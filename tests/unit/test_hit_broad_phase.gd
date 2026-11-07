@@ -9,14 +9,6 @@ const FIXTURE: String = "hit_broad_phase"
 const CROWDS: int = 40
 const FAR_M: float = 45000.0
 
-# True (and the test marked pending, saying why) when there is no native library to compare against.
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there is no native path to compare")
-	return true
-
-
 # The pairs the resolver's sphere test accepts, by testing every pair: the reference.
 static func _every_pair(bolt_mids: PackedVector3Array, bolt_reach: PackedFloat64Array, hull_mids: PackedVector3Array,
 		hull_reach: PackedFloat64Array) -> PackedInt64Array:
@@ -89,8 +81,6 @@ static func _ascending(keys: PackedInt64Array) -> bool:
 
 
 func test_the_native_path_gives_the_same_pairs_and_work_as_gdscript() -> void:
-	if _skipped():
-		return
 	var recorded: Variant = ParityFixture.stored(FIXTURE, "work_seed_20261103")
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 20261103
@@ -125,8 +115,6 @@ func test_pairs_right_on_the_edge_of_the_sphere_test_are_the_sphere_test_s() -> 
 	var expected: PackedInt64Array = _every_pair(bolt_mids, bolt_reach, hull_mids, hull_reach)
 	gut.p("%d of 3000 edge pairs pass the sphere test" % expected.size())
 	assert_between(expected.size(), 300, 2700, "the edge splits the pairs")
-	if _skipped():
-		return
 	var phase := HitBroadPhase.new()
 	assert_eq(phase.pairs(bolt_mids, bolt_reach, hull_mids, hull_reach), expected, "native")
 
@@ -140,8 +128,6 @@ func test_odd_inputs_give_what_the_sphere_test_gives() -> void:
 			Vector3(-195, 0, 0), Vector3(25, 0, 0), Vector3(0, 0, 0)])
 	var bolt_reach := PackedFloat64Array([1.0, 1.0, 1.0, 1.0, INF, -3.0])
 	var expected: PackedInt64Array = _every_pair(bolt_mids, bolt_reach, hull_mids, hull_reach)
-	if _skipped():
-		return
 	var phase := HitBroadPhase.new()
 	assert_eq(phase.path(), &"native")
 	assert_eq(phase.pairs(bolt_mids, bolt_reach, hull_mids, hull_reach), expected, "native")
@@ -158,8 +144,6 @@ func test_nothing_to_pair_gives_no_pairs_and_no_work() -> void:
 
 
 func test_the_native_sweep_refuses_arrays_that_do_not_line_up() -> void:
-	if _skipped():
-		return
 	var sweep: Object = NativeLib.instantiate(HitBroadPhase.NATIVE_CLASS)
 	assert_not_null(sweep, "the library provides %s" % HitBroadPhase.NATIVE_CLASS)
 	if sweep == null:
@@ -188,8 +172,6 @@ func test_a_capital_hull_is_found_from_anywhere_it_reaches_without_testing_the_f
 	for i: int in 300:
 		bolt_mids.append(Vector3(1000, 0, 0) + _direction(rng) * rng.randf_range(0.0, 600.0))
 		bolt_reach.append(4.0)
-	if _skipped():
-		return
 	var phase := HitBroadPhase.new()
 	var got: PackedInt64Array = phase.pairs(bolt_mids, bolt_reach, hull_mids, hull_reach)
 	assert_eq(got, _every_pair(bolt_mids, bolt_reach, hull_mids, hull_reach), "%s: the same as every pair" % phase.path())
@@ -235,8 +217,6 @@ func test_a_bolt_far_from_a_thousand_kept_rocks_visits_none() -> void:
 		rock_mids.append(Vector3(rng.randf_range(-10000.0, 10000.0), rng.randf_range(-2500.0, 2500.0),
 				rng.randf_range(-10000.0, 10000.0)))
 		rock_reach.append(exp(rng.randf_range(log(20.0), log(200.0))))
-	if _skipped():
-		return
 	var phase := HitBroadPhase.new()
 	phase.keep(rock_mids, rock_reach)
 	phase.kept_pairs(PackedVector3Array([Vector3(30000.0, 0.0, 0.0)]), PackedFloat64Array([10.0]))

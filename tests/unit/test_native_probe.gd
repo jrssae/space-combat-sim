@@ -1,11 +1,6 @@
 extends GutTest
-## The native seam (M4-T05a, architecture §17.5): `NativeProbe` answers through the native library when it is
-## loaded and `perf_native` is on, through GDScript otherwise, with the same results either way. Passes with and
-## without bin/libscs_native.so, and says which path it took.
-
-
-func _loaded() -> bool:
-	return ClassDB.class_exists(NativeProbe.NATIVE_CLASS)
+## The native seam (M4-T05a, architecture §17.5): `NativeProbe` answers through the native library (required since
+## M4-T37), and through GDScript when a test forces it (`NativeProbe.new(false)`), with the same results either way.
 
 
 func _points(count: int, seed_value: int) -> PackedVector3Array:
@@ -18,13 +13,10 @@ func _points(count: int, seed_value: int) -> PackedVector3Array:
 	return out
 
 
-func test_the_probe_takes_the_native_path_exactly_when_the_library_is_loaded() -> void:
-	var probe := NativeProbe.new()
-	var expected: StringName = &"native" if _loaded() else &"gdscript"
-	gut.p("native library %s: probe path %s" % ["loaded" if _loaded() else "absent", probe.path()])
-	assert_eq(probe.path(), expected)
-	assert_eq(NativeLib.has_class(NativeProbe.NATIVE_CLASS), _loaded())
-	assert_eq(NativeLib.version(NativeProbe.NATIVE_CLASS) != "", _loaded(), "a version only from a loaded library")
+func test_the_probe_takes_the_native_path() -> void:
+	assert_eq(NativeProbe.new().path(), &"native")
+	assert_true(NativeLib.has_class(NativeProbe.NATIVE_CLASS))
+	assert_ne(NativeLib.version(NativeProbe.NATIVE_CLASS), "", "the loaded library gives its version")
 
 
 func test_use_native_false_forces_gdscript() -> void:
@@ -63,8 +55,7 @@ func test_the_boundary_bench_reports_every_size_and_both_paths_agree() -> void:
 	assert_eq(rows.size(), 3, "echo plus one row per size")
 	for row: Dictionary in rows:
 		assert_gte(float(row["gdscript_us"]), 0.0)
-		assert_eq(float(row["native_us"]) >= 0.0, _loaded(), "native timed only with the library")
-		if _loaded():
-			assert_eq(row["native_found"], row["gdscript_found"], "%s %d" % [row["name"], row["n"]])
+		assert_gte(float(row["native_us"]), 0.0, "native timed")
+		assert_eq(row["native_found"], row["gdscript_found"], "%s %d" % [row["name"], row["n"]])
 	for line: String in NativeBoundaryBench.format(rows):
 		gut.p(line)

@@ -2,7 +2,7 @@ extends GutTest
 ## Ships flying in the native flight batch, headless in Jolt (M4-T10, N4; architecture §17.9): every ship but the
 ## player's takes the batch's path; a batched ship and its GDScript twin (an unbatched ship, as the player's flies) fly the
 ## same; the damping guard holds for batched ships; an empty tank makes a batched ship coast; a parked ship leaves the step;
-## and the `flight` console provider reports the batch. M4-T37 removed the live switch to every ship's own model. Skips, saying why, when the native library is not built.
+## and the `flight` console provider reports the batch. M4-T37 removed the live switch to every ship's own model.
 
 const SPEC_PATH: String = "res://assets/ships/starfury_aurora.tres"
 const GEN_ASSETS_HINT: String = "run scripts/gen_assets.sh, then scripts/run_tests.sh (it imports first)"
@@ -23,13 +23,6 @@ func before_each() -> void:
 
 func after_each() -> void:
 	Settings.set_value(&"fuel_unlimited", _fuel_backup)
-
-
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there is no native path to compare")
-	return true
 
 
 func _spawn(at: Vector3, player: bool = false, ghost: bool = false) -> Ship:
@@ -108,8 +101,6 @@ func _spawn_target(at: Vector3, velocity: Vector3) -> Targetable:
 
 
 func test_every_ship_but_the_players_flies_in_the_batch() -> void:
-	if _skipped():
-		return
 	var ai: Ship = _spawn(Vector3.ZERO)
 	var player: Ship = _spawn(Vector3(0.0, 300.0, 0.0), true)
 	var batch: FlightBatch = FlightBatch.attach(world)
@@ -125,8 +116,6 @@ func test_every_ship_but_the_players_flies_in_the_batch() -> void:
 
 
 func test_a_batched_ship_and_its_gdscript_twin_fly_the_same() -> void:
-	if _skipped():
-		return
 	var batched: Ship = _spawn(Vector3.ZERO, false, true)
 	var twin: Ship = _spawn(Vector3.ZERO, false, true)
 	twin.batched = false
@@ -163,8 +152,6 @@ func test_a_batched_ship_and_its_gdscript_twin_fly_the_same() -> void:
 
 
 func test_damping_guard_a_batched_ship_coasts_and_spins_on() -> void:
-	if _skipped():
-		return
 	var ship: Ship = _spawn(Vector3.ZERO)
 	ship.set_assist(false)
 	ship.linear_velocity = Vector3(10.0, 0.0, 0.0)
@@ -177,8 +164,6 @@ func test_damping_guard_a_batched_ship_coasts_and_spins_on() -> void:
 
 
 func test_a_batched_ship_out_of_reaction_mass_coasts() -> void:
-	if _skipped():
-		return
 	Settings.set_value(&"fuel_unlimited", false)
 	var ship: Ship = _spawn(Vector3.ZERO)
 	ship.get_fuel_tank().set_kg(spec.fuel_capacity_kg * 0.0005)  # a fraction of a second of full thrust
@@ -195,8 +180,6 @@ func test_a_batched_ship_out_of_reaction_mass_coasts() -> void:
 
 
 func test_a_parked_ship_leaves_the_step_and_a_woken_one_returns() -> void:
-	if _skipped():
-		return
 	var ship: Ship = _spawn(Vector3.ZERO)
 	var other: Ship = _spawn(Vector3(0.0, 500.0, 0.0))
 	var batch: FlightBatch = FlightBatch.attach(world)
@@ -216,8 +199,6 @@ func test_a_parked_ship_leaves_the_step_and_a_woken_one_returns() -> void:
 
 
 func test_the_flight_provider_reports_the_batch() -> void:
-	if _skipped():
-		return
 	_spawn(Vector3.ZERO)
 	FlightBatch.attach(world)
 	await _align()

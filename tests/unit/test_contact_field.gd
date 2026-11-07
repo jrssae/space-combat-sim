@@ -2,8 +2,8 @@ extends GutTest
 ## The contact scan's queries in native code (M4-T05b, architecture §17.5): `ContactScan` hands its arrays to the native
 ## `ScsContactField` and builds what callers get from the indices it returns. The native path must answer exactly as the
 ## GDScript one (maintainer, 2026-11-02: bit-identical): the same contacts in the same order, the same `incoming_fire`
-## and the same broadcasts, so seeded runs give the same outcome with `perf_native` on and off. Scans are filled by hand
-## (no scene), so seeded worlds of any size are cheap. Skips, saying why, when the native library is not built.
+## and the same broadcasts, so seeded runs give the same outcome on either. Scans are filled by hand
+## (no scene), so seeded worlds of any size are cheap.
 
 const WORLDS: int = 40
 const MAX_BODIES: int = 300
@@ -55,14 +55,6 @@ static func _key(answer: Variant) -> String:
 		var ids: Array[int] = _ids(answer)
 		return "%d:%s" % [ids.size(), ParityFixture.digest(ids).left(16)]
 	return str(answer)
-
-
-# True (and the test marked pending, saying why) when there is no native library to compare against.
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there is no native path to compare")
-	return true
 
 
 # A scan of the given bodies: body i has body id 1000 + i, contact id 5000 + i and name "SHIP i".
@@ -168,8 +160,6 @@ static func _same(a: Array[Contact], b: Array[Contact]) -> bool:
 
 
 func test_the_scan_takes_the_native_path_when_the_library_is_loaded() -> void:
-	if _skipped():
-		return
 	var scan := _scan(PackedVector3Array([Vector3.ZERO, Vector3(100, 0, 0)]), [Factions.RAIDERS, Factions.EARTH_ALLIANCE],
 			PackedByteArray([1, 1]))
 	assert_eq(scan.path(), &"native", "the native field answers (%s)" % NativeLib.version(ContactScan.NATIVE_CLASS))
@@ -178,8 +168,6 @@ func test_the_scan_takes_the_native_path_when_the_library_is_loaded() -> void:
 
 
 func test_seeded_worlds_give_the_same_answers_on_both_paths() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 2026_11_03
 	var compared: int = 0
@@ -241,8 +229,6 @@ func test_seeded_worlds_give_the_same_answers_on_both_paths() -> void:
 
 
 func test_incoming_fire_agrees_on_bolts_that_graze_the_15_m_line() -> void:
-	if _skipped():
-		return
 	# Bolts whose closest approach is within a few micrometres of the line: the 32-bit rounding of GDScript's maths
 	# decides about one in ten of them, so only the same precision gives the same counts.
 	var rng := RandomNumberGenerator.new()
@@ -271,8 +257,6 @@ func test_incoming_fire_agrees_on_bolts_that_graze_the_15_m_line() -> void:
 
 
 func test_k_of_zero_or_less_cuts_nothing_on_both_paths() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 23
 	var scan := _world(rng, 60, 0)
@@ -294,8 +278,6 @@ func test_k_of_zero_or_less_cuts_nothing_on_both_paths() -> void:
 
 
 func test_a_query_visits_only_the_cells_its_range_reaches() -> void:
-	if _skipped():
-		return
 	# Spread's shape: groups of 12, 20 km apart, so every body but its own group is out of range.
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 7
@@ -322,8 +304,6 @@ func test_a_query_visits_only_the_cells_its_range_reaches() -> void:
 
 
 func test_a_freed_body_is_noticed_on_both_paths() -> void:
-	if _skipped():
-		return
 	var alive := Node.new()
 	var doomed := Node.new()
 	var scan := _scan(PackedVector3Array([Vector3.ZERO, Vector3(10, 0, 0)]), [Factions.RAIDERS, Factions.RAIDERS],
@@ -364,8 +344,6 @@ static func _load_raw(field: Object, args: Dictionary) -> Variant:
 
 # If the grid's overflow guard regresses, this test hangs instead of failing: a shard stuck here is that regression.
 func test_a_huge_finite_range_gives_the_same_answers_on_both_paths_and_finishes_quickly() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 31
 	var n: int = 120
@@ -385,8 +363,6 @@ func test_a_huge_finite_range_gives_the_same_answers_on_both_paths_and_finishes_
 
 
 func test_a_load_with_mismatched_array_lengths_is_rejected_and_the_field_answers_nothing() -> void:
-	if _skipped():
-		return
 	var control: Object = NativeLib.instantiate(ContactScan.NATIVE_CLASS)
 	assert_eq(_load_raw(control, _load_args()), true, "a consistent load is taken")
 	assert_eq(control.contacts(1000, Vector3.ZERO, 5000.0).size(), 2, "and answers")
@@ -417,8 +393,6 @@ func test_a_load_with_mismatched_array_lengths_is_rejected_and_the_field_answers
 
 
 func test_the_facade_falls_back_to_gdscript_for_a_scan_the_field_rejects() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 41
 	var scan := _world(rng, 50, 0)
@@ -442,8 +416,6 @@ func test_the_facade_falls_back_to_gdscript_for_a_scan_the_field_rejects() -> vo
 
 
 func test_a_negative_range_acts_as_its_magnitude_on_both_paths() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 53
 	var scan := _world(rng, 80, 0)
@@ -459,8 +431,6 @@ func test_a_negative_range_acts_as_its_magnitude_on_both_paths() -> void:
 
 
 func test_more_than_256_factions_are_told_apart() -> void:
-	if _skipped():
-		return
 	# Bodies f0 to f299 along a line; only f0 and f290 are hostile. A faction index kept in a byte would read f290 as f34.
 	var count: int = 300
 	var ids: Array = []
@@ -494,8 +464,6 @@ func test_more_than_256_factions_are_told_apart() -> void:
 
 
 func test_a_hostility_row_too_short_for_a_faction_counts_it_as_not_hostile() -> void:
-	if _skipped():
-		return
 	var args: Dictionary = _load_args()
 	args["positions"] = PackedVector3Array([Vector3.ZERO, Vector3(10, 0, 0), Vector3(20, 0, 0), Vector3(30, 0, 0)])
 	args["body_ids"] = PackedInt64Array([1000, 1001, 1002, 1003])
@@ -565,8 +533,6 @@ static func _expected_statics(scan: ContactScan, own_id: int, at: Vector3, k: in
 
 
 func test_statics_stay_out_of_the_contacts_and_the_nearest_k_static_come_beside_them() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 2026_11_09
 	var compared: int = 0
@@ -608,8 +574,6 @@ func test_statics_stay_out_of_the_contacts_and_the_nearest_k_static_come_beside_
 
 
 func test_a_query_for_statics_visits_only_the_cells_its_range_reaches() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 17
 	# Spread's shape with a field of 1 000 rocks around every group: a query tests its own neighbourhood, not 1 120 rows.
@@ -634,8 +598,6 @@ func test_a_query_for_statics_visits_only_the_cells_its_range_reaches() -> void:
 
 
 func test_four_factions_every_pair_hostile_give_the_same_hostile_lists_on_both_paths() -> void:
-	if _skipped():
-		return
 	var sides: Array[StringName] = [Factions.EARTH_ALLIANCE, Factions.RAIDERS, &"bench_a", &"bench_b"]
 	var table_ids: Array = []
 	for side: StringName in sides:
@@ -669,8 +631,6 @@ func test_four_factions_every_pair_hostile_give_the_same_hostile_lists_on_both_p
 
 
 func test_a_kinds_array_of_the_wrong_length_is_rejected_and_the_scan_answers_from_gdscript() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 61
 	var scan := _world(rng, 40, 0)
@@ -688,8 +648,6 @@ func test_a_side_sees_its_own_mines_and_never_an_enemys_on_both_paths() -> void:
 	# Q27 (maintainer, 2026-11-03): a side knows its own mines (and its friends') and steers clear of them; enemy mines are
 	# hidden from it until they go off. Rocks are obstacles for every side. Four sides, two of them friends, every other
 	# pair hostile; mines of every side and rocks round every ship; the same statics on both paths, and the reference's.
-	if _skipped():
-		return
 	var sides: Array[StringName] = [Factions.EARTH_ALLIANCE, Factions.RAIDERS, &"bench_a", &"bench_b"]
 	var table_ids: Array = []
 	for side: StringName in sides:

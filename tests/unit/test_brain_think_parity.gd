@@ -5,7 +5,7 @@ extends GutTest
 ## with its demos, a passive and a reckless pilot, a hit) and must give the same flight and combat command, the same
 ## wanted target, the same dodge, the same behaviour in control and the same scores. The twin's perception is picked as
 ## `AiPilotDriver.perceive` picks it (nearest k with the keeps, the nearest statics, incoming fire, broadcasts), from a scan
-## built by hand on the same rows. Skips, saying why, when the library is not built.
+## built by hand on the same rows.
 
 const BRAINS_CLASS: StringName = &"ScsBrains"
 const SIDES: Array[StringName] = [Factions.EARTH_ALLIANCE, Factions.RAIDERS, &"bench_c", &"bench_d"]
@@ -21,13 +21,6 @@ func before_each() -> void:
 
 func after_each() -> void:
 	Factions.reset()
-
-
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there are no brains to test")
-	return true
 
 
 static func _bytes(value: Variant) -> String:
@@ -416,8 +409,6 @@ func _twin(rows: Rows, row: int, profile: StringName, seed_value: int, rng: Rand
 
 
 func test_a_plain_crowd_thinks_the_same_natively_tick_by_tick() -> void:
-	if _skipped():
-		return
 	var brains: Object = NativeLib.instantiate(BRAINS_CLASS)
 	assert_not_null(brains)
 	var rng := RandomNumberGenerator.new()
@@ -436,8 +427,6 @@ func test_a_plain_crowd_thinks_the_same_natively_tick_by_tick() -> void:
 
 
 func test_wings_under_each_order_and_a_leaderless_wing_think_the_same() -> void:
-	if _skipped():
-		return
 	var brains: Object = NativeLib.instantiate(BRAINS_CLASS)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 1708
@@ -472,8 +461,6 @@ func test_wings_under_each_order_and_a_leaderless_wing_think_the_same() -> void:
 
 
 func test_objectives_guards_temperaments_and_live_retunes_think_the_same() -> void:
-	if _skipped():
-		return
 	var brains: Object = NativeLib.instantiate(BRAINS_CLASS)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 1709
@@ -518,8 +505,6 @@ func test_objectives_guards_temperaments_and_live_retunes_think_the_same() -> vo
 
 
 func test_a_patrol_route_with_demos_flies_the_same() -> void:
-	if _skipped():
-		return
 	var brains: Object = NativeLib.instantiate(BRAINS_CLASS)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 1710
@@ -580,8 +565,6 @@ func test_a_duplicate_name_follows_the_first_listed_row_as_the_gdscript_does() -
 	# M4-T18: a row earlier in the row order (out of sensor range: a parked or far body) carries the same name as a live ship
 	# in range. The GDScript matches the name among the contacts every tick, so the objective and the guarded ship are the
 	# live one; the native brains must not stick to the first row with the name.
-	if _skipped():
-		return
 	var brains: Object = NativeLib.instantiate(BRAINS_CLASS)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 1711

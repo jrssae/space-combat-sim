@@ -111,9 +111,6 @@ class FiringBrain extends PilotBrain:
 
 func test_an_ai_cannon_on_the_bolt_rows_is_heard_on_every_shot() -> void:
 	# M4-T35 fix round 1: the AI cannons fire rows, not `Projectile` nodes, so the director listens to `shot_fired`.
-	if not NativeLib.has_class(SimCore.NATIVE_CLASS) or not NativeLib.has_class(SimCore.CANNONS_CLASS):
-		pending("the native library is not built (scripts/build_native.sh), so there are no bolt rows")
-		return
 	var raider: Combatant = main.ships.acquire("RAIDER", main.world.to_universe(Vector3(0.0, 0.0, -400.0)), Basis.IDENTITY,
 			Vector3.ZERO, FiringBrain.new(), ShipPool.DEFAULT_TYPE)
 	await _ticks(1)

@@ -6,7 +6,7 @@ extends GutTest
 ## kernel's marshalling; the kernel waits for T17). A scan stops handing out the kernels as soon as the core's rows change
 ## after it was taken (a resync or a rebase in the same frame). A seeded fight of AI fighters flies the same with the
 ## kernels as with the GDScript. Seeded crowds of ships, capitals, props, rocks and mines of four sides; real AI ships for
-## the driver and the fight. Skips, saying why, when the native library is not built at all.
+## the driver and the fight.
 
 const SIDES: Array[StringName] = [Factions.RAIDERS, Factions.EARTH_ALLIANCE, Factions.NEUTRAL, &"drifters"]
 const RAIDER_SPEC: String = "res://assets/ships/raider_delta_v.tres"
@@ -39,13 +39,6 @@ func after_each() -> void:
 		Settings.set_value(key, _saved[key])
 	ContactScan.pilot_kernels_on = true
 	Factions.reset()
-
-
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there are no kernels to test")
-	return true
 
 
 # A rigid body with a marker and a hull, as `ShipAssembly` builds them (without the rest of a ship).
@@ -109,8 +102,6 @@ func _crowd(rng: RandomNumberGenerator, n: int, statics: int) -> Array[Node3D]:
 
 
 func test_the_facades_answer_from_the_core_as_the_gdscript_reference_does() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 1610
 	var differences: PackedStringArray = []
@@ -220,8 +211,6 @@ func _ai_ship(display_name: String, faction: StringName, at: Vector3) -> Combata
 
 
 func test_the_driver_perceives_on_the_rows_with_the_core_and_without_them_off_it() -> void:
-	if _skipped():
-		return
 	var a: Combatant = _ai_ship("ALPHA 1", Factions.EARTH_ALLIANCE, Vector3.ZERO)
 	_ai_ship("RAIDER 1", Factions.RAIDERS, Vector3(0.0, 0.0, -400.0))
 	_ai_ship("ALPHA 2", Factions.EARTH_ALLIANCE, Vector3(60.0, 0.0, 0.0))
@@ -237,8 +226,6 @@ func test_the_driver_perceives_on_the_rows_with_the_core_and_without_them_off_it
 
 
 func test_refresh_stays_on_the_gdscript_split_even_on_the_rows() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 1611
 	_crowd(rng, 40, 0)
@@ -268,8 +255,6 @@ func test_refresh_stays_on_the_gdscript_split_even_on_the_rows() -> void:
 
 
 func test_a_same_frame_resync_or_rebase_stops_the_kernels_for_that_tick() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 1612
 	var bodies: Array[Node3D] = _crowd(rng, 20, 4)
@@ -298,8 +283,6 @@ const FIGHT_TICKS: int = 480
 
 
 func test_a_seeded_fight_flies_the_same_with_the_kernels_and_without() -> void:
-	if _skipped():
-		return
 	# The fight on the GDScript avoidance and fire lane (the kernels off) is recorded (M4-T37).
 	var recorded: Variant = await ParityFixture.expected(FIXTURE, "fight_without_kernels", func() -> Dictionary:
 		var without: Dictionary = await _fight(false)

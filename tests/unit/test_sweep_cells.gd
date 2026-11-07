@@ -47,9 +47,6 @@ func _bolts(rng: RandomNumberGenerator, n: int, hull_mids: PackedVector3Array) -
 
 
 func test_the_pairs_and_the_work_are_the_same_with_hashed_cells() -> void:
-	if not NativeLib.has_class(HitBroadPhase.NATIVE_CLASS):
-		pending("the native library is not built (scripts/build_native.sh)")
-		return
 	var recorded: Variant = ParityFixture.stored(FIXTURE, "rounds_seed_3403")
 	assert_not_null(recorded, "the GDScript reference's rounds were recorded")
 	var hashed: Array = _rounds()

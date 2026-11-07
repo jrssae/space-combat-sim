@@ -195,14 +195,14 @@ func _physics_process(_delta: float) -> void:
 		ensure_synced()
 
 
-## Whether the library provides the core and the settings ask for it (read on every call, so a flip takes effect at once).
+## Whether the library provides the core (always, since M4-T37 requires the library; the class is looked up once).
 static func enabled() -> bool:
 	if _native_class_known < 0:
 		_native_class_known = 1 if NativeLib.has_class(NATIVE_CLASS) else 0
 	return _native_class_known == 1
 
 
-## The core under `world`, made on first ask; null without a world or when the core is off.
+## The core under `world`, made on first ask; null without a world (or a library without the core class).
 static func attach(p_world: Node) -> SimCore:
 	if p_world == null or not is_instance_valid(p_world) or not p_world.is_inside_tree() or not enabled():
 		return null

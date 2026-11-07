@@ -26,13 +26,6 @@ func after_each() -> void:
 	Factions.reset()
 
 
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there are no weapon kernels to test")
-	return true
-
-
 # Hulls on the edge of the triggers: each hostile drone sits at the trigger's reach from its mine, within a millimetre
 # inside or outside, along a seeded direction; a friend sits well inside another.
 func _edge_scene() -> Dictionary:
@@ -91,8 +84,6 @@ func _edge_scene() -> Dictionary:
 
 
 func test_hulls_on_the_edge_of_a_trigger_set_off_the_recorded_mines() -> void:
-	if _skipped():
-		return
 	var recorded: Variant = ParityFixture.stored(FIXTURE, "edge_of_a_trigger")  # the GDScript stand-ins' (M4-T37)
 	var entries: Array = _edge_run()
 	assert_eq(_tick_digests(entries), recorded, "every tick: the mines alive, checked and hurting the hulls the GDScript stand-ins did (recorded)")
@@ -134,8 +125,6 @@ static func _tick_digests(entries: Array) -> Array:
 
 
 func test_a_seeded_belt_goes_off_and_is_laid_again_on_the_recorded_ticks() -> void:
-	if _skipped():
-		return
 	var recorded: Variant = ParityFixture.stored(FIXTURE, "belt_seed_23")  # the GDScript stand-ins' (M4-T37)
 	var native: WeaponRowsScene = WeaponRowsScene.build(self, 23)
 	native.run(840)
@@ -205,8 +194,6 @@ func _free_world(scene: Dictionary) -> void:
 
 
 func test_a_carriers_reach_straddles_the_grids_slabs() -> void:
-	if _skipped():
-		return
 	var logs: Array = []
 	# one run on the native rows (M4-T37: the GDScript stand-ins it was paired with are gone)
 	var scene: Dictionary = _world()
@@ -246,8 +233,6 @@ func test_a_carriers_reach_straddles_the_grids_slabs() -> void:
 
 
 func test_a_blast_hurts_its_hulls_in_the_gdscript_order_with_a_pool() -> void:
-	if _skipped():
-		return
 	var logs: Array = []
 	var group_order: Array = []
 	var expected: Array = []

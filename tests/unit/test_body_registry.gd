@@ -3,7 +3,7 @@ extends GutTest
 ## what the scan needs, so `ContactScan` builds no per-tick arrays in GDScript. Its scan must equal `ContactScan.from_tree`
 ## bit for bit (the same rows in the same order, the same positions, velocities, axes, factions, names, radii, ship flags
 ## and kinds). Light bodies made here (a rigid body with a `Targetable` and a `Damageable`, props, a hull without a marker),
-## nothing stepped. Skips, saying why, when the native library is not built at all.
+## nothing stepped.
 
 const FIXTURE: String = "body_registry"
 const ROWS_COMPARED: Array[String] = ["_body_ids", "_ids", "_names", "_factions", "_positions", "_velocities", "_forwards",
@@ -24,13 +24,6 @@ func after_each() -> void:
 	ContactScan.clear_statics()
 	ContactScan.invalidate()
 	Factions.reset()
-
-
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there is no registry to compare")
-	return true
 
 
 # A rigid body with a marker and a hull, as `ShipAssembly` builds them (without the rest of a ship).
@@ -152,8 +145,6 @@ func test_body_kinds_read_names_values_and_nothing() -> void:
 
 
 func test_the_registry_scan_equals_the_tree_gather_bit_for_bit() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 2026_11_09
 	for n: int in [1, 7, 60, 300]:
@@ -166,8 +157,6 @@ func test_the_registry_scan_equals_the_tree_gather_bit_for_bit() -> void:
 func test_the_core_scan_equals_the_recorded_tree_gather_bit_for_bit() -> void:
 	# M4-T37: the tree gather is gone; its rows for these seeded crowds are recorded in
 	# `tests/fixtures/parity/body_registry.json` (without the instance ids, which differ between runs).
-	if _skipped():
-		return
 	var world := WorldFrame.new()
 	add_child_autofree(world)
 	var sim: SimCore = SimCore.attach(world)
@@ -198,8 +187,6 @@ static func _rows(scan: ContactScan) -> Dictionary:
 
 
 func test_node_less_static_rows_come_after_the_bodies_on_both_paths() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 5
 	_crowd(rng, 40)
@@ -221,8 +208,6 @@ func test_node_less_static_rows_come_after_the_bodies_on_both_paths() -> void:
 
 
 func test_a_parked_body_is_gone_from_the_next_scan_and_back_renamed_after_a_quick_reuse() -> void:
-	if _skipped():
-		return
 	var a := _body(Vector3(100, 0, 0), Factions.RAIDERS, "RAIDER 1")
 	var b := _body(Vector3(200, 0, 0), Factions.RAIDERS, "RAIDER 2")
 	var marker_b := b.get_node(^"Targetable") as Targetable
@@ -245,8 +230,6 @@ func test_a_parked_body_is_gone_from_the_next_scan_and_back_renamed_after_a_quic
 
 
 func test_a_moved_body_is_seen_at_its_new_place_without_registering_again() -> void:
-	if _skipped():
-		return
 	var a := _body(Vector3(100, 0, 0), Factions.RAIDERS, "RAIDER 1")
 	_registry_scan()
 	a.global_position = Vector3(-4000, 25, 12.5)
@@ -258,8 +241,6 @@ func test_a_moved_body_is_seen_at_its_new_place_without_registering_again() -> v
 
 
 func test_a_freed_body_is_noticed_by_the_scan_and_dropped_by_the_next() -> void:
-	if _skipped():
-		return
 	var a := _body(Vector3(100, 0, 0), Factions.RAIDERS, "RAIDER 1")
 	var b := _body(Vector3(200, 0, 0), Factions.RAIDERS, "RAIDER 2")
 	var b_id: int = b.get_instance_id()
@@ -274,8 +255,6 @@ func test_a_freed_body_is_noticed_by_the_scan_and_dropped_by_the_next() -> void:
 
 
 func test_attributes_are_read_once_not_every_tick() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 9
 	_crowd(rng, 100)
@@ -289,8 +268,6 @@ func test_attributes_are_read_once_not_every_tick() -> void:
 
 
 func test_the_shared_scan_gathers_nothing_in_gdscript_on_the_native_path() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 13
 	_crowd(rng, 50)
@@ -301,8 +278,6 @@ func test_the_shared_scan_gathers_nothing_in_gdscript_on_the_native_path() -> vo
 
 
 func test_a_rebase_moves_its_own_worlds_static_rows_once_on_both_paths() -> void:
-	if _skipped():
-		return
 	var a := WorldFrame.new()
 	add_child_autofree(a)
 	var b := WorldFrame.new()
@@ -329,8 +304,6 @@ func test_a_rebase_moves_its_own_worlds_static_rows_once_on_both_paths() -> void
 
 
 func test_the_broadcast_scan_equals_from_broadcasters_row_for_row() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 21
 	_crowd(rng, 30)

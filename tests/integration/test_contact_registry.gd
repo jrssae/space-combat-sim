@@ -1,5 +1,5 @@
 extends GutTest
-## The native body registry in play (M4-T09, architecture §17.8): with the library and `perf_native` on, the AI's shared
+## The native body registry in play (M4-T09, architecture §17.8): the AI's shared
 ## scan comes from one native refresh a tick, never from a GDScript gather of the tree, and holds exactly what that gather
 ## would. Rocks and mines are kept out of a fighter's nearest contacts; its nearest `ai_nearest_static_k` statics come
 ## beside them and avoidance steers round them. Real ships from `ShipAssembly`, real drivers and brains, the game's 60 Hz.
@@ -42,8 +42,6 @@ class Checker extends Node:
 		if _tick % 7 != 0:
 			return
 		var native: ContactScan = ContactScan.from_registry(get_tree())
-		if native == null:
-			return  # perf_native is off: nothing to compare
 		var script: ContactScan = ContactScan.from_tree(get_tree())
 		compared += 1
 		for field: String in ROWS_COMPARED:
@@ -98,13 +96,6 @@ func after_each() -> void:
 	ContactScan.invalidate()
 
 
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there is no registry to compare")
-	return true
-
-
 func _ai_ship(spec_path: String, display_name: String, faction: StringName, at: Vector3, velocity: Vector3) -> Combatant:
 	var c: Combatant = ShipAssembly.build(load(spec_path) as ShipSpec, world, projectiles, {
 		ShipAssembly.OPT_FACTION: faction,
@@ -143,8 +134,6 @@ func _fight(rng: RandomNumberGenerator) -> Array[Combatant]:
 
 
 func test_in_a_live_fight_the_scan_never_gathers_from_the_tree_and_equals_that_gather() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 909
 	var ships: Array[Combatant] = _fight(rng)
@@ -176,8 +165,6 @@ func test_in_a_live_fight_the_scan_never_gathers_from_the_tree_and_equals_that_g
 
 
 func test_a_fighter_flying_at_a_rock_steers_round_it_on_both_paths() -> void:
-	if _skipped():
-		return
 	var cases: Array[Dictionary] = [
 		{"spec": RAIDER_SPEC, "native": true}, {"spec": STARFURY_SPEC, "native": true},
 	]
@@ -217,8 +204,6 @@ static func _contact_of(scan: ContactScan, at: Vector3, faction: StringName, id:
 
 
 func test_a_selection_and_a_hull_changed_after_the_build_reach_both_paths_alike() -> void:
-	if _skipped():
-		return
 	var own: Combatant = _ai_ship(RAIDER_SPEC, "RAIDER 1", Factions.RAIDERS, Vector3.ZERO, Vector3.ZERO)
 	var mate: Combatant = _ai_ship(RAIDER_SPEC, "RAIDER 2", Factions.RAIDERS, Vector3(200.0, 0.0, 0.0), Vector3.ZERO)
 	var enemy: Combatant = _ai_ship(STARFURY_SPEC, "ALPHA 1", Factions.EARTH_ALLIANCE, Vector3(0.0, 0.0, -900.0),

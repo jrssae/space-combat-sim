@@ -2,8 +2,7 @@ extends GutTest
 ## Bolts as core rows (M4-T35a, architecture §17.13): the core owns its bolts, a kernel steps them as a `Projectile` node
 ## stepped itself, the cannons' gates and spawns run as a kernel over the rows, the hit resolver sweeps and spends the rows,
 ## and one multimesh draws them. Bit for bit with the bolt node path: the gate, the spawn, the step, and a seeded battle's
-## hits and rows; 1 and 6 threads identical; the engine calls do not grow with the bolts. Skips, saying why, when the
-## library is not built.
+## hits and rows; 1 and 6 threads identical; the engine calls do not grow with the bolts.
 
 const SHIPS: int = 120
 const SEED: int = 1
@@ -36,13 +35,6 @@ func after_each() -> void:
 	ContactScan.invalidate()
 
 
-func _skipped() -> bool:
-	if NativeLib.has_class(SimCore.NATIVE_CLASS) and NativeLib.has_class(SimCore.CANNONS_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there are no bolt rows to test")
-	return true
-
-
 # --- the bolt kernel against the node ---------------------------------------------------------------------------------
 
 
@@ -64,8 +56,6 @@ func _fly(bolt: Projectile) -> void:
 
 
 func test_an_owned_bolt_steps_as_a_node_bolt_does() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 35
 	var world := WorldFrame.new()
@@ -101,8 +91,6 @@ func test_an_owned_bolt_steps_as_a_node_bolt_does() -> void:
 
 
 func test_a_bolt_waits_out_its_launch_tick_and_expires_in_time() -> void:
-	if _skipped():
-		return
 	var core: Object = _core(5)
 	var velocity := Vector3(600.0, 0.0, 0.0)
 	var id: int = core.add_bolt(Vector3(1.0, 2.0, 3.0), velocity, Factions.RAIDERS, 7, null, 0.25, 10.0, Color.WHITE, 0, 1.0, 10.0)
@@ -123,8 +111,6 @@ func test_a_bolt_waits_out_its_launch_tick_and_expires_in_time() -> void:
 
 
 func test_a_spent_bolt_stays_flagged_until_the_next_sync() -> void:
-	if _skipped():
-		return
 	var core: Object = _core(5)
 	var ids: Array[int] = []
 	for i: int in 5:
@@ -146,8 +132,6 @@ func test_a_spent_bolt_stays_flagged_until_the_next_sync() -> void:
 
 
 func test_a_rebase_shifts_the_owned_rows() -> void:
-	if _skipped():
-		return
 	var core: Object = _core(5)
 	core.add_bolt(Vector3(1.0, 2.0, 3.0), Vector3.ZERO, Factions.RAIDERS, 7, null, 0.25, 10.0, Color.WHITE, 0, 4.0, 0.0)
 	core.shift(Vector3(-1000.0, 0.0, 10.0))
@@ -155,8 +139,6 @@ func test_a_rebase_shifts_the_owned_rows() -> void:
 
 
 func test_node_projectiles_follow_the_owned_rows_in_the_table() -> void:
-	if _skipped():
-		return
 	var world := WorldFrame.new()
 	add_child_autofree(world)
 	var core: Object = _core(5)
@@ -180,8 +162,6 @@ func test_node_projectiles_follow_the_owned_rows_in_the_table() -> void:
 
 
 func test_the_engine_calls_do_not_grow_with_the_owned_bolts() -> void:
-	if _skipped():
-		return
 	var core: Object = _core(5)
 	core.sync_bolts()
 	core.sync_out()
@@ -198,8 +178,6 @@ func test_the_engine_calls_do_not_grow_with_the_owned_bolts() -> void:
 
 
 func test_the_renderer_draws_each_live_bolt_between_its_ticks() -> void:
-	if _skipped():
-		return
 	var core: Object = _core(5)
 	var v := Vector3(600.0, 0.0, 0.0)
 	for i: int in 3:
@@ -234,8 +212,6 @@ func _slot_ys(core: Object) -> Array[float]:
 
 func test_a_bolts_draw_slot_stays_its_own_while_others_come_and_go() -> void:
 	# Fix round 1 (review minor 1): instance k follows the same bolt tick to tick, for T38's motion vectors.
-	if _skipped():
-		return
 	var core: Object = _core(5)
 	var v := Vector3(600.0, 0.0, 0.0)
 	for i: int in 3:
@@ -285,8 +261,6 @@ static func _fired_muzzles(answer: Array) -> Array[int]:
 
 
 func test_the_cannon_kernel_gates_as_the_gdscript_gate_does() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 3535
 	var core: Object = _core(5)
@@ -331,8 +305,6 @@ func test_the_cannon_kernel_gates_as_the_gdscript_gate_does() -> void:
 
 
 func test_a_kernel_shot_leaves_the_muzzle_as_the_gdscript_spawn_does() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 36
 	var world := WorldFrame.new()
@@ -494,8 +466,6 @@ static func _first_difference(a: PackedInt64Array, b: PackedInt64Array) -> int:
 
 
 func test_the_seeded_battle_hits_the_same_with_bolts_as_rows() -> void:
-	if _skipped():
-		return
 	var recorded: Variant = ParityFixture.stored(FIXTURE, "battle_with_bolt_nodes")
 	var rows: Dictionary = await _battle(1)
 	assert_eq(rows["bolt_path"], &"rows", "the rows path owns its bolts")
@@ -518,8 +488,6 @@ static func _digest_of(battle: Dictionary) -> Dictionary:
 
 
 func test_one_thread_and_six_give_the_same_bolts() -> void:
-	if _skipped():
-		return
 	var one: Dictionary = await _battle(1)
 	var six: Dictionary = await _battle(6)
 	var first: int = _first_difference(one["bolts"], six["bolts"])
@@ -601,8 +569,6 @@ func _same_tick_tie(row_first: bool) -> Dictionary:
 
 func test_the_bolt_launched_first_lands_first_whether_a_node_or_a_row() -> void:
 	# Fix round 1 (review minor 6): the resolver sweeps the bolts in launch order, not owned rows first.
-	if _skipped():
-		return
 	var node_first: Dictionary = await _same_tick_tie(false)
 	assert_eq(node_first["path"], &"rows")
 	assert_eq(node_first["hits"], 1, "one hit kills; the second bolt finds the hull gone (%s)" % node_first)
@@ -613,8 +579,6 @@ func test_the_bolt_launched_first_lands_first_whether_a_node_or_a_row() -> void:
 
 
 func test_a_cannon_on_the_kernel_fires_rows_and_signals_each_shot() -> void:
-	if _skipped():
-		return
 	var space := _space()
 	var world := space.get_node("World") as WorldFrame
 	var bolts := world.get_node("Projectiles") as Node3D
@@ -648,8 +612,6 @@ func test_a_cannon_on_the_kernel_fires_rows_and_signals_each_shot() -> void:
 
 
 func test_a_cannon_on_a_body_the_core_has_no_row_for_still_fires() -> void:
-	if _skipped():
-		return
 	var space := _space()
 	var world := space.get_node("World") as WorldFrame
 	var bolts := world.get_node("Projectiles") as Node3D

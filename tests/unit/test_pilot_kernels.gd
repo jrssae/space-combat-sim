@@ -5,19 +5,11 @@ extends GutTest
 ## their edge) the native kernels give the same filtered velocity, lane verdict and lists bit for bit. The kernels live in
 ## the engine-free module (`native/src/kernels.rs`, `pub mod pilot`), so T18 can run them on worker threads. Here the
 ## kernels read rows loaded from arrays (`ScsPilotKernels.load`); `test_pilot_kernels_in_play` reads them from the core.
-## Skips, saying why, when the native library is not built at all.
 
 const PILOT_CLASS: StringName = &"ScsPilotKernels"
 const KERNEL_FILE: String = "res://native/src/kernels.rs"
 const SHELL_FILE: String = "res://native/src/pilot_kernels.rs"
 const CASES: int = 600
-
-
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there are no kernels to test")
-	return true
 
 
 func _kernels() -> Object:
@@ -168,8 +160,6 @@ func test_the_pilot_kernels_live_in_the_engine_free_module() -> void:
 
 
 func test_avoidance_matches_the_gdscript_filter_bit_for_bit_on_seeded_contacts() -> void:
-	if _skipped():
-		return
 	var kernels: Object = _kernels()
 	if kernels == null:
 		return
@@ -225,8 +215,6 @@ static func _reference_filter(table: Table, exempt_id: int, own_pos: Vector3, ow
 
 
 func test_dead_centre_ties_break_the_same_way_natively_for_every_seed() -> void:
-	if _skipped():
-		return
 	var kernels: Object = _kernels()
 	if kernels == null:
 		return
@@ -270,8 +258,6 @@ func test_dead_centre_ties_break_the_same_way_natively_for_every_seed() -> void:
 
 
 func test_the_tie_angle_is_the_engines_deg_to_rad_bit_for_bit() -> void:
-	if _skipped():
-		return
 	var kernels: Object = _kernels()
 	if kernels == null:
 		return
@@ -295,8 +281,6 @@ func test_the_tie_angle_is_the_engines_deg_to_rad_bit_for_bit() -> void:
 
 
 func test_the_fire_lane_matches_the_gdscript_verdict_on_seeded_lanes() -> void:
-	if _skipped():
-		return
 	var kernels: Object = _kernels()
 	if kernels == null:
 		return
@@ -345,8 +329,6 @@ func test_the_fire_lane_matches_the_gdscript_verdict_on_seeded_lanes() -> void:
 
 
 func test_the_context_lists_match_the_gdscript_refresh_on_seeded_contacts() -> void:
-	if _skipped():
-		return
 	var kernels: Object = _kernels()
 	if kernels == null:
 		return
@@ -391,8 +373,6 @@ func test_the_context_lists_match_the_gdscript_refresh_on_seeded_contacts() -> v
 
 
 func test_rows_that_do_not_line_up_or_out_of_range_never_panic() -> void:
-	if _skipped():
-		return
 	var kernels: Object = _kernels()
 	if kernels == null:
 		return

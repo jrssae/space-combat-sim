@@ -3,7 +3,7 @@ extends GutTest
 ## flight and combat command into the core, the flight batch applies it the same tick, and the drivers touch only the ships
 ## whose trigger, selection or command source changed. Seeded battles fly the same bits with the rows path on and off, with
 ## one thread and six; a command set from GDScript takes over from the row. Each fight runs in a space of its own with the clock reset, as
-## `test_core_threads` flies them. Skips, saying why, when the library is not built.
+## `test_core_threads` flies them.
 
 const SHIPS: int = 120
 const SEED: int = 1
@@ -33,16 +33,7 @@ func after_each() -> void:
 const FIXTURE: String = "row_commands"
 
 
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there are no native commands to test")
-	return true
-
-
 func test_commands_from_rows_fly_the_same_battle_as_today() -> void:
-	if _skipped():
-		return
 	# The drivers handing each ship its command (T18's path), recorded before M4-T37 removed it.
 	var recorded: Variant = ParityFixture.stored(FIXTURE, "battle_with_commands_from_the_drivers")
 	var rows: Dictionary = await _battle(1, true)
@@ -67,8 +58,6 @@ static func _digest_of(battle: Dictionary) -> Dictionary:
 
 
 func test_one_thread_and_six_give_the_same_commands_from_rows() -> void:
-	if _skipped():
-		return
 	var one: Dictionary = await _battle(1, true)
 	var six: Dictionary = await _battle(6, true)
 	var first: int = _first_difference(one["row_commands"], six["row_commands"])
@@ -79,8 +68,6 @@ func test_one_thread_and_six_give_the_same_commands_from_rows() -> void:
 
 
 func test_a_declined_think_holds_the_command_the_row_has() -> void:
-	if _skipped():
-		return
 	var fight: Dictionary = await _small_fight()
 	var sim: SimCore = fight["sim"]
 	var batch: BrainBatch = BrainBatch.for_tree(get_tree())
@@ -107,8 +94,6 @@ func test_a_declined_think_holds_the_command_the_row_has() -> void:
 
 
 func test_a_command_set_from_gdscript_takes_over_from_the_row() -> void:
-	if _skipped():
-		return
 	var fight: Dictionary = await _small_fight()
 	var sim: SimCore = fight["sim"]
 	var c: Combatant = null
@@ -329,8 +314,6 @@ func _queue_thinks(ships: Array) -> int:
 
 
 func test_a_ship_whose_row_the_core_lost_is_handed_its_command_once_and_flies_from_the_row_again() -> void:
-	if _skipped():
-		return
 	var fight: Dictionary = await _small_fight()
 	var sim: SimCore = fight["sim"]
 	var lost: Array[Combatant] = []
@@ -358,8 +341,6 @@ func test_a_ship_whose_row_the_core_lost_is_handed_its_command_once_and_flies_fr
 
 
 func test_a_native_pilot_that_wants_the_nearest_hostile_has_it_selected_as_today() -> void:
-	if _skipped():
-		return
 	var fight: Dictionary = await _small_fight()
 	var c: Combatant = fight["ships"][0]
 	c.driver.set_physics_process(false)

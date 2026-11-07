@@ -2,7 +2,7 @@ extends GutTest
 ## The brain maths in native code (M4-T17a, architecture §17.13): `PilotSteering`, `InterceptMath`, the temperament tables,
 ## the five `Manoeuvres`, Godot's `hash([seed, "label"])` and its `RandomNumberGenerator`, each reproduced in
 ## `native/src/brain_maths.rs` and compared here with the GDScript reference bit for bit on seeded inputs (the bytes of every
-## vector and float). The shell `ScsBrains` only hands the maths over. Skips, saying why, when the library is not built.
+## vector and float). The shell `ScsBrains` only hands the maths over.
 
 const BRAINS_CLASS: StringName = &"ScsBrains"
 const CASES: int = 400
@@ -14,13 +14,6 @@ const MANOEUVRE_STEPS: int = 300
 const STEP_IN: int = 23
 ## Per step back: the four levels, strafe, rot, brake, done, timed out, has a desired velocity, the desired velocity.
 const STEP_OUT: int = 16
-
-
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there is no brain maths to test")
-	return true
 
 
 func _brains() -> Object:
@@ -73,8 +66,6 @@ static func _cap_array(cap: ShipCapability) -> PackedFloat64Array:
 
 
 func test_the_seed_hash_is_godots_array_hash_bit_for_bit() -> void:
-	if _skipped():
-		return
 	var brains: Object = _brains()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 1701
@@ -101,8 +92,6 @@ func test_the_seed_hash_is_godots_array_hash_bit_for_bit() -> void:
 
 
 func test_the_rolls_are_godots_random_number_generators_bit_for_bit() -> void:
-	if _skipped():
-		return
 	var brains: Object = _brains()
 	var differences: PackedStringArray = []
 	var seeds: Array[int] = [0, 1, 2, 12345, hash([1, "evade"]), hash([7, "attack brain"]), 4294967295, -5, 9223372036854775807]
@@ -129,8 +118,6 @@ func test_the_rolls_are_godots_random_number_generators_bit_for_bit() -> void:
 
 
 func test_the_angle_helpers_are_the_engines() -> void:
-	if _skipped():
-		return
 	var brains: Object = _brains()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 1702
@@ -156,8 +143,6 @@ func test_the_angle_helpers_are_the_engines() -> void:
 
 
 func test_pilot_steering_gives_the_same_bits() -> void:
-	if _skipped():
-		return
 	var brains: Object = _brains()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 1703
@@ -210,8 +195,6 @@ func test_pilot_steering_gives_the_same_bits() -> void:
 
 
 func test_the_intercept_solution_gives_the_same_bits() -> void:
-	if _skipped():
-		return
 	var brains: Object = _brains()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 1704
@@ -242,8 +225,6 @@ func test_the_intercept_solution_gives_the_same_bits() -> void:
 
 
 func test_the_temperament_tables_and_the_scaled_profile_give_the_same_bits() -> void:
-	if _skipped():
-		return
 	var brains: Object = _brains()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 1705
@@ -344,8 +325,6 @@ static func _pack_command(cmd: FlightCommand, m: Manoeuvre) -> PackedFloat64Arra
 
 
 func test_the_five_manoeuvres_fly_the_same_bits() -> void:
-	if _skipped():
-		return
 	var brains: Object = _brains()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 1706

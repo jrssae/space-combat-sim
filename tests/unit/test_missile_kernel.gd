@@ -3,7 +3,7 @@ extends GutTest
 ## natively over its target's row, bit for bit with `MissileStandin.steer`, which stays the reference behind
 ## a missile the rows cannot steer. Compared on seeded inputs and on seeded flights at a weaving target, one missile steered by each
 ## path side by side; a target hidden after the tick's sync (not yet read again) is asked of the GDScript, which drops it as
-## before, and a missile with no core to read steers in GDScript. Skips, saying why, without the native library.
+## before, and a missile with no core to read steers in GDScript.
 
 const NATIVE_CLASS: StringName = &"ScsWeaponRows"
 const DT: float = 1.0 / 60.0
@@ -35,16 +35,7 @@ func after_each() -> void:
 	Factions.reset()
 
 
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there are no weapon kernels to test")
-	return true
-
-
 func test_the_guidance_maths_match_the_gdscript_bit_for_bit() -> void:
-	if _skipped():
-		return
 	var rows: Object = ClassDB.instantiate(NATIVE_CLASS)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 31
@@ -104,8 +95,6 @@ func _rows(core: SimCore) -> Object:
 
 
 func test_a_missile_on_the_rows_flies_the_gdscript_missiles_path_bit_for_bit() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 4
 	var core: SimCore = SimCore.attach(world)
@@ -145,8 +134,6 @@ func test_a_missile_on_the_rows_flies_the_gdscript_missiles_path_bit_for_bit() -
 
 
 func test_a_target_hidden_after_the_sync_is_dropped_as_the_gdscript_drops_it() -> void:
-	if _skipped():
-		return
 	var core: SimCore = SimCore.attach(world)
 	var rows: Object = _rows(core)
 	var target: RigidBody3D = _fighter(Vector3(0.0, 0.0, -3000.0))
@@ -166,8 +153,6 @@ func test_a_target_hidden_after_the_sync_is_dropped_as_the_gdscript_drops_it() -
 
 
 func test_a_missile_without_a_core_steers_in_gdscript() -> void:
-	if _skipped():
-		return
 	var rows: Object = ClassDB.instantiate(NATIVE_CLASS)  # never attached: no rows to read
 	var target: RigidBody3D = _fighter(Vector3(500.0, 0.0, -3000.0))
 	target.linear_velocity = Vector3(100.0, 0.0, 0.0)

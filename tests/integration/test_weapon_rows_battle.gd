@@ -4,7 +4,7 @@ extends GutTest
 ## and missiles shot by capitals), every hit of the battle, and the beams, launches, kills and detonations come out within
 ## 10 % of the GDScript stand-ins' battle, recorded before M4-T37 removed them (`tests/fixtures/parity/`). A battle on the main
 ## scene does not repeat exactly between runs (847 hits against 856, fix round 1's controls), so it is held to Q22's
-## tolerance, not to equality. Skips, saying why, without the native library.
+## tolerance, not to equality.
 
 const NATIVE_CLASS: StringName = &"ScsWeaponRows"
 const ROOT: String = "user://test_weapon_rows_battle"
@@ -33,13 +33,6 @@ func after_each() -> void:
 
 
 const FIXTURE: String = "weapon_rows_battle"
-
-
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there are no weapon kernels to test")
-	return true
 
 
 # One seeded battle on a fresh main scene: [every hit, capitals' hits, beam shots, launches, missiles shot down, mines set off].
@@ -80,9 +73,7 @@ func _on_hit(info: HitInfo) -> void:
 		_capital_hits += 1
 
 
-func test_a_seeded_battle_lands_the_same_hits_within_ten_percent_on_both_paths() -> void:
-	if _skipped():
-		return
+func test_a_seeded_battle_lands_the_same_hits_within_ten_percent_of_the_gdscript_recording() -> void:
 	# The GDScript stand-ins' battle, recorded before M4-T37 removed them.
 	var recorded: Variant = ParityFixture.stored(FIXTURE, "battle_100_seed_1")
 	assert_not_null(recorded, "the GDScript stand-ins' battle was recorded")

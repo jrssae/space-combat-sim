@@ -6,7 +6,7 @@ extends GutTest
 ## along the tick's flight, so a 3 km beam or a 1 km hull goes through the same sweep.
 ##
 ## Like `test_hit_resolver`, the tests step the world by hand in the order of one game tick: bolts move, the resolver runs,
-## the drones move on by their velocity. Native cases go pending, saying why, when the native library is not built.
+## the drones move on by their velocity.
 
 const DRONE_SCENE: String = "res://tests/fixtures/target_drone.tscn"
 const DT: float = 1.0 / 60.0
@@ -74,15 +74,7 @@ func _build() -> void:
 	resolver.hit_resolved.connect(func(info: HitInfo) -> void: hits.append(info))
 
 
-# True (and the test marked pending, saying why) when there is no native library to compare against.
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there is no native path to compare")
-	return true
-
-
-# The paths to run a case on: GDScript always, native when the library is built.
+# The paths to run a case on: the native one only (M4-T37 removed the GDScript one).
 func _paths() -> Array[bool]:
 	return [true]  # the native path; M4-T37 removed the GDScript one
 

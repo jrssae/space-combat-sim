@@ -20,8 +20,7 @@ extends GutTest
 ## - A cruiser with 8 guns and 2 beams against 12 invulnerable fighters, 30 s: their hull loss (damage over hull) within 15 %.
 ## - Far missiles: a cruiser launching at fighters about a hostile guard cruiser with interceptors, 30 s: the share shot
 ##   down within 15 %.
-## Real pooled ships, drivers, Jolt, the hit resolver and the core, on the threaded step (M4-T37 ended Q54's both-schedules rule). Skips, saying why, when
-## the library is not built.
+## Real pooled ships, drivers, Jolt, the hit resolver and the core, on the threaded step (M4-T37 ended Q54's both-schedules rule).
 
 const SCHEDULES: Array[StringName] = [&"threaded"]  # M4-T37: the inline step and Q54's both-schedules rule are gone
 const SEEDS: Array[int] = [1, 2, 3]
@@ -72,13 +71,6 @@ func after_each() -> void:
 	await get_tree().physics_frame
 
 
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there is no tier to compare")
-	return true
-
-
 func _world(raiders: int, allies: int, tier_on: bool, schedule: StringName) -> void:
 	if w != null:
 		w.free_world()
@@ -102,8 +94,6 @@ func _ticks(n: int) -> void:
 
 
 func test_the_to_hit_roll_matches_a_seeded_full_fidelity_duel_within_ten_percent() -> void:
-	if _skipped():
-		return
 	for schedule: StringName in SCHEDULES:
 		await _world(DUEL_PAIRS, DUEL_PAIRS, false, schedule)
 		# Rounds of duels: in each, a raider and an allied Starfury meet head on from 1.8 km (each pair 31 km from the next,
@@ -190,8 +180,6 @@ func _on_duel_shot(_muzzle: int, at: Vector3, shooter: Combatant, target: Combat
 
 
 func test_an_even_fight_in_the_tier_ends_as_it_does_at_full_fidelity_for_each_side() -> void:
-	if _skipped():
-		return
 	for schedule: StringName in SCHEDULES:
 		var pool: Dictionary = {}
 		for key: String in ["full_hits_a", "tier_hits_a", "full_hits_r", "tier_hits_r", "full_loss_a", "tier_loss_a",
@@ -282,8 +270,6 @@ func _fight(seed_value: int, tier_on: bool, schedule: StringName) -> Dictionary:
 
 
 func test_a_cruiser_against_twelve_fighters_in_the_tier_hurts_them_as_at_full_fidelity() -> void:
-	if _skipped():
-		return
 	for schedule: StringName in SCHEDULES:
 		var full: Dictionary = await _cruiser_fight(false, schedule)
 		var tier: Dictionary = await _cruiser_fight(true, schedule)
@@ -322,8 +308,6 @@ func _cruiser_fight(tier_on: bool, schedule: StringName) -> Dictionary:
 
 
 func test_far_missiles_are_shot_down_at_the_rate_near_ones_are() -> void:
-	if _skipped():
-		return
 	for schedule: StringName in SCHEDULES:
 		var full: Dictionary = await _missile_fight(false, schedule)
 		var tier: Dictionary = await _missile_fight(true, schedule)

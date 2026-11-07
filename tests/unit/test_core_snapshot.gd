@@ -4,7 +4,7 @@ extends GutTest
 ## frame and the player's input never wait on it. `threaded` must equal `delayed` (the same one-tick handover on the main
 ## thread) tick for tick; a job that misses its deadline is counted and waited for, never skipped; the schedule flips live;
 ## a reader asking while the brains are away answers from the launch. M4-T37 removed the single-thread `inline` step and
-## its test (the commands one tick earlier: the one-tick shift is Q53's accepted outcome). Skips, saying why, when the library is not built.
+## its test (the commands one tick earlier: the one-tick shift is Q53's accepted outcome).
 
 const SHIPS: int = 120
 const SEED: int = 1
@@ -34,13 +34,6 @@ func after_each() -> void:
 	ContactScan.invalidate()
 
 
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there is no step to thread")
-	return true
-
-
 func test_the_setting_exists_and_defaults_to_threaded() -> void:
 	assert_true(Settings.schema.has_key(&"sim_step"), "sim_step is a setting")
 	assert_eq(Settings.schema.get_default(&"sim_step"), &"threaded", "the worker thread by default (Q53)")
@@ -50,8 +43,6 @@ func test_the_setting_exists_and_defaults_to_threaded() -> void:
 
 
 func test_the_threaded_step_equals_the_delayed_step_tick_for_tick() -> void:
-	if _skipped():
-		return
 	var delayed: Dictionary = await _battle(&"delayed", 6)
 	var threaded: Dictionary = await _battle(&"threaded", 6)
 	assert_gt(int(delayed["hits_total"]), 10, "hits landed (%d)" % int(delayed["hits_total"]))
@@ -76,8 +67,6 @@ func test_the_threaded_step_equals_the_delayed_step_tick_for_tick() -> void:
 
 
 func test_one_thread_and_six_give_the_same_threaded_battle() -> void:
-	if _skipped():
-		return
 	var one: Dictionary = await _battle(&"threaded", 1)
 	var six: Dictionary = await _battle(&"threaded", 6)
 	assert_eq(int(one["native_thinks"]), int(six["native_thinks"]), "the same number of thinks")
@@ -88,8 +77,6 @@ func test_one_thread_and_six_give_the_same_threaded_battle() -> void:
 
 
 func test_a_missed_deadline_is_counted_and_waited_for_never_skipped() -> void:
-	if _skipped():
-		return
 	var delayed: Dictionary = await _battle(&"delayed", 6, 60)
 	var slow: Dictionary = await _battle(&"threaded", 6, 60, true)
 	assert_gt(int(slow["misses"]), 40, "a job slower than the tick misses its deadline every tick (%d of 60)" % int(slow["misses"]))
@@ -100,8 +87,6 @@ func test_a_missed_deadline_is_counted_and_waited_for_never_skipped() -> void:
 
 
 func test_the_schedule_flips_live_and_a_reader_while_the_brains_are_away_answers_from_the_launch() -> void:
-	if _skipped():
-		return
 	var fight: Dictionary = await _start(&"threaded", 6)
 	var sim: SimCore = fight["sim"]
 	var host: Object = NativeBrains.host(get_tree())
@@ -148,8 +133,6 @@ func test_the_schedule_flips_live_and_a_reader_while_the_brains_are_away_answers
 
 
 func test_an_inline_think_while_a_job_is_out_loses_no_result() -> void:
-	if _skipped():
-		return
 	var delayed: Dictionary = await _battle(&"delayed", 6, 60)
 	var poked: Dictionary = await _battle(&"threaded", 6, 60, false, true)
 	assert_gte(int(poked["pokes"]), 8, "single thinks with output were made while jobs were out (%d)" % int(poked["pokes"]))
@@ -170,8 +153,6 @@ func test_an_inline_think_while_a_job_is_out_loses_no_result() -> void:
 
 
 func test_a_single_think_while_a_job_is_out_keeps_a_released_ship_off_its_row() -> void:
-	if _skipped():
-		return
 	var fight: Dictionary = await _start(&"threaded", 6)
 	var ships: Array = fight["ships"]
 	var sim: SimCore = fight["sim"]
@@ -205,8 +186,6 @@ func test_a_single_think_while_a_job_is_out_keeps_a_released_ship_off_its_row() 
 
 
 func test_a_job_that_panics_after_its_pass_hands_over_no_events_and_keeps_the_brains() -> void:
-	if _skipped():
-		return
 	var fight: Dictionary = await _start(&"threaded", 6)
 	var host: Object = NativeBrains.host(get_tree())
 	for i: int in 4:
@@ -231,8 +210,6 @@ func test_a_job_that_panics_after_its_pass_hands_over_no_events_and_keeps_the_br
 
 
 func test_a_driver_unhosted_during_a_job_gets_no_event_for_its_old_slot() -> void:
-	if _skipped():
-		return
 	var fight: Dictionary = await _start(&"threaded", 6)
 	var batch: BrainBatch = BrainBatch.for_tree(get_tree())
 	for i: int in 4:
@@ -251,8 +228,6 @@ func test_a_driver_unhosted_during_a_job_gets_no_event_for_its_old_slot() -> voi
 
 
 func test_a_ship_parked_during_a_job_gets_no_stale_result() -> void:
-	if _skipped():
-		return
 	var fight: Dictionary = await _start(&"threaded", 6)
 	var ships: Array = fight["ships"]
 	var batch: BrainBatch = BrainBatch.for_tree(get_tree())
@@ -283,8 +258,6 @@ func test_a_ship_parked_during_a_job_gets_no_stale_result() -> void:
 
 
 func test_a_ship_repiloted_during_a_job_keeps_the_new_pilots_state() -> void:
-	if _skipped():
-		return
 	var fight: Dictionary = await _start(&"threaded", 6)
 	var ships: Array = fight["ships"]
 	var batch: BrainBatch = BrainBatch.for_tree(get_tree())

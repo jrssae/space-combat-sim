@@ -3,8 +3,7 @@ extends GutTest
 ## a row with no body and no node, integrated from its held command on its beat (`tier_hz`, staggered) and advanced every
 ## tick; a hulk drifts with no force and is never removed; the rows join the scan's rows after the statics, flagged tier,
 ## and move with a rebase; the core names what the director demotes and promotes. Driven through the core's native API
-## with a hand-held tick, so the beats and the bits are under the test's control. Skips, saying why, when the library is
-## not built.
+## with a hand-held tick, so the beats and the bits are under the test's control.
 
 const SPEC_PATH: String = "res://assets/ships/starfury_aurora.tres"
 const LAYOUT_PATH: String = "res://tests/fixtures/hardpoints_nominal.json"
@@ -40,13 +39,6 @@ func after_each() -> void:
 	for key: StringName in SETTINGS:
 		Settings.set_value(key, _saved[key])
 	Factions.reset()
-
-
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there is no tier to test")
-	return true
 
 
 func _core() -> SimCore:
@@ -99,8 +91,6 @@ static func _orthonormal(b: Basis) -> bool:
 
 
 func test_a_coasting_fighter_keeps_its_velocity_and_spin_bit_for_bit() -> void:
-	if _skipped():
-		return
 	var sim: SimCore = _core()
 	var type_ix: int = _starfury_type(sim)
 	var v := Vector3(123.456, -7.5, -300.25)
@@ -119,8 +109,6 @@ func test_a_coasting_fighter_keeps_its_velocity_and_spin_bit_for_bit() -> void:
 
 
 func test_gravity_pulls_a_tier_row_as_the_stand_in_pulls_a_body() -> void:
-	if _skipped():
-		return
 	var sim: SimCore = _core()
 	var type_ix: int = _starfury_type(sim)
 	var moon := GravityStandin.new()
@@ -140,8 +128,6 @@ func test_gravity_pulls_a_tier_row_as_the_stand_in_pulls_a_body() -> void:
 
 
 func test_a_held_command_pushes_a_fighter_and_the_speed_ceiling_holds() -> void:
-	if _skipped():
-		return
 	var sim: SimCore = _core()
 	var type_ix: int = _starfury_type(sim)
 	var full := PackedFloat64Array([1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
@@ -167,8 +153,6 @@ func test_a_held_command_pushes_a_fighter_and_the_speed_ceiling_holds() -> void:
 
 
 func test_the_assist_damps_a_spin_on_the_beat_and_the_accel_is_held_between() -> void:
-	if _skipped():
-		return
 	var sim: SimCore = _core()
 	var type_ix: int = _starfury_type(sim)
 	var zero := PackedFloat64Array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
@@ -187,8 +171,6 @@ func test_the_assist_damps_a_spin_on_the_beat_and_the_accel_is_held_between() ->
 
 
 func test_a_capital_row_comes_back_to_its_cruise_at_two_metres_per_second_squared_at_most() -> void:
-	if _skipped():
-		return
 	var sim: SimCore = _core()
 	var cruise := Vector3(0.0, 0.0, -30.0)
 	_capital(sim, 801, Vector3(20000.0, 0.0, 0.0), Vector3(40.0, 0.0, -30.0), cruise)
@@ -206,8 +188,6 @@ func test_a_capital_row_comes_back_to_its_cruise_at_two_metres_per_second_square
 
 
 func test_a_hulk_drifts_on_its_last_motion_and_is_never_removed() -> void:
-	if _skipped():
-		return
 	var sim: SimCore = _core()
 	var type_ix: int = _starfury_type(sim)
 	var full := PackedFloat64Array([1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0])
@@ -249,8 +229,6 @@ func test_a_hulk_drifts_on_its_last_motion_and_is_never_removed() -> void:
 
 
 func test_tier_rows_join_the_scan_rows_after_the_statics_flagged_tier() -> void:
-	if _skipped():
-		return
 	StaticRows.register(12345, Vector3(50.0, 0.0, 0.0), 20.0, BodyKind.STATIC, Factions.NEUTRAL, world)
 	var sim: SimCore = _core()
 	var type_ix: int = _starfury_type(sim)
@@ -285,8 +263,6 @@ func test_tier_rows_join_the_scan_rows_after_the_statics_flagged_tier() -> void:
 
 
 func test_a_rebase_shifts_the_tier_rows_and_the_pull_once() -> void:
-	if _skipped():
-		return
 	var sim: SimCore = _core()
 	var type_ix: int = _starfury_type(sim)
 	sim.core.tier_set_gravity(PackedVector3Array([Vector3(0.0, -400000.0, 0.0)]), PackedFloat64Array([4.8e9]))
@@ -303,8 +279,6 @@ func test_a_rebase_shifts_the_tier_rows_and_the_pull_once() -> void:
 
 
 func test_the_core_names_the_far_bodies_to_demote_and_the_near_rows_to_promote() -> void:
-	if _skipped():
-		return
 	var near: RigidBody3D = _body(Vector3(0.0, 0.0, -3000.0), "NEAR")
 	var far: RigidBody3D = _body(Vector3(0.0, 0.0, -12000.0), "FAR")
 	var player: RigidBody3D = _body(Vector3(0.0, 0.0, -40000.0), "PLAYER")
@@ -324,8 +298,6 @@ func test_the_core_names_the_far_bodies_to_demote_and_the_near_rows_to_promote()
 
 
 func test_take_hands_the_state_back_exactly_and_keeps_the_other_rows_whole() -> void:
-	if _skipped():
-		return
 	var sim: SimCore = _core()
 	var type_ix: int = _starfury_type(sim)
 	var basis := Basis(Vector3(0.3, 0.5, 0.8).normalized(), 1.1)

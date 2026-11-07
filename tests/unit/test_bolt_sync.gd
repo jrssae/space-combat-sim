@@ -34,13 +34,6 @@ func after_each() -> void:
 		Settings.set_value(key, _saved[key])
 
 
-func _skipped() -> bool:
-	if NativeLib.has_class(SimCore.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there is no core to test")
-	return true
-
-
 # A bolt as the game launches it; `flown` gives it one tick of flight, as `_physics_process` would.
 func _bolt(rng: RandomNumberGenerator, flown: bool) -> Projectile:
 	var bolt := PROJECTILE_SCENE.instantiate() as Projectile
@@ -77,8 +70,6 @@ static func _rows(core: Object) -> Array:
 
 
 func test_the_reader_fills_the_same_bolt_rows_as_the_core() -> void:
-	if _skipped():
-		return
 	var recorded: Variant = ParityFixture.stored(FIXTURE, "crowd_seed_34")
 	var fast: Array = _crowd()
 	assert_not_null(recorded, "the core's own read was recorded")
@@ -129,8 +120,6 @@ func _crowd() -> Array:
 
 
 func test_sim_core_reads_the_bolts_through_the_reader_and_counts_its_calls() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 35
 	for i: int in 40:

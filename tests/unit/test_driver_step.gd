@@ -4,7 +4,6 @@ extends GutTest
 ## the wake, the time since the last think and the hold of a declined think in the batch's call. The seeded battle flies
 ## the same bits with the setting off and on, with and without a player (near and far ships), with one thread and six; a
 ## hit wakes a hosted far ship; a changed wing order reaches a hosted pilot; the setting off gives every driver its tick back.
-## Skips, saying why, when the library is not built.
 
 const SHIPS: int = 120
 const SEED: int = 1
@@ -33,13 +32,6 @@ func after_each() -> void:
 
 
 const FIXTURE: String = "driver_step"
-
-
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there is no host to step the drivers")
-	return true
 
 
 # A space of its own with a world and its projectiles.
@@ -214,20 +206,14 @@ func _assert_recorded(case: String, with_player: bool, label: String) -> void:
 
 
 func test_the_hosted_step_flies_the_same_battle_at_the_far_rate() -> void:
-	if _skipped():
-		return
 	await _assert_recorded("battle_far_rate", false, "no player, every ship far")
 
 
 func test_the_hosted_step_flies_the_same_battle_with_near_and_far_ships() -> void:
-	if _skipped():
-		return
 	await _assert_recorded("battle_near_and_far", true, "a player among them")
 
 
 func test_one_thread_and_six_give_the_same_hosted_battle() -> void:
-	if _skipped():
-		return
 	var one: Dictionary = await _battle(1, true)
 	var six: Dictionary = await _battle(6, true)
 	var first: int = _first_difference(one["rows"], six["rows"])
@@ -266,8 +252,6 @@ func _small_fight() -> Dictionary:
 
 
 func test_a_changed_wing_order_reaches_a_hosted_pilot_and_a_hand_step_takes_the_step_back() -> void:
-	if _skipped():
-		return
 	var fight: Dictionary = await _small_fight()
 	var ships: Array[Combatant] = fight["ships"]
 	var hosted: int = 0

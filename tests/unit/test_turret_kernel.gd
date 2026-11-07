@@ -4,7 +4,7 @@ extends GutTest
 ## the GDScript stand-ins as they were recorded before M4-T37 removed them (`tests/fixtures/parity/turret_kernel.json`). The
 ## aim maths (`InterceptMath.solve`, the limited turn, the angle) are compared on seeded inputs; a seeded miniature battle
 ## must log the recorded picks, axes, aim errors, fire ticks, bolts, kills, beams and launches every tick, also across a
-## rebase between the sync and the step and a relation changed mid-run. Skips, saying why, without the native library.
+## rebase between the sync and the step and a relation changed mid-run.
 
 const NATIVE_CLASS: StringName = &"ScsWeaponRows"
 
@@ -28,13 +28,6 @@ func after_each() -> void:
 const FIXTURE: String = "turret_kernel"
 
 
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there are no weapon kernels to test")
-	return true
-
-
 # A unit vector from the seeded generator, now and then exactly on an axis.
 static func _unit(rng: RandomNumberGenerator) -> Vector3:
 	if rng.randf() < 0.05:
@@ -43,8 +36,6 @@ static func _unit(rng: RandomNumberGenerator) -> Vector3:
 
 
 func test_the_aim_maths_match_the_gdscript_bit_for_bit() -> void:
-	if _skipped():
-		return
 	var rows: Object = ClassDB.instantiate(NATIVE_CLASS)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 20
@@ -80,8 +71,6 @@ func test_the_aim_maths_match_the_gdscript_bit_for_bit() -> void:
 
 
 func test_a_seeded_battle_gives_the_recorded_picks_aims_fire_ticks_and_kills() -> void:
-	if _skipped():
-		return
 	var native: WeaponRowsScene = WeaponRowsScene.build(self, 7)
 	native.run(600)
 	assert_eq(native.director.weapons_path(), &"native", "the run is on the native rows")
@@ -102,8 +91,6 @@ func test_a_seeded_battle_gives_the_recorded_picks_aims_fire_ticks_and_kills() -
 
 
 func test_a_rebase_between_the_sync_and_the_step_changes_nothing() -> void:
-	if _skipped():
-		return
 	var native: WeaponRowsScene = WeaponRowsScene.build(self, 11)
 	native.rebase_at = 90
 	native.run(240)
@@ -112,8 +99,6 @@ func test_a_rebase_between_the_sync_and_the_step_changes_nothing() -> void:
 
 
 func test_a_relation_changed_mid_run_is_followed_the_same_tick() -> void:
-	if _skipped():
-		return
 	var native_log: Array = _relation_run()
 	_assert_recorded("relation_changed_at_120", native_log)
 	# Within a retarget (six ticks) every gun has let go: the rows read the new table.
@@ -126,8 +111,6 @@ func test_a_relation_changed_mid_run_is_followed_the_same_tick() -> void:
 
 
 func test_turrets_of_a_capital_that_is_not_bound_are_refused() -> void:
-	if _skipped():
-		return
 	var rows: Object = ClassDB.instantiate(NATIVE_CLASS)
 	rows.set_capitals(PackedInt64Array([0, 0]))
 	var ok: bool = rows.set_turrets(PackedInt32Array([0, 2]), PackedVector3Array([Vector3.ZERO, Vector3.ZERO]),

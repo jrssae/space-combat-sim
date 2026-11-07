@@ -5,7 +5,7 @@ extends GutTest
 ## once; the four classes answer from the core exactly as they do from their own loads (bit for bit, on seeded worlds); a
 ## row of each kind round-trips its state; and the sync points are the only places the core touches the engine. Light
 ## bodies made here (a rigid body with a `Targetable` and a `Damageable`, props, a hull without a marker, bolts), real ships
-## only for the flight step. Skips, saying why, when the native library is not built at all.
+## only for the flight step.
 
 const ROWS_COMPARED: Array[String] = ["_body_ids", "_ids", "_names", "_factions", "_positions", "_velocities", "_forwards",
 		"_ups", "_radii", "_is_ship", "_kinds"]
@@ -43,13 +43,6 @@ func after_each() -> void:
 	for key: StringName in SETTINGS:
 		Settings.set_value(key, _saved[key])
 	Factions.reset()
-
-
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there is no core to test")
-	return true
 
 
 # --- the world ---------------------------------------------------------------------------------------------------------
@@ -220,8 +213,6 @@ static func _ids(contacts: Array[Contact]) -> PackedInt64Array:
 
 
 func test_rows_survive_a_pool_release_and_acquire_with_a_new_handle() -> void:
-	if _skipped():
-		return
 	var ship: RigidBody3D = _body(Vector3(100.0, 0.0, -50.0), Factions.EARTH_ALLIANCE, "KILO 1")
 	_body(Vector3(-300.0, 20.0, 400.0), Factions.RAIDERS, "R 1")
 	var core: SimCore = _core()
@@ -251,8 +242,6 @@ func test_rows_survive_a_pool_release_and_acquire_with_a_new_handle() -> void:
 
 
 func test_the_slot_map_stays_bounded_over_spawn_and_release_cycles_and_refuses_an_old_handle() -> void:
-	if _skipped():
-		return
 	_body(Vector3(-300.0, 20.0, 400.0), Factions.RAIDERS, "ANCHOR")
 	var core: SimCore = _core()
 	core.sync_now()
@@ -281,8 +270,6 @@ func test_the_slot_map_stays_bounded_over_spawn_and_release_cycles_and_refuses_a
 
 
 func test_a_rebase_shifts_every_row_once() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 15
 	var bodies: Array[Node3D] = _crowd(rng, 40, 30, 20)
@@ -316,8 +303,6 @@ func test_a_rebase_shifts_every_row_once() -> void:
 
 
 func test_a_row_of_each_kind_round_trips_its_state() -> void:
-	if _skipped():
-		return
 	var core: SimCore = _core()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 3
@@ -359,8 +344,6 @@ func test_a_row_of_each_kind_round_trips_its_state() -> void:
 
 
 func test_the_contact_scan_answers_from_the_core_as_from_its_own_load() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 150
 	for round: int in 6:
@@ -404,8 +387,6 @@ func test_the_contact_scan_answers_from_the_core_as_from_its_own_load() -> void:
 
 
 func test_the_hit_sweep_pairs_from_the_core_as_from_its_own_load() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 808
 	var resolver := HitResolver.new()
@@ -453,8 +434,6 @@ func test_the_hit_sweep_pairs_from_the_core_as_from_its_own_load() -> void:
 
 
 func test_a_bolt_on_its_launch_tick_sweeps_only_its_muzzle_on_both_paths() -> void:
-	if _skipped():
-		return
 	var resolver := HitResolver.new()
 	resolver.name = "HitResolver"
 	add_child_autofree(resolver)
@@ -483,8 +462,6 @@ func test_a_bolt_on_its_launch_tick_sweeps_only_its_muzzle_on_both_paths() -> vo
 
 
 func test_a_hull_destroyed_between_the_resolvers_leaves_the_ram_rows_on_both_paths() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 2102
 	var hits := HitResolver.new()
@@ -523,8 +500,6 @@ func test_a_hull_destroyed_between_the_resolvers_leaves_the_ram_rows_on_both_pat
 
 
 func test_a_ship_parked_after_the_resync_and_back_the_next_tick_gets_a_new_handle() -> void:
-	if _skipped():
-		return
 	var ship: RigidBody3D = _body(Vector3(100.0, 0.0, -50.0), Factions.EARTH_ALLIANCE, "KILO 1")
 	_body(Vector3(-300.0, 20.0, 400.0), Factions.RAIDERS, "R 1")
 	var core: SimCore = _core()
@@ -543,8 +518,6 @@ func test_a_ship_parked_after_the_resync_and_back_the_next_tick_gets_a_new_handl
 
 
 func test_the_ram_broad_phase_pairs_from_the_core_as_from_its_own_load() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 2101
 	var rams := RamResolver.new()
@@ -600,8 +573,6 @@ class Launcher extends Node:
 
 
 func test_the_flight_step_flies_the_same_from_the_core_as_from_the_physics_server() -> void:
-	if _skipped():
-		return
 	var spec: ShipSpec = load(SPEC_PATH) as ShipSpec
 	var digests: Array[Array] = []
 	for use_core: bool in [true]:
@@ -750,8 +721,6 @@ func test_the_kernels_hold_no_engine_type() -> void:
 
 
 func test_sync_in_and_sync_out_are_the_only_places_the_core_touches_the_engine() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 9
 	var resolver := HitResolver.new()
