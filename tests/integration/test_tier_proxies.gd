@@ -316,3 +316,17 @@ func test_a_release_or_a_death_in_the_tier_is_not_a_promotion() -> void:
 	tier.forget_capital(cap)
 	assert_false(sim.core.tier_has(c.ship.get_instance_id()) or sim.core.tier_has(cap.get_instance_id()), "both rows gone")
 	assert_eq(int(sim.core.tier_promotions()), promotions, "and neither counted as a promotion")
+
+
+func test_the_bench_counts_leave_a_dead_capital_and_its_weapons_out() -> void:
+	var a: CapitalStandin = standins.add_capital(&"cruiser", Factions.RAIDERS, "CRUISER 1", world.to_universe(Vector3(0.0, 0.0, -3000.0)),
+			Basis.IDENTITY, Vector3.ZERO)
+	standins.add_capital(&"cruiser", Factions.RAIDERS, "CRUISER 2", world.to_universe(Vector3(2000.0, 0.0, -3000.0)), Basis.IDENTITY,
+			Vector3.ZERO)
+	standins.active = true
+	await _ticks(2)
+	var guns: int = standins.turret_count()
+	assert_eq(standins.capitals_in_play(), 2)
+	a.damageable.kill()
+	assert_eq(standins.capitals_in_play(), 1, "the dead one is not counted")
+	assert_eq(standins.turret_count(), guns - a.guns().size(), "nor its guns")

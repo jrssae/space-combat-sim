@@ -378,6 +378,19 @@ func gravity() -> GravityStandin:
 	return _gravity if _gravity != null and is_instance_valid(_gravity) else null
 
 
+## Capitals in play, on their bodies or as tier rows: not the destroyed ones (M4-T23 fix round 1: capitals can die now).
+func capitals_in_play() -> int:
+	var n: int = 0
+	for cap: CapitalStandin in _capitals:
+		n += 1 if _in_play(cap) else 0
+	return n
+
+
+# A capital not freed and not destroyed (its body may be parked in the tier).
+static func _in_play(cap: CapitalStandin) -> bool:
+	return is_instance_valid(cap) and not cap.damageable.hull.destroyed
+
+
 # A capital in play on its body: not freed, in the tree and not parked in the low-attention tier (M4-T21).
 static func _flying(cap: CapitalStandin) -> bool:
 	return is_instance_valid(cap) and cap.is_inside_tree() and cap.can_process()
@@ -390,21 +403,21 @@ func asteroid_count() -> int:
 func turret_count() -> int:
 	var n: int = 0
 	for cap: CapitalStandin in _capitals:
-		n += cap.guns().size()
+		n += cap.guns().size() if _in_play(cap) else 0
 	return n
 
 
 func interceptor_count() -> int:
 	var n: int = 0
 	for cap: CapitalStandin in _capitals:
-		n += cap.interceptors().size()
+		n += cap.interceptors().size() if _in_play(cap) else 0
 	return n
 
 
 func beam_count() -> int:
 	var n: int = 0
 	for cap: CapitalStandin in _capitals:
-		n += cap.beams().size()
+		n += cap.beams().size() if _in_play(cap) else 0
 	return n
 
 
@@ -485,7 +498,7 @@ func _plan_launches(now_s: float) -> void:
 
 
 func _count(launched: int) -> void:
-	counts[Count.CAPITALS] = _capitals.size()
+	counts[Count.CAPITALS] = capitals_in_play()
 	counts[Count.TURRETS] = turret_count()
 	counts[Count.INTERCEPTORS] = interceptor_count()
 	counts[Count.ASTEROIDS] = asteroid_count()
