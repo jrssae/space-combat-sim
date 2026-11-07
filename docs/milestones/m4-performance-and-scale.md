@@ -102,6 +102,7 @@ After cycle 1 the maintainer read the options in `docs/handoff-m4.md` section 7 
 | Q68 | The order after T22 (2026-11-06) | **T37 before T23.** The cleanup (fallbacks, the inline step, the GDScript paths) runs next, so T23 builds on the one threaded path; T25 stays last |
 | Q69 | A mid-milestone merge (2026-11-06) | **Merge `m4` into `main` before T37**, with an ordinary merge commit tagged `m4-gdscript-reference`, so `main` keeps a tested point where the GDScript paths, the `perf_native*` switches and the single-thread `inline` step still exist; T37 then removes them and M4's close-out merge follows as usual. Not M4's acceptance: T37, T23 and T25 remain |
 | Q70 | Q16 on the threaded step (2026-11-06, T37) | **Accept the loosened gate.** With the inline step gone, Q16's GDScript-against-native fights run one tick apart and twins drift (390 to 820 m at 10 s); the gate becomes hits within 20 % and the outcome mix within 5 points, the twin distance recorded, not gated (the one-tick shift is Q53's accepted cost) |
+| Q71 | A full code review (2026-11-07) | **T43 after T25**: a read-only review of the whole code base for performance, memory, duplicated code and any other issue, delivered with report P3; the maintainer triages its findings into fix tasks |
 
 ## The budget ("good game performance", Q5)
 
@@ -235,6 +236,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T40 | Upscaling (Q59, Q60): FSR 2.2 (temporal, its own anti-aliasing) and FSR 1.0 (spatial, with sharpness) with internal-resolution presets from a third of the output's height up to native, applied live with the HUD at window size; no frame generation; defaults chosen by measurement | T38 | Opus | Since T36 a 4K window renders 4K; FSR 2.2 from 1 080 or 1 440 lines looks better than a bilinear stretch and costs less than native; below 1 080 is for weaker GPUs; supersedes T26 (measured otherwise: FSR 2.2 costs more GPU than native here, so native is the default) | R | done (2026-11-05, one fix round, CI green on `d85a314`; native the default: FSR 2.2 costs more GPU than native here and FSR 1.0 gains 3 to 5 % on a CPU-bound frame; the fix round made `FULLSCREEN_EXEC` apply, so T24's and T35's fullscreen comparisons were re-measured; Cycle log, M4-T40) |
 | T41 | The Wayland display driver (Q66): the game and the measurements open through Godot's Wayland driver, so a fullscreen window is the panel's own 3840x2160 under GNOME's 1.25 scale | T40 | Opus (controller) | The X11 path made the fullscreen window 6144x3456 and the compositor scaled it down; Wayland is worth about 8 to 10 FPS at 1 000 ships | R | done (2026-11-06, the controller, CI green on `7468d81`; fullscreen a true 3840x2160, `battle` 500 54.6 to 58.7 FPS and 1 000 60 to 62 to 69 to 72; Cycle log, M4-T41) |
 | T42 | Every world attaches the core, one hull read (T37's review I3): free flight, the menu, scenarios and test worlds attach `SimCore`, so the registry, `from_tree`, the resolvers' own walks, the flight batch's server read and the contact field's GDScript loops collapse into one native hull read | T37 | Opus | T37 removed the switches but left five hull-reading paths for worlds with no core (the free-flight scenario has no ship pools, so no core); T23's blast and proxies read hulls and Q68 wants T23 on one path | X, G | in progress (dispatched 2026-11-07, Opus; built in a worktree on `0e6515e`, waiting for review and merge) |
+| T43 | Full code review (Q71): the whole code base (GDScript, Rust, shaders, scripts, tests) read for performance, memory (leaks, retained nodes and resources, growth per tick or per spawn, VRAM), duplicated code, and any other defect; read-only, a ranked findings list the maintainer triages into fix tasks | T25 | Opus | M4 rewrote the simulation in two languages over 40 tasks; a fresh whole-code read catches what task-scoped reviews could not | M | not started |
 | T39 | FSR 4 study (Q59): whether AMD's FSR 4 can run in this game on Linux, Vulkan and Godot 4.7 through the native library, on the maintainer's RDNA 2 card, under the GPL-3.0 licence; a go or no-go with a plan | T38 | Sonnet | FSR 4 is not in Godot 4.7; AMD's support for RDNA 2 and for Vulkan is new or announced, so it needs facts before code | M | not needed (skipped by the maintainer, Q60) |
 
 ### M4-T01 Benchmark harness, budget and baseline
@@ -2456,6 +2458,25 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
     before, 1.79 / 2.44 after; `battle` 300 6.44 / 8.16 before, 6.42 / 8.23 after; `battle` 500 10.81 / 13.33 before,
     10.77 / 13.57 after: unchanged within noise. Free flight (the default scenario, 1 200 ticks after 300) 3.44 / 6.59
     before, 3.52 / 6.52 after: its core's sync costs about 0.05 ms a tick. The full suite and each CI shard green.
+
+##### M4-T43 Full code review (Q71)
+
+- **Track:** M. **Agent:** Opus (read-only reviewers; subagents allowed for the parts). **Depends on:** T25 (it reviews the code
+  report P3 measured). Delivered with report P3; the maintainer triages its findings.
+- **Goal:** one fresh read of the whole code base after M4: `src/`, `native/src/`, the shaders, `scripts/`, `tools/procgen/` and
+  `tests/`, against `CLAUDE.md`, `docs/architecture.md` and the milestone's rulings. Focus: performance (per-tick and per-frame work,
+  allocations in hot paths, needless engine calls, work done twice, anything that grows with entity count and could move to the
+  native core or a cheaper pass), memory (leaks, nodes, resources and RIDs kept after use, unbounded caches and dictionaries, growth
+  per spawn, per rebase or per scenario reload, VRAM held), duplicated code (two implementations of one thing, copy-pasted logic,
+  dead code and leftovers of removed paths), and any other defect found on the way (correctness, threading, determinism,
+  test gaps, doc drift, rule breaks).
+- **Measures (to back findings):** a long `battle` 500 run and a scenario-reload loop watching memory (`Performance` monitors,
+  VRAM from `/sys/class/drm/card1/device/mem_info_vram_used`, orphan nodes) for growth; leak warnings at exit.
+- **Output:** `.superpowers/sdd/m4-performance-and-scale/full-review.md`: findings ranked by impact, each with file:line, what is
+  wrong, the evidence, a suggested fix and its size; grouped into "fix in M4", "a later milestone" and "no action". Read-only:
+  no code changes. The maintainer picks which become fix tasks (new rows, in M4 or later); if any lands in M4, T25's affected
+  numbers are re-taken.
+- **Done when:** the findings list is written and handed to the maintainer with report P3.
 
 ##### M4-T39 FSR 4 study (Q59)
 - **Not needed (Q60, 2026-11-05):** the maintainer skipped FSR 4; the section below is kept as the record of what was asked.
