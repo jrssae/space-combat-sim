@@ -884,7 +884,7 @@ impl ScsBrains {
 
     // --- the drivers' step (M4-T35) ----------------------------------------------------------------------------------
 
-    /// Steps the driver of the pilot in `slot` here from now on (`perf_native_driver_step`): its ship's body, its place
+    /// Steps the driver of the pilot in `slot` here from now on (M4-T35): its ship's body, its place
     /// in the think rate's stagger and the think rate's state and hits as the driver kept them.
     #[func]
     #[allow(clippy::too_many_arguments)]

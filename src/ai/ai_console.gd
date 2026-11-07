@@ -28,7 +28,7 @@ static func provider() -> ConsoleVars:
 				"doc": "AI ships farther out (or with no player alive) that thought in the last tick, at ai_think_far_hz"},
 		&"held": {"get": AiPilotDriver.held, "doc": "AI ships that held their last command in the last tick"},
 		&"tiered": {"get": AiPilotDriver.tiered, "doc": "Hosted AI ships the host left alone in the last tick because they fly as low-attention tier rows (M4-T21); not counted in held"},
-		&"hosted": {"get": AiPilotDriver.hosted, "doc": "AI drivers whose step the native brain host decides (M4-T35, perf_native_driver_step)"},
+		&"hosted": {"get": AiPilotDriver.hosted, "doc": "AI drivers whose step the native brain host decides (M4-T35)"},
 		&"contacts_max": {"get": AiPilotDriver.contacts_max,
 				"doc": "The most contacts one AI ship scored and avoided in the last tick (ai_nearest_k plus what it keeps)"},
 		&"thinks_native": {"get": AiPilotDriver.thinks_native,

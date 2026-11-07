@@ -405,7 +405,7 @@ func _make_hulk(c: Combatant) -> void:
 # A native AI pilot the host does not step yet would never think in the tier: it stays in Jolt until it is hosted.
 func _waits_for_host(c: Combatant) -> bool:
 	var pilot := c.driver.brain as AiPilot if c.driver != null else null
-	return pilot != null and pilot.native_capable() and BrainBatch.driver_step_mode() and not c.driver.is_hosted()
+	return pilot != null and pilot.native_capable() and not c.driver.is_hosted()
 
 
 # Body `body_id`'s `Damageable`, found once and kept (a ship keeps its hull for life; fix round 2: looking it up among

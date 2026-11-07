@@ -245,7 +245,9 @@ func test_a_driver_unhosted_during_a_job_gets_no_event_for_its_old_slot() -> voi
 	for i: int in 4:
 		await get_tree().physics_frame
 	assert_gt(batch.hosted_count(), 50, "most drivers are hosted (%d)" % batch.hosted_count())
-	Settings.set_value(&"perf_native_driver_step", false)  # every driver takes its step back while the job is out
+	batch.unhost_all()  # every driver takes its step back while the job is out
+	for c: Combatant in fight["ships"]:
+		c.driver.set_physics_process(false)  # and stays off the host this tick, so the join finds every slot let go
 	assert_eq(batch.hosted_count(), 0, "every driver unhosted at once")
 	await get_tree().physics_frame
 	assert_eq(batch.events, 0, "no event reached a driver for a slot it no longer has")

@@ -260,7 +260,6 @@ func test_a_slot_listed_twice_in_one_flight_step_flies_as_two_steps_in_a_row() -
 # A fight of the battle's first fighters in a space of its own, flown a few ticks so every pilot has its native slot.
 func _small_fight() -> Dictionary:
 	Settings.set_value(&"perf_threads", 6)
-	Settings.set_value(&"perf_native_driver_step", false)  # these fights queue thinks by hand (T18's seam; the host's step: test_driver_step)
 	Settings.set_value(&"sim_step", &"delayed")  # and join the flush's job by hand on the main thread (test_core_snapshot)
 	Factions.reset()
 	Factions.use_table(BenchLayout.faction_table(BenchLayout.BATTLE))

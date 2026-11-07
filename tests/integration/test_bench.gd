@@ -141,7 +141,7 @@ func _assert_stages_are_consistent(series: Array[PackedInt64Array]) -> void:
 		if parts != v.call(PerfProbe.Field.TICK):
 			broken.append("tick %d: stages %d, tick %d" % [i, parts, v.call(PerfProbe.Field.TICK)])
 	assert_eq(broken.size(), 0, "stages nest inside the stage that contains them: %s" % "; ".join(broken.slice(0, 6)))
-	if BrainBatch.driver_step_mode() and SimCore.enabled():
+	if SimCore.enabled():
 		# Every driver hosted in the native brain host (M4-T35): its perception runs inside the native think, counted in
 		# `think`, and no GDScript contact scan is built in the measured ticks, so `scan` reads 0.
 		assert_gt(PerfStats.max_value(_floats(series[PerfProbe.Field.THINK])), 0.0, "the hosted drivers' think was timed")

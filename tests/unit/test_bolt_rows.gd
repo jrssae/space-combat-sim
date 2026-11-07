@@ -635,7 +635,6 @@ func test_a_cannon_on_the_kernel_fires_rows_and_signals_each_shot() -> void:
 	if _skipped():
 		return
 	Settings.set_value(&"perf_native_bolt_rows", true)
-	Settings.set_value(&"perf_native_commands", false)
 	var space := _space()
 	var world := space.get_node("World") as WorldFrame
 	var bolts := world.get_node("Projectiles") as Node3D

@@ -102,15 +102,9 @@ const ENTRIES: Dictionary = {
 	# M4-T15
 	&"perf_native_core": {"type": TYPE_BOOL, "default": true,
 		"doc": "The native simulation core feeds the contact scan, the hit sweep, the flight step and the ram broad phase from one sync a tick (M4-T15) when perf_native is on and the library is built; off = each class loads its own copy, for pairing the two in one process"},
-	# M4-T17
-	&"perf_native_brains": {"type": TYPE_BOOL, "default": true,
-		"doc": "Every AiPilot thinks in the native brains over the core's rows (M4-T17) when perf_native and perf_native_core are on and the library is built; off = the GDScript brains, for pairing the two in one process"},
 	# M4-T18
 	&"perf_threads": {"type": TYPE_INT, "default": 0, "min": 0, "max": 64,
 		"doc": "Worker threads for the native core's per-ship passes, the brains and the flight step (M4-T18): 0 = as many threads as the machine has performance cores, 1 = the main thread alone; outputs are the same bits whatever the count; live"},
-	# M4-T33
-	&"perf_native_commands": {"type": TYPE_BOOL, "default": true,
-		"doc": "The native pilots' flight and combat commands go into the core's rows and the flight step flies them the same tick (M4-T33) when the native brains are on; the drivers then touch only ships whose trigger, selection or command source changed; off = each driver hands its ship the command as before, for pairing the two in one process; live"},
 	# M4-T30a
 	&"ambient_level": {"type": TYPE_FLOAT, "default": 0.3, "min": 0.0, "max": 2.0,
 		"doc": "The environment's ambient light, white at this energy: what the textured meshes and every other lit surface get on every side (M4-T30a, live)"},
@@ -137,8 +131,6 @@ const ENTRIES: Dictionary = {
 		"doc": "The AI ships' targeting controllers' selection check (a target gone, parked or out of reach) runs as one native pass over the core's rows (M4-T35; needs perf_core_event_columns); off = each controller checks its own selection every tick, the reference; live"},
 	&"perf_batch_owns_ships": {"type": TYPE_BOOL, "default": true,
 		"doc": "A ship the flight batch flies does not tick itself (M4-T35): the batch's gather takes its combat edges and the batch gives the tick back when it stops flying the ship; off = every ship's own tick runs and returns early, the reference; live"},
-	&"perf_native_driver_step": {"type": TYPE_BOOL, "default": true,
-		"doc": "The AI drivers' step (the think rate's stagger and wake, the time since the last think, the hold of a declined think) is decided in the native brain host for every bound native pilot (M4-T35), so no driver runs per ship per tick; off = each driver steps itself at -10 and queues its think, the reference (M4-T33); live"},
 	&"ship_contact_monitor": {"type": TYPE_BOOL, "default": false,
 		"doc": "RigidBody3D.contact_monitor on every ship (M4-T35): off by default, since nothing connects body_entered and the direct state's contact list, which the ram resolver reads, needs only max_contacts_reported; applies to ships built after the change"},
 	&"perf_native_bolt_rows": {"type": TYPE_BOOL, "default": true,
@@ -180,7 +172,8 @@ const RENAMED: Dictionary = {}
 
 ## Settings removed with the old paths (M4-T37, Q67): `Settings.revert` reads only schema keys, so a saved file that still
 ## holds one of these loads without it, and the next `save` drops it.
-const RETIRED: Array[StringName] = [&"perf_native_weapons"]
+const RETIRED: Array[StringName] = [&"perf_native_weapons", &"perf_native_brains", &"perf_native_commands",
+		&"perf_native_driver_step"]
 
 ## Choices removed from a setting: key -> {old choice -> what a saved file's old choice loads as} (M4-T37: the inline step).
 const RETIRED_VALUES: Dictionary = {&"sim_step": {&"inline": &"threaded"}}

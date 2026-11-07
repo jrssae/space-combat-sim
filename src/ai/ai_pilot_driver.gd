@@ -41,7 +41,7 @@ extends Node
 ## the host declines (the ship has no row this tick, the rows moved under the scan), the driver perceives and thinks in
 ## GDScript as before.
 ##
-## Commands as rows (M4-T33, `perf_native_commands`): a native think in a rows batch hands in only what the rows do not
+## Commands as rows (M4-T33): a native think in the tick's rows batch hands in only what the rows do not
 ## hold (the core reads the hull and the selection at the sync), and the host writes the command into the core, where the
 ## flight batch flies it the same tick. The driver does nothing for that think at -9 unless the batch names it: the ship's
 ## first command from its row (the ship and the cannon are handed their commands once, and fly the row's from then on), a
@@ -49,12 +49,12 @@ extends Node
 ## landed (the think rate's clock and wake), and the pilot's state (`AiPilot.set_pending`). A new pilot, or a command set
 ## from GDScript, releases the ship from its row.
 ##
-## Hosted (M4-T35, `perf_native_driver_step`): once its pilot's slot is bound, the driver hands its step to the host through
+## Hosted (M4-T35): once its pilot's slot is bound, the driver hands its step to the host through
 ## the batch (`BrainBatch.host_driver`) and stops ticking: the think rate's stagger and wake, the time since the last think
 ## and the hold of a declined think are decided natively in the batch's call, the hits reach the host as they land
 ## (`_on_hit_taken`), a parked ship's driver is marked not live, and the pilot reads its latest think from the host's slot.
-## The driver takes its step back (`unhost`) when its pilot changes, it leaves the tree, the setting goes off, or a test
-## steps it by hand.
+## The driver takes its step back (`unhost`) when its pilot changes, it leaves the tree, or a test steps it by hand (which
+## never hosts it again: only the engine's own tick does).
 ##
 ## Console (§16.4, M3-T06): `AiConsole` is registered while any driver is in the tree, owned by the newest. `think_us()` is
 ## wall-clock time, a profiling readout (AC13), never gameplay time.
@@ -87,7 +87,6 @@ static var _thinks_native: int = 0
 static var _thinks_fallback: int = 0
 static var _rows_events: int = 0
 # The think-rate settings the hosted drivers' frame carries (M4-T35), and the settings read flag for them.
-static var _driver_step_on: bool = true
 # The host and batch of this physics frame (`_frame_host`).
 static var _lookup_frame: int = -1
 static var _frame_host_cached: Object = null
@@ -182,7 +181,6 @@ var _prev_since_s: float = 0.0
 var _prev_woken: bool = false
 var _avoid_from_pilot: bool = false
 var _row_combat: CombatCommand = null
-static var _frame_rows: bool = false
 static var _no_origin: UniversePos = UniversePos.new()
 # The host steps this driver (M4-T35): the host and the batch that hold it, and its pilot's slot there.
 var _hosted: bool = false
@@ -229,12 +227,12 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	step(delta, true)
+	step(delta, true, true)
 
 
-## One tick. `_physics_process` calls it with `batched` (a native think joins the tick's `BrainBatch`, M4-T18, and
-## finishes in `finish_native` at -9); public so tests can drive it, by default thinking at once.
-func step(delta: float, batched: bool = false) -> void:
+## One tick. `_physics_process` calls it with `batched` (a native think joins the tick's `BrainBatch` rows, M4-T33, and lands
+## at -9) and `may_host` (the host may take the step over, M4-T35); public so tests can drive it, by default thinking at once.
+func step(delta: float, batched: bool = false, may_host: bool = false) -> void:
 	if brain == null or combatant == null or not is_instance_valid(combatant.ship):
 		return
 	var started_us: int = Time.get_ticks_usec()  # profiling readout only, never gameplay time
@@ -248,7 +246,7 @@ func step(delta: float, batched: bool = false) -> void:
 	if _landing != null and _landing.ready:  # an answer still to come (the step one tick behind, M4-T24) settles later
 		_settle_landing(_landing, _landing_index, _landing_since_s, _landing_woken)
 		_landing = null
-	if batched and _frame_rows and _driver_step_on and _try_host():
+	if batched and may_host and _try_host():
 		_add_think_time(Time.get_ticks_usec() - started_us)
 		return  # the host steps this driver from this tick on
 	near_player = _is_near_player()
@@ -264,7 +262,7 @@ func step(delta: float, batched: bool = false) -> void:
 	if pilot != null and pilot.native_capable():
 		var host: Object = _frame_host() if batched else NativeBrains.host(get_tree())
 		if host != null:
-			if batched and _frame_rows and _step_rows(pilot, host, dt):
+			if batched and _step_rows(pilot, host, dt):
 				_add_think_time(Time.get_ticks_usec() - started_us)
 				return  # the rows batch thinks it; the core flies its command
 			# The scan stage on the native path: the shared scan's build and the perception (the lists are picked inside the
@@ -275,16 +273,6 @@ func step(delta: float, batched: bool = false) -> void:
 			var p: Perception = _perceive_lite(scan, host) if scan.rows_fresh() else null
 			if timed:
 				ContactScan.add_time(Time.get_ticks_usec() - scan_started_us)
-			if p != null and batched:
-				var batch: BrainBatch = _frame_batch
-				var slot: int = pilot.prepare_native(p) if batch != null else -1
-				if slot >= 0 and batch.add(self, host, p, slot, dt, scan.rows_version_taken(), _since_think_s, _woken):
-					# The clock and the wake reset now as a landed think resets them (put back if the host declines), so the
-					# next tick's decision is right when the answer comes a tick later (M4-T24).
-					_since_think_s = 0.0
-					_woken = false
-					_add_think_time(Time.get_ticks_usec() - started_us)
-					return  # the batch thinks it and calls finish_native when its answer comes
 			if p != null:
 				pc = pilot.try_think_native(p, dt)
 			if pc == null and pilot.has_native_slot():
@@ -292,23 +280,6 @@ func step(delta: float, batched: bool = false) -> void:
 				_add_think_time(Time.get_ticks_usec() - started_us)
 				return
 	_act(pc, pilot, dt)
-	_add_think_time(Time.get_ticks_usec() - started_us)
-
-
-## The end of a native think the tick's `BrainBatch` carried (M4-T18): the think's output starts at `base` in the batch's
-## answer `out` (-1 when the host declined it); `dt` the time the think was given.
-func finish_native(out: PackedFloat64Array, base: int, dt: float, since_s: float = 0.0, woken: bool = false) -> void:
-	var started_us: int = Time.get_ticks_usec()  # profiling readout only, never gameplay time
-	var pilot := brain as AiPilot
-	if pilot == null or combatant == null or not is_instance_valid(combatant.ship):
-		return
-	var pc: PilotCommand = pilot.apply_native(out, base)
-	if pc == null:
-		_since_think_s += since_s  # the clock and the wake as they stood before the queue
-		_woken = _woken or woken
-		_hold_declined()
-	else:
-		_act(pc, pilot, dt, false)  # the clock was reset when the think queued
 	_add_think_time(Time.get_ticks_usec() - started_us)
 
 
@@ -371,7 +342,7 @@ func _try_host() -> bool:
 		return false
 	var host: Object = _frame_host()
 	var batch: BrainBatch = _frame_batch
-	if host == null or batch == null or not BrainBatch.driver_step_mode() or not pilot.rows_ready(host, own_body_id()):
+	if host == null or batch == null or not pilot.rows_ready(host, own_body_id()):
 		return false
 	var slot: int = pilot.sync_rows(host)
 	if slot < 0:
@@ -857,12 +828,11 @@ static func _read_settings() -> void:
 	_period = AiThinkRate.period_ticks(float(Settings.get_value(&"ai_think_far_hz")), Engine.physics_ticks_per_second)
 	_nearest_k = int(Settings.get_value(&"ai_nearest_k"))
 	_nearest_static_k = int(Settings.get_value(&"ai_nearest_static_k"))
-	_driver_step_on = bool(Settings.get_value(&"perf_native_driver_step"))
 	NativeBrains.set_settings(_nearest_k, _nearest_static_k)
 
 
 func _on_setting_changed(key: StringName, _value: Variant) -> void:
-	if key in RATE_SETTINGS or key == &"perf_native_driver_step":
+	if key in RATE_SETTINGS:
 		_settings_read = false
 	elif key == &"friendly_fire":
 		_friendly_fire = -1
@@ -882,7 +852,6 @@ static func _frame_host() -> Object:
 		var tree := Engine.get_main_loop() as SceneTree
 		_frame_host_cached = NativeBrains.host(tree)
 		_frame_batch = BrainBatch.for_tree(tree)
-		_frame_rows = _frame_batch != null and BrainBatch.rows_mode()
 	return _frame_host_cached
 
 
