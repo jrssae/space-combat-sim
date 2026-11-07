@@ -2209,15 +2209,16 @@ scripts/fullscreen_check.sh         a layout fullscreen, the 3D at 1080p, under 
 ### 17.8 The body registry and entity kinds (M4-T09)
 
 ```
-native/src/body_registry.rs     ScsBodyRegistry: the scan's bodies, known once, read natively in one refresh a tick
+native/src/body_registry.rs     ScsBodyRegistry: the scan's bodies, read natively in one refresh a tick (removed by M4-T42)
 src/ai/body_kind.gd             BodyKind: ship, capital, turret, missile, mine, static, prop; rocks and mines are obstacles
 ```
 
 - **What it ends.** After cycle 4 the scan's queries were native but the scan itself was still gathered in GDScript every
   tick (`ContactScan.from_tree`: walking the groups and reading about fifteen properties a body), with the broadcast scan
-  built the same way and a freed-body check on every `shared` call. On a world with no core, `shared` now
-  comes from `ContactScan.from_registry`: no per-body GDScript a tick. `from_tree` stays the reference and is counted
-  (`ContactScan.gathers`, 0 a tick on the native path).
+  built the same way and a freed-body check on every `shared` call. On a world with no core, `shared` then came from
+  `ContactScan.from_registry`: no per-body GDScript a tick, with `from_tree` as the reference. Since M4-T42 every world
+  has a core, so the registry (now the core's own registration, §17.13) is read only through the core; `from_registry`,
+  `from_tree`, `from_broadcasters`, `ScsBodyRegistry` and the `gathers` count are gone.
 - **Membership.** The registry is told the `targetable` and `damageable` groups (`set_members`, the group arrays passed
   whole) when they change: `ContactScan` listens to the tree's `node_added` and `node_removed` for markers and hulls. A
   pool ship stays in the tree when parked, so play rarely changes the members; spawning and parking do not.
@@ -2235,8 +2236,8 @@ src/ai/body_kind.gd             BodyKind: ship, capital, turret, missile, mine, 
   paths alike (fix round 1: the tree gather no longer reads them at the build), so the paths agree whatever changes between
   a scan's build and its queries (a hit, the console, the player). A driver that changes its ship's selection first calls
   `ContactScan.note_selection`, so this frame's scans still hand out the selection they were built with (M3's behaviour).
-- **The broadcast scan** is `ScsBodyRegistry.select`: a row, read now, for each active marker of
-  `Targetable.broadcasters()` in that list's order (a body's second marker gets its own row, as in `from_broadcasters`),
+- **The broadcast scan** is the core's `select` (the registry's until M4-T42): a row, read now, for each active marker of
+  `Targetable.broadcasters()` in that list's order (a body's second marker gets its own row, as `from_broadcasters` gave),
   with each broadcaster's range read in GDScript. A body's hull is its first `Damageable` in group order, which is child
   order, so it is the one `Damageable.of(body)` finds.
 - **Kinds** (`BodyKind`). A marker's `kind` property (M4-T07 adds it to `Targetable`) is read as a name or a value; a
@@ -2255,7 +2256,8 @@ src/ai/body_kind.gd             BodyKind: ship, capital, turret, missile, mine, 
   must be unique and not instance ids.
 - **NaN radii.** A static whose surface distance is NaN (a NaN radius or position) is never an obstacle, on both paths.
 - **Bad input never panics.** `set_statics` and the field's `set_kinds` check their array lengths, log one error and keep
-  nothing; the scan then answers from GDScript, as for a rejected `load`.
+  nothing; the scan then answers nothing, as for a rejected `load` (it answered from GDScript until M4-T42 removed the
+  loops).
 - **Still per tick in GDScript:** the bolts' gather for `incoming_fire` (T15 unifies it with the hit sweep's rows).
 
 ### 17.9 The native flight step (T10, N4)
@@ -2461,11 +2463,11 @@ native/src/sim_core.rs           ScsSimCore: one store of rows for every simulat
 native/src/rows.rs               Rows, Bolts and the row flags: the plain row tables, the only thing the kernels import from the crate
 native/src/kernels.rs            the kernels: every query and step over the rows (contact, sweep, ram, flight), no way to the engine
 native/src/ram_phase.rs          ScsRamPhase: the ram resolver's broad phase on the core's rows (RamBroadPhase stays the reference)
-native/src/body_registry.rs      ScsBodyRegistry: the core without its facade, kept for the scan's registry path
+native/src/body_registry.rs      ScsBodyRegistry: the core without its facade, for the scan's registry path (removed by M4-T42)
 src/perf/sim_core.gd             SimCore: the facade; a node under World at priority -11 (sync_in) with an internal child at
                                  2 000 000 (sync_out); the `core` console provider
 src/ai/contact_scan.gd, src/combat/hit_broad_phase.gd, src/combat/hit_resolver.gd, src/combat/ram_resolver.gd,
-src/ship/flight_batch.gd         the four classes read the core (their own loads stay for a world with no core)
+src/ship/flight_batch.gd         the four classes read the core (their own loads, for a world with no core, went with M4-T42)
 ```
 
 - **What it is.** Phase 1 left four native classes, each loading its own copy of the world every tick: the registry's
@@ -2525,6 +2527,17 @@ src/ship/flight_batch.gd         the four classes read the core (their own loads
   `ram.gather_us`, `flight.source` and `flight.fallback_reads` say what each class read.
 - **Tests**: `test_sim_core` (the lifecycle, the rebase, the round trip, the four classes' parity, the engine seam) and the
   files of the four classes on both paths.
+- **Every world attaches the core, one hull read (M4-T42).** Until M4-T42 only a world with batched ships had a core
+  (`FlightBatch.attach` made it), so free flight (no ship pools), bare test worlds and their resolvers each read the tree
+  their own way. Now `WorldFrame` attaches its `SimCore` as it becomes ready, and the stand-ins attach it when they get
+  capitals or mines. With two worlds in one tree the newest core is read and the one before takes over when it leaves.
+  The paths for a world with no core are gone: the body registry with `from_registry` and `from_tree`, the hit
+  resolver's walk of hulls and bolts, the ram resolver's walk and its contact read per hull, the flight batch's server
+  read, the contact field's GDScript query loops, and the resolvers' `use_core` and the scan's `use_native` switches. A
+  tree with no world has no core: its scan sees nothing and its resolvers resolve nothing (`source` none). The flight
+  step still reads a ship with no row (back from the pool on its launch tick) from the physics server. The tests compare
+  the core's rows with `TreeRows` (a node-by-node read of the tree kept in `tests/fixtures/`), and the removed paths'
+  recorders are stored reads of `tests/fixtures/parity/` (`test_every_world_core`).
 
 **The pilot kernels (T16, N2).**
 

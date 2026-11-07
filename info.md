@@ -123,13 +123,13 @@ Source: `src/autoload/debug_console.gd`
 | `allies` | `src/game/ship_pool.gd` |
 | `audio` | `src/audio/audio_director.gd` |
 | `camera` | `src/camera/camera_rig.gd` |
-| `combat` | `src/combat/hit_resolver.gd` (M4-T15 adds `source` and `gather_us`) |
+| `combat` | `src/combat/hit_resolver.gd` (M4-T15 adds `source` and `gather_us`; M4-T42: `source` is core, or none in a tree with no world) |
 | `controls` | `src/autoload/control_profiles.gd` |
 | `debris` | `src/combat/debris_pool.gd` |
 | `debug` | `src/autoload/debug_console.gd` |
 | `factions` | `src/combat/faction_console.gd` (registered by `src/combat/hit_resolver.gd`) |
 | `core` | `src/perf/sim_core.gd` (M4-T15: the native simulation core: `path`, `rows`, `bodies`, `statics`, `bolts`, `syncs`, `sync_us`, `bolts_us`, `sync_calls`, `fallback_calls`, `attribute_reads`, `touched`; M4-T18: `threads`, `parallel_passes`, `parallel_min` and `flight_parallel_min` (both settable with `set core.<key> <n>`), `batch_us`, `batch_ships`, `live_workers`; the thread count itself is the setting `perf_threads`, `set settings.perf_threads <n>`; M4-T35: `bolt_path` (rows or nodes), `owned_bolts`, `cannons`, `cannon_us`, `bolt_step_us`, `shots`, `expired`, `bolt_draws`, `watched_selections`, `selection_clears`; M4-T24: `step_mode` (the setting `sim_step`: threaded or delayed; M4-T37 removed inline), `step_launched`, `step_us` (the job's own run time), `step_wait_us` (how long the join waited), `join_us`, `step_misses` (ticks whose join found the job still running), `step_early_joins`, `step_early_waits`, `step_stale` (results dropped for a ship parked or re-piloted while its job ran), `step_pool` and `step_pool_workers` (the setting `perf_step_threads`), `step_off_main`, `step_threads`; the catch-up cap is the setting `physics_max_steps_per_frame`) |
-| `flight` | `src/ship/flight_batch.gd` (M4-T10: the native flight batch: `path`, `ships`, `stepped`, `gather_us`, `step_us`, `positions`; M4-T15: `source`, `fallback_reads`) |
+| `flight` | `src/ship/flight_batch.gd` (M4-T10: the native flight batch: `path`, `ships`, `stepped`, `gather_us`, `step_us`, `positions`; M4-T15: `source`, `fallback_reads`; M4-T42: `source` is core or none, the server read is gone) |
 | `frame` | `src/rendering/frame_passes.gd` (M4-T36: the frame's passes, `plumes_us`, `flashes_us`, `impacts_us`, `lod_us`, and what each walks: `plumes`, `flashes`, `impacts`, `impact_pool`, `switchers`; M4-T35: `flash_pool_us`, `pool_flashes` (the lean ships' pooled muzzle flashes), `bolts_us`, `bolt_draws` (the bolt multimesh pass)) |
 | `fx` | `src/combat/fx_pool.gd` |
 | `hud` | `src/hud/hud.gd` |
@@ -140,7 +140,7 @@ Source: `src/autoload/debug_console.gd`
 | `perf` | `src/perf/perf_probe.gd` (M4-T21 adds the counts `tier_fighters` and `tier_capitals`: the low-attention tier's rows in the last tick of a battle bench) |
 | `post` | `src/rendering/post_effects.gd` |
 | `raiders` | `src/game/ship_pool.gd` |
-| `ram` | `src/combat/ram_resolver.gd` (M4-T15 adds `source` and `gather_us`) |
+| `ram` | `src/combat/ram_resolver.gd` (M4-T15 adds `source` and `gather_us`; M4-T42: `source` is core, or none in a tree with no world) |
 | `render` | `src/rendering/render_status.gd` (M4-T31: `renderer` (`forward_plus`, or `headless`), `fps`, `frame_ms`, `draw_calls`, `triangles`, `vram_mb`, `far_dots` (the ships in play drawn as far dots past `settings.far_ship_dot_m`, M4-T11), `gpu`, `gpu_ms`, `display` (`wayland`, `x11` or `headless`, M4-T41), `window` (the window's size in pixels, M4-T41)) |
 | `screens` | `src/hud/cockpit_screens.gd` |
 | `settings` | `src/autoload/debug_console.gd` (one key per settings entry) |

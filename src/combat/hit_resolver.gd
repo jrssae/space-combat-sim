@@ -50,8 +50,8 @@ var gather_us: int = 0
 ## Finds the pairs that pass the bounding-sphere test (M4-T08); a test may swap in its own.
 var broad_phase: HitBroadPhase = HitBroadPhase.new()
 
-# This tick's hulls (columns, index j) and projectiles (columns, index i), refilled every tick: from the native core's rows
-# (M4-T15) or from the resolver's own walk of the tree. Nodes are looked up only for the pairs the broad phase gives.
+# This tick's hulls (columns, index j) and projectiles (columns, index i), refilled every tick from the native core's rows
+# (M4-T15). Nodes are looked up only for the pairs the broad phase gives.
 var _hull_count: int = 0
 var _body_ids := PackedInt64Array()
 var _hull_ids := PackedInt64Array()
@@ -61,7 +61,7 @@ var _bases := PackedVector3Array()  # three columns (the x, y and z axes) a hull
 var _damageables: Array[Damageable] = []  # per hull, looked up when first needed (null until then)
 var _to_body: Dictionary = {}  # hull -> Basis, transposed when first needed
 var _bolt_ids := PackedInt64Array()
-# The bolts in launch order (the core's, M4-T35); empty on the own walk, whose group order is launch order already.
+# The bolts in launch order (the core's, M4-T35).
 var _bolt_order := PackedInt32Array()
 var _hull_first := PackedInt32Array()
 var _hull_next := PackedInt32Array()
@@ -71,7 +71,7 @@ var _bolt_starts := PackedVector3Array()
 var _bolt_ends := PackedVector3Array()
 var _bolt_radii := PackedFloat64Array()
 var _beams := PackedInt32Array()
-# What a hit lands with, per bolt (M4-T35): from the core's columns, or from the nodes on the own walk.
+# What a hit lands with, per bolt (M4-T35), from the core's columns.
 var _bolt_shooters := PackedInt64Array()
 var _bolt_factions: Array = []
 var _bolt_damage := PackedFloat64Array()

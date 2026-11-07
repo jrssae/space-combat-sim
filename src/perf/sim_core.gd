@@ -29,9 +29,9 @@ extends Node
 ## sync drops the spent ones, as a spent node is gone by then. Beams and missiles keep their nodes and follow the owned rows in the table at each sync. A `BoltMesh` child
 ## draws the rows, one multimesh a look, interpolated between ticks as the nodes were.
 ##
-## The first consumer attaches it to the world (`attach`, as `FlightBatch` does); `for_tree` gives it to the classes
-## that read it, or null when none is attached to that tree; a world with no core (a bare test world) has each class load
-## its own copy as before.
+## Every world attaches its core as it becomes ready (M4-T42, `WorldFrame`), so it is the one hull read: `for_tree` gives
+## it to the classes that read it, or null in a tree with no world. With two worlds in one tree the newest core is read,
+## and the one before takes over when it leaves.
 ## Console: provider `core`.
 
 const NATIVE_CLASS: StringName = &"ScsSimCore"
@@ -653,7 +653,7 @@ func _on_hull_destroyed(_info: HitInfo, body_id: int) -> void:
 
 func _register_console() -> void:
 	DebugConsole.registry.register_provider(&"core", ConsoleVars.new({
-		&"path": {"get": path, "doc": "native when the core feeds the scan, the hit sweep, the flight step and the ram broad phase, else gdscript (each loads its own copy)"},
+		&"path": {"get": path, "doc": "native when the core feeds the scan, the hit sweep, the flight step and the ram broad phase (every world since M4-T42)"},
 		&"rows": {"get": rows, "doc": "Rows in the core: bodies, static rows and rows added after the tick's first sync"},
 		&"bodies": {"get": func() -> int: return int(core.node_count()) if core != null else 0, "doc": "Body rows (active markers and hulls)"},
 		&"statics": {"get": func() -> int: return int(core.static_count()) if core != null else 0, "doc": "Static rows (rocks, mines)"},
