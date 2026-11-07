@@ -103,6 +103,7 @@ After cycle 1 the maintainer read the options in `docs/handoff-m4.md` section 7 
 | Q69 | A mid-milestone merge (2026-11-06) | **Merge `m4` into `main` before T37**, with an ordinary merge commit tagged `m4-gdscript-reference`, so `main` keeps a tested point where the GDScript paths, the `perf_native*` switches and the single-thread `inline` step still exist; T37 then removes them and M4's close-out merge follows as usual. Not M4's acceptance: T37, T23 and T25 remain |
 | Q70 | Q16 on the threaded step (2026-11-06, T37) | **Accept the loosened gate.** With the inline step gone, Q16's GDScript-against-native fights run one tick apart and twins drift (390 to 820 m at 10 s); the gate becomes hits within 20 % and the outcome mix within 5 points, the twin distance recorded, not gated (the one-tick shift is Q53's accepted cost) |
 | Q71 | A full code review (2026-11-07) | **T43 after T25**: a read-only review of the whole code base for performance, memory, duplicated code and any other issue, delivered with report P3; the maintainer triages its findings into fix tasks |
+| Q72 | Closing M4 (2026-11-07) | **Pre-approved: merge `m4` into `main` once every M4 task is done.** The controller triages T43's findings: clear-cut "fix in M4" findings become fix tasks (reviewed and CI-green like the rest), T25's numbers they move are re-taken, and large or debatable ones go to a later milestone, listed for the maintainer. The return checklist play session follows the merge |
 
 ## The budget ("good game performance", Q5)
 
