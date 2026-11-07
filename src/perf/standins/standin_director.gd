@@ -74,11 +74,6 @@ var _mines: MineStandin = null
 var _grid: HitBroadPhase = HitBroadPhase.new()
 var _strike: Dictionary = {}  # capital -> [target body id, tick it was looked up]
 var _capital_turn: int = 0
-# This tick's hulls that fly (fighters, capitals, the player): parallel arrays.
-var _hulls: Array[Damageable] = []
-var _hull_at := PackedVector3Array()
-var _hull_reach := PackedFloat64Array()
-var _hull_factions: Array[StringName] = []
 # This tick's projectiles in flight but beams, with their places.
 var _shot_at := PackedVector3Array()
 
@@ -207,15 +202,9 @@ func _step_native(native: NativeWeapons, delta: float, now_s: float, started_us:
 		tier_group_rolls = int(out[15])
 	mark_us = _mark(Part.MISSILES, mark_us)
 	if native.mines != null and is_instance_valid(native.mines):
-		detonations += native.mines.step_native(_tick, now_s, _walked_hulls)
+		detonations += native.mines.step_native(_tick, now_s)
 	mark_us = _mark(Part.MINES, mark_us)
 	_finish(now_s, mark_us, started_us)
-
-
-# The hulls the GDScript's mines would walk this tick, in its order (gathered only when a mine goes off).
-func _walked_hulls() -> Array:
-	_gather_hulls()
-	return _hulls
 
 
 ## Which code stepped the weapons in the latest tick: &"native" (the rows), or &"none" when no core was there to step them.
@@ -378,7 +367,6 @@ func clear() -> void:
 	missile_target = 0
 	restart_weapon_counters()
 	counts.fill(0)
-	_hulls.clear()
 
 
 func capitals() -> Array[CapitalStandin]:
@@ -484,36 +472,6 @@ func _mark(part: Part, since_us: int) -> int:
 	var now_us: int = Time.get_ticks_usec()
 	part_us[part] += now_us - since_us
 	return now_us
-
-
-# Every hull that flies this tick (the pool's fighters, the capitals and the player; in a test, every rigid body's hull).
-func _gather_hulls() -> void:
-	_hulls.clear()
-	_hull_at.clear()
-	_hull_reach.clear()
-	_hull_factions.clear()
-	if ships != null and is_instance_valid(ships):
-		for c: Combatant in ships.alive():
-			_add_hull(c.damageable)
-		for cap: CapitalStandin in _capitals:
-			if is_instance_valid(cap):
-				_add_hull(cap.damageable)
-		if player != null and is_instance_valid(player):
-			_add_hull(Damageable.of(player))
-		return
-	for node: Node in get_tree().get_nodes_in_group(Damageable.GROUP):
-		var damageable := node as Damageable
-		if damageable != null and damageable.body() is RigidBody3D:
-			_add_hull(damageable)
-
-
-func _add_hull(damageable: Damageable) -> void:
-	if damageable == null or not damageable.is_active():
-		return
-	_hulls.append(damageable)
-	_hull_at.append(damageable.body().global_position)
-	_hull_reach.append(damageable.bounding_radius)
-	_hull_factions.append(damageable.faction)
 
 
 # Each carrier's first launch, spread over one period so they do not all launch in the same tick.

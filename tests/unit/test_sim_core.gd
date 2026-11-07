@@ -767,7 +767,7 @@ func test_sync_in_and_sync_out_are_the_only_places_the_core_touches_the_engine()
 const WEAPON_KERNEL_FILE: String = "res://native/src/weapon_kernels.rs"
 const WEAPON_KERNEL_USERS: Array[String] = ["res://native/src/weapon_rows.rs"]
 const WEAPON_KERNEL_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::{Basis, Vector3};",
-		"use crate::rows::{Bolts, FLAG_HULL_ACTIVE, FLAG_RIGID, Rows};"]
+		"use crate::rows::{Bolts, FLAG_HULL_ACTIVE, FLAG_RIGID, FLAG_TIER, Rows};"]  # FLAG_TIER: M4-T23's blast on tier rows
 
 
 func test_the_weapon_kernels_hold_no_engine_type() -> void:

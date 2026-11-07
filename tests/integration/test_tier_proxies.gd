@@ -243,3 +243,28 @@ func test_a_row_promoted_inside_a_rock_comes_back_clear_of_it() -> void:
 	assert_almost_eq(moving.ship.linear_velocity, Vector3(0.0, 0.0, 50.0), Vector3.ONE * 0.5, "its velocity unchanged")
 	assert_gt(still.ship.global_position.distance_to(rocks[1]), rock_r + still.damageable.bounding_radius,
 			"the still one is pushed straight out")
+
+
+func test_a_mine_blast_is_on_the_cores_rows_and_hurts_a_tier_row_and_a_near_hull_alike() -> void:
+	var c: Combatant = _raider("RAIDER 1", Vector3(0.0, 0.0, -15000.0))
+	await _ticks(4)
+	assert_true(c.ship.is_tier_parked())
+	var near: Combatant = _raider("RAIDER 2", Vector3(0.0, 0.0, -900.0))
+	var row: Vector3 = _row_at(c.ship)
+	var mines: MineStandin = standins.add_mines([
+			{"offset": row + Vector3(0.0, 5.0, 0.0), "faction": Factions.EARTH_ALLIANCE},
+			{"offset": near.ship.global_position + Vector3(0.0, 5.0, 0.0), "faction": Factions.EARTH_ALLIANCE}],
+			world.to_universe(Vector3.ZERO))
+	standins.active = true
+	var hit_by_mine: Dictionary = {}
+	for who: Combatant in [c, near]:
+		who.damageable.hit_taken.connect(func(info: HitInfo) -> void:
+			if info.cause == MineStandin.CAUSE:
+				hit_by_mine[who.display_name] = true)
+	await _ticks(MineStandin.TRIGGER_TICKS + 2)
+	assert_false(mines.is_alive(0), "the tier row set its mine off")
+	assert_true(hit_by_mine.get("RAIDER 1", false), "and the blast hurt it, from its row")
+	assert_false(mines.is_alive(1), "the near hull set its own off")
+	assert_true(hit_by_mine.get("RAIDER 2", false), "and was hurt the same way")
+	var source: String = FileAccess.get_file_as_string("res://src/perf/standins/standin_director.gd")
+	assert_false(source.contains("func _gather_hulls"), "no GDScript walk of the hulls orders a blast: one path, the core's rows")

@@ -232,11 +232,12 @@ func test_a_carriers_reach_straddles_the_grids_slabs() -> void:
 	assert_between(gone, 10, 38, "some on each side of the edge")
 
 
-func test_a_blast_hurts_its_hulls_in_the_gdscript_order_with_a_pool() -> void:
+func test_a_blast_hurts_its_hulls_in_the_cores_order_with_a_pool() -> void:
 	var logs: Array = []
 	var group_order: Array = []
 	var expected: Array = []
-	# one run on the native rows (M4-T37): the hulls are hurt in the walk's order, the pool's
+	# M4-T23: the blast is on the core's rows alone (Q68), so its hulls are hurt in the core's order (the hull group's), no
+	# longer re-sorted into the pool's walk as the GDScript mines did
 	var scene: Dictionary = _world()
 	var director: StandinDirector = scene["director"]
 	var world: WorldFrame = scene["world"]
@@ -263,7 +264,7 @@ func test_a_blast_hurts_its_hulls_in_the_gdscript_order_with_a_pool() -> void:
 		c.ship.freeze = true
 		c.ship.global_position = Vector3(10.0 * k - 25.0, 5.0 * (k % 2), 12.0 + 3.0 * k)
 		by_hull[c.damageable] = String(c.display_name)
-		expected.append(String(c.display_name))  # the GDScript mines walked the pool's ships first, in its order
+		expected.append(String(c.display_name))  # the pool's order, which the GDScript mines walked
 	var hits: Array = []
 	for c: Combatant in placed:
 		c.damageable.hit_taken.connect(func(_info: HitInfo) -> void: hits.append(by_hull[c.damageable]))
@@ -278,5 +279,5 @@ func test_a_blast_hurts_its_hulls_in_the_gdscript_order_with_a_pool() -> void:
 			group_order.append(by_hull[node])
 	_free_world(scene)
 	assert_eq(logs[0].size(), 6, "the blast hurt all six: %s" % [logs[0]])
-	assert_eq(logs[0], expected, "in the pool's order, as the GDScript mines walked them")
-	assert_ne(logs[0], group_order, "the pool's order, not the tree's (the case this guards)")
+	assert_eq(logs[0], group_order, "in the core's order, the hull group's")
+	assert_ne(logs[0], expected, "not the pool's walk (the case this guards)")

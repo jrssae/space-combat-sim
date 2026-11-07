@@ -767,10 +767,10 @@ impl ScsWeaponRows {
             let n = self.factions;
             self.fired.clear();
             self.fired.resize(mines.local.len(), false);
-            // Each hull's column of the table, by mine faction (hostility is symmetric).
-            for &h in &guard.hull_rows {
+            // Each hull's column of the table, by mine faction (hostility is symmetric); tier rows set mines off too.
+            for &h in &guard.sweep_rows {
                 let j = h as usize;
-                if rows.flags[j] & FLAG_RIGID == 0 {
+                if rows.flags[j] & FLAG_RIGID == 0 && rows.flags[j] & FLAG_TIER == 0 {
                     continue;
                 }
                 let column = table_row(&self.hostile, n, rows.faction_ix[j]);
@@ -799,7 +799,7 @@ impl ScsWeaponRows {
         out
     }
 
-    /// The hulls in the blast of a mine at `at`: `[hull ids, their bodies' places]`.
+    /// The hulls in the blast of a mine at `at`, near and tier rows in the core's order (M4-T23): `[hull ids, their bodies' places]`.
     #[func]
     fn blast(&mut self, at: Vector3) -> VarArray {
         let mut ids: Vec<i64> = Vec::new();
@@ -807,7 +807,7 @@ impl ScsWeaponRows {
         if let Some(core) = self.core.as_ref() {
             let guard = core.bind();
             self.hits.clear();
-            wk::blast(&guard.rows, &guard.hull_rows, at, &mut self.hits);
+            wk::blast(&guard.rows, &guard.sweep_rows, at, &mut self.hits);
             for &r in &self.hits {
                 ids.push(guard.rows.hull_ids[r as usize]);
                 places.push(guard.rows.positions[r as usize]);

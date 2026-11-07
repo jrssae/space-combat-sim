@@ -130,34 +130,23 @@ func bind_native(rows: Object) -> void:
 
 
 ## `step` with the native rows answering the triggers and the blasts over the core's rows (`bind_native` first). Returns
-## how many went off. `hull_order` (asked only when one goes off) gives the hulls `step` would walk, in its order: a blast
-## hurts those of its hulls, in that order.
-func step_native(tick: int, now_s: float, hull_order: Callable) -> int:
+## how many went off. A blast hurts the hulls the core names, near and low-attention tier rows alike, in the core's order
+## (M4-T23: one path, no walk of the hulls here).
+func step_native(tick: int, now_s: float) -> int:
 	_lay_again(now_s)
 	var origin: Vector3 = global_position
 	var out: Array = native_rows.mine_step(tick, origin)
 	checked_last_tick = out[0]
 	var set_off: PackedInt32Array = out[1]
-	if set_off.is_empty():
-		return 0
-	var rank: Dictionary = {}  # Damageable -> its place in the walk
-	var walk: Array = hull_order.call()
-	for j: int in walk.size():
-		rank[walk[j]] = j
 	for i: int in set_off:
 		var at: Vector3 = origin + _local[i]
 		_retire(i, now_s)
 		var in_blast: Array = native_rows.blast(at)
 		var hull_ids: PackedInt64Array = in_blast[0]
 		var places: PackedVector3Array = in_blast[1]
-		var hurt: Array = []  # [place in the walk, hull, its body's place]
 		for k: int in hull_ids.size():
-			var damageable := instance_from_id(hull_ids[k]) as Damageable
-			if rank.has(damageable):
-				hurt.append([rank[damageable], damageable, places[k]])
-		hurt.sort_custom(func(a: Array, b: Array) -> bool: return int(a[0]) < int(b[0]))
-		for h: Array in hurt:
-			_hurt(i, at, h[1], h[2])
+			var hull_id: int = hull_ids[k]
+			_hurt(i, at, instance_from_id(hull_id) as Damageable if is_instance_id_valid(hull_id) else null, places[k])
 		detonated.emit(i)
 	return set_off.size()
 
@@ -211,9 +200,12 @@ func _retire(i: int, now_s: float) -> void:
 		native_rows.set_mine_alive(i, false)
 
 
-# Mine `i`'s blast at `at` on one hull whose body is at `hull_at`, if it can still be hurt.
+# Mine `i`'s blast at `at` on one hull whose body (or tier row) is at `hull_at`, if it can still be hurt.
 func _hurt(i: int, at: Vector3, damageable: Damageable, hull_at: Vector3) -> void:
-	if not is_instance_valid(damageable) or not damageable.is_active():
+	if damageable == null or not is_instance_valid(damageable) or damageable.hull.destroyed:
+		return
+	var body: Node3D = damageable.body()
+	if not damageable.is_active() and not (body != null and body.has_meta(TierDirector.TIER_META)):
 		return
 	var away: Vector3 = hull_at - at
 	var info := HitInfo.new(damageable.body().get_instance_id(), 0, _factions[i], DAMAGE, at,
