@@ -243,6 +243,7 @@ func _physics_process(delta: float) -> void:
 	var sim: SimCore = SimCore.for_tree(get_tree())
 	var stepped: bool = false
 	fallback_reads = 0
+	_source = &"none"
 	if sim != null and sim.ensure_synced():
 		_source = &"core"
 		stepped = step.step_core(sim.core, slots, _body_ids.slice(0, row), scalars, vectors, flags, delta)
