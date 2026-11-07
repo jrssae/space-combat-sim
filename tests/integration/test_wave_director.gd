@@ -53,6 +53,7 @@ func test_the_sandbox_is_the_default_scenario_and_waits_for_wave_start() -> void
 
 
 func test_auto_start_begins_the_first_countdown() -> void:
+	main.free()  # one world per tree (M4-T42)
 	var auto: Main = (load("res://src/game/main.tscn") as PackedScene).instantiate() as Main
 	auto.input_source = FakeInputSource.new()
 	add_child_autofree(auto)
@@ -219,6 +220,7 @@ func test_the_wave_goes_on_across_the_players_death() -> void:
 
 
 func test_free_flight_has_no_waves_and_no_pool() -> void:
+	main.free()  # one world per tree (M4-T42)
 	var free: Main = (load("res://src/game/main.tscn") as PackedScene).instantiate() as Main
 	free.input_source = FakeInputSource.new()
 	free.scenario_path = ScenarioLoader.FREE_FLIGHT_PATH

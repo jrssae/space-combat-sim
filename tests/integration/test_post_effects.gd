@@ -173,15 +173,14 @@ func test_a_rebase_blanks_the_blur_then_it_returns() -> void:
 
 
 func test_watching_a_second_world_stops_listening_to_the_first() -> void:
-	var first := WorldFrame.new()
-	var second := WorldFrame.new()
-	add_child_autofree(first)
-	add_child_autofree(second)
+	# Out of the tree, so only their signals speak: one world per tree (M4-T42).
+	var first: WorldFrame = autofree(WorldFrame.new())
+	var second: WorldFrame = autofree(WorldFrame.new())
 	post.watch_world(first)
 	post.watch_world(second)
-	first.rebase(Vector3(1.0, 0.0, 0.0))
+	first.rebased.emit(Vector3(1.0, 0.0, 0.0))
 	assert_eq(post.blur_gate().skipping(), 0)
-	second.rebase(Vector3(1.0, 0.0, 0.0))
+	second.rebased.emit(Vector3(1.0, 0.0, 0.0))
 	assert_gt(post.blur_gate().skipping(), 0)
 
 

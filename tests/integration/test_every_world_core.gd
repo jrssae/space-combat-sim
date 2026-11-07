@@ -64,14 +64,20 @@ func test_a_bare_world_attaches_its_core() -> void:
 	assert_eq(SimCore.for_tree(get_tree()), sim)
 
 
-func test_the_older_world_keeps_its_core_when_a_newer_one_leaves() -> void:
+func test_a_second_world_in_one_tree_is_refused_its_core() -> void:
+	# One world per tree (fix round 1): the game only ever has one; a second world's core would be read half-way.
 	var first := WorldFrame.new()
 	add_child_autofree(first)
+	var core: SimCore = first.get_node(NodePath(SimCore.NODE_NAME)) as SimCore
 	var second := WorldFrame.new()
-	add_child(second)
-	assert_eq(SimCore.for_tree(get_tree()), second.get_node(NodePath(SimCore.NODE_NAME)), "the newest core is read")
-	second.free()
-	assert_eq(SimCore.for_tree(get_tree()), first.get_node(NodePath(SimCore.NODE_NAME)), "then the one left")
+	add_child_autofree(second)
+	assert_push_error("one world per tree", "the second world is refused, saying why")
+	assert_null(second.get_node_or_null(NodePath(SimCore.NODE_NAME)), "and gets no core")
+	assert_null(SimCore.attach(second), "attaching it by hand is refused too")
+	assert_push_error_count(1, "said once")
+	assert_eq(SimCore.for_tree(get_tree()), core, "the first world's core stays the one read")
+	first.free()
+	assert_null(SimCore.for_tree(get_tree()), "with the first world gone there is no core: nothing takes over")
 
 
 func test_a_tree_with_no_world_has_nothing_to_resolve() -> void:

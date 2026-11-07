@@ -140,6 +140,7 @@ func test_preparing_the_starfury_again_for_the_ally_type_builds_nothing_more() -
 
 
 func test_every_scenario_prepares_the_starfury_sets_not_only_the_sandbox() -> void:
+	main.free()  # one world per tree (M4-T42)
 	var free_flight := (load("res://src/game/main.tscn") as PackedScene).instantiate() as Main
 	free_flight.input_source = source
 	free_flight.scenario_path = "res://data/scenarios/free_flight.json"

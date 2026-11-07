@@ -30,8 +30,8 @@ extends Node
 ## draws the rows, one multimesh a look, interpolated between ticks as the nodes were.
 ##
 ## Every world attaches its core as it becomes ready (M4-T42, `WorldFrame`), so it is the one hull read: `for_tree` gives
-## it to the classes that read it, or null in a tree with no world. With two worlds in one tree the newest core is read,
-## and the one before takes over when it leaves.
+## it to the classes that read it, or null in a tree with no world. One world per tree: a second world, while the first
+## world's core is live, is refused its core (with one error).
 ## Console: provider `core`.
 
 const NATIVE_CLASS: StringName = &"ScsSimCore"
@@ -73,7 +73,6 @@ const FLAG_HULK: int = 32
 
 # The latest core attached to a tree (-1 for the class check: classes never change while the game runs).
 static var _current: SimCore = null
-static var _cores: Array[SimCore] = []  # every core in a tree, oldest first: the one before takes over when the latest leaves
 static var _native_class_known: int = -1
 static var _cannons_class_known: int = -1
 
@@ -107,6 +106,7 @@ var _bolt_sync: Object = null  # the bolt reader (M4-T34), made on first use
 var _tick_open: bool = false  # a sync_in since the last sync_out: the next sync_in closes the tick's count, as the core's does
 var _cannons_by_slot: Dictionary[int, PulseCannon] = {}
 var _selection_controllers: Dictionary[int, TargetingController] = {}
+var _refused_a_world: bool = false  # a second world was refused while this core was live (said once)
 ## Selections the core's check cleared in the last tick (a readout).
 var selection_clears_last_tick: int = 0
 var _bolt_mesh: BoltMesh = null
@@ -172,7 +172,6 @@ func _ready() -> void:
 	_hook(get_tree())
 	if world != null and not world.rebased.is_connected(_on_rebased):
 		world.rebased.connect(_on_rebased)
-	_cores.append(self)
 	_current = self
 	_register_console()
 	PulseCannon.rebind_all()
@@ -186,11 +185,8 @@ func _exit_tree() -> void:
 	if world != null and is_instance_valid(world) and world.rebased.is_connected(_on_rebased):
 		world.rebased.disconnect(_on_rebased)
 	DebugConsole.registry.unregister_owner(self)
-	_cores.erase(self)
 	if _current == self:
-		_current = _cores.back() if not _cores.is_empty() else null
-		if _current != null:
-			_current._register_console()
+		_current = null
 	PulseCannon.rebind_all()
 	TargetingController.rebind_all()
 
@@ -207,13 +203,21 @@ static func enabled() -> bool:
 	return _native_class_known == 1
 
 
-## The core under `world`, made on first ask; null without a world (or a library without the core class).
+## The core under `world`, made on first ask; null without a world (or a library without the core class), and null with
+## one error when another world's core is live: one world per tree.
 static func attach(p_world: Node) -> SimCore:
 	if p_world == null or not is_instance_valid(p_world) or not p_world.is_inside_tree() or not enabled():
 		return null
 	var found := p_world.get_node_or_null(NodePath(NODE_NAME)) as SimCore
 	if found != null:
 		return found
+	var live: SimCore = current()
+	if live != null and live.is_inside_tree():
+		if not live._refused_a_world:
+			live._refused_a_world = true
+			push_error("SimCore: %s is a second world while %s has the core; one world per tree, so it gets none"
+					% [p_world.get_path(), live.get_parent().get_path()])
+		return null
 	var made := SimCore.new()
 	made.world = p_world as WorldFrame
 	p_world.add_child(made)

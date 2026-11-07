@@ -311,6 +311,8 @@ func _fight(kernels_on: bool) -> Dictionary:
 	# Start at a tick boundary: ships spawned from idle time (as after another test file's last await) would not tick before
 	# the loop's first `physics_frame`, and the two fights' digests would be one tick apart.
 	await get_tree().physics_frame
+	if is_instance_valid(world):
+		world.free()  # the fight's own world is the tree's one world (M4-T42)
 	var space := SubViewport.new()
 	space.own_world_3d = true
 	space.world_3d = World3D.new()

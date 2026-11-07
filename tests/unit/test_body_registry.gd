@@ -275,10 +275,8 @@ func test_the_shared_scan_is_the_cores() -> void:
 
 
 func test_a_rebase_moves_its_own_worlds_static_rows_once() -> void:
-	var a := WorldFrame.new()
-	add_child_autofree(a)
-	var b := WorldFrame.new()
-	add_child_autofree(b)
+	var a: WorldFrame = root
+	var b: WorldFrame = autofree(WorldFrame.new())  # out of the tree: it only owns rows (one world per tree, M4-T42)
 	var at_a := Vector3(1234.5, -20.25, 987.125)
 	var at_b := Vector3(-40.0, 5.5, 3000.0)
 	var at_none := Vector3(7.0, 8.0, 9.0)
