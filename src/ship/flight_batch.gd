@@ -10,12 +10,12 @@ extends Node
 ## joined ship that cannot process (parked in the pool) is skipped. Ships' types and nozzles are registered once; a rebuilt
 ## ship registers again. M4-T37 removed the switch that flew every ship on its own GDScript model instead.
 ##
-## With the native core on (M4-T15, `SimCore`), the step reads each ship's basis and velocities from the core's rows (synced
-## at -11; nothing moves a body between) instead of the physics server; a ship the core has no row for (back from the
-## pool this tick) is read from the server as before. The batch attaches the core to the world when it attaches itself.
+## The step reads each ship's basis and velocities from the native core's rows (M4-T15, `SimCore`; synced at -11, nothing
+## moves a body between); a ship the core has no row for (back from the pool this tick) is read from the physics server.
+## Every world has a core (M4-T42); with none (it was freed) every ship flies its own model that tick.
 ##
-## Commands from rows (M4-T33): on the core a native pilot's ship flies the command its row holds (the step reads it there,
-## whatever was gathered); without the core the batch reads that command into the ship first (`Ship.pull_row_command`).
+## Commands from rows (M4-T33): a native pilot's ship flies the command its row holds (the step reads it there, whatever was
+## gathered).
 ##
 ## The batch owns its ships' ticks (M4-T35): a ship the batch flew has nothing left to do at 0 (its combat edges are taken
 ## in the gather), so its `_physics_process` is switched off and given back when the batch stops flying it (no native step
@@ -148,8 +148,8 @@ func reset_assist(ship: Ship) -> void:
 		_step.reset_assist(_slots[ship])
 
 
-## Where the last step read the ships' poses and motion: &"server" (the physics server by RID, M4-T10), &"core" (the
-## native core's rows, M4-T15) or &"none" (nothing stepped).
+## Where the last step read the ships' poses and motion: &"core" (the native core's rows, M4-T15) or &"none" (nothing
+## stepped).
 func source() -> StringName:
 	return _source if not rows.is_empty() else &"none"
 
@@ -241,22 +241,14 @@ func _physics_process(delta: float) -> void:
 		step_us = 0
 		return
 	var sim: SimCore = SimCore.for_tree(get_tree())
-	var stepped: bool
+	var stepped: bool = false
+	fallback_reads = 0
 	if sim != null and sim.ensure_synced():
 		_source = &"core"
 		stepped = step.step_core(sim.core, slots, _body_ids.slice(0, row), scalars, vectors, flags, delta)
 		fallback_reads = int(step.fallback_reads())
-	else:
-		_source = &"server"
-		for i: int in row:
-			if rows[i].is_row_commanded():
-				rows[i].pull_row_command()
-				pack_command(rows[i].flight_command(), vectors[i * CMD_VECTORS + 5], flags[i * CMD_FLAGS + 2] != 0,
-						flags[i * CMD_FLAGS + 3] != 0, scalars, vectors, flags, i)
-		stepped = step.step(slots, scalars, vectors, flags, PackedVector3Array(), delta)
-		fallback_reads = 0
 	if not stepped:
-		# The step refused the arrays (it logged why): every ship flies its own model this tick.
+		# No core, or the step refused the arrays (it logged why): every ship flies its own model this tick.
 		for ship: Ship in rows:
 			var owned: bool = ship.is_batch_owned()
 			ship.batch_refused()
@@ -314,7 +306,7 @@ func _register_console() -> void:
 		&"stepped": {"get": func() -> int: return rows.size(), "doc": "Ships the batch flew in the last tick"},
 		&"gather_us": {"get": func() -> int: return gather_us, "unit": "us", "doc": "The last tick's GDScript gather; wall clock"},
 		&"step_us": {"get": func() -> int: return step_us, "unit": "us", "doc": "The last tick's native step and its outputs; wall clock"},
-		&"source": {"get": func() -> String: return String(source()), "doc": "Where the last step read the ships' poses: core (the native core's rows, M4-T15), server (the physics server by RID) or none"},
+		&"source": {"get": func() -> String: return String(source()), "doc": "Where the last step read the ships' poses: core (the native core's rows, M4-T15) or none"},
 		&"fallback_reads": {"get": func() -> int: return fallback_reads, "doc": "Ships the last core step read from the physics server because the core had no row for them (back from the pool this tick)"},
 		&"positions": {"get": _console_positions, "doc": "Every batchable ship's name and World position, for comparing seeded runs"},
 	}), self)

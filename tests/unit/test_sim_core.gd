@@ -554,7 +554,7 @@ class Launcher extends Node:
 func test_the_flight_step_flies_the_same_from_the_core_as_from_the_physics_server() -> void:
 	var spec: ShipSpec = load(SPEC_PATH) as ShipSpec
 	var digests: Array[Array] = []
-	for use_core: bool in [true]:
+	for run: int in 1:
 		var ships: Array[Ship] = []
 		for i: int in 3:
 			var ship: Ship = Ship.create(spec, world)
@@ -584,7 +584,7 @@ func test_the_flight_step_flies_the_same_from_the_core_as_from_the_physics_serve
 			await get_tree().physics_frame
 			var batch: FlightBatch = FlightBatch.attach(world)
 			if tick == 10:
-				assert_eq(batch.source(), &"core" if use_core else &"server", "the batch reads the %s" % ("core" if use_core else "server"))
+				assert_eq(batch.source(), &"core", "the batch reads the core")
 			for ship: Ship in ships:
 				var o: FlightOutput = ship.get_flight_output()
 				# Exact values, compared as such: a formatted float would hide a difference in the last bits.
