@@ -88,6 +88,15 @@ func setup(collision: Array[Dictionary], hull_max: float, p_faction: StringName,
 	respects_god_mode = p_respects_god_mode
 	hull = HullHealth.new(hull_max)
 	zones = DamageZones.new(DamageZones.layout_from_name(damage_layout))
+	set_volumes(collision)
+	DebugConsole.registry.unregister_owner(self)
+	if register_console:
+		_register_console()
+
+
+## Replaces the hit volumes (and the bounds and ram volumes built from them) and keeps the hull: a hull whose shape changes
+## in play (cargo pods mounted or taken off, M5-T16). `collision` is `Hardpoints.collision`'s form.
+func set_volumes(collision: Array[Dictionary]) -> void:
 	shapes.clear()
 	ram_volumes.clear()
 	ram_cores.clear()
@@ -103,9 +112,6 @@ func setup(collision: Array[Dictionary], hull_max: float, p_faction: StringName,
 		ram_bounds = ram_volumes[-1].bounds if ram_volumes.size() == 1 else ram_bounds.merge(ram_volumes[-1].bounds)
 		bounding_radius = maxf(bounding_radius, shape.extent_radius())
 	core_radius = RamMath.core_radius(shapes)
-	DebugConsole.registry.unregister_owner(self)
-	if register_console:
-		_register_console()
 
 
 ## Whether a bolt of `bolt_faction` can hurt this hull. With `friendly_fire` (`settings.friendly_fire`, D31) any bolt can:

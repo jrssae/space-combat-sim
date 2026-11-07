@@ -35,7 +35,9 @@ extends RefCounted
 ##                                                  #       `ObjectiveBook.declare`, closing_lines: {reason, "success" or
 ##                                                  #       "failure" -> line id (StringName)} (M5-T10)}; strings may be ""
 ##      "cinematics": Dictionary}                   # (M5-T05, D55) shot id -> shot, passed through for T08; may be empty
-## Every spawn (wave or load) carries "wing" (a wing's name, "" for none; it needs an "ai" behaviour). A wing named by a spawn
+## Every spawn (wave or load) carries "wing" (a wing's name, "" for none; it needs an "ai" behaviour), "cargo_pods" (M5-T16: how
+## many cargo pods a hull with pod mounts flies with, 0-3; -1, the default, mounts them all) and "forward" (M5-T16: the spawn's
+## own heading, a Vector3; zero, the default, takes the player's). A wing named by a spawn
 ## but not declared in `wings[]` is a group led by its first ship, engaging at will, in a finger-four.
 ## Errors are returned, not pushed: the caller decides how loud a broken scenario is.
 
@@ -551,9 +553,16 @@ static func _spawn(raw: Variant, where: String, system: StringName) -> Variant:
 		return "%s.wing must be a wing's name" % where
 	if not (wing as String).strip_edges().is_empty() and not (made["brain"] is AiPilot):
 		return "%s.wing needs an \"ai\" behaviour (a wing's members fly an AiPilot)" % where
+	var pods: Variant = entry.get("cargo_pods", -1)
+	if typeof(pods) != TYPE_FLOAT and typeof(pods) != TYPE_INT or float(pods) != floorf(float(pods)) \
+			or int(pods) < -1 or int(pods) > CargoPods.MAX_PODS:
+		return "%s: cargo_pods must be a whole number from 0 to %d" % [where, CargoPods.MAX_PODS]
+	var forward: Variant = _vector3(entry.get("forward", [0.0, 0.0, 0.0]))
+	if forward == null:
+		return "%s: forward must be [x, y, z] (numbers)" % where
 	return {"type": StringName(type as String), "name": str(entry.get("name", "")), "anchor": StringName(anchor as String),
 			"offset": offset as Vector3, "velocity": velocity as Vector3, "at_s": float(at_s), "behaviour": behaviour,
-			"wing": (wing as String).strip_edges()}
+			"wing": (wing as String).strip_edges(), "cargo_pods": int(pods), "forward": forward as Vector3}
 
 
 ## An orientation whose forward axis (-Z) points along `forward`, up as close to +Y as possible.

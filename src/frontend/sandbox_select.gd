@@ -7,6 +7,7 @@ const SCENARIOS: Array[Dictionary] = [
 	{"id": &"combat_sandbox", "text": "Combat sandbox"},
 	{"id": &"dogfight", "text": "Dogfight"},
 	{"id": &"instructor_route", "text": "Instructor route"},
+	{"id": &"civilian_showcase", "text": "Civilian ships"},
 ]
 
 

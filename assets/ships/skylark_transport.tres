@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="ShipSpec" load_steps=2 format=3]
+
+[ext_resource type="Script" uid="uid://csixdcdy0fu46" path="res://src/ship/ship_spec.gd" id="1_ship_spec"]
+
+[resource]
+script = ExtResource("1_ship_spec")
+asset_id = "skylark_transport"
+mass = 1.771e+6
+inertia = Vector3(2.85102e+8, 3.55922e+8, 7.22424e+7)
+pod_main_thrust = 4.43e+6
+pod_retro_thrust = 1.48e+6
+rcs_force_max = Vector3(1.77e+6, 1.77e+6, 0)
+rcs_torque_max = Vector3(2.6e+7, 3.3e+7, 7e+6)
+rate_max = Vector3(15.8, 15.8, 21.1)
+assist_gain_k = 2.0
+pod_yaw_gain = 0.5
+pod_yaw_deadzone = 0.1
+pod_yaw_smoothing_s = 0.5
+brake_gain_k = 0.5
+exhaust_velocity = 30000.0
+fuel_capacity_kg = 177000
+assist_speed_max_mps = 400.0
+hull_max = 440.0
+ram_safe_dv_mps = 2.0
+ram_lethal_dv_mps = 10.0
+has_cockpit_interior = false
+engine_glow_color = Color(1.7, 1.5, 1.2, 1)
+damage_layout = &""
+tier_hit_scale = 1.0

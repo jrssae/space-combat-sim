@@ -24,6 +24,8 @@ extends RefCounted
 ##   as one multimesh on the body, its markers as another, its collision shapes without nodes, no cockpit.
 ## - `civilian` (bool, default false): a civilian ship (M5-T21); other civilians' turrets defend it too.
 ##
+## A hull whose hardpoints list `cargo_pods[]` (M5-T16, the Bokmai) gets its `CargoPods`, every pod mounted, in
+## `combatant.cargo_pods`.
 ## A hull whose hardpoints list `turrets[]` (M5-T21, D61) gets a `TurretMount` per entry when it is ready, firing the
 ## spec's `turret_weapon` (the light turret when it has none) for its faction, in `combatant.turrets`, each showing the
 ## asset's turret model (its manifest's `turret` entry).
@@ -108,6 +110,7 @@ static func _wire(combatant: Combatant, projectiles_parent: Node3D, console_owne
 			combatant.is_player, console_owner, ship.spec.damage_layout)
 	combatant.damageable.ram_safe_dv_mps = ship.spec.ram_safe_dv_mps
 	combatant.damageable.ram_lethal_dv_mps = ship.spec.ram_lethal_dv_mps
+	combatant.cargo_pods = CargoPods.build_for(ship)  # M5-T16: before the turrets, so the hull is whole when they bind
 	if combatant.civilian:
 		SimCore.set_civilian(ship.get_instance_id(), true)
 	_mount_turrets(combatant)

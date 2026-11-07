@@ -18,6 +18,8 @@ var driver: AiPilotDriver = null
 var turrets: Array[TurretMount] = []
 ## A civilian ship (M5-T21): other civilians' turrets defend it too.
 var civilian: bool = false
+## The hull's removable cargo pods (M5-T16: the Bokmai), or null for a hull without pod mounts.
+var cargo_pods: CargoPods = null
 
 var faction: StringName = Factions.NEUTRAL
 var display_name: String = ""

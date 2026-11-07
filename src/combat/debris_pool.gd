@@ -95,7 +95,7 @@ func prepare_chunks(asset_id: StringName, entries: Array[Dictionary]) -> int:
 ## frame, rad/s). `chunks` are the ship's `Hardpoints.chunks`; empty means generic shards. The textured chunks wear `livery` (null:
 ## plain). Returns the chunks launched.
 func burst(asset_id: StringName, chunks: Array[Dictionary], xform: Transform3D, velocity: Vector3,
-		angular_velocity: Vector3, seed_value: int, livery: Livery = null) -> Array[DebrisChunk]:
+		angular_velocity: Vector3, seed_value: int, livery: Livery = null, pooled: bool = true) -> Array[DebrisChunk]:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value
 	var launched: Array[DebrisChunk] = []
@@ -107,7 +107,7 @@ func burst(asset_id: StringName, chunks: Array[Dictionary], xform: Transform3D, 
 			_fly(shard, Vector3.ZERO, xform, velocity, angular_velocity, rng, Vector3(rng.randfn(), rng.randfn(), rng.randfn()) * 0.6)
 			launched.append(shard)
 		return launched
-	var set: Array = _free_set(asset_id)
+	var set: Array = _free_set(asset_id) if pooled else []  # a hull's extra pieces (its cargo pods) are one-shots
 	var dir: String = ASSET_ROOT.path_join(String(asset_id))
 	for i: int in chunks.size():
 		var chunk: DebrisChunk = set[i] if not set.is_empty() else null

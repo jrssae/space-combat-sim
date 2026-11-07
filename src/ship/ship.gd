@@ -624,7 +624,7 @@ func set_far_dot(on: bool) -> void:
 	_far_dot = on
 	_apply_far_interpolation()
 	_apply_hull_visuals()
-	for path: NodePath in [^"ThrusterVisuals", ^"Thrusters", ^"RunningLights", ^"Guns"]:
+	for path: NodePath in [^"ThrusterVisuals", ^"Thrusters", ^"RunningLights", ^"Guns", ^"CargoPods"]:
 		var node := get_node_or_null(path) as Node3D
 		if node != null:
 			node.visible = not on

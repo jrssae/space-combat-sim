@@ -188,6 +188,10 @@ func _spawn_effects(ship: Ship, xform: Transform3D, velocity: Vector3, spin: Vec
 			debris.stage_wreck(StringName(ship.spec.asset_id), chunks, xform, velocity, spin, seed_value, first, ship.livery)
 		else:
 			debris.burst(StringName(ship.spec.asset_id), chunks, xform, velocity, spin, seed_value, ship.livery)
+		var pods: CargoPods = CargoPods.of(ship)
+		if pods != null and pods.count > 0:
+			# A Bokmai sheds its mounted pods with its chunks (M5-T16, D59).
+			debris.burst(StringName(ship.spec.asset_id), pods.debris_entries(), xform, velocity, spin, seed_value + 1, null, false)
 
 
 ## Writes a death's blast onto its killing hit (M4-T22): energy from the hull's mass, reach from its size, at `at`.

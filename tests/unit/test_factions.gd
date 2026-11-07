@@ -123,7 +123,7 @@ func _doc_with(relation: String) -> Dictionary:
 func test_the_active_table_is_loaded_lazily_from_the_data_file() -> void:
 	Factions.reset()
 	var table: FactionTable = Factions.table()
-	assert_eq(table.ids(), ALL_KNOWN as Array[StringName])
+	assert_eq(table.ids().slice(0, 3), ALL_KNOWN as Array[StringName], "M2's three first; the civilians' peoples follow (M5-T16)")
 	assert_eq(table.display_name(Factions.EARTH_ALLIANCE), "Earth Alliance")
 	assert_same(Factions.table(), table, "loaded once, then reused")
 	assert_true(Factions.is_hostile(Factions.EARTH_ALLIANCE, Factions.RAIDERS))

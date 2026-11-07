@@ -2,10 +2,16 @@
   "factions": [
     {"id": "earth_alliance", "name": "Earth Alliance"},
     {"id": "raiders", "name": "Raiders"},
-    {"id": "neutral", "name": "Neutral"}
+    {"id": "neutral", "name": "Neutral"},
+    {"id": "narn", "name": "Narn Regime"},
+    {"id": "centauri", "name": "Centauri Republic"},
+    {"id": "brakiri", "name": "Brakiri Syndicracy"}
   ],
   "relations": [
-    {"a": "earth_alliance", "b": "raiders", "relation": "hostile"}
+    {"a": "earth_alliance", "b": "raiders", "relation": "hostile"},
+    {"a": "narn", "b": "raiders", "relation": "hostile"},
+    {"a": "centauri", "b": "raiders", "relation": "hostile"},
+    {"a": "brakiri", "b": "raiders", "relation": "hostile"}
   ],
   "default": "neutral"
 }

@@ -11,7 +11,8 @@ extends Node3D
 const SCENARIO_DIR := "res://data/scenarios/"
 ## The debug overlay's text is rebuilt this often while it shows (M4-T36): a readout, not an animation.
 const OVERLAY_INTERVAL_S: float = 0.1
-const SCENARIO_CHOICES: Array[StringName] = [&"combat_sandbox", &"free_flight", &"instructor_route", &"dogfight"]
+const SCENARIO_CHOICES: Array[StringName] = [&"combat_sandbox", &"free_flight", &"instructor_route", &"dogfight",
+		&"civilian_showcase"]
 
 ## The player's hull reached zero (the ship is hidden and disabled; input is ignored until the respawn).
 signal player_died
@@ -135,6 +136,7 @@ func _ready() -> void:
 		ships.prepare(ShipPool.ALLY_TYPE, ally_count)
 	# The Starfury's break-up chunks serve the allies and the player (the player can die in any scenario).
 	debris.prepare(ShipCatalog.PLAYER_TYPE)
+	_prepare_other_pools(scenario)
 	hud.input_provider = _build_hud_input
 	hud.screens = ship.cockpit_screens
 	director.setup(world, ships, debris, effects, combatant)
@@ -290,6 +292,16 @@ func _pool_count(scenario: Dictionary, type: StringName, override_count: int) ->
 	if override_count >= 0:
 		return override_count
 	return int((scenario.get("pools", {}) as Dictionary).get(type, 0))
+
+
+# The scenario's pools of every other type (the civilians, M5-T16) and their break-up chunks.
+func _prepare_other_pools(scenario: Dictionary) -> void:
+	var pools: Dictionary = scenario.get("pools", {})
+	for type: StringName in pools:
+		if type == ShipPool.DEFAULT_TYPE or type == ShipPool.ALLY_TYPE or int(pools[type]) <= 0:
+			continue
+		ships.prepare(type, int(pools[type]))
+		debris.prepare(type)
 
 
 ## Grows the pool of `type` to at least `count` ships, heard like the scenario's own (the benchmark's load, M4-T01). Returns
@@ -519,9 +531,13 @@ func _place_spawn(entry: Dictionary) -> void:
 	if route != null and brain is AiPilot:
 		route.pace_id = combatant.targetable.get_instance_id() if route.pace == Route.PACE_PLAYER else 0
 		path = BehaviourFollowPath.attach(brain as AiPilot, route)
-	var placed: Combatant = ships.acquire(ship_name, anchor.plus_local(entry["offset"]), _spawn_basis, entry["velocity"], brain, type)
+	var forward: Vector3 = entry.get("forward", Vector3.ZERO)
+	var basis: Basis = _spawn_basis if forward.is_zero_approx() else ScenarioLoader.basis_facing(forward)
+	var placed: Combatant = ships.acquire(ship_name, anchor.plus_local(entry["offset"]), basis, entry["velocity"], brain, type)
 	if placed == null:
 		return
+	if placed.cargo_pods != null:
+		placed.cargo_pods.set_count(int(entry.get("cargo_pods", -1)))  # M5-T16: the spawn's pods, all by default
 	placed.damageable.invulnerable = bool(entry["invulnerable"])
 	scenario_ships.append(placed)
 	_scenario_brains.append(brain)

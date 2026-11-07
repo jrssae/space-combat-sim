@@ -75,7 +75,7 @@ Arguments in `<angle brackets>` are required, `[square brackets]` optional, `a|b
 |---|---|---|---|
 | `respawn` | | Reset the ship to the scenario start (refused in a mission) | in flight |
 | `pause` | `[on\|off]` | Pause or resume the game; no argument toggles; refused while the pause menu is open (resume from it) | in flight |
-| `scenario` | `[combat_sandbox\|free_flight\|instructor_route\|dogfight]` | Load a scenario for this session and reload the scene | in flight |
+| `scenario` | `[combat_sandbox\|free_flight\|instructor_route\|dogfight\|civilian_showcase]` | Load a scenario for this session and reload the scene | in flight |
 | `window` | `<width> <height>` or `max\|normal` | Resize the window, or maximize or restore it | in flight |
 | `throttle` | `<level>` | Hold both main pods at a level, 0..1, on top of the pilot's input | in flight |
 | `assist` | `[on\|off]` | Toggle or set flight assist | in flight |

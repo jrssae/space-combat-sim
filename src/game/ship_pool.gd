@@ -79,6 +79,7 @@ func prepare(type: StringName, count: int) -> int:
 			ShipAssembly.OPT_FORCE_ASSIST: true,
 			ShipAssembly.OPT_AI: true,
 			ShipAssembly.OPT_LEAN: true,  # the AI ship's lean set of nodes (M4-T11)
+			ShipAssembly.OPT_CIVILIAN: ShipCatalog.is_civilian(type),  # M5-T16: the role comes with the type
 		})
 		world.spawn(combatant.ship, _park_position(), Basis.IDENTITY, self)
 		if type == ALLY_TYPE:
@@ -119,6 +120,8 @@ func acquire(display_name: String, at: UniversePos, basis: Basis = Basis.IDENTIT
 	ship.set_far_dot(false)  # drawn in full until its switcher next looks (M4-T11)
 	combatant.damageable.restore()
 	combatant.damageable.invulnerable = false  # per spawn (M3-T09); the caller sets it
+	if combatant.cargo_pods != null:
+		combatant.cargo_pods.set_count(-1)  # every pod mounted (M5-T16); the spawn says otherwise after
 	combatant.display_name = display_name
 	combatant.targetable.display_name = display_name
 	# A Starfury of a wing wears its wing's livery and its number from its callsign (M4-T30b); every other ship that takes liveries

@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="ShipSpec" load_steps=3 format=3]
+
+[ext_resource type="Script" uid="uid://csixdcdy0fu46" path="res://src/ship/ship_spec.gd" id="1_ship_spec"]
+[ext_resource type="Resource" path="res://assets/weapons/turret_light_brakiri.tres" id="2_turret"]
+
+[resource]
+script = ExtResource("1_ship_spec")
+asset_id = "brakiri_bokmai"
+mass = 852000
+inertia = Vector3(5.65435e+8, 5.94661e+8, 8.58785e+7)
+pod_main_thrust = 2.13e+6
+pod_retro_thrust = 710000
+rcs_force_max = Vector3(850000, 850000, 0)
+rcs_torque_max = Vector3(3.9e+7, 4.1e+7, 6e+6)
+rate_max = Vector3(11.9, 11.9, 15.9)
+assist_gain_k = 2.0
+pod_yaw_gain = 0.5
+pod_yaw_deadzone = 0.1
+pod_yaw_smoothing_s = 0.5
+brake_gain_k = 0.5
+exhaust_velocity = 30000.0
+fuel_capacity_kg = 85000
+assist_speed_max_mps = 400.0
+hull_max = 330.0
+ram_safe_dv_mps = 2.0
+ram_lethal_dv_mps = 10.0
+has_cockpit_interior = false
+engine_glow_color = Color(1.75, 1.6, 1.1, 1)
+damage_layout = &""
+tier_hit_scale = 1.0
+turret_weapon = ExtResource("2_turret")
