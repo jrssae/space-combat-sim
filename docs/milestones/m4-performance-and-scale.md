@@ -230,7 +230,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T34 | The cheap pass on the per-ship stages (Q50): the ram stage's loop, the hit stage's gather, targeting and the core's sync, into native code or out of the per-tick path | checkpoint 3 | Opus | 13.3 of 17.85 ms at `battle` 300 sits in four stages phase 2 did not take (report P2) | N, G | done, bit for bit, five of the six changes behind a setting; the four stages at `battle` 300 from 9.12 to 4.16 ms and the tick from 17.72 to 12.86 (8 ms missed, the rest named in the entry); at 500 15.81 to 7.47 and 30.42 to 21.74 (2026-11-05, in a worktree on `9cd88d5`, fix round 1 the same day; Cycle log, M4-T34) |
 | T35 | The core owns the simulated state (Q55): bolts as rows drawn by one multimesh, Jolt bodies read once a tick by RID in one native call, activity, hull and selection as event-driven columns, the ram stage's contact read native | T33, T34 | Fable | Refactor review findings 1, 4, 5 and 6: 5 to 8 ms at 500 for the bolts alone; T24's precondition | N, G | done (2026-11-05, four fix rounds, CI green on `8934e9b`; the tick at `battle` 300 from 11.80 to 6.74 ms, Q49's 8 ms met; 500 from 19.46 to 10.71 ms; Cycle log, M4-T35) |
 | T36 | The frame's per-ship work in one pass per subsystem (Q56, Q58): plumes, muzzle flashes, LOD switching, audio, far dots, the HUD radar, hit flashes; the splat-era render scale cap; the slow test switch | T33 | Opus | Refactor review findings 2, 3, 7, 9, 12, 13, 14: 3 to 5 ms a frame at 500 | R, G | done (2026-11-05, in a worktree on `f414cf4`; Cycle log, M4-T36): the worst second's process work at `battle` 500 from 25.7 to 10.2 to 10.8 ms and at 300 from 20.2 to 11.3 ms after fix round 1; `battle` 300 from 16.7 to 37.1 FPS; engine audio left to M5-T19 (finding 7) and the lean ships' muzzle flash pool with muzzle transforms as data moved to T35 (finding 12) |
-| T37 | M4's cleanup (Q57; the maintainer, 2026-11-06): the native library required, the old GDScript paths and the inline step removed with their settings (parity tests against recorded references), one hull-reading path, the documentation drift | T22 (before T23, Q68) | Opus | Refactor review findings 8, 16, 17; more lines and settings than planned, since the GDScript references go too; the parity tests must keep their teeth | X, G | in progress (dispatched 2026-11-06, Opus; first pass in a worktree on `60beeae`: the refusal, the parity recordings, the inline step and 6 of the 21 switches removed (weapons, brains, commands, driver step, flight, batch owns), the rest listed in the T37 report for the next pass) |
+| T37 | M4's cleanup (Q57; the maintainer, 2026-11-06): the native library required, the old GDScript paths and the inline step removed with their settings (parity tests against recorded references), one hull-reading path, the documentation drift | T22 (before T23, Q68) | Opus | Refactor review findings 8, 16, 17; more lines and settings than planned, since the GDScript references go too; the parity tests must keep their teeth | X, G | in progress (dispatched 2026-11-06, Opus, in a worktree on `60beeae`; both passes done: the refusal, the parity recordings, the inline step and all 21 switches removed with the paths behind them, the main scene's SimClock reset, finding 16's drift; settings 74 to 53; waiting for the controller's review and merge) |
 | T38 | Anti-aliasing (Q59, Q60): Godot's MSAA 2x and 4x, TAA, FXAA and SMAA as a setting, live; motion vectors fixed for everything TAA (and T40's FSR 2.2) needs; defaults chosen by measurement | T36 | Opus | `project.godot` sets no anti-aliasing, so edges and thin hull detail alias; TAA and FSR 2.2 both need correct motion vectors from the multimeshes, particles and bolts | R | done (2026-11-05, one fix round, CI green on `d8b73ce`; SMAA the default, a look call the costs allow; at the 6K window's native size `battle` 300 draws in 2.83 ms off, 3.20 ms SMAA, 5.50 ms TAA; Cycle log, M4-T38) |
 | T40 | Upscaling (Q59, Q60): FSR 2.2 (temporal, its own anti-aliasing) and FSR 1.0 (spatial, with sharpness) with internal-resolution presets from a third of the output's height up to native, applied live with the HUD at window size; no frame generation; defaults chosen by measurement | T38 | Opus | Since T36 a 4K window renders 4K; FSR 2.2 from 1 080 or 1 440 lines looks better than a bilinear stretch and costs less than native; below 1 080 is for weaker GPUs; supersedes T26 (measured otherwise: FSR 2.2 costs more GPU than native here, so native is the default) | R | done (2026-11-05, one fix round, CI green on `d85a314`; native the default: FSR 2.2 costs more GPU than native here and FSR 1.0 gains 3 to 5 % on a CPU-bound frame; the fix round made `FULLSCREEN_EXEC` apply, so T24's and T35's fullscreen comparisons were re-measured; Cycle log, M4-T40) |
 | T41 | The Wayland display driver (Q66): the game and the measurements open through Godot's Wayland driver, so a fullscreen window is the panel's own 3840x2160 under GNOME's 1.25 scale | T40 | Opus (controller) | The X11 path made the fullscreen window 6144x3456 and the compositor scaled it down; Wayland is worth about 8 to 10 FPS at 1 000 ships | R | done (2026-11-06, the controller, CI green on `7468d81`; fullscreen a true 3840x2160, `battle` 500 54.6 to 58.7 FPS and 1 000 60 to 62 to 69 to 72; Cycle log, M4-T41) |
@@ -2240,6 +2240,32 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
   - Measures as above, plus the settings and lines removed, and the focused set of every M4 task green on the one path.
   - The return checklist's M4-T24 item (`docs/playtest.md`) compares the threaded step with `sim_step inline` mid-fight; T37
     drops that comparison (or points it at `delayed`) when the inline step goes.
+
+- **Done (2026-11-06, two passes in a worktree on `60beeae`; report `.superpowers/sdd/m4-performance-and-scale/task-t37-report.md`):**
+  - The library is required: `NativeLib.REQUIRED` and `refusal()`; `Main` prints why (naming `bin/libscs_native.so` and
+    `scripts/build_native.sh`) and exits 1 (`test_native_required`).
+  - 21 settings removed (74 to 53), each with the path behind it: `perf_native`, `perf_native_core`, `perf_native_weapons`,
+    `perf_native_brains`, `perf_native_commands`, `perf_native_driver_step`, `perf_native_flight`, `perf_batch_owns_ships`,
+    `perf_native_sweep_cells`, `perf_ram_contact_columns`, `perf_ram_sweep_cull`, `perf_native_ram_contacts`,
+    `perf_targeting_on_read`, `collision_layers`, `far_ship_interpolation_off`, `ship_contact_monitor`,
+    `perf_core_event_columns`, `perf_core_body_direct`, `perf_native_selection_check`, `perf_native_bolt_sync`,
+    `perf_native_bolt_rows`; `sim_step` lost `inline`. The Rust flags they drove went too (the sorted sweep cells, the core's
+    event-columns, body-direct and bolt-rows flags, the core's own bolt-node read). Kept: `perf_threads`, `perf_step_threads`,
+    `sim_step` (threaded, and delayed as its reference), `physics_jitter_fix`, `physics_max_steps_per_frame` (engine tuning) and
+    `ai_think_rate` (behaviour). `SettingsSchema.RETIRED` and `RETIRED_VALUES` let an old saved file load (`test_settings`).
+  - Parity tests compare with 20 recordings in `tests/fixtures/parity/` (`ParityFixture`, recorded at the first pass's
+    `0586e3e`, where every path still existed). Q70: the Q16 fights hold hits within 20 % and the mix within 5 points of the
+    GDScript recording, the twin distance printed, not gated.
+  - The main scene resets `SimClock` as it enters the tree, so a battle loaded again in one process starts at 0
+    (`test_main_scene`).
+  - The tier director's ram check returns early with no tier rows and is timed into the fighters' landing cost.
+  - Lines: src, native, scripts and bin +343, -1 695; tests (without the recordings) +1 189, -1 484.
+  - Measured (headless, seed 1, 20 s after 5 s, both locks, cores 0 to 11): `typical` 58 1.80 / 2.55 ms (median / p99) before,
+    1.80 / 2.48 after; `battle` 300 6.51 / 8.24 before, 6.48 / 8.24 after; `battle` 500 10.77 / 13.30 before, 10.81 / 13.58
+    after: unchanged within noise. The full suite and each CI shard green (the report has the totals).
+  - Left for later: the hull reading is two paths, not one: a world with a core reads its rows; a world with no core (bare
+    test worlds) still uses the registry, `from_tree` and the resolvers' own walks, and the GDScript query loops stay as the
+    contact field's fallback. Collapsing them needs every world to attach a core first (the report's concerns).
 
 ##### M4-T38 Anti-aliasing (Q59, Q60)
 
@@ -6361,6 +6387,20 @@ otherwise, the 3D at 1 080 lines, vsync off, load 1.4 to 2.5 (`reports/perf/M4-T
 
 No regression from the code: the two builds overlap within the 1 % low's known run-to-run spread (up to 1.8 times, report P2), and
 at 1 000 the final code holds T21's 1 % low (29). These rows replace fix round 2's fullscreen rows as T22's final numbers.
+
+### M4-T37 (2026-11-06): the cleanup, measured
+
+The native-only build against its base `60beeae`, headless, seed 1, 20 s after a 5 s warm-up, both bench locks, cores 0 to 11
+(`reports/perf/M4-T37_before_*`, `M4-T37p2_after_*`; load 0.7 to 1.4):
+
+| layout | before median / p99 ms | after median / p99 ms |
+|---|---|---|
+| typical 58 | 1.80 / 2.55 | 1.80 / 2.48 |
+| battle 300 | 6.51 / 8.24 | 6.48 / 8.24 |
+| battle 500 | 10.77 / 13.30 | 10.81 / 13.58 |
+
+No change outside noise: the removed paths were all off the default path, so the win is code and settings (21 settings, about
+1 350 net lines of game and native code), not ticks.
 
 ## Definition of done (M4)
 
