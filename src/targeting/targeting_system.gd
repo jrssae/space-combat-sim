@@ -227,8 +227,10 @@ static func compute_readout(target: TargetInfo, ship_pos: Vector3, ship_vel: Vec
 
 ## Distance in metres, with the difference taken in 64-bit.
 static func range_between(from: Vector3, to: Vector3) -> float:
-	var d: PackedFloat64Array = _offset64(from, to)
-	return sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2])
+	var dx: float = float(to.x) - float(from.x)  # 64-bit, as `_offset64`, with no array per call (the radar asks per contact)
+	var dy: float = float(to.y) - float(from.y)
+	var dz: float = float(to.z) - float(from.z)
+	return sqrt(dx * dx + dy * dy + dz * dz)
 
 
 ## Angle in radians between `axis` and the 64-bit vector `d` (atan2 of |cross| and dot: accurate near 0 and 180).
