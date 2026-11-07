@@ -8,6 +8,9 @@ const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf
 		&"perf_native_bolt_rows", &"perf_native_commands", &"perf_native_driver_step", &"perf_threads", &"perf_step_threads",
 		&"sim_step", &"ai_think_rate"]
 const WEAPON_PATH: String = ShipAssembly.DEFAULT_TURRET_WEAPON
+## The hand-mounted turrets fire the light turret at this interval, so a few seconds of a mechanics test carry several shots
+## whatever the balance fight tunes the real gun to (`test_turret_defence` fires the real one from the hardpoints).
+const MECHANICS_INTERVAL_S: float = 1.2
 
 var space: SubViewport = null
 var world: WorldFrame = null
@@ -68,11 +71,25 @@ func ship(type: StringName, faction: StringName, display_name: String, at: Vecto
 	return c
 
 
+## Takes `c` out of play when its hull is destroyed, as `ShipPool` parks a dead ship (hidden, not processing, no pilot), so a
+## dead raider stops firing in a fight with no pool.
+func park_on_death(c: Combatant) -> void:
+	c.damageable.destroyed.connect(func(_info: HitInfo) -> void:
+		c.ship.visible = false
+		c.ship.process_mode = Node.PROCESS_MODE_DISABLED
+		c.ship.linear_velocity = Vector3.ZERO
+		c.ship.angular_velocity = Vector3.ZERO
+		if c.driver != null:
+			c.driver.brain = null)
+
+
 ## A turret on `c` at `position` (its frame) with its base facing `up` and a cone of `arc_deg`.
 func mount(c: Combatant, position: Vector3 = Vector3(0.0, 3.0, 0.0), up: Vector3 = Vector3.UP, arc_deg: float = 200.0,
 		mount_name: String = "dorsal") -> TurretMount:
+	var gun: WeaponSpec = (load(WEAPON_PATH) as WeaponSpec).duplicate()
+	gun.shot_interval_s = MECHANICS_INTERVAL_S
 	var m := TurretMount.create({"name": mount_name, "position": position, "up": up, "arc_deg": arc_deg, "barrel_m": 2.0},
-			load(WEAPON_PATH) as WeaponSpec, c.faction)
+			gun, c.faction)
 	c.ship.add_child(m)
 	c.turrets.append(m)
 	return m

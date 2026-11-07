@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="ShipSpec" load_steps=2 format=3]
+
+[ext_resource type="Script" uid="uid://csixdcdy0fu46" path="res://src/ship/ship_spec.gd" id="1_ship_spec"]
+
+[resource]
+script = ExtResource("1_ship_spec")
+asset_id = "saturn_4_transport"
+mass = 1.4e+07
+inertia = Vector3(1.98e+10, 3.28e+10, 1.42e+10)
+pod_main_thrust = 2.1e+07
+pod_retro_thrust = 7e+06
+rcs_force_max = Vector3(7e+06, 7e+06, 0)
+rcs_torque_max = Vector3(6.9e+08, 1.15e+09, 5e+08)
+rate_max = Vector3(6, 6, 8)
+assist_gain_k = 2.0
+pod_yaw_gain = 0.5
+pod_yaw_deadzone = 0.1
+pod_yaw_smoothing_s = 0.5
+brake_gain_k = 0.5
+exhaust_velocity = 30000.0
+fuel_capacity_kg = 840000.0
+assist_speed_max_mps = 400.0
+hull_max = 1000.0
+ram_safe_dv_mps = 2.0
+ram_lethal_dv_mps = 10.0
+has_cockpit_interior = false
+engine_glow_color = Color(1.4, 1.1, 0.7, 1)
+damage_layout = &"x_fighter"
+tier_hit_scale = 1.0

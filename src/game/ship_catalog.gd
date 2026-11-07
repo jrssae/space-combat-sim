@@ -11,6 +11,8 @@ const PATHS: Dictionary[StringName, String] = {
 	PLAYER_TYPE: "res://assets/ships/starfury_aurora.tres",
 	&"starfury_ally": "res://assets/ships/starfury_ally.tres",
 	&"raider_fighter": "res://assets/ships/raider_delta_v.tres",
+	# A minimal entry for the turrets' balance fight (M5-T21); M5-T16 owns the civilian catalog.
+	&"saturn_4_transport": "res://assets/ships/saturn_4_transport.tres",
 }
 
 ## The faction a ship of each type is built for (`ShipPool.prepare`); the player's own type is listed for completeness.
@@ -18,6 +20,7 @@ const FACTIONS: Dictionary[StringName, StringName] = {
 	PLAYER_TYPE: Factions.EARTH_ALLIANCE,
 	&"starfury_ally": Factions.EARTH_ALLIANCE,
 	&"raider_fighter": Factions.RAIDERS,
+	&"saturn_4_transport": Factions.EARTH_ALLIANCE,
 }
 
 
