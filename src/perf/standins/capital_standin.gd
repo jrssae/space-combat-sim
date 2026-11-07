@@ -127,6 +127,14 @@ func unpark_from_tier(xform: Transform3D, velocity: Vector3, spin: Vector3) -> v
 	reset_physics_interpolation()
 
 
+## Takes a destroyed capital out of play (M4-T23): hidden and not processing, its turrets and emitters with it, for good.
+func leave_play() -> void:
+	if has_meta(&"_scs_tier_row"):
+		remove_meta(&"_scs_tier_row")
+	visible = false
+	process_mode = Node.PROCESS_MODE_DISABLED
+
+
 ## Whether the body is parked for the tier now.
 func is_tier_parked() -> bool:
 	return has_meta(&"_scs_tier_row")

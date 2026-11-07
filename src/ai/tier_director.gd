@@ -270,6 +270,18 @@ func forget(c: Combatant) -> void:
 	c.ship.remove_meta(TIER_META)
 
 
+## A capital leaves play while it is in the tier (destroyed, M4-T23): its row goes with it.
+func forget_capital(cap: CapitalStandin) -> void:
+	if cap == null:
+		return
+	var body_id: int = cap.get_instance_id()
+	if not _tiered_capitals.erase(body_id):
+		return
+	_park_origins.erase(body_id)
+	if _sim != null and is_instance_valid(_sim) and _sim.core != null:
+		_sim.core.tier_take(body_id)
+
+
 ## Whether body `body_id` is in the tier now.
 func is_tiered(body_id: int) -> bool:
 	return _tiered_ships.has(body_id) or _tiered_capitals.has(body_id)

@@ -280,6 +280,9 @@ func add_capital(cls: StringName, faction: StringName, display_name: String, at:
 		gun.axis = -cap.global_basis.z
 	_capitals.append(cap)
 	_native_dirty = true
+	var destruction: DestructionDirector = DestructionDirector.current()
+	if destruction != null:
+		destruction.watch_capital(cap)  # its death is drawn and leaves play (M4-T23)
 	return cap
 
 
