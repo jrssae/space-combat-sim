@@ -13,11 +13,11 @@ const DELTA: float = 1.0 / 60.0
 const SPEC_PATH: String = "res://assets/ships/starfury_aurora.tres"
 const FIXTURE: String = "core_state"
 const NEW_SETTINGS: Array[StringName] = [&"perf_core_event_columns", &"perf_core_body_direct",
-		&"perf_native_selection_check", &"ship_contact_monitor"]
+		&"perf_native_selection_check"]
 const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_native_flight",
 		&"perf_threads", &"perf_native_commands", &"perf_native_bolt_rows", &"ram_damage",
 		&"perf_core_event_columns", &"perf_core_body_direct", &"perf_native_selection_check",
-		&"perf_batch_owns_ships", &"ship_contact_monitor"]
+		&"perf_batch_owns_ships"]
 
 var _saved: Dictionary = {}
 var _index_of: Dictionary = {}
@@ -55,7 +55,6 @@ func test_the_settings_exist_with_their_defaults() -> void:
 		assert_true(Settings.schema.has_key(key), "%s is a setting" % key)
 	assert_eq(Settings.schema.get_default(&"perf_core_event_columns"), true, "event columns on by default")
 	assert_eq(Settings.schema.get_default(&"perf_native_selection_check"), true, "the native selection check on by default")
-	assert_eq(Settings.schema.get_default(&"ship_contact_monitor"), false, "contact_monitor off by default: nothing listens")
 
 
 # --- a small world: two lean ships and the core ---------------------------------------------------------------------
@@ -209,7 +208,7 @@ func test_a_ship_reports_jolt_contacts_with_contact_monitor_off() -> void:
 	var world: WorldFrame = made[1]
 	var a: Combatant = _ship(world, made[2], "A", Factions.EARTH_ALLIANCE, Vector3.ZERO)
 	var b: Combatant = _ship(world, made[2], "B", Factions.RAIDERS, Vector3(0.0, 0.0, -40.0))
-	assert_false(a.ship.contact_monitor, "contact_monitor is off by default (nothing connects body_entered)")
+	assert_false(a.ship.contact_monitor, "contact_monitor is off (nothing connects body_entered)")
 	assert_eq(a.ship.max_contacts_reported, Ship.CONTACTS_REPORTED, "max_contacts_reported stays")
 	b.ship.linear_velocity = Vector3(0.0, 0.0, 60.0)
 	var seen: int = 0

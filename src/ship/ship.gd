@@ -198,7 +198,6 @@ func _ready() -> void:
 		var switcher := LodSwitcher.new()
 		switcher.name = "LodSwitcher"
 		add_child(switcher)
-	Settings.changed.connect(_on_hull_setting_changed)
 	set_cockpit_interior_visible(_interior_visible)
 	if console_owner:
 		_register_console()
@@ -218,8 +217,6 @@ func _exit_tree() -> void:
 	var rig: LightRig = LightRig.of(self)
 	if rig != null and _cabin_emitter != null:
 		rig.remove_emitter(_cabin_emitter)
-	if Settings.changed.is_connected(_on_hull_setting_changed):
-		Settings.changed.disconnect(_on_hull_setting_changed)
 
 
 ## Gives the ship its type and its world. Call it before `World.spawn` (the usual order, or use `create`); called
@@ -639,8 +636,8 @@ func set_far_dot(on: bool) -> void:
 # A far dot's ship is not interpolated: nothing of it is drawn but a dot, so a rebase has no history to reset on its nodes
 # (M4-T14). Back near, it blends again from where it is.
 func _apply_far_interpolation() -> void:
-	var off: bool = _far_dot and bool(Settings.get_value(&"far_ship_interpolation_off"))
-	var mode: Node.PhysicsInterpolationMode = Node.PHYSICS_INTERPOLATION_MODE_OFF if off else Node.PHYSICS_INTERPOLATION_MODE_INHERIT
+	var mode: Node.PhysicsInterpolationMode = Node.PHYSICS_INTERPOLATION_MODE_OFF if _far_dot \
+			else Node.PHYSICS_INTERPOLATION_MODE_INHERIT
 	if physics_interpolation_mode == mode:
 		return
 	physics_interpolation_mode = mode
@@ -679,7 +676,7 @@ func _apply_newtonian_body() -> void:
 	can_sleep = false
 	continuous_cd = false
 	# Nothing connects body_entered; the direct state's contact list (the ram resolver's) needs only the count (M4-T35).
-	contact_monitor = bool(Settings.get_value(&"ship_contact_monitor"))
+	contact_monitor = false
 	max_contacts_reported = CONTACTS_REPORTED
 	if collision_layer == 1 and collision_mask == 1:  # layers a caller already chose before the ship entered the tree stay
 		_apply_collision_layers()
@@ -687,13 +684,9 @@ func _apply_newtonian_body() -> void:
 
 # AI ships (the lean ones) sit on the fighter layer (M4-T14); every other ship keeps the default layer and collides with everything.
 func _apply_collision_layers() -> void:
-	if bool(Settings.get_value(&"collision_layers")):
-		var kind: StringName = &"fighter" if lean else &"player"
-		collision_layer = CollisionLayers.layer_of(kind)
-		collision_mask = CollisionLayers.mask_of(kind)
-	else:
-		collision_layer = 1
-		collision_mask = 1
+	var kind: StringName = &"fighter" if lean else &"player"
+	collision_layer = CollisionLayers.layer_of(kind)
+	collision_mask = CollisionLayers.mask_of(kind)
 
 
 # A lean ship (M4-T11) needs no first-person interior and no camera anchor; the empty plume holder goes too (`ShipAssembly` puts its
@@ -856,13 +849,6 @@ func set_livery(p_livery: Livery) -> void:
 func _apply_livery() -> void:
 	if livery != null and hull != null:
 		livery.apply(hull)
-
-
-func _on_hull_setting_changed(key: StringName, _value: Variant) -> void:
-	if key == &"collision_layers":
-		_apply_collision_layers()
-	elif key == &"far_ship_interpolation_off":
-		_apply_far_interpolation()
 
 
 # A soft red lamp just behind and above the pilot's eyes. Its range stops short of the wings, so it lights only the cockpit frame.

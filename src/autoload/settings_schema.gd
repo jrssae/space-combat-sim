@@ -91,11 +91,6 @@ const ENTRIES: Dictionary = {
 	# M4-T11
 	&"far_ship_dot_m": {"type": TYPE_FLOAT, "default": 3000.0, "min": 500.0, "max": 50000.0,
 		"doc": "Past this distance from the camera an AI ship is drawn as a dot: no hull, plumes or markers (M4-T11); it shows its detail again a tenth inside"},
-	# M4-T14
-	&"collision_layers": {"type": TYPE_BOOL, "default": true,
-		"doc": "Jolt layers by kind (M4-T14): fighters, the player, capitals and rocks each pair only with what can hit them (fighters with fighters too, Q33); off puts every body on the one default layer. Ships follow it at once, capitals and rocks as they are built"},
-	&"far_ship_interpolation_off": {"type": TYPE_BOOL, "default": true,
-		"doc": "A far-dot AI ship's body is not interpolated, so a rebase leaves its nodes out of the interpolation reset (M4-T14)"},
 	# M4-T15
 	&"perf_native_core": {"type": TYPE_BOOL, "default": true,
 		"doc": "The native simulation core feeds the contact scan, the hit sweep, the flight step and the ram broad phase from one sync a tick (M4-T15) when perf_native is on and the library is built; off = each class loads its own copy, for pairing the two in one process"},
@@ -116,8 +111,6 @@ const ENTRIES: Dictionary = {
 		"doc": "The core reads the rigid bodies' pose and motion from the physics server's direct state by RID (M4-T35) instead of the nodes' getters; the bits differ from the nodes' only between a teleport and Jolt's next step; off = the nodes' getters, the reference; live"},
 	&"perf_native_selection_check": {"type": TYPE_BOOL, "default": true,
 		"doc": "The AI ships' targeting controllers' selection check (a target gone, parked or out of reach) runs as one native pass over the core's rows (M4-T35; needs perf_core_event_columns); off = each controller checks its own selection every tick, the reference; live"},
-	&"ship_contact_monitor": {"type": TYPE_BOOL, "default": false,
-		"doc": "RigidBody3D.contact_monitor on every ship (M4-T35): off by default, since nothing connects body_entered and the direct state's contact list, which the ram resolver reads, needs only max_contacts_reported; applies to ships built after the change"},
 	&"perf_native_bolt_rows": {"type": TYPE_BOOL, "default": true,
 		"doc": "The core owns the bolts (M4-T35): the AI cannons' gates and shots run as one kernel over the rows, each bolt is a row stepped natively, swept and spent from the rows by the hit resolver and drawn by one multimesh a look; the player's cannon and the beams and missiles keep their nodes; off = a Projectile node per bolt and a GDScript tick per cannon, the reference, for pairing the two in one process (a switch mid-run drops the bolts in flight); live"},
 	# M4-T38
@@ -159,7 +152,8 @@ const RENAMED: Dictionary = {}
 ## holds one of these loads without it, and the next `save` drops it.
 const RETIRED: Array[StringName] = [&"perf_native_weapons", &"perf_native_brains", &"perf_native_commands",
 		&"perf_native_driver_step", &"perf_native_flight", &"perf_batch_owns_ships", &"perf_native_sweep_cells",
-		&"perf_ram_contact_columns", &"perf_ram_sweep_cull", &"perf_native_ram_contacts", &"perf_targeting_on_read"]
+		&"perf_ram_contact_columns", &"perf_ram_sweep_cull", &"perf_native_ram_contacts", &"perf_targeting_on_read",
+		&"collision_layers", &"far_ship_interpolation_off", &"ship_contact_monitor"]
 
 ## Choices removed from a setting: key -> {old choice -> what a saved file's old choice loads as} (M4-T37: the inline step).
 const RETIRED_VALUES: Dictionary = {&"sim_step": {&"inline": &"threaded"}}
