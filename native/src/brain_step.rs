@@ -214,7 +214,7 @@ pub struct Done {
 }
 
 /// Runs one job to its end: the pass across the runner's threads, then (on the rows path) the commands into the
-/// snapshot's copy and the hosted drivers' clocks. The same function on every path, so `inline`, `delayed` and
+/// snapshot's copy and the hosted drivers' clocks. The same function on every path, so a single `think`, `delayed` and
 /// `threaded` give the same bits from the same snapshot.
 pub fn run(job: Job) -> Done {
     let started = Instant::now();

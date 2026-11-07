@@ -1487,8 +1487,8 @@ One physics tick, in order (`process_physics_priority`, then tree order):
    (`SimCore` synced them at -11). With `threaded` (the default) or `delayed`, the batch first joins the previous tick's
    job and hands over its results (the commands into the rows, which the flight batch flies at -1; the events to the
    drivers that joined then), then launches this tick's job, on the step's worker thread when threaded. Every AI
-   command therefore lands one tick after the rows it was decided on; the player's own command (3) is never behind. With
-   `inline` the batch thinks and applies in the same call, today's order (§17.13, "The AI step on a worker thread").
+   command therefore lands one tick after the rows it was decided on; the player's own command (3) is never behind. Until
+   M4-T37 an `inline` schedule thought and applied in the same call (§17.13, "The AI step on a worker thread").
 2. `DebugConsole` statements (autoload, so first among the priority-0 nodes; a `rebase` here moves everything
    together).
 3. `Main` (0): player `PilotCommand` -> `Combatant.apply_commands` (the same call).
@@ -2280,9 +2280,9 @@ src/ship/ship.gd                a ship is `batched` (every ship but the player's
   and the batch draws the reaction mass when the tank is finite. The per-nozzle `nozzle_forces` of a batched ship's output
   stay empty: nothing reads them for an AI ship.
 - **The player's ship never joins** (`console_owner` switches `batched` off in `_ready`), so the GDScript path stays the
-  reference and the player's feel is untouched. Any ship can be taken out (`batched = false`), and when the library lacks the
-  class, the batch steps nothing and every ship flies its own model that same tick (M4-T37 removed `perf_native` and
-  `perf_native_flight`; the batch always flies the AI ships).
+  reference and the player's feel is untouched. Any ship can be taken out (`batched = false`). Until M4-T37 a library without
+  the class, `perf_native` off or `perf_native_flight` off left every ship on its own model; M4-T37 removed both settings,
+  the game refuses to start without the library, and the batch always flies the AI ships.
 - **The assist's state follows the ship.** `FlightAssist.pod_yaw_smoothed` is the model's only state; the native slot keeps
   its own copy. When a ship changes path the value is carried over (to native at the next gather, back to the model at the
   next GDScript tick), and `set_assist` and `reset_to` clear both.
@@ -2588,9 +2588,9 @@ src/perf/standins/                the director, turret, missile and mine stand-i
   aim step and fire gate, each interceptor's pick among the projectiles in reach, each capital's strike target and the
   beams and missile launches that use it, the mines' trigger checks and a blast's hulls, and a missile's proportional
   navigation. The director's two gathers (every flying hull and every projectile, 2.5 ms at `battle` 500) go too: the
-  kernels read the core's rows and bolts. The GDScript stand-ins stay the reference behind `perf_native_weapons`
-  (default on), and either path carries on from the other's state: switching hands the turrets' axes, targets, aim errors,
-  gate times and counters, the strike targets and the launch turn over.
+  kernels read the core's rows and bolts. Until M4-T37 the GDScript stand-ins stayed the reference behind
+  `perf_native_weapons`, and either path carried on from the other's state. M4-T37 removed the setting and the GDScript
+  step; the stand-ins step only on the native rows, and their parity tests compare with recordings in `tests/fixtures/parity/`.
 - **Who does what.** One `ScsWeaponRows.step` a tick decides, in the GDScript's order, which guns fire (with each bolt's
   start and velocity), which projectiles the interceptors shoot down, which beams fire at what, and which capitals launch
   at whom. The director then does it: it spawns the bolts, beams and missiles with the stand-ins' own code, spends the
@@ -2656,9 +2656,9 @@ src/ai/ai_pilot_driver.gd        the native path: a perception without contact l
   arguments: the relation row, the clock, the hull, the selection, the hits, the friendly-fire setting and the frame origin
   as three doubles) gives back a `PackedFloat64Array` of 54 numbers: the flight command, the trigger, the wanted target in
   two halves, the dodge flags, the wish, the behaviour in control, dwell and switches, the contacts seen, the raw and
-  weighted scores by tie order, and twelve numbers of the behaviour in control's state. The GDScript brains stay the
-  reference and fly whenever a perception is not on the rows (`perf_native_brains` off, no core, a pilot with a scripted or
-  subclassed behaviour, a ship with no row this tick).
+  weighted scores by tie order, and twelve numbers of the behaviour in control's state. The GDScript brains fly whenever a
+  perception is not on the rows (no core, a pilot with a scripted or subclassed behaviour, a ship with no row this tick;
+  `perf_native_brains` off did too until M4-T37 removed it).
 - **Bit for bit, with the seeds.** The maths repeats the GDScript op for op (32-bit vectors, 64-bit scalars, a scalar rounded
   to 32 bits before it scales a vector, the engine's `atan2`, `sin`, `cos`, `tan`, `acos`, `exp` through the same libm).
   The seeded rolls are Godot's own: `hash([seed, "label"])` is the Array hash (murmur3 over `hash_one_uint64` of the int and
@@ -2697,8 +2697,8 @@ src/ai/ai_pilot_driver.gd        the native path: a perception without contact l
   or its ship has no row this tick) holds its last command for that tick, as a held far-rate tick does, and is counted in
   `ai.thinks_fallback`; its GDScript objects, which hold only the mirror, never run. A pilot without a slot yet thinks in
   GDScript as before.
-- **Console and settings.** `perf_native_brains` (default on; off = the GDScript brains, so a bench pairs the two in one
-  process). Provider `ai` gains `thinks_native` (AI ships whose think ran natively in the last tick) and `thinks_fallback` (native pilots the host declined, each holding its last command); `ai <name>` reads a
+- **Console and settings.** `perf_native_brains` (default on; off = the GDScript brains, so a bench paired the two in one
+  process; M4-T37 removed it). Provider `ai` gains `thinks_native` (AI ships whose think ran natively in the last tick) and `thinks_fallback` (native pilots the host declined, each holding its last command); `ai <name>` reads a
   native pilot's `describe()` from its slot (the behaviour in control, its state and fields, the scores).
 
 
@@ -2708,13 +2708,15 @@ src/ai/ai_pilot_driver.gd        the native path: a perception without contact l
 native/src/threads.rs            Threads: the core's rayon pool (none for one thread), a threshold per pass, the per-item pass,
                                  the performance-core count; engine-free (std and rayon only), under test_sim_core's guard
 native/src/sim_core.rs           the pool on the core (set_threads, threads, parallel_passes, the thresholds), rows_digest
-native/src/brain.rs              ScsBrains.think_batch: every native think of a tick in one call, across the pool
+native/src/brain.rs              ScsBrains.think_batch: every native think of a tick in one call, across the pool (M4-T37
+                                 removed it; launch_batch and launch_rows carry it)
 native/src/flight_step.rs        ScsFlightStep: read on the main thread, the kernel on the pool, the forces applied in row order
 src/perf/brain_batch.gd          BrainBatch: an internal child of SimCore at -9 that carries the drivers' native thinks
 ```
 
 - **What runs in parallel.** Two passes. The brains: the drivers (-10) hand each native pilot's inputs to `BrainBatch`
-  (its slot, its relation row, selection, latest attacker, dt, hull and hits), and at -9 one `think_batch` call thinks
+  (its slot, its relation row, selection, latest attacker, dt, hull and hits), and at -9 one batch call (`think_batch`, a
+  launched job since M4-T24) thinks
   every ship across the pool (the perception queries, the context split, the scoring, the behaviour and the avoidance all
   run inside a think); each driver then gets its output in the order it came and does what it did before (the selection,
   the hiding lights, `apply_commands`). The flight step: the ships' commands and poses are read on the main thread (a ship
@@ -2819,6 +2821,7 @@ src/targeting/targeting_controller.gd  the player's candidate list built when re
 ```
 native/src/row_commands.rs       RowCommand and the core's commands by body: written by the brains' batch, flown by the flight step
 native/src/brain.rs              ScsBrains.think_batch_rows and rows_events: the rows batch, its commands and its events
+                                 (M4-T37 removed think_batch_rows; launch_rows carries it)
 native/src/flight_step.rs        the step flies a ship's command from its row when it has one
 src/perf/brain_answer.gd         BrainAnswer: one tick's answer, kept by the drivers and pilots that joined, read when needed
 src/perf/brain_batch.gd          the rows batch (add_rows, the flush that hands out the few events)
@@ -2829,7 +2832,8 @@ src/ship/ship.gd                 use_row_command, release_row_command, pull_row_
 
 - **What moved.** T18 left about 27 us of GDScript around every native think: the lite perception, the slot's checks,
   joining the batch, then unpacking the answer, mirroring it, building the command objects, the selection, the lights
-  and `apply_commands`. With `perf_native_commands` on (the default) a native think goes into a rows batch: the driver
+  and `apply_commands`. With `perf_native_commands` on (the default until M4-T37 removed it with T18's path, so always
+  now) a native think goes into a rows batch: the driver
   hands in the slot, dt, its faction's relation row, the near flag and the latest hits; the host reads the hull and the
   selection from the ship's own row (the sync stamped them, T17), thinks as before, and writes each think's flight
   numbers and trigger into the core's commands by body (`ScsSimCore.row_commands`). The flight batch (-1) flies a ship's
@@ -2863,7 +2867,8 @@ src/ship/ship.gd                 use_row_command, release_row_command, pull_row_
   batch order; the pass itself is T18's. What is left per ship on the main thread is the think rate's decision, the
   context check and the join at -10, and the events at -9: the next lever (the think rate decided in the host from the
   slot's own clock, the hits pushed when they land) takes the per-ship step off the main thread with the rest of T24.
-- **Console and settings.** `perf_native_commands` (default on, live; off is T18's path, for pairing). Provider `ai` gains
+- **Console and settings.** `perf_native_commands` (default on, live; off was T18's path, for pairing; M4-T37 removed
+  both). Provider `ai` gains
   `rows_events` (drivers the last rows batch handed something to do) and `row_commands` (ships flying from their rows).
 
 **The core owns the simulated state (T35).**
@@ -2927,7 +2932,8 @@ src/combat/hit_resolver.gd, src/combat/ram_resolver.gd, src/targeting/targeting_
   the same columns as before. What the events do not cover: a body that only stops processing (no visibility change) keeps
   its row until something touches it; a hull changed under `Damageable` (a test poking `HullHealth` directly) is not heard.
   The reads a body makes each tick fell from eleven to three (the transform and two velocities).
-- **The direct-state read** (`perf_core_body_direct`, off by default). The rigid bodies' pose and motion read from
+- **The direct-state read** (`perf_core_body_direct`, off by default; M4-T37 removed the read with the setting). The
+  rigid bodies' pose and motion read from
   `PhysicsServer3D.body_get_direct_state` by RID instead of the nodes' getters: four calls a body against three, and the
   bits equal the nodes' after Jolt's first step (the node is set from the same state) but differ between a teleport and the
   next step (the server rebuilds the basis from its quaternion, T09's finding), which moves T14's melee digest. Measured
@@ -2951,14 +2957,16 @@ src/combat/hit_resolver.gd, src/combat/ram_resolver.gd, src/targeting/targeting_
   (`SimCore.touch_moved`; `NavBuoy`'s drift does), and the core reads the touched rows again before the check
   (`resync_touched_now`) and again at the resolvers' sync, so this check and the hit sweep see this tick's place as the
   tree reads at 0 and later did. The buoy keeps the default priority: the World's rebase at 0 runs before every prop.
-- **The batch owns its ships' ticks** (`perf_batch_owns_ships`). A ship the flight batch flew has nothing left to do at 0
-  (its combat edges are taken in the batch's gather, before the World's rebase), so `FlightBatch` switches its
-  `_physics_process` off once and gives it back when it stops flying the ship (no native step this tick, a refused step,
-  the ship leaving, the setting off); a ship given its tick back inside a tick flies its own model at once
+- **The batch owns its ships' ticks** (`perf_batch_owns_ships` until M4-T37, which removed the setting: the batch always
+  owns them). A ship the flight batch flew has nothing left to do at 0 (its combat edges are taken in the batch's gather,
+  before the World's rebase), so `FlightBatch` switches its `_physics_process` off once and gives it back when it stops
+  flying the ship (no native step this tick, a refused step, the ship leaving); a ship given its tick back inside a tick flies its own model at once
   (`fly_own_tick_now`), since the engine's process list for that tick was made before.
-- **The drivers' step in the host** (`perf_native_driver_step`). Once a native pilot's slot is bound to its ship, its
-  driver hands the host its think rate's state (its place in the stagger, its steps, the time since the last think, the
-  wake, the latest hits) through `BrainBatch.host_driver` and stops ticking. In the batch's call (`think_batch_rows`) the
+- **The drivers' step in the host** (`perf_native_driver_step` until M4-T37, which removed the setting: the host always
+  takes the step, and a hand step takes it back). Once a native pilot's slot is bound to its ship, its driver hands the
+  host its think rate's state (its place in the stagger, its steps, the time since the last think, the wake, the latest
+  hits) through `BrainBatch.host_driver` and stops ticking. In the batch's job (`think_batch_rows`, `launch_rows` since
+  M4-T37) the
   host steps every hosted driver after the queued ships: a step and the tick added, near the player or not from the ship's
   row and the player's position the batch gave it, `AiThinkRate.thinks`' rule (`posmod(steps + ordinal, period) == 0`),
   a ship with no row this tick held as a declined think was; the thinking ones become items with the relation row of their
@@ -3006,9 +3014,9 @@ native/src/brain_step.rs         the step as a job: Work (the brains, the hosted
 native/src/threads.rs            + Runner (the core's pool behind an Arc, so a job off the main thread runs its pass on the same
                                  threads with the same thresholds) and StepThread (one std thread, a job in, its result out,
                                  joined on drop)
-native/src/brain.rs              ScsBrains launches and joins the job (launch_rows, launch_batch, join_step; think, think_batch and
-                                 think_batch_rows are launch plus join), queues what arrives while the brains are away, keeps the
-                                 readers' view
+native/src/brain.rs              ScsBrains launches and joins the job (launch_rows, launch_batch, join_step; think is launch plus
+                                 join, and so were think_batch and think_batch_rows until M4-T37 removed them), queues what
+                                 arrives while the brains are away, keeps the readers' view
 native/src/row_commands.rs       snapshot_into and take_commands: the commands copied out at the launch and swapped in at the join,
                                  less the ones released since
 src/perf/brain_batch.gd          flush by `sim_step`: join the previous tick's job and hand its results over, then launch this tick's
@@ -3019,7 +3027,8 @@ scripts/input_latency.gd         the input latency probe: a pad press on the fak
 
 - **Why, and what moved.** The maintainer asked that the AI never make the game loop or the player's input wait (Q53). The
   brains' batch (the perception queries, the thinks, the avoidance, the hosted drivers' think-rate step, the commands
-  written into the rows: `ScsBrains.think_batch_rows`, and the plain `think_batch`) is the engine-free half of the tick, so
+  written into the rows: `ScsBrains.think_batch_rows`, and the plain `think_batch`, both `launch_rows` and
+  `launch_batch` since M4-T37) is the engine-free half of the tick, so
   it became a job (`brain_step::run`) over a snapshot of the core's tables that runs on a worker thread. Everything the job
   touches it owns: the brains and the batch's state (`Work`) move into the job and come back with its result, and the
   rows, bolts, touched set and commands are copied (`clone_from` into kept buffers: the double buffer's back half) at
@@ -3029,8 +3038,9 @@ scripts/input_latency.gd         the input latency probe: a pad press on the fak
   the hit sweep, the ram phase and the weapon kernels (their results feed GDScript damage in the same tick). The brief's
   "every kernel" was read as directional: the one that is the AI left; the kernels whose outputs are engine writes in the
   same tick stayed, and the entry says so.
-- **The schedule** (`sim_step`, live). `inline`: the batch thinks and applies in one call at -9, today's order and bits
-  (the Q54 fallback and the reference every GDScript-against-native parity test pins). `delayed`: the batch is launched at
+- **The schedule** (`sim_step`, live). Until M4-T37 an `inline` schedule thought and applied in one call at -9 (the Q54
+  fallback and the reference the GDScript-against-native parity tests pinned); M4-T37 removed it, and a saved `inline`
+  loads as `threaded`. `delayed`: the batch is launched at
   -9 of tick N and runs there and then, but its results are applied at -9 of tick N+1: the one-tick handover without a
   thread, the threaded step's deterministic reference. `threaded` (the default): the same job runs on the step's thread
   (`scs-sim-step`; its pass still across the core's rayon pool through a `Runner`) from -9 of tick N; at -9 of tick N+1
@@ -3043,7 +3053,7 @@ scripts/input_latency.gd         the input latency probe: a pad press on the fak
   to select, a rammer or route follower to read) -> the hits, liveness, wakes and newly hosted drivers that arrived
   meanwhile applied -> the contexts, the frame and the relation matrix pushed -> the snapshot taken and this tick's job
   launched. A scheduled job's result (its output, events, hosted slots and commands) is parked at its join, early or
-  not, until `join_step` hands it over, so a single `think` or an inline batch call while the job is out loses nothing.
+  not, until `join_step` hands it over, so a single `think` while the job is out loses nothing.
   Each launched driver is stamped with the pilot flying its ship at the launch (and each hosted slot with its driver and
   pilot): a result for a ship parked or re-piloted meanwhile is stale and dropped, counted (`core.step_stale`).
 - **Where the job's pass runs** (`perf_step_threads`, 1): on the step's thread alone by default, so the job never queues
@@ -3086,11 +3096,11 @@ scripts/input_latency.gd         the input latency probe: a pad press on the fak
   `step_mode`, `step_launched`, `step_us` (the job's own run time), `step_wait_us` (how long the join waited), `join_us`,
   `step_misses`, `step_early_joins`, `step_off_main`, `step_threads`.
 - **Tests.** `test_core_snapshot`: threaded equals delayed tick for tick on the seeded battle (rows, commands, hits,
-  thinks; the job off the main thread; 1 and 6 threads); inline flies the same first commands one tick earlier and the
-  shift changes the outcome; a job slower than the tick (`FAULT_SLOW`) misses every deadline, is waited for and skips
+  thinks; the job off the main thread; 1 and 6 threads); a job slower than the tick (`FAULT_SLOW`) misses every deadline, is waited for and skips
   nothing; the schedule flips live; a reader while the brains are away answers from the launch (one early join, then the
   cache). `test_sim_core` guards the job and the thread. The existing native-against-native pairings (T33, T35) hold under
-  the default; the GDScript-against-native ones pin `inline`.
+  the default. Until M4-T37 the GDScript-against-native ones pinned `inline` and a test showed inline flying the same first
+  commands one tick earlier; M4-T37 removed the inline step, and those tests compare with recordings instead.
 
 ### 17.14 The low-attention tier (T21)
 
@@ -3222,14 +3232,15 @@ src/combat/destruction_director.gd   a tier death where its row flew; every deat
   lost half their hits). A hit does not wake a tier think (fix round 1): it waits for its beat, so the thinks stay staggered
   however the far hits fall (every landed hit used to wake one, and a ship hit every tick thought every tick). The job counts
   and times the tier thinks (`ScsBrains.tier_thinks`, `tier_think_us`, on the job's own clock: the worker thread when threaded,
-  the main thread when inline). Its command goes to the core's row commands, which the tier's integrator flies; its driver
+  the main thread on the inline step, until M4-T37 removed it). Its command goes to the core's row commands, which the tier's integrator flies; its driver
   gets no event (its node is parked). A ship whose native pilot the host does not step yet waits in Jolt until it does, so no
   tier ship is left without a brain. A hulk never thinks. The think also writes what the roll reads with the command: the
   target the pilot wants, its aim error and its fire gate (the miss distance and the cone).
 - **A new command flies at once** (fix round 1). A row whose command a think wrote since its last beat (`RowCommand.seq`)
   gets its beat in the next tier step rather than at its stagger: waiting for the beat added up to two ticks of steering lag
   on top of the step's one-tick handover, enough to swing a 4 Hz pilot's nose off its gate, and made the tier's fights
-  differ between the inline and the threaded step (the same seed's raiders held their trigger 62 % more ticks on inline).
+  differ between the inline step (removed by M4-T37) and the threaded step (the same seed's raiders held their trigger 62 %
+  more ticks on inline).
 - **A fighter's fire.** Its parked cannon (`ScsCannons`, T35) keeps its gate and capacitor: in a pass after the near cannons
   (a tier shot makes no bolt, so the bolt order holds) the gate fires on the row command's trigger as on the body, and each
   shot is a seeded roll against the pilot's target, with no bolt row. The chance (`tier_fire::hit_chance`) is a circular
@@ -3281,7 +3292,7 @@ src/combat/destruction_director.gd   a tier death where its row flew; every deat
   launches, with their share of the integration) is timed and its means since the bench window began are `tier.cost_us` and
   the bench summary's tier line, beside the tier thinks (count, most in a tick, their time on the step's clock): at `battle`
   500 0.20 us a fighter row on the main thread plus 0.12 us of thinks (on the worker thread when threaded, the main thread
-  when inline), 0.31 us a capital row (fix round 2; it was 0.24 plus 0.72). The main thread's share is the integration with
+  on the inline step of the time), 0.31 us a capital row (fix round 2; it was 0.24 plus 0.72). The main thread's share is the integration with
   its flight beats (about 0.1 us), the cannons' tier pass (0.04) and landing the hits through `Damageable` in GDScript
   (about 14 us a hit, 0.06 us a row). The row commands use an id hasher (`CommandMap`), the core keeps a tier row's hull
   from `note_hull` (no per-ship hull signal in the director), and the landing finds hulls through a cache.

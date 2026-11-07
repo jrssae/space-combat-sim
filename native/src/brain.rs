@@ -82,8 +82,8 @@ enum Pending {
 }
 
 // A scheduled job's result, parked from its join until `join_step` hands it over: the output, the events, the hosted
-// items' slots and the snapshot with the commands it wrote. An inline call in between (a single `think`, an inline
-// batch) leaves it alone, so no tick's output or event is lost (fix round 1, I2).
+// items' slots and the snapshot with the commands it wrote. A single `think` in between leaves it alone, so no tick's
+// output or event is lost (fix round 1, I2).
 struct Handover {
     out: Vec<f64>,
     events: Vec<i64>,
@@ -120,7 +120,7 @@ pub struct ScsBrains {
     own_version: i64,
     // The brains and the batch's state (M4-T24): here between jobs, in the job while one runs (`work` is None then).
     work: Option<Box<Work>>,
-    // The step's thread, the result of a job run on the main thread (delayed or inline), and the spare snapshot buffer.
+    // The step's thread, the result of a job run on the main thread (delayed, or a single `think`), and the spare snapshot buffer.
     step: Option<StepThread<Job, Done>>,
     done: Option<Done>,
     spare: Option<Snapshot>,
@@ -1059,7 +1059,7 @@ impl ScsBrains {
     }
 
     /// The last handed-over job's low-attention tier thinks, and their summed time in microseconds (M4-T22 fix round 1;
-    /// the job's own clock: on the worker thread when `sim_step` is threaded, on the main thread when inline).
+    /// the job's own clock: on the worker thread when `sim_step` is threaded, on the main thread when delayed).
     #[func]
     fn tier_thinks(&self) -> i64 {
         self.handed_tier.0
