@@ -234,7 +234,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T38 | Anti-aliasing (Q59, Q60): Godot's MSAA 2x and 4x, TAA, FXAA and SMAA as a setting, live; motion vectors fixed for everything TAA (and T40's FSR 2.2) needs; defaults chosen by measurement | T36 | Opus | `project.godot` sets no anti-aliasing, so edges and thin hull detail alias; TAA and FSR 2.2 both need correct motion vectors from the multimeshes, particles and bolts | R | done (2026-11-05, one fix round, CI green on `d8b73ce`; SMAA the default, a look call the costs allow; at the 6K window's native size `battle` 300 draws in 2.83 ms off, 3.20 ms SMAA, 5.50 ms TAA; Cycle log, M4-T38) |
 | T40 | Upscaling (Q59, Q60): FSR 2.2 (temporal, its own anti-aliasing) and FSR 1.0 (spatial, with sharpness) with internal-resolution presets from a third of the output's height up to native, applied live with the HUD at window size; no frame generation; defaults chosen by measurement | T38 | Opus | Since T36 a 4K window renders 4K; FSR 2.2 from 1 080 or 1 440 lines looks better than a bilinear stretch and costs less than native; below 1 080 is for weaker GPUs; supersedes T26 (measured otherwise: FSR 2.2 costs more GPU than native here, so native is the default) | R | done (2026-11-05, one fix round, CI green on `d85a314`; native the default: FSR 2.2 costs more GPU than native here and FSR 1.0 gains 3 to 5 % on a CPU-bound frame; the fix round made `FULLSCREEN_EXEC` apply, so T24's and T35's fullscreen comparisons were re-measured; Cycle log, M4-T40) |
 | T41 | The Wayland display driver (Q66): the game and the measurements open through Godot's Wayland driver, so a fullscreen window is the panel's own 3840x2160 under GNOME's 1.25 scale | T40 | Opus (controller) | The X11 path made the fullscreen window 6144x3456 and the compositor scaled it down; Wayland is worth about 8 to 10 FPS at 1 000 ships | R | done (2026-11-06, the controller, CI green on `7468d81`; fullscreen a true 3840x2160, `battle` 500 54.6 to 58.7 FPS and 1 000 60 to 62 to 69 to 72; Cycle log, M4-T41) |
-| T42 | Every world attaches the core, one hull read (T37's review I3): free flight, the menu, scenarios and test worlds attach `SimCore`, so the registry, `from_tree`, the resolvers' own walks, the flight batch's server read and the contact field's GDScript loops collapse into one native hull read | T37 | Opus | T37 removed the switches but left five hull-reading paths for worlds with no core (the free-flight scenario has no ship pools, so no core); T23's blast and proxies read hulls and Q68 wants T23 on one path | X, G | in progress (dispatched 2026-11-07, Opus) |
+| T42 | Every world attaches the core, one hull read (T37's review I3): free flight, the menu, scenarios and test worlds attach `SimCore`, so the registry, `from_tree`, the resolvers' own walks, the flight batch's server read and the contact field's GDScript loops collapse into one native hull read | T37 | Opus | T37 removed the switches but left five hull-reading paths for worlds with no core (the free-flight scenario has no ship pools, so no core); T23's blast and proxies read hulls and Q68 wants T23 on one path | X, G | in progress (dispatched 2026-11-07, Opus; built in a worktree on `0e6515e`, waiting for review and merge) |
 | T39 | FSR 4 study (Q59): whether AMD's FSR 4 can run in this game on Linux, Vulkan and Godot 4.7 through the native library, on the maintainer's RDNA 2 card, under the GPL-3.0 licence; a go or no-go with a plan | T38 | Sonnet | FSR 4 is not in Godot 4.7; AMD's support for RDNA 2 and for Vulkan is new or announced, so it needs facts before code | M | not needed (skipped by the maintainer, Q60) |
 
 ### M4-T01 Benchmark harness, budget and baseline
@@ -2424,6 +2424,32 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
   same rows as the core's; removing a path leaves its tests green against the recordings.
 - **Measures:** lines removed; the tick at `typical` 58, `battle` 300 and 500 unchanged or better; the full suite and the three CI
   shards green.
+
+- **Done (2026-11-07, in a worktree on `0e6515e`; report `.superpowers/sdd/m4-performance-and-scale/task-t42-report.md`):**
+  - Every world attaches the core: `WorldFrame._ready` calls `SimCore.attach`, so free flight (no ship pools), every scenario
+    and every test world built on a `WorldFrame` simulate on the core (`test_every_world_core`: each of the four scenarios
+    reads its hulls from the core, free flight's rows are its player and buoys as the nodes say, a bare world makes its
+    core). The game has no separate menu world: the menu is the main scene's overlay. With two worlds in one tree the
+    newest core is read and the one before takes over when it leaves (`SimCore._cores`).
+  - The stand-ins attach the core when they get capitals or mines (T37's review M1); the one-time warning is gone.
+  - Removed: `ScsBodyRegistry` (`native/src/body_registry.rs`), `ContactScan.from_registry`, `from_tree`,
+    `from_broadcasters` and the `gathers` count; the hit resolver's walk of hulls and bolts; the ram resolver's walk, its
+    contact read per hull and its column-path pairs and rocks; the flight batch's server read; the contact field's
+    GDScript query loops (contacts, nearest-k, statics, broadcasts, incoming fire); the `use_core` and `use_native` switches.
+    The broadcast scan selects its rows from the core. A tree with no world has no core: its scan sees nothing, its
+    resolvers resolve nothing (`source` none), its flight batch lets every ship fly its own model.
+  - Kept: the flight step still reads a ship the core has no row for (back from the pool on its launch tick) from the
+    physics server; the GDScript `RamBroadPhase` and `HitBroadPhase.pairs` stay (the mines and their own tests use them);
+    the pilot kernels' GDScript reference and its switch (`pilot_kernels_on`, not one of the five paths).
+  - Tests: the core's rows are compared with `TreeRows` (a node-by-node read of the tree, `tests/fixtures/tree_rows.gd`);
+    the removed paths' recorders in `test_sim_core`, `test_body_registry` and `test_hit_scale` are stored reads of their
+    recordings. A scan whose arrays the field refuses answers nothing (`test_contact_field`).
+  - Lines: src and native +134, -842 (game code and Rust before the docs); tests +358, -212 (`TreeRows` and the new test
+    file are most of the additions).
+  - Measured (headless, seed 1, 20 s after 5 s, both locks, cores 0 to 11): `typical` 58 1.79 / 2.54 ms (median / p99)
+    before, 1.79 / 2.44 after; `battle` 300 6.44 / 8.16 before, 6.42 / 8.23 after; `battle` 500 10.81 / 13.33 before,
+    10.77 / 13.57 after: unchanged within noise. Free flight (the default scenario, 1 200 ticks after 300) 3.44 / 6.59
+    before, 3.52 / 6.52 after: its core's sync costs about 0.05 ms a tick. The full suite and each CI shard green.
 
 ##### M4-T39 FSR 4 study (Q59)
 - **Not needed (Q60, 2026-11-05):** the maintainer skipped FSR 4; the section below is kept as the record of what was asked.
@@ -6414,6 +6440,23 @@ The native-only build against its base `60beeae`, headless, seed 1, 20 s after a
 
 No change outside noise: the removed paths were all off the default path, so the win is code and settings (21 settings, about
 1 350 net lines of game and native code), not ticks.
+
+### M4-T42 (2026-11-07): every world attaches the core, one hull read
+
+Against its base `0e6515e`, headless, seed 1, 20 s after a 5 s warm-up, both bench locks, cores 0 to 11
+(`reports/perf/M4-T42_before_*`, `M4-T42_after_*`; load 0.5 to 1.5). Free flight is the default scenario's tick
+(`perf.tick_us`) read for 1 200 ticks after 300:
+
+| layout | before median / p99 ms | after median / p99 ms |
+|---|---|---|
+| typical 58 | 1.79 / 2.54 | 1.79 / 2.44 |
+| battle 300 | 6.44 / 8.16 | 6.42 / 8.23 |
+| battle 500 | 10.81 / 13.33 | 10.77 / 13.57 |
+| free flight | 3.44 / 6.59 | 3.52 / 6.52 |
+
+The battles already ran on the core, so they do not move. Free flight now has a core: its sync costs about 0.05 ms a tick
+(`core.sync_us`, median 51 us), within the run's noise. The win is code: about 710 net lines of game and native code and
+one native class gone.
 
 ## Definition of done (M4)
 
