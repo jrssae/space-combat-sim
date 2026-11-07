@@ -215,7 +215,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T20 | Turrets, missiles, beams and mines as native rows | T16, T12 | Opus | The non-fighter rows' budget (710 turrets at 500); M12 inherits the path | N, A | done, bit for bit; the stand-ins' stage at `battle` 500 from 9.50 to 0.68 ms; every row in budget but a beam shot's spawn (about 20 us a shot against 1) (2026-11-04, in a worktree on `67d5cda`; Cycle log, M4-T20) |
 | T21 | The low-attention tier: state, 20 Hz integration, promotion and demotion of fighters and capitals | T20, checkpoint 3, T24 | Fable | The pool and ship adapter handover must never pop; serial | T | done (2026-11-06, Fable then Opus for fix round 1, CI green on `4f360e3`; headless 1 000 20.3 to 9.9 ms, fullscreen 500 55 to 101 FPS and 1 000 14 to 58, partly provisional until T22; the tier off by default until T22 and T23 land (7 far-ship tests); Cycle log, M4-T21) |
 | T22 | Tier brains at 2 to 5 Hz, statistical fire, far capitals' aggregated fire | T21 | Opus | Far fights must stay fair | T, N | done (2026-11-06, Opus, two fix rounds, CI green on `7468d81`; an even fight is 12 Starfuries against 40 raiders (Q63), loose fairness checks (Q64), 0.31 us a tier fighter with thinks (Q65); `battle` 1 000 fullscreen 63 to 66 FPS, 1 % low 29 to 33 (the controller's A/B); Cycle log, M4-T22) |
-| T23 | Far proxies for tier rows (dots, radar, targeting) | T21, T11, T37, T42 (Q68) | Opus | GPU numbers by the agent, the look (H) | R | in progress (dispatched 2026-11-07, Opus) |
+| T23 | Far proxies for tier rows (dots, radar, targeting) | T21, T11, T37, T42 (Q68) | Opus | GPU numbers by the agent, the look (H) | R | in progress (dispatched 2026-11-07, Opus; built in a worktree on `380590d`, waiting for review) |
 | T24 | The simulation step on a worker thread (firm, Q53): the AI and every native kernel step off the main thread into a double-buffered snapshot | T35, T36 | Fable | A tick-order change, double-buffered snapshots; the frame and input stop waiting on the simulation | N | done (2026-11-06, two fix rounds, CI green on `798f393`; the AI step on its own worker thread one tick behind, flight and combat on the main thread (Q61); `battle` 500 tick p99 16.8 to 12.9 ms; Cycle log, M4-T24) |
 | T25 | Phase 3 measurements, the 1 000 stretch, the full suite, report P3 | T23, T24, T37 (T26) | Sonnet | Measurement, no code | M | not started |
 | T26 | Resolution scaling for the big battle (only if the GPU binds at the fullscreen check; Q20) | T11 | Sonnet | One setting and an automatic step on `RenderScale`; the look (H) | R | not needed (superseded by T38, Q59; `RenderScale` was removed by T36) |
@@ -1492,6 +1492,35 @@ done and T20 proceeds.
   lines), so tier capitals draw as instances of their class's textured mesh in one `MultiMesh` per class (`far_dots.gd` gains the
   second proxy, or a sibling `FarHulls`), the dot stays for fighters; both are cheap because the meshes exist (T30b). "Visible
   splats" in the measures reads triangles drawn.
+
+- **Done (2026-11-07, worktree on `380590d`; Cycle log, "M4-T23"):** tier fighters draw as far dots from their rows in
+  `FarDots`' own buffer (the core writes them after the near ships' dots: one draw call), tier capitals as instances of the
+  mesh their bodies draw in one `MultiMesh` per mesh (`FarHulls`); a promotion takes the row in the tick its body shows. The
+  player's candidates, selections, readouts and the nearest hostile read tier ships from their rows by marker id
+  (`TierTargets`), so a selection survives promotion and demotion; a tier think hands a named target to its parked controller
+  and the tier rows carry that selection; the broadcast scan hears a parked ally from its row; the radar reads its contacts in
+  one pass over the core's rows and plots them in a native kernel (`radar_kernel.rs`). A row promoted inside a rock or mine is
+  moved clear first (along its velocity, or straight out). The explosion level of detail: the full effect within 250 bounding
+  radii of the camera, a reduced one (no light, the gas shell, no debris) within 800, beyond a point flash in one shared
+  multimesh (`FarFlashes`: a 1 px floor, the inverse square below it, size, peak and length from the blast's energy; a raider's
+  reads to about 6.6 km at 1 080 lines, a carrier's to about 300 km) with no node or particle; tier deaths flash where the row
+  flew; a capital stand-in's death is drawn the same way, leaves play and the tier, and keeps its blast on the event. A mine's
+  trigger and blast read the core's sweep rows, tier rows among them, and `StandinDirector._gather_hulls` is gone (Q68).
+  `tier_radius_m` is 10 000 again, and the seven far-ship tests pass with it on (they read where a tier ship flies,
+  `TierDirector.flying_position`, not its parked node). Fullscreen (Wayland, 3840x2160, the 3D at 1 080 lines), base with the
+  tier on against this task, two runs each: `battle` 500 126.1 / 125.8 FPS (1 % low 67.6 / 65.1) to 138.7 / 138.9 (63.7 /
+  64.9); `battle` 1 000 72.7 / 73.8 (41.9 / 43.4) to 72.1 / 72.4 (42.9 / 47.7); render CPU 0.34 ms at 500 (the Done-when's 3 ms
+  met) and 0.44 at 1 000; GPU 0.76 to 0.88 ms; draw calls about 100; triangles about 504 000 (500) and 524 000 (1 000). The far
+  proxies' CPU update at 1 000 is 0.20 ms a frame (max 0.46) for 580 dots and 97 hull instances, under the 0.5 ms bar, so the
+  GPU-driven option was not built. Full suite (`GUT_SLOW=1 scripts/run_tests.sh`, exit 0): Python 410 OK; GUT 235 scripts, 2 578
+  tests, 2 566 passing, 12 pending (the renderer-only and AC12 ones), 0 failing; the three CI shards: see the report.
+- **As built, where it differs from the plan:** the radar and its plot moved onto the core's rows and a native kernel, which the
+  plan did not name: with the tier's ships back on the radar the GDScript walk and plot took `battle` 1 000 from 73 to 52 FPS;
+  capital stand-ins gained a death (they had none: a capital at zero hull stayed in play) so a far capital's death could be
+  drawn; `kill target` takes any selected target with a hull; the selection check and the snapshot of the player's own
+  candidates keep their node walk plus the tier rows (the snapshot is pinned tick by tick by `targeting_on_read.json`); a
+  ship death's blast stays data on its killing hit (M12 applies it), its point read from the row for a tier death; the bench's
+  capitals use the box look, so their proxies are boxes (the station scene's are textured hulls).
 
 ##### M4-T24 The simulation step on a worker thread (firm, Q53)
 
@@ -6485,6 +6514,38 @@ Against its base `0e6515e`, headless, seed 1, 20 s after a 5 s warm-up, both ben
 The battles already ran on the core, so they do not move. Free flight now has a core: its sync costs about 0.05 ms a tick
 (`core.sync_us`, median 51 us), within the run's noise. The win is code: about 710 net lines of game and native code and
 one native class gone.
+
+### M4-T23 (2026-11-07): far proxies for tier rows, the explosion level of detail, the tier on by default
+
+- **What changed:** tier fighters as far dots and tier capitals as mesh instances from their rows; radar, targeting and
+  broadcasts read tier ships from their rows; the radar's contacts from the core's rows and its plot in a native kernel; a
+  promoted row moved clear of rocks and mines; far deaths as point flashes, a reduced explosion between, capital deaths drawn;
+  mines on the core's sweep rows; `tier_radius_m` 10 000.
+- **Fullscreen** (`scripts/fullscreen_check.sh`, Wayland 3840x2160, the 3D at 1 080 lines, seed 1, both locks; base `380590d`
+  with `FULLSCREEN_EXEC="set settings.tier_radius_m 10000"`; loads 0.6 to 1.6):
+
+| run | N | average FPS | 1 % low | p99 frame ms | frame mean ms | GPU ms | draw calls | render CPU ms | triangles |
+|---|---|---|---|---|---|---|---|---|---|
+| base r1 | 500 | 126.1 | 67.6 | 13.62 | 7.93 | 0.78 | 100 | 0.34 | 498 317 |
+| base r2 | 500 | 125.8 | 65.1 | 14.21 | 7.95 | 0.78 | 100 | 0.34 | 498 242 |
+| T23 r1 | 500 | 138.7 | 63.7 | 13.99 | 7.21 | 0.76 | 102 | 0.34 | 504 287 |
+| T23 r2 | 500 | 138.9 | 64.9 | 14.00 | 7.20 | 0.76 | 102 | 0.34 | 504 039 |
+| base r1 | 1 000 | 72.7 | 41.9 | 21.53 | 13.76 | 0.85 | 102 | 0.41 | 508 200 |
+| base r2 | 1 000 | 73.8 | 43.4 | 20.16 | 13.55 | 0.87 | 102 | 0.40 | 508 848 |
+| T23 r1 | 1 000 | 72.1 | 42.9 | 19.74 | 13.87 | 0.87 | 100 | 0.44 | 524 241 |
+| T23 r2 | 1 000 | 72.4 | 47.7 | 19.26 | 13.81 | 0.88 | 100 | 0.44 | 523 756 |
+
+- **The radar's cost, found on the way:** the first build (the radar walking the targetables and plotting in GDScript, now with
+  the tier's ships on it) measured 108 FPS at 500 and 52 at 1 000. Dropping the tier rows from the radar alone gave 70 at 1 000:
+  about 1.5 ms of frame work, which a frame near the tick's cost turns into about 4 ms, since each slower frame runs more ticks.
+  The radar from the core's rows (gather 595 to 12 us for 1 005 contacts, headless) and the native plot (1 507 to 283 us) give
+  the table's rows. Headless `battle` 1 000 tick (seed 1, 20 s after 5 s): base 9.97 ms mean, T23 10.26 ms (the player's
+  targeting snapshot with the tier rows, +0.19 ms).
+- **Far proxies' CPU update at 1 000** (a scratch sampler over 600 frames during the bench): 0.20 ms mean, 0.46 ms max, for 580
+  dots and 97 hull instances; under 0.5 ms, so the compute path was not built.
+- **Screenshots** for (H): `reports/perf/M4-T23_far_fight.png` (24 fighters and a carrier 13 to 16 km ahead, the carrier's box
+  proxy), `reports/perf/M4-T23_far_capital_death.png` (that carrier's death: at 16 km it is still the full explosion),
+  `reports/perf/M4-T23_battle_1000_view.png`, and each run's `fullscreen.png` under `reports/perf/M4-T23_final_*`.
 
 ## Definition of done (M4)
 

@@ -3223,7 +3223,7 @@ src/perf/standins/capital_standin.gd   park_for_tier, unpark_from_tier; the dire
   places it); a second rebase before the end-of-tick settle keeps the first one's nodes. The group is still walked, not kept as a list: nodes join it after entering the tree (`Projectile._ready`, the
   camera rig, test fixtures), so a kept list would need every site to register with the World, and the walk itself is a
   pointer copy; the cost was the translate of fifteen child nodes a ship, which the tier removes for parked ships.
-- **Settings and console.** `tier_radius_m` (0, off, until T22 and T23 land, then 10 000; 0 = off, live), `tier_hz` (20, live). Provider `tier`: `radius_m`,
+- **Settings and console.** `tier_radius_m` (10 000 since T23; 0 = off, live), `tier_hz` (20, live). Provider `tier`: `radius_m`,
   `period_ticks`, `fighters`, `capitals`, `rows`, `hulks`, `promotions`, `demotions`, `step_us` (the tier's integration inside
   the sync), `director_us`. Provider `perf` and the bench's entity counts gain `tier_fighters` and `tier_capitals`;
   `fighters_far` counts a tiered fighter as far.
@@ -3333,6 +3333,64 @@ src/combat/destruction_director.gd   a tier death where its row flew; every deat
   hulk), `test_tier_outcomes` (slow: the duel, the even 12 against 40 for seeds 1 to 3 with the per-side bound reported
   pending, a cruiser against 12 fighters, far missiles' share shot down, each tier against full fidelity on both schedules), `test_sim_core` (the guard on `tier_fire.rs`),
   `test_tier_handover` (a tier ship thinks at the tier's rate).
+
+**Far proxies, the radar and the explosion level of detail (T23).**
+
+```
+native/src/tier.rs               adds each row's proxy (a far dot's paint, or a far hull class), fill_dots, fill_hulls and
+                                 clear_of_statics (a promoted row moved clear of a rock or mine), engine-free
+native/src/tier_rows.rs          tier_set_proxy, tier_fill_dots, tier_fill_hulls, tier_targets, tier_target, tier_position,
+                                 tier_cleared; tier_take clears the row of the statics first
+native/src/sim_core.rs           radar_contacts (the radar's contacts from the rows); select answers a parked marker from its
+                                 tier row (the broadcasts); tier rows carry their ship's selection
+native/src/radar_kernel.rs       the radar sphere's plot (RadarModel.plot's maths), engine-free; radar_plot.rs is its shell
+                                 (ScsRadarPlot)
+native/src/weapon_kernels.rs     a mine's trigger and blast over the sweep's rows, tier rows among them (mine_can_hurt)
+src/rendering/far_dots.gd        FarDots: the tier fighters as a second source in the same buffer
+src/rendering/far_hulls.gd       FarHulls: the tier capitals, one MultiMesh per mesh their bodies draw
+src/rendering/far_flashes.gd     FarFlashes: far deaths as point flashes in one MultiMesh (far_flash.gdshader)
+src/combat/explosion_lod.gd      ExplosionLod: the level from the distance and the hull's size; the flash's maths
+src/targeting/tier_targets.gd    TierTargets: tier ships as targets, by marker id, from their rows
+```
+
+- **Drawn.** At demotion the director gives a fighter's row its hull's paint (`FarDots.asset_paint`) and a capital's row the
+  class of the mesh its body draws (`FarHulls.class_of(CapitalStandin.drawn_mesh())`; the box look shares one mesh per class).
+  Each frame `FarDots` writes its near ships' dots and then asks the core to write the tier dots after them into the same
+  buffer (one draw call), and `FarHulls` asks the core for each class's transforms. A promotion takes the row and shows the body
+  in the same tick, and a demotion parks the body and adds the row in the same tick, so a ship is drawn by one of the two in
+  every frame. The far proxies' CPU update at `battle` 1 000 is about 0.2 ms a frame (580 dots and 97 hull instances), under
+  the 0.5 ms that would have called for a compute pass, so none was built.
+- **Radar and targeting.** A tier ship's marker is parked, so the player's candidates, a selection, its readout and the nearest
+  hostile read the row by the marker's id (`TierTargets`): the selection names the same `Targetable` before, during and after
+  the tier. A controller whose own ship is in the tier reads its own position from its row. A tier think that names or drops a
+  target hands it to the parked controller (`EVENT_SELECT`, never the nearest-hostile retarget), and the tier rows carry that
+  selection, so a promoted ship holds its brain's target. The broadcast scan hears a parked ally from its row. The radar reads
+  its contacts in one pass over the core's rows (`radar_contacts`, markers and tier rows) and plots them in the native kernel,
+  in the GDScript's steps and precision; with the tier's ships back on it a `battle` 1 000 frame plots about a thousand
+  contacts, and the GDScript walk and plot had cost 73 to 52 FPS (a frame's work comes back about 2.5 times through the extra
+  ticks a slower frame runs).
+- **Promotion inside a rock.** A row collides with nothing, so `tier_take` first moves it clear of every static row it
+  overlaps (rocks and mines): on along its velocity to the far side plus 5 m, or straight out when it barely moves; `cleared`
+  counts them.
+- **The explosion level of detail.** A death within 250 bounding radii of the camera is the full `Explosion`; within 800 a
+  reduced one (no light, the gas shell only, no debris); farther a point flash in `FarFlashes`, with no node and no particle. The
+  flash's radius grows with the cube root of the blast's energy (about 3 m for a raider), its peak with the cube root too (so
+  the delivered light grows with the energy), its length with the root of its radius; drawn at least a pixel, below its real
+  size it dims by the square of that size, so the light it delivers falls with the inverse square of distance. A raider's
+  flash reads to about 6.6 km at 1 080 lines and a carrier's to about 300 km. A tier death flashes where the row flew. A
+  capital stand-in's death (`DestructionDirector.watch_capital`) is drawn the same way, takes the capital out of play and out
+  of the tier, and emits `capital_destroyed`. Every death's killing hit carries its blast's energy, radius and point (M12).
+- **Mines on the rows.** A mine's trigger and blast read the sweep's rows (the near hulls, then the tier rows), so a tier ship
+  sets a mine off and is hurt by it, in the core's order; `StandinDirector`'s GDScript walk of the hulls is gone (Q68).
+- **The default.** `tier_radius_m` is 10 000 again. The far-ship tests read where a tier ship flies and whether it is in play
+  (`TierDirector.flying_position`, `flying_velocity`, the pool's in-play list), not its parked node.
+- **Console.** Provider `tier` gains `proxy_dots`, `proxy_hulls`, `proxy_us`, `flashes`, `cleared`; `kill target` destroys any
+  selected target with a hull.
+- **Tests.** `test_tier_proxies` (every tier row drawn and on the radar, one multimesh per capital mesh, the handover frame, the
+  selection through promotion and demotion, candidates and broadcasts, the rock, a mine's blast on a tier row),
+  `test_explosion_lod_maths` (the levels, the floor and the inverse square at 1 080 and 2 160 lines, a capital's reach),
+  `test_explosion_lod` (near, reduced, far, a tier death, a capital's death, `kill` on a capital), `test_mine_kernel` (the
+  core's order), `test_sim_core` (the guards on the new kernels).
 
 ### 17.16 Rocks and mines as static rows (T29)
 

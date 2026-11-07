@@ -500,14 +500,13 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
 - **T35, bolts as rows:** the AI ships' bolts are drawn by one multimesh per look (`core.bolt_draws`), interpolated between ticks as the nodes were. Check in a `battle` run: bolts leave the muzzles, fly straight and smoothly (no stutter against the hulls), hit flashes still appear where bolts land, the chase camera's larger bolts (`Projectile.visual_scale`) still apply, and nothing is drawn where a bolt was spent. (M4-T37 removed `perf_native_bolt_rows`, so there is no bolt-node run to compare with: the recorded battle in `test_bolt_rows` holds the rows to the nodes' hits.)
 - **T35, the AI ships' muzzle flashes:** the lean ships' flashes come from one pool (a multimesh of billboard quads and pooled lights), not a node per muzzle. Check in a `battle` run: a flash pops at the muzzle of every AI shot for about 50 ms, grows and fades as the player's own flashes do, rides with the ship, and lights the nose; no flash lingers on a parked or dead ship.
 - **T35, the AI ships' shot sounds:** `AudioDirector.watch_ship` listens to `shot_fired`, which both bolt paths emit (fix round 1). Confirm every AI shot in a `battle` run makes its pulse or raider sound at the muzzle (the AI ships' bolts are always rows since M4-T37 removed `perf_native_bolt_rows`).
-- [ ] **M4-T21 The low-attention tier.** Off by default until T23; turn it on with `set settings.tier_radius_m 10000`. AI fighters and capitals more than 10 km from you (`settings.tier_radius_m`) leave
+- [ ] **M4-T21 The low-attention tier.** On by default since T23 (`settings.tier_radius_m` 10 000). AI fighters and capitals more than 10 km from you (`settings.tier_radius_m`) leave
       Jolt and fly as native core rows integrated at 20 Hz from their held command; within 10 km they are promoted back onto
       their bodies with their motion carried over exactly. In a `battle 300` or `500` run (`state tier` shows the rows and the
-      handovers): fly toward a far fight: its ships should appear as they come within 10 km (T23 draws tier rows as dots; until
-      then a far fight is dark beyond 10 km) with no pop, jump or stutter at the moment they appear, and keep flying as they
-      flew; fly away from a fight: fighters should vanish past 11 km without a visible pop. A capital at 11 km is about 100 px
-      tall, so it visibly vanishes there until T23 draws tier capitals: a known gap, not a failure to judge. Ships past 11 km
-      also leave the radar and drop your lock until T23. A ship that crosses the line while
+      handovers): fly toward a far fight: its ships are drawn from their rows beyond 10 km (T23: dots for fighters, the class's
+      mesh for capitals) and should come onto their bodies at 10 km with no pop, jump, flicker or stutter, and keep flying as they
+      flew; fly away from a fight: the same at 11 km the other way. Ships past 11 km stay on the radar and keep your lock (T23).
+      A ship that crosses the line while
       shooting should fire again at once when it is back. Compare with the tier off (`set settings.tier_radius_m 0`).
 - [ ] **M4-T21 The battle beyond the radius.** Tier ships do not fight yet (T22 gives them brains and fire): a far fight you
       watch from 10 km out is frozen in its held commands until you come close. Say whether that reads as wrong from the
@@ -520,11 +519,28 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
       whether a fight met this way feels like the same fight you would have watched up close (a 3 Hz brain flies its attack
       runs a little looser). Far ships also think lean: they ignore rocks, mines, incoming fire and avoidance (they collide with
       nothing out there), so watch for a ship promoted inside or right against a rock at 10 km (a jolt, a hit or an explosion);
-      `state tier` should show `brain_period_ticks` 20 (a settings file saved before T22's fix round 2 may hold 4 Hz). Tier ships are still not drawn and not on the radar (T23), and a far death shows nothing yet
-      (T23's far flash). A known limit (fix round 1): a far fight that settles into a steady tail chase scores fewer hits than
+      `state tier` should show `brain_period_ticks` 20 (a settings file saved before T22's fix round 2 may hold 4 Hz). Since T23 a
+      ship promoted inside a rock is moved clear first (`state tier` counts it as `cleared`), tier ships are drawn and on the
+      radar, and a far death flashes. A known limit (fix round 1): a far fight that settles into a steady tail chase scores fewer hits than
       the same chase up close (a Starfury sitting behind a raider at 450 m lands about 73 % of its shots up close, about 30 %
       in the tier); say whether you notice far chases ending slower than near ones. Far missiles can now be shot down by the
       target side's interceptors, and committed rammers ram out of view too.
+- [ ] **M4-T23 Far ships as dots.** In a `battle 500` or `1000` run (the tier on by default), the fighters beyond 11 km are
+      dots from their rows (`state tier`: `proxy_dots`), in their hull's paint, a pixel at least, dimming with distance as the
+      near far dots do. Say whether a far fight reads as a fight (moving specks) and whether the dots are too bright, too dim or
+      too many next to the stars. Screenshot: `reports/perf/M4-T23_battle_1000_view.png`, `reports/perf/M4-T23_far_fight.png`.
+- [ ] **M4-T23 Far capitals.** A capital beyond 11 km is drawn as its class's mesh from its row (`proxy_hulls`): at 11 to 20 km
+      a carrier is still a hundred pixels or more. Fly toward and away from one through 10 and 11 km: no pop, no flicker and no
+      jump at the handover; it should look exactly the same just before and just after (the bench's capitals use the plain box
+      look; the station scene's the textured hull). Screenshot: `reports/perf/M4-T23_far_fight.png` (the grey hull ahead).
+- [ ] **M4-T23 Far deaths.** A death past 250 bounding radii is a reduced explosion (no light, a gas puff, no debris) and past 800
+      a point flash with no node (`state tier`: `flashes`). A raider's flash should read to about 6 km and fade there; a capital's
+      (`set targeting.selected "CRUISER 1"` then `kill` in a battle run) reads across tens of km, and at 16 km a carrier's death is
+      still the full explosion. Say how far each should read and how bright the flash should be. Screenshot:
+      `reports/perf/M4-T23_far_capital_death.png` (a carrier at 16 km, the full explosion).
+- [ ] **M4-T23 The radar with the tier.** At `battle 1000` the radar holds about a thousand contacts again (the tier's ships
+      within 25 km and its broadcasting allies); check it stays readable and that selecting a far ship by `target_next` works
+      and holds while it is promoted and demoted.
 - [ ] **M4-T38 Anti-aliasing, the default.** `settings.anti_aliasing` is `smaa` now (it was no anti-aliasing). Compare the sheets in
       `reports/perf/m4-t38_compare/pairs/` (each the same frozen `battle` 300 frame in all six modes): `edges_2160.png` and
       `edges_1080.png` (a wing and a rock edge), `hull_detail_2160.png` and `hull_detail_1080.png` (struts, panel lines, the small
