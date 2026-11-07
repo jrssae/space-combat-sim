@@ -2518,6 +2518,11 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
   no code changes. The maintainer picks which become fix tasks (new rows, in M4 or later); if any lands in M4, T25's affected
   numbers are re-taken.
 - **Done when:** the findings list is written and handed to the maintainer with report P3.
+- **Carried in (2026-11-07):** from T23's review M7, the player's targeting snapshot still walks the targetable nodes and appends
+  the tier rows every tick (+0.19 ms at 1 000), the walk the radar left; consider building the candidates from the core's rows as the
+  radar does (re-record `targeting_on_read.json` if so). From T23's re-review: the explosion-LOD maths tests share `flash_radius_m`
+  and `PEAK` with the code (they would not catch drift from `Explosion`'s values), nothing tests that `picture_lines` follows the 3D
+  scale, and the far-proxy cost's max is 0.506 ms against T23's 0.5 ms bar.
 
 ##### M4-T39 FSR 4 study (Q59)
 - **Not needed (Q60, 2026-11-05):** the maintainer skipped FSR 4; the section below is kept as the record of what was asked.
