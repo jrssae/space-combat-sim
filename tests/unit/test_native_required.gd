@@ -20,6 +20,8 @@ func test_a_missing_class_is_named_with_how_to_build_the_library() -> void:
 	assert_string_contains(why, String(FAKE_CLASS))
 	assert_string_contains(why, "scripts/build_native.sh")
 	assert_string_contains(why, "bin/libscs_native.so")
+	assert_string_contains(why, "rustup", "names what the build needs")
+	assert_string_contains(why, "--import", "and the import that registers the library")
 
 
 func test_the_game_refuses_to_start_without_a_required_class() -> void:

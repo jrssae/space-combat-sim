@@ -2073,9 +2073,9 @@ native/src/contact_field.rs     ScsContactField: the contact scan's queries (T05
   `scripts/build_native.sh`), `perf_native` is gone, and the parity tests compare with recordings in `tests/fixtures/parity/`.
   A native class gets its own name (`Scs...`), since a GDScript `class_name` cannot share it.
 - **Building.** `scripts/build_native.sh` builds only when the library is missing or older than a file under `native/`; with no
-  `cargo` it prints one line and exits 0. `run_tests.sh` runs it before the import, and CI builds once per job with cargo's
-  files cached on `Cargo.lock` and the toolchain file. Without the library Godot logs three errors about it at every start;
-  `run_tests.sh` ignores those three, and only when the library is absent. The library is built for baseline x86-64, never
+  `cargo` it says the game needs the library and exits 1 (until M4-T37 it exited 0 and the game fell back to GDScript).
+  `run_tests.sh` runs it before the import and stops when the build fails or leaves no library, and CI builds once per job
+  with cargo's files cached on `Cargo.lock` and the toolchain file. The library is built for baseline x86-64, never
   `target-cpu=native`, so the maths is the same on every machine.
 - **Crossing the boundary** (Cycle log, cycle 4, debug editor build): a native call with one int costs 0.12 us, 0.22 us through
   a facade, against 0.08 us for a GDScript call; one with a packed array in and one out about 0.35 us plus a few ns per element.

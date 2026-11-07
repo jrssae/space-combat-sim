@@ -1,6 +1,6 @@
 name: CI
 
-# Python generator tests, asset generation, the optional native library, headless Godot import, compile check and GUT,
+# Python generator tests, asset generation, the native library (required), headless Godot import, compile check and GUT,
 # all without a GPU.
 # Anything that needs a GPU is verified by a human, never here (docs/architecture.md, section 12).
 

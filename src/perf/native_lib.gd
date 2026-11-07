@@ -31,7 +31,8 @@ static func refusal(classes: Array[StringName] = []) -> String:
 	if lacking.is_empty():
 		return ""
 	return ("The native library bin/libscs_native.so is missing or out of date (it lacks %s). The game needs it: build it "
-			+ "with scripts/build_native.sh, then start again.") % ", ".join(lacking)
+			+ "with scripts/build_native.sh (it needs Rust's cargo; install it with rustup, https://rustup.rs), run "
+			+ "godot --headless --path . --import once so Godot registers it, then start again.") % ", ".join(lacking)
 
 
 ## Whether `native_class` is registered in this process.

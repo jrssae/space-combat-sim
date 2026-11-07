@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs every automated check that works without a GPU: Python generator tests, the optional native library's build,
+# Runs every automated check that works without a GPU: Python generator tests, the native library's build (required),
 # a headless Godot import that must be free of script errors, a compile check of every project script, the GUT suites,
 # and debug-console smoke runs that drive a live headless build through --console-exec.
 # Exits non-zero on any failure. Logs and the GUT JUnit XML land in reports/ (gitignored; CI uploads it).
@@ -64,15 +64,10 @@ if (( run_extras )) && [[ -d tools/procgen/tests ]]; then
     python3 -m unittest discover -s tools/procgen/tests -t . -v
 fi
 
-# Built before the import so Godot finds it. It is optional (architecture §17.5): with no cargo the script skips it,
-# Godot logs three errors about the missing library at every start, and those are the only errors ignored below.
+# Built before the import so Godot finds it. The game needs it (architecture §17.5), so a failed build stops the run.
 echo "== Native library"
-scripts/build_native.sh || fail "The native library failed to build (see the cargo output above)."
-NATIVE_ABSENT_ERRORS='^$'
-if [[ ! -f bin/libscs_native.so ]]; then
-    echo "run_tests.sh: no native library; the GDScript fallbacks run."
-    NATIVE_ABSENT_ERRORS='libscs_native\.so|scs_native\.gdextension'
-fi
+scripts/build_native.sh || fail "The native library failed to build (see the output above)."
+[[ -f bin/libscs_native.so ]] || fail "No native library at bin/libscs_native.so after the build."
 
 # --import imports resources but does not compile scripts, hence the separate compile check below.
 echo "== Godot import"
@@ -164,8 +159,7 @@ expect_providers() {
     return "${missing}"
 }
 reject_text() {
-    # No -q on the second grep: stopping early could kill the first with SIGPIPE, and pipefail would hide the match.
-    if grep -F -- "$2" "$1" | grep -vE -- "${NATIVE_ABSENT_ERRORS}" > /dev/null; then
+    if grep -qF -- "$2" "$1"; then
         echo "run_tests.sh: unexpected text in $1: $2" >&2
         return 1
     fi
