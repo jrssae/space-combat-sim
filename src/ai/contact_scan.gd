@@ -17,24 +17,24 @@ extends RefCounted
 ## The cache is rebuilt within a frame if a body it saw was freed; a body added later appears next frame. Tests that need a
 ## fresh scan call `invalidate()`.
 ##
+## One hull read (M4-T42): every world attaches the native core (`WorldFrame`), so `shared` is always the core's rows
+## (`from_core`); a tree with no world has no core and sees nothing.
+##
 ## Native queries (M4-T05b, architecture §17.5): the native library's `NATIVE_CLASS` (required since M4-T37) answers:
 ## the queries and the freed-body check run in a native field that takes this scan's arrays once, on its first query, and
 ## answers with body indices; the contact lists are still built here from the shared faction lists. The GDScript code is
 ## the reference (`use_native` off, for the tests) and the fallback for a field that refuses its arrays; both give the same
 ## answers bit for bit. A scan's arrays must not change once it has been queried.
 ##
-## The body registry (M4-T09, architecture §17.8): on a world with no core, `shared` comes from the native
-## `REGISTRY_CLASS`, which knows the tree's bodies (it is told when the groups change) and reads them in one call a tick;
-## `from_tree` stays the reference: the same rows bit for bit. On both paths a contact's hull and selection are read when it
-## is first handed out, so the two agree whatever changes between the build and the query (a driver's own selection change
-## after the build is taken as it was, `note_selection`).
+## A contact's hull and selection are read when it is first handed out (a driver's own selection change after the build is
+## taken as it was, `note_selection`).
 ## Kinds (`BodyKind`): rocks and mines are never contacts; `statics_for` gives a ship its nearest ones as obstacles. Rows
 ## with no node (an asteroid field's rocks, a belt's mines) live in `StaticRows` (M4-T29): `register_static` adds one, a
-## rebase moves them, and both paths append them whole. A side knows only its own and its friends' mines (Q27).
+## rebase moves them, and the scan appends them whole. A side knows only its own and its friends' mines (Q27).
 ##
 ## The native core (M4-T15, architecture §17.13): with a `SimCore` attached to the world, `shared` comes from the core's
-## rows (`from_core`, the same rows as the registry's and the tree gather's, bit for bit) and the field reads the core
-## directly (bodies, statics and bolts) instead of taking a copy; the registry path stays for a world with no core.
+## rows (`from_core`, the same rows the tree's own gather read before M4-T42, bit for bit) and the field reads the core
+## directly (bodies, statics and bolts) instead of taking a copy.
 ##
 ## The pilot kernels (M4-T16, architecture §17.13): a core scan's rows are the core's, in its order, so the indices a list
 ## was picked from (`picked_rows`) name the core rows of its contacts. `pilot_kernels` gives the native kernels that answer
@@ -47,13 +47,8 @@ const INCOMING_MISS_M: float = 15.0
 const INCOMING_HORIZON_S: float = 2.0
 ## The native class that answers the queries (M4-T05b).
 const NATIVE_CLASS: StringName = &"ScsContactField"
-## The native body registry the shared scan is built from (M4-T09).
-const REGISTRY_CLASS: StringName = &"ScsBodyRegistry"
 ## The native pilot kernels a core scan hands its ships (M4-T16).
 const PILOT_CLASS: StringName = &"ScsPilotKernels"
-
-## How many scans were gathered from the tree in GDScript (`from_tree`): a work count, 0 a tick on the native path.
-static var gathers: int = 0
 
 ## Profiling (M4-T01): while `PerfProbe` is on, `AiPilotDriver` times its calls into the scans and adds them here. Wall
 ## clock, never gameplay time.
@@ -67,18 +62,10 @@ static var _shared_broadcasts: ContactScan = null
 static var _no_contacts: Array[Contact] = []
 # Whether the loaded library provides `NATIVE_CLASS` (-1 until first asked; classes never change while the game runs).
 static var _native_class_known: int = -1
-# The registry (M4-T09): made on the first native `shared`, told when the tree's groups change.
-static var _registry_class_known: int = -1
 static var _pilot_class_known: int = -1
 ## Off: no scan hands out the pilot kernels, while the core stays on, so a test pairs the kernels alone against the
 ## GDScript (M4-T16). Not a setting: the game always leaves it on.
 static var pilot_kernels_on: bool = true
-static var _registry: Object = null
-static var _registry_tree: SceneTree = null
-static var _members_dirty: bool = true
-static var _removals: int = 0  # members that left the tree, so a registry scan knows to look for freed bodies
-# `StaticRows.version` the registry was last given.
-static var _registry_statics_version: int = -1
 
 ## The physics frame this scan is of (-1 for one built by hand).
 var physics_frame: int = -1
@@ -109,7 +96,7 @@ var _relations: Dictionary = {}  # faction -> {other faction -> relation}, looke
 var _hostile_ships: Dictionary = {}  # faction -> PackedByteArray, 1 for a ship hostile to it (nearest-k, M4-T04)
 var _extent_m: float = -1.0  # computed on first use
 var _statics_n: int = -1  # rock and mine rows, counted on first use
-var _node_statics: int = 0  # node rows of a static kind, counted as the tree gather adds them
+var _node_statics: int = 0  # node rows of a static kind, as the core counts them
 var _bolt_positions: PackedVector3Array = PackedVector3Array()
 var _bolt_velocities: PackedVector3Array = PackedVector3Array()
 var _bolt_factions: Array[StringName] = []
@@ -126,8 +113,8 @@ var _friends: Dictionary = {}  # faction -> PackedByteArray, 1 for each mine it 
 var _live: bool = false
 var _hull_ids: PackedInt64Array = PackedInt64Array()
 var _target_before: Dictionary = {}
-# A registry scan, and the members' removals it has seen (its freed-body check).
-var _from_registry: bool = false
+# The core whose rows a core or broadcast scan took, and its removals seen since (the freed-body check).
+var _rows_of: SimCore = null
 var _removals_at: int = 0
 # A core scan (M4-T15): the core its field reads; its bolts come over only when the GDScript path needs them.
 var _sim: SimCore = null
@@ -143,9 +130,7 @@ static func shared(tree: SceneTree) -> ContactScan:
 	var frame: int = Engine.get_physics_frames()
 	if _shared == null or _shared.physics_frame != frame or not _shared._bodies_alive():
 		var built: ContactScan = from_core(tree)
-		if built == null:
-			built = from_registry(tree)
-		_shared = built if built != null else from_tree(tree)
+		_shared = built if built != null else ContactScan.new()  # no world, no core: nothing to see
 		_shared.physics_frame = frame
 	return _shared
 
@@ -169,9 +154,6 @@ static func time_this_tick_us() -> int:
 static func invalidate() -> void:
 	_shared = null
 	_shared_broadcasts = null
-	_members_dirty = true
-	if _registry != null:
-		_registry.forget_attributes()
 	var sim: SimCore = SimCore.current()
 	if sim != null:
 		sim.forget_attributes()
@@ -181,89 +163,16 @@ static func invalidate() -> void:
 static func shared_broadcasts() -> ContactScan:
 	var frame: int = Engine.get_physics_frames()
 	if _shared_broadcasts == null or _shared_broadcasts.physics_frame != frame or not _shared_broadcasts._bodies_alive():
-		var main: ContactScan = _shared
-		var selector: Object = main._selector() if main != null and main.physics_frame == frame else null
-		if selector != null:
-			_shared_broadcasts = main._broadcast_scan(Targetable.broadcasters(), selector)
+		var sim: SimCore = SimCore.current()
+		if sim != null and sim.ensure_synced():
+			_shared_broadcasts = _broadcast_scan(Targetable.broadcasters(), sim)
 		else:
-			_shared_broadcasts = from_broadcasters(Targetable.broadcasters())
+			_shared_broadcasts = ContactScan.new()  # no world, no core: nothing to hear
 		_shared_broadcasts.physics_frame = frame
 	return _shared_broadcasts
 
 
-## A scan of the active targetables in `list` only (no cache), each with its broadcast range.
-static func from_broadcasters(list: Array[Targetable]) -> ContactScan:
-	var scan := ContactScan.new()
-	scan._live = true
-	for targetable: Targetable in list:
-		if not targetable.is_active():
-			continue
-		var body := targetable.get_parent() as Node3D
-		if body == null:
-			continue
-		scan._add(body, targetable, Damageable.of(body))
-		scan._reach.append(targetable.broadcast_range_m)
-	return scan
-
-
-## A scan of the tree as it is now (no cache), then the node-less static rows.
-static func from_tree(tree: SceneTree) -> ContactScan:
-	gathers += 1
-	var scan := ContactScan.new()
-	scan._live = true
-	var seen: Dictionary = {}
-	# Hulls found from the group once, not by walking every body's children (AC13's budget).
-	var damageable_nodes: Array[Node] = tree.get_nodes_in_group(Damageable.GROUP)
-	var hulls: Dictionary = {}  # body instance id -> Damageable
-	for node: Node in damageable_nodes:
-		var damageable := node as Damageable
-		var owner: Node = damageable.get_parent() if damageable != null else null
-		if owner != null and not hulls.has(owner.get_instance_id()):
-			hulls[owner.get_instance_id()] = damageable
-	for node: Node in tree.get_nodes_in_group(Targetable.GROUP):
-		var targetable := node as Targetable
-		if targetable == null or not targetable.is_active():
-			continue
-		var body := targetable.get_parent() as Node3D
-		if body != null and not seen.has(body.get_instance_id()):
-			seen[body.get_instance_id()] = true
-			scan._add(body, targetable, hulls.get(body.get_instance_id()) as Damageable)
-	for node: Node in damageable_nodes:
-		var damageable := node as Damageable
-		if damageable == null or not damageable.is_active():
-			continue
-		var body: Node3D = damageable.body()
-		if body != null and not seen.has(body.get_instance_id()):
-			seen[body.get_instance_id()] = true
-			scan._add(body, null, damageable)
-	scan._node_count = scan._body_ids.size()
-	scan._append_static_rows()
-	scan._gather_bolts(tree)
-	return scan
-
-
-## The scan of the tree as the native registry reads it now (no cache), equal to `from_tree` bit for bit; null when the
-## library does not provide the registry.
-static func from_registry(tree: SceneTree) -> ContactScan:
-	var registry: Object = _registry_for(tree)
-	if registry == null:
-		return null
-	if _members_dirty:
-		_members_dirty = false
-		registry.set_members(tree.get_nodes_in_group(Targetable.GROUP), tree.get_nodes_in_group(Damageable.GROUP))
-	if _registry_statics_version != StaticRows.version:
-		_registry_statics_version = StaticRows.version
-		registry.set_statics(StaticRows.ids, StaticRows.positions, StaticRows.radii, StaticRows.factions, StaticRows.kinds)
-	registry.refresh()
-	var scan := ContactScan.new()
-	scan._take_rows(registry.snapshot())
-	scan._bolts_pending = false
-	scan._gather_bolts(tree)
-	return scan
-
-
-## The scan of the tree as the native core holds it this frame (no cache), equal to `from_tree` bit for bit; null when no
-## core is attached to this tree or the core is off (M4-T15).
+## The scan of the tree as the native core holds it this frame (no cache); null when no core is attached to this tree.
 static func from_core(tree: SceneTree) -> ContactScan:
 	var sim: SimCore = SimCore.for_tree(tree)
 	if sim == null or not sim.ensure_synced():
@@ -274,21 +183,15 @@ static func from_core(tree: SceneTree) -> ContactScan:
 	scan._node_statics = rows[13]
 	scan._append_static_rows()
 	scan._sim = sim
+	scan._rows_of = sim
 	scan._removals_at = sim.removals
 	scan._rows_version = int(sim.core.rows_version())
 	return scan
 
 
-## The native registry in use, or null (no registry scan built yet).
-static func registry() -> Object:
-	return _registry
-
-
-## Asks the registry to read `body`'s faction, name, kind and radius again at the next scan: for code that changes one of
+## Asks the core to read `body`'s faction, name, kind and radius again at the next scan: for code that changes one of
 ## them on a body that stays in play (a pool ship hidden and shown again is noticed by itself).
 static func touch(body: Node) -> void:
-	if _registry != null and body != null:
-		_registry.touch(body.get_instance_id())
 	var sim: SimCore = SimCore.current()
 	if sim != null:
 		sim.touch(body)
@@ -335,11 +238,9 @@ static func clear_statics() -> void:
 	StaticRows.clear()
 
 
-## Where this scan's rows came from: &"tree" (the GDScript gather), &"registry" (M4-T09) or &"core" (M4-T15).
+## Where this scan's rows came from: &"core" (the core's rows, M4-T15) or &"hand" (built by hand, or a broadcast scan).
 func source() -> StringName:
-	if _sim != null:
-		return &"core"
-	return &"registry" if _from_registry else &"tree"
+	return &"core" if _sim != null else &"hand"
 
 
 ## Which code answers this scan's queries now: &"native" or &"gdscript".
@@ -491,7 +392,7 @@ func statics_for(own_body_id: int, own_position: Vector3, own_faction: StringNam
 	return _pick(own_faction, stamped, best)
 
 
-## The broadcasts a ship hears (from a `from_broadcasters` scan): beyond `near_m`, where contacts take over, and within
+## The broadcasts a ship hears (from a broadcast scan, `shared_broadcasts`): beyond `near_m`, where contacts take over, and within
 ## each broadcaster's own range.
 func broadcasts_for(own_body_id: int, own_position: Vector3, own_faction: StringName,
 		near_m: float = SENSOR_RANGE_M) -> Array[Contact]:
@@ -579,65 +480,7 @@ func relation_row(faction: StringName) -> PackedByteArray:
 	return row
 
 
-# The registry for a native scan of `tree`, made (and told of the tree's changes) on first use; null when not available.
-static func _registry_for(tree: SceneTree) -> Object:
-	if _registry_class_known < 0:
-		_registry_class_known = 1 if NativeLib.has_class(REGISTRY_CLASS) else 0
-	if _registry_class_known == 0:
-		return null
-	if _registry == null or _registry_tree != tree:
-		var registry: Object = NativeLib.instantiate(REGISTRY_CLASS)
-		if registry == null:
-			return null
-		_unhook()
-		_registry = registry
-		_registry_tree = tree
-		_members_dirty = true
-		_registry_statics_version = -1
-		tree.node_added.connect(_on_node_added)
-		tree.node_removed.connect(_on_node_removed)
-		for group: StringName in [Targetable.GROUP, Damageable.GROUP]:
-			for node: Node in tree.get_nodes_in_group(group):
-				_watch(node.get_parent())
-	return _registry
-
-
-static func _unhook() -> void:
-	if _registry_tree != null and is_instance_valid(_registry_tree):
-		if _registry_tree.node_added.is_connected(_on_node_added):
-			_registry_tree.node_added.disconnect(_on_node_added)
-		if _registry_tree.node_removed.is_connected(_on_node_removed):
-			_registry_tree.node_removed.disconnect(_on_node_removed)
-
-
-# A marker or hull joined the tree: the registry's members change, and its body is watched for being hidden and shown.
-static func _on_node_added(node: Node) -> void:
-	if node is Targetable or node is Damageable:
-		_members_dirty = true
-		_watch(node.get_parent())
-
-
-static func _on_node_removed(node: Node) -> void:
-	if node is Targetable or node is Damageable:
-		_members_dirty = true
-		_removals += 1
-
-
-# Reads a body's attributes again whenever it is hidden or shown (the pool parks and reuses ships that way).
-static func _watch(body: Node) -> void:
-	var visual := body as Node3D
-	if visual == null or visual.has_meta(&"_scs_registry_watch"):
-		return
-	visual.set_meta(&"_scs_registry_watch", true)
-	visual.visibility_changed.connect(_on_body_visibility.bind(visual.get_instance_id()))
-
-
-static func _on_body_visibility(body_id: int) -> void:
-	if _registry != null:
-		_registry.touch(body_id)
-
-
-# Takes the registry's rows (`ScsBodyRegistry.snapshot` or `select`).
+# Takes the core's rows (`ScsSimCore.snapshot` or `select`).
 func _take_rows(rows: Array) -> void:
 	_body_ids = rows[0]
 	_ids = rows[1]
@@ -654,29 +497,22 @@ func _take_rows(rows: Array) -> void:
 	_node_count = rows[12]
 	_statics_n = rows[13]
 	_live = true
-	_from_registry = true
-	_removals_at = _removals
 	_bolts_pending = true
 
 
-# What this scan's broadcast scan selects rows from: the core, the registry, or null for a tree gather.
-func _selector() -> Object:
-	if _sim != null and is_instance_valid(_sim) and _sim.core != null:
-		return _sim.core
-	return _registry if _from_registry else null
-
-
-# The broadcast scan of this scan's frame: the active broadcasters of `list`, in that order, with their ranges, read now
-# by `selector` (the core's or the registry's `select`).
-func _broadcast_scan(list: Array[Targetable], selector: Object) -> ContactScan:
+# The broadcast scan of this frame: the active broadcasters of `list`, in that order, with their ranges, read now by
+# the core of `sim`.
+static func _broadcast_scan(list: Array[Targetable], sim: SimCore) -> ContactScan:
 	var marker_ids := PackedInt64Array()
 	var reaches := PackedFloat64Array()
 	for targetable: Targetable in list:
 		marker_ids.append(targetable.get_instance_id())
 		reaches.append(targetable.broadcast_range_m)
-	var rows: Array = selector.select(marker_ids)
+	var rows: Array = sim.core.select(marker_ids)
 	var scan := ContactScan.new()
 	scan._take_rows(rows)
+	scan._rows_of = sim
+	scan._removals_at = sim.removals
 	scan._bolts_pending = false
 	for j: int in rows[14] as PackedInt32Array:
 		scan._reach.append(reaches[j])
@@ -694,18 +530,6 @@ func _take_bolts() -> void:
 	_bolt_factions = bolts[2]
 	_bolt_shooters = bolts[3]
 	_hostile_bolts.clear()
-
-
-# The bolts in flight, for `incoming_fire`.
-func _gather_bolts(tree: SceneTree) -> void:
-	for node: Node in tree.get_nodes_in_group(Projectile.GROUP):
-		var bolt := node as Projectile
-		if bolt == null or bolt.is_spent() or not bolt.is_inside_tree():
-			continue
-		_bolt_positions.append(bolt.global_position)
-		_bolt_velocities.append(bolt.velocity)
-		_bolt_factions.append(bolt.faction)
-		_bolt_shooters.append(bolt.shooter_id)
 
 
 # Adds body `i` to a nearest-k selection when it is in range, not the ship's own and not in it yet.
@@ -802,36 +626,6 @@ func _native_with_row(faction: StringName) -> Object:
 		field.set_hostile_row(faction, row)
 		_field_rows[faction] = true
 	return field
-
-
-func _add(body: Node3D, targetable: Targetable, damageable: Damageable) -> void:
-	_body_ids.append(body.get_instance_id())
-	_ids.append(targetable.get_instance_id() if targetable != null else body.get_instance_id())
-	_names.append(targetable.display_name if targetable != null else "")
-	if targetable != null:
-		_factions.append(targetable.faction)
-	elif damageable != null:
-		_factions.append(damageable.faction)
-	else:
-		_factions.append(Factions.NEUTRAL)
-	_positions.append(body.global_position)
-	var rigid := body as RigidBody3D
-	if rigid != null:
-		_velocities.append(rigid.linear_velocity)
-	elif targetable != null:
-		_velocities.append(targetable.velocity)
-	else:
-		_velocities.append(Vector3.ZERO)
-	var basis: Basis = body.global_basis
-	_forwards.append(-basis.z.normalized())
-	_ups.append(basis.y.normalized())
-	_radii.append(damageable.bounding_radius if damageable != null else 0.0)
-	_is_ship.append(1 if rigid != null else 0)
-	_hull_ids.append(damageable.get_instance_id() if damageable != null else 0)
-	var kind: int = BodyKind.of(targetable)
-	_kinds.append(kind)
-	if BodyKind.is_static(kind):
-		_node_statics += 1
 
 
 # The contacts as a ship of `faction` sees them: one list per faction, shared, each contact made when first handed out
@@ -971,24 +765,16 @@ func _hostile_bolts_for(faction: StringName) -> PackedInt32Array:
 	return list
 
 
-# Whether every node this scan holds still exists. A registry scan looks only when a marker or hull has left the tree.
+# Whether every node this scan holds still exists. A core scan looks only when a marker or hull has left the tree.
 func _bodies_alive() -> bool:
-	if _sim != null:
-		var removals: int = _sim.removals if is_instance_valid(_sim) else -1
+	if _rows_of != null:
+		var removals: int = _rows_of.removals if is_instance_valid(_rows_of) else -1
 		if _removals_at == removals:
 			return true
 		for i: int in _node_count:
 			if not is_instance_id_valid(_body_ids[i]):
 				return false
 		_removals_at = removals
-		return true
-	if _from_registry:
-		if _removals_at == _removals:
-			return true
-		for i: int in _node_count:
-			if not is_instance_id_valid(_body_ids[i]):
-				return false
-		_removals_at = _removals
 		return true
 	var nodes: int = _node_count if _node_count >= 0 else _body_ids.size()
 	var field: Object = _native() if nodes == _body_ids.size() else null

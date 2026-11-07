@@ -238,7 +238,7 @@ func test_rows_survive_a_pool_release_and_acquire_with_a_new_handle() -> void:
 	assert_eq(core.row_of(first), -1, "the old handle stays dead")
 	assert_eq(core.row_name(second), "KILO 2", "the row carries the new name")
 	assert_eq(core.row_position(second), Vector3(5.0, 6.0, 7.0), "and the new place")
-	_assert_same_rows(ContactScan.shared(get_tree()), ContactScan.from_tree(get_tree()), "the scan after the reuse")
+	_assert_same_rows(ContactScan.shared(get_tree()), TreeRows.scan(get_tree()), "the scan after the reuse")
 
 
 func test_the_slot_map_stays_bounded_over_spawn_and_release_cycles_and_refuses_an_old_handle() -> void:
@@ -298,7 +298,7 @@ func test_a_rebase_shifts_every_row_once() -> void:
 	var next: PackedVector3Array = core.body_positions()
 	assert_eq(next, after, "the next sync reads the nodes where the shift left them: no second move")
 	assert_eq(core.static_positions(), StaticRows.positions, "the static rows follow StaticRows' own shift")
-	_assert_same_rows(ContactScan.shared(get_tree()), ContactScan.from_tree(get_tree()), "the scan after the rebase")
+	_assert_same_rows(ContactScan.shared(get_tree()), TreeRows.scan(get_tree()), "the scan after the rebase")
 	assert_true(bodies.size() > 0, "a crowd was made")
 
 
@@ -360,7 +360,7 @@ func test_the_contact_scan_answers_from_the_core_as_from_its_own_load() -> void:
 		core.sync_now()
 		var shared: ContactScan = ContactScan.shared(get_tree())
 		assert_eq(shared.source(), &"core", "round %d: the shared scan comes from the core" % round)
-		var script: ContactScan = ContactScan.from_tree(get_tree())
+		var script: ContactScan = TreeRows.scan(get_tree())
 		script.use_native = false
 		_assert_same_rows(shared, script, "round %d" % round)
 		var differences: PackedStringArray = PackedStringArray()

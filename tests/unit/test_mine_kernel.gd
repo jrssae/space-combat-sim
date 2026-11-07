@@ -103,7 +103,7 @@ func _edge_run() -> Array:
 	var now_s: float = SimClock.now() + 100.0
 	for tick: int in 6:
 		(scene["core"] as SimCore).sync_now()
-		director.step(DT, now_s, ContactScan.from_tree(get_tree()))
+		director.step(DT, now_s, ContactScan.from_core(get_tree()))
 		now_s += DT
 		var alive := PackedByteArray()
 		for i: int in mines.count():
@@ -183,7 +183,7 @@ func _run(scene: Dictionary, ticks: int) -> void:
 	var now_s: float = SimClock.now() + 100.0
 	for tick: int in ticks:
 		(scene["core"] as SimCore).sync_now()
-		(scene["director"] as StandinDirector).step(DT, now_s, ContactScan.from_tree(get_tree()))
+		(scene["director"] as StandinDirector).step(DT, now_s, ContactScan.from_core(get_tree()))
 		now_s += DT
 
 

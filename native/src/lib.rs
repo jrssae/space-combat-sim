@@ -1,7 +1,6 @@
 // Entry point of the game's native library: registers every native class with Godot.
 use godot::prelude::*;
 
-mod body_registry;
 mod bolt_kernels;
 mod bolt_rows;
 mod brain;

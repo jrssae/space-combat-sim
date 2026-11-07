@@ -1,22 +1,22 @@
 extends GutTest
-## The native body registry (M4-T09, architecture §17.8): bodies are known to it once, and each tick one native refresh reads
-## what the scan needs, so `ContactScan` builds no per-tick arrays in GDScript. Its scan must equal `ContactScan.from_tree`
-## bit for bit (the same rows in the same order, the same positions, velocities, axes, factions, names, radii, ship flags
-## and kinds). Light bodies made here (a rigid body with a `Targetable` and a `Damageable`, props, a hull without a marker),
-## nothing stepped.
+## The core's body rows (M4-T09's registry, in the core since M4-T15, the only hull read since M4-T42): bodies are known to it
+## once, and each sync reads what the scan needs, so `ContactScan` builds no per-tick arrays in GDScript. Its scan must equal
+## the tree read node by node (`TreeRows`) bit for bit (the same rows in the same order, the same positions, velocities,
+## axes, factions, names, radii, ship flags and kinds). Light bodies made here (a rigid body with a `Targetable` and a
+## `Damageable`, props, a hull without a marker) under a world and its core, nothing stepped.
 
 const FIXTURE: String = "body_registry"
 const ROWS_COMPARED: Array[String] = ["_body_ids", "_ids", "_names", "_factions", "_positions", "_velocities", "_forwards",
 		"_ups", "_radii", "_is_ship", "_kinds"]
 
-var root: Node3D
+var root: WorldFrame
 
 
 func before_each() -> void:
 	Factions.reset()
 	ContactScan.invalidate()
 	ContactScan.clear_statics()
-	root = Node3D.new()
+	root = WorldFrame.new()  # its core reads every body in the tree
 	add_child_autofree(root)
 
 
@@ -108,10 +108,10 @@ func _crowd(rng: RandomNumberGenerator, n: int) -> Array[Node3D]:
 	return out
 
 
-# The registry's scan of the tree as it is now (a fresh one, never the cached `shared`).
-func _registry_scan() -> ContactScan:
-	var scan: ContactScan = ContactScan.from_registry(get_tree())
-	assert_not_null(scan, "the registry is available (%s)" % NativeLib.version(ContactScan.REGISTRY_CLASS))
+# The core's scan of the tree as it is now (a fresh one, never the cached `shared`).
+func _core_scan() -> ContactScan:
+	var scan: ContactScan = TreeRows.core_scan(get_tree())
+	assert_not_null(scan, "the world has a core")
 	return scan
 
 
@@ -144,32 +144,31 @@ func test_body_kinds_read_names_values_and_nothing() -> void:
 	assert_false(BodyKind.is_static(BodyKind.PROP) or BodyKind.is_static(BodyKind.CAPITAL), "props and capitals are contacts")
 
 
-func test_the_registry_scan_equals_the_tree_gather_bit_for_bit() -> void:
+func test_the_core_scan_equals_the_tree_read_bit_for_bit() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 2026_11_09
 	for n: int in [1, 7, 60, 300]:
 		for child: Node in root.get_children():
-			child.free()
+			if not child is SimCore:
+				child.free()
 		_crowd(rng, n)
-		_assert_same_rows(_registry_scan(), ContactScan.from_tree(get_tree()), "%d bodies" % n)
+		_assert_same_rows(_core_scan(), TreeRows.scan(get_tree()), "%d bodies" % n)
 
 
 func test_the_core_scan_equals_the_recorded_tree_gather_bit_for_bit() -> void:
 	# M4-T37: the tree gather is gone; its rows for these seeded crowds are recorded in
 	# `tests/fixtures/parity/body_registry.json` (without the instance ids, which differ between runs).
-	var world := WorldFrame.new()
-	add_child_autofree(world)
-	var sim: SimCore = SimCore.attach(world)
+	var sim: SimCore = SimCore.for_tree(get_tree())
 	assert_not_null(sim, "a core under the world")
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 2026_11_09
 	for n: int in [1, 7, 60, 300]:
 		for child: Node in root.get_children():
-			child.free()
+			if not child is SimCore:
+				child.free()
 		_crowd(rng, n)
 		await get_tree().physics_frame
-		var recorded: Variant = await ParityFixture.expected(FIXTURE, "crowd_%d" % n, func() -> Dictionary:
-			return _rows(ContactScan.from_tree(get_tree())))
+		var recorded: Variant = ParityFixture.stored(FIXTURE, "crowd_%d" % n)
 		sim.forget_attributes()
 		sim.sync_now()
 		var scan: ContactScan = ContactScan.from_core(get_tree())
@@ -186,24 +185,23 @@ static func _rows(scan: ContactScan) -> Dictionary:
 	return out
 
 
-func test_node_less_static_rows_come_after_the_bodies_on_both_paths() -> void:
+func test_node_less_static_rows_come_after_the_bodies() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 5
 	_crowd(rng, 40)
-	var world := WorldFrame.new()
-	add_child_autofree(world)
+	var world: WorldFrame = root
 	for s: int in 1000:
 		ContactScan.register_static(900000 + s, Vector3(rng.randf_range(-10000.0, 10000.0), 0.0, rng.randf_range(-10000.0,
 				10000.0)), rng.randf_range(20.0, 200.0), BodyKind.MINE if s % 10 == 0 else BodyKind.STATIC, Factions.NEUTRAL,
 				world)
-	var script := ContactScan.from_tree(get_tree())
-	_assert_same_rows(_registry_scan(), script, "40 bodies and 1 000 statics")
+	var script := TreeRows.scan(get_tree())
+	_assert_same_rows(_core_scan(), script, "40 bodies and 1 000 statics")
 	assert_eq(script._body_ids.slice(script._body_ids.size() - 1000), PackedInt64Array(range(900000, 901000)),
 			"the statics follow the bodies in the order they were registered")
 	ContactScan.shift_statics(Vector3(100.0, 0.0, -50.0), world)
 	ContactScan.unregister_static(900003)
-	script = ContactScan.from_tree(get_tree())
-	_assert_same_rows(_registry_scan(), script, "after a shift and one removal")
+	script = TreeRows.scan(get_tree())
+	_assert_same_rows(_core_scan(), script, "after a shift and one removal")
 	assert_false(script._body_ids.has(900003), "the removed static is gone")
 
 
@@ -211,30 +209,30 @@ func test_a_parked_body_is_gone_from_the_next_scan_and_back_renamed_after_a_quic
 	var a := _body(Vector3(100, 0, 0), Factions.RAIDERS, "RAIDER 1")
 	var b := _body(Vector3(200, 0, 0), Factions.RAIDERS, "RAIDER 2")
 	var marker_b := b.get_node(^"Targetable") as Targetable
-	assert_true(_registry_scan()._body_ids.has(b.get_instance_id()), "both bodies are in the scan")
+	assert_true(_core_scan()._body_ids.has(b.get_instance_id()), "both bodies are in the scan")
 	_park(b)
-	var scan := _registry_scan()
+	var scan := _core_scan()
 	assert_false(scan._body_ids.has(b.get_instance_id()), "a parked body is gone from the next scan")
 	assert_true(scan._body_ids.has(a.get_instance_id()), "the other stays")
-	# The pool's release and acquire in one tick: the registry never sees it parked, yet reads its new name.
+	# The pool's release and acquire in one tick: the core never sees it parked, yet reads its new name.
 	_unpark(b)
-	_registry_scan()
+	_core_scan()
 	_park(b)
 	marker_b.display_name = "RAIDER 9"
 	_unpark(b)
-	scan = _registry_scan()
+	scan = _core_scan()
 	var at: int = scan._body_ids.find(b.get_instance_id())
 	assert_gt(at, -1, "back in the scan")
 	assert_eq(scan._names[at], "RAIDER 9", "with the name it was given while parked")
-	_assert_same_rows(scan, ContactScan.from_tree(get_tree()), "after the reuse")
+	_assert_same_rows(scan, TreeRows.scan(get_tree()), "after the reuse")
 
 
 func test_a_moved_body_is_seen_at_its_new_place_without_registering_again() -> void:
 	var a := _body(Vector3(100, 0, 0), Factions.RAIDERS, "RAIDER 1")
-	_registry_scan()
+	_core_scan()
 	a.global_position = Vector3(-4000, 25, 12.5)
 	a.linear_velocity = Vector3(7, 8, 9)
-	var scan := _registry_scan()
+	var scan := _core_scan()
 	var at: int = scan._body_ids.find(a.get_instance_id())
 	assert_eq(scan._positions[at], Vector3(-4000, 25, 12.5), "the new position")
 	assert_eq(scan._velocities[at], Vector3(7, 8, 9), "the new velocity")
@@ -244,11 +242,11 @@ func test_a_freed_body_is_noticed_by_the_scan_and_dropped_by_the_next() -> void:
 	var a := _body(Vector3(100, 0, 0), Factions.RAIDERS, "RAIDER 1")
 	var b := _body(Vector3(200, 0, 0), Factions.RAIDERS, "RAIDER 2")
 	var b_id: int = b.get_instance_id()
-	var scan := _registry_scan()
+	var scan := _core_scan()
 	assert_true(scan._bodies_alive(), "both exist")
 	b.free()
 	assert_false(scan._bodies_alive(), "the scan knows a body it holds was freed")
-	scan = _registry_scan()
+	scan = _core_scan()
 	assert_false(scan._body_ids.has(b_id), "the next scan has no row for it")
 	assert_true(scan._bodies_alive())
 	assert_true(scan._body_ids.has(a.get_instance_id()))
@@ -258,26 +256,25 @@ func test_attributes_are_read_once_not_every_tick() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 9
 	_crowd(rng, 100)
-	_registry_scan()
-	var registry: Object = ContactScan.registry()
-	var reads: int = registry.attribute_reads()
+	_core_scan()
+	var core: Object = SimCore.for_tree(get_tree()).core
+	var reads: int = core.attribute_reads()
 	assert_gt(reads, 0, "the first scan read every active body's faction, name, kind and radius")
 	for tick: int in 10:
-		_registry_scan()
-	assert_eq(registry.attribute_reads(), reads, "ten more scans read no attribute again")
+		_core_scan()
+	assert_eq(core.attribute_reads(), reads, "ten more scans read no attribute again")
 
 
-func test_the_shared_scan_gathers_nothing_in_gdscript_on_the_native_path() -> void:
+func test_the_shared_scan_is_the_cores() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 13
 	_crowd(rng, 50)
-	var before: int = ContactScan.gathers
 	var scan := ContactScan.shared(get_tree())
-	assert_eq(ContactScan.gathers, before, "no gather from the tree with the library")
-	_assert_same_rows(scan, ContactScan.from_tree(get_tree()), "the shared scan")
+	assert_eq(scan.source(), &"core", "the shared scan is the core's rows")
+	_assert_same_rows(scan, TreeRows.scan(get_tree()), "the shared scan")
 
 
-func test_a_rebase_moves_its_own_worlds_static_rows_once_on_both_paths() -> void:
+func test_a_rebase_moves_its_own_worlds_static_rows_once() -> void:
 	var a := WorldFrame.new()
 	add_child_autofree(a)
 	var b := WorldFrame.new()
@@ -293,17 +290,16 @@ func test_a_rebase_moves_its_own_worlds_static_rows_once_on_both_paths() -> void
 	for rebase: int in 2:
 		a.rebase(offset)
 		expected_a = expected_a - offset
-		for native: bool in [true]:
-			ContactScan.invalidate()
-			var scan: ContactScan = ContactScan.shared(get_tree())
-			var label: String = "after rebase %d, %s" % [rebase + 1, scan.path()]
-			assert_eq(scan._positions[scan._body_ids.find(910001)], expected_a, "%s: world A's row moved by -offset once" % label)
-			assert_eq(scan._positions[scan._body_ids.find(910002)], at_b, "%s: world B's row did not move" % label)
-			assert_eq(scan._positions[scan._body_ids.find(910003)], at_none, "%s: a row with no world did not move" % label)
-		_assert_same_rows(_registry_scan(), ContactScan.from_tree(get_tree()), "after rebase %d" % (rebase + 1))
+		ContactScan.invalidate()
+		var scan: ContactScan = ContactScan.shared(get_tree())
+		var label: String = "after rebase %d" % (rebase + 1)
+		assert_eq(scan._positions[scan._body_ids.find(910001)], expected_a, "%s: world A's row moved by -offset once" % label)
+		assert_eq(scan._positions[scan._body_ids.find(910002)], at_b, "%s: world B's row did not move" % label)
+		assert_eq(scan._positions[scan._body_ids.find(910003)], at_none, "%s: a row with no world did not move" % label)
+		_assert_same_rows(_core_scan(), TreeRows.scan(get_tree()), "after rebase %d" % (rebase + 1))
 
 
-func test_the_broadcast_scan_equals_from_broadcasters_row_for_row() -> void:
+func test_the_broadcast_scan_equals_the_broadcasters_read_row_for_row() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 21
 	_crowd(rng, 30)
@@ -325,8 +321,8 @@ func test_the_broadcast_scan_equals_from_broadcasters_row_for_row() -> void:
 	ContactScan.invalidate()
 	ContactScan.shared(get_tree())
 	var native: ContactScan = ContactScan.shared_broadcasts()
-	assert_true(native._from_registry, "the broadcast scan comes from the registry")
-	var script := ContactScan.from_broadcasters(Targetable.broadcasters())
+	assert_eq(native._rows_of, SimCore.for_tree(get_tree()), "the broadcast scan comes from the core")
+	var script := TreeRows.broadcasts(Targetable.broadcasters())
 	_assert_same_rows(native, script, "broadcasters")
 	assert_eq(native._reach, script._reach, "the same reach, row by row")
 	assert_eq(script._body_ids.size(), 9, "three buoys, five shown allies and the twin's beacon")

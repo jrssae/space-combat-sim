@@ -274,7 +274,7 @@ func test_a_mine_leaves_the_rows_when_it_fires_and_comes_back_when_laid_again() 
 	var sim: SimCore = SimCore.attach(world)  # the mines step on the core's rows (M4-T37: their GDScript step is gone)
 	for i: int in MineStandin.TRIGGER_TICKS:
 		sim.sync_now()  # the rows as the bodies stand now: this test steps the stand-ins by hand
-		standins.step(DT, now_s, ContactScan.from_tree(get_tree()))
+		standins.step(DT, now_s, ContactScan.from_core(get_tree()))
 		now_s += DT
 	assert_false(mines.is_alive(0), "the hostile set it off")
 	assert_false(StaticRows.has(first), "a mine that went off is no longer a row")
@@ -282,7 +282,7 @@ func test_a_mine_leaves_the_rows_when_it_fires_and_comes_back_when_laid_again() 
 	hostile.global_position = Vector3(0.0, 0.0, 5000.0)
 	for i: int in roundi(MineStandin.RELAY_S / DT) + MineStandin.TRIGGER_TICKS:
 		sim.sync_now()
-		standins.step(DT, now_s, ContactScan.from_tree(get_tree()))
+		standins.step(DT, now_s, ContactScan.from_core(get_tree()))
 		now_s += DT
 	assert_true(mines.is_alive(0), "laid again")
 	assert_true(StaticRows.has(first), "and a row again, with the same id")

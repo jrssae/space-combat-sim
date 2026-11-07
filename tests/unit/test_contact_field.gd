@@ -133,7 +133,7 @@ static func _world(rng: RandomNumberGenerator, n: int, shape: int) -> ContactSca
 	return scan
 
 
-# A broadcast scan (`from_broadcasters`' shape) over the same bodies, each with its own reach.
+# A broadcast scan (`shared_broadcasts`' shape) over the same bodies, each with its own reach.
 static func _broadcasters(rng: RandomNumberGenerator, scan: ContactScan) -> ContactScan:
 	var reach_choices: Array[float] = [0.0, 3000.0, 100000.0, 1.0e6]
 	var b := _scan(scan._positions, scan._factions, scan._is_ship)

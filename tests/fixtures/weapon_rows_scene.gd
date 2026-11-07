@@ -125,7 +125,7 @@ func step() -> void:
 		world.rebase(offset)
 		_rebased -= offset
 	_hits.clear()
-	director.step(DT, now_s, ContactScan.from_tree(world.get_tree()))
+	director.step(DT, now_s, ContactScan.from_core(world.get_tree()))
 	director.pull_native_state()
 	log.append(_entry())
 

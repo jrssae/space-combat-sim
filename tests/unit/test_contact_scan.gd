@@ -69,7 +69,7 @@ func _bolt(at: Vector3, velocity: Vector3, faction: StringName, shooter_id: int 
 
 
 func _seen_by(c: Combatant, scan: ContactScan = null) -> Dictionary:
-	var s: ContactScan = scan if scan != null else ContactScan.from_tree(get_tree())
+	var s: ContactScan = scan if scan != null else TreeRows.core_scan(get_tree())
 	var by_name: Dictionary = {}
 	for contact: Contact in s.contacts_for(c.ship.get_instance_id(), c.ship.global_position, c.faction):
 		by_name[contact.name if not contact.name.is_empty() else "<%d>" % contact.id] = contact
@@ -149,7 +149,7 @@ func test_a_scan_of_freed_bodies_is_rebuilt_within_the_frame() -> void:
 
 
 func test_ships_of_one_faction_share_contact_objects() -> void:
-	var scan: ContactScan = ContactScan.from_tree(get_tree())
+	var scan: ContactScan = TreeRows.core_scan(get_tree())
 	var by_own: Array[Contact] = scan.contacts_for(own.ship.get_instance_id(), own.ship.global_position, own.faction)
 	var by_wingman: Array[Contact] = scan.contacts_for(wingman.ship.get_instance_id(), wingman.ship.global_position, wingman.faction)
 	var enemy_a: Contact = null
@@ -165,7 +165,7 @@ func test_ships_of_one_faction_share_contact_objects() -> void:
 
 func test_in_a_fight_a_ship_sees_every_body_but_itself_in_the_same_order_as_the_loop() -> void:
 	far_enemy.ship.global_position = Vector3(0.0, 0.0, -1500.0)  # every body within 5 km of every other: the copy path
-	var scan: ContactScan = ContactScan.from_tree(get_tree())
+	var scan: ContactScan = TreeRows.core_scan(get_tree())
 	var seen: Array[Contact] = scan.contacts_for(own.ship.get_instance_id(), own.ship.global_position, own.faction)
 	# A body id the scan does not know takes the range loop; without the ship itself that is what the loop gives the ship.
 	var looped: Array[Contact] = []
@@ -185,7 +185,7 @@ func test_incoming_fire_counts_hostile_bolts_passing_within_15_m_in_2_s() -> voi
 	_bolt(Vector3(0.0, 0.0, -1000.0), Vector3(0.0, 0.0, 400.0), Factions.EARTH_ALLIANCE)  # 2.5 s out: no
 	_bolt(Vector3(0.0, 0.0, 100.0), Vector3(0.0, 0.0, 400.0), Factions.EARTH_ALLIANCE)  # already past, flying away: no
 	_bolt(Vector3(0.0, 0.0, -500.0), Vector3(0.0, 0.0, 400.0), Factions.RAIDERS)  # a friend's: no
-	var scan: ContactScan = ContactScan.from_tree(get_tree())
+	var scan: ContactScan = TreeRows.core_scan(get_tree())
 	assert_eq(scan.incoming_fire(own.ship.get_instance_id(), Vector3.ZERO, Vector3.ZERO, own.faction), 2)
 	assert_eq(scan.incoming_fire(own.ship.get_instance_id(), Vector3.ZERO, Vector3(0.0, 0.0, -400.0), own.faction), 3,
 			"own motion counts: flying into them, the one 2.5 s out arrives in 1.25 s")
