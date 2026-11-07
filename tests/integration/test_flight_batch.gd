@@ -1,9 +1,8 @@
 extends GutTest
 ## Ships flying in the native flight batch, headless in Jolt (M4-T10, N4; architecture §17.9): every ship but the
-## player's takes the batch's path when the library is loaded and `perf_native` is on; a batched ship and its GDScript twin
-## fly the same; the damping guard holds for batched ships; an empty tank makes a batched ship coast; a live flip of
-## `perf_native` switches the path and carries the assist's state over; a parked ship leaves the step; and the `flight`
-## console provider reports the batch. Skips, saying why, when the native library is not built.
+## player's takes the batch's path; a batched ship and its GDScript twin (an unbatched ship, as the player's flies) fly the
+## same; the damping guard holds for batched ships; an empty tank makes a batched ship coast; a parked ship leaves the step;
+## and the `flight` console provider reports the batch. M4-T37 removed the live switch to every ship's own model. Skips, saying why, when the native library is not built.
 
 const SPEC_PATH: String = "res://assets/ships/starfury_aurora.tres"
 const GEN_ASSETS_HINT: String = "run scripts/gen_assets.sh, then scripts/run_tests.sh (it imports first)"
@@ -11,16 +10,13 @@ const GEN_ASSETS_HINT: String = "run scripts/gen_assets.sh, then scripts/run_tes
 var world: WorldFrame
 var spec: ShipSpec
 var _native_backup: bool
-var _flight_backup: bool
 var _fuel_backup: bool
 
 
 func before_each() -> void:
 	_native_backup = bool(Settings.get_value(&"perf_native"))
-	_flight_backup = bool(Settings.get_value(&"perf_native_flight"))
 	_fuel_backup = bool(Settings.get_value(&"fuel_unlimited"))
 	Settings.set_value(&"perf_native", true)
-	Settings.set_value(&"perf_native_flight", true)
 	Settings.set_value(&"fuel_unlimited", true)
 	world = WorldFrame.new()
 	world.name = "World"
@@ -30,7 +26,6 @@ func before_each() -> void:
 
 func after_each() -> void:
 	Settings.set_value(&"perf_native", _native_backup)
-	Settings.set_value(&"perf_native_flight", _flight_backup)
 	Settings.set_value(&"fuel_unlimited", _fuel_backup)
 
 
@@ -201,31 +196,6 @@ func test_a_batched_ship_out_of_reaction_mass_coasts() -> void:
 	assert_gt(speed, 0.5, "it got some way before the tank emptied")
 	await _step(_ticks(1.0))
 	assert_almost_eq(ship.linear_velocity.length(), speed, 1e-4, "and coasts from then on")
-
-
-func test_a_live_perf_native_flip_switches_the_path_and_keeps_the_assist_state() -> void:
-	if _skipped():
-		return
-	var ship: Ship = _spawn(Vector3.ZERO)
-	ship.set_flight_command(_cmd(0.0, 1.0))  # one-sided: the pod-yaw command builds up
-	await _align()
-	await _step(_ticks(0.1))
-	assert_eq(ship.flight_path(), &"native")
-	var batch: FlightBatch = FlightBatch.attach(world)
-	var native_state: float = batch.assist_state(ship)
-	assert_gt(absf(native_state), 0.01, "the smoothed pod-yaw command is under way")
-	Settings.set_value(&"perf_native", false)
-	await _step(1)
-	assert_eq(ship.flight_path(), &"gdscript", "off: the ship's own model flies it")
-	assert_eq(batch.rows.size(), 0, "nothing stepped")
-	var carried: float = ship.get_flight_output().pod_yaw_cmd / spec.pod_yaw_gain
-	assert_true(absf(carried - native_state) < 0.1, "the GDScript assist took the state over (%s vs %s)" % [carried, native_state])
-	await _step(_ticks(0.3))
-	Settings.set_value(&"perf_native", true)
-	await _step(1)
-	assert_eq(ship.flight_path(), &"native", "on again: back in the batch")
-	assert_true(absf(batch.assist_state(ship) - ship.get_flight_output().pod_yaw_cmd / spec.pod_yaw_gain) < 1e-9,
-			"and the native state is the one the GDScript model had")
 
 
 func test_a_parked_ship_leaves_the_step_and_a_woken_one_returns() -> void:

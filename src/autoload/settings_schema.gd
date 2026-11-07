@@ -85,9 +85,6 @@ const ENTRIES: Dictionary = {
 		"doc": "An AI ship scores, avoids and checks its fire lane against its nearest this many contacts (M4-T04); when that cuts any, the nearest hostile ship, its target, wing, objective and latest attacker are kept too; 0 = every contact"},
 	&"perf_native": {"type": TYPE_BOOL, "default": true,
 		"doc": "Run the hot paths in the native library when it is built (M4-T05); off = the GDScript code, for pairing the two in one process"},
-	# M4-T10
-	&"perf_native_flight": {"type": TYPE_BOOL, "default": true,
-		"doc": "Fly every AI ship's flight model in the native batch (M4-T10) when perf_native is on and the library is built; off = each ship's own GDScript model, for pairing the two in one process"},
 	# M4-T09
 	&"ai_nearest_static_k": {"type": TYPE_INT, "default": 4, "min": 0, "max": 32,
 		"doc": "An AI ship avoids its nearest this many rocks and mines within 5 km (M4-T09); they are never among its contacts; 0 = none"},
@@ -129,8 +126,6 @@ const ENTRIES: Dictionary = {
 		"doc": "The ram resolver reads every rigid hull's Jolt contacts and its own acceleration in one native call over the core's rows (M4-T35); off = a GDScript direct-state read per hull, the reference (needs perf_ram_contact_columns on); live"},
 	&"perf_native_selection_check": {"type": TYPE_BOOL, "default": true,
 		"doc": "The AI ships' targeting controllers' selection check (a target gone, parked or out of reach) runs as one native pass over the core's rows (M4-T35; needs perf_core_event_columns); off = each controller checks its own selection every tick, the reference; live"},
-	&"perf_batch_owns_ships": {"type": TYPE_BOOL, "default": true,
-		"doc": "A ship the flight batch flies does not tick itself (M4-T35): the batch's gather takes its combat edges and the batch gives the tick back when it stops flying the ship; off = every ship's own tick runs and returns early, the reference; live"},
 	&"ship_contact_monitor": {"type": TYPE_BOOL, "default": false,
 		"doc": "RigidBody3D.contact_monitor on every ship (M4-T35): off by default, since nothing connects body_entered and the direct state's contact list, which the ram resolver reads, needs only max_contacts_reported; applies to ships built after the change"},
 	&"perf_native_bolt_rows": {"type": TYPE_BOOL, "default": true,
@@ -173,7 +168,7 @@ const RENAMED: Dictionary = {}
 ## Settings removed with the old paths (M4-T37, Q67): `Settings.revert` reads only schema keys, so a saved file that still
 ## holds one of these loads without it, and the next `save` drops it.
 const RETIRED: Array[StringName] = [&"perf_native_weapons", &"perf_native_brains", &"perf_native_commands",
-		&"perf_native_driver_step"]
+		&"perf_native_driver_step", &"perf_native_flight", &"perf_batch_owns_ships"]
 
 ## Choices removed from a setting: key -> {old choice -> what a saved file's old choice loads as} (M4-T37: the inline step).
 const RETIRED_VALUES: Dictionary = {&"sim_step": {&"inline": &"threaded"}}

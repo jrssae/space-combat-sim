@@ -31,8 +31,8 @@ extends RigidBody3D
 ##
 ## The flight batch (M4-T10, architecture §17.9): every ship but the player's is `batched`, so `FlightBatch` (under `World`,
 ## priority -1) runs its model, governor and force application in one native call per tick for all of them; this node's
-## `_physics_process` then only takes the command edges and leaves the forces to the batch. The player's ship, a ship whose
-## `batched` is off, and every ship when the library or `perf_native` is off, fly the GDScript path below. On the batched
+## `_physics_process` then only takes the command edges and leaves the forces to the batch. The player's ship and a ship
+## whose `batched` is off fly the GDScript path below. On the batched
 ## path `get_flight_output()` fills its `FlightOutput` from the batch's row on demand (levels, RCS shares, forces, flags; the
 ## per-nozzle `nozzle_forces` stay empty) and `applied_force()` reads the batch's sum.
 ##

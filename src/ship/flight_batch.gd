@@ -7,10 +7,8 @@ extends Node
 ## levels and RCS shares (the thruster glow and the engine audio) and the reaction-mass flow (drawn here).
 ##
 ## A ship joins (`Ship.batched`) when it is built and leaves when it exits the tree; the player's ship never joins. A
-## joined ship that cannot process (parked in the pool) is skipped. When the library lacks the class or `perf_native` or
-## `perf_native_flight` is off, no row is stepped and every ship flies its own GDScript model that tick, so the setting can
-## flip live and a bench can pair the two paths in one process. Ships' types and nozzles are registered once; a rebuilt ship
-## registers again.
+## joined ship that cannot process (parked in the pool) is skipped. Ships' types and nozzles are registered once; a rebuilt
+## ship registers again. M4-T37 removed the switch that flew every ship on its own GDScript model instead.
 ##
 ## With the native core on (M4-T15, `SimCore`), the step reads each ship's basis and velocities from the core's rows (synced
 ## at -11; nothing moves a body between) instead of the physics server; a ship the core has no row for (back from the
@@ -19,11 +17,11 @@ extends Node
 ## Commands from rows (M4-T33): on the core a native pilot's ship flies the command its row holds (the step reads it there,
 ## whatever was gathered); without the core the batch reads that command into the ship first (`Ship.pull_row_command`).
 ##
-## The batch owns its ships' ticks (M4-T35, `perf_batch_owns_ships`): a ship the batch flew has nothing left to do at 0 (its
-## combat edges are taken in the gather), so its `_physics_process` is switched off and given back when the batch stops
-## flying it (no native step this tick, a refused step, the ship leaving, the setting off).
+## The batch owns its ships' ticks (M4-T35): a ship the batch flew has nothing left to do at 0 (its combat edges are taken
+## in the gather), so its `_physics_process` is switched off and given back when the batch stops flying it (no native step
+## this tick, a refused step, the ship leaving).
 
-## The native class that flies the batch when the library is loaded and the settings are on.
+## The native class that flies the batch.
 const NATIVE_CLASS: StringName = &"ScsFlightStep"
 const NODE_NAME: StringName = &"FlightBatch"
 const PRIORITY: int = -1
@@ -67,7 +65,6 @@ var _scalars: PackedFloat64Array = PackedFloat64Array()
 var _vectors: PackedVector3Array = PackedVector3Array()
 var _flags: PackedByteArray = PackedByteArray()
 var _fuel_unlimited: bool = true
-var _owns: int = -1  # `perf_batch_owns_ships` as last read (-1: read again)
 
 
 func _init() -> void:
@@ -77,32 +74,14 @@ func _init() -> void:
 
 func _ready() -> void:
 	_register_console()
-	if not Settings.changed.is_connected(_on_setting_changed):
-		Settings.changed.connect(_on_setting_changed)
 
 
 func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
-	if Settings.changed.is_connected(_on_setting_changed):
-		Settings.changed.disconnect(_on_setting_changed)
 	_give_back_all()
 
 
-## Whether the batch owns the ticks of the ships it flies (`perf_batch_owns_ships`).
-func owns_ships() -> bool:
-	if _owns < 0:
-		_owns = 1 if bool(Settings.get_value(&"perf_batch_owns_ships")) else 0
-	return _owns == 1
-
-
-func _on_setting_changed(key: StringName, _value: Variant) -> void:
-	if key == &"perf_batch_owns_ships":
-		_owns = -1
-		if not owns_ships():
-			_give_back_all()
-
-
-# Every ship ticks itself again (the batch stops flying, or the setting goes off). A ship given back inside a physics tick
+# Every ship ticks itself again (the batch stops flying). A ship given back inside a physics tick
 # flies its own model now: the engine's process list for this tick was made before, so its own call would not come.
 func _give_back_all(fly_now: bool = false) -> void:
 	for ship: Ship in _ships:
@@ -289,19 +268,16 @@ func _physics_process(delta: float) -> void:
 	out_vectors = step.out_vectors()
 	out_scalars = step.out_scalars()
 	tick = frame
-	if owns_ships():
-		for ship: Ship in rows:
-			ship.set_batch_owned(true)  # a no-op once owned: the per-ship work here is the gather alone
+	for ship: Ship in rows:
+		ship.set_batch_owned(true)  # a no-op once owned: the per-ship work here is the gather alone
 	if not _fuel_unlimited:
 		for i: int in rows.size():
 			rows[i].batch_draw_fuel(out_scalars[i * OUT_SCALARS + OutScalar.MASS_FLOW], delta)
 	step_us = Time.get_ticks_usec() - gathered
 
 
-# The native step, or null when the library lacks it or a setting is off (then nothing is stepped this tick).
+# The native step, or null when the library lacks it (then nothing is stepped this tick).
 func _native() -> Object:
-	if not NativeLib.enabled() or not bool(Settings.get_value(&"perf_native_flight")):
-		return null
 	if _native_class_known < 0:
 		_native_class_known = 1 if NativeLib.has_class(NATIVE_CLASS) else 0
 	if _native_class_known == 0:

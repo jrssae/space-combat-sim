@@ -13,7 +13,7 @@ const DELTA: float = 1.0 / 60.0
 const SPEC_PATH: String = "res://assets/ships/starfury_aurora.tres"
 const FIXTURE: String = "core_state"
 const NEW_SETTINGS: Array[StringName] = [&"perf_core_event_columns", &"perf_core_body_direct", &"perf_native_ram_contacts",
-		&"perf_native_selection_check", &"perf_batch_owns_ships", &"ship_contact_monitor"]
+		&"perf_native_selection_check", &"ship_contact_monitor"]
 const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_native_flight",
 		&"perf_threads", &"perf_native_commands", &"perf_native_bolt_rows", &"ram_damage", &"perf_ram_contact_columns",
 		&"perf_core_event_columns", &"perf_core_body_direct", &"perf_native_ram_contacts", &"perf_native_selection_check",
@@ -56,7 +56,6 @@ func test_the_settings_exist_with_their_defaults() -> void:
 	assert_eq(Settings.schema.get_default(&"perf_core_event_columns"), true, "event columns on by default")
 	assert_eq(Settings.schema.get_default(&"perf_native_ram_contacts"), true, "the native contact read on by default")
 	assert_eq(Settings.schema.get_default(&"perf_native_selection_check"), true, "the native selection check on by default")
-	assert_eq(Settings.schema.get_default(&"perf_batch_owns_ships"), true, "the batch owns its ships' ticks by default")
 	assert_eq(Settings.schema.get_default(&"ship_contact_monitor"), false, "contact_monitor off by default: nothing listens")
 
 
@@ -333,7 +332,6 @@ func test_a_drifting_buoy_is_read_where_this_ticks_move_put_it() -> void:
 func test_the_batch_switches_its_ships_own_tick_off_and_back() -> void:
 	if _skipped():
 		return
-	Settings.set_value(&"perf_batch_owns_ships", true)
 	var made: Array = _space()
 	var world: WorldFrame = made[1]
 	var a: Combatant = _ship(world, made[2], "A", Factions.EARTH_ALLIANCE, Vector3.ZERO, true)
@@ -349,14 +347,6 @@ func test_the_batch_switches_its_ships_own_tick_off_and_back() -> void:
 	await get_tree().physics_frame
 	assert_true(a.ship.is_physics_processing(), "a ship off the batch ticks itself again")
 	assert_false(batch.stepped(a.ship), "and the batch no longer flies it")
-	Settings.set_value(&"perf_batch_owns_ships", false)
-	await get_tree().physics_frame
-	assert_true(b.ship.is_physics_processing(), "the setting off gives every ship its tick back")
-	assert_true(batch.stepped(b.ship), "while the batch still flies it")
-	Settings.set_value(&"perf_batch_owns_ships", true)
-	await get_tree().physics_frame
-	await get_tree().physics_frame
-	assert_false(b.ship.is_physics_processing(), "and on again takes it")
 	# The combat edges a batch-owned ship is handed still reach its targeting.
 	var cmd := CombatCommand.new()
 	cmd.target_next = true
