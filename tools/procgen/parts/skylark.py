@@ -90,7 +90,7 @@ def _on_axis(mesh: Mesh, axis: Sequence[float]) -> Mesh:
 def _axial(profile: Sequence[tuple[float, float]], axis: Sequence[float], segments: int,
            materials: Material | Sequence[Material], creases=(), step: float = 1.0) -> Mesh:  # fmt: skip
     """A lathe about a z-parallel axis through ``axis`` (x, y). Long profile segments are split so no face is much
-    longer than ``step``: long slivers sample unevenly and leave holes between splats."""
+    longer than ``step``: long slivers sample unevenly and bend the surface samples' centroid."""
     mats = [materials] * (len(profile) - 1) if isinstance(materials, Material) else list(materials)
     points, seg_mats, index = [profile[0]], [], {0: 0}
     for i, ((z0, r0), (z1, r1)) in enumerate(zip(profile[:-1], profile[1:], strict=True)):

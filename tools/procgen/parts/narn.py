@@ -6,7 +6,7 @@ tips, metres. Right-hand parts are built for x > 0 and the asset mirrors them. E
 lofts, frustums and prisms through the sizes written in the design references.
 
 Painted regions (the crescent's red band, the canopy, the box's green panel and hazard corners) are facets of their
-lofts, so the splats and the fallback mesh carry the same paint. Each solid also has a burial test, so the asset can drop
+lofts, so the textured mesh and the fallback mesh carry the same paint. Each solid also has a burial test, so the asset can drop
 the samples one part hides inside another.
 """
 

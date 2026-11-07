@@ -4,6 +4,10 @@ panel and yellow and black hazard marks, dark green glass, dark metal nozzles.
 
 Albedos are linear RGB from the written sRGB scheme (Q19); the green was lifted when the maintainer judged it too dark
 (2026-11-04, docs/assets-civilian.md "Colour round").
+
+The texture pack (M5-T27; docs/design-references.md, "Narn transport", texture): the hard-used green plating of
+Tal'Quith.JPG and Na'Tan.JPG. Big plates with dark seams and a strong plate-to-plate tint, chipped edges with some bare
+metal, grime and long streaks aft; the light grey cargo box takes the same wear. The engine throats glow orange-white.
 """
 
 from __future__ import annotations
@@ -35,7 +39,7 @@ NARN = Style(
         "canopy_glass": Material("nr_canopy", _lin(0x10201A)),  # opaque: there is no cockpit inside
         "canopy_frame": Material("nr_canopy_frame", _lin(0x26392F), metallic=0.5),
         "nozzle": Material("nr_nozzle", _lin(0x3A3A36), metallic=0.8),
-        "nozzle_throat": Material("nr_nozzle_throat", _lin(0x141413), metallic=0.8),
+        "nozzle_throat": Material("nr_nozzle_throat", _lin(0x141413), metallic=0.8, emissive=_lin(0xFFB070), emissive_strength=3.0),
         "barrel": Material("nr_barrel", _lin(0x4A4A44), metallic=0.7),
         "bore": Material("nr_bore", (0.01, 0.01, 0.01)),
         "interior": Material("nr_interior", (0.02, 0.022, 0.02)),
@@ -43,6 +47,11 @@ NARN = Style(
     },
     panel_size_m=2.4,
     panel_line_width_m=0.25,
-    panel_line_darkness=1.0,  # no painted grid (the maintainer, 2026-11-04): panels come with the texture pack
-    panel_tint_jitter=0.0,
+    panel_line_darkness=0.62,
+    panel_tint_jitter=0.09,
+    hatch_fraction=0.16,
+    edge_wear=0.5,
+    streaks=0.22,
+    grime=0.11,
+    extra={"bare_metal": 0.25, "smudge": 0.22, "speckle": 0.05, "paint_roughness": 0.8, "streak_length_m": 0.35, "rivets": 0.6},
 )

@@ -4,6 +4,12 @@ and dark fins on the command disc's top, warm-white rim windows, dark nozzles.
 
 Hex values are the sRGB colours read off the screen captures; materials store them as linear albedo. A hull that wears
 the same language in other paint (the Skylark's khaki plating) builds its own copy with :func:`ea_civilian`.
+
+The texture pack (M5-T27; docs/design-references.md, "Saturn family", texture): working freighters in clean industrial
+paint, as Achilles.jpg, Red Star 9.jpg and Epsilon.JPG show them. Long plates with fine dark seams and a few hatches, a
+light patchwork of tints from plate to plate, edges worn to dark primer rather than bare metal, faint grime and short
+streaks aft of the seams, flat paint. The rim windows glow warm white and the engine throats the blue-white of
+Valjean.JPG; the Skylark's throats take its warm white.
 """
 
 from __future__ import annotations
@@ -41,6 +47,10 @@ SCHEME: dict[str, tuple[int, bool, float, float]] = {
     "bore": (0x101010, False, 0.0, 0.0),
     "interior": (0x2E2C2A, False, 0.0, 0.0),
 }
+# The lit roles: role -> emission strength; the colour is the role's own (windows) or the engine glow (throats).
+WINDOW_STRENGTH = 2.0
+ENGINE_STRENGTH = 3.0
+ENGINE_GLOW = 0xDCE8FF  # blue-white, Valjean.JPG
 
 
 def lin(hex_rgb: int) -> tuple[float, float, float]:
@@ -50,9 +60,9 @@ def lin(hex_rgb: int) -> tuple[float, float, float]:
     return (r, g, b)
 
 
-def ea_civilian(overrides: Mapping[str, int] | None = None) -> Style:
-    """The style, with any role repainted to another sRGB value (per-hull trim). A repainted role gets its own material
-    name, so two hulls' meshes never share a name with different colours."""
+def ea_civilian(overrides: Mapping[str, int] | None = None, engine_glow: int = ENGINE_GLOW) -> Style:
+    """The style, with any role repainted to another sRGB value (per-hull trim) and its own engine glow. A repainted role
+    gets its own material name, so two hulls' meshes never share a name with different colours."""
     overrides = dict(overrides or {})
     unknown = set(overrides) - set(SCHEME)
     if unknown:
@@ -61,15 +71,33 @@ def ea_civilian(overrides: Mapping[str, int] | None = None) -> Style:
     for role, (hex_rgb, paneled, metallic, transmittance) in SCHEME.items():
         colour = overrides.get(role, hex_rgb)
         name = f"{PREFIX}_{role}" if colour == hex_rgb else f"{PREFIX}_{role}_{colour:06x}"
-        materials[role] = Material(name, lin(colour), transmittance=transmittance, paneled=paneled, metallic=metallic)
+        glow, strength = (0.0, 0.0, 0.0), 0.0
+        if role == "window":
+            glow, strength = lin(colour), WINDOW_STRENGTH
+        elif role == "nozzle_throat":
+            glow, strength = lin(engine_glow), ENGINE_STRENGTH
+            name = name if engine_glow == ENGINE_GLOW else f"{name}_glow_{engine_glow:06x}"
+        materials[role] = Material(name, lin(colour), transmittance=transmittance, paneled=paneled, metallic=metallic,
+                                   emissive=glow, emissive_strength=strength)
     return Style(
         name="ea_civilian",
         materials=materials,
         panel_size_m=3.6,
         panel_line_width_m=0.4,
-        panel_line_darkness=1.0,  # no painted grid (the maintainer, 2026-11-04): panels come with the texture pack
-        panel_tint_jitter=0.0,
+        **TEXTURE_PACK,
     )
+
+
+# The texture pack at a fighter's scale (``core/civilian.py``'s ``at_texel`` scales it to the hull's texel).
+TEXTURE_PACK = {
+    "panel_line_darkness": 0.72,
+    "panel_tint_jitter": 0.05,
+    "hatch_fraction": 0.14,
+    "edge_wear": 0.35,
+    "streaks": 0.14,
+    "grime": 0.07,
+    "extra": {"bare_metal": 0.0, "smudge": 0.12, "speckle": 0.03, "paint_roughness": 0.72, "rivets": 0.4},
+}
 
 
 EA_CIVILIAN = ea_civilian()

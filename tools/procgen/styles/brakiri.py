@@ -3,9 +3,13 @@ olive green frame, pale putty green cargo pods, Brakiri yellow on the fins, neck
 pod straps and turret trim, cream engine domes in dark metal cups.
 
 Albedos are linear RGB from the written sRGB scheme, confirmed by the maintainer (Q19, Q22, 2026-11-03). Roles the
-design leaves open (canopy, barrels, interior) are our choice. The pods use their own role, ``pod``. No panel grid is
-painted (the maintainer, 2026-11-04): panel layout comes with the texture pack at the rebase. The turret bolts' green
-is a gameplay colour for T21 and T16, not paint.
+design leaves open (canopy, barrels, interior) are our choice. The pods use their own role, ``pod``. The turret bolts'
+green is a gameplay colour for T21 and T16, not paint.
+
+The texture pack (M5-T27; docs/design-references.md, "Brakiri Bokmai transport", texture): no capture of a Bokmai
+exists, so the plating follows the Brakiri cruiser's (Brakiri ship.jpg and the starshipmodeler.com miniature shots):
+satin paint over plates of moderate size, darker seams, a mild plate-to-plate tint, edges worn to primer, light grime.
+The window strips glow pale green-white and the cream engine domes glow yellow-white.
 """
 
 from __future__ import annotations
@@ -16,7 +20,7 @@ from ..core.color import srgb_to_linear
 from ..core.geometry import Material
 from . import Style
 
-GLOW_SRGB = 0xFFF0B0  # engine glow, yellow-white: a ShipSpec tint for T16, not paint
+GLOW_SRGB = 0xFFF0B0  # engine glow, yellow-white: the domes' glow and a ShipSpec tint for T16
 BOLT_SRGB = 0x7CFF4F  # the turrets' bright green pulse (Q22, the maintainer chose the value): T21 and T16
 
 
@@ -28,6 +32,16 @@ def _lin(hex_rgb: int) -> tuple[float, float, float]:
 
 
 HULL_SRGB, HULL_DARK_SRGB = 0x5A6B59, 0x3A4538
+# The texture pack at a fighter's scale (``core/civilian.py``'s ``at_texel`` scales it to the hull's texel).
+TEXTURE_PACK = {
+    "panel_line_darkness": 0.7,
+    "panel_tint_jitter": 0.06,
+    "hatch_fraction": 0.12,
+    "edge_wear": 0.35,
+    "streaks": 0.12,
+    "grime": 0.08,
+    "extra": {"bare_metal": 0.0, "smudge": 0.1, "speckle": 0.03, "paint_roughness": 0.65, "rivets": 0.3},
+}
 POD_SRGB = 0xABAE9A
 YELLOW_SRGB = 0xD8B840
 
@@ -41,9 +55,9 @@ BRAKIRI = Style(
         "frame_plain": Material("bk_frame_plain", _lin(HULL_SRGB)),  # the frame's green on the pods (top plate, saddles)
         "pod": Material("bk_pod", _lin(POD_SRGB), paneled=True),  # the cargo pods' plating
         "stripe": Material("bk_stripe", _lin(YELLOW_SRGB)),  # the yellow
-        "window": Material("bk_window", _lin(0xE8F0DC)),
+        "window": Material("bk_window", _lin(0xE8F0DC), emissive=_lin(0xE8F0DC), emissive_strength=2.0),
         "window_strip": Material("bk_window_strip", _lin(0x1E2620)),
-        "engine_dome": Material("bk_engine_dome", _lin(0xF2EDC4)),
+        "engine_dome": Material("bk_engine_dome", _lin(0xF2EDC4), emissive=_lin(GLOW_SRGB), emissive_strength=2.5),
         "hazard": Material("bk_hazard", _lin(YELLOW_SRGB)),
         "hazard_dark": Material("bk_hazard_dark", _lin(HULL_DARK_SRGB)),
         "canopy_glass": Material("bk_canopy", _lin(0x1E2620)),
@@ -57,16 +71,14 @@ BRAKIRI = Style(
     },
     panel_size_m=2.4,
     panel_line_width_m=0.25,
-    panel_line_darkness=1.0,  # no painted grid (the maintainer, 2026-11-04): panels come with the texture pack
-    panel_tint_jitter=0.0,
+    **TEXTURE_PACK,
 )
 
-# The pods' own style over the same roles (its grid size stays for the texture pack's panel scale).
+# The pods' own style over the same roles and pack, a little finer plating.
 BRAKIRI_POD = Style(
     name="brakiri_pod",
     materials=BRAKIRI.materials,
     panel_size_m=2.0,
     panel_line_width_m=0.25,
-    panel_line_darkness=1.0,
-    panel_tint_jitter=0.0,
+    **TEXTURE_PACK,
 )

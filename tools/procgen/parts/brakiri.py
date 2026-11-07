@@ -445,7 +445,7 @@ def fin(style: Style, upper: bool) -> Piece:
 # --- the spindle -------------------------------------------------------------------------------------------------------
 SPINDLE = (1.70, 0.965, 12.5, 58.0)  # axis y, radius, z from, z to
 DRUM = (1.215, 15.35, 17.22)  # radius, z from, z to
-SLEEVE_R = 1.48  # the pods' sleeves: the bore the hull's no-splats test leaves out round the spindle
+SLEEVE_R = 1.48  # the pods' sleeves: the bore round the spindle the hull's pod-volume test leaves out
 
 
 def spindle(style: Style) -> Piece:

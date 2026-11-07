@@ -1,16 +1,21 @@
-"""The civilian ships' shared build pipeline (M5-T22, D59).
+"""The civilian ships' shared build pipeline (M5-T22, D59; textured meshes from M5-T27).
 
 Every civilian generator places pieces (a part, the volume it buries, and whether it sits on the centre line or on the
-right and is mirrored), samples them into splats, paints them through a style and writes levels, chunks and small
-standalone models (turrets, cargo pods). Until T22 this was copied into each generator; the Bokmai is the first to use
-this module.
+right and is mirrored), samples their visible surface for the body origin and the chunks' offsets, and writes the hull,
+its break-up chunks and small standalone models (turrets, cargo pods) as M4's textured meshes (``core/textured_mesh.py``).
 
-Frames: the authored Godot frame (x to starboard, y up, z aft from the nose), then the body frame centred on the splat
-centroid (``offset``); the PLY stores the body frame turned by Rz(180) (the GDGS orientation).
+Frames: the authored Godot frame (x to starboard, y up, z aft from the nose), then the body frame centred on the visible
+surface's centroid (``offset``, the manifest's ``centroid_offset``). The ``.glb``, the OBJs and ``hardpoints.json`` are all
+in the body frame.
+
+The texture pack: each faction's style carries its plating and wear at a fighter's scale (a centimetre texel);
+:func:`at_texel` scales the wear, the seams and the noise to the texel the hull's atlas ends up with, so a 260 m freighter
+and a 4 m turret read the same paint.
 """
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,24 +26,26 @@ import numpy as np
 from ..parts import Part
 from ..parts.solids import Solid
 from ..styles import Style
-from . import frames, lighting
-from .chunks import ChunkSource
+from .chunks import ChunkCut, ChunkSource, chunk_offsets, write_chunks
 from .context import BuildContext
 from .geometry import Mesh
 from .obj import write_obj
-from .paint_mesh import PaintPart, phase_steps, write_paint_mesh
-from .ply import SplatData, write_ply
-from .sampling import SurfaceSamples, sample_mesh, to_splats
+from .sampling import SurfaceSamples, sample_mesh
+from .textured_mesh import DEFAULT_TEXEL_M, TexturedPart, pack_parts, phase_steps, write_textured_mesh
+from .textures import Marking
 
 CENTRE, RIGHT = "c", "r"
 JSON_DIGITS = 5
+HULL_ATLAS_PX = 2048  # every civilian hull: 4 to 16 cm a texel from the Bokmai to the Saturn 8s
+MODEL_ATLAS_PX = 1024  # a turret or a cargo pod
+LINE_TEXELS = 2.0  # a panel seam is never thinner than this many texels, so it survives the mipmaps
 
 
 @dataclass(frozen=True)
 class Piece:
-    """One sampled component: ``solid`` is the volume it buries (``None``: it hides nothing), ``side`` is :data:`CENTRE`
+    """One component: ``solid`` is the volume it buries (``None``: it hides nothing), ``side`` is :data:`CENTRE`
     (symmetrised) or :data:`RIGHT` (mirrored to a left twin), ``fine`` scales its sampling spacing (thin parts are
-    sampled finer so their outline survives)."""
+    sampled finer so their outline counts)."""
 
     part: Part
     solid: Solid | None = None
@@ -79,12 +86,11 @@ class Sampled:
     piece: Piece
     samples: SurfaceSamples
     spacing: float
-    paint_name: str  # the right twin's name: both twins get the same panel pattern
+    paint_name: str  # the right twin's name: both twins get the same panel phase
 
 
 def right_half_first(mesh: Mesh) -> Mesh:
-    """The same faces with the right half's first, so systematic rounding gives a centre piece's halves equal shares and a
-    coarse level keeps LOD0's centroid."""
+    """The same faces with the right half's first, so systematic rounding gives a centre piece's halves equal shares."""
     right = mesh.face_centroids()[:, 0] > 0.0
     order = np.concatenate([np.flatnonzero(right), np.flatnonzero(~right)])
     return Mesh(mesh.vertices, mesh.faces[order], mesh.face_material[order], mesh.materials)
@@ -97,14 +103,14 @@ def sample_pieces(
     suffix: tuple[str, ...] = (),
     buried_margin: float = 0.03,
 ) -> list[Sampled]:
-    """Every piece sampled, samples buried in another piece dropped, centre pieces symmetrised and right pieces mirrored,
-    in placement order. ``suffix`` keeps another level's random draws apart from LOD0's."""
+    """Every piece's visible surface: samples buried in another piece dropped, centre pieces symmetrised and right pieces
+    mirrored, in placement order."""
     solids = [(p.name, p.solid, p.solid.bounds()) for p in with_twins(pieces) if p.solid is not None]
     out: list[Sampled] = []
     for p in pieces:
         step = spacing * p.fine
         mesh = p.part.mesh if p.side == RIGHT else right_half_first(p.part.mesh)
-        s = sample_mesh(mesh, step, ctx.rng("splats", p.name, *suffix), systematic=True)
+        s = sample_mesh(mesh, step, ctx.rng("surface", p.name, *suffix), systematic=True)
         if len(s):
             lo, hi = s.positions.min(axis=0), s.positions.max(axis=0)
             hidden = np.zeros(len(s), dtype=bool)
@@ -122,62 +128,150 @@ def sample_pieces(
 
 
 def centroid(sampled: Sequence[Sampled]) -> np.ndarray:
-    """The splat centroid (x is zero by symmetry): the authored position of the body origin."""
+    """The visible surface's centroid (x is zero by symmetry): the authored position of the body origin."""
     total = sum(len(s.samples) for s in sampled)
     mean = sum(s.samples.positions.sum(axis=0) for s in sampled) / total
     return np.array([0.0, float(mean[1]), float(mean[2])])
 
 
-def panel_phase(name: str, style: Style) -> tuple[float, float, float]:
-    """A per-piece shift of the panel grid so neighbouring pieces' lines do not line up."""
-    h = sum((i + 1) * ord(c) for i, c in enumerate(name))
-    return tuple(((h * k) % 97) / 97.0 * style.panel_size_m for k in (7, 11, 13))
+# --- the textured hull -------------------------------------------------------------------------------------------------
+@dataclass(frozen=True)
+class HullPart:
+    """A hull part ready for the textured mesh, in the body frame: its mesh, its chunk, its visible surface points (they
+    place the chunk), the name its panel phase comes from (twins share it) and what is painted on it."""
+
+    name: str
+    group: str
+    mesh: Mesh
+    points: np.ndarray
+    paint_name: str = ""
+    markings: tuple[Marking, ...] = ()
 
 
-def colour(s: Sampled, style: Style) -> np.ndarray:
-    """Paint only (paint, panel lines mirrored across the centre line, tint): the scene's lights shade it in the game."""
-    at = s.samples.positions.copy()
-    at[:, 0] = np.abs(at[:, 0])
-    paneled = s.samples.material_flag("paneled") > 0.5
-    return style.shade_panels(s.samples.albedo(), at, s.samples.normals, paneled, panel_phase(s.paint_name, style))
+@dataclass
+class HullFiles:
+    """What :func:`write_hull` wrote: the files, the manifest's ``mesh`` section, the ``hardpoints.chunks[]`` entries, the
+    hull's box and its mesh (body frame)."""
+
+    files: list[Path]
+    mesh_section: dict[str, Any]
+    chunks: list[dict[str, Any]]
+    aabb_min: np.ndarray
+    aabb_max: np.ndarray
+    mesh: Mesh
 
 
-def splats_of(s: Sampled, style: Style, offset: np.ndarray, overlap: float, thickness: float) -> SplatData:
-    """One sampled piece as splats in the body frame."""
-    return to_splats(s.samples.translated(-offset), colour(s, style), s.spacing, overlap, thickness)
+def hull_parts(sampled: Sequence[Sampled], offset: np.ndarray, markings: dict[str, tuple[Marking, ...]] | None = None) -> list[HullPart]:
+    """The sampled pieces as hull parts in the body frame; ``markings`` by piece name (authored frame, moved here too)."""
+    marks = markings or {}
+    return [
+        HullPart(s.piece.name, s.piece.group, s.piece.part.mesh.translated(-offset), s.samples.positions - offset, s.paint_name,
+                 tuple(moved_marking(m, -offset) for m in marks.get(s.piece.name, ())))
+        for s in sampled
+    ]  # fmt: skip
 
 
-def chunk_sources(
-    sampled: Sequence[Sampled], order: Sequence[str], style: Style, offset: np.ndarray, overlap: float, thickness: float
-) -> list[ChunkSource]:
-    """One source per chunk group in ``order``: its pieces' splats and fallback mesh in the body frame."""
+def moved_marking(marking: Marking, by: Sequence[float]) -> Marking:
+    """A marking moved with its part: every point it is placed by shifts, its directions stay."""
+    params = dict(marking.params)
+    for key in ("centre", "exit"):
+        if key in params:
+            params[key] = tuple(float(a) + float(b) for a, b in zip(params[key], by, strict=True))
+    return dataclasses.replace(marking, params=params)
+
+
+def at_texel(style: Style, texel_m: float) -> Style:
+    """The style's texture pack scaled to a hull texelled at ``texel_m``: its wear, noise, grooves and rivets are sized for a
+    fighter at a centimetre a texel, so a bigger texel scales them up; a seam stays at least ``LINE_TEXELS`` texels wide."""
+    k = max(1.0, float(texel_m) / DEFAULT_TEXEL_M)
+    base = float(style.extra.get("wear_scale", 1.0))
+    return dataclasses.replace(
+        style,
+        panel_line_width_m=max(style.panel_line_width_m, LINE_TEXELS * texel_m),
+        groove_depth_m=style.groove_depth_m * k,
+        hatch_depth_m=style.hatch_depth_m * k,
+        edge_wear_width_m=style.edge_wear_width_m * k,
+        grime_scale_m=style.grime_scale_m * k,
+        extra={**style.extra, "wear_scale": base * k},
+    )
+
+
+def _textured(parts: Sequence[HullPart]) -> list[TexturedPart]:
+    return [TexturedPart(p.mesh, phase_steps(p.paint_name or p.name, False), p.markings, p.name) for p in parts if p.mesh.face_count > 0]
+
+
+def texel_of(parts: Sequence[TexturedPart], atlas_px: int) -> float:
+    """The texel the atlas packs the parts at: from the area a texel would have with the atlas two thirds full, grown by the
+    packer until every chart fits."""
+    area = sum(p.mesh.area() for p in parts)
+    start = max(float(np.sqrt(area / (0.66 * atlas_px * atlas_px))), 1e-4)
+    return float(pack_parts(parts, atlas_px, start).packed.texel_m)
+
+
+def write_hull(
+    out_dir: Path,
+    asset_id: str,
+    parts: Sequence[HullPart],
+    chunk_order: Sequence[str],
+    style: Style,
+    ctx: BuildContext,
+    comments: Sequence[str] = (),
+) -> HullFiles:
+    """The hull as ``<id>.glb`` with its maps, the fallback ``<id>.obj`` and one chunk per group in ``chunk_order``
+    (``<id>_chunk_<name>.obj`` and its cut of the textured mesh, placed by its visible surface's centroid). Options:
+    ``atlas_px`` (default 2 048) and ``occlusion`` (default off: the hulls are far bigger than the occlusion radius)."""
+    out_dir = Path(out_dir)
+    unknown = {p.group for p in parts} - set(chunk_order)
+    if unknown:
+        raise ValueError(f"{asset_id}: parts in unlisted chunks {sorted(unknown)}")
+    hull_mesh = Mesh.concatenate(p.mesh for p in parts)
+    files: list[Path] = write_obj(out_dir / f"{asset_id}.obj", hull_mesh, asset_id, tuple(comments)[:1])
     sources = []
-    for group in order:
-        members = [s for s in sampled if s.piece.group == group]
-        splats = SplatData.concatenate([splats_of(s, style, offset, overlap, thickness) for s in members])
-        sources.append(ChunkSource(group, splats, Mesh.concatenate(s.piece.part.mesh.translated(-offset) for s in members)))
-    return sources
+    for group in chunk_order:
+        members = [p for p in parts if p.group == group]
+        points = [p.points for p in members if len(p.points)]
+        if not points:
+            raise ValueError(f"{asset_id}: chunk {group!r} has no visible surface")
+        sources.append(ChunkSource(group, np.concatenate(points), Mesh.concatenate(p.mesh for p in members)))
+    chunk_files, chunk_entries = write_chunks(out_dir, asset_id, sources, tuple(comments), with_meshes=True)
+    files += chunk_files
 
-
-def to_3dgs(splats: SplatData) -> SplatData:
-    """Rz(180 deg) of the Godot frame: what the PLY stores, so the splat node stays at identity."""
-    return SplatData(
-        xyz=frames.godot_to_3dgs_positions(splats.xyz), rgb=splats.rgb, alpha=splats.alpha, scale=splats.scale,
-        rot=frames.godot_to_3dgs_quats(splats.rot), normals=frames.flip_xy(splats.normals),
+    textured = _textured(parts)
+    atlas_px = int(ctx.option("atlas_px", HULL_ATLAS_PX))
+    texel = texel_of(textured, atlas_px)
+    offsets = chunk_offsets(sources)
+    names = {t.name for t in textured}
+    cuts = [ChunkCut(g, tuple(p.name for p in parts if p.group == g and p.name in names), tuple(float(v) for v in offsets[g]))
+            for g in chunk_order]  # fmt: skip
+    paths, section = write_textured_mesh(
+        out_dir, asset_id, textured, at_texel(style, texel), atlas_px=atlas_px, texel_m=texel, seed=ctx.seed,
+        occlusion=bool(ctx.option("occlusion", False)), normal_scale=1, chunks=cuts,
     )  # fmt: skip
+    files += paths
+    lo, hi = hull_mesh.bounds()
+    return HullFiles(files, section, chunk_entries, lo, hi, hull_mesh)
 
 
-def write_level(out_dir: Path, ply_name: str, light_name: str, splats: SplatData, comments: tuple[str, ...]) -> list[Path]:
-    """A level's PLY (GDGS orientation) and its lighting record."""
-    written = to_3dgs(splats)
-    return [write_ply(out_dir / ply_name, written, comments), lighting.write_lighting(out_dir / light_name, written)]
-
-
-def write_mesh(out_dir: Path, stem: str, named: Sequence[tuple[str, Mesh]], style: Style) -> tuple[Path, dict[str, Any]]:
-    """The model as one painted mesh, ``<stem>_mesh.glb``, through M4's exporter (the 2026-11-04 directive: ships are meshes,
-    not splats; M4-T30a turns the paint into texture maps). ``named`` pairs each part's mesh, in the files' frame, with the
-    name its panel phase comes from, as the splats are painted. Returns the file and its manifest section."""
-    return write_paint_mesh(out_dir, stem, [PaintPart(mesh, phase_steps(name, False)) for name, mesh in named], style)
+def write_model(
+    out_dir: Path,
+    stem: str,
+    meshes: Sequence[tuple[str, Mesh]],
+    style: Style,
+    ctx: BuildContext,
+    comments: Sequence[str] = (),
+    markings: tuple[Marking, ...] = (),
+) -> tuple[list[Path], dict[str, Any]]:
+    """A standalone model (a turret, a cargo pod) in its own frame: ``<stem>.obj`` and ``<stem>.glb`` with its own maps;
+    returns the files and the model's ``mesh`` section. ``meshes`` pairs each part's name with its mesh."""
+    out_dir = Path(out_dir)
+    whole = Mesh.concatenate(m for _, m in meshes)
+    files: list[Path] = write_obj(out_dir / f"{stem}.obj", whole, stem, tuple(comments)[:1])
+    textured = [TexturedPart(m, phase_steps(name, False), markings if k == 0 else (), name) for k, (name, m) in enumerate(meshes)]
+    atlas_px = int(ctx.option("model_atlas_px", MODEL_ATLAS_PX))
+    texel = texel_of(textured, atlas_px)
+    paths, section = write_textured_mesh(out_dir, stem, textured, at_texel(style, texel), atlas_px=atlas_px, texel_m=texel,
+                                         seed=ctx.seed, occlusion=bool(ctx.option("occlusion", False)), normal_scale=1)
+    return files + paths, section
 
 
 def r(v: Any, digits: int = JSON_DIGITS) -> list[float]:
@@ -203,46 +297,12 @@ def inertia_estimate(parts: Sequence[Part], com: np.ndarray) -> np.ndarray:
     return inertia
 
 
-# --- standalone models (turrets, cargo pods) ---------------------------------------------------------------------------
-def sample_model(
-    part: Part, solids: Sequence[Solid], style: Style, ctx: BuildContext, stream: str, spacing: float, overlap: float,
-    thickness: float, buried_margin: float = 0.03,
-) -> SplatData:  # fmt: skip
-    """A small model in its own frame, sampled whole, its buried samples dropped and made mirror-symmetric in x."""
-    s = sample_mesh(right_half_first(part.mesh), spacing, ctx.rng("splats", stream), systematic=True)
-    hidden = np.zeros(len(s), dtype=bool)
-    for solid in solids:
-        hidden |= solid.contains(s.positions, buried_margin)
-    sampled = Sampled(Piece(part), s.subset(~hidden).symmetrized("x"), spacing, stream)
-    return to_splats(sampled.samples, colour(sampled, style), spacing, overlap, thickness)
-
-
-def write_model(
-    out_dir: Path, stem: str, part: Part, splats: SplatData, comments: tuple[str, ...], centred: bool = True,
-    with_obj: bool = True,
-) -> tuple[list[Path], np.ndarray]:
-    """A model written like a chunk: ``<stem>.ply``, its lighting record and ``<stem>.obj``. Centred, the files sit on
-    the splat centroid and the returned offset is that centroid in the model's frame (a turret); otherwise they keep the
-    model's own origin (a cargo pod, whose origin is its mount) and the offset is still the centroid, for the importer,
-    which subtracts it."""
-    mean = splats.xyz.mean(axis=0)
-    shift = mean if centred else np.zeros(3)
-    moved = SplatData(splats.xyz - shift, splats.rgb, splats.alpha, splats.scale, splats.rot, splats.normals)
-    files = write_level(out_dir, f"{stem}.ply", f"{stem}{lighting.SUFFIX}", moved, comments)
-    if with_obj:
-        files += write_obj(out_dir / f"{stem}.obj", part.mesh.translated(-shift), stem, comments[:1])
-    return files, mean
-
-
-def turret_entry(stem: str, part: Part, splats: SplatData, spacing: float, barrel_m: float, offset: np.ndarray) -> dict[str, Any]:
-    """The manifest's ``turret`` entry, with the keys of ``parts/turret.py``'s."""
+def turret_entry(stem: str, part: Part, barrel_m: float, section: dict[str, Any]) -> dict[str, Any]:
+    """The manifest's ``turret`` entry: its mesh (in the turret's frame, the pivot at the origin), the fallback OBJ, the
+    barrel's reach, the trunnion and the muzzles."""
     return {
-        "ply": f"{stem}.ply",
-        "lighting": f"{stem}{lighting.SUFFIX}",
         "obj": f"{stem}.obj",
-        "splats": len(splats),
-        "spacing_m": spacing,
-        "offset": r(offset),
+        "mesh": section,
         "barrel_m": round(barrel_m, JSON_DIGITS),
         "trunnion": r(part.anchor("trunnion").position),
         "muzzles": [r(part.anchor("muzzle_l").position), r(part.anchor("muzzle_r").position)],
@@ -253,24 +313,23 @@ __all__ = [
     "CENTRE",
     "JSON_DIGITS",
     "RIGHT",
+    "HullFiles",
+    "HullPart",
     "Piece",
     "Sampled",
+    "at_texel",
     "centroid",
-    "chunk_sources",
     "collision_json",
-    "colour",
+    "hull_parts",
     "inertia_estimate",
     "left_name",
-    "panel_phase",
+    "moved_marking",
     "r",
     "right_half_first",
-    "sample_model",
     "sample_pieces",
-    "splats_of",
-    "to_3dgs",
+    "texel_of",
     "turret_entry",
     "with_twins",
-    "write_level",
-    "write_mesh",
+    "write_hull",
     "write_model",
 ]

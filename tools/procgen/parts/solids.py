@@ -1,5 +1,5 @@
-"""Solid volumes for burial tests: where one part sits inside another, the hidden samples are dropped before they become
-splats (docs/assets-civilian.md counts on it: buried roots and recessed ends cost no splats).
+"""Solid volumes for burial tests: where one part sits inside another, the hidden surface samples are dropped, so the body
+origin and the chunks' offsets come from the visible surface only (buried roots and recessed ends do not count).
 
 A :class:`Solid` is a local inside-test plus a rigid placement, so it moves and mirrors with the part it belongs to.
 """

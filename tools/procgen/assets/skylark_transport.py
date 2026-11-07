@@ -2,8 +2,8 @@
 docs/design-references.md, "Skylark transport").
 
 Composition only, like ``narn_transport``: the pieces of ``parts/skylark.py`` in the ``ea_civilian`` style with the
-Skylark's own paint, and every output (splats, fallback mesh, hardpoints, chunks, the turret model) derived from the
-placed pieces so they agree by construction.
+Skylark's own paint, and every output (the textured mesh, fallback mesh, hardpoints, chunks, the turret model) derived
+from the placed pieces so they agree by construction.
 
 Layout (authored frame, metres, before re-centring; -Z is forward, the nose vanes' tips at z = 0, x and y centred on the
 reference model's box, as ``tools/refview`` draws it):
@@ -16,10 +16,10 @@ reference model's box, as ``tools/refview`` draws it):
 * the nacelles against the body's flanks on a thrust line 0.26 m below the box centre: a ribbed intake, two pods
   pointing up and down outboard, a ribbed dark bell, and two forked claws on short pylons reaching aft to z 60.
 
-LOD0 is written chunk group by chunk group (``manifest.counts``), LOD1 to LOD3 are resampled coarser from their own
-streams, and LOD1's groups are the break-up chunks (``chunk_lod`` 1). Right-hand pieces are sampled once and mirrored and
-centre-line pieces symmetrised, so every level is exactly mirror-symmetric; samples buried in another piece are dropped.
-The turret (D61) is ``parts/turret.py``'s EA turret at two thirds of its size, written like a chunk.
+The hull is one textured mesh (``core/civilian.py``; Godot's importer builds its levels of detail), each chunk group a cut
+of it. The body origin is the visible surface's centroid (right-hand pieces sampled once and mirrored, centre-line pieces
+symmetrised, surface buried in another piece left out). The turret (D61) is ``parts/turret.py``'s EA turret at two
+thirds of its size, its own textured mesh.
 """
 
 from __future__ import annotations
@@ -31,50 +31,33 @@ from typing import Any
 
 import numpy as np
 
-from ..core import frames, lighting
 from ..core import civilian as cv
-from ..core.chunks import ChunkSource, write_chunks
 from ..core.context import AssetOutputs, BuildContext
 from ..core.geometry import Mesh
-from ..core.manifest import build_manifest, lod_entry, write_manifest
-from ..core.obj import write_obj
-from ..core.ply import SplatData, write_ply
-from ..core.sampling import DEFAULT_OVERLAP, DEFAULT_THICKNESS, SurfaceSamples, sample_mesh, to_splats
+from ..core.manifest import build_manifest, write_manifest
+from ..core.sampling import SurfaceSamples, sample_mesh
 from ..parts import Part, mass_centroid, total_mass
 from ..parts import skylark as sp
 from ..parts.propulsion import pilot_tags
 from ..parts.skylark import CENTRE, RIGHT, Piece
 from ..parts.turret import write_turret
-from ..styles import Style
 from ..styles.ea_civilian import ea_civilian
 
 ASSET_ID = "skylark_transport"
-GENERATOR_VERSION = 1
-PLY_NAME = f"{ASSET_ID}.ply"
+GENERATOR_VERSION = 2  # 2: textured meshes (M5-T27)
 OBJ_NAME = f"{ASSET_ID}.obj"
 HARDPOINTS_NAME = "hardpoints.json"
 
-# docs/assets-civilian.md: LOD0 60 000 (48 000 to 72 000). The built surface is about half the reference's (no inner
-# faces), so the spacing is finer than the planned 0.33 m start.
-DEFAULT_SPACING_M = 0.26
-SPLAT_BUDGET = (48_000, 72_000)
-LODS = {
-    1: (f"{ASSET_ID}_lod1.ply", 2.0, "lod1"),  # level: file, spacing factor, RNG stream
-    2: (f"{ASSET_ID}_lod2.ply", 4.0, "lod2"),
-    3: (f"{ASSET_ID}_lod3.ply", 8.0, "lod3"),
-}
-LOD_SHARES = {1: (0.20, 0.30), 2: (0.04, 0.09), 3: (0.01, 0.025)}
-CHUNK_LOD = 1
+DEFAULT_SPACING_M = 0.26  # the surface samples' spacing: the body origin and the chunks' offsets
 CHUNK_ORDER = ("capsule", "body", "nacelle_l", "nacelle_r")
 
 # Q19's scheme on the ea_civilian style: grey khaki plating (to the captures, 2026-11-04), red-orange bands, dark bells.
 SKYLARK_PAINT = {"hull": 0xA9A68E, "hull_panel": 0x7A7659, "hull_dark": 0x4A4839, "stripe": 0xB8452B, "nozzle": 0x4A4A46}
-STYLE = replace(ea_civilian(SKYLARK_PAINT), panel_size_m=2.4, panel_line_width_m=0.25)
-ENGINE_GLOW_SRGB = 0xFFE9C2  # warm white; a ShipSpec tint (T16), not in the splats
+ENGINE_GLOW_SRGB = 0xFFE9C2  # warm white (7Tango7.JPG): the throats' glow and a ShipSpec tint (T16)
+# The EA civilian texture pack, its plating finer and more patched, as Transport 1.png shows the Skylark.
+STYLE = replace(ea_civilian(SKYLARK_PAINT, ENGINE_GLOW_SRGB), panel_size_m=2.4, panel_line_width_m=0.25, panel_tint_jitter=0.1)
 
 TURRET = sp.TURRET  # the EA turret at two thirds: barrel_m 3.0; the body's seat is sized to its base
-TURRET_SPACING_M = 0.08
-TURRET_SPLATS = (1_500, 3_500)
 TURRET_ARC_DEG = 200.0  # a hemisphere plus 10 degrees below the mount's base
 
 BURIED_MARGIN_M = 0.01
@@ -87,7 +70,7 @@ NAV_LAMP_RANGE_SHARE = 0.3
 NAV_CABIN_RANGE_SHARE = 0.05
 
 
-# --- sampling ----------------------------------------------------------------------------------------------------------
+# --- the visible surface ----------------------------------------------------------------------------------------------------------
 def _left(name: str) -> str:
     return name[:-2] + "_l" if name.endswith("_r") else name + "_l"
 
@@ -112,26 +95,26 @@ class Sampled:
     piece: Piece
     samples: SurfaceSamples
     spacing: float
-    paint_name: str  # the right twin's name: both twins get the same panel pattern
+    paint_name: str  # the right twin's name: both twins get the same panel phase
 
 
 def _right_half_first(mesh: Mesh) -> Mesh:
     """The same faces with the right half's first, so systematic rounding gives a centre piece's kept half its exact
-    share of samples and a coarse level keeps LOD0's centroid."""
+    share of samples."""
     right = mesh.face_centroids()[:, 0] > 0.0
     order = np.concatenate([np.flatnonzero(right), np.flatnonzero(~right)])
     return Mesh(mesh.vertices, mesh.faces[order], mesh.face_material[order], mesh.materials)
 
 
 def sample_hull(pieces: list[Piece], ctx: BuildContext, spacing: float, suffix: tuple[str, ...] = ()) -> list[Sampled]:
-    """Every piece of the hull with its samples: hidden samples dropped, centre pieces symmetrised, right pieces
-    mirrored; ``suffix`` keeps another level's random draws apart from LOD0's."""
+    """Every piece of the hull with its visible surface: hidden samples dropped, centre pieces symmetrised, right pieces
+    mirrored."""
     solids = [(p.name, p.solid, p.solid.bounds()) for p in with_twins(pieces) if p.solid is not None]
     out: list[Sampled] = []
     for p in pieces:
         step = spacing * p.fine
         mesh = p.part.mesh if p.side == RIGHT else _right_half_first(p.part.mesh)
-        s = sample_mesh(mesh, step, ctx.rng("splats", p.name, *suffix), systematic=True)
+        s = sample_mesh(mesh, step, ctx.rng("surface", p.name, *suffix), systematic=True)
         if len(s):
             lo, hi = s.positions.min(axis=0), s.positions.max(axis=0)
             hidden = np.zeros(len(s), dtype=bool)
@@ -149,49 +132,10 @@ def sample_hull(pieces: list[Piece], ctx: BuildContext, spacing: float, suffix: 
 
 
 def centre(sampled: list[Sampled]) -> np.ndarray:
-    """The splat centroid (x is zero by symmetry): the authored position of the body origin."""
+    """The visible surface's centroid (x is zero by symmetry): the authored position of the body origin."""
     total = sum(len(s.samples) for s in sampled)
     mean = sum(s.samples.positions.sum(axis=0) for s in sampled) / total
     return np.array([0.0, float(mean[1]), float(mean[2])])
-
-
-def _phase(name: str, style: Style) -> tuple[float, float, float]:
-    h = sum((i + 1) * ord(c) for i, c in enumerate(name))
-    return tuple(((h * k) % 97) / 97.0 * style.panel_size_m for k in (7, 11, 13))
-
-
-def splats_of(s: Sampled, style: Style, offset: np.ndarray, overlap: float, thickness: float) -> SplatData:
-    """Paint only (panel lines mirrored across the centre line) and flat splats, in the centred frame: the scene's
-    lights do the shading in the game."""
-    smp = s.samples.translated(-offset)
-    painted_at = s.samples.positions.copy()
-    painted_at[:, 0] = np.abs(painted_at[:, 0])
-    rgb = style.shade_panels(smp.albedo(), painted_at, smp.normals, smp.material_flag("paneled") > 0.5, _phase(s.paint_name, style))
-    return to_splats(smp, rgb, s.spacing, overlap, thickness)
-
-
-def chunked(sampled: list[Sampled], style: Style, offset: np.ndarray, overlap: float, thickness: float) -> list[ChunkSource]:
-    """One source per chunk in ``CHUNK_ORDER``: its pieces' splats and fallback mesh, centred frame."""
-    sources = []
-    for chunk in CHUNK_ORDER:
-        members = [s for s in sampled if s.piece.group == chunk]
-        splats = SplatData.concatenate([splats_of(s, style, offset, overlap, thickness) for s in members])
-        mesh = Mesh.concatenate(s.piece.part.mesh.translated(-offset) for s in members)
-        sources.append(ChunkSource(chunk, splats, mesh))
-    return sources
-
-
-def _to_3dgs(splats: SplatData) -> SplatData:
-    """Rz(180 deg) of the Godot frame: what the PLY stores, so the splat node stays at identity."""
-    return SplatData(
-        xyz=frames.godot_to_3dgs_positions(splats.xyz), rgb=splats.rgb, alpha=splats.alpha, scale=splats.scale,
-        rot=frames.godot_to_3dgs_quats(splats.rot), normals=frames.flip_xy(splats.normals),
-    )  # fmt: skip
-
-
-def _write_level(out_dir: Path, ply_name: str, light_name: str, splats: SplatData, comments: tuple[str, ...]) -> list[Path]:
-    written = _to_3dgs(splats)
-    return [write_ply(out_dir / ply_name, written, comments), lighting.write_lighting(out_dir / light_name, written)]
 
 
 # --- hardpoints --------------------------------------------------------------------------------------------------------
@@ -252,7 +196,7 @@ def nav_lights(by_name: dict[str, Part], offset: np.ndarray, length: float) -> d
 
 def hardpoints(everything: list[Piece], chunks: list[dict[str, Any]], offset: np.ndarray) -> dict[str, Any]:
     """The hardpoints document in the centred frame (authored positions minus ``offset``); ``chunks`` are the
-    ``write_chunks`` entries (from LOD1)."""
+    ``write_chunks`` entries."""
     parts = [p.part for p in everything]
     by_name = {p.name: p for p in parts}
     lo, hi = Mesh.concatenate(p.mesh for p in parts).bounds()
@@ -320,98 +264,50 @@ def hardpoints(everything: list[Piece], chunks: list[dict[str, Any]], offset: np
 
 
 # --- build -------------------------------------------------------------------------------------------------------------
-def lod_file(level: int) -> str:
-    return PLY_NAME if level == 0 else LODS[level][0]
-
-
 def build(ctx: BuildContext) -> AssetOutputs:
     """Generate the ship and its turret into ``ctx.out_dir``.
 
-    Options: ``spacing`` (m, default 0.26; the CLI's ``--spacing``), ``overlap`` (sigma / spacing, default 1.0),
-    ``thickness`` (normal sigma / spacing, default 0.08), ``turret_spacing`` (m, default 0.08).
+    Options: ``spacing`` (m, default 0.26; the surface samples' spacing), ``atlas_px`` (the hull's atlas, default 2 048),
+    ``model_atlas_px`` (the turret's, default 1 024), ``occlusion`` (default off).
     """
     spacing = float(ctx.option("spacing", DEFAULT_SPACING_M))
-    overlap = float(ctx.option("overlap", DEFAULT_OVERLAP))
-    thickness = float(ctx.option("thickness", DEFAULT_THICKNESS))
-    turret_spacing = float(ctx.option("turret_spacing", TURRET_SPACING_M))
-    if min(spacing, overlap, thickness, turret_spacing) <= 0.0:
-        raise ValueError("spacing, overlap, thickness and turret_spacing must be positive")
+    if spacing <= 0.0:
+        raise ValueError("spacing must be positive")
     style = STYLE
     out_dir = ctx.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
-    comments = (f"{ASSET_ID} generator v{GENERATOR_VERSION} seed {ctx.seed}", "frame: 3dgs (Rz180 of godot)")
-    light = {level: lighting.lod_file_name(ASSET_ID, level) for level in (0, *LODS)}
+    comments = (f"{ASSET_ID} generator v{GENERATOR_VERSION} seed {ctx.seed}",)
 
     pieces = sp.assemble(style)
     everything = with_twins(pieces)
-    unknown = {p.group for p in everything} - set(CHUNK_ORDER)
-    if unknown:
-        raise ValueError(f"pieces in unlisted chunks {sorted(unknown)}")
+    sampled = sample_hull(pieces, ctx, spacing)
+    offset = centre(sampled)
+    hull = cv.write_hull(out_dir, ASSET_ID, cv.hull_parts(sampled, offset), CHUNK_ORDER, style, ctx, comments)
+    files: list[Path] = list(hull.files)
 
-    # LOD0: the chunk groups concatenated (manifest ``counts`` order).
-    lod0 = sample_hull(pieces, ctx, spacing)
-    offset = centre(lod0)
-    groups = chunked(lod0, style, offset, overlap, thickness)
-    authored = SplatData.concatenate([g.splats for g in groups])
-    xyz32 = authored.xyz.astype(np.float32)
-    aabb_min, aabb_max = xyz32.min(axis=0), xyz32.max(axis=0)
-    files: list[Path] = _write_level(out_dir, PLY_NAME, light[0], authored, comments)
-    files += write_obj(out_dir / OBJ_NAME, Mesh.concatenate(p.part.mesh.translated(-offset) for p in everything), ASSET_ID, comments[:1])
-    # The painted mesh: the ship as the game draws it from the 2026-11-04 directive (meshes, not splats).
-    mesh_path, mesh_entry = cv.write_mesh(out_dir, ASSET_ID, [(s.paint_name, s.piece.part.mesh.translated(-offset)) for s in lod0], style)
-    files.append(mesh_path)
-
-    # LOD1 to LOD3: resampled coarser from their own streams, each centred on its own centroid; LOD1's groups are the chunks.
-    counts: dict[int, int] = {}
-    chunk_entries: list[dict[str, Any]] = []
-    for level, (name, factor, stream) in LODS.items():
-        sampled = sample_hull(pieces, ctx, factor * spacing, (stream,))
-        lod_groups = chunked(sampled, style, centre(sampled), overlap, thickness)
-        lod = SplatData.concatenate([g.splats for g in lod_groups])
-        counts[level] = len(lod)
-        level_comments = comments + (f"lod {level}",)
-        files += _write_level(out_dir, name, light[level], lod, level_comments)
-        if level == CHUNK_LOD:
-            chunk_files, chunk_entries = write_chunks(out_dir, ASSET_ID, lod_groups, level_comments)
-            files += chunk_files
-
-    turret_files, turret_entry = write_turret(out_dir, ASSET_ID, TURRET, style, ctx, turret_spacing, overlap, thickness, comments)
+    turret_files, turret_entry = write_turret(out_dir, ASSET_ID, TURRET, style, ctx, comments)
     files += turret_files
 
-    hp = hardpoints(everything, chunk_entries, offset)
+    hp = hardpoints(everything, hull.chunks, offset)
     hp_path = out_dir / HARDPOINTS_NAME
     hp_path.write_text(json.dumps(hp, indent=2) + "\n", encoding="utf-8", newline="\n")
     files.append(hp_path)
 
-    total = len(authored)
-    warnings: list[str] = []
-    if abs(spacing - DEFAULT_SPACING_M) < 1e-12:
-        if not SPLAT_BUDGET[0] <= total <= SPLAT_BUDGET[1]:
-            warnings.append(f"{total} splats is outside the budget {SPLAT_BUDGET} at the default spacing")
-        for level, share in LOD_SHARES.items():
-            if not share[0] <= counts[level] / total <= share[1]:
-                warnings.append(f"LOD{level} has {counts[level] / total:.1%} of LOD0's splats, outside {share}")
-    if abs(turret_spacing - TURRET_SPACING_M) < 1e-12 and not TURRET_SPLATS[0] <= turret_entry["splats"] <= TURRET_SPLATS[1]:
-        warnings.append(f"the turret has {turret_entry['splats']} splats, outside {TURRET_SPLATS}")
     manifest = build_manifest(
         asset_id=ASSET_ID,
         generator_version=GENERATOR_VERSION,
         seed=ctx.seed,
-        lods=[lod_entry(0, PLY_NAME, total, spacing, light[0])]
-        + [lod_entry(level, lod_file(level), counts[level], LODS[level][1] * spacing, light[level]) for level in LODS],
-        aabb_min=aabb_min,
-        aabb_max=aabb_max,
+        aabb_min=hull.aabb_min,
+        aabb_max=hull.aabb_max,
         centroid_offset=offset,
-        files={"fallback_mesh": OBJ_NAME, "paint_mesh": mesh_entry["file"], "hardpoints": HARDPOINTS_NAME},
+        files={"obj": OBJ_NAME, "mesh": hull.mesh_section["file"], "hardpoints": HARDPOINTS_NAME},
         extra={
-            "paint_mesh": mesh_entry,
-            "counts": {g.name: len(g.splats) for g in groups},
-            "chunks": [c["name"] for c in chunk_entries],
-            "chunk_lod": CHUNK_LOD,
-            "sampling": {"spacing_m": spacing, "overlap": overlap, "thickness": thickness, "turret_spacing_m": turret_spacing},
+            "mesh": hull.mesh_section,
+            "chunks": [c["name"] for c in hull.chunks],
+            "surface_spacing_m": spacing,
             "dimensions_m": {"length": hp["length_m"], "span": hp["span_m"], "height": hp["height_m"]},
             "turret": turret_entry,
         },
     )
     files.append(write_manifest(out_dir, manifest))
-    return AssetOutputs(ASSET_ID, out_dir, manifest, tuple(files), tuple(warnings))
+    return AssetOutputs(ASSET_ID, out_dir, manifest, tuple(files), ())

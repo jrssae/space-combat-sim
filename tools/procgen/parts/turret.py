@@ -2,8 +2,7 @@
 
 The turret frame is the mount's: the origin at the centre of the base where it sits on the hull, +Y the mount's ``up``,
 the barrels along -Z at rest. ``write_turret`` turns it into the files a hull ships beside its chunks
-(``<id>_turret.ply/.light/.obj/.mtl``): splats re-centred on their own centroid and flipped to the 3DGS frame like a
-chunk, with ``offset`` saying where that centroid sits in the turret frame.
+(``<id>_turret.glb`` with its maps, and ``<id>_turret.obj``), in the turret frame.
 """
 
 from __future__ import annotations
@@ -15,13 +14,8 @@ from typing import Any
 
 import numpy as np
 
-from ..core import frames, lighting
 from ..core.context import BuildContext
 from ..core.geometry import Mesh, assign_material_by_predicate, box, ellipsoid_cap, lathe, rotation_x
-from ..core.obj import write_obj
-from ..core.paint_mesh import PaintPart, write_paint_mesh
-from ..core.ply import SplatData, write_ply
-from ..core.sampling import SurfaceSamples, sample_mesh, to_splats
 from ..styles import Style
 from . import Anchor, Part
 from .solids import Solid, box_solid, lathe_solid, segment_solid
@@ -152,58 +146,16 @@ def write_turret(
     spec: TurretSpec,
     style: Style,
     ctx: BuildContext,
-    spacing: float,
-    overlap: float,
-    thickness: float,
     comments: tuple[str, ...] = (),
 ) -> tuple[list[Path], dict[str, Any]]:
-    """Writes the turret's PLY, lighting records, fallback OBJ and painted mesh (``<id>_turret_mesh.glb``, the ships-as-meshes
-    directive of 2026-11-04); returns the files and the manifest ``turret`` entry."""
+    """Writes the turret's textured mesh (``<id>_turret.glb`` and its maps) and fallback OBJ in the turret's frame, the
+    pivot at the origin; returns the files and the manifest ``turret`` entry. The turret takes its own panel size: a hull's
+    plating would be bigger than the whole turret."""
+    from ..core import civilian as cv
+
     part = turret(spec, style)
-    pieces = turret_pieces(spec, style)
-    kept = []
-    for name, mesh, _solid in pieces:
-        s = sample_mesh(mesh, spacing, ctx.rng("turret", "splats", name))
-        hidden = np.zeros(len(s), dtype=bool)
-        for other, _mesh, solid in pieces:
-            if other != name:
-                hidden |= solid.contains(s.positions)
-        kept.append(s.subset(~hidden))
-    samples = SurfaceSamples.concatenate(kept)
     fine = replace(style, panel_size_m=spec.panel_size_m, panel_line_width_m=spec.panel_line_m)
-    rgb = fine.shade_panels(samples.albedo(), np.abs(samples.positions), samples.normals, samples.material_flag("paneled") > 0.5)
-    splats = to_splats(samples, rgb, spacing, overlap, thickness)
-    centroid = splats.xyz.mean(axis=0)
-    written = SplatData(
-        xyz=frames.godot_to_3dgs_positions(splats.xyz - centroid),
-        rgb=splats.rgb,
-        alpha=splats.alpha,
-        scale=splats.scale,
-        rot=frames.godot_to_3dgs_quats(splats.rot),
-        normals=frames.flip_xy(splats.normals),
-    )
-    ply_name, light_name, obj_name = f"{asset_id}_turret.ply", f"{asset_id}_turret.light", f"{asset_id}_turret.obj"
-    files = [
-        write_ply(out_dir / ply_name, written, tuple(comments) + ("turret",)),
-        lighting.write_lighting(out_dir / light_name, written),
-    ]
-    files += write_obj(out_dir / obj_name, part.mesh.translated(-centroid), f"{asset_id}_turret", comments[:1])
-    mesh_path, mesh_entry = write_paint_mesh(out_dir, f"{asset_id}_turret", [PaintPart(part.mesh.translated(-centroid), (0, 0, 0))], fine)
-    files.append(mesh_path)
-
-    def r(v: Any) -> list[float]:
-        return [round(float(x), 5) + 0.0 for x in np.asarray(v, dtype=float).reshape(-1)]
-
-    entry = {
-        "ply": ply_name,
-        "lighting": light_name,
-        "obj": obj_name,
-        "splats": len(splats),
-        "spacing_m": spacing,
-        "offset": r(centroid),
-        "barrel_m": round(spec.barrel_m, 5),
-        "trunnion": r(part.anchor("trunnion").position),
-        "muzzles": [r(part.anchor("muzzle_l").position), r(part.anchor("muzzle_r").position)],
-        "paint_mesh": mesh_entry,
-    }
-    return files, entry
+    stem = f"{asset_id}_turret"
+    files, section = cv.write_model(out_dir, stem, [(name, mesh) for name, mesh, _ in turret_pieces(spec, style)], fine, ctx,
+                                    tuple(comments) + ("turret",))
+    return files, cv.turret_entry(stem, part, spec.barrel_m, section)

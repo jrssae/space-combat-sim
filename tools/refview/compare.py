@@ -1,16 +1,11 @@
-"""Fidelity check of a built civilian asset against its reference STL (M5-T23, Q18).
+"""Fidelity check of a built civilian asset against its reference STL (M5-T23, Q18; on the textured mesh from M5-T27).
 
 Every civilian model must lie within 90 % of its STL, measured as silhouettes and size. This tool is the measuring
 stick. It puts the STL (in the same ship frame and at the same length as ``refview.py``) and the asset's **geometry**,
-its fallback mesh ``<id>.obj`` (every civilian generator builds it from the same parts as its splats), on one grid,
-draws the top, side and front silhouettes of both, and scores each view's intersection over union (IoU) together with
-the length, width and height of asset against model. The bar is an IoU of at least 0.90 in every view and every
-dimension within 10 %: the *geometry verdict*. A second check, the *splat check*, keeps the LOD0 splats honest against
-their own mesh, per view and with a band one LOD0 spacing wide (the manifest's LOD0 spacing, else derived from the
-splat scales), on a grid of a third of that spacing whatever the ship's length: at least 95 % of the mesh silhouette must be covered by splats (nothing missing) and at least 95 % of the
-splat silhouette must lie within the mesh silhouette grown by one spacing (nothing misplaced). A splat reaches about 0.75
-spacings past an edge whatever the setting, so a plain overlap would fail faithful thin parts; the band does not. Nothing
-from the STL is kept: overlays and numbers go to the gitignored ``reports/refs/<name>/compare/``.
+the triangles of its textured mesh ``<id>.glb`` (what the game draws; the manifest's ``mesh.file``), on one grid, draws
+the top, side and front silhouettes of both, and scores each view's intersection over union (IoU) together with the
+length, width and height of asset against model. The bar is an IoU of at least 0.90 in every view and every dimension
+within 10 %. Nothing from the STL is kept: overlays and numbers go to the gitignored ``reports/refs/<name>/compare/``.
 
 Usage, with the project's venv and isolated mode::
 
@@ -19,7 +14,7 @@ Usage, with the project's venv and isolated mode::
 
 The second argument is an asset id (a folder under ``assets/generated/``) or a path to an asset folder. The STL takes the
 same ``--length``, ``--right``, ``--up`` and ``--aft`` as ``refview.py``; the mappings of the civilian ships are in
-``docs/design-references.md``. Exit status: 0 when both checks pass, 1 when either does not, 2 on bad input.
+``docs/design-references.md``. Exit status: 0 when the check passes, 1 when it does not, 2 on bad input.
 
 How the two sides are put on one grid
 -------------------------------------
@@ -28,32 +23,25 @@ How the two sides are put on one grid
   from the spine axis) shows it as a shift; ``--model-offset X,Y,Z`` moves the model onto that origin. When the
   silhouettes only meet further away than the shift window, the output suggests a value (found by a wider silhouette
   search, not from the boxes).
-* The asset's mesh and LOD0 PLY are stored as the generators write them, centred on the splat centroid:
-  ``manifest.centroid_offset`` is the authored position of that origin. The OBJ is in the Godot frame as it is, so the
-  tool adds the offset; the PLY is also turned by Rz(180) into the GDGS orientation (``core.frames``), which the tool
-  undoes on positions and rotations before adding the offset.
-* The geometry check's pixel is ``PIXEL_FRACTION`` of the length (never above 0.5 %). The asset may then move by a whole
-  number of pixels in x, y and z, up to 2 % of the length each, to the place where the three views overlap best; the
-  shift is reported and the geometry scores are those at that place (``iou_unshifted`` in the JSON is the score without
-  it). The splat check takes no shift (splats and mesh come from the same parts in the same frame) and has its own grid:
-  a pixel of a third of the LOD0 spacing, so its band is exactly three pixels and its numbers do not depend on the ship's
-  length, the crop or ``--pixel-frac``.
-* Each splat of the splat check is drawn as the orthographic projection of its Gaussian: an ellipse, not a disc, so a
-  flat splat seen edge-on is a thin line and a closed hull is not grown by the splat size at its horizon. The ellipse
-  reaches ``SPLAT_SIGMAS`` sigmas from the centre (see the constant for why).
+* The asset's mesh is stored as the generators write it, in the Godot frame centred on its visible surface's centroid:
+  ``manifest.centroid_offset`` is the authored position of that origin, which the tool adds back. A ``.glb`` or an
+  ``.obj`` reads the same way (the fallback OBJ holds the same triangles).
+* The pixel is ``PIXEL_FRACTION`` of the length (never above 0.5 %). The asset may then move by a whole number of pixels
+  in x, y and z, up to 2 % of the length each, to the place where the three views overlap best; the shift is reported and
+  the scores are those at that place (``iou_unshifted`` in the JSON is the score without it).
 * ``--model-zrange`` and ``--asset-zrange`` keep one part of each side so a ship is scored part by part against the
-  model each part was built from (the Saturns, Q16). Meshes are cut exactly at the planes and splats are kept by centre; a
-  plane inside a ship is nudged by a tenth of a millimetre so a face lying in it belongs to the neighbouring part. Each
-  cropped side starts at z = 0, and the asset part is then aligned on its own: moved in x and y so that its box
+  model each part was built from (the Saturns, Q16). Meshes are cut exactly at the planes; a plane inside a ship is
+  nudged by a tenth of a millimetre so a face lying in it belongs to the neighbouring part. Each cropped side starts at
+  z = 0, and the asset part is then aligned on its own: moved in x and y so that its box
   centre meets the model part's (a part placed differently by design, like the Saturn 3's raised stack, is scored for
   shape), then the usual best-fit shift. The move is reported (``part_align_m``). ``--part NAME`` puts the result in its
   own folder.
 * ``--model-scale SX,SY,SZ`` scales the (cropped) model about its own box centre in x and y and its start in z: a part
   whose size the maintainer set apart from the model (the Saturn 3's shared pods, Q20) is scored for shape and layout
   at that size. ``--model-offset`` is for the whole ship; a cropped part aligns itself.
-* Extra parts (the Bokmai's removable pods) are drawn with the hull: ``--pod-obj FILE`` and ``--pod-ply FILE`` are the
-  pod's mesh and splats in the pod's own frame (by default ``<id>_pod.obj`` and ``<id>_pod.ply`` beside the asset), put
-  at every mount from ``--pod-at X,Y,Z`` (body frame, repeatable) and ``--pods-from-hardpoints`` (the asset's
+* Extra parts (the Bokmai's removable pods) are drawn with the hull: ``--pod-mesh FILE`` is the pod's mesh (``.glb`` or
+  ``.obj``) in the pod's own frame (by default the manifest's ``pod.mesh.file`` beside the asset, else ``<id>_pod.glb``),
+  put at every mount from ``--pod-at X,Y,Z`` (body frame, repeatable) and ``--pods-from-hardpoints`` (the asset's
   ``hardpoints.json`` ``cargo_pods[]``, whose ``position``, ``up`` and optional ``forward`` are in the body frame, as the
   other hardpoints are). The pod's +y is turned onto ``up`` and its forward (-z) onto ``forward``; without ``forward``
   the shortest turn is used.
@@ -67,6 +55,7 @@ import math
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from struct import error as struct_error
 
 import numpy as np
 from PIL import Image, ImageDraw
@@ -75,39 +64,24 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:  # run as a script in isolated mode, the repo root is not on the path
     sys.path.insert(0, str(REPO_ROOT))
 
-from tools.procgen.core import frames  # noqa: E402
+from tools.procgen.core.glb import read_glb  # noqa: E402
 from tools.procgen.core.manifest import read_manifest  # noqa: E402
 from tools.procgen.core.obj import read_obj  # noqa: E402
-from tools.procgen.core.ply import read_ply  # noqa: E402
 from tools.refview import refview  # noqa: E402
 
 GENERATED = REPO_ROOT / "assets" / "generated"
 
 IOU_MIN = 0.90  # each view's intersection over union must reach this (Q18)
 DIM_TOLERANCE = 0.10  # length, width and height of asset / model within this of 1 (Q18)
-SPLAT_COVERAGE_MIN = 0.95  # splat check: this share of the mesh silhouette is covered by splats (nothing missing)
-SPLAT_PRECISION_MIN = 0.95  # ... and this share of the splat silhouette lies within one spacing of the mesh's (nothing misplaced)
 SHIFT_FRACTION = 0.02  # the best-fit shift of the asset: at most this share of the length, per axis
 PIXEL_FRACTION = 0.0025  # default pixel as a share of the length
 PIXEL_FRACTION_MAX = 0.005  # the brief's coarsest allowed pixel
-SPLAT_PIXELS_PER_SPACING = 3  # the splat check's pixel is the LOD0 spacing over this; the band is this many pixels
-SPACING_TOLERANCE = 0.10  # a declared LOD0 spacing this far from the one the splat scales imply fails the splat check
 HINT_PIXEL_FRACTION = 0.01  # the wider search behind the --model-offset hint runs on a coarser grid
 HINT_WINDOW = 0.10  # ... over this share of the length each way in x and y
 CROP_EPS = 1e-4  # m; a crop plane inside a ship moves this far inward, so a face lying in it is not kept face-on
-# How far a splat is taken to reach, in sigmas. The generators put about one splat per spacing^2 on the surface, each
-# with a sigma of one spacing, and the centres sit on the mesh, so a surface cell is a disc of about 0.56 spacings. The
-# value is calibrated on three built assets against their own fallback meshes (the silhouettes the splats were sampled
-# from): the mean IoU over the three views peaks at 0.7 to 0.8 sigmas for the raider (0.91), the Narn transport (0.96) and
-# the Starfury (0.96); 1.0 grows every edge by about half a spacing and 0.5 leaves holes. Splats near an edge reach about
-# 0.75 spacings past it whatever the factor, so a thin part reads lower than a thick one: that is why the verdict is
-# scored on the mesh and the splats only against it.
-SPLAT_SIGMAS = 0.75
-
 MODEL_ONLY = (232, 128, 24)  # orange
 ASSET_ONLY = (36, 112, 224)  # blue
 BOTH = (64, 64, 64)  # dark grey
-OUTSIDE = (200, 30, 40)  # red: splat pixels beyond the one-spacing band (the splat check's misplaced part)
 
 # This tool's names for the three silhouettes and refview's views they are drawn from.
 VIEWS = {"top": "top", "side": "port", "front": "front"}
@@ -167,70 +141,22 @@ def crop_triangles(tris: np.ndarray, lo: float, hi: float, z_min: float, z_max: 
     return clip_slab(tris, 2, *crop_planes(lo, hi, z_min, z_max))
 
 
-# --- splats and meshes -----------------------------------------------------------------------------------------------
-@dataclass
-class SplatSet:
-    """Splat centres and 3D covariances in the authored frame (metres)."""
-
-    centres: np.ndarray  # (n, 3)
-    cov: np.ndarray  # (n, 3, 3)
-
-    def __len__(self) -> int:
-        return int(len(self.centres))
-
-    def bounds(self, sigmas: float = SPLAT_SIGMAS) -> tuple[np.ndarray, np.ndarray]:
-        """The box of all splat ellipsoids at ``sigmas`` sigmas (exact for an ellipsoid: centre +- reach per axis)."""
-        reach = sigmas * np.sqrt(np.maximum(np.einsum("nii->ni", self.cov), 0.0))
-        return (self.centres - reach).min(axis=0), (self.centres + reach).max(axis=0)
-
-    def transformed(self, rotation: np.ndarray, offset: np.ndarray) -> SplatSet:
-        return SplatSet(self.centres @ rotation.T + offset, np.einsum("ij,njk,lk->nil", rotation, self.cov, rotation))
-
-    def moved(self, offset: np.ndarray) -> SplatSet:
-        return SplatSet(self.centres + offset, self.cov)
-
-    def cropped(self, axis: int, lo: float, hi: float) -> SplatSet:
-        keep = (self.centres[:, axis] >= lo) & (self.centres[:, axis] <= hi)
-        return SplatSet(self.centres[keep], self.cov[keep])
-
-    @staticmethod
-    def concatenate(parts: list[SplatSet]) -> SplatSet:
-        return SplatSet(np.concatenate([p.centres for p in parts]), np.concatenate([p.cov for p in parts]))
-
-
-def splat_set(centres: np.ndarray, scales: np.ndarray, quats: np.ndarray | None = None) -> SplatSet:
-    """A splat set from authored-frame centres, per-axis sigmas and ``(w, x, y, z)`` rotations (identity if none)."""
-    centres = np.asarray(centres, dtype=np.float64).reshape(-1, 3)
-    var = np.asarray(scales, dtype=np.float64).reshape(-1, 3) ** 2
-    if quats is None:
-        cov = np.einsum("ni,ij->nij", var, np.eye(3))
-    else:
-        r = frames.quat_to_matrix(np.asarray(quats, dtype=np.float64).reshape(-1, 4))
-        cov = np.einsum("nij,nj,nkj->nik", r, var, r)
-    return SplatSet(centres, cov)
-
-
-def splats_from_ply(path: Path, offset: np.ndarray) -> SplatSet:
-    """Splats of a generator's PLY in the authored frame: the GDGS flip (Rz(180)) undone on positions and rotations, then
-    ``offset`` (``manifest.centroid_offset``, the authored position of the file's origin) added back."""
+# --- meshes ----------------------------------------------------------------------------------------------------------
+def mesh_from_file(path: Path, offset: np.ndarray) -> np.ndarray:
+    """Triangles ``(n, 3, 3)`` of a generator's ``.glb`` (every primitive) or ``.obj``, in the authored frame: the file is in
+    the Godot frame centred on the body origin, so only ``offset`` is added back."""
+    path = Path(path)
     try:
-        data = read_ply(path).to_splats()
-    except (OSError, ValueError) as exc:
-        raise ValueError(f"{path}: cannot read the splat file ({exc})") from exc
-    centres = frames.gdgs_to_godot_positions(data.xyz) + np.asarray(offset, dtype=np.float64)
-    return splat_set(centres, data.scale, frames.gdgs_to_godot_quats(data.rot))
-
-
-def mesh_from_obj(path: Path, offset: np.ndarray) -> np.ndarray:
-    """Triangles ``(n, 3, 3)`` of a generator's OBJ in the authored frame. The OBJ is written in the Godot frame centred on
-    the splat centroid, like the splats after their flip, so only ``offset`` is added back."""
-    try:
-        obj = read_obj(path)
-        tris = obj.vertices[obj.faces]
-    except (OSError, ValueError, IndexError, UnicodeDecodeError) as exc:
-        raise ValueError(f"{path}: cannot read the fallback mesh ({exc})") from exc
+        if path.suffix.lower() == ".glb":
+            tris = np.concatenate([p.positions.astype(np.float64)[np.asarray(p.indices, dtype=np.int64).reshape(-1, 3)]
+                                   for p in read_glb(path).primitives if len(p.indices)])  # fmt: skip
+        else:
+            obj = read_obj(path)
+            tris = obj.vertices[obj.faces]
+    except (OSError, ValueError, IndexError, KeyError, UnicodeDecodeError, struct_error) as exc:
+        raise ValueError(f"{path}: cannot read the mesh ({exc})") from exc
     if len(tris) == 0:
-        raise ValueError(f"{path}: the fallback mesh has no triangles")
+        raise ValueError(f"{path}: the mesh has no triangles")
     return tris + np.asarray(offset, dtype=np.float64)
 
 
@@ -256,17 +182,19 @@ def _centroid_offset(manifest: dict) -> np.ndarray:
     return np.asarray(manifest["centroid_offset"], dtype=np.float64)
 
 
-def load_asset_splats(folder: Path) -> SplatSet:
-    """The LOD0 splats of the asset in ``folder``, in the authored frame."""
-    manifest = read_asset_manifest(Path(folder))
-    return splats_from_ply(Path(folder) / manifest["lods"][0]["file"], _centroid_offset(manifest))
+def asset_mesh_name(manifest: dict) -> str:
+    """The asset's mesh file: the textured mesh (``mesh.file``), else the fallback OBJ the manifest names, else ``<id>.obj``."""
+    section = manifest.get("mesh")
+    if isinstance(section, dict) and isinstance(section.get("file"), str):
+        return section["file"]
+    files = manifest.get("files", {})
+    return files.get("obj") or files.get("fallback_mesh") or f"{manifest['asset_id']}.obj"
 
 
 def load_asset_mesh(folder: Path) -> np.ndarray:
-    """The fallback mesh of the asset in ``folder`` (``files.fallback_mesh``, else ``<id>.obj``), in the authored frame."""
+    """The mesh of the asset in ``folder`` (:func:`asset_mesh_name`), in the authored frame."""
     manifest = read_asset_manifest(Path(folder))
-    name = manifest.get("files", {}).get("fallback_mesh") or f"{manifest['asset_id']}.obj"
-    return mesh_from_obj(Path(folder) / name, _centroid_offset(manifest))
+    return mesh_from_file(Path(folder) / asset_mesh_name(manifest), _centroid_offset(manifest))
 
 
 def rotation_to_up(up: np.ndarray) -> np.ndarray:
@@ -309,17 +237,14 @@ class Mount:
     forward: np.ndarray | None = None
 
 
-def place_parts(
-    part_mesh: np.ndarray, part_splats: SplatSet, mounts: list[Mount], centroid_offset: np.ndarray
-) -> tuple[np.ndarray, SplatSet]:
-    """One copy of the part (mesh and splats) at every mount, in the authored frame."""
-    meshes, splats = [], []
+def place_parts(part_mesh: np.ndarray, mounts: list[Mount], centroid_offset: np.ndarray) -> np.ndarray:
+    """One copy of the part's mesh at every mount, in the authored frame."""
+    meshes = []
     for m in mounts:
         r = pod_rotation(m.up, m.forward)
         t = np.asarray(m.position, dtype=np.float64) + centroid_offset
         meshes.append(part_mesh @ r.T + t)
-        splats.append(part_splats.transformed(r, t))
-    return np.concatenate(meshes), SplatSet.concatenate(splats)
+    return np.concatenate(meshes)
 
 
 # --- grids and silhouettes -------------------------------------------------------------------------------------------
@@ -377,52 +302,11 @@ def triangle_mask(tris: np.ndarray, grid: ViewGrid) -> np.ndarray:
     return index >= 0
 
 
-def splat_mask(splats: SplatSet, grid: ViewGrid, sigmas: float = SPLAT_SIGMAS) -> np.ndarray:
-    """Pixels covered by the splats in this view: a pixel is covered when its centre lies within ``sigmas`` sigmas of a
-    splat's projected Gaussian, so a flat splat seen edge-on is a thin line. A splat is never thinner than a pixel and
-    always marks the pixel under its centre."""
-    h, w = grid.shape
-    mask = np.zeros((h, w), dtype=bool)
-    if len(splats) == 0:
-        return mask
-    cx, cy = grid.to_pixels(splats.centres).T
-    cov = np.einsum("ai,nij,bj->nab", grid.basis, splats.cov, grid.basis) / grid.px**2
-    cov[:, 0, 1] *= -1.0  # the image's y runs against v
-    cov[:, 1, 0] *= -1.0
-    floor = (0.75 / sigmas) ** 2  # a reach of 3/4 pixel at least, so an edge-on plate is a line that crosses pixel centres
-    a, b, c = cov[:, 0, 0] + floor, cov[:, 0, 1], cov[:, 1, 1] + floor
-    det = a * c - b * b
-    ia, ib, ic = c / det, -b / det, a / det  # the inverse of the covariance
-    reach = np.maximum(np.ceil(sigmas * np.sqrt(a)), np.ceil(sigmas * np.sqrt(c))).astype(np.int64) + 1
-    limit = sigmas * sigmas
-
-    base_c, base_r = np.floor(cx).astype(np.int64), np.floor(cy).astype(np.int64)
-    centred = (base_c >= 0) & (base_c < w) & (base_r >= 0) & (base_r < h)
-    mask[base_r[centred], base_c[centred]] = True
-
-    for r in np.unique(reach):
-        ids = np.flatnonzero(reach == r)
-        side = 2 * int(r) + 1
-        step = max(1, 1_000_000 // (side * side))
-        offs = np.arange(-int(r), int(r) + 1)
-        for start in range(0, len(ids), step):
-            s = ids[start : start + step]
-            cols = base_c[s][:, None, None] + offs[None, None, :]
-            rows = base_r[s][:, None, None] + offs[None, :, None]
-            dx = cols + 0.5 - cx[s][:, None, None]
-            dy = rows + 0.5 - cy[s][:, None, None]
-            q = ia[s][:, None, None] * dx * dx + 2.0 * ib[s][:, None, None] * dx * dy + ic[s][:, None, None] * dy * dy
-            hit = (q <= limit) & (cols >= 0) & (cols < w) & (rows >= 0) & (rows < h)
-            rows_b, cols_b = np.broadcast_to(rows, hit.shape), np.broadcast_to(cols, hit.shape)
-            mask[rows_b[hit], cols_b[hit]] = True
-    return mask
-
-
 # --- scoring ---------------------------------------------------------------------------------------------------------
 @dataclass
 class ViewScore:
-    """One view's two silhouettes: ``model_mask`` is the reference side (the STL, or the mesh in the splat check) and
-    ``asset_mask`` the side scored against it (after the best-fit shift)."""
+    """One view's two silhouettes: ``model_mask`` is the reference side (the STL) and ``asset_mask`` the side scored
+    against it (after the best-fit shift)."""
 
     grid: ViewGrid
     iou: float
@@ -455,32 +339,6 @@ class Comparison:
     asset_dims: dict[str, float]
     ratios: dict[str, float] = field(default_factory=dict)
     at_limit: tuple[bool, bool, bool] = (False, False, False)  # the best-fit shift reached its limit on x, y, z
-
-
-@dataclass
-class SplatView(ViewScore):
-    """One view of the splat check: ``model_mask`` is the mesh's silhouette and ``asset_mask`` the splats'. ``coverage`` is
-    the share of the mesh's pixels the splats cover; ``precision`` the share of the splats' pixels within the band (the
-    mesh silhouette dilated by one spacing); ``outside`` marks the splat pixels beyond the band."""
-
-    coverage: float = 0.0
-    precision: float = 0.0
-    band_px: float = 1.0
-    outside: np.ndarray = field(default_factory=lambda: np.zeros((0, 0), dtype=bool))
-
-    @property
-    def outside_px(self) -> int:
-        return int(self.outside.sum())
-
-
-@dataclass
-class SplatCheck:
-    """The splat check: the LOD0 splats against their own mesh (no shift), with a band one LOD0 spacing wide."""
-
-    views: dict[str, SplatView]
-    pixel_m: float
-    spacing_m: float
-    spacing_source: str
 
 
 def shift_table(model: np.ndarray, asset: np.ndarray, reach: int) -> np.ndarray:
@@ -567,118 +425,6 @@ def compare_shapes(
     return Comparison(views, move * px, shift_fraction * length_ref, px, model_dims, asset_dims, ratios, at_limit)
 
 
-def dilate(mask: np.ndarray, radius_px: float) -> np.ndarray:
-    """The mask grown by a disc of ``radius_px`` pixels (rows of runs, each run by a running sum)."""
-    r = int(math.floor(radius_px))
-    if r < 1:
-        return mask.copy()
-    h, w = mask.shape
-    runs: dict[int, np.ndarray] = {}
-
-    def widened(k: int) -> np.ndarray:
-        if k not in runs:
-            padded = np.pad(mask.astype(np.int32), ((0, 0), (k, k)))
-            total = np.concatenate([np.zeros((h, 1), dtype=np.int32), np.cumsum(padded, axis=1)], axis=1)
-            runs[k] = (total[:, 2 * k + 1 : 2 * k + 1 + w] - total[:, :w]) > 0
-        return runs[k]
-
-    out = np.zeros_like(mask)
-    for dy in range(-r, r + 1):
-        half = int(math.floor(math.sqrt(max(radius_px * radius_px - dy * dy, 0.0))))
-        row = widened(half)
-        if dy >= 0:
-            out[dy:] |= row[: h - dy]
-        else:
-            out[:dy] |= row[-dy:]
-    return out
-
-
-def _positive(v: object) -> bool:
-    return isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0.0
-
-
-def _overlap(manifest: dict) -> float:
-    sampling = manifest.get("sampling")
-    overlap = sampling.get("overlap") if isinstance(sampling, dict) else None
-    return float(overlap) if _positive(overlap) else 1.0
-
-
-def derived_spacing(manifest: dict, splats: SplatSet) -> float:
-    """The LOD0 spacing the splat scales imply: the largest sigma is ``overlap * spacing`` (overlap from ``sampling`` or 1,
-    the generators' default)."""
-    sigma = np.sqrt(np.max(np.einsum("nii->ni", splats.cov), axis=1))
-    return float(np.median(sigma)) / _overlap(manifest)
-
-
-def splat_spacing(manifest: dict, splats: SplatSet) -> tuple[float, str]:
-    """The asset's LOD0 sampling spacing and where it came from: the manifest's ``lods[0].spacing_m``, else its
-    ``sampling.spacing_m``, else derived from the splat scales."""
-    lods = manifest.get("lods")
-    lod0 = lods[0] if isinstance(lods, list) and lods and isinstance(lods[0], dict) else {}
-    if _positive(lod0.get("spacing_m")):
-        return float(lod0["spacing_m"]), "manifest lods[0].spacing_m"
-    sampling = manifest.get("sampling")
-    spacing = sampling.get("spacing_m") if isinstance(sampling, dict) else None
-    if _positive(spacing):
-        return float(spacing), "manifest sampling.spacing_m"
-    return derived_spacing(manifest, splats), f"derived from the splat scales (overlap {_overlap(manifest):g})"
-
-
-def spacing_mismatch(manifest: dict, splats: SplatSet, spacing: float, source: str) -> str | None:
-    """A failure when a declared spacing disagrees with the splats themselves, so a generator cannot widen the band by
-    declaring a coarser spacing than it sampled at. ``None`` when it agrees or was derived."""
-    if source.startswith("derived"):
-        return None
-    implied = derived_spacing(manifest, splats)
-    if abs(spacing / max(implied, 1e-12) - 1.0) > SPACING_TOLERANCE + 1e-9:
-        return f"splats spacing {spacing:g} m ({source}) is off the {implied:.3f} m the splat scales imply by more than {SPACING_TOLERANCE:.0%}"
-    return None
-
-
-def check_splats(
-    mesh_tris: np.ndarray,
-    splats: SplatSet,
-    spacing: float,
-    spacing_source: str = "given",
-    sigmas: float = SPLAT_SIGMAS,
-) -> SplatCheck:
-    """The splat check: the splats' silhouettes against their own mesh's, in place (no shift), on a grid of a third of
-    ``spacing`` so the numbers depend on the sampling alone. Per view, coverage is the share of the mesh silhouette the
-    splats cover and precision the share of the splat silhouette inside the mesh silhouette grown by one ``spacing``. A
-    faithful thin part passes (splats reach about 0.75 spacings past an edge); a missing part fails coverage and a part
-    moved by several spacings fails precision."""
-    if len(mesh_tris) == 0 or len(splats) == 0:
-        raise ValueError("nothing to compare: the mesh or the splats are empty")
-    if not spacing > 0.0:
-        raise ValueError(f"the LOD0 spacing must be positive (got {spacing:g})")
-    px = spacing / SPLAT_PIXELS_PER_SPACING
-    band_px = float(SPLAT_PIXELS_PER_SPACING)
-    (m_lo, m_hi), (s_lo, s_hi) = _bounds(mesh_tris), splats.bounds(sigmas)
-    lo, hi = np.minimum(m_lo, s_lo), np.maximum(m_hi, s_hi)
-    a, b = sorted(float(v) for v in (hi - lo))[1:]
-    if (a / px + 2 * band_px + 2) * (b / px + 2 * band_px + 2) > MAX_GRID_PIXELS:
-        raise ValueError(f"a spacing of {spacing:g} m is too fine for a {b:.1f} m part (a view over {MAX_GRID_PIXELS} pixels)")
-    views = {}
-    for name in VIEWS:
-        grid = view_grid(name, lo, hi, px, int(band_px) + 1)
-        mesh_mask, splat_mask_ = triangle_mask(mesh_tris, grid), splat_mask(splats, grid, sigmas)
-        both = int((mesh_mask & splat_mask_).sum())
-        union = int((mesh_mask | splat_mask_).sum())
-        outside = splat_mask_ & ~dilate(mesh_mask, band_px)
-        views[name] = SplatView(
-            grid,
-            both / max(union, 1),
-            both / max(union, 1),
-            mesh_mask,
-            splat_mask_,
-            coverage=both / max(int(mesh_mask.sum()), 1),
-            precision=1.0 - int(outside.sum()) / max(int(splat_mask_.sum()), 1),
-            band_px=band_px,
-            outside=outside,
-        )
-    return SplatCheck(views, px, spacing, spacing_source)
-
-
 def suggest_offset(model_tris: np.ndarray, asset_tris: np.ndarray, length_ref: float) -> tuple[np.ndarray, float, float]:
     """Where the asset would sit best against the model if its origin were elsewhere: a wider silhouette search in x and y
     (``HINT_WINDOW`` of the length each way, on a coarser grid). Returns the move of the asset in metres, the mean IoU
@@ -698,14 +444,6 @@ def judge(ious: dict[str, float], ratios: dict[str, float]) -> list[str]:
     failures += [
         f"{name} ratio {r:.3f} is off by more than {DIM_TOLERANCE:.0%}" for name, r in ratios.items() if abs(r - 1.0) > DIM_TOLERANCE + 1e-9
     ]
-    return failures
-
-
-def judge_splats(coverage: dict[str, float], precision: dict[str, float]) -> list[str]:
-    """What fails the splat check: a view whose splats cover under ``SPLAT_COVERAGE_MIN`` of the mesh silhouette (something
-    is missing) or whose splat silhouette lies under ``SPLAT_PRECISION_MIN`` within the band (something is misplaced)."""
-    failures = [f"splats {n} coverage {v:.3f} is under {SPLAT_COVERAGE_MIN:.2f}" for n, v in coverage.items() if v < SPLAT_COVERAGE_MIN - 1e-9]
-    failures += [f"splats {n} precision {v:.3f} is under {SPLAT_PRECISION_MIN:.2f}" for n, v in precision.items() if v < SPLAT_PRECISION_MIN - 1e-9]
     return failures
 
 
@@ -738,10 +476,6 @@ def write_overlay(path: Path, views: dict[str, ViewScore], view: str, title: str
     paint[score.model_mask & ~score.asset_mask] = MODEL_ONLY
     paint[score.asset_mask & ~score.model_mask] = ASSET_ONLY
     paint[score.model_mask & score.asset_mask] = BOTH
-    outside = getattr(score, "outside", None)
-    banded = outside is not None and outside.shape == score.asset_mask.shape
-    if banded:
-        paint[outside] = OUTSIDE
     covered = np.repeat(np.repeat(score.model_mask | score.asset_mask, zoom, axis=0), zoom, axis=1)
     layer = np.repeat(np.repeat(paint, zoom, axis=0), zoom, axis=1)
     left, top = canvas.margin[0], canvas.margin[1]
@@ -752,15 +486,11 @@ def write_overlay(path: Path, views: dict[str, ViewScore], view: str, title: str
     draw = ImageDraw.Draw(img)
     font = refview._font(13)
     x = max(left, 140)  # right of the axis name that decorate() puts in the top left
-    entries = [(MODEL_ONLY, f"{names[0]} only ({score.model_px - score.both_px} px)")]
-    if banded:
-        entries += [
-            (ASSET_ONLY, f"{names[1]} in the band ({score.asset_px - score.both_px - score.outside_px} px)"),
-            (OUTSIDE, f"{names[1]} beyond it ({score.outside_px} px)"),
-        ]
-    else:
-        entries.append((ASSET_ONLY, f"{names[1]} only ({score.asset_px - score.both_px} px)"))
-    entries.append((BOTH, f"both ({score.both_px} px)"))
+    entries = [
+        (MODEL_ONLY, f"{names[0]} only ({score.model_px - score.both_px} px)"),
+        (ASSET_ONLY, f"{names[1]} only ({score.asset_px - score.both_px} px)"),
+        (BOTH, f"both ({score.both_px} px)"),
+    ]
     for colour, label in entries:
         draw.rectangle([x, 26, x + 13, 39], fill=colour, outline=refview.INK)
         draw.text((x + 19, 33), label, fill=refview.INK, font=font, anchor="lm")
@@ -769,15 +499,7 @@ def write_overlay(path: Path, views: dict[str, ViewScore], view: str, title: str
 
 
 def view_report(score: ViewScore) -> dict:
-    extra = {}
-    if isinstance(score, SplatView):
-        extra = {
-            "coverage": round(score.coverage, 4),
-            "precision": round(score.precision, 4),
-            "band_px": round(score.band_px, 3),
-            "outside_px": score.outside_px,
-        }
-    return extra | {
+    return {
         "iou": round(score.iou, 4),
         "iou_unshifted": round(score.iou_unshifted, 4),
         "model_px": score.model_px,
@@ -830,15 +552,17 @@ def pod_mounts(args: argparse.Namespace, folder: Path) -> list[Mount]:
     return mounts
 
 
-def pod_files(args: argparse.Namespace, folder: Path) -> tuple[Path, Path]:
-    """The pod's splat file and mesh: named on the command line (the mesh beside the splats when only they are named) or
-    ``<id>_pod.ply`` and ``<id>_pod.obj`` beside the asset."""
-    ply = args.pod_ply or (args.pod_obj.with_suffix(".ply") if args.pod_obj else folder / f"{folder.name}_pod.ply")
-    obj = args.pod_obj or (args.pod_ply.with_suffix(".obj") if args.pod_ply else folder / f"{folder.name}_pod.obj")
-    for path in (ply, obj):
-        if not Path(path).is_file():
-            raise ValueError(f"{path}: no such pod file (pod mounts need --pod-ply FILE and --pod-obj FILE, or <id>_pod.ply and <id>_pod.obj beside the asset)")
-    return Path(ply), Path(obj)
+def pod_file(args: argparse.Namespace, folder: Path, manifest: dict) -> Path:
+    """The pod's mesh: named on the command line, else the manifest's ``pod.mesh.file`` or ``<id>_pod.glb`` beside the asset."""
+    if args.pod_mesh:
+        path = Path(args.pod_mesh)
+    else:
+        section = manifest.get("pod", {}).get("mesh", {}) if isinstance(manifest.get("pod"), dict) else {}
+        name = section.get("file") if isinstance(section, dict) else None
+        path = folder / (name if isinstance(name, str) else f"{folder.name}_pod.glb")
+    if not path.is_file():
+        raise ValueError(f"{path}: no such pod mesh (pod mounts need --pod-mesh FILE or the asset's own pod)")
+    return path
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -856,11 +580,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--asset-zrange", nargs=2, type=float, default=None, metavar=("Z0", "Z1"), help="keep this z range (m) of the asset")
     ap.add_argument("--model-scale", default=None, metavar="SX,SY,SZ",
                     help="scale the (cropped) model per axis, about its own box centre in x and y and its start in z (Q20)")
-    ap.add_argument("--pod-ply", type=Path, default=None, help="splat file of a removable part, drawn at every mount")
-    ap.add_argument("--pod-obj", type=Path, default=None, help="mesh of the removable part (default: beside --pod-ply or <id>_pod.obj)")
+    ap.add_argument("--pod-mesh", type=Path, default=None, help="mesh (.glb or .obj) of a removable part, drawn at every mount (default: the asset's pod)")
     ap.add_argument("--pod-at", action="append", default=[], metavar="X,Y,Z", help="a mount in the body frame (repeatable)")
     ap.add_argument("--pods-from-hardpoints", action="store_true", help="mounts from the asset's hardpoints.json cargo_pods[]")
-    ap.add_argument("--pixel-frac", type=float, default=PIXEL_FRACTION, help=f"geometry check's pixel as a share of the length (at most {PIXEL_FRACTION_MAX}); the splat check's is a third of the spacing")
+    ap.add_argument("--pixel-frac", type=float, default=PIXEL_FRACTION, help=f"the pixel as a share of the length (at most {PIXEL_FRACTION_MAX})")
     ap.add_argument("--out", type=Path, default=None, help="output folder (default: reports/refs/<name>/compare)")
     args = ap.parse_args(argv)
 
@@ -873,18 +596,15 @@ def main(argv: list[str] | None = None) -> int:
         tris = tris + model_offset
         folder = resolve_asset(args.asset)
         manifest = read_asset_manifest(folder)
-        mesh, splats = load_asset_mesh(folder), load_asset_splats(folder)
-        spacing, spacing_source = splat_spacing(manifest, splats)
-        spacing_failure = spacing_mismatch(manifest, splats, spacing, spacing_source)
+        mesh_name = asset_mesh_name(manifest)
+        mesh = mesh_from_file(folder / mesh_name, _centroid_offset(manifest))
 
         mounts = pod_mounts(args, folder)
         if mounts:
-            pod_ply, pod_obj = pod_files(args, folder)
-            offset = _centroid_offset(manifest)
-            pods_mesh, pods_splats = place_parts(mesh_from_obj(pod_obj, np.zeros(3)), splats_from_ply(pod_ply, np.zeros(3)), mounts, offset)
-            mesh, splats = np.concatenate([mesh, pods_mesh]), SplatSet.concatenate([splats, pods_splats])
-        elif args.pod_ply or args.pod_obj:
-            raise ValueError("--pod-ply and --pod-obj need mounts: --pod-at X,Y,Z or --pods-from-hardpoints")
+            pod_mesh = mesh_from_file(pod_file(args, folder, manifest), np.zeros(3))
+            mesh = np.concatenate([mesh, place_parts(pod_mesh, mounts, _centroid_offset(manifest))])
+        elif args.pod_mesh:
+            raise ValueError("--pod-mesh needs mounts: --pod-at X,Y,Z or --pods-from-hardpoints")
 
         cropped = model_range is not None or asset_range is not None
         if model_range is not None:
@@ -900,23 +620,19 @@ def main(argv: list[str] | None = None) -> int:
         if asset_range is not None:
             z_min, z_max = float(mesh[..., 2].min()), float(mesh[..., 2].max())
             lo, hi = crop_planes(*asset_range, z_min, z_max)
-            mesh, splats = clip_slab(mesh, 2, lo, hi), splats.cropped(2, lo, hi)
-            if len(mesh) == 0 or len(splats) == 0:
-                raise ValueError(f"the asset has no triangles and splats within z {asset_range[0]:g}..{asset_range[1]:g} m")
-            start = np.array([0.0, 0.0, asset_range[0]])
-            mesh, splats = mesh - start, splats.moved(-start)
+            mesh = clip_slab(mesh, 2, lo, hi)
+            if len(mesh) == 0:
+                raise ValueError(f"the asset has no triangles within z {asset_range[0]:g}..{asset_range[1]:g} m")
+            mesh = mesh - np.array([0.0, 0.0, asset_range[0]])
         align = np.zeros(3)
         if cropped:
             align = part_alignment(tris, mesh)
-            mesh, splats = mesh + align, splats.moved(align)
+            mesh = mesh + align
         length_ref = float(np.ptp(tris[..., 2]))
         if length_ref <= 0.0:
             raise ValueError("the model has no extent along z")
         comp = compare_shapes(tris, mesh, length_ref, pixel_fraction=args.pixel_frac)
-        check = check_splats(mesh, splats, spacing, spacing_source)
         failures = judge({n: s.iou for n, s in comp.views.items()}, comp.ratios)
-        splat_failures = judge_splats({n: s.coverage for n, s in check.views.items()}, {n: s.precision for n, s in check.views.items()})
-        splat_failures += [spacing_failure] if spacing_failure else []
         suggestion = None
         if not cropped and (failures or any(comp.at_limit[:2])):
             gap, best, unmoved = suggest_offset(tris, mesh, length_ref)
@@ -934,9 +650,7 @@ def main(argv: list[str] | None = None) -> int:
         shift = ", ".join(f"{v:+.2f}" for v in comp.shift_m)
         for view in VIEWS:
             write_overlay(out / f"overlay_{view}.png", comp.views, view, f"{label}: {view}, STL against mesh, IoU {comp.views[view].iou:.3f}, mesh moved ({shift}) m", ("STL", "mesh"))
-            write_overlay(out / f"splats_{view}.png", check.views, view, f"{label}: {view}, mesh against LOD0 splats, coverage {check.views[view].coverage:.3f}, precision {check.views[view].precision:.3f}", ("mesh", "splats"))
 
-        verdict_failures = failures + splat_failures
         report = {
             "name": name,
             "part": args.part,
@@ -952,9 +666,8 @@ def main(argv: list[str] | None = None) -> int:
             "asset": {
                 "id": manifest["asset_id"],
                 "dir": str(folder),
-                "lod0": manifest["lods"][0]["file"],
+                "mesh": mesh_name,
                 "mesh_triangles": int(len(mesh)),
-                "splats": int(len(splats)),
                 "extra_parts": len(mounts),
                 "zrange": asset_range,
                 "centroid_offset": manifest["centroid_offset"],
@@ -974,36 +687,17 @@ def main(argv: list[str] | None = None) -> int:
                 n: {"model_m": round(comp.model_dims[n], 3), "asset_m": round(comp.asset_dims[n], 3), "ratio": round(comp.ratios[n], 4)}
                 for n in DIMENSIONS
             },
-            "geometry": {"verdict": "fail" if failures else "pass", "failures": failures},
-            "splat_check": {
-                "splat_sigmas": SPLAT_SIGMAS,
-                "spacing_m": round(check.spacing_m, 4),
-                "spacing_source": check.spacing_source,
-                "pixel_m": round(check.pixel_m, 5),
-                "band_px": round(next(iter(check.views.values())).band_px, 3),
-                "coverage_min": SPLAT_COVERAGE_MIN,
-                "precision_min": SPLAT_PRECISION_MIN,
-                "views": {n: view_report(s) for n, s in check.views.items()},
-                "verdict": "fail" if splat_failures else "pass",
-                "failures": splat_failures,
-            },
-            "thresholds": {
-                "iou_min": IOU_MIN,
-                "dimension_tolerance": DIM_TOLERANCE,
-                "shift_fraction": SHIFT_FRACTION,
-                "splat_coverage_min": SPLAT_COVERAGE_MIN,
-                "splat_precision_min": SPLAT_PRECISION_MIN,
-            },
-            "failures": verdict_failures,
-            "verdict": "fail" if verdict_failures else "pass",
+            "thresholds": {"iou_min": IOU_MIN, "dimension_tolerance": DIM_TOLERANCE, "shift_fraction": SHIFT_FRACTION},
+            "failures": failures,
+            "verdict": "fail" if failures else "pass",
         }
         (out / "fidelity.json").write_text(json.dumps(report, indent=1) + "\n")
     except OSError as exc:
         print(f"compare: cannot write the results: {exc}", file=sys.stderr)
         return 2
 
-    print(f"{label}: {args.stl.name} against {manifest['asset_id']} (mesh {len(mesh)} triangles, LOD0 {len(splats)} splats), length {length_ref:.1f} m, pixel {comp.pixel_m:.3f} m -> {out}")
-    print(f"geometry: the STL against the asset's mesh, bar {IOU_MIN:.2f} per view and {DIM_TOLERANCE:.0%} on each dimension")
+    print(f"{label}: {args.stl.name} against {manifest['asset_id']} ({mesh_name}, {len(mesh)} triangles), length {length_ref:.1f} m, pixel {comp.pixel_m:.3f} m -> {out}")
+    print(f"the STL against the asset's mesh, bar {IOU_MIN:.2f} per view and {DIM_TOLERANCE:.0%} on each dimension")
     for view, score in comp.views.items():
         mark = "ok  " if score.iou >= IOU_MIN - 1e-9 else "LOW "
         print(f"{view:<6} IoU {score.iou:.3f} {mark} (unshifted {score.iou_unshifted:.3f})  STL {score.model_px} px  mesh {score.asset_px} px  both {score.both_px} px")
@@ -1014,22 +708,8 @@ def main(argv: list[str] | None = None) -> int:
     if suggestion is not None:
         gap = ",".join(f"{v:.2f}" for v in suggestion)
         print(f"note   the silhouettes meet best further away than the shift window; if only the origin differs, try --model-offset {gap}")
-    print("geometry verdict: " + ("PASS" if not failures else "FAIL (" + "; ".join(failures) + ")"))
-    band = next(iter(check.views.values())).band_px
-    print(
-        f"splats: LOD0 against the mesh, no shift, pixel {check.pixel_m:.3f} m; band one spacing = {check.spacing_m:.3f} m ({check.spacing_source}) = {band:.0f} px; "
-        f"bar {SPLAT_COVERAGE_MIN:.2f} coverage and {SPLAT_PRECISION_MIN:.2f} precision per view"
-    )
-    for view, score in check.views.items():
-        cov_mark = "ok  " if score.coverage >= SPLAT_COVERAGE_MIN - 1e-9 else "LOW "
-        prec_mark = "ok  " if score.precision >= SPLAT_PRECISION_MIN - 1e-9 else "LOW "
-        print(
-            f"splats {view:<5} coverage {score.coverage:.3f} {cov_mark} precision {score.precision:.3f} {prec_mark} "
-            f"mesh {score.model_px} px  splats {score.asset_px} px  beyond the band {score.outside_px} px"
-        )
-    print("splats verdict: " + ("PASS" if not splat_failures else "FAIL (" + "; ".join(splat_failures) + ")"))
-    print("verdict: " + ("PASS" if not verdict_failures else "FAIL (" + "; ".join(verdict_failures) + ")"))
-    return 1 if verdict_failures else 0
+    print("verdict: " + ("PASS" if not failures else "FAIL (" + "; ".join(failures) + ")"))
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":
