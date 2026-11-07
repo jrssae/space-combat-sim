@@ -450,7 +450,7 @@ func test_a_bolt_on_its_launch_tick_sweeps_only_its_muzzle() -> void:
 	assert_eq(ParityFixture.encode(core_next[0]), (own_next as Array)[0], "the tick after: the own load's pairs (recorded)")
 
 
-func test_a_hull_destroyed_between_the_resolvers_leaves_the_ram_rows_on_both_paths() -> void:
+func test_a_hull_destroyed_between_the_resolvers_leaves_the_ram_rows() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 2102
 	var hits := HitResolver.new()
@@ -475,14 +475,9 @@ func test_a_hull_destroyed_between_the_resolvers_leaves_the_ram_rows_on_both_pat
 	var victim: Node3D = bodies[0] if bodies[0] is RigidBody3D else bodies[1]
 	_kill(victim)
 	assert_false(Damageable.of(victim).is_active(), "the hull is destroyed")
-	rams.use_core = true
 	var from_core: PackedInt64Array = rams.broad_phase_pairs(delta, PackedInt64Array())
 	var core_count: int = rams.hulls_last_tick
-	var own: Variant = await ParityFixture.expected(FIXTURE, "ram_rows_after_a_kill", func() -> Array:
-		rams.use_core = false
-		var pairs: PackedInt64Array = rams.broad_phase_pairs(delta, PackedInt64Array())
-		rams.use_core = true
-		return [pairs, rams.hulls_last_tick])
+	var own: Variant = ParityFixture.stored(FIXTURE, "ram_rows_after_a_kill")
 	assert_eq(ParityFixture.encode([from_core, core_count]), own,
 			"the destroyed hull is out of the core's hull rows and the pairs are the tree walk's (recorded)")
 
@@ -529,11 +524,7 @@ func test_the_ram_broad_phase_pairs_from_the_core_as_from_its_own_load() -> void
 		core.sync_now()
 		var delta: float = 1.0 / 60.0
 		var always := PackedInt64Array([0, 1])
-		var own: Variant = await ParityFixture.expected(FIXTURE, "ram_broad_phase_round_%d" % round, func() -> Array:
-			rams.use_core = false
-			var pairs: Array = rams.broad_phase_pairs(delta, always)
-			rams.use_core = true
-			return pairs)
+		var own: Variant = ParityFixture.stored(FIXTURE, "ram_broad_phase_round_%d" % round)
 		var from_core: Array = rams.broad_phase_pairs(delta, always)
 		assert_eq(ParityFixture.encode(from_core), own, "round %d: the hull pairs the resolver's own gather gave (recorded)" % round)
 		assert_true(from_core.size() > 1 or round == 0, "round %d: there were pairs to compare" % round)
@@ -753,7 +744,6 @@ func test_sync_in_and_sync_out_are_the_only_places_the_core_touches_the_engine()
 			scan.statics_for(id, body.global_position, Factions.RAIDERS, 4)
 			scan.incoming_fire(id, body.global_position, Vector3.ZERO, Factions.RAIDERS)
 		resolver.broad_phase_pairs(1.0 / 60.0)
-		rams.use_core = true
 		rams.broad_phase_pairs(1.0 / 60.0, PackedInt64Array())
 		# The flight step over the real ships: it reads its rows from the core and applies the forces (the one write).
 		batch._physics_process(1.0 / 60.0)

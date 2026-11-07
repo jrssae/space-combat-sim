@@ -74,6 +74,23 @@ func test_the_older_world_keeps_its_core_when_a_newer_one_leaves() -> void:
 	assert_eq(SimCore.for_tree(get_tree()), first.get_node(NodePath(SimCore.NODE_NAME)), "then the one left")
 
 
+func test_a_tree_with_no_world_has_nothing_to_resolve() -> void:
+	assert_null(SimCore.for_tree(get_tree()), "no world, so no core")
+	var hits := HitResolver.new()
+	add_child_autofree(hits)
+	var rams := RamResolver.new()
+	add_child_autofree(rams)
+	var drone := (load("res://tests/fixtures/target_drone.tscn") as PackedScene).instantiate() as TargetDrone
+	add_child_autofree(drone)
+	hits.resolve(1.0 / 60.0)
+	rams.resolve(1.0 / 60.0)
+	assert_eq(hits.source(), &"none", "the hit resolver reads nothing")
+	assert_eq(hits.hulls_last_tick, 0, "and gathers no hull")
+	assert_eq(rams.source(), &"none", "the ram resolver reads nothing")
+	assert_eq(rams.hulls_last_tick, 0, "and gathers no hull")
+	assert_eq(ContactScan.shared(get_tree())._body_ids.size(), 0, "the scan sees nothing")
+
+
 func _load(path: String) -> void:
 	main = (load("res://src/game/main.tscn") as PackedScene).instantiate() as Main
 	main.input_source = FakeInputSource.new()
