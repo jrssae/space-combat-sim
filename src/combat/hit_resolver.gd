@@ -47,7 +47,7 @@ var hulls_last_tick: int = 0
 var static_pairs_visited: int = 0
 ## Wall-clock microseconds of the last tick's gather of hulls and bolts (a readout only).
 var gather_us: int = 0
-## Finds the pairs that pass the bounding-sphere test (M4-T08); a test may swap in its own.
+## Finds the pairs that pass the bounding-sphere test (M4-T08), natively over the core's rows.
 var broad_phase: HitBroadPhase = HitBroadPhase.new()
 
 # This tick's hulls (columns, index j) and projectiles (columns, index i), refilled every tick from the native core's rows
@@ -111,7 +111,7 @@ func _ready() -> void:
 		&"pairs_visited": {"get": func() -> int: return pairs_visited,
 				"doc": "Bolt and ship pairs the broad phase put to the distance cull on the last tick (the work)"},
 		&"hit_path": {"get": func() -> String: return String(broad_phase.path()),
-				"doc": "Which code finds the pairs worth sweeping: native or gdscript"},
+				"doc": "Which code finds the pairs worth sweeping: native, or none without the library"},
 		&"source": {"get": func() -> String: return String(_source),
 				"doc": "Where the last tick's hulls and bolts came from: core (the native core's rows, M4-T15), or none with no core in the tree"},
 		&"gather_us": {"get": func() -> int: return gather_us, "unit": "us",

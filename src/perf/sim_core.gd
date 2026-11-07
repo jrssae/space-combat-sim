@@ -516,9 +516,9 @@ func engine_calls() -> PackedInt64Array:
 	return calls
 
 
-## Which path the classes take now: &"native" with the core on, else &"gdscript".
+## Which path the classes take now: &"native" with the core's native class, else &"none" (the game refuses to start then).
 func path() -> StringName:
-	return &"native" if core != null and enabled() else &"gdscript"
+	return &"native" if core != null else &"none"
 
 
 func _sync_in() -> void:
@@ -663,7 +663,7 @@ func _on_hull_destroyed(_info: HitInfo, body_id: int) -> void:
 
 func _register_console() -> void:
 	DebugConsole.registry.register_provider(&"core", ConsoleVars.new({
-		&"path": {"get": path, "doc": "native when the core feeds the scan, the hit sweep, the flight step and the ram broad phase (every world since M4-T42)"},
+		&"path": {"get": path, "doc": "native: the core feeds the scan, the hit sweep, the flight step and the ram broad phase (every world since M4-T42); none without the library"},
 		&"rows": {"get": rows, "doc": "Rows in the core: bodies, static rows and rows added after the tick's first sync"},
 		&"bodies": {"get": func() -> int: return int(core.node_count()) if core != null else 0, "doc": "Body rows (active markers and hulls)"},
 		&"statics": {"get": func() -> int: return int(core.static_count()) if core != null else 0, "doc": "Static rows (rocks, mines)"},
