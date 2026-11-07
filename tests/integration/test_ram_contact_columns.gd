@@ -1,13 +1,13 @@
 extends GutTest
-## The ram resolver's contact phase in columns (M4-T34): with `perf_ram_contact_columns` on, the resolver hands the tracker
-## every rigid hull's id, velocity and accel as columns and builds contact lists only for the hulls Jolt reports touching;
-## off keeps a sample per hull (the reference). T14's seeded melee (eight fighters flung together for 4 s, thousands of Jolt
-## contacts and a dozen rams) runs once each way in its own physics space, and both runs give the same rams and the same
-## digest of every ship's pose, spin and hull.
+## The ram resolver's contact phase (M4-T34, M4-T35): the resolver reads every rigid hull's contacts in one native call over
+## the core's rows and hands the tracker columns. T14's seeded melee (eight fighters flung together for 4 s, thousands of Jolt
+## contacts and a dozen rams) in its own physics space gives the rams and the digest of every ship's pose, spin and hull
+## that a sample per hull gave (the reference, recorded in `tests/fixtures/parity/ram_contact_columns.json` before M4-T37
+## removed `perf_ram_contact_columns` and `perf_native_ram_contacts`).
 
 const SPEC_PATH: String = "res://assets/ships/starfury_aurora.tres"
 const FIXTURE: String = "ram_contact_columns"
-const SETTINGS: Array[StringName] = [&"ram_damage", &"perf_ram_contact_columns", &"perf_native_ram_contacts"]
+const SETTINGS: Array[StringName] = [&"ram_damage"]
 
 var _saved: Dictionary = {}
 
@@ -16,7 +16,6 @@ func before_each() -> void:
 	for key: StringName in SETTINGS:
 		_saved[key] = Settings.get_value(key)
 	Settings.set_value(&"ram_damage", true)
-	Settings.set_value(&"perf_native_ram_contacts", false)  # this file pairs T34's columns against the samples; T35's native read is test_core_state's
 
 
 func after_each() -> void:
@@ -74,14 +73,9 @@ func _melee() -> Array:
 
 
 func test_the_melee_rams_the_same_with_the_contacts_in_columns() -> void:
-	var recorded: Variant = await ParityFixture.expected(FIXTURE, "melee_rams_from_samples", func() -> Dictionary:
-		Settings.set_value(&"perf_ram_contact_columns", false)
-		var samples: Array = await _melee()
-		Settings.set_value(&"perf_ram_contact_columns", true)
-		assert_eq(samples[2], &"samples", "the reference run kept a sample per hull")
-		return {"rams": samples[1], "poses": ParityFixture.digest(samples[0]), "source": samples[3]})
+	var recorded: Variant = ParityFixture.stored(FIXTURE, "melee_rams_from_samples")
 	var columns: Array = await _melee()
-	assert_eq(columns[2], &"columns", "the run read the contacts in columns")
+	assert_eq(columns[2], &"native", "the run read the contacts over the core's rows")
 	assert_not_null(recorded, "the reference melee was recorded")
 	if recorded == null:
 		return

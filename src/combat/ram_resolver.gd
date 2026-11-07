@@ -102,9 +102,7 @@ var _phase_class_known: int = -1
 var _rocks: HitBroadPhase = HitBroadPhase.new()
 var _solid: StaticRows.Solid = null
 var _rock_hulls: Dictionary = {}
-# The contact phase's form (M4-T34): columns (`perf_ram_contact_columns`) or a sample per hull, the reference; the tracker is
-# reset when it changes. And each hull's index by body id, built when first needed in a tick.
-var _contact_columns: bool = false
+# Each hull's index by body id, built when first needed in a tick.
 var _contact_native: bool = false  # the contacts read in one native call over the rows (M4-T35)
 var _index_of: Dictionary[int, int] = {}
 var _index_built: bool = false
@@ -180,16 +178,12 @@ func resolve(delta: float) -> void:
 		var sim: SimCore = _gather(delta)
 		gather_us = Time.get_ticks_usec() - started_us
 		hulls_last_tick = _count
-		var columns: bool = bool(Settings.get_value(&"perf_ram_contact_columns"))
-		if columns != _contact_columns:
-			_contact_columns = columns
-			tracker.reset()  # the tracker keeps the last tick in the form it was given
-		_contact_native = columns and sim != null and bool(Settings.get_value(&"perf_native_ram_contacts"))
+		_contact_native = sim != null
 		var in_contact: PackedInt64Array
 		if _contact_native:
 			in_contact = _resolve_contacts_native(sim, delta)
 		else:
-			in_contact = _resolve_contacts_columns(delta) if columns else _resolve_contacts(delta)
+			in_contact = _resolve_contacts_columns(delta)
 		_resolve_swept(sim, in_contact, delta)
 		_resolve_rocks(sim, delta)
 		tracker.end_tick()
@@ -204,12 +198,10 @@ func source() -> StringName:
 	return _source
 
 
-## How the last tick's contacts reached the tracker: &"native" (one call over the rows, M4-T35), &"columns" (M4-T34) or
-## &"samples" (a sample per hull, the reference).
+## How the last tick's contacts reached the tracker: &"native" (one call over the core's rows, M4-T35) or &"columns" (read
+## per hull, a world with no core).
 func contact_path() -> StringName:
-	if _contact_native:
-		return &"native"
-	return &"columns" if _contact_columns else &"samples"
+	return &"native" if _contact_native else &"columns"
 
 
 ## The broad phase alone, for the parity tests (M4-T15): the keys `_resolve_swept` walks, with `always` added.
@@ -361,44 +353,9 @@ func _accel(i: int) -> Vector3:
 # --- contacts: Jolt bounced them ---------------------------------------------------------------------------------
 
 
-# Lands the contact rams; returns the pairs of hulls Jolt reported touching, in `RamBroadPhase`'s form.
-func _resolve_contacts(delta: float) -> PackedInt64Array:
-	var index_of: Dictionary[int, int] = {}
-	for i: int in _count:
-		index_of[_ids[i]] = i
-	var samples: Array[RamTracker.Sample] = []
-	var in_contact := PackedInt64Array()
-	for i: int in _rigid_rows:
-		var damageable := instance_from_id(_hull_ids[i]) as Damageable
-		var body := instance_from_id(_ids[i]) as RigidBody3D
-		if damageable == null or body == null:
-			continue
-		var sample := RamTracker.Sample.new(_ids[i], _velocities[i], _accel(i), damageable.ram_safe_dv_mps,
-				damageable.ram_lethal_dv_mps)
-		_read_contacts(body, sample, _shift_since_step)
-		samples.append(sample)
-		for other_id: int in sample.contacts:
-			var k: int = index_of.get(other_id, -1)
-			if k >= 0:
-				in_contact.append(mini(i, k) * _count + maxi(i, k))
-	var pending: Array[Array] = []
-	for ram: RamTracker.ContactRam in tracker.contacts(samples, delta):
-		var damageable: Damageable = _hull(index_of[ram.hull_id])["damageable"]
-		if damageable == null:
-			continue  # its node went since the gather
-		var other_at: int = index_of.get(ram.other_id, -1)
-		var other_hull: Damageable = _hull(other_at)["damageable"] if other_at >= 0 else null
-		var other_faction: StringName = other_hull.faction if other_hull != null else &""
-		var info := HitInfo.new(ram.hull_id, ram.other_id, other_faction, damageable.hull.max_hp * ram.severity, ram.point,
-				ram.normal, ram.relative_speed, HitInfo.CAUSE_RAM)
-		pending.append(_pending(damageable, info, KIND_CONTACT, ram.dv))
-	_apply_all(pending)
-	return in_contact
-
-
-# `_resolve_contacts` with the tracker fed columns (M4-T34): every rigid hull's id, velocity and accel, and contact lists only
-# for the hulls Jolt reports touching something, so a tick with no contact builds no object per hull. The same rams, the
-# same pairs.
+# Lands the contact rams and returns the pairs of hulls Jolt reported touching, in `RamBroadPhase`'s form, on a world with
+# no core. The tracker is fed columns (M4-T34): every rigid hull's id, velocity and accel, and contact lists only for the
+# hulls Jolt reports touching something, so a tick with no contact builds no object per hull.
 func _resolve_contacts_columns(delta: float) -> PackedInt64Array:
 	var ids := PackedInt64Array()
 	var velocities := PackedVector3Array()
@@ -517,17 +474,6 @@ static func _accel_of(body: RigidBody3D) -> Vector3:
 	if ship == null or ship.mass <= 0.0:
 		return Vector3.ZERO
 	return ship.applied_force() / ship.mass
-
-
-# Every body Jolt reported touching `rigid` in its last step, with the first contact point and `rigid`'s surface normal there
-# (Jolt's normal points from the other body into this one). `shift` is what the World was rebased by since that step.
-static func _read_contacts(rigid: RigidBody3D, sample: RamTracker.Sample, shift: Vector3) -> void:
-	var state: PhysicsDirectBodyState3D = PhysicsServer3D.body_get_direct_state(rigid.get_rid())
-	if state == null:
-		return
-	for i: int in state.get_contact_count():
-		sample.touch(state.get_contact_collider_id(i), state.get_contact_local_position(i) - shift,
-				-state.get_contact_local_normal(i))
 
 
 # --- swept: tunnelling speeds and props -------------------------------------------------------------------------
@@ -658,13 +604,12 @@ func _sweep_pair(first: Dictionary, second: Dictionary, deep: bool) -> Dictionar
 	var theirs: Damageable = second["damageable"]
 	if SweepMath.segment_sphere(start, start + move, Vector3.ZERO, mine.bounding_radius + theirs.bounding_radius) < 0.0:
 		return {}  # the bodies never come near each other this tick
-	var cull: bool = bool(Settings.get_value(&"perf_ram_sweep_cull"))
-	if cull and not _sphere_reaches(start, mine.bounding_radius, move, theirs.ram_bounds):
+	if not _sphere_reaches(start, mine.bounding_radius, move, theirs.ram_bounds):
 		return {}  # no volume of this body can reach the other's box (M4-T34)
 	var pose := Transform3D(to_second * (first["basis"] as Basis), start)
 	for i: int in mine.ram_volumes.size():
 		var volume: ConvexSweep.Convex = mine.ram_volumes[i]
-		if cull and not _sphere_reaches(pose * volume.centre, volume.reach, move, theirs.ram_bounds):
+		if not _sphere_reaches(pose * volume.centre, volume.reach, move, theirs.ram_bounds):
 			continue  # this volume cannot either
 		volumes_placed += 1
 		var a: ConvexSweep.Convex = volume.placed(pose)

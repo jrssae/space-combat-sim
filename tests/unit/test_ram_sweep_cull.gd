@@ -2,22 +2,12 @@ extends GutTest
 ## The ram resolver's swept test with its early rejects (M4-T34): before placing a hull's volumes in the other's frame, the
 ## hull's bounding sphere, and then each volume's, swept over the tick and padded, must reach the other hull's box, or no volume
 ## can. The rejects only skip work whose answer is "no ram", so the answer is the same bit for bit: seeded pairs of a many-volume
-## fighter and a one-box capital (and the other way round, and two fighters), near misses, grazes and hits, swept both ways
-## with `perf_ram_sweep_cull` on and off, give the same hits at the same points.
+## fighter and a one-box capital (and the other way round, and two fighters), near misses, grazes and hits, swept both ways,
+## give the hits at the points the test gave without the rejects (recorded in `tests/fixtures/parity/ram_sweep_cull.json`
+## before M4-T37 removed `perf_ram_sweep_cull`).
 
 const FIXTURE: String = "ram_sweep_cull"
 const PAIRS: int = 1500
-
-var _saved: Variant
-
-
-func before_each() -> void:
-	_saved = Settings.get_value(&"perf_ram_sweep_cull")
-
-
-func after_each() -> void:
-	Settings.set_value(&"perf_ram_sweep_cull", _saved)
-
 
 # A fighter-like hull of many boxes and capsules round its origin.
 func _fighter(rng: RandomNumberGenerator) -> Damageable:
@@ -60,12 +50,11 @@ func _entry(hull: Damageable, at: Vector3, basis: Basis, move: Vector3) -> Dicti
 
 
 func test_the_rejects_change_no_answer() -> void:
-	var recorded: Variant = await ParityFixture.expected(FIXTURE, "pairs_seed_3401", func() -> Dictionary:
-		return _sweeps(false))
+	var recorded: Variant = ParityFixture.stored(FIXTURE, "pairs_seed_3401")
 	assert_not_null(recorded, "the answers without the rejects were recorded")
 	if recorded == null:
 		return
-	var culled: Dictionary = _sweeps(true)
+	var culled: Dictionary = _sweeps()
 	gut.p("%d hits among %d sweeps; volumes placed %d without the rejects (recorded), %d with them" % [int(culled["hits"]),
 			PAIRS * 4, int(recorded["placed"]), int(culled["placed"])])
 	assert_lt(float(culled["placed"]), float(recorded["placed"]) / 2.0, "the rejects spare most of the placing")
@@ -75,13 +64,11 @@ func test_the_rejects_change_no_answer() -> void:
 	assert_lt(int(culled["hits"]), PAIRS * 3, "and enough missed for the rejects to work")
 
 
-# The seeded pairs swept both ways, deep and shallow, with the rejects or without (`cull` off: the reference, recorded in
-# `tests/fixtures/parity/ram_sweep_cull.json`): a digest of every answer, the volumes placed and the hits.
-func _sweeps(cull: bool) -> Dictionary:
+# The seeded pairs swept both ways, deep and shallow: a digest of every answer, the volumes placed and the hits.
+func _sweeps() -> Dictionary:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 3401
 	var resolver := RamResolver.new()
-	Settings.set_value(&"perf_ram_sweep_cull", cull)
 	var hits: int = 0
 	var placed: int = 0
 	var answers: Array = []
@@ -107,5 +94,4 @@ func _sweeps(cull: bool) -> Dictionary:
 				answers.append(var_to_str(answer))
 				hits += 0 if answer.is_empty() else 1
 	resolver.free()
-	Settings.set_value(&"perf_ram_sweep_cull", true)
 	return {"answers": ParityFixture.digest(answers), "count": answers.size(), "placed": placed, "hits": hits}

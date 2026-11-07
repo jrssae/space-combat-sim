@@ -504,11 +504,16 @@ func _sum_costs(sim: SimCore) -> void:
 
 
 # The rams the core finds where a tier ship meets its rammer's target, landed by the near rule (`RamResolver.ram_pending`),
-# through the ram resolver when there is one (so `ram_resolved` hears them).
+# through the ram resolver when there is one (so `ram_resolved` hears them). Timed into the fighters' landing cost; nothing
+# to look for with no tier rows.
 func _land_rams(sim: SimCore) -> void:
+	if int(sim.core.tier_fighters()) + int(sim.core.tier_capitals()) == 0:
+		return
+	var started: int = Time.get_ticks_usec()  # a readout, never gameplay time
 	var found: Array = sim.core.tier_ram_contacts(get_physics_process_delta_time())
 	var rammers: PackedInt64Array = found[0]
 	if rammers.is_empty():
+		land_us += Time.get_ticks_usec() - started
 		return
 	var pending: Array[Array] = []
 	for k: int in rammers.size():
@@ -524,6 +529,7 @@ func _land_rams(sim: SimCore) -> void:
 		for ram: Array in pending:
 			(ram[0] as Damageable).apply_hit(ram[1] as HitInfo)
 	rams_landed += pending.size()
+	land_us += Time.get_ticks_usec() - started
 
 
 # A hull as the ram rule takes it, from body `body_id` and the velocity its row has; empty when it is gone or destroyed.

@@ -108,10 +108,6 @@ const ENTRIES: Dictionary = {
 	# M4-T34
 	&"perf_native_bolt_sync": {"type": TYPE_BOOL, "default": true,
 		"doc": "The core's two bolt reads a tick go through the cheaper native reader (M4-T34) when the core is on; off = the core's own read, the reference, for pairing the two in one process"},
-	&"perf_ram_contact_columns": {"type": TYPE_BOOL, "default": true,
-		"doc": "The ram resolver hands its contact tracker columns and builds contact lists only for the hulls Jolt reports touching (M4-T34); off = a sample per hull every tick, the reference, for pairing the two between runs (a switch mid-run resets the tracker's open windows)"},
-	&"perf_ram_sweep_cull": {"type": TYPE_BOOL, "default": true,
-		"doc": "The ram resolver's swept test first checks a hull's bounding sphere, then each volume's, against the other hull's box and places only the volumes that can reach it (M4-T34; the same answers); off = every volume placed, the reference"},
 	&"perf_targeting_on_read": {"type": TYPE_BOOL, "default": true,
 		"doc": "The player's targeting computer checks its selection every tick and notes each target's place, reach and name, and builds its full list of every target only when it is read, the HUD's and the radar's once a frame (M4-T34; the same selection, its name and select_id answers; the list itself as of the read); off = the list built every tick, the reference"},
 	# M4-T35
@@ -120,8 +116,6 @@ const ENTRIES: Dictionary = {
 	# Kept though it gains nothing on the main thread: T24's step on a worker reads the bodies through this seam.
 	&"perf_core_body_direct": {"type": TYPE_BOOL, "default": false,
 		"doc": "The core reads the rigid bodies' pose and motion from the physics server's direct state by RID (M4-T35) instead of the nodes' getters; the bits differ from the nodes' only between a teleport and Jolt's next step; off = the nodes' getters, the reference; live"},
-	&"perf_native_ram_contacts": {"type": TYPE_BOOL, "default": true,
-		"doc": "The ram resolver reads every rigid hull's Jolt contacts and its own acceleration in one native call over the core's rows (M4-T35); off = a GDScript direct-state read per hull, the reference (needs perf_ram_contact_columns on); live"},
 	&"perf_native_selection_check": {"type": TYPE_BOOL, "default": true,
 		"doc": "The AI ships' targeting controllers' selection check (a target gone, parked or out of reach) runs as one native pass over the core's rows (M4-T35; needs perf_core_event_columns); off = each controller checks its own selection every tick, the reference; live"},
 	&"ship_contact_monitor": {"type": TYPE_BOOL, "default": false,
@@ -166,7 +160,8 @@ const RENAMED: Dictionary = {}
 ## Settings removed with the old paths (M4-T37, Q67): `Settings.revert` reads only schema keys, so a saved file that still
 ## holds one of these loads without it, and the next `save` drops it.
 const RETIRED: Array[StringName] = [&"perf_native_weapons", &"perf_native_brains", &"perf_native_commands",
-		&"perf_native_driver_step", &"perf_native_flight", &"perf_batch_owns_ships", &"perf_native_sweep_cells"]
+		&"perf_native_driver_step", &"perf_native_flight", &"perf_batch_owns_ships", &"perf_native_sweep_cells",
+		&"perf_ram_contact_columns", &"perf_ram_sweep_cull", &"perf_native_ram_contacts"]
 
 ## Choices removed from a setting: key -> {old choice -> what a saved file's old choice loads as} (M4-T37: the inline step).
 const RETIRED_VALUES: Dictionary = {&"sim_step": {&"inline": &"threaded"}}

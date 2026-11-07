@@ -1,7 +1,7 @@
 extends GutTest
 ## The core owns the simulated state (M4-T35b, architecture §17.13): activity, hull points and the selection as columns
 ## updated from events (`perf_core_event_columns`), the Jolt bodies read by RID from the direct state (`perf_core_body_direct`),
-## the ram stage's contact read in one native call (`perf_native_ram_contacts`) with `contact_monitor` off, the AI targeting
+## the ram stage's contact read in one native call with `contact_monitor` off (M4-T37 removed its switch), the AI targeting
 ## controllers' selection check as a row column (`perf_native_selection_check`), and the batched ships' own tick off
 ## (`perf_batch_owns_ships`). Each path keeps the old one as the reference behind its setting; seeded fights give the same
 ## rows, commands and hits either way. Skips, saying why, when the library is not built.
@@ -12,11 +12,11 @@ const TICKS: int = 240
 const DELTA: float = 1.0 / 60.0
 const SPEC_PATH: String = "res://assets/ships/starfury_aurora.tres"
 const FIXTURE: String = "core_state"
-const NEW_SETTINGS: Array[StringName] = [&"perf_core_event_columns", &"perf_core_body_direct", &"perf_native_ram_contacts",
+const NEW_SETTINGS: Array[StringName] = [&"perf_core_event_columns", &"perf_core_body_direct",
 		&"perf_native_selection_check", &"ship_contact_monitor"]
 const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_native_flight",
-		&"perf_threads", &"perf_native_commands", &"perf_native_bolt_rows", &"ram_damage", &"perf_ram_contact_columns",
-		&"perf_core_event_columns", &"perf_core_body_direct", &"perf_native_ram_contacts", &"perf_native_selection_check",
+		&"perf_threads", &"perf_native_commands", &"perf_native_bolt_rows", &"ram_damage",
+		&"perf_core_event_columns", &"perf_core_body_direct", &"perf_native_selection_check",
 		&"perf_batch_owns_ships", &"ship_contact_monitor"]
 
 var _saved: Dictionary = {}
@@ -54,7 +54,6 @@ func test_the_settings_exist_with_their_defaults() -> void:
 	for key: StringName in NEW_SETTINGS:
 		assert_true(Settings.schema.has_key(key), "%s is a setting" % key)
 	assert_eq(Settings.schema.get_default(&"perf_core_event_columns"), true, "event columns on by default")
-	assert_eq(Settings.schema.get_default(&"perf_native_ram_contacts"), true, "the native contact read on by default")
 	assert_eq(Settings.schema.get_default(&"perf_native_selection_check"), true, "the native selection check on by default")
 	assert_eq(Settings.schema.get_default(&"ship_contact_monitor"), false, "contact_monitor off by default: nothing listens")
 
@@ -542,13 +541,7 @@ func test_the_melee_rams_the_same_with_the_contacts_read_natively() -> void:
 	if _skipped():
 		return
 	Settings.set_value(&"ram_damage", true)
-	Settings.set_value(&"perf_ram_contact_columns", true)
-	var recorded: Variant = await ParityFixture.expected(FIXTURE, "melee_rams", func() -> Dictionary:
-		Settings.set_value(&"perf_native_ram_contacts", false)
-		var columns: Array = await _melee()
-		Settings.set_value(&"perf_native_ram_contacts", true)
-		assert_eq(columns[2], &"columns", "the reference read the contacts in columns from GDScript")
-		return _melee_summary(columns))
+	var recorded: Variant = ParityFixture.stored(FIXTURE, "melee_rams")
 	var native: Array = await _melee()
 	assert_eq(native[2], &"native", "the contacts are read in one native call")
 	assert_not_null(recorded, "the GDScript read's melee was recorded")
