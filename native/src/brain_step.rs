@@ -456,7 +456,7 @@ pub fn pack_output(brain: &Brain, result: &brain_behaviours::Output, out: &mut V
 }
 
 // After a rows batch: every think's command into the snapshot's commands, the counts, and the events of the ships whose
-// drivers have something to do (`ScsBrains.think_batch_rows`).
+// drivers have something to do (`ScsBrains.launch_rows`).
 fn write_commands(work: &mut Work, snap: &mut Snapshot, n: usize) {
     for k in 0..n {
         let item = &work.items[k];

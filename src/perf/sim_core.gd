@@ -716,7 +716,7 @@ func _register_console() -> void:
 		&"batch_us": {"get": func() -> int: return _batch().call_us if _batch() != null else 0, "unit": "us", "doc": "The last tick's one native call for every native think (BrainBatch); wall clock"},
 		&"live_workers": {"get": func() -> int: return int(core.live_workers()) if core != null else 0, "doc": "Worker threads running now (0 with one thread: a pool is joined before the next starts)"},
 		&"batch_ships": {"get": func() -> int: return _batch().ships if _batch() != null else 0, "doc": "Ships the last tick's brain batch carried"},
-		&"step_mode": {"get": func() -> String: return String(Settings.get_value(&"sim_step")), "doc": "Where the AI step runs (sim_step, M4-T24): threaded (the worker thread, one tick behind), delayed (the main thread, one tick behind) or inline (today's same-tick step)"},
+		&"step_mode": {"get": func() -> String: return String(Settings.get_value(&"sim_step")), "doc": "Where the AI step runs (sim_step, M4-T24): threaded (the worker thread, one tick behind) or delayed (the main thread, one tick behind)"},
 		&"step_launched": {"get": func() -> bool: return _batch() != null and _batch().step_launched(), "doc": "A tick's job is out (launched, not yet joined; M4-T24)"},
 		&"step_us": {"get": func() -> int: return int(_host().step_us()) if _host() != null else 0, "unit": "us", "doc": "The last job's own run time (the brains' batch on its thread; M4-T24); wall clock"},
 		&"step_wait_us": {"get": func() -> int: return int(_host().step_wait_us()) if _host() != null else 0, "unit": "us", "doc": "How long the last join waited for the job (0 when it had finished; M4-T24); wall clock"},

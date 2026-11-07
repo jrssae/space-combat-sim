@@ -4,9 +4,9 @@ extends GutTest
 ## geometry and the shooter's skill, the damage landing through the target's `Damageable` with no bolt row; a near ship's
 ## bolt hits a tier row; a tier kill goes through the destruction director (pool release, the event with its blast); a far
 ## capital's guns and beams roll once a second, its interceptors remove hostile missiles in reach and its launches resolve
-## at launch. Every test runs on both of T24's schedules (Q54). Skips, saying why, when the library is not built.
+## at launch. Every test runs on the threaded step (M4-T37 ended Q54's both-schedules rule). Skips, saying why, when the library is not built.
 
-const SCHEDULES: Array[StringName] = [&"threaded", &"inline"]
+const SCHEDULES: Array[StringName] = [&"threaded"]  # M4-T37: the inline step and Q54's both-schedules rule are gone
 const RADIUS_M: float = 10000.0
 
 var w: TierWorld

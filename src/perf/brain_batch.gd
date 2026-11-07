@@ -18,11 +18,11 @@ extends Node
 ## tick (`AiContext.take_changed`) and the relation matrix over the core's factions when the factions or the table change,
 ## and hands the hosted drivers their events as it hands the queued ones theirs.
 ##
-## The step as a job (M4-T24, `sim_step`): with `delayed` or `threaded` the batch is launched at -9 (`ScsBrains.launch_rows`,
-## a snapshot of the rows, on the step's worker thread when threaded) and joined at the next tick's -9, when its commands
-## reach the core (the flight batch flies them at -1) and its events the drivers that joined the tick before, so every
-## command lands one tick later than on `inline`, today's step, which thinks and applies in the same call. A join that finds
-## the job still running waits for it (a counted miss); nothing is skipped.
+## The step as a job (M4-T24, `sim_step`): the batch is launched at -9 (`ScsBrains.launch_rows`, a snapshot of the rows, on
+## the step's worker thread when `threaded`, on the main thread when `delayed`) and joined at the next tick's -9, when its
+## commands reach the core (the flight batch flies them at -1) and its events the drivers that joined the tick before, so
+## every command lands one tick after its think (Q53; M4-T37 removed the same-tick inline step). A join that finds the job
+## still running waits for it (a counted miss); nothing is skipped.
 
 const NODE_NAME: StringName = &"BrainBatch"
 const PRIORITY: int = -9
@@ -36,9 +36,8 @@ const EVENT_SELECT: int = 4
 const EVENT_SETTLE: int = 8
 const EVENTS_HEAD: int = 6
 const NO_RELATION := Vector2i(-1, -1)
-## The step's schedules (`sim_step`, M4-T24): today's same-tick step, the one-tick handover on the main thread, the
-## one-tick handover with the job on the step's worker thread.
-const STEP_INLINE: int = 0
+## The step's schedules (`sim_step`, M4-T24): the one-tick handover on the main thread, and with the job on the step's
+## worker thread.
 const STEP_DELAYED: int = 1
 const STEP_THREADED: int = 2
 
@@ -227,7 +226,7 @@ static func rows_mode() -> bool:
 	return _rows_setting == 1
 
 
-## The step's schedule now (`sim_step`): `STEP_INLINE`, `STEP_DELAYED` or `STEP_THREADED`.
+## The step's schedule now (`sim_step`): `STEP_DELAYED` or `STEP_THREADED`.
 static func step_mode() -> int:
 	if _step_setting < 0:
 		_step_setting = step_mode_of(StringName(Settings.get_value(&"sim_step")))
@@ -238,8 +237,6 @@ static func step_mode() -> int:
 
 static func step_mode_of(name: StringName) -> int:
 	match name:
-		&"inline":
-			return STEP_INLINE
 		&"delayed":
 			return STEP_DELAYED
 		_:
@@ -355,13 +352,6 @@ func _flush_plain() -> void:
 	launched.sinces = sinces
 	launched.wokens = wokens
 	_apply_step_threads(host)
-	if mode == STEP_INLINE:
-		var out: PackedFloat64Array = host.think_batch(_ints, _floats, _relations, _now_s, _friendly_fire, _origin_x, _origin_y,
-				_origin_z, _rows_version)
-		call_us = Time.get_ticks_usec() - started_us
-		AiPilotDriver.add_think_time(call_us)
-		_apply_plain(launched, out)
-		return
 	if host.launch_batch(_ints, _floats, _relations, _now_s, _friendly_fire, _origin_x, _origin_y, _origin_z, _rows_version,
 			mode == STEP_THREADED):
 		_launched = launched
@@ -390,10 +380,10 @@ func _apply_plain(launched: Launched, out: PackedFloat64Array) -> void:
 		finishes += 1
 
 
-# A rows batch's flush (M4-T33): one native call that thinks every ship and writes the commands into the core, the
-# answer handed to everyone who joined, the tick's counts, and the few drivers with an event told in the order they came.
-# The hosted drivers (M4-T35) are stepped in the same call, after the queued ships. Delayed or threaded (M4-T24): the
-# call is launched now and all of that happens at the next tick's join.
+# A rows batch's flush (M4-T33): one native job that thinks every ship and writes the commands into the core, the answer
+# handed to everyone who joined, the tick's counts, and the few drivers with an event told in the order they came. The
+# hosted drivers (M4-T35) are stepped in the same job, after the queued ships. The job is launched now and all of that
+# happens at the next tick's join (M4-T24).
 func _flush_rows() -> void:
 	var started_us: int = Time.get_ticks_usec()  # profiling readout only, never gameplay time
 	var mode: int = step_mode()
@@ -418,13 +408,6 @@ func _flush_rows() -> void:
 	if not _hosted.is_empty() and driver_step_mode():
 		_prepare_hosted()
 	_apply_step_threads(host)
-	if mode == STEP_INLINE:
-		var out: PackedFloat64Array = host.think_batch_rows(_ints, _floats, _relations, _now_s, _friendly_fire, _origin_x, _origin_y,
-				_origin_z, _rows_version)
-		call_us = Time.get_ticks_usec() - started_us
-		_apply_rows(launched, out, host.rows_events(), host.hosted_item_slots())
-		AiPilotDriver.add_think_time(Time.get_ticks_usec() - started_us)
-		return
 	if host.launch_rows(_ints, _floats, _relations, _now_s, _friendly_fire, _origin_x, _origin_y, _origin_z, _rows_version,
 			mode == STEP_THREADED):
 		_launched = launched

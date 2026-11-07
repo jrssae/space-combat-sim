@@ -2,7 +2,7 @@ extends GutTest
 ## The low-attention tier's fairness (M4-T22, architecture §17.14): a fight out of view wins or loses at the rate one in view
 ## does. Every comparison is the tier against full fidelity on held-out seeds (fix round 1; the Cycle log has the fit): the
 ## hit model's constants by maximum likelihood over full-fidelity melee shots (seeds 11 to 16) and duel rounds (seeds from
-## 50 000), the per-hull terms (`ShipSpec.tier_hit_scale`) from the even fight below on seeds 101 to 103, both schedules;
+## 50 000), the per-hull terms (`ShipSpec.tier_hit_scale`) from the even fight below on seeds 101 to 103, on the threaded step;
 ## never on the seeds tested here.
 ## - The duel: rounds of head-on engagements (the first build's steady chase, where Starfuries hit 73 % at 450 m, is a known
 ##   limit the model under-scores), 1 000 shots or more: the model's expected to-hit rate over the same shots, with each shot's
@@ -20,10 +20,10 @@ extends GutTest
 ## - A cruiser with 8 guns and 2 beams against 12 invulnerable fighters, 30 s: their hull loss (damage over hull) within 15 %.
 ## - Far missiles: a cruiser launching at fighters about a hostile guard cruiser with interceptors, 30 s: the share shot
 ##   down within 15 %.
-## Real pooled ships, drivers, Jolt, the hit resolver and the core, on both of T24's schedules (Q54). Skips, saying why, when
+## Real pooled ships, drivers, Jolt, the hit resolver and the core, on the threaded step (M4-T37 ended Q54's both-schedules rule). Skips, saying why, when
 ## the library is not built.
 
-const SCHEDULES: Array[StringName] = [&"threaded", &"inline"]
+const SCHEDULES: Array[StringName] = [&"threaded"]  # M4-T37: the inline step and Q54's both-schedules rule are gone
 const SEEDS: Array[int] = [1, 2, 3]
 const FIGHT_TICKS: int = 1800
 const DUEL_SHOTS: int = 1000

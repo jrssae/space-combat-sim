@@ -5,8 +5,8 @@ extends GutTest
 ## A capital goes with its turrets and emitters and fires again when it is back; Jolt holds only the near bodies; the
 ## player flying into a far fight finds it promoted at 10 km, long before 5 km; a tier ship thinks at the tier's brain
 ## rate (M4-T22; the tier replaces the far rate for it) and at its own again when promoted; a hulk comes back as a hulk; a release while tiered takes
-## the row away; the radius at 0 or the core off promotes everything. Every test runs on both of T24's step schedules
-## (Q54), each pass reading the live schedule back. Real pooled ships, real physics frames. Skips, saying why, when the
+## the row away; the radius at 0 or the core off promotes everything. Every test runs on the threaded step (M4-T37 ended
+## Q54's both-schedules rule), reading the live schedule back. Real pooled ships, real physics frames. Skips, saying why, when the
 ## library is not built.
 
 const POOL: int = 14
@@ -14,7 +14,7 @@ const DT: float = 1.0 / 60.0
 const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_native_flight",
 		&"perf_native_commands", &"perf_native_driver_step", &"perf_native_weapons", &"perf_native_bolt_rows", &"sim_step",
 		&"tier_radius_m", &"tier_hz", &"ai_think_rate", &"perf_threads"]
-const SCHEDULES: Array[StringName] = [&"threaded", &"inline"]
+const SCHEDULES: Array[StringName] = [&"threaded"]  # M4-T37: the inline step and Q54's both-schedules rule are gone
 const RADIUS_M: float = 10000.0
 
 var world: WorldFrame

@@ -2,9 +2,9 @@ extends GutTest
 ## The AI step on a worker thread, one tick behind (M4-T24, Q53, architecture §15.3 and §17.13; setting `sim_step`): the
 ## brains' batch runs as a job over a snapshot of the core's rows, launched at -9 and joined at the next tick's -9, so the
 ## frame and the player's input never wait on it. `threaded` must equal `delayed` (the same one-tick handover on the main
-## thread) tick for tick; `inline` is today's step and differs from them by the one-tick shift; a job that misses its
-## deadline is counted and waited for, never skipped; the schedule flips live; a reader asking while the brains are away
-## answers from the launch. Skips, saying why, when the library is not built.
+## thread) tick for tick; a job that misses its deadline is counted and waited for, never skipped; the schedule flips live;
+## a reader asking while the brains are away answers from the launch. M4-T37 removed the single-thread `inline` step and
+## its test (the commands one tick earlier: the one-tick shift is Q53's accepted outcome). Skips, saying why, when the library is not built.
 
 const SHIPS: int = 120
 const SEED: int = 1
@@ -51,7 +51,7 @@ func _skipped() -> bool:
 func test_the_setting_exists_and_defaults_to_threaded() -> void:
 	assert_true(Settings.schema.has_key(&"sim_step"), "sim_step is a setting")
 	assert_eq(Settings.schema.get_default(&"sim_step"), &"threaded", "the worker thread by default (Q53)")
-	assert_eq(BrainBatch.step_mode_of(&"inline"), BrainBatch.STEP_INLINE)
+	assert_false(Settings.schema.get_choices(&"sim_step").has(&"inline"), "the single-thread inline step is gone (M4-T37)")
 	assert_eq(BrainBatch.step_mode_of(&"delayed"), BrainBatch.STEP_DELAYED)
 	assert_eq(BrainBatch.step_mode_of(&"threaded"), BrainBatch.STEP_THREADED)
 
@@ -94,21 +94,6 @@ func test_one_thread_and_six_give_the_same_threaded_battle() -> void:
 	assert_eq(first, -1, "and the commands (first difference at tick %d)" % first)
 
 
-func test_the_inline_step_flies_the_same_commands_one_tick_earlier() -> void:
-	if _skipped():
-		return
-	var inline: Dictionary = await _battle(&"inline", 6, 20)
-	var delayed: Dictionary = await _battle(&"delayed", 6, 20)
-	var first_inline: int = _first_command_tick(inline["live"])
-	var first_delayed: int = _first_command_tick(delayed["live"])
-	assert_gte(first_inline, 0, "the inline step wrote commands")
-	assert_eq(first_delayed, first_inline + 1, "the delayed step's first commands land one tick later (tick %d against %d)" % [
-			first_delayed, first_inline])
-	assert_eq((delayed["commands"] as PackedInt64Array)[first_delayed], (inline["commands"] as PackedInt64Array)[first_inline],
-			"and they are the same commands: the first thinks read the same rows")
-	assert_ne(_first_difference(inline["rows"], delayed["rows"]), -1, "the one-tick shift changes the outcome against today (Q53)")
-
-
 func test_a_missed_deadline_is_counted_and_waited_for_never_skipped() -> void:
 	if _skipped():
 		return
@@ -145,20 +130,21 @@ func test_the_schedule_flips_live_and_a_reader_while_the_brains_are_away_answers
 	d = host.describe(slot)
 	assert_true(d.has("behaviour"), "describe answers again")
 	assert_eq(int(host.early_joins()), early + 1, "from the cache this time: no early join")
-	Settings.set_value(&"sim_step", &"inline")
+	Settings.set_value(&"sim_step", &"delayed")
 	await get_tree().physics_frame
 	await get_tree().physics_frame
-	assert_false(bool(host.step_pending()), "inline: no job is out between ticks")
+	assert_false(bool(host.step_off_main()), "delayed: the job runs on the main thread")
 	assert_eq(int(host.deadline_misses()), 0, "the flip joined the last job without a miss")
 	var thinks: int = 0
 	for i: int in 3:
 		await get_tree().physics_frame
 		thinks += AiPilotDriver.thinks_native()
-	assert_gt(thinks, 0, "the brains think on inline")
+	assert_gt(thinks, 0, "the brains think on the delayed step")
 	Settings.set_value(&"sim_step", &"threaded")
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 	assert_true(bool(host.step_pending()), "and again on the thread")
+	assert_true(bool(host.step_off_main()), "off the main thread")
 	assert_gt(int(sim.core.row_count()), 0, "the core still holds the rows")
 	fight["space"].queue_free()
 	await get_tree().physics_frame

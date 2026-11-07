@@ -2,7 +2,7 @@ extends GutTest
 ## The native pilots' commands as core rows (M4-T33, architecture §17.13): the brains' batch writes each native pilot's
 ## flight and combat command into the core, the flight batch applies it the same tick, and the drivers touch only the ships
 ## whose trigger, selection or command source changed. Seeded battles fly the same bits with the rows path on and off, with
-## one thread and six, and with the ships on their own GDScript models; a declined think holds the command the row has; a
+## one thread and six, and with the ships on their own GDScript models; a
 ## command set from GDScript takes over from the row. Each fight runs in a space of its own with the clock reset, as
 ## `test_core_threads` flies them. Skips, saying why, when the library is not built.
 
@@ -101,34 +101,6 @@ func test_ships_on_their_own_models_fly_the_command_from_the_row() -> void:
 	var first: int = _first_difference(today["rows"], rows["rows"])
 	assert_eq(first, -1, "with the flight batch off every ship flies its own model the same bits (first difference at tick %d)" % first)
 	assert_gt(int(rows["live_max"]), 0, "the ships flew commands from the rows")
-
-
-func test_a_declined_think_holds_the_command_the_row_has() -> void:
-	if _skipped():
-		return
-	Settings.set_value(&"perf_native_commands", true)
-	var fight: Dictionary = await _small_fight()
-	var sim: SimCore = fight["sim"]
-	var batch: BrainBatch = BrainBatch.for_tree(get_tree())
-	var queued: int = _queue_thinks(fight["ships"])
-	assert_gt(queued, 0, "some ships queued a native think")
-	var before: PackedFloat64Array = _row_commands(sim, fight["ships"])
-	var live_before: int = int(sim.core.live_commands())
-	assert_gt(live_before, 0, "ships fly commands from the rows")
-	var held_before: int = AiPilotDriver.thinks_fallback()
-	sim.touch((fight["ships"][0] as Combatant).ship)
-	sim.core.resync_touched_now()  # the rows move between the drivers and the batch
-	batch.flush()
-	assert_eq(AiPilotDriver.thinks_fallback() - held_before, queued, "every queued think was held and counted")
-	assert_eq(_row_commands(sim, fight["ships"]), before, "every row keeps its command")
-	assert_eq(int(sim.core.live_commands()), live_before, "and every ship still flies it")
-	await get_tree().physics_frame
-	await get_tree().physics_frame
-	var native: int = 0
-	for i: int in 4:
-		await get_tree().physics_frame
-		native += AiPilotDriver.thinks_native()
-	assert_gt(native, 0, "native thinks resume")
 
 
 func test_a_command_set_from_gdscript_takes_over_from_the_row() -> void:
@@ -315,7 +287,7 @@ func _first_difference(a: PackedInt64Array, b: PackedInt64Array) -> int:
 func _small_fight() -> Dictionary:
 	Settings.set_value(&"perf_threads", 6)
 	Settings.set_value(&"perf_native_driver_step", false)
-	Settings.set_value(&"sim_step", &"inline")  # these fights flush by hand and read the result at once (the one-tick handover: test_core_snapshot)
+	Settings.set_value(&"sim_step", &"delayed")  # these fights flush by hand and join the job on the main thread (test_core_snapshot)
 	Factions.reset()
 	Factions.use_table(BenchLayout.faction_table(BenchLayout.BATTLE))
 	ContactScan.invalidate()

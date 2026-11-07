@@ -158,8 +158,8 @@ const ENTRIES: Dictionary = {
 	&"tier_brain_hz": {"type": TYPE_FLOAT, "default": 3.0, "min": 1.0, "max": 20.0,
 		"doc": "How often a low-attention tier fighter's brain thinks, on the same contacts as the near brains inside the AI step (M4-T22; 3 since fix round 2: the cheapest rate in the section's 2 to 5 Hz whose fights still match full fidelity, since at 2 the raiders lose half their hits); its command is held between thinks; live"},
 	# M4-T24
-	&"sim_step": {"type": TYPE_ENUM, "default": &"threaded", "choices": [&"inline", &"delayed", &"threaded"],
-		"doc": "Where and when the AI step (the native brains' batch: perception, thinks, avoidance, the hosted drivers' think rate, the commands into the rows) runs (M4-T24, Q53): threaded = on a worker thread from -9, its results handed over one tick later, so the frame and the player's input never wait on it; delayed = the same one-tick handover on the main thread (the threaded step's reference, bit for bit); inline = today's single-thread step, the commands flown the same tick (Q54's fallback); live"},
+	&"sim_step": {"type": TYPE_ENUM, "default": &"threaded", "choices": [&"delayed", &"threaded"],
+		"doc": "Where the AI step (the native brains' batch: perception, thinks, avoidance, the hosted drivers' think rate, the commands into the rows) runs (M4-T24, Q53): threaded = on a worker thread from -9, its results handed over one tick later, so the frame and the player's input never wait on it; delayed = the same one-tick handover on the main thread (the threaded step's reference, bit for bit); live. M4-T37 removed the single-thread inline step (Q67)"},
 	&"perf_step_threads": {"type": TYPE_INT, "default": 1, "min": 0, "max": 64,
 		"doc": "Threads the AI step's job runs its brains' pass on (M4-T24): 1 = the step's worker thread alone (the default: the job never queues the main thread's passes behind its chunks), n = a pool of its own with n threads, 0 = the core's pool (perf_threads), shared with the main thread's passes; live"},
 	&"physics_max_steps_per_frame": {"type": TYPE_INT, "default": 3, "min": 1, "max": 8,
@@ -181,6 +181,13 @@ const ENTRIES: Dictionary = {
 ## only schema keys, so a saved file's old line is ignored and dropped on the next `save`.)
 const RENAMED: Dictionary = {}
 
+## Settings removed with the old paths (M4-T37, Q67): `Settings.revert` reads only schema keys, so a saved file that still
+## holds one of these loads without it, and the next `save` drops it.
+const RETIRED: Array[StringName] = []
+
+## Choices removed from a setting: key -> {old choice -> what a saved file's old choice loads as} (M4-T37: the inline step).
+const RETIRED_VALUES: Dictionary = {&"sim_step": {&"inline": &"threaded"}}
+
 const _TRUE_WORDS: PackedStringArray = ["true", "on", "1", "yes"]
 const _FALSE_WORDS: PackedStringArray = ["false", "off", "0", "no"]
 
@@ -195,6 +202,14 @@ func keys() -> Array[StringName]:
 
 func has_key(key: StringName) -> bool:
 	return ENTRIES.has(key)
+
+
+## `value` as a saved file's `key` loads: a removed choice (see `RETIRED_VALUES`) becomes its replacement, anything else stays.
+func retired_value(key: StringName, value: Variant) -> Variant:
+	var removed: Dictionary = RETIRED_VALUES.get(key, {})
+	if (typeof(value) == TYPE_STRING or typeof(value) == TYPE_STRING_NAME) and removed.has(StringName(value)):
+		return removed[StringName(value)]
+	return value
 
 
 ## Former names of `key` (see `RENAMED`).

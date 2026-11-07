@@ -199,27 +199,6 @@ func test_the_pool_is_joined_when_the_thread_count_changes() -> void:
 	await get_tree().physics_frame
 
 
-func test_rows_that_moved_before_the_batch_hold_and_count_every_queued_think() -> void:
-	if _skipped():
-		return
-	Settings.set_value(&"perf_native_commands", false)  # T18's path, where the ship holds its command (T33's rows: test_row_commands)
-	var fight: Dictionary = await _small_fight()
-	var batch: BrainBatch = BrainBatch.for_tree(get_tree())
-	var queued: int = _queue_thinks(fight["ships"])
-	assert_gt(queued, 0, "some ships queued a native think")
-	var before: Array = _commands(fight["ships"])
-	var held_before: int = AiPilotDriver.thinks_fallback()
-	var native_before: int = AiPilotDriver.thinks_native()
-	var sim: SimCore = fight["sim"]
-	sim.touch((fight["ships"][0] as Combatant).ship)
-	sim.core.resync_touched_now()  # the rows move between the drivers and the batch
-	batch.flush()
-	assert_eq(AiPilotDriver.thinks_fallback() - held_before, queued, "every queued think was held and counted")
-	assert_eq(AiPilotDriver.thinks_native() - native_before, 0, "none thought on moved rows")
-	assert_eq(_commands(fight["ships"]), before, "every ship keeps its last command")
-	await _thinks_resume(fight)
-
-
 func test_a_panic_in_the_pool_keeps_the_brains_and_holds_the_tick() -> void:
 	if _skipped():
 		return
@@ -233,6 +212,7 @@ func test_a_panic_in_the_pool_keeps_the_brains_and_holds_the_tick() -> void:
 	var held_before: int = AiPilotDriver.thinks_fallback()
 	host.set_fault(2)
 	batch.flush()
+	batch.flush()  # the delayed step: this flush joins the job the first launched
 	host.set_fault(0)
 	assert_eq(int(host.pass_failures()), 1, "the failed pass is counted")
 	assert_engine_error("panicked", "and said once")
@@ -281,7 +261,7 @@ func test_a_slot_listed_twice_in_one_flight_step_flies_as_two_steps_in_a_row() -
 func _small_fight() -> Dictionary:
 	Settings.set_value(&"perf_threads", 6)
 	Settings.set_value(&"perf_native_driver_step", false)  # these fights queue thinks by hand (T18's seam; the host's step: test_driver_step)
-	Settings.set_value(&"sim_step", &"inline")  # and read the flush's result at once (the one-tick handover: test_core_snapshot)
+	Settings.set_value(&"sim_step", &"delayed")  # and join the flush's job by hand on the main thread (test_core_snapshot)
 	Factions.reset()
 	Factions.use_table(BenchLayout.faction_table(BenchLayout.BATTLE))
 	ContactScan.invalidate()

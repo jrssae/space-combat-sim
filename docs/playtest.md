@@ -487,8 +487,9 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
 - [ ] **M4-T24 The AI one tick behind.** The AI step (every native brain's think, the hosted drivers' think rate, the commands into
       the rows) runs on a worker thread and its commands reach the ships one tick (16.7 ms) after the rows they were decided on
       (Q53). Fly the sandbox and `battle 300`: AI ships should turn, fire and dodge as before, with no visible hesitation or
-      overshoot; a raider on your tail should still track you. Compare by flipping `set settings.sim_step inline` (today's
-      same-tick step) and back to `threaded` mid-fight; `delayed` is the threaded step's reference on the main thread.
+      overshoot; a raider on your tail should still track you. M4-T37 removed the same-tick `inline` step, so there is no
+      switch back to compare with; `set settings.sim_step delayed` runs the same one-tick handover on the main thread (the
+      threaded step's bit-for-bit reference) if a difference between the two is suspected.
 - [ ] **M4-T24 Input feel.** Your own stick is never behind (the player's command is sampled and applied in the same tick on
       every schedule), but the frame no longer carries the AI step: at `battle 300` and `500` the stick should feel more
       immediate than before. Check pitch, yaw and the trigger with vsync on and off; `state core` shows `step_misses` (should

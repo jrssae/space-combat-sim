@@ -633,7 +633,7 @@ func _register_console() -> void:
 		&"thinks": {"get": func() -> int: return int(NativeBrains.host(get_tree()).tier_thinks()) if NativeBrains.host(get_tree()) != null else 0,
 				"doc": "Tier fighters' thinks in the last handed-over AI step (fix round 1)"},
 		&"think_us": {"get": func() -> float: return float(NativeBrains.host(get_tree()).tier_think_us()) if NativeBrains.host(get_tree()) != null else 0.0,
-				"unit": "us", "doc": "Their summed time on the step's own clock: the worker thread when sim_step is threaded, the main thread when inline (fix round 1)"},
+				"unit": "us", "doc": "Their summed time on the step's own clock: the worker thread when sim_step is threaded, the main thread when delayed (fix round 1)"},
 		&"cost_us": {"get": func() -> String: return "%.1f fighters, %.1f capitals; %.3f a fighter, %.2f a capital" % Array(cost_means()),
 				"doc": "The tier's main-thread cost per tick since the bench's window began (or the first tier row): the fighters' part (integration, rolls, landing), the far capitals' rolls, and each per row, us; wall clock (M4-T22)"},
 	}), self)

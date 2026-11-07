@@ -642,84 +642,17 @@ impl ScsBrains {
         }
     }
 
-    /// Every thinking ship of a tick in one call (M4-T18), across the core's worker threads: per ship `BATCH_INTS` ints
-    /// (slot, relation row offset and length in `relations`, selection, latest attacker) and `BATCH_FLOATS` floats (dt,
-    /// hull, latest hit, latest bolt hit), the rest as `think` takes it. Returns `BATCH_OUT` numbers per ship in the
-    /// order given: 1 and `think`'s output, or 0 and zeros when declined (no slot, a slot twice, no row). Each think reads
-    /// the frozen rows and writes only its own brain and its output, so the result does not depend on the threads.
-    /// `rows_version` is the core's version the drivers took their scan at: when the rows moved since (a resync or a
-    /// rebase between the drivers and the batch), every ship is declined, so each holds its last command, as T17's
-    /// per-ship check did. A think that panics declines the whole batch too, its brains kept (`pass_failures`).
-    /// The inline step (M4-T24): `launch_batch` and `join` in one call.
-    #[func]
-    #[allow(clippy::too_many_arguments)]
-    fn think_batch(
-        &mut self,
-        ints: PackedInt64Array,
-        floats: PackedFloat64Array,
-        relations: PackedByteArray,
-        now_s: f64,
-        friendly_fire: bool,
-        origin_x: f64,
-        origin_y: f64,
-        origin_z: f64,
-        rows_version: i64,
-    ) -> PackedFloat64Array {
-        if !self.launch_inline(
-            ints,
-            floats,
-            relations,
-            now_s,
-            friendly_fire,
-            [origin_x, origin_y, origin_z],
-            rows_version,
-            false,
-        ) {
-            return PackedFloat64Array::new();
-        }
-        PackedFloat64Array::from(self.finish_inline().as_slice())
-    }
-
-    /// The rows path of `think_batch` (M4-T33): per ship `ROWS_INTS` ints and `ROWS_FLOATS` floats, the hull and the
-    /// selection read from its row; returns the same output. Each think's command (its flight numbers and trigger) is
-    /// written into the core's commands, which the flight step flies the same tick, and `rows_events` then holds the
-    /// counts and the ships whose drivers have something to do: a first command from the row, a changed trigger, or a
-    /// wanted target the ship has not selected. A declined think writes nothing, so its ship flies the row's command on.
-    /// The inline step (M4-T24): `launch_rows` and `join` in one call.
-    #[func]
-    #[allow(clippy::too_many_arguments)]
-    fn think_batch_rows(
-        &mut self,
-        ints: PackedInt64Array,
-        floats: PackedFloat64Array,
-        relations: PackedByteArray,
-        now_s: f64,
-        friendly_fire: bool,
-        origin_x: f64,
-        origin_y: f64,
-        origin_z: f64,
-        rows_version: i64,
-    ) -> PackedFloat64Array {
-        if !self.launch_inline(
-            ints,
-            floats,
-            relations,
-            now_s,
-            friendly_fire,
-            [origin_x, origin_y, origin_z],
-            rows_version,
-            true,
-        ) {
-            return PackedFloat64Array::new();
-        }
-        PackedFloat64Array::from(self.finish_inline().as_slice())
-    }
-
     // --- the step as a job (M4-T24) ----------------------------------------------------------------------------------
 
-    /// `think_batch`'s launch: the batch becomes a job over a snapshot of the rows, run on the step's thread when
-    /// `threaded`, else at once on this thread; `join_step` gives its output. False, after logging why, when the
-    /// arrays do not make whole ships.
+    /// Every thinking ship of a tick as one job (M4-T18, M4-T24), across the core's worker threads: per ship `BATCH_INTS`
+    /// ints (slot, relation row offset and length in `relations`, selection, latest attacker) and `BATCH_FLOATS` floats (dt,
+    /// hull, latest hit, latest bolt hit), the rest as `think` takes it. The job runs over a snapshot of the rows, on the
+    /// step's thread when `threaded`, else at once on this thread; `join_step` gives `BATCH_OUT` numbers per ship in the
+    /// order given: 1 and `think`'s output, or 0 and zeros when declined (no slot, a slot twice, no row). Each think reads
+    /// the frozen rows and writes only its own brain and its output, so the result does not depend on the threads. When the
+    /// rows moved since the drivers took their scan (`rows_version`), every ship is declined and holds its last command; a
+    /// think that panics declines the whole batch too, its brains kept (`pass_failures`). False, after logging why, when
+    /// the arrays do not make whole ships.
     #[func]
     #[allow(clippy::too_many_arguments)]
     fn launch_batch(
@@ -738,7 +671,7 @@ impl ScsBrains {
         let n = ints.len() / BATCH_INTS;
         if ints.len() != n * BATCH_INTS || floats.len() != n * BATCH_FLOATS {
             godot_error!(
-                "ScsBrains.think_batch: {} ints and {} floats do not make whole ships; nothing thought",
+                "ScsBrains.launch_batch: {} ints and {} floats do not make whole ships; nothing thought",
                 ints.len(),
                 floats.len()
             );
@@ -782,8 +715,11 @@ impl ScsBrains {
         true
     }
 
-    /// `think_batch_rows`' launch (see `launch_batch`): the hosted drivers are stepped in the job too, and the commands
-    /// its thinks write reach the core's rows at the join.
+    /// The rows path of `launch_batch` (M4-T33): per ship `ROWS_INTS` ints and `ROWS_FLOATS` floats, the hull and the
+    /// selection read from its row. The hosted drivers are stepped in the job too; at the join each think's command (its
+    /// flight numbers and trigger) reaches the core's commands, and `rows_events` holds the counts and the ships whose
+    /// drivers have something to do: a first command from the row, a changed trigger, or a wanted target the ship has not
+    /// selected. A declined think writes nothing, so its ship flies the row's command on.
     #[func]
     #[allow(clippy::too_many_arguments)]
     fn launch_rows(
@@ -802,7 +738,7 @@ impl ScsBrains {
         let n = ints.len() / ROWS_INTS;
         if ints.len() != n * ROWS_INTS || floats.len() != n * ROWS_FLOATS {
             godot_error!(
-                "ScsBrains.think_batch_rows: {} ints and {} floats do not make whole ships; nothing thought",
+                "ScsBrains.launch_rows: {} ints and {} floats do not make whole ships; nothing thought",
                 ints.len(),
                 floats.len()
             );
@@ -1656,7 +1592,7 @@ impl ScsBrains {
 
     // The launch itself: the frame's readers' views taken, the rows copied into the spare snapshot, the brains and the
     // batch handed to the job, which runs on the step's thread when asked (else here, its result kept for the join).
-    // An inline wrapper's launch (`think`, `think_batch`, `think_batch_rows`): the batch filled as `launch_batch` or
+    // An inline wrapper's launch (`think`): the batch filled as `launch_batch` or
     // `launch_rows` fill it and run at once, its result kept apart from any scheduled job's.
     #[allow(clippy::too_many_arguments)]
     fn launch_inline(
@@ -1815,7 +1751,7 @@ impl ScsBrains {
             if !self.warned {
                 self.warned = true;
                 godot_warn!(
-                    "ScsBrains.think_batch: a think panicked; the tick's thinks are held, their brains kept"
+                    "ScsBrains: a think panicked; the tick's thinks are held, their brains kept"
                 );
             }
             self.pass_failures += 1;
