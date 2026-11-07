@@ -1385,7 +1385,7 @@ Built in M1 because each is cheap and avoids a later rewrite:
 | `TargetInfo.faction` | T14 | Changing the targeting data model for IFF, allies and enemies |
 | `ShipSpec` per ship class with `asset_id`; `mass_flow` in `FlightOutput` (unlimited reaction mass) | T08, T10 | Ship-class hard-coding (Thunderbolt) and a flight-model change for finite fuel |
 | Scenario JSON for free flight, spawns in universe coordinates | T14, T15 | A second spawn path when the mission framework arrives |
-| `tools/procgen` framework layout, per-asset output dirs, manifest `lods` array | T02, T04 | Moving files and rewriting import paths for every later asset |
+| `tools/procgen` framework layout, per-asset output dirs (the manifest's `lods` array was the seam until T31 removed it; `mesh.lods` stays empty, Q45, and its validator stays for M6's generated far levels) | T02, T04 | Moving files and rewriting import paths for every later asset |
 | Camera mode enum | T12 | Reworking the rig for cinematic and free-look modes |
 | Debug console registry, whitelisted state providers, `debug.invulnerable` flag | T07 (+ each subsystem's task) | Bolting debug tooling onto every subsystem later; M2 hull damage only has to read the flag |
 
@@ -1475,6 +1475,9 @@ Main
 ```
 
 ### 15.3 Tick order and data flow
+
+Superseded for M4 and later by §17.13's sync points (the brain batch at -9, the stand-ins at -5, the flight batch at -1,
+`SimCoreStep`, `SimCoreOut`) and T24's threaded step; this section keeps M1's order as history.
 
 One physics tick, in order (`process_physics_priority`, then tree order):
 
@@ -1842,6 +1845,8 @@ tests/integration/test_m3_run.gd         the whole sandbox in one build; the dog
 
 ### 16.3 Tick order (changes to §15.3)
 
+Superseded for M4 and later by §17.13 (see the note under §15.3).
+
 1. `AiPilotDriver`s (-10): `ContactScan` (first driver of the tick builds it), `Perception`, brain, avoidance filter,
    `Combatant.apply_commands`.
 2. Console, `Main` (0), the World's automatic rebase (0, M3-T14), ships, projectiles as before. `Main` passes order edges
@@ -2064,6 +2069,8 @@ native/src/contact_field.rs     ScsContactField: the contact scan's queries (T05
   the library is not loaded or the setting `perf_native` (default on) is off, and the facade then runs its GDScript code. So a
   missing or stale library never breaks parsing, the suite or the game, and a bench can pair native against GDScript in one
   process by flipping the setting. Each facade keeps the GDScript code as the reference its parity tests compare against.
+  M4-T37 ended this (Q57, Q67): the library is required (`Main` refuses to start without it, naming the missing classes and
+  `scripts/build_native.sh`), `perf_native` is gone, and the parity tests compare with recordings in `tests/fixtures/parity/`.
   A native class gets its own name (`Scs...`), since a GDScript `class_name` cannot share it.
 - **Building.** `scripts/build_native.sh` builds only when the library is missing or older than a file under `native/`; with no
   `cargo` it prints one line and exits 0. `run_tests.sh` runs it before the import, and CI builds once per job with cargo's
@@ -2076,8 +2083,7 @@ native/src/contact_field.rs     ScsContactField: the contact scan's queries (T05
   out, never a call per contact, and native code never reads a GDScript object. Results are collected in Rust and handed over once.
 - **Threads** are allowed inside native code later (N3, maintainer Q9), with a test that one thread and six give the same
   output; T05a adds none.
-- **Following the setting.** `NativeLib.enabled()` caches `perf_native` and clears the cache on `Settings.changed`, so a
-  facade asks it on every call and a flip takes effect at once, also on objects made before it (T05b). `NativeLib.version`
+- **Following the setting.** `NativeLib.enabled()` cached `perf_native` until M4-T37 removed both. `NativeLib.version`
   takes the class to ask.
 - **The contact field (T05b, N1).** `ContactScan` keeps its interface, so brains, drivers and tests are unchanged. On a
   scan's first native query it makes an `ScsContactField` and hands it the scan's arrays in one `load` call: body ids,
@@ -2183,8 +2189,8 @@ scripts/fullscreen_check.sh         a layout fullscreen, the 3D at 1080p, under 
   projectile looks, per level, at the cells its reach plus that largest reach can touch, so a 10 m fighter and a 1 km capital
   are both found from anywhere they reach without filling the fine cells. A look that would cover more cells than the level
   has hulls (a 3 km beam), and a hull that fits no cell (not finite, beyond the top level or the grid), test everything instead.
-- **Native and GDScript run the same grid.** With the library loaded and `perf_native` on, `ScsHitSweep`
-  (`native/src/hit_sweep.rs`) answers; the GDScript code is the reference and the fallback. Both use the same levels, cells and
+- **Native and GDScript ran the same grid.** `ScsHitSweep` (`native/src/hit_sweep.rs`) answers; the GDScript code was the
+  reference until M4-T37 removed it (its work counts are recorded in `tests/fixtures/parity/hit_broad_phase.json`). Both use the same levels, cells and
   fallbacks and the sphere test in 32-bit vectors with 64-bit scalars in the engine's order, so the pairs and the work count
   (`pairs_visited`) are the same bit for bit. The plan named sort and sweep for the fallback; the same grid was chosen so the
   two paths can be compared pair for pair and count for count.
@@ -2210,7 +2216,7 @@ src/ai/body_kind.gd             BodyKind: ship, capital, turret, missile, mine, 
 
 - **What it ends.** After cycle 4 the scan's queries were native but the scan itself was still gathered in GDScript every
   tick (`ContactScan.from_tree`: walking the groups and reading about fifteen properties a body), with the broadcast scan
-  built the same way and a freed-body check on every `shared` call. With the library and `perf_native` on, `shared` now
+  built the same way and a freed-body check on every `shared` call. On a world with no core, `shared` now
   comes from `ContactScan.from_registry`: no per-body GDScript a tick. `from_tree` stays the reference and is counted
   (`ContactScan.gathers`, 0 a tick on the native path).
 - **Membership.** The registry is told the `targetable` and `damageable` groups (`set_members`, the group arrays passed
@@ -2275,8 +2281,8 @@ src/ship/ship.gd                a ship is `batched` (every ship but the player's
   stay empty: nothing reads them for an AI ship.
 - **The player's ship never joins** (`console_owner` switches `batched` off in `_ready`), so the GDScript path stays the
   reference and the player's feel is untouched. Any ship can be taken out (`batched = false`), and when the library lacks the
-  class or `perf_native` or `perf_native_flight` is off, the batch steps nothing and every ship flies its own model that same
-  tick; the flip works live, and a bench pairs the two paths in one process by flipping `perf_native_flight` alone.
+  class, the batch steps nothing and every ship flies its own model that same tick (M4-T37 removed `perf_native` and
+  `perf_native_flight`; the batch always flies the AI ships).
 - **The assist's state follows the ship.** `FlightAssist.pod_yaw_smoothed` is the model's only state; the native slot keeps
   its own copy. When a ship changes path the value is carried over (to native at the next gather, back to the model at the
   next GDScript tick), and `set_assist` and `reset_to` clear both.
@@ -2306,7 +2312,7 @@ src/ship/ship.gd                 `lean` (AI ships): no cockpit, anchor or fallba
                                  `set_far_dot` hides the ship's visuals and hands it to the world's FarDots
 src/ship/thruster_visuals.gd     `instanced`: every plume of a ship is an instance of one multimesh (cone and core in one surface)
 src/ship/running_lights.gd       `instanced`: the three markers are instances of one multimesh (the colour in the custom data)
-src/ship/hull_depth_proxy.gd     the proxy draws the fallback mesh merged into one surface; on a lean ship it also draws the
+src/ship/hull_depth_proxy.gd     (removed with the splats, T31) the proxy draws the fallback mesh merged into one surface; on a lean ship it also draws the
                                  fallback mesh itself
 src/rendering/lod_switcher.gd    the far level: past settings.far_ship_dot_m from the camera an AI ship is a dot
 src/rendering/far_dots.gd        FarDots: one MultiMeshInstance3D under World, a point per far ship, updated each frame
@@ -2438,11 +2444,11 @@ matter). Everything the table does not list is as before: a bolt (a `Node3D` flo
   the settle skips it, subtree and all; back near, the mode returns to inherit and the interpolation is reset once. A dot moves
   at the tick rate, by one tick of travel at most (2.5 m at 150 m/s, 10 m at 600 m/s; a few pixels at the 3 km a dot starts at, (H)). `WorldFrame.last_settle_resets`
   counts the nodes the last settle reached.
-- **Settings.** `collision_layers` (default on; off puts every body on the one default layer: ships follow it live, capitals and
-  rocks as they are built) and `far_ship_interpolation_off` (default on) are the switches for measuring either half alone.
+- **Settings.** `collision_layers` and `far_ship_interpolation_off` were the switches for measuring either half alone; M4-T37
+  removed them, so every body takes its kind's layers and a far dot is never interpolated.
 - **Measured** (battle 300 and 500, Cycle log, M4-T14): the physics stage and the tick median are unchanged within noise; the
   rebase shift falls by 1.5 to 2 ms, a third, which is the far ships' interpolation alone.
-- **Tests**: `test_collision_layers` (the table, the setting, two fighters meeting report a Jolt contact and exchange momentum,
+- **Tests**: `test_collision_layers` (the table, two fighters meeting report a Jolt contact and exchange momentum,
   allied fighters collide, 30 m/s costs each at least half its hull once as a contact ram, 600 m/s takes the swept ram, a 4 m/s
   bump hurts nobody, the player bounces off a fighter, a capital and a rock pair with a fighter, a bolt and a mine have no body,
   the settle walks only the interpolated nodes, a far ship is left out of it and returns) and `test_fighter_melee` (a seeded melee
@@ -2460,7 +2466,7 @@ native/src/body_registry.rs      ScsBodyRegistry: the core without its facade, k
 src/perf/sim_core.gd             SimCore: the facade; a node under World at priority -11 (sync_in) with an internal child at
                                  2 000 000 (sync_out); the `core` console provider
 src/ai/contact_scan.gd, src/combat/hit_broad_phase.gd, src/combat/hit_resolver.gd, src/combat/ram_resolver.gd,
-src/ship/flight_batch.gd         the four classes read the core (their own loads stay behind `perf_native_core` off)
+src/ship/flight_batch.gd         the four classes read the core (their own loads stay for a world with no core)
 ```
 
 - **What it is.** Phase 1 left four native classes, each loading its own copy of the world every tick: the registry's
@@ -2514,8 +2520,8 @@ src/ship/flight_batch.gd         the four classes read the core (their own loads
   bodies and bolts) and the flight step's fallback reads for ships without a row (`core.fallback_calls`,
   `flight.fallback_reads`, 0 outside launch ticks). T18's threads rest on the same property: a kernel takes its rows and
   its own scratch (the flight kernel writes its nozzle forces into the buffer the caller passes) and shares nothing.
-- **Settings and console.** `perf_native_core` (default on; off = each class loads its own copy, so a bench pairs the two
-  in one process). Provider `core` (`path`, `rows`, `bodies`, `statics`, `bolts`, `syncs`, `sync_us`, `bolts_us`,
+- **Settings and console.** `perf_native_core` (off = each class loaded its own copy) went with M4-T37: a world with a
+  core always uses it. Provider `core` (`path`, `rows`, `bodies`, `statics`, `bolts`, `syncs`, `sync_us`, `bolts_us`,
   `sync_calls`, `fallback_calls`, `attribute_reads`, `touched`); `combat.source` and `combat.gather_us`, `ram.source` and
   `ram.gather_us`, `flight.source` and `flight.fallback_reads` say what each class read.
 - **Tests**: `test_sim_core` (the lifecycle, the rebase, the round trip, the four classes' parity, the engine seam) and the
@@ -2548,8 +2554,8 @@ native/src/pilot_kernels.rs              ScsPilotKernels: binds the core's rows 
   the core on.
 - **The facades.** `AvoidanceMath.filter_seen(p, radius, v_des, exempt_id, seed)` (the driver), `FireLane.clear_seen(p,
   aim, range, target)` (the attack brain and the slash) and `AiContext.refresh` ask the kernels when the perception is on
-  the rows, and otherwise list the contacts and run `filter`, `clear` or the loop as before. Off the core (`perf_native`
-  or `perf_native_core` off, no library) nothing changes.
+  the rows, and otherwise list the contacts and run `filter`, `clear` or the loop as before. Off the core (a world with no
+  core) nothing changes.
 - **Bit for bit.** The kernels repeat the GDScript's arithmetic: 32-bit vectors, 64-bit scalars, a scalar rounded to 32
   bits before it scales a vector, division where the engine divides, the engine's `Basis(axis, angle)` for the tie's turn
   (`cosf` and `sinf`, as the engine calls them), and the tie angle in the engine's `deg_to_rad` form (`x * (PI / 180)`,
@@ -2777,7 +2783,8 @@ src/targeting/targeting_controller.gd  the player's candidate list built when re
   a target), the bolts read twice a tick (0.8 to 0.9 ms a read), a `RamTracker.Sample` built for every rigid hull every
   tick though almost none touched anything (1.3 ms), and about ten fighter and capital pairs a tick in the ram sweep, each
   placing all 13 or 14 fighter volumes before most failed their first box test (0.5 ms).
-- **What changed, each behind a setting that keeps the old path as the reference.** The bolt reader (`perf_native_bolt_sync`)
+- **What changed, each behind a setting that kept the old path as the reference** (M4-T37 removed the five switches and the
+  old paths; their outputs are recorded in `tests/fixtures/parity/`). The bolt reader (`perf_native_bolt_sync`)
   finds a known bolt by the instance id in its array slot instead of making it into an object handle, does not ask the
   group's nodes whether they are in the tree (a group holds only nodes that are) and keeps its bolts in a cheaper map; it
   counts its engine calls as the core counts its own, and `SimCore.engine_calls` adds them. The ram contact phase
@@ -2884,7 +2891,7 @@ src/combat/hit_resolver.gd, src/combat/ram_resolver.gd, src/targeting/targeting_
   GDScript left on the batched path (the cannons' ticks, the drivers' steps, the ships' own ticks, the controllers'
   selection checks) at about 4 ms more. After this task everything simulated is a row the core owns or steps, and the
   nodes are the mirror: a body's pose and motion are the only columns read from the engine each tick.
-- **Bolts as rows** (`perf_native_bolt_rows`). The `Bolts` table's front rows are the core's own, in launch order (a negative
+- **Bolts as rows** (`perf_native_bolt_rows` until M4-T37, which also removed the core's own bolt-node read). The `Bolts` table's front rows are the core's own, in launch order (a negative
   id each, never an instance id), with the columns a hit lands with and the renderer draws (damage, colour, look, expiry,
   launch tick, spent); the projectiles that still have a node (beams, missiles, the player's bolts) follow them at each
   sync point, read as before. `bolt_kernels::step` expires the owned bolts whose time is up and moves the rest by
@@ -2911,7 +2918,7 @@ src/combat/hit_resolver.gd, src/combat/ram_resolver.gd, src/targeting/targeting_
   bolts. A live cannon whose ship has no row this tick is handed back for GDScript to step from the node's pose
   (`step_one`), so a bare body still fires. The GDScript gate stays the reference (`step`, which the tests drive by hand)
   and its state is carried over when a cannon joins or leaves the kernel.
-- **The state from events** (`perf_core_event_columns`). A body's activity (`Targetable.is_active`: valid, in the tree,
+- **The state from events** (`perf_core_event_columns` until M4-T37). A body's activity (`Targetable.is_active`: valid, in the tree,
   visible, processing) is checked again only when the body was touched (hidden, shown, destroyed: the events the facade
   already watched, plus a marker hidden on its own) or first seen; its hull column follows `Damageable.damaged` and the new
   `restored` signal (`note_hull`, `clamp(hp / max_hp)` as the read did), its selection column every change a
@@ -2924,17 +2931,17 @@ src/combat/hit_resolver.gd, src/combat/ram_resolver.gd, src/targeting/targeting_
   `PhysicsServer3D.body_get_direct_state` by RID instead of the nodes' getters: four calls a body against three, and the
   bits equal the nodes' after Jolt's first step (the node is set from the same state) but differ between a teleport and the
   next step (the server rebuilds the basis from its quaternion, T09's finding), which moves T14's melee digest. Measured
-  no faster (Cycle log), so it stays an option.
-- **The ram stage's contact read** (`perf_native_ram_contacts`). `ScsRamPhase.contacts` walks the rigid hull rows once:
+  no faster (Cycle log); M4-T37 removed it with its switch.
+- **The ram stage's contact read** (`perf_native_ram_contacts` until M4-T37). `ScsRamPhase.contacts` walks the rigid hull rows once:
   each body's direct state by the row's RID, the contact count, and for the hulls Jolt reports touching, every contact's
   collider, point (shifted by what the World was rebased by since Jolt's step) and normal; with them the velocity column and
   the acceleration the flight step wrote into the core for every ship it flew this tick (`force / mass` in 32 bits, as
   `Ship.applied_force() / ship.mass`), flagged where it did not (a ship on its own model, which GDScript asks as before). The
   resolver builds the tracker's columns from that (`RamTracker.contacts_columns`, T34), so the rams are bit for bit the
-  columns path's. `contact_monitor` is off on every ship by default (`ship_contact_monitor`): nothing connects
+  columns path's. `contact_monitor` is off on every ship (`ship_contact_monitor` until M4-T37): nothing connects
   `body_entered`, and the direct state's contact list, which this read takes, needs only `max_contacts_reported` (T14's melee
   counts the same 2 959 Jolt contacts).
-- **The AI controllers' selection check** (`perf_native_selection_check`, needs the event columns). An AI ship's
+- **The AI controllers' selection check** (`perf_native_selection_check` until M4-T37). An AI ship's
   `TargetingController` (one that does not keep candidates) hands its check to the core (`watch_selection`, with its sensor
   range) and stops ticking; `SimCoreTargeting` at the controllers' priority asks `selection_clears` once: for every watched
   ship whose latest selection (the events') is a marker id, no row for it, its own ship, or a 64-bit range beyond the
@@ -2986,8 +2993,8 @@ src/combat/hit_resolver.gd, src/combat/ram_resolver.gd, src/targeting/targeting_
   points' pose reads, the ram stage's contact read and the flight step's force application, each in one call over the rows.
 - **Settings and console.** `perf_native_bolt_rows`, `perf_core_event_columns`, `perf_core_body_direct` (off),
   `perf_native_ram_contacts`, `perf_native_selection_check`, `perf_batch_owns_ships`, `perf_native_driver_step`,
-  `ship_contact_monitor` (off), all live. Provider `core` gains `bolt_path`, `owned_bolts`, `cannons`, `cannon_us`,
-  `bolt_step_us`, `shots`, `expired`, `bolt_draws`, `event_columns`, `body_direct`, `watched_selections`,
+  `ship_contact_monitor` (off), all live until M4-T37 removed them. Provider `core` gains `bolt_path`, `owned_bolts`,
+  `cannons`, `cannon_us`, `bolt_step_us`, `shots`, `expired`, `bolt_draws`, `watched_selections`,
   `selection_clears`; `ai` gains `hosted`.
 
 **The AI step on a worker thread, one tick behind (T24, Q53).**
@@ -3344,7 +3351,7 @@ native/src/contact_field.rs         + set_friendly_row; statics(..., faction, ..
   invulnerable, `SOLID_MASS_KG`), so the outcome is the old marker's: the ship takes the whole closing speed, the rock nothing.
   Jolt's own bounce off the RID body is unchanged (its contacts never named a rock: the RID body has no object id).
 - **Why nothing changes for fighters.** Furball, spread and transit have no rocks and no mines, so the rows are empty, the kept
-  grids answer nothing and every contact list is what it was; the seeded outcomes match the base with `perf_native` on and off.
+  grids answer nothing and every contact list is what it was; the seeded outcomes matched the base with `perf_native` on and off (before M4-T37).
 ### 17.17 Splats against meshes: the render comparison (T27)
 
 History (M4-T31): this subsection records the comparison that led to Q29. T31 removed the point-cloud side and the painted mesh

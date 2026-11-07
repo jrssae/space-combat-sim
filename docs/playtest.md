@@ -1,4 +1,4 @@
-# Play-testing M1 (First Flight)
+# Play-testing (M1 First Flight, then each milestone's section and the M4 return checklist)
 
 Everything an agent can check runs in CI. What's left needs a person: a Linux desktop with a Vulkan GPU, a
 gamepad and a keyboard. This page covers setup, the controls, and the checklist that closes M1.
@@ -497,7 +497,7 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
 - [ ] **M4-T24 The catch-up cap.** `physics_max_steps_per_frame` is 3 (Godot's default was 8): when the tick cannot keep up
       (battle 500) the simulation slows instead of the frame stuttering through catch-up ticks. Judge whether the slow-motion
       at 500 reads better than the stutter did; `2` is the other candidate (`set settings.physics_max_steps_per_frame 2`).
-- **T35, bolts as rows:** the AI ships' bolts are drawn by one multimesh per look (`core.bolt_draws`), interpolated between ticks as the nodes were. Check in a `battle` run: bolts leave the muzzles, fly straight and smoothly (no stutter against the hulls), hit flashes still appear where bolts land, the chase camera's larger bolts (`Projectile.visual_scale`) still apply, and nothing is drawn where a bolt was spent. Switch `settings.perf_native_bolt_rows` off and on mid-run to compare with the bolt nodes.
+- **T35, bolts as rows:** the AI ships' bolts are drawn by one multimesh per look (`core.bolt_draws`), interpolated between ticks as the nodes were. Check in a `battle` run: bolts leave the muzzles, fly straight and smoothly (no stutter against the hulls), hit flashes still appear where bolts land, the chase camera's larger bolts (`Projectile.visual_scale`) still apply, and nothing is drawn where a bolt was spent. (M4-T37 removed `perf_native_bolt_rows`, so there is no bolt-node run to compare with: the recorded battle in `test_bolt_rows` holds the rows to the nodes' hits.)
 - **T35, the AI ships' muzzle flashes:** the lean ships' flashes come from one pool (a multimesh of billboard quads and pooled lights), not a node per muzzle. Check in a `battle` run: a flash pops at the muzzle of every AI shot for about 50 ms, grows and fades as the player's own flashes do, rides with the ship, and lights the nose; no flash lingers on a parked or dead ship.
 - **T35, the AI ships' shot sounds:** `AudioDirector.watch_ship` listens to `shot_fired`, which both bolt paths emit (fix round 1). Confirm every AI shot in a `battle` run makes its pulse or raider sound at the muzzle, with the bolt rows on and off.
 - [ ] **M4-T21 The low-attention tier.** Off by default until T23; turn it on with `set settings.tier_radius_m 10000`. AI fighters and capitals more than 10 km from you (`settings.tier_radius_m`) leave
