@@ -1,59 +1,82 @@
 extends GutTest
-## The explosion level of detail's maths (M4-T23, architecture §17.14): the full effect near, a reduced one between, a point
-## flash far, the distances set by the blast's size; a far flash keeps a 1 px floor and its delivered light falls with the
-## inverse square of distance below it, at 1 080 and at 2 160 lines; a capital's flash reads much farther than a fighter's.
+## The explosion level of detail's maths (M4-T23, fix round 1, architecture §17.14): the level follows the fireball's size in
+## pixels on the current picture (the full effect while its radius is `FULL_PX` or more, the reduced one down to `REDUCED_PX`,
+## then the far flash), so the switch moves with the resolution; the flash takes over at the fireball's size and brightness, so
+## its delivered light at the switch is what the reduced effect showed (no pop, no gap), then shrinks to its 1 px floor and falls
+## with the inverse square until it drops under the visibility bar. Checked for a fighter, a destroyer and a carrier at 1 080 and
+## 2 160 lines.
 
 const FOV_DEG: float = 70.0
-const FIGHTER_KG: float = 2.0e4
-const CARRIER_KG: float = 8.0e7
+## A raider's bounding radius (17 by 7.2 m), about.
+const FIGHTER_R: float = 9.3
 
 
-func _energy(mass_kg: float) -> float:
-	return mass_kg * DestructionDirector.BLAST_J_PER_KG
+func _classes() -> Dictionary:
+	return {"fighter": FIGHTER_R, "destroyer": CapitalStandin.hull_radius(&"destroyer"), "carrier": CapitalStandin.hull_radius(&"carrier")}
 
 
-func test_the_level_is_full_near_reduced_between_and_far_beyond_set_by_the_blast_size() -> void:
-	var r: float = 6.0
-	assert_eq(ExplosionLod.level(r, 100.0), ExplosionLod.Level.FULL)
-	assert_eq(ExplosionLod.level(r, r * ExplosionLod.FULL_RADII * 1.5), ExplosionLod.Level.REDUCED)
-	assert_eq(ExplosionLod.level(r, r * ExplosionLod.REDUCED_RADII * 1.5), ExplosionLod.Level.FAR)
-	var big: float = 600.0
-	assert_eq(ExplosionLod.level(big, r * ExplosionLod.REDUCED_RADII * 1.5), ExplosionLod.Level.FULL, "a capital's is full farther out")
-
-
-func test_a_far_flash_keeps_a_one_pixel_floor_and_its_delivered_light_falls_by_the_inverse_square() -> void:
-	var e: float = _energy(FIGHTER_KG)
+func test_the_level_follows_the_fireballs_size_in_pixels() -> void:
 	for lines: float in [1080.0, 2160.0]:
-		var floor_m: float = ExplosionLod.floor_distance_m(e, lines, FOV_DEG)
-		var at_floor: Vector2 = ExplosionLod.on_screen(e, floor_m, lines, FOV_DEG)
-		assert_almost_eq(at_floor.x, 1.0, 1e-3, "%d lines: one pixel at the floor distance" % lines)
-		assert_almost_eq(at_floor.y, ExplosionLod.peak(e), 1e-3, "at full brightness there")
-		for d: float in [2.0 * floor_m, 4.0 * floor_m, 10.0 * floor_m]:
-			var s: Vector2 = ExplosionLod.on_screen(e, d, lines, FOV_DEG)
-			assert_eq(s.x, 1.0, "%d lines, %.0f m: never under a pixel" % [lines, d])
-			var delivered: float = s.y * s.x * s.x
-			var expected: float = ExplosionLod.peak(e) * pow(floor_m / d, 2.0)
-			assert_almost_eq(delivered / expected, 1.0, 1e-3, "%d lines, %.0f m: the delivered light falls by the inverse square" % [lines, d])
-		var near: Vector2 = ExplosionLod.on_screen(e, floor_m * 0.5, lines, FOV_DEG)
-		assert_almost_eq(near.x, 2.0, 1e-3, "nearer than the floor it is its real size")
-	assert_almost_eq(ExplosionLod.floor_distance_m(e, 2160.0, FOV_DEG) / ExplosionLod.floor_distance_m(e, 1080.0, FOV_DEG), 2.0, 1e-3,
-			"at twice the lines the floor sits twice as far")
+		for r: float in _classes().values():
+			var full_m: float = ExplosionLod.switch_distance_m(r, lines, FOV_DEG, ExplosionLod.FULL_PX)
+			var far_m: float = ExplosionLod.switch_distance_m(r, lines, FOV_DEG, ExplosionLod.REDUCED_PX)
+			assert_almost_eq(ExplosionLod.fireball_px(r, full_m, lines, FOV_DEG), ExplosionLod.FULL_PX, 1e-3)
+			assert_eq(ExplosionLod.level(r, full_m * 0.99, lines, FOV_DEG), ExplosionLod.Level.FULL)
+			assert_eq(ExplosionLod.level(r, full_m * 1.01, lines, FOV_DEG), ExplosionLod.Level.REDUCED)
+			assert_eq(ExplosionLod.level(r, far_m * 0.99, lines, FOV_DEG), ExplosionLod.Level.REDUCED)
+			assert_eq(ExplosionLod.level(r, far_m * 1.01, lines, FOV_DEG), ExplosionLod.Level.FAR)
 
 
-func test_a_capitals_flash_reads_much_farther_than_a_fighters() -> void:
-	var fighter: float = ExplosionLod.visible_to_m(_energy(FIGHTER_KG), 1080.0, FOV_DEG)
-	var carrier: float = ExplosionLod.visible_to_m(_energy(CARRIER_KG), 1080.0, FOV_DEG)
-	gut.p("a flash reads to %.1f km (fighter) and %.0f km (carrier) at 1 080 lines" % [fighter / 1000.0, carrier / 1000.0])
-	assert_between(fighter, 3000.0, 30000.0, "a fighter's death reads across a few km")
-	assert_gt(carrier, 10.0 * fighter, "a capital's across tens of km")
-	assert_gt(ExplosionLod.flash_radius_m(_energy(CARRIER_KG)), ExplosionLod.flash_radius_m(_energy(FIGHTER_KG)))
-	assert_gt(ExplosionLod.flash_s(_energy(CARRIER_KG)), ExplosionLod.flash_s(_energy(FIGHTER_KG)), "and lasts longer")
+func test_the_switch_moves_with_the_resolution() -> void:
+	for r: float in _classes().values():
+		assert_almost_eq(ExplosionLod.switch_distance_m(r, 2160.0, FOV_DEG, ExplosionLod.REDUCED_PX)
+				/ ExplosionLod.switch_distance_m(r, 1080.0, FOV_DEG, ExplosionLod.REDUCED_PX), 2.0, 1e-4, "twice the lines, twice as far")
 
 
-func test_the_flash_rises_fast_and_fades_to_nothing_over_its_life() -> void:
-	var e: float = _energy(FIGHTER_KG)
+func test_the_flash_is_visible_at_the_switch_and_takes_over_the_reduced_effects_light() -> void:
+	var classes: Dictionary = _classes()
+	for lines: float in [1080.0, 2160.0]:
+		for cls: String in classes:
+			var r: float = classes[cls]
+			var switch_m: float = ExplosionLod.switch_distance_m(r, lines, FOV_DEG, ExplosionLod.REDUCED_PX)
+			var at_switch: Vector2 = ExplosionLod.on_screen(r, switch_m, lines, FOV_DEG)
+			assert_almost_eq(at_switch.x, ExplosionLod.REDUCED_PX, 1e-3, "%s, %d lines: the flash as big as the fireball it replaces" % [cls, lines])
+			var delivered: float = at_switch.y * at_switch.x * at_switch.x
+			assert_almost_eq(delivered, ExplosionLod.PEAK * ExplosionLod.REDUCED_PX * ExplosionLod.REDUCED_PX, 1e-3,
+					"%s, %d lines: the same light as the reduced effect at its end" % [cls, lines])
+			assert_gt(delivered, ExplosionLod.VISIBLE_DELIVERED, "%s, %d lines: visible at the switch" % [cls, lines])
+			assert_gte(ExplosionLod.visible_to_m(r, lines, FOV_DEG), 2.0 * switch_m, "%s, %d lines: and well beyond it" % [cls, lines])
+
+
+func test_below_its_floor_the_flash_keeps_a_pixel_and_its_light_falls_by_the_inverse_square() -> void:
+	for lines: float in [1080.0, 2160.0]:
+		var floor_m: float = ExplosionLod.floor_distance_m(FIGHTER_R, lines, FOV_DEG)
+		assert_almost_eq(ExplosionLod.on_screen(FIGHTER_R, floor_m, lines, FOV_DEG).x, 1.0, 1e-3)
+		for d: float in [2.0 * floor_m, 4.0 * floor_m]:
+			var s: Vector2 = ExplosionLod.on_screen(FIGHTER_R, d, lines, FOV_DEG)
+			assert_eq(s.x, 1.0, "never under a pixel")
+			assert_almost_eq(s.y * s.x * s.x / (ExplosionLod.PEAK * pow(floor_m / d, 2.0)), 1.0, 1e-3, "the inverse square")
+
+
+func test_a_fighters_death_reads_across_a_few_km_and_a_capitals_across_tens() -> void:
+	var classes: Dictionary = _classes()
+	for lines: float in [1080.0, 2160.0]:
+		var reach: Dictionary = {}
+		for cls: String in classes:
+			reach[cls] = ExplosionLod.visible_to_m(classes[cls], lines, FOV_DEG)
+			gut.p("%d lines, %s (R %.0f m): full to %.1f km, reduced to %.1f km, the flash reads to %.1f km" % [lines, cls, classes[cls],
+					ExplosionLod.switch_distance_m(classes[cls], lines, FOV_DEG, ExplosionLod.FULL_PX) / 1000.0,
+					ExplosionLod.switch_distance_m(classes[cls], lines, FOV_DEG, ExplosionLod.REDUCED_PX) / 1000.0, reach[cls] / 1000.0])
+		assert_between(float(reach["fighter"]), 3000.0, 60000.0, "%d lines: a fighter's across a few km" % lines)
+		assert_gt(float(reach["destroyer"]), 10.0 * float(reach["fighter"]), "a capital's much farther")
+		assert_gt(float(reach["carrier"]), float(reach["destroyer"]))
+		assert_gt(float(reach["destroyer"]), 30000.0, "%d lines: a capital's across tens of km" % lines)
+
+
+func test_the_flash_rises_fast_lasts_longer_for_a_bigger_blast_and_fades_to_nothing() -> void:
+	var e: float = 2.0e9
 	var life: float = ExplosionLod.flash_s(e)
 	assert_eq(ExplosionLod.envelope(0.0, life), 0.0)
 	assert_almost_eq(ExplosionLod.envelope(ExplosionLod.RISE_S, life), 1.0, 1e-4)
-	assert_lt(ExplosionLod.envelope(life * 0.5, life), 1.0)
 	assert_eq(ExplosionLod.envelope(life, life), 0.0)
+	assert_gt(ExplosionLod.flash_s(8.0e12), life)

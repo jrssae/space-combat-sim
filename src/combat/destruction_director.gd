@@ -17,9 +17,9 @@ extends Node
 ## waves count). An ally's death is a `ship_destroyed` only. Which is which is the pool type (`ShipPool.DEFAULT_TYPE` raiders,
 ## `ShipPool.ALLY_TYPE` allies), never the faction relation, so a `relation` change on the console cannot turn kills into losses.
 ##
-## The level of detail (M4-T23, `ExplosionLod`): how a death is drawn depends on its distance from the camera, set by the
-## hull's size: the full effects above near, a reduced explosion (no light, the gas shell only, no debris) between, and a point
-## flash in the world's `FarFlashes` far, with no node and no particle. A death in the low-attention tier is drawn where its row
+## The level of detail (M4-T23, `ExplosionLod`): how a death is drawn depends on its fireball's size on the current picture:
+## the full effects while it is 8 px or more in radius, a reduced explosion (no light, the gas shell only, no debris) down to
+## 2 px, and below that a point flash in the world's `FarFlashes`, with no node and no particle. A death in the low-attention tier is drawn where its row
 ## flew. A **capital** stand-in's death (`watch_capital`) is drawn the same way; the capital then leaves play (and the tier)
 ## and `capital_destroyed` is emitted. Every death's killing hit carries its blast's energy, radius and point (`set_blast`),
 ## the data M12's blast damage and hulks start from.
@@ -205,12 +205,13 @@ func _on_capital_destroyed(info: HitInfo, cap: CapitalStandin) -> void:
 	capital_destroyed.emit(cap, info)
 
 
-# How a death of a hull of `radius` at `at` is drawn, from the camera's distance (the full effect with no camera).
+# How a death of a hull of `radius` at `at` is drawn: from its fireball's size on the current picture (the full effect with no
+# camera).
 func _level_at(radius: float, at: Vector3) -> ExplosionLod.Level:
 	var camera: Camera3D = get_viewport().get_camera_3d() if is_inside_tree() else null
 	if camera == null:
 		return ExplosionLod.Level.FULL
-	return ExplosionLod.level(radius, camera.global_position.distance_to(at))
+	return ExplosionLod.level(radius, camera.global_position.distance_to(at), ExplosionLod.picture_lines(get_viewport()), camera.fov)
 
 
 # A death past the full effect's distance: a reduced explosion, or a far flash with no node and no particle.
@@ -220,7 +221,7 @@ func _spawn_far(level: ExplosionLod.Level, at: Vector3, velocity: Vector3, radiu
 		return
 	var flashes: FarFlashes = FarFlashes.attach(world)
 	if flashes != null:
-		flashes.add(at, velocity, energy_j)
+		flashes.add(at, velocity, radius, energy_j)
 
 
 func _add_explosion(radius: float, velocity: Vector3, at: Vector3, reduced: bool) -> void:

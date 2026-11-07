@@ -1,7 +1,7 @@
 extends GutTest
 ## The explosion level of detail in play (M4-T23, architecture §17.14): a near death is the full explosion as before, a death
 ## farther out a reduced one (no light, fewer particles, no debris), and a far death a point flash in one shared multimesh
-## that costs no node and no particle; a death in the low-attention tier flashes where its row flew; a capital's death
+## that costs no node and no particle; the distances come from the fireball's size on this picture (fix round 1); a death in the low-attention tier flashes where its row flew; a capital's death
 ## flashes too, leaves play and keeps its blast's energy and radius on the event (M12). The real main scene.
 
 var main: Main
@@ -49,6 +49,23 @@ func _camera_distance(at: Vector3) -> float:
 	return get_viewport().get_camera_3d().global_position.distance_to(at)
 
 
+# Where a hull of `radius`'s fireball is `px` pixels in radius on this picture, m.
+func _switch_m(radius: float, px: float) -> float:
+	return ExplosionLod.switch_distance_m(radius, ExplosionLod.picture_lines(get_viewport()), get_viewport().get_camera_3d().fov, px)
+
+
+func _level(radius: float, at: Vector3) -> ExplosionLod.Level:
+	return ExplosionLod.level(radius, _camera_distance(at), ExplosionLod.picture_lines(get_viewport()), get_viewport().get_camera_3d().fov)
+
+
+# A raider placed `distance_m` ahead, with its radius known before it is spawned (the pool's raiders are all alike).
+func _raider_radius() -> float:
+	var probe: Combatant = _raider(100.0)
+	var r: float = probe.damageable.bounding_radius
+	main.ships.release(probe)
+	return r
+
+
 func test_a_near_death_is_the_full_explosion_as_before() -> void:
 	var raider: Combatant = _raider(200.0)
 	await _ticks(1)
@@ -63,11 +80,10 @@ func test_a_near_death_is_the_full_explosion_as_before() -> void:
 
 
 func test_a_death_between_is_a_reduced_explosion_with_no_light_and_no_debris() -> void:
-	var raider: Combatant = _raider(2500.0)
+	var r: float = _raider_radius()
+	var raider: Combatant = _raider(0.5 * (_switch_m(r, ExplosionLod.FULL_PX) + _switch_m(r, ExplosionLod.REDUCED_PX)))
 	await _ticks(1)
-	var radius: float = raider.damageable.bounding_radius
-	assert_eq(ExplosionLod.level(radius, _camera_distance(raider.ship.global_position)), ExplosionLod.Level.REDUCED,
-			"(the raider sits in the reduced band)")
+	assert_eq(_level(r, raider.ship.global_position), ExplosionLod.Level.REDUCED, "(the raider sits in the reduced band)")
 	var debris_before: int = main.debris.active_chunk_count()
 	raider.damageable.kill()
 	var made: Array[Explosion] = _explosions()
@@ -80,9 +96,11 @@ func test_a_death_between_is_a_reduced_explosion_with_no_light_and_no_debris() -
 
 
 func test_a_far_death_is_a_point_flash_that_costs_no_node_and_no_particle() -> void:
-	var raider: Combatant = _raider(8000.0)
+	var r: float = _raider_radius()
+	var raider: Combatant = _raider(1.3 * _switch_m(r, ExplosionLod.REDUCED_PX))
 	await _ticks(2)
-	assert_false(raider.ship.is_tier_parked(), "(8 km: still on its body)")
+	assert_false(raider.ship.is_tier_parked(), "(within 10 km: still on its body)")
+	assert_eq(_level(r, raider.ship.global_position), ExplosionLod.Level.FAR, "(past the flash's switch)")
 	var nodes_before: int = main.effects.get_child_count()
 	var busy_before: int = main.fx.busy_count()
 	var debris_before: int = main.debris.active_chunk_count()
@@ -130,14 +148,24 @@ func test_a_far_capitals_death_flashes_leaves_play_and_keeps_its_blast_on_the_ev
 	assert_false(cap.visible or cap.can_process(), "the capital left play")
 	var sim: SimCore = SimCore.for_tree(get_tree())
 	assert_false(sim.core.tier_has(cap.get_instance_id()), "and the tier")
-	var radius: float = cap.damageable.bounding_radius
-	var level: int = ExplosionLod.level(radius, _camera_distance(main.world.to_global(Vector3(0.0, 0.0, -14000.0))))
-	if level == ExplosionLod.Level.FAR:
-		assert_eq(_flash_count(), 1, "a far flash")
-	else:
-		assert_eq(_explosions().size(), 1, "at 14 km a carrier's blast is still an explosion (%d)" % level)
+	assert_eq(_explosions().size(), 1, "at 14 km a carrier's fireball is tens of pixels: the full explosion")
+	assert_false(_explosions()[0].reduced)
+	assert_eq(_flash_count(), 0)
 	await _ticks(4)
 	assert_false(cap.visible, "and is not promoted back")
+
+
+func test_a_capital_past_its_switch_dies_as_a_far_flash() -> void:
+	var standins: StandinDirector = main.world.get_node("Standins") as StandinDirector
+	var far_m: float = 1.3 * _switch_m(CapitalStandin.hull_radius(&"cruiser"), ExplosionLod.REDUCED_PX)
+	var cap: CapitalStandin = standins.add_capital(&"cruiser", Factions.RAIDERS, "CRUISER", main.world.to_universe(Vector3(0.0, 0.0, -far_m)),
+			Basis.IDENTITY, Vector3.ZERO)
+	standins.active = true
+	await _ticks(4)
+	assert_true(cap.is_tier_parked(), "(%.0f km: a tier row)" % (far_m / 1000.0))
+	assert_true(cap.damageable.kill())
+	assert_eq(_explosions().size(), 0, "no explosion node")
+	assert_eq(_flash_count(), 1, "a far flash")
 
 
 func test_kill_target_destroys_a_selected_capital() -> void:

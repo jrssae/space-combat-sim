@@ -2,8 +2,9 @@ class_name FarFlashes
 extends MultiMeshInstance3D
 ## Far deaths as point flashes (M4-T23, architecture §17.14): every death past the reduced explosion's distance, near ship or
 ## tier row, is one instance of the world's one multimesh, so a far battle's deaths cost one draw call and no node or particle.
-## A flash drifts with the dead ship's velocity, rises fast and fades over its life, its size, peak and length from the blast's
-## energy (`ExplosionLod`); `far_flash.gdshader` keeps it at least a pixel and dims it by the inverse square below that.
+## A flash drifts with the dead ship's velocity, rises fast and fades over its life; it is as big as the fireball it replaces and
+## as bright as the explosion's glow, and lasts longer for a bigger blast (`ExplosionLod`); `far_flash.gdshader` keeps it at
+## least a pixel and dims it by the inverse square below that.
 ##
 ## A child of `World` (`attach`) at the World's origin, its flashes in World-local metres. It is shiftable, so a rebase moves
 ## the drawn flashes with everything else; it then goes back to the origin and moves its flashes instead. Visual only:
@@ -16,7 +17,8 @@ const STRIDE: int = 16
 
 var _positions := PackedVector3Array()
 var _velocities := PackedVector3Array()
-var _energies := PackedFloat64Array()
+var _radii := PackedFloat64Array()
+var _lives := PackedFloat64Array()
 var _ages := PackedFloat64Array()
 var _buffer := PackedFloat32Array()
 ## Flashes started so far (a readout).
@@ -69,11 +71,12 @@ func _process(delta: float) -> void:
 	advance(delta)
 
 
-## Starts a flash for a blast of `energy_j` at `at` (World-local), drifting at `velocity`.
-func add(at: Vector3, velocity: Vector3, energy_j: float) -> void:
+## Starts the flash of a hull of `radius_m` whose blast held `energy_j`, at `at` (World-local), drifting at `velocity`.
+func add(at: Vector3, velocity: Vector3, radius_m: float, energy_j: float) -> void:
 	_positions.append(at)
 	_velocities.append(velocity)
-	_energies.append(energy_j)
+	_radii.append(ExplosionLod.flash_radius_m(radius_m))
+	_lives.append(ExplosionLod.flash_s(energy_j))
 	_ages.append(0.0)
 	started += 1
 	_write()
@@ -93,10 +96,11 @@ func flash_position(index: int) -> Vector3:
 func advance(delta: float) -> void:
 	for i: int in range(_positions.size() - 1, -1, -1):
 		_ages[i] += delta
-		if _ages[i] >= ExplosionLod.flash_s(_energies[i]):
+		if _ages[i] >= _lives[i]:
 			_positions.remove_at(i)
 			_velocities.remove_at(i)
-			_energies.remove_at(i)
+			_radii.remove_at(i)
+			_lives.remove_at(i)
 			_ages.remove_at(i)
 			continue
 		_positions[i] += _velocities[i] * delta
@@ -111,8 +115,7 @@ func _write() -> void:
 	for i: int in n:
 		var b: int = i * STRIDE
 		var at: Vector3 = _positions[i]
-		var e: float = _energies[i]
-		var light: float = ExplosionLod.peak(e) * ExplosionLod.envelope(maxf(_ages[i], ExplosionLod.RISE_S * 0.5), ExplosionLod.flash_s(e))
+		var light: float = ExplosionLod.PEAK * ExplosionLod.envelope(maxf(_ages[i], ExplosionLod.RISE_S * 0.5), _lives[i])
 		_buffer[b] = 1.0
 		_buffer[b + 1] = 0.0
 		_buffer[b + 2] = 0.0
@@ -128,7 +131,7 @@ func _write() -> void:
 		_buffer[b + 12] = ExplosionLod.COLOR.r * light
 		_buffer[b + 13] = ExplosionLod.COLOR.g * light
 		_buffer[b + 14] = ExplosionLod.COLOR.b * light
-		_buffer[b + 15] = ExplosionLod.flash_radius_m(e)
+		_buffer[b + 15] = _radii[i]
 	if multimesh.instance_count > 0:
 		RenderingServer.multimesh_set_buffer(multimesh.get_rid(), _buffer)
 	multimesh.visible_instance_count = n
