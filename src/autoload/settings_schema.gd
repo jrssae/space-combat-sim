@@ -104,13 +104,6 @@ const ENTRIES: Dictionary = {
 	&"perf_native_bolt_sync": {"type": TYPE_BOOL, "default": true,
 		"doc": "The core's two bolt reads a tick go through the cheaper native reader (M4-T34) when the core is on; off = the core's own read, the reference, for pairing the two in one process"},
 	# M4-T35
-	&"perf_core_event_columns": {"type": TYPE_BOOL, "default": true,
-		"doc": "The core keeps a body's activity, hull points and selection from the events that change them (hidden, shown, destroyed, damaged, healed, a selection change; M4-T35) and reads only the pose and motion a tick; off = every column read from the nodes every tick, the reference, for pairing the two in one process; live"},
-	# Kept though it gains nothing on the main thread: T24's step on a worker reads the bodies through this seam.
-	&"perf_core_body_direct": {"type": TYPE_BOOL, "default": false,
-		"doc": "The core reads the rigid bodies' pose and motion from the physics server's direct state by RID (M4-T35) instead of the nodes' getters; the bits differ from the nodes' only between a teleport and Jolt's next step; off = the nodes' getters, the reference; live"},
-	&"perf_native_selection_check": {"type": TYPE_BOOL, "default": true,
-		"doc": "The AI ships' targeting controllers' selection check (a target gone, parked or out of reach) runs as one native pass over the core's rows (M4-T35; needs perf_core_event_columns); off = each controller checks its own selection every tick, the reference; live"},
 	&"perf_native_bolt_rows": {"type": TYPE_BOOL, "default": true,
 		"doc": "The core owns the bolts (M4-T35): the AI cannons' gates and shots run as one kernel over the rows, each bolt is a row stepped natively, swept and spent from the rows by the hit resolver and drawn by one multimesh a look; the player's cannon and the beams and missiles keep their nodes; off = a Projectile node per bolt and a GDScript tick per cannon, the reference, for pairing the two in one process (a switch mid-run drops the bolts in flight); live"},
 	# M4-T38
@@ -153,7 +146,8 @@ const RENAMED: Dictionary = {}
 const RETIRED: Array[StringName] = [&"perf_native_weapons", &"perf_native_brains", &"perf_native_commands",
 		&"perf_native_driver_step", &"perf_native_flight", &"perf_batch_owns_ships", &"perf_native_sweep_cells",
 		&"perf_ram_contact_columns", &"perf_ram_sweep_cull", &"perf_native_ram_contacts", &"perf_targeting_on_read",
-		&"collision_layers", &"far_ship_interpolation_off", &"ship_contact_monitor"]
+		&"collision_layers", &"far_ship_interpolation_off", &"ship_contact_monitor", &"perf_core_event_columns",
+		&"perf_core_body_direct", &"perf_native_selection_check"]
 
 ## Choices removed from a setting: key -> {old choice -> what a saved file's old choice loads as} (M4-T37: the inline step).
 const RETIRED_VALUES: Dictionary = {&"sim_step": {&"inline": &"threaded"}}

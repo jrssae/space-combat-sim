@@ -1,10 +1,9 @@
 extends GutTest
 ## The core owns the simulated state (M4-T35b, architecture §17.13): activity, hull points and the selection as columns
-## updated from events (`perf_core_event_columns`), the Jolt bodies read by RID from the direct state (`perf_core_body_direct`),
-## the ram stage's contact read in one native call with `contact_monitor` off (M4-T37 removed its switch), the AI targeting
-## controllers' selection check as a row column (`perf_native_selection_check`), and the batched ships' own tick off
-## (`perf_batch_owns_ships`). Each path keeps the old one as the reference behind its setting; seeded fights give the same
-## rows, commands and hits either way. Skips, saying why, when the library is not built.
+## updated from events, the ram stage's contact read in one native call with `contact_monitor` off, the AI targeting
+## controllers' selection check as a row column, and the batched ships' own tick off. Seeded fights give the rows, commands
+## and hits the old paths gave (recorded in `tests/fixtures/parity/core_state.json` before M4-T37 removed them and their
+## switches).
 
 const SHIPS: int = 120
 const SEED: int = 1
@@ -12,12 +11,8 @@ const TICKS: int = 240
 const DELTA: float = 1.0 / 60.0
 const SPEC_PATH: String = "res://assets/ships/starfury_aurora.tres"
 const FIXTURE: String = "core_state"
-const NEW_SETTINGS: Array[StringName] = [&"perf_core_event_columns", &"perf_core_body_direct",
-		&"perf_native_selection_check"]
 const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_native_flight",
-		&"perf_threads", &"perf_native_commands", &"perf_native_bolt_rows", &"ram_damage",
-		&"perf_core_event_columns", &"perf_core_body_direct", &"perf_native_selection_check",
-		&"perf_batch_owns_ships"]
+		&"perf_threads", &"perf_native_commands", &"perf_native_bolt_rows", &"ram_damage"]
 
 var _saved: Dictionary = {}
 var _index_of: Dictionary = {}
@@ -48,13 +43,6 @@ func _skipped() -> bool:
 		return false
 	pending("the native library is not built (scripts/build_native.sh), so there is no core to test")
 	return true
-
-
-func test_the_settings_exist_with_their_defaults() -> void:
-	for key: StringName in NEW_SETTINGS:
-		assert_true(Settings.schema.has_key(key), "%s is a setting" % key)
-	assert_eq(Settings.schema.get_default(&"perf_core_event_columns"), true, "event columns on by default")
-	assert_eq(Settings.schema.get_default(&"perf_native_selection_check"), true, "the native selection check on by default")
 
 
 # --- a small world: two lean ships and the core ---------------------------------------------------------------------
@@ -94,7 +82,6 @@ func _target_row(sim: SimCore, c: Combatant) -> int:
 func test_the_hull_and_selection_columns_follow_the_events_at_the_next_sync() -> void:
 	if _skipped():
 		return
-	Settings.set_value(&"perf_core_event_columns", true)
 	var made: Array = _space()
 	var world: WorldFrame = made[1]
 	var a: Combatant = _ship(world, made[2], "A", Factions.EARTH_ALLIANCE, Vector3.ZERO)
@@ -102,7 +89,6 @@ func test_the_hull_and_selection_columns_follow_the_events_at_the_next_sync() ->
 	var sim: SimCore = SimCore.attach(world)
 	await get_tree().physics_frame
 	sim.sync_now()
-	assert_eq(sim.core.event_columns(), true, "the core updates its columns from events")
 	assert_eq(_hull_row(sim, a), 1.0, "a full hull reads 1")
 	assert_eq(_target_row(sim, a), -1, "no selection reads -1")
 	var hit := HitInfo.new(a.ship.get_instance_id(), b.ship.get_instance_id(), Factions.RAIDERS, 25.0)
@@ -142,65 +128,6 @@ func test_the_hull_and_selection_columns_follow_the_events_at_the_next_sync() ->
 	await get_tree().physics_frame
 
 
-func test_the_event_columns_cut_the_engine_calls_a_body_makes() -> void:
-	if _skipped():
-		return
-	var calls: Dictionary = {}
-	for on: bool in [false, true]:
-		Settings.set_value(&"perf_core_event_columns", on)
-		Settings.set_value(&"perf_core_body_direct", false)
-		var made: Array = _space()
-		var world: WorldFrame = made[1]
-		for i: int in 20:
-			_ship(world, made[2], "S%d" % i, Factions.RAIDERS if i % 2 == 0 else Factions.EARTH_ALLIANCE, Vector3(0.0, 0.0, -400.0 * i))
-		var sim: SimCore = SimCore.attach(world)
-		for i: int in 3:
-			await get_tree().physics_frame
-		calls[on] = sim.engine_calls()[0]
-		(made[0] as SubViewport).queue_free()
-		await get_tree().physics_frame
-	gut.p("sync calls a tick for 20 ships: %d with the columns read every tick, %d from events" % [int(calls[false]), int(calls[true])])
-	assert_lt(int(calls[true]) * 2, int(calls[false]), "the event columns make less than half the engine calls a tick")
-
-
-func test_the_direct_state_read_gives_the_nodes_bits_after_the_first_step() -> void:
-	if _skipped():
-		return
-	var made: Array = _space()
-	var world: WorldFrame = made[1]
-	var ships: Array[Combatant] = []
-	for i: int in 6:
-		var c: Combatant = _ship(world, made[2], "S%d" % i, Factions.RAIDERS, Vector3(300.0 * i, 0.0, -400.0 * i))
-		c.ship.linear_velocity = Vector3(10.0 * i, -5.0, 20.0)
-		c.ship.angular_velocity = Vector3(0.1 * i, 0.2, -0.1)
-		ships.append(c)
-	await get_tree().physics_frame
-	await get_tree().physics_frame
-	var by_node: Object = NativeLib.instantiate(SimCore.NATIVE_CLASS)
-	var by_rid: Object = NativeLib.instantiate(SimCore.NATIVE_CLASS)
-	by_rid.set_body_direct(true)
-	var markers: Array[Node] = get_tree().get_nodes_in_group(Targetable.GROUP)
-	var hulls: Array[Node] = get_tree().get_nodes_in_group(Damageable.GROUP)
-	by_node.set_members(markers, hulls)
-	by_rid.set_members(markers, hulls)
-	var no_nodes: Array[Node] = []
-	for tick: int in 5:
-		await get_tree().physics_frame
-		by_node.sync_in(no_nodes, tick, DELTA)
-		by_rid.sync_in(no_nodes, tick, DELTA)
-		var a: Array = by_node.hull_columns()
-		var b: Array = by_rid.hull_columns()
-		assert_eq(b[3], a[3], "tick %d: the same positions" % tick)
-		assert_eq(b[4], a[4], "tick %d: the same velocities" % tick)
-		assert_eq(b[6], a[6], "tick %d: the same bases" % tick)
-	assert_eq(int(by_node.node_count()), 6, "six body rows")
-	assert_eq(int(by_rid.node_count()), 6, "either way")
-	gut.p("direct read: %d sync calls a tick against %d through the nodes" % [int(by_rid.engine_calls_open()[0]),
-			int(by_node.engine_calls_open()[0])])
-	(made[0] as SubViewport).queue_free()
-	await get_tree().physics_frame
-
-
 func test_a_ship_reports_jolt_contacts_with_contact_monitor_off() -> void:
 	if _skipped():
 		return
@@ -228,19 +155,16 @@ func test_a_ship_reports_jolt_contacts_with_contact_monitor_off() -> void:
 func test_the_native_selection_check_clears_as_the_controllers_did() -> void:
 	if _skipped():
 		return
-	var recorded: Variant = await ParityFixture.expected(FIXTURE, "selection_check_signals",
-			func() -> Array: return await _selection_signals(false))
-	var native: Array = await _selection_signals(true)
+	var recorded: Variant = ParityFixture.stored(FIXTURE, "selection_check_signals")
+	var native: Array = await _selection_signals()
 	assert_eq(ParityFixture.encode(native), recorded,
 			"the same target_changed signals on the same ticks as the controllers' own check (recorded): %s" % [native])
 	assert_gte(native.size(), 4, "selections and clears happened")
 
 
-# A selection in reach, one that leaves reach and one parked, on the native check or the controllers' own (`native` off,
-# the recorded reference): each target_changed signal as `[ticks since the first, to B, to C, cleared]`.
-func _selection_signals(native: bool) -> Array:
-	Settings.set_value(&"perf_native_selection_check", native)
-	Settings.set_value(&"perf_core_event_columns", true)
+# A selection in reach, one that leaves reach and one parked, on the native check: each target_changed signal as
+# `[ticks since the first, to B, to C, cleared]`.
+func _selection_signals() -> Array:
 	var made: Array = _space()
 	var world: WorldFrame = made[1]
 	var a: Combatant = _ship(world, made[2], "A", Factions.EARTH_ALLIANCE, Vector3.ZERO, true)
@@ -251,7 +175,7 @@ func _selection_signals(native: bool) -> Array:
 	var changes: Array = []
 	a.ship.targeting.target_changed.connect(func(id: int) -> void: changes.append([Engine.get_physics_frames(), id]))
 	await get_tree().physics_frame
-	assert_eq(a.ship.targeting.is_physics_processing(), not native, "the AI controller ticks itself only off the native check")
+	assert_eq(a.ship.targeting.is_physics_processing(), false, "the AI controller hands its check to the core")
 	var frame0: int = Engine.get_physics_frames()
 	a.ship.targeting.select_id(b.targetable.get_instance_id())
 	await get_tree().physics_frame
@@ -259,13 +183,13 @@ func _selection_signals(native: bool) -> Array:
 	assert_eq(a.ship.targeting.selected_id(), b.targetable.get_instance_id(), "B in reach stays selected")
 	b.ship.global_position = Vector3(0.0, 0.0, -2000.0)  # out of A's reach
 	await get_tree().physics_frame
-	assert_eq(a.ship.targeting.selected_id(), 0, "a selection that left reach is cleared by the next tick (native %s)" % native)
+	assert_eq(a.ship.targeting.selected_id(), 0, "a selection that left reach is cleared by the next tick")
 	a.ship.targeting.select_id(c.targetable.get_instance_id())
 	await get_tree().physics_frame
 	c.ship.visible = false
 	c.ship.process_mode = Node.PROCESS_MODE_DISABLED
 	await get_tree().physics_frame
-	assert_eq(a.ship.targeting.selected_id(), 0, "a parked selection is cleared (native %s)" % native)
+	assert_eq(a.ship.targeting.selected_id(), 0, "a parked selection is cleared")
 	var stamped: Array = []
 	for change: Array in changes:
 		stamped.append([int(change[0]) - frame0, change[1] == b.targetable.get_instance_id(),
@@ -442,50 +366,32 @@ static func _digest_of(battle: Dictionary) -> Dictionary:
 			"ticks": (battle["rows"] as PackedInt64Array).size()}
 
 
-# Flies the battle with `key` on and asks for the rows, commands and hits every tick that the old path behind `key` gave
-# (M4-T37: recorded in `tests/fixtures/parity/core_state.json` with `key` off, before that path was removed).
-func _assert_same_battle(key: StringName, with: Dictionary = {}) -> void:
-	var off: Dictionary = with.duplicate()
-	off[key] = false
-	var on: Dictionary = with.duplicate()
-	on[key] = true
-	var recorded: Variant = await ParityFixture.expected(FIXTURE, "battle_without_" + String(key),
-			func() -> Dictionary: return _digest_of(await _battle(off, 1)))
-	var candidate: Dictionary = await _battle(on, 1)
-	assert_not_null(recorded, "%s: the old path's battle was recorded" % key)
-	if recorded == null:
-		return
-	assert_gt(int(recorded["hits_total"]), 10, "%s: hits landed (%d)" % [key, int(recorded["hits_total"])])
-	assert_eq(ParityFixture.encode(_digest_of(candidate)), recorded,
-			"%s: the same rows, commands and hits every tick as the old path's recording" % key)
-	gut.p("%s: %d hits; %d sync calls a tick" % [key, int(candidate["hits_total"]), int(candidate["sync_calls"])])
+# The cases recorded with one old path each (M4-T37: the event columns, the native selection check and the batch owning
+# its ships off), before those paths were removed.
+const OLD_PATH_CASES: Array[String] = ["battle_without_perf_core_event_columns", "battle_without_perf_native_selection_check",
+		"battle_without_perf_batch_owns_ships"]
 
 
-func test_the_event_columns_fly_the_same_battle() -> void:
+func test_the_battle_flies_as_each_old_path_did() -> void:
 	if _skipped():
 		return
-	await _assert_same_battle(&"perf_core_event_columns", {&"perf_native_selection_check": false})
-
-
-func test_the_native_selection_check_flies_the_same_battle() -> void:
-	if _skipped():
-		return
-	await _assert_same_battle(&"perf_native_selection_check", {&"perf_core_event_columns": true})
-
-
-func test_the_batch_owning_its_ships_flies_the_same_battle() -> void:
-	if _skipped():
-		return
-	await _assert_same_battle(&"perf_batch_owns_ships")
+	var candidate: Dictionary = await _battle({}, 1)
+	for case: String in OLD_PATH_CASES:
+		var recorded: Variant = ParityFixture.stored(FIXTURE, case)
+		assert_not_null(recorded, "%s was recorded" % case)
+		if recorded == null:
+			continue
+		assert_gt(int(recorded["hits_total"]), 10, "%s: hits landed (%d)" % [case, int(recorded["hits_total"])])
+		assert_eq(ParityFixture.encode(_digest_of(candidate)), recorded,
+				"%s: the same rows, commands and hits every tick as the recording" % case)
+	gut.p("%d hits; %d sync calls a tick" % [int(candidate["hits_total"]), int(candidate["sync_calls"])])
 
 
 func test_one_thread_and_six_give_the_same_battle_with_everything_on() -> void:
 	if _skipped():
 		return
-	var all_on: Dictionary = {&"perf_core_event_columns": true, &"perf_native_selection_check": true, &"perf_batch_owns_ships": true,
-			&"perf_native_bolt_rows": true}
-	var one: Dictionary = await _battle(all_on, 1)
-	var six: Dictionary = await _battle(all_on, 6)
+	var one: Dictionary = await _battle({}, 1)
+	var six: Dictionary = await _battle({}, 6)
 	var first: int = _first_difference(one["rows"], six["rows"])
 	assert_eq(first, -1, "the rows are the same bits with one thread and six (first difference at tick %d)" % first)
 	first = _first_difference(one["hits"], six["hits"])

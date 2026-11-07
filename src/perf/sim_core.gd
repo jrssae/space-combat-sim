@@ -15,12 +15,11 @@ extends Node
 ## Threads (M4-T18): the core's per-ship passes (the brains, which `BrainBatch`, an internal child at -9, hands one batch a
 ## tick, and the flight step) run on `perf_threads` worker threads, set at once whenever the setting changes.
 ##
-## The core's state from events (M4-T35b, `perf_core_event_columns`): a body's activity is checked again only when it is
+## The core's state from events (M4-T35b): a body's activity is checked again only when it is
 ## touched (hidden, shown, destroyed: the events this facade already watched), its hull column follows `Damageable.damaged`
 ## and `restored`, its selection column every change a `TargetingController` makes (`note_selection_changed`); the columns are written to the rows at the
-## sync points, so the rows hold what a read at the sync would. `perf_core_body_direct` reads the rigid bodies from the
-## physics server's direct state by RID. The AI targeting controllers' selection check runs here at their priority
-## (`SimCoreTargeting`, `perf_native_selection_check`), and the ram resolver's contact read in one native call.
+## sync points, so the rows hold what a read at the sync would. The AI targeting controllers' selection check runs here at
+## their priority (`SimCoreTargeting`), and the ram resolver's contact read in one native call.
 ##
 ## Bolts as rows (M4-T35, `perf_native_bolt_rows`): the core owns its bolts. Every cannon but the player's registers with
 ## `ScsCannons` (`register_cannon`), and an internal `SimCoreStep` child at priority 1 (after the drivers, `Main` and the
@@ -170,7 +169,6 @@ func _ready() -> void:
 	add_child(_bolt_mesh, false, Node.INTERNAL_MODE_BACK)
 	_apply_threads()
 	_apply_bolt_rows()
-	_apply_state_settings()
 	if not Settings.changed.is_connected(_on_setting_changed):
 		Settings.changed.connect(_on_setting_changed)
 	_hook(get_tree())
@@ -245,11 +243,9 @@ static func bolt_rows_enabled() -> bool:
 	return _cannons_class_known == 1
 
 
-## Whether the AI targeting controllers' selection check runs on the core (M4-T35): the core on, the setting on, and the
-## event columns (the check reads the selection the events last gave).
+## Whether the AI targeting controllers' selection check runs on the core (M4-T35): whenever the core runs.
 static func selection_check_enabled() -> bool:
-	return enabled() and bool(Settings.get_value(&"perf_native_selection_check")) \
-			and bool(Settings.get_value(&"perf_core_event_columns"))
+	return enabled()
 
 
 ## A ship's selection changed (`TargetingController` says so on every change): the latest core notes it for its selection
@@ -505,13 +501,6 @@ func _apply_bolt_rows() -> void:
 		core.set_bolt_rows(bolt_rows_enabled())
 
 
-# Tells the core how it keeps its state (M4-T35b), as the settings stand.
-func _apply_state_settings() -> void:
-	if core != null:
-		core.set_event_columns(bool(Settings.get_value(&"perf_core_event_columns")))
-		core.set_body_direct(bool(Settings.get_value(&"perf_core_body_direct")))
-
-
 ## Engine calls of the last closed tick: `[sync, fallbacks]` (the sync points' reads, and the flight step's reads of the
 ## physics server for ships without a row; the kernels make none by construction, see `native/src/kernels.rs`).
 func engine_calls() -> PackedInt64Array:
@@ -604,9 +593,6 @@ func _on_setting_changed(key: StringName, _value: Variant) -> void:
 	elif key == &"perf_native_bolt_rows" or key == &"perf_native_core" or key == &"perf_native":
 		_apply_bolt_rows()
 		PulseCannon.rebind_all()
-		TargetingController.rebind_all()
-	elif key == &"perf_core_event_columns" or key == &"perf_core_body_direct" or key == &"perf_native_selection_check":
-		_apply_state_settings()
 		TargetingController.rebind_all()
 
 
@@ -737,8 +723,6 @@ func _register_console() -> void:
 		&"shots": {"get": func() -> int: return shots_last_tick, "doc": "Shots the kernel fired in the last tick"},
 		&"expired": {"get": func() -> int: return expired_last_tick, "doc": "Owned bolts that expired in the last tick"},
 		&"bolt_draws": {"get": func() -> int: return _bolt_mesh.instances_drawn if _bolt_mesh != null else 0, "doc": "Bolt instances the multimesh drew in the last frame (M4-T35)"},
-		&"event_columns": {"get": func() -> bool: return core != null and bool(core.event_columns()), "doc": "The activity, hull and selection columns follow the events (M4-T35) instead of a read a body a tick"},
-		&"body_direct": {"get": func() -> bool: return core != null and bool(core.body_direct()), "doc": "The rigid bodies are read from the physics server's direct state by RID (M4-T35)"},
 		&"watched_selections": {"get": func() -> int: return _selection_controllers.size(), "doc": "AI targeting controllers whose selection check runs on the core (M4-T35)"},
 		&"selection_clears": {"get": func() -> int: return selection_clears_last_tick, "doc": "Selections the core's check cleared in the last tick"},
 	}), self)

@@ -17,7 +17,7 @@ extends Node
 ## Inactive targetables (`Targetable.is_active()`: hidden, or their owner not processing) are never candidates, and a
 ## selection that turns inactive is cleared on the next refresh, emitting `target_changed`.
 ##
-## On the core (M4-T35, `perf_native_selection_check`): an AI ship's controller (one that does not keep candidates) hands its
+## On the core (M4-T35): an AI ship's controller (one that does not keep candidates) hands its
 ## check to the core, which runs every watched ship's in one pass over the rows at this priority and names the ships whose
 ## selection must clear; this node then stops ticking itself and only clears (`clear_selection`, the same signal).
 

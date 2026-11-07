@@ -4,7 +4,7 @@
 #![allow(clippy::redundant_field_names)]
 use std::collections::{HashMap, HashSet};
 
-use godot::classes::{Node, Node3D, Object, PhysicsServer3D, RigidBody3D};
+use godot::classes::{Node, Node3D, Object, RigidBody3D};
 use godot::prelude::*;
 
 use crate::threads::{self, Pass, Threads};
@@ -235,9 +235,7 @@ pub struct ScsSimCore {
     pub(crate) bolt_rows: bool,
     pub(crate) next_bolt_id: i64,
     // The core's state from events (M4-T35b): activity, hull and selection kept in the attributes and written to the rows
-    // at the sync points; `body_direct` reads the rigid bodies from the physics server's direct state by RID.
-    event_columns: bool,
-    body_direct: bool,
+    // at the sync points.
     activity_dirty: bool,
     /// Each row's body RID (invalid for a body with none), beside the rows (M4-T35: the ram stage's contact read).
     pub row_rids: Vec<Rid>,
@@ -464,11 +462,10 @@ impl ScsSimCore {
         self.row_names.clear();
         self.row_rids.clear();
         self.seen.clear();
-        let cached = self.event_columns && !self.activity_dirty;
+        let cached = !self.activity_dirty;
         let mut markers = std::mem::take(&mut self.markers);
         for m in markers.iter_mut() {
-            // With the event columns, a body's activity is checked again only when it was touched (hidden, shown,
-            // destroyed) or first seen; the facade's events cover every change the pool and the resolvers make.
+            // A body's activity is checked again only when it was touched (hidden, shown, destroyed) or first seen; the facade's events cover every change the pool and the resolvers make.
             if !cached || !m.active_known || self.touched.contains(&m.body_id) {
                 m.active = marker_active(m, &mut self.sync_reads);
                 m.active_known = true;
@@ -1319,45 +1316,25 @@ impl ScsSimCore {
             .attrs
             .as_ref()
             .expect("attributes are read before a row is made");
-        // The pose and motion: from the physics server's direct state by RID (M4-T35, `perf_core_body_direct`: one state
-        // handle and three reads), else through the node's own getters as the tree gather reads them.
-        let direct = if self.body_direct && m.rigid.is_some() && m.rid.is_valid() {
-            self.sync_reads += 1;
-            PhysicsServer3D::singleton().body_get_direct_state(m.rid)
-        } else {
-            None
-        };
-        let (xf, velocity, angular) = match direct {
-            Some(state) => {
-                self.sync_reads += 3;
+        // The pose and motion through the node's own getters, as the tree gather reads them.
+        self.sync_reads += 1;
+        let xf = m.body.get_global_transform();
+        let (velocity, angular) = match (&m.rigid, &m.marker) {
+            (Some(rigid), _) => {
+                self.sync_reads += 2;
+                (rigid.get_linear_velocity(), rigid.get_angular_velocity())
+            }
+            (None, Some(marker)) => {
+                self.sync_reads += 1;
                 (
-                    state.get_transform(),
-                    state.get_linear_velocity(),
-                    state.get_angular_velocity(),
+                    marker
+                        .get(&self.names.get_or_insert_with(Names::new).velocity)
+                        .try_to::<Vector3>()
+                        .unwrap_or(Vector3::ZERO),
+                    Vector3::ZERO,
                 )
             }
-            None => {
-                self.sync_reads += 1;
-                let xf = m.body.get_global_transform();
-                let (velocity, angular) = match (&m.rigid, &m.marker) {
-                    (Some(rigid), _) => {
-                        self.sync_reads += 2;
-                        (rigid.get_linear_velocity(), rigid.get_angular_velocity())
-                    }
-                    (None, Some(marker)) => {
-                        self.sync_reads += 1;
-                        (
-                            marker
-                                .get(&self.names.get_or_insert_with(Names::new).velocity)
-                                .try_to::<Vector3>()
-                                .unwrap_or(Vector3::ZERO),
-                            Vector3::ZERO,
-                        )
-                    }
-                    (None, None) => (Vector3::ZERO, Vector3::ZERO),
-                };
-                (xf, velocity, angular)
-            }
+            (None, None) => (Vector3::ZERO, Vector3::ZERO),
         };
         let has_hull = m.hull.is_some();
         let mut flags = 0;
@@ -1370,68 +1347,16 @@ impl ScsSimCore {
         if has_hull && !attrs.destroyed {
             flags |= FLAG_HULL_ACTIVE;
         }
-        // The brains' two live reads of a contact (M4-T17): `Damageable.hull.fraction()` and the ship's selection, as the
-        // scan stamped them. Two property reads for the hull, one for the selection; with the event columns (M4-T35) the
-        // values the events last gave, read live only with the attributes.
-        if self.event_columns {
-            return Read {
-                position: xf.origin,
-                basis: xf.basis,
-                velocity,
-                angular,
-                flags,
-                hull_fraction: attrs.hull_fraction,
-                target_id: attrs.target_id,
-            };
-        }
-        let names = self.names.get_or_insert_with(Names::new);
-        let mut failed = 0;
-        let hull_fraction = match &attrs.health {
-            Some(health) => {
-                self.sync_reads += 2;
-                let hp = health.get(&names.hp).try_to::<f64>();
-                let max_hp = health.get(&names.max_hp).try_to::<f64>();
-                match (hp, max_hp) {
-                    (Ok(hp), Ok(max_hp)) => clamp01(hp / max_hp),
-                    _ => {
-                        failed += 1;
-                        -1.0
-                    }
-                }
-            }
-            None => -1.0,
-        };
-        let target_id = match &attrs.targeting {
-            Some(system) => {
-                self.sync_reads += 1;
-                match system.get(&names.selected_id).try_to::<i64>() {
-                    Ok(selected) if selected != 0 => selected,
-                    Ok(_) => -1,
-                    Err(_) => {
-                        failed += 1;
-                        -1
-                    }
-                }
-            }
-            None => -1,
-        };
-        if failed > 0 {
-            if self.column_read_failures == 0 {
-                godot_warn!(
-                    "ScsSimCore: a hull's hp and max_hp or a targeting system's _selected_id did not read; the brains see no \
-                     hull or no selection for that body (a renamed property?)"
-                );
-            }
-            self.column_read_failures += failed;
-        }
+        // The brains' two live reads of a contact (M4-T17), `Damageable.hull.fraction()` and the ship's selection: the
+        // values the events last gave (M4-T35), read live only with the attributes.
         Read {
             position: xf.origin,
             basis: xf.basis,
             velocity,
             angular,
             flags,
-            hull_fraction,
-            target_id,
+            hull_fraction: attrs.hull_fraction,
+            target_id: attrs.target_id,
         }
     }
 
@@ -1919,33 +1844,6 @@ impl Digest {
 // M4-T35b: the core's state from events, the selection check and what the ram stage reads.
 #[godot_api(secondary)]
 impl ScsSimCore {
-    /// Keeps activity, hull and selection from the facade's events (`perf_core_event_columns`): a body is checked again
-    /// only when touched, and its hull and selection columns carry what `note_hull` and `note_selection` last gave.
-    #[func]
-    fn set_event_columns(&mut self, on: bool) {
-        if on != self.event_columns {
-            self.activity_dirty = true;
-            self.forget_attributes();
-        }
-        self.event_columns = on;
-    }
-
-    #[func]
-    fn event_columns(&self) -> bool {
-        self.event_columns
-    }
-
-    /// Reads the rigid bodies from the physics server's direct state by RID (`perf_core_body_direct`) instead of the nodes.
-    #[func]
-    fn set_body_direct(&mut self, on: bool) {
-        self.body_direct = on;
-    }
-
-    #[func]
-    fn body_direct(&self) -> bool {
-        self.body_direct
-    }
-
     /// A hull's points changed (`Damageable.damaged`, a heal): its column reads `clamp(hp / max_hp)` from the next sync.
     #[func]
     fn note_hull(&mut self, body_id: i64, hp: f64, max_hp: f64) {
