@@ -491,3 +491,13 @@ func test_a_rebase_shifts_the_mines() -> void:
 	world.rebase(offset)
 	assert_almost_eq(mines.position_of(0).distance_to(before - offset), 0.0, 1e-3)
 	assert_eq(mines.kind, Targetable.Kind.MINE, "a row of kind mine for the body registry")
+
+
+func test_capitals_with_no_core_warn_once() -> void:
+	_capital(Vector3.ZERO)
+	sim.free()  # a world with no core: the stand-ins cannot step (M4-T42 makes every world attach it)
+	assert_null(SimCore.for_tree(get_tree()), "no core in this tree")
+	standins.step(DT, now_s, ContactScan.from_tree(get_tree()))
+	standins.step(DT, now_s + DT, ContactScan.from_tree(get_tree()))
+	assert_eq(standins.weapons_path(), &"none", "nothing steps the weapons")
+	assert_eq(standins.no_core_warnings, 1, "said once, not every tick")

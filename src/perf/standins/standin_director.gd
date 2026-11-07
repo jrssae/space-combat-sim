@@ -67,6 +67,8 @@ var last_us: int = 0
 ## Each part's cost summed over `ticks` active ticks since `clear`, by `Part` (profiling only).
 var part_us: PackedInt64Array = PackedInt64Array()
 var ticks: int = 0
+## How many times the stand-ins said they have capitals or mines but no core to step them (once per director).
+var no_core_warnings: int = 0
 
 var _capitals: Array[CapitalStandin] = []
 var _field: AsteroidField = null
@@ -90,7 +92,7 @@ var _next_launch: Dictionary = {}  # carrier -> sim time of its next launch
 var _last_frame: int = -1
 var _native: NativeWeapons = null  # bound while the native rows step the weapons
 var _native_dirty: bool = true  # the capitals or mines changed since the rows were bound
-var _path: StringName = &"gdscript"
+var _path: StringName = &"none"
 
 
 func _init() -> void:
@@ -119,6 +121,11 @@ func step(delta: float, now_s: float, scan: ContactScan) -> void:
 	_path = &"native" if native != null else &"none"
 	if native != null:
 		_step_native(native, delta, now_s, started_us)
+	elif no_core_warnings == 0 and (not _capitals.is_empty() or _mines != null) and SimCore.for_tree(get_tree()) == null:
+		# Only a world with a core steps the weapons; say so rather than leave the capitals and mines silently idle.
+		no_core_warnings += 1
+		push_warning("StandinDirector: capitals or mines with no SimCore in the world; their engines, guns, launches and "
+				+ "mines do nothing (attach the core with SimCore.attach)")
 
 
 # The carriers' launches, the cost and the counts: the end of a tick on either path.
