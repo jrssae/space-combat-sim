@@ -279,7 +279,9 @@ func test_a_mine_leaves_the_rows_when_it_fires_and_comes_back_when_laid_again() 
 	assert_eq(StaticRows.radii[at], MineStandin.TRIGGER_RADIUS_M, "as big as its trigger")
 	assert_eq(StaticRows.solid().ids.size(), 0, "a mine is not solid: bolts and rams pass it")
 	var hostile: TargetDrone = _drone(Vector3(0.0, 0.0, -1010.0))
+	var sim: SimCore = SimCore.attach(world)  # the mines step on the core's rows (M4-T37: their GDScript step is gone)
 	for i: int in MineStandin.TRIGGER_TICKS:
+		sim.sync_now()  # the rows as the bodies stand now: this test steps the stand-ins by hand
 		standins.step(DT, now_s, ContactScan.from_tree(get_tree()))
 		now_s += DT
 	assert_false(mines.is_alive(0), "the hostile set it off")
@@ -287,6 +289,7 @@ func test_a_mine_leaves_the_rows_when_it_fires_and_comes_back_when_laid_again() 
 	assert_true(StaticRows.has(mines.row_id(1)), "the other stays")
 	hostile.global_position = Vector3(0.0, 0.0, 5000.0)
 	for i: int in roundi(MineStandin.RELAY_S / DT) + MineStandin.TRIGGER_TICKS:
+		sim.sync_now()
 		standins.step(DT, now_s, ContactScan.from_tree(get_tree()))
 		now_s += DT
 	assert_true(mines.is_alive(0), "laid again")
