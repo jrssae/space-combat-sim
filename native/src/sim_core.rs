@@ -241,6 +241,8 @@ pub struct ScsSimCore {
     pub(crate) tier_hits_total: i64,
     // The rammer and target pairs in contact at the last check, so a ram lands once, when they first touch (fix round 1).
     pub(crate) tier_ram_pairs: std::collections::HashSet<(i64, i64)>,
+    // Promotions moved clear of a rock or mine they overlapped (M4-T23).
+    pub(crate) tier_cleared: i64,
 }
 
 #[godot_api]
@@ -491,7 +493,14 @@ impl ScsSimCore {
             rows.name_keys.push(String::new());
         }
         // The tier's rows after the statics (M4-T21): contacts to the brains, out of the scan GDScript builds.
+        let tier_base = rows.body_ids.len();
         self.tier.append_to(&mut rows);
+        // A tier ship's selection is its own (M4-T23): its brain sees what it holds, as a near brain does.
+        for (k, body_id) in self.tier.body_ids.iter().enumerate() {
+            if let Some(&target) = self.latest_target.get(body_id) {
+                rows.target_ids[tier_base + k] = target;
+            }
+        }
         for name in &self.tier_names {
             self.row_names.push(name.clone());
             self.row_rids.push(Rid::Invalid);
@@ -860,14 +869,34 @@ impl ScsSimCore {
         // The selection's names go to a list of its own; the core's rows keep theirs.
         let core_names = std::mem::take(&mut self.row_names);
         let mut markers = std::mem::take(&mut self.markers);
+        // A parked marker whose ship flies as a tier row is heard from its row (M4-T23), built on the first miss.
+        let mut tier_of: Option<std::collections::HashMap<i64, usize>> = None;
         for (j, id) in ids.as_slice().iter().enumerate() {
-            let Some(&at) = self.marker_at.get(id) else {
+            let active = self
+                .marker_at
+                .get(id)
+                .copied()
+                .filter(|&at| marker_active(&markers[at], &mut self.sync_reads));
+            let Some(at) = active else {
+                if self.tier.is_empty() {
+                    continue;
+                }
+                let map = tier_of.get_or_insert_with(|| {
+                    self.tier
+                        .marker_ids
+                        .iter()
+                        .enumerate()
+                        .map(|(i, &m)| (m, i))
+                        .collect()
+                });
+                if let Some(&i) = map.get(id) {
+                    self.tier.push_row(i, &mut rows);
+                    self.row_names.push(self.tier_names[i].clone());
+                    found.push(j as i32);
+                }
                 continue;
             };
             let m = &mut markers[at];
-            if !marker_active(m, &mut self.sync_reads) {
-                continue;
-            }
             if m.attrs.is_none() || self.touched.contains(&m.body_id) {
                 m.attrs = Some(self.read_attrs(m));
                 self.attribute_reads += 1;

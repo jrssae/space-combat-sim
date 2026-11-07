@@ -12,6 +12,10 @@ extends Node
 ## processing: out of Jolt, out of the scan, its hosted driver not live, its cannon idle). A capital parks with its turrets
 ## and emitters. With no live player nothing moves. With the radius at 0, or the core off, every tier row is promoted.
 ##
+## Far proxies (M4-T23): a demoted fighter is drawn as a far dot from its row (`FarDots`, its hull's paint), a capital as an
+## instance of the mesh its body draws (`FarHulls`); a promotion takes the row in the tick its body shows. A row that comes
+## back inside a rock or a mine is moved clear by the core first (it flew through them as a row).
+##
 ## A hulk (M12 groundwork): a tier row flagged a hulk drifts with no force and no brain and is never removed for being idle;
 ## promotion brings it back as a hulk (`Ship.hulk`: no pilot, no thrust, no assist), not a live ship.
 ##
@@ -329,6 +333,8 @@ func _demote_ship(sim: SimCore, c: Combatant) -> bool:
 	sim.core.tier_set_control(body_id, Vector3.ZERO, command, ship.assist_state(), ship.assist_on)
 	if ship.hulk:
 		sim.core.tier_set_hulk(body_id, true)
+	sim.core.tier_set_proxy(body_id, -1, FarDots.asset_paint(ship.spec.asset_id if ship.spec != null else ""))
+	FarDots.attach(world)
 	ships.park_in_tier(c)
 	if c.driver != null:
 		c.driver.set_tiered(true)
@@ -349,6 +355,10 @@ func _demote_capital(sim: SimCore, cap: CapitalStandin) -> bool:
 	sim.core.tier_set_attrs(body_id, cap.targetable.get_instance_id(), cap.faction, cap.targetable.display_name,
 			cap.damageable.bounding_radius, cap.targetable.broadcast_range_m, cap.damageable.hull.fraction())
 	sim.core.tier_set_control(body_id, cap.cruise_velocity, PackedFloat64Array(), 0.0, false)
+	var hulls: FarHulls = FarHulls.attach(world)
+	sim.core.tier_set_proxy(body_id, hulls.class_of(cap.drawn_mesh()) if hulls != null else -1, FarDots.DEFAULT_PAINT)
+	if hulls == null:
+		FarDots.attach(world)
 	cap.park_for_tier()
 	_tiered_capitals[body_id] = cap
 	_park_origins[body_id] = _origin()

@@ -812,7 +812,7 @@ func test_the_tier_kernel_holds_no_engine_type() -> void:
 	assert_eq(violations.size(), 0, "no engine type, call, crate path or stray import in the tier: %s" % violations)
 	var source: String = FileAccess.get_file_as_string(TIER_FILE)
 	for part: String in ["pub fn step(", "fn beat(", "pub fn rotate_basis(", "pub fn far_bodies(", "pub fn near_rows(",
-			"pub fn append_to("]:
+			"pub fn append_to(", "pub fn fill_dots(", "pub fn fill_hulls(", "pub fn clear_of_statics("]:  # the last three: M4-T23
 		assert_true(source.contains(part), "the tier holds %s" % part)
 	assert_false(source.contains("static mut") or source.contains("thread_local") or source.contains("Cell<"),
 			"no shared mutable state in the tier")

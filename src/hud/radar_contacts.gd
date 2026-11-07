@@ -3,7 +3,8 @@ extends RefCounted
 ## What the radar shows this frame (M4-T36, architecture §17.21): every targetable the player's `TargetingController.candidates()`
 ## would list (in play, not the ship's own, within its reach), as packed arrays read straight from the targetables. The radar
 ## needs only a position, a faction and a broadcast range per contact, so building a `TargetInfo` for each and sorting them by
-## range, as the candidate list does, was most of the HUD's frame at 500 ships.
+## range, as the candidate list does, was most of the HUD's frame at 500 ships. Ships in the low-attention tier come from
+## their rows in the core (`TierTargets`, M4-T23).
 
 var ids := PackedInt64Array()
 ## World-local, as `TargetInfo.position`.
@@ -35,6 +36,12 @@ static func gather(tree: SceneTree, own_body: Node3D, sensor_range_m: float) -> 
 		out.positions.append(at)
 		out.factions.append(targetable.faction)
 		out.reach.append(targetable.broadcast_range_m)
+	# Ships in the low-attention tier have parked nodes: their rows stand in for them (M4-T23).
+	var rows: TierTargets = TierTargets.gather(tree, own, own_body.get_instance_id(), sensor_range_m)
+	out.ids.append_array(rows.ids)
+	out.positions.append_array(rows.positions)
+	out.factions.append_array(rows.factions)
+	out.reach.append_array(rows.reach)
 	return out
 
 

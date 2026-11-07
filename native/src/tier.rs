@@ -95,6 +95,10 @@ pub struct TierRows {
     pub accel: Vec<Vector3>,
     pub alpha: Vec<Vector3>,
     pub speed_limit: Vec<f64>,
+    /// What the row draws as (M4-T23): -1 a far dot, else the far hull class of its capital's mesh.
+    pub proxy: Vec<i32>,
+    /// A far dot's paint, linear rgb.
+    pub paint: Vec<[f32; 3]>,
     pub by_body: HashMap<i64, usize>,
 }
 
@@ -157,6 +161,8 @@ impl TierRows {
         self.accel.push(Vector3::ZERO);
         self.alpha.push(Vector3::ZERO);
         self.speed_limit.push(0.0);
+        self.proxy.push(-1);
+        self.paint.push([0.5, 0.5, 0.5]);
         self.by_body.insert(body_id, at);
         Some(at)
     }
@@ -191,6 +197,8 @@ impl TierRows {
         self.accel.swap_remove(at);
         self.alpha.swap_remove(at);
         self.speed_limit.swap_remove(at);
+        self.proxy.swap_remove(at);
+        self.paint.swap_remove(at);
         if at != last {
             self.by_body.insert(self.body_ids[at], at);
             return Some((at, Some(last)));
@@ -210,6 +218,14 @@ impl TierRows {
     /// still finds its row. The shell appends the names and RIDs beside them.
     pub fn append_to(&self, rows: &mut Rows) {
         for i in 0..self.len() {
+            self.push_row(i, rows);
+        }
+        rows.tier_rows = self.len();
+    }
+
+    /// Pushes row `i` onto `rows` as `append_to` does.
+    pub fn push_row(&self, i: usize, rows: &mut Rows) {
+        {
             let hulk = self.hulk[i];
             rows.body_ids.push(self.body_ids[i]);
             rows.ids.push(self.marker_ids[i]);
@@ -232,7 +248,6 @@ impl TierRows {
             rows.reach.push(self.reach[i]);
             rows.name_keys.push(self.name_keys[i].clone());
         }
-        rows.tier_rows = self.len();
     }
 }
 
@@ -502,4 +517,125 @@ fn range(a: Vector3, b: Vector3) -> f64 {
     let dy = f64::from(a.y) - f64::from(b.y);
     let dz = f64::from(a.z) - f64::from(b.z);
     (dx * dx + dy * dy + dz * dz).sqrt()
+}
+
+// --- far proxies and the promotion's clearance (M4-T23) -------------------------------------------------------------
+
+/// Floats per far dot (`FarDots`' layout): a 3x4 transform, then the paint (rgb) and the hull radius.
+pub const DOT_STRIDE: usize = 16;
+/// How far past a static's surface a promoted row is put, m.
+pub const CLEARANCE_M: f64 = 5.0;
+// Passes over the statics, for rocks that touch each other.
+const CLEAR_PASSES: usize = 8;
+// A hair past the exit, so 32-bit rounding never leaves the row just inside.
+const EXIT_SLACK_M: f64 = 0.01;
+
+/// Rows drawn as far dots.
+pub fn dot_count(t: &TierRows) -> usize {
+    t.proxy.iter().filter(|&&p| p < 0).count()
+}
+
+/// Writes every row drawn as a dot into `out` from instance `start` on: its position plus `offset` (the dots' node
+/// frame), no rotation, its paint and radius. `out` must hold them. Returns how many it wrote.
+pub fn fill_dots(t: &TierRows, offset: Vector3, out: &mut [f32], start: usize) -> usize {
+    let mut n = 0;
+    for i in 0..t.len() {
+        if t.proxy[i] >= 0 {
+            continue;
+        }
+        let b = (start + n) * DOT_STRIDE;
+        let p = add(t.positions[i], offset);
+        let paint = t.paint[i];
+        out[b..b + DOT_STRIDE].copy_from_slice(&[
+            1.0,
+            0.0,
+            0.0,
+            p.x,
+            0.0,
+            1.0,
+            0.0,
+            p.y,
+            0.0,
+            0.0,
+            1.0,
+            p.z,
+            paint[0],
+            paint[1],
+            paint[2],
+            t.radii[i] as f32,
+        ]);
+        n += 1;
+    }
+    n
+}
+
+/// Appends every row of far hull class `class` to `out` at its pose plus `offset`, a 3x4 transform each (MultiMesh's layout). Returns how many it appended.
+pub fn fill_hulls(t: &TierRows, class: i32, offset: Vector3, out: &mut Vec<f32>) -> usize {
+    let mut n = 0;
+    for i in 0..t.len() {
+        if t.proxy[i] != class {
+            continue;
+        }
+        let r = &t.bases[i].rows;
+        let p = add(t.positions[i], offset);
+        out.extend_from_slice(&[
+            r[0].x, r[0].y, r[0].z, p.x, r[1].x, r[1].y, r[1].z, p.y, r[2].x, r[2].y, r[2].z, p.z,
+        ]);
+        n += 1;
+    }
+    n
+}
+
+/// Where a row of `radius` at `position`, moving at `velocity`, must go to clear every static sphere (`centers`,
+/// `radii`) by `CLEARANCE_M`: on along its velocity to the far side, or straight out when it barely moves; a few passes
+/// for rocks that touch. None when it overlaps nothing.
+pub fn clear_of_statics(
+    position: Vector3,
+    velocity: Vector3,
+    radius: f64,
+    centers: &[Vector3],
+    radii: &[f64],
+) -> Option<Vector3> {
+    let mut at = position;
+    let mut moved = false;
+    let along = if f64::from(length_squared(velocity)) > 1.0 {
+        Some(normalized(velocity))
+    } else {
+        None
+    };
+    for _ in 0..CLEAR_PASSES {
+        let mut clear = true;
+        for (k, &c) in centers.iter().enumerate() {
+            let need = radii[k] + radius + CLEARANCE_M;
+            let rel = sub(at, c);
+            let d_sq = f64::from(length_squared(rel));
+            if d_sq >= need * need {
+                continue;
+            }
+            clear = false;
+            moved = true;
+            at = match along {
+                // The exit of the ray from `at` along `d` through the sphere of radius `need`.
+                Some(d) => {
+                    let b = f64::from(rel.x) * f64::from(d.x)
+                        + f64::from(rel.y) * f64::from(d.y)
+                        + f64::from(rel.z) * f64::from(d.z);
+                    let t = -b + (b * b - (d_sq - need * need)).max(0.0).sqrt() + EXIT_SLACK_M;
+                    add(at, scale(d, t as f32))
+                }
+                None => {
+                    let out_dir = if d_sq > 1e-6 {
+                        normalized(rel)
+                    } else {
+                        Vector3::UP
+                    };
+                    add(c, scale(out_dir, (need + EXIT_SLACK_M) as f32))
+                }
+            };
+        }
+        if clear {
+            break;
+        }
+    }
+    moved.then_some(at)
 }

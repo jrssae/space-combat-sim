@@ -427,8 +427,14 @@ func _settle_landing(answer: BrainAnswer, index: int, since_s: float, woken: boo
 ## changed trigger reaches the cannon; the first shot ends the hiding; a wanted target is selected; a rammer's or a route
 ## follower's pilot is read at once.
 func rows_event(events: int, out: PackedFloat64Array, base: int) -> void:
-	if combatant == null or brain == null or not is_instance_valid(combatant.ship) or not combatant.ship.can_process():
-		return  # no pilot, or a parked ship (the batch drops stale results first; M4-T24)
+	if combatant == null or brain == null or not is_instance_valid(combatant.ship):
+		return
+	if not combatant.ship.can_process():
+		# A tier ship's think names only a target (M4-T23): its selection follows, so it is the brain's when the ship is
+		# promoted; any other parked ship takes nothing (the batch drops stale results first; M4-T24).
+		if combatant.ship.is_tier_parked() and events & BrainBatch.EVENT_SELECT != 0:
+			_follow_target(AiPilot.native_target_id(out, base))
+		return
 	if _hosted and is_instance_valid(_hosted_host):
 		var dt: float = float(_hosted_host.driver_dt(_hosted_slot))  # the think's dt, for the retarget's clock
 		if dt > 0.0:

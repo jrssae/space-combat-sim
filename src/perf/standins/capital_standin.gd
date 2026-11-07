@@ -47,6 +47,7 @@ var _beams: Array[BeamStandin] = []
 var _hull_mesh: MeshInstance3D = null
 var _piece: RenderPiece = null
 
+# The shared hull material and each class's box mesh.
 static var _materials: Dictionary = {}
 
 
@@ -153,12 +154,9 @@ func _build(display_name: String) -> void:
 	shape.name = "Hull"
 	shape.shape = box
 	add_child(shape)
-	var mesh := BoxMesh.new()
-	mesh.size = size
-	mesh.material = _material()
 	var hull_mesh := MeshInstance3D.new()
 	hull_mesh.name = "HullMesh"
-	hull_mesh.mesh = mesh
+	hull_mesh.mesh = _box_mesh(ship_class, size)
 	add_child(hull_mesh)
 	_hull_mesh = hull_mesh
 	targetable = Targetable.new()
@@ -221,6 +219,13 @@ func set_look(value: StringName) -> void:
 		_piece.visible = look != LOOK_BOX
 
 
+## The mesh the hull is drawn with now (the class's box or its textured hull): what its far proxy draws (M4-T23).
+func drawn_mesh() -> Mesh:
+	if look != LOOK_BOX and _piece != null and _piece.mesh() != null:
+		return _piece.mesh()
+	return _hull_mesh.mesh if _hull_mesh != null else null
+
+
 ## The hull piece, once a look other than the box was asked for.
 func hull_piece() -> RenderPiece:
 	return _piece
@@ -234,6 +239,17 @@ func _turret(role: TurretStandin.Role, at: Vector3, turret_name: String) -> Turr
 	turret.capital = self
 	add_child(turret)
 	return turret
+
+
+# One box per class, so every capital of a class shares its mesh (its far proxy is one multimesh per mesh, M4-T23).
+static func _box_mesh(cls: StringName, size: Vector3) -> BoxMesh:
+	var key := StringName("box_%s" % cls)
+	if not _materials.has(key):
+		var mesh := BoxMesh.new()
+		mesh.size = size
+		mesh.material = _material()
+		_materials[key] = mesh
+	return _materials[key]
 
 
 static func _material() -> StandardMaterial3D:

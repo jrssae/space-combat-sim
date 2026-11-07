@@ -14,6 +14,73 @@ use crate::tier::{self, KIND_CAPITAL, KIND_FIGHTER, Type};
 const DEFAULT_PERIOD: i64 = 3;
 
 impl ScsSimCore {
+    // A row about to get its body back must not come back inside a rock or a mine (M4-T23): it flew through them as
+    // a row, so it is moved clear first.
+    fn clear_row_of_statics(&mut self, i: usize) {
+        let r = &self.rows;
+        let mut centers: Vec<Vector3> = Vec::new();
+        let mut radii: Vec<f64> = Vec::new();
+        for j in 0..r.body_ids.len() {
+            if r.is_static[j] {
+                centers.push(r.positions[j]);
+                radii.push(r.radii[j]);
+            }
+        }
+        let t = &mut self.tier;
+        if let Some(at) = tier::clear_of_statics(
+            t.positions[i],
+            t.velocities[i],
+            t.radii[i],
+            &centers,
+            &radii,
+        ) {
+            t.positions[i] = at;
+            self.tier_cleared += 1;
+        }
+    }
+
+    // The target columns of tier rows `list` (M4-T23): what a selection, the radar or a candidate list reads of a row.
+    fn tier_target_columns(&self, list: &[usize]) -> VarArray {
+        let t = &self.tier;
+        let mut ids = PackedInt64Array::new();
+        let mut positions = PackedVector3Array::new();
+        let mut velocities = PackedVector3Array::new();
+        let mut factions: Array<StringName> = Array::new();
+        let mut reach = PackedFloat64Array::new();
+        let mut names = PackedStringArray::new();
+        let mut radii = PackedFloat64Array::new();
+        let mut hulls = PackedFloat64Array::new();
+        let mut bodies = PackedInt64Array::new();
+        for &i in list {
+            ids.push(t.marker_ids[i]);
+            positions.push(t.positions[i]);
+            velocities.push(t.velocities[i]);
+            factions.push(
+                &self
+                    .factions
+                    .get(t.faction_ix[i] as usize)
+                    .cloned()
+                    .unwrap_or_default(),
+            );
+            reach.push(t.reach[i]);
+            names.push(&self.tier_names[i]);
+            radii.push(t.radii[i]);
+            hulls.push(t.hull_fraction[i]);
+            bodies.push(t.body_ids[i]);
+        }
+        let mut out = VarArray::new();
+        out.push(&ids.to_variant());
+        out.push(&positions.to_variant());
+        out.push(&velocities.to_variant());
+        out.push(&factions.to_variant());
+        out.push(&reach.to_variant());
+        out.push(&names.to_variant());
+        out.push(&radii.to_variant());
+        out.push(&hulls.to_variant());
+        out.push(&bodies.to_variant());
+        out
+    }
+
     /// One tick of the tier, inside `sync_in`: the integration since the last tick, with the brains' commands.
     pub(crate) fn tier_step(&mut self, delta: f64) {
         if self.tier.is_empty() {
@@ -255,6 +322,7 @@ impl ScsSimCore {
         let Some(i) = self.tier.index_of(body_id) else {
             return VarDictionary::new();
         };
+        self.clear_row_of_statics(i);
         let out = self.tier_dict(i);
         if let Some((at, moved)) = self.tier.remove(body_id) {
             self.tier_names.swap_remove(at);
@@ -569,4 +637,99 @@ impl ScsSimCore {
     fn tier_promotions(&self) -> i64 {
         self.tier_promotions
     }
+
+    /// Promotions moved clear of a rock or mine they overlapped so far (M4-T23).
+    #[func]
+    fn tier_cleared(&self) -> i64 {
+        self.tier_cleared
+    }
+
+    /// How body `body_id`'s row is drawn (M4-T23): `class` -1 a far dot in `paint` (linear), else that far hull class.
+    #[func]
+    fn tier_set_proxy(&mut self, body_id: i64, class: i64, paint: Color) -> bool {
+        let Some(i) = self.tier.index_of(body_id) else {
+            return false;
+        };
+        self.tier.proxy[i] = class.clamp(-1, i64::from(i32::MAX)) as i32;
+        self.tier.paint[i] = [paint.r, paint.g, paint.b];
+        true
+    }
+
+    /// Rows drawn as far dots.
+    #[func]
+    fn tier_dot_count(&self) -> i64 {
+        tier::dot_count(&self.tier) as i64
+    }
+
+    /// Writes the far dots into `buffer` (`FarDots`' layout) from instance `start` on, each at its row's position plus
+    /// `offset`: `[the buffer, grown when it was short, how many]`.
+    #[func]
+    fn tier_fill_dots(&self, buffer: PackedFloat32Array, start: i64, offset: Vector3) -> VarArray {
+        let start = start.max(0) as usize;
+        let need = (start + tier::dot_count(&self.tier)) * tier::DOT_STRIDE;
+        let mut buf = buffer;
+        if buf.len() < need {
+            buf.resize(need);
+        }
+        let n = tier::fill_dots(&self.tier, offset, buf.as_mut_slice(), start);
+        let mut out = VarArray::new();
+        out.push(&buf.to_variant());
+        out.push(&(n as i64).to_variant());
+        out
+    }
+
+    /// The rows of far hull class `class` as MultiMesh transforms at their poses plus `offset`.
+    #[func]
+    fn tier_fill_hulls(&self, class: i64, offset: Vector3) -> PackedFloat32Array {
+        let mut out: Vec<f32> = Vec::new();
+        tier::fill_hulls(&self.tier, class as i32, offset, &mut out);
+        PackedFloat32Array::from(out.as_slice())
+    }
+
+    /// The tier rows a ship at `own_position` could select (M4-T23): not body `own_body`, within `sensor_range` or their
+    /// own broadcast reach, as `[marker ids, positions, velocities, factions, reach, names, radii, hulls 0..1, body ids]`.
+    #[func]
+    fn tier_targets(&self, own_position: Vector3, own_body: i64, sensor_range: f64) -> VarArray {
+        let t = &self.tier;
+        let list: Vec<usize> = (0..t.len())
+            .filter(|&i| {
+                t.body_ids[i] != own_body
+                    && tier_range(own_position, t.positions[i]) <= sensor_range.max(t.reach[i])
+            })
+            .collect();
+        self.tier_target_columns(&list)
+    }
+
+    /// The tier row whose marker id is `marker_id`, in `tier_targets`' columns (empty when none).
+    #[func]
+    fn tier_target(&self, marker_id: i64) -> VarArray {
+        let list: Vec<usize> = self
+            .tier
+            .marker_ids
+            .iter()
+            .position(|&m| m == marker_id)
+            .into_iter()
+            .collect();
+        self.tier_target_columns(&list)
+    }
+
+    /// Where body `body_id`'s row is now: xyz, w 1; w 0 when it is not in the tier.
+    #[func]
+    fn tier_position(&self, body_id: i64) -> Vector4 {
+        match self.tier.index_of(body_id) {
+            Some(i) => {
+                let p = self.tier.positions[i];
+                Vector4::new(p.x, p.y, p.z, 1.0)
+            }
+            None => Vector4::ZERO,
+        }
+    }
+}
+
+// The range between two points in 64 bits, as `TargetingSystem.range_between` takes it.
+fn tier_range(a: Vector3, b: Vector3) -> f64 {
+    let dx = f64::from(b.x) - f64::from(a.x);
+    let dy = f64::from(b.y) - f64::from(a.y);
+    let dz = f64::from(b.z) - f64::from(a.z);
+    (dx * dx + dy * dy + dz * dz).sqrt()
 }

@@ -473,15 +473,20 @@ fn write_commands(work: &mut Work, snap: &mut Snapshot, n: usize) {
         let mut events = write_command(&mut snap.commands, body, &item.out[..=CMD_LEN]);
         let wanted = brain.wanted_target_id;
         note_aim(&mut snap.commands, body, brain);
+        let selected = usize::try_from(item.own_row).map_or(-1, |r| snap.rows.target_ids[r]);
         if item.tier {
             // A tier row's driver is parked: the command (and the ram's commitment, which the tier's ram reads) is all
-            // the tier needs.
+            // the tier needs, and a target it names or drops (M4-T23: the selection survives the handovers), never the
+            // nearest hostile's retarget, which walks every marker.
             note_ram(&mut snap.commands, body, item.out[OUT_RAM] != 0.0);
             work.tier_thinks += 1;
             work.tier_think_ns += item.ns;
+            if (wanted > 0 && wanted != selected) || (wanted < 0 && selected > 0) {
+                work.events.push(k as i64);
+                work.events.push(i64::from(EVENT_SELECT));
+            }
             continue;
         }
-        let selected = usize::try_from(item.own_row).map_or(-1, |r| snap.rows.target_ids[r]);
         // The driver follows the brain's target: it clears a selection for none, selects anything else it wants, and
         // for the nearest hostile (0) runs its retarget every think, as T18's path does.
         if wanted == 0 || (wanted < 0 && selected > 0) || (wanted > 0 && wanted != selected) {
