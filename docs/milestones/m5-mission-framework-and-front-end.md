@@ -58,6 +58,7 @@ voices. M8's tutorial is written on top of all this, so the framework matters mo
 | Q28 | (same day) M4-T37 (the fallbacks removed) is still running on `m4` and touches the weapon files T21 extends. Wait for it? | **Start T21's native work now** on `main`'s core; take T37 in a later merge and resolve any overlap in `weapon_kernels.rs` and `weapon_rows.rs` then |
 | Q29 | (same day) The second machine (`oscar`, two R9 280X) | **GPU runs are allowed there, labelled as oscar's** (never taken as the RX 6950 XT's numbers); **no many-ship scenarios** (no `bench`, no `battle` or `typical` layouts, no `GUT_SLOW` long fights) |
 | Q30 | (maintainer, 2026-11-07, during T16) How do the Saturn specs relate? | **The Saturn 4 and Saturn 8 variants share one engine, so their acceleration follows their mass.** `saturn_4_transport`, `saturn_4_tanker`, `saturn_8_transport` and `saturn_8_tanker` all carry the Saturn 4 transport's engine and thrusters (`pod_main_thrust` 2.1e7, `pod_retro_thrust` 7e6, `rcs_force_max` (7e6, 7e6, 0), `rcs_torque_max` (6.9e8, 1.15e9, 5e8)); nothing is scaled per hull. Mass and inertia come from each hull's `hardpoints.json` (14 082 000 kg for the Saturn 4 transport, not 1.4e7): forward 0.304 g, 0.204 g, 0.168 g and 0.106 g; pitch/yaw/roll about 2.0/2.0/2.0, 2.6/4.1/5.2, 0.36/0.49/1.0 and 0.29/0.48/2.5 °/s². `rate_max` is set so the assist reaches it in a sensible time at that acceleration (T16's rule: 3 s from rest); `fuel_capacity_kg` per hull. **The Saturn 3 keeps its own smaller, slimmer engine (Q20)**, 1.523e7 N a pod, about the Saturn 4 transport's 0.30 g; its torque and RCS stay its own. A test pins it |
+| Q31 | (maintainer, 2026-11-07, during T16) The turrets' balance on the civilian Saturns | **A Saturn occasionally wins against two raiders, but never against three.** Read (the controller, confirmed by the maintainer): every Saturn variant (`saturn_3_freighter`, `saturn_4_transport`, `saturn_4_tanker`, `saturn_8_transport`, `saturn_8_tanker`) alone with its own turrets and its Q30 spec; against two raiders, 10 seeds a variant, it wins at least 1 and at most 3; against three, 10 seeds, none. A fight runs until the Saturn is destroyed or no raider is left fighting (destroyed or beyond 5 km), capped at 600 s of sim time; the Saturn wins if it is alive at the end (alive at the cap is a win). The check that the turrets finish a raider left at 15 % hull that keeps attacking stays. **The turrets become a bit more dangerous** (the maintainer's follow-up): tune the shared turret `WeaponSpec` first (`assets/weapons/turret_light.tres`: damage, fire interval, spread; range about 1.5 km, Q14), then each hull's `hull_max` for what the turret alone cannot balance across the five; never the raiders' specs or AI. Supersedes D61's "two raiders destroy a lone Saturn 4 within 180 s in two of three seeds" |
 
 ## Scope
 
@@ -426,7 +427,7 @@ removed or converted when M5 rebases onto `main` after M4.
 | AC15 | Sounds: generator tests pin the new guns' shape (length, flat hold, constant pitch, energy band after the 0.25 register, inharmonic partials), the impact's length and band, and the engine bursts' band (no energy to speak of below 300 Hz); voices sit at the nozzles; the voice cap holds and the per-frame update is linear in voices (work count); the old loops are gone | A | |
 | AC16 | Cost: M5 adds nothing measurable to AC13 of M3 (the paired 13-ship AI budget still passes, `test_ai_think_time`); the mission runner with 20 triggers and the encounter director stay inside their work counts | A | |
 | AC17 | Docs and the suite: `docs/architecture.md` §18 as built, a `docs/playtest.md` M5 section (how to start, menus, mission, comms menu, encounters, new settings and commands), the roadmap row; `scripts/run_tests.sh` green **once, at the end** (Q10), read from the suite's own totals | A | |
-| AC19 | Defensive turrets (D61): the native turret kernels (aim, fire gate, target pick) and the attacker memory unit-tested in Rust and through GUT, identical with 1 and 6 threads and between `sim_step` threaded and `delayed`; civilians fire only at attackers of themselves or of a civilian or ally within 2 km; they keep running while firing; turret bolts go through the projectile pool and `HitResolver`; the seeded balance fight holds (two raiders beat a lone Saturn 4 in at least two of three seeds; its turrets finish a 15 % raider that keeps attacking); `turret_fire` sound | A | |
+| AC19 | Defensive turrets (D61): the native turret kernels (aim, fire gate, target pick) and the attacker memory unit-tested in Rust and through GUT, identical with 1 and 6 threads and between `sim_step` threaded and `delayed`; civilians fire only at attackers of themselves or of a civilian or ally within 2 km; they keep running while firing; turret bolts go through the projectile pool and `HitResolver`; the seeded balance holds (Q31: every Saturn variant alone beats two raiders in 1 to 3 of 10 seeds and three raiders in none, a fight running until the Saturn dies or no raider fights on, at most 600 s; its turrets finish a 15 % raider that keeps attacking); `turret_fire` sound | A | |
 | AC20 | Fidelity (Q18): every civilian model's top, side and front silhouettes overlap its STL's by at least 90 % (intersection over union) and its length, width and height are within 10 %, Q16's deliberate departures scored part by part against the model each part was built from; measured on the model's geometry (its fallback mesh) by `tools/refview` compare, with the LOD0 splats covering at least 95 % of their own mesh's silhouette and lying at least 95 % within a one-spacing band of it, and unit tests that pin the tool's calibration; each model's scores recorded in `docs/assets-civilian.md` | A | |
 | AC18 | (H) The maintainer plays it: menus feel right on the pad, the mission's pacing and lines, the cinematic, the civilian ships' look, the new guns, impacts and engines by ear | H | |
 
@@ -1299,6 +1300,72 @@ T21, T16 and T28 are re-planned on the native core ("M5 on the native core", bel
   side of the Starfury from the attacker; a second freighter within sensor range of it starts fleeing, one beyond does
   not; two attacked freighters end closer together than they started.
 - **Done when:** AC13.
+- **Done (as built, 2026-11-07, on `oscar`):**
+  - **Data.** `data/factions.json` gains `narn`, `centauri` and `brakiri`, each hostile to raiders and neutral to the rest
+    (Q24). `ShipCatalog` lists the nine hulls with their people's factions and `CIVILIAN_TYPES` (the role); `ShipPool`
+    builds them with `ShipAssembly`'s `civilian` option; `Main` prepares any other pool type a scenario lists and its debris
+    sets; a spawn may give `cargo_pods` (0-3) and `forward`. `civilian_showcase` (front end Sandbox, `scenario`, `play`)
+    parks all nine in view, a Bokmai with three pods and one with none.
+  - **Specs.** One `ShipSpec` a hull: mass and inertia from its hardpoints; no cannon, its turrets (T21); torque-only
+    turning; zero damping (`test_civilian_ships` checks the body's damping and that a coasting hull keeps its speed); no
+    damage layout, so a civilian bursts into its chunks. Q30: the four Saturn 4 and 8 variants share the Saturn 4
+    transport's engine and thrusters (0.304, 0.204, 0.168, 0.106 g), the Saturn 3 keeps its own (0.31 g); `rate_max` is
+    three seconds of each hull's angular acceleration (S4 transport 6/6/6 deg/s, S4 tanker 7.8/12.2/15.6, S8 transport
+    1.1/1.5/3.0, S8 tanker 0.9/1.4/7.6); the smaller hulls (Skylark, Narn, Brezebel, Bokmai) 5 m/s^2 and a rate of about
+    950 / length deg/s. Engine glows from the written schemes. The Brakiri turrets fire green
+    (`turret_light_brakiri.tres`, the light turret's numbers).
+  - **The Bokmai's pods.** `CargoPods` (`src/ship/cargo_pods.gd`) builds every mount's pod mesh and Jolt shapes once with
+    the ship; `set_count` mounts the first n with their mass, inertia, shapes and hit volumes (`Damageable.set_volumes`);
+    the far dot hides them; a destroyed Bokmai sheds the mounted pods as one-shot debris chunks (`DebrisPool.burst`'s
+    `pooled` off). The assist still reads the spec's mass, so a laden Bokmai answers a little slower than it expects.
+  - **Native.** The rows' role column (`ROLE_CIVILIAN`), fed from `SimCore.set_civilian` at registration (touching the
+    body), kept in the tier. `native/src/civilian.rs` (engine-free, under `test_sim_core`'s guard): a civilian with a
+    hostile in range runs to the nearest ship of its own people among its contacts, to a warship's far side from the
+    threat (standoff three radii of the larger hull, at least 150 m) or to a freighter, and closes up with its people's
+    other fleeing civilians; panic: the job marks the fleeing and alarmed civilians from every brain's last think before
+    its pass, and a civilian with an alarmed kin within 5 km runs (20 s hold, one hop). With nobody to run to the retreat
+    is M3's, bit for bit. Against a civilian target the attack's ranges and the raiders' pick use its skin distance;
+    avoidance gives it a rock's horizon; turrets defend it within 2 km of skin; the tier moves it by its surface. Design in
+    architecture §18.11.
+  - **Balance (Q31).** The shared light turret is now 8 damage every 2.4 s with 0.5 degree spread (was 4.5, 3.0 s, 0.8;
+    900 m/s, 2 s life, 1.5 km range kept; the Brakiri copy follows). Hulls: Saturn 3 1600, Saturn 4 transport 550, Saturn
+    4 tanker 650, Saturn 8 transport 1750, Saturn 8 tanker 1800 (Skylark 440, Narn 340, Brezebel 300, Bokmai 330 untuned,
+    no balance rule for them). `test_turret_balance` (behind `GUT_SLOW`; run alone on `oscar`, about 25 minutes) wins:
+
+    | Saturn | Two raiders (of 10) | Three raiders (of 10) |
+    |---|---|---|
+    | 3 freighter | 2 (seeds 2, 7) | 0 |
+    | 4 transport | 3 (seeds 2, 3, 8) | 0 |
+    | 4 tanker | 3 (seeds 3, 8, 10) | 0 |
+    | 8 transport | 2 (seeds 1, 4) | 0 |
+    | 8 tanker | 1 (seed 4) | 0 |
+
+    Found from the winners' damage taken (a hull change moves nothing before the death but the low-hull retreat score),
+    then swept again. Thin margins: the Saturn 4 transport's seeds 2 and 8 end at 3 and 4 % hull, so a change to the
+    raiders or the brains can move a count by one. Per variant the turrets hit at very different rates (the Saturn 3 has
+    one turret; the Saturn 8 transport's rarely get a shot), hence the spread of hulls. `test_turret_defence` keeps the
+    mechanics (two mounts, shots, running) and the finish check; D61's "two of three seeds within 180 s" is superseded.
+  - **Tests.** Rust 24 of 24 (`civilian/tests.rs` 11 new, `turret_kernels/tests.rs` 13). GUT: `test_civilian_flight` 5
+    (shelter, panic in and out, grouping, threaded against delayed and one thread against six byte for byte),
+    `test_civilian_ships` 5, `test_ship_catalog` 6 (Q30 pinned), `test_faction_table` 33 and `test_factions` 21 (the
+    shipped file's new peoples), `test_turret_balance` 2 (slow). Regression, all passing: `test_sim_core` 17 (the guard holds `civilian.rs`), `test_brain_parity` 7, `test_brain_think_parity` 5, `test_pilot_kernels` 7, `test_turret_kernel` 14, `test_turret_threads` 2, `test_turret_defence` 1 passing and 1 pending (below), `test_destruction` 11, `test_debris_pool` 12, `test_main_scene` 13, `test_console_command_list` 7, `test_tier` 10, `test_tier_handover` 13, `test_ai_retreat` 1, `test_civilian_meshes` 4, `test_damage` 17, `test_frame_passes` 12, `test_brain_in_play` 2, `test_last_hit_breakup` 14, `test_hit_resolver` 16, `test_hardpoints` 20, `test_scenario_loader` 36; `check_scripts` clean.
+    `test_ai_think_time`: before AiPilot median 335 us (paired difference -2522 us), after 337 us (-2487 us): no change beyond noise.
+  - **GPU (oscar, R9 280X, labelled as oscar's, Q29).** `civilian_showcase` at 960x540: `renderer = forward_plus`, 57 fps,
+    96 draw calls, 158 406 triangles, `render.vram_mb` 441 MB; the card's VRAM (`mem_info_vram_used`) 695 MB idle, 1 273 MB at
+    its peak in the run. At 1.8 km the hulls are small beside the overlay; the screenshot is in `reports/` (not in git).
+  - **Left:**
+    - **Open for the maintainer: the finish check against Q31's hull.** At 550 hull the Saturn 4 transport dies (92 raider
+      hits, about 45 s) before the wounded raider, which makes its passes under the dorsal turrets' arc, comes back into it:
+      0 turret shots in seeds 1, 2 and 3. With the transport made invulnerable its turrets finish the raider at 45 to 58 s
+      after 65 to 82 hits (390 to 490 hp), so it needs about 600 hp where Q31's band wants at most about 560. No turret
+      number changes it (9.5 damage every 2.85 s, one hit for a 15 % raider, gave the same 0 shots). The check runs and
+      goes pending with that reason (`FINISH_OPEN` in `test_turret_defence`) until the maintainer decides (the check's
+      ship or setup, or the Saturn 4 transport's hull against its band).
+    - The GPU check on the maintainer's machine (`civilian_showcase`, `state render`, VRAM). Not run on `oscar`:
+    the slow parity fights (`GUT_SLOW`), `test_core_threads` and `test_core_snapshot` (the `battle` layout), any bench.
+  - **(H):** the nine hulls' look in play and their engine glows; the Bokmai's pale pods against the olive frame; how the
+    fleeing reads (shelter, groups, panic); the Saturn 8s' slow turns (about 1 deg/s pitch); the balance's feel with the
+    harder-hitting turrets.
 
 ### M5-T28 Engine voices on the core's rows
 

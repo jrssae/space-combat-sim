@@ -4039,7 +4039,8 @@ M4-T20's capital stand-ins rather than into `weapon_kernels.rs` and `weapon_rows
   bolt inherits the ship's velocity) and slews at the weapon's traverse and elevation rates. The gate opens when the lead is
   solvable and inside the arc, the target within range, the gun ready, and the barrel's miss at the lead point no wider than
   the bolt's spread there plus the target's radius.
-- **Strength (Q14).** The light turret: 900 m/s, one shot every 3.0 s, 4.5 damage, 2 s life, 1.5 km range, 0.8 degree spread,
+- **Strength (Q14; retuned by Q31 in T16, §18.11: 8 damage every 2.4 s, 0.5 degree spread, the Saturns' hulls per
+  variant).** As T21 built it: the light turret: 900 m/s, one shot every 3.0 s, 4.5 damage, 2 s life, 1.5 km range, 0.8 degree spread,
   50 and 40 degrees a second. Few, harder shots: two hits finish a raider at 15 %, but a full raider takes fourteen, so two
   raiders still win. Pinned by `test_turret_defence` against a Saturn 4 of 1000 hull flown by the `civilian` profile: the
   raid wins in all three seeds (52, 91 and 88 s), the turrets finish a 15 % raider in all three (70, 43 and 34 s). The first
@@ -4056,3 +4057,55 @@ M4-T20's capital stand-ins rather than into `weapon_kernels.rs` and `weapon_rows
   byte for byte), `test_turret_defence` (the balance fight, three seeds), `test_sim_core`'s guard. The mechanics tests fire a
   copy of the light turret at 1.2 s (`TurretScene.MECHANICS_INTERVAL_S`), so a few seconds carry several shots whatever the
   balance sets.
+
+### 18.11 Civilian ships in the game as built (T16, D58, D59, Q24, Q25, Q30, Q31)
+
+```
+data/factions.json               + narn, centauri, brakiri (hostile to raiders, neutral to everyone else; Q24)
+assets/ships/<civilian>.tres     a ShipSpec per hull: mass and inertia from its hardpoints, heavy and slow, no cannon
+src/game/ship_catalog.gd         the nine types, each its people's faction; CIVILIAN_TYPES, is_civilian (the role)
+src/ship/cargo_pods.gd           CargoPods: the Bokmai's 0-3 pods (mass, inertia, Jolt shapes, hit volumes, far dot, debris)
+native/src/rows.rs               the role column (ROLE_COMBAT, ROLE_CIVILIAN), fed from SimCore.set_civilian, kept in the tier
+native/src/civilian.rs           the civilian flight: kin, shelter, group, alarm; engine-free, tests in civilian/tests.rs
+native/src/brain_behaviours.rs   the retreat runs the civilian flight for a civilian row; Field marks the fleeing civilians
+data/scenarios/civilian_showcase.json   all nine parked in view, a Bokmai with three pods and one with none
+tests/integration/test_civilian_flight.gd, test_civilian_ships.gd, test_turret_balance.gd (GUT_SLOW)
+```
+
+- **Role, not faction (Q24).** A civilian hull flies for its people (`earth_alliance` for the Saturns and the Skylark,
+  `narn`, `centauri`, `brakiri`); `civilian` is a role. `ShipPool.prepare` builds a catalog civilian with
+  `ShipAssembly`'s `civilian` option, which calls `SimCore.set_civilian` (T21's turret set). The core reads the role with a
+  body's other attributes (on activation and on touch; `set_civilian` touches the body), into `Rows.roles`; a tier row
+  takes it at `tier_add`. Rows built without the column (tests) are combat rows (`Rows.role`). No per-tick gather.
+- **The flight (`civilian.rs`, in the AI job).** The retreat keeps M3's rule for every other ship and for a civilian with
+  nobody to run to (bit for bit). A civilian that sees a hostile in range runs to the nearest ship of its own faction among
+  its contacts, of any kind: to a warship's far side from the nearest threat (a standoff of three radii of the larger hull,
+  at least 150 m, slowing over 10 s and matching the warship there), or to a freighter (swinging off the threat's side; once
+  together, on away); with its people's other fleeing civilians it closes up (a pull toward their centre beyond a group's
+  gap, half the run's speed at most). Panic (Q25): before its pass the job marks, from every brain's last think, which
+  civilian rows are fleeing (retreat or evade) and which are alarmed (fleeing a threat they see, or dodging fire); a
+  civilian with an alarmed kin within 5 km scores retreat at the threat level and runs with it for 20 s after the last
+  alarm it heard. The alarm is one hop (only a civilian that sees a threat raises it), so two panicked ships never keep
+  each other running. Every query walks the ship's own contacts; the marks are one pass over the brains a tick, sequential
+  inside the job, so one thread and six, `threaded` and `delayed`, give the same bits (`test_civilian_flight`).
+- **A big hull for what it is.** Against a civilian target the attack brain and the slashing pass measure their ranges to
+  its skin (centre distance less its radius) and widen the miss gate by half the radius; the attack's pick ranks a civilian
+  by its skin distance. Avoidance gives a civilian contact the rocks' horizon (time for a sideways burn to clear its reach).
+  A turret defends a civilian (by role or by its memory's flag) within 2 km of skin. The tier demotes and promotes a
+  civilian by its surface distance. Every other row's maths is unchanged, so the brains' parity tests hold.
+- **Specs (Q30).** Turning is torque only (no pod torque about pitch or roll, `test_civilian_ships`); zero damping. The
+  Saturn 4 and 8 variants share the Saturn 4 transport's engine and thrusters, their mass and inertia their own, so they
+  accelerate 0.304, 0.204, 0.168 and 0.106 g; the Saturn 3 keeps its own engine (0.31 g). `rate_max` is three seconds of
+  each hull's angular acceleration (the same rule sized the smaller hulls' torque from a rate of about 950 / length deg/s).
+  No hull has a cannon; each has its turrets (T21). `damage_layout` is none, so a civilian bursts into its chunks.
+- **The Bokmai's pods (D59).** `CargoPods` builds every mount's pod mesh and Jolt shapes once with the ship (pooled with it)
+  and `set_count` mounts the first n: the ship's mass and inertia (point masses about the hull's centre of mass), the shapes
+  enabled, the `Damageable`'s hit volumes rebuilt (`set_volumes`, the hull kept), the core touched for the new radius. A
+  pool hand-out mounts all three; a spawn's `cargo_pods` (0-3) sets it. The far dot hides them with the hull; the pod mesh
+  switches LOD with it. A destroyed Bokmai sheds its mounted pods as one-shot debris chunks beside its hull's chunk set.
+  The flight model's assist reads the spec's mass, so a laden Bokmai answers a little slower than the assist expects.
+- **Balance (Q31).** Every Saturn alone beats two raiders in 1 to 3 of 10 seeds and three raiders in none
+  (`test_turret_balance`, behind `GUT_SLOW`): the light turret 8 damage every 2.4 s with 0.5 degree spread, hulls per
+  variant (Saturn 3 1600, Saturn 4 transport 550, Saturn 4 tanker 650, Saturn 8 transport 1750, Saturn 8 tanker 1800); the
+  counts are in the milestone's T16 Done block. Open: at 550 hull the turrets' finish of a 15 % raider no longer holds (the
+  raider passes under the dorsal arc until the transport is dead); `test_turret_defence` reports it pending.

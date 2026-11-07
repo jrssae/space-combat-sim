@@ -5,8 +5,8 @@
 [resource]
 script = ExtResource("1_weapon_spec")
 muzzle_speed_mps = 900.0
-shot_interval_s = 3.0
-damage = 4.5
+shot_interval_s = 2.4
+damage = 8.0
 lifetime_s = 2.0
 hit_radius_m = 0.3
 bolt_length_m = 1.0
@@ -17,6 +17,6 @@ capacitor_capacity = 100.0
 capacitor_cost_per_shot = 0.0
 capacitor_recharge_per_s = 25.0
 turret_range_m = 1500.0
-turret_spread_deg = 0.8
+turret_spread_deg = 0.5
 turret_traverse_deg_s = 50.0
 turret_elevation_deg_s = 40.0
