@@ -2263,9 +2263,15 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
   - Measured (headless, seed 1, 20 s after 5 s, both locks, cores 0 to 11): `typical` 58 1.80 / 2.55 ms (median / p99) before,
     1.80 / 2.48 after; `battle` 300 6.51 / 8.24 before, 6.48 / 8.24 after; `battle` 500 10.77 / 13.30 before, 10.81 / 13.58
     after: unchanged within noise. The full suite and each CI shard green (the report has the totals).
-  - Left for later: the hull reading is two paths, not one: a world with a core reads its rows; a world with no core (bare
-    test worlds) still uses the registry, `from_tree` and the resolvers' own walks, and the GDScript query loops stay as the
-    contact field's fallback. Collapsing them needs every world to attach a core first (the report's concerns).
+  - Left for M4-T42 (every world attaches the core, one hull read; planned on `m4` before T23): the hull reading is two
+    paths, not one. A world with a core reads its rows. A world with no core still reads its own way, and that is not only
+    bare test worlds: the free-flight scenario (`data/scenarios/free_flight.json`, the game's default) has no ship pools, so
+    `Main` builds no AI ship, nothing attaches the core, and the player's bolts and rams there go through the resolvers' own
+    reads. The paths left: `ContactScan.from_registry` with `ScsBodyRegistry`, `ContactScan.from_tree` when the registry
+    is missing, the hit resolver's own target gather and the ram resolver's `_gather_tree`, the flight batch's server
+    read, and the contact field's GDScript query loops (the fallback when `ScsContactField` refuses a scan's arrays).
+    T42 owns the collapse; their remaining recorders (`test_hit_scale`, `test_pilot_kernels_in_play`, `test_sim_core`,
+    `test_body_registry`, `test_contact_field`) become stored reads with it.
 
 ##### M4-T38 Anti-aliasing (Q59, Q60)
 
