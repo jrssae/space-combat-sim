@@ -395,14 +395,14 @@ func test_the_saturn_4s_mounts_show_its_turret_model_turned_by_the_frame_pass() 
 	var transport: Combatant = scene.ship(&"saturn_4_transport", Factions.EARTH_ALLIANCE, "SATURN", Vector3.ZERO, {}, 1, true)
 	var raider: Combatant = scene.ship(RAIDER, Factions.RAIDERS, "RAIDER", Vector3(300.0, 500.0, -1000.0))
 	scene.attach()
-	assert_eq(transport.turrets.size(), 2, "its two dorsal turrets (Q19), from its hardpoints")
+	assert_eq(transport.turrets.size(), 3, "its two flank turrets and its dorsal one (Q32), from its hardpoints")
 	var model: Dictionary = TurretMount.model_for(asset)
 	var base_tris: int = _triangles(model["base"])
 	var barrel_tris: int = _triangles(model["barrel"])
 	assert_eq(base_tris + barrel_tris, int(entry["mesh"]["triangles"]), "the split keeps every triangle of the manifest's mesh")
 	assert_eq(barrel_tris, _obj_triangles(ShipSpec.ASSET_ROOT.path_join(asset).path_join(String(entry["obj"])), ["barrel", "bore"]),
 			"the barrels are the model's barrel and bore triangles, no more")
-	var mount: TurretMount = transport.turrets[0]
+	var mount: TurretMount = transport.turrets[2]  # the cargo section's dorsal mount: the raider is above it
 	assert_not_null(mount.yaw.get_node_or_null(^"Base"), "the base turns round the mount's up")
 	assert_not_null(mount.pitch.get_node_or_null(^"Barrels"), "the barrels lift with the elevation")
 	assert_eq(mount.pitch.position, model["trunnion"], "about the trunnion")

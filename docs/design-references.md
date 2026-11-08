@@ -265,7 +265,7 @@ white, the engine throat blue-white (Valjean.JPG). No markings or lettering beyo
 No capture shows weapons, and the wiki lists "None" for the Achilles. The turrets below are Q14's, placed to cover the
 hull's quarters. The drum frame's drums are the only turret-like mounts in the models; they stay RCS clusters. Every
 variant has the lead ship's two turrets (Q32, 2026-11-07, replacing Q19's `dorsal_fwd` on the disc's top hub):
-`flank_l` and `flank_r` on the disc rim's widest point at (∓14.73, 0, 19.1), up ∓x outboard, each on a pad sunk 1.2 m into
+`flank_l` and `flank_r` on the disc rim's widest point at (∓14.43, 0, 19.1), up ∓x outboard, each on a slim post (0.8 m radius, the turret's base overhangs it) sunk 1.2 m into
 the rim, so the command section is covered above, below and to both sides; the belly seen from astern stays a blind spot
 on purpose. The cargo sections' turrets are dorsal (Q19): the ventral mounts first proposed (`ventral_fwd`, `ventral_aft`)
 are dropped.

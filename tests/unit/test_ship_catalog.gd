@@ -65,7 +65,7 @@ func test_the_saturn_4_and_8_share_one_engine_so_their_acceleration_follows_thei
 		var alpha_deg: Vector3 = Vector3(rad_to_deg(spec.rcs_torque_max.x / spec.inertia.x),
 				rad_to_deg(spec.rcs_torque_max.y / spec.inertia.y), rad_to_deg(spec.rcs_torque_max.z / spec.inertia.z))
 		assert_almost_eq(spec.rate_max, alpha_deg * 3.0, Vector3.ONE * 0.06, "%s: rate_max is 3 s of its angular acceleration" % type)
-	assert_eq(ShipCatalog.spec_for(&"saturn_4_transport").mass, 14082000.0, "the hull's mass, not 1.4e7")
+	assert_eq(ShipCatalog.spec_for(&"saturn_4_transport").mass, 14092000.0, "the hull's mass, not 1.4e7 (with Q32's two flank pads)")
 	for i: int in accel.size() - 1:
 		assert_gt(accel[i], accel[i + 1], "%s out-accelerates %s" % [shared[i], shared[i + 1]])
 	assert_almost_eq(accel[0] / 9.80665, 0.304, 0.001, "the Saturn 4 transport, 0.304 g")

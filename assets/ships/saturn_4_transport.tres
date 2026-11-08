@@ -5,8 +5,8 @@
 [resource]
 script = ExtResource("1_ship_spec")
 asset_id = "saturn_4_transport"
-mass = 1.4082e+7
-inertia = Vector3(1.97891e+10, 3.28311e+10, 1.42057e+10)
+mass = 1.4092e+7
+inertia = Vector3(1.98409e+10, 3.28848e+10, 1.42076e+10)
 pod_main_thrust = 2.1e+7
 pod_retro_thrust = 7e+6
 rcs_force_max = Vector3(7e+6, 7e+6, 0)

@@ -70,12 +70,13 @@ class Mount:
 
 # Q32 (supersedes Q19 for the command section): a turret on each flank of the command disc, on the rim's widest point,
 # facing outboard, standing on a pad sunk into the rim; the cargo sections keep their dorsal mounts.
-FLANK_X = round(sp.DISC_RADIUS + 0.6, 2)
+FLANK_X = round(sp.DISC_RADIUS + 0.3, 2)
 LEAD_MOUNTS = (
     Mount("flank_l", (-FLANK_X, 0.0, sp.DISC_CENTRE_Z), (-1.0, 0.0, 0.0), "bow"),
     Mount("flank_r", (FLANK_X, 0.0, sp.DISC_CENTRE_Z), (1.0, 0.0, 0.0), "bow"),
 )
 FLANK_PAD_SINK_M = 1.2  # how far a flank pad reaches into the rim past the point it meets
+FLANK_PAD_RADIUS = 0.8  # a post, not a drum: the rim is 1 m thick, and the turret's base overhangs it
 
 
 @dataclass(frozen=True)
@@ -258,7 +259,7 @@ def turret_pads(v: Variant, pieces: Sequence[Piece], style: Style) -> list[Piece
             depth = _seat_depth(position, up, solids, rim=False) + FLANK_PAD_SINK_M
         else:
             depth = _seat_depth(position, up, solids) + 0.3
-        mesh, solid = sp.turret_pad(m.position, m.up, depth, style, TURRET_PAD_RADIUS)
+        mesh, solid = sp.turret_pad(m.position, m.up, depth, style, FLANK_PAD_RADIUS if flank else TURRET_PAD_RADIUS)
         side = RIGHT if m.position[0] > 0.0 else CENTRE
         name = f"pad_{m.name}"
         pads.append(Piece(Part(name, mesh, mass_kg=5_000.0, group=m.host), solid, side))

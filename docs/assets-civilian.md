@@ -121,7 +121,7 @@ The lead ship gives every variant the same retro nozzles, cockpit, RCS and two t
 | `cockpit_camera` | inside the disc's front rim, (0, +0.8, 8.0) |
 | `cabin` | the same point, `cabin_range_m` 0.05 L |
 | RCS | both ends of the two lower drums at (±9.27, -10.55, z), z 41.9 exhausting -z and 50.1 exhausting +z, and the top drum's aft end (0, +5.55, 50.1) (its front is behind the crossed plates; T12 fix round, 11 ports); the disc's flanks (±14.13, 0, 19.06) exhausting ±x; four on the engine collar 3 m behind its front, (±4.78, 0, z) and (0, ±4.78, z), exhausting outward |
-| Turrets | `flank_l` (-14.73, 0, 19.1), up (-1, 0, 0), and `flank_r` (14.73, 0, 19.1), up (1, 0, 0), on pads sunk into the disc rim (Q32, which replaced Q19's `dorsal_fwd` on the hub) |
+| Turrets | `flank_l` (-14.43, 0, 19.1), up (-1, 0, 0), and `flank_r` (14.43, 0, 19.1), up (1, 0, 0), on slim posts (0.8 m radius) sunk into the disc rim (Q32, which replaced Q19's `dorsal_fwd` on the hub) |
 
 Per variant:
 
@@ -262,18 +262,18 @@ within a pixel; the splat column is gone with the splats.
 
 | Ship | Part | Top IoU | Side IoU | Front IoU | Length | Width | Height | Date |
 |---|---|---|---|---|---|---|---|---|
-| `saturn_4_transport` | whole ship (`--model-offset 0,-3.643,0`) | 0.958 | 0.966 | 0.931 | 1.000 | 1.000 | 1.026 | 2026-11-07 |
-| `saturn_4_transport` | lead ship (Saturn 4 model z 0-49.3, asset 0-49.3) | 0.960 | 0.919 | 0.916 | 1.000 | 1.000 | 0.985 | 2026-11-07 |
+| `saturn_4_transport` | whole ship (`--model-offset 0,-3.643,0`; Q32) | 0.958 | 0.966 | 0.930 | 1.000 | 1.000 | 1.026 | 2026-11-07 |
+| `saturn_4_transport` | lead ship (Saturn 4 model z 0-49.3, asset 0-49.3; Q32's flank posts, re-scored on every variant) | 0.959 | 0.919 | 0.913 | 1.000 | 1.021 | 0.985 | 2026-11-07 |
 | `saturn_4_transport` | transport section (model 49.3-149.3, asset 49.3-149.3) | 0.955 | 0.984 | 0.917 | 1.000 | 1.000 | 1.026 | 2026-11-07 |
-| `saturn_4_tanker` | lead ship (Saturn 4 model z 0-49.3, asset 0-49.3) | 0.960 | 0.919 | 0.916 | 1.000 | 1.000 | 0.985 | 2026-11-07 |
+| `saturn_4_tanker` | lead ship (Saturn 4 model z 0-49.3, asset 0-49.3; Q32's flank posts, re-scored on every variant) | 0.959 | 0.919 | 0.913 | 1.000 | 1.021 | 0.985 | 2026-11-07 |
 | `saturn_4_tanker` | tank group (tanker model 49.3-136.0, asset 49.3-136.0: the tanks on both sides, the model's junction and the asset's engine left out) | 0.987 | 0.976 | 0.938 | 1.000 | 1.000 | 1.026 | 2026-11-07 |
-| `saturn_8_transport` | lead ship (Saturn 4 model z 0-49.3, asset 0-49.3) | 0.960 | 0.919 | 0.916 | 1.000 | 1.000 | 0.985 | 2026-11-07 |
+| `saturn_8_transport` | lead ship (Saturn 4 model z 0-49.3, asset 0-49.3; Q32's flank posts, re-scored on every variant) | 0.959 | 0.919 | 0.913 | 1.000 | 1.021 | 0.985 | 2026-11-07 |
 | `saturn_8_transport` | transport section 1 (Saturn 4 model 49.3-137.1, asset 49.3-137.1: the aft frame to the cylinder's end on both sides) | 0.955 | 0.990 | 0.923 | 1.000 | 1.000 | 1.005 | 2026-11-07 |
 | `saturn_8_transport` | transport section 2 and engine (Saturn 4 model 61.65-149.3, asset 161.65-249.3: the cylinder's front to the engine on both sides) | 0.967 | 0.991 | 0.923 | 1.000 | 1.000 | 1.005 | 2026-11-07 |
-| `saturn_8_tanker` | lead ship (Saturn 4 model z 0-49.3, asset 0-49.3) | 0.960 | 0.919 | 0.916 | 1.000 | 1.000 | 0.985 | 2026-11-07 |
+| `saturn_8_tanker` | lead ship (Saturn 4 model z 0-49.3, asset 0-49.3; Q32's flank posts, re-scored on every variant) | 0.959 | 0.919 | 0.913 | 1.000 | 1.021 | 0.985 | 2026-11-07 |
 | `saturn_8_tanker` | tank section 1 (tanker model 49.3-146.2, asset 49.3-149.3; the model's sections are 96.96 m apart, Q16's 100 m) | 0.947 | 0.935 | 0.917 | 1.032 | 0.993 | 1.012 | 2026-11-07 |
 | `saturn_8_tanker` | tank section 2 and engine (tanker model 146.2-255.1, asset 149.3-258.5) | 0.980 | 0.971 | 0.916 | 1.003 | 0.993 | 1.012 | 2026-11-07 |
-| `saturn_3_freighter` | lead ship (Saturn 4 model z 0-41.5, asset 0-41.5) | 0.964 | 0.905 | 0.946 | 1.000 | 1.000 | 0.990 | 2026-11-07 |
+| `saturn_3_freighter` | lead ship (Saturn 4 model z 0-41.5, asset 0-41.5; Q32) | 0.962 | 0.905 | 0.941 | 1.000 | 1.021 | 0.990 | 2026-11-07 |
 | `saturn_3_freighter` | pod group (Saturn 3 model 41.5-91.1 scaled 1.244, 1.093, 1; asset 41.5-96.8): expected exemption (Q23) | 0.768 | 0.644 | 0.927 | 1.114 | 0.989 | 1.022 | 2026-11-07 |
 | `narn_transport` | whole ship (no shift) | 0.991 | 0.985 | 0.974 | 1.000 | 1.000 | 0.997 | 2026-11-07 |
 | `brakiri_bokmai` | whole ship with its three pods (`--pods-from-hardpoints`, no shift) | 0.966 | 0.977 | 0.954 | 0.999 | 0.999 | 0.999 | 2026-11-07 |
@@ -667,11 +667,11 @@ From the design references, authored frame; `up` is (0, 1, 0) for dorsal mounts,
 
 | Hull | Turrets |
 |---|---|
-| Saturn 4 transport (3) | `flank_l` (-14.73, 0, 19.1), `flank_r` (14.73, 0, 19.1), `dorsal_aft` (0, +9.3, 124.4) |
-| Saturn 4 tanker (3) | `flank_l` (-14.73, 0, 19.1), `flank_r` (14.73, 0, 19.1), `dorsal_aft` (0, +9.3, 124.4) |
-| Saturn 8 transport (3) | `flank_l` (-14.73, 0, 19.1), `flank_r` (14.73, 0, 19.1), `dorsal_mid` (0, +7.2, 149.4) |
-| Saturn 8 tanker (3) | `flank_l` (-14.73, 0, 19.1), `flank_r` (14.73, 0, 19.1), `dorsal_mid` (0, +9.0, 149.4) |
-| Saturn 3 (2) | `flank_l` (-14.73, 0, 19.1), `flank_r` (14.73, 0, 19.1) |
+| Saturn 4 transport (3) | `flank_l` (-14.43, 0, 19.1), `flank_r` (14.43, 0, 19.1), `dorsal_aft` (0, +9.3, 124.4) |
+| Saturn 4 tanker (3) | `flank_l` (-14.43, 0, 19.1), `flank_r` (14.43, 0, 19.1), `dorsal_aft` (0, +9.3, 124.4) |
+| Saturn 8 transport (3) | `flank_l` (-14.43, 0, 19.1), `flank_r` (14.43, 0, 19.1), `dorsal_mid` (0, +7.2, 149.4) |
+| Saturn 8 tanker (3) | `flank_l` (-14.43, 0, 19.1), `flank_r` (14.43, 0, 19.1), `dorsal_mid` (0, +9.0, 149.4) |
+| Saturn 3 (2) | `flank_l` (-14.43, 0, 19.1), `flank_r` (14.43, 0, 19.1) |
 | Skylark (1) | `dorsal` (0, +2.766, 37.5), seated on the body's ridge; no ventral (Q19) |
 | Narn (2) | `tower_l` (-14.85, +9.0, 41.7), `tower_r` (14.85, +9.0, 41.7), on the slotted crowns |
 | Brezebel (1) | `dorsal` (0, +4.3, 7.0), on the dorsal fitting's turret ring |

@@ -49,7 +49,7 @@ ENGINE_TAIL_M = 9.18  # the engine section behind the last section
 ENGINE_M = 22.6
 UP, DOWN = (0.0, 1.0, 0.0), (0.0, -1.0, 0.0)
 # Q32: the command section's two flank turrets on the disc rim (supersedes Q19's dorsal_fwd on the hub).
-LEAD_TURRETS = {"flank_l": ((-14.73, 0.0, 19.1), (-1.0, 0.0, 0.0)), "flank_r": ((14.73, 0.0, 19.1), (1.0, 0.0, 0.0))}
+LEAD_TURRETS = {"flank_l": ((-14.43, 0.0, 19.1), (-1.0, 0.0, 0.0)), "flank_r": ((14.43, 0.0, 19.1), (1.0, 0.0, 0.0))}
 SLIM = 2.8 / 4.8  # Q20: the Saturn 3's engine, the shared section scaled to fit between its lower pods
 STACK_REAR_Z = 95.30  # the Saturn 3's pods' aft faces (64.24 + the shared pod's 31.06 m turned)
 

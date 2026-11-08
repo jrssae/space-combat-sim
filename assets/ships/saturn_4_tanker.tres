@@ -5,13 +5,13 @@
 [resource]
 script = ExtResource("1_ship_spec")
 asset_id = "saturn_4_tanker"
-mass = 2.101e+7
-inertia = Vector3(1.51812e+10, 1.62581e+10, 5.51469e+9)
+mass = 2.102e+7
+inertia = Vector3(1.52371e+10, 1.63159e+10, 5.51656e+9)
 pod_main_thrust = 2.1e+7
 pod_retro_thrust = 7e+6
 rcs_force_max = Vector3(7e+6, 7e+6, 0)
 rcs_torque_max = Vector3(6.9e+8, 1.15e+9, 5e+8)
-rate_max = Vector3(7.8, 12.2, 15.6)
+rate_max = Vector3(7.8, 12.1, 15.6)
 assist_gain_k = 2.0
 pod_yaw_gain = 0.5
 pod_yaw_deadzone = 0.1
