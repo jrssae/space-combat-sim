@@ -28,10 +28,33 @@ order and scope will change. Long-term design: `docs/architecture.md` §14.
 | M9 Time warp and the solar system | go anywhere | `SimClock` warp, KSP-style: physics warp 2-4× (thrust allowed), on-rails warp 10× up to ≈ 100 000× while coasting (no thrust, no hostiles near), altitude-banded limits near bodies, automatic predictive drop-back when anything happens (contact, comms, trigger, alarm, arrival); trajectory preview, nav computer, `warp` console command; fly to the sun or other planets (1 AU in ≈ 50 s at the cap); honest gravity assists and Oberth burns | `SimClock` rule (no wall clock), `UniversePos`, M6 gravity |
 | M10 Jumpgate travel | other star systems | system generator (star, planets, moons, belts, gates, per-system sky; a star's colour is one entry in `data/star_systems.json`, Q30, and the Narn system's star is red), gate network, transitions | `UniversePos.system_id`, sky as a generated asset, scenario data |
 | M11 Hyperspace | the other space | separate space with gravitational incline, currents, beacons and lock; full-control flight; later combat in hyperspace; the destination jumpgate broadcasts with unlimited range (M3-T17's `broadcast_range_m = INF`, for the player and the AI) | `environment_accel`, one `WorldFrame` per space |
-| M12 Factions and capital ships | the setting's fleets | raider carrier and Raider Battle Wagon (launch tubes as Delta-V spawn points; moved out of M2 because they need M6's LOD chains; earlier only if the M8 raiders launch from one), raider control ship, Earthforce renegades, Narn, Centauri, Minbari, Drazi and other non-aligned worlds, Shadow scouts and large Shadow ships, Vorlon ships of several sizes; turrets, subsystems; organic part library with SH sheen; capital-ship destruction as a staged break-up with secondary blasts, visible from tens of km through M4-T23's far explosion flashes; blast damage with distance falloff for every explosion and ship death scaled by size, and ships and stations disabled without exploding (see "Required: blast damage and disabled hulks"); it replaces M4's benchmark stand-ins: the box capitals (`CapitalStandin`), their gun and interceptor turrets, beam lasers, missiles, carrier launches, the four bench sides and the mine stand-ins' flat 200-point blast; where mines are placed (belts between the sides in M4's benchmark, or the maintainer's own placement) and whether they belong in M12 or a mission milestone is an open question for the maintainer (M4-T25). | `faction`, procgen `styles/` and `parts/`, `AiPilot` |
+| M12 Factions and capital ships | the setting's fleets | raider carrier and Raider Battle Wagon (launch tubes as Delta-V spawn points; moved out of M2 because they need M6's LOD chains; earlier only if the M8 raiders launch from one), raider control ship, Earthforce renegades, Narn, Centauri, Minbari, Drazi and other non-aligned worlds, Shadow scouts and large Shadow ships, Vorlon ships of several sizes; turrets, subsystems; organic part library with SH sheen; capital-ship destruction as a staged break-up with secondary blasts, visible from tens of km through M4-T23's far explosion flashes; blast damage with distance falloff for every explosion and ship death scaled by size, and ships and stations disabled without exploding (see "Required: blast damage and disabled hulks"); it replaces M4's benchmark stand-ins: the box capitals (`CapitalStandin`), their gun and interceptor turrets, beam lasers, missiles, carrier launches, the four bench sides and the mine stand-ins' flat 200-point blast; mines belong here (the maintainer, 2026-11-08): defensive minefields laid by each faction around its stations, capital ships and chokepoints, placed by scenario and mission data instead of M4's belts between the sides, with M12's blast falloff replacing the flat 200-point stand-in blast (M14's missions may add minefield crossings on top). | `faction`, procgen `styles/` and `parts/`, `AiPilot` |
 | M13 Starfury Thunderbolt | second player ship | new `ShipSpec` + generator family member with its own pod/wing layout | `ShipSpec` per class with `asset_id`, `ThrusterLayout` from hardpoints |
 | M14 Mission types | variety | rescue with towing (tether force), escort, asteroid fields, comets, random encounters in free flight; it replaces M4's asteroid stand-in (`AsteroidField`, the benchmark's slab of 1 000 static rocks) with generated asteroid fields. | tether design (§14.7), procgen asteroid/comet assets, mission framework |
 | M15 Voiced dialog | the instructor speaks | offline TTS generator (`tools/procgen` asset kind `voice`): renders every dialog line from mission data on the user's machine with one voice per speaker plus a radio filter; output cached and gitignored. Candidate engine: Piper (`OHF-Voice/piper1-gpl`, GPL-3.0); only voice models whose licence permits it. Being produced by code, voices satisfy the procedural-only rule. Can be pulled forward any time after M8 | dialog lines as data (speaker, text, voice id) from M5; subtitles stay as the fallback |
+
+## Carried from M4's full review (2026-11-08)
+
+M4-T43 read the whole code base after M4; its eleven "fix in M4" findings were fixed (M4-T44), and the fifteen below are assigned
+here (the maintainer, 2026-11-08). Details, evidence and suggested fixes: `docs/research/m4-full-review.md`, sections L1 to L15.
+
+| finding | what | milestone |
+|---|---|---|
+| L1 | the flight batch's per-ship GDScript gather (about 37 % of the tick at 1 000 ships): read the rows natively | M5 (performance block) |
+| L2 | the hit resolver walks every bolt in GDScript and builds unfiltered pairs | M5 (performance block) |
+| L3 | the ram resolver's GDScript passes and string keys | M5 (performance block) |
+| L5 | the radar fills its dot buffers per contact in GDScript each frame | M5 (performance block) |
+| L8 | a native allocation pass (per-tick `Vec` and packed-array churn in the kernels) | M5 (performance block) |
+| L9 | `note_hull` / `note_selection` scan every member per event | M5 (performance block) |
+| L12 | the smaller items (S each) | M5 (performance block) |
+| L13 | native and GDScript constants mirrored by hand | M5 (performance block) |
+| L6 | every AI shot anywhere gets a flash and a sound | M5 (sound pass) |
+| L7 | two `AudioStreamPlayer3D` per pooled ship, walked every frame | M5 (sound pass) |
+| L14 | test and script duplication; always-pending balance tests | M5 (with the balance retune, AC12) |
+| L4 | the rebase cascade (statics shifted natively, the cached solid shifted in place, hidden ships skipped) | M6 |
+| L15 | the bench reads and writes `res://reports`, which an exported build does not have | M8 |
+| L10 | an explosion builds meshes and materials per death | M12 (the staged capital break-up rewrites it) |
+| L11 | the stand-in counters walk every ship each tick | M12 (M12 replaces the stand-ins) |
 
 ## Required: gravity
 
