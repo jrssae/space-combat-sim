@@ -491,7 +491,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T21 | C | Defensive turrets in the native core (Q28): mounts, aim, the fire gate and the attacker memory as weapon rows (placed here in the order; numbered last because it was added after the others had numbers) | T27, T19 | Opus | A native gunner seam under the threading rules, with a balance test | done |
 | T16 | C | Civilian ships in the game: data and assembly in GDScript, the big-hull kind, avoidance and tier in the native core | T27, T21 | Opus | Specs for heavy hulls, factions, pools, native AI fixes, GPU check | done |
 | T28 | D | Engine voices on the core's rows: the 4 Hz re-rank asks the core for the ships near the listener instead of walking every ship | T26, T16 | Sonnet | A small native query; the re-rank stops growing with ship count | in progress |
-| T17 | C | Free-flight encounters | T16, T02 | Opus | Seeded director under a CPU cap | not started |
+| T17 | C | Free-flight encounters | T16, T02 | Opus | Seeded director under a CPU cap | in progress |
 | T18 | D | New guns and impacts | - | Opus | Synthesis to measured shapes | done |
 | T19 | D | Per-thruster engine bursts | T18 | Opus | Voice placement and a voice budget | done |
 | T25 | A | Targeting at scale: a target menu and other targeting UX for large battles (Q26; placed before T20; numbered last because it was added after the others had numbers) | T02, T07, the M4 rebase | Opus | UX judgement with a concept stop (H); reads M4's on-read candidate list | not started |
