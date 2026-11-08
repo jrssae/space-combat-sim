@@ -2,7 +2,8 @@ class_name NativeBoundaryBench
 extends RefCounted
 ## Measures what crossing from GDScript into the native library costs (M4-T05a), at the sizes the contact kernel
 ## will use: one call per AI ship per query, with a packed array of every body in and the indices in range out.
-## Wall-clock numbers for the Cycle log and the console (`native bench`), never for assertions.
+## The GDScript columns time the same work written in GDScript, as the yardstick. Wall-clock numbers for the Cycle log and
+## the console (`native bench`), never for assertions.
 
 const SIZES: PackedInt32Array = [100, 200, 300]
 const RANGE_M: float = 5000.0
@@ -14,12 +15,11 @@ const WARMUP_CALLS: int = 20
 ## (per call; -1 when the library is not loaded) and the indices found over all calls, which must match.
 static func run(calls: int = 300, sizes: PackedInt32Array = SIZES) -> Array[Dictionary]:
 	var native := NativeProbe.new()
-	var fallback := NativeProbe.new(false)
 	var has_native: bool = native.path() == &"native"
 	var rows: Array[Dictionary] = []
 	rows.append({"name": "echo", "n": 0, "calls": calls,
-			"native_us": _time_echo(native, calls) if has_native else -1.0,
-			"gdscript_us": _time_echo(fallback, calls), "native_found": 0, "gdscript_found": 0})
+			"native_us": _time_echo(native.echo, calls) if has_native else -1.0,
+			"gdscript_us": _time_echo(_script_echo, calls), "native_found": 0, "gdscript_found": 0})
 	var rng := RandomNumberGenerator.new()
 	rng.seed = SEED
 	for n: int in sizes:
@@ -29,10 +29,10 @@ static func run(calls: int = 300, sizes: PackedInt32Array = SIZES) -> Array[Dict
 					rng.randf_range(-RANGE_M, RANGE_M)))
 		var row: Dictionary = {"name": "in_range", "n": n, "calls": calls, "native_us": -1.0, "native_found": 0}
 		if has_native:
-			var timed: Array = _time_in_range(native, points, calls)
+			var timed: Array = _time_in_range(native.in_range, points, calls)
 			row["native_us"] = timed[0]
 			row["native_found"] = timed[1]
-		var timed_script: Array = _time_in_range(fallback, points, calls)
+		var timed_script: Array = _time_in_range(_script_in_range, points, calls)
 		row["gdscript_us"] = timed_script[0]
 		row["gdscript_found"] = timed_script[1]
 		rows.append(row)
@@ -61,25 +61,39 @@ static func format(rows: Array[Dictionary]) -> PackedStringArray:
 	return out
 
 
-# Mean cost of one echo through the facade, in microseconds.
-static func _time_echo(probe: NativeProbe, calls: int) -> float:
+# The yardsticks: the probe's two calls written in GDScript, at the library's precision.
+static func _script_echo(value: int) -> int:
+	return value
+
+
+static func _script_in_range(positions: PackedVector3Array, origin: Vector3, range_m: float) -> PackedInt32Array:
+	var out := PackedInt32Array()
+	var range_sq: float = range_m * range_m
+	for i: int in positions.size():
+		if positions[i].distance_squared_to(origin) <= range_sq:
+			out.append(i)
+	return out
+
+
+# Mean cost of one echo, in microseconds.
+static func _time_echo(echo: Callable, calls: int) -> float:
 	var total: int = 0
 	for i: int in WARMUP_CALLS:
-		total += probe.echo(i)
+		total += int(echo.call(i))
 	var start: int = Time.get_ticks_usec()
 	for i: int in calls:
-		total += probe.echo(i)
+		total += int(echo.call(i))
 	var elapsed: int = Time.get_ticks_usec() - start
 	return float(elapsed) / calls
 
 
-# Mean cost of one query through the facade in microseconds, and how many indices all queries found.
-static func _time_in_range(probe: NativeProbe, points: PackedVector3Array, calls: int) -> Array:
+# Mean cost of one query in microseconds, and how many indices all queries found.
+static func _time_in_range(in_range: Callable, points: PackedVector3Array, calls: int) -> Array:
 	for i: int in WARMUP_CALLS:
-		probe.in_range(points, points[i % points.size()], RANGE_M)
+		in_range.call(points, points[i % points.size()], RANGE_M)
 	var found: int = 0
 	var start: int = Time.get_ticks_usec()
 	for i: int in calls:
-		found += probe.in_range(points, points[i % points.size()], RANGE_M).size()
+		found += (in_range.call(points, points[i % points.size()], RANGE_M) as PackedInt32Array).size()
 	var elapsed: int = Time.get_ticks_usec() - start
 	return [float(elapsed) / calls, found]

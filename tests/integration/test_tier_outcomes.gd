@@ -53,7 +53,7 @@ func should_skip_script():
 
 func before_each() -> void:
 	_saved = TierWorld.save_settings()
-	TierWorld.use_native(0.0)
+	TierWorld.set_tier(0.0)
 	Settings.set_value(&"tier_hz", 20.0)
 	Settings.set_value(&"tier_brain_hz", float(SettingsSchema.ENTRIES[&"tier_brain_hz"]["default"]))  # the game's rate
 	Settings.set_value(&"friendly_fire", false)

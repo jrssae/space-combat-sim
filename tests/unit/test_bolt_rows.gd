@@ -452,7 +452,7 @@ func _battle(threads: int, ticks: int = TICKS) -> Dictionary:
 		owned_max = maxi(owned_max, int(sim.core.owned_bolts()))
 	shots = resolver.hits_total
 	var out: Dictionary = {"rows": rows, "bolts": bolt_digests, "hits": hits, "kills": deaths.size(), "hits_total": shots,
-			"nodes_max": nodes_max, "owned_max": owned_max, "bolt_path": sim.bolt_rows_path()}
+			"nodes_max": nodes_max, "owned_max": owned_max, "bolt_rows": sim.bolt_rows_on()}
 	space.queue_free()
 	await get_tree().physics_frame
 	return out
@@ -468,7 +468,7 @@ static func _first_difference(a: PackedInt64Array, b: PackedInt64Array) -> int:
 func test_the_seeded_battle_hits_the_same_with_bolts_as_rows() -> void:
 	var recorded: Variant = ParityFixture.stored(FIXTURE, "battle_with_bolt_nodes")
 	var rows: Dictionary = await _battle(1)
-	assert_eq(rows["bolt_path"], &"rows", "the rows path owns its bolts")
+	assert_true(rows["bolt_rows"], "the rows path owns its bolts")
 	assert_eq(int(rows["nodes_max"]), 0, "the rows path spawned no bolt node")
 	assert_gt(int(rows["owned_max"]), 50, "and owned the bolts (%d at most)" % int(rows["owned_max"]))
 	assert_not_null(recorded, "the bolt nodes' battle was recorded")
@@ -561,7 +561,7 @@ func _same_tick_tie(row_first: bool) -> Dictionary:
 		await get_tree().physics_frame
 		ticks += 1
 	var out: Dictionary = {"killer": killer[0], "node": node_shooter, "row": row_shooter, "hits": resolver.hits_total,
-			"path": sim.bolt_rows_path()}
+			"bolt_rows": sim.bolt_rows_on()}
 	space.queue_free()
 	await get_tree().physics_frame
 	return out
@@ -570,7 +570,7 @@ func _same_tick_tie(row_first: bool) -> Dictionary:
 func test_the_bolt_launched_first_lands_first_whether_a_node_or_a_row() -> void:
 	# Fix round 1 (review minor 6): the resolver sweeps the bolts in launch order, not owned rows first.
 	var node_first: Dictionary = await _same_tick_tie(false)
-	assert_eq(node_first["path"], &"rows")
+	assert_true(node_first["bolt_rows"], "the core owns the bolts")
 	assert_eq(node_first["hits"], 1, "one hit kills; the second bolt finds the hull gone (%s)" % node_first)
 	assert_eq(node_first["killer"], node_first["node"], "the node bolt launched first takes the kill (%s)" % node_first)
 	var row_first: Dictionary = await _same_tick_tie(true)
@@ -594,7 +594,7 @@ func test_a_cannon_on_the_kernel_fires_rows_and_signals_each_shot() -> void:
 	for i: int in 40:
 		c.cannon.set_combat_command(cmd)
 		await get_tree().physics_frame
-	assert_eq(sim.bolt_rows_path(), &"rows", "the cannon fires through the kernel")
+	assert_true(sim.bolt_rows_on(), "the cannon fires through the kernel")
 	assert_true(c.cannon.on_kernel(), "the cannon is registered with the kernel")
 	assert_gt(shots.size(), 1, "shots were signalled (%d)" % shots.size())
 	assert_gt(int(sim.core.owned_bolts()), 1, "the bolts are owned rows")

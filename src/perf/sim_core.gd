@@ -71,12 +71,10 @@ const FLAG_LATE: int = 8
 const FLAG_TIER: int = 16
 const FLAG_HULK: int = 32
 
-# The latest core attached to a tree (-1 for the class check: classes never change while the game runs).
+# The latest core attached to a tree.
 static var _current: SimCore = null
 ## Warnings that bodies were asked about in a tree with no world (said once a run).
 static var no_world_warnings: int = 0
-static var _native_class_known: int = -1
-static var _cannons_class_known: int = -1
 
 ## The native core (`ScsSimCore`); null until `_ready`.
 var core: Object = null
@@ -195,21 +193,13 @@ func _exit_tree() -> void:
 
 
 func _physics_process(_delta: float) -> void:
-	if enabled():
-		ensure_synced()
+	ensure_synced()
 
 
-## Whether the library provides the core (always, since M4-T37 requires the library; the class is looked up once).
-static func enabled() -> bool:
-	if _native_class_known < 0:
-		_native_class_known = 1 if NativeLib.has_class(NATIVE_CLASS) else 0
-	return _native_class_known == 1
-
-
-## The core under `world`, made on first ask; null without a world (or a library without the core class), and null with
+## The core under `world`, made on first ask; null without a world, and null with
 ## one error when another world's core is live: one world per tree.
 static func attach(p_world: Node) -> SimCore:
-	if p_world == null or not is_instance_valid(p_world) or not p_world.is_inside_tree() or not enabled():
+	if p_world == null or not is_instance_valid(p_world) or not p_world.is_inside_tree():
 		return null
 	var found := p_world.get_node_or_null(NodePath(NODE_NAME)) as SimCore
 	if found != null:
@@ -245,20 +235,6 @@ static func current() -> SimCore:
 	return _current if _current != null and is_instance_valid(_current) else null
 
 
-## Whether the core owns the bolts when it runs (M4-T35): the core on and the library's cannons.
-static func bolt_rows_enabled() -> bool:
-	if not enabled():
-		return false
-	if _cannons_class_known < 0:
-		_cannons_class_known = 1 if NativeLib.has_class(CANNONS_CLASS) else 0
-	return _cannons_class_known == 1
-
-
-## Whether the AI targeting controllers' selection check runs on the core (M4-T35): whenever the core runs.
-static func selection_check_enabled() -> bool:
-	return enabled()
-
-
 ## A ship's selection changed (`TargetingController` says so on every change): the latest core notes it for its selection
 ## column and its selection check (M4-T35).
 ## A body moved by script after the tick's first sync (a nav buoy's drift): its row is read again before the late systems.
@@ -276,11 +252,6 @@ static func note_selection_changed(body_id: int, selected_id: int) -> void:
 ## Whether this core owns its bolts now.
 func bolt_rows_on() -> bool:
 	return core != null and cannons != null
-
-
-## Which path the bolts fly now: &"rows" (the core's own rows, M4-T35) or &"nodes" (a `Projectile` node each).
-func bolt_rows_path() -> StringName:
-	return &"rows" if bolt_rows_on() else &"nodes"
 
 
 ## Makes sure this physics frame's first sync ran; true when the core holds this frame's rows.
@@ -700,7 +671,6 @@ func _register_console() -> void:
 		&"step_pool": {"get": func() -> int: return int(_host().step_threads_setting()) if _host() != null else 0, "doc": "Where the job's pass runs (perf_step_threads): 1 the step's thread alone, n its own pool of n, 0 the core's pool (M4-T24)"},
 		&"step_pool_workers": {"get": func() -> int: return int(_host().step_pool_workers()) if _host() != null else 0, "doc": "Worker threads of the job's own pool running now (M4-T24)"},
 		&"step_stale": {"get": func() -> int: return _batch().stale_total if _batch() != null else 0, "doc": "Results dropped at the handover because the ship was parked or re-piloted while its job ran (M4-T24)"},
-		&"bolt_path": {"get": func() -> String: return String(bolt_rows_path()), "doc": "rows when the core owns the bolts (M4-T35: the cannon kernel, the bolt step, the multimesh), else nodes (a Projectile node each)"},
 		&"owned_bolts": {"get": owned_bolts, "doc": "Bolt rows the core owns now (M4-T35)"},
 		&"cannons": {"get": cannon_count, "doc": "Cannons firing through the kernel (M4-T35)"},
 		&"cannon_us": {"get": func() -> int: return cannon_us, "unit": "us", "doc": "The last tick's cannon step (every gate, the shots handed back); wall clock"},

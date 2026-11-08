@@ -346,7 +346,7 @@ static func rebind_all() -> void:
 # Joins the kernel when the core owns the bolts and this is not the player's cannon; else fires from this node's gate.
 func _bind() -> void:
 	var sim: SimCore = SimCore.for_tree(get_tree()) if is_inside_tree() else null
-	var wanted: bool = sim != null and SimCore.bolt_rows_enabled() and not _console_owner and _body != null \
+	var wanted: bool = sim != null and not _console_owner and _body != null \
 			and not _muzzle_locals.is_empty()
 	if not wanted:
 		_unbind()

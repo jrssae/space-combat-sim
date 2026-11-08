@@ -113,7 +113,7 @@ static func rebind_all() -> void:
 # Hands the check to the core when it runs them and this controller only checks its selection; else ticks itself.
 func _bind() -> void:
 	var sim: SimCore = SimCore.for_tree(get_tree()) if is_inside_tree() else null
-	var wanted: bool = sim != null and not keeps_candidates and SimCore.selection_check_enabled() and _has_body()
+	var wanted: bool = sim != null and not keeps_candidates and _has_body()
 	if not wanted:
 		_unbind()
 		return

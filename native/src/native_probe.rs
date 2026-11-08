@@ -1,8 +1,7 @@
 // A trivial native class: proves the library loads, and measures what a call from GDScript costs.
 use godot::prelude::*;
 
-/// Smoke test and boundary probe for the native seam (M4-T05a). GDScript reaches it through `NativeProbe`,
-/// which falls back to its own code when the library is missing.
+/// Smoke test and boundary probe for the native seam (M4-T05a). GDScript reaches it through `NativeProbe`.
 #[derive(GodotClass)]
 #[class(base=RefCounted, init)]
 pub struct ScsNativeProbe {
@@ -26,7 +25,12 @@ impl ScsNativeProbe {
     /// Indices of the points within `range` of `origin`, in order: the shape of the contact queries T05b moves here.
     /// Repeats GDScript's precision: a 32-bit squared distance against a 64-bit squared range.
     #[func]
-    fn in_range(&self, positions: PackedVector3Array, origin: Vector3, range: f64) -> PackedInt32Array {
+    fn in_range(
+        &self,
+        positions: PackedVector3Array,
+        origin: Vector3,
+        range: f64,
+    ) -> PackedInt32Array {
         let range_sq = range * range;
         // Collected in Rust and handed over once: a push per element would cross into the engine each time.
         let found: Vec<i32> = positions

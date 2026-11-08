@@ -21,7 +21,6 @@ extends RefCounted
 ## The native class that answers.
 const NATIVE_CLASS: StringName = &"ScsHitSweep"
 # Whether the loaded library provides `NATIVE_CLASS` (-1 until first asked).
-static var _native_class_known: int = -1
 
 ## Pairs the last call put to the sphere test (the work count).
 var visited: int = 0
@@ -72,11 +71,6 @@ func kept_pairs(bolt_mids: PackedVector3Array, bolt_reach: PackedFloat64Array) -
 ## Which code answers now: &"native", or &"none" when the library lacks the sweep (the game refuses to start then).
 func path() -> StringName:
 	return &"native" if _native() != null else &"none"
-
-
-## Whether the native sweep answers now (the core paths need it).
-func native_available() -> bool:
-	return _native() != null
 
 
 ## `pairs` over the core's rows (M4-T15): the hull rows as the resolver's spheres (`position + velocity * (0.5 * delta)`,
@@ -141,10 +135,6 @@ func pairs(bolt_mids: PackedVector3Array, bolt_reach: PackedFloat64Array, hull_m
 
 
 func _native() -> Object:
-	if _native_class_known < 0:
-		_native_class_known = 1 if NativeLib.has_class(NATIVE_CLASS) else 0
-	if _native_class_known == 0:
-		return null
 	if _sweep == null:
 		_sweep = ClassDB.instantiate(NATIVE_CLASS)
 	return _sweep

@@ -61,8 +61,6 @@ static var _shared_broadcasts: ContactScan = null
 ## Returned for a frame with no broadcaster, so a ship that hears nothing allocates nothing. Read, never write.
 static var _no_contacts: Array[Contact] = []
 # Whether the loaded library provides `NATIVE_CLASS` (-1 until first asked; classes never change while the game runs).
-static var _native_class_known: int = -1
-static var _pilot_class_known: int = -1
 
 ## The physics frame this scan is of (-1 for one built by hand).
 var physics_frame: int = -1
@@ -325,18 +323,16 @@ func incoming_fire(own_body_id: int, own_position: Vector3, own_velocity: Vector
 	return 0
 
 
-## The native pilot kernels over this scan's core rows (M4-T16), or null: not a core scan, native code off, the library
-## without the class, or the core's rows changed since the scan was taken (a resync or a rebase later in the frame: the
-## indices would name other values), asked again on every call. The perception's own lists then answer as rows of their
+## The native pilot kernels over this scan's core rows (M4-T16), or null: not a core scan, or the core's rows changed since
+## the scan was taken (a resync or a rebase later in the frame: the indices would name other values), asked again on every
+## call. The perception's own lists then answer as rows of their
 ## own (`PilotRows`).
 func pilot_kernels() -> Object:
 	if not _pilot_known:
 		_pilot_known = true
 		if _sim == null or not is_instance_valid(_sim) or _sim.core == null:
 			return null
-		if _pilot_class_known < 0:
-			_pilot_class_known = 1 if NativeLib.has_class(PILOT_CLASS) else 0
-		if _pilot_class_known == 1 and int(_sim.core.row_count()) == _body_ids.size():
+		if int(_sim.core.row_count()) == _body_ids.size():
 			_pilot = NativeLib.instantiate(PILOT_CLASS)
 			if _pilot != null:
 				_pilot.attach_core(_sim.core)
@@ -454,10 +450,6 @@ func _all_but(faction: StringName, stamped: Array[Contact], skip: int) -> Array[
 
 # The native field for this query, or null when it refused this scan's arrays. Made and loaded on the first query.
 func _native() -> Object:
-	if _native_class_known < 0:
-		_native_class_known = 1 if NativeLib.has_class(NATIVE_CLASS) else 0
-	if _native_class_known == 0:
-		return null
 	if _field == null:
 		if _field_rejected:
 			return null

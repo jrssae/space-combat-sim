@@ -15,7 +15,7 @@ var _saved: Dictionary = {}
 
 func before_each() -> void:
 	_saved = TierWorld.save_settings()
-	TierWorld.use_native(RADIUS_M)
+	TierWorld.set_tier(RADIUS_M)
 	Settings.set_value(&"tier_hz", 20.0)
 	Settings.set_value(&"tier_brain_hz", 4.0)
 	Settings.set_value(&"friendly_fire", false)

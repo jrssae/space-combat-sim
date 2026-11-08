@@ -9,7 +9,6 @@ const NATIVE_CLASS: StringName = &"ScsBrains"
 
 static var _host: Object = null
 static var _core: Object = null
-static var _class_known: int = -1
 static var _nearest_k: int = 12
 static var _static_k: int = 4
 
@@ -18,10 +17,6 @@ static var _static_k: int = 4
 static func host(tree: SceneTree) -> Object:
 	var sim: SimCore = SimCore.for_tree(tree)
 	if sim == null or sim.core == null:
-		return null
-	if _class_known < 0:
-		_class_known = 1 if NativeLib.has_class(NATIVE_CLASS) else 0
-	if _class_known == 0:
 		return null
 	if _host == null or _core != sim.core:
 		var made: Object = NativeLib.instantiate(NATIVE_CLASS)

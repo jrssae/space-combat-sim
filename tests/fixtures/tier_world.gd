@@ -6,7 +6,6 @@ extends RefCounted
 
 const SETTINGS: Array[StringName] = [&"sim_step",
 		&"tier_radius_m", &"tier_hz", &"tier_brain_hz", &"ai_think_rate", &"perf_threads", &"friendly_fire"]
-const NATIVE_SETTINGS: Array[StringName] = [&"ai_think_rate"]
 
 var space: SubViewport
 var world: WorldFrame
@@ -36,10 +35,9 @@ static func restore_settings(saved: Dictionary) -> void:
 		Settings.set_value(key, saved[key])
 
 
-## Every native path on, the tier at `radius_m` (0 = off).
-static func use_native(radius_m: float) -> void:
-	for key: StringName in NATIVE_SETTINGS:
-		Settings.set_value(key, true)
+## The think rate on, as in play, and the tier at `radius_m` (0 = off).
+static func set_tier(radius_m: float) -> void:
+	Settings.set_value(&"ai_think_rate", true)
 	Settings.set_value(&"tier_radius_m", radius_m)
 
 
