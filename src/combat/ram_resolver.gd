@@ -27,7 +27,8 @@ extends Node
 ##
 ## Rocks (M4-T29, §17.16) are `StaticRows` with no node: a grid of them is kept between ticks (built again only when a rock
 ## changes) and each ship asks it for the rocks it could reach this tick. A rock is a prop to the swept test (any touch rams,
-## a sphere of its radius, a mass nothing moves), so a ship that flies into one takes the whole closing speed.
+## a sphere of its radius, a mass nothing moves), so a ship that flies into one takes its whole speed into the rock's surface;
+## the part along the surface is not stopped and costs nothing (M5-T41).
 ##
 ## The hulls come as columns from the native core's rows (M4-T15, `SimCore`) and `ScsRamPhase` pairs them from the same rows
 ## (its GDScript reference `RamBroadPhase` lives in `tests/fixtures/`); the resolver then builds a hull's Dictionary only for the pairs. Every
@@ -423,7 +424,21 @@ func _resolve_rocks(sim: SimCore, delta: float) -> void:
 		var rock: Dictionary = _rock(solid, key - k * rock_count)
 		var hit: Dictionary = _sweep_pair(ship, rock, false)
 		if not hit.is_empty() and tracker.swept_meeting(ship["id"], rock["id"]):
-			_ram_swept(ship, rock, hit["point"], KIND_PROP)
+			_ram_swept(head_on(ship, rock, hit["point"]), rock, hit["point"], KIND_PROP)
+
+
+## `ship` as it meets the sphere `rock` at `point`: its velocity cut to the part driving into the rock's surface, so the ram
+## rule charges a glancing scrape by its closing speed, not the ship's whole speed (M5-T41). The rock never moves.
+static func head_on(ship: Dictionary, rock: Dictionary, point: Vector3) -> Dictionary:
+	var outward: Vector3 = point - (rock["start"] as Vector3)
+	if outward.length_squared() < 1e-6:
+		outward = (ship["start"] as Vector3) - (rock["start"] as Vector3)
+	if outward.length_squared() < 1e-6:
+		return ship
+	outward = outward.normalized()
+	var out: Dictionary = ship.duplicate()
+	out["velocity"] = -outward * RamMath.closing_speed(ship["velocity"], outward)
+	return out
 
 
 # Rock `s` as the swept test sees a hull: a sphere at rest that nothing moves or breaks.

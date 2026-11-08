@@ -4364,3 +4364,10 @@ tests/unit/test_encounter_plan.gd, tests/integration/test_encounters.gd, tests/f
   quitting: a sound stopped in the same frame as the quit kept its playback alive past exit (the "leaked" lines after jump
   arrivals and comms squelches). The comms panel plays nothing once it or the audio has left the tree.
 
+### 18.16 Rock rams by the speed into the rock (T41)
+
+A rock is a sphere nothing moves, so the swept ram rule charged a ship its whole speed. `RamResolver.head_on` now keeps only the
+part of the ship's velocity along the rock's outward normal at the contact point (`RamMath.closing_speed`): head-on hits are as
+before, a glancing scrape costs its slow closing speed, and Jolt still deflects the ship. Ship-to-ship rams keep the momentum split
+of their full relative speed.
+

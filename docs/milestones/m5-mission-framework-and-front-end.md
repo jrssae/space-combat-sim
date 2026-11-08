@@ -602,6 +602,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T38 | - | L14: the shared test steps fixture, collapsed recordings, balance tests out of the default run, CI's Python job and asset cache | T36 | Sonnet | Duplication and CI time; CI must stay green | not started |
 | T39 | C | Civilian colours as the show shows them, and a sheen on every hull (maintainer, 2026-11-08; added after T38, done before T30) | T27 | controller | Colour read off captures vs lit albedo; the look is (H) | done |
 | T40 | C | Civilian panel seams drawn from the show's references instead of the generic brick grid (maintainer, 2026-11-08) | T39, the maintainer's reference captures | controller | Per-ship seam layouts read off images; the look is (H) | not started |
+| T41 | - | Rock rams by the speed into the rock: a glancing scrape costs its closing speed, not the ship's whole speed (maintainer, 2026-11-08; done before T31) | T29 | controller | A small change to the ram rule for rocks | done |
 | T20 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 **Progress (2026-11-03).** Done: T01, T02, T05, T11, T15, T18, T19, T24. In progress:
@@ -1945,6 +1946,17 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   pods), drawn as per-part seam layouts instead of `plating_for`'s staggered grid; a look sheet per ship for the
   maintainer before the generator commits.
 - **Done when:** each civilian's seams match its references (H), tests pin the layouts, and `panel_grid` is gone or unused.
+
+### M5-T41 Rock rams by the speed into the rock
+
+- **Why (maintainer, 2026-11-08):** ram damage should follow the impact's speed. Rocks did, but by the ship's whole speed, so a
+  Starfury grazing a rock at 100 m/s died as if it had flown straight in.
+- **Done (as built, 2026-11-08):** `RamResolver.head_on` cuts a ship's velocity to the part along the rock's outward normal at
+  the contact point (`RamMath.closing_speed`) before the swept ram rule charges it; head-on hits are unchanged, a scrape costs its
+  closing speed and the motion along the surface costs nothing. Ship-to-ship rams are unchanged. Tests: `test_ram_math` (closing
+  speed: head-on, scrape, along, away), `test_rocks_and_mines` (a drone at 40 m/s along and 3 m/s into a rock is unhurt; checked to
+  fail without the change; the head-on 40 m/s ram stays lethal), and the ram files (`test_ram_damage`, `test_ram_scale`,
+  `test_ai_ram`, `test_ram_contact_columns`, `test_asteroid_belt`): 50 passing.
 
 ### M5-T20 Integration, full suite, docs and acceptance
 

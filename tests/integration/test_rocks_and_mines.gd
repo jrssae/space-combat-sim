@@ -224,6 +224,31 @@ func test_a_ship_flying_into_a_rock_is_rammed() -> void:
 		await _ticks(1)
 
 
+func test_a_ship_grazing_a_rock_is_hurt_by_its_closing_speed_only() -> void:
+	var rocks: Array[Dictionary] = [{"offset": Vector3(0.0, 0.0, -1000.0), "radius": 50.0}]
+	standins.add_asteroids(rocks, world.to_universe(Vector3.ZERO))
+	var rams: RamResolver = _resolvers()[1]
+	var infos: Array[HitInfo] = []
+	rams.ram_resolved.connect(func(info: HitInfo) -> void: infos.append(info))
+	# The nose 2 cm off the rock's face, 40 m/s along it and 3 m/s into it: under the drone's 5 m/s safe change.
+	var drone: TargetDrone = _drone(Vector3(0.0, 0.0, -950.0 + 3.0 + 0.02), Factions.RAIDERS, Vector3(40.0, 0.0, -3.0))
+	rams.resolve(DT)
+	assert_gt(rams.static_pairs_visited, 0, "the drone was tested against the rock")
+	assert_eq(infos.size(), 0, "a scrape at 3 m/s does no harm")
+	assert_false(drone.damageable.hull.destroyed)
+	assert_eq(drone.damageable.hull.hp, drone.damageable.hull.max_hp)
+	drone.queue_free()
+	await _ticks(1)
+
+
+func test_head_on_strips_the_motion_along_the_rock() -> void:
+	var ship: Dictionary = {"start": Vector3(0.0, 0.0, 10.0), "velocity": Vector3(40.0, 0.0, -12.0)}
+	var rock: Dictionary = {"start": Vector3.ZERO}
+	var cut: Dictionary = RamResolver.head_on(ship, rock, Vector3(0.0, 0.0, 5.0))
+	assert_almost_eq(cut["velocity"], Vector3(0.0, 0.0, -12.0), Vector3.ONE * 1e-4, "only the 12 m/s into the rock")
+	assert_eq(ship["velocity"], Vector3(40.0, 0.0, -12.0), "the ship's own record is untouched")
+
+
 # --- rebase --------------------------------------------------------------------------------------------------------
 
 
