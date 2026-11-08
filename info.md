@@ -76,7 +76,7 @@ Arguments in `<angle brackets>` are required, `[square brackets]` optional, `a|b
 |---|---|---|---|
 | `respawn` | | Reset the ship to the scenario start (refused in a mission) | in flight |
 | `pause` | `[on\|off]` | Pause or resume the game; no argument toggles; refused while the pause menu is open (resume from it) | in flight |
-| `scenario` | `[combat_sandbox\|free_flight\|instructor_route\|dogfight\|civilian_showcase]` | Load a scenario for this session and reload the scene | in flight |
+| `scenario` | `[combat_sandbox\|free_flight\|instructor_route\|dogfight\|civilian_showcase\|belt_showcase]` | Load a scenario for this session and reload the scene | in flight |
 | `window` | `<width> <height>` or `max\|normal` | Resize the window, or maximize or restore it | in flight |
 | `throttle` | `<level>` | Hold both main pods at a level, 0..1, on top of the pilot's input | in flight |
 | `assist` | `[on\|off]` | Toggle or set flight assist | in flight |
@@ -165,6 +165,7 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `raiders` | The raider pool: size, free, alive, a list with hull and range, and the selected one's brain | in flight |
 | `encounters` | Free-flight encounters: on, pools built, seed, interval, cap, ships in play by kind, the next event and its time, the one waiting, events started, ships released, the last event, the release check's work and the pools' build time | free flight |
 | `allies` | The allied pool, the same way | in flight |
+| `belts` | The scenario's asteroid belts: belts, rocks, collision spheres and the multimeshes drawing them | in flight |
 | `waves` | The raider waves: wave number, name, state, countdown, raiders alive and the kill tally | in flight |
 | `wing` | The player's wing: name, order, formation, members and the last acknowledgement | in flight |
 | `hud` | Whether the HUD shows, and where the lead, prograde and target marks are | in flight |

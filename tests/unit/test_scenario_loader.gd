@@ -664,3 +664,50 @@ func test_the_buoy_defence_file_validates() -> void:
 	assert_eq(ids, ["protect", "raiders", "home"])
 	assert_true((result["cinematics"] as Dictionary).has("relay"))
 	assert_true((result["cinematics"] as Dictionary).has("wing"))
+
+
+func _belt(overrides: Dictionary = {}) -> Dictionary:
+	var belt: Dictionary = {"centre": [0, 0, -5000], "size": [2000, 500, 1000], "count": 20, "radius_m": [10, 50], "seed": 7,
+			"min_gap_m": 100}
+	belt.merge(overrides, true)
+	return belt
+
+
+func test_asteroid_belts_parse_into_layout_input() -> void:
+	var data: Dictionary = _minimal()
+	assert_eq((ScenarioLoader.from_data(data, "case")["belts"] as Array).size(), 0, "none by default")
+	data["asteroid_belts"] = [_belt()]
+	var result: Dictionary = ScenarioLoader.from_data(data, "case")
+	assert_true(result["ok"], str(result["error"]))
+	var belt: Dictionary = result["belts"][0]
+	assert_true(belt["centre"] is UniversePos)
+	assert_eq(belt["size"], Vector3(2000.0, 500.0, 1000.0))
+	assert_eq(belt["count"], 20)
+	assert_eq(belt["radius_m"], Vector2(10.0, 50.0))
+	assert_eq(belt["seed"], 7)
+	assert_eq(belt["min_gap_m"], 100.0)
+
+
+func test_asteroid_belt_errors_name_the_json_path() -> void:
+	var data: Dictionary = _minimal()
+	data["asteroid_belts"] = {}
+	_assert_fails(data, "case: asteroid_belts must be an array")
+	data["asteroid_belts"] = [_belt({"centre": [0, 0]})]
+	_assert_fails(data, "case: asteroid_belts[0]: centre")
+	data["asteroid_belts"] = [_belt({"size": [100, 0, 100]})]
+	_assert_fails(data, "case: asteroid_belts[0]: size")
+	data["asteroid_belts"] = [_belt({"count": 2.5})]
+	_assert_fails(data, "case: asteroid_belts[0]: count")
+	data["asteroid_belts"] = [_belt({"radius_m": [50, 10]})]
+	_assert_fails(data, "case: asteroid_belts[0]: radius_m")
+	data["asteroid_belts"] = [_belt({"min_gap_m": -1})]
+	_assert_fails(data, "case: asteroid_belts[0]: min_gap_m")
+
+
+func test_the_belt_showcase_file_validates() -> void:
+	var result: Dictionary = ScenarioLoader.load("res://data/scenarios/belt_showcase.json")
+	assert_true(result["ok"], str(result["error"]))
+	var belt: Dictionary = result["belts"][0]
+	assert_eq(belt["size"], Vector3(24000.0, 3000.0, 8000.0), "the escort's belt: 24 km across, 3 km high, 8 km deep (D63)")
+	var layout: BeltLayout = BeltLayout.place(belt, 16)
+	assert_eq(layout.shortfall, 0, "every rock fits")

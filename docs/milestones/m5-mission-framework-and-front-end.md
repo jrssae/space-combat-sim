@@ -590,7 +590,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T18 | D | New guns and impacts | - | Opus | Synthesis to measured shapes | done |
 | T19 | D | Per-thruster engine bursts | T18 | Opus | Voice placement and a voice budget | done |
 | T25 | A | Targeting at scale: a target menu and other targeting UX for large battles (Q26; placed before T20; numbered last because it was added after the others had numbers) | T02, T07, the M4 rebase | Opus | UX judgement with a concept stop (H); reads M4's on-read candidate list | not started |
-| T29 | C | Generated asteroids and a sparse belt (D63, Q38): the `asteroids` generator, `BeltLayout`, `AsteroidBelt` as static rows | T27 | Opus | A new procgen asset and a placement seam M14 builds on | not started |
+| T29 | C | Generated asteroids and a sparse belt (D63, Q38): the `asteroids` generator, `BeltLayout`, `AsteroidBelt` as static rows | T27 | Opus | A new procgen asset and a placement seam M14 builds on | done |
 | T30 | B | Mission: Civilian escort with a cinematic intro (D62, Q36 to Q42), replacing Buoy defence and the ring | T29, T16, T17 | Opus | The random civilian, flee-and-resume in the native brains, three waves, writing and pacing | not started |
 | T31 | - | L1: the flight batch's per-ship gather in native for row-commanded ships | T30 | Opus | The biggest measured lever (about 37 % of the tick at 1 000) | not started |
 | T32 | - | L2: the hit resolver gets only bolts with live hostile pairs from native; per-hit hash and readout costs | T31 | Opus | 1.41 ms at 1 000; native pair filtering | not started |
@@ -1746,6 +1746,27 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   VRAM with the belt in view. A look sheet of the rock shapes and the belt from 2 km and 10 km goes to
   `references/screenshots/T29 asteroid belt/` for the maintainer (H).
 - **Done when:** AC21, with the belt in a test scenario; the escort uses it in T30.
+- **Done (as built, 2026-11-08, on the maintainer's machine):**
+  - **Built:** the `asteroids` generator (16 shapes from 12 kinds, 5 120-triangle render mesh with an 81 920-triangle normal
+    map, `shapes.json` with each shape's bounding radius and one to three collision spheres), `BeltLayout`, `AsteroidBelt`,
+    the loader's `asteroid_belts[]` (result key `belts`), `Main._spawn_belts` (it warns when a count does not fit), provider
+    `belts`, and `data/scenarios/belt_showcase.json`: D63's escort belt, 24 x 3 x 8 km, 400 rocks of 10 to 150 m, 200 m gap,
+    starting 3 km ahead of the player. 400 rocks give a mean nearest-neighbour distance of about 620 m (0.55 (V/N)^(1/3)), so a
+    Saturn 8 can thread it; all 400 fit. `belt_showcase` is in `settings.scenario` and the `scenario` command, not the menu.
+  - **Changed from the drafts:** the peanut's lobes sit further apart (the waist test failed: the neck was as wide as a lobe),
+    generator version 3; the crater-floor test checks the render level (a pitted rock's small craters spanned too few faces of
+    the coarse test mesh); the CLI's build line now counts the rock shapes' triangles. The drafts grouped rocks into 2 km
+    cells (362 multimeshes for this belt); measured against one multimesh per shape, the cells cost more draw calls (274 vs 156
+    with the overlay on, from 2 km) and no fewer triangles, also from inside the belt, so the belt draws one multimesh per shape.
+  - **Measured (RX 6950 XT, Forward+, 960x540, overlay off):** 16 multimeshes; 145 fps from 2 km and from 10 km (the 144 Hz
+    vsync cap), 44 draw calls and about 44 000 triangles in both views; Godot's VRAM 338 MB with the belt vs 282 MB in free
+    flight (the 16 shapes' maps). Static rows: 859 spheres; `perf` tick 1 999 us vs 1 946 us in free flight, inside the noise.
+  - **Tests:** `test_asteroids` 15 (Python), `test_belt_layout` 7, `test_asteroid_belt` 4, `test_scenario_loader` 39 (three new:
+    parsing, errors, the showcase file fits), `test_info_md` 2, `test_console_command_list` 7; main-scene smoke runs (default
+    and `belt_showcase` with a rebase) show no errors or leaks.
+  - **(H):** the belt sheet (`references/screenshots/T29 asteroid belt/`, from 2 km and 10 km) and the shapes sheet again
+    (`references/screenshots/T29 asteroid shapes/`; the approved one is kept beside it), since the peanut changed. Fly it with
+    `--scenario=belt_showcase`.
 
 ### M5-T30 Mission: Civilian escort with a cinematic intro
 

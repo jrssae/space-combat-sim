@@ -3930,6 +3930,10 @@ tests/unit/test_triggers.gd, test_objective_book.gd, test_mission_sequencer.gd, 
 src/world/buoy_ring.gd   nav buoys evenly on a ring: positions, names, how many a point hears, pure (T10)
 data/scenarios/buoy_defence.json, data/missions/buoy_defence.gd, data/dialog/buoy_defence.json   the Buoy defence mission (T10)
 tests/unit/test_buoy_ring.gd, tests/integration/test_buoy_defence.gd   (T10)
+tools/procgen/assets/asteroids.py, tools/procgen/tests/test_asteroids.py   the rock shapes and their spheres (T29)
+src/world/belt_layout.gd   a belt's rocks in its box, pure (T29)
+src/world/asteroid_belt.gd   a multimesh per shape, static spheres in StaticRows (T29)
+tests/unit/test_belt_layout.gd, tests/integration/test_asteroid_belt.gd, data/scenarios/belt_showcase.json   (T29)
 ```
 
 ### 18.3 Boot, scene changes and the console's startup scripts
@@ -4287,3 +4291,29 @@ tests/unit/test_encounter_plan.gd, tests/integration/test_encounters.gd, tests/f
   session), `encounter_interval_s` (120, read when encounters first turn on), `encounter_max_ships` (24). The front end gives each
   free flight it starts a fresh seed (`FrontEnd.session_seed`); Restart keeps it.
 
+
+
+### 18.13 Generated asteroids and belts as built (T29, D63, Q38)
+
+- **The rocks.** `tools/procgen/assets/asteroids.py` writes 16 shapes from twelve kinds (`KINDS`): potato, fragment, peanut,
+  shard, boulder, slab, cratered, rubble, half, banana, spindle and pitted; every kind once, then four again with other draws.
+  A shape is an icosphere whose radius along each direction comes from its kind (an ellipsoid, or fused lobes through a soft
+  maximum for the peanut and the rubble pile), roughened by five octaves of value noise, pressed with craters, clipped by
+  fracture planes (fragments, shards, boulders, slabs, the half rock), then bent or tapered along its long axis. It is
+  authored at about 4 m (`AUTHOR_RADIUS_M`, so the fine mesh's detail lies inside the normal map's 0.12 m transfer reach) and
+  written as M4's textured mesh: a 5 120-triangle render mesh whose normal map carries an 81 920-triangle fine mesh, painted
+  through a `rock` style with no plating, rivets, streaks or bare metal: a grey, brown or cold-grey family per shape, soft
+  grime, darker regolith in crater floors, fresher rock on fracture faces. Godot's importer builds the mesh levels.
+  `shapes.json` (and the manifest) lists each shape's kind, mesh section, bounding radius and collision spheres: one for a
+  round rock, two or three spaced along a long one (its principal axis), each the mean distance of its stretch of surface.
+- **The layout.** `BeltLayout.place(belt, shape_count)` (pure) scatters a belt's rocks through its box: sizes drawn as
+  `min * (max / min) ^ (u ^ 3)` so small rocks outnumber large ones, placed largest first by rejection against a hash grid so
+  no two are closer than `min_gap_m` plus their radii and every rock lies inside the box; seeded (`RandomNumberGenerator`),
+  so a scenario's belt is the same every run. A count that cannot fit places what fits and reports the `shortfall`, which `Main` warns about.
+- **In the game.** A scenario's `asteroid_belts[]` (`{centre, size, count, radius_m: [min, max], seed, min_gap_m}`, the
+  radius a rock's bounding radius) comes out of `ScenarioLoader` as `belts`; `Main._spawn_belts` spawns an `AsteroidBelt` per
+  belt from `UniversePos` and connects the world's `rebased`. The belt draws one `MultiMeshInstance3D` per shape (2 km cells
+  were tried and measured: more draw calls, no fewer triangles), and makes each collision sphere a static body by RID registered in `StaticRows` (kind `STATIC`, neutral), as M4's
+  `AsteroidField` does, so the scan, the hit sweep, rams and avoidance see the rocks with no node per rock and nothing walked
+  per tick; it releases bodies and rows when it leaves the tree. Provider `belts` (count, rocks, spheres, draw_groups).
+  M4's `AsteroidField` stays the bench's stand-in.

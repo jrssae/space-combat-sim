@@ -1,0 +1,5 @@
+{"scenario_id": "belt_showcase", "system_id": "local",
+ "player": {"position": [0, 0, 0], "forward": [0, 0, -1]},
+ "asteroid_belts": [
+   {"centre": [0, 0, -7000], "size": [24000, 3000, 8000], "count": 400, "radius_m": [10, 150], "seed": 29,
+    "min_gap_m": 200}]}

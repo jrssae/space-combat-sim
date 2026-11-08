@@ -73,10 +73,12 @@ class AssetOutputs:
 
     @property
     def triangle_count(self) -> int:
-        """Triangles of the asset's textured meshes: its own ``mesh`` and every piece's or class's (0 for a sky or a sound set)."""
+        """Triangles of the asset's textured meshes: its own ``mesh``, every piece's or class's and every rock shape's (0 for a
+        sky or a sound set)."""
         sections = [self.manifest.get("mesh")]
         for group in ("pieces", "classes"):
             sections += [entry.get("mesh") for entry in dict(self.manifest.get(group, {})).values()]
+        sections += [entry.get("mesh") for entry in list(self.manifest.get("shapes", [])) if isinstance(entry, dict)]
         return sum(int(section["triangles"]) for section in sections if isinstance(section, dict))
 
     @property

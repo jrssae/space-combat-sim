@@ -34,7 +34,10 @@ extends RefCounted
 ##                                                  #       path), objectives: the raw `objectives[]`, already checked by
 ##                                                  #       `ObjectiveBook.declare`, closing_lines: {reason, "success" or
 ##                                                  #       "failure" -> line id (StringName)} (M5-T10)}; strings may be ""
-##      "cinematics": Dictionary}                   # (M5-T05, D55) shot id -> shot, passed through for T08; may be empty
+##      "cinematics": Dictionary,                   # (M5-T05, D55) shot id -> shot, passed through for T08; may be empty
+##      "belts": Array[Dictionary]}                 # `asteroid_belts[]` (M5-T29, D63): each {centre: UniversePos, size: Vector3,
+##                                                  #       count, radius_m: Vector2 (min, max bounding radius), seed, min_gap_m},
+##                                                  #       the input `BeltLayout.place` takes; may be empty
 ## Every spawn (wave or load) carries "wing" (a wing's name, "" for none; it needs an "ai" behaviour), "cargo_pods" (M5-T16: how
 ## many cargo pods a hull with pod mounts flies with, 0-3; -1, the default, mounts them all) and "forward" (M5-T16: the spawn's
 ## own heading, a Vector3; zero, the default, takes the player's). A wing named by a spawn
@@ -159,6 +162,10 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	if (loop as Dictionary)["from_wave"] > wave_list.size():
 		return _failure("%s: loop.from_wave %d is beyond the %d waves" % [source, (loop as Dictionary)["from_wave"], wave_list.size()])
 
+	var belts: Variant = _belts(root.get("asteroid_belts", []), system, source)
+	if belts is String:
+		return _failure(belts as String)
+
 	var result: Dictionary = _empty()
 	result["ok"] = true
 	result["scenario_id"] = StringName(scenario_id as String)
@@ -174,7 +181,45 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	result["wings"] = wings
 	result["mission"] = mission
 	result["cinematics"] = cinematics
+	result["belts"] = belts
 	return result
+
+
+## `asteroid_belts[]` (M5-T29, D63): each belt's box, rock count and sizes; or an error string.
+static func _belts(raw: Variant, system: StringName, source: String) -> Variant:
+	if not (raw is Array):
+		return "%s: asteroid_belts must be an array" % source
+	var out: Array[Dictionary] = []
+	for b: int in (raw as Array).size():
+		var where: String = "%s: asteroid_belts[%d]" % [source, b]
+		var entry: Variant = (raw as Array)[b]
+		if not (entry is Dictionary):
+			return "%s must be an object" % where
+		var belt: Dictionary = entry
+		var centre: Variant = _universe_pos(belt.get("centre"), system)
+		if centre == null:
+			return "%s: centre must be [x, y, z] (numbers)" % where
+		var size: Variant = _vector3(belt.get("size"))
+		if size == null or (size as Vector3).x <= 0.0 or (size as Vector3).y <= 0.0 or (size as Vector3).z <= 0.0:
+			return "%s: size must be [x, y, z], each above 0" % where
+		var count: Variant = belt.get("count")
+		if not (count is float or count is int) or int(count) < 1 or float(count) != floorf(float(count)):
+			return "%s: count must be a whole number of at least 1" % where
+		var radii: Variant = belt.get("radius_m")
+		if not (radii is Array) or (radii as Array).size() != 2 or not ((radii as Array)[0] is float or (radii as Array)[0] is int) \
+				or not ((radii as Array)[1] is float or (radii as Array)[1] is int) or float((radii as Array)[0]) <= 0.0 \
+				or float((radii as Array)[1]) < float((radii as Array)[0]):
+			return "%s: radius_m must be [min, max] with 0 < min <= max" % where
+		var gap: Variant = belt.get("min_gap_m", 0.0)
+		if not (gap is float or gap is int) or float(gap) < 0.0:
+			return "%s: min_gap_m must be a number of at least 0" % where
+		var seed_value: Variant = belt.get("seed", 1)
+		if not (seed_value is float or seed_value is int):
+			return "%s: seed must be a number" % where
+		out.append({"centre": centre as UniversePos, "size": size as Vector3, "count": int(count),
+				"radius_m": Vector2(float((radii as Array)[0]), float((radii as Array)[1])), "seed": int(seed_value),
+				"min_gap_m": float(gap)})
+	return out
 
 
 ## The `mission` block (D51), or an error string: `{}` when absent. Strings are checked for type only (the script and the
@@ -609,7 +654,7 @@ static func _empty() -> Dictionary:
 					"velocity": Vector3.ZERO},
 			"props": [] as Array[Dictionary], "pools": {}, "waves": [] as Array[Dictionary],
 			"loop": {"from_wave": 0, "add_per_loop": 1}, "routes": [] as Array[Route], "spawns": [] as Array[Dictionary],
-			"wings": [] as Array[Dictionary], "mission": {}, "cinematics": {}}
+			"wings": [] as Array[Dictionary], "mission": {}, "cinematics": {}, "belts": [] as Array[Dictionary]}
 
 
 static func _failure(message: String) -> Dictionary:

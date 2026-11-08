@@ -12,7 +12,7 @@ const SCENARIO_DIR := "res://data/scenarios/"
 ## The debug overlay's text is rebuilt this often while it shows (M4-T36): a readout, not an animation.
 const OVERLAY_INTERVAL_S: float = 0.1
 const SCENARIO_CHOICES: Array[StringName] = [&"combat_sandbox", &"free_flight", &"instructor_route", &"dogfight",
-		&"civilian_showcase"]
+		&"civilian_showcase", &"belt_showcase"]
 
 ## The player's hull reached zero (the ship is hidden and disabled; input is ignored until the respawn).
 signal player_died
@@ -56,6 +56,8 @@ var ship: Ship = null
 var thrusters: ThrusterVisuals = null
 var cannon: PulseCannon = null
 var buoys: Array[NavBuoy] = []
+## The scenario's asteroid belts (M5-T29).
+var asteroid_belts: Array[AsteroidBelt] = []
 ## The ships the scenario places at load (`spawns`, M3-T09), from the pool; the route leaders are placed again on a respawn.
 var scenario_ships: Array[Combatant] = []
 ## The ship leading a route (the instructor) and its follow-path behaviour; null when the scenario has none.
@@ -181,6 +183,7 @@ func _ready() -> void:
 	waves.wave_started.connect(wings.on_wave_started)
 	if bool(scenario.get("ok", false)):
 		_spawn_props(scenario["props"])
+		_spawn_belts(scenario["belts"])
 	_spawn_scenario_ships()
 	if not (scenario.get("mission", {}) as Dictionary).is_empty():
 		mission = MissionRunner.create(self, scenario)
@@ -661,6 +664,22 @@ func _spawn_props(props: Array) -> void:
 		director.watch_buoy(buoy)
 
 
+# The scenario's asteroid belts (M5-T29, D63), each laid out from its seed and built as static rows.
+func _spawn_belts(belts: Array) -> void:
+	var shape_count: int = maxi(AsteroidBelt.shapes().size(), 1)
+	for i: int in belts.size():
+		var entry: Dictionary = belts[i]
+		var belt := AsteroidBelt.new()
+		belt.name = "Belt%d" % i
+		world.spawn(belt, entry["centre"])
+		var layout: BeltLayout = BeltLayout.place(entry, shape_count)
+		if layout.shortfall > 0:
+			push_warning("Belt%d: %d of %d rocks did not fit the box with the gap asked for" % [i, layout.shortfall, entry["count"]])
+		belt.build(layout, world.get_world_3d().space, world)
+		world.rebased.connect(belt.on_rebased)
+		asteroid_belts.append(belt)
+
+
 func _handle_ui(ui: UiCommand) -> void:
 	if ui.pause:
 		pause_menu.on_pause_action()
@@ -731,6 +750,15 @@ func _update_bracket() -> void:
 
 
 func _register_console() -> void:
+	DebugConsole.registry.register_provider(&"belts", ConsoleVars.new({
+		&"count": {"get": func() -> int: return asteroid_belts.size(), "doc": "Asteroid belts in the scenario (M5-T29)"},
+		&"rocks": {"get": func() -> int: return asteroid_belts.reduce(func(n: int, b: AsteroidBelt) -> int: return n + b.rock_count, 0),
+				"doc": "Rocks in every belt"},
+		&"spheres": {"get": func() -> int: return asteroid_belts.reduce(func(n: int, b: AsteroidBelt) -> int: return n + b.sphere_count, 0),
+				"doc": "Collision spheres (static rows) the rocks stand on"},
+		&"draw_groups": {"get": func() -> int: return asteroid_belts.reduce(func(n: int, b: AsteroidBelt) -> int: return n + b.draw_groups, 0),
+				"doc": "Multimeshes drawing the rocks (one per shape)"},
+	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"respawn", "Reset the ship to the scenario start",
 			[] as Array[ConsoleArg]), _cmd_respawn, self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"window", "Resize the game window (width and height in pixels), or `window max` / `window normal` to maximize or restore it",
