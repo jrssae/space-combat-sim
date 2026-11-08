@@ -13,11 +13,12 @@ from pathlib import Path
 
 import numpy as np
 
+
 from tools.procgen.assets import ASSETS
 from tools.procgen.assets import centauri_brezebel as brez
 from tools.procgen.core import civilian as cv
 from tools.procgen.core import manifest as manifest_io
-from tools.procgen.core.color import linear_to_srgb
+from tools.procgen.core.color import capture_albedo, linear_to_srgb
 from tools.procgen.core.context import BuildContext
 from tools.procgen.core.obj import read_obj
 from tools.procgen.core.textured_mesh import TexturedPart, phase_steps
@@ -194,10 +195,10 @@ class CentauriBrezebelTests(unittest.TestCase):
         violet = np.median(rgb[arm_top], axis=0)
         self.assertGreater(violet[2], violet[0] * 1.5, "violet: much more blue than red")
         self.assertGreater(violet[0], violet[1] * 1.2, "violet, not blue: more red than green")
-        gold = (rgb[:, 0] > 0.55) & (rgb[:, 1] > 0.4) & (rgb[:, 2] < 0.35)
+        gold = (rgb[:, 0] > 0.33) & (rgb[:, 1] > 0.25) & (rgb[:, 2] < 0.25)  # the paint, darkened (capture_albedo)
         self.assertGreater(int(gold.sum()), 4, "the tip fins' gold caps")
         self.assertGreater(float(np.abs(a[gold, 1] - brez.CENTRE_Y).min()), 10.0, "the caps are on the fins' tips")
-        pale = (rgb.min(axis=1) > 0.6) & (np.ptp(rgb, axis=1) < 0.25)
+        pale = (rgb.min(axis=1) > 0.36) & (np.ptp(rgb, axis=1) < 0.2)  # the darkened lavender (capture_albedo)
         rim = pale & (a[:, 2] < 19.5) & (np.abs(a[:, 1] - brez.CENTRE_Y) < 1.0)
         self.assertGreater(int(rim.sum()), 10, "the pale lavender band round the bow's rim")
 
@@ -384,7 +385,7 @@ class CentauriBrezebelTests(unittest.TestCase):
         self.assertAlmostEqual(float(local[:, 0].max()), 1.1, delta=0.15, msg="a teardrop pod 2.2 m across")
         assert_mirror_symmetric(self, local, "turret")
         _, rgb = painted_points(self.dir_a, turret["mesh"])
-        gold = (rgb[:, 0] > 0.55) & (rgb[:, 1] > 0.4) & (rgb[:, 2] < 0.35)
+        gold = (rgb[:, 0] > 0.33) & (rgb[:, 1] > 0.25) & (rgb[:, 2] < 0.25)  # the paint, darkened (capture_albedo)
         violet = rgb[:, 2] > 1.5 * rgb[:, 0]
         self.assertGreater(int(gold.sum()), 4, "gold collars on the barrels")
         self.assertGreater(int(violet.sum()), len(rgb) // 4, "a violet pod")
@@ -497,6 +498,9 @@ class CentauriStyleTests(unittest.TestCase):
 
         for role, value in (("hull", 0x4C3C8E), ("hull_dark", 0x2B2257), ("stripe", 0xD9B23A), ("trim_light", 0xD7D2E6),
                             ("window", 0xF3F1FF), ("nozzle", 0x3A3448), ("nozzle_throat", 0x141218)):  # fmt: skip
+            # The scheme is what a lit face shows; the paint is the albedo that shows it (core/color.py, capture_albedo).
+            r, g, b = (round(float(c) * 255) for c in linear_to_srgb(np.array(capture_albedo(value))))
+            value = (r << 16) | (g << 8) | b
             got = srgb_hex(centauri.CENTAURI.material(role).albedo)
             for shift in (16, 8, 0):
                 self.assertAlmostEqual((got >> shift) & 255, (value >> shift) & 255, delta=1, msg=role)

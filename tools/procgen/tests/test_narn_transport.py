@@ -13,10 +13,11 @@ from pathlib import Path
 
 import numpy as np
 
+
 from tools.procgen.assets import narn_transport as narn
 from tools.procgen.core import civilian as cv
 from tools.procgen.core import manifest as manifest_io
-from tools.procgen.core.color import linear_to_srgb
+from tools.procgen.core.color import capture_albedo, linear_to_srgb
 from tools.procgen.core.context import BuildContext
 from tools.procgen.core.obj import read_obj
 from tools.procgen.core.textured_mesh import TexturedPart, phase_steps
@@ -144,12 +145,12 @@ class NarnTransportTests(unittest.TestCase):
         box_side = (np.abs(np.abs(at[:, 0]) - 12.75) < 0.05) & (z > np.percentile(self.xyz[:, 2], 85))
         grey = np.average(rgb[box_side], axis=0, weights=area[box_side])
         self.assertLess(float(np.ptp(grey)), 0.08, "the box is a neutral grey")
-        self.assertGreater(float(grey.mean()), 0.45, "a light grey")
+        self.assertGreater(float(grey.mean()), 0.25, "a light grey (darker than the capture, which shows lit paint)")
         prongs = (z < self.xyz[:, 2].min() + 6.0) & (y > -1.0)
         green = np.average(rgb[prongs], axis=0, weights=area[prongs])
         self.assertGreater(green[1], green[0] * 1.2, "the hull is green")
         self.assertGreater(green[1], green[2] * 1.05)
-        red = (rgb[:, 0] > 1.8 * rgb[:, 1]) & (rgb[:, 0] > 0.35)
+        red = (rgb[:, 0] > 1.8 * rgb[:, 1]) & (rgb[:, 0] > 0.2)  # the darkened red (capture_albedo)
         self.assertGreater(int(red.sum()), 4, "the red band on each side of the crescent")
         self.assertAlmostEqual(float(at[red, 0].mean()), 0.0, delta=0.5, msg="one band on each side")
         self.assertGreater(float(np.abs(at[red, 0]).min()), 12.0, "on the crescent halves, outboard of the box")
@@ -332,7 +333,7 @@ class NarnTransportTests(unittest.TestCase):
         self.assertAlmostEqual(float(local[:, 0].max()), 1.3, delta=0.15, msg="a six-sided base 2.6 m across")
         assert_mirror_symmetric(self, local, "turret")
         _, rgb, area, _metal = painted_faces(self.dir_a, turret["mesh"])
-        red = (rgb[:, 0] > 1.8 * rgb[:, 1]) & (rgb[:, 0] > 0.35)
+        red = (rgb[:, 0] > 1.8 * rgb[:, 1]) & (rgb[:, 0] > 0.2)  # the darkened paint (capture_albedo)
         green = rgb[:, 1] > 1.1 * rgb[:, 0]
         self.assertGreater(int(red.sum()), 2, "the red band")
         self.assertGreater(float(area[green].sum()), 0.25 * float(area.sum()), "dark green")
@@ -450,6 +451,9 @@ class NarnStyleTests(unittest.TestCase):
         for role, value in (("hull", 0x3A5A48), ("hull_dark", 0x26392F), ("cargo_panel", 0x4E7552), ("hull_panel", 0xB7BAB5),
                             ("stripe", 0xA3241C), ("hazard", 0xD2B032), ("hazard_dark", 0x262626), ("canopy_glass", 0x10201A),
                             ("canopy_frame", 0x26392F), ("nozzle", 0x3A3A36), ("nozzle_throat", 0x141413)):  # fmt: skip
+            # The scheme is what a lit face shows; the paint is the albedo that shows it (core/color.py, capture_albedo).
+            r, g, b = (round(float(c) * 255) for c in linear_to_srgb(np.array(capture_albedo(value))))
+            value = (r << 16) | (g << 8) | b
             got = srgb_hex(role)
             for shift in (16, 8, 0):
                 self.assertAlmostEqual((got >> shift) & 255, (value >> shift) & 255, delta=1, msg=role)

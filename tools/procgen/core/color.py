@@ -71,3 +71,34 @@ def lerp(
     a: np.ndarray | float, b: np.ndarray | float, t: np.ndarray | float
 ) -> np.ndarray:
     return np.asarray(a) + (np.asarray(b) - np.asarray(a)) * np.asarray(t)
+
+
+# The civilian colour schemes were read off lit screen captures, so a scheme colour is what a lit face *shows*, not its paint.
+# Measured in the game (2026-11-08, RX 6950 XT): a flat grey of albedo sRGB level A, lit by the key star (energy 1.5) at 45
+# degrees with the default ambient (0.3) and the filmic tonemap, shows level D. Used backwards, it turns a capture colour into
+# the albedo that shows it. Re-measure with reports/colour_probe if the key light, the ambient default or the tonemap change.
+_SHOWN_LEVEL = np.array([0.0, 47.0, 57.0, 76.0, 102.0, 121.0, 140.0, 160.0, 184.0, 195.0, 209.0, 222.0, 238.0])
+_ALBEDO_LEVEL = np.array([0.0, 16.0, 32.0, 48.0, 64.0, 80.0, 96.0, 112.0, 128.0, 144.0, 160.0, 176.0, 192.0])
+# The maintainer judged the calibrated paint still too light against the show and picked half of it, with the ambient lowered
+# to 0.1 (2026-11-08, M5-T39 option C).
+PAINT_DARKEN = 0.5
+
+
+def capture_albedo(hex_rgb: int, darken: float = PAINT_DARKEN) -> tuple[float, float, float]:
+    """The linear albedo for a colour read off a screen capture: darkened by how much the game's light brightens it (so at
+    ``darken`` 1 a lit face shows the capture's colour), then by ``darken``. Hue is kept; colours brighter than the table's top
+    keep its strongest darkening."""
+    srgb = np.array([(hex_rgb >> 16) & 255, (hex_rgb >> 8) & 255, hex_rgb & 255], dtype=float) / 255.0
+    linear = srgb_to_linear(srgb)
+    luminance = float(linear @ np.array([0.2126, 0.7152, 0.0722]))
+    if luminance <= 0.0:
+        return (0.0, 0.0, 0.0)
+    shown = float(linear_to_srgb(np.array(luminance))) * 255.0
+    if shown <= _SHOWN_LEVEL[-1]:
+        albedo_level = float(np.interp(shown, _SHOWN_LEVEL, _ALBEDO_LEVEL))
+        scale = float(srgb_to_linear(np.array(albedo_level / 255.0))) / luminance
+    else:
+        top = float(srgb_to_linear(np.array(_SHOWN_LEVEL[-1] / 255.0)))
+        scale = float(srgb_to_linear(np.array(_ALBEDO_LEVEL[-1] / 255.0))) / top
+    r, g, b = (float(v) for v in np.clip(linear * min(scale, 1.0) * darken, 0.0, 1.0))
+    return (r, g, b)

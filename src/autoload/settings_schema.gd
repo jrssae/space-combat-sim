@@ -116,6 +116,9 @@ const ENTRIES: Dictionary = {
 	&"cockpit_light_energy": {"type": TYPE_FLOAT, "default": 1.0, "min": 0.0, "max": 8.0,  # M4-T30b (Q37): a subtler red cabin
 		"category": &"graphics", "label": "Cockpit lamp", "menu": false, "step": 0.4,
 		"doc": "Brightness of the cabin lamp that lights the cockpit frame in the first-person view (applies on the next spawn)"},
+	&"hull_sheen": {"type": TYPE_FLOAT, "default": 0.25, "min": 0.0, "max": 1.0,
+		"category": &"graphics", "label": "Hull sheen", "menu": false, "step": 0.05,
+		"doc": "A clear coat over every ship's paint: the key star's highlight and a faint reflection of the nebula; 0 is flat paint (live)"},
 	&"cabin_glow_level": {"type": TYPE_FLOAT, "default": 0.3, "min": 0.0, "max": 2.0,
 		"category": &"graphics", "label": "Cabin glow", "menu": false, "step": 0.1,
 		"doc": "How much red the cockpit glow adds in the canopy, seen from outside"},
@@ -165,9 +168,9 @@ const ENTRIES: Dictionary = {
 		"category": &"game", "label": "Native threads", "menu": false, "step": 1,
 		"doc": "Worker threads for the native core's per-ship passes, the brains and the flight step (M4-T18): 0 = as many threads as the machine has performance cores, 1 = the main thread alone; outputs are the same bits whatever the count; live"},
 	# M4-T30a
-	&"ambient_level": {"type": TYPE_FLOAT, "default": 0.3, "min": 0.0, "max": 2.0,
+	&"ambient_level": {"type": TYPE_FLOAT, "default": 0.1, "min": 0.0, "max": 2.0,
 		"category": &"graphics", "label": "Ambient light", "step": 0.1,
-		"doc": "The environment's ambient light, white at this energy: what the textured meshes and every other lit surface get on every side (M4-T30a, live)"},
+		"doc": "The environment's ambient light, white at this energy: what the textured meshes and every other lit surface get on every side (M4-T30a, live)"},  # 0.1 since M5-T39: the show's darker shadows
 	# M4-T38
 	&"anti_aliasing": {"type": TYPE_ENUM, "default": &"smaa", "choices": [&"off", &"fxaa", &"smaa", &"msaa_2x", &"msaa_4x", &"taa"],
 		"category": &"graphics", "label": "Anti-aliasing",

@@ -17,11 +17,12 @@ from pathlib import Path
 
 import numpy as np
 
+
 from tools.procgen.assets import ASSETS
 from tools.procgen.assets import skylark_transport as sky
 from tools.procgen.core import civilian as cv
 from tools.procgen.core import manifest as manifest_io
-from tools.procgen.core.color import linear_to_srgb
+from tools.procgen.core.color import capture_albedo, linear_to_srgb
 from tools.procgen.core.context import BuildContext
 from tools.procgen.core.obj import read_obj
 from tools.procgen.core.textured_mesh import TexturedPart, phase_steps
@@ -182,8 +183,8 @@ class SkylarkTransportTests(unittest.TestCase):
         top = (np.abs(x) > 4.0) & (np.abs(x) < 9.0) & (z > 40.0) & (z < 48.0) & (y > -0.5)
         sand = np.average(rgb[top], axis=0, weights=area[top])
         self.assertGreater(sand[0], sand[2] + 0.05, "khaki: warm, not neutral grey")
-        self.assertGreater(float(sand.mean()), 0.4, "a light plating")
-        band = (rgb[:, 0] > 1.6 * rgb[:, 1]) & (rgb[:, 0] > 0.35)
+        self.assertGreater(float(sand.mean()), 0.22, "a light plating (darker than the capture, which shows lit paint)")
+        band = (rgb[:, 0] > 1.6 * rgb[:, 1]) & (rgb[:, 0] > 0.22)  # the darkened red (capture_albedo)
         self.assertGreater(int(band.sum()), 10, "two bands on the capsule, one on each side tank")
         self.assertAlmostEqual(float(x[band].mean()), 0.0, delta=0.5)
         self.assertLess(float(z[band].max()), 30.0, "the bands are on the forward capsule and the tanks")
@@ -204,6 +205,9 @@ class SkylarkTransportTests(unittest.TestCase):
         style = sky.STYLE
         for role, value in (("hull", 0xA9A68E), ("hull_panel", 0x7A7659), ("hull_dark", 0x4A4839), ("stripe", 0xB8452B),
                             ("nozzle", 0x4A4A46)):  # fmt: skip
+            # The scheme is what a lit face shows; the paint is the albedo that shows it (core/color.py, capture_albedo).
+            r, g, b = (round(float(c) * 255) for c in linear_to_srgb(np.array(capture_albedo(value))))
+            value = (r << 16) | (g << 8) | b
             got = srgb_hex(style.material(role).albedo)
             for shift in (16, 8, 0):
                 self.assertAlmostEqual((got >> shift) & 255, (value >> shift) & 255, delta=1, msg=role)

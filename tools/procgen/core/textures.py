@@ -293,6 +293,12 @@ def wear_scale(style: Style) -> float:
     return float(style.extra.get("wear_scale", 1.0))
 
 
+def _has_panel_grid(style: Style) -> bool:
+    """Whether the style paints the generic staggered plating (seams, tint patchwork, hatches, rivets). The civilian styles turn it
+    off until their seams follow the show (M5-T39, T40); wear and grime are painted either way."""
+    return bool(style.extra.get("panel_grid", 1.0))
+
+
 def _surface_height(style: Style, lattice: dict[str, np.ndarray]) -> np.ndarray:
     """The plating's relief: the seams' grooves, the hatches' bevels and the rivets' domes (metres, 0 the plate)."""
     k = wear_scale(style)
@@ -565,7 +571,8 @@ def _normal_map(atlas: Atlas, style: Style, platings: Sequence[Plating], scale: 
             if not sel.any():
                 continue
             lattice = plating_lattice(style, position[sel], normal[sel], platings[p_index], phase, chart_normal[chart[sel]])
-            strip_h[sel] = np.where(paneled_table[material[sel]], _surface_height(style, lattice), 0.0)
+            grid = paneled_table[material[sel]] & _has_panel_grid(style)
+            strip_h[sel] = np.where(grid, _surface_height(style, lattice), 0.0)
         height[rr] = strip_h
     hu, hv = _gradient(height, filled_big)
     su = np.maximum(step_u[np.ix_(near, near)] / scale, 1e-6)
@@ -613,7 +620,7 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
         if not sel.any():
             continue
         lattice = plating_lattice(style, pos[sel], nrm[sel], platings[p_index], phase, chart_normal[b.chart[idx][sel]])
-        painted = paneled[sel]
+        painted = paneled[sel] & _has_panel_grid(style)
         factor = np.where(lattice["on_line"], style.panel_line_darkness, lattice["tint"])
         factor = np.where(lattice["hatch"], factor * 0.93, factor)
         albedo[sel] *= np.where(painted, factor, 1.0)[:, None]

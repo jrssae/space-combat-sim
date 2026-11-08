@@ -17,11 +17,12 @@ from pathlib import Path
 
 import numpy as np
 
+
 from tools.procgen.assets import ASSETS
 from tools.procgen.assets import brakiri_bokmai as bok
 from tools.procgen.core import civilian as cv
 from tools.procgen.core import manifest as manifest_io
-from tools.procgen.core.color import linear_to_srgb
+from tools.procgen.core.color import capture_albedo, linear_to_srgb
 from tools.procgen.core.context import BuildContext
 from tools.procgen.core.obj import read_obj
 from tools.procgen.core.textured_mesh import TexturedPart, phase_steps
@@ -208,7 +209,10 @@ class BrakiriBokmaiTests(unittest.TestCase):
         written = {"hull": 0x5A6B59, "hull_dark": 0x3A4538, "pod": 0xABAE9A, "stripe": 0xD8B840, "window": 0xE8F0DC,
                    "window_strip": 0x1E2620, "nozzle": 0x2E3530, "engine_dome": 0xF2EDC4}  # fmt: skip
         for role, value in written.items():
-            self.assertEqual(srgb_hex(m[role].albedo), value, role)
+            # The scheme is what a lit face shows; the paint is the albedo that shows it (core/color.py, capture_albedo).
+            # The pods are painted paler than written so they stay pale in shade (M5-T39).
+            expected = 0xC8CCB4 if role == "pod" else srgb_hex(capture_albedo(value))
+            self.assertEqual(srgb_hex(m[role].albedo), expected, role)
         self.assertEqual((GLOW_SRGB, BOLT_SRGB), (0xFFF0B0, 0x7CFF4F), "the glow and the bright green bolts (Q22)")
         # The texture pack (M5-T27): seams darker than the paint, a mild tint, worn to primer; the windows and domes glow.
         for style in (BRAKIRI, BRAKIRI_POD):
@@ -222,7 +226,7 @@ class BrakiriBokmaiTests(unittest.TestCase):
         at, rgb = painted_points(self.dir_a, self.manifest["mesh"])
         authored = at + self.offset
         fins_top = authored[:, 1] > 14.2
-        self.assertGreater(float(np.median(rgb[fins_top][:, 0])), 0.45, "the fins' yellow tops")
+        self.assertGreater(float(np.median(rgb[fins_top][:, 0])), 0.32, "the fins' yellow tops (darkened paint)")
         spine = (authored[:, 2] > 20) & (authored[:, 2] < 40) & (authored[:, 1] > 12.5)
         self.assertLess(float(np.median(rgb[spine][:, 0])), float(np.median(rgb[spine][:, 1])), "the spine is green")
         _, pod_rgb = painted_points(self.dir_a, self.manifest["pod"]["mesh"])

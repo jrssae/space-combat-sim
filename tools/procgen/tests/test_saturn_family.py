@@ -20,6 +20,7 @@ from typing import Any, ClassVar
 import numpy as np
 
 from tools.procgen.assets import ASSETS
+from tools.procgen.core.color import capture_albedo
 from tools.procgen.assets import saturn_family as saturn
 from tools.procgen.parts import saturn as sp
 from tools.procgen.core import civilian as cv
@@ -256,8 +257,8 @@ class SaturnVariantChecks:
         disc = keep & (authored[:, 2] > 6.0) & (authored[:, 2] < 30.0) & (np.abs(authored[:, 0]) > 7.5) & (authored[:, 1] < -0.5)
         grey = np.average(rgb[disc], axis=0, weights=area[disc])
         self.assertLess(float(np.ptp(grey)), 0.1, "the disc's underside is a neutral grey")
-        self.assertGreater(float(grey.mean()), 0.4)
-        red = keep & (rgb[:, 0] > 1.6 * rgb[:, 1]) & (rgb[:, 0] > 0.35)
+        self.assertGreater(float(grey.mean()), 0.18, "a mid grey (darker than the capture, which shows lit paint)")
+        red = keep & (rgb[:, 0] > 1.6 * rgb[:, 1]) & (rgb[:, 0] > 0.2)  # the darkened red (capture_albedo)
         self.assertGreater(int(red.sum()), 10, "the red bands")
         self.assertLess(float(np.abs(authored[red, 0]).mean()), 30.0, "on the cylinders and the disc's ring, not the pods")
 
@@ -568,9 +569,8 @@ class EaCivilianStyleTests(unittest.TestCase):
             "canopy_frame": 0x4F5256,
         }  # fmt: skip
         for role, hex_rgb in scheme.items():
-            srgb = linear_to_srgb(np.array(EA_CIVILIAN.material(role).albedo)) * 255.0
-            expected = [(hex_rgb >> 16) & 255, (hex_rgb >> 8) & 255, hex_rgb & 255]
-            np.testing.assert_allclose(srgb, expected, atol=1.0, err_msg=role)
+            # The scheme is what a lit face shows; the paint is the albedo that shows it (core/color.py, capture_albedo).
+            np.testing.assert_allclose(EA_CIVILIAN.material(role).albedo, capture_albedo(hex_rgb), atol=1e-6, err_msg=role)
         self.assertAlmostEqual(EA_CIVILIAN.panel_size_m, 3.6)
         self.assertAlmostEqual(EA_CIVILIAN.panel_line_width_m, 0.4)
         # The texture pack (M5-T27, Achilles.jpg, Red Star 9.jpg, Epsilon.JPG): fine dark seams, a light patchwork, edges worn

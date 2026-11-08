@@ -600,6 +600,8 @@ whose trigger never arose). Update the column with each task's commit.
 | T36 | - | L12 and L13: the smaller items and one native constants table with its GUT check | T35 | Sonnet | Many small fixes and a drift guard | not started |
 | T37 | D | L6 and L7: muzzle flashes and shot sounds culled by range; no audio node per pooled ship walked per frame | T28 | Sonnet | Sound-pass cost at scale | not started |
 | T38 | - | L14: the shared test steps fixture, collapsed recordings, balance tests out of the default run, CI's Python job and asset cache | T36 | Sonnet | Duplication and CI time; CI must stay green | not started |
+| T39 | C | Civilian colours as the show shows them, and a sheen on every hull (maintainer, 2026-11-08; added after T38, done before T30) | T27 | controller | Colour read off captures vs lit albedo; the look is (H) | done |
+| T40 | C | Civilian panel seams drawn from the show's references instead of the generic brick grid (maintainer, 2026-11-08) | T39, the maintainer's reference captures | controller | Per-ship seam layouts read off images; the look is (H) | not started |
 | T20 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 **Progress (2026-11-03).** Done: T01, T02, T05, T11, T15, T18, T19, T24. In progress:
@@ -1874,6 +1876,45 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   the lock paths in one place.
 - **Done when:** the suite's totals are unchanged except the moved balance tests; CI is green on the push, with shard times
   in the Done notes.
+
+### M5-T39 Civilian colours and hull sheen
+
+- **Why (maintainer, 2026-11-08):** the civilian ships look much whiter than in the show, and every hull (the Starfury and the
+  raider too) reads as flat paint although they are metal: add a small reflection or sheen.
+- **Cause:** the civilian schemes were read off lit screen captures and used as albedo, so the game's key star and ambient
+  light them a second time; reflections were off (`REFLECTION_SOURCE_DISABLED`) and the paint matte, so nothing shone.
+- **What:** `capture_albedo` (`tools/procgen/core/color.py`) turns a capture colour into the albedo that shows it on a lit
+  face, from a measured grey ramp; the four civilian styles paint with it (emission unchanged). `settings.hull_sheen` (0.25)
+  puts a clear coat on every hull's paint (`MeshAssets`, the livery shader) and turns on the nebula's reflection; 0 is the old
+  flat look. Rocks take no sheen.
+- **Done when:** the civilian generators rebuilt and their tests green, before and after sheets in
+  `references/screenshots/Civilian colours and hull sheen/`, and the maintainer's OK on the look (H) before the commit.
+- **Done (as built, 2026-11-08, on the maintainer's machine):**
+  - **Measured:** a grey of albedo #A4A7AA showed #EEE9DF head-on and #D8D4CA at 50 degrees (key star 1.5, ambient 0.3,
+    filmic). A grey ramp at 45 degrees gave the table in `core/color.py`; `reports/colour_probe/` has the probe (gitignored).
+  - **The maintainer's picks (three rounds of sheets):** the calibrated paint still read too light, so `PAINT_DARKEN` 0.5
+    (option C) with `settings.ambient_level` 0.3 -> 0.1 (darker shadow sides, as in the show); the Brakiri pods painted
+    #C8CCB4 directly, lighter than the written #ABAE9A, so they stay pale in shade; sheen 0.25 approved. The generic staggered
+    plating is off on every civilian style (`extra["panel_grid"]` 0: no seams, tint patchwork, hatches or rivets; wear and
+    grime stay) until T40 draws seams from the show.
+  - **Code:** `capture_albedo` (with `darken`) in the four civilian styles and the Saturn pod tops; `settings.hull_sheen`
+    through `MeshAssets` (clear coat on `StandardMaterial3D`, `sheen` on `hull_livery.gdshader`) and the sky's reflection in
+    `SpaceEnvironment` (radiance 128); rocks pass `sheen` false.
+  - **Tests:** Python 356 (the civilians, `test_color`'s calibration, `test_textures`' grid switch; absolute brightness cuts
+    in the paint tests lowered to the darkened colours), GUT `test_environment` 19, `test_mesh_assets` 6 (the sheen),
+    `test_settings_schema` 25, `test_settings_menu_model` 15, `test_textured_hull` 4, `check_scripts` 610.
+  - **(H):** the pods' shade; how the 0.1 ambient reads in flight. A saved `ambient_level` overrides the new default.
+
+### M5-T40 Civilian panel seams from the show
+
+- **Why (maintainer, 2026-11-08):** the generic brick grid looked terrible; seams suit some ships, but they must follow the
+  show's references.
+- **Needs:** the maintainer's captures per ship (Saturn family: Achilles.jpg, Red Star 9.jpg, Epsilon.JPG; Skylark; Narn
+  transport; Brakiri Bokmai; Brezebel), which are not on this machine.
+- **What:** per ship, the seams and hatches read off the captures (where plates break, which way they run, ribs on the
+  pods), drawn as per-part seam layouts instead of `plating_for`'s staggered grid; a look sheet per ship for the
+  maintainer before the generator commits.
+- **Done when:** each civilian's seams match its references (H), tests pin the layouts, and `panel_grid` is gone or unused.
 
 ### M5-T20 Integration, full suite, docs and acceptance
 

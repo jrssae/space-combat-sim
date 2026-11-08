@@ -4317,3 +4317,16 @@ tests/unit/test_encounter_plan.gd, tests/integration/test_encounters.gd, tests/f
   `AsteroidField` does, so the scan, the hit sweep, rams and avoidance see the rocks with no node per rock and nothing walked
   per tick; it releases bodies and rows when it leaves the tree. Provider `belts` (count, rocks, spheres, draw_groups).
   M4's `AsteroidField` stays the bench's stand-in.
+
+### 18.14 Civilian colours and hull sheen as built (T39)
+
+- **Colours.** The civilian schemes were read off lit screen captures, so `capture_albedo` (`tools/procgen/core/color.py`)
+  turns a scheme colour into paint: a measured grey ramp (key star 1.5 at 45 degrees, ambient 0.3, filmic) inverted so a lit
+  face shows the capture's colour, then halved (`PAINT_DARKEN`, the maintainer's pick), hue kept. Emission is not touched. The
+  Brakiri pods are painted #C8CCB4 directly. Re-measure with a probe if the key light, the ambient default or the tonemap change.
+- **Ambient.** `settings.ambient_level` defaults to 0.1 (was 0.3): darker shadow sides, as in the show.
+- **Sheen.** `settings.hull_sheen` (0.25, live): `MeshAssets` gives every hull's paint a clear coat (roughness 0.35;
+  `StandardMaterial3D.clearcoat`, the livery shader's `sheen`), and `SpaceEnvironment` turns on the sky's reflection
+  (radiance 128) while it is above 0. Glass and rocks take none; 0 is the old flat paint.
+- **Plating.** The civilian styles set `extra["panel_grid"]` 0: no generic staggered seams, tint patchwork, hatches or rivets
+  until T40 draws their seams from the show; the fighters keep the grid.

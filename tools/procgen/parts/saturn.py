@@ -33,7 +33,7 @@ from ..core.geometry import (
     sweep_rect,
 )
 from ..styles import Style
-from ..styles.ea_civilian import lin
+from ..core.color import capture_albedo
 from . import Collision, Part
 from .propulsion import NozzleSpec, nozzle
 from .solids import Solid, box_solid, difference, lathe_solid, prism_solid, union
@@ -747,7 +747,7 @@ def _pod_paint(spec: PodSpec, trim: PodTrim, style: Style, body: np.ndarray) -> 
     lengths = [float(np.linalg.norm(body[(e + 1) % 6] - body[e])) for e in range(6)]
     top_paint = None
     if trim.top_paint is not None:
-        top_paint = Material(f"eac_pod_top_{trim.top_paint:06x}", lin(trim.top_paint), paneled=True)
+        top_paint = Material(f"eac_pod_top_{trim.top_paint:06x}", capture_albedo(trim.top_paint), paneled=True)
 
     def breaks(e: int, length: float) -> list[float]:
         ts = set(_cells(length, 3.6))

@@ -97,7 +97,7 @@ func _add_sphere(at: Vector3, radius: float, space: RID, world: Node) -> void:
 
 # One shape's rocks as a multimesh.
 func _add_group(shape: Dictionary, transforms: Array) -> void:
-	var mesh: Mesh = MeshAssets.load_textured(ASSET_DIR, shape["mesh"])
+	var mesh: Mesh = MeshAssets.load_textured(ASSET_DIR, shape["mesh"], false)
 	if mesh == null:
 		return
 	var multimesh := MultiMesh.new()

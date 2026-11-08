@@ -20,6 +20,10 @@ static var _cache: Dictionary = {}
 static var _glass: Array[ShaderMaterial] = []
 static var _glass_strength: Array[float] = []
 static var _livery_sections: Dictionary = {}
+## The hulls' paint materials, for `settings.hull_sheen`: a clear coat so painted metal catches the light.
+static var _sheen: Array[Material] = []
+## How sharp the sheen's highlight and reflection are.
+const SHEEN_ROUGHNESS: float = 0.35
 
 
 ## The parsed `manifest.json` of `asset_id`, or {} when it is missing or unreadable.
@@ -69,8 +73,9 @@ static func is_textured(asset_id: String, asset_root: String = ShipSpec.ASSET_RO
 
 
 ## The textured mesh a manifest `mesh` section names, under `dir`, each surface with its own `StandardMaterial3D` from the maps;
-## cached per file. Null when the glb is missing or not imported.
-static func load_textured(dir: String, entry: Dictionary) -> Mesh:
+## cached per file. Null when the glb is missing or not imported. A hull's paint takes `settings.hull_sheen`; pass `sheen` false
+## for what is not painted metal (rocks).
+static func load_textured(dir: String, entry: Dictionary, sheen: bool = true) -> Mesh:
 	var path: String = dir.path_join(String(entry.get("file", "")))
 	if _cache.has(path):
 		return _cache[path]
@@ -87,9 +92,10 @@ static func load_textured(dir: String, entry: Dictionary) -> Mesh:
 		if bool(surface.get("blend", false)) and not livery.is_empty():
 			mesh.surface_set_material(i, glass_material(dir, surface))
 		elif not livery.is_empty():
-			mesh.surface_set_material(i, livery_material(dir, surface, livery))
+			mesh.surface_set_material(i, _with_sheen(livery_material(dir, surface, livery), sheen))
 		else:
-			mesh.surface_set_material(i, textured_material(dir, surface))
+			var material: StandardMaterial3D = textured_material(dir, surface)
+			mesh.surface_set_material(i, _with_sheen(material, sheen and not bool(surface.get("blend", false))))
 	_cache[path] = mesh
 	return mesh
 
@@ -262,10 +268,36 @@ static func _apply_cabin_glow(index: int) -> void:
 	_glass[index].set_shader_parameter(&"glow_view_m", float(Settings.get_value(&"cabin_glow_view_m")))
 
 
+# Registers a hull paint material for `settings.hull_sheen` and gives it the current sheen.
+static func _with_sheen(material: Material, sheen: bool) -> Material:
+	if not sheen:
+		return material
+	_sheen.append(material)
+	_apply_sheen(material)
+	if not Settings.changed.is_connected(_on_setting_changed):
+		Settings.changed.connect(_on_setting_changed)
+	return material
+
+
+static func _apply_sheen(material: Material) -> void:
+	var amount: float = float(Settings.get_value(&"hull_sheen"))
+	if material is StandardMaterial3D:
+		var standard := material as StandardMaterial3D
+		standard.clearcoat_enabled = amount > 0.0
+		standard.clearcoat = amount
+		standard.clearcoat_roughness = SHEEN_ROUGHNESS
+	elif material is ShaderMaterial:
+		(material as ShaderMaterial).set_shader_parameter(&"sheen", amount)
+		(material as ShaderMaterial).set_shader_parameter(&"sheen_roughness", SHEEN_ROUGHNESS)
+
+
 static func _on_setting_changed(key: StringName, _value: Variant) -> void:
 	if key == &"cabin_glow_level" or key == &"cabin_glow_view_m":
 		for i: int in _glass.size():
 			_apply_cabin_glow(i)
+	elif key == &"hull_sheen":
+		for material: Material in _sheen:
+			_apply_sheen(material)
 
 
 static func _texture(path: String) -> Texture2D:

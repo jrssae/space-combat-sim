@@ -18,7 +18,7 @@ from collections.abc import Mapping
 
 import numpy as np
 
-from ..core.color import srgb_to_linear
+from ..core.color import capture_albedo, srgb_to_linear
 from ..core.geometry import Material
 from . import Style
 
@@ -77,7 +77,7 @@ def ea_civilian(overrides: Mapping[str, int] | None = None, engine_glow: int = E
         elif role == "nozzle_throat":
             glow, strength = lin(engine_glow), ENGINE_STRENGTH
             name = name if engine_glow == ENGINE_GLOW else f"{name}_glow_{engine_glow:06x}"
-        materials[role] = Material(name, lin(colour), transmittance=transmittance, paneled=paneled, metallic=metallic,
+        materials[role] = Material(name, capture_albedo(colour), transmittance=transmittance, paneled=paneled, metallic=metallic,
                                    emissive=glow, emissive_strength=strength)
     return Style(
         name="ea_civilian",
@@ -96,7 +96,7 @@ TEXTURE_PACK = {
     "edge_wear": 0.35,
     "streaks": 0.14,
     "grime": 0.07,
-    "extra": {"bare_metal": 0.0, "smudge": 0.12, "speckle": 0.03, "paint_roughness": 0.72, "rivets": 0.4},
+    "extra": {"bare_metal": 0.0, "smudge": 0.12, "speckle": 0.03, "paint_roughness": 0.72, "rivets": 0.4, "panel_grid": 0.0},
 }
 
 

@@ -289,3 +289,21 @@ class WeatheringTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PanelGridSwitchTests(unittest.TestCase):
+    """The generic staggered plating is off on the civilian hulls until their seams follow the show (M5-T39); fighters keep it."""
+
+    def test_the_civilians_paint_no_generic_grid_and_the_fighters_do(self) -> None:
+        from tools.procgen.core import textures
+        from tools.procgen.styles.brakiri import BRAKIRI, BRAKIRI_POD
+        from tools.procgen.styles.centauri import CENTAURI
+        from tools.procgen.styles.ea_civilian import EA_CIVILIAN
+        from tools.procgen.styles.earthforce import EARTHFORCE
+        from tools.procgen.styles.narn import NARN
+        from tools.procgen.styles.raider import RAIDER
+
+        for style in (EA_CIVILIAN, NARN, CENTAURI, BRAKIRI, BRAKIRI_POD):
+            self.assertFalse(textures._has_panel_grid(style), style.name)
+        for style in (EARTHFORCE, RAIDER):
+            self.assertTrue(textures._has_panel_grid(style), style.name)

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..core.color import srgb_to_linear
+from ..core.color import capture_albedo, srgb_to_linear
 from ..core.geometry import Material
 from . import Style
 
@@ -40,34 +40,36 @@ TEXTURE_PACK = {
     "edge_wear": 0.35,
     "streaks": 0.12,
     "grime": 0.08,
-    "extra": {"bare_metal": 0.0, "smudge": 0.1, "speckle": 0.03, "paint_roughness": 0.65, "rivets": 0.3},
+    "extra": {"bare_metal": 0.0, "smudge": 0.1, "speckle": 0.03, "paint_roughness": 0.65, "rivets": 0.3, "panel_grid": 0.0},
 }
 POD_SRGB = 0xABAE9A
+POD_PAINT_SRGB = 0xC8CCB4  # the pods' paint, lighter than the written colour (M5-T39)
 YELLOW_SRGB = 0xD8B840
 
 
 BRAKIRI = Style(
     name="brakiri",
     materials={
-        "hull": Material("bk_hull", _lin(HULL_SRGB), paneled=True),  # the frame
-        "hull_dark": Material("bk_hull_dark", _lin(HULL_DARK_SRGB)),  # recesses, the spindle, sleeves, rails, insets
-        "hull_panel": Material("bk_hull_panel", _lin(HULL_SRGB), paneled=True),
-        "frame_plain": Material("bk_frame_plain", _lin(HULL_SRGB)),  # the frame's green on the pods (top plate, saddles)
-        "pod": Material("bk_pod", _lin(POD_SRGB), paneled=True),  # the cargo pods' plating
-        "stripe": Material("bk_stripe", _lin(YELLOW_SRGB)),  # the yellow
-        "window": Material("bk_window", _lin(0xE8F0DC), emissive=_lin(0xE8F0DC), emissive_strength=2.0),
-        "window_strip": Material("bk_window_strip", _lin(0x1E2620)),
-        "engine_dome": Material("bk_engine_dome", _lin(0xF2EDC4), emissive=_lin(GLOW_SRGB), emissive_strength=2.5),
-        "hazard": Material("bk_hazard", _lin(YELLOW_SRGB)),
-        "hazard_dark": Material("bk_hazard_dark", _lin(HULL_DARK_SRGB)),
-        "canopy_glass": Material("bk_canopy", _lin(0x1E2620)),
-        "canopy_frame": Material("bk_canopy_frame", _lin(HULL_DARK_SRGB), metallic=0.5),
-        "nozzle": Material("bk_nozzle", _lin(0x2E3530), metallic=0.8),  # the nacelle cups
-        "nozzle_throat": Material("bk_nozzle_throat", _lin(0x121512), metallic=0.8),
-        "barrel": Material("bk_barrel", _lin(0x2E3530), metallic=0.7),
-        "bore": Material("bk_bore", _lin(0x101210)),
-        "interior": Material("bk_interior", _lin(0x101210)),
-        "rcs": Material("bk_rcs", _lin(HULL_DARK_SRGB), metallic=0.6),
+        "hull": Material("bk_hull", capture_albedo(HULL_SRGB), paneled=True),  # the frame
+        "hull_dark": Material("bk_hull_dark", capture_albedo(HULL_DARK_SRGB)),  # recesses, the spindle, sleeves, rails, insets
+        "hull_panel": Material("bk_hull_panel", capture_albedo(HULL_SRGB), paneled=True),
+        "frame_plain": Material("bk_frame_plain", capture_albedo(HULL_SRGB)),  # the frame's green on the pods (top plate, saddles)
+        # The cargo pods' plating: paler than written, so they stay pale putty green in shade (the maintainer, M5-T39).
+        "pod": Material("bk_pod", _lin(POD_PAINT_SRGB), paneled=True),
+        "stripe": Material("bk_stripe", capture_albedo(YELLOW_SRGB)),  # the yellow
+        "window": Material("bk_window", capture_albedo(0xE8F0DC), emissive=_lin(0xE8F0DC), emissive_strength=2.0),
+        "window_strip": Material("bk_window_strip", capture_albedo(0x1E2620)),
+        "engine_dome": Material("bk_engine_dome", capture_albedo(0xF2EDC4), emissive=_lin(GLOW_SRGB), emissive_strength=2.5),
+        "hazard": Material("bk_hazard", capture_albedo(YELLOW_SRGB)),
+        "hazard_dark": Material("bk_hazard_dark", capture_albedo(HULL_DARK_SRGB)),
+        "canopy_glass": Material("bk_canopy", capture_albedo(0x1E2620)),
+        "canopy_frame": Material("bk_canopy_frame", capture_albedo(HULL_DARK_SRGB), metallic=0.5),
+        "nozzle": Material("bk_nozzle", capture_albedo(0x2E3530), metallic=0.8),  # the nacelle cups
+        "nozzle_throat": Material("bk_nozzle_throat", capture_albedo(0x121512), metallic=0.8),
+        "barrel": Material("bk_barrel", capture_albedo(0x2E3530), metallic=0.7),
+        "bore": Material("bk_bore", capture_albedo(0x101210)),
+        "interior": Material("bk_interior", capture_albedo(0x101210)),
+        "rcs": Material("bk_rcs", capture_albedo(HULL_DARK_SRGB), metallic=0.6),
     },
     panel_size_m=2.4,
     panel_line_width_m=0.25,
