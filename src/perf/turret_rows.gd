@@ -9,6 +9,8 @@ extends RefCounted
 
 ## How a turret's `WeaponSpec` packs for the core (`turret_rows.rs`, `GUN_LEN`).
 const GUN_LEN: int = 9
+## How one hit volume packs for the core (`turret_kernels.rs`, `VOLUME_LEN`): capsule flag, basis columns, origin, size.
+const VOLUME_LEN: int = 16
 
 var sim: SimCore = null
 var shots_last_tick: int = 0
@@ -18,13 +20,16 @@ var _mounts: Dictionary[int, TurretMount] = {}
 var _relations_count: int = -1
 var _relations_table: FactionTable = null
 var _relations_revision: int = -1
+# The ships whose own hull the core holds for their turrets' line of fire (Q33), by body id.
+var _hulls_fed: Dictionary[int, Damageable] = {}
 
 
 func _init(p_sim: SimCore) -> void:
 	sim = p_sim
 
 
-## Mounts `mount` on body `body_id` and returns its slot (-1 when the core refused it).
+## Mounts `mount` on body `body_id` and returns its slot (-1 when the core refused it). The ship's own hit volumes go to
+## the core with its first mount and again whenever they change, so its hull blocks its turrets' fire (Q33).
 func register(mount: TurretMount, body_id: int, weapon: WeaponSpec, faction: StringName) -> int:
 	if sim == null or sim.core == null or weapon == null:
 		return -1
@@ -33,6 +38,7 @@ func register(mount: TurretMount, body_id: int, weapon: WeaponSpec, faction: Str
 	if slot < 0:
 		return -1
 	_mounts[slot] = mount
+	_feed_hull(body_id, Damageable.of(mount.get_parent()))
 	return slot
 
 
@@ -50,6 +56,39 @@ func count() -> int:
 ## The mount in `slot`, or null.
 func mount_at(slot: int) -> TurretMount:
 	return _mounts.get(slot)
+
+
+# Gives the core body `body_id`'s own hit volumes once, and again on every change of them.
+func _feed_hull(body_id: int, damageable: Damageable) -> void:
+	if damageable == null or _hulls_fed.get(body_id) == damageable:
+		return
+	_hulls_fed[body_id] = damageable
+	damageable.volumes_changed.connect(_send_hull.bind(body_id, damageable))
+	_send_hull(body_id, damageable)
+
+
+func _send_hull(body_id: int, damageable: Damageable) -> void:
+	if sim == null or sim.core == null or not is_instance_valid(damageable):
+		return
+	sim.core.set_turret_hull(body_id, pack_volumes(damageable.shapes))
+
+
+## A ship's hit volumes packed for the core: per shape the capsule flag, its basis' columns, its origin and its size (a
+## box's half extents; a capsule's half segment and radius).
+static func pack_volumes(shapes: Array[HitShape]) -> PackedFloat64Array:
+	var out := PackedFloat64Array()
+	for shape: HitShape in shapes:
+		var t: Transform3D = shape.transform
+		var capsule: bool = shape.kind == HitShape.Kind.CAPSULE
+		out.append(1.0 if capsule else 0.0)
+		for column: Vector3 in [t.basis.x, t.basis.y, t.basis.z]:
+			out.append_array([column.x, column.y, column.z])
+		out.append_array([t.origin.x, t.origin.y, t.origin.z])
+		if capsule:
+			out.append_array([shape.half_segment, shape.radius, 0.0])
+		else:
+			out.append_array([shape.half_extents.x, shape.half_extents.y, shape.half_extents.z])
+	return out
 
 
 ## One tick of every turret (from `SimCore.step_now`, after the cannons and before the bolts move): the relations brought

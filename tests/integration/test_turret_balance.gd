@@ -23,7 +23,8 @@ var _scale_backup: float = 1.0
 var _steps_backup: int = 8
 
 
-func should_skip_script() -> Variant:
+@warning_ignore("untyped_declaration")  # GutTest declares it untyped
+func should_skip_script():
 	return SlowTests.skip_reason()
 
 

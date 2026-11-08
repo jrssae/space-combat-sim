@@ -291,9 +291,9 @@ fn turrets_cover_a_civilian_hull_within_two_km_of_skin() {
     };
     let mut memory = Memory::default();
     memory.note(2, 3, 0.0, false);
-    assert_eq!(turret_kernels::pick(&rows, &find, &mount, &memory, &t, 3, 1.0), 3,
+    assert_eq!(turret_kernels::pick(&rows, &find, &mount, &memory, &t, 3, 1.0, &[]), 3,
         "the role alone makes it a civilian, measured between skins");
     let mut combat = rows.clone();
     combat.roles = vec![ROLE_COMBAT; 3];
-    assert_eq!(turret_kernels::pick(&combat, &find, &mount, &memory, &t, 3, 1.0), 0, "a neutral warship 2.15 km off is not");
+    assert_eq!(turret_kernels::pick(&combat, &find, &mount, &memory, &t, 3, 1.0, &[]), 0, "a neutral warship 2.15 km off is not");
 }

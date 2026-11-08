@@ -76,13 +76,13 @@ fn a_turret_picks_only_attackers_of_its_ship() {
     let mut memory = Memory::default();
     let find = row_finder(&rows);
     let t = table();
-    assert_eq!(pick(&rows, &find, &mount(1), &memory, &t, 3, 0.0), 0, "a raider flying past is left alone");
+    assert_eq!(pick(&rows, &find, &mount(1), &memory, &t, 3, 0.0, &[]), 0, "a raider flying past is left alone");
     memory.note(1, 2, 0.0, true);
-    assert_eq!(pick(&rows, &find, &mount(1), &memory, &t, 3, 1.0), 2, "the one that shot is picked, not the nearer one");
+    assert_eq!(pick(&rows, &find, &mount(1), &memory, &t, 3, 1.0, &[]), 2, "the one that shot is picked, not the nearer one");
     memory.note(1, 3, 2.0, true);
-    assert_eq!(pick(&rows, &find, &mount(1), &memory, &t, 3, 3.0), 3, "the nearest of two attackers");
-    assert_eq!(pick(&rows, &find, &mount(1), &memory, &t, 3, 31.0), 3, "raider 2 forgotten after 30 s, 3 still remembered");
-    assert_eq!(pick(&rows, &find, &mount(1), &memory, &t, 3, 32.5), 0, "both forgotten");
+    assert_eq!(pick(&rows, &find, &mount(1), &memory, &t, 3, 3.0, &[]), 3, "the nearest of two attackers");
+    assert_eq!(pick(&rows, &find, &mount(1), &memory, &t, 3, 31.0, &[]), 3, "raider 2 forgotten after 30 s, 3 still remembered");
+    assert_eq!(pick(&rows, &find, &mount(1), &memory, &t, 3, 32.5, &[]), 0, "both forgotten");
 }
 
 #[test]
@@ -98,16 +98,16 @@ fn a_turret_defends_a_civilian_or_ally_within_two_km_only() {
     let t = table();
     let mut memory = Memory::default();
     memory.note(4, 2, 0.0, false);
-    assert_eq!(pick(&rows, &find, &mount(1), &memory, &t, 3, 0.0), 2, "an ally 1.5 km away is defended");
+    assert_eq!(pick(&rows, &find, &mount(1), &memory, &t, 3, 0.0, &[]), 2, "an ally 1.5 km away is defended");
     memory.clear();
     memory.note(5, 2, 0.0, true);
-    assert_eq!(pick(&rows, &find, &mount(1), &memory, &t, 3, 0.0), 2, "a neutral civilian 1.5 km away is defended");
+    assert_eq!(pick(&rows, &find, &mount(1), &memory, &t, 3, 0.0, &[]), 2, "a neutral civilian 1.5 km away is defended");
     memory.clear();
     memory.note(5, 2, 0.0, false);
-    assert_eq!(pick(&rows, &find, &mount(1), &memory, &t, 3, 0.0), 0, "a neutral warship is not");
+    assert_eq!(pick(&rows, &find, &mount(1), &memory, &t, 3, 0.0, &[]), 0, "a neutral warship is not");
     memory.clear();
     memory.note(6, 2, 0.0, true);
-    assert_eq!(pick(&rows, &find, &mount(1), &memory, &t, 3, 0.0), 0, "an ally 2.6 km away is too far");
+    assert_eq!(pick(&rows, &find, &mount(1), &memory, &t, 3, 0.0, &[]), 0, "an ally 2.6 km away is too far");
 }
 
 #[test]
@@ -125,7 +125,7 @@ fn a_friendly_attacker_out_of_reach_or_dead_is_not_picked() {
     memory.note(1, 3, 0.0, true);
     rows.flags[3] = FLAG_RIGID;
     let find = row_finder(&rows);
-    assert_eq!(pick(&rows, &find, &mount(1), &memory, &t, 3, 0.0), 0, "friendly fire, out of reach and destroyed: none");
+    assert_eq!(pick(&rows, &find, &mount(1), &memory, &t, 3, 0.0, &[]), 0, "friendly fire, out of reach and destroyed: none");
 }
 
 #[test]
@@ -139,10 +139,10 @@ fn a_target_inside_the_arc_comes_before_a_nearer_one_below_it() {
     let mut memory = Memory::default();
     memory.note(1, 2, 0.0, true);
     memory.note(1, 3, 0.0, true);
-    assert_eq!(pick(&rows, &find, &mount(1), &memory, &table(), 3, 0.0), 3);
+    assert_eq!(pick(&rows, &find, &mount(1), &memory, &table(), 3, 0.0, &[]), 3);
     memory.clear();
     memory.note(1, 2, 0.0, true);
-    assert_eq!(pick(&rows, &find, &mount(1), &memory, &table(), 3, 0.0), 2, "below the arc, but the only one");
+    assert_eq!(pick(&rows, &find, &mount(1), &memory, &table(), 3, 0.0, &[]), 2, "below the arc, but the only one");
 }
 
 #[test]
@@ -286,7 +286,7 @@ fn the_mounts_reuse_a_freed_slot_and_change_its_stamp() {
     assert_eq!(m.add(3, 9, 12, 0, Vector3::ZERO, Vector3::new(0.0, 1.0, 0.0), 200.0, 3.0, gun()), 0);
     let mut job = PickJob::default();
     m.live[1] = false;
-    job.take_from(&m, &Memory::default(), &table(), 3);
+    job.take_from(&m, &Memory::default(), &table(), 3, &Hulls::default());
     assert_eq!(job.mounts.len(), 1, "only live mounts are picked for");
     assert_eq!((job.mounts[0].slot, job.mounts[0].stamp), (0, 9));
 }
@@ -300,7 +300,7 @@ fn the_pick_over_a_job_answers_every_live_mount_with_its_stamp() {
     let mut memory = Memory::default();
     memory.note(1, 2, 0.0, true);
     let mut job = PickJob::default();
-    job.take_from(&m, &memory, &table(), 3);
+    job.take_from(&m, &memory, &table(), 3, &Hulls::default());
     pick_all(&rows, row_finder(&rows), 0.0, &mut job);
     assert_eq!(
         job.picks,
@@ -309,4 +309,90 @@ fn the_pick_over_a_job_answers_every_live_mount_with_its_stamp() {
             Pick { slot: 1, stamp: 6, target: 2 }
         ]
     );
+}
+
+// --- the own hull's line of fire (Q33) ------------------------------------------------------------------------------
+
+fn boxv(origin: (f32, f32, f32), half: [f64; 3]) -> Volume {
+    Volume::new(false, Basis::IDENTITY, Vector3::new(origin.0, origin.1, origin.2), half)
+}
+
+#[test]
+fn a_segment_through_a_box_is_blocked_one_past_it_is_not() {
+    let v = boxv((0.0, 0.0, 0.0), [10.0, 2.0, 30.0]);
+    assert!(segment_hits([0.0, 10.0, 0.0], [0.0, -10.0, 0.0], &v), "straight through");
+    assert!(segment_hits([20.0, 0.0, 0.0], [-20.0, 1.9, 5.0], &v), "slanting through");
+    assert!(!segment_hits([0.0, 10.0, 0.0], [0.0, 2.01, 0.0], &v), "stopping short of the top face");
+    assert!(!segment_hits([11.0, 10.0, 0.0], [11.0, -10.0, 0.0], &v), "beside it");
+    assert!(!segment_hits([0.0, 0.0, 0.0], [0.0, 50.0, 0.0], &v), "starting inside: the mount's own block does not count");
+    assert!(segment_hits([0.0, 3.0, -40.0], [0.0, 1.0, 40.0], &v), "grazing in along its length");
+}
+
+#[test]
+fn a_segment_near_a_capsule_is_blocked_inside_its_radius_only() {
+    // Along z, radius 3, half segment 20: the capsule's own y axis turned onto z.
+    let turn = Basis::from_cols(Vector3::new(1.0, 0.0, 0.0), Vector3::new(0.0, 0.0, 1.0), Vector3::new(0.0, -1.0, 0.0));
+    let v = Volume::new(true, turn, Vector3::new(0.0, 0.0, 50.0), [20.0, 3.0, 0.0]);
+    assert!((v.reach - 23.0).abs() < 1e-9);
+    assert!(segment_hits([-10.0, 2.9, 50.0], [10.0, 2.9, 50.0], &v), "2.9 m from the axis");
+    assert!(!segment_hits([-10.0, 3.1, 50.0], [10.0, 3.1, 50.0], &v), "3.1 m from the axis");
+    assert!(segment_hits([0.0, 0.0, 80.0], [0.0, 0.0, 20.0], &v), "end to end through both caps");
+    assert!(!segment_hits([0.0, 0.0, 74.0], [0.0, 0.0, 99.0], &v), "behind the far cap");
+    assert!(segment_hits([0.0, -10.0, 72.5], [0.0, 10.0, 72.5], &v), "through the end cap's sphere");
+    assert!(!segment_hits([0.0, 0.0, 50.0], [0.0, 30.0, 50.0], &v), "starting inside");
+}
+
+#[test]
+fn the_line_is_tested_in_the_ships_turned_frame() {
+    // A 200 m spine along the ship's z; the ship turned 90 degrees about y and moved: its spine lies along World x.
+    let spine = boxv((0.0, 0.0, 0.0), [5.0, 5.0, 100.0]);
+    let yaw = Basis::from_cols(Vector3::new(0.0, 0.0, -1.0), Vector3::new(0.0, 1.0, 0.0), Vector3::new(1.0, 0.0, 0.0));
+    let at = Vector3::new(1000.0, 0.0, 0.0);
+    let above = Vector3::new(1000.0, 8.0, 0.0);
+    assert!(line_blocked(&yaw, at, above, Vector3::new(1050.0, -300.0, 0.0), &[spine]), "down through the spine");
+    assert!(!line_blocked(&yaw, at, above, Vector3::new(1000.0, -300.0, 600.0), &[spine]), "down past its side");
+    assert!(!line_blocked(&yaw, at, above, Vector3::new(1050.0, -300.0, 0.0), &[]), "no volumes, nothing blocks");
+}
+
+#[test]
+fn a_turret_skips_an_attacker_its_own_hull_hides() {
+    // The mount on the ship's top; raider 2 right below the ship (behind its hull), raider 3 farther off to the side.
+    let rows = rows_of(&[
+        (1, 0, Vector3::ZERO),
+        (2, 1, Vector3::new(0.0, -400.0, 0.0)),
+        (3, 1, Vector3::new(900.0, 100.0, 0.0)),
+    ]);
+    let hull = [boxv((0.0, 0.0, 0.0), [10.0, 4.0, 40.0])];
+    let mut memory = Memory::default();
+    memory.note(1, 2, 0.0, true);
+    memory.note(1, 3, 0.0, true);
+    let find = row_finder(&rows);
+    let t = table();
+    let mut low = mount(1);
+    low.min_elevation = -FRAC_PI_2; // a full sphere: only the hull hides the raider below
+    assert_eq!(pick(&rows, &find, &low, &memory, &t, 3, 1.0, &[]), 2, "with no hull the nearer one");
+    assert_eq!(pick(&rows, &find, &low, &memory, &t, 3, 1.0, &hull), 3, "the hull hides the one below");
+    memory.forget(3);
+    assert_eq!(pick(&rows, &find, &low, &memory, &t, 3, 1.0, &hull), 0, "and with nothing else, no target at all");
+}
+
+#[test]
+fn the_hull_table_unpacks_and_versions() {
+    let mut h = Hulls::default();
+    let mut packed = vec![0.0; VOLUME_LEN * 2];
+    for (k, v) in [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 1.0, 2.0, 3.0].iter().enumerate() {
+        packed[1 + k] = *v;
+    }
+    packed[VOLUME_LEN] = 1.0;
+    packed[VOLUME_LEN + 13] = 5.0;
+    packed[VOLUME_LEN + 14] = 2.0;
+    h.set(7, &packed);
+    assert_eq!(h.version, 1);
+    let v = h.of(7);
+    assert_eq!(v.len(), 2);
+    assert!(!v[0].capsule && v[1].capsule);
+    assert_eq!(v[0].origin, Vector3::new(2.0, 3.0, 4.0));
+    assert_eq!(v[0].half, [1.0, 2.0, 3.0]);
+    assert!((v[1].reach - 7.0).abs() < 1e-9);
+    assert!(h.of(8).is_empty());
 }

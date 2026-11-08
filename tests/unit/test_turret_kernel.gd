@@ -272,7 +272,8 @@ func test_a_target_below_the_arc_holds_the_barrel_at_the_edge_and_the_gate_shut(
 	var scene: TurretScene = TurretScene.build(self)
 	var transport: Combatant = scene.ship(TRANSPORT, Factions.EARTH_ALLIANCE, "TRANSPORT", Vector3.ZERO, {}, 1, true)
 	var mount: TurretMount = scene.mount(transport)
-	var under: Combatant = scene.ship(RAIDER, Factions.RAIDERS, "UNDER", Vector3(0.0, -500.0, -500.0))
+	# Ahead and below: under the arc's edge, but in clear line past the own hull (Q33), which would hide it right below.
+	var under: Combatant = scene.ship(RAIDER, Factions.RAIDERS, "UNDER", Vector3(100.0, -250.0, -900.0))
 	scene.attach()
 	await _ticks(2)
 	scene.sim.note_hit(_id(transport), _id(under))

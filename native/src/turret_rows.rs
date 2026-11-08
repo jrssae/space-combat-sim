@@ -8,7 +8,7 @@ use godot::prelude::*;
 
 use crate::sim_core::{KIND_BOLT, ScsSimCore};
 use crate::turret_kernels::{
-    self as tk, Gun, Memory, Mounts, PickJob, REL_NEUTRAL,
+    self as tk, Gun, Hulls, Memory, Mounts, PickJob, REL_NEUTRAL,
 };
 
 /// How many numbers `add_turret`'s gun takes: muzzle speed (m/s), shot interval (s), lifetime (s), damage, hit radius
@@ -30,6 +30,10 @@ pub struct TurretState {
     picks_applied: i64,
     picks_stale: i64,
     step_us: i64,
+    /// The turreted ships' own hit volumes (Q33): what blocks their turrets' fire.
+    pub hulls: Hulls,
+    // Shots the gate would have fired but the own hull was in the way (a readout).
+    blocked_total: i64,
 }
 
 impl TurretState {
@@ -43,7 +47,7 @@ impl ScsSimCore {
     /// The launch's copy for the AI job: the live mounts, the memory and the relations as they stand.
     pub(crate) fn turret_snapshot_into(&self, job: &mut PickJob) {
         let t = &self.turrets;
-        job.take_from(&t.mounts, &t.memory, &t.relations, t.stride);
+        job.take_from(&t.mounts, &t.memory, &t.relations, t.stride, &t.hulls);
     }
 
     /// A joined job's picks: each lands on its mount when the mount's binding is still the one it was picked for.
@@ -277,6 +281,13 @@ impl ScsSimCore {
             if !tk::gate(&a, &gun, self.rows.radii[tr], m.ready_at[s], now_s) {
                 continue;
             }
+            // Q33: the ship's own hull stops the shot; the line runs from the trunnion to the lead point.
+            let from = tk::line_start(&f);
+            let own_hull = self.turrets.hulls.of(body);
+            if tk::line_blocked(&self.rows.bases[own], self.rows.positions[own], from, a.lead_point, own_hull) {
+                self.turrets.blocked_total += 1;
+                continue;
+            }
             m.ready_at[s] = now_s + gun.interval_s;
             m.shots[s] += 1;
             let direction = tk::spread(a.axis, gun.spread_rad, m.id[s], tick);
@@ -351,13 +362,27 @@ impl ScsSimCore {
         self.turrets.memory.len() as i64
     }
 
-    /// `[shots so far, picks applied, picks dropped as stale, the last step's microseconds]` (readouts).
+    /// `[shots so far, picks applied, picks dropped as stale, the last step's microseconds, shots the own hull blocked]`
+    /// (readouts).
     #[func]
     fn turret_readouts(&self) -> PackedInt64Array {
         let t = &self.turrets;
         PackedInt64Array::from(
-            &[t.shots_total, t.picks_applied, t.picks_stale, t.step_us][..],
+            &[t.shots_total, t.picks_applied, t.picks_stale, t.step_us, t.blocked_total][..],
         )
+    }
+
+    /// Body `body_id`'s own hit volumes (Q33), `VOLUME_LEN` numbers each in its body frame: what its turrets cannot fire
+    /// through. Given when its first mount binds and again when its volumes change, never per tick.
+    #[func]
+    fn set_turret_hull(&mut self, body_id: i64, volumes: PackedFloat64Array) {
+        self.turrets.hulls.set(body_id, volumes.as_slice());
+    }
+
+    /// How many hit volumes body `body_id` has given its turrets.
+    #[func]
+    fn turret_hull_count(&self, body_id: i64) -> i64 {
+        self.turrets.hulls.of(body_id).len() as i64
     }
 
     /// A hash of every mount's aim, target, gate and shots and of the memory, for comparing runs byte for byte (ships by

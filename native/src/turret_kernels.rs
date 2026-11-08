@@ -3,16 +3,22 @@
 //! runs in the AI job one tick behind on a frozen copy (`PickJob`), and its answers are applied at the join against each
 //! mount's stamp. The aim, the fire gate and the shot write a bolt row the same tick, so they run on the main thread in
 //! the core's step. Work is linear in mounts times remembered attackers, never a sweep over every ship. These extend
-//! M4-T20's turret stand-ins (`weapon_kernels.rs`) into real mounts: arcs, slew rates, lead and a spread.
+//! M4-T20's turret stand-ins (`weapon_kernels.rs`) into real mounts: arcs, slew rates, lead and a spread. A ship's own hull
+//! blocks its turrets' fire (Q33): the gate and the pick test the line against the ship's own hit volumes.
 #![allow(clippy::too_many_arguments)]
 
+use std::collections::HashMap;
 use std::f64::consts::{FRAC_PI_2, PI, TAU};
 
 use godot::builtin::{Basis, Vector3};
 
 use crate::brain_maths::solve;
 use crate::rows::{FLAG_HULL_ACTIVE, FLAG_RIGID, FLAG_TIER, Rows};
-use crate::v3::{add, cross, dist_sq, dot, normalized, scale, sub, xform};
+use crate::v3::{add, col_a, col_b, col_c, cross, dist_sq, dot, normalized, scale, sub, xform};
+
+/// Where a turret's line of fire starts (Q33): this far above its base along its up, about the barrels' trunnion, which
+/// stands clear of the hull however the barrel points (the tip may dip into the hull; the trunnion cannot).
+pub const LINE_LIFT_M: f64 = 1.5;
 
 /// How long a ship stays an attacker of a victim after one of its bolts hit it, s (D61).
 pub const MEMORY_S: f64 = 30.0;
@@ -252,11 +258,16 @@ pub struct PickJob {
     pub relations: Vec<u8>,
     pub stride: usize,
     pub picks: Vec<Pick>,
+    /// The turreted ships' own hit volumes (Q33), copied again only when they changed (`hulls_version`).
+    pub hulls: Hulls,
 }
 
 impl PickJob {
     /// Fills the job from the mounts and memory as they stand (the launch's copy).
-    pub fn take_from(&mut self, mounts: &Mounts, memory: &Memory, relations: &[u8], stride: usize) {
+    pub fn take_from(&mut self, mounts: &Mounts, memory: &Memory, relations: &[u8], stride: usize, hulls: &Hulls) {
+        if self.hulls.version != hulls.version {
+            self.hulls.clone_from(hulls);
+        }
         self.mounts.clear();
         for s in 0..mounts.taken.len() {
             if !mounts.taken[s] || !mounts.live[s] {
@@ -304,10 +315,12 @@ pub fn pick_all<F: Fn(i64) -> i64>(rows: &Rows, row_of: F, now_s: f64, job: &mut
         relations,
         stride,
         picks,
+        hulls,
     } = job;
     picks.clear();
     for m in mounts.iter() {
-        let target = pick(rows, &row_of, m, memory, relations, *stride, now_s);
+        let own = hulls.of(m.body);
+        let target = pick(rows, &row_of, m, memory, relations, *stride, now_s, own);
         picks.push(Pick {
             slot: m.slot,
             stamp: m.stamp,
@@ -317,7 +330,8 @@ pub fn pick_all<F: Fn(i64) -> i64>(rows: &Rows, row_of: F, now_s: f64, job: &mut
 }
 
 /// One mount's pick: the nearest remembered attacker of its own ship, or of a civilian or ally within `PROTECT_M` of it,
-/// that is alive, not friendly and within the mount's reach; one inside the arc before one outside it. 0 for none.
+/// that is alive, not friendly and within the mount's reach; one inside the arc before one outside it. An attacker its own
+/// hull hides (`own`, the ship's volumes, Q33) is not picked, so a turret never holds a target it cannot shoot. 0 for none.
 pub fn pick<F: Fn(i64) -> i64>(
     rows: &Rows,
     row_of: &F,
@@ -326,6 +340,7 @@ pub fn pick<F: Fn(i64) -> i64>(
     relations: &[u8],
     stride: usize,
     now_s: f64,
+    own_hull: &[Volume],
 ) -> i64 {
     if memory.is_empty() {
         return 0;
@@ -390,7 +405,12 @@ pub fn pick<F: Fn(i64) -> i64>(
         } else {
             d_sq + reach_sq * 4.0
         };
+        // The line is tested only for a candidate that would win: the volume test stays off the common path.
         if score < best_score {
+            let from = add(pivot, scale(up, LINE_LIFT_M as f32));  // `line_start` of the mount's frame
+            if line_blocked(basis, ship_at, from, rows.positions[a], own_hull) {
+                continue;
+            }
             best_score = score;
             best = attacker;
         }
@@ -467,6 +487,8 @@ pub struct Aim {
     pub lead_ok: bool,
     pub range_m: f64,
     pub lead_range_m: f64,
+    /// Where the lead says the bolt meets the target (the target itself when the lead has no solution).
+    pub lead_point: Vector3,
 }
 
 /// One tick of a mount's aim at a target: the lead by the brains' intercept maths (`InterceptMath.solve`: the bolt
@@ -512,6 +534,11 @@ pub fn aim(
         lead_ok: lead.ok,
         range_m: f64::from(dist_sq(target_at, f.pivot)).sqrt(),
         lead_range_m: if lead.ok { gun.muzzle_speed * lead.t } else { 0.0 },
+        lead_point: if lead.ok {
+            add(f.pivot, scale(wanted, (gun.muzzle_speed * lead.t) as f32))
+        } else {
+            target_at
+        },
     }
 }
 
@@ -561,6 +588,216 @@ pub fn shot(
         add(pivot, scale(axis, barrel_m as f32)),
         add(ship_velocity, scale(direction, muzzle_speed as f32)),
     )
+}
+
+/// One of a ship's own hit volumes (Q33), in its body frame: a box (`half` its half extents) or a capsule along its local y
+/// (`half` = [half segment, radius, 0]), placed by `basis` and `origin`; `reach` bounds it from `origin`.
+#[derive(Clone, Copy, Debug)]
+pub struct Volume {
+    pub capsule: bool,
+    pub basis: Basis,
+    pub origin: Vector3,
+    pub half: [f64; 3],
+    pub reach: f64,
+}
+
+impl Volume {
+    /// A box or capsule from its placement and size; `reach` is worked out here.
+    pub fn new(capsule: bool, basis: Basis, origin: Vector3, half: [f64; 3]) -> Self {
+        let reach = if capsule {
+            half[0] + half[1]
+        } else {
+            (half[0] * half[0] + half[1] * half[1] + half[2] * half[2]).sqrt()
+        };
+        Volume {
+            capsule,
+            basis,
+            origin,
+            half,
+            reach,
+        }
+    }
+}
+
+/// How many numbers one volume packs into (`set_turret_hull`): capsule flag, the basis' columns x, y and z, the origin,
+/// the size (a box's half extents; a capsule's half segment, radius, 0).
+pub const VOLUME_LEN: usize = 16;
+
+/// The turreted ships' own hit volumes by body id, and a version that grows with every change (the job copies on change).
+#[derive(Default, Clone)]
+pub struct Hulls {
+    pub by_body: HashMap<i64, Vec<Volume>>,
+    pub version: u64,
+}
+
+impl Hulls {
+    /// Body `body`'s volumes from packed numbers (`VOLUME_LEN` each); a short tail is dropped.
+    pub fn set(&mut self, body: i64, packed: &[f64]) {
+        let volumes = packed
+            .chunks_exact(VOLUME_LEN)
+            .map(|v| {
+                let col = |k: usize| Vector3::new(v[k] as f32, v[k + 1] as f32, v[k + 2] as f32);
+                Volume::new(
+                    v[0] != 0.0,
+                    Basis::from_cols(col(1), col(4), col(7)),
+                    col(10),
+                    [v[13], v[14], v[15]],
+                )
+            })
+            .collect();
+        self.by_body.insert(body, volumes);
+        self.version += 1;
+    }
+
+    /// Body `body`'s volumes (none when it has not been given any).
+    pub fn of(&self, body: i64) -> &[Volume] {
+        HashMap::get(&self.by_body, &body).map_or(&[], |v| v.as_slice())
+    }
+}
+
+/// Where a mount's line of fire starts: `LINE_LIFT_M` above its base.
+pub fn line_start(f: &Frame) -> Vector3 {
+    add(f.pivot, scale(f.up, LINE_LIFT_M as f32))
+}
+
+/// Whether the ship's own hull lies across the line from `from` to `to` (World frame), the ship at `origin` turned by
+/// `basis`: the line passes through one of its volumes that `from` is not already inside (a turret on its pad still
+/// fires out of it).
+pub fn line_blocked(basis: &Basis, origin: Vector3, from: Vector3, to: Vector3, volumes: &[Volume]) -> bool {
+    if volumes.is_empty() {
+        return false;
+    }
+    let a = to_frame(basis, origin, from);
+    let b = to_frame(basis, origin, to);
+    volumes.iter().any(|v| segment_hits(a, b, v))
+}
+
+/// Whether the segment from `a` to `b` (body frame, metres) enters volume `v` from outside it.
+pub fn segment_hits(a: [f64; 3], b: [f64; 3], v: &Volume) -> bool {
+    let o = [f64::from(v.origin.x), f64::from(v.origin.y), f64::from(v.origin.z)];
+    if segment_point_distance(a, b, o) > v.reach {
+        return false;
+    }
+    let la = to_local(v, a);
+    let lb = to_local(v, b);
+    if v.capsule {
+        let (h, r) = (v.half[0], v.half[1]);
+        let inside = |p: [f64; 3]| {
+            let y = p[1].clamp(-h, h);
+            p[0] * p[0] + (p[1] - y) * (p[1] - y) + p[2] * p[2] <= r * r
+        };
+        if inside(la) {
+            return false;
+        }
+        segment_segment_distance(la, lb, [0.0, -h, 0.0], [0.0, h, 0.0]) <= r
+    } else {
+        let inside = (0..3).all(|k| la[k].abs() <= v.half[k]);
+        !inside && segment_crosses_box(la, lb, v.half)
+    }
+}
+
+// The slab test: whether the segment from `a` to `b` meets the axis-aligned box of half extents `half` about the origin.
+fn segment_crosses_box(a: [f64; 3], b: [f64; 3], half: [f64; 3]) -> bool {
+    let (mut t0, mut t1) = (0.0_f64, 1.0_f64);
+    for k in 0..3 {
+        let d = b[k] - a[k];
+        if d.abs() < 1e-12 {
+            if a[k].abs() > half[k] {
+                return false;
+            }
+            continue;
+        }
+        let (mut near, mut far) = ((-half[k] - a[k]) / d, (half[k] - a[k]) / d);
+        if near > far {
+            std::mem::swap(&mut near, &mut far);
+        }
+        t0 = t0.max(near);
+        t1 = t1.min(far);
+        if t0 > t1 {
+            return false;
+        }
+    }
+    true
+}
+
+// The least distance between segments `p0 p1` and `q0 q1`.
+fn segment_segment_distance(p0: [f64; 3], p1: [f64; 3], q0: [f64; 3], q1: [f64; 3]) -> f64 {
+    let d1 = sub3(p1, p0);
+    let d2 = sub3(q1, q0);
+    let r = sub3(p0, q0);
+    let (a, e, f) = (dot3(d1, d1), dot3(d2, d2), dot3(d2, r));
+    let (s, t);
+    if a <= 1e-12 && e <= 1e-12 {
+        return dot3(r, r).sqrt();
+    }
+    if a <= 1e-12 {
+        s = 0.0;
+        t = (f / e).clamp(0.0, 1.0);
+    } else {
+        let c = dot3(d1, r);
+        if e <= 1e-12 {
+            t = 0.0;
+            s = (-c / a).clamp(0.0, 1.0);
+        } else {
+            let b = dot3(d1, d2);
+            let denom = a * e - b * b;
+            let mut s0 = if denom > 1e-12 { ((b * f - c * e) / denom).clamp(0.0, 1.0) } else { 0.0 };
+            let mut t0 = (b * s0 + f) / e;
+            if t0 < 0.0 {
+                t0 = 0.0;
+                s0 = (-c / a).clamp(0.0, 1.0);
+            } else if t0 > 1.0 {
+                t0 = 1.0;
+                s0 = ((b - c) / a).clamp(0.0, 1.0);
+            }
+            s = s0;
+            t = t0;
+        }
+    }
+    let gap = sub3(add3(p0, scale3(d1, s)), add3(q0, scale3(d2, t)));
+    dot3(gap, gap).sqrt()
+}
+
+// The distance from point `p` to the segment `a b`.
+fn segment_point_distance(a: [f64; 3], b: [f64; 3], p: [f64; 3]) -> f64 {
+    let ab = sub3(b, a);
+    let len_sq = dot3(ab, ab);
+    let t = if len_sq > 1e-12 { (dot3(sub3(p, a), ab) / len_sq).clamp(0.0, 1.0) } else { 0.0 };
+    let gap = sub3(p, add3(a, scale3(ab, t)));
+    dot3(gap, gap).sqrt()
+}
+
+// A World point in the ship's body frame (the basis is a rotation, so its transpose undoes it).
+fn to_frame(basis: &Basis, origin: Vector3, p: Vector3) -> [f64; 3] {
+    let o = [f64::from(origin.x), f64::from(origin.y), f64::from(origin.z)];
+    frame_of(basis, o, [f64::from(p.x), f64::from(p.y), f64::from(p.z)])
+}
+
+// A body-frame point in a volume's own frame.
+fn to_local(v: &Volume, p: [f64; 3]) -> [f64; 3] {
+    frame_of(&v.basis, [f64::from(v.origin.x), f64::from(v.origin.y), f64::from(v.origin.z)], p)
+}
+
+// `p` less `origin`, read along the basis' columns.
+fn frame_of(basis: &Basis, origin: [f64; 3], p: [f64; 3]) -> [f64; 3] {
+    let d = sub3(p, origin);
+    [col_a(basis), col_b(basis), col_c(basis)].map(|c| d[0] * f64::from(c.x) + d[1] * f64::from(c.y) + d[2] * f64::from(c.z))
+}
+
+fn sub3(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+}
+
+fn add3(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+    [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
+}
+
+fn scale3(a: [f64; 3], s: f64) -> [f64; 3] {
+    [a[0] * s, a[1] * s, a[2] * s]
+}
+
+fn dot3(a: [f64; 3], b: [f64; 3]) -> f64 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 }
 
 /// The row of a body a turret may read (alive, not in the low-attention tier), if any.

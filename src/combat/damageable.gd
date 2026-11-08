@@ -22,6 +22,8 @@ signal damaged(info: HitInfo, applied: float)
 signal destroyed(info: HitInfo)
 ## The hull is whole again (`restore`, a rebuild): what watches the hull points (the core's columns, M4-T35) reads them anew.
 signal restored
+## The hit volumes changed in play (`set_volumes`: cargo pods mounted or taken off, M5-T16).
+signal volumes_changed
 
 const GROUP: StringName = &"damageable"
 
@@ -112,6 +114,7 @@ func set_volumes(collision: Array[Dictionary]) -> void:
 		ram_bounds = ram_volumes[-1].bounds if ram_volumes.size() == 1 else ram_bounds.merge(ram_volumes[-1].bounds)
 		bounding_radius = maxf(bounding_radius, shape.extent_radius())
 	core_radius = RamMath.core_radius(shapes)
+	volumes_changed.emit()
 
 
 ## Whether a bolt of `bolt_faction` can hurt this hull. With `friendly_fire` (`settings.friendly_fire`, D31) any bolt can:
