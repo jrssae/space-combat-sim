@@ -6790,7 +6790,13 @@ Q53); Q70's loosened gate for the GDScript-against-native fights after T37 (hits
 twin distance recorded); T22's fairness checks as Q64 accepted them (the win share within one seed of three, each seed's hits within
 two times); the tier's tail-chase limit above.
 
-**Tests.** {TESTS}
+**Tests.** `scripts/run_tests.sh` once on `ca7509d` (the bench and docs commits of this task; the bench lock held, 50 minutes): exit 0;
+the Python tests 410, OK; GUT **235 scripts, 2 586 tests, 2 574 passing, 0 failing, 12 pending** (AC12's two balance runs,
+`test_dogfight` and `test_m3_sandbox`, and the ten GPU tests of `test_motion_vectors_gpu` and `test_upscaling_gpu`, which need the real
+renderer); every console smoke run passed. The CI shards in order (`GUT_SHARD=k/3 GUT_SLOW=1 CI=true scripts/run_tests.sh`), each exit
+0: shard 1 the Python tests 410 OK and 79 scripts, 978 tests, 977 passing, 1 pending; shard 2 77 scripts, 785 tests, 784 passing, 1
+pending; shard 3 79 scripts, 823 tests, 813 passing, 10 pending (together the full suite's 2 586 and 12). AC13's paired budget
+(`test_ai_think_time` 1 of 1) and AC21's rebase cost (`test_rebase_in_play` 8 of 8) passed on the first run.
 
 #### Report P3
 
