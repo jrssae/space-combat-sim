@@ -477,9 +477,10 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
       hit are gone. Shoot a raider at 100 to 300 m: say if hits read too thin.
 - [ ] **M4-T36 Plumes.** A ship holding one command stops updating its plumes once they reach their levels (within a ten-thousandth).
       Watch AI plumes at combat range: nothing should freeze or step.
-- [ ] **M4-T36 The 3D at full resolution on the 6K desktop.** `RenderScale` no longer renders a 6144 x 3456 window's 3D at 0.86.
-      Maximize the game on the 6K desktop: the 3D is sharper; check the frame rate holds in the sandbox and at `typical` (GPU time was
-      about 1.9 ms at 1 080 lines; full 6K is about 10 times the pixels).
+- [ ] **M4-T36 The 3D at full resolution.** `RenderScale` no longer lowers a large window's 3D. Since M4-T41 the game opens through
+      Wayland at the panel's own 3840x2160 (before, X11 under GNOME's 1.25 scale made it 6144x3456). Maximize the game: the 3D is
+      at the window's size (`settings.upscaler native`); check the frame rate holds in the sandbox and at `typical` (GPU time was
+      0.8 ms a frame at 1 080 lines in M4-T25's fullscreen check; full 4K is four times the pixels).
 - [ ] **M4-T36 Motion blur on turns.** `settings.motion_blur on`, then a hard turn: the stars and the nebula smear by the turn, hulls by
       their own motion, and no hull paint is dragged across the stars. The pair `reports/perf/M4-T36_motion_blur/turn_blur_{false,true}.png`
       (a one-frame 40 degree look swing) shows what the agent saw.
@@ -497,9 +498,9 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
 - [ ] **M4-T24 The catch-up cap.** `physics_max_steps_per_frame` is 3 (Godot's default was 8): when the tick cannot keep up
       (battle 500) the simulation slows instead of the frame stuttering through catch-up ticks. Judge whether the slow-motion
       at 500 reads better than the stutter did; `2` is the other candidate (`set settings.physics_max_steps_per_frame 2`).
-- **T35, bolts as rows:** the AI ships' bolts are drawn by one multimesh per look (`core.bolt_draws`), interpolated between ticks as the nodes were. Check in a `battle` run: bolts leave the muzzles, fly straight and smoothly (no stutter against the hulls), hit flashes still appear where bolts land, the chase camera's larger bolts (`Projectile.visual_scale`) still apply, and nothing is drawn where a bolt was spent. (M4-T37 removed `perf_native_bolt_rows`, so there is no bolt-node run to compare with: the recorded battle in `test_bolt_rows` holds the rows to the nodes' hits.)
-- **T35, the AI ships' muzzle flashes:** the lean ships' flashes come from one pool (a multimesh of billboard quads and pooled lights), not a node per muzzle. Check in a `battle` run: a flash pops at the muzzle of every AI shot for about 50 ms, grows and fades as the player's own flashes do, rides with the ship, and lights the nose; no flash lingers on a parked or dead ship.
-- **T35, the AI ships' shot sounds:** `AudioDirector.watch_ship` listens to `shot_fired`, which both bolt paths emit (fix round 1). Confirm every AI shot in a `battle` run makes its pulse or raider sound at the muzzle (the AI ships' bolts are always rows since M4-T37 removed `perf_native_bolt_rows`).
+- [ ] **M4-T35 Bolts as rows.** the AI ships' bolts are drawn by one multimesh per look (`core.bolt_draws`), interpolated between ticks as the nodes were. Check in a `battle` run: bolts leave the muzzles, fly straight and smoothly (no stutter against the hulls), hit flashes still appear where bolts land, the chase camera's larger bolts (`Projectile.visual_scale`) still apply, and nothing is drawn where a bolt was spent. (M4-T37 removed `perf_native_bolt_rows`, so there is no bolt-node run to compare with: the recorded battle in `test_bolt_rows` holds the rows to the nodes' hits.)
+- [ ] **M4-T35 The AI ships' muzzle flashes.** the lean ships' flashes come from one pool (a multimesh of billboard quads and pooled lights), not a node per muzzle. Check in a `battle` run: a flash pops at the muzzle of every AI shot for about 50 ms, grows and fades as the player's own flashes do, rides with the ship, and lights the nose; no flash lingers on a parked or dead ship.
+- [ ] **M4-T35 The AI ships' shot sounds.** `AudioDirector.watch_ship` listens to `shot_fired`, which both bolt paths emit (fix round 1). Confirm every AI shot in a `battle` run makes its pulse or raider sound at the muzzle (the AI ships' bolts are always rows since M4-T37 removed `perf_native_bolt_rows`).
 - [ ] **M4-T21 The low-attention tier.** On by default since T23 (`settings.tier_radius_m` 10 000). AI fighters and capitals more than 10 km from you (`settings.tier_radius_m`) leave
       Jolt and fly as native core rows integrated at 20 Hz from their held command; within 10 km they are promoted back onto
       their bodies with their motion carried over exactly. In a `battle 300` or `500` run (`state tier` shows the rows and the
@@ -508,10 +509,7 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
       flew; fly away from a fight: the same at 11 km the other way. Ships past 11 km stay on the radar and keep your lock (T23).
       A ship that crosses the line while
       shooting should fire again at once when it is back. Compare with the tier off (`set settings.tier_radius_m 0`).
-- [ ] **M4-T21 The battle beyond the radius.** Tier ships do not fight yet (T22 gives them brains and fire): a far fight you
-      watch from 10 km out is frozen in its held commands until you come close. Say whether that reads as wrong from the
-      player's seat at `battle 500`, where most of the battle is beyond 10 km.
-- [ ] **M4-T22 The battle beyond the radius fights.** With the tier on (`set settings.tier_radius_m 10000`), tier fighters think
+- [ ] **M4-T22 The battle beyond the radius fights.** With the tier on (the default since T23, `settings.tier_radius_m` 10 000), tier fighters think
       three times a second (`settings.tier_brain_hz`) and their shots and the far capitals' guns, beams and missiles are rolled,
       not flown as bolts. In a `battle 500` run, fly into a far fight: the ships you meet at 10 km should be in the middle of a
       fight that went on without you (hurt hulls, ships missing that died out there, wingmen still in their slots), with no
@@ -557,7 +555,7 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
       `reports/perf/m4-t38_compare/pairs/` (each the same frozen `battle` 300 frame in all six modes): `edges_2160.png` and
       `edges_1080.png` (a wing and a rock edge), `hull_detail_2160.png` and `hull_detail_1080.png` (struts, panel lines, the small
       parts), `stars_2160.png` and `far_dots_2160.png` (stars and small far objects must stay crisp single points), and
-      `edges_native.png`, `hull_detail_native.png`, `stars_native.png` with the 3D at the 6K window's own size (the game's default). Then fly the
+      `edges_native.png`, `hull_detail_native.png`, `stars_native.png` with the 3D at the 6K window's own size (taken through X11 before M4-T41; the game's window is now the 4K panel). Then fly the
       sandbox with `aa smaa`, `aa fxaa`, `aa msaa_4x` and `aa off`: say which you want as the default.
 - [ ] **M4-T38 TAA in motion.** `aa taa`, then fly a `battle 300` run with hard turns: the stars and the nebula must stay steady and
       bright through a turn (no dimming, no trails; a measured softening: a star's brightest pixel fell from 0.59 to 0.45 of white
@@ -575,7 +573,7 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
       mouse, the pad or alt-tab behaves differently from before.
 - [ ] **M4-T40 Upscaling, the default.** `settings.upscaler` is `native` (the 3D at the window's own size, as since T36), because
       FSR 2.2 measured dearer than native on this card. Compare the sheets in `reports/perf/m4-t40_compare/pairs/` (each the same
-      frozen `battle` 300 frame in the 6K window, twelve upscaler and preset turns): `edges.png`, `hull_detail.png`, `stars.png`,
+      frozen `battle` 300 frame in the 6K X11 window before M4-T41, twelve upscaler and preset turns): `edges.png`, `hull_detail.png`, `stars.png`,
       `far_dots.png` and `hud_text.png` (the HUD must be equally sharp in every turn). Then fly the sandbox with `upscale fsr1 quality`
       and `upscale native`: FSR 1.0 Quality costs about 1.4 ms less GPU at 6K, but the FPS gain is a few percent (+3 to +5 % in
       the agent's live round; the frame is CPU-bound); say if it looks as good as native, in which case it could be the default for
@@ -590,3 +588,7 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
       moment of the live fight) show what the agent saw: no ghosting, stars soft at Ultra Performance.
 - [ ] **M4-T40 Low presets.** `upscale fsr1 ultra_performance` and `upscale fsr2 ultra_performance` (a third of the lines, for weaker
       GPUs): the stars and far dots enlarge into soft blobs; say whether that is acceptable for a low setting.
+- [ ] **M4-T30d Every other hull textured (AC7, Q44).** T30d merged on the agent's judgement; the sheets wait for your eye. Open
+      `reports/perf/m4-t30d_sheets/`: the raider fighter (8 to 600 m), the nav buoy, the raider and Starfury break-up chunks, the
+      cruiser, destroyer and carrier (300 m to 8 km), the B5 station (3, 8 and 20 km), and the Starfury's fine against coarse LOD
+      sheets (Q45: the agent picked one; you may reverse it). Say which need a fix round.
