@@ -1447,6 +1447,63 @@ T21, T16 and T28 are re-planned on the native core ("M5 on the native core", bel
   `EncounterPlan`'s draws are hashes of the session seed and the event index (`CLAUDE.md`: no shared or stepped RNG), so
   an event's draw does not depend on how many came before it was asked for.
 - **Done when:** AC14 and AC16's encounter clause.
+- **Done (as built, 2026-11-08, on `oscar`):**
+  - **Plan.** `EncounterPlan` and `EncounterEvent` (pure, tests first). Event `i` comes at `interval * (i + 1)` give or take a
+    quarter interval (gaps 60-180 s at the default 120 s of sim time). Every draw is `hash([seed, i, salt])`, so an event is the
+    same whatever was asked before it. Kinds by weight (raid 0.4, patrol 0.25, traffic 0.35, in the pools file). Raids: 2-6
+    raiders around one jump point 6-12 km from their target, half of them sent at an encounter civilian within 20 km of the
+    player when there is one. Patrols: 2/4/6 Starfuries at 220 m/s. Traffic: 1-3 hulls of any of the nine at 120 m/s,
+    passing 2-10 km out, a Bokmai's pods 0-3 from the seed. Both start 26-30 km out on straight routes that end as far out.
+    `EncounterPlan.admit` is the cap rule.
+  - **Director.** `EncounterDirector` (node under Main, pausable) exists in any scenario with `data/encounters/<id>.json` (free
+    flight), off. `Main.encounters`, set by `Game.finish_loading` from the request, turns it on at load. Every other run
+    stays off until `encounters on`, which builds the pools then (D58 said refuse; the brief asked for `encounters on` to
+    work in a straight-to-Main run, so it builds them, a hitch on a debug path). It spawns through `ShipPool.acquire`,
+    `BrainFactory` (raider with the target as objective, `ally_starfury` engaging, `civilian`), `BehaviourFollowPath` on a
+    `Route` (no pacing, no loop; a patrol's yields to attacks) and its own 4-point `JumpArrivalPool`. Releases: once a second,
+    over its own ships only, a ship 40 km from the player or at its route's end goes back to its pool, then
+    `AudioDirector.reallocate_engines()` once. A destroyed ship leaves the count at once. The ships are pooled, never freed,
+    so T28's `unwatch_ship` is not needed (a parked ship drops out of the core's rows by itself).
+  - **Found and fixed.** Ships built after load (`ensure_pool`) were not watched by the `DestructionDirector`, so they would
+    not break up or return to the pool when destroyed. The director now watches every pooled ship after it builds the
+    pools. The bench's `ensure_pool` ships have the same gap; I left it alone.
+  - **Additions beyond the spec.**
+    - Encounter civilians broadcast 15 km (a transponder) so a raid 6-12 km out finds them past its 5 km sensors.
+    - A due event that does not fit waits (later ones queue behind it); one bigger than the whole cap is trimmed to it once
+      nothing else is in play, so it cannot wait for ever.
+    - A traffic hull whose pool is spent gives way to the next civilian hull with a free ship.
+    - The front end gives each free flight a fresh seed (`FrontEnd.session_seed`) so sessions differ; Restart keeps it.
+  - **Settings.** `encounters` (bool, true): the Free flight page starts from it and keeps the toggle there for the session (the
+    next settings save, from the menu or the console, writes it to disk). `encounter_interval_s` (120, 20-600, read when encounters first turn on).
+    `encounter_max_ships` (24, 4-48, live).
+  - **Console.** `encounters [status|on|off|next|force|clear] [raid|patrol|traffic]` (AC14's `encounter <kind>` is `encounters
+    force <kind>`, drawn from indices from 1 000 000 up so the schedule is untouched) and provider `encounters`; both in `info.md`
+    under the new "free flight" place.
+  - **Pools** (`data/encounters/free_flight.json`): 12 raiders, 12 Starfuries, two of each civilian hull (42 ships).
+  - **Load time** (oscar, headless, `test_encounters`): free flight with encounters off 120-156 ms; on 740-920 ms, of which
+    the pools take 650-820 ms. A live `--console-exec` `encounters on` built them in 992 ms.
+  - **Cost (AC16).**
+    - A tick compares one time.
+    - The release check's work equals the director's own ships: 4 units for 4 own ships with 6 in play.
+    - `test_ai_think_time`: before, AiPilot median 342 us (paired difference -2610 us); after, 345 us (-2559 us). No change
+      beyond noise.
+  - **Tests.**
+    - New: `test_encounter_plan` 15 (seeds, order independence, intervals, weights, the three kinds' numbers, routes, the cap,
+      trim) and `test_encounters` 17. The integration file covers: off leaves free flight empty with `raiders.pool_size = 0`;
+      the pools; raid ranges and jump points; cruise-in ranges and routes; Bokmai pods; hull substitution; releases at 40 km
+      and at the route's end with no engine voice left; a near ship stays; a destroyed ship leaves at once; the cap waits and
+      trims; sim time and the pause; raiders sent at a Saturn attack it and the patrol engages them; the check's work count;
+      the console; the load time.
+    - Regression, all passing: `test_settings_schema` 25, `test_settings_menu_model` 15, `test_console_command_list` 7,
+      `test_main_scene` 13, `test_boot_routing` 14, `test_front_end` 22. `test_front_end` was red from T16 (Sandbox now lists
+      `civilian_showcase`); I updated it here. `check_scripts` is clean (590).
+  - **Left:** the `docs/playtest.md` M5 section on encounters (T20, AC17). AC14 says "released past 30 km"; this follows D58's 40 km.
+  - **(H):**
+    - The pacing (an event every 1-3 minutes) and the mix.
+    - How raids read when they jump in at 6-12 km.
+    - Patrols and traffic coming over the radar's edge.
+    - Whether the 15 km civilian transponder shows anything odd on the radar rim.
+    - No GPU run on `oscar` for this task.
 
 ### M5-T18 New guns and impacts
 

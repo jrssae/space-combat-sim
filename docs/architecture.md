@@ -3840,6 +3840,7 @@ tests/unit/test_buoy_ring.gd, tests/integration/test_buoy_defence.gd   (T10)
 | `mission` | MissionRunner (T05), only while a mission runs | `id`, `title`, `state` (`running`, `success`, `failure`, `error`), `result`, `step` (`<name> (n/N)`), `steps`, `time_s`, `objectives`, `live_triggers`, `tick_work`, `skipping`, `waypoint`, `controls_locked`, `jump_points` |
 | `debrief` | Game (T09) | `result` (`success`, `failure`), `reason`, `time` (`m:ss`), `kills`, `assists`, `wing_losses`, `shots_fired`, `shots_hit`, `accuracy` (`45%` or `no shots fired`), `objectives` (`id state, ...`); every key `none` until a mission ends |
 | `camera` | CameraRig (M1; T08 adds) | `mode` now also reads `cinematic` while a shot plays (setting it then picks the view after the shot), `shot` (the shot's id or `none`), `shot_time_s` |
+| `encounters` | EncounterDirector (T17), free flight only | `on`, `pools_built`, `seed`, `interval_s`, `max_ships`, `alive`, `raiders`, `patrol`, `traffic`, `next_index`, `next_in_s`, `waiting`, `started`, `released`, `last_event`, `check_work`, `build_ms` |
 | `pause_menu` | PauseMenu (T02) | `open`, `page` (the title of the page on top: `PAUSED`, `Settings`, `Controls`), `depth` (pages open, 1 is the pause list) |
 
 Commands: `retry` (T09: in the debrief, play the same mission again, same scenario and seed, through the loading screen; refused anywhere else); `menu` (back to the front end); `play <scenario_id> [seed]` (any `data/scenarios/*.json`, through the loading screen
@@ -3902,8 +3903,8 @@ as the menu does; seed 0 by default, encounters off). Setting: `skip_front_end` 
 - **Resume.** `Main` re-seeds the adapter's edges when the menu closes (`InputAdapter.resync_edges`), so the button that closed it (B is also the target button) does not also tap a target when it is released.
 - **Missions.** `MissionCatalog.entries(dir, read)` lists the scenario files whose loader result has a non-empty `mission` block (its
   `title`, else the id made readable, and `briefing`). No shipped scenario has one until T10; the page then says "No missions yet".
-- **Free flight.** `encounters` lives in `Game`'s request only (the menu starts it on; `play` and boot keep it off); `Settings.encounters`
-  comes with T17. Restart is `Game.restart()`: the request that started the run, else the scenario setting.
+- **Free flight.** `encounters` lives in `Game`'s request (the menu starts it from `Settings.encounters`; `play` and boot keep it
+  off); T17 (§18.12) added the setting and a fresh session seed for each menu start. Restart is `Game.restart()`: the request that started the run, else the scenario setting.
 - **Loading.** Leaving the loading screen mid-load collects the threaded request; a failed load is collected too. `Game` refuses a scene
   it cannot build instead of failing on a null.
 - **Sky.** The front end's camera has the rig's far plane (50 km): the sky sphere is 20 km across and a default far plane clips the stars.
@@ -4122,3 +4123,44 @@ tests/integration/test_civilian_flight.gd, test_civilian_ships.gd, test_turret_b
   `GUT_SLOW`): the light turret 6 damage every 2.4 s with 0.5 degree spread, hulls per variant (Saturn 3 640, Saturn 4
   transport 450, Saturn 4 tanker 440, Saturn 8 transport 1150, Saturn 8 tanker 330); the counts are in the milestone's
   T16 Done block. The turrets finish a 15 % raider in every seed of `test_turret_defence`.
+
+### 18.12 Free-flight encounters as built (T17, D58, Q3, Q9, Q12)
+
+```
+src/encounters/encounter_plan.gd       RefCounted, pure: the schedule and each event's draws, hashed from (seed, index, salt)
+src/encounters/encounter_event.gd      RefCounted, pure: one event's kind, ships, offsets, velocities, routes, pods
+src/encounters/encounter_director.gd   node under Main (pausable): pools, starts, the cap, releases
+src/encounters/encounter_console.gd    command and provider `encounters`
+data/encounters/free_flight.json       the pools built when encounters turn on, and the kinds' weights
+tests/unit/test_encounter_plan.gd, tests/integration/test_encounters.gd, tests/fixtures/encounters/small.json
+```
+
+- **Plan.** Event `i` is due at `interval * (i + 1 + 0.25 * (2u - 1))` of encounter time (sim seconds with encounters on), so gaps
+  run from half to one and a half intervals (60-180 s at the default 120). Its kind (weights raid 0.4, patrol 0.25, traffic 0.35
+  from the pools file), sizes, directions (within 30 degrees of the horizontal plane), ranges and hulls are each `hash([seed, i,
+  salt])`: an event never depends on what was drawn before it. Raids: 2-6 raiders around one jump point 6-12 km from their target,
+  flying at it at 120 m/s plus the target's velocity; half of them go for an encounter civilian within 20 km of the player when
+  there is one (picked by the event's draw), else for the player. Patrols (2, 4 or 6 Starfuries, 220 m/s, passing 0.5-5 km out)
+  and traffic (1-3 hulls of any of the nine, 120 m/s, passing 2-10 km out, a Bokmai with 0-3 pods) start 26-30 km out at
+  cruise on straight, parallel routes that end as far out on the other side.
+- **Director.** A Main whose scenario has `data/encounters/<scenario_id>.json` (free flight) gets one, off. `Main.encounters` (set
+  by `Game.finish_loading` from the request) turns it on at load, behind the loading screen; anything else stays off until
+  `encounters on`, which builds the pools then (a hitch, a debug path; D58 had it refuse). Pools are grown with
+  `Main.ensure_pool`, their debris sets prepared and every pooled ship watched by the `DestructionDirector` (ships built after
+  load were not). Ships come from the existing paths: `ShipPool.acquire`, `BrainFactory` (`raider` with the target as
+  objective; `ally_starfury` engaging; `civilian`), a `Route` (`pace` none, no loop; a patrol's yields to attacks) through
+  `BehaviourFollowPath`, raiders through the director's own `JumpArrivalPool` (4 points, built with the director). Encounter
+  civilians broadcast 15 km (a transponder) so a raid sent from 6-12 km finds them; the range is cleared when they leave.
+- **Cap.** `encounter_max_ships` (24, live) counts the director's ships in play. A due event that would pass it waits (one at a
+  time; later events queue behind it); one bigger than the whole cap is trimmed to it once nothing else is in play. Raids and
+  patrols wait for their pool; a traffic hull whose pool is spent gives way to the next civilian hull with a free ship.
+- **Releases.** Once a second, over its own ships only (`check_work` = their number, whatever else is in play): a ship 40 km
+  from the player (its tier row's position when tiered) or at its route's end goes back to its pool, then the engine voices are
+  re-ranked once. A destroyed ship leaves the count at once (`ship_destroyed`). Encounter ships are pooled, never freed, so
+  `AudioDirector.unwatch_ship` is not needed; a parked ship drops out of the core's rows by itself (T28).
+- **Console.** `encounters [status|on|off|next|force|clear] [raid|patrol|traffic]`: `force` draws from indices from 1 000 000 up,
+  so the schedule is untouched; `next` takes the next scheduled event now (it waits if it does not fit).
+- **Settings.** `encounters` (bool, true: the Free flight page starts from it and keeps the player's toggle there for the
+  session), `encounter_interval_s` (120, read when encounters first turn on), `encounter_max_ships` (24). The front end gives each
+  free flight it starts a fresh seed (`FrontEnd.session_seed`); Restart keeps it.
+
