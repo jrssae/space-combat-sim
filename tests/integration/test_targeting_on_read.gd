@@ -80,7 +80,9 @@ func _run() -> Array:
 	var log := PackedStringArray()
 	var stale_selects: int = 0
 	var late_reads: int = 0
+	var sim: SimCore = SimCore.for_tree(get_tree())
 	for step: int in STEPS:
+		sim.sync_now()  # each step is a tick: the rows are read again before the refresh reads them (M4-T44)
 		targeting.refresh()
 		var line: String = "%d refresh sel %s signals %s" % [step, names.get(targeting.selected_id(), "none"), str(signals)]
 		signals.clear()

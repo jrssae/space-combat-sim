@@ -1673,8 +1673,8 @@ impl ScsSimCore {
         self.selection_watch.len() as i64
     }
 
-    /// What the player's radar shows (M4-T23): every row with a marker (a targetable in play) or in the low-attention
-    /// tier, not body `own_body`, within `sensor_range` of `own_position` or its own broadcast reach, as `[marker ids,
+    /// What the player's radar shows (M4-T23): every row with a marker (a targetable in play, not parked since the sync) or
+    /// in the low-attention tier, not body `own_body`, within `sensor_range` of `own_position` or its own broadcast reach, as `[marker ids,
     /// positions, faction indices (into `factions`), reach]` in row order. One pass over the rows, near and tier alike, instead of a walk of the
     /// targetable nodes each frame; the positions are the tick's rows.
     #[func]
@@ -1687,7 +1687,10 @@ impl ScsSimCore {
         for i in 0..r.body_ids.len() {
             let marked =
                 r.flags[i] & FLAG_TIER != 0 || (r.ids[i] != r.body_ids[i] && !r.is_static[i]);
-            if !marked || r.body_ids[i] == own_body {
+            if !marked
+                || r.body_ids[i] == own_body
+                || self.parked_since_sync.contains(&r.body_ids[i])
+            {
                 continue;
             }
             let p = r.positions[i];

@@ -41,12 +41,12 @@ var keeps_candidates: bool = true
 var _body: RigidBody3D = null
 # The list was not built since the last refresh (M4-T34, built on read): the next reader builds it.
 var _stale: bool = false
-# What the last refresh's list held, light (M4-T34, on read): each target's id, position, broadcast range and name, so the
-# selection, its name and `select_id` answer as from the list the refresh used to build. Valid until a command gathers anew.
+# What the last refresh's list held within reach, light (M4-T34, on read; from the core's rows since M4-T44): each target's
+# id, position and broadcast range, so the selection and `select_id` answer as from the list the refresh used to build.
+# Valid until a command gathers anew.
 var _snap_ids := PackedInt64Array()
 var _snap_positions := PackedVector3Array()
 var _snap_reach := PackedFloat64Array()
-var _snap_names := PackedStringArray()
 var _snap_valid: bool = false
 # Every controller in a tree, so the core can rebind them when its selection check comes or goes (M4-T35); the core this
 # one's check runs on, or null.
@@ -197,8 +197,7 @@ func selected_id() -> int:
 ## Display name of the selection, or "" when nothing is selected.
 func selected_name() -> String:
 	if keeps_candidates and _snap_valid:
-		var k: int = _snap_ids.find(system.selected_id())
-		return _snap_names[k] if k >= 0 else ""
+		return _name_of(system.selected_id()) if _snap_ids.has(system.selected_id()) else ""
 	var target: TargetInfo = system.selected()
 	return target.display_name if target != null else ""
 
@@ -305,28 +304,26 @@ func _infos() -> Array[TargetInfo]:
 	return infos
 
 
-# The refresh on read (M4-T34): notes what the list would hold (in play, not its own, at its position now) and clears the
-# selection as `TargetingSystem.update` would over that list; the full list waits for its first reader.
+# The refresh on read (M4-T34): notes what the list would hold within reach (in play or in the tier, not its own) from the
+# core's rows, as the radar reads them (M4-T44), and clears the selection as `TargetingSystem.update` would over that list;
+# the full list waits for its first reader. It reads only rows the core synced this tick; before the tick's first sync (a
+# core attached during the tick) there is no snapshot: the selection is checked alone, as an AI ship's is, and every
+# reader gathers afresh.
 func _snapshot() -> void:
 	if not _has_body() or not is_inside_tree():
 		return
-	_snap_ids.clear()
-	_snap_positions.clear()
-	_snap_reach.clear()
-	_snap_names.clear()
-	for node: Node in get_tree().get_nodes_in_group(Targetable.GROUP):
-		var targetable := node as Targetable
-		if targetable == null or _body.is_ancestor_of(targetable) or not targetable.is_active():
-			continue
-		_snap_ids.append(targetable.get_instance_id())
-		_snap_positions.append(targetable.global_position)
-		_snap_reach.append(targetable.broadcast_range_m)
-		_snap_names.append(targetable.display_name)
-	var rows: TierTargets = _tier_rows()
-	_snap_ids.append_array(rows.ids)
-	_snap_positions.append_array(rows.positions)
-	_snap_reach.append_array(rows.reach)
-	_snap_names.append_array(rows.names)
+	var sim: SimCore = SimCore.for_tree(get_tree())
+	if sim == null or sim.core == null or sim.synced_frame != Engine.get_physics_frames():
+		_snap_valid = false
+		_stale = true
+		_check_selection()
+		return
+	if int(sim.core.touched_count()) > 0:
+		sim.core.resync_touched_now()  # a body moved, parked or changed since the sync is read as it is now
+	var contacts: Array = sim.core.radar_contacts(_ship_position(), _body.get_instance_id(), system.sensor_range_m)
+	_snap_ids = contacts[0]
+	_snap_positions = contacts[1]
+	_snap_reach = contacts[3]
 	_snap_valid = true
 	_stale = true
 	if system.has_selection() and not _snap_in_reach(_snap_ids.find(system.selected_id())):
@@ -381,6 +378,12 @@ func _selectable(target_id: int) -> TargetInfo:
 	if TargetingSystem.range_between(_ship_position(), at) > maxf(system.sensor_range_m, broadcast):
 		return null
 	return row if row != null else target.to_target_info()
+
+
+# Target `target_id`'s display name (a tier ship's parked targetable keeps its name), or "" once it is gone.
+func _name_of(target_id: int) -> String:
+	var target := instance_from_id(target_id) as Targetable if is_instance_id_valid(target_id) else null
+	return target.display_name if target != null else ""
 
 
 # The target with this id as it is now (a live targetable, or a tier ship's row), or null when it is neither.
