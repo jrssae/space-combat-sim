@@ -89,11 +89,15 @@ been planned were taken for done.
   re-applied every physics tick. The damping guard test must stay. Gravity effects only matter when in a reasonable proximity to a planet, moon, or star; 0 gravitational effects from anything smaller than a moon.
 - GPU work: the maintainer's machine (AMD Radeon RX 6950 XT, RADV, Wayland) runs the game on the GPU with Godot's
   Forward+ renderer, so an agent working there verifies GPU behaviour itself: run the real renderer
-  (`.tools/godot/godot --path . --resolution 960x540 -- --console-exec="...; screenshot /tmp/x.png; quit"`; it opens a
+  (`.tools/godot/godot --path . --resolution 960x540 -- --console-exec="...; screenshot references/screenshots/<request>/x.png; quit"`; it opens a
   window for a few seconds), read `state render` (`renderer = forward_plus`, fps, draw calls), and VRAM from
   `/sys/class/drm/card1/device/mem_info_vram_used`. Judging how something looks (visual appearance, feel) stays with the
   human tester as `(H)`. In a container without a GPU, mark GPU checks `(H)` instead of faking them; llvmpipe
   (`scripts/capture.sh`) shows geometry and layout, not the GPU's speed (`docs/research-notes.md`).
+- Screenshots: every screenshot or captured frame an agent takes, for any request, goes under `references/screenshots/`
+  (gitignored) in a subfolder named for the request, e.g. `references/screenshots/T13 Saturn 4 current replacement/`.
+  Never `/tmp` or `reports/`, and never commit them. In a worktree, use the main checkout's `references/` so the
+  maintainer finds them in one place.
 - Commit subjects start with the task id, e.g. `M1-T08: flight model and assist`. Do not push or open PRs unless
   asked; the maintainer handles git remotes.
 - Confirm each milestone is complete by asking the user, but once confirmed, merge to main.
