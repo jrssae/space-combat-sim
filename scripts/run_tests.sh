@@ -86,9 +86,14 @@ if grep -E "${SCRIPT_ERRORS}" "${REPORTS}/check_scripts.log"; then
 fi
 
 echo "== GUT"
-# The whole run takes about 25 minutes on the maintainer's machine; the timeout leaves room for a slower one.
+# The whole run takes about 40 minutes on the maintainer's machine, a CI shard 15 to 25. A shard's timeout (40 minutes)
+# fires before CI's 60-minute job limit, so a hang ends with GUT's log and this script's message, not a cancelled job.
+gut_timeout=3600
+if [[ -n "${GUT_SHARD:-}" ]]; then
+    gut_timeout=2400
+fi
 gut_status=0
-run_logged "${REPORTS}/gut.log" timeout 3600 "${GODOT}" --headless --path . -s addons/gut/gut_cmdln.gd \
+run_logged "${REPORTS}/gut.log" timeout "${gut_timeout}" "${GODOT}" --headless --path . -s addons/gut/gut_cmdln.gd \
     "${gut_select[@]}" -gexit -gjunit_xml_file=reports/gut.xml \
     || gut_status=$?
 if (( gut_status != 0 )); then

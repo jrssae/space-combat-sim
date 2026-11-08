@@ -5,8 +5,8 @@ name: CI
 # Anything that needs a GPU is verified by a human, never here (docs/architecture.md, section 12).
 
 on:
-  # Doc-only commits (plans, milestones, research notes) change no code or test, so they skip the 40-minute run; info.md stays
-  # in, because a test checks the console command list against it.
+  # Doc-only commits (plans, milestones, research notes) change no code or test, so they skip the run; info.md stays in,
+  # because a test checks the console command list against it (test_info_md).
   push:
     paths:
       - "**"
@@ -26,8 +26,8 @@ permissions:
 jobs:
   test:
     # GUT takes about 40 minutes on the maintainer's machine, more than one runner job should hold, so three jobs share it
-    # (scripts/run_tests.sh, GUT_SHARD); shard 1 also runs the Python tests and the console smoke runs. Two shards came
-    # within seconds of the job limit after M4-T22 (shard 1: 44:57 of 45 minutes).
+    # (scripts/run_tests.sh, GUT_SHARD); shard 1 also runs the Python tests and the console smoke runs. At M4-T25 the jobs
+    # took 24, 17 and 15 minutes. A shard's GUT timeout (40 minutes, run_tests.sh) fires before this job limit.
     name: test (GUT shard ${{ matrix.shard }} of 3)
     runs-on: ubuntu-latest
     timeout-minutes: 60
