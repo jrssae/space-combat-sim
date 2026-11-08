@@ -130,6 +130,9 @@ func enable() -> String:
 		for type: StringName in pools:
 			built += main.ensure_pool(type, pools[type])
 			main.debris.prepare(type)
+		# Ships built after load still break up and go back to their pools when destroyed (watching twice is harmless).
+		for pooled: Combatant in main.ships.all_ships():
+			main.director.watch(pooled)
 		build_ms = Time.get_ticks_msec() - t0
 		pools_built = true
 	if plan == null:

@@ -64,6 +64,10 @@ static func _run(director: EncounterDirector, args: Dictionary) -> ConsoleResult
 				return ConsoleResult.line("started %s" % held.summary())
 			var e: EncounterEvent = director.take_forced(StringName(kind)) if action == &"force" else director.take_next()
 			if not director.start(e):
+				if action == &"next":
+					director.waiting = e  # a scheduled event is not lost: it waits like one that came on time
+					return ConsoleResult.line("%s waits: %d of %d ships in play, or its pools are spent" % [e.summary(),
+							director.alive_count(), director.cap()])
 				return ConsoleResult.failure("%s does not fit: %d of %d ships in play, or its pools are spent" % [e.summary(),
 						director.alive_count(), director.cap()])
 			return ConsoleResult.line("started %s" % e.summary())
