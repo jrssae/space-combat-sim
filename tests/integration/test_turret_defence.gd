@@ -1,7 +1,7 @@
 extends GutTest
 ## The defensive turrets in a fight (M5-T21, D61, Q14, AC19): a lone Saturn 4 transport flown by the civilian profile keeps
-## running while its two dorsal turrets fire at two raiders, and its turrets finish a raider left at 15 % hull that keeps
-## attacking it. Seeded, headless, through the native core (the turrets' pick in the AI job, their shots bolt rows through the
+## running while its three turrets (two flank, one dorsal, Q32) fire at two raiders, and its turrets finish a raider left at
+## 15 % hull that keeps attacking it. Seeded, headless, through the native core (the turrets' pick in the AI job, their shots bolt rows through the
 ## hit sweep). How often a Saturn wins is Q31's (M5-T16, `test_turret_balance`, behind `GUT_SLOW`); this file keeps the
 ## mechanics and the finish. The step stays 1/60 s; the fight runs `SPEED_UP` ticks a real tick. Skips, saying why, without
 ## the native library or the Saturn 4's generated asset.
@@ -15,9 +15,6 @@ const RAID_S: float = 180.0
 ## How long the turrets get to finish the damaged raider (a deterrent's few hits: 4 light bolts on a 15 % raider).
 const FINISH_S: float = 90.0
 const WOUNDED: float = 0.15
-## The finish check against Q31's balance is an open maintainer question (M5-T16): while true, a seed the turrets do not
-## finish leaves the test pending with the reason, not failing. Set false once it is decided.
-const FINISH_OPEN: bool = true
 ## Ticks per real tick: the physics rate and the time scale raised together, so each step is still 1/60 s of sim time.
 const SPEED_UP: float = 4.0
 
@@ -51,7 +48,7 @@ func test_a_saturn_4_runs_and_fires_its_two_turrets_at_two_raiders() -> void:
 	for seed_value: int in SEEDS:
 		var fight: Dictionary = await _raid(seed_value)
 		gut.p("seed %d: %s" % [seed_value, _fight_line(fight)])
-		assert_eq(int(fight["mounts"]), 2, "the Saturn 4 carries its two dorsal turrets (Q19)")
+		assert_eq(int(fight["mounts"]), 3, "the Saturn 4 carries its two flank turrets and its dorsal one (Q32)")
 		assert_gt(int(fight["turret_shots"]), 0, "seed %d: its turrets fired" % seed_value)
 		assert_gt(float(fight["run_m"]), 200.0, "seed %d: it kept running while they fired" % seed_value)
 
@@ -59,20 +56,9 @@ func test_a_saturn_4_runs_and_fires_its_two_turrets_at_two_raiders() -> void:
 func test_the_turrets_finish_a_wounded_raider_that_keeps_attacking() -> void:
 	if _skipped():
 		return
-	var short: PackedStringArray = []
-	var fights: Array[Dictionary] = []
 	for seed_value: int in SEEDS:
 		var fight: Dictionary = await _finish(seed_value)
 		gut.p("seed %d: %s" % [seed_value, _fight_line(fight)])
-		fights.append(fight)
-		if not (bool(fight["raider_down"]) and bool(fight["by_turret"]) and not bool(fight["destroyed"])):
-			short.append(str(seed_value))
-	if not short.is_empty() and FINISH_OPEN:
-		pending("open (M5-T16, Q31): at Q31's 550 hull the Saturn 4 transport dies before the wounded raider, which passes under "
-				+ "its dorsal arc, comes back into it (seeds %s); a maintainer call on the finish check or the hull" % ", ".join(short))
-		return
-	for fight: Dictionary in fights:
-		var seed_value: int = int(fight["seed"])
 		assert_true(bool(fight["raider_down"]), "seed %d: the turrets finished the raider within %.0f s" % [seed_value, FINISH_S])
 		assert_true(bool(fight["by_turret"]), "seed %d: with a turret's bolt" % seed_value)
 		assert_false(bool(fight["destroyed"]), "seed %d: the transport outlived it" % seed_value)

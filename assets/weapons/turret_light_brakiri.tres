@@ -6,7 +6,7 @@
 script = ExtResource("1_weapon_spec")
 muzzle_speed_mps = 900.0
 shot_interval_s = 2.4
-damage = 8.0
+damage = 6.0
 lifetime_s = 2.0
 hit_radius_m = 0.3
 bolt_length_m = 1.0
