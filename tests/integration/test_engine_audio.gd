@@ -2,7 +2,10 @@ extends GutTest
 ## Engine bursts in the game (M5-T19, AC15, D60): `engine_loop` and `thruster_loop` are gone; every ship has a `main_burst`
 ## voice at each pod and the player's ship an `rcs_burst` voice at each RCS cluster, children of the ship at their
 ## nozzles; thrust and RCS demand bring them up; parked and distant ships are silent; `engine_voice_cap` bounds the voices,
-## and a frame's engine work follows the voices, not the ships (work counts).
+## and a frame's engine work follows the voices, not the ships (work counts). The re-rank asks the native core for the ships
+## near the listener (M5-T28): its rows are the tick's, so a test that spawns or moves a ship waits a tick before it re-ranks.
+## A hull with no cannon (a civilian) is voiced, a ship the pool parks is revoked, `unwatch_ship` removes one for good, and a
+## ship the flight batch flies (it no longer ticks itself) is voiced when it thrusts.
 
 var main: Main
 var source: FakeInputSource
@@ -140,9 +143,11 @@ func test_parked_ships_are_silent_and_a_ship_beyond_hearing_loses_its_voices() -
 			assert_eq(_playing(_voices(pooled.ship, "EnginePod")), 0)
 	_spawn_raiders(1, 400.0)
 	var raider: Combatant = main.ships.alive(ShipPool.DEFAULT_TYPE)[0]
+	await _ticks(2)
 	main.audio.reallocate_engines()
 	assert_eq(main.audio.engine_voices_of(raider.ship), 2, "400 m away: heard")
 	raider.ship.global_position = main.ship.global_position + Vector3(0.0, 0.0, -EngineVoices.AUDIBLE_RANGE_M - 500.0)
+	await _ticks(2)
 	main.audio.reallocate_engines()
 	assert_eq(main.audio.engine_voices_of(raider.ship), 0, "out of range")
 	await get_tree().process_frame
@@ -151,6 +156,7 @@ func test_parked_ships_are_silent_and_a_ship_beyond_hearing_loses_its_voices() -
 
 func test_the_cap_holds_with_every_ship_near() -> void:
 	_spawn_raiders(9, 300.0)
+	await _ticks(2)
 	main.audio.reallocate_engines()
 	assert_eq(main.audio.engine_voices_granted(), 24, "the default cap, filled")
 	assert_eq(main.audio.engine_voices_of(main.ship), 8, "the player's own first")
@@ -170,12 +176,138 @@ func test_a_frames_engine_work_follows_the_voices_not_the_ships() -> void:
 	var few: int = main.audio.engine_frame_work
 	assert_between(few, 2 * 12, bound)
 	_spawn_raiders(9, 300.0)
+	await _ticks(2)
 	main.audio.reallocate_engines()
 	await _frames(2)
 	assert_eq(main.audio.engine_voices_granted(), 12)
 	assert_between(main.audio.engine_frame_work, 2 * 12, bound, "nine more ships in range: bounded by the cap, not the ships")
 	main.audio.reallocate_engines()
-	assert_eq(main.audio.engine_allocate_work(), main.audio.engine_ship_count(), "a re-rank reads each ship once")
+	# The player, then the ships in earshot until the cap is spent: never the ships in play (the pool holds more).
+	assert_lte(main.audio.engine_allocate_work(), 1 + 1 + 2, "the player, its own row and the two ships that fit")
+	assert_lt(main.audio.engine_allocate_work(), main.audio.engine_ship_count())
+
+
+## A civilian hull as the encounters will build one: `FREIGHTER`, assembled and spawned 400 m ahead of the player.
+const FREIGHTER: StringName = &"saturn_3_freighter"
+
+
+func _civilian(watch_first: bool, drop_cannon: bool) -> Combatant:
+	var civilian: Combatant = ShipAssembly.build(ShipCatalog.spec_for(FREIGHTER), main.world, main.projectiles, {
+		ShipAssembly.OPT_FACTION: Factions.NEUTRAL, ShipAssembly.OPT_DISPLAY_NAME: "FREIGHTER", ShipAssembly.OPT_LEAN: true,
+		ShipAssembly.OPT_CIVILIAN: true})
+	if watch_first:
+		main.audio.watch_ship(civilian)  # before the ship is ready: its voices wait for its layout
+	main.world.spawn(civilian.ship, main.world.to_universe(main.ship.global_position + Vector3(0.0, 0.0, -400.0)))
+	if drop_cannon:
+		civilian.cannon = null  # a hull with no cannon at all
+		main.audio.watch_ship(civilian)
+	return civilian
+
+
+func test_a_ship_watched_before_it_is_ready_gets_its_voices_when_it_is() -> void:
+	var civilian: Combatant = _civilian(true, false)
+	var pods: int = civilian.ship.get_layout().pod_count()
+	assert_gt(pods, 0)
+	assert_eq(_voices(civilian.ship, "EnginePod").size(), pods, "a voice per pod, built at its ready")
+	await _ticks(2)
+	main.audio.reallocate_engines()
+	assert_eq(main.audio.engine_voices_of(civilian.ship), pods, "400 m away: heard")
+
+
+func test_a_hull_with_no_cannon_gets_pod_voices_and_no_rcs() -> void:
+	Settings.set_value(&"engine_voice_cap", 64)
+	var civilian: Combatant = _civilian(false, true)
+	var pods: int = civilian.ship.get_layout().pod_count()
+	assert_eq(_voices(civilian.ship, "EnginePod").size(), pods)
+	assert_eq(_voices(civilian.ship, "EngineRcs").size(), 0, "RCS voices are the player's alone")
+	await _ticks(2)
+	main.audio.reallocate_engines()
+	assert_eq(main.audio.engine_voices_of(civilian.ship), pods, "voiced like any ship in earshot")
+
+
+func test_a_ship_the_pool_parks_loses_its_voices_at_once() -> void:
+	_spawn_raiders(1, 400.0)
+	var raider: Combatant = main.ships.alive(ShipPool.DEFAULT_TYPE)[0]
+	await _ticks(2)
+	main.audio.reallocate_engines()
+	assert_eq(main.audio.engine_voices_of(raider.ship), 2)
+	main.ships.release(raider)
+	# The core's rows still list it until the next sync; its node says it is gone.
+	await _frames(2)
+	assert_eq(main.audio.engine_voices_of(raider.ship), 0, "revoked")
+	main.audio.reallocate_engines()
+	assert_eq(main.audio.engine_voices_of(raider.ship), 0, "and not granted again from the stale rows")
+	await _ticks(2)
+	main.audio.reallocate_engines()
+	assert_eq(main.audio.engine_voices_of(raider.ship), 0, "nor from the fresh ones")
+	assert_eq(_playing(_voices(raider.ship, "EnginePod")), 0)
+
+
+func test_unwatching_a_ship_takes_its_voices_away_for_good() -> void:
+	var civilian: Combatant = _civilian(false, false)
+	main.audio.watch_ship(civilian)
+	var ships_before: int = main.audio.engine_ship_count()
+	await _ticks(2)
+	main.audio.reallocate_engines()
+	var pods: int = civilian.ship.get_layout().pod_count()
+	assert_eq(main.audio.engine_voices_of(civilian.ship), pods)
+	main.audio.unwatch_ship(civilian)
+	assert_eq(main.audio.engine_voices_of(civilian.ship), 0)
+	assert_eq(main.audio.engine_ship_count(), ships_before - 1)
+	main.audio.reallocate_engines()
+	assert_eq(main.audio.engine_voices_of(civilian.ship), 0, "still in earshot, still silent")
+	await _frames(2)
+	assert_eq(_voices(civilian.ship, "EnginePod").size(), 0, "its voice nodes are freed")
+	main.audio.unwatch_ship(civilian)  # twice is harmless
+	main.audio.watch_ship(civilian)  # and a ship can be watched again
+	assert_eq(_voices(civilian.ship, "EnginePod").size(), pods)
+
+
+func test_a_ship_the_flight_batch_flies_is_voiced_when_it_thrusts() -> void:
+	# No AI driver hands this hull a command each think, so the one it is given stays; the batch flies it, the ship's own
+	# tick does not.
+	var civilian: Combatant = _civilian(false, false)
+	main.audio.watch_ship(civilian)
+	var command := FlightCommand.new()
+	command.main_left = 1.0
+	command.main_right = 1.0
+	civilian.ship.set_flight_command(command)
+	await _ticks(10)
+	main.audio.reallocate_engines()
+	await _frames(2)
+	assert_true(civilian.ship.is_batch_owned(), "the batch flies it")
+	assert_eq(main.audio.engine_voices_of(civilian.ship), civilian.ship.get_layout().pod_count())
+	assert_gt(_playing(_voices(civilian.ship, "EnginePod")), 0, "its pods roar")
+
+
+func test_ships_beyond_hearing_cost_the_re_rank_nothing() -> void:
+	# Three hundred bodies far away are rows in the core (bodies of ships' kind, no meshes) and are never listed, so the
+	# re-rank walks no more than it did. The tier rows' side of this is in test_voice_query.
+	var sim: SimCore = SimCore.for_tree(get_tree())
+	assert_not_null(sim, "the game runs on the core")
+	main.audio.reallocate_engines()
+	var walked: int = main.audio.engine_allocate_work()
+	var granted: int = main.audio.engine_voices_granted()
+	var rows_before: int = sim.rows()
+	for i: int in 300:
+		var body := RigidBody3D.new()
+		body.freeze = true
+		main.world.add_child(body)
+		body.add_to_group(WorldFrame.SHIFTABLE_GROUP)
+		body.global_position = main.ship.global_position + Vector3(0.0, 0.0, -20000.0 - float(i))
+		var hull := Damageable.new()
+		hull.bounding_radius = 10.0
+		body.add_child(hull)
+		var marker := Targetable.new()
+		marker.name = "Targetable"
+		marker.display_name = "FAR %d" % i
+		marker.faction = Factions.NEUTRAL
+		body.add_child(marker)
+	await _ticks(3)
+	assert_gte(sim.rows(), rows_before + 300, "the rows hold them")
+	main.audio.reallocate_engines()
+	assert_eq(main.audio.engine_allocate_work(), walked, "300 more rows far away: the same work")
+	assert_eq(main.audio.engine_voices_granted(), granted)
 
 
 func test_engine_voice_cap_is_a_schema_entry() -> void:

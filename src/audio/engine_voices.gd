@@ -6,8 +6,11 @@ extends RefCounted
 ## Every ship has a voice per pod (its main and retro nozzle share it, heard at whichever fires harder) playing `main_burst`.
 ## The player's ship also has one per RCS cluster playing `rcs_burst`: its jets grouped by where they sit about the centre of
 ## mass (`rcs_clusters`), so any hull gets a handful. `allocate` grants at most `cap` voices: the player's first, then whole
-## ships, nearest first, within `AUDIBLE_RANGE_M`. `step` moves only the granted voices, so a frame costs one unit per voice
-## however many ships and nozzles exist (`step_work`); levels come from the same mapping as the glows (`ThrusterGlowLevels`).
+## ships, nearest first, within `AUDIBLE_RANGE_M`. The ranking is the core's (`ScsSimCore.ships_near`, M5-T28): a re-rank is
+## `begin_allocation`, an `offer` per ship the core listed (nearest first, until the budget is spent) and `finish_allocation`,
+## so its work follows the ships in earshot, never the ships in play (`allocate_work`). `step` moves only the granted voices,
+## so a frame costs one unit per voice however many ships and nozzles exist (`step_work`); levels come from the same mapping
+## as the glows (`ThrusterGlowLevels`).
 ##
 ## Envelopes follow docs/design-references.md "Roars and pass-bys" and run on the frame's delta (sim time).
 
@@ -49,7 +52,7 @@ var at_retro := PackedByteArray()
 var active := PackedInt32Array()
 var voiced_ships := PackedInt32Array()
 var revoked := PackedInt32Array()
-## Units of work done by the last `step` (one per granted voice) and the last `allocate` (one per ship).
+## Units of work done by the last `step` (one per granted voice) and the last re-rank (the player and one per ship offered).
 var step_work: int = 0
 var allocate_work: int = 0
 
@@ -64,7 +67,9 @@ var _tags: Array[PackedStringArray] = []
 var _burn_s := PackedFloat64Array()
 var _release_tau := PackedFloat64Array()
 var _granted := PackedByteArray()
-var _keys := PackedInt64Array()
+var _before := PackedInt32Array()
+var _budget: int = 0
+var _removed: int = 0
 
 
 ## Registers a ship and makes its voices; returns its id. The player's ship also gets its RCS cluster voices.
@@ -94,8 +99,9 @@ func add_ship(layout: ThrusterLayout, is_player: bool) -> int:
 	return ship
 
 
+## Ships with voices now (a removed ship no longer counts).
 func ship_count() -> int:
-	return _layouts.size()
+	return _layouts.size() - _removed
 
 
 ## Voice ids of a ship: its pods in pod order, then its RCS clusters.
@@ -111,38 +117,69 @@ func set_output(ship: int, output: FlightOutput) -> void:
 	_outputs[ship] = output
 
 
-## Hands out the voices: `distance_sq` has each ship's squared distance to the listener, negative when out of play.
-## A voice that loses its grant restarts cold and is listed in `revoked`.
-func allocate(distance_sq: PackedFloat64Array) -> void:
+## Starts a re-rank: the last grants are let go and the player's voices (when it is in play) are granted first. Follow with
+## `offer` for the ships in earshot, nearest first, and then `finish_allocation`.
+func begin_allocation(player_in_play: bool) -> void:
 	allocate_work = 0
-	var before: PackedInt32Array = active
-	for v: int in before:
+	_before = active
+	for v: int in _before:
 		_granted[v] = 0
 	active = PackedInt32Array()
 	voiced_ships.resize(0)
-	var budget: int = cap
-	if _player >= 0 and distance_sq[_player] >= 0.0:
-		budget -= _grant(_player, budget)
-	# Nearest first: one sort key per ship, its squared distance (to 0.01 m²) above its id, sorted natively.
-	_keys.resize(0)
-	var range_sq: float = AUDIBLE_RANGE_M * AUDIBLE_RANGE_M
-	for ship: int in _layouts.size():
+	_budget = cap
+	if _player >= 0:
 		allocate_work += 1
-		var d: float = distance_sq[ship]
-		if ship != _player and d >= 0.0 and d <= range_sq and _voice_count[ship] > 0:
-			_keys.append((int(d * 100.0) << 24) | ship)
-	_keys.sort()
-	for key: int in _keys:
-		if budget <= 0:
-			break
-		var ship: int = key & 0xFFFFFF
-		if _voice_count[ship] <= budget:
-			budget -= _grant(ship, budget)
+		if player_in_play:
+			_budget -= _grant(_player, _budget)
+
+
+## Grants a whole ship's voices if they fit in what is left of the cap; a ship with none, or the player's, is passed over.
+func offer(ship: int) -> void:
+	allocate_work += 1
+	if ship != _player and _voice_count[ship] > 0 and _voice_count[ship] <= _budget:
+		_budget -= _grant(ship, _budget)
+
+
+## What is left of the cap in this re-rank: the caller stops offering at 0.
+func budget_left() -> int:
+	return _budget
+
+
+## Ends the re-rank: a voice that lost its grant restarts cold and is listed in `revoked`.
+func finish_allocation() -> void:
 	revoked.resize(0)
-	for v: int in before:
+	for v: int in _before:
 		if _granted[v] == 0:
 			revoked.append(v)
 			_go_cold(v)
+	_before = PackedInt32Array()
+
+
+## Takes a ship out for good (it despawned): its voices are revoked, returned so their players can stop, and never granted
+## again. Its ids stay taken, so the other ships' keep their meaning.
+func remove_ship(ship: int) -> PackedInt32Array:
+	var gone := PackedInt32Array()
+	if ship < 0 or ship >= _layouts.size() or _layouts[ship] == null:
+		return gone
+	var kept := PackedInt32Array()
+	for v: int in active:
+		if voice_ship[v] == ship:
+			_granted[v] = 0
+			gone.append(v)
+			_go_cold(v)
+		else:
+			kept.append(v)
+	active = kept
+	var at: int = voiced_ships.find(ship)
+	if at >= 0:
+		voiced_ships.remove_at(at)
+	_voice_count[ship] = 0
+	_layouts[ship] = null
+	_outputs[ship] = null
+	if _player == ship:
+		_player = -1
+	_removed += 1
+	return gone
 
 
 ## Moves every granted voice's envelope on by `delta` seconds of sim time toward its thrusters' demand.

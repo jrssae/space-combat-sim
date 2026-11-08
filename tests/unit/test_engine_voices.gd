@@ -53,6 +53,26 @@ func _distances(values: Array[float]) -> PackedFloat64Array:
 	return out
 
 
+## A re-rank as the director makes it: ship 0 is the player; the rest within range are listed nearest first (what the core's
+## `ships_near` gives) and offered until the cap is spent. Returns the ships offered.
+func _allocate(voices: EngineVoices, distance_sq: PackedFloat64Array) -> int:
+	var ranked: Array[Vector2] = []
+	for ship: int in range(1, distance_sq.size()):
+		var d: float = distance_sq[ship]
+		if d >= 0.0 and d <= EngineVoices.AUDIBLE_RANGE_M * EngineVoices.AUDIBLE_RANGE_M:
+			ranked.append(Vector2(d, ship))
+	ranked.sort_custom(func(a: Vector2, b: Vector2) -> bool: return a.x < b.x or (a.x == b.x and a.y < b.y))
+	voices.begin_allocation(distance_sq[0] >= 0.0)
+	var offered: int = 0
+	for entry: Vector2 in ranked:
+		if voices.budget_left() <= 0:
+			break
+		offered += 1
+		voices.offer(int(entry.y))
+	voices.finish_allocation()
+	return offered
+
+
 ## Voices of `ship` among the granted ones.
 func _granted_of(voices: EngineVoices, ship: int) -> int:
 	var n: int = 0
@@ -169,7 +189,7 @@ func test_the_player_first_then_whole_ships_nearest_first_up_to_the_cap() -> voi
 	for i: int in 10:
 		voices.add_ship(raider, false)
 		metres.append(1000.0 - 90.0 * i)  # the last added is nearest
-	voices.allocate(_distances(metres))
+	_allocate(voices, _distances(metres))
 	assert_eq(voices.active.size(), 24)
 	assert_eq(_granted_of(voices, 0), 8, "the player's own voices")
 	for ship: int in range(3, 11):
@@ -183,9 +203,9 @@ func test_ships_out_of_range_or_out_of_play_get_no_voices() -> void:
 	voices.add_ship(starfury, true)
 	voices.add_ship(raider, false)
 	voices.add_ship(raider, false)
-	voices.allocate(_distances([0.0, EngineVoices.AUDIBLE_RANGE_M + 1.0, -1.0]))
+	_allocate(voices, _distances([0.0, EngineVoices.AUDIBLE_RANGE_M + 1.0, -1.0]))
 	assert_eq(voices.active.size(), 8, "beyond hearing, and parked, are silent")
-	voices.allocate(_distances([-1.0, 100.0, 200.0]))
+	_allocate(voices, _distances([-1.0, 100.0, 200.0]))
 	assert_eq(_granted_of(voices, 0), 0, "a player out of play has no voices either")
 	assert_eq(voices.active.size(), 4)
 
@@ -196,7 +216,7 @@ func test_only_whole_ships_are_voiced() -> void:
 	voices.add_ship(starfury, true)
 	voices.add_ship(starfury, false)  # nearest, but its four pods do not fit in the three left
 	voices.add_ship(raider, false)
-	voices.allocate(_distances([0.0, 50.0, 300.0]))
+	_allocate(voices, _distances([0.0, 50.0, 300.0]))
 	assert_eq(_granted_of(voices, 1), 0)
 	assert_eq(_granted_of(voices, 2), 2, "the next ship that fits")
 	assert_eq(voices.active.size(), 10)
@@ -206,7 +226,7 @@ func test_a_cap_below_the_players_count_keeps_its_pods_first() -> void:
 	var voices := EngineVoices.new()
 	voices.cap = 5
 	voices.add_ship(starfury, true)
-	voices.allocate(_distances([0.0]))
+	_allocate(voices, _distances([0.0]))
 	assert_eq(voices.active.size(), 5)
 	var pods: int = 0
 	for v: int in voices.active:
@@ -218,15 +238,15 @@ func test_a_voice_that_loses_its_grant_is_listed_and_restarts_cold() -> void:
 	var voices := EngineVoices.new()
 	voices.add_ship(starfury, true)
 	var them: int = voices.add_ship(raider, false)
-	voices.allocate(_distances([0.0, 100.0]))
+	_allocate(voices, _distances([0.0, 100.0]))
 	voices.set_output(them, _output([1.0, 1.0], [0.0, 0.0]))
 	voices.step(0.5)
 	var v: int = voices.voices_of(them)[0]
 	assert_gt(voices.level[v], 0.9)
-	voices.allocate(_distances([0.0, EngineVoices.AUDIBLE_RANGE_M * 2.0]))
+	_allocate(voices, _distances([0.0, EngineVoices.AUDIBLE_RANGE_M * 2.0]))
 	assert_eq(voices.revoked, voices.voices_of(them), "both of its voices")
 	assert_eq(voices.level[v], 0.0)
-	voices.allocate(_distances([0.0, EngineVoices.AUDIBLE_RANGE_M * 2.0]))
+	_allocate(voices, _distances([0.0, EngineVoices.AUDIBLE_RANGE_M * 2.0]))
 	assert_eq(voices.revoked.size(), 0, "listed once")
 
 
@@ -236,7 +256,7 @@ func test_a_voice_that_loses_its_grant_is_listed_and_restarts_cold() -> void:
 func test_a_pod_voice_follows_its_pods_main_and_retro_and_sits_at_the_one_firing() -> void:
 	var voices := EngineVoices.new()
 	var me: int = voices.add_ship(starfury, true)
-	voices.allocate(_distances([0.0]))
+	_allocate(voices, _distances([0.0]))
 	var pods: PackedInt32Array = voices.voices_of(me).slice(0, 4)
 	voices.set_output(me, _output([1.0, 0.0, 0.0, 0.0], [0.0, 0.6, 0.0, 0.0]))
 	voices.step(0.2)
@@ -251,7 +271,7 @@ func test_a_pod_voice_follows_its_pods_main_and_retro_and_sits_at_the_one_firing
 func test_a_cluster_voice_follows_the_strongest_of_its_jets() -> void:
 	var voices := EngineVoices.new()
 	var me: int = voices.add_ship(starfury, true)
-	voices.allocate(_distances([0.0]))
+	_allocate(voices, _distances([0.0]))
 	var output := FlightOutput.new()
 	output.rcs_force_level = Vector3(0.7, 0.0, 0.0)  # sway right: the -x jets of every pod
 	voices.set_output(me, output)
@@ -269,7 +289,7 @@ func test_a_cluster_voice_follows_the_strongest_of_its_jets() -> void:
 func test_a_whisper_of_demand_stays_silent() -> void:
 	var voices := EngineVoices.new()
 	var me: int = voices.add_ship(starfury, true)
-	voices.allocate(_distances([0.0]))
+	_allocate(voices, _distances([0.0]))
 	voices.set_output(me, _output([EngineVoices.GATE * 0.5, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0]))
 	voices.step(0.5)
 	assert_eq(voices.target[voices.voices_of(me)[0]], 0.0)
@@ -279,7 +299,7 @@ func test_a_whisper_of_demand_stays_silent() -> void:
 func test_no_output_yet_is_silence() -> void:
 	var voices := EngineVoices.new()
 	var me: int = voices.add_ship(starfury, true)
-	voices.allocate(_distances([0.0]))
+	_allocate(voices, _distances([0.0]))
 	voices.step(DT)
 	for v: int in voices.voices_of(me):
 		assert_eq(voices.level[v], 0.0)
@@ -304,7 +324,7 @@ func test_a_pod_rises_in_5_to_35_ms_and_stops_in_30_to_50_ms() -> void:
 	# Reference step roar: attack (10-90 %) 5-35 ms; cut 30-50 ms.
 	var voices := EngineVoices.new()
 	var me: int = voices.add_ship(starfury, true)
-	voices.allocate(_distances([0.0]))
+	_allocate(voices, _distances([0.0]))
 	var v: int = voices.voices_of(me)[0]
 	voices.set_output(me, _output([1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0]))
 	var rise: float = _time_between(voices, v, 0.1, 0.9, 1.0)
@@ -319,7 +339,7 @@ func test_a_jet_rises_in_25_to_100_ms_and_releases_slower_after_a_long_burn() ->
 	# Reference swell and jet: attack 25-100 ms; release tau 120-250 ms after a pulse, up to 0.65 s after a long burn.
 	var voices := EngineVoices.new()
 	var me: int = voices.add_ship(starfury, true)
-	voices.allocate(_distances([0.0]))
+	_allocate(voices, _distances([0.0]))
 	var v: int = voices.voices_of(me)[4]
 	assert_eq(voices.voice_kind[v], EngineVoices.Kind.RCS)
 	var firing := FlightOutput.new()
@@ -356,15 +376,16 @@ func test_voices_start_at_different_points_of_their_loop() -> void:
 
 
 ## Work of one allocation and one step with the player and `ships` others of `layout`, every one in range.
-func _work(ships: int, layout: ThrusterLayout, cap: int) -> Dictionary:
+func _work(ships: int, layout: ThrusterLayout, cap: int, near: int = -1) -> Dictionary:
 	var voices := EngineVoices.new()
 	voices.cap = cap
 	voices.add_ship(starfury, true)
 	var metres: Array[float] = [0.0]
 	for i: int in ships:
 		voices.add_ship(layout, false)
-		metres.append(10.0 + float(i))
-	voices.allocate(_distances(metres))
+		# `near` of them in earshot, the rest far away (-1: every one near)
+		metres.append(10.0 + float(i) if near < 0 or i < near else 50000.0)
+	_allocate(voices, _distances(metres))
 	var output := _output([1.0, 1.0, 1.0, 1.0], [0.0, 0.0, 0.0, 0.0])
 	for ship: int in voices.voiced_ships:
 		voices.set_output(ship, output)
@@ -385,7 +406,35 @@ func test_the_per_frame_step_is_linear_in_voices_not_ships_times_nozzles() -> vo
 	assert_eq(bare["step"], wide["step"], "the jets of ships without RCS voices cost nothing")
 
 
-func test_allocation_is_linear_in_ships_and_ignores_nozzles() -> void:
-	assert_eq(_work(10, _hull(2, 0), 24)["allocate"], 11)
-	assert_eq(_work(300, _hull(2, 0), 24)["allocate"], 301)
-	assert_eq(_work(300, _hull(16, 64), 24)["allocate"], 301, "the same with eight times the nozzles")
+func test_a_re_rank_follows_the_ships_in_earshot_not_the_ships_in_play() -> void:
+	# The player plus the ships the core listed: 3 in earshot cost 1 + 3 whether 3 or 300 more are far away.
+	assert_eq(_work(3, _hull(2, 0), 24)["allocate"], 1 + 3)
+	assert_eq(_work(303, _hull(2, 0), 24, 3)["allocate"], 1 + 3, "300 ships far away cost nothing")
+	assert_eq(_work(303, _hull(2, 64), 24, 3)["allocate"], 1 + 3, "nor do their nozzles")
+
+
+func test_the_walk_stops_when_the_cap_is_spent() -> void:
+	# 300 ships in earshot, two pods each, 16 voices to hand out after the player's 8: eight ships, then the walk ends.
+	var work: Dictionary = _work(300, _hull(2, 0), 24)
+	assert_eq(work["voices"], 24)
+	assert_eq(work["allocate"], 1 + 8, "the player and the eight ships that fit")
+
+
+func test_a_removed_ship_loses_its_voices_for_good() -> void:
+	var voices := EngineVoices.new()
+	voices.add_ship(starfury, true)
+	var them: int = voices.add_ship(raider, false)
+	var other: int = voices.add_ship(raider, false)
+	assert_eq(voices.ship_count(), 3)
+	_allocate(voices, _distances([0.0, 100.0, 200.0]))
+	assert_eq(voices.active.size(), 8 + 2 + 2)
+	var theirs: PackedInt32Array = voices.voices_of(them)
+	assert_eq(voices.remove_ship(them), theirs, "its two voices")
+	assert_eq(voices.active.size(), 8 + 2, "the others keep theirs")
+	assert_false(voices.voiced_ships.has(them))
+	assert_eq(voices.ship_count(), 2)
+	_allocate(voices, _distances([0.0, 50.0, 200.0]))
+	assert_eq(_granted_of(voices, them), 0, "never granted again, however near")
+	assert_eq(_granted_of(voices, other), 2)
+	assert_eq(voices.remove_ship(them).size(), 0, "removing twice does nothing")
+	assert_eq(voices.ship_count(), 2)

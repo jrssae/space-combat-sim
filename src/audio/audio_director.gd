@@ -13,6 +13,10 @@ extends Node3D
 ## RCS cluster, children of the ship at their nozzles, so they follow it and a rebase. `EngineVoices` decides which sound
 ## (at most `settings.engine_voice_cap`: the player's first, then the nearest ships in range, re-ranked every
 ## `ENGINE_REALLOCATE_S`) and shapes each voice's attack and release on the frame's delta; a frame touches only those voices.
+## The re-rank asks the native core for the ships near the listener (`SimCore.ships_near`, M5-T28: the rows the main thread
+## holds after the tick's sync, tier rows never), so its work follows the ships in earshot, not the ships in play. A ship
+## gets its voices whether or not it has a cannon (a civilian has none); `unwatch_ship` takes a ship's voices away for good,
+## and a ship the pool parks drops out of the rows by itself.
 ##
 ## The menus' sounds (`sfx_ui`: move, accept, back; M5-T02) and the comms squelches (`radio_open`, `radio_close`; M5-T06) load
 ## beside these and play through `play_ui`. The front end has an `AudioDirector` of its own for them; they keep sounding while
@@ -24,7 +28,8 @@ extends Node3D
 ## gains and apply the moment they change.
 ## The Dummy audio driver of a headless run plays silently, and nothing here errors without sound files.
 ##
-## Console: provider `audio` (`sounds`, `voices_active`, `volume`, `engine_voices`, `engine_sounding`, `engine_frame_work`) and
+## Console: provider `audio` (`sounds`, `voices_active`, `volume`, `engine_voices`, `engine_sounding`, `engine_frame_work`,
+## `engine_rank_work`) and
 ## `sfx <name>` (play at the player; a burst plays once).
 
 const SOUND_DIR: String = "res://assets/generated/sfx_combat"
@@ -68,8 +73,8 @@ var _engine_ships: Array[Combatant] = []  # by EngineVoices ship id
 var _engine_ids: Dictionary = {}  # Ship instance id -> EngineVoices ship id
 var _engine_nodes: Array[AudioStreamPlayer3D] = []  # by voice id
 var _engine_node_at_retro := PackedByteArray()  # where each pod node sits now
-var _engine_distance_sq := PackedFloat64Array()
 var _engine_rerank_in_s: float = 0.0
+var _engine_rank_work: int = 0
 
 
 func _ready() -> void:
@@ -104,6 +109,8 @@ func _ready() -> void:
 		&"engine_sounding": {"get": engine_voices_sounding, "doc": "Engine voices playing now"},
 		&"engine_frame_work": {"get": func() -> int: return engine_frame_work,
 				"doc": "Engine voices and voiced ships touched in the last frame"},
+		&"engine_rank_work": {"get": engine_allocate_work,
+				"doc": "Ships the last engine-voice re-rank walked (the ones in earshot, not all in play)"},
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"sfx", "Play a sound at the player",
 			[ConsoleArg.enum_required(&"name", SOUND_NAMES)] as Array[ConsoleArg]), _cmd_sfx, self)
@@ -299,15 +306,16 @@ func connect_combat(resolver: HitResolver, destruction: DestructionDirector, p_p
 				play_ui(&"target_blip", -6.0))
 
 
-## Gives a ship its gun sounds and its engine voices.
+## Gives a ship its gun sounds, its turrets' and its engine voices. A hull without a cannon (a civilian) still gets the last.
 func watch_ship(combatant: Combatant) -> void:
-	if combatant == null or combatant.cannon == null:
+	if combatant == null:
 		return
-	var shot: StringName = &"pulse_fire" if combatant.faction == Factions.EARTH_ALLIANCE else &"raider_fire"
-	var shot_db: float = SHOT_DB[shot]
-	# `shot_fired` sounds on both bolt paths; `projectile_fired` is silent for the AI cannons' rows (M4-T35).
-	combatant.cannon.shot_fired.connect(func(_index: int, at: Vector3) -> void:
-		play(shot, at, shot_db, randf_range(0.96, 1.04)))
+	if combatant.cannon != null:
+		var shot: StringName = &"pulse_fire" if combatant.faction == Factions.EARTH_ALLIANCE else &"raider_fire"
+		var shot_db: float = SHOT_DB[shot]
+		# `shot_fired` sounds on both bolt paths; `projectile_fired` is silent for the AI cannons' rows (M4-T35).
+		combatant.cannon.shot_fired.connect(func(_index: int, at: Vector3) -> void:
+			play(shot, at, shot_db, randf_range(0.96, 1.04)))
 	if combatant.ship.is_node_ready():
 		_watch_turrets(combatant)
 	else:
@@ -354,20 +362,51 @@ func engine_ship_count() -> int:
 	return _engine.ship_count()
 
 
-## Work of the last re-rank: one per ship.
+## Work of the last re-rank: the player and each ship the core listed that the walk looked at (not the ships in play).
 func engine_allocate_work() -> int:
-	return _engine.allocate_work
+	return _engine_rank_work
 
 
-## Re-ranks which ships are heard: the player's first, then the nearest in range. Runs every `ENGINE_REALLOCATE_S` by itself.
+## Takes `combatant`'s engine voices away for good: playing ones stop and are freed, and the ship is never heard again. For a
+## ship that leaves for good (traffic despawned, not parked: a parked ship leaves the rows and falls silent by itself).
+func unwatch_ship(combatant: Combatant) -> void:
+	var id: int = _engine_id_of(combatant)
+	if id < 0:
+		return
+	var voices: PackedInt32Array = _engine.voices_of(id)
+	_engine.remove_ship(id)
+	for v: int in voices:
+		var node: AudioStreamPlayer3D = _engine_nodes[v]
+		if is_instance_valid(node):
+			node.stop()
+			node.queue_free()
+		_engine_nodes[v] = null
+	for key: int in _engine_ids.keys():
+		if _engine_ids[key] == id:
+			_engine_ids.erase(key)
+	_engine_ships[id] = null
+
+
+## Re-ranks which ships are heard: the player's first, then the nearest in range, as the native core lists them. Runs every
+## `ENGINE_REALLOCATE_S` by itself.
 func reallocate_engines() -> void:
 	_engine_rerank_in_s = ENGINE_REALLOCATE_S
-	var listener: Vector3 = _listener_position()
-	_engine_distance_sq.resize(_engine_ships.size())
-	for id: int in _engine_ships.size():
-		var combatant: Combatant = _engine_ships[id]
-		_engine_distance_sq[id] = combatant.ship.global_position.distance_squared_to(listener) if _in_play(combatant) else -1.0
-	_engine.allocate(_engine_distance_sq)
+	var player_id: int = _engine_id_of(player)
+	_engine.begin_allocation(player_id >= 0 and _in_play(_engine_ships[player_id]))
+	var work: int = 1 if player_id >= 0 else 0
+	var sim: SimCore = SimCore.for_tree(get_tree()) if is_inside_tree() else null
+	if sim != null and _engine.budget_left() > 0:
+		var near: Array = sim.ships_near(_listener_position(), EngineVoices.AUDIBLE_RANGE_M)
+		for body_id: int in near[0] as PackedInt64Array:
+			work += 1
+			var id: int = int(_engine_ids.get(body_id, -1))
+			# The rows are the tick's, so a ship that was parked or freed since is still listed: its node says.
+			if id >= 0 and id != player_id and _in_play(_engine_ships[id]):
+				_engine.offer(id)
+				if _engine.budget_left() <= 0:
+					break
+	_engine.finish_allocation()
+	_engine_rank_work = work
 	for v: int in _engine.revoked:
 		var node: AudioStreamPlayer3D = _engine_nodes[v]
 		if is_instance_valid(node) and node.playing:
@@ -379,6 +418,9 @@ func reallocate_engines() -> void:
 
 # Builds a ship's voice nodes at its nozzles, from the voices `EngineVoices` made for its layout.
 func _add_engine_voices(combatant: Combatant) -> void:
+	if not combatant.ship.is_node_ready():
+		combatant.ship.ready.connect(_add_engine_voices.bind(combatant), CONNECT_ONE_SHOT)  # its layout comes with its build
+		return
 	var layout: ThrusterLayout = combatant.ship.get_layout()
 	if not _loops.has(&"main_burst") or layout == null or not layout.valid or _engine_ids.has(combatant.ship.get_instance_id()):
 		return
@@ -404,6 +446,15 @@ func _add_engine_voices(combatant: Combatant) -> void:
 	_engine_rerank_in_s = 0.0
 
 
+# A ship's id in `EngineVoices`, or -1 when it has none (never watched, or unwatched).
+func _engine_id_of(combatant: Combatant) -> int:
+	if combatant == null:
+		return -1
+	if is_instance_valid(combatant.ship):
+		return int(_engine_ids.get(combatant.ship.get_instance_id(), -1))
+	return _engine_ships.find(combatant)
+
+
 func _listener_position() -> Vector3:
 	var camera: Camera3D = get_viewport().get_camera_3d() if is_inside_tree() else null
 	if camera != null:
@@ -412,7 +463,7 @@ func _listener_position() -> Vector3:
 
 
 static func _in_play(combatant: Combatant) -> bool:
-	return is_instance_valid(combatant.ship) and combatant.ship.is_visible_in_tree() and combatant.ship.can_process()
+	return combatant != null and is_instance_valid(combatant.ship) and combatant.ship.is_visible_in_tree() and combatant.ship.can_process()
 
 
 # Moves the granted engine voices on by a frame: linear in voices, whatever the number of ships.
