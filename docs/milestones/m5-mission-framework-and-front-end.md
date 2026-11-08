@@ -1903,7 +1903,7 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   - **Tests:** Python 356 (the civilians, `test_color`'s calibration, `test_textures`' grid switch; absolute brightness cuts
     in the paint tests lowered to the darkened colours), GUT `test_environment` 19, `test_mesh_assets` 6 (the sheen),
     `test_settings_schema` 25, `test_settings_menu_model` 15, `test_textured_hull` 4, `check_scripts` 610.
-  - **(H):** the pods' shade; how the 0.1 ambient reads in flight. A saved `ambient_level` overrides the new default.
+  - **(H):** approved by the maintainer (2026-11-08). A saved `ambient_level` overrides the new default.
 
 ### M5-T40 Civilian panel seams from the show
 
