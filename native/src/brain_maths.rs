@@ -91,11 +91,6 @@ impl Pcg {
         rng
     }
 
-    /// `randi()`: one 32-bit draw.
-    pub fn randi(&mut self) -> u32 {
-        self.next_u32()
-    }
-
     fn next_u32(&mut self) -> u32 {
         let old = self.state;
         self.state = old.wrapping_mul(PCG_MULT).wrapping_add(self.inc);

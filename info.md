@@ -17,7 +17,7 @@ same commit; `tests/integration/test_console_command_list.gd` fails when the fil
   - Example: `.tools/godot/godot --headless --path . -- --console-strict --console-exec="wait 30; state ship; quit"`
 - Details: `docs/architecture.md` §6.4, §15.13, §16.4 and §18.4.
 
-Commands on this list are those on the `m5` branch, which holds M4 through T22 since the merge of `main` on 2026-11-07.
+Commands on this list are those on the `m5` branch, which holds all of M4 since the merge of `main` on 2026-11-08.
 
 ## Where a command exists
 
@@ -105,7 +105,7 @@ Arguments in `<angle brackets>` are required, `[square brackets]` optional, `a|b
 |---|---|---|---|
 | `damage` | `<amount> [player\|target]` | Hit the player or the selected target with no shooter (god mode applies to the player) | in flight |
 | `heal` | `[player\|target\|all]` | Restore the player's, the target's or every hull | in flight |
-| `kill` | `[target\|all\|allies\|player]` | Destroy the target, every raider, every ally or the player now (bypasses god mode) | in flight |
+| `kill` | `[target\|all\|allies\|player]` | Destroy the target (any target with a hull, a capital too), every raider, every ally or the player now (bypasses god mode) | in flight |
 | `relation` | `<a> [b] [friendly\|neutral\|hostile]` or `reset` | Show or set (this session only) how faction a regards faction b; `reset` reloads `data/factions.json` | in flight |
 
 ### Ships and waves
@@ -130,7 +130,7 @@ Arguments in `<angle brackets>` are required, `[square brackets]` optional, `a|b
 | Command | Arguments | Does | Where |
 |---|---|---|---|
 | `perf` | `[on\|off]` | Time every tick's stages (the `perf` provider); no argument toggles | in flight |
-| `native` | `[bench]` | Say whether the native library is loaded and which path runs; `bench` times calls into it | in flight |
+| `native` | `[bench]` | Say whether the native library is loaded (it is required since M4-T37); `bench` times calls into it | in flight |
 | `bench` | `<furball\|spread\|transit\|battle\|typical> <n> [options]` | Fly a benchmark layout with n ships and write `reports/perf/<label>/` (`scripts/bench.sh`) | in flight |
 | `station` | `<near\|far\|off>` | Open the render comparison's station scene (M4-T27) | in flight |
 

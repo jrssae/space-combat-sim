@@ -37,10 +37,6 @@ func unregister_owner(owner: Object) -> void:
 	_prune()
 
 
-func unregister_command(command_name: StringName) -> void:
-	_commands.erase(command_name)
-
-
 func unregister_provider(provider_name: StringName) -> void:
 	_providers.erase(provider_name)
 

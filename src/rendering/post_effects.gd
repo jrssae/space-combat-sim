@@ -87,10 +87,11 @@ func blur_gate() -> MotionBlurGate:
 	return _gate
 
 
-## Pushes the three settings into the effects.
+## Pushes the three settings into the effects; a flare whose shader failed stays off.
 func apply_settings() -> void:
 	if _flare != null:
-		_flare.enabled = bool(Settings.get_value(&"lens_flare"))
+		var usable: bool = not (_flare is SceneLensFlareEffect) or (_flare as SceneLensFlareEffect).usable
+		_flare.enabled = usable and bool(Settings.get_value(&"lens_flare"))
 	if _blur != null:
 		_blur.enabled = bool(Settings.get_value(&"motion_blur"))
 		_blur.strength = float(Settings.get_value(&"motion_blur_strength"))

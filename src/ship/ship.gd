@@ -25,14 +25,15 @@ extends RigidBody3D
 ## `ShipSpec.fuel_capacity_kg`, never drawn down while `settings.fuel_unlimited` is on), and when the tank is empty the
 ## model is told to cut all thrust.
 ##
-## Contacts (M3-T04): Jolt reports up to `CONTACTS_REPORTED` contact points (`contact_monitor` on), and the ship keeps the
-## World-frame sum of the forces it applied on its last tick (`applied_force`), so the `RamResolver` can tell the velocity
-## change a collision caused from what the ship's own thrust did.
+## Contacts (M3-T04): Jolt keeps up to `CONTACTS_REPORTED` contact points (`contact_monitor` off since M4-T35: the ram
+## phase reads them from the physics server by body RID), and the ship keeps the World-frame sum of the forces it applied
+## on its last tick (`applied_force`), so the `RamResolver` can tell the velocity change a collision caused from what the
+## ship's own thrust did.
 ##
 ## The flight batch (M4-T10, architecture §17.9): every ship but the player's is `batched`, so `FlightBatch` (under `World`,
 ## priority -1) runs its model, governor and force application in one native call per tick for all of them; this node's
-## `_physics_process` then only takes the command edges and leaves the forces to the batch. The player's ship, a ship whose
-## `batched` is off, and every ship when the library or `perf_native` is off, fly the GDScript path below. On the batched
+## `_physics_process` then only takes the command edges and leaves the forces to the batch. The player's ship and a ship
+## whose `batched` is off fly the GDScript path below. On the batched
 ## path `get_flight_output()` fills its `FlightOutput` from the batch's row on demand (levels, RCS shares, forces, flags; the
 ## per-nozzle `nozzle_forces` stay empty) and `applied_force()` reads the batch's sum.
 ##
@@ -198,7 +199,6 @@ func _ready() -> void:
 		var switcher := LodSwitcher.new()
 		switcher.name = "LodSwitcher"
 		add_child(switcher)
-	Settings.changed.connect(_on_hull_setting_changed)
 	set_cockpit_interior_visible(_interior_visible)
 	if console_owner:
 		_register_console()
@@ -218,8 +218,6 @@ func _exit_tree() -> void:
 	var rig: LightRig = LightRig.of(self)
 	if rig != null and _cabin_emitter != null:
 		rig.remove_emitter(_cabin_emitter)
-	if Settings.changed.is_connected(_on_hull_setting_changed):
-		Settings.changed.disconnect(_on_hull_setting_changed)
 
 
 ## Gives the ship its type and its world. Call it before `World.spawn` (the usual order, or use `create`); called
@@ -509,14 +507,8 @@ func batch_gather(batch: FlightBatch, row: int, frame: int, delta: float, fuel_u
 	_output_tick = -1
 
 
-## The batch's step refused this tick's arrays after the gather: this node applies the forces itself.
-func batch_refused() -> void:
-	_flown_tick = -1
-	set_batch_owned(false)
-
-
 ## Whether the flight batch owns this ship's tick (M4-T35): the batch flies it and this node's `_physics_process` is off
-## until the batch gives the tick back (it stops flying the ship, the ship leaves it, the setting goes off).
+## until the ship leaves the batch.
 func set_batch_owned(owned: bool) -> void:
 	if owned == _batch_owned:
 		return
@@ -526,13 +518,6 @@ func set_batch_owned(owned: bool) -> void:
 
 func is_batch_owned() -> bool:
 	return _batch_owned
-
-
-## Flies this node's own model for this tick at once (the batch gave the tick back inside the tick, after the engine listed
-## what processes this tick).
-func fly_own_tick_now(delta: float) -> void:
-	if is_inside_tree() and can_process() and not _batch_owned:
-		_physics_process(delta)
 
 
 ## The batch draws this tick's reaction mass for a batched ship (only when the tank is finite).
@@ -642,8 +627,8 @@ func set_far_dot(on: bool) -> void:
 # A far dot's ship is not interpolated: nothing of it is drawn but a dot, so a rebase has no history to reset on its nodes
 # (M4-T14). Back near, it blends again from where it is.
 func _apply_far_interpolation() -> void:
-	var off: bool = _far_dot and bool(Settings.get_value(&"far_ship_interpolation_off"))
-	var mode: Node.PhysicsInterpolationMode = Node.PHYSICS_INTERPOLATION_MODE_OFF if off else Node.PHYSICS_INTERPOLATION_MODE_INHERIT
+	var mode: Node.PhysicsInterpolationMode = Node.PHYSICS_INTERPOLATION_MODE_OFF if _far_dot \
+			else Node.PHYSICS_INTERPOLATION_MODE_INHERIT
 	if physics_interpolation_mode == mode:
 		return
 	physics_interpolation_mode = mode
@@ -682,7 +667,7 @@ func _apply_newtonian_body() -> void:
 	can_sleep = false
 	continuous_cd = false
 	# Nothing connects body_entered; the direct state's contact list (the ram resolver's) needs only the count (M4-T35).
-	contact_monitor = bool(Settings.get_value(&"ship_contact_monitor"))
+	contact_monitor = false
 	max_contacts_reported = CONTACTS_REPORTED
 	if collision_layer == 1 and collision_mask == 1:  # layers a caller already chose before the ship entered the tree stay
 		_apply_collision_layers()
@@ -690,13 +675,9 @@ func _apply_newtonian_body() -> void:
 
 # AI ships (the lean ones) sit on the fighter layer (M4-T14); every other ship keeps the default layer and collides with everything.
 func _apply_collision_layers() -> void:
-	if bool(Settings.get_value(&"collision_layers")):
-		var kind: StringName = &"fighter" if lean else &"player"
-		collision_layer = CollisionLayers.layer_of(kind)
-		collision_mask = CollisionLayers.mask_of(kind)
-	else:
-		collision_layer = 1
-		collision_mask = 1
+	var kind: StringName = &"fighter" if lean else &"player"
+	collision_layer = CollisionLayers.layer_of(kind)
+	collision_mask = CollisionLayers.mask_of(kind)
 
 
 # A lean ship (M4-T11) needs no first-person interior and no camera anchor; the empty plume holder goes too (`ShipAssembly` puts its
@@ -859,13 +840,6 @@ func set_livery(p_livery: Livery) -> void:
 func _apply_livery() -> void:
 	if livery != null and hull != null:
 		livery.apply(hull)
-
-
-func _on_hull_setting_changed(key: StringName, _value: Variant) -> void:
-	if key == &"collision_layers":
-		_apply_collision_layers()
-	elif key == &"far_ship_interpolation_off":
-		_apply_far_interpolation()
 
 
 # A soft red lamp just behind and above the pilot's eyes. Its range stops short of the wings, so it lights only the cockpit frame.

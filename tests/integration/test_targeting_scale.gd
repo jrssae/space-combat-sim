@@ -266,6 +266,7 @@ func test_a_controller_that_asks_chooses_as_one_that_keeps_its_list() -> void:
 	var keeps_seen: Array[int] = _watch(keeps)
 	var asks_seen: Array[int] = _watch(asks)
 	var mismatches: int = 0
+	var sim: SimCore = SimCore.for_tree(get_tree())
 	for step: int in 400:
 		# The world moves on, then the tick's refresh, then a choice.
 		var moved: Targetable = markers[rng.randi_range(0, markers.size() - 1)]
@@ -274,6 +275,7 @@ func test_a_controller_that_asks_chooses_as_one_that_keeps_its_list() -> void:
 			holder.visible = not holder.visible
 		else:
 			holder.position = Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0)) * 30000.0
+		sim.sync_now()  # each step is a tick: the rows are read again before the refresh reads them (M4-T44)
 		keeps.refresh()
 		asks.refresh()
 		var op: int = rng.randi_range(0, 6)

@@ -322,9 +322,8 @@ func _cmd_perf(args: Dictionary) -> String:
 
 func _cmd_native(args: Dictionary) -> PackedStringArray:
 	var loaded: bool = NativeLib.has_class(NativeProbe.NATIVE_CLASS)
-	var out := PackedStringArray(["native library %s, perf_native %s, probe path %s" % [
-			"loaded (%s)" % NativeLib.version(NativeProbe.NATIVE_CLASS) if loaded else "not loaded",
-			"on" if NativeLib.enabled() else "off", NativeProbe.new().path()]])
+	var out := PackedStringArray(["native library %s, probe path %s" % [
+			"loaded (%s)" % NativeLib.version(NativeProbe.NATIVE_CLASS) if loaded else "not loaded", NativeProbe.new().path()]])
 	if args.get(&"action") == &"bench":
 		out.append_array(NativeBoundaryBench.format(NativeBoundaryBench.run()))
 	return out

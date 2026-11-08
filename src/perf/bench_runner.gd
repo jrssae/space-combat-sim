@@ -1,7 +1,7 @@
 class_name BenchRunner
 extends Node
 ## Runs one many-ships benchmark on the live main scene (M4-T01, architecture §17.1): `bench <layout> <n> [seconds]
-## [warmup=<s>] [seed=<k>] [label=<name>] [probe=paired] [rebase_m=<m>] [sleep=keep] [rocks=<count>]`. Sets the scene up from
+## [warmup=<s>] [seed=<k>] [label=<name>] [probe=paired] [rebase_m=<m>] [sleep=keep] [rocks=<count>] [capitals=<share>]`. Sets the scene up from
 ## the pools, warms up, records ticks with the `PerfProbe`, writes the report and puts back what it changed; the ships stay in
 ## play.
 ##
@@ -26,7 +26,7 @@ const MAX_SLOWDOWN: float = 10.0
 ## The console waits this many frames at most; the run releases the wait when it ends.
 const HOLD_FRAMES: int = 1_000_000
 const DEFAULT_ROOT: String = "res://reports/perf"
-const OPTION_KEYS: Array[String] = ["warmup", "seed", "label", "probe", "rebase_m", "sleep", "rocks"]
+const OPTION_KEYS: Array[String] = ["warmup", "seed", "label", "probe", "rebase_m", "sleep", "rocks", "capitals"]
 ## A carrier's launch leaves its bay this much faster than the carrier, along its nose, m/s.
 const LAUNCH_MPS: float = 80.0
 
@@ -61,7 +61,7 @@ func _init() -> void:
 
 func _ready() -> void:
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"bench",
-			"Fly a benchmark layout (%s) with n ships from the pools, measure [seconds] (30) after warmup=<s> (5), and write reports/perf/<label>/ (seed=<k> label=<name> probe=paired rebase_m=<m> rocks=<count>)"
+			"Fly a benchmark layout (%s) with n ships from the pools, measure [seconds] (30) after warmup=<s> (5), and write reports/perf/<label>/ (seed=<k> label=<name> probe=paired rebase_m=<m> rocks=<count> capitals=<share>)"
 			% ", ".join(PackedStringArray(BenchLayout.NAMES)),
 			[ConsoleArg.enum_required(&"layout", BenchLayout.NAMES), ConsoleArg.int_required(&"n", 1, 2000),
 			ConsoleArg.string_rest(&"options").make_optional("")]), _cmd_bench, self)
@@ -75,10 +75,12 @@ func _exit_tree() -> void:
 
 
 ## Reads the words after `bench <layout> <n>`: an optional window in seconds first, then `key=value` options.
-## `{"ok", "error", "seconds", "warmup", "seed", "label", "paired", "rebase_m", "keep_sleep", "rocks"}` (`rocks` -1: the mix's).
+## `{"ok", "error", "seconds", "warmup", "seed", "label", "paired", "rebase_m", "keep_sleep", "rocks", "capitals"}` (`rocks` and
+## `capitals`, the capital share, -1: the mix's).
 static func parse_options(words: PackedStringArray) -> Dictionary:
 	var out: Dictionary = {"ok": true, "error": "", "seconds": DEFAULT_SECONDS, "warmup": DEFAULT_WARMUP_S, "seed": 1, "label": "",
-			"paired": false, "rebase_m": REBASE_THRESHOLD_M, "keep_sleep": false, "rocks": -1}
+			"paired": false, "rebase_m": REBASE_THRESHOLD_M, "keep_sleep": false, "rocks": -1,
+			"capitals": -1.0}
 	for i: int in words.size():
 		var word: String = words[i]
 		var pair: PackedStringArray = word.split("=", true, 1)
@@ -119,6 +121,10 @@ static func parse_options(words: PackedStringArray) -> Dictionary:
 				if not text.is_valid_int() or int(text) < 0:
 					return _bad("rocks must be a count, 0 or more")
 				out["rocks"] = int(text)
+			"capitals":
+				if not text.is_valid_float() or float(text) < 0.0 or float(text) > 1.0:
+					return _bad("capitals must be a share from 0 to 1")
+				out["capitals"] = float(text)
 			_:
 				return _bad("unknown option '%s' (%s)" % [key, ", ".join(PackedStringArray(OPTION_KEYS))])
 	return out
@@ -182,6 +188,7 @@ func _set_up_scene() -> void:
 	DebugConsole.flags.invulnerable = true
 	for c: Combatant in main.ships.alive():
 		main.ships.release(c)
+	BenchLayout.capital_share = float(_options.get("capitals", -1.0))
 	var plan: Array[Dictionary] = BenchLayout.plan(_layout, _n, int(_options["seed"]))
 	if TierDirector.current() != null:
 		TierDirector.current().seed_value = int(_options["seed"])  # the tier's rolls follow the bench's seed (M4-T22)
@@ -404,6 +411,7 @@ func _put_back() -> void:
 	probe.stages_enabled = true
 	probe.enabled = bool(_restore["probe"])
 	OS.low_processor_usage_mode_sleep_usec = int(_restore["sleep"])
+	BenchLayout.capital_share = -1.0
 	DebugConsole.flags.invulnerable = bool(_restore["god"])
 	if main != null and is_instance_valid(main.world):
 		main.world.auto_rebase_distance_m = float(_restore["threshold"])

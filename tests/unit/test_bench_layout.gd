@@ -207,6 +207,16 @@ func test_battle_and_typical_are_layouts_that_fight() -> void:
 		assert_false(BenchLayout.FIGHTER_LAYOUTS.has(layout))
 
 
+func test_the_capital_share_override_sets_the_battles_capitals() -> void:
+	BenchLayout.capital_share = 0.2
+	var plan: Array[Dictionary] = BenchLayout.plan(BenchLayout.BATTLE, 1000, 1)
+	var capitals: int = int(BenchLayout.mix(BenchLayout.BATTLE, 1000)["capitals"])
+	BenchLayout.capital_share = -1.0
+	assert_eq(capitals, 200, "20 % of 1 000")
+	assert_eq(_of_kind(plan, BenchLayout.KIND_CAPITAL).size(), 200, "the plan places them")
+	assert_eq(int(BenchLayout.mix(BenchLayout.BATTLE, 1000)["capitals"]), 150, "back to the profile's 15 %")
+
+
 func test_battle_holds_the_mix_with_a_quarter_of_the_capitals_a_side() -> void:
 	for n: int in [50, 100, 300, 500]:
 		var plan: Array[Dictionary] = BenchLayout.plan(BenchLayout.BATTLE, n, 1)

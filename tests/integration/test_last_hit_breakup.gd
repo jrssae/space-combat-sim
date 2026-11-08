@@ -177,6 +177,7 @@ func test_the_same_holds_for_an_ally_and_for_a_ram() -> void:
 
 
 func test_the_instructors_hull_type_breaks_up_the_same_way() -> void:
+	main.free()  # one world per tree (M4-T42)
 	var scenario: Main = _new_main("res://data/scenarios/instructor_route.json")
 	add_child_autofree(scenario)
 	await _ticks(2)

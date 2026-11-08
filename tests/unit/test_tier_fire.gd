@@ -4,9 +4,9 @@ extends GutTest
 ## geometry and the shooter's skill, the damage landing through the target's `Damageable` with no bolt row; a near ship's
 ## bolt hits a tier row; a tier kill goes through the destruction director (pool release, the event with its blast); a far
 ## capital's guns and beams roll once a second, its interceptors remove hostile missiles in reach and its launches resolve
-## at launch. Every test runs on both of T24's schedules (Q54). Skips, saying why, when the library is not built.
+## at launch. Every test runs on the threaded step (M4-T37 ended Q54's both-schedules rule).
 
-const SCHEDULES: Array[StringName] = [&"threaded", &"inline"]
+const SCHEDULES: Array[StringName] = [&"threaded"]  # M4-T37: the inline step and Q54's both-schedules rule are gone
 const RADIUS_M: float = 10000.0
 
 var w: TierWorld
@@ -15,7 +15,7 @@ var _saved: Dictionary = {}
 
 func before_each() -> void:
 	_saved = TierWorld.save_settings()
-	TierWorld.use_native(RADIUS_M)
+	TierWorld.set_tier(RADIUS_M)
 	Settings.set_value(&"tier_hz", 20.0)
 	Settings.set_value(&"tier_brain_hz", 4.0)
 	Settings.set_value(&"friendly_fire", false)
@@ -32,13 +32,6 @@ func after_each() -> void:
 	Factions.reset()
 	ContactScan.invalidate()
 	await get_tree().physics_frame
-
-
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there is no tier to fight in")
-	return true
 
 
 func _world(raiders: int, allies: int) -> void:
@@ -69,8 +62,6 @@ func _tiered(c: Combatant) -> bool:
 
 
 func test_the_hit_chance_follows_the_range_the_size_and_the_skill() -> void:
-	if _skipped():
-		return
 	await _world(1, 0)
 	var core: Object = w.sim.core
 	# range, target radius, hit radius, muzzle speed, aim error (rad), the gate's miss distance (m), the bolt's reach (m)
@@ -89,8 +80,6 @@ func test_the_hit_chance_follows_the_range_the_size_and_the_skill() -> void:
 
 
 func test_a_tier_fighter_thinks_at_tier_brain_hz_in_the_step() -> void:
-	if _skipped():
-		return
 	for schedule: StringName in SCHEDULES:
 		await _world(2, 0)
 		_use_schedule(schedule)
@@ -112,8 +101,6 @@ func test_a_tier_fighter_thinks_at_tier_brain_hz_in_the_step() -> void:
 
 
 func test_a_tier_fighter_steers_by_its_brain() -> void:
-	if _skipped():
-		return
 	for schedule: StringName in SCHEDULES:
 		await _world(1, 1)
 		_use_schedule(schedule)
@@ -133,8 +120,6 @@ func test_a_tier_fighter_steers_by_its_brain() -> void:
 
 
 func test_a_tier_fighter_rolls_its_shots_and_hurts_its_target_through_its_damageable() -> void:
-	if _skipped():
-		return
 	for schedule: StringName in SCHEDULES:
 		await _world(1, 1)
 		_use_schedule(schedule)
@@ -159,8 +144,6 @@ func test_a_tier_fighter_rolls_its_shots_and_hurts_its_target_through_its_damage
 
 
 func test_the_rolls_are_seeded_one_thread_and_six_roll_the_same_hits() -> void:
-	if _skipped():
-		return
 	for schedule: StringName in SCHEDULES:
 		var runs: Array = []
 		for threads: int in [1, 6]:
@@ -188,8 +171,6 @@ func test_the_rolls_are_seeded_one_thread_and_six_roll_the_same_hits() -> void:
 
 
 func test_a_near_ships_bolt_hits_a_tier_row() -> void:
-	if _skipped():
-		return
 	for schedule: StringName in SCHEDULES:
 		await _world(1, 0)
 		_use_schedule(schedule)
@@ -211,8 +192,6 @@ func test_a_near_ships_bolt_hits_a_tier_row() -> void:
 
 
 func test_a_tier_kill_goes_through_the_destruction_director_with_its_blast() -> void:
-	if _skipped():
-		return
 	for schedule: StringName in SCHEDULES:
 		await _world(1, 0)
 		_use_schedule(schedule)
@@ -243,8 +222,6 @@ func test_a_tier_kill_goes_through_the_destruction_director_with_its_blast() -> 
 
 
 func test_a_near_death_carries_its_blast_too() -> void:
-	if _skipped():
-		return
 	await _world(1, 0)
 	var target: Combatant = w.pool.acquire("NEAR", w.world.to_universe(Vector3(0.0, 0.0, -500.0)), Basis.IDENTITY,
 			Vector3.ZERO, IdleBrain.new())
@@ -264,8 +241,6 @@ func test_a_near_death_carries_its_blast_too() -> void:
 
 
 func test_a_tier_capitals_guns_and_beams_roll_once_a_second_against_fighters_in_range() -> void:
-	if _skipped():
-		return
 	for schedule: StringName in SCHEDULES:
 		await _world(2, 0)
 		_use_schedule(schedule)
@@ -287,8 +262,6 @@ func test_a_tier_capitals_guns_and_beams_roll_once_a_second_against_fighters_in_
 
 
 func test_a_tier_capitals_launch_resolves_at_launch_and_counts_in_flight() -> void:
-	if _skipped():
-		return
 	for schedule: StringName in SCHEDULES:
 		await _world(2, 0)
 		_use_schedule(schedule)
@@ -312,8 +285,6 @@ func test_a_tier_capitals_launch_resolves_at_launch_and_counts_in_flight() -> vo
 
 
 func test_a_tier_capitals_interceptors_remove_hostile_missiles_in_reach() -> void:
-	if _skipped():
-		return
 	for schedule: StringName in SCHEDULES:
 		await _world(0, 1)
 		_use_schedule(schedule)
@@ -348,8 +319,6 @@ func _host() -> Object:
 
 
 func test_tier_thinks_are_counted_and_timed() -> void:
-	if _skipped():
-		return
 	for schedule: StringName in SCHEDULES:
 		await _world(4, 0)
 		_use_schedule(schedule)
@@ -367,8 +336,6 @@ func test_tier_thinks_are_counted_and_timed() -> void:
 
 
 func test_a_hit_does_not_wake_a_tier_think_outside_its_beat() -> void:
-	if _skipped():
-		return
 	for schedule: StringName in SCHEDULES:
 		await _world(1, 1)
 		_use_schedule(schedule)
@@ -389,8 +356,6 @@ func test_a_hit_does_not_wake_a_tier_think_outside_its_beat() -> void:
 
 
 func test_a_far_capitals_missile_is_shot_down_by_its_targets_interceptors() -> void:
-	if _skipped():
-		return
 	for schedule: StringName in SCHEDULES:
 		await _world(2, 0)
 		_use_schedule(schedule)
@@ -418,8 +383,6 @@ func test_a_far_capitals_missile_is_shot_down_by_its_targets_interceptors() -> v
 
 
 func test_a_far_missile_does_not_land_on_a_respawned_target_or_a_hulk() -> void:
-	if _skipped():
-		return
 	for schedule: StringName in SCHEDULES:
 		await _world(1, 0)
 		_use_schedule(schedule)
@@ -447,8 +410,6 @@ func test_a_far_missile_does_not_land_on_a_respawned_target_or_a_hulk() -> void:
 
 
 func test_a_committed_rammer_in_the_tier_lands_ram_damage() -> void:
-	if _skipped():
-		return
 	for schedule: StringName in SCHEDULES:
 		await _world(1, 1)
 		_use_schedule(schedule)
@@ -480,8 +441,6 @@ func test_a_committed_rammer_in_the_tier_lands_ram_damage() -> void:
 
 
 func test_the_rolls_follow_the_seed() -> void:
-	if _skipped():
-		return
 	var runs: Array = []
 	for seed_value: int in [7, 7, 8]:
 		await _world(4, 4)
@@ -502,8 +461,6 @@ func test_the_rolls_follow_the_seed() -> void:
 
 
 func test_a_rolled_hit_lands_on_a_hulk_and_a_shooters_pending_hits_land_after_its_promotion() -> void:
-	if _skipped():
-		return
 	for schedule: StringName in SCHEDULES:
 		await _world(2, 0)
 		_use_schedule(schedule)
@@ -524,8 +481,6 @@ func test_a_rolled_hit_lands_on_a_hulk_and_a_shooters_pending_hits_land_after_it
 
 
 func test_a_near_rammer_lands_ram_damage_on_a_tier_target() -> void:
-	if _skipped():
-		return
 	for schedule: StringName in SCHEDULES:
 		await _world(1, 1)
 		_use_schedule(schedule)
@@ -556,8 +511,6 @@ func test_a_near_rammer_lands_ram_damage_on_a_tier_target() -> void:
 
 
 func test_a_tier_kill_by_a_roll_frees_its_wing_slot_raises_the_kill_and_the_slot_is_refilled() -> void:
-	if _skipped():
-		return
 	var main := (load("res://src/game/main.tscn") as PackedScene).instantiate() as Main
 	main.input_source = FakeInputSource.new()
 	main.scenario_path = ScenarioLoader.FREE_FLIGHT_PATH
@@ -592,8 +545,6 @@ func test_a_tier_kill_by_a_roll_frees_its_wing_slot_raises_the_kill_and_the_slot
 
 
 func test_a_tier_think_skips_the_avoidance_a_tier_row_cannot_use() -> void:
-	if _skipped():
-		return
 	for schedule: StringName in SCHEDULES:
 		for tier_on: bool in [false, true]:
 			await _world(2, 0)

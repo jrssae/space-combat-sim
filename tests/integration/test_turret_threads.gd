@@ -12,16 +12,7 @@ const RAIDER: StringName = &"raider_fighter"
 const RAIDER_AI: Dictionary = {"type": "ai", "profile": "raider"}
 
 
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there are no turrets to thread")
-	return true
-
-
 func test_threaded_equals_delayed_tick_for_tick() -> void:
-	if _skipped():
-		return
 	var delayed: Dictionary = await _fight(&"delayed", 6)
 	var threaded: Dictionary = await _fight(&"threaded", 6)
 	assert_gt(int(delayed["shots"]), 4, "the turrets fired (%d shots)" % int(delayed["shots"]))
@@ -37,8 +28,6 @@ func test_threaded_equals_delayed_tick_for_tick() -> void:
 
 
 func test_one_thread_and_six_give_the_same_fight() -> void:
-	if _skipped():
-		return
 	var one: Dictionary = await _fight(&"threaded", 1)
 	var six: Dictionary = await _fight(&"threaded", 6)
 	assert_gt(int(one["shots"]), 4, "the turrets fired (%d shots)" % int(one["shots"]))
@@ -50,8 +39,6 @@ func test_one_thread_and_six_give_the_same_fight() -> void:
 func test_the_own_hull_blocking_fire_is_the_same_on_every_schedule_and_thread_count() -> void:
 	# Q33 (M5-T16): a Saturn 4 transport's own hull hides some of four raiders from its turrets; the blocked picks (in the
 	# AI job) and the blocked shots (in the main thread's step) must land the same bits every way the step can run.
-	if _skipped():
-		return
 	if not MeshAssets.read_manifest("saturn_4_transport").has("turret"):
 		pending("the Saturn 4 is not generated (scripts/gen_assets.sh)")
 		return

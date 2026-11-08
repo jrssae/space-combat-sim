@@ -11,6 +11,11 @@ extends MultiMeshInstance3D
 ## so a frame writes a dot's place, paint and size only, and ships turning together cost one refresh, at the frame's end (M4-T36).
 ## It is shiftable, so a rebase moves the written dots with everything else at once (no frame draws one at its old place); it then
 ## goes back to the origin and moves the dots instead, so its own offset never grows. A parked or freed ship draws none. Visual only.
+##
+## Tier rows (M4-T23, §17.14): the fighters in the low-attention tier have no node to draw; their rows in the native core are a
+## second source, written by the core into the same buffer after the ships' dots each frame (paint and radius set when the
+## ship was demoted, `TierDirector`), so every far ship, near or tier, is still this one draw call. A promotion parks no node and
+## takes the row in the same tick, so a ship is drawn by its body or its row, never both and never neither.
 
 const NODE_NAME: String = "FarDots"
 const SHADER: Shader = preload("res://assets/shaders/far_ship_dot.gdshader")
@@ -33,6 +38,9 @@ var _buffer: PackedFloat32Array = PackedFloat32Array()
 var _shown: int = 0
 ## Refreshes so far (tests: ships that turn together cost one).
 var refresh_count: int = 0
+## Tier rows drawn by the last refresh (M4-T23), and that refresh's time, us (a readout, wall clock).
+var tier_shown: int = 0
+var last_refresh_us: int = 0
 # A ship turned this frame: one refresh at the frame's end draws it (the frame's own may have run, or this node may be new).
 var _refresh_queued: bool = false
 
@@ -114,9 +122,9 @@ func remove(ship: Ship) -> void:
 		_queue_refresh()
 
 
-## Dots drawn since the last refresh.
+## Dots drawn since the last refresh, the tier rows' among them.
 func dot_count() -> int:
-	return _shown
+	return _shown + tier_shown
 
 
 ## The global position of dot `index`.
@@ -145,20 +153,16 @@ func instance_transform(index: int) -> Transform3D:
 
 ## Writes every shown far ship at its drawn pose. `_process` calls it each frame; public for the tests.
 func refresh() -> void:
+	var started: int = Time.get_ticks_usec()  # a readout, never gameplay time
 	refresh_count += 1
 	var n: int = 0
 	for i: int in range(_ships.size() - 1, -1, -1):
 		if not is_instance_valid(_ships[i]) or not _ships[i].is_inside_tree():
 			_forget(i)
-	if _ships.size() > multimesh.instance_count:
-		var first_new: int = multimesh.instance_count
-		multimesh.instance_count = maxi(_ships.size(), multimesh.instance_count * 2)  # grows rarely, never shrinks
-		_buffer.resize(multimesh.instance_count * STRIDE)
-		for slot: int in range(first_new, multimesh.instance_count):
-			var b: int = slot * STRIDE  # the dots never turn: each slot's rotation is the identity, written once
-			_buffer[b] = 1.0
-			_buffer[b + 5] = 1.0
-			_buffer[b + 10] = 1.0
+	var sim: SimCore = SimCore.for_tree(get_tree()) if is_inside_tree() else null
+	var core: Object = sim.core if sim != null else null
+	var tier_dots: int = int(core.tier_dot_count()) if core != null else 0
+	_ensure_slots(_ships.size() + tier_dots)
 	var to_local: Transform3D = global_transform.affine_inverse()
 	for i: int in _ships.size():
 		var ship: Ship = _ships[i]
@@ -176,7 +180,27 @@ func refresh() -> void:
 		_buffer[base + 15] = _radii[i]
 		n += 1
 	_shown = n
+	tier_shown = 0
+	if tier_dots > 0:
+		var filled: Array = core.tier_fill_dots(_buffer, n, -position)  # rows are World-local
+		_buffer = filled[0]
+		tier_shown = int(filled[1])
 	_upload()
+	last_refresh_us = Time.get_ticks_usec() - started
+
+
+# Room for `count` dots: the multimesh grows rarely and never shrinks; a new slot's rotation is the identity, written once.
+func _ensure_slots(count: int) -> void:
+	if count <= multimesh.instance_count:
+		return
+	var first_new: int = multimesh.instance_count
+	multimesh.instance_count = maxi(count, multimesh.instance_count * 2)
+	_buffer.resize(multimesh.instance_count * STRIDE)
+	for slot: int in range(first_new, multimesh.instance_count):
+		var b: int = slot * STRIDE
+		_buffer[b] = 1.0
+		_buffer[b + 5] = 1.0
+		_buffer[b + 10] = 1.0
 
 
 func _queue_refresh() -> void:
@@ -199,13 +223,13 @@ func _forget(at: int) -> void:
 func _upload() -> void:
 	if multimesh.instance_count > 0:
 		RenderingServer.multimesh_set_buffer(multimesh.get_rid(), _buffer)
-	multimesh.visible_instance_count = _shown
+	multimesh.visible_instance_count = _shown + tier_shown
 
 
 # The rebase moved this node with the world; back to the origin, with the dots moved instead.
 func _on_rebased(offset: Vector3) -> void:
 	position += offset
-	for i: int in _shown:
+	for i: int in _shown + tier_shown:
 		var base: int = i * STRIDE
 		_buffer[base + 3] -= offset.x
 		_buffer[base + 7] -= offset.y

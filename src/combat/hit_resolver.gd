@@ -9,10 +9,10 @@ extends Node
 ## stepped yet). A bounding-sphere test comes first, then each hit volume inflated by the bolt's hit radius; the earliest
 ## hit wins. The sphere test runs in `HitBroadPhase` (M4-T08, §17.7), which finds the pairs that pass it without testing every
 ## pair, natively when the library is loaded; the resolver sweeps only those, in the same order, so the hits are the same.
-## With the native core on (M4-T15, `SimCore`), the hulls and bolts come as columns from the core's rows (the bolts read
-## again at this priority, since they moved at 0) and the broad phase pairs them natively from the same rows; the resolver
-## then looks up only the nodes the pairs name. Without it, the resolver walks the tree as before (the reference).
-## With the core owning the bolts (M4-T35, `perf_native_bolt_rows`), a bolt's shooter, faction, damage and tint are columns
+## The hulls and bolts come as columns from the native core's rows (M4-T15, `SimCore`; the bolts read again at this
+## priority, since they moved at 0) and the broad phase pairs them natively from the same rows; the resolver then looks up
+## only the nodes the pairs name. Every world has a core (M4-T42); a tree with no world has nothing to resolve.
+## With the core owning the bolts (M4-T35), a bolt's shooter, faction, damage and tint are columns
 ## of the table and a hit spends the row in the core; a projectile that still has a node (a beam, a missile, the player's
 ## bolts) is spent through its node as before.
 ## Every projectile kind (bolt, beam, missile, mine) is swept alike, with its own hit radius; a beam (M4-T12) lives for one
@@ -47,25 +47,21 @@ var hulls_last_tick: int = 0
 var static_pairs_visited: int = 0
 ## Wall-clock microseconds of the last tick's gather of hulls and bolts (a readout only).
 var gather_us: int = 0
-## Finds the pairs that pass the bounding-sphere test (M4-T08); a test may swap in its own.
+## Finds the pairs that pass the bounding-sphere test (M4-T08), natively over the core's rows.
 var broad_phase: HitBroadPhase = HitBroadPhase.new()
-## False keeps the resolver on its own gather of the tree even when the native core is on (M4-T15), for pairing the two.
-var use_core: bool = true
 
-# This tick's hulls (columns, index j) and projectiles (columns, index i), refilled every tick: from the native core's rows
-# (M4-T15) or from the resolver's own walk of the tree. Nodes are looked up only for the pairs the broad phase gives.
+# This tick's hulls (columns, index j) and projectiles (columns, index i), refilled every tick from the native core's rows
+# (M4-T15). Nodes are looked up only for the pairs the broad phase gives.
 var _hull_count: int = 0
 var _body_ids := PackedInt64Array()
 var _hull_ids := PackedInt64Array()
 var _starts := PackedVector3Array()
 var _velocities := PackedVector3Array()
 var _bases := PackedVector3Array()  # three columns (the x, y and z axes) a hull
-var _mids := PackedVector3Array()  # the own walk only: what `HitBroadPhase.pairs` takes
-var _reach := PackedFloat64Array()
 var _damageables: Array[Damageable] = []  # per hull, looked up when first needed (null until then)
 var _to_body: Dictionary = {}  # hull -> Basis, transposed when first needed
 var _bolt_ids := PackedInt64Array()
-# The bolts in launch order (the core's, M4-T35); empty on the own walk, whose group order is launch order already.
+# The bolts in launch order (the core's, M4-T35).
 var _bolt_order := PackedInt32Array()
 var _hull_first := PackedInt32Array()
 var _hull_next := PackedInt32Array()
@@ -74,10 +70,8 @@ var _rock_next := PackedInt32Array()
 var _bolt_starts := PackedVector3Array()
 var _bolt_ends := PackedVector3Array()
 var _bolt_radii := PackedFloat64Array()
-var _bolt_mids := PackedVector3Array()  # the own walk only
-var _bolt_reach := PackedFloat64Array()
 var _beams := PackedInt32Array()
-# What a hit lands with, per bolt (M4-T35): from the core's columns, or from the nodes on the own walk.
+# What a hit lands with, per bolt (M4-T35), from the core's columns.
 var _bolt_shooters := PackedInt64Array()
 var _bolt_factions: Array = []
 var _bolt_damage := PackedFloat64Array()
@@ -85,7 +79,7 @@ var _bolt_colors := PackedColorArray()
 var _bolt_owned: int = 0  # rows at the front the core owns (spent in the core, not through a node)
 var _sim: SimCore = null
 var _delta: float = 0.0
-var _source: StringName = &"tree"
+var _source: StringName = &"none"
 var _gather_frame: int = -1
 # The rocks (M4-T29): their grid, kept until a rock changes, and the earliest rock hit `_earliest_rock` found.
 var _rocks: HitBroadPhase = HitBroadPhase.new()
@@ -117,9 +111,9 @@ func _ready() -> void:
 		&"pairs_visited": {"get": func() -> int: return pairs_visited,
 				"doc": "Bolt and ship pairs the broad phase put to the distance cull on the last tick (the work)"},
 		&"hit_path": {"get": func() -> String: return String(broad_phase.path()),
-				"doc": "Which code finds the pairs worth sweeping: native or gdscript"},
+				"doc": "Which code finds the pairs worth sweeping: native, or none without the library"},
 		&"source": {"get": func() -> String: return String(_source),
-				"doc": "Where the last tick's hulls and bolts came from: core (the native core's rows, M4-T15) or tree (the resolver's own walk)"},
+				"doc": "Where the last tick's hulls and bolts came from: core (the native core's rows, M4-T15), or none with no core in the tree"},
 		&"gather_us": {"get": func() -> int: return gather_us, "unit": "us",
 				"doc": "Cost of the last tick's gather of hulls and bolts (profiling only, wall clock)"},
 		&"resolve_us": {"get": func() -> int: return resolve_us, "unit": "us",
@@ -153,9 +147,11 @@ func resolve(delta: float) -> void:
 	gather_us = Time.get_ticks_usec() - started_us
 	hulls_last_tick = _hull_count
 	projectiles_last_tick = _bolt_ids.size()
+	if sim == null:
+		resolve_us = Time.get_ticks_usec() - started_us
+		return
 	var hull_count: int = _hull_count
-	var keys: PackedInt64Array = broad_phase.pairs_core(sim.core, delta) if sim != null \
-			else broad_phase.pairs(_bolt_mids, _bolt_reach, _mids, _reach)
+	var keys: PackedInt64Array = broad_phase.pairs_core(sim.core, delta)
 	pairs_visited = broad_phase.visited
 	var rock_keys: PackedInt64Array = _rock_pairs(sim)
 	var rock_count: int = _solid.ids.size()
@@ -205,7 +201,7 @@ func _pair_ranges(keys: PackedInt64Array, count: int, first_out: PackedInt32Arra
 		next_out[i] = at
 
 
-## Where the last gather came from: &"tree" (the resolver's own walk) or &"core" (the native core's rows, M4-T15).
+## Where the last gather came from: &"core" (the native core's rows, M4-T15), or &"none" with no core in the tree.
 func source() -> StringName:
 	return _source
 
@@ -213,17 +209,17 @@ func source() -> StringName:
 ## The broad phase alone, for the parity tests (M4-T15): `[keys, visited]`, the keys as `resolve` sees them.
 func broad_phase_pairs(delta: float) -> Array:
 	var sim: SimCore = _gather(delta)
-	var keys: PackedInt64Array = broad_phase.pairs_core(sim.core, delta) if sim != null \
-			else broad_phase.pairs(_bolt_mids, _bolt_reach, _mids, _reach)
-	return [keys, broad_phase.visited]
+	if sim == null:
+		return [PackedInt64Array(), 0]
+	return [broad_phase.pairs_core(sim.core, delta), broad_phase.visited]
 
 
-# This tick's hulls and bolts: from the core when it is on (the core it read, returned), else from the tree.
+# This tick's hulls and bolts from the core's rows (the core it read, returned); none, and null, with no core in the tree.
 func _gather(delta: float) -> SimCore:
 	_delta = delta
 	_damageables.clear()
 	_to_body.clear()
-	var sim: SimCore = SimCore.for_tree(get_tree()) if use_core and broad_phase.native_available() else null
+	var sim: SimCore = SimCore.for_tree(get_tree())
 	if sim != null and _synced(sim):
 		_source = &"core"
 		var hulls: Array = sim.core.sweep_columns()
@@ -231,7 +227,6 @@ func _gather(delta: float) -> SimCore:
 		_hull_ids = hulls[1]
 		_starts = hulls[3]
 		_velocities = hulls[4]
-		_reach = hulls[5]
 		_bases = hulls[6]
 		_hull_count = _body_ids.size()
 		var bolts: Array = sim.core.bolt_columns()
@@ -246,14 +241,14 @@ func _gather(delta: float) -> SimCore:
 		_bolt_colors = bolts[9]
 		_bolt_owned = int(bolts[11])
 		_bolt_order = bolts[14]
-		_mids.clear()
-		_bolt_mids.clear()
-		_bolt_reach.clear()
 	else:
-		_source = &"tree"
-		_gather_targets(delta)
-		_gather_bolts()
+		_source = &"none"
 		sim = null
+		_hull_count = 0
+		_bolt_ids.clear()
+		_bolt_order.clear()
+		_beams.clear()
+		_bolt_owned = 0
 	_sim = sim
 	_damageables.resize(_hull_count)
 	return sim
@@ -268,72 +263,6 @@ func _synced(sim: SimCore) -> bool:
 	if again:
 		return sim.sync_now() and sim.sync_bolts_now()
 	return sim.ensure_bolts_synced()
-
-
-# The own walk: everything about the active hulls that does not depend on the bolt, as of this tick's start, and the
-# spheres the broad phase takes.
-func _gather_targets(delta: float) -> void:
-	_body_ids.clear()
-	_hull_ids.clear()
-	_starts.clear()
-	_velocities.clear()
-	_bases.clear()
-	_mids.clear()
-	_reach.clear()
-	for node: Node in get_tree().get_nodes_in_group(Damageable.GROUP):
-		var damageable := node as Damageable
-		if damageable == null or not damageable.is_active():
-			continue
-		var body: Node3D = damageable.body()
-		var velocity: Vector3 = Vector3.ZERO
-		if body is RigidBody3D:
-			velocity = (body as RigidBody3D).linear_velocity
-		var basis: Basis = body.global_basis
-		_body_ids.append(body.get_instance_id())
-		_hull_ids.append(damageable.get_instance_id())
-		_starts.append(body.global_position)
-		_velocities.append(velocity)
-		_bases.append(basis.x)
-		_bases.append(basis.y)
-		_bases.append(basis.z)
-		_mids.append(body.global_position + velocity * (0.5 * delta))
-		_reach.append(damageable.bounding_radius + velocity.length() * delta * 0.5)
-	_hull_count = _body_ids.size()
-
-
-# The own walk: every live projectile and the sphere round the segment it flew this tick.
-func _gather_bolts() -> void:
-	_bolt_ids.clear()
-	_bolt_starts.clear()
-	_bolt_ends.clear()
-	_bolt_radii.clear()
-	_bolt_mids.clear()
-	_bolt_reach.clear()
-	_beams.clear()
-	_bolt_shooters.clear()
-	_bolt_factions.clear()
-	_bolt_damage.clear()
-	_bolt_colors.clear()
-	_bolt_owned = 0
-	_bolt_order.clear()
-	for node: Node in get_tree().get_nodes_in_group(Projectile.GROUP):
-		var bolt := node as Projectile
-		if bolt == null or bolt.is_spent() or bolt.is_queued_for_deletion() or not bolt.is_inside_tree():
-			continue
-		if bolt.kind == Projectile.KIND_BEAM:
-			_beams.append(_bolt_ids.size())
-		var p1: Vector3 = bolt.global_position
-		var start: Vector3 = p1 - bolt.last_step
-		_bolt_ids.append(bolt.get_instance_id())
-		_bolt_starts.append(start)
-		_bolt_ends.append(p1)
-		_bolt_radii.append(bolt.hit_radius_m)
-		_bolt_mids.append(start + bolt.last_step * 0.5)
-		_bolt_reach.append(bolt.last_step.length() * 0.5 + bolt.hit_radius_m)
-		_bolt_shooters.append(bolt.shooter_id)
-		_bolt_factions.append(bolt.faction)
-		_bolt_damage.append(bolt.damage)
-		_bolt_colors.append(bolt.color)
 
 
 # Bolt `i`'s node, or null when it is gone or the bolt is a row the core owns.
@@ -391,12 +320,10 @@ func _rock_pairs(sim: SimCore) -> PackedInt64Array:
 	if solid != _solid:
 		_solid = solid
 		_rocks.keep(solid.positions, solid.radii)
-	_rocks.use_native = broad_phase.use_native
 	static_pairs_visited = 0
 	if solid.ids.is_empty():
 		return PackedInt64Array()
-	var keys: PackedInt64Array = _rocks.kept_pairs_core(sim.core) if sim != null \
-			else _rocks.kept_pairs(_bolt_mids, _bolt_reach)
+	var keys: PackedInt64Array = _rocks.kept_pairs_core(sim.core)
 	static_pairs_visited = _rocks.visited
 	return keys
 

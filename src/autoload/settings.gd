@@ -121,7 +121,8 @@ func revert() -> Error:
 			for key: StringName in schema.keys():
 				var file_key: String = _file_key(cfg, key)
 				if not file_key.is_empty():
-					var result: Dictionary = schema.validate(key, _from_config(key, cfg.get_value(_SECTION, file_key)))
+					var raw: Variant = schema.retired_value(key, cfg.get_value(_SECTION, file_key))
+					var result: Dictionary = schema.validate(key, _from_config(key, raw))
 					if result["ok"]:
 						loaded[key] = result["value"]
 					else:

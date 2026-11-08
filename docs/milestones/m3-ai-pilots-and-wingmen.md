@@ -2,7 +2,7 @@
 
 > "Others who fly." (`docs/roadmap.md`)
 
-**Status:** planned 2026-10-21 on branch `m3`. The maintainer answered the planning questions the same day (below). M2's
+**Status:** accepted and merged into `main`. The status as it stood while the milestone ran, kept as history: planned 2026-10-21 on branch `m3`. The maintainer answered the planning questions the same day (below). M2's
 (A) work is done; its AC20 (saved control profile) and AC21 (sound) still wait for a re-test and do not block M3.
 Extended 2026-10-28 at the maintainer's request with splat LOD and a visual pass (Q22, Q23; T19-T25).
 Agent work finished 2026-11-02 (T12). Open: AC12's balance, which the maintainer holds; AC13's resolver clause, which holds at the 99th percentile but not for the worst tick under load, also the maintainer's to accept; and the (H) checklist in `docs/playtest.md`. AC13's and AC21's wall-clock budgets are asserted on the maintainer's machine and only recorded on CI. Every other (A) criterion passes. The maintainer gave the word on 2026-11-02 to merge into `main` once the tests pass, with these carried.

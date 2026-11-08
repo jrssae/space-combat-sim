@@ -1,25 +1,21 @@
 // The hit resolver's broad phase in native code, behind HitBroadPhase (M4-T08, docs/architecture.md 17.7). The grid and
-// the sweep are `kernels::sweep`; this class holds the grids between calls and crosses the boundary.
+// the sweep are `sweep_cells`; this class holds the grids between calls and crosses the boundary.
 // gdext's class derive writes `base: base` in the code it generates for this module.
 #![allow(clippy::redundant_field_names)]
 use godot::prelude::*;
 
-use crate::kernels::sweep::{self, Grid};
+use crate::kernels::sweep;
 use crate::sim_core::ScsSimCore;
 use crate::sweep_cells::{self, CellGrid};
 
 /// Which projectile and hull pairs pass the hit resolver's bounding-sphere test this tick, found through a grid of levels so
-/// a 10 m fighter and a 1 km hull are both found cheaply. Repeats `HitBroadPhase`'s GDScript step for step: the same levels,
-/// the same cells, the same fallbacks, the sphere test in 32-bit vectors and 64-bit scalars, so both paths give the same pairs
-/// and the same work count. Hulls that stay put (rocks, M4-T29) can be kept in a grid of their own between calls (`keep`).
+/// a 10 m fighter and a 1 km hull are both found cheaply (the sphere test in 32-bit vectors and 64-bit scalars). Hulls that stay put (rocks, M4-T29) can be kept in a grid of their own between calls (`keep`).
 /// With the core (M4-T15) the hulls and bolts come from its rows.
 #[derive(GodotClass)]
 #[class(base=RefCounted, init)]
 pub struct ScsHitSweep {
     base: Base<RefCounted>,
     visited: i64,
-    grid: Grid,
-    kept: Grid,
     kept_mids: Vec<Vector3>,
     kept_reach: Vec<f64>,
     candidates: Vec<u32>,
@@ -28,8 +24,6 @@ pub struct ScsHitSweep {
     hull_reach: Vec<f64>,
     bolt_mids: Vec<Vector3>,
     bolt_reach: Vec<f64>,
-    // The grids with hashed cells (M4-T34): the same pairs and work, found faster; off keeps the sorted grids, the reference.
-    cells: bool,
     cell_grid: CellGrid,
     cell_kept: CellGrid,
 }
@@ -48,20 +42,6 @@ impl ScsHitSweep {
         self.visited
     }
 
-    /// Whether the grids keep their cells in hash maps (M4-T34, the default from `HitBroadPhase`); off keeps the sorted
-    /// cells, the reference. Both give the same pairs and the same work count.
-    #[func]
-    fn set_cells(&mut self, on: bool) {
-        self.cells = on;
-    }
-
-    #[func]
-    fn cells(&self) -> bool {
-        self.cells
-    }
-
-    /// `HitBroadPhase.pairs`: the pairs that pass the sphere test, as `bolt * hulls + hull`, ascending. Returns nothing, after
-    /// logging why, when the arrays do not line up.
     #[func]
     fn pairs(
         &mut self,
@@ -175,13 +155,11 @@ impl ScsHitSweep {
                 hull_mids.len(),
                 hull_reach.len()
             );
-            self.kept.place(&[], &[]);
             self.cell_kept.place(&[], &[]);
             return false;
         }
         self.kept_mids = hull_mids.as_slice().to_vec();
         self.kept_reach = hull_reach.as_slice().to_vec();
-        self.kept.place(&self.kept_mids, &self.kept_reach);
         self.cell_kept.place(&self.kept_mids, &self.kept_reach);
         true
     }
@@ -215,31 +193,19 @@ impl ScsHitSweep {
         if self.kept_mids.is_empty() || self.bolt_mids.is_empty() {
             return PackedInt64Array::new();
         }
-        let out = if self.cells {
-            sweep_cells::sweep(
-                &self.cell_kept,
-                &self.bolt_mids,
-                &self.bolt_reach,
-                &self.kept_mids,
-                &self.kept_reach,
-                &mut self.candidates,
-                &mut self.visited,
-            )
-        } else {
-            sweep::sweep(
-                &self.kept,
-                &self.bolt_mids,
-                &self.bolt_reach,
-                &self.kept_mids,
-                &self.kept_reach,
-                &mut self.candidates,
-                &mut self.visited,
-            )
-        };
+        let out = sweep_cells::sweep(
+            &self.cell_kept,
+            &self.bolt_mids,
+            &self.bolt_reach,
+            &self.kept_mids,
+            &self.kept_reach,
+            &mut self.candidates,
+            &mut self.visited,
+        );
         PackedInt64Array::from(out.as_slice())
     }
 
-    // Places the hulls in this call's grid and sweeps the bolts against it, through the hashed cells or the sorted ones.
+    // Places the hulls in this call's grid and sweeps the bolts against it.
     fn placed_sweep(
         &mut self,
         bolts: &[Vector3],
@@ -247,28 +213,15 @@ impl ScsHitSweep {
         hulls: &[Vector3],
         hull_reach: &[f64],
     ) -> Vec<i64> {
-        if self.cells {
-            self.cell_grid.place(hulls, hull_reach);
-            sweep_cells::sweep(
-                &self.cell_grid,
-                bolts,
-                bolt_reach,
-                hulls,
-                hull_reach,
-                &mut self.candidates,
-                &mut self.visited,
-            )
-        } else {
-            self.grid.place(hulls, hull_reach);
-            sweep::sweep(
-                &self.grid,
-                bolts,
-                bolt_reach,
-                hulls,
-                hull_reach,
-                &mut self.candidates,
-                &mut self.visited,
-            )
-        }
+        self.cell_grid.place(hulls, hull_reach);
+        sweep_cells::sweep(
+            &self.cell_grid,
+            bolts,
+            bolt_reach,
+            hulls,
+            hull_reach,
+            &mut self.candidates,
+            &mut self.visited,
+        )
     }
 }

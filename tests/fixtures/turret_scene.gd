@@ -4,9 +4,7 @@ extends RefCounted
 ## and the native core, ships built by `ShipAssembly` and turrets mounted on them by hand (or from their hardpoints), the
 ## step's schedule and thread count set, and the settings put back when it is freed.
 
-const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_native_flight",
-		&"perf_native_bolt_rows", &"perf_native_commands", &"perf_native_driver_step", &"perf_threads", &"perf_step_threads",
-		&"sim_step", &"ai_think_rate"]
+const SETTINGS: Array[StringName] = [&"perf_threads", &"perf_step_threads", &"sim_step", &"ai_think_rate"]
 const WEAPON_PATH: String = ShipAssembly.DEFAULT_TURRET_WEAPON
 ## The hand-mounted turrets fire the light turret at this interval, so a few seconds of a mechanics test carry several shots
 ## whatever the balance fight tunes the real gun to (`test_turret_defence` fires the real one from the hardpoints).
@@ -24,14 +22,12 @@ var hits: Array = []
 var _saved: Dictionary = {}
 
 
-## A new scene under `parent` with the step `mode` (`threaded`, `delayed` or `inline`) and `threads` worker threads.
+## A new scene under `parent` with the step `mode` (`threaded` or `delayed`) and `threads` worker threads.
 static func build(parent: Node, mode: StringName = &"threaded", threads: int = 1) -> TurretScene:
 	var scene := TurretScene.new()
 	for key: StringName in SETTINGS:
 		scene._saved[key] = Settings.get_value(key)
-	for key: StringName in [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_native_flight",
-			&"perf_native_bolt_rows", &"perf_native_commands", &"perf_native_driver_step", &"ai_think_rate"]:
-		Settings.set_value(key, true)
+	Settings.set_value(&"ai_think_rate", true)
 	Settings.set_value(&"sim_step", mode)
 	Settings.set_value(&"perf_threads", threads)
 	Settings.set_value(&"perf_step_threads", 0 if threads > 1 else 1)
@@ -132,4 +128,3 @@ func free_scene(tree: SceneTree) -> void:
 			Settings.set_value(key, _saved[key])
 	Factions.reset()
 	ContactScan.invalidate()
-	NativeBrains.drop()

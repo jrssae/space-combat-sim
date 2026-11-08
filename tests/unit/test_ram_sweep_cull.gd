@@ -2,21 +2,12 @@ extends GutTest
 ## The ram resolver's swept test with its early rejects (M4-T34): before placing a hull's volumes in the other's frame, the
 ## hull's bounding sphere, and then each volume's, swept over the tick and padded, must reach the other hull's box, or no volume
 ## can. The rejects only skip work whose answer is "no ram", so the answer is the same bit for bit: seeded pairs of a many-volume
-## fighter and a one-box capital (and the other way round, and two fighters), near misses, grazes and hits, swept both ways
-## with `perf_ram_sweep_cull` on and off, give the same hits at the same points.
+## fighter and a one-box capital (and the other way round, and two fighters), near misses, grazes and hits, swept both ways,
+## give the hits at the points the test gave without the rejects (recorded in `tests/fixtures/parity/ram_sweep_cull.json`
+## before M4-T37 removed `perf_ram_sweep_cull`).
 
+const FIXTURE: String = "ram_sweep_cull"
 const PAIRS: int = 1500
-
-var _saved: Variant
-
-
-func before_each() -> void:
-	_saved = Settings.get_value(&"perf_ram_sweep_cull")
-
-
-func after_each() -> void:
-	Settings.set_value(&"perf_ram_sweep_cull", _saved)
-
 
 # A fighter-like hull of many boxes and capsules round its origin.
 func _fighter(rng: RandomNumberGenerator) -> Damageable:
@@ -55,18 +46,32 @@ func _capital(rng: RandomNumberGenerator) -> Damageable:
 # A hull as `RamResolver._hull` gives it, at `at` with `basis`, moving by `move` over the tick.
 func _entry(hull: Damageable, at: Vector3, basis: Basis, move: Vector3) -> Dictionary:
 	return {"damageable": hull, "body": null, "id": hull.get_instance_id(), "rigid": true, "basis": basis,
-			"to_body": basis.transposed(), "mass": 1.0, "velocity": move * 60.0, "start": at, "end": at + move, "accel": Vector3.ZERO}
+			"to_body": basis.transposed(), "mass": 1.0, "velocity": move * 60.0, "start": at, "end": at + move}
 
 
 func test_the_rejects_change_no_answer() -> void:
+	var recorded: Variant = ParityFixture.stored(FIXTURE, "pairs_seed_3401")
+	assert_not_null(recorded, "the answers without the rejects were recorded")
+	if recorded == null:
+		return
+	var culled: Dictionary = _sweeps()
+	gut.p("%d hits among %d sweeps; volumes placed %d without the rejects (recorded), %d with them" % [int(culled["hits"]),
+			PAIRS * 4, int(recorded["placed"]), int(culled["placed"])])
+	assert_lt(float(culled["placed"]), float(recorded["placed"]) / 2.0, "the rejects spare most of the placing")
+	assert_eq(int(culled["count"]), int(recorded["count"]), "as many sweeps as the recording")
+	assert_eq(culled["answers"], recorded["answers"], "the same answer to every sweep as without the rejects (recorded, M4-T37)")
+	assert_gt(int(culled["hits"]), PAIRS / 10, "enough of the pairs met to compare their points")
+	assert_lt(int(culled["hits"]), PAIRS * 3, "and enough missed for the rejects to work")
+
+
+# The seeded pairs swept both ways, deep and shallow: a digest of every answer, the volumes placed and the hits.
+func _sweeps() -> Dictionary:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 3401
 	var resolver := RamResolver.new()
-	autofree(resolver)
-	assert_true(Settings.get_value(&"perf_ram_sweep_cull") is bool, "the setting exists")
 	var hits: int = 0
-	var placed := PackedInt64Array([0, 0])
-	var differences := PackedStringArray()
+	var placed: int = 0
+	var answers: Array = []
 	for p: int in PAIRS:
 		var big: Damageable = _capital(rng) if p % 3 != 2 else _fighter(rng)
 		var small: Damageable = _fighter(rng)
@@ -83,19 +88,10 @@ func test_the_rejects_change_no_answer() -> void:
 				Vector3(rng.randf_range(-1.0, 1.0), 0.0, rng.randf_range(-1.0, 1.0)))
 		for order: Array in [[a, b], [b, a]]:
 			for deep: bool in [true, false]:
-				Settings.set_value(&"perf_ram_sweep_cull", false)
 				var before: int = resolver.volumes_placed
-				var plain: Dictionary = resolver._sweep_pair(order[0], order[1], deep)
-				placed[0] += resolver.volumes_placed - before
-				Settings.set_value(&"perf_ram_sweep_cull", true)
-				before = resolver.volumes_placed
-				var culled: Dictionary = resolver._sweep_pair(order[0], order[1], deep)
-				placed[1] += resolver.volumes_placed - before
-				if var_to_str(plain) != var_to_str(culled):
-					differences.append("pair %d: %s against %s" % [p, var_to_str(plain), var_to_str(culled)])
-				hits += 0 if plain.is_empty() else 1
-	gut.p("%d hits among %d sweeps; volumes placed %d without the rejects, %d with them" % [hits, PAIRS * 4, placed[0], placed[1]])
-	assert_lt(placed[1], placed[0] / 2, "the rejects spare most of the placing")
-	assert_eq(differences.size(), 0, "the same answer with and without the rejects: %s" % ", ".join(differences.slice(0, 5)))
-	assert_gt(hits, PAIRS / 10, "enough of the pairs met to compare their points")
-	assert_lt(hits, PAIRS * 3, "and enough missed for the rejects to work")
+				var answer: Dictionary = resolver._sweep_pair(order[0], order[1], deep)
+				placed += resolver.volumes_placed - before
+				answers.append(var_to_str(answer))
+				hits += 0 if answer.is_empty() else 1
+	resolver.free()
+	return {"answers": ParityFixture.digest(answers), "count": answers.size(), "placed": placed, "hits": hits}

@@ -110,7 +110,7 @@ static func run_markdown(s: Dictionary) -> String:
 					float(tier.get("capitals_us", 0.0)), float(tier.get("capital_rows", 0.0)), float(tier.get("per_capital_us", 0.0)),
 					float(tier.get("thinks_per_tick", 0.0)), int(tier.get("thinks_max", 0)), float(tier.get("think_us", 0.0)),
 					float(tier.get("per_fighter_think_us", 0.0)), String(tier.get("think_schedule", "")),
-					"the main thread" if String(tier.get("think_schedule", "")) == "inline" else "the worker thread",
+					"the worker thread" if String(tier.get("think_schedule", "")) == "threaded" else "the main thread",
 					int(tier.get("shots", 0)), int(tier.get("hits", 0)), int(tier.get("capital_rolls", 0)), int(weapons.get("tier_capital_hits", 0))])
 	lines.append("")
 	lines.append_array(_breakdown_table(s.get("stages", {}) as Dictionary, float(s.get("sync_timed_share", 0.0))))

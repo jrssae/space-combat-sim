@@ -2,23 +2,16 @@ extends GutTest
 ## The engine voices' ship query on the core (M5-T28, D60): `ScsSimCore.ships_near` lists the ships with a node within a
 ## radius of the listener, nearest first, from the rows the main thread holds after the tick's sync. Tier rows, other kinds
 ## and parked ships are never listed, a rebase moves the answer with the ships, and 300 ships far away leave the answer (and
-## so the re-rank's work) as it was. Light bodies stand in for ships (a rigid body with a marker and a hull). Skips, saying
-## why, when the library is not built.
+## so the re-rank's work) as it was. Light bodies stand in for ships (a rigid body with a marker and a hull).
 
 const SPEC_PATH: String = "res://assets/ships/starfury_aurora.tres"
 const LAYOUT_PATH: String = "res://tests/fixtures/hardpoints_nominal.json"
-const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core"]
 
 var world: WorldFrame
 var projectiles: Node3D
-var _saved: Dictionary = {}
 
 
 func before_each() -> void:
-	for key: StringName in SETTINGS:
-		_saved[key] = Settings.get_value(key)
-	Settings.set_value(&"perf_native", true)
-	Settings.set_value(&"perf_native_core", true)
 	Factions.reset()
 	ContactScan.invalidate()
 	ContactScan.clear_statics()
@@ -33,16 +26,7 @@ func before_each() -> void:
 func after_each() -> void:
 	ContactScan.clear_statics()
 	ContactScan.invalidate()
-	for key: StringName in SETTINGS:
-		Settings.set_value(key, _saved[key])
 	Factions.reset()
-
-
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there is no core to query")
-	return true
 
 
 func _core() -> SimCore:
@@ -93,8 +77,6 @@ func _near(sim: SimCore, radius: float = EngineVoices.AUDIBLE_RANGE_M) -> Array:
 
 
 func test_ships_in_earshot_come_back_nearest_first_with_their_squared_distance() -> void:
-	if _skipped():
-		return
 	var far: RigidBody3D = _ship(Vector3(0.0, 0.0, -900.0))
 	var close: RigidBody3D = _ship(Vector3(30.0, 40.0, 0.0))
 	var mid: RigidBody3D = _ship(Vector3(0.0, 400.0, 0.0))
@@ -109,8 +91,6 @@ func test_ships_in_earshot_come_back_nearest_first_with_their_squared_distance()
 
 
 func test_other_kinds_parked_ships_and_tier_rows_are_never_listed() -> void:
-	if _skipped():
-		return
 	var live: RigidBody3D = _ship(Vector3(0.0, 0.0, 100.0))
 	_ship(Vector3(0.0, 0.0, 110.0), Targetable.Kind.CAPITAL)
 	var parked: RigidBody3D = _ship(Vector3(0.0, 0.0, 120.0))
@@ -127,8 +107,6 @@ func test_other_kinds_parked_ships_and_tier_rows_are_never_listed() -> void:
 
 
 func test_ships_far_away_leave_the_answer_as_it_was() -> void:
-	if _skipped():
-		return
 	var near: Array[RigidBody3D] = [_ship(Vector3(0.0, 0.0, 100.0)), _ship(Vector3(0.0, 0.0, 200.0)), _ship(Vector3(0.0, 0.0, 300.0))]
 	var sim: SimCore = _core()
 	_sync(sim)
@@ -144,8 +122,6 @@ func test_ships_far_away_leave_the_answer_as_it_was() -> void:
 
 
 func test_a_rebase_moves_the_answer_with_the_ships() -> void:
-	if _skipped():
-		return
 	var ship: RigidBody3D = _ship(Vector3(0.0, 0.0, 5000.0))
 	var sim: SimCore = _core()
 	_sync(sim)

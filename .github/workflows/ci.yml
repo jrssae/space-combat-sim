@@ -1,12 +1,12 @@
 name: CI
 
-# Python generator tests, asset generation, the optional native library, headless Godot import, compile check and GUT,
+# Python generator tests, asset generation, the native library (required), headless Godot import, compile check and GUT,
 # all without a GPU.
 # Anything that needs a GPU is verified by a human, never here (docs/architecture.md, section 12).
 
 on:
-  # Doc-only commits (plans, milestones, research notes) change no code or test, so they skip the 40-minute run; info.md stays
-  # in, because a test checks the console command list against it.
+  # Doc-only commits (plans, milestones, research notes) change no code or test, so they skip the run; info.md stays in,
+  # because a test checks the console command list against it (test_info_md).
   push:
     paths:
       - "**"
@@ -25,15 +25,16 @@ permissions:
 
 jobs:
   test:
-    # GUT takes about 25 minutes on the maintainer's machine, more than one runner job should hold, so two jobs share it
-    # (scripts/run_tests.sh, GUT_SHARD); shard 1 also runs the Python tests and the console smoke runs.
-    name: test (GUT shard ${{ matrix.shard }} of 2)
+    # GUT takes about 40 minutes on the maintainer's machine, more than one runner job should hold, so three jobs share it
+    # (scripts/run_tests.sh, GUT_SHARD); shard 1 also runs the Python tests and the console smoke runs. At M4-T25 the jobs
+    # took 24, 17 and 15 minutes. A shard's GUT timeout (40 minutes, run_tests.sh) fires before this job limit.
+    name: test (GUT shard ${{ matrix.shard }} of 3)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3]
     steps:
       - name: Check out
         uses: actions/checkout@v4
@@ -87,7 +88,7 @@ jobs:
       - name: Run tests
         run: scripts/run_tests.sh
         env:
-          GUT_SHARD: ${{ matrix.shard }}/2
+          GUT_SHARD: ${{ matrix.shard }}/3
           # The slow files (the long seeded parity fights, the pending balance runs) run here (M4-T36, Q58).
           GUT_SLOW: "1"
 

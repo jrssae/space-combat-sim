@@ -295,6 +295,8 @@ func test_a_missions_objectives_fill_the_right_panel() -> void:
 
 
 func test_the_running_missions_objectives_are_wired_in_from_main() -> void:
+	main.free()  # one world per tree (M4-T42): the free-flight Main leaves before the mission's comes
+	await _ticks(2)
 	var mission_main: Main = (load("res://src/game/main.tscn") as PackedScene).instantiate() as Main
 	mission_main.input_source = source
 	mission_main.scenario_path = "res://tests/fixtures/missions/test_mission.json"

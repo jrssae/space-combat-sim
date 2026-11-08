@@ -15,14 +15,13 @@ extends Node
 ## Threads (M4-T18): the core's per-ship passes (the brains, which `BrainBatch`, an internal child at -9, hands one batch a
 ## tick, and the flight step) run on `perf_threads` worker threads, set at once whenever the setting changes.
 ##
-## The core's state from events (M4-T35b, `perf_core_event_columns`): a body's activity is checked again only when it is
+## The core's state from events (M4-T35b): a body's activity is checked again only when it is
 ## touched (hidden, shown, destroyed: the events this facade already watched), its hull column follows `Damageable.damaged`
 ## and `restored`, its selection column every change a `TargetingController` makes (`note_selection_changed`); the columns are written to the rows at the
-## sync points, so the rows hold what a read at the sync would. `perf_core_body_direct` reads the rigid bodies from the
-## physics server's direct state by RID. The AI targeting controllers' selection check runs here at their priority
-## (`SimCoreTargeting`, `perf_native_selection_check`), and the ram resolver's contact read in one native call.
+## sync points, so the rows hold what a read at the sync would. The AI targeting controllers' selection check runs here at
+## their priority (`SimCoreTargeting`), and the ram resolver's contact read in one native call.
 ##
-## Bolts as rows (M4-T35, `perf_native_bolt_rows`): the core owns its bolts. Every cannon but the player's registers with
+## Bolts as rows (M4-T35): the core owns its bolts. Every cannon but the player's registers with
 ## `ScsCannons` (`register_cannon`), and an internal `SimCoreStep` child at priority 1 (after the drivers, `Main` and the
 ## World's rebase at 0, before the targeting at 100 and the resolvers) steps every cannon's gate in one call, spawns each
 ## shot as an owned bolt row, hands the shots back to their cannons (the flash, the signal), and then steps every owned
@@ -35,9 +34,9 @@ extends Node
 ## and victim here (`note_hit`, the attacker memory), a destroyed hull is forgotten there, and the turrets' pick rides in
 ## the AI job (`BrainBatch`), which launches for them even when no AI ship thinks.
 ##
-## The first consumer attaches it to the world (`attach`, as `FlightBatch` does); `for_tree` gives it to the classes
-## that read it, or null when the library lacks the class or `perf_native` or `perf_native_core` is off, and then each
-## class loads its own copy as before, so a bench pairs the two paths in one process by flipping `perf_native_core`.
+## Every world attaches its core as it becomes ready (M4-T42, `WorldFrame`), so it is the one hull read: `for_tree` gives
+## it to the classes that read it, or null in a tree with no world. One world per tree: a second world, while the first
+## world's core is live, is refused its core (with one error).
 ## Console: provider `core`.
 
 const NATIVE_CLASS: StringName = &"ScsSimCore"
@@ -68,21 +67,18 @@ const KIND_STATIC: int = 5
 const KIND_PROP: int = 6
 const KIND_BOLT: int = 7
 const KIND_BEAM: int = 8
-## Row flags (`ScsSimCore`): a rigid body, a hull, an active hull, a row added after the tick's first sync, a low-attention
-## tier row (M4-T21), a hulk.
+## Row flags (`ScsSimCore`) GDScript reads: a rigid body, a hull, an active hull, a low-attention tier row (M4-T21).
 const FLAG_RIGID: int = 1
 const FLAG_HULL: int = 2
 const FLAG_HULL_ACTIVE: int = 4
-const FLAG_LATE: int = 8
 const FLAG_TIER: int = 16
-const FLAG_HULK: int = 32
 
-# The latest core attached to a tree (-1 for the class check: classes never change while the game runs).
+# The latest core attached to a tree.
 static var _current: SimCore = null
-static var _native_class_known: int = -1
-static var _cannons_class_known: int = -1
 # The civilian ships by body id (M5-T21): every core is told, so the turrets defend them.
 static var _civilians: Dictionary[int, bool] = {}
+## Warnings that bodies were asked about in a tree with no world (said once a run).
+static var no_world_warnings: int = 0
 
 ## The native core (`ScsSimCore`); null until `_ready`.
 var core: Object = null
@@ -111,16 +107,15 @@ var _statics_version: int = -1
 var _out: Node = null
 var _bolts_fresh: bool = false  # the bolts were read again since this tick's first sync
 var _bolt_sync: Object = null  # the bolt reader (M4-T34), made on first use
-var _bolt_sync_known: int = -1
 var _tick_open: bool = false  # a sync_in since the last sync_out: the next sync_in closes the tick's count, as the core's does
 var _cannons_by_slot: Dictionary[int, PulseCannon] = {}
 var _selection_controllers: Dictionary[int, TargetingController] = {}
+var _refused_a_world: bool = false  # a second world was refused while this core was live (said once)
 ## Selections the core's check cleared in the last tick (a readout).
 var selection_clears_last_tick: int = 0
 var _bolt_mesh: BoltMesh = null
 ## The defensive turrets on the core (M5-T21).
 var turrets: TurretRows = null
-const _NO_NODES: Array[Node] = []
 
 
 ## Runs `sync_out` last in every physics tick (an internal child, so World's children stay its world objects).
@@ -179,8 +174,6 @@ func _ready() -> void:
 	_bolt_mesh = BoltMesh.new(self)
 	add_child(_bolt_mesh, false, Node.INTERNAL_MODE_BACK)
 	_apply_threads()
-	_apply_bolt_rows()
-	_apply_state_settings()
 	if not Settings.changed.is_connected(_on_setting_changed):
 		Settings.changed.connect(_on_setting_changed)
 	_hook(get_tree())
@@ -201,69 +194,56 @@ func _exit_tree() -> void:
 		Settings.changed.disconnect(_on_setting_changed)
 	if world != null and is_instance_valid(world) and world.rebased.is_connected(_on_rebased):
 		world.rebased.disconnect(_on_rebased)
+	DebugConsole.registry.unregister_owner(self)
+	NativeBrains.drop_for(core)
 	if _current == self:
 		_current = null
-	DebugConsole.registry.unregister_owner(self)
 	PulseCannon.rebind_all()
 	TargetingController.rebind_all()
 	TurretMount.rebind_all()
 
 
 func _physics_process(_delta: float) -> void:
-	if enabled():
-		ensure_synced()
+	ensure_synced()
 
 
-## Whether the library provides the core and the settings ask for it (read on every call, so a flip takes effect at once).
-static func enabled() -> bool:
-	if not NativeLib.enabled() or not bool(Settings.get_value(&"perf_native_core")):
-		return false
-	if _native_class_known < 0:
-		_native_class_known = 1 if NativeLib.has_class(NATIVE_CLASS) else 0
-	return _native_class_known == 1
-
-
-## The core under `world`, made on first ask; null without a world or when the core is off.
+## The core under `world`, made on first ask; null without a world, and null with
+## one error when another world's core is live: one world per tree.
 static func attach(p_world: Node) -> SimCore:
-	if p_world == null or not is_instance_valid(p_world) or not p_world.is_inside_tree() or not enabled():
+	if p_world == null or not is_instance_valid(p_world) or not p_world.is_inside_tree():
 		return null
 	var found := p_world.get_node_or_null(NodePath(NODE_NAME)) as SimCore
 	if found != null:
 		return found
+	var live: SimCore = current()
+	if live != null and live.is_inside_tree():
+		if not live._refused_a_world:
+			live._refused_a_world = true
+			push_error("SimCore: %s is a second world while %s has the core; one world per tree, so it gets none"
+					% [p_world.get_path(), live.get_parent().get_path()])
+		return null
 	var made := SimCore.new()
 	made.world = p_world as WorldFrame
 	p_world.add_child(made)
 	return made
 
 
-## The core the classes of `tree` read now, or null (none attached, or the core is off).
+## The core the classes of `tree` read now, or null (no world in the tree, so none attached). Bodies in a tree with no
+## world get no contacts, hits or rams, so the first such ask in a run warns.
 static func for_tree(tree: SceneTree) -> SimCore:
-	if _current == null or not is_instance_valid(_current) or _current.core == null or not enabled():
-		return null
-	if not _current.is_inside_tree() or _current.get_tree() != tree:
-		return null
-	return _current
+	if _current != null and is_instance_valid(_current) and _current.core != null and _current.is_inside_tree() \
+			and _current.get_tree() == tree:
+		return _current
+	if no_world_warnings == 0 and tree != null and (tree.has_group(Damageable.GROUP) or tree.has_group(Targetable.GROUP)):
+		no_world_warnings += 1
+		push_warning("SimCore: bodies in a tree with no world, so no core: they get no contacts, hits or rams "
+				+ "(build them under a WorldFrame)")
+	return null
 
 
 ## The latest core, whichever tree, or null.
 static func current() -> SimCore:
 	return _current if _current != null and is_instance_valid(_current) else null
-
-
-## Whether the core owns the bolts when it runs (M4-T35): the core on, `perf_native_bolt_rows` on and the library's cannons.
-static func bolt_rows_enabled() -> bool:
-	if not enabled() or not bool(Settings.get_value(&"perf_native_bolt_rows")):
-		return false
-	if _cannons_class_known < 0:
-		_cannons_class_known = 1 if NativeLib.has_class(CANNONS_CLASS) else 0
-	return _cannons_class_known == 1
-
-
-## Whether the AI targeting controllers' selection check runs on the core (M4-T35): the core on, the setting on, and the
-## event columns (the check reads the selection the events last gave).
-static func selection_check_enabled() -> bool:
-	return enabled() and bool(Settings.get_value(&"perf_native_selection_check")) \
-			and bool(Settings.get_value(&"perf_core_event_columns"))
 
 
 ## A ship's selection changed (`TargetingController` says so on every change): the latest core notes it for its selection
@@ -304,12 +284,7 @@ func turret_count() -> int:
 
 ## Whether this core owns its bolts now.
 func bolt_rows_on() -> bool:
-	return core != null and bool(core.bolt_rows())
-
-
-## Which path the bolts fly now: &"rows" (the core's own rows, M4-T35) or &"nodes" (a `Projectile` node each).
-func bolt_rows_path() -> StringName:
-	return &"rows" if bolt_rows_on() else &"nodes"
+	return core != null and cannons != null
 
 
 ## Makes sure this physics frame's first sync ran; true when the core holds this frame's rows.
@@ -478,26 +453,6 @@ func static_positions() -> PackedVector3Array:
 	return core.static_positions() if core != null else PackedVector3Array()
 
 
-## Rows with no node (the seam T20 builds on): `add_row` takes a Dictionary (`kind`, `id`, `faction`, `radius`, `flags`,
-## `position`, `velocity`, `basis`, `angular`, `command`, `state`) and gives a handle; `row` gives it back.
-func add_row(p_row: Dictionary) -> int:
-	return int(core.add_row(p_row)) if core != null else -1
-
-
-func row(handle: int) -> Dictionary:
-	return core.row(handle) if core != null else {}
-
-
-func set_row_command(handle: int, command: PackedFloat64Array) -> void:
-	if core != null:
-		core.set_row_command(handle, command)
-
-
-func remove_row(handle: int) -> void:
-	if core != null:
-		core.remove_row(handle)
-
-
 # --- bolts as rows (M4-T35) ---------------------------------------------------------------------------------------
 
 
@@ -545,19 +500,6 @@ func owned_bolts() -> int:
 	return int(core.owned_bolts()) if core != null else 0
 
 
-# Tells the core whether it owns the bolts, as the setting stands.
-func _apply_bolt_rows() -> void:
-	if core != null:
-		core.set_bolt_rows(bolt_rows_enabled())
-
-
-# Tells the core how it keeps its state (M4-T35b), as the settings stand.
-func _apply_state_settings() -> void:
-	if core != null:
-		core.set_event_columns(bool(Settings.get_value(&"perf_core_event_columns")))
-		core.set_body_direct(bool(Settings.get_value(&"perf_core_body_direct")))
-
-
 ## Engine calls of the last closed tick: `[sync, fallbacks]` (the sync points' reads, and the flight step's reads of the
 ## physics server for ships without a row; the kernels make none by construction, see `native/src/kernels.rs`).
 func engine_calls() -> PackedInt64Array:
@@ -569,14 +511,9 @@ func engine_calls() -> PackedInt64Array:
 	return calls
 
 
-## Which code reads the bolts at the sync points now: &"reader" (`BOLT_SYNC_CLASS`, M4-T34) or &"core" (the core's own).
-func bolt_path() -> StringName:
-	return &"reader" if _bolt_reader() != null else &"core"
-
-
-## Which path the classes take now: &"native" with the core on, else &"gdscript".
+## Which path the classes take now: &"native" with the core's native class, else &"none" (the game refuses to start then).
 func path() -> StringName:
-	return &"native" if core != null and enabled() else &"gdscript"
+	return &"native" if core != null else &"none"
 
 
 func _sync_in() -> void:
@@ -591,14 +528,11 @@ func _sync_in() -> void:
 	var frame: int = Engine.get_physics_frames()
 	var delta: float = get_physics_process_delta_time()
 	var reader: Object = _bolt_reader()
-	if _bolt_sync != null and _tick_open:
-		_bolt_sync.close_tick()
+	if _tick_open:
+		reader.close_tick()
 	_tick_open = true
-	if reader != null:
-		core.sync_in(_NO_NODES, frame, delta)
-		reader.read(core, tree.get_nodes_in_group(Projectile.GROUP), frame, delta, true, false)
-	else:
-		core.sync_in(tree.get_nodes_in_group(Projectile.GROUP), frame, delta)
+	core.sync_in(frame, delta)
+	reader.read(core, tree.get_nodes_in_group(Projectile.GROUP), frame, delta, true, false)
 	synced_frame = frame
 	bolts_frame = frame
 	_bolts_fresh = false
@@ -608,12 +542,8 @@ func _sync_in() -> void:
 func _sync_bolts() -> void:
 	var started: int = Time.get_ticks_usec()  # readout only
 	var delta: float = get_physics_process_delta_time()
-	var reader: Object = _bolt_reader()
-	if reader != null:
-		core.sync_bolts(_NO_NODES, delta)
-		reader.read(core, get_tree().get_nodes_in_group(Projectile.GROUP), core.tick(), delta, false, true)
-	else:
-		core.sync_bolts(get_tree().get_nodes_in_group(Projectile.GROUP), delta)
+	core.sync_bolts()
+	_bolt_reader().read(core, get_tree().get_nodes_in_group(Projectile.GROUP), core.tick(), delta, false, true)
 	bolts_frame = Engine.get_physics_frames()
 	_bolts_fresh = true
 	bolts_us = Time.get_ticks_usec() - started
@@ -624,14 +554,10 @@ func _on_rebased(offset: Vector3) -> void:
 		core.shift(-offset)
 
 
-# The bolt reader when `perf_native_bolt_sync` asks for it and the library has it (M4-T34), else null.
+# The node bolts' reader (M4-T34), made on first use (the library is required, M4-T37).
 func _bolt_reader() -> Object:
-	if core == null or not bool(Settings.get_value(&"perf_native_bolt_sync")):
-		return null
-	if _bolt_sync_known < 0:
-		_bolt_sync_known = 1 if NativeLib.has_class(BOLT_SYNC_CLASS) else 0
-	if _bolt_sync_known == 1 and _bolt_sync == null:
-		_bolt_sync = NativeLib.instantiate(BOLT_SYNC_CLASS)
+	if _bolt_sync == null:
+		_bolt_sync = ClassDB.instantiate(BOLT_SYNC_CLASS)
 	return _bolt_sync
 
 
@@ -647,13 +573,6 @@ func _apply_threads() -> void:
 func _on_setting_changed(key: StringName, _value: Variant) -> void:
 	if key == &"perf_threads":
 		_apply_threads()
-	elif key == &"perf_native_bolt_rows" or key == &"perf_native_core" or key == &"perf_native":
-		_apply_bolt_rows()
-		PulseCannon.rebind_all()
-		TargetingController.rebind_all()
-	elif key == &"perf_core_event_columns" or key == &"perf_core_body_direct" or key == &"perf_native_selection_check":
-		_apply_state_settings()
-		TargetingController.rebind_all()
 
 
 # --- the tree's changes ------------------------------------------------------------------------------------------
@@ -740,7 +659,7 @@ func _on_hull_destroyed(_info: HitInfo, body_id: int) -> void:
 
 func _register_console() -> void:
 	DebugConsole.registry.register_provider(&"core", ConsoleVars.new({
-		&"path": {"get": path, "doc": "native when the core feeds the scan, the hit sweep, the flight step and the ram broad phase, else gdscript (each loads its own copy)"},
+		&"path": {"get": path, "doc": "native: the core feeds the scan, the hit sweep, the flight step and the ram broad phase (every world since M4-T42); none without the library"},
 		&"rows": {"get": rows, "doc": "Rows in the core: bodies, static rows and rows added after the tick's first sync"},
 		&"bodies": {"get": func() -> int: return int(core.node_count()) if core != null else 0, "doc": "Body rows (active markers and hulls)"},
 		&"statics": {"get": func() -> int: return int(core.static_count()) if core != null else 0, "doc": "Static rows (rocks, mines)"},
@@ -763,7 +682,7 @@ func _register_console() -> void:
 		&"batch_us": {"get": func() -> int: return _batch().call_us if _batch() != null else 0, "unit": "us", "doc": "The last tick's one native call for every native think (BrainBatch); wall clock"},
 		&"live_workers": {"get": func() -> int: return int(core.live_workers()) if core != null else 0, "doc": "Worker threads running now (0 with one thread: a pool is joined before the next starts)"},
 		&"batch_ships": {"get": func() -> int: return _batch().ships if _batch() != null else 0, "doc": "Ships the last tick's brain batch carried"},
-		&"step_mode": {"get": func() -> String: return String(Settings.get_value(&"sim_step")), "doc": "Where the AI step runs (sim_step, M4-T24): threaded (the worker thread, one tick behind), delayed (the main thread, one tick behind) or inline (today's same-tick step)"},
+		&"step_mode": {"get": func() -> String: return String(Settings.get_value(&"sim_step")), "doc": "Where the AI step runs (sim_step, M4-T24): threaded (the worker thread, one tick behind) or delayed (the main thread, one tick behind)"},
 		&"step_launched": {"get": func() -> bool: return _batch() != null and _batch().step_launched(), "doc": "A tick's job is out (launched, not yet joined; M4-T24)"},
 		&"step_us": {"get": func() -> int: return int(_host().step_us()) if _host() != null else 0, "unit": "us", "doc": "The last job's own run time (the brains' batch on its thread; M4-T24); wall clock"},
 		&"step_wait_us": {"get": func() -> int: return int(_host().step_wait_us()) if _host() != null else 0, "unit": "us", "doc": "How long the last join waited for the job (0 when it had finished; M4-T24); wall clock"},
@@ -776,7 +695,6 @@ func _register_console() -> void:
 		&"step_pool": {"get": func() -> int: return int(_host().step_threads_setting()) if _host() != null else 0, "doc": "Where the job's pass runs (perf_step_threads): 1 the step's thread alone, n its own pool of n, 0 the core's pool (M4-T24)"},
 		&"step_pool_workers": {"get": func() -> int: return int(_host().step_pool_workers()) if _host() != null else 0, "doc": "Worker threads of the job's own pool running now (M4-T24)"},
 		&"step_stale": {"get": func() -> int: return _batch().stale_total if _batch() != null else 0, "doc": "Results dropped at the handover because the ship was parked or re-piloted while its job ran (M4-T24)"},
-		&"bolt_path": {"get": func() -> String: return String(bolt_rows_path()), "doc": "rows when the core owns the bolts (M4-T35: the cannon kernel, the bolt step, the multimesh), else nodes (a Projectile node each)"},
 		&"owned_bolts": {"get": owned_bolts, "doc": "Bolt rows the core owns now (M4-T35)"},
 		&"cannons": {"get": cannon_count, "doc": "Cannons firing through the kernel (M4-T35)"},
 		&"cannon_us": {"get": func() -> int: return cannon_us, "unit": "us", "doc": "The last tick's cannon step (every gate, the shots handed back); wall clock"},
@@ -784,8 +702,6 @@ func _register_console() -> void:
 		&"shots": {"get": func() -> int: return shots_last_tick, "doc": "Shots the kernel fired in the last tick"},
 		&"expired": {"get": func() -> int: return expired_last_tick, "doc": "Owned bolts that expired in the last tick"},
 		&"bolt_draws": {"get": func() -> int: return _bolt_mesh.instances_drawn if _bolt_mesh != null else 0, "doc": "Bolt instances the multimesh drew in the last frame (M4-T35)"},
-		&"event_columns": {"get": func() -> bool: return core != null and bool(core.event_columns()), "doc": "The activity, hull and selection columns follow the events (M4-T35) instead of a read a body a tick"},
-		&"body_direct": {"get": func() -> bool: return core != null and bool(core.body_direct()), "doc": "The rigid bodies are read from the physics server's direct state by RID (M4-T35)"},
 		&"watched_selections": {"get": func() -> int: return _selection_controllers.size(), "doc": "AI targeting controllers whose selection check runs on the core (M4-T35)"},
 		&"selection_clears": {"get": func() -> int: return selection_clears_last_tick, "doc": "Selections the core's check cleared in the last tick"},
 		&"turrets": {"get": turret_count, "doc": "Defensive turrets mounted on the core (M5-T21)"},

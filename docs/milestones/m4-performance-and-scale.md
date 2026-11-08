@@ -2,7 +2,7 @@
 
 > "Many ships at once." (`docs/roadmap.md`)
 
-**Status:** Resumed 2026-11-04 (Q43 to Q45): T30d and T15 run side by side, then T31 and the rest of phase 2. Before that, paused 2026-11-04 at a closing spot (maintainer): phase 1 is done and checkpoint 1 signed off (Report P1, Q38 to Q40); T30a to T30c are merged (textured Starfury with wing liveries, the sky without splats); phase 2 (T15 onward) is not started and waits for the maintainer. Next: T30d, T31, then T15. 2026-11-04 (Q29 to Q31): Gaussian splats are dropped; T30a to T30c build the textured mesh pipeline and T31 removes the splat code (the plan subsection "Textured meshes and the end of splats"). Resumed 2026-11-03 (Q14 to Q18): the research's phases 1 to 3 toward 500 ships in one battle. Planned as T07 to T26 on 2026-11-03 and revised the same day for Q20 to Q23 (the plan section below the T06 report; Q19 and Q21 add capital ships, turrets, missiles, mines, asteroids and a typical mission's load; Q20 sets the fullscreen render bar). Paused earlier the same day after the T06 report (45 ships; Q11 to Q13). Earlier: planned 2026-10-28 at the maintainer's request, inserted after M3; the later milestones moved up one (the mission
+**Status:** **Accepted 2026-11-08** (the maintainer's pre-approval, Q72) and merged into `main`: every task done or not needed, AC1 to AC7 met (AC5's headline `battle` 500, 1 000 ships in real time above 60 FPS), Report P3 and the full review's later-milestone findings (L1 to L15) handed to the maintainer with the open questions; the return checklist (`docs/playtest.md`) is the maintainer's next session. Earlier: resumed 2026-11-04 (Q43 to Q45): T30d and T15 run side by side, then T31 and the rest of phase 2. Before that, paused 2026-11-04 at a closing spot (maintainer): phase 1 is done and checkpoint 1 signed off (Report P1, Q38 to Q40); T30a to T30c are merged (textured Starfury with wing liveries, the sky without splats); phase 2 (T15 onward) is not started and waits for the maintainer. Next: T30d, T31, then T15. 2026-11-04 (Q29 to Q31): Gaussian splats are dropped; T30a to T30c build the textured mesh pipeline and T31 removes the splat code (the plan subsection "Textured meshes and the end of splats"). Resumed 2026-11-03 (Q14 to Q18): the research's phases 1 to 3 toward 500 ships in one battle. Planned as T07 to T26 on 2026-11-03 and revised the same day for Q20 to Q23 (the plan section below the T06 report; Q19 and Q21 add capital ships, turrets, missiles, mines, asteroids and a typical mission's load; Q20 sets the fullscreen render bar). Paused earlier the same day after the T06 report (45 ships; Q11 to Q13). Earlier: planned 2026-10-28 at the maintainer's request, inserted after M3; the later milestones moved up one (the mission
 framework is now M5, Epsilon space M6, and so on to voiced dialog, M15). M4 starts when M3 is accepted and merged into `main`,
 on branch `m4`, unless the maintainer pulls it forward.
 
@@ -101,6 +101,10 @@ After cycle 1 the maintainer read the options in `docs/handoff-m4.md` section 7 
 | Q67 | The fallbacks (2026-11-06, asked during T22's fix round 2) | **M4 is the way to go: remove the fallbacks.** T37 removes the `sim_step` inline step (Q54's switch back; `delayed` stays as the threaded step's reference) and every `perf_native*` and `perf_*` switch to an old path with the GDScript paths behind them, not kept as test references (overrides Q57); parity tests compare the native path with recorded reference output in `tests/fixtures/`. Q54's both-schedules rule ends when T37 merges |
 | Q68 | The order after T22 (2026-11-06) | **T37 before T23.** The cleanup (fallbacks, the inline step, the GDScript paths) runs next, so T23 builds on the one threaded path; T25 stays last |
 | Q69 | A mid-milestone merge (2026-11-06) | **Merge `m4` into `main` before T37**, with an ordinary merge commit tagged `m4-gdscript-reference`, so `main` keeps a tested point where the GDScript paths, the `perf_native*` switches and the single-thread `inline` step still exist; T37 then removes them and M4's close-out merge follows as usual. Not M4's acceptance: T37, T23 and T25 remain |
+| Q70 | Q16 on the threaded step (2026-11-06, T37) | **Accept the loosened gate.** With the inline step gone, Q16's GDScript-against-native fights run one tick apart and twins drift (390 to 820 m at 10 s); the gate becomes hits within 20 % and the outcome mix within 5 points, the twin distance recorded, not gated (the one-tick shift is Q53's accepted cost) |
+| Q71 | A full code review (2026-11-07) | **T43 after T25**: a read-only review of the whole code base for performance, memory, duplicated code and any other issue, delivered with report P3; the maintainer triages its findings into fix tasks |
+| Q72 | Closing M4 (2026-11-07) | **Pre-approved: merge `m4` into `main` once every M4 task is done.** The controller triages T43's findings: clear-cut "fix in M4" findings become fix tasks (reviewed and CI-green like the rest), T25's numbers they move are re-taken, and large or debatable ones go to a later milestone, listed for the maintainer. The return checklist play session follows the merge |
+| Q73 | Report P3's open questions (2026-11-08, after the merge) | **1** Wayland's vsync cap (about 145 FPS): fine for now. **2** a 1 % low of about 40 to 59 FPS at 700 to 1 000 ships: accepted. **3** mines: placed in M12 (defensive minefields per faction around stations, capitals and chokepoints, from scenario data; M12's blast falloff replaces the stand-in blast; `docs/roadmap.md`). **4** the tier's known limits (far tail chases, the hit terms not refitted for 3 Hz): accepted for now. **5** 500 in one dense fight as the practical limit: likely, to be decided. **6** the full review's fifteen later findings: all assigned (`docs/roadmap.md`, "Carried from M4's full review"). **7** M5's rebase onto `main`: the maintainer does it |
 
 ## The budget ("good game performance", Q5)
 
@@ -180,8 +184,8 @@ are M5's mission work).
 | AC2 | Baseline: before any change, the sweep's max N per layout and the stage breakdown at 50 and 100 ships are recorded below | A | M4-T01, 2026-11-02 (Cycle log, Baseline) |
 | AC3 | Four cycles, each recorded below: the numbers before, three candidates ranked by confidence with the evidence for each, the first built **test first** (the failing test committed before the change), the numbers after, the gain against the prediction | A | M4-T02 to M4-T05, 2026-11-03 (Cycle log) |
 | AC4 | No regressions: after each cycle the focused runs (the touched code and AC13's paired budget) are green locally and CI's full suite is green on the push (Q10); `scripts/run_tests.sh` green locally once, before M4 closes; every behaviour change listed | A | M4-T06m, 2026-11-03: full suite 2 257 of 2 259 passing, 0 failing, 2 pending (AC12); CI green on every cycle's push; behaviour changes in the T06 report |
-| AC5 | Goal: the headline max N is at least 100, and toward 500. Not reached after cycle 4: the report says so and asks for guidance (T06) | A | **Not met**: headline 25 by the sweep, 45 with the below-sweep runs (release build: 50 in the quick check). T06 asks for guidance, 2026-11-03 |
-| AC6 | Render check at the headline max N on the maintainer's GPU: FPS, frame time, VRAM, GPU and driver recorded (by the agent, 2026-11-01) | A | M4-T06m, 2026-11-03 (Cycle log, Final measurements) |
+| AC5 | Goal: the headline max N is at least 100, and toward 500. Not reached after cycle 4: the report says so and asks for guidance (T06) | A | **Met** (M4-T25, 2026-11-07; M4-T44, 2026-11-08): `battle` **500** after T44 (7.42 ms median, 3 of 3 seeds passing; T25 had 450 by the below-sweep count and 500 at 8.10 ms); furball 400, transit 400, spread and `typical` 500 or more; 1 000 ships at 9.22 ms keeping real time (T44; 10.50 at T25; Report P3). Before: 25 by the sweep, 45 with the below-sweep runs (T06, 2026-11-03) |
+| AC6 | Render check at the headline max N on the maintainer's GPU: FPS, frame time, VRAM, GPU and driver recorded (by the agent, 2026-11-01) | A | M4-T44, 2026-11-08, at the headline `battle` 500: 142.7 FPS (1 % low 64.9, p99 14.25 ms, at the Wayland cap), GPU 0.77 ms, VRAM 581 MB, through Wayland at 3840x2160; release export 144.1 FPS. M4-T25, 2026-11-07 (Cycle log, Phase 3): `battle` 400 fullscreen through Wayland at 3840x2160, the 3D at 1 080 lines (Wayland keeps vsync on: about 145 FPS is the cap, so these averages sit at it): 142.8 and 143.6 FPS, frame mean 7.0 ms, 1 % low 60.2 and 60.6, GPU 0.77 ms, the game's VRAM 581 MB, RX 6950 XT (RADV NAVI21) on Forward+; the limit table to 1 000 beside it. Earlier: M4-T06m, 2026-11-03 |
 | AC7 | Textured meshes, no splats (Q29): every ship, station, capital, prop and the sky draws without Gaussian splats, the hulls as procedurally textured meshes from `tools/procgen` (T30a to T30c); `addons/gdgs_scs` and every splat path in code, procgen, settings, console, tests, scripts and docs are gone (T31); the maintainer has accepted the Starfury look sheet (checkpoint 1b) | A, H | met (A, T31 2026-11-04: no splat code, asset or setting left; checkpoint 1b approved, Q34); the T30d sheets wait for (H) |
 
 ## Task breakdown (ordered)
@@ -212,9 +216,9 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T20 | Turrets, missiles, beams and mines as native rows | T16, T12 | Opus | The non-fighter rows' budget (710 turrets at 500); M12 inherits the path | N, A | done, bit for bit; the stand-ins' stage at `battle` 500 from 9.50 to 0.68 ms; every row in budget but a beam shot's spawn (about 20 us a shot against 1) (2026-11-04, in a worktree on `67d5cda`; Cycle log, M4-T20) |
 | T21 | The low-attention tier: state, 20 Hz integration, promotion and demotion of fighters and capitals | T20, checkpoint 3, T24 | Fable | The pool and ship adapter handover must never pop; serial | T | done (2026-11-06, Fable then Opus for fix round 1, CI green on `4f360e3`; headless 1 000 20.3 to 9.9 ms, fullscreen 500 55 to 101 FPS and 1 000 14 to 58, partly provisional until T22; the tier off by default until T22 and T23 land (7 far-ship tests); Cycle log, M4-T21) |
 | T22 | Tier brains at 2 to 5 Hz, statistical fire, far capitals' aggregated fire | T21 | Opus | Far fights must stay fair | T, N | done (2026-11-06, Opus, two fix rounds, CI green on `7468d81`; an even fight is 12 Starfuries against 40 raiders (Q63), loose fairness checks (Q64), 0.31 us a tier fighter with thinks (Q65); `battle` 1 000 fullscreen 63 to 66 FPS, 1 % low 29 to 33 (the controller's A/B); Cycle log, M4-T22) |
-| T23 | Far proxies for tier rows (dots, radar, targeting) | T21, T11, T37 (Q68) | Opus | GPU numbers by the agent, the look (H) | R | not started |
+| T23 | Far proxies for tier rows (dots, radar, targeting) | T21, T11, T37, T42 (Q68) | Opus | GPU numbers by the agent, the look (H) | R | done (2026-11-07, Opus, one fix round, CI green on `da60d72`; tier rows drawn (dots, capital meshes), on radar (native plot) and targeting, the explosion level from pixels with a visible far flash, mines on the core's rows, the tier on at 10 km with the seven far-ship tests passing; `battle` 500 137 FPS, 1 000 72 (1 % low 46); Cycle log, M4-T23) |
 | T24 | The simulation step on a worker thread (firm, Q53): the AI and every native kernel step off the main thread into a double-buffered snapshot | T35, T36 | Fable | A tick-order change, double-buffered snapshots; the frame and input stop waiting on the simulation | N | done (2026-11-06, two fix rounds, CI green on `798f393`; the AI step on its own worker thread one tick behind, flight and combat on the main thread (Q61); `battle` 500 tick p99 16.8 to 12.9 ms; Cycle log, M4-T24) |
-| T25 | Phase 3 measurements, the 1 000 stretch, the full suite, report P3 | T23, T24, T37 (T26) | Sonnet | Measurement, no code | M | not started |
+| T25 | Phase 3 measurements, the 1 000 stretch, the full suite, report P3 | T23, T24, T37 (T26) | Sonnet | Measurement, no code | M | done (2026-11-07, Opus, CI green on `b8dc420`; AC5 met at `battle` 450 (500 at 8.10 ms); 500 to 1 000 ships above 60 FPS average with 1 % lows of 40 to 64 and the simulation in real time; Wayland caps near 145 FPS; the release window blocked by runtime GLSL reads (T43); Cycle log, Phase 3 and Report P3) |
 | T26 | Resolution scaling for the big battle (only if the GPU binds at the fullscreen check; Q20) | T11 | Sonnet | One setting and an automatic step on `RenderScale`; the look (H) | R | not needed (superseded by T38, Q59; `RenderScale` was removed by T36) |
 | T27 | Render comparison: Gaussian splats against meshes, in the 500 battle and a Babylon 5 station scene (Q24) | T07, T11, T12 | Opus | Measures whether splats or meshes carry the big battles; GPU numbers by the agent, the look (H) | R, M | done |
 | T28 | Running lights stay point-sized and dim by the inverse square (maintainer, 2026-11-03) | none | Sonnet | Lights in vacuum do not scatter into globes | R | done |
@@ -229,10 +233,13 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T34 | The cheap pass on the per-ship stages (Q50): the ram stage's loop, the hit stage's gather, targeting and the core's sync, into native code or out of the per-tick path | checkpoint 3 | Opus | 13.3 of 17.85 ms at `battle` 300 sits in four stages phase 2 did not take (report P2) | N, G | done, bit for bit, five of the six changes behind a setting; the four stages at `battle` 300 from 9.12 to 4.16 ms and the tick from 17.72 to 12.86 (8 ms missed, the rest named in the entry); at 500 15.81 to 7.47 and 30.42 to 21.74 (2026-11-05, in a worktree on `9cd88d5`, fix round 1 the same day; Cycle log, M4-T34) |
 | T35 | The core owns the simulated state (Q55): bolts as rows drawn by one multimesh, Jolt bodies read once a tick by RID in one native call, activity, hull and selection as event-driven columns, the ram stage's contact read native | T33, T34 | Fable | Refactor review findings 1, 4, 5 and 6: 5 to 8 ms at 500 for the bolts alone; T24's precondition | N, G | done (2026-11-05, four fix rounds, CI green on `8934e9b`; the tick at `battle` 300 from 11.80 to 6.74 ms, Q49's 8 ms met; 500 from 19.46 to 10.71 ms; Cycle log, M4-T35) |
 | T36 | The frame's per-ship work in one pass per subsystem (Q56, Q58): plumes, muzzle flashes, LOD switching, audio, far dots, the HUD radar, hit flashes; the splat-era render scale cap; the slow test switch | T33 | Opus | Refactor review findings 2, 3, 7, 9, 12, 13, 14: 3 to 5 ms a frame at 500 | R, G | done (2026-11-05, in a worktree on `f414cf4`; Cycle log, M4-T36): the worst second's process work at `battle` 500 from 25.7 to 10.2 to 10.8 ms and at 300 from 20.2 to 11.3 ms after fix round 1; `battle` 300 from 16.7 to 37.1 FPS; engine audio left to M5-T19 (finding 7) and the lean ships' muzzle flash pool with muzzle transforms as data moved to T35 (finding 12) |
-| T37 | M4's cleanup (Q57; the maintainer, 2026-11-06): the native library required, the old GDScript paths and the inline step removed with their settings (parity tests against recorded references), one hull-reading path, the documentation drift | T22 (before T23, Q68) | Opus | Refactor review findings 8, 16, 17; more lines and settings than planned, since the GDScript references go too; the parity tests must keep their teeth | X, G | not started |
+| T37 | M4's cleanup (Q57; the maintainer, 2026-11-06): the native library required, the old GDScript paths and the inline step removed with their settings (parity tests against recorded references), one hull-reading path, the documentation drift | T22 (before T23, Q68) | Opus | Refactor review findings 8, 16, 17; more lines and settings than planned, since the GDScript references go too; the parity tests must keep their teeth | X, G | done (2026-11-07, Opus in two passes and one fix round, CI green on `98badeb`; the library required, 21 old-path switches and the inline step removed (settings 74 to 53), 20 parity recordings in `tests/fixtures/parity/`, SimClock reset on main-scene entry; the one hull read moved to T42; Cycle log, M4-T37) |
 | T38 | Anti-aliasing (Q59, Q60): Godot's MSAA 2x and 4x, TAA, FXAA and SMAA as a setting, live; motion vectors fixed for everything TAA (and T40's FSR 2.2) needs; defaults chosen by measurement | T36 | Opus | `project.godot` sets no anti-aliasing, so edges and thin hull detail alias; TAA and FSR 2.2 both need correct motion vectors from the multimeshes, particles and bolts | R | done (2026-11-05, one fix round, CI green on `d8b73ce`; SMAA the default, a look call the costs allow; at the 6K window's native size `battle` 300 draws in 2.83 ms off, 3.20 ms SMAA, 5.50 ms TAA; Cycle log, M4-T38) |
 | T40 | Upscaling (Q59, Q60): FSR 2.2 (temporal, its own anti-aliasing) and FSR 1.0 (spatial, with sharpness) with internal-resolution presets from a third of the output's height up to native, applied live with the HUD at window size; no frame generation; defaults chosen by measurement | T38 | Opus | Since T36 a 4K window renders 4K; FSR 2.2 from 1 080 or 1 440 lines looks better than a bilinear stretch and costs less than native; below 1 080 is for weaker GPUs; supersedes T26 (measured otherwise: FSR 2.2 costs more GPU than native here, so native is the default) | R | done (2026-11-05, one fix round, CI green on `d85a314`; native the default: FSR 2.2 costs more GPU than native here and FSR 1.0 gains 3 to 5 % on a CPU-bound frame; the fix round made `FULLSCREEN_EXEC` apply, so T24's and T35's fullscreen comparisons were re-measured; Cycle log, M4-T40) |
 | T41 | The Wayland display driver (Q66): the game and the measurements open through Godot's Wayland driver, so a fullscreen window is the panel's own 3840x2160 under GNOME's 1.25 scale | T40 | Opus (controller) | The X11 path made the fullscreen window 6144x3456 and the compositor scaled it down; Wayland is worth about 8 to 10 FPS at 1 000 ships | R | done (2026-11-06, the controller, CI green on `7468d81`; fullscreen a true 3840x2160, `battle` 500 54.6 to 58.7 FPS and 1 000 60 to 62 to 69 to 72; Cycle log, M4-T41) |
+| T42 | Every world attaches the core, one hull read (T37's review I3): free flight, the menu, scenarios and test worlds attach `SimCore`, so the registry, `from_tree`, the resolvers' own walks, the flight batch's server read and the contact field's GDScript loops collapse into one native hull read | T37 | Opus | T37 removed the switches but left five hull-reading paths for worlds with no core (the free-flight scenario has no ship pools, so no core); T23's blast and proxies read hulls and Q68 wants T23 on one path | X, G | done (2026-11-07, Opus, one fix round, CI green on `d7f97f3`; every world attaches the core (one world per tree), five hull-reading paths and the last switch removed (net about -700 lines), ticks unchanged; Cycle log, M4-T42) |
+| T43 | Full code review (Q71): the whole code base (GDScript, Rust, shaders, scripts, tests) read for performance, memory (leaks, retained nodes and resources, growth per tick or per spawn, VRAM), duplicated code, and any other defect; read-only, a ranked findings list the maintainer triages into fix tasks | T25 | Opus | M4 rewrote the simulation in two languages over 40 tasks; a fresh whole-code read catches what task-scoped reviews could not | M | done (2026-11-07, Opus, read-only: `docs/research/m4-full-review.md` (written to `.superpowers/sdd/m4-performance-and-scale/full-review.md`, copied into the repo 2026-11-08), 11 fix-in-M4 findings (into T44), 15 for later milestones, 9 no action; memory clean over 20 scenario reloads and 10 minutes of `battle` 500) |
+| T44 | T43's fix round (Q72): the eleven "fix in M4" findings F1 to F11 of the full review (release export GLSL, lens flare re-enabled after a failed compile, the broadcast scan shifting the rows' rid column, the unread per-tick rows copy, statics outliving their world, per-tick waste, T37 leftovers and dead code, the targeting snapshot from rows, the explosion-LOD tests, CI timeout, doc drift); then the release fullscreen pair and the moved numbers re-taken | T43 | Opus | The controller's triage of T43 under Q72: clear-cut, contained fixes before the close-out merge; the fifteen later-milestone findings are listed for the maintainer | X, G | done (2026-11-08, Opus, approved on review, CI green on `0744d5f`; F1 to F11 fixed; the release window opens (`battle` 1 000 at 119 FPS); `battle` 500 7.42 ms and 1 000 9.22 ms headless, 1 000 at 87 FPS fullscreen; AC5's headline 500; Cycle log, Phase 3, "After T44") |
 | T39 | FSR 4 study (Q59): whether AMD's FSR 4 can run in this game on Linux, Vulkan and Godot 4.7 through the native library, on the maintainer's RDNA 2 card, under the GPL-3.0 licence; a go or no-go with a plan | T38 | Sonnet | FSR 4 is not in Godot 4.7; AMD's support for RDNA 2 and for Vulkan is new or announced, so it needs facts before code | M | not needed (skipped by the maintainer, Q60) |
 
 ### M4-T01 Benchmark harness, budget and baseline
@@ -1488,6 +1495,46 @@ done and T20 proceeds.
   second proxy, or a sibling `FarHulls`), the dot stays for fighters; both are cheap because the meshes exist (T30b). "Visible
   splats" in the measures reads triangles drawn.
 
+- **Done (2026-11-07, worktree on `380590d`; Cycle log, "M4-T23"):** tier fighters draw as far dots from their rows in
+  `FarDots`' own buffer (the core writes them after the near ships' dots: one draw call), tier capitals as instances of the
+  mesh their bodies draw in one `MultiMesh` per mesh (`FarHulls`); a promotion takes the row in the tick its body shows. The
+  player's candidates, selections, readouts and the nearest hostile read tier ships from their rows by marker id
+  (`TierTargets`), so a selection survives promotion and demotion; a tier think hands a named target to its parked controller
+  and the tier rows carry that selection; the broadcast scan hears a parked ally from its row; the radar reads its contacts in
+  one pass over the core's rows and plots them in a native kernel (`radar_kernel.rs`). A row promoted inside a rock or mine is
+  moved clear first (fix round 1: by the shortest way out, a capital by its hull box). The explosion level of detail (fix round 1:
+  from pixels): the full effect while the fireball's radius on the 3D picture is 8 px or more, a reduced one (no light, the
+  gas shell, no debris) down to 2 px, then a point flash in one shared multimesh (`FarFlashes`) with no node or particle, as big
+  and bright as the fireball at the switch, then a 1 px floor and the inverse square (at 1 080 lines a fighter's death is full
+  to 1.1 km, reduced to 4.3 km, its flash reading to 17 km; a destroyer's 36, 142 and 570 km; a carrier's 71, 284 and 1 140 km); tier deaths flash where the row
+  flew; a capital stand-in's death is drawn the same way, leaves play and the tier, and keeps its blast on the event. A mine's
+  trigger and blast read the core's sweep rows, tier rows among them, and `StandinDirector._gather_hulls` is gone (Q68).
+  `tier_radius_m` is 10 000 again, and the seven far-ship tests pass with it on (they read where a tier ship flies,
+  `TierDirector.flying_position`, not its parked node). Fullscreen (Wayland, 3840x2160, the 3D at 1 080 lines), base with the
+  tier on against this task, two runs each: `battle` 500 126.1 / 125.8 FPS (1 % low 67.6 / 65.1) to 138.7 / 138.9 (63.7 /
+  64.9); `battle` 1 000 72.7 / 73.8 (41.9 / 43.4) to 72.1 / 72.4 (42.9 / 47.7); render CPU 0.34 ms at 500 (the Done-when's 3 ms
+  met) and 0.44 at 1 000; GPU 0.76 to 0.88 ms; draw calls about 100; triangles about 504 000 (500) and 524 000 (1 000). The far
+  proxies' CPU update at 1 000 is 0.20 ms a frame (max 0.46; fix round 1's rerun 0.204 and 0.506, saved as
+  `reports/perf/M4-T23_proxy_cost.txt`) for 580 dots and 97 hull instances, under the 0.5 ms bar, so the
+  GPU-driven option was not built. Full suite (`GUT_SLOW=1 scripts/run_tests.sh`, exit 0): Python 410 OK; GUT 235 scripts, 2 578
+  tests, 2 566 passing, 12 pending (the renderer-only and AC12 ones), 0 failing; the three CI shards: see the report.
+- **Fix round 1 (2026-11-07, review I1 and M1 to M8):** the explosion level of detail switches on the fireball's pixels on the
+  current 3D picture and the flash takes over at the fireball's size and brightness, so it is visible at the switch for every
+  class at 1 080 and 2 160 lines (the first build's flash started under its own visibility bar); a promoted row is cleared of
+  rocks by the shortest way out, a capital by its hull box (a grazed cruiser moves 20 to 40 m, not 149); a release or a death
+  in the tier is not a promotion (`tier_remove`); the stand-ins' counts leave dead capitals out (the bench's capitals are
+  invulnerable, so no measured window lost one); the capital-death test asserts its level and a cruiser past its switch dies
+  as a flash; the far-flash screenshots retaken; the proxy cost saved. Carried to T43 (review M7): the player's per-tick
+  candidate snapshot still walks the targetable nodes and appends the tier rows' columns (+0.19 ms at 1 000); reading it from
+  the core's rows as the radar now does would change `targeting_on_read.json`'s record.
+- **As built, where it differs from the plan:** the radar and its plot moved onto the core's rows and a native kernel, which the
+  plan did not name: with the tier's ships back on the radar the GDScript walk and plot took `battle` 1 000 from 73 to 52 FPS;
+  capital stand-ins gained a death (they had none: a capital at zero hull stayed in play) so a far capital's death could be
+  drawn; `kill target` takes any selected target with a hull; the selection check and the snapshot of the player's own
+  candidates keep their node walk plus the tier rows (the snapshot is pinned tick by tick by `targeting_on_read.json`); a
+  ship death's blast stays data on its killing hit (M12 applies it), its point read from the row for a tier death; the bench's
+  capitals use the box look, so their proxies are boxes (the station scene's are textured hulls).
+
 ##### M4-T24 The simulation step on a worker thread (firm, Q53)
 
 - **Track:** N. **Agent:** Fable. **Depends on:** T33 and T34 (the per-ship GDScript out of the AI path, the per-ship stages on
@@ -2239,6 +2286,45 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
   - The return checklist's M4-T24 item (`docs/playtest.md`) compares the threaded step with `sim_step inline` mid-fight; T37
     drops that comparison (or points it at `delayed`) when the inline step goes.
 
+- **Done (2026-11-06, two passes in a worktree on `60beeae`; report `.superpowers/sdd/m4-performance-and-scale/task-t37-report.md`):**
+  - The library is required: `NativeLib.REQUIRED` and `refusal()`; `Main` prints why (naming `bin/libscs_native.so` and
+    `scripts/build_native.sh`) and exits 1 (`test_native_required`).
+  - 21 settings removed (74 to 53), each with the path behind it: `perf_native`, `perf_native_core`, `perf_native_weapons`,
+    `perf_native_brains`, `perf_native_commands`, `perf_native_driver_step`, `perf_native_flight`, `perf_batch_owns_ships`,
+    `perf_native_sweep_cells`, `perf_ram_contact_columns`, `perf_ram_sweep_cull`, `perf_native_ram_contacts`,
+    `perf_targeting_on_read`, `collision_layers`, `far_ship_interpolation_off`, `ship_contact_monitor`,
+    `perf_core_event_columns`, `perf_core_body_direct`, `perf_native_selection_check`, `perf_native_bolt_sync`,
+    `perf_native_bolt_rows`; `sim_step` lost `inline`. The Rust flags they drove went too (the sorted sweep cells, the core's
+    event-columns, body-direct and bolt-rows flags, the core's own bolt-node read). Kept: `perf_threads`, `perf_step_threads`,
+    `sim_step` (threaded, and delayed as its reference), `physics_jitter_fix`, `physics_max_steps_per_frame` (engine tuning) and
+    `ai_think_rate` (behaviour). `SettingsSchema.RETIRED` and `RETIRED_VALUES` let an old saved file load (`test_settings`).
+  - Parity tests compare with 20 recordings in `tests/fixtures/parity/` (`ParityFixture`, recorded at the first pass's
+    `0586e3e`, where every path still existed; its game code is the tag `m4-gdscript-reference`'s plus the start-up refusal,
+    and `weapon_rows_battle.json` was taken again from that code in a fresh process, committed in `7987de4`). Q70: the Q16 fights hold hits within 20 % and the mix within 5 points of the
+    GDScript recording, the twin distance printed, not gated.
+  - The main scene resets `SimClock` as it enters the tree, so a battle loaded again in one process starts at 0
+    (`test_main_scene`).
+  - The tier director's ram check returns early with no tier rows and is timed into the fighters' landing cost.
+  - Lines: src, native, scripts and bin +343, -1 695; tests (without the recordings) +1 189, -1 484.
+  - Measured (headless, seed 1, 20 s after 5 s, both locks, cores 0 to 11): `typical` 58 1.80 / 2.55 ms (median / p99) before,
+    1.80 / 2.48 after; `battle` 300 6.51 / 8.24 before, 6.48 / 8.24 after; `battle` 500 10.77 / 13.30 before, 10.81 / 13.58
+    after: unchanged within noise. The full suite and each CI shard green (the report has the totals).
+  - Left for M4-T42 (every world attaches the core, one hull read; planned on `m4` before T23): the hull reading is two
+    paths, not one. A world with a core reads its rows. A world with no core still reads its own way, and that is not only
+    bare test worlds: the free-flight scenario (`data/scenarios/free_flight.json`, the game's default) has no ship pools, so
+    `Main` builds no AI ship, nothing attaches the core, and the player's bolts and rams there go through the resolvers' own
+    reads. The paths left: `ContactScan.from_registry` with `ScsBodyRegistry`, `ContactScan.from_tree` when the registry
+    is missing, the hit resolver's own target gather and the ram resolver's `_gather_tree`, the flight batch's server
+    read, and the contact field's GDScript query loops (the fallback when `ScsContactField` refuses a scan's arrays).
+    T42 owns the collapse; their remaining recorders (`test_hit_scale`, `test_pilot_kernels_in_play`, `test_sim_core`,
+    `test_body_registry`, `test_contact_field`) become stored reads with it.
+  - Left as they were, from the refactor review's finding 17 (each a small cost, none a switch or doc drift):
+    `StandinDirector._count` (a distance per fighter a tick for the near and far counts, bench only), `Ship.get_fuel_tank`
+    reading `fuel_unlimited` per call, the driver's two `Time.get_ticks_usec` reads a tick, `LightRig` calling `follow` on
+    every emitter every frame, and the chase view's bolt scale (`Projectile.visual_scale` and `chase_bolt_scale`, read by
+    the bolt rows' mesh, not yet a shader uniform). `physics_jitter_fix` stays as engine tuning; T14's two measuring
+    switches are gone.
+
 ##### M4-T38 Anti-aliasing (Q59, Q60)
 
 - **Track:** R. **Agent:** Opus (GPU numbers by the agent, the look (H) on the return checklist). **Depends on:** T36. Runs as wave
@@ -2369,6 +2455,131 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
   72 (29.5 and 40.8), `reports/perf/M4-T22_fr2_fs4k_battle1000_{a,b}`.
 - **Done when:** the project setting is in, `get render.display` reads `Wayland` and `get render.window` the panel's size in a
   fullscreen run, the test passes, and T25 knows its baselines must be re-taken.
+
+##### M4-T42 Every world attaches the core, one hull read
+
+- **Track:** X and G. **Agent:** Opus. **Depends on:** T37. Runs before T23 (T23's blast and proxies read hulls; Q68).
+- **Source:** T37's review, finding I3 and answer (7) (`.superpowers/sdd/m4-performance-and-scale/task-t37-review.md`), and T37's
+  report, part 2 (the plan for the collapse).
+- **Goal:** every world the game builds attaches `SimCore` (free flight, which has no ship pools today, the menu's world if it
+  has one, every scenario and the test worlds through one helper), so the five hull-reading paths that T37 left (the registry,
+  `from_tree`, the resolvers' own walks, the flight batch's server read, the contact field's GDScript query loops) become one
+  native read; the stand-ins attach the core themselves when they get capitals or mines (T37's review M1).
+- **Tests first:** free flight and each scenario run with a core attached; a hull read in a world built without pools returns the
+  same rows as the core's; removing a path leaves its tests green against the recordings.
+- **Measures:** lines removed; the tick at `typical` 58, `battle` 300 and 500 unchanged or better; the full suite and the three CI
+  shards green.
+
+- **Done (2026-11-07, in a worktree on `0e6515e`; report `.superpowers/sdd/m4-performance-and-scale/task-t42-report.md`):**
+  - Every world attaches the core: `WorldFrame._ready` calls `SimCore.attach`, so free flight (no ship pools), every scenario
+    and every test world built on a `WorldFrame` simulate on the core (`test_every_world_core`: each of the four scenarios
+    reads its hulls from the core, free flight's rows are its player and buoys as the nodes say, a bare world makes its
+    core). The game has no separate menu world: the menu is the main scene's overlay. One world per tree (fix round 1,
+    the maintainer's ruling on review I1): a second world, while the first world's core is live, is refused its core with
+    one error; nothing takes over. Bodies asked about in a tree with no world warn once a run.
+  - The stand-ins attach the core when they get capitals or mines (T37's review M1); the one-time warning is gone.
+  - Removed: `ScsBodyRegistry` (`native/src/body_registry.rs`), `ContactScan.from_registry`, `from_tree`,
+    `from_broadcasters` and the `gathers` count; the hit resolver's walk of hulls and bolts; the ram resolver's walk, its
+    contact read per hull and its column-path pairs and rocks; the flight batch's server read; the contact field's
+    GDScript query loops (contacts, nearest-k, statics, broadcasts, incoming fire); the `use_core` and `use_native` switches.
+    The broadcast scan selects its rows from the core. A tree with no world has no core: its scan sees nothing, its
+    resolvers resolve nothing (`source` none), its flight batch lets every ship fly its own model.
+  - Kept: the flight step still reads a ship the core has no row for (back from the pool on its launch tick) from the
+    physics server; `HitBroadPhase.pairs` stays (the mines use it); the GDScript `RamBroadPhase` moved to
+    `tests/fixtures/` as the reference of its tests (fix round 1).
+  - Fix round 1 also removed the pilot kernels' switch (`ContactScan.pilot_kernels_on`) and their GDScript reference (the
+    avoidance filter and fire lane loops), after recording its answers (`pilot_kernels.json`, the facades case of
+    `pilot_kernels_in_play.json`); off the core's rows the kernels read the perception's own lists (`PilotRows`).
+  - Carried to T23 (review M8): `StandinDirector._gather_hulls` still walks the hulls in GDScript to order a mine's blast
+    (per event, not one of the five paths); T23's blast on one path (Q68) meets it.
+  - Tests: the core's rows are compared with `TreeRows` (a node-by-node read of the tree, `tests/fixtures/tree_rows.gd`);
+    the removed paths' recorders in `test_sim_core`, `test_body_registry` and `test_hit_scale` are stored reads of their
+    recordings. A scan whose arrays the field refuses answers nothing (`test_contact_field`).
+  - Lines: src and native +134, -842 (game code and Rust before the docs); tests +358, -212 (`TreeRows` and the new test
+    file are most of the additions).
+  - Measured (headless, seed 1, 20 s after 5 s, both locks, cores 0 to 11): `typical` 58 1.79 / 2.54 ms (median / p99)
+    before, 1.79 / 2.44 after; `battle` 300 6.44 / 8.16 before, 6.42 / 8.23 after; `battle` 500 10.81 / 13.33 before,
+    10.77 / 13.57 after: unchanged within noise. Free flight (the default scenario, 1 200 ticks after 300) 3.44 / 6.59
+    before, 3.52 / 6.52 after: its core's sync costs about 0.05 ms a tick. The full suite and each CI shard green.
+
+##### M4-T43 Full code review (Q71)
+
+- **Track:** M. **Agent:** Opus (read-only reviewers; subagents allowed for the parts). **Depends on:** T25 (it reviews the code
+  report P3 measured). Delivered with report P3; the maintainer triages its findings.
+- **Goal:** one fresh read of the whole code base after M4: `src/`, `native/src/`, the shaders, `scripts/`, `tools/procgen/` and
+  `tests/`, against `CLAUDE.md`, `docs/architecture.md` and the milestone's rulings. Focus: performance (per-tick and per-frame work,
+  allocations in hot paths, needless engine calls, work done twice, anything that grows with entity count and could move to the
+  native core or a cheaper pass), memory (leaks, nodes, resources and RIDs kept after use, unbounded caches and dictionaries, growth
+  per spawn, per rebase or per scenario reload, VRAM held), duplicated code (two implementations of one thing, copy-pasted logic,
+  dead code and leftovers of removed paths), and any other defect found on the way (correctness, threading, determinism,
+  test gaps, doc drift, rule breaks).
+- **Measures (to back findings):** a long `battle` 500 run and a scenario-reload loop watching memory (`Performance` monitors,
+  VRAM from `/sys/class/drm/card1/device/mem_info_vram_used`, orphan nodes) for growth; leak warnings at exit.
+- **Output:** `docs/research/m4-full-review.md` (written to `.superpowers/sdd/m4-performance-and-scale/full-review.md`, copied into the repo 2026-11-08): findings ranked by impact, each with file:line, what is
+  wrong, the evidence, a suggested fix and its size; grouped into "fix in M4", "a later milestone" and "no action". Read-only:
+  no code changes. The maintainer picks which become fix tasks (new rows, in M4 or later); if any lands in M4, T25's affected
+  numbers are re-taken.
+- **Done when:** the findings list is written and handed to the maintainer with report P3.
+- **From T25 (2026-11-07):** the release export cannot open its window: `RuntimeShader` reads `sky_velocity.glsl`,
+  `motion_blur.glsl` and `motion_blur_copy.glsl` with `FileAccess`, which an export does not ship (`RuntimeShader: cannot read
+  res://src/rendering/sky_velocity.glsl`). A clear-cut fix for the T43 fix round; then re-take T25's release fullscreen pair (`battle`
+  500 and 1 000). The release run folders are in `~/.cache/scs-agents/m4-t25/release/snap/reports/perf/`, not the main `reports/`.
+- **Carried in (2026-11-07):** from T23's review M7, the player's targeting snapshot still walks the targetable nodes and appends
+  the tier rows every tick (+0.19 ms at 1 000), the walk the radar left; consider building the candidates from the core's rows as the
+  radar does (re-record `targeting_on_read.json` if so). From T23's re-review: the explosion-LOD maths tests share `flash_radius_m`
+  and `PEAK` with the code (they would not catch drift from `Explosion`'s values), nothing tests that `picture_lines` follows the 3D
+  scale, and the far-proxy cost's max is 0.506 ms against T23's 0.5 ms bar.
+
+##### M4-T44 T43's fix round (Q72)
+
+- **Track:** X and G. **Agent:** Opus. **Depends on:** T43.
+- **Source:** `docs/research/m4-full-review.md` (written to `.superpowers/sdd/m4-performance-and-scale/full-review.md`, copied into the repo 2026-11-08), the "Fix in M4" section, F1 to F11 (each with file:line,
+  evidence and the suggested fix). The fifteen "later milestone" findings (L1 to L15: flight's per-ship GDScript gather, the hit and
+  ram resolvers' GDScript loops, the radar's per-contact loop, a native allocation pass, the sound pass and the rest) stay in the
+  review for the maintainer, named in report P3's open questions.
+- **Goal:** every F finding fixed, tests first where behaviour changes. F1 without editing the vendored `addons/lens_effects/`
+  (CLAUDE.md): the four `src/rendering/*.glsl` files kept as files in the export, the lens flare's shader added by an export plugin
+  in our own code (or another route that leaves the addon untouched). Commit the untracked `tests/unit/test_parity_fixture.gd.uid`.
+- **Measures:** the release export built and its fullscreen pair taken (`battle` 500 and 1 000, the release row T25 could not take);
+  the headless tick at `battle` 500 and 1 000 and the fullscreen `battle` 500 and 1 000 once each after F4, F6 and F8, against T25's
+  rows; the full suite and the three CI shards green.
+- **Done when:** F1 to F11 are fixed and reviewed, the release window opens and its numbers are in the Phase 3 entry, and the moved
+  numbers are recorded beside T25's.
+- **Done (2026-11-08, built in the `m4-t44` worktree; review and merge pending).** One finding per commit (F7 in six):
+  - F1: the four `src/rendering/*.glsl.import` files are `importer="keep"`; `addons/scs_export` (our own editor plugin, enabled in
+    `project.godot`) adds the vendored `lens_flares.glsl` to every export; `test_runtime_glsl_export` checks every `.glsl` path in
+    `src/` and the flare. The headless import no longer writes broken `RDShaderFile`s.
+  - F2: `SceneLensFlareEffect.usable`; `PostEffects.apply_settings` keeps a failed flare off (`test_post_effects`).
+  - F3: `select` sets the core's rid column aside as it does the names; `test_sim_core` reproduces a pool return after a broadcast
+    scan through a new `row_rid` accessor (it read the broadcaster's body before the fix).
+  - F4: `StandinDirector.step` lost its unread scan argument and the per-tick `ContactScan.shared` build.
+  - F5: `SimCore._exit_tree` drops the brain host over its core (`NativeBrains.drop_for`); the tier director clears its hull cache
+    when it leaves (`test_world_statics`).
+  - F6: the ram resolver's unread `accel`, `BrainBatch`'s per-flush copies (now only after a host or unhost) and `_dts`, and the
+    contact grids' per-rebuild allocation (`sorted_cells_into`).
+  - F7: the always-true switches and `has_class` lookups; `NativeProbe`'s GDScript path (the boundary bench keeps its own
+    yardstick); the flight batch's own-model fallback (a refused step now flies nothing); the missile's GDScript steering (a touched
+    target is read again and asked once more; the core answers "gone" for a body parked since the sync, `parked_since_sync`; no core
+    flies straight on); the turret's Projectile-node shot; a native AI pilot's GDScript think (it holds its last command); the dead
+    native functions (with the DataRow seam), GDScript functions and procgen helpers. Kept: `MineStandin.triggers` and `blast`, the
+    mine rules' tested statement (as `MissileStandin.steer` is the missile kernel's), and the GDScript brains the host cannot carry.
+  - F8: the player's refresh reads `radar_contacts` after resyncing touched bodies, only from rows synced this tick (before the
+    tick's first sync it checks the selection alone); `radar_contacts` leaves out a body parked since the sync, and a changed
+    broadcast range touches its body. `targeting_on_read.json` was not re-recorded: its digest came out the same once the test syncs
+    the core before each hand-stepped refresh (`test_targeting_scale`'s comparison does the same).
+  - F9: pinned switch distances and levels (a fighter at 1 080 lines, a cruiser at 2 160), `FIREBALL_RADII` reads
+    `Explosion.FIREBALL_FINAL_SCALE`, and `picture_lines_for` is tested at FSR quality (2 160 lines draw 1 440).
+  - F10: a CI shard's GUT timeout is 40 minutes (`run_tests.sh`), under the 60-minute job; the timing comments are current;
+    `test_info_md` compares `info.md` with the commands and providers the main scene registers.
+  - F11: Cargo.toml, `NativeBrains`, the turret and mine headers, `Ship`'s contact paragraph and architecture.md's flight batch,
+    weapon rows and `bolt_path` lines.
+  - Also committed `tests/unit/test_parity_fixture.gd.uid`.
+  - Measures in the Phase 3 entry's "After T44" block: the release window opens with no shader error (`battle` 500 144.1 FPS,
+    1 000 119.1 FPS); headless `battle` 500 7.42 ms (passes 3/3) and 1 000 9.22 ms against T25's 8.10 and 10.50; fullscreen
+    editor `battle` 1 000 87.3 FPS against 65.6 and 71.1. Report P3's open question 4 (the release shaders) is answered.
+  - Tests: the full suite (`GUT_SLOW=1 scripts/run_tests.sh`) found one failure, `test_mesh_only_scene`'s kept-addon list, fixed in
+    its own commit; then the three CI shards in order, each exit 0: 2 598 tests, 2 586 passing, 0 failing, 12 pending (T25's 12),
+    Python 410 OK, the console smoke runs passed. The main-scene smoke shows no `ERROR:` line.
 
 ##### M4-T39 FSR 4 study (Q59)
 - **Not needed (Q60, 2026-11-05):** the maintainer skipped FSR 4; the section below is kept as the record of what was asked.
@@ -6345,6 +6556,390 @@ otherwise, the 3D at 1 080 lines, vsync off, load 1.4 to 2.5 (`reports/perf/M4-T
 
 No regression from the code: the two builds overlap within the 1 % low's known run-to-run spread (up to 1.8 times, report P2), and
 at 1 000 the final code holds T21's 1 % low (29). These rows replace fix round 2's fullscreen rows as T22's final numbers.
+
+### M4-T37 (2026-11-06): the cleanup, measured
+
+The native-only build against its base `60beeae`, headless, seed 1, 20 s after a 5 s warm-up, both bench locks, cores 0 to 11
+(`reports/perf/M4-T37_before_*`, `M4-T37p2_after_*`; load 0.7 to 1.4):
+
+| layout | before median / p99 ms | after median / p99 ms |
+|---|---|---|
+| typical 58 | 1.80 / 2.55 | 1.80 / 2.48 |
+| battle 300 | 6.51 / 8.24 | 6.48 / 8.24 |
+| battle 500 | 10.77 / 13.30 | 10.81 / 13.58 |
+
+No change outside noise: the removed paths were all off the default path, so the win is code and settings (21 settings, about
+1 350 net lines of game and native code), not ticks.
+
+### M4-T42 (2026-11-07): every world attaches the core, one hull read
+
+Against its base `0e6515e`, headless, seed 1, 20 s after a 5 s warm-up, both bench locks, cores 0 to 11
+(`reports/perf/M4-T42_before_*`, `M4-T42_after_*`; load 0.5 to 1.5). Free flight is the default scenario's tick
+(`perf.tick_us`) read for 1 200 ticks after 300:
+
+| layout | before median / p99 ms | after median / p99 ms |
+|---|---|---|
+| typical 58 | 1.79 / 2.54 | 1.79 / 2.44 |
+| battle 300 | 6.44 / 8.16 | 6.42 / 8.23 |
+| battle 500 | 10.81 / 13.33 | 10.77 / 13.57 |
+| free flight | 3.44 / 6.59 | 3.52 / 6.52 |
+
+The battles already ran on the core, so they do not move. Free flight now has a core: its sync costs about 0.05 ms a tick
+(`core.sync_us`, median 51 us), within the run's noise. The win is code: about 710 net lines of game and native code and
+one native class gone.
+
+### M4-T23 (2026-11-07): far proxies for tier rows, the explosion level of detail, the tier on by default
+
+- **What changed:** tier fighters as far dots and tier capitals as mesh instances from their rows; radar, targeting and
+  broadcasts read tier ships from their rows; the radar's contacts from the core's rows and its plot in a native kernel; a
+  promoted row moved clear of rocks and mines; far deaths as point flashes, a reduced explosion between, capital deaths drawn;
+  mines on the core's sweep rows; `tier_radius_m` 10 000.
+- **Fullscreen** (`scripts/fullscreen_check.sh`, Wayland 3840x2160, the 3D at 1 080 lines, seed 1, both locks; base `380590d`
+  with `FULLSCREEN_EXEC="set settings.tier_radius_m 10000"`; loads 0.6 to 1.6):
+
+| run | N | average FPS | 1 % low | p99 frame ms | frame mean ms | GPU ms | draw calls | render CPU ms | triangles |
+|---|---|---|---|---|---|---|---|---|---|
+| base r1 | 500 | 126.1 | 67.6 | 13.62 | 7.93 | 0.78 | 100 | 0.34 | 498 317 |
+| base r2 | 500 | 125.8 | 65.1 | 14.21 | 7.95 | 0.78 | 100 | 0.34 | 498 242 |
+| T23 r1 | 500 | 138.7 | 63.7 | 13.99 | 7.21 | 0.76 | 102 | 0.34 | 504 287 |
+| T23 r2 | 500 | 138.9 | 64.9 | 14.00 | 7.20 | 0.76 | 102 | 0.34 | 504 039 |
+| base r1 | 1 000 | 72.7 | 41.9 | 21.53 | 13.76 | 0.85 | 102 | 0.41 | 508 200 |
+| base r2 | 1 000 | 73.8 | 43.4 | 20.16 | 13.55 | 0.87 | 102 | 0.40 | 508 848 |
+| T23 r1 | 1 000 | 72.1 | 42.9 | 19.74 | 13.87 | 0.87 | 100 | 0.44 | 524 241 |
+| T23 r2 | 1 000 | 72.4 | 47.7 | 19.26 | 13.81 | 0.88 | 100 | 0.44 | 523 756 |
+| fix round 1 | 500 | 136.6 | 64.5 | 13.97 | 7.32 | 0.77 | 102 | 0.35 | |
+| fix round 1 | 1 000 | 72.2 | 46.0 | 19.82 | 13.84 | 0.86 | 100 | 0.43 | |
+
+- **Fix round 1:** the explosion levels from pixels and the flash's new size leave the fullscreen check where it was (one run
+  each, loads 0.4 to 0.9). No capital died in any measured window (the bench's capitals are invulnerable), so the stand-ins'
+  counts were exact before and after. The far proxies' CPU update, rerun and saved (`reports/perf/M4-T23_proxy_cost.txt`):
+  0.204 ms mean, 0.506 ms max over 600 frames.
+
+- **The radar's cost, found on the way:** the first build (the radar walking the targetables and plotting in GDScript, now with
+  the tier's ships on it) measured 108 FPS at 500 and 52 at 1 000. Dropping the tier rows from the radar alone gave 70 at 1 000:
+  about 1.5 ms of frame work, which a frame near the tick's cost turns into about 4 ms, since each slower frame runs more ticks.
+  The radar from the core's rows (gather 595 to 12 us for 1 005 contacts, headless) and the native plot (1 507 to 283 us) give
+  the table's rows. Headless `battle` 1 000 tick (seed 1, 20 s after 5 s): base 9.97 ms mean, T23 10.26 ms (the player's
+  targeting snapshot with the tier rows, +0.19 ms).
+- **Far proxies' CPU update at 1 000** (a scratch sampler over 600 frames during the bench): 0.20 ms mean, 0.46 ms max, for 580
+  dots and 97 hull instances; under 0.5 ms, so the compute path was not built.
+- **Screenshots** for (H): `reports/perf/M4-T23_far_fight.png` (24 fighters and a carrier 13 to 16 km ahead, the carrier's box
+  proxy), `reports/perf/M4-T23_far_capital_death.png` (that carrier's death: at 16 km it is still the full explosion); fix round
+  1: `M4-T23_far_fighter_death.png` and `M4-T23_far_capital_flash.png` (a raider at 7.5 km and a cruiser at 116 km, each past its
+  flash switch on a 1 350-line window, with 8x crops `*_crop8x.png` and `M4-T23_far_flash_shots.txt`),
+  `reports/perf/M4-T23_battle_1000_view.png`, and each run's `fullscreen.png` under `reports/perf/M4-T23_final_*`.
+
+### Phase 3 (T21 to T42, M4-P3, M4-T25, 2026-11-07)
+
+Taken on `3fc472b` (every M4 task merged but T25 and T43) in a detached worktree with its own native build (its own cargo target
+directory), the debug editor build with the library loaded, default settings (no saved settings file; the tier on at 10 km, the
+threaded step, six core threads, `smaa`, the upscaler `native` with the fullscreen check holding the 3D at 1 080 lines), on the
+maintainer's desktop (i5-13600KF, RX 6950 XT, RADV NAVI21, Forward+, GNOME on Wayland, two 3840x2160 panels at 60 Hz). Every
+number ran under the M5 and bench locks, the window runs under the GPU lock too; headless runs pinned to cores 0-11. The load at
+each run's start read 0.6 to 3.3 (the higher readings the previous run's process ending; seeds of one count agree within 6 %), and
+no other job ran: the locks serialised the sweep, the fullscreen, latency and release runs, and `bench.sh` found no other Godot
+process at any start.
+Reports are in `reports/perf/` (not committed): `m4_p3` (the sweep), `m4_p3_stretch` (`battle` 700 to 1 000, one count per call so
+the sweep's stop rule did not cut it), `m4_p3_cap20` (1 000 at 20 % capitals), `m4_p3_below` (450), `M4-T25_fs_<layout>_<n>_r<k>`
+(fullscreen), `M4-T25_win1080_*` (the 1 080-line window), `M4-T25_x11_*` (the same check through X11), `M4-T25_lat_*`,
+`m4_p3_release` and `M4-T25_release_fs_*` (the release export).
+
+**The only code changed** is the measuring: the bench takes `capitals=<share>` (`BenchLayout.capital_share`, reset after the run;
+`test_bench_layout` 24 of 24 and `test_bench` 9 of 9 with the new tests), since the section asks for the 1 000 run at 20 %
+capitals and the bench had no way to set it, and `scripts/measure_fight_node.gd` prints `render.display` and `render.window` in
+every log (Q66). The sweep's commit stamps read `32ac1b9`, `655f046`, `d4ec666` and `7a6a718`: the same game code, the later
+commits docs only.
+
+**The limit table (Q48, Q62)**, `scripts/fullscreen_check.sh` on the defaults: Wayland fullscreen at 3840x2160 (every log reads
+`render.display Wayland, render.window 3840x2160`), the 3D at 1 080 lines (scale 0.50), vsync off as asked, chase camera, seed 1,
+8 s of warm-up and 20 s measured, two runs a row. Average FPS is 1000 over the frame mean; the 1 % low is the slowest 1 % of the
+window's frames taken together (P2's reading); sim speed is the window's ticks a second over 60. The headless tick is the sweep's
+median of three seeds at the same count.
+
+| layout | N | average FPS, runs 1 and 2 | 1 % low FPS | p99 frame ms | frame mean ms | median frame ms | sim speed | ticks a frame | GPU ms | draw calls | headless tick median ms |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| typical | 58 | 144.5, 144.6 | 76.2, 80.1 | 11.85, 11.77 | 6.92, 6.91 | 6.90, 6.90 | 1.00 | 0.42, 0.41 | 0.84, 0.84 | 130 | 1.91 |
+| battle | 50 | 144.3, 144.6 | 77.4, 78.6 | 11.60, 11.53 | 6.93, 6.92 | 6.90, 6.90 | 1.00 | 0.42, 0.41 | 0.84, 0.85 | 129 | 1.88 |
+| battle | 100 | 144.4, 144.7 | 69.5, 71.8 | 12.81, 12.94 | 6.93, 6.91 | 6.90, 6.89 | 1.00 | 0.42, 0.41 | 0.80, 0.80 | 118 | 2.77 |
+| battle | 200 | 144.5, 144.2 | 62.2, 63.0 | 14.57, 14.57 | 6.92, 6.93 | 5.98, 5.67 | 1.00 | 0.41, 0.42 | 0.79, 0.79 | 113 | 4.58 |
+| battle | 300 | 144.0, 143.9 | 60.9, 61.7 | 14.52, 14.82 | 6.95, 6.95 | 5.02, 5.11 | 1.00 | 0.42, 0.42 | 0.79, 0.79 | 108 | 5.39 |
+| battle | 400 | 142.8, 143.6 | 60.2, 60.6 | 15.07, 15.08 | 7.00, 6.96 | 3.93, 3.94 | 1.00 | 0.42, 0.42 | 0.77, 0.76 | 105 | 6.58 |
+| battle | 500 | 137.8, 136.9 | 63.6, 59.2 | 13.75, 14.15 | 7.25, 7.30 | 4.18, 4.15 | 1.00 | 0.43, 0.44 | 0.77, 0.76 | 102 | 8.10 |
+| battle | 600 | 123.3, 122.5 | 62.9, 58.3 | 14.72, 14.80 | 8.11, 8.17 | 5.72, 5.78 | 1.00 | 0.49, 0.49 | 0.80, 0.80 | 97 | 8.31 |
+| battle | 700 | 106.1, 106.9 | 56.3, 59.2 | 16.42, 15.73 | 9.43, 9.35 | 12.51, 12.49 | 1.00 | 0.57, 0.56 | 0.81, 0.82 | 94 | 9.01 |
+| battle | 800 | 89.4, 92.8 | 44.7, 51.1 | 19.10, 17.56 | 11.19, 10.78 | 13.52, 13.37 | 1.00 | 0.67, 0.65 | 0.85, 0.86 | 97 | 9.48 |
+| battle | 900 | 78.7, 68.9 | 43.0, 39.7 | 19.33, 22.20 | 12.70, 14.51 | 14.49, 15.23 | 1.00 | 0.76, 0.87 | 0.88, 0.88 | 95 | 9.96 |
+| battle | 1000 | 65.6, 71.1 | 42.7, 42.2 | 21.93, 20.34 | 15.25, 14.07 | 15.56, 15.17 | 1.00 | 0.91, 0.84 | 0.86, 0.87 | 100 | 10.50 |
+
+Every row: the game's own VRAM peak 580 to 581 MB, GPU 0.76 to 0.88 ms a frame, render CPU 0.32 to 0.46 ms, 94 to 130 draw calls.
+
+- **Where the frame crosses the lines.** The average stays over 60 FPS at every count to 1 000 (65.6 and 71.1 there). The 1 % low
+  sits at about 60 from 200 to 600 (58.3 to 63.6), drops under it from 700 (56.3 and 59.2) and never reaches the 30 FPS floor (39.7
+  at the lowest, battle 900). The simulation never falls behind real time: sim speed 1.00 in every window, and headless
+  the worst run is 0.05 % behind. So M4 ends with no cliff in the table: P2's ran from 103 FPS at 100 ships to 6 at 300 and half
+  of real time at 500.
+- **The 145 FPS ceiling.** Up to 300 ships every window averages 143.9 to 144.7 FPS with a frame mean of 6.91 to 6.95 ms, while the
+  median frame falls from 6.9 ms (typical, battle 50 and 100) to 5.0 ms (300): a pace, not a cost. 6.9 ms is Godot's
+  `low_processor_usage_mode_sleep_usec` default (6 900 us), which the engine's frame delay paces to whenever low-processor mode is on
+  or the display server says the window cannot draw; the game never sets low-processor mode. Godot also warns in every Wayland log
+  that vsync off is not available and falls back to on (`measure` reads vsync 1), yet the windows run past the panels' 60 Hz. The same check through X11
+  (`M4-T25_x11_*`, one run each; X11 makes the window 6144x3456 under GNOME's 1.25 scale) runs `typical` 58 at **314.0 FPS** (frame
+  mean 3.18 ms, median 2.63, 1 % low 76.2) and `battle` 1 000 at 63.1 (1 % low 25.4): the ceiling is the Wayland path's, and where
+  the game's frame is longer than 6.9 ms (700 ships and up) the two drivers agree. So rows at 140 FPS and over read the ceiling, not the game, and the frame work W at those counts is not measurable here.
+- **What binds at 1 000.** The frame of 14.1 to 15.3 ms carries 0.84 to 0.91 ticks of about 10.5 ms (the tick is the window's main
+  thread like headless; the AI step is on its worker), so about 9 ms of each frame is the simulation and 5 to 6 ms the rest of
+  the frame (the HUD and radar, the far proxies 0.2 ms, the draw submission 0.46 ms on the render CPU). The GPU does 0.87 ms.
+  The CPU main thread binds; the GPU is idle nine tenths of each frame.
+- **The 1 080-line window** (`M4-T25_win1080_*`, a windowed 1920x1080: `render.window 1920x1080`, the 3D at scale 1.00, one run each):
+  `typical` 58 144.6 FPS (1 % low 78.5, p99 11.73 ms), `battle` 300 143.8 (61.8, 14.74), `battle` 500 136.9 (62.4, 14.23), GPU 0.71 to
+  0.79 ms, game VRAM 318 MB. The 4K fullscreen rows at the same counts: 144.5 and 144.6, 144.0 and 143.9, 137.8 and 136.9. So the 4K
+  window's own present and HUD cost nothing the averages can show (refactor review, open question 5); the window's size costs 263 MB
+  of VRAM. Caution (T25's review): Wayland keeps vsync on and caps the frame at about 145 FPS (6.9 ms), so the `typical` and `battle`
+  300 averages on both windows sit on the cap and cannot differ; only the p99 frame time and the GPU ms carry this comparison.
+- **At the headline** (AC6; the max N is 400 by the ladder and 450 by the below-sweep count, and 400 was measured): 142.8 and 143.6 FPS, 1 % low 60.2 and 60.6, p99 15.07 and
+  15.08 ms, sim speed 1.00, GPU 0.76 to 0.77 ms, 105 draw calls, the game's VRAM 581 MB, through Wayland at 3840x2160; RADV NAVI21 on
+  Forward+ (Vulkan 1.4.354).
+
+**The sweep** (`scripts/bench.sh m4_p3 <layout>`, one layout per locked call; seeds 1 to 3, 5 s + 30 s; `battle` on 25 to 600 with
+the stop rule, 700 to 1 000 one count per call, 450 as a below-sweep count; `typical` with 58 in its ladder):
+
+| layout | N | runs passed | tick median ms (runs) | p99 ms | behind real time | worst rebase tick ms |
+|---|---|---|---|---|---|---|
+| battle | 25 | 3/3 | 1.28 (1.28, 1.28, 1.25) | 1.75 | 0.00 % | 2.50 |
+| battle | 50 | 3/3 | 1.88 (1.71, 1.88, 1.90) | 2.56 | 0.01 % | 3.35 |
+| battle | 100 | 3/3 | 2.77 (2.67, 2.78, 2.77) | 3.78 | 0.00 % | 4.54 |
+| battle | 150 | 3/3 | 3.79 (3.79, 3.71, 3.84) | 4.92 | 0.00 % | 5.72 |
+| battle | 200 | 3/3 | 4.58 (4.58, 4.54, 4.64) | 6.00 | 0.00 % | 6.33 |
+| battle | 300 | 3/3 | 5.39 (5.30, 5.49, 5.39) | 6.90 | 0.00 % | 7.68 |
+| battle | 400 | 3/3 | 6.58 (6.62, 6.58, 6.43) | 8.23 | 0.00 % | 8.93 |
+| battle | 450 | 3/3 | 7.11 (6.89, 7.14, 7.11) | 8.94 | 0.00 % | 9.59 |
+| battle | 500 | 1/3 | 8.10 (7.73, 8.12, 8.10) | 10.01 | 0.02 % | 10.43 |
+| battle | 600 | 0/3 | 8.31 (8.35, 8.23, 8.31) | 10.44 | 0.00 % | 11.73 |
+| battle | 700 | 0/3 | 9.01 (9.04, 8.90, 9.01) | 11.30 | 0.00 % | 12.23 |
+| battle | 800 | 0/3 | 9.48 (9.38, 9.50, 9.48) | 11.77 | 0.03 % | 11.98 |
+| battle | 900 | 0/3 | 9.96 (9.99, 9.71, 9.96) | 12.19 | 0.00 % | 12.59 |
+| battle | 1000 | 0/3 | 10.50 (10.23, 10.50, 10.51) | 13.08 | 0.02 % | 13.07 |
+| typical | 25 | 3/3 | 1.28 (1.24, 1.28, 1.36) | 1.89 | 0.00 % | 2.86 |
+| typical | 50 | 3/3 | 1.79 (1.70, 1.79, 2.00) | 2.69 | 0.01 % | 3.29 |
+| typical | 58 | 3/3 | 1.91 (1.91, 1.83, 1.91) | 2.73 | 0.00 % | 3.32 |
+| typical | 100 | 3/3 | 2.64 (2.64, 2.71, 2.51) | 3.71 | 0.00 % | 4.60 |
+| typical | 150 | 3/3 | 3.56 (3.67, 3.47, 3.56) | 4.70 | 0.00 % | 5.46 |
+| typical | 200 | 3/3 | 4.10 (4.10, 4.00, 4.54) | 5.33 | 0.00 % | 6.26 |
+| typical | 300 | 3/3 | 4.87 (4.88, 4.86, 4.87) | 6.25 | 0.00 % | 6.81 |
+| typical | 400 | 3/3 | 5.74 (5.74, 5.75, 5.61) | 7.19 | 0.00 % | 7.64 |
+| typical | 500 | 3/3 | 5.86 (5.92, 5.81, 5.86) | 7.62 | 0.00 % | 8.47 |
+| furball | 25 | 3/3 | 0.93 (0.94, 0.93, 0.92) | 1.25 | 0.00 % | 1.33 |
+| furball | 50 | 3/3 | 1.25 (1.25, 1.26, 1.25) | 1.64 | 0.00 % | 1.94 |
+| furball | 100 | 3/3 | 1.99 (1.99, 1.97, 2.03) | 2.48 | 0.00 % | 2.73 |
+| furball | 150 | 3/3 | 2.73 (2.78, 2.73, 2.73) | 3.39 | 0.01 % | 3.90 |
+| furball | 200 | 3/3 | 3.52 (3.55, 3.47, 3.52) | 4.31 | 0.00 % | 4.74 |
+| furball | 300 | 3/3 | 5.19 (4.97, 5.19, 5.22) | 6.63 | 0.01 % | 7.04 |
+| furball | 400 | 2/3 | 6.30 (6.25, 6.43, 6.30) | 9.59 | 0.03 % | 10.74 |
+| furball | 500 | 0/3 | 8.17 (7.85, 8.17, 8.70) | 22.49 | 7.74 % | 23.38 |
+| spread | 25 | 3/3 | 0.84 (0.84, 0.83, 0.86) | 1.18 | 0.00 % | 1.28 |
+| spread | 50 | 3/3 | 0.90 (0.90, 0.90, 0.91) | 1.19 | 0.00 % | 1.22 |
+| spread | 100 | 3/3 | 1.05 (1.04, 1.05, 1.05) | 1.40 | 0.00 % | 1.31 |
+| spread | 150 | 3/3 | 1.18 (1.17, 1.18, 1.18) | 1.53 | 0.00 % | 1.50 |
+| spread | 200 | 3/3 | 1.34 (1.32, 1.34, 1.34) | 1.72 | 0.00 % | 1.68 |
+| spread | 300 | 3/3 | 1.64 (1.65, 1.64, 1.64) | 2.00 | 0.00 % | 2.17 |
+| spread | 400 | 3/3 | 1.97 (1.97, 1.98, 1.97) | 2.30 | 0.00 % | 2.49 |
+| spread | 500 | 3/3 | 2.31 (2.31, 2.30, 2.33) | 2.69 | 0.00 % | 2.70 |
+| transit | 25 | 3/3 | 1.05 (1.05, 1.05, 1.05) | 1.41 | 0.00 % | 1.34 |
+| transit | 50 | 3/3 | 1.51 (1.51, 1.52, 1.51) | 1.99 | 0.00 % | 2.14 |
+| transit | 100 | 3/3 | 2.40 (2.42, 2.40, 2.40) | 3.01 | 0.00 % | 3.22 |
+| transit | 150 | 3/3 | 3.15 (3.15, 3.17, 3.14) | 3.85 | 0.00 % | 4.05 |
+| transit | 200 | 3/3 | 3.81 (3.79, 3.84, 3.81) | 4.59 | 0.00 % | 4.32 |
+| transit | 300 | 3/3 | 5.15 (5.15, 5.15, 5.17) | 6.01 | 0.00 % | 6.26 |
+| transit | 400 | 3/3 | 6.56 (6.55, 6.56, 6.59) | 7.43 | 0.00 % | 7.55 |
+| transit | 500 | 0/3 | 8.04 (8.06, 8.03, 8.04) | 9.07 | 0.00 % | 8.70 |
+
+**The max N** (all three bars on two runs of three): **`battle` 400** by the ladder and **450 by the below-sweep count** (3 of 3 at 6.89, 7.14 and 7.11 ms, p99 8.96; 500
+passes one run of three at 7.73 ms and misses two at 8.12 and 8.10, so the line is at 500 within 1 %), furball 400 (500 fails: the Jolt step 2.97 ms and the
+core's sync 1.97 ms jump in the 2 km ball and the p99 reaches 20 to 25 ms, 5 to 11 % behind real time), transit 400 (500 at 8.04 ms),
+spread and `typical` 500, the ladder's top. P2: `battle` 110, furball 140, spread 160, transit 200.
+
+**The 1 000 stretch (Q23).** The profile's 15 % capitals (850 fighters, 150 capitals, 1 420 turrets, 600 interceptors, 300 beams, 340
+missiles, 1 000 mines, 1 000 rocks, 4 sides, 85 x 85 x 20 km): **10.50 ms** median (10.23, 10.50, 10.51), p99 13.08, 0.02 % behind
+real time, worst rebase tick 13.07 ms. At 20 % (800 fighters, 200 capitals; `capitals=0.2`): **11.03 ms** (10.87, 11.03, 11.05),
+p99 13.62, 0.01 % behind, worst rebase 14.27. Fifty more capitals cost 0.53 ms: flight +0.20, the resolvers +0.30, the stand-ins
++0.14. Neither holds the 8 ms budget; both keep real time with 3 to 6 ms of a step to spare (the p99 against the median).
+
+**The stages** (`battle`, means of the three seeds' means, ms; "think" is the AI step's main-thread share, "sync" the core's first sync):
+
+| N | ai | think | flight | standins | targeting | resolvers | hit | ram | physics | sync | late | other | tick |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 25 | 0.11 | 0.09 | 0.52 | 0.05 | 0.06 | 0.21 | 0.14 | 0.06 | 0.27 | 0.04 | 0.04 | 0.10 | 1.31 |
+| 50 | 0.13 | 0.11 | 0.70 | 0.08 | 0.08 | 0.49 | 0.25 | 0.23 | 0.31 | 0.06 | 0.05 | 0.14 | 1.89 |
+| 100 | 0.17 | 0.14 | 1.09 | 0.11 | 0.12 | 0.76 | 0.41 | 0.31 | 0.42 | 0.11 | 0.05 | 0.19 | 2.80 |
+| 150 | 0.20 | 0.17 | 1.50 | 0.16 | 0.16 | 1.13 | 0.64 | 0.49 | 0.54 | 0.17 | 0.05 | 0.24 | 3.82 |
+| 200 | 0.25 | 0.20 | 1.87 | 0.21 | 0.20 | 1.33 | 0.82 | 0.50 | 0.67 | 0.24 | 0.05 | 0.29 | 4.64 |
+| 300 | 0.31 | 0.25 | 2.16 | 0.28 | 0.29 | 1.48 | 0.90 | 0.58 | 0.73 | 0.27 | 0.06 | 0.39 | 5.44 |
+| 400 | 0.39 | 0.31 | 2.66 | 0.36 | 0.38 | 1.81 | 1.06 | 0.74 | 0.87 | 0.34 | 0.06 | 0.48 | 6.66 |
+| 450 | 0.43 | 0.33 | 2.82 | 0.39 | 0.43 | 2.02 | 1.15 | 0.86 | 0.92 | 0.36 | 0.06 | 0.54 | 7.21 |
+| 500 | 0.45 | 0.35 | 3.05 | 0.43 | 0.48 | 2.53 | 1.18 | 1.31 | 0.98 | 0.40 | 0.06 | 0.59 | 8.19 |
+| 600 | 0.53 | 0.41 | 3.35 | 0.50 | 0.59 | 2.13 | 1.27 | 0.85 | 1.06 | 0.44 | 0.06 | 0.70 | 8.42 |
+| 700 | 0.61 | 0.47 | 3.43 | 0.56 | 0.68 | 2.49 | 1.33 | 1.16 | 1.06 | 0.43 | 0.06 | 0.79 | 9.15 |
+| 800 | 0.67 | 0.52 | 3.64 | 0.62 | 0.78 | 2.46 | 1.33 | 1.13 | 1.09 | 0.44 | 0.06 | 0.88 | 9.60 |
+| 900 | 0.74 | 0.57 | 3.76 | 0.66 | 0.88 | 2.54 | 1.37 | 1.16 | 1.08 | 0.44 | 0.06 | 1.00 | 10.12 |
+| 1000 | 0.79 | 0.60 | 3.97 | 0.71 | 0.97 | 2.64 | 1.41 | 1.20 | 1.13 | 0.46 | 0.06 | 1.12 | 10.68 |
+
+At 1 000 the flight stage is 37 % of the tick (the batch's per-ship gather and the forces into Jolt for the 324 ships on bodies),
+the resolvers 25 % (the hit stage 1.41 with 1 069 bolts a tick, the ram stage 1.20), physics 11 %, unaccounted 10 %, targeting 9 %,
+the AI step 7 %. Between 500 and 1 000 the tick grows by 2.5 ms for 500 more ships, 5 us a ship, because the ships on bodies grow
+from 284 to 324 (the tier takes the rest).
+
+**The far battle** (the summaries' tier lines, medians of three seeds):
+
+| N | fighters on bodies / in the tier | capitals on bodies / in the tier | tier main thread us a tick (a fighter row, a capital row) | tier thinks a tick (max), us in the AI step (a row) | fighter shots rolled, hits landed | far-capital rolls, hits landed |
+|---|---|---|---|---|---|---|
+| 300 | 180 / 75 | 30 / 15 | 25.1 (0.262, 0.35) | 3.8 (7), 8.2 (0.110) | 517, 172 | 447, 170 |
+| 500 | 243 / 182 | 41 / 34 | 56.1 (0.246, 0.33) | 9.1 (14), 23.0 (0.126) | 1229, 353 | 1017, 400 |
+| 700 | 255 / 340 | 48 / 57 | 77.5 (0.172, 0.32) | 17.0 (20), 47.1 (0.139) | 2428, 683 | 1712, 1097 |
+| 1000 | 271 / 579 | 53 / 97 | 135.8 (0.179, 0.33) | 29.0 (33), 90.0 (0.155) | 4331, 1234 | 2912, 1911 |
+
+The tier costs 0.17 to 0.26 us a fighter row and 0.32 to 0.35 us a capital row on the main thread, and 0.11 to 0.16 us a fighter row
+in the AI step's thinks: together 0.33 to 0.37 us a fighter row against Q65's 0.3. **Far kills:** none in any bench window, by
+design: the bench makes every hull invulnerable (T22's note), so the hits land and take hull and nothing dies; kills by the tier's
+rolls are covered by `test_tier_outcomes` and `test_tier_fire`. **The known chase limit (T22, fix round 1)** stands: a far fight that
+settles into a steady tail chase scores fewer hits than up close (a Starfury behind a raider at about 450 m lands about 73 % of its
+shots at full fidelity, about 30 % in the tier), and the per-hull to-hit terms (Starfury 0.92, raider 1.25) were fitted at 4 Hz with
+avoiding thinks, not refitted at 3 Hz with lean ones. **`ai.think_us` (T22's re-review):** the AI step's think grows linearly, 0.35 ms
+at 500 and 0.60 ms at 1 000 (the window's `ai.think_us` 388 and 650 us), so the near brains' nearest-contacts walk over every row shows
+no quadratic growth to 1 000; in the sparse `spread` layout it is 0.31 ms at 500 ships.
+
+**The release export, once** (a snapshot of `655f046` by `git archive`, the generated assets and the library copied in, imported and
+exported with the script header's preset, embedded pack, release template 4.7.2; `scripts/` kept in the pack so the measuring scripts
+run): **203 MB**, the native library (6 MB) beside it (P2: 176 MB). Headless, `battle` seed 1, 5 s + 30 s under both locks (`m4_p3_release`, in the
+snapshot's `reports/`): **500 at 6.78 ms** (p99 8.39, passes) and **1 000 at 9.19 ms** (p99 11.73, 0.03 % behind real time), against
+the editor build's 7.73 and 10.23 on the same seed (12 % and 10 % faster; P2 found 25 % at 300). The sweep's own summary step hangs in
+the export (it reads `res://reports`, which is not in the pack) and was stopped; each run's summary is written. **The fullscreen release
+runs failed**: the export cannot read three runtime GLSL files (`RuntimeShader` loads `sky_velocity.glsl`, `motion_blur.glsl` and
+`motion_blur_copy.glsl` as text with `FileAccess`, and an export ships only the imported shader, so adding `*.glsl` to the preset did
+not help), the compositor effects then fail every frame with pipeline errors, and the window run crashed (exit 132) on the first
+export and never reached its summary on the second (timeout). No game code changes in this task, so it is reported for T43 and M8's
+release build (open question 4).
+
+**Input latency** (`scripts/input_latency.gd`, a full pitch-up on the fake input source at a random point of a frame, 20 presses a
+second apart after 10 s, fullscreen at 1 080 lines, vsync off, the threaded step): `battle` 500 **30.6 ms** mean (median 30.1, worst 39.8, best 25.2; 4.1 frames at 140 FPS), `battle` 1 000 **34.0 ms** (median 33.7,
+worst 47.4, best 28.7; 2.45 frames at 77 FPS). T24 measured 35.9 ms at 500 (worst 77.6) at 57 FPS through X11. The latency is still
+two physics ticks (the pad sampled at 60 Hz, the pod-yaw command ramping); the frame no longer adds to it.
+
+**Behaviour changes in phase 3** (each listed in its own entry; all tests green there):
+- T21: fighters and capitals beyond 10 km leave Jolt and fly as core rows at 20 Hz from their last command; promoted back at 10 km
+  with their motion carried over; demoted at 11 km.
+- T22: tier fighters think three times a second with lean thinks (no rocks, mines, incoming fire or avoidance) and fight by rolls;
+  far capitals' guns, beams and missiles are rolled once a second; near bolts hit tier ships; tier ships ram and are rammed and die;
+  far missiles are shot down by interceptors along their path; every death's killing hit carries a blast; every brain's nearest
+  contacts come from the ships' rows.
+- T23: tier fighters drawn as far dots and tier capitals as their class's mesh from the rows; radar, targeting and broadcasts read
+  tier ships from the rows (a ship past 11 km stays on the radar and keeps the player's lock); a promoted row is moved clear of rocks
+  and mines; far deaths as point flashes and a reduced explosion between; capitals can die (the bench's are invulnerable); mines on
+  the core's sweep rows; the tier on by default (`tier_radius_m` 10 000).
+- T24: every AI command lands one tick (16.7 ms) after the rows it was decided on (Q53); the catch-up cap
+  `physics_max_steps_per_frame` 3. T37 removed the same-tick inline step.
+- T33 to T36: the player's candidate list is built when the HUD reads it (one tick fresher); the AI ships' bolts drawn by one
+  multimesh a look and their muzzle flashes from one pool; the radar's dots in batches, the mesh spark streaks gone, plumes held at
+  their levels, the debug overlay at 10 Hz, `RenderScale` no longer lowers a large window's 3D.
+- T38: `smaa` the default anti-aliasing. T40: `native` the default upscaler. T41: the Wayland display driver.
+- T42: every world (free flight too) attaches the core; no behaviour change measured (free flight's sync 0.05 ms).
+
+**Tolerated differences in phase 3:** T35's bolt table order (owned rows by launch tick, an owned row first on a tie; the only order
+left is two same-tick projectiles on the same hull); T24's new seeded references (every outcome shifted by the one-tick handover,
+Q53); Q70's loosened gate for the GDScript-against-native fights after T37 (hits within 20 %, the outcome mix within 5 points, the
+twin distance recorded); T22's fairness checks as Q64 accepted them (the win share within one seed of three, each seed's hits within
+two times); the tier's tail-chase limit above.
+
+**Tests.** `scripts/run_tests.sh` once on `ca7509d` (the bench and docs commits of this task; the bench lock held, 50 minutes): exit 0;
+the Python tests 410, OK; GUT **235 scripts, 2 586 tests, 2 574 passing, 0 failing, 12 pending** (AC12's two balance runs,
+`test_dogfight` and `test_m3_sandbox`, and the ten GPU tests of `test_motion_vectors_gpu` and `test_upscaling_gpu`, which need the real
+renderer); every console smoke run passed. The CI shards in order (`GUT_SHARD=k/3 GUT_SLOW=1 CI=true scripts/run_tests.sh`), each exit
+0: shard 1 the Python tests 410 OK and 79 scripts, 978 tests, 977 passing, 1 pending; shard 2 77 scripts, 785 tests, 784 passing, 1
+pending; shard 3 79 scripts, 823 tests, 813 passing, 10 pending (together the full suite's 2 586 and 12). AC13's paired budget
+(`test_ai_think_time` 1 of 1) and AC21's rebase cost (`test_rebase_in_play` 8 of 8) passed on the first run.
+
+**After T44 (2026-11-08).** T43's fix round (F1 to F11) on `b5c7a83`, measured the same way in its own worktree (its own native
+build, default settings, the M5 and bench locks, the GPU lock for the windows; load 0.4 to 1.3 at each start).
+
+- **The release window opens.** A `git archive` snapshot of `b5c7a83` exported with the script header's preset: 203 MB, the native
+  library beside it, no shader error in any log (the four `src/rendering/*.glsl` now ship as kept files, the lens flare's by
+  `addons/scs_export`), the lens flare on. T25's window runs failed for two more reasons than the GLSL: a release template does not
+  honour `-s`, so `scripts/measure_fight.gd` never ran (the main scene sat idle until the timeout), and the measure node needs
+  `FakeInputSource` from `tests/fixtures/`, which the preset excluded. The measuring snapshot therefore excludes only
+  `tests/unit/*` and `tests/integration/*` and makes `scripts/measure_fight_node.gd` its main scene (snapshot only; the steps are in
+  `scripts/setup_export_templates.sh`'s header). A release print is not flushed until the process exits, so a run killed by its
+  timeout logs nothing.
+- **The release fullscreen pair** (`M4-T44_release_fs_battle_*`, in the snapshot's `reports/`), Wayland at 3840x2160, the 3D at
+  1 080 lines: `battle` 500 **144.1 FPS** (1 % low 60.4, p99 15.43 ms, frame mean 6.94, at the Wayland cap), `battle` 1 000
+  **119.1 FPS** (1 % low 57.9, p99 15.14 ms, frame mean 8.39); sim speed 1.00, GPU 0.77 and 0.80 ms, 100 to 102 draw calls, the
+  game's VRAM 581 MB.
+- **Headless, the editor build** (`M4-T44_after`, seeds 1 to 3, 5 s + 30 s): `battle` 500 **7.42 ms** median (7.13, 7.44, 7.42; p99
+  9.34; passes 3/3, so the headline max N is 500) against T25's 8.10 (p99 10.01, 1/3); `battle` 1 000 **9.22 ms** (8.93, 9.22, 9.24;
+  p99 11.64) against 10.50 (p99 13.08). Seed 2's stages at 1 000 against T25's seed 2: targeting 0.97 to **0.16 ms** (F8, the
+  player's snapshot from the rows), flight 3.97 to 3.82, resolvers 2.64 to 2.59, physics 1.13 to 1.12, the unaccounted remainder
+  1.12 to 1.10 (F4's unread scan cost less than T43's estimate of 0.1 to 0.3 ms).
+- **Fullscreen, the editor build** (`M4-T44_fs_battle_*`, one run each): `battle` 500 142.7 FPS (1 % low 64.9, p99 14.25 ms, frame
+  mean 7.01) against T25's 137.8 and 136.9; `battle` 1 000 **87.3 FPS** (1 % low 48.8, p99 18.90 ms, frame mean 11.46) against 65.6 and
+  71.1 (1 % low 42.7 and 42.2).
+
+#### Report P3
+
+**For the maintainer: confirm M4.** Phase 3 (T21 to T42) is built and measured. It took the tick at `battle` 500 from 30.9 ms (P2)
+to 8.1 ms and raised the `battle` ceiling from 110 ships to 450. A thousand ships keep real time at 10.5 ms, and the fullscreen frame
+holds 60 FPS on average at every count to 1 000.
+
+**Headlines** (editor build headless, the budget of 8 ms median and 12 ms p99; fullscreen through Wayland on the RX 6950 XT):
+- **AC5, the headline max N:** `battle` **500 after T44** (7.42 ms, 3 of 3; see "After T44"); at T25 `battle` **450** (400 by the sweep's ladder; 500 at the line, 8.10 ms against 8). furball 400, transit
+  400, spread and `typical` 500 or more (the ladder's top). P2: `battle` 110, furball 140, transit 200, spread 160; T06: 25.
+- **`typical`** (50 fighters, 8 capitals, every weapon, 1 000 rocks, a moon): **1.91 ms** (1.91, 1.83, 1.91), p99 2.73; fullscreen 144.5
+  and 144.6 FPS, 1 % low 76.2 and 80.1, frame mean 6.9 ms (the Wayland ceiling; 314 FPS through X11). P2: 4.06 ms.
+- **The limit table, read plainly:** the average FPS is over 60 at every count to 1 000 (144 to 300 ships, 137 at 500, 106 at 700,
+  89 to 93 at 800, 69 to 79 at 900, 66 to 71 at 1 000). The 1 % low is about 60 from 200 to 600 and falls to 39.7 to 51.1 from 800,
+  so frame pacing, not the average, is where 60 FPS gives way, between 500 and 700 ships. Nothing reaches the 30 FPS floor. The
+  simulation never falls behind real time (sim speed 1.00 in every window; at most 0.05 % behind headless).
+- **The 1 000 stretch (Q23):** 10.50 ms (11.03 at 20 % capitals), p99 13.1 (13.6), real time kept; 65.6 and 71.1 FPS, 1 % low 42.
+- **The release export:** 500 at 6.78 ms and 1 000 at 9.19 ms headless; its window runs fail on a shader the export cannot read.
+- **The GPU** draws a frame in 0.76 to 0.88 ms at every count; the game holds 581 MB of VRAM (318 MB in a 1 080-line window).
+- **Input latency:** 30.6 ms at 500 and 34.0 ms at 1 000 (two physics ticks), vsync off.
+
+**Against the acceptance criteria.** AC1 to AC3 met (T01 to T05). AC4: the full suite and the three CI shards locally in this task
+(the totals below); CI runs on the controller's push. **AC5 met**: the headline is 450 at T25 and **500 after T44** (7.42 ms, 3 of 3; the "After T44" block below), over 100 and at the plan's 500. **AC6 met**:
+the render check at the headline (400: 142.8 and 143.6 FPS, GPU 0.77 ms, 581 MB, RADV on Forward+). AC7 met for its automated half; the
+T30d sheets wait for your eye on the return checklist.
+
+**Against the section's expected rows.** `typical` under 4 ms and 60 FPS with headroom (85 %): **met**, 1.91 ms and 144.5 FPS (at Wayland's vsync cap of about 145, so the headroom is larger than the FPS shows; X11 ran it at 314). Battle 500
+in the world: 243 fighters and 41 capitals stay on their bodies within 10 km and 182 fighters and 34 capitals fly in the tier (the plan
+expected 100 to 150 fighters and about 20 capitals near: the 10 km radius takes in the player's fight and its neighbours on the 8 km
+lattice); under 8 ms headless
+(55 %): **missed by 1 %**, 8.10 ms (one run of three at 7.73); the 30 FPS floor (60 %): **met**, 137 FPS; 60 FPS (40 %): **met** on the
+average, the 1 % low 59.2 and 63.6. 1 000 under 8 ms (35 %): **not met**, 10.50 ms; the floor (30 %): **met**, 66 to 71 FPS, 1 % low 42;
+60 FPS (15 %): **met on the average**, not on the 1 % low.
+
+**What binds at 1 000.** The CPU's main thread. Per tick (10.68 ms mean): flight 3.97 ms (the batch's per-ship gather in GDScript and the
+forces into Jolt for the 324 ships on bodies), the resolvers 2.64 (the hit stage 1.41 for 1 069 bolts, the ram stage 1.20), the Jolt step
+1.13, unaccounted 1.12 (the console, `Main`, the scene's own nodes), targeting 0.97, the AI step's main-thread share 0.79 (its thinks run
+on the worker thread), the stand-ins 0.71, the core's sync 0.46. In the window each frame adds 5 to 6 ms outside the ticks (the HUD
+and the radar, the far proxies 0.2 ms, draw submission 0.46 ms). The GPU is busy 0.87 ms of a 14 to 15 ms frame. The next levers are flight's
+GDScript gather (37 % of the tick) and the two resolvers (25 %); the tier itself is 0.14 ms a tick on the main thread.
+
+**Open questions for the maintainer** (Q72 already approves merging `m4` into `main` after T25 and T43):
+1. **Confirm M4** on these numbers: `battle` 450 in budget, 500 at the line, 1 000 in real time at 10.5 ms and 66 to 71 FPS.
+2. **The Wayland frame ceiling.** Through Wayland Godot reports that vsync off is not available, keeps vsync on, and paces frames to at
+   most about 145 FPS (6.9 ms, the engine's low-processor sleep, which it applies when the display server says the window cannot draw);
+   through X11 `typical` runs at 314 FPS. On these 60 Hz panels it changes nothing you can see, and Q52's bar (60 FPS at the screen with
+   vsync on, (H)) is on the return checklist. Keep Wayland with the ceiling (Q66), or ask T43 or a later task to look into it?
+3. **The 1 % low at 700 to 1 000** (39.7 to 59.2) while the average holds 66 to 107: the frames that carry a tick (median frame 12.5 to
+   15.6 ms) are the slow ones. Is that acceptable for the 1 000 stretch, or is it a target for a later milestone?
+4. **The release export's shaders.** `RuntimeShader` reads three GLSL files as text at runtime, which an export does not ship, so the
+   motion-blur and sky-velocity effects fail and the window runs did not finish. M8 ships a release build: a fix task before then (T43
+   will list it), and the export preset in `scripts/setup_export_templates.sh`'s header needs the GLSL sources or the shaders need to
+   load as resources.
+5. **The mines' placement** (`docs/roadmap.md`, M12): belts between the sides as in the benchmark, or your own placement, and in which
+   milestone?
+6. **The tier's known limits:** the tail-chase to-hit gap (73 % up close against 30 % in the tier) and the per-hull to-hit terms not
+   refitted at 3 Hz with lean thinks. Accept them for M4, or plan a refit? The bench cannot show far kills (every hull is invulnerable
+   during a bench); a bench option for mortal hulls would let the far battle's kills be counted.
+7. **The furball at 500:** 500 ships inside a 2 km ball push the Jolt step and the core's sync up (p99 20 to 25 ms, 5 to 11 % behind real
+   time). It is the worst case beyond the furball's 400; accept it as the limit of a single dense fight?
 
 ## Definition of done (M4)
 

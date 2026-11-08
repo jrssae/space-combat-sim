@@ -15,6 +15,9 @@ extends Node3D
 ## It drifts with `velocity` (it was the ship's), joins `world_shiftable` so a rebase moves it, and frees itself after
 ## 3 s. Animation is `_process` (visuals), so a paused game freezes it; `advance` is public for tests.
 ##
+## The reduced effect (M4-T23, `ExplosionLod`): a death too far for the full effect to show keeps the flash and the fireball
+## but no light and only the gas shell's puffs (`reduced`).
+##
 ## The pool's bursts start where the ship blew up and fly on at the ship's velocity (they inherit it); their emitters are shifted
 ## by a rebase with the world (`FxPool`). The explosion owns no particle nodes of its own, so the count never changes.
 
@@ -36,6 +39,8 @@ var velocity: Vector3 = Vector3.ZERO
 var emitter: LightEmitter = null
 var flash: MeshInstance3D = null
 var fireball: MeshInstance3D = null
+## The reduced effect: no light, the gas shell only (M4-T23).
+var reduced: bool = false
 ## Where the sparks, fragments and gas shell come from (`DestructionDirector` sets it); without one the explosion has none.
 var fx: FxPool = null
 
@@ -45,11 +50,12 @@ var _fireball_material: ShaderMaterial = null
 
 
 ## An explosion of `p_radius` metres that drifts at `p_velocity`. Add it under `World/Effects` and place it.
-static func create(p_radius: float, p_velocity: Vector3) -> Explosion:
+static func create(p_radius: float, p_velocity: Vector3, p_reduced: bool = false) -> Explosion:
 	var e := Explosion.new()
 	e.name = "Explosion"
 	e.radius_m = maxf(p_radius, 0.5)
 	e.velocity = p_velocity
+	e.reduced = p_reduced
 	e._build()
 	return e
 
@@ -61,11 +67,14 @@ func _init() -> void:
 func _ready() -> void:
 	if emitter == null:
 		_build()  # instanced from the scene instead of `create`
-	_rig = LightRig.of(self)
+	_rig = LightRig.of(self) if not reduced else null
 	if _rig != null:
 		_rig.add_emitter(emitter)
 	if fx != null:
-		for effect: int in [FxSpecs.EXPLOSION_SPARKS, FxSpecs.EXPLOSION_FRAGMENTS, FxSpecs.EXPLOSION_GAS]:
+		var effects: Array[int] = [FxSpecs.EXPLOSION_SPARKS, FxSpecs.EXPLOSION_FRAGMENTS, FxSpecs.EXPLOSION_GAS]
+		if reduced:
+			effects = [FxSpecs.EXPLOSION_GAS]
+		for effect: int in effects:
 			fx.burst(effect, global_position, Vector3.UP, velocity)
 	advance(0.0)
 
@@ -111,6 +120,11 @@ static func light_energy(age_s: float) -> float:
 	var t: float = clampf(age_s / LIGHT_S, 0.0, 1.0)
 	var rise: float = 1.0 / 3.0
 	return LIGHT_PEAK_ENERGY * (t / rise if t < rise else (1.0 - t) / (1.0 - rise))
+
+
+## Whether its light competes for a slot in the light rig now.
+func lit() -> bool:
+	return _rig != null
 
 
 ## Seconds since it appeared.

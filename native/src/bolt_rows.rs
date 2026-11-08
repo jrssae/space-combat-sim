@@ -1,5 +1,4 @@
-// The core's own bolts (M4-T35, docs/architecture.md 17.13): with `set_bolt_rows(true)` the bolt table's front rows are
-// the core's, added by the cannon kernel and the stand-ins, stepped by `bolt_kernels::step` once a tick between the
+// The core's own bolts (M4-T35, docs/architecture.md 17.13): the bolt table's front rows are the core's, added by the cannon kernel and the stand-ins, stepped by `bolt_kernels::step` once a tick between the
 // cannons and the hit resolver, spent by the resolver and dropped at the tick's end. The rows read from nodes (beams and
 // missiles, which still have one) follow them at each sync point.
 use godot::prelude::*;
@@ -36,21 +35,6 @@ impl ScsSimCore {
 
 #[godot_api(secondary)]
 impl ScsSimCore {
-    /// Switches the core's ownership of bolts on or off (`perf_native_bolt_rows`). Off drops the owned rows at once; the
-    /// node reads carry on as before.
-    #[func]
-    fn set_bolt_rows(&mut self, on: bool) {
-        if self.bolt_rows && !on {
-            self.bolts.drop_owned();
-        }
-        self.bolt_rows = on;
-    }
-
-    #[func]
-    fn bolt_rows(&self) -> bool {
-        self.bolt_rows
-    }
-
     /// Adds a bolt row (a stand-in's gun bolt, a test's) and returns its id: `kind` is `SimCore.KIND_*` or its name,
     /// `look` the renderer's look index (`LOOK_NONE` for none), `lifetime_s` from `now_s`.
     #[func]

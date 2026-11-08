@@ -62,8 +62,22 @@ been planned were taken for done.
 - Do not commit `assets/generated/`, `.tools/`, `.godot/`, `references/` or `reports/` (already in `.gitignore`).
 - Do not edit `README.md`, `LICENSE`, `DISCLAIMER.md` (owned by the maintainer) or files under `addons/gut/` and `addons/lens_effects/`
   (vendored upstream code; see `docs/third-party.md`).
-- Statically typed GDScript, one class per file, pure logic in `RefCounted` classes with GUT unit tests in the
-  same PR; nodes are thin adapters. Physics in `_physics_process`, visuals in `_process`.
+- Two languages, split by cost. Per-tick work that scales with entity count (flight, brains and perception,
+  contacts, hit sweeps, weapons, the low-attention tier, anything run per ship, bolt or missile every tick) goes
+  in the native core: Rust with gdext under `native/`, engine-free kernels inside the guard test
+  (`test_the_kernels_hold_no_engine_type`), threads only inside native code, 1 and 6 threads identical
+  (architecture §17). Everything else is statically typed GDScript: game rules, scenarios, UI and HUD, scene glue,
+  per-event logic, tools.
+- The native library is required (M4-T37). Never add a GDScript fallback or a setting that switches back to an
+  old path; a native change keeps its parity test against the recordings in `tests/fixtures/` green, and new
+  native behaviour gets its own tests. GDScript stays one class per file, pure logic in `RefCounted` classes
+  with GUT unit tests in the same PR; nodes are thin adapters. Physics in `_physics_process`, visuals in `_process`.
+- Threads (Q53, Q61, architecture §17.13): AI decisions run in the core's worker job one tick behind, on a frozen
+  snapshot of the rows; their commands are applied at the join on the main thread, checked against the pilot's
+  stamp. Work that writes to the engine in the same tick (flight forces, bolts, the hit sweep, rams, weapons) and
+  the player's own input stay on the main thread. No engine call off the main thread; no GDScript threads or
+  `WorkerThreadPool` for gameplay. Randomness is a seeded per-entity hash, never a shared RNG: results must be
+  identical with 1 and 6 threads and between `sim_step` threaded and its `delayed` reference.
 - Gameplay never reads `Input`; ships consume `FlightCommand` + `CombatCommand` from `InputAdapter` (or, later,
   an AI pilot).
 - World objects live under the `World` node and are spawned from `UniversePos`; gameplay time comes from `delta` or

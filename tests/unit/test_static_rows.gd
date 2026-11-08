@@ -11,8 +11,7 @@ func before_each() -> void:
 	StaticRows.clear()
 	_a = WorldFrame.new()
 	add_child_autofree(_a)
-	_b = WorldFrame.new()
-	add_child_autofree(_b)
+	_b = autofree(WorldFrame.new())  # out of the tree: it only owns rows (one world per tree, M4-T42)
 
 
 func after_each() -> void:

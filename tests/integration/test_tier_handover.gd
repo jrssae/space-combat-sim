@@ -5,16 +5,14 @@ extends GutTest
 ## A capital goes with its turrets and emitters and fires again when it is back; Jolt holds only the near bodies; the
 ## player flying into a far fight finds it promoted at 10 km, long before 5 km; a tier ship thinks at the tier's brain
 ## rate (M4-T22; the tier replaces the far rate for it) and at its own again when promoted; a hulk comes back as a hulk; a release while tiered takes
-## the row away; the radius at 0 or the core off promotes everything. Every test runs on both of T24's step schedules
-## (Q54), each pass reading the live schedule back. Real pooled ships, real physics frames. Skips, saying why, when the
-## library is not built.
+## the row away; the radius at 0 or the core off promotes everything. Every test runs on the threaded step (M4-T37 ended
+## Q54's both-schedules rule), reading the live schedule back. Real pooled ships, real physics frames.
 
 const POOL: int = 14
 const DT: float = 1.0 / 60.0
-const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_native_flight",
-		&"perf_native_commands", &"perf_native_driver_step", &"perf_native_weapons", &"perf_native_bolt_rows", &"sim_step",
+const SETTINGS: Array[StringName] = [&"sim_step",
 		&"tier_radius_m", &"tier_hz", &"ai_think_rate", &"perf_threads"]
-const SCHEDULES: Array[StringName] = [&"threaded", &"inline"]
+const SCHEDULES: Array[StringName] = [&"threaded"]  # M4-T37: the inline step and Q54's both-schedules rule are gone
 const RADIUS_M: float = 10000.0
 
 var world: WorldFrame
@@ -43,8 +41,7 @@ class ThrustBrain extends PilotBrain:
 func before_each() -> void:
 	for key: StringName in SETTINGS:
 		_saved[key] = Settings.get_value(key)
-	for key: StringName in [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_native_flight",
-			&"perf_native_commands", &"perf_native_driver_step", &"perf_native_weapons", &"perf_native_bolt_rows", &"ai_think_rate"]:
+	for key: StringName in [&"ai_think_rate"]:
 		Settings.set_value(key, true)
 	Settings.set_value(&"tier_radius_m", RADIUS_M)
 	Settings.set_value(&"tier_hz", 20.0)
@@ -118,13 +115,6 @@ func _strays(n: int) -> Array[Combatant]:
 		world.spawn(stray.ship, world.to_universe(Vector3(float(i) * 100.0, 0.0, -20000.0)), Basis.IDENTITY, holder)
 		out.append(stray)
 	return out
-
-
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there is no tier to hand over to")
-	return true
 
 
 func _ticks(n: int) -> void:
@@ -204,8 +194,6 @@ func _assert_scan_continuous(scan: Array, why: String) -> void:
 
 
 func test_a_fighter_demoted_and_promoted_a_hundred_times_never_pops_on_either_schedule() -> void:
-	if _skipped():
-		return
 	tier.set_physics_process(false)  # the handovers by hand, at a fixed beat
 	for schedule: StringName in SCHEDULES:
 		_use_schedule(schedule)
@@ -263,8 +251,6 @@ func test_a_fighter_demoted_and_promoted_a_hundred_times_never_pops_on_either_sc
 
 
 func test_jolt_holds_only_the_near_bodies_and_the_counts_say_so() -> void:
-	if _skipped():
-		return
 	for schedule: StringName in SCHEDULES:
 		_use_schedule(schedule)
 		var near: Array[Combatant] = []
@@ -307,8 +293,6 @@ func test_jolt_holds_only_the_near_bodies_and_the_counts_say_so() -> void:
 
 
 func test_the_player_flying_into_a_far_fight_sees_it_promoted_at_ten_km_long_before_five() -> void:
-	if _skipped():
-		return
 	for schedule: StringName in SCHEDULES:
 		if schedule != SCHEDULES[0]:
 			await _rebuild()
@@ -337,8 +321,6 @@ func test_the_player_flying_into_a_far_fight_sees_it_promoted_at_ten_km_long_bef
 
 
 func test_a_tier_ship_thinks_at_the_tier_brain_rate_and_at_its_own_again_when_promoted() -> void:
-	if _skipped():
-		return
 	for schedule: StringName in SCHEDULES:
 		_use_schedule(schedule)
 		Settings.set_value(&"tier_radius_m", RADIUS_M)
@@ -399,8 +381,6 @@ func test_tier_holds_have_a_count_of_their_own_apart_from_the_far_rate_holds() -
 
 
 func test_a_capital_leaves_with_its_turrets_and_fires_again_when_it_is_back() -> void:
-	if _skipped():
-		return
 	for schedule: StringName in SCHEDULES:
 		if schedule != SCHEDULES[0]:
 			await _rebuild()
@@ -440,8 +420,6 @@ func test_a_capital_leaves_with_its_turrets_and_fires_again_when_it_is_back() ->
 
 
 func test_a_hulk_row_comes_back_as_a_hulk_and_goes_back_as_one() -> void:
-	if _skipped():
-		return
 	for schedule: StringName in SCHEDULES:
 		if schedule != SCHEDULES[0]:
 			await _rebuild()
@@ -484,8 +462,6 @@ func test_a_hulk_row_comes_back_as_a_hulk_and_goes_back_as_one() -> void:
 
 
 func test_a_release_while_tiered_takes_the_row_away() -> void:
-	if _skipped():
-		return
 	for schedule: StringName in SCHEDULES:
 		if schedule != SCHEDULES[0]:
 			await _rebuild()
@@ -505,8 +481,6 @@ func test_a_release_while_tiered_takes_the_row_away() -> void:
 
 
 func test_the_radius_at_zero_or_the_core_off_promotes_every_row() -> void:
-	if _skipped():
-		return
 	for schedule: StringName in SCHEDULES:
 		if schedule != SCHEDULES[0]:
 			await _rebuild()
@@ -526,17 +500,9 @@ func test_the_radius_at_zero_or_the_core_off_promotes_every_row() -> void:
 		Settings.set_value(&"tier_radius_m", RADIUS_M)
 		await _ticks(3)
 		assert_eq(int(sim.core.tier_count()), 5, "%s: and demoted again when the radius is back" % schedule)
-		Settings.set_value(&"perf_native_core", false)
-		await _ticks(2)
-		assert_eq(tier.tier_fighters(), 0, "%s: the core off, every row promoted" % schedule)
-		for c: Combatant in far:
-			assert_true(c.ship.visible and _in_jolt(c.ship), "%s is back on its body" % c.display_name)
-		Settings.set_value(&"perf_native_core", true)
 
 
 func test_with_the_core_gone_a_tiered_ship_comes_back_where_it_was_parked_in_the_current_frame() -> void:
-	if _skipped():
-		return
 	for schedule: StringName in SCHEDULES:
 		if schedule != SCHEDULES[0]:
 			await _rebuild()
@@ -557,8 +523,6 @@ func test_with_the_core_gone_a_tiered_ship_comes_back_where_it_was_parked_in_the
 
 
 func test_a_gdscript_pilot_beside_a_tier_row_perceives_only_the_bodies_its_scan_holds() -> void:
-	if _skipped():
-		return
 	tier.set_physics_process(false)  # one ship into the tier by hand; its neighbours stay on their bodies
 	for schedule: StringName in SCHEDULES:
 		if schedule != SCHEDULES[0]:
@@ -583,8 +547,6 @@ func test_a_gdscript_pilot_beside_a_tier_row_perceives_only_the_bodies_its_scan_
 
 
 func test_bodies_the_director_cannot_demote_do_not_use_up_its_handovers() -> void:
-	if _skipped():
-		return
 	for schedule: StringName in SCHEDULES:
 		if schedule != SCHEDULES[0]:
 			await _rebuild()
@@ -607,8 +569,6 @@ func test_bodies_the_director_cannot_demote_do_not_use_up_its_handovers() -> voi
 
 
 func test_one_thread_and_six_give_the_same_rows_with_tier_rows_among_the_contacts() -> void:
-	if _skipped():
-		return
 	for schedule: StringName in SCHEDULES:
 		var digests: Array[PackedInt64Array] = []
 		for threads: int in [1, 6]:

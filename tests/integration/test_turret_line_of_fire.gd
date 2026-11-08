@@ -15,9 +15,6 @@ const TICKS: int = 360
 
 
 func _skipped() -> bool:
-	if not NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		pending("the native library is not built (scripts/build_native.sh), so there are no turrets")
-		return true
 	if not MeshAssets.read_manifest(String(TRANSPORT)).has("turret"):
 		pending("the Saturn 4 is not generated (scripts/gen_assets.sh), so it has no turrets")
 		return true

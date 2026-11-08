@@ -1,7 +1,6 @@
 // Entry point of the game's native library: registers every native class with Godot.
 use godot::prelude::*;
 
-mod body_registry;
 mod bolt_kernels;
 mod bolt_rows;
 mod brain;
@@ -50,3 +49,6 @@ mod turret_rows;
 // M5-T28: the engine voices' ship query, an engine-free kernel and the core's shell around it.
 mod voice_kernels;
 mod voice_rows;
+// M4-T23: the player's radar sphere, an engine-free kernel, and its shell.
+mod radar_kernel;
+mod radar_plot;

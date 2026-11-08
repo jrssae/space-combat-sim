@@ -404,6 +404,8 @@ func _finish() -> void:
 			label, _read("render.renderer"), _read("render.gpu"), get_window().size.x, get_window().size.y, DisplayServer.window_get_vsync_mode(),
 			float(Settings.get_value(&"ambient_level")), Settings.get_value(&"particle_density"), Settings.get_value(&"lens_flare"), Settings.get_value(&"motion_blur"),
 			_read("ship.running_lights")])
+	# M4-T25: which display driver and window size the numbers come from (Q66).
+	print("[measure] %s: render.display %s, render.window %s" % [label, _read("render.display"), _read("render.window")])
 	# M4-T40: what the 3D was drawn with, so a run's settings file or exec is shown to have applied.
 	print("[measure] %s: upscaler %s (%s), scale %.3f, anti_aliasing %s, held %s, sim_step %s" % [label, _read("upscale.applied"),
 			_read("upscale.applied_preset"), get_tree().root.scaling_3d_scale, Settings.get_value(&"anti_aliasing"), _read("aa.held"),

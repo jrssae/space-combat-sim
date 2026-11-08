@@ -1,5 +1,6 @@
 // The ram resolver's broad phase on the core's rows (M4-T15, docs/architecture.md 17.13); `RamBroadPhase` (GDScript,
-// M4-T03) stays the reference. The pass itself is `kernels::ram`; this class only binds the core and hands the keys over.
+// M4-T03, in tests/fixtures/ since M4-T42) stays the reference. The pass itself is `kernels::ram`; this class only
+// binds the core and hands the keys over.
 // gdext's `init` derive writes `base: base`, which clippy flags on the struct's `base` field.
 #![allow(clippy::redundant_field_names)]
 use godot::classes::PhysicsServer3D;

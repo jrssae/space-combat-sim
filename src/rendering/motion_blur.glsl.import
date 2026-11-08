@@ -1,14 +1,3 @@
 [remap]
 
-importer="glsl"
-type="RDShaderFile"
-uid="uid://bc8ou6iyxs6kf"
-path="res://.godot/imported/motion_blur.glsl-8c2d4a55135f24058e6da4cdebecf056.res"
-
-[deps]
-
-source_file="res://src/rendering/motion_blur.glsl"
-dest_files=["res://.godot/imported/motion_blur.glsl-8c2d4a55135f24058e6da4cdebecf056.res"]
-
-[params]
-
+importer="keep"

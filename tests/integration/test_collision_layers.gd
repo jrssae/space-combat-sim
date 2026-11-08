@@ -31,7 +31,7 @@ class ContactCounter extends Node:
 
 
 func before_each() -> void:
-	for key: StringName in [&"ram_damage", &"collision_layers", &"far_ship_interpolation_off"]:
+	for key: StringName in [&"ram_damage"]:
 		_saved[key] = Settings.get_value(key)
 		Settings.reset(key)
 	Settings.set_value(&"ram_damage", true)
@@ -135,16 +135,6 @@ func test_each_kind_of_body_gets_its_layer_and_mask() -> void:
 	var rock: RID = field.body_rids()[0]
 	assert_eq(PhysicsServer3D.body_get_collision_layer(rock), CollisionLayers.layer_of(&"rock"))
 	assert_eq(PhysicsServer3D.body_get_collision_mask(rock), CollisionLayers.mask_of(&"rock"))
-
-
-func test_the_setting_off_puts_every_body_back_on_the_default_layer() -> void:
-	Settings.set_value(&"collision_layers", false)
-	var ai: Combatant = _fighter("AI", Factions.RAIDERS, Vector3.ZERO)
-	await _ticks(2)
-	assert_eq(ai.ship.collision_layer, 1)
-	assert_eq(ai.ship.collision_mask, 1)
-	Settings.set_value(&"collision_layers", true)
-	assert_eq(ai.ship.collision_layer, CollisionLayers.layer_of(&"fighter"), "a ship follows the setting while it flies")
 
 
 # --- fighters meeting (Q33: they collide in Jolt, as on the base) ---------------------------------------------------
@@ -322,11 +312,3 @@ func test_a_far_ship_is_not_interpolated_and_its_nodes_are_left_out_of_the_settl
 	assert_eq(far.ship.physics_interpolation_mode, Node.PHYSICS_INTERPOLATION_MODE_INHERIT, "back near, it blends again")
 	assert_eq(await _rebase_resets(), with_both)
 	assert_eq(near.ship.physics_interpolation_mode, Node.PHYSICS_INTERPOLATION_MODE_INHERIT)
-
-
-func test_the_far_interpolation_setting_off_leaves_a_far_ship_interpolated() -> void:
-	Settings.set_value(&"far_ship_interpolation_off", false)
-	var far: Combatant = _fighter("FAR", Factions.RAIDERS, Vector3(0.0, 0.0, -9000.0))
-	await _ticks(2)
-	far.ship.set_far_dot(true)
-	assert_eq(far.ship.physics_interpolation_mode, Node.PHYSICS_INTERPOLATION_MODE_INHERIT)

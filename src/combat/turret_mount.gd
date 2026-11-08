@@ -239,10 +239,10 @@ static func rebind_all() -> void:
 			mount._bind()
 
 
-# Joins the core's mounts when it owns the bolts (a turret's shot is a bolt row); else the turret holds fire.
+# Joins the core's mounts (a turret's shot is a bolt row); without a core the turret holds fire.
 func _bind() -> void:
 	var sim: SimCore = SimCore.for_tree(get_tree()) if is_inside_tree() else null
-	if sim == null or sim.turrets == null or not SimCore.bolt_rows_enabled() or _body == null or weapon == null:
+	if sim == null or sim.turrets == null or not sim.bolt_rows_on() or _body == null or weapon == null:
 		_unbind()
 		return
 	if _slot >= 0 and _sim == sim:

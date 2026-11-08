@@ -2,15 +2,13 @@ extends GutTest
 ## The native pilots' commands as core rows (M4-T33, architecture §17.13): the brains' batch writes each native pilot's
 ## flight and combat command into the core, the flight batch applies it the same tick, and the drivers touch only the ships
 ## whose trigger, selection or command source changed. Seeded battles fly the same bits with the rows path on and off, with
-## one thread and six, and with the ships on their own GDScript models; a declined think holds the command the row has; a
-## command set from GDScript takes over from the row. Each fight runs in a space of its own with the clock reset, as
-## `test_core_threads` flies them. Skips, saying why, when the library is not built.
+## one thread and six; a command set from GDScript takes over from the row. Each fight runs in a space of its own with the clock reset, as
+## `test_core_threads` flies them.
 
 const SHIPS: int = 120
 const SEED: int = 1
 const TICKS: int = 240
-const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_native_flight",
-		&"perf_threads", &"perf_native_commands", &"perf_native_driver_step", &"sim_step"]
+const SETTINGS: Array[StringName] = [&"perf_threads", &"sim_step"]
 
 var _saved: Dictionary = {}
 # The battle's ships by their `Targetable` id, so selections compare across runs (each run has its own instance ids).
@@ -20,10 +18,6 @@ var _index_of: Dictionary = {}
 func before_each() -> void:
 	for key: StringName in SETTINGS:
 		_saved[key] = Settings.get_value(key)
-	Settings.set_value(&"perf_native", true)
-	Settings.set_value(&"perf_native_core", true)
-	Settings.set_value(&"perf_native_brains", true)
-	Settings.set_value(&"perf_native_flight", true)
 	Factions.reset()
 	ContactScan.invalidate()
 
@@ -36,29 +30,16 @@ func after_each() -> void:
 	ContactScan.invalidate()
 
 
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there are no native commands to test")
-	return true
-
-
-func test_the_setting_exists_and_defaults_on() -> void:
-	assert_true(Settings.schema.has_key(&"perf_native_commands"), "perf_native_commands is a setting")
-	assert_eq(Settings.schema.get_default(&"perf_native_commands"), true, "on by default")
+const FIXTURE: String = "row_commands"
 
 
 func test_commands_from_rows_fly_the_same_battle_as_today() -> void:
-	if _skipped():
-		return
-	var today: Dictionary = await _battle(false, 1, true)
-	var rows: Dictionary = await _battle(true, 1, true)
-	assert_eq((today["rows"] as PackedInt64Array).size(), TICKS, "a digest every tick on today's path")
-	assert_eq((rows["rows"] as PackedInt64Array).size(), TICKS, "and on the rows path")
+	# The drivers handing each ship its command (T18's path), recorded before M4-T37 removed it.
+	var recorded: Variant = ParityFixture.stored(FIXTURE, "battle_with_commands_from_the_drivers")
+	var rows: Dictionary = await _battle(1, true)
+	assert_eq((rows["rows"] as PackedInt64Array).size(), TICKS, "a digest every tick on the rows path")
 	assert_gt(int(rows["native_thinks"]), TICKS * 20, "the native brains thought (%d thinks)" % int(rows["native_thinks"]))
-	assert_eq(int(rows["native_thinks"]), int(today["native_thinks"]), "the same thinks on both paths")
 	assert_eq(int(rows["fallbacks"]), 0, "nothing declined on the rows path")
-	assert_eq(int(today["finished"]), int(today["native_thinks"]), "today every native think ends in its driver")
 	assert_eq(int(rows["finished"]), 0, "on the rows path no driver finishes a think ship by ship")
 	assert_gt(int(rows["live_max"]), SHIPS / 2, "most ships fly a command from the rows (%d at most)" % int(rows["live_max"]))
 	assert_lt(int(rows["events"]), int(rows["native_thinks"]) / 4,
@@ -66,19 +47,19 @@ func test_commands_from_rows_fly_the_same_battle_as_today() -> void:
 			int(rows["native_thinks"])])
 	gut.p("battle %d seed %d, %d ticks: %d native thinks, %d events on the rows path, %d ships on row commands at most" % [
 			SHIPS, SEED, TICKS, int(rows["native_thinks"]), int(rows["events"]), int(rows["live_max"])])
-	var first: int = _first_difference(today["commands"], rows["commands"])
-	assert_eq(first, -1, "every ship flies the same command, trigger and selection every tick (first difference at tick %d)" % first)
-	first = _first_difference(today["rows"], rows["rows"])
-	assert_eq(first, -1, "the rows are the same bits every tick (first difference at tick %d)" % first)
-	first = _first_difference(today["pilots"], rows["pilots"])
-	assert_eq(first, -1, "every pilot shows the same behaviour, target and scores at the end (first difference at ship %d)" % first)
+	assert_eq(ParityFixture.encode(_digest_of(rows)), recorded,
+			"every ship flies the drivers' command, trigger and selection every tick, the same rows and the same pilots (recorded)")
+
+
+# What the battle is held to: the thinks, and digests of every tick's commands and rows and of the pilots at the end.
+static func _digest_of(battle: Dictionary) -> Dictionary:
+	return {"native_thinks": battle["native_thinks"], "commands": ParityFixture.digest(battle["commands"]),
+			"rows": ParityFixture.digest(battle["rows"]), "pilots": ParityFixture.digest(battle["pilots"])}
 
 
 func test_one_thread_and_six_give_the_same_commands_from_rows() -> void:
-	if _skipped():
-		return
-	var one: Dictionary = await _battle(true, 1, true)
-	var six: Dictionary = await _battle(true, 6, true)
+	var one: Dictionary = await _battle(1, true)
+	var six: Dictionary = await _battle(6, true)
 	var first: int = _first_difference(one["row_commands"], six["row_commands"])
 	assert_eq(first, -1, "the core's commands are the same bits every tick with one thread and six (first difference at tick %d)" % first)
 	first = _first_difference(one["rows"], six["rows"])
@@ -86,33 +67,20 @@ func test_one_thread_and_six_give_the_same_commands_from_rows() -> void:
 	assert_eq(int(one["events"]), int(six["events"]), "the same events")
 
 
-func test_ships_on_their_own_models_fly_the_command_from_the_row() -> void:
-	if _skipped():
-		return
-	Settings.set_value(&"perf_native_flight", false)
-	var today: Dictionary = await _battle(false, 1, true, 90)
-	var rows: Dictionary = await _battle(true, 1, true, 90)
-	var first: int = _first_difference(today["rows"], rows["rows"])
-	assert_eq(first, -1, "with the flight batch off every ship flies its own model the same bits (first difference at tick %d)" % first)
-	assert_gt(int(rows["live_max"]), 0, "the ships flew commands from the rows")
-
-
 func test_a_declined_think_holds_the_command_the_row_has() -> void:
-	if _skipped():
-		return
-	Settings.set_value(&"perf_native_commands", true)
 	var fight: Dictionary = await _small_fight()
 	var sim: SimCore = fight["sim"]
 	var batch: BrainBatch = BrainBatch.for_tree(get_tree())
 	var queued: int = _queue_thinks(fight["ships"])
 	assert_gt(queued, 0, "some ships queued a native think")
+	sim.touch((fight["ships"][0] as Combatant).ship)
+	sim.core.resync_touched_now()  # the rows move between the drivers' scan and the launch
+	batch.flush()  # lands the previous tick's job and launches this one (the delayed step runs it at the next join)
 	var before: PackedFloat64Array = _row_commands(sim, fight["ships"])
 	var live_before: int = int(sim.core.live_commands())
 	assert_gt(live_before, 0, "ships fly commands from the rows")
 	var held_before: int = AiPilotDriver.thinks_fallback()
-	sim.touch((fight["ships"][0] as Combatant).ship)
-	sim.core.resync_touched_now()  # the rows move between the drivers and the batch
-	batch.flush()
+	batch.flush()  # joins the job the first flush launched
 	assert_eq(AiPilotDriver.thinks_fallback() - held_before, queued, "every queued think was held and counted")
 	assert_eq(_row_commands(sim, fight["ships"]), before, "every row keeps its command")
 	assert_eq(int(sim.core.live_commands()), live_before, "and every ship still flies it")
@@ -126,9 +94,6 @@ func test_a_declined_think_holds_the_command_the_row_has() -> void:
 
 
 func test_a_command_set_from_gdscript_takes_over_from_the_row() -> void:
-	if _skipped():
-		return
-	Settings.set_value(&"perf_native_commands", true)
 	var fight: Dictionary = await _small_fight()
 	var sim: SimCore = fight["sim"]
 	var c: Combatant = null
@@ -139,6 +104,7 @@ func test_a_command_set_from_gdscript_takes_over_from_the_row() -> void:
 	assert_not_null(c, "a ship flies a command from the rows, without the brake")
 	if c == null:
 		return
+	c.driver.unhost()  # the host steps it no more
 	c.driver.set_physics_process(false)  # its pilot stays, but thinks no more: only the command below releases the row
 	var cmd := FlightCommand.new()
 	cmd.brake = true
@@ -168,12 +134,11 @@ func _space() -> SubViewport:
 	return space
 
 
-## The seeded battle's fighters (four sides, the bench's session table) flown `ticks` ticks with the rows path on or off
-## and `threads` threads, every pass in parallel when `parallel`. Returns per tick the rows' digest, the effective commands'
+## The seeded battle's fighters (four sides, the bench's session table) flown `ticks` ticks on the rows path with
+## `threads` threads, every pass in parallel when `parallel`. Returns per tick the rows' digest, the effective commands'
 ## digest (every ship's flight command, trigger and selection) and the core's commands' digest; the pilots' digest at the
 ## end; the native thinks, declined thinks, driver finishes and events; the most ships on row commands in a tick.
-func _battle(rows_on: bool, threads: int, parallel: bool, ticks: int = TICKS) -> Dictionary:
-	Settings.set_value(&"perf_native_commands", rows_on)
+func _battle(threads: int, parallel: bool, ticks: int = TICKS) -> Dictionary:
 	Settings.set_value(&"perf_threads", threads)
 	Factions.reset()
 	Factions.use_table(BenchLayout.faction_table(BenchLayout.BATTLE))
@@ -223,9 +188,8 @@ func _battle(rows_on: bool, threads: int, parallel: bool, ticks: int = TICKS) ->
 		digests.append(int(sim.core.rows_digest()))
 		commands.append(_commands_digest(sim, ships))
 		var batch: BrainBatch = BrainBatch.for_tree(get_tree())
-		if rows_on:
-			row_commands.append(int(sim.core.commands_digest()))
-			live_max = maxi(live_max, int(sim.core.live_commands()))
+		row_commands.append(int(sim.core.commands_digest()))
+		live_max = maxi(live_max, int(sim.core.live_commands()))
 		if batch != null:
 			finished += batch.finishes
 			events += batch.events
@@ -304,12 +268,10 @@ func _first_difference(a: PackedInt64Array, b: PackedInt64Array) -> int:
 
 
 # A fight of the battle's first fighters in a space of its own, flown a few ticks so every pilot has its native slot. The
-# drivers step themselves here (T33's path): these fights queue thinks by hand and move the rows between the drivers and
-# the batch, which the host's step (M4-T35) has no gap for.
+# drivers stepped by hand here take their step back from the host (M4-T35), so these fights queue thinks by hand.
 func _small_fight() -> Dictionary:
 	Settings.set_value(&"perf_threads", 6)
-	Settings.set_value(&"perf_native_driver_step", false)
-	Settings.set_value(&"sim_step", &"inline")  # these fights flush by hand and read the result at once (the one-tick handover: test_core_snapshot)
+	Settings.set_value(&"sim_step", &"delayed")  # these fights flush by hand and join the job on the main thread (test_core_snapshot)
 	Factions.reset()
 	Factions.use_table(BenchLayout.faction_table(BenchLayout.BATTLE))
 	ContactScan.invalidate()
@@ -352,9 +314,6 @@ func _queue_thinks(ships: Array) -> int:
 
 
 func test_a_ship_whose_row_the_core_lost_is_handed_its_command_once_and_flies_from_the_row_again() -> void:
-	if _skipped():
-		return
-	Settings.set_value(&"perf_native_commands", true)
 	var fight: Dictionary = await _small_fight()
 	var sim: SimCore = fight["sim"]
 	var lost: Array[Combatant] = []
@@ -382,9 +341,6 @@ func test_a_ship_whose_row_the_core_lost_is_handed_its_command_once_and_flies_fr
 
 
 func test_a_native_pilot_that_wants_the_nearest_hostile_has_it_selected_as_today() -> void:
-	if _skipped():
-		return
-	Settings.set_value(&"perf_native_commands", true)
 	var fight: Dictionary = await _small_fight()
 	var c: Combatant = fight["ships"][0]
 	c.driver.set_physics_process(false)

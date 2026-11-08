@@ -1,16 +1,14 @@
 extends GutTest
-## The drivers' step decided in the native host (M4-T35b, `perf_native_driver_step`, architecture §17.13): once a native
+## The drivers' step decided in the native host (M4-T35b, architecture §17.13): once a native
 ## pilot's slot is bound, its driver hands the host its think rate's state and stops ticking; the host decides the stagger,
 ## the wake, the time since the last think and the hold of a declined think in the batch's call. The seeded battle flies
 ## the same bits with the setting off and on, with and without a player (near and far ships), with one thread and six; a
 ## hit wakes a hosted far ship; a changed wing order reaches a hosted pilot; the setting off gives every driver its tick back.
-## Skips, saying why, when the library is not built.
 
 const SHIPS: int = 120
 const SEED: int = 1
 const TICKS: int = 240
-const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_native_flight",
-		&"perf_threads", &"perf_native_commands", &"perf_native_driver_step", &"perf_native_bolt_rows", &"ai_think_rate",
+const SETTINGS: Array[StringName] = [&"perf_threads", &"ai_think_rate",
 		&"ai_think_far_hz", &"ai_think_near_m"]
 
 var _saved: Dictionary = {}
@@ -20,11 +18,6 @@ var _index_of: Dictionary = {}
 func before_each() -> void:
 	for key: StringName in SETTINGS:
 		_saved[key] = Settings.get_value(key)
-	Settings.set_value(&"perf_native", true)
-	Settings.set_value(&"perf_native_core", true)
-	Settings.set_value(&"perf_native_brains", true)
-	Settings.set_value(&"perf_native_flight", true)
-	Settings.set_value(&"perf_native_commands", true)
 	Settings.set_value(&"ai_think_rate", true)
 	Factions.reset()
 	ContactScan.invalidate()
@@ -38,16 +31,7 @@ func after_each() -> void:
 	ContactScan.invalidate()
 
 
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there is no host to step the drivers")
-	return true
-
-
-func test_the_setting_exists_and_defaults_on() -> void:
-	assert_true(Settings.schema.has_key(&"perf_native_driver_step"), "perf_native_driver_step is a setting")
-	assert_eq(Settings.schema.get_default(&"perf_native_driver_step"), true, "on by default")
+const FIXTURE: String = "driver_step"
 
 
 # A space of its own with a world and its projectiles.
@@ -65,11 +49,10 @@ func _space() -> SubViewport:
 	return space
 
 
-## The seeded battle's fighters flown `ticks` ticks with the hosted step off or on and `threads` threads, a "player" ship
+## The seeded battle's fighters flown `ticks` ticks hosted with `threads` threads, a "player" ship
 ## among them when `with_player` (so some ships are near and think every tick, the rest at the far rate). Returns per tick
 ## the rows' digest, the commands' digest and a digest of the hits; the counts; the most drivers hosted and processing.
-func _battle(hosted: bool, threads: int, with_player: bool, ticks: int = TICKS) -> Dictionary:
-	Settings.set_value(&"perf_native_driver_step", hosted)
+func _battle(threads: int, with_player: bool, ticks: int = TICKS) -> Dictionary:
 	Settings.set_value(&"perf_threads", threads)
 	Factions.reset()
 	Factions.use_table(BenchLayout.faction_table(BenchLayout.BATTLE))
@@ -190,59 +173,49 @@ static func _first_difference(a: PackedInt64Array, b: PackedInt64Array) -> int:
 	return -1 if a.size() == b.size() else mini(a.size(), b.size())
 
 
-func _assert_same(reference: Dictionary, hosted: Dictionary, label: String) -> void:
-	assert_gt(int(reference["hits_total"]), 10, "%s: hits landed (%d)" % [label, int(reference["hits_total"])])
+# What a battle is held to (M4-T37): its thinks, its held ticks (read one tick later when hosted on a step one tick behind)
+# and digests of every tick's rows, commands and hits and of the pilots at the end.
+static func _digest_of(battle: Dictionary, shift: int) -> Dictionary:
+	var held: PackedInt64Array = battle["held_ticks"]
+	var held_sum: int = 0
+	for t: int in held.size() - 1:
+		held_sum += held[t + shift]
+	return {"native_thinks": battle["native_thinks"], "held": held_sum, "hits_total": battle["hits_total"],
+			"rows": ParityFixture.digest(battle["rows"]), "commands": ParityFixture.digest(battle["commands"]),
+			"hits": ParityFixture.digest(battle["hits"]), "pilots": ParityFixture.digest(battle["pilots"])}
+
+
+# Flies the battle hosted and holds it to the drivers' own step, recorded in `tests/fixtures/parity/driver_step.json`
+# before M4-T37 removed the switch that kept every driver on it.
+func _assert_recorded(case: String, with_player: bool, label: String) -> void:
+	var recorded: Variant = ParityFixture.stored(FIXTURE, case)
+	var hosted: Dictionary = await _battle(1, with_player)
+	assert_not_null(recorded, "%s: the drivers' own step was recorded" % label)
+	if recorded == null:
+		return
+	assert_gt(int(recorded["hits_total"]), 10, "%s: hits landed (%d)" % [label, int(recorded["hits_total"])])
 	assert_gt(int(hosted["hosted_max"]), SHIPS / 2, "%s: most drivers were hosted (%d)" % [label, int(hosted["hosted_max"])])
-	assert_eq(int(reference["hosted_max"]), 0, "%s: none on the reference" % label)
 	assert_lt(int(hosted["processing_min"]), SHIPS / 10, "%s: hosted drivers do not tick (%d still processing at the fewest)" % [label,
 			int(hosted["processing_min"])])
-	assert_eq(int(hosted["native_thinks"]), int(reference["native_thinks"]), "%s: the same number of thinks" % label)
 	# A hosted driver's held tick is counted when its job is joined (the step one tick behind, M4-T24), a driver's own at its
-	# step: the same decisions, read one tick later, so the windows are shifted by that tick unless the step is inline.
-	var shift: int = 0 if BrainBatch.step_mode() == BrainBatch.STEP_INLINE else 1
-	var held_reference: PackedInt64Array = reference["held_ticks"]
-	var held_hosted: PackedInt64Array = hosted["held_ticks"]
-	var ref_sum: int = 0
-	var hosted_sum: int = 0
-	for t: int in held_reference.size() - shift:
-		ref_sum += held_reference[t]
-		hosted_sum += held_hosted[t + shift]
-	assert_eq(hosted_sum, ref_sum, "%s: the same number of held ticks (the hosted counts read %d tick later)" % [label, shift])
-	var first: int = _first_difference(reference["rows"], hosted["rows"])
-	assert_eq(first, -1, "%s: the rows are the same bits every tick (first difference at tick %d)" % [label, first])
-	first = _first_difference(reference["commands"], hosted["commands"])
-	assert_eq(first, -1, "%s: the commands too (first difference at tick %d)" % [label, first])
-	first = _first_difference(reference["hits"], hosted["hits"])
-	assert_eq(first, -1, "%s: and every hit (first difference at tick %d)" % [label, first])
-	first = _first_difference(reference["pilots"], hosted["pilots"])
-	if first >= 0:
-		gut.p("%s: ship 0 reference %s\n hosted %s" % [label, var_to_str(reference["first"]), var_to_str(hosted["first"])])
-	assert_eq(first, -1, "%s: every pilot reads the same at the end (first difference at ship %d)" % [label, first])
-	gut.p("%s: %d thinks, %d held ticks, %d hits; %d drivers hosted at most" % [label, int(hosted["native_thinks"]), int(hosted["held"]),
+	# step: the same decisions, read one tick later.
+	assert_eq(ParityFixture.encode(_digest_of(hosted, 1)), recorded,
+			"%s: the same thinks, held ticks, rows, commands, hits and pilots as the drivers' own step (recorded)" % label)
+	gut.p("%s: %d thinks, %d hits; %d drivers hosted at most" % [label, int(hosted["native_thinks"]),
 			int(hosted["hits_total"]), int(hosted["hosted_max"])])
 
 
 func test_the_hosted_step_flies_the_same_battle_at_the_far_rate() -> void:
-	if _skipped():
-		return
-	var reference: Dictionary = await _battle(false, 1, false)
-	var hosted: Dictionary = await _battle(true, 1, false)
-	_assert_same(reference, hosted, "no player, every ship far")
+	await _assert_recorded("battle_far_rate", false, "no player, every ship far")
 
 
 func test_the_hosted_step_flies_the_same_battle_with_near_and_far_ships() -> void:
-	if _skipped():
-		return
-	var reference: Dictionary = await _battle(false, 1, true)
-	var hosted: Dictionary = await _battle(true, 1, true)
-	_assert_same(reference, hosted, "a player among them")
+	await _assert_recorded("battle_near_and_far", true, "a player among them")
 
 
 func test_one_thread_and_six_give_the_same_hosted_battle() -> void:
-	if _skipped():
-		return
-	var one: Dictionary = await _battle(true, 1, true)
-	var six: Dictionary = await _battle(true, 6, true)
+	var one: Dictionary = await _battle(1, true)
+	var six: Dictionary = await _battle(6, true)
 	var first: int = _first_difference(one["rows"], six["rows"])
 	assert_eq(first, -1, "the rows are the same bits with one thread and six (first difference at tick %d)" % first)
 	first = _first_difference(one["commands"], six["commands"])
@@ -251,7 +224,6 @@ func test_one_thread_and_six_give_the_same_hosted_battle() -> void:
 
 # A fight of the battle's first fighters in a space of its own, flown a few ticks so every driver is hosted.
 func _small_fight() -> Dictionary:
-	Settings.set_value(&"perf_native_driver_step", true)
 	Settings.set_value(&"perf_threads", 6)
 	Factions.reset()
 	Factions.use_table(BenchLayout.faction_table(BenchLayout.BATTLE))
@@ -279,9 +251,7 @@ func _small_fight() -> Dictionary:
 	return {"space": space, "sim": sim, "ships": ships}
 
 
-func test_a_changed_wing_order_reaches_a_hosted_pilot_and_the_setting_off_gives_the_ticks_back() -> void:
-	if _skipped():
-		return
+func test_a_changed_wing_order_reaches_a_hosted_pilot_and_a_hand_step_takes_the_step_back() -> void:
 	var fight: Dictionary = await _small_fight()
 	var ships: Array[Combatant] = fight["ships"]
 	var hosted: int = 0
@@ -302,45 +272,11 @@ func test_a_changed_wing_order_reaches_a_hosted_pilot_and_the_setting_off_gives_
 	c0.driver.step(1.0 / 60.0)
 	assert_false(c0.driver.is_hosted(), "a driver stepped by hand decides for itself again")
 	assert_true(c0.driver.is_physics_processing(), "and ticks")
-	Settings.set_value(&"perf_native_driver_step", false)
 	await get_tree().physics_frame
-	var still: int = 0
-	for c: Combatant in ships:
-		if c.driver.is_hosted() or not c.driver.is_physics_processing():
-			still += 1
-	assert_eq(still, 0, "the setting off gives every driver its tick back")
+	assert_true(c0.driver.is_hosted(), "and its next engine tick hands the step to the host again")
 	await get_tree().physics_frame
 	assert_gt(AiPilotDriver.thinks_native(), 0, "and the battle thinks on")
 	(fight["space"] as SubViewport).queue_free()
-	await get_tree().physics_frame
-
-
-func test_the_native_path_switched_off_gives_the_hosted_drivers_their_ticks_back_without_errors() -> void:
-	# Fix round 3 (test_contact_registry in a wide run): `perf_native` off mid-fight left the drivers hosted with no host
-	# to step them, the batch flushed a hosted tick it could not begin (an error a tick), and no driver gathered a scan.
-	if _skipped():
-		return
-	var fight: Dictionary = await _small_fight()
-	var ships: Array[Combatant] = fight["ships"]
-	var hosted: int = 0
-	for c: Combatant in ships:
-		hosted += 1 if c.driver.is_hosted() else 0
-	assert_gt(hosted, ships.size() / 2, "most drivers are hosted (%d of %d)" % [hosted, ships.size()])
-	Settings.set_value(&"perf_native", false)
-	await get_tree().physics_frame
-	var still: int = 0
-	for c: Combatant in ships:
-		if c.driver.is_hosted() or not c.driver.is_physics_processing():
-			still += 1
-	assert_eq(still, 0, "perf_native off: every driver has its tick back")
-	var steps_before: int = ships[0].driver._steps
-	var gathers: int = ContactScan.gathers
-	await get_tree().physics_frame
-	await get_tree().physics_frame
-	assert_eq(ships[0].driver._steps, steps_before + 2, "and steps itself every tick")
-	assert_gt(ContactScan.gathers - gathers, 0, "the GDScript scan is gathered again")
-	Settings.set_value(&"perf_native", true)
-	(fight["space"] as Node).queue_free()
 	await get_tree().physics_frame
 
 

@@ -29,9 +29,6 @@ func after_each() -> void:
 
 
 func _skipped() -> bool:
-	if not NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		pending("the native library is not built (scripts/build_native.sh), so the native brains do not fly")
-		return true
 	if not Hardpoints.load_file(ShipCatalog.spec_for(FREIGHTER).hardpoints_path()).valid:
 		pending("the Saturn 4 is not generated (scripts/gen_assets.sh)")
 		return true

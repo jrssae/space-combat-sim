@@ -3,7 +3,7 @@
 > "A working 3D space combat ship (based on the Starfury design) in a starry background with a little bit of a
 > nebula visible."
 
-**Status:** M1-T01 to M1-T15 are implemented on branch `m1-first-flight`, and every (A) criterion passes in CI.
+**Status:** accepted and merged into `main`. The status as it stood while the milestone ran, kept as history: M1-T01 to M1-T15 are implemented on branch `m1-first-flight`, and every (A) criterion passes in CI.
 The maintainer's first play-test (2026-10-20) found issues. All the fixes are merged (`docs/handoff.md` section 3), and
 M1 is **waiting on the maintainer's re-test** of the (H) checks in `docs/playtest.md`. M1-T16 runs only if a splat check
 still fails.

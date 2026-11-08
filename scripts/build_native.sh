@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Builds the optional native library (native/, Rust with godot-rust gdext) into bin/libscs_native.so.
+# Builds the native library (native/, Rust with godot-rust gdext) into bin/libscs_native.so. The game needs it and
+# refuses to start without it (M4-T37).
 # Builds only when the library is missing or older than any file under native/; cargo then rebuilds what changed.
-# The library is optional during M4 (every caller falls back to GDScript), so with no cargo this prints one line and
-# exits 0. The Rust version comes from native/rust-toolchain.toml; rustup installs it on first use.
+# With no cargo it says so and exits 1. The Rust version comes from native/rust-toolchain.toml; rustup installs it on
+# first use.
 # Cargo's build files go to .tools/native-target (CARGO_TARGET_DIR overrides it).
 set -euo pipefail
 
@@ -25,8 +26,8 @@ if ! command -v cargo > /dev/null && [[ -x "${HOME}/.cargo/bin/cargo" ]]; then
     export PATH="${HOME}/.cargo/bin:${PATH}"
 fi
 if ! command -v cargo > /dev/null; then
-    echo "build_native.sh: cargo not found, skipping the native library (the game falls back to GDScript; install rustup to build it)."
-    exit 0
+    echo "build_native.sh: cargo not found, so ${LIB#"${ROOT}"/} cannot be built, and the game needs it to start. Install rustup (https://rustup.rs) and run this script again." >&2
+    exit 1
 fi
 
 # rustup reads rust-toolchain.toml from the working directory, so build from inside the crate.

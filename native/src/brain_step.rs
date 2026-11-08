@@ -217,7 +217,7 @@ pub struct Done {
 }
 
 /// Runs one job to its end: the pass across the runner's threads, then (on the rows path) the commands into the
-/// snapshot's copy and the hosted drivers' clocks. The same function on every path, so `inline`, `delayed` and
+/// snapshot's copy and the hosted drivers' clocks. The same function on every path, so a single `think`, `delayed` and
 /// `threaded` give the same bits from the same snapshot.
 pub fn run(job: Job) -> Done {
     let started = Instant::now();
@@ -497,7 +497,7 @@ pub fn pack_output(brain: &Brain, result: &brain_behaviours::Output, out: &mut V
 }
 
 // After a rows batch: every think's command into the snapshot's commands, the counts, and the events of the ships whose
-// drivers have something to do (`ScsBrains.think_batch_rows`).
+// drivers have something to do (`ScsBrains.launch_rows`).
 fn write_commands(work: &mut Work, snap: &mut Snapshot, n: usize) {
     for k in 0..n {
         let item = &work.items[k];
@@ -514,15 +514,20 @@ fn write_commands(work: &mut Work, snap: &mut Snapshot, n: usize) {
         let mut events = write_command(&mut snap.commands, body, &item.out[..=CMD_LEN]);
         let wanted = brain.wanted_target_id;
         note_aim(&mut snap.commands, body, brain);
+        let selected = usize::try_from(item.own_row).map_or(-1, |r| snap.rows.target_ids[r]);
         if item.tier {
             // A tier row's driver is parked: the command (and the ram's commitment, which the tier's ram reads) is all
-            // the tier needs.
+            // the tier needs, and a target it names or drops (M4-T23: the selection survives the handovers), never the
+            // nearest hostile's retarget, which walks every marker.
             note_ram(&mut snap.commands, body, item.out[OUT_RAM] != 0.0);
             work.tier_thinks += 1;
             work.tier_think_ns += item.ns;
+            if (wanted > 0 && wanted != selected) || (wanted < 0 && selected > 0) {
+                work.events.push(k as i64);
+                work.events.push(i64::from(EVENT_SELECT));
+            }
             continue;
         }
-        let selected = usize::try_from(item.own_row).map_or(-1, |r| snap.rows.target_ids[r]);
         // The driver follows the brain's target: it clears a selection for none, selects anything else it wants, and
         // for the nearest hostile (0) runs its retarget every think, as T18's path does.
         if wanted == 0 || (wanted < 0 && selected > 0) || (wanted > 0 && wanted != selected) {
@@ -686,7 +691,7 @@ pub fn refresh_grid(work: &mut Work, snap: &Snapshot) {
         return;
     }
     work.grid_version = snap.rows_version;
-    work.grid.cells = contact::sorted_cells(&snap.rows.positions, work.grid.cell_m);
+    contact::sorted_cells_into(&snap.rows.positions, work.grid.cell_m, &mut work.grid.cells);
     work.grid.max_static_radius = (0..snap.rows.positions.len())
         .filter(|&i| snap.rows.is_static[i])
         .map(|i| snap.rows.radii[i].abs())

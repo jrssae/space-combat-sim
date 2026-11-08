@@ -4,14 +4,14 @@ extends GutTest
 ## battle stepped 600 ticks with one thread and with six gives the same rows byte for byte, a think that reads what the
 ## worker's previous think left (another row's output) is caught by that comparison, and the thread count follows
 ## `perf_threads` at once. Each fight runs in a space of its own with the clock reset, as `test_brain_tolerance` flies
-## them. Skips, saying why, when the library is not built.
+## them.
 
 const SHIPS: int = 120
 const SEED: int = 1
 const TICKS: int = 600
 const FAULT_TICKS: int = 120
-const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_threads",
-		&"perf_native_commands", &"perf_native_driver_step", &"sim_step", &"perf_step_threads"]
+const SETTINGS: Array[StringName] = [&"perf_threads",
+		&"sim_step", &"perf_step_threads"]
 
 var _saved: Dictionary = {}
 
@@ -19,9 +19,6 @@ var _saved: Dictionary = {}
 func before_each() -> void:
 	for key: StringName in SETTINGS:
 		_saved[key] = Settings.get_value(key)
-	Settings.set_value(&"perf_native", true)
-	Settings.set_value(&"perf_native_core", true)
-	Settings.set_value(&"perf_native_brains", true)
 	Factions.reset()
 	ContactScan.invalidate()
 
@@ -36,16 +33,7 @@ func after_each() -> void:
 	ContactScan.invalidate()
 
 
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there are no native threads to test")
-	return true
-
-
 func test_the_thread_count_follows_the_setting_at_once() -> void:
-	if _skipped():
-		return
 	var space := _space()
 	var world := space.get_node("World") as WorldFrame
 	var sim: SimCore = SimCore.attach(world)
@@ -66,8 +54,6 @@ func test_the_thread_count_follows_the_setting_at_once() -> void:
 
 
 func test_a_seeded_battle_gives_the_same_rows_byte_for_byte_with_one_thread_and_six() -> void:
-	if _skipped():
-		return
 	var one: Dictionary = await _battle(1, TICKS, false)
 	var six: Dictionary = await _battle(6, TICKS, false)
 	var a: PackedInt64Array = one["digests"]
@@ -87,8 +73,6 @@ func test_a_seeded_battle_gives_the_same_rows_byte_for_byte_with_one_thread_and_
 
 
 func test_a_think_that_reads_another_rows_output_is_caught() -> void:
-	if _skipped():
-		return
 	var one: Dictionary = await _battle(1, FAULT_TICKS, true)
 	var six: Dictionary = await _battle(6, FAULT_TICKS, true)
 	var first: int = _first_difference(one["digests"], six["digests"])
@@ -185,8 +169,6 @@ func _first_difference(a: PackedInt64Array, b: PackedInt64Array) -> int:
 
 
 func test_the_pool_is_joined_when_the_thread_count_changes() -> void:
-	if _skipped():
-		return
 	var space := _space()
 	var sim: SimCore = SimCore.attach(space.get_node("World"))
 	await get_tree().physics_frame
@@ -199,30 +181,24 @@ func test_the_pool_is_joined_when_the_thread_count_changes() -> void:
 	await get_tree().physics_frame
 
 
-func test_rows_that_moved_before_the_batch_hold_and_count_every_queued_think() -> void:
-	if _skipped():
-		return
-	Settings.set_value(&"perf_native_commands", false)  # T18's path, where the ship holds its command (T33's rows: test_row_commands)
+func test_rows_that_moved_before_the_launch_hold_and_count_every_queued_think() -> void:
 	var fight: Dictionary = await _small_fight()
 	var batch: BrainBatch = BrainBatch.for_tree(get_tree())
 	var queued: int = _queue_thinks(fight["ships"])
 	assert_gt(queued, 0, "some ships queued a native think")
-	var before: Array = _commands(fight["ships"])
-	var held_before: int = AiPilotDriver.thinks_fallback()
-	var native_before: int = AiPilotDriver.thinks_native()
 	var sim: SimCore = fight["sim"]
 	sim.touch((fight["ships"][0] as Combatant).ship)
-	sim.core.resync_touched_now()  # the rows move between the drivers and the batch
-	batch.flush()
+	sim.core.resync_touched_now()  # the rows move between the drivers' scan and the launch
+	batch.flush()  # lands the previous tick's job and launches this one (the delayed step runs it at the next join)
+	var held_before: int = AiPilotDriver.thinks_fallback()
+	var native_before: int = AiPilotDriver.thinks_native()
+	batch.flush()  # joins the job the first flush launched
 	assert_eq(AiPilotDriver.thinks_fallback() - held_before, queued, "every queued think was held and counted")
 	assert_eq(AiPilotDriver.thinks_native() - native_before, 0, "none thought on moved rows")
-	assert_eq(_commands(fight["ships"]), before, "every ship keeps its last command")
 	await _thinks_resume(fight)
 
 
 func test_a_panic_in_the_pool_keeps_the_brains_and_holds_the_tick() -> void:
-	if _skipped():
-		return
 	var fight: Dictionary = await _small_fight()
 	var host: Object = NativeBrains.host(get_tree())
 	var batch: BrainBatch = BrainBatch.for_tree(get_tree())
@@ -233,6 +209,7 @@ func test_a_panic_in_the_pool_keeps_the_brains_and_holds_the_tick() -> void:
 	var held_before: int = AiPilotDriver.thinks_fallback()
 	host.set_fault(2)
 	batch.flush()
+	batch.flush()  # the delayed step: this flush joins the job the first launched
 	host.set_fault(0)
 	assert_eq(int(host.pass_failures()), 1, "the failed pass is counted")
 	assert_engine_error("panicked", "and said once")
@@ -243,8 +220,6 @@ func test_a_panic_in_the_pool_keeps_the_brains_and_holds_the_tick() -> void:
 
 
 func test_a_slot_listed_twice_in_one_flight_step_flies_as_two_steps_in_a_row() -> void:
-	if _skipped():
-		return
 	var spec: ShipSpec = load("res://assets/ships/starfury_aurora.tres") as ShipSpec
 	var layout: ThrusterLayout = ThrusterLayout.load_file("res://tests/fixtures/hardpoints_nominal.json")
 	var step: Object = NativeLib.instantiate(FlightBatch.NATIVE_CLASS)
@@ -280,8 +255,7 @@ func test_a_slot_listed_twice_in_one_flight_step_flies_as_two_steps_in_a_row() -
 # A fight of the battle's first fighters in a space of its own, flown a few ticks so every pilot has its native slot.
 func _small_fight() -> Dictionary:
 	Settings.set_value(&"perf_threads", 6)
-	Settings.set_value(&"perf_native_driver_step", false)  # these fights queue thinks by hand (T18's seam; the host's step: test_driver_step)
-	Settings.set_value(&"sim_step", &"inline")  # and read the flush's result at once (the one-tick handover: test_core_snapshot)
+	Settings.set_value(&"sim_step", &"delayed")  # and join the flush's job by hand on the main thread (test_core_snapshot)
 	Factions.reset()
 	Factions.use_table(BenchLayout.faction_table(BenchLayout.BATTLE))
 	ContactScan.invalidate()

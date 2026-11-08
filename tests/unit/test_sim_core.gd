@@ -2,19 +2,18 @@ extends GutTest
 ## The native simulation core (M4-T15, architecture §17.13): one store of rows in the crate, filled once per tick from the
 ## engine (`sync_in`) and read by every native class, so the contact field, the hit sweep, the flight step and the ram broad
 ## phase stop loading their own copies. Rows survive a pool release and acquire with a new handle; a rebase shifts every row
-## once; the four classes answer from the core exactly as they do from their own loads (bit for bit, on seeded worlds); a
-## row of each kind round-trips its state; and the sync points are the only places the core touches the engine. Light
+## once; the four classes answer from the core exactly as they do from their own loads (bit for bit, on seeded worlds); and
+## the sync points are the only places the core touches the engine. Light
 ## bodies made here (a rigid body with a `Targetable` and a `Damageable`, props, a hull without a marker, bolts), real ships
-## only for the flight step. Skips, saying why, when the native library is not built at all.
+## only for the flight step.
 
 const ROWS_COMPARED: Array[String] = ["_body_ids", "_ids", "_names", "_factions", "_positions", "_velocities", "_forwards",
 		"_ups", "_radii", "_is_ship", "_kinds"]
+const FIXTURE: String = "sim_core"
 const SPEC_PATH: String = "res://assets/ships/starfury_aurora.tres"
 const PROJECTILE_SCENE: PackedScene = preload("res://src/weapons/projectile.tscn")
 const SIDES: Array[StringName] = [Factions.RAIDERS, Factions.EARTH_ALLIANCE, Factions.NEUTRAL, &"drifters"]
-const KINDS_ROUND_TRIPPED: Array[int] = [SimCore.KIND_SHIP, SimCore.KIND_CAPITAL, SimCore.KIND_TURRET, SimCore.KIND_MISSILE,
-		SimCore.KIND_BEAM, SimCore.KIND_BOLT, SimCore.KIND_MINE, SimCore.KIND_STATIC]
-const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_flight", &"fuel_unlimited"]
+const SETTINGS: Array[StringName] = [&"fuel_unlimited"]
 
 var world: WorldFrame
 var projectiles: Node3D
@@ -24,9 +23,6 @@ var _saved: Dictionary = {}
 func before_each() -> void:
 	for key: StringName in SETTINGS:
 		_saved[key] = Settings.get_value(key)
-	Settings.set_value(&"perf_native", true)
-	Settings.set_value(&"perf_native_core", true)
-	Settings.set_value(&"perf_native_flight", true)
 	Settings.set_value(&"fuel_unlimited", true)
 	Factions.reset()
 	ContactScan.invalidate()
@@ -45,13 +41,6 @@ func after_each() -> void:
 	for key: StringName in SETTINGS:
 		Settings.set_value(key, _saved[key])
 	Factions.reset()
-
-
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there is no core to test")
-	return true
 
 
 # --- the world ---------------------------------------------------------------------------------------------------------
@@ -222,8 +211,6 @@ static func _ids(contacts: Array[Contact]) -> PackedInt64Array:
 
 
 func test_rows_survive_a_pool_release_and_acquire_with_a_new_handle() -> void:
-	if _skipped():
-		return
 	var ship: RigidBody3D = _body(Vector3(100.0, 0.0, -50.0), Factions.EARTH_ALLIANCE, "KILO 1")
 	_body(Vector3(-300.0, 20.0, 400.0), Factions.RAIDERS, "R 1")
 	var core: SimCore = _core()
@@ -249,12 +236,10 @@ func test_rows_survive_a_pool_release_and_acquire_with_a_new_handle() -> void:
 	assert_eq(core.row_of(first), -1, "the old handle stays dead")
 	assert_eq(core.row_name(second), "KILO 2", "the row carries the new name")
 	assert_eq(core.row_position(second), Vector3(5.0, 6.0, 7.0), "and the new place")
-	_assert_same_rows(ContactScan.shared(get_tree()), ContactScan.from_tree(get_tree()), "the scan after the reuse")
+	_assert_same_rows(ContactScan.shared(get_tree()), TreeRows.scan(get_tree()), "the scan after the reuse")
 
 
 func test_the_slot_map_stays_bounded_over_spawn_and_release_cycles_and_refuses_an_old_handle() -> void:
-	if _skipped():
-		return
 	_body(Vector3(-300.0, 20.0, 400.0), Factions.RAIDERS, "ANCHOR")
 	var core: SimCore = _core()
 	core.sync_now()
@@ -283,8 +268,6 @@ func test_the_slot_map_stays_bounded_over_spawn_and_release_cycles_and_refuses_a
 
 
 func test_a_rebase_shifts_every_row_once() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 15
 	var bodies: Array[Node3D] = _crowd(rng, 40, 30, 20)
@@ -313,56 +296,14 @@ func test_a_rebase_shifts_every_row_once() -> void:
 	var next: PackedVector3Array = core.body_positions()
 	assert_eq(next, after, "the next sync reads the nodes where the shift left them: no second move")
 	assert_eq(core.static_positions(), StaticRows.positions, "the static rows follow StaticRows' own shift")
-	_assert_same_rows(ContactScan.shared(get_tree()), ContactScan.from_tree(get_tree()), "the scan after the rebase")
+	_assert_same_rows(ContactScan.shared(get_tree()), TreeRows.scan(get_tree()), "the scan after the rebase")
 	assert_true(bodies.size() > 0, "a crowd was made")
-
-
-func test_a_row_of_each_kind_round_trips_its_state() -> void:
-	if _skipped():
-		return
-	var core: SimCore = _core()
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 3
-	var handles: PackedInt64Array = PackedInt64Array()
-	var given: Array[Dictionary] = []
-	for kind: int in KINDS_ROUND_TRIPPED:
-		var row: Dictionary = {
-			"kind": kind,
-			"id": 70000 + kind,
-			"faction": SIDES[kind % SIDES.size()],
-			"radius": rng.randf_range(0.25, 1200.0),
-			"flags": rng.randi_range(0, 255),
-			"position": Vector3(rng.randf_range(-1e5, 1e5), rng.randf_range(-1e5, 1e5), rng.randf_range(-1e5, 1e5)),
-			"velocity": Vector3(rng.randf_range(-900.0, 900.0), rng.randf_range(-900.0, 900.0), rng.randf_range(-900.0, 900.0)),
-			"basis": Basis.from_euler(Vector3(rng.randf_range(-PI, PI), rng.randf_range(-PI, PI), rng.randf_range(-PI, PI))),
-			"angular": Vector3(rng.randf_range(-3.0, 3.0), rng.randf_range(-3.0, 3.0), rng.randf_range(-3.0, 3.0)),
-			"command": PackedFloat64Array([rng.randf(), rng.randf(), rng.randf(), rng.randf(), rng.randf_range(-1.0, 1.0),
-					rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0), 1.0, 0.0, 1.0]),
-			"state": PackedFloat64Array([rng.randf_range(0.0, 100.0), rng.randf_range(0.0, 100.0), rng.randf_range(0.0, 100.0)]),
-		}
-		var handle: int = core.add_row(row)
-		assert_gt(handle, 0, "kind %d gets a handle" % kind)
-		handles.append(handle)
-		given.append(row)
-	for i: int in handles.size():
-		var back: Dictionary = core.row(handles[i])
-		for key: String in given[i]:
-			assert_eq(back.get(key), given[i][key], "kind %d: %s round-trips" % [given[i]["kind"], key])
-	# A changed command and state come back changed; a removed row answers nothing.
-	var moved: PackedFloat64Array = PackedFloat64Array([0.5, 0.25, 0.0, 0.0, 0.1, -0.2, 0.3, 0.0, 1.0, 0.0])
-	core.set_row_command(handles[0], moved)
-	assert_eq((core.row(handles[0]) as Dictionary)["command"], moved, "the command changes in place")
-	core.remove_row(handles[1])
-	assert_true((core.row(handles[1]) as Dictionary).is_empty(), "a removed row is gone")
-	assert_eq((core.row(handles[2]) as Dictionary)["id"], 70000 + KINDS_ROUND_TRIPPED[2], "its neighbours stay")
 
 
 # --- the four classes, from the core and from their own loads -------------------------------------------------------
 
 
 func test_the_contact_scan_answers_from_the_core_as_from_its_own_load() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 150
 	for round: int in 6:
@@ -379,8 +320,7 @@ func test_the_contact_scan_answers_from_the_core_as_from_its_own_load() -> void:
 		core.sync_now()
 		var shared: ContactScan = ContactScan.shared(get_tree())
 		assert_eq(shared.source(), &"core", "round %d: the shared scan comes from the core" % round)
-		var script: ContactScan = ContactScan.from_tree(get_tree())
-		script.use_native = false
+		var script: ContactScan = TreeRows.scan(get_tree())
 		_assert_same_rows(shared, script, "round %d" % round)
 		var differences: PackedStringArray = PackedStringArray()
 		for q: int in mini(bodies.size(), 60):
@@ -406,8 +346,6 @@ func test_the_contact_scan_answers_from_the_core_as_from_its_own_load() -> void:
 
 
 func test_the_hit_sweep_pairs_from_the_core_as_from_its_own_load() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 808
 	var resolver := HitResolver.new()
@@ -426,34 +364,28 @@ func test_the_hit_sweep_pairs_from_the_core_as_from_its_own_load() -> void:
 		var core: SimCore = _core()
 		core.sync_now()
 		var delta: float = 1.0 / 60.0
-		# The resolver's own load: hulls and bolts gathered from the tree, paired by the broad phase.
-		resolver.use_core = false
-		var own: Array = resolver.broad_phase_pairs(delta)
-		# From the core: the same pairs, named by body and bolt instance id, and the same work.
-		resolver.use_core = true
+		# The resolver's own load (hulls and bolts gathered from the tree, paired by the broad phase) is recorded (M4-T37;
+		# the walk itself went in M4-T42).
+		var own: Variant = ParityFixture.stored(FIXTURE, "hit_sweep_round_%d" % round)
+		# From the core: the same pairs and the same work.
 		var from_core: Array = resolver.broad_phase_pairs(delta)
-		assert_eq(from_core[0], own[0], "round %d: the same bolt and hull pairs" % round)
-		assert_eq(from_core[1], own[1], "round %d: the same pairs visited" % round)
-		assert_true((own[0] as Array).size() > 0 or round == 0, "round %d: there were pairs to compare" % round)
+		assert_eq(ParityFixture.encode(from_core), own, "round %d: the own load's bolt and hull pairs and work (recorded)" % round)
+		assert_true((from_core[0] as PackedInt64Array).size() > 0 or round == 0, "round %d: there were pairs to compare" % round)
 		assert_eq(resolver.source(), &"core", "round %d: the resolver read the core" % round)
 		# The bolts fly on after the tick's first sync (they move at priority 0, the resolver runs at 200): the resolver's
 		# sync point must read them where they are now, not where the first sync saw them.
 		core.sync_now()
 		for node: Node in projectiles.get_children():
 			_fly(node as Projectile)
-		resolver.use_core = false
-		var own_moved: Array = resolver.broad_phase_pairs(delta)
-		resolver.use_core = true
+		var own_moved: Variant = ParityFixture.stored(FIXTURE, "hit_sweep_round_%d_moved" % round)
 		var core_moved: Array = resolver.broad_phase_pairs(delta)
-		assert_eq(core_moved[0], own_moved[0], "round %d: the same pairs after the bolts moved" % round)
-		if own_moved[0] != own[0]:
+		assert_eq(ParityFixture.encode(core_moved), own_moved, "round %d: the same pairs after the bolts moved (recorded)" % round)
+		if core_moved[0] != from_core[0]:
 			bolts_moved_pairs = true
 	assert_true(bolts_moved_pairs, "the moved bolts paired differently in some round, so the second sync was tested")
 
 
-func test_a_bolt_on_its_launch_tick_sweeps_only_its_muzzle_on_both_paths() -> void:
-	if _skipped():
-		return
+func test_a_bolt_on_its_launch_tick_sweeps_only_its_muzzle() -> void:
 	var resolver := HitResolver.new()
 	resolver.name = "HitResolver"
 	add_child_autofree(resolver)
@@ -465,26 +397,19 @@ func test_a_bolt_on_its_launch_tick_sweeps_only_its_muzzle_on_both_paths() -> vo
 	var core: SimCore = _core()
 	core.sync_now()
 	var delta: float = 1.0 / 60.0
-	resolver.use_core = false
-	var own: Array = resolver.broad_phase_pairs(delta)
-	resolver.use_core = true
 	var from_core: Array = resolver.broad_phase_pairs(delta)
-	assert_eq((own[0] as PackedInt64Array).size(), 0, "the reference sweeps the muzzle alone and misses the ship")
-	assert_eq(from_core[0], own[0], "launch tick: the same pairs from the core")
-	# The next tick the bolt has flown one step (its own `_physics_process`): both paths see the same segment.
+	assert_eq((from_core[0] as PackedInt64Array).size(), 0, "a launch-tick bolt sweeps the muzzle alone and misses the ship")
+	# The next tick the bolt has flown one step (its own `_physics_process`): the core sees the segment the tree walk saw
+	# (recorded, M4-T37).
 	await get_tree().physics_frame
 	await get_tree().physics_frame
-	resolver.use_core = false
-	var own_next: Array = resolver.broad_phase_pairs(delta)
-	resolver.use_core = true
+	var own_next: Variant = ParityFixture.stored(FIXTURE, "launch_tick_after")
 	var core_next: Array = resolver.broad_phase_pairs(delta)
-	assert_eq(core_next[0], own_next[0], "the tick after: the same pairs from the core")
-	assert_eq(core_next[1], own_next[1], "the tick after: the same pairs visited")
+	# The pairs only: the work count also counts any hull an earlier test left in the tree (the core reads the whole tree).
+	assert_eq(ParityFixture.encode(core_next[0]), (own_next as Array)[0], "the tick after: the own load's pairs (recorded)")
 
 
-func test_a_hull_destroyed_between_the_resolvers_leaves_the_ram_rows_on_both_paths() -> void:
-	if _skipped():
-		return
+func test_a_hull_destroyed_between_the_resolvers_leaves_the_ram_rows() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 2102
 	var hits := HitResolver.new()
@@ -505,23 +430,18 @@ func test_a_hull_destroyed_between_the_resolvers_leaves_the_ram_rows_on_both_pat
 	core.sync_now()
 	var delta: float = 1.0 / 60.0
 	# The hit resolver (200) reads the tick's bolts, then one of its hits kills a hull; the ram resolver (210) must not see it.
-	hits.use_core = true
 	hits.broad_phase_pairs(delta)
 	var victim: Node3D = bodies[0] if bodies[0] is RigidBody3D else bodies[1]
 	_kill(victim)
 	assert_false(Damageable.of(victim).is_active(), "the hull is destroyed")
-	rams.use_core = true
 	var from_core: PackedInt64Array = rams.broad_phase_pairs(delta, PackedInt64Array())
 	var core_count: int = rams.hulls_last_tick
-	rams.use_core = false
-	var own: PackedInt64Array = rams.broad_phase_pairs(delta, PackedInt64Array())
-	assert_eq(core_count, rams.hulls_last_tick, "the destroyed hull is out of the core's hull rows, as it is out of the tree walk")
-	assert_eq(from_core, own, "the same pairs from the core after a kill between the resolvers")
+	var own: Variant = ParityFixture.stored(FIXTURE, "ram_rows_after_a_kill")
+	assert_eq(ParityFixture.encode([from_core, core_count]), own,
+			"the destroyed hull is out of the core's hull rows and the pairs are the tree walk's (recorded)")
 
 
 func test_a_ship_parked_after_the_resync_and_back_the_next_tick_gets_a_new_handle() -> void:
-	if _skipped():
-		return
 	var ship: RigidBody3D = _body(Vector3(100.0, 0.0, -50.0), Factions.EARTH_ALLIANCE, "KILO 1")
 	_body(Vector3(-300.0, 20.0, 400.0), Factions.RAIDERS, "R 1")
 	var core: SimCore = _core()
@@ -539,9 +459,28 @@ func test_a_ship_parked_after_the_resync_and_back_the_next_tick_gets_a_new_handl
 	assert_eq(core.row_of(first), -1, "the old handle stays dead")
 
 
+func test_a_ship_back_from_the_pool_after_a_broadcast_scan_keeps_its_own_body() -> void:
+	# M4-T44 (F3): the broadcast scan builds rows of its own and must leave the core's rid column alone, or a ship that
+	# comes back from the pool mid-tick reads its ram contacts from a broadcaster's body.
+	var ship: RigidBody3D = _body(Vector3(100.0, 0.0, -50.0), Factions.EARTH_ALLIANCE, "KILO 1")
+	var buoy: RigidBody3D = _body(Vector3(-300.0, 20.0, 400.0), Factions.NEUTRAL, "BUOY")
+	var marker := buoy.get_node("Targetable") as Targetable
+	marker.broadcast_range_m = 1.0e6
+	_park(ship)
+	var core: SimCore = _core()
+	core.sync_now()  # the tick's first sync, the ship still in the pool
+	var heard: Array = core.core.select(PackedInt64Array([marker.get_instance_id()]))
+	assert_gt(heard.size(), 0, "the broadcast scan answered")
+	_unpark(ship)  # acquired from the pool mid-tick
+	core.sync_bolts_now()  # the hit resolver's resync gives it a late row
+	var handle: int = core.handle_of(ship.get_instance_id())
+	assert_gt(handle, 0, "the ship is a row again")
+	assert_eq(core.core.row_rid(core.row_of(handle)), ship.get_rid(), "its row reads its own body")
+	assert_eq(core.core.row_rid(core.row_of(core.handle_of(buoy.get_instance_id()))), buoy.get_rid(),
+			"and the broadcaster's row its own")
+
+
 func test_the_ram_broad_phase_pairs_from_the_core_as_from_its_own_load() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 2101
 	var rams := RamResolver.new()
@@ -565,12 +504,10 @@ func test_the_ram_broad_phase_pairs_from_the_core_as_from_its_own_load() -> void
 		core.sync_now()
 		var delta: float = 1.0 / 60.0
 		var always := PackedInt64Array([0, 1])
-		rams.use_core = false
-		var own: Array = rams.broad_phase_pairs(delta, always)
-		rams.use_core = true
+		var own: Variant = ParityFixture.stored(FIXTURE, "ram_broad_phase_round_%d" % round)
 		var from_core: Array = rams.broad_phase_pairs(delta, always)
-		assert_eq(from_core, own, "round %d: the same hull pairs from the core as from the resolver's own gather" % round)
-		assert_true(own.size() > 1 or round == 0, "round %d: there were pairs to compare" % round)
+		assert_eq(ParityFixture.encode(from_core), own, "round %d: the hull pairs the resolver's own gather gave (recorded)" % round)
+		assert_true(from_core.size() > 1 or round == 0, "round %d: there were pairs to compare" % round)
 		assert_eq(rams.source(), &"core", "round %d: the resolver read the core" % round)
 
 
@@ -594,67 +531,59 @@ class Launcher extends Node:
 		ship.linear_velocity = Vector3(0.0, 0.0, -80.0)
 
 
-func test_the_flight_step_flies_the_same_from_the_core_as_from_the_physics_server() -> void:
-	if _skipped():
-		return
+func test_the_flight_step_from_the_core_flies_as_the_recorded_server_read() -> void:
 	var spec: ShipSpec = load(SPEC_PATH) as ShipSpec
 	var digests: Array[Array] = []
-	for use_core: bool in [true, false]:
-		Settings.set_value(&"perf_native_core", use_core)
-		var ships: Array[Ship] = []
-		for i: int in 3:
-			var ship: Ship = Ship.create(spec, world)
-			world.spawn(ship, world.to_universe(Vector3(300.0 * i, 0.0, -200.0 * i)))
-			assert_true(ship.get_layout().valid, "ship has a valid thruster layout (run scripts/gen_assets.sh)")
-			ships.append(ship)
-		var launcher := Launcher.new()
-		launcher.ship = ships[1]
-		add_child(launcher)
-		await get_tree().physics_frame
-		await get_tree().physics_frame
-		launcher.at_frame = Engine.get_physics_frames() + 30  # the same recorded tick in both runs
-		var rng := RandomNumberGenerator.new()
-		rng.seed = 44
-		var lines: Array = []
-		for tick: int in 90:
-			for ship: Ship in ships:
-				var cmd := FlightCommand.new()
-				cmd.main_left = rng.randf()
-				cmd.main_right = rng.randf()
-				cmd.retro_left = 1.0 if rng.randf() < 0.2 else 0.0
-				cmd.retro_right = 1.0 if rng.randf() < 0.2 else 0.0
-				cmd.rot = Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0))
-				cmd.strafe = Vector2(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0))
-				cmd.brake = rng.randf() < 0.1
-				ship.set_flight_command(cmd)
-			await get_tree().physics_frame
-			var batch: FlightBatch = FlightBatch.attach(world)
-			if tick == 10:
-				assert_eq(batch.source(), &"core" if use_core else &"server", "the batch reads the %s" % ("core" if use_core else "server"))
-			for ship: Ship in ships:
-				var o: FlightOutput = ship.get_flight_output()
-				# Exact values, compared as such: a formatted float would hide a difference in the last bits.
-				lines.append([tick, ship.global_position, ship.linear_velocity, ship.angular_velocity, ship.applied_force(),
-						o.rcs_torque_b, o.group_levels[0], o.mass_flow_kg_s, o.face_error_rad])
-		digests.append(lines)
-		launcher.free()
+	var ships: Array[Ship] = []
+	for i: int in 3:
+		var ship: Ship = Ship.create(spec, world)
+		world.spawn(ship, world.to_universe(Vector3(300.0 * i, 0.0, -200.0 * i)))
+		assert_true(ship.get_layout().valid, "ship has a valid thruster layout (run scripts/gen_assets.sh)")
+		ships.append(ship)
+	var launcher := Launcher.new()
+	launcher.ship = ships[1]
+	add_child(launcher)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	launcher.at_frame = Engine.get_physics_frames() + 30  # the same recorded tick in both runs
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 44
+	var lines: Array = []
+	for tick: int in 90:
 		for ship: Ship in ships:
-			ship.free()
-		var batch: FlightBatch = world.get_node_or_null(NodePath(FlightBatch.NODE_NAME))
-		if batch != null:
-			batch.free()
-		var core: Node = world.get_node_or_null(NodePath(SimCore.NODE_NAME))
-		if core != null:
-			core.free()
+			var cmd := FlightCommand.new()
+			cmd.main_left = rng.randf()
+			cmd.main_right = rng.randf()
+			cmd.retro_left = 1.0 if rng.randf() < 0.2 else 0.0
+			cmd.retro_right = 1.0 if rng.randf() < 0.2 else 0.0
+			cmd.rot = Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0))
+			cmd.strafe = Vector2(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0))
+			cmd.brake = rng.randf() < 0.1
+			ship.set_flight_command(cmd)
 		await get_tree().physics_frame
-	assert_eq(digests[0].size(), digests[1].size(), "both runs logged every tick")
-	var first_difference: int = -1
-	for i: int in mini(digests[0].size(), digests[1].size()):
-		if digests[0][i] != digests[1][i]:
-			first_difference = i
-			break
-	assert_eq(first_difference, -1, "the batch flies the same from the core as from the physics server (first difference: %s | %s)" % [
-			str(digests[0][first_difference]) if first_difference >= 0 else "", str(digests[1][first_difference]) if first_difference >= 0 else ""])
+		var batch: FlightBatch = FlightBatch.attach(world)
+		if tick == 10:
+			assert_eq(batch.source(), &"core", "the batch reads the core")
+		for ship: Ship in ships:
+			var o: FlightOutput = ship.get_flight_output()
+			# Exact values, compared as such: a formatted float would hide a difference in the last bits.
+			lines.append([tick, ship.global_position, ship.linear_velocity, ship.angular_velocity, ship.applied_force(),
+					o.rcs_torque_b, o.group_levels[0], o.mass_flow_kg_s, o.face_error_rad])
+	digests.append(lines)
+	launcher.free()
+	for ship: Ship in ships:
+		ship.free()
+	var batch: FlightBatch = world.get_node_or_null(NodePath(FlightBatch.NODE_NAME))
+	if batch != null:
+		batch.free()
+	var core: Node = world.get_node_or_null(NodePath(SimCore.NODE_NAME))
+	if core != null:
+		core.free()
+	await get_tree().physics_frame
+	var recorded: Variant = ParityFixture.stored(FIXTURE, "flight_step_from_the_server")
+	assert_not_null(recorded, "the server read's flight was recorded")
+	assert_eq(ParityFixture.encode({"ticks": digests[0].size(), "lines": ParityFixture.digest(digests[0])}), recorded,
+			"the batch flies the same from the core as from the physics server (recorded, M4-T37)")
 
 
 # --- the engine seam ---------------------------------------------------------------------------------------------------
@@ -774,8 +703,6 @@ func test_the_kernels_hold_no_engine_type() -> void:
 
 
 func test_sync_in_and_sync_out_are_the_only_places_the_core_touches_the_engine() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 9
 	var resolver := HitResolver.new()
@@ -819,9 +746,7 @@ func test_sync_in_and_sync_out_are_the_only_places_the_core_touches_the_engine()
 			scan.nearest_for(id, body.global_position, Factions.RAIDERS, 12)
 			scan.statics_for(id, body.global_position, Factions.RAIDERS, 4)
 			scan.incoming_fire(id, body.global_position, Vector3.ZERO, Factions.RAIDERS)
-		resolver.use_core = true
 		resolver.broad_phase_pairs(1.0 / 60.0)
-		rams.use_core = true
 		rams.broad_phase_pairs(1.0 / 60.0, PackedInt64Array())
 		# The flight step over the real ships: it reads its rows from the core and applies the forces (the one write).
 		batch._physics_process(1.0 / 60.0)
@@ -847,7 +772,7 @@ func test_sync_in_and_sync_out_are_the_only_places_the_core_touches_the_engine()
 const WEAPON_KERNEL_FILE: String = "res://native/src/weapon_kernels.rs"
 const WEAPON_KERNEL_USERS: Array[String] = ["res://native/src/weapon_rows.rs"]
 const WEAPON_KERNEL_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::{Basis, Vector3};",
-		"use crate::rows::{Bolts, FLAG_HULL_ACTIVE, FLAG_RIGID, Rows};"]
+		"use crate::rows::{Bolts, FLAG_HULL_ACTIVE, FLAG_RIGID, FLAG_TIER, Rows};"]  # FLAG_TIER: M4-T23's blast on tier rows
 
 
 func test_the_weapon_kernels_hold_no_engine_type() -> void:
@@ -892,7 +817,7 @@ func test_the_tier_kernel_holds_no_engine_type() -> void:
 	assert_eq(violations.size(), 0, "no engine type, call, crate path or stray import in the tier: %s" % violations)
 	var source: String = FileAccess.get_file_as_string(TIER_FILE)
 	for part: String in ["pub fn step(", "fn beat(", "pub fn rotate_basis(", "pub fn far_bodies(", "pub fn near_rows(",
-			"pub fn append_to("]:
+			"pub fn append_to(", "pub fn fill_dots(", "pub fn fill_hulls(", "pub fn clear_of_statics("]:  # the last three: M4-T23
 		assert_true(source.contains(part), "the tier holds %s" % part)
 	assert_false(source.contains("static mut") or source.contains("thread_local") or source.contains("Cell<"),
 			"no shared mutable state in the tier")
@@ -933,3 +858,16 @@ func test_the_step_job_holds_no_engine_type() -> void:
 	# The host hands the job nothing but plain data: it launches through the job's `run`, with no engine handle inside.
 	var host: String = FileAccess.get_file_as_string("res://native/src/brain.rs")
 	assert_true(host.contains("StepThread::start(STEP_THREAD, brain_step::run)"), "the host's thread runs the job's run")
+
+
+## The radar sphere's kernel (M4-T23): held to the kernels' rules; its shell (`radar_plot.rs`) is what reaches it.
+const RADAR_KERNEL_FILE: String = "res://native/src/radar_kernel.rs"
+const RADAR_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::{Basis, Vector3};", "use crate::v3::{length_squared, xform_inv};"]
+
+
+func test_the_radar_kernel_holds_no_engine_type() -> void:
+	var violations: PackedStringArray = _engine_free_violations(RADAR_KERNEL_FILE, KERNEL_FORBIDDEN, RADAR_KERNEL_USE_ALLOWED)
+	assert_eq(violations.size(), 0, "no engine type, call, crate path or stray import in the radar kernel: %s" % violations)
+	assert_true(FileAccess.get_file_as_string(RADAR_KERNEL_FILE).contains("pub fn plot("), "the radar kernel holds the plot")
+	assert_true(FileAccess.get_file_as_string("res://native/src/radar_plot.rs").contains("use crate::radar_kernel::"),
+			"the shell reads the kernel")

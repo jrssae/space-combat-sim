@@ -7,8 +7,9 @@ extends RefCounted
 ## closes it like a friendly ship. The target itself never closes the lane, nor do hostiles (hitting one is fine) or
 ## other props (buoys: every bolt hits them whatever the setting, so the setting changes nothing about them).
 ## `AttackBrain` asks before it holds the trigger; the check runs in both settings.
-## Native kernels (M4-T16, architecture §17.13): `clear_seen` is what the brains call. On the core's rows
-## (`Perception.on_rows`) one native call answers it bit for bit; otherwise `clear`, which stays the reference.
+## The check runs in the native pilot kernels (M4-T16, architecture §17.13; `kernels::pilot::fire_lane`): over the core's
+## rows when the perception is on them (`Perception.on_rows`), else over the contacts loaded as rows (`PilotRows`). The
+## GDScript loop it matched went in M4-T42; its verdicts are recorded in `tests/fixtures/parity/pilot_kernels.json`.
 
 ## Clearance around a contact's bounding sphere, m: the muzzles sit a few metres off the ship's centre line.
 const CLEARANCE_M: float = 5.0
@@ -17,31 +18,16 @@ const CLEARANCE_M: float = 5.0
 ## True when nothing that must not be hit sits in the lane. `target_id` is the target's `Contact.id` (`TargetInfo.id`).
 static func clear(own_pos: Vector3, aim_dir: Vector3, range_m: float, contacts: Array[Contact], target_id: int = 0,
 		friendly_fire: bool = false) -> bool:
-	if aim_dir.length_squared() < 1e-12 or range_m <= 0.0:
+	var kernels: Object = PilotRows.kernels_of(contacts)
+	if kernels == null:
 		return true
-	var dir: Vector3 = aim_dir.normalized()
-	for c: Contact in contacts:
-		if c.id == target_id or not _protected(c, friendly_fire):
-			continue
-		var rel: Vector3 = c.position - own_pos
-		var along: float = rel.dot(dir)
-		if along <= 0.0 or along >= range_m:
-			continue
-		var width: float = c.bounding_radius + CLEARANCE_M
-		if (rel - dir * along).length_squared() < width * width:
-			return false
-	return true
+	return kernels.fire_lane(PilotRows.span(0, contacts.size()), PilotRows.relations(contacts), own_pos, aim_dir, range_m,
+			target_id, friendly_fire)
 
 
-## `clear` for a perception: from its position, against its contacts, with its friendly-fire setting. Through the native
-## kernels when the perception is on the core's rows.
+## `clear` for a perception: from its position, against its contacts, with its friendly-fire setting, over the core's rows
+## when it is on them.
 static func clear_seen(p: Perception, aim_dir: Vector3, range_m: float, target_id: int = 0) -> bool:
 	if p.on_rows():
 		return p.kernels.fire_lane(p.contact_rows, p.relation_row, p.position, aim_dir, range_m, target_id, p.friendly_fire)
 	return clear(p.position, aim_dir, range_m, p.contacts, target_id, p.friendly_fire)
-
-
-static func _protected(c: Contact, friendly_fire: bool) -> bool:
-	if c.relation == Factions.Relation.FRIENDLY:
-		return true
-	return friendly_fire and c.is_ship and c.relation != Factions.Relation.HOSTILE

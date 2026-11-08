@@ -23,7 +23,7 @@ extends Node3D
 ## The gate is paid from a `WeaponCapacitor` (M2-T14), sized by the `WeaponSpec`: an empty capacitor stops the fire
 ## until it has recharged enough for the next shot.
 ##
-## On the kernel (M4-T35, `perf_native_bolt_rows`, architecture §17.13): with the core on, every cannon but the player's
+## On the kernel (M4-T35, architecture §17.13): with the core on, every cannon but the player's
 ## registers with `ScsCannons` (its muzzles as data in the ship's frame, its gate and capacitor, what its bolts carry) and
 ## stops ticking itself; the core steps every cannon's gate in one call a tick, spawns each shot as an owned bolt row and
 ## names the shots, so this node only flashes the muzzle and emits `shot_fired`. The trigger comes from the ship's row
@@ -204,11 +204,6 @@ static func muzzle_locals_of(body: Node3D, muzzles: Array[Node3D]) -> PackedVect
 	return out
 
 
-## The muzzles' origins in the ship's frame, as data (the kernel's and, for the frame's flashes, T36's).
-func muzzle_locals() -> PackedVector3Array:
-	return _muzzle_locals
-
-
 ## Ends every muzzle flash at once (a ship back in play).
 func reset_flashes() -> void:
 	for flash: MuzzleFlash in _flashes:
@@ -346,7 +341,7 @@ static func rebind_all() -> void:
 # Joins the kernel when the core owns the bolts and this is not the player's cannon; else fires from this node's gate.
 func _bind() -> void:
 	var sim: SimCore = SimCore.for_tree(get_tree()) if is_inside_tree() else null
-	var wanted: bool = sim != null and SimCore.bolt_rows_enabled() and not _console_owner and _body != null \
+	var wanted: bool = sim != null and not _console_owner and _body != null \
 			and not _muzzle_locals.is_empty()
 	if not wanted:
 		_unbind()

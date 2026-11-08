@@ -7,23 +7,20 @@ extends Node
 ## levels and RCS shares (the thruster glow and the engine audio) and the reaction-mass flow (drawn here).
 ##
 ## A ship joins (`Ship.batched`) when it is built and leaves when it exits the tree; the player's ship never joins. A
-## joined ship that cannot process (parked in the pool) is skipped. When the library lacks the class or `perf_native` or
-## `perf_native_flight` is off, no row is stepped and every ship flies its own GDScript model that tick, so the setting can
-## flip live and a bench can pair the two paths in one process. Ships' types and nozzles are registered once; a rebuilt ship
-## registers again.
+## joined ship that cannot process (parked in the pool) is skipped. Ships' types and nozzles are registered once; a rebuilt
+## ship registers again. M4-T37 removed the switch that flew every ship on its own GDScript model instead.
 ##
-## With the native core on (M4-T15, `SimCore`), the step reads each ship's basis and velocities from the core's rows (synced
-## at -11; nothing moves a body between) instead of the physics server; a ship the core has no row for (back from the
-## pool this tick) is read from the server as before. The batch attaches the core to the world when it attaches itself.
+## The step reads each ship's basis and velocities from the native core's rows (M4-T15, `SimCore`; synced at -11, nothing
+## moves a body between); a ship the core has no row for (back from the pool this tick) is read from the physics server.
+## Every world has a core (M4-T42); with none (it was freed as its world left) the batch flies nothing that tick.
 ##
-## Commands from rows (M4-T33): on the core a native pilot's ship flies the command its row holds (the step reads it there,
-## whatever was gathered); without the core the batch reads that command into the ship first (`Ship.pull_row_command`).
+## Commands from rows (M4-T33): a native pilot's ship flies the command its row holds (the step reads it there, whatever was
+## gathered).
 ##
-## The batch owns its ships' ticks (M4-T35, `perf_batch_owns_ships`): a ship the batch flew has nothing left to do at 0 (its
-## combat edges are taken in the gather), so its `_physics_process` is switched off and given back when the batch stops
-## flying it (no native step this tick, a refused step, the ship leaving, the setting off).
+## The batch owns its ships' ticks (M4-T35): a ship the batch flew has nothing left to do at 0 (its combat edges are taken
+## in the gather), so its `_physics_process` is switched off and given back when the ship leaves the batch.
 
-## The native class that flies the batch when the library is loaded and the settings are on.
+## The native class that flies the batch.
 const NATIVE_CLASS: StringName = &"ScsFlightStep"
 const NODE_NAME: StringName = &"FlightBatch"
 const PRIORITY: int = -1
@@ -57,7 +54,6 @@ var step_us: int = 0
 var _ships: Array[Ship] = []
 var _slots: Dictionary[Ship, int] = {}  # the native slot of every registered ship
 var _step: Object = null
-var _native_class_known: int = -1  # -1 until first asked; classes never change while the game runs
 var _slot_ids: PackedInt32Array = PackedInt32Array()
 var _body_ids: PackedInt64Array = PackedInt64Array()
 var _source: StringName = &"none"
@@ -67,7 +63,6 @@ var _scalars: PackedFloat64Array = PackedFloat64Array()
 var _vectors: PackedVector3Array = PackedVector3Array()
 var _flags: PackedByteArray = PackedByteArray()
 var _fuel_unlimited: bool = true
-var _owns: int = -1  # `perf_batch_owns_ships` as last read (-1: read again)
 
 
 func _init() -> void:
@@ -77,39 +72,18 @@ func _init() -> void:
 
 func _ready() -> void:
 	_register_console()
-	if not Settings.changed.is_connected(_on_setting_changed):
-		Settings.changed.connect(_on_setting_changed)
 
 
 func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
-	if Settings.changed.is_connected(_on_setting_changed):
-		Settings.changed.disconnect(_on_setting_changed)
 	_give_back_all()
 
 
-## Whether the batch owns the ticks of the ships it flies (`perf_batch_owns_ships`).
-func owns_ships() -> bool:
-	if _owns < 0:
-		_owns = 1 if bool(Settings.get_value(&"perf_batch_owns_ships")) else 0
-	return _owns == 1
-
-
-func _on_setting_changed(key: StringName, _value: Variant) -> void:
-	if key == &"perf_batch_owns_ships":
-		_owns = -1
-		if not owns_ships():
-			_give_back_all()
-
-
-# Every ship ticks itself again (the batch stops flying, or the setting goes off). A ship given back inside a physics tick
-# flies its own model now: the engine's process list for this tick was made before, so its own call would not come.
-func _give_back_all(fly_now: bool = false) -> void:
+# Every ship ticks itself again (the batch leaves the tree).
+func _give_back_all() -> void:
 	for ship: Ship in _ships:
 		if is_instance_valid(ship) and ship.is_batch_owned():
 			ship.set_batch_owned(false)
-			if fly_now:
-				ship.fly_own_tick_now(get_physics_process_delta_time())
 
 
 ## The batch under `world`, made on first ask; null without a world.
@@ -169,8 +143,8 @@ func reset_assist(ship: Ship) -> void:
 		_step.reset_assist(_slots[ship])
 
 
-## Where the last step read the ships' poses and motion: &"server" (the physics server by RID, M4-T10), &"core" (the
-## native core's rows, M4-T15) or &"none" (nothing stepped).
+## Where the last step read the ships' poses and motion: &"core" (the native core's rows, M4-T15) or &"none" (nothing
+## stepped).
 func source() -> StringName:
 	return _source if not rows.is_empty() else &"none"
 
@@ -226,9 +200,6 @@ static func pack_command(cmd: FlightCommand, env_accel: Vector3, assist_on: bool
 func _physics_process(delta: float) -> void:
 	rows.clear()
 	var step: Object = _native()
-	if step == null:
-		_give_back_all(true)
-		return
 	var started: int = Time.get_ticks_usec()  # readout only
 	var frame: int = Engine.get_physics_frames()
 	_fuel_unlimited = bool(Settings.get_value(&"fuel_unlimited"))
@@ -262,54 +233,33 @@ func _physics_process(delta: float) -> void:
 		step_us = 0
 		return
 	var sim: SimCore = SimCore.for_tree(get_tree())
-	var stepped: bool
+	var stepped: bool = false
+	fallback_reads = 0
+	_source = &"none"
 	if sim != null and sim.ensure_synced():
 		_source = &"core"
 		stepped = step.step_core(sim.core, slots, _body_ids.slice(0, row), scalars, vectors, flags, delta)
 		fallback_reads = int(step.fallback_reads())
-	else:
-		_source = &"server"
-		for i: int in row:
-			if rows[i].is_row_commanded():
-				rows[i].pull_row_command()
-				pack_command(rows[i].flight_command(), vectors[i * CMD_VECTORS + 5], flags[i * CMD_FLAGS + 2] != 0,
-						flags[i * CMD_FLAGS + 3] != 0, scalars, vectors, flags, i)
-		stepped = step.step(slots, scalars, vectors, flags, PackedVector3Array(), delta)
-		fallback_reads = 0
 	if not stepped:
-		# The step refused the arrays (it logged why): every ship flies its own model this tick.
-		for ship: Ship in rows:
-			var owned: bool = ship.is_batch_owned()
-			ship.batch_refused()
-			if owned:
-				ship.fly_own_tick_now(delta)
+		# No core (its world is leaving), or the step refused the arrays (it logged why): nothing flies this tick.
 		rows.clear()
 		step_us = 0
 		return
 	out_vectors = step.out_vectors()
 	out_scalars = step.out_scalars()
 	tick = frame
-	if owns_ships():
-		for ship: Ship in rows:
-			ship.set_batch_owned(true)  # a no-op once owned: the per-ship work here is the gather alone
+	for ship: Ship in rows:
+		ship.set_batch_owned(true)  # a no-op once owned: the per-ship work here is the gather alone
 	if not _fuel_unlimited:
 		for i: int in rows.size():
 			rows[i].batch_draw_fuel(out_scalars[i * OUT_SCALARS + OutScalar.MASS_FLOW], delta)
 	step_us = Time.get_ticks_usec() - gathered
 
 
-# The native step, or null when the library lacks it or a setting is off (then nothing is stepped this tick).
+# The native step, made on first use with every joined ship registered.
 func _native() -> Object:
-	if not NativeLib.enabled() or not bool(Settings.get_value(&"perf_native_flight")):
-		return null
-	if _native_class_known < 0:
-		_native_class_known = 1 if NativeLib.has_class(NATIVE_CLASS) else 0
-	if _native_class_known == 0:
-		return null
 	if _step == null:
 		_step = NativeLib.instantiate(NATIVE_CLASS)
-		if _step == null:
-			return null
 		_slots.clear()
 		for ship: Ship in _ships:
 			_register(ship)
@@ -338,7 +288,7 @@ func _register_console() -> void:
 		&"stepped": {"get": func() -> int: return rows.size(), "doc": "Ships the batch flew in the last tick"},
 		&"gather_us": {"get": func() -> int: return gather_us, "unit": "us", "doc": "The last tick's GDScript gather; wall clock"},
 		&"step_us": {"get": func() -> int: return step_us, "unit": "us", "doc": "The last tick's native step and its outputs; wall clock"},
-		&"source": {"get": func() -> String: return String(source()), "doc": "Where the last step read the ships' poses: core (the native core's rows, M4-T15), server (the physics server by RID) or none"},
+		&"source": {"get": func() -> String: return String(source()), "doc": "Where the last step read the ships' poses: core (the native core's rows, M4-T15) or none"},
 		&"fallback_reads": {"get": func() -> int: return fallback_reads, "doc": "Ships the last core step read from the physics server because the core had no row for them (back from the pool this tick)"},
 		&"positions": {"get": _console_positions, "doc": "Every batchable ship's name and World position, for comparing seeded runs"},
 	}), self)

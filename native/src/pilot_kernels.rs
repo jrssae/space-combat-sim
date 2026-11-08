@@ -1,6 +1,6 @@
 // The AI pilot's per-contact loops on the core's rows (M4-T16, docs/architecture.md 17.13): avoidance, the fire lane and
 // the context lists, one call per thinking ship. The maths is `kernels::pilot`; this class only binds the rows (the core's,
-// or its own load for tests) and hands the answers over. `AvoidanceMath`, `FireLane` and `AiContext` stay the reference.
+// or a perception's own lists, `PilotRows`) and hands the answers over. `AiContext` keeps its own GDScript loop.
 // gdext's `init` derive writes `base: base`, which clippy flags on the struct's `base` field.
 #![allow(clippy::redundant_field_names)]
 use godot::prelude::*;

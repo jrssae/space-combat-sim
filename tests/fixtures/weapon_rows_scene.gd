@@ -5,13 +5,13 @@ extends RefCounted
 ## through a mine belt, hostile bolts and missiles are laid near the capitals for the interceptors, and the director fires
 ## guns, beams and missiles and steps the mines once per tick, all moved by hand so a run is the same every time. A run
 ## logs every turret's state, every projectile the director made, every interceptor kill and every hit the mines dealt,
-## tick by tick, with bodies named by their place in the scene (instance ids differ between runs). Run once on the
-## GDScript stand-ins and once on the native rows, the two logs must be equal byte for byte.
+## tick by tick, with bodies named by their place in the scene (instance ids differ between runs). The GDScript stand-ins'
+## logs were recorded before M4-T37 removed them; the native rows' must equal them byte for byte.
 
 const DT: float = 1.0 / 60.0
 const SIDES: Array[StringName] = [Factions.EARTH_ALLIANCE, Factions.RAIDERS, Factions.NEUTRAL]
 const CLASSES: Array[StringName] = [&"cruiser", &"destroyer", &"carrier"]
-const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_weapons"]
+const SETTINGS: Array[StringName] = []
 
 var world: WorldFrame
 var projectiles: Node3D
@@ -37,17 +37,14 @@ var _rebased: Vector3 = Vector3.ZERO  # what the rebases moved the World frame b
 
 
 ## Builds the scene under `test` (a GutTest, which frees it), seeded, with the native weapon rows on or off.
-static func build(test: Node, seed_value: int, native: bool) -> WeaponRowsScene:
+static func build(test: Node, seed_value: int) -> WeaponRowsScene:
 	var scene := WeaponRowsScene.new()
-	scene._build(test, seed_value, native)
+	scene._build(test, seed_value)
 	return scene
 
 
-func _build(test: Node, seed_value: int, native: bool) -> void:
+func _build(test: Node, seed_value: int) -> void:
 	_rng.seed = seed_value
-	Settings.set_value(&"perf_native", true)
-	Settings.set_value(&"perf_native_core", true)
-	Settings.set_value(&"perf_native_weapons", native)
 	Factions.reset()
 	ContactScan.invalidate()
 	StaticRows.clear()
@@ -64,6 +61,7 @@ func _build(test: Node, seed_value: int, native: bool) -> void:
 	world.add_child(director)
 	director.set_physics_process(false)  # stepped by hand
 	director.active = true
+	SimClock.reset()  # the same times in every process, so a recorded log compares bit for bit (M4-T37)
 	now_s = SimClock.now() + 100.0  # ahead of the clock projectiles expire by
 	for i: int in 6:
 		var at := Vector3(_rng.randf_range(-3000.0, 3000.0), _rng.randf_range(-800.0, 800.0), _rng.randf_range(-3000.0, 3000.0))
@@ -127,7 +125,7 @@ func step() -> void:
 		world.rebase(offset)
 		_rebased -= offset
 	_hits.clear()
-	director.step(DT, now_s, ContactScan.from_tree(world.get_tree()))
+	director.step(DT, now_s)
 	director.pull_native_state()
 	log.append(_entry())
 
@@ -258,3 +256,11 @@ func _entry() -> Dictionary:
 			"mines": mine_alive, "checked": mines.checked_last_tick,
 			"counts": [director.intercepts, director.missile_intercepts, director.beam_shots, director.missile_launches,
 					director.detonations]}
+
+
+## The log as the parity recordings keep it (M4-T37): a short digest of each tick's entry, in order.
+static func digests(entries: Array) -> Array:
+	var out: Array = []
+	for entry: Dictionary in entries:
+		out.append(var_to_bytes(entry).hex_encode().sha256_text().left(16))
+	return out

@@ -16,7 +16,6 @@ import numpy as np
 from ..core.geometry import (
     Material,
     Mesh,
-    assign_material_by_predicate,
     basis_from_z,
     box,
     lathe,
@@ -570,12 +569,6 @@ def claw_cluster(spec: ClawSpec, style: Style) -> Part:
             )
         )
     return Part("claw", Mesh.concatenate(meshes), anchors, collision, spec.mass_kg)
-
-
-def mark_band(mesh: Mesh, material_name: str, axis: int, lo: float, hi: float, style: Style) -> Mesh:
-    """Utility for callers: recolour faces whose centroid lies in ``[lo, hi]`` along ``axis``."""
-    c = mesh.face_centroids()[:, axis]
-    return assign_material_by_predicate(mesh, style.material(material_name), (c >= lo) & (c <= hi))
 
 
 def pilot_tags(
