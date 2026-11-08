@@ -506,14 +506,8 @@ func batch_gather(batch: FlightBatch, row: int, frame: int, delta: float, fuel_u
 	_output_tick = -1
 
 
-## The batch's step refused this tick's arrays after the gather: this node applies the forces itself.
-func batch_refused() -> void:
-	_flown_tick = -1
-	set_batch_owned(false)
-
-
 ## Whether the flight batch owns this ship's tick (M4-T35): the batch flies it and this node's `_physics_process` is off
-## until the batch gives the tick back (it stops flying the ship, the ship leaves it, the setting goes off).
+## until the ship leaves the batch.
 func set_batch_owned(owned: bool) -> void:
 	if owned == _batch_owned:
 		return
@@ -523,13 +517,6 @@ func set_batch_owned(owned: bool) -> void:
 
 func is_batch_owned() -> bool:
 	return _batch_owned
-
-
-## Flies this node's own model for this tick at once (the batch gave the tick back inside the tick, after the engine listed
-## what processes this tick).
-func fly_own_tick_now(delta: float) -> void:
-	if is_inside_tree() and can_process() and not _batch_owned:
-		_physics_process(delta)
 
 
 ## The batch draws this tick's reaction mass for a batched ship (only when the tank is finite).
