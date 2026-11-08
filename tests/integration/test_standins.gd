@@ -66,7 +66,7 @@ func _bolts(faction: StringName = &"") -> Array[Projectile]:
 func _step() -> int:
 	var before: int = _bolts().size()
 	sim.sync_now()  # the rows as the bodies stand now: the test moves them by hand between steps
-	standins.step(DT, now_s, ContactScan.from_core(get_tree()))
+	standins.step(DT, now_s)
 	standins.pull_native_state()  # the turrets' nodes show the rows' state, as the tests read it
 	now_s += DT
 	return _bolts().size() - before
@@ -505,5 +505,5 @@ func test_capitals_and_mines_attach_the_core() -> void:
 	standins.add_mines([{"offset": Vector3(100.0, 0.0, -1000.0), "faction": Factions.RAIDERS}], world.to_universe(Vector3.ZERO))
 	sim = SimCore.for_tree(get_tree())
 	assert_not_null(sim, "mines attach the core")
-	standins.step(DT, now_s, TreeRows.core_scan(get_tree()))
+	standins.step(DT, now_s)
 	assert_eq(standins.weapons_path(), &"native", "and the core steps the weapons")

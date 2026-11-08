@@ -2,7 +2,7 @@ class_name StandinDirector
 extends Node3D
 ## The battle's stand-ins in play (M4-T07, architecture §17.6): `World/Standins`, an identity container `Main` makes for the
 ## bench runner. It holds the capitals, the asteroid field, the mine belts and the moon, steps every capital's engines, guns,
-## interceptors and beam lasers once per tick (priority -5: after the AI drivers built the tick's contact scan, before anything
+## interceptors and beam lasers once per tick (priority -5: after the core's first sync and the AI drivers, before anything
 ## moves), keeps `missile_target` missiles in flight (M4-T12), steps the mines, runs the carriers' launch cycle through the
 ## runner's `launcher`, and counts the battle per entity type for the `perf` probe. Bench-only: no scenario spawns stand-ins.
 ##
@@ -102,11 +102,11 @@ func _physics_process(delta: float) -> void:
 	if not active:
 		_leave_native()
 		return
-	step(delta, SimClock.now(), ContactScan.shared(get_tree()))
+	step(delta, SimClock.now())
 
 
-## One tick of every stand-in at sim time `now_s`, the guns choosing from `scan`; then the counts.
-func step(delta: float, now_s: float, scan: ContactScan) -> void:
+## One tick of every stand-in at sim time `now_s`, over the core's rows; then the counts.
+func step(delta: float, now_s: float) -> void:
 	var started_us: int = Time.get_ticks_usec()  # profiling readout only
 	_tick += 1
 	ticks += 1
