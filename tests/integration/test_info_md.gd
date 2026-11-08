@@ -1,7 +1,7 @@
 extends GutTest
-## M4-T44 (F10): `info.md` lists every console command and state provider (CLAUDE.md asks for it). The main scene registers
-## them; the test reads the file's tables and the registry and names any command or provider that one has and the other has
-## not.
+## M4-T44 (F10): `info.md` lists every console command and state provider the sandbox registers (CLAUDE.md asks for it). The
+## other direction, every listed row registered somewhere, needs the scenes that register mission, route and free-flight
+## entries: `test_console_command_list.gd` (M5-T24) boots them and checks it.
 
 const INFO_PATH: String = "res://info.md"
 
@@ -18,20 +18,18 @@ func before_each() -> void:
 	await get_tree().physics_frame
 
 
-func test_every_registered_command_is_in_info_md_and_back() -> void:
+func test_every_registered_command_is_in_info_md() -> void:
 	var listed: PackedStringArray = _first_column(false)
 	var registered: PackedStringArray = _names(DebugConsole.registry.command_names())
 	assert_gt(listed.size(), 40, "info.md's command tables were read")
 	assert_eq(_missing(registered, listed), PackedStringArray(), "registered commands missing from info.md")
-	assert_eq(_missing(listed, registered), PackedStringArray(), "info.md commands the game does not register")
 
 
-func test_every_state_provider_is_in_info_md_and_back() -> void:
+func test_every_state_provider_is_in_info_md() -> void:
 	var listed: PackedStringArray = _first_column(true)
 	var registered: PackedStringArray = _names(DebugConsole.registry.provider_names())
 	assert_gt(listed.size(), 20, "info.md's provider table was read")
 	assert_eq(_missing(registered, listed), PackedStringArray(), "registered providers missing from info.md")
-	assert_eq(_missing(listed, registered), PackedStringArray(), "info.md providers the game does not register")
 
 
 # The names in the first column of info.md's tables: the provider table (under "State providers") or every command table

@@ -29,14 +29,14 @@ func _run(line: String) -> ConsoleResult:
 
 
 func test_the_provider_lists_ids_and_listed_pairs() -> void:
-	assert_eq(registry.format_path("factions.ids"), "factions.ids = [earth_alliance, raiders, neutral]")
-	assert_eq(registry.format_path("factions.relations"), "factions.relations = [earth_alliance raiders hostile]")
+	assert_eq(registry.format_path("factions.ids"), "factions.ids = [earth_alliance, raiders, neutral, narn, centauri, brakiri]")
+	assert_eq(registry.format_path("factions.relations"), "factions.relations = [earth_alliance raiders hostile, narn raiders hostile, centauri raiders hostile, brakiri raiders hostile]")
 
 
 func test_the_provider_follows_session_changes() -> void:
 	Factions.table().set_relation(&"neutral", &"raiders", Factions.Relation.FRIENDLY)
 	assert_eq(registry.format_path("factions.relations"),
-			"factions.relations = [earth_alliance raiders hostile, neutral raiders friendly]")
+			"factions.relations = [earth_alliance raiders hostile, narn raiders hostile, centauri raiders hostile, brakiri raiders hostile, neutral raiders friendly]")
 
 
 func test_the_provider_mirrors_the_friendly_fire_setting() -> void:
@@ -72,7 +72,7 @@ func test_relation_sets_a_pair_for_the_session() -> void:
 	assert_eq(result.lines, PackedStringArray(["earth_alliance vs raiders: hostile -> neutral (this session)"]))
 	assert_eq(Factions.relation(Factions.EARTH_ALLIANCE, Factions.RAIDERS), Factions.Relation.NEUTRAL)
 	assert_eq(Factions.relation(Factions.RAIDERS, Factions.EARTH_ALLIANCE), Factions.Relation.NEUTRAL)
-	assert_eq(registry.format_path("factions.relations"), "factions.relations = [earth_alliance raiders neutral]")
+	assert_eq(registry.format_path("factions.relations"), "factions.relations = [earth_alliance raiders neutral, narn raiders hostile, centauri raiders hostile, brakiri raiders hostile]")
 	assert_eq(_run("relation raiders earth_alliance").lines, PackedStringArray(["raiders vs earth_alliance: neutral"]))
 
 
@@ -95,7 +95,7 @@ func test_relation_reset_reloads_the_file() -> void:
 	assert_true(result.ok, result.error)
 	assert_string_contains(result.lines[0], "res://data/factions.json")
 	assert_true(Factions.is_hostile(Factions.EARTH_ALLIANCE, Factions.RAIDERS))
-	assert_eq(registry.format_path("factions.relations"), "factions.relations = [earth_alliance raiders hostile]")
+	assert_eq(registry.format_path("factions.relations"), "factions.relations = [earth_alliance raiders hostile, narn raiders hostile, centauri raiders hostile, brakiri raiders hostile]")
 
 
 func test_relation_reset_says_so_when_the_file_is_broken_and_keeps_the_table() -> void:
