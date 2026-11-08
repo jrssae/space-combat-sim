@@ -230,13 +230,14 @@ func test_sandbox_starts_each_existing_scenario() -> void:
 	await _pad(&"ui_accept")
 	assert_eq(_page_title(front), "Sandbox")
 	var page: SandboxSelect = front.frame().current_page() as SandboxSelect
-	assert_eq(page.option_ids(), [&"combat_sandbox", &"dogfight", &"instructor_route"] as Array[StringName])
+	assert_eq(page.option_ids(), [&"combat_sandbox", &"dogfight", &"instructor_route", &"civilian_showcase"] as Array[StringName])
 	for id: StringName in page.option_ids():
 		page.button_of(id).pressed.emit()
 	assert_eq(game.played, [
 		GameFlow.make_request(&"sandbox", &"combat_sandbox"),
 		GameFlow.make_request(&"sandbox", &"dogfight"),
 		GameFlow.make_request(&"sandbox", &"instructor_route"),
+		GameFlow.make_request(&"sandbox", &"civilian_showcase"),  # M5-T16
 	] as Array[Dictionary])
 	for request: Dictionary in game.played:
 		assert_true(FileAccess.file_exists(GameFlow.scenario_path(request["scenario_id"])), "%s exists" % request["scenario_id"])
