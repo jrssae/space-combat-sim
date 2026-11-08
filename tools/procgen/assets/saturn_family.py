@@ -68,7 +68,14 @@ class Mount:
     host: str | None
 
 
-LEAD_MOUNTS = (Mount("dorsal_fwd", (0.0, 3.8, 19.1), UP, None),)  # Q19: dorsal mounts only
+# Q32 (supersedes Q19 for the command section): a turret on each flank of the command disc, on the rim's widest point,
+# facing outboard, standing on a pad sunk into the rim; the cargo sections keep their dorsal mounts.
+FLANK_X = round(sp.DISC_RADIUS + 0.6, 2)
+LEAD_MOUNTS = (
+    Mount("flank_l", (-FLANK_X, 0.0, sp.DISC_CENTRE_Z), (-1.0, 0.0, 0.0), "bow"),
+    Mount("flank_r", (FLANK_X, 0.0, sp.DISC_CENTRE_Z), (1.0, 0.0, 0.0), "bow"),
+)
+FLANK_PAD_SINK_M = 1.2  # how far a flank pad reaches into the rim past the point it meets
 
 
 @dataclass(frozen=True)
@@ -238,24 +245,36 @@ def cargo(v: Variant, style: Style) -> list[Piece]:
 
 
 def turret_pads(v: Variant, pieces: Sequence[Piece], style: Style) -> list[Piece]:
-    """A pad under every turret that does not stand on the disc's hub, reaching down into whatever it is mounted on."""
+    """A pad under every turret, reaching down into whatever it is mounted on. A flank pair is one right pad and its
+    mirrored twin; a flank pad on the thin disc rim sinks in from where its axis meets the rim."""
     solids = [p.solid for p in with_twins(pieces) if p.solid is not None]
     pads = []
     for m in v.mounts:
-        if m.host is None:
+        if m.host is None or m.position[0] < 0.0:
             continue
-        depth = _seat_depth(np.array(m.position), np.array(m.up), solids) + 0.3
+        position, up = np.array(m.position), np.array(m.up)
+        flank = abs(up[1]) < 0.5
+        if flank:
+            depth = _seat_depth(position, up, solids, rim=False) + FLANK_PAD_SINK_M
+        else:
+            depth = _seat_depth(position, up, solids) + 0.3
         mesh, solid = sp.turret_pad(m.position, m.up, depth, style, TURRET_PAD_RADIUS)
-        pads.append(Piece(Part(f"pad_{m.name}", mesh, mass_kg=5_000.0, group=m.host), solid, CENTRE))
+        side = RIGHT if m.position[0] > 0.0 else CENTRE
+        name = f"pad_{m.name}"
+        pads.append(Piece(Part(name, mesh, mass_kg=5_000.0, group=m.host), solid, side))
     return pads
 
 
-def _seat_depth(position: np.ndarray, up: np.ndarray, solids: Sequence[Any]) -> float:
-    """How far below a mount (along -up) the hull starts under every point of the pad's rim."""
-    side = np.array([1.0, 0.0, 0.0])
+def _seat_depth(position: np.ndarray, up: np.ndarray, solids: Sequence[Any], rim: bool = True) -> float:
+    """How far below a mount (along -up) the hull starts under every point of the pad's rim (``rim`` off: under its
+    centre alone)."""
+    side = np.array([1.0, 0.0, 0.0]) if abs(up[0]) < 0.9 else np.array([0.0, 0.0, 1.0])
+    side = side - (side @ up) * up
+    side /= np.linalg.norm(side)
     fwd = np.cross(up, side)
     deepest = 0.0
-    for offset in (np.zeros(3), side, -side, fwd, -fwd):
+    offsets = (np.zeros(3), side, -side, fwd, -fwd) if rim else (np.zeros(3),)
+    for offset in offsets:
         start = position + 0.9 * TURRET_PAD_RADIUS * offset
         for t in np.arange(0.0, 6.0, 0.02):
             p = (start - t * up)[None, :]

@@ -53,7 +53,7 @@ DISC_RIM = 1.0  # the least thickness, at the rim (the reference's edge reads ab
 DISC_CUT_Z = 29.6  # the aft quarter is cut square here
 NECK_END_Z = 32.6  # the neck's box ends here on the reference's sections
 HUB_RADIUS = 2.5
-HUB_TOP_Y = 3.8  # the dorsal_fwd turret stands on the hub
+HUB_TOP_Y = 3.8
 FIN_RADII = (2.5, 7.3)  # the reference's fins end before r 8 m (planned 8.7)
 RUST_RING_RADII = (2.5, 11.0)
 WINDOW_HALF_HEIGHT = 0.3
@@ -379,7 +379,7 @@ def command_disc(style: Style) -> list[Piece]:
         pieces.append(_piece(name if side == CENTRE else f"{name}_r", box(size, hull, center=centre), box_solid(size, centre),
                              side=side, mass_kg=8_000.0))  # fmt: skip
 
-    # Hubs: the top one is white and carries the forward dorsal turret.
+    # Hubs: the top one is white (its turret moved to the rim's flanks, Q32).
     top_hub = lathe_y([(2.6, 0.0), (2.6, HUB_RADIUS), (HUB_TOP_Y - 0.2, HUB_RADIUS), (HUB_TOP_Y, HUB_RADIUS - 0.2), (HUB_TOP_Y, 0.0)],
                       40, style.material("disc_hub"), creases={1, 2, 3})
     bottom_hub = lathe_y([(-3.9, 0.0), (-3.9, HUB_RADIUS - 0.2), (-3.7, HUB_RADIUS), (-2.6, HUB_RADIUS), (-2.6, 0.0)], 40, hull, creases={1, 2, 3})

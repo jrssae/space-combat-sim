@@ -121,7 +121,7 @@ The lead ship gives every variant the same retro nozzles, cockpit, RCS and two t
 | `cockpit_camera` | inside the disc's front rim, (0, +0.8, 8.0) |
 | `cabin` | the same point, `cabin_range_m` 0.05 L |
 | RCS | both ends of the two lower drums at (±9.27, -10.55, z), z 41.9 exhausting -z and 50.1 exhausting +z, and the top drum's aft end (0, +5.55, 50.1) (its front is behind the crossed plates; T12 fix round, 11 ports); the disc's flanks (±14.13, 0, 19.06) exhausting ±x; four on the engine collar 3 m behind its front, (±4.78, 0, z) and (0, ±4.78, z), exhausting outward |
-| Turrets | `dorsal_fwd` (0, +3.8, 19.1), up (0, 1, 0); dorsal mounts only (Q19) |
+| Turrets | `flank_l` (-14.73, 0, 19.1), up (-1, 0, 0), and `flank_r` (14.73, 0, 19.1), up (1, 0, 0), on pads sunk into the disc rim (Q32, which replaced Q19's `dorsal_fwd` on the hub) |
 
 Per variant:
 
@@ -663,15 +663,15 @@ in T16's GPU check, lift the value and keep the hue, and record the change here.
 
 ## Turret positions
 
-From the design references, authored frame; `up` is (0, 1, 0) for dorsal mounts and (0, -1, 0) for ventral ones.
+From the design references, authored frame; `up` is (0, 1, 0) for dorsal mounts, (0, -1, 0) for ventral ones and (±1, 0, 0) outboard for the Saturns' flank pair (Q32).
 
 | Hull | Turrets |
 |---|---|
-| Saturn 4 transport (2) | `dorsal_fwd` (0, +3.8, 19.1), `dorsal_aft` (0, +9.3, 124.4) |
-| Saturn 4 tanker (2) | `dorsal_fwd` (0, +3.8, 19.1), `dorsal_aft` (0, +9.3, 124.4) |
-| Saturn 8 transport (2) | `dorsal_fwd` (0, +3.8, 19.1), `dorsal_mid` (0, +7.2, 149.4) |
-| Saturn 8 tanker (2) | `dorsal_fwd` (0, +3.8, 19.1), `dorsal_mid` (0, +9.0, 149.4) |
-| Saturn 3 (1) | `dorsal_fwd` (0, +3.8, 19.1) |
+| Saturn 4 transport (3) | `flank_l` (-14.73, 0, 19.1), `flank_r` (14.73, 0, 19.1), `dorsal_aft` (0, +9.3, 124.4) |
+| Saturn 4 tanker (3) | `flank_l` (-14.73, 0, 19.1), `flank_r` (14.73, 0, 19.1), `dorsal_aft` (0, +9.3, 124.4) |
+| Saturn 8 transport (3) | `flank_l` (-14.73, 0, 19.1), `flank_r` (14.73, 0, 19.1), `dorsal_mid` (0, +7.2, 149.4) |
+| Saturn 8 tanker (3) | `flank_l` (-14.73, 0, 19.1), `flank_r` (14.73, 0, 19.1), `dorsal_mid` (0, +9.0, 149.4) |
+| Saturn 3 (2) | `flank_l` (-14.73, 0, 19.1), `flank_r` (14.73, 0, 19.1) |
 | Skylark (1) | `dorsal` (0, +2.766, 37.5), seated on the body's ridge; no ventral (Q19) |
 | Narn (2) | `tower_l` (-14.85, +9.0, 41.7), `tower_r` (14.85, +9.0, 41.7), on the slotted crowns |
 | Brezebel (1) | `dorsal` (0, +4.3, 7.0), on the dorsal fitting's turret ring |

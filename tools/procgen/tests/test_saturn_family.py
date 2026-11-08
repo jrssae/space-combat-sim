@@ -48,7 +48,8 @@ SECTION_M = 100.0  # one Saturn 4 cargo section (Q16)
 ENGINE_TAIL_M = 9.18  # the engine section behind the last section
 ENGINE_M = 22.6
 UP, DOWN = (0.0, 1.0, 0.0), (0.0, -1.0, 0.0)
-LEAD_TURRETS = {"dorsal_fwd": ((0.0, 3.8, 19.1), UP)}  # Q19: dorsal mounts only
+# Q32: the command section's two flank turrets on the disc rim (supersedes Q19's dorsal_fwd on the hub).
+LEAD_TURRETS = {"flank_l": ((-14.73, 0.0, 19.1), (-1.0, 0.0, 0.0)), "flank_r": ((14.73, 0.0, 19.1), (1.0, 0.0, 0.0))}
 SLIM = 2.8 / 4.8  # Q20: the Saturn 3's engine, the shared section scaled to fit between its lower pods
 STACK_REAR_Z = 95.30  # the Saturn 3's pods' aft faces (64.24 + the shared pod's 31.06 m turned)
 
@@ -350,8 +351,9 @@ class SaturnVariantChecks:
     def test_turrets_as_tabulated(self) -> None:
         turrets = {t["name"]: t for t in self.hp["turrets"]}
         self.assertEqual(set(turrets), set(self.design["turrets"]))
-        self.assertTrue(1 <= len(turrets) <= 2, "Q19: dorsal mounts only")
-        self.assertTrue(all(t["up"] == list(UP) for t in turrets.values()))
+        self.assertEqual(len(turrets), 2 if self.ASSET_ID == "saturn_3_freighter" else 3, "Q32: two flanks, a cargo dorsal")
+        for name, t in turrets.items():
+            self.assertEqual(t["up"], list(LEAD_TURRETS[name][1]) if name in LEAD_TURRETS else list(UP), name)
         for name, (position, up) in self.design["turrets"].items():
             t = turrets[name]
             np.testing.assert_allclose(self.authored(t["position"]), position, atol=POS_TOL, err_msg=name)
@@ -369,6 +371,28 @@ class SaturnVariantChecks:
             self.assertTrue(seat.any(), f"{t['name']}: hull surface under the mount")
             clear = (across < 1.5) & (along > 0.3)
             self.assertFalse(clear.any(), f"{t['name']}: nothing of the hull above the mount")
+
+    def test_no_barrel_enters_the_hull_at_any_traverse(self) -> None:
+        # Q32: the barrels sweep their whole arc (every azimuth, from the arc's lowest elevation to straight up) clear of the
+        # hull's solids, the pads aside (the barrels' roots stand above their own pad).
+        pieces = saturn.with_twins(saturn.assemble(saturn.VARIANTS[self.ASSET_ID], saturn.EA_CIVILIAN))
+        solids = [p.solid for p in pieces if p.solid is not None and not p.name.startswith("pad_")]
+        turret = saturn.TURRET
+        for t in self.hp["turrets"]:
+            up = np.array(t["up"], dtype=float)
+            a = np.array([1.0, 0.0, 0.0]) if abs(up[0]) < 0.9 else np.array([0.0, 0.0, 1.0])
+            a -= (a @ up) * up
+            a /= np.linalg.norm(a)
+            b = np.cross(up, a)
+            pivot = self.authored(t["position"]) + turret.trunnion_height * up
+            lowest = np.radians(90.0 - 0.5 * t["arc_deg"])
+            az, el = np.meshgrid(np.radians(np.arange(0.0, 360.0, 5.0)), np.linspace(lowest, 0.5 * np.pi, 20))
+            dirs = (np.cos(el)[..., None] * (np.cos(az)[..., None] * a + np.sin(az)[..., None] * b) + np.sin(el)[..., None] * up)
+            points = (pivot + np.linspace(0.3, t["barrel_m"], 10)[:, None, None, None] * dirs).reshape(-1, 3)
+            inside = np.zeros(len(points), dtype=bool)
+            for solid in solids:
+                inside |= solid.contains(points, 0.0)
+            self.assertFalse(inside.any(), f"{t['name']}: {int(inside.sum())} barrel points inside the hull")
 
     # --- collision --------------------------------------------------------------------------------------------
     def test_collision_covers_the_visible_surface_and_stays_close(self) -> None:
@@ -478,7 +502,7 @@ class SaturnFamilyTests(unittest.TestCase):
             return np.array(points) + off
 
         reference = lead_points("saturn_4_transport")
-        self.assertEqual(len(reference), 1 + 2 + 7 + 1)  # camera, retros, the lead ship's seven RCS ports, dorsal_fwd
+        self.assertEqual(len(reference), 1 + 2 + 7 + 2)  # camera, retros, the lead ship's seven RCS ports, two flank turrets
         for asset_id in DESIGN:
             np.testing.assert_allclose(lead_points(asset_id), reference, atol=POS_TOL, err_msg=asset_id)
 

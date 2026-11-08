@@ -264,8 +264,11 @@ white, the engine throat blue-white (Valjean.JPG). No markings or lettering beyo
 
 No capture shows weapons, and the wiki lists "None" for the Achilles. The turrets below are Q14's, placed to cover the
 hull's quarters. The drum frame's drums are the only turret-like mounts in the models; they stay RCS clusters. Every
-variant has the lead ship's turret, `dorsal_fwd` on the disc's top hub at (0, +3.8, 19.1), up +y, for the forward upper
-quarter. Turrets are dorsal only (Q19): the ventral mounts first proposed (`ventral_fwd`, `ventral_aft`) are dropped.
+variant has the lead ship's two turrets (Q32, 2026-11-07, replacing Q19's `dorsal_fwd` on the disc's top hub):
+`flank_l` and `flank_r` on the disc rim's widest point at (∓14.73, 0, 19.1), up ∓x outboard, each on a pad sunk 1.2 m into
+the rim, so the command section is covered above, below and to both sides; the belly seen from astern stays a blind spot
+on purpose. The cargo sections' turrets are dorsal (Q19): the ventral mounts first proposed (`ventral_fwd`, `ventral_aft`)
+are dropped.
 
 Sources, checked 2026-11-02:
 https://babylon5.fandom.com/wiki/%22Achilles%22_Type_Freighter,
@@ -295,7 +298,7 @@ cylinders and docking clamps), not the Saturn pod; it was rendered and set aside
 
 - Pod trim: a red stripe (#A8322C) along each pod's top edge and a yellow and black hazard band (#D6AE2A, #262626)
   along its flank, as on Red Star 9 and Dionysus.
-- Turrets (2, Q19): `dorsal_fwd`, and `dorsal_aft` on the cylinder's top over the aft arm pair at (0, +9.3, 124.4), up
+- Turrets (3, Q19, Q32): the two flanks, and `dorsal_aft` on the cylinder's top over the aft arm pair at (0, +9.3, 124.4), up
   +y, for the rear and the flanks above the pods.
 
 #### Saturn 4 tanker (158.5 m)
@@ -312,7 +315,7 @@ No model: half the Saturn 8 tanker, built from the same parts (Q16). Lead ship a
 | Engine section | 135.9 to 158.5 | on the spine tank's aft dome |
 
 - Colours: tanks in the family's red and off-white bands (the tubular sections the wiki says were built for a tanker).
-- Turrets (2, Q19): `dorsal_fwd`, and `dorsal_aft` on the spine tank's top at (0, +9.3, 124.4), up +y.
+- Turrets (3, Q19, Q32): the two flanks, and `dorsal_aft` on the spine tank's top at (0, +9.3, 124.4), up +y.
 
 #### Saturn 8 transport (258.5 m)
 
@@ -335,7 +338,7 @@ from each end. Its engine ends in a crown of short nozzles; the generator uses t
 
 - All eight pods sit 6.97 m apart, across the junction too, as in the model.
 - Pod trim as on the Saturn 4 transport.
-- Turrets (2, Q19): `dorsal_fwd`, and `dorsal_mid` on top of the junction module (0, +7.2, 149.4), up +y, which sees
+- Turrets (3, Q19, Q32): the two flanks, and `dorsal_mid` on top of the junction module (0, +7.2, 149.4), up +y, which sees
   fore and aft over the pods.
 
 #### Saturn 8 tanker (258.5 m)
@@ -352,7 +355,7 @@ long, 50.5 m wide, 30.8 m tall. In the model each junction module has two recess
 | Engine section | 235.9 to 258.5 | |
 
 - Colours: tanks banded as on the Saturn 4 tanker, junction modules in the plating grey with #4F5256 recesses.
-- Turrets (2, Q19): `dorsal_fwd`, and `dorsal_mid` on the top junction module (0, +9.0, 149.4), up +y.
+- Turrets (3, Q19, Q32): the two flanks, and `dorsal_mid` on the top junction module (0, +9.0, 149.4), up +y.
 
 #### Saturn 3 freighter (96.8 m)
 
@@ -389,7 +392,7 @@ long, 50.5 m wide, 30.8 m tall. In the model each junction module has two recess
 | Engine section (slim, Q20) | 83.6 to 96.8 | on the axis between the lower pods and under the top pod; the bell's exit 1.5 m behind the pods |
 
 - Pod trim: rust-red tops (#8E4A3F) as on Epsilon.JPG.
-- Turrets (1, Q19, Q20): `dorsal_fwd` only; the aft turret is dropped.
+- Turrets (2, Q19, Q20, Q32): the two flanks only; the aft turret is dropped.
 
 ### Skylark transport (60 m)
 
