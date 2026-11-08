@@ -39,8 +39,9 @@ extends Node
 ## Native brains (M4-T17, §17.13): with the native host on (`NativeBrains.host`), an `AiPilot` thinks in one native call
 ## over the core's rows: the driver hands it a perception without contact lists (the host picks them from the rows as the
 ## scan would) and takes the finished command, the dodge flags and the wanted target back; the avoidance ran inside. When
-## the host declines (the ship has no row this tick, the rows moved under the scan), the driver perceives and thinks in
-## GDScript as before.
+## the host declines (the ship has no row this tick, the rows moved under the scan) or there is no core, the ship flies its
+## last command until the next think. Only a brain the host cannot carry (not an `AiPilot` built from the default
+## behaviours) thinks in GDScript.
 ##
 ## Commands as rows (M4-T33): a native think in the tick's rows batch hands in only what the rows do not
 ## hold (the core reads the hull and the selection at the sync), and the host writes the command into the core, where the
@@ -276,10 +277,11 @@ func step(delta: float, batched: bool = false, may_host: bool = false) -> void:
 				ContactScan.add_time(Time.get_ticks_usec() - scan_started_us)
 			if p != null:
 				pc = pilot.try_think_native(p, dt)
-			if pc == null and pilot.has_native_slot():
-				_hold_declined()
-				_add_think_time(Time.get_ticks_usec() - started_us)
-				return
+		if pc == null:
+			# No core to think over, or the host declined (no row yet, the rows moved): the ship flies its last command.
+			_hold_declined()
+			_add_think_time(Time.get_ticks_usec() - started_us)
+			return
 	_act(pc, pilot, dt)
 	_add_think_time(Time.get_ticks_usec() - started_us)
 
@@ -492,8 +494,8 @@ func _pilot_avoiding(urgent: bool) -> bool:
 	return pilot.native_avoiding_urgent if urgent else pilot.native_avoiding
 
 
-# Declined with a brain in the slot: the GDScript objects hold only a mirror, so this tick is held, as a far-rate tick
-# is, and the think waits for the next one.
+# A native pilot's think that did not happen (declined, or no core): the GDScript objects hold only a mirror, so this tick
+# is held, as a far-rate tick is, and the think waits for the next one.
 func _hold_declined() -> void:
 	_roll_counts()
 	_thinks_fallback += 1
