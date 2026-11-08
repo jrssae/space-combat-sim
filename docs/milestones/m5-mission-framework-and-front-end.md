@@ -8,7 +8,10 @@ be rebased onto `main` once M4 merges (see "Living beside M4"). The planning que
 including the civilian ships' lengths and a seventh civilian hull, the Centauri Brezebel (Q8, Q11). A ninth hull, the
 Brakiri Bokmai transport with removable cargo pods, was added during the build (Q17). **2026-11-07:** `main` (M4 through T22
 and T41, the native core) was merged into `m5` (Q27, T26); from here M5's per-tick, per-entity work goes in the native core
-under `CLAUDE.md`'s language split and threading rules ("M5 on the native core", below).
+under `CLAUDE.md`'s language split and threading rules ("M5 on the native core", below). **2026-11-08:** M4 was accepted
+and the rest of `main` (M4-T23 to T44, with the GDScript fallbacks removed) was merged into `m5` (Q34). The maintainer
+then replaced the demo mission with **Civilian escort** (Q36 to Q42) and moved M4's later findings assigned to M5 into this
+milestone as the **performance block** (Q35, T31 to T39).
 
 Read `docs/architecture.md` first, especially §6 (input and the console), §8 (camera), §14.6 (the mission framework as
 first sketched), §15.10 (scenarios and waves), §15.12 (control profiles) and §16 (the M3 AI: D36 wings, D37 the instructor,
@@ -22,13 +25,15 @@ encounters) or a mission, and plays it. A mission is a scenario plus a script th
 sets objectives, cuts to a cinematic camera, sends raiders at things and ends in a debrief. Settings and controls get real
 menus. Free flight gets traffic: raiders, allied patrols and nine new civilian ships built from the maintainer's
 references and online images. The sound pass replaces the engine loops with per-thruster bursts and gives both guns and the bolt impacts new
-voices. M8's tutorial is written on top of all this, so the framework matters more than the one demo mission.
+voices. M8's tutorial is written on top of all this, so the framework matters more than the one demo mission. The demo
+mission is a civilian escort through a thin asteroid belt (Q36). M4's review left eleven findings to M5: they are its
+performance block.
 
 ## Maintainer answers (2026-11-02)
 
 | Q | Question | Answer |
 |---|---|---|
-| Q1 | Which demo missions prove the framework? | **Buoy defence**, with a **scripted cinematic intro**: raiders are sent at a nav buoy from beyond sensor range; the player and their wing defend it. Objectives, comms lines, win and fail, debrief |
+| Q1 | Which demo missions prove the framework? | (Superseded by Q36.) **Buoy defence**, with a **scripted cinematic intro**: raiders are sent at a nav buoy from beyond sensor range; the player and their wing defend it. Objectives, comms lines, win and fail, debrief |
 | Q2 | What sits behind the front-end menu (the B5 interior needs M7's station)? | **Sky only** |
 | Q3 | What does "random encounters on" mean in free flight? | **Mixed traffic**: raiders, allied patrols and neutral traffic |
 | Q4 | A pad comms menu for wing orders? | **D-pad Right opens a comms menu**; keys 1-4 stay |
@@ -48,7 +53,7 @@ voices. M8's tutorial is written on top of all this, so the framework matters mo
 | Q18 | (maintainer, during the build) How close to the references? | **Every civilian model within 90 % of its STL**, measured as **silhouettes and size**: the top, side and front silhouettes each overlap the STL's by at least 90 % (intersection over union) at the same length, and length, width and height each lie within 10 %. **Civilian ships only**: the Starfury stays as built, and the raider has no STL. Planner's calls: the score is taken on the LOD0 splats by `tools/refview`'s compare mode (T23); where Q16 departs from a model on purpose (the Saturn 8s' 200 m of cargo, the Saturn 3's engine section, the Saturn 4 tanker, which has no model of its own), each part is scored against the part of the model it came from |
 | Q19 | (after the review sheet of turret spots and colours) Turrets and colours | **Turrets on top only:** keep every dorsal spot proposed, drop every ventral one. That leaves the Saturn 4 transport, Saturn 4 tanker, Saturn 8 transport and Saturn 8 tanker with two each (`dorsal_fwd` on the disc hub and `dorsal_aft` or `dorsal_mid`), the Saturn 3 with one (`dorsal_fwd`), the Skylark and the Brezebel with one (`dorsal`), the Narn transport with its two tower turrets. **Colours confirmed** as written for the Saturn family, the Skylark, the Narn transport and the Brezebel. **The Narn transport's towers point up** (T11's reading). The maintainer places turrets and confirms colours for any further ship (the Bokmai) before its generator commits them |
 | Q20 | (same day) Where is the Saturn 3's engine? | **Between the two lower pods, on the centre line, directly under the top pod**, and **just long enough that its exhaust clears the pods**. It is a **slimmer engine** than the shared section so it fits the gap between the lower pods; the pods keep their places. The Saturn 3's aft turret is dropped. For the 90 % check (Q18) the Saturn 3's pod group is scored against the model's pod group **scaled up to the shared pod size** (Q8), so shape and layout are checked rather than the size the maintainer chose |
-| Q21 | (maintainer, 2026-11-03) The mission's buoys | **Buoy defence is set on a string of nav buoys in a huge circle, as if round a planet: 16 buoys on a ring of 20 000 km radius, about 7 850 km apart.** **Every buoy broadcasts to 10 000 km** (was 1 000 km, M3 Q21), and the spacing is set so that a ship always has **at least two buoys in broadcast range**, on the radar and targetable: anywhere on the ring, and within about 6 000 km of it. There is no planet in the middle yet (M6 brings Epsilon III) |
+| Q21 | (maintainer, 2026-11-03) The mission's buoys | (Superseded by Q41.) **Buoy defence is set on a string of nav buoys in a huge circle, as if round a planet: 16 buoys on a ring of 20 000 km radius, about 7 850 km apart.** **Every buoy broadcasts to 10 000 km** (was 1 000 km, M3 Q21), and the spacing is set so that a ship always has **at least two buoys in broadcast range**, on the radar and targetable: anywhere on the ring, and within about 6 000 km of it. There is no planet in the middle yet (M6 brings Epsilon III) |
 | Q22 | (after T22's survey) The Bokmai's frame, colours and turrets | **The tall fins are at the stern**, so the blade is the bow (T22's reading; the STL stands on its tail, its length along file y). **The pods are pale green** (#ABAE9A, as proposed). **Two turrets, in the stepped Z-shaped insets on either side of the bow** (4.9 x 2.4 m, high on each flank; the survey had read them as windows), each facing outboard: an exception to Q19's top-only rule, for the Bokmai. **Brakiri turrets fire a bright green pulse.** (The maintainer first said one on top and one underneath the bow, then corrected it the same day) |
 | Q23 | (same day) The Saturn 3's pod group misses 0.90 because T11 spread its pods wider than the model to let the truss and engine pass. Keep it? | **Keep the wider spread.** The Saturn 3's pod group is an **expected exemption** from Q18's bar: its scores are recorded with that note and do not fail T12. Every other Saturn part must still pass |
 | Q24 | (maintainer, 2026-11-04) How civilians flee | **Every civilian has a faction** (the Saturns and the Skylark are Earth Alliance, the Narn transport Narn, the Brezebel Centauri, the Bokmai Brakiri); "civilian" is its role, not its faction. **Attacked, a civilian runs away from the enemy towards the nearest vessel of its own faction, of any kind** (an Earth Alliance freighter makes for any Earth Alliance ship, military or civilian). **Civilians under attack run together and cover each other** (they close up while fleeing, and their turrets fire for one another, D61). In T16 (the `civilian` profile and the faction data) and T21; T16 and T21 wait for M4's merge, so this lands after the rebase |
@@ -61,6 +66,16 @@ voices. M8's tutorial is written on top of all this, so the framework matters mo
 | Q31 | (maintainer, 2026-11-07, during T16) The turrets' balance on the civilian Saturns | **A Saturn occasionally wins against two raiders, but never against three.** Read (the controller, confirmed by the maintainer): every Saturn variant (`saturn_3_freighter`, `saturn_4_transport`, `saturn_4_tanker`, `saturn_8_transport`, `saturn_8_tanker`) alone with its own turrets and its Q30 spec; against two raiders, 10 seeds a variant, it wins at least 1 and at most 3; against three, 10 seeds, none. A fight runs until the Saturn is destroyed or no raider is left fighting (destroyed or beyond 5 km), capped at 600 s of sim time; the Saturn wins if it is alive at the end (alive at the cap is a win). The check that the turrets finish a raider left at 15 % hull that keeps attacking stays. **The turrets become a bit more dangerous** (the maintainer's follow-up): tune the shared turret `WeaponSpec` first (`assets/weapons/turret_light.tres`: damage, fire interval, spread; range about 1.5 km, Q14), then each hull's `hull_max` for what the turret alone cannot balance across the five; never the raiders' specs or AI. Supersedes D61's "two raiders destroy a lone Saturn 4 within 180 s in two of three seeds" |
 | Q32 | (maintainer, 2026-11-07, T16 fix round 1) The finish check fails because the Saturn 4 transport dies before a raider under its dorsal arc comes back into it | **Every Saturn's command section gets two turrets, one on each side, instead of the single dorsal one** (supersedes Q19 for the command section): a smaller blind spot, the belly seen from astern left vulnerable on purpose. Read: on all five Saturns `dorsal_fwd` on the disc hub becomes `flank_l` and `flank_r` on the command section's flanks, `up` ±x outboard, the 200° arc unless the barrels need less, on turret pads; the cargo sections' `dorsal_aft` / `dorsal_mid` stay. The Saturn 3 carries 2 turrets, each Saturn 4 and 8 carries 3. Q31's sweep is re-run and re-tuned in its order, and the 15 % finish check comes back on (with a raider inside the arcs and a test pinning the rear-belly blind spot if the raider attacks from there) |
 | Q33 | (maintainer, 2026-11-07, T16 fix round 2) Q32's rear-belly blind spot is not in the model: a turret fires through its own ship | **A ship's own hull blocks its turrets' fire.** Make the blind spot real with a native line-of-fire check, not by narrowing arcs: a turret fires only when the line from it to the lead point misses its own ship's hit volumes, and the pick skips an attacker the hull hides; for every turreted ship (M12's capitals too). Q31's sweep is re-run and re-tuned in its order |
+| Q34 | (maintainer, 2026-11-08) "Pull m5, then rebase from main." A rebase rewrites 132 commits and needs a force-push; Q27 chose merges | **Merge `main` into `m5`** (Q27 stands): one merge commit, normal push |
+| Q35 | (same day) "Add the updated requirements": there is no `requirements.md`; is it the roadmap's "Carried from M4's full review" table? | **Yes.** L1, L2, L3, L5, L8, L9, L12, L13 (performance), L6, L7 (sound pass) and L14 (tests and CI) become M5 tasks T31 to T39 (`docs/research/m4-full-review.md` has the details) |
+| Q36 | (maintainer, same day) The demo mission | **Replace Buoy defence with a civilian escort.** The civilian travels from a starting nav beacon to one on the far side of a **less dense asteroid belt**. The player escorts it and fights off raider waves that trigger at **three points** on the way. **One wingman** for the player. **Three raiders in the first wave.** **The civilian ship is random** (any of the nine hulls) |
+| Q37 | (same day) The waves' sizes | **3, 4 and 6 raiders** |
+| Q38 | (same day) What the belt's rocks are | **New procedural rocks**: a small `tools/procgen` asteroid generator (lumpy textured rocks, a few shapes and sizes), placed sparsely. It pulls part of M14 forward; M4's grey-sphere bench stand-in stays for the bench |
+| Q39 | (same day) What the civilian does under attack | **Flee, then resume**: it flees by the Q24 and Q25 rules and returns to its route to the far beacon once the raiders are gone |
+| Q40 | (same day) How far apart the beacons are | **About 30 km**, about 6 to 8 minutes of play; the belt sits in the middle |
+| Q41 | (same day) The 16-buoy ring of Q21 | **Drop it**: `BuoyRing`, its tests and the scenario's `buoy_rings` go, and buoys broadcast to 1 000 km again (M3 Q21). Supersedes Q21 |
+| Q42 | (same day) A cinematic intro for the escort? | **Yes, adapted**: the civilian at the start beacon, then the player and the wingman flying past; Control briefs, then hands over |
+| Q43 | (maintainer, same day) Where screenshots go | **`references/screenshots/<a folder named for the request>/`** (gitignored), for every screenshot an agent takes; written into `CLAUDE.md` |
 
 ## Scope
 
@@ -75,7 +90,10 @@ In:
   triggers, objectives with success and failure, dialog lines as data, subtitles and a comms panel, a `CINEMATIC` camera
   mode with locked controls, and a debrief.
 - **Comms menu on D-pad Right** with the four wing orders.
-- **One mission**: Buoy defence with a cinematic intro.
+- **One mission**: Civilian escort with a cinematic intro (Q36; it replaced Buoy defence, T10, which is removed with the
+  buoy ring, Q41), through a sparse belt of generated asteroids (Q38).
+- **Performance block** (Q35): M4's later findings L1, L2, L3, L5, L8, L9, L12 and L13 (T31 to T36), and L14's test and CI
+  clean-up (T38). The sound pass takes L6 and L7 (T37).
 - **Civilian ships**: nine hulls in five generators (the Saturn family with five variants, the Skylark, the Narn
   transport, the Centauri Brezebel, the Brakiri Bokmai with removable cargo pods), measured from the references and
   rebuilt in `tools/procgen`, coloured after online images of each ship; each in its people's faction (`earth_alliance`,
@@ -89,11 +107,15 @@ Out (explicitly):
 - The Babylon 5 station, its interior behind the menu and launch bays (M7). The tutorial and its control checks (M8).
 - Voiced dialog (M15). Lines carry a voice id now; nothing reads it yet.
 - Music. Saved mission progress or unlocks (every mission is open; nothing persists but settings and control profiles).
-- Mission types beyond what Buoy defence needs: escort, rescue and towing, asteroid fields (M14). Capital ships (M12).
-- Performance work on the AI, contact scan, targeting, rams or the rebase (M4 owns those files; see below).
+- Mission types beyond the escort: rescue and towing, comets, M14's full asteroid fields (M5 builds only the rocks and a
+  sparse belt the escort needs, Q38). Capital ships (M12).
+- Performance work beyond the L-items above. The rebase cascade (L4) is M6's, the explosion and stand-in counters (L10,
+  L11) M12's, the bench's `res://reports` (L15) M8's.
 - A key or button to remember the last camera view (not wanted now, `docs/handoff-m4.md`).
 
 ## Living beside M4
+
+*(Historical since 2026-11-08: M4 is accepted and all of it is in `m5`, Q34. The file rules below no longer apply.)*
 
 `m5` and `m4` move at the same time. Since 2026-11-07 `m5` holds `main` (M4 through T22, Q27); M4's later work (T37, T42,
 T23, T25) comes in by later merges of `main`, never a rebase. To keep those merges small:
@@ -408,12 +430,76 @@ removed or converted when M5 rebases onto `main` after M4.
   voices only, and only the nearest few within audible range. A voice cap (`engine_voice_cap`, default 24) bounds the
   work; the per-frame update is linear in voices, not in ships times nozzles (a work-count test).
 
+### D62 Civilian escort (Q36 to Q42)
+
+- **The mission** `civilian_escort` (`data/scenarios/civilian_escort.json`, `data/missions/civilian_escort.gd`,
+  `data/dialog/civilian_escort.json`) replaces `buoy_defence`. Two nav buoys about 30 km apart (Q40): **NAV ALPHA**, the
+  start, at the scenario origin, and **NAV BETA** beyond the belt. They are the existing `nav_buoy` asset and broadcast to
+  1 000 km (Q41). The belt (D63) lies across the route in the middle: the straight line between the buoys crosses it.
+- **The civilian is random (Q36).** A spawn's `type` may be `random_civilian`. The scenario loader resolves it from the
+  run's seed before pools are built, so only the drawn hull is pooled, and retry (same seed) gets the same ship. Any of
+  the nine hulls can come up; a Bokmai draws 1 to 3 pods from the same seed. Its name and callsign come from a small
+  per-hull list in the mission data (all names original), and the dialog fills them in through a placeholder in the line
+  text (`{civilian}`), so one dialog file serves all nine.
+- **The civilian's route.** It is sent to NAV BETA (`m.send`, D39's pilot objective) at its hull's cruise speed, about
+  100 to 150 m/s; the heavy Saturns build up to that speed slowly, which is part of the escort. Its native brain flies the
+  route and avoids rocks by its size (T16's big-hull avoidance). **Flee, then resume (Q39):** when raiders attack it, it
+  flees by Q24 and Q25 (towards the nearest ship of its own faction, behind it from the threat when that ship is
+  military: an Earth Alliance civilian shelters behind the player or the wingman; a Narn, Centauri or Brakiri one simply
+  runs). Once no hostile is within its flee radius for a few seconds, it turns back onto the route to NAV BETA. The
+  resume is part of the pilot objective: the objective outlives the flee, and the brain goes back to it. It belongs in the
+  native brains (per tick, per ship), not in the mission script.
+- **The escort.** The player leads **Alpha wing** with one wingman, **ALPHA 2** (Q36), on the `cover` order. The
+  civilian keeps its turrets (D61), which fire only at its attackers.
+- **The waves (Q36, Q37).** Three trigger points on the civilian's progress along the route: about 25 % (before the belt),
+  50 % (inside it) and 75 % (past it), each a `proximity` trigger on the civilian against a point on the route. The waves
+  hold **3, 4 and 6 raiders**. Each jumps in (D51's `arrival: "jump"`) 6 to 12 km from the civilian, beyond the AI's 5 km
+  sensors, from a different bearing, and is sent at the civilian. A wave whose point comes up while the last one is still
+  fighting jumps in anyway; the raiders' pool holds all 13.
+- **Objectives.** *Escort the {civilian} to NAV BETA* (primary): done when the civilian is within 1.5 km of NAV BETA and
+  the third wave has jumped in and no raider is left fighting; failed when the civilian is destroyed. *Bring ALPHA 2
+  home* (optional): failed when the wingman is lost. Failure also comes from the player's death (D51). The mission ends on
+  a closing line, then the debrief.
+- **The intro (Q42).** Two shots: the civilian beside NAV ALPHA with the belt's rocks beyond, then Alpha 1 and 2 flying
+  past a camera held still in space. Control (or the civilian's master) hails over the fly-past and briefs with the
+  controls held, then hands over. A or Start skips a shot.
+- **Skipping.** `mission goto wave_two` and the rest work as D51 says: a skipped wave's raiders are released, and an
+  `arrived` or `proximity` trigger on the civilian places it at the point, so a skip leaves the world as the step would.
+- **The ring goes (Q41).** `BuoyRing`, `test_buoy_ring.gd`, the scenario field `buoy_rings`, the Buoy defence files and
+  their tests are removed. `NavBuoy.BROADCAST_RANGE_M` returns to 1 000 km (M3 Q21), with `test_broadcast.gd` to match.
+  §18 records both changes.
+
+### D63 Generated asteroids and a sparse belt (Q38)
+
+- **Generator.** `tools/procgen` gains an `asteroids` asset: a handful of rock shapes (about six), each a seeded icosphere
+  pushed out by layered noise into a lumpy rock with a few craters, written as M4's textured `.glb` (UV atlas, colour,
+  normal, roughness and metal maps from `core/glb.py`) with two or three mesh levels. Greys and browns with a little
+  variation per shape. The manifest records each shape's bounding radius and the radius of the sphere that stands for it
+  in collision. Python tests: determinism, watertight and outward-facing triangles, triangle budgets per level, radii in
+  the manifest that match the mesh.
+- **Placement.** A scenario's `asteroid_belts[]`: `{centre, size: [x, y, z], count, radius_m: [min, max], seed,
+  min_gap_m}`. A pure `BeltLayout` (`RefCounted`) turns it into rocks (position, shape, scale, rotation): seeded and
+  deterministic, every rock inside the box, no two closer than `min_gap_m` plus their radii, sizes drawn so small rocks
+  outnumber large ones. Unit tests cover all of that.
+- **Less dense (Q36).** The escort's belt is about 8 km deep along the route, 24 km across and 3 km high, with a few
+  hundred rocks of 10 to 150 m: an average gap of several hundred metres, so a 200 m Saturn 8 threads it while avoiding
+  rocks, and a fighter can use the rocks for cover. The task tunes the count to that rule and records it.
+- **In the game.** `AsteroidBelt` (node, `src/world/`) draws every rock of one shape with one `MultiMeshInstance3D` per
+  shape and level (visibility ranges switch the levels). Each rock's collision is a static sphere made through
+  `PhysicsServer3D` by RID and registered in `StaticRows`, as M4's `AsteroidField` does, so the contact scan, the hit
+  sweep, rams and avoidance all see the rocks with no node per rock and no per-tick walk. It is spawned from `UniversePos`
+  and follows rebases. The rocks do not move in M5. M4's `AsteroidField` stays the bench's stand-in; M14 builds full
+  fields on this generator.
+- **Cost.** On the maintainer's GPU the belt in view adds a handful of draw calls (one per shape and level). The agent
+  records FPS, draw calls and VRAM with the belt in view (CLAUDE.md's GPU rule), and the tick cost of the static rows at
+  the belt's count.
+
 ## Acceptance criteria
 
 | # | Criterion | Kind | Done |
 |---|---|---|---|
 | AC1 | Boot: a windowed launch shows the front end; `--headless`, `--console-exec`, `--console-file`, `--scenario=<id>` and `skip_front_end` go straight to `Main` as before; `GameFlow` transitions unit-tested; `game` provider, `menu` and `play` commands work under `--console-strict` | A | |
-| AC2 | Front end and pause: the pause menu and the settings and controls screens use the three-panel frame of Q15 (options left, pad diagram with live bindings bottom left, objectives right; a test checks the legend follows a rebind); every screen is reachable and usable with the pad alone (a test drives focus with injected `ui_*` events); free flight starts with encounters on or off; Missions lists Buoy defence with its briefing; Sandbox starts each existing scenario; Quit quits; Start in flight opens the pause menu and Quit to menu returns to the front end; a loading screen shows while `Main` loads; no splat node enters the tree during play | A | |
+| AC2 | Front end and pause: the pause menu and the settings and controls screens use the three-panel frame of Q15 (options left, pad diagram with live bindings bottom left, objectives right; a test checks the legend follows a rebind); every screen is reachable and usable with the pad alone (a test drives focus with injected `ui_*` events); free flight starts with encounters on or off; Missions lists the demo mission (Civilian escort since Q36) with its briefing; Sandbox starts each existing scenario; Quit quits; Start in flight opens the pause menu and Quit to menu returns to the front end; a loading screen shows while `Main` loads; no splat node enters the tree during play | A | |
 | AC3 | Settings menu: every schema entry has a category; entries with `menu: false` are hidden; changing, applying, reverting and resetting a value works and persists through `Settings.save`; four audio buses with their volumes | A | |
 | AC4 | Controls menu: pick a profile; rebind an action by pressing a button; unbind; save as; the profile rules are enforced with the reason shown; applying a profile leaves the `ui_*` actions intact | A | |
 | AC5 | Mission runtime: `MissionScript`, `MissionApi`, `MissionRunner`; every trigger kind unit-tested; `ObjectiveBook` success and failure; the result rules of D51 (all primaries done, a primary failed, the player destroyed, `m.end`); sim time only; console `mission` provider, `mission skip`, `mission goto <step>`, `mission objectives`, `play <id>`; a skip leaves the world as the step would (a test compares a skipped and an unskipped run's spawns and objectives) | A | |
@@ -421,7 +507,7 @@ removed or converted when M5 rebases onto `main` after M4.
 | AC7 | Comms menu: D-pad Right opens it; the four directions give the four wing orders through `WingDirector`; B or 4 s closes it; while open, the D-pad's flight actions and the target button do not fire; a profile saved before M5 loads with `comms_menu` filled in | A | |
 | AC8 | `CINEMATIC`: shots from data relative to actors or the origin, unit-tested interpolation; a rebase during a shot moves nothing on screen (test); HUD hidden, letterbox, the player's commands zeroed while the ship keeps its physics; A or Start skips | A | |
 | AC9 | Debrief: result and reason, objectives, time, kills and assists, wing losses, shots and hits; retry restarts the same scenario and seed; menu returns to the front end | A | |
-| AC10 | Buoy defence: starts from the menu with its cinematic intro, runs to success and to failure (buoy destroyed; player destroyed) in headless tests driven by console commands, and ends in the debrief; it is set on a ring of 16 buoys, 20 000 km in radius, that broadcast to 10 000 km, with at least two buoys in broadcast range anywhere on or near the ring (Q21, test) | A | |
+| AC10 | Civilian escort (D62): starts from the menu with its cinematic intro and runs to success and to failure (civilian destroyed; player destroyed) in headless tests driven by console commands, ending in the debrief; the civilian is drawn from all nine hulls by the seed (test over seeds) and only its hull is pooled; it flies from NAV ALPHA through the belt to NAV BETA about 30 km away, flees when attacked and resumes its route (test); three waves of 3, 4 and 6 raiders jump in at the 25, 50 and 75 % points; one wingman; the buoy ring is gone and buoys broadcast to 1 000 km (Q41). Buoy defence's AC10 is superseded | A | |
 | AC11 | Civilian references: each of the nine ships described (the Saturn 4 tanker from the Saturn parts, Q16; the Bokmai, Q17) in `docs/design-references.md` with the lengths from Q8, Q11, Q16 and Q17, from orthographic views and cross-sections of its STL; every ship's colour scheme written from online images (Q11) with the sources listed; nothing from the STL files or the images is in git | A | |
 | AC12 | Civilian generators: nine hulls from five generators meet the output contract (LOD0-3 PLYs and lighting records, fallback mesh, hardpoints with pods, RCS, collision, cockpit camera, chase anchor, running lights, chunks; the Bokmai's pod model and `cargo_pods[]`); Python tests for budgets, frames, symmetry where the design has it, chunk partition, collision coverage and determinism; every PLY imports in Godot with the manifest's count | A | |
 | AC13 | Civilian ships in the game: each flies through `FlightModel` with zero damping (the damping guard covers it), turns by torque only, flees raiders on the `civilian` profile, towards the nearest ship of its own faction (behind it from the threat when it is military) and in a group with other fleeing civilians, and sets same-faction civilians within its sensor range fleeing too (Q24, Q25), takes hull damage, breaks into its chunks, shows running lights and switches LOD; a Bokmai flies with 0-3 cargo pods and sheds them when destroyed; raiders attack them through faction data; on the maintainer's GPU all nine in view at once run with `renderer = forward_plus`, FPS, draw calls and VRAM recorded by the agent | A | |
@@ -431,6 +517,9 @@ removed or converted when M5 rebases onto `main` after M4.
 | AC17 | Docs and the suite: `docs/architecture.md` §18 as built, a `docs/playtest.md` M5 section (how to start, menus, mission, comms menu, encounters, new settings and commands), the roadmap row; `scripts/run_tests.sh` green **once, at the end** (Q10), read from the suite's own totals | A | |
 | AC19 | Defensive turrets (D61): the native turret kernels (aim, fire gate, target pick) and the attacker memory unit-tested in Rust and through GUT, identical with 1 and 6 threads and between `sim_step` threaded and `delayed`; civilians fire only at attackers of themselves or of a civilian or ally within 2 km, and never through their own hull (Q33: a blind spot astern of a Saturn is pinned); they keep running while firing; turret bolts go through the projectile pool and `HitResolver`; the seeded balance holds (Q31: every Saturn variant alone beats two raiders in 1 to 3 of 10 seeds and three raiders in none, a fight running until the Saturn dies or no raider fights on, at most 600 s; its turrets finish a 15 % raider that keeps attacking); `turret_fire` sound | A | |
 | AC20 | Fidelity (Q18): every civilian model's top, side and front silhouettes overlap its STL's by at least 90 % (intersection over union) and its length, width and height are within 10 %, Q16's deliberate departures scored part by part against the model each part was built from; measured on the model's geometry (its fallback mesh) by `tools/refview` compare, with the LOD0 splats covering at least 95 % of their own mesh's silhouette and lying at least 95 % within a one-spacing band of it, and unit tests that pin the tool's calibration; each model's scores recorded in `docs/assets-civilian.md` | A | |
+| AC21 | Asteroids (D63): the generator's Python tests (determinism, closed meshes, budgets, radii); `BeltLayout` unit-tested (seeded, inside the box, gaps held, size spread); the belt's rocks are static rows that the scan, hits, rams and avoidance see; a Saturn 8 crosses the escort's belt in a headless run without hitting a rock; FPS, draw calls and VRAM with the belt in view recorded on the maintainer's GPU | A | |
+| AC22 | Performance block (Q35): each of L1, L2, L3, L5, L8, L9, L12 and L13 fixed as its task says; results unchanged (the recorded parity fixtures, and the same answers with 1 and 6 threads and with `sim_step` threaded and delayed); each task measures `bench battle 1000` before and after with `scripts/bench_quick.sh` on an idle machine, and the per-stage numbers go into its Done notes against Report P3's (flight 3.97 ms, hits 1.41 ms, rams 1.20 ms at 1 000) | A | |
+| AC23 | Sound and test clean-up (Q35): L6 (muzzle flashes and shot sounds culled by range, a ring buffer for the flash pool) and L7 (no audio node per pooled ship walked every frame) with work-count tests; L14's shared test steps fixture, the collapsed recordings, the always-pending balance tests out of the default run, and CI's Python job split off with cached assets, CI green | A | |
 | AC18 | (H) The maintainer plays it: menus feel right on the pad, the mission's pacing and lines, the cinematic, the civilian ships' look, the new guns, impacts and engines by ear | H | |
 
 ## Working rules for M5
@@ -439,7 +528,7 @@ removed or converted when M5 rebases onto `main` after M4.
   encounters), D (sound). Inside a track the order holds. Track C's reference and generator tasks (T11-T15) are Python and run beside
   anything; the Godot tasks of every track share one machine, so they follow the locks below. If work has to go one task at
   a time, the order is T01, T02, T05, T06, T08, T09, T07, T10, T03, T04, T11, T23, T12-T15, T22, T26, T27, T21, T16, T28, T17,
-  T18, T19, T20.
+  T18, T19, then (after Q34 to Q43) T29, T30, T31-T38 in number order, T25, T20.
 - **One working copy.** All M5 work happens in the `m5` worktree (`.claude/worktrees/m5`) on branch `m5`; no task
   branches, no worktrees per agent (the maintainer's rule from M4). Parallel agents keep to their task's files.
 - **Locks.** Every Godot run in the `m5` worktree goes through `flock /tmp/m5-godot.lock <command>` (one Godot process at a
@@ -448,6 +537,11 @@ removed or converted when M5 rebases onto `main` after M4.
   benchmark runs take `/tmp/m5-godot.lock` too (2026-11-02, from the M4 session), so a Godot run may wait up to about 10
   minutes; never kill or bypass the lock. Other CPU-heavy work (asset builds, STL renders, long Python runs) takes the same
   lock so M4's numbers stay clean.
+- **Screenshots (Q43):** every screenshot or captured frame goes to `references/screenshots/<a folder named for the
+  request>/` in the main checkout, never `/tmp` or `reports/`.
+- **Performance tasks (T31 to T36):** measure before and after on an idle machine (`scripts/bench_quick.sh`, `bench battle
+  1000`), keep results identical (parity fixtures, 1 and 6 threads, threaded and delayed), and run the whole suite or let CI
+  run it before marking the task done (M4's lesson: focused runs missed full-suite failures).
 - **Tests (Q10).** Each task runs the Python tests and GUT scripts for what it touched and the new tests it adds, never the
   whole suite. GUT by file: `.tools/godot/godot --headless --path . -s addons/gut/gut_cmdln.gd -gtest=res://tests/<dir>/<file>.gd -gexit`.
   Read GUT's own totals (Passing, Failing, Pending). The full suite runs in T20.
@@ -495,6 +589,16 @@ whose trigger never arose). Update the column with each task's commit.
 | T18 | D | New guns and impacts | - | Opus | Synthesis to measured shapes | done |
 | T19 | D | Per-thruster engine bursts | T18 | Opus | Voice placement and a voice budget | done |
 | T25 | A | Targeting at scale: a target menu and other targeting UX for large battles (Q26; placed before T20; numbered last because it was added after the others had numbers) | T02, T07, the M4 rebase | Opus | UX judgement with a concept stop (H); reads M4's on-read candidate list | not started |
+| T29 | C | Generated asteroids and a sparse belt (D63, Q38): the `asteroids` generator, `BeltLayout`, `AsteroidBelt` as static rows | T27 | Opus | A new procgen asset and a placement seam M14 builds on | not started |
+| T30 | B | Mission: Civilian escort with a cinematic intro (D62, Q36 to Q42), replacing Buoy defence and the ring | T29, T16, T17 | Opus | The random civilian, flee-and-resume in the native brains, three waves, writing and pacing | not started |
+| T31 | - | L1: the flight batch's per-ship gather in native for row-commanded ships | T30 | Opus | The biggest measured lever (about 37 % of the tick at 1 000) | not started |
+| T32 | - | L2: the hit resolver gets only bolts with live hostile pairs from native; per-hit hash and readout costs | T31 | Opus | 1.41 ms at 1 000; native pair filtering | not started |
+| T33 | - | L3: the ram resolver's quick wins, then `RamTracker` in native | T32 | Opus | 1.20 ms at 1 000; string keys and full passes per tick | not started |
+| T34 | - | L5: the radar's dot buffers filled natively | T31 | Sonnet | Per-contact GDScript every frame | not started |
+| T35 | - | L8 and L9: the native allocation pass and the per-event member scans | T33 | Opus | Hash maps and Vec churn per sync; hits times members | not started |
+| T36 | - | L12 and L13: the smaller items and one native constants table with its GUT check | T35 | Sonnet | Many small fixes and a drift guard | not started |
+| T37 | D | L6 and L7: muzzle flashes and shot sounds culled by range; no audio node per pooled ship walked per frame | T28 | Sonnet | Sound-pass cost at scale | not started |
+| T38 | - | L14: the shared test steps fixture, collapsed recordings, balance tests out of the default run, CI's Python job and asset cache | T36 | Sonnet | Duplication and CI time; CI must stay green | not started |
 | T20 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 **Progress (2026-11-03).** Done: T01, T02, T05, T11, T15, T18, T19, T24. In progress:
@@ -526,6 +630,14 @@ voices from the core's rows), T27 (civilians as textured meshes) and T17 (encoun
 - **(H)**: the nine hulls and their paint, the turrets' look and `turret_fire`, fleeing civilians, the Saturn 8s' slow
   turns, the low Saturn hulls against the harder turrets, the encounters' pacing and the 15 km civilian transponder.
 - M4-T37 and the rest of M4 come in by a later merge of `main` (Q27); expect overlap in the native weapon files (Q28).
+
+**Progress (2026-11-08, main machine).** `main` (M4 accepted) merged into `m5` (Q34): nine conflicts, plus the M5 code
+that still named T37's removed switches, `SimCore.bolt_rows_enabled` and `NativeBrains.drop`. Assets regenerated. M5's
+unit GUT files pass (711), its integration files 336 of 338 in one run (the two failures, the loading screen's timing and
+a second `Main` in the pause test, pass alone; the second is fixed). Open: a forced raid in free flight
+(`encounters force raid`) leaks two objects and one resource at exit; CI's smoke runs do not cover it, and T30 (jump
+arrivals) clears it. The maintainer replaced the demo mission (Q36 to Q42) and added the performance block (Q35): T29 to
+T38 below.
 
 ### M5-T01 `Game` flow, boot routing and loading
 
@@ -789,6 +901,9 @@ voices from the core's rows), T27 (civilians as textured meshes) and T17 (encoun
     and `main.combatant` for losses.
 
 ### M5-T10 Mission: Buoy defence with a cinematic intro
+
+*(Superseded 2026-11-08: T30 replaces Buoy defence with Civilian escort and removes the ring, Q36 and Q41. Kept for the
+framework pieces it added: `player.velocity`, `mission.closing_lines` and the cinematic fly-past.)*
 
 - **Goal:** AC10 and the mission half of AC18.
 - **Files:** `data/scenarios/buoy_defence.json`, `data/missions/buoy_defence.gd`, `data/dialog/buoy_defence.json`,
@@ -1614,11 +1729,135 @@ voices from the core's rows), T27 (civilians as textured meshes) and T17 (encoun
 - **Done when:** the maintainer's chosen set works in the dogfight scenario and a 300-ship battle, the tests pass, and the (H) items
   (readability at 4K and 1080 lines, feel of the menu under fire) are in the playtest list.
 
+### M5-T29 Generated asteroids and a sparse belt
+
+- **Goal:** AC21 and D63 (Q38). **Track:** C. **Agent:** Opus. **Depends on:** T27 (the textured-mesh pipeline).
+- **Files:** `tools/procgen/assets/asteroids.py` (and its registry entry), `tools/procgen/tests/test_asteroids.py`,
+  `src/world/belt_layout.gd`, `src/world/asteroid_belt.gd`, the scenario loader's `asteroid_belts[]`,
+  `tests/unit/test_belt_layout.gd`, `tests/integration/test_asteroid_belt.gd`, §18, `docs/third-party.md` if anything new
+  comes in (nothing should).
+- **Tests first** for `BeltLayout`: seeded and deterministic, every rock inside the box, gaps held, small rocks outnumber
+  large ones, the count as asked or as many as fit (said, not silent).
+- **In the game:** one multimesh per shape and level; static spheres by RID in `StaticRows` (copy the pattern of M4's
+  `AsteroidField`, do not change the bench's stand-in); spawned from `UniversePos`, rebase-safe (a test rebases with the
+  belt loaded and checks rows and draw positions); the belt is freed with its world (M4-T44's statics rule).
+- **Measure:** the static rows' tick cost at the belt's count (`perf on`), and on the maintainer's GPU FPS, draw calls and
+  VRAM with the belt in view. A look sheet of the rock shapes and the belt from 2 km and 10 km goes to
+  `references/screenshots/T29 asteroid belt/` for the maintainer (H).
+- **Done when:** AC21, with the belt in a test scenario; the escort uses it in T30.
+
+### M5-T30 Mission: Civilian escort with a cinematic intro
+
+- **Goal:** AC10 (rewritten) and the mission half of AC18, per D62 (Q36 to Q42). **Track:** B. **Agent:** Opus.
+  **Depends on:** T29 (the belt), T16 (civilians in play), T17 (jump arrivals as used by encounters).
+- **Files:** `data/scenarios/civilian_escort.json`, `data/missions/civilian_escort.gd`, `data/dialog/civilian_escort.json`,
+  `tests/integration/test_civilian_escort.gd`; the loader's `random_civilian` spawn type; the native brains' resume of the
+  pilot objective after a flee; `docs/playtest.md` (how to play it); removed: `data/*/buoy_defence.*`,
+  `tests/integration/test_buoy_defence.gd`, `BuoyRing` and `test_buoy_ring.gd`, the `buoy_rings` field;
+  `NavBuoy.BROADCAST_RANGE_M` back to 1 000 km with `test_broadcast.gd`; the menu's Missions list, `test_front_end`,
+  `test_mission_catalog` and any other test that names Buoy defence.
+- **Steps:**
+  1. `random_civilian`: drawn from `ShipCatalog.CIVILIAN_TYPES` by the run's seed before pools are built; only that hull
+     pooled; a test over many seeds sees all nine and the same ship on a retry.
+  2. Flee and resume in the native brains (per tick, per ship, so native under `CLAUDE.md`): a civilian with a pilot
+     objective flees by Q24/Q25 and goes back to the objective once no hostile is within its flee radius for a few
+     seconds. Rust unit test plus a GUT test (a raider attacks a civilian bound for a point; it flees, the raider is
+     destroyed, it reaches the point). The same answers with 1 and 6 threads and threaded and delayed.
+  3. The scenario: NAV ALPHA and NAV BETA about 30 km apart, the belt across the middle, Alpha 1 and ALPHA 2, the
+     civilian at NAV ALPHA, pools of 13 raiders, 1 ally and the drawn civilian, the two intro shots.
+  4. The script: steps `intro`, `brief`, `depart`, `wave_one`, `wave_two`, `wave_three`, `arrive`; the three proximity
+     points at 25, 50 and 75 % of the route; waves of 3, 4 and 6 sent at the civilian; closing lines for the civilian's
+     loss and the player's; every line original.
+  5. Headless tests driven by console commands: success (with `mission goto` and `kill all` between waves), failure by the
+     civilian destroyed and by the player destroyed, the debrief in each case, the skip contract (a skipped wave leaves
+     no raider and the civilian at the point). A whole-mission run without skips (the civilian crosses the belt with no
+     rock hit) goes under `GUT_SLOW`.
+  6. The leak after jump arrivals (Progress, 2026-11-08): find it and fix it; the escort's smoke run must be clean of
+     `leaked` and `ERROR:`.
+  7. A windowed run on the maintainer's GPU: frames of the intro and of each wave to
+     `references/screenshots/T30 civilian escort/` for the maintainer (H).
+- **Done when:** AC10; the mission plays from the menu in 6 to 8 minutes for a fair player (Q40; the agent times a run
+  where the escort fights each wave and records it); the playtest section is rewritten.
+
+### M5-T31 L1: the flight batch's gather in native
+
+- **Goal:** AC22 for L1 (`docs/research/m4-full-review.md` L1). **Agent:** Opus.
+- **What:** a native step for row-commanded ships over the core's rows: `face_dir_b` from the target row only when the row
+  brakes, the pull from the native gravity sources (the tier's `tier_set_gravity`), assist, hulk and propellant as
+  per-slot flags set when they change. GDScript gathers only ships without a row command (the player, scripted ships).
+  The no-op `set_batch_owned` loop and the five `.slice()` copies go.
+- **Done when:** the flight stage at `battle 1000` drops (Report P3: 3.97 ms; estimate 1.5 to 2.5 ms saved), the flight
+  parity fixtures hold, and the numbers are in the Done notes.
+
+### M5-T32 L2: the hit resolver's bolt walk
+
+- **Goal:** AC22 for L2. **Agent:** Opus.
+- **What:** `pairs_core` drops the shooter's own hull, friendly and spent pairs; the native side returns only bolts with
+  live hostile pairs, in launch order, with their columns; GDScript no longer builds bolt-sized arrays per tick. Per hit,
+  the unused `hash([...])` and the `last_hit` string build go (the readout builds on read). The narrow phase in native is
+  optional, measured first.
+- **Done when:** the hit stage at `battle 1000` drops from 1.41 ms, hits are identical to the recorded fixtures, numbers
+  in the Done notes.
+
+### M5-T33 L3: the ram resolver
+
+- **Goal:** AC22 for L3. **Agent:** Opus.
+- **What:** first the quick wins (contacts return hull indices so `_index()` goes, `current_at` filled only for touched ids,
+  rigid and layers tested from columns before `_hull()`), measured; then `RamTracker` in native (integer keys, no strings),
+  which the per-tick-native rule asks for.
+- **Done when:** the ram stage at `battle 1000` drops from 1.20 ms, ram results identical, numbers in the Done notes.
+
+### M5-T34 L5: the radar's dot buffers
+
+- **Goal:** AC22 for L5. **Agent:** Sonnet.
+- **What:** `ScsRadarPlot.plot` takes the screen transform and radii and returns the three buffers ready for the
+  multimeshes; `factions` built only when read; no `slice` copy when the multimesh is larger.
+- **Done when:** the HUD's frame cost outside the ticks at 1 000 ships drops, the radar tests pass unchanged, numbers in the
+  Done notes.
+
+### M5-T35 L8 and L9: native allocations and per-event scans
+
+- **Goal:** AC22 for L8 and L9. **Agent:** Opus.
+- **What:** the items listed in L8 (`index_rows` with a rank column and the `IdHasher`, interned name ids instead of cloned
+  strings, faction indices in `snapshot`, a cached static block, the per-step Vecs and sets reused) and L9 (a body id to
+  member index map rebuilt in `set_members`; `latest_target` pruned for freed bodies).
+- **Done when:** the core's sync and the snapshot cost less at 1 000 (measured), Rust and GUT parity hold, numbers in the
+  Done notes.
+
+### M5-T36 L12 and L13: the smaller items and the constants table
+
+- **Goal:** AC22 for L12 and L13. **Agent:** Sonnet.
+- **What:** each L12 item as listed in the review (the tier's prune on removals, the bolt quarantine from the core's
+  transforms, the far proxies' uploads, the light picks, the wing director's compare-before-assign, the HUD readout and
+  silhouettes, the two group walks, the drivers' console vars, the output array, the latent `reach`, the duplicated maths).
+  L13: a `#[func] constants()` on the core and one GUT test that compares every mirrored constant with its GDScript twin.
+- **Done when:** each item is done or marked not worth it with a measured reason; the constants test passes.
+
+### M5-T37 L6 and L7: flashes and sounds at scale
+
+- **Goal:** AC23 for L6 and L7 (the sound pass's share). **Agent:** Sonnet.
+- **What:** L6: a ring buffer and a lit counter for the muzzle flash pool, and flashes and shot sounds culled beyond a range
+  from the camera before they are made. L7: check what T19 and T28 left (the engine voices come from the core's query
+  now); any per-pooled-ship audio node still walked every frame goes, so the per-frame audio work is linear in voices, not
+  ships.
+- **Done when:** work-count tests pin both; `battle 1000` frame time with sound on is recorded before and after.
+
+### M5-T38 L14: test duplication and CI
+
+- **Goal:** AC23 for L14. **Agent:** Sonnet.
+- **What:** one `TestSteps` fixture for the copied `_ticks`, `_exec`, `_console` helpers (move the copies over in one pass);
+  `test_core_state.gd`'s three identical `OLD_PATH_CASES` recordings collapsed to one; the always-pending balance tests
+  (`test_m3_sandbox`, `test_dogfight`) out of the default run as a manual balance check; CI's Python tests in their own job
+  and `assets/generated` cached on `hashFiles('tools/procgen/**')`; `run_tests.sh`'s smoke blocks through one helper and
+  the lock paths in one place.
+- **Done when:** the suite's totals are unchanged except the moved balance tests; CI is green on the push, with shard times
+  in the Done notes.
+
 ### M5-T20 Integration, full suite, docs and acceptance
 
 - **Goal:** AC16, AC17 and the (H) checklist for AC18.
 - **Steps:** finish §18 in `docs/architecture.md` as built; write the M5 section of `docs/playtest.md` with the (H)
   checklist; update the roadmap row; run `scripts/run_tests.sh` once and read GUT's and Python's own totals; run the GPU
-  check on the maintainer's machine; then ask the maintainer to confirm the milestone. Before `m5` is merged it is rebased
-  onto `main` (with M4 in it); the agent asks before force-pushing.
+  check on the maintainer's machine; then ask the maintainer to confirm the milestone. `m5` already holds all of M4 (Q34);
+  once confirmed it merges into `main` (no rebase).
 - **Done when:** the maintainer confirms M5.
