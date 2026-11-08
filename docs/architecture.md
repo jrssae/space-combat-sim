@@ -4039,8 +4039,8 @@ M4-T20's capital stand-ins rather than into `weapon_kernels.rs` and `weapon_rows
   bolt inherits the ship's velocity) and slews at the weapon's traverse and elevation rates. The gate opens when the lead is
   solvable and inside the arc, the target within range, the gun ready, and the barrel's miss at the lead point no wider than
   the bolt's spread there plus the target's radius.
-- **Strength (Q14; retuned by Q31 in T16, §18.11: 8 damage every 2.4 s, 0.5 degree spread, the Saturns' hulls per
-  variant).** As T21 built it: the light turret: 900 m/s, one shot every 3.0 s, 4.5 damage, 2 s life, 1.5 km range, 0.8 degree spread,
+- **Strength (Q14; retuned by Q31 and Q32 in T16, §18.11: 6 damage every 2.4 s, 0.5 degree spread, the Saturns'
+  hulls per variant).** As T21 built it: the light turret: 900 m/s, one shot every 3.0 s, 4.5 damage, 2 s life, 1.5 km range, 0.8 degree spread,
   50 and 40 degrees a second. Few, harder shots: two hits finish a raider at 15 %, but a full raider takes fourteen, so two
   raiders still win. Pinned by `test_turret_defence` against a Saturn 4 of 1000 hull flown by the `civilian` profile: the
   raid wins in all three seeds (52, 91 and 88 s), the turrets finish a 15 % raider in all three (70, 43 and 34 s). The first
@@ -4104,8 +4104,12 @@ tests/integration/test_civilian_flight.gd, test_civilian_ships.gd, test_turret_b
   pool hand-out mounts all three; a spawn's `cargo_pods` (0-3) sets it. The far dot hides them with the hull; the pod mesh
   switches LOD with it. A destroyed Bokmai sheds its mounted pods as one-shot debris chunks beside its hull's chunk set.
   The flight model's assist reads the spec's mass, so a laden Bokmai answers a little slower than the assist expects.
-- **Balance (Q31).** Every Saturn alone beats two raiders in 1 to 3 of 10 seeds and three raiders in none
-  (`test_turret_balance`, behind `GUT_SLOW`): the light turret 8 damage every 2.4 s with 0.5 degree spread, hulls per
-  variant (Saturn 3 1600, Saturn 4 transport 550, Saturn 4 tanker 650, Saturn 8 transport 1750, Saturn 8 tanker 1800); the
-  counts are in the milestone's T16 Done block. Open: at 550 hull the turrets' finish of a 15 % raider no longer holds (the
-  raider passes under the dorsal arc until the transport is dead); `test_turret_defence` reports it pending.
+- **Turrets and balance (Q31, Q32).** Every Saturn's command disc carries two flank turrets (`flank_l`, `flank_r` on
+  posts at the rim's widest point, up ±x outboard, 200 degrees) instead of Q19's hub turret; the cargo sections keep their
+  dorsal one, so a Saturn 3 has 2 and the others 3. Each Saturn alone beats two raiders in 1 to 3 of 10 seeds and three
+  raiders in none (`test_turret_balance`, behind `GUT_SLOW`): the light turret 6 damage every 2.4 s with 0.5 degree spread,
+  hulls per variant (Saturn 3 590, Saturn 4 transport 450, Saturn 4 tanker 420, Saturn 8 transport 620, Saturn 8 tanker
+  330); the counts are in the milestone's T16 Done block. The flanks finish a 15 % raider in every seed of
+  `test_turret_defence`. A turret's arc has no hull occlusion (its bolts pass its own ship), so the belly from astern
+  that Q32 leaves vulnerable on purpose is in fact covered by the flanks beyond about 83 m; narrower flank arcs or a
+  line-of-fire test would make the blind spot real (open for the maintainer).
