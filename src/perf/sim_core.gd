@@ -453,6 +453,14 @@ func row_position(handle: int) -> Vector3:
 	return core.row_position(core.row_of(handle)) if core != null else Vector3.INF
 
 
+## The ships with a node within `radius_m` of `centre`, nearest first, from the rows as of the tick's last sync (M5-T28, the
+## engine voices' query): `[body_ids, squared_distances]`; both empty without the core.
+func ships_near(centre: Vector3, radius_m: float) -> Array:
+	if core == null:
+		return [PackedInt64Array(), PackedFloat64Array()]
+	return core.ships_near(centre, radius_m)
+
+
 ## Every node row's body id and position, the bolts' positions and the static rows' positions, as the core holds them.
 func body_ids() -> PackedInt64Array:
 	return core.body_ids() if core != null else PackedInt64Array()

@@ -46,3 +46,7 @@ mod tier_fire;
 // M5-T21: the defensive turrets, engine-free kernels and the core's shell around them.
 mod turret_kernels;
 mod turret_rows;
+
+// M5-T28: the engine voices' ship query, an engine-free kernel and the core's shell around it.
+mod voice_kernels;
+mod voice_rows;

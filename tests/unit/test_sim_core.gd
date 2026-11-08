@@ -701,6 +701,11 @@ const TURRET_KERNEL_FILE: String = "res://native/src/turret_kernels.rs"
 const TURRET_KERNEL_USERS: Array[String] = ["res://native/src/turret_rows.rs", "res://native/src/brain_step.rs"]
 const TURRET_KERNEL_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::{Basis, Vector3};", "use crate::rows::",
 		"use crate::v3::", "use crate::brain_maths::"]
+## The engine voices' ship query (M5-T28): the ships near the listener from the rows, held to the kernels' rules; it imports
+## the row tables and the vector maths only. The shell (`voice_rows.rs`) is what reaches it.
+const VOICE_KERNEL_FILE: String = "res://native/src/voice_kernels.rs"
+const VOICE_KERNEL_USER: String = "res://native/src/voice_rows.rs"
+const VOICE_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::Vector3;", "use crate::rows::", "use crate::v3::"]
 ## The core's worker threads (M4-T18): engine-free, the standard library and rayon only.
 const THREADS_FILE: String = "res://native/src/threads.rs"
 const THREADS_USE_ALLOWED: Array[String] = ["use std::", "use rayon::"]
@@ -748,6 +753,9 @@ func test_the_kernels_hold_no_engine_type() -> void:
 		violations.append_array(_engine_free_violations(brain_file, KERNEL_FORBIDDEN, BRAIN_USE_ALLOWED))
 	violations.append_array(_engine_free_violations(THREADS_FILE, KERNEL_FORBIDDEN, THREADS_USE_ALLOWED))
 	violations.append_array(_engine_free_violations(TURRET_KERNEL_FILE, KERNEL_FORBIDDEN, TURRET_KERNEL_USE_ALLOWED))
+	violations.append_array(_engine_free_violations(VOICE_KERNEL_FILE, KERNEL_FORBIDDEN, VOICE_KERNEL_USE_ALLOWED))
+	assert_true(FileAccess.get_file_as_string(VOICE_KERNEL_FILE).contains("pub fn ships_near("), "the voice kernel holds ships_near")
+	assert_true(FileAccess.get_file_as_string(VOICE_KERNEL_USER).contains("use crate::voice_kernels"), "the shell reads the voice kernel")
 	assert_eq(violations.size(), 0, "no engine type, call, crate path or stray import in the kernels, the row tables or the brains: %s" % violations)
 	var turret_source: String = FileAccess.get_file_as_string(TURRET_KERNEL_FILE)
 	for part: String in ["pub fn pick<", "pub fn pick_all<", "pub fn aim(", "pub fn gate(", "pub fn spread(", "pub struct Memory",
