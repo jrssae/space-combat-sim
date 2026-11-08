@@ -2576,6 +2576,9 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
   - Measures in the Phase 3 entry's "After T44" block: the release window opens with no shader error (`battle` 500 144.1 FPS,
     1 000 119.1 FPS); headless `battle` 500 7.42 ms (passes 3/3) and 1 000 9.22 ms against T25's 8.10 and 10.50; fullscreen
     editor `battle` 1 000 87.3 FPS against 65.6 and 71.1. Report P3's open question 4 (the release shaders) is answered.
+  - Tests: the full suite (`GUT_SLOW=1 scripts/run_tests.sh`) found one failure, `test_mesh_only_scene`'s kept-addon list, fixed in
+    its own commit; then the three CI shards in order, each exit 0: 2 598 tests, 2 586 passing, 0 failing, 12 pending (T25's 12),
+    Python 410 OK, the console smoke runs passed. The main-scene smoke shows no `ERROR:` line.
 
 ##### M4-T39 FSR 4 study (Q59)
 - **Not needed (Q60, 2026-11-05):** the maintainer skipped FSR 4; the section below is kept as the record of what was asked.
