@@ -2,7 +2,7 @@ extends GutTest
 ## Every line a mission script says exists in its dialog file, and every speaker exists (architecture §18 D53, AC6, M5-T06).
 ## Generic on purpose: it walks the mission scenarios in `data/scenarios/` and `tests/fixtures/missions/`, reads each one's
 ## script for `say(...)` and `dialog_finished(...)` ids, and checks them against the scenario's dialog file, so a new mission
-## (T10's Buoy defence) is covered the moment it exists. Ids a script builds at run time cannot be read; scripts use literals.
+## (T30's Civilian escort) is covered the moment it exists. Ids a script builds at run time cannot be read; scripts use literals.
 
 ## Folders whose `*.json` scenarios may carry a `mission` block, and the folder of dialog files.
 const SCENARIO_DIRS: Array[String] = ["res://data/scenarios", "res://tests/fixtures/missions"]
@@ -125,12 +125,12 @@ func test_the_scan_covers_the_test_missions() -> void:
 	assert_has(ids, "control_raiders")
 
 
-func test_the_scan_covers_buoy_defence_and_its_closing_lines() -> void:
-	var data: Variant = _json("res://data/scenarios/buoy_defence.json")
-	assert_true(data is Dictionary and (data as Dictionary).get("mission") is Dictionary, "Buoy defence is a mission")
+func test_the_scan_covers_civilian_escort_and_its_closing_lines() -> void:
+	var data: Variant = _json("res://data/scenarios/civilian_escort.json")
+	assert_true(data is Dictionary and (data as Dictionary).get("mission") is Dictionary, "Civilian escort is a mission")
 	var block: Dictionary = (data as Dictionary)["mission"]
 	var closing: Array[String] = _scenario_ids(block)
-	assert_has(closing, "control_relay_lost")
+	assert_has(closing, "control_civilian_lost")
 	assert_has(closing, "alpha_2_leader_down")
 	var said: Array[String] = _line_ids(FileAccess.get_file_as_string(String(block["script"])))
 	assert_gt(said.size(), 5, "the script's lines are read")

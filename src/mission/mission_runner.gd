@@ -77,6 +77,7 @@ func _ready() -> void:
 	api = MissionApi.new(world, book, stage)
 	api.scenario_id = _scenario.get("scenario_id", &"")
 	api.title = String(block.get("title", ""))
+	api.placeholders = _scenario.get("placeholders", {})
 	_load_dialog(String(block.get("dialog", "")))
 	api.closing_lines = block.get("closing_lines", {})
 	var shots_problem: String = api.load_cinematics(_scenario.get("cinematics", {}))
@@ -175,6 +176,7 @@ func _load_dialog(path: String) -> void:
 	var made: Dictionary = DialogBook.load_file(path)
 	if bool(made["ok"]):
 		api.dialog_book = made["book"]
+		api.dialog_book.fill(api.placeholders)
 	else:
 		error = "dialog: %s" % made["error"]
 

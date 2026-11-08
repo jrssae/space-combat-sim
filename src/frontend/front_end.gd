@@ -61,7 +61,7 @@ func frame() -> MenuFrame:
 	return _frame
 
 
-## A fresh seed for each free flight the menu starts, so its encounters differ from one session to the next (M5-T17);
+## A fresh seed for each free flight or mission the menu starts, so its encounters (M5-T17) or its civilian (T30) differ;
 ## a restart keeps the run's request, and with it the seed.
 static func session_seed() -> int:
 	return randi_range(1, 2147483647)  # the console's `play` seed range
@@ -81,7 +81,7 @@ func _on_main_chosen(id: StringName) -> void:
 			entries.assign(mission_entries.call() if mission_entries.is_valid() else MissionCatalog.entries())
 			var page := MissionSelect.new()
 			page.setup_missions(entries)
-			page.chosen.connect(func(mission_id: StringName) -> void: _start(GameFlow.make_request(&"mission", mission_id)))
+			page.chosen.connect(func(mission_id: StringName) -> void: _start(GameFlow.make_request(&"mission", mission_id, false, session_seed())))
 			_frame.push_screen(page)
 		&"free_flight":
 			var page := FreeFlightSelect.new()

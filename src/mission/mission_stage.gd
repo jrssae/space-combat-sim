@@ -56,10 +56,13 @@ func teardown() -> void:
 	camera_rig = null
 
 
-## Knows `combatant` by the name it flies under now.
+## Knows `combatant` by the name it flies under now, and keeps it out of the low-attention tier: a parked tier body would read
+## as gone to the triggers (a civilian 15 km ahead of the player failed the escort).
 func register(combatant: Combatant) -> void:
 	if combatant != null and not combatant.display_name.is_empty():
 		_actors[MissionWorld.key(combatant.display_name)] = combatant
+		if combatant.ship != null:
+			combatant.ship.tier_exempt = true
 
 
 ## Updates the snapshot for `names` (lower case): position, alive and route. One unit of work each.

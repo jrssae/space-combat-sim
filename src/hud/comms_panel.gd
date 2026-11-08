@@ -131,8 +131,9 @@ func _on_finished(_ticket: int, _line: DialogBook.Line, cut: bool) -> void:
 	_redraw()
 
 
+# Nothing plays while the scene is going (a line cut at quit would outlive the audio's own clean-up and leak its stream).
 func _play(sound: StringName) -> void:
-	if audio != null and is_instance_valid(audio):
+	if audio != null and is_instance_valid(audio) and audio.is_inside_tree() and is_inside_tree():
 		audio.play_ui(sound, SQUELCH_DB)
 
 

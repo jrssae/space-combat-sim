@@ -3928,8 +3928,9 @@ src/hud/letterbox.gd   the cinematic's black bars (T08)
 tests/unit/test_cinematic_shot.gd, test_control_lock.gd, test_mission_cinematic.gd, tests/integration/test_cinematic_camera.gd, tests/fixtures/missions/test_cinematic.json|.gd   (T08)
 tests/unit/test_triggers.gd, test_objective_book.gd, test_mission_sequencer.gd, tests/integration/test_mission_runner.gd, test_mission_skip.gd   (T05)
 src/world/buoy_ring.gd   nav buoys evenly on a ring: positions, names, how many a point hears, pure (T10)
-data/scenarios/buoy_defence.json, data/missions/buoy_defence.gd, data/dialog/buoy_defence.json   the Buoy defence mission (T10)
-tests/unit/test_buoy_ring.gd, tests/integration/test_buoy_defence.gd   (T10)
+data/scenarios/civilian_escort.json, data/missions/civilian_escort.gd, data/dialog/civilian_escort.json   the Civilian escort
+                                 mission (T30; it replaced T10's Buoy defence, whose files and the buoy ring are gone)
+tests/integration/test_civilian_escort.gd   (T30)
 tools/procgen/assets/asteroids.py, tools/procgen/tests/test_asteroids.py   the rock shapes and their spheres (T29)
 src/world/belt_layout.gd   a belt's rocks in its box, pure (T29)
 src/world/asteroid_belt.gd   a multimesh per shape, static spheres in StaticRows (T29)
@@ -4008,7 +4009,7 @@ as the menu does; seed 0 by default, encounters off). Setting: `skip_front_end` 
   for it). `Game.end_mission` moves the flow to `DEBRIEF`, or, for a Main the flow did not start (tests), keeps the result
   through `GameFlow.keep_result`. The console's `respawn` is refused in a mission, as Back is.
 - **Wingmen's names.** A replacement from `WingDirector.replenish` flies under the lost wingman's callsign, so a `destroyed` on
-  wing names is only safe as an objective's `fail` with `all` false (Buoy defence's `home`): it fails at the loss, before any
+  wing names is only safe as an objective's `fail` with `all` false (Civilian escort's `home`): it fails at the loss, before any
   replacement, and failure is final. A success trigger or an `until` on wing names could be satisfied, or undone, by a
   replacement. Buoy defence also pools exactly its three wingmen and runs no waves (which replenish), so no replacement comes.
 - **Left for later.** `cinematic` and the control lock are T08's (§18.8); the debrief screen is T09's (§18.7).
@@ -4090,6 +4091,10 @@ as the menu does; seed 0 by default, encounters off). Setting: `skip_front_end` 
   played by a mission script, and `mission skip` cuts it.
 
 ### 18.9 Buoy defence as built (T10)
+
+*Superseded by §18.15 (T30, Q36, Q41): the mission, `BuoyRing`, the `buoy_rings` field and their tests are removed, and
+`NavBuoy.BROADCAST_RANGE_M` is back at 1 000 km. Kept for the framework pieces it added: `player.velocity`, closing lines and the
+fly-past shot.*
 
 - **The ring (Q21).** A scenario may declare `buoy_rings: [{centre, radius_m, count, normal, first, prefix}]`; `ScenarioLoader`
   turns each into nav buoy props (after the hand-placed ones, names checked for duplicates) from `BuoyRing` (pure): the ring in the
@@ -4330,3 +4335,32 @@ tests/unit/test_encounter_plan.gd, tests/integration/test_encounters.gd, tests/f
   (radiance 128) while it is above 0. Glass and rocks take none; 0 is the old flat paint.
 - **Plating.** The civilian styles set `extra["panel_grid"]` 0: no generic staggered seams, tint patchwork, hatches or rivets
   until T40 draws their seams from the show; the fighters keep the grid.
+
+### 18.15 Civilian escort as built (T30, D62, Q36 to Q42)
+
+- **The random civilian.** A spawn and a pool may name `random_civilian`. `ScenarioLoader.resolve_random_civilian(scenario,
+  seed)` (Main calls it right after loading, before any pool is built) draws one of the nine hulls from the seed, moves the pool
+  to it, gives a Bokmai 1 to 3 pods, and takes a name from the scenario's `civilian_names` for that hull. The name replaces
+  `{civilian}` in spawn names, the mission block and the cinematics, and `DialogBook.fill` puts it into the dialog lines;
+  scripts read it with `m.filled("{civilian}")`. The menu starts each mission on a fresh seed (`FrontEnd.session_seed`); retry
+  keeps it, so the same ship comes back.
+- **Flee and resume needed no new native code.** The civilian flies a scenario route (`routes[]`, cruise 120 m/s, waypoints at
+  25, 50 and 75 % and 1 km short of NAV BETA) instead of a pilot objective: a passive profile never takes an objective (the
+  attack behaviour carries it). The native arbiter already gives retreat (0.85 while a hostile is within the civilian's 3 km or an
+  alarm holds) precedence over follow-path (0.5), and follow-path picks up at its current waypoint once retreat scores 0. So
+  flee-then-resume is the brains' own per-tick choice; `test_civilian_escort.gd` pins it. Routes through the progress points also
+  make the wave triggers reliable: the civilian must pass within 150 m of each to go on, and the triggers use 1 km.
+- **Transponder.** Every civilian hull broadcasts to 15 km (`ShipPool.CIVILIAN_BROADCAST_RANGE_M`, the encounters' value), so
+  raiders sent from a jump point beyond sensor range find it. A civilian leading a route is not taken for the instructor.
+- **Mission actors stay out of the tier.** `MissionStage.register` sets `Ship.tier_exempt` on every ship it knows (the pool
+  clears it on parking), and `TierDirector` never demotes such a ship. Without it the civilian, once more than the tier radius
+  ahead of the player, was parked in the low-attention tier, and a parked body (hidden, not processing) read as gone to the
+  `destroyed` trigger, failing the escort. At most 15 ships, so the tier's savings are untouched.
+- **Waves and skipping.** Each wave jumps in 6 to 12 km off the civilian (from its live position) on its own bearing and is
+  sent at it with `m.send`. `m.transient(names)` (new) releases a wave's raiders when its step is skipped, so `mission goto`
+  leaves no raider behind and the civilian at the step's point. `arrive` waits for all 13 to be gone, then completes `home` if
+  ALPHA 2 lives and `escort` (the last primary) ends the mission.
+- **Quitting cleanly.** The console's `quit` pauses the tree, silences every player and waits 0.5 s (`QUIT_SETTLE_S`) before
+  quitting: a sound stopped in the same frame as the quit kept its playback alive past exit (the "leaked" lines after jump
+  arrivals and comms squelches). The comms panel plays nothing once it or the audio has left the tree.
+

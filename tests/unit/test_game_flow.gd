@@ -127,8 +127,8 @@ func test_a_successful_move_clears_the_last_refusal() -> void:
 
 
 func test_make_request_has_the_four_fields() -> void:
-	var request: Dictionary = GameFlow.make_request(&"mission", &"buoy_defence", true, 42)
-	assert_eq(request, {"kind": &"mission", "scenario_id": &"buoy_defence", "encounters": true, "seed": 42})
+	var request: Dictionary = GameFlow.make_request(&"mission", &"civilian_escort", true, 42)
+	assert_eq(request, {"kind": &"mission", "scenario_id": &"civilian_escort", "encounters": true, "seed": 42})
 	assert_eq(GameFlow.make_request(&"sandbox", &"dogfight"),
 			{"kind": &"sandbox", "scenario_id": &"dogfight", "encounters": false, "seed": 0}, "encounters off, seed 0")
 
@@ -153,8 +153,8 @@ func test_kind_for_a_scenario() -> void:
 
 
 func test_a_scenario_with_a_mission_block_is_a_mission() -> void:
-	var text: String = JSON.stringify({"scenario_id": "buoy_defence", "mission": {"title": "Buoy defence"}})
-	assert_eq(GameFlow.kind_for(&"buoy_defence", text), &"mission")
+	var text: String = JSON.stringify({"scenario_id": "civilian_escort", "mission": {"title": "Civilian escort"}})
+	assert_eq(GameFlow.kind_for(&"civilian_escort", text), &"mission")
 	assert_eq(GameFlow.kind_for(&"free_flight", JSON.stringify({"mission": {}})), &"free_flight", "an empty block is none")
 	assert_eq(GameFlow.kind_for(&"dogfight", "{not json"), &"sandbox", "an unreadable file falls back")
 	assert_eq(GameFlow.kind_for(&"no_such_scenario"), &"sandbox", "no file: the old rule")
@@ -193,7 +193,7 @@ func test_every_state_has_a_name() -> void:
 
 
 func _mission(seed_value: int = 0) -> Dictionary:
-	return GameFlow.make_request(&"mission", &"buoy_defence", false, seed_value)
+	return GameFlow.make_request(&"mission", &"civilian_escort", false, seed_value)
 
 
 func test_only_a_mission_has_a_debrief() -> void:
@@ -223,10 +223,10 @@ func test_no_debrief_without_a_mission_or_a_result() -> void:
 
 
 func test_retry_of_a_mission_keeps_its_seed_and_encounters() -> void:
-	flow.enter_directly(GameFlow.make_request(&"mission", &"buoy_defence", true, 123))
+	flow.enter_directly(GameFlow.make_request(&"mission", &"civilian_escort", true, 123))
 	flow.end_run({"success": false, "reason": "player destroyed"})
 	assert_true(flow.retry())
-	assert_eq(flow.request, GameFlow.make_request(&"mission", &"buoy_defence", true, 123))
+	assert_eq(flow.request, GameFlow.make_request(&"mission", &"civilian_escort", true, 123))
 	assert_eq(flow.state, GameFlow.State.LOADING)
 
 

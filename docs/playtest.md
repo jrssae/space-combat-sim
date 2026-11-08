@@ -601,29 +601,31 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
 
 # Play-testing M5 (Missions and Front End)
 
-## Buoy defence (M5-T10)
+## Civilian escort (M5-T30; replaced Buoy defence)
 
-Start the game windowed (`.tools/godot/godot --path .`), choose **Missions**, then **Buoy defence**. The briefing shows on the right
-while it is focused. From the console, `play buoy_defence` does the same (add a seed: `play buoy_defence 7`).
+Start the game windowed (`.tools/godot/godot --path .`), choose **Missions**, then **Civilian escort**. The briefing shows on the
+right while it is focused. Each start from the menu draws a new seed, and with it a different civilian ship (any of the nine hulls;
+**Retry** on the debrief keeps the ship). From the console, `play civilian_escort <seed>` picks the seed (seed 5 is the Skylark).
 
-- **The intro.** The mission opens on the relay buoy NAV ALPHA with the star behind it, then cuts to Alpha wing (you leading, three
-  wingmen in a finger-four) coasting past the camera at 40 m/s. Babylon 5 Control hails you over the fly-past and briefs you once the
-  camera is back behind your ship. Your controls are held until Control says "the flight is yours"; the ship keeps coasting. **A** or
-  **Start** skips one shot (one press, one shot).
-- **The fight.** Three raiders jump in about 9.5 km off your left (port) side and go for the buoy. When they are down, Control warns
-  of a second group: four more jump in from the right (starboard) and below, a few seconds later. The buoy dies to six hits, so stay
-  between it and the raiders. The waypoint diamond marks NAV ALPHA; objectives show top right.
-- **Objectives.** Protect NAV ALPHA (lost if it is destroyed), destroy the raiders (all seven), and, optional, bring Alpha wing home
-  (failed the moment a wingman is lost). The mission ends on a last line from Control or Alpha 2, then the debrief.
-- **The ring.** NAV ALPHA is one of 16 buoys on a ring of 20 000 km radius; every buoy broadcasts to 10 000 km. From the start the
-  radar's rim shows NAV BRAVO and NAV PAPA, the two neighbours about 7 800 km away (`state targeting` lists them).
-- **Console shortcuts.** `mission goto wave_one` skips the intro and the brief; `kill all` destroys every raider in play;
-  `set targeting.selected "NAV ALPHA"; damage 100 target` loses the buoy; `kill player` loses you; `mission skip` fast-forwards the
-  step; `mission journal` lists what happened.
+- **The intro.** The mission opens on the civilian beside NAV ALPHA with the belt somewhere ahead, then cuts to you and ALPHA 2
+  coasting past the camera. The civilian's master hails over the fly-past; Control briefs once the camera is back, with your
+  controls held until "the flight is yours". **A** or **Start** skips one shot.
+- **The crossing.** The civilian flies to NAV BETA, 30 km out, at up to 120 m/s, threading the asteroid belt (24 km across, 8 km
+  deep) in the middle of the route. The waypoint marks the civilian. Three raider waves jump in 6 to 12 km off it as it passes
+  25 % (3 raiders, before the belt), 50 % (4, inside it) and 75 % (6, past it). Attacked, it runs (an Earth Alliance ship towards
+  you or ALPHA 2, others straight away) and turns back onto its route a few seconds after the raiders are gone or dead.
+- **Objectives.** Escort the civilian to NAV BETA (done when it is within 1.5 km of the buoy and every raider is down; failed if
+  it is destroyed) and, optional, bring ALPHA 2 home. Losing yourself also ends it. A last line, then the debrief.
+- **Console shortcuts.** `mission goto wave_one` (or `wave_two`, `wave_three`) skips ahead: the civilian is placed at the step's
+  point and skipped waves leave no raider; `kill all` destroys every raider in play; `kill player` loses you; `mission skip`
+  fast-forwards the step; `mission journal` lists what happened. `ai "<civilian name>"` shows whether it flies its route
+  (`follow_path`) or runs (`retreat`).
 
 Check (AC18, this mission's part):
 
-- [ ] The intro reads well: the buoy against the star, the wing passing close, the lines readable in their time on screen.
-- [ ] The pacing: the brief is not too long before you fly, and the second group arrives soon enough after the first.
-- [ ] The lines: Control, Alpha 2 and 3 and the raider leader sound like people; the last line before the debrief is heard out.
-- [ ] Losing the buoy, losing yourself and winning each end where you expect, with the right debrief.
+- [ ] The intro reads well: the civilian at the buoy, the wing passing close, the lines readable in their time on screen.
+- [ ] The pacing: the whole mission takes about 6 to 8 minutes when you fight each wave (Q40); the waves come neither too soon
+      nor too late.
+- [ ] The civilian: it runs when attacked and comes back to its route; a Saturn 8 gets through the belt without hitting rocks.
+- [ ] The lines read as people, with the civilian's name filled in; the last line before the debrief is heard out.
+- [ ] Losing the civilian, losing yourself and winning each end where you expect, with the right debrief.

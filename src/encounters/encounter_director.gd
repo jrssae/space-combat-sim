@@ -22,7 +22,7 @@ const CHECK_S: float = 1.0
 ## A raid goes for a civilian at most this far from the player.
 const CIVILIAN_REACH_M: float = 20000.0
 ## Encounter civilians call out their position this far (a transponder), so a raid sent at one from 6-12 km finds it.
-const TRANSPONDER_M: float = 15000.0
+const TRANSPONDER_M: float = ShipPool.CIVILIAN_BROADCAST_RANGE_M
 const JUMP_POINTS: int = 4
 ## Forced events' indices start here, far past any session's schedule.
 const FORCED_INDEX: int = 1000000

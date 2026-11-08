@@ -54,6 +54,8 @@ var autoexec_path: String = DEFAULT_AUTOEXEC_PATH
 var user_args: PackedStringArray = OS.get_cmdline_user_args()
 var run_startup: bool = true
 var mirror_stdout: bool = true
+## Wall-clock seconds between silencing every sound and quitting (several audio mixes).
+const QUIT_SETTLE_S: float = 0.5
 ## Callable(code: int); defaults to `get_tree().quit(code)`.
 var quit_handler: Callable = Callable()
 
@@ -386,9 +388,11 @@ func _quit(code: int) -> void:
 	if quit_handler.is_valid():
 		quit_handler.call(code)
 	elif is_inside_tree():
-		# A sound playing at quit keeps its stream alive ("resources still in use at exit"), so silence everything and quit a frame later.
+		# A sound playing at quit keeps its stream alive ("resources still in use at exit"), so silence everything and quit once
+		# the audio thread has let the stopped sounds go (a frame alone can come before its next mix).
+		get_tree().paused = true  # nothing starts a new sound meanwhile
 		_silence(get_tree().root)
-		await get_tree().process_frame
+		await get_tree().create_timer(QUIT_SETTLE_S, true, false, true).timeout
 		get_tree().quit(code)
 
 

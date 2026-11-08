@@ -591,7 +591,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T19 | D | Per-thruster engine bursts | T18 | Opus | Voice placement and a voice budget | done |
 | T25 | A | Targeting at scale: a target menu and other targeting UX for large battles (Q26; placed before T20; numbered last because it was added after the others had numbers) | T02, T07, the M4 rebase | Opus | UX judgement with a concept stop (H); reads M4's on-read candidate list | not started |
 | T29 | C | Generated asteroids and a sparse belt (D63, Q38): the `asteroids` generator, `BeltLayout`, `AsteroidBelt` as static rows | T27 | Opus | A new procgen asset and a placement seam M14 builds on | done |
-| T30 | B | Mission: Civilian escort with a cinematic intro (D62, Q36 to Q42), replacing Buoy defence and the ring | T29, T16, T17 | Opus | The random civilian, flee-and-resume in the native brains, three waves, writing and pacing | not started |
+| T30 | B | Mission: Civilian escort with a cinematic intro (D62, Q36 to Q42), replacing Buoy defence and the ring | T29, T16, T17 | Opus | The random civilian, flee-and-resume in the native brains, three waves, writing and pacing | done |
 | T31 | - | L1: the flight batch's per-ship gather in native for row-commanded ships | T30 | Opus | The biggest measured lever (about 37 % of the tick at 1 000) | not started |
 | T32 | - | L2: the hit resolver gets only bolts with live hostile pairs from native; per-hit hash and readout costs | T31 | Opus | 1.41 ms at 1 000; native pair filtering | not started |
 | T33 | - | L3: the ram resolver's quick wins, then `RamTracker` in native | T32 | Opus | 1.20 ms at 1 000; string keys and full passes per tick | not started |
@@ -1802,6 +1802,36 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
      `references/screenshots/T30 civilian escort/` for the maintainer (H).
 - **Done when:** AC10; the mission plays from the menu in 6 to 8 minutes for a fair player (Q40; the agent times a run
   where the escort fights each wave and records it); the playtest section is rewritten.
+
+- **Done (as built, 2026-11-08):**
+  - **Built:** `data/scenarios/civilian_escort.json` (NAV ALPHA at the origin, NAV BETA 30 km out, D63's belt across the middle on
+    seed 38, the civilian's route `ESCORT` at 120 m/s through the 25/50/75 % points, ALPHA 2 on `cover`, pools 13 raiders, 1 ally,
+    1 `random_civilian`, two intro shots, names for all nine hulls), `data/missions/civilian_escort.gd` (steps intro, brief,
+    depart, wave_one, wave_two, wave_three, arrive; waves of 3, 4 and 6 jump in 6-12 km off the civilian on three bearings and are
+    sent at it), `data/dialog/civilian_escort.json` (16 original lines with `{civilian}`). `ScenarioLoader.resolve_random_civilian`
+    (Main, before the pools), `DialogBook.fill`, `MissionApi.filled` and `MissionApi.transient` (a skipped wave's raiders
+    released). The menu starts each mission on a fresh seed. Removed: Buoy defence's files and test, `BuoyRing`, its test and
+    `buoy_rings`; `NavBuoy.BROADCAST_RANGE_M` back to 1 000 km.
+  - **Changed from the plan:** step 2 needed no native change. A passive civilian never takes a pilot objective (the attack
+    behaviour carries it), so the civilian flies a scenario route instead, and the native arbiter already ranks retreat (0.85
+    under threat) over follow-path (0.5) and returns to the route's current waypoint when retreat drops; the GUT test pins
+    flee-then-resume. The wave points are route waypoints, so the civilian must pass within 150 m of each and the 1 km triggers
+    cannot be missed after a detour. The belt seed was picked so the 50 % point (where a skip places the civilian) has no rock
+    within 500 m and the straight route clears every rock by 200 m (unit test).
+  - **Found and fixed:** (1) mission actors were parked in the low-attention tier once beyond its radius from the player, and a
+    parked body read as destroyed to the triggers (the escort failed with the civilian alive); `Ship.tier_exempt`, set by
+    `MissionStage.register`, keeps them out. (2) Civilians now broadcast to 15 km from the pool (`ShipPool.CIVILIAN_BROADCAST_RANGE_M`),
+    so raiders sent from a jump point find them. (3) The leak at exit after jump arrivals and comms lines: a sound stopped in the
+    frame of the quit kept its playback; the console's `quit` now pauses, silences and waits 0.5 s. The escort's smoke runs and
+    `encounters force raid` in free flight end clean.
+  - **Tests:** `test_civilian_escort` 12 with `GUT_SLOW=1` (menu, intro, success, both failures, flee and resume, the skip
+    contract, pools, buoy range, a Saturn 8 crossing the belt with its hull untouched); `test_scenario_loader` 38 (random civilian
+    over 200 seeds sees all nine, retry, placeholders, names checked, the belt's clearances); `test_dialog_ids`, `test_objective_book`,
+    `test_game_flow`, `test_objectives_model`, `test_mission_catalog`, and the focused files for the tier, pools, mission runner,
+    console, front end, encounters and pause menu.
+  - **(H):** pacing (6 to 8 minutes for a fair player, Q40: not timed by a person; the route alone is about 4.5 minutes at
+    120 m/s plus the intro and brief, so a run with fights should land in it), the lines, the intro frames
+    (`references/screenshots/T30 civilian escort/`), and whether a fragile hull (the Skylark) survives three waves with a fair escort.
 
 ### M5-T31 L1: the flight batch's gather in native
 

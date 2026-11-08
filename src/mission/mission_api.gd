@@ -13,11 +13,13 @@ extends RefCounted
 ##     await m.cinematic(shot_id)      a camera shot from the scenario's `cinematics` (D55): until it ends or the player skips it
 ##     m.spawn(spawn)                  a ship from a pool, by the scenario's spawn rules; `arrival: "jump"` opens a jump point
 ##     m.send(ship, target)            the ship's pilot objective (D39)
+##     m.transient(names)              ships that only matter while the step plays: a skipped step releases them (M5-T30)
 ##     m.objective_add(id [, text, primary]) / m.objective_complete(id) / m.objective_fail(id)
 ##     m.waypoint(name or null)        the HUD's waypoint marker on an actor
 ##     m.lock_controls(on)             the player's flight and combat commands held at zero; the ship flies on (D55)
 ##     m.end(success [, reason])
 ##     m.time_s(), m.alive(name), m.objective_state(id)
+##     m.filled(text)                  `text` with the scenario's placeholders filled in ("{civilian}" -> the drawn ship's name)
 ##
 ## Lines (D53): `dialog_book` holds the mission's dialog file and `dialog` is the queue the comms panel shows; a line is recorded
 ## in the `MissionWorld` as finished when it ends, shown out or cut (an interrupt, a skip, the mission's end). Without a book
@@ -72,6 +74,8 @@ var dialog: DialogQueue = DialogQueue.new()
 ## The line said as the mission ends: by the result's reason ("player destroyed", "objective failed: protect"), else by
 ## "success" or "failure" (the scenario's `mission.closing_lines`).
 var closing_lines: Dictionary = {}  # String -> StringName
+## The scenario's placeholders (`ScenarioLoader.resolve_random_civilian`): "{civilian}" -> the drawn civilian's name.
+var placeholders: Dictionary = {}  # String -> String
 
 var _seq: MissionSequencer = MissionSequencer.new()
 # The shot `cinematic` is waiting on, or null.
@@ -254,6 +258,19 @@ func send(ship_name: String, target_name: String) -> bool:
 	return true
 
 
+## Ships that only matter while this step plays (a wave, M5-T30): in a skipped step they leave play at once, as a forced
+## `destroyed` would release them, so a skip leaves no wave behind (D62). Played, it does nothing.
+func transient(names: PackedStringArray) -> void:
+	if has_ended() or not _seq.skipping:
+		return
+	var gone: TriggerDestroyed = TriggerSpec.destroyed(names)
+	if stage != null:
+		stage.refresh(world, names)
+	gone.make_true(world)
+	journal.append("transient %s" % ", ".join(names))
+	settle()
+
+
 ## Shows objective `id`: a declared one, or a new one when `text` is given.
 func objective_add(id: StringName, text: String = "", primary: bool = true) -> bool:
 	if has_ended():
@@ -349,6 +366,10 @@ func alive(actor: String) -> bool:
 
 func objective_state(id: StringName) -> StringName:
 	return book.state_of(id)
+
+
+func filled(text: String) -> String:
+	return String(ScenarioLoader.fill_placeholders(text, placeholders))
 
 
 # --- runner side -------------------------------------------------------------------------------------------------------

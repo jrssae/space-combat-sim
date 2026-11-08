@@ -154,6 +154,9 @@ var _row_command: bool = false
 ## A disabled hulk (M4-T21, M12 groundwork): its assist is off for good; `set_hulk` clears its command and the tier director
 ## takes its pilot, so it coasts on its last motion until something commands it again. The pool clears it on reuse.
 var hulk: bool = false
+## A mission watches this ship (M5-T30): it stays out of the low-attention tier, so the mission sees where it is and that it
+## lives. The pool clears it on parking.
+var tier_exempt: bool = false
 # The flight batch flies this ship and owns its tick (M4-T35): this node's `_physics_process` is off until the batch gives it back.
 var _batch_owned: bool = false
 

@@ -134,6 +134,7 @@ func _ready() -> void:
 	world.process_mode = Node.PROCESS_MODE_PAUSABLE
 	_setup_input()
 	var scenario: Dictionary = ScenarioLoader.load(resolved_scenario_path())
+	ScenarioLoader.resolve_random_civilian(scenario, scenario_seed)
 	if not bool(scenario.get("ok", false)):
 		push_warning("Main: %s; spawning at the origin with no props" % scenario.get("error", "no scenario"))
 	else:
@@ -585,7 +586,7 @@ func _place_spawn(entry: Dictionary) -> void:
 	_scenario_entries.append(entry)
 	if not String(entry.get("wing", "")).is_empty():
 		wings.join(String(entry["wing"]), placed)  # says so itself when the wing cannot take it
-	if path != null and instructor == null:
+	if path != null and instructor == null and not ShipCatalog.is_civilian(type):  # a civilian's route is not a lesson
 		instructor = placed
 		instructor_path = path
 

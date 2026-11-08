@@ -560,60 +560,7 @@ func test_the_test_mission_fixture_loads() -> void:
 	assert_eq((result["mission"]["objectives"] as Array).size(), 4)
 
 
-# --- Buoy defence's additions (M5-T10): buoy rings, a start velocity, closing lines -----------------------------------------
-
-
-func _ring(extra: Dictionary = {}) -> Dictionary:
-	var base: Dictionary = {"centre": [0, 0, 20000000], "radius_m": 20000000, "count": 16, "normal": [0, 1, 0],
-			"first": [0, 0, -1]}
-	base.merge(extra, true)
-	return base
-
-
-func test_a_buoy_ring_becomes_nav_buoy_props_from_the_ring_helper() -> void:
-	var data: Dictionary = _minimal([_buoy("BEACON")])
-	data["buoy_rings"] = [_ring()]
-	var result: Dictionary = ScenarioLoader.from_data(data, "case")
-	assert_true(result["ok"], str(result["error"]))
-	var props: Array = result["props"]
-	assert_eq(props.size(), 17, "the hand-placed buoy and the ring's sixteen")
-	var expected: Array[UniversePos] = BuoyRing.positions(UniversePos.new(0.0, 0.0, 2.0e7), 2.0e7, 16, Vector3.UP, Vector3.FORWARD)
-	var names: PackedStringArray = BuoyRing.names(16)
-	for i: int in 16:
-		var entry: Dictionary = props[i + 1]
-		assert_eq(entry["type"], &"nav_buoy")
-		assert_eq(entry["name"], names[i])
-		assert_almost_eq((entry["position"] as UniversePos).distance_to(expected[i]), 0.0, 1e-6)
-		assert_eq(entry["velocity"], Vector3.ZERO)
-	assert_eq(props[1]["name"], "NAV ALPHA")
-	assert_almost_eq((props[1]["position"] as UniversePos).z, 0.0, 1e-6, "NAV ALPHA at the scenario origin")
-
-
-func test_a_ring_takes_a_name_prefix() -> void:
-	var data: Dictionary = _minimal()
-	data["buoy_rings"] = [_ring({"count": 3, "prefix": "RELAY "})]
-	var result: Dictionary = ScenarioLoader.from_data(data, "case")
-	assert_true(result["ok"], str(result["error"]))
-	assert_eq(result["props"][2]["name"], "RELAY CHARLIE")
-
-
-func test_buoy_ring_errors_name_the_json_path() -> void:
-	var data: Dictionary = _minimal()
-	data["buoy_rings"] = {}
-	_assert_fails(data, "case: buoy_rings must be an array")
-	data["buoy_rings"] = [_ring({"centre": [0, 0]})]
-	_assert_fails(data, "case: buoy_rings[0].centre must be [x, y, z]")
-	data["buoy_rings"] = [_ring({"radius_m": -5})]
-	_assert_fails(data, "case: buoy_rings[0]: radius")
-	data["buoy_rings"] = [_ring({"count": 1})]
-	_assert_fails(data, "case: buoy_rings[0]: count")
-	data["buoy_rings"] = [_ring({"normal": [0, 0, 0]})]
-	_assert_fails(data, "case: buoy_rings[0]: normal")
-	data["buoy_rings"] = [_ring({"prefix": 3})]
-	_assert_fails(data, "case: buoy_rings[0].prefix must be a string")
-	data = _minimal([_buoy("NAV ALPHA")])
-	data["buoy_rings"] = [_ring()]
-	_assert_fails(data, "duplicate name 'NAV ALPHA'")
+# --- the start velocity and closing lines (M5-T10) ---------------------------------------------------------------------
 
 
 func test_the_player_may_start_moving() -> void:
@@ -641,73 +588,89 @@ func test_closing_lines_pass_through_and_are_checked() -> void:
 	_assert_fails(data, "case: mission.closing_lines.failure must be a line id")
 
 
-func test_the_buoy_defence_file_validates() -> void:
-	var result: Dictionary = ScenarioLoader.load("res://data/scenarios/buoy_defence.json")
+func test_the_civilian_escort_file_validates() -> void:
+	var result: Dictionary = ScenarioLoader.load("res://data/scenarios/civilian_escort.json")
 	assert_true(result["ok"], str(result["error"]))
 	var props: Array = result["props"]
-	assert_eq(props.size(), 16, "the ring of sixteen, nothing hand-placed")
+	assert_eq(props.size(), 2)
 	assert_eq(props[0]["name"], "NAV ALPHA")
-	var centre := UniversePos.new(0.0, 0.0, 2.0e7)
-	for entry: Dictionary in props:
-		assert_almost_eq((entry["position"] as UniversePos).distance_to(centre), 2.0e7, 1.0, "%s on the ring" % entry["name"])
-	assert_eq_deep(result["pools"], {&"raider_fighter": 7, &"starfury_ally": 3})
-	assert_eq((result["wings"] as Array).size(), 1)
-	assert_eq(result["wings"][0]["leader"], "player")
-	assert_eq((result["spawns"] as Array).size(), 3, "ALPHA 2, 3 and 4")
+	assert_almost_eq((props[0]["position"] as UniversePos).distance_to(props[1]["position"]), 30000.0, 1.0, "30 km apart (Q40)")
+	assert_eq_deep(result["pools"], {&"raider_fighter": 13, &"starfury_ally": 1, &"random_civilian": 1})
+	assert_eq((result["belts"] as Array).size(), 1, "the belt across the route")
+	assert_eq((result["civilian_names"] as Dictionary).size(), ShipCatalog.CIVILIAN_TYPES.size(), "names for all nine hulls")
 	var mission: Dictionary = result["mission"]
-	assert_eq(mission["title"], "Buoy defence")
-	assert_eq(mission["script"], "res://data/missions/buoy_defence.gd")
-	assert_eq(mission["dialog"], "res://data/dialog/buoy_defence.json")
+	assert_eq(mission["script"], "res://data/missions/civilian_escort.gd")
 	var ids: Array = []
 	for objective: Dictionary in mission["objectives"]:
 		ids.append(objective["id"])
-	assert_eq(ids, ["protect", "raiders", "home"])
-	assert_true((result["cinematics"] as Dictionary).has("relay"))
-	assert_true((result["cinematics"] as Dictionary).has("wing"))
+	assert_eq(ids, ["escort", "home"])
 
 
-func _belt(overrides: Dictionary = {}) -> Dictionary:
-	var belt: Dictionary = {"centre": [0, 0, -5000], "size": [2000, 500, 1000], "count": 20, "radius_m": [10, 50], "seed": 7,
-			"min_gap_m": 100}
-	belt.merge(overrides, true)
-	return belt
-
-
-func test_asteroid_belts_parse_into_layout_input() -> void:
-	var data: Dictionary = _minimal()
-	assert_eq((ScenarioLoader.from_data(data, "case")["belts"] as Array).size(), 0, "none by default")
-	data["asteroid_belts"] = [_belt()]
-	var result: Dictionary = ScenarioLoader.from_data(data, "case")
-	assert_true(result["ok"], str(result["error"]))
+func test_the_escort_belt_leaves_the_route_and_its_middle_point_clear() -> void:
+	var result: Dictionary = ScenarioLoader.load("res://data/scenarios/civilian_escort.json")
 	var belt: Dictionary = result["belts"][0]
-	assert_true(belt["centre"] is UniversePos)
-	assert_eq(belt["size"], Vector3(2000.0, 500.0, 1000.0))
-	assert_eq(belt["count"], 20)
-	assert_eq(belt["radius_m"], Vector2(10.0, 50.0))
-	assert_eq(belt["seed"], 7)
-	assert_eq(belt["min_gap_m"], 100.0)
-
-
-func test_asteroid_belt_errors_name_the_json_path() -> void:
-	var data: Dictionary = _minimal()
-	data["asteroid_belts"] = {}
-	_assert_fails(data, "case: asteroid_belts must be an array")
-	data["asteroid_belts"] = [_belt({"centre": [0, 0]})]
-	_assert_fails(data, "case: asteroid_belts[0]: centre")
-	data["asteroid_belts"] = [_belt({"size": [100, 0, 100]})]
-	_assert_fails(data, "case: asteroid_belts[0]: size")
-	data["asteroid_belts"] = [_belt({"count": 2.5})]
-	_assert_fails(data, "case: asteroid_belts[0]: count")
-	data["asteroid_belts"] = [_belt({"radius_m": [50, 10]})]
-	_assert_fails(data, "case: asteroid_belts[0]: radius_m")
-	data["asteroid_belts"] = [_belt({"min_gap_m": -1})]
-	_assert_fails(data, "case: asteroid_belts[0]: min_gap_m")
-
-
-func test_the_belt_showcase_file_validates() -> void:
-	var result: Dictionary = ScenarioLoader.load("res://data/scenarios/belt_showcase.json")
-	assert_true(result["ok"], str(result["error"]))
-	var belt: Dictionary = result["belts"][0]
-	assert_eq(belt["size"], Vector3(24000.0, 3000.0, 8000.0), "the escort's belt: 24 km across, 3 km high, 8 km deep (D63)")
 	var layout: BeltLayout = BeltLayout.place(belt, 16)
-	assert_eq(layout.shortfall, 0, "every rock fits")
+	assert_eq(layout.rocks.size(), 400, "all 400 rocks fit")
+	var middle: float = INF
+	var line: float = INF
+	for rock: Dictionary in layout.rocks:
+		var o: Vector3 = rock["offset"]
+		middle = minf(middle, o.length() - float(rock["radius"]))
+		line = minf(line, Vector2(o.x, o.y).length() - float(rock["radius"]))
+	# A skip places the civilian at the 50 % point, the belt's centre; a Saturn 8 (about 100 m round) passes the straight line.
+	assert_gt(middle, 500.0, "no rock within 500 m of the 50 % point")
+	assert_gt(line, 200.0, "the straight route clears every rock by 200 m")
+
+
+# --- the random civilian (M5-T30, D62) ------------------------------------------------------------------------------------
+
+
+func _escort(seed_value: int) -> Dictionary:
+	var result: Dictionary = ScenarioLoader.load("res://data/scenarios/civilian_escort.json")
+	ScenarioLoader.resolve_random_civilian(result, seed_value)
+	return result
+
+
+func test_the_seed_draws_every_civilian_hull_and_only_that_hull_is_pooled() -> void:
+	var seen: Dictionary = {}
+	for seed_value: int in 200:
+		var result: Dictionary = _escort(seed_value)
+		var pools: Dictionary = result["pools"]
+		assert_false(pools.has(ScenarioLoader.RANDOM_CIVILIAN), "resolved before the pools are built")
+		var spawn: Dictionary = result["spawns"][0]
+		assert_true(ShipCatalog.is_civilian(spawn["type"]))
+		assert_eq(int(pools.get(spawn["type"], 0)), 1, "only the drawn hull is pooled")
+		var hulls: int = 0
+		for type: StringName in pools:
+			hulls += 1 if ShipCatalog.is_civilian(type) else 0
+		assert_eq(hulls, 1)
+		seen[spawn["type"]] = true
+		if spawn["type"] == &"brakiri_bokmai":
+			assert_between(int(spawn["cargo_pods"]), 1, 3, "a Bokmai flies 1 to 3 pods")
+	assert_eq(seen.size(), ShipCatalog.CIVILIAN_TYPES.size(), "all nine hulls come up")
+
+
+func test_a_retry_with_the_same_seed_flies_the_same_ship() -> void:
+	var a: Dictionary = _escort(77)
+	var b: Dictionary = _escort(77)
+	assert_eq(a["spawns"][0]["type"], b["spawns"][0]["type"])
+	assert_eq(a["spawns"][0]["name"], b["spawns"][0]["name"])
+
+
+func test_the_drawn_name_fills_the_placeholder_everywhere() -> void:
+	var result: Dictionary = _escort(5)
+	var ship_name: String = result["spawns"][0]["name"]
+	assert_false(ship_name.contains("{"), ship_name)
+	assert_has(result["civilian_names"][result["spawns"][0]["type"]], ship_name, "from its hull's list")
+	assert_eq(result["placeholders"], {ScenarioLoader.CIVILIAN_PLACEHOLDER: ship_name})
+	var text: String = JSON.stringify(result["mission"]) + JSON.stringify(result["cinematics"])
+	assert_false(text.contains(ScenarioLoader.CIVILIAN_PLACEHOLDER), "no placeholder left")
+	assert_true(text.contains(ship_name))
+
+
+func test_civilian_names_are_checked() -> void:
+	var data: Dictionary = _minimal()
+	data["civilian_names"] = {"raider_fighter": ["X"]}
+	_assert_fails(data, "case: civilian_names.raider_fighter is not a civilian hull")
+	data["civilian_names"] = {"skylark_transport": []}
+	_assert_fails(data, "case: civilian_names.skylark_transport must be a non-empty list of names")

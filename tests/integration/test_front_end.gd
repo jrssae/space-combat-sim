@@ -194,7 +194,10 @@ func test_choosing_a_mission_starts_it() -> void:
 	await _pad(&"ui_accept")
 	await _pad(&"ui_down")
 	await _pad(&"ui_accept")
-	assert_eq(game.played, [GameFlow.make_request(&"mission", &"mission_second")] as Array[Dictionary])
+	assert_eq(game.played.size(), 1)
+	assert_eq(game.played[0]["scenario_id"], &"mission_second")
+	assert_eq(game.played[0]["kind"], &"mission")
+	assert_gt(int(game.played[0]["seed"]), 0, "a fresh seed per start (M5-T30: the civilian varies)")
 
 
 func test_with_no_missions_the_page_says_so_and_can_be_left() -> void:

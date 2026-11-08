@@ -154,6 +154,16 @@ func add_lines(data: Variant, source: String) -> String:
 	return ""
 
 
+## Fills placeholders in every line's text (`ScenarioLoader.CIVILIAN_PLACEHOLDER` -> the drawn civilian's name, M5-T30), so
+## one dialog file serves whichever ship the seed drew.
+func fill(placeholders: Dictionary) -> void:
+	if placeholders.is_empty():
+		return
+	for id: StringName in _lines:
+		var l: Line = _lines[id]
+		l.text = String(ScenarioLoader.fill_placeholders(l.text, placeholders))
+
+
 func has_line(id: StringName) -> bool:
 	return _lines.has(id)
 

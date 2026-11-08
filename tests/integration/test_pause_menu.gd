@@ -288,7 +288,7 @@ func test_a_missions_objectives_fill_the_right_panel() -> void:
 			{"id": &"spare", "text": "Save the wing", "primary": false, "state": &"failed"},
 			{"id": &"twist", "text": "Not yet", "primary": true, "state": &"hidden"},
 		]
-	game.flow.request = GameFlow.make_request(&"mission", &"buoy_defence")
+	game.flow.request = GameFlow.make_request(&"mission", &"civilian_escort")
 	await _open()
 	assert_eq(_menu().frame().objectives_panel().shown_lines(), PackedStringArray([
 		"[ ] Defend the buoy", "[x] Clear the raiders", "[!] Save the wing (optional)"]), "hidden ones are not shown")

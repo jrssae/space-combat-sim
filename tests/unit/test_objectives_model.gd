@@ -66,7 +66,7 @@ func test_an_unknown_state_is_not_shown() -> void:
 func test_with_objectives_the_panel_lists_them() -> void:
 	var content: Dictionary = ObjectivesModel.content(
 			_objectives([_objective(&"defend", "Defend the buoy", &"active")]),
-			GameFlow.make_request(&"mission", &"buoy_defence"))
+			GameFlow.make_request(&"mission", &"civilian_escort"))
 	assert_eq(content["title"], "OBJECTIVES")
 	assert_eq(content["lines"].size(), 1)
 	assert_eq(content["lines"][0]["text"], "Defend the buoy")
@@ -89,8 +89,8 @@ func test_a_sandbox_names_the_scenario() -> void:
 
 func test_a_mission_with_nothing_to_show_yet_says_so() -> void:
 	var content: Dictionary = ObjectivesModel.content(
-			_objectives([_objective(&"later", "Later", &"hidden")]), GameFlow.make_request(&"mission", &"buoy_defence"))
-	assert_eq(content["lines"][0]["text"], "Mission: Buoy Defence")
+			_objectives([_objective(&"later", "Later", &"hidden")]), GameFlow.make_request(&"mission", &"civilian_escort"))
+	assert_eq(content["lines"][0]["text"], "Mission: Civilian Escort")
 	assert_eq(content["lines"].size(), 1)
 
 
@@ -100,9 +100,9 @@ func test_with_no_request_and_no_objectives_the_panel_is_empty() -> void:
 
 
 func test_a_briefing_is_a_titled_paragraph() -> void:
-	var content: Dictionary = ObjectivesModel.briefing("Buoy defence", "Raiders are coming.\nHold the line.")
+	var content: Dictionary = ObjectivesModel.briefing("Civilian escort", "Raiders are coming.\nHold the line.")
 	assert_eq(content["title"], "BRIEFING")
-	assert_eq(content["lines"][0]["text"], "Buoy defence")
+	assert_eq(content["lines"][0]["text"], "Civilian escort")
 	assert_eq(content["lines"][1]["text"], "Raiders are coming.")
 	assert_eq(content["lines"][2]["text"], "Hold the line.")
 	for line: Dictionary in content["lines"]:

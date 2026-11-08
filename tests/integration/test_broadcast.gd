@@ -67,7 +67,7 @@ func _candidate_names() -> PackedStringArray:
 
 func test_buoys_and_allies_broadcast_and_raiders_do_not() -> void:
 	assert_eq(_buoy("NAV ALPHA").targetable.broadcast_range_m, NavBuoy.BROADCAST_RANGE_M)
-	assert_eq(NavBuoy.BROADCAST_RANGE_M, 1.0e7, "10 000 km (M5 Q21; M3 had 1 000 km)")
+	assert_eq(NavBuoy.BROADCAST_RANGE_M, 1.0e6, "1 000 km (M3 Q21; back from M5-T10's 10 000 km, Q41)")
 	assert_eq(ShipPool.ALLY_BROADCAST_RANGE_M, 1.0e5, "100 km")
 	var ally: Combatant = _ally("ALPHA 7", Vector3(0.0, 0.0, -1000.0))
 	var raider: Combatant = _raider("RAIDER 9", Vector3(0.0, 0.0, -1000.0))

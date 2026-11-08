@@ -339,7 +339,7 @@ func _demote_ship(sim: SimCore, c: Combatant) -> bool:
 	var ship: Ship = c.ship
 	if not is_instance_valid(ship) or not ship.is_inside_tree() or not ship.can_process() or not ship.visible:
 		return false
-	if _waits_for_host(c):
+	if ship.tier_exempt or _waits_for_host(c):
 		return false
 	var type_ix: int = type_of(sim.core, ship.spec, ship.get_layout())
 	if type_ix < 0:

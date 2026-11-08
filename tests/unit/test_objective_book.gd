@@ -15,7 +15,7 @@ func before_each() -> void:
 	world.set_actor("RAIDER 1", UniversePos.new(0.0, 0.0, -6000.0))
 
 
-func _declare_buoy_defence() -> void:
+func _declare_objectives() -> void:
 	var error: String = book.declare([
 		{"id": "protect", "text": "Protect NAV ALPHA", "primary": true,
 				"fail": {"kind": "destroyed", "name": "NAV ALPHA"}},
@@ -27,7 +27,7 @@ func _declare_buoy_defence() -> void:
 
 
 func test_declared_objectives_start_hidden_unless_marked_active() -> void:
-	_declare_buoy_defence()
+	_declare_objectives()
 	assert_eq(book.state_of(&"protect"), ObjectiveBook.HIDDEN)
 	assert_eq(book.state_of(&"raiders"), ObjectiveBook.HIDDEN)
 	assert_eq(book.state_of(&"home"), ObjectiveBook.ACTIVE)
@@ -35,7 +35,7 @@ func test_declared_objectives_start_hidden_unless_marked_active() -> void:
 
 
 func test_snapshot_lists_every_objective_in_order() -> void:
-	_declare_buoy_defence()
+	_declare_objectives()
 	book.activate(&"protect", world)
 	var snap: Array[Dictionary] = book.snapshot()
 	assert_eq(snap.size(), 3)
@@ -45,7 +45,7 @@ func test_snapshot_lists_every_objective_in_order() -> void:
 
 
 func test_success_trigger_completes_an_active_objective() -> void:
-	_declare_buoy_defence()
+	_declare_objectives()
 	book.activate(&"raiders", world)
 	assert_eq(book.evaluate(world), [] as Array[StringName])
 	world.set_alive("RAIDER 1", false)
@@ -55,7 +55,7 @@ func test_success_trigger_completes_an_active_objective() -> void:
 
 
 func test_fail_trigger_fails_an_active_objective() -> void:
-	_declare_buoy_defence()
+	_declare_objectives()
 	book.activate(&"protect", world)
 	world.set_alive("NAV ALPHA", false)
 	assert_eq(book.evaluate(world), [&"protect"] as Array[StringName])
@@ -91,14 +91,14 @@ func test_a_json_objective_declared_before_its_ships_spawn_waits_for_them() -> v
 
 
 func test_hidden_objectives_are_not_evaluated() -> void:
-	_declare_buoy_defence()
+	_declare_objectives()
 	world.set_alive("RAIDER 1", false)
 	assert_eq(book.evaluate(world), [] as Array[StringName])
 	assert_eq(book.state_of(&"raiders"), ObjectiveBook.HIDDEN)
 
 
 func test_script_can_complete_and_fail_and_finished_ones_stay_finished() -> void:
-	_declare_buoy_defence()
+	_declare_objectives()
 	assert_true(book.complete(&"home"))
 	assert_false(book.fail(&"home"), "done is final")
 	assert_string_contains(book.error, "already done")
@@ -109,7 +109,7 @@ func test_script_can_complete_and_fail_and_finished_ones_stay_finished() -> void
 
 
 func test_forced_success_makes_the_trigger_true_and_completes() -> void:
-	_declare_buoy_defence()
+	_declare_objectives()
 	book.activate(&"raiders", world)
 	assert_true(book.force_success(&"raiders", world))
 	assert_eq(book.state_of(&"raiders"), ObjectiveBook.DONE)
@@ -117,7 +117,7 @@ func test_forced_success_makes_the_trigger_true_and_completes() -> void:
 
 
 func test_forced_success_without_a_trigger_just_completes() -> void:
-	_declare_buoy_defence()
+	_declare_objectives()
 	assert_true(book.force_success(&"home", world))
 	assert_eq(book.state_of(&"home"), ObjectiveBook.DONE)
 
@@ -129,7 +129,7 @@ func test_an_objective_can_be_added_by_the_script() -> void:
 
 
 func test_result_rules_read_the_primaries() -> void:
-	_declare_buoy_defence()
+	_declare_objectives()
 	assert_false(book.all_primaries_done(), "nothing done yet")
 	book.complete(&"raiders")
 	assert_false(book.all_primaries_done())
@@ -139,7 +139,7 @@ func test_result_rules_read_the_primaries() -> void:
 
 
 func test_a_failed_optional_is_not_a_failed_mission() -> void:
-	_declare_buoy_defence()
+	_declare_objectives()
 	book.fail(&"home")
 	assert_eq(book.failed_primary(), &"")
 	book.fail(&"protect")
@@ -153,7 +153,7 @@ func test_a_book_without_primaries_is_never_all_done() -> void:
 
 
 func test_live_triggers_are_those_of_active_objectives() -> void:
-	_declare_buoy_defence()
+	_declare_objectives()
 	assert_eq(book.live_triggers().size(), 0)
 	book.activate(&"protect", world)
 	book.activate(&"raiders", world)
@@ -181,7 +181,7 @@ func test_declare_refuses_bad_entries() -> void:
 
 
 func test_describe_lines_mark_state_and_optional() -> void:
-	_declare_buoy_defence()
+	_declare_objectives()
 	book.complete(&"raiders")
 	var lines: PackedStringArray = book.describe_lines()
 	assert_eq(lines.size(), 3)
