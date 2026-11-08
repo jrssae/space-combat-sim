@@ -1126,6 +1126,16 @@ The full large-world design is §14.1.
 - Startup to flyable < 5 s after import (the first import of the generated meshes and maps takes longer; a one-time cost).
 - Many ships (M4): the tick budget for 100-500 ships (median ≤ 8 ms, p99 ≤ 12 ms headless at 60 Hz) and how it is
   measured are in `docs/milestones/m4-performance-and-scale.md`.
+- The entity budget (M4-T25, the editor build headless, the tier on at 10 km): the usual mission (`typical`, 50 fighters and
+  8 capitals with every weapon, 1 000 rocks and a moon) ticks in 1.9 ms; the grand battle (`battle`, 15 % capitals) holds the
+  budget to 400 ships (6.6 ms) and is at the line at 500 (7.7 to 8.1 ms); 1 000 ships tick in 10.5 ms (11.0 at 20 % capitals)
+  and keep real time. The tier carries the far share (580 of 850 fighters and 97 of 150 capitals at 1 000), so the cost grows
+  by about 5 us a ship past 500. The milestone's Report P3 has the tables.
+- The render bar (Q20, Q52): fullscreen at the panel's size with the 3D at 1 080 lines; at the headline battle the floor is
+  30 FPS and the target 60, and the bar the maintainer judges is 60 FPS at the screen with vsync on (H). Measured through
+  Wayland (M4-T25): the average holds 60 FPS to 1 000 ships (65 to 71 there), the 1 % low drops under 60 from about 500 and
+  stays over 30 everywhere, and the GPU draws a frame in under 1 ms at every count, so the main thread binds. Through Wayland
+  Godot paces frames to at most about 145 FPS (6.9 ms); through X11 `typical` runs at 314 FPS.
 
 ## 12. Testing strategy
 
