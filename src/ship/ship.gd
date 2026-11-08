@@ -138,11 +138,13 @@ var _hull_mesh: Mesh = null
 var _cockpit_hull: Mesh = null
 var _far_dot: bool = false
 var _applied_force: Vector3 = Vector3.ZERO
-# The flight batch (M4-T10): the batch this ship joined, its row and the physics frame of the last gather, whether the last
-# path flown was the batch's (the assist state follows a change of path), and the frame `_output` was last filled from a row.
+## The ship's slot in its flight batch's native step (-1 for none); the batch sets it (M5-T31).
+var batch_slot: int = -1
+# The flight batch (M4-T10): the batch this ship joined, the physics frame its last batch row went stale in (this node flew
+# itself, or it was teleported), whether the last path flown was the batch's (the assist state follows a change of path), and
+# the batch tick `_output` was last filled from.
 var _batch: FlightBatch = null
-var _batch_row: int = -1
-var _batch_tick: int = -1
+var _stale_tick: int = -1
 var _native_last: bool = false
 var _output_tick: int = -1
 # The physics frame the batch applied this ship's forces in (so this node never applies them again that tick), and the frame
@@ -245,7 +247,7 @@ func _physics_process(delta: float) -> void:
 		if _model != null and _batch != null:
 			_model.assist.pod_yaw_smoothed = _batch.assist_state(self)
 		_native_last = false
-	_batch_tick = -1  # this node's model flies this tick, so the batch's row is no longer the latest
+	_stale_tick = frame  # this node's model flies this tick, so the batch's row is no longer the latest
 	if _row_command:
 		pull_row_command()
 	var b: Basis = global_basis
@@ -301,6 +303,10 @@ func set_flight_command(cmd: FlightCommand) -> void:
 ## right after handing the ship that pilot's first command.
 func use_row_command() -> void:
 	_row_command = true
+	if _batch != null and is_instance_valid(_batch):
+		_batch.set_row_flight(self, true)
+		if _combat_fresh or _flight_fresh:
+			_batch.mark_gather(self)  # the hand-over's commands land through one gather
 
 
 ## Whether the ship flies its command from the core's row.
@@ -312,6 +318,8 @@ func is_row_commanded() -> bool:
 ## so the hand-over does not release that row (a ship whose flag outlived its row, under a core made again).
 func forget_row_command() -> void:
 	_row_command = false
+	if _batch != null and is_instance_valid(_batch):
+		_batch.set_row_flight(self, false)
 
 
 ## The flight command the ship holds (what its own model flies, and what the batch gathers).
@@ -324,6 +332,8 @@ func release_row_command() -> void:
 	if not _row_command:
 		return
 	_row_command = false
+	if _batch != null and is_instance_valid(_batch):
+		_batch.set_row_flight(self, false)
 	var sim: SimCore = SimCore.current()
 	if sim != null and sim.core != null:
 		sim.core.release_command(get_instance_id())
@@ -351,6 +361,8 @@ func pull_row_command() -> void:
 func set_combat_command(cmd: CombatCommand) -> void:
 	_combat = cmd if cmd != null else CombatCommand.new()
 	_combat_fresh = true
+	if _row_command and _batch != null and is_instance_valid(_batch):
+		_batch.mark_gather(self)  # its edges land in a gather
 
 
 ## The combat command of the current tick, edges cleared once they have been seen. Weapons (M1-T13) read it in their
@@ -372,6 +384,7 @@ func set_assist(on: bool) -> void:
 		_model.reset_assist()
 	if _batch != null:
 		_batch.reset_assist(self)
+		_batch.flags_changed(self)
 	assist_toggled.emit(on)
 
 
@@ -387,7 +400,7 @@ func reset_to(xform: Transform3D) -> void:
 		_output = _idle_output()
 	if _batch != null:
 		_batch.reset_assist(self)
-	_batch_tick = -1
+	_stale_tick = Engine.get_physics_frames()
 	_output_tick = -1
 	reset_physics_interpolation()
 
@@ -411,7 +424,7 @@ func unpark_from_tier(xform: Transform3D, velocity: Vector3, spin: Vector3, pod_
 	linear_velocity = velocity
 	angular_velocity = spin
 	set_assist_state(pod_yaw)
-	_batch_tick = -1
+	_stale_tick = Engine.get_physics_frames()
 	_output_tick = -1
 	reset_physics_interpolation()
 
@@ -443,6 +456,8 @@ func set_hulk(on: bool) -> void:
 	hulk = on
 	if on:
 		set_flight_command(FlightCommand.new())
+	if _batch != null and is_instance_valid(_batch):
+		_batch.flags_changed(self)
 
 
 ## Switches the running lights.
@@ -479,7 +494,7 @@ func body_angular_velocity() -> Vector3:
 ## came from a contact.
 func applied_force() -> Vector3:
 	if _in_batch_row():
-		return _batch.out_vectors[_batch_row * FlightBatch.OUT_VECTORS + FlightBatch.Out.FORCE]
+		return _batch.out_vectors[_batch.row_of(batch_slot) * FlightBatch.OUT_VECTORS + FlightBatch.Out.FORCE]
 	return _applied_force
 
 
@@ -504,8 +519,6 @@ func batch_gather(batch: FlightBatch, row: int, frame: int, delta: float, fuel_u
 			batch.set_assist_state(self, _model.assist.pod_yaw_smoothed)
 		_native_last = true
 	_batch = batch
-	_batch_row = row
-	_batch_tick = frame
 	_flown_tick = frame
 	_output_tick = -1
 
@@ -523,9 +536,33 @@ func is_batch_owned() -> bool:
 	return _batch_owned
 
 
-## The batch draws this tick's reaction mass for a batched ship (only when the tank is finite).
-func batch_draw_fuel(flow_kg_s: float, delta: float) -> void:
+## The batch draws this tick's reaction mass for a batched ship (only when the tank is finite). True when the tank ran dry
+## or was refilled by it (the row flight's propellant flag follows).
+func batch_draw_fuel(flow_kg_s: float, delta: float) -> bool:
+	var was_empty: bool = _fuel.is_empty()
+	_fuel.unlimited = false
 	_fuel.draw(flow_kg_s, delta)
+	return _fuel.is_empty() != was_empty
+
+
+## The assist flag the batch flies a row ship with: the assist on and not a hulk (M5-T31).
+func batch_assist_flag() -> bool:
+	return _assist_on and not hulk
+
+
+## Whether the tank holds reaction mass (M5-T31).
+func batch_has_propellant() -> bool:
+	return not _fuel.is_empty()
+
+
+## The batch flies this ship from its row from now on (M5-T31): it owns the ship's tick and carries the assist state on.
+func batch_row_flight_started(batch: FlightBatch) -> void:
+	_batch = batch
+	if not _native_last:
+		if _model != null:
+			batch.set_assist_state(self, _model.assist.pod_yaw_smoothed)
+		_native_last = true
+	set_batch_owned(true)
 
 
 ## The reaction-mass tank, with `unlimited` brought in line with `settings.fuel_unlimited` as of now. Never null.
@@ -537,9 +574,9 @@ func get_fuel_tank() -> FuelTank:
 ## What the flight model produced on the last physics tick (all zero before the first one). Never null. On the batched
 ## path it is filled from the batch's row when first asked after a tick.
 func get_flight_output() -> FlightOutput:
-	if _output_tick != _batch_tick and _in_batch_row():
+	if _in_batch_row() and _output_tick != _batch.tick:
 		_fill_output_from_batch()
-		_output_tick = _batch_tick
+		_output_tick = _batch.tick
 	return _output
 
 
@@ -1003,7 +1040,7 @@ func _prepare_command(delta: float, to_body: Basis) -> void:
 
 # Whether the batch's outputs hold a row for this ship from its latest step.
 func _in_batch_row() -> bool:
-	return _batch != null and _batch_tick >= 0 and _batch_tick == _batch.tick
+	return _batch != null and _batch.tick >= 0 and _stale_tick != _batch.tick and _batch.row_of(batch_slot) >= 0
 
 
 # Joins the world's batch when this ship can fly in it, re-registering a rebuilt ship; otherwise (or on another world) leaves.
@@ -1027,15 +1064,16 @@ func _leave_batch() -> void:
 			_model.assist.pod_yaw_smoothed = _batch.assist_state(self)
 		_batch.leave(self)
 	_native_last = false
-	_batch_tick = -1
+	_stale_tick = -1
 	_batch = null
 
 
 # `_output` from the batch's row: the levels per group and per pod, the RCS shares, the body-frame forces and torques, the
 # flags and the flow. The per-nozzle list stays empty: nothing reads it for a batched ship.
 func _fill_output_from_batch() -> void:
-	var v: int = _batch_row * FlightBatch.OUT_VECTORS
-	var s: int = _batch_row * FlightBatch.OUT_SCALARS
+	var row: int = _batch.row_of(batch_slot)
+	var v: int = row * FlightBatch.OUT_VECTORS
+	var s: int = row * FlightBatch.OUT_SCALARS
 	var ov: PackedVector3Array = _batch.out_vectors
 	var os: PackedFloat64Array = _batch.out_scalars
 	var out: FlightOutput = _output

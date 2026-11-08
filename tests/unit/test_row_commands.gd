@@ -119,6 +119,23 @@ func test_a_command_set_from_gdscript_takes_over_from_the_row() -> void:
 	assert_true(c.ship.get_flight_output().braking, "with the GDScript command's brake")
 
 
+func test_ships_flying_from_their_rows_are_not_gathered() -> void:
+	var fight: Dictionary = await _small_fight()
+	var sim: SimCore = fight["sim"]
+	var row_ships: Array[Combatant] = []
+	for ship: Combatant in fight["ships"]:
+		if ship.ship.is_row_commanded() and not sim.core.row_command(ship.ship.get_instance_id()).is_empty():
+			row_ships.append(ship)
+	assert_gt(row_ships.size(), SHIPS / 4, "many ships fly from their rows")
+	await get_tree().physics_frame
+	var batch: FlightBatch = row_ships[0].ship.get_parent().get_node("FlightBatch") as FlightBatch
+	assert_lte(batch.gathered_count, batch.stepped_count() - row_ships.size() / 2,
+			"the row ships fly without a GDScript gather (M5-T31; a few take fresh commands through one)")
+	for c: Combatant in row_ships:
+		assert_true(batch.stepped(c.ship), "%s flown" % c.display_name)
+		assert_eq(c.ship.flight_path(), &"native")
+
+
 # A space of its own with a world and its projectiles.
 func _space() -> SubViewport:
 	var space := SubViewport.new()

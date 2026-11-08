@@ -4371,3 +4371,12 @@ part of the ship's velocity along the rock's outward normal at the contact point
 before, a glancing scrape costs its slow closing speed, and Jolt still deflects the ship. Ship-to-ship rams keep the momentum split
 of their full relative speed.
 
+### 18.17 Row flight: the flight batch without a gather for native pilots (T31, L1)
+
+A ship whose native pilot commands it from the core's row (M4-T33) is no longer gathered in GDScript. `ScsFlightStep` keeps
+each slot's body id, a row-mode flag and the assist and propellant flags (set on change), and `step_core` flies every row-mode
+slot that has a live command and an active row straight from the core: the pose from the row, `face_dir_b` from the selection
+column (only while braking), gravity from the core's sources. GDScript gathers the other ships, a row ship once when it takes
+fresh combat commands, and any row ship whose command the core lost. Outputs are read by slot (`FlightBatch.row_of`). At
+`battle` 1000 the flight stage fell from 3.89 to 2.45 ms.
+

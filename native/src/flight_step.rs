@@ -12,6 +12,7 @@ use crate::kernels::flight::{self, Applied, Body, Cmd, Spec};
 use crate::rows::FLAG_RIGID;
 use crate::sim_core::ScsSimCore;
 use crate::threads::{self, Pass, Threads};
+use crate::v3::{sub, xform_inv};
 
 /// Per ship per tick: `main_right, main_left, retro_right, retro_left` (the nozzle groups' order).
 pub const CMD_SCALARS: usize = 4;
@@ -36,6 +37,12 @@ struct Slot {
     rid: Rid,
     body: Body,
     pod_yaw_smoothed: f64,
+    // Row flight (M5-T31): a ship whose native pilot commands it from the core's row flies with no GDScript gather; its
+    // body, and the assist and propellant flags GDScript sets when they change.
+    body_id: i64,
+    row_mode: bool,
+    assist_on: bool,
+    has_propellant: bool,
 }
 
 // One ship of a step: read on the main thread, flown by the kernel on a worker, applied on the main thread (M4-T18).
@@ -103,6 +110,11 @@ pub struct ScsFlightStep {
     listed: Vec<bool>,
     // Ships the last `step_core` read from the physics server because the core had no row for them (M4-T15).
     fallback_reads: i64,
+    // The slot of each output row of the last step, and the output row of each slot (-1: not flown), M5-T31.
+    out_slots: Vec<i32>,
+    slot_rows: Vec<i32>,
+    // Row-flown ships this step: their body ids, beside the gathered ones (scratch kept between ticks).
+    row_bodies: Vec<i64>,
 }
 
 #[godot_api]
@@ -145,6 +157,10 @@ impl ScsFlightStep {
             rid,
             body,
             pod_yaw_smoothed: 0.0,
+            body_id: 0,
+            row_mode: false,
+            assist_on: true,
+            has_propellant: true,
         };
         if let Some(free) = self.slots.iter().position(Option::is_none) {
             self.slots[free] = Some(slot);
@@ -184,6 +200,49 @@ impl ScsFlightStep {
         if let Some(s) = self.slot_mut(slot) {
             s.pod_yaw_smoothed = value;
         }
+    }
+
+    /// Row flight (M5-T31): with `on`, the ship of `slot` (body `body_id`) flies its native pilot's row command with no
+    /// gathered command whenever the core has that command and a row for the body; `assist_on` (the assist and not a
+    /// hulk) and `has_propellant` stand in for the gathered flags until set again. Off, it is flown only when gathered.
+    #[func]
+    fn set_row_flight(&mut self, slot: i64, body_id: i64, on: bool, assist_on: bool, has_propellant: bool) {
+        if let Some(s) = self.slot_mut(slot) {
+            s.body_id = body_id;
+            s.row_mode = on;
+            s.assist_on = assist_on;
+            s.has_propellant = has_propellant;
+        }
+    }
+
+    /// The row-flight slots the core holds no command for (a flag that outlived its row): the batch gathers these as
+    /// it gathers any ship, so no ship goes unflown.
+    #[func]
+    fn row_strays(&self, core: Gd<ScsSimCore>) -> PackedInt32Array {
+        let c = core.bind();
+        let mut out = PackedInt32Array::new();
+        for (i, s) in self.slots.iter().enumerate() {
+            if let Some(s) = s
+                && s.row_mode
+                && c.live_command(s.body_id).is_none()
+                && c.row_of_id(s.body_id) >= 0
+            {
+                out.push(i as i32);
+            }
+        }
+        out
+    }
+
+    /// The slot of each output row of the last step, in row order.
+    #[func]
+    fn out_slots(&self) -> PackedInt32Array {
+        PackedInt32Array::from(self.out_slots.as_slice())
+    }
+
+    /// The output row of each slot in the last step (-1 for a slot it did not fly).
+    #[func]
+    fn slot_rows(&self) -> PackedInt32Array {
+        PackedInt32Array::from(self.slot_rows.as_slice())
     }
 
     /// Clears the assist state, as `FlightModel.reset_assist` does on an assist toggle or a reset.
@@ -251,19 +310,23 @@ impl ScsFlightStep {
             c.note_fallback_read(self.fallback_reads);
         }
         // Each flown ship's acceleration from its own forces, as `Ship.applied_force() / ship.mass` gives it (M4-T35: the
-        // ram tracker's accel column, read natively).
+        // ram tracker's accel column, read natively). The gathered ships come first, then the row-flown ones.
         c.accels.clear();
         if ok {
-            for (i, item) in self.items[..body_ids.len()].iter().enumerate() {
+            let gathered = body_ids.len();
+            let total = gathered + self.row_bodies.len();
+            for (i, item) in self.items[..total].iter().enumerate() {
                 if let (Some(step), Some(slot)) =
                     (item.applied.as_ref(), self.slots[item.slot].as_ref())
                 {
                     let mass = slot.body.spec.mass as f32;
                     let f = step.out_vectors[0];
-                    c.accels.insert(
-                        body_ids.as_slice()[i],
-                        Vector3::new(f.x / mass, f.y / mass, f.z / mass),
-                    );
+                    let body = if i < gathered {
+                        body_ids.as_slice()[i]
+                    } else {
+                        self.row_bodies[i - gathered]
+                    };
+                    c.accels.insert(body, Vector3::new(f.x / mass, f.y / mass, f.z / mass));
                 }
             }
         }
@@ -404,6 +467,93 @@ impl ScsFlightStep {
                 item.apply = false;
             }
         }
+        // Row flight (M5-T31): every row-mode ship not gathered this tick, with a command in its row and a row in the core,
+        // flies that command from the core's tables alone: its selected target's line of sight (only while it brakes) and
+        // the core's gravity sources stand in for what the gather would have read.
+        self.row_bodies.clear();
+        let mut n = n;
+        if let Some((c, _)) = core {
+            self.listed.clear();
+            self.listed.resize(self.slots.len(), false);
+            for item in &self.items[..n] {
+                self.listed[item.slot] = true;
+            }
+            for slot_ix in 0..self.slots.len() {
+                let Some(slot) = self.slots[slot_ix].as_ref() else {
+                    continue;
+                };
+                if !slot.row_mode || self.listed[slot_ix] {
+                    continue;
+                }
+                let Some(rc) = c.live_command(slot.body_id) else {
+                    continue;
+                };
+                if c.row_of_id(slot.body_id) < 0 {
+                    continue; // not in play (parked): nothing to fly
+                }
+                if self.items.len() <= n {
+                    self.items.resize_with(n + 1, Item::default);
+                }
+                let item = &mut self.items[n];
+                item.slot = slot_ix;
+                let mut cmd = Cmd {
+                    levels: [0.0; flight::GROUPS],
+                    strafe: Vector3::ZERO,
+                    rot: Vector3::ZERO,
+                    track_dir_b: Vector3::ZERO,
+                    track_rate_b: Vector3::ZERO,
+                    face_dir_b: Vector3::ZERO,
+                    brake: false,
+                    autotrack: false,
+                };
+                rc.apply_to(&mut cmd);
+                item.assist_on = slot.assist_on;
+                item.has_propellant = slot.has_propellant;
+                item.applied = None;
+                item.pod_yaw = slot.pod_yaw_smoothed;
+                item.fly = true;
+                let kernel_row = usize::try_from(c.row_for_kernel(slot.body_id))
+                    .ok()
+                    .filter(|&r| c.rows.flags[r] & FLAG_RIGID != 0);
+                let position = if let Some(r) = kernel_row {
+                    item.basis = c.rows.bases[r];
+                    item.v_w = c.rows.velocities[r];
+                    item.w_w = c.rows.angular[r];
+                    item.apply = true;
+                    Some(c.rows.positions[r])
+                } else {
+                    // Touched since the sync (teleported, shown): read from the physics server as the gathered path does.
+                    self.fallback_reads += 1;
+                    match (slot.rid.is_valid())
+                        .then(|| server.body_get_direct_state(slot.rid))
+                        .flatten()
+                    {
+                        Some(body) => {
+                            let t = body.get_transform();
+                            item.basis = t.basis;
+                            item.v_w = body.get_linear_velocity();
+                            item.w_w = body.get_angular_velocity();
+                            item.apply = true;
+                            Some(t.origin)
+                        }
+                        None => {
+                            item.fly = false;
+                            None
+                        }
+                    }
+                };
+                item.env_w = position.map_or(Vector3::ZERO, |at| c.tier_gravity.accel(at));
+                if cmd.brake
+                    && let Some(at) = position
+                {
+                    cmd.face_dir_b = selected_offset(c, slot.body_id, at)
+                        .map_or(Vector3::ZERO, |off| xform_inv(&item.basis, off));
+                }
+                item.cmd = Some(cmd);
+                self.row_bodies.push(slot.body_id);
+                n += 1;
+            }
+        }
         // The kernel, across the core's worker threads: each ship reads its own slot's type and writes only its item. A
         // slot listed twice flies its entries one after the other on this thread, each reading the assist state the one
         // before left, as the step always did.
@@ -438,6 +588,13 @@ impl ScsFlightStep {
         }
         // On the main thread, in row order: the assist state back, and the one engine write of the tick outside the sync
         // points, the forces, in `Ship._physics_process`'s order.
+        self.out_slots.clear();
+        self.slot_rows.clear();
+        self.slot_rows.resize(self.slots.len(), -1);
+        for (row, item) in self.items[..n].iter().enumerate() {
+            self.out_slots.push(item.slot as i32);
+            self.slot_rows[item.slot] = row as i32;
+        }
         for item in &self.items[..n] {
             let Some(step) = item.applied.as_ref() else {
                 self.out_vectors.extend([Vector3::ZERO; OUT_VECTORS]);
@@ -486,6 +643,19 @@ impl ScsFlightStep {
             .and_then(|i| self.slots.get_mut(i))
             .and_then(Option::as_mut)
     }
+}
+
+// The line of sight from `at` to the target body `body_id` has selected, world frame (`TargetingController.selected_offset`
+// read from the core's rows: the selection column, then the target's row by marker id, tier rows included). None without a
+// selection or a row for it.
+fn selected_offset(c: &ScsSimCore, body_id: i64, at: Vector3) -> Option<Vector3> {
+    let own = usize::try_from(c.row_of_id(body_id)).ok()?;
+    let target = c.rows.target_ids[own];
+    if target <= 0 {
+        return None;
+    }
+    let row = usize::try_from(c.rows.row_of_id(target)).ok()?;
+    Some(sub(c.rows.positions[row], at))
 }
 
 /// A ship type and its nozzles from the arrays `ScsFlightStep.register` takes (the tier registers its types the same way,

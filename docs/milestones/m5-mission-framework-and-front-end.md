@@ -592,7 +592,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T25 | A | Targeting at scale: a target menu and other targeting UX for large battles (Q26; placed before T20; numbered last because it was added after the others had numbers) | T02, T07, the M4 rebase | Opus | UX judgement with a concept stop (H); reads M4's on-read candidate list | not started |
 | T29 | C | Generated asteroids and a sparse belt (D63, Q38): the `asteroids` generator, `BeltLayout`, `AsteroidBelt` as static rows | T27 | Opus | A new procgen asset and a placement seam M14 builds on | done |
 | T30 | B | Mission: Civilian escort with a cinematic intro (D62, Q36 to Q42), replacing Buoy defence and the ring | T29, T16, T17 | Opus | The random civilian, flee-and-resume in the native brains, three waves, writing and pacing | done |
-| T31 | - | L1: the flight batch's per-ship gather in native for row-commanded ships | T30 | Opus | The biggest measured lever (about 37 % of the tick at 1 000) | not started |
+| T31 | - | L1: the flight batch's per-ship gather in native for row-commanded ships | T30 | Opus | The biggest measured lever (about 37 % of the tick at 1 000) | done |
 | T32 | - | L2: the hit resolver gets only bolts with live hostile pairs from native; per-hit hash and readout costs | T31 | Opus | 1.41 ms at 1 000; native pair filtering | not started |
 | T33 | - | L3: the ram resolver's quick wins, then `RamTracker` in native | T32 | Opus | 1.20 ms at 1 000; string keys and full passes per tick | not started |
 | T34 | - | L5: the radar's dot buffers filled natively | T31 | Sonnet | Per-contact GDScript every frame | not started |
@@ -1843,6 +1843,23 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   The no-op `set_batch_owned` loop and the five `.slice()` copies go.
 - **Done when:** the flight stage at `battle 1000` drops (Report P3: 3.97 ms; estimate 1.5 to 2.5 ms saved), the flight
   parity fixtures hold, and the numbers are in the Done notes.
+- **Done (as built, 2026-11-08):**
+  - **Built:** row flight in `ScsFlightStep` (`native/src/flight_step.rs`): each slot keeps its body id, a row-mode flag and
+    the assist and propellant flags (`set_row_flight`, set on change). `step_core` flies every row-mode slot that was not
+    gathered, has a live row command and an active row, from the core alone: pose from the row (the physics server for a body
+    touched since the sync), `face_dir_b` from the selection column and the target's row only while braking, gravity from the
+    core's sources (`tier_gravity`). `row_strays` lists row ships whose row lost its command; `out_slots` and `slot_rows` map
+    outputs to slots. `FlightBatch` gathers only the ships without a row command (`_plain`), a row ship with fresh combat
+    commands (once, `mark_gather`) and the strays; ships read their outputs through `batch_slot` and `row_of`. The no-op
+    `set_batch_owned` loop is gone (owned on the first gather or when row flight starts) and `rows` became `stepped_count` /
+    `stepped_ships`. The command arrays are still sliced, now to the gathered ships only (none in a battle).
+  - **Measured** (`scripts/bench_quick.sh`, `battle` 1000, seed 1, idle machine): flight stage median 3.89 ms before, 2.45 ms
+    after (-1.44 ms); tick median 8.87 to 7.50 ms, p99 11.53 to 9.86 ms, so `battle 1000` now passes the 8 ms budget. In the
+    battle 850 ships fly, 0 gathered; the gather readout fell from about 1.5 ms to under 0.25 ms.
+  - **Tests:** `test_flight_parity_fight` (the recorded fixture) holds; new `test_ships_flying_from_their_rows_are_not_gathered`
+    (`test_row_commands`); `test_flight_batch` (updated for `stepped_count`), `test_ai_driver`, the brain and tier files,
+    `test_weapon_rows_battle`, `test_ai_think_time`, `test_engine_audio`, the ram files: 138 passing with `GUT_SLOW=1`. Rust
+    `cargo test` passes; `cargo clippy` flags two lints in `turret_kernels.rs` (not touched here; CI does not run clippy).
 
 ### M5-T32 L2: the hit resolver's bolt walk
 
