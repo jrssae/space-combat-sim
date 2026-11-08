@@ -308,8 +308,10 @@ func keep_impact(impact: ImpactFlash) -> void:
 ## A spare hit flash out of the pool (with no parent), or null when there is none.
 func take_impact() -> ImpactFlash:
 	while not _impact_pool.is_empty():
-		var impact: ImpactFlash = _impact_pool.pop_back()
-		if is_instance_valid(impact):
+		# Untyped first: a flash freed with an old scene must be skipped, and a typed assignment of it is an error.
+		var kept: Variant = _impact_pool.pop_back()
+		if is_instance_valid(kept):
+			var impact: ImpactFlash = kept as ImpactFlash
 			remove_child(impact)
 			return impact
 	return null
