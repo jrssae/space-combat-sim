@@ -6579,8 +6579,9 @@ directory), the debug editor build with the library loaded, default settings (no
 threaded step, six core threads, `smaa`, the upscaler `native` with the fullscreen check holding the 3D at 1 080 lines), on the
 maintainer's desktop (i5-13600KF, RX 6950 XT, RADV NAVI21, Forward+, GNOME on Wayland, two 3840x2160 panels at 60 Hz). Every
 number ran under the M5 and bench locks, the window runs under the GPU lock too; headless runs pinned to cores 0-11. The load at
-each run's start read 1.1 to 3.3 (the higher readings the previous run's process ending; seeds of one count agree within 6 %), and
-no other job ran: the locks serialised the sweep, the fullscreen, latency and release runs, and M5 took no run in the window.
+each run's start read 0.6 to 3.3 (the higher readings the previous run's process ending; seeds of one count agree within 6 %), and
+no other job ran: the locks serialised the sweep, the fullscreen, latency and release runs, and `bench.sh` found no other Godot
+process at any start.
 Reports are in `reports/perf/` (not committed): `m4_p3` (the sweep), `m4_p3_stretch` (`battle` 700 to 1 000, one count per call so
 the sweep's stop rule did not cut it), `m4_p3_cap20` (1 000 at 20 % capitals), `m4_p3_below` (450), `M4-T25_fs_<layout>_<n>_r<k>`
 (fullscreen), `M4-T25_win1080_*` (the 1 080-line window), `M4-T25_x11_*` (the same check through X11), `M4-T25_lat_*`,
@@ -6616,25 +6617,27 @@ median of three seeds at the same count.
 Every row: the game's own VRAM peak 580 to 581 MB, GPU 0.76 to 0.88 ms a frame, render CPU 0.32 to 0.46 ms, 94 to 130 draw calls.
 
 - **Where the frame crosses the lines.** The average stays over 60 FPS at every count to 1 000 (65.6 and 71.1 there). The 1 % low
-  crosses 60 between 300 and 500 (60.9 and 61.7 at 300, 59.2 and 63.6 at 500, 56.3 and 59.2 at 700) and never reaches the 30 FPS
-  floor (39.7 at the lowest, battle 900). The simulation never falls behind real time: sim speed 1.00 in every window, and headless
+  sits at about 60 from 200 to 600 (58.3 to 63.6), drops under it from 700 (56.3 and 59.2) and never reaches the 30 FPS floor (39.7
+  at the lowest, battle 900). The simulation never falls behind real time: sim speed 1.00 in every window, and headless
   the worst run is 0.05 % behind. So M4 ends with no cliff in the table: P2's ran from 103 FPS at 100 ships to 6 at 300 and half
   of real time at 500.
 - **The 145 FPS ceiling.** Up to 300 ships every window averages 143.9 to 144.7 FPS with a frame mean of 6.91 to 6.95 ms, while the
   median frame falls from 6.9 ms (typical, battle 50 and 100) to 5.0 ms (300): a pace, not a cost. 6.9 ms is Godot's
   `low_processor_usage_mode_sleep_usec` default (6 900 us), which the engine's frame delay paces to whenever low-processor mode is on
   or the display server says the window cannot draw; the game never sets low-processor mode. Godot also warns in every Wayland log
-  that vsync off is not available and falls back to on (`measure` reads vsync 1), yet the windows run past the panels' 60 Hz. The same check through X11 (`M4-T25_x11_*`, one run each; X11 makes the window 6144x3456 under GNOME's 1.25 scale) runs `typical` 58 at **314.0 FPS** (frame mean 3.18 ms, median 2.63, 1 % low 76.2) and `battle` 1 000 at 63.1 (1 % low 25.4): the ceiling is the Wayland path's, and where the game's frame is longer than 6.9 ms (700 ships and up) the two drivers agree.
-  So rows at 140 FPS and over read the ceiling, not the game, and the frame work W at those counts is not measurable here.
+  that vsync off is not available and falls back to on (`measure` reads vsync 1), yet the windows run past the panels' 60 Hz. The same check through X11
+  (`M4-T25_x11_*`, one run each; X11 makes the window 6144x3456 under GNOME's 1.25 scale) runs `typical` 58 at **314.0 FPS** (frame
+  mean 3.18 ms, median 2.63, 1 % low 76.2) and `battle` 1 000 at 63.1 (1 % low 25.4): the ceiling is the Wayland path's, and where
+  the game's frame is longer than 6.9 ms (700 ships and up) the two drivers agree. So rows at 140 FPS and over read the ceiling, not the game, and the frame work W at those counts is not measurable here.
 - **What binds at 1 000.** The frame of 14.1 to 15.3 ms carries 0.84 to 0.91 ticks of about 10.5 ms (the tick is the window's main
-  thread like headless; the AI step is on its worker), so about 9 to 10 ms of each frame is the simulation and 4.5 to 5.5 ms the
-  rest of the frame (the HUD and radar, the far proxies 0.2 ms, the draw submission 0.46 ms on the render CPU). The GPU does 0.87 ms.
+  thread like headless; the AI step is on its worker), so about 9 ms of each frame is the simulation and 5 to 6 ms the rest of
+  the frame (the HUD and radar, the far proxies 0.2 ms, the draw submission 0.46 ms on the render CPU). The GPU does 0.87 ms.
   The CPU main thread binds; the GPU is idle nine tenths of each frame.
 - **The 1 080-line window** (`M4-T25_win1080_*`, a windowed 1920x1080: `render.window 1920x1080`, the 3D at scale 1.00, one run each):
   `typical` 58 144.6 FPS (1 % low 78.5, p99 11.73 ms), `battle` 300 143.8 (61.8, 14.74), `battle` 500 136.9 (62.4, 14.23), GPU 0.71 to
   0.79 ms, game VRAM 318 MB. The 4K fullscreen rows at the same counts: 144.5 and 144.6, 144.0 and 143.9, 137.8 and 136.9. So the 4K
   window's own present and HUD cost nothing measurable (refactor review, open question 5); the window's size costs 263 MB of VRAM.
-- **At the headline** (`battle` 400 and 450 are the max N; AC6): 400 measured 142.8 and 143.6 FPS, 1 % low 60.2 and 60.6, p99 15.07 and
+- **At the headline** (AC6; the max N is 400 by the ladder and 450 by the below-sweep count, and 400 was measured): 142.8 and 143.6 FPS, 1 % low 60.2 and 60.6, p99 15.07 and
   15.08 ms, sim speed 1.00, GPU 0.76 to 0.77 ms, 105 draw calls, the game's VRAM 581 MB, through Wayland at 3840x2160; RADV NAVI21 on
   Forward+ (Vulkan 1.4.354).
 
@@ -6691,8 +6694,8 @@ the stop rule, 700 to 1 000 one count per call, 450 as a below-sweep count; `typ
 | transit | 400 | 3/3 | 6.56 (6.55, 6.56, 6.59) | 7.43 | 0.00 % | 7.55 |
 | transit | 500 | 0/3 | 8.04 (8.06, 8.03, 8.04) | 9.07 | 0.00 % | 8.70 |
 
-**The max N** (all three bars on two runs of three): **`battle` 400** (by the ladder; **450 by the below-sweep count**, 3 of 3 at 6.89, 7.14 and 7.11 ms, p99 8.96; 500 passes one run of three at
-7.73 ms and misses two at 8.12 and 8.10, so the line is at 500 within 1 %), furball 400 (500 fails: the Jolt step 2.97 ms and the
+**The max N** (all three bars on two runs of three): **`battle` 400** by the ladder and **450 by the below-sweep count** (3 of 3 at 6.89, 7.14 and 7.11 ms, p99 8.96; 500
+passes one run of three at 7.73 ms and misses two at 8.12 and 8.10, so the line is at 500 within 1 %), furball 400 (500 fails: the Jolt step 2.97 ms and the
 core's sync 1.97 ms jump in the 2 km ball and the p99 reaches 20 to 25 ms, 5 to 11 % behind real time), transit 400 (500 at 8.04 ms),
 spread and `typical` 500, the ladder's top. P2: `battle` 110, furball 140, spread 160, transit 200.
 
@@ -6700,7 +6703,7 @@ spread and `typical` 500, the ladder's top. P2: `battle` 110, furball 140, sprea
 missiles, 1 000 mines, 1 000 rocks, 4 sides, 85 x 85 x 20 km): **10.50 ms** median (10.23, 10.50, 10.51), p99 13.08, 0.02 % behind
 real time, worst rebase tick 13.07 ms. At 20 % (800 fighters, 200 capitals; `capitals=0.2`): **11.03 ms** (10.87, 11.03, 11.05),
 p99 13.62, 0.01 % behind, worst rebase 14.27. Fifty more capitals cost 0.53 ms: flight +0.20, the resolvers +0.30, the stand-ins
-+0.14. Neither holds the 8 ms budget; both keep real time with 4 to 6 ms to spare a tick.
++0.14. Neither holds the 8 ms budget; both keep real time with 3 to 6 ms of a step to spare (the p99 against the median).
 
 **The stages** (`battle`, means of the three seeds' means, ms; "think" is the AI step's main-thread share, "sync" the core's first sync):
 
@@ -6825,7 +6828,7 @@ average, the 1 % low 59.2 and 63.6. 1 000 under 8 ms (35 %): **not met**, 10.50 
 **What binds at 1 000.** The CPU's main thread. Per tick (10.68 ms mean): flight 3.97 ms (the batch's per-ship gather in GDScript and the
 forces into Jolt for the 324 ships on bodies), the resolvers 2.64 (the hit stage 1.41 for 1 069 bolts, the ram stage 1.20), the Jolt step
 1.13, unaccounted 1.12 (the console, `Main`, the scene's own nodes), targeting 0.97, the AI step's main-thread share 0.79 (its thinks run
-on the worker thread), the stand-ins 0.71, the core's sync 0.46. In the window each frame adds 4.5 to 5.5 ms outside the ticks (the HUD
+on the worker thread), the stand-ins 0.71, the core's sync 0.46. In the window each frame adds 5 to 6 ms outside the ticks (the HUD
 and the radar, the far proxies 0.2 ms, draw submission 0.46 ms). The GPU is busy 0.87 ms of a 14 to 15 ms frame. The next levers are flight's
 GDScript gather (37 % of the tick) and the two resolvers (25 %); the tier itself is 0.14 ms a tick on the main thread.
 
