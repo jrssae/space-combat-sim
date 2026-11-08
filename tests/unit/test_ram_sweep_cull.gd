@@ -46,7 +46,7 @@ func _capital(rng: RandomNumberGenerator) -> Damageable:
 # A hull as `RamResolver._hull` gives it, at `at` with `basis`, moving by `move` over the tick.
 func _entry(hull: Damageable, at: Vector3, basis: Basis, move: Vector3) -> Dictionary:
 	return {"damageable": hull, "body": null, "id": hull.get_instance_id(), "rigid": true, "basis": basis,
-			"to_body": basis.transposed(), "mass": 1.0, "velocity": move * 60.0, "start": at, "end": at + move, "accel": Vector3.ZERO}
+			"to_body": basis.transposed(), "mass": 1.0, "velocity": move * 60.0, "start": at, "end": at + move}
 
 
 func test_the_rejects_change_no_answer() -> void:

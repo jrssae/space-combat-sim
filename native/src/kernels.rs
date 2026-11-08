@@ -62,14 +62,8 @@ pub mod contact {
         pub query: &'a mut Query,
     }
 
-    /// Every body by its grid cell, sorted by cell then by scan index.
-    pub fn sorted_cells(positions: &[Vector3], cell_m: f64) -> Vec<((i32, i32, i32), u32)> {
-        let mut cells = Vec::new();
-        sorted_cells_into(positions, cell_m, &mut cells);
-        cells
-    }
-
-    /// `sorted_cells` into the caller's list (no allocation once it has grown, M4-T17).
+    /// Every body by its grid cell, sorted by cell then by scan index, into the caller's list (no allocation once it has
+    /// grown, M4-T17).
     pub fn sorted_cells_into(
         positions: &[Vector3],
         cell_m: f64,
@@ -372,7 +366,7 @@ pub mod contact {
         closest_approach(rel_pos, rel_vel, INCOMING_HORIZON_S) < INCOMING_MISS_M
     }
 
-    /// `incoming` over the bolts a grid of their cells (`sorted_cells`) puts within `reach_max` of `at`: the same count
+    /// `incoming` over the bolts a grid of their cells (`sorted_cells_into`) puts within `reach_max` of `at`: the same count
     /// when no bolt can be incoming from farther than `reach_max` (the caller bounds it by the fastest bolt plus the
     /// ship's own speed, times the horizon, plus the miss distance). `candidates` is the caller's scratch.
     pub fn incoming_near(

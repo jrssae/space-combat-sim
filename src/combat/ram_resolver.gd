@@ -280,7 +280,6 @@ func _hull(i: int) -> Dictionary:
 		"velocity": velocity,
 		"start": position if rigid else position - velocity * _delta,
 		"end": position + velocity * _delta if rigid else position,
-		"accel": _accel(i),
 	}
 	_hulls[i] = hull
 	return hull
@@ -457,7 +456,6 @@ func _rock(solid: StaticRows.Solid, s: int) -> Dictionary:
 		"velocity": Vector3.ZERO,
 		"start": at,
 		"end": at,
-		"accel": Vector3.ZERO,
 	}
 
 

@@ -650,7 +650,7 @@ pub fn refresh_grid(work: &mut Work, snap: &Snapshot) {
         return;
     }
     work.grid_version = snap.rows_version;
-    work.grid.cells = contact::sorted_cells(&snap.rows.positions, work.grid.cell_m);
+    contact::sorted_cells_into(&snap.rows.positions, work.grid.cell_m, &mut work.grid.cells);
     work.grid.max_static_radius = (0..snap.rows.positions.len())
         .filter(|&i| snap.rows.is_static[i])
         .map(|i| snap.rows.radii[i].abs())

@@ -118,7 +118,7 @@ impl ScsContactField {
         own.is_static = vec![false; n];
         own.is_mine = vec![false; n];
         self.grid.cell_m = cell_m;
-        self.grid.cells = contact::sorted_cells(&own.positions, cell_m);
+        contact::sorted_cells_into(&own.positions, cell_m, &mut self.grid.cells);
         true
     }
 
@@ -132,7 +132,7 @@ impl ScsContactField {
         {
             let c = core.bind();
             let n = scan_len(&c);
-            self.grid.cells = contact::sorted_cells(&c.rows.positions[..n], cell_m);
+            contact::sorted_cells_into(&c.rows.positions[..n], cell_m, &mut self.grid.cells);
             self.grid.max_static_radius = (0..n)
                 .filter(|&i| c.rows.is_static[i])
                 .map(|i| c.rows.radii[i].abs())
@@ -349,7 +349,11 @@ impl ScsContactField {
         self.own = Own::default();
         self.hostile_rows.clear();
         self.friendly_rows.clear();
+        // The grid's cell list keeps its allocation for the next attach.
+        let mut cells = std::mem::take(&mut self.grid.cells);
+        cells.clear();
         self.grid = Grid::default();
+        self.grid.cells = cells;
         self.query = Query::default();
     }
 }

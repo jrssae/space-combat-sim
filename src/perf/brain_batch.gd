@@ -60,7 +60,6 @@ var _origin_x: float = 0.0
 var _origin_y: float = 0.0
 var _origin_z: float = 0.0
 var _drivers: Array[AiPilotDriver] = []
-var _dts := PackedFloat64Array()
 var _ints := PackedInt64Array()
 var _floats := PackedFloat64Array()
 var _relations := PackedByteArray()
@@ -83,6 +82,11 @@ var stale: int = 0
 var stale_total: int = 0
 # The hosted drivers' pilots as they were hosted (slot to brain), for the identity check at the join.
 var _hosted_brains: Dictionary[int, PilotBrain] = {}
+# The two above as the launched ticks read them: copied only after a host or unhost, never changed in place, so a tick in
+# flight keeps the set it was launched with.
+var _hosted_launch: Dictionary[int, AiPilotDriver] = {}
+var _hosted_brains_launch: Dictionary[int, PilotBrain] = {}
+var _hosted_changed: bool = false
 # `perf_step_threads` as last given to the host (-1: give it again).
 var _step_threads_given: int = -1
 static var _step_threads_setting: int = -1
@@ -136,12 +140,14 @@ func host_driver(driver: AiPilotDriver, host: Object, slot: int, body_id: int, o
 	host.host_driver(slot, body_id, ordinal, steps, since_think_s, woken, attacker_id, hit_s, bolt_hit_s)
 	_hosted[slot] = driver
 	_hosted_brains[slot] = driver.brain
+	_hosted_changed = true
 
 
 ## Takes the step back from the host: `[steps, since_think_s, woken]` as the host left them (empty when it was not hosted).
 func unhost_driver(host: Object, slot: int) -> PackedFloat64Array:
 	_hosted.erase(slot)
 	_hosted_brains.erase(slot)
+	_hosted_changed = true
 	if host != null and is_instance_valid(host):
 		return host.unhost_driver(slot)
 	return PackedFloat64Array()
@@ -160,6 +166,7 @@ func unhost_all() -> void:
 			driver.unhost()
 	_hosted.clear()
 	_hosted_brains.clear()
+	_hosted_changed = true
 
 
 ## The step's schedule now (`sim_step`): `STEP_DELAYED` or `STEP_THREADED`.
@@ -264,7 +271,6 @@ func _flush_rows() -> void:
 	var answered: BrainAnswer = _answer
 	var host: Object = _host
 	_drivers = []
-	_dts = PackedFloat64Array()
 	_frame = -1
 	_answer = null
 	var launched := Launched.new()
@@ -272,8 +278,12 @@ func _flush_rows() -> void:
 	launched.drivers = drivers
 	launched.brains = _brains_of(drivers)
 	launched.answer = answered
-	launched.hosted_drivers = _hosted.duplicate()
-	launched.hosted_brains = _hosted_brains.duplicate()
+	if _hosted_changed:
+		_hosted_launch = _hosted.duplicate()
+		_hosted_brains_launch = _hosted_brains.duplicate()
+		_hosted_changed = false
+	launched.hosted_drivers = _hosted_launch
+	launched.hosted_brains = _hosted_brains_launch
 	if not is_instance_valid(host):
 		_apply_rows(launched, PackedFloat64Array(), PackedInt64Array(), PackedInt64Array())
 		return
@@ -421,7 +431,6 @@ func _begin(frame: int, host: Object, now_s: float, friendly_fire: bool, origin:
 	_origin_z = origin.z
 	_answer = BrainAnswer.new()
 	_drivers.clear()
-	_dts.clear()
 	_ints.clear()
 	_floats.clear()
 	_relations.clear()
