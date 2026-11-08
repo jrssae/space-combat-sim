@@ -11,8 +11,9 @@ extends Node3D
 ## as its trigger and registered with `world`, so that world's rebase moves it: its own side's ships steer round it, other
 ## sides never see it (Q27). A mine leaves the rows when it goes off and comes back when it is laid again.
 ##
-## With the native rows on (M4-T20) the director binds the belt to its `ScsWeaponRows` and calls `step_native`: the trigger
-## and blast queries run over the core's rows, and this node still lays, retires and hurts; `step` is the reference.
+## The director binds the belt to its `ScsWeaponRows` (M4-T20) and calls `step_native`: the trigger and blast queries run
+## over the core's rows, and this node lays, retires and hurts. `triggers` and `blast` state the same rules in GDScript for
+## their tests.
 
 ## A row went off (`index`) and is no longer in play.
 signal detonated(index: int)

@@ -5,8 +5,8 @@ extends Node3D
 ## limited rate and fires pulse-cannon bolts through a `PulseCannonGate` only while the aim is inside `GATE_RAD`. An
 ## `INTERCEPTOR` shoots down a hostile projectile within `INTERCEPT_RANGE_M` at its own rate (no bolt of its own): the nearest
 ## missile first, else the nearest bolt (M4-T12), from the candidates the director found for it through the hit broad phase's
-## grid. `StandinDirector` steps every turret once per tick; a turret has no process of its own. With the native rows on
-## (M4-T20) the director's `NativeWeapons` steps them instead and keeps their state; this code is then the reference.
+## grid. The director's `NativeWeapons` (M4-T20) steps every turret once per tick on the core's rows and keeps its state
+## here between bindings; a turret has no process of its own.
 
 enum Role { GUN, INTERCEPTOR }
 

@@ -1,9 +1,9 @@
 class_name NativeBrains
 extends RefCounted
 ## The native brain host's facade (M4-T17, architecture §17.13): one `ScsBrains` per core, holding every `AiPilot`'s native
-## brain as a slot over the core's rows. `host` gives it to the drivers, or null when no core is attached to the tree; a
-## pilot the host cannot carry (a behaviour built by hand) thinks in GDScript. The nearest-k settings every native think
-## picks with are pushed here as the drivers read them.
+## brain as a slot over the core's rows. `host` gives it to the drivers, or null when no core is attached to the tree (a
+## native pilot then holds its last command). Only a brain the host cannot carry (not built from the default behaviours)
+## thinks in GDScript. The nearest-k settings every native think picks with are pushed here as the drivers read them.
 
 const NATIVE_CLASS: StringName = &"ScsBrains"
 

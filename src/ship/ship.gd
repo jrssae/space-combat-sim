@@ -25,9 +25,10 @@ extends RigidBody3D
 ## `ShipSpec.fuel_capacity_kg`, never drawn down while `settings.fuel_unlimited` is on), and when the tank is empty the
 ## model is told to cut all thrust.
 ##
-## Contacts (M3-T04): Jolt reports up to `CONTACTS_REPORTED` contact points (`contact_monitor` on), and the ship keeps the
-## World-frame sum of the forces it applied on its last tick (`applied_force`), so the `RamResolver` can tell the velocity
-## change a collision caused from what the ship's own thrust did.
+## Contacts (M3-T04): Jolt keeps up to `CONTACTS_REPORTED` contact points (`contact_monitor` off since M4-T35: the ram
+## phase reads them from the physics server by body RID), and the ship keeps the World-frame sum of the forces it applied
+## on its last tick (`applied_force`), so the `RamResolver` can tell the velocity change a collision caused from what the
+## ship's own thrust did.
 ##
 ## The flight batch (M4-T10, architecture §17.9): every ship but the player's is `batched`, so `FlightBatch` (under `World`,
 ## priority -1) runs its model, governor and force application in one native call per tick for all of them; this node's

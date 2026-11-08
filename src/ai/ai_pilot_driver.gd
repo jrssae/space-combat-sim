@@ -88,7 +88,6 @@ static var _contacts_max: int = 0
 static var _thinks_native: int = 0
 static var _thinks_fallback: int = 0
 static var _rows_events: int = 0
-# The think-rate settings the hosted drivers' frame carries (M4-T35), and the settings read flag for them.
 # The host and batch of this physics frame (`_frame_host`).
 static var _lookup_frame: int = -1
 static var _frame_host_cached: Object = null

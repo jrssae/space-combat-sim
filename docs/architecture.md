@@ -2312,8 +2312,8 @@ src/ship/ship.gd                a ship is `batched` (every ship but the player's
   mass included: anything that changes a ship's mass or thrust at runtime (burnt fuel, damage, a capital ship's modules) must
   register the ship again (`FlightBatch.join` on a joined ship does that).
 - **Bad input never panics.** `register` checks the arrays line up and returns -1 after one error; `step` checks the per-ship
-  array sizes and that every slot is known, and on a mismatch logs one error, applies nothing and returns false, so the batch
-  leaves every ship to its own model that tick. A body not in a space (a parked pool ship) gives a row of zeros and no force.
+  array sizes and that every slot is known, and on a mismatch logs one error, applies nothing and returns false, so nothing
+  flies that tick (M4-T44 removed the GDScript fallback that flew each ship's own model). A body not in a space (a parked pool ship) gives a row of zeros and no force.
 
 ### 17.10 Far-ship dots and the node diet for AI ships (T11)
 
@@ -2631,9 +2631,10 @@ src/perf/standins/                the director, turret, missile and mine stand-i
   projectiles, and steps the capitals' engines and the carriers' launches as before. `MineStandin.step_native` asks
   `mine_step` for the mines set off and `blast` for each one's hulls, and still lays, retires and hurts. A missile's
   steering hook asks `steer_missile` for its velocity from its target's row. Every engine write stays in GDScript.
-- **When the rows step.** Only when the core synced this physics frame and no body was touched since (a body hidden,
-  shown or destroyed after the sync has a stale row): otherwise the director runs the GDScript for that tick. A missile
-  whose target was touched, or with no core to read, steers in GDScript. In the game's tick order the director runs at -5,
+- **When the rows step.** Every tick the core synced: a body touched since the sync (hidden, shown or destroyed, so its row
+  is stale) is read again first (`resync_touched_now`); with no core nothing steps. A missile
+  whose target was touched reads the touched rows again and asks once more (M4-T44); with no core to read it flies
+  straight on. In the game's tick order the director runs at -5,
   after the sync and before anything moves or is touched, so the rows step every tick of a battle.
 - **Frozen rows.** The kernels keep no index into the rows between calls and cache nothing across a sync: each call looks
   its capitals and targets up by body id in the rows as they are, and the mines' grid is over their offsets from the belt's
@@ -2994,8 +2995,8 @@ src/combat/hit_resolver.gd, src/combat/ram_resolver.gd, src/targeting/targeting_
 - **The batch owns its ships' ticks** (`perf_batch_owns_ships` until M4-T37, which removed the setting: the batch always
   owns them). A ship the flight batch flew has nothing left to do at 0 (its combat edges are taken in the batch's gather,
   before the World's rebase), so `FlightBatch` switches its `_physics_process` off once and gives it back when it stops
-  flying the ship (no native step this tick, a refused step, the ship leaving); a ship given its tick back inside a tick flies its own model at once
-  (`fly_own_tick_now`), since the engine's process list for that tick was made before.
+  flying the ship (the ship leaving). M4-T44 removed the GDScript fallback that flew a ship's own model at once
+  (`fly_own_tick_now`) when there was no native step or a refused one.
 - **The drivers' step in the host** (`perf_native_driver_step` until M4-T37, which removed the setting: the host always
   takes the step, and a hand step takes it back). Once a native pilot's slot is bound to its ship, its driver hands the
   host its think rate's state (its place in the stagger, its steps, the time since the last think, the wake, the latest
@@ -3035,7 +3036,7 @@ src/combat/hit_resolver.gd, src/combat/ram_resolver.gd, src/targeting/targeting_
   points' pose reads, the ram stage's contact read and the flight step's force application, each in one call over the rows.
 - **Settings and console.** `perf_native_bolt_rows`, `perf_core_event_columns`, `perf_core_body_direct` (off),
   `perf_native_ram_contacts`, `perf_native_selection_check`, `perf_batch_owns_ships`, `perf_native_driver_step`,
-  `ship_contact_monitor` (off), all live until M4-T37 removed them. Provider `core` gains `bolt_path`, `owned_bolts`,
+  `ship_contact_monitor` (off), all live until M4-T37 removed them. Provider `core` gains `bolt_path` (removed in M4-T44), `owned_bolts`,
   `cannons`, `cannon_us`, `bolt_step_us`, `shots`, `expired`, `bolt_draws`, `watched_selections`,
   `selection_clears`; `ai` gains `hosted`.
 
