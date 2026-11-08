@@ -130,11 +130,6 @@ func set_look(dt: float, active: bool, stick: Vector2, mouse_px: Vector2) -> voi
 	_look.step(dt, active, stick, mouse_px, float(Settings.get_value(&"mouse_look_deg_per_px")))
 
 
-## Where the view is looking now relative to the nose, degrees (yaw right, pitch up), as drawn.
-func look_angles() -> Vector2:
-	return Vector2(_shown_yaw, _shown_pitch)
-
-
 ## The look angles the view is easing toward, degrees (yaw right, pitch up).
 func look_goal() -> Vector2:
 	return Vector2(_look.yaw_deg, _look.pitch_deg)

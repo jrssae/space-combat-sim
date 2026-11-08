@@ -31,8 +31,6 @@ const LAUNCH_PERIOD_S: float = 5.0
 const STRIKE_RETARGET_TICKS: int = 30
 ## At most this many missiles leave in one tick, so a gap in the count fills over a few ticks.
 const MAX_MISSILE_LAUNCHES_PER_TICK: int = 2
-## Hulls larger than this are capitals, not fighters, m.
-const FIGHTER_RADIUS_MAX_M: float = TurretStandin.FIGHTER_RADIUS_MAX_M
 enum Part { GATHER, ENGINES_GUNS, INTERCEPTORS, BEAMS, MISSILES, MINES, LAUNCHES }
 const PART_NAMES: Array[StringName] = [&"gather", &"engines_guns", &"interceptors", &"beams", &"missiles", &"mines", &"launches"]
 
@@ -71,11 +69,8 @@ var ticks: int = 0
 var _capitals: Array[CapitalStandin] = []
 var _field: AsteroidField = null
 var _mines: MineStandin = null
-var _grid: HitBroadPhase = HitBroadPhase.new()
 var _strike: Dictionary = {}  # capital -> [target body id, tick it was looked up]
 var _capital_turn: int = 0
-# This tick's projectiles in flight but beams, with their places.
-var _shot_at := PackedVector3Array()
 
 
 var _missiles_flying: int = 0

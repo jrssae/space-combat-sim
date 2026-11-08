@@ -2,8 +2,8 @@ extends GutTest
 ## The native simulation core (M4-T15, architecture §17.13): one store of rows in the crate, filled once per tick from the
 ## engine (`sync_in`) and read by every native class, so the contact field, the hit sweep, the flight step and the ram broad
 ## phase stop loading their own copies. Rows survive a pool release and acquire with a new handle; a rebase shifts every row
-## once; the four classes answer from the core exactly as they do from their own loads (bit for bit, on seeded worlds); a
-## row of each kind round-trips its state; and the sync points are the only places the core touches the engine. Light
+## once; the four classes answer from the core exactly as they do from their own loads (bit for bit, on seeded worlds); and
+## the sync points are the only places the core touches the engine. Light
 ## bodies made here (a rigid body with a `Targetable` and a `Damageable`, props, a hull without a marker, bolts), real ships
 ## only for the flight step.
 
@@ -13,8 +13,6 @@ const FIXTURE: String = "sim_core"
 const SPEC_PATH: String = "res://assets/ships/starfury_aurora.tres"
 const PROJECTILE_SCENE: PackedScene = preload("res://src/weapons/projectile.tscn")
 const SIDES: Array[StringName] = [Factions.RAIDERS, Factions.EARTH_ALLIANCE, Factions.NEUTRAL, &"drifters"]
-const KINDS_ROUND_TRIPPED: Array[int] = [SimCore.KIND_SHIP, SimCore.KIND_CAPITAL, SimCore.KIND_TURRET, SimCore.KIND_MISSILE,
-		SimCore.KIND_BEAM, SimCore.KIND_BOLT, SimCore.KIND_MINE, SimCore.KIND_STATIC]
 const SETTINGS: Array[StringName] = [&"fuel_unlimited"]
 
 var world: WorldFrame
@@ -300,44 +298,6 @@ func test_a_rebase_shifts_every_row_once() -> void:
 	assert_eq(core.static_positions(), StaticRows.positions, "the static rows follow StaticRows' own shift")
 	_assert_same_rows(ContactScan.shared(get_tree()), TreeRows.scan(get_tree()), "the scan after the rebase")
 	assert_true(bodies.size() > 0, "a crowd was made")
-
-
-func test_a_row_of_each_kind_round_trips_its_state() -> void:
-	var core: SimCore = _core()
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 3
-	var handles: PackedInt64Array = PackedInt64Array()
-	var given: Array[Dictionary] = []
-	for kind: int in KINDS_ROUND_TRIPPED:
-		var row: Dictionary = {
-			"kind": kind,
-			"id": 70000 + kind,
-			"faction": SIDES[kind % SIDES.size()],
-			"radius": rng.randf_range(0.25, 1200.0),
-			"flags": rng.randi_range(0, 255),
-			"position": Vector3(rng.randf_range(-1e5, 1e5), rng.randf_range(-1e5, 1e5), rng.randf_range(-1e5, 1e5)),
-			"velocity": Vector3(rng.randf_range(-900.0, 900.0), rng.randf_range(-900.0, 900.0), rng.randf_range(-900.0, 900.0)),
-			"basis": Basis.from_euler(Vector3(rng.randf_range(-PI, PI), rng.randf_range(-PI, PI), rng.randf_range(-PI, PI))),
-			"angular": Vector3(rng.randf_range(-3.0, 3.0), rng.randf_range(-3.0, 3.0), rng.randf_range(-3.0, 3.0)),
-			"command": PackedFloat64Array([rng.randf(), rng.randf(), rng.randf(), rng.randf(), rng.randf_range(-1.0, 1.0),
-					rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0), 1.0, 0.0, 1.0]),
-			"state": PackedFloat64Array([rng.randf_range(0.0, 100.0), rng.randf_range(0.0, 100.0), rng.randf_range(0.0, 100.0)]),
-		}
-		var handle: int = core.add_row(row)
-		assert_gt(handle, 0, "kind %d gets a handle" % kind)
-		handles.append(handle)
-		given.append(row)
-	for i: int in handles.size():
-		var back: Dictionary = core.row(handles[i])
-		for key: String in given[i]:
-			assert_eq(back.get(key), given[i][key], "kind %d: %s round-trips" % [given[i]["kind"], key])
-	# A changed command and state come back changed; a removed row answers nothing.
-	var moved: PackedFloat64Array = PackedFloat64Array([0.5, 0.25, 0.0, 0.0, 0.1, -0.2, 0.3, 0.0, 1.0, 0.0])
-	core.set_row_command(handles[0], moved)
-	assert_eq((core.row(handles[0]) as Dictionary)["command"], moved, "the command changes in place")
-	core.remove_row(handles[1])
-	assert_true((core.row(handles[1]) as Dictionary).is_empty(), "a removed row is gone")
-	assert_eq((core.row(handles[2]) as Dictionary)["id"], 70000 + KINDS_ROUND_TRIPPED[2], "its neighbours stay")
 
 
 # --- the four classes, from the core and from their own loads -------------------------------------------------------

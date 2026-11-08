@@ -1,4 +1,6 @@
 // A trivial native class: proves the library loads, and measures what a call from GDScript costs.
+// gdext's `init` derive writes `base: base`, which clippy flags on the struct's `base` field.
+#![allow(clippy::redundant_field_names)]
 use godot::prelude::*;
 
 /// Smoke test and boundary probe for the native seam (M4-T05a). GDScript reaches it through `NativeProbe`.

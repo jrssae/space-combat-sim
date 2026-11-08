@@ -204,11 +204,6 @@ static func muzzle_locals_of(body: Node3D, muzzles: Array[Node3D]) -> PackedVect
 	return out
 
 
-## The muzzles' origins in the ship's frame, as data (the kernel's and, for the frame's flashes, T36's).
-func muzzle_locals() -> PackedVector3Array:
-	return _muzzle_locals
-
-
 ## Ends every muzzle flash at once (a ship back in play).
 func reset_flashes() -> void:
 	for flash: MuzzleFlash in _flashes:

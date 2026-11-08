@@ -35,8 +35,6 @@ const COLOR: Color = Color(0.7, 0.15, 0.1)
 var kind: Targetable.Kind = Targetable.Kind.MINE
 ## Mines that checked their trigger in the latest step.
 var checked_last_tick: int = 0
-## Finds the hulls inside a trigger; a test may force its path.
-var broad_phase: HitBroadPhase = HitBroadPhase.new()
 ## The frame the mines' rows are in (the one that spawned this node); set before `build`.
 var world: Node = null
 ## The native weapon rows (`ScsWeaponRows`) holding these mines while they answer the triggers and blasts (M4-T20), or

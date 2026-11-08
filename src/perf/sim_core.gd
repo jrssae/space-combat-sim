@@ -62,14 +62,11 @@ const KIND_STATIC: int = 5
 const KIND_PROP: int = 6
 const KIND_BOLT: int = 7
 const KIND_BEAM: int = 8
-## Row flags (`ScsSimCore`): a rigid body, a hull, an active hull, a row added after the tick's first sync, a low-attention
-## tier row (M4-T21), a hulk.
+## Row flags (`ScsSimCore`) GDScript reads: a rigid body, a hull, an active hull, a low-attention tier row (M4-T21).
 const FLAG_RIGID: int = 1
 const FLAG_HULL: int = 2
 const FLAG_HULL_ACTIVE: int = 4
-const FLAG_LATE: int = 8
 const FLAG_TIER: int = 16
-const FLAG_HULK: int = 32
 
 # The latest core attached to a tree.
 static var _current: SimCore = null
@@ -408,26 +405,6 @@ func bolt_positions() -> PackedVector3Array:
 
 func static_positions() -> PackedVector3Array:
 	return core.static_positions() if core != null else PackedVector3Array()
-
-
-## Rows with no node (the seam T20 builds on): `add_row` takes a Dictionary (`kind`, `id`, `faction`, `radius`, `flags`,
-## `position`, `velocity`, `basis`, `angular`, `command`, `state`) and gives a handle; `row` gives it back.
-func add_row(p_row: Dictionary) -> int:
-	return int(core.add_row(p_row)) if core != null else -1
-
-
-func row(handle: int) -> Dictionary:
-	return core.row(handle) if core != null else {}
-
-
-func set_row_command(handle: int, command: PackedFloat64Array) -> void:
-	if core != null:
-		core.set_row_command(handle, command)
-
-
-func remove_row(handle: int) -> void:
-	if core != null:
-		core.remove_row(handle)
 
 
 # --- bolts as rows (M4-T35) ---------------------------------------------------------------------------------------

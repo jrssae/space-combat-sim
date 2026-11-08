@@ -76,9 +76,6 @@ enum Pending {
         slot: i64,
         on: bool,
     },
-    Wake {
-        slot: i64,
-    },
 }
 
 // A scheduled job's result, parked from its join until `join_step` hands it over: the output, the events, the hosted
@@ -961,12 +958,6 @@ impl ScsBrains {
         self.mutate(Pending::Tiered { slot, on });
     }
 
-    /// Wakes the driver for the next tick (a new pilot would).
-    #[func]
-    fn wake_driver(&mut self, slot: i64) {
-        self.mutate(Pending::Wake { slot });
-    }
-
     /// The tick's frame for the hosted drivers: the tick length, the player (live, and where) and the think rate's
     /// settings (`ai_think_rate`, `ai_think_near_m` squared, the far period in ticks), and the tier brains' period in
     /// ticks (`tier_brain_hz`, M4-T22).
@@ -1154,17 +1145,6 @@ impl ScsBrains {
     #[func]
     fn hash_int(value: i64) -> i64 {
         brain_maths::hash_int(value)
-    }
-
-    /// The first `count` `randi()` draws of a generator seeded with `seed`.
-    #[func]
-    fn randi_sequence(seed: i64, count: i64) -> PackedInt64Array {
-        let mut rng = Pcg::seeded(seed);
-        (0..count.max(0))
-            .map(|_| i64::from(rng.randi()))
-            .collect::<Vec<i64>>()
-            .as_slice()
-            .into()
     }
 
     /// The first `count` `randf()` draws of a generator seeded with `seed`.
@@ -1551,11 +1531,6 @@ impl ScsBrains {
                 if let Some(h) = find(work, slot) {
                     h.tiered = on;
                     h.tier_wake = on; // its first tier think comes at once, not a beat later
-                }
-            }
-            Pending::Wake { slot } => {
-                if let Some(h) = find(work, slot) {
-                    h.woken = true;
                 }
             }
         }

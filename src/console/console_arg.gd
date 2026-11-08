@@ -99,11 +99,6 @@ static func path_required(p_name: StringName, p_filter: PathFilter = PathFilter.
 	return arg
 
 
-static func path_optional(p_name: StringName, p_filter: PathFilter = PathFilter.ANY,
-		p_fallback: Variant = null) -> ConsoleArg:
-	return ConsoleArg.path_required(p_name, p_filter).make_optional(p_fallback)
-
-
 ## Three numbers, typed as three tokens (`1 2 3`) or one (`1,2,3`).
 static func vec3_required(p_name: StringName, p_components: PackedStringArray = PackedStringArray()) -> ConsoleArg:
 	var arg := ConsoleArg.new(p_name, Kind.VEC3)

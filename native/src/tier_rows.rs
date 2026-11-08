@@ -173,12 +173,6 @@ impl ScsSimCore {
         (self.tier_types.len() - 1) as i64
     }
 
-    /// Fighter types registered.
-    #[func]
-    fn tier_type_count(&self) -> i64 {
-        self.tier_types.len() as i64
-    }
-
     /// Demotes body `body_id` into the tier: `kind` 0 a fighter of type `type_ix`, 1 a capital; the pose and motion as the
     /// body holds them. Returns the row's handle, or 0 when the body is in the tier already (or a fighter's type is
     /// unknown). `tier_set_attrs` and `tier_set_control` complete the row.
@@ -230,7 +224,6 @@ impl ScsSimCore {
             return 0;
         }
         self.tier_names.push(GString::new());
-        self.tier_demotions += 1;
         handle
     }
 
@@ -303,16 +296,6 @@ impl ScsSimCore {
             self.tier.alpha[i] = Vector3::ZERO;
             self.tier.speed_limit[i] = 0.0;
         }
-        true
-    }
-
-    /// A tier row's hull changed (0..1).
-    #[func]
-    fn tier_set_hull(&mut self, body_id: i64, hull_fraction: f64) -> bool {
-        let Some(i) = self.tier.index_of(body_id) else {
-            return false;
-        };
-        self.tier.hull_fraction[i] = hull_fraction;
         true
     }
 
@@ -401,25 +384,10 @@ impl ScsSimCore {
         self.tier.hulk.iter().filter(|&&h| h).count() as i64
     }
 
-    /// Every tier row's body id.
-    #[func]
-    fn tier_body_ids(&self) -> PackedInt64Array {
-        PackedInt64Array::from(self.tier.body_ids.as_slice())
-    }
-
     /// Sets the beat: a row's forces are recomputed every `period` ticks (1 or more).
     #[func]
     fn tier_set_period(&mut self, period: i64) {
         self.tier_period = period.max(1);
-    }
-
-    #[func]
-    fn tier_period(&self) -> i64 {
-        if self.tier_period > 0 {
-            self.tier_period
-        } else {
-            DEFAULT_PERIOD
-        }
     }
 
     /// The pull the tier's rows feel: point sources at World-local `positions` with parameters `gm` (m^3/s^2). Empty for
@@ -651,11 +619,6 @@ impl ScsSimCore {
     #[func]
     fn tier_beats(&self) -> i64 {
         self.tier_beats
-    }
-
-    #[func]
-    fn tier_demotions(&self) -> i64 {
-        self.tier_demotions
     }
 
     #[func]

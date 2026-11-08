@@ -1,4 +1,6 @@
 // The shell around the radar kernel (M4-T23): `RadarModel.plot` hands its packed contacts here once a frame.
+// gdext's `init` derive writes `base: base`, which clippy flags on the struct's `base` field.
+#![allow(clippy::redundant_field_names)]
 use godot::prelude::*;
 
 use crate::radar_kernel::{self, Plot};

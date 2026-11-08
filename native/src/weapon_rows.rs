@@ -701,12 +701,6 @@ impl ScsWeaponRows {
         self.tier_us
     }
 
-    /// The far capitals' missiles resolved at launch and not yet arrived (M4-T22).
-    #[func]
-    fn tier_missiles(&self) -> i64 {
-        self.tier_missiles.len() as i64
-    }
-
     /// The mines: offsets from the belt's node, layers (faction names) and which are in play.
     #[func]
     fn set_mines(

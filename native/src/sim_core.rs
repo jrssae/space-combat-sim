@@ -123,22 +123,6 @@ struct Read {
     target_id: i64,
 }
 
-// A row with no node (T20's turrets, missiles and mines to come): what `add_row` keeps and `row` gives back.
-struct DataRow {
-    handle: i64,
-    kind: u8,
-    id: i64,
-    faction: StringName,
-    radius: f64,
-    flags: i64,
-    position: Vector3,
-    velocity: Vector3,
-    basis: Basis,
-    angular: Vector3,
-    command: Vec<f64>,
-    state: Vec<f64>,
-}
-
 /// One store of rows for every simulated entity, filled once per tick from the engine (`sync_in`, then `sync_bolts` for
 /// the bolts after they moved) and read by every native kernel, so no kernel loads a copy of its own or calls the
 /// engine. The bodies are the registry's (M4-T09): known once (`set_members`), read through the nodes' own getters so
@@ -185,13 +169,10 @@ pub struct ScsSimCore {
     pub sweep_rows: Vec<u32>,
     row_of_id: HashMap<i64, u32>,
     row_of_handle: HashMap<i64, u32>,
-    data: Vec<DataRow>,
-    next_data_handle: i64,
     pub(crate) sync_reads: i64,
     fallback_reads: i64,
     last_calls: [i64; 2],
     pub(crate) tick: i64,
-    bolt_tick: i64,
     open: bool,
     // Grows whenever the rows change under a scan taken from them: each sync, resync and shift (M4-T16).
     rows_version: i64,
@@ -234,7 +215,6 @@ pub struct ScsSimCore {
     pub(crate) tier_step_us: i64,
     pub(crate) tier_beats: i64,
     pub(crate) tier_promotions: i64,
-    pub(crate) tier_demotions: i64,
     // The tier's fire (M4-T22): the seed every roll draws from, the fighters' hits rolled since GDScript took them, and the
     // shots and hits rolled so far.
     pub(crate) tier_seed: u64,
@@ -520,7 +500,6 @@ impl ScsSimCore {
     /// owned bolts for `ScsBoltSync` to read the node bolts after. Returns the bolt row count.
     #[func]
     pub fn sync_bolts(&mut self) -> i64 {
-        self.bolt_tick = self.tick;
         if !self.touched.is_empty() {
             self.resync_touched();
         }
@@ -574,12 +553,6 @@ impl ScsSimCore {
     #[func]
     pub fn engine_calls(&self) -> PackedInt64Array {
         PackedInt64Array::from(&self.last_calls[..])
-    }
-
-    /// Engine calls so far in the open tick: `[sync, fallbacks]`.
-    #[func]
-    fn engine_calls_open(&self) -> PackedInt64Array {
-        PackedInt64Array::from(&[self.sync_reads, self.fallback_reads][..])
     }
 
     /// Counts the flight step's fallback reads of the physics server (a ship without a row this tick).
@@ -701,11 +674,6 @@ impl ScsSimCore {
     #[func]
     fn tick(&self) -> i64 {
         self.tick
-    }
-
-    #[func]
-    fn bolt_tick(&self) -> i64 {
-        self.bolt_tick
     }
 
     /// Rows now: the bodies, the statics and the late rows together.
@@ -1042,120 +1010,6 @@ impl ScsSimCore {
         out.push(&factions.to_variant());
         out.push(&PackedInt64Array::from(b.shooters.as_slice()).to_variant());
         out
-    }
-
-    // --- rows with no node (the seam T20 builds on) ---------------------------------------------------------------
-
-    /// Adds a row with no node from `row` (`kind`, `id`, `faction`, `radius`, `flags`, `position`, `velocity`, `basis`,
-    /// `angular`, `command`, `state`; missing keys take zeros) and returns its handle.
-    #[func]
-    fn add_row(&mut self, row: VarDictionary) -> i64 {
-        if self.next_data_handle == 0 {
-            self.next_data_handle = 1;
-        }
-        let handle = self.next_data_handle;
-        self.next_data_handle += 1;
-        // A missing or wrongly typed key takes its zero; a kind out of range is a ship; a float field takes an int too.
-        fn take<T: FromGodot>(row: &VarDictionary, key: &str, zero: T) -> T {
-            row.get(key)
-                .and_then(|v| v.try_to::<T>().ok())
-                .unwrap_or(zero)
-        }
-        fn take_f64(row: &VarDictionary, key: &str) -> f64 {
-            row.get(key)
-                .and_then(|v| {
-                    v.try_to::<f64>()
-                        .ok()
-                        .or_else(|| v.try_to::<i64>().ok().map(|i| i as f64))
-                })
-                .unwrap_or(0.0)
-        }
-        let kind = take::<i64>(&row, "kind", 0);
-        self.data.push(DataRow {
-            handle,
-            kind: if (0..KIND_NAMES.len() as i64).contains(&kind) {
-                kind as u8
-            } else {
-                KIND_SHIP
-            },
-            id: take(&row, "id", 0),
-            faction: take(&row, "faction", StringName::default()),
-            radius: take_f64(&row, "radius"),
-            flags: take(&row, "flags", 0),
-            position: take(&row, "position", Vector3::ZERO),
-            velocity: take(&row, "velocity", Vector3::ZERO),
-            basis: take(&row, "basis", Basis::IDENTITY),
-            angular: take(&row, "angular", Vector3::ZERO),
-            command: take(&row, "command", PackedFloat64Array::new())
-                .as_slice()
-                .to_vec(),
-            state: take(&row, "state", PackedFloat64Array::new())
-                .as_slice()
-                .to_vec(),
-        });
-        handle
-    }
-
-    /// The data row `handle` as a Dictionary with `add_row`'s keys, or an empty one.
-    #[func]
-    fn row(&self, handle: i64) -> VarDictionary {
-        let mut out = VarDictionary::new();
-        let Some(r) = self.data.iter().find(|r| r.handle == handle) else {
-            return out;
-        };
-        out.set("kind", i64::from(r.kind));
-        out.set("id", r.id);
-        out.set("faction", &r.faction);
-        out.set("radius", r.radius);
-        out.set("flags", r.flags);
-        out.set("position", r.position);
-        out.set("velocity", r.velocity);
-        out.set("basis", r.basis);
-        out.set("angular", r.angular);
-        out.set("command", &PackedFloat64Array::from(r.command.as_slice()));
-        out.set("state", &PackedFloat64Array::from(r.state.as_slice()));
-        out
-    }
-
-    #[func]
-    fn set_row_motion(
-        &mut self,
-        handle: i64,
-        position: Vector3,
-        velocity: Vector3,
-        basis: Basis,
-        angular: Vector3,
-    ) {
-        if let Some(r) = self.data.iter_mut().find(|r| r.handle == handle) {
-            r.position = position;
-            r.velocity = velocity;
-            r.basis = basis;
-            r.angular = angular;
-        }
-    }
-
-    #[func]
-    fn set_row_command(&mut self, handle: i64, command: PackedFloat64Array) {
-        if let Some(r) = self.data.iter_mut().find(|r| r.handle == handle) {
-            r.command = command.as_slice().to_vec();
-        }
-    }
-
-    #[func]
-    fn set_row_state(&mut self, handle: i64, state: PackedFloat64Array) {
-        if let Some(r) = self.data.iter_mut().find(|r| r.handle == handle) {
-            r.state = state.as_slice().to_vec();
-        }
-    }
-
-    #[func]
-    fn remove_row(&mut self, handle: i64) {
-        self.data.retain(|r| r.handle != handle);
-    }
-
-    #[func]
-    fn data_rows(&self) -> i64 {
-        self.data.len() as i64
     }
 }
 
@@ -1817,35 +1671,6 @@ impl ScsSimCore {
     #[func]
     fn watched_selections(&self) -> i64 {
         self.selection_watch.len() as i64
-    }
-
-    /// A watched body's check, step by step, for the tests: `[row, latest target, target row, range, reach, sensor]`.
-    #[func]
-    fn selection_check_of(&self, body_id: i64) -> PackedFloat64Array {
-        let sensor = self
-            .selection_watch
-            .iter()
-            .find(|(b, _)| *b == body_id)
-            .map_or(-1.0, |(_, s)| *s);
-        let r = self.row_of_id.get(&body_id).map_or(-1, |&r| i64::from(r));
-        let target = self.latest_target.get(&body_id).copied().unwrap_or(-1);
-        let tr = if target > 0 {
-            i64::from(self.rows.row_of_id(target))
-        } else {
-            -1
-        };
-        let (range, reach) = match (usize::try_from(r), usize::try_from(tr)) {
-            (Ok(r), Ok(t)) => {
-                let from = self.rows.positions[r];
-                let to = self.rows.positions[t];
-                let dx = f64::from(to.x) - f64::from(from.x);
-                let dy = f64::from(to.y) - f64::from(from.y);
-                let dz = f64::from(to.z) - f64::from(from.z);
-                ((dx * dx + dy * dy + dz * dz).sqrt(), self.rows.reach[t])
-            }
-            _ => (-1.0, -1.0),
-        };
-        PackedFloat64Array::from(&[r as f64, target as f64, tr as f64, range, reach, sensor][..])
     }
 
     /// What the player's radar shows (M4-T23): every row with a marker (a targetable in play) or in the low-attention

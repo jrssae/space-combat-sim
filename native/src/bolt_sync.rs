@@ -232,12 +232,6 @@ impl ScsBoltSync {
         self.known.len() as i64
     }
 
-    /// Engine calls so far in the open tick.
-    #[func]
-    fn reads_open(&self) -> i64 {
-        self.reads
-    }
-
     /// Closes the tick's engine-call count (with the core's `sync_out`).
     #[func]
     fn close_tick(&mut self) {

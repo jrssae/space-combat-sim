@@ -145,10 +145,6 @@ class Part:
         return self.mesh.area_centroid()
 
 
-def merge_meshes(parts: Iterable[Part]) -> Mesh:
-    return Mesh.concatenate(p.mesh for p in parts)
-
-
 def total_mass(parts: Iterable[Part]) -> float:
     return float(sum(p.mass_kg for p in parts))
 

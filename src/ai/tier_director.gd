@@ -297,11 +297,6 @@ func forget_capital(cap: CapitalStandin) -> void:
 		_sim.core.tier_remove(body_id)  # dies, not a promotion (fix round 1)
 
 
-## Whether body `body_id` is in the tier now.
-func is_tiered(body_id: int) -> bool:
-	return _tiered_ships.has(body_id) or _tiered_capitals.has(body_id)
-
-
 ## Fighters and capitals in the tier now.
 func tier_fighters() -> int:
 	return _tiered_ships.size()

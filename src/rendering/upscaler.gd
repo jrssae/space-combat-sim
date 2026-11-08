@@ -51,11 +51,6 @@ func _exit_tree() -> void:
 		anti_aliasing.set_held(false)
 
 
-## The plan in use: the resolved upscaler and preset, the Godot mode and the scale (`Upscaling.plan`).
-func current_plan() -> Dictionary:
-	return _plan.duplicate()
-
-
 ## The lines the 3D renders in this window.
 func internal_lines() -> int:
 	return Upscaling.internal_lines(_window_lines(), get_viewport().scaling_3d_scale)
