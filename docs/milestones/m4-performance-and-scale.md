@@ -238,6 +238,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T41 | The Wayland display driver (Q66): the game and the measurements open through Godot's Wayland driver, so a fullscreen window is the panel's own 3840x2160 under GNOME's 1.25 scale | T40 | Opus (controller) | The X11 path made the fullscreen window 6144x3456 and the compositor scaled it down; Wayland is worth about 8 to 10 FPS at 1 000 ships | R | done (2026-11-06, the controller, CI green on `7468d81`; fullscreen a true 3840x2160, `battle` 500 54.6 to 58.7 FPS and 1 000 60 to 62 to 69 to 72; Cycle log, M4-T41) |
 | T42 | Every world attaches the core, one hull read (T37's review I3): free flight, the menu, scenarios and test worlds attach `SimCore`, so the registry, `from_tree`, the resolvers' own walks, the flight batch's server read and the contact field's GDScript loops collapse into one native hull read | T37 | Opus | T37 removed the switches but left five hull-reading paths for worlds with no core (the free-flight scenario has no ship pools, so no core); T23's blast and proxies read hulls and Q68 wants T23 on one path | X, G | done (2026-11-07, Opus, one fix round, CI green on `d7f97f3`; every world attaches the core (one world per tree), five hull-reading paths and the last switch removed (net about -700 lines), ticks unchanged; Cycle log, M4-T42) |
 | T43 | Full code review (Q71): the whole code base (GDScript, Rust, shaders, scripts, tests) read for performance, memory (leaks, retained nodes and resources, growth per tick or per spawn, VRAM), duplicated code, and any other defect; read-only, a ranked findings list the maintainer triages into fix tasks | T25 | Opus | M4 rewrote the simulation in two languages over 40 tasks; a fresh whole-code read catches what task-scoped reviews could not | M | in progress (dispatched 2026-11-07, Opus) |
+| T44 | T43's fix round (Q72): the eleven "fix in M4" findings F1 to F11 of the full review (release export GLSL, lens flare re-enabled after a failed compile, the broadcast scan shifting the rows' rid column, the unread per-tick rows copy, statics outliving their world, per-tick waste, T37 leftovers and dead code, the targeting snapshot from rows, the explosion-LOD tests, CI timeout, doc drift); then the release fullscreen pair and the moved numbers re-taken | T43 | Opus | The controller's triage of T43 under Q72: clear-cut, contained fixes before the close-out merge; the fifteen later-milestone findings are listed for the maintainer | X, G | in progress (dispatched 2026-11-07, Opus) |
 | T39 | FSR 4 study (Q59): whether AMD's FSR 4 can run in this game on Linux, Vulkan and Godot 4.7 through the native library, on the maintainer's RDNA 2 card, under the GPL-3.0 licence; a go or no-go with a plan | T38 | Sonnet | FSR 4 is not in Godot 4.7; AMD's support for RDNA 2 and for Vulkan is new or announced, so it needs facts before code | M | not needed (skipped by the maintainer, Q60) |
 
 ### M4-T01 Benchmark harness, budget and baseline
@@ -2527,6 +2528,22 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
   radar does (re-record `targeting_on_read.json` if so). From T23's re-review: the explosion-LOD maths tests share `flash_radius_m`
   and `PEAK` with the code (they would not catch drift from `Explosion`'s values), nothing tests that `picture_lines` follows the 3D
   scale, and the far-proxy cost's max is 0.506 ms against T23's 0.5 ms bar.
+
+##### M4-T44 T43's fix round (Q72)
+
+- **Track:** X and G. **Agent:** Opus. **Depends on:** T43.
+- **Source:** `.superpowers/sdd/m4-performance-and-scale/full-review.md`, the "Fix in M4" section, F1 to F11 (each with file:line,
+  evidence and the suggested fix). The fifteen "later milestone" findings (L1 to L15: flight's per-ship GDScript gather, the hit and
+  ram resolvers' GDScript loops, the radar's per-contact loop, a native allocation pass, the sound pass and the rest) stay in the
+  review for the maintainer, named in report P3's open questions.
+- **Goal:** every F finding fixed, tests first where behaviour changes. F1 without editing the vendored `addons/lens_effects/`
+  (CLAUDE.md): the four `src/rendering/*.glsl` files kept as files in the export, the lens flare's shader added by an export plugin
+  in our own code (or another route that leaves the addon untouched). Commit the untracked `tests/unit/test_parity_fixture.gd.uid`.
+- **Measures:** the release export built and its fullscreen pair taken (`battle` 500 and 1 000, the release row T25 could not take);
+  the headless tick at `battle` 500 and 1 000 and the fullscreen `battle` 500 and 1 000 once each after F4, F6 and F8, against T25's
+  rows; the full suite and the three CI shards green.
+- **Done when:** F1 to F11 are fixed and reviewed, the release window opens and its numbers are in the Phase 3 entry, and the moved
+  numbers are recorded beside T25's.
 
 ##### M4-T39 FSR 4 study (Q59)
 - **Not needed (Q60, 2026-11-05):** the maintainer skipped FSR 4; the section below is kept as the record of what was asked.
