@@ -77,6 +77,21 @@ func test_settings_switch_the_effects_live() -> void:
 	assert_false(post.blur_effect().enabled)
 
 
+func test_a_flare_whose_shader_failed_stays_off() -> void:
+	# M4-T44 (F2): a failed compile must not be switched back on by the setting, or the add-on errors on every frame.
+	var flare := post.flare_effect() as SceneLensFlareEffect
+	assert_true(flare.usable, "the scene's flare starts usable")
+	var shader: RID = flare.create_shader("res://no/such/lens_flares.glsl")
+	assert_false(shader.is_valid(), "no shader from a source that cannot be read")
+	assert_false(flare.usable, "the flare knows its shader failed")
+	Settings.set_value(&"lens_flare", true)
+	post.apply_settings()
+	assert_false(flare.enabled, "the setting does not switch a failed flare back on")
+	flare.usable = true
+	post.apply_settings()
+	assert_true(flare.enabled, "a usable flare follows the setting again")
+
+
 func test_the_blur_strength_setting_reaches_the_effect() -> void:
 	Settings.set_value(&"motion_blur", true)
 	Settings.set_value(&"motion_blur_strength", 0.8)

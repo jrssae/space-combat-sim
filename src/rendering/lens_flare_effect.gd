@@ -26,11 +26,19 @@ const SHADER_PATCHES: Dictionary[String, String] = {
 }
 
 
+## False once the shader failed: the flare then stays off whatever the setting says (`PostEffects.apply_settings`).
+var usable: bool = true
+
+
 func create_shader(p_file_path: String) -> RID:
-	var shader: RID = RuntimeShader.compile_text(rd, patched_source(p_file_path), p_file_path)
+	var text: String = patched_source(p_file_path)
+	var shader := RID()
+	if not text.is_empty() and rd != null:
+		shader = RuntimeShader.compile_text(rd, text, p_file_path)
 	if not shader.is_valid():
 		# The add-on would retry and fail on every frame.
 		push_warning("SceneLensFlareEffect: %s did not compile; the lens flare stays off" % p_file_path)
+		usable = false
 		enabled = false
 		return shader
 	add_rid_to_free(shader, "shader: %s" % p_file_path)
@@ -40,6 +48,8 @@ func create_shader(p_file_path: String) -> RID:
 ## The add-on's shader source with the patches applied.
 static func patched_source(path: String) -> String:
 	var text: String = FileAccess.get_file_as_string(path)
+	if text.is_empty():
+		return text
 	for old: String in SHADER_PATCHES:
 		if not text.contains(old):
 			push_warning("SceneLensFlareEffect: %s has changed: a patch no longer applies" % path)
