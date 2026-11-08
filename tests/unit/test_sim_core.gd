@@ -499,6 +499,27 @@ func test_a_ship_parked_after_the_resync_and_back_the_next_tick_gets_a_new_handl
 	assert_eq(core.row_of(first), -1, "the old handle stays dead")
 
 
+func test_a_ship_back_from_the_pool_after_a_broadcast_scan_keeps_its_own_body() -> void:
+	# M4-T44 (F3): the broadcast scan builds rows of its own and must leave the core's rid column alone, or a ship that
+	# comes back from the pool mid-tick reads its ram contacts from a broadcaster's body.
+	var ship: RigidBody3D = _body(Vector3(100.0, 0.0, -50.0), Factions.EARTH_ALLIANCE, "KILO 1")
+	var buoy: RigidBody3D = _body(Vector3(-300.0, 20.0, 400.0), Factions.NEUTRAL, "BUOY")
+	var marker := buoy.get_node("Targetable") as Targetable
+	marker.broadcast_range_m = 1.0e6
+	_park(ship)
+	var core: SimCore = _core()
+	core.sync_now()  # the tick's first sync, the ship still in the pool
+	var heard: Array = core.core.select(PackedInt64Array([marker.get_instance_id()]))
+	assert_gt(heard.size(), 0, "the broadcast scan answered")
+	_unpark(ship)  # acquired from the pool mid-tick
+	core.sync_bolts_now()  # the hit resolver's resync gives it a late row
+	var handle: int = core.handle_of(ship.get_instance_id())
+	assert_gt(handle, 0, "the ship is a row again")
+	assert_eq(core.core.row_rid(core.row_of(handle)), ship.get_rid(), "its row reads its own body")
+	assert_eq(core.core.row_rid(core.row_of(core.handle_of(buoy.get_instance_id()))), buoy.get_rid(),
+			"and the broadcaster's row its own")
+
+
 func test_the_ram_broad_phase_pairs_from_the_core_as_from_its_own_load() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 2101

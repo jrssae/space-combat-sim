@@ -789,6 +789,14 @@ impl ScsSimCore {
             .map_or_else(GString::new, |r| self.row_names[r].clone())
     }
 
+    /// The body a row reads its contacts from (the ram phase's), for tests.
+    #[func]
+    fn row_rid(&self, row: i64) -> Rid {
+        self.row_index(row)
+            .and_then(|r| self.row_rids.get(r).copied())
+            .unwrap_or(Rid::Invalid)
+    }
+
     #[func]
     fn row_position(&self, row: i64) -> Vector3 {
         self.row_index(row).map_or(
@@ -866,8 +874,9 @@ impl ScsSimCore {
     pub fn select(&mut self, ids: PackedInt64Array) -> VarArray {
         let mut rows = Rows::default();
         let mut found: Vec<i32> = Vec::new();
-        // The selection's names go to a list of its own; the core's rows keep theirs.
+        // The selection's names and rids go to lists of their own; the core's rows keep theirs.
         let core_names = std::mem::take(&mut self.row_names);
+        let core_rids = std::mem::take(&mut self.row_rids);
         let mut markers = std::mem::take(&mut self.markers);
         // A parked marker whose ship flies as a tier row is heard from its row (M4-T23), built on the first miss.
         let mut tier_of: Option<std::collections::HashMap<i64, usize>> = None;
@@ -906,6 +915,7 @@ impl ScsSimCore {
         }
         self.markers = markers;
         let names = std::mem::replace(&mut self.row_names, core_names);
+        self.row_rids = core_rids;
         rows.node_count = rows.body_ids.len();
         let mut out = rows.to_array(&names, rows.node_count, rows.node_count, &self.factions);
         out.push(&PackedInt32Array::from(found.as_slice()).to_variant());
