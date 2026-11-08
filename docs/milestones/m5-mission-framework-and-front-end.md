@@ -510,6 +510,23 @@ whose trigger never arose). Update the column with each task's commit.
 their Python tests skip until T27 moves them onto the textured-mesh pipeline (`main` removed the splat writers they call).
 T21, T16 and T28 are re-planned on the native core ("M5 on the native core", below).
 
+**Hand-off (2026-11-08, from the `oscar` session).** Every task is `done` except T25 and T20. The native split in "M5 on
+the native core" is built: T21 (turrets in Rust, with the own-hull line-of-fire rule, Q33), T16 (civilian fleeing in the
+native brains, the role column, big-hull handling; Q30 shared Saturn engine, Q31 balance, Q32 flank turrets), T28 (engine
+voices from the core's rows), T27 (civilians as textured meshes) and T17 (encounters). Open for the maintainer:
+- **Q33's blind spot is narrow**: the hull hides only a cone straight behind each Saturn and a little below (the flank
+  turrets see past the cargo hull). Keep it, or widen it (narrower flank arcs, or the turrets set closer in)?
+- **T25 (targeting at scale)** waits for its concept stop (Q26).
+- **T20** needs the main machine: the full suite with `GUT_SLOW=1` (including `test_flight_parity_fight`,
+  `test_weapon_rows_battle`, `test_core_threads`, `test_core_snapshot` and `test_turret_balance`, which `oscar` cannot or
+  did not run), `run_tests.sh` with its bench smoke run, the GPU checks on the RX 6950 XT (`civilian_showcase`) and the
+  encounters part of `docs/playtest.md`.
+- **Not yet seen rendered**: the Saturns' flank turrets (windowed runs on `oscar` hung while the display slept). Earlier
+  Saturn 4 shots, before the flank turrets, are in the gitignored `references/screenshots/`.
+- **(H)**: the nine hulls and their paint, the turrets' look and `turret_fire`, fleeing civilians, the Saturn 8s' slow
+  turns, the low Saturn hulls against the harder turrets, the encounters' pacing and the 15 km civilian transponder.
+- M4-T37 and the rest of M4 come in by a later merge of `main` (Q27); expect overlap in the native weapon files (Q28).
+
 ### M5-T01 `Game` flow, boot routing and loading
 
 - **Goal:** AC1 and the loading half of AC2 (D50).
