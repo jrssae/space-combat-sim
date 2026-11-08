@@ -80,3 +80,40 @@ func test_the_flash_rises_fast_lasts_longer_for_a_bigger_blast_and_fades_to_noth
 	assert_almost_eq(ExplosionLod.envelope(ExplosionLod.RISE_S, life), 1.0, 1e-4)
 	assert_eq(ExplosionLod.envelope(life, life), 0.0)
 	assert_gt(ExplosionLod.flash_s(8.0e12), life)
+
+
+# --- pinned values (M4-T44): worked out by hand, so a changed constant fails here instead of moving the expectation ---
+
+
+func test_a_fighters_switches_at_1080_lines_are_where_the_maths_puts_them() -> void:
+	# R 9.3 m, flash radius 1.2 R = 11.16 m; 540 / tan(35 deg) = 771.20 px per radian.
+	assert_almost_eq(ExplosionLod.switch_distance_m(9.3, 1080.0, 70.0, 8.0), 1075.82, 0.01, "full to reduced at 8 px")
+	assert_almost_eq(ExplosionLod.switch_distance_m(9.3, 1080.0, 70.0, 2.0), 4303.30, 0.01, "reduced to the flash at 2 px")
+	assert_eq(ExplosionLod.level(9.3, 1000.0, 1080.0, 70.0), ExplosionLod.Level.FULL, "1 km: the full effect")
+	assert_eq(ExplosionLod.level(9.3, 2000.0, 1080.0, 70.0), ExplosionLod.Level.REDUCED, "2 km: the reduced one")
+	assert_eq(ExplosionLod.level(9.3, 5000.0, 1080.0, 70.0), ExplosionLod.Level.FAR, "5 km: the flash")
+	assert_almost_eq(ExplosionLod.visible_to_m(9.3, 1080.0, 70.0), 17213.18, 0.05, "the flash reads to about 17 km")
+	var at_switch: Vector2 = ExplosionLod.on_screen(9.3, 4303.30, 1080.0, 70.0)
+	assert_almost_eq(at_switch.x, 2.0, 1e-3, "2 px at the switch")
+	assert_almost_eq(at_switch.y, 2.0, 1e-6, "at the glow's brightness")
+
+
+func test_a_cruisers_switches_at_2160_lines_are_where_the_maths_puts_them() -> void:
+	# R 250 m, flash radius 300 m; 1 080 / tan(35 deg) = 1 542.40 px per radian.
+	assert_almost_eq(ExplosionLod.switch_distance_m(250.0, 2160.0, 70.0, 8.0), 57840.0, 0.1, "full to reduced at 8 px")
+	assert_almost_eq(ExplosionLod.switch_distance_m(250.0, 2160.0, 70.0, 2.0), 231360.0, 0.5, "reduced to the flash at 2 px")
+	assert_eq(ExplosionLod.level(250.0, 50000.0, 2160.0, 70.0), ExplosionLod.Level.FULL, "50 km: the full effect")
+	assert_eq(ExplosionLod.level(250.0, 100000.0, 2160.0, 70.0), ExplosionLod.Level.REDUCED, "100 km: the reduced one")
+	assert_eq(ExplosionLod.level(250.0, 300000.0, 2160.0, 70.0), ExplosionLod.Level.FAR, "300 km: the flash")
+
+
+func test_the_flash_is_as_big_as_the_explosions_fireball() -> void:
+	assert_eq(ExplosionLod.FIREBALL_RADII, Explosion.FIREBALL_FINAL_SCALE, "one number for both")
+
+
+func test_the_picture_lines_follow_the_window_and_the_3d_scale() -> void:
+	assert_eq(ExplosionLod.picture_lines_for(2160, 1.0 / 1.5, false), 1440.0, "2 160 lines at FSR quality draw 1 440")
+	assert_eq(ExplosionLod.picture_lines_for(2160, 1.0, false), 2160.0, "native: the window's lines")
+	assert_eq(ExplosionLod.picture_lines_for(1080, 0.5, false), 540.0, "half the lines at half scale")
+	assert_eq(ExplosionLod.picture_lines_for(2160, 0.5, true), 1080.0, "headless draws nothing: the default lines")
+

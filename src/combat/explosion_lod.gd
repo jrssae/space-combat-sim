@@ -18,8 +18,8 @@ enum Level { FULL, REDUCED, FAR }
 ## The fireball's radius in pixels where the full effect ends and where the reduced one ends.
 const FULL_PX: float = 8.0
 const REDUCED_PX: float = 2.0
-## The fireball's final radius in bounding radii (`Explosion.FIREBALL_FINAL_SCALE`): the flash's radius.
-const FIREBALL_RADII: float = 1.2
+## The fireball's final radius in bounding radii: the flash's radius.
+const FIREBALL_RADII: float = Explosion.FIREBALL_FINAL_SCALE
 ## The flash's brightness (linear, HDR): the explosion's glow (`Explosion`'s flash quad, 2.4 / 1.7 / 1.0 in `COLOR` times this).
 const PEAK: float = 2.0
 const COLOR: Color = Color(1.2, 0.85, 0.5)
@@ -101,6 +101,14 @@ static func visible_to_m(radius_m: float, lines: float, fov_deg: float) -> float
 ## The lines the 3D picture of `viewport` is drawn at (the window's, scaled by the 3D scale), as the flash's pixel floor counts;
 ## `DEFAULT_LINES` with no picture (the headless display draws none).
 static func picture_lines(viewport: Viewport) -> float:
-	if viewport == null or DisplayServer.get_name() == "headless":
+	if viewport == null:
 		return DEFAULT_LINES
-	return float(Upscaling.internal_lines(int(viewport.get_visible_rect().size.y), viewport.scaling_3d_scale))
+	return picture_lines_for(int(viewport.get_visible_rect().size.y), viewport.scaling_3d_scale,
+			DisplayServer.get_name() == "headless")
+
+
+## The lines a window `window_lines` tall draws its 3D at, at 3D scale `scale`; `DEFAULT_LINES` when `headless`.
+static func picture_lines_for(window_lines: int, scale: float, headless: bool) -> float:
+	if headless:
+		return DEFAULT_LINES
+	return float(Upscaling.internal_lines(window_lines, scale))
