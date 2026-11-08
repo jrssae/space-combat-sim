@@ -490,7 +490,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T27 | C | The civilian generators on the textured-mesh pipeline: `core/civilian.py` and the five generators write M4's textured `.glb` (UV atlas, colour, normal, roughness and metal, emissive) from show-reference schemes instead of splats; fidelity (AC20) re-scored on the mesh | T26 | Opus | Five generators and their tests move from splat levels to mesh levels; the paint is a look call | done |
 | T21 | C | Defensive turrets in the native core (Q28): mounts, aim, the fire gate and the attacker memory as weapon rows (placed here in the order; numbered last because it was added after the others had numbers) | T27, T19 | Opus | A native gunner seam under the threading rules, with a balance test | done |
 | T16 | C | Civilian ships in the game: data and assembly in GDScript, the big-hull kind, avoidance and tier in the native core | T27, T21 | Opus | Specs for heavy hulls, factions, pools, native AI fixes, GPU check | done |
-| T28 | D | Engine voices on the core's rows: the 4 Hz re-rank asks the core for the ships near the listener instead of walking every ship | T26, T16 | Sonnet | A small native query; the re-rank stops growing with ship count | in progress |
+| T28 | D | Engine voices on the core's rows: the 4 Hz re-rank asks the core for the ships near the listener instead of walking every ship | T26, T16 | Sonnet | A small native query; the re-rank stops growing with ship count | done |
 | T17 | C | Free-flight encounters | T16, T02 | Opus | Seeded director under a CPU cap | in progress |
 | T18 | D | New guns and impacts | - | Opus | Synthesis to measured shapes | done |
 | T19 | D | Per-thruster engine bursts | T18 | Opus | Voice placement and a voice budget | done |
