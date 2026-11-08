@@ -187,6 +187,7 @@ func _exit_tree() -> void:
 	if world != null and is_instance_valid(world) and world.rebased.is_connected(_on_rebased):
 		world.rebased.disconnect(_on_rebased)
 	DebugConsole.registry.unregister_owner(self)
+	NativeBrains.drop_for(core)
 	if _current == self:
 		_current = null
 	PulseCannon.rebind_all()

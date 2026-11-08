@@ -37,6 +37,7 @@ const HANDOVERS_PER_TICK: int = 64
 const TIER_META: StringName = &"_scs_tier_row"
 
 static var _current: TierDirector = null
+## The tier's hulls by body id, found once and kept while the director's world lives (cleared when it leaves).
 static var _damageables: Dictionary[int, Damageable] = {}
 
 var world: WorldFrame = null
@@ -105,6 +106,7 @@ func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
 	if _current == self:
 		_current = null
+		_damageables.clear()
 
 
 ## The director under `p_world`, made on first ask with the pool and the stand-ins it works for.

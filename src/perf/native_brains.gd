@@ -42,7 +42,8 @@ static func set_settings(nearest_k: int, static_k: int) -> void:
 		_host.set_settings(nearest_k, static_k)
 
 
-## Forgets the host (tests that swap cores).
-static func drop() -> void:
-	_host = null
-	_core = null
+## Forgets the host when `core` is the one it is over, so a world that leaves takes its core and step threads with it.
+static func drop_for(core: Object) -> void:
+	if core != null and _core == core:
+		_host = null
+		_core = null
