@@ -529,8 +529,9 @@ removed or converted when M5 rebases onto `main` after M4.
   anything; the Godot tasks of every track share one machine, so they follow the locks below. If work has to go one task at
   a time, the order is T01, T02, T05, T06, T08, T09, T07, T10, T03, T04, T11, T23, T12-T15, T22, T26, T27, T21, T16, T28, T17,
   T18, T19, then (after Q34 to Q43) T29, T30, T31-T38 in number order, T25, T20.
-- **One working copy.** All M5 work happens in the `m5` worktree (`.claude/worktrees/m5`) on branch `m5`; no task
-  branches, no worktrees per agent (the maintainer's rule from M4). Parallel agents keep to their task's files.
+- **One working copy.** Since 2026-11-08 all M5 work happens in the main checkout on branch `m5` (the `.claude/worktrees/m5`
+  worktree, used while M4 held the main checkout, was removed once M4 merged); no task branches, no worktrees per agent (the
+  maintainer's rule from M4). Parallel agents keep to their task's files.
 - **Locks.** Every Godot run in the `m5` worktree goes through `flock /tmp/m5-godot.lock <command>` (one Godot process at a
   time on the shared `.godot/` import cache). Every `git add` + `git commit` goes through `flock /tmp/m5-git.lock`, and an
   agent stages only the paths it changed (never `git add -A`). GPU checks take `flock /tmp/gpu.lock` as well. M4's
