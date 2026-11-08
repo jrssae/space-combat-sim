@@ -588,6 +588,12 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
       moment of the live fight) show what the agent saw: no ghosting, stars soft at Ultra Performance.
 - [ ] **M4-T40 Low presets.** `upscale fsr1 ultra_performance` and `upscale fsr2 ultra_performance` (a third of the lines, for weaker
       GPUs): the stars and far dots enlarge into soft blobs; say whether that is acceptable for a low setting.
+- [ ] **M4-T25 The 60 FPS bar at the screen (Q52).** The bar is yours to judge: 60 FPS at the screen with vsync on, fullscreen at the
+      panel's 3840x2160. Fly `bench typical 58`, `bench battle 300`, `bench battle 500` and `bench battle 1000` (each with a long
+      window, e.g. `bench battle 500 300`) and say where the picture stops being smooth. The agent measured with vsync off: the
+      average over 60 FPS at every count (66 to 71 at 1 000), the 1 % low about 60 to 600 ships and 40 to 51 from 800. Through
+      Wayland Godot keeps vsync on whatever the setting says and paces frames to at most about 145 FPS; say if anything feels
+      different from X11 (`--display-driver x11` runs the old path).
 - [ ] **M4-T30d Every other hull textured (AC7, Q44).** T30d merged on the agent's judgement; the sheets wait for your eye. Open
       `reports/perf/m4-t30d_sheets/`: the raider fighter (8 to 600 m), the nav buoy, the raider and Starfury break-up chunks, the
       cruiser, destroyer and carrier (300 m to 8 km), the B5 station (3, 8 and 20 km), and the Starfury's fine against coarse LOD
