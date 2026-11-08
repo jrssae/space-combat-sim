@@ -6587,7 +6587,7 @@ the sweep's stop rule did not cut it), `m4_p3_cap20` (1 000 at 20 % capitals), `
 `m4_p3_release` and `M4-T25_release_fs_*` (the release export).
 
 **The only code changed** is the measuring: the bench takes `capitals=<share>` (`BenchLayout.capital_share`, reset after the run;
-`test_bench_layout` 25 of 25 and `test_bench` 9 of 9 with the new tests), since the section asks for the 1 000 run at 20 %
+`test_bench_layout` 24 of 24 and `test_bench` 9 of 9 with the new tests), since the section asks for the 1 000 run at 20 %
 capitals and the bench had no way to set it, and `scripts/measure_fight_node.gd` prints `render.display` and `render.window` in
 every log (Q66). The sweep's commit stamps read `32ac1b9`, `655f046`, `d4ec666` and `7a6a718`: the same game code, the later
 commits docs only.
@@ -6747,7 +6747,7 @@ no quadratic growth to 1 000; in the sparse `spread` layout it is 0.31 ms at 500
 
 **The release export, once** (a snapshot of `655f046` by `git archive`, the generated assets and the library copied in, imported and
 exported with the script header's preset, embedded pack, release template 4.7.2; `scripts/` kept in the pack so the measuring scripts
-run): **203 MB** with the library beside it (P2: 176 MB). Headless, `battle` seed 1, 5 s + 30 s under both locks (`m4_p3_release`, in the
+run): **203 MB**, the native library (6 MB) beside it (P2: 176 MB). Headless, `battle` seed 1, 5 s + 30 s under both locks (`m4_p3_release`, in the
 snapshot's `reports/`): **500 at 6.78 ms** (p99 8.39, passes) and **1 000 at 9.19 ms** (p99 11.73, 0.03 % behind real time), against
 the editor build's 7.73 and 10.23 on the same seed (12 % and 10 % faster; P2 found 25 % at 300). The sweep's own summary step hangs in
 the export (it reads `res://reports`, which is not in the pack) and was stopped; each run's summary is written. **The fullscreen release
