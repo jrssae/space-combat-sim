@@ -821,7 +821,7 @@ impl ScsWeaponRows {
 
     /// One missile's guidance toward body `target_id` from its row: the velocity in x, y and z and in w 1 when steered,
     /// 0 when the target is gone (it flies straight on), -1 when the rows cannot answer (no core, or the target was
-    /// touched since its row was read) and the GDScript must.
+    /// touched since its row was read: the caller reads the touched rows again and asks once more).
     #[func]
     #[allow(clippy::too_many_arguments)]
     fn steer_missile(
@@ -840,6 +840,9 @@ impl ScsWeaponRows {
         let guard = core.bind();
         if guard.is_touched(target_id) {
             return answer(velocity, -1.0);
+        }
+        if guard.parked_since_sync(target_id) {
+            return answer(velocity, 0.0);
         }
         let Some(j) = usize::try_from(guard.row_of_id(target_id)).ok() else {
             return answer(velocity, 0.0);

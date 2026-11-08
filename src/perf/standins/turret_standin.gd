@@ -24,7 +24,6 @@ const MUZZLE_SPEED_MPS: float = 1000.0
 const SHOT_INTERVAL_S: float = 1.0
 const BOLT_LIFETIME_S: float = 4.2
 const BOLT_DAMAGE: float = 10.0
-const PROJECTILE_SCENE: PackedScene = preload("res://src/weapons/projectile.tscn")
 
 static var _weapon: WeaponSpec = null
 
@@ -70,20 +69,12 @@ static func turned_toward(from: Vector3, wanted: Vector3, max_angle: float) -> V
 	return from.rotated(turn_axis.normalized(), max_angle).normalized()
 
 
-## Spawns one of `cap`'s gun bolts under `projectiles`, leaving from `at` at `velocity` (World frame): the gun's shot, also
-## for the native rows' fire decisions (M4-T20).
-static func launch_bolt(cap: CapitalStandin, at: Vector3, velocity: Vector3, now_s: float, projectiles: Node3D) -> Projectile:
+## Fires one of `cap`'s gun bolts from `at` at `velocity` (World frame) as a row the core owns (M4-T35): the native rows'
+## fire decision (M4-T20). Nothing without a core.
+static func launch_bolt(cap: CapitalStandin, at: Vector3, velocity: Vector3, now_s: float) -> void:
 	var sim: SimCore = SimCore.current()
 	if sim != null and sim.bolt_rows_on():
-		sim.add_bolt(at, velocity, cap.faction, cap.get_instance_id(), weapon(), now_s)  # an owned row (M4-T35), no node
-		return null
-	var bolt := PROJECTILE_SCENE.instantiate() as Projectile
-	projectiles.add_child(bolt)
-	bolt.configure(weapon())
-	bolt.shooter_id = cap.get_instance_id()
-	bolt.faction = cap.faction
-	bolt.launch(at, velocity, now_s)
-	return bolt
+		sim.add_bolt(at, velocity, cap.faction, cap.get_instance_id(), weapon(), now_s)
 
 
 ## What the native rows keep for this turret while they step it (M4-T20): `[axis, target_id, aim error, the gate's ready

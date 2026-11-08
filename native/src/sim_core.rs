@@ -161,6 +161,8 @@ pub struct ScsSimCore {
     slot_generation: Vec<u32>,
     free_slots: Vec<u32>,
     touched: HashSet<i64>,
+    // Bodies a resync found parked since the tick's first sync: their rows stay until the next sync, but nothing aims at them.
+    parked_since_sync: HashSet<i64>,
     seen: HashSet<i64>,
     syncs: u64,
     attribute_reads: i64,
@@ -433,6 +435,7 @@ impl ScsSimCore {
         self.row_names.clear();
         self.row_rids.clear();
         self.seen.clear();
+        self.parked_since_sync.clear();
         let cached = !self.activity_dirty;
         let mut markers = std::mem::take(&mut self.markers);
         for m in markers.iter_mut() {
@@ -1344,6 +1347,7 @@ impl ScsSimCore {
                     } else {
                         // Parked or destroyed since: the row stays (the scan's indices hold) but no kernel treats it as a hull.
                         rows.flags[r] &= !FLAG_HULL_ACTIVE;
+                        self.parked_since_sync.insert(m.body_id);
                         m.active_at = 0;
                     }
                 }
@@ -1717,6 +1721,11 @@ impl ScsSimCore {
     /// Whether `body_id` was hidden, shown or lost its hull since its row was last read (its row may be stale).
     pub fn is_touched(&self, body_id: i64) -> bool {
         self.touched.contains(&body_id)
+    }
+
+    /// Whether a resync found `body_id` parked since the tick's first sync (its row is still there until the next one).
+    pub fn parked_since_sync(&self, body_id: i64) -> bool {
+        self.parked_since_sync.contains(&body_id)
     }
 }
 

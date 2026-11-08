@@ -149,7 +149,7 @@ func _step_native(native: NativeWeapons, delta: float, now_s: float, started_us:
 	var bolt_velocity: PackedVector3Array = out[2]
 	for k: int in gun_rows.size():
 		var gun := native.turrets[gun_rows[k]] as TurretStandin
-		TurretStandin.launch_bolt(gun.capital, bolt_at[k], bolt_velocity[k], now_s, projectiles)
+		TurretStandin.launch_bolt(gun.capital, bolt_at[k], bolt_velocity[k], now_s)
 	mark_us = _mark(Part.ENGINES_GUNS, mark_us)
 	var spent: PackedInt64Array = out[3]
 	var spent_missile: PackedByteArray = out[4]
