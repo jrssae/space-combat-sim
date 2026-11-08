@@ -13,6 +13,7 @@ var world: WorldFrame
 var projectiles: Node3D
 var standins: StandinDirector
 var now_s: float = 0.0
+var sim: SimCore
 
 
 func before_each() -> void:
@@ -30,6 +31,7 @@ func before_each() -> void:
 	standins.projectiles = projectiles
 	world.add_child(standins)
 	standins.set_physics_process(false)  # stepped by hand
+	sim = SimCore.for_tree(get_tree())  # the world's own core (M4-T42): the weapons step on its rows
 	now_s = SimClock.now() + 100.0  # ahead of the clock projectiles expire by, however long the suite has run
 
 
@@ -63,7 +65,9 @@ func _bolts(faction: StringName = &"") -> Array[Projectile]:
 # One stand-in tick at `now_s` with a fresh scan; returns how many bolts the turrets fired.
 func _step() -> int:
 	var before: int = _bolts().size()
-	standins.step(DT, now_s, ContactScan.from_tree(get_tree()))
+	sim.sync_now()  # the rows as the bodies stand now: the test moves them by hand between steps
+	standins.step(DT, now_s)
+	standins.pull_native_state()  # the turrets' nodes show the rows' state, as the tests read it
 	now_s += DT
 	return _bolts().size() - before
 
@@ -90,7 +94,7 @@ func test_a_capital_carries_its_class_turrets_hull_and_kind() -> void:
 	assert_eq(carrier.linear_damp_mode, RigidBody3D.DAMP_MODE_REPLACE, "Newtonian: no damping")
 	assert_eq(carrier.linear_damp, 0.0)
 	assert_eq(carrier.angular_damp, 0.0)
-	var scan := ContactScan.from_tree(get_tree())
+	var scan := TreeRows.core_scan(get_tree())
 	var seen: Array[Contact] = scan.contacts_for(-1, Vector3(0.0, 0.0, 3000.0), Factions.RAIDERS)
 	assert_eq(seen.size(), 1, "the capital is one contact")
 	assert_true(seen[0].is_ship, "a capital is a body that flies")
@@ -165,7 +169,7 @@ func test_the_asteroid_field_is_static_rows_in_the_scan_and_bolts_hit_it() -> vo
 	assert_eq(field.count(), 2)
 	assert_eq(field.body_rids().size(), 2, "one static physics body per rock, by RID")
 	assert_eq(field.get_child_count(), 1, "one multimesh: no mesh, physics or marker node per rock (M4-T29)")
-	var scan := ContactScan.from_tree(get_tree())
+	var scan := TreeRows.core_scan(get_tree())
 	assert_eq(scan.contacts_for(-1, Vector3.ZERO, Factions.RAIDERS).size(), 0, "a rock is never a contact (M4-T29)")
 	var seen: Array[Contact] = scan.statics_for(-1, Vector3.ZERO, Factions.RAIDERS, 4)
 	assert_eq(seen.size(), 2, "every rock is a static row, an obstacle for every side")
@@ -487,3 +491,19 @@ func test_a_rebase_shifts_the_mines() -> void:
 	world.rebase(offset)
 	assert_almost_eq(mines.position_of(0).distance_to(before - offset), 0.0, 1e-3)
 	assert_eq(mines.kind, Targetable.Kind.MINE, "a row of kind mine for the body registry")
+
+
+func test_capitals_and_mines_attach_the_core() -> void:
+	# M4-T42 (T37's review M1): stand-ins in a world whose core is gone attach it again, so their weapons never sit idle.
+	sim.free()
+	assert_null(SimCore.for_tree(get_tree()), "no core in this tree")
+	_capital(Vector3.ZERO)
+	sim = SimCore.for_tree(get_tree())
+	assert_not_null(sim, "a capital attaches the core")
+	assert_eq(sim.get_parent(), world, "under the stand-ins' world")
+	sim.free()
+	standins.add_mines([{"offset": Vector3(100.0, 0.0, -1000.0), "faction": Factions.RAIDERS}], world.to_universe(Vector3.ZERO))
+	sim = SimCore.for_tree(get_tree())
+	assert_not_null(sim, "mines attach the core")
+	standins.step(DT, now_s)
+	assert_eq(standins.weapons_path(), &"native", "and the core steps the weapons")

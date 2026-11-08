@@ -141,12 +141,9 @@ func _assert_stages_are_consistent(series: Array[PackedInt64Array]) -> void:
 		if parts != v.call(PerfProbe.Field.TICK):
 			broken.append("tick %d: stages %d, tick %d" % [i, parts, v.call(PerfProbe.Field.TICK)])
 	assert_eq(broken.size(), 0, "stages nest inside the stage that contains them: %s" % "; ".join(broken.slice(0, 6)))
-	if BrainBatch.driver_step_mode() and SimCore.enabled():
-		# Every driver hosted in the native brain host (M4-T35): its perception runs inside the native think, counted in
-		# `think`, and no GDScript contact scan is built in the measured ticks, so `scan` reads 0.
-		assert_gt(PerfStats.max_value(_floats(series[PerfProbe.Field.THINK])), 0.0, "the hosted drivers' think was timed")
-	else:
-		assert_gt(PerfStats.max_value(_floats(series[PerfProbe.Field.SCAN])), 0.0, "the scan was timed")
+	# Every driver hosted in the native brain host (M4-T35): its perception runs inside the native think, counted in
+	# `think`, and no GDScript contact scan is built in the measured ticks, so `scan` reads 0.
+	assert_gt(PerfStats.max_value(_floats(series[PerfProbe.Field.THINK])), 0.0, "the hosted drivers' think was timed")
 	assert_gt(PerfStats.max_value(_floats(series[PerfProbe.Field.THINK])), 0.0, "the drivers were timed")
 
 
@@ -207,6 +204,15 @@ func test_options_are_read_from_key_value_words() -> void:
 	assert_eq(float(defaults["rebase_m"]), BenchRunner.REBASE_THRESHOLD_M)
 	assert_false(bool(BenchRunner.parse_options(PackedStringArray(["seed=x"]))["ok"]))
 	assert_false(bool(BenchRunner.parse_options(PackedStringArray(["0"]))["ok"]), "no zero-length window")
+
+
+func test_the_capital_share_is_an_option_from_0_to_1() -> void:
+	assert_eq(float(BenchRunner.parse_options(PackedStringArray())["capitals"]), -1.0, "the mix's share by default")
+	var o: Dictionary = BenchRunner.parse_options(PackedStringArray(["capitals=0.2"]))
+	assert_true(o["ok"], String(o.get("error", "")))
+	assert_eq(float(o["capitals"]), 0.2)
+	assert_false(bool(BenchRunner.parse_options(PackedStringArray(["capitals=1.5"]))["ok"]))
+	assert_false(bool(BenchRunner.parse_options(PackedStringArray(["capitals=x"]))["ok"]))
 
 
 # --- battle and typical (M4-T07) ---------------------------------------------------------------------------------

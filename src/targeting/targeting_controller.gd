@@ -17,7 +17,12 @@ extends Node
 ## Inactive targetables (`Targetable.is_active()`: hidden, or their owner not processing) are never candidates, and a
 ## selection that turns inactive is cleared on the next refresh, emitting `target_changed`.
 ##
-## On the core (M4-T35, `perf_native_selection_check`): an AI ship's controller (one that does not keep candidates) hands its
+## Tier ships (M4-T23): a ship in the low-attention tier is parked, so its targetable is not active; its row in the core
+## stands in for it (`TierTargets`): candidates, the nearest hostile, a selection and its readout read the row, by the same
+## marker id, so a selection survives the ship's promotion and demotion. A controller whose own ship is in the tier reads
+## its own position from its row too.
+##
+## On the core (M4-T35): an AI ship's controller (one that does not keep candidates) hands its
 ## check to the core, which runs every watched ship's in one pass over the rows at this priority and names the ships whose
 ## selection must clear; this node then stops ticking itself and only clears (`clear_selection`, the same signal).
 
@@ -34,14 +39,14 @@ var system: TargetingSystem = TargetingSystem.new()
 var keeps_candidates: bool = true
 
 var _body: RigidBody3D = null
-# The list was not built since the last refresh (M4-T34, `perf_targeting_on_read`): the next reader builds it.
+# The list was not built since the last refresh (M4-T34, built on read): the next reader builds it.
 var _stale: bool = false
-# What the last refresh's list held, light (M4-T34, on read): each target's id, position, broadcast range and name, so the
-# selection, its name and `select_id` answer as from the list the refresh used to build. Valid until a command gathers anew.
+# What the last refresh's list held within reach, light (M4-T34, on read; from the core's rows since M4-T44): each target's
+# id, position and broadcast range, so the selection and `select_id` answer as from the list the refresh used to build.
+# Valid until a command gathers anew.
 var _snap_ids := PackedInt64Array()
 var _snap_positions := PackedVector3Array()
 var _snap_reach := PackedFloat64Array()
-var _snap_names := PackedStringArray()
 var _snap_valid: bool = false
 # Every controller in a tree, so the core can rebind them when its selection check comes or goes (M4-T35); the core this
 # one's check runs on, or null.
@@ -108,7 +113,7 @@ static func rebind_all() -> void:
 # Hands the check to the core when it runs them and this controller only checks its selection; else ticks itself.
 func _bind() -> void:
 	var sim: SimCore = SimCore.for_tree(get_tree()) if is_inside_tree() else null
-	var wanted: bool = sim != null and not keeps_candidates and SimCore.selection_check_enabled() and _has_body()
+	var wanted: bool = sim != null and not keeps_candidates and _has_body()
 	if not wanted:
 		_unbind()
 		return
@@ -137,10 +142,8 @@ func refresh() -> void:
 	var before: int = system.selected_id()
 	if not keeps_candidates:
 		_check_selection()
-	elif bool(Settings.get_value(&"perf_targeting_on_read")):
-		_snapshot()
 	else:
-		_gather()
+		_snapshot()
 	_emit_if_changed(before)
 
 
@@ -164,11 +167,10 @@ func apply(cmd: CombatCommand) -> void:
 func selected_readout() -> TargetReadout:
 	if not _has_body() or not system.has_selection():
 		return null
-	var target := instance_from_id(system.selected_id()) as Targetable
-	if target == null or not target.is_inside_tree():
+	var info: TargetInfo = _live_info(system.selected_id())
+	if info == null:
 		return null
-	return TargetingSystem.compute_readout(target.to_target_info(), _ship_position(), _body.linear_velocity,
-			_ship_forward())
+	return TargetingSystem.compute_readout(info, _ship_position(), _body.linear_velocity, _ship_forward())
 
 
 ## Line of sight from the ship to the selected target, World frame, m; zero when nothing is selected. Read live from
@@ -180,6 +182,10 @@ func selected_offset() -> Vector3:
 	var target := instance_from_id(system.selected_id()) as Targetable
 	if target == null or not target.is_inside_tree():
 		return Vector3.ZERO
+	if not target.is_active():
+		var row: TargetInfo = TierTargets.info_of(get_tree(), system.selected_id())
+		if row != null:
+			return row.position - _ship_position()
 	return target.global_position - _ship_position()
 
 
@@ -191,8 +197,7 @@ func selected_id() -> int:
 ## Display name of the selection, or "" when nothing is selected.
 func selected_name() -> String:
 	if keeps_candidates and _snap_valid:
-		var k: int = _snap_ids.find(system.selected_id())
-		return _snap_names[k] if k >= 0 else ""
+		return _name_of(system.selected_id()) if _snap_ids.has(system.selected_id()) else ""
 	var target: TargetInfo = system.selected()
 	return target.display_name if target != null else ""
 
@@ -227,7 +232,7 @@ func select_nearest_hostile() -> bool:
 		else:
 			system.clear()
 	else:
-		var nearest: Targetable = _nearest_hostile()
+		var nearest: TargetInfo = _nearest_hostile()
 		found = nearest != null
 		if found:
 			_select_alone(nearest)
@@ -259,7 +264,7 @@ func select_id(target_id: int) -> bool:
 	var before: int = system.selected_id()
 	if before != target_id:
 		if not keeps_candidates:
-			var target: Targetable = _selectable(target_id)
+			var target: TargetInfo = _selectable(target_id)
 			if target != null:
 				_select_alone(target)
 			else:
@@ -293,26 +298,32 @@ func _infos() -> Array[TargetInfo]:
 		if targetable == null or _body.is_ancestor_of(targetable) or not targetable.is_active():
 			continue
 		infos.append(targetable.to_target_info())
+	var rows: TierTargets = _tier_rows()
+	for k: int in rows.size():
+		infos.append(rows.info(k))
 	return infos
 
 
-# The refresh on read (M4-T34): notes what the list would hold (in play, not its own, at its position now) and clears the
-# selection as `TargetingSystem.update` would over that list; the full list waits for its first reader.
+# The refresh on read (M4-T34): notes what the list would hold within reach (in play or in the tier, not its own) from the
+# core's rows, as the radar reads them (M4-T44), and clears the selection as `TargetingSystem.update` would over that list;
+# the full list waits for its first reader. It reads only rows the core synced this tick; before the tick's first sync (a
+# core attached during the tick) there is no snapshot: the selection is checked alone, as an AI ship's is, and every
+# reader gathers afresh.
 func _snapshot() -> void:
 	if not _has_body() or not is_inside_tree():
 		return
-	_snap_ids.clear()
-	_snap_positions.clear()
-	_snap_reach.clear()
-	_snap_names.clear()
-	for node: Node in get_tree().get_nodes_in_group(Targetable.GROUP):
-		var targetable := node as Targetable
-		if targetable == null or _body.is_ancestor_of(targetable) or not targetable.is_active():
-			continue
-		_snap_ids.append(targetable.get_instance_id())
-		_snap_positions.append(targetable.global_position)
-		_snap_reach.append(targetable.broadcast_range_m)
-		_snap_names.append(targetable.display_name)
+	var sim: SimCore = SimCore.for_tree(get_tree())
+	if sim == null or sim.core == null or sim.synced_frame != Engine.get_physics_frames():
+		_snap_valid = false
+		_stale = true
+		_check_selection()
+		return
+	if int(sim.core.touched_count()) > 0:
+		sim.core.resync_touched_now()  # a body moved, parked or changed since the sync is read as it is now
+	var contacts: Array = sim.core.radar_contacts(_ship_position(), _body.get_instance_id(), system.sensor_range_m)
+	_snap_ids = contacts[0]
+	_snap_positions = contacts[1]
+	_snap_reach = contacts[3]
 	_snap_valid = true
 	_stale = true
 	if system.has_selection() and not _snap_in_reach(_snap_ids.find(system.selected_id())):
@@ -349,25 +360,54 @@ func _check_selection() -> void:
 		system.clear()
 
 
-# The targetable with this id if this ship could select it now (in play, not its own, within reach), else null.
-func _selectable(target_id: int) -> Targetable:
+# The target with this id if this ship could select it now (in play or in the tier, not its own, within reach), else null.
+func _selectable(target_id: int) -> TargetInfo:
 	if target_id == TargetingSystem.NO_TARGET or not is_instance_id_valid(target_id):
 		return null
 	var target := instance_from_id(target_id) as Targetable
-	if target == null or _body.is_ancestor_of(target) or not target.is_active():
+	if target == null or _body.is_ancestor_of(target):
 		return null
-	var reach: float = maxf(system.sensor_range_m, target.broadcast_range_m)
-	if TargetingSystem.range_between(_ship_position(), target.global_position) > reach:
+	var at: Vector3 = target.global_position
+	var broadcast: float = target.broadcast_range_m
+	var row: TargetInfo = null
+	if not target.is_active():
+		row = TierTargets.info_of(get_tree(), target_id)
+		if row == null:
+			return null
+		at = row.position
+	if TargetingSystem.range_between(_ship_position(), at) > maxf(system.sensor_range_m, broadcast):
 		return null
-	return target
+	return row if row != null else target.to_target_info()
+
+
+# Target `target_id`'s display name (a tier ship's parked targetable keeps its name), or "" once it is gone.
+func _name_of(target_id: int) -> String:
+	var target := instance_from_id(target_id) as Targetable if is_instance_id_valid(target_id) else null
+	return target.display_name if target != null else ""
+
+
+# The target with this id as it is now (a live targetable, or a tier ship's row), or null when it is neither.
+func _live_info(target_id: int) -> TargetInfo:
+	var target := instance_from_id(target_id) as Targetable if is_instance_id_valid(target_id) else null
+	if target == null or not target.is_inside_tree():
+		return null
+	if target.is_active():
+		return target.to_target_info()
+	return TierTargets.info_of(get_tree(), target_id)
+
+
+# The tier ships this ship could list now (M4-T23).
+func _tier_rows() -> TierTargets:
+	return TierTargets.gather(get_tree(), _ship_position(), _body.get_instance_id(), system.sensor_range_m)
 
 
 # The nearest targetable hostile to this ship within its reach, ties to the lower id, or null. The same pick as the head of
 # `TargetingSystem.cycle_order`, without building a list.
-func _nearest_hostile() -> Targetable:
+func _nearest_hostile() -> TargetInfo:
 	var ship_pos: Vector3 = _ship_position()
 	var hostile: Dictionary = {}  # faction -> hostile to this ship, looked up once per faction
 	var best: Targetable = null
+	var best_id: int = 0
 	var best_range: float = INF
 	for node: Node in get_tree().get_nodes_in_group(Targetable.GROUP):
 		var targetable := node as Targetable
@@ -381,17 +421,33 @@ func _nearest_hostile() -> Targetable:
 		var r: float = TargetingSystem.range_between(ship_pos, targetable.global_position)
 		if r > maxf(system.sensor_range_m, targetable.broadcast_range_m):
 			continue
-		if best == null or r < best_range or (r == best_range and targetable.get_instance_id() < best.get_instance_id()):
+		if best_id == 0 or r < best_range or (r == best_range and targetable.get_instance_id() < best_id):
 			best = targetable
+			best_id = targetable.get_instance_id()
 			best_range = r
-	return best
+	var rows: TierTargets = _tier_rows()
+	var best_row: int = -1
+	for k: int in rows.size():
+		var faction: StringName = rows.factions[k]
+		if not hostile.has(faction):
+			hostile[faction] = Factions.is_hostile(system.own_faction, faction)
+		if not hostile[faction]:
+			continue
+		var r: float = TargetingSystem.range_between(ship_pos, rows.positions[k])
+		if best_id == 0 or r < best_range or (r == best_range and rows.ids[k] < best_id):
+			best_row = k
+			best_id = rows.ids[k]
+			best_range = r
+	if best_row >= 0:
+		return rows.info(best_row)
+	return best.to_target_info() if best != null else null
 
 
 # Selects a target `_selectable` passed, holding it as the only candidate (a controller that does not keep the list).
-func _select_alone(target: Targetable) -> void:
-	var only: Array[TargetInfo] = [target.to_target_info()]
+func _select_alone(target: TargetInfo) -> void:
+	var only: Array[TargetInfo] = [target]
 	system.update(only, _ship_position())
-	system.select_id(target.get_instance_id(), _ship_position())
+	system.select_id(target.id, _ship_position())
 
 
 func _emit_if_changed(before: int) -> void:
@@ -405,7 +461,14 @@ func _has_body() -> bool:
 	return _body != null and is_instance_valid(_body) and _body.is_inside_tree()
 
 
+# Where this ship is: its body, or its row while it flies in the low-attention tier (M4-T23).
 func _ship_position() -> Vector3:
+	if _body.has_meta(TierDirector.TIER_META):
+		var sim: SimCore = SimCore.for_tree(get_tree())
+		if sim != null and sim.core != null:
+			var row: Vector4 = sim.core.tier_position(_body.get_instance_id())
+			if row.w > 0.0:
+				return Vector3(row.x, row.y, row.z)
 	return _body.global_position
 
 

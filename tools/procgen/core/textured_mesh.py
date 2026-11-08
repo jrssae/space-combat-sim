@@ -60,24 +60,6 @@ class TexturedPart:
     zone: int = 0  # the livery zone its vertices carry (``core/livery.py``; 0: never painted)
 
 
-def _material_table(parts: Sequence[TexturedPart]) -> tuple[tuple[Material, ...], list[np.ndarray]]:
-    """One material table for every part (shared by name) and each part's remap into it."""
-    table: list[Material] = []
-    by_name: dict[str, int] = {}
-    remaps = []
-    for part in parts:
-        remap = np.zeros(max(len(part.mesh.materials), 1), dtype=np.int64)
-        for i, m in enumerate(part.mesh.materials):
-            if m.name not in by_name:
-                by_name[m.name] = len(table)
-                table.append(m)
-            elif table[by_name[m.name]] != m:
-                raise ValueError(f"material {m.name!r} defined twice with different values")
-            remap[i] = by_name[m.name]
-        remaps.append(remap)
-    return tuple(table), remaps
-
-
 @dataclass
 class PackedParts:
     """Every part's faces in one atlas: the merged mesh, per-face ids and the 0..1 UVs."""

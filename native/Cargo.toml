@@ -1,4 +1,4 @@
-# The game's optional native library (docs/architecture.md, section 17.5). Built by scripts/build_native.sh.
+# The game's native library, required since M4-T37 (docs/architecture.md, section 17.5). Built by scripts/build_native.sh.
 [package]
 name = "scs_native"
 version = "0.1.0"

@@ -1,34 +1,17 @@
 extends GutTest
 ## The pilot kernels (M4-T16, architecture §17.13): avoidance, the fire lane and the context lists in native code, one call
-## per thinking ship over the core's rows. `AvoidanceMath`, `FireLane` and `AiContext.refresh` stay the reference: on seeded
-## contacts (head-on, dead-centre ties, contacts inside the margin, matched velocities, rocks and mines, lanes grazed at
-## their edge) the native kernels give the same filtered velocity, lane verdict and lists bit for bit. The kernels live in
+## per thinking ship over the core's rows. On seeded contacts (head-on, dead-centre ties, contacts inside the margin,
+## matched velocities, rocks and mines, lanes grazed at their edge) the native kernels give the filtered velocity and lane
+## verdict the GDScript `AvoidanceMath` and `FireLane` loops gave, bit for bit (recorded in
+## `tests/fixtures/parity/pilot_kernels.json` before M4-T42 removed the loops), and `AiContext.refresh`'s lists. The kernels live in
 ## the engine-free module (`native/src/kernels.rs`, `pub mod pilot`), so T18 can run them on worker threads. Here the
 ## kernels read rows loaded from arrays (`ScsPilotKernels.load`); `test_pilot_kernels_in_play` reads them from the core.
-## Skips, saying why, when the native library is not built at all.
 
 const PILOT_CLASS: StringName = &"ScsPilotKernels"
 const KERNEL_FILE: String = "res://native/src/kernels.rs"
 const SHELL_FILE: String = "res://native/src/pilot_kernels.rs"
 const CASES: int = 600
-
-var _saved_native: bool = true
-
-
-func before_each() -> void:
-	_saved_native = bool(Settings.get_value(&"perf_native"))
-	Settings.set_value(&"perf_native", true)
-
-
-func after_each() -> void:
-	Settings.set_value(&"perf_native", _saved_native)
-
-
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there are no kernels to test")
-	return true
+const FIXTURE: String = "pilot_kernels"
 
 
 func _kernels() -> Object:
@@ -179,8 +162,6 @@ func test_the_pilot_kernels_live_in_the_engine_free_module() -> void:
 
 
 func test_avoidance_matches_the_gdscript_filter_bit_for_bit_on_seeded_contacts() -> void:
-	if _skipped():
-		return
 	var kernels: Object = _kernels()
 	if kernels == null:
 		return
@@ -190,6 +171,7 @@ func test_avoidance_matches_the_gdscript_filter_bit_for_bit_on_seeded_contacts()
 	var dodged: int = 0
 	var urgent: int = 0
 	var exempted: int = 0
+	var answers: Array = []  # native, per case: [v_des, urgent]
 	for case: int in CASES:
 		var table := Table.new(rng)
 		var faction_of: Dictionary = {}
@@ -209,35 +191,33 @@ func test_avoidance_matches_the_gdscript_filter_bit_for_bit_on_seeded_contacts()
 		if not table.contacts.is_empty() and rng.randf() < 0.3:
 			exempt_id = table.contacts[rng.randi_range(0, table.contacts.size() - 1)].id
 			exempted += 1
-		var reference: Dictionary = _reference_filter(table, exempt_id, own_pos, own_vel, own_radius, v_des, cap, seed_value)
 		var native: Vector4 = kernels.avoid(table.contact_rows, table.static_rows, exempt_id, own_pos, own_vel, own_radius,
 				v_des, cap.a_retro, cap.rate_max_rad, cap.a_rcs, hash(seed_value))
 		var filtered := Vector3(native.x, native.y, native.z)
-		if var_to_bytes(filtered) != var_to_bytes(reference["v_des"]) or (native.w > 0.5) != bool(reference["urgent"]):
-			differences.append("case %d: native %s urgent %s, GDScript %s urgent %s" % [case, filtered, native.w > 0.5,
-					reference["v_des"], reference["urgent"]])
-		dodged += 1 if reference["v_des"] != v_des else 0
-		urgent += 1 if reference["urgent"] else 0
+		answers.append([filtered, native.w > 0.5])
+		dodged += 1 if filtered != v_des else 0
+		urgent += 1 if native.w > 0.5 else 0
+	# The GDScript filter's answers are recorded (M4-T42 fix round 1, from the reference before it went).
+	var recorded: Variant = ParityFixture.stored(FIXTURE, "avoidance")
+	_compare_recorded(answers, recorded, differences)
 	assert_eq(differences.size(), 0, "the native filter is the GDScript filter bit for bit: %s" % differences.slice(0, 4))
 	assert_gt(dodged, CASES / 3, "the seeded cases dodge often (%d of %d)" % [dodged, CASES])
 	assert_gt(urgent, CASES / 10, "and are often urgent (%d)" % urgent)
 	assert_gt(exempted, CASES / 5, "a rammer's exempt target is left out in many cases (%d)" % exempted)
 
 
-# The driver's avoidance before M4-T16: the contacts but the exempt one, then the statics, through `AvoidanceMath.filter`.
-static func _reference_filter(table: Table, exempt_id: int, own_pos: Vector3, own_vel: Vector3, own_radius: float,
-		v_des: Vector3, cap: ShipCapability, seed_value: int) -> Dictionary:
-	var contacts: Array[Contact] = []
-	for c: Contact in table.contacts:
-		if exempt_id == 0 or c.id != exempt_id:
-			contacts.append(c)
-	contacts.append_array(table.statics)
-	return AvoidanceMath.filter(own_pos, own_vel, own_radius, contacts, v_des, cap, seed_value)
+# Fails each case whose native answer is not the recorded one, bit for bit (the recording keeps full precision).
+static func _compare_recorded(answers: Array, recorded: Variant, differences: PackedStringArray) -> void:
+	if recorded == null or (recorded as Array).size() != answers.size():
+		differences.append("the recording has %s cases, the run %d" % [
+				"no" if recorded == null else str((recorded as Array).size()), answers.size()])
+		return
+	for i: int in answers.size():
+		if ParityFixture.encode(answers[i]) != recorded[i]:
+			differences.append("case %d: native %s, GDScript %s (recorded)" % [i, answers[i], recorded[i]])
 
 
 func test_dead_centre_ties_break_the_same_way_natively_for_every_seed() -> void:
-	if _skipped():
-		return
 	var kernels: Object = _kernels()
 	if kernels == null:
 		return
@@ -245,6 +225,7 @@ func test_dead_centre_ties_break_the_same_way_natively_for_every_seed() -> void:
 	rng.seed = 1601
 	var differences: PackedStringArray = []
 	var sides: Dictionary = {}
+	var answers: Array = []
 	for case: int in 400:
 		var table := Table.new(rng)
 		var faction_of: Dictionary = {}
@@ -268,21 +249,18 @@ func test_dead_centre_ties_break_the_same_way_natively_for_every_seed() -> void:
 		table.load_into(kernels)
 		var cap := ShipCapability.new()
 		var seed_value: int = case * 7919 - 1000000
-		var reference: Dictionary = AvoidanceMath.filter(Vector3(3.0, -2.0, 1.0), v_des, 10.0, table.contacts, v_des, cap,
-				seed_value)
 		var native: Vector4 = kernels.avoid(table.contact_rows, table.static_rows, 0, Vector3(3.0, -2.0, 1.0), v_des, 10.0,
 				v_des, cap.a_retro, cap.rate_max_rad, cap.a_rcs, hash(seed_value))
 		var filtered := Vector3(native.x, native.y, native.z)
-		if var_to_bytes(filtered) != var_to_bytes(reference["v_des"]):
-			differences.append("case %d (seed %d): native %s, GDScript %s" % [case, seed_value, filtered, reference["v_des"]])
-		sides[reference["v_des"]] = true
+		answers.append(filtered)
+		sides[filtered] = true
+	var recorded: Variant = ParityFixture.stored(FIXTURE, "ties")
+	_compare_recorded(answers, recorded, differences)
 	assert_eq(differences.size(), 0, "every tie breaks the same way natively: %s" % differences.slice(0, 4))
 	assert_gt(sides.size(), 300, "the seeds spread the ties' sides (%d different)" % sides.size())
 
 
 func test_the_tie_angle_is_the_engines_deg_to_rad_bit_for_bit() -> void:
-	if _skipped():
-		return
 	var kernels: Object = _kernels()
 	if kernels == null:
 		return
@@ -306,8 +284,6 @@ func test_the_tie_angle_is_the_engines_deg_to_rad_bit_for_bit() -> void:
 
 
 func test_the_fire_lane_matches_the_gdscript_verdict_on_seeded_lanes() -> void:
-	if _skipped():
-		return
 	var kernels: Object = _kernels()
 	if kernels == null:
 		return
@@ -315,6 +291,7 @@ func test_the_fire_lane_matches_the_gdscript_verdict_on_seeded_lanes() -> void:
 	rng.seed = 1602
 	var differences: PackedStringArray = []
 	var closed: int = 0
+	var answers: Array = []
 	for case: int in CASES * 2:
 		var table := Table.new(rng)
 		var faction_of: Dictionary = {}
@@ -343,11 +320,11 @@ func test_the_fire_lane_matches_the_gdscript_verdict_on_seeded_lanes() -> void:
 		var target_id: int = 0
 		if not table.contacts.is_empty() and rng.randf() < 0.5:
 			target_id = table.contacts[rng.randi_range(0, table.contacts.size() - 1)].id
-		var reference: bool = FireLane.clear(own_pos, aim, range_m, table.contacts, target_id, friendly_fire)
 		var native: bool = kernels.fire_lane(table.contact_rows, table.relations, own_pos, aim, range_m, target_id, friendly_fire)
-		if native != reference:
-			differences.append("case %d: native %s, GDScript %s" % [case, native, reference])
-		closed += 0 if reference else 1
+		answers.append(native)
+		closed += 0 if native else 1
+	var recorded: Variant = ParityFixture.stored(FIXTURE, "lanes")
+	_compare_recorded(answers, recorded, differences)
 	assert_eq(differences.size(), 0, "the native lane is the GDScript lane: %s" % differences.slice(0, 4))
 	assert_gt(closed, CASES / 4, "many lanes are closed (%d)" % closed)
 
@@ -356,8 +333,6 @@ func test_the_fire_lane_matches_the_gdscript_verdict_on_seeded_lanes() -> void:
 
 
 func test_the_context_lists_match_the_gdscript_refresh_on_seeded_contacts() -> void:
-	if _skipped():
-		return
 	var kernels: Object = _kernels()
 	if kernels == null:
 		return
@@ -402,8 +377,6 @@ func test_the_context_lists_match_the_gdscript_refresh_on_seeded_contacts() -> v
 
 
 func test_rows_that_do_not_line_up_or_out_of_range_never_panic() -> void:
-	if _skipped():
-		return
 	var kernels: Object = _kernels()
 	if kernels == null:
 		return

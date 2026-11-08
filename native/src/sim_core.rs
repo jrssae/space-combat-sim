@@ -4,7 +4,7 @@
 #![allow(clippy::redundant_field_names)]
 use std::collections::{HashMap, HashSet};
 
-use godot::classes::{Node, Node3D, Object, PhysicsServer3D, RigidBody3D};
+use godot::classes::{Node, Node3D, Object, RigidBody3D};
 use godot::prelude::*;
 
 use crate::threads::{self, Pass, Threads};
@@ -35,13 +35,8 @@ pub const KIND_BEAM: u8 = 8;
 // The script properties the core reads, as StringNames made once: a name built per read costs as much as the read.
 struct Names {
     velocity: StringName,
-    last_step: StringName,
     faction: StringName,
-    shooter_id: StringName,
     kind: StringName,
-    hit_radius_m: StringName,
-    damage: StringName,
-    color: StringName,
     bounding_radius: StringName,
     display_name: StringName,
     hull: StringName,
@@ -58,13 +53,8 @@ impl Names {
     fn new() -> Self {
         Self {
             velocity: StringName::from("velocity"),
-            last_step: StringName::from("last_step"),
             faction: StringName::from("faction"),
-            shooter_id: StringName::from("shooter_id"),
             kind: StringName::from("kind"),
-            hit_radius_m: StringName::from("hit_radius_m"),
-            damage: StringName::from("damage"),
-            color: StringName::from("color"),
             bounding_radius: StringName::from("bounding_radius"),
             display_name: StringName::from("display_name"),
             hull: StringName::from("hull"),
@@ -122,25 +112,6 @@ struct Member {
     active_known: bool,
 }
 
-// A bolt in flight: its node and what is read once, when it is first seen. A plain bolt's velocity never changes after
-// its launch and its step each tick is `velocity * delta`, so only its position is read again; a missile steers and a
-// beam lays its segment, so their motion is read every sync.
-struct Bolt {
-    node: Gd<Node3D>,
-    faction_ix: u32,
-    shooter: i64,
-    kind: u8,
-    radius: f64,
-    velocity: Vector3,
-    plain: bool,
-    // The tick the core first saw it: on that tick its step is whatever the node holds (zero until its first
-    // `_physics_process`, §15.3); from the next tick on a plain bolt's step is `velocity * delta`.
-    first_tick: i64,
-    // What a hit lands with (M4-T35): read once with the rest.
-    damage: f64,
-    color: [f32; 4],
-}
-
 // What one read of a body gives: its pose, motion and flags.
 struct Read {
     position: Vector3,
@@ -150,22 +121,6 @@ struct Read {
     flags: u32,
     hull_fraction: f64,
     target_id: i64,
-}
-
-// A row with no node (T20's turrets, missiles and mines to come): what `add_row` keeps and `row` gives back.
-struct DataRow {
-    handle: i64,
-    kind: u8,
-    id: i64,
-    faction: StringName,
-    radius: f64,
-    flags: i64,
-    position: Vector3,
-    velocity: Vector3,
-    basis: Basis,
-    angular: Vector3,
-    command: Vec<f64>,
-    state: Vec<f64>,
 }
 
 /// One store of rows for every simulated entity, filled once per tick from the engine (`sync_in`, then `sync_bolts` for
@@ -190,6 +145,8 @@ pub struct ScsSimCore {
     slot_generation: Vec<u32>,
     free_slots: Vec<u32>,
     touched: HashSet<i64>,
+    // Bodies a resync found parked since the tick's first sync: their rows stay until the next sync, but nothing aims at them.
+    parked_since_sync: HashSet<i64>,
     seen: HashSet<i64>,
     syncs: u64,
     attribute_reads: i64,
@@ -198,7 +155,6 @@ pub struct ScsSimCore {
     static_radii: Vec<f64>,
     static_factions: Vec<u32>,
     static_kinds: Vec<u8>,
-    bolt_known: HashMap<i64, Bolt>,
     /// Every faction the core has seen, in first-sight order; rows carry an index into it.
     pub factions: Vec<StringName>,
     /// The scan's rows and the bolts, as of the last sync point.
@@ -213,13 +169,10 @@ pub struct ScsSimCore {
     pub sweep_rows: Vec<u32>,
     row_of_id: HashMap<i64, u32>,
     row_of_handle: HashMap<i64, u32>,
-    data: Vec<DataRow>,
-    next_data_handle: i64,
     pub(crate) sync_reads: i64,
     fallback_reads: i64,
     last_calls: [i64; 2],
     pub(crate) tick: i64,
-    bolt_tick: i64,
     open: bool,
     // Grows whenever the rows change under a scan taken from them: each sync, resync and shift (M4-T16).
     rows_version: i64,
@@ -232,12 +185,9 @@ pub struct ScsSimCore {
     pub row_commands: crate::row_commands::CommandMap,
     // The core owns its bolts (M4-T35): the owned rows stay across the sync points and the kernels step them; the ids it
     // hands out count down from -1, so no instance id is ever one.
-    pub(crate) bolt_rows: bool,
     pub(crate) next_bolt_id: i64,
     // The core's state from events (M4-T35b): activity, hull and selection kept in the attributes and written to the rows
-    // at the sync points; `body_direct` reads the rigid bodies from the physics server's direct state by RID.
-    event_columns: bool,
-    body_direct: bool,
+    // at the sync points.
     activity_dirty: bool,
     /// Each row's body RID (invalid for a body with none), beside the rows (M4-T35: the ram stage's contact read).
     pub row_rids: Vec<Rid>,
@@ -265,7 +215,6 @@ pub struct ScsSimCore {
     pub(crate) tier_step_us: i64,
     pub(crate) tier_beats: i64,
     pub(crate) tier_promotions: i64,
-    pub(crate) tier_demotions: i64,
     // The tier's fire (M4-T22): the seed every roll draws from, the fighters' hits rolled since GDScript took them, and the
     // shots and hits rolled so far.
     pub(crate) tier_seed: u64,
@@ -274,6 +223,8 @@ pub struct ScsSimCore {
     pub(crate) tier_hits_total: i64,
     // The rammer and target pairs in contact at the last check, so a ram lands once, when they first touch (fix round 1).
     pub(crate) tier_ram_pairs: std::collections::HashSet<(i64, i64)>,
+    // Promotions moved clear of a rock or mine they overlapped (M4-T23).
+    pub(crate) tier_cleared: i64,
 }
 
 #[godot_api]
@@ -442,10 +393,10 @@ impl ScsSimCore {
         self.syncs as i64
     }
 
-    /// The tick's first sync point: builds this tick's rows from the bodies and the bolts (`projectiles`, the group as it is
-    /// now), the statics after the bodies. `tick` stamps the rows. Returns the body row count.
+    /// The tick's first sync point: builds this tick's rows from the bodies, the statics after the bodies, and keeps only
+    /// the owned bolts (`ScsBoltSync` reads the node bolts after it). `tick` stamps the rows. Returns the body row count.
     #[func]
-    pub fn sync_in(&mut self, projectiles: Array<Gd<Node>>, tick: i64, delta: f64) -> i64 {
+    pub fn sync_in(&mut self, tick: i64, delta: f64) -> i64 {
         if self.open {
             self.close_tick();
         }
@@ -464,11 +415,11 @@ impl ScsSimCore {
         self.row_names.clear();
         self.row_rids.clear();
         self.seen.clear();
-        let cached = self.event_columns && !self.activity_dirty;
+        self.parked_since_sync.clear();
+        let cached = !self.activity_dirty;
         let mut markers = std::mem::take(&mut self.markers);
         for m in markers.iter_mut() {
-            // With the event columns, a body's activity is checked again only when it was touched (hidden, shown,
-            // destroyed) or first seen; the facade's events cover every change the pool and the resolvers make.
+            // A body's activity is checked again only when it was touched (hidden, shown, destroyed) or first seen; the facade's events cover every change the pool and the resolvers make.
             if !cached || !m.active_known || self.touched.contains(&m.body_id) {
                 m.active = marker_active(m, &mut self.sync_reads);
                 m.active_known = true;
@@ -525,7 +476,14 @@ impl ScsSimCore {
             rows.name_keys.push(String::new());
         }
         // The tier's rows after the statics (M4-T21): contacts to the brains, out of the scan GDScript builds.
+        let tier_base = rows.body_ids.len();
         self.tier.append_to(&mut rows);
+        // A tier ship's selection is its own (M4-T23): its brain sees what it holds, as a near brain does.
+        for (k, body_id) in self.tier.body_ids.iter().enumerate() {
+            if let Some(&target) = self.latest_target.get(body_id) {
+                rows.target_ids[tier_base + k] = target;
+            }
+        }
         for name in &self.tier_names {
             self.row_names.push(name.clone());
             self.row_rids.push(Rid::Invalid);
@@ -533,125 +491,19 @@ impl ScsSimCore {
         self.rows = rows;
         self.touched.clear();
         self.index_rows();
-        self.read_bolts(projectiles, delta, true, false);
+        self.bolts.truncate_to_owned();
         self.rows.node_count as i64
     }
 
-    /// The tick's later sync point (the hit resolver's, after the bolts moved): reads the bolts again (their positions
-    /// and last steps; the velocity column is left zero, the scan read it at the first sync), and the bodies that were touched since the
-    /// first sync (a ship back from the pool gets its row now, a parked one loses its hull).
+    /// The tick's later sync point (the hit resolver's, after the bolts moved): reads the bodies that were touched since
+    /// the first sync again (a ship back from the pool gets its row now, a parked one loses its hull) and keeps only the
+    /// owned bolts for `ScsBoltSync` to read the node bolts after. Returns the bolt row count.
     #[func]
-    pub fn sync_bolts(&mut self, projectiles: Array<Gd<Node>>, delta: f64) -> i64 {
-        self.bolt_tick = self.tick;
+    pub fn sync_bolts(&mut self) -> i64 {
         if !self.touched.is_empty() {
             self.resync_touched();
         }
-        self.read_bolts(projectiles, delta, false, true)
-    }
-
-    // Reads the live bolts into the bolt table: the position always, the velocity for the scan's first sync and the last
-    // step for the resolver's; a bolt seen for the first time gives its faction, shooter, kind and radius once. A spent
-    // bolt is queued for deletion (`Projectile.spend`), so that one check covers it.
-    fn read_bolts(
-        &mut self,
-        projectiles: Array<Gd<Node>>,
-        delta: f64,
-        velocity: bool,
-        last_step: bool,
-    ) -> i64 {
-        if self.names.is_none() {
-            self.names = Some(Names::new());
-        }
-        let mut bolts = std::mem::take(&mut self.bolts);
-        bolts.truncate_to_owned();
-        let mut live: HashSet<i64> = HashSet::new();
-        for node in projectiles.iter_shared() {
-            let id = node.instance_id().to_i64();
-            self.sync_reads += 1;
-            if !node.is_inside_tree() || node.is_queued_for_deletion() {
-                continue;
-            }
-            live.insert(id);
-            if !self.bolt_known.contains_key(&id) {
-                let Ok(node3d) = node.clone().try_cast::<Node3D>() else {
-                    continue;
-                };
-                self.sync_reads += 6;
-                let names = self.names.as_ref().expect("made above");
-                let faction = node
-                    .get(&names.faction)
-                    .try_to::<StringName>()
-                    .unwrap_or_default();
-                let shooter = node.get(&names.shooter_id).try_to::<i64>().unwrap_or(0);
-                let kind = kind_of(&node.get(&names.kind));
-                let radius = node.get(&names.hit_radius_m).try_to::<f64>().unwrap_or(0.0);
-                let launch_velocity = node
-                    .get(&names.velocity)
-                    .try_to::<Vector3>()
-                    .unwrap_or(Vector3::ZERO);
-                let damage = node.get(&names.damage).try_to::<f64>().unwrap_or(0.0);
-                let color = color_of(&node.get(&names.color));
-                let bolt = Bolt {
-                    node: node3d,
-                    faction_ix: self.faction_index(faction),
-                    shooter,
-                    kind,
-                    radius,
-                    velocity: launch_velocity,
-                    plain: kind == KIND_BOLT,
-                    first_tick: self.tick,
-                    damage,
-                    color,
-                };
-                self.bolt_known.insert(id, bolt);
-            }
-            let names = self.names.as_ref().expect("made above");
-            let bolt = &self.bolt_known[&id];
-            self.sync_reads += 1;
-            bolts.ids.push(id);
-            bolts.positions.push(bolt.node.get_global_position());
-            let v = if bolt.plain {
-                bolt.velocity
-            } else if velocity || last_step {
-                self.sync_reads += 1;
-                bolt.node
-                    .get(&names.velocity)
-                    .try_to::<Vector3>()
-                    .unwrap_or(Vector3::ZERO)
-            } else {
-                Vector3::ZERO
-            };
-            bolts
-                .velocities
-                .push(if velocity { v } else { Vector3::ZERO });
-            bolts.last_steps.push(if !last_step {
-                Vector3::ZERO
-            } else if bolt.plain && bolt.first_tick < self.tick {
-                // `Projectile._physics_process`: `last_step = velocity * delta`, the float rounded to 32 bits first. A
-                // bolt first seen this tick may not have stepped yet, so its node says.
-                let dt = delta as f32;
-                Vector3::new(v.x * dt, v.y * dt, v.z * dt)
-            } else {
-                self.sync_reads += 1;
-                bolt.node
-                    .get(&names.last_step)
-                    .try_to::<Vector3>()
-                    .unwrap_or(Vector3::ZERO)
-            });
-            bolts.faction_ix.push(bolt.faction_ix);
-            bolts.shooters.push(bolt.shooter);
-            bolts.kinds.push(bolt.kind);
-            bolts.radii.push(bolt.radius);
-            bolts.damage.push(bolt.damage);
-            bolts.colors.push(bolt.color);
-            bolts.looks.push(crate::rows::LOOK_NONE);
-            bolts.expires_at.push(f64::INFINITY);
-            bolts.launched.push(bolt.first_tick);
-            bolts.spent.push(false);
-            bolts.draw_slots.push(-1);
-        }
-        self.bolt_known.retain(|id, _| live.contains(id));
-        self.bolts = bolts;
+        self.bolts.truncate_to_owned();
         self.bolts.ids.len() as i64
     }
 
@@ -701,12 +553,6 @@ impl ScsSimCore {
     #[func]
     pub fn engine_calls(&self) -> PackedInt64Array {
         PackedInt64Array::from(&self.last_calls[..])
-    }
-
-    /// Engine calls so far in the open tick: `[sync, fallbacks]`.
-    #[func]
-    fn engine_calls_open(&self) -> PackedInt64Array {
-        PackedInt64Array::from(&[self.sync_reads, self.fallback_reads][..])
     }
 
     /// Counts the flight step's fallback reads of the physics server (a ship without a row this tick).
@@ -830,11 +676,6 @@ impl ScsSimCore {
         self.tick
     }
 
-    #[func]
-    fn bolt_tick(&self) -> i64 {
-        self.bolt_tick
-    }
-
     /// Rows now: the bodies, the statics and the late rows together.
     #[func]
     pub fn row_count(&self) -> i64 {
@@ -919,6 +760,14 @@ impl ScsSimCore {
             .map_or_else(GString::new, |r| self.row_names[r].clone())
     }
 
+    /// The body a row reads its contacts from (the ram phase's), for tests.
+    #[func]
+    fn row_rid(&self, row: i64) -> Rid {
+        self.row_index(row)
+            .and_then(|r| self.row_rids.get(r).copied())
+            .unwrap_or(Rid::Invalid)
+    }
+
     #[func]
     fn row_position(&self, row: i64) -> Vector3 {
         self.row_index(row).map_or(
@@ -996,17 +845,38 @@ impl ScsSimCore {
     pub fn select(&mut self, ids: PackedInt64Array) -> VarArray {
         let mut rows = Rows::default();
         let mut found: Vec<i32> = Vec::new();
-        // The selection's names go to a list of its own; the core's rows keep theirs.
+        // The selection's names and rids go to lists of their own; the core's rows keep theirs.
         let core_names = std::mem::take(&mut self.row_names);
+        let core_rids = std::mem::take(&mut self.row_rids);
         let mut markers = std::mem::take(&mut self.markers);
+        // A parked marker whose ship flies as a tier row is heard from its row (M4-T23), built on the first miss.
+        let mut tier_of: Option<std::collections::HashMap<i64, usize>> = None;
         for (j, id) in ids.as_slice().iter().enumerate() {
-            let Some(&at) = self.marker_at.get(id) else {
+            let active = self
+                .marker_at
+                .get(id)
+                .copied()
+                .filter(|&at| marker_active(&markers[at], &mut self.sync_reads));
+            let Some(at) = active else {
+                if self.tier.is_empty() {
+                    continue;
+                }
+                let map = tier_of.get_or_insert_with(|| {
+                    self.tier
+                        .marker_ids
+                        .iter()
+                        .enumerate()
+                        .map(|(i, &m)| (m, i))
+                        .collect()
+                });
+                if let Some(&i) = map.get(id) {
+                    self.tier.push_row(i, &mut rows);
+                    self.row_names.push(self.tier_names[i].clone());
+                    found.push(j as i32);
+                }
                 continue;
             };
             let m = &mut markers[at];
-            if !marker_active(m, &mut self.sync_reads) {
-                continue;
-            }
             if m.attrs.is_none() || self.touched.contains(&m.body_id) {
                 m.attrs = Some(self.read_attrs(m));
                 self.attribute_reads += 1;
@@ -1016,6 +886,7 @@ impl ScsSimCore {
         }
         self.markers = markers;
         let names = std::mem::replace(&mut self.row_names, core_names);
+        self.row_rids = core_rids;
         rows.node_count = rows.body_ids.len();
         let mut out = rows.to_array(&names, rows.node_count, rows.node_count, &self.factions);
         out.push(&PackedInt32Array::from(found.as_slice()).to_variant());
@@ -1140,120 +1011,6 @@ impl ScsSimCore {
         out.push(&PackedInt64Array::from(b.shooters.as_slice()).to_variant());
         out
     }
-
-    // --- rows with no node (the seam T20 builds on) ---------------------------------------------------------------
-
-    /// Adds a row with no node from `row` (`kind`, `id`, `faction`, `radius`, `flags`, `position`, `velocity`, `basis`,
-    /// `angular`, `command`, `state`; missing keys take zeros) and returns its handle.
-    #[func]
-    fn add_row(&mut self, row: VarDictionary) -> i64 {
-        if self.next_data_handle == 0 {
-            self.next_data_handle = 1;
-        }
-        let handle = self.next_data_handle;
-        self.next_data_handle += 1;
-        // A missing or wrongly typed key takes its zero; a kind out of range is a ship; a float field takes an int too.
-        fn take<T: FromGodot>(row: &VarDictionary, key: &str, zero: T) -> T {
-            row.get(key)
-                .and_then(|v| v.try_to::<T>().ok())
-                .unwrap_or(zero)
-        }
-        fn take_f64(row: &VarDictionary, key: &str) -> f64 {
-            row.get(key)
-                .and_then(|v| {
-                    v.try_to::<f64>()
-                        .ok()
-                        .or_else(|| v.try_to::<i64>().ok().map(|i| i as f64))
-                })
-                .unwrap_or(0.0)
-        }
-        let kind = take::<i64>(&row, "kind", 0);
-        self.data.push(DataRow {
-            handle,
-            kind: if (0..KIND_NAMES.len() as i64).contains(&kind) {
-                kind as u8
-            } else {
-                KIND_SHIP
-            },
-            id: take(&row, "id", 0),
-            faction: take(&row, "faction", StringName::default()),
-            radius: take_f64(&row, "radius"),
-            flags: take(&row, "flags", 0),
-            position: take(&row, "position", Vector3::ZERO),
-            velocity: take(&row, "velocity", Vector3::ZERO),
-            basis: take(&row, "basis", Basis::IDENTITY),
-            angular: take(&row, "angular", Vector3::ZERO),
-            command: take(&row, "command", PackedFloat64Array::new())
-                .as_slice()
-                .to_vec(),
-            state: take(&row, "state", PackedFloat64Array::new())
-                .as_slice()
-                .to_vec(),
-        });
-        handle
-    }
-
-    /// The data row `handle` as a Dictionary with `add_row`'s keys, or an empty one.
-    #[func]
-    fn row(&self, handle: i64) -> VarDictionary {
-        let mut out = VarDictionary::new();
-        let Some(r) = self.data.iter().find(|r| r.handle == handle) else {
-            return out;
-        };
-        out.set("kind", i64::from(r.kind));
-        out.set("id", r.id);
-        out.set("faction", &r.faction);
-        out.set("radius", r.radius);
-        out.set("flags", r.flags);
-        out.set("position", r.position);
-        out.set("velocity", r.velocity);
-        out.set("basis", r.basis);
-        out.set("angular", r.angular);
-        out.set("command", &PackedFloat64Array::from(r.command.as_slice()));
-        out.set("state", &PackedFloat64Array::from(r.state.as_slice()));
-        out
-    }
-
-    #[func]
-    fn set_row_motion(
-        &mut self,
-        handle: i64,
-        position: Vector3,
-        velocity: Vector3,
-        basis: Basis,
-        angular: Vector3,
-    ) {
-        if let Some(r) = self.data.iter_mut().find(|r| r.handle == handle) {
-            r.position = position;
-            r.velocity = velocity;
-            r.basis = basis;
-            r.angular = angular;
-        }
-    }
-
-    #[func]
-    fn set_row_command(&mut self, handle: i64, command: PackedFloat64Array) {
-        if let Some(r) = self.data.iter_mut().find(|r| r.handle == handle) {
-            r.command = command.as_slice().to_vec();
-        }
-    }
-
-    #[func]
-    fn set_row_state(&mut self, handle: i64, state: PackedFloat64Array) {
-        if let Some(r) = self.data.iter_mut().find(|r| r.handle == handle) {
-            r.state = state.as_slice().to_vec();
-        }
-    }
-
-    #[func]
-    fn remove_row(&mut self, handle: i64) {
-        self.data.retain(|r| r.handle != handle);
-    }
-
-    #[func]
-    fn data_rows(&self) -> i64 {
-        self.data.len() as i64
-    }
 }
 
 impl ScsSimCore {
@@ -1319,45 +1076,25 @@ impl ScsSimCore {
             .attrs
             .as_ref()
             .expect("attributes are read before a row is made");
-        // The pose and motion: from the physics server's direct state by RID (M4-T35, `perf_core_body_direct`: one state
-        // handle and three reads), else through the node's own getters as the tree gather reads them.
-        let direct = if self.body_direct && m.rigid.is_some() && m.rid.is_valid() {
-            self.sync_reads += 1;
-            PhysicsServer3D::singleton().body_get_direct_state(m.rid)
-        } else {
-            None
-        };
-        let (xf, velocity, angular) = match direct {
-            Some(state) => {
-                self.sync_reads += 3;
+        // The pose and motion through the node's own getters, as the tree gather reads them.
+        self.sync_reads += 1;
+        let xf = m.body.get_global_transform();
+        let (velocity, angular) = match (&m.rigid, &m.marker) {
+            (Some(rigid), _) => {
+                self.sync_reads += 2;
+                (rigid.get_linear_velocity(), rigid.get_angular_velocity())
+            }
+            (None, Some(marker)) => {
+                self.sync_reads += 1;
                 (
-                    state.get_transform(),
-                    state.get_linear_velocity(),
-                    state.get_angular_velocity(),
+                    marker
+                        .get(&self.names.get_or_insert_with(Names::new).velocity)
+                        .try_to::<Vector3>()
+                        .unwrap_or(Vector3::ZERO),
+                    Vector3::ZERO,
                 )
             }
-            None => {
-                self.sync_reads += 1;
-                let xf = m.body.get_global_transform();
-                let (velocity, angular) = match (&m.rigid, &m.marker) {
-                    (Some(rigid), _) => {
-                        self.sync_reads += 2;
-                        (rigid.get_linear_velocity(), rigid.get_angular_velocity())
-                    }
-                    (None, Some(marker)) => {
-                        self.sync_reads += 1;
-                        (
-                            marker
-                                .get(&self.names.get_or_insert_with(Names::new).velocity)
-                                .try_to::<Vector3>()
-                                .unwrap_or(Vector3::ZERO),
-                            Vector3::ZERO,
-                        )
-                    }
-                    (None, None) => (Vector3::ZERO, Vector3::ZERO),
-                };
-                (xf, velocity, angular)
-            }
+            (None, None) => (Vector3::ZERO, Vector3::ZERO),
         };
         let has_hull = m.hull.is_some();
         let mut flags = 0;
@@ -1370,68 +1107,16 @@ impl ScsSimCore {
         if has_hull && !attrs.destroyed {
             flags |= FLAG_HULL_ACTIVE;
         }
-        // The brains' two live reads of a contact (M4-T17): `Damageable.hull.fraction()` and the ship's selection, as the
-        // scan stamped them. Two property reads for the hull, one for the selection; with the event columns (M4-T35) the
-        // values the events last gave, read live only with the attributes.
-        if self.event_columns {
-            return Read {
-                position: xf.origin,
-                basis: xf.basis,
-                velocity,
-                angular,
-                flags,
-                hull_fraction: attrs.hull_fraction,
-                target_id: attrs.target_id,
-            };
-        }
-        let names = self.names.get_or_insert_with(Names::new);
-        let mut failed = 0;
-        let hull_fraction = match &attrs.health {
-            Some(health) => {
-                self.sync_reads += 2;
-                let hp = health.get(&names.hp).try_to::<f64>();
-                let max_hp = health.get(&names.max_hp).try_to::<f64>();
-                match (hp, max_hp) {
-                    (Ok(hp), Ok(max_hp)) => clamp01(hp / max_hp),
-                    _ => {
-                        failed += 1;
-                        -1.0
-                    }
-                }
-            }
-            None => -1.0,
-        };
-        let target_id = match &attrs.targeting {
-            Some(system) => {
-                self.sync_reads += 1;
-                match system.get(&names.selected_id).try_to::<i64>() {
-                    Ok(selected) if selected != 0 => selected,
-                    Ok(_) => -1,
-                    Err(_) => {
-                        failed += 1;
-                        -1
-                    }
-                }
-            }
-            None => -1,
-        };
-        if failed > 0 {
-            if self.column_read_failures == 0 {
-                godot_warn!(
-                    "ScsSimCore: a hull's hp and max_hp or a targeting system's _selected_id did not read; the brains see no \
-                     hull or no selection for that body (a renamed property?)"
-                );
-            }
-            self.column_read_failures += failed;
-        }
+        // The brains' two live reads of a contact (M4-T17), `Damageable.hull.fraction()` and the ship's selection: the
+        // values the events last gave (M4-T35), read live only with the attributes.
         Read {
             position: xf.origin,
             basis: xf.basis,
             velocity,
             angular,
             flags,
-            hull_fraction,
-            target_id,
+            hull_fraction: attrs.hull_fraction,
+            target_id: attrs.target_id,
         }
     }
 
@@ -1516,6 +1201,7 @@ impl ScsSimCore {
                     } else {
                         // Parked or destroyed since: the row stays (the scan's indices hold) but no kernel treats it as a hull.
                         rows.flags[r] &= !FLAG_HULL_ACTIVE;
+                        self.parked_since_sync.insert(m.body_id);
                         m.active_at = 0;
                     }
                 }
@@ -1890,6 +1576,11 @@ impl ScsSimCore {
     pub fn is_touched(&self, body_id: i64) -> bool {
         self.touched.contains(&body_id)
     }
+
+    /// Whether a resync found `body_id` parked since the tick's first sync (its row is still there until the next one).
+    pub fn parked_since_sync(&self, body_id: i64) -> bool {
+        self.parked_since_sync.contains(&body_id)
+    }
 }
 
 // FNV-1a over 64-bit words: `rows_digest`'s hash.
@@ -1919,33 +1610,6 @@ impl Digest {
 // M4-T35b: the core's state from events, the selection check and what the ram stage reads.
 #[godot_api(secondary)]
 impl ScsSimCore {
-    /// Keeps activity, hull and selection from the facade's events (`perf_core_event_columns`): a body is checked again
-    /// only when touched, and its hull and selection columns carry what `note_hull` and `note_selection` last gave.
-    #[func]
-    fn set_event_columns(&mut self, on: bool) {
-        if on != self.event_columns {
-            self.activity_dirty = true;
-            self.forget_attributes();
-        }
-        self.event_columns = on;
-    }
-
-    #[func]
-    fn event_columns(&self) -> bool {
-        self.event_columns
-    }
-
-    /// Reads the rigid bodies from the physics server's direct state by RID (`perf_core_body_direct`) instead of the nodes.
-    #[func]
-    fn set_body_direct(&mut self, on: bool) {
-        self.body_direct = on;
-    }
-
-    #[func]
-    fn body_direct(&self) -> bool {
-        self.body_direct
-    }
-
     /// A hull's points changed (`Damageable.damaged`, a heal): its column reads `clamp(hp / max_hp)` from the next sync.
     #[func]
     fn note_hull(&mut self, body_id: i64, hp: f64, max_hp: f64) {
@@ -1991,7 +1655,7 @@ impl ScsSimCore {
         self.row_index(row).map_or(-1, |r| self.rows.target_ids[r])
     }
 
-    /// Runs the selection check of body `body_id`'s AI targeting controller here (`perf_native_selection_check`): its
+    /// Runs the selection check of body `body_id`'s AI targeting controller here: its
     /// selection must be a row within `sensor_range_m` or the target's own reach, and not its own ship.
     #[func]
     fn watch_selection(&mut self, body_id: i64, sensor_range_m: f64) {
@@ -2009,33 +1673,44 @@ impl ScsSimCore {
         self.selection_watch.len() as i64
     }
 
-    /// A watched body's check, step by step, for the tests: `[row, latest target, target row, range, reach, sensor]`.
+    /// What the player's radar shows (M4-T23): every row with a marker (a targetable in play, not parked since the sync) or
+    /// in the low-attention tier, not body `own_body`, within `sensor_range` of `own_position` or its own broadcast reach, as `[marker ids,
+    /// positions, faction indices (into `factions`), reach]` in row order. One pass over the rows, near and tier alike, instead of a walk of the
+    /// targetable nodes each frame; the positions are the tick's rows.
     #[func]
-    fn selection_check_of(&self, body_id: i64) -> PackedFloat64Array {
-        let sensor = self
-            .selection_watch
-            .iter()
-            .find(|(b, _)| *b == body_id)
-            .map_or(-1.0, |(_, s)| *s);
-        let r = self.row_of_id.get(&body_id).map_or(-1, |&r| i64::from(r));
-        let target = self.latest_target.get(&body_id).copied().unwrap_or(-1);
-        let tr = if target > 0 {
-            i64::from(self.rows.row_of_id(target))
-        } else {
-            -1
-        };
-        let (range, reach) = match (usize::try_from(r), usize::try_from(tr)) {
-            (Ok(r), Ok(t)) => {
-                let from = self.rows.positions[r];
-                let to = self.rows.positions[t];
-                let dx = f64::from(to.x) - f64::from(from.x);
-                let dy = f64::from(to.y) - f64::from(from.y);
-                let dz = f64::from(to.z) - f64::from(from.z);
-                ((dx * dx + dy * dy + dz * dz).sqrt(), self.rows.reach[t])
+    fn radar_contacts(&self, own_position: Vector3, own_body: i64, sensor_range: f64) -> VarArray {
+        let r = &self.rows;
+        let mut ids: Vec<i64> = Vec::new();
+        let mut positions: Vec<Vector3> = Vec::new();
+        let mut faction_ix: Vec<i32> = Vec::new();
+        let mut reach: Vec<f64> = Vec::new();
+        for i in 0..r.body_ids.len() {
+            let marked =
+                r.flags[i] & FLAG_TIER != 0 || (r.ids[i] != r.body_ids[i] && !r.is_static[i]);
+            if !marked
+                || r.body_ids[i] == own_body
+                || self.parked_since_sync.contains(&r.body_ids[i])
+            {
+                continue;
             }
-            _ => (-1.0, -1.0),
-        };
-        PackedFloat64Array::from(&[r as f64, target as f64, tr as f64, range, reach, sensor][..])
+            let p = r.positions[i];
+            let dx = f64::from(p.x) - f64::from(own_position.x);
+            let dy = f64::from(p.y) - f64::from(own_position.y);
+            let dz = f64::from(p.z) - f64::from(own_position.z);
+            if (dx * dx + dy * dy + dz * dz).sqrt() > sensor_range.max(r.reach[i]) {
+                continue;
+            }
+            ids.push(r.ids[i]);
+            positions.push(p);
+            faction_ix.push(r.faction_ix[i] as i32);
+            reach.push(r.reach[i]);
+        }
+        let mut out = VarArray::new();
+        out.push(&PackedInt64Array::from(ids.as_slice()).to_variant());
+        out.push(&PackedVector3Array::from(positions.as_slice()).to_variant());
+        out.push(&PackedInt32Array::from(faction_ix.as_slice()).to_variant());
+        out.push(&PackedFloat64Array::from(reach.as_slice()).to_variant());
+        out
     }
 
     /// The watched bodies whose selection the controllers would clear now (`TargetingController._check_selection`): no

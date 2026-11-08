@@ -1,17 +1,16 @@
 extends GutTest
 ## The weapon rows in a real battle (M4-T20, Q22): a seeded 30 s `battle` at 100 ships on the real main scene, once with the
-## turrets, interceptors, beams, missiles and mines on the native rows and once on the GDScript stand-ins: the hits the
-## stand-ins' weapons land (bolts, beams and missiles shot by capitals), every hit of the battle, and the beams, launches,
-## kills and detonations come out within 10 % of each other. In one process the second run of a battle does not start from
-## the first's state (847 hits against 856 on either path, in either order, fix round 1's controls), so the two runs are
-## compared by Q22's tolerance, not for equality. Skips, saying why, without the native library.
+## turrets, interceptors, beams, missiles and mines on the native rows: the hits the stand-ins' weapons land (bolts, beams
+## and missiles shot by capitals), every hit of the battle, and the beams, launches, kills and detonations come out within
+## 10 % of the GDScript stand-ins' battle, recorded before M4-T37 removed them (`tests/fixtures/parity/`). A battle on the main
+## scene does not repeat exactly between runs (847 hits against 856, fix round 1's controls), so it is held to Q22's
+## tolerance, not to equality.
 
 const NATIVE_CLASS: StringName = &"ScsWeaponRows"
 const ROOT: String = "user://test_weapon_rows_battle"
 const SECONDS: float = 30.0
 
 var main: Main
-var _saved: Variant
 var _hits: int = 0
 var _capital_hits: int = 0
 
@@ -23,28 +22,22 @@ func should_skip_script():
 
 
 func before_each() -> void:
-	_saved = Settings.get_value(&"perf_native_weapons")
 	get_tree().paused = false
 	ContactScan.invalidate()
 
 
 func after_each() -> void:
-	Settings.set_value(&"perf_native_weapons", _saved)
 	DebugConsole.flags.invulnerable = false
 	ContactScan.invalidate()
 	Factions.reset()
 
 
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there are no weapon kernels to test")
-	return true
+const FIXTURE: String = "weapon_rows_battle"
 
 
 # One seeded battle on a fresh main scene: [every hit, capitals' hits, beam shots, launches, missiles shot down, mines set off].
-func _battle(native: bool) -> Array:
-	Settings.set_value(&"perf_native_weapons", native)
+func _battle() -> Array:
+	SimClock.reset()  # every battle from the same sim time: a later start rounds its gates and expiries otherwise
 	main = (load("res://src/game/main.tscn") as PackedScene).instantiate() as Main
 	main.input_source = FakeInputSource.new()
 	main.waves_auto_start = false
@@ -57,11 +50,11 @@ func _battle(native: bool) -> Array:
 	_capital_hits = 0
 	var resolver := main.get_node("Combat/HitResolver") as HitResolver
 	resolver.hit_resolved.connect(_on_hit)
-	var label: String = "native" if native else "gdscript"
+	var label: String = "native"
 	var result: ConsoleResult = DebugConsole.registry.execute("bench battle 100 %d warmup=0 seed=1 label=%s" % [SECONDS, label])[0]
 	assert_true(result.ok, result.text())
 	await wait_for_signal(main.bench.finished, 240.0, "the battle finishes")
-	assert_eq(main.bench.standins.weapons_path(), &"native" if native else &"gdscript", "%s: the weapons ran on that path" % label)
+	assert_eq(main.bench.standins.weapons_path(), &"native", "the weapons ran on the native rows")
 	var summary: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(ROOT.path_join(label).path_join("summary.json")))
 	var weapons: Dictionary = summary.get("weapons", {})
 	var out: Array = [_hits, _capital_hits, int(weapons.get("beam_shots", 0)), int(weapons.get("missile_launches", 0)),
@@ -80,11 +73,16 @@ func _on_hit(info: HitInfo) -> void:
 		_capital_hits += 1
 
 
-func test_a_seeded_battle_lands_the_same_hits_within_ten_percent_on_both_paths() -> void:
-	if _skipped():
+func test_a_seeded_battle_lands_the_same_hits_within_ten_percent_of_the_gdscript_recording() -> void:
+	# The GDScript stand-ins' battle, recorded before M4-T37 removed them.
+	var recorded: Variant = ParityFixture.stored(FIXTURE, "battle_100_seed_1")
+	assert_not_null(recorded, "the GDScript stand-ins' battle was recorded")
+	if recorded == null:
 		return
-	var gdscript: Array = await _battle(false)
-	var native: Array = await _battle(true)
+	var gdscript: Array = []
+	for count: Variant in recorded:
+		gdscript.append(int(count))
+	var native: Array = await _battle()
 	var names: Array[String] = ["hits", "capitals' hits", "beam shots", "launches", "missiles shot down", "mines set off"]
 	gut.p("battle 100, %d s, seed 1: GDScript %s, native %s" % [SECONDS, gdscript, native])
 	assert_gt(int(gdscript[1]), 20, "the stand-ins' weapons landed hits: %s" % [gdscript])

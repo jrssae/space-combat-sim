@@ -1,7 +1,7 @@
 extends GutTest
 ## The proximity mine stand-in's trigger and blast (M4-T12, Q21), pure: a mine goes off on a hull hostile to its layer whose
 ## sphere comes inside the trigger radius, never on a friendly or a neutral one, and its blast reaches every hull whose sphere
-## lies within the blast radius, friend or foe. The trigger query runs through the hit sweep's grid, native or GDScript, with
+## lies within the blast radius, friend or foe. The trigger query runs through the hit sweep's native grid, with
 ## the same answer.
 
 const EA: StringName = Factions.EARTH_ALLIANCE
@@ -13,9 +13,8 @@ func after_each() -> void:
 
 
 func _triggers(mines: Array[Vector3], mine_factions: Array[StringName], hulls: Array[Vector3], reach: Array[float],
-		hull_factions: Array[StringName], use_native: bool = true) -> PackedInt32Array:
+		hull_factions: Array[StringName]) -> PackedInt32Array:
 	var broad := HitBroadPhase.new()
-	broad.use_native = use_native
 	var reach_packed := PackedFloat64Array()
 	for r: float in reach:
 		reach_packed.append(r)
@@ -61,9 +60,7 @@ func test_each_mine_answers_for_itself_and_both_paths_agree() -> void:
 		hulls.append(Vector3(rng.randf_range(-3000.0, 3000.0), rng.randf_range(-300.0, 300.0), rng.randf_range(-3000.0, 3000.0)))
 		reach.append(5.0 if j % 10 != 0 else 300.0)
 		hull_factions.append(RAIDERS if j % 3 == 0 else EA)
-	var native: PackedInt32Array = _triggers(mines, mine_factions, hulls, reach, hull_factions, true)
-	var script: PackedInt32Array = _triggers(mines, mine_factions, hulls, reach, hull_factions, false)
-	assert_eq(native, script, "the same triggers on both paths")
+	var native: PackedInt32Array = _triggers(mines, mine_factions, hulls, reach, hull_factions)
 	# Against the plain definition, every mine against every hull.
 	var fired: int = 0
 	for i: int in mines.size():
@@ -73,7 +70,7 @@ func test_each_mine_answers_for_itself_and_both_paths_agree() -> void:
 					and mines[i].distance_to(hulls[j]) <= MineStandin.TRIGGER_RADIUS_M + reach[j]:
 				expected = j
 				break
-		assert_eq(script[i], expected, "mine %d" % i)
+		assert_eq(native[i], expected, "mine %d" % i)
 		fired += 1 if expected >= 0 else 0
 	assert_gt(fired, 0, "the crowd sets some off")
 

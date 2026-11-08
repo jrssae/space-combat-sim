@@ -3,7 +3,7 @@ extends GutTest
 ## and state, the forces, torques, levels and assist state that `FlightModel.compute`, `SpeedGovernor` and the force
 ## application in `Ship._physics_process` give. Differential, with no scene: 10 000 seeded commands and states per ship type
 ## through both paths, bit for bit (the native maths repeats GDScript's 32-bit vectors and 64-bit scalars); any field that
-## cannot be bit-identical is listed here with its tolerance. Skips, saying why, when the native library is not built.
+## cannot be bit-identical is listed here with its tolerance.
 
 const STARFURY_SPEC: String = "res://assets/ships/starfury_aurora.tres"
 const RAIDER_SPEC: String = "res://assets/ships/raider_delta_v.tres"
@@ -15,25 +15,6 @@ const DT: float = 1.0 / 60.0
 ## compared bit for bit, and a field is only listed here, with the reason, once a run shows the maths cannot match).
 const TOLERATED: Dictionary = {}
 const REL_TOL: float = 1e-6
-
-var _native_backup: bool
-
-
-func before_each() -> void:
-	_native_backup = bool(Settings.get_value(&"perf_native"))
-	Settings.set_value(&"perf_native", true)
-
-
-func after_each() -> void:
-	Settings.set_value(&"perf_native", _native_backup)
-
-
-# True (and the test marked pending, saying why) when there is no native library to compare against.
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there is no native path to compare")
-	return true
 
 
 # A fresh native step, or null (asserting) when the library lacks the class.
@@ -238,22 +219,16 @@ func _differential(spec_path: String, fixture: String, seed: int) -> Dictionary:
 
 
 func test_starfury_matches_the_model_bit_for_bit_over_ten_thousand_samples() -> void:
-	if _skipped():
-		return
 	var misses: Dictionary = _differential(STARFURY_SPEC, STARFURY_FIXTURE, 1)
 	assert_eq(misses, {}, "every field equal on every sample (the listing above names any that differ)")
 
 
 func test_raider_matches_the_model_bit_for_bit_over_ten_thousand_samples() -> void:
-	if _skipped():
-		return
 	var misses: Dictionary = _differential(RAIDER_SPEC, RAIDER_FIXTURE, 2)
 	assert_eq(misses, {}, "every field equal on every sample (the listing above names any that differ)")
 
 
 func test_assist_state_is_per_slot_and_reset_clears_it() -> void:
-	if _skipped():
-		return
 	var loaded: Array = _load(STARFURY_SPEC, STARFURY_FIXTURE)
 	var step: Object = _step()
 	if step == null:
@@ -275,8 +250,6 @@ func test_assist_state_is_per_slot_and_reset_clears_it() -> void:
 
 
 func test_bad_input_is_refused_and_never_panics() -> void:
-	if _skipped():
-		return
 	var loaded: Array = _load(STARFURY_SPEC, STARFURY_FIXTURE)
 	var spec: ShipSpec = loaded[0]
 	var layout: ThrusterLayout = loaded[1]

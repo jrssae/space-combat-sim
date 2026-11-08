@@ -16,6 +16,11 @@
 #        args=(); while (( $# )); do [[ $1 == --path ]] && { shift 2; continue; }; args+=("$1"); shift; done
 #        exec <build>/scs_release.x86_64 "${args[@]}"
 #      and run the snapshot's copy: GODOT_BIN=<wrapper> <snap>/scripts/bench_quick.sh <label>.
+#   6. For scripts/fullscreen_check.sh (M4-T44): a template does not honour -s, so scripts/measure_fight.gd never runs. Export a
+#      second snapshot whose project.godot sets run/main_scene to a scene holding scripts/measure_fight_node.gd, with
+#      exclude_filter "tests/unit/*, tests/integration/*, ..." (the measure node needs tests/fixtures/fake_input_source.gd), and a
+#      wrapper that also drops "-s <script>". A release print is flushed only at exit, so a run killed by its timeout logs nothing.
+#   The runtime GLSL ships by itself since M4-T44 (kept .glsl files and addons/scs_export), so include_filter needs no *.glsl.
 set -euo pipefail
 
 GODOT_VERSION="4.7.2-stable"

@@ -1,14 +1,3 @@
 [remap]
 
-importer="glsl"
-type="RDShaderFile"
-uid="uid://bo44rhai7jqyw"
-path="res://.godot/imported/velocity_probe.glsl-5def8bac09cb4cf28921fab3a36ed1ff.res"
-
-[deps]
-
-source_file="res://src/rendering/velocity_probe.glsl"
-dest_files=["res://.godot/imported/velocity_probe.glsl-5def8bac09cb4cf28921fab3a36ed1ff.res"]
-
-[params]
-
+importer="keep"

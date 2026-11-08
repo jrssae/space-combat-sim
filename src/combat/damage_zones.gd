@@ -70,10 +70,6 @@ static func zone_for(p_layout: Layout, local: Vector3) -> int:
 	return -1
 
 
-func zone_count_now() -> int:
-	return totals.size()
-
-
 ## Adds `amount` hull points of damage at the ship-local point `local`.
 func record(local: Vector3, amount: float) -> void:
 	var zone: int = zone_for(layout, local)

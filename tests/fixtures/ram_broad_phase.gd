@@ -1,6 +1,7 @@
 class_name RamBroadPhase
 extends RefCounted
-## The ram resolver's broad phase (M4-T03, architecture §17.3), pure: which pairs of hulls could come near each other in the
+## The ram resolver's broad phase as GDScript (M4-T03, architecture §17.3), the reference `ScsRamPhase` repeats step for step;
+## a test fixture since M4-T42, as the game runs only the native one. Pure: which pairs of hulls could come near each other in the
 ## coming tick, so that only those get the resolver's exact test. A pair the exact test would find meeting is never left out.
 ##
 ## Each hull is its bounding sphere swept along its path through the tick, boxed. Two hulls whose boxes do not overlap cannot

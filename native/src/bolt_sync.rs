@@ -1,5 +1,5 @@
-// The bolts' read at the core's two sync points, cheaper (M4-T34, docs/architecture.md 17.13): the same rows as
-// `ScsSimCore`'s own bolt read, which stays the reference behind `perf_native_bolt_sync`.
+// The node bolts' read at the core's two sync points (M4-T34, docs/architecture.md 17.13): the rows the core's own read
+// filled, for less (M4-T37 removed that read; its rows are recorded in `tests/fixtures/parity/bolt_sync.json`).
 // gdext's `init` derive writes `base: base`, which clippy flags on the struct's `base` field.
 #![allow(clippy::redundant_field_names)]
 use std::collections::HashMap;
@@ -77,11 +77,11 @@ struct Bolt {
     color: [f32; 4],
 }
 
-/// Reads the live bolts into the core's bolt table exactly as `ScsSimCore` does at its sync points (the position always,
-/// the velocity for the first sync, the last step for the hit resolver's), for less: a bolt already known is found by the
-/// instance id in its array slot instead of being made into an object handle, the group's nodes are not asked whether they
-/// are in the tree (a group holds only nodes that are), and the known bolts sit in a cheaper map. `SimCore` calls the core's
-/// own sync with no bolts and then this. Engine calls are counted per tick as the core counts them.
+/// Reads the live node bolts into the core's bolt table at its sync points (the position always, the velocity for the
+/// first sync, the last step for the hit resolver's): a bolt already known is found by the instance id in its array slot
+/// instead of being made into an object handle, the group's nodes are not asked whether they are in the tree (a group
+/// holds only nodes that are), and the known bolts sit in a cheaper map. `SimCore` calls the core's own sync, which keeps
+/// the owned bolts, and then this. Engine calls are counted per tick as the core counts them.
 #[derive(GodotClass)]
 #[class(base=RefCounted, init)]
 pub struct ScsBoltSync {
@@ -230,12 +230,6 @@ impl ScsBoltSync {
     #[func]
     fn known_count(&self) -> i64 {
         self.known.len() as i64
-    }
-
-    /// Engine calls so far in the open tick.
-    #[func]
-    fn reads_open(&self) -> i64 {
-        self.reads
     }
 
     /// Closes the tick's engine-call count (with the core's `sync_out`).

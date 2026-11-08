@@ -11,8 +11,9 @@ extends Node3D
 ## as its trigger and registered with `world`, so that world's rebase moves it: its own side's ships steer round it, other
 ## sides never see it (Q27). A mine leaves the rows when it goes off and comes back when it is laid again.
 ##
-## With the native rows on (M4-T20) the director binds the belt to its `ScsWeaponRows` and calls `step_native`: the trigger
-## and blast queries run over the core's rows, and this node still lays, retires and hurts; `step` is the reference.
+## The director binds the belt to its `ScsWeaponRows` (M4-T20) and calls `step_native`: the trigger and blast queries run
+## over the core's rows, and this node lays, retires and hurts. `triggers` and `blast` state the same rules in GDScript for
+## their tests.
 
 ## A row went off (`index`) and is no longer in play.
 signal detonated(index: int)
@@ -35,8 +36,6 @@ const COLOR: Color = Color(0.7, 0.15, 0.1)
 var kind: Targetable.Kind = Targetable.Kind.MINE
 ## Mines that checked their trigger in the latest step.
 var checked_last_tick: int = 0
-## Finds the hulls inside a trigger; a test may force its path.
-var broad_phase: HitBroadPhase = HitBroadPhase.new()
 ## The frame the mines' rows are in (the one that spawned this node); set before `build`.
 var world: Node = null
 ## The native weapon rows (`ScsWeaponRows`) holding these mines while they answer the triggers and blasts (M4-T20), or
@@ -122,33 +121,6 @@ func faction_of(i: int) -> StringName:
 	return _factions[i]
 
 
-## One tick (`tick` the director's count): mines due to be laid again come back, a third of the rows check their trigger
-## against the hulls (`hulls` with their centres, reaches and factions, index for index) and those set off go off. Returns
-## how many went off.
-func step(tick: int, now_s: float, hulls: Array[Damageable], hull_at: PackedVector3Array, hull_reach: PackedFloat64Array,
-		hull_factions: Array[StringName]) -> int:
-	_lay_again(now_s)
-	var rows := PackedInt32Array()
-	var at := PackedVector3Array()
-	var factions: Array[StringName] = []
-	var origin: Vector3 = global_position
-	for i: int in range(posmod(tick, TRIGGER_TICKS), _local.size(), TRIGGER_TICKS):
-		if _alive[i] == 1:
-			rows.append(i)
-			at.append(origin + _local[i])
-			factions.append(_factions[i])
-	checked_last_tick = rows.size()
-	if rows.is_empty() or hulls.is_empty():
-		return 0
-	var set_off: PackedInt32Array = triggers(at, factions, hull_at, hull_reach, hull_factions, broad_phase)
-	var fired: int = 0
-	for k: int in rows.size():
-		if set_off[k] >= 0:
-			_go_off(rows[k], at[k], now_s, hulls, hull_at, hull_reach)
-			fired += 1
-	return fired
-
-
 ## Hands the mines to the native rows (`rows`, an `ScsWeaponRows` on the core), or takes them back with null.
 func bind_native(rows: Object) -> void:
 	native_rows = rows
@@ -157,34 +129,23 @@ func bind_native(rows: Object) -> void:
 
 
 ## `step` with the native rows answering the triggers and the blasts over the core's rows (`bind_native` first). Returns
-## how many went off. `hull_order` (asked only when one goes off) gives the hulls `step` would walk, in its order: a blast
-## hurts those of its hulls, in that order.
-func step_native(tick: int, now_s: float, hull_order: Callable) -> int:
+## how many went off. A blast hurts the hulls the core names, near and low-attention tier rows alike, in the core's order
+## (M4-T23: one path, no walk of the hulls here).
+func step_native(tick: int, now_s: float) -> int:
 	_lay_again(now_s)
 	var origin: Vector3 = global_position
 	var out: Array = native_rows.mine_step(tick, origin)
 	checked_last_tick = out[0]
 	var set_off: PackedInt32Array = out[1]
-	if set_off.is_empty():
-		return 0
-	var rank: Dictionary = {}  # Damageable -> its place in the walk
-	var walk: Array = hull_order.call()
-	for j: int in walk.size():
-		rank[walk[j]] = j
 	for i: int in set_off:
 		var at: Vector3 = origin + _local[i]
 		_retire(i, now_s)
 		var in_blast: Array = native_rows.blast(at)
 		var hull_ids: PackedInt64Array = in_blast[0]
 		var places: PackedVector3Array = in_blast[1]
-		var hurt: Array = []  # [place in the walk, hull, its body's place]
 		for k: int in hull_ids.size():
-			var damageable := instance_from_id(hull_ids[k]) as Damageable
-			if rank.has(damageable):
-				hurt.append([rank[damageable], damageable, places[k]])
-		hurt.sort_custom(func(a: Array, b: Array) -> bool: return int(a[0]) < int(b[0]))
-		for h: Array in hurt:
-			_hurt(i, at, h[1], h[2])
+			var hull_id: int = hull_ids[k]
+			_hurt(i, at, instance_from_id(hull_id) as Damageable if is_instance_id_valid(hull_id) else null, places[k])
 		detonated.emit(i)
 	return set_off.size()
 
@@ -226,14 +187,6 @@ static func blast(at: Vector3, hull_at: PackedVector3Array, hull_reach: PackedFl
 	return out
 
 
-func _go_off(i: int, at: Vector3, now_s: float, hulls: Array[Damageable], hull_at: PackedVector3Array,
-		hull_reach: PackedFloat64Array) -> void:
-	_retire(i, now_s)
-	for j: int in blast(at, hull_at, hull_reach):
-		_hurt(i, at, hulls[j], hull_at[j])
-	detonated.emit(i)
-
-
 # Mine `i` leaves play until it is laid again.
 func _retire(i: int, now_s: float) -> void:
 	_alive[i] = 0
@@ -246,9 +199,12 @@ func _retire(i: int, now_s: float) -> void:
 		native_rows.set_mine_alive(i, false)
 
 
-# Mine `i`'s blast at `at` on one hull whose body is at `hull_at`, if it can still be hurt.
+# Mine `i`'s blast at `at` on one hull whose body (or tier row) is at `hull_at`, if it can still be hurt.
 func _hurt(i: int, at: Vector3, damageable: Damageable, hull_at: Vector3) -> void:
-	if not is_instance_valid(damageable) or not damageable.is_active():
+	if damageable == null or not is_instance_valid(damageable) or damageable.hull.destroyed:
+		return
+	var body: Node3D = damageable.body()
+	if not damageable.is_active() and not (body != null and body.has_meta(TierDirector.TIER_META)):
 		return
 	var away: Vector3 = hull_at - at
 	var info := HitInfo.new(damageable.body().get_instance_id(), 0, _factions[i], DAMAGE, at,

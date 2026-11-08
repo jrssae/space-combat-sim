@@ -12,6 +12,11 @@ extends Node
 ## processing: out of Jolt, out of the scan, its hosted driver not live, its cannon idle). A capital parks with its turrets
 ## and emitters. With no live player nothing moves. With the radius at 0, or the core off, every tier row is promoted.
 ##
+## Far proxies (M4-T23): a demoted fighter is drawn as a far dot from its row (`FarDots`, its hull's paint), a capital as an
+## instance of the mesh its body draws (`FarHulls`); a promotion takes the row in the tick its body shows. A row that comes
+## back inside a rock or a mine is moved clear by the core first (it flew through them as a row), by the shortest way out: a
+## fighter as a sphere, a capital as its hull box (fix round 1).
+##
 ## A hulk (M12 groundwork): a tier row flagged a hulk drifts with no force and no brain and is never removed for being idle;
 ## promotion brings it back as a hulk (`Ship.hulk`: no pilot, no thrust, no assist), not a live ship.
 ##
@@ -32,6 +37,7 @@ const HANDOVERS_PER_TICK: int = 64
 const TIER_META: StringName = &"_scs_tier_row"
 
 static var _current: TierDirector = null
+## The tier's hulls by body id, found once and kept while the director's world lives (cleared when it leaves).
 static var _damageables: Dictionary[int, Damageable] = {}
 
 var world: WorldFrame = null
@@ -100,6 +106,7 @@ func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
 	if _current == self:
 		_current = null
+		_damageables.clear()
 
 
 ## The director under `p_world`, made on first ask with the pool and the stand-ins it works for.
@@ -145,6 +152,18 @@ static func row_pose(body: Node3D) -> Array:
 	if state.is_empty():
 		return []
 	return [Transform3D(state["basis"], state["position"]), state["velocity"], state["angular"]]
+
+
+## Where `body` flies now (M4-T23): its tier row's position while it is in the tier, else its own.
+static func flying_position(body: Node3D) -> Vector3:
+	var pose: Array = row_pose(body) if body != null and body.has_meta(TIER_META) else []
+	return (pose[0] as Transform3D).origin if not pose.is_empty() else body.global_position
+
+
+## How fast `body` flies now (M4-T23): its tier row's velocity while it is in the tier, else its body's.
+static func flying_velocity(body: RigidBody3D) -> Vector3:
+	var pose: Array = row_pose(body) if body != null and body.has_meta(TIER_META) else []
+	return pose[1] if not pose.is_empty() else body.linear_velocity
 
 
 ## Lands tier hits through each target's `Damageable` (M4-T22), in order: `targets` and `shooters` by body id, each hit's
@@ -262,13 +281,20 @@ func forget(c: Combatant) -> void:
 	if c.driver != null:
 		c.driver.set_tiered(false)
 	if _sim != null and is_instance_valid(_sim) and _sim.core != null:
-		_sim.core.tier_take(body_id)
+		_sim.core.tier_remove(body_id)  # leaves play, not a promotion (fix round 1)
 	c.ship.remove_meta(TIER_META)
 
 
-## Whether body `body_id` is in the tier now.
-func is_tiered(body_id: int) -> bool:
-	return _tiered_ships.has(body_id) or _tiered_capitals.has(body_id)
+## A capital leaves play while it is in the tier (destroyed, M4-T23): its row goes with it.
+func forget_capital(cap: CapitalStandin) -> void:
+	if cap == null:
+		return
+	var body_id: int = cap.get_instance_id()
+	if not _tiered_capitals.erase(body_id):
+		return
+	_park_origins.erase(body_id)
+	if _sim != null and is_instance_valid(_sim) and _sim.core != null:
+		_sim.core.tier_remove(body_id)  # dies, not a promotion (fix round 1)
 
 
 ## Fighters and capitals in the tier now.
@@ -329,6 +355,8 @@ func _demote_ship(sim: SimCore, c: Combatant) -> bool:
 	sim.core.tier_set_control(body_id, Vector3.ZERO, command, ship.assist_state(), ship.assist_on)
 	if ship.hulk:
 		sim.core.tier_set_hulk(body_id, true)
+	sim.core.tier_set_proxy(body_id, -1, FarDots.asset_paint(ship.spec.asset_id if ship.spec != null else ""))
+	FarDots.attach(world)
 	ships.park_in_tier(c)
 	if c.driver != null:
 		c.driver.set_tiered(true)
@@ -349,6 +377,11 @@ func _demote_capital(sim: SimCore, cap: CapitalStandin) -> bool:
 	sim.core.tier_set_attrs(body_id, cap.targetable.get_instance_id(), cap.faction, cap.targetable.display_name,
 			cap.damageable.bounding_radius, cap.targetable.broadcast_range_m, cap.damageable.hull.fraction())
 	sim.core.tier_set_control(body_id, cap.cruise_velocity, PackedFloat64Array(), 0.0, false)
+	sim.core.tier_set_box(body_id, cap.half_extents())  # cleared of rocks by its hull, not its bounding sphere (fix round 1)
+	var hulls: FarHulls = FarHulls.attach(world)
+	sim.core.tier_set_proxy(body_id, hulls.class_of(cap.drawn_mesh()) if hulls != null else -1, FarDots.DEFAULT_PAINT)
+	if hulls == null:
+		FarDots.attach(world)
 	cap.park_for_tier()
 	_tiered_capitals[body_id] = cap
 	_park_origins[body_id] = _origin()
@@ -405,7 +438,7 @@ func _make_hulk(c: Combatant) -> void:
 # A native AI pilot the host does not step yet would never think in the tier: it stays in Jolt until it is hosted.
 func _waits_for_host(c: Combatant) -> bool:
 	var pilot := c.driver.brain as AiPilot if c.driver != null else null
-	return pilot != null and pilot.native_capable() and BrainBatch.driver_step_mode() and not c.driver.is_hosted()
+	return pilot != null and pilot.native_capable() and not c.driver.is_hosted()
 
 
 # Body `body_id`'s `Damageable`, found once and kept (a ship keeps its hull for life; fix round 2: looking it up among
@@ -504,11 +537,16 @@ func _sum_costs(sim: SimCore) -> void:
 
 
 # The rams the core finds where a tier ship meets its rammer's target, landed by the near rule (`RamResolver.ram_pending`),
-# through the ram resolver when there is one (so `ram_resolved` hears them).
+# through the ram resolver when there is one (so `ram_resolved` hears them). Timed into the fighters' landing cost; nothing
+# to look for with no tier rows.
 func _land_rams(sim: SimCore) -> void:
+	if int(sim.core.tier_fighters()) + int(sim.core.tier_capitals()) == 0:
+		return
+	var started: int = Time.get_ticks_usec()  # a readout, never gameplay time
 	var found: Array = sim.core.tier_ram_contacts(get_physics_process_delta_time())
 	var rammers: PackedInt64Array = found[0]
 	if rammers.is_empty():
+		land_us += Time.get_ticks_usec() - started
 		return
 	var pending: Array[Array] = []
 	for k: int in rammers.size():
@@ -524,6 +562,7 @@ func _land_rams(sim: SimCore) -> void:
 		for ram: Array in pending:
 			(ram[0] as Damageable).apply_hit(ram[1] as HitInfo)
 	rams_landed += pending.size()
+	land_us += Time.get_ticks_usec() - started
 
 
 # A hull as the ram rule takes it, from body `body_id` and the velocity its row has; empty when it is gone or destroyed.
@@ -567,13 +606,13 @@ func _prune(sim: SimCore) -> void:
 		if not is_instance_valid(cap) or not cap.is_inside_tree():
 			_tiered_capitals.erase(body_id)
 			_park_origins.erase(body_id)
-			sim.core.tier_take(body_id)
+			sim.core.tier_remove(body_id)
 	for body_id: int in _tiered_ships.keys():
 		var c: Combatant = _tiered_ships[body_id]
 		if not is_instance_valid(c.ship) or not c.ship.is_inside_tree():
 			_tiered_ships.erase(body_id)
 			_park_origins.erase(body_id)
-			sim.core.tier_take(body_id)
+			sim.core.tier_remove(body_id)
 
 
 func _ship_of(body_id: int) -> Combatant:
@@ -598,6 +637,13 @@ func _capital_of(body_id: int) -> CapitalStandin:
 			if is_instance_valid(cap):
 				_capitals_by_body[cap.get_instance_id()] = cap
 	return _capitals_by_body.get(body_id)
+
+
+## The last frame's far proxy update on the CPU, us (M4-T23): the far dots' and the far hulls' refreshes.
+func proxy_us() -> int:
+	var dots: FarDots = FarDots.of(world)
+	var hulls: FarHulls = FarHulls.of(world)
+	return (dots.last_refresh_us if dots != null else 0) + (hulls.last_refresh_us if hulls != null else 0)
 
 
 func _register_console() -> void:
@@ -633,7 +679,17 @@ func _register_console() -> void:
 		&"thinks": {"get": func() -> int: return int(NativeBrains.host(get_tree()).tier_thinks()) if NativeBrains.host(get_tree()) != null else 0,
 				"doc": "Tier fighters' thinks in the last handed-over AI step (fix round 1)"},
 		&"think_us": {"get": func() -> float: return float(NativeBrains.host(get_tree()).tier_think_us()) if NativeBrains.host(get_tree()) != null else 0.0,
-				"unit": "us", "doc": "Their summed time on the step's own clock: the worker thread when sim_step is threaded, the main thread when inline (fix round 1)"},
+				"unit": "us", "doc": "Their summed time on the step's own clock: the worker thread when sim_step is threaded, the main thread when delayed (fix round 1)"},
+		&"proxy_dots": {"get": func() -> int: return FarDots.of(world).tier_shown if FarDots.of(world) != null else 0,
+				"doc": "Tier fighters drawn as far dots by the last frame (M4-T23)"},
+		&"proxy_hulls": {"get": func() -> int: return FarHulls.of(world).shown if FarHulls.of(world) != null else 0,
+				"doc": "Tier capitals drawn as far hull instances by the last frame (M4-T23)"},
+		&"proxy_us": {"get": proxy_us, "unit": "us",
+				"doc": "The last frame's far proxy update on the CPU: the far dots (near and tier) and the far hulls; wall clock (M4-T23)"},
+		&"flashes": {"get": func() -> int: return FarFlashes.of(world).flash_count() if FarFlashes.of(world) != null else 0,
+				"doc": "Far deaths shining as point flashes now (M4-T23)"},
+		&"cleared": {"get": func() -> int: return int(_sim.core.tier_cleared()) if _sim != null and is_instance_valid(_sim) and _sim.core != null else 0,
+				"doc": "Promotions moved clear of a rock or mine they overlapped so far (M4-T23)"},
 		&"cost_us": {"get": func() -> String: return "%.1f fighters, %.1f capitals; %.3f a fighter, %.2f a capital" % Array(cost_means()),
 				"doc": "The tier's main-thread cost per tick since the bench's window began (or the first tier row): the fighters' part (integration, rolls, landing), the far capitals' rolls, and each per row, us; wall clock (M4-T22)"},
 	}), self)

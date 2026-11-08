@@ -31,6 +31,20 @@ func test_runs_180_physics_frames_and_spawns_the_scenario() -> void:
 	assert_eq(main.thrusters.glow_count(), main.ship.get_layout().nozzle_count() + main.ship.get_layout().rcs_nozzles.size())
 
 
+func test_a_main_scene_starts_its_battle_at_sim_time_zero() -> void:
+	# M4-T37: a scene loaded again in the same process (the `scenario` command) must not start at a later sim time, or its
+	# gates and expiries round differently and the battle moves.
+	main.free()
+	SimClock.reset(500.0)
+	main = (load("res://src/game/main.tscn") as PackedScene).instantiate() as Main
+	main.input_source = source
+	main.scenario_path = ScenarioLoader.FREE_FLIGHT_PATH
+	add_child_autofree(main)
+	assert_lt(SimClock.now(), 0.001, "the scene reset the clock as it entered the tree")
+	await _ticks(2)
+	assert_lt(SimClock.now(), 0.1, "and the battle runs from zero")
+
+
 func test_camera_toggle_flips_current_and_cockpit_interior() -> void:
 	assert_eq(main.camera_rig.mode, CameraRig.Mode.CHASE, "Settings.camera_default is chase")
 	assert_false(main.ship.is_cockpit_interior_visible())

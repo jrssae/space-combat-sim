@@ -4,11 +4,9 @@ extends RefCounted
 ## core, holding the capitals' guns, interceptors and beam emitters and the mine belt, which `StandinDirector` steps once
 ## per tick instead of the GDScript stand-ins. This class binds the stand-ins to the rows (their state taken from the
 ## nodes), keeps the hostility table the kernels read in step with `Factions` and the core's factions, and hands the state
-## back to the nodes when the GDScript takes over again. The GDScript stand-ins stay the reference.
+## back to the nodes when the rows are rebound.
 
 const NATIVE_CLASS: StringName = &"ScsWeaponRows"
-
-static var _class_known: int = -1
 
 ## The native rows, an `ScsWeaponRows`.
 var rows: Object = null
@@ -23,13 +21,6 @@ var mines: MineStandin = null
 var _relations_count: int = -1
 var _relations_table: FactionTable = null
 var _relations_revision: int = -1
-
-
-## Whether the library has the native rows.
-static func available() -> bool:
-	if _class_known < 0:
-		_class_known = 1 if NativeLib.has_class(NATIVE_CLASS) else 0
-	return _class_known == 1
 
 
 ## Binds `p_capitals` (with their turrets' state) and `p_mines` (or null) to new rows on `p_sim`'s core.

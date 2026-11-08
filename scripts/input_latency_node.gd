@@ -6,7 +6,7 @@ extends Node
 ## layout around the player, as the fullscreen check does). Prints one `[latency]` line with the mean, median, worst and
 ## best latency in milliseconds and in frames, the frame time over the window and the step mode, then quits.
 ##
-## Arguments after `--`: exec="<console statements>" warmup=<s> presses=<n> mode=<inline|delayed|threaded> steps=<n>
+## Arguments after `--`: exec="<console statements>" warmup=<s> presses=<n> mode=<delayed|threaded> steps=<n>
 ## (Engine.max_physics_steps_per_frame, 0 keeps the setting's) scale3d=<1080p|factor>.
 
 const RESPONSE_RAD_S: float = 0.004

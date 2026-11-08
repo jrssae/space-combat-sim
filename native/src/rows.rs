@@ -147,13 +147,6 @@ impl Bolts {
         self.owned = 0;
     }
 
-    /// Drops the rows the core owns (the bolt rows switched off), their draw slots with them.
-    pub fn drop_owned(&mut self) {
-        self.owned = 0;
-        self.truncate_to_owned();
-        self.slots_used.clear();
-    }
-
     /// The instances a look's multimesh draws: its highest taken slot plus one.
     pub fn slot_count(&self, look: u8) -> usize {
         self.slots_used

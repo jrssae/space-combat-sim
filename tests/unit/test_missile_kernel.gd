@@ -1,9 +1,8 @@
 extends GutTest
 ## The missile kernel on the core's rows (M4-T20, architecture §17.13): a guided missile's proportional navigation runs
-## natively over its target's row, bit for bit with `MissileStandin.steer`, which stays the reference behind
-## `perf_native_weapons`. Compared on seeded inputs and on seeded flights at a weaving target, one missile steered by each
-## path side by side; a target hidden after the tick's sync (not yet read again) is asked of the GDScript, which drops it as
-## before, and a missile with no core to read steers in GDScript. Skips, saying why, without the native library.
+## natively over its target's row, bit for bit with the maths in `MissileStandin.steer`. Compared on seeded inputs and on
+## seeded flights at a weaving target, side by side with the maths; a target hidden after the tick's sync is read again
+## and dropped, and a missile with no core to read flies straight on.
 
 const NATIVE_CLASS: StringName = &"ScsWeaponRows"
 const DT: float = 1.0 / 60.0
@@ -35,16 +34,7 @@ func after_each() -> void:
 	Factions.reset()
 
 
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there are no weapon kernels to test")
-	return true
-
-
 func test_the_guidance_maths_match_the_gdscript_bit_for_bit() -> void:
-	if _skipped():
-		return
 	var rows: Object = ClassDB.instantiate(NATIVE_CLASS)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 31
@@ -104,8 +94,6 @@ func _rows(core: SimCore) -> Object:
 
 
 func test_a_missile_on_the_rows_flies_the_gdscript_missiles_path_bit_for_bit() -> void:
-	if _skipped():
-		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 4
 	var core: SimCore = SimCore.attach(world)
@@ -128,7 +116,8 @@ func test_a_missile_on_the_rows_flies_the_gdscript_missiles_path_bit_for_bit() -
 			MissileStandin.native_rows = rows
 			var v_rows: Vector3 = guide_rows.step(on_rows, DT)
 			MissileStandin.native_rows = null
-			var v_ref: Vector3 = guide_ref.step(reference, DT)
+			var v_ref: Vector3 = MissileStandin.steer(reference.global_position, reference.velocity, target.global_position,
+					target.linear_velocity, MissileStandin.NAV_GAIN, guide_ref.turn_rate_rad_s, DT)
 			if var_to_bytes(v_rows) != var_to_bytes(v_ref):
 				fail_test("flight %d tick %d: %s against %s" % [flight, tick, v_rows, v_ref])
 				return
@@ -144,9 +133,7 @@ func test_a_missile_on_the_rows_flies_the_gdscript_missiles_path_bit_for_bit() -
 	assert_gt(MissileStandin.native_steers, 0, "the rows answered")
 
 
-func test_a_target_hidden_after_the_sync_is_dropped_as_the_gdscript_drops_it() -> void:
-	if _skipped():
-		return
+func test_a_target_hidden_after_the_sync_is_read_again_and_dropped() -> void:
 	var core: SimCore = SimCore.attach(world)
 	var rows: Object = _rows(core)
 	var target: RigidBody3D = _fighter(Vector3(0.0, 0.0, -3000.0))
@@ -165,17 +152,14 @@ func test_a_target_hidden_after_the_sync_is_dropped_as_the_gdscript_drops_it() -
 	assert_eq(MissileStandin.native_steers, before + 1, "a target on the rows and untouched is steered natively")
 
 
-func test_a_missile_without_a_core_steers_in_gdscript() -> void:
-	if _skipped():
-		return
+func test_a_missile_without_a_core_flies_straight_on() -> void:
 	var rows: Object = ClassDB.instantiate(NATIVE_CLASS)  # never attached: no rows to read
 	var target: RigidBody3D = _fighter(Vector3(500.0, 0.0, -3000.0))
 	target.linear_velocity = Vector3(100.0, 0.0, 0.0)
 	var missile: Projectile = _missile(Vector3.ZERO, target)
-	var reference: Projectile = _missile(Vector3.ZERO, target)
 	MissileStandin.native_rows = rows
 	var before: int = MissileStandin.native_steers
 	var v: Vector3 = MissileStandin.of(missile).step(missile, DT)
 	MissileStandin.native_rows = null
-	assert_eq(MissileStandin.native_steers, before, "nothing on the rows: the GDScript answered")
-	assert_eq(v, MissileStandin.of(reference).step(reference, DT), "with the reference's answer")
+	assert_eq(MissileStandin.native_steers, before, "nothing on the rows answered")
+	assert_eq(v, missile.velocity, "so the missile flies straight on")

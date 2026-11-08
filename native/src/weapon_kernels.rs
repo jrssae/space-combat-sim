@@ -12,7 +12,7 @@ use std::f64::consts::PI;
 
 use godot::builtin::{Basis, Vector3};
 
-use crate::rows::{Bolts, FLAG_HULL_ACTIVE, FLAG_RIGID, Rows};
+use crate::rows::{Bolts, FLAG_HULL_ACTIVE, FLAG_RIGID, FLAG_TIER, Rows};
 
 // `TurretStandin`'s constants.
 const RANGE_M: f64 = 4000.0;
@@ -404,12 +404,18 @@ pub fn mine_hits(
     }
 }
 
-/// `MineStandin.blast`: the rigid active hulls (in `hull_rows`' order) whose spheres lie within the blast of a mine at
-/// `at`, as rows, appended to `out`.
+/// Whether a row's hull can be set off and hurt by a mine: a rigid active hull, or a low-attention tier row (M4-T23: the
+/// blast is on the core's rows, near and tier alike).
+pub fn mine_can_hurt(flags: u32) -> bool {
+    flags & FLAG_TIER != 0 || (flags & FLAG_RIGID != 0 && flags & FLAG_HULL_ACTIVE != 0)
+}
+
+/// `MineStandin.blast`: the hulls a mine can hurt (in `hull_rows`' order: the sweep's rows, tier rows after the near ones)
+/// whose spheres lie within the blast of a mine at `at`, as rows, appended to `out`.
 pub fn blast(rows: &Rows, hull_rows: &[u32], at: Vector3, out: &mut Vec<u32>) {
     for &r in hull_rows {
         let j = r as usize;
-        if rows.flags[j] & FLAG_RIGID == 0 || rows.flags[j] & FLAG_HULL_ACTIVE == 0 {
+        if !mine_can_hurt(rows.flags[j]) {
             continue;
         }
         let reach = BLAST_RADIUS_M + rows.radii[j];

@@ -17,7 +17,7 @@ extends RefCounted
 ## - **Matched velocities** (relative speed under `MATCHED_MPS`, formation flight) never predict: they push apart only when
 ##   already inside the margin.
 ## - **Inside the margin**: straight away from the contact at `(reach - d) / PUSH_S`, plus whatever speed closes on it.
-## - **Ties** (a dead-centre course, or the same position): the side comes from `tie_direction`, seeded and odd in `w`,
+## - **Ties** (a dead-centre course, or the same position): the side comes from the kernel's tie direction, seeded and odd in `w`,
 ##   so two ships meeting head-on dodge apart whatever their two seeds.
 ## - **Rocks and mines** (`BodyKind.is_static`, M4-T09) are obstacles like any contact, with their radius. Their horizon is
 ##   at least the time a sideways RCS burn takes to clear their reach, plus `URGENT_SETTLE_S`, so a 200 m rock is seen
@@ -25,28 +25,15 @@ extends RefCounted
 ## - `urgent`: a threat closer in time than a 90 degree turn plus `URGENT_SETTLE_S`, or a contact inside the margin that
 ##   closes: the driver then seeks harder, so the RCS strafe does the dodge before any turn could.
 ##
-## Native kernels (M4-T16, architecture §17.13): `filter_seen` is what the driver calls. On the core's rows
-## (`Perception.on_rows`) one native call answers it bit for bit; otherwise it lists the contacts and statics and runs
-## `filter`, which stays the reference.
+## The maths runs in the native pilot kernels (M4-T16, architecture §17.13; `kernels::pilot::avoid`): over the core's rows
+## when the perception is on them (`Perception.on_rows`), else over its own lists loaded as rows (`PilotRows`). The GDScript
+## loop it matched bit for bit went in M4-T42; its answers are recorded in `tests/fixtures/parity/pilot_kernels.json`. The
+## constants named above are the kernel's (`native/src/kernels.rs`, `pub mod pilot`).
 
-## Clearance kept beyond the two bounding radii, m.
+## Clearance kept beyond the two bounding radii, m (the kernel's `MARGIN_M`).
 const MARGIN_M: float = 15.0
-const HORIZON_MIN_S: float = 4.0
-## Relative speeds under this are flying together (formation): no prediction, only the margin.
-const MATCHED_MPS: float = 3.0
-## Inside the margin the overlap is pushed out in about this long.
-const PUSH_S: float = 2.0
-## The dodge aims this much past the margin, so the filtered line clears it rather than grazing it.
-const AIM_PAST_M: float = 1.0
-## Closest-approach offsets under this are ties (dead centre): the side is seeded.
-const TIE_M: float = 0.1
-## A tie's side: within this many degrees of "right of the relative velocity, world up". Under 45, so two seeded dodges
-## never cancel.
+## A tie's side: within this many degrees of "right of the relative velocity, world up" (the kernel's `TIE_SPREAD_DEG`).
 const TIE_SPREAD_DEG: float = 40.0
-## Added to the time a 90 degree turn takes to decide what is urgent.
-const URGENT_SETTLE_S: float = 1.0
-## A dodge never asks for less time than this (alongside, closest approach a fraction of a second away).
-const MIN_TIME_S: float = 0.25
 
 
 ## The desired velocity with every threat's dodge added: `{"v_des": Vector3, "urgent": bool}`. `v_des` comes back
@@ -54,63 +41,36 @@ const MIN_TIME_S: float = 0.25
 ## `seed_value` breaks ties.
 static func filter(own_pos: Vector3, own_vel: Vector3, own_radius: float, contacts: Array[Contact], v_des: Vector3,
 		capability: ShipCapability, seed_value: int) -> Dictionary:
-	var dodge := Vector3.ZERO
-	var urgent: bool = false
-	var a_stop: float = maxf(capability.a_retro, 0.01)
-	var turn_rate: float = maxf(minf(capability.rate_max_rad.x, capability.rate_max_rad.y), 0.01)
-	var urgent_s: float = 0.5 * PI / turn_rate + URGENT_SETTLE_S
-	var a_side: float = maxf(minf(capability.a_rcs.x, capability.a_rcs.y), 0.01)
-	for c: Contact in contacts:
-		var reach: float = own_radius + c.bounding_radius + MARGIN_M
-		var s: Vector3 = own_pos - c.position
-		var w: Vector3 = v_des - c.velocity
-		var d: float = s.length()
-		if d < reach:
-			var out_dir: Vector3 = s / d if d > TIE_M else tie_direction(w, seed_value)
-			var closing: float = -w.dot(out_dir)
-			dodge += out_dir * ((reach - d) / PUSH_S + maxf(closing, 0.0))
-			urgent = urgent or closing > MATCHED_MPS
-			continue
-		var speed_sq: float = w.length_squared()
-		if speed_sq < MATCHED_MPS * MATCHED_MPS:
-			continue
-		var t_star: float = -s.dot(w) / speed_sq
-		if t_star <= 0.0:
-			continue  # opening
-		var speed: float = sqrt(speed_sq)
-		var horizon: float = maxf(HORIZON_MIN_S, maxf(speed, (own_vel - c.velocity).length()) / a_stop)
-		if BodyKind.is_static(c.kind):
-			horizon = maxf(horizon, sqrt(2.0 * reach / a_side) + URGENT_SETTLE_S)
-		if t_star > horizon:
-			continue
-		var offset: Vector3 = s + w * t_star
-		var miss: float = offset.length()
-		if miss >= reach:
-			continue
-		var side: Vector3 = offset / miss if miss > TIE_M else tie_direction(w, seed_value)
-		dodge += side * _sideways_speed(miss, speed * t_star, reach + AIM_PAST_M, speed, t_star)
-		urgent = urgent or t_star < urgent_s
-	return {"v_des": v_des + dodge, "urgent": urgent}
+	var kernels: Object = PilotRows.kernels_of(contacts)
+	if kernels == null:
+		return {"v_des": v_des, "urgent": false}
+	return _avoid(kernels, PilotRows.span(0, contacts.size()), PackedInt32Array(), 0, own_pos, own_vel, own_radius, v_des,
+			capability, hash(seed_value))
 
 
 ## `filter` for a perception: its contacts but `exempt_id` (a committed rammer's target, M3-T13; 0 for none), then its
-## statics (rocks and mines, M4-T09), from its own position and velocity. Through the native kernels when the perception
-## is on the core's rows, with `hash(seed_value)` passed in as the tie-break.
+## statics (rocks and mines, M4-T09), from its own position and velocity, with `hash(seed_value)` as the tie-break.
 static func filter_seen(p: Perception, own_radius: float, v_des: Vector3, exempt_id: int, seed_value: int) -> Dictionary:
-	var capability: ShipCapability = p.capability
 	if p.on_rows():
-		var out: Vector4 = p.kernels.avoid(p.contact_rows, p.static_rows, exempt_id, p.position, p.velocity, own_radius,
-				v_des, capability.a_retro, capability.rate_max_rad, capability.a_rcs, hash(seed_value))
-		return {"v_des": Vector3(out.x, out.y, out.z), "urgent": out.w > 0.5}
-	var contacts: Array[Contact] = p.contacts
-	if exempt_id != 0:
-		contacts = []
-		for c: Contact in p.contacts:
-			if c.id != exempt_id:
-				contacts.append(c)
-	if not p.statics.is_empty():
-		contacts = contacts + p.statics
-	return filter(p.position, p.velocity, own_radius, contacts, v_des, capability, seed_value)
+		return _avoid(p.kernels, p.contact_rows, p.static_rows, exempt_id, p.position, p.velocity, own_radius, v_des,
+				p.capability, hash(seed_value))
+	var listed: Array[Contact] = []
+	listed.append_array(p.contacts)
+	listed.append_array(p.statics)
+	var kernels: Object = PilotRows.kernels_of(listed)
+	if kernels == null:
+		return {"v_des": v_des, "urgent": false}
+	return _avoid(kernels, PilotRows.span(0, p.contacts.size()), PilotRows.span(p.contacts.size(), p.statics.size()),
+			exempt_id, p.position, p.velocity, own_radius, v_des, p.capability, hash(seed_value))
+
+
+# One ship's avoidance through `kernels` over the given rows: `{"v_des": Vector3, "urgent": bool}`.
+static func _avoid(kernels: Object, contact_rows: PackedInt32Array, static_rows: PackedInt32Array, exempt_id: int,
+		own_pos: Vector3, own_vel: Vector3, own_radius: float, v_des: Vector3, capability: ShipCapability,
+		tie_hash: int) -> Dictionary:
+	var out: Vector4 = kernels.avoid(contact_rows, static_rows, exempt_id, own_pos, own_vel, own_radius, v_des,
+			capability.a_retro, capability.rate_max_rad, capability.a_rcs, tie_hash)
+	return {"v_des": Vector3(out.x, out.y, out.z), "urgent": out.w > 0.5}
 
 
 ## Distance between two bodies at their closest approach within `horizon_s` from now, given the relative position and
@@ -121,29 +81,3 @@ static func closest_approach(rel_pos: Vector3, rel_vel: Vector3, horizon_s: floa
 		return rel_pos.length()
 	var t: float = clampf(-rel_pos.dot(rel_vel) / speed_sq, 0.0, horizon_s)
 	return (rel_pos + rel_vel * t).length()
-
-
-## A unit vector perpendicular to `rel_vel` for a dead-centre tie: "right" of it with world up (world right when it is
-## nearly vertical), turned about it by a seeded angle within `TIE_SPREAD_DEG`. Odd in `rel_vel` (the other ship sees
-## `-rel_vel` and gets the opposite base), so two ships on a collision course dodge apart for any pair of seeds.
-static func tie_direction(rel_vel: Vector3, seed_value: int) -> Vector3:
-	var axis: Vector3 = rel_vel.normalized() if rel_vel.length_squared() > 1e-12 else Vector3.FORWARD
-	var reference: Vector3 = Vector3.UP if absf(axis.dot(Vector3.UP)) < 0.9 else Vector3.RIGHT
-	var base: Vector3 = axis.cross(reference).normalized()
-	var unit: float = float(posmod(hash(seed_value), 65536)) / 65535.0
-	return base.rotated(axis, deg_to_rad(TIE_SPREAD_DEG) * (2.0 * unit - 1.0))
-
-
-# The sideways speed (perpendicular to the relative velocity) that lifts the straight-line miss from `miss` to `target`.
-# With `along` = the distance to the closest approach along the line and `speed` = |w|, adding `x` sideways makes the miss
-# (miss * speed + along * x) / sqrt(speed^2 + x^2); setting that to `target` is a quadratic in x. When the closest approach
-# is nearer along the line than `target` (alongside), no sideways speed alone gets there: as much as the time left asks.
-# Never more than `speed` (45 degrees off the relative velocity).
-static func _sideways_speed(miss: float, along: float, target: float, speed: float, t_star: float) -> float:
-	var x: float
-	if along > target + 1e-3:
-		var distance_sq: float = along * along + miss * miss
-		x = speed * (target * sqrt(distance_sq - target * target) - miss * along) / (along * along - target * target)
-	else:
-		x = (target - miss) / maxf(t_star, MIN_TIME_S)
-	return clampf(x, 0.0, speed)

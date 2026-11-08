@@ -42,32 +42,6 @@ def closed_loft(rings: Sequence[np.ndarray], material: Material, cap: Material |
     return outward(loft([np.asarray(r, dtype=float) for r in rings], material, cap_material=cap))
 
 
-def strip_loft(rings: Sequence[np.ndarray], material: Material, cap: Material) -> Mesh:
-    """A loft of thickened-polyline rings (``2n`` points: one side out, the other back) whose end
-    caps are triangulated as strips across the section, so a bent section's cap stays inside its
-    outline (a centroid fan would bridge the bend). Faces wind outwards."""
-    rings = [np.asarray(r, dtype=float) for r in rings]
-    n = len(rings[0])
-    tube = closed_loft(rings, material, cap)
-    tube = tube.face_subset(np.arange(tube.face_count) < n * (len(rings) - 1) * 2)
-    half = n // 2
-    caps = []
-    for ring, neighbour in ((rings[0], rings[1]), (rings[-1], rings[-2])):
-        away = ring.mean(axis=0) - neighbour.mean(axis=0)
-        tris = []
-        for i in range(half - 1):
-            a, b = ring[i], ring[i + 1]
-            c, d = ring[n - 2 - i], ring[n - 1 - i]
-            tris += [(a, b, c), (a, c, d)]
-        v = np.array([p for tri in tris for p in tri])
-        f = np.arange(len(v)).reshape(-1, 3)
-        normals = np.cross(v[f[:, 1]] - v[f[:, 0]], v[f[:, 2]] - v[f[:, 0]])
-        flip = normals @ away < 0.0
-        f[flip] = f[flip][:, ::-1]
-        caps.append(Mesh(v, f, np.zeros(len(f), dtype=np.int64), (cap,)))
-    return Mesh.concatenate([tube, *caps])
-
-
 def section_loft(
     rings: Sequence[np.ndarray],
     edge_materials: Sequence[Material],

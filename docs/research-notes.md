@@ -130,6 +130,10 @@ GDGS behaviours that shape our pipeline (read from the v3.3.0 source):
   registered once a real renderer is up (`base_error` = "#include failed for file 'godot/scene_data_inc.glsl'", no versions). A
   non-headless `--import` compiles it. The import cache is not rebuilt unless the source changes, so a headless import leaves the
   broken one in `.godot/imported/`. We compile such shaders when the game starts instead (`RuntimeShader`); compiling at run time finds the includes.
+- The export ships an imported `.glsl` as its `RDShaderFile` only, never the source, and `include_filter` does not add a file that
+  has an importer (M4-T25, M4-T44). So the files `RuntimeShader` reads are imported with `importer="keep"` (Godot's "Keep File
+  (exported as is)"), which copies the raw file to the same `res://` path; the vendored lens flare's shader is added by our export
+  plugin (`addons/scs_export`), since its folder is not ours to edit. `test_runtime_glsl_export` checks both.
 - Forward+ velocity buffer (`needs_motion_vectors`): a render-thread RG16F texture, `prev_uv - current_uv` per pixel (uv units), written
   by meshes (the hull depth proxies); it stays zero for the sky and for splats. Disabled compositor effects do not request it
   (`compositor_get_compositor_effects(..., true)` returns enabled ones only).

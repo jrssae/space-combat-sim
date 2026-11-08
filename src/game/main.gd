@@ -69,6 +69,7 @@ var _scenario_wings: Array[Dictionary] = []
 # By `scenario_ships` index: the brain each was given, to tell when the pool has reused the ship, and the spawn it came from.
 var _scenario_brains: Array[PilotBrain] = []
 var _scenario_entries: Array[Dictionary] = []
+var _refused: bool = false  # the native library is missing: the scene never starts (M4-T37)
 
 @onready var world: WorldFrame = $World
 @onready var space_environment: SpaceEnvironment = $SpaceEnvironment
@@ -89,7 +90,25 @@ var _scenario_entries: Array[Dictionary] = []
 @onready var overlay: DebugOverlay = $DebugOverlay
 
 
+# Refuses to start without the native library (M4-T37): says why, stops the scene and exits with 1.
+func _enter_tree() -> void:
+	var why: String = NativeLib.refusal()
+	if why.is_empty():
+		# Each battle starts at sim time 0, also a scene loaded again in the same process (the `scenario` command), so its
+		# timers round as a first run's do (M4-T37). Before the children enter, so none reads the old time.
+		SimClock.reset()
+		return
+	_refused = true
+	process_mode = Node.PROCESS_MODE_DISABLED
+	push_error(why)
+	if DisplayServer.get_name() != "headless":
+		OS.alert(why, "Space Combat Sim")
+	get_tree().quit(1)
+
+
 func _ready() -> void:
+	if _refused:
+		return
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	world.process_mode = Node.PROCESS_MODE_PAUSABLE
 	_setup_input()

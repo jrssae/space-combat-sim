@@ -1,5 +1,5 @@
-; The game's optional native library (docs/architecture.md, section 17.5). scripts/build_native.sh builds the .so;
-; when it is missing, Godot logs that it cannot open it and every caller falls back to GDScript.
+; The game's native library (docs/architecture.md, section 17.5). scripts/build_native.sh builds the .so; it is required
+; (M4-T37): when it is missing, Godot logs that it cannot open it and the game refuses to start (NativeLib.refusal).
 [configuration]
 entry_symbol = "gdext_rust_init"
 compatibility_minimum = 4.7

@@ -106,11 +106,6 @@ static func _restore(material: Material) -> void:
 	_additive_looks.erase(base)
 
 
-## Looks registered so far.
-static func look_count() -> int:
-	return _looks.size()
-
-
 func _enter_tree() -> void:
 	var passes: FramePasses = FramePasses.of(self)
 	if passes != null:

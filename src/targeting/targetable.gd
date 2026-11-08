@@ -25,6 +25,8 @@ enum Kind { SHIP, CAPITAL, TURRET, MISSILE, MINE, STATIC, PROP }
 	set(value):
 		broadcast_range_m = maxf(value, 0.0)
 		_sync_broadcaster()
+		if is_inside_tree():
+			ContactScan.touch(get_parent())  # the core keeps the reach with the body's other attributes
 ## World-frame velocity of the marked object, m/s, for owners that move kinematically (a drifting buoy keeps it
 ## current). Ignored when the parent is a RigidBody3D: its `linear_velocity` is the truth.
 var velocity: Vector3 = Vector3.ZERO

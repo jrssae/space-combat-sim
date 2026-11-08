@@ -62,14 +62,8 @@ pub mod contact {
         pub query: &'a mut Query,
     }
 
-    /// Every body by its grid cell, sorted by cell then by scan index.
-    pub fn sorted_cells(positions: &[Vector3], cell_m: f64) -> Vec<((i32, i32, i32), u32)> {
-        let mut cells = Vec::new();
-        sorted_cells_into(positions, cell_m, &mut cells);
-        cells
-    }
-
-    /// `sorted_cells` into the caller's list (no allocation once it has grown, M4-T17).
+    /// Every body by its grid cell, sorted by cell then by scan index, into the caller's list (no allocation once it has
+    /// grown, M4-T17).
     pub fn sorted_cells_into(
         positions: &[Vector3],
         cell_m: f64,
@@ -372,7 +366,7 @@ pub mod contact {
         closest_approach(rel_pos, rel_vel, INCOMING_HORIZON_S) < INCOMING_MISS_M
     }
 
-    /// `incoming` over the bolts a grid of their cells (`sorted_cells`) puts within `reach_max` of `at`: the same count
+    /// `incoming` over the bolts a grid of their cells (`sorted_cells_into`) puts within `reach_max` of `at`: the same count
     /// when no bolt can be incoming from farther than `reach_max` (the caller bounds it by the fastest bolt plus the
     /// ship's own speed, times the horizon, plus the miss distance). `candidates` is the caller's scratch.
     pub fn incoming_near(
@@ -514,139 +508,7 @@ pub mod sweep {
     use godot::builtin::Vector3;
 
     use crate::rows::{Bolts, FLAG_RIGID, Rows};
-    use crate::v3::{dist_sq, length};
-
-    // The grid's levels, as `HitBroadPhase` defines them.
-    const BASE_CELL_M: f64 = 64.0;
-    const LEVEL_FACTOR: f64 = 4.0;
-    const LEVELS: usize = 5;
-    const PAD_REL: f64 = 1e-6;
-    const PAD_M: f64 = 1.0;
-    const MAX_CELL_INDEX: f64 = 1_073_741_824.0;
-
-    // A hull in the grid: its cell and its index.
-    type CellEntry = ((i32, i32, i32), u32);
-
-    /// Hulls placed in a grid of levels: per level, (cell, hull) sorted, the level's hulls ascending, and its largest reach.
-    #[derive(Default)]
-    pub struct Grid {
-        cells: Vec<Vec<CellEntry>>,
-        members: Vec<Vec<u32>>,
-        level_reach: Vec<f64>,
-        loose: Vec<u32>,
-    }
-
-    impl Grid {
-        /// Puts every hull into its level's cell, or into the loose list when it fits no cell.
-        pub fn place(&mut self, hulls: &[Vector3], hull_reach: &[f64]) {
-            self.cells.resize_with(LEVELS, Vec::new);
-            self.members.resize_with(LEVELS, Vec::new);
-            self.level_reach.clear();
-            self.level_reach.resize(LEVELS, 0.0);
-            for level in 0..LEVELS {
-                self.cells[level].clear();
-                self.members[level].clear();
-            }
-            self.loose.clear();
-            for (j, &mid) in hulls.iter().enumerate() {
-                let reach = hull_reach[j].abs();
-                let Some(level) = level_for(reach).filter(|_| finite(mid)) else {
-                    self.loose.push(j as u32);
-                    continue;
-                };
-                let cell_m = cell_size(level);
-                let key = (
-                    (f64::from(mid.x) / cell_m).floor(),
-                    (f64::from(mid.y) / cell_m).floor(),
-                    (f64::from(mid.z) / cell_m).floor(),
-                );
-                if !within_grid(key.0, key.1, key.2) {
-                    self.loose.push(j as u32);
-                    continue;
-                }
-                self.cells[level].push(((key.0 as i32, key.1 as i32, key.2 as i32), j as u32));
-                self.members[level].push(j as u32);
-                if reach > self.level_reach[level] {
-                    self.level_reach[level] = reach;
-                }
-            }
-            for level in 0..LEVELS {
-                self.cells[level].sort_unstable();
-            }
-        }
-
-        // Fills `candidates` with the hulls a projectile at `at` with reach `own` must test, ascending.
-        fn look(&self, at: Vector3, own: f64, candidates: &mut Vec<u32>) {
-            candidates.clear();
-            for level in 0..LEVELS {
-                let count = self.members[level].len();
-                if count == 0 {
-                    continue;
-                }
-                let cell_m = cell_size(level);
-                let half = (own + self.level_reach[level]) * (1.0 + PAD_REL) + PAD_M;
-                let (x, y, z) = (f64::from(at.x), f64::from(at.y), f64::from(at.z));
-                let (lx, ly, lz) = (
-                    ((x - half) / cell_m).floor(),
-                    ((y - half) / cell_m).floor(),
-                    ((z - half) / cell_m).floor(),
-                );
-                let (hx, hy, hz) = (
-                    ((x + half) / cell_m).floor(),
-                    ((y + half) / cell_m).floor(),
-                    ((z + half) / cell_m).floor(),
-                );
-                let span = (hx - lx + 1.0) * (hy - ly + 1.0) * (hz - lz + 1.0);
-                // Not finite, beyond the grid, or more cells than hulls: testing every hull of the level is cheaper and safe.
-                #[allow(clippy::neg_cmp_op_on_partial_ord)]
-                let walk_every_hull =
-                    !(span <= count as f64) || !within_grid(lx, ly, lz) || !within_grid(hx, hy, hz);
-                if walk_every_hull {
-                    candidates.extend_from_slice(&self.members[level]);
-                    continue;
-                }
-                let cells = &self.cells[level];
-                let (lz, hz) = (lz as i32, hz as i32);
-                for cx in lx as i32..=hx as i32 {
-                    for cy in ly as i32..=hy as i32 {
-                        let start = cells.partition_point(|e| e.0 < (cx, cy, lz));
-                        let end = cells.partition_point(|e| e.0 <= (cx, cy, hz));
-                        candidates.extend(cells[start..end].iter().map(|e| e.1));
-                    }
-                }
-            }
-            candidates.extend_from_slice(&self.loose);
-            candidates.sort_unstable();
-        }
-    }
-
-    /// Each projectile against the placed hulls: its candidates from the cells it can reach, then the sphere test. Keys
-    /// as `bolt * hulls + hull`, ascending; `visited` grows by the candidates tested.
-    pub fn sweep(
-        grid: &Grid,
-        bolts: &[Vector3],
-        bolt_reach: &[f64],
-        hulls: &[Vector3],
-        hull_reach: &[f64],
-        candidates: &mut Vec<u32>,
-        visited: &mut i64,
-    ) -> Vec<i64> {
-        let mut out: Vec<i64> = Vec::new();
-        let hull_count = hulls.len() as i64;
-        for (i, &at) in bolts.iter().enumerate() {
-            grid.look(at, bolt_reach[i].abs(), candidates);
-            *visited += candidates.len() as i64;
-            for &j in candidates.iter() {
-                let j = j as usize;
-                let reach = bolt_reach[i] + hull_reach[j];
-                if f64::from(dist_sq(at, hulls[j])) > reach * reach {
-                    continue;
-                }
-                out.push(i as i64 * hull_count + j as i64);
-            }
-        }
-        out
-    }
+    use crate::v3::length;
 
     /// The core's hull rows as the hit resolver's spheres: `global_position + velocity * (0.5 * delta)`, reach
     /// `bounding_radius + velocity.length() * delta * 0.5`, in GDScript's precision and order.
@@ -718,33 +580,6 @@ pub mod sweep {
             reach.push(f64::from(length(travel)) * 0.5 + rows.radii[j] + margin_m);
         }
     }
-
-    // The grid level for a hull of this reach, or none when it fits no level.
-    fn level_for(reach: f64) -> Option<usize> {
-        if !reach.is_finite() {
-            return None;
-        }
-        let mut cell_m = BASE_CELL_M;
-        for level in 0..LEVELS {
-            if 2.0 * reach <= cell_m {
-                return Some(level);
-            }
-            cell_m *= LEVEL_FACTOR;
-        }
-        None
-    }
-
-    fn cell_size(level: usize) -> f64 {
-        BASE_CELL_M * LEVEL_FACTOR.powi(level as i32)
-    }
-
-    fn finite(v: Vector3) -> bool {
-        v.x.is_finite() && v.y.is_finite() && v.z.is_finite()
-    }
-
-    fn within_grid(x: f64, y: f64, z: f64) -> bool {
-        x.abs() <= MAX_CELL_INDEX && y.abs() <= MAX_CELL_INDEX && z.abs() <= MAX_CELL_INDEX
-    }
 }
 
 /// The ram resolver's broad phase on the rows (`ScsRamPhase`; `RamBroadPhase` in GDScript is the reference).
@@ -756,7 +591,7 @@ pub mod ram {
     use crate::rows::{FLAG_RIGID, Rows};
     use crate::v3::{add, max_cw as max, min_cw as min, scale, sub};
 
-    // `RamBroadPhase.MARGIN_M`: room round every box, metres.
+    // `RamResolver.MARGIN_M` (and `RamBroadPhase.MARGIN_M`): room round every box, metres.
     const MARGIN_M: f64 = 1.0;
 
     /// The scratch the pass reuses between ticks.

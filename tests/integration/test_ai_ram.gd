@@ -79,10 +79,11 @@ func test_a_committed_rammer_hits_its_target_in_at_least_8_of_10_runs() -> void:
 		var t0: float = SimClock.now()
 		var flew_ram: bool = false
 		var closest: float = INF
-		while not rammed[0] and SimClock.now() - t0 < 40.0 and rammer.ship.can_process():
+		# The runs past 10 km fly as tier rows (M4-T23): where the two are is their rows'.
+		while not rammed[0] and SimClock.now() - t0 < 40.0 and main.ships.alive().has(rammer):
 			await get_tree().physics_frame
 			flew_ram = flew_ram or pilot.current.id == &"ram"
-			closest = minf(closest, rammer.ship.global_position.distance_to(target.ship.global_position))
+			closest = minf(closest, TierDirector.flying_position(rammer.ship).distance_to(TierDirector.flying_position(target.ship)))
 
 		Engine.time_scale = 1.0
 		main.rams.ram_resolved.disconnect(on_ram)

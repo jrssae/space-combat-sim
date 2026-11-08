@@ -83,83 +83,32 @@ const ENTRIES: Dictionary = {
 		"doc": "How often a far AI ship thinks, Hz, on staggered physics ticks (20 = every third tick at 60 Hz)"},
 	&"ai_nearest_k": {"type": TYPE_INT, "default": 12, "min": 0, "max": 64,
 		"doc": "An AI ship scores, avoids and checks its fire lane against its nearest this many contacts (M4-T04); when that cuts any, the nearest hostile ship, its target, wing, objective and latest attacker are kept too; 0 = every contact"},
-	&"perf_native": {"type": TYPE_BOOL, "default": true,
-		"doc": "Run the hot paths in the native library when it is built (M4-T05); off = the GDScript code, for pairing the two in one process"},
-	# M4-T10
-	&"perf_native_flight": {"type": TYPE_BOOL, "default": true,
-		"doc": "Fly every AI ship's flight model in the native batch (M4-T10) when perf_native is on and the library is built; off = each ship's own GDScript model, for pairing the two in one process"},
 	# M4-T09
 	&"ai_nearest_static_k": {"type": TYPE_INT, "default": 4, "min": 0, "max": 32,
 		"doc": "An AI ship avoids its nearest this many rocks and mines within 5 km (M4-T09); they are never among its contacts; 0 = none"},
 	# M4-T11
 	&"far_ship_dot_m": {"type": TYPE_FLOAT, "default": 3000.0, "min": 500.0, "max": 50000.0,
 		"doc": "Past this distance from the camera an AI ship is drawn as a dot: no hull, plumes or markers (M4-T11); it shows its detail again a tenth inside"},
-	# M4-T14
-	&"collision_layers": {"type": TYPE_BOOL, "default": true,
-		"doc": "Jolt layers by kind (M4-T14): fighters, the player, capitals and rocks each pair only with what can hit them (fighters with fighters too, Q33); off puts every body on the one default layer. Ships follow it at once, capitals and rocks as they are built"},
-	&"far_ship_interpolation_off": {"type": TYPE_BOOL, "default": true,
-		"doc": "A far-dot AI ship's body is not interpolated, so a rebase leaves its nodes out of the interpolation reset (M4-T14)"},
-	# M4-T15
-	&"perf_native_core": {"type": TYPE_BOOL, "default": true,
-		"doc": "The native simulation core feeds the contact scan, the hit sweep, the flight step and the ram broad phase from one sync a tick (M4-T15) when perf_native is on and the library is built; off = each class loads its own copy, for pairing the two in one process"},
-	# M4-T20
-	&"perf_native_weapons": {"type": TYPE_BOOL, "default": true,
-		"doc": "The stand-ins' turrets, interceptors, beams, missiles and mines step as native kernels over the core's rows (M4-T20) when the core is on; off = the GDScript stand-ins, the reference, for pairing the two in one process"},
-	# M4-T17
-	&"perf_native_brains": {"type": TYPE_BOOL, "default": true,
-		"doc": "Every AiPilot thinks in the native brains over the core's rows (M4-T17) when perf_native and perf_native_core are on and the library is built; off = the GDScript brains, for pairing the two in one process"},
 	# M4-T18
 	&"perf_threads": {"type": TYPE_INT, "default": 0, "min": 0, "max": 64,
 		"doc": "Worker threads for the native core's per-ship passes, the brains and the flight step (M4-T18): 0 = as many threads as the machine has performance cores, 1 = the main thread alone; outputs are the same bits whatever the count; live"},
-	# M4-T33
-	&"perf_native_commands": {"type": TYPE_BOOL, "default": true,
-		"doc": "The native pilots' flight and combat commands go into the core's rows and the flight step flies them the same tick (M4-T33) when the native brains are on; the drivers then touch only ships whose trigger, selection or command source changed; off = each driver hands its ship the command as before, for pairing the two in one process; live"},
 	# M4-T30a
 	&"ambient_level": {"type": TYPE_FLOAT, "default": 0.3, "min": 0.0, "max": 2.0,
 		"doc": "The environment's ambient light, white at this energy: what the textured meshes and every other lit surface get on every side (M4-T30a, live)"},
-	# M4-T34
-	&"perf_native_bolt_sync": {"type": TYPE_BOOL, "default": true,
-		"doc": "The core's two bolt reads a tick go through the cheaper native reader (M4-T34) when the core is on; off = the core's own read, the reference, for pairing the two in one process"},
-	&"perf_ram_contact_columns": {"type": TYPE_BOOL, "default": true,
-		"doc": "The ram resolver hands its contact tracker columns and builds contact lists only for the hulls Jolt reports touching (M4-T34); off = a sample per hull every tick, the reference, for pairing the two between runs (a switch mid-run resets the tracker's open windows)"},
-	&"perf_ram_sweep_cull": {"type": TYPE_BOOL, "default": true,
-		"doc": "The ram resolver's swept test first checks a hull's bounding sphere, then each volume's, against the other hull's box and places only the volumes that can reach it (M4-T34; the same answers); off = every volume placed, the reference"},
-	&"perf_targeting_on_read": {"type": TYPE_BOOL, "default": true,
-		"doc": "The player's targeting computer checks its selection every tick and notes each target's place, reach and name, and builds its full list of every target only when it is read, the HUD's and the radar's once a frame (M4-T34; the same selection, its name and select_id answers; the list itself as of the read); off = the list built every tick, the reference"},
-	&"perf_native_sweep_cells": {"type": TYPE_BOOL, "default": true,
-		"doc": "The native hit broad phase keeps its grid's cells in hash maps (M4-T34; the same pairs and work); off = the sorted cells, the reference"},
-	# M4-T35
-	&"perf_core_event_columns": {"type": TYPE_BOOL, "default": true,
-		"doc": "The core keeps a body's activity, hull points and selection from the events that change them (hidden, shown, destroyed, damaged, healed, a selection change; M4-T35) and reads only the pose and motion a tick; off = every column read from the nodes every tick, the reference, for pairing the two in one process; live"},
-	# Kept though it gains nothing on the main thread: T24's step on a worker reads the bodies through this seam.
-	&"perf_core_body_direct": {"type": TYPE_BOOL, "default": false,
-		"doc": "The core reads the rigid bodies' pose and motion from the physics server's direct state by RID (M4-T35) instead of the nodes' getters; the bits differ from the nodes' only between a teleport and Jolt's next step; off = the nodes' getters, the reference; live"},
-	&"perf_native_ram_contacts": {"type": TYPE_BOOL, "default": true,
-		"doc": "The ram resolver reads every rigid hull's Jolt contacts and its own acceleration in one native call over the core's rows (M4-T35); off = a GDScript direct-state read per hull, the reference (needs perf_ram_contact_columns on); live"},
-	&"perf_native_selection_check": {"type": TYPE_BOOL, "default": true,
-		"doc": "The AI ships' targeting controllers' selection check (a target gone, parked or out of reach) runs as one native pass over the core's rows (M4-T35; needs perf_core_event_columns); off = each controller checks its own selection every tick, the reference; live"},
-	&"perf_batch_owns_ships": {"type": TYPE_BOOL, "default": true,
-		"doc": "A ship the flight batch flies does not tick itself (M4-T35): the batch's gather takes its combat edges and the batch gives the tick back when it stops flying the ship; off = every ship's own tick runs and returns early, the reference; live"},
-	&"perf_native_driver_step": {"type": TYPE_BOOL, "default": true,
-		"doc": "The AI drivers' step (the think rate's stagger and wake, the time since the last think, the hold of a declined think) is decided in the native brain host for every bound native pilot (M4-T35), so no driver runs per ship per tick; off = each driver steps itself at -10 and queues its think, the reference (M4-T33); live"},
-	&"ship_contact_monitor": {"type": TYPE_BOOL, "default": false,
-		"doc": "RigidBody3D.contact_monitor on every ship (M4-T35): off by default, since nothing connects body_entered and the direct state's contact list, which the ram resolver reads, needs only max_contacts_reported; applies to ships built after the change"},
-	&"perf_native_bolt_rows": {"type": TYPE_BOOL, "default": true,
-		"doc": "The core owns the bolts (M4-T35): the AI cannons' gates and shots run as one kernel over the rows, each bolt is a row stepped natively, swept and spent from the rows by the hit resolver and drawn by one multimesh a look; the player's cannon and the beams and missiles keep their nodes; off = a Projectile node per bolt and a GDScript tick per cannon, the reference, for pairing the two in one process (a switch mid-run drops the bolts in flight); live"},
 	# M4-T38
 	&"anti_aliasing": {"type": TYPE_ENUM, "default": &"smaa", "choices": [&"off", &"fxaa", &"smaa", &"msaa_2x", &"msaa_4x", &"taa"],
 		"doc": "Anti-aliasing of the 3D view (M4-T38): off, fxaa, smaa (edge detection, the default), msaa_2x or msaa_4x (geometry edges only), taa (temporal: the smoothest edges, but thin moving things soften and the bolts draw opaque so they carry their motion); live"},
 	# M4-T21
-	&"tier_radius_m": {"type": TYPE_FLOAT, "default": 0.0, "min": 0.0, "max": 200000.0,
-		"doc": "AI fighters and capitals farther than this from the player leave Jolt and the scene's processing and fly as native core rows at tier_hz (the low-attention tier, M4-T21); within it they are promoted back onto their bodies exactly; demotion happens 10 % beyond it. 0 = off, every ship in Jolt; live. Off by default until T22 (tier brains and fire) and T23 (tier ships on radar and targeting) land; T23 sets 10000"},
+	&"tier_radius_m": {"type": TYPE_FLOAT, "default": 10000.0, "min": 0.0, "max": 200000.0,
+		"doc": "AI fighters and capitals farther than this from the player leave Jolt and the scene's processing and fly as native core rows at tier_hz (the low-attention tier, M4-T21); within it they are promoted back onto their bodies exactly; demotion happens 10 % beyond it. 0 = off, every ship in Jolt; live. On at 10000 since M4-T23 (tier ships drawn, on the radar and targetable)"},
 	&"tier_hz": {"type": TYPE_FLOAT, "default": 20.0, "min": 1.0, "max": 60.0,
 		"doc": "How often a low-attention tier row's forces are recomputed from its held command (M4-T21); its pose still advances every tick; live"},
 	# M4-T22
 	&"tier_brain_hz": {"type": TYPE_FLOAT, "default": 3.0, "min": 1.0, "max": 20.0,
 		"doc": "How often a low-attention tier fighter's brain thinks, on the same contacts as the near brains inside the AI step (M4-T22; 3 since fix round 2: the cheapest rate in the section's 2 to 5 Hz whose fights still match full fidelity, since at 2 the raiders lose half their hits); its command is held between thinks; live"},
 	# M4-T24
-	&"sim_step": {"type": TYPE_ENUM, "default": &"threaded", "choices": [&"inline", &"delayed", &"threaded"],
-		"doc": "Where and when the AI step (the native brains' batch: perception, thinks, avoidance, the hosted drivers' think rate, the commands into the rows) runs (M4-T24, Q53): threaded = on a worker thread from -9, its results handed over one tick later, so the frame and the player's input never wait on it; delayed = the same one-tick handover on the main thread (the threaded step's reference, bit for bit); inline = today's single-thread step, the commands flown the same tick (Q54's fallback); live"},
+	&"sim_step": {"type": TYPE_ENUM, "default": &"threaded", "choices": [&"delayed", &"threaded"],
+		"doc": "Where the AI step (the native brains' batch: perception, thinks, avoidance, the hosted drivers' think rate, the commands into the rows) runs (M4-T24, Q53): threaded = on a worker thread from -9, its results handed over one tick later, so the frame and the player's input never wait on it; delayed = the same one-tick handover on the main thread (the threaded step's reference, bit for bit); live. M4-T37 removed the single-thread inline step (Q67)"},
 	&"perf_step_threads": {"type": TYPE_INT, "default": 1, "min": 0, "max": 64,
 		"doc": "Threads the AI step's job runs its brains' pass on (M4-T24): 1 = the step's worker thread alone (the default: the job never queues the main thread's passes behind its chunks), n = a pool of its own with n threads, 0 = the core's pool (perf_threads), shared with the main thread's passes; live"},
 	&"physics_max_steps_per_frame": {"type": TYPE_INT, "default": 3, "min": 1, "max": 8,
@@ -181,6 +130,18 @@ const ENTRIES: Dictionary = {
 ## only schema keys, so a saved file's old line is ignored and dropped on the next `save`.)
 const RENAMED: Dictionary = {}
 
+## Settings removed with the old paths (M4-T37, Q67): `Settings.revert` reads only schema keys, so a saved file that still
+## holds one of these loads without it, and the next `save` drops it.
+const RETIRED: Array[StringName] = [&"perf_native_weapons", &"perf_native_brains", &"perf_native_commands",
+		&"perf_native_driver_step", &"perf_native_flight", &"perf_batch_owns_ships", &"perf_native_sweep_cells",
+		&"perf_ram_contact_columns", &"perf_ram_sweep_cull", &"perf_native_ram_contacts", &"perf_targeting_on_read",
+		&"collision_layers", &"far_ship_interpolation_off", &"ship_contact_monitor", &"perf_core_event_columns",
+		&"perf_core_body_direct", &"perf_native_selection_check", &"perf_native_bolt_sync", &"perf_native_bolt_rows",
+		&"perf_native", &"perf_native_core"]
+
+## Choices removed from a setting: key -> {old choice -> what a saved file's old choice loads as} (M4-T37: the inline step).
+const RETIRED_VALUES: Dictionary = {&"sim_step": {&"inline": &"threaded"}}
+
 const _TRUE_WORDS: PackedStringArray = ["true", "on", "1", "yes"]
 const _FALSE_WORDS: PackedStringArray = ["false", "off", "0", "no"]
 
@@ -195,6 +156,14 @@ func keys() -> Array[StringName]:
 
 func has_key(key: StringName) -> bool:
 	return ENTRIES.has(key)
+
+
+## `value` as a saved file's `key` loads: a removed choice (see `RETIRED_VALUES`) becomes its replacement, anything else stays.
+func retired_value(key: StringName, value: Variant) -> Variant:
+	var removed: Dictionary = RETIRED_VALUES.get(key, {})
+	if (typeof(value) == TYPE_STRING or typeof(value) == TYPE_STRING_NAME) and removed.has(StringName(value)):
+		return removed[StringName(value)]
+	return value
 
 
 ## Former names of `key` (see `RENAMED`).

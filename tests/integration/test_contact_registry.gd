@@ -1,7 +1,7 @@
 extends GutTest
-## The native body registry in play (M4-T09, architecture §17.8): with the library and `perf_native` on, the AI's shared
-## scan comes from one native refresh a tick, never from a GDScript gather of the tree, and holds exactly what that gather
-## would. Rocks and mines are kept out of a fighter's nearest contacts; its nearest `ai_nearest_static_k` statics come
+## The core's body rows in play (M4-T09's registry, the core's since M4-T15 and every world's since M4-T42): the AI's
+## shared scan comes from the core's sync, never from a GDScript gather of the tree, and holds exactly what a node-by-node
+## read of the tree (`TreeRows`) gives. Rocks and mines are kept out of a fighter's nearest contacts; its nearest `ai_nearest_static_k` statics come
 ## beside them and avoidance steers round them. Real ships from `ShipAssembly`, real drivers and brains, the game's 60 Hz.
 
 const RAIDER_SPEC: String = "res://assets/ships/raider_delta_v.tres"
@@ -12,14 +12,14 @@ const ROCK_RADIUS_M: float = 150.0
 const ROCK_START_M: float = 1500.0
 const ROCK_SPEED_MPS: float = 100.0
 const LANE_SPACING_M: float = 8000.0
-const SETTINGS: Array[StringName] = [&"perf_native", &"ai_nearest_k", &"ai_nearest_static_k"]
+const SETTINGS: Array[StringName] = [&"ai_nearest_k", &"ai_nearest_static_k"]
 
 var world: WorldFrame
 var projectiles: Node3D
 var _saved: Dictionary = {}
 
 
-## Before the drivers each tick (priority -20): compares the registry's scan with the tree gather, and parks a ship on cue.
+## Before the drivers each tick (priority -20): compares the core's scan with the tree read, and parks a ship on cue.
 class Checker extends Node:
 	var compared: int = 0
 	var differences: PackedStringArray = PackedStringArray()
@@ -41,10 +41,9 @@ class Checker extends Node:
 			parked.process_mode = Node.PROCESS_MODE_DISABLED
 		if _tick % 7 != 0:
 			return
-		var native: ContactScan = ContactScan.from_registry(get_tree())
-		if native == null:
-			return  # perf_native is off: nothing to compare
-		var script: ContactScan = ContactScan.from_tree(get_tree())
+		# The core's sync runs here (-20), before its own at -11: nothing moves between, so the fight is unchanged.
+		var native: ContactScan = TreeRows.core_scan(get_tree())
+		var script: ContactScan = TreeRows.scan(get_tree())
 		compared += 1
 		for field: String in ROWS_COMPARED:
 			if native.get(field) != script.get(field):
@@ -98,13 +97,6 @@ func after_each() -> void:
 	ContactScan.invalidate()
 
 
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there is no registry to compare")
-	return true
-
-
 func _ai_ship(spec_path: String, display_name: String, faction: StringName, at: Vector3, velocity: Vector3) -> Combatant:
 	var c: Combatant = ShipAssembly.build(load(spec_path) as ShipSpec, world, projectiles, {
 		ShipAssembly.OPT_FACTION: faction,
@@ -142,9 +134,7 @@ func _fight(rng: RandomNumberGenerator) -> Array[Combatant]:
 	return ships
 
 
-func test_in_a_live_fight_the_scan_never_gathers_from_the_tree_and_equals_that_gather() -> void:
-	if _skipped():
-		return
+func test_in_a_live_fight_the_scan_is_the_cores_and_equals_the_tree() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 909
 	var ships: Array[Combatant] = _fight(rng)
@@ -152,12 +142,10 @@ func test_in_a_live_fight_the_scan_never_gathers_from_the_tree_and_equals_that_g
 	checker.parked = ships[3].ship
 	checker.park_at_tick = 40
 	add_child_autofree(checker)
-	var gathers: int = ContactScan.gathers
 	await _ticks(120)
-	# The checker's own `from_tree` calls are the only gathers.
-	assert_eq(ContactScan.gathers - gathers, checker.compared, "no gather from the tree but the checker's")
+	assert_eq(ContactScan.shared(get_tree()).source(), &"core", "the drivers read the core's rows")
 	assert_gt(checker.compared, 10, "the scans were compared")
-	assert_eq(checker.differences, PackedStringArray(), "the registry's scan equals the tree gather every time")
+	assert_eq(checker.differences, PackedStringArray(), "the core's scan equals the tree every time")
 	assert_eq(checker.parked_seen_after, 0, "a ship parked as the pool parks it is gone from the next tick's scan")
 	var static_contacts: int = 0
 	var statics_handed: int = 0
@@ -173,22 +161,13 @@ func test_in_a_live_fight_the_scan_never_gathers_from_the_tree_and_equals_that_g
 			assert_true(BodyKind.is_static(rock.kind), "only rocks and mines among the statics")
 	assert_eq(static_contacts, 0, "no rock or mine among any fighter's contacts")
 	assert_eq(statics_handed, 4, "a fighter in the field gets its nearest ai_nearest_static_k (4) statics")
-	Settings.set_value(&"perf_native", false)
-	gathers = ContactScan.gathers
-	var compared: int = checker.compared
-	await _ticks(10)
-	assert_gt(ContactScan.gathers - gathers - (checker.compared - compared), 0, "perf_native off: the GDScript gather")
 
 
-func test_a_fighter_flying_at_a_rock_steers_round_it_on_both_paths() -> void:
-	if _skipped():
-		return
+func test_a_fighter_flying_at_a_rock_steers_round_it() -> void:
 	var cases: Array[Dictionary] = [
 		{"spec": RAIDER_SPEC, "native": true}, {"spec": STARFURY_SPEC, "native": true},
-		{"spec": RAIDER_SPEC, "native": false}, {"spec": STARFURY_SPEC, "native": false},
 	]
 	for i: int in cases.size():
-		Settings.set_value(&"perf_native", cases[i]["native"])
 		ContactScan.invalidate()
 		ContactScan.clear_statics()
 		var monitor := RockMonitor.new()
@@ -223,9 +202,7 @@ static func _contact_of(scan: ContactScan, at: Vector3, faction: StringName, id:
 	return null
 
 
-func test_a_selection_and_a_hull_changed_after_the_build_reach_both_paths_alike() -> void:
-	if _skipped():
-		return
+func test_a_selection_and_a_hull_changed_after_the_build_reach_the_scan() -> void:
 	var own: Combatant = _ai_ship(RAIDER_SPEC, "RAIDER 1", Factions.RAIDERS, Vector3.ZERO, Vector3.ZERO)
 	var mate: Combatant = _ai_ship(RAIDER_SPEC, "RAIDER 2", Factions.RAIDERS, Vector3(200.0, 0.0, 0.0), Vector3.ZERO)
 	var enemy: Combatant = _ai_ship(STARFURY_SPEC, "ALPHA 1", Factions.EARTH_ALLIANCE, Vector3(0.0, 0.0, -900.0),
@@ -233,22 +210,21 @@ func test_a_selection_and_a_hull_changed_after_the_build_reach_both_paths_alike(
 	var mate_id: int = mate.targetable.get_instance_id()
 	assert_true(mate.ship.targeting.select_nearest_hostile(), "the mate has the enemy selected")
 	# Built first, changed after (a console `set targeting.selected`, the player, a stand-in, a hit), queried last.
-	var native: ContactScan = ContactScan.from_registry(get_tree())
-	var script: ContactScan = ContactScan.from_tree(get_tree())
+	var native: ContactScan = TreeRows.core_scan(get_tree())
+	var script: ContactScan = TreeRows.scan(get_tree())
 	mate.ship.targeting.clear_selection()
 	mate.damageable.hull.apply(0.25 * mate.damageable.hull.max_hp)
 	var a: Contact = _contact_of(native, own.ship.global_position, Factions.RAIDERS, mate_id)
 	var b: Contact = _contact_of(script, own.ship.global_position, Factions.RAIDERS, mate_id)
-	assert_not_null(a, "the registry scan has the mate")
-	assert_not_null(b, "the tree gather has the mate")
-	assert_eq(a.target_id, b.target_id, "the same selection on both paths")
-	assert_eq(a.hull_fraction, b.hull_fraction, "the same hull on both paths")
-	assert_eq(a.target_id, -1, "both read the selection when the contact is handed out")
+	assert_not_null(a, "the core scan has the mate")
+	assert_not_null(b, "the tree read has the mate")
+	assert_eq(a.target_id, b.target_id, "the same selection as the tree's")
+	assert_eq(a.hull_fraction, b.hull_fraction, "the same hull as the tree's")
+	assert_eq(a.target_id, -1, "the selection is read when the contact is handed out")
 	assert_almost_eq(a.hull_fraction, 0.75, 1e-6, "and the hull")
 	# A driver's own change after the build is noted, so both paths hand out the selection the scan was built with.
 	for on: bool in [true, false]:
 		mate.ship.targeting.select_nearest_hostile()
-		Settings.set_value(&"perf_native", on)
 		ContactScan.invalidate()
 		var shared: ContactScan = ContactScan.shared(get_tree())
 		ContactScan.note_selection(mate.ship)

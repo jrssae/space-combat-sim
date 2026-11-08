@@ -4,10 +4,10 @@ extends GutTest
 ## of running its GDScript brain on a stale mirror, and the driver counts it (`ai.thinks_fallback`); a hit it took earlier
 ## never produces a spurious evade on such a tick; a ram committed from outside whose target leaves is uncommitted once, not
 ## pushed again every think; the core's new column reads fail on no body of a real ship. Real ships and drivers, the core
-## on, in a space of their own. Skips, saying why, when the library is not built.
+## on, in a space of their own.
 
 const RAIDER_SPEC: String = "res://assets/ships/raider_delta_v.tres"
-const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"ai_think_rate"]
+const SETTINGS: Array[StringName] = [&"ai_think_rate"]
 
 var _saved: Dictionary = {}
 var space: SubViewport
@@ -18,9 +18,6 @@ var bolts: Node3D
 func before_each() -> void:
 	for key: StringName in SETTINGS:
 		_saved[key] = Settings.get_value(key)
-	Settings.set_value(&"perf_native", true)
-	Settings.set_value(&"perf_native_core", true)
-	Settings.set_value(&"perf_native_brains", true)
 	Settings.set_value(&"ai_think_rate", false)  # every ship thinks every tick: the test counts thinks
 	Factions.reset()
 	ContactScan.invalidate()
@@ -41,13 +38,6 @@ func after_each() -> void:
 		Settings.set_value(key, _saved[key])
 	Factions.reset()
 	ContactScan.invalidate()
-
-
-func _skipped() -> bool:
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there are no native brains to test")
-	return true
 
 
 func _ship(display_name: String, faction: StringName, at: Vector3, profile: String, seed_value: int,
@@ -75,8 +65,6 @@ func _bolt_hit(c: Combatant, shooter: Combatant) -> void:
 
 
 func test_a_declined_think_holds_the_last_command_and_is_counted_never_a_stale_gdscript_think() -> void:
-	if _skipped():
-		return
 	var a: Combatant = _ship("RAIDER 1", Factions.RAIDERS, Vector3(0.0, 0.0, 600.0), "raider", 11)
 	var b: Combatant = _ship("ALPHA 2", Factions.EARTH_ALLIANCE, Vector3(0.0, 0.0, -600.0), "ally_starfury", 12)
 	for i: int in 20:
@@ -128,8 +116,6 @@ func test_a_declined_think_holds_the_last_command_and_is_counted_never_a_stale_g
 
 
 func test_a_ram_committed_from_outside_is_uncommitted_once_when_its_target_leaves() -> void:
-	if _skipped():
-		return
 	var rammer: Combatant = _ship("RAIDER 1", Factions.RAIDERS, Vector3(0.0, 0.0, 900.0), "raider", 21, "reckless")
 	var target: Combatant = _ship("ALPHA 2", Factions.EARTH_ALLIANCE, Vector3(0.0, 0.0, -900.0), "ally_starfury", 22)
 	for i: int in 10:

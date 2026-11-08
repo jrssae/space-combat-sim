@@ -2,7 +2,7 @@
 
 > "Something to shoot." (`docs/roadmap.md`)
 
-**Status:** in progress. The maintainer asked to proceed before M1's re-test. Done: **T01** combat maths, **T02**
+**Status:** accepted and merged into `main`. The status as it stood while the milestone ran, kept as history: in progress. The maintainer asked to proceed before M1's re-test. Done: **T01** combat maths, **T02**
 multi-ship readiness, **T03** hit detection and damage, **T04** raider generator, **T05** raider ship and pool, **T06** destruction, **T07** AI seam and simple brains, **T08** HUD, **T09** waves, **T10** integration, **T12** sound, **T11** control profiles, **T14** reaction mass and weapon capacitor. All (A) work is done; the maintainer runs the (H) checklist in `docs/playtest.md`. T13 only if AC15 is rejected. See `docs/handoff.md`.
 
 Read `docs/architecture.md` first, §1-§13 and especially **§15** (the M2 design: decisions D20-D29, tick order, hit

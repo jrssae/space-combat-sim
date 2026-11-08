@@ -100,6 +100,32 @@ func test_a_removed_key_in_an_old_file_is_ignored_and_dropped_on_save() -> void:
 	assert_false(saved.has_section_key("settings", "yaw_ramp_s"), "save writes only schema keys")
 
 
+func test_a_file_from_before_m4_t37_loads_its_removed_switches_and_the_inline_step_without_error() -> void:
+	# M4-T37 removed the old paths' switches and the single-thread step: a saved file that still names them loads, the keys
+	# ignored and `sim_step inline` read as the default, with no warning, and the next save drops them.
+	assert_true(SettingsSchema.RETIRED_VALUES.has(&"sim_step"), "the inline step is listed as removed")
+	var cfg := ConfigFile.new()
+	for key: StringName in SettingsSchema.RETIRED:
+		cfg.set_value("settings", String(key), false)
+	cfg.set_value("settings", "sim_step", "inline")
+	cfg.set_value("settings", "invert_y", true)
+	cfg.save(CONFIG_PATH)
+	assert_eq(settings.revert(), OK, "the file loads")
+	assert_eq(settings.get_value(&"sim_step"), &"threaded", "the inline step, gone, loads as the default")
+	assert_false(settings.is_unsaved(&"sim_step"), "as loaded, not as a change")
+	assert_eq(settings.get_value(&"invert_y"), true, "the rest of the file still loads")
+	for key: StringName in SettingsSchema.RETIRED:
+		assert_false(settings.schema.has_key(key), "%s is no longer a setting" % key)
+		assert_null(settings.get_value(key), "%s reads nothing" % key)
+	assert_false((settings.schema.get_entry(&"sim_step")["choices"] as Array).has(&"inline"), "inline is no longer a choice")
+	assert_eq(settings.save(), OK)
+	var saved := ConfigFile.new()
+	assert_eq(saved.load(CONFIG_PATH), OK)
+	for key: StringName in SettingsSchema.RETIRED:
+		assert_false(saved.has_section_key("settings", String(key)), "save drops %s" % key)
+	assert_eq(saved.get_value("settings", "sim_step"), "threaded", "and writes the step as it is now")
+
+
 func test_invalid_file_values_fall_back_to_defaults() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("settings", "stick_deadzone", 5.0)

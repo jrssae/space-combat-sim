@@ -34,6 +34,8 @@ extends Node3D
 ## come back; so are the nodes that are not interpolated (a far dot's ship, M4-T14). A rebase outside a tick (the console
 ## between frames) resets at once. The velocity rebase (§14.1) is roadmap
 ## M6: `origin_velocity` stays zero.
+##
+## The native core (M4-T42): every world attaches its `SimCore` as it becomes ready, so every hull read in it is the core's.
 
 signal rebased(offset: Vector3)
 
@@ -88,6 +90,7 @@ class Settler extends Node:
 func _ready() -> void:
 	_settler = Settler.new(self)
 	add_child(_settler, false, Node.INTERNAL_MODE_BACK)
+	SimCore.attach(self)  # every world simulates on the native core (M4-T42), pools or none
 	# Console seam (architecture §6.4): `rebase` shifts the origin by hand; `rebases` and `rebase_us` watch the automatic one.
 	DebugConsole.registry.register_provider(&"world", ConsoleVars.new({
 		&"origin": {"get": _origin_array, "unit": "m", "doc": "Universe position of the local origin (64-bit)"},

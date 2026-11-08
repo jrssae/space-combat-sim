@@ -4,8 +4,8 @@ extends GutTest
 ## ones the project keeps, and no other addon is installed or names a class. The checks go by script paths, never by class, so this
 ## file compiles whatever addons exist.
 
-## The addons the project keeps (docs/third-party.md): the test runner and the lens flare.
-const KEPT_ADDONS: Array[String] = ["gut", "lens_effects"]
+## The addons the project keeps: the test runner and the lens flare (docs/third-party.md), and our own export plugin (M4-T44).
+const KEPT_ADDONS: Array[String] = ["gut", "lens_effects", "scs_export"]
 const ADDONS_DIR: String = "res://addons/"
 const GEN_ASSETS_HINT: String = "run scripts/gen_assets.sh and import first"
 

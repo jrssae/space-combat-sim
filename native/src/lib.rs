@@ -1,7 +1,6 @@
 // Entry point of the game's native library: registers every native class with Godot.
 use godot::prelude::*;
 
-mod body_registry;
 mod bolt_kernels;
 mod bolt_rows;
 mod brain;
@@ -41,3 +40,7 @@ mod tier_rows;
 
 // M4-T22: the low-attention tier's fire, an engine-free kernel.
 mod tier_fire;
+
+// M4-T23: the player's radar sphere, an engine-free kernel, and its shell.
+mod radar_kernel;
+mod radar_plot;
