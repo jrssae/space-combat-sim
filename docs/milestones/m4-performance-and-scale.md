@@ -184,7 +184,7 @@ are M5's mission work).
 | AC3 | Four cycles, each recorded below: the numbers before, three candidates ranked by confidence with the evidence for each, the first built **test first** (the failing test committed before the change), the numbers after, the gain against the prediction | A | M4-T02 to M4-T05, 2026-11-03 (Cycle log) |
 | AC4 | No regressions: after each cycle the focused runs (the touched code and AC13's paired budget) are green locally and CI's full suite is green on the push (Q10); `scripts/run_tests.sh` green locally once, before M4 closes; every behaviour change listed | A | M4-T06m, 2026-11-03: full suite 2 257 of 2 259 passing, 0 failing, 2 pending (AC12); CI green on every cycle's push; behaviour changes in the T06 report |
 | AC5 | Goal: the headline max N is at least 100, and toward 500. Not reached after cycle 4: the report says so and asks for guidance (T06) | A | **Met** (M4-T25, 2026-11-07): `battle` 450 (400 by the sweep's ladder, 450 by the below-sweep count; 500 at the line, 8.10 ms); furball 400, transit 400, spread and `typical` 500 or more; 1 000 ships at 10.50 ms keeping real time (Report P3). Before: 25 by the sweep, 45 with the below-sweep runs (T06, 2026-11-03) |
-| AC6 | Render check at the headline max N on the maintainer's GPU: FPS, frame time, VRAM, GPU and driver recorded (by the agent, 2026-11-01) | A | M4-T25, 2026-11-07 (Cycle log, Phase 3): `battle` 400 fullscreen through Wayland at 3840x2160, the 3D at 1 080 lines: 142.8 and 143.6 FPS, frame mean 7.0 ms, 1 % low 60.2 and 60.6, GPU 0.77 ms, the game's VRAM 581 MB, RX 6950 XT (RADV NAVI21) on Forward+; the limit table to 1 000 beside it. Earlier: M4-T06m, 2026-11-03 |
+| AC6 | Render check at the headline max N on the maintainer's GPU: FPS, frame time, VRAM, GPU and driver recorded (by the agent, 2026-11-01) | A | M4-T25, 2026-11-07 (Cycle log, Phase 3): `battle` 400 fullscreen through Wayland at 3840x2160, the 3D at 1 080 lines (Wayland keeps vsync on: about 145 FPS is the cap, so these averages sit at it): 142.8 and 143.6 FPS, frame mean 7.0 ms, 1 % low 60.2 and 60.6, GPU 0.77 ms, the game's VRAM 581 MB, RX 6950 XT (RADV NAVI21) on Forward+; the limit table to 1 000 beside it. Earlier: M4-T06m, 2026-11-03 |
 | AC7 | Textured meshes, no splats (Q29): every ship, station, capital, prop and the sky draws without Gaussian splats, the hulls as procedurally textured meshes from `tools/procgen` (T30a to T30c); `addons/gdgs_scs` and every splat path in code, procgen, settings, console, tests, scripts and docs are gone (T31); the maintainer has accepted the Starfury look sheet (checkpoint 1b) | A, H | met (A, T31 2026-11-04: no splat code, asset or setting left; checkpoint 1b approved, Q34); the T30d sheets wait for (H) |
 
 ## Task breakdown (ordered)
@@ -2518,6 +2518,10 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
   no code changes. The maintainer picks which become fix tasks (new rows, in M4 or later); if any lands in M4, T25's affected
   numbers are re-taken.
 - **Done when:** the findings list is written and handed to the maintainer with report P3.
+- **From T25 (2026-11-07):** the release export cannot open its window: `RuntimeShader` reads `sky_velocity.glsl`,
+  `motion_blur.glsl` and `motion_blur_copy.glsl` with `FileAccess`, which an export does not ship (`RuntimeShader: cannot read
+  res://src/rendering/sky_velocity.glsl`). A clear-cut fix for the T43 fix round; then re-take T25's release fullscreen pair (`battle`
+  500 and 1 000). The release run folders are in `~/.cache/scs-agents/m4-t25/release/snap/reports/perf/`, not the main `reports/`.
 - **Carried in (2026-11-07):** from T23's review M7, the player's targeting snapshot still walks the targetable nodes and appends
   the tier rows every tick (+0.19 ms at 1 000), the walk the radar left; consider building the candidates from the core's rows as the
   radar does (re-record `targeting_on_read.json` if so). From T23's re-review: the explosion-LOD maths tests share `flash_radius_m`
@@ -6636,7 +6640,9 @@ Every row: the game's own VRAM peak 580 to 581 MB, GPU 0.76 to 0.88 ms a frame, 
 - **The 1 080-line window** (`M4-T25_win1080_*`, a windowed 1920x1080: `render.window 1920x1080`, the 3D at scale 1.00, one run each):
   `typical` 58 144.6 FPS (1 % low 78.5, p99 11.73 ms), `battle` 300 143.8 (61.8, 14.74), `battle` 500 136.9 (62.4, 14.23), GPU 0.71 to
   0.79 ms, game VRAM 318 MB. The 4K fullscreen rows at the same counts: 144.5 and 144.6, 144.0 and 143.9, 137.8 and 136.9. So the 4K
-  window's own present and HUD cost nothing measurable (refactor review, open question 5); the window's size costs 263 MB of VRAM.
+  window's own present and HUD cost nothing the averages can show (refactor review, open question 5); the window's size costs 263 MB
+  of VRAM. Caution (T25's review): Wayland keeps vsync on and caps the frame at about 145 FPS (6.9 ms), so the `typical` and `battle`
+  300 averages on both windows sit on the cap and cannot differ; only the p99 frame time and the GPU ms carry this comparison.
 - **At the headline** (AC6; the max N is 400 by the ladder and 450 by the below-sweep count, and 400 was measured): 142.8 and 143.6 FPS, 1 % low 60.2 and 60.6, p99 15.07 and
   15.08 ms, sim speed 1.00, GPU 0.76 to 0.77 ms, 105 draw calls, the game's VRAM 581 MB, through Wayland at 3840x2160; RADV NAVI21 on
   Forward+ (Vulkan 1.4.354).
@@ -6823,7 +6829,7 @@ holds 60 FPS on average at every count to 1 000.
 the render check at the headline (400: 142.8 and 143.6 FPS, GPU 0.77 ms, 581 MB, RADV on Forward+). AC7 met for its automated half; the
 T30d sheets wait for your eye on the return checklist.
 
-**Against the section's expected rows.** `typical` under 4 ms and 60 FPS with headroom (85 %): **met**, 1.91 ms and 144.5 FPS. Battle 500
+**Against the section's expected rows.** `typical` under 4 ms and 60 FPS with headroom (85 %): **met**, 1.91 ms and 144.5 FPS (at Wayland's vsync cap of about 145, so the headroom is larger than the FPS shows; X11 ran it at 314). Battle 500
 in the world: 243 fighters and 41 capitals stay on their bodies within 10 km and 182 fighters and 34 capitals fly in the tier (the plan
 expected 100 to 150 fighters and about 20 capitals near: the 10 km radius takes in the player's fight and its neighbours on the 8 km
 lattice); under 8 ms headless
