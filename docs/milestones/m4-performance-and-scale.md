@@ -238,7 +238,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T41 | The Wayland display driver (Q66): the game and the measurements open through Godot's Wayland driver, so a fullscreen window is the panel's own 3840x2160 under GNOME's 1.25 scale | T40 | Opus (controller) | The X11 path made the fullscreen window 6144x3456 and the compositor scaled it down; Wayland is worth about 8 to 10 FPS at 1 000 ships | R | done (2026-11-06, the controller, CI green on `7468d81`; fullscreen a true 3840x2160, `battle` 500 54.6 to 58.7 FPS and 1 000 60 to 62 to 69 to 72; Cycle log, M4-T41) |
 | T42 | Every world attaches the core, one hull read (T37's review I3): free flight, the menu, scenarios and test worlds attach `SimCore`, so the registry, `from_tree`, the resolvers' own walks, the flight batch's server read and the contact field's GDScript loops collapse into one native hull read | T37 | Opus | T37 removed the switches but left five hull-reading paths for worlds with no core (the free-flight scenario has no ship pools, so no core); T23's blast and proxies read hulls and Q68 wants T23 on one path | X, G | done (2026-11-07, Opus, one fix round, CI green on `d7f97f3`; every world attaches the core (one world per tree), five hull-reading paths and the last switch removed (net about -700 lines), ticks unchanged; Cycle log, M4-T42) |
 | T43 | Full code review (Q71): the whole code base (GDScript, Rust, shaders, scripts, tests) read for performance, memory (leaks, retained nodes and resources, growth per tick or per spawn, VRAM), duplicated code, and any other defect; read-only, a ranked findings list the maintainer triages into fix tasks | T25 | Opus | M4 rewrote the simulation in two languages over 40 tasks; a fresh whole-code read catches what task-scoped reviews could not | M | done (2026-11-07, Opus, read-only: `.superpowers/sdd/m4-performance-and-scale/full-review.md`, 11 fix-in-M4 findings (into T44), 15 for later milestones, 9 no action; memory clean over 20 scenario reloads and 10 minutes of `battle` 500) |
-| T44 | T43's fix round (Q72): the eleven "fix in M4" findings F1 to F11 of the full review (release export GLSL, lens flare re-enabled after a failed compile, the broadcast scan shifting the rows' rid column, the unread per-tick rows copy, statics outliving their world, per-tick waste, T37 leftovers and dead code, the targeting snapshot from rows, the explosion-LOD tests, CI timeout, doc drift); then the release fullscreen pair and the moved numbers re-taken | T43 | Opus | The controller's triage of T43 under Q72: clear-cut, contained fixes before the close-out merge; the fifteen later-milestone findings are listed for the maintainer | X, G | in progress (dispatched 2026-11-07, Opus) |
+| T44 | T43's fix round (Q72): the eleven "fix in M4" findings F1 to F11 of the full review (release export GLSL, lens flare re-enabled after a failed compile, the broadcast scan shifting the rows' rid column, the unread per-tick rows copy, statics outliving their world, per-tick waste, T37 leftovers and dead code, the targeting snapshot from rows, the explosion-LOD tests, CI timeout, doc drift); then the release fullscreen pair and the moved numbers re-taken | T43 | Opus | The controller's triage of T43 under Q72: clear-cut, contained fixes before the close-out merge; the fifteen later-milestone findings are listed for the maintainer | X, G | in progress (dispatched 2026-11-07, Opus; F1 to F11 built and measured 2026-11-08 in the `m4-t44` worktree, review and merge pending) |
 | T39 | FSR 4 study (Q59): whether AMD's FSR 4 can run in this game on Linux, Vulkan and Godot 4.7 through the native library, on the maintainer's RDNA 2 card, under the GPL-3.0 licence; a go or no-go with a plan | T38 | Sonnet | FSR 4 is not in Godot 4.7; AMD's support for RDNA 2 and for Vulkan is new or announced, so it needs facts before code | M | not needed (skipped by the maintainer, Q60) |
 
 ### M4-T01 Benchmark harness, budget and baseline
@@ -2544,6 +2544,38 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
   rows; the full suite and the three CI shards green.
 - **Done when:** F1 to F11 are fixed and reviewed, the release window opens and its numbers are in the Phase 3 entry, and the moved
   numbers are recorded beside T25's.
+- **Done (2026-11-08, built in the `m4-t44` worktree; review and merge pending).** One finding per commit (F7 in six):
+  - F1: the four `src/rendering/*.glsl.import` files are `importer="keep"`; `addons/scs_export` (our own editor plugin, enabled in
+    `project.godot`) adds the vendored `lens_flares.glsl` to every export; `test_runtime_glsl_export` checks every `.glsl` path in
+    `src/` and the flare. The headless import no longer writes broken `RDShaderFile`s.
+  - F2: `SceneLensFlareEffect.usable`; `PostEffects.apply_settings` keeps a failed flare off (`test_post_effects`).
+  - F3: `select` sets the core's rid column aside as it does the names; `test_sim_core` reproduces a pool return after a broadcast
+    scan through a new `row_rid` accessor (it read the broadcaster's body before the fix).
+  - F4: `StandinDirector.step` lost its unread scan argument and the per-tick `ContactScan.shared` build.
+  - F5: `SimCore._exit_tree` drops the brain host over its core (`NativeBrains.drop_for`); the tier director clears its hull cache
+    when it leaves (`test_world_statics`).
+  - F6: the ram resolver's unread `accel`, `BrainBatch`'s per-flush copies (now only after a host or unhost) and `_dts`, and the
+    contact grids' per-rebuild allocation (`sorted_cells_into`).
+  - F7: the always-true switches and `has_class` lookups; `NativeProbe`'s GDScript path (the boundary bench keeps its own
+    yardstick); the flight batch's own-model fallback (a refused step now flies nothing); the missile's GDScript steering (a touched
+    target is read again and asked once more; the core answers "gone" for a body parked since the sync, `parked_since_sync`; no core
+    flies straight on); the turret's Projectile-node shot; a native AI pilot's GDScript think (it holds its last command); the dead
+    native functions (with the DataRow seam), GDScript functions and procgen helpers. Kept: `MineStandin.triggers` and `blast`, the
+    mine rules' tested statement (as `MissileStandin.steer` is the missile kernel's), and the GDScript brains the host cannot carry.
+  - F8: the player's refresh reads `radar_contacts` after resyncing touched bodies, only from rows synced this tick (before the
+    tick's first sync it checks the selection alone); `radar_contacts` leaves out a body parked since the sync, and a changed
+    broadcast range touches its body. `targeting_on_read.json` was not re-recorded: its digest came out the same once the test syncs
+    the core before each hand-stepped refresh (`test_targeting_scale`'s comparison does the same).
+  - F9: pinned switch distances and levels (a fighter at 1 080 lines, a cruiser at 2 160), `FIREBALL_RADII` reads
+    `Explosion.FIREBALL_FINAL_SCALE`, and `picture_lines_for` is tested at FSR quality (2 160 lines draw 1 440).
+  - F10: a CI shard's GUT timeout is 40 minutes (`run_tests.sh`), under the 60-minute job; the timing comments are current;
+    `test_info_md` compares `info.md` with the commands and providers the main scene registers.
+  - F11: Cargo.toml, `NativeBrains`, the turret and mine headers, `Ship`'s contact paragraph and architecture.md's flight batch,
+    weapon rows and `bolt_path` lines.
+  - Also committed `tests/unit/test_parity_fixture.gd.uid`.
+  - Measures in the Phase 3 entry's "After T44" block: the release window opens with no shader error (`battle` 500 144.1 FPS,
+    1 000 119.1 FPS); headless `battle` 500 7.42 ms (passes 3/3) and 1 000 9.22 ms against T25's 8.10 and 10.50; fullscreen
+    editor `battle` 1 000 87.3 FPS against 65.6 and 71.1. Report P3's open question 4 (the release shaders) is answered.
 
 ##### M4-T39 FSR 4 study (Q59)
 - **Not needed (Q60, 2026-11-05):** the maintainer skipped FSR 4; the section below is kept as the record of what was asked.
@@ -6820,6 +6852,30 @@ renderer); every console smoke run passed. The CI shards in order (`GUT_SHARD=k/
 0: shard 1 the Python tests 410 OK and 79 scripts, 978 tests, 977 passing, 1 pending; shard 2 77 scripts, 785 tests, 784 passing, 1
 pending; shard 3 79 scripts, 823 tests, 813 passing, 10 pending (together the full suite's 2 586 and 12). AC13's paired budget
 (`test_ai_think_time` 1 of 1) and AC21's rebase cost (`test_rebase_in_play` 8 of 8) passed on the first run.
+
+**After T44 (2026-11-08).** T43's fix round (F1 to F11) on `b5c7a83`, measured the same way in its own worktree (its own native
+build, default settings, the M5 and bench locks, the GPU lock for the windows; load 0.4 to 1.3 at each start).
+
+- **The release window opens.** A `git archive` snapshot of `b5c7a83` exported with the script header's preset: 203 MB, the native
+  library beside it, no shader error in any log (the four `src/rendering/*.glsl` now ship as kept files, the lens flare's by
+  `addons/scs_export`), the lens flare on. T25's window runs failed for two more reasons than the GLSL: a release template does not
+  honour `-s`, so `scripts/measure_fight.gd` never ran (the main scene sat idle until the timeout), and the measure node needs
+  `FakeInputSource` from `tests/fixtures/`, which the preset excluded. The measuring snapshot therefore excludes only
+  `tests/unit/*` and `tests/integration/*` and makes `scripts/measure_fight_node.gd` its main scene (snapshot only; the steps are in
+  `scripts/setup_export_templates.sh`'s header). A release print is not flushed until the process exits, so a run killed by its
+  timeout logs nothing.
+- **The release fullscreen pair** (`M4-T44_release_fs_battle_*`, in the snapshot's `reports/`), Wayland at 3840x2160, the 3D at
+  1 080 lines: `battle` 500 **144.1 FPS** (1 % low 60.4, p99 15.43 ms, frame mean 6.94, at the Wayland cap), `battle` 1 000
+  **119.1 FPS** (1 % low 57.9, p99 15.14 ms, frame mean 8.39); sim speed 1.00, GPU 0.77 and 0.80 ms, 100 to 102 draw calls, the
+  game's VRAM 581 MB.
+- **Headless, the editor build** (`M4-T44_after`, seeds 1 to 3, 5 s + 30 s): `battle` 500 **7.42 ms** median (7.13, 7.44, 7.42; p99
+  9.34; passes 3/3, so the headline max N is 500) against T25's 8.10 (p99 10.01, 1/3); `battle` 1 000 **9.22 ms** (8.93, 9.22, 9.24;
+  p99 11.64) against 10.50 (p99 13.08). Seed 2's stages at 1 000 against T25's seed 2: targeting 0.97 to **0.16 ms** (F8, the
+  player's snapshot from the rows), flight 3.97 to 3.82, resolvers 2.64 to 2.59, physics 1.13 to 1.12, the unaccounted remainder
+  1.12 to 1.10 (F4's unread scan cost less than T43's estimate of 0.1 to 0.3 ms).
+- **Fullscreen, the editor build** (`M4-T44_fs_battle_*`, one run each): `battle` 500 142.7 FPS (1 % low 64.9, p99 14.25 ms, frame
+  mean 7.01) against T25's 137.8 and 136.9; `battle` 1 000 **87.3 FPS** (1 % low 48.8, p99 18.90 ms, frame mean 11.46) against 65.6 and
+  71.1 (1 % low 42.7 and 42.2).
 
 #### Report P3
 
