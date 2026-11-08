@@ -1404,6 +1404,37 @@ T21, T16 and T28 are re-planned on the native core ("M5 on the native core", bel
   `tests/integration/test_engine_audio.gd` (a work count: the re-rank's units grow with the ships in range, not in play).
 - **Notes:** reads the rows the main thread already has, never the worker's in-flight snapshot; audio stays in `_process`.
 - **Done when:** the work-count test and the existing engine-voice tests pass.
+- **Done (as built, 2026-11-07, on `oscar`):**
+  - **The query.** `ScsSimCore.ships_near(centre, radius_m)` returns `[body_ids, squared_distances]`: the node rows that are
+    rigid ships, not tier rows, within the radius, nearest first (ties in row order). The maths is `voice_kernels.rs`
+    (engine-free, under `test_the_kernels_hold_no_engine_type`, with 7 Rust tests); `voice_rows.rs` is the shell. It reads
+    `self.rows`, the rows the main thread holds after the tick's sync, never the AI job's snapshot (M4-T24). The facade is
+    `SimCore.ships_near`; without a core it answers empty (no GDScript walk to fall back to), so only the player's own voices
+    sound then.
+  - **The re-rank.** `EngineVoices.allocate` is gone: `begin_allocation(player_in_play)`, an `offer(ship)` per listed ship
+    and `finish_allocation()`. `AudioDirector.reallocate_engines` maps the body ids to its ships and stops offering when the
+    cap is spent. The grant order is unchanged (the player's voices, then whole ships nearest first). The rows are the tick's,
+    so each candidate's node is checked (`_in_play`) before it is offered: a ship parked or freed since is never granted from
+    a stale row. The per-frame envelope step stays GDScript in `_process`, bounded by `engine_voice_cap`.
+  - **Work counts.** The re-rank's `allocate_work` was one unit per registered ship (14 in the default scenario's pools) and is
+    now the player plus the ships walked: 5 in the default scenario (the player, its own row and the allies in earshot), 7 with
+    nine raiders at 300 m (the cap spends first). Three hundred bodies 20 km away leave it unchanged
+    (`test_ships_beyond_hearing_cost_the_re_rank_nothing`; the unit tests show 3 in earshot among 303 cost 1 + 3). The new
+    console readout `audio.engine_rank_work` shows it; `info.md` is updated.
+  - **T26's note.** A ship the flight batch flies (no tick of its own, M4-T35/T36) is voiced: `get_flight_output()` fills from
+    the batch's row, and `test_a_ship_the_flight_batch_flies_is_voiced_when_it_thrusts` pins it.
+  - **T19's carried items.** `watch_ship` no longer returns for a hull with no cannon, so a civilian gets its pod voices (and
+    its turrets' sound hook); a ship watched before it is ready gets its voices at its `ready`. `AudioDirector.unwatch_ship`
+    (and `EngineVoices.remove_ship`) takes a ship's voices away for good: playing ones stop, their nodes are freed and the id
+    is never granted again (its slots stay taken, a few words per voice). **For M5-T17:** traffic returned to the pool needs
+    nothing (a parked ship leaves the rows and falls silent), traffic freed for good calls `audio.unwatch_ship`.
+  - **Tests.** `test_engine_voices.gd` (23: the re-rank follows the ships in earshot, the walk stops at the cap, a removed
+    ship), `test_engine_audio.gd` (15: the cannon-less civilian, the not-yet-ready ship, the pool-parked ship revoked, unwatch,
+    the batch ship, the far rows), `test_voice_query.gd` (5, new: the query on the core, tier rows never listed, a rebase) and
+    the Rust tests. A test that spawns or moves a ship now waits a tick before it re-ranks, since the rows are the tick's.
+    `test_audio_director`, `test_sim_core`, `test_console_command_list` pass; `cargo test` 36.
+  - **Not run.** `check_scripts` reports `encounter_console.gd`, `encounter_director.gd` and `main.gd` (M5-T17's files, in
+    progress in the same working copy), none of them T28's. No benchmark, no `GUT_SLOW` suite and no windowed run (`oscar`).
 
 ### M5-T17 Free-flight encounters
 

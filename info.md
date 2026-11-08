@@ -182,7 +182,7 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `perf` | The tick's stage timings and per-entity counts (on while `perf on` or a bench runs) | in flight |
 | `fx` | The particle emitter pool: emitters, busy, bursts thrown and the density in use | in flight |
 | `debris` | The break-up chunk pool: sets, free sets, active chunks and held wrecks | in flight |
-| `audio` | Sounds loaded, voices playing, engine voices and the SFX volume (writable) | front end, flight |
+| `audio` | Sounds loaded, voices playing, engine voices (granted, sounding, the frame's work and the re-rank's work, `engine_rank_work`) and the SFX volume (writable) | front end, flight |
 | `ai` | The AI ships and their behaviours, a count per behaviour and the AI's cost per tick | AI ships |
 | `mission` | The running mission: id, title, state, result, step, objectives, time, trigger counts, waypoint, controls locked and jump points | mission |
 | `dialog` | The comms panel: whether a line shows, its id, speaker callsign and text, lines queued, time left and lines shown | mission |
