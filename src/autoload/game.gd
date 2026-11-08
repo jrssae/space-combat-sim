@@ -106,6 +106,7 @@ func finish_loading(packed: PackedScene) -> void:
 	# Set by name, so this autoload does not compile Main and everything it uses at start-up.
 	main.set(&"scenario_path", GameFlow.scenario_path(flow.request["scenario_id"]))
 	main.set(&"scenario_seed", int(flow.request["seed"]))
+	main.set(&"encounters", bool(flow.request.get("encounters", false)))
 	flow.finish_loading()
 	_show.call_deferred(main)
 

@@ -144,9 +144,11 @@ func test_free_flight_reaches_the_real_main_through_the_loading_screen() -> void
 		return
 	await wait_physics_frames(2)
 	assert_eq(main.resolved_scenario_path(), ScenarioLoader.FREE_FLIGHT_PATH, "the request's scenario")
-	assert_eq(main.scenario_seed, 0, "and its seed")
+	assert_eq(main.scenario_seed, int(game.flow.request["seed"]), "and its seed")
+	assert_true(main.encounters, "with encounters on (M5-T17)")
 	assert_eq(main.buoys.size(), 5, "free flight's nav buoys")
-	assert_eq(game.flow.request, GameFlow.make_request(&"free_flight", &"free_flight", true), "encounters start on")
+	assert_eq(game.flow.request, GameFlow.make_request(&"free_flight", &"free_flight", true, main.scenario_seed),
+			"encounters start on")
 
 
 func test_leaving_a_paused_scene_unpauses_the_tree() -> void:

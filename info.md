@@ -29,6 +29,7 @@ Commands on this list are those on the `m5` branch, which holds M4 through T22 s
 | AI ships | Exists while at least one AI-flown ship is in the scene. |
 | mission | Exists only while a mission runs. |
 | route | Exists only in a scenario where a ship leads a route (the instructor). |
+| free flight | Exists only in a scenario with an encounter pools file (`data/encounters/<scenario_id>.json`): free flight. |
 | benchmark | Exists only in a benchmark run. The test cannot boot a benchmark and skips these rows. |
 
 ## Commands
@@ -116,6 +117,7 @@ Arguments in `<angle brackets>` are required, `[square brackets]` optional, `a|b
 | `wave` | `<start\|next\|stop\|restart> [index]` | Drive the raider waves | in flight |
 | `wing` | `[order\|formation\|replenish] [value]` | Order the player's wing, change its formation or launch replacements; alone, show the wing | in flight |
 | `ai` | `<name> [objective <target\|none>\|skill <rank\|0-1>\|aggression <level\|0-1>]` | Show an AI ship's behaviour and scores; send it at a target, or set its skill or aggression | AI ships |
+| `encounters` | `[status\|on\|off\|next\|force\|clear] [raid\|patrol\|traffic]` | Free-flight encounters: show them, turn them on (building their pools) or off, start the next one now, force one of a kind (off the schedule), or return every encounter ship to its pool | free flight |
 
 ### Audio
 
@@ -161,6 +163,7 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `ram` | Rams resolved, the last one and the cost of the ram checks | in flight |
 | `factions` | The faction ids, their listed relations and the friendly-fire mirror | in flight |
 | `raiders` | The raider pool: size, free, alive, a list with hull and range, and the selected one's brain | in flight |
+| `encounters` | Free-flight encounters: on, pools built, seed, interval, cap, ships in play by kind, the next event and its time, the one waiting, events started, ships released, the last event, the release check's work and the pools' build time | free flight |
 | `allies` | The allied pool, the same way | in flight |
 | `waves` | The raider waves: wave number, name, state, countdown, raiders alive and the kill tally | in flight |
 | `wing` | The player's wing: name, order, formation, members and the last acknowledgement | in flight |

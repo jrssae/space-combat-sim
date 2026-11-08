@@ -61,6 +61,12 @@ func frame() -> MenuFrame:
 	return _frame
 
 
+## A fresh seed for each free flight the menu starts, so its encounters differ from one session to the next (M5-T17);
+## a restart keeps the run's request, and with it the seed.
+static func session_seed() -> int:
+	return randi_range(1, 2147483647)  # the console's `play` seed range
+
+
 func _main_menu() -> MenuScreen:
 	var page := ChoiceListScreen.new()
 	page.setup("SPACE COMBAT SIM", MAIN_ENTRIES)
@@ -81,7 +87,7 @@ func _on_main_chosen(id: StringName) -> void:
 			var page := FreeFlightSelect.new()
 			page.setup_free_flight()
 			page.start_requested.connect(func(encounters: bool) -> void:
-				_start(GameFlow.make_request(&"free_flight", &"free_flight", encounters)))
+				_start(GameFlow.make_request(&"free_flight", &"free_flight", encounters, session_seed())))
 			_frame.push_screen(page)
 		&"sandbox":
 			var page := SandboxSelect.new()

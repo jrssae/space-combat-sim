@@ -9,11 +9,20 @@ var game: RecordingGame
 var quits: int = 0
 
 
+var _encounters_backup: Variant = true
+
+
 func before_each() -> void:
 	get_tree().paused = false
+	_encounters_backup = Settings.get_value(&"encounters")
+	Settings.set_value(&"encounters", true)
 	game = RecordingGame.new()
 	autofree(game)
 	quits = 0
+
+
+func after_each() -> void:
+	Settings.set_value(&"encounters", _encounters_backup)
 
 
 func _missions() -> Array[Dictionary]:
@@ -125,7 +134,7 @@ func test_free_flight_starts_with_encounters_on_by_default() -> void:
 	await _pad(&"ui_down")
 	assert_eq(_focused_text(front), "Start")
 	await _pad(&"ui_accept")
-	assert_eq(game.played, [GameFlow.make_request(&"free_flight", &"free_flight", true)] as Array[Dictionary])
+	_assert_free_flight(true)
 
 
 func test_free_flight_starts_with_encounters_off_when_toggled() -> void:
@@ -136,7 +145,22 @@ func test_free_flight_starts_with_encounters_off_when_toggled() -> void:
 	assert_eq(_focused_text(front), "Encounters: off")
 	await _pad(&"ui_down")
 	await _pad(&"ui_accept")
-	assert_eq(game.played, [GameFlow.make_request(&"free_flight", &"free_flight", false)] as Array[Dictionary])
+	_assert_free_flight(false)
+	assert_false(bool(Settings.get_value(&"encounters")), "the page keeps the choice in Settings.encounters (M5-T17)")
+	var again: FrontEnd = await _front_end()
+	await _pad(&"ui_down")
+	await _pad(&"ui_accept")
+	assert_eq(_focused_text(again), "Encounters: off", "and opens with it next time")
+
+
+# One free-flight request with `encounters`, on a fresh session seed (M5-T17).
+func _assert_free_flight(encounters: bool) -> void:
+	assert_eq(game.played.size(), 1)
+	if game.played.size() != 1:
+		return
+	var request: Dictionary = game.played[0]
+	assert_eq(request, GameFlow.make_request(&"free_flight", &"free_flight", encounters, int(request["seed"])))
+	assert_gt(int(request["seed"]), 0, "a fresh session seed")
 
 
 func test_a_refused_start_is_shown_not_swallowed() -> void:

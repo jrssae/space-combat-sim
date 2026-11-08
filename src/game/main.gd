@@ -31,6 +31,10 @@ var waves_auto_start: bool = true
 ## Mixed into the brain seed of every ship the scenario places (M3-T10): the same seed flies the same fight (the dogfight's
 ## AC12 runs). Set before the node enters the tree.
 var scenario_seed: int = 0
+## Free-flight encounters from the start (M5-T17, D58): the menu's request sets it; every other run starts them off.
+var encounters: bool = false
+## Overrides the scenario's encounter pools file (tests). Empty = `data/encounters/<scenario_id>.json`, if there is one.
+var encounter_pools_path: String = ""
 
 ## Set before the node enters the tree to drive Main from a script (tests use FakeInputSource).
 var input_source: InputSource = null
@@ -69,6 +73,8 @@ var overlay_refreshes: int = 0
 ## The comms menu on D-pad Right (M5-T07): its model, and the view that draws it.
 var comms_menu: CommsMenu = CommsMenu.new()
 var comms_menu_view: CommsMenuView = null
+## Free-flight encounters (M5-T17): null in a scenario without an encounter pools file.
+var encounter_director: EncounterDirector = null
 
 var _spawn_position: UniversePos = UniversePos.new()
 var _overlay_in_s: float = 0.0
@@ -179,6 +185,7 @@ func _ready() -> void:
 	pause_menu.resumed.connect(func() -> void: adapter.resync_edges(input_source))
 	add_child(pause_menu)
 	_setup_perf()
+	_setup_encounters(scenario)
 	comms_menu.set_root_page("WING ORDERS", CommsMenu.wing_orders())
 	comms_menu_view = CommsMenuView.new()
 	comms_menu_view.menu = comms_menu
@@ -353,6 +360,18 @@ func _setup_perf() -> void:
 	station_scene.process_mode = Node.PROCESS_MODE_PAUSABLE
 	station_scene.main = self
 	add_child(station_scene)
+
+
+# The encounter director in a scenario with an encounter pools file, on at once when the request asked for encounters.
+func _setup_encounters(scenario: Dictionary) -> void:
+	var path: String = encounter_pools_path
+	if path.is_empty():
+		path = EncounterDirector.pools_file(StringName(scenario.get("scenario_id", &"")))
+	if path.is_empty():
+		return
+	encounter_director = EncounterDirector.create(self, path)
+	if encounter_director != null and encounters:
+		print("[encounters] ", encounter_director.enable())
 
 
 ## The scenario file in use: `scenario_path`, else the one `settings.scenario` names.
