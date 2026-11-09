@@ -526,9 +526,9 @@ removed or converted when M5 rebases onto `main` after M4.
 | AC23 | Sound and test clean-up (Q35): L6 (muzzle flashes and shot sounds culled by range, a ring buffer for the flash pool) and L7 (no audio node per pooled ship walked every frame) with work-count tests; L14's shared test steps fixture, the collapsed recordings, the always-pending balance tests out of the default run, and CI's Python job split off with cached assets, CI green | A | |
 | AC24 | Pause backdrop (T42): with the pause menu open, an outside camera flies a slow closed figure 8 around the player's ship behind the menu (`PauseOrbitPath` unit-tested: closed, smooth, never inside the hull's clearance, always looking at the ship); it blends in from the camera in use and back to it on Resume; the world stays paused; `settings.pause_backdrop` off gives the old still view; no player ship (dead, or mid-load) leaves the still view | A | |
 | AC25 | Target preview (T43): highlighting an entity in the target menu's second level shows its green wireframe on the side of the screen opposite the radial menu, vertically centred, slowly turning, with only the edges on the side facing the viewer (feature edges plus the silhouette, no flat-panel diagonals), its hull bar and distance, and the info lines T43 settles; `FeatureEdges` and `TargetPreviewModel` unit-tested; the preview's viewport renders nothing while the menu's second level is closed; opening it on the largest hull costs what T43 records | A | |
-| AC26 | Focus pull (T44): opening the target menu takes everything except the target menu and the target information (the 3D view, the flight HUD, its brackets and radar) slightly out of focus over 0.2 s, so only the menu and the target information are sharp; closing it (a pick with A, or B out of the first level) brings the play view back into focus over 0.2 s; reopening mid-pull reverses from where it is; `FocusPull` unit-tested; with the menu closed the blur is off and costs nothing; `settings.target_menu_blur` 0 turns it off | A | |
+| AC26 | Focus pull (T44): opening a radial menu (the target menu, or the comms menu since T46) takes everything except that menu and the target information (the 3D view, the flight HUD, its brackets and radar) slightly out of focus over 0.2 s, so only the menu and the target information are sharp; closing it (a pick with A, or B out of the first level) brings the play view back into focus over 0.2 s; reopening mid-pull reverses from where it is; `FocusPull` unit-tested; with the menu closed the blur is off and costs nothing; `settings.target_menu_blur` 0 turns it off | A | |
 | AC27 | Start screen (T45): only the options list shows (no pad diagram, no right panel): New game, Load game (shown disabled; D-pad focus and the mouse skip it), Free flight, Settings, Quit; New game lists the catalogue's missions and then the sandbox scenes, the highlighted entry's briefing or description under the list; Free flight works as before (encounters on or off); Settings opens the groups Gameplay, Controls, Camera & HUD, Video and Audio, Controls holding the profile and rebinding screen and the stick and mouse settings; every schema entry shown in the menu falls in one group (test); the pause menu reads Resume, Restart, Settings, Quit to menu, keeps its pad diagram and objectives, and its Settings opens the same groups; pad-only navigation tested | A | |
-| AC28 | Radial comms menu (T46): the comms menu uses T25's radial widget, vertically centred at the same side as the target menu, its four wing orders at the four D-pad directions; the routing rules of AC7 hold (B or 4 s closes, the D-pad's flight actions and the target button do not fire while it is open) | A | |
+| AC28 | Radial comms menu (T46): D-pad Right opens the comms menu on T25's radial framework, as big as the target menu and vertically centred at the same side, with T44's focus pull; the right stick points at an entry, A confirms, B goes back a page and closes it from the first; while it is open the right stick does not steer, A does not fire, B does not target and the D-pad's flight actions do not fire; a profile saved before M5 still loads with `comms_menu` filled in | A | |
 | AC18 | (H) The maintainer plays it: menus feel right on the pad, the mission's pacing and lines, the cinematic, the civilian ships' look, the new guns, impacts and engines by ear; the pause backdrop's path and speed, the radial target and comms menus, the start screen and the settings groups, the target preview's readability at 1080 and 4K, the focus pull's feel under fire | H | |
 
 ## Working rules for M5
@@ -617,7 +617,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T43 | A | Target preview: a turning green wireframe of the highlighted entity on the side of the screen opposite the radial target menu, with hull bar and distance (maintainer, 2026-11-08) | T25 | Opus | Hidden-line wireframe in a small viewport, edges from the mesh, an info panel kept lean | not started |
 | T44 | A | Focus pull: while the target menu is open only it and the target information are in focus; the play view and HUD blur over 0.2 s and come back over 0.2 s when it closes (maintainer, 2026-11-08, corrected 2026-11-09) | T25 | Sonnet | A short tweened screen blur between the HUD and the menu layers, free when closed | not started |
 | T45 | A | Start screen and settings groups: an options-only start screen (New game, Load game, Free flight, Settings, Quit), the sandbox scenes under New game, Controls inside Settings, five settings groups (maintainer, 2026-11-09) | T02, T03, T04 | Sonnet | Menu re-plumbing on the built kit; mostly tests | not started |
-| T46 | A | Radial comms menu: the D-pad Right comms menu moves onto T25's radial widget (maintainer, 2026-11-09) | T25, T07 | Sonnet | One shared widget, same routing rules | not started |
+| T46 | A | Radial comms menu: the comms menu moves onto T25's radial framework, with the focus pull, the right stick to point, A to confirm, B to go back (maintainer, 2026-11-09) | T25, T44, T07 | Sonnet | One framework for both menus; the comms routing changes from the D-pad to the stick | not started |
 | T20 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 **Progress (2026-11-03).** Done: T01, T02, T05, T11, T15, T18, T19, T24. In progress:
@@ -1727,10 +1727,14 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   `NEEDS_CONTEXT: targeting concepts ready` for the maintainer to pick. Then it builds the chosen set, tests first.
 - **The maintainer's layout (2026-11-09):** the target menu is circular (radial), vertically centred at one side of the
   screen (left by default), and the target information (T43's wireframe, hull bar, distance and info lines) sits
-  vertically centred on the opposite side. **A selects** (a category at the first level, the target at the second) and
-  **B goes back** (to the first level, then closes the menu); X and Y take no part in the menu. While it is open the
-  rest of the view is out of focus (T44). The radial ring is one reusable control (`RadialMenu`, its pure layout and
-  focus model in a `RefCounted` with GUT tests), because the comms menu moves onto it in T46. The concept stop mocks this
+  vertically centred on the opposite side. **The right stick points at an entry** (the ring highlights the slice it
+  points to; a centred stick keeps the last highlight), **A selects** (a category at the first level, the target at the
+  second) and **B goes back** (to the first level, then closes the menu); X and Y take no part in the menu. While a
+  radial menu is open the right stick, A and B belong to it: the ship gets no pitch or yaw from the stick (flight assist
+  holds its attitude), A does not fire and B does not target. While it is open the
+  rest of the view is out of focus (T44). The radial ring, its input (right stick, A, B, nested pages) and T44's
+  focus pull are one reusable framework (`RadialMenu`, its pure layout, stick-to-slice and page-stack model in a
+  `RefCounted` with GUT tests), because the comms menu moves onto it in T46 and later comms options grow on it. The concept stop mocks this
   layout first; the options below fill it in.
 - **Options to brainstorm and mock up:**
   1. **A target menu** on a held button (or the comms menu pattern of D54): categories (hostile fighters, capital ships, ships
@@ -2107,7 +2111,7 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
 
 - **Why (maintainer, 2026-11-08, corrected 2026-11-09):** while the target menu is open, the play view goes out of
   focus and the target menu and the target information (T43's wireframe and its lines) are the only things in focus,
-  so the eye goes to the pick.
+  so the eye goes to the pick. It belongs to the radial framework, so the comms menu (T46) gets the same pull.
 - **Track:** A. **Agent:** Sonnet. **Depends on:** T25 (the radial menu, its open and close), T43 (the target
   information panel, which must sit above the blur).
 - **What:** on open, everything except the menu and the target information eases from sharp to slightly out of focus
@@ -2171,17 +2175,25 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
 
 ### M5-T46 Radial comms menu
 
-- **Why (maintainer, 2026-11-09):** the comms menu on D-pad Right should be circular like the target menu.
-- **Track:** A. **Agent:** Sonnet. **Depends on:** T25 (the `RadialMenu` widget), T07 (the comms menu and its routing).
-- **What:** `CommsMenuView` draws `CommsMenu`'s page on T25's radial widget, vertically centred at the same side as the
-  target menu, the four wing orders at the four D-pad directions (up, right, down, left as today's picks 0-3).
-  `CommsMenu`, `UiCommand.comms_pick` and `comms_close` and the input rules are unchanged: the four directions pick, B
-  closes, 4 s closes it, the D-pad's flight actions and the target button do not fire while it is open. A later page of
-  mission replies lays out on the same ring.
-- **Tests:** the existing comms menu tests pass unchanged; a view test that each entry sits at its direction and the
-  highlight follows a pick.
-- **Done when:** AC28, the tests pass, a screenshot in `references/screenshots/Radial comms menu/` for the look check
-  (H).
+- **Why (maintainer, 2026-11-09):** the comms menu should work like the target menu (circular, as big, the same blur
+  behind it, the right stick to point, A to confirm, B to go back), so that when the comms options grow there is one
+  common framework for both.
+- **Track:** A. **Agent:** Sonnet. **Depends on:** T25 (the `RadialMenu` framework), T44 (the focus pull), T07 (the
+  comms menu and its routing).
+- **What:** D-pad Right still opens it. `CommsMenuView` lays `CommsMenu`'s pages on T25's radial framework, the same
+  size as the target menu and vertically centred at the same side, with T44's focus pull behind it. The right stick
+  points at an entry, A confirms it, B goes back a page and closes the menu from the first page. The first page is the
+  four wing orders; a later page of replies, or sub-pages of orders, nest on the same page stack. D54's routing changes
+  from the D-pad picking to the stick: `UiCommand` carries the stick's pick and A and B as menu edges instead of
+  `comms_pick` 0-3, and while the menu is open the right stick does not steer, A does not fire, B does not target and the
+  D-pad's flight actions do not fire. The 4 s timeout goes (a bigger menu is read, not flicked); B or D-pad Right closes
+  it. Keys 1-4 still give the wing orders directly.
+- **Tests:** `CommsMenu`'s page tests move onto the shared page stack; the routing tests rewritten for the stick, A and
+  B (no fire, no target, no steering while open; the edges re-seeded on close so nothing fires on the frame it closes);
+  a profile saved before M5 loads with `comms_menu`; a view test that the entries sit on the ring and the highlight
+  follows the stick.
+- **Done when:** AC28, the tests pass, `docs/playtest.md`'s comms section updated, a screenshot in
+  `references/screenshots/Radial comms menu/` for the look check (H).
 
 ### M5-T20 Integration, full suite, docs and acceptance
 
