@@ -520,7 +520,10 @@ removed or converted when M5 rebases onto `main` after M4.
 | AC21 | Asteroids (D63): the generator's Python tests (determinism, closed meshes, budgets, radii); `BeltLayout` unit-tested (seeded, inside the box, gaps held, size spread); the belt's rocks are static rows that the scan, hits, rams and avoidance see; a Saturn 8 crosses the escort's belt in a headless run without hitting a rock; FPS, draw calls and VRAM with the belt in view recorded on the maintainer's GPU | A | |
 | AC22 | Performance block (Q35): each of L1, L2, L3, L5, L8, L9, L12 and L13 fixed as its task says; results unchanged (the recorded parity fixtures, and the same answers with 1 and 6 threads and with `sim_step` threaded and delayed); each task measures `bench battle 1000` before and after with `scripts/bench_quick.sh` on an idle machine, and the per-stage numbers go into its Done notes against Report P3's (flight 3.97 ms, hits 1.41 ms, rams 1.20 ms at 1 000) | A | |
 | AC23 | Sound and test clean-up (Q35): L6 (muzzle flashes and shot sounds culled by range, a ring buffer for the flash pool) and L7 (no audio node per pooled ship walked every frame) with work-count tests; L14's shared test steps fixture, the collapsed recordings, the always-pending balance tests out of the default run, and CI's Python job split off with cached assets, CI green | A | |
-| AC18 | (H) The maintainer plays it: menus feel right on the pad, the mission's pacing and lines, the cinematic, the civilian ships' look, the new guns, impacts and engines by ear | H | |
+| AC24 | Pause backdrop (T42): with the pause menu open, an outside camera flies a slow closed figure 8 around the player's ship behind the menu (`PauseOrbitPath` unit-tested: closed, smooth, never inside the hull's clearance, always looking at the ship); it blends in from the camera in use and back to it on Resume; the world stays paused; `settings.pause_backdrop` off gives the old still view; no player ship (dead, or mid-load) leaves the still view | A | |
+| AC25 | Target preview (T43): highlighting an entity in the target menu's second level shows its green wireframe beside the menu, slowly turning, with only the edges on the side facing the viewer (feature edges plus the silhouette, no flat-panel diagonals), its hull bar and distance, and the info lines T43 settles; `FeatureEdges` and `TargetPreviewModel` unit-tested; the preview's viewport renders nothing while the menu's second level is closed; opening it on the largest hull costs what T43 records | A | |
+| AC26 | Focus pull (T44): opening the target menu takes the 3D view slightly out of focus over 0.2 s and a pick (or B) brings it back over 0.2 s; reopening mid-pull reverses from where it is; HUD and menu stay sharp; `FocusPull` unit-tested; with the menu closed the blur is off and costs nothing; `settings.target_menu_blur` 0 turns it off | A | |
+| AC18 | (H) The maintainer plays it: menus feel right on the pad, the mission's pacing and lines, the cinematic, the civilian ships' look, the new guns, impacts and engines by ear; the pause backdrop's path and speed, the target preview's readability at 1080 and 4K, the focus pull's feel under fire | H | |
 
 ## Working rules for M5
 
@@ -528,7 +531,8 @@ removed or converted when M5 rebases onto `main` after M4.
   encounters), D (sound). Inside a track the order holds. Track C's reference and generator tasks (T11-T15) are Python and run beside
   anything; the Godot tasks of every track share one machine, so they follow the locks below. If work has to go one task at
   a time, the order is T01, T02, T05, T06, T08, T09, T07, T10, T03, T04, T11, T23, T12-T15, T22, T26, T27, T21, T16, T28, T17,
-  T18, T19, then (after Q34 to Q43) T29, T30, T31-T38 in number order, T25, T20.
+  T18, T19, then (after Q34 to Q43) T29, T30, T31-T38 in number order, T25, T42, T43, T44, T20. T42 does not wait
+  for T25 and can run beside it; T43 and T44 build on T25's menu.
 - **One working copy.** Since 2026-11-08 all M5 work happens in the main checkout on branch `m5` (the `.claude/worktrees/m5`
   worktree, used while M4 held the main checkout, was removed once M4 merged); no task branches, no worktrees per agent (the
   maintainer's rule from M4). Parallel agents keep to their task's files.
@@ -603,6 +607,9 @@ whose trigger never arose). Update the column with each task's commit.
 | T39 | C | Civilian colours as the show shows them, and a sheen on every hull (maintainer, 2026-11-08; added after T38, done before T30) | T27 | controller | Colour read off captures vs lit albedo; the look is (H) | done |
 | T40 | C | Civilian panel seams drawn from the show's references instead of the generic brick grid (maintainer, 2026-11-08) | T39, the maintainer's reference captures | controller | Per-ship seam layouts read off images; the look is (H) | not started |
 | T41 | - | Rock rams by the speed into the rock: a glancing scrape costs its closing speed, not the ship's whole speed (maintainer, 2026-11-08; done before T31) | T29 | controller | A small change to the ram rule for rocks | done |
+| T42 | A | Pause backdrop: a slow figure-8 camera around the Starfury behind the pause menu (maintainer, 2026-11-08) | T02, T08 | Sonnet | A camera path that runs while the tree is paused; the look is (H) | not started |
+| T43 | A | Target preview: a turning green wireframe of the highlighted entity beside the target menu's second level, with hull bar and distance (maintainer, 2026-11-08) | T25 | Opus | Hidden-line wireframe in a small viewport, edges from the mesh, an info panel kept lean | not started |
+| T44 | A | Focus pull: the 3D view goes slightly out of focus over 0.2 s when the target menu opens and refocuses on a pick (maintainer, 2026-11-08) | T25 | Sonnet | A short tweened blur on the 3D view only, free when closed | not started |
 | T20 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 **Progress (2026-11-03).** Done: T01, T02, T05, T11, T15, T18, T19, T24. In progress:
@@ -1990,6 +1997,121 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   speed: head-on, scrape, along, away), `test_rocks_and_mines` (a drone at 40 m/s along and 3 m/s into a rock is unhurt; checked to
   fail without the change; the head-on 40 m/s ram stays lethal), and the ram files (`test_ram_damage`, `test_ram_scale`,
   `test_ai_ram`, `test_ram_contact_columns`, `test_asteroid_belt`): 50 passing.
+
+### M5-T42 Pause backdrop: a cinematic camera behind the pause menu
+
+- **Why (maintainer, 2026-11-08):** the pause menu sits over a frozen frame. A slow camera move around the player's ship
+  behind the menu makes the pause feel like part of the game instead of a stop.
+- **Track:** A. **Agent:** Sonnet. **Depends on:** T02 (the pause menu), T08 (the rig's `CINEMATIC` mode and its shot
+  hand-back).
+- **The path.** The suggested move is a figure 8 around the ship, and it is the default: a lemniscate (Gerono's, so the
+  two lobes sit either side of the ship) laid in a plane tilted about 20 degrees off the ship's top, at about 1.3 times the
+  chase distance, so the camera passes the nose and the tail in turn and dips under and over the hull; one loop in about
+  60 s, eased so the crossings are not faster than the turns; the camera always looks at the ship's chase anchor with a
+  small lead, so the ship sits in the gap between the menu's left and right panels, not behind them. Other moves the task
+  may offer at the look check, each a different `PauseOrbitPath`: a plain slow orbit with a gentle rise and fall (the
+  safest), a Lissajous path (a figure 8 that drifts so no two loops repeat), or a slow cycle of three or four held "beauty"
+  angles (front three-quarter, top-down on the wings, behind the engines) with long dissolves. The maintainer picks (H).
+- **How:** a pure `PauseOrbitPath` (`RefCounted`) gives the camera's ship-local pose at a phase in [0, 1); the rig plays
+  it through its cinematic camera with process mode always, since the tree is paused (the frames' `delta` still comes
+  in; nothing reads the wall clock). On open it blends from the camera in use (cockpit or chase) to the path over about
+  1 s, starting at the phase nearest the current camera so the first move is short; on Resume it blends back and the rig
+  returns to the mode it left (T08's hand-back). Settings, Controls and their sub-pages keep it running; Restart and Quit
+  to menu cut it. The pause menu's 0.6 dim becomes lighter (about 0.3) with a darker band behind the panels, so the ship
+  reads in the centre and the text stays legible. Paused during a mission cinematic: the shot holds and no orbit runs.
+  The world is paused, so no rebase can happen mid-path; the path is ship-local anyway.
+- **Settings and console:** `settings.pause_backdrop` (bool, `camera`, default on; off is today's still frame) and
+  `settings.pause_backdrop_speed` (loop time); `pause_menu` provider keys `backdrop` (on, off or still) and `backdrop_phase`;
+  `info.md` updated.
+- **Tests first:** `test_pause_orbit_path` (the loop closes, position and direction are smooth across the seam, the camera
+  never comes inside the hull's bounding radius plus a margin for the Starfury and a Saturn 8, it always faces the
+  target, the phase nearest a given pose); `test_pause_menu` gains: the backdrop runs while `get_tree().paused`, Resume
+  restores the mode and the pose, no player ship gives the still view, the setting off gives the still view.
+- **Done when:** AC24, the tests pass, and screenshots of three phases in `references/screenshots/Pause backdrop/` for
+  the maintainer's look check (H).
+
+### M5-T43 Target preview: a wireframe of the highlighted entity
+
+- **Why (maintainer, 2026-11-08):** in the target menu's second level (the entries of a category, T25) a name and a range
+  do not say which ship it is. A small turning wireframe of the highlighted entity, with its health and distance, shows
+  at a glance what the pick is.
+- **Track:** A. **Agent:** Opus. **Depends on:** T25 (the menu and its second level; if T25's concept stop picks a layout
+  without a second level, this task follows the list the pilot scrolls through to pick a ship).
+- **The look.** A panel to one side of the menu (the side away from the screen's centre, so it never covers the reticle),
+  about 256 px square at 1080 lines and scaled with the UI at 4K. The entity in the HUD's green, drawn as lines on a dark
+  ground, turning slowly (about 15 degrees per second) about its own up axis with a fixed view from about 20 degrees
+  above, framed by its bounding box so a Starfury and a Saturn 8 both fill the panel. Only the lines on the side facing
+  the viewer show (hidden-line removal); the far side's lines are hidden, not dimmed.
+- **How:**
+  - **Edges, not triangles.** A raw triangle wireframe draws every diagonal of every flat panel and turns a hull into
+    noise. `FeatureEdges` (pure, `RefCounted`) takes the entity's lowest-detail mesh that still reads (LOD2, or LOD1 for
+    small hulls) and keeps only the creases (edges whose faces meet at more than about 25 degrees, with welded vertex
+    positions) and the open borders, as a `PRIMITIVE_LINES` mesh; built once per hull id on first highlight and cached.
+    If building it on the largest hull costs more than a frame's slack (measure; about 5 ms), the edges move into procgen's
+    output contract as a written file instead.
+  - **Hidden lines.** The panel is a `SubViewport` with its own `World3D` (nothing from the game world leaks in): the
+    solid mesh is drawn first in the ground colour, writing depth, pulled back a little along its normals, then the
+    lines on top with the depth test, so the far side's lines fail it.
+  - **The silhouette.** Rounded hulls (the Saturns' tanks, the Narn's drum) have soft outlines with no crease to draw, so
+    an edge-detect pass on the solid mesh's depth in the same viewport draws the outline. Two draws and one pass; nothing
+    else enters that world.
+  - **Cost.** The viewport updates only while the second level is open (`UPDATE_DISABLED` otherwise); the entity's data
+    is read for the one highlighted entity per frame, never for the list.
+- **Below the wireframe, at most four lines:**
+  - **Kept (worth the space):** the ship class or kind (`Starfury`, `Raider`, `Saturn 4 tanker`, `Nav buoy`); the hull bar
+    (the HUD's target bar, green to red, with a shield bar only if the entity has shields); the distance (the HUD's m or
+    km format); the closing speed, signed (`+120 m/s` closing, `-40 m/s` opening), which is what the pilot needs to judge
+    an intercept and what `targeting` already computes; and the faction as one word in the HUD's IFF colour, because the
+    menu's categories mix civilians, allies and hostiles.
+  - **One flag:** `ATTACKING YOU` when the entity is in the player's attacker memory (or attacking the escort in the
+    mission), since that is the question a pick is usually answering.
+  - **Left out as clutter for now:** the weapon list (every fighter carries the same few guns; it matters with M12's
+    capitals, where T25's sub-target level shows turrets on the wireframe itself), the full relative velocity vector, the
+    entity's own target when it is not the player, its orders, and cargo (the Bokmai's pods show on the wireframe already).
+  - The concept sheet of T25 can carry this panel; if the maintainer wants a field back, it is one line in
+    `TargetPreviewModel`.
+- **Entities without a hull** (nav points, jump points): their marker icon instead of a wireframe, no bar. A rock: its
+  wireframe, no bar. An entity destroyed while highlighted: the panel says `DESTROYED` until the highlight moves, and
+  T25's rule for the list applies.
+- **Console:** provider `target_preview` (entity, hull id, edge count, visible, cache size); `info.md` updated.
+- **Tests first:** `test_feature_edges` (a cube gives 12 edges; a quad split into two triangles gives its 4 borders and
+  no diagonal; the crease angle; welded seams give no false border; deterministic order); `test_target_preview_model`
+  (the lines for a fighter, a civilian, a buoy, a rock; distance and closing-speed formats; the attacker flag; hull and
+  shield fractions); an integration test that highlighting an entry sets the preview's entity and that the viewport is
+  disabled while the menu is closed; the edge build timed on the Saturn 8.
+- **GPU (oscar or the main machine, labelled):** the panel's frame cost and draw calls with the menu open in a 300-ship
+  battle, `state render` before and after.
+- **Done when:** AC25, the tests pass, and screenshots of a Starfury, a raider and a Saturn 8 in the panel in
+  `references/screenshots/Target preview/` for the maintainer's look check (H).
+
+### M5-T44 Focus pull when the target menu opens
+
+- **Why (maintainer, 2026-11-08):** opening the target menu should feel like the pilot's eye moving to the display: the
+  view behind it goes slightly out of focus over 0.2 s, and comes back into focus when the pick is made.
+- **Track:** A. **Agent:** Sonnet. **Depends on:** T25 (the menu's open and close).
+- **What:** on open, the 3D view eases from sharp to a slight blur over 0.2 s; on a pick, or on B or the timeout closing
+  the menu, it eases back to sharp over 0.2 s. A reopen during a pull reverses from where it is, never jumps. The HUD, the
+  menu and T43's preview stay sharp (only the 3D view blurs), and "slightly" means a small radius: ships stay readable
+  as shapes, because the menu is used under fire and the world does not pause.
+- **How:** a pure `FocusPull` (`RefCounted`) gives the blur amount from the time since the last open or close (smoothstep,
+  reversible mid-way). The blur itself is the cheapest of: the active camera's `CameraAttributesPractical` far and near
+  depth-of-field with the focus distance pulled in (Forward+ only, which is the only renderer we ship), or a small
+  separable blur as a compositor effect beside `MotionBlurEffect` in `PostEffects`. The task measures both on the GPU and
+  keeps the one that looks even across cockpit and chase views (depth of field can leave the cockpit interior sharp
+  or blur it, depending on the near range; the compositor blur treats every pixel alike). The pull runs on frame
+  `delta`; with the menu closed and the pull at rest the effect is off, not set to zero, so it costs nothing.
+- **Interpretation to confirm at the look check (H):** "refocus on selection" is built as "back into focus when the pick
+  is made". The other reading, that while the menu is open the focus sits on the highlighted entity (it sharp, the rest
+  soft, the focus distance following the highlight), is an option on the depth-of-field path and is shown beside it at
+  the look check if the depth-of-field path is kept.
+- **Settings and console:** `settings.target_menu_blur` (0 to 1, `hud`, default 0.35; 0 is off); a `focus` key on the
+  `post` provider (the blur amount now); `info.md` if a command is added.
+- **Tests first:** `test_focus_pull` (0 to full in 0.2 s, back in 0.2 s, a reversal from the middle, rest states); an
+  integration test that opening and closing the menu turns the effect on and then off again, and that the setting at 0
+  never turns it on.
+- **GPU:** frame cost with the pull at full on oscar (labelled) and, when it is on hand, the main machine.
+- **Done when:** AC26, the tests pass, and a short frame sequence of the pull in `references/screenshots/Focus pull/` for
+  the maintainer's look check (H).
 
 ### M5-T20 Integration, full suite, docs and acceptance
 
