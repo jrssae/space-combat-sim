@@ -2008,7 +2008,10 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   two lobes sit either side of the ship) laid in a plane tilted about 20 degrees off the ship's top, at about 1.3 times the
   chase distance, so the camera passes the nose and the tail in turn and dips under and over the hull; one loop in about
   60 s, eased so the crossings are not faster than the turns; the camera always looks at the ship's chase anchor with a
-  small lead, so the ship sits in the gap between the menu's left and right panels, not behind them. Other moves the task
+  small lead. The frame's panels fill nearly the whole screen (the screenshot of 2026-11-08 in
+  `references/screenshots/front_end_and_pause_menu_as_is/`: options and pad left, objectives right, a 25 px gutter), so
+  the ship is framed in the right half, behind the objectives panel's empty space, and that panel's ground becomes
+  mostly see-through (text kept on a dark band) while the backdrop runs. Other moves the task
   may offer at the look check, each a different `PauseOrbitPath`: a plain slow orbit with a gentle rise and fall (the
   safest), a Lissajous path (a figure 8 that drifts so no two loops repeat), or a slow cycle of three or four held "beauty"
   angles (front three-quarter, top-down on the wings, behind the engines) with long dissolves. The maintainer picks (H).
@@ -2017,8 +2020,9 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   in; nothing reads the wall clock). On open it blends from the camera in use (cockpit or chase) to the path over about
   1 s, starting at the phase nearest the current camera so the first move is short; on Resume it blends back and the rig
   returns to the mode it left (T08's hand-back). Settings, Controls and their sub-pages keep it running; Restart and Quit
-  to menu cut it. The pause menu's 0.6 dim becomes lighter (about 0.3) with a darker band behind the panels, so the ship
-  reads in the centre and the text stays legible. Paused during a mission cinematic: the shot holds and no orbit runs.
+  to menu cut it. The pause menu's 0.6 dim becomes lighter (about 0.3) with the options and pad panels kept dark, so the ship
+  reads on the right and the text stays legible. The flight HUD (readouts, radar, wing list) shows through the menu today;
+  it hides while the backdrop runs and comes back on Resume. Paused during a mission cinematic: the shot holds and no orbit runs.
   The world is paused, so no rebase can happen mid-path; the path is ship-local anyway.
 - **Settings and console:** `settings.pause_backdrop` (bool, `camera`, default on; off is today's still frame) and
   `settings.pause_backdrop_speed` (loop time); `pause_menu` provider keys `backdrop` (on, off or still) and `backdrop_phase`;
