@@ -528,8 +528,8 @@ removed or converted when M5 rebases onto `main` after M4.
 | AC25 | Target preview (T43): highlighting an entity in the target menu's second level shows its green wireframe on the side of the screen opposite the radial menu, vertically centred, slowly turning, with only the edges on the side facing the viewer (feature edges plus the silhouette, no flat-panel diagonals), its hull bar and distance, and the info lines T43 settles; `FeatureEdges` and `TargetPreviewModel` unit-tested; the preview's viewport renders nothing while the menu's second level is closed; opening it on the largest hull costs what T43 records | A | |
 | AC26 | Focus pull (T44): opening a radial menu (the target menu, or the comms menu since T46) takes everything except that menu and the target information (the 3D view, the flight HUD, its brackets and radar) slightly out of focus over 0.2 s, so only the menu and the target information are sharp; closing it (a pick with A, or B out of the first level) brings the play view back into focus over 0.2 s; reopening mid-pull reverses from where it is; `FocusPull` unit-tested; with the menu closed the blur is off and costs nothing; `settings.target_menu_blur` 0 turns it off | A | |
 | AC27 | Start screen (T45): only the options list shows (no pad diagram, no right panel): New game, Load game (shown disabled; D-pad focus and the mouse skip it), Free flight, Settings, Quit; New game lists the catalogue's missions and then the sandbox scenes, the highlighted entry's briefing or description under the list; Free flight works as before (encounters on or off); Settings opens the groups Gameplay, Controls, Camera & HUD, Video and Audio, Controls holding the profile and rebinding screen and the stick and mouse settings; every schema entry shown in the menu falls in one group (test); the pause menu reads Resume, Restart, Settings, Quit to menu, keeps its pad diagram and objectives, and its Settings opens the same groups; pad-only navigation tested | A | |
-| AC28 | Radial comms menu (T46): D-pad Right opens the comms menu on T25's radial framework, as big as the target menu and vertically centred at the same side, with T44's focus pull; the right stick points at an entry, A confirms, B goes back a page and closes it from the first; while it is open the right stick does not steer, A does not fire, B does not target and the D-pad's flight actions do not fire; a profile saved before M5 still loads with `comms_menu` filled in | A | |
-| AC18 | (H) The maintainer plays it: menus feel right on the pad, the mission's pacing and lines, the cinematic, the civilian ships' look, the new guns, impacts and engines by ear; the pause backdrop's path and speed, the radial target and comms menus, the start screen and the settings groups, the target preview's readability at 1080 and 4K, the focus pull's feel under fire | H | |
+| AC28 | Radial comms menu (T46): D-pad Right opens the comms menu on T25's radial framework, as big as the target menu and vertically centred at the same side, with T44's focus pull, and pauses the game while open as the target menu does; the right stick points at an entry, A confirms, B goes back a page and closes it from the first; nothing it was pressed for fires, steers or targets when the game resumes; a profile saved before M5 still loads with `comms_menu` filled in | A | |
+| AC18 | (H) The maintainer plays it: menus feel right on the pad, the mission's pacing and lines, the cinematic, the civilian ships' look, the new guns, impacts and engines by ear; the pause backdrop's path and speed, the radial target and comms menus, the start screen and the settings groups, the target preview's readability at 1080 and 4K, the focus pull's feel, and the pause and resume of the radial menus mid-fight | H | |
 
 ## Working rules for M5
 
@@ -617,7 +617,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T43 | A | Target preview: a turning green wireframe of the highlighted entity on the side of the screen opposite the radial target menu, with hull bar and distance (maintainer, 2026-11-08) | T25 | Opus | Hidden-line wireframe in a small viewport, edges from the mesh, an info panel kept lean | not started |
 | T44 | A | Focus pull: while the target menu is open only it and the target information are in focus; the play view and HUD blur over 0.2 s and come back over 0.2 s when it closes (maintainer, 2026-11-08, corrected 2026-11-09) | T25 | Sonnet | A short tweened screen blur between the HUD and the menu layers, free when closed | not started |
 | T45 | A | Start screen and settings groups: an options-only start screen (New game, Load game, Free flight, Settings, Quit), the sandbox scenes under New game, Controls inside Settings, five settings groups (maintainer, 2026-11-09) | T02, T03, T04 | Sonnet | Menu re-plumbing on the built kit; mostly tests | not started |
-| T46 | A | Radial comms menu: the comms menu moves onto T25's radial framework, with the focus pull, the right stick to point, A to confirm, B to go back (maintainer, 2026-11-09) | T25, T44, T07 | Sonnet | One framework for both menus; the comms routing changes from the D-pad to the stick | not started |
+| T46 | A | Radial comms menu: the comms menu moves onto T25's radial framework, with the focus pull, the right stick to point, A to confirm, B to go back (maintainer, 2026-11-09) | T25, T44, T07 | Sonnet | One framework for both menus; the comms routing changes from the D-pad to the stick; it pauses the game | not started |
 | T20 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 **Progress (2026-11-03).** Done: T01, T02, T05, T11, T15, T18, T19, T24. In progress:
@@ -1729,11 +1729,13 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   screen (left by default), and the target information (T43's wireframe, hull bar, distance and info lines) sits
   vertically centred on the opposite side. **The right stick points at an entry** (the ring highlights the slice it
   points to; a centred stick keeps the last highlight), **A selects** (a category at the first level, the target at the
-  second) and **B goes back** (to the first level, then closes the menu); X and Y take no part in the menu. While a
-  radial menu is open the right stick, A and B belong to it: the ship gets no pitch or yaw from the stick (flight assist
-  holds its attitude), A does not fire and B does not target. While it is open the
-  rest of the view is out of focus (T44). The radial ring, its input (right stick, A, B, nested pages) and T44's
-  focus pull are one reusable framework (`RadialMenu`, its pure layout, stick-to-slice and page-stack model in a
+  second) and **B goes back** (to the first level, then closes the menu); X and Y take no part in the menu. **Opening a
+  radial menu pauses the game** (maintainer, 2026-11-09), as the pause menu does: the world and sim time stop, the menu,
+  its preview and the focus pull run with process mode always, and the pad belongs to the menu (`InputAdapter` reads only
+  the menu's stick, A and B, and re-seeds every other edge on close so nothing fires, steers or targets on the frame the
+  game resumes). Picking a target (or B out of the first level) closes the menu and resumes. Start while a radial menu is
+  open closes it and opens the pause menu. While it is open the rest of the view is out of focus (T44). The radial ring, the pause while open, its input (right stick, A, B,
+  nested pages) and T44's focus pull are one reusable framework (`RadialMenu`, its pure layout, stick-to-slice and page-stack model in a
   `RefCounted` with GUT tests), because the comms menu moves onto it in T46 and later comms options grow on it. The concept stop mocks this
   layout first; the options below fill it in.
 - **Options to brainstorm and mock up:**
@@ -1757,7 +1759,7 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   500; the smart buttons pick the right ship in scripted cases; the menu routes the D-pad without firing other actions; the cost of
   opening the menu at 500 ships measured (no per-tick cost when closed).
 - **Done when:** the maintainer's chosen set works in the dogfight scenario and a 300-ship battle, the tests pass, and the (H) items
-  (readability at 4K and 1080 lines, feel of the menu under fire) are in the playtest list.
+  (readability at 4K and 1080 lines, the feel of the pause and resume mid-fight) are in the playtest list.
 
 ### M5-T29 Generated asteroids and a sparse belt
 
@@ -2079,7 +2081,7 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
     an edge-detect pass on the solid mesh's depth in the same viewport draws the outline. Two draws and one pass; nothing
     else enters that world.
   - **Cost.** The viewport updates only while the second level is open (`UPDATE_DISABLED` otherwise); the entity's data
-    is read for the one highlighted entity per frame, never for the list.
+    is read once per highlight (the world is paused while the menu is open), never for the whole list.
 - **Below the wireframe, at most four lines:**
   - **Kept (worth the space):** the ship class or kind (`Starfury`, `Raider`, `Saturn 4 tanker`, `Nav buoy`); the hull bar
     (the HUD's target bar, green to red, with a shield bar only if the entity has shields); the distance (the HUD's m or
@@ -2117,8 +2119,9 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
 - **What:** on open, everything except the menu and the target information eases from sharp to slightly out of focus
   over 0.2 s: the 3D view and the flight HUD alike (readouts, brackets, radar, wing list). On close (A picks the target,
   or B backs out of the first level) it eases back to sharp over 0.2 s. A reopen during a pull reverses from where it
-  is, never jumps. "Slightly" means a small radius and perhaps a light dim: ships stay readable as shapes, because the
-  menu is used under fire and the world does not pause.
+  is, never jumps. "Slightly" means a small radius and perhaps a light dim, so the frozen fight behind stays readable as
+  shapes. The game is paused while the menu is open (T25), so the pull runs with process mode always on the frame
+  `delta`.
 - **How:** a pure `FocusPull` (`RefCounted`) gives the blur amount from the time since the last open or close
   (smoothstep, reversible mid-way). The blur is one full-screen `ColorRect` with a screen-reading blur shader (mipmapped
   screen texture, or two separable passes if the mips look blocky) on a `CanvasLayer` between the HUD's layers and the
@@ -2185,11 +2188,12 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   points at an entry, A confirms it, B goes back a page and closes the menu from the first page. The first page is the
   four wing orders; a later page of replies, or sub-pages of orders, nest on the same page stack. D54's routing changes
   from the D-pad picking to the stick: `UiCommand` carries the stick's pick and A and B as menu edges instead of
-  `comms_pick` 0-3, and while the menu is open the right stick does not steer, A does not fire, B does not target and the
-  D-pad's flight actions do not fire. The 4 s timeout goes (a bigger menu is read, not flicked); B or D-pad Right closes
-  it. Keys 1-4 still give the wing orders directly.
+  `comms_pick` 0-3. Opening it pauses the game, as the target menu does (the framework's rule): the order given takes
+  effect when the game resumes, and the pad belongs to the menu while it is open. The 4 s timeout goes (the game is
+  paused, so there is nothing to time out); B or D-pad Right closes it and resumes. Keys 1-4 still give the wing orders directly.
 - **Tests:** `CommsMenu`'s page tests move onto the shared page stack; the routing tests rewritten for the stick, A and
-  B (no fire, no target, no steering while open; the edges re-seeded on close so nothing fires on the frame it closes);
+  B (the tree paused while open and resumed on close; the edges re-seeded on close so nothing fires, steers or targets on
+  the frame it closes);
   a profile saved before M5 loads with `comms_menu`; a view test that the entries sit on the ring and the highlight
   follows the stick.
 - **Done when:** AC28, the tests pass, `docs/playtest.md`'s comms section updated, a screenshot in
