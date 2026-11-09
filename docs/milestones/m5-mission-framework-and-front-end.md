@@ -1859,7 +1859,7 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   - **Tests:** `test_flight_parity_fight` (the recorded fixture) holds; new `test_ships_flying_from_their_rows_are_not_gathered`
     (`test_row_commands`); `test_flight_batch` (updated for `stepped_count`), `test_ai_driver`, the brain and tier files,
     `test_weapon_rows_battle`, `test_ai_think_time`, `test_engine_audio`, the ram files: 138 passing with `GUT_SLOW=1`. Rust
-    `cargo test` passes; `cargo clippy` flags two lints in `turret_kernels.rs` (not touched here; CI does not run clippy).
+    `cargo test` passes; `cargo clippy` flags two lints in `turret_kernels.rs` (not touched here; CI does not run clippy). Fix round: a teleport before the step (`reset_to`, the tier's unpark) no longer marks the batch row stale (`test_sim_core` caught it in CI).
 
 ### M5-T32 L2: the hit resolver's bolt walk
 
