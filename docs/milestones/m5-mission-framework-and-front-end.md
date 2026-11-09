@@ -274,6 +274,10 @@ removed or converted when M5 rebases onto `main` after M4.
   focus moved by the D-pad or left stick, A to accept, B to go back; arrow keys, Enter and Esc and the mouse also work.
   Menus use Godot's `ui_*` actions; `ControlProfiles` must leave those actions alone when it applies a profile (a test
   checks this).
+- **Revised by T45 (maintainer, 2026-11-09):** the start screen shows only its options list (New game, Load game,
+  Free flight, Settings, Quit); New game lists the missions and the sandbox scenes; Controls moves inside Settings, which
+  groups its entries as Gameplay, Controls, Camera & HUD, Video and Audio, on the start screen and in the pause menu
+  alike. The paragraphs below are as first built.
 - Front end (`src/frontend/front_end.tscn`): the `sky_default` sky with a slow camera drift and the menu. Entries:
   **Missions** (each scenario with a `mission` block: title, briefing, start), **Free flight** (encounters on or off, from
   `Settings.encounters`), **Sandbox** (combat_sandbox, dogfight, instructor_route), **Settings**, **Controls**, **Quit**.
@@ -523,7 +527,9 @@ removed or converted when M5 rebases onto `main` after M4.
 | AC24 | Pause backdrop (T42): with the pause menu open, an outside camera flies a slow closed figure 8 around the player's ship behind the menu (`PauseOrbitPath` unit-tested: closed, smooth, never inside the hull's clearance, always looking at the ship); it blends in from the camera in use and back to it on Resume; the world stays paused; `settings.pause_backdrop` off gives the old still view; no player ship (dead, or mid-load) leaves the still view | A | |
 | AC25 | Target preview (T43): highlighting an entity in the target menu's second level shows its green wireframe on the side of the screen opposite the radial menu, vertically centred, slowly turning, with only the edges on the side facing the viewer (feature edges plus the silhouette, no flat-panel diagonals), its hull bar and distance, and the info lines T43 settles; `FeatureEdges` and `TargetPreviewModel` unit-tested; the preview's viewport renders nothing while the menu's second level is closed; opening it on the largest hull costs what T43 records | A | |
 | AC26 | Focus pull (T44): opening the target menu takes everything except the target menu and the target information (the 3D view, the flight HUD, its brackets and radar) slightly out of focus over 0.2 s, so only the menu and the target information are sharp; closing it (a pick with A, or B out of the first level) brings the play view back into focus over 0.2 s; reopening mid-pull reverses from where it is; `FocusPull` unit-tested; with the menu closed the blur is off and costs nothing; `settings.target_menu_blur` 0 turns it off | A | |
-| AC18 | (H) The maintainer plays it: menus feel right on the pad, the mission's pacing and lines, the cinematic, the civilian ships' look, the new guns, impacts and engines by ear; the pause backdrop's path and speed, the radial target menu and the target preview's readability at 1080 and 4K, the focus pull's feel under fire | H | |
+| AC27 | Start screen (T45): only the options list shows (no pad diagram, no right panel): New game, Load game (shown disabled; D-pad focus and the mouse skip it), Free flight, Settings, Quit; New game lists the catalogue's missions and then the sandbox scenes, the highlighted entry's briefing or description under the list; Free flight works as before (encounters on or off); Settings opens the groups Gameplay, Controls, Camera & HUD, Video and Audio, Controls holding the profile and rebinding screen and the stick and mouse settings; every schema entry shown in the menu falls in one group (test); the pause menu reads Resume, Restart, Settings, Quit to menu, keeps its pad diagram and objectives, and its Settings opens the same groups; pad-only navigation tested | A | |
+| AC28 | Radial comms menu (T46): the comms menu uses T25's radial widget, vertically centred at the same side as the target menu, its four wing orders at the four D-pad directions; the routing rules of AC7 hold (B or 4 s closes, the D-pad's flight actions and the target button do not fire while it is open) | A | |
+| AC18 | (H) The maintainer plays it: menus feel right on the pad, the mission's pacing and lines, the cinematic, the civilian ships' look, the new guns, impacts and engines by ear; the pause backdrop's path and speed, the radial target and comms menus, the start screen and the settings groups, the target preview's readability at 1080 and 4K, the focus pull's feel under fire | H | |
 
 ## Working rules for M5
 
@@ -531,8 +537,8 @@ removed or converted when M5 rebases onto `main` after M4.
   encounters), D (sound). Inside a track the order holds. Track C's reference and generator tasks (T11-T15) are Python and run beside
   anything; the Godot tasks of every track share one machine, so they follow the locks below. If work has to go one task at
   a time, the order is T01, T02, T05, T06, T08, T09, T07, T10, T03, T04, T11, T23, T12-T15, T22, T26, T27, T21, T16, T28, T17,
-  T18, T19, then (after Q34 to Q43) T29, T30, T31-T38 in number order, T25, T42, T43, T44, T20. T42 does not wait
-  for T25 and can run beside it; T43 and T44 build on T25's menu.
+  T18, T19, then (after Q34 to Q43) T29, T30, T31-T38 in number order, T25, T42, T45, T43, T44, T46, T20. T42 and
+  T45 do not wait for T25 and can run beside it; T43, T44 and T46 build on T25's radial menu.
 - **One working copy.** Since 2026-11-08 all M5 work happens in the main checkout on branch `m5` (the `.claude/worktrees/m5`
   worktree, used while M4 held the main checkout, was removed once M4 merged); no task branches, no worktrees per agent (the
   maintainer's rule from M4). Parallel agents keep to their task's files.
@@ -610,6 +616,8 @@ whose trigger never arose). Update the column with each task's commit.
 | T42 | A | Pause backdrop: a slow figure-8 camera around the Starfury behind the pause menu (maintainer, 2026-11-08) | T02, T08 | Sonnet | A camera path that runs while the tree is paused; the look is (H) | not started |
 | T43 | A | Target preview: a turning green wireframe of the highlighted entity on the side of the screen opposite the radial target menu, with hull bar and distance (maintainer, 2026-11-08) | T25 | Opus | Hidden-line wireframe in a small viewport, edges from the mesh, an info panel kept lean | not started |
 | T44 | A | Focus pull: while the target menu is open only it and the target information are in focus; the play view and HUD blur over 0.2 s and come back over 0.2 s when it closes (maintainer, 2026-11-08, corrected 2026-11-09) | T25 | Sonnet | A short tweened screen blur between the HUD and the menu layers, free when closed | not started |
+| T45 | A | Start screen and settings groups: an options-only start screen (New game, Load game, Free flight, Settings, Quit), the sandbox scenes under New game, Controls inside Settings, five settings groups (maintainer, 2026-11-09) | T02, T03, T04 | Sonnet | Menu re-plumbing on the built kit; mostly tests | not started |
+| T46 | A | Radial comms menu: the D-pad Right comms menu moves onto T25's radial widget (maintainer, 2026-11-09) | T25, T07 | Sonnet | One shared widget, same routing rules | not started |
 | T20 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 **Progress (2026-11-03).** Done: T01, T02, T05, T11, T15, T18, T19, T24. In progress:
@@ -1721,7 +1729,9 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   screen (left by default), and the target information (T43's wireframe, hull bar, distance and info lines) sits
   vertically centred on the opposite side. **A selects** (a category at the first level, the target at the second) and
   **B goes back** (to the first level, then closes the menu); X and Y take no part in the menu. While it is open the
-  rest of the view is out of focus (T44). The concept stop mocks this layout first; the options below fill it in.
+  rest of the view is out of focus (T44). The radial ring is one reusable control (`RadialMenu`, its pure layout and
+  focus model in a `RefCounted` with GUT tests), because the comms menu moves onto it in T46. The concept stop mocks this
+  layout first; the options below fill it in.
 - **Options to brainstorm and mock up:**
   1. **A target menu** on a held button (or the comms menu pattern of D54): categories (hostile fighters, capital ships, ships
      attacking me, my wing's targets, objectives, navigation and stations), each sorted by threat or distance and paged with the
@@ -2120,6 +2130,58 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
 - **GPU:** frame cost with the pull at full on oscar (labelled) and, when it is on hand, the main machine.
 - **Done when:** AC26, the tests pass, and a short frame sequence of the pull in `references/screenshots/Focus pull/` for
   the maintainer's look check (H).
+
+### M5-T45 Start screen and settings groups
+
+- **Why (maintainer, 2026-11-09):** the start screen carries the pad diagram and an empty right panel it does not need,
+  Sandbox and Missions split what is one list to the player, and Controls belongs inside Settings.
+- **Track:** A. **Agent:** Sonnet. **Depends on:** T02 (the menu kit), T03 (the settings screen), T04 (the controls
+  screen). Independent of T25.
+- **Start screen:** the sky backdrop as today and only the options list (`MenuFrame` with the pad and right panels hidden,
+  or a slimmer layout from the same kit): **New game**, **Load game** (shown greyed out; focus by D-pad, stick or mouse
+  skips it, A does nothing on it, until saves exist), **Free flight**, **Settings**, **Quit**. A selects and B goes back
+  everywhere, as today.
+- **New game** (for now, until a campaign exists): one list with the missions from `MissionCatalog` first (Civilian
+  escort) and then the sandbox scenes (Combat sandbox, Dogfight, Instructor route, Civilian ships); the highlighted
+  entry's briefing (a mission) or a one-line description (a sandbox scene, written in its scenario file) shows under the
+  list. The Sandbox page and its entry go away; the scenes stay as they are and keep their console ids.
+- **Free flight:** as today (open space with the nav buoys, encounters on or off from `Settings.encounters`).
+- **Settings:** a list of five groups, each opening its page. The schema's seven categories map onto them:
+  - **Gameplay:** `game` and `flight` (encounters, friendly fire, ram damage, flight assist at start, unlimited fuel).
+  - **Controls:** the controls screen of T04 (profiles, rebinding, unbind, save as) and the `controls` settings (invert
+    pitch, deadzones, target hold time, mouse speeds). This page keeps the pad diagram, since it highlights the button of
+    the action in focus.
+  - **Camera & HUD:** `camera` and `hud`.
+  - **Video:** `graphics`.
+  - **Audio:** `audio`.
+  The mapping lives in one table beside `SettingsSchema.CATEGORIES`; a test fails when a menu entry falls in no group.
+  Apply, revert and defaults work per page as today.
+- **Pause menu:** Resume, Restart, Settings (with Controls inside, the same five groups), Quit to menu; it keeps its pad
+  diagram and objectives panels.
+- **Not in this task:** a Load game screen and saves; new video settings (there is no window mode, V-sync or frame cap
+  setting today; the console's `window` command resizes) unless the maintainer asks for them.
+- **Tests first:** `test_settings_groups` (every menu entry in exactly one group, the order of groups); `test_front_end`
+  (the entries in order, Load game disabled and skipped by focus in both directions, New game lists the mission then the
+  four scenes and starts each, the text under the list follows the highlight, Settings, Controls and back with injected
+  `ui_*` events, no pad diagram or right panel on the start screen); `test_pause_menu` (four entries, Controls reached
+  through Settings); the existing settings and controls screen tests moved onto the groups.
+- **Done when:** AC27, the tests pass, `docs/playtest.md`'s menu section and `info.md` (if a command changes) updated,
+  and screenshots of the start screen, New game and the Settings groups in `references/screenshots/Start screen/` for
+  the maintainer's look check (H).
+
+### M5-T46 Radial comms menu
+
+- **Why (maintainer, 2026-11-09):** the comms menu on D-pad Right should be circular like the target menu.
+- **Track:** A. **Agent:** Sonnet. **Depends on:** T25 (the `RadialMenu` widget), T07 (the comms menu and its routing).
+- **What:** `CommsMenuView` draws `CommsMenu`'s page on T25's radial widget, vertically centred at the same side as the
+  target menu, the four wing orders at the four D-pad directions (up, right, down, left as today's picks 0-3).
+  `CommsMenu`, `UiCommand.comms_pick` and `comms_close` and the input rules are unchanged: the four directions pick, B
+  closes, 4 s closes it, the D-pad's flight actions and the target button do not fire while it is open. A later page of
+  mission replies lays out on the same ring.
+- **Tests:** the existing comms menu tests pass unchanged; a view test that each entry sits at its direction and the
+  highlight follows a pick.
+- **Done when:** AC28, the tests pass, a screenshot in `references/screenshots/Radial comms menu/` for the look check
+  (H).
 
 ### M5-T20 Integration, full suite, docs and acceptance
 
