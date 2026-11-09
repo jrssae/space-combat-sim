@@ -186,6 +186,18 @@ func test_a_bolt_never_hits_its_shooter() -> void:
 	assert_eq(hits.size(), 0)
 
 
+func test_a_bolt_whose_only_pair_is_its_shooter_is_not_walked() -> void:
+	var drone: TargetDrone = _drone(Vector3.ZERO)
+	# Launched inside its shooter's hull: the broad phase pairs them, the core drops the pair (M5-T32).
+	_bolt(Vector3(0.0, 0.0, 1.0), Vector3(0.0, 0.0, -BOLT_SPEED), Factions.EARTH_ALLIANCE, drone.get_instance_id())
+	_tick()
+	assert_gt(resolver.pairs_visited, 0, "the broad phase saw the pair")
+	assert_eq(resolver.projectiles_last_tick, 1, "one bolt in play")
+	assert_eq(resolver._bolt_index.size(), 0, "no candidate bolt: the shooter's own hull is dropped natively")
+	assert_eq(resolver.pairs_tested, 0)
+	assert_eq(hits.size(), 0)
+
+
 func test_a_bolt_never_hits_its_own_faction_or_a_neutral() -> void:
 	_drone(Vector3.ZERO)
 	_bolt(Vector3(0.0, 0.0, -100.0), Vector3(0.0, 0.0, BOLT_SPEED), Factions.RAIDERS)

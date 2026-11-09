@@ -1000,6 +1000,128 @@ impl ScsSimCore {
         out
     }
 
+    /// The hit resolver's bolts for one tick (M5-T32, L2): only the bolts with a live pair, in launch order, and what the
+    /// narrow phase reads of them and of the hulls they pair with. `hull_keys` (`bolt * hulls + hull`, ascending, the
+    /// hulls in `sweep_rows` order, as `pairs_core` gives them) lose the pairs of spent bolts and of a bolt with its own
+    /// shooter's hull; `rock_keys` (`bolt * rock_count + rock`) lose those of spent bolts. Returns `[index, id, start, end,
+    /// radius, shooter, faction, damage, color, hull_first, hull_next, rock_first, rock_next, hull_slots, rock_keys, beams,
+    /// beam_ids, owned, bolt_count, hull_body_ids, hull_ids, hull_positions, hull_velocities, hull_bases, hull_total]`: one
+    /// entry per bolt kept in the first thirteen (ranges into `hull_slots` and `rock_keys`); per kept hull pair the paired
+    /// hull's slot in the hull columns that follow (only hulls some kept pair names, bases three columns each); the beams'
+    /// indices and ids; the rows the core owns, the bolt count and the hull count.
+    #[func]
+    fn hit_bolts(&self, hull_keys: PackedInt64Array, rock_keys: PackedInt64Array, rock_count: i64) -> VarArray {
+        let b = &self.bolts;
+        let n = b.ids.len();
+        let hull_total = self.sweep_rows.len();
+        let hulls = (hull_total as i64).max(1);
+        let rocks = rock_count.max(1);
+        // Each bolt's run of kept keys in the filtered lists.
+        let mut kept_hulls: Vec<i32> = Vec::with_capacity(hull_keys.len());
+        let mut hull_range = vec![(0i32, 0i32); n];
+        let mut slot_of_hull: HashMap<usize, i32> = HashMap::new();
+        let mut hull_list: Vec<u32> = Vec::new();
+        for &key in hull_keys.as_slice() {
+            let i = (key / hulls) as usize;
+            let j = (key - i as i64 * hulls) as usize;
+            if i >= n || b.spent[i] {
+                continue;
+            }
+            let body = self
+                .sweep_rows
+                .get(j)
+                .map_or(0, |&r| self.rows.body_ids[r as usize]);
+            if body == b.shooters[i] {
+                continue;
+            }
+            if hull_range[i].1 == hull_range[i].0 {
+                hull_range[i] = (kept_hulls.len() as i32, kept_hulls.len() as i32);
+            }
+            let slot = *slot_of_hull.entry(j).or_insert_with(|| {
+                hull_list.push(self.sweep_rows[j]);
+                (hull_list.len() - 1) as i32
+            });
+            kept_hulls.push(slot);
+            hull_range[i].1 = kept_hulls.len() as i32;
+        }
+        let mut kept_rocks: Vec<i64> = Vec::with_capacity(rock_keys.len());
+        let mut rock_range = vec![(0i32, 0i32); n];
+        for &key in rock_keys.as_slice() {
+            let i = (key / rocks) as usize;
+            if i >= n || b.spent[i] {
+                continue;
+            }
+            if rock_range[i].1 == rock_range[i].0 {
+                rock_range[i] = (kept_rocks.len() as i32, kept_rocks.len() as i32);
+            }
+            kept_rocks.push(key);
+            rock_range[i].1 = kept_rocks.len() as i32;
+        }
+        let mut index = Vec::new();
+        let mut ids = Vec::new();
+        let mut starts = Vec::new();
+        let mut ends = Vec::new();
+        let mut radii = Vec::new();
+        let mut shooters = Vec::new();
+        let mut factions: Array<StringName> = Array::new();
+        let mut damage = Vec::new();
+        let mut colors = Vec::new();
+        let (mut hf, mut hn, mut rf, mut rn) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        for i in crate::bolt_kernels::launch_order(b) {
+            let i = i as usize;
+            let (h0, h1) = hull_range[i];
+            let (r0, r1) = rock_range[i];
+            if h0 == h1 && r0 == r1 {
+                continue;
+            }
+            index.push(i as i32);
+            ids.push(b.ids[i]);
+            starts.push(sub(b.positions[i], b.last_steps[i]));
+            ends.push(b.positions[i]);
+            radii.push(b.radii[i]);
+            shooters.push(b.shooters[i]);
+            factions.push(&self.factions[b.faction_ix[i] as usize]);
+            damage.push(b.damage[i]);
+            let c = b.colors[i];
+            colors.push(Color::from_rgba(c[0], c[1], c[2], c[3]));
+            hf.push(h0);
+            hn.push(h1);
+            rf.push(r0);
+            rn.push(r1);
+        }
+        let beams: Vec<i32> = (0..n)
+            .filter(|&i| b.kinds[i] == KIND_BEAM)
+            .map(|i| i as i32)
+            .collect();
+        let beam_ids: Vec<i64> = beams.iter().map(|&i| b.ids[i as usize]).collect();
+        let mut out = VarArray::new();
+        out.push(&PackedInt32Array::from(index.as_slice()).to_variant());
+        out.push(&PackedInt64Array::from(ids.as_slice()).to_variant());
+        out.push(&PackedVector3Array::from(starts.as_slice()).to_variant());
+        out.push(&PackedVector3Array::from(ends.as_slice()).to_variant());
+        out.push(&PackedFloat64Array::from(radii.as_slice()).to_variant());
+        out.push(&PackedInt64Array::from(shooters.as_slice()).to_variant());
+        out.push(&factions.to_variant());
+        out.push(&PackedFloat64Array::from(damage.as_slice()).to_variant());
+        out.push(&PackedColorArray::from(colors.as_slice()).to_variant());
+        out.push(&PackedInt32Array::from(hf.as_slice()).to_variant());
+        out.push(&PackedInt32Array::from(hn.as_slice()).to_variant());
+        out.push(&PackedInt32Array::from(rf.as_slice()).to_variant());
+        out.push(&PackedInt32Array::from(rn.as_slice()).to_variant());
+        out.push(&PackedInt32Array::from(kept_hulls.as_slice()).to_variant());
+        out.push(&PackedInt64Array::from(kept_rocks.as_slice()).to_variant());
+        out.push(&PackedInt32Array::from(beams.as_slice()).to_variant());
+        out.push(&PackedInt64Array::from(beam_ids.as_slice()).to_variant());
+        out.push(&(b.owned as i64).to_variant());
+        out.push(&(n as i64).to_variant());
+        let columns = self.columns_of(&hull_list);
+        for k in [0, 1, 3, 4, 6] {
+            out.push(&columns.at(k));
+        }
+        out.push(&(hull_total as i64).to_variant());
+        out
+    }
+
     /// The bolts as the scan's `incoming_fire` arrays: `[positions, velocities, factions, shooters]`.
     #[func]
     fn bolt_scan(&self) -> VarArray {

@@ -593,7 +593,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T29 | C | Generated asteroids and a sparse belt (D63, Q38): the `asteroids` generator, `BeltLayout`, `AsteroidBelt` as static rows | T27 | Opus | A new procgen asset and a placement seam M14 builds on | done |
 | T30 | B | Mission: Civilian escort with a cinematic intro (D62, Q36 to Q42), replacing Buoy defence and the ring | T29, T16, T17 | Opus | The random civilian, flee-and-resume in the native brains, three waves, writing and pacing | done |
 | T31 | - | L1: the flight batch's per-ship gather in native for row-commanded ships | T30 | Opus | The biggest measured lever (about 37 % of the tick at 1 000) | done |
-| T32 | - | L2: the hit resolver gets only bolts with live hostile pairs from native; per-hit hash and readout costs | T31 | Opus | 1.41 ms at 1 000; native pair filtering | not started |
+| T32 | - | L2: the hit resolver gets only bolts with live hostile pairs from native; per-hit hash and readout costs | T31 | Opus | 1.41 ms at 1 000; native pair filtering | done |
 | T33 | - | L3: the ram resolver's quick wins, then `RamTracker` in native | T32 | Opus | 1.20 ms at 1 000; string keys and full passes per tick | not started |
 | T34 | - | L5: the radar's dot buffers filled natively | T31 | Sonnet | Per-contact GDScript every frame | not started |
 | T35 | - | L8 and L9: the native allocation pass and the per-event member scans | T33 | Opus | Hash maps and Vec churn per sync; hits times members | not started |
@@ -1870,6 +1870,22 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   optional, measured first.
 - **Done when:** the hit stage at `battle 1000` drops from 1.41 ms, hits are identical to the recorded fixtures, numbers
   in the Done notes.
+- **Done (as built, 2026-11-08):**
+  - **Built:** `ScsSimCore.hit_bolts(hull_keys, rock_keys, rock_count)`: from the broad phase's keys it drops the pairs of
+    spent bolts and a bolt's pair with its own shooter's hull, and returns only the bolts left with a pair, in launch order,
+    with their columns, their pair ranges, and the columns of just the hulls those pairs name (the paired hull's slot per
+    pair). `HitResolver` walks those candidates; it no longer reads `bolt_columns` or `sweep_columns` (every bolt's and every
+    hull's arrays) per tick, nor resizes and fills bolt-sized range arrays. Per hit, the unused `hash([...])` seed and the
+    `last_hit` string go (`last_hit` is described when read). `pairs_core` is unchanged, so the broad-phase parity fixtures
+    hold; the faction test stays in GDScript per surviving pair (the core has no hostility table). The narrow phase stays in
+    GDScript: two pairs reach it per tick in the battle.
+  - **Measured** (`bench_quick.sh`, `battle` 1000, seed 1): hit stage median 1.30 ms (after T31) to 1.01 ms (P3: 1.41);
+    tick median 7.50 to 7.22 ms, p99 9.86 to 9.59 ms. In the battle about 400 bolts are in play, 30 broad-phase pairs, 2
+    pairs tested; the resolver's gather fell from about 0.25 ms to the candidates' columns.
+  - **Tests:** new `test_a_bolt_whose_only_pair_is_its_shooter_is_not_walked` (`test_hit_resolver`); `test_hit_resolver`,
+    `test_hit_scale`, `test_last_hit_breakup`, the turret files, `test_weapon_rows_battle` (recorded), `test_weapons`,
+    `test_bolt_rows`, `test_bolt_sync`, `test_hit_broad_phase`, `test_rocks_and_mines`, `test_flight_parity_fight`,
+    `test_row_commands`, `test_sim_core`, `test_ai_driver`: 180 passing with `GUT_SLOW=1`.
 
 ### M5-T33 L3: the ram resolver
 

@@ -4380,3 +4380,11 @@ column (only while braking), gravity from the core's sources. GDScript gathers t
 fresh combat commands, and any row ship whose command the core lost. Outputs are read by slot (`FlightBatch.row_of`). At
 `battle` 1000 the flight stage fell from 3.89 to 2.45 ms.
 
+### 18.18 The hit resolver walks candidate bolts only (T32, L2)
+
+`ScsSimCore.hit_bolts` takes the broad phase's hull and rock keys, drops spent bolts and each bolt's pair with its own shooter,
+and hands back only the bolts left with a pair (in launch order), their columns, and the columns of the hulls those pairs name.
+`HitResolver` no longer reads every bolt's and every hull's columns per tick. The faction test and the narrow phase stay in
+GDScript (a couple of pairs a tick in a battle). `last_hit` is described when read. At `battle` 1000 the hit stage fell from
+1.30 to 1.01 ms.
+
