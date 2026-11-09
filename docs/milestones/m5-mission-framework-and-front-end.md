@@ -521,9 +521,9 @@ removed or converted when M5 rebases onto `main` after M4.
 | AC22 | Performance block (Q35): each of L1, L2, L3, L5, L8, L9, L12 and L13 fixed as its task says; results unchanged (the recorded parity fixtures, and the same answers with 1 and 6 threads and with `sim_step` threaded and delayed); each task measures `bench battle 1000` before and after with `scripts/bench_quick.sh` on an idle machine, and the per-stage numbers go into its Done notes against Report P3's (flight 3.97 ms, hits 1.41 ms, rams 1.20 ms at 1 000) | A | |
 | AC23 | Sound and test clean-up (Q35): L6 (muzzle flashes and shot sounds culled by range, a ring buffer for the flash pool) and L7 (no audio node per pooled ship walked every frame) with work-count tests; L14's shared test steps fixture, the collapsed recordings, the always-pending balance tests out of the default run, and CI's Python job split off with cached assets, CI green | A | |
 | AC24 | Pause backdrop (T42): with the pause menu open, an outside camera flies a slow closed figure 8 around the player's ship behind the menu (`PauseOrbitPath` unit-tested: closed, smooth, never inside the hull's clearance, always looking at the ship); it blends in from the camera in use and back to it on Resume; the world stays paused; `settings.pause_backdrop` off gives the old still view; no player ship (dead, or mid-load) leaves the still view | A | |
-| AC25 | Target preview (T43): highlighting an entity in the target menu's second level shows its green wireframe beside the menu, slowly turning, with only the edges on the side facing the viewer (feature edges plus the silhouette, no flat-panel diagonals), its hull bar and distance, and the info lines T43 settles; `FeatureEdges` and `TargetPreviewModel` unit-tested; the preview's viewport renders nothing while the menu's second level is closed; opening it on the largest hull costs what T43 records | A | |
-| AC26 | Focus pull (T44): opening the target menu takes the 3D view slightly out of focus over 0.2 s and a pick (or B) brings it back over 0.2 s; reopening mid-pull reverses from where it is; HUD and menu stay sharp; `FocusPull` unit-tested; with the menu closed the blur is off and costs nothing; `settings.target_menu_blur` 0 turns it off | A | |
-| AC18 | (H) The maintainer plays it: menus feel right on the pad, the mission's pacing and lines, the cinematic, the civilian ships' look, the new guns, impacts and engines by ear; the pause backdrop's path and speed, the target preview's readability at 1080 and 4K, the focus pull's feel under fire | H | |
+| AC25 | Target preview (T43): highlighting an entity in the target menu's second level shows its green wireframe on the side of the screen opposite the radial menu, vertically centred, slowly turning, with only the edges on the side facing the viewer (feature edges plus the silhouette, no flat-panel diagonals), its hull bar and distance, and the info lines T43 settles; `FeatureEdges` and `TargetPreviewModel` unit-tested; the preview's viewport renders nothing while the menu's second level is closed; opening it on the largest hull costs what T43 records | A | |
+| AC26 | Focus pull (T44): opening the target menu takes everything except the target menu and the target information (the 3D view, the flight HUD, its brackets and radar) slightly out of focus over 0.2 s, so only the menu and the target information are sharp; closing it (a pick with A, or B out of the first level) brings the play view back into focus over 0.2 s; reopening mid-pull reverses from where it is; `FocusPull` unit-tested; with the menu closed the blur is off and costs nothing; `settings.target_menu_blur` 0 turns it off | A | |
+| AC18 | (H) The maintainer plays it: menus feel right on the pad, the mission's pacing and lines, the cinematic, the civilian ships' look, the new guns, impacts and engines by ear; the pause backdrop's path and speed, the radial target menu and the target preview's readability at 1080 and 4K, the focus pull's feel under fire | H | |
 
 ## Working rules for M5
 
@@ -608,8 +608,8 @@ whose trigger never arose). Update the column with each task's commit.
 | T40 | C | Civilian panel seams drawn from the show's references instead of the generic brick grid (maintainer, 2026-11-08) | T39, the maintainer's reference captures | controller | Per-ship seam layouts read off images; the look is (H) | not started |
 | T41 | - | Rock rams by the speed into the rock: a glancing scrape costs its closing speed, not the ship's whole speed (maintainer, 2026-11-08; done before T31) | T29 | controller | A small change to the ram rule for rocks | done |
 | T42 | A | Pause backdrop: a slow figure-8 camera around the Starfury behind the pause menu (maintainer, 2026-11-08) | T02, T08 | Sonnet | A camera path that runs while the tree is paused; the look is (H) | not started |
-| T43 | A | Target preview: a turning green wireframe of the highlighted entity beside the target menu's second level, with hull bar and distance (maintainer, 2026-11-08) | T25 | Opus | Hidden-line wireframe in a small viewport, edges from the mesh, an info panel kept lean | not started |
-| T44 | A | Focus pull: the 3D view goes slightly out of focus over 0.2 s when the target menu opens and refocuses on a pick (maintainer, 2026-11-08) | T25 | Sonnet | A short tweened blur on the 3D view only, free when closed | not started |
+| T43 | A | Target preview: a turning green wireframe of the highlighted entity on the side of the screen opposite the radial target menu, with hull bar and distance (maintainer, 2026-11-08) | T25 | Opus | Hidden-line wireframe in a small viewport, edges from the mesh, an info panel kept lean | not started |
+| T44 | A | Focus pull: while the target menu is open only it and the target information are in focus; the play view and HUD blur over 0.2 s and come back over 0.2 s when it closes (maintainer, 2026-11-08, corrected 2026-11-09) | T25 | Sonnet | A short tweened screen blur between the HUD and the menu layers, free when closed | not started |
 | T20 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 **Progress (2026-11-03).** Done: T01, T02, T05, T11, T15, T18, T19, T24. In progress:
@@ -1717,10 +1717,15 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
 - **First: a concept stop (H).** Before any code, the task writes the options below (and any better ones it finds in other games'
   targeting UX: flight sims, space sims, RTS selection), builds a mockup sheet of the menu and HUD at 300 ships, and stops with
   `NEEDS_CONTEXT: targeting concepts ready` for the maintainer to pick. Then it builds the chosen set, tests first.
+- **The maintainer's layout (2026-11-09):** the target menu is circular (radial), vertically centred at one side of the
+  screen (left by default), and the target information (T43's wireframe, hull bar, distance and info lines) sits
+  vertically centred on the opposite side. **A selects** (a category at the first level, the target at the second) and
+  **B goes back** (to the first level, then closes the menu); X and Y take no part in the menu. While it is open the
+  rest of the view is out of focus (T44). The concept stop mocks this layout first; the options below fill it in.
 - **Options to brainstorm and mock up:**
   1. **A target menu** on a held button (or the comms menu pattern of D54): categories (hostile fighters, capital ships, ships
      attacking me, my wing's targets, objectives, navigation and stations), each sorted by threat or distance and paged with the
-     D-pad; picking an entry selects it. A radial layout for the pad is an alternative to a list.
+     D-pad; picking an entry selects it. Radial, per the maintainer's layout above.
   2. **Smart target buttons:** "who is shooting me" (the nearest attacker, from the hit log), "my leader's target" and "my wing's
      targets", "the objective", "the ship in my reticle" (exists as `target_ahead`), "the previous target" toggle.
   3. **Scoped cycling:** cycle within the current category only (hostiles only, fighters only), ordered by threat instead of
@@ -2041,8 +2046,8 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   at a glance what the pick is.
 - **Track:** A. **Agent:** Opus. **Depends on:** T25 (the menu and its second level; if T25's concept stop picks a layout
   without a second level, this task follows the list the pilot scrolls through to pick a ship).
-- **The look.** A panel to one side of the menu (the side away from the screen's centre, so it never covers the reticle),
-  about 256 px square at 1080 lines and scaled with the UI at 4K. The entity in the HUD's green, drawn as lines on a dark
+- **The look.** A panel vertically centred on the side of the screen opposite T25's radial menu (the menu on the left,
+  the panel on the right by default), clear of the reticle, the wireframe about 256 px square at 1080 lines and scaled with the UI at 4K. The entity in the HUD's green, drawn as lines on a dark
   ground, turning slowly (about 15 degrees per second) about its own up axis with a fixed view from about 20 degrees
   above, framed by its bounding box so a Starfury and a Saturn 8 both fill the panel. Only the lines on the side facing
   the viewer show (hidden-line removal); the far side's lines are hidden, not dimmed.
@@ -2090,29 +2095,28 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
 
 ### M5-T44 Focus pull when the target menu opens
 
-- **Why (maintainer, 2026-11-08):** opening the target menu should feel like the pilot's eye moving to the display: the
-  view behind it goes slightly out of focus over 0.2 s, and comes back into focus when the pick is made.
-- **Track:** A. **Agent:** Sonnet. **Depends on:** T25 (the menu's open and close).
-- **What:** on open, the 3D view eases from sharp to a slight blur over 0.2 s; on a pick, or on B or the timeout closing
-  the menu, it eases back to sharp over 0.2 s. A reopen during a pull reverses from where it is, never jumps. The HUD, the
-  menu and T43's preview stay sharp (only the 3D view blurs), and "slightly" means a small radius: ships stay readable
-  as shapes, because the menu is used under fire and the world does not pause.
-- **How:** a pure `FocusPull` (`RefCounted`) gives the blur amount from the time since the last open or close (smoothstep,
-  reversible mid-way). The blur itself is the cheapest of: the active camera's `CameraAttributesPractical` far and near
-  depth-of-field with the focus distance pulled in (Forward+ only, which is the only renderer we ship), or a small
-  separable blur as a compositor effect beside `MotionBlurEffect` in `PostEffects`. The task measures both on the GPU and
-  keeps the one that looks even across cockpit and chase views (depth of field can leave the cockpit interior sharp
-  or blur it, depending on the near range; the compositor blur treats every pixel alike). The pull runs on frame
-  `delta`; with the menu closed and the pull at rest the effect is off, not set to zero, so it costs nothing.
-- **Interpretation to confirm at the look check (H):** "refocus on selection" is built as "back into focus when the pick
-  is made". The other reading, that while the menu is open the focus sits on the highlighted entity (it sharp, the rest
-  soft, the focus distance following the highlight), is an option on the depth-of-field path and is shown beside it at
-  the look check if the depth-of-field path is kept.
+- **Why (maintainer, 2026-11-08, corrected 2026-11-09):** while the target menu is open, the play view goes out of
+  focus and the target menu and the target information (T43's wireframe and its lines) are the only things in focus,
+  so the eye goes to the pick.
+- **Track:** A. **Agent:** Sonnet. **Depends on:** T25 (the radial menu, its open and close), T43 (the target
+  information panel, which must sit above the blur).
+- **What:** on open, everything except the menu and the target information eases from sharp to slightly out of focus
+  over 0.2 s: the 3D view and the flight HUD alike (readouts, brackets, radar, wing list). On close (A picks the target,
+  or B backs out of the first level) it eases back to sharp over 0.2 s. A reopen during a pull reverses from where it
+  is, never jumps. "Slightly" means a small radius and perhaps a light dim: ships stay readable as shapes, because the
+  menu is used under fire and the world does not pause.
+- **How:** a pure `FocusPull` (`RefCounted`) gives the blur amount from the time since the last open or close
+  (smoothstep, reversible mid-way). The blur is one full-screen `ColorRect` with a screen-reading blur shader (mipmapped
+  screen texture, or two separable passes if the mips look blocky) on a `CanvasLayer` between the HUD's layers and the
+  target menu's, so it blurs everything drawn under it (the 3D view and the HUD) and nothing drawn over it (the menu and
+  the target information). Depth of field is not used: it would blur only the 3D view and leave the HUD sharp. The pull
+  runs on frame `delta`; with the menu closed and the pull at rest the rect is hidden, so it costs nothing. The console
+  and the pause menu draw above it.
 - **Settings and console:** `settings.target_menu_blur` (0 to 1, `hud`, default 0.35; 0 is off); a `focus` key on the
-  `post` provider (the blur amount now); `info.md` if a command is added.
+  target menu's provider (the blur amount now); `info.md` if a command is added.
 - **Tests first:** `test_focus_pull` (0 to full in 0.2 s, back in 0.2 s, a reversal from the middle, rest states); an
-  integration test that opening and closing the menu turns the effect on and then off again, and that the setting at 0
-  never turns it on.
+  integration test that opening and closing the menu shows and hides the blur, that the blur layer sits above every HUD
+  layer and below the menu and the target information, and that the setting at 0 never shows it.
 - **GPU:** frame cost with the pull at full on oscar (labelled) and, when it is on hand, the main machine.
 - **Done when:** AC26, the tests pass, and a short frame sequence of the pull in `references/screenshots/Focus pull/` for
   the maintainer's look check (H).
