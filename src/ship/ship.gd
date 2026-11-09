@@ -400,7 +400,7 @@ func reset_to(xform: Transform3D) -> void:
 		_output = _idle_output()
 	if _batch != null:
 		_batch.reset_assist(self)
-	_stale_tick = Engine.get_physics_frames()
+	_mark_batch_row_stale()
 	_output_tick = -1
 	reset_physics_interpolation()
 
@@ -424,7 +424,7 @@ func unpark_from_tier(xform: Transform3D, velocity: Vector3, spin: Vector3, pod_
 	linear_velocity = velocity
 	angular_velocity = spin
 	set_assist_state(pod_yaw)
-	_stale_tick = Engine.get_physics_frames()
+	_mark_batch_row_stale()
 	_output_tick = -1
 	reset_physics_interpolation()
 
@@ -1036,6 +1036,12 @@ func _prepare_command(delta: float, to_body: Basis) -> void:
 		_flight.face_dir_b = to_body * targeting.selected_offset()  # what the brake faces (§5.5); zero = no target
 		_update_tracking(delta, to_body)
 	_prepared_tick = Engine.get_physics_frames()
+
+
+# A teleport after this frame's step leaves that step's row behind; one before it is flown from the new pose.
+func _mark_batch_row_stale() -> void:
+	if _batch != null and is_instance_valid(_batch) and _batch.tick == Engine.get_physics_frames():
+		_stale_tick = _batch.tick
 
 
 # Whether the batch's outputs hold a row for this ship from its latest step.
