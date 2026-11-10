@@ -19,8 +19,8 @@ milestone's scope. Tasks are ordered inside each track; each is one PR-sized uni
 
 Put the game in the real Epsilon Eridani system at true scale. The local space becomes a moving, free-falling frame: it follows
 the player's orbit, so local physics feels only the tidal residual of gravity and float32 speeds stay small (the velocity rebase).
-The star, Epsilon III and its moons move on Kepler rails, and every ship, bolt and piece of debris falls under restricted n-body
-gravity, so a bolt fired near the planet curves. Flight assist, the brake and the HUD read speed against the dominant body or
+The star, Epsilon III and its moons move on Kepler rails, and every ship, bolt and piece of debris falls toward the strongest
+nearby body, so a bolt fired near the planet curves. Flight assist, the brake and the HUD read speed against the dominant body or
 station instead of the frame. The planet and the sun are drawn in a scaled-space layer with an atmosphere, lit from the true sun
 direction, and stay visible from orbit. The first jumpgate is built, with its vortex, and broadcasts to 1 000 km. M4's gravity
 stand-in and the rebase cascade (L4) go. M7 puts Babylon 5 into this space, and M9 (time warp) and M11 (hyperspace) build on the
@@ -31,19 +31,20 @@ frame without rewriting it.
 | Q | Question | Proposed answer (planner's default, until the maintainer answers) | Answer |
 |---|---|---|---|
 | Q1 | Which bodies make up the Epsilon system in M6, and their sizes and orbits? | The star (Epsilon Eridani, K2V, 0.82 solar masses, already in `data/star_systems.json`), **Epsilon III** and **its moons**, nothing else; other planets wait for M9's travel. Epsilon III's radius, mass, orbit and moon count from the maintainer's references, or an Earth-sized planet with one large moon if there are none | open |
-| Q2 | Where is Babylon 5? | At a Lagrange point (L4 or L5) of Epsilon III and its large moon, as the show's background puts it, if the maintainer confirms; else a circular orbit around Epsilon III with the planet filling a large part of the view. M6 places the station's stand-in there; M7 replaces it | open |
+| Q2 | Where is Babylon 5? | At a Lagrange point (L4 or L5) of Epsilon III and its large moon, as the show's background puts it, if the maintainer confirms; else a circular orbit around Epsilon III with the planet filling a large part of the view. M6 places the station's stand-in there; M7 replaces it | **L5 of Epsilon III and its moon**, on a rail (D65). The system's sizes and distances may be tuned so the planet looks from the station as it does in the show; the goal is fun, not precision (maintainer, 2026-11-10) |
 | Q3 | Where is the jumpgate? | Near the station: about 50 km from it, in the same orbit, so a ship from the gate reaches the station in a few minutes and both broadcast to each other | open |
-| Q4 | The hard 9 999 m/s speed clamp in `Ship` | **Drop the clamp**; keep only the thrust fade (`SpeedGovernor.thrust_gain`), measured against the dominant body (Q5). A body falling toward the star may then go as fast as physics says | open |
-| Q5 | What is flight assist's "speed" under gravity? | **Relative to the HUD's reference** (Q6): the assist's safe speed, the brake's all stop and the thrust fade all read the ship's velocity minus the reference's. A ship that brakes to a stop in orbit beside the station stays beside it; a ship that brakes far from anything stops against the dominant body | open |
-| Q6 | The HUD's reference point (the launch point today) | Set by the mission (a station, bay, gate or body), else the nearest of the station, the gate and the dominant body, its name shown beside `REF`; near a body the HUD also shows altitude | open |
+| Q4 | The hard 9 999 m/s speed clamp in `Ship` | **Drop the clamp**; keep only the thrust fade (`SpeedGovernor.thrust_gain`), measured against the dominant body (Q5). A body falling toward the star may then go as fast as physics says | **Keep a cap, measured against the reference.** Against a planet or moon, speed is read against the circular orbit at the ship's altitude, so a ship in a steady orbit reads about 0 and the 9 999 m/s cap and fade apply on top of the orbit; against a place (station, gate) as today (maintainer, 2026-11-10; D67) |
+| Q5 | What is flight assist's "speed" under gravity? | **Relative to the HUD's reference** (Q6): the assist's safe speed, the brake's all stop and the thrust fade all read the ship's velocity minus the reference's. A ship that brakes to a stop in orbit beside the station stays beside it; a ship that brakes far from anything stops against the dominant body | **Against the reference**, as T01's draft; against a planet or moon the brake **settles the ship into a circular orbit** at its altitude instead of stopping it against the body's centre (maintainer, 2026-11-10; D67) |
+| Q6 | The HUD's reference point (the launch point today) | Set by the mission (a station, bay, gate or body), else the nearest of the station, the gate and the dominant body, its name shown beside `REF`; near a body the HUD also shows altitude | **T01's draft** (below), accepted (maintainer, 2026-11-10) |
 | Q7 | Where free flight and the sandbox scenarios start | Beside the station's stand-in in its orbit (Q2), with the planet in view; the old origin-at-rest scenarios keep their layout around that point | open |
-| Q8 | The velocity rebase threshold | 200 m/s relative to the frame (architecture §14.1), with the same end-of-tick interpolation rule as the position rebase | open |
+| Q8 | The velocity rebase threshold | 200 m/s relative to the frame (architecture §14.1), with the same end-of-tick interpolation rule as the position rebase | **2 000 m/s**, the frame riding its anchor below it (T01's D64, accepted by the maintainer, 2026-11-10) |
 | Q9 | The start epoch (the planet's phase, day or night under the station) | Each scenario sets an epoch; free flight seeds one per run, as it seeds its encounters | open |
 | Q10 | References for Epsilon III, its moons and the sun's look | The maintainer's references (`docs/design-references.md`; per the standing rule, colours and textures from show images); without them, a rocky planet with thin clouds and a blue limb | open |
 | Q11 | References for the jumpgate and its vortex | The maintainer's references; the jumpgate gets a section in `docs/design-references.md` before its generator starts (T13) | open |
 | Q12 | M5's `JumpArrival` (a flash where raiders appear) | It stays for open jump points far from the gate; ships that use the gate come through the vortex (T14) | open |
 
-### T01's drafts for Q4 to Q6 and Q8 (drafts, 2026-11-10: they wait for the maintainer; the Answer column stays `open`)
+### T01's drafts for Q4 to Q6 and Q8 (2026-11-10; the maintainer's answers are in the table above: Q6 and Q8 as drafted, Q4
+and Q5 changed to read speed against the local orbit near a body)
 
 - **Q4 (draft): drop the hard clamp** in `Ship`, the native flight step and the tier. It clamps a frame speed, which a
   velocity rebase changes, and 9 999 m/s is below escape speed in low orbit (10 851 m/s). Keep the thrust fade, read against the
@@ -72,7 +73,7 @@ In:
 - **The moving frame**: `WorldFrame` propagates its origin as a free-falling test particle in 64-bit; the **velocity rebase** on
   (Q8), over every body, row, bolt, debris chunk, particle system and interpolated node; the rebase cascade's cost fixed (L4).
 - **Kepler rails and gravity**: one ephemeris in the native core (bodies on Kepler orbits, moons around planets, seekable in time)
-  and restricted n-body gravity, applied as the tidal residual to ships, the low-attention tier's rows, bolts and debris; the brake
+  and gravity from the strongest nearby body (D66), applied as the tidal residual to ships, the low-attention tier's rows, bolts and debris; the brake
   and the AI get it as feed-forward.
 - **Star system data**: `data/star_systems.json` grows bodies with their elements (Q1 to Q3); scenarios spawn relative to a body,
   a station or an orbit, and set an epoch (Q7, Q9).
@@ -156,11 +157,19 @@ which changes the same native rows and rebase path:
   T02 decides), never through a second implementation: M4's L13 finding (constants mirrored by hand) is not repeated.
 - The kernel answers in 64-bit **relative to a point it is given** (the anchor), so no caller subtracts two barycentric
   numbers of 1e11 m (a step of 1.5e-5 m there).
-- What is not on a rail: the anchor, anything at a Lagrange point (the station, if Q2 says so), ships and debris. They are
-  test particles. A station at L4 or L5 is seeded at the point with the point's velocity and librates around it (stable while
-  the moon is under 1/26 of the planet's mass). Budgets in D64.
+- **The station is on a rail** (Q2): at L5 it has its moon's elements with the mean anomaly 60 degrees behind, so it moves
+  exactly like the moon and nothing drifts against it. The ephemeris places a point on another body's orbit at a phase offset.
+- What is not on a rail: ships and debris. They are test particles. A frame's anchor is a test particle only when it is not a
+  place on a rail (a scenario's point in a low orbit). Budgets in D64.
 
-### D66 Restricted n-body gravity on everything
+### D66 Gravity from the strongest nearby body, on everything
+
+- **Only the strongest nearby body pulls** (maintainer, 2026-11-10): each body has a zone where its pull is at least
+  `a_min` = **0.5 m/s^2**, radius `sqrt(GM / a_min)` (about 28 000 km for an Earth-like planet, about 3 100 km for a Moon-like
+  moon). Outside every zone nothing pulls; inside a moon's zone the moon takes over from its planet. The pull fades smoothly to
+  zero over a band at the zone's edge, so crossing it is no jolt. The star never pulls near a planet: the frame falls with it.
+- The residual a frame feels is `g(x) - g(anchor)`, both under the same rule. Babylon 5 at L5 sits outside every zone, so the
+  space around it has no pull at all and a ship holds station there with no effort; gravity is felt near the planet and moons.
 
 - Ships: the native flight step already takes `env_accel` per ship (world frame); it gets the tidal residual instead of zero.
 - The low-attention tier: `tier_set_gravity`'s point sources (M4's moon stand-in) become the ephemeris's bodies.
@@ -175,7 +184,9 @@ which changes the same native rows and rebase path:
 ### D67 Flying under gravity
 
 - The speed clamp and the thrust fade follow Q4; the assist's safe speed and the brake's all stop are measured against the HUD's
-  reference (Q5, Q6; T01's drafts are under the planning questions). A pure `ReferenceFrame` (`RefCounted`) gives the
+  reference (Q5, Q6). **Against a planet or moon, the rest velocity is the circular orbit's velocity at the ship's position**
+  (prograde, in the orbit's plane), so a steady orbit reads about 0, the 9 999 m/s cap applies on top of it, climbing or escaping
+  is just thrust, and the brake settles the ship into that circular orbit. Against a place it is the place's velocity. A pure `ReferenceFrame` (`RefCounted`) gives the
   reference's position, velocity and acceleration in the local frame each tick, from a node, a station, a gate or a body.
 - The native flight step takes the rest velocity beside `env_accel` and hands `v - v_rest` to the brake, the fade and the cap;
   the brains get their velocities with the World's rest velocity taken off, at the one place they are fed.
@@ -255,14 +266,15 @@ which changes the same native rows and rebase path:
   added to `tests/quick_suite.txt` in the same commit. Test first for the pure classes (`ReferenceFrame`, the system loader, the
   scaled-space placement, the vortex's timing).
 - **Screenshots** to `references/screenshots/<request>/` in the main checkout. Visual judgement is (H).
-- After each task: its row says `done` with its Done notes, in the same commit; push `m6` (the maintainer's rule from M5).
+- After each task: its row says `done` with its Done notes, in the same commit. Do not push: the maintainer handles the
+  remotes (`CLAUDE.md`; 2026-11-10, replacing M5's push-after-each-task rule).
 
 ## Task breakdown (ordered)
 
 | Task | Track | Title | Depends on | Agent | Why | Status |
 |---|---|---|---|---|---|---|
-| T01 | A | Moving-frame audit and design: every World-frame velocity, the rebase order, the error budgets, §19's draft (early start) | - | Fable | Cross-cutting invariants over GDScript, Jolt and the native rows; mistakes surface late | in progress |
-| T02 | A | Ephemeris and gravity kernel: Kepler rails, the body tree, n-body and tidal pull, the integrator (early start, new native files) | T01 | Fable | Precise, deterministic numerics that M9 and M11 reuse | not started |
+| T01 | A | Moving-frame audit and design: every World-frame velocity, the rebase order, the error budgets, §19's draft (early start) | - | Fable | Cross-cutting invariants over GDScript, Jolt and the native rows; mistakes surface late | done |
+| T02 | A | Ephemeris and gravity kernel: Kepler rails, the body tree, the strongest body's pull and the tidal residual, the integrator (early start, new native files) | T01 | Fable | Precise, deterministic numerics that M9 and M11 reuse | in progress |
 | T03 | B | Star system data: bodies and elements in `data/star_systems.json`, the loader, the `system` provider | T02, Q1 to Q3 | Sonnet | Data and validation on a clear format | not started |
 | T04 | A | The free-falling frame: the origin as a test particle, `environment_accel` from the ephemeris | T02, T03 | Opus | Touches the tick order and every ship's force step | not started |
 | T05 | A | The velocity rebase over every body, row, bolt, chunk, particle and interpolated node | T04 | Fable | The riskiest change of the milestone; every moving thing and the parity recordings | not started |
@@ -295,7 +307,8 @@ which changes the same native rows and rebase path:
   audit table.
 - **Done when:** the audit table covers every file that reads `linear_velocity`, a row velocity or `origin`; the maintainer has
   read the decisions and the drafts for Q4 to Q6.
-- **Done (2026-11-10, written; `in progress` until the maintainer has read it):**
+- **Done (2026-11-10; the maintainer read it the same day and accepted the anchor and Q8, answered Q4 to Q6 and Q2, and
+  ruled out Doppler; the answers changed D65 to D67 as above):**
   - The audit is `docs/research/m6-moving-frame.md`: every file that reads `linear_velocity`, a row velocity or `origin`, with
     what a boost does to it; the absolute-velocity readers; the places assumed at rest; the single-frame globals; the numbers.
   - D64, D65, D67 and D71 are revised. Decided: the kick-then-drift integrator at the physics tick with a half-kick start; one
@@ -319,6 +332,8 @@ which changes the same native rows and rebase path:
 - **Notes:** elliptic orbits only (e < 1), solved by Newton's method with a fixed iteration rule so every run gives the same bits;
   64-bit throughout; the residual computed as an exact difference. The pull over rows is a pure function over a frozen list of
   body positions, so it runs in the worker job or on the main thread with the same result. Test values from closed-form orbits.
+  The pull follows D66 (the strongest body in whose zone a point lies, `a_min` a parameter, the fade at the edge); a point can
+  be placed on another body's orbit at a phase offset (the L5 rail).
 - **Tests:** the Rust tests and `test_ephemeris.gd`: quick.
 - **Done when:** AC3 in Rust; the kernel holds no engine type (the guard test).
 
