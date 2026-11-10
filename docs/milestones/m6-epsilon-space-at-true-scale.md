@@ -5,7 +5,8 @@
 **Status:** planned 2026-11-10, ahead of time; **not started.** M5 is the current milestone until the maintainer accepts it.
 **2026-11-10 (maintainer):** branch `m6` was cut from `m5` at `5d81686`, with `main`'s M6 and M7 plans merged in, so the early
 start (below) runs on it; `m6` takes M5's later work by merging `m5` into it (merges, no rebase, as M5's Q27). The rest of M6 waits
-as the early-start section says. Every task is `not started`. The planning questions (Q1 to Q12) are open: the proposed answers below are the
+as the early-start section says. T01 is `in progress` (its audit and decisions are written and wait for the maintainer to
+read them); every other task is `not started`. The planning questions (Q1 to Q12) are open: the proposed answers below are the
 planner's defaults, and each task that depends on one waits for the maintainer's answer. This plan was written against `m5` at
 `5d81686`, so it names M5 files (§18, M5-T21, `JumpArrival`) that reach `main` when M5 merges.
 
@@ -41,6 +42,29 @@ frame without rewriting it.
 | Q10 | References for Epsilon III, its moons and the sun's look | The maintainer's references (`docs/design-references.md`; per the standing rule, colours and textures from show images); without them, a rocky planet with thin clouds and a blue limb | open |
 | Q11 | References for the jumpgate and its vortex | The maintainer's references; the jumpgate gets a section in `docs/design-references.md` before its generator starts (T13) | open |
 | Q12 | M5's `JumpArrival` (a flash where raiders appear) | It stays for open jump points far from the gate; ships that use the gate come through the vortex (T14) | open |
+
+### T01's drafts for Q4 to Q6 and Q8 (drafts, 2026-11-10: they wait for the maintainer; the Answer column stays `open`)
+
+- **Q4 (draft): drop the hard clamp** in `Ship`, the native flight step and the tier. It clamps a frame speed, which a
+  velocity rebase changes, and 9 999 m/s is below escape speed in low orbit (10 851 m/s). Keep the thrust fade, read against the
+  reference (Q5), **but only while the reference is a place or an object**. Against a body there is no fade and no assist cap:
+  in a 400 km orbit (7 673 m/s) the fade would leave 64 % of the thrust and none above 9 999 m/s, and the assist's 5 000 m/s cap
+  would cancel every prograde burn, so AC5's low orbit could not be held. Jolt's 10 000 m/s cap stays as a backstop that the
+  velocity rebase keeps out of reach.
+- **Q5 (draft): yes, against the reference.** Each ship has a rest velocity (the reference's velocity in the local frame); the
+  safe speed, the all stop and the fade read `v - v_rest`. The brake holds station on the reference: it also gets the
+  reference's own acceleration as feed-forward, beside `env_accel`. The AI uses the World's rest velocity (the anchor's), fed
+  once where the brains get their velocities, so "stop", cruise and run-up speeds mean speed against the place and no brain
+  changes. Holding the brake far from any place stops the ship against the body, which is a de-orbit burn; the HUD's `REF`
+  name says what it will stop against.
+- **Q6 (draft):** the mission's reference if it sets one; else the nearest place (station, gate) whose broadcast range holds the
+  ship, with a tenth of hysteresis as the far dots have; else the dominant body (the largest pull at the ship). The altitude
+  shows while a body is the reference or the ship is within one radius of its surface. The speed readout jumps when the
+  reference changes (0.5 km/s against the station, 7.7 km/s against the planet); the name beside `REF` is what explains it.
+- **Q8 (T01 recommends a different answer): 2 000 m/s, and the frame rides the anchor below it** (D64). At 200 m/s a Starfury
+  triggers a rebase after 7 s of thrust, and from then on every rock, buoy, station and stored place moves each tick. float32
+  does not need it: at 2 000 m/s the smallest acceleration a velocity can show is 7.3e-3 m/s^2, eight times finer than the
+  game's 9 999 m/s today. Numbers in `docs/research/m6-moving-frame.md`, section 5.
 
 ## Scope
 
@@ -81,32 +105,60 @@ which changes the same native rows and rebase path:
 
 ## Design (to go into `docs/architecture.md` §19)
 
-### D64 The moving, free-falling frame
+### D64 The moving, free-falling frame (revised by T01; evidence in `docs/research/m6-moving-frame.md`)
 
-- `WorldFrame.origin` (`UniversePos`) and `origin_velocity` (64-bit) are propagated each tick as a test particle under the system's
-  gravity (leapfrog, the same integrator as T02's, sim time from `SimClock`). Local physics then feels only the tidal residual,
-  `g(origin + x) - g(origin)`, computed in 64-bit as an exact difference, never linearised.
-- **Velocity rebase** when the focus's speed relative to the frame passes the threshold (Q8): `v` is subtracted from every body's
-  `linear_velocity`, every native row's velocity (ships, tier rows, bolts), every projectile, debris chunk and particle emitter, and
-  `origin_velocity += v`. Same tick slot as the position rebase (priority 0 in `World._physics_process`), same end-of-tick reset of
-  the interpolation, and both rebases may fall in one tick (position first).
-- **Velocities that outlive a tick** are relative to a reference, never to the frame: the HUD's reference, the assist and brake
-  (D67), the AI's "stop" and station keeping, the mission triggers on speed. T01 lists every place that reads a World-frame
-  velocity as absolute; each one is fixed in T05 or named as harmless.
-- The rebase cascade (L4, `docs/research/m4-full-review.md`): the statics shift natively and the cached `Solid` shifts in place (a
-  pure shift is not a new version), and hidden pool ships are skipped.
+- **The anchor.** Each `WorldFrame` has one anchor: the free-falling point its scene is built around (the station's point; a
+  point on an orbit for a scenario with no station). It is a 64-bit test particle in the native core. **A `UniversePos` is
+  relative to its World's anchor**, in axes that do not rotate. So every stored place (waypoints, posts, trigger points, wave
+  anchors) and every static row stays valid with no change: a barycentric place would fall 580 m behind per tick. Barycentric
+  positions live only in the ephemeris.
+- **The frame rides its anchor**: `origin_velocity` (64-bit, against the anchor) is zero and `origin` moves only by position
+  rebases, as today. Local physics feels `g(x) - g(anchor)`, an exact 64-bit difference. Any frame acceleration gives the same
+  universe motion, so this is as honest as falling at the origin, and rocks, buoys and the station stay still in Jolt.
+- **Velocity rebase** (Q8, 2 000 m/s proposed): when the focus passes the threshold against the frame, boost onto the focus:
+  `dv` comes off every body's `linear_velocity`, every row velocity in the core (ships, tier rows and their cruise, bolts),
+  every projectile, chunk, wreck, explosion, emitter and far flash, and off `RamTracker`'s remembered velocities;
+  `origin_velocity += dv`. The frame then falls freely at its origin, `origin` moves each tick, and anchor-tied things (static
+  rows natively by one vector, the few anchor-tied nodes) move with the anchor. When the focus is back under half the threshold
+  against the anchor, boost onto the anchor and ride again.
+- **A boost is exact and needs no interpolation reset**: no position jumps. Universe position and velocity of everything are
+  unchanged (T05's test).
+- **The integrator**: kick, then drift, once per physics tick in 64-bit: `v += g dt; x += v dt`. It is leapfrog with the
+  velocity held half a step behind, symplectic (no energy drift, phase error about `(n dt)^2 / 24`), and it is the step Jolt
+  and the tier already take, so a body's universe motion does not depend on which frame carries it. An orbit is started half
+  a kick back (`v0 - g dt / 2`), or it is 256 m off mid-orbit. One fixed step, fixed operation order, no adaptive substeps:
+  the same bits on every run. M9's warp composes the same `kick` and `drift` with its own step.
+- **One gravity sample per tick.** A first slot (before the tier director at -12) takes the tick's time once, places the
+  bodies against the anchor and fixes the frame's acceleration. Every mover of the tick uses that sample, and the frame's own
+  step uses it too, last in the tick (after `sync_out`), so the frame moves with Jolt. Needed because the flight batch (-1)
+  applies forces before the rebase slot, and `SimClock` advances at priority 0.
+- **The tick**: sample; core sync (-11); drivers, brains, flight batch (-10 to -1); `World` at 0: position rebase, then
+  velocity rebase (both may fall in one tick; the core's `shift` then its new `boost`, both bump `rows_version`); bolts (1);
+  targeting, hits, rams, missions (100 to 400); the settler (position rebases only); `sync_out`; the frame's step.
+- **Speeds are read against a rest velocity**, never the frame: `v_rest` is the reference's velocity in the local frame (D67),
+  zero while the frame rides the anchor and the anchor is the reference, so today's results are bit-identical there. T01's
+  note lists every reader (section 3); T05 boosts the holders, T08 changes the readers.
+- **Error budgets** (a 400 km circular orbit of an Earth-sized planet, 5 545 s, 60 Hz). AC1: an empty frame within **0.05 m**
+  of the analytic orbit at every tick (measured 0.005 m) and within 0.1 m at the end of an `e` 0.3 orbit; energy (the velocity brought to the tick by half a kick) within 1e-8 with no trend; that one is a budget, not yet measured. AC4: a ship coasting along the track from the station's stand-in stays within **0.5 m** of a 64-bit run of
+  the same start at up to 3 km, and 5 m at 10 km (measured 0.08 m and 1.6 m). Both tests use this low orbit from a fixture
+  system whatever Q2 says: one orbit at a moon's distance is 1.4e8 ticks. AC4's ship is placed along the track: a ship 1 km
+  above the station is on another orbit and ends 37.7 km behind.
+- The rebase cascade (L4): the statics shift natively and the cached `Solid` shifts in place (a pure shift is not a new
+  version), and hidden pool ships are skipped. The same in-place shift carries the statics while the frame is off its anchor.
 
 ### D65 One ephemeris, in the native core
 
 - Bodies move on Kepler orbits, one element set per body around its parent (moons around their planet, planets around the star),
   evaluated directly at any sim time (seekable, no state carried from tick to tick), so M9's warp can jump and M9's predictive
   drop-back can look ahead.
-- The kernel is engine-free Rust under `test_the_kernels_hold_no_engine_type` (new files, D64's integrator beside it). GDScript
-  reads body positions and velocities through one binding (`ScsEphemeris`, or methods on `ScsSimCore`; T02 decides), never through
-  a second implementation: M4's L13 finding (constants mirrored by hand) is not repeated.
-- What is not on a rail: anything at a Lagrange point (the station, if Q2 says so), ships and debris. They are test particles. T01
-  sets the error budget for a station that is integrated while the bodies are analytic (the drift between a parked ship and the
-  station over an orbit).
+- The kernel is engine-free Rust under `test_the_kernels_hold_no_engine_type` (new files, D64's integrator beside it as `kick`
+  and `drift`). GDScript reads body positions and velocities through one binding (`ScsEphemeris`, or methods on `ScsSimCore`;
+  T02 decides), never through a second implementation: M4's L13 finding (constants mirrored by hand) is not repeated.
+- The kernel answers in 64-bit **relative to a point it is given** (the anchor), so no caller subtracts two barycentric
+  numbers of 1e11 m (a step of 1.5e-5 m there).
+- What is not on a rail: the anchor, anything at a Lagrange point (the station, if Q2 says so), ships and debris. They are
+  test particles. A station at L4 or L5 is seeded at the point with the point's velocity and librates around it (stable while
+  the moon is under 1/26 of the planet's mass). Budgets in D64.
 
 ### D66 Restricted n-body gravity on everything
 
@@ -123,8 +175,10 @@ which changes the same native rows and rebase path:
 ### D67 Flying under gravity
 
 - The speed clamp and the thrust fade follow Q4; the assist's safe speed and the brake's all stop are measured against the HUD's
-  reference (Q5, Q6). A pure `ReferenceFrame` (`RefCounted`) gives the reference's position and velocity in the local frame each
-  tick, from a node, a station, a gate or a body.
+  reference (Q5, Q6; T01's drafts are under the planning questions). A pure `ReferenceFrame` (`RefCounted`) gives the
+  reference's position, velocity and acceleration in the local frame each tick, from a node, a station, a gate or a body.
+- The native flight step takes the rest velocity beside `env_accel` and hands `v - v_rest` to the brake, the fade and the cap;
+  the brains get their velocities with the World's rest velocity taken off, at the one place they are fed.
 - The HUD shows `REF <name>` with its range and closing speed, the speed against the reference, and the altitude near a body.
 - Hitting a planet or a moon, or dropping below its atmosphere's top, destroys the ship (Out, above): a rule from data, checked
   against the ephemeris each tick for the player and the AI rows.
@@ -155,7 +209,11 @@ which changes the same native rows and rebase path:
 ### D71 Seams for M9 and M11
 
 - The ephemeris is seekable (D65) and the integrator takes any step, so M9's on-rails warp reuses both.
-- One `WorldFrame` per space: no autoload or static holds "the" frame, so M11's hyperspace adds a second one (T01 lists any that do).
+- One `WorldFrame` per space, each with its own anchor, so M11's hyperspace adds a second one. M6's new state (the anchor, the
+  gravity sample, the rest velocity) lives on the `WorldFrame` and its core, never in an autoload or a static.
+- T01 found statics that do assume one frame (`SimCore._current`, `StaticRows`, `ContactScan._shared`, the directors'
+  `_current`, the `_live` lists, the console's `world` provider; the note's section 4). M6 adds none and fixes none; M11 does.
+- M9 changes the anchor when the player travels: a hand-over that converts or drops the places held against the old one.
 
 ## Acceptance criteria
 
@@ -196,7 +254,7 @@ which changes the same native rows and rebase path:
 
 | Task | Track | Title | Depends on | Agent | Why | Status |
 |---|---|---|---|---|---|---|
-| T01 | A | Moving-frame audit and design: every World-frame velocity, the rebase order, the error budgets, §19's draft (early start) | - | Fable | Cross-cutting invariants over GDScript, Jolt and the native rows; mistakes surface late | not started |
+| T01 | A | Moving-frame audit and design: every World-frame velocity, the rebase order, the error budgets, §19's draft (early start) | - | Fable | Cross-cutting invariants over GDScript, Jolt and the native rows; mistakes surface late | in progress |
 | T02 | A | Ephemeris and gravity kernel: Kepler rails, the body tree, n-body and tidal pull, the integrator (early start, new native files) | T01 | Fable | Precise, deterministic numerics that M9 and M11 reuse | not started |
 | T03 | B | Star system data: bodies and elements in `data/star_systems.json`, the loader, the `system` provider | T02, Q1 to Q3 | Sonnet | Data and validation on a clear format | not started |
 | T04 | A | The free-falling frame: the origin as a test particle, `environment_accel` from the ephemeris | T02, T03 | Opus | Touches the tick order and every ship's force step | not started |
@@ -228,6 +286,20 @@ which changes the same native rows and rebase path:
   audit table.
 - **Done when:** the audit table covers every file that reads `linear_velocity`, a row velocity or `origin`; the maintainer has
   read the decisions and the drafts for Q4 to Q6.
+- **Done (2026-11-10, written; `in progress` until the maintainer has read it):**
+  - The audit is `docs/research/m6-moving-frame.md`: every file that reads `linear_velocity`, a row velocity or `origin`, with
+    what a boost does to it; the absolute-velocity readers; the places assumed at rest; the single-frame globals; the numbers.
+  - D64, D65, D67 and D71 are revised. Decided: the kick-then-drift integrator at the physics tick with a half-kick start; one
+    gravity sample per tick, the frame's step last in the tick; the velocity rebase in `World`'s slot after the position
+    rebase, with no interpolation reset; budgets of 0.05 m (AC1) and 0.5 m at 3 km (AC4) over one low orbit.
+  - **Changed from the plan, for the maintainer to accept or refuse:** a `UniversePos` is relative to the World's anchor, and
+    the frame rides the anchor instead of following the player; Q8 at 2 000 m/s instead of 200. If refused (the frame follows
+    the player at 200 m/s), T05 also has to move every static row and anchor-tied node each tick and turn every stored
+    `UniversePos` into an anchored place.
+  - Drafts for Q4 to Q6 are under the planning questions.
+  - For later tasks: T02 gives `kick` and `drift` and answers relative to a point; T04 adds the sample slot and the frame's
+    step; T05 adds the core's `boost` and boosts `RamTracker`'s windows, the tier's `cruise` and the fallback at
+    `tier_director.gd:414`; T08 threads the rest velocity through the flight step and the brains' feed.
 
 ### M6-T02 Ephemeris and gravity kernel
 
