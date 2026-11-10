@@ -235,8 +235,9 @@ which changes the same native rows and rebase path:
 ## Working rules for M6
 
 - **Tracks.** A (frame and gravity: T01, T02, T04 to T08), B (system data and scenarios: T03, T09), C (scaled space and far
-  representations: T10, T11, T12, T15), D (the jumpgate: T13, T14). Inside a track the order holds. If work goes one task at a
-  time, the order is T01, T02, T03, T04, T05, T06, T07, T08, T09, T10, T11, T12, T13, T14, T15, T16.
+  representations: T10, T11, T12, T15), D (the jumpgate: T13, T14), E (test tiers: T17, T18). Inside a track the order holds.
+  If work goes one task at a time, the order is T01, T17, T18, T02, T03, T04, T05, T06, T07, T08, T09, T10, T11, T12, T13, T14,
+  T15, T16.
 - **One working copy** on branch `m6` in the main checkout, no task branches, as in M5; early-start work runs where the maintainer
   says (Early start, above).
 - **Locks** as in M5: Godot runs through `flock /tmp/m6-godot.lock`, commits through `flock /tmp/m6-git.lock` and stage only the
@@ -245,8 +246,14 @@ which changes the same native rows and rebase path:
   identical with 1 and 6 threads and between `sim_step` threaded and `delayed`. No GDScript fallback.
 - **Performance** (T05, T06, T07): measure `bench battle 1000` before and after with `scripts/bench_quick.sh` on an idle machine;
   numbers in the task's Done notes.
-- **Tests.** Each task runs the Python and GUT files it touched and its new tests; the full suite runs once, in T16. Test first for
-  the pure classes (`ReferenceFrame`, the system loader, the scaled-space placement, the vortex's timing).
+- **Tests.** Four tiers from T17 on (2026-11-10, maintainer): **quick** (a few minutes, every area touched, run between changes),
+  **standard** (the merge gate: everything except the balance runs), **balance** (the long fights whose verdict is a balance
+  judgement, behind `GUT_BALANCE=1`) and **full** (standard plus balance). Each task runs the quick tier plus the Python and GUT
+  files it touched and its new tests; the full tier runs once, in T16. Every task that adds or changes a test names its tier in
+  the task's **Tests** line and its Done notes: quick for pure, fast files (under about 5 s alone, no SLOW gate), standard for
+  scene-booting fights, whole-asset builds and anything SLOW-gated, balance only for a fight judged on balance. A quick file is
+  added to `tests/quick_suite.txt` in the same commit. Test first for the pure classes (`ReferenceFrame`, the system loader, the
+  scaled-space placement, the vortex's timing).
 - **Screenshots** to `references/screenshots/<request>/` in the main checkout. Visual judgement is (H).
 - After each task: its row says `done` with its Done notes, in the same commit; push `m6` (the maintainer's rule from M5).
 
@@ -270,6 +277,8 @@ which changes the same native rows and rebase path:
 | T14 | D | The jumpgate in the game: the prop, the vortex, 1 000 km broadcast, arrivals through the gate | T13, T09, Q12 | Opus | A new effect and the mission and encounter seams | not started |
 | T15 | C | Far representations for the station's stand-in, the gate and the planets | T10, T14 | Opus | Hand-offs across three draw paths with no pop | not started |
 | T16 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
+| T17 | E | Test tiers: quick, standard, balance and full, the quick list, its guard test, the Rust tests in the run | T01 | Sonnet | Scripts and one data file from a written plan (`docs/research/test-review/quick-test-suite.md`) | in progress |
+| T18 | E | The review's CONFIRMED test removals (sections A to D), each re-checked, the parity recordings still read | T17 | Opus | Proving two tests cover the same thing needs both read in full; rules on what must stay | not started |
 
 ### M6-T01 Moving-frame audit and design
 
@@ -310,6 +319,7 @@ which changes the same native rows and rebase path:
 - **Notes:** elliptic orbits only (e < 1), solved by Newton's method with a fixed iteration rule so every run gives the same bits;
   64-bit throughout; the residual computed as an exact difference. The pull over rows is a pure function over a frozen list of
   body positions, so it runs in the worker job or on the main thread with the same result. Test values from closed-form orbits.
+- **Tests:** the Rust tests and `test_ephemeris.gd`: quick.
 - **Done when:** AC3 in Rust; the kernel holds no engine type (the guard test).
 
 ### M6-T03 Star system data
@@ -318,6 +328,7 @@ which changes the same native rows and rebase path:
 - **Files:** `data/star_systems.json` (bodies with parent, mass or `gm`, radius, atmosphere top, elements, epoch of elements, and
   places such as the station's point and the gate's), `src/world/star_system.gd` (`RefCounted`: load, validate, hand to the core),
   `tests/unit/test_star_system.gd`, provider `system` (bodies and their positions now), `info.md`.
+- **Tests:** `test_star_system.gd`: quick.
 - **Done when:** the file holds Q1 to Q3's answers, validated with reasons; the core gets the bodies from it.
 
 ### M6-T04 The free-falling frame
@@ -326,6 +337,7 @@ which changes the same native rows and rebase path:
 - **Files:** `src/world/world_frame.gd` (origin and `origin_velocity` propagated each tick; `environment_accel` from the core),
   `src/ship/ship.gd` and the flight batch (the residual into `env_accel`), the core's binding, `tests/integration/test_free_fall.gd`.
 - **Notes:** `environment_field` stays the seam; the callable now calls the core. The frame is propagated in the slot T01 chose.
+- **Tests:** `test_free_fall.gd`: quick for a short arc and the ship at rest; the one-orbit check is standard.
 - **Done when:** an empty frame follows the analytic orbit within the budget; a ship at rest in the frame stays at rest to within
   the residual; the parity recordings are green with gravity off.
 
@@ -337,6 +349,8 @@ which changes the same native rows and rebase path:
 - **Notes:** universe position and universe velocity of every object unchanged across a rebase (the test sums them before and
   after). The interpolation rule is the position rebase's: reset at the end of the tick. Particles stay in their node's frame.
   Measure the rebase's cost at `bench battle 1000`.
+- **Tests:** `test_velocity_rebase.gd` (the sums before and after): quick; `RebaseFight` with both rebases forced and the
+  recorded dogfight: standard.
 - **Done when:** AC1; a dogfight across many velocity rebases shows no jump in a recorded run (the test compares drawn positions).
 
 ### M6-T06 L4: the rebase cascade
@@ -344,6 +358,7 @@ which changes the same native rows and rebase path:
 - **Goal:** AC2.
 - **Files:** `src/world/static_rows.gd`, `src/perf/sim_core.gd`, the resolvers' cached solids, `src/world/world_frame.gd`, the
   native statics' shift.
+- **Tests:** the existing rebase tests keep their tiers; the cost is a bench number, not a test.
 - **Done when:** AC2, numbers before and after in the Done notes.
 
 ### M6-T07 Gravity on everything
@@ -352,6 +367,8 @@ which changes the same native rows and rebase path:
 - **Files:** `native/src/flight_step.rs` (input only), `native/src/tier.rs` and `tier_rows.rs` (bodies for point sources),
   `native/src/bolt_kernels.rs` (the pull before the move), the debris path T07 measures, the brake's and the AI's feed-forward,
   `src/perf/standins/gravity_standin.gd` removed with its install path and the bench layout moved to data, tests in Rust and GUT.
+- **Tests:** the Rust tests and the zero-gravity parity checks: quick; the parked ship over one orbit and the curved bolt:
+  standard.
 - **Done when:** AC4; bit-identical results at zero gravity; AC10's cost measured.
 
 ### M6-T08 Flying under gravity
@@ -360,6 +377,8 @@ which changes the same native rows and rebase path:
 - **Files:** `src/ship/speed_governor.gd`, `src/ship/ship.gd`, the assist's and the brake's inputs, `src/world/reference_frame.gd`
   (pure), the HUD's reference and altitude (`hud_input.gd`, `hud_frame.gd`, `hud_painter.gd`), the planet-impact rule, settings for
   anything new, tests (a headless low orbit held with assist on; the brake's stop against the reference).
+- **Tests:** `ReferenceFrame` and the brake's stop against the reference: quick; the headless low orbit held with assist on:
+  standard.
 - **Done when:** AC5.
 
 ### M6-T09 Scenarios at true scale
@@ -370,6 +389,7 @@ which changes the same native rows and rebase path:
   player's reference), tests for each spawn form.
 - **Notes:** the Civilian escort's belt and beacons keep their layout, moved as a whole to the station's orbit; every mission's
   headless tests run unchanged in outcome.
+- **Tests:** each spawn form in the loader: quick; the missions' headless runs keep their tiers.
 - **Done when:** AC6; free flight starts beside the station's stand-in with the planet in view.
 
 ### M6-T10 Scaled-space layer
@@ -380,6 +400,7 @@ which changes the same native rows and rebase path:
 - **Notes:** the design question is how the layer's depth and the near world's coexist in Forward+ (a separate viewport, a second
   camera pass, or reversed depth with a clamp) and what each costs; decide by measuring on the maintainer's GPU. The planet's shadow
   on the near world is a key-light factor from the ephemeris (sun, planet and camera), not a shadow map.
+- **Tests:** `scaled_placement` tests: quick; GPU files (`*_gpu.gd`): standard (Pending headless).
 - **Done when:** the placement tests; a placeholder sphere for the planet and the sun draws at the right size from anywhere and
   after any rebase; GPU numbers recorded.
 
@@ -388,6 +409,8 @@ which changes the same native rows and rebase path:
 - **Goal:** the planet half of AC7.
 - **Files:** `tools/procgen/assets/planet.py` (albedo, height or normal, clouds, night side if the references show one; early
   start), its Python tests, the planet's material and the atmosphere shader on T10's layer.
+- **Tests:** the generator's Python tests: standard (a whole-asset build), with any pure helper test under 5 s in the quick
+  Python list.
 - **Done when:** AC7's planet; a look sheet (day, terminator, night, limb from orbit and from 1 000 km) in
   `references/screenshots/M6-T11 planet/` for the maintainer (H).
 
@@ -396,6 +419,7 @@ which changes the same native rows and rebase path:
 - **Goal:** the sun half of AC7.
 - **Files:** the sun's disc and glow on T10's layer, `src/rendering/lens_flare_aim.gd` and the flare's source on the true
   direction, the star's colour from `data/star_systems.json`.
+- **Tests:** pure direction and colour tests: quick; GPU files: standard.
 - **Done when:** AC7's sun and light; a look sheet for the maintainer (H).
 
 ### M6-T13 Jumpgate references and generator
@@ -403,6 +427,7 @@ which changes the same native rows and rebase path:
 - **Goal:** the generator half of AC8. Early start once Q11 has references.
 - **Files:** `docs/design-references.md` (a jumpgate section: shape, proportions, colours from the references, sources listed),
   `tools/procgen/assets/jumpgate.py`, its tests and registry entry.
+- **Tests:** as T11: the whole-asset build standard, pure helpers quick.
 - **Done when:** the output contract and Python tests; a look sheet for the maintainer (H).
 
 ### M6-T14 The jumpgate in the game
@@ -410,6 +435,7 @@ which changes the same native rows and rebase path:
 - **Goal:** AC8 (D69).
 - **Files:** `src/props/jumpgate.gd`, the vortex (`src/props/jump_vortex.gd`, its shader and mesh), the broadcast, arrivals through
   the gate for missions and encounters (data), `JumpArrival` kept for open points (Q12), the `gate` provider and commands, tests.
+- **Tests:** the vortex's timing and the broadcast range: quick; a ship arriving through the gate headless: standard.
 - **Done when:** AC8.
 
 ### M6-T15 Far representations
@@ -417,12 +443,48 @@ which changes the same native rows and rebase path:
 - **Goal:** AC9 (D70).
 - **Files:** `src/rendering/lod_switcher.gd` and `far_dots.gd` for the large props, the scaled-space impostors from T10, the
   station's stand-in, the gate and the planets.
+- **Tests:** the drawn size across each hand-off: quick if pure, else standard.
 - **Done when:** AC9.
 
 ### M6-T16 Integration, full suite, docs and acceptance
 
 - **Goal:** AC10, AC11 and the (H) checklist for AC12.
 - **Steps:** §19 in `docs/architecture.md` as built (and §14.1, §14.2 updated); the M6 section of `docs/playtest.md` with the (H)
-  checklist; the roadmap row; `scripts/run_tests.sh` once, read from the suite's own totals; the GPU check on the maintainer's
+  checklist; the roadmap row; the full tier once (T17's runner), read from the suite's own totals; the GPU check on the maintainer's
   machine; then ask the maintainer to confirm the milestone, and once confirmed merge `m6` into `main`.
 - **Done when:** the maintainer confirms M6.
+
+### M6-T17 Test tiers: quick, standard, balance and full
+
+- **Goal:** a few-minute check for iteration, a merge gate that skips the balance fights, and a full run that includes them
+  (2026-11-10, maintainer: four tiers instead of the review's two).
+- **Steps:** follow `docs/research/test-review/quick-test-suite.md` for the quick tier (its GUT and Python lists, the compile
+  check, `cargo test`, the two console smokes, the guard test), with these changes:
+  - One entry point: `scripts/run_tests.sh --quick | --standard | --balance | --full`, default `--standard`, so
+    `scripts/run_tests.sh` alone stays the gate CLAUDE.md names. Shared helpers in a sourced `scripts/lib_tests.sh`.
+  - Standard is what `run_tests.sh` checks today, plus `cargo test --release --lib` (the review's H1: no run calls it), minus
+    the balance tests.
+  - Balance: a `BalanceTests` gate like `SlowTests` (`GUT_BALANCE=1`), on the tests that judge balance: `test_dogfight`'s
+    six-minute fight and `test_m3_sandbox`'s three waves (both end Pending today, review F4), and `test_turret_balance` and any
+    other file whose verdict is a balance judgement. The other tests in those files stay standard. `--balance` runs only these.
+  - Full: standard plus balance.
+- **Files:** `scripts/run_tests.sh`, `scripts/lib_tests.sh`, `tests/quick_suite.txt`, the balance gate beside `SlowTests` and
+  its users, `tests/unit/test_quick_suite.gd` (also checks no listed file is a balance file), `CLAUDE.md`'s Commands block,
+  `docs/architecture.md`'s tests section, `docs/research/test-review/quick-test-suite.md` (as built).
+- **Tests:** `test_quick_suite.gd` and the balance gate's own test: quick.
+- **Done when:** `--quick` exits 0 and prints its time (about 3.5 min); a broken listed test and a broken parse each stop it;
+  `--balance` runs only the balance tests; `--standard` runs everything it ran before except those, plus the Rust tests, and
+  exits 0 (its time in the Done notes); CI keeps running the standard tier.
+
+### M6-T18 The review's CONFIRMED test removals
+
+- **Goal:** cut duplicated run time without losing coverage (`docs/research/test-review/removal-candidates.md`).
+- **Steps:** sections A to D only, each re-checked as the file's "How to verify an entry" says (the branch has moved since
+  `5c65d81`); A8's shared seeded-battle fixture first so A1 to A7 are safe. C5 (`StarPointMath`) stays as a design oracle unless
+  the maintainer says otherwise; C7 (dead `PlaceholderScreen`) is reported, not deleted. Sections E, F and G wait for the
+  maintainer. Then update `tests/quick_suite.txt` as the quick suite's "Interplay" section says.
+- **Rules:** the file's five (every parity recording still read, the damping guard, the engine-free guards, one 1-vs-6 and one
+  threaded-vs-delayed test per threaded subsystem).
+- **Tests:** a removal keeps the kept test's tier; a moved assert takes the tier of the file it lands in.
+- **Done when:** each entry is removed, merged or kept with the reason in the Done notes; the standard tier exits 0 and its time
+  before and after is recorded.
