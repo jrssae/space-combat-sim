@@ -103,6 +103,21 @@ About 8 km long, arranged along one axis. From aft to fore:
 Front on: a circular cross-section with a central docking aperture; two short arms carry the Cobra bays; long,
 thin vertical masts. Defence-grid emplacements (tutorial tour points) sit on the hull.
 
+## Epsilon III (M6)
+
+The planet Babylon 5 orbits. No moons. 0.75 g at the surface, about 9 560 km across (`docs/milestones/m6-epsilon-space-at-true-scale.md`,
+Q1). Reference: one show still of the planet in sunlight (`references/Epsilon III planet.png`, maintainer, 2026-11-10).
+
+- **Colour.** Warm and dry: rust, tan and ochre. Darker brown lowlands, lighter beige-cream highlands and plateaus,
+  some pale patches near the top that read as high ground or haze rather than ice. No blue oceans; no visible water.
+- **Surface.** Strong relief at every scale: wrinkled ridges, rough mottled terrain and canyon-like grooves, so the lit
+  side looks bumpy, not smooth. Lit areas show fine grain from the relief catching the light.
+- **Clouds.** Not distinct cloud decks; at most thin pale wisps over the brighter areas. The surface dominates.
+- **Light.** A hard terminator: lit from the upper right, with the lower left in deep shadow that fades to near black.
+  No city lights on the night side.
+- **Limb.** A faint warm orange haze along the lit edge only; no blue atmospheric ring. A thin atmosphere at most.
+- **Setting.** Black space with dense small stars and a blue nebula wash behind (that is the sky, not part of the planet).
+
 ## Raider fighter "Delta-V" (M2)
 
 A flying wing. A triangular delta with a leading-edge sweep of about 60° and a span of about twice the length.
