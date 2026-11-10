@@ -28,7 +28,8 @@ Words used below:
 7. **The 9 999 m/s limit is below escape speed** in low orbit (10 851 m/s), and the thrust fade against a body would leave
    64 % of the thrust in a 400 km orbit and none above the limit.
 8. **A boost needs no interpolation reset**: no position jumps, so nothing blends across one.
-9. No sound uses Doppler (`doppler` appears nowhere in `src/` or `project.godot`). Jolt's speed cap is 10 000 m/s in
+9. No sound uses Doppler (`doppler` appears nowhere in `src/` or `project.godot`), and none will: the maintainer ruled
+   Doppler effects out (2026-11-10). Jolt's speed cap is 10 000 m/s in
    `project.godot`, not the 500 m/s default that architecture §14.1 names.
 
 ## 2. Audit: who holds or reads a local velocity or position
