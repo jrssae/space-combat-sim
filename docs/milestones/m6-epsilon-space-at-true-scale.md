@@ -3,8 +3,9 @@
 > "The real neighbourhood." (`docs/roadmap.md`)
 
 **Status:** planned 2026-11-10, ahead of time; **not started.** M5 is the current milestone until the maintainer accepts it.
-M6 starts after that, on branch `m6` cut from `main` once M5 has merged, unless the maintainer pulls a task forward ("Early
-start", below). Every task is `not started`. The planning questions (Q1 to Q12) are open: the proposed answers below are the
+**2026-11-10 (maintainer):** branch `m6` was cut from `m5` at `5d81686`, with `main`'s M6 and M7 plans merged in, so the early
+start (below) runs on it; `m6` takes M5's later work by merging `m5` into it (merges, no rebase, as M5's Q27). The rest of M6 waits
+as the early-start section says. Every task is `not started`. The planning questions (Q1 to Q12) are open: the proposed answers below are the
 planner's defaults, and each task that depends on one waits for the maintainer's answer. This plan was written against `m5` at
 `5d81686`, so it names M5 files (§18, M5-T21, `JumpArrival`) that reach `main` when M5 merges.
 
@@ -69,8 +70,9 @@ Out (explicitly):
 
 ## Early start (2026-11-10)
 
-Four tasks have no dependency on M5's open work and can start before M5 is accepted, if the maintainer says where they run (a
-branch or a worktree; `CLAUDE.md` forbids an agent making its own branch):
+Four tasks have no dependency on M5's open work and can start before M5 is accepted. They run on branch `m6` (2026-11-10). T03
+(star system data) can join them once Q1 to Q3 are answered; T04 to T08 wait for M5's performance block (M5-T33 to T36 and T38),
+which changes the same native rows and rebase path:
 - **T01** (moving-frame audit and design): reading and writing only; its result is this file's Design section, revised.
 - **T02** (ephemeris and gravity kernel): engine-free Rust in **new files only** under `native/src/`. It must not touch the row
   files M5-T35 (native allocation pass) and M5-T36 (one native constants table) are changing; it is wired in by T04, after M5.
