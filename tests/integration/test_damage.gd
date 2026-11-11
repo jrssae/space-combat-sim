@@ -86,10 +86,6 @@ func _shoot_player() -> void:
 	_fly(60)
 
 
-func _hp() -> String:
-	return DebugConsole.registry.format_path("hull.hp")
-
-
 # --- the hull ------------------------------------------------------------------------------------------------
 
 
@@ -184,15 +180,6 @@ func test_raiders_always_take_damage() -> void:
 
 
 # --- console -----------------------------------------------------------------------------------------------------
-
-
-func test_the_acceptance_script_prints_300_then_250() -> void:
-	_console("god on")
-	_console("damage 50 player")
-	assert_eq(_hp(), "hull.hp = 300.00")
-	_console("god off")
-	_console("damage 50 player")
-	assert_eq(_hp(), "hull.hp = 250.00")
 
 
 func test_hull_provider_keys() -> void:

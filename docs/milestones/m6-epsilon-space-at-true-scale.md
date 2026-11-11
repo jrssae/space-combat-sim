@@ -598,13 +598,13 @@ which changes the same native rows and rebase path:
     is production (through `clear_seen`); moving the tests to perceptions adds nothing. C5 kept (the design oracle, as
     planned). C6 done: the two M4-T05a distance-check tests went; `in_range` stays (console `native bench`), checked by the
     bench test against GDScript. C7 reported, not deleted: `src/frontend/placeholder_screen.gd` (`PlaceholderScreen`) is
-    referenced nowhere. C8 removed (`test_runner_works`).
+    referenced nowhere; the maintainer keeps it (2026-11-11). C8 removed (`test_runner_works`).
   - D1 done (the tank line moved into the tank test). D2 kept: `test_fx_specs` also matches each material to its spec
     (speeds, spread, accelerations), and the other copy is the damping guard's own loop (rule 2). D3 done: the Jolt line
     joined the damping guard (added only); `test_smoke` became `test_project_settings` (quick), the quick tier's damping
     check. D4 done: `test_ship_lights` still drives the curve through `advance` (keep it if E11 is applied). D5 done (the
-    facade tests that remain are about the facade). D6 kept: the smoke runs a separate process through `--console-exec`,
-    a different path from the GUT test; the entry leaves the choice to the maintainer. D7 kept: the scene test is the only
+    facade tests that remain are about the facade). D6 done (maintainer, 2026-11-11: drop one): the GUT copy
+    `test_the_acceptance_script_prints_300_then_250` went; the AC's own smoke stays, as it runs the separate process. D7 kept: the scene test is the only
     check that `LodSwitcher` feeds its state back, the pure one pins the exact edges. D8 done (`test_console_command_list`
     boots the sandbox; `test_info_md` left the quick list). D9 done (into `test_settings_schema`). D10 done
     (`test_debug_console` asserts both autoloads are present).
