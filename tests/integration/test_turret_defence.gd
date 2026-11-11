@@ -2,7 +2,7 @@ extends GutTest
 ## The defensive turrets in a fight (M5-T21, D61, Q14, AC19): a lone Saturn 4 transport flown by the civilian profile keeps
 ## running while its three turrets (two flank, one dorsal, Q32) fire at two raiders, and its turrets finish a raider left at
 ## 15 % hull that keeps attacking it. Seeded, headless, through the native core (the turrets' pick in the AI job, their shots bolt rows through the
-## hit sweep). How often a Saturn wins is Q31's (M5-T16, `test_turret_balance`, behind `GUT_SLOW`); this file keeps the
+## hit sweep). How often a Saturn wins is Q31's (M5-T16, `test_turret_balance`, behind `GUT_BALANCE`); this file keeps the
 ## mechanics and the finish. The step stays 1/60 s; the fight runs `SPEED_UP` ticks a real tick. Skips, saying why, without
 ## the native library or the Saturn 4's generated asset.
 

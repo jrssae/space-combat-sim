@@ -110,7 +110,10 @@ been planned were taken for done.
 ```
 scripts/setup_godot.sh
 scripts/gen_assets.sh
-scripts/run_tests.sh
+scripts/run_tests.sh                    # --standard, the default: the merge gate (Python, Rust, import, compile check, GUT with the slow files, smokes)
+scripts/run_tests.sh --quick            # about 3.5 min, every area touched, for iteration; not a gate
+scripts/run_tests.sh --balance          # only the balance tests (long fights; tests/balance_suite.txt)
+scripts/run_tests.sh --full             # standard plus the balance tests
 # pieces, if you need them individually:
 python3 -m unittest discover -s tools/procgen/tests -t . -v
 python3 -m tools.procgen list

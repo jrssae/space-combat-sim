@@ -1,42 +1,118 @@
 #!/usr/bin/env bash
-# Runs every automated check that works without a GPU: Python generator tests, the native library's build (required),
-# a headless Godot import that must be free of script errors, a compile check of every project script, the GUT suites,
-# and debug-console smoke runs that drive a live headless build through --console-exec.
-# Exits non-zero on any failure. Logs and the GUT JUnit XML land in reports/ (gitignored; CI uploads it).
-# GUT_SHARD=k/n (CI) runs only every n-th GUT script from the k-th, in path order, so n jobs share the GUT run; the Python
-# tests and the console smoke runs then run in shard 1 only. Unset (the default) runs everything.
-# GUT_SLOW=1 (the default here, and CI) runs the slow GUT files too (M4-T36, Q58: the long seeded parity fights and the pending
-# balance runs, `tests/fixtures/slow_tests.gd`); GUT_SLOW=0 leaves them out. A focused GUT run without this script leaves them out.
+# One entry point for the project's automated checks, in four tiers (M6-T17). Everything works without a GPU. Exits non-zero on
+# any failure. Logs and the GUT JUnit XML land in reports/ (gitignored; CI uploads it).
+#   run_tests.sh --quick     a few minutes, every area touched, for iteration between changes. NOT a merge gate: it leaves
+#                            out the slow and balance files, the whole-asset Python builds, the Jolt behaviour fights and
+#                            ten of the twelve console smokes (the list is tests/quick_suite.txt).
+#   run_tests.sh --standard  (the default, and the merge gate) the Python tests, the native build and its Rust tests, the import,
+#                            the compile check, every GUT file with the slow ones and without the balance tests, and the smokes.
+#   run_tests.sh --balance   only the balance tests (tests/balance_suite.txt), the long fights judging how the game plays.
+#   run_tests.sh --full      standard plus the balance tests.
+# GUT_SHARD=k/n (CI, standard) runs only every n-th GUT script from the k-th, in path order, so n jobs share the GUT run; the
+# Python tests, the Rust tests and the console smoke runs then run in shard 1 only. Unset (the default) runs everything.
+# GUT_SLOW=1 (the default here, and CI) runs the slow GUT files too (M4-T36, Q58: the long seeded parity fights,
+# `tests/fixtures/slow_tests.gd`); GUT_SLOW=0 leaves them out. GUT_BALANCE=1 runs the balance tests (`tests/fixtures/balance_tests.gd`);
+# only --balance and --full set it. A focused GUT run without this script leaves both out.
 set -euo pipefail
-export GUT_SLOW="${GUT_SLOW:-1}"
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "${ROOT}"
-GODOT="${GODOT_BIN:-${ROOT}/.tools/godot/godot}"
-REPORTS="${ROOT}/reports"
-SCRIPT_ERRORS="SCRIPT ERROR|Parse Error|Failed to load script"
-
-mkdir -p "${REPORTS}"
-# reports/ must only describe this run.
-rm -f "${REPORTS}"/*.log "${REPORTS}/gut.xml"
-
-fail() {
-    echo "run_tests.sh: $*" >&2
-    exit 1
+usage() {
+    echo "usage: scripts/run_tests.sh [--quick | --standard | --balance | --full]   (default: --standard)" >&2
+    exit 2
 }
 
-# run_logged <log file> <command...>: runs the command, mirrors its output into the log, returns its exit code.
-run_logged() {
-    local log="$1"
-    shift
+mode="standard"
+(( $# <= 1 )) || usage
+case "${1:---standard}" in
+    --quick) mode="quick" ;;
+    --standard) mode="standard" ;;
+    --balance) mode="balance" ;;
+    --full) mode="full" ;;
+    *) usage ;;
+esac
+
+source "$(dirname "${BASH_SOURCE[0]}")/lib_tests.sh"
+cd "${ROOT}"
+mkdir -p "${REPORTS}"
+require_godot
+
+# run_gut <log> <junit xml> <timeout s> <godot args...>: one GUT process; returns its exit code.
+run_gut() {
+    local log="$1" xml="$2" limit="$3"
+    shift 3
     local status=0
-    "$@" 2>&1 | tee "${log}" || status=$?
+    run_logged "${log}" timeout "${limit}" "${GODOT}" --headless --path . -s addons/gut/gut_cmdln.gd "$@" -gexit \
+        -gjunit_xml_file="${xml}" || status=$?
     return "${status}"
 }
 
-if [[ ! -x "${GODOT}" ]]; then
-    fail "Godot not found at ${GODOT}; run scripts/setup_godot.sh (or set GODOT_BIN)."
+# test_paths <list file>: the res:// paths of a tests/*_suite.txt, comments and blank lines skipped, one per line.
+test_paths() {
+    grep -vE '^\s*(#|$)' "$1" | tr -d '\r'
+}
+
+if [[ "${mode}" == "quick" ]]; then
+    started=${SECONDS}
+    rm -f "${REPORTS}"/quick_*.log "${REPORTS}/gut_quick.xml"
+    if [[ ! -d assets/generated ]] || [[ -n "$(find tools/procgen -type f -newer assets/generated -print -quit 2> /dev/null)" ]]; then
+        echo "run_tests.sh: assets/generated is missing or older than tools/procgen; run scripts/gen_assets.sh and scripts/run_tests.sh before merging."
+    fi
+    build_native_or_fail
+    compile_check "${REPORTS}/quick_check_scripts.log"
+    rust_tests "${REPORTS}/quick_cargo.log"
+
+    echo "== Python tests"
+    mapfile -t py_modules < <(test_paths tests/quick_python.txt)
+    run_logged "${REPORTS}/quick_python.log" "$(python_bin)" -m unittest "${py_modules[@]}" \
+        || fail "The Python tests failed (see reports/quick_python.log)."
+
+    echo "== GUT"
+    mapfile -t quick_files < <(test_paths tests/quick_suite.txt)
+    for f in "${quick_files[@]}"; do
+        [[ -f "${f#res://}" ]] || fail "tests/quick_suite.txt lists ${f}, which does not exist."
+    done
+    gut_status=0
+    GUT_SLOW=0 GUT_BALANCE=0 run_gut "${REPORTS}/quick_gut.log" reports/gut_quick.xml 600 \
+        "-gtest=$(IFS=,; echo "${quick_files[*]}")" || gut_status=$?
+    (( gut_status == 0 )) || fail "GUT failed with exit code ${gut_status} (see reports/quick_gut.log)."
+
+    smoke_status=0
+    echo "== Console smoke run: strict script that succeeds"
+    smoke_console_host "${REPORTS}/quick_console_smoke.log" || smoke_status=1
+    echo "== Console smoke run: the real main scene"
+    smoke_main_scene "${REPORTS}/quick_console_main.log" || smoke_status=1
+    (( smoke_status == 0 )) || fail "The console smoke runs failed (see reports/quick_console_*.log)."
+    echo "run_tests.sh --quick: passed in $(( SECONDS - started )) s."
+    exit 0
 fi
+
+if [[ "${mode}" == "balance" ]]; then
+    started=${SECONDS}
+    rm -f "${REPORTS}"/balance_*.log "${REPORTS}/gut_balance.xml"
+    build_native_or_fail
+    mapfile -t balance_files < <(test_paths tests/balance_suite.txt)
+    for f in "${balance_files[@]}"; do
+        [[ -f "${f#res://}" ]] || fail "tests/balance_suite.txt lists ${f}, which does not exist."
+    done
+    echo "== GUT (balance files)"
+    gut_status=0
+    GUT_SLOW=1 GUT_BALANCE=1 run_gut "${REPORTS}/balance_gut.log" reports/gut_balance.xml 7200 \
+        "-gtest=$(IFS=,; echo "${balance_files[*]}")" || gut_status=$?
+    echo "run_tests.sh --balance: finished in $(( SECONDS - started )) s (GUT exit code ${gut_status})."
+    exit "${gut_status}"
+fi
+
+# Standard and full: the merge gate, with the balance tests on for full only.
+export GUT_SLOW="${GUT_SLOW:-1}"
+if [[ "${mode}" == "full" ]]; then
+    export GUT_BALANCE=1
+else
+    export GUT_BALANCE="${GUT_BALANCE:-0}"
+fi
+started=${SECONDS}
+# reports/ must only describe this run (the quick tier's logs are its own).
+find "${REPORTS}" -maxdepth 1 -name '*.log' ! -name 'quick_*' ! -name 'balance_*' -delete
+rm -f "${REPORTS}/gut.xml"
+
 
 gut_select=(-gdir=res://tests -ginclude_subdirs)
 run_extras=1
@@ -61,13 +137,12 @@ fi
 
 if (( run_extras )) && [[ -d tools/procgen/tests ]]; then
     echo "== Python tests"
-    python3 -m unittest discover -s tools/procgen/tests -t . -v
+    "$(python_bin)" -m unittest discover -s tools/procgen/tests -t . -v
+    rust_tests "${REPORTS}/cargo.log"
 fi
 
-# Built before the import so Godot finds it. The game needs it (architecture §17.5), so a failed build stops the run.
-echo "== Native library"
-scripts/build_native.sh || fail "The native library failed to build (see the output above)."
-[[ -f bin/libscs_native.so ]] || fail "No native library at bin/libscs_native.so after the build."
+# Built before the import so Godot finds it (architecture §17.5).
+build_native_or_fail
 
 # --import imports resources but does not compile scripts, hence the separate compile check below.
 echo "== Godot import"
@@ -77,13 +152,7 @@ if grep -E "${SCRIPT_ERRORS}" "${REPORTS}/import.log"; then
     fail "Import reported script errors (see reports/import.log)."
 fi
 
-# GUT silently skips a test file that does not parse, so compile everything explicitly.
-echo "== Compile check"
-run_logged "${REPORTS}/check_scripts.log" timeout 300 "${GODOT}" --headless --path . -s res://scripts/check_scripts.gd \
-    || fail "Scripts failed to compile (see reports/check_scripts.log)."
-if grep -E "${SCRIPT_ERRORS}" "${REPORTS}/check_scripts.log"; then
-    fail "Scripts failed to compile (see reports/check_scripts.log)."
-fi
+compile_check "${REPORTS}/check_scripts.log"
 
 echo "== GUT"
 # The whole run takes about 40 minutes on the maintainer's machine, a CI shard 15 to 25. A shard's timeout (40 minutes)
@@ -107,89 +176,10 @@ fi
 # Debug console smoke runs (architecture §6.4, AC21): a live headless build driven by --console-exec must print the
 # expected [console] lines and exit with the requested code. console_host.tscn is an empty scene, so only the
 # console's own providers (settings, debug, time) exist. `set` must not touch user://settings.cfg (only `save` does).
-CONSOLE_HOST="res://tests/fixtures/console_host.tscn"
-SETTINGS_CFG="${XDG_DATA_HOME:-${HOME}/.local/share}/godot/app_userdata/space-combat-sim/settings.cfg"
 smoke_status=0
 
-settings_fingerprint() {
-    if [[ -f "${SETTINGS_CFG}" ]]; then
-        sha256sum "${SETTINGS_CFG}" | cut -d' ' -f1
-    else
-        echo "absent"
-    fi
-}
-
-# console_run <log> <expected exit code> <user args...>: runs the host scene with the args after --.
-console_run() {
-    local log="$1" expected="$2"
-    shift 2
-    local status=0
-    timeout 120 "${GODOT}" --headless --path . "${CONSOLE_HOST}" -- "$@" > "${log}" 2>&1 || status=$?
-    cat "${log}"
-    if (( status != expected )); then
-        echo "run_tests.sh: console smoke run exited ${status}, expected ${expected} (see ${log})." >&2
-        return 1
-    fi
-    if grep -E "${SCRIPT_ERRORS}" "${log}"; then
-        echo "run_tests.sh: console smoke run reported script errors (see ${log})." >&2
-        return 1
-    fi
-}
-
-# expect_line <log> <exact line>; expect_text <log> <substring>; reject_text <log> <substring>
-expect_line() {
-    grep -qxF -- "$2" "$1" || { echo "run_tests.sh: missing line in $1: $2" >&2; return 1; }
-}
-expect_text() {
-    grep -qF -- "$2" "$1" || { echo "run_tests.sh: missing text in $1: $2" >&2; return 1; }
-}
-# The providers line lists every registered state provider. New subsystems add providers, so the check is that the ones named
-# here are all present, not that the list is exactly this one (an exact list failed CI every time a task added a provider).
-expect_providers() {
-    local line
-    line="$(grep -m1 -F -- "[console] providers: " "$1" || true)"
-    if [[ -z "${line}" ]]; then
-        echo "run_tests.sh: missing providers line in $1" >&2
-        return 1
-    fi
-    local have=",${line#*providers: },"
-    have="${have// /}"
-    local missing=0 name
-    for name in ${2//,/ }; do
-        if [[ "${have}" != *",${name},"* ]]; then
-            echo "run_tests.sh: provider ${name} missing in $1" >&2
-            missing=1
-        fi
-    done
-    return "${missing}"
-}
-reject_text() {
-    if grep -qF -- "$2" "$1"; then
-        echo "run_tests.sh: unexpected text in $1: $2" >&2
-        return 1
-    fi
-}
-
 echo "== Console smoke run: strict script that succeeds"
-log="${REPORTS}/console_smoke.log"
-settings_before="$(settings_fingerprint)"
-console_run "${log}" 0 --console-strict \
-    --console-exec="help; set settings.stick_deadzone 0.2; get settings.stick_deadzone; god on; get debug.invulnerable; quit 0" \
-    || smoke_status=1
-expect_line "${log}" "[console] > help" || smoke_status=1
-expect_text "${log}" "[console]   set <path> <value>" || smoke_status=1
-expect_text "${log}" "[console]   quit [code]" || smoke_status=1
-expect_line "${log}" "[console] > set settings.stick_deadzone 0.2" || smoke_status=1
-expect_line "${log}" "[console] > get settings.stick_deadzone" || smoke_status=1
-expect_line "${log}" "[console] settings.stick_deadzone = 0.20" || smoke_status=1
-expect_line "${log}" "[console] > god on" || smoke_status=1
-expect_line "${log}" "[console] debug.invulnerable = true" || smoke_status=1
-expect_line "${log}" "[console] > quit 0" || smoke_status=1
-reject_text "${log}" "[console] error:" || smoke_status=1
-if [[ "$(settings_fingerprint)" != "${settings_before}" ]]; then
-    echo "run_tests.sh: 'set' changed ${SETTINGS_CFG}; only 'save' may write it." >&2
-    smoke_status=1
-fi
+smoke_console_host "${REPORTS}/console_smoke.log" || smoke_status=1
 
 echo "== Console smoke run: strict script with an out-of-range value must exit 1"
 log="${REPORTS}/console_strict.log"
@@ -226,27 +216,7 @@ expect_text "${log}" "[console] error: bind fire: key:QuoteLeft is the console k
 reject_text "${log}" "[console] > quit 0" || smoke_status=1
 
 echo "== Console smoke run: the real main scene"
-# M1-T15 / AC10: the game itself (project main scene) must boot headless, register every subsystem's provider and
-# answer through the console without engine errors.
-log="${REPORTS}/console_main.log"
-main_status=0
-timeout 180 "${GODOT}" --headless --path . -- --console-strict \
-    --console-exec="wait 30; state; state ship; get render.renderer; quit" > "${log}" 2>&1 || main_status=$?
-cat "${log}"
-if (( main_status != 0 )); then
-    echo "run_tests.sh: main scene smoke run exited ${main_status}, expected 0 (see ${log})." >&2
-    smoke_status=1
-fi
-if grep -E "${SCRIPT_ERRORS}" "${log}"; then
-    echo "run_tests.sh: main scene smoke run reported script errors (see ${log})." >&2
-    smoke_status=1
-fi
-expect_providers "${log}" "ai, allies, audio, camera, combat, controls, debris, debug, factions, flight, fx, game, hud, hull, input, lights, livery, perf, post, raiders, ram, render, screens, settings, ship, sky, targeting, time, waves, weapons, wing, world" \
-    || smoke_status=1
-expect_line "${log}" "[console] ship.assist_on = true" || smoke_status=1
-expect_line "${log}" "[console] render.renderer = headless" || smoke_status=1
-reject_text "${log}" "[console] error:" || smoke_status=1
-reject_text "${log}" "ERROR:" || smoke_status=1
+smoke_main_scene "${REPORTS}/console_main.log" || smoke_status=1
 
 echo "== Console smoke run: a rebase 900 km out comes straight back on the real main scene"
 # M3-T14 / AC21 (maintainer Q13): `rebase -900000 0 0` puts everything 900 km from the local origin; the automatic rebase
@@ -733,5 +703,8 @@ if (( smoke_status != 0 )); then
 fi
 if (( gut_status != 0 )); then
     exit "${gut_status}"
+fi
+if (( smoke_status == 0 )); then
+    echo "run_tests.sh --${mode}: passed in $(( SECONDS - started )) s."
 fi
 exit "${smoke_status}"

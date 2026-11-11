@@ -124,7 +124,7 @@ scripts/
   setup_godot.sh              download + sha256-verify Godot 4.7.2 into .tools/godot/
   vendor_addons.sh            git clone pinned tags, copy addons/<name>, keep licences (run once; result committed)
   gen_assets.sh               python3 -m tools.procgen build all
-  run_tests.sh                python tests, godot --import, GUT headless, junit to reports/
+  run_tests.sh                the four test tiers (--quick, --standard, --balance, --full); lib_tests.sh holds its helpers
 .github/workflows/ci.yml
 docs/                         this file, milestones/, roadmap.md, research-notes.md, third-party.md
 ```
@@ -1173,6 +1173,14 @@ The slow files (M4-T36, Q58: `test_dogfight`, `test_m3_sandbox`, `test_brain_tol
 `test_weapon_rows_battle`) skip themselves unless `GUT_SLOW=1` (`tests/fixtures/slow_tests.gd`). `scripts/run_tests.sh` sets it
 unless told otherwise and CI sets it, so the full run includes them; a direct GUT run as above leaves them out (GUT logs "Script
 skipped"), so put `GUT_SLOW=1` in front of it for a complete run.
+
+**Four tiers (M6-T17).** `scripts/run_tests.sh` takes `--quick`, `--standard` (the default and the merge gate), `--balance` or
+`--full`. *Quick* (about 3.5 minutes) builds the native library, compiles every script, runs the Rust kernel tests, the Python modules
+of `tests/quick_python.txt` and the GUT files of `tests/quick_suite.txt` with `GUT_SLOW=0 GUT_BALANCE=0`, and two console smokes; it
+is for iteration, not a gate (`tests/unit/test_quick_suite.gd` keeps slow, balance and GPU files out of the list). *Standard* is
+everything the script ran before plus `cargo test --release --lib`, with the slow files and without the balance tests. *Balance*
+runs only the files of `tests/balance_suite.txt` with `GUT_BALANCE=1` (`tests/fixtures/balance_tests.gd`: `test_dogfight`'s six-minute
+fight, `test_m3_sandbox`'s three waves, `test_turret_balance`); *full* is standard with the balance tests on. CI runs the standard tier.
 
 ## 13. Coding conventions
 

@@ -1,5 +1,12 @@
 # Quick test suite (for an implementing agent)
 
+> **As built (M6-T17, 2026-11-10).** The quick tier is `scripts/run_tests.sh --quick`, not a separate `run_quick_tests.sh`: one
+> entry point with `--quick | --standard | --balance | --full` (default standard, the gate), its helpers in `scripts/lib_tests.sh`.
+> The lists are data files: `tests/quick_suite.txt` (GUT, the list below plus `test_balance_tests` and `test_quick_suite`, which
+> are the quick tier's own guards), `tests/quick_python.txt` and `tests/balance_suite.txt`. All listed files still existed on `m6`.
+> Quick logs are `reports/quick_*.log` and `reports/gut_quick.xml`. Standard also runs `cargo test --release --lib`.
+> The "Check before handing back" items were run; the quick tier passes in about 3.5 minutes.
+
 A fast suite that touches every major area of the game, for agents and the maintainer to run between changes.
 `scripts/run_tests.sh` stays the full gate before a merge. This list was **trial-run on 2026-11-09** (branch `m5`,
 `5c65d81`, maintainer's machine, generated assets present): everything passed.

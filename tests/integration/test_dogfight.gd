@@ -87,6 +87,8 @@ func test_the_scenario_places_both_sides_in_their_wings() -> void:
 
 
 func test_one_side_is_destroyed_within_six_minutes_for_every_seed() -> void:
+	if BalanceTests.skip(self):  # a balance judgement (GUT_BALANCE=1, scripts/run_tests.sh --balance)
+		return
 	var lines := PackedStringArray()
 	var unfinished: int = 0
 	for seed_value: int in SEEDS:

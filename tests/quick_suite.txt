@@ -1,0 +1,121 @@
+# The quick tier (scripts/run_tests.sh --quick): one GUT script per line, grouped by area. Pure or fast files only, no
+# SlowTests or BalanceTests files, no *_gpu.gd (tests/unit/test_quick_suite.gd guards this).
+# Flight
+res://tests/unit/test_smoke.gd
+res://tests/unit/test_flight_model.gd
+res://tests/unit/test_flight_assist.gd
+res://tests/unit/test_flight_model_propellant.gd
+res://tests/unit/test_speed_governor.gd
+res://tests/unit/test_fuel_tank.gd
+res://tests/unit/test_thruster_layout.gd
+res://tests/unit/test_hardpoints.gd
+res://tests/integration/test_flight_batch.gd
+# Native core, parity, guards, threads
+res://tests/unit/test_sim_core.gd
+res://tests/unit/test_native_required.gd
+res://tests/unit/test_flight_step.gd
+res://tests/unit/test_contact_field.gd
+res://tests/unit/test_hit_broad_phase.gd
+res://tests/unit/test_pilot_kernels.gd
+res://tests/unit/test_brain_parity.gd
+res://tests/unit/test_sweep_cells.gd
+res://tests/unit/test_missile_kernel.gd
+res://tests/unit/test_mine_kernel.gd
+res://tests/unit/test_core_state.gd
+res://tests/unit/test_tier.gd
+res://tests/unit/test_parity_fixture.gd
+# Input and controls
+res://tests/unit/test_input_adapter.gd
+res://tests/unit/test_input_map.gd
+res://tests/unit/test_control_profile.gd
+res://tests/unit/test_godot_input_source.gd
+res://tests/unit/test_trigger_calibration.gd
+res://tests/unit/test_binding_capture.gd
+res://tests/unit/test_controls_model.gd
+# Console, settings, info.md
+res://tests/unit/test_console_registry.gd
+res://tests/unit/test_console_tokenizer.gd
+res://tests/unit/test_console_completer.gd
+res://tests/unit/test_settings_schema.gd
+res://tests/unit/test_settings.gd
+res://tests/unit/test_settings_menu_model.gd
+res://tests/integration/test_debug_console.gd
+res://tests/integration/test_console_command_list.gd
+res://tests/integration/test_info_md.gd
+# Weapons, hits, damage, rams
+res://tests/unit/test_pulse_cannon_gate.gd
+res://tests/unit/test_pulse_cannon_capacitor.gd
+res://tests/unit/test_weapon_capacitor.gd
+res://tests/unit/test_hull_health.gd
+res://tests/unit/test_hit_shape.gd
+res://tests/unit/test_intercept_math.gd
+res://tests/unit/test_ram_math.gd
+res://tests/unit/test_ram_tracker.gd
+res://tests/unit/test_damage_zones.gd
+res://tests/integration/test_hit_resolver.gd
+res://tests/integration/test_damage.gd
+res://tests/integration/test_friendly_fire.gd
+res://tests/integration/test_ram_scale.gd
+# Ships, pools, destruction
+res://tests/unit/test_ship_catalog.gd
+res://tests/integration/test_ship_scene.gd
+res://tests/integration/test_ship_pool.gd
+res://tests/integration/test_multi_ship.gd
+res://tests/integration/test_starfury_breakup.gd
+res://tests/integration/test_debris_pool.gd
+# Targeting and HUD
+res://tests/unit/test_targeting_system.gd
+res://tests/unit/test_hud_layout.gd
+res://tests/unit/test_radar_model.gd
+res://tests/integration/test_targeting_controller.gd
+res://tests/integration/test_hud.gd
+# AI and wings
+res://tests/unit/test_ai_pilot_selection.gd
+res://tests/unit/test_attack_brain_states.gd
+res://tests/unit/test_avoidance_math.gd
+res://tests/unit/test_fire_lane.gd
+res://tests/unit/test_pilot_steering.gd
+res://tests/unit/test_formation.gd
+res://tests/unit/test_wing.gd
+res://tests/unit/test_ai_profile.gd
+res://tests/unit/test_brain_factory.gd
+res://tests/integration/test_ai_driver.gd
+res://tests/integration/test_ai_think_rate.gd
+res://tests/integration/test_wing_orders.gd
+# Factions
+res://tests/unit/test_faction_table.gd
+# World and rebase
+res://tests/unit/test_universe_pos.gd
+res://tests/unit/test_sim_clock.gd
+res://tests/integration/test_world_frame.gd
+res://tests/integration/test_every_world_core.gd
+res://tests/unit/test_star_system.gd
+# Missions, dialog, scenarios
+res://tests/unit/test_scenario_loader.gd
+res://tests/unit/test_mission_sequencer.gd
+res://tests/unit/test_triggers.gd
+res://tests/unit/test_objective_book.gd
+res://tests/unit/test_dialog_queue.gd
+res://tests/unit/test_dialog_ids.gd
+res://tests/integration/test_mission_runner.gd
+# Waves and encounters
+res://tests/unit/test_wave_plan.gd
+res://tests/unit/test_encounter_plan.gd
+# Game flow, menus, main scene
+res://tests/unit/test_game_flow.gd
+res://tests/integration/test_boot_routing.gd
+res://tests/integration/test_front_end.gd
+res://tests/integration/test_pause_menu.gd
+res://tests/integration/test_main_scene.gd
+# Audio
+res://tests/unit/test_audio_buses.gd
+res://tests/unit/test_engine_voices.gd
+res://tests/integration/test_audio_director.gd
+# Rendering settings
+res://tests/unit/test_upscaling.gd
+res://tests/unit/test_anti_aliasing_mode.gd
+res://tests/integration/test_post_effects.gd
+# Test infrastructure
+res://tests/unit/test_slow_tests.gd
+res://tests/unit/test_balance_tests.gd
+res://tests/unit/test_quick_suite.gd
