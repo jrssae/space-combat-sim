@@ -37,6 +37,10 @@ var system: TargetingSystem = TargetingSystem.new()
 ## frame. Other ships only check their selection each tick and build a list when something asks for one, so their ticks
 ## cost nothing per targetable (with every ship gathering, targeting was two thirds of a 100-ship tick).
 var keeps_candidates: bool = true
+## The selection has been identified (M5-T25, `TargetCategories.is_identified`): it came within the identification range or
+## broadcasts. Once identified it stays so while it is selected, so a target that opens the range does not lose its name.
+## Kept for a controller that keeps its candidates (the player's).
+var selection_identified: bool = false
 
 var _body: RigidBody3D = null
 # The list was not built since the last refresh (M4-T34, built on read): the next reader builds it.
@@ -144,16 +148,23 @@ func refresh() -> void:
 		_check_selection()
 	else:
 		_snapshot()
+		_note_identified()
 	_emit_if_changed(before)
 
 
 ## Applies this tick's combat command: `target_next` / `target_prev` cycle by range, `target_ahead` picks the target nearest the
-## nose. Both act on candidates gathered now, so it does not matter whether the caller runs before this node.
+## nose, `target_nearest` toggles between the nearest and the 2nd nearest enemy (M5-T25). All act on candidates gathered
+## now, so it does not matter whether the caller runs before this node.
 func apply(cmd: CombatCommand) -> void:
-	if cmd == null or not (cmd.target_next or cmd.target_prev or cmd.target_ahead) or not _has_body():
+	if cmd == null or not (cmd.target_next or cmd.target_prev or cmd.target_ahead or cmd.target_nearest) or not _has_body():
 		return
 	var before: int = system.selected_id()
 	_gather()
+	if cmd.target_nearest:
+		var at: Vector3 = _ship_position()
+		var pick: int = TargetCategories.tap_pick(system.in_range(at), at, system.own_faction, system.selected_id())
+		if pick != TargetingSystem.NO_TARGET:
+			system.select_id(pick, at)
 	if cmd.target_next:
 		system.select_next(_ship_position())
 	if cmd.target_prev:
@@ -391,7 +402,8 @@ func _live_info(target_id: int) -> TargetInfo:
 	var target := instance_from_id(target_id) as Targetable if is_instance_id_valid(target_id) else null
 	if target == null or not target.is_inside_tree():
 		return null
-	if target.is_active():
+	# Behind a pause (the target menu, the pause menu) nothing processes, yet the target is still there to read.
+	if target.is_active() or (get_tree().paused and target.is_visible_in_tree()):
 		return target.to_target_info()
 	return TierTargets.info_of(get_tree(), target_id)
 
@@ -450,8 +462,19 @@ func _select_alone(target: TargetInfo) -> void:
 	system.select_id(target.id, _ship_position())
 
 
+# Marks the selection identified once it is close enough or broadcasts; it then stays so until the selection changes.
+func _note_identified() -> void:
+	if selection_identified or not system.has_selection() or not _has_body():
+		return
+	var target := instance_from_id(system.selected_id()) as Targetable
+	if target != null:
+		selection_identified = TargetCategories.is_identified(selected_offset().length(), target.broadcast_range_m)
+
+
 func _emit_if_changed(before: int) -> void:
 	if system.selected_id() != before:
+		selection_identified = false
+		_note_identified()
 		if _body != null:
 			SimCore.note_selection_changed(_body.get_instance_id(), system.selected_id())  # the core's column (M4-T35)
 		target_changed.emit(system.selected_id())

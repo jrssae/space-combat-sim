@@ -19,6 +19,13 @@ var toggle_running_lights: bool = false
 var comms_open: bool = false
 var comms_pick: int = -1
 var comms_close: bool = false
+## The target menu (M5-T25): a hold of the target button asks for it (`target_menu_open`, an edge). While a radial menu is open
+## `InputAdapter.sample_radial` gives the direction pointed (`radial_point`: x right, y up, 0..1; zero when nothing points)
+## and the select and back edges.
+var target_menu_open: bool = false
+var radial_point: Vector2 = Vector2.ZERO
+var radial_select: bool = false
+var radial_back: bool = false
 ## Free look (L3 held on a pad, the middle mouse button held): the camera turns, the ship does not. `look_stick` is the right
 ## stick as an absolute look direction (x right, y up, -1..1); `look_mouse_px` is the mouse travel this tick in pixels
 ## (x right, y up).
@@ -34,5 +41,7 @@ func to_dict() -> Dictionary:
 		"wing_attack": wing_attack, "wing_form": wing_form, "wing_engage": wing_engage, "wing_cover": wing_cover,
 		"toggle_running_lights": toggle_running_lights,
 		"comms_open": comms_open, "comms_pick": comms_pick, "comms_close": comms_close,
+		"target_menu_open": target_menu_open, "radial_point": radial_point, "radial_select": radial_select,
+		"radial_back": radial_back,
 		"look_active": look_active, "look_stick": look_stick, "look_mouse_px": look_mouse_px,
 	}

@@ -4399,3 +4399,43 @@ and hands back only the bolts left with a pair (in launch order), their columns,
 GDScript (a couple of pairs a tick in a battle). `last_hit` is described when read. At `battle` 1000 the hit stage fell from
 1.30 to 1.01 ms.
 
+### 18.19 The target menu and the radial framework as built (T25, Q26, Q44)
+
+**The target buttons.** A tap (`CombatCommand.target_nearest`) toggles between the nearest and the 2nd nearest enemy
+(`TargetCategories.tap_pick`, unknown contacts standing in when no enemy is identified). A hold of `settings.target_hold_s`
+gives `UiCommand.target_menu_open`. `target_ahead` and `target_prev` stay actions without a default binding; the wheel
+still cycles every target.
+
+**The radial framework** (shared with T46's comms menu):
+
+| Class | Kind | Holds |
+|---|---|---|
+| `RadialMenu` | pure | the page stack, the highlight, `slice_at` (slice 0 straight up, clockwise; a boundary takes the slice nearer the top; under `POINT_THRESHOLD` nothing is pointed at) and `arrange`, which puts a "none" entry in the down slice of an even ring |
+| `RadialLayout` | pure | the ring vertically centred at one side, slice polygons, spokes, label points, scaled by window height |
+| `RadialMenuView` | `CanvasLayer` 45 | draws a `RadialMenu`; hidden and not processing while closed |
+
+A slot is `{label, sub, detail, color, payload}`; an empty one is a blank slice the highlight skips. The owner feeds
+`point`, `select` and `back` and decides what a selected entry does.
+
+**The target menu.** `TargetMenu` (pure) builds the pages from one candidate list: the six categories with counts, then
+the nearest five of one and NONE. `select` returns `{action: target | waypoint | clear_target | clear_waypoint, id, label,
+point}` and closes. `TargetMenuDirector` (a node under `Main`) reads `TargetingController.candidates()` before it pauses
+the tree, since a paused marker is not in play, then carries the pick out after it resumes. `Main` calls its `step` only
+while it is open, with `InputAdapter.sample_radial`'s command.
+
+**Input while a radial menu is open.** `begin_radial` seeds the menu's select and back from what is held;
+`sample_radial` reads the direction pointed (the `radial_*` actions, else the mouse's travel), select, back and Start, and
+re-seeds every other edge each tick; `end_radial` re-seeds them once more and holds fire and the aim stick over until each
+is let go. The `radial_*` actions are in `project.godot` and outside the control profiles, as the menu kit's `ui_*` are.
+
+**Identification.** `TargetCategories.is_identified`: within 5 km, or a broadcast range above 0. An unidentified contact is
+grey on the radar (`radar_kernel::plot` flags it from `ident_range_m`; `known_id` exempts a selection already identified),
+sits under Unknown, and reads `UNKNOWN` as the target (`HudInput.target_unknown`). `TargetingController.selection_identified`
+latches for the player's selection until it changes. `Targetable.role` (ship, civilian, beacon) feeds the categories.
+
+**Waypoints.** `HudWaypoint` holds the pilot's pick and who spoke last. A script's waypoint carries a key that changes when
+it is set anew (`mission:<serial>`, `route:NAV n`); `Hud.final_input` lets the director settle the frame's waypoint after
+the mission's part. `HudInput.waypoint_id` marks the waypoint's radar contact.
+
+**Cost.** Opening: 0.28 ms with 10 candidates, 2.56 ms with 304 (the list is most of it). Closed: nothing per tick.
+

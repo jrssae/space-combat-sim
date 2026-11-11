@@ -222,6 +222,13 @@ func local_position(actor: String) -> Variant:
 	return node.global_position if node != null else null
 
 
+## The `Targetable` id of the actor `actor` (its radar contact), or 0 when it is not in play or has no marker (M5-T25).
+func target_id(actor: String) -> int:
+	var node: Node3D = _node_of(MissionWorld.key(actor))
+	var marker := node.get_node_or_null(^"Targetable") as Targetable if node != null else null
+	return marker.get_instance_id() if marker != null else 0
+
+
 # The node of a live actor (the ship's body or the buoy), or null when it is unknown, parked, destroyed or flying another name.
 func _node_of(k: String) -> Node3D:
 	var thing: Object = _actors.get(k)

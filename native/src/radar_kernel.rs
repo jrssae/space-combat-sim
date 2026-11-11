@@ -24,6 +24,8 @@ pub struct Plot {
     pub points: Vec<Vector3>,
     pub ranges: Vec<f64>,
     pub rims: Vec<u8>,
+    /// 1 for a contact too far to identify (M5-T25): beyond the identification range with no transponder.
+    pub unknown: Vec<u8>,
     pub units: Vec<(f32, f32)>,
     pub feet: Vec<(f32, f32)>,
     pub selected: i32,
@@ -60,6 +62,9 @@ fn range_between(from: Vector3, to: Vector3) -> f64 {
 
 /// `RadarModel.plot` without the colours: every contact (`ids`, World `positions`, broadcast `reach`) within
 /// `MAX_RANGE_M` of a ship at `own_position` with attitude `own_basis`, or within its own reach (then on the rim).
+/// A contact beyond `ident_range_m` that does not broadcast is flagged unknown, except `known_id` (a selection the
+/// pilot has already identified).
+#[allow(clippy::too_many_arguments)]
 pub fn plot(
     ids: &[i64],
     positions: &[Vector3],
@@ -67,6 +72,8 @@ pub fn plot(
     own_position: Vector3,
     own_basis: &Basis,
     selected_id: i64,
+    ident_range_m: f64,
+    known_id: i64,
     out: &mut Plot,
 ) {
     *out = Plot {
@@ -123,6 +130,8 @@ pub fn plot(
         out.points.push(point);
         out.ranges.push(ranges[i]);
         out.rims.push(u8::from(ranges[i] > MAX_RANGE_M));
+        out.unknown
+            .push(u8::from(ranges[i] > ident_range_m && reach[i] <= 0.0 && ids[i] != known_id));
         out.units.push(to_unit(point));
         out.feet.push(to_unit(Vector3::new(point.x, point.y, 0.0)));
     }
@@ -130,3 +139,6 @@ pub fn plot(
         out.selected = out.order.len() as i32 - 1;
     }
 }
+
+#[cfg(test)]
+mod tests;

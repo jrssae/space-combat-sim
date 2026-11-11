@@ -27,7 +27,7 @@ const ENTRIES: Dictionary = {
 		"doc": "Trigger deadzone applied after rest calibration"},
 	&"target_hold_s": {"type": TYPE_FLOAT, "default": 0.35, "min": 0.15, "max": 1.0,
 		"category": &"controls", "label": "Target button hold time", "step": 0.05,
-		"doc": "Hold a target button this long for its second function (pad B: previous target; keyboard B, Mouse 2: nearest the nose); a shorter tap selects the next target"},
+		"doc": "Hold a target button (pad B, keyboard B, Mouse 2) this long to open the target menu; a shorter tap selects the nearest enemy"},
 	&"assist_default": {"type": TYPE_BOOL, "default": true,
 		"category": &"flight", "label": "Flight assist at start",
 		"doc": "Flight assist state at spawn"},

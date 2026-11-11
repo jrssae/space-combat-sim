@@ -23,6 +23,10 @@ func actors() -> PackedStringArray:
 	return PackedStringArray([actor, other]) if not other.is_empty() else PackedStringArray([actor])
 
 
+func place() -> UniversePos:
+	return point
+
+
 func test(world: MissionWorld) -> bool:
 	var from: UniversePos = world.position_of(actor)
 	var goal: UniversePos = _goal(world)

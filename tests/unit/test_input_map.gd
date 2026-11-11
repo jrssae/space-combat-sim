@@ -232,14 +232,44 @@ func test_the_right_stick_pitches_and_yaws_and_the_dpad_sides_are_lights_and_fre
 
 
 func test_pad_b_cycles_targets_and_dpad_up_toggles_assist() -> void:
-	assert_eq(_actions_on_button(JOY_BUTTON_B), [&"target_cycle"] as Array[StringName], "B: tap next, hold previous")
+	assert_eq(_actions_on_button(JOY_BUTTON_B), [&"target_cycle"] as Array[StringName], "B: tap the nearest enemy, hold the target menu")
 	assert_eq(_actions_on_button(JOY_BUTTON_DPAD_UP), [&"toggle_flight_assist"] as Array[StringName])
 	assert_false(InputAdapter.EDGE_ACTIONS.has(&"target_cycle"), "a tap-or-hold button: the tap fires on release")
 	assert_false(InputAdapter.EDGE_ACTIONS.has(&"target_next"), "and so is target_next")
 	assert_true(InputAdapter.EDGE_ACTIONS.has(&"target_ahead"), "an event bound to target_ahead stays a press edge")
-	assert_true(_has_key(&"target_next", KEY_B), "keyboard B: tap next, hold nearest the nose")
+	assert_true(_has_key(&"target_next", KEY_B), "keyboard B: the same tap and hold")
+	assert_eq(InputMap.action_get_events(&"target_ahead").size(), 0, "nearest the nose stays an action, unbound (M5-T25)")
 	assert_true(_has_mouse(&"target_next", MOUSE_BUTTON_RIGHT), "and so does Mouse 2")
 	assert_false(_has_pad_button(&"target_next"), "the pad targets with target_cycle")
+
+
+func test_the_radial_menus_actions_are_fixed_and_outside_the_profiles() -> void:
+	# M5-T25: the right stick or the arrow keys point, A, Enter or Mouse 1 select, B, Backspace or Mouse 2 go back. They are
+	# read only while a radial menu is open, so sharing A with fire and B with the target button is the point.
+	var expected: Dictionary = {
+		&"radial_up": [JOY_AXIS_RIGHT_Y, -1.0, KEY_UP], &"radial_down": [JOY_AXIS_RIGHT_Y, 1.0, KEY_DOWN],
+		&"radial_left": [JOY_AXIS_RIGHT_X, -1.0, KEY_LEFT], &"radial_right": [JOY_AXIS_RIGHT_X, 1.0, KEY_RIGHT],
+	}
+	assert_eq(InputAdapter.RADIAL_ACTIONS.size(), 6)
+	for action: StringName in InputAdapter.RADIAL_ACTIONS:
+		assert_true(InputMap.has_action(action), "InputMap has %s" % action)
+		assert_false(InputAdapter.ACTIONS.has(action), "%s is not a profile action" % action)
+	for action: StringName in expected:
+		var events: Array[InputEvent] = InputMap.action_get_events(action)
+		assert_eq(events.size(), 2, String(action))
+		var motion := events[0] as InputEventJoypadMotion
+		assert_eq(motion.axis, expected[action][0], "%s: the right stick" % action)
+		assert_eq(motion.axis_value, expected[action][1], String(action))
+		assert_eq((events[1] as InputEventKey).physical_keycode, expected[action][2], "%s: its arrow key" % action)
+		assert_almost_eq(InputMap.action_get_deadzone(action), 0.15, 1e-6)
+	var buttons: Dictionary = {&"radial_select": [JOY_BUTTON_A, KEY_ENTER, MOUSE_BUTTON_LEFT],
+			&"radial_back": [JOY_BUTTON_B, KEY_BACKSPACE, MOUSE_BUTTON_RIGHT]}
+	for action: StringName in buttons:
+		var events: Array[InputEvent] = InputMap.action_get_events(action)
+		assert_eq(events.size(), 3, String(action))
+		assert_eq((events[0] as InputEventJoypadButton).button_index, buttons[action][0], String(action))
+		assert_eq((events[1] as InputEventKey).physical_keycode, buttons[action][1], String(action))
+		assert_eq((events[2] as InputEventMouseButton).button_index, buttons[action][2], String(action))
 
 
 func _actions_on_button(button: JoyButton) -> Array[StringName]:

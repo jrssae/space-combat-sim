@@ -67,6 +67,10 @@ res://tests/unit/test_targeting_system.gd
 res://tests/unit/test_hud_layout.gd
 res://tests/unit/test_radar_model.gd
 res://tests/integration/test_targeting_controller.gd
+res://tests/unit/test_radial_menu.gd
+res://tests/unit/test_target_categories.gd
+res://tests/unit/test_target_menu.gd
+res://tests/integration/test_target_menu.gd
 res://tests/integration/test_hud.gd
 # AI and wings
 res://tests/unit/test_ai_pilot_selection.gd

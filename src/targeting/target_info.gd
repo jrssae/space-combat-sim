@@ -24,6 +24,9 @@ var damage_zones: PackedFloat32Array = PackedFloat32Array()
 ## The target's broadcast range (`Targetable.broadcast_range_m`, M3-T17), m: 0 for none, `INF` for everywhere.
 var broadcast_range_m: float = 0.0
 
+## What the target is to a pilot picking from a menu (`Targetable.Role`, M5-T25): a ship, a civilian ship or a nav beacon.
+var role: int = 0
+
 ## How many have been built in this process (M4-T02): a work count for tests and profiling, never gameplay.
 static var built_count: int = 0
 

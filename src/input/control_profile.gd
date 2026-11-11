@@ -23,7 +23,7 @@ const DEFAULT_NAME: String = "default"
 const NAME_PATTERN: String = "^[a-z0-9_]{1,32}$"
 ## Actions that need no pad binding: no pad button is free for them, or the pad reaches the function another way. The roll
 ## keys add to the right stick's diagonal roll; target_next, target_prev and target_ahead are the keyboard's and the
-## mouse's (the pad cycles with B, `target_cycle`, which a layout that targets with another button, such as m1_classic's
+## mouse's (the pad targets with B, `target_cycle`, which a layout that targets with another button, such as m1_classic's
 ## D-pad Up on target_next, can leave unbound). The wing orders are keys 1-4, the console and the comms menu (architecture §16
 ## D36, §18 D54). The running lights and the comms menu are D-pad Left and Right in the default, but a layout that rolls on the
 ## D-pad (m1_classic) has no button left for them.

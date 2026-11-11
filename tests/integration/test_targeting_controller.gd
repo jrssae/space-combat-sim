@@ -376,3 +376,64 @@ func test_buoy_scene_structure_and_groups() -> void:
 	for node: Node in nodes:
 		assert_false(node is CollisionObject3D or node is CollisionShape3D, "no collision: %s" % node.name)
 	assert_true(alpha.body.visible, "the textured body is drawn")
+
+
+# --- the target button's tap and identification (M5-T25) --------------------------------------------------------------
+
+
+# A bare marker at `at` (World frame).
+func _contact(label: String, faction: StringName, at: Vector3, broadcast_m: float = 0.0) -> Targetable:
+	var holder := Node3D.new()
+	world.add_child(holder)
+	holder.position = at
+	var marker := Targetable.new()
+	marker.display_name = label
+	marker.faction = faction
+	marker.broadcast_range_m = broadcast_m
+	holder.add_child(marker)
+	return marker
+
+
+func _tap() -> CombatCommand:
+	var cmd := CombatCommand.new()
+	cmd.target_nearest = true
+	return cmd
+
+
+func test_a_tap_toggles_the_two_nearest_enemies_and_never_takes_a_buoy() -> void:
+	controller.system.own_faction = Factions.EARTH_ALLIANCE
+	controller.apply(_tap())
+	assert_eq(controller.selected_name(), "", "buoys only: a tap selects nothing")
+	var at: Vector3 = body.global_position
+	_contact("THIRD", Factions.RAIDERS, at + Vector3(0.0, 0.0, -3000.0))
+	_contact("FIRST", Factions.RAIDERS, at + Vector3(0.0, 0.0, -1000.0))
+	_contact("SECOND", Factions.RAIDERS, at + Vector3(0.0, 2000.0, 0.0))
+	_contact("FRIEND", Factions.EARTH_ALLIANCE, at + Vector3(0.0, 0.0, -200.0), 1.0e5)
+	var picked: Array[String] = []
+	for i: int in 5:
+		controller.apply(_tap())
+		picked.append(controller.selected_name())
+	assert_eq(picked, ["FIRST", "SECOND", "FIRST", "SECOND", "FIRST"] as Array[String])
+	controller.apply(_next())
+	controller.apply(_tap())
+	assert_eq(controller.selected_name(), "FIRST", "from any other target a tap goes to the nearest enemy")
+
+
+func test_a_selection_is_identified_near_or_broadcasting_and_stays_so() -> void:
+	controller.system.own_faction = Factions.EARTH_ALLIANCE
+	var at: Vector3 = body.global_position
+	var far: Targetable = _contact("FAR", Factions.RAIDERS, at + Vector3(0.0, 0.0, -9000.0))
+	controller.select_id(far.get_instance_id())
+	assert_eq(controller.selected_name(), "FAR")
+	assert_false(controller.selection_identified, "9 km off with no transponder: not identified")
+	(far.get_parent() as Node3D).position = at + Vector3(0.0, 0.0, -4000.0)
+	controller.refresh()
+	assert_true(controller.selection_identified, "inside 5 km it is")
+	(far.get_parent() as Node3D).position = at + Vector3(0.0, 0.0, -9000.0)
+	controller.refresh()
+	assert_true(controller.selection_identified, "and it stays identified while selected")
+	controller.clear_selection()
+	controller.select_id(far.get_instance_id())
+	assert_false(controller.selection_identified, "selected anew from afar, it is unknown again")
+	controller.select_id(_id_of("NAV ALPHA"))
+	assert_true(controller.selection_identified, "a buoy broadcasts: identified at once")

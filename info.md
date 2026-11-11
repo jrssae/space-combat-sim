@@ -76,6 +76,7 @@ Arguments in `<angle brackets>` are required, `[square brackets]` optional, `a|b
 |---|---|---|---|
 | `respawn` | | Reset the ship to the scenario start (refused in a mission) | in flight |
 | `pause` | `[on\|off]` | Pause or resume the game; no argument toggles; refused while the pause menu is open (resume from it) | in flight |
+| `targetmenu` | `open\|pick <entry>\|back\|close` | The target menu (a hold of the target button): `open` pauses the game and shows the categories; `pick` takes a slice 0-5 clockwise from the top or its label (`enemies`, `none`, `"raider 2"`) and opens that category or makes the pick; `back` goes back a ring; `close` resumes | in flight |
 | `scenario` | `[combat_sandbox\|free_flight\|instructor_route\|dogfight\|civilian_showcase\|belt_showcase]` | Load a scenario for this session and reload the scene | in flight |
 | `window` | `<width> <height>` or `max\|normal` | Resize the window, or maximize or restore it | in flight |
 | `throttle` | `<level>` | Hold both main pods at a level, 0..1, on top of the pilot's input | in flight |
@@ -172,6 +173,7 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `screens` | The cockpit screens: shown, powered, paint counts and the lamps lit | in flight |
 | `pause_menu` | Whether the pause menu is open, the page on top and how many pages are open | in flight |
 | `comms_menu` | The comms menu (D-pad Right): whether it is open, the page, time left, entries picked and why it last closed | in flight |
+| `target_menu` | The target menu: whether it is open, the ring and its entries, the highlight, the ship's target as the HUD names it, the HUD waypoint, the last pick, why it last closed, and what the last opening cost | in flight |
 | `render` | The renderer (`forward_plus` or `headless`), fps, frame time, draw calls, triangles, VRAM, far dots, GPU, display and window | in flight |
 | `lights` | Which emitters light the scene this frame and what that costs | front end, flight |
 | `sky` | The star points and the nebula panorama: loaded and shown | front end, flight |

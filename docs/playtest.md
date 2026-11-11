@@ -40,7 +40,7 @@ Right stick   up/down: pitch (stick back = nose up)   Left stick  strafe left/ri
               left/right: yaw;  the four diagonals: roll toward the side you lean (up-right or down-right = roll right)
 D-pad Up      flight assist on/off                   D-pad Down  fire mode
 D-pad Left    running lights on/off (key 5; the HUD says LIGHTS ON or OFF, and your wingmen follow)     D-pad Right  free
-B             tap: next target                       hold (about 0.35 s): previous target (as the mouse wheel)
+B             tap: nearest enemy (again: the 2nd nearest)   hold (about 0.35 s): the target menu (see "Target menu", M5)
 X (toggle)    auto-track on/off: the nose swings onto the lead reticle of the selected target and follows it as it moves
               (with none selected it takes the nearest hostile; it switches itself off when none is left); your speed and
               direction are untouched, so you can keep thrusting and strafing while you aim. AUTO-TRACK shows on the HUD
@@ -60,18 +60,18 @@ R / F         strafe up / down                        Z / C       strafe left / 
 Caps Lock / G roll left / right                       X           brake (hold)           Shift  auto-track (toggle)
 Space         fire                                    V           fire mode              T      flight assist on/off
 5             running lights on/off (as D-pad Left)
-B             tap: next target, hold: target nearest the nose (as Mouse 2)              Tab    cockpit / chase camera
+B             tap: nearest enemy, hold: the target menu (as Mouse 2)                   Tab    cockpit / chase camera
 Mouse         pitch and yaw: how fast you move it is how fast you turn (stop the mouse and the turn stops)
 Alt (hold)    frees the mouse: the cursor appears, the ship ignores it and clicks do not fire; Alt + drag moves the window
-Mouse 1       fire                                    Mouse 2     tap: next target, hold: target nearest the nose
+Mouse 1       fire                                    Mouse 2     tap: nearest enemy, hold: the target menu
 Wheel         previous / next target                  Middle button (hold)  free look, as L3
 Mouse 4       auto-track (toggle)                     Mouse 5     fire mode (the side buttons, if your mouse has them)
 N or Print    screenshot (saved to user://screenshots/, path printed)
 Backspace     respawn                                 Esc         pause (also frees the mouse)       F3  debug overlay
 ```
 
-No flight key sits right of G and B: pitch and yaw are the mouse (or the pad), and previous target and "nearest the nose"
-have no keys of their own (the wheel and a B or Mouse 2 hold do both). Ctrl is free, and keys 1-4 are the wing orders and 5 the
+No flight key sits right of G and B: pitch and yaw are the mouse (or the pad). Previous target and "nearest the nose" have no
+keys of their own since M5 (the wheel cycles; `bind target_ahead key:H` gives the second one back). Ctrl is free, and keys 1-4 are the wing orders and 5 the
 running lights. Caps Lock is read as a held key (down = roll left); if your desktop turns it into a toggle, tell the
 maintainer (the fallback is Ctrl). Your own saved control profiles keep the keys they had: `controls use default` in the console
 loads layout B.
@@ -629,3 +629,40 @@ Check (AC18, this mission's part):
 - [ ] The civilian: it runs when attacked and comes back to its route; a Saturn 8 gets through the belt without hitting rocks.
 - [ ] The lines read as people, with the civilian's name filled in; the last line before the debrief is heard out.
 - [ ] Losing the civilian, losing yourself and winning each end where you expect, with the right debrief.
+
+## Target menu (M5-T25)
+
+Fly the dogfight (`play dogfight`, or **Sandbox**, **Dogfight**) and a big battle (`bench battle 300 120` in the console).
+
+```
+B / Mouse 2 (tap)    the nearest enemy; tap again for the 2nd nearest; again for the nearest
+B / Mouse 2 (hold)   the game pauses and the target menu opens at the left; it stays open when you let go
+Right stick          points at a slice (centred, the highlight stays); arrow keys and moving the mouse do the same
+A / Enter / Mouse 1  open the category, or pick the entry
+B / Backspace / Mouse 2   back to the categories; from the categories, close and resume
+Start / Esc          close it and open the pause menu
+Wheel                cycles through every target, as before
+```
+
+The categories, clockwise from the top: **Enemies**, **Allies**, **Civilian**, **Unknown**, **Navigation**, **Objectives**. Each
+opens a ring of its nearest five with **NONE** straight down. A ship you pick becomes the target and the game resumes. A beacon
+or an objective becomes the waypoint (the diamond in the view, and a diamond round its dot on the radar); your target stays as it
+was. NONE clears the target or the waypoint. A mission that sets its waypoint after your pick takes it back.
+
+A contact more than 5 km away with no transponder is **unknown**: a grey dot on the radar, listed under Unknown with no name, and
+`UNKNOWN` in grey if you target it. Inside 5 km it gets its colour and name. Allies, civilians and buoys broadcast and are always
+known.
+
+From the console: `targetmenu open`, `targetmenu pick enemies`, `targetmenu pick 1` (a slice, 0 at the top, clockwise) or
+`targetmenu pick "raider 2"`, `targetmenu back`, `targetmenu close`; `state target_menu` shows it.
+
+Check (T25's (H) items; screenshots of both rings are in `references/screenshots/T25 target menu/`):
+
+- [ ] The ring reads at 1080 lines and at 4K: the category names, the ship names and ranges, the highlight.
+- [ ] The pause and the resume mid-fight feel right, and nothing fires, turns or retargets as the game comes back.
+- [ ] 0.35 s is the right hold (`set settings.target_hold_s 0.5` to try another).
+- [ ] The tap: nearest, 2nd nearest, nearest. With no identified enemy it takes the nearest unknown contact: wanted, or not?
+- [ ] Unknown contacts: the grey reads against the radar; a contact turning unknown again when it opens past 5 km is acceptable
+      (the selected target keeps its name).
+- [ ] Navigation and Objectives: the waypoint diamond and its radar mark are easy to find; the ship keeps facing its target.
+- [ ] Keyboard and mouse: arrows (left or right alone take the upper slice), the mouse's direction, Enter, Backspace.

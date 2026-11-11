@@ -40,6 +40,7 @@ func apply(pc: PilotCommand, held: bool, shot_playing: bool) -> bool:
 		pc.combat = CombatCommand.new()
 		# The wing orders wait too (keys 1-4 and the comms menu, which `Main` closes).
 		pc.ui.comms_open = false
+		pc.ui.target_menu_open = false  # nothing to pick while the ship is out of the pilot's hands
 		pc.ui.comms_pick = -1
 		pc.ui.wing_attack = false
 		pc.ui.wing_form = false

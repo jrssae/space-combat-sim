@@ -19,6 +19,12 @@ func actors() -> PackedStringArray:
 	return PackedStringArray()
 
 
+## The fixed place this trigger is about (an area's centre, a point to reach), or null: the target menu offers an objective
+## with one as a waypoint (M5-T25).
+func place() -> UniversePos:
+	return null
+
+
 ## Called when the trigger goes live (a timer starts counting here).
 func arm(_world: MissionWorld) -> void:
 	pass

@@ -63,6 +63,8 @@ var result: Dictionary = {}
 var tick_work: int = 0
 ## The actor the HUD's waypoint marks ("" for none).
 var waypoint_name: String = ""
+## Counts the script's `waypoint` calls (M5-T25): the HUD shows the later of the script's waypoint and the pilot's own pick.
+var waypoint_serial: int = 0
 ## `lock_controls` asked for the player's controls to be held: `Main` zeroes their commands while it is set.
 var controls_locked: bool = false
 ## The scenario's camera shots by id (`load_cinematics`).
@@ -299,6 +301,7 @@ func waypoint(target: Variant) -> void:
 	if has_ended():
 		return
 	waypoint_name = "" if target == null else String(target).strip_edges()
+	waypoint_serial += 1
 	journal.append("waypoint %s" % (waypoint_name if not waypoint_name.is_empty() else "none"))
 
 

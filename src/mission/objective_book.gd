@@ -182,6 +182,25 @@ func active() -> Array[Dictionary]:
 	return out
 
 
+## What the active objective `id` is about (M5-T25, the target menu's objectives): `{actors: PackedStringArray, point:
+## UniversePos or null}`, from its success trigger and then its fail trigger. The actors are in the triggers' order, the
+## player left out; `point` is the first fixed place a trigger names. Both empty for an objective that names neither.
+func subject(id: StringName) -> Dictionary:
+	var actors := PackedStringArray()
+	var point: UniversePos = null
+	var entry: Entry = _by_id.get(id)
+	if entry != null:
+		for trigger: Trigger in [entry.success, entry.fail]:
+			if trigger == null:
+				continue
+			if point == null:
+				point = trigger.place()
+			for actor: String in trigger.actors():
+				if MissionWorld.key(actor) != "player" and not actors.has(actor):
+					actors.append(actor)
+	return {"actors": actors, "point": point}
+
+
 ## Every primary objective is done (and there is at least one).
 func all_primaries_done() -> bool:
 	var primaries: int = 0

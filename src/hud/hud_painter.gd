@@ -470,6 +470,12 @@ func _draw_radar(f: HudFrame, surface: HudSurface, s: float, w: float) -> void:
 		else:
 			_canvas.draw_circle(at[i], 4.5 * k, plot.colors[i])
 		_canvas.draw_arc(at[i], 8.0 * k, 0.0, TAU, 20, plot.colors[i], w * 0.75)
+	# The waypoint's contact (M5-T25): a diamond in the HUD's own colour, as its marker in the view.
+	var wp: int = f.waypoint_radar_index
+	if wp >= 0 and wp < at.size():
+		var d: float = 9.0 * k
+		_canvas.draw_polyline(PackedVector2Array([at[wp] + Vector2(0.0, -d), at[wp] + Vector2(d, 0.0), at[wp] + Vector2(0.0, d),
+				at[wp] + Vector2(-d, 0.0), at[wp] + Vector2(0.0, -d)]), LINE_COLOR, w * 0.75)
 
 
 # Fills the radar's dot buffers in one pass over the contacts (M4-T23: with the tier's rows a thousand of them): every

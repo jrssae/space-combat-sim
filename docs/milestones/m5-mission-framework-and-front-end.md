@@ -600,7 +600,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T17 | C | Free-flight encounters | T16, T02 | Opus | Seeded director under a CPU cap | done |
 | T18 | D | New guns and impacts | - | Opus | Synthesis to measured shapes | done |
 | T19 | D | Per-thruster engine bursts | T18 | Opus | Voice placement and a voice budget | done |
-| T25 | A | Targeting at scale: a target menu and other targeting UX for large battles (Q26; placed before T20; numbered last because it was added after the others had numbers) | T02, T07, the M4 rebase | Opus | UX judgement with a concept stop (H); reads M4's on-read candidate list | in progress |
+| T25 | A | Targeting at scale: a target menu and other targeting UX for large battles (Q26; placed before T20; numbered last because it was added after the others had numbers) | T02, T07, the M4 rebase | Opus | UX judgement with a concept stop (H); reads M4's on-read candidate list | done |
 | T29 | C | Generated asteroids and a sparse belt (D63, Q38): the `asteroids` generator, `BeltLayout`, `AsteroidBelt` as static rows | T27 | Opus | A new procgen asset and a placement seam M14 builds on | done |
 | T30 | B | Mission: Civilian escort with a cinematic intro (D62, Q36 to Q42), replacing Buoy defence and the ring | T29, T16, T17 | Opus | The random civilian, flee-and-resume in the native brains, three waves, writing and pacing | done |
 | T31 | - | L1: the flight batch's per-ship gather in native for row-commanded ships | T30 | Opus | The biggest measured lever (about 37 % of the tick at 1 000) | done |
@@ -1761,6 +1761,82 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   opening the menu at 500 ships measured (no per-tick cost when closed).
 - **Done when:** the maintainer's chosen set works in the dogfight scenario and a 300-ship battle, the tests pass, and the (H) items
   (readability at 4K and 1080 lines, the feel of the pause and resume mid-fight) are in the playtest list.
+- **Done (as built, 2026-11-11, on the maintainer's machine):**
+  - **Built (Q44's set, the mockup of 2026-11-11):**
+    - **The tap.** A tap of a target button (pad B, keyboard B, Mouse 2) gives `CombatCommand.target_nearest`:
+      `TargetCategories.tap_pick` takes the nearest enemy, or the 2nd nearest when the nearest is selected, and back. The
+      old hold (`target_ahead` on the keyboard, `target_prev` on the pad) left the buttons; both stay actions, unbound.
+      The mouse wheel still cycles every target.
+    - **The hold.** Held `settings.target_hold_s` (0.35 s), a target button gives `UiCommand.target_menu_open`.
+      `TargetMenuDirector` reads the player's candidate list once, pauses the tree (the pause the game had before is put
+      back on close) and shows the menu; it stays open after the release.
+    - **The framework.** `RadialMenu` (pages, highlight, stick to slice, `arrange` with "none" in the down slice),
+      `RadialLayout` (the ring vertically centred at the left, slice polygons, label points) and `RadialMenuView` (a
+      `CanvasLayer` at layer 45 that is hidden and does not process while closed). T46 puts the comms pages on the same
+      three; T44's blur goes between the HUD's layer (40) and 45; T43's panel takes the right side (`right_side` mirrors
+      the ring if that is ever swapped).
+    - **The rings.** First: Enemies, Allies, Civilian, Unknown, Navigation, Objectives, clockwise from the top, with counts.
+      Second: six slices, the nearest five of the category clockwise from the top and NONE straight down. Objectives: the
+      active objectives whose triggers name an actor in play or a fixed place (`ObjectiveBook.subject`, `Trigger.place`),
+      the first five.
+    - **Picking.** A ship becomes the target; a beacon or an objective becomes the HUD waypoint (`HudWaypoint`: the diamond
+      on screen as before, and a diamond round its radar contact), never the target; NONE clears the target or the
+      waypoint. Every pick closes the menu and resumes. The later of the pilot's pick and a script's waypoint wins
+      (`MissionApi.waypoint_serial`, the instructor's route by its `NAV n`).
+    - **Input.** While it is open `InputAdapter.sample_radial` reads only the menu's stick, select, back and Start
+      (`radial_up/down/left/right/select/back`: the right stick or the arrow keys, A or Enter or Mouse 1, B or Backspace or
+      Mouse 2; the mouse's direction of travel points too). `begin_radial` seeds select and back from what is held (the B
+      that opened it is not a back); `end_radial` re-seeds every edge, and the A that selected does not fire and the stick
+      that pointed does not steer until each is let go. Start closes it and opens the pause menu.
+    - **Unknown.** A contact beyond 5 km (`TargetCategories.IDENT_RANGE_M`, the AI's sensor range) with no broadcast range is
+      unidentified: grey on the radar (the native radar kernel flags it, `ScsRadarPlot` colours it), listed under Unknown
+      with no name, and as the target it reads `UNKNOWN` in grey with no hull bar or damage outline.
+    - **Console.** Provider `target_menu`, command `targetmenu open|pick <entry>|back|close`; both in `info.md`.
+  - **Assumptions made where the settled design was silent (say if any should change):**
+    1. Both target buttons share the tap and the hold, so pad B's "hold = previous target" is gone with "nearest the nose".
+    2. With no identified enemy a tap takes the nearest unknown contact (and the 2nd nearest), so the button is never dead
+       while something is out there. With neither (free flight) it does nothing: buoys are reached through Navigation.
+    3. Identification keeps no memory: a contact that opens past 5 km is unknown again. The exception is the selected
+       target, which keeps its name and colour once identified for as long as it stays selected.
+    4. "Broadcasts" means a broadcast range above 0, at any distance (a civilian's 15 km transponder identifies it at 20 km).
+    5. Categories: a hostile ship is an enemy even when it is a civilian hull; a civilian of any people, and any ship of a
+       people neutral to the pilot, is under Civilian; a friendly ship that is not a civilian is an ally. A ship in the
+       low-attention tier is sorted by faction alone (its row carries no role).
+    6. The menu's own actions are fixed, like the menu kit's `ui_*` ones: declared in `project.godot`, not part of a control
+       profile, so nothing was added to saved profiles. Mouse 1 and Mouse 2 also select and go back. A plain left or right
+       arrow takes the upper slice of that side; add Down for the lower one.
+    7. Every category ring keeps six slices, so NONE and "the nearest" are always in the same direction; empty slices are
+       blank and the highlight skips them.
+    8. An objective's slice shows its text cut to 16 characters with its subject and range; the whole text shows under the
+       ring while it is highlighted.
+    9. The pilot's NONE on Navigation or Objectives hides a script's waypoint too, until the script sets one anew.
+    10. A hold does nothing while the controls are not the pilot's (a cinematic, `lock_controls`, the player down, the pause
+        menu). Opening the target menu closes the comms menu.
+    11. A light dim (25 % black) sits behind the ring until T44's blur.
+    12. The HUD keeps the selected target's box and readout behind a pause (it used to drop them behind the pause menu,
+        because a paused marker did not count as in play).
+  - **Changed from the plan:** no smart buttons, pins, scoped cycling or declutter (Q44 chose the tap and the wheel only). The
+    radar's unknown flag went into the native kernel (per contact, per frame); everything else is per-event GDScript.
+    `TargetCategories.summarise` keeps the nearest five per category in one pass instead of sorting every category.
+  - **Measured (RX 6950 XT, Forward+, window 1200x675, overlay off):** opening the menu, median of 10: 0.28 ms in the dogfight
+    (10 candidates), 2.56 ms in `bench battle 300` (304 candidates; 2.4 to 5.5 ms), most of it the candidate list itself;
+    `TargetMenu.open` alone on 500 seeded candidates 0.43 ms. Closed, it costs nothing per tick (no node of it processes,
+    no candidate is built: test). Dogfight: 145 fps and 41 draw calls closed, 145 and 71 on the first ring, 145 and 69 on
+    the second. Battle 300: 144 and 126 closed, 145 and 156 on the first ring, 134 and 154 on the second (the 144 Hz cap
+    throughout; the ring adds about 30 draw calls of text and lines).
+  - **Tests:** `test_radial_menu` 12, `test_target_categories` 6 (seeded sets of 500), `test_target_menu` 12 (with `HudWaypoint`
+    and the 500-candidate opening), integration `test_target_menu` 16 on the main scene (tap, hold and pause, stick, A and B,
+    Start, nothing fired or steered on resume, waypoints, the mission's later word, unknown contacts, no cost closed, the
+    console, the ring's place on screen), `test_input_adapter` 50 (five new, the tap and hold ones rewritten),
+    `test_input_map` 13, `test_radar_model` 15, `test_hud_layout` 52, `test_objective_book` 19,
+    `test_targeting_controller` 20, `test_control_lock` 10, and two Rust tests of the radar kernel. The quick tier passes
+    (1 629 GUT tests), and so does every GUT file with the slow ones left out (303 scripts, 3 318 tests); main-scene smoke
+    runs show no errors or leaks.
+  - **(H):** the screenshots in `references/screenshots/T25 target menu/` (both rings in the dogfight and the battle, and
+    the HUD after a pick); readability of the ring's labels at 1080 lines and at 4K; the feel of the pause and the resume
+    mid-fight, and whether 0.35 s is the right hold; whether a tap falling back to unknown contacts is wanted; whether a
+    far contact should stay identified once it has been seen close (assumption 3); the grey of unknown contacts against
+    the radar; the keyboard and mouse pointing.
 
 ### M5-T29 Generated asteroids and a sparse belt
 

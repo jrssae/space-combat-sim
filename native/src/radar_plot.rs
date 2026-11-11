@@ -18,7 +18,8 @@ impl ScsRadarPlot {
     /// The plot of contacts `ids` at World `positions` with broadcast `reach`, each coloured `colours[colour_ix[i]]`, seen
     /// from a ship at `own_position` with attitude `own_basis`, `selected_id` drawn last: `[order (contact indices, far to
     /// near), their ids, points, ranges, colours, rims, point units, stalk units (foot, point), stalk colours, selected
-    /// index]`.
+    /// index]`. A contact beyond `ident_range_m` with no reach is drawn in `unknown_colour` instead (M5-T25), unless it is
+    /// `known_id`.
     #[func]
     #[allow(clippy::too_many_arguments)]
     fn plot(
@@ -31,6 +32,9 @@ impl ScsRadarPlot {
         own_position: Vector3,
         own_basis: Basis,
         selected_id: i64,
+        ident_range_m: f64,
+        unknown_colour: Color,
+        known_id: i64,
     ) -> VarArray {
         radar_kernel::plot(
             ids.as_slice(),
@@ -39,6 +43,8 @@ impl ScsRadarPlot {
             own_position,
             &own_basis,
             selected_id,
+            ident_range_m,
+            known_id,
             &mut self.plot,
         );
         let p = &self.plot;
@@ -60,7 +66,11 @@ impl ScsRadarPlot {
         for (k, &i) in p.order.iter().enumerate() {
             order.push(i as i32);
             drawn_ids.push(id_list[i as usize]);
-            let c = colour_of(i);
+            let c = if p.unknown[k] == 1 {
+                unknown_colour
+            } else {
+                colour_of(i)
+            };
             cols.push(c);
             stalk_cols.push(Color::from_rgba(c.r, c.g, c.b, 0.5));
             units.push(Vector2::new(p.units[k].0, p.units[k].1));

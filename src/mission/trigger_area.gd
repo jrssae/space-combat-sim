@@ -18,6 +18,10 @@ func actors() -> PackedStringArray:
 	return PackedStringArray([actor])
 
 
+func place() -> UniversePos:
+	return centre
+
+
 func test(world: MissionWorld) -> bool:
 	var at: UniversePos = world.position_of(actor)
 	return at != null and at.distance_to(centre) <= radius_m
