@@ -23,8 +23,12 @@ def _chunk(kind: bytes, data: bytes) -> bytes:
     return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
 
 
-def png_bytes(image: np.ndarray, level: int = COMPRESSION_LEVEL) -> bytes:
-    """The PNG file for an 8-bit image of shape ``(h, w)``, ``(h, w, 3)`` or ``(h, w, 4)``."""
+def png_bytes(image: np.ndarray, level: int = COMPRESSION_LEVEL, row_filter: int = 0) -> bytes:
+    """The PNG file for an 8-bit image of shape ``(h, w)``, ``(h, w, 3)`` or ``(h, w, 4)``.
+
+    ``row_filter`` 0 stores rows as they are; 1 ("sub") stores each byte less its left neighbour, which shrinks noisy natural
+    maps (the planet's) by about half. Either way the same pixels give the same bytes.
+    """
     pixels = np.asarray(image)
     if pixels.dtype != np.uint8:
         raise TypeError(f"png_bytes wants uint8 pixels, got {pixels.dtype}")
@@ -33,7 +37,13 @@ def png_bytes(image: np.ndarray, level: int = COMPRESSION_LEVEL) -> bytes:
     if pixels.ndim != 3 or pixels.shape[2] not in _COLOUR_TYPE:
         raise ValueError(f"png_bytes wants (h, w), (h, w, 3) or (h, w, 4) pixels, got {pixels.shape}")
     height, width, channels = pixels.shape
-    rows = np.concatenate([np.zeros((height, 1), dtype=np.uint8), pixels.reshape(height, width * channels)], axis=1)
+    if row_filter not in (0, 1):
+        raise ValueError(f"png_bytes supports row filters 0 and 1, got {row_filter}")
+    flat = pixels.reshape(height, width * channels)
+    if row_filter == 1:
+        flat = flat.copy()
+        flat[:, channels:] -= pixels.reshape(height, width * channels)[:, :-channels]
+    rows = np.concatenate([np.full((height, 1), row_filter, dtype=np.uint8), flat], axis=1)
     header = struct.pack(">IIBBBBB", width, height, 8, _COLOUR_TYPE[channels], 0, 0, 0)
     data = zlib.compress(np.ascontiguousarray(rows).tobytes(), level)
     return SIGNATURE + _chunk(b"IHDR", header) + _chunk(b"IDAT", data) + _chunk(b"IEND", b"")

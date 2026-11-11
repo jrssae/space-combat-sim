@@ -55,6 +55,17 @@ class PngTests(unittest.TestCase):
         np.testing.assert_array_equal(back[0], [[10, 20, 30], [15, 25, 35]])
         np.testing.assert_array_equal(back[1], [[11, 21, 31], [16, 26, 36]])
 
+    def test_the_sub_filter_round_trips_exactly_and_is_smaller_on_a_gradient(self) -> None:
+        rng = np.random.default_rng(3)
+        for shape in ((5, 7), (5, 7, 3), (4, 6, 4)):
+            pixels = rng.integers(0, 256, shape, dtype=np.uint8)
+            np.testing.assert_array_equal(read_png(png_bytes(pixels, row_filter=1)), pixels)
+        ramp = np.tile((np.arange(256) * 7 % 256).astype(np.uint8), (64, 1))
+        self.assertLess(len(png_bytes(ramp, row_filter=1)), len(png_bytes(ramp)))
+        self.assertEqual(png_bytes(ramp, row_filter=1), png_bytes(ramp.copy(), row_filter=1))
+        with self.assertRaises(ValueError):
+            png_bytes(ramp, row_filter=4)
+
 
 if __name__ == "__main__":
     unittest.main()
