@@ -42,11 +42,17 @@ const BOKMAI: StringName = &"brakiri_bokmai"
 const MAX_PODS: int = 3
 
 # What each hash draws, so no two draws of one event share a value.
-enum Salt { TIME, KIND, COUNT, RANGE, AZIMUTH, ELEVATION, ROLL, PASS, AT_CIVILIAN, PICK, TYPE = 100, PODS = 200 }
+enum Salt { TIME, KIND, COUNT, RANGE, AZIMUTH, ELEVATION, ROLL, PASS, AT_CIVILIAN, PICK, TYPE = 100, PODS = 200, GATE = 300 }
+## Ways an event may use the jumpgate (M6-T14): its ships come out of it, or fly out through it.
+const GATE_ARRIVE: StringName = &"arrive"
+const GATE_DEPART: StringName = &"depart"
 
 var seed_value: int = 0
 var interval_s: float = DEFAULT_INTERVAL_S
 var weights: Dictionary = DEFAULT_WEIGHTS
+## The pools file's `gate` table (M6-T14): {"arrive": {kind: share 0..1}, "depart": {kind: share}}. Empty: no event uses the gate,
+## so a file without it plans exactly as before (the gate's draw has its own salt).
+var gate_shares: Dictionary = {}
 
 
 func _init(p_seed: int = 0, p_interval_s: float = DEFAULT_INTERVAL_S, p_weights: Dictionary = DEFAULT_WEIGHTS) -> void:
@@ -177,6 +183,38 @@ static func _perpendicular(dir: Vector3, angle: float) -> Vector3:
 	var a: Vector3 = dir.cross(helper).normalized()
 	var b: Vector3 = dir.cross(a).normalized()
 	return a * cos(angle) + b * sin(angle)
+
+
+## Whether event `index` of `kind` uses the gate: `GATE_ARRIVE`, `GATE_DEPART` or &"" (the shares are tried in that order on one
+## draw, so an arrive share of 0.3 and a depart share of 0.2 split the events 30/20/50). Raids never depart: they came to fight.
+func gate_use(index: int, kind: StringName) -> StringName:
+	if gate_shares.is_empty():
+		return &""
+	var arrive: float = clampf(float((gate_shares.get(GATE_ARRIVE, {}) as Dictionary).get(kind, 0.0)), 0.0, 1.0)
+	var depart: float = 0.0 if kind == &"raid" else clampf(float((gate_shares.get(GATE_DEPART, {}) as Dictionary).get(kind, 0.0)), 0.0, 1.0)
+	var u: float = _unit(index, Salt.GATE)
+	if u < arrive:
+		return GATE_ARRIVE
+	if u < arrive + depart:
+		return GATE_DEPART
+	return &""
+
+
+## Reads the pools file's `gate` table into `gate_shares` form; anything malformed counts as 0.
+static func parse_gate_shares(raw: Variant) -> Dictionary:
+	var out: Dictionary = {}
+	if not (raw is Dictionary):
+		return out
+	for way: StringName in [GATE_ARRIVE, GATE_DEPART]:
+		var table: Variant = (raw as Dictionary).get(String(way))
+		if not (table is Dictionary):
+			continue
+		var shares: Dictionary = {}
+		for kind: StringName in KINDS:
+			var v: Variant = (table as Dictionary).get(String(kind), 0.0)
+			shares[kind] = clampf(float(v), 0.0, 1.0) if (v is float or v is int) else 0.0
+		out[way] = shares
+	return out
 
 
 # 0..1 from the seed, the event and what is drawn.

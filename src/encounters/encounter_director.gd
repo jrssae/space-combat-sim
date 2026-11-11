@@ -11,6 +11,11 @@ extends Node
 ## Encounters run only when asked for (D58): the menu's request turns them on at load; every other run keeps them off
 ## until the console's `encounters on`, which builds the pools then (a hitch, for debugging).
 ##
+## The jumpgate (M6-T14): a pools file's `gate` table (`EncounterPlan.gate_use`) sends a share of each kind's events through the
+## scene's gate while the player is within `GATE_REACH_M` of it: arrivals come out of its blue vortex (raiders instead of a jump
+## point, patrols and traffic flying out along its axis), departures fly their way in and leave through its orange one. With no
+## table, no gate or the player far from it, every event is placed as before.
+##
 ## Console (`EncounterConsole`): command `encounters`, provider `encounters`.
 
 ## A director sits in any scenario with a pools file here, named after the scenario.
@@ -27,6 +32,12 @@ const JUMP_POINTS: int = 4
 ## Forced events' indices start here, far past any session's schedule.
 const FORCED_INDEX: int = 1000000
 const JUMP_RADIUS_M: float = 40.0
+## Events use the gate only while the player is this close to it, so its traffic is seen (and not released at once at 40 km).
+const GATE_REACH_M: float = 25000.0
+## Ships of one gate arrival come out this far apart, side by side.
+const GATE_SPREAD_M: float = 150.0
+## Patrols and traffic out of the gate fly this far along its axis before their route ends.
+const GATE_OUT_M: float = 15000.0
 const PATROL_CALLSIGNS: Array[String] = ["BRAVO", "CHARLIE", "DELTA", "ECHO", "FOXTROT"]
 const CIVILIAN_CALLSIGNS: Dictionary[StringName, String] = {
 	&"saturn_3_freighter": "SATURN", &"saturn_4_transport": "SATURN", &"saturn_4_tanker": "SATURN",
@@ -67,6 +78,11 @@ var checks: int = 0
 ## Milliseconds the pools took to build.
 var build_ms: int = 0
 var jumps: JumpArrivalPool = null
+## The pools file's `gate` table (`EncounterPlan.parse_gate_shares`); empty for none.
+var gate_shares: Dictionary = {}
+## Events that used the gate so far, and ships waiting for the arrival vortex (counted against the cap).
+var gate_events: int = 0
+var in_transit: int = 0
 
 var _check_in_s: float = 0.0
 # One entry a ship in play: {combatant, brain, path (BehaviourFollowPath or null), index, kind}.
@@ -103,6 +119,7 @@ static func create(p_main: Main, path: String) -> EncounterDirector:
 		for kind: StringName in EncounterPlan.KINDS:
 			w[kind] = float((raw_weights as Dictionary).get(String(kind), 0.0))
 		director.weights = w
+	director.gate_shares = EncounterPlan.parse_gate_shares((parsed as Dictionary).get("gate"))
 	director.process_mode = Node.PROCESS_MODE_PAUSABLE
 	p_main.add_child(director)
 	return director
@@ -137,6 +154,7 @@ func enable() -> String:
 		pools_built = true
 	if plan == null:
 		plan = EncounterPlan.new(seed_value, float(Settings.get_value(&"encounter_interval_s")), weights)
+		plan.gate_shares = gate_shares
 	on = true
 	return "encounters on (seed %d, every %.0f s, at most %d ships)%s" % [seed_value, plan.interval_s, cap(),
 			" - built %d pooled ships in %d ms" % [built, build_ms] if built > 0 else ""]
@@ -213,7 +231,7 @@ func take_forced(kind: StringName) -> EncounterEvent:
 
 ## Starts `e` now when the cap and the pools allow it; false (nothing placed) when it must wait.
 func start(e: EncounterEvent) -> bool:
-	var admitted: int = EncounterPlan.admit(_own.size(), e.count(), cap())
+	var admitted: int = EncounterPlan.admit(_own.size() + in_transit, e.count(), cap())
 	if admitted == 0:
 		return false
 	if admitted < e.count():
@@ -227,8 +245,15 @@ func start(e: EncounterEvent) -> bool:
 	if e.anchor == EncounterEvent.ANCHOR_TARGET:
 		anchor_velocity = target.ship.linear_velocity if target != null else main.ship.linear_velocity
 	var target_name: String = target.display_name if target != null else main.combatant.display_name
+	var gate: Jumpgate = _gate_for(e)
+	var via: StringName = plan.gate_use(e.index, e.kind) if gate != null else &""
+	if via != &"":
+		gate_events += 1
 	for k: int in e.count():
-		_place(e, k, types[k], anchor, anchor_velocity, target_name)
+		if via == EncounterPlan.GATE_ARRIVE:
+			_arrive_at_gate(e, k, types[k], target_name, gate)
+		else:
+			_place(e, k, types[k], anchor, anchor_velocity, target_name, gate if via == EncounterPlan.GATE_DEPART else null)
 	last_event = e
 	events_started += 1
 	event_started.emit(e)
@@ -335,21 +360,10 @@ func _anchor_of(e: EncounterEvent, target: Combatant) -> UniversePos:
 
 
 func _place(e: EncounterEvent, k: int, type: StringName, anchor: UniversePos, anchor_velocity: Vector3,
-		target_name: String) -> void:
+		target_name: String, depart_by: Jumpgate = null) -> void:
 	var ships: ShipPool = main.ships
-	var ship_name: String
-	var behaviour: Dictionary
-	match e.kind:
-		&"raid":
-			ship_name = ships.next_name()
-			behaviour = RAIDER_AI.duplicate()
-			behaviour["objective"] = target_name
-		&"patrol":
-			ship_name = ships.next_name(PATROL_CALLSIGNS[e.index % PATROL_CALLSIGNS.size()], 1)
-			behaviour = ALLY_AI.duplicate()
-		_:
-			ship_name = ships.next_name(CIVILIAN_CALLSIGNS.get(type, "CIVILIAN"), 1)
-			behaviour = CIVILIAN_AI.duplicate()
+	var ship_name: String = _name_for(e, type)
+	var behaviour: Dictionary = _behaviour_for(e, target_name)
 	var at: UniversePos = anchor.plus_local(e.positions[k])
 	var made: Dictionary = BrainFactory.from_behaviour(behaviour, at, hash([seed_value, e.index, k]))
 	if not bool(made["ok"]):
@@ -358,7 +372,8 @@ func _place(e: EncounterEvent, k: int, type: StringName, anchor: UniversePos, an
 	var brain: PilotBrain = made["brain"]
 	var path: BehaviourFollowPath = null
 	if not e.routes[k].is_empty() and brain is AiPilot:
-		path = BehaviourFollowPath.attach(brain as AiPilot, _route(e, k, anchor))
+		var route: Route = depart_by.departure_route(main.world, e.cruise_mps) if depart_by != null else _route(e, k, anchor)
+		path = BehaviourFollowPath.attach(brain as AiPilot, route)
 	var velocity: Vector3 = e.velocities[k] + anchor_velocity
 	var basis: Basis = ScenarioLoader.basis_facing(velocity if velocity.length() > 1.0 else -e.positions[k])
 	if e.jumps and jumps != null:
@@ -371,6 +386,82 @@ func _place(e: EncounterEvent, k: int, type: StringName, anchor: UniversePos, an
 	if ShipCatalog.is_civilian(type):
 		placed.targetable.broadcast_range_m = TRANSPONDER_M
 	_own.append({"combatant": placed, "brain": brain, "path": path, "index": e.index, "kind": e.kind})
+	if depart_by != null and path != null:
+		placed.ship.tier_exempt = true  # the gate watches its node fly in
+		depart_by.send_departure(placed.ship, func(_ship: Node3D) -> void: _release_ship(placed, brain))
+
+
+# One ship of an event that comes out of the gate: taken from its pool once the blue vortex is open, beside the others of its
+# event, flying out along the gate's axis; a raider goes for its target, a patrol or traffic flies on along the axis.
+func _arrive_at_gate(e: EncounterEvent, k: int, type: StringName, target_name: String, gate: Jumpgate) -> void:
+	var ship_name: String = _name_for(e, type)
+	var behaviour: Dictionary = _behaviour_for(e, target_name)
+	var offset := Vector3((float(k) - float(e.count() - 1) * 0.5) * GATE_SPREAD_M, 0.0, 0.0)
+	var made: Dictionary = BrainFactory.from_behaviour(behaviour, main.world.to_universe(gate.global_position),
+			hash([seed_value, e.index, k]))
+	if not bool(made["ok"]):
+		push_error("EncounterDirector: %s: %s" % [ship_name, made["error"]])
+		return
+	in_transit += 1
+	gate.request_arrival(func() -> void:
+		in_transit -= 1
+		var brain: PilotBrain = made["brain"]
+		var xform: Transform3D = gate.arrival_transform(offset)
+		var path: BehaviourFollowPath = null
+		if e.kind != &"raid" and brain is AiPilot:
+			var route := Route.new()
+			route.name = "ENCOUNTER %d" % e.index
+			route.pace = Route.PACE_NONE
+			route.yield_to_attack = e.kind == &"patrol"
+			route.cruise_mps = e.cruise_mps
+			route.add(main.world.to_universe(xform.origin + gate.arrival_velocity().normalized() * GATE_OUT_M))
+			path = BehaviourFollowPath.attach(brain as AiPilot, route)
+		var placed: Combatant = main.ships.acquire(ship_name, main.world.to_universe(xform.origin), xform.basis,
+				gate.arrival_velocity(), brain, type)
+		if placed == null:
+			return
+		if ShipCatalog.is_civilian(type):
+			placed.targetable.broadcast_range_m = TRANSPONDER_M
+		_own.append({"combatant": placed, "brain": brain, "path": path, "index": e.index, "kind": e.kind}))
+
+
+# The scene's gate when this event may use it: a gate table, a gate, and the player within reach of it.
+func _gate_for(_e: EncounterEvent) -> Jumpgate:
+	if gate_shares.is_empty() or main.gates == null:
+		return null
+	var gate: Jumpgate = main.gates.gate()
+	if gate == null or gate.global_position.distance_to(main.ship.global_position) > GATE_REACH_M:
+		return null
+	return gate
+
+
+func _name_for(e: EncounterEvent, type: StringName) -> String:
+	match e.kind:
+		&"raid":
+			return main.ships.next_name()
+		&"patrol":
+			return main.ships.next_name(PATROL_CALLSIGNS[e.index % PATROL_CALLSIGNS.size()], 1)
+	return main.ships.next_name(CIVILIAN_CALLSIGNS.get(type, "CIVILIAN"), 1)
+
+
+func _behaviour_for(e: EncounterEvent, target_name: String) -> Dictionary:
+	match e.kind:
+		&"raid":
+			var behaviour: Dictionary = RAIDER_AI.duplicate()
+			behaviour["objective"] = target_name
+			return behaviour
+		&"patrol":
+			return ALLY_AI.duplicate()
+	return CIVILIAN_AI.duplicate()
+
+
+# A departing ship went through the gate: back to its pool, if it still flies for the encounters.
+func _release_ship(c: Combatant, brain: PilotBrain) -> void:
+	for i: int in _own.size():
+		if _own[i]["combatant"] == c and _own[i]["brain"] == brain and _still_ours(_own[i]):
+			_release_at(i)
+			main.audio.reallocate_engines()
+			return
 
 
 # A straight route that ends where it ends: a patrol stands aside to fight what it meets, traffic keeps going.

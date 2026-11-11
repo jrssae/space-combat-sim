@@ -10,7 +10,11 @@ extends RefCounted
 ## Pools (D50): every ship a mission spawns comes from a pool its scenario declares. A spawn past a pool's size is a
 ## `push_error` (tests fail on it), never a new ship; `ShipPool` itself is unchanged.
 
-const ARRIVALS: Array[StringName] = [&"none", &"jump"]
+## How a spawned ship arrives: in place, out of an open jump point (`JumpArrival`, far from any gate, Q12) or out of the
+## scene's jumpgate (M6-T14: blue vortex; the ship appears once it is open).
+const ARRIVALS: Array[StringName] = [&"none", &"jump", &"gate"]
+## A ship sent out through the gate flies its run-in at this speed (the player's autopilot's run-in is 250 m/s).
+const DEPART_CRUISE_MPS: float = 200.0
 ## The jump point's radius for a spawned ship, metres.
 const JUMP_RADIUS_M: float = 40.0
 
@@ -19,6 +23,8 @@ var ships: ShipPool = null
 var wings: WingDirector = null
 var player: Combatant = null
 var jumps: JumpArrivalPool = null
+## The scene's jumpgates (M6-T14); null in a stage without a `Main`.
+var gates: JumpgateHost = null
 ## Plays the mission's cinematics (D55).
 var camera_rig: CameraRig = null
 var system_id: StringName = &"local"
@@ -35,6 +41,7 @@ func setup(main: Main, p_jumps: JumpArrivalPool) -> void:
 	wings = main.wings
 	player = main.combatant
 	jumps = p_jumps
+	gates = main.gates
 	camera_rig = main.camera_rig
 	system_id = main.world.origin.system_id
 	seed_value = main.scenario_seed
@@ -169,6 +176,68 @@ func spawn(entry: Dictionary) -> Combatant:
 	if not String(entry.get("wing", "")).is_empty():
 		wings.join(String(entry["wing"]), placed)
 	return placed
+
+
+## A spawn that comes out of the gate (`arrival: "gate"`, M6-T14): the blue vortex opens now and the ship is taken from its pool
+## once it is fully open, at the gate's arrival point, its `offset` read in the gate's frame (x right, y up) so a group comes out
+## side by side, flying out at `Jumpgate.ARRIVAL_SPEED_MPS`. Its anchor and velocity are not used. Returns the name it will fly
+## under (it is not in play until it comes through), or "" with an error.
+func spawn_through_gate(entry: Dictionary) -> String:
+	var gate: Jumpgate = gates.gate() if gates != null else null
+	if gate == null:
+		push_error("Mission: spawn %s: arrival \"gate\" needs a jumpgate in the scenario's props" % entry["name"])
+		return ""
+	var type: StringName = entry["type"]
+	if ships.free_count(type) == 0:
+		push_error("Mission: spawn %s: no free %s (pool of %d, %d in play); declare enough in the scenario's pools" % [
+				entry["name"], type, ships.pool_size(type), ships.alive(type).size()])
+		return ""
+	var ship_name: String = String(entry["name"])
+	if ship_name.is_empty():
+		ship_name = ships.next_name(ShipPool.ALLY_NAME_PREFIX, ShipPool.ALLY_FIRST_NUMBER) if type == ShipPool.ALLY_TYPE \
+				else ships.next_name()
+	var made: Dictionary = BrainFactory.from_behaviour(entry["behaviour"], world.to_universe(gate.global_position),
+			hash([ship_name, seed_value]))
+	if not bool(made["ok"]):
+		push_error("Mission: spawn %s: %s" % [ship_name, made["error"]])
+		return ""
+	var offset: Vector3 = entry["offset"]
+	var place: Callable = func() -> void:
+		var xform: Transform3D = gate.arrival_transform(offset)
+		var placed: Combatant = ships.acquire(ship_name, world.to_universe(xform.origin), xform.basis, gate.arrival_velocity(),
+				made["brain"] as PilotBrain, type)
+		if placed == null:
+			push_error("Mission: spawn %s: the %s pool refused at the gate" % [ship_name, type])
+			return
+		placed.damageable.invulnerable = bool(entry.get("invulnerable", false))
+		register(placed)
+		if not String(entry.get("wing", "")).is_empty():
+			wings.join(String(entry["wing"]), placed)
+	gate.request_arrival(place)
+	return ship_name
+
+
+## Sends the AI ship `ship_name` out through the gate (M6-T14): it flies the gate's departure route, the orange vortex opens as
+## it nears, and once through it leaves play as a forced `destroyed` does (back to its pool, no explosion, no kill credit). Its
+## objective is dropped so it does not turn back to fight. False, with an error, when there is no such ship or no gate.
+func depart(ship_name: String) -> bool:
+	var gate: Jumpgate = gates.gate() if gates != null else null
+	var k: String = MissionWorld.key(ship_name)
+	var combatant := _actors.get(k) as Combatant
+	if gate == null:
+		push_error("Mission: depart %s: no jumpgate in the scenario's props" % ship_name)
+		return false
+	if combatant == null or _node_of(k) == null or combatant == player:
+		push_error("Mission: depart: no AI ship '%s' in play" % ship_name)
+		return false
+	var pilot := combatant.driver.brain as AiPilot if combatant.driver != null else null
+	if pilot == null:
+		push_error("Mission: depart: %s flies no AI pilot" % ship_name)
+		return false
+	pilot.context.objective_name = ""
+	BehaviourFollowPath.attach(pilot, gate.departure_route(world, DEPART_CRUISE_MPS))
+	gate.send_departure(combatant.ship, func(_ship: Node3D) -> void: release(ship_name))
+	return true
 
 
 ## Sets the pilot objective of the AI ship `ship_name` (D39): `target_name` ("none" or "" clears it). False, with an error, when

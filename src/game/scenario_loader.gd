@@ -13,6 +13,11 @@ extends RefCounted
 ##                 "velocity": Vector3},            # the start velocity (M5-T10), zero unless given
 ##      "props": Array[Dictionary],                 # each {"type": StringName, "name": String,
 ##                                                  #       "position": UniversePos, "velocity": Vector3}
+##      "jumpgates": Array[Dictionary],             # (M6-T14) `jumpgates[]`, each {"type": &"jumpgate", "name", "position"
+##                                                  #       (UniversePos, or null: placed from the system data), "place",
+##                                                  #       "from" (StringName ids in `data/star_systems.json`), "station"
+##                                                  #       (UniversePos of the `from` place's stand-in), "bearing" and
+##                                                  #       "facing" (unit Vector3s)}; `_jumpgate` says how they are read
 ##      "pools": Dictionary,                        # ship type (StringName) -> how many to build (int); may be empty.
 ##                                                  # `Main` builds `raider_fighter` and `starfury_ally` (M3-T08) from it
 ##      "waves": Array[Dictionary],                 # each {"name", "delay_s", "spawns": Array[{type, name, anchor, offset,
@@ -47,6 +52,9 @@ extends RefCounted
 const FREE_FLIGHT_PATH: String = "res://data/scenarios/free_flight.json"
 ## Prop types a scenario may spawn (the caller maps each to a scene). Unknown types are an error, not a silent skip.
 const PROP_TYPES: Array[StringName] = [&"nav_buoy"]
+## A `jumpgates[]` entry's type (M6-T14): placed from `data/star_systems.json` beside the station's stand-in unless it gives a
+## position.
+const JUMPGATE: StringName = &"jumpgate"
 const SANDBOX_PATH: String = "res://data/scenarios/combat_sandbox.json"
 const ANCHORS: Array[StringName] = [&"player", &"origin"]
 ## A spawn and pool type that stands for one civilian hull drawn from the run's seed (M5-T30, D62).
@@ -130,6 +138,26 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 		props.append({"type": StringName(prop_type as String), "name": prop_name as String,
 				"position": position as UniversePos, "velocity": velocity as Vector3})
 
+	var gates_raw: Variant = root.get("jumpgates", [])
+	if not (gates_raw is Array):
+		return _failure("%s: jumpgates must be an array" % source)
+	var jumpgates: Array[Dictionary] = []
+	for i: int in (gates_raw as Array).size():
+		var where: String = "%s: jumpgates[%d]" % [source, i]
+		var raw: Variant = (gates_raw as Array)[i]
+		if not (raw is Dictionary):
+			return _failure("%s must be an object" % where)
+		var gate_name: Variant = (raw as Dictionary).get("name")
+		if not (gate_name is String) or (gate_name as String).strip_edges().is_empty():
+			return _failure("%s: name must be a non-empty string" % where)
+		if names.has((gate_name as String).to_lower()):
+			return _failure("%s: duplicate name '%s' (targets are selected by name)" % [where, gate_name])
+		names[(gate_name as String).to_lower()] = true
+		var gate: Variant = _jumpgate(raw as Dictionary, gate_name as String, system, where)
+		if gate is String:
+			return _failure(gate as String)
+		jumpgates.append(gate as Dictionary)
+
 	var pools: Variant = _pools(root.get("pools", {}), source)
 	if pools is String:
 		return _failure(pools as String)
@@ -177,6 +205,7 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	result["player"] = {"position": player_pos as UniversePos, "forward": forward_unit,
 			"basis": basis_facing(forward_unit), "velocity": start_velocity as Vector3}
 	result["props"] = props
+	result["jumpgates"] = jumpgates
 	result["pools"] = pools
 	result["waves"] = wave_list
 	result["loop"] = loop
@@ -658,6 +687,33 @@ static func basis_facing(forward: Vector3) -> Basis:
 
 
 ## Three finite numbers -> UniversePos in `system`, or null. Validated here so UniversePos.from_array never errors.
+# A `jumpgates[]` entry (M6-T14): `position` [x, y, z] puts it there; else it stands `bearing` (default [0, 0, -1]) from `station` (the
+# stand-in of the star-system place `from`, default "babylon5", at [0, 0, 0] unless given) at the distance the system data
+# gives between `from` and `place` (default "jumpgate"), which `Main` reads. `facing` is the way its arrivals leave (its front,
+# -Z): back toward the station unless given. Returns the entry or why it is wrong.
+static func _jumpgate(entry: Dictionary, prop_name: String, system: StringName, where: String) -> Variant:
+	var position: Variant = null
+	if entry.has("position"):
+		position = _universe_pos(entry["position"], system)
+		if position == null:
+			return "%s: position must be [x, y, z] (numbers)" % where
+	var station: Variant = _universe_pos(entry.get("station", [0.0, 0.0, 0.0]), system)
+	if station == null:
+		return "%s: station must be [x, y, z] (numbers)" % where
+	var bearing: Variant = _vector3(entry.get("bearing", [0.0, 0.0, -1.0]))
+	if bearing == null or (bearing as Vector3).is_zero_approx():
+		return "%s: bearing must be a non-zero [x, y, z]" % where
+	var facing: Variant = _vector3(entry["facing"]) if entry.has("facing") else -(bearing as Vector3)
+	if facing == null or (facing as Vector3).is_zero_approx():
+		return "%s: facing must be a non-zero [x, y, z]" % where
+	for key: String in ["place", "from"]:
+		if entry.has(key) and (not (entry[key] is String) or (entry[key] as String).strip_edges().is_empty()):
+			return "%s: %s must be a star-system place id" % [where, key]
+	return {"type": JUMPGATE, "name": prop_name, "position": position, "velocity": Vector3.ZERO,
+			"place": StringName(str(entry.get("place", "jumpgate"))), "from": StringName(str(entry.get("from", "babylon5"))),
+			"station": station, "bearing": (bearing as Vector3).normalized(), "facing": (facing as Vector3).normalized()}
+
+
 static func _universe_pos(value: Variant, system: StringName) -> Variant:
 	var parts: Variant = _numbers3(value)
 	if parts == null:
@@ -692,7 +748,7 @@ static func _empty() -> Dictionary:
 	return {"ok": false, "error": "", "scenario_id": &"", "system_id": &"local",
 			"player": {"position": UniversePos.new(), "forward": Vector3.FORWARD, "basis": Basis.IDENTITY,
 					"velocity": Vector3.ZERO},
-			"props": [] as Array[Dictionary], "pools": {}, "waves": [] as Array[Dictionary],
+			"props": [] as Array[Dictionary], "jumpgates": [] as Array[Dictionary], "pools": {}, "waves": [] as Array[Dictionary],
 			"loop": {"from_wave": 0, "add_per_loop": 1}, "routes": [] as Array[Route], "spawns": [] as Array[Dictionary],
 			"wings": [] as Array[Dictionary], "mission": {}, "cinematics": {}, "belts": [] as Array[Dictionary],
 			"civilian_names": {}, "placeholders": {}}

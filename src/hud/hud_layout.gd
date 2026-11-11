@@ -367,7 +367,7 @@ static func _wing(input: HudInput, f: HudFrame) -> void:
 	if input.overlay_bottom_px > 0.0:
 		origin.y = maxf(origin.y, input.overlay_bottom_px + 8.0 * s)
 	f.roster_rows = _roster_rows(input, origin, s)
-	f.ack_line = input.ack_line
+	f.ack_line = input.ack_line if not input.ack_line.is_empty() else input.prompt_line
 	f.ack_pos = Vector2(input.viewport_size.x * 0.5, (STATUS_Y_PX + ACK_BELOW_STATUS_PX) * s)
 	f.status_pos = Vector2(input.viewport_size.x * 0.5, STATUS_Y_PX * s)
 	f.tracking_pos = Vector2(input.viewport_size.x * 0.5, 62.0 * s)

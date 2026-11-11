@@ -2,4 +2,5 @@
            "saturn_3_freighter": 2, "saturn_4_transport": 2, "saturn_4_tanker": 2, "saturn_8_transport": 2,
            "saturn_8_tanker": 2, "skylark_transport": 2, "narn_transport": 2, "centauri_brezebel": 2,
            "brakiri_bokmai": 2},
- "weights": {"raid": 0.4, "patrol": 0.25, "traffic": 0.35}}
+ "weights": {"raid": 0.4, "patrol": 0.25, "traffic": 0.35},
+ "gate": {"arrive": {"raid": 0.5, "patrol": 0.5, "traffic": 0.4}, "depart": {"patrol": 0.2, "traffic": 0.3}}}

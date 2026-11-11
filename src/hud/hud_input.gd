@@ -67,6 +67,9 @@ var status_line: String = ""
 var roster: Array[Dictionary] = []
 var roster_color: Color = Factions.FRIENDLY_COLOR
 var ack_line: String = ""
+## A prompt for the player (M6-T14: `X: REQUEST JUMP` beside a targeted gate), "" for none. It shows on the acknowledgement's line
+## while no acknowledgement does.
+var prompt_line: String = ""
 ## The route waypoint to mark (M3-T09: the instructor's next waypoint), World frame, and its label (`NAV 2`).
 var has_waypoint: bool = false
 var waypoint_position: Vector3 = Vector3.ZERO

@@ -1,5 +1,6 @@
 {"scenario_id": "combat_sandbox", "system_id": "local",
  "player": {"position": [0, 0, 0], "forward": [0, 0, -1]},
+ "jumpgates": [{"name": "JUMPGATE", "place": "jumpgate", "from": "babylon5", "station": [0, 0, 0], "bearing": [0, 0, -1]}],
  "props": [
    {"type": "nav_buoy", "name": "NAV ALPHA",   "position": [0, 0, -500]},
    {"type": "nav_buoy", "name": "NAV BRAVO",   "position": [300, 50, -1200]},

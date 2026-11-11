@@ -77,6 +77,10 @@ var comms_menu: CommsMenu = CommsMenu.new()
 var comms_menu_view: CommsMenuView = null
 ## Free-flight encounters (M5-T17): null in a scenario without an encounter pools file.
 var encounter_director: EncounterDirector = null
+## The scenario's jumpgates and the player's jump through one (M6-T14); always present, with no gate in most scenarios.
+var gates: JumpgateHost = null
+## The star system the scene flies in (M6-T03).
+var star_system: StarSystemHost = null
 
 var _spawn_position: UniversePos = UniversePos.new()
 var _overlay_in_s: float = 0.0
@@ -182,8 +186,18 @@ func _ready() -> void:
 	player_respawned.connect(waves.on_player_respawned)
 	# Downed wingmen are replaced when the next wave starts (maintainer Q8, AC11).
 	waves.wave_started.connect(wings.on_wave_started)
+	star_system = StarSystemHost.new()
+	star_system.name = "StarSystemHost"
+	star_system.setup(_system_id)
+	add_child(star_system)
+	gates = JumpgateHost.new()
+	gates.name = JumpgateHost.NODE_NAME
+	gates.main = self
+	add_child(gates)
 	if bool(scenario.get("ok", false)):
 		_spawn_props(scenario["props"])
+		for entry: Dictionary in scenario["jumpgates"]:
+			gates.place(entry, star_system.system)
 		_spawn_belts(scenario["belts"])
 	_spawn_scenario_ships()
 	if not (scenario.get("mission", {}) as Dictionary).is_empty():
@@ -201,10 +215,6 @@ func _ready() -> void:
 	# The motion blur skips the frames around a rebase (M3-T25).
 	space_environment.post_effects.watch_world(world)
 	space_environment.use_star_of(_system_id)
-	var star_system := StarSystemHost.new()
-	star_system.name = "StarSystemHost"
-	star_system.setup(_system_id)
-	add_child(star_system)
 	pause_menu = (preload("res://src/hud/pause_menu.tscn") as PackedScene).instantiate() as PauseMenu
 	pause_menu.audio = audio
 	pause_menu.objectives_source = objectives
@@ -229,9 +239,16 @@ func _physics_process(delta: float) -> void:
 		# Behind the pause menu the pad belongs to the menu: only Start (and Esc) is read.
 		_handle_ui(adapter.sample_menu(input_source, delta))
 		return
+	# Beside a targeted gate X asks for a jump instead of switching auto-track (M6-T14).
+	adapter.jump_offered = gates.jump_offered()
 	var pc: PilotCommand = adapter.sample(input_source, delta)
 	if control_lock.apply(pc, controls_locked(), camera_rig.is_playing_shot()):
 		camera_rig.stop_shot()
+	if pc.ui.request_jump:
+		gates.start_jump()
+	var autopilot: FlightCommand = gates.step_player(delta) if not get_tree().paused else null
+	if autopilot != null:
+		pc.flight = autopilot
 	if debug_throttle > 0.0:
 		pc.flight.main_left = maxf(pc.flight.main_left, debug_throttle)
 		pc.flight.main_right = maxf(pc.flight.main_right, debug_throttle)
@@ -418,6 +435,7 @@ func respawn() -> void:
 	for buoy: NavBuoy in buoys:
 		buoy.restore()
 	director.cancel_respawn()  # Back while dead: the death's own respawn must not follow
+	gates.cancel_jump("respawn")
 	_restart_lessons()
 	combatant.cannon.reset_gate()
 	combatant.cannon.reset_flashes()
@@ -450,9 +468,10 @@ func objectives() -> Array[Dictionary]:
 	return mission.objectives() if mission != null else ([] as Array[Dictionary])
 
 
-## The running mission holds the player's controls (`MissionApi.lock_controls`): the ship flies on without them.
+## The running mission holds the player's controls (`MissionApi.lock_controls`), or a gate jump does (M6-T14): the ship flies on
+## without them.
 func controls_locked() -> bool:
-	return mission != null and mission.api != null and mission.api.controls_locked
+	return (mission != null and mission.api != null and mission.api.controls_locked) or (gates != null and gates.locks_controls())
 
 
 # A cinematic hides the HUD and brings the letterbox in; the comms panel keeps its subtitles (D55).
@@ -510,6 +529,7 @@ func _build_hud_input() -> HudInput:
 	input.roster = wings.hud_roster()
 	input.roster_color = Factions.FRIENDLY_COLOR
 	input.ack_line = wings.ack_text()
+	input.prompt_line = gates.prompt_line()
 	if route_active():
 		input.status_line = instructor_path.status_line(instructor.display_name)
 		var waypoint: UniversePos = instructor_path.waypoint_position()

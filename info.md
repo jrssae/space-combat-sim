@@ -85,6 +85,7 @@ Arguments in `<angle brackets>` are required, `[square brackets]` optional, `a|b
 | `camera` | `[cockpit\|chase]` | Switch camera; no argument toggles; during a cinematic, the camera to go back to after the shot | in flight |
 | `look` | `<yaw> [pitch]` or `off` | Hold the view at an angle off the nose, for captures | in flight |
 | `rebase` | `<dx> <dy> <dz>` | Shift the local origin by an offset in metres; nothing moves in universe terms | in flight |
+| `gate` | `[status\|open\|close\|jump\|cancel\|target\|approach] [arrival\|departure]` | The jumpgate (M6-T14): show it, open its vortex for an arrival (blue) or a departure (orange), close it, start the player's jump through it from anywhere, cancel the jump, target the gate, or put the player 6 km in front of it facing it; says so in a scenario with no gate | in flight |
 
 ### Rendering and effects
 
@@ -157,6 +158,7 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `hull` | The player's hull points, fraction and destroyed state | in flight |
 | `world` | The local origin, rebases and the automatic rebase distance | in flight |
 | `camera` | The active camera mode (cockpit, chase or cinematic; writable) and field of view, the cinematic shot playing and its time | in flight |
+| `gate` | The jumpgate: count, name, distance, targeted, whether the jump is offered (`prompt`), the vortex's phase, direction, age and openings, ships arrived, departed, waiting and departing, and the player's jump (state, time in it, completed, aborted, last abort) | in flight |
 | `system` | The star system: its bodies (GM, radius, atmosphere top, zone), the places' positions from Epsilon III's centre, the gate's distance from the station and the station's orbit period | in flight |
 | `weapons` | Pulse cannon fire mode (writable), cooldown and capacitor charge | in flight |
 | `targeting` | The selected target (writable), its range and closing speed, and the targets in sensor range | in flight |
@@ -164,7 +166,7 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `ram` | Rams resolved, the last one and the cost of the ram checks | in flight |
 | `factions` | The faction ids, their listed relations and the friendly-fire mirror | in flight |
 | `raiders` | The raider pool: size, free, alive, a list with hull and range, and the selected one's brain | in flight |
-| `encounters` | Free-flight encounters: on, pools built, seed, interval, cap, ships in play by kind, the next event and its time, the one waiting, events started, ships released, the last event, the release check's work and the pools' build time | free flight |
+| `encounters` | Free-flight encounters: on, pools built, seed, interval, cap, ships in play by kind, the next event and its time, the one waiting, events started, ships released, the last event, the release check's work, the pools' build time, and the events through the jumpgate and ships waiting for it (`gate_events`, `gate_in_transit`) | free flight |
 | `allies` | The allied pool, the same way | in flight |
 | `belts` | The scenario's asteroid belts: belts, rocks, collision spheres and the multimeshes drawing them | in flight |
 | `waves` | The raider waves: wave number, name, state, countdown, raiders alive and the kill tally | in flight |

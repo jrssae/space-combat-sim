@@ -37,12 +37,14 @@ func test_every_scenario_reads_its_hulls_from_the_core() -> void:
 
 
 func test_free_flight_rows_are_its_bodies() -> void:
-	# A world with no ship pools: the core's rows hold the player and the buoys as their nodes say.
+	# A world with no ship pools: the core's rows hold the player, the buoys and the jumpgate (M6-T14) as their nodes say.
 	await _load(ScenarioLoader.FREE_FLIGHT_PATH)
 	var scan: ContactScan = ContactScan.shared(get_tree())
 	var bodies: Array[Node3D] = [main.ship]
 	for buoy: NavBuoy in main.buoys:
 		bodies.append(buoy)
+	for gate: Jumpgate in main.gates.gates:
+		bodies.append(gate)
 	assert_eq(scan._body_ids.size(), bodies.size(), "one row per body, nothing else")
 	for body: Node3D in bodies:
 		var i: int = scan._body_ids.find(body.get_instance_id())
@@ -52,7 +54,8 @@ func test_free_flight_rows_are_its_bodies() -> void:
 		assert_eq(scan._positions[i], body.global_position, "%s: its position" % body.name)
 		var marker := body.find_children("*", "Targetable", false, false)[0] as Targetable
 		assert_eq(scan._factions[i], marker.faction, "%s: its faction" % body.name)
-		assert_eq(scan._radii[i], Damageable.of(body).bounding_radius, "%s: its radius" % body.name)
+		var hull: Damageable = Damageable.of(body)
+		assert_eq(scan._radii[i], hull.bounding_radius if hull != null else 0.0, "%s: its radius (none without a hull)" % body.name)
 
 
 func test_a_bare_world_attaches_its_core() -> void:

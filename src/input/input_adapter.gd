@@ -19,7 +19,8 @@ extends RefCounted
 ## (attack my target, form on me, engage at will, cover me; M3-T07), press edges in `UiCommand` for `Main` to pass on. D-pad Left
 ## and key 5 switch the running lights (M3-T27). D-pad Right and Ctrl open the comms menu (M5-T07); while it is open (`comms_open`,
 ## set by `Main`) the D-pad's four directions pick its entries and the target button closes it, so assist, next weapon, lights
-## and target cycling do not fire.
+## and target cycling do not fire. While a gate offers a jump (`jump_offered`, set by `Main`, M6-T14) X gives `UiCommand.request_jump`
+## instead of switching auto-track; everywhere else it stays auto-track.
 
 const MAIN_RIGHT := &"main_right"
 const MAIN_LEFT := &"main_left"
@@ -112,6 +113,10 @@ var autotrack_on: bool = false
 ## The comms menu is open (set by `Main` from its `CommsMenu`): see `UiCommand.comms_pick`.
 var comms_open: bool = false
 
+## A targeted gate within reach offers the player a jump (set by `Main` each tick, `GateJumpPrompt`): the auto-track press then
+## asks for the jump and leaves auto-track as it was.
+var jump_offered: bool = false
+
 var _prev_pressed: Dictionary = {}
 ## The mouse's turn command, -1..1 per axis (x yaw right, y pitch up), after smoothing.
 var _mouse_rate: Vector2 = Vector2.ZERO
@@ -171,8 +176,10 @@ func sample(source: InputSource, dt: float) -> PilotCommand:
 	var edges: Dictionary = _sample_edges(source)
 	var menu: bool = comms_open
 	flight.toggle_assist = edges[TOGGLE_ASSIST] and not menu
-	# Auto-track is a toggle: one press switches it on, the next switches it off.
-	if edges[AUTOTRACK]:
+	# Auto-track is a toggle: one press switches it on, the next switches it off. Beside a gate the same press asks for a jump.
+	if edges[AUTOTRACK] and jump_offered:
+		cmd.ui.request_jump = true
+	elif edges[AUTOTRACK]:
 		autotrack_on = not autotrack_on
 	flight.autotrack = autotrack_on
 
