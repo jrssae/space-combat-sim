@@ -6,8 +6,6 @@ extends GutTest
 ## a reader asking while the brains are away answers from the launch. M4-T37 removed the single-thread `inline` step and
 ## its test (the commands one tick earlier: the one-tick shift is Q53's accepted outcome).
 
-const SHIPS: int = 120
-const SEED: int = 1
 const TICKS: int = 240
 const SETTINGS: Array[StringName] = [&"perf_threads", &"ai_think_rate",
 		&"sim_step", &"perf_step_threads"]
@@ -62,7 +60,7 @@ func test_the_threaded_step_equals_the_delayed_step_tick_for_tick() -> void:
 	assert_eq(first, -1, "the commands are the same bits every tick (first difference at tick %d)" % first)
 	first = _first_difference(delayed["hits"], threaded["hits"])
 	assert_eq(first, -1, "the same hits every tick (first difference at tick %d)" % first)
-	gut.p("threaded against delayed, %d ships, %d ticks: %d thinks, %d hits; the job ran %d us a tick at most" % [SHIPS, TICKS,
+	gut.p("threaded against delayed, %d ships, %d ticks: %d thinks, %d hits; the job ran %d us a tick at most" % [SeededBattle.SHIPS, TICKS,
 			int(threaded["native_thinks"]), int(threaded["hits_total"]), int(threaded["step_us_max"])])
 
 
@@ -283,58 +281,12 @@ func test_a_ship_repiloted_during_a_job_keeps_the_new_pilots_state() -> void:
 	Factions.reset()
 
 
-# A space of its own with a world and its projectiles.
-func _space() -> SubViewport:
-	var space := SubViewport.new()
-	space.own_world_3d = true
-	space.world_3d = World3D.new()
-	add_child(space)
-	var world := WorldFrame.new()
-	world.name = "World"
-	space.add_child(world)
-	var bolts := Node3D.new()
-	bolts.name = "Projectiles"
-	world.add_child(bolts)
-	return space
-
-
-## The seeded battle's fighters (four sides, the bench's session table) built in a space of their own with the step `mode`
-## and `threads` threads: the space, the core and the ships.
+## The seeded battle's fighters (`SeededBattle`) built in a space of their own with the step `mode` and `threads` threads:
+## the space, the core, the ships and the hit resolver.
 func _start(mode: StringName, threads: int) -> Dictionary:
 	Settings.set_value(&"sim_step", mode)
 	Settings.set_value(&"perf_threads", threads)
-	Factions.reset()
-	Factions.use_table(BenchLayout.faction_table(BenchLayout.BATTLE))
-	ContactScan.invalidate()
-	await get_tree().process_frame
-	await get_tree().physics_frame
-	SimClock.reset()
-	var space := _space()
-	var world := space.get_node("World") as WorldFrame
-	var bolts := world.get_node("Projectiles") as Node3D
-	var resolver := HitResolver.new()
-	resolver.name = "HitResolver"
-	space.add_child(resolver)
-	var anchor: UniversePos = world.to_universe(Vector3.ZERO)
-	var numbers: Dictionary = {}
-	var ships: Array[Combatant] = []
-	for e: Dictionary in BenchLayout.plan(BenchLayout.BATTLE, SHIPS, SEED):
-		if StringName(e["kind"]) != BenchLayout.KIND_FIGHTER:
-			continue
-		var type: StringName = e["type"]
-		numbers[type] = int(numbers.get(type, 0)) + 1
-		var c: Combatant = ShipAssembly.build(ShipCatalog.spec_for(type), world, bolts, {
-			ShipAssembly.OPT_FACTION: StringName(e["faction"]), ShipAssembly.OPT_DISPLAY_NAME: "%s %d" % [type, int(numbers[type])],
-			ShipAssembly.OPT_FORCE_ASSIST: true, ShipAssembly.OPT_AI: true, ShipAssembly.OPT_LEAN: true})
-		world.spawn(c.ship, anchor.plus_local(e["offset"]), e["basis"])
-		c.ship.linear_velocity = e["velocity"]
-		var made: Dictionary = BrainFactory.from_behaviour(e["behaviour"], anchor, int(e["seed"]))
-		c.driver.brain = made["brain"] as PilotBrain
-		ships.append(c)
-	var sim: SimCore = SimCore.attach(world)
-	sim.core.set_parallel_min(2)
-	sim.core.set_flight_parallel_min(2)
-	return {"space": space, "sim": sim, "ships": ships, "resolver": resolver}
+	return await SeededBattle.start(self)
 
 
 ## The seeded battle flown `ticks` ticks with the step `mode` and `threads` threads (`slow`: the job sleeps 40 ms, so every
@@ -393,10 +345,7 @@ func _battle(mode: StringName, threads: int, ticks: int = TICKS, slow: bool = fa
 	var out: Dictionary = {"rows": rows, "commands": commands, "live": live, "hits": hits, "thinks": thinks, "events": tick_events, "hits_total": resolver.hits_total,
 			"native_thinks": native_thinks, "held": held, "step_us_max": step_us_max, "wait_us_max": wait_us_max,
 			"off_main": off_main, "misses": int(host.deadline_misses()) - misses_before, "pokes": pokes}
-	fight["space"].queue_free()
-	await get_tree().physics_frame
-	await get_tree().physics_frame
-	Factions.reset()
+	await SeededBattle.finish(fight)
 	return out
 
 
@@ -416,7 +365,4 @@ static func _sum(values: PackedInt64Array) -> int:
 
 
 static func _first_difference(a: PackedInt64Array, b: PackedInt64Array) -> int:
-	for i: int in mini(a.size(), b.size()):
-		if a[i] != b[i]:
-			return i
-	return -1 if a.size() == b.size() else mini(a.size(), b.size())
+	return SeededBattle.first_difference(a, b)
