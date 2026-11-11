@@ -1,16 +1,37 @@
 extends GutTest
 ## RadarModel (M2-T08, AC10b): contacts on the radar sphere by bearing, scaled linearly to 5 km and logarithmically beyond,
-## dropped past the 25 km sensor range, coloured by faction, ordered for drawing.
+## dropped past the 25 km sensor range, coloured by faction, ordered for drawing. Every contact goes through `plot`, the
+## native plot the HUD draws (M6-T18: the GDScript `dots` reference is gone).
 
 const TOL: float = 1e-6
 
 
+# The radar's dots for `infos`, in drawing order, as the HUD plots them.
+func _plot(infos: Array[TargetInfo], selected_id: int = 0, own_position: Vector3 = Vector3.ZERO, own_basis: Basis = Basis.IDENTITY,
+		viewer: StringName = Factions.EARTH_ALLIANCE) -> Array[RadarModel.Dot]:
+	return RadarModel.plot(RadarContacts.from_infos(infos), selected_id, own_position, own_basis, viewer).to_dots()
+
+
+# The dot of one contact at World `position`, or null when it is off the radar.
+func _dot_at(position: Vector3, faction: StringName = Factions.RAIDERS, viewer: StringName = Factions.EARTH_ALLIANCE,
+		own_position: Vector3 = Vector3.ZERO, own_basis: Basis = Basis.IDENTITY, broadcast_range_m: float = 0.0) -> RadarModel.Dot:
+	var info := TargetInfo.new(1, "C", faction, position)
+	info.broadcast_range_m = broadcast_range_m
+	var dots: Array[RadarModel.Dot] = _plot([info] as Array[TargetInfo], 0, own_position, own_basis, viewer)
+	return dots[0] if dots.size() == 1 else null
+
+
 func _dot(offset_body: Vector3, faction: StringName = Factions.RAIDERS, viewer: StringName = Factions.EARTH_ALLIANCE) -> RadarModel.Dot:
-	return RadarModel.dot_for(1, offset_body, faction, false, Vector3.ZERO, Basis.IDENTITY, viewer)
+	return _dot_at(offset_body, faction, viewer)
+
+
+# The sphere radius a contact at `range_m` dead ahead is drawn at (a broadcast one, so ranges past the sensors plot too).
+func _radius(range_m: float) -> float:
+	return _dot_at(Vector3(0.0, 0.0, -range_m), Factions.RAIDERS, Factions.EARTH_ALLIANCE, Vector3.ZERO, Basis.IDENTITY, INF).point.length()
 
 
 func test_the_six_bearings() -> void:
-	var r: float = RadarModel.radius_for_range(1000.0)
+	var r: float = _radius(1000.0)
 	var ahead: Vector3 = _dot(Vector3(0.0, 0.0, -1000.0)).point
 	var astern: Vector3 = _dot(Vector3(0.0, 0.0, 1000.0)).point
 	var above: Vector3 = _dot(Vector3(0.0, 1000.0, 0.0)).point
@@ -28,31 +49,31 @@ func test_the_six_bearings() -> void:
 func test_bearing_follows_the_ships_orientation() -> void:
 	# A ship turned 90 degrees left (nose along world -X): a contact at world -X is dead ahead.
 	var turned := Basis(Vector3.UP, deg_to_rad(90.0))
-	var dot: RadarModel.Dot = RadarModel.dot_for(1, Vector3(-500.0, 0.0, 0.0), Factions.RAIDERS, false, Vector3.ZERO, turned, Factions.EARTH_ALLIANCE)
+	var dot: RadarModel.Dot = _dot_at(Vector3(-500.0, 0.0, 0.0), Factions.RAIDERS, Factions.EARTH_ALLIANCE, Vector3.ZERO, turned)
 	assert_almost_eq(dot.point.normalized(), Vector3(0.0, 1.0, 0.0), Vector3.ONE * TOL)
 
 
 func test_bearing_is_taken_from_the_ships_position() -> void:
-	var dot: RadarModel.Dot = RadarModel.dot_for(1, Vector3(100.0, 0.0, -2000.0), Factions.RAIDERS, false, Vector3(100.0, 0.0, -1000.0), Basis.IDENTITY, Factions.EARTH_ALLIANCE)
+	var dot: RadarModel.Dot = _dot_at(Vector3(100.0, 0.0, -2000.0), Factions.RAIDERS, Factions.EARTH_ALLIANCE, Vector3(100.0, 0.0, -1000.0))
 	assert_almost_eq(dot.range_m, 1000.0, 1e-6)
 	assert_almost_eq(dot.point.x, 0.0, TOL)
 
 
 func test_range_is_linear_to_5_km() -> void:
-	assert_eq(RadarModel.radius_for_range(0.0), 0.0)
-	assert_almost_eq(RadarModel.radius_for_range(2500.0), 0.5 * RadarModel.LINEAR_RADIUS, TOL)
-	assert_almost_eq(RadarModel.radius_for_range(5000.0), RadarModel.LINEAR_RADIUS, TOL)
-	assert_almost_eq(RadarModel.radius_for_range(1000.0) * 2.0, RadarModel.radius_for_range(2000.0), TOL, "linear")
+	assert_eq(_radius(0.0), 0.0)
+	assert_almost_eq(_radius(2500.0), 0.5 * RadarModel.LINEAR_RADIUS, TOL)
+	assert_almost_eq(_radius(5000.0), RadarModel.LINEAR_RADIUS, TOL)
+	assert_almost_eq(_radius(1000.0) * 2.0, _radius(2000.0), TOL, "linear")
 
 
 func test_range_is_logarithmic_beyond_5_km_up_to_25() -> void:
-	var at_5: float = RadarModel.radius_for_range(5000.0)
-	var at_25: float = RadarModel.radius_for_range(25000.0)
+	var at_5: float = _radius(5000.0)
+	var at_25: float = _radius(25000.0)
 	assert_almost_eq(at_25, 1.0, TOL, "the sensor limit is the sphere's edge")
-	var geometric: float = RadarModel.radius_for_range(5000.0 * sqrt(5.0))  # the geometric mean of 5 and 25 km
-	assert_almost_eq(geometric, 0.5 * (at_5 + at_25), 1e-9, "equal ratios, equal steps")
-	assert_lt(RadarModel.radius_for_range(10000.0), RadarModel.radius_for_range(20000.0))
-	assert_almost_eq(RadarModel.radius_for_range(1.0e6), 1.0, TOL, "clamped")
+	var geometric: float = _radius(5000.0 * sqrt(5.0))  # the geometric mean of 5 and 25 km
+	assert_almost_eq(geometric, 0.5 * (at_5 + at_25), TOL, "equal ratios, equal steps")
+	assert_lt(_radius(10000.0), _radius(20000.0))
+	assert_almost_eq(_radius(1.0e6), 1.0, TOL, "clamped")
 
 
 func test_contacts_beyond_the_sensor_range_are_dropped() -> void:
@@ -83,7 +104,7 @@ func test_dots_are_drawn_far_to_near_with_the_selection_last() -> void:
 		TargetInfo.new(2, "MID", Factions.RAIDERS, Vector3(0.0, 0.0, -3000.0)),
 		TargetInfo.new(4, "GONE", Factions.RAIDERS, Vector3(0.0, 0.0, -90000.0)),
 	]
-	var dots: Array[RadarModel.Dot] = RadarModel.dots(infos, 1, Vector3.ZERO, Basis.IDENTITY, Factions.EARTH_ALLIANCE)
+	var dots: Array[RadarModel.Dot] = _plot(infos, 1)
 	assert_eq(dots.size(), 3, "the 90 km one is out of range")
 	assert_eq([dots[0].id, dots[1].id, dots[2].id], [2, 3, 1], "far to near, then the selected (id 1) last")
 	assert_true(dots[2].selected)
@@ -112,16 +133,15 @@ func test_the_unit_sphere_stays_inside_its_pixel_radius_roughly() -> void:
 
 func test_a_broadcast_beyond_the_sensor_range_sits_on_the_rim_in_its_true_direction() -> void:
 	var offset := Vector3(3.0e5, 4.0e5, 0.0)  # 500 km, right and above
-	var rim: RadarModel.Dot = RadarModel.dot_for(1, offset, Factions.EARTH_ALLIANCE, false, Vector3.ZERO, Basis.IDENTITY,
-			Factions.EARTH_ALLIANCE, 1.0e6)
+	var rim: RadarModel.Dot = _dot_at(offset, Factions.EARTH_ALLIANCE, Factions.EARTH_ALLIANCE, Vector3.ZERO, Basis.IDENTITY, 1.0e6)
 	assert_not_null(rim)
 	assert_true(rim.rim, "hollow, on the rim")
 	assert_almost_eq(rim.point, Vector3(0.6, 0.0, 0.8), Vector3.ONE * TOL, "unit radius, true bearing")
 	assert_almost_eq(rim.range_m, 5.0e5, 1e-3)
-	assert_null(RadarModel.dot_for(1, offset, Factions.EARTH_ALLIANCE, false, Vector3.ZERO, Basis.IDENTITY,
-			Factions.EARTH_ALLIANCE, 4.0e5), "beyond its own broadcast: dropped")
-	var near: RadarModel.Dot = RadarModel.dot_for(1, Vector3(0.0, 0.0, -1000.0), Factions.EARTH_ALLIANCE, false, Vector3.ZERO,
-			Basis.IDENTITY, Factions.EARTH_ALLIANCE, 1.0e6)
+	assert_null(_dot_at(offset, Factions.EARTH_ALLIANCE, Factions.EARTH_ALLIANCE, Vector3.ZERO, Basis.IDENTITY, 4.0e5),
+			"beyond its own broadcast: dropped")
+	var near: RadarModel.Dot = _dot_at(Vector3(0.0, 0.0, -1000.0), Factions.EARTH_ALLIANCE, Factions.EARTH_ALLIANCE, Vector3.ZERO,
+			Basis.IDENTITY, 1.0e6)
 	assert_false(near.rim, "inside 25 km a broadcaster is drawn as any contact")
 
 
@@ -130,7 +150,7 @@ func test_dots_carry_each_contacts_broadcast_range() -> void:
 	far.broadcast_range_m = 1.0e6
 	var silent := TargetInfo.new(10, "RAIDER 1", Factions.RAIDERS, Vector3(0.0, 0.0, -3.0e4))
 	var infos: Array[TargetInfo] = [far, silent]
-	var dots: Array[RadarModel.Dot] = RadarModel.dots(infos, 0, Vector3.ZERO, Basis.IDENTITY, Factions.EARTH_ALLIANCE)
+	var dots: Array[RadarModel.Dot] = _plot(infos)
 	assert_eq(dots.size(), 1)
 	assert_eq(dots[0].id, 9)
 	assert_true(dots[0].rim)

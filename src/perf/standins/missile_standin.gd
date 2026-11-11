@@ -81,6 +81,8 @@ static func launch_direction(at: Vector3, shooter_velocity: Vector3, target_at: 
 
 ## Proportional navigation for one tick: the velocity that turns `velocity` toward `nav_gain` times the line of sight's
 ## turn, by at most `max_turn_rate` (rad/s), at the same speed. Straight on once the target is behind or on top of it.
+## The game steers through the native rows (`step`, `ScsWeaponRows.steer`); this is the maths written out, the oracle
+## `test_missile_kernel` holds the kernel to bit for bit.
 static func steer(position: Vector3, velocity: Vector3, target_position: Vector3, target_velocity: Vector3, nav_gain: float,
 		max_turn_rate: float, delta: float) -> Vector3:
 	var speed: float = velocity.length()

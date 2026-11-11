@@ -2863,7 +2863,7 @@ src/targeting/targeting_controller.gd  the player's candidate list built when re
   so `refresh` and the commands must stay on the main thread (a note for T24).
 - **Tests.** `test_bolt_sync` (a seeded crowd of bolts, missiles and beams, spent, freed and new each round: the same bolt
   rows at both sync points; the engine calls counted alike), `test_ram_tracker_columns` (400 random ticks of two trackers
-  side by side: the same rams field for field), `test_ram_contact_columns` (T14's melee both ways: the same rams and
+  side by side: the same rams field for field; M6-T18 removed the sample path and ported `test_ram_tracker` to the columns), `test_ram_contact_columns` (T14's melee both ways: the same rams and
   digest; M6-T18 folded it into `test_core_state`, which reads the same recording), `test_ram_sweep_cull` (6 000 seeded sweeps: the same hits at the same points, a fifth of the volumes placed),
   `test_targeting_on_read` (400 steps of moves, parks, frees and selection commands: the same selection, signals and lists
   read; no list built while nothing reads), `test_targetable_hull`, `test_sweep_cells` (twelve seeded mixes against the
@@ -3857,8 +3857,8 @@ flashes 0.45, the hit flashes 0.15). Each subsystem is now one pass over its shi
   taken at M5's rebase onto M4; T37 checks the per-ship audio node count after it.
 - **The HUD radar**: `Main` gathers the radar's contacts straight from the targetables (`RadarContacts`, the same set as
   `TargetingController.candidates()`, without a `TargetInfo` each or the range sort), `RadarModel.plot` places them on the sphere
-  into packed arrays (`RadarPlot`) ordered by a native int64 sort key (bit for bit `RadarModel.dots`, but for two ranges equal to a
-  millimetre), and `HudPainter` draws every stalk in one `draw_multiline_colors` and every plain dot in one canvas multimesh (the
+  into packed arrays (`RadarPlot`) ordered by a native int64 sort key (bit for bit the old GDScript `RadarModel.dots`, removed in M6-T18, but for two
+  ranges equal to a millimetre), and `HudPainter` draws every stalk in one `draw_multiline_colors` and every plain dot in one canvas multimesh (the
   cockpit octagon's dark backings in another); rim and selected dots are drawn one by one. `HudFrame.radar_dots` is built from
   the plot when read. The player's candidate list is built only when something cycles it (M4-T34's refresh on read).
 - **The debug overlay** text is rebuilt every `Main.OVERLAY_INTERVAL_S` (0.1 s) while it shows.

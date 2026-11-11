@@ -1,8 +1,8 @@
 class_name RadarPlot
 extends RefCounted
 ## The radar's contacts placed on the sphere for one frame (M4-T36, architecture §17.21): `RadarModel.plot`'s output, in drawing
-## order (far to near, the selected one last), as packed arrays a painter draws in a few batched calls. The same dots as
-## `RadarModel.dots`, without an object per contact.
+## order (far to near, the selected one last), as packed arrays a painter draws in a few batched calls, without an object per
+## contact.
 
 var ids := PackedInt64Array()
 ## Radar-space points inside the unit sphere (`RadarModel.Dot.point`).

@@ -29,7 +29,7 @@ pub struct Plot {
     pub selected: i32,
 }
 
-/// `RadarModel.radius_for_range`.
+/// The sphere radius (0..1) for a range: linear to `LINEAR_RADIUS` at 5 km, logarithmic to 1 at 25 km, clamped beyond.
 pub fn radius_for_range(range_m: f64) -> f64 {
     if range_m <= 0.0 {
         return 0.0;

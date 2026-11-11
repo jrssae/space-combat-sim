@@ -129,7 +129,8 @@ func test_the_radar_contacts_are_the_players_candidates_without_the_list() -> vo
 			assert_eq(input.radar_contacts.positions[i], info.position)
 			assert_eq(input.radar_contacts.factions[i], info.faction)
 			assert_eq(input.radar_contacts.reach[i], info.broadcast_range_m)
-	var expected: Array[RadarModel.Dot] = RadarModel.dots(listed, input.selected_id, input.own_position, input.own_basis, input.faction)
+	var expected: Array[RadarModel.Dot] = RadarModel.plot(RadarContacts.from_infos(listed), input.selected_id, input.own_position,
+			input.own_basis, input.faction).to_dots()
 	var drawn: Array[RadarModel.Dot] = HudLayout.compute(input).radar_dots
 	assert_eq(drawn.size(), expected.size())
 	for i: int in mini(drawn.size(), expected.size()):
