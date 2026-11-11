@@ -201,6 +201,10 @@ func _ready() -> void:
 	# The motion blur skips the frames around a rebase (M3-T25).
 	space_environment.post_effects.watch_world(world)
 	space_environment.use_star_of(_system_id)
+	var star_system := StarSystemHost.new()
+	star_system.name = "StarSystemHost"
+	star_system.setup(_system_id)
+	add_child(star_system)
 	pause_menu = (preload("res://src/hud/pause_menu.tscn") as PackedScene).instantiate() as PauseMenu
 	pause_menu.audio = audio
 	pause_menu.objectives_source = objectives

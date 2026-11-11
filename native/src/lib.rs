@@ -56,3 +56,6 @@ mod radar_plot;
 // M6-T02: the ephemeris and the gravity on test particles, engine-free kernels (wired in by M6-T04).
 mod ephemeris;
 mod gravity;
+
+// M6-T03: the ephemeris's binding for GDScript.
+mod ephemeris_binding;

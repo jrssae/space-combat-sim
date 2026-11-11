@@ -157,6 +157,7 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `hull` | The player's hull points, fraction and destroyed state | in flight |
 | `world` | The local origin, rebases and the automatic rebase distance | in flight |
 | `camera` | The active camera mode (cockpit, chase or cinematic; writable) and field of view, the cinematic shot playing and its time | in flight |
+| `system` | The star system: its bodies (GM, radius, atmosphere top, zone), the places' positions from Epsilon III's centre, the gate's distance from the station and the station's orbit period | in flight |
 | `weapons` | Pulse cannon fire mode (writable), cooldown and capacitor charge | in flight |
 | `targeting` | The selected target (writable), its range and closing speed, and the targets in sensor range | in flight |
 | `combat` | Bolts swept, hits resolved, the last hit and the cost of resolving them | in flight |
