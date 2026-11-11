@@ -4,11 +4,9 @@ extends CanvasLayer
 ## highlighted slice lit, each entry's label and second line in its colour, the stick's pointer in the hub, the page's
 ## heading at the top and a hint under the ring. It runs while the game is paused, and only while it shows: closed, it is
 ## hidden and does not process. Above the HUD (40) and the comms menu (42), below the debug overlay (50) and the pause menu
-## (60); T44's blur goes between the HUD and this layer.
+## (60). The focus pull (T44, `FocusPullView`, layer 44) blurs and dims everything under it while the menu shows.
 
 const LAYER: int = 45
-## The dimming over the paused view (T44 adds the blur behind it).
-const DIM_COLOR: Color = Color(0.0, 0.0, 0.0, 0.25)
 const HUB_COLOR: Color = Color(0.0, 0.0, 0.0, 0.6)
 const PLATE_ALPHA: float = 0.72
 const SHADOW_COLOR: Color = Color(0.0, 0.0, 0.0, 0.85)
@@ -37,6 +35,7 @@ var drawn_heading: String = ""
 var draws: int = 0
 
 var _canvas: RingCanvas = null
+var _focus: FocusPullView = null
 
 
 func _ready() -> void:
@@ -48,15 +47,34 @@ func _ready() -> void:
 	_canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_canvas.view = self
 	add_child(_canvas)
+	# A sibling, not a child: it must go on easing back after this layer hides.
+	_focus = FocusPullView.new()
+	_focus.name = "FocusPull"
+	if get_parent() != null:
+		get_parent().add_child.call_deferred(_focus)
+	else:
+		add_child(_focus)
 	set_showing(false)
+
+
+func _exit_tree() -> void:
+	if _focus != null and is_instance_valid(_focus) and _focus.get_parent() != self:
+		_focus.queue_free()
 
 
 ## Shows or hides the layer; hidden, it does no work at all.
 func set_showing(showing: bool) -> void:
 	visible = showing
 	set_process(showing)
+	if _focus != null:
+		_focus.set_open(showing)
 	if showing:
 		refresh()
+
+
+## The focus pull's eased amount now, 0..1 (0 sharp).
+func focus_amount() -> float:
+	return _focus.amount() if _focus != null else 0.0
 
 
 ## The model changed (a new highlight, a new page): draw it.
@@ -83,7 +101,6 @@ func paint(canvas: Control) -> void:
 	var tint: Color = menu.color()
 	var rim := Color(tint.r, tint.g, tint.b, 0.55)
 	var font: Font = HudPainter.font()
-	canvas.draw_rect(Rect2(Vector2.ZERO, size), DIM_COLOR, true)
 	canvas.draw_circle(at, outer, Color(tint.r * 0.08, tint.g * 0.08, tint.b * 0.08, PLATE_ALPHA))
 	canvas.draw_circle(at, inner, HUB_COLOR)
 	var slots: Array[Dictionary] = menu.slots()

@@ -173,7 +173,7 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `screens` | The cockpit screens: shown, powered, paint counts and the lamps lit | in flight |
 | `pause_menu` | Whether the pause menu is open, the page on top and how many pages are open | in flight |
 | `comms_menu` | The comms menu (D-pad Right): whether it is open, the page, time left, entries picked and why it last closed | in flight |
-| `target_menu` | The target menu: whether it is open, the ring and its entries, the highlight, the ship's target as the HUD names it, the HUD waypoint, the last pick, why it last closed, and what the last opening cost | in flight |
+| `target_menu` | The target menu: whether it is open, the ring and its entries, the highlight, the ship's target as the HUD names it, the HUD waypoint, the last pick, why it last closed, and what the last opening cost, and the focus pull's amount (`focus`) | in flight |
 | `target_preview` | The target menu's preview panel: whether it shows, the entry and its kind, the hull drawn as a wireframe and its line count, whether its edges are still being found and its viewport renders, the panel's rows and flag, the meshes whose edges are kept, what the last edge search cost (in all, its longest frame, frames) and the panel's CPU work per frame | in flight |
 | `render` | The renderer (`forward_plus` or `headless`), fps, frame time, draw calls, triangles, VRAM, far dots, GPU, display and window | in flight |
 | `lights` | Which emitters light the scene this frame and what that costs | front end, flight |

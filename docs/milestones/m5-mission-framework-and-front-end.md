@@ -616,7 +616,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T41 | - | Rock rams by the speed into the rock: a glancing scrape costs its closing speed, not the ship's whole speed (maintainer, 2026-11-08; done before T31) | T29 | controller | A small change to the ram rule for rocks | done |
 | T42 | A | Pause backdrop: a slow figure-8 camera around the Starfury behind the pause menu (maintainer, 2026-11-08) | T02, T08 | Sonnet | A camera path that runs while the tree is paused; the look is (H) | not started |
 | T43 | A | Target preview: a turning green wireframe of the highlighted entity on the side of the screen opposite the radial target menu, with hull bar and distance (maintainer, 2026-11-08) | T25 | Fable (maintainer, 2026-11-11) | Hidden-line wireframe in a small viewport, edges from the mesh, an info panel kept lean | done |
-| T44 | A | Focus pull: while the target menu is open only it and the target information are in focus; the play view and HUD blur over 0.2 s and come back over 0.2 s when it closes (maintainer, 2026-11-08, corrected 2026-11-09) | T25 | Sonnet | A short tweened screen blur between the HUD and the menu layers, free when closed | in progress |
+| T44 | A | Focus pull: while the target menu is open only it and the target information are in focus; the play view and HUD blur over 0.2 s and come back over 0.2 s when it closes (maintainer, 2026-11-08, corrected 2026-11-09) | T25 | Sonnet | A short tweened screen blur between the HUD and the menu layers, free when closed | done |
 | T45 | A | Start screen and settings groups: an options-only start screen (New game, Load game, Free flight, Settings, Quit), the sandbox scenes under New game, Controls inside Settings, five settings groups (maintainer, 2026-11-09) | T02, T03, T04 | Sonnet | Menu re-plumbing on the built kit; mostly tests | not started |
 | T46 | A | Radial comms menu: the comms menu moves onto T25's radial framework, with the focus pull, the right stick to point, A to confirm, B to go back (maintainer, 2026-11-09) | T25, T44, T07 | Sonnet | One framework for both menus; the comms routing changes from the D-pad to the stick; it pauses the game | not started |
 | T20 | - | Integration, full suite, docs and acceptance | all | Fable (maintainer, 2026-11-11) | One full run, the GPU check, the (H) list | not started |
@@ -2303,6 +2303,28 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
 - **GPU:** frame cost with the pull at full on oscar (labelled) and, when it is on hand, the main machine.
 - **Done when:** AC26, the tests pass, and a short frame sequence of the pull in `references/screenshots/Focus pull/` for
   the maintainer's look check (H).
+
+- **Done (as built, 2026-11-11, on the maintainer's machine):**
+  - **Built:** `FocusPull` (pure, `src/hud/focus_pull.gd`: progress at 1/0.2 s toward open or closed, smoothstep amount, reversal
+    from where it is), `FocusPullView` (`CanvasLayer` 44, one `ColorRect` with `focus_pull.gdshader`: a mip of the screen read
+    with nine taps, plus a dim) and `RadialMenuView` owning it, so the comms menu (T46) gets the pull by using the view. The pull
+    is a sibling of the view, not its child, so it keeps easing back after the view hides. It runs on real frame time
+    (`delta / Engine.time_scale`) with process mode always; at rest the layer is hidden and does not process.
+    `settings.target_menu_blur` (hud, 0..1, default 0.35; 0 never shows it) sets the radius (up to 3 mip levels) and the dim
+    (up to 35 %); the console's `target_menu.focus` gives the amount.
+  - **Choice:** T25's fixed 25 % dim is removed: the pull dims by itself (about 12 % at the default). At setting 0 the view
+    is neither blurred nor dimmed (the ring's plate carries the menu).
+  - **Layers:** blur 44 sits under the radial menu and `TargetPreview` (both 45) and over the HUD (40) and comms menu (42);
+    the debug overlay (50), console and pause menu stay sharp, as the screenshot shows.
+  - **Measured (RX 6950 XT, Forward+, 960x540 window):** dogfight 59 draw calls closed, 89 with the first ring open (ring,
+    preview, blur), 59 again after; `bench battle 300` 102, 132 open, 103 closed; the frame rate stays at the 144 Hz cap with
+    the menu open (the sampled `fps` reads a window average: 126 to 145). GPU frame time 0.4 to 0.8 ms open. Hidden: nothing.
+  - **Tests:** `test_focus_pull` (5: rest, open in 0.2 s, close in 0.2 s, reversal mid-way, negative step) and two in
+    `test_target_menu` (eases in and out on real time while paused, layer order, hidden and not processing at rest; setting 0
+    never shows); the quick suite passes (110 scripts, 1671 tests, 47663 asserts); main-scene smoke clean.
+  - **Screenshots:** `references/screenshots/T44 focus pull/` (`open1`, `open2`, `battle_open`, `closed`).
+  - **(H):** the strength and dim look right at 0.35 (`set settings.target_menu_blur 0.6` to try more); the 0.2 s ease feels
+    right; the ring and the preview panel read as the only sharp things.
 
 ### M5-T45 Start screen and settings groups
 

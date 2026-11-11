@@ -339,6 +339,7 @@ func _register_console() -> void:
 		&"last_pick": {"get": func() -> String: return last_pick if not last_pick.is_empty() else "none",
 				"doc": "What the last pick did"},
 		&"closed_by": {"get": func() -> String: return String(menu.radial.closed_by), "doc": "Why it last closed: pick, back, pause or close"},
+		&"focus": {"get": func() -> float: return view.focus_amount(), "doc": "The focus pull on the view behind the menu, 0 sharp to 1 full"},
 		&"opens": {"get": func() -> int: return opens, "doc": "Times it has opened"},
 		&"last_open_ms": {"get": func() -> float: return float(last_open_usec) / 1000.0, "unit": "ms",
 				"doc": "What the last opening cost: reading the candidates and building the first ring"},

@@ -740,6 +740,7 @@ unsaved, emits `changed(key, value)`), `reset(key)`, `save()`, `revert()`. Nothi
 | `stick_deadzone` | float | 0.15 | 0.0-0.30 |
 | `trigger_deadzone` | float | 0.05 | 0.0-0.20 |
 | `target_hold_s` | float | 0.35 | 0.15-1.0 |
+| `target_menu_blur` | float | 0.35 | 0.0-1.0 | M5-T44: focus pull strength while a radial menu is open; 0 is off |
 | `assist_default` | bool | true | |
 | `fuel_unlimited` | bool | true | M2-T14: reaction mass is never drawn down and the fuel gauge stays full; off = finite tank |
 | `camera_default` | enum | `chase` | `chase`, `cockpit` |
@@ -4494,3 +4495,23 @@ contact gets none of its facts. Closing speed is `TargetingSystem.compute_readou
 
 **Cost (RX 6950 XT, Forward+).** Showing: 9 draw calls (3 in the viewport for a one-part hull) and 0.06 to 0.15 ms of CPU a
 frame; the frame rate stays at the 144 Hz cap in the dogfight and in `bench battle 300`. Hidden: nothing.
+
+### 18.21 The focus pull as built (T44)
+
+While a radial menu shows, everything under it (the 3D view and the HUD) goes out of focus over 0.2 s and comes back over 0.2 s
+when it closes, so the menu and the target preview are the only sharp things.
+
+| Class | Kind | Holds |
+|---|---|---|
+| `FocusPull` | pure | progress toward open or closed at 1 per 0.2 s, the smoothstep amount, `at_rest`; a reversal continues from where it is |
+| `FocusPullView` | `CanvasLayer` 44 | one full-screen `ColorRect` with `focus_pull.gdshader`: a mip of the screen read with nine taps, and a dim |
+
+`RadialMenuView.set_showing` opens and closes the pull; the view creates it as its own sibling, so it eases back after the view
+hides, and each radial menu (the target menu, later the comms menu) carries it. It runs on real frame time, since the tree is
+paused: `delta / Engine.time_scale` with process mode always. Layer 44 is above the HUD (40) and comms menu (42) and under the
+menu and `TargetPreview` (45); the console, debug overlay (50) and pause menu (60) stay sharp. At rest the layer is hidden and
+does not process; `settings.target_menu_blur` (0 to 1, default 0.35) scales the radius (up to 3 mip levels) and dim (up to
+35 %), and 0 never shows it. T25's fixed 25 % dim is gone. Console: `target_menu.focus`.
+
+**Cost (RX 6950 XT, Forward+).** Open: about 30 more draw calls with the ring and preview (59 to 89 in the dogfight, 102 to 132
+in `bench battle 300`), 0.4 to 0.8 ms of GPU, the 144 Hz cap held. Closed: nothing.

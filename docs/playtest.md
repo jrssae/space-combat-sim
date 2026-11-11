@@ -672,6 +672,8 @@ Check (T25's (H) items; screenshots of both rings are in `references/screenshots
       (the selected target keeps its name).
 - [ ] Navigation and Objectives: the waypoint diamond and its radar mark are easy to find; the ship keeps facing its target.
 - [ ] Keyboard and mouse: arrows (left or right alone take the upper slice), the mouse's direction, Enter, Backspace.
+- [ ] **M5-T44 The focus pull** (screenshots in `references/screenshots/T44 focus pull/`): the view and HUD ease out of focus in 0.2 s
+      and back in 0.2 s, the ring and the preview stay sharp; `set settings.target_menu_blur 0.6` for more (0 is off).
 - [ ] **M5-T43 The preview panel** (screenshots in `references/screenshots/T43 target preview/`): the wireframes read as
       the ships (a raider, a Starfury, a Saturn 8, a Bokmai with its pods), with no far-side lines and no flat-panel
       diagonals; the dense spots are acceptable or want fewer lines; the turn's speed and angle; a long hull end-on is

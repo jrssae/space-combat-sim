@@ -474,3 +474,39 @@ func test_the_ring_is_drawn_vertically_centred_at_the_left_with_its_entries() ->
 	assert_eq(view.drawn_heading, "TACTICAL PAUSE · ENEMIES")
 	assert_eq(view.hint, TargetMenuDirector.HINT_TARGET)
 	_run("targetmenu close")
+
+
+# --- focus pull (T44) ---------------------------------------------------------------------------------------------
+
+
+func _pull_view() -> FocusPullView:
+	return main.target_menu.get_node("FocusPull") as FocusPullView
+
+
+func test_focus_pull_eases_in_and_out_on_real_time() -> void:
+	var blur: FocusPullView = _pull_view()
+	assert_not_null(blur)
+	assert_false(blur.visible, "hidden at rest")
+	assert_false(blur.is_processing())
+	assert_eq(main.target_menu.open(), "")
+	assert_true(blur.visible)
+	assert_true(blur.layer > Hud.new().layer and blur.layer < main.target_menu.view.layer, "above the HUD, below the menu")
+	assert_true(blur.layer < main.target_menu.preview.layer + 1)
+	await get_tree().create_timer(0.4, true, false, true).timeout
+	assert_eq(blur.amount(), 1.0, "full after 0.2 s even though the tree is paused")
+	assert_eq(_read("target_menu.focus"), 1.0)
+	main.target_menu.close()
+	await get_tree().create_timer(0.4, true, false, true).timeout
+	assert_eq(blur.amount(), 0.0)
+	assert_false(blur.visible, "hidden again once back in focus")
+	assert_false(blur.is_processing())
+
+
+func test_focus_pull_setting_zero_never_shows() -> void:
+	Settings.set_value(&"target_menu_blur", 0.0)
+	assert_eq(main.target_menu.open(), "")
+	await get_tree().create_timer(0.3, true, false, true).timeout
+	assert_false(_pull_view().visible)
+	assert_eq(_pull_view().amount(), 0.0)
+	main.target_menu.close()
+	Settings.set_value(&"target_menu_blur", 0.35)
