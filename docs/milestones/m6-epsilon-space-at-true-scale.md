@@ -210,7 +210,9 @@ which changes the same native rows and rebase path:
 
 - A `jumpgate` generator (references from Q11), a gate prop with collision and a `Targetable`, broadcasting to 1 000 km as M3-T17's
   buoys do (the AI sees it at that range, so a mission can send ships at it).
-- The vortex: meshes and shaders only (D22), opened and closed by the gate when a ship jumps in or out; it replaces `JumpArrival`
+- The vortex: meshes and shaders only (D22), opened and closed by the gate when a ship jumps in or out; **orange/yellow for a
+  departure into hyperspace, blue for an arrival from it** (maintainer, 2026-11-11; reference video
+  https://www.youtube.com/watch?v=2k8SRxOYC_U); it replaces `JumpArrival`
   for gate traffic (Q12). Missions and encounters ask for an arrival through the gate in data.
 
 ### D70 Far representations
