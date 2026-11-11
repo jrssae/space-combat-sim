@@ -124,21 +124,23 @@ The Earth Alliance gate ships use to enter and leave hyperspace (M6-T13, D69, Q1
 maintainer's model `references/EA_Jump_Gate.stl`; the colours, lights and the vortex from show stills and the reference video (sources
 below). Nothing from either is copied: `tools/procgen/assets/jumpgate.py` builds its own geometry from the ratios here.
 
-**Layout.** Four identical, free-standing arms in one plane, 90° apart, each pointing straight at the centre like the spokes of a
-wheel with no hub and no rim. Nothing joins them; the vortex forms in the empty middle, its rim close to the arms' inner tips. Seen
-face on the gate is a plus sign (or an X, rolled 45°). The model holds the four arms as separate print pieces, not assembled, so the
-spacing is read off the stills: the gap from the centre to an inner tip is about two thirds of an arm, so the whole gate spans about
-five times that gap.
+**Layout** (corrected under M6-T19 by the maintainer, 2026-11-11; T13 had laid the arms out as flat spokes). Four identical,
+free-standing arms, **parallel to each other and to the vortex's axis**, 90° apart round it like the four corner rails of a square
+tube. Nothing joins them; the vortex forms inside them: its mouth at the arms' front ends, its funnel running back along them to
+their back ends. Seen face on the gate is four dots round the vortex; seen obliquely, four long rails round it (the stills). The
+model holds the four arms as separate print pieces, not assembled, so the spacing is read off the stills: the mouth is about as wide
+as an arm is long, so each arm stands two thirds of an arm out from the axis.
 
 **One arm** (ratios to the arm's length; the model's arm is 164 of its units long):
 - **Truss.** A central spine tube (diameter 1.3 %) inside four slim longerons (diameter 0.55 %) on a square 4.9 % across, two on the
-  gate's plane and two on its normal. Clamp rings sit on the longerons midway between stations and near both ends.
+  tube's sides and one each toward and away from the axis. Clamp rings sit on the longerons midway between stations and near both ends.
 - **Five stations**, evenly spaced 17.4 % apart about the arm's middle (the end ones about 15 % from each end). Each is a pair of
   cross-shaped collars (6 % across, 0.85 % thick, 4.1 % apart) with conical sleeves on the spine between and outside them.
-- **Fins.** Each station carries two flat fins, one each side across the gate's plane: a stretched hexagon, root chord 3 %, widest
+- **Fins.** Each station carries two flat fins, spanning round the tube one each side of the arm: a stretched hexagon, root chord 3 %, widest
   (5.8 %) a fifth of the way out, tip chord 2.7 %, reaching 11.8 % from the arm's axis, 0.2 % thick, with a raised rim round a darker
-  inset panel. The pair is not flat but a shallow V of 140°: each fin is tilted 20° off the gate's plane, so seen down the arm they form
-  a wide dish. Ten fins per arm. (The model does not say which way the V opens; the generator opens it to the gate's front.)
+  inset panel. The pair is not flat but a shallow V of 140°: each fin is tilted 20°, so seen down the arm they form a wide dish.
+  Ten fins per arm. The stills show the fins standing out sideways from each rail, round the tube rather than away from the axis,
+  so they span tangentially, the V opening toward the axis (a dish facing the funnel).
 - **End caps.** A cross-shaped cap at each end, as wide as the collars, its four limbs drooping towards the arm's middle like a hipped
   roof, with a cone and band below it down to the spine.
 - Overall cross-section about 6 % of the length across the truss and 22 % across the fin tips; the arm is long and spindly, like a
@@ -146,8 +148,8 @@ five times that gap.
 
 **Scale.** No on-screen figure was found. A fan "unofficial technical manual" says large permanent gates have "four seven-mile long
 generators" (11 km each, larger than the station); the stills do not support that, so it is not used. Instead the vortex must take a
-capital ship with room to spare: **arms of 1 200 m**, inner tips 800 m from the centre, a vortex about 1 440 m across, the gate 4 km
-tip to tip (half the station's length). The truss is then about 75 m across, a fin about 120 m long, a station pitch about 210 m; a
+capital ship with room to spare: **arms of 1 200 m**, each 800 m from the axis, a vortex mouth about 1 500 m across and 1 200 m deep,
+the gate about 1.7 km across and 1.2 km long. The truss is then about 75 m across, a fin about 120 m long, a station pitch about 210 m; a
 Starfury is a speck beside a fin. The arm length is one option (`arm_length_m`), everything else follows from the ratios.
 
 **Colours and finish.** Industrial and dark. The truss and spine read warm grey to dull tan (a brassy sheen where lit), the collars and
@@ -155,14 +157,14 @@ caps gunmetal, the fins a paler cool grey with darker slate-blue inset panels. L
 black; in shadow they are near-black silhouettes picked out only by their lights.
 
 **Lights.** A row of small warm lamps along each arm, one at each fin station, steady amber to pale yellow-white; they are what you see
-of a gate in shadow. While the vortex forms, the arms' **inner tips** glow first: a hot pink-white bloom with spiky rays, the four
+of a gate in shadow. While the vortex forms, the arms' **ends** glow first (the back ends in the game, after the lamps' front-to-back chase): a hot pink-white bloom with spiky rays, the four
 glows then merging into one flash in the centre.
 
 **The vortex** (the maintainer's description, 2026-11-11, from T14's screenshots). One effect for every jump point: a gate's,
 a capital ship's own (M12) and the open points raiders arrive through.
-- **Fit at a gate.** The open end, the mouth, lies in the gate's front plane; its rim reaches to a few metres short of the arms'
-  inner tips (about 800 m from the centre) and fades out to translucent there. Behind the gate the funnel recedes as deep as an
-  arm is long (1 200 m). The numbers come from the gate's markers, not constants.
+- **Fit at a gate.** The mouth lies at the arms' front ends; its rim stops a few metres short of the arms (just under their 800 m
+  from the axis) and fades out to translucent there. The funnel runs back along the arms and ends at their back ends: as deep as
+  an arm is long (1 200 m). The numbers come from the gate's markers, not constants.
 - **Shape.** A slight funnel: visible, not pronounced. Most of it is a shallow bowl near the mouth; the depth gathers toward a
   narrow base.
 - **Colour and motion.** Layers of colour: the base colour (orange to golden yellow for a departure, blue for an arrival), with
@@ -172,7 +174,8 @@ a capital ship's own (M12) and the open points raiders arrive through.
   black; from the side or from behind it shows a moderately bright white glow, local to the base, with the rest of the funnel
   visible round it as usual.
 - **Opening.** At a gate, first the gate's own activation: the lamps at the fin stations flash one after another along each
-  arm, all four arms together, and the inner tips glow (a hot pink-white bloom with spiky rays). Then, for every jump point,
+  arm from its front end to its back end, all four arms together, and the back ends glow (a hot pink-white bloom with spiky rays);
+  then the jump point forms inside the arms. Then, for every jump point,
   the initiation flash at its centre; the funnel then grows out of that point and unfolds toward the rim of its mouth (it does
   not scale up in place). It stays open while ships pass, then folds back and is gone within about a second. A ship-made point
   starts at the flash. Ships coming out of an open point appear in its flash.
@@ -189,10 +192,12 @@ a capital ship's own (M12) and the open points raiders arrive through.
   the video frames (the whole sequence, and the orange-gold departure). `jumpgate.png` is dimmer and deeper blue than the
   others; the game follows the brighter video colours, a little dimmed.
 
-**What the generator gives the game (T14).** The gate's origin is the vortex's centre; the gate faces -Z (arrivals leave along -Z,
-departures fly in along +Z). `hardpoints.json` and the manifest carry the vortex (centre, normal, up, radius, the colours by direction in
-linear RGB with the streak highlight, the opening flash colour), the arrival and departure points (each naming its vortex colour), the
-four emitters on the inner tips, the 40 lamps, the arms' axes and one collision box per truss and per fin. The gate broadcasts to
+**What the generator gives the game (T14, T19).** The gate's origin is the centre of the arms' front ends, where the vortex's mouth
+lies; the gate faces -Z (arrivals leave along -Z, departures fly in along +Z) and the arms run back to z = 1 200 m. `hardpoints.json`
+and the manifest carry the vortex (mouth centre, normal, up, rim radius measured a few metres inside the arms, depth = the arm's
+length, the colours by direction in linear RGB with the streak highlight, the opening flash colour), the arrival and departure points
+(each naming its vortex colour), the four emitters on the arms' back ends, the 40 lamps (each with its station, listed front to back),
+the arms' front and back ends and one collision box per truss and per fin. The gate broadcasts to
 1 000 km (D69; the wiki and the fan manual both say about 1 000 km for a gate's beacon).
 
 Sources:

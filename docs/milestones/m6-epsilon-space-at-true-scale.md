@@ -295,7 +295,7 @@ which changes the same native rows and rebase path:
 | T16 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 | T17 | E | Test tiers: quick, standard, balance and full, the quick list, its guard test, the Rust tests in the run | T01 | Sonnet | Scripts and one data file from a written plan (`docs/research/test-review/quick-test-suite.md`) | done |
 | T18 | E | The review's CONFIRMED test removals (sections A to D), each re-checked, the parity recordings still read | T17 | Opus | Proving two tests cover the same thing needs both read in full; rules on what must stay | done |
-| T19 | D | The vortex reworked and stand-alone: fitted to the gate, a shallow funnel, spiralling soft dark patches; open jump points use it too | T14 | Opus | Shader animation and a shared effect seam; the look is (H) | done |
+| T19 | D | The vortex reworked and stand-alone: fitted to the gate, a shallow funnel, spiralling soft dark patches; open jump points use it too | T14 | Opus | Shader animation and a shared effect seam; the look is (H) | in progress |
 
 ### M6-T01 Moving-frame audit and design
 
@@ -491,6 +491,9 @@ which changes the same native rows and rebase path:
     boxes; `hardpoints.json` and the manifest carry the vortex (centre at the origin, normal -Z, radius 720 m, blue arrival
     and orange/yellow departure colours), arrival and departure points, four tip emitters and 40 amber lamps.
   - Tests: `test_jumpgate.py` (standard, 106 s) and `test_jumpgate_helpers.py` (quick, about 1 s).
+  - **Layout corrected under T19 (maintainer, 2026-11-11):** the four arms run parallel to each other and to the vortex's axis,
+    round it like the corner rails of a square tube (800 m from the axis), not as flat spokes; the mouth sits at their front
+    ends and the funnel runs back to their back ends. Generator v2, markers rebuilt (see T19).
   - Look sheet `references/screenshots/M6-T13 jumpgate/look/look_sheet.png` (H). Open for the maintainer: which way the fins'
     V opens, amber or white lamps, whether 1.2 m per texel is soft at 100 m.
 
@@ -667,6 +670,11 @@ which changes the same native rows and rebase path:
   changes with the view. From outside the back or from the side it shows a moderately bright white glow, local to the base;
   the rest of the funnel stays visible round it and looks as usual. From in front, looking down the funnel, the base fades to
   black. The shader blends between them from the view direction against the axis.
+- **The gate's arms run parallel to the vortex's axis (maintainer, 2026-11-11):** they sit round the funnel like the four
+  corner rails of a square tube and contain it, each with a front and a back end; T13's flat spokes were wrong. The mouth sits at
+  the front ends, the rim just under the arms' distance from the axis, the funnel runs back to the back ends (depth = arm length).
+  The activation's lamps fire from the front end to the back end, then the jump point forms inside the arms. The generator, its
+  markers and collision, `VortexFit`, `GateActivation`, `GateAutopilot`'s way round the arms and their tests follow.
 - **Acceptance view (maintainer, 2026-11-11):** the arrival vortex fully open, seen from the pose of
   `references/jumpgate/jumpgate.png`, side by side with it. The bar is an **80 to 90 % match** to the references; small
   differences are fine, pixel matching is not wanted.

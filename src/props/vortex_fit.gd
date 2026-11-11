@@ -3,26 +3,25 @@ extends RefCounted
 ## The size and place of a jump vortex (M6-T19): its mouth's radius, how deep the funnel goes behind the mouth, and where the
 ## mouth lies along its opener's axis. Pure.
 ##
-## At a jumpgate (from its markers): the mouth lies in the gate's front plane, its rim a few metres short of the arms' inner
-## tips, the funnel as deep as an arm is long. At a ship-made point: sized for the ship that comes through (`for_ship`), with the
-## gate's proportions, and widened when more ships of the same group come out of it (`widen_for`).
+## At a jumpgate (from its markers): the four arms run parallel to the vortex's axis round it; the mouth lies at their front
+## ends, its rim a few metres short of the nearest part of an arm, and the funnel runs back to their back ends (as deep as an arm
+## is long). At a ship-made point: sized for the ship that comes through (`for_ship`), with the gate's proportions, and widened
+## when more ships of the same group come out of it (`widen_for`).
 
-## The rim stops this far short of the nearest inner tip (it fades out there, so it never seems to touch the arms).
-const RIM_CLEARANCE_M: float = 8.0
 ## A ship-made point: the mouth is this many times the ship's bounding radius across (a fighter sits well inside it), never
-## smaller than `MIN_POINT_RADIUS_M`; the funnel is `POINT_DEPTH_RATIO` mouth radii deep, about a gate's 1 200 m to 782 m.
+## smaller than `MIN_POINT_RADIUS_M`; the funnel is `POINT_DEPTH_RATIO` mouth radii deep, about a gate's 1 200 m to 751 m.
 const POINT_RADII_PER_SHIP: float = 4.0
 const MIN_POINT_RADIUS_M: float = 60.0
-const POINT_DEPTH_RATIO: float = 1.5
-## Where a gate's markers are missing: the generator's 1 200 m arms.
-const FALLBACK_TIP_M: float = 790.0
+const POINT_DEPTH_RATIO: float = 1.6
+## Where a gate's markers are missing: the generator's 1 200 m arms 800 m from the axis.
+const FALLBACK_RIM_M: float = 751.0
 const FALLBACK_ARM_M: float = 1200.0
 
 ## The rim's radius, metres.
 var mouth_radius_m: float = 0.0
 ## From the mouth to the funnel's narrow end, metres.
 var depth_m: float = 0.0
-## Where the mouth lies along the opener's normal, metres (gate-local z; 0 for a ship-made point).
+## Where the mouth lies along the opener's axis, metres (gate-local z; 0 for a ship-made point).
 var mouth_z_m: float = 0.0
 
 
@@ -33,28 +32,17 @@ func _init(p_mouth_radius_m: float = MIN_POINT_RADIUS_M, p_depth_m: float = MIN_
 	mouth_z_m = p_mouth_z_m
 
 
-## A gate's vortex from its `hardpoints.json` and the manifest's `aabb_min` (the gate faces -Z, so its front plane is the lowest
-## z of its mesh): the rim just inside the nearest inner tip (an arm's `inner` end or a tip's emitter lens), the depth the arm's
-## length, the mouth in the front plane.
-static func for_gate(hardpoints: Dictionary, manifest: Dictionary) -> VortexFit:
-	var tip: float = INF
-	for key: String in ["arms", "emitters"]:
-		var list: Variant = hardpoints.get(key)
-		if not (list is Array):
-			continue
-		for entry: Variant in list as Array:
-			if entry is Dictionary:
-				var p: Variant = (entry as Dictionary).get("inner" if key == "arms" else "position")
-				if p is Array and (p as Array).size() >= 2:
-					tip = minf(tip, Vector2(float(p[0]), float(p[1])).length())
-	if tip == INF:
-		tip = FALLBACK_TIP_M
-	var arm: float = float(hardpoints.get("arm_length_m", FALLBACK_ARM_M))
-	var front: float = 0.0
-	var lo: Variant = manifest.get("aabb_min")
-	if lo is Array and (lo as Array).size() == 3:
-		front = minf(float(lo[2]), 0.0)
-	return VortexFit.new(tip - RIM_CLEARANCE_M, arm, front)
+## A gate's vortex from its `hardpoints.json`: the `vortex` marker's rim, depth and centre (the generator measures the rim off the
+## arms), else the arm length for the depth and the arms' front ends for the mouth.
+static func for_gate(hardpoints: Dictionary) -> VortexFit:
+	var v: Dictionary = hardpoints.get("vortex", {}) if hardpoints.get("vortex") is Dictionary else {}
+	var rim: float = float(v.get("radius_m", FALLBACK_RIM_M))
+	var depth: float = float(v.get("depth_m", hardpoints.get("arm_length_m", FALLBACK_ARM_M)))
+	var mouth: float = 0.0
+	var centre: Variant = v.get("center")
+	if centre is Array and (centre as Array).size() == 3:
+		mouth = float(centre[2])
+	return VortexFit.new(rim, depth, mouth)
 
 
 ## A ship-made point for a ship of `ship_radius_m` (its bounding radius).

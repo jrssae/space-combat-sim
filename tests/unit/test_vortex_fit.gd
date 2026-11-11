@@ -1,57 +1,49 @@
 extends GutTest
-## The jump vortex's fit (M6-T19): at a gate, from its markers, the rim a few metres inside the arms' inner tips, the funnel as
-## deep as an arm is long, the mouth in the gate's front plane; at a ship-made point, sized for the ship coming through.
+## The jump vortex's fit (M6-T19): at a gate, from its markers (the four arms run parallel to the vortex's axis round it): the rim
+## a few metres short of the arms, the funnel as deep as an arm is long, the mouth at the arms' front ends; at a ship-made point,
+## sized for the ship coming through.
 
 const HARDPOINTS_PATH: String = "res://assets/generated/jumpgate/hardpoints.json"
-const MANIFEST_PATH: String = "res://assets/generated/jumpgate/manifest.json"
 
 
-# Markers shaped as the generator writes them: 1 200 m arms whose inner ends are 800 m out, lenses 790.5 m out.
-func _hardpoints(arm_m: float = 1200.0, inner_m: float = 800.0, lens_m: float = 790.4878) -> Dictionary:
-	var arms: Array = []
-	var emitters: Array = []
-	for axis: Vector2 in [Vector2(0, 1), Vector2(-1, 0), Vector2(0, -1), Vector2(1, 0)]:
-		arms.append({"inner": [axis.x * inner_m, axis.y * inner_m, 0.0]})
-		emitters.append({"position": [axis.x * lens_m, axis.y * lens_m, 0.0]})
-	return {"arm_length_m": arm_m, "arms": arms, "emitters": emitters}
-
-
-func test_the_rim_stops_a_few_metres_short_of_the_inner_tips() -> void:
-	var fit: VortexFit = VortexFit.for_gate(_hardpoints(), {"aabb_min": [-2000.0, -2000.0, -49.75]})
-	assert_lt(fit.mouth_radius_m, 790.4878, "inside the nearest tip (the lens)")
-	assert_gt(fit.mouth_radius_m, 790.4878 - 20.0, "only a few metres short")
-	assert_almost_eq(fit.mouth_radius_m, 790.4878 - VortexFit.RIM_CLEARANCE_M, 0.01)
-
-
-func test_the_depth_is_the_arm_length_and_the_mouth_is_in_the_front_plane() -> void:
-	var fit: VortexFit = VortexFit.for_gate(_hardpoints(), {"aabb_min": [-2000.0, -2000.0, -49.75]})
+func test_a_gate_takes_its_rim_depth_and_mouth_from_the_vortex_marker() -> void:
+	var fit: VortexFit = VortexFit.for_gate({"arm_length_m": 1200.0,
+			"vortex": {"center": [0.0, 0.0, 0.0], "radius_m": 751.0, "depth_m": 1200.0}})
+	assert_almost_eq(fit.mouth_radius_m, 751.0, 0.01)
 	assert_almost_eq(fit.depth_m, 1200.0, 0.01)
-	assert_almost_eq(fit.mouth_z_m, -49.75, 0.01, "the gate faces -Z: its front plane is its lowest z")
+	assert_eq(fit.mouth_z_m, 0.0)
 
 
 func test_the_fit_follows_the_markers_not_constants() -> void:
-	var fit: VortexFit = VortexFit.for_gate(_hardpoints(600.0, 400.0, 395.0), {"aabb_min": [-1000.0, -1000.0, -25.0]})
-	assert_almost_eq(fit.mouth_radius_m, 395.0 - VortexFit.RIM_CLEARANCE_M, 0.01, "a half-size gate")
-	assert_almost_eq(fit.depth_m, 600.0, 0.01)
-	assert_almost_eq(fit.mouth_z_m, -25.0, 0.01)
-	var no_lens: VortexFit = VortexFit.for_gate({"arm_length_m": 1200.0, "arms": _hardpoints()["arms"]}, {})
-	assert_almost_eq(no_lens.mouth_radius_m, 800.0 - VortexFit.RIM_CLEARANCE_M, 0.01, "the arms' inner ends alone")
-	assert_eq(no_lens.mouth_z_m, 0.0, "no manifest: the mid plane")
+	var half: VortexFit = VortexFit.for_gate({"vortex": {"center": [0.0, 0.0, -5.0], "radius_m": 375.0, "depth_m": 600.0}})
+	assert_almost_eq(half.mouth_radius_m, 375.0, 0.01, "a half-size gate")
+	assert_almost_eq(half.depth_m, 600.0, 0.01)
+	assert_almost_eq(half.mouth_z_m, -5.0, 0.01)
+	var old: VortexFit = VortexFit.for_gate({"arm_length_m": 900.0, "vortex": {"radius_m": 500.0}})
+	assert_almost_eq(old.depth_m, 900.0, 0.01, "no depth marker: the arm's length")
+	var none: VortexFit = VortexFit.for_gate({})
+	assert_almost_eq(none.mouth_radius_m, VortexFit.FALLBACK_RIM_M, 0.01, "no markers: the generator's values")
 
 
-func test_the_built_gate_fits_its_own_markers() -> void:
-	if not FileAccess.file_exists(HARDPOINTS_PATH) or not FileAccess.file_exists(MANIFEST_PATH):
+func test_the_built_gate_fits_inside_its_arms() -> void:
+	if not FileAccess.file_exists(HARDPOINTS_PATH):
 		pending("the jumpgate asset is not built (scripts/gen_assets.sh)")
 		return
 	var hp: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(HARDPOINTS_PATH))
-	var manifest: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(MANIFEST_PATH))
-	var fit: VortexFit = VortexFit.for_gate(hp, manifest)
-	var tip: float = INF
-	for e: Dictionary in hp["emitters"]:
-		tip = minf(tip, Vector2(float(e["position"][0]), float(e["position"][1])).length())
-	assert_between(fit.mouth_radius_m, tip - 20.0, tip - 1.0, "just under the arms' inner tips (about 800 m)")
+	var fit: VortexFit = VortexFit.for_gate(hp)
+	var arm_radius: float = INF
+	var front_z: float = INF
+	for arm: Dictionary in hp["arms"]:
+		arm_radius = minf(arm_radius, Vector2(float(arm["front"][0]), float(arm["front"][1])).length())
+		front_z = minf(front_z, float(arm["front"][2]))
+	# The arms' trusses and fins reach about 50 m in toward the axis; the rim stops a few metres short of them.
+	assert_between(fit.mouth_radius_m, arm_radius - 70.0, arm_radius - 1.0, "just under the arms' distance from the axis")
+	var nearest: float = INF
+	for box: Dictionary in hp["collision"]:
+		nearest = minf(nearest, Vector2(float(box["position"][0]), float(box["position"][1])).length())
+	assert_lt(fit.mouth_radius_m, nearest, "inside every collision box's centre")
 	assert_almost_eq(fit.depth_m, float(hp["arm_length_m"]), 0.01, "as deep as an arm is long")
-	assert_almost_eq(fit.mouth_z_m, float(manifest["aabb_min"][2]), 0.01, "in the front plane")
+	assert_almost_eq(fit.mouth_z_m, front_z, 0.01, "at the arms' front ends")
 
 
 func test_a_ship_made_point_is_sized_for_its_ship() -> void:

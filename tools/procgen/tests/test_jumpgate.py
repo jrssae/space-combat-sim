@@ -76,11 +76,12 @@ class JumpgateTests(unittest.TestCase):
         for key, value in vortex.items():
             self.assertEqual(value, self.hp["vortex"][key], key)
         dims = self.manifest["dimensions_m"]
-        self.assertEqual((dims["span"], dims["arm_length"], dims["inner_radius"], dims["vortex_radius"]), (4000.0, 1200.0, 800.0, 720.0))
+        self.assertEqual((dims["arm_length"], dims["arm_radius"], dims["vortex_depth"]), (1200.0, 800.0, 1200.0))
+        self.assertTrue(740.0 < dims["vortex_radius"] < 800.0, dims["vortex_radius"])
 
     # --- hardpoints -------------------------------------------------------------------------
     def test_hardpoints_schema(self) -> None:
-        for key in ("asset_id", "frame", "units", "span_m", "depth_m", "arm_length_m", "inner_radius_m", "vortex", "arrival", "departure",
+        for key in ("asset_id", "frame", "units", "span_m", "depth_m", "arm_length_m", "arm_radius_m", "vortex", "arrival", "departure",
                     "emitters", "arms", "lights", "collision"):
             self.assertIn(key, self.hp)
         self.assertEqual((self.hp["asset_id"], self.hp["frame"], self.hp["units"]), ("jumpgate", "godot", "m"))
@@ -88,12 +89,14 @@ class JumpgateTests(unittest.TestCase):
         self.assertEqual(len(self.hp["lights"]), 40)
         self.assertEqual(len(self.hp["collision"]), 44)
 
-    def test_the_arms_run_from_the_inner_radius_outwards(self) -> None:
+    def test_the_arms_run_parallel_to_the_axis_from_front_to_back(self) -> None:
         for arm in self.hp["arms"]:
-            inner, outer, axis = (np.array(arm[k]) for k in ("inner", "outer", "axis"))
-            self.assertAlmostEqual(float(np.linalg.norm(inner)), 800.0, places=3)
-            self.assertAlmostEqual(float(np.linalg.norm(outer)), 2000.0, places=3)
-            np.testing.assert_allclose(outer - inner, 1200.0 * axis, atol=1e-3)
+            front, back, axis = (np.array(arm[k]) for k in ("front", "back", "axis"))
+            self.assertAlmostEqual(float(np.hypot(front[0], front[1])), 800.0, places=3)
+            self.assertEqual(float(front[2]), 0.0)  # the front ends in the mouth's plane
+            np.testing.assert_allclose(front - back, 1200.0 * axis, atol=1e-3)
+            np.testing.assert_allclose(axis, [0.0, 0.0, -1.0], atol=1e-9)
+        self.assertEqual(self.hp["vortex"]["depth_m"], 1200.0)
 
     def test_the_markers_sit_inside_the_ring(self) -> None:
         radial = np.hypot(self.obj.vertices[:, 0], self.obj.vertices[:, 1]).min()

@@ -25,13 +25,13 @@ const DIRECTIONS: Array[StringName] = [&"arrival", &"departure"]
 ## acceptance view for T19): 2.1 km out in front of the mouth, 53 degrees off its axis, below and a little to the right, so
 ## the mouth reads as a wide ellipse (0.6) with the throat low and right.
 const VIEWS: Dictionary = {
-	&"front": [Vector3(0.0, 0.0, -6000.0), Vector3.ZERO, 55.0],
-	&"three_quarter": [Vector3(3200.0, 1600.0, -4400.0), Vector3.ZERO, 55.0],
-	&"close": [Vector3(650.0, 420.0, -1500.0), Vector3(0.0, 0.0, 300.0), 60.0],
-	&"tip": [Vector3(1250.0, 260.0, -650.0), Vector3(700.0, 0.0, 0.0), 45.0],
+	&"front": [Vector3(0.0, 0.0, -6000.0), Vector3(0.0, 0.0, 600.0), 55.0],
+	&"three_quarter": [Vector3(3200.0, 1600.0, -4400.0), Vector3(0.0, 0.0, 600.0), 55.0],
+	&"close": [Vector3(650.0, 420.0, -1500.0), Vector3(0.0, 0.0, 600.0), 60.0],
+	&"tip": [Vector3(1150.0, 300.0, -600.0), Vector3(760.0, 0.0, 100.0), 45.0],
 	&"run_in": [Vector3(0.0, 60.0, -1500.0), Vector3(0.0, 0.0, 1200.0), 65.0],
-	&"side": [Vector3(5200.0, 400.0, 500.0), Vector3(0.0, 0.0, 450.0), 50.0],
-	&"behind": [Vector3(1500.0, -1300.0, 4600.0), Vector3(0.0, 0.0, 500.0), 55.0],
+	&"side": [Vector3(5200.0, 400.0, 600.0), Vector3(0.0, 0.0, 600.0), 50.0],
+	&"behind": [Vector3(1500.0, -1300.0, 4600.0), Vector3(0.0, 0.0, 700.0), 55.0],
 	&"reference": [Vector3(-450.0, -1650.0, -1300.0), Vector3.ZERO, 52.0, 0.0],
 }
 const VIEW_NAMES: Array[StringName] = [&"front", &"three_quarter", &"close", &"tip", &"run_in", &"side", &"behind", &"reference",

@@ -127,7 +127,7 @@ func test_flash_then_black_then_the_fade_lifts() -> void:
 # --- the autopilot --------------------------------------------------------------------------------------------------
 
 
-func test_line_up_goes_round_a_gate_seen_from_behind() -> void:
+func test_line_up_goes_round_the_arms_from_behind_or_beside() -> void:
 	assert_eq(GateAutopilot.line_up_target(Vector3(0.0, 0.0, -6000.0), DEPARTURE), DEPARTURE, "in front: straight there")
 	var behind: Vector3 = GateAutopilot.line_up_target(Vector3(0.0, 1500.0, 2000.0), DEPARTURE)
 	assert_almost_eq(Vector2(behind.x, behind.y).length(), GateAutopilot.DETOUR_RADIUS_M, 0.1, "out past the arms first")
@@ -135,6 +135,10 @@ func test_line_up_goes_round_a_gate_seen_from_behind() -> void:
 	assert_eq(behind.z, 2000.0, "without crossing the plane")
 	var outside := Vector3(GateAutopilot.DETOUR_RADIUS_M, GateAutopilot.DETOUR_RADIUS_M, 3000.0)
 	assert_eq(GateAutopilot.line_up_target(outside, DEPARTURE), DEPARTURE, "clear of the arms: round to the front")
+	var inside := Vector3(100.0, 200.0, 600.0)
+	assert_eq(GateAutopilot.line_up_target(inside, DEPARTURE), DEPARTURE, "within the four arms: straight out of the front")
+	var beside: Vector3 = GateAutopilot.line_up_target(Vector3(900.0, 0.0, 600.0), DEPARTURE)
+	assert_almost_eq(absf(beside.x), absf(beside.y), 0.1, "next to an arm (they run along the axis): out to a diagonal first")
 
 
 func test_run_in_waits_for_the_vortex() -> void:

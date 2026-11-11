@@ -1,15 +1,18 @@
-"""``jumpgate``: an Earth Alliance jumpgate, four free-standing arms round the vortex (M6-T13, D69, Q11; docs/design-references.md,
-"Jumpgate").
+"""``jumpgate``: an Earth Alliance jumpgate, four free-standing arms round the vortex (M6-T13, T19, D69, Q11;
+docs/design-references.md, "Jumpgate").
 
 Shape only, built from primitives: the proportions were read off the maintainer's model and the colours off show stills, and no
 geometry from either is used. Every length below is a share of one arm's length (the reference model's arm is 164 of its units long,
 so ``ARM_UNIT`` is one of those units), scaled to ``ARM_LENGTH_M``.
 
-Layout (Godot frame, metres, the origin the vortex's centre): the gate stands in the X/Y plane and faces -Z (its front: arrivals leave
-along -Z, departures fly in along +Z). Four identical arms point at the centre at 90 degree steps (arm 0 along +Y), each inner tip
-``INNER_RADIUS_SHARE`` of an arm from the centre. An arm is a truss: a central spine with conical sleeves, four longerons round it with
-clamp rings, five stations of two cross-shaped collars carrying a pair of swept fins (a shallow V opening to the front, so the fins
-make a dish facing the front), cross-shaped end caps, an emitter lens on the inner tip and amber lamps on both faces of each station.
+Layout (Godot frame, metres; corrected under T19 by the maintainer, 2026-11-11): the four arms run parallel to the vortex's axis,
+like the corner rails of a square tube round the funnel. The gate faces -Z (its front: arrivals leave along -Z, departures fly in
+along +Z); the origin is the centre of the arms' front ends, where the vortex's mouth lies, and the arms run back from z = 0 to
+z = the arm's length, where the funnel ends. They stand at 90 degree steps round the axis (arm 0 on +Y), ``ARM_RADIUS_SHARE`` of an
+arm out from it. An arm is a truss: a central spine with conical sleeves, four longerons round it with clamp rings, five stations of
+two cross-shaped collars carrying a pair of fins spanning round the tube (a shallow V opening toward the axis, so each pair makes a
+dish facing the funnel), cross-shaped end caps, an emitter lens on its back end and amber lamps on its inner and outer faces at each
+station.
 
 Outputs: the textured mesh (``jumpgate.glb``, its four maps; the importer builds the levels of detail), the OBJ, ``hardpoints.json``
 (the vortex with its colours by direction, the arrival and departure points, the emitters, the lamps, the arms, the collision
@@ -35,16 +38,17 @@ from ..parts import Collision
 from ..styles import Style
 
 ASSET_ID = "jumpgate"
-GENERATOR_VERSION = 1
+GENERATOR_VERSION = 2
 OBJ_NAME = f"{ASSET_ID}.obj"
 HARDPOINTS_NAME = "hardpoints.json"
 JSON_DIGITS = 4
 
 # The scale (docs/design-references.md, "Jumpgate"): no on-screen number exists, so the arm is sized so the vortex swallows a capital
-# ship with room to spare. The inner tips sit 2/3 of an arm from the centre (the show stills); the vortex fills 90 % of that circle.
+# ship with room to spare. The arms stand 2/3 of an arm out from the axis (the stills: the funnel's mouth about as wide as an arm is
+# long); the vortex's rim stops a few metres short of the nearest part of an arm, and the funnel is as deep as an arm is long.
 ARM_LENGTH_M = 1200.0
-INNER_RADIUS_SHARE = 2.0 / 3.0
-VORTEX_RADIUS_SHARE = 0.9  # of the inner radius
+ARM_RADIUS_SHARE = 2.0 / 3.0
+RIM_CLEARANCE_M = 8.0
 ARMS = 4
 # Where a ship comes out (just in front of the mouth) and where one lines up to go in, in vortex radii along the front normal.
 ARRIVAL_RADII = 0.1
@@ -60,7 +64,7 @@ VORTEX_FLASH = (1.0, 0.62, 0.86)
 # The arm's proportions, read off the reference: one of its units is 1/164 of an arm.
 ARM_UNIT = 1.0 / 164.0
 SPINE_RADIUS = 1.05 * ARM_UNIT
-LONGERON_OFFSET = 4.0 * ARM_UNIT  # from the spine's axis, on the gate's plane and its normal
+LONGERON_OFFSET = 4.0 * ARM_UNIT  # from the spine's axis, round the tube and toward the axis
 LONGERON_RADIUS = 0.45 * ARM_UNIT
 CLAMP_RADIUS = 0.65 * ARM_UNIT
 CLAMP_LENGTH = 1.3 * ARM_UNIT
@@ -73,7 +77,7 @@ COLLAR_THICKNESS = 1.4 * ARM_UNIT
 SLEEVE_RADIUS = 1.75 * ARM_UNIT
 SLEEVE_WAIST = 1.3 * ARM_UNIT
 SLEEVE_TAPER = 2.4 * ARM_UNIT  # the cone from the spine to the sleeve, outside each collar
-# A fin: a flat hexagon from its root to its tip, (span, half chord) pairs; swept forward off the gate's plane.
+# A fin: a flat hexagon from its root to its tip, (span, half chord) pairs, spanning round the tube; swept in toward the axis.
 FIN_ROOT = 3.0 * ARM_UNIT
 FIN_OUTLINE = ((0.0, 2.5 * ARM_UNIT), (3.5 * ARM_UNIT, 4.75 * ARM_UNIT), (16.4 * ARM_UNIT, 2.25 * ARM_UNIT))
 FIN_THICKNESS = 0.35 * ARM_UNIT
@@ -87,9 +91,9 @@ CAP_DROOP = 1.4 * ARM_UNIT
 CAP_CONE = ((1.4, 1.65), (4.8, 1.2))  # (depth from the arm's end, radius), reference units
 CAP_BAND = ((4.8, 1.35), (5.1, 1.35))
 END_CLAMP_DEPTH = 13.1 * ARM_UNIT  # the longerons' last clamp from each end
-# The emitter lens on the inner tip, our addition from the stills (the tips glow while the vortex forms): (depth inwards, radius).
+# The emitter lens on the back end, our addition from the stills (the ends glow while the vortex forms): (depth backwards, radius).
 EMITTER_PROFILE = ((0.0, 1.6), (0.6, 1.4), (1.1, 0.8), (1.3, 0.0))
-# The lamps: a small amber box on each face of every station, on the collar nearer the centre.
+# The lamps: a small amber box on the inner and outer face of every station, on the collar nearer the back.
 LAMP_SIZE = (1.2 * ARM_UNIT, 1.2 * ARM_UNIT, 0.6 * ARM_UNIT)
 
 SPINE_SEGMENTS = 16
@@ -149,32 +153,27 @@ def _m(role: str) -> Material:
 # --- the layout, pure ------------------------------------------------------------------------------------------------------
 @dataclass(frozen=True)
 class GateLayout:
-    """The gate's size: an arm's length, the inner tips' distance from the centre and the vortex's radius, metres."""
+    """The gate's size: an arm's length and its axis's distance from the vortex's axis, metres."""
 
     arm_length_m: float = ARM_LENGTH_M
 
     @property
-    def inner_radius_m(self) -> float:
-        return INNER_RADIUS_SHARE * self.arm_length_m
-
-    @property
-    def vortex_radius_m(self) -> float:
-        return VORTEX_RADIUS_SHARE * self.inner_radius_m
-
-    @property
-    def outer_radius_m(self) -> float:
-        return self.inner_radius_m + self.arm_length_m
+    def arm_radius_m(self) -> float:
+        return ARM_RADIUS_SHARE * self.arm_length_m
 
 
 def station_offsets() -> np.ndarray:
-    """The stations' places along an arm (shares from its inner end), evenly pitched about its middle."""
+    """The stations' places along an arm (shares from its back end), evenly pitched about its middle."""
     return 0.5 + STATION_PITCH * (np.arange(STATIONS) - 0.5 * (STATIONS - 1))
 
 
 def arm_rotation(k: int) -> np.ndarray:
-    """Arm ``k``'s turn about the gate's normal: exact quarter turns, so the four arms are exact copies."""
-    c, s = [(1, 0), (0, 1), (-1, 0), (0, -1)][k % 4]
-    return np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]], dtype=float)
+    """Arm ``k``'s turn from its own frame into the gate's: its length runs to the front (-Z), its fins round the tube and its z out
+    from the axis. Exact quarter turns about the axis, so the four arms are exact copies."""
+    c, s = [(0, 1), (-1, 0), (0, -1), (1, 0)][k % 4]  # the arm's outward direction: +Y, -X, -Y, +X
+    out = np.array([c, s, 0.0])
+    round_ = np.array([s, -c, 0.0])  # so (round, front, out) is a proper rotation
+    return np.stack([round_, np.array([0.0, 0.0, -1.0]), out], axis=1)
 
 
 def fin_outline() -> np.ndarray:
@@ -186,30 +185,37 @@ def fin_outline() -> np.ndarray:
 def fin_basis(side: float) -> np.ndarray:
     """A starboard (+1) or port (-1) fin's axes in the arm's frame: span, chord (along the arm), normal (a proper rotation)."""
     a = math.radians(FIN_SWEEP_DEG)
-    span = np.array([side * math.cos(a), 0.0, -math.sin(a)])  # tips swept forward (-Z): the dish faces the front
+    span = np.array([side * math.cos(a), 0.0, -math.sin(a)])  # tips swept toward the axis (-z): the dish faces the funnel
     chord = np.array([0.0, 1.0, 0.0])
     normal = np.cross(span, chord)
     return np.stack([span, chord, normal], axis=1)
 
 
-def markers(layout: GateLayout) -> dict[str, Any]:
-    """The points the game needs, in the gate's frame: the vortex, where ships arrive and depart, the emitters on the inner tips."""
+def markers(layout: GateLayout, rim_m: float) -> dict[str, Any]:
+    """The points the game needs, in the gate's frame: the vortex (its mouth at the front ends, its rim ``rim_m``, as deep as an arm
+    is long), where ships arrive and depart, and the emitters on the arms' back ends."""
     front = np.array([0.0, 0.0, -1.0])
-    rv = layout.vortex_radius_m
     unit = layout.arm_length_m * ARM_UNIT
     emitters = []
     for k in range(ARMS):
-        r = arm_rotation(k)
-        tip = r @ np.array([0.0, layout.inner_radius_m - EMITTER_PROFILE[-1][0] * unit, 0.0])
-        emitters.append({"name": f"arm_{k}", "position": _r(tip), "direction": _r(r @ np.array([0.0, -1.0, 0.0]))})
+        r, t = _placement(layout, k)
+        lens = r @ np.array([0.0, -EMITTER_PROFILE[-1][0] * unit, 0.0]) + t
+        emitters.append({"name": f"arm_{k}", "position": _r(lens), "direction": _r(-front)})
     return {
-        "vortex": {"center": [0.0, 0.0, 0.0], "normal": _r(front), "up": [0.0, 1.0, 0.0], "radius_m": round(rv, 3), **vortex_colours()},
-        "arrival": {"position": _r(front * ARRIVAL_RADII * rv), "forward": _r(front), "up": [0.0, 1.0, 0.0],
+        "vortex": {"center": [0.0, 0.0, 0.0], "normal": _r(front), "up": [0.0, 1.0, 0.0], "radius_m": round(rim_m, 3),
+                   "depth_m": round(layout.arm_length_m, 3), **vortex_colours()},
+        "arrival": {"position": _r(front * ARRIVAL_RADII * rim_m), "forward": _r(front), "up": [0.0, 1.0, 0.0],
                     "vortex": "arrival"},
-        "departure": {"position": _r(front * DEPARTURE_RADII * rv), "forward": _r(-front), "up": [0.0, 1.0, 0.0],
+        "departure": {"position": _r(front * DEPARTURE_RADII * rim_m), "forward": _r(-front), "up": [0.0, 1.0, 0.0],
                       "vortex": "departure"},
         "emitters": emitters,
     }
+
+
+def rim_radius(body: Mesh) -> float:
+    """The vortex's rim: a few metres short of the nearest part of any arm, measured off the built mesh."""
+    radial = np.hypot(body.vertices[:, 0], body.vertices[:, 1])
+    return float(radial.min()) - RIM_CLEARANCE_M
 
 
 def vortex_colours() -> dict[str, Any]:
@@ -225,7 +231,7 @@ def _r(v: Any) -> list[float]:
     return [round(float(x), JSON_DIGITS) + 0.0 for x in np.asarray(v, dtype=float).reshape(-1)]
 
 
-# --- one arm, in its own frame (y from 0 at the inner end to the arm's length; x along the gate's plane; z the gate's normal) --------
+# --- one arm, in its own frame (y from 0 at the back end to the arm's length at the front; x round the tube; z out from the axis) --
 def _along_y(mesh: Mesh) -> Mesh:
     """A mesh built along local Z turned to run along +Y."""
     return mesh.transformed(rotation_x(-0.5 * math.pi))
@@ -243,7 +249,7 @@ def spine(length: float) -> Mesh:
         mats.append(material)
 
     sleeve, girder = _m("hazard_dark"), _m("rcs")
-    # Under the inner cap: its cone and band.
+    # Under the back cap: its cone and band.
     add(CAP_CONE[0][0] * u, CAP_CONE[0][1] * u, sleeve)
     add(CAP_CONE[1][0] * u, CAP_CONE[1][1] * u, sleeve)
     add(CAP_BAND[0][0] * u, CAP_BAND[0][1] * u, sleeve)
@@ -258,7 +264,7 @@ def spine(length: float) -> Mesh:
         add(y + c1 - 0.5 * COLLAR_THICKNESS * length, SLEEVE_WAIST * length, sleeve)
         add(y + c1, SLEEVE_RADIUS * length, sleeve)
         add(y + c1 + SLEEVE_TAPER * length, rs, sleeve)
-    # Under the outer cap, the inner one mirrored.
+    # Under the front cap, the back one mirrored.
     add(length - CAP_BAND[1][0] * u, rs, girder)
     add(length - CAP_BAND[1][0] * u, CAP_BAND[1][1] * u, sleeve)
     add(length - CAP_BAND[0][0] * u, CAP_BAND[0][1] * u, sleeve)
@@ -287,7 +293,7 @@ def longeron(length: float) -> Mesh:
 
 
 def longerons(length: float) -> Mesh:
-    """The four longerons round the spine: two on the gate's plane, two on its normal."""
+    """The four longerons round the spine: two round the tube, one toward the axis and one away."""
     d = LONGERON_OFFSET * length
     one = longeron(length)
     return Mesh.concatenate(one.translated(offset) for offset in ((d, 0.0, 0.0), (-d, 0.0, 0.0), (0.0, 0.0, d), (0.0, 0.0, -d)))
@@ -306,7 +312,7 @@ def collars(length: float) -> Mesh:
 
 
 def fin(length: float, side: float, station_y: float) -> Mesh:
-    """One fin at a station: a framed plate, its inset panel darker, swept forward off the gate's plane."""
+    """One fin at a station: a framed plate, its inset panel darker, spanning round the tube and swept toward the axis."""
     if side < 0.0:
         # The port fin is the starboard one mirrored, so both sides are exact images.
         return fin(length, 1.0, station_y).mirrored("x")
@@ -336,16 +342,16 @@ def end_cap(length: float, outer: bool) -> Mesh:
 
 
 def emitter(length: float) -> Mesh:
-    """The lens on the inner tip, bulging towards the centre."""
+    """The lens on the back end, bulging backwards."""
     u = length * ARM_UNIT
     pts = [(0.0, 0.0)] + [(d * u, r * u) for d, r in EMITTER_PROFILE]
     return _along_y(lathe(pts, SPINE_SEGMENTS, EMITTER, creases=(1,))).mirrored("y")
 
 
 def lamp_positions(length: float) -> list[tuple[np.ndarray, np.ndarray]]:
-    """Each lamp's outer face centre and outward normal, in the arm's frame: one on each face of every station."""
+    """Each lamp's face centre and normal, in the arm's frame: one on the inner and outer face of every station, front first."""
     out = []
-    for share in station_offsets():
+    for share in station_offsets()[::-1]:
         y = share * length - COLLAR_OFFSET * length
         for face in (-1.0, 1.0):
             z = face * (COLLAR_REACH * length + LAMP_SIZE[2] * length)
@@ -392,9 +398,9 @@ def arm_collision(length: float) -> list[Collision]:
 
 
 def _placement(layout: GateLayout, k: int) -> tuple[np.ndarray, np.ndarray]:
-    """Arm ``k``'s rotation and translation from its own frame into the gate's."""
+    """Arm ``k``'s rotation and translation from its own frame into the gate's: its back end at z = the arm's length."""
     r = arm_rotation(k)
-    return r, r @ np.array([0.0, layout.inner_radius_m, 0.0])
+    return r, r @ np.array([0.0, 0.0, layout.arm_radius_m]) + np.array([0.0, 0.0, layout.arm_length_m])
 
 
 def gate_parts(layout: GateLayout) -> list[TexturedPart]:
@@ -410,13 +416,13 @@ def gate_parts(layout: GateLayout) -> list[TexturedPart]:
 
 
 def lights(layout: GateLayout) -> list[dict[str, Any]]:
-    """The amber running lamps in the gate's frame."""
+    """The amber running lamps in the gate's frame, each arm's from its front end to its back end (the activation's order)."""
     out = []
     for k in range(ARMS):
         r, t = _placement(layout, k)
         for i, (p, n) in enumerate(lamp_positions(layout.arm_length_m)):
-            out.append({"name": f"arm_{k}_{i // 2}_{'front' if n[2] < 0 else 'back'}", "arm": k, "position": _r(r @ p + t),
-                        "normal": _r(r @ n), "colour": list(LAMP_COLOUR)})
+            out.append({"name": f"arm_{k}_{i // 2}_{'inner' if n[2] < 0 else 'outer'}", "arm": k, "station": i // 2,
+                        "position": _r(r @ p + t), "normal": _r(r @ n), "colour": list(LAMP_COLOUR)})
     return out
 
 
@@ -436,7 +442,7 @@ def hardpoints(layout: GateLayout, body: Mesh) -> dict[str, Any]:
     arms = []
     for k in range(ARMS):
         r, t = _placement(layout, k)
-        arms.append({"name": f"arm_{k}", "inner": _r(t), "outer": _r(t + r @ np.array([0.0, layout.arm_length_m, 0.0])),
+        arms.append({"name": f"arm_{k}", "front": _r(t + r @ np.array([0.0, layout.arm_length_m, 0.0])), "back": _r(t),
                      "axis": _r(r @ np.array([0.0, 1.0, 0.0]))})
     return {
         "asset_id": ASSET_ID,
@@ -446,8 +452,8 @@ def hardpoints(layout: GateLayout, body: Mesh) -> dict[str, Any]:
         "span_m": round(float(hi[0] - lo[0]), 3),
         "depth_m": round(float(hi[2] - lo[2]), 3),
         "arm_length_m": round(layout.arm_length_m, 3),
-        "inner_radius_m": round(layout.inner_radius_m, 3),
-        **markers(layout),
+        "arm_radius_m": round(layout.arm_radius_m, 3),
+        **markers(layout, rim_radius(body)),
         "arms": arms,
         "lights": lights(layout),
         "collision": collision(layout),
@@ -487,13 +493,15 @@ def build(ctx: BuildContext) -> AssetOutputs:
         seed=ctx.seed,
         aabb_min=aabb_min,
         aabb_max=aabb_max,
-        centroid_offset=(0.0, 0.0, 0.0),  # the origin is the vortex's centre, by design
+        centroid_offset=(0.0, 0.0, 0.0),  # the origin is the vortex's mouth, by design
         files={"obj": OBJ_NAME, "mesh": mesh_entry["file"], "hardpoints": HARDPOINTS_NAME},
         extra={
             "dimensions_m": {"span": hp["span_m"], "depth": hp["depth_m"], "arm_length": hp["arm_length_m"],
-                             "inner_radius": hp["inner_radius_m"], "vortex_radius": hp["vortex"]["radius_m"]},
+                             "arm_radius": hp["arm_radius_m"], "vortex_radius": hp["vortex"]["radius_m"],
+                             "vortex_depth": hp["vortex"]["depth_m"]},
             "mesh": mesh_entry,
-            "vortex": {k: hp["vortex"][k] for k in ("center", "normal", "up", "radius_m", "colour_space", "colours", "flash")},
+            "vortex": {k: hp["vortex"][k] for k in ("center", "normal", "up", "radius_m", "depth_m", "colour_space", "colours",
+                                                    "flash")},
         },
     )
     files.append(write_manifest(out_dir, manifest))
