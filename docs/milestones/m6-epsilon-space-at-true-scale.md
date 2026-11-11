@@ -290,7 +290,7 @@ which changes the same native rows and rebase path:
 | T11 | C | The planet and its atmosphere: the `planet` generator and the scattering shader (generator half early) | T10, Q10 | Opus | Shader maths on T10's layer; the look is (H) | in progress |
 | T12 | C | The sun: disc and glow from the star's colour, the lens flare and key light on the true direction | T10 | Sonnet | A small shader and the existing flare | not started |
 | T13 | D | Jumpgate references and the `jumpgate` generator (early start) | Q11 | Opus | Geometry read off references | done |
-| T14 | D | The jumpgate in the game: the prop, the vortex, 1 000 km broadcast, arrivals through the gate | T13, T09, Q12 | Opus | A new effect and the mission and encounter seams | not started |
+| T14 | D | The jumpgate in the game: the prop, the vortex, 1 000 km broadcast, arrivals through the gate | T13, T09, Q12 | Opus | A new effect and the mission and encounter seams | in progress |
 | T15 | C | Far representations for the station's stand-in, the gate and the planets | T10, T14 | Opus | Hand-offs across three draw paths with no pop | not started |
 | T16 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 | T17 | E | Test tiers: quick, standard, balance and full, the quick list, its guard test, the Rust tests in the run | T01 | Sonnet | Scripts and one data file from a written plan (`docs/research/test-review/quick-test-suite.md`) | done |
@@ -499,6 +499,15 @@ which changes the same native rows and rebase path:
 - **Files:** `src/props/jumpgate.gd`, the vortex (`src/props/jump_vortex.gd`, its shader and mesh), the broadcast, arrivals through
   the gate for missions and encounters (data), `JumpArrival` kept for open points (Q12), the `gate` provider and commands, tests.
 - **Tests:** the vortex's timing and the broadcast range: quick; a ship arriving through the gate headless: standard.
+- **The player's jump (maintainer, 2026-11-11):** lock on to the gate as to a nav beacon. Within about 10 km, with the gate
+  targeted, the HUD shows a prompt `X: request jump`; X does this **only** then (it stays auto-track everywhere else). Pressing
+  it starts a sequence: the controls lock, an autopilot lines the ship up with the gate's departure point and accelerates, the
+  orange/yellow vortex opens on the show's timing, a cinematic camera (`CinematicShot`) follows the ship in, and a flash and a
+  fade end it. In M6 the ship then **comes back through the same gate's blue arrival vortex** and the controls return
+  (hyperspace itself is M11, which replaces the round trip). AI ships and encounter raiders arrive (blue) and leave
+  (orange/yellow) through the gate when the data asks for it.
+- **Order (maintainer, 2026-11-11):** T14 runs before T09: the gate is placed in today's scenes beside the station's stand-in,
+  50 km away as `data/star_systems.json` says, at rest; T09 later moves it with the rest of the scene to true scale.
 - **Done when:** AC8.
 
 ### M6-T15 Far representations
