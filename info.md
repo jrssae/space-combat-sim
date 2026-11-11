@@ -85,7 +85,8 @@ Arguments in `<angle brackets>` are required, `[square brackets]` optional, `a|b
 | `camera` | `[cockpit\|chase]` | Switch camera; no argument toggles; during a cinematic, the camera to go back to after the shot | in flight |
 | `look` | `<yaw> [pitch]` or `off` | Hold the view at an angle off the nose, for captures | in flight |
 | `rebase` | `<dx> <dy> <dz>` | Shift the local origin by an offset in metres; nothing moves in universe terms | in flight |
-| `gate` | `[status\|open\|close\|jump\|cancel\|target\|approach] [arrival\|departure]` | The jumpgate (M6-T14): show it, open its vortex for an arrival (blue) or a departure (orange), close it, start the player's jump through it from anywhere, cancel the jump, target the gate, or put the player 6 km in front of it facing it; says so in a scenario with no gate | in flight |
+| `gate` | `[status\|open\|close\|jump\|cancel\|target\|approach\|view] [arrival\|departure\|<view>]` | The jumpgate (M6-T14, T19): show it, open its vortex for an arrival (blue) or a departure (orange) after the arms' activation (held open 20 s to look at), close it, start the player's jump through it from anywhere, cancel the jump, target the gate, put the player 6 km in front of it facing it, or hold the camera on it for captures: `view front\|three_quarter\|close\|tip\|run_in\|side\|behind\|reference\|off` (`reference` is the pose of `references/jumpgate/jumpgate.png`, the maintainer's acceptance view); says so in a scenario with no gate | in flight |
+| `vortex` | `[status\|open\|close\|view] [arrival\|departure] [radius_m]` | A stand-alone jump vortex (M6-T19), as raiders and capital ships open: `open` one ahead of the player facing them (mouth radius default 300 m, held 20 s), `close` every console point, `view` hold the camera in front of the newest open point (console, mission or encounter) | in flight |
 
 ### Rendering and effects
 
@@ -158,7 +159,8 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `hull` | The player's hull points, fraction and destroyed state | in flight |
 | `world` | The local origin, rebases and the automatic rebase distance | in flight |
 | `camera` | The active camera mode (cockpit, chase or cinematic; writable) and field of view, the cinematic shot playing and its time | in flight |
-| `gate` | The jumpgate: count, name, distance, targeted, whether the jump is offered (`prompt`), the vortex's phase, direction, age and openings, ships arrived, departed, waiting and departing, and the player's jump (state, time in it, completed, aborted, last abort) | in flight |
+| `gate` | The jumpgate: count, name, distance, targeted, whether the jump is offered (`prompt`), the vortex's phase (`activate`, `flash`, `grow`, `open`, `closing`, `closed`), direction, age and openings, ships arrived, departed, waiting and departing, and the player's jump (state, time in it, completed, aborted, last abort) | in flight |
+| `vortex` | Stand-alone jump points: how many are open (console, mission and encounter points), how many `vortex open` opened, the newest console point's phase, mouth radius and depth, and the gate vortex's fit (`gate_rim_m`, `gate_depth_m`, `gate_mouth_z_m`) | in flight |
 | `system` | The star system: its bodies (GM, radius, atmosphere top, zone), the places' positions from Epsilon III's centre, the gate's distance from the station and the station's orbit period | in flight |
 | `weapons` | Pulse cannon fire mode (writable), cooldown and capacitor charge | in flight |
 | `targeting` | The selected target (writable), its range and closing speed, and the targets in sensor range | in flight |

@@ -158,15 +158,36 @@ black; in shadow they are near-black silhouettes picked out only by their lights
 of a gate in shadow. While the vortex forms, the arms' **inner tips** glow first: a hot pink-white bloom with spiky rays, the four
 glows then merging into one flash in the centre.
 
-**The vortex.** A swirling funnel of streaky, feathered light that spirals in to a dark eye, seen as a disc face on and as a deep
-whirlpool from an angle; its rim is ragged and soft, fading into space. Its colour says which way it goes (the maintainer, 2026-11-11):
-- **Arrival** (coming out of hyperspace): **blue**, a saturated mid blue with paler cyan-white streaks.
-- **Departure** (going into hyperspace): **orange to golden yellow**, with paler yellow streaks.
-Sequence and timing from the reference video's frames (about one per second): the inner tips glow (about 1 s), the glows merge into a
-white-pink flash in the centre (about 1 s), a small spark opens into the funnel, growing to full size in 1 to 2 s; it stays open while
-the ship passes (3 to 4 s in the clips), the ship appearing as a dark speck deep in the eye and flying out; then it shrinks back to a
-spark and is gone within about a second. Ships must pass soon after it opens: the closing vortex is dangerous (the wiki, "backwash").
-Only one direction per opening; a gate is not shut down quickly.
+**The vortex** (the maintainer's description, 2026-11-11, from T14's screenshots). One effect for every jump point: a gate's,
+a capital ship's own (M12) and the open points raiders arrive through.
+- **Fit at a gate.** The open end, the mouth, lies in the gate's front plane; its rim reaches to a few metres short of the arms'
+  inner tips (about 800 m from the centre) and fades out to translucent there. Behind the gate the funnel recedes as deep as an
+  arm is long (1 200 m). The numbers come from the gate's markers, not constants.
+- **Shape.** A slight funnel: visible, not pronounced. Most of it is a shallow bowl near the mouth; the depth gathers toward a
+  narrow base.
+- **Colour and motion.** Layers of colour: the base colour (orange to golden yellow for a departure, blue for an arrival), with
+  small patches darker than the base, roughly rectangular with soft edges, moving in a spiral along the funnel, and paler,
+  translucent patches of the base colour moving with them. The rim breaks up into soft wisps.
+- **The base by view.** Only the narrow deep end changes with the view: from in front, looking down the funnel, it fades to
+  black; from the side or from behind it shows a moderately bright white glow, local to the base, with the rest of the funnel
+  visible round it as usual.
+- **Opening.** At a gate, first the gate's own activation: the lamps at the fin stations flash one after another along each
+  arm, all four arms together, and the inner tips glow (a hot pink-white bloom with spiky rays). Then, for every jump point,
+  the initiation flash at its centre; the funnel then grows out of that point and unfolds toward the rim of its mouth (it does
+  not scale up in place). It stays open while ships pass, then folds back and is gone within about a second. A ship-made point
+  starts at the flash. Ships coming out of an open point appear in its flash.
+- **Sizes.** A gate's vortex is fitted to the gate. An open point is sized for the ship coming through, with the gate's
+  proportions, and widens when the rest of its group comes out of it.
+- **Timing** from the reference video's frames (about one per second): the activation about 1 s, the flash about 1 s, the
+  funnel full size 1 to 2 s later; open while the ship passes (3 to 4 s in the clips), the ship a dark speck deep in the eye
+  flying out. Ships must pass soon after it opens: the closing vortex is dangerous (the wiki, "backwash"). Only one direction
+  per opening; a gate is not shut down quickly.
+- **The references in `references/jumpgate/`** (not committed): `jumpgate.png` (the acceptance view: the open blue vortex framed
+  by the arms, dim deep blue with paler feathered streaks spiralling to a dark throat), `jumpgate_open` (the tips' activation
+  glow), `gathering` (the gate in shadow, its amber lamps), `point_1` (a ship-made point: a mid-blue funnel packed with soft
+  darker and paler patches, black eye, wispy rim), `point_2` (the initiation flash: a white core with lavender-blue rays), and
+  the video frames (the whole sequence, and the orange-gold departure). `jumpgate.png` is dimmer and deeper blue than the
+  others; the game follows the brighter video colours, a little dimmed.
 
 **What the generator gives the game (T14).** The gate's origin is the vortex's centre; the gate faces -Z (arrivals leave along -Z,
 departures fly in along +Z). `hardpoints.json` and the manifest carry the vortex (centre, normal, up, radius, the colours by direction in

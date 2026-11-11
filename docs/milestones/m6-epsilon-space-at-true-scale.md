@@ -295,7 +295,7 @@ which changes the same native rows and rebase path:
 | T16 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 | T17 | E | Test tiers: quick, standard, balance and full, the quick list, its guard test, the Rust tests in the run | T01 | Sonnet | Scripts and one data file from a written plan (`docs/research/test-review/quick-test-suite.md`) | done |
 | T18 | E | The review's CONFIRMED test removals (sections A to D), each re-checked, the parity recordings still read | T17 | Opus | Proving two tests cover the same thing needs both read in full; rules on what must stay | done |
-| T19 | D | The vortex reworked and stand-alone: fitted to the gate, a shallow funnel, spiralling soft dark patches; open jump points use it too | T14 | Opus | Shader animation and a shared effect seam; the look is (H) | in progress |
+| T19 | D | The vortex reworked and stand-alone: fitted to the gate, a shallow funnel, spiralling soft dark patches; open jump points use it too | T14 | Opus | Shader animation and a shared effect seam; the look is (H) | done |
 
 ### M6-T01 Moving-frame audit and design
 
@@ -657,6 +657,82 @@ which changes the same native rows and rebase path:
   (Q12 revised). An open point's vortex is sized for the ship that comes through.
 - **Tests:** the funnel's fit to the gate's markers (rim, depth) and the open-point sizing: quick if pure; the arrivals that
   used `JumpArrival` keep their tests, moved to the vortex (their tier unchanged).
+- **The opening, split between the gate and the vortex (maintainer, 2026-11-11):** (1) **gate only, the activation:** the
+  lamps at the fin stations flash one after another along each arm, all four arms together, then the inner tips glow; it is
+  the gate's own logic and timing, driven by its lamp markers (`GateActivation`, the lead-in of the vortex's timing). (2) **the
+  vortex, the initiation flash** at the jump point's centre, for every point, gate or ship-made. (3) **the vortex, flash to
+  funnel:** the funnel grows out of that point and unfolds toward the rim of its mouth, not a scaling in place. At a gate:
+  activation, centre flash, unfolding, open, closing; a ship-made point starts at the flash.
+- **The base depends on the view (maintainer, 2026-11-11, corrected the same day):** only the funnel's base, its narrow deep end,
+  changes with the view. From outside the back or from the side it shows a moderately bright white glow, local to the base;
+  the rest of the funnel stays visible round it and looks as usual. From in front, looking down the funnel, the base fades to
+  black. The shader blends between them from the view direction against the axis.
+- **Acceptance view (maintainer, 2026-11-11):** the arrival vortex fully open, seen from the pose of
+  `references/jumpgate/jumpgate.png`, side by side with it. The bar is an **80 to 90 % match** to the references; small
+  differences are fine, pixel matching is not wanted.
+- **What the references show** (`references/jumpgate/`, looked at one by one before tuning):
+  - `jumpgate.png` (and `jumpgate.gif`, which is a single still WebP, the same picture): the open blue vortex seen obliquely
+    from in front, a wide ellipse framed by the four arms with their amber lamps; a dim, deep blue body with paler
+    blue-white feathery streaks in a spiral toward a dark throat low and right of centre; the rim soft, fading out.
+  - `jumpgate_open.png/jpg`: the activation peak: four hot pink-white glows with rays at the inner tips, a faint white haze
+    between them; no funnel yet.
+  - `gathering.png/jpg`: the gate in shadow: dark arms picked out by a row of small steady amber lamps, one per fin station;
+    a nebula behind, no vortex.
+  - `point_1.png/webp` (a ship-made point): a big blue funnel seen obliquely, mid blue, packed with small soft-edged darker and
+    paler patches in a spiral, a black eye off centre, the rim breaking into radial wisps.
+  - `point_2.png/webp` (a ship-made point opening): the initiation flash alone: a white core with lavender-blue rays on black.
+  - The video frames (`yt_*`, the storyboard): lights along the arms, the tips flaring, one big white-pink flash, a pink spark
+    that opens into a small blue ring and grows to the full funnel; the departure is the same in orange-gold with darker
+    brown streaks.
+  - Where they disagree: `jumpgate.png` is dim and deep blue, `point_1` and the video brighter and more cyan. Followed: between
+    the two, closer to the video (the gate's hardpoint colours, a little dimmed), since the game is lit for the video's look.
 - **Done when:** the fit and sizing tests; every mission and encounter that used `JumpArrival` arrives through a vortex with
   its outcome unchanged; screenshots of the gate's vortex (both colours, front and three-quarter) and of an open point for
-  the maintainer (H); GPU numbers with the vortex open.
+  the maintainer (H); GPU numbers with the vortex open. **(H) acceptance view:** `gate view reference` (camera 2.1 km out in
+  front of the mouth, 53 degrees off its axis, below and a little to the right, 52 degree field of view, no roll), the side by
+  side `references/screenshots/M6-T19 vortex/acceptance_jumpgate_png.png`, judged at an 80 to 90 % match.
+
+- **Done (2026-11-11):**
+  - **Stand-alone vortex** (`JumpVortex`, `jump_vortex.tscn`): `JumpVortex.create(colours, standalone)`, then
+    `open_at(transform, VortexFit, direction, hold_s, lead_s)` (origin the mouth's centre, -Z the way out), `open`, `close`,
+    `stop`, `extend`, `phase_name`, `is_open_for`, `open_in_s`. Its own centre flash (`jump_glow.gdshader`), the funnel
+    unfolding from that point to the rim (a vertex shader on a unit grid), the `jump_in` sound on arrivals, a light.
+  - **Fit** (`VortexFit.for_gate`, from `hardpoints.json` and the manifest): rim = nearest inner tip (the lenses, 790.5 m) less
+    8 m = 782.5 m, fading out from 0.68 of the radius; depth = `arm_length_m` (1 200 m); mouth z = the manifest's `aabb_min.z`
+    (-49.75 m, the front plane). The shape is a shallow bowl round a deeper, narrow throat (depth gathered toward the base).
+  - **Open points** (`JumpPointPool`, replacing `JumpArrival` and `JumpArrivalPool`, retired): sized for the ship,
+    `VortexFit.for_ship`: mouth radius = 4 bounding radii, never under 60 m, depth 1.5 radii (the gate's proportions); the
+    mouth one ship radius behind it, facing its heading; a group arriving within 600 m in the first second shares the point,
+    which widens to hold each ship (its offset from the axis plus its own point radius). The ship is placed as before (the
+    pool opens after the ship is acquired), so missions and encounters keep their outcomes.
+  - **Gate activation** (`GateActivation`, pure): the 1 s lead-in (T14's tip glow, so the gate still opens in 3.5 s): the 40
+    lamps ranked into 5 stations by distance, flashing from the outer end in over 0.6 s on all arms, then the tips glow into the
+    flash; one multimesh of glows. `VortexTiming` now takes the opener's `lead_s` (phases activate, flash, grow, open,
+    closing). Which end the chase starts from is one constant (`CHASE_INWARD`): the maintainer's "front to back" was read as
+    outer end to the centre, leading into the flash as the video does; flip it if meant the other way.
+  - **Base by view:** black down the funnel from in front, a white glow over the base only (r < 0.16) from the side or behind,
+    blended on the view direction against the axis.
+  - **Console:** `vortex [status|open|close|view] [arrival|departure] [radius_m]` and provider `vortex`; `gate view
+    <front|three_quarter|close|tip|run_in|side|behind|reference|off>` (held capture poses, no letterbox); `gate open` holds
+    20 s. `CinematicShot` keys take an optional `roll`. In `info.md`. `docs/architecture.md` (§18 D51 still names
+    `JumpArrival`) waits for T16, as T14's notes do.
+  - **Tests:** quick `test_vortex_fit` (rim, depth, mouth plane, the built asset, ship sizing, widening), `test_gate_activation`,
+    `test_vortex_timing` (rewritten for the lead-in), `test_jumpgate_broadcast` (activation, fit), `test_cinematic_shot` (roll);
+    the jump-arrival test in `test_mission_runner` (quick) moved to the vortex (sized, both raiders inside the mouth, closes);
+    `test_encounters`, `test_mission_skip`, `test_jumpgate_in_play` (standard) unchanged and green. Quick tier: 1 615 GUT
+    tests, 201 s, exit 0.
+  - **GPU, oscar** (R9 200 / Tahiti, 960x540, Forward+): with the vortex open, 144 fps (6.9 ms), 25 draw calls, 51.6k
+    triangles, 322 MB VRAM in the renderer, sysfs `card1` 947 MB (740 MB before the game). Measured while the window was drawn,
+    on an earlier pass of the shader (same mesh and structure, a few noise taps fewer); the later captures ran with the window
+    hidden (Wayland stops drawing it, X11 drops to 1 fps), so the final shader's frame rate is to be re-read on a visible
+    window (H).
+  - **Screenshots** in `references/screenshots/M6-T19 vortex/`: `arr_*` and `dep_*` (front, three-quarter, close, tip, side,
+    behind, run_in, reference), `seq1_arm_lights`, `seq2_centre_flash`, `seq3_half_grown`, `close_motion_a/b`,
+    `raid_point_flash/open` (an encounter raid's point), `console_point_300m`, `acceptance_jumpgate_png.png`; the references'
+    storyboard enlarged in `storyboard/`.
+  - **Against the references (own estimate):** `point_1` about 80 %, the video frames' opening sequence about 85 %,
+    `jumpgate_open` about 80 %, `point_2` about 80 %, `gathering` (lamps) about 75 %, `jumpgate.png` about 70 %. Below the bar:
+    the acceptance view, where the patches read as crisper tiles than the still's fine feathered streaks and the body is brighter;
+    the still's arms also sit closer to the funnel (its vortex is wider against its arms than our 782 m rim inside 1 200 m arms)
+    and its mouth ellipse leans the other way, which a symmetric funnel cannot match with the throat low and right. Open (H):
+    the look; the chase's direction; whether the base glow should bloom more.

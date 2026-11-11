@@ -6,7 +6,8 @@ extends Node
 ## hidden while away and placed back by the gate's blue arrival. A thin adapter: the rules are in `GateJump`, `GateJumpPrompt`,
 ## `GateAutopilot` and `VortexTiming`.
 ##
-## Console: command `gate`, provider `gate` (both exist in every flight scene; with no gate the command says so).
+## Console: commands `gate` and `vortex`, providers `gate` and `vortex` (they exist in every flight scene; with no gate `gate` says
+## so). `vortex` opens stand-alone jump points ahead of the player from its own small `JumpPointPool`, to look at.
 
 const NODE_NAME: StringName = &"JumpgateHost"
 ## Q3: the gate is about 50 km from the station on its orbit; used only when the star-system data cannot say.
@@ -17,8 +18,34 @@ const PARK_BEHIND_M: float = 3000.0
 const APPROACH_M: float = 6000.0
 ## Lit layer of the flash and the fade: over the HUD and the letterbox (39), under the console.
 const FADE_LAYER: int = 60
-const ACTIONS: Array[StringName] = [&"status", &"open", &"close", &"jump", &"cancel", &"target", &"approach"]
+const ACTIONS: Array[StringName] = [&"status", &"open", &"close", &"jump", &"cancel", &"target", &"approach", &"view"]
 const DIRECTIONS: Array[StringName] = [&"arrival", &"departure"]
+## `gate view <name>`: held camera poses on the gate for captures, in the gate's frame (-Z its front, +Y its top): the camera's
+## offset, the aim's offset, the field of view and the roll (degrees, the picture turned clockwise). `reference` matches `references/jumpgate/jumpgate.png` (the maintainer's
+## acceptance view for T19): 2.1 km out in front of the mouth, 53 degrees off its axis, below and a little to the right, so
+## the mouth reads as a wide ellipse (0.6) with the throat low and right.
+const VIEWS: Dictionary = {
+	&"front": [Vector3(0.0, 0.0, -6000.0), Vector3.ZERO, 55.0],
+	&"three_quarter": [Vector3(3200.0, 1600.0, -4400.0), Vector3.ZERO, 55.0],
+	&"close": [Vector3(650.0, 420.0, -1500.0), Vector3(0.0, 0.0, 300.0), 60.0],
+	&"tip": [Vector3(1250.0, 260.0, -650.0), Vector3(700.0, 0.0, 0.0), 45.0],
+	&"run_in": [Vector3(0.0, 60.0, -1500.0), Vector3(0.0, 0.0, 1200.0), 65.0],
+	&"side": [Vector3(5200.0, 400.0, 500.0), Vector3(0.0, 0.0, 450.0), 50.0],
+	&"behind": [Vector3(1500.0, -1300.0, 4600.0), Vector3(0.0, 0.0, 500.0), 55.0],
+	&"reference": [Vector3(-450.0, -1650.0, -1300.0), Vector3.ZERO, 52.0, 0.0],
+}
+const VIEW_NAMES: Array[StringName] = [&"front", &"three_quarter", &"close", &"tip", &"run_in", &"side", &"behind", &"reference",
+		&"off"]
+## `gate open` and `vortex open` hold the vortex open this long, to look at it.
+const CONSOLE_HOLD_S: float = 20.0
+const VORTEX_ACTIONS: Array[StringName] = [&"status", &"open", &"close", &"view"]
+## `vortex view`: the camera in front of the newest open point, off its axis, this many mouth radii away.
+const POINT_VIEW: Vector3 = Vector3(1.2, 0.8, -4.5)
+## `vortex open`: the mouth's radius when none is given, and the point's distance ahead of the player in mouth radii (plus a
+## margin), so the whole funnel is in view.
+const CONSOLE_POINT_RADIUS_M: float = 300.0
+const CONSOLE_POINT_AHEAD: float = 4.0
+const CONSOLE_POINT_MARGIN_M: float = 300.0
 
 var main: Main = null
 var gates: Array[Jumpgate] = []
@@ -33,9 +60,20 @@ var _assist_before: bool = true
 var _capability: ShipCapability = null
 var _fade: ColorRect = null
 var _flash_colour: Color = JumpVortex.DEFAULT_FLASH
+## The stand-alone points `vortex open` shows.
+var console_points: JumpPointPool = null
+
+var _view_gate: Jumpgate = null
+var _view_point: JumpVortex = null
 
 
 func _ready() -> void:
+	if main != null and main.effects != null:
+		console_points = JumpPointPool.new()
+		console_points.name = "ConsoleJumpPoints"
+		console_points.world = main.world
+		main.effects.add_child(console_points)
+		console_points.prepare(2)
 	var layer := CanvasLayer.new()
 	layer.name = "JumpFade"
 	layer.layer = FADE_LAYER
@@ -290,9 +328,31 @@ func _others_hold_controls() -> bool:
 func _register_console() -> void:
 	var registry: ConsoleRegistry = DebugConsole.registry
 	registry.register_command(ConsoleCommand.new(&"gate",
-			"The jumpgate: status, open <arrival|departure> (the vortex), close, jump (start the player's jump through it, from anywhere), cancel (end the jump), target (select it), approach (put the player 6 km in front of it, facing it)",
+			"The jumpgate: status, open <arrival|departure> (the vortex, after the arms' activation), close, jump (start the player's jump through it, from anywhere), cancel (end the jump), target (select it), approach (put the player 6 km in front of it, facing it), view <front|three_quarter|close|tip|run_in|side|behind|reference|off> (hold the camera on it for captures)",
 			[ConsoleArg.enum_optional(&"action", ACTIONS, &"status"),
-			ConsoleArg.enum_optional(&"direction", DIRECTIONS, null)] as Array[ConsoleArg]), _cmd_gate, self)
+			ConsoleArg.string_optional(&"option", null)] as Array[ConsoleArg]), _cmd_gate, self)
+	registry.register_command(ConsoleCommand.new(&"vortex",
+			"A stand-alone jump point ahead of the player, to look at: status, open <arrival|departure> [mouth radius m] (facing the player), close (every one), view (hold the camera in front of the newest open point: console, mission or encounter)",
+			[ConsoleArg.enum_optional(&"action", VORTEX_ACTIONS, &"status"),
+			ConsoleArg.enum_optional(&"direction", DIRECTIONS, &"arrival"),
+			ConsoleArg.float_optional(&"radius_m", CONSOLE_POINT_RADIUS_M, 5.0, 5000.0)] as Array[ConsoleArg]), _cmd_vortex, self)
+	registry.register_provider(&"vortex", ConsoleVars.new({
+		&"open": {"get": _open_points, "doc": "Stand-alone jump points showing now (console, mission and encounter points)"},
+		&"opened": {"get": func() -> int: return console_points.opened if console_points != null else 0,
+				"doc": "Points `vortex open` has opened"},
+		&"phase": {"get": func() -> String: return _console_point().phase_name() if _console_point() != null else "closed",
+				"doc": "The newest console point's phase: activate, flash, grow, open, closing or closed"},
+		&"radius_m": {"get": func() -> float: return _console_point().fit.mouth_radius_m if _console_point() != null else 0.0,
+				"unit": "m", "doc": "The newest console point's mouth radius"},
+		&"depth_m": {"get": func() -> float: return _console_point().fit.depth_m if _console_point() != null else 0.0,
+				"unit": "m", "doc": "The newest console point's depth"},
+		&"gate_rim_m": {"get": func() -> float: return gate().fit.mouth_radius_m if gate() != null else 0.0, "unit": "m",
+				"doc": "The gate vortex's rim radius (from the markers)"},
+		&"gate_depth_m": {"get": func() -> float: return gate().fit.depth_m if gate() != null else 0.0, "unit": "m",
+				"doc": "The gate vortex's depth behind its mouth (an arm's length)"},
+		&"gate_mouth_z_m": {"get": func() -> float: return gate().fit.mouth_z_m if gate() != null else 0.0, "unit": "m",
+				"doc": "The gate vortex's mouth along the gate's axis (its front plane)"},
+	}), self)
 	registry.register_provider(&"gate", ConsoleVars.new({
 		&"count": {"get": func() -> int: return gates.size(), "doc": "Jumpgates in the scene"},
 		&"name": {"get": func() -> String: return gate().display_name if gate() != null else "none", "doc": "The gate's name"},
@@ -300,7 +360,7 @@ func _register_console() -> void:
 		&"targeted": {"get": func() -> bool: return targeted_gate() != null, "doc": "The player has the gate targeted"},
 		&"prompt": {"get": jump_offered, "doc": "The jump is offered: the HUD shows X: REQUEST JUMP and X asks for it"},
 		&"vortex": {"get": func() -> String: return gate().vortex.phase_name() if gate() != null else "none",
-				"doc": "The vortex: closed, glow, flash, grow, open or closing"},
+				"doc": "The vortex: closed, activate (the arms' lamps), flash, grow, open or closing"},
 		&"vortex_direction": {"get": func() -> String: return String(gate().vortex.direction_name()) if gate() != null else "none",
 				"doc": "arrival (blue), departure (orange) or none"},
 		&"vortex_age_s": {"get": func() -> float: return gate().vortex.age_s if gate() != null and gate().vortex.is_active() else 0.0,
@@ -321,6 +381,109 @@ func _register_console() -> void:
 	}), self)
 
 
+# Holds the cinematic camera on one of `VIEWS` (no letterbox: it is for captures), or ends it with `off`.
+func _view(g: Jumpgate, view: StringName) -> ConsoleResult:
+	if view == &"off":
+		if main.camera_rig.is_playing_shot():
+			main.camera_rig.stop_shot()
+		return ConsoleResult.line("gate view off")
+	if not VIEWS.has(view):
+		return ConsoleResult.failure("gate view <%s>" % "|".join(VIEW_NAMES))
+	var pose: Array = VIEWS[view]
+	var key: String = "gate:" + g.display_name
+	var at: Vector3 = pose[0]
+	var aim: Vector3 = pose[1]
+	var frame: Dictionary = {"position": {"actor": key, "offset": [at.x, at.y, at.z]},
+			"look_at": {"actor": key, "offset": [aim.x, aim.y, aim.z]}, "fov": pose[2],
+			"roll": pose[3] if pose.size() > 3 else 0.0}
+	var keys: Array = [frame.merged({"t": 0.0}), frame.merged({"t": 3600.0})]
+	var made: Dictionary = CinematicShot.from_dict(StringName("gate_view_" + String(view)), {"keys": keys})
+	if not bool(made["ok"]):
+		return ConsoleResult.failure(String(made["error"]))
+	_view_gate = g
+	main.camera_rig.play_shot(made["shot"], _view_pose, _origin_to_local)
+	main.letterbox.shown = false
+	return ConsoleResult.line("gate view %s" % view)
+
+
+func _view_pose(actor: String) -> Variant:
+	if actor == "vortex" and _view_point != null and is_instance_valid(_view_point):
+		return _view_point.global_transform
+	if _view_gate != null and is_instance_valid(_view_gate) and actor == "gate:" + _view_gate.display_name:
+		return _view_gate.global_transform
+	return _actor_pose(actor)
+
+
+func _cmd_vortex(args: Dictionary) -> ConsoleResult:
+	if console_points == null:
+		return ConsoleResult.failure("no jump points in this scene")
+	match StringName(args[&"action"]):
+		&"open":
+			var radius: float = float(args[&"radius_m"])
+			var dir: JumpVortex.Direction = JumpVortex.Direction.ARRIVAL if StringName(args[&"direction"]) == &"arrival" \
+					else JumpVortex.Direction.DEPARTURE
+			var nose: Vector3 = -main.ship.global_basis.z
+			var at: Vector3 = main.ship.global_position + nose * (radius * CONSOLE_POINT_AHEAD + CONSOLE_POINT_MARGIN_M)
+			# Its way out points at the player, so the player looks into the mouth.
+			var xform := Transform3D(Basis.looking_at(-nose, main.ship.global_basis.y), at)
+			var fit := VortexFit.new(radius, radius * VortexFit.POINT_DEPTH_RATIO)
+			console_points.open_with(xform, fit, dir, CONSOLE_HOLD_S)
+			return ConsoleResult.line("%s point opening, %.0f m mouth, %.0f m ahead" % [args[&"direction"], radius,
+					radius * CONSOLE_POINT_AHEAD + CONSOLE_POINT_MARGIN_M])
+		&"close":
+			for point: JumpVortex in console_points.points():
+				point.close()
+			return ConsoleResult.line("jump points closing")
+		&"view":
+			var newest: JumpVortex = _newest_point()
+			if newest == null:
+				return ConsoleResult.failure("no stand-alone jump point is open")
+			var r: float = newest.fit.mouth_radius_m
+			var at: Vector3 = POINT_VIEW * r
+			var frame: Dictionary = {"position": {"actor": "vortex", "offset": [at.x, at.y, at.z]},
+					"look_at": {"actor": "vortex", "offset": [0.0, 0.0, 0.0]}, "fov": 50.0}
+			var made: Dictionary = CinematicShot.from_dict(&"vortex_view", {"keys": [frame.merged({"t": 0.0}),
+					frame.merged({"t": 3600.0})]})
+			_view_point = newest
+			main.camera_rig.play_shot(made["shot"], _view_pose, _origin_to_local)
+			main.letterbox.shown = false
+			return ConsoleResult.line("viewing a %.0f m point (%s)" % [r, newest.phase_name()])
+	return ConsoleResult.line("%d stand-alone jump points open (%d opened here)" % [_open_points(), console_points.opened])
+
+
+# The newest open stand-alone point in the scene (console, mission or encounters), or null.
+func _newest_point() -> JumpVortex:
+	var newest: JumpVortex = null
+	for pool: JumpPointPool in [console_points, main.mission.jumps if main.mission != null else null,
+			main.encounter_director.jumps if main.encounter_director != null else null]:
+		if pool == null:
+			continue
+		for point: JumpVortex in pool.points():
+			if point.is_active() and (newest == null or point.age_s < newest.age_s):
+				newest = point
+	return newest
+
+
+# The newest point `vortex open` opened, or null.
+func _console_point() -> JumpVortex:
+	if console_points == null:
+		return null
+	var newest: JumpVortex = null
+	for point: JumpVortex in console_points.points():
+		if point.is_active() and (newest == null or point.age_s < newest.age_s):
+			newest = point
+	return newest
+
+
+func _open_points() -> int:
+	var n: int = console_points.open_count() if console_points != null else 0
+	if main != null and main.mission != null and main.mission.jumps != null:
+		n += main.mission.jumps.open_count()
+	if main != null and main.encounter_director != null and main.encounter_director.jumps != null:
+		n += main.encounter_director.jumps.open_count()
+	return n
+
+
 func _distance_km() -> float:
 	if gate() == null or main == null or main.ship == null:
 		return -1.0
@@ -334,14 +497,17 @@ func _cmd_gate(args: Dictionary) -> ConsoleResult:
 		return ConsoleResult.failure("no jumpgate in this scenario")
 	match action:
 		&"open":
-			if args.get(&"direction") == null:
+			var option: Variant = args.get(&"option")
+			if option == null or not DIRECTIONS.has(StringName(str(option))):
 				return ConsoleResult.failure("gate open <arrival|departure>")
-			var dir: JumpVortex.Direction = JumpVortex.Direction.ARRIVAL if StringName(args[&"direction"]) == &"arrival" \
+			var dir: JumpVortex.Direction = JumpVortex.Direction.ARRIVAL if StringName(str(option)) == &"arrival" \
 					else JumpVortex.Direction.DEPARTURE
-			if not g.vortex.open(dir):
+			if not g.open_vortex(dir, CONSOLE_HOLD_S):
 				return ConsoleResult.failure("the vortex is %s for %s; one direction per opening" % [g.vortex.phase_name(),
 						g.vortex.direction_name()])
-			return ConsoleResult.line("%s vortex opening" % args[&"direction"])
+			return ConsoleResult.line("%s vortex opening" % option)
+		&"view":
+			return _view(g, StringName(str(args.get(&"option", ""))))
 		&"close":
 			g.vortex.close()
 			return ConsoleResult.line("vortex closing (%s)" % g.vortex.phase_name())

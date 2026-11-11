@@ -10,19 +10,16 @@ extends RefCounted
 ## Pools (D50): every ship a mission spawns comes from a pool its scenario declares. A spawn past a pool's size is a
 ## `push_error` (tests fail on it), never a new ship; `ShipPool` itself is unchanged.
 
-## How a spawned ship arrives: in place, out of an open jump point (`JumpArrival`, far from any gate, Q12) or out of the
-## scene's jumpgate (M6-T14: blue vortex; the ship appears once it is open).
+## How a spawned ship arrives: in place, out of an open jump point (a stand-alone vortex sized for it, `JumpPointPool`, Q12
+## revised; it appears in the centre flash) or out of the scene's jumpgate (M6-T14: blue vortex; the ship appears once it is open).
 const ARRIVALS: Array[StringName] = [&"none", &"jump", &"gate"]
 ## A ship sent out through the gate flies its run-in at this speed (the player's autopilot's run-in is 250 m/s).
 const DEPART_CRUISE_MPS: float = 200.0
-## The jump point's radius for a spawned ship, metres.
-const JUMP_RADIUS_M: float = 40.0
-
 var world: WorldFrame = null
 var ships: ShipPool = null
 var wings: WingDirector = null
 var player: Combatant = null
-var jumps: JumpArrivalPool = null
+var jumps: JumpPointPool = null
 ## The scene's jumpgates (M6-T14); null in a stage without a `Main`.
 var gates: JumpgateHost = null
 ## Plays the mission's cinematics (D55).
@@ -35,7 +32,7 @@ var _actors: Dictionary = {}  # MissionWorld.key -> Combatant or NavBuoy
 
 
 ## Wires the stage to `main`'s nodes and learns the actors already in play.
-func setup(main: Main, p_jumps: JumpArrivalPool) -> void:
+func setup(main: Main, p_jumps: JumpPointPool) -> void:
 	world = main.world
 	ships = main.ships
 	wings = main.wings
@@ -165,12 +162,12 @@ func spawn(entry: Dictionary) -> Combatant:
 	# Nose along its drift, or toward the player when it starts at rest (as a wave's raiders).
 	var heading: Vector3 = velocity if velocity.length() > 1.0 else player_local - at_local
 	var basis: Basis = ScenarioLoader.basis_facing(heading if heading.length() > 1e-3 else Vector3.FORWARD)
-	if StringName(entry.get("arrival", &"none")) == &"jump" and jumps != null:
-		jumps.open_at(at, JUMP_RADIUS_M)
 	var placed: Combatant = ships.acquire(ship_name, at, basis, velocity, made["brain"] as PilotBrain, type)
 	if placed == null:
 		push_error("Mission: spawn %s: the %s pool refused" % [ship_name, type])
 		return null
+	if StringName(entry.get("arrival", &"none")) == &"jump" and jumps != null:
+		jumps.open_for(at, -basis.z, placed.ship.bounding_radius())
 	placed.damageable.invulnerable = bool(entry.get("invulnerable", false))
 	register(placed)
 	if not String(entry.get("wing", "")).is_empty():

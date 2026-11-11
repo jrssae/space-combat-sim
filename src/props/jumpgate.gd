@@ -1,7 +1,9 @@
 class_name Jumpgate
 extends Node3D
 ## The Earth Alliance jumpgate (M6-T14, D69): the generated `jumpgate` mesh, one Jolt box per truss and fin, a `Targetable` that
-## locks on like a nav beacon and broadcasts to 1 000 km (so the AI and missions see it), and its `JumpVortex`.
+## locks on like a nav beacon and broadcasts to 1 000 km (so the AI and missions see it), and its `JumpVortex`, fitted to the arms
+## from the markers (`VortexFit.for_gate`). Before each opening it runs its own activation (`GateActivation`): the fin stations'
+## lamps flash in turn along all four arms, then the inner tips glow into the vortex's centre flash.
 ##
 ## Its origin is the vortex's centre and it faces -Z: arrivals come out along -Z from the arrival point, departures line up at
 ## the departure point in front and fly in along +Z (`hardpoints.json`). The gate is at rest and has no hull: bolts pass it,
@@ -16,6 +18,11 @@ const SCENE_PATH: String = "res://src/props/jumpgate.tscn"
 const ASSET_ID: String = "jumpgate"
 const ASSET_DIR: String = "res://assets/generated/jumpgate"
 const HARDPOINTS_PATH: String = ASSET_DIR + "/hardpoints.json"
+const MANIFEST_PATH: String = ASSET_DIR + "/manifest.json"
+const GLOW_SHADER: Shader = preload("res://src/props/jump_glow.gdshader")
+## The activation's glows, metres across: a lamp's flash and an inner tip's.
+const LAMP_GLOW_M: float = 70.0
+const TIP_GLOW_M: float = 260.0
 ## A gate's beacon is heard 1 000 km out (D69; the wiki and the fan manual both say so), as the nav buoys are.
 const BROADCAST_RANGE_M: float = 1.0e6
 ## Where the hardpoints are missing: the generator's values for 1 200 m arms.
@@ -23,6 +30,7 @@ const DEFAULT_RADIUS_M: float = 720.0
 const DEFAULT_ARRIVAL: Vector3 = Vector3(0.0, 0.0, -72.0)
 const DEFAULT_DEPARTURE: Vector3 = Vector3(0.0, 0.0, -1440.0)
 const DEFAULT_TIP_M: float = 790.0
+const FALLBACK_REACH_M: float = 2200.0
 ## A departing ship this close to the centre, in front, opens the vortex: from the departure point (1 440 m) a ship at the
 ## run-in speed reaches the plane after the 3.5 s the vortex takes to open.
 const DEPARTURE_OPEN_M: float = 1600.0
@@ -40,6 +48,10 @@ const ARRIVAL_SPEED_MPS: float = 200.0
 		_sync_targetable()
 
 var vortex: JumpVortex = null
+## The vortex's size and place, from the markers.
+var fit: VortexFit = null
+## The activation's lamps (one per fin-station lamp) and inner-tip glows, one multimesh.
+var activation_glows: MultiMeshInstance3D = null
 var collision_body: StaticBody3D = null
 var radius_m: float = DEFAULT_RADIUS_M
 ## Gate-local points and directions from the hardpoints.
@@ -52,12 +64,16 @@ var arrived: int = 0
 var departed: int = 0
 
 var _pending_arrivals: Array[Callable] = []
+# Per activation glow: the lamp's station rank, or -1 for an inner tip.
+var _glow_ranks: PackedInt32Array = PackedInt32Array()
+var _stations: int = 0
 # One entry per departing ship: {body: Node3D, on_through: Callable, z: float (gate-local z last tick)}.
 var _departures: Array[Dictionary] = []
 
 static var _shared_loaded: bool = false
 static var _shared_mesh: Mesh = null
 static var _shared_data: Dictionary = {}
+static var _shared_manifest: Dictionary = {}
 
 @onready var body: MeshInstance3D = $Body
 @onready var targetable: Targetable = $Targetable
@@ -80,16 +96,52 @@ func _ready() -> void:
 	body.mesh = _shared_mesh
 	_read_points(_shared_data)
 	_build_collision(_shared_data)
-	vortex = JumpVortex.new()
+	fit = VortexFit.for_gate(_shared_data, _shared_manifest)
+	vortex = JumpVortex.create(_shared_data.get("vortex", {}) as Dictionary, false)
 	vortex.name = "Vortex"
-	vortex.setup(radius_m, _shared_data.get("vortex", {}) as Dictionary, _tips(_shared_data))
+	vortex.fit = fit
+	vortex.position = Vector3(0.0, 0.0, fit.mouth_z_m)
 	add_child(vortex)
+	_build_activation(_shared_data)
 	_sync_targetable()
 
 
 func _physics_process(_delta: float) -> void:
 	_step_arrivals()
 	_step_departures()
+
+
+func _process(_delta: float) -> void:
+	update_activation()
+
+
+## Opens the vortex `direction` after the gate's activation (or keeps the one opening that way open); false while it runs the
+## other way.
+func open_vortex(direction: JumpVortex.Direction, hold_s: float = VortexTiming.DEFAULT_HOLD_S) -> bool:
+	return vortex.open(direction, hold_s, GateActivation.DURATION_S)
+
+
+## Puts the activation's lamps and tips on the vortex's age. Public for tests and captures.
+func update_activation() -> void:
+	if activation_glows == null:
+		return
+	var age: float = vortex.age_s
+	var showing: bool = vortex.is_active() and vortex.timing.lead_s > 0.0 and GateActivation.is_showing(age)
+	activation_glows.visible = showing
+	if not showing:
+		return
+	var mm: MultiMesh = activation_glows.multimesh
+	for i: int in _glow_ranks.size():
+		var rank: int = _glow_ranks[i]
+		var level: float = GateActivation.tip_level(age) if rank < 0 else GateActivation.lamp_level(rank, _stations, age)
+		var c: Color = mm.get_instance_color(i)
+		c.a = level
+		mm.set_instance_color(i, c)
+
+
+## The level of the lamps at station `rank` now (tests, captures).
+func activation_level(rank: int) -> float:
+	return GateActivation.lamp_level(rank, _stations, vortex.age_s) if vortex.is_active() else 0.0
 
 
 ## Opens the arrival vortex (or joins the one opening) and calls `place` once it is fully open; `place` puts the ship at
@@ -161,7 +213,7 @@ func _step_arrivals() -> void:
 				arrived += 1
 		return
 	if vortex.open_in_s(JumpVortex.Direction.ARRIVAL) == INF:
-		vortex.open(JumpVortex.Direction.ARRIVAL)  # refused while a departure runs: tried again next tick
+		open_vortex(JumpVortex.Direction.ARRIVAL)  # refused while a departure runs: tried again next tick
 
 
 func _step_departures() -> void:
@@ -184,7 +236,7 @@ func _step_departures() -> void:
 			(entry["on_through"] as Callable).call(ship)
 			continue
 		if local.z < 0.0 and local.length() <= DEPARTURE_OPEN_M:
-			if not vortex.open(JumpVortex.Direction.DEPARTURE):
+			if not open_vortex(JumpVortex.Direction.DEPARTURE):
 				continue  # an arrival is running: it opens once that one has closed
 			vortex.extend(DEPARTURE_KEEP_S)
 	if _departures.is_empty() and vortex.direction == JumpVortex.Direction.DEPARTURE:
@@ -213,6 +265,58 @@ func _read_points(data: Dictionary) -> void:
 	if d is Dictionary:
 		departure_point = _vec((d as Dictionary).get("position"), DEFAULT_DEPARTURE)
 		departure_forward = _vec((d as Dictionary).get("forward"), Vector3.BACK).normalized()
+
+
+# One glow per fin-station lamp (ranked by its distance from the centre, the same on all four arms) and one per inner tip, in a
+# single multimesh; the lamps' colour from the markers, the tips' from the vortex's flash.
+func _build_activation(data: Dictionary) -> void:
+	var points: Array[Vector3] = []
+	var colours: Array[Color] = []
+	var radials := PackedFloat32Array()
+	var lights: Variant = data.get("lights")
+	if lights is Array:
+		for e: Variant in lights as Array:
+			if e is Dictionary:
+				var p: Vector3 = _vec((e as Dictionary).get("position"), Vector3.ZERO)
+				points.append(p)
+				colours.append(JumpVortex._colour((e as Dictionary).get("colour"), Color(1.0, 0.66, 0.26)))
+				radials.append(Vector2(p.x, p.y).length())
+	_glow_ranks = GateActivation.station_ranks(radials)
+	_stations = 0
+	for r: int in _glow_ranks:
+		_stations = maxi(_stations, r + 1)
+	var tips: Array[Vector3] = _tips(data)
+	for tip: Vector3 in tips:
+		points.append(tip)
+		colours.append(vortex.flash_colour)
+		_glow_ranks.append(-1)
+	var quad := QuadMesh.new()
+	quad.size = Vector2(2.0, 2.0)
+	var material := ShaderMaterial.new()
+	material.shader = GLOW_SHADER
+	material.set_shader_parameter(&"tint", Vector3(3.0, 3.0, 3.0))
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.mesh = quad
+	mm.instance_count = points.size()
+	for i: int in points.size():
+		var size: float = (TIP_GLOW_M if _glow_ranks[i] < 0 else LAMP_GLOW_M) * 0.5
+		mm.set_instance_transform(i, Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * size), points[i]))
+		var c: Color = colours[i]
+		c.a = 0.0
+		mm.set_instance_color(i, c)
+	activation_glows = MultiMeshInstance3D.new()
+	activation_glows.name = "ActivationGlows"
+	activation_glows.multimesh = mm
+	activation_glows.material_override = material
+	activation_glows.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var reach: float = FALLBACK_REACH_M
+	for p: Vector3 in points:
+		reach = maxf(reach, p.length() + TIP_GLOW_M)
+	activation_glows.custom_aabb = AABB(-Vector3.ONE * reach, Vector3.ONE * reach * 2.0)
+	activation_glows.visible = false
+	add_child(activation_glows)
 
 
 func _tips(data: Dictionary) -> Array[Vector3]:
@@ -263,6 +367,12 @@ static func _load_shared() -> void:
 	var parsed: Variant = JSON.parse_string(file.get_as_text())
 	if parsed is Dictionary:
 		_shared_data = parsed
+	var manifest: Variant = JSON.parse_string(FileAccess.get_file_as_string(MANIFEST_PATH)) \
+			if FileAccess.file_exists(MANIFEST_PATH) else null
+	if manifest is Dictionary:
+		_shared_manifest = manifest
+	else:
+		push_warning("Jumpgate: no %s; the vortex's mouth sits in the gate's mid plane" % MANIFEST_PATH)
 
 
 static func _vec(raw: Variant, fallback: Vector3) -> Vector3:

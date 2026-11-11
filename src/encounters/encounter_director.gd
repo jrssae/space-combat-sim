@@ -31,7 +31,6 @@ const TRANSPONDER_M: float = ShipPool.CIVILIAN_BROADCAST_RANGE_M
 const JUMP_POINTS: int = 4
 ## Forced events' indices start here, far past any session's schedule.
 const FORCED_INDEX: int = 1000000
-const JUMP_RADIUS_M: float = 40.0
 ## Events use the gate only while the player is this close to it, so its traffic is seen (and not released at once at 40 km).
 const GATE_REACH_M: float = 25000.0
 ## Ships of one gate arrival come out this far apart, side by side.
@@ -77,7 +76,7 @@ var check_work: int = 0
 var checks: int = 0
 ## Milliseconds the pools took to build.
 var build_ms: int = 0
-var jumps: JumpArrivalPool = null
+var jumps: JumpPointPool = null
 ## The pools file's `gate` table (`EncounterPlan.parse_gate_shares`); empty for none.
 var gate_shares: Dictionary = {}
 ## Events that used the gate so far, and ships waiting for the arrival vortex (counted against the cap).
@@ -126,7 +125,7 @@ static func create(p_main: Main, path: String) -> EncounterDirector:
 
 
 func _ready() -> void:
-	jumps = JumpArrivalPool.new()
+	jumps = JumpPointPool.new()
 	jumps.name = "EncounterJumpPoints"
 	jumps.world = main.world
 	main.effects.add_child(jumps)
@@ -376,11 +375,11 @@ func _place(e: EncounterEvent, k: int, type: StringName, anchor: UniversePos, an
 		path = BehaviourFollowPath.attach(brain as AiPilot, route)
 	var velocity: Vector3 = e.velocities[k] + anchor_velocity
 	var basis: Basis = ScenarioLoader.basis_facing(velocity if velocity.length() > 1.0 else -e.positions[k])
-	if e.jumps and jumps != null:
-		jumps.open_at(at, JUMP_RADIUS_M)
 	var placed: Combatant = ships.acquire(ship_name, at, basis, velocity, brain, type)
 	if placed == null:
 		return
+	if e.jumps and jumps != null:
+		jumps.open_for(at, -basis.z, placed.ship.bounding_radius())
 	if placed.cargo_pods != null and e.cargo_pods[k] >= 0:
 		placed.cargo_pods.set_count(e.cargo_pods[k])
 	if ShipCatalog.is_civilian(type):
