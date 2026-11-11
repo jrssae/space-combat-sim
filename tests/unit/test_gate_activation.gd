@@ -1,5 +1,5 @@
 extends GutTest
-## A jumpgate's activation (M6-T19): the fin stations' lamps flash in turn along every arm, from its front end to its back end,
+## A jumpgate's activation (M6-T19): the fin stations' lamps (burning steadily between openings) flash in turn along every arm, from its front end to its back end,
 ## then the back ends glow into the vortex's centre flash; all inside the lead-in the vortex waits for.
 
 const EPS: float = 1e-4
@@ -31,11 +31,14 @@ func test_the_chase_runs_station_by_station_from_front_to_back() -> void:
 
 func test_a_lamp_is_dark_then_flashes_then_glows_until_the_flash_is_over() -> void:
 	var start: float = GateActivation.flash_at_s(2, 5)
-	assert_eq(GateActivation.lamp_level(2, 5, start - 0.01), 0.0, "dark before its turn")
+	assert_eq(GateActivation.lamp_level(2, 5, start - 0.01), GateActivation.STEADY_LEVEL, "its steady burn before its turn")
 	assert_almost_eq(GateActivation.lamp_level(2, 5, start + GateActivation.RISE_S), 1.0, EPS, "a flash in its turn")
 	var held: float = GateActivation.lamp_level(2, 5, GateActivation.DURATION_S)
-	assert_between(held, GateActivation.HOLD_LEVEL - EPS, 0.5, "then a steady glow")
-	assert_eq(GateActivation.lamp_level(2, 5, GateActivation.DURATION_S + VortexTiming.FLASH_S), 0.0, "out after the flash")
+	assert_between(held, GateActivation.HOLD_LEVEL - EPS, 0.5, "then a brighter glow")
+	assert_eq(GateActivation.lamp_level(2, 5, GateActivation.DURATION_S + VortexTiming.FLASH_S), GateActivation.STEADY_LEVEL,
+			"back to its steady burn after the flash")
+	assert_gt(GateActivation.STEADY_LEVEL, 0.0, "a gate in shadow shows its lamps")
+	assert_lt(GateActivation.STEADY_LEVEL, GateActivation.HOLD_LEVEL)
 
 
 func test_the_back_ends_peak_as_the_vortex_flashes() -> void:

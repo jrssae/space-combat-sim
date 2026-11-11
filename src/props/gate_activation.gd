@@ -15,6 +15,8 @@ const RISE_S: float = 0.05
 const PULSE_S: float = 0.3
 ## Lit lamps keep this share of their flash until the vortex's flash is over.
 const HOLD_LEVEL: float = 0.3
+## Between openings the lamps burn steadily at this level: the amber points that show a gate in shadow (the stills).
+const STEADY_LEVEL: float = 0.12
 ## Two lamps this close along the arm (metres) belong to the same station.
 const SAME_STATION_M: float = 2.0
 
@@ -48,19 +50,20 @@ static func flash_at_s(rank: int, stations: int) -> float:
 	return CHASE_S * float(rank) / float(stations - 1)
 
 
-## A lamp's level, 0..1, `age_s` into the opening: dark, a flash in its turn, a steady glow until the vortex's flash is over.
+## A lamp's level, 0..1, `age_s` into the opening: its steady burn, a flash in its turn, a brighter glow until the vortex's flash
+## is over, then its steady burn again.
 static func lamp_level(rank: int, stations: int, age_s: float) -> float:
 	var t: float = age_s - flash_at_s(rank, stations)
 	if t < 0.0 or age_s >= DURATION_S + VortexTiming.FLASH_S:
-		return 0.0
+		return STEADY_LEVEL
 	if t < RISE_S:
-		return t / RISE_S
+		return lerpf(STEADY_LEVEL, 1.0, t / RISE_S)
 	var settle: float = clampf((t - RISE_S) / PULSE_S, 0.0, 1.0)
 	var level: float = lerpf(1.0, HOLD_LEVEL, settle)
 	var fade_from: float = DURATION_S + VortexTiming.FLASH_S * 0.5
 	if age_s > fade_from:
-		level *= 1.0 - (age_s - fade_from) / (VortexTiming.FLASH_S * 0.5)
-	return level
+		level = lerpf(level, STEADY_LEVEL, (age_s - fade_from) / (VortexTiming.FLASH_S * 0.5))
+	return maxf(level, STEADY_LEVEL)
 
 
 ## The back ends' glow, 0..1: rising once the chase reaches them, peaking as the vortex flashes, gone half way through the flash.

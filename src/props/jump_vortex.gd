@@ -6,8 +6,9 @@ extends Node3D
 ##
 ## The node's origin is the mouth's centre and its -Z the way ships come out (the funnel recedes along +Z); `fit` gives the mouth's
 ## radius and the depth. An opening runs on `VortexTiming`: the opener's lead-in (a gate's arm sequence; none for a ship-made
-## point), the flash at the centre, the funnel unfolding from there to its rim, open, then folding back. Blue for an arrival,
-## orange to golden yellow for a departure. The age runs on physics ticks from `delta` (a pause freezes it); the visuals follow it
+## point), the flash at the jump point's centre (the funnel's base), the funnel unfolding from that point forward to the rim of
+## its mouth, open, then folding back. Blue for an arrival, its patches spiralling out from the
+## throat; orange to golden yellow for a departure, its patches spiralling in. The age runs on physics ticks from `delta` (a pause freezes it); the visuals follow it
 ## each rendered frame. In `world_shiftable` when it stands alone, so a rebase moves it; a gate's moves with the gate.
 
 enum Direction { ARRIVAL, DEPARTURE }
@@ -27,6 +28,9 @@ const RINGS: int = 40
 ## The flash at its peak, as a share of the mouth's radius.
 const FLASH_SIZE: float = 1.1
 const LIGHT_PEAK_ENERGY: float = 12.0
+## The funnel's overall brightness by direction: the blue arrival follows the dim show still (`jumpgate.png`), the orange
+## departure the brighter video frames.
+const BRIGHTNESS: Dictionary = {&"arrival": 0.5, &"departure": 1.2}
 ## An arrival's sound (the generated `jump_in`); silent without it.
 const SOUND_PATH: String = "res://assets/generated/sfx_world/jump_in.wav"
 const SOUND_DB: float = 2.0
@@ -151,7 +155,8 @@ func open(p_direction: Direction, hold_s: float = VortexTiming.DEFAULT_HOLD_S, l
 	var pair: Array = _colours[DIRECTION_NAMES[direction]]
 	_material.set_shader_parameter(&"colour", pair[0])
 	_material.set_shader_parameter(&"highlight", pair[1])
-	_material.set_shader_parameter(&"spin", 1.0 if direction == Direction.ARRIVAL else -1.0)
+	_material.set_shader_parameter(&"flow", 1.0 if direction == Direction.ARRIVAL else -1.0)
+	_material.set_shader_parameter(&"brightness", BRIGHTNESS[DIRECTION_NAMES[direction]])
 	emitter.color = (pair[1] as Color)
 	emitter.omni_range = fit.mouth_radius_m * 6.0
 	_rig = LightRig.of(self)
@@ -243,13 +248,14 @@ func update_visuals() -> void:
 	_material.set_shader_parameter(&"swirl_time", SimClock.now())
 	var flash_level: float = timing.flash(age_s)
 	flash_quad.visible = flash_level > 0.0
+	flash_quad.position = Vector3(0.0, 0.0, fit.depth_m)
 	flash_quad.scale = Vector3.ONE * fit.mouth_radius_m * FLASH_SIZE * maxf(sqrt(flash_level), 1e-3)
 	_flash_material.set_shader_parameter(&"level", flash_level)
 	emitter.energy = LIGHT_PEAK_ENERGY * maxf(flash_level, grown * 0.5)
 
 
-## A unit funnel grid shared by every vortex: UV.x round it, UV.y from the rim (0) to the narrow end (1). The shader shapes it
-## (and unfolds it); the vertices here are its full shape, so its bounds are right.
+## A unit funnel grid shared by every vortex: UV.x round it, UV.y from the rim (0) to the centre (1), closed at the centre. The
+## shader shapes it (and unfolds it); the vertices here only give it the right bounds.
 static func funnel_mesh() -> ArrayMesh:
 	if _funnel_mesh != null:
 		return _funnel_mesh
@@ -258,7 +264,7 @@ static func funnel_mesh() -> ArrayMesh:
 	var indices := PackedInt32Array()
 	for ring: int in RINGS + 1:
 		var v: float = float(ring) / float(RINGS)
-		var r: float = lerpf(1.0, 0.035, v)
+		var r: float = 1.0 - v
 		for seg: int in SEGMENTS + 1:
 			var u: float = float(seg) / float(SEGMENTS)
 			vertices.append(Vector3(cos(u * TAU) * r, sin(u * TAU) * r, v))

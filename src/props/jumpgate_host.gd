@@ -22,8 +22,9 @@ const ACTIONS: Array[StringName] = [&"status", &"open", &"close", &"jump", &"can
 const DIRECTIONS: Array[StringName] = [&"arrival", &"departure"]
 ## `gate view <name>`: held camera poses on the gate for captures, in the gate's frame (-Z its front, +Y its top): the camera's
 ## offset, the aim's offset, the field of view and the roll (degrees, the picture turned clockwise). `reference` matches `references/jumpgate/jumpgate.png` (the maintainer's
-## acceptance view for T19): 2.1 km out in front of the mouth, 53 degrees off its axis, below and a little to the right, so
-## the mouth reads as a wide ellipse (0.6) with the throat low and right.
+## acceptance view for T19), fitted to where the four rails' ends sit in the still: 1.2 km in front of the mouth, below and to
+## the side, looking about 19 degrees off the axis with a 60 degree field, so perspective turns the parallel rails into four
+## converging spokes round the funnel.
 const VIEWS: Dictionary = {
 	&"front": [Vector3(0.0, 0.0, -6000.0), Vector3(0.0, 0.0, 600.0), 55.0],
 	&"three_quarter": [Vector3(3200.0, 1600.0, -4400.0), Vector3(0.0, 0.0, 600.0), 55.0],
@@ -32,7 +33,7 @@ const VIEWS: Dictionary = {
 	&"run_in": [Vector3(0.0, 60.0, -1500.0), Vector3(0.0, 0.0, 1200.0), 65.0],
 	&"side": [Vector3(5200.0, 400.0, 600.0), Vector3(0.0, 0.0, 600.0), 50.0],
 	&"behind": [Vector3(1500.0, -1300.0, 4600.0), Vector3(0.0, 0.0, 700.0), 55.0],
-	&"reference": [Vector3(-450.0, -1650.0, -1300.0), Vector3.ZERO, 52.0, 0.0],
+	&"reference": [Vector3(-330.0, -390.0, -1100.0), Vector3(-12.0, 9.0, 367.0), 60.0, 0.0],
 }
 const VIEW_NAMES: Array[StringName] = [&"front", &"three_quarter", &"close", &"tip", &"run_in", &"side", &"behind", &"reference",
 		&"off"]

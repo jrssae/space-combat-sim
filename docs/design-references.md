@@ -165,11 +165,15 @@ a capital ship's own (M12) and the open points raiders arrive through.
 - **Fit at a gate.** The mouth lies at the arms' front ends; its rim stops a few metres short of the arms (just under their 800 m
   from the axis) and fades out to translucent there. The funnel runs back along the arms and ends at their back ends: as deep as
   an arm is long (1 200 m). The numbers come from the gate's markers, not constants.
-- **Shape.** A slight funnel: visible, not pronounced. Most of it is a shallow bowl near the mouth; the depth gathers toward a
-  narrow base.
-- **Colour and motion.** Layers of colour: the base colour (orange to golden yellow for a departure, blue for an arrival), with
-  small patches darker than the base, roughly rectangular with soft edges, moving in a spiral along the funnel, and paler,
-  translucent patches of the base colour moving with them. The rim breaks up into soft wisps.
+- **Shape.** A slight funnel: visible, not pronounced. A broad well with gently curving walls and a wide, rounded base; the dark
+  throat a soft smudge, not a hard hole. The walls are translucent: stars and the gate's far arms partly show through them.
+- **Colour and motion.** Layers of colour: the base colour (orange to golden yellow for a departure, blue for an arrival), dark
+  navy toward the throat and the rim and brightest over a band in between, uneven across the surface; small patches darker than
+  the base, roughly rectangular with soft edges, and paler translucent patches of the base colour, all drawn out along a spiral
+  and moving along it, low in contrast like fine feathered streaks. **A departure swirls in** (the patches spiral down toward
+  the throat, drawing ships in); **an arrival swirls out** (they spiral up from the throat toward the rim); both turn the same
+  way round. The rim fades out to translucent in soft wisps. The blue arrival follows the dim show still (`jumpgate.png`), the
+  orange departure the brighter video.
 - **The base by view.** Only the narrow deep end changes with the view: from in front, looking down the funnel, it fades to
   black; from the side or from behind it shows a moderately bright white glow, local to the base, with the rest of the funnel
   visible round it as usual.
@@ -178,7 +182,8 @@ a capital ship's own (M12) and the open points raiders arrive through.
   then the jump point forms inside the arms. Then, for every jump point,
   the initiation flash at its centre; the funnel then grows out of that point and unfolds toward the rim of its mouth (it does
   not scale up in place). It stays open while ships pass, then folds back and is gone within about a second. A ship-made point
-  starts at the flash. Ships coming out of an open point appear in its flash.
+  starts at the flash and goes straight on into the funnel's growth, with no pause (a pause in one reference gif is a fault in
+  the gif, the maintainer, 2026-11-11). Ships coming out of an open point appear in its flash.
 - **Sizes.** A gate's vortex is fitted to the gate. An open point is sized for the ship coming through, with the gate's
   proportions, and widens when the rest of its group comes out of it.
 - **Timing** from the reference video's frames (about one per second): the activation about 1 s, the flash about 1 s, the

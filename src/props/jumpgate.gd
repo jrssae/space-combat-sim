@@ -51,7 +51,7 @@ const ARRIVAL_SPEED_MPS: float = 200.0
 var vortex: JumpVortex = null
 ## The vortex's size and place, from the markers.
 var fit: VortexFit = null
-## The activation's lamps (one per fin-station lamp) and back-end glows, one multimesh.
+## The lamps' glows (one per fin-station lamp: steady, flashing in turn during the activation) and the back ends', one multimesh.
 var activation_glows: MultiMeshInstance3D = null
 var collision_body: StaticBody3D = null
 var radius_m: float = DEFAULT_RADIUS_M
@@ -68,6 +68,8 @@ var _pending_arrivals: Array[Callable] = []
 # Per activation glow: the lamp's station rank (0 the front), or -1 for a back end.
 var _glow_ranks: PackedInt32Array = PackedInt32Array()
 var _stations: int = 0
+# The glows are at their steady levels (nothing to update until the next activation).
+var _steady: bool = false
 # One entry per departing ship: {body: Node3D, on_through: Callable, z: float (gate-local z last tick)}.
 var _departures: Array[Dictionary] = []
 
@@ -125,15 +127,20 @@ func open_vortex(direction: JumpVortex.Direction, hold_s: float = VortexTiming.D
 func update_activation() -> void:
 	if activation_glows == null:
 		return
-	var age: float = vortex.age_s
-	var showing: bool = vortex.is_active() and vortex.timing.lead_s > 0.0 and GateActivation.is_showing(age)
-	activation_glows.visible = showing
-	if not showing:
+	# The lamps always burn (steadily between openings); only the activation changes them.
+	var running: bool = vortex.is_active() and vortex.timing.lead_s > 0.0 and GateActivation.is_showing(vortex.age_s)
+	if not running and _steady:
 		return
+	_steady = not running
+	var age: float = vortex.age_s if running else INF
 	var mm: MultiMesh = activation_glows.multimesh
 	for i: int in _glow_ranks.size():
 		var rank: int = _glow_ranks[i]
-		var level: float = GateActivation.tip_level(age) if rank < 0 else GateActivation.lamp_level(rank, _stations, age)
+		var level: float
+		if rank < 0:
+			level = GateActivation.tip_level(age) if running else 0.0
+		else:
+			level = GateActivation.lamp_level(rank, _stations, age) if running else GateActivation.STEADY_LEVEL
 		var c: Color = mm.get_instance_color(i)
 		c.a = level
 		mm.set_instance_color(i, c)
@@ -141,7 +148,7 @@ func update_activation() -> void:
 
 ## The level of the lamps at station `rank` now (tests, captures).
 func activation_level(rank: int) -> float:
-	return GateActivation.lamp_level(rank, _stations, vortex.age_s) if vortex.is_active() else 0.0
+	return GateActivation.lamp_level(rank, _stations, vortex.age_s) if vortex.is_active() else GateActivation.STEADY_LEVEL
 
 
 ## Opens the arrival vortex (or joins the one opening) and calls `place` once it is fully open; `place` puts the ship at
@@ -315,7 +322,6 @@ func _build_activation(data: Dictionary) -> void:
 	for p: Vector3 in points:
 		reach = maxf(reach, p.length() + TIP_GLOW_M)
 	activation_glows.custom_aabb = AABB(-Vector3.ONE * reach, Vector3.ONE * reach * 2.0)
-	activation_glows.visible = false
 	add_child(activation_glows)
 
 
