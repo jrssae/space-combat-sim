@@ -15,10 +15,12 @@ const K_LATERAL: float = 0.4
 const MAX_LATERAL_MPS: float = 60.0
 ## With the vortex not yet opening, the run-in creeps to this far from the plane and waits.
 const WAIT_SHORT_M: float = 600.0
-## A ship beside or behind the gate, out among the arms (800 m from the axis, their fins to about 950 m), first moves out to a
-## diagonal between two arms at least this far from the axis, then flies round to the front.
+## A ship beside or behind the gate, out among the arms (800 m from the axis above and below, 1 080 m at the sides, their fins
+## reaching about 140 m to either side), first moves out to a diagonal between two arms at least this far from the axis (about
+## 1 km clear of every fin), then flies round to the front.
 const DETOUR_RADIUS_M: float = 1600.0
-## Inside this distance from the axis a ship is within the four arms, where a straight line to the front meets none of them.
+## Inside this distance from the axis a ship is within the four arms (the nearer pair is about 760 m out), where a straight line
+## to the front meets none of them.
 const INSIDE_ARMS_M: float = 650.0
 ## The nose turns onto the velocity error while it is larger than this (a flip and burn); else onto the course.
 const FACE_DV_MPS: float = 30.0

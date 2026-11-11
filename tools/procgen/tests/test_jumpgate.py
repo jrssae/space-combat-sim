@@ -77,11 +77,15 @@ class JumpgateTests(unittest.TestCase):
             self.assertEqual(value, self.hp["vortex"][key], key)
         dims = self.manifest["dimensions_m"]
         self.assertEqual((dims["arm_length"], dims["arm_radius"], dims["vortex_depth"]), (1200.0, 800.0, 1200.0))
+        self.assertEqual(dims["arm_side_radius"], round(jg.MOUTH_ASPECT * 800.0, 3))
         self.assertTrue(740.0 < dims["vortex_radius"] < 800.0, dims["vortex_radius"])
+        self.assertTrue(0.9 * dims["arm_side_radius"] < dims["vortex_half_width"] < dims["arm_side_radius"])
+        self.assertEqual(vortex["semi_axes_m"], [dims["vortex_half_width"], dims["vortex_radius"]])
 
     # --- hardpoints -------------------------------------------------------------------------
     def test_hardpoints_schema(self) -> None:
-        for key in ("asset_id", "frame", "units", "span_m", "depth_m", "arm_length_m", "arm_radius_m", "vortex", "arrival", "departure",
+        for key in ("asset_id", "frame", "units", "span_m", "depth_m", "arm_length_m", "arm_radius_m", "arm_side_radius_m", "mouth_aspect",
+                    "vortex", "arrival", "departure",
                     "emitters", "arms", "lights", "collision"):
             self.assertIn(key, self.hp)
         self.assertEqual((self.hp["asset_id"], self.hp["frame"], self.hp["units"]), ("jumpgate", "godot", "m"))
@@ -90,9 +94,10 @@ class JumpgateTests(unittest.TestCase):
         self.assertEqual(len(self.hp["collision"]), 44)
 
     def test_the_arms_run_parallel_to_the_axis_from_front_to_back(self) -> None:
-        for arm in self.hp["arms"]:
+        for k, arm in enumerate(self.hp["arms"]):
             front, back, axis = (np.array(arm[k]) for k in ("front", "back", "axis"))
-            self.assertAlmostEqual(float(np.hypot(front[0], front[1])), 800.0, places=3)
+            out = self.hp["arm_radius_m"] if k % 2 == 0 else self.hp["arm_side_radius_m"]  # top and bottom, then the sides
+            self.assertAlmostEqual(float(np.hypot(front[0], front[1])), out, places=3)
             self.assertEqual(float(front[2]), 0.0)  # the front ends in the mouth's plane
             np.testing.assert_allclose(front - back, 1200.0 * axis, atol=1e-3)
             np.testing.assert_allclose(axis, [0.0, 0.0, -1.0], atol=1e-9)
@@ -104,6 +109,9 @@ class JumpgateTests(unittest.TestCase):
             p = np.array(self.hp[name]["position"])
             self.assertLess(float(np.hypot(p[0], p[1])), self.hp["vortex"]["radius_m"])
         self.assertLess(self.hp["vortex"]["radius_m"], radial)
+        half_width, half_height = self.hp["vortex"]["semi_axes_m"]
+        outside = (self.obj.vertices[:, 0] / half_width) ** 2 + (self.obj.vertices[:, 1] / half_height) ** 2
+        self.assertGreater(float(outside.min()), 1.0)  # the elliptical rim meets no arm
         self.assertEqual(self.hp["arrival"]["vortex"], "arrival")
         self.assertEqual(self.hp["departure"]["vortex"], "departure")
 
@@ -148,7 +156,7 @@ class JumpgateDeterminismTests(unittest.TestCase):
             self.assertEqual(a, c, name)
 
     def test_invalid_options_are_rejected(self) -> None:
-        for bad in ({"arm_length_m": 0.0}, {"arm_length_m": -5.0}):
+        for bad in ({"arm_length_m": 0.0}, {"arm_length_m": -5.0}, {"mouth_aspect": 0.8}, {"mouth_aspect": 3.0}):
             with self.subTest(bad), self.assertRaises(ValueError):
                 jg.build(BuildContext(self.root / "bad", seed=1, options=bad))
 

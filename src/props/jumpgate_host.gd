@@ -22,18 +22,18 @@ const ACTIONS: Array[StringName] = [&"status", &"open", &"close", &"jump", &"can
 const DIRECTIONS: Array[StringName] = [&"arrival", &"departure"]
 ## `gate view <name>`: held camera poses on the gate for captures, in the gate's frame (-Z its front, +Y its top): the camera's
 ## offset, the aim's offset, the field of view and the roll (degrees, the picture turned clockwise). `reference` matches `references/jumpgate/jumpgate.png` (the maintainer's
-## acceptance view for T19), fitted to where the four rails' ends sit in the still: 1.2 km in front of the mouth, below and to
-## the side, looking about 19 degrees off the axis with a 60 degree field, so perspective turns the parallel rails into four
-## converging spokes round the funnel.
+## acceptance view for T19), fitted to where the four rails' ends and the funnel's dark throat sit in the still: 1.6 km in front
+## of the mouth, below and to the side, looking about 23 degrees off the axis with a 52 degree field, so perspective turns the
+## parallel rails into four converging spokes round the funnel.
 const VIEWS: Dictionary = {
 	&"front": [Vector3(0.0, 0.0, -6000.0), Vector3(0.0, 0.0, 600.0), 55.0],
 	&"three_quarter": [Vector3(3200.0, 1600.0, -4400.0), Vector3(0.0, 0.0, 600.0), 55.0],
 	&"close": [Vector3(650.0, 420.0, -1500.0), Vector3(0.0, 0.0, 600.0), 60.0],
-	&"tip": [Vector3(1150.0, 300.0, -600.0), Vector3(760.0, 0.0, 100.0), 45.0],
+	&"tip": [Vector3(1430.0, 300.0, -600.0), Vector3(1040.0, 0.0, 100.0), 45.0],
 	&"run_in": [Vector3(0.0, 60.0, -1500.0), Vector3(0.0, 0.0, 1200.0), 65.0],
 	&"side": [Vector3(5200.0, 400.0, 600.0), Vector3(0.0, 0.0, 600.0), 50.0],
 	&"behind": [Vector3(1500.0, -1300.0, 4600.0), Vector3(0.0, 0.0, 700.0), 55.0],
-	&"reference": [Vector3(-330.0, -390.0, -1100.0), Vector3(-12.0, 9.0, 367.0), 60.0, 0.0],
+	&"reference": [Vector3(-526.0, -533.0, -1588.0), Vector3(95.0, 137.0, 600.0), 52.4, 0.0],
 }
 const VIEW_NAMES: Array[StringName] = [&"front", &"three_quarter", &"close", &"tip", &"run_in", &"side", &"behind", &"reference",
 		&"off"]
@@ -348,7 +348,9 @@ func _register_console() -> void:
 		&"depth_m": {"get": func() -> float: return _console_point().fit.depth_m if _console_point() != null else 0.0,
 				"unit": "m", "doc": "The newest console point's depth"},
 		&"gate_rim_m": {"get": func() -> float: return gate().fit.mouth_radius_m if gate() != null else 0.0, "unit": "m",
-				"doc": "The gate vortex's rim radius (from the markers)"},
+				"doc": "The gate vortex's rim half height, its smaller semi-axis (from the markers)"},
+		&"gate_half_width_m": {"get": func() -> float: return gate().fit.mouth_half_width_m if gate() != null else 0.0,
+				"unit": "m", "doc": "The gate vortex's rim half width: the mouth is an ellipse, wider than tall"},
 		&"gate_depth_m": {"get": func() -> float: return gate().fit.depth_m if gate() != null else 0.0, "unit": "m",
 				"doc": "The gate vortex's depth behind its mouth (an arm's length)"},
 		&"gate_mouth_z_m": {"get": func() -> float: return gate().fit.mouth_z_m if gate() != null else 0.0, "unit": "m",

@@ -95,6 +95,7 @@ res://tests/unit/test_gate_jump.gd
 res://tests/unit/test_jumpgate_data.gd
 res://tests/unit/test_jumpgate_broadcast.gd
 res://tests/unit/test_vortex_fit.gd
+res://tests/unit/test_vortex_swirl.gd
 res://tests/unit/test_gate_activation.gd
 # Missions, dialog, scenarios
 res://tests/unit/test_scenario_loader.gd

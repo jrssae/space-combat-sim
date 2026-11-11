@@ -1,29 +1,37 @@
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_always, cull_disabled, shadows_disabled;
 // A jump vortex's funnel (M6-T19, D69): a broad, gently curving, translucent well of the base colour, darker toward its rim and
-// its soft throat, with many small soft-edged darker patches and paler translucent ones drawn out along a spiral and drifting
-// along it (out from the throat for an arrival, in toward it for a departure); the rim fades out in wisps. The funnel unfolds
-// from its base forward to the rim of its mouth as it opens. Its base looks black from in front, down the funnel, and glows white
-// from the side or behind.
+// its soft throat, combed with fine hair-like streaks along one soft spiral, over soft-edged darker patches and paler
+// translucent ones that lie along the same spiral. Everything turns round the axis and drifts along the spiral (out from the
+// throat for an arrival, in toward it for a departure); the rim fades out in feathers. The funnel unfolds from its base forward
+// to the rim of its mouth as it opens. Its base looks black from in front, down the funnel, and glows white from the side or
+// behind.
 //
 // The mesh is a unit grid: UV.x round the funnel, UV.y from the rim (0) to the centre (1); the node's scale gives the mouth's
-// radius (x, y) and the depth (z, behind the mouth). `swirl_time` is sim time, so a pause freezes the motion.
+// semi-axes (x, y: an ellipse at a gate) and the depth (z, behind the mouth). `swirl_time` is sim time, so a pause freezes it.
 
-uniform vec3 colour = vec3(0.045, 0.23, 0.9);
-uniform vec3 highlight = vec3(0.38, 0.65, 1.0);
+uniform vec3 colour = vec3(0.06, 0.38, 0.85);
+uniform vec3 highlight = vec3(0.36, 0.75, 1.0);
 // 0..1: how far the funnel has unfolded from its centre toward the rim.
 uniform float growth = 1.0;
 // The opener's overall brightness (an arrival is darker than a departure, as the references are).
 uniform float brightness = 1.0;
 uniform float swirl_time = 0.0;
-// +1 for an arrival (the patches spiral out toward the rim), -1 for a departure (they spiral in); both turn the same way.
+// +1 when the pattern travels out toward the rim (an arrival), -1 when it travels in (a departure).
 uniform float flow = 1.0;
+// The way it turns, in the mesh's own angle: -1 is counter-clockwise seen from in front (an arrival), +1 clockwise (`VortexSwirl`).
+uniform float turn = -1.0;
+// How tightly the spiral winds: turns round the funnel per e-fold of radius.
+uniform float twist = 0.17;
+// Turns a second round the axis, and e-folds of radius a second along the spiral.
+uniform float spin = 0.02;
+uniform float travel = 0.1;
 // How much of what is behind shows through the walls.
 uniform float body_alpha = 0.72;
 // How wide the well is: its walls fall away over about this share of the radius, round a broad, rounded base.
 uniform float well = 0.55;
 // The rim fades from this share of the radius to nothing at the rim.
-uniform float rim_fade_from = 0.42;
+uniform float rim_fade_from = 0.55;
 uniform vec3 base_glow = vec3(1.2, 1.2, 1.3);
 
 varying float v_s;
@@ -42,48 +50,43 @@ float hash2(vec2 p) {
 	return fract(p.x * p.y);
 }
 
-float vnoise(vec2 p) {
+// Value noise that repeats every `period` cells in x, so a pattern laid round the funnel closes on itself with no seam.
+float pnoise(vec2 p, float period) {
 	vec2 i = floor(p);
 	vec2 f = fract(p);
 	f = f * f * (3.0 - 2.0 * f);
-	return mix(mix(hash2(i), hash2(i + vec2(1.0, 0.0)), f.x), mix(hash2(i + vec2(0.0, 1.0)), hash2(i + vec2(1.0, 1.0)), f.x), f.y);
+	float x0 = mod(i.x, period);
+	float x1 = mod(i.x + 1.0, period);
+	return mix(mix(hash2(vec2(x0, i.y)), hash2(vec2(x1, i.y)), f.x),
+			mix(hash2(vec2(x0, i.y + 1.0)), hash2(vec2(x1, i.y + 1.0)), f.x), f.y);
 }
 
-// Value noise along the funnel at `n` cells round it, the row sheared `m` per turn: blended across the seam at u = 1 so the
-// wrap round the funnel shows no line.
-float ring_noise(float u, float y0, float n, float m, float drift) {
-	float here = vnoise(vec2(u * n + drift, y0 - m * u));
-	float wrapped = vnoise(vec2((u - 1.0) * n + drift, y0 - m * (u - 1.0)));
-	return mix(here, wrapped, smoothstep(0.85, 1.0, u));
+// Hair-like streaks along the spiral: `around` strands round the funnel, each `per_fold` cells long per e-fold of radius.
+// `px_cells` is how many strands one pixel covers: strands finer than a pixel melt into their mean instead of shimmering.
+float hairs(float w, float along, float around, float per_fold, float px_cells) {
+	float n = pnoise(vec2(w * around, along * per_fold + around), around);
+	return mix(n, 0.5, smoothstep(0.35, 1.1, px_cells * around));
 }
 
-// A field of soft-edged, roughly rectangular patches on a spiral grid: `around` cells round the funnel, rows a cell tall in
-// log radius, sheared `turns` cells per turn so they lie along spirals, each row slid by its own amount so they do not line up.
-// `drift` moves them along the spiral; `blur` widens their edges (more when a cell covers few pixels). Returns the patch's
-// cover (0..1) and its random tone in y.
-vec2 patches(float u, float r, float around, float turns, float drift, float seed, float fill, float blur) {
-	float a = u * around;
-	float b = log(r) * around / TAU;
-	vec2 q = vec2(a + drift, b - turns * u);
-	float row = floor(q.y);
-	// A row's slide repeats every `turns` rows, so the wrap round the funnel stays seamless.
-	q.x += hash2(vec2(mod(row, turns), seed)) * 7.0;
-	vec2 cell = floor(q);
-	// The wrap round the funnel: a cell past the seam is the same cell as at its start, rows offset by `turns`.
-	float lap = floor(cell.x / around);
-	vec2 id = vec2(cell.x - lap * around, cell.y + lap * turns) + seed;
+// Soft-edged, roughly rectangular patches lying along the spiral: `around` columns round the funnel, `per_fold` rows per
+// e-fold of radius, each column slid by its own amount so they do not line up in rings. Returns the cover (0..1) and the
+// patch's own random tone.
+vec2 patches(float w, float along, float around, float per_fold, float seed, float fill, float blur) {
+	vec2 q = vec2(w * around, along * per_fold);
+	float column = mod(floor(q.x), around);
+	q.y += hash2(vec2(column, seed)) * 9.0;
+	vec2 id = vec2(column, floor(q.y)) + seed;
 	float h1 = hash2(id);
 	float h2 = hash2(id + 17.7);
 	float h3 = hash2(id + 41.3);
 	if (h1 > fill) {
 		return vec2(0.0, h3);
 	}
-	vec2 f = fract(q) - 0.5 - (vec2(h2, h3) - 0.5) * vec2(0.2, 0.3);
-	// Drawn out along the spiral, thin across it.
-	vec2 half_size = vec2(0.32 + 0.14 * h2, 0.07 + 0.07 * h3);
+	vec2 f = fract(q) - 0.5 - (vec2(h2, h3) - 0.5) * vec2(0.2, 0.2);
+	vec2 half_size = vec2(0.2 + 0.12 * h2, 0.26 + 0.14 * h3);
 	vec2 d = abs(f) - half_size;
 	float sd = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
-	float soft = 0.14 + blur;
+	float soft = 0.2 + blur;
 	return vec2(1.0 - smoothstep(-soft, soft, sd), h3);
 }
 
@@ -109,44 +112,49 @@ void fragment() {
 	float rp = max(r, 0.04);
 	float u = UV.x;
 	float t = swirl_time;
-	// How many funnel radii one pixel covers: patches smaller than a few pixels melt into their mean tone instead of aliasing.
+	// How many funnel radii one pixel covers, and how many turns round the funnel that is here.
 	float px = length(fwidth(v_flat));
+	float px_turns = px / (TAU * rp);
+	// The spiral everything lies along: `w` counts turns across it, `along` e-folds of radius down it. One spiral serves both
+	// directions: going out along it turns one way, going in the other.
+	float lr = log(rp);
+	float w = u - turn * flow * twist * lr - turn * spin * t;
+	float along = lr - flow * travel * t;
 	// Base tone: the opener's colour leaning a little to its highlight, its weakest channel cut so it stays deep (the
-	// tonemapper otherwise pulls blue toward violet); dark navy at the throat and the rim, brightest over a band in the middle.
+	// tonemapper otherwise pulls blue toward violet); dark at the throat and the rim, brightest over a band in the middle,
+	// in broad uneven clouds.
 	vec3 base = mix(colour, highlight, 0.15);
-	base -= vec3(min(base.r, min(base.g, base.b))) * 0.85;
-	float band = smoothstep(0.1, 0.45, r) * (1.0 - 0.7 * smoothstep(0.55, 0.95, r));
-	float wash = ring_noise(u, log(rp) * 4.0, 9.0, 2.0 * flow, -t * 0.25);
-	float level = (0.08 + 0.92 * band * band) * (0.25 + 1.3 * wash * wash);
-	// Fine feathery streaks along the spiral, low in contrast.
-	float sp = log(rp) * 90.0 / TAU;
-	float streak = ring_noise(u, sp * 3.0, 260.0, 105.0 * flow, -t * 1.4) * 0.6
-			+ ring_noise(u, sp * 1.5, 120.0, 52.5 * flow, -t) * 0.4;
-	float streak_k = 1.0 - smoothstep(0.004, 0.02, px / rp);
-	vec3 c = base * level * (1.0 + 0.35 * (streak - 0.5) * streak_k);
-	// Paler, translucent patches of the base colour, drifting slowly along the spiral.
-	float around_l = 44.0;
-	float cell_l = TAU * rp / around_l;
-	float blur_l = 0.6 * px / cell_l;
-	vec2 light = patches(u, rp, around_l, 17.0 * flow, -t * 0.8, 3.0, 0.8, blur_l);
-	float keep_l = 1.0 - smoothstep(0.4, 1.2, px / cell_l);
-	vec3 pale = mix(base, highlight, 0.45) * level * 1.6;
-	c = mix(c, pale, mix(0.8 * 0.3, light.x, keep_l) * (0.4 + 0.35 * light.y));
-	// The small darker patches, faster, drifting along the spiral.
-	float around_d = 120.0;
-	float cell_d = TAU * rp / around_d;
-	float blur_d = 0.6 * px / cell_d;
-	vec2 dark = patches(u, rp, around_d, 47.0 * flow, -t * 1.7, 0.0, 0.6, blur_d);
-	float keep_d = 1.0 - smoothstep(0.4, 1.2, px / cell_d);
-	c = mix(c, c * 0.45, mix(0.6 * 0.3, dark.x, keep_d) * (0.45 + 0.35 * dark.y));
+	base -= vec3(min(base.r, min(base.g, base.b))) * 0.92;
+	float band = smoothstep(0.12, 0.5, r) * (1.0 - 0.6 * smoothstep(0.5, 0.98, r));
+	float cloud = pnoise(vec2(w * 6.0, along * 2.2), 6.0) * 0.6 + pnoise(vec2(w * 14.0, along * 4.5 + 5.0), 14.0) * 0.4;
+	float level = (0.1 + 0.9 * band) * (0.45 + 0.9 * cloud);
+	vec3 c = base * level;
+	// The darker patches, soft-edged and roughly rectangular, lying along the spiral.
+	float around_d = 30.0;
+	vec2 dark = patches(w, along, around_d, 5.0, 0.0, 0.55, 0.5 * px_turns * around_d);
+	c *= 1.0 - (0.35 + 0.25 * dark.y) * dark.x;
+	// Paler, translucent patches of the base colour, longer, a little slower.
+	float around_l = 22.0;
+	vec2 light = patches(w + 0.37, along + flow * travel * t * 0.3, around_l, 3.0, 3.0, 0.5, 0.5 * px_turns * around_l);
+	vec3 pale = mix(base, highlight, 0.35) * (0.25 + level);
+	c = mix(c, pale, (0.35 + 0.25 * light.y) * light.x);
+	// Fine hair-like streaks combed along the spiral, three widths; the finest carry the most light.
+	float broad = hairs(w, along, 120.0, 11.0, px_turns);
+	float fine = hairs(w, along + 3.0, 300.0, 18.0, px_turns);
+	float finest = hairs(w, along + 11.0, 600.0, 28.0, px_turns);
+	float strands = smoothstep(0.52, 0.86, 0.2 * broad + 0.45 * fine + 0.35 * finest + 0.2 * (cloud - 0.5));
+	float combed = 0.7 + 0.6 * (0.4 * broad + 0.6 * fine);
+	c = c * combed + mix(base, highlight, 0.42) * strands * (0.12 + 0.95 * band) * (0.4 + cloud);
 	// The base: a soft black smudge down the funnel from in front, a white glow on the base alone from the side or behind.
-	float deep = 1.0 - smoothstep(0.02, 0.5, r);
+	float deep = 1.0 - smoothstep(0.05, 0.7, r);
 	deep *= deep * (3.0 - 2.0 * deep);
 	float glow = 1.0 - smoothstep(0.0, 0.17, r);
 	c = mix(c * (1.0 - deep * (1.0 - v_glow)), base_glow, glow * v_glow);
-	// The rim fades out raggedly in wisps; the unfolding edge is soft.
-	float wisps = ring_noise(u, t * 0.5, 70.0, 0.0, 0.0) * 0.6 + ring_noise(u, 3.0 + t * 0.7, 170.0, 0.0, 0.0) * 0.4;
-	float rim = 1.0 - smoothstep(rim_fade_from, 1.0, r + (wisps - 0.5) * 0.2 * smoothstep(rim_fade_from, 1.0, r));
+	// The rim fades out in feathers that follow the streaks; the unfolding edge is soft.
+	float fade = smoothstep(rim_fade_from, 1.0, r);
+	float feather = 0.6 * broad + 0.4 * fine - 0.5;
+	float rim = 1.0 - smoothstep(rim_fade_from, 1.0, r + feather * 0.2 * fade);
+	rim *= 1.0 - smoothstep(0.93, 1.0, r);
 	float edge = 1.0 - smoothstep(growth - 0.08, growth, r);
 	// Translucent walls; the base is opaque, black from in front and its glow from behind.
 	float solid = max(glow * v_glow, deep * (1.0 - v_glow));

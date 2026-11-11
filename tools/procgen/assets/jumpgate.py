@@ -6,10 +6,11 @@ geometry from either is used. Every length below is a share of one arm's length 
 so ``ARM_UNIT`` is one of those units), scaled to ``ARM_LENGTH_M``.
 
 Layout (Godot frame, metres; corrected under T19 by the maintainer, 2026-11-11): the four arms run parallel to the vortex's axis,
-like the corner rails of a square tube round the funnel. The gate faces -Z (its front: arrivals leave along -Z, departures fly in
+at the top, bottom and both sides of the funnel. The gate faces -Z (its front: arrivals leave along -Z, departures fly in
 along +Z); the origin is the centre of the arms' front ends, where the vortex's mouth lies, and the arms run back from z = 0 to
-z = the arm's length, where the funnel ends. They stand at 90 degree steps round the axis (arm 0 on +Y), ``ARM_RADIUS_SHARE`` of an
-arm out from it. An arm is a truss: a central spine with conical sleeves, four longerons round it with clamp rings, five stations of
+z = the arm's length, where the funnel ends. They stand at 90 degree steps round the axis (arm 0 on +Y): the top and bottom arms
+``ARM_RADIUS_SHARE`` of an arm out from it, the side arms ``MOUTH_ASPECT`` times as far, so the four frame an elliptical mouth,
+wider than tall (T19 round 3). An arm is a truss: a central spine with conical sleeves, four longerons round it with clamp rings, five stations of
 two cross-shaped collars carrying a pair of fins spanning round the tube (a shallow V opening toward the axis, so each pair makes a
 dish facing the funnel), cross-shaped end caps, an emitter lens on its back end and amber lamps on its inner and outer faces at each
 station.
@@ -38,25 +39,28 @@ from ..parts import Collision
 from ..styles import Style
 
 ASSET_ID = "jumpgate"
-GENERATOR_VERSION = 2
+GENERATOR_VERSION = 3
 OBJ_NAME = f"{ASSET_ID}.obj"
 HARDPOINTS_NAME = "hardpoints.json"
 JSON_DIGITS = 4
 
 # The scale (docs/design-references.md, "Jumpgate"): no on-screen number exists, so the arm is sized so the vortex swallows a capital
-# ship with room to spare. The arms stand 2/3 of an arm out from the axis (the stills: the funnel's mouth about as wide as an arm is
-# long); the vortex's rim stops a few metres short of the nearest part of an arm, and the funnel is as deep as an arm is long.
+# ship with room to spare. The top and bottom arms stand 2/3 of an arm out from the axis; the vortex's rim follows an ellipse that
+# stops a metre short of the nearest part of the arms, and the funnel is as deep as an arm is long.
 ARM_LENGTH_M = 1200.0
 ARM_RADIUS_SHARE = 2.0 / 3.0
-RIM_CLEARANCE_M = 8.0
+# How much further out the side arms stand than the top and bottom ones: the mouth's width over its height (option
+# ``mouth_aspect``). Read off ``jumpgate.png`` (docs/design-references.md, "Jumpgate").
+MOUTH_ASPECT = 1.35
+RIM_CLEARANCE_M = 1.0
 ARMS = 4
-# Where a ship comes out (just in front of the mouth) and where one lines up to go in, in vortex radii along the front normal.
+# Where a ship comes out (just in front of the mouth) and where one lines up to go in, in mouth half heights along the front normal.
 ARRIVAL_RADII = 0.1
 DEPARTURE_RADII = 2.0
 # The vortex's colours by direction (the maintainer, 2026-11-11; linear RGB): blue for ships coming out of hyperspace, orange-yellow
 # for ships going in; each with the paler colour of its swirl's streaks, and the pink-white flash the emitters make as it opens.
 VORTEX_COLOURS = {
-    "arrival": {"colour": (0.045, 0.23, 0.9), "highlight": (0.38, 0.65, 1.0)},
+    "arrival": {"colour": (0.06, 0.38, 0.85), "highlight": (0.36, 0.75, 1.0)},
     "departure": {"colour": (0.95, 0.42, 0.06), "highlight": (1.0, 0.82, 0.38)},
 }
 VORTEX_FLASH = (1.0, 0.62, 0.86)
@@ -153,13 +157,22 @@ def _m(role: str) -> Material:
 # --- the layout, pure ------------------------------------------------------------------------------------------------------
 @dataclass(frozen=True)
 class GateLayout:
-    """The gate's size: an arm's length and its axis's distance from the vortex's axis, metres."""
+    """The gate's size: an arm's length, the top and bottom arms' distance from the vortex's axis and the side arms', metres."""
 
     arm_length_m: float = ARM_LENGTH_M
+    mouth_aspect: float = MOUTH_ASPECT
 
     @property
     def arm_radius_m(self) -> float:
         return ARM_RADIUS_SHARE * self.arm_length_m
+
+    @property
+    def side_radius_m(self) -> float:
+        return self.mouth_aspect * self.arm_radius_m
+
+    def radius_of(self, k: int) -> float:
+        """Arm ``k``'s distance from the axis: the even arms are the top and bottom ones, the odd arms the sides."""
+        return self.arm_radius_m if k % 2 == 0 else self.side_radius_m
 
 
 def station_offsets() -> np.ndarray:
@@ -191,10 +204,12 @@ def fin_basis(side: float) -> np.ndarray:
     return np.stack([span, chord, normal], axis=1)
 
 
-def markers(layout: GateLayout, rim_m: float) -> dict[str, Any]:
-    """The points the game needs, in the gate's frame: the vortex (its mouth at the front ends, its rim ``rim_m``, as deep as an arm
-    is long), where ships arrive and depart, and the emitters on the arms' back ends."""
+def markers(layout: GateLayout, rim_m: tuple[float, float]) -> dict[str, Any]:
+    """The points the game needs, in the gate's frame: the vortex (its mouth at the front ends, an ellipse of semi-axes ``rim_m``
+    across and up, as deep as an arm is long; ``radius_m`` is the half height, the largest circle inside it), where ships arrive
+    and depart, and the emitters on the arms' back ends."""
     front = np.array([0.0, 0.0, -1.0])
+    half_width, half_height = rim_m
     unit = layout.arm_length_m * ARM_UNIT
     emitters = []
     for k in range(ARMS):
@@ -202,20 +217,27 @@ def markers(layout: GateLayout, rim_m: float) -> dict[str, Any]:
         lens = r @ np.array([0.0, -EMITTER_PROFILE[-1][0] * unit, 0.0]) + t
         emitters.append({"name": f"arm_{k}", "position": _r(lens), "direction": _r(-front)})
     return {
-        "vortex": {"center": [0.0, 0.0, 0.0], "normal": _r(front), "up": [0.0, 1.0, 0.0], "radius_m": round(rim_m, 3),
-                   "depth_m": round(layout.arm_length_m, 3), **vortex_colours()},
-        "arrival": {"position": _r(front * ARRIVAL_RADII * rim_m), "forward": _r(front), "up": [0.0, 1.0, 0.0],
+        "vortex": {"center": [0.0, 0.0, 0.0], "normal": _r(front), "up": [0.0, 1.0, 0.0], "radius_m": round(half_height, 3),
+                   "semi_axes_m": [round(half_width, 3), round(half_height, 3)], "depth_m": round(layout.arm_length_m, 3), **vortex_colours()},
+        "arrival": {"position": _r(front * ARRIVAL_RADII * half_height), "forward": _r(front), "up": [0.0, 1.0, 0.0],
                     "vortex": "arrival"},
-        "departure": {"position": _r(front * DEPARTURE_RADII * rim_m), "forward": _r(-front), "up": [0.0, 1.0, 0.0],
+        "departure": {"position": _r(front * DEPARTURE_RADII * half_height), "forward": _r(-front), "up": [0.0, 1.0, 0.0],
                       "vortex": "departure"},
         "emitters": emitters,
     }
 
 
-def rim_radius(body: Mesh) -> float:
-    """The vortex's rim: a few metres short of the nearest part of any arm, measured off the built mesh."""
-    radial = np.hypot(body.vertices[:, 0], body.vertices[:, 1])
-    return float(radial.min()) - RIM_CLEARANCE_M
+def mouth_semi_axes(body: Mesh) -> tuple[float, float]:
+    """The vortex's rim, measured off the built mesh: the ellipse (half width, half height) that touches the side arms and the top
+    and bottom arms at once, drawn in by the clearance so it comes within a metre of them and meets none."""
+    x, y = np.abs(body.vertices[:, 0]), np.abs(body.vertices[:, 1])
+    side = x > y
+    half_width, half_height = float(x[side].min()), float(y[~side].min())
+    # Each pair of arms limits mostly its own semi-axis; a few rounds settle the little each takes from the other.
+    for _ in range(8):
+        half_height = float((y[~side] / np.sqrt(1.0 - (x[~side] / half_width) ** 2)).min())
+        half_width = float((x[side] / np.sqrt(1.0 - (y[side] / half_height) ** 2)).min())
+    return half_width - RIM_CLEARANCE_M, half_height - RIM_CLEARANCE_M
 
 
 def vortex_colours() -> dict[str, Any]:
@@ -400,7 +422,7 @@ def arm_collision(length: float) -> list[Collision]:
 def _placement(layout: GateLayout, k: int) -> tuple[np.ndarray, np.ndarray]:
     """Arm ``k``'s rotation and translation from its own frame into the gate's: its back end at z = the arm's length."""
     r = arm_rotation(k)
-    return r, r @ np.array([0.0, 0.0, layout.arm_radius_m]) + np.array([0.0, 0.0, layout.arm_length_m])
+    return r, r @ np.array([0.0, 0.0, layout.radius_of(k)]) + np.array([0.0, 0.0, layout.arm_length_m])
 
 
 def gate_parts(layout: GateLayout) -> list[TexturedPart]:
@@ -453,7 +475,9 @@ def hardpoints(layout: GateLayout, body: Mesh) -> dict[str, Any]:
         "depth_m": round(float(hi[2] - lo[2]), 3),
         "arm_length_m": round(layout.arm_length_m, 3),
         "arm_radius_m": round(layout.arm_radius_m, 3),
-        **markers(layout, rim_radius(body)),
+        "arm_side_radius_m": round(layout.side_radius_m, 3),
+        "mouth_aspect": round(layout.mouth_aspect, 4),
+        **markers(layout, mouth_semi_axes(body)),
         "arms": arms,
         "lights": lights(layout),
         "collision": collision(layout),
@@ -463,11 +487,14 @@ def hardpoints(layout: GateLayout, body: Mesh) -> dict[str, Any]:
 def build(ctx: BuildContext) -> AssetOutputs:
     """Generate the gate into ``ctx.out_dir``.
 
-    Options: ``arm_length_m`` (default 1 200), ``atlas_px`` (default 2 048).
+    Options: ``arm_length_m`` (default 1 200), ``mouth_aspect`` (the side arms' distance from the axis over the top and bottom
+    arms', default ``MOUTH_ASPECT``), ``atlas_px`` (default 2 048).
     """
-    layout = GateLayout(float(ctx.option("arm_length_m", ARM_LENGTH_M)))
+    layout = GateLayout(float(ctx.option("arm_length_m", ARM_LENGTH_M)), float(ctx.option("mouth_aspect", MOUTH_ASPECT)))
     if layout.arm_length_m <= 0.0:
         raise ValueError("arm_length_m must be positive")
+    if not 1.0 <= layout.mouth_aspect <= 2.0:
+        raise ValueError("mouth_aspect must be between 1 and 2")
     atlas_px = int(ctx.option("atlas_px", ATLAS_PX))
     out_dir = ctx.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -497,11 +524,12 @@ def build(ctx: BuildContext) -> AssetOutputs:
         files={"obj": OBJ_NAME, "mesh": mesh_entry["file"], "hardpoints": HARDPOINTS_NAME},
         extra={
             "dimensions_m": {"span": hp["span_m"], "depth": hp["depth_m"], "arm_length": hp["arm_length_m"],
-                             "arm_radius": hp["arm_radius_m"], "vortex_radius": hp["vortex"]["radius_m"],
+                             "arm_radius": hp["arm_radius_m"], "arm_side_radius": hp["arm_side_radius_m"],
+                             "vortex_radius": hp["vortex"]["radius_m"], "vortex_half_width": hp["vortex"]["semi_axes_m"][0],
                              "vortex_depth": hp["vortex"]["depth_m"]},
             "mesh": mesh_entry,
-            "vortex": {k: hp["vortex"][k] for k in ("center", "normal", "up", "radius_m", "depth_m", "colour_space", "colours",
-                                                    "flash")},
+            "vortex": {k: hp["vortex"][k] for k in ("center", "normal", "up", "radius_m", "semi_axes_m", "depth_m", "colour_space",
+                                                    "colours", "flash")},
         },
     )
     files.append(write_manifest(out_dir, manifest))

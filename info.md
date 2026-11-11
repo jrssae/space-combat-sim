@@ -160,7 +160,7 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `world` | The local origin, rebases and the automatic rebase distance | in flight |
 | `camera` | The active camera mode (cockpit, chase or cinematic; writable) and field of view, the cinematic shot playing and its time | in flight |
 | `gate` | The jumpgate: count, name, distance, targeted, whether the jump is offered (`prompt`), the vortex's phase (`activate`, `flash`, `grow`, `open`, `closing`, `closed`), direction, age and openings, ships arrived, departed, waiting and departing, and the player's jump (state, time in it, completed, aborted, last abort) | in flight |
-| `vortex` | Stand-alone jump points: how many are open (console, mission and encounter points), how many `vortex open` opened, the newest console point's phase, mouth radius and depth, and the gate vortex's fit (`gate_rim_m`, `gate_depth_m`, `gate_mouth_z_m`) | in flight |
+| `vortex` | Stand-alone jump points: how many are open (console, mission and encounter points), how many `vortex open` opened, the newest console point's phase, mouth radius and depth, and the gate vortex's fit (`gate_rim_m` the rim's half height, `gate_half_width_m` its half width, `gate_depth_m`, `gate_mouth_z_m`) | in flight |
 | `system` | The star system: its bodies (GM, radius, atmosphere top, zone), the places' positions from Epsilon III's centre, the gate's distance from the station and the station's orbit period | in flight |
 | `weapons` | Pulse cannon fire mode (writable), cooldown and capacitor charge | in flight |
 | `targeting` | The selected target (writable), its range and closing speed, and the targets in sensor range | in flight |

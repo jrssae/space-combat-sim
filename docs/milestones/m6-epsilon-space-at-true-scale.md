@@ -494,6 +494,7 @@ which changes the same native rows and rebase path:
   - **Layout corrected under T19 (maintainer, 2026-11-11):** the four arms run parallel to each other and to the vortex's axis,
     round it like the corner rails of a square tube (800 m from the axis), not as flat spokes; the mouth sits at their front
     ends and the funnel runs back to their back ends. Generator v2, markers rebuilt (see T19).
+    Round 3: at the top, bottom and sides, the side arms 1 080 m out, an elliptical mouth (generator v3, `mouth_aspect`).
   - Look sheet `references/screenshots/M6-T13 jumpgate/look/look_sheet.png` (H). Open for the maintainer: which way the fins'
     V opens, amber or white lamps, whether 1.2 m per texel is soft at 100 m.
 
@@ -702,8 +703,8 @@ which changes the same native rows and rebase path:
 - **Done when:** the fit and sizing tests; every mission and encounter that used `JumpArrival` arrives through a vortex with
   its outcome unchanged; screenshots of the gate's vortex (both colours, front and three-quarter) and of an open point for
   the maintainer (H); GPU numbers with the vortex open. **(H) acceptance view:** `gate view reference` (fitted to where the
-  four rails' ends sit in the still, 18 to 20 px rms: camera at (-330, -390, -1100) m in the gate's frame, 1.2 km in front of the
-  mouth, aimed at (-12, 9, 367), about 19 degrees off the axis, 60 degree vertical field, no roll), the side by side
+  four rails' ends and the throat sit in the still; round 3's pose: camera at (-526, -533, -1588) m in the gate's frame, 1.6 km in
+  front of the mouth, aimed at (95, 137, 600), about 23 degrees off the axis, 52.4 degree vertical field, no roll), the side by side
   `references/screenshots/M6-T19 vortex/acceptance_jumpgate_png.png`, judged at an 80 to 90 % match.
 
 - **Done (2026-11-11; round 2 the same day):**
@@ -766,3 +767,44 @@ which changes the same native rows and rebase path:
     departing one**. The patches still travel in for a departure and out for an arrival.
   - **Colour:** lighter, a **dark sky blue** rather than navy, for the arrival vortex.
   - **Texture:** finer, hair-like streaks and a softer swirl, not separate bold bands.
+- **Round 3 done (2026-11-11):**
+  - **Arms and ellipse** (generator v3): top and bottom arms 800 m from the axis, side arms 1 080 m, all parallel to the axis
+    from the front plane back 1 200 m. **Aspect 1.35**, option `mouth_aspect` (1 to 2): the camera and the aspect were fitted
+    together to the rails' ends in `jumpgate.png`; the misfit is 31 px rms for a square gate, 23 at 1.2, 20.6 at 1.35, 20.2 at
+    1.5, 22 at 1.7, so flat from 1.35 to 1.5, and the low end was taken ("slightly further"). The gate is now 2 242 m wide.
+  - **Mouth:** `mouth_semi_axes` measures the ellipse that touches both pairs of arms off the mesh and draws it in 1 m:
+    **1 038 m across, 755.5 m up** (the trusses reach about 45 m in from the arms' axes). The `vortex` marker carries
+    `semi_axes_m` beside `radius_m` (the half height, the largest circle inside); arrival and departure points follow the half
+    height (75.5 m and 1 511 m in front); emitters, lamps and collision follow the arms. `VortexFit` holds the half width
+    (`semi_axes`, `aspect`, `contains`); the funnel is scaled by both, elliptical from the mouth to the throat, depth unchanged.
+    A ship-made point stays round (no arms shape it). A departing ship counts as through inside the ellipse.
+    `GateAutopilot` is unchanged (its 1 600 m diagonal is about 1 km clear of every fin), comments only.
+  - **Swirl** (`VortexSwirl`, pure): seen from in front an arrival turns counter-clockwise and travels out, a departure turns
+    clockwise and travels in, both along one spiral. Measured off two frames 1 s apart looking down the axis: arrival +13
+    degrees and 10 to 20 px outward, departure -13 degrees and 9 to 19 px inward.
+  - **Colour:** arrival `colour` (0.06, 0.38, 0.85), `highlight` (0.36, 0.75, 1.0) linear (was (0.045, 0.23, 0.9) and
+    (0.38, 0.65, 1.0)); the body reads about sRGB (6, 60, 125) in the acceptance view against the still's (4, 42, 129).
+    The departure colours are unchanged.
+  - **Texture:** the spiral band grids are gone. Everything lies along one soft spiral (0.17 turns per e-fold of radius):
+    broad uneven clouds, soft-edged roughly rectangular darker patches and paler translucent ones, and over them three widths
+    of short hair-like streaks (120, 300 and 600 round the funnel), filtered by distance; the rim fades from 0.55 of the radius
+    in feathers that follow the streaks; the throat's dark smudge is wider. Translucency unchanged (72 %).
+  - **Acceptance pose** refitted (`gate view reference`): camera (-526, -533, -1588) m, aimed at (95, 137, 600), 52.4 degree
+    field, about 23 degrees off the axis; fitted to the rails' ends and the dark throat's place (27 px rms; the rails alone
+    give 24 px with the throat too near the middle). `gate view tip` moved out to the side arm.
+  - **Tests:** quick `test_vortex_swirl` (new, 5 tests), `test_vortex_fit` (semi-axes, `contains`, the built gate's ellipse
+    outside every collision box), `test_jumpgate_broadcast`; Python `test_jumpgate_helpers` (quick, 19 tests: the side arms'
+    placement, the ellipse within a metre of both pairs, a square gate's round mouth) and `test_jumpgate` (standard, 103 s).
+    Quick tier green (1 620 GUT tests, 202 s).
+  - **GPU, oscar** (R9 200 / Tahiti, 960x540, Forward+, X11 at 1 fps as in round 2; Wayland stops drawing the window): gate
+    vortex open 9 draw calls looking down the axis, 51.2k triangles, 322.6 MB VRAM in the renderer, sysfs `card1` 714 MB; an
+    open point 25 draw calls. **Frame rate (H)** on the maintainer's machine.
+  - **Screenshots:** `references/screenshots/M6-T19 vortex/acceptance_jumpgate_png.png` (the still left, the game right, lens
+    flare off: the star's ghost otherwise falls on the throat from this pose) and `round3/`: `arr_*` and `dep_*` (`front`,
+    `three_quarter`, `inside`, `behind`, `side`, `close`, `reference`, `motion_a/b`), `point_arrival_300m`, `point_departure_300m`.
+  - **Against the references (own estimate):** `jumpgate.png` about 80 %: the combed streaks, the mottling, the soft dark
+    throat low and right and the wide mouth between the four arms are there. Still different: the mouth reaches the arms'
+    front ends, so it fills more of the frame than the still's, which lies inside the arms' inner tips; the still's ellipse is
+    flatter (about 1.65 to 1 on screen against 1.35) and its streaks a little shorter and crisper; the blue is lighter than the
+    still's on purpose; the top arm is dim; the lamps are as round 2. `point_1` about 80 % (it is patchier and paler; ours is
+    streakier). The opening sequence, `jumpgate_open`, `point_2` and `gathering` are as round 2. The look stays (H).

@@ -36,7 +36,8 @@ func test_the_player_can_select_it_from_999_km_but_not_1001() -> void:
 func test_its_points_and_vortex_come_from_the_hardpoints() -> void:
 	var gate: Jumpgate = _gate()
 	assert_almost_eq(gate.radius_m, gate.fit.mouth_radius_m, 0.1, "ships pass within the vortex's rim")
-	assert_between(gate.radius_m, 700.0, 800.0, "inside the arms, 800 m out")
+	assert_between(gate.radius_m, 700.0, 800.0, "inside the top and bottom arms, 800 m out")
+	assert_gt(gate.fit.mouth_half_width_m, gate.radius_m, "the mouth is an ellipse, wider than tall")
 	assert_eq(gate.arrival_forward, Vector3.FORWARD, "arrivals leave along -Z")
 	assert_eq(gate.departure_forward, Vector3.BACK, "departures fly in along +Z")
 	assert_lt(gate.departure_point.z, -1000.0, "the departure point is well in front")
@@ -61,7 +62,7 @@ func test_its_points_and_vortex_come_from_the_hardpoints() -> void:
 	gate.update_activation()
 	assert_true(gate.vortex.funnel.visible)
 	assert_eq(gate.activation_level(0), GateActivation.STEADY_LEVEL, "the lamps back to their steady burn once it is open")
-	assert_eq(gate.vortex.funnel.scale, Vector3(gate.fit.mouth_radius_m, gate.fit.mouth_radius_m, gate.fit.depth_m))
+	assert_eq(gate.vortex.funnel.scale, Vector3(gate.fit.mouth_half_width_m, gate.fit.mouth_radius_m, gate.fit.depth_m))
 	gate.vortex.close()
 	gate.vortex.advance(VortexTiming.CLOSE_S + 0.01)
 	assert_false(gate.vortex.is_active(), "gone once closed")

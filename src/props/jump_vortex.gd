@@ -7,8 +7,9 @@ extends Node3D
 ## The node's origin is the mouth's centre and its -Z the way ships come out (the funnel recedes along +Z); `fit` gives the mouth's
 ## radius and the depth. An opening runs on `VortexTiming`: the opener's lead-in (a gate's arm sequence; none for a ship-made
 ## point), the flash at the jump point's centre (the funnel's base), the funnel unfolding from that point forward to the rim of
-## its mouth, open, then folding back. Blue for an arrival, its patches spiralling out from the
-## throat; orange to golden yellow for a departure, its patches spiralling in. The age runs on physics ticks from `delta` (a pause freezes it); the visuals follow it
+## its mouth, open, then folding back. Blue for an arrival, turning counter-clockwise seen from in front, its patches spiralling
+## out from the throat; orange to golden yellow for a departure, turning clockwise, its patches spiralling in (`VortexSwirl`).
+## A gate's mouth is an ellipse (`VortexFit`); the funnel keeps that section down to its throat. The age runs on physics ticks from `delta` (a pause freezes it); the visuals follow it
 ## each rendered frame. In `world_shiftable` when it stands alone, so a rebase moves it; a gate's moves with the gate.
 
 enum Direction { ARRIVAL, DEPARTURE }
@@ -19,7 +20,7 @@ const FUNNEL_SHADER: Shader = preload("res://src/props/jump_vortex.gdshader")
 const GLOW_SHADER: Shader = preload("res://src/props/jump_glow.gdshader")
 ## Colours (linear) when the opener gives none: the gate generator's values.
 const DEFAULT_COLOURS: Dictionary = {
-	&"arrival": [Color(0.045, 0.23, 0.9), Color(0.38, 0.65, 1.0)],
+	&"arrival": [Color(0.06, 0.38, 0.85), Color(0.36, 0.75, 1.0)],
 	&"departure": [Color(0.95, 0.42, 0.06), Color(1.0, 0.82, 0.38)],
 }
 const DEFAULT_FLASH: Color = Color(1.0, 0.62, 0.86)
@@ -35,7 +36,7 @@ const BRIGHTNESS: Dictionary = {&"arrival": 0.5, &"departure": 1.2}
 const SOUND_PATH: String = "res://assets/generated/sfx_world/jump_in.wav"
 const SOUND_DB: float = 2.0
 
-## The mouth's radius and the depth.
+## The mouth's semi-axes and the depth.
 var fit: VortexFit = VortexFit.new()
 ## The opening flash's colour, also the screen's flash in the player's jump.
 var flash_colour: Color = DEFAULT_FLASH
@@ -155,7 +156,8 @@ func open(p_direction: Direction, hold_s: float = VortexTiming.DEFAULT_HOLD_S, l
 	var pair: Array = _colours[DIRECTION_NAMES[direction]]
 	_material.set_shader_parameter(&"colour", pair[0])
 	_material.set_shader_parameter(&"highlight", pair[1])
-	_material.set_shader_parameter(&"flow", 1.0 if direction == Direction.ARRIVAL else -1.0)
+	_material.set_shader_parameter(&"flow", VortexSwirl.radial(direction))
+	_material.set_shader_parameter(&"turn", VortexSwirl.turn_in_mesh(direction))
 	_material.set_shader_parameter(&"brightness", BRIGHTNESS[DIRECTION_NAMES[direction]])
 	emitter.color = (pair[1] as Color)
 	emitter.omni_range = fit.mouth_radius_m * 6.0
@@ -243,7 +245,7 @@ func update_visuals() -> void:
 		return
 	var grown: float = timing.growth(age_s)
 	funnel.visible = grown > 0.0
-	funnel.scale = Vector3(fit.mouth_radius_m, fit.mouth_radius_m, fit.depth_m)
+	funnel.scale = Vector3(fit.mouth_half_width_m, fit.mouth_radius_m, fit.depth_m)
 	_material.set_shader_parameter(&"growth", grown)
 	_material.set_shader_parameter(&"swirl_time", SimClock.now())
 	var flash_level: float = timing.flash(age_s)

@@ -5,7 +5,8 @@ extends Node3D
 ## arms from the markers (`VortexFit.for_gate`). Before each opening it runs its own activation (`GateActivation`): the fin
 ## stations' lamps flash in turn along all four arms from front to back, then the back ends glow into the vortex's centre flash.
 ##
-## The four arms run parallel to the vortex's axis round it (T19's correction of T13). The origin is the centre of their front
+## The four arms run parallel to the vortex's axis at its top, bottom and sides, the side arms further out, so they frame an
+## elliptical mouth (T19's correction of T13). The origin is the centre of their front
 ## ends, where the vortex's mouth lies, and the gate faces -Z: arrivals come out along -Z from the arrival point, departures line
 ## up at the departure point in front and fly in along +Z (`hardpoints.json`). The gate is at rest and has no hull: bolts pass it,
 ## ships bounce off its arms.
@@ -25,11 +26,12 @@ const LAMP_GLOW_M: float = 70.0
 const TIP_GLOW_M: float = 260.0
 ## A gate's beacon is heard 1 000 km out (D69; the wiki and the fan manual both say so), as the nav buoys are.
 const BROADCAST_RANGE_M: float = 1.0e6
-## Where the hardpoints are missing: the generator's values for 1 200 m arms 800 m from the axis.
-const DEFAULT_RADIUS_M: float = 751.0
-const DEFAULT_ARRIVAL: Vector3 = Vector3(0.0, 0.0, -75.0)
-const DEFAULT_DEPARTURE: Vector3 = Vector3(0.0, 0.0, -1502.0)
+## Where the hardpoints are missing: the generator's values for 1 200 m arms, 800 m from the axis above and below, 1 080 m at the sides.
+const DEFAULT_RADIUS_M: float = 755.5
+const DEFAULT_ARRIVAL: Vector3 = Vector3(0.0, 0.0, -75.5)
+const DEFAULT_DEPARTURE: Vector3 = Vector3(0.0, 0.0, -1511.0)
 const DEFAULT_ARM_RADIUS_M: float = 800.0
+const DEFAULT_SIDE_RADIUS_M: float = 1080.0
 const DEFAULT_BACK_Z_M: float = 1210.0
 const FALLBACK_REACH_M: float = 2200.0
 ## A departing ship this close to the mouth, in front, opens the vortex: from the departure point (1 500 m) a ship at the
@@ -37,7 +39,7 @@ const FALLBACK_REACH_M: float = 2200.0
 const DEPARTURE_OPEN_M: float = 1600.0
 ## While a departing ship is on its way in, the vortex is kept open at least this much longer each tick.
 const DEPARTURE_KEEP_S: float = 1.5
-## Crossing the plane this far from the centre (a share of the vortex radius) still counts as going through.
+## Crossing the plane this far out (a share of the mouth's ellipse) still counts as going through.
 const THROUGH_RADIUS: float = 1.1
 ## Ships come out of an arrival at this speed along -Z: clear of the plane in well under the 4 s it stays open.
 const ARRIVAL_SPEED_MPS: float = 200.0
@@ -54,6 +56,7 @@ var fit: VortexFit = null
 ## The lamps' glows (one per fin-station lamp: steady, flashing in turn during the activation) and the back ends', one multimesh.
 var activation_glows: MultiMeshInstance3D = null
 var collision_body: StaticBody3D = null
+## The mouth's half height: the largest circle inside its ellipse.
 var radius_m: float = DEFAULT_RADIUS_M
 ## Gate-local points and directions from the hardpoints.
 var arrival_point: Vector3 = DEFAULT_ARRIVAL
@@ -226,7 +229,6 @@ func _step_arrivals() -> void:
 func _step_departures() -> void:
 	if _departures.is_empty() or vortex == null:
 		return
-	var limit: float = radius_m * THROUGH_RADIUS
 	for i: int in range(_departures.size() - 1, -1, -1):
 		var entry: Dictionary = _departures[i]
 		var ship := entry["body"] as Node3D
@@ -236,8 +238,8 @@ func _step_departures() -> void:
 		var local: Vector3 = to_local(ship.global_position)
 		var was_z: float = entry["z"]
 		entry["z"] = local.z
-		var radial: float = Vector2(local.x, local.y).length()
-		if was_z < 0.0 and local.z >= 0.0 and radial <= limit and vortex.is_passable_for(JumpVortex.Direction.DEPARTURE):
+		var inside: bool = fit.contains(Vector2(local.x, local.y), THROUGH_RADIUS)
+		if was_z < 0.0 and local.z >= 0.0 and inside and vortex.is_passable_for(JumpVortex.Direction.DEPARTURE):
 			_departures.remove_at(i)
 			departed += 1
 			(entry["on_through"] as Callable).call(ship)
@@ -334,7 +336,8 @@ func _tips(data: Dictionary) -> Array[Vector3]:
 				out.append(_vec((e as Dictionary).get("position"), Vector3.ZERO))
 	if out.is_empty():
 		for axis: Vector3 in [Vector3.UP, Vector3.LEFT, Vector3.DOWN, Vector3.RIGHT]:
-			out.append(axis * DEFAULT_ARM_RADIUS_M + Vector3(0.0, 0.0, DEFAULT_BACK_Z_M))
+			var out_m: float = DEFAULT_ARM_RADIUS_M if is_zero_approx(axis.x) else DEFAULT_SIDE_RADIUS_M
+			out.append(axis * out_m + Vector3(0.0, 0.0, DEFAULT_BACK_Z_M))
 	return out
 
 
