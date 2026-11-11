@@ -289,7 +289,7 @@ which changes the same native rows and rebase path:
 | T10 | C | Scaled-space layer: placement, draw order and depth, the true sun direction, the planet's shadow | T04 | Fable | Precision and draw order in Forward+ at planetary distances; a design that later layers stand on | not started |
 | T11 | C | The planet and its atmosphere: the `planet` generator and the scattering shader (generator half early) | T10, Q10 | Opus | Shader maths on T10's layer; the look is (H) | in progress |
 | T12 | C | The sun: disc and glow from the star's colour, the lens flare and key light on the true direction | T10 | Sonnet | A small shader and the existing flare | not started |
-| T13 | D | Jumpgate references and the `jumpgate` generator (early start) | Q11 | Opus | Geometry read off references | in progress |
+| T13 | D | Jumpgate references and the `jumpgate` generator (early start) | Q11 | Opus | Geometry read off references | done |
 | T14 | D | The jumpgate in the game: the prop, the vortex, 1 000 km broadcast, arrivals through the gate | T13, T09, Q12 | Opus | A new effect and the mission and encounter seams | not started |
 | T15 | C | Far representations for the station's stand-in, the gate and the planets | T10, T14 | Opus | Hand-offs across three draw paths with no pop | not started |
 | T16 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
@@ -480,6 +480,18 @@ which changes the same native rows and rebase path:
   `tools/procgen/assets/jumpgate.py`, its tests and registry entry.
 - **Tests:** as T11: the whole-asset build standard, pure helpers quick.
 - **Done when:** the output contract and Python tests; a look sheet for the maintainer (H).
+
+- **Done (2026-11-11, `bb539f4`):**
+  - `docs/design-references.md` "Jumpgate (M6)": four separate arms 90 degrees apart (proportions read off the maintainer's
+    STL, which holds the arms as print pieces: spine in four longerons, five fin stations, V-tilted hexagonal fins, cross
+    caps), colours and lamps from the wiki's stills, the vortex's look and timing from the reference video's frames, sources
+    listed. No on-screen size exists; chosen: 1 200 m arms, a 1 440 m vortex, 4 km tip to tip (`arm_length_m`).
+  - `tools/procgen/assets/jumpgate.py` (about 44 s): 15 840 triangles (LODs by the importer), 2 048 px maps, 44 collision
+    boxes; `hardpoints.json` and the manifest carry the vortex (centre at the origin, normal -Z, radius 720 m, blue arrival
+    and orange/yellow departure colours), arrival and departure points, four tip emitters and 40 amber lamps.
+  - Tests: `test_jumpgate.py` (standard, 106 s) and `test_jumpgate_helpers.py` (quick, about 1 s).
+  - Look sheet `references/screenshots/M6-T13 jumpgate/look/look_sheet.png` (H). Open for the maintainer: which way the fins'
+    V opens, amber or white lamps, whether 1.2 m per texel is soft at 100 m.
 
 ### M6-T14 The jumpgate in the game
 
