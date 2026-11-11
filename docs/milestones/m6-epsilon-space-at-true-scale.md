@@ -451,6 +451,18 @@ which changes the same native rows and rebase path:
 - **Done when:** AC7's planet; a look sheet (day, terminator, night, limb from orbit and from 1 000 km) in
   `references/screenshots/M6-T11 planet/` for the maintainer (H).
 
+- **Generator half done (2026-11-11, `ba6da40`; the row stays `in progress` until the shader half on T10's layer):**
+  - `tools/procgen/assets/planet.py`: `PlanetSpec` parameter sets, `epsilon_iii` registered (`python3 -m tools.procgen build
+    epsilon_iii`, about 40 s). Equirectangular maps from noise sampled on the sphere (seamless, exact pole caps): albedo,
+    height and normal at 4096x2048, the wisp mask at 2048x1024, 25.7 MB. Warm palette from the reference, no ocean or city
+    lights; the manifest records the layout, height range, relief gain and haze tint.
+  - Tests: `test_planet.py` (standard, 52 s, 11 tests: contract, seam, poles, palette, relief, determinism) and
+    `test_planet_helpers.py` (quick, about 1 s).
+  - Look sheet `references/screenshots/M6-T11 planet/epsilon_iii_preview.png` (H): close in colour and relief, a little
+    pinker with larger cream patches than the still.
+  - Left for the shader half: the terminator from the true sun direction, no relief lit on the night side, the faint warm
+    limb on the lit side only, sunlit wisps, mipmapped sampling. `docs/architecture.md` §9 still needs a `planet` entry.
+
 ### M6-T12 The sun
 
 - **Goal:** the sun half of AC7.
