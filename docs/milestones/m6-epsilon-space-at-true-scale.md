@@ -294,7 +294,7 @@ which changes the same native rows and rebase path:
 | T15 | C | Far representations for the station's stand-in, the gate and the planets | T10, T14 | Opus | Hand-offs across three draw paths with no pop | not started |
 | T16 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 | T17 | E | Test tiers: quick, standard, balance and full, the quick list, its guard test, the Rust tests in the run | T01 | Sonnet | Scripts and one data file from a written plan (`docs/research/test-review/quick-test-suite.md`) | done |
-| T18 | E | The review's CONFIRMED test removals (sections A to D), each re-checked, the parity recordings still read | T17 | Opus | Proving two tests cover the same thing needs both read in full; rules on what must stay | not started |
+| T18 | E | The review's CONFIRMED test removals (sections A to D), each re-checked, the parity recordings still read | T17 | Opus | Proving two tests cover the same thing needs both read in full; rules on what must stay | in progress |
 
 ### M6-T01 Moving-frame audit and design
 
