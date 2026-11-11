@@ -277,7 +277,7 @@ which changes the same native rows and rebase path:
 |---|---|---|---|---|---|---|
 | T01 | A | Moving-frame audit and design: every World-frame velocity, the rebase order, the error budgets, §19's draft (early start) | - | Fable | Cross-cutting invariants over GDScript, Jolt and the native rows; mistakes surface late | done |
 | T02 | A | Ephemeris and gravity kernel: Kepler rails, the body tree, the strongest body's pull and the tidal residual, the integrator (early start, new native files) | T01 | Fable | Precise, deterministic numerics that M9 and M11 reuse | done |
-| T03 | B | Star system data: bodies and elements in `data/star_systems.json`, the loader, the `system` provider | T02, Q1 to Q3 | Sonnet | Data and validation on a clear format | in progress |
+| T03 | B | Star system data: bodies and elements in `data/star_systems.json`, the loader, the `system` provider | T02, Q1 to Q3 | Sonnet | Data and validation on a clear format | done |
 | T04 | A | The free-falling frame: the origin as a test particle, `environment_accel` from the ephemeris | T02, T03 | Opus | Touches the tick order and every ship's force step | not started |
 | T05 | A | The velocity rebase over every body, row, bolt, chunk, particle and interpolated node | T04 | Fable | The riskiest change of the milestone; every moving thing and the parity recordings | not started |
 | T06 | A | L4: the rebase cascade natively, the cached solid shifted in place, hidden ships skipped | T05 | Opus | A measured native fix on the path T05 rewrote | not started |
@@ -357,6 +357,16 @@ which changes the same native rows and rebase path:
   `tests/unit/test_star_system.gd`, provider `system` (bodies and their positions now), `info.md`.
 - **Tests:** `test_star_system.gd`: quick.
 - **Done when:** the file holds Q1 to Q3's answers, validated with reasons; the core gets the bodies from it.
+
+- **Done (2026-11-10, `95bf34f`):**
+  - `data/star_systems.json` holds Q1 to Q3 beside `StarCatalog`'s fields: `a_min`, `bodies` (Epsilon III, no moon: `gm`
+    1.68e14, radius 4 780 km, atmosphere top 100 km, a 0.6 AU circular orbit) and `places` (Babylon 5 on a 27 500 km circular
+    orbit; the gate on the same orbit, 50 km ahead as a phase offset). Metres, seconds, degrees; `gm` is authoritative.
+  - `StarSystem` (`RefCounted`) validates with a reason for every refusal and builds `ScsEphemeris`
+    (`native/src/ephemeris_binding.rs`: 64-bit `state` and `relative_state`, `zone_radius`, `dominant`; kernel axes, mapped
+    to the game's by T04). `ScsEphemeris` is in `NativeLib.REQUIRED`. Provider `system` from `StarSystemHost`, in `info.md`.
+  - Tests: `test_star_system.gd` (quick) and 3 Rust binding tests (quick). By design (D66), the station and gate sit outside
+    Epsilon III's zone (18 300 km at `a_min` 0.5), so nothing pulls there; T07 and T08 test gravity on a low fixture orbit.
 
 ### M6-T04 The free-falling frame
 
