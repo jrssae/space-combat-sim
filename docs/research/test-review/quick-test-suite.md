@@ -283,6 +283,9 @@ battle, the AI driver and the in-scene mission. Offer that as an option (`--tier
 
 ## Interplay with the removal list
 
+> **Applied (M6-T18).** `test_smoke` became `test_project_settings` (the first option below) and `test_info_md` left the
+> list; `test_core_state`, `test_ram_tracker` and `test_radar_model` stay listed.
+
 - C8/D3 propose deleting `test_smoke.gd` after moving its project-settings asserts into `test_ship_physics.gd`. If that
   happens, the quick suite loses its only damping check outside `test_flight_batch`. Either keep a small pure
   `test_project_settings.gd` in the quick list, or add `test_ship_physics.gd` (48 s) to it.

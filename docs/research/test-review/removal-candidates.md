@@ -1,5 +1,15 @@
 # Test removal candidates (for a verifying agent)
 
+> **Applied (M6-T18, 2026-11-11, sections A to D only).** Removed or merged: A1 to A8 (one `SeededBattle` fixture; the
+> 1-vs-6 battles folded into `test_core_threads`; `driver_step.json`'s far-rate case read by `test_row_commands`;
+> `core_state.json`'s three identical cases now one), B1 and B2 (`test_ram_contact_columns`, `ram_contact_columns.json` and
+> `test_fighter_melee` gone; `test_core_state`'s melee also pins the contact count), C1 (`RamTracker.contacts` and `Sample`),
+> C2 (`RadarModel.dots`, `dot_for`, `radius_for_range`), C3 (`test_missile_guidance` on the native rows), C6 (the probe's
+> distance-check tests), C8, D1, D3 (`test_smoke` is now `test_project_settings`), D4, D5, D8, D9, D10. Kept: C4, C5, D2,
+> D6, D7; C7 reported. Reasons and the recording-to-test map are in `docs/milestones/m6-epsilon-space-at-true-scale.md`,
+> M6-T18's Done notes. For E: E11 must keep one test that drives the explosion light through `advance` (D4 relied on
+> `test_ship_lights`). Sections E to H are untouched and wait for the maintainer.
+
 Review of every test on branch `m5` at `5c65d81` (2026-11-09): 288 GUT files (3,299 tests), 37 Python files (713 tests),
 3 Rust test modules (36 tests). **Nothing here has been removed or changed.** Your job is to check each entry and remove
 or merge only what holds up.

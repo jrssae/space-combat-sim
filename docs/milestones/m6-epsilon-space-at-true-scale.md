@@ -294,7 +294,7 @@ which changes the same native rows and rebase path:
 | T15 | C | Far representations for the station's stand-in, the gate and the planets | T10, T14 | Opus | Hand-offs across three draw paths with no pop | not started |
 | T16 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 | T17 | E | Test tiers: quick, standard, balance and full, the quick list, its guard test, the Rust tests in the run | T01 | Sonnet | Scripts and one data file from a written plan (`docs/research/test-review/quick-test-suite.md`) | done |
-| T18 | E | The review's CONFIRMED test removals (sections A to D), each re-checked, the parity recordings still read | T17 | Opus | Proving two tests cover the same thing needs both read in full; rules on what must stay | in progress |
+| T18 | E | The review's CONFIRMED test removals (sections A to D), each re-checked, the parity recordings still read | T17 | Opus | Proving two tests cover the same thing needs both read in full; rules on what must stay | done |
 
 ### M6-T01 Moving-frame audit and design
 
@@ -577,3 +577,45 @@ which changes the same native rows and rebase path:
 - **Tests:** a removal keeps the kept test's tier; a moved assert takes the tier of the file it lands in.
 - **Done when:** each entry is removed, merged or kept with the reason in the Done notes; the standard tier exits 0 and its time
   before and after is recorded.
+- **Done (2026-11-11):** commits `cb4784e` (A, B), `96119a0` (C), `6b26d03` (C8, D). Every entry re-read in full against
+  `m6` (both tests with their `before_each` and helpers); asserts only the removed side made were moved first.
+  - A8 done: `tests/fixtures/seeded_battle.gd` (`SeededBattle`) builds the seeded battle and the small fights for the six
+    battle files in the recordings' build order; no recording was re-taken, every digest still matches.
+  - A1 to A4 merged: the 1-vs-6 battles of `test_core_state`, `test_bolt_rows`, `test_row_commands` and `test_driver_step`
+    folded into `test_core_threads`' 600-tick one, which now flies with the ram resolver and a player (near and far thinkers)
+    and compares the rows, hits and rams, bolt table, core commands and driver events.
+  - A5 and A6 merged: `test_driver_step`'s far-rate test went, and its recording (`driver_step.json:battle_far_rate`) is
+    checked by `test_row_commands`' battle, which is the same battle (same rows digest and thinks); A6's test stays.
+  - A7 done: `core_state.json`'s three identical old-path cases are one, `battle_on_the_old_paths` (the values were equal).
+  - B1 removed `test_ram_contact_columns` and `ram_contact_columns.json` (the same rams and poses as `core_state.json`); its
+    hull-source assert moved to `test_core_state`'s melee. B2 removed `test_fighter_melee`: `test_core_state`'s melee pins
+    the same run at full precision, and now also its 2 959 Jolt contact points (`T14_DIGEST`'s dump went with it).
+  - C1 done: `RamTracker.contacts`, `Sample` and `_open` removed; `test_ram_tracker` drives `contacts_columns`;
+    `test_ram_tracker_columns` removed, its reset case moved. C2 done: `RadarModel.dots`, `dot_for` and `radius_for_range`
+    removed; `test_radar_model`, `test_hud` and `test_broadcast` read `plot`, `test_radar_plot` lost its plot-equals-dots
+    test. C3 done: `test_missile_guidance` flies `ScsWeaponRows.steer`; `MissileStandin.steer` stays as
+    `test_missile_kernel`'s oracle (its doc comment says so). C4 kept: both wrappers reach the production kernel and `clear`
+    is production (through `clear_seen`); moving the tests to perceptions adds nothing. C5 kept (the design oracle, as
+    planned). C6 done: the two M4-T05a distance-check tests went; `in_range` stays (console `native bench`), checked by the
+    bench test against GDScript. C7 reported, not deleted: `src/frontend/placeholder_screen.gd` (`PlaceholderScreen`) is
+    referenced nowhere. C8 removed (`test_runner_works`).
+  - D1 done (the tank line moved into the tank test). D2 kept: `test_fx_specs` also matches each material to its spec
+    (speeds, spread, accelerations), and the other copy is the damping guard's own loop (rule 2). D3 done: the Jolt line
+    joined the damping guard (added only); `test_smoke` became `test_project_settings` (quick), the quick tier's damping
+    check. D4 done: `test_ship_lights` still drives the curve through `advance` (keep it if E11 is applied). D5 done (the
+    facade tests that remain are about the facade). D6 kept: the smoke runs a separate process through `--console-exec`,
+    a different path from the GUT test; the entry leaves the choice to the maintainer. D7 kept: the scene test is the only
+    check that `LodSwitcher` feeds its state back, the pure one pins the exact edges. D8 done (`test_console_command_list`
+    boots the sandbox; `test_info_md` left the quick list). D9 done (into `test_settings_schema`). D10 done
+    (`test_debug_console` asserts both autoloads are present).
+  - Recordings and readers: `core_state` (`test_core_state`), `driver_step` (`test_driver_step` near and far,
+    `test_row_commands` far rate), `row_commands` (`test_row_commands`), `bolt_rows` (`test_bolt_rows`); the other 16 files
+    are untouched with their readers; `ram_contact_columns.json` deleted with its last reader. The damping guard, the
+    `*_holds_no_engine_type` guards and the per-subsystem 1-vs-6 and threaded-vs-delayed tests are untouched.
+  - Totals: 9 files deleted, 27 GUT tests fewer (3,324 to 3,297 declared), 1,275 test lines and 148 source lines removed,
+    817 lines net. The six battle files alone: 149 s to 96 s run alone.
+  - Tiers: `test_project_settings` quick (in `tests/quick_suite.txt` for `test_smoke`); `test_info_md` left the list; moved
+    asserts took their new files' tiers. Quick: 264 s, exit 0 (1,581 GUT tests).
+  - Standard tier: 6,633 s before (T17), 5,709 s after (95 min; Python 2,482 s of it, GUT 2,895 s, 3,295 tests, 13 pending as before), exit 0. Both runs were made in a detached worktree of `6b26d03`
+    (no branch): T14's unfinished work in the main checkout (`main.gd` naming `JumpgateHost`) fails every main-scene test
+    there until it lands.
