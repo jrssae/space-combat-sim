@@ -71,6 +71,10 @@ res://tests/unit/test_radial_menu.gd
 res://tests/unit/test_target_categories.gd
 res://tests/unit/test_target_menu.gd
 res://tests/integration/test_target_menu.gd
+res://tests/unit/test_feature_edges.gd
+res://tests/unit/test_wire_framing.gd
+res://tests/unit/test_target_preview_model.gd
+res://tests/integration/test_target_preview.gd
 res://tests/integration/test_hud.gd
 # AI and wings
 res://tests/unit/test_ai_pilot_selection.gd

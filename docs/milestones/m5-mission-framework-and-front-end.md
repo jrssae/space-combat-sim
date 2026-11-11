@@ -615,7 +615,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T40 | C | Civilian panel seams drawn from the show's references instead of the generic brick grid (maintainer, 2026-11-08) | T39, the maintainer's reference captures | controller | Per-ship seam layouts read off images; the look is (H) | not started |
 | T41 | - | Rock rams by the speed into the rock: a glancing scrape costs its closing speed, not the ship's whole speed (maintainer, 2026-11-08; done before T31) | T29 | controller | A small change to the ram rule for rocks | done |
 | T42 | A | Pause backdrop: a slow figure-8 camera around the Starfury behind the pause menu (maintainer, 2026-11-08) | T02, T08 | Sonnet | A camera path that runs while the tree is paused; the look is (H) | not started |
-| T43 | A | Target preview: a turning green wireframe of the highlighted entity on the side of the screen opposite the radial target menu, with hull bar and distance (maintainer, 2026-11-08) | T25 | Fable (maintainer, 2026-11-11) | Hidden-line wireframe in a small viewport, edges from the mesh, an info panel kept lean | in progress |
+| T43 | A | Target preview: a turning green wireframe of the highlighted entity on the side of the screen opposite the radial target menu, with hull bar and distance (maintainer, 2026-11-08) | T25 | Fable (maintainer, 2026-11-11) | Hidden-line wireframe in a small viewport, edges from the mesh, an info panel kept lean | done |
 | T44 | A | Focus pull: while the target menu is open only it and the target information are in focus; the play view and HUD blur over 0.2 s and come back over 0.2 s when it closes (maintainer, 2026-11-08, corrected 2026-11-09) | T25 | Sonnet | A short tweened screen blur between the HUD and the menu layers, free when closed | not started |
 | T45 | A | Start screen and settings groups: an options-only start screen (New game, Load game, Free flight, Settings, Quit), the sandbox scenes under New game, Controls inside Settings, five settings groups (maintainer, 2026-11-09) | T02, T03, T04 | Sonnet | Menu re-plumbing on the built kit; mostly tests | not started |
 | T46 | A | Radial comms menu: the comms menu moves onto T25's radial framework, with the focus pull, the right stick to point, A to confirm, B to go back (maintainer, 2026-11-09) | T25, T44, T07 | Sonnet | One framework for both menus; the comms routing changes from the D-pad to the stick; it pauses the game | not started |
@@ -2185,6 +2185,95 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   battle, `state render` before and after.
 - **Done when:** AC25, the tests pass, and screenshots of a Starfury, a raider and a Saturn 8 in the panel in
   `references/screenshots/Target preview/` for the maintainer's look check (H).
+- **Done (as built, 2026-11-11, on the maintainer's machine):**
+  - **Built:**
+    - **The panel** (`TargetPreview`, a `CanvasLayer` on the ring's layer 45, so above T44's blur): vertically centred at
+      the side opposite the ring, 552 x 624 px at 1080 lines, scaled with the ring. It shows while the second ring is
+      open and follows the highlight; on the first ring and with the menu closed it is hidden.
+    - **The wireframe** (`WirePreview`, a `SubViewport` with its own `World3D`, 504 x 300 px at 1080 lines, MSAA 4x): the
+      hull turns at 15 degrees a second about its up axis under an orthographic camera 20 degrees above, sized from the
+      bounding box so the hull stays inside the view through the whole turn (`WireFraming`). Per part two draws (the solid
+      mesh for depth, then its feature edges with the depth test) and one outline pass on the depth buffer.
+    - **The edges** (`FeatureEdges`, `FeatureEdgeJob`): creases over 25 degrees, open borders and edges of three or more
+      faces, vertices welded at 1 mm; found once per mesh and kept for the session.
+    - **The lines** (`TargetPreviewModel`, Q44's approved set): name in the IFF colour; class and faction; hull bar with
+      percent; range; closing speed, signed. A hull with pod mounts adds `CARGO PODS 2 of 3`. A beacon shows `Nav buoy`
+      and no hull bar. An objective shows its text and range, and its actor's wireframe when it names a ship in play (a
+      diamond for a bare place). `ATTACKING YOU` in red over the drawing. No weapons, absolute speed or heading. Each
+      kind's rows are one list in `TargetPreviewModel.FIELDS`.
+    - **Console:** provider `target_preview`; `targetmenu highlight <entry>` points at an entry without picking it. Both
+      in `info.md`.
+  - **Changed from the plan:**
+    1. The edges come from the full mesh, not LOD1 or LOD2: the generator writes no LOD meshes any more (the importer
+       builds index levels inside the mesh), and the full mesh gives clean creases.
+    2. The edge search costs more than a frame on every ship (table below), so it runs 2 ms a frame (`FeatureEdgeJob`)
+       instead of moving into procgen's output contract: no new asset file, no regeneration. The outline shows at once
+       and the creases follow within 4 to 28 frames, the first time a hull is highlighted in a session.
+    3. The lines are pulled toward the camera (0.6 % of the hull's radius, in view space) instead of the solid being
+       shrunk along its normals: split normals at hard edges would open cracks in a shrunk solid.
+    4. The outline pass measures the bend of the depth across a pixel, not its plain difference, so a steep flat face
+       draws nothing and the line is one pixel wide.
+    5. The panel is the mockup's 552 x 624 px with a 504 x 300 px drawing, not "about 256 px square": a wide drawing
+       suits long hulls.
+    6. `DESTROYED` is not built: the game is paused while the menu shows, so nothing can be destroyed while highlighted.
+    7. Rocks are not in the candidate list, so there is no rock wireframe.
+  - **Assumptions (say if any should change):**
+    1. An unknown contact shows `NO ID` in grey in the drawing's place, with `UNKNOWN`, `No transponder`, range and closing
+       speed: no generic silhouette, since any hull shape would suggest a class.
+    2. `NONE` keeps the panel up with `NONE` and what picking it does (`Clears the target` or `Clears the waypoint`), and
+       no drawing, so the panel does not blink as the stick crosses the down slice.
+    3. `ATTACKING YOU` means the ship's pilot has the player selected and is in an attack (`attack`, `ram`, or `aggro` in
+       its attack state). The player has no attacker memory of its own, and a ship in the low-attention tier is never
+       flagged. "Attacking the escort" is not flagged.
+    4. Class names are a table in `TargetPreviewModel.CLASS_NAMES` (`Aurora Starfury`, `Delta-V raider`, `Saturn 8 tanker`,
+       `Bokmai hauler`, `Brezebel transport`, `Nav buoy`, ...); an unlisted hull reads as its asset id.
+    5. A civilian of the pilot's own faction has its name in the friendly blue (the IFF colour), though it is listed
+       under Civilian in the ring's orange.
+    6. The wireframe shows the hull and a Bokmai's mounted pods; turrets are left off.
+    7. The turn starts at yaw 125 degrees (from ahead and well to one side) each time the highlight moves.
+    8. The panel's ground is the mockup's 72 % dark green; until T44's blur the HUD's drift ring shows faintly through its
+       lower right corner.
+  - **Measured (RX 6950 XT, Forward+, RADV, Wayland):**
+
+    | Hull | Triangles | Edges | In one go | In the game, sliced | Longest frame's share |
+    |---|---|---|---|---|---|
+    | Nav buoy (smallest) | 776 | 296 | 0.8 ms | 1.4 ms, 2 frames | 1.3 ms |
+    | Raider | 5 700 | 1 999 | 5.5 ms | 8.5 to 10.1 ms, 4 frames | 3.0 to 4.5 ms |
+    | Bokmai with 3 pods | 9 284 + pod | 5 726 | 8.9 ms (hull) | 15.1 to 15.5 ms, 9 frames | 2.7 to 3.3 ms |
+    | Starfury | 34 428 | 11 320 | 32.7 ms | 36.4 to 36.8 ms, 17 frames | 4.2 ms |
+    | Saturn 8 tanker | 52 890 | 6 332 | 49.3 ms | 58.7 to 64.6 ms, 26 to 28 frames | 5.0 to 8.3 ms |
+    | Saturn 8 transport (largest) | 55 382 | 11 648 | 51.8 ms | 55.8 to 56.1 ms, 26 frames | 3.7 ms |
+
+    The longest share is the frame that reads the mesh back from the GPU (`Mesh.surface_get_arrays`, one call, 3 to 9 ms
+    on the GPU, 1 ms headless); every other slice is 2 to 3 ms. A hull already seen costs nothing.
+    Per frame with the panel showing: 0.06 ms of CPU in the dogfight and 0.15 ms in `bench battle 300`
+    (`target_preview.frame_ms`), 9 draw calls. Closed or on the first ring: nothing (hidden, not processing, the
+    viewport `UPDATE_DISABLED`: test).
+
+    | Scene (window) | Closed | First ring | Second ring with the panel |
+    |---|---|---|---|
+    | Dogfight (1200x675 and 1920x1080) | 145 fps, 41 draw calls | 145, 71 | 145, 80 |
+    | `bench battle 300` (1200x675) | 145, 88 | 145, 118 | 144, 127 |
+    | Civilian showcase, Saturn 8 tanker (1920x1080) | 145, 53 | | 145, 90 |
+
+    The frame rate is the 144 Hz cap throughout, so the GPU cost shows only as draw calls.
+  - **Tests:** `test_feature_edges` 9 (the cube's 12 edges, the flat panel's diagonal dropped and borders kept, the crease
+    angle, welded seams, the order, slivers, a three-face edge, a mesh and its line mesh, a sliced job giving the same
+    lines), `test_wire_framing` 5 (the turn, both hulls inside the view at every angle and aspect, the camera, the
+    panel's place at five window shapes, the rows inside it), `test_target_preview_model` 11 (a fighter, the formats, the
+    attacker flag and rule, an ally, a civilian with and without pods, a buoy, an unknown contact, an objective, none,
+    every catalogue hull named), integration `test_target_preview` 10 on the main scene (the highlight sets the entity,
+    read once per highlight, the stick moves it, the viewport off while closed and on the first ring, the turn behind
+    the pause, unknown, a buoy, an objective, the flag, the console, the largest hull's edges in slices), and one more in
+    `test_civilian_ships` (a Bokmai's pods in the drawing). The quick tier passes (109 scripts, 1 664 GUT tests, 292
+    Python tests), `test_civilian_ships` 6, `test_target_menu` 16 and 12; main-scene smoke runs show no errors or leaks.
+  - **(H):** the screenshots in `references/screenshots/T43 target preview/` (an enemy raider, an ally Starfury, a Saturn
+    8 tanker and transport, a Bokmai laden and empty, an unknown contact, a nav buoy, `NONE`; 1920x1080): whether the
+    wireframes read as the ships, and whether the dense spots (the Starfury's pods, the Saturn's container ends) want
+    fewer lines (a higher `FeatureEdges.CREASE_DEG`, or short edges dropped); the turn's speed and the 20 degree view;
+    how small a long hull gets when it turns end-on; the outline's one-pixel line beside the anti-aliased creases;
+    readability at 4K; the class names (assumption 4); the `NO ID` placeholder (assumption 1); the panel over the HUD's
+    lower right until T44.
 
 ### M5-T44 Focus pull when the target menu opens
 

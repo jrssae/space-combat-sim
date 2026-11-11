@@ -3946,6 +3946,9 @@ tools/procgen/assets/asteroids.py, tools/procgen/tests/test_asteroids.py   the r
 src/world/belt_layout.gd   a belt's rocks in its box, pure (T29)
 src/world/asteroid_belt.gd   a multimesh per shape, static spheres in StaticRows (T29)
 tests/unit/test_belt_layout.gd, tests/integration/test_asteroid_belt.gd, data/scenarios/belt_showcase.json   (T29)
+src/hud/feature_edges.gd, feature_edge_job.gd, wire_framing.gd, target_preview_layout.gd, src/targeting/target_preview_model.gd   pure (T43)
+src/hud/wire_preview.gd, target_preview.gd, assets/shaders/wire_solid|wire_lines|wire_outline.gdshader   the preview's viewport and panel (T43)
+tests/unit/test_feature_edges.gd, test_wire_framing.gd, test_target_preview_model.gd, tests/integration/test_target_preview.gd   (T43)
 ```
 
 ### 18.3 Boot, scene changes and the console's startup scripts
@@ -3981,10 +3984,11 @@ tests/unit/test_belt_layout.gd, tests/integration/test_asteroid_belt.gd, data/sc
 | `camera` | CameraRig (M1; T08 adds) | `mode` now also reads `cinematic` while a shot plays (setting it then picks the view after the shot), `shot` (the shot's id or `none`), `shot_time_s` |
 | `encounters` | EncounterDirector (T17), free flight only | `on`, `pools_built`, `seed`, `interval_s`, `max_ships`, `alive`, `raiders`, `patrol`, `traffic`, `next_index`, `next_in_s`, `waiting`, `started`, `released`, `last_event`, `check_work`, `build_ms` |
 | `pause_menu` | PauseMenu (T02) | `open`, `page` (the title of the page on top: `PAUSED`, `Settings`, `Controls`), `depth` (pages open, 1 is the pause list) |
+| `target_preview` | TargetPreview (T43) | `visible`, `entity`, `kind` (`none`, `ship`, `beacon`, `objective`, `unknown`), `hull` (the asset drawn, `+n pods`), `edges`, `building`, `rendering`, `lines`, `flag`, `cache`, `last_build_ms`, `last_build_slice_ms`, `last_build_frames`, `shows`, `frame_ms` |
 
 Commands: `retry` (T09: in the debrief, play the same mission again, same scenario and seed, through the loading screen; refused anywhere else); `menu` (back to the front end); `play <scenario_id> [seed]` (any `data/scenarios/*.json`, through the loading screen
 as the menu does; seed 0 by default, encounters off). Setting: `skip_front_end` (bool, false). Command line: `--scenario=<id>`
-(goes straight to Main with that scenario for the session). T05: `mission [status|skip|goto <step>|objectives|journal]`, registered only while a mission runs (elsewhere `mission` is an unknown command); a bad action, `goto` without a step or with an unknown or past one, and a step given to anything but `goto` are refused.
+(goes straight to Main with that scenario for the session). T05: `mission [status|skip|goto <step>|objectives|journal]`, registered only while a mission runs (elsewhere `mission` is an unknown command); a bad action, `goto` without a step or with an unknown or past one, and a step given to anything but `goto` are refused. T43: `targetmenu highlight <entry>` points at an entry of the open ring without picking it.
 
 ### 18.5 Missions as built (T05)
 
@@ -4439,3 +4443,54 @@ the mission's part. `HudInput.waypoint_id` marks the waypoint's radar contact.
 
 **Cost.** Opening: 0.28 ms with 10 candidates, 2.56 ms with 304 (the list is most of it). Closed: nothing per tick.
 
+### 18.20 The target preview as built (T43, Q44)
+
+While the target menu's second ring is open, a panel at the side opposite the ring shows the highlighted entry: its hull as
+a turning green wireframe, its name in the IFF colour, class and faction, and a few rows. On the first ring and when the
+menu is closed the panel is hidden, its viewport is `UPDATE_DISABLED` and none of its nodes process.
+
+| Class | Kind | Holds |
+|---|---|---|
+| `FeatureEdges` | pure | a mesh's creases (faces meeting at more than 25 degrees), open borders and edges of three faces or more, as line pairs; vertices within 1 mm weld, so UV seams and hard-normal splits are no border; `line_mesh` makes the `PRIMITIVE_LINES` mesh |
+| `FeatureEdgeJob` | pure | the same search worked a slice at a time (`step(budget_usec)`): weld, faces, collect |
+| `WireFraming` | pure | the turn (15 degrees a second from yaw 125), the 20 degree elevation, and the orthographic view height that holds the bounding box through a whole turn |
+| `TargetPreviewModel` | pure | the panel's content per kind of entry; `FIELDS` lists each kind's rows, so a field is one entry to add or drop |
+| `TargetPreviewLayout` | pure | the panel's rectangle (the ring's centre mirrored, scaled with the ring), the drawing's and the hull bar's |
+| `WirePreview` | `SubViewport`, own `World3D` | the drawing; the edge cache |
+| `TargetPreview` | `CanvasLayer` 45 | the panel; provider `target_preview` |
+
+**The drawing.** Per part of the hull (the hull mesh; a Bokmai's mounted pods from `CargoPods.mounted_parts`) two draws:
+the solid mesh in the ground colour, both sides, to fill the depth buffer (`wire_solid.gdshader`), and its feature edges
+tested against that depth without writing any (`wire_lines.gdshader`), so lines on the far side are hidden, not dimmed.
+Each line is pulled toward the camera by 0.6 % of the hull's radius, in view space, so it wins against the faces it lies
+on; the camera is orthographic, so the pull does not move it on screen. The solid mesh is not shrunk along its normals as
+first planned: split normals at hard edges would open cracks. Then one quad over the view (`wire_outline.gdshader`) draws
+the outline from the depth buffer: where depth bends across a pixel (left + right - 2 x centre) by more than 3 % of the
+radius, on the nearer side only. A flat face has no bend however steep, so only steps draw; this closes rounded hulls
+(the Saturns' tanks) whose outline has no crease. The viewport has MSAA 4x, a transparent ground and `mesh_lod_threshold`
+0, so the solid is the same full mesh the edges were found on.
+
+**Edges are found once per mesh and kept for the session** (`WirePreview._edges`, by the mesh's instance id). The search is
+GDScript, about 1 microsecond a triangle: 53 ms for the largest hull in one go. That is several frames, so `WirePreview`
+gives it 2 ms a frame (`FeatureEdgeJob`); the outline shows at once and the creases appear when the search ends (4 frames
+for a raider, 26 for a Saturn 8). The plan's alternative, an edge file in procgen's output contract, was not needed. The one
+part that cannot be sliced is reading the mesh back from the GPU (`Mesh.surface_get_arrays`): 3 to 9 ms, once per mesh.
+
+**Content.** `TargetMenuDirector._sync_preview` runs when the highlight lands on a new slice (never per tick: the game is
+paused). The slot's `source` (its `TargetInfo` or objective) and what the list does not carry (`_facts`: the hull's asset
+id, the pod count, whether its pilot is attacking the player) go to `TargetPreviewModel`:
+
+| Kind | Title | Second line | Rows | Drawing |
+|---|---|---|---|---|
+| ship | name, IFF colour | class · faction | hull bar and percent, range, closing speed, cargo pods (a hull with pod mounts) | wireframe |
+| beacon | name | `Nav buoy` · faction | range, closing speed | wireframe |
+| objective | its actor or id | `Mission objective` | its text, range | its actor's wireframe, or a diamond for a bare place |
+| unknown | `UNKNOWN`, grey | `No transponder` | range, closing speed | `NO ID`, no wireframe |
+| none | `NONE`, grey | what picking it clears | | nothing |
+
+`ATTACKING YOU` shows over the drawing when the ship's pilot has the player selected and its brain describes an attack
+(`attack`, `ram`, or `aggro` in its attack state); a ship that only has the player selected does not count. An unknown
+contact gets none of its facts. Closing speed is `TargetingSystem.compute_readout`'s, signed, positive closing.
+
+**Cost (RX 6950 XT, Forward+).** Showing: 9 draw calls (3 in the viewport for a one-part hull) and 0.06 to 0.15 ms of CPU a
+frame; the frame rate stays at the 144 Hz cap in the dogfight and in `bench battle 300`. Hidden: nothing.

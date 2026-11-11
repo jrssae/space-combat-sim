@@ -7,7 +7,8 @@ extends RefCounted
 ##     {action: target, id, label}           a ship becomes the target
 ##     {action: waypoint, id, label, point}  a beacon or an objective becomes the HUD waypoint (`id` 0 for a bare place)
 ##     {action: clear_target} / {action: clear_waypoint}   "none"
-## A pick closes the menu.
+## A pick closes the menu. A second-ring slot also carries its `source` (the `TargetInfo` or the objective it was built from),
+## which the preview panel reads for the highlighted entry (T43).
 
 const HEADING: String = "TACTICAL PAUSE"
 const NONE_LABEL: String = "NONE"
@@ -125,7 +126,7 @@ func _contact_entry(info: TargetInfo, c: TargetCategories.Category, color: Color
 	var label: String = UNKNOWN_LABEL if c == TargetCategories.Category.UNKNOWN else info.display_name.to_upper()
 	var action: StringName = ACTION_WAYPOINT if c == TargetCategories.Category.NAVIGATION else ACTION_TARGET
 	return {"label": label, "sub": range_text(TargetingSystem.range_between(_own_position, info.position)), "color": color,
-			"payload": {"action": action, "id": info.id, "label": label, "point": null}}
+			"source": info, "payload": {"action": action, "id": info.id, "label": label, "point": null}}
 
 
 func _objective_entry(objective: Dictionary, color: Color) -> Dictionary:
@@ -134,6 +135,6 @@ func _objective_entry(objective: Dictionary, color: Color) -> Dictionary:
 	var short: String = text if text.length() <= OBJECTIVE_LABEL_CHARS else text.left(OBJECTIVE_LABEL_CHARS - 1).strip_edges() + "…"
 	var at: Vector3 = objective.get("position", _own_position)
 	return {"label": short, "sub": "%s  %s" % [label, range_text(TargetingSystem.range_between(_own_position, at))],
-			"detail": text, "color": color,
+			"detail": text, "color": color, "source": objective,
 			"payload": {"action": ACTION_WAYPOINT, "id": int(objective.get("target_id", 0)), "label": label,
 					"point": objective.get("point")}}

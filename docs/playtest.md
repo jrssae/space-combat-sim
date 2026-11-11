@@ -653,6 +653,12 @@ A contact more than 5 km away with no transponder is **unknown**: a grey dot on 
 `UNKNOWN` in grey if you target it. Inside 5 km it gets its colour and name. Allies, civilians and buoys broadcast and are always
 known.
 
+**The preview panel (M5-T43).** On a category's ring, the highlighted entry shows at the right: its hull as a slowly turning
+green wireframe (only the near side's lines), its name in the IFF colour, class and faction, a hull bar, range and closing
+speed (`+` closing). A Bokmai adds its cargo pods, a buoy and an objective have no hull bar, an unknown contact shows `NO ID`
+and nothing about what it is, and a ship attacking you is flagged `ATTACKING YOU`. `play civilian_showcase` has every civilian
+hull; `targetmenu highlight "saturn 8 tanker"` points at an entry without picking it and `state target_preview` shows the panel.
+
 From the console: `targetmenu open`, `targetmenu pick enemies`, `targetmenu pick 1` (a slice, 0 at the top, clockwise) or
 `targetmenu pick "raider 2"`, `targetmenu back`, `targetmenu close`; `state target_menu` shows it.
 
@@ -666,3 +672,9 @@ Check (T25's (H) items; screenshots of both rings are in `references/screenshots
       (the selected target keeps its name).
 - [ ] Navigation and Objectives: the waypoint diamond and its radar mark are easy to find; the ship keeps facing its target.
 - [ ] Keyboard and mouse: arrows (left or right alone take the upper slice), the mouse's direction, Enter, Backspace.
+- [ ] **M5-T43 The preview panel** (screenshots in `references/screenshots/T43 target preview/`): the wireframes read as
+      the ships (a raider, a Starfury, a Saturn 8, a Bokmai with its pods), with no far-side lines and no flat-panel
+      diagonals; the dense spots are acceptable or want fewer lines; the turn's speed and angle; a long hull end-on is
+      not too small; it reads at 1080 lines and at 4K; the class names; `NO ID` for an unknown contact; `ATTACKING YOU`
+      appears on the raider that is on you. The first time a hull is highlighted its outline shows at once and its
+      inner lines a moment later (up to 0.2 s for a Saturn 8).
