@@ -124,7 +124,7 @@ scripts/
   setup_godot.sh              download + sha256-verify Godot 4.7.2 into .tools/godot/
   vendor_addons.sh            git clone pinned tags, copy addons/<name>, keep licences (run once; result committed)
   gen_assets.sh               python3 -m tools.procgen build all
-  run_tests.sh                python tests, godot --import, GUT headless, junit to reports/
+  run_tests.sh                the four test tiers (--quick, --standard, --balance, --full); lib_tests.sh holds its helpers
 .github/workflows/ci.yml
 docs/                         this file, milestones/, roadmap.md, research-notes.md, third-party.md
 ```
@@ -1173,6 +1173,14 @@ The slow files (M4-T36, Q58: `test_dogfight`, `test_m3_sandbox`, `test_brain_tol
 `test_weapon_rows_battle`) skip themselves unless `GUT_SLOW=1` (`tests/fixtures/slow_tests.gd`). `scripts/run_tests.sh` sets it
 unless told otherwise and CI sets it, so the full run includes them; a direct GUT run as above leaves them out (GUT logs "Script
 skipped"), so put `GUT_SLOW=1` in front of it for a complete run.
+
+**Four tiers (M6-T17).** `scripts/run_tests.sh` takes `--quick`, `--standard` (the default and the merge gate), `--balance` or
+`--full`. *Quick* (about 3.5 minutes) builds the native library, compiles every script, runs the Rust kernel tests, the Python modules
+of `tests/quick_python.txt` and the GUT files of `tests/quick_suite.txt` with `GUT_SLOW=0 GUT_BALANCE=0`, and two console smokes; it
+is for iteration, not a gate (`tests/unit/test_quick_suite.gd` keeps slow, balance and GPU files out of the list). *Standard* is
+everything the script ran before plus `cargo test --release --lib`, with the slow files and without the balance tests. *Balance*
+runs only the files of `tests/balance_suite.txt` with `GUT_BALANCE=1` (`tests/fixtures/balance_tests.gd`: `test_dogfight`'s six-minute
+fight, `test_m3_sandbox`'s three waves, `test_turret_balance`); *full* is standard with the balance tests on. CI runs the standard tier.
 
 ## 13. Coding conventions
 
@@ -2472,7 +2480,8 @@ matter). Everything the table does not list is as before: a bolt (a `Node3D` flo
   allied fighters collide, 30 m/s costs each at least half its hull once as a contact ram, 600 m/s takes the swept ram, a 4 m/s
   bump hurts nobody, the player bounces off a fighter, a capital and a rock pair with a fighter, a bolt and a mine have no body,
   the settle walks only the interpolated nodes, a far ship is left out of it and returns) and `test_fighter_melee` (a seeded melee
-  of eight fighters, 2 966 contacts and 11 rams, whose digest equals the base's byte for byte).
+  of eight fighters, 2 966 contacts and 11 rams, whose digest equals the base's byte for byte; since M6-T18 the melee and
+  its contact count are pinned in `test_core_state`).
 
 ### 17.13 The native core (T15)
 
@@ -2520,7 +2529,7 @@ src/ship/flight_batch.gd         the four classes read the core (their own loads
   field reads the same values from the rows, the sweep and the ram phase build the same spheres and boxes from the rows
   in GDScript's precision and order (the hull rows in the `damageable` group's order, so ties fall the same way), the
   flight step reads the basis Jolt wrote back to the node after its last step, which is what the direct state holds too
-  (`test_sim_core`, `test_fighter_melee`'s digest, the seeded outcome runs in the Cycle log). What differs: a ship
+  (`test_sim_core`, the seeded melee's digest, now in `test_core_state`, the seeded outcome runs in the Cycle log). What differs: a ship
   teleported without a visibility change between -11 and 200 (the console only) is swept at its -11 pose that tick, and the
   flight step reads a launched ship from the physics server on its launch tick (`fallback_reads`), as before.
 - **The kernels hold no way to the engine.** Every query and step over the rows lives in `native/src/kernels.rs`
@@ -2788,7 +2797,9 @@ src/perf/brain_batch.gd          BrainBatch: an internal child of SimCore at -9 
   gives the same `rows_digest` every tick (positions, velocities, bases, spins, flags, hulls and selections of every row,
   every bolt); with an injected fault (`ScsBrains.set_fault`: a think adds what the worker's previous think left in its
   scratch, so it reads another row's output) the two differ within 30 ticks; the thread count follows `perf_threads` at
-  once. `test_sim_core`'s guard covers `threads.rs`.
+  once. `test_sim_core`'s guard covers `threads.rs`. Since M6-T18 the battle has a ram resolver and a player ship (near
+  and far thinkers), and the comparison also covers the hits and rams, the bolt table, the core's commands and the drivers'
+  events: the other battle files' 1-vs-6 checks were folded into it, and their builds share `tests/fixtures/seeded_battle.gd`.
 - **Holding instead of guessing** (fix round 1). The batch carries the core's rows version the drivers' scan was taken
   at; if the rows moved before the batch (a resync or a rebase between -10 and -9) every think is declined and each pilot
   holds its last command, counted in `ai.thinks_fallback`, as T17's per-ship check did. A panic inside the pass is caught:
@@ -2852,8 +2863,8 @@ src/targeting/targeting_controller.gd  the player's candidate list built when re
   so `refresh` and the commands must stay on the main thread (a note for T24).
 - **Tests.** `test_bolt_sync` (a seeded crowd of bolts, missiles and beams, spent, freed and new each round: the same bolt
   rows at both sync points; the engine calls counted alike), `test_ram_tracker_columns` (400 random ticks of two trackers
-  side by side: the same rams field for field), `test_ram_contact_columns` (T14's melee both ways: the same rams and
-  digest), `test_ram_sweep_cull` (6 000 seeded sweeps: the same hits at the same points, a fifth of the volumes placed),
+  side by side: the same rams field for field; M6-T18 removed the sample path and ported `test_ram_tracker` to the columns), `test_ram_contact_columns` (T14's melee both ways: the same rams and
+  digest; M6-T18 folded it into `test_core_state`, which reads the same recording), `test_ram_sweep_cull` (6 000 seeded sweeps: the same hits at the same points, a fifth of the volumes placed),
   `test_targeting_on_read` (400 steps of moves, parks, frees and selection commands: the same selection, signals and lists
   read; no list built while nothing reads), `test_targetable_hull`, `test_sweep_cells` (twelve seeded mixes against the
   sorted grid and the GDScript reference; the guard holds the new kernel).
@@ -2903,7 +2914,7 @@ src/ship/ship.gd                 use_row_command, release_row_command, pull_row_
   (120 ships, 240 ticks) with the rows path off and on: every ship's command, trigger and selection, and the rows, are
   the same every tick, and every pilot reads the same at the end; one thread and six give the same commands; with the
   flight batch off the ships fly the same bits on their own models; a declined think keeps every row's command; a
-  command set from GDScript takes over. T17's parity files, Q16's fights and `test_fighter_melee`'s digest are unchanged.
+  command set from GDScript takes over. T17's parity files, Q16's fights and the seeded melee's digest are unchanged.
 - **Thread-ready (for T24).** The commands are written on the main thread after the pass, from each item's output, in
   batch order; the pass itself is T18's. What is left per ship on the main thread is the think rate's decision, the
   context check and the join at -10, and the events at -9: the next lever (the think rate decided in the host from the
@@ -3846,8 +3857,8 @@ flashes 0.45, the hit flashes 0.15). Each subsystem is now one pass over its shi
   taken at M5's rebase onto M4; T37 checks the per-ship audio node count after it.
 - **The HUD radar**: `Main` gathers the radar's contacts straight from the targetables (`RadarContacts`, the same set as
   `TargetingController.candidates()`, without a `TargetInfo` each or the range sort), `RadarModel.plot` places them on the sphere
-  into packed arrays (`RadarPlot`) ordered by a native int64 sort key (bit for bit `RadarModel.dots`, but for two ranges equal to a
-  millimetre), and `HudPainter` draws every stalk in one `draw_multiline_colors` and every plain dot in one canvas multimesh (the
+  into packed arrays (`RadarPlot`) ordered by a native int64 sort key (bit for bit the old GDScript `RadarModel.dots`, removed in M6-T18, but for two
+  ranges equal to a millimetre), and `HudPainter` draws every stalk in one `draw_multiline_colors` and every plain dot in one canvas multimesh (the
   cockpit octagon's dark backings in another); rim and selected dots are drawn one by one. `HudFrame.radar_dots` is built from
   the plot when read. The player's candidate list is built only when something cycles it (M4-T34's refresh on read).
 - **The debug overlay** text is rebuilt every `Main.OVERLAY_INTERVAL_S` (0.1 s) while it shows.

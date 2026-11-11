@@ -1,6 +1,7 @@
 extends GutTest
 ## Factions (architecture §15.1 D25, AC1; §16 D30, M3 AC2): the relation table, the hostility query and the HUD colours,
-## and the active table behind them (loaded from data/factions.json, swappable, resettable).
+## and the active table behind them (loaded from data/factions.json, swappable, resettable). The relation rule itself
+## (symmetry, the same faction, unknown ids, the shipped file against the built-in rule) is `test_faction_table`'s (M6-T18).
 
 const ALL_KNOWN: Array[StringName] = [Factions.EARTH_ALLIANCE, Factions.RAIDERS, Factions.NEUTRAL]
 
@@ -29,26 +30,6 @@ func test_relation_table() -> void:
 		for column: int in ALL_KNOWN.size():
 			assert_eq(int(Factions.relation(ALL_KNOWN[row], ALL_KNOWN[column])), (table[row] as Array)[column],
 					"%s vs %s" % [ALL_KNOWN[row], ALL_KNOWN[column]])
-
-
-func test_relation_is_symmetric() -> void:
-	var ids: Array[StringName] = [Factions.EARTH_ALLIANCE, Factions.RAIDERS, Factions.NEUTRAL, &"pirates", &""]
-	for a: StringName in ids:
-		for b: StringName in ids:
-			assert_eq(Factions.relation(a, b), Factions.relation(b, a), "%s vs %s" % [a, b])
-
-
-func test_same_faction_is_friendly() -> void:
-	assert_eq(Factions.relation(Factions.EARTH_ALLIANCE, Factions.EARTH_ALLIANCE), Factions.Relation.FRIENDLY)
-	assert_eq(Factions.relation(Factions.RAIDERS, Factions.RAIDERS), Factions.Relation.FRIENDLY)
-	assert_eq(Factions.relation(&"pirates", &"pirates"), Factions.Relation.FRIENDLY)
-
-
-func test_unknown_faction_is_neutral_against_everyone_else() -> void:
-	for other: StringName in ALL_KNOWN:
-		assert_eq(Factions.relation(&"pirates", other), Factions.Relation.NEUTRAL, "pirates vs %s" % other)
-		assert_eq(Factions.relation(&"", other), Factions.Relation.NEUTRAL, "empty vs %s" % other)
-	assert_eq(Factions.relation(&"pirates", &"smugglers"), Factions.Relation.NEUTRAL)
 
 
 func test_is_hostile_only_for_earth_alliance_against_raiders() -> void:
@@ -190,21 +171,6 @@ func test_a_broken_file_leaves_the_active_table_unchanged() -> void:
 	assert_ne(Factions.load_table("user://no_such_factions.json"), "")
 	assert_eq(Factions.relation(Factions.EARTH_ALLIANCE, Factions.RAIDERS), Factions.Relation.FRIENDLY)
 	DirAccess.remove_absolute(path)
-
-
-func test_the_built_in_rule_matches_the_shipped_file_for_every_query() -> void:
-	# What a broken file falls back to must read the same as the file at its defaults.
-	var from_file: Array[int] = []
-	var probes: Array[StringName] = [Factions.EARTH_ALLIANCE, Factions.RAIDERS, Factions.NEUTRAL, &"pirates", &""]
-	for a: StringName in probes:
-		for b: StringName in probes:
-			from_file.append(Factions.relation(a, b))
-	Factions.use_table(FactionTable.builtin())
-	var index: int = 0
-	for a: StringName in probes:
-		for b: StringName in probes:
-			assert_eq(Factions.relation(a, b), from_file[index], "%s vs %s" % [a, b])
-			index += 1
 
 
 func test_hud_colours_follow_a_changed_pair() -> void:

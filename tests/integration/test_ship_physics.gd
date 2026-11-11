@@ -498,6 +498,7 @@ func test_ac5g_one_tick_angular_velocity_change_matches_the_model() -> void:
 
 
 func test_damping_guard_project_and_body_settings() -> void:
+	assert_eq(ProjectSettings.get_setting("physics/3d/physics_engine"), "Jolt Physics", "Jolt, whose damping these settings are")
 	assert_eq(float(ProjectSettings.get_setting("physics/3d/default_gravity")), 0.0, "no default gravity")
 	assert_eq(float(ProjectSettings.get_setting("physics/3d/default_linear_damp")), 0.0, "no default linear damp")
 	assert_eq(float(ProjectSettings.get_setting("physics/3d/default_angular_damp")), 0.0, "no default angular damp")

@@ -1,6 +1,6 @@
 class_name SlowTests
 extends RefCounted
-## The slow test switch (M4-T36, Q58): the long seeded parity fights and the pending balance files run only when `GUT_SLOW=1`
+## The slow test switch (M4-T36, Q58): the long seeded parity fights run only when `GUT_SLOW=1`
 ## (`scripts/run_tests.sh` sets it, so CI's shards and the milestone's full run take them; a focused run leaves them out). Such a
 ## file returns `SlowTests.skip_reason()` from GUT's `should_skip_script()`.
 

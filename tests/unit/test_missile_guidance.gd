@@ -1,11 +1,23 @@
 extends GutTest
 ## The missile stand-in's guidance (M4-T12, Q19): proportional navigation at a constant speed with a turn rate limit. Pure
-## kinematics: a missile launched at a crossing fighter closes and hits within its lifetime at the stand-in's turn rate and
-## misses at a tenth of it.
+## kinematics on the native rows' maths (`ScsWeaponRows.steer`, what the game's missiles fly; M6-T18 moved these scenarios
+## off the GDScript `MissileStandin.steer`, which stays as `test_missile_kernel`'s oracle): a missile launched at a crossing
+## fighter closes and hits within its lifetime at the stand-in's turn rate and misses at a tenth of it.
 
 const DT: float = 1.0 / 60.0
 ## The hull sphere of a fighter the size of a Starfury, m: a pass inside it plus the missile's hit radius is a hit.
 const FIGHTER_RADIUS_M: float = 5.0
+
+var _rows: Object = null
+
+
+func before_each() -> void:
+	if _rows == null:
+		_rows = NativeLib.instantiate(&"ScsWeaponRows")
+
+
+func _steer(position: Vector3, velocity: Vector3, target_position: Vector3, target_velocity: Vector3, turn_rate: float) -> Vector3:
+	return _rows.steer(position, velocity, target_position, target_velocity, MissileStandin.NAV_GAIN, turn_rate, DT)
 
 
 # Flies a missile from the origin, pointed at the target's start, against a target crossing at constant velocity; returns
@@ -17,7 +29,7 @@ func _fly(turn_rate: float, target_at: Vector3, target_velocity: Vector3) -> Dic
 	var closest: float = INF
 	var when: float = -1.0
 	for i: int in roundi(MissileStandin.LIFETIME_S / DT):
-		v = MissileStandin.steer(p, v, tp, target_velocity, MissileStandin.NAV_GAIN, turn_rate, DT)
+		v = _steer(p, v, tp, target_velocity, turn_rate)
 		# The closest point of this tick's relative motion, both flying straight through it.
 		var rel0: Vector3 = tp - p
 		var rel_step: Vector3 = (target_velocity - v) * DT
@@ -52,8 +64,7 @@ func test_at_a_tenth_of_the_turn_rate_it_misses() -> void:
 func test_the_turn_per_tick_is_limited_and_the_speed_holds() -> void:
 	var v := Vector3(0.0, 0.0, -MissileStandin.SPEED_MPS)
 	# A target abeam asks for far more than the limit.
-	var after: Vector3 = MissileStandin.steer(Vector3.ZERO, v, Vector3(1000.0, 0.0, -10.0), Vector3(0.0, 0.0, 300.0),
-			MissileStandin.NAV_GAIN, MissileStandin.TURN_RATE_RAD_S, DT)
+	var after: Vector3 = _steer(Vector3.ZERO, v, Vector3(1000.0, 0.0, -10.0), Vector3(0.0, 0.0, 300.0), MissileStandin.TURN_RATE_RAD_S)
 	assert_almost_eq(after.length(), MissileStandin.SPEED_MPS, 1e-3, "constant speed")
 	assert_gt(v.angle_to(after), 0.0, "it turns")
 	assert_lte(v.angle_to(after), MissileStandin.TURN_RATE_RAD_S * DT + 1e-6, "by at most the turn rate")
@@ -62,15 +73,13 @@ func test_the_turn_per_tick_is_limited_and_the_speed_holds() -> void:
 
 func test_a_target_dead_ahead_and_still_needs_no_turn() -> void:
 	var v := Vector3(0.0, 0.0, -MissileStandin.SPEED_MPS)
-	var after: Vector3 = MissileStandin.steer(Vector3.ZERO, v, Vector3(0.0, 0.0, -2000.0), Vector3.ZERO,
-			MissileStandin.NAV_GAIN, MissileStandin.TURN_RATE_RAD_S, DT)
+	var after: Vector3 = _steer(Vector3.ZERO, v, Vector3(0.0, 0.0, -2000.0), Vector3.ZERO, MissileStandin.TURN_RATE_RAD_S)
 	assert_almost_eq(v.angle_to(after), 0.0, 1e-6)
 
 
 func test_it_flies_straight_once_past_or_on_top_of_its_target() -> void:
 	var v := Vector3(0.0, 0.0, -MissileStandin.SPEED_MPS)
-	var after: Vector3 = MissileStandin.steer(Vector3.ZERO, v, Vector3.ZERO, Vector3(10.0, 0.0, 0.0),
-			MissileStandin.NAV_GAIN, MissileStandin.TURN_RATE_RAD_S, DT)
+	var after: Vector3 = _steer(Vector3.ZERO, v, Vector3.ZERO, Vector3(10.0, 0.0, 0.0), MissileStandin.TURN_RATE_RAD_S)
 	assert_eq(after, v, "no line of sight to steer on")
 
 

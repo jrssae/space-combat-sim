@@ -310,13 +310,6 @@ func test_ships_beyond_hearing_cost_the_re_rank_nothing() -> void:
 	assert_eq(main.audio.engine_voices_granted(), granted)
 
 
-func test_engine_voice_cap_is_a_schema_entry() -> void:
-	var entry: Dictionary = SettingsSchema.ENTRIES[&"engine_voice_cap"]
-	assert_eq(entry["type"], TYPE_INT)
-	assert_eq(entry["default"], 24)
-	assert_gte(int(entry["min"]), 8, "the player's own voices always fit")
-
-
 func _max(values: PackedFloat64Array) -> float:
 	var top: float = 0.0
 	for v: float in values:

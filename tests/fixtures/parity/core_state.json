@@ -1,21 +1,5 @@
 {
-  "battle_without_perf_batch_owns_ships": {
-    "rows": "982f6ac7aa6f1c7d3afdd3e83b888d4714a3e7622b53552ceaaddcfb010256a0",
-    "commands": "a3c263839b61def87361eebb6ff54c3e7f292461a76857ea0383574309872d02",
-    "hits": "b94b8b3793c42629498757392054ed6d18c4e5bbd858bab4ad9f02d7d8021250",
-    "hits_total": 62.0,
-    "rams": 0.0,
-    "ticks": 240.0
-  },
-  "battle_without_perf_core_event_columns": {
-    "rows": "982f6ac7aa6f1c7d3afdd3e83b888d4714a3e7622b53552ceaaddcfb010256a0",
-    "commands": "a3c263839b61def87361eebb6ff54c3e7f292461a76857ea0383574309872d02",
-    "hits": "b94b8b3793c42629498757392054ed6d18c4e5bbd858bab4ad9f02d7d8021250",
-    "hits_total": 62.0,
-    "rams": 0.0,
-    "ticks": 240.0
-  },
-  "battle_without_perf_native_selection_check": {
+  "battle_on_the_old_paths": {
     "rows": "982f6ac7aa6f1c7d3afdd3e83b888d4714a3e7622b53552ceaaddcfb010256a0",
     "commands": "a3c263839b61def87361eebb6ff54c3e7f292461a76857ea0383574309872d02",
     "hits": "b94b8b3793c42629498757392054ed6d18c4e5bbd858bab4ad9f02d7d8021250",

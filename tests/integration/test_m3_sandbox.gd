@@ -45,6 +45,8 @@ func test_the_sandbox_starts_with_the_wing_on_the_player() -> void:
 
 
 func test_the_wingmen_clear_three_waves_with_the_player_idle() -> void:
+	if BalanceTests.skip(self):  # a balance judgement (GUT_BALANCE=1, scripts/run_tests.sh --balance)
+		return
 	var groups: Dictionary = {}  # wave name -> wing sizes seen while it was active
 	main.waves.wave_started.connect(func(_n: int, wave_name: String) -> void: groups[wave_name] = [])
 	assert_true(DebugConsole.registry.execute("wave start 1")[0].ok)

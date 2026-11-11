@@ -30,6 +30,33 @@ func test_fuel_unlimited_is_a_bool_that_defaults_to_true() -> void:
 	assert_false(schema.parse(&"fuel_unlimited", "maybe")["ok"])
 
 
+func test_the_feature_settings_keep_their_types_defaults_and_ranges() -> void:
+	# M6-T18: moved from the files of the features that read them (audio, HUD, engine audio, friendly fire, particles, rams,
+	# post effects), which booted a scene to read a schema entry.
+	assert_true(schema.has_key(&"sfx_volume"))
+	assert_eq(schema.get_type(&"show_hud"), TYPE_BOOL)
+	assert_eq(schema.get_default(&"show_hud"), true)
+	assert_eq(schema.get_type(&"hud_targeting_grid"), TYPE_BOOL)
+	assert_eq(schema.get_default(&"hud_targeting_grid"), false)
+	var voices: Dictionary = SettingsSchema.ENTRIES[&"engine_voice_cap"]
+	assert_eq(voices["type"], TYPE_INT)
+	assert_eq(voices["default"], 24)
+	assert_gte(int(voices["min"]), 8, "the player's own voices always fit")
+	assert_eq(schema.get_type(&"friendly_fire"), TYPE_BOOL)
+	assert_eq(schema.get_default(&"friendly_fire"), false, "forgiving by default (maintainer Q2)")
+	assert_eq(DebugConsole.registry.format_path("settings.friendly_fire"), "settings.friendly_fire = false")
+	var density: Dictionary = SettingsSchema.ENTRIES[&"particle_density"]
+	assert_eq(density["type"], TYPE_FLOAT)
+	assert_eq(density["default"], 1.0)
+	assert_eq(density["min"], 0.0)
+	assert_eq(density["max"], 1.0)
+	assert_eq(schema.get_type(&"ram_damage"), TYPE_BOOL)
+	assert_eq(schema.get_default(&"ram_damage"), true)
+	var blur: Dictionary = SettingsSchema.ENTRIES[&"motion_blur_strength"]
+	assert_eq(blur["min"], 0.0)
+	assert_eq(blur["max"], 1.0)
+
+
 func test_renamed_keys_point_at_current_keys() -> void:
 	for old: StringName in SettingsSchema.RENAMED.keys():
 		assert_false(schema.has_key(old), "%s is no longer a key" % old)

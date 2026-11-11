@@ -30,8 +30,3 @@ func test_warp_is_fixed_at_one_in_m1() -> void:
 	assert_eq(clock.warp, 1.0)
 	clock.advance(0.5)
 	assert_almost_eq(clock.now(), 0.5, 1e-12)
-
-
-func test_autoload_is_registered() -> void:
-	assert_not_null(get_tree().root.get_node_or_null("SimClock"))
-	assert_not_null(get_tree().root.get_node_or_null("Settings"))

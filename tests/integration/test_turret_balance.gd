@@ -3,7 +3,7 @@ extends GutTest
 ## spec after Q30's shared engine, beats two raiders now and then (1 to 3 of 10 seeds) and three raiders never. A fight runs
 ## until the Saturn is destroyed or no raider is left fighting (each destroyed or more than 5 km off), capped at 600 s of
 ## sim time; the Saturn wins when it is alive at the end. Seeded and headless through the native core, as
-## `test_turret_defence`; slow (about a hundred fights), so behind `GUT_SLOW`. `TURRET_BALANCE_ONLY=<type>[:<raiders>]`
+## `test_turret_defence`; a balance file (about a hundred fights), so behind `GUT_BALANCE`. `TURRET_BALANCE_ONLY=<type>[:<raiders>]`
 ## runs one variant (and one raid size) while tuning.
 
 const VARIANTS: Array[StringName] = [&"saturn_3_freighter", &"saturn_4_transport", &"saturn_4_tanker",
@@ -25,7 +25,7 @@ var _steps_backup: int = 8
 
 @warning_ignore("untyped_declaration")  # GutTest declares it untyped
 func should_skip_script():
-	return SlowTests.skip_reason()
+	return BalanceTests.skip_reason()
 
 
 func before_each() -> void:

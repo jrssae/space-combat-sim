@@ -2,6 +2,7 @@ extends GutTest
 ## Explosion (M2-T06, architecture §15.7): the code-made effect of a destroyed ship. It has the light, the billboard flash,
 ## the fireball; each one follows its timeline; it drifts with the velocity it was given, moves with a rebase, and frees itself
 ## after 3 s. Its sparks, fragments and gas come from the FxPool (M3-T23) and start where it blew up.
+## The light's curve is `test_light_emitters`' (pure) and `test_ship_lights`' (through `advance`, M6-T18).
 
 const RADIUS: float = 6.0
 
@@ -28,15 +29,6 @@ func _particle_nodes(node: Node) -> int:
 	for child: Node in node.get_children():
 		n += _particle_nodes(child)
 	return n
-
-
-func test_the_light_peaks_at_8_and_is_out_by_a_quarter_second() -> void:
-	explosion.advance(0.0)
-	assert_eq(explosion.emitter.energy, 0.0, "starts dark")
-	explosion.advance(Explosion.LIGHT_S / 3.0)
-	assert_almost_eq(explosion.emitter.energy, 8.0, 1e-4, "the peak")
-	explosion.advance(Explosion.LIGHT_S * 2.0 / 3.0)
-	assert_almost_eq(explosion.emitter.energy, 0.0, 1e-4, "out after 0.25 s")
 
 
 func test_the_flash_is_gone_after_150_ms() -> void:

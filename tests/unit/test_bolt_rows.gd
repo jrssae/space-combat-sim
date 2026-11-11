@@ -2,10 +2,9 @@ extends GutTest
 ## Bolts as core rows (M4-T35a, architecture §17.13): the core owns its bolts, a kernel steps them as a `Projectile` node
 ## stepped itself, the cannons' gates and spawns run as a kernel over the rows, the hit resolver sweeps and spends the rows,
 ## and one multimesh draws them. Bit for bit with the bolt node path: the gate, the spawn, the step, and a seeded battle's
-## hits and rows; 1 and 6 threads identical; the engine calls do not grow with the bolts.
+## hits and rows (`SeededBattle`; one thread against six is `test_core_threads`', M6-T18); the engine calls do not grow with
+## the bolts.
 
-const SHIPS: int = 120
-const SEED: int = 1
 const TICKS: int = 240
 const DELTA: float = 1.0 / 60.0
 const NO_NODES: Array[Node] = []
@@ -363,72 +362,28 @@ func test_a_kernel_shot_leaves_the_muzzle_as_the_gdscript_spawn_does() -> void:
 
 # A space of its own with a world and its projectiles.
 func _space() -> SubViewport:
-	var space := SubViewport.new()
-	space.own_world_3d = true
-	space.world_3d = World3D.new()
-	add_child(space)
-	var world := WorldFrame.new()
-	world.name = "World"
-	space.add_child(world)
-	var bolts := Node3D.new()
-	bolts.name = "Projectiles"
-	world.add_child(bolts)
-	return space
+	return SeededBattle.space(self)
 
 
-## The seeded battle's fighters flown `ticks` ticks on `threads` threads. Returns per tick a
-## digest of the hull rows (positions, velocities, bases), of the bolt table (starts and ends) and of the hits (target and
-## shooter by their place in the battle, damage, point), the kills, the shots, and the most bolt nodes and owned rows seen.
+## The seeded battle's fighters (`SeededBattle`) flown `ticks` ticks on `threads` threads. Returns per tick a digest of the
+## hull rows (positions, velocities, bases), of the bolt table (starts and ends) and of the hits (target and shooter by
+## their place in the battle, damage, point), the kills, the shots, and the most bolt nodes and owned rows seen.
 func _battle(threads: int, ticks: int = TICKS) -> Dictionary:
 	Settings.set_value(&"perf_threads", threads)
-	Factions.reset()
-	Factions.use_table(BenchLayout.faction_table(BenchLayout.BATTLE))
-	ContactScan.invalidate()
-	await get_tree().process_frame
-	await get_tree().physics_frame
-	SimClock.reset()
-	var space := _space()
-	var world := space.get_node("World") as WorldFrame
-	var bolts := world.get_node("Projectiles") as Node3D
-	var resolver := HitResolver.new()
-	resolver.name = "HitResolver"
-	space.add_child(resolver)
-	var anchor: UniversePos = world.to_universe(Vector3.ZERO)
-	var numbers: Dictionary = {}
-	var ships: Array[Combatant] = []
-	for e: Dictionary in BenchLayout.plan(BenchLayout.BATTLE, SHIPS, SEED):
-		if StringName(e["kind"]) != BenchLayout.KIND_FIGHTER:
-			continue
-		var type: StringName = e["type"]
-		numbers[type] = int(numbers.get(type, 0)) + 1
-		var c: Combatant = ShipAssembly.build(ShipCatalog.spec_for(type), world, bolts, {
-			ShipAssembly.OPT_FACTION: StringName(e["faction"]), ShipAssembly.OPT_DISPLAY_NAME: "%s %d" % [type, int(numbers[type])],
-			ShipAssembly.OPT_FORCE_ASSIST: true, ShipAssembly.OPT_AI: true, ShipAssembly.OPT_LEAN: true})
-		world.spawn(c.ship, anchor.plus_local(e["offset"]), e["basis"])
-		c.ship.linear_velocity = e["velocity"]
-		var made: Dictionary = BrainFactory.from_behaviour(e["behaviour"], anchor, int(e["seed"]))
-		c.driver.brain = made["brain"] as PilotBrain
-		ships.append(c)
-	_index_of.clear()
-	for i: int in ships.size():
-		_index_of[ships[i].ship.get_instance_id()] = i
-		_index_of[ships[i].targetable.get_instance_id()] = i
-	var sim: SimCore = SimCore.attach(world)
-	sim.core.set_parallel_min(2)
-	sim.core.set_flight_parallel_min(2)
-	var hits: PackedInt64Array = PackedInt64Array()
+	var fight: Dictionary = await SeededBattle.start(self)
+	var sim: SimCore = fight["sim"]
+	var resolver: HitResolver = fight["resolver"]
+	_index_of = fight["index_of"]
 	var tick_hits: Array = []
-	resolver.hit_resolved.connect(func(info: HitInfo) -> void:
-		tick_hits.append([_index_of.get(info.target_id, -2), _index_of.get(info.shooter_id, -2), info.damage, info.applied,
-				info.point]))
+	SeededBattle.log_hits(fight, tick_hits)
 	var deaths: Array = []
-	for c: Combatant in ships:
+	for c: Combatant in fight["ships"]:
 		c.damageable.destroyed.connect(func(_info: HitInfo) -> void: deaths.append(c.display_name))
 	var rows := PackedInt64Array()
 	var bolt_digests := PackedInt64Array()
+	var hits := PackedInt64Array()
 	var nodes_max: int = 0
 	var owned_max: int = 0
-	var shots: int = 0
 	for t: int in ticks:
 		tick_hits.clear()
 		await get_tree().physics_frame
@@ -450,19 +405,10 @@ func _battle(threads: int, ticks: int = TICKS) -> Dictionary:
 		hits.append(hash(tick_hits))
 		nodes_max = maxi(nodes_max, get_tree().get_nodes_in_group(Projectile.GROUP).size())
 		owned_max = maxi(owned_max, int(sim.core.owned_bolts()))
-	shots = resolver.hits_total
-	var out: Dictionary = {"rows": rows, "bolts": bolt_digests, "hits": hits, "kills": deaths.size(), "hits_total": shots,
+	var out: Dictionary = {"rows": rows, "bolts": bolt_digests, "hits": hits, "kills": deaths.size(), "hits_total": resolver.hits_total,
 			"nodes_max": nodes_max, "owned_max": owned_max, "bolt_rows": sim.bolt_rows_on()}
-	space.queue_free()
-	await get_tree().physics_frame
+	await SeededBattle.finish(fight)
 	return out
-
-
-static func _first_difference(a: PackedInt64Array, b: PackedInt64Array) -> int:
-	for i: int in mini(a.size(), b.size()):
-		if a[i] != b[i]:
-			return i
-	return -1 if a.size() == b.size() else mini(a.size(), b.size())
 
 
 func test_the_seeded_battle_hits_the_same_with_bolts_as_rows() -> void:
@@ -477,7 +423,7 @@ func test_the_seeded_battle_hits_the_same_with_bolts_as_rows() -> void:
 	assert_gt(int(recorded["hits_total"]), 10, "hits landed (%d)" % int(recorded["hits_total"]))
 	assert_eq(ParityFixture.encode(_digest_of(rows)), recorded,
 			"the same hits, kills, bolt table and hull rows every tick as the bolt nodes' recording")
-	gut.p("battle %d seed %d, %d ticks: %d hits, %d kills, %d owned rows at most" % [SHIPS, SEED, TICKS,
+	gut.p("battle %d seed %d, %d ticks: %d hits, %d kills, %d owned rows at most" % [SeededBattle.SHIPS, SeededBattle.SEED, TICKS,
 			int(rows["hits_total"]), int(rows["kills"]), int(rows["owned_max"])])
 
 
@@ -485,17 +431,6 @@ func test_the_seeded_battle_hits_the_same_with_bolts_as_rows() -> void:
 static func _digest_of(battle: Dictionary) -> Dictionary:
 	return {"rows": ParityFixture.digest(battle["rows"]), "bolts": ParityFixture.digest(battle["bolts"]),
 			"hits": ParityFixture.digest(battle["hits"]), "hits_total": battle["hits_total"], "kills": battle["kills"]}
-
-
-func test_one_thread_and_six_give_the_same_bolts() -> void:
-	var one: Dictionary = await _battle(1)
-	var six: Dictionary = await _battle(6)
-	var first: int = _first_difference(one["bolts"], six["bolts"])
-	assert_eq(first, -1, "the bolt table is the same bits with one thread and six (first difference at tick %d)" % first)
-	first = _first_difference(one["hits"], six["hits"])
-	assert_eq(first, -1, "and the hits (first difference at tick %d)" % first)
-	first = _first_difference(one["rows"], six["rows"])
-	assert_eq(first, -1, "and the rows (first difference at tick %d)" % first)
 
 
 # --- the cannon in play -----------------------------------------------------------------------------------------------

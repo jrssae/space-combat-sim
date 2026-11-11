@@ -111,14 +111,6 @@ func _console(line: String) -> ConsoleResult:
 # --- the setting and the filter ---------------------------------------------------------------------------------
 
 
-func test_friendly_fire_is_a_setting_that_defaults_off() -> void:
-	var schema := SettingsSchema.new()
-	assert_true(schema.has_key(&"friendly_fire"))
-	assert_eq(schema.get_type(&"friendly_fire"), TYPE_BOOL)
-	assert_eq(schema.get_default(&"friendly_fire"), false, "forgiving by default (maintainer Q2)")
-	assert_eq(DebugConsole.registry.format_path("settings.friendly_fire"), "settings.friendly_fire = false")
-
-
 func test_can_be_hit_by_with_and_without_friendly_fire() -> void:
 	var hull := Damageable.new()
 	add_child_autofree(hull)

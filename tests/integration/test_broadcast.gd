@@ -105,8 +105,8 @@ func test_the_radar_puts_a_far_broadcast_on_the_rim_in_its_true_direction() -> v
 	_place_buoy("NAV ALPHA", Vector3(0.0, 0.0, -FAR_BUOY_M))
 	_ally("ALPHA 7", Vector3(90000.0, 0.0, 0.0))
 	await _ticks(2)
-	var dots: Array[RadarModel.Dot] = RadarModel.dots(main.ship.targeting.candidates(), 0, main.ship.global_position,
-			main.ship.global_basis, Factions.EARTH_ALLIANCE)
+	var dots: Array[RadarModel.Dot] = RadarModel.plot(RadarContacts.from_infos(main.ship.targeting.candidates()), 0,
+			main.ship.global_position, main.ship.global_basis, Factions.EARTH_ALLIANCE).to_dots()
 	var by_id: Dictionary = {}
 	for dot: RadarModel.Dot in dots:
 		by_id[dot.id] = dot

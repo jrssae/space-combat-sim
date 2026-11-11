@@ -1,8 +1,9 @@
 extends GutTest
 ## The console command list (CLAUDE.md, M5-T24): `info.md` names every command and state provider the game registers, and
-## nothing the game does not. The scenes that register different things are booted one after another (free flight, a mission,
-## the instructor's route, the front end) and the console's registry is read after each; the autoloads' own entries are
-## there throughout. A task that adds a command or a provider without listing it fails here.
+## nothing the game does not. The scenes that register different things are booted one after another (free flight, the combat
+## sandbox, a mission, the instructor's route, the front end) and the console's registry is read after each; the autoloads'
+## own entries are there throughout. A task that adds a command or a provider without listing it fails here. M6-T18 folded
+## `test_info_md` (the sandbox's entries) into this file.
 
 const INFO_PATH: String = "res://info.md"
 ## The provider table follows this heading; everything before it holds the commands.
@@ -37,6 +38,7 @@ func _collect() -> void:
 	_collected = true
 	_note("autoloads")
 	await _in_flight("free flight", ScenarioLoader.FREE_FLIGHT_PATH)
+	await _in_flight("sandbox", ScenarioLoader.SANDBOX_PATH)  # AI ships, so the AI and the flight batch register theirs
 	await _in_flight("mission", MISSION_PATH)
 	await _in_flight("instructor route", ROUTE_PATH)
 	await _in_front_end()
@@ -157,6 +159,8 @@ func test_the_scenes_register_commands_and_providers() -> void:
 	assert_has(_commands, &"menu", "the Game autoload")
 	assert_has(_providers, &"route", "the instructor route booted")
 	assert_has(_providers, &"ship", "flight booted")
+	assert_has(_commands, &"ai", "the sandbox's AI ships registered theirs")
+	assert_has(_providers, &"ai", "and their provider")
 	assert_gt(_commands.size(), 40, "every scene's commands were read")
 
 

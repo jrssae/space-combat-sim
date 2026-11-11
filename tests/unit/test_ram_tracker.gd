@@ -1,7 +1,7 @@
 extends GutTest
 ## RamTracker (M3-T04, architecture §16 D32): which contacts are new, the window that measures a new contact's velocity
 ## change, one ram per pair per collision, and the hand-over between swept rams and Jolt's contacts. No Jolt: each tick is a
-## list of samples, as the RamResolver reads them.
+## list of bodies, handed to `contacts_columns` as the RamResolver reads them (M6-T18: the per-body sample path is gone).
 
 const DT: float = 1.0 / 60.0
 const A: int = 101
@@ -17,16 +17,38 @@ func before_each() -> void:
 	tracker = RamTracker.new()
 
 
-func _sample(id: int, velocity: Vector3, touching: Array[int] = [], accel: Vector3 = Vector3.ZERO) -> RamTracker.Sample:
-	var sample := RamTracker.Sample.new(id, velocity, accel, SAFE, LETHAL)
-	for other_id: int in touching:
-		sample.touch(other_id, Vector3(0.0, 0.0, -5.0), Vector3(0.0, 0.0, -1.0))
-	return sample
+# One rigid body as read this tick: its id, velocity, the bodies it touches and what its own forces add per second.
+func _sample(id: int, velocity: Vector3, touching: Array[int] = [], accel: Vector3 = Vector3.ZERO) -> Dictionary:
+	return {"id": id, "velocity": velocity, "touching": touching, "accel": accel}
+
+
+func _limits(_id: int) -> PackedFloat64Array:
+	return PackedFloat64Array([SAFE, LETHAL])
+
+
+## The contact phase for `samples`, in the columns the resolver hands over. Returns the contact rams that landed.
+func _contacts(samples: Array) -> Array[RamTracker.ContactRam]:
+	var ids := PackedInt64Array()
+	var velocities := PackedVector3Array()
+	var accels := PackedVector3Array()
+	var touches: Dictionary[int, Dictionary] = {}
+	for sample: Dictionary in samples:
+		ids.append(sample["id"])
+		velocities.append(sample["velocity"])
+		accels.append(sample["accel"])
+		var touching: Array[int] = sample["touching"]
+		if touching.is_empty():
+			continue
+		var contacts: Dictionary = {}
+		for other_id: int in touching:
+			contacts[other_id] = RamTracker.Touch.new(Vector3(0.0, 0.0, -5.0), Vector3(0.0, 0.0, -1.0))
+		touches[int(sample["id"])] = contacts
+	return tracker.contacts_columns(ids, velocities, accels, touches, _limits, DT)
 
 
 ## One tick: the contact phase, then the end of the tick. Returns the contact rams that landed.
-func _tick(samples: Array[RamTracker.Sample]) -> Array[RamTracker.ContactRam]:
-	var rams: Array[RamTracker.ContactRam] = tracker.contacts(samples, DT)
+func _tick(samples: Array) -> Array[RamTracker.ContactRam]:
+	var rams: Array[RamTracker.ContactRam] = _contacts(samples)
 	tracker.end_tick()
 	return rams
 
@@ -135,7 +157,7 @@ func test_each_pair_has_its_own_window() -> void:
 func test_a_body_that_leaves_play_takes_its_windows_along() -> void:
 	_tick([_sample(A, Vector3(0.0, 0.0, -15.0))])
 	_tick([_sample(A, Vector3.ZERO, [B])])
-	assert_eq(_tick([] as Array[RamTracker.Sample]).size(), 0, "parked mid-window")
+	assert_eq(_tick([]).size(), 0, "parked mid-window")
 	assert_eq(_tick([_sample(A, Vector3.ZERO, [B])]).size(), 0, "back with no tick before: nothing")
 	assert_eq(_tick([_sample(A, Vector3.ZERO, [B])]).size(), 0)
 
@@ -144,27 +166,27 @@ func test_a_body_that_leaves_play_takes_its_windows_along() -> void:
 
 
 func test_a_swept_meeting_is_one_ram_per_pair() -> void:
-	tracker.contacts([] as Array[RamTracker.Sample], DT)
+	_contacts([])
 	assert_true(tracker.swept_meeting(A, B), "a new meeting is a ram")
 	tracker.end_tick()
-	tracker.contacts([] as Array[RamTracker.Sample], DT)
+	_contacts([])
 	assert_false(tracker.swept_meeting(B, A), "still meeting a tick later: the same ram, either order")
 	tracker.end_tick()
 	for i: int in RamTracker.SWEPT_GRACE_TICKS - 2:
-		_tick([] as Array[RamTracker.Sample])
-	tracker.contacts([] as Array[RamTracker.Sample], DT)
+		_tick([])
+	_contacts([])
 	assert_false(tracker.swept_meeting(A, B), "meeting again within the grace ticks is still the same collision")
 	tracker.end_tick()
 	for i: int in RamTracker.SWEPT_GRACE_TICKS + 1:
-		_tick([] as Array[RamTracker.Sample])
-	tracker.contacts([] as Array[RamTracker.Sample], DT)
+		_tick([])
+	_contacts([])
 	assert_true(tracker.swept_meeting(A, B), "a later meeting is a new ram")
 	tracker.end_tick()
 
 
 func test_jolt_resolving_a_swept_ram_opens_no_contact_window() -> void:
 	# The sweep predicts the hit for the coming step; Jolt resolves it in that step and reports the contact next tick.
-	tracker.contacts([_sample(A, Vector3(0.0, 0.0, -13.0)), _sample(B, Vector3(0.0, 0.0, 13.0))], DT)
+	_contacts([_sample(A, Vector3(0.0, 0.0, -13.0)), _sample(B, Vector3(0.0, 0.0, 13.0))])
 	assert_true(tracker.swept_meeting(A, B))
 	tracker.end_tick()
 	var rams: Array[RamTracker.ContactRam] = []
@@ -174,7 +196,7 @@ func test_jolt_resolving_a_swept_ram_opens_no_contact_window() -> void:
 
 
 func test_a_contact_that_begins_late_in_the_grace_ticks_opens_no_window() -> void:
-	tracker.contacts([_sample(A, Vector3(0.0, 0.0, -13.0)), _sample(B, Vector3(0.0, 0.0, 13.0))], DT)
+	_contacts([_sample(A, Vector3(0.0, 0.0, -13.0)), _sample(B, Vector3(0.0, 0.0, 13.0))])
 	assert_true(tracker.swept_meeting(A, B))
 	tracker.end_tick()
 	for i: int in RamTracker.SWEPT_GRACE_TICKS - 1:
@@ -186,7 +208,7 @@ func test_a_contact_that_begins_late_in_the_grace_ticks_opens_no_window() -> voi
 
 
 func test_a_contact_after_the_grace_ticks_is_a_new_collision() -> void:
-	tracker.contacts([] as Array[RamTracker.Sample], DT)
+	_contacts([])
 	assert_true(tracker.swept_meeting(A, B))
 	tracker.end_tick()
 	for i: int in RamTracker.SWEPT_GRACE_TICKS:
@@ -196,7 +218,7 @@ func test_a_contact_after_the_grace_ticks_is_a_new_collision() -> void:
 
 func test_a_swept_ram_takes_over_the_pairs_open_contact_window() -> void:
 	_tick([_sample(A, Vector3(0.0, 0.0, -15.0)), _sample(B, Vector3(0.0, 0.0, 15.0))])
-	assert_eq(tracker.contacts([_sample(A, Vector3(0.0, 0.0, -5.0), [B]), _sample(B, Vector3(0.0, 0.0, 5.0), [A])], DT).size(), 0)
+	assert_eq(_contacts([_sample(A, Vector3(0.0, 0.0, -5.0), [B]), _sample(B, Vector3(0.0, 0.0, 5.0), [A])]).size(), 0)
 	assert_true(tracker.in_contact(A, B))
 	assert_true(tracker.swept_meeting(A, B), "a tunnelling hit found while the window measures")
 	tracker.end_tick()
@@ -207,40 +229,50 @@ func test_a_swept_ram_takes_over_the_pairs_open_contact_window() -> void:
 
 
 func test_while_jolt_holds_the_pair_it_stays_met() -> void:
-	tracker.contacts([] as Array[RamTracker.Sample], DT)
+	_contacts([])
 	assert_true(tracker.swept_meeting(A, B))
 	tracker.end_tick()
 	# Jolt holds them in contact for a while, below tunnelling speed: the resolver does not sweep, it keeps them met.
 	for i: int in RamTracker.SWEPT_GRACE_TICKS + 4:
-		tracker.contacts([_sample(A, Vector3.ZERO, [B]), _sample(B, Vector3.ZERO, [A])], DT)
+		_contacts([_sample(A, Vector3.ZERO, [B]), _sample(B, Vector3.ZERO, [A])])
 		tracker.keep_touching(A, B)
 		tracker.end_tick()
 	# They separate while the sweep still sees their volumes meeting: the same collision.
-	tracker.contacts([_sample(A, Vector3.ZERO), _sample(B, Vector3.ZERO)], DT)
+	_contacts([_sample(A, Vector3.ZERO), _sample(B, Vector3.ZERO)])
 	assert_false(tracker.swept_meeting(A, B))
 	tracker.end_tick()
 
 
 func test_keep_touching_needs_both_a_contact_and_a_meeting() -> void:
-	tracker.contacts([_sample(A, Vector3.ZERO, [B]), _sample(B, Vector3.ZERO, [A])], DT)
+	_contacts([_sample(A, Vector3.ZERO, [B]), _sample(B, Vector3.ZERO, [A])])
 	tracker.keep_touching(A, B)  # in contact, but their swept volumes never met
 	tracker.end_tick()
 	for i: int in RamTracker.SWEPT_GRACE_TICKS + 1:
 		_tick([_sample(A, Vector3.ZERO), _sample(B, Vector3.ZERO)])
-	tracker.contacts([] as Array[RamTracker.Sample], DT)
+	_contacts([])
 	assert_true(tracker.swept_meeting(A, B))
 	tracker.end_tick()
 
 
 func test_reset_forgets_everything() -> void:
-	tracker.contacts([_sample(A, Vector3(0.0, 0.0, -15.0))], DT)
+	_contacts([_sample(A, Vector3(0.0, 0.0, -15.0))])
 	assert_true(tracker.swept_meeting(A, B))
 	tracker.end_tick()
 	tracker.reset()
-	tracker.contacts([] as Array[RamTracker.Sample], DT)
+	_contacts([])
 	assert_true(tracker.swept_meeting(A, B), "no grace survives a reset")
 	tracker.end_tick()
 	assert_eq(_tick([_sample(A, Vector3.ZERO, [B])]).size(), 0, "and no velocity from before it")
+
+
+func test_reset_forgets_the_last_ticks_velocities() -> void:
+	# From test_ram_tracker_columns (M6-T18): without the reset this head-on's window would close with two rams.
+	_tick([_sample(A, Vector3(0.0, 0.0, -15.0)), _sample(B, Vector3(0.0, 0.0, 15.0))])
+	tracker.reset()
+	var rams: Array[RamTracker.ContactRam] = []
+	for i: int in 4:
+		rams.append_array(_tick([_sample(A, Vector3.ZERO, [B]), _sample(B, Vector3.ZERO, [A])]))
+	assert_eq(rams.size(), 0, "after a reset no body has a tick before, so the contact opens no window")
 
 
 func test_pair_keys_ignore_the_order() -> void:

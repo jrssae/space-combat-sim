@@ -4,7 +4,7 @@ extends RefCounted
 ## sweeps; this decides which contacts are new, measures each new contact's velocity change, and keeps one ram per pair per
 ## collision. Once per physics tick, in this order:
 ##
-## 1. `contacts(samples, delta)`: every rigid body as read this tick. Returns the contact rams that land now.
+## 1. `contacts_columns(...)`: every rigid body as read this tick. Returns the contact rams that land now.
 ## 2. For each pair the resolver sweeps: `swept_meeting(a, b)` when the sweep found their volumes meeting (true = ram now).
 ##    For each rigid pair it does not sweep (below tunnelling speed): `keep_touching(a, b)`.
 ## 3. `end_tick()`.
@@ -41,32 +41,6 @@ class Touch extends RefCounted:
 		normal = p_normal
 
 
-## One rigid body as the resolver read it this tick (before Jolt's step).
-class Sample extends RefCounted:
-	var id: int = 0
-	var velocity: Vector3 = Vector3.ZERO
-	## What the body's own forces (thrust, the environment) add to its velocity per second; applied before this tick's step.
-	var accel: Vector3 = Vector3.ZERO
-	## The bodies Jolt reported touching it in the last step: instance id -> where.
-	var contacts: Dictionary[int, Touch] = {}
-	var safe_dv_mps: float = 5.0
-	var lethal_dv_mps: float = 18.0
-
-	func _init(p_id: int = 0, p_velocity: Vector3 = Vector3.ZERO, p_accel: Vector3 = Vector3.ZERO, p_safe_dv_mps: float = 5.0,
-			p_lethal_dv_mps: float = 18.0) -> void:
-		id = p_id
-		velocity = p_velocity
-		accel = p_accel
-		safe_dv_mps = p_safe_dv_mps
-		lethal_dv_mps = p_lethal_dv_mps
-
-	## Records a contact with `other_id` (the first one per body counts). Returns self.
-	func touch(other_id: int, point: Vector3, normal: Vector3) -> Sample:
-		if not contacts.has(other_id):
-			contacts[other_id] = Touch.new(point, normal)
-		return self
-
-
 ## A contact ram that lands this tick: the hull, the body it met, its velocity change and the share of its hull that takes.
 class ContactRam extends RefCounted:
 	var hull_id: int = 0
@@ -88,7 +62,6 @@ class _Window extends RefCounted:
 
 
 var _tick: int = 0
-var _previous: Dictionary[int, Sample] = {}
 # Directed key "hull>other" -> its open window.
 var _windows: Dictionary[String, _Window] = {}
 var _in_contact: Dictionary[String, bool] = {}
@@ -96,8 +69,8 @@ var _touching: Dictionary[String, bool] = {}
 var _touching_now: Dictionary[String, bool] = {}
 # Pair key -> the tick of its last swept ram.
 var _swept_at: Dictionary[String, int] = {}
-# The last tick in columns (M4-T34, `contacts_columns`): each body's index by id, its velocity and accel, and the contacts of
-# the bodies that touched something.
+# The last tick (M4-T34, `contacts_columns`): each body's index by id, its velocity and accel, and the contacts of the bodies
+# that touched something.
 var _prev_at: Dictionary[int, int] = {}
 var _prev_velocities := PackedVector3Array()
 var _prev_accels := PackedVector3Array()
@@ -109,51 +82,12 @@ static func pair_key(a: int, b: int) -> String:
 	return "%d:%d" % [mini(a, b), maxi(a, b)]
 
 
-## Phase 1 of a tick: the rigid bodies as read now. Opens windows for new contacts, measures the open ones and returns the
-## rams whose windows close (or turn lethal) this tick. `delta` is the physics time step.
-func contacts(samples: Array[Sample], delta: float) -> Array[ContactRam]:
-	_tick += 1
-	_in_contact.clear()
-	_touching_now.clear()
-	var current: Dictionary[int, Sample] = {}
-	for sample: Sample in samples:
-		current[sample.id] = sample
-	for sample: Sample in samples:
-		for other_id: int in sample.contacts:
-			_in_contact[pair_key(sample.id, other_id)] = true
-		var previous: Sample = _previous.get(sample.id)
-		if previous == null:
-			continue
-		for other_id: int in sample.contacts:
-			var key: String = _directed(sample.id, other_id)
-			if previous.contacts.has(other_id) or _windows.has(key) or _swept_recently(pair_key(sample.id, other_id)):
-				continue
-			_windows[key] = _open(sample, other_id, previous)
-	var landed: Array[ContactRam] = []
-	var still_open: Dictionary[String, _Window] = {}
-	for key: String in _windows:
-		var window: _Window = _windows[key]
-		var sample: Sample = current.get(window.ram.hull_id)
-		var previous: Sample = _previous.get(window.ram.hull_id)
-		if sample == null or previous == null:
-			continue  # the body left play (or was away a tick): its windows go
-		window.own_dv += previous.accel * delta
-		window.ram.dv = maxf(window.ram.dv, RamMath.contact_dv(sample.velocity, window.v_before, window.own_dv))
-		window.ticks_left -= 1
-		window.ram.severity = RamMath.severity(window.ram.dv, sample.safe_dv_mps, sample.lethal_dv_mps)
-		if window.ticks_left > 0 and window.ram.severity < 1.0:
-			still_open[key] = window
-		elif window.ram.severity > 0.0:
-			landed.append(window.ram)
-	_windows = still_open
-	_previous = current
-	return landed
-
-
-## Phase 1 in columns (M4-T34): the rams `contacts` lands for samples made of these, in the same order, without a sample per
-## body. `ids`, `velocities` and `accels`: every rigid body read this tick, in order. `touches`: id -> (other id -> `Touch`)
-## for the bodies Jolt reported touching something, in the same order. `limits`: id -> `[safe_dv_mps, lethal_dv_mps]`, asked
-## only for a hull with an open window. A tracker takes one phase 1 or the other from tick to tick; `reset` between.
+## Phase 1 of a tick, in columns (M4-T34): the rigid bodies as read now (before Jolt's step). Opens windows for new contacts,
+## measures the open ones and returns the rams whose windows close (or turn lethal) this tick. `ids`, `velocities` and
+## `accels` (what each body's own forces, thrust and the environment, add to its velocity per second): every rigid body read
+## this tick, in order. `touches`: id -> (other id -> `Touch`, the first report of each pair) for the bodies Jolt reported
+## touching something in the last step, in the same order. `limits`: id -> `[safe_dv_mps, lethal_dv_mps]`, asked only for a
+## hull with an open window. `delta` is the physics time step.
 func contacts_columns(ids: PackedInt64Array, velocities: PackedVector3Array, accels: PackedVector3Array,
 		touches: Dictionary[int, Dictionary], limits: Callable, delta: float) -> Array[ContactRam]:
 	_tick += 1
@@ -200,7 +134,7 @@ func contacts_columns(ids: PackedInt64Array, velocities: PackedVector3Array, acc
 	return landed
 
 
-## True when Jolt reported `a` and `b` touching this tick (valid after `contacts`).
+## True when Jolt reported `a` and `b` touching this tick (valid after `contacts_columns`).
 func in_contact(a: int, b: int) -> bool:
 	return _in_contact.has(pair_key(a, b))
 
@@ -246,7 +180,6 @@ func shift(offset: Vector3) -> void:
 ## Forgets everything (ram damage switched off): no velocity, contact, window or grace carries over.
 func reset() -> void:
 	_tick = 0
-	_previous.clear()
 	_windows.clear()
 	_in_contact.clear()
 	_touching.clear()
@@ -262,20 +195,7 @@ func _swept_recently(key: String) -> bool:
 	return _swept_at.has(key) and _tick - _swept_at[key] <= SWEPT_GRACE_TICKS
 
 
-func _open(sample: Sample, other_id: int, previous: Sample) -> _Window:
-	var window := _Window.new()
-	var touch: Touch = sample.contacts[other_id]
-	var other_previous: Sample = _previous.get(other_id)
-	window.v_before = previous.velocity
-	window.ram.hull_id = sample.id
-	window.ram.other_id = other_id
-	window.ram.point = touch.point
-	window.ram.normal = touch.normal
-	window.ram.relative_speed = (previous.velocity - (other_previous.velocity if other_previous != null else Vector3.ZERO)).length()
-	return window
-
-
-# `_open` from columns: the hull's velocity on the last tick and the other's, if it was there.
+# A new contact's window: the hull's velocity on the last tick and the other's, if it was there.
 func _open_at(id: int, other_id: int, touch: Touch, v_previous: Vector3) -> _Window:
 	var window := _Window.new()
 	var o: int = _prev_at.get(other_id, -1)

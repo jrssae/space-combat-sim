@@ -5,16 +5,14 @@ extends GutTest
 ## and hits the old paths gave (recorded in `tests/fixtures/parity/core_state.json` before M4-T37 removed them and their
 ## switches).
 
-const SHIPS: int = 120
-const SEED: int = 1
 const TICKS: int = 240
-const DELTA: float = 1.0 / 60.0
 const SPEC_PATH: String = "res://assets/ships/starfury_aurora.tres"
 const FIXTURE: String = "core_state"
 const SETTINGS: Array[StringName] = [&"perf_threads", &"ram_damage"]
+## Jolt's contact points in T14's melee, as `test_fighter_melee` pinned them (M4-T14, re-taken in M4-T31).
+const MELEE_CONTACTS: int = 2959
 
 var _saved: Dictionary = {}
-var _index_of: Dictionary = {}
 
 
 func before_each() -> void:
@@ -256,84 +254,33 @@ func test_the_batch_switches_its_ships_own_tick_off_and_back() -> void:
 	await get_tree().physics_frame
 
 
-# --- the seeded battle, each path against its reference -----------------------------------------------------------------
+# --- the seeded battle against the old paths' recording -----------------------------------------------------------------
 
 
-## The seeded battle's fighters flown `ticks` ticks with `overrides` set and `threads` threads: per tick the rows' digest
-## (positions, velocities, bases, spins, flags, hulls, selections), the commands' digest and a digest of the hits.
-func _battle(overrides: Dictionary, threads: int, ticks: int = TICKS) -> Dictionary:
-	for key: StringName in overrides:
-		Settings.set_value(key, overrides[key])
-	Settings.set_value(&"perf_threads", threads)
-	Factions.reset()
-	Factions.use_table(BenchLayout.faction_table(BenchLayout.BATTLE))
-	ContactScan.invalidate()
-	await get_tree().process_frame
-	await get_tree().physics_frame
-	SimClock.reset()
-	var made: Array = _space()
-	var space: SubViewport = made[0]
-	var world: WorldFrame = made[1]
-	var bolts: Node3D = made[2]
-	var resolver := HitResolver.new()
-	resolver.name = "HitResolver"
-	space.add_child(resolver)
-	var rams := RamResolver.new()
-	rams.name = "RamResolver"
-	rams.world = world
-	space.add_child(rams)
-	var anchor: UniversePos = world.to_universe(Vector3.ZERO)
-	var numbers: Dictionary = {}
-	var ships: Array[Combatant] = []
-	for e: Dictionary in BenchLayout.plan(BenchLayout.BATTLE, SHIPS, SEED):
-		if StringName(e["kind"]) != BenchLayout.KIND_FIGHTER:
-			continue
-		var type: StringName = e["type"]
-		numbers[type] = int(numbers.get(type, 0)) + 1
-		var c: Combatant = ShipAssembly.build(ShipCatalog.spec_for(type), world, bolts, {
-			ShipAssembly.OPT_FACTION: StringName(e["faction"]), ShipAssembly.OPT_DISPLAY_NAME: "%s %d" % [type, int(numbers[type])],
-			ShipAssembly.OPT_FORCE_ASSIST: true, ShipAssembly.OPT_AI: true, ShipAssembly.OPT_LEAN: true})
-		world.spawn(c.ship, anchor.plus_local(e["offset"]), e["basis"])
-		c.ship.linear_velocity = e["velocity"]
-		var made_brain: Dictionary = BrainFactory.from_behaviour(e["behaviour"], anchor, int(e["seed"]))
-		c.driver.brain = made_brain["brain"] as PilotBrain
-		ships.append(c)
-	_index_of.clear()
-	for i: int in ships.size():
-		_index_of[ships[i].ship.get_instance_id()] = i
-		_index_of[ships[i].targetable.get_instance_id()] = i
-	var sim: SimCore = SimCore.attach(world)
-	sim.core.set_parallel_min(2)
-	sim.core.set_flight_parallel_min(2)
+## The seeded battle's fighters (`SeededBattle`, a ram resolver beside the hit resolver) flown `TICKS` ticks on one thread:
+## per tick the rows' digest (positions, velocities, bases, spins, flags, hulls, selections), the commands' digest and a
+## digest of the hits. The 1-vs-6 comparison of this battle is `test_core_threads`'.
+func _battle() -> Dictionary:
+	Settings.set_value(&"perf_threads", 1)
+	var fight: Dictionary = await SeededBattle.start(self, {SeededBattle.OPT_RAMS: true})
+	var sim: SimCore = fight["sim"]
+	var rams: RamResolver = fight["rams"]
 	var tick_hits: Array = []
-	resolver.hit_resolved.connect(func(info: HitInfo) -> void:
-		tick_hits.append([_index_of.get(info.target_id, -2), _index_of.get(info.shooter_id, -2), info.damage, info.applied, info.point]))
-	rams.ram_resolved.connect(func(info: HitInfo) -> void:
-		tick_hits.append(["ram", _index_of.get(info.target_id, -2), _index_of.get(info.shooter_id, -2), info.damage, info.point]))
+	SeededBattle.log_hits(fight, tick_hits)
 	var rows := PackedInt64Array()
 	var commands := PackedInt64Array()
 	var hits := PackedInt64Array()
-	var ram_count: int = 0
-	for t: int in ticks:
+	for t: int in TICKS:
 		tick_hits.clear()
 		await get_tree().physics_frame
 		rows.append(int(sim.core.rows_digest()))
 		commands.append(int(sim.core.commands_digest()))
 		hits.append(hash(tick_hits))
-	ram_count = rams.rams_total if "rams_total" in rams else 0
-	var out: Dictionary = {"rows": rows, "commands": commands, "hits": hits, "hits_total": resolver.hits_total, "rams": ram_count,
+	var out: Dictionary = {"rows": rows, "commands": commands, "hits": hits,
+			"hits_total": (fight["resolver"] as HitResolver).hits_total, "rams": rams.rams_total if "rams_total" in rams else 0,
 			"sync_calls": sim.engine_calls()[0]}
-	space.queue_free()
-	await get_tree().physics_frame
-	await get_tree().physics_frame
+	await SeededBattle.finish(fight)
 	return out
-
-
-static func _first_difference(a: PackedInt64Array, b: PackedInt64Array) -> int:
-	for i: int in mini(a.size(), b.size()):
-		if a[i] != b[i]:
-			return i
-	return -1 if a.size() == b.size() else mini(a.size(), b.size())
 
 
 # What a battle is held to: digests of its rows, commands and hits every tick, and its totals.
@@ -343,38 +290,28 @@ static func _digest_of(battle: Dictionary) -> Dictionary:
 			"ticks": (battle["rows"] as PackedInt64Array).size()}
 
 
-# The cases recorded with one old path each (M4-T37: the event columns, the native selection check and the batch owning
-# its ships off), before those paths were removed.
-const OLD_PATH_CASES: Array[String] = ["battle_without_perf_core_event_columns", "battle_without_perf_native_selection_check",
-		"battle_without_perf_batch_owns_ships"]
+# Recorded with each old path on in turn (M4-T37: the event columns, the native selection check, the batch owning its ships
+# off) before those paths were removed. The three recordings were the same value, so M6-T18 kept one.
+const OLD_PATHS_CASE: String = "battle_on_the_old_paths"
 
 
-func test_the_battle_flies_as_each_old_path_did() -> void:
-	var candidate: Dictionary = await _battle({}, 1)
-	for case: String in OLD_PATH_CASES:
-		var recorded: Variant = ParityFixture.stored(FIXTURE, case)
-		assert_not_null(recorded, "%s was recorded" % case)
-		if recorded == null:
-			continue
-		assert_gt(int(recorded["hits_total"]), 10, "%s: hits landed (%d)" % [case, int(recorded["hits_total"])])
-		assert_eq(ParityFixture.encode(_digest_of(candidate)), recorded,
-				"%s: the same rows, commands and hits every tick as the recording" % case)
+func test_the_battle_flies_as_the_old_paths_did() -> void:
+	var candidate: Dictionary = await _battle()
+	var recorded: Variant = ParityFixture.stored(FIXTURE, OLD_PATHS_CASE)
+	assert_not_null(recorded, "the old paths' battle was recorded")
+	if recorded == null:
+		return
+	assert_gt(int(recorded["hits_total"]), 10, "hits landed (%d)" % int(recorded["hits_total"]))
+	assert_eq(ParityFixture.encode(_digest_of(candidate)), recorded,
+			"the same rows, commands and hits every tick as the recording")
 	gut.p("%d hits; %d sync calls a tick" % [int(candidate["hits_total"]), int(candidate["sync_calls"])])
-
-
-func test_one_thread_and_six_give_the_same_battle_with_everything_on() -> void:
-	var one: Dictionary = await _battle({}, 1)
-	var six: Dictionary = await _battle({}, 6)
-	var first: int = _first_difference(one["rows"], six["rows"])
-	assert_eq(first, -1, "the rows are the same bits with one thread and six (first difference at tick %d)" % first)
-	first = _first_difference(one["hits"], six["hits"])
-	assert_eq(first, -1, "and the hits (first difference at tick %d)" % first)
 
 
 # --- the ram stage's contact read ---------------------------------------------------------------------------------------
 
 
-# The melee of `test_fighter_melee`, in a fresh physics space: [digest, ram lines, the resolver's contact path].
+# T14's seeded melee (Q33): eight lean fighters flung together for 4 s in a fresh physics space, thousands of Jolt contacts
+# and a dozen rams. Returns [pose lines, ram lines, the resolver's contact path, its hull source, the Jolt contact points].
 func _melee() -> Array:
 	var made: Array = _space()
 	var space: SubViewport = made[0]
@@ -402,24 +339,34 @@ func _melee() -> Array:
 		c.ship.reset_to(Transform3D(Basis(Vector3.UP, rng.randf_range(0.0, TAU)), at))
 		c.ship.linear_velocity = -at.normalized() * rng.randf_range(15.0, 70.0)
 	var lines := PackedStringArray()
+	var contacts: int = 0
 	for tick: int in 240:
 		await get_tree().physics_frame
+		for c: Combatant in ships:
+			var state: PhysicsDirectBodyState3D = PhysicsServer3D.body_get_direct_state(c.ship.get_rid())
+			if state != null:
+				contacts += state.get_contact_count()
 		if tick % 20 == 19:
 			for c: Combatant in ships:
 				var s: Ship = c.ship
 				lines.append("t%d %s %s %s %s %.6f" % [tick, c.display_name, var_to_str(s.global_position),
 						var_to_str(s.linear_velocity), var_to_str(s.angular_velocity), c.damageable.hull.hp])
 	var path: StringName = rams.contact_path()
+	var source: StringName = rams.source()
 	space.queue_free()
 	await get_tree().physics_frame
-	return ["\n".join(lines), ram_lines.duplicate(), path]
+	return ["\n".join(lines), ram_lines.duplicate(), path, source, contacts]
 
 
 func test_the_melee_rams_the_same_with_the_contacts_read_natively() -> void:
+	# M6-T18 folded `test_fighter_melee` (its contact count) and `test_ram_contact_columns` (the same recording, and the
+	# hulls gathered from the core) into this test.
 	Settings.set_value(&"ram_damage", true)
 	var recorded: Variant = ParityFixture.stored(FIXTURE, "melee_rams")
 	var native: Array = await _melee()
 	assert_eq(native[2], &"native", "the contacts are read in one native call")
+	assert_eq(native[3], &"core", "over the hulls the core gathered")
+	assert_eq(native[4], MELEE_CONTACTS, "Jolt's contact points between the fighters, summed over the melee")
 	assert_not_null(recorded, "the GDScript read's melee was recorded")
 	if recorded == null:
 		return

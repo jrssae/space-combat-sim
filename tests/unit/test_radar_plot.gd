@@ -1,6 +1,7 @@
 extends GutTest
-## RadarModel.plot and RadarPlot (M4-T36): the radar's packed plot gives the same dots, in the same order, as the per-contact
-## `RadarModel.dots`, and its unit points land where `RadarModel.to_screen` puts them.
+## RadarModel.plot and RadarPlot (M4-T36): the radar's packed plot's unit points and stalks land where `RadarModel.to_screen`
+## puts them, and the contacts gathered from `TargetInfo`s keep what the plot reads. The dots themselves are
+## `test_radar_model`'s (M6-T18 removed the GDScript `dots` they were compared with).
 
 const TOL: float = 1e-6
 
@@ -22,27 +23,6 @@ func _field(count: int, seed_value: int) -> Array[TargetInfo]:
 
 func _own_basis() -> Basis:
 	return Basis(Vector3(0.3, 1.0, -0.2).normalized(), 0.8)
-
-
-func test_the_plot_holds_the_same_dots_in_the_same_order_as_the_dots() -> void:
-	var infos: Array[TargetInfo] = _field(400, 36)
-	var own := Vector3(120.0, -40.0, 300.0)
-	var selected: int = infos[18].id  # a near one (every third is within 5 km)
-	var expected: Array[RadarModel.Dot] = RadarModel.dots(infos, selected, own, _own_basis(), Factions.EARTH_ALLIANCE)
-	var plot: RadarPlot = RadarModel.plot(RadarContacts.from_infos(infos), selected, own, _own_basis(), Factions.EARTH_ALLIANCE)
-	var got: Array[RadarModel.Dot] = plot.to_dots()
-	assert_gt(expected.size(), 200, "most are on the radar")
-	assert_lt(expected.size(), infos.size(), "some are beyond reach")
-	assert_eq(got.size(), expected.size())
-	var same: int = 0
-	for i: int in mini(got.size(), expected.size()):
-		var a: RadarModel.Dot = got[i]
-		var b: RadarModel.Dot = expected[i]
-		if a.id == b.id and a.point == b.point and a.foot == b.foot and a.range_m == b.range_m and a.color == b.color \
-				and a.faction == b.faction and a.selected == b.selected and a.above == b.above and a.rim == b.rim:
-			same += 1
-	assert_eq(same, expected.size(), "every dot equal, bit for bit, in drawing order")
-	assert_eq(plot.selected_index, plot.size() - 1, "the selected one last")
 
 
 func test_with_no_selection_and_no_contacts() -> void:
