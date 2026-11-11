@@ -52,3 +52,7 @@ mod voice_rows;
 // M4-T23: the player's radar sphere, an engine-free kernel, and its shell.
 mod radar_kernel;
 mod radar_plot;
+
+// M6-T02: the ephemeris and the gravity on test particles, engine-free kernels (wired in by M6-T04).
+mod ephemeris;
+mod gravity;

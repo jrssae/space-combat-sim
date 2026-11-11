@@ -860,6 +860,32 @@ func test_the_step_job_holds_no_engine_type() -> void:
 	assert_true(host.contains("StepThread::start(STEP_THREAD, brain_step::run)"), "the host's thread runs the job's run")
 
 
+## The ephemeris and the gravity on test particles (M6-T02): held to the kernels' rules and to the standard library alone,
+## so the tick's gravity sample can be read on a worker or the main thread. T04 adds the shell that reaches them.
+const EPHEMERIS_FILE: String = "res://native/src/ephemeris.rs"
+const GRAVITY_FILE: String = "res://native/src/gravity.rs"
+const EPHEMERIS_USE_ALLOWED: Array[String] = ["use std::"]
+
+
+func test_the_ephemeris_kernel_holds_no_engine_type() -> void:
+	var violations: PackedStringArray = _engine_free_violations(EPHEMERIS_FILE, KERNEL_FORBIDDEN, EPHEMERIS_USE_ALLOWED)
+	violations.append_array(_engine_free_violations(GRAVITY_FILE, KERNEL_FORBIDDEN, EPHEMERIS_USE_ALLOWED))
+	assert_eq(violations.size(), 0, "no engine type, call, crate path or stray import in the ephemeris or the gravity: %s" % violations)
+	var ephemeris: String = FileAccess.get_file_as_string(EPHEMERIS_FILE)
+	for part: String in ["pub struct Elements", "pub struct System", "pub fn solve_kepler(", "pub fn state_at(",
+			"pub fn relative_state(", "pub fn sample(", "pub fn set_influence_radius(", "pub fn pull_gm(", "pub fn at_phase(",
+			"pub fn add_on_orbit("]:
+		assert_true(ephemeris.contains(part), "the ephemeris holds %s" % part)
+	var gravity: String = FileAccess.get_file_as_string(GRAVITY_FILE)
+	for part: String in ["pub fn zones(", "pub fn dominant(", "pub fn pull_at(", "pub fn residual(", "pub fn residual_rows(",
+			"pub fn accel_at(", "pub fn tidal(", "pub fn tidal_rows(", "pub fn kick(", "pub fn drift(", "pub fn step(",
+			"pub fn half_kick_back(", "pub fn velocity_at_tick("]:
+		assert_true(gravity.contains(part), "the gravity kernel holds %s" % part)
+	for source: String in [ephemeris, gravity]:
+		assert_false(source.contains("static mut") or source.contains("thread_local") or source.contains("Cell<")
+				or source.contains("f32"), "no shared mutable state and nothing narrower than 64-bit")
+
+
 ## The radar sphere's kernel (M4-T23): held to the kernels' rules; its shell (`radar_plot.rs`) is what reaches it.
 const RADAR_KERNEL_FILE: String = "res://native/src/radar_kernel.rs"
 const RADAR_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::{Basis, Vector3};", "use crate::v3::{length_squared, xform_inv};"]
