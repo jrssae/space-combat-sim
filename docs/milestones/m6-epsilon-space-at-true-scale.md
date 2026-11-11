@@ -295,7 +295,7 @@ which changes the same native rows and rebase path:
 | T16 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 | T17 | E | Test tiers: quick, standard, balance and full, the quick list, its guard test, the Rust tests in the run | T01 | Sonnet | Scripts and one data file from a written plan (`docs/research/test-review/quick-test-suite.md`) | done |
 | T18 | E | The review's CONFIRMED test removals (sections A to D), each re-checked, the parity recordings still read | T17 | Opus | Proving two tests cover the same thing needs both read in full; rules on what must stay | done |
-| T19 | D | The vortex reworked and stand-alone: fitted to the gate, a shallow funnel, spiralling soft dark patches; open jump points use it too | T14 | Opus | Shader animation and a shared effect seam; the look is (H) | done |
+| T19 | D | The vortex reworked and stand-alone: fitted to the gate, a shallow funnel, spiralling soft dark patches; open jump points use it too | T14 | Opus | Shader animation and a shared effect seam; the look is (H) | in progress |
 
 ### M6-T01 Moving-frame audit and design
 
@@ -758,3 +758,11 @@ which changes the same native rows and rebase path:
     sequence about 85 %, `jumpgate_open` about 80 %, `point_2` about 80 %, `gathering` (the gate's steady lamps in shadow,
     `gate_closed_lamps.png`) about 80 %. Open (H): the look; the base glow's
     strength from behind; the final frame rate.
+- **Round 3 (maintainer, 2026-11-11, after round 2's side-by-side):** the lamps are fine for now; the shape and texture are not.
+  - **Arms:** at the top, bottom and both sides of the funnel, the side arms a little further from the axis than the top and
+    bottom ones, so the four frame an **elliptical mouth**, wider than tall.
+  - **Mouth:** its rim within **1 m** of the arms (it was 8 m short), following the ellipse.
+  - **Swirl rotation:** seen from in front of the mouth, **counter-clockwise for an arriving (exiting) vortex, clockwise for a
+    departing one**. The patches still travel in for a departure and out for an arrival.
+  - **Colour:** lighter, a **dark sky blue** rather than navy, for the arrival vortex.
+  - **Texture:** finer, hair-like streaks and a softer swirl, not separate bold bands.
