@@ -80,17 +80,14 @@ func _burn(seconds: float) -> void:
 
 
 func test_the_tank_is_built_from_the_ship_spec_and_starts_full() -> void:
+	# The setting's default (true) is `test_settings_schema`'s; the tank follows the setting it was built under.
+	assert_true(ship.get_fuel_tank().unlimited, "unlimited under the default setting")
 	Settings.set_value(&"fuel_unlimited", false)
 	var tank: FuelTank = ship.get_fuel_tank()
 	assert_eq(tank.capacity_kg, spec.fuel_capacity_kg)
 	assert_eq(tank.mass_kg(), spec.fuel_capacity_kg)
 	assert_eq(tank.fraction(), 1.0)
 	assert_false(tank.is_empty())
-
-
-func test_fuel_unlimited_defaults_to_true() -> void:
-	assert_true(Settings.schema.get_default(&"fuel_unlimited"))
-	assert_true(ship.get_fuel_tank().unlimited)
 
 
 func test_unlimited_fuel_is_never_drawn_down() -> void:

@@ -206,13 +206,6 @@ func test_the_hud_console_provider() -> void:
 		assert_true(registry.read("hud.%s" % key)["ok"], key)
 
 
-func test_the_hud_settings_are_schema_entries() -> void:
-	assert_true(SettingsSchema.new().keys().has(&"show_hud"))
-	assert_true(SettingsSchema.new().keys().has(&"hud_targeting_grid"))
-	assert_eq(Settings.get_value(&"show_hud"), true)
-	assert_eq(Settings.get_value(&"hud_targeting_grid"), false)
-
-
 # --- what the targeting reports for the HUD ---------------------------------------------------------------------------
 
 

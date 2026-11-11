@@ -196,8 +196,3 @@ func test_the_console_surface() -> void:
 	assert_eq(Settings.get_value(&"sfx_volume"), 0.25)
 	assert_false(registry.execute("sfx nonsense")[0].ok)
 	assert_eq(registry.format_path("audio.sounds").count("pulse_fire"), 1)
-
-
-func test_sfx_volume_is_a_schema_entry() -> void:
-	assert_true(SettingsSchema.new().keys().has(&"sfx_volume"))
-	assert_eq(float(Settings.get_value(&"sfx_volume")), float(_volume_backup))

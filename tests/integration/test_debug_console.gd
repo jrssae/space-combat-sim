@@ -361,6 +361,8 @@ func test_autoload_is_registered_after_sim_clock_and_always_processes() -> void:
 	var names := PackedStringArray()
 	for child: Node in get_tree().root.get_children():
 		names.append(child.name)
+	assert_gte(names.find("Settings"), 0, "Settings is an autoload")
+	assert_gte(names.find("SimClock"), 0, "SimClock is an autoload (M6-T18: from test_sim_clock)")
 	assert_lt(names.find("SimClock"), names.find("DebugConsole"))
 	assert_lt(names.find("Settings"), names.find("SimClock"))
 	assert_eq(DebugConsole.process_mode, Node.PROCESS_MODE_ALWAYS)

@@ -394,13 +394,6 @@ func test_the_console_reports_the_rams() -> void:
 	assert_string_contains(results[1].lines[0], "ALPHA")
 
 
-func test_the_ram_damage_setting_is_a_bool_that_defaults_on() -> void:
-	var schema := SettingsSchema.new()
-	assert_true(schema.has_key(&"ram_damage"))
-	assert_eq(schema.get_type(&"ram_damage"), TYPE_BOOL)
-	assert_eq(schema.get_default(&"ram_damage"), true)
-
-
 # --- the real main scene ------------------------------------------------------------------------------------------
 
 

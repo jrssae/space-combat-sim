@@ -105,12 +105,6 @@ func test_an_off_blur_is_given_zero_strength() -> void:
 	assert_eq(post.blur_effect().strength, 0.0)
 
 
-func test_strength_is_a_unit_range_setting() -> void:
-	var entry: Dictionary = SettingsSchema.ENTRIES[&"motion_blur_strength"]
-	assert_eq(entry["min"], 0.0)
-	assert_eq(entry["max"], 1.0)
-
-
 # --- console ------------------------------------------------------------------------------------------------------
 
 

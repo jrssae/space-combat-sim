@@ -1,7 +1,7 @@
 # The quick tier (scripts/run_tests.sh --quick): one GUT script per line, grouped by area. Pure or fast files only, no
 # SlowTests or BalanceTests files, no *_gpu.gd (tests/unit/test_quick_suite.gd guards this).
 # Flight
-res://tests/unit/test_smoke.gd
+res://tests/unit/test_project_settings.gd
 res://tests/unit/test_flight_model.gd
 res://tests/unit/test_flight_assist.gd
 res://tests/unit/test_flight_model_propellant.gd
@@ -41,7 +41,6 @@ res://tests/unit/test_settings.gd
 res://tests/unit/test_settings_menu_model.gd
 res://tests/integration/test_debug_console.gd
 res://tests/integration/test_console_command_list.gd
-res://tests/integration/test_info_md.gd
 # Weapons, hits, damage, rams
 res://tests/unit/test_pulse_cannon_gate.gd
 res://tests/unit/test_pulse_cannon_capacitor.gd
