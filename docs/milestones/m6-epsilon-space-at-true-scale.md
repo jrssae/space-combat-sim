@@ -276,7 +276,7 @@ which changes the same native rows and rebase path:
 | Task | Track | Title | Depends on | Agent | Why | Status |
 |---|---|---|---|---|---|---|
 | T01 | A | Moving-frame audit and design: every World-frame velocity, the rebase order, the error budgets, §19's draft (early start) | - | Fable | Cross-cutting invariants over GDScript, Jolt and the native rows; mistakes surface late | done |
-| T02 | A | Ephemeris and gravity kernel: Kepler rails, the body tree, the strongest body's pull and the tidal residual, the integrator (early start, new native files) | T01 | Fable | Precise, deterministic numerics that M9 and M11 reuse | in progress |
+| T02 | A | Ephemeris and gravity kernel: Kepler rails, the body tree, the strongest body's pull and the tidal residual, the integrator (early start, new native files) | T01 | Fable | Precise, deterministic numerics that M9 and M11 reuse | done |
 | T03 | B | Star system data: bodies and elements in `data/star_systems.json`, the loader, the `system` provider | T02, Q1 to Q3 | Sonnet | Data and validation on a clear format | not started |
 | T04 | A | The free-falling frame: the origin as a test particle, `environment_accel` from the ephemeris | T02, T03 | Opus | Touches the tick order and every ship's force step | not started |
 | T05 | A | The velocity rebase over every body, row, bolt, chunk, particle and interpolated node | T04 | Fable | The riskiest change of the milestone; every moving thing and the parity recordings | not started |
@@ -338,6 +338,16 @@ which changes the same native rows and rebase path:
   be placed on another orbit at a phase offset (the gate on the station's orbit, Q3).
 - **Tests:** the Rust tests and `test_ephemeris.gd`: quick.
 - **Done when:** AC3 in Rust; the kernel holds no engine type (the guard test).
+
+- **Done (2026-11-10, `72b3150`):**
+  - `native/src/ephemeris.rs`: Kepler elements (e up to 0.99) solved by Newton with a fixed 24 steps, a body tree evaluated
+    directly at any time (`state`, `relative_state` against a body, no carried state), `add_on_orbit` for a point sharing an
+    orbit at a phase offset (the gate on the station's orbit), and `sample` for the frozen lists the gravity kernel reads.
+  - `native/src/gravity.rs`: D66's rule (`pull_at`, `dominant`, `residual` and `residual_rows`: the strongest body whose zone
+    holds the point, zones from `zone_radius` with `A_MIN_DEFAULT` 0.5 m/s^2, eased to nothing over the outer fifth); the full
+    n-body sum and `tidal` kept beside it; `kick`, `drift`, `step` and `half_kick_back` for the integrator.
+  - 27 new Rust tests (63 in all, `cargo test --release --lib`) and `test_the_ephemeris_kernel_holds_no_engine_type` in
+    `test_sim_core.gd`: both quick tier. Not bound to GDScript yet: T04 adds the binding and `test_ephemeris.gd`.
 
 ### M6-T03 Star system data
 
