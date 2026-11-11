@@ -290,7 +290,7 @@ which changes the same native rows and rebase path:
 | T11 | C | The planet and its atmosphere: the `planet` generator and the scattering shader (generator half early) | T10, Q10 | Opus | Shader maths on T10's layer; the look is (H) | in progress |
 | T12 | C | The sun: disc and glow from the star's colour, the lens flare and key light on the true direction | T10 | Sonnet | A small shader and the existing flare | not started |
 | T13 | D | Jumpgate references and the `jumpgate` generator (early start) | Q11 | Opus | Geometry read off references | done |
-| T14 | D | The jumpgate in the game: the prop, the vortex, 1 000 km broadcast, arrivals through the gate | T13, T09, Q12 | Opus | A new effect and the mission and encounter seams | in progress |
+| T14 | D | The jumpgate in the game: the prop, the vortex, 1 000 km broadcast, arrivals through the gate | T13, T09, Q12 | Opus | A new effect and the mission and encounter seams | done |
 | T15 | C | Far representations for the station's stand-in, the gate and the planets | T10, T14 | Opus | Hand-offs across three draw paths with no pop | not started |
 | T16 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 | T17 | E | Test tiers: quick, standard, balance and full, the quick list, its guard test, the Rust tests in the run | T01 | Sonnet | Scripts and one data file from a written plan (`docs/research/test-review/quick-test-suite.md`) | done |
@@ -509,6 +509,28 @@ which changes the same native rows and rebase path:
 - **Order (maintainer, 2026-11-11):** T14 runs before T09: the gate is placed in today's scenes beside the station's stand-in,
   50 km away as `data/star_systems.json` says, at rest; T09 later moves it with the rest of the scene to true scale.
 - **Done when:** AC8.
+
+- **Done (2026-11-11, `cfc7882`):**
+  - The gate (`src/props/jumpgate.gd`): the generated mesh, 44 Jolt boxes on the rock layer, no hull (bolts pass through), a
+    `Targetable` (`PROP`) broadcasting to 1 000 km. No gameplay scene holds the station's stand-in yet, so free flight and the
+    sandbox get a `jumpgates[]` entry: 50 km from the scene's origin (the data's distance), toward -Z, facing the origin.
+  - The vortex (`jump_vortex.gd` and its shader): a funnel with flash and tip billboards, driven by the pure `VortexTiming`
+    (1 s tip glow, 1 s flash, 1.5 s growth, 4 s open, 1 s close); orange/yellow out, blue in.
+  - The player's jump: the pure `GateJumpPrompt`, `GateJump` and `GateAutopilot`, and the adapter `JumpgateHost`. Within 10 km
+    with the gate targeted the HUD shows `X: REQUEST JUMP` and X sends `request_jump` (auto-track elsewhere); controls lock,
+    the autopilot lines up 1 440 m out (around the arms if behind) and runs in at 250 m/s, the cinematic shot, a flash, fade
+    and 2 s of black, then out through the blue vortex at 200 m/s with control back after 3 s or 500 m.
+  - Data: a mission spawn with `arrival: "gate"` and `m.depart(name)`; an encounter pool's `gate` table sends a share of
+    arrivals or departures through the gate while the player is within 25 km (free flight has one). Without either, nothing
+    changes; `JumpArrival` stays for open points. Console `gate` (`status`, `open`, `close`, `jump`, `cancel`, `target`,
+    `approach`) and provider, in `info.md`.
+  - Tests: quick `test_vortex_timing`, `test_gate_jump`, `test_jumpgate_data`, `test_jumpgate_broadcast`; standard
+    `test_jumpgate_in_play` (the player out and back, an AI ship in and out, an encounter raid). Quick tier green (1 604 in
+    202 s); the touched SLOW files (`test_m3_sandbox`, `test_flight_parity_fight`) green.
+  - GPU, **oscar** (R9 200 / Tahiti, not the maintainer's RX 6950 XT), 960x540 Forward+: 94 to 117 fps, 76 draw calls, 76k
+    triangles with the vortex open, 58 to 60 fps in the cinematic; VRAM 322 MB in the renderer (sysfs 673 to 970 MB).
+    Screenshots in `references/screenshots/M6-T14 jumpgate/`. Open (H): the vortex's look, the shots' framing; the gate
+    vanishes beyond 50 km (the camera's far plane) until T15. `docs/architecture.md` waits for T16.
 
 ### M6-T15 Far representations
 
