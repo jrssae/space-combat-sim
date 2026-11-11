@@ -808,3 +808,13 @@ which changes the same native rows and rebase path:
     flatter (about 1.65 to 1 on screen against 1.35) and its streaks a little shorter and crisper; the blue is lighter than the
     still's on purpose; the top arm is dim; the lamps are as round 2. `point_1` about 80 % (it is patchier and paler; ours is
     streakier). The opening sequence, `jumpgate_open`, `point_2` and `gathering` are as round 2. The look stays (H).
+- **Remaining work (maintainer, 2026-11-11, after round 3; the row stays `in progress`):** round 3 is about 80 % by the agent's
+  estimate, the high 70s by the controller's. Paused here at the maintainer's word; when T19 resumes:
+  1. **The mouth's apparent size:** in `jumpgate.png` the mouth sits inside the arms' inner ends; ours reaches their front
+     ends and fills more of the frame. Pull its visible edge in to match the still while it stays within 1 m of the arms.
+  2. **The ellipse's proportion:** the still's mouth reads about 1.65:1 on screen against ours at 1.35 (`mouth_aspect`);
+     flatten toward the still.
+  3. **The rim:** ours is fuzzier and spreads wider; tighten it toward the still's cleaner feathered edge.
+  4. Still open (H): the frame rate with a visible window on the maintainer's machine, and the maintainer's acceptance of the
+     side-by-side (`references/screenshots/M6-T19 vortex/acceptance_jumpgate_png.png`). The lamps are accepted for now; the
+     top arm reads dim in the acceptance view.
