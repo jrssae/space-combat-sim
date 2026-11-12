@@ -405,6 +405,24 @@ impl ScsSimCore {
         true
     }
 
+    /// Takes the static rows' new positions after a shift (M6-T06, L4): the same rows, so nothing is built again; the rows
+    /// hold them from the next sync, as they would after `set_statics`. Returns false, after logging why, when the count is
+    /// not the statics'; nothing changes then.
+    #[func]
+    pub fn move_statics(&mut self, positions: PackedVector3Array) -> bool {
+        let from = positions.as_slice();
+        if from.len() != self.static_positions.len() || !self.static_block.take_positions(from) {
+            godot_error!(
+                "ScsSimCore.move_statics: {} positions for {} statics; nothing moved",
+                from.len(),
+                self.static_positions.len()
+            );
+            return false;
+        }
+        self.static_positions.copy_from_slice(from);
+        true
+    }
+
     /// Marks a body whose faction, name, kind, radius, place or activity may have changed: it is read again at the next
     /// sync point, and a touched body that turned active after the tick's first sync gets its row at the next one.
     #[func]

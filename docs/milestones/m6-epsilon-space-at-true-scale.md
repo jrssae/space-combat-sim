@@ -288,7 +288,7 @@ which changes the same native rows and rebase path:
 | T03 | B | Star system data: bodies and elements in `data/star_systems.json`, the loader, the `system` provider | T02, Q1 to Q3 | Sonnet | Data and validation on a clear format | done |
 | T04 | A | The free-falling frame: the origin as a test particle, `environment_accel` from the ephemeris | T02, T03 | Opus | Touches the tick order and every ship's force step | done |
 | T05 | A | The velocity rebase over every body, row, bolt, chunk, particle and interpolated node | T04 | Fable | The riskiest change of the milestone; every moving thing and the parity recordings | done |
-| T06 | A | L4: the rebase cascade natively, the cached solid shifted in place, hidden ships skipped | T05 | Opus | A measured native fix on the path T05 rewrote | in progress |
+| T06 | A | L4: the rebase cascade natively, the cached solid shifted in place, hidden ships skipped | T05 | Opus | A measured native fix on the path T05 rewrote | in progress (the cascade is gone; AC2's 10 % bar waits for the maintainer, options in the work notes) |
 | T07 | A | Gravity on everything: ships, tier rows, bolts, debris, the brake's and the AI's feed-forward; the gravity stand-in removed | T04 | Opus | Native kernels with parity at zero gravity | not started |
 | T08 | A | Flying under gravity: the clamp, the assist's and brake's reference, the HUD's reference and altitude, planet impact | T07, Q4 to Q6 | Opus | Flight-model semantics the player feels | not started |
 | T09 | B | Scenarios at true scale: spawns relative to bodies, stations and orbits, epochs, free flight beside the station's stand-in | T03, T08, Q7, Q9 | Opus | Every scenario and mission must keep working | not started |
@@ -499,6 +499,56 @@ which changes the same native rows and rebase path:
   native statics' shift.
 - **Tests:** the existing rebase tests keep their tiers; the cost is a bench number, not a test.
 - **Done when:** AC2, numbers before and after in the Done notes.
+
+- **Work notes (2026-11-12; AC2's bar not met, the maintainer's choice below):**
+  - **A shift is not a new version.** `StaticRows.shift` moves one world's rows in one native call (`ScsStaticRows.shift`
+    over `kernels::statics::shift_owned`, engine-free, the same 32-bit sum GDScript's `+=` made) and bumps `moves`, not
+    `version` or `solid_version`. The cached `Solid` (now with a `worlds` column) shifts in place with it and counts its own
+    `moves`; the hit and ram resolvers take the new places into their kept grids when it changes (a native `keep`, about
+    45 us each). `scan_columns` is no longer built again. `SimCore` sends the core only the positions
+    (`ScsSimCore.move_statics`: the static block's positions in place, no rebuild, taken by the rows at the next sync as
+    `set_statics` was). Measured alone (1 000 rocks, 1 000 mines): shift 100 to 3 us, solid rows 295 to 8 us, scan columns
+    128 to 0, the core's copy 104 to a few us.
+  - **Hidden pool ships are skipped**: `ShipPool` marks a parked ship (`WorldFrame.PARKED_META`) and `acquire` clears it;
+    the rebase walk skips it, as it skips the tier's, and tests both metas before `is_ancestor_of`.
+  - **Tried and dropped:** placing the rock bodies natively. 1 000 `body_set_state` calls cost 284 us from Rust against 293 us
+    from GDScript: the cost is Godot-Jolt's per body, not the loop.
+  - `bench ... boost=<m/s>` (new option): boosts the frame off its anchor once the scene is placed, so the off-anchor tick is
+    measured with the same relative motion as a riding run (T05's probe boosted before the spawn, so its ships flew through
+    the rocks at the boost's speed and part of its 1.4 ms was more rams and contacts, not the drift).
+  - **Numbers**, `bench battle 1000 20 warmup=3 seed=1` (headless, pinned 0-11, idle, before at `ed9935b5`):
+
+    | run | tick median ms | p99 ms | rebase ticks: count, median, worst ms | shift ms |
+    |---|---|---|---|---|
+    | riding, before | 5.57 | 7.82 | 3, 7.97, 8.50 | 1.34 |
+    | riding, after | 5.61 | 7.70 | 3, 7.32, 8.35 | 1.21 |
+    | `rebase_m=60`, before | 5.56 | 7.74 | 8, 7.81, 8.28 | 1.33 |
+    | `rebase_m=60`, after | 5.57 | 7.67 | 8, 7.34, 7.67 | 1.19 |
+    | off the anchor (`boost=50`), before | 6.78 | 8.86 | | |
+    | off the anchor (`boost=50`), after | 6.25 | 8.46 | | |
+
+    The off-anchor extra drops from 1.21 to 0.64 ms a tick (hit +0.39 to +0.09, the core's sync +0.39 to 0; what is left: the
+    1 000 rock bodies placed each tick, about 0.28 ms in Jolt, the two kept grids, the anchored nodes). The rebase tick's
+    extra over the median drops from 2.25 to 1.77 ms (worst 8.28 to 7.67 ms, +38 % against +49 %). `bench_quick.sh
+    m6_t06_after_quick battle` (500, 1 000): 4.42 and 5.61 ms median, p99 6.04 and 7.84, every budget held.
+  - **Where the rebase tick still goes** (one probed run): the shiftable walk about 0.6 ms (1 128 group members listed, 489
+    moved, rigid bodies teleported), the rock field's 1 000 bodies 0.25 ms, far dots 0.06 ms, the end-of-tick interpolation
+    reset 0.27 ms, Jolt's next step +0.33 ms, the resolvers' kept grids +0.2 ms. All of it is per-node engine work, not the
+    cascade. And the bar itself: the tick's own p90 is 6.37 ms (+14 %), so the worst of 3 to 8 rebase ticks lands over +10 %
+    by noise alone, even at no cost.
+  - **Maintainer's choice (AC2):** (a) accept AC2 as met by the cascade's removal and restate the bar on the rebase tick's
+    median extra (now 1.77 ms; or against the tick's p95); (b) a follow-up task for the per-node part: stream the rocks'
+    bodies (only those near a rigid hull live in Jolt, which also removes the off-anchor 0.28 ms), and keep a registry of the
+    shiftables in play instead of walking the group with the tier's 580 parked ships in it; (c) both.
+  - Tests: Rust 118 pass (new: the shift kernel's bits and owners, columns out of step, `Rows::take_positions`). GUT
+    `test_static_shift.gd` (**quick**, 1 test, 2 s): a rebase and a drift over 200 rocks and 3 mines leave the version, the
+    solid rows' object and the scan's columns as they were, and the contact scan's statics, the hit sweep's and the ram
+    broad phase's rock pairs and the core's static rows equal a fresh build's (fails on the hit pairs and the core's rows
+    when either re-take is removed). `test_bench` grows the `boost` option (standard). Quick tier 1 784 of 1 784;
+    with `GUT_SLOW=1`: `test_world_frame` 18, `test_rebase_in_play` 9, `test_velocity_rebase` 10, `test_every_world_core` 6,
+    `test_ship_pool` 21, `test_weapon_rows_battle` 1, `test_debris_pool` 12, `test_tier_handover` 13,
+    `test_flight_parity_fight` 1, `test_parity_fixture` 3, `test_collision_layers` 15, `test_tier` 10, `test_ram_damage` 14,
+    `test_rocks_and_mines` 9, `test_asteroid_belt` 4, `test_standins` 20, `test_sim_core` 21, `test_bench` 10 pass.
 
 ### M6-T07 Gravity on everything
 

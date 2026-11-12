@@ -93,6 +93,7 @@ var _gather_frame: int = -1
 # The rocks (M4-T29): their grid, kept until a rock changes, and the earliest rock hit `_earliest_rock` found.
 var _rocks: HitBroadPhase = HitBroadPhase.new()
 var _solid: StaticRows.Solid = null
+var _solid_moves: int = -1
 var _rock_t: float = INF
 var _rock_a := Vector3.ZERO
 var _rock_b := Vector3.ZERO
@@ -325,11 +326,12 @@ func _to_body_of(j: int) -> Basis:
 
 
 # This tick's projectile and rock pairs that pass the sphere test, as `bolt * rocks + rock`, ascending; the rocks' grid is
-# built again only when a rock changed.
+# built again only when a rock changed or the rocks moved.
 func _rock_pairs(sim: SimCore) -> PackedInt64Array:
 	var solid: StaticRows.Solid = StaticRows.solid()
-	if solid != _solid:
+	if solid != _solid or solid.moves != _solid_moves:
 		_solid = solid
+		_solid_moves = solid.moves  # shifted in place (M6-T06): the grid takes the new places
 		_rocks.keep(solid.positions, solid.radii)
 	static_pairs_visited = 0
 	if solid.ids.is_empty():

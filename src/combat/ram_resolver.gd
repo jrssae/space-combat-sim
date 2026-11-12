@@ -107,6 +107,7 @@ var _phase_class_known: int = -1
 # never in the tree, freed with this node).
 var _rocks: HitBroadPhase = HitBroadPhase.new()
 var _solid: StaticRows.Solid = null
+var _solid_moves: int = -1
 var _rock_hulls: Dictionary = {}
 var _contact_native: bool = false  # the contacts read in one native call over the rows (M4-T35)
 
@@ -408,8 +409,9 @@ func _keep_touching(first_id: int, second_id: int) -> void:
 # could reach, and those go through the swept test as props. The hulls' columns are read only when a ship is near a rock.
 func _resolve_rocks(sim: SimCore, delta: float) -> void:
 	var solid: StaticRows.Solid = StaticRows.solid()
-	if solid != _solid:
+	if solid != _solid or solid.moves != _solid_moves:
 		_solid = solid
+		_solid_moves = solid.moves  # shifted in place (M6-T06): the grid takes the new places
 		_rocks.keep(solid.positions, solid.radii)
 	static_pairs_visited = 0
 	if solid.ids.is_empty():

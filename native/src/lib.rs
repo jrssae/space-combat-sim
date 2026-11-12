@@ -68,3 +68,6 @@ mod frame_rows;
 // M5-T33: the ram tracker, an engine-free kernel, and its shell over Jolt's contacts and the core's rows.
 mod ram_contacts;
 mod ram_tracker;
+
+// M6-T06: the static rows' shift (L4).
+mod static_rows;

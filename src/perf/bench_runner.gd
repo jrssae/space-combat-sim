@@ -1,7 +1,7 @@
 class_name BenchRunner
 extends Node
 ## Runs one many-ships benchmark on the live main scene (M4-T01, architecture §17.1): `bench <layout> <n> [seconds]
-## [warmup=<s>] [seed=<k>] [label=<name>] [probe=paired] [rebase_m=<m>] [sleep=keep] [rocks=<count>] [capitals=<share>]`. Sets the scene up from
+## [warmup=<s>] [seed=<k>] [label=<name>] [probe=paired] [rebase_m=<m>] [sleep=keep] [rocks=<count>] [capitals=<share>] [boost=<m/s>]`. Sets the scene up from
 ## the pools, warms up, records ticks with the `PerfProbe`, writes the report and puts back what it changed; the ships stay in
 ## play.
 ##
@@ -10,6 +10,9 @@ extends Node
 ## belts and the missiles the mix holds in flight (M4-T12), the moon, the carriers' launch cycle, and for four sides a session
 ## faction table and the bench factions on the fighters of sides three and four.
 ## All of it goes when the run ends.
+##
+## `boost=` (M6-T06) boosts the frame off its anchor once the scene is placed, so the run measures the frame falling
+## freely (the anchor-tied things drift every tick) with the same relative motion as a run that rides the anchor.
 
 ## The report is written; the run's summary.
 signal finished(summary: Dictionary)
@@ -26,7 +29,7 @@ const MAX_SLOWDOWN: float = 10.0
 ## The console waits this many frames at most; the run releases the wait when it ends.
 const HOLD_FRAMES: int = 1_000_000
 const DEFAULT_ROOT: String = "res://reports/perf"
-const OPTION_KEYS: Array[String] = ["warmup", "seed", "label", "probe", "rebase_m", "sleep", "rocks", "capitals"]
+const OPTION_KEYS: Array[String] = ["warmup", "seed", "label", "probe", "rebase_m", "sleep", "rocks", "capitals", "boost"]
 ## A carrier's launch leaves its bay this much faster than the carrier, along its nose, m/s.
 const LAUNCH_MPS: float = 80.0
 
@@ -61,7 +64,7 @@ func _init() -> void:
 
 func _ready() -> void:
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"bench",
-			"Fly a benchmark layout (%s) with n ships from the pools, measure [seconds] (30) after warmup=<s> (5), and write reports/perf/<label>/ (seed=<k> label=<name> probe=paired rebase_m=<m> rocks=<count> capitals=<share>)"
+			"Fly a benchmark layout (%s) with n ships from the pools, measure [seconds] (30) after warmup=<s> (5), and write reports/perf/<label>/ (seed=<k> label=<name> probe=paired rebase_m=<m> rocks=<count> capitals=<share> boost=<m/s>)"
 			% ", ".join(PackedStringArray(BenchLayout.NAMES)),
 			[ConsoleArg.enum_required(&"layout", BenchLayout.NAMES), ConsoleArg.int_required(&"n", 1, 2000),
 			ConsoleArg.string_rest(&"options").make_optional("")]), _cmd_bench, self)
@@ -75,12 +78,12 @@ func _exit_tree() -> void:
 
 
 ## Reads the words after `bench <layout> <n>`: an optional window in seconds first, then `key=value` options.
-## `{"ok", "error", "seconds", "warmup", "seed", "label", "paired", "rebase_m", "keep_sleep", "rocks", "capitals"}` (`rocks` and
-## `capitals`, the capital share, -1: the mix's).
+## `{"ok", "error", "seconds", "warmup", "seed", "label", "paired", "rebase_m", "keep_sleep", "rocks", "capitals", "boost"}` (`rocks`
+## and `capitals`, the capital share, -1: the mix's; `boost`, m/s, 0 for none).
 static func parse_options(words: PackedStringArray) -> Dictionary:
 	var out: Dictionary = {"ok": true, "error": "", "seconds": DEFAULT_SECONDS, "warmup": DEFAULT_WARMUP_S, "seed": 1, "label": "",
 			"paired": false, "rebase_m": REBASE_THRESHOLD_M, "keep_sleep": false, "rocks": -1,
-			"capitals": -1.0}
+			"capitals": -1.0, "boost": 0.0}
 	for i: int in words.size():
 		var word: String = words[i]
 		var pair: PackedStringArray = word.split("=", true, 1)
@@ -125,6 +128,10 @@ static func parse_options(words: PackedStringArray) -> Dictionary:
 				if not text.is_valid_float() or float(text) < 0.0 or float(text) > 1.0:
 					return _bad("capitals must be a share from 0 to 1")
 				out["capitals"] = float(text)
+			"boost":
+				if not text.is_valid_float() or float(text) < 0.0:
+					return _bad("boost must be m/s, 0 or more")
+				out["boost"] = float(text)
 			_:
 				return _bad("unknown option '%s' (%s)" % [key, ", ".join(PackedStringArray(OPTION_KEYS))])
 	return out
@@ -240,6 +247,8 @@ func _set_up_scene() -> void:
 	if DisplayServer.get_name() == "headless" and not bool(_options["keep_sleep"]):
 		OS.low_processor_usage_mode_sleep_usec = 0
 		probe.time_sync = true
+	if float(_options.get("boost", 0.0)) > 0.0:
+		main.world.boost(Vector3(float(_options["boost"]), 0.0, 0.0))
 	probe.recording = false
 	probe.clear_series()
 	probe.stages_enabled = true
@@ -380,6 +389,7 @@ func _finish(now: int, aborted: String) -> void:
 		"weapons": _weapons(),
 		"core": SimCore.current().window_summary() if SimCore.current() != null else {},
 		"rebase_threshold_m": float(_options["rebase_m"]),
+		"boost_mps": float(_options.get("boost", 0.0)),
 		"sync_timed": probe.time_sync,
 		"sleep_usec_during_run": OS.low_processor_usage_mode_sleep_usec,
 		"engine_check": _engine_check(series[PerfProbe.Field.TICK], int(tps)),
@@ -418,6 +428,8 @@ func _put_back() -> void:
 	DebugConsole.flags.invulnerable = bool(_restore["god"])
 	if main != null and is_instance_valid(main.world):
 		main.world.auto_rebase_distance_m = float(_restore["threshold"])
+		if float(_options.get("boost", 0.0)) > 0.0:
+			main.world.boost_to_anchor()
 	if standins != null and is_instance_valid(standins):
 		standins.clear()
 	if main != null and is_instance_valid(main.ships):

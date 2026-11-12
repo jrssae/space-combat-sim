@@ -10,7 +10,8 @@ extends Node
 ## 1 000 000), closing the tick's engine-call count; it is the seam where later tasks write rows back. The hit resolver
 ## (200) asks for the bolts again (`ensure_bolts_synced`), since they moved at 0; bodies touched since the first sync
 ## (a ship back from the pool, a parked or destroyed one) are read again then. A rebase shifts the node and bolt rows
-## once (`rebased`); the static rows come again from `StaticRows` at the next sync.
+## once (`rebased`); the static rows' new places come from `StaticRows` at the next sync, alone when only they changed
+## (M6-T06).
 ##
 ## Threads (M4-T18): the core's per-ship passes (the brains, which `BrainBatch`, an internal child at -9, hands one batch a
 ## tick, and the flight step) run on `perf_threads` worker threads, set at once whenever the setting changes.
@@ -120,6 +121,7 @@ var _window_selects: int = 0
 var _window_parts_us: PackedInt64Array = PackedInt64Array([0, 0, 0, 0, 0])
 var _window_select_us: int = 0
 var _statics_version: int = -1
+var _statics_moves: int = -1
 var _out: Node = null
 var _bolts_fresh: bool = false  # the bolts were read again since this tick's first sync
 var _bolt_sync: Object = null  # the bolt reader (M4-T34), made on first use
@@ -543,7 +545,11 @@ func _sync_in() -> void:
 		core.set_members(tree.get_nodes_in_group(Targetable.GROUP), tree.get_nodes_in_group(Damageable.GROUP))
 	if _statics_version != StaticRows.version:
 		_statics_version = StaticRows.version
+		_statics_moves = StaticRows.moves
 		core.set_statics(StaticRows.ids, StaticRows.positions, StaticRows.radii, StaticRows.factions, StaticRows.kinds)
+	elif _statics_moves != StaticRows.moves:
+		_statics_moves = StaticRows.moves  # the same rows, shifted (M6-T06): only their places go over
+		core.move_statics(StaticRows.positions)
 	var frame: int = Engine.get_physics_frames()
 	var delta: float = get_physics_process_delta_time()
 	var reader: Object = _bolt_reader()

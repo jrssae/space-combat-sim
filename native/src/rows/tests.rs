@@ -284,3 +284,19 @@ fn a_boost_takes_dv_off_the_tier_rows_and_off_the_cruise_a_capital_holds() {
     assert_eq!(tier.cruise[1], Vector3::new(-1960.0, 0.0, 10.0), "the capital still cruises at 40 m/s against the anchor");
     assert_eq!(tier.positions[0], Vector3::new(5.0, 6.0, 7.0));
 }
+
+#[test]
+fn taking_positions_changes_only_the_positions_and_refuses_another_count() {
+    let mut rows = rows_with(&[7, 3, 9]);
+    let before_ids = rows.ids.clone();
+    let before_velocities = rows.velocities.clone();
+    let before_radii = rows.radii.clone();
+    let moved = vec![Vector3::new(1.0, 2.0, 3.0), Vector3::new(4.0, 5.0, 6.0), Vector3::new(-1.0, -2.0, -3.0)];
+    assert!(rows.take_positions(&moved));
+    assert_eq!(rows.positions, moved);
+    assert_eq!(rows.ids, before_ids);
+    assert_eq!(rows.velocities, before_velocities);
+    assert_eq!(rows.radii, before_radii);
+    assert!(!rows.take_positions(&moved[..2]), "two positions for three rows");
+    assert_eq!(rows.positions, moved, "nothing changed by the refused call");
+}

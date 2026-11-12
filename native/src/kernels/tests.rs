@@ -237,3 +237,36 @@ fn a_hull_with_no_box_or_no_number_is_left_to_the_resolver() {
     ));
     assert!(!cannot_reach(&rows, 0, 1, d, 9.0, [100.0; 3], [-100.0; 3]));
 }
+
+#[test]
+fn a_static_shift_moves_only_the_owners_rows_by_the_same_32_bit_sum() {
+    use super::statics::shift_owned;
+    let mut seed = 71u64;
+    let start: Vec<Vector3> = (0..500)
+        .map(|_| Vector3::new(next(&mut seed) * 9.0e4, next(&mut seed) * 2.0e4, next(&mut seed) * 9.0e4))
+        .collect();
+    let worlds: Vec<i64> = (0..500).map(|i| if i % 5 == 0 { 0 } else { 42 }).collect();
+    let offset = Vector3::new(-180.25, 0.003, 4999.9);
+    let mut positions = start.clone();
+    assert_eq!(shift_owned(&mut positions, &worlds, 42, offset), 400);
+    for i in 0..500 {
+        if worlds[i] == 42 {
+            // The same bits as GDScript's `positions[s] += offset` on a 32-bit Vector3.
+            let want = start[i] + offset;
+            assert_eq!(positions[i].x.to_bits(), want.x.to_bits());
+            assert_eq!(positions[i].y.to_bits(), want.y.to_bits());
+            assert_eq!(positions[i].z.to_bits(), want.z.to_bits());
+        } else {
+            assert_eq!(positions[i], start[i], "a row of another world stays");
+        }
+    }
+    assert_eq!(shift_owned(&mut positions, &worlds, 7, offset), 0, "no row of world 7");
+}
+
+#[test]
+fn a_static_shift_with_columns_out_of_step_moves_nothing() {
+    use super::statics::shift_owned;
+    let mut positions = vec![Vector3::new(1.0, 2.0, 3.0); 3];
+    assert_eq!(shift_owned(&mut positions, &[1, 1], 1, Vector3::ONE), 0);
+    assert_eq!(positions, vec![Vector3::new(1.0, 2.0, 3.0); 3]);
+}

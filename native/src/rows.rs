@@ -546,6 +546,18 @@ impl Rows {
     }
 }
 
+impl Rows {
+    /// Takes new positions for the same rows (M6-T06: the statics after a shift), every other column kept. False, with
+    /// nothing changed, when the count differs.
+    pub fn take_positions(&mut self, from: &[Vector3]) -> bool {
+        if from.len() != self.positions.len() {
+            return false;
+        }
+        self.positions.copy_from_slice(from);
+        true
+    }
+}
+
 impl Bolts {
     /// A velocity rebase: every bolt loses `dv`. Its last step stays: that displacement was flown in the old frame.
     pub fn boost(&mut self, dv: Vector3) {

@@ -4,8 +4,9 @@ extends RefCounted
 ## belt's mines. Each is registered once and removed once, and no tick walks them: the contact scan appends them as rows, and
 ## the hit and ram resolvers keep the solid ones (rocks: bolts hit them, ships ram them) in a grid built only when one changes.
 ## A row belongs to the `WorldFrame` it was registered with (its position is in that frame) and moves only on that world's
-## rebase; a row with no world never moves. Ids must be unique and not instance ids: a rock uses its body's RID id, a mine
-## one from `new_id`.
+## rebase or drift; a row with no world never moves. A move is not a change of rows (M6-T06, L4): the columns shift in place
+## natively, the solid rows with them, and `moves` counts it, so nothing kept by `version` is built again. Ids must be unique
+## and not instance ids: a rock uses its body's RID id, a mine one from `new_id`.
 ##
 ## Mines are obstacles, not hulls: bolts and rams pass them (the mine's own trigger is what sets it off), and only their own
 ## side knows where they are (Q27, `ContactScan.statics_for`).
@@ -14,6 +15,8 @@ extends RefCounted
 const SOLID_MASS_KG: float = 1.0e15
 ## A solid row's hull points: nothing breaks a rock.
 const SOLID_HULL: float = 1.0e9
+## The native class that shifts the columns (M6-T06).
+const NATIVE_CLASS: StringName = &"ScsStaticRows"
 
 
 ## The solid rows (kind `BodyKind.STATIC`) in registration order: what the resolvers keep in their grids.
@@ -22,8 +25,11 @@ class Solid extends RefCounted:
 	var positions: PackedVector3Array = PackedVector3Array()
 	var radii: PackedFloat64Array = PackedFloat64Array()
 	var factions: Array[StringName] = []
+	var worlds: PackedInt64Array = PackedInt64Array()
 	## `StaticRows.solid_version` when it was built.
 	var version: int = -1
+	## Shifts taken in place since it was built: a holder of the positions takes them again when it changes.
+	var moves: int = 0
 
 
 ## The rows, column by column, in registration order. Read, never write: go through the functions below.
@@ -33,9 +39,11 @@ static var radii: PackedFloat64Array = PackedFloat64Array()
 static var factions: Array[StringName] = []
 static var kinds: PackedByteArray = PackedByteArray()
 static var worlds: PackedInt64Array = PackedInt64Array()  # the owning WorldFrame's instance id, 0 for none
-## Changes whenever any row does; `solid_version` only when a solid one does (a mine coming and going leaves it).
+## Changes whenever any row does; `solid_version` only when a solid one does (a mine coming and going leaves it). A shift
+## changes neither: it bumps `moves`.
 static var version: int = 0
 static var solid_version: int = 0
+static var moves: int = 0
 ## Work counts: rows registered since the game started, and how often the solid rows were gathered again.
 static var registrations: int = 0
 static var solid_builds: int = 0
@@ -43,6 +51,7 @@ static var solid_builds: int = 0
 static var _solid: Solid = null
 static var _columns: Dictionary = {}
 static var _columns_version: int = -1
+static var _native: Object = null
 
 
 ## Adds a row. `kind` is a `BodyKind` (a rock is `STATIC`, a mine `MINE`); `world` the frame `position` is in.
@@ -89,20 +98,22 @@ static func unregister_many(gone: PackedInt64Array) -> void:
 		_changed(solid_row)
 
 
-## Moves the rows registered with `world` by `offset` (`WorldFrame.rebase` shifts them with its nodes).
+## Moves the rows registered with `world` by `offset` (`WorldFrame.rebase` and its drift shift them with its nodes), and
+## the solid rows with them, in place.
 static func shift(offset: Vector3, world: Node) -> void:
 	if ids.is_empty() or world == null:
 		return
 	var owner: int = world.get_instance_id()
-	var moved: bool = false
-	var solid_row: bool = false
-	for s: int in positions.size():
-		if worlds[s] == owner:
-			positions[s] += offset
-			moved = true
-			solid_row = solid_row or kinds[s] == BodyKind.STATIC
-	if moved:
-		_changed(solid_row)
+	var native: Object = _shifter()
+	var shifted: PackedVector3Array = native.shift(positions, worlds, owner, offset)
+	if int(native.moved()) == 0:
+		return
+	positions = shifted
+	moves += 1
+	if _solid != null and _solid.version == solid_version:
+		_solid.positions = native.shift(_solid.positions, _solid.worlds, owner, offset)
+		if int(native.moved()) > 0:
+			_solid.moves += 1
 
 
 ## Removes every row.
@@ -148,6 +159,7 @@ static func solid() -> Solid:
 		out.positions.append(positions[s])
 		out.radii.append(radii[s])
 		out.factions.append(factions[s])
+		out.worlds.append(worlds[s])
 	out.version = solid_version
 	_solid = out
 	solid_builds += 1
@@ -182,6 +194,13 @@ static func scan_columns() -> Dictionary:
 			"statics": statics}
 	_columns_version = version
 	return _columns
+
+
+# The native shift (the library is required, M4-T37), made on first use.
+static func _shifter() -> Object:
+	if _native == null:
+		_native = NativeLib.instantiate(NATIVE_CLASS)
+	return _native
 
 
 static func _remove_at(at: int) -> void:

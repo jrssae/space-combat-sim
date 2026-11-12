@@ -1591,5 +1591,27 @@ pub mod pilot {
     }
 }
 
+/// The static rows' shift (M6-T06, L4): a rebase or the frame's drift moves one world's rocks and mines by one vector, in
+/// place, so a pure shift costs one pass and no rebuild.
+pub mod statics {
+    use godot::builtin::Vector3;
+
+    /// Adds `offset` to every position whose world is `owner`, in 32-bit as GDScript's `+=` does, so the result is the
+    /// same bits a row registered there would hold. Returns how many moved; none when the columns differ in length.
+    pub fn shift_owned(positions: &mut [Vector3], worlds: &[i64], owner: i64, offset: Vector3) -> usize {
+        if positions.len() != worlds.len() {
+            return 0;
+        }
+        let mut moved = 0;
+        for (p, &world) in positions.iter_mut().zip(worlds) {
+            if world == owner {
+                *p = Vector3::new(p.x + offset.x, p.y + offset.y, p.z + offset.z);
+                moved += 1;
+            }
+        }
+        moved
+    }
+}
+
 #[cfg(test)]
 mod tests;

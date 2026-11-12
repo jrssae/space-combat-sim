@@ -69,6 +69,9 @@ const SHIFTABLE_GROUP := &"world_shiftable"
 ## off it. Same rule as `world_shiftable`: never a node whose parent is in it too.
 const ANCHORED_GROUP := &"world_anchored"
 ## The method a shiftable node has when it keeps its own velocity: `frame_boost(dv: Vector3)` takes `dv` off it.
+## Meta on a shiftable node its pool has parked out of play (hidden, not processing, out of Jolt): a rebase leaves it where
+## it is, since the pool places it when it comes back (M6-T06, L4).
+const PARKED_META := &"_scs_pool_parked"
 const BOOST_METHOD := &"frame_boost"
 ## The frame boosts back onto its anchor when the focus is under this part of the threshold against the anchor (Q8).
 const RETURN_PART: float = 0.5
@@ -271,8 +274,9 @@ func spawn(node: Node3D, at: UniversePos, basis: Basis = Basis.IDENTITY, parent:
 	node.reset_physics_interpolation()
 
 
-## Re-centres the local space: every shiftable node moves by `-offset` and `origin` moves by `+offset`, so no
-## object's universe position changes. Velocities are untouched (the frame does not move, only its origin label).
+## Re-centres the local space: every shiftable node in play moves by `-offset` (parked ones wait for their pool or the tier
+## to place them) and `origin` moves by `+offset`, so no object's universe position changes. Velocities are untouched
+## (the frame does not move, only its origin label).
 ## `rebased` is emitted last, with everything already shifted. Inside a physics tick the interpolation reset waits for the
 ## end of the tick (class notes); outside one it happens here.
 func rebase(offset: Vector3) -> void:
@@ -288,11 +292,13 @@ func rebase(offset: Vector3) -> void:
 	else:
 		_shifted.clear()
 	for member: Node in get_tree().get_nodes_in_group(SHIFTABLE_GROUP):
+		# Parked for the low-attention tier (M4-T21): its row moves with the core and promotion places the body. Parked in its
+		# pool (M6-T06, L4): out of play, and `acquire` places it.
+		if member.has_meta(TierDirector.TIER_META) or member.has_meta(PARKED_META):
+			continue
 		var node := member as Node3D
 		if node == null or not is_ancestor_of(node):
 			continue
-		if node.has_meta(TierDirector.TIER_META):
-			continue  # parked for the low-attention tier (M4-T21): its row moves with the core; promotion places the body
 		node.global_translate(shift)
 		if not kept.has(node):
 			_shifted.append(node)

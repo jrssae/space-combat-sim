@@ -206,6 +206,15 @@ func test_the_capital_share_is_an_option_from_0_to_1() -> void:
 	assert_false(bool(BenchRunner.parse_options(PackedStringArray(["capitals=x"]))["ok"]))
 
 
+func test_the_frame_boost_is_an_option_in_m_per_s() -> void:
+	assert_eq(float(BenchRunner.parse_options(PackedStringArray())["boost"]), 0.0, "riding the anchor by default")
+	var o: Dictionary = BenchRunner.parse_options(PackedStringArray(["boost=50"]))
+	assert_true(o["ok"], String(o.get("error", "")))
+	assert_eq(float(o["boost"]), 50.0)
+	assert_false(bool(BenchRunner.parse_options(PackedStringArray(["boost=-1"]))["ok"]))
+	assert_false(bool(BenchRunner.parse_options(PackedStringArray(["boost=x"]))["ok"]))
+
+
 # --- battle and typical (M4-T07) ---------------------------------------------------------------------------------
 
 
