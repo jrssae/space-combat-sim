@@ -605,7 +605,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T30 | B | Mission: Civilian escort with a cinematic intro (D62, Q36 to Q42), replacing Buoy defence and the ring | T29, T16, T17 | Opus | The random civilian, flee-and-resume in the native brains, three waves, writing and pacing | done |
 | T31 | - | L1: the flight batch's per-ship gather in native for row-commanded ships | T30 | Opus | The biggest measured lever (about 37 % of the tick at 1 000) | done |
 | T32 | - | L2: the hit resolver gets only bolts with live hostile pairs from native; per-hit hash and readout costs | T31 | Opus | 1.41 ms at 1 000; native pair filtering | done |
-| T33 | - | L3: the ram resolver's quick wins, then `RamTracker` in native | T32 | Fable (maintainer, 2026-11-11) | 1.20 ms at 1 000; string keys and full passes per tick | in progress |
+| T33 | - | L3: the ram resolver's quick wins, then `RamTracker` in native | T32 | Fable (maintainer, 2026-11-11) | 1.20 ms at 1 000; string keys and full passes per tick | done |
 | T34 | - | L5: the radar's dot buffers filled natively | T31 | Sonnet | Per-contact GDScript every frame | not started |
 | T35 | - | L8 and L9: the native allocation pass and the per-event member scans | T33 | Fable (maintainer, 2026-11-11) | Hash maps and Vec churn per sync; hits times members | not started |
 | T36 | - | L12 and L13: the smaller items and one native constants table with its GUT check | T35 | Sonnet | Many small fixes and a drift guard | not started |
@@ -1999,6 +1999,42 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   rigid and layers tested from columns before `_hull()`), measured; then `RamTracker` in native (integer keys, no strings),
   which the per-tick-native rule asks for.
 - **Done when:** the ram stage at `battle 1000` drops from 1.20 ms, ram results identical, numbers in the Done notes.
+- **Done (as built, 2026-11-11):**
+  - **Built:** `ScsRamTracker` (`native/src/ram_tracker.rs`, an engine-free kernel under the guard test, and its shell
+    `native/src/ram_contacts.rs`) replaces the GDScript `RamTracker`, which moved to `tests/fixtures/ram_tracker.gd` as
+    the reference. Pairs are keyed by their two body ids as integers; the last tick's index by id is built only on a
+    tick with a contact or an open window. One call a tick (`contacts`) reads Jolt's contacts over the core's rigid rows,
+    feeds the tracker and notes the pairs Jolt holds; it asks GDScript back only for the acceleration of a hull the
+    flight step did not fly (`set_accels`) and the ram limits of a hull with a measured window (`land`). `swept_pairs`
+    runs the broad phase (`kernels::ram`) and returns the pairs with the columns of just the hulls they name; it leaves
+    out prop pairs and, for pairs Jolt does not hold, those the swept test's own first two rejects are sure to refuse
+    (`ram::clearly_apart`: the bounding spheres; `ram::cannot_reach`: the first hull's sphere against the second's
+    `ram_bounds`, read from the `Damageable`; both with room for the resolver's 32-bit sums). `RamResolver` no longer
+    copies every hull's columns, keeps no per-hull array or index, tests each pair from the columns and builds a hull's
+    Dictionary only for a pair it sweeps; the hull columns are read whole only on a tick where a contact ram lands or a
+    ship is near a rock. `ScsRamPhase.contacts` is gone (`pairs` stays for the parity tests); `ScsSimCore.hull_count` is
+    new. The rocks' grid (`sweep_cells.rs`, shared with the hit resolver): a look walks only the cells between the
+    lowest and highest held cell of a level; a kept grid marks its held cells (`mark_cells`, a bit a cell) and lists a
+    sparse level's hulls by x range; hulls far from a look are counted as work, not listed; only the pairs that pass the
+    sphere test are sorted. Pairs, their order and `visited` are unchanged (the recorded fixtures hold).
+  - **Not moved:** the shape-by-shape swept test (`_sweep_pair`, `ConvexSweep`) stays in GDScript: about one pair a
+    tick reaches it in the battle after the native rejects. The contact read's cost is now two engine calls a rigid hull
+    (`body_get_direct_state`, `get_contact_count`), which a cache could not replace without changing which hulls count
+    as in play.
+  - **Measured** (`bench_quick.sh`, `battle` 1000, seed 1, `reports/perf/t33_before` at a107cffe and `t33_after` at
+    027956b5): ram stage median 0.577 ms before, 0.230 ms after (P3: 1.20); hit stage 1.013 to 0.926 ms (the rocks'
+    grid); tick median 7.22 to 6.79 ms, p99 9.49 to 9.32 ms (8.85 to 9.38 over four runs). Per part, microseconds a
+    tick (about 330 rigid hulls, 55 of them capitals, 1 000 rocks): gather 35-68 to 6; contacts 168-178 to 98; swept
+    89-197 to 41-59 (9-27 broad-phase pairs, 1 left for GDScript); rocks 136-153 to 66-70.
+  - **Tests:** Rust `cargo test --release --lib` 54 passing (16 new: the tracker's rules 8, the grid 4, the two pair
+    rejects against the resolver's own tests 4). GUT: `test_ram_tracker` (22: the 20 ported to the native class, the
+    native tracker beside the GDScript reference for 1 500 random ticks, a refused feed), `test_ram_scale` (8: new
+    `test_a_ship_inside_a_large_hulls_bounding_sphere_but_out_of_reach_of_its_box_is_not_swept`), the guard test
+    (`ram_tracker.rs` added). Focused run with `GUT_SLOW=1`, 374 passing: the ram files, `test_rocks_and_mines`,
+    `test_tier_outcomes`, `test_core_state`, `test_core_threads`, `test_core_snapshot`, `test_row_commands`,
+    `test_driver_step`, `test_bolt_rows`, `test_sim_core`, `test_weapon_rows_battle`, `test_flight_parity_fight`,
+    `test_hit_resolver`, `test_hit_scale`, `test_hit_broad_phase`, `test_sweep_cells`, `test_rebase_in_play`, the pool,
+    stand-in and run files.
 
 ### M5-T34 L5: the radar's dot buffers
 

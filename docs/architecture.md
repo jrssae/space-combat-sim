@@ -4534,3 +4534,33 @@ menu, and the comms key's edge (`UiCommand.comms_open`, read by `sample_radial`;
 menu is open. The target menu and the comms menu refuse to open over each other; a cinematic, a mission's `lock_controls`
 or the pilot's death closes the comms menu. A later page of replies is `push_page` (or an entry's `page`); a page with a "none"
 entry goes through `RadialMenu.arrange` so "none" takes the down slice (Q44).
+
+### 18.23 The ram tracker in native (T33, L3)
+
+`ScsRamTracker` keeps what the ram resolver needs between ticks: contacts, windows and one ram per pair per collision. The
+rules are §16 D32's, unchanged; the kernel is `native/src/ram_tracker.rs` (engine-free, under the guard test) and the shell is
+`native/src/ram_contacts.rs`. The GDScript `RamTracker` is the reference in `tests/fixtures/`, run beside it by `test_ram_tracker`.
+
+| Call (once a tick, in order) | Does |
+|---|---|
+| `contacts(core, shift, delta)` | Reads Jolt's contacts over the core's rigid hull rows, opens and measures windows, notes the pairs Jolt holds. Returns the hull count, the bodies with no acceleration from the flight step, and the hulls whose ram limits it needs |
+| `set_accels`, `land(limits)` | GDScript's answers, only when asked: a hull on its own flight model; the limits of a hull with a measured window. `land` returns the contact rams as columns |
+| `swept_pairs(core, delta)` | The broad phase's pairs plus Jolt's, with the columns of just the hulls they name |
+| `swept_meeting`, `keep_touching` | Per pair the resolver looks at, as before |
+| `end_tick` | Closes the tick |
+
+`swept_pairs` leaves out a pair Jolt does not hold when the swept test is sure to refuse it: the bounding spheres stay apart
+(`kernels::ram::clearly_apart`), or the first hull's sphere cannot reach the second's `ram_bounds` (`cannot_reach`, the box read
+from the `Damageable` each tick). Both repeat `_sweep_pair`'s first two rejects in 64 bits with a few centimetres of room, so
+they only ever drop a pair whose answer is no ram. A fighter inside a carrier's 614 m bounding sphere but away from its hull no
+longer reaches GDScript.
+
+The resolver copies no hull columns per tick. It reads the whole columns only on a tick where a contact ram lands or a ship is
+near a rock. The shape-by-shape swept test stays in GDScript (about one pair a tick in the battle).
+
+The rocks' grid (`sweep_cells.rs`, also the hit resolver's): a look walks only between a level's lowest and highest held cell; a
+kept grid marks its held cells and lists a sparse level's hulls by x range; only pairs that pass the sphere test are sorted. The
+pairs, their order and the work count `visited` are unchanged.
+
+At `battle` 1000 the ram stage fell from 0.58 to 0.23 ms and the hit stage from 1.01 to 0.93 ms. What is left of the ram stage
+is mostly the contact read: two engine calls a rigid hull.
