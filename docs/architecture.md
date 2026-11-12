@@ -2553,7 +2553,7 @@ src/ship/flight_batch.gd         the four classes read the core (their own loads
   its own scratch (the flight kernel writes its nozzle forces into the buffer the caller passes) and shares nothing.
 - **Settings and console.** `perf_native_core` (off = each class loaded its own copy) went with M4-T37: a world with a
   core always uses it. Provider `core` (`path`, `rows`, `bodies`, `statics`, `bolts`, `syncs`, `sync_us`, `bolts_us`,
-  `sync_calls`, `fallback_calls`, `attribute_reads`, `touched`); `combat.source` and `combat.gather_us`, `ram.source` and
+  `core_sync_us`, `snapshot_us`, `select_us` (M5-T35), `sync_calls`, `fallback_calls`, `attribute_reads`, `touched`); `combat.source` and `combat.gather_us`, `ram.source` and
   `ram.gather_us`, `flight.source` and `flight.fallback_reads` say what each class read.
 - **Tests**: `test_sim_core` (the lifecycle, the rebase, the round trip, the four classes' parity against the recorded
   loads, the engine seam) and the files of the four classes.
@@ -4564,3 +4564,41 @@ pairs, their order and the work count `visited` are unchanged.
 
 At `battle` 1000 the ram stage fell from 0.58 to 0.23 ms and the hit stage from 1.01 to 0.93 ms. What is left of the ram stage
 is mostly the contact read: two engine calls a rigid hull.
+
+### 18.24 The core's sync without per-row allocations (T35, L8 and L9)
+
+The first sync (`ScsSimCore.sync_in`) builds the tick's rows. Until T35 it allocated per row and hashed every id with the
+default hasher; now it copies blocks and numbers. Results are unchanged: the same rows in the same order, the recorded
+fixtures hold.
+
+| Part | Before | Now |
+|---|---|---|
+| Names | A lowered `String` cloned per row per sync, a `GString` beside it; names matched by string compare | A row carries `name_ids` (a `u32`); `Rows.names` is a shared `NameTable` (`rows.rs`). A wanted name is looked up once, then numbers are compared. Display names are ids too (`row_name_ids`), resolved only when asked |
+| Lookups (`index_rows`) | A fresh map of ranks over every member, three default-hashed maps, a sort of every `(id, row)` pair | The rank is a column beside the rows; the maps use `IdHasher` (`IdMap`, `IdSet` in `row_commands.rs`); the rocks' and mines' pairs are sorted once and merged in (`Rows::index_ids_around`) |
+| Rocks and mines | Every column pushed per static per sync | One ready block, built in `set_statics`, appended whole (`Rows::extend_from`) |
+| Tier rows | Pushed row by row with a name clone | Appended column by column (`TierRows::append_to`) |
+| Activity | A hull with no active marker asked four to seven engine calls every tick | Asked only when its body is touched or first seen, as the markers are since M4-T35b |
+| The job's snapshot | `Rows` and `Bolts` cloned whole (new columns each tick) | `clone_from` copies into the columns the snapshot holds |
+| `snapshot` | A `StringName` and a `GString` made per row per call | Both columns kept and handed out as copies; made again only when a row's faction or name changed |
+| Events (L9) | `note_hull` and `note_selection` walked every member | Members listed by body (`members_by_body`, rebuilt in `set_members`), found by binary search |
+
+Rules that follow from it:
+
+- **Name ids are private to one table.** Compare a row's `name_ids` only with an id from the same rows' table
+  (`Rows::name_id`). Id 0 is the empty name and matches nothing. A job's snapshot holds the table its rows were made with.
+- **Names are dropped, never renumbered in place.** When the tables hold more than twice the bodies plus 256 names,
+  `compact_names` rebuilds them at the start of a first sync, where the rows are made again anyway.
+- **The id-hashed maps have no order.** Nothing may iterate `row_of_id`, `touched`, `latest_target` or the tier's `by_body`
+  for a result.
+- **A hull's activity needs its events.** The core hears a body hidden or shown and a hull destroyed or restored
+  (`SimCore._watch`). Code that changes a hull's `destroyed` flag or a body's `process_mode` without one of those must call
+  `ContactScan.touch(body)`.
+- **The scan's GDScript face is unchanged.** `snapshot` still returns faction names, not indices: `ContactScan` and its
+  tests keep their columns, and the kept column removes the per-call cost that indices would have.
+- `latest_target` keeps a selection only for a member or a tier row; `set_members` drops the rest.
+
+Readouts: `core.core_sync_us`, `core.snapshot_us`, `core.select_us`; `ScsSimCore.sync_parts_us()` splits the sync into the
+tier's step, the bodies, the statics, the tier rows and the lookups. A bench's `summary.json` has their means under `core`.
+
+At `battle` 1000 the native sync fell from 0.72 to 0.26 ms a tick and the tick median from 6.73 to 5.9 ms. What is left of the
+sync is the bodies' pose and velocity reads (three engine calls a body in play) and the tier's own step.

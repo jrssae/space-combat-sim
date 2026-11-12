@@ -607,7 +607,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T32 | - | L2: the hit resolver gets only bolts with live hostile pairs from native; per-hit hash and readout costs | T31 | Opus | 1.41 ms at 1 000; native pair filtering | done |
 | T33 | - | L3: the ram resolver's quick wins, then `RamTracker` in native | T32 | Fable (maintainer, 2026-11-11) | 1.20 ms at 1 000; string keys and full passes per tick | done |
 | T34 | - | L5: the radar's dot buffers filled natively | T31 | Sonnet | Per-contact GDScript every frame | not started |
-| T35 | - | L8 and L9: the native allocation pass and the per-event member scans | T33 | Fable (maintainer, 2026-11-11) | Hash maps and Vec churn per sync; hits times members | in progress |
+| T35 | - | L8 and L9: the native allocation pass and the per-event member scans | T33 | Fable (maintainer, 2026-11-11) | Hash maps and Vec churn per sync; hits times members | done |
 | T36 | - | L12 and L13: the smaller items and one native constants table with its GUT check | T35 | Sonnet | Many small fixes and a drift guard | not started |
 | T37 | D | L6 and L7: muzzle flashes and shot sounds culled by range; no audio node per pooled ship walked per frame | T28 | Sonnet | Sound-pass cost at scale | not started |
 | T38 | - | L14: the shared test steps fixture, collapsed recordings, balance tests out of the default run, CI's Python job and asset cache | T36 | Sonnet | Duplication and CI time; CI must stay green | not started |
@@ -2052,6 +2052,58 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   member index map rebuilt in `set_members`; `latest_target` pruned for freed bodies).
 - **Done when:** the core's sync and the snapshot cost less at 1 000 (measured), Rust and GUT parity hold, numbers in the
   Done notes.
+- **Done (as built, 2026-11-11):**
+  - **Readouts first:** `core.core_sync_us` (the native `sync_in` call alone), `core.snapshot_us`, `core.select_us`, and
+    `ScsSimCore.sync_parts_us()` (the tier's step, the bodies, the statics, the tier rows, the lookups). A bench sums them
+    over its window and writes the means to `summary.json` under `core`. Readouts only.
+  - **L8, built per item:**
+    - *`index_rows`:* the hull rank is a column beside the rows (`row_ranks`), so no map of ranks is built; `row_of_id`,
+      `row_of_handle`, `touched`, `seen`, `parked_since_sync`, `marker_at`, `slot_of`, `latest_target`, `accels` and the
+      tier's `by_body` hash with `IdHasher` (`IdMap`, `IdSet`); the hull list is built in a kept Vec. The rows' id lookup
+      sorts only the bodies and tier rows and merges the rocks' and mines' pairs, sorted once (`index_ids_around`).
+    - *Names:* a row carries a `u32` name id; the lowered names live in a shared `NameTable` and the brains match a
+      wanted name by its id (`rows_named`, `first_named`, the keeper). Display names are ids too, so a sync clones no
+      engine string. Names no body carries are dropped once the tables pass twice the bodies plus 256.
+    - *`snapshot`:* the faction and name columns are kept and made again only when a row's faction or name changed; the
+      scan gets copies of its own. **Not built as listed:** faction indices are not sent. `ContactScan`, its GDScript
+      readers and several test files read `_factions` as names, and the kept column already removes the per-call cost.
+    - *Statics:* one ready block built in `set_statics`, appended whole each sync.
+    - *Small items, all five:* the sweep grid's cell lists are pooled (`sweep_cells.rs`); the bolt step's `keep` flags,
+      the tier ram's pair set and the weapon step's nine lists (plus `interceptors_of`) are kept between ticks;
+      `resync_touched` asks the set, not a copied Vec.
+  - **L9:** `members_by_body` (sorted, rebuilt in `set_members`) gives `note_hull` and `note_selection` a body's members
+    by binary search. `set_members` drops `latest_target` entries of bodies that are neither a member nor a tier row.
+  - **Beyond the list, found by the readouts:** the tier rows are appended column by column (122 to 10 us); `Rows` and
+    `Bolts` copy into the job snapshot's held columns (`clone_from`; the derived clone allocated every column each tick);
+    a hull with no active marker is asked for its activity only when its body is touched or first seen, as the markers
+    are since M4-T35b (about 700 parked hulls cost four engine calls each a tick; the bodies' part 284 to 124 us).
+  - **Measured** (`bench_quick.sh`, `battle` 1000, seed 1, three runs each; `reports/perf/t35_before` at 797819a8,
+    `t35_after` at d09c4d7e), mean microseconds a tick:
+
+    | | before | after |
+    |---|---|---|
+    | native `sync_in` | 722 | 255 (P3's core sync: 460) |
+    | its parts: tier step / bodies / statics / tier rows / lookups | 53 / 400 / 35 / 122 / 96 | 52 / 124 / 23 / 10 / 30 |
+    | `snapshot` (0.07 calls a tick here) | 47 a call | 21 a call |
+    | think stage median (the job's snapshot copy) | 512 | 335 |
+    | hit stage median | 917 | 775 to 790 |
+    | targeting stage median | 157 | 88 |
+    | tick median | 6 730 to 6 750 | 5 820 to 5 900 |
+    | tick p99 | 8 760 to 9 160 | 7 870 to 8 060 |
+
+    The ram and flight stages are unchanged (0.23 ms, 2.42 ms). What is left of the sync: three engine calls a body in
+    play (pose and velocities) and the tier's step.
+  - **Tests:** Rust `cargo test --release --lib` 60 passing (6 new in `native/src/rows/tests.rs`: the name ids, the
+    merged id lookup against the plain one, the block append, the copy into held columns, the tier's column append
+    against its row push). GUT `test_body_registry` 15 (4 new: the kept snapshot columns, names dropped, an event
+    reaching only its body and a freed body's selection dropped, a parked hull not asked again until touched). Focused
+    run with `GUT_SLOW=1`, 48 files, 431 passing: `test_core_state`, `test_core_threads`, `test_core_snapshot`,
+    `test_row_commands`, `test_driver_step`, `test_bolt_rows`, `test_weapon_rows_battle`, `test_sim_core` (the guard's
+    import lists take `IdMap` and `IdSet`), `test_brain_parity`, `test_brain_think_parity`, `test_tier_outcomes`, the
+    tier, ram, hit, pool, stand-in, destruction and run files. `run_tests.sh --quick` 1 672 passing; the main-scene smoke
+    clean.
+  - **Open:** none. A caller that sets a hull's `destroyed` flag or a body's `process_mode` without the hull's signals
+    or a visibility change must call `ContactScan.touch(body)` (architecture 18.24); the game's own paths all signal.
 
 ### M5-T36 L12 and L13: the smaller items and the constants table
 
