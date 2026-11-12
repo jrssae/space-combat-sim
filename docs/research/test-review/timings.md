@@ -343,3 +343,15 @@ Not run alone (each builds full assets in setUpClass, minutes each): the per-hul
 - `cargo test --release --lib` in `native/`: 36 passed; 72 s compile from cold, 0.00 s to run.
 - Compile check (`scripts/check_scripts.gd`): 20 s, 608 scripts.
 - Main-scene console smoke (`wait 30; state ship; quit`): 7 s.
+
+## Independent review notes (2026-11-09)
+
+- The 66-minute GUT run ended by timeout while `test_tier_fire.gd` was running; it is not a completed full-suite measurement.
+  The approximate full-suite duration in `quick-test-suite.md` is an estimate from the partial GUT timing, the separate 48.6-minute
+  Python run, and the remaining runner steps.
+- The first seven GUT files have only a combined estimate, and one-by-one runs include about 5.5 seconds of GUT startup each.
+  Use those numbers to prioritize candidates, not to promise exact savings from each test removal.
+- The Python test list was measured in an environment where NumPy was available for the selected modules; the notes say the
+  maintainer's system Python lacked NumPy. A quick runner must validate or select its Python environment explicitly.
+- The timings belong to `5c65d81`; the pulled head `5d81686` adds review documents and milestone planning, with no test/source
+  changes between those commits. Re-take the measurements after test-suite changes land.
