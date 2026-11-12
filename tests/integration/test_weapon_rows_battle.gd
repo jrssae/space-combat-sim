@@ -37,6 +37,9 @@ const FIXTURE: String = "weapon_rows_battle"
 
 # One seeded battle on a fresh main scene: [every hit, capitals' hits, beam shots, launches, missiles shot down, mines set off].
 func _battle() -> Array:
+	# Every battle starts between two physics ticks. A test file that ran before this one can leave GUT inside a tick (its
+	# last `await` was on `physics_frame`), and a scene added there is set up one tick apart: another sample of the battle.
+	await get_tree().process_frame
 	SimClock.reset()  # every battle from the same sim time: a later start rounds its gates and expiries otherwise
 	main = (load("res://src/game/main.tscn") as PackedScene).instantiate() as Main
 	main.input_source = FakeInputSource.new()

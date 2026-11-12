@@ -488,6 +488,17 @@ which changes the same native rows and rebase path:
   - **The automatic boost is off in `main.tscn`** (`auto_boost_speed_mps` 0). The readers still take a local speed as a
     speed against the anchor (T01's R list), so above 2 000 m/s the brake would stop the ship against the moving frame and
     the HUD would read 0. T08 changes the readers and sets the export to 2 000 in the same commit.
+  - **Fix after CI (2026-11-12), `test_weapon_rows_battle.gd`:** CI's shard 1 failed the seeded battle's capital hits
+    (384 against the recording's 446, 45 allowed). T05's code does not change that battle: T04's commit and T05's give the
+    same hits alone ([885, 406, 159, 146, 28, 0] here). The battle has two samples by where it starts: between two ticks
+    (406 here), or inside one (389 here), which is where GUT stands when the file before it ended on
+    `await physics_frame`; the main scene is then set up one tick apart. CI's 403 before and 384 after fit the same two
+    (not run there to confirm). T04's commit fails the same way after
+    `test_free_fall.gd`. T05's new test file moved the shards' file lists, so another file ran before the battle. The
+    test now waits for a `process_frame` first, so it always starts between ticks, whatever ran before. **Open:** both
+    samples sit 9 to 14 % under the GDScript recording against 10 % allowed (403 in CI is 43 off, 45 allowed), so the test
+    is close to its limit on any change that perturbs the battle; whether to look into the capitals' missing hits or
+    re-base the tolerance is the maintainer's call.
   - Left for T08 (readers, all in T01's R list): brake, assist, thrust fade and clamp, the HUD's speed, the brains' own
     speed, spawn velocities ("at rest" means `rest_velocity()`), a missile's held speed and heading (frame speed), rocks
     and props taken as at rest in the hit sweep, the ram rule and avoidance, a buoy marker's `velocity` for lead. Voices
