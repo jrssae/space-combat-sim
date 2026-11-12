@@ -1,4 +1,4 @@
-{"scenario_id": "civilian_showcase", "system_id": "local",
+{"scenario_id": "civilian_showcase", "description": "The civilian hulls parked in a row: freighters, transports, tankers and the alien traders. No fighting.", "system_id": "local",
  "player": {"position": [0, 0, 0], "forward": [0, 0, -1]},
  "pools": {"saturn_3_freighter": 1, "saturn_4_transport": 1, "saturn_4_tanker": 1, "saturn_8_transport": 1,
            "saturn_8_tanker": 1, "skylark_transport": 1, "narn_transport": 1, "centauri_brezebel": 1, "brakiri_bokmai": 2},

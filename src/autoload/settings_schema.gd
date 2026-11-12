@@ -8,6 +8,20 @@ const TYPE_ENUM := -1  # pseudo type for string settings restricted to `choices`
 
 ## The groups the settings menu lists entries under (M5-T03, D57), in the order it shows them. Every entry names one in `category`.
 const CATEGORIES: Array[StringName] = [&"flight", &"controls", &"camera", &"hud", &"graphics", &"audio", &"game"]
+## The five pages the start screen's and the pause menu's Settings list opens (M5-T45), in the order shown. Each takes whole
+## categories; a menu entry's category falls in exactly one group (a test fails when one falls in none).
+const GROUPS: Array[Dictionary] = [
+	{"id": &"gameplay", "title": "Gameplay", "categories": [&"game", &"flight"],
+		"help": "Encounters, friendly fire, ram damage and the flight start."},
+	{"id": &"controls", "title": "Controls", "categories": [&"controls"],
+		"help": "Profiles and rebinding, invert pitch, deadzones, target hold time and mouse speeds."},
+	{"id": &"camera_hud", "title": "Camera & HUD", "categories": [&"camera", &"hud"],
+		"help": "The default view, the camera feel and what the HUD shows."},
+	{"id": &"video", "title": "Video", "categories": [&"graphics"],
+		"help": "Rendering quality and effects."},
+	{"id": &"audio", "title": "Audio", "categories": [&"audio"],
+		"help": "Volumes and voices."},
+]
 ## Menu fields an entry may carry besides its type, default, range and `doc`: `category` (required), `label` (the menu's
 ## name for it), `menu: false` (console-only: debug switches, tuning knobs, text a pad cannot edit), `step` (what one D-pad
 ## press moves a number) and `percent: true` (a 0..1 number the menu shows as 0..100 %).
@@ -420,3 +434,20 @@ func _ok(value: Variant) -> Dictionary:
 
 func _fail(message: String) -> Dictionary:
 	return {"ok": false, "value": null, "error": message}
+
+
+## The group a category belongs to (an id of `GROUPS`), or &"" when it falls in none.
+static func group_of_category(category: StringName) -> StringName:
+	for group: Dictionary in GROUPS:
+		if (group["categories"] as Array).has(category):
+			return group["id"]
+	return &""
+
+
+## The categories of the group `group_id`, in the order the group lists them; empty for an unknown group.
+static func categories_of_group(group_id: StringName) -> Array[StringName]:
+	var out: Array[StringName] = []
+	for group: Dictionary in GROUPS:
+		if group["id"] == group_id:
+			out.assign(group["categories"])
+	return out

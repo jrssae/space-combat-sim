@@ -1,8 +1,9 @@
 class_name FrontEnd
 extends Control
 ## The front end (architecture §18, D57): the sky with a slow camera drift behind a `MenuFrame` whose root page is the main
-## menu. Missions, Free flight and Sandbox start a run through `Game.play` (the loading screen); Settings and Controls open
-## the shared pages in the frame; Quit leaves. Everything is reachable and usable with the pad alone.
+## menu (M5-T45: New game, Load game (greyed out until saves exist), Free flight, Settings, Quit). New game (the missions, then
+## the sandbox scenes) and Free flight start a run through `Game.play` (the loading screen); Settings opens the shared pages in
+## the frame; Quit leaves. Everything is reachable and usable with the pad alone.
 
 const GameScript := preload("res://src/autoload/game.gd")
 
@@ -13,11 +14,10 @@ const DRIFT_PITCH_DEG: float = 6.0
 const DRIFT_PITCH_RATE: float = 0.021
 
 const MAIN_ENTRIES: Array[Dictionary] = [
-	{"id": &"missions", "text": "Missions"},
+	{"id": &"new_game", "text": "New game"},
+	{"id": &"load_game", "text": "Load game", "enabled": false},  # until saves exist (M5-T45)
 	{"id": &"free_flight", "text": "Free flight"},
-	{"id": &"sandbox", "text": "Sandbox"},
 	{"id": &"settings", "text": "Settings"},
-	{"id": &"controls", "text": "Controls"},
 	{"id": &"quit", "text": "Quit"},
 ]
 
@@ -70,34 +70,36 @@ static func session_seed() -> int:
 func _main_menu() -> MenuScreen:
 	var page := ChoiceListScreen.new()
 	page.setup("SPACE COMBAT SIM", MAIN_ENTRIES)
+	page.button_of(&"load_game").tooltip_text = "No saved games yet."
+	page.show_pad = false  # only the options on the start screen
+	page.show_right = false
 	page.chosen.connect(_on_main_chosen)
 	return page
 
 
 func _on_main_chosen(id: StringName) -> void:
 	match id:
-		&"missions":
+		&"new_game":
 			var entries: Array[Dictionary] = []
 			entries.assign(mission_entries.call() if mission_entries.is_valid() else MissionCatalog.entries())
-			var page := MissionSelect.new()
-			page.setup_missions(entries)
-			page.chosen.connect(func(mission_id: StringName) -> void: _start(GameFlow.make_request(&"mission", mission_id, false, session_seed())))
+			var page := NewGameSelect.new()
+			page.setup_new_game(entries)
+			page.chosen.connect(func(picked: StringName) -> void:
+				if page.is_mission(picked):
+					_start(GameFlow.make_request(&"mission", picked, false, session_seed()))
+				else:
+					_start(GameFlow.make_request(&"sandbox", picked)))
 			_frame.push_screen(page)
 		&"free_flight":
 			var page := FreeFlightSelect.new()
 			page.setup_free_flight()
+			page.show_pad = false
+			page.show_right = false
 			page.start_requested.connect(func(encounters: bool) -> void:
 				_start(GameFlow.make_request(&"free_flight", &"free_flight", encounters, session_seed())))
 			_frame.push_screen(page)
-		&"sandbox":
-			var page := SandboxSelect.new()
-			page.setup_sandbox()
-			page.chosen.connect(func(scenario_id: StringName) -> void: _start(GameFlow.make_request(&"sandbox", scenario_id)))
-			_frame.push_screen(page)
 		&"settings":
 			_frame.push_screen(MenuScreens.settings())
-		&"controls":
-			_frame.push_screen(MenuScreens.controls())
 		&"quit":
 			if quit_game.is_valid():
 				quit_game.call()

@@ -1,7 +1,7 @@
 class_name PauseMenu
 extends CanvasLayer
 ## The pause menu (architecture §18, D57, Q15): Start (the `pause` action) in flight opens a `MenuFrame` over the game with
-## Resume, Restart, Settings, Controls and Quit to menu. The world pauses while it is open; the menu itself keeps running.
+## Resume, Restart, Settings (with Controls inside) and Quit to menu. The world pauses while it is open; the menu itself keeps running.
 ##
 ## `Main` hands it the pause action's edge (`on_pause_action`): it opens the menu, goes back one page, or at the root resumes.
 ## Esc is that same action, so the pages ignore the key themselves and one press never counts twice.
@@ -15,7 +15,6 @@ const ENTRIES: Array[Dictionary] = [
 	{"id": &"resume", "text": "Resume"},
 	{"id": &"restart", "text": "Restart"},
 	{"id": &"settings", "text": "Settings"},
-	{"id": &"controls", "text": "Controls"},
 	{"id": &"quit", "text": "Quit to menu"},
 ]
 
@@ -39,7 +38,7 @@ func _ready() -> void:
 	DebugConsole.registry.register_provider(&"pause_menu", ConsoleVars.new({
 		&"open": {"get": func() -> bool: return _open, "doc": "The pause menu is showing"},
 		&"page": {"get": func() -> String: return _frame.current_page().title if _open and _frame.current_page() != null else "",
-				"doc": "The title of the page on top: PAUSED, Settings or Controls"},
+				"doc": "The title of the page on top: PAUSED, Settings, a settings group or Controls"},
 		&"depth": {"get": func() -> int: return _frame.depth() if _open else 0, "doc": "Pages open (1 is the pause list)"},
 	}), self)
 
@@ -115,8 +114,6 @@ func _on_chosen(id: StringName) -> void:
 			_ask_game(func() -> String: return game.restart())
 		&"settings":
 			_push(MenuScreens.settings())
-		&"controls":
-			_push(MenuScreens.controls())
 		&"quit":
 			if game != null:
 				game.show_front_end()

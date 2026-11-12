@@ -39,6 +39,7 @@ res://tests/unit/test_console_completer.gd
 res://tests/unit/test_settings_schema.gd
 res://tests/unit/test_settings.gd
 res://tests/unit/test_settings_menu_model.gd
+res://tests/unit/test_settings_groups.gd
 res://tests/integration/test_debug_console.gd
 res://tests/integration/test_console_command_list.gd
 # Weapons, hits, damage, rams

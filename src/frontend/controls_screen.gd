@@ -21,6 +21,7 @@ const ERROR_COLOR: Color = Color(1.0, 0.55, 0.4)
 const NAME_MAX_LENGTH: int = 32  # ControlProfile.NAME_PATTERN
 const KEY_PROFILE: StringName = &"@profile"
 const KEY_SAVE: StringName = &"@save"
+const KEY_SETTINGS: StringName = &"@settings"
 
 enum View { LIST, PROFILES, ACTION, SAVE_AS }
 
@@ -169,8 +170,14 @@ func _show_list(focus_key: StringName = &"") -> void:
 	for action: StringName in InputAdapter.ACTIONS:
 		_row(ControlsModel.row_text(live, action), _open_action.bind(action), action)
 	_row("Save as a new profile...", _show_save_as, KEY_SAVE)
+	_row("Sensitivity and deadzones...", _open_settings, KEY_SETTINGS)
 	add_back_option()
 	_focus_key(focus_key)
+
+
+# The `controls` settings (invert pitch, deadzones, hold time, mouse speeds) open over this page (M5-T45).
+func _open_settings() -> void:
+	push_requested.emit(MenuScreens.settings_screen(&"controls"))
 
 
 func _show_profiles() -> void:

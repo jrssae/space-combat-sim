@@ -1,4 +1,4 @@
-{"scenario_id": "dogfight", "system_id": "local",
+{"scenario_id": "dogfight", "description": "A close fight: six raiders against your wing and its allies, no objectives.", "system_id": "local",
  "player": {"position": [3000, 0, 0], "forward": [-1, 0, 0]},
  "pools": {"raider_fighter": 6, "starfury_ally": 4},
  "wings": [

@@ -617,7 +617,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T42 | A | Pause backdrop: a slow figure-8 camera around the Starfury behind the pause menu (maintainer, 2026-11-08) | T02, T08 | Sonnet | A camera path that runs while the tree is paused; the look is (H) | done |
 | T43 | A | Target preview: a turning green wireframe of the highlighted entity on the side of the screen opposite the radial target menu, with hull bar and distance (maintainer, 2026-11-08) | T25 | Fable (maintainer, 2026-11-11) | Hidden-line wireframe in a small viewport, edges from the mesh, an info panel kept lean | done |
 | T44 | A | Focus pull: while the target menu is open only it and the target information are in focus; the play view and HUD blur over 0.2 s and come back over 0.2 s when it closes (maintainer, 2026-11-08, corrected 2026-11-09) | T25 | Sonnet | A short tweened screen blur between the HUD and the menu layers, free when closed | done |
-| T45 | A | Start screen and settings groups: an options-only start screen (New game, Load game, Free flight, Settings, Quit), the sandbox scenes under New game, Controls inside Settings, five settings groups (maintainer, 2026-11-09) | T02, T03, T04 | Sonnet | Menu re-plumbing on the built kit; mostly tests | in progress |
+| T45 | A | Start screen and settings groups: an options-only start screen (New game, Load game, Free flight, Settings, Quit), the sandbox scenes under New game, Controls inside Settings, five settings groups (maintainer, 2026-11-09) | T02, T03, T04 | Sonnet | Menu re-plumbing on the built kit; mostly tests | done |
 | T46 | A | Radial comms menu: the comms menu moves onto T25's radial framework, with the focus pull, the right stick to point, A to confirm, B to go back (maintainer, 2026-11-09) | T25, T44, T07 | Sonnet | One framework for both menus; the comms routing changes from the D-pad to the stick; it pauses the game | done |
 | T20 | - | Integration, full suite, docs and acceptance | all | Fable (maintainer, 2026-11-11) | One full run, the GPU check, the (H) list | not started |
 
@@ -2519,6 +2519,30 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
 - **Done when:** AC27, the tests pass, `docs/playtest.md`'s menu section and `info.md` (if a command changes) updated,
   and screenshots of the start screen, New game and the Settings groups in `references/screenshots/Start screen/` for
   the maintainer's look check (H).
+- **Done (as built, 2026-11-12):** the start screen, New game and the five settings groups (architecture §18.28).
+  - **Built:** `FrontEnd`'s list is New game, Load game, Free flight, Settings, Quit, with no pad diagram and no right panel
+    (`MenuScreen.show_pad` and `show_right`, applied by `MenuFrame`; without the right panel the page's `info()` shows under
+    its list, `MenuFrame.detail_text`). `NewGameSelect` (replaces `MissionSelect` and `SandboxSelect`, both deleted) lists the
+    catalogue's missions and then Combat sandbox, Dogfight, Instructor route and Civilian ships; the scenes' one-line
+    descriptions are a new `description` key in their scenario files (the loader ignores it). `SettingsSchema.GROUPS`
+    (Gameplay: game then flight, Controls, Camera & HUD, Video, Audio) with `group_of_category` and `categories_of_group`;
+    `SettingsGroupsScreen` is the Settings list both hosts push (`MenuScreens.settings()`); `MenuScreens.settings_screen(group)`
+    builds one group's `SettingsScreen` (`SettingsMenuModel` takes the categories; Apply, Revert and Defaults work per page).
+    The pause menu lost its Controls entry (four entries); its Settings opens the same groups.
+  - **Assumptions:** Load game is disabled with the tooltip "No saved games yet." (no save system exists). The Controls group
+    is the controls page itself (it keeps the pad diagram); the `controls` settings (invert pitch, deadzones, hold time, mouse
+    speeds) open from a row "Sensitivity and deadzones..." at the end of its list, through the new `MenuScreen.push_requested`
+    (the frame pushes it and copies `cancel_ignores_keys`, so the pause menu's Esc stays one edge). Free flight also uses the
+    slim layout (its text under the list). Settings group pages hide the pad diagram and keep the help panel. AC1 to AC4 hold
+    with the new routes; AC27 is the criterion for this design.
+  - **Tests (focused, passing):** `test_settings_groups` 5 (new), `test_front_end` rewritten for the new list (start screen,
+    Load game skipped both ways, no pad or right panel, New game's list, starts and text under the list, five groups, Controls
+    inside Settings with its diagram, the controls settings), `test_pause_menu`, `test_controls_screen`, `test_settings_screen`
+    (a group page test added), `test_civilian_escort`, `test_settings_menu_model`, `test_boot_routing`, `test_game_flow`.
+    `run_tests.sh --quick` passed.
+  - **GPU look check:** `references/screenshots/T45 start screen/` (start, New game, Settings, each group), RX 6950 XT.
+  - **(H):** how the slim start screen and the text under New game read; the Controls row for the stick settings; whether
+    Load game's greyed look is clear.
 
 ### M5-T46 Radial comms menu
 

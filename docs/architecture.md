@@ -4662,3 +4662,20 @@ Main                pause_menu.opened -> start (if settings.pause_backdrop), res
 The path is pure and ship-local; every frame the rig puts the camera on the ship's interpolated pose times it, so it needs no
 state that a rebase could move (the world is paused anyway). The phase advances on the frame's `delta`. The radial menus do not
 start it. A shot playing, no ship or the setting off leave the still frame.
+
+### 18.28 The start screen and the settings groups as built (T45)
+
+```
+FrontEnd root list   New game | Load game (disabled, tooltip) | Free flight | Settings | Quit; show_pad = show_right = false
+NewGameSelect        missions of MissionCatalog, then SCENES (combat_sandbox, dogfight, instructor_route, civilian_showcase);
+                     scene text = "description" in data/scenarios/<id>.json; chosen -> mission or sandbox request
+MenuScreen           show_pad, show_right (the frame hides those panels); push_requested(page) (the frame pushes it)
+MenuFrame            _apply_layout(): panels per top page; right panel hidden -> Detail label under the list (detail_text())
+SettingsSchema.GROUPS  gameplay (game, flight) | controls | camera_hud (camera, hud) | video (graphics) | audio
+MenuScreens          settings() -> SettingsGroupsScreen; settings_screen(group) -> SettingsScreen; controls() -> ControlsScreen
+PauseMenu            Resume | Restart | Settings | Quit to menu; Settings pushes the same SettingsGroupsScreen
+```
+
+Both hosts push one `SettingsGroupsScreen`; choosing a group emits `push_requested` with its page, so the pause menu and the
+front end share the five groups with no code of their own. Controls opens `ControlsScreen`, whose list ends with "Sensitivity
+and deadzones..." pushing the `controls` category's `SettingsScreen`. A test fails when a menu entry falls in no group.

@@ -32,12 +32,14 @@ layout_mode = 2
 theme_override_constants/separation = 24
 
 [node name="Left" type="VBoxContainer" parent="Margin/Columns"]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 1.3
 theme_override_constants/separation = 16
 
 [node name="OptionsPanel" type="PanelContainer" parent="Margin/Columns/Left"]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 size_flags_stretch_ratio = 1.5
@@ -52,6 +54,7 @@ layout_mode = 2
 theme_type_variation = &"Title"
 
 [node name="Scroll" type="ScrollContainer" parent="Margin/Columns/Left/OptionsPanel/Box"]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 follow_focus = true
@@ -62,6 +65,12 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 
+[node name="Detail" type="Label" parent="Margin/Columns/Left/OptionsPanel/Box"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+autowrap_mode = 3
+
 [node name="Message" type="Label" parent="Margin/Columns/Left/OptionsPanel/Box"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -69,6 +78,7 @@ theme_override_colors/font_color = Color(1, 0.55, 0.4, 1)
 autowrap_mode = 3
 
 [node name="PadPanel" type="PanelContainer" parent="Margin/Columns/Left"]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 
@@ -80,6 +90,7 @@ size_flags_vertical = 3
 script = ExtResource("3_pad")
 
 [node name="RightPanel" type="PanelContainer" parent="Margin/Columns"]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 

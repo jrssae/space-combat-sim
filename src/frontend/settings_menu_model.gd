@@ -12,16 +12,20 @@ const CATEGORY_TITLES: Dictionary[StringName, String] = {
 	&"graphics": "Graphics", &"audio": "Audio", &"game": "Game"}
 
 var schema: SettingsSchema
+## The categories this model lists, in the order given; empty lists every category in `SettingsSchema.CATEGORIES` order.
+## A settings group page passes its group's categories (`SettingsSchema.GROUPS`).
+var only: Array[StringName] = []
 
 
-func _init(p_schema: SettingsSchema = null) -> void:
+func _init(p_schema: SettingsSchema = null, p_only: Array[StringName] = []) -> void:
 	schema = p_schema if p_schema != null else SettingsSchema.new()
+	only = p_only
 
 
-## The categories that have a menu entry: `{category, title, rows}` in `SettingsSchema.CATEGORIES` order.
+## The categories that have a menu entry: `{category, title, rows}` in the model's order.
 func sections() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
-	for category: StringName in SettingsSchema.CATEGORIES:
+	for category: StringName in (only if not only.is_empty() else SettingsSchema.CATEGORIES):
 		var rows: Array[Dictionary] = []
 		for key: StringName in schema.menu_keys(category):
 			rows.append(row(key))

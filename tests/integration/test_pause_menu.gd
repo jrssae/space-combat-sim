@@ -82,10 +82,10 @@ func test_start_opens_the_menu_and_pauses_the_world() -> void:
 	assert_eq(_focused_text(), "Resume", "the pad's A resumes without pointing first")
 
 
-func test_the_pause_list_has_the_five_entries() -> void:
+func test_the_pause_list_has_the_four_entries() -> void:
 	await _open()
 	var page: ChoiceListScreen = _menu().frame().current_page() as ChoiceListScreen
-	assert_eq(page.option_ids(), [&"resume", &"restart", &"settings", &"controls", &"quit"] as Array[StringName])
+	assert_eq(page.option_ids(), [&"resume", &"restart", &"settings", &"quit"] as Array[StringName])
 	assert_eq(page.button_of(&"quit").text, "Quit to menu")
 
 
@@ -216,7 +216,7 @@ func test_a_refused_restart_is_shown() -> void:
 
 func test_quit_to_menu_returns_to_the_front_end() -> void:
 	await _open()
-	for i: int in 4:
+	for i: int in 3:
 		await _pad(&"ui_down")
 	assert_eq(_focused_text(), "Quit to menu")
 	await _pad(&"ui_accept")
@@ -234,20 +234,30 @@ func test_settings_and_controls_open_in_the_frame_and_start_steps_back() -> void
 	await _tap(InputAdapter.PAUSE)
 	assert_true(_menu().is_open(), "Start steps back one page, it does not resume")
 	assert_eq(_menu().frame().depth(), 1)
+	# Controls is the second of the five settings groups (M5-T45); the list keeps the focus on Settings.
+	await _pad(&"ui_accept")
 	await _pad(&"ui_down")
 	await _pad(&"ui_accept")
-	assert_true(_menu().frame().current_page() is ControlsScreen)
+	assert_true(_menu().frame().current_page() is ControlsScreen, "Controls is reached through Settings")
+	assert_eq(_menu().frame().depth(), 3)
 	await _pad(&"ui_cancel")
-	assert_eq(_menu().frame().depth(), 1, "B steps back too")
+	assert_eq(_menu().frame().depth(), 2, "B steps back to the Settings list")
+	await _pad(&"ui_cancel")
+	assert_eq(_menu().frame().depth(), 1)
 	assert_true(get_tree().paused)
 
 
-func test_the_settings_entry_opens_a_settings_page() -> void:
+func test_the_settings_entry_opens_the_five_groups() -> void:
 	await _open()
 	await _pad(&"ui_down")
 	await _pad(&"ui_down")
 	await _pad(&"ui_accept")
-	assert_true(_menu().frame().current_page() is SettingsScreen)
+	var page: ChoiceListScreen = _menu().frame().current_page() as ChoiceListScreen
+	assert_true(page is SettingsGroupsScreen)
+	assert_eq(page.option_ids(), [&"gameplay", &"controls", &"camera_hud", &"video", &"audio"] as Array[StringName])
+	await _pad(&"ui_accept")
+	assert_true(_menu().frame().current_page() is SettingsScreen, "a group opens its settings page")
+	assert_eq(_menu().frame().current_page().title, "Gameplay")
 
 
 func test_the_escape_key_is_the_pause_action_and_does_not_count_twice() -> void:

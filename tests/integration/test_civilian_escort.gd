@@ -128,17 +128,17 @@ func test_the_front_end_lists_the_escort_with_its_briefing_and_starts_it_on_a_fr
 	front.game = game
 	add_child_autofree(front)
 	await wait_process_frames(2)
-	(front.frame().current_page() as ChoiceListScreen).button_of(&"missions").pressed.emit()
+	(front.frame().current_page() as ChoiceListScreen).button_of(&"new_game").pressed.emit()
 	await wait_process_frames(2)
-	var page: MissionSelect = front.frame().current_page() as MissionSelect
+	var page: NewGameSelect = front.frame().current_page() as NewGameSelect
 	assert_not_null(page)
 	assert_has(page.option_ids(), SCENARIO_ID)
 	assert_does_not_have(page.option_ids(), &"buoy_defence", "Buoy defence is gone (Q36)")
 	page.button_of(SCENARIO_ID).grab_focus()
 	await wait_process_frames(2)
-	var shown: PackedStringArray = front.frame().objectives_panel().shown_lines()
-	assert_eq(shown[0], "Civilian escort")
-	assert_string_contains("\n".join(shown), "NAV BETA", "the briefing shows beside the list")
+	var shown: String = front.frame().detail_text()
+	assert_true(shown.begins_with("Civilian escort"))
+	assert_string_contains(shown, "NAV BETA", "the briefing shows under the list")
 	page.button_of(SCENARIO_ID).pressed.emit()
 	assert_eq(game.played.size(), 1)
 	assert_eq(game.played[0]["scenario_id"], SCENARIO_ID)
