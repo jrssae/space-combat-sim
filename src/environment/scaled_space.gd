@@ -12,9 +12,14 @@ extends Node3D
 ## The World is the one the current camera is in (`WorldFrame.of`), so nothing here assumes one frame (D71). With no star
 ## system on that World nothing is drawn and the light is left alone.
 ##
-## Console (§6.4): provider `scaled`, command `scaled`. The look of the stand-ins is M6-T11's and T12's; (H).
+## A planet with generated maps (M6-T11, `PlanetLook`) is drawn by its own surface shader on the true sphere, with a haze
+## shell over it; a body without maps keeps the plain stand-in. The star's look is M6-T12's.
+##
+## Console (§6.4): provider `scaled`, command `scaled`. The look is (H).
 
 const SHADER_PATH: String = "res://assets/shaders/scaled_body.gdshader"
+const PLANET_SHADER_PATH: String = "res://assets/shaders/scaled_planet.gdshader"
+const ATMOSPHERE_SHADER_PATH: String = "res://assets/shaders/scaled_atmosphere.gdshader"
 ## Runs after the camera rig has moved the cameras this frame, as the sky does.
 const LATE_PRIORITY: int = 1000
 ## Until scenarios seed their epoch (M6-T09, Q9), the layer looks at the system this much later than the sim clock: at the
@@ -32,12 +37,15 @@ var epoch_offset_s: float = STAND_IN_EPOCH_S
 
 var _system: StarSystem = null
 var _spheres: Dictionary = {}  # StringName -> MeshInstance3D
+var _shells: Dictionary = {}  # StringName -> MeshInstance3D, the haze over a planet with maps
+var _frames: Dictionary = {}  # StringName -> Basis, a planet's own axes in the game's
 var _placements: Dictionary = {}  # StringName -> ScaledPlacement
 var _star: StringName = &""
 var _sun_direction: Vector3 = Vector3.UP
 var _has_sun: bool = false
 var _key_light: float = 1.0
 var _mesh: SphereMesh = null
+var _planet_mesh: SphereMesh = null
 var _shader: Shader = null
 
 
@@ -56,6 +64,7 @@ func _ready() -> void:
 		&"key_light": {"get": key_light, "doc": "The part of the star's disc no planet hides at the camera, 0 to 1: the key light's factor"},
 		&"epoch_h": {"get": func() -> float: return epoch_offset_s / 3600.0, "unit": "h",
 				"doc": "How much later than the sim clock the layer looks at the system (a stand-in until scenarios set an epoch)"},
+		&"mapped": {"get": mapped_bodies, "doc": "The planets drawn with their generated maps and haze (M6-T11); the others are plain stand-ins"},
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"scaled",
 			"The scaled-space layer (M6-T10): status, epoch <hours> (look at the system that much later than the sim clock, to move the sun and the planet's phase for captures), show or hide (draw the far bodies or not, to measure them)",
@@ -104,15 +113,25 @@ func refresh(camera: Camera3D) -> void:
 			_key_light = minf(_key_light, EclipseMath.lit_fraction(to_star, float(system.info(_star)["radius_m"]),
 					_from(eye, at), radius_m))
 		sphere.visible = true
-		sphere.global_transform = Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * placed.radius), view.origin + placed.offset)
-		var material: ShaderMaterial = sphere.material_override as ShaderMaterial
-		material.set_shader_parameter(&"layer_depth", placed.depth)
+		var axes: Basis = _frames.get(id, Basis.IDENTITY)
+		sphere.global_transform = Transform3D(axes * Basis.from_scale(Vector3.ONE * placed.radius), view.origin + placed.offset)
+		(sphere.material_override as ShaderMaterial).set_shader_parameter(&"layer_depth", placed.depth)
+		if _shells.has(id):
+			(_shells[id].material_override as ShaderMaterial).set_shader_parameter(&"layer_depth", placed.depth)
 	if _has_sun:
 		for id: StringName in system.body_ids:
 			# Each body is lit from where the star is seen from it, not from the camera.
 			var lit_from: PackedFloat64Array = _from(places[id], places[_star])
-			if id != _star and lit_from.size() == 3:
+			if id == _star or lit_from.size() != 3:
+				continue
+			if not _frames.has(id):
 				(_spheres[id].material_override as ShaderMaterial).set_shader_parameter(&"sun_direction", _unit(lit_from))
+				continue
+			# A planet with maps takes the sun in its own frame, where its shaders work.
+			var sun_body: Vector3 = PlanetLook.sun_in_body(_unit(lit_from), _frames[id])
+			(_spheres[id].material_override as ShaderMaterial).set_shader_parameter(&"sun_body", sun_body)
+			if _shells.has(id):
+				(_shells[id].material_override as ShaderMaterial).set_shader_parameter(&"sun_body", sun_body)
 
 
 ## Where body `id` is from the World's anchor at `time_s`: three numbers, m, game axes; empty when it cannot be told.
@@ -151,6 +170,19 @@ func sphere_of(id: StringName) -> MeshInstance3D:
 	return _spheres.get(id) as MeshInstance3D
 
 
+## The haze shell over planet `id` (a child of its sphere), or null when it has no maps.
+func shell_of(id: StringName) -> MeshInstance3D:
+	return _shells.get(id) as MeshInstance3D
+
+
+## The planets drawn with their generated maps.
+func mapped_bodies() -> PackedStringArray:
+	var ids := PackedStringArray()
+	for id: StringName in _frames:
+		ids.append(String(id))
+	return ids
+
+
 func has_sun() -> bool:
 	return _has_sun
 
@@ -170,6 +202,8 @@ func _build(system: StarSystem) -> void:
 	for sphere: MeshInstance3D in _spheres.values():
 		sphere.queue_free()
 	_spheres.clear()
+	_shells.clear()
+	_frames.clear()
 	_placements.clear()
 	_system = system
 	_star = &""
@@ -184,6 +218,12 @@ func _build(system: StarSystem) -> void:
 		var is_star: bool = system.info(id)["kind"] == &"star"
 		if is_star and _star == &"":
 			_star = id
+		if not is_star:
+			var look: PlanetLook = PlanetLook.load_body(id, system.info(id))
+			if look.valid:
+				_add_mapped_planet(id, look)
+				continue
+			push_warning("ScaledSpace: %s drawn plain: %s" % [id, look.error])
 		var material := ShaderMaterial.new()
 		material.shader = _shader
 		material.set_shader_parameter(&"glows", 1.0 if is_star else 0.0)
@@ -199,6 +239,48 @@ func _build(system: StarSystem) -> void:
 		sphere.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 		add_child(sphere)
 		_spheres[id] = sphere
+
+
+# A planet with generated maps: its surface on the true sphere, turned to its own axes, and the haze shell over it.
+func _add_mapped_planet(id: StringName, look: PlanetLook) -> void:
+	if _planet_mesh == null:
+		_planet_mesh = SphereMesh.new()
+		_planet_mesh.radius = 1.0
+		_planet_mesh.height = 2.0
+		_planet_mesh.radial_segments = PlanetLook.SEGMENTS
+		_planet_mesh.rings = PlanetLook.RINGS
+	var surface := ShaderMaterial.new()
+	surface.shader = load(PLANET_SHADER_PATH) as Shader
+	surface.set_shader_parameter(&"albedo_map", load(look.albedo_path))
+	surface.set_shader_parameter(&"normal_map", load(look.normal_path))
+	surface.set_shader_parameter(&"wisp_map", load(look.wisp_path))
+	var sphere: MeshInstance3D = _layer_mesh(String(id).to_pascal_case(), surface, look.surface_uniforms())
+	add_child(sphere)
+	_spheres[id] = sphere
+	_frames[id] = PlanetLook.orientation()
+	if look.atmosphere_top_m <= 0.0:
+		return
+	var haze := ShaderMaterial.new()
+	haze.shader = load(ATMOSPHERE_SHADER_PATH) as Shader
+	var shell: MeshInstance3D = _layer_mesh("Haze", haze, look.haze_uniforms())
+	sphere.add_child(shell)
+	_shells[id] = shell
+
+
+func _layer_mesh(node_name: String, material: ShaderMaterial, uniforms: Dictionary) -> MeshInstance3D:
+	for key: StringName in uniforms:
+		material.set_shader_parameter(key, uniforms[key])
+	var mesh := MeshInstance3D.new()
+	mesh.name = node_name
+	mesh.mesh = _planet_mesh
+	# The shader pushes the vertices out; the culling box must follow.
+	var reach: float = float(uniforms[&"mesh_inflate"])
+	mesh.custom_aabb = AABB(-Vector3.ONE * reach, Vector3.ONE * 2.0 * reach)
+	mesh.material_override = material
+	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mesh.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+	mesh.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	return mesh
 
 
 # No star system in view: nothing drawn, the light left as the scene made it.

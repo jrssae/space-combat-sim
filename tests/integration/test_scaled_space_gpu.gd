@@ -86,6 +86,10 @@ func _lit(pixel: Color) -> bool:
 func test_the_planets_disc_is_as_wide_as_its_angular_size() -> void:
 	if not _gpu():
 		return
+	# The surface alone: the haze shell's glow just outside the lit limb (M6-T11) is test_planet_gpu.gd's.
+	layer.refresh(camera)
+	if layer.shell_of(PLANET) != null:
+		layer.shell_of(PLANET).visible = false
 	var image: Image = await _look_at_planet()
 	var size: Vector2i = image.get_size()
 	var placed: ScaledPlacement = layer.placement_of(PLANET)

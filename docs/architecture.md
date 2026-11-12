@@ -1108,7 +1108,27 @@ authored positions to centre the hull on its surface samples. A big stand-in (th
   amber lens under the beacon. Outputs the textured `nav_buoy.glb` and its maps, `nav_buoy.obj`, `hardpoints.json` (`beacon`
   position), manifest.
 
-### 9.4 Running
+### 9.4 `planet` (M6-T11, D68)
+
+- One asset per `PlanetSpec` in `tools/procgen/assets/planet.py`; the first is `epsilon_iii` (the show still described in
+  `docs/design-references.md`, "Epsilon III"). Equirectangular maps from noise sampled on the unit sphere, so they are seamless
+  at 0/360 degrees with no pinch at the poles: albedo (sRGB), height, tangent-space normal (red east, green north, relief
+  exaggerated by `planet.normal_exaggeration`) at 4096x2048, and the wisp cover at 2048x1024, each with a VRAM-compressed,
+  mipmapped `.import` sidecar. The manifest's `planet` section gives the layout (`uv`: u = 0 at the planet's +Z growing east
+  toward +X, v = 0 at the north pole, +Y), the height range, the wisps' tint and the lit limb's haze tint
+  (`atmosphere.limb_srgb`).
+- In the game (`ScaledSpace`, D68): `PlanetLook` reads the manifest and the star system's `radius_m` and `atmosphere_top_m`.
+  The planet's frame puts the maps' north on the ephemeris's z (the game's +Y) and u = 0 toward the ephemeris's +x; no tilt or
+  spin yet (the data has none). `assets/shaders/scaled_planet.gdshader` draws the surface on a coarse 64x32 sphere pushed out
+  just enough to enclose the true one, finds each pixel's point on the true sphere (a round limb at any distance), samples
+  the maps with seam-safe gradients (anisotropic, mipmapped), lights the relief only where the sun is up, with a hard
+  terminator and a near-black night side. `assets/shaders/scaled_atmosphere.gdshader` is a shell to the atmosphere's top,
+  added over it: sunlit air along each view ray, so the lit limb gets a faint warm rim and glow and the night limb none.
+  Both keep T10's pinned layer depth. A body without built maps keeps T10's plain stand-in, with a warning.
+- `scripts/planet_sheet.sh` photographs the planet from the station's rail, a 400 km orbit, 1 000 and 10 000 km up for
+  the look sheets.
+
+### 9.5 Running
 
 `scripts/gen_assets.sh` runs `python3 -m tools.procgen build all`. `scripts/run_tests.sh` first runs
 `python3 -m unittest discover -s tools/procgen/tests -t .`. CI regenerates assets on every run (they are not

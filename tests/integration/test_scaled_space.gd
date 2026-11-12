@@ -227,3 +227,55 @@ func test_the_scaled_command_and_provider() -> void:
 	assert_eq(DebugConsole.registry.read("scaled.bodies")["value"], 2)
 	assert_false(DebugConsole.registry.execute("scaled epoch")[0].ok, "epoch needs its hours")
 	assert_true(DebugConsole.registry.execute("scaled")[0].ok, "alone, it reports")
+
+
+func test_epsilon_iii_is_drawn_with_its_maps_and_its_haze() -> void:
+	layer.epoch_offset_s = system.period_s(&"babylon5") / 3.0
+	_on_the_rail()
+	assert_eq(layer.mapped_bodies(), PackedStringArray(["epsilon_iii"]), "the planet has built maps (M6-T11)")
+	var sphere: MeshInstance3D = layer.sphere_of(PLANET)
+	var surface: ShaderMaterial = sphere.material_override as ShaderMaterial
+	assert_eq(surface.shader.resource_path, ScaledSpace.PLANET_SHADER_PATH)
+	for map: StringName in [&"albedo_map", &"normal_map", &"wisp_map"]:
+		assert_not_null(surface.get_shader_parameter(map), "%s is set" % map)
+	# The maps' north is the ephemeris's: the stand-in's y axis is the game's up, its size still the planet's angle.
+	assert_almost_eq(sphere.global_basis.y.normalized(), Vector3.UP, Vector3.ONE * 1.0e-6)
+	assert_almost_eq(sphere.global_basis.z.normalized(), Vector3.RIGHT, Vector3.ONE * 1.0e-6, "u = 0 toward the kernel's +x")
+	assert_almost_eq(_drawn_size_deg(PLANET), 20.02, 0.02)
+	# The haze shell rides on the planet, a hair nearer in the layer's depth (its shader adds the hair).
+	var shell: MeshInstance3D = layer.shell_of(PLANET)
+	assert_eq(shell.get_parent(), sphere)
+	var haze: ShaderMaterial = shell.material_override as ShaderMaterial
+	assert_eq(haze.shader.resource_path, ScaledSpace.ATMOSPHERE_SHADER_PATH)
+	assert_eq(haze.get_shader_parameter(&"layer_depth"), surface.get_shader_parameter(&"layer_depth"))
+	assert_almost_eq(float(haze.get_shader_parameter(&"shell_radius")), 1.0 + 1.0e5 / PLANET_RADIUS_M, 1.0e-6,
+			"the atmosphere's top from the star system's data")
+	assert_eq(haze.get_shader_parameter(&"haze_tint"), Color8(236, 150, 84), "the manifest's warm limb")
+
+
+func test_the_planet_is_lit_from_where_it_sees_the_star() -> void:
+	layer.epoch_offset_s = system.period_s(&"babylon5") / 3.0
+	_on_the_rail()
+	var surface: ShaderMaterial = layer.sphere_of(PLANET).material_override as ShaderMaterial
+	var sun_body: Vector3 = surface.get_shader_parameter(&"sun_body")
+	var star_from_planet: PackedFloat64Array = ScaledPlacement.to_game(system.relative_state(STAR, PLANET, layer.epoch_offset_s))
+	var expected: Vector3 = PlanetLook.sun_in_body(Vector3(star_from_planet[0], star_from_planet[1], star_from_planet[2]),
+			PlanetLook.orientation())
+	assert_almost_eq(sun_body, expected, Vector3.ONE * 1.0e-5, "the sun in the planet's own frame")
+	assert_almost_eq((layer.shell_of(PLANET).material_override as ShaderMaterial).get_shader_parameter(&"sun_body"), sun_body,
+			Vector3.ONE * 1.0e-6, "the haze is lit from the same sun")
+	# The star sits in the planet's equator plane (no tilt), so the sun is overhead somewhere on the equator.
+	assert_almost_eq(PlanetLook.longitude_latitude(sun_body).y, 0.0, 1.0e-4)
+	# The sun about 120 degrees from the planet seen from the station is about 60 degrees from the station seen from the
+	# planet (the star's parallax is a few hundredths of a degree): three quarters of the disc lit.
+	var at_station: float = rad_to_deg(layer.sun_direction().angle_to(layer.placement_of(PLANET).direction))
+	assert_almost_eq(rad_to_deg(acos(sun_body.dot(PlanetLook.sun_in_body(-layer.placement_of(PLANET).direction,
+			PlanetLook.orientation())))), 180.0 - at_station, 0.05)
+
+
+func test_the_maps_are_mipmapped() -> void:
+	_on_the_rail()
+	var surface: ShaderMaterial = layer.sphere_of(PLANET).material_override as ShaderMaterial
+	for map: StringName in [&"albedo_map", &"normal_map", &"wisp_map"]:
+		var texture: Texture2D = surface.get_shader_parameter(map)
+		assert_true(texture.get_image().has_mipmaps(), "%s has its mip levels, so the far planet does not shimmer" % map)

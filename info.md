@@ -189,7 +189,7 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `render` | The renderer (`forward_plus` or `headless`), fps, frame time, draw calls, triangles, VRAM, far dots, GPU, display and window | in flight |
 | `lights` | Which emitters light the scene this frame and what that costs | front end, flight |
 | `sky` | The star points and the nebula panorama: loaded and shown | front end, flight |
-| `scaled` | The scaled-space layer (M6-T10): far `bodies` drawn, each one's angular size, direction, true distance and stand-in (`layout`), whether the key light follows the true sun (`has_sun`), `sun_direction`, the key light's factor in a planet's shadow (`key_light`, 0 to 1) and the layer's epoch offset (`epoch_h`) | front end, flight |
+| `scaled` | The scaled-space layer (M6-T10): far `bodies` drawn, each one's angular size, direction, true distance and stand-in (`layout`), whether the key light follows the true sun (`has_sun`), `sun_direction`, the key light's factor in a planet's shadow (`key_light`, 0 to 1), the layer's epoch offset (`epoch_h`) and the planets drawn with their generated maps and haze (`mapped`, M6-T11) | front end, flight |
 | `aa` | The anti-aliasing mode, what the viewport uses, and the bolts' and sky's motion-vector state | front end, flight |
 | `upscale` | The upscaler, its preset, the scale applied, sharpness and the window's and 3D view's lines | front end, flight |
 | `post` | Lens flare and motion blur state and where the star is in the picture | front end, flight |

@@ -293,7 +293,7 @@ which changes the same native rows and rebase path:
 | T08 | A | Flying under gravity: the clamp, the assist's and brake's reference, the HUD's reference and altitude, planet impact | T07, Q4 to Q6 | Opus | Flight-model semantics the player feels | not started |
 | T09 | B | Scenarios at true scale: spawns relative to bodies, stations and orbits, epochs, free flight beside the station's stand-in | T03, T08, Q7, Q9 | Opus | Every scenario and mission must keep working | not started |
 | T10 | C | Scaled-space layer: placement, draw order and depth, the true sun direction, the planet's shadow | T04 | Fable | Precision and draw order in Forward+ at planetary distances; a design that later layers stand on | done |
-| T11 | C | The planet and its atmosphere: the `planet` generator and the scattering shader (generator half early) | T10, Q10 | Opus | Shader maths on T10's layer; the look is (H) | in progress |
+| T11 | C | The planet and its atmosphere: the `planet` generator and the scattering shader (generator half early) | T10, Q10 | Opus | Shader maths on T10's layer; the look is (H) | done |
 | T12 | C | The sun: disc and glow from the star's colour, the lens flare and key light on the true direction | T10 | Sonnet | A small shader and the existing flare | not started |
 | T13 | D | Jumpgate references and the `jumpgate` generator (early start) | Q11 | Opus | Geometry read off references | done |
 | T14 | D | The jumpgate in the game: the prop, the vortex, 1 000 km broadcast, arrivals through the gate | T13, T09, Q12 | Opus | A new effect and the mission and encounter seams | done |
@@ -702,6 +702,63 @@ which changes the same native rows and rebase path:
     pinker with larger cream patches than the still.
   - Left for the shader half: the terminator from the true sun direction, no relief lit on the night side, the faint warm
     limb on the lit side only, sunlit wisps, mipmapped sampling. `docs/architecture.md` §9 still needs a `planet` entry.
+
+- **Shader half done (2026-11-12):**
+  - `src/environment/planet_look.gd` (`PlanetLook`, pure): reads the planet's manifest (maps, wisp and haze tints) and the star
+    system's `radius_m` and `atmosphere_top_m`; the planet's frame (`orientation`: the maps' north on the ephemeris's z, the
+    game's +Y, u = 0 toward the ephemeris's +x, east toward its +y; no tilt or spin, the data has none), the sun in that frame
+    (`sun_in_body`), the haze shell's radius and scale height (a fifth of the 100 km top), and how far the coarse mesh is pushed
+    out to enclose the true sphere (`mesh_inflate`, 1.0034 for 64x32). A body without built maps is not fatal: it keeps
+    T10's plain stand-in, with a warning.
+  - `assets/shaders/scaled_planet.gdshader`: the surface on a 64x32 sphere (half T10's triangles), each pixel finding its own
+    point on the true sphere (closest approach, no large-number cancellation), so the limb is round from any distance (T10's
+    "a pixel coarse from 400 km" is gone) and the mesh's facets never show. Maps sampled with `textureGrad`, the gradients
+    taken from whichever of two u's is continuous at that pixel, so neither the 0 nor the 180 degree meridian drops to the
+    smallest mip (a dashed line before the fix), anisotropic and mipmapped (the imports carry the mips). The normal map's relief
+    is lit only where the sun is up and the terminator is hard (a smoothstep over -0.02 to 0.1 of the sun's height); the night
+    side keeps 0.004 of the albedo (about 5/255 on screen, no lights); the wisps are lit by the sun's height only. Full sun is
+    `sun_strength` 1.5 against the Filmic tonemap.
+  - `assets/shaders/scaled_atmosphere.gdshader`: a shell to the atmosphere's top, added over the surface (`blend_add`, no depth
+    write, its depth a hair in front of the planet's in T10's slab). 16 samples of exponential air along each view ray, each
+    counted only while its air is sunlit (a band from just past the terminator), tinted by the manifest's `limb_srgb`: the lit
+    limb gets a faint warm rim and a thin glow just outside the disc, the night limb none, the face-on disc almost nothing.
+    `haze_strength` 0.012 is a look choice (H).
+  - `ScaledSpace` (T10's layer): a body with maps gets the surface material, its own axes in the stand-in's basis (its scale
+    is still the placement's radius, so T10's size checks hold) and the shell as a child (`shell_of`); `sun_body` on both
+    from where the star is seen from the planet. Provider `scaled` gains `mapped`; no new command. Both shaders keep T10's
+    vertex stage (`layer_depth`) and are `cull_front`, so they also work with the camera inside the shell.
+  - `scripts/planet_sheet.sh` (`planet_sheet_node.gd`): the look sheet on this GPU with the game's sky and light and no ships
+    (views from the station's rail, a 400 km orbit, 1 000 and 10 000 km up), each line with the GPU time; `layer=off` for
+    the baseline.
+  - Tests: `tests/unit/test_planet_look.gd` (quick, 10: the manifest, the air from the data, bad manifests, missing maps,
+    north and east against the ephemeris, a tilted pole, the sun in the planet's frame, longitude and latitude against the
+    generator's layout, the coarse mesh enclosing the sphere, Epsilon III's built maps); `tests/integration/test_scaled_space.gd`
+    (quick, 3 more, 14 in all: the maps, axes and shell wired, the sun in the planet's frame, the maps mipmapped);
+    `tests/integration/test_planet_gpu.gd` (standard, Pending headless, 4: the limb a true circle to within 2 px at a 2 degree
+    view where the facets measured 5.3 px; the terminator hard, the night side under 0.03 with no relief past it, the day side's
+    relief; the warm glow on the lit limb only; no line at either seam, checked to fail with the seam bug put back);
+    `test_scaled_space_gpu.gd`'s disc height now hides the haze (the glow is the new file's). Quick tier: 1 801 tests in 127
+    scripts, green; both GPU files green on the RX 6950 XT.
+  - GPU (RX 6950 XT, RADV, Wayland, Forward+, 1200x675 window, combat sandbox on the station's rail, `look 150`, HUD on),
+    against the same build with the manifest moved aside (T10's plain stand-in): `forward_plus`, 145 fps both (the display's
+    cap); 71 to 73 draw calls against 70 to 72 (the haze shell); 90 584 triangles against 98 776; `render.vram_mb` 378.6 MB
+    against 360.1 MB (+18.4 MB for the three maps; the baseline has grown from T10's 333.5 MB with other tasks' work). GPU
+    time with the planet filling the view (`planet_sheet.sh`, layer on against off, mean of 40 frames): 1200x675 +0.08 ms from
+    the rail, +0.13 ms at the 400 km limb, +0.24 ms looking down from 1 000 km; 3200x1800 +0.25 ms on both measured views.
+  - Look sheet (H) in `references/screenshots/M6-T11 planet/`: `rail_day`, `rail_terminator`, `rail_full`, `rail_crescent`,
+    `rail_eclipse` (night side near black, the star behind), `rail_like_still` (lit from the upper right as in the still),
+    `rail_lit_limb_zoom` and `rail_dark_limb_zoom` (3 degree views: the round limb and the glow on the lit side only),
+    `orbit400_lit_limb`, `orbit400_day_limb`, `orbit400_down`, `orbit400_terminator`, `orbit400_night`, `alt1000_lit_limb`,
+    `alt1000_down`, `alt10000`; in game with the HUD: `game_station.png` (beside `game_station_before_t11.png`, T10's
+    stand-in) and `game_orbit400_a.png` (`frame orbit 400` starts on the night side, so the night limb with the star behind
+    it); `compare_with_still.png` puts the in-game planet beside the generator's preview in the same light. **The still
+    `references/Epsilon III planet.png` is not on this machine**, so its panel is a placeholder: once it is back, the
+    generator's `look_sheet` (`tools/procgen/assets/planet.py`) sets it beside the preview, and `rail_like_still.png` is
+    the in-game planet in the preview's light.
+  - Open, for the maintainer (H): the haze's strength (0.012) and the surface's brightness in full sun (1.5); the albedo reads a
+    little pink and pale beside the description's rust and tan (the generator half's note too); the map is soft when seen from
+    400 km straight down (4 096 texels round, about 1.2 km each), a detail layer would be a later task. No spin or axial tilt:
+    the data has none. Not checked: the shells' motion vectors under TAA and FSR 2 (as T10).
 
 ### M6-T12 The sun
 
