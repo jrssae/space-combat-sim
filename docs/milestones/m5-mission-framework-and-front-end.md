@@ -2253,6 +2253,9 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   fighter's pattern of smaller rectangles in slightly varied colour across the hull. (6) The references are inspiration only,
   never reused or traced. (7) No re-shoot needed. Phase 2 commits the layouts with tests (per part: feature counts and
   positions, mirror symmetry, minimum plate size, determinism) and removes `panel_grid` and the civilian path of `plating_for`.
+- **Note (maintainer, 2026-11-12):** the texture detail setting is meant for every ship, but only the civilian hulls have low and
+  high texture sets so far. The Starfury, the raider and the allies keep their one set (the setting changes nothing on them) until
+  their surfaces get the same A/C treatment; the setting's description says so, and `docs/roadmap.md` carries it as a follow-up.
 - **What:** per ship, the seams and hatches read off the captures (where plates break, which way they run, ribs on the
   pods), drawn as per-part seam layouts instead of `plating_for`'s staggered grid; a look sheet per ship for the
   maintainer before the generator commits.

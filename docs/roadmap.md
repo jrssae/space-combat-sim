@@ -127,3 +127,9 @@ events plus those settings, applied before the first frame. The tutorial checks 
 - Every asset (ships, stations, planets, asteroids, comets, interiors, skies) comes from `tools/procgen` code: no
   hand modelling, no AI 3D generators, no official or ripped franchise assets. Generated binaries stay out of git.
 - Any new dependency is recorded in `docs/third-party.md` with a GPL-3.0-compatible license.
+
+**Follow-up from M5-T40 (maintainer, 2026-11-12):** the texture detail setting (low = major seams only, high = show-like plating
+with per-plate tone, hatches and ribs) applies to every ship, but only the nine civilian hulls have both texture sets. The Starfury,
+the raider and every later hull (capitals, station, other races) need low and high sets built the same way, from show references,
+when their surfaces are next worked on.
+
