@@ -45,7 +45,7 @@ func test_a_shift_moves_only_its_own_worlds_rows_once() -> void:
 	assert_eq(StaticRows.position_of(203), Vector3(300, 0, 0), "nor a row with no world")
 
 
-func test_the_solid_rows_are_the_rocks_and_are_rebuilt_only_when_a_rock_changes() -> void:
+func test_the_solid_rows_are_the_rocks_rebuilt_only_when_a_rock_changes_and_shifted_in_place() -> void:
 	StaticRows.register(301, Vector3(1, 0, 0), 40.0, BodyKind.STATIC, Factions.NEUTRAL, _a)
 	StaticRows.register(302, Vector3(2, 0, 0), 50.0, BodyKind.MINE, Factions.RAIDERS, _a)
 	StaticRows.register(303, Vector3(3, 0, 0), 60.0, BodyKind.STATIC, Factions.NEUTRAL, _a)
@@ -62,9 +62,19 @@ func test_the_solid_rows_are_the_rocks_and_are_rebuilt_only_when_a_rock_changes(
 	StaticRows.register(302, Vector3(2, 0, 0), 50.0, BodyKind.MINE, Factions.RAIDERS, _a)
 	assert_gt(StaticRows.version, version, "a mine coming and going changes the rows")
 	assert_true(StaticRows.solid() == solid and StaticRows.solid_builds == builds, "but not the solid ones")
+	# A rebase is not a change of rows (M6-T06, L4): the same solid rows move in place and count the move.
+	version = StaticRows.version
+	var solid_version: int = StaticRows.solid_version
+	var moves: int = solid.moves
 	StaticRows.shift(Vector3(10, 0, 0), _a)
-	assert_eq(StaticRows.solid().positions, PackedVector3Array([Vector3(11, 0, 0), Vector3(13, 0, 0)]), "a rebase moves them")
-	assert_eq(StaticRows.solid_builds, builds + 1, "built again once")
+	assert_same(StaticRows.solid(), solid, "a rebase keeps the solid rows")
+	assert_eq(solid.positions, PackedVector3Array([Vector3(11, 0, 0), Vector3(13, 0, 0)]), "and moves them")
+	assert_eq(solid.moves, moves + 1, "one move, so a holder of their places takes them again")
+	assert_eq(StaticRows.solid_builds, builds, "not built again")
+	assert_eq([StaticRows.version, StaticRows.solid_version], [version, solid_version], "not a new version")
+	StaticRows.unregister(301)
+	assert_eq(StaticRows.solid().ids, PackedInt64Array([303]), "a rock leaving builds them again")
+	assert_eq(StaticRows.solid_builds, builds + 1, "once")
 
 
 func test_new_ids_are_unique() -> void:
