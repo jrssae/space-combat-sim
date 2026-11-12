@@ -10,11 +10,21 @@ path with that recording. A test fails when the native result moves, as it did w
 - The recorders are the tests themselves: each `ParityFixture.expected(file, case, recorder)` call runs its recorder when
   the run sets `SCS_RECORD_FIXTURES=1` (never on CI: with `CI=true` it refuses and reads the recordings).
 - **Provenance.** Every recording was taken at `0586e3e`, the commit that added this file, where every GDScript path and
-  switch still existed. `weapon_rows_battle.json` was taken again from that same commit's code, alone in a fresh process,
-  and committed in `7987de4`. The game and native code of `0586e3e` is the tag `m4-gdscript-reference` (`095c73d`, on
-  `main`) plus only the start-up refusal (`src/game/main.gd`, `src/perf/native_lib.gd`), which no recorded path reads.
+  switch still existed (`weapon_rows_battle.json` is the exception, below). The game and native code of `0586e3e` is the
+  tag `m4-gdscript-reference` (`095c73d`, on `main`) plus only the start-up refusal (`src/game/main.gd`, `src/perf/native_lib.gd`), which no recorded path reads.
   After T37 the switches are gone, so a recorder run on a later commit records the native path; re-record only on purpose
   and say so in the commit.
+
+**`weapon_rows_battle.json` is a native recording (M6-T07).** Its GDScript recording (918 hits, 446 by capitals, 174 beam
+shots, 150 launches, 26 missiles shot down, 0 mines set off; taken at `0586e3e` and committed in `7987de4`) was made under
+M4's moon stand-in, with the tier off (its default then) and the sim clock not reset. M6-T07 removed the moon, so the
+battle was compared again with no gravity on either side, tier off, clock reset, seed 1: the GDScript stand-ins at
+`0586e3e` give 920, 431, 185, 151, 24, 0 and the native rows at `c4e4d785` give the same 920 hits one for one (tick,
+shooter, damage, relative speed); seed 2 likewise (728 hits), seed 3 too (717) but for the last digits of one missile's
+relative speed. The stored case is that native battle in the bench's orbit of Epsilon III, tier off: 933, 420, 174, 151,
+25, 1. For reference, at `0586e3e` under the moon with the clock reset both paths give 955, 470, 180, 151, 26, 0; with
+the tier on (the default since M4-T23) the native battle's resolver lands 822 and 362 with no gravity and 802 and 359 in
+orbit, since far ships' fire is then rolled by the tier and never reaches the resolver.
 
 To record again from the GDScript paths, check out `0586e3e` (the tag has the paths but not the recorders) in a separate
 worktree, build the library (`scripts/build_native.sh`), and run the test file with the variable set, for example:

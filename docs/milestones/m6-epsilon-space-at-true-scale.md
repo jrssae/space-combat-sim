@@ -289,7 +289,7 @@ which changes the same native rows and rebase path:
 | T04 | A | The free-falling frame: the origin as a test particle, `environment_accel` from the ephemeris | T02, T03 | Opus | Touches the tick order and every ship's force step | done |
 | T05 | A | The velocity rebase over every body, row, bolt, chunk, particle and interpolated node | T04 | Fable | The riskiest change of the milestone; every moving thing and the parity recordings | done |
 | T06 | A | L4: the rebase cascade natively, the cached solid shifted in place, hidden ships skipped | T05 | Opus | A measured native fix on the path T05 rewrote | done (AC2 restated, the per-node rest moved to T21; maintainer, 2026-11-12) |
-| T07 | A | Gravity on everything: ships, tier rows, bolts, debris, the brake's and the AI's feed-forward; the gravity stand-in removed | T04 | Opus | Native kernels with parity at zero gravity | in progress |
+| T07 | A | Gravity on everything: ships, tier rows, bolts, debris, the brake's and the AI's feed-forward; the gravity stand-in removed | T04 | Opus | Native kernels with parity at zero gravity | done |
 | T08 | A | Flying under gravity: the clamp, the assist's and brake's reference, the HUD's reference and altitude, planet impact | T07, Q4 to Q6 | Opus | Flight-model semantics the player feels | not started |
 | T09 | B | Scenarios at true scale: spawns relative to bodies, stations and orbits, epochs, free flight beside the station's stand-in | T03, T08, Q7, Q9 | Opus | Every scenario and mission must keep working | not started |
 | T10 | C | Scaled-space layer: placement, draw order and depth, the true sun direction, the planet's shadow | T04 | Fable | Precision and draw order in Forward+ at planetary distances; a design that later layers stand on | done |
@@ -498,7 +498,8 @@ which changes the same native rows and rebase path:
     test now waits for a `process_frame` first, so it always starts between ticks, whatever ran before. **Open:** both
     samples sit 9 to 14 % under the GDScript recording against 10 % allowed (403 in CI is 43 off, 45 allowed), so the test
     is close to its limit on any change that perturbs the battle; whether to look into the capitals' missing hits or
-    re-base the tolerance is the maintainer's call.
+    re-base the tolerance is the maintainer's call. **Closed in T07:** the missing hits are the tier's (on by default
+    since M4-T23, off when the battle was recorded); see T07's notes.
   - Left for T08 (readers, all in T01's R list): brake, assist, thrust fade and clamp, the HUD's speed, the brains' own
     speed, spawn velocities ("at rest" means `rest_velocity()`), a missile's held speed and heading (frame speed), rocks
     and props taken as at rest in the hit sweep, the ram rule and avoidance, a buoy marker's `velocity` for lead. Voices
@@ -572,7 +573,7 @@ which changes the same native rows and rebase path:
   standard.
 - **Done when:** AC4; bit-identical results at zero gravity; AC10's cost measured.
 
-- **Work notes (2026-11-12; built and measured, one maintainer choice open, below):**
+- **Work notes (2026-11-12; built and measured):**
   - **One sample, every mover.** Every mover reads the frame's residual from the tick's one sample (`frame.rs`), never a
     second copy of the maths, so nothing pulls outside a body's zone (the station's rail stays quiet) and only the strongest
     body pulls inside one. `Frame::residual_rows` (over `gravity::residual_rows_in_place`) gives a batch of movers the bits
@@ -632,16 +633,47 @@ which changes the same native rows and rebase path:
     (`warmup=3 seed=1`): median 5.74 and 5.67 ms before, 5.73 and 5.70 after (mean 6.01 and 5.83 against 5.88 and 5.85).
     Within 1 %, against 5 % allowed. In the battle the pull reaches about 270 ships, 680 tier rows (12.6 us) and 1 100 bolts
     (19 us) a tick: about 35 us, 0.6 % of the tick. `test_ai_think_time` passes (AiPilot median 197 us for 13 ships).
-  - **Open: the seeded weapon battle (`test_weapon_rows_battle.gd`, slow) fails.** Hits 802 against the GDScript
-    recording's 918 (10 % allowed: 826), capitals' hits 359 against 446 (allowed 401). The recording was made under M4's
-    moon stand-in: a near-uniform 0.03 m/s^2 on every ship while the capitals' engines held off a pull their bodies never
-    felt. T07 removes that by design (D66). The same battle with no gravity at all gives 822 and 362; under the orbit's tide
-    802 and 359; the moon gave 885 and 406 (T05). So the capitals' extra hits came from the stand-in's lopsided pull, and the
-    recording can no longer be reached by any gravity D66 allows. **Maintainer's choice:** (a) record the native battle now
-    (T07's physics) as the test's reference and hold later changes to it, keeping the GDScript numbers as history; (b) keep
-    the GDScript recording and widen the capitals' tolerance (and every hit's) to cover the moon's removal, about 20 %; (c)
-    run the test's battle with no gravity and widen less (822 and 362: every hit 10.5 % under, capitals 19 %), which still
-    needs (a) or (b) for the capitals.
+  - **The seeded weapon battle (`test_weapon_rows_battle.gd`, slow): compared again with no gravity, no defect, a new
+    reference (2026-11-12, at the maintainer's word).** The test failed after the moon went: 802 hits against the GDScript
+    recording's 918 (826 allowed), capitals' 359 against 446 (401 allowed). The GDScript battle was run again at the
+    recording's commit (`0586e3e`, exported, its own library and assets built) with the moon on and off, and the native
+    battle at `c4e4d785` with no gravity and in orbit, every hit logged. 30 s, 100 ships, seed 1; hits, capitals' hits,
+    beam shots, launches, missiles shot down, mines set off:
+
+    | battle | tier | hits | capitals' | beams | launches | shot down | mines |
+    |---|---|---|---|---|---|---|---|
+    | GDScript, M4's moon, clock not reset (the old recording, reproduced) | off | 918 | 446 | 174 | 150 | 26 | 0 |
+    | GDScript, M4's moon | off | 955 | 470 | 180 | 151 | 26 | 0 |
+    | native at `0586e3e`, M4's moon | off | 955 | 470 | 180 | 151 | 26 | 0 |
+    | GDScript, no gravity | off | 920 | 431 | 185 | 151 | 24 | 0 |
+    | native, no gravity | off | 920 | 431 | 185 | 151 | 24 | 0 |
+    | native, T07's orbit (the new recording) | off | 933 | 420 | 174 | 151 | 25 | 1 |
+    | native, M4's moon (T05) | on | 885 | 406 | 159 | 146 | 28 | 0 |
+    | native, no gravity | on | 822 | 362 | 171 | 149 | 28 | 0 |
+    | native, T07's orbit | on | 802 | 359 | 166 | 147 | 28 | 0 |
+
+    - **The native rows are the GDScript stand-ins, hit for hit.** With no gravity and the tier off, today's native battle
+      lands the GDScript battle's 920 hits one for one: the same tick, shooter, target kind, damage and relative speed.
+      Seed 2 the same (728 hits, 347 by capitals); seed 3 the same 717 and 334 but for the last digits of one missile's
+      relative speed on the final tick. At `0586e3e` the two paths also agree hit for hit, moon on or off.
+    - **The missing hits were the tier's, not the weapons'.** The GDScript battle was recorded with the tier off (its
+      default until M4-T23 turned it on at 10 km, after the recording). With it on, three capitals and about three
+      fighters of this battle fly as tier rows; their fire is rolled (7 capital hits from 84 rolls, 5 fighter hits from
+      16 shots) and never reaches the hit resolver the test counts. By category, tier off against on with no gravity:
+      capitals 431 to 362 (CRUISER 6 41 to 0, DESTROYER 5 10 to 0, CARRIER 2 92 to 72; 44 of the 69 are 10-point hits
+      on targets that are not ships: missiles, mines or rocks), fighters 489 to 460. That is the 9 to 14 %
+      T05 left open.
+    - **The moon moved the capitals' count less than it seemed.** Tier off, the moon added 35 hits (955 against 920), 39
+      of them the capitals'. The old recording's 918 and 446 is the same battle with the sim clock not reset (the reset
+      was added in the commit that stored it); with the reset it is 955 and 470.
+    - **The reference.** `weapon_rows_battle.json` now holds the native battle in the bench's orbit with the tier off
+      (933, 420, 174, 151, 25, 1); the test turns the tier off, checks that no ship flew as a row, and keeps its 10 %. In
+      orbit, not with no gravity: the bench's battle has one gravity now (D66) and a no-gravity switch would be a second
+      path kept for one test; the orbit's battle also runs the pull on bolts and capitals, and it sits 1.4 % (hits) and
+      2.6 % (capitals') from the GDScript battle with no gravity, so the recording is still tied to the GDScript
+      reference. The tier off, because the test is about the weapon rows the resolver sees and the tier's fire has its
+      own test (`test_tier_outcomes.gd`). The GDScript numbers and this comparison are in `tests/fixtures/parity/README.md`.
+      With `GUT_SLOW=1`: recorded [933, 420, 174, 151, 25, 1], now the same.
 
 ### M6-T08 Flying under gravity
 
