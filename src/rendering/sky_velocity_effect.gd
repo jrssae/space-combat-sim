@@ -48,9 +48,9 @@ func _render_callback(callback_type: int, render_data: RenderData) -> void:
 		if not velocity.is_valid():
 			continue
 		var uniforms: Array[RDUniform] = [
-			_uniform(RenderingDevice.UNIFORM_TYPE_UNIFORM_BUFFER, 0, [scene_data.get_uniform_buffer()]),
-			_uniform(RenderingDevice.UNIFORM_TYPE_IMAGE, 1, [velocity]),
-			_uniform(RenderingDevice.UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 2, [_sampler, buffers.get_depth_layer(view)]),
+			ComputeUniform.make(RenderingDevice.UNIFORM_TYPE_UNIFORM_BUFFER, 0, [scene_data.get_uniform_buffer()]),
+			ComputeUniform.make(RenderingDevice.UNIFORM_TYPE_IMAGE, 1, [velocity]),
+			ComputeUniform.make(RenderingDevice.UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 2, [_sampler, buffers.get_depth_layer(view)]),
 		]
 		var list: int = _rd.compute_list_begin()
 		_rd.compute_list_bind_compute_pipeline(list, _pipeline)
@@ -58,15 +58,6 @@ func _render_callback(callback_type: int, render_data: RenderData) -> void:
 		_rd.compute_list_set_push_constant(list, params.to_byte_array(), params.size() * 4)
 		_rd.compute_list_dispatch(list, groups.x, groups.y, 1)
 		_rd.compute_list_end()
-
-
-static func _uniform(type: RenderingDevice.UniformType, binding: int, ids: Array) -> RDUniform:
-	var uniform := RDUniform.new()
-	uniform.uniform_type = type
-	uniform.binding = binding
-	for id: RID in ids:
-		uniform.add_id(id)
-	return uniform
 
 
 func _init_render() -> void:

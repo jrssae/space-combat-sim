@@ -11,6 +11,7 @@ use godot::prelude::*;
 use crate::row_commands::{IdMap, IdSet};
 use crate::rows::NameTable;
 use crate::threads::{self, Pass, Threads};
+use crate::v3::{add, col_b, col_c, neg, normalized, sub};
 
 pub use crate::rows::{Bolts, FLAG_HULL, FLAG_HULL_ACTIVE, FLAG_LATE, FLAG_RIGID, FLAG_TIER, Rows};
 
@@ -1981,39 +1982,6 @@ fn destroyed(hull: &Gd<Node>, names: &Names) -> bool {
     hull.get(&names.hull)
         .try_to::<Gd<Object>>()
         .is_ok_and(|h| h.get(&names.destroyed).try_to::<bool>().unwrap_or(false))
-}
-
-fn col_b(b: &Basis) -> Vector3 {
-    Vector3::new(b.rows[0].y, b.rows[1].y, b.rows[2].y)
-}
-
-fn col_c(b: &Basis) -> Vector3 {
-    Vector3::new(b.rows[0].z, b.rows[1].z, b.rows[2].z)
-}
-
-// Godot's `Vector3.normalized()` in 32 bits: divide by the length, zero stays zero.
-fn normalized(v: Vector3) -> Vector3 {
-    let x2 = v.x * v.x;
-    let y2 = v.y * v.y;
-    let z2 = v.z * v.z;
-    let lsq = x2 + y2 + z2;
-    if lsq == 0.0 {
-        return Vector3::ZERO;
-    }
-    let len = lsq.sqrt();
-    Vector3::new(v.x / len, v.y / len, v.z / len)
-}
-
-fn neg(v: Vector3) -> Vector3 {
-    Vector3::new(-v.x, -v.y, -v.z)
-}
-
-pub fn add(a: Vector3, b: Vector3) -> Vector3 {
-    Vector3::new(a.x + b.x, a.y + b.y, a.z + b.z)
-}
-
-pub fn sub(a: Vector3, b: Vector3) -> Vector3 {
-    Vector3::new(a.x - b.x, a.y - b.y, a.z - b.z)
 }
 
 // M4-T20: what the weapon rows ask the core beyond its columns.

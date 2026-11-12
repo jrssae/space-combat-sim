@@ -7,7 +7,7 @@ use crate::rows::{FLAG_RIGID, FLAG_TIER, Rows};
 use crate::v3::dist_sq;
 
 // `BodyKind.SHIP`: the only kind with thrusters to hear.
-const KIND_SHIP: u8 = 0;
+pub const KIND_SHIP: u8 = 0;
 
 /// The rows of ships with a node, rigid and not in the low-attention tier, within `radius_m` of `centre`, as (squared
 /// distance, row), nearest first (ties in row order). A tier row has no node to put a voice on, and the statics, bolts and

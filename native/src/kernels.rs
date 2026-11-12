@@ -592,7 +592,7 @@ pub mod ram {
     use crate::v3::{add, max_cw as max, min_cw as min, scale, sub};
 
     // `RamResolver.MARGIN_M` (and `RamBroadPhase.MARGIN_M`): room round every box, metres.
-    const MARGIN_M: f64 = 1.0;
+    pub const MARGIN_M: f64 = 1.0;
 
     /// The scratch the pass reuses between ticks.
     #[derive(Default)]
@@ -718,7 +718,7 @@ pub mod ram {
     }
 
     // `RamResolver.SWEEP_CULL_PAD_M`, and the room the reject adds for the resolver's 32-bit sums.
-    const SWEEP_CULL_PAD_M: f64 = 0.05;
+    pub const SWEEP_CULL_PAD_M: f64 = 0.05;
     const REACH_PAD_M: f64 = 0.02;
 
     /// Whether row `a`'s bounding sphere (`radius_a`) cannot reach row `b`'s box (`low_b` to `high_b`, in `b`'s own
@@ -790,7 +790,7 @@ pub mod flight {
 
     pub const GROUPS: usize = 4;
     // `FlightAssist.FACE_DECEL_FRACTION`.
-    const FACE_DECEL_FRACTION: f64 = 0.5;
+    pub const FACE_DECEL_FRACTION: f64 = 0.5;
 
     /// A ship's type and nozzles, as `register` snapshots them: what the maths reads.
     pub struct Body {
@@ -1331,7 +1331,7 @@ pub mod pilot {
     };
 
     // `AvoidanceMath`'s constants.
-    const MARGIN_M: f64 = 15.0;
+    pub const MARGIN_M: f64 = 15.0;
     const HORIZON_MIN_S: f64 = 4.0;
     const MATCHED_MPS: f64 = 3.0;
     const PUSH_S: f64 = 2.0;
@@ -1341,7 +1341,7 @@ pub mod pilot {
     const URGENT_SETTLE_S: f64 = 1.0;
     const MIN_TIME_S: f64 = 0.25;
     // `FireLane.CLEARANCE_M`.
-    const CLEARANCE_M: f64 = 5.0;
+    pub const CLEARANCE_M: f64 = 5.0;
 
     /// `Factions.Relation` values, as the relation rows hold them (one per faction of the core's table).
     pub const FRIENDLY: u8 = 0;

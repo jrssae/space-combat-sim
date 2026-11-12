@@ -608,7 +608,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T33 | - | L3: the ram resolver's quick wins, then `RamTracker` in native | T32 | Fable (maintainer, 2026-11-11) | 1.20 ms at 1 000; string keys and full passes per tick | done |
 | T34 | - | L5: the radar's dot buffers filled natively | T31 | Sonnet | Per-contact GDScript every frame | done |
 | T35 | - | L8 and L9: the native allocation pass and the per-event member scans | T33 | Fable (maintainer, 2026-11-11) | Hash maps and Vec churn per sync; hits times members | done |
-| T36 | - | L12 and L13: the smaller items and one native constants table with its GUT check | T35 | Sonnet | Many small fixes and a drift guard | in progress |
+| T36 | - | L12 and L13: the smaller items and one native constants table with its GUT check | T35 | Sonnet | Many small fixes and a drift guard | done |
 | T37 | D | L6 and L7: muzzle flashes and shot sounds culled by range; no audio node per pooled ship walked per frame | T28 | Sonnet | Sound-pass cost at scale | done |
 | T38 | - | L14: the shared test steps fixture, collapsed recordings, balance tests out of the default run, CI's Python job and asset cache | T36 | Sonnet | Duplication and CI time; CI must stay green | not started |
 | T39 | C | Civilian colours as the show shows them, and a sheen on every hull (maintainer, 2026-11-08; added after T38, done before T30) | T27 | controller | Colour read off captures vs lit albedo; the look is (H) | done |
@@ -2139,6 +2139,34 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   silhouettes, the two group walks, the drivers' console vars, the output array, the latent `reach`, the duplicated maths).
   L13: a `#[func] constants()` on the core and one GUT test that compares every mirrored constant with its GDScript twin.
 - **Done when:** each item is done or marked not worth it with a measured reason; the constants test passes.
+- **Done (as built, 2026-11-12):** architecture §18.28.
+  - **L12, item by item:**
+
+    | Item | Outcome |
+    |---|---|
+    | Tier `_prune` every tick | Done: `TierDirector._prune` walks only when `SimCore.removals` changed |
+    | Bolt quarantine under TAA | Done, native: `ScsSimCore.bolt_quarantine` (kernel `bolt_kernels::quarantine`, bit-identical in 64-bit over the 32-bit rows); measured 0.39 ms per 1 000 slots per frame in GDScript, no `duplicate`/GDScript loop left |
+    | `FarFlashes` upload per `add()` / with zero flashes | Done: `add` only queues, the next `advance` uploads once; an empty, already-empty multimesh is not uploaded |
+    | `FarHulls` `instance_count` per change | Not worth it: it changes only when the capital count changes (rare), and the exact-size buffer needs the exact count |
+    | Light rig / picker `get_global_transform_interpolated` | Not worth it: only lit emitters pay it; `state lights` in `battle 1000` reads 30 candidates, `cost_us` 33 |
+    | Wing director compare-before-assign | Done: the `AiContext` wing setters return on an equal value, so only a real change (a moving leader's link, an order) marks the pilot for the native push |
+    | `main.gd` readout before `hud.visible`; silhouettes per frame | Done: `_update_bracket` tests `hud.visible` first; `Silhouette.wireframe`/`polygons` are cached per layout and aspect |
+    | Two `get_nodes_in_group(Projectile.GROUP)` per tick | Not worth it: only one call per sync remains (the other is the delayed path), the group holds the player's bolts, beams and missiles only (NPC bolts are core rows); beams as owned rows is a larger task |
+    | Drivers' console vars on enter/exit | Done: the first driver in the tree owns the `ai` entries; the other 999 register nothing |
+    | `PackedFloat64Array` per ship per output read | Done: `group_levels` is filled in place |
+    | Latent `reach: &[]` in `contact_field.rs` | Done: the core-attached view carries `rows.reach` |
+    | Duplicated maths | Done: `weapon_kernels.rs` and `sim_core.rs` use `v3` (about 70 lines gone); the three compute effects share `ComputeUniform.make`. Not done: the PREDELETE scaffolding (each frees different RIDs) and the multimesh setups of `FarDots`/`FarFlashes`/`FarHulls` (formats differ); the "64-bit range" had no identifiable duplicate |
+
+  - **L13:** `native/src/constants.rs` is one table of 32 numbers and `FlightModel.AXIS_SIGN`, served by `ScsSimCore.constants()`
+    (the mirrored consts are `pub` now); `tests/unit/test_native_constants.gd` finds each GDScript twin through the global class
+    list and fails on any difference or missing twin. `MUZZLE_OFFSET_M` has no GDScript twin and stays out.
+  - **`battle 1000` (`bench_quick.sh`, seed 1, other agents working beside it, so a few percent is noise):** before tick median 5.88 ms, p99
+    8.13 ms; after 5.50 ms, p99 7.62 ms. Stages: targeting 0.09 / 0.09, ai 0.41 / 0.40, resolvers 1.00 / 1.00, stand-ins 0.69 / 0.68
+    ms; nothing moved beyond noise (the work done is per-frame and TAA-only, or a spawn cost). Results identical.
+  - **Tests:** cargo `--lib` 66 (3 new: the quarantine kernel); GUT quick suite 1681 tests, all pass after the two guard
+    allow-lists in `test_sim_core.gd` were widened (`use crate::v3::`, the test module's `use super::*;`); new
+    `test_native_constants` 2; the quarantine and TAA mesh tests (17) are unchanged and pass on the native kernel; 20 focused
+    parity/tier/wing/battle files with `GUT_SLOW=1`: 203 pass; main-scene smoke clean.
 
 ### M5-T37 L6 and L7: flashes and sounds at scale
 

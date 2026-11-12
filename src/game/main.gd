@@ -759,9 +759,12 @@ func _update_mouse_capture() -> void:
 
 
 func _update_bracket() -> void:
-	var readout: TargetReadout = ship.targeting.selected_readout() if ship != null else null
+	if hud.visible or ship == null:  # the HUD has its own box
+		overlay.hide_bracket()
+		return
+	var readout: TargetReadout = ship.targeting.selected_readout()
 	var cam: Camera3D = camera_rig.active_camera()
-	if hud.visible or readout == null or cam == null or cam.is_position_behind(readout.position):  # the HUD has its own box
+	if readout == null or cam == null or cam.is_position_behind(readout.position):
 		overlay.hide_bracket()
 		return
 	overlay.show_bracket(cam.unproject_position(readout.position))

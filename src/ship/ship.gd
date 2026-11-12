@@ -1084,7 +1084,10 @@ func _fill_output_from_batch() -> void:
 	var os: PackedFloat64Array = _batch.out_scalars
 	var out: FlightOutput = _output
 	out.nozzle_forces.clear()
-	out.group_levels = PackedFloat64Array([os[s], os[s + 1], os[s + 2], os[s + 3]])
+	if out.group_levels.size() != 4:
+		out.group_levels.resize(4)
+	for g: int in 4:
+		out.group_levels[g] = os[s + g]  # in place: no array per ship per read
 	var pods: int = _layout.pod_count()
 	if out.main_levels.size() != pods:
 		out.main_levels.resize(pods)

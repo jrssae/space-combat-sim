@@ -603,7 +603,7 @@ const KERNEL_USERS: Array[String] = ["res://native/src/contact_field.rs", "res:/
 const BOLT_KERNEL_FILE: String = "res://native/src/bolt_kernels.rs"
 const BOLT_KERNEL_USERS: Array[String] = ["res://native/src/bolt_rows.rs", "res://native/src/cannons.rs"]
 const BOLT_KERNEL_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::{Basis, Vector3};", "use crate::rows::",
-		"use crate::v3::"]
+		"use crate::v3::", "use super::*;"]  # super: the quarantine tests (M5-T36)
 ## The brains' engine-free files (M4-T17): the shared vector maths, the brain maths and the behaviours, held to the kernels'
 ## rules; they may import each other and the kernels, nothing else.
 ## M5-T16: the civilians' flight (`civilian.rs`) is one of them, and the behaviours may import it.
@@ -779,7 +779,8 @@ func test_sync_in_and_sync_out_are_the_only_places_the_core_touches_the_engine()
 const WEAPON_KERNEL_FILE: String = "res://native/src/weapon_kernels.rs"
 const WEAPON_KERNEL_USERS: Array[String] = ["res://native/src/weapon_rows.rs"]
 const WEAPON_KERNEL_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::{Basis, Vector3};",
-		"use crate::rows::{Bolts, FLAG_HULL_ACTIVE, FLAG_RIGID, FLAG_TIER, Rows};"]  # FLAG_TIER: M4-T23's blast on tier rows
+		"use crate::rows::{Bolts, FLAG_HULL_ACTIVE, FLAG_RIGID, FLAG_TIER, Rows};",
+		"use crate::v3::"]  # FLAG_TIER: M4-T23's blast on tier rows
 
 
 func test_the_weapon_kernels_hold_no_engine_type() -> void:

@@ -12,34 +12,35 @@ use std::f64::consts::PI;
 
 use godot::builtin::{Basis, Vector3};
 
+use crate::v3::{add, cross, div_s, dist_sq, dot, length, length_squared, minf, normalized, scale, sub};
 use crate::rows::{Bolts, FLAG_HULL_ACTIVE, FLAG_RIGID, FLAG_TIER, Rows};
 
 // `TurretStandin`'s constants.
-const RANGE_M: f64 = 4000.0;
-const INTERCEPT_RANGE_M: f64 = 1500.0;
-const TURN_RATE_RAD_S: f64 = PI / 6.0;
-const GATE_RAD: f64 = 1.5 * PI / 180.0;
-const FIGHTER_RADIUS_MAX_M: f64 = 50.0;
-const MUZZLE_SPEED_MPS: f64 = 1000.0;
-const BOLT_LIFETIME_S: f64 = 4.2;
+pub const RANGE_M: f64 = 4000.0;
+pub const INTERCEPT_RANGE_M: f64 = 1500.0;
+pub const TURN_RATE_RAD_S: f64 = PI / 6.0;
+pub const GATE_RAD: f64 = 1.5 * PI / 180.0;
+pub const FIGHTER_RADIUS_MAX_M: f64 = 50.0;
+pub const MUZZLE_SPEED_MPS: f64 = 1000.0;
+pub const BOLT_LIFETIME_S: f64 = 4.2;
 const MUZZLE_OFFSET_M: f32 = 4.0;
 /// `TurretStandin.RETARGET_TICKS`.
 pub const RETARGET_TICKS: i64 = 6;
 /// `TurretStandin.SHOT_INTERVAL_S`: the gun's gate, one muzzle.
 pub const SHOT_INTERVAL_S: f64 = 1.0;
 // `PulseCannonGate.TIME_EPSILON_S`.
-const TIME_EPSILON_S: f64 = 1e-6;
+pub const TIME_EPSILON_S: f64 = 1e-6;
 // `InterceptMath.LINEAR_EPSILON`.
-const LINEAR_EPSILON: f64 = 1e-9;
+pub const LINEAR_EPSILON: f64 = 1e-9;
 /// `BeamStandin.RANGE_M`.
 pub const BEAM_RANGE_M: f64 = 3000.0;
 // `MissileStandin.RANGE_M`: a capital's strike reach.
-const STRIKE_RANGE_M: f64 = 6000.0;
+pub const STRIKE_RANGE_M: f64 = 6000.0;
 /// `StandinDirector.STRIKE_RETARGET_TICKS`.
 pub const STRIKE_RETARGET_TICKS: i64 = 30;
 // `MineStandin`'s constants.
-const TRIGGER_RADIUS_M: f64 = 50.0;
-const BLAST_RADIUS_M: f64 = 100.0;
+pub const TRIGGER_RADIUS_M: f64 = 50.0;
+pub const BLAST_RADIUS_M: f64 = 100.0;
 /// `MineStandin.TRIGGER_TICKS`.
 pub const TRIGGER_TICKS: i64 = 3;
 // The mines' grid cell, m, and the room added round a hull's look so a mine the exact test takes is never missed.
@@ -562,61 +563,3 @@ fn rotated(v: Vector3, axis: Vector3, angle: f32) -> Vector3 {
     )
 }
 
-// Godot's Vector3 maths in 32 bits, in the engine's order of operations.
-fn add(a: Vector3, b: Vector3) -> Vector3 {
-    Vector3::new(a.x + b.x, a.y + b.y, a.z + b.z)
-}
-
-fn sub(a: Vector3, b: Vector3) -> Vector3 {
-    Vector3::new(a.x - b.x, a.y - b.y, a.z - b.z)
-}
-
-fn scale(a: Vector3, s: f32) -> Vector3 {
-    Vector3::new(a.x * s, a.y * s, a.z * s)
-}
-
-fn div_s(a: Vector3, s: f32) -> Vector3 {
-    Vector3::new(a.x / s, a.y / s, a.z / s)
-}
-
-fn dot(a: Vector3, b: Vector3) -> f32 {
-    a.x * b.x + a.y * b.y + a.z * b.z
-}
-
-fn cross(a: Vector3, b: Vector3) -> Vector3 {
-    Vector3::new(
-        a.y * b.z - a.z * b.y,
-        a.z * b.x - a.x * b.z,
-        a.x * b.y - a.y * b.x,
-    )
-}
-
-fn length_squared(a: Vector3) -> f32 {
-    let x2 = a.x * a.x;
-    let y2 = a.y * a.y;
-    let z2 = a.z * a.z;
-    x2 + y2 + z2
-}
-
-fn length(a: Vector3) -> f32 {
-    length_squared(a).sqrt()
-}
-
-fn normalized(a: Vector3) -> Vector3 {
-    let length_sq = length_squared(a);
-    if length_sq == 0.0 {
-        return Vector3::new(0.0, 0.0, 0.0);
-    }
-    let l = length_sq.sqrt();
-    Vector3::new(a.x / l, a.y / l, a.z / l)
-}
-
-// `a.distance_squared_to(b)`.
-fn dist_sq(a: Vector3, b: Vector3) -> f32 {
-    length_squared(sub(b, a))
-}
-
-// Godot's `minf`: `a < b ? a : b`.
-fn minf(a: f64, b: f64) -> f64 {
-    if a < b { a } else { b }
-}

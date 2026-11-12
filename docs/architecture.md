@@ -4679,3 +4679,19 @@ PauseMenu            Resume | Restart | Settings | Quit to menu; Settings pushes
 Both hosts push one `SettingsGroupsScreen`; choosing a group emits `push_requested` with its page, so the pause menu and the
 front end share the five groups with no code of their own. Controls opens `ControlsScreen`, whose list ends with "Sensitivity
 and deadzones..." pushing the `controls` category's `SettingsScreen`. A test fails when a menu entry falls in no group.
+
+### 18.28 The smaller performance items and the constants table (T36, L12 and L13)
+
+```
+ScsSimCore.bolt_quarantine(buffer, last, forward) -> [buffer with the new-occupant slots collapsed, count]   (bolt_kernels::quarantine)
+ScsSimCore.constants() -> { "Class.CONST[@module][#size]": value }                                             (constants.rs)
+tests/unit/test_native_constants.gd   every entry equals its GDScript twin
+```
+
+`BoltSlotQuarantine` keeps its last buffers and calls the kernel; the pass over the slots (a rule of the previous frame's
+place, basis and move) is native, computed in 64 bits over the 32-bit rows in the GDScript's order so the draw is unchanged.
+Constants a native file copies from GDScript are `pub` and listed in `constants.rs`; adding a mirrored constant means adding it
+there. Smaller changes: the tier prunes only when the removal count changed, `AiContext`'s wing setters ignore an equal value
+(so the wing director's per-tick assignment no longer pushes every member to native), the far flashes upload once per frame, the
+HUD silhouettes are cached, one driver registers the `ai` console entries, `group_levels` is filled in place and the
+core-attached contact view carries the broadcast reach.

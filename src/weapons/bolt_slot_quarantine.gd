@@ -22,6 +22,8 @@ var collapsed: int = 0
 
 var _forward: Vector3
 var _last: Dictionary[int, PackedFloat32Array] = {}
+# The native core's slot test (`bolt_quarantine`), a pure function of its arguments; the pass over the slots runs there.
+var _kernel: Object = ClassDB.instantiate(SimCore.NATIVE_CLASS)
 
 
 ## `forward` is the bolts' flight direction in an instance's own frame.
@@ -39,45 +41,6 @@ func reset() -> void:
 func filter(look: int, buffer: PackedFloat32Array) -> PackedFloat32Array:
 	var last: PackedFloat32Array = _last.get(look, PackedFloat32Array())
 	_last[look] = buffer
-	var out: PackedFloat32Array = buffer.duplicate()
-	var fx: float = _forward.x
-	var fy: float = _forward.y
-	var fz: float = _forward.z
-	var known: int = last.size()
-	var end: int = buffer.size()
-	var count: int = 0
-	var b: int = 0
-	while b < end:
-		var r0x: float = buffer[b]
-		var r0y: float = buffer[b + 1]
-		var r0z: float = buffer[b + 2]
-		if r0x != 0.0 or r0y != 0.0 or r0z != 0.0:
-			var kept: bool = b < known and r0x == last[b] and r0y == last[b + 1] and r0z == last[b + 2]
-			if kept:
-				# The flight direction in the world (scaled like the basis) and the move since the last frame.
-				var wx: float = r0x * fx + r0y * fy + r0z * fz
-				var wy: float = buffer[b + 4] * fx + buffer[b + 5] * fy + buffer[b + 6] * fz
-				var wz: float = buffer[b + 8] * fx + buffer[b + 9] * fy + buffer[b + 10] * fz
-				var dx: float = buffer[b + 3] - last[b + 3]
-				var dy: float = buffer[b + 7] - last[b + 7]
-				var dz: float = buffer[b + 11] - last[b + 11]
-				var w2: float = wx * wx + wy * wy + wz * wz
-				var d2: float = dx * dx + dy * dy + dz * dz
-				var along: float = dx * wx + dy * wy + dz * wz
-				var side2: float = d2 - along * along / maxf(w2, 1e-12)
-				var slack: float = SIDE_SLACK_M + SIDE_SLACK_SHARE * sqrt(d2)
-				kept = along >= 0.0 and d2 <= MAX_STEP_M * MAX_STEP_M and side2 <= slack * slack
-			if not kept:
-				count += 1
-				out[b] = 0.0
-				out[b + 1] = 0.0
-				out[b + 2] = 0.0
-				out[b + 4] = 0.0
-				out[b + 5] = 0.0
-				out[b + 6] = 0.0
-				out[b + 8] = 0.0
-				out[b + 9] = 0.0
-				out[b + 10] = 0.0
-		b += 12
-	collapsed = count
-	return out
+	var result: Array = _kernel.bolt_quarantine(buffer, last, _forward)
+	collapsed = result[1]
+	return result[0]

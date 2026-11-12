@@ -194,13 +194,19 @@ static var _frame_scan: ContactScan = null
 var _body_id: int = 0
 
 
+# The driver that owns the `ai` console entries while any driver is in the tree.
+static var _console_owner: AiPilotDriver = null
+
+
 func _init() -> void:
 	process_physics_priority = -10
 
 
 func _enter_tree() -> void:
 	_live.append(self)
-	AiConsole.register(DebugConsole.registry, self)
+	if not is_instance_valid(_console_owner):  # the console's view is static: the first driver in the tree registers it for all
+		_console_owner = self
+		AiConsole.register(DebugConsole.registry, self)
 	_settings_read = false  # they may have changed while no driver listened
 	if not Settings.changed.is_connected(_on_setting_changed):
 		Settings.changed.connect(_on_setting_changed)
@@ -211,9 +217,12 @@ func _exit_tree() -> void:
 	_live.erase(self)
 	if Settings.changed.is_connected(_on_setting_changed):
 		Settings.changed.disconnect(_on_setting_changed)
-	DebugConsole.registry.unregister_owner(self)
-	if not _live.is_empty():
-		AiConsole.register(DebugConsole.registry, _live.back())
+	if _console_owner == self:
+		DebugConsole.registry.unregister_owner(self)
+		_console_owner = null
+		if not _live.is_empty():
+			_console_owner = _live.back()
+			AiConsole.register(DebugConsole.registry, _console_owner)
 
 
 func _notification(what: int) -> void:

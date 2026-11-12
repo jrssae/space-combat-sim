@@ -376,7 +376,7 @@ fn view_of<'a>(core: &'a Option<GdRef<'a, ScsSimCore>>, own: &'a Own) -> View<'a
                 positions: &c.rows.positions[..n],
                 body_faction: &c.rows.faction_ix[..n],
                 is_ship: &c.rows.rigid[..n],
-                reach: &[],
+                reach: &c.rows.reach[..n.min(c.rows.reach.len())],
                 is_static: &c.rows.is_static[..n],
                 is_mine: &c.rows.is_mine[..n],
                 radii: &c.rows.radii[..n],

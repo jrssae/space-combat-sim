@@ -149,6 +149,40 @@ impl ScsSimCore {
         PackedFloat32Array::from(out.as_slice())
     }
 
+    /// Every constant the native code mirrors from GDScript, `"Class.CONST[@module][#size]" -> value` (`FlightModel.AXIS_SIGN`
+    /// is the one vector); `tests/unit/test_native_constants.gd` compares each with its twin.
+    #[func]
+    fn constants(&self) -> VarDictionary {
+        let mut table = VarDictionary::new();
+        for (key, value) in crate::constants::numbers() {
+            table.set(key, value);
+        }
+        table.set("FlightModel.AXIS_SIGN", crate::constants::axis_sign());
+        table
+    }
+
+    /// `BoltSlotQuarantine.filter` for the motion vectors: `[buffer with every slot new since `last` collapsed, how many]`.
+    /// `forward` is the bolts' flight direction in an instance's own frame.
+    #[func]
+    fn bolt_quarantine(
+        &self,
+        buffer: PackedFloat32Array,
+        last: PackedFloat32Array,
+        forward: Vector3,
+    ) -> VarArray {
+        let mut out: Vec<f32> = Vec::new();
+        let collapsed = bolt_kernels::quarantine(
+            buffer.as_slice(),
+            last.as_slice(),
+            [forward.x, forward.y, forward.z],
+            &mut out,
+        );
+        let mut result = VarArray::new();
+        result.push(&PackedFloat32Array::from(out.as_slice()).to_variant());
+        result.push(&(collapsed as i64).to_variant());
+        result
+    }
+
     /// How many instances `bolt_transforms(look, ...)` fills now: the look's highest draw slot plus one (a slot stays
     /// a bolt's for life, so a freed one in the middle is drawn empty until a new bolt takes it).
     #[func]

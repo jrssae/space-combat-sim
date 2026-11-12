@@ -26,10 +26,10 @@ use crate::threads::{Runner, StepThread, Threads};
 const STEP_IN: usize = 23;
 const STEP_OUT: usize = 16;
 // `BodyKind` values of the rows that are obstacles (src/ai/body_kind.gd).
-const KIND_MINE: u8 = 4;
-const KIND_STATIC: u8 = 5;
+pub const KIND_MINE: u8 = 4;
+pub const KIND_STATIC: u8 = 5;
 // `ContactScan.SENSOR_RANGE_M`: the grid's cell size.
-const SENSOR_RANGE_M: f64 = 5000.0;
+pub const SENSOR_RANGE_M: f64 = 5000.0;
 
 /// `AiProfile` as the facade packs it: the nine weights in tie order, then stickiness, emergency_margin, min_dwell_s,
 /// retreat_below, retreat_within_m, cruise_mps, aim_error_deg, fires, slashing, idle_hold.
