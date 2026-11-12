@@ -133,6 +133,19 @@ func test_destroyed_is_emitted_once_even_with_more_hits_in_the_same_tick() -> vo
 	assert_false(player.damageable.is_active(), "a destroyed hull cannot be hit again")
 
 
+func test_a_dead_hull_hit_while_invulnerable_does_not_die_again() -> void:
+	# Code review 2026-11-12: a lethal hit, then god mode, then more hits must not announce the death again.
+	var info := HitInfo.new(player.ship.get_instance_id(), raider.ship.get_instance_id(), Factions.RAIDERS, 10000.0,
+			player.ship.global_position, Vector3.UP, 1000.0)
+	player.damageable.apply_hit(info)
+	assert_eq(destroyed_count, 1)
+	player.damageable.invulnerable = true
+	player.damageable.apply_hit(info)
+	player.damageable.apply_hit(info)
+	assert_eq(destroyed_count, 1, "one death, however many hits follow")
+	player.damageable.invulnerable = false
+
+
 # --- god mode (AC8) ------------------------------------------------------------------------------------------
 
 

@@ -880,3 +880,18 @@ func test_the_radar_kernel_holds_no_engine_type() -> void:
 			"the radar kernel holds the plot and the dot buffers")
 	assert_true(FileAccess.get_file_as_string("res://native/src/radar_plot.rs").contains("use crate::radar_kernel::"),
 			"the shell reads the kernel")
+
+
+# Code review 2026-11-12: the civilian set kept every ship id ever marked; a new core drops the ones freed since.
+func test_a_new_core_forgets_civilians_freed_with_an_earlier_scene() -> void:
+	var gone := Node3D.new()
+	var gone_id: int = gone.get_instance_id()
+	SimCore.set_civilian(gone_id, true)
+	gone.free()
+	var old: Node = world.get_node_or_null(NodePath(SimCore.NODE_NAME))
+	if old != null:
+		old.free()  # one core per world: the next one is made below, as a new scene's would be
+	SimCore.attach(world)
+	await get_tree().process_frame
+	assert_false(SimCore._civilians.has(gone_id), "a freed ship's id leaves the set")
+

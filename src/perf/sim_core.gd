@@ -199,8 +199,11 @@ func _ready() -> void:
 	_register_console()
 	PulseCannon.rebind_all()
 	TargetingController.rebind_all()
-	for body_id: int in _civilians:
-		core.set_civilian(body_id, true)
+	for body_id: int in _civilians.keys():
+		if is_instance_id_valid(body_id):
+			core.set_civilian(body_id, true)
+		else:
+			_civilians.erase(body_id)  # a ship freed with an earlier scene (code review 2026-11-12: the set only grew)
 	TurretMount.rebind_all()
 
 

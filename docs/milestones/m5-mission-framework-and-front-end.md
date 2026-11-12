@@ -623,6 +623,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T45 | A | Start screen and settings groups: an options-only start screen (New game, Load game, Free flight, Settings, Quit), the sandbox scenes under New game, Controls inside Settings, five settings groups (maintainer, 2026-11-09) | T02, T03, T04 | Sonnet | Menu re-plumbing on the built kit; mostly tests | done |
 | T46 | A | Radial comms menu: the comms menu moves onto T25's radial framework, with the focus pull, the right stick to point, A to confirm, B to go back (maintainer, 2026-11-09) | T25, T44, T07 | Sonnet | One framework for both menus; the comms routing changes from the D-pad to the stick; it pauses the game | done |
 | T47 | - | Radar plot input checks and scratch reuse: the code review's two open radar items (maintainer, 2026-11-12; numbered last because it was added after the others had numbers) | T34 | controller | Two small native fixes found by the code review | done |
+| T48 | - | The full code review's three P3 findings (maintainer, 2026-11-12; numbered last because it was added after the others had numbers) | T47 | controller | Small fixes found by the review | done |
 | T20 | - | Integration, full suite, docs and acceptance | all | Fable (maintainer, 2026-11-11) | One full run, the GPU check, the (H) list | in progress — awaiting the maintainer's confirmation |
 
 **Progress (2026-11-12).** Every task in the table is `done` except T20, which is `in progress` until the maintainer confirms
@@ -2700,6 +2701,18 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   `a_second_plot_reuses_its_buffers_and_matches_the_first` (8 radar kernel tests pass); GUT
   `test_mismatched_columns_are_refused_not_truncated` in `test_radar_plot`, with `test_radar_model`, `test_sim_core`,
   `test_hud` and `test_target_menu`: 71 passing.
+
+### M5-T48 The full code review's findings
+
+- **Why (maintainer, 2026-11-12):** a Fable agent reviewed the whole codebase at `104264ea` (no P1 or P2 issues; three P3 items
+  in `code-review-comments.md`); the maintainer asked for them fixed before the merge.
+- **Done (as built, 2026-11-12):** `Damageable.apply_hit` emits `destroyed` only for the kill of its own hit, so a dead hull hit
+  while invulnerable no longer announces its death again (`test_damage`: `test_a_dead_hull_hit_while_invulnerable_does_not_die_again`);
+  the brains' hosted settle reads each item's place in the hosted list from `Work.hosted_at` instead of searching the list per
+  think (the seeded-battle parity files pass unchanged); a new `SimCore` drops civilian ids of ships freed since instead of
+  handing them to its core (`test_sim_core`: `test_a_new_core_forgets_civilians_freed_with_an_earlier_scene`). Rust 68 pass;
+  GUT: `test_damage`, `test_sim_core`, `test_row_commands`, `test_core_threads`, `test_core_state`, `test_driver_step`,
+  `test_turret_defence`, `test_civilian_ships`, `test_ai_driver`: 89 passing with `GUT_SLOW=1`; the quick tier passes.
 
 ### M5-T20 Integration, full suite, docs and acceptance
 
