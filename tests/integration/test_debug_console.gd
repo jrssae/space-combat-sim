@@ -457,18 +457,18 @@ func test_opening_and_closing_with_a_key_held_fires_no_edge() -> void:
 	_key(KEY_QUOTELEFT, true, 96)
 	assert_false(adapter.sample(source, 1.0 / 60.0).ui.toggle_camera, "opening with Tab held")
 	_key(KEY_B, true)  # target_next (B), pressed while typing
-	assert_false(adapter.sample(source, 1.0 / 60.0).combat.target_next, "typing never fires")
+	assert_false(adapter.sample(source, 1.0 / 60.0).combat.target_nearest, "typing never fires")
 	_key(KEY_QUOTELEFT, true, 96)
 	var after_close: PilotCommand = adapter.sample(source, 1.0 / 60.0)
 	assert_false(after_close.ui.toggle_camera, "closing with Tab still held fires no edge")
-	assert_false(after_close.combat.target_next, "closing with B still held fires no edge")
+	assert_false(after_close.combat.target_nearest, "closing with B still held fires no edge")
 
 	_key(KEY_B, false)
-	assert_false(adapter.sample(source, 1.0 / 60.0).combat.target_next, "nor does releasing it: B is tap-on-release")
+	assert_false(adapter.sample(source, 1.0 / 60.0).combat.target_nearest, "nor does releasing it: B is tap-on-release")
 	_key(KEY_B, true)
-	assert_false(adapter.sample(source, 1.0 / 60.0).combat.target_next, "a tap acts on release")
+	assert_false(adapter.sample(source, 1.0 / 60.0).combat.target_nearest, "a tap acts on release")
 	_key(KEY_B, false)
-	assert_true(adapter.sample(source, 1.0 / 60.0).combat.target_next, "a real tap after closing still works")
+	assert_true(adapter.sample(source, 1.0 / 60.0).combat.target_nearest, "a real tap after closing still works")
 
 
 func test_pause_on_open() -> void:

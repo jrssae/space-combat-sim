@@ -59,5 +59,5 @@ CENTAURI = Style(
     edge_wear=0.15,
     streaks=0.04,
     grime=0.03,
-    extra={"bare_metal": 0.0, "smudge": 0.04, "speckle": 0.02, "paint_roughness": 0.42, "rivets": 0.0, "panel_grid": 0.0},
+    extra={"bare_metal": 0.0, "smudge": 0.04, "speckle": 0.02, "paint_roughness": 0.42, "rivets": 0.0},
 )

@@ -10,6 +10,8 @@ var input_provider: Callable = Callable()
 ## Called with each frame's `HudInput` after `input_provider` (M5-T05: the running mission adds its objectives, waypoint and
 ## result line); unset outside a mission.
 var extra_input: Callable = Callable()
+## Called last with each frame's `HudInput` (M5-T25): the target menu settles whose waypoint shows, the pilot's or a script's.
+var final_input: Callable = Callable()
 ## The frame drawn last (for tests and the console).
 var frame: HudFrame = HudFrame.new()
 ## The player ship's console screens (M3-T29), or null: they get the frame while the cockpit view shows them, and go dark with the HUD.
@@ -25,6 +27,9 @@ var cinematic: bool = false:
 		_apply_visibility()
 
 var _canvas: HudCanvas = null
+# Smoothed over about twenty frames, us (readouts).
+var _radar_plot_us: float = 0.0
+var _radar_paint_us: float = 0.0
 
 
 func _ready() -> void:
@@ -46,6 +51,8 @@ func _ready() -> void:
 				"doc": "The prograde marker is on screen"},
 		&"target_box": {"get": func() -> Variant: return frame.target_box if frame.target_on_screen else null,
 				"doc": "Screen rectangle of the target box, while the target is on screen"},
+		&"radar_plot_us": {"get": func() -> int: return int(_radar_plot_us), "unit": "us", "doc": "What the radar's plot (RadarModel.plot) costs a frame, smoothed over about twenty frames; wall clock"},
+		&"radar_paint_us": {"get": func() -> int: return int(_radar_paint_us), "unit": "us", "doc": "What painting the radar costs a frame (the dot buffers and draws), smoothed over about twenty frames; wall clock"},
 		&"window_items": {"get": func() -> String: return ",".join(frame.items), "doc": "What the 2D layer draws this frame"},
 	}), self)
 
@@ -62,12 +69,19 @@ func _process(_delta: float) -> void:
 		return
 	if extra_input.is_valid():
 		extra_input.call(input)
+	if final_input.is_valid():
+		final_input.call(input)
 	frame = HudLayout.compute(input)
+	_radar_plot_us = lerpf(_radar_plot_us, float(frame.radar_plot_us), 0.05)
 	# The chase view is busier (the whole ship is on screen): the HUD is drawn fainter there.
 	_canvas.modulate.a = 1.0 if frame.cockpit else float(Settings.get_value(&"hud_chase_opacity"))
 	_canvas.queue_redraw()
 	if screens != null and not frame.screens.is_empty():
 		screens.show_frame(frame)
+
+
+func note_radar_paint(us: int) -> void:
+	_radar_paint_us = lerpf(_radar_paint_us, float(us), 0.05)
 
 
 ## Draws `f` now (tests set a frame directly).
@@ -104,3 +118,4 @@ class HudCanvas extends Control:
 	func _draw() -> void:
 		if hud != null and painter != null:
 			painter.paint(hud.frame, hud.frame)
+			hud.note_radar_paint(HudPainter.radar_paint_us)

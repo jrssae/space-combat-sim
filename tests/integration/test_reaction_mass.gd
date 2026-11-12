@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## The Ship's reaction-mass tank in Jolt, headless (architecture §5.1, M2-T14): with `settings.fuel_unlimited` on (the
 ## default) the tank is never drawn down; with it off the flow is drawn every tick, and an empty tank means the ship
 ## cannot thrust (and just coasts, the damping guard still holds). Also the `ship.fuel_kg` / `ship.fuel_fraction`
@@ -41,7 +41,7 @@ func _dt() -> float:
 	return 1.0 / float(Engine.physics_ticks_per_second)
 
 
-func _ticks(seconds: float) -> int:
+func _ticks_in(seconds: float) -> int:
 	return roundi(seconds * float(Engine.physics_ticks_per_second))
 
 
@@ -63,17 +63,11 @@ func _thrust_flow() -> float:
 	return 4.0 * spec.pod_main_thrust / spec.exhaust_velocity
 
 
-func _console(line: String) -> ConsoleResult:
-	var results: Array[ConsoleResult] = DebugConsole.registry.execute(line)
-	assert_eq(results.size(), 1, "one statement: " + line)
-	return results[0]
-
-
 ## Thrust for `seconds` from a tick boundary, then the tick's results are in.
 func _burn(seconds: float) -> void:
 	await get_tree().physics_frame
 	ship.set_flight_command(_thrust_cmd())
-	await _step(_ticks(seconds))
+	await _step(_ticks_in(seconds))
 
 
 # --- the tank ------------------------------------------------------------------------------------------------
@@ -110,7 +104,7 @@ func test_a_finite_tank_is_drawn_down_by_the_mass_flow() -> void:
 
 func test_an_idle_ship_burns_nothing() -> void:
 	Settings.set_value(&"fuel_unlimited", false)
-	await _step(_ticks(0.5))
+	await _step(_ticks_in(0.5))
 	assert_eq(ship.get_fuel_tank().mass_kg(), spec.fuel_capacity_kg)
 
 
@@ -126,7 +120,7 @@ func test_with_an_empty_tank_the_ship_cannot_thrust() -> void:
 	cmd.strafe = Vector2(1.0, 1.0)
 	await get_tree().physics_frame
 	ship.set_flight_command(cmd)
-	await _step(_ticks(1.0))
+	await _step(_ticks_in(1.0))
 	var out: FlightOutput = ship.get_flight_output()
 	assert_true(out.propellant_empty, "the model was told the tank is empty")
 	assert_eq(out.force_b, Vector3.ZERO, "no force asked of the engine")
@@ -143,7 +137,7 @@ func test_the_same_ship_thrusts_again_once_refuelled() -> void:
 	assert_almost_eq(ship.linear_velocity.length(), 0.0, 1e-6, "dry: nothing")
 	var result: ConsoleResult = _console("refuel")
 	assert_true(result.ok, result.text())
-	await _step(_ticks(0.5))
+	await _step(_ticks_in(0.5))
 	assert_gt(ship.linear_velocity.length(), 10.0, "refuelled: 30 m/s² for 0.5 s")
 	assert_false(ship.get_flight_output().propellant_empty)
 
@@ -157,7 +151,7 @@ func test_the_ship_runs_dry_mid_burn_and_coasts_at_the_speed_it_had() -> void:
 	# One second of thrust, plus at most the single tick that spends the last grams.
 	assert_between(ship.linear_velocity.length(), accel * 1.0 - 0.5, accel * 1.0 + accel * _dt() * 2.0 + 0.1, "about one second's delta-v")
 	var coasting: float = ship.linear_velocity.length()
-	await _step(_ticks(1.0))
+	await _step(_ticks_in(1.0))
 	assert_almost_eq(ship.linear_velocity.length(), coasting, 1e-4, "a dry ship coasts: zero damping, zero thrust")
 	assert_true(ship.get_flight_output().propellant_empty)
 
@@ -175,10 +169,10 @@ func test_the_setting_applies_live() -> void:
 	Settings.set_value(&"fuel_unlimited", true)
 	await get_tree().physics_frame
 	ship.set_flight_command(_thrust_cmd())
-	await _step(_ticks(0.5))
+	await _step(_ticks_in(0.5))
 	assert_eq(ship.get_fuel_tank().mass_kg(), spec.fuel_capacity_kg, "nothing drawn while unlimited")
 	assert_true(_console("set settings.fuel_unlimited false").ok)
-	await _step(_ticks(0.5))
+	await _step(_ticks_in(0.5))
 	var drawn: float = spec.fuel_capacity_kg - ship.get_fuel_tank().mass_kg()
 	assert_almost_eq(drawn, _thrust_flow() * 0.5, _thrust_flow() * _dt() * 3.0, "drawing from the moment the setting changed")
 

@@ -32,6 +32,7 @@ from ..core.geometry import Mesh, mirror_matrix
 from ..core.manifest import build_manifest, write_manifest
 from ..core.sampling import SurfaceSamples, sample_mesh
 from ..parts import Part, mass_centroid, total_mass
+from ..parts import layouts
 from ..parts import saturn as sp
 from ..parts.propulsion import pilot_tags
 from ..parts.saturn import CENTRE, RIGHT, Piece, PodTrim
@@ -56,6 +57,7 @@ TURRET_PAD_RADIUS = 1.6
 UP = (0.0, 1.0, 0.0)
 BANDS = ("band_light", "stripe", "band_light", "stripe", "band_light")
 TANK_MASS_KG = 6_000_000.0  # a loaded tank; informational, ShipSpec (T16) sets the flight mass
+LAYOUTS = layouts.saturn(sp.CYLINDER_RADIUS, sp.DOME_DEPTH, sp.CYLINDER_Z[1] - sp.CYLINDER_Z[0], sp.POD.length, sp.POD.band, sp.DISC_CENTRE_Z)
 
 
 @dataclass(frozen=True)
@@ -165,11 +167,13 @@ def mirror_group(group: str) -> str:
 
 
 def _place(pieces: Sequence[Piece], group: str, offset: Sequence[float] = (0.0, 0.0, 0.0), prefix: str = "",
-           rotation: np.ndarray | None = None, side: str | None = None) -> list[Piece]:
+           rotation: np.ndarray | None = None, side: str | None = None, drawn: dict | None = None) -> list[Piece]:
     """Puts parts' pieces into the ship: moved, named uniquely, assigned to a chunk (and to a side, for a whole
     assembly built on the right)."""
     out = []
     for p in pieces:
+        if p.name in (drawn or LAYOUTS):
+            p = Piece(p.part.with_seams((drawn or LAYOUTS)[p.name]), p.solid, p.side, p.fine)
         moved = p.transformed(np.eye(3) if rotation is None else rotation, offset)
         s = side or p.side
         name = f"{prefix}{p.name}"
@@ -190,7 +194,7 @@ def lead_ship(v: Variant, style: Style) -> list[Piece]:
         pieces += _place([sp.truss_end_plate(style, v.engine_front_z - 0.2)], "engine")
     else:
         pieces += _place(sp.aft_frame(style), "bow")
-    pieces += _place(sp.engine_section(style, v.engine_scale), "engine", (0.0, 0.0, v.engine_front_z))
+    pieces += _place(sp.engine_section(style, v.engine_scale), "engine", (0.0, 0.0, v.engine_front_z), drawn=layouts.saturn_engine(v.engine_scale))
     return pieces
 
 

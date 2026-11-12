@@ -14,6 +14,11 @@ extends Node3D
 ##   so a rebase mid-shot moves nothing on screen. The shot's clock runs on physics ticks; at its end, or on `stop_shot`, the
 ##   rig goes back to the mode it left. While a shot plays, `set_mode` only changes the mode it will go back to.
 ##
+## - The pause backdrop (M5-T42) plays `PauseOrbitPath` on the same cinematic camera while the pause menu is open. The rig runs
+##   with process mode always for as long as it plays, since the tree is paused; the phase advances on the frame's `delta`.
+##   It blends in from the view in use, and stopping it cuts back to the mode it left, with the chase camera snapped to the ship.
+##   Never over a shot, and not for the radial menus.
+##
 ## The rig does not know the ship's class: `setup` takes the pieces it needs (a body to follow, an anchor, an offset,
 ## a visibility callback), which keeps it testable with plain nodes. Rebase-safe: the only pose kept between frames is
 ## the chase camera node's own transform, which the rebase shifts; nothing is cached in this script.
@@ -30,6 +35,8 @@ signal shot_finished(shot_id: StringName)
 ## How fast the drawn look angles close on the goal, per second (exponential).
 const SHOWN_LOOK_RATE_PER_S: float = 30.0
 const MODE_CHOICES: Array[StringName] = [&"cockpit", &"chase"]
+## Seconds the backdrop takes to blend in from the player's view.
+const BACKDROP_BLEND_S: float = 1.0
 const _REMOTE_NAME: StringName = &"CockpitCameraRemote"
 
 ## Chase pose tunables. `setup` replaces `offset_local` with the ship's chase anchor; `smoothing_s` follows the
@@ -58,6 +65,13 @@ var _shot_origin_to_local: Callable = Callable()
 var _shot_time_s: float = 0.0
 var _shot_prev_time_s: float = 0.0
 var _return_mode: Mode = Mode.CHASE
+# The pause backdrop (null when not running), its loop time, phase in [0, 1) and seconds since it started (for the blend in).
+var _backdrop: PauseOrbitPath = null
+var _backdrop_loop_s: float = 30.0
+var _backdrop_phase: float = 0.0
+var _backdrop_age_s: float = 0.0
+var _backdrop_from: Transform3D = Transform3D.IDENTITY
+var _backdrop_process_mode: ProcessMode = Node.PROCESS_MODE_INHERIT
 
 @onready var cockpit_pivot: Node3D = $CockpitPivot
 @onready var cockpit_camera: Camera3D = $CockpitPivot/CockpitCamera
@@ -80,6 +94,10 @@ func _ready() -> void:
 				"doc": "Field of view of the active camera"},
 		&"shot": {"get": func() -> String: return String(_shot.id) if _shot != null else "none",
 				"doc": "The cinematic shot playing, or none"},
+		&"backdrop": {"get": func() -> bool: return _backdrop != null,
+				"doc": "The pause menu's camera move is running"},
+		&"backdrop_phase": {"get": func() -> float: return backdrop_phase(),
+				"doc": "Where the pause menu's camera move is in its loop, 0 to 1"},
 		&"shot_time_s": {"get": func() -> float: return _shot_time_s if _shot != null else 0.0, "unit": "s",
 				"doc": "Sim time into the shot playing"},
 	}), self)
@@ -113,6 +131,8 @@ func _process(delta: float) -> void:
 	_ease_shown_look(delta)
 	update_chase(delta)
 	cockpit_camera.transform = Transform3D(_shown_basis(), Vector3.ZERO)
+	if _backdrop != null:
+		advance_backdrop(delta)
 	if _shot != null:
 		update_cinematic(Engine.get_physics_interpolation_fraction())
 
@@ -157,7 +177,7 @@ func setup(target: Node3D, cockpit_anchor: Node3D, chase_offset_local: Vector3, 
 ## stick (absolute, x right, y up) or the mouse travel (pixels, x right, y up) and the ship does not; released, it eases back
 ## to centre. In the cockpit the pilot turns their head; in the chase view the camera pans around the ship.
 func set_look(dt: float, active: bool, stick: Vector2, mouse_px: Vector2) -> void:
-	if _look_held or _shot != null:
+	if _look_held or _shot != null or _backdrop != null:
 		return
 	_look.step(dt, active, stick, mouse_px, float(Settings.get_value(&"mouse_look_deg_per_px")))
 
@@ -169,8 +189,13 @@ func look_goal() -> Vector2:
 
 ## Switches between the cockpit and chase views; during a shot, the view to go back to.
 func toggle() -> void:
-	var current: Mode = _return_mode if _shot != null else _mode
+	var current: Mode = _return_mode if (_shot != null or _backdrop != null) else _mode
 	set_mode(Mode.CHASE if current == Mode.COCKPIT else Mode.COCKPIT)
+
+
+## The view the player has chosen: the active mode, or the one a shot or the pause backdrop will give back.
+func chosen_mode() -> Mode:
+	return _return_mode if (_shot != null or _backdrop != null) else _mode
 
 
 func get_mode() -> Mode:
@@ -182,7 +207,7 @@ func set_mode(new_mode: Mode) -> void:
 	if new_mode == Mode.CINEMATIC and _shot == null:
 		push_warning("CameraRig: the cinematic camera needs a shot (play_shot)")
 		return
-	if _shot != null and new_mode != Mode.CINEMATIC:
+	if (_shot != null or _backdrop != null) and new_mode != Mode.CINEMATIC:
 		_return_mode = new_mode
 		return
 	if new_mode == _mode:
@@ -205,9 +230,71 @@ func active_camera() -> Camera3D:
 	return chase_camera
 
 
+## Starts the pause backdrop: the camera blends from the view in use onto the figure 8 around the ship and keeps going until
+## `stop_backdrop`. `loop_s` is the time of one loop. False (and nothing changes) with no ship, a shot playing or one already running.
+func start_backdrop(loop_s: float, hull_radius_m: float) -> bool:
+	if _backdrop != null or _shot != null or not _has_target():
+		return false
+	_backdrop = PauseOrbitPath.create(chase_config.offset_local.length(), hull_radius_m)
+	_backdrop_loop_s = maxf(loop_s, 1.0)
+	_backdrop_age_s = 0.0
+	var view: Camera3D = active_camera()
+	_backdrop_from = view.global_transform
+	cinematic_camera.fov = view.fov
+	var ship_pose: Transform3D = _target.get_global_transform_interpolated()
+	_backdrop_phase = _backdrop.nearest_phase(ship_pose.affine_inverse() * _backdrop_from.origin)
+	_backdrop_process_mode = process_mode
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	_return_mode = _mode
+	_mode = Mode.CINEMATIC
+	cinematic_camera.global_transform = _backdrop_from
+	cinematic_camera.reset_physics_interpolation()
+	_apply_mode()
+	return true
+
+
+## Ends the backdrop and goes back to the mode it left, the chase camera exactly on the ship. Nothing happens when it is not running.
+func stop_backdrop() -> void:
+	if _backdrop == null:
+		return
+	_backdrop = null
+	process_mode = _backdrop_process_mode
+	_look.reset()
+	_shown_yaw = 0.0
+	_shown_pitch = 0.0
+	_mode = _return_mode
+	_look.set_mode(_mode == Mode.COCKPIT)
+	if _mode == Mode.CHASE:
+		snap_chase()
+	_apply_mode()
+
+
+func is_backdrop_running() -> bool:
+	return _backdrop != null
+
+
+## The phase in [0, 1) of the loop, or 0 when the backdrop is not running.
+func backdrop_phase() -> float:
+	return _backdrop_phase if _backdrop != null else 0.0
+
+
+## Moves the backdrop on by `delta` seconds and puts the camera on it. `_process` calls it every frame; public for tests.
+func advance_backdrop(delta: float) -> void:
+	if _backdrop == null or not _has_target():
+		return
+	_backdrop_phase = fposmod(_backdrop_phase + delta / _backdrop_loop_s, 1.0)
+	_backdrop_age_s += delta
+	var goal: Transform3D = _target.get_global_transform_interpolated() * _backdrop.transform_at(_backdrop_phase)
+	var w: float = smoothstep(0.0, 1.0, _backdrop_age_s / BACKDROP_BLEND_S)
+	var shown := Transform3D(_backdrop_from.basis.orthonormalized().slerp(goal.basis.orthonormalized(), w).orthonormalized(),
+			_backdrop_from.origin.lerp(goal.origin, w))
+	cinematic_camera.global_transform = shown
+
+
 ## Plays `shot` on the cinematic camera from its start, replacing any shot playing. `actor_pose(name)` and `origin_to_local(offset)`
 ## place its points every frame (`CinematicShot.pose_at`).
 func play_shot(shot: CinematicShot, actor_pose: Callable, origin_to_local: Callable) -> void:
+	stop_backdrop()
 	if _shot == null:
 		_return_mode = _mode
 	_shot = shot

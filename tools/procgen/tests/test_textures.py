@@ -291,19 +291,26 @@ if __name__ == "__main__":
     unittest.main()
 
 
-class PanelGridSwitchTests(unittest.TestCase):
-    """The generic staggered plating is off on the civilian hulls until their seams follow the show (M5-T39); fighters keep it."""
+class GenericGridTests(unittest.TestCase):
+    """The generic staggered plating is the fighters' and the props'; a hull with drawn layouts bakes with it off (M5-T40)."""
 
-    def test_the_civilians_paint_no_generic_grid_and_the_fighters_do(self) -> None:
-        from tools.procgen.core import textures
+    def test_an_atlas_with_the_grid_off_paints_no_seams_and_no_relief(self) -> None:
+        part = [TexturedPart(_panel_box(4.0), (0, 0, 0), name="fuselage")]
+        gridded = bake_maps(atlas_of(part, atlas_px=256, texel_m=0.02), EARTHFORCE, 1, occlusion=False)
+        atlas = atlas_of(part, atlas_px=256, texel_m=0.02, grid=False)
+        plain = bake_maps(atlas, EARTHFORCE, 1, occlusion=False)
+        self.assertEqual(atlas.part_platings, ())
+        flat = np.abs(plain["normal"].astype(int) - np.array([128, 128, 255])).max()
+        self.assertLessEqual(flat, 1, "no grooves, hatches or rivets")
+        self.assertGreater(np.abs(gridded["normal"].astype(int) - np.array([128, 128, 255])).max(), 20)
+        filled = atlas.buffers.filled
+        self.assertGreater(plain["albedo"][filled].min(), gridded["albedo"][filled].min(), "no dark seam lines")
+
+    def test_no_style_carries_the_old_switch(self) -> None:
         from tools.procgen.styles.brakiri import BRAKIRI, BRAKIRI_POD
         from tools.procgen.styles.centauri import CENTAURI
         from tools.procgen.styles.ea_civilian import EA_CIVILIAN
-        from tools.procgen.styles.earthforce import EARTHFORCE
         from tools.procgen.styles.narn import NARN
-        from tools.procgen.styles.raider import RAIDER
 
         for style in (EA_CIVILIAN, NARN, CENTAURI, BRAKIRI, BRAKIRI_POD):
-            self.assertFalse(textures._has_panel_grid(style), style.name)
-        for style in (EARTHFORCE, RAIDER):
-            self.assertTrue(textures._has_panel_grid(style), style.name)
+            self.assertNotIn("panel_grid", style.extra, style.name)

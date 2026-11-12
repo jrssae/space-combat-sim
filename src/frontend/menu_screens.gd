@@ -6,9 +6,16 @@ const SettingsScene: PackedScene = preload("res://src/frontend/settings_screen.t
 const ControlsScene: PackedScene = preload("res://src/frontend/controls_screen.tscn")
 
 
-## The settings page (M5-T03): a new one each time, like the controls page.
+## The Settings list (M5-T45): the five groups, each opening its page. A new one each time.
 static func settings() -> MenuScreen:
-	return SettingsScene.instantiate() as MenuScreen
+	return SettingsGroupsScreen.new()
+
+
+## One settings page (M5-T03): a new one each time. `group` is an id of `SettingsSchema.GROUPS`; empty lists every setting.
+static func settings_screen(group: StringName = &"") -> MenuScreen:
+	var page: SettingsScreen = SettingsScene.instantiate() as SettingsScreen
+	page.group = group
+	return page
 
 
 ## The controls page (M5-T04): a new one each time, so a page left open elsewhere is never shared.

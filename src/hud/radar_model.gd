@@ -47,16 +47,18 @@ static func radar_direction(body_offset: Vector3) -> Vector3:
 ## Every contact of `contacts` within sensor or broadcast range placed on the sphere, in drawing order (far to near, so the
 ## near ones draw on top, the selected one last; two contacts whose ranges agree to a millimetre follow the contacts' own
 ## order), as packed arrays for a batched painter (M4-T36). The maths runs in the native library (`NATIVE_CLASS`, M4-T23):
-## with the tier's ships on the radar a frame at `battle` 1 000 plots a thousand contacts.
+## with the tier's ships on the radar a frame at `battle` 1 000 plots a thousand contacts. A contact beyond `ident_range_m` that
+## does not broadcast is unidentified (M5-T25): grey, whatever its faction, unless it is `known_id` (a selection already
+## identified).
 static func plot(contacts: RadarContacts, selected_id: int, own_position: Vector3, own_basis: Basis,
-		viewer_faction: StringName) -> RadarPlot:
+		viewer_faction: StringName, known_id: int = 0, ident_range_m: float = TargetCategories.IDENT_RANGE_M) -> RadarPlot:
 	if _native == null:
 		_native = NativeLib.instantiate(NATIVE_CLASS)  # the native library is required (M4-T37)
 	var palette := PackedColorArray()
 	for faction: StringName in contacts.faction_names:
 		palette.append(Factions.hud_color(Factions.relation(viewer_faction, faction)))
 	var r: Array = _native.plot(contacts.ids, contacts.positions, contacts.reach, contacts.faction_ix, palette, own_position,
-			own_basis, selected_id)
+			own_basis, selected_id, ident_range_m, Factions.UNIDENTIFIED_COLOR, known_id)
 	var out := RadarPlot.new()
 	var order: PackedInt32Array = r[0]
 	out.ids = r[1]
@@ -68,9 +70,26 @@ static func plot(contacts: RadarContacts, selected_id: int, own_position: Vector
 	out.stalk_units = r[7]
 	out.stalk_colors = r[8]
 	out.selected_index = int(r[9])
-	out.factions.resize(order.size())
-	for k: int in order.size():
-		out.factions[k] = contacts.faction_names[contacts.faction_ix[order[k]]]
+	out.bind_factions(order, contacts.faction_ix, contacts.faction_names)
+	return out
+
+
+## The dots of `plot` on a screen radar of `radius_px` centred at `centre`, as the multimeshes' buffers, built natively
+## (M5-T34). `held` is the three multimeshes' instance counts now (plain, rim, backing); a buffer comes sized to hold its
+## dots whole, growing only when it must. `backings` adds a dark `backing_radius` dot under every contact.
+static func dot_buffers(plot: RadarPlot, centre: Vector2, radius_px: float, backing_radius: float, dot_radius: float,
+		backing_colour: Color, backings: bool, held: PackedInt32Array) -> RadarDotBuffers:
+	if _native == null:
+		_native = NativeLib.instantiate(NATIVE_CLASS)
+	var r: Array = _native.dot_buffers(plot.point_units, plot.colors, plot.rims, plot.selected_index, centre, radius_px,
+			backing_radius, dot_radius, backing_colour, backings, held)
+	var out := RadarDotBuffers.new()
+	out.plain = r[0]
+	out.plain_count = int(r[1])
+	out.rim = r[2]
+	out.rim_count = int(r[3])
+	out.backing = r[4]
+	out.backing_count = int(r[5])
 	return out
 
 

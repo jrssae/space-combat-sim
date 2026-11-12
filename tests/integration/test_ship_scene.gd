@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## The ship scene headless (architecture §3, §6.4, §7; M1-T10 done-when): every part present, the hull drawn as its textured mesh
 ## (one `Hull` node, M4-T31), body settings from the ShipSpec and the hardpoints, collision primitives, muzzles and cockpit anchor,
 ## the API Main (M1-T15) calls (commands and their edges, assist, reset, the camera rig wiring), `RenderStatus`, and the `ship` /
@@ -61,12 +61,6 @@ static func _vec(value: Variant) -> Vector3:
 
 func _vec_tol(tol: float = TOL) -> Vector3:
 	return Vector3(tol, tol, tol)
-
-
-func _console(line: String) -> ConsoleResult:
-	var results: Array[ConsoleResult] = DebugConsole.registry.execute(line)
-	assert_eq(results.size(), 1, "one statement: " + line)
-	return results[0]
 
 
 func _collision_nodes(body: Node) -> Array[CollisionShape3D]:

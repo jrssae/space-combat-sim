@@ -128,12 +128,14 @@ func fill_hud_input(input: HudInput) -> void:
 	if api == null:
 		return
 	input.objectives = api.book.active()
-	if not input.has_waypoint and not api.waypoint_name.is_empty():
-		var at: Variant = stage.local_position(api.waypoint_name)
+	if not input.has_waypoint:
+		input.waypoint_key = "mission:%d" % api.waypoint_serial if api.waypoint_serial > 0 else ""
+		var at: Variant = stage.local_position(api.waypoint_name) if not api.waypoint_name.is_empty() else null
 		if at != null:
 			input.has_waypoint = true
 			input.waypoint_position = at as Vector3
 			input.waypoint_label = api.waypoint_name.to_upper()
+			input.waypoint_id = stage.target_id(api.waypoint_name)
 	if api.has_ended():
 		input.status_line = result_line(api.result)
 

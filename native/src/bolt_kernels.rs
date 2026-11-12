@@ -14,13 +14,67 @@ pub const CHARGE_EPSILON: f64 = 1e-9;
 /// Floats per multimesh instance: three rows of a basis with the origin in the fourth column.
 pub const INSTANCE_FLOATS: usize = 12;
 
+/// `BoltSlotQuarantine.MAX_STEP_M`: the furthest a bolt flies between two drawn frames.
+pub const QUARANTINE_MAX_STEP_M: f64 = 250.0;
+/// `BoltSlotQuarantine.SIDE_SLACK_M`: how far off its line of flight a kept bolt may be drawn.
+pub const QUARANTINE_SIDE_SLACK_M: f64 = 0.05;
+/// `BoltSlotQuarantine.SIDE_SLACK_SHARE`: the share of its move added to that slack.
+pub const QUARANTINE_SIDE_SLACK_SHARE: f64 = 0.01;
+
+/// `BoltSlotQuarantine.filter`: `buffer` (12 floats a slot) with every slot whose occupant is new since `last` collapsed
+/// to a point at its place, so the renderer never pairs a new bolt with another's last frame. `forward` is the bolts' flight
+/// direction in an instance's own frame. Written into `out`; returns how many slots were collapsed. Arithmetic in 64 bits
+/// over the 32-bit floats, in the GDScript's order, so both give the same bits.
+pub fn quarantine(buffer: &[f32], last: &[f32], forward: [f32; 3], out: &mut Vec<f32>) -> usize {
+    out.clear();
+    out.extend_from_slice(buffer);
+    let [fx, fy, fz] = forward.map(f64::from);
+    let g = |v: &[f32], i: usize| f64::from(v[i]);
+    let mut count = 0;
+    let mut b = 0;
+    while b + INSTANCE_FLOATS <= buffer.len() {
+        let (r0x, r0y, r0z) = (g(buffer, b), g(buffer, b + 1), g(buffer, b + 2));
+        if r0x != 0.0 || r0y != 0.0 || r0z != 0.0 {
+            let mut kept = b + INSTANCE_FLOATS <= last.len()
+                && buffer[b] == last[b]
+                && buffer[b + 1] == last[b + 1]
+                && buffer[b + 2] == last[b + 2];
+            if kept {
+                let wx = r0x * fx + r0y * fy + r0z * fz;
+                let wy = g(buffer, b + 4) * fx + g(buffer, b + 5) * fy + g(buffer, b + 6) * fz;
+                let wz = g(buffer, b + 8) * fx + g(buffer, b + 9) * fy + g(buffer, b + 10) * fz;
+                let dx = g(buffer, b + 3) - g(last, b + 3);
+                let dy = g(buffer, b + 7) - g(last, b + 7);
+                let dz = g(buffer, b + 11) - g(last, b + 11);
+                let w2 = wx * wx + wy * wy + wz * wz;
+                let d2 = dx * dx + dy * dy + dz * dz;
+                let along = dx * wx + dy * wy + dz * wz;
+                let side2 = d2 - along * along / maxf(w2, 1e-12);
+                let slack = QUARANTINE_SIDE_SLACK_M + QUARANTINE_SIDE_SLACK_SHARE * d2.sqrt();
+                kept = along >= 0.0
+                    && d2 <= QUARANTINE_MAX_STEP_M * QUARANTINE_MAX_STEP_M
+                    && side2 <= slack * slack;
+            }
+            if !kept {
+                count += 1;
+                for k in [0, 1, 2, 4, 5, 6, 8, 9, 10] {
+                    out[b + k] = 0.0;
+                }
+            }
+        }
+        b += INSTANCE_FLOATS;
+    }
+    count
+}
+
 /// Expires the owned bolts whose time is up and moves the rest, as `Projectile._physics_process` does for a node: the
 /// expiry test first (the bolt is gone before it moves), then `last_step = velocity * delta` with the delta rounded to 32
 /// bits and `position += last_step`. A bolt launched this tick does not move yet (§15.3: its launch tick sweeps only its
 /// muzzle). Returns how many expired.
 pub fn step(bolts: &mut Bolts, delta: f64, now_s: f64, tick: i64) -> usize {
     let owned = bolts.owned;
-    let mut keep: Vec<bool> = Vec::with_capacity(owned);
+    let mut keep = std::mem::take(&mut bolts.keep_scratch);
+    keep.clear();
     let mut expired = 0;
     for i in 0..owned {
         let alive = now_s < bolts.expires_at[i];
@@ -32,6 +86,7 @@ pub fn step(bolts: &mut Bolts, delta: f64, now_s: f64, tick: i64) -> usize {
     if expired > 0 {
         bolts.retain_owned(&keep);
     }
+    bolts.keep_scratch = keep;
     let dt = delta as f32;
     for i in 0..bolts.owned {
         if bolts.launched[i] >= tick {
@@ -48,11 +103,14 @@ pub fn step(bolts: &mut Bolts, delta: f64, now_s: f64, tick: i64) -> usize {
 /// Returns how many went.
 pub fn drop_spent(bolts: &mut Bolts) -> usize {
     let owned = bolts.owned;
-    let keep: Vec<bool> = (0..owned).map(|i| !bolts.spent[i]).collect();
+    let mut keep = std::mem::take(&mut bolts.keep_scratch);
+    keep.clear();
+    keep.extend(bolts.spent[..owned].iter().map(|&spent| !spent));
     let gone = keep.iter().filter(|&&k| !k).count();
     if gone > 0 {
         bolts.retain_owned(&keep);
     }
+    bolts.keep_scratch = keep;
     gone
 }
 
@@ -353,5 +411,40 @@ fn mul(a: &Basis, b: &Basis) -> Basis {
             Vector3::new(dot(a.rows[1], c0), dot(a.rows[1], c1), dot(a.rows[1], c2)),
             Vector3::new(dot(a.rows[2], c0), dot(a.rows[2], c1), dot(a.rows[2], c2)),
         ],
+    }
+}
+
+#[cfg(test)]
+mod quarantine_tests {
+    use super::*;
+
+    // One slot: identity basis rows (x, y, z scales) and the origin at z.
+    fn slot(z: f32) -> Vec<f32> {
+        vec![1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, z]
+    }
+
+    #[test]
+    fn a_bolt_flying_on_in_its_slot_is_kept() {
+        let mut out = Vec::new();
+        let n = quarantine(&slot(-10.0), &slot(0.0), [0.0, 0.0, -1.0], &mut out);
+        assert_eq!(n, 0);
+        assert_eq!(out, slot(-10.0));
+    }
+
+    #[test]
+    fn a_new_occupant_or_a_jump_is_collapsed_to_its_place() {
+        let mut out = Vec::new();
+        assert_eq!(quarantine(&slot(-10.0), &[], [0.0, 0.0, -1.0], &mut out), 1);
+        assert_eq!(out[11], -10.0);
+        assert_eq!(&out[0..3], &[0.0, 0.0, 0.0]);
+        // Backwards and past the step limit both fail the test.
+        assert_eq!(quarantine(&slot(10.0), &slot(0.0), [0.0, 0.0, -1.0], &mut out), 1);
+        assert_eq!(quarantine(&slot(-500.0), &slot(0.0), [0.0, 0.0, -1.0], &mut out), 1);
+    }
+
+    #[test]
+    fn an_empty_slot_is_left_alone() {
+        let mut out = Vec::new();
+        assert_eq!(quarantine(&[0.0; 12], &[0.0; 12], [0.0, 0.0, -1.0], &mut out), 0);
     }
 }

@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## AC8 on the real main scene (architecture §18 D55, M5-T08), on `tests/fixtures/missions/test_cinematic.json`: the mission's intro
 ## shot plays on the cinematic camera with the HUD hidden, the letterbox in and the subtitles still up; the player's commands are
 ## zeroed while the ship keeps its physics; a rebase mid-shot moves nothing on screen; A or Start skips the shot (the A that skipped
@@ -40,11 +40,6 @@ func _make_main(path: String = MISSION_PATH) -> void:
 	add_child_autofree(main)
 	main.cannon.projectile_fired.connect(func(_i: int, _p: Projectile) -> void: shots_fired += 1)
 	await _ticks(2)
-
-
-func _ticks(n: int) -> void:
-	for _i: int in n:
-		await get_tree().physics_frame
 
 
 func _frames(n: int) -> void:
@@ -215,16 +210,16 @@ func test_lock_controls_alone_zeroes_the_commands_without_the_camera() -> void:
 func test_the_comms_menu_closes_and_waits_while_the_controls_are_held() -> void:
 	await _make_main()
 	await _press(InputAdapter.COMMS_MENU)
-	assert_false(main.comms_menu.is_open(), "no comms menu over a shot")
+	assert_false(main.comms.is_open(), "no comms menu over a shot")
 	DebugConsole.registry.execute("mission skip")
 	await _press(InputAdapter.COMMS_MENU)
-	assert_true(main.comms_menu.is_open(), "it opens with the controls free")
+	assert_true(main.comms.is_open(), "it opens with the controls free")
 	_api().lock_controls(true)
 	await _ticks(1)
-	assert_false(main.comms_menu.is_open(), "locking the controls closes it")
-	assert_false(main.adapter.comms_open, "and the D-pad is the D-pad again")
+	assert_false(main.comms.is_open(), "locking the controls closes it")
+	assert_false(get_tree().paused, "and the game runs")
 	await _press(InputAdapter.COMMS_MENU)
-	assert_false(main.comms_menu.is_open(), "and it stays shut")
+	assert_false(main.comms.is_open(), "and it stays shut")
 
 
 # --- rebase --------------------------------------------------------------------------------------------------------------------

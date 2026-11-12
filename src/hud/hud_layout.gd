@@ -187,6 +187,12 @@ static func _target(input: HudInput, f: HudFrame) -> void:
 	f.target_hull = t.hull_fraction
 	f.target_relation = Factions.relation(input.faction, t.faction)
 	f.target_color = Factions.hud_color(f.target_relation)
+	if input.target_unknown:
+		# Too far to tell what it is (M5-T25): no name, no hull, no faction colour.
+		f.target_name = TargetMenu.UNKNOWN_LABEL
+		f.target_hull = -1.0
+		f.target_relation = Factions.Relation.NEUTRAL
+		f.target_color = Factions.UNIDENTIFIED_COLOR
 	var shown: Dictionary = project(input, t.position)
 	if bool(shown["in_front"]) and on_screen(input, shown["pos"]):
 		f.target_on_screen = true
@@ -241,6 +247,7 @@ static func _waypoint(input: HudInput, f: HudFrame) -> void:
 	f.waypoint_present = true
 	f.waypoint_label = input.waypoint_label
 	f.waypoint_range_m = input.own_position.distance_to(input.waypoint_position)
+	f.waypoint_radar_index = f.radar_plot.ids.find(input.waypoint_id) if input.waypoint_id != 0 else -1
 	var shown: Dictionary = project(input, input.waypoint_position)
 	if bool(shown["in_front"]) and on_screen(input, shown["pos"]):
 		f.waypoint_on_screen = true
@@ -328,7 +335,7 @@ static func _radar(input: HudInput, f: HudFrame) -> void:
 	if not input.cockpit:
 		# Chase view: bottom-right corner, over the charge bar.
 		f.radar_centre = Vector2(input.viewport_size.x - 48.0 * f.scale - 130.0 * f.scale, input.viewport_size.y - 56.0 * f.scale - 30.0 * f.scale - f.radar_radius_px)
-	if input.target != null and input.target.damage_layout != DamageZones.Layout.NONE:
+	if input.target != null and input.target.damage_layout != DamageZones.Layout.NONE and not input.target_unknown:
 		f.target_layout = input.target.damage_layout
 		f.target_zones = input.target.damage_zones
 		var outline := Vector2(150.0, 112.0) * f.scale
@@ -343,7 +350,10 @@ static func _radar(input: HudInput, f: HudFrame) -> void:
 	else:
 		f.drift_centre = f.speed_pos + Vector2(-215.0 * f.scale - f.drift_radius_px, 0.0)
 	var contacts: RadarContacts = input.radar_contacts if input.radar_contacts != null else RadarContacts.from_infos(input.contacts)
-	f.radar_plot = RadarModel.plot(contacts, input.selected_id, input.own_position, input.own_basis, input.faction)
+	var before_us: int = Time.get_ticks_usec()
+	f.radar_plot = RadarModel.plot(contacts, input.selected_id, input.own_position, input.own_basis, input.faction,
+			0 if input.target_unknown else input.selected_id)
+	f.radar_plot_us = Time.get_ticks_usec() - before_us
 
 
 # --- wing roster and acknowledgements (M3-T11) -----------------------------------------------------------------------

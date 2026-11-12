@@ -150,15 +150,17 @@ func is_active() -> bool:
 func apply_hit(info: HitInfo) -> void:
 	hit_taken.emit(info)
 	var applied: float = 0.0
+	var killed: bool = false  # this hit's own kill, never one left over from an earlier hit (code review 2026-11-12)
 	if not invulnerable and not (respects_god_mode and DebugConsole.flags.invulnerable):
 		applied = hull.apply(info.damage)
+		killed = hull.destroyed_now
 	info.applied = applied
 	if applied > 0.0:
 		var b: Node3D = body()
 		if b != null and b.is_inside_tree():
 			zones.record(b.global_transform.affine_inverse() * info.point, applied)
 		damaged.emit(info, applied)
-	if hull.destroyed_now:
+	if killed:
 		destroyed.emit(info)
 
 

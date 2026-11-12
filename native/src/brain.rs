@@ -26,10 +26,10 @@ use crate::threads::{Runner, StepThread, Threads};
 const STEP_IN: usize = 23;
 const STEP_OUT: usize = 16;
 // `BodyKind` values of the rows that are obstacles (src/ai/body_kind.gd).
-const KIND_MINE: u8 = 4;
-const KIND_STATIC: u8 = 5;
+pub const KIND_MINE: u8 = 4;
+pub const KIND_STATIC: u8 = 5;
 // `ContactScan.SENSOR_RANGE_M`: the grid's cell size.
-const SENSOR_RANGE_M: f64 = 5000.0;
+pub const SENSOR_RANGE_M: f64 = 5000.0;
 
 /// `AiProfile` as the facade packs it: the nine weights in tie order, then stickiness, emergency_margin, min_dwell_s,
 /// retreat_below, retreat_within_m, cruise_mps, aim_error_deg, fires, slashing, idle_hold.
@@ -272,11 +272,13 @@ impl ScsBrains {
         own.hull_fraction = hulls.as_slice().to_vec();
         own.target_ids = target_ids.as_slice().to_vec();
         own.reach = reaches.as_slice().to_vec();
-        own.name_keys = names
+        let mut table = crate::rows::NameTable::default();
+        own.name_ids = names
             .as_slice()
             .iter()
-            .map(|s| s.to_string().to_lowercase())
+            .map(|s| table.intern(&s.to_string().to_lowercase()))
             .collect();
+        own.names = Some(std::sync::Arc::new(table));
         own.node_count = n;
         own.index_ids();
         self.own_names = names.as_slice().to_vec();
@@ -1833,12 +1835,11 @@ impl ScsBrains {
         }
         let names: Vec<(&str, i64)> = d.names.clone();
         let guard = self.core.as_ref().map(|c| c.bind());
-        let (rows, row_names): (&Rows, &[GString]) = match &guard {
-            Some(c) => (&c.rows, &c.row_names),
-            None => (&self.own, &self.own_names),
-        };
         for (key, id) in names {
-            let name = name_of(rows, row_names, id);
+            let name = match &guard {
+                Some(c) => c.name_of_marker(id),
+                None => name_of(&self.own, &self.own_names, id),
+            };
             if key == "state" {
                 dict.set("state", &GString::from(format!("to {name}").as_str()));
             } else {

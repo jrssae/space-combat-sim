@@ -26,6 +26,8 @@ const ACTIONS: Array[Dictionary] = [
 ## The settings to edit: the `Settings` autoload, unless a test hands in a scratch one before the page is shown.
 var settings: SettingsScript = null
 var model := SettingsMenuModel.new()
+## The settings group this page edits (`SettingsSchema.GROUPS`), set before the page is shown. Empty: every setting on one page.
+var group: StringName = &""
 
 var _controls: Dictionary = {}  # key -> the Control the pad focuses (CheckButton, HSlider or OptionButton)
 var _names: Dictionary = {}  # key -> its Label
@@ -41,6 +43,8 @@ func _init() -> void:
 
 
 func _ready() -> void:
+	show_pad = false  # the diagram has nothing to say here; the Controls page keeps it
+	_apply_group()
 	if settings == null:
 		settings = get_node_or_null(^"/root/Settings") as SettingsScript
 	if settings == null:
@@ -54,6 +58,15 @@ func _ready() -> void:
 func _exit_tree() -> void:
 	if settings != null and settings.changed.is_connected(_on_setting_changed):
 		settings.changed.disconnect(_on_setting_changed)
+
+
+# Titles the page and narrows the model to the group's categories.
+func _apply_group() -> void:
+	for entry: Dictionary in SettingsSchema.GROUPS:
+		if entry["id"] == group:
+			title = String(entry["title"])
+	var categories: Array[StringName] = SettingsSchema.categories_of_group(group)
+	model = SettingsMenuModel.new(null, categories)
 
 
 # --- What the pad and the tests see ---------------------------------------------------------------------------------

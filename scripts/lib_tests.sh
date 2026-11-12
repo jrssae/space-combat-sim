@@ -42,6 +42,17 @@ build_native_or_fail() {
     [[ -f bin/libscs_native.so ]] || fail "No native library at bin/libscs_native.so after the build."
 }
 
+# Godot's import: the resources and the global class list (a new `class_name` is unknown to the compile check and to GUT
+# until it has run). A current cache takes about 3 s. <log> names where the output goes.
+godot_import() {
+    echo "== Godot import"
+    run_logged "$1" timeout 600 "${GODOT}" --headless --path . --import \
+        || fail "Godot import failed (see $1)."
+    if grep -E "${SCRIPT_ERRORS}" "$1"; then
+        fail "Import reported script errors (see $1)."
+    fi
+}
+
 # GUT silently skips a test file that does not parse, so compile everything explicitly. <log> names where the output goes.
 compile_check() {
     echo "== Compile check"
@@ -129,6 +140,20 @@ expect_providers() {
 reject_text() {
     if grep -qF -- "$2" "$1"; then
         echo "run_tests.sh: unexpected text in $1: $2" >&2
+        return 1
+    fi
+}
+
+# main_run <log> <timeout s> <expected exit code> <label> <godot args...>: one headless run of the project (the real main scene
+# unless a scene is named) for a smoke block; returns 1 when the exit code is not the expected one.
+main_run() {
+    local log="$1" limit="$2" expected="$3" label="$4"
+    shift 4
+    local status=0
+    timeout "${limit}" "${GODOT}" --headless --path . "$@" > "${log}" 2>&1 || status=$?
+    cat "${log}"
+    if (( status != expected )); then
+        echo "run_tests.sh: ${label} smoke run exited ${status}, expected ${expected} (see ${log})." >&2
         return 1
     fi
 }

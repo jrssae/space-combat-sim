@@ -154,3 +154,34 @@ func test_dots_carry_each_contacts_broadcast_range() -> void:
 	assert_eq(dots.size(), 1)
 	assert_eq(dots[0].id, 9)
 	assert_true(dots[0].rim)
+
+
+# --- unidentified contacts (M5-T25) ---------------------------------------------------------------------------------
+
+
+func test_a_silent_contact_beyond_the_identification_range_is_grey() -> void:
+	var near: RadarModel.Dot = _dot_at(Vector3(0.0, 0.0, -TargetCategories.IDENT_RANGE_M))
+	assert_eq(near.color, Factions.HOSTILE_COLOR, "at 5 km it is still told apart")
+	var far: RadarModel.Dot = _dot_at(Vector3(0.0, 0.0, -TargetCategories.IDENT_RANGE_M - 1.0))
+	assert_eq(far.color, Factions.UNIDENTIFIED_COLOR, "past it, a contact with no transponder has no faction colour")
+	assert_eq(far.faction, Factions.RAIDERS, "the plot still knows what it is: only the colour is withheld")
+	var ally: RadarModel.Dot = _dot_at(Vector3(0.0, 0.0, -9000.0), Factions.EARTH_ALLIANCE, Factions.EARTH_ALLIANCE)
+	assert_eq(ally.color, Factions.UNIDENTIFIED_COLOR, "a silent friend far off is unknown too")
+	var beacon: RadarModel.Dot = _dot_at(Vector3(0.0, 0.0, -9000.0), Factions.EARTH_ALLIANCE, Factions.EARTH_ALLIANCE, Vector3.ZERO,
+			Basis.IDENTITY, 1.0e5)
+	assert_eq(beacon.color, Factions.FRIENDLY_COLOR, "anything that broadcasts is identified at any range")
+
+
+func test_an_identified_selection_keeps_its_colour_and_the_range_is_a_parameter() -> void:
+	var infos: Array[TargetInfo] = [TargetInfo.new(1, "A", Factions.RAIDERS, Vector3(0.0, 0.0, -9000.0)),
+			TargetInfo.new(2, "B", Factions.RAIDERS, Vector3(0.0, 0.0, -8000.0))]
+	var contacts: RadarContacts = RadarContacts.from_infos(infos)
+	var plot: RadarPlot = RadarModel.plot(contacts, 1, Vector3.ZERO, Basis.IDENTITY, Factions.EARTH_ALLIANCE)
+	assert_eq(plot.colors[plot.selected_index], Factions.UNIDENTIFIED_COLOR, "a selection not yet identified is grey")
+	plot = RadarModel.plot(contacts, 1, Vector3.ZERO, Basis.IDENTITY, Factions.EARTH_ALLIANCE, 1)
+	assert_eq(plot.colors[plot.selected_index], Factions.HOSTILE_COLOR, "an identified one keeps its colour")
+	assert_eq(plot.colors[0], Factions.UNIDENTIFIED_COLOR, "the other contact is still unknown")
+	assert_eq(plot.stalk_colors[0], Color(Factions.UNIDENTIFIED_COLOR, 0.5), "and so is its stalk")
+	plot = RadarModel.plot(contacts, 0, Vector3.ZERO, Basis.IDENTITY, Factions.EARTH_ALLIANCE, 0, 8500.0)
+	assert_eq(plot.colors[1], Factions.HOSTILE_COLOR, "8 km inside an 8.5 km identification range")
+	assert_eq(plot.colors[0], Factions.UNIDENTIFIED_COLOR)

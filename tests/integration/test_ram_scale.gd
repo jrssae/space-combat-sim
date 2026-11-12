@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## The ram resolver at scale (M4-T03, cycle 2). The resolver's swept pass used to look at every pair of hulls every tick
 ## (N squared), though a pair can only ram in a tick when its two hulls come near each other in it. The work it does per tick in
 ## a spread-out fleet must grow with the ship count, not its square.
@@ -32,20 +32,16 @@ const SCRAPE_MPS: float = 20.0
 const SCRAPE_X_M: float = 8.0
 
 
-## Counts the pairs the tracker is told to keep touching, and which ones.
-class CountingTracker extends RamTracker:
+## Counts the pairs swept shape by shape, and the pairs the tracker is told to keep touching, and which ones.
+class CountingResolver extends RamResolver:
+	var sweeps: int = 0
 	var keep_touching_calls: int = 0
 	var kept: Dictionary[String, bool] = {}
 
-	func keep_touching(a: int, b: int) -> void:
+	func _keep_touching(first_id: int, second_id: int) -> void:
 		keep_touching_calls += 1
-		kept[RamTracker.pair_key(a, b)] = true
-		super(a, b)
-
-
-## Counts the pairs swept shape by shape.
-class CountingResolver extends RamResolver:
-	var sweeps: int = 0
+		kept[RamTracker.pair_key(first_id, second_id)] = true
+		super(first_id, second_id)
 
 	func _sweep_pair(first: Dictionary, second: Dictionary, deep: bool) -> Dictionary:
 		sweeps += 1
@@ -55,7 +51,6 @@ class CountingResolver extends RamResolver:
 var world: WorldFrame
 var projectiles: Node3D
 var rams: CountingResolver
-var tracker: CountingTracker
 ## Each ram as it lands: the info and the resolver's `last_ram` line (which names how it was found).
 var landed: Array[Array] = []
 var ram_damage_backup: bool = true
@@ -74,8 +69,6 @@ func before_each() -> void:
 	rams = CountingResolver.new()
 	rams.name = "RamResolver"
 	rams.world = world
-	tracker = CountingTracker.new()
-	rams.tracker = tracker
 	add_child_autofree(rams)
 	landed.clear()
 	rams.ram_resolved.connect(func(info: HitInfo) -> void: landed.append([info, rams.last_ram]))
@@ -91,11 +84,6 @@ func _ship(path: String, at: Vector3, basis: Basis = Basis.IDENTITY) -> Combatan
 	})
 	world.spawn(combatant.ship, world.to_universe(at), basis)
 	return combatant
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
 
 
 func _place(combatant: Combatant, position: Vector3, basis: Basis, velocity: Vector3) -> void:
@@ -143,13 +131,36 @@ func test_the_pairs_looked_at_per_tick_in_a_spread_out_fleet_grow_linearly() -> 
 		combatant.ship.linear_velocity = Vector3(CROSSING_MPS, 0.0, 0.0) if crossing else Vector3.ZERO
 	await _ticks(2)
 	rams.sweeps = 0
-	tracker.keep_touching_calls = 0
+	rams.keep_touching_calls = 0
 	await _ticks(MEASURED_TICKS)
-	var per_tick: float = float(rams.sweeps + tracker.keep_touching_calls) / float(MEASURED_TICKS)
+	var per_tick: float = float(rams.sweeps + rams.keep_touching_calls) / float(MEASURED_TICKS)
 	var bound: float = PAIRS_PER_SHIP * FLEET
 	assert_lte(per_tick, bound, "pairs looked at per tick (%.1f swept, %.1f kept touching) against a linear bound of %.0f; all pairs: %.0f"
-			% [float(rams.sweeps) / MEASURED_TICKS, float(tracker.keep_touching_calls) / MEASURED_TICKS, bound, FLEET * (FLEET - 1) / 2.0])
+			% [float(rams.sweeps) / MEASURED_TICKS, float(rams.keep_touching_calls) / MEASURED_TICKS, bound, FLEET * (FLEET - 1) / 2.0])
 	assert_eq(landed.size(), 0, "nobody met")
+
+
+func test_a_ship_inside_a_large_hulls_bounding_sphere_but_out_of_reach_of_its_box_is_not_swept() -> void:
+	# M5-T33: a fighter passing a capital flies inside its bounding sphere for seconds. The tracker hands the resolver the
+	# pair only once the fighter's sphere can reach the hull's box; until then nothing is swept or kept touching.
+	var a: Combatant = _ship(STARFURY_PATH, Vector3(0.0, 0.0, 600.0))
+	var b: Combatant = _ship(STARFURY_PATH, Vector3(0.0, 0.0, -600.0))
+	b.damageable.bounding_radius = 600.0  # as wide as a carrier's, round a fighter's volumes
+	await _ticks(2)
+	_head_on(a, b, 600.0, 45.0, 200.0)  # 200 m abreast at tunnelling speed
+	rams.sweeps = 0
+	rams.keep_touching_calls = 0
+	await get_tree().physics_frame
+	var delta: float = 1.0 / float(Engine.physics_ticks_per_second)
+	assert_gt(rams.broad_phase_pairs(delta, PackedInt64Array()).size(), 0, "the broad phase pairs the two: their spheres overlap")
+	await _ticks(10)
+	assert_eq(rams.sweeps + rams.keep_touching_calls, 0, "200 m abreast the pair never reaches the resolver")
+	assert_eq(landed.size(), 0)
+	# The same pass 3 m abreast: now the fighter's sphere reaches the box, and the swept test runs and finds the hit.
+	_head_on(a, b, 600.0, 45.0, 3.0)
+	await _ticks(12)
+	assert_gt(rams.sweeps, 0, "within reach of the box the pair is swept")
+	assert_eq(_kinds(), PackedStringArray(["tunnelling", "tunnelling"]), "and the hit is found as before")
 
 
 # --- what stays the same ---------------------------------------------------------------------------------------------
@@ -210,9 +221,9 @@ func test_a_slow_scrape_is_a_jolt_contact_and_its_pair_stays_touching() -> void:
 	var touched: bool = false
 	for i: int in 60:
 		await _ticks(1)
-		touched = touched or tracker.in_contact(a.ship.get_instance_id(), b.ship.get_instance_id())
+		touched = touched or rams.tracker.in_contact(a.ship.get_instance_id(), b.ship.get_instance_id())
 	assert_true(touched, "Jolt reported the scrape")
-	assert_true(tracker.kept.has(key), "the resolver kept the pair touching while Jolt held it")
+	assert_true(rams.kept.has(key), "the resolver kept the pair touching while Jolt held it")
 	assert_eq(_kinds(), PackedStringArray(["contact", "contact"]), "a scrape is a contact ram, one on each hull")
 
 
@@ -229,9 +240,9 @@ func test_a_pair_jolt_holds_in_contact_is_kept_touching_whatever_its_bounding_sp
 	var touched: bool = false
 	for i: int in 60:
 		await _ticks(1)
-		touched = touched or tracker.in_contact(a.ship.get_instance_id(), b.ship.get_instance_id())
+		touched = touched or rams.tracker.in_contact(a.ship.get_instance_id(), b.ship.get_instance_id())
 	assert_true(touched, "Jolt reported the scrape")
-	assert_true(tracker.kept.has(RamTracker.pair_key(a.ship.get_instance_id(), b.ship.get_instance_id())),
+	assert_true(rams.kept.has(RamTracker.pair_key(a.ship.get_instance_id(), b.ship.get_instance_id())),
 			"the resolver kept the pair touching while Jolt held it")
 
 

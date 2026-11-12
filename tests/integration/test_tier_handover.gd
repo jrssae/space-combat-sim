@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## The low-attention tier's handover (M4-T21, architecture §17.14): a fighter beyond `tier_radius_m` of the player leaves
 ## Jolt and the processing and flies as a core row; coming back within the radius it is promoted onto its body with its
 ## position, velocity, attitude, command and assist state carried over exactly, and the reverse demotes it, so nothing pops.
@@ -115,11 +115,6 @@ func _strays(n: int) -> Array[Combatant]:
 		world.spawn(stray.ship, world.to_universe(Vector3(float(i) * 100.0, 0.0, -20000.0)), Basis.IDENTITY, holder)
 		out.append(stray)
 	return out
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
 
 
 func _raider(display_name: String, at: Vector3, brain: PilotBrain, velocity: Vector3 = Vector3.ZERO) -> Combatant:

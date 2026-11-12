@@ -36,45 +36,65 @@ var perception: Perception = Perception.new()
 ## host steps without a GDScript think (M4-T35) pushes it at the next batch; assign `wing_ids` whole, never edit it in place.
 var order: Order = Order.ENGAGE_AT_WILL:
 	set(value):
+		if value == order:
+			return  # the wing director sets these every tick; only a real change goes to native
 		order = value
 		_changed()
 ## The leader's `Targetable` id (`Contact.id`), 0 for none.
 var leader_id: int = 0:
 	set(value):
+		if value == leader_id:
+			return
 		leader_id = value
 		_changed()
 ## The target the leader has selected (a `Contact.id`), 0 for none.
 var leader_target_id: int = 0:
 	set(value):
+		if value == leader_target_id:
+			return
 		leader_target_id = value
 		_changed()
 var engage_radius_m: float = DEFAULT_ENGAGE_RADIUS_M:
 	set(value):
+		if value == engage_radius_m:
+			return
 		engage_radius_m = value
 		_changed()
 ## The formation slot (M3-T07) and its offset from the leader in the leader's body frame (`Formation.offset`).
 var has_slot: bool = false:
 	set(value):
+		if value == has_slot:
+			return
 		has_slot = value
 		_changed()
 ## m, x right, y up, +z behind.
 var slot_offset: Vector3 = Vector3.ZERO:
 	set(value):
+		if value == slot_offset:
+			return
 		slot_offset = value
 		_changed()
 ## The `Targetable` ids of this ship's wingmates, leader included, itself not (M3-T10, `BehaviourRally`); empty outside a wing.
 var wing_ids: PackedInt64Array = PackedInt64Array():
 	set(value):
+		if value == wing_ids:
+			return
 		wing_ids = value
 		_changed()
 ## The wing's link to its leader (M3-T07), World frame, null without a live leader. Used while the leader is beyond
 ## sensor range; in sight, its contact (with attitude) is used instead.
 var leader_link_position: UniversePos = null:
 	set(value):
+		if value == leader_link_position or (value != null and leader_link_position != null and value.x == leader_link_position.x
+				and value.y == leader_link_position.y and value.z == leader_link_position.z
+				and value.system_id == leader_link_position.system_id):
+			return
 		leader_link_position = value
 		_changed()
 var leader_link_velocity: Vector3 = Vector3.ZERO:
 	set(value):
+		if value == leader_link_velocity:
+			return
 		leader_link_velocity = value
 		_changed()
 ## The route this pilot leads (M3-T09, the instructor; `BehaviourFollowPath.attach` sets it), or null.

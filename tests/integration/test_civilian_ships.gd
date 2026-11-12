@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## The nine civilian hulls in the game (M5-T16, AC13, D59): each flies through the one flight model with zero damping, heavy
 ## and slow, turning by torque alone; in play each carries its people's faction with the civilian role, shows its running
 ## lights, takes hull damage and breaks into its chunks; raiders attack them through the faction data; a Bokmai flies with
@@ -31,11 +31,6 @@ func _skipped() -> bool:
 			pending("%s is not generated (scripts/gen_assets.sh)" % type)
 			return true
 	return false
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
 
 
 # --- flight ---------------------------------------------------------------------------------------------------------
@@ -167,6 +162,35 @@ func test_a_bokmai_flies_with_three_pods_or_none() -> void:
 			Vector3.ZERO, null, BOKMAI)
 	assert_same(again, empty)
 	assert_eq(again.cargo_pods.count, 3)
+
+
+func test_the_target_preview_draws_a_bokmai_with_its_pods_and_counts_them() -> void:
+	if _skipped():
+		return
+	var main: Main = await _showcase()
+	var laden: Combatant = _named(main, "BOKMAI LADEN")
+	var empty: Combatant = _named(main, "BOKMAI EMPTY")
+	assert_eq(laden.cargo_pods.mounted_parts().size(), 3, "three pods to draw")
+	assert_eq(empty.cargo_pods.mounted_parts().size(), 0)
+	assert_not_null(laden.cargo_pods.mounted_parts()[0]["mesh"])
+	var director: TargetMenuDirector = main.target_menu
+	var preview: TargetPreview = director.preview
+	assert_eq(director._facts(laden.targetable.get_instance_id()), {"asset_id": "brakiri_bokmai", "cargo_pods": 3, "cargo_mounts": 3,
+			"attacking_you": false})
+	assert_eq(director._parts(laden.targetable.get_instance_id()).size(), 4, "the hull and its three pods")
+	assert_eq(director._parts(empty.targetable.get_instance_id()).size(), 1)
+	assert_eq(director._hull_key(laden.targetable.get_instance_id(), "brakiri_bokmai"), "brakiri_bokmai+3 pods")
+	assert_eq(director._hull_key(empty.targetable.get_instance_id(), "brakiri_bokmai"), "brakiri_bokmai")
+	# The panel itself, on whichever civilian the ring lists first.
+	assert_eq(director.open(), "")
+	director.menu.radial.set_highlight(TargetCategories.ORDER.find(TargetCategories.Category.CIVILIAN))
+	director.select()
+	assert_true(preview.is_showing())
+	assert_eq(preview.model.kind, TargetPreviewModel.Kind.SHIP)
+	assert_true(preview.wire.has_hull(), "a civilian hull is drawn")
+	assert_true(TargetPreviewModel.CLASS_NAMES.values().has(preview.model.subtitle.get_slice(" · ", 0)), preview.model.subtitle)
+	director.close()
+	assert_false(preview.is_showing())
 
 
 func test_each_hull_takes_damage_and_breaks_into_its_chunks_a_bokmai_shedding_its_pods() -> void:

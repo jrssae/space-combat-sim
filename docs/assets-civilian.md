@@ -677,6 +677,78 @@ From the design references, authored frame; `up` is (0, 1, 0) for dorsal mounts,
 | Brezebel (1) | `dorsal` (0, +4.3, 7.0), on the dorsal fitting's turret ring |
 | Bokmai (2) | `flank_l` (-2.04, +8.45, 6.58), `flank_r` (2.04, +8.45, 6.58), in the bow's flank insets, up (∓1, 0, 0) outboard (Q22) |
 
+## Surface layouts (M5-T40)
+
+What each hull's surface shows in the maintainer's references (`references/T40 seam references/`, never committed; several
+are other artists' renders, so they are inspiration only and nothing is reused or traced), and the layout drawn for it
+(`tools/procgen/parts/layouts.py`; how it is baked is architecture §18.30). Every feature is drawn per part, in the part's
+own frame: seam grooves, sunk hatches, louvres and raised ribs go into the normal and roughness maps and darken the paint a
+little; plating gives each plate its own tone and sheen. No triangles are added. Base colours and markings stay T39's.
+
+Each hull is written with two texture sets, picked by `settings.texture_detail`: **low** draws level A below, **high** (the
+default) draws A, B and C together. **A** is the major breaks (grooves), **B** the references' seam density with hatches,
+ribs and louvres, **C** the plating: plates of mixed size toned plate by plate (a share of the paint's own value, no new
+colours), sheen varied, grime in the joints, small proud hatches. Turrets, trusses, arms, struts, antennas and nozzles stay
+plain. The phase 1 option sheets are `references/screenshots/T40 seams/T40_options_<hull>.png`.
+
+### Saturn family (shared parts)
+
+- **Read.** Cargo pods: each face is a frame round long slats that run the pod's length (eight or nine to a face), with
+  three or four ribbed posts at each end and a break at the middle; the plating is dark grey in plates of clearly
+  different value. Hull cylinders and tanks: rings at the edges of every paint band, plate courses round the barrel between
+  them, a few long strakes, petals on the domes. Command disc: concentric rings and radial joints outside the fins.
+  Collar: close ribs. Seams are sparse for the size (a plate is 5 m or more); the truss, arms, antenna and bell are plain.
+- **Layout.** Cylinder and tank: A rings at the four band edges; B three courses a band, six strakes, dome petals and one
+  ring a dome, a hatch on each band's back and flank; C every course cut into plates of mixed length with tone, grime and
+  a few small hatches. Pod: A the frame lines and the middle break; B slats every 2.46 m inside the frame, the belt on the
+  flanks, two ribs at each end; C the slats as planks of mixed length, each its own grey. Disc: A rings at 7.3 m and 11 m;
+  B rings at 9.15 m and 12.85 m and radial joints every 30 degrees; C the sectors toned. Collar: one ring, then four ribs
+  and eight strakes. Junction modules, the Saturn 3's pod blocks and the drums: plating only (plain in the low set).
+
+### Skylark
+
+- **Read.** The capsule is the busiest part: a ring either side of each orange band, panel courses and about twelve
+  strakes between the bands with sunk rectangular ports, petals on both domes, a ribbed neck and spine. Tanks repeat it
+  smaller. Nacelles are ringed every metre. The body slab has angular plates that follow its leading edge, a few
+  rectangular and rounded hatches and rows of louvres along the flank and beside the ridge. Fins and claws are nearly
+  plain. Seams are dense for the size (plates of 1 to 2 m on a 60 m ship).
+- **Layout.** Capsule: A the four band rings and the middle joint; B four courses, twelve strakes, dome petals, spine
+  ribs, four ports a side; C the courses broken into panels of mixed size in shades of the sand paint. Tanks and nacelles
+  the same in small. Body: A two frames and the line inside the leading edge; B a strake, two more frames, five hatches
+  and three louvre panels a side (top and belly); C angular plating with tone and small hatches.
+
+### Narn transport
+
+- **Read.** The one capture of the transport is small: a dark green crescent with a blocky pattern of darker
+  rectangles and a pale box with a band. The model for its surface is the Frazi fighter (the maintainer, 2026-11-12), the
+  consistent Narn construction: framed panels square to the ship's axes, a panel outlined inside a panel, a trim line that
+  follows the outline, and over the whole hull small rectangles in slightly varied shades of the paint beneath, with a few
+  narrow bars. The angular red and black war paint of the cruisers is a paint scheme, not surface, and is left out.
+- **Layout.** Crescent: A the trim line 2.2 m inside the rim (top and belly), two frames and a framed panel on each half
+  and on the centre; B a second line at 4.6 m, a strake, three more frames and the panels inside the framed ones; C the
+  small rectangles (fields of 3.2 m by 2.4 m split down to 0.55 m, tone 10 % either way, thin joints) and narrow proud bars
+  both ways. Box: A frames at the paint panel's ends and middle, the belt and a framed panel on the top and floor; B
+  frames every 5 m, the lower belt, two strakes, two inner panels; C the same rectangles at 7 %. Cockpit, towers, fins and
+  dorsal block: the rectangles only (plain in the low set).
+
+### Centauri Brezebel
+
+- **Read.** Smooth, glossy hull with no proud detail. Its plating runs fore and aft in long strakes whose plates butt at
+  uneven stations, each plate a slightly different violet and gloss; the Centauri fighter's wings are plated across in
+  strips, with thin trim lines. The pale rim band and the emblems are paint.
+- **Layout.** Bow: A two strake lines a side and one frame; B every 3.25 m strake with uneven butt joints, two rounded
+  hatches; C the plates toned and their gloss varied. Arms and fairings the same. Fins: seams across the blade every
+  2.5 m and one along it.
+
+### Brakiri Bokmai
+
+- **Read.** A smooth skin in a few big plates with fine seams that follow the limbs, clusters of small raised
+  rectangular hatches, and rows of small rounded ports (the lit ones exist as windows). The fins carry seams across the
+  chord and one along the span. Tone differences are slight.
+- **Layout.** Bow, spine, arms, struts and nacelles: A two or three long seams and frames; B big plates broken unevenly
+  with thin seams; C a slight tone and gloss per plate and scattered proud hatches. Fins: chordwise seams every 4 m, then
+  every 2 m and the spanwise seam, then hatches. Cargo pod: the belt and girth seams, then plating and hatches.
+
 ## Open for the human tester `(H)`
 
 - The Narn's up is read from symmetry, the wiki's draught and one capture; flipping it moves the towers under the

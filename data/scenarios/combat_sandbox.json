@@ -1,4 +1,4 @@
-{"scenario_id": "combat_sandbox", "system_id": "local",
+{"scenario_id": "combat_sandbox", "description": "Waves of raiders against your wing in open space. The waves loop and grow.", "system_id": "local",
  "player": {"position": [0, 0, 0], "forward": [0, 0, -1]},
  "jumpgates": [{"name": "JUMPGATE", "place": "jumpgate", "from": "babylon5", "station": [0, 0, 0], "bearing": [0, 0, -1]}],
  "props": [

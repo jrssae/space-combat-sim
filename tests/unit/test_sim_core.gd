@@ -603,7 +603,7 @@ const KERNEL_USERS: Array[String] = ["res://native/src/contact_field.rs", "res:/
 const BOLT_KERNEL_FILE: String = "res://native/src/bolt_kernels.rs"
 const BOLT_KERNEL_USERS: Array[String] = ["res://native/src/bolt_rows.rs", "res://native/src/cannons.rs"]
 const BOLT_KERNEL_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::{Basis, Vector3};", "use crate::rows::",
-		"use crate::v3::"]
+		"use crate::v3::", "use super::*;"]  # super: the quarantine tests (M5-T36)
 ## The brains' engine-free files (M4-T17): the shared vector maths, the brain maths and the behaviours, held to the kernels'
 ## rules; they may import each other and the kernels, nothing else.
 ## M5-T16: the civilians' flight (`civilian.rs`) is one of them, and the behaviours may import it.
@@ -635,6 +635,11 @@ const TURRET_KERNEL_USE_ALLOWED: Array[String] = ["use std::", "use godot::built
 const VOICE_KERNEL_FILE: String = "res://native/src/voice_kernels.rs"
 const VOICE_KERNEL_USER: String = "res://native/src/voice_rows.rs"
 const VOICE_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::Vector3;", "use crate::rows::", "use crate::v3::"]
+## The ram tracker (M5-T33): contacts, windows and one ram per pair per collision, held to the kernels' rules; it imports the
+## vector maths only. The shell (`ram_contacts.rs`) reads Jolt and the rows for it.
+const RAM_TRACKER_FILE: String = "res://native/src/ram_tracker.rs"
+const RAM_TRACKER_USER: String = "res://native/src/ram_contacts.rs"
+const RAM_TRACKER_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::Vector3;", "use crate::v3::"]
 ## The core's worker threads (M4-T18): engine-free, the standard library and rayon only.
 const THREADS_FILE: String = "res://native/src/threads.rs"
 const THREADS_USE_ALLOWED: Array[String] = ["use std::", "use rayon::"]
@@ -683,6 +688,8 @@ func test_the_kernels_hold_no_engine_type() -> void:
 	violations.append_array(_engine_free_violations(THREADS_FILE, KERNEL_FORBIDDEN, THREADS_USE_ALLOWED))
 	violations.append_array(_engine_free_violations(TURRET_KERNEL_FILE, KERNEL_FORBIDDEN, TURRET_KERNEL_USE_ALLOWED))
 	violations.append_array(_engine_free_violations(VOICE_KERNEL_FILE, KERNEL_FORBIDDEN, VOICE_KERNEL_USE_ALLOWED))
+	violations.append_array(_engine_free_violations(RAM_TRACKER_FILE, KERNEL_FORBIDDEN, RAM_TRACKER_USE_ALLOWED))
+	assert_true(FileAccess.get_file_as_string(RAM_TRACKER_USER).contains("use crate::ram_tracker::"), "the shell reads the ram tracker")
 	assert_true(FileAccess.get_file_as_string(VOICE_KERNEL_FILE).contains("pub fn ships_near("), "the voice kernel holds ships_near")
 	assert_true(FileAccess.get_file_as_string(VOICE_KERNEL_USER).contains("use crate::voice_kernels"), "the shell reads the voice kernel")
 	assert_eq(violations.size(), 0, "no engine type, call, crate path or stray import in the kernels, the row tables or the brains: %s" % violations)
@@ -772,7 +779,8 @@ func test_sync_in_and_sync_out_are_the_only_places_the_core_touches_the_engine()
 const WEAPON_KERNEL_FILE: String = "res://native/src/weapon_kernels.rs"
 const WEAPON_KERNEL_USERS: Array[String] = ["res://native/src/weapon_rows.rs"]
 const WEAPON_KERNEL_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::{Basis, Vector3};",
-		"use crate::rows::{Bolts, FLAG_HULL_ACTIVE, FLAG_RIGID, FLAG_TIER, Rows};"]  # FLAG_TIER: M4-T23's blast on tier rows
+		"use crate::rows::{Bolts, FLAG_HULL_ACTIVE, FLAG_RIGID, FLAG_TIER, Rows};",
+		"use crate::v3::"]  # FLAG_TIER: M4-T23's blast on tier rows
 
 
 func test_the_weapon_kernels_hold_no_engine_type() -> void:
@@ -798,7 +806,7 @@ func test_the_weapon_kernels_hold_no_engine_type() -> void:
 const BRAIN_STEP_FILE: String = "res://native/src/brain_step.rs"
 const BRAIN_STEP_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::Vector3;", "use godot::builtin::{Basis, Vector3};",
 		"use crate::rows::", "use crate::v3::", "use crate::brain_maths::", "use crate::brain_behaviours::", "use crate::kernels::",
-		"use crate::row_commands::RowCommand;", "use crate::row_commands::{CommandMap, RowCommand};",
+		"use crate::row_commands::RowCommand;", "use crate::row_commands::{CommandMap, IdMap, IdSet, RowCommand};",
 		"use crate::row_commands::{CMD_LEN, EVENT_ENTER, EVENT_FIRE, EVENT_SELECT, EVENT_SETTLE};",
 		"use crate::threads::", "use crate::turret_kernels::"]
 
@@ -809,7 +817,7 @@ const TIER_FILE: String = "res://native/src/tier.rs"
 const TIER_SHELL_FILE: String = "res://native/src/tier_rows.rs"
 const TIER_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::{Basis, Vector3};", "use crate::rows::",
 		"use crate::v3::", "use crate::kernels::", "use crate::row_commands::RowCommand;",
-		"use crate::row_commands::{CommandMap, RowCommand};"]
+		"use crate::row_commands::{CommandMap, IdMap, RowCommand};"]
 
 
 func test_the_tier_kernel_holds_no_engine_type() -> void:
@@ -888,12 +896,28 @@ func test_the_ephemeris_kernel_holds_no_engine_type() -> void:
 
 ## The radar sphere's kernel (M4-T23): held to the kernels' rules; its shell (`radar_plot.rs`) is what reaches it.
 const RADAR_KERNEL_FILE: String = "res://native/src/radar_kernel.rs"
-const RADAR_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::{Basis, Vector3};", "use crate::v3::{length_squared, xform_inv};"]
+const RADAR_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::{Basis, Color, Vector2, Vector3};", "use crate::v3::{length_squared, xform_inv};"]
 
 
 func test_the_radar_kernel_holds_no_engine_type() -> void:
 	var violations: PackedStringArray = _engine_free_violations(RADAR_KERNEL_FILE, KERNEL_FORBIDDEN, RADAR_KERNEL_USE_ALLOWED)
 	assert_eq(violations.size(), 0, "no engine type, call, crate path or stray import in the radar kernel: %s" % violations)
-	assert_true(FileAccess.get_file_as_string(RADAR_KERNEL_FILE).contains("pub fn plot("), "the radar kernel holds the plot")
+	assert_true(FileAccess.get_file_as_string(RADAR_KERNEL_FILE).contains("pub fn plot(") and FileAccess.get_file_as_string(RADAR_KERNEL_FILE).contains("pub fn fill_dots("),
+			"the radar kernel holds the plot and the dot buffers")
 	assert_true(FileAccess.get_file_as_string("res://native/src/radar_plot.rs").contains("use crate::radar_kernel::"),
 			"the shell reads the kernel")
+
+
+# Code review 2026-11-12: the civilian set kept every ship id ever marked; a new core drops the ones freed since.
+func test_a_new_core_forgets_civilians_freed_with_an_earlier_scene() -> void:
+	var gone := Node3D.new()
+	var gone_id: int = gone.get_instance_id()
+	SimCore.set_civilian(gone_id, true)
+	gone.free()
+	var old: Node = world.get_node_or_null(NodePath(SimCore.NODE_NAME))
+	if old != null:
+		old.free()  # one core per world: the next one is made below, as a new scene's would be
+	SimCore.attach(world)
+	await get_tree().process_frame
+	assert_false(SimCore._civilians.has(gone_id), "a freed ship's id leaves the set")
+

@@ -63,22 +63,46 @@ func _page_title(front: FrontEnd) -> String:
 	return front.frame().current_page().title
 
 
-# --- The main menu --------------------------------------------------------------------------------------------
+# --- The start screen ----------------------------------------------------------------------------------------
 
 
-func test_the_main_menu_lists_the_entries_and_focuses_the_first() -> void:
+func test_the_start_screen_lists_the_entries_and_focuses_the_first() -> void:
 	var front: FrontEnd = await _front_end()
 	var menu: ChoiceListScreen = front.frame().current_page() as ChoiceListScreen
-	assert_eq(menu.option_ids(), [&"missions", &"free_flight", &"sandbox", &"settings", &"controls", &"quit"] as Array[StringName])
-	assert_eq(_focused_text(front), "Missions", "the pad's A works without pointing first")
+	assert_eq(menu.option_ids(), [&"new_game", &"load_game", &"free_flight", &"settings", &"quit"] as Array[StringName])
+	assert_eq(_focused_text(front), "New game", "the pad's A works without pointing first")
 	assert_eq(front.frame().depth(), 1)
 
 
-func test_the_frame_has_its_three_panels() -> void:
+func test_the_start_screen_has_no_pad_diagram_or_right_panel() -> void:
 	var front: FrontEnd = await _front_end()
-	assert_not_null(front.frame().pad_diagram(), "the controller diagram, bottom left")
-	assert_not_null(front.frame().objectives_panel(), "the objectives, right")
-	assert_eq(front.frame().right_content()["lines"].size(), 0, "nothing to say on the right of the main menu")
+	assert_not_null(front.frame().pad_diagram(), "the nodes stay in the kit")
+	assert_false(front.frame().pad_diagram().is_visible_in_tree(), "no controller diagram on the start screen")
+	assert_false(front.frame().objectives_panel().is_visible_in_tree(), "no right panel either")
+	assert_false((front.frame().current_page() as MenuScreen).show_pad)
+	await _pad(&"ui_down")
+	await _pad(&"ui_accept")
+	assert_eq(_page_title(front), "Free flight")
+	assert_false(front.frame().objectives_panel().is_visible_in_tree())
+	await _pad(&"ui_cancel")
+	await _pad(&"ui_down")
+	await _pad(&"ui_accept")
+	assert_eq(_page_title(front), "Settings")
+	assert_true(front.frame().objectives_panel().is_visible_in_tree(), "the settings pages keep the help panel")
+
+
+func test_load_game_is_greyed_out_and_the_focus_skips_it_both_ways() -> void:
+	var front: FrontEnd = await _front_end()
+	var menu: ChoiceListScreen = front.frame().current_page() as ChoiceListScreen
+	assert_true(menu.button_of(&"load_game").disabled)
+	assert_eq(menu.button_of(&"load_game").focus_mode, Control.FOCUS_NONE)
+	await _pad(&"ui_down")
+	assert_eq(_focused_text(front), "Free flight", "down skips Load game")
+	await _pad(&"ui_up")
+	assert_eq(_focused_text(front), "New game", "up skips it too")
+	menu.button_of(&"load_game").pressed.emit()
+	assert_eq(front.frame().depth(), 1, "A on it does nothing")
+	assert_eq(game.played.size(), 0)
 
 
 func test_the_pad_alone_walks_the_menu_and_back() -> void:
@@ -86,7 +110,7 @@ func test_the_pad_alone_walks_the_menu_and_back() -> void:
 	await _pad(&"ui_down")
 	assert_eq(_focused_text(front), "Free flight")
 	await _pad(&"ui_down")
-	assert_eq(_focused_text(front), "Sandbox")
+	assert_eq(_focused_text(front), "Settings")
 	await _pad(&"ui_up")
 	assert_eq(_focused_text(front), "Free flight")
 	await _pad(&"ui_accept")
@@ -97,7 +121,7 @@ func test_the_pad_alone_walks_the_menu_and_back() -> void:
 	assert_eq(_focused_text(front), "Free flight", "to the entry it left")
 
 
-func test_b_on_the_main_menu_does_nothing_harmful() -> void:
+func test_b_on_the_start_screen_does_nothing_harmful() -> void:
 	var front: FrontEnd = await _front_end()
 	await _pad(&"ui_cancel")
 	assert_eq((front.get_node(^"%Audio") as AudioDirector).times_played(&"ui_back"), 0, "no beep for a back that goes nowhere")
@@ -112,7 +136,7 @@ func test_the_pad_never_strands_when_the_focus_is_lost() -> void:
 	front.get_viewport().gui_release_focus()
 	assert_null(front.frame().current_page().focused_option())
 	await _pad(&"ui_down")
-	assert_eq(_focused_text(front), "Missions", "the D-pad lands on the first option")
+	assert_eq(_focused_text(front), "New game", "the D-pad lands on the first option")
 	await _pad(&"ui_down")
 	assert_eq(_focused_text(front), "Free flight", "and walks on from there")
 
@@ -126,11 +150,16 @@ func test_quit_quits() -> void:
 # --- Free flight -------------------------------------------------------------------------------------------------
 
 
-func test_free_flight_starts_with_encounters_on_by_default() -> void:
-	var front: FrontEnd = await _front_end()
+func _open_free_flight(front: FrontEnd) -> void:
 	await _pad(&"ui_down")
 	await _pad(&"ui_accept")
+
+
+func test_free_flight_starts_with_encounters_on_by_default() -> void:
+	var front: FrontEnd = await _front_end()
+	await _open_free_flight(front)
 	assert_eq(_focused_text(front), "Encounters: on")
+	assert_string_contains(front.frame().detail_text(), "nav buoys", "the text sits under the list")
 	await _pad(&"ui_down")
 	assert_eq(_focused_text(front), "Start")
 	await _pad(&"ui_accept")
@@ -139,8 +168,7 @@ func test_free_flight_starts_with_encounters_on_by_default() -> void:
 
 func test_free_flight_starts_with_encounters_off_when_toggled() -> void:
 	var front: FrontEnd = await _front_end()
-	await _pad(&"ui_down")
-	await _pad(&"ui_accept")
+	await _open_free_flight(front)
 	await _pad(&"ui_accept")  # the toggle
 	assert_eq(_focused_text(front), "Encounters: off")
 	await _pad(&"ui_down")
@@ -148,8 +176,7 @@ func test_free_flight_starts_with_encounters_off_when_toggled() -> void:
 	_assert_free_flight(false)
 	assert_false(bool(Settings.get_value(&"encounters")), "the page keeps the choice in Settings.encounters (M5-T17)")
 	var again: FrontEnd = await _front_end()
-	await _pad(&"ui_down")
-	await _pad(&"ui_accept")
+	await _open_free_flight(again)
 	assert_eq(_focused_text(again), "Encounters: off", "and opens with it next time")
 
 
@@ -166,27 +193,42 @@ func _assert_free_flight(encounters: bool) -> void:
 func test_a_refused_start_is_shown_not_swallowed() -> void:
 	game.refusal = "no scenario 'free_flight'"
 	var front: FrontEnd = await _front_end()
-	await _pad(&"ui_down")
-	await _pad(&"ui_accept")
+	await _open_free_flight(front)
 	await _pad(&"ui_down")
 	await _pad(&"ui_accept")
 	assert_eq(front.frame().message(), "no scenario 'free_flight'")
 
 
-# --- Missions ----------------------------------------------------------------------------------------------------
+# --- New game ----------------------------------------------------------------------------------------------------
 
 
-func test_missions_lists_each_mission_and_shows_the_briefing_of_the_focused_one() -> void:
+func test_new_game_lists_the_missions_then_the_four_scenes() -> void:
 	var front: FrontEnd = await _front_end(_missions())
 	await _pad(&"ui_accept")
-	assert_eq(_page_title(front), "Missions")
+	assert_eq(_page_title(front), "New game")
+	var page: NewGameSelect = front.frame().current_page() as NewGameSelect
+	assert_eq(page.option_ids(), [&"mission_demo", &"mission_second", &"combat_sandbox", &"dogfight", &"instructor_route",
+			&"civilian_showcase"] as Array[StringName])
 	assert_eq(_focused_text(front), "Demo Run")
-	var content: Dictionary = front.frame().right_content()
-	assert_eq(content["title"], "BRIEFING")
-	assert_eq(front.frame().objectives_panel().shown_lines(), PackedStringArray(["Demo Run", "Escort the freighter.", "Hold the line."]))
+	assert_false(page.show_right, "the text goes under the list")
+
+
+func test_the_text_under_the_list_follows_the_highlight() -> void:
+	var front: FrontEnd = await _front_end(_missions())
+	await _pad(&"ui_accept")
+	assert_eq(front.frame().detail_text(), "Demo Run\nEscort the freighter.\nHold the line.")
 	await _pad(&"ui_down")
-	assert_eq(_focused_text(front), "Second")
-	assert_eq(front.frame().objectives_panel().shown_lines(), PackedStringArray(["Second", "Another one."]), "the right panel follows the focus")
+	assert_eq(front.frame().detail_text(), "Second\nAnother one.", "the briefing of the next mission")
+	await _pad(&"ui_down")
+	assert_eq(_focused_text(front), "Combat sandbox")
+	assert_string_contains(front.frame().detail_text(), "Combat sandbox\n", "a scene shows its title and its description")
+	assert_gt(front.frame().detail_text().length(), "Combat sandbox\n".length() + 20)
+
+
+func test_every_scene_has_a_description_in_its_scenario_file() -> void:
+	for scene: Dictionary in NewGameSelect.SCENES:
+		assert_false(NewGameSelect.scene_description(scene["id"]).is_empty(), "%s has a description" % scene["id"])
+		assert_true(ScenarioLoader.load(GameFlow.scenario_path(scene["id"]))["ok"], "%s still loads with it" % scene["id"])
 
 
 func test_choosing_a_mission_starts_it() -> void:
@@ -200,40 +242,12 @@ func test_choosing_a_mission_starts_it() -> void:
 	assert_gt(int(game.played[0]["seed"]), 0, "a fresh seed per start (M5-T30: the civilian varies)")
 
 
-func test_with_no_missions_the_page_says_so_and_can_be_left() -> void:
+func test_new_game_starts_each_sandbox_scene() -> void:
 	var front: FrontEnd = await _front_end()
 	await _pad(&"ui_accept")
-	var page: MissionSelect = front.frame().current_page() as MissionSelect
-	assert_not_null(page)
-	assert_true(page.button_of(MissionSelect.NONE_ID).disabled)
-	assert_eq(_focused_text(front), "Back", "the pad lands on what can be used")
-	await _pad(&"ui_accept")
-	assert_eq(front.frame().depth(), 1)
-	assert_eq(game.played.size(), 0)
-
-
-func test_missions_come_from_the_scenario_files_by_default() -> void:
-	var front: FrontEnd = FrontEndScene.instantiate() as FrontEnd
-	front.game = game
-	add_child_autofree(front)
-	await wait_process_frames(2)
-	await _pad(&"ui_accept")
-	var page: MissionSelect = front.frame().current_page() as MissionSelect
-	assert_not_null(page, "Missions opens with the catalogue of data/scenarios")
-	assert_eq(page.option_ids().size(), maxi(MissionCatalog.entries().size(), 1))
-
-
-# --- Sandbox -----------------------------------------------------------------------------------------------------
-
-
-func test_sandbox_starts_each_existing_scenario() -> void:
-	var front: FrontEnd = await _front_end()
-	await _pad(&"ui_down")
-	await _pad(&"ui_down")
-	await _pad(&"ui_accept")
-	assert_eq(_page_title(front), "Sandbox")
-	var page: SandboxSelect = front.frame().current_page() as SandboxSelect
-	assert_eq(page.option_ids(), [&"combat_sandbox", &"dogfight", &"instructor_route", &"civilian_showcase"] as Array[StringName])
+	var page: NewGameSelect = front.frame().current_page() as NewGameSelect
+	assert_eq(page.option_ids(), [&"combat_sandbox", &"dogfight", &"instructor_route", &"civilian_showcase"] as Array[StringName],
+			"with no missions the scenes alone")
 	for id: StringName in page.option_ids():
 		page.button_of(id).pressed.emit()
 	assert_eq(game.played, [
@@ -246,37 +260,87 @@ func test_sandbox_starts_each_existing_scenario() -> void:
 		assert_true(FileAccess.file_exists(GameFlow.scenario_path(request["scenario_id"])), "%s exists" % request["scenario_id"])
 
 
+func test_missions_come_from_the_scenario_files_by_default() -> void:
+	var front: FrontEnd = FrontEndScene.instantiate() as FrontEnd
+	front.game = game
+	add_child_autofree(front)
+	await wait_process_frames(2)
+	await _pad(&"ui_accept")
+	var page: NewGameSelect = front.frame().current_page() as NewGameSelect
+	assert_not_null(page, "New game opens with the catalogue of data/scenarios")
+	assert_eq(page.option_ids().size(), MissionCatalog.entries().size() + NewGameSelect.SCENES.size())
+	assert_true(page.is_mission(&"civilian_escort"))
+
+
+func test_b_leaves_new_game() -> void:
+	var front: FrontEnd = await _front_end()
+	await _pad(&"ui_accept")
+	await _pad(&"ui_cancel")
+	assert_eq(front.frame().depth(), 1)
+	assert_eq(_focused_text(front), "New game")
+
+
 # --- Settings and Controls ---------------------------------------------------------------------------------------
 
 
-func test_settings_and_controls_open_in_the_frame_and_go_back() -> void:
+func test_settings_lists_five_groups_and_each_opens_its_page() -> void:
 	var front: FrontEnd = await _front_end()
-	for entry: Array in [[3, "Settings"], [4, "Controls"]]:
-		for i: int in int(entry[0]):
-			await _pad(&"ui_down")
+	await _pad(&"ui_down")
+	await _pad(&"ui_down")
+	await _pad(&"ui_accept")
+	assert_true(front.frame().current_page() is SettingsGroupsScreen)
+	var list: ChoiceListScreen = front.frame().current_page() as ChoiceListScreen
+	assert_eq(list.option_ids(), [&"gameplay", &"controls", &"camera_hud", &"video", &"audio"] as Array[StringName])
+	var titles: Array[String] = []
+	for id: StringName in list.option_ids():
+		titles.append(list.button_of(id).text)
+	assert_eq(titles, ["Gameplay", "Controls", "Camera & HUD", "Video", "Audio"] as Array[String])
+	for i: int in 5:
+		var page_title: String = _focused_text(front)
 		await _pad(&"ui_accept")
-		assert_eq(_page_title(front), entry[1])
-		assert_not_null(front.frame().pad_diagram(), "the diagram stays in view")
+		assert_eq(_page_title(front), page_title, "A opens the %s page" % page_title)
+		assert_eq(front.frame().depth(), 3)
 		await _pad(&"ui_cancel")
-		assert_eq(_page_title(front), "SPACE COMBAT SIM")
-		for i: int in int(entry[0]):
-			await _pad(&"ui_up")
-
-
-func test_the_controls_entry_opens_a_controls_page() -> void:
-	var front: FrontEnd = await _front_end()
-	for i: int in 4:
+		assert_eq(_page_title(front), "Settings")
+		assert_eq(_focused_text(front), page_title, "B returns to the group it left")
 		await _pad(&"ui_down")
+
+
+func test_controls_inside_settings_keeps_the_pad_diagram() -> void:
+	var front: FrontEnd = await _front_end()
+	for i: int in 2:
+		await _pad(&"ui_down")
+	await _pad(&"ui_accept")
+	await _pad(&"ui_down")
 	await _pad(&"ui_accept")
 	assert_true(front.frame().current_page() is ControlsScreen)
+	assert_true(front.frame().pad_diagram().is_visible_in_tree(), "it highlights the button of the action in focus")
+	await _pad(&"ui_cancel")
+	await _pad(&"ui_cancel")
+	await _pad(&"ui_cancel")
+	assert_eq(_page_title(front), "SPACE COMBAT SIM")
+	assert_eq(_focused_text(front), "Settings")
 
 
-func test_the_settings_entry_opens_a_settings_page() -> void:
+func test_the_controls_settings_open_from_the_controls_page() -> void:
 	var front: FrontEnd = await _front_end()
-	for i: int in 3:
+	for i: int in 2:
 		await _pad(&"ui_down")
 	await _pad(&"ui_accept")
-	assert_true(front.frame().current_page() is SettingsScreen)
+	await _pad(&"ui_down")
+	await _pad(&"ui_accept")
+	var controls: ControlsScreen = front.frame().current_page() as ControlsScreen
+	var row: Button = null
+	for child: Node in controls.get_children():
+		if child is Button and (child as Button).text.begins_with("Sensitivity"):
+			row = child
+	assert_not_null(row, "a row for the controls settings")
+	row.grab_focus()
+	await _pad(&"ui_accept")
+	var page: SettingsScreen = front.frame().current_page() as SettingsScreen
+	assert_not_null(page)
+	assert_eq(page.listed_keys(), SettingsMenuModel.new(null, [&"controls"] as Array[StringName]).visible_keys())
+	assert_true(page.listed_keys().has(&"invert_y"))
 
 
 # --- Sound and sky -----------------------------------------------------------------------------------------------

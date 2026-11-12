@@ -82,10 +82,10 @@ func _render_callback(callback_type: int, render_data: RenderData) -> void:
 	var points_buffer: RID = _rd.storage_buffer_create(ints.size() * 4, ints.to_byte_array())
 	var out_buffer: RID = _rd.storage_buffer_create(points.size() * 16)
 	var uniforms: Array[RDUniform] = [
-		_uniform(RenderingDevice.UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, [_sampler, velocity]),
-		_uniform(RenderingDevice.UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 1, [_sampler, buffers.get_depth_layer(0)]),
-		_uniform(RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER, 2, [points_buffer]),
-		_uniform(RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER, 3, [out_buffer]),
+		ComputeUniform.make(RenderingDevice.UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, [_sampler, velocity]),
+		ComputeUniform.make(RenderingDevice.UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 1, [_sampler, buffers.get_depth_layer(0)]),
+		ComputeUniform.make(RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER, 2, [points_buffer]),
+		ComputeUniform.make(RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER, 3, [out_buffer]),
 	]
 	var uniform_set: RID = _rd.uniform_set_create(uniforms, _shader, 0)
 	var params := PackedInt32Array([size.x, size.y, points.size(), 0])
@@ -107,15 +107,6 @@ func _render_callback(callback_type: int, render_data: RenderData) -> void:
 	_size = size
 	frames_read += 1
 	_lock.unlock()
-
-
-static func _uniform(type: RenderingDevice.UniformType, binding: int, ids: Array) -> RDUniform:
-	var uniform := RDUniform.new()
-	uniform.uniform_type = type
-	uniform.binding = binding
-	for id: RID in ids:
-		uniform.add_id(id)
-	return uniform
 
 
 func _init_render() -> void:

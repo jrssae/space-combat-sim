@@ -87,6 +87,15 @@ func collision_with_pods() -> Array[Dictionary]:
 	return out
 
 
+## The mounted pods as drawn parts, ship frame (`{mesh, transform}`): what the target preview adds to the hull (T43).
+func mounted_parts() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for i: int in count:
+		if _meshes[i].mesh != null:
+			out.append({"mesh": _meshes[i].mesh, "transform": _mounts[i]["transform"]})
+	return out
+
+
 ## The mounted pods as break-up chunks (`Hardpoints.chunks`' form): each flies off on its own.
 func debris_entries() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []

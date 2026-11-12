@@ -154,7 +154,7 @@ func test_every_game_action_is_listed_with_its_bindings() -> void:
 	for child: Node in screen.get_children():
 		if child is Button:
 			texts.append((child as Button).text)
-	assert_eq(texts.size(), InputAdapter.ACTIONS.size() + 3, "the profile, every action, save as and back")
+	assert_eq(texts.size(), InputAdapter.ACTIONS.size() + 4, "the profile, every action, save as, the controls settings and back")
 	var live: ControlProfile = ControlProfile.from_input_map("live")
 	for action: StringName in InputAdapter.ACTIONS:
 		assert_has(texts, ControlsModel.row_text(live, action))
@@ -580,9 +580,12 @@ func test_the_front_end_opens_the_page_with_the_pad_alone() -> void:
 	add_child_autofree(front)
 	await wait_process_frames(2)
 	frame = front.frame()
-	for i: int in 4:
+	for i: int in 2:
 		await _pad(&"ui_down")
-	assert_eq(_focused_text(), "Controls")
+	assert_eq(_focused_text(), "Settings")
+	await _pad(&"ui_accept")
+	await _pad(&"ui_down")
+	assert_eq(_focused_text(), "Controls", "the second of the settings groups")
 	await _pad(&"ui_accept")
 	screen = frame.current_page() as ControlsScreen
 	assert_not_null(screen, "the placeholder is gone")
@@ -594,7 +597,7 @@ func test_the_front_end_opens_the_page_with_the_pad_alone() -> void:
 	screen.advance(1.0)
 	await _pad(&"ui_cancel")
 	await _pad(&"ui_cancel")
-	assert_eq(frame.depth(), 1, "B leaves the view, then the page")
+	assert_eq(frame.depth(), 2, "B leaves the view, then the page (back at the Settings list)")
 
 
 func test_the_pause_menu_opens_the_page_and_start_during_a_wait_does_not_leave_it() -> void:
@@ -613,7 +616,9 @@ func test_the_pause_menu_opens_the_page_and_start_during_a_wait_does_not_leave_i
 	await wait_physics_frames(2)
 	assert_true(main.pause_menu.is_open())
 	frame = main.pause_menu.frame()
-	await _walk_to("Controls")
+	await _walk_to("Settings")
+	await _pad(&"ui_accept")
+	await _pad(&"ui_down")
 	await _pad(&"ui_accept")
 	screen = frame.current_page() as ControlsScreen
 	assert_not_null(screen, "Controls from the pause menu is the real page")
@@ -624,7 +629,7 @@ func test_the_pause_menu_opens_the_page_and_start_during_a_wait_does_not_leave_i
 	source.release(InputAdapter.PAUSE)
 	await wait_physics_frames(3)
 	assert_true(main.pause_menu.is_open())
-	assert_eq(frame.depth(), 2, "Start did not step back while a press was awaited")
+	assert_eq(frame.depth(), 3, "Start did not step back while a press was awaited")
 	assert_true(screen.is_capturing())
 	await _press_button(JOY_BUTTON_START)  # the press is bound, and is also the pause action
 	source.hold(InputAdapter.PAUSE)
@@ -632,7 +637,7 @@ func test_the_pause_menu_opens_the_page_and_start_during_a_wait_does_not_leave_i
 	source.release(InputAdapter.PAUSE)
 	await wait_physics_frames(3)
 	assert_has(_bindings(InputAdapter.BRAKE), "pad:button:6")
-	assert_eq(frame.depth(), 2, "nor did the same press arriving as the pause action just after")
+	assert_eq(frame.depth(), 3, "nor did the same press arriving as the pause action just after")
 	assert_eq(screen.current_view(), ControlsScreen.View.ACTION)
 	assert_true(main.pause_menu.is_open())
 	main.pause_menu.close()

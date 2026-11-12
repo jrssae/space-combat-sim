@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## Rocks and mines as static rows (M4-T29, architecture §17.16, Q27). T07's asteroids and T12's mines are rows with no node:
 ## each is registered once (`StaticRows`), moved only by its own world's rebase, and no per-tick path walks them. Bolts still
 ## hit rocks and ships still ram them, through a kept grid in the hit and ram resolvers; a mine leaves the rows when it goes
@@ -115,11 +115,6 @@ static func _slab(rng: RandomNumberGenerator, count: int) -> Array[Dictionary]:
 		rocks.append({"offset": Vector3(rng.randf_range(-10000.0, 10000.0), rng.randf_range(-2500.0, 2500.0),
 				rng.randf_range(-10000.0, 10000.0)), "radius": exp(rng.randf_range(log(20.0), log(200.0)))})
 	return rocks
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
 
 
 # --- rocks ---------------------------------------------------------------------------------------------------------

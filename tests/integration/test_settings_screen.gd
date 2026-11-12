@@ -23,7 +23,7 @@ func before_each() -> void:
 	var home := ChoiceListScreen.new()
 	home.setup("HOME", [{"id": &"settings", "text": "Settings"}] as Array[Dictionary])
 	frame.set_root(home)
-	screen = MenuScreens.settings() as SettingsScreen
+	screen = MenuScreens.settings_screen() as SettingsScreen
 	screen.settings = settings
 	frame.push_screen(screen)
 	await wait_process_frames(2)
@@ -153,3 +153,19 @@ func test_changes_drive_the_audio_bus_volume() -> void:
 	assert_eq(AudioBuses.bus_of_setting(&"ui_volume"), AudioBuses.UI)
 	assert_not_null(screen.control_of(&"ui_volume"))
 	assert_not_null(screen.control_of(&"comms_volume"))
+
+
+func test_a_group_page_lists_only_its_categories_and_is_titled() -> void:
+	for group: Dictionary in SettingsSchema.GROUPS:
+		if group["id"] == &"controls":
+			continue
+		var page: SettingsScreen = MenuScreens.settings_screen(group["id"]) as SettingsScreen
+		page.settings = settings
+		frame.push_screen(page)
+		await wait_process_frames(1)
+		assert_eq(page.title, group["title"])
+		var wanted: Array[StringName] = SettingsMenuModel.new(null, SettingsSchema.categories_of_group(group["id"])).visible_keys()
+		assert_eq(page.listed_keys(), wanted, "%s lists its own settings" % group["title"])
+		assert_false(wanted.is_empty())
+		assert_false(page.show_pad, "no controller diagram on a settings page")
+		frame.go_back()

@@ -11,6 +11,8 @@ signal back_requested
 signal sound_requested(sound: StringName)
 signal info_changed
 signal highlight_requested(actions: Array[StringName])
+## The page opens another one over itself (the settings list opening a group); the frame pushes it.
+signal push_requested(page: MenuScreen)
 
 const SOUND_MOVE: StringName = &"ui_move"
 const SOUND_ACCEPT: StringName = &"ui_accept"
@@ -20,6 +22,10 @@ var title: String = ""
 ## The pause menu sets this: there Esc is the `pause` action, which `Main` hands to the menu as one edge, so the page must
 ## not also act on the key or one press would go back twice.
 var cancel_ignores_keys: bool = false
+## Whether the frame shows the controller diagram and the right panel while this page is up. Without the right panel the
+## page's `info()` shows under its list instead (the start screen's slim layout).
+var show_pad: bool = true
+var show_right: bool = true
 
 var _last_focus: Control = null
 var _silent: bool = false

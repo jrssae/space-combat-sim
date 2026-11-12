@@ -9,7 +9,8 @@ same triangles and bounds as the OBJ.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import dataclasses
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,7 @@ from .image import write_png
 from .chunks import ChunkCut, chunk_mesh_name
 from .livery import digit_atlas, digit_import_sidecar, livery_section
 from .raster import dilate, rasterize, sharp_edges
+from .seams import EMPTY, SeamLayout
 from .textures import NORMAL_SCALE, Atlas, Marking, bake_maps, plating_for, surface_emissive_strength
 from .uv_atlas import Packed, charts_of, pack
 
@@ -30,6 +32,7 @@ DEFAULT_ATLAS_PX = 2048
 DEFAULT_TEXEL_M = 0.01
 GUTTER_PX = 4  # texels of the coarsest map between charts (Q34)
 MAP_KEYS = ("albedo", "normal", "orm", "emissive")
+DETAIL_KEYS = ("albedo", "normal", "orm")  # the maps a texture detail set replaces (the glow is the same in every set)
 DIGITS_KEY = "digits"
 OPAQUE_SURFACE = "hull"
 GLASS_SURFACE = "glass"
@@ -58,6 +61,7 @@ class TexturedPart:
     markings: tuple[Marking, ...] = ()
     name: str = ""
     zone: int = 0  # the livery zone its vertices carry (``core/livery.py``; 0: never painted)
+    seams: SeamLayout = EMPTY  # its drawn surface layout, in the mesh's frame (M5-T40)
 
 
 @dataclass
@@ -85,9 +89,9 @@ def pack_parts(parts: Sequence[TexturedPart], atlas_px: int, texel_m: float, gut
 
 
 def atlas_of(parts: Sequence[TexturedPart], atlas_px: int = DEFAULT_ATLAS_PX, texel_m: float = DEFAULT_TEXEL_M,
-             style_phase_m: float | None = None, style: Style | None = None) -> Atlas:
+             style_phase_m: float | None = None, style: Style | None = None, grid: bool = True) -> Atlas:
     """Pack ``parts`` and rasterise the atlas buffers: what ``bake_maps`` paints from (each part's plating in ``style``, the
-    Earthforce one by default)."""
+    Earthforce one by default; ``grid`` off for a hull with drawn layouts alone)."""
     if style is None:
         from ..styles.earthforce import EARTHFORCE as style
     packed = pack_parts(parts, atlas_px, texel_m)
@@ -100,8 +104,9 @@ def atlas_of(parts: Sequence[TexturedPart], atlas_px: int = DEFAULT_ATLAS_PX, te
     panel = style_phase_m if style_phase_m is not None else 0.6
     phases = tuple(tuple(int(s) / float(PHASE_STEPS) * panel for s in p.phase) for p in parts)
     markings = tuple(m for p in parts for m in p.markings)
-    platings = tuple(plating_for(p.name, p.mesh, style) for p in parts)
-    return Atlas(buffers, mesh.materials, tuple(p.name for p in parts), phases, markings, packed.packed.texel_m, mesh, platings)
+    platings = tuple(plating_for(p.name, p.mesh, style) for p in parts) if grid else ()
+    return Atlas(buffers, mesh.materials, tuple(p.name for p in parts), phases, markings, packed.packed.texel_m, mesh, platings, None,
+                 tuple(p.seams for p in parts), grid)
 
 
 def _primitives(parts: Sequence[TexturedPart], packed: PackedParts, zones: bool = False, face_mask: np.ndarray | None = None,
@@ -188,13 +193,17 @@ def manifest_section(asset_id: str, parts: Sequence[TexturedPart], packed: Packe
 def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPart], style: Style, atlas_px: int = DEFAULT_ATLAS_PX,
                         texel_m: float = DEFAULT_TEXEL_M, seed: int = 0, occlusion: bool = True,
                         paintable: Sequence[str] = (), fine_mesh: Mesh | None = None, normal_scale: int = NORMAL_SCALE,
-                        chunks: Sequence[ChunkCut] = ()) -> tuple[list[Path], dict[str, Any]]:
+                        chunks: Sequence[ChunkCut] = (), grid: bool = True,
+                        detail_levels: Mapping[str, int] | None = None) -> tuple[list[Path], dict[str, Any]]:
     """Write the textured mesh of ``parts`` into ``out_dir`` and return its files and the manifest's ``mesh`` section. With
     ``paintable`` material names the hull takes wing liveries (M4-T30b): the vertices carry their parts' zones, the albedo's alpha
     says where paint may go, and the digit atlas and the ``livery`` section are written too. With ``fine_mesh`` the parts are a
     coarse render mesh (``render_triangles``) and the normal map carries the fine mesh's shape. ``normal_scale`` is the normal map's
     size over the atlas's (big hulls take 1). Each of ``chunks`` (M4-T30d) is written as ``<asset_id>_chunk_<name>.glb``: its parts'
-    faces on the same atlas, so it draws with these maps."""
+    faces on the same atlas, so it draws with these maps. ``grid`` off leaves the generic staggered plating out (a hull whose parts
+    carry drawn layouts, M5-T40). Each of ``detail_levels`` (a name and a layout level) is one more set of the albedo, normal and
+    ORM maps with the layouts drawn up to that level only, ``<asset_id>_<map>_<name>.png``, named in every surface's ``detail``:
+    the game picks a set by ``settings.texture_detail``; the maps without a suffix are the full layouts."""
     out_dir = Path(out_dir)
     packed = pack_parts(parts, atlas_px, texel_m)
     mesh = packed.mesh
@@ -203,7 +212,8 @@ def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPa
     dilate(buffers, GUTTER_PX)
     phases = tuple(phase_of(p.phase, style) for p in parts)
     atlas = Atlas(buffers, mesh.materials, tuple(p.name for p in parts), phases, tuple(m for p in parts for m in p.markings),
-                  packed.packed.texel_m, mesh, tuple(plating_for(p.name, p.mesh, style) for p in parts), fine_mesh)
+                  packed.packed.texel_m, mesh, tuple(plating_for(p.name, p.mesh, style) for p in parts) if grid else (), fine_mesh,
+                  tuple(p.seams for p in parts), grid)
     maps = bake_maps(atlas, style, seed, occlusion, paintable, normal_scale)
     opaque, glass = _primitives(parts, packed, zones=bool(paintable))
     paths = [write_glb(out_dir / f"{asset_id}.glb", [opaque, glass], asset_id)]
@@ -225,6 +235,17 @@ def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPa
         sidecar.write_text(import_sidecar(key), encoding="utf-8", newline="\n")
         paths.append(sidecar)
     section = manifest_section(asset_id, parts, packed, [opaque, glass], maps, atlas)
+    for name, level in (detail_levels or {}).items() if any(p.seams for p in parts) else ():
+        lesser = bake_maps(dataclasses.replace(atlas, part_seams=tuple(p.seams.up_to(level) for p in parts)), style, seed, occlusion,
+                           paintable, normal_scale)
+        files = {key: f"{asset_id}_{key}_{name}.png" for key in DETAIL_KEYS}
+        for key, file in files.items():
+            paths.append(write_png(out_dir / file, lesser[key]))
+            sidecar = out_dir / (file + ".import")
+            sidecar.write_text(import_sidecar(key), encoding="utf-8", newline="\n")
+            paths.append(sidecar)
+        for surface in section["surfaces"]:
+            surface.setdefault("detail", {})[name] = dict(files)
     if paintable:
         digits = out_dir / f"{asset_id}_{DIGITS_KEY}.png"
         paths.append(write_png(digits, digit_atlas()))

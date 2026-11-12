@@ -72,9 +72,10 @@ var bench: BenchRunner = null
 var station_scene: StationScene = null
 ## Times the overlay's text was rebuilt (tests).
 var overlay_refreshes: int = 0
-## The comms menu on D-pad Right (M5-T07): its model, and the view that draws it.
-var comms_menu: CommsMenu = CommsMenu.new()
-var comms_menu_view: CommsMenuView = null
+## The comms menu on D-pad Right (M5-T46): a radial menu, the game pauses while it is open.
+var comms: CommsMenuDirector = null
+## The target menu on a hold of the target button (M5-T25): the game pauses while it is open.
+var target_menu: TargetMenuDirector = null
 ## Free-flight encounters (M5-T17): null in a scenario without an encounter pools file.
 var encounter_director: EncounterDirector = null
 ## The scenario's jumpgates and the player's jump through one (M6-T14); always present, with no gate in most scenarios.
@@ -220,13 +221,18 @@ func _ready() -> void:
 	pause_menu.objectives_source = objectives
 	# The button that closed the menu may still be down: it must not also tap a target or toggle something.
 	pause_menu.resumed.connect(func() -> void: adapter.resync_edges(input_source))
+	pause_menu.opened.connect(_start_pause_backdrop)
+	pause_menu.resumed.connect(_stop_pause_backdrop)
 	add_child(pause_menu)
 	_setup_perf()
 	_setup_encounters(scenario)
-	comms_menu.set_root_page("WING ORDERS", CommsMenu.wing_orders())
-	comms_menu_view = CommsMenuView.new()
-	comms_menu_view.menu = comms_menu
-	add_child(comms_menu_view)
+	comms = CommsMenuDirector.new()
+	comms.main = self
+	add_child(comms)
+	target_menu = TargetMenuDirector.new()
+	target_menu.main = self
+	add_child(target_menu)
+	hud.final_input = target_menu.fill_hud_input
 	_register_console()
 
 
@@ -238,6 +244,13 @@ func _physics_process(delta: float) -> void:
 	if pause_menu != null and pause_menu.is_open():
 		# Behind the pause menu the pad belongs to the menu: only Start (and Esc) is read.
 		_handle_ui(adapter.sample_menu(input_source, delta))
+		return
+	if target_menu.is_open():
+		# The target menu has the pad and the game is paused: only its stick, select, back and Start are read.
+		target_menu.step(adapter.sample_radial(input_source, delta))
+		return
+	if comms.is_open():
+		comms.step(adapter.sample_radial(input_source, delta))
 		return
 	# Beside a targeted gate X asks for a jump instead of switching auto-track (M6-T14).
 	adapter.jump_offered = gates.jump_offered()
@@ -260,7 +273,10 @@ func _physics_process(delta: float) -> void:
 	if not get_tree().paused:
 		camera_rig.set_look(delta, pc.ui.look_active, pc.ui.look_stick, pc.ui.look_mouse_px)
 	_handle_ui(pc.ui)
-	_step_comms_menu(pc.ui, delta)
+	if pc.ui.comms_open:
+		comms.open()  # says nothing when it cannot (the player is down, a cinematic): the press is simply lost
+	if pc.ui.target_menu_open:
+		target_menu.open()  # it says nothing when it cannot (the player is down, a cinematic): the hold is simply lost
 
 
 # Auto-track needs a target: with none selected the nearest hostile is taken; with none in range it switches itself off.
@@ -481,6 +497,20 @@ func _on_camera_mode_changed(new_mode: CameraRig.Mode) -> void:
 	letterbox.shown = cinematic
 
 
+# The slow camera move behind the pause menu (M5-T42); the flight HUD steps aside while it runs.
+func _start_pause_backdrop() -> void:
+	if not bool(Settings.get_value(&"pause_backdrop")) or ship == null:
+		return
+	if camera_rig.start_backdrop(float(Settings.get_value(&"pause_backdrop_loop_s")), ship.bounding_radius()):
+		hud.cinematic = true
+
+
+func _stop_pause_backdrop() -> void:
+	if camera_rig.is_backdrop_running():
+		camera_rig.stop_backdrop()
+		hud.cinematic = camera_rig.is_playing_shot()
+
+
 ## This frame's `HudInput`, read from the live nodes (the HUD never caches anything).
 func _build_hud_input() -> HudInput:
 	var camera: Camera3D = camera_rig.active_camera()
@@ -522,6 +552,7 @@ func _build_hud_input() -> HudInput:
 	input.charge_fraction = cannon.charge_fraction()
 	input.fire_mode = String(PulseCannonGate.mode_name(cannon.gate.mode))
 	input.target = ship.targeting.selected_readout()
+	input.target_unknown = input.target != null and not ship.targeting.selection_identified
 	# The radar's contacts straight from the targetables (M4-T36): the candidate list is built only when something cycles it.
 	input.radar_contacts = RadarContacts.gather(get_tree(), ship, ship.targeting.system.sensor_range_m)
 	input.selected_id = ship.targeting.selected_id()
@@ -537,6 +568,7 @@ func _build_hud_input() -> HudInput:
 			input.has_waypoint = true
 			input.waypoint_position = world.universe_to_local(waypoint)  # this frame's World frame (rebase-proof)
 			input.waypoint_label = instructor_path.waypoint_label()
+			input.waypoint_key = "route:" + input.waypoint_label
 	return input
 
 
@@ -722,23 +754,6 @@ func _handle_ui(ui: UiCommand) -> void:
 	_give_wing_orders(ui)
 
 
-# D-pad Right opens the comms menu, its four directions give the wing orders through the same call as keys 1-4, B or 4 s close it.
-# The timer runs here, so it stops while the pause menu has the game. A cinematic or locked controls close it (D55).
-func _step_comms_menu(ui: UiCommand, delta: float) -> void:
-	if ui.pause or not player_alive or controls_locked() or camera_rig.is_playing_shot():
-		comms_menu.close()
-	elif ui.comms_open:
-		comms_menu.open()
-	elif ui.comms_close:
-		comms_menu.close()
-	elif ui.comms_pick >= 0:
-		var entry: Dictionary = comms_menu.pick(ui.comms_pick)
-		if not entry.is_empty() and entry["payload"] is int:
-			wings.give_order(entry["payload"] as AiContext.Order)
-	comms_menu.tick(delta)
-	adapter.comms_open = comms_menu.is_open()
-
-
 # Keys 1-4 (UiCommand edges, never `Input`): orders for the player's wing (architecture §16.3).
 func _give_wing_orders(ui: UiCommand) -> void:
 	if ui.wing_attack:
@@ -757,7 +772,9 @@ func _update_mouse_capture() -> void:
 	var godot_source := input_source as GodotInputSource
 	if godot_source == null or DisplayServer.get_name() == "headless":
 		return
-	var flying: bool = not get_tree().paused and not DebugConsole.is_open() and get_window().has_focus() \
+	# A radial menu keeps the mouse too: its direction points at a slice.
+	var in_play: bool = not get_tree().paused or (target_menu != null and target_menu.is_open()) or (comms != null and comms.is_open())
+	var flying: bool = in_play and not DebugConsole.is_open() and get_window().has_focus() \
 			and not Input.is_physical_key_pressed(KEY_ALT)
 	var wanted: Input.MouseMode = Input.MOUSE_MODE_CAPTURED if flying else Input.MOUSE_MODE_VISIBLE
 	if Input.mouse_mode != wanted:
@@ -766,9 +783,12 @@ func _update_mouse_capture() -> void:
 
 
 func _update_bracket() -> void:
-	var readout: TargetReadout = ship.targeting.selected_readout() if ship != null else null
+	if hud.visible or ship == null:  # the HUD has its own box
+		overlay.hide_bracket()
+		return
+	var readout: TargetReadout = ship.targeting.selected_readout()
 	var cam: Camera3D = camera_rig.active_camera()
-	if hud.visible or readout == null or cam == null or cam.is_position_behind(readout.position):  # the HUD has its own box
+	if readout == null or cam == null or cam.is_position_behind(readout.position):
 		overlay.hide_bracket()
 		return
 	overlay.show_bracket(cam.unproject_position(readout.position))
@@ -792,6 +812,8 @@ func _register_console() -> void:
 			[ConsoleArg.float_required(&"level", 0.0, 1.0)]), _cmd_throttle, self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"pause", "Pause or resume the game (toggles with no argument)",
 			[ConsoleArg.bool_optional(&"state")] as Array[ConsoleArg]), _cmd_pause, self)
+	DebugConsole.registry.register_command(ConsoleCommand.new(&"pausemenu", "Open or close the pause menu (toggles with no argument)",
+			[ConsoleArg.bool_optional(&"state")] as Array[ConsoleArg]), _cmd_pausemenu, self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"scenario",
 			"Load a scenario (%s): sets settings.scenario for this session and reloads the scene" % ", ".join(PackedStringArray(SCENARIO_CHOICES)),
 			[ConsoleArg.enum_optional(&"name", SCENARIO_CHOICES, null)] as Array[ConsoleArg]), _cmd_scenario, self)
@@ -865,9 +887,23 @@ func _cmd_pause(args: Dictionary) -> ConsoleResult:
 	# The pause menu owns the pause while it is open; resuming behind it would leave the ship uncommanded.
 	if pause_menu != null and pause_menu.is_open():
 		return ConsoleResult.failure("the pause menu is open: resume from it")
+	if target_menu != null and target_menu.is_open():
+		return ConsoleResult.failure("the target menu is open: close it first (targetmenu close)")
+	if comms != null and comms.is_open():
+		return ConsoleResult.failure("the comms menu is open: close it first (commsmenu close)")
 	var requested: Variant = args.get(&"state")
 	set_paused(not get_tree().paused if requested == null else bool(requested))
 	return ConsoleResult.line("paused" if get_tree().paused else "running")
+
+
+func _cmd_pausemenu(args: Dictionary) -> ConsoleResult:
+	var requested: Variant = args.get(&"state")
+	var want_open: bool = not pause_menu.is_open() if requested == null else bool(requested)
+	if want_open:
+		pause_menu.open()
+	else:
+		pause_menu.close()
+	return ConsoleResult.line("pause menu open" if pause_menu.is_open() else "pause menu closed")
 
 
 func _on_setting_changed(key: StringName, _value: Variant) -> void:

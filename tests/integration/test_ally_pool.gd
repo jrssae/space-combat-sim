@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## Allied ships from the pool (M3-T08, AC7, architecture §15.6, §16 D35): a `starfury_ally` is built once with its catalog faction,
 ## draws the Starfury's textured hull, flies the Starfury `ShipSpec` numbers (the M1 AC5 formula for a straight burn) and is named
 ## per acquire. The `raiders` and `allies` providers and `spawn ally` work on the console. The inner class runs the real main scene: allies in the
@@ -40,12 +40,6 @@ func before_each() -> void:
 	pool.player = player.ship
 	assert_eq(pool.prepare(ALLY, ALLY_COUNT), ALLY_COUNT)
 	assert_eq(pool.prepare(RAIDER, 1), 1)
-
-
-func _console(line: String) -> ConsoleResult:
-	var results: Array[ConsoleResult] = DebugConsole.registry.execute(line)
-	assert_eq(results.size(), 1, "one statement: " + line)
-	return results[0]
 
 
 func _ally_at(z: float, ally_name: String = "ALPHA 2") -> Combatant:
@@ -275,7 +269,7 @@ func test_the_selected_brain_is_per_provider() -> void:
 
 
 class TestAlliesInTheSandbox:
-	extends GutTest
+	extends TestSteps
 
 	var main: Main
 	var source: FakeInputSource
@@ -294,13 +288,6 @@ class TestAlliesInTheSandbox:
 		DebugConsole.flags.invulnerable = false
 		Engine.time_scale = 1.0
 		get_tree().paused = false
-
-	func _ticks(n: int) -> void:
-		for i: int in n:
-			await get_tree().physics_frame
-
-	func _exec(line: String) -> ConsoleResult:
-		return DebugConsole.registry.execute(line)[0]
 
 	func test_the_sandbox_builds_an_ally_pool_beside_the_raiders() -> void:
 		assert_gt(main.ships.pool_size(ShipPool.ALLY_TYPE), 0, "the sandbox scenario pools allies")

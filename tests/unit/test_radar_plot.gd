@@ -67,3 +67,102 @@ func test_gathered_contacts_from_infos_keep_ids_positions_factions_and_reach() -
 		assert_eq(contacts.positions[i], infos[i].position)
 		assert_eq(contacts.factions[i], infos[i].faction)
 		assert_eq(contacts.reach[i], infos[i].broadcast_range_m)
+
+
+# The per-contact loop the painter ran before M5-T34, as the reference for the native buffers: [plain, rim, backing] as
+# float lists, each instance 12 floats.
+func _reference_dots(plot: RadarPlot, centre: Vector2, radius_px: float, backing_radius: float, dot_radius: float,
+		backings: bool) -> Array:
+	var at: PackedVector2Array = RadarPlot.screen_transform(centre, radius_px) * plot.point_units
+	var out: Array = [[], [], []]
+	for i: int in at.size():
+		var p: Vector2 = at[i]
+		if backings:
+			out[2].append_array([backing_radius, 0.0, 0.0, p.x, 0.0, backing_radius, 0.0, p.y, 0.0, 0.0, 0.0, 0.8])
+		if i == plot.selected_index:
+			continue
+		var c: Color = plot.colors[i]
+		out[1 if plot.rims[i] == 1 else 0].append_array([dot_radius, 0.0, 0.0, p.x, 0.0, dot_radius, 0.0, p.y, c.r, c.g, c.b, c.a])
+	return out
+
+
+func _same(buffer: PackedFloat32Array, count: int, expected: Array) -> bool:
+	if count * RadarDotBuffers.STRIDE != expected.size() or buffer.size() < expected.size():
+		return false
+	for k: int in expected.size():
+		if not is_equal_approx(buffer[k], expected[k]):
+			return false
+	return true
+
+
+func test_the_native_dot_buffers_match_the_per_contact_loop() -> void:
+	var infos: Array[TargetInfo] = _field(80, 4)
+	var plot: RadarPlot = RadarModel.plot(RadarContacts.from_infos(infos), infos[3].id, Vector3(120.0, -40.0, 300.0), _own_basis(),
+			Factions.RAIDERS)
+	assert_gt(plot.rims.count(1), 0, "the field has rim contacts")
+	assert_gte(plot.selected_index, 0, "the selection is drawn")
+	var centre := Vector2(1700.5, 880.25)
+	for backings: bool in [true, false]:
+		var held := PackedInt32Array([0, 0, 0])
+		var got: RadarDotBuffers = RadarModel.dot_buffers(plot, centre, 131.0, 5.5, 3.0, Color(0.0, 0.0, 0.0, 0.8), backings, held)
+		var want: Array = _reference_dots(plot, centre, 131.0, 5.5, 3.0, backings)
+		assert_true(_same(got.plain, got.plain_count, want[0]), "plain dots (backings %s)" % backings)
+		assert_true(_same(got.rim, got.rim_count, want[1]), "rim dots (backings %s)" % backings)
+		assert_true(_same(got.backing, got.backing_count, want[2]), "backings (backings %s)" % backings)
+		assert_eq(got.backing_count, plot.size() if backings else 0)
+		assert_eq(got.plain_count + got.rim_count, plot.size() - 1, "all but the selection")
+
+
+func test_a_dot_buffer_is_sized_for_its_multimesh() -> void:
+	var infos: Array[TargetInfo] = _field(30, 6)
+	var plot: RadarPlot = RadarModel.plot(RadarContacts.from_infos(infos), TargetingSystem.NO_TARGET, Vector3(120.0, -40.0, 300.0),
+			_own_basis(), Factions.RAIDERS)
+	var first: RadarDotBuffers = RadarModel.dot_buffers(plot, Vector2.ZERO, 100.0, 5.5, 3.0, Color.BLACK, false, PackedInt32Array([0, 0, 0]))
+	assert_eq(RadarDotBuffers.instances(first.plain), first.plain_count, "a new multimesh is the count")
+	assert_eq(first.backing.size(), 0, "no backings, no buffer")
+	var roomy: RadarDotBuffers = RadarModel.dot_buffers(plot, Vector2.ZERO, 100.0, 5.5, 3.0, Color.BLACK, false,
+			PackedInt32Array([500, 500, 500]))
+	assert_eq(RadarDotBuffers.instances(roomy.plain), 500, "a multimesh that is big enough keeps its size")
+	var grown: RadarDotBuffers = RadarModel.dot_buffers(plot, Vector2.ZERO, 100.0, 5.5, 3.0, Color.BLACK, false,
+			PackedInt32Array([first.plain_count - 1, 0, 0]))
+	assert_eq(RadarDotBuffers.instances(grown.plain), 2 * (first.plain_count - 1), "it doubles when it must grow")
+	var empty: RadarDotBuffers = RadarModel.dot_buffers(RadarPlot.new(), Vector2.ZERO, 100.0, 5.5, 3.0, Color.BLACK, true,
+			PackedInt32Array([8, 8, 8]))
+	assert_eq(empty.plain.size() + empty.rim.size() + empty.backing.size(), 0, "nothing to draw, nothing sized")
+
+
+func test_the_factions_are_named_when_read() -> void:
+	var infos: Array[TargetInfo] = _field(40, 8)
+	var plot: RadarPlot = RadarModel.plot(RadarContacts.from_infos(infos), infos[2].id, Vector3(120.0, -40.0, 300.0), _own_basis(),
+			Factions.RAIDERS)
+	var by_id: Dictionary = {}
+	for info: TargetInfo in infos:
+		by_id[info.id] = info.faction
+	var names: Array[StringName] = plot.factions
+	assert_eq(names.size(), plot.size())
+	for i: int in plot.size():
+		assert_eq(names[i], by_id[plot.ids[i]], "contact %d" % i)
+	assert_eq(plot.to_dots()[0].faction, names[0])
+
+
+# Code review (M5-T47): columns of different lengths, or a colour index outside the palette, are refused with an error
+# and an empty plot, never truncated or painted a stand-in colour.
+func test_mismatched_columns_are_refused_not_truncated() -> void:
+	var native: Object = NativeLib.instantiate(RadarModel.NATIVE_CLASS)
+	var ids := PackedInt64Array([1, 2, 3])
+	var positions := PackedVector3Array([Vector3(0, 0, -100), Vector3(0, 0, -200)])
+	var reach := PackedFloat64Array([0.0, 0.0, 0.0])
+	var palette := PackedColorArray([Color.RED])
+	var r: Array = native.plot(ids, positions, reach, PackedInt32Array([0, 0, 0]), palette, Vector3.ZERO, Basis.IDENTITY,
+			0, 5000.0, Color.GRAY, 0)
+	assert_engine_error("columns do not line up")
+	assert_eq((r[0] as PackedInt32Array).size(), 0, "nothing plotted")
+	assert_eq(int(r[9]), -1)
+	positions.append(Vector3(0, 0, -300))
+	r = native.plot(ids, positions, reach, PackedInt32Array([0, 1, 0]), palette, Vector3.ZERO, Basis.IDENTITY, 0, 5000.0,
+			Color.GRAY, 0)
+	assert_engine_error("colour index")
+	assert_eq((r[0] as PackedInt32Array).size(), 0, "a colour outside the palette is refused too")
+	r = native.plot(ids, positions, reach, PackedInt32Array([0, 0, 0]), palette, Vector3.ZERO, Basis.IDENTITY, 0, 5000.0,
+			Color.GRAY, 0)
+	assert_eq((r[0] as PackedInt32Array).size(), 3, "matching columns plot every contact")

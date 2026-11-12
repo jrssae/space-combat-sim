@@ -9,6 +9,7 @@ mod brain_maths;
 mod brain_step;
 mod cannons;
 mod civilian;
+mod constants;
 mod contact_field;
 mod flight_step;
 mod hit_sweep;
@@ -59,3 +60,7 @@ mod gravity;
 
 // M6-T03: the ephemeris's binding for GDScript.
 mod ephemeris_binding;
+
+// M5-T33: the ram tracker, an engine-free kernel, and its shell over Jolt's contacts and the core's rows.
+mod ram_contacts;
+mod ram_tracker;

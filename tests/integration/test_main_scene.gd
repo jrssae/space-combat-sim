@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## AC10: the real main scene runs headless, spawns the scenario, and reacts to pilot input end to end.
 
 var main: Main
@@ -58,24 +58,28 @@ func test_camera_toggle_flips_current_and_cockpit_interior() -> void:
 	assert_false(main.ship.is_cockpit_interior_visible())
 
 
-func test_target_next_selects_the_nearest_buoy() -> void:
-	await _tap(InputAdapter.TARGET_NEXT)
+func test_the_wheel_selects_the_nearest_buoy() -> void:
+	source.push_wheel(1)
+	await _ticks(2)
 	assert_eq(main.ship.targeting.selected_name(), "NAV ALPHA")
 	var snap: Dictionary = main.snapshot()
 	assert_eq(snap["target_name"], "NAV ALPHA")
 	assert_almost_eq(float(snap["target_range_m"]), 500.0, 5.0)
 
 
-func test_holding_dpad_up_targets_the_buoy_nearest_the_nose() -> void:
+func test_a_tap_of_the_target_button_never_takes_a_buoy_and_a_hold_opens_the_target_menu() -> void:
 	await _tap(InputAdapter.TARGET_NEXT)
-	await _tap(InputAdapter.TARGET_NEXT)
-	assert_eq(main.ship.targeting.selected_name(), "NAV BRAVO", "two taps: the second nearest")
+	assert_eq(main.ship.targeting.selected_name(), "", "a tap picks enemies only (M5-T25): a buoy is not one")
 	source.hold(InputAdapter.TARGET_NEXT)
 	await _ticks(ceili(main.adapter.target_hold_s * Engine.physics_ticks_per_second) + 5)
-	assert_eq(main.ship.targeting.selected_name(), "NAV ALPHA", "the hold picks the buoy on the nose, not the next one")
+	assert_true(main.target_menu.is_open(), "the hold opens the target menu")
+	assert_true(get_tree().paused, "and pauses the game")
 	source.release(InputAdapter.TARGET_NEXT)
 	await _ticks(3)
-	assert_eq(main.ship.targeting.selected_name(), "NAV ALPHA", "and its release does not cycle")
+	assert_true(main.target_menu.is_open(), "it stays open after the button is released")
+	main.target_menu.close()
+	assert_false(get_tree().paused)
+	assert_eq(main.ship.targeting.selected_name(), "", "nothing was targeted on the way")
 
 
 func test_triggers_fly_the_ship() -> void:
@@ -161,11 +165,6 @@ func test_console_commands() -> void:
 
 
 # Physics ticks that keep counting while the tree is paused.
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
-
-
 func _tap(action: StringName) -> void:
 	source.hold(action)
 	await _ticks(2)

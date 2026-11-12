@@ -31,6 +31,7 @@ from .context import BuildContext
 from .geometry import Mesh
 from .obj import write_obj
 from .sampling import SurfaceSamples, sample_mesh
+from .seams import EMPTY, MAJOR, SeamLayout
 from .textured_mesh import DEFAULT_TEXEL_M, TexturedPart, pack_parts, phase_steps, write_textured_mesh
 from .textures import Marking
 
@@ -146,6 +147,7 @@ class HullPart:
     points: np.ndarray
     paint_name: str = ""
     markings: tuple[Marking, ...] = ()
+    seams: SeamLayout = EMPTY
 
 
 @dataclass
@@ -166,7 +168,7 @@ def hull_parts(sampled: Sequence[Sampled], offset: np.ndarray, markings: dict[st
     marks = markings or {}
     return [
         HullPart(s.piece.name, s.piece.group, s.piece.part.mesh.translated(-offset), s.samples.positions - offset, s.paint_name,
-                 tuple(moved_marking(m, -offset) for m in marks.get(s.piece.name, ())))
+                 tuple(moved_marking(m, -offset) for m in marks.get(s.piece.name, ())), s.piece.part.seams.transformed(np.eye(3), -offset))
         for s in sampled
     ]  # fmt: skip
 
@@ -196,8 +198,13 @@ def at_texel(style: Style, texel_m: float) -> Style:
     )
 
 
+# The texture sets a civilian hull is written with beside its full one (``settings.texture_detail``): low is the major breaks alone.
+DETAIL_LEVELS = {"low": MAJOR}
+
+
 def _textured(parts: Sequence[HullPart]) -> list[TexturedPart]:
-    return [TexturedPart(p.mesh, phase_steps(p.paint_name or p.name, False), p.markings, p.name) for p in parts if p.mesh.face_count > 0]
+    return [TexturedPart(p.mesh, phase_steps(p.paint_name or p.name, False), p.markings, p.name, seams=p.seams)
+            for p in parts if p.mesh.face_count > 0]
 
 
 def texel_of(parts: Sequence[TexturedPart], atlas_px: int) -> float:
@@ -245,7 +252,7 @@ def write_hull(
             for g in chunk_order]  # fmt: skip
     paths, section = write_textured_mesh(
         out_dir, asset_id, textured, at_texel(style, texel), atlas_px=atlas_px, texel_m=texel, seed=ctx.seed,
-        occlusion=bool(ctx.option("occlusion", False)), normal_scale=1, chunks=cuts,
+        occlusion=bool(ctx.option("occlusion", False)), normal_scale=1, chunks=cuts, grid=False, detail_levels=DETAIL_LEVELS,
     )  # fmt: skip
     files += paths
     lo, hi = hull_mesh.bounds()
@@ -260,17 +267,19 @@ def write_model(
     ctx: BuildContext,
     comments: Sequence[str] = (),
     markings: tuple[Marking, ...] = (),
+    seams: SeamLayout = EMPTY,
 ) -> tuple[list[Path], dict[str, Any]]:
     """A standalone model (a turret, a cargo pod) in its own frame: ``<stem>.obj`` and ``<stem>.glb`` with its own maps;
     returns the files and the model's ``mesh`` section. ``meshes`` pairs each part's name with its mesh."""
     out_dir = Path(out_dir)
     whole = Mesh.concatenate(m for _, m in meshes)
     files: list[Path] = write_obj(out_dir / f"{stem}.obj", whole, stem, tuple(comments)[:1])
-    textured = [TexturedPart(m, phase_steps(name, False), markings if k == 0 else (), name) for k, (name, m) in enumerate(meshes)]
+    textured = [TexturedPart(m, phase_steps(name, False), markings if k == 0 else (), name, seams=seams) for k, (name, m) in enumerate(meshes)]
     atlas_px = int(ctx.option("model_atlas_px", MODEL_ATLAS_PX))
     texel = texel_of(textured, atlas_px)
     paths, section = write_textured_mesh(out_dir, stem, textured, at_texel(style, texel), atlas_px=atlas_px, texel_m=texel,
-                                         seed=ctx.seed, occlusion=bool(ctx.option("occlusion", False)), normal_scale=1)
+                                         seed=ctx.seed, occlusion=bool(ctx.option("occlusion", False)), normal_scale=1, grid=False,
+                                         detail_levels=DETAIL_LEVELS)
     return files + paths, section
 
 

@@ -10,6 +10,8 @@ extends Control
 
 const SettingsScript := preload("res://src/autoload/settings.gd")
 const SOUND_BACK: StringName = &"ui_back"
+## The options column's width when the right panel is hidden (the start screen), so a short list is not stretched across.
+const SLIM_WIDTH: float = 680.0
 
 ## The root page asked to go back: the pause menu resumes, the front end ignores it.
 signal closed
@@ -32,6 +34,10 @@ var _lit_actions: Array[StringName] = []
 @onready var _message: Label = %Message
 @onready var _pad: PadDiagram = %PadDiagram
 @onready var _objectives: ObjectivesPanel = %Objectives
+@onready var _left: Control = %Left
+@onready var _pad_panel: Control = %PadPanel
+@onready var _right_panel: Control = %RightPanel
+@onready var _detail: Label = %Detail
 
 
 func _ready() -> void:
@@ -79,6 +85,7 @@ func go_back() -> bool:
 	below.visible = true
 	_title.text = below.title
 	_lit_actions.clear()
+	_apply_layout()
 	below.restore_focus()
 	refresh()
 	return true
@@ -134,6 +141,8 @@ func refresh_legend() -> void:
 func refresh_panel() -> void:
 	if _objectives != null:
 		_objectives.show_content(right_content())
+	if _detail != null:
+		_detail.text = detail_text()
 
 
 ## What the right panel should say: the page's own content, else the mission's objectives or the run, else nothing.
@@ -151,6 +160,17 @@ func right_content() -> Dictionary:
 	return ObjectivesModel.content(objectives, request)
 
 
+## What shows under the list while the right panel is hidden: the page's own content, a line per paragraph.
+func detail_text() -> String:
+	var page: MenuScreen = current_page()
+	if page == null or page.show_right:
+		return ""
+	var lines := PackedStringArray()
+	for line: Dictionary in (page.info().get("lines", []) as Array):
+		lines.append(String(line["text"]))
+	return "\n".join(lines)
+
+
 func pad_diagram() -> PadDiagram:
 	return _pad
 
@@ -165,12 +185,30 @@ func _show_page(page: MenuScreen) -> void:
 	page.sound_requested.connect(_play)
 	page.info_changed.connect(refresh_panel)
 	page.highlight_requested.connect(highlight_actions)
+	page.push_requested.connect(func(next: MenuScreen) -> void:
+		next.cancel_ignores_keys = page.cancel_ignores_keys  # the pause menu's Esc is one edge, whatever the depth
+		push_screen(next))
 	_lit_actions.clear()
 	_host.add_child(page)
 	_title.text = page.title
+	_apply_layout()
 	_message.text = ""
 	page.focus_first()
 	refresh()
+
+
+# The panels the top page asks for. Without the right panel the options column keeps a modest width and the page's text sits
+# under its list.
+func _apply_layout() -> void:
+	var page: MenuScreen = current_page()
+	var pad_on: bool = page == null or page.show_pad
+	var right_on: bool = page == null or page.show_right
+	_pad_panel.visible = pad_on
+	_right_panel.visible = right_on
+	_detail.visible = not right_on
+	_left.size_flags_horizontal = Control.SIZE_EXPAND_FILL if right_on else Control.SIZE_SHRINK_BEGIN
+	_left.custom_minimum_size.x = 0.0 if right_on else SLIM_WIDTH
+	_detail.add_theme_font_size_override(&"font_size", 16)
 
 
 func _drop(page: MenuScreen) -> void:

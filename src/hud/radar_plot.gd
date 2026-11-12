@@ -9,7 +9,14 @@ var ids := PackedInt64Array()
 var points := PackedVector3Array()
 var ranges := PackedFloat64Array()
 var colors := PackedColorArray()
-var factions: Array[StringName] = []
+## Each drawn contact's faction, built when read (tests and readouts): the painter never reads it.
+var factions: Array[StringName]:
+	get:
+		var out: Array[StringName] = []
+		out.resize(_order.size())
+		for k: int in _order.size():
+			out[k] = _faction_names[_faction_ix[_order[k]]]
+		return out
 ## 1 for a broadcast contact beyond the sensors, drawn hollow on the rim.
 var rims := PackedByteArray()
 ## The selected contact's index (always the last), or -1.
@@ -20,6 +27,18 @@ var point_units := PackedVector2Array()
 var stalk_units := PackedVector2Array()
 var stalk_colors := PackedColorArray()
 
+# What `factions` is built from: the drawn order as indices into the contacts, theirs, and the names those index.
+var _order := PackedInt32Array()
+var _faction_ix := PackedInt32Array()
+var _faction_names: Array[StringName] = []
+
+
+## Keeps what `factions` needs to name each drawn contact's faction.
+func bind_factions(order: PackedInt32Array, contact_faction_ix: PackedInt32Array, names: Array[StringName]) -> void:
+	_order = order
+	_faction_ix = contact_faction_ix
+	_faction_names = names
+
 
 func size() -> int:
 	return ids.size()
@@ -28,6 +47,7 @@ func size() -> int:
 ## The plot as `RadarModel.Dot`s (tests and the readouts that want objects).
 func to_dots() -> Array[RadarModel.Dot]:
 	var out: Array[RadarModel.Dot] = []
+	var names: Array[StringName] = factions
 	for i: int in ids.size():
 		var dot := RadarModel.Dot.new()
 		dot.id = ids[i]
@@ -35,7 +55,7 @@ func to_dots() -> Array[RadarModel.Dot]:
 		dot.foot = Vector3(dot.point.x, dot.point.y, 0.0)
 		dot.range_m = ranges[i]
 		dot.color = colors[i]
-		dot.faction = factions[i]
+		dot.faction = names[i]
 		dot.selected = i == selected_index
 		dot.above = dot.point.z >= 0.0
 		dot.rim = rims[i] == 1

@@ -21,11 +21,12 @@ func _busy(fire: bool = false, pause: bool = false) -> PilotCommand:
 	pc.flight.toggle_assist = true
 	pc.combat.fire = fire
 	pc.combat.target_next = true
+	pc.combat.target_nearest = true
+	pc.ui.target_menu_open = true
 	pc.ui.pause = pause
 	pc.ui.toggle_camera = true
 	pc.ui.toggle_overlay = true
 	pc.ui.comms_open = true
-	pc.ui.comms_pick = 2
 	pc.ui.wing_form = true
 	return pc
 
@@ -49,7 +50,8 @@ func test_held_controls_zero_flight_and_combat_but_keep_the_ui() -> void:
 	assert_true(pc.ui.pause, "Start still opens the pause menu under lock_controls alone")
 	assert_true(pc.ui.toggle_camera, "and the camera still switches")
 	assert_false(pc.ui.comms_open, "the comms menu does not open")
-	assert_eq(pc.ui.comms_pick, -1, "nor give an order")
+	assert_false(pc.ui.target_menu_open, "nor the target menu (M5-T25)")
+	assert_false(pc.combat.target_nearest, "and a tap targets nothing")
 	assert_false(pc.ui.wing_form, "and keys 1-4 wait")
 
 
@@ -59,7 +61,6 @@ func test_a_shot_zeroes_the_commands_even_without_the_lock() -> void:
 	_assert_zeroed(pc)
 	assert_false(pc.ui.toggle_camera, "the shot owns the camera")
 	assert_false(pc.ui.comms_open, "no comms menu over a shot")
-	assert_eq(pc.ui.comms_pick, -1)
 	assert_true(pc.ui.toggle_overlay, "the debug keys still work")
 
 

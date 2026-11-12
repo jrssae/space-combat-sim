@@ -187,3 +187,28 @@ func test_describe_lines_mark_state_and_optional() -> void:
 	assert_eq(lines.size(), 3)
 	assert_string_contains(lines[1], "done")
 	assert_string_contains(lines[2], "optional")
+
+
+# --- what an objective is about (M5-T25: the target menu's objectives ring) --------------------------------------------
+
+
+func test_an_objectives_subject_is_its_triggers_actors_and_place() -> void:
+	var error: String = book.declare([
+		{"id": "reach", "success": {"kind": "proximity", "actor": "player", "to": "NAV ALPHA", "radius_m": 400}},
+		{"id": "gate", "success": {"kind": "area", "actor": "player", "centre": [0, 0, -5000], "radius_m": 300}},
+		{"id": "escort", "success": {"kind": "arrived", "actor": "SATURN 4"}, "fail": {"kind": "destroyed", "names": ["SATURN 4", "ALPHA 2"]}},
+		{"id": "report", "text": "Report to Control"},
+	])
+	assert_eq(error, "")
+	var reach: Dictionary = book.subject(&"reach")
+	assert_eq(reach["actors"], PackedStringArray(["NAV ALPHA"]), "the player is never its own waypoint")
+	assert_null(reach["point"])
+	var gate: Dictionary = book.subject(&"gate")
+	assert_eq((gate["actors"] as PackedStringArray).size(), 0)
+	assert_almost_eq((gate["point"] as UniversePos).z, -5000.0, 1e-9, "an area names a place")
+	assert_eq(book.subject(&"escort")["actors"], PackedStringArray(["SATURN 4", "ALPHA 2"]), "success first, then fail, once each")
+	var report: Dictionary = book.subject(&"report")
+	assert_eq((report["actors"] as PackedStringArray).size(), 0, "an objective with no trigger names nothing")
+	assert_null(report["point"])
+	assert_eq((book.subject(&"nonsense")["actors"] as PackedStringArray).size(), 0)
+	assert_eq(book.error, "", "asking is not a refused call")

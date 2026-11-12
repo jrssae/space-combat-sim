@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## The mission runner in the real main scene (architecture §18 D51, D52, AC5, M5-T05), on `tests/fixtures/missions/test_mission.json`:
 ## it exists only for a scenario with a `mission` block; the test mission plays through on sim time to a success that reaches
 ## `Game`; the player's death, a failed primary and `m.end` end it; the player does not respawn; raiders jump in from the pool
@@ -37,11 +37,6 @@ func _make_main(path: String) -> Main:
 	add_child_autofree(m)
 	await _ticks(2)
 	return m
-
-
-func _ticks(n: int) -> void:
-	for _i: int in n:
-		await get_tree().physics_frame
 
 
 func _frames(n: int) -> void:

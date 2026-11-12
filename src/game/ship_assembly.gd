@@ -95,6 +95,7 @@ static func build(spec: ShipSpec, world: WorldFrame, projectiles_parent: Node3D,
 	targetable.name = "Targetable"
 	targetable.display_name = combatant.display_name
 	targetable.faction = combatant.faction
+	targetable.role = Targetable.Role.CIVILIAN if combatant.civilian else Targetable.Role.SHIP
 	ship.add_child(targetable)
 	combatant.targetable = targetable
 

@@ -90,6 +90,11 @@ var bolts_frame: int = -1
 ## Wall-clock microseconds of the last `sync_in` and of the last bolt sync (readouts only, never gameplay time).
 var sync_us: int = 0
 var bolts_us: int = 0
+## Wall-clock microseconds of the last tick's native `sync_in` call alone, and of the last `snapshot` and `select` calls
+## (readouts only).
+var core_sync_us: int = 0
+var snapshot_us: int = 0
+var select_us: int = 0
 ## Markers and hulls that left the tree since the core was made (a scan built from the core checks its bodies when this
 ## changed).
 var removals: int = 0
@@ -103,6 +108,17 @@ var expired_last_tick: int = 0
 
 var _tree: SceneTree = null
 var _members_dirty: bool = true
+# The readouts summed since `reset_window` (a bench's measured window): first syncs, their time, the native call's share,
+# the bolt syncs' time, and the snapshot and select calls with their time.
+var _window_syncs: int = 0
+var _window_sync_us: int = 0
+var _window_core_sync_us: int = 0
+var _window_bolts_us: int = 0
+var _window_snapshots: int = 0
+var _window_snapshot_us: int = 0
+var _window_selects: int = 0
+var _window_parts_us: PackedInt64Array = PackedInt64Array([0, 0, 0, 0, 0])
+var _window_select_us: int = 0
 var _statics_version: int = -1
 var _out: Node = null
 var _bolts_fresh: bool = false  # the bolts were read again since this tick's first sync
@@ -183,8 +199,11 @@ func _ready() -> void:
 	_register_console()
 	PulseCannon.rebind_all()
 	TargetingController.rebind_all()
-	for body_id: int in _civilians:
-		core.set_civilian(body_id, true)
+	for body_id: int in _civilians.keys():
+		if is_instance_id_valid(body_id):
+			core.set_civilian(body_id, true)
+		else:
+			_civilians.erase(body_id)  # a ship freed with an earlier scene (code review 2026-11-12: the set only grew)
 	TurretMount.rebind_all()
 
 
@@ -531,12 +550,20 @@ func _sync_in() -> void:
 	if _tick_open:
 		reader.close_tick()
 	_tick_open = true
+	var before_core: int = Time.get_ticks_usec()
 	core.sync_in(frame, delta)
+	core_sync_us = Time.get_ticks_usec() - before_core
 	reader.read(core, tree.get_nodes_in_group(Projectile.GROUP), frame, delta, true, false)
 	synced_frame = frame
 	bolts_frame = frame
 	_bolts_fresh = false
 	sync_us = Time.get_ticks_usec() - started
+	_window_syncs += 1
+	_window_sync_us += sync_us
+	_window_core_sync_us += core_sync_us
+	var parts: PackedInt64Array = core.sync_parts_us()
+	for i: int in parts.size():
+		_window_parts_us[i] += parts[i]
 
 
 func _sync_bolts() -> void:
@@ -547,6 +574,53 @@ func _sync_bolts() -> void:
 	bolts_frame = Engine.get_physics_frames()
 	_bolts_fresh = true
 	bolts_us = Time.get_ticks_usec() - started
+	_window_bolts_us += bolts_us
+
+
+## The scan's rows (`ScsSimCore.snapshot`), timed for the readouts.
+func snapshot_rows() -> Array:
+	var started: int = Time.get_ticks_usec()  # readout only
+	var rows: Array = core.snapshot()
+	snapshot_us = Time.get_ticks_usec() - started
+	_window_snapshots += 1
+	_window_snapshot_us += snapshot_us
+	return rows
+
+
+## The broadcast scan's rows (`ScsSimCore.select`), timed for the readouts.
+func select_rows(marker_ids: PackedInt64Array) -> Array:
+	var started: int = Time.get_ticks_usec()  # readout only
+	var rows: Array = core.select(marker_ids)
+	select_us = Time.get_ticks_usec() - started
+	_window_selects += 1
+	_window_select_us += select_us
+	return rows
+
+
+## Starts the window's sums over (a bench's measured window).
+func reset_window() -> void:
+	_window_syncs = 0
+	_window_sync_us = 0
+	_window_core_sync_us = 0
+	_window_bolts_us = 0
+	_window_snapshots = 0
+	_window_snapshot_us = 0
+	_window_selects = 0
+	_window_select_us = 0
+	_window_parts_us.fill(0)
+
+
+## The sync points' and the snapshots' cost since `reset_window`, mean microseconds a tick (wall clock, readouts), and how
+## many snapshot and select calls a tick there were.
+func window_summary() -> Dictionary:
+	var ticks: float = float(maxi(_window_syncs, 1))
+	return {"ticks": _window_syncs, "sync_us": float(_window_sync_us) / ticks,
+			"core_sync_us": float(_window_core_sync_us) / ticks, "bolts_us": float(_window_bolts_us) / ticks,
+			"snapshot_us": float(_window_snapshot_us) / ticks, "snapshots_per_tick": float(_window_snapshots) / ticks,
+			"select_us": float(_window_select_us) / ticks, "selects_per_tick": float(_window_selects) / ticks,
+			"sync_parts_us": {"tier_step": float(_window_parts_us[0]) / ticks, "bodies": float(_window_parts_us[1]) / ticks,
+					"statics": float(_window_parts_us[2]) / ticks, "tier_rows": float(_window_parts_us[3]) / ticks,
+					"lookups": float(_window_parts_us[4]) / ticks}}
 
 
 func _on_rebased(offset: Vector3) -> void:
@@ -667,6 +741,9 @@ func _register_console() -> void:
 		&"syncs": {"get": func() -> int: return int(core.syncs()) if core != null else 0, "doc": "First syncs so far"},
 		&"sync_us": {"get": func() -> int: return sync_us, "unit": "us", "doc": "The last tick's first sync (bodies, statics, bolts); wall clock"},
 		&"bolts_us": {"get": func() -> int: return bolts_us, "unit": "us", "doc": "The last tick's bolt sync (the hit resolver's); wall clock"},
+		&"core_sync_us": {"get": func() -> int: return core_sync_us, "unit": "us", "doc": "The native sync_in call's share of sync_us (the bodies, statics and tier rows into the rows); wall clock"},
+		&"snapshot_us": {"get": func() -> int: return snapshot_us, "unit": "us", "doc": "The last snapshot call (the scan's rows handed to GDScript); wall clock"},
+		&"select_us": {"get": func() -> int: return select_us, "unit": "us", "doc": "The last select call (the broadcast scan's rows); wall clock"},
 		&"sync_calls": {"get": func() -> int: return engine_calls()[0], "doc": "Engine calls the last closed tick's syncs made (they grow with the rows)"},
 		&"fallback_calls": {"get": func() -> int: return engine_calls()[1], "doc": "The flight step's reads of the physics server in the last closed tick, for ships the core had no row for (0 outside launch ticks). The kernels themselves hold no engine type: native/src/kernels.rs"},
 		&"attribute_reads": {"get": func() -> int: return int(core.attribute_reads()) if core != null else 0, "doc": "Bodies whose faction, name, kind and radius were read (once per activation, not per tick)"},

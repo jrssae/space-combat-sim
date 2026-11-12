@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## Damage and god mode (M2-T03, AC8, architecture §15.4): ships built by `ShipAssembly` carry a `Damageable` with the
 ## hull from `ShipSpec.hull_max`; a raider's bolt that reaches the player emits `hit_taken` and an impact flash, and
 ## removes hull points unless `god on`; raiders always take damage; `damage` and `heal` work from the console.
@@ -51,12 +51,6 @@ func _build(spec: ShipSpec, faction: StringName, at: Vector3, is_player: bool) -
 	})
 	world.spawn(combatant.ship, world.to_universe(at))
 	return combatant
-
-
-func _console(line: String) -> ConsoleResult:
-	var results: Array[ConsoleResult] = DebugConsole.registry.execute(line)
-	assert_eq(results.size(), 1, "one statement: " + line)
-	return results[0]
 
 
 ## A bolt from `shooter` (its faction and id) flying at `velocity` from `at`.
@@ -137,6 +131,19 @@ func test_destroyed_is_emitted_once_even_with_more_hits_in_the_same_tick() -> vo
 	assert_eq(destroyed_count, 1, "once")
 	assert_eq(damaged_log.size(), 30, "30 hits of 10 emptied a 300 hull; later bolts found a dead ship")
 	assert_false(player.damageable.is_active(), "a destroyed hull cannot be hit again")
+
+
+func test_a_dead_hull_hit_while_invulnerable_does_not_die_again() -> void:
+	# Code review 2026-11-12: a lethal hit, then god mode, then more hits must not announce the death again.
+	var info := HitInfo.new(player.ship.get_instance_id(), raider.ship.get_instance_id(), Factions.RAIDERS, 10000.0,
+			player.ship.global_position, Vector3.UP, 1000.0)
+	player.damageable.apply_hit(info)
+	assert_eq(destroyed_count, 1)
+	player.damageable.invulnerable = true
+	player.damageable.apply_hit(info)
+	player.damageable.apply_hit(info)
+	assert_eq(destroyed_count, 1, "one death, however many hits follow")
+	player.damageable.invulnerable = false
 
 
 # --- god mode (AC8) ------------------------------------------------------------------------------------------

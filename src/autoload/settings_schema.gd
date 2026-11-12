@@ -8,6 +8,20 @@ const TYPE_ENUM := -1  # pseudo type for string settings restricted to `choices`
 
 ## The groups the settings menu lists entries under (M5-T03, D57), in the order it shows them. Every entry names one in `category`.
 const CATEGORIES: Array[StringName] = [&"flight", &"controls", &"camera", &"hud", &"graphics", &"audio", &"game"]
+## The five pages the start screen's and the pause menu's Settings list opens (M5-T45), in the order shown. Each takes whole
+## categories; a menu entry's category falls in exactly one group (a test fails when one falls in none).
+const GROUPS: Array[Dictionary] = [
+	{"id": &"gameplay", "title": "Gameplay", "categories": [&"game", &"flight"],
+		"help": "Encounters, friendly fire, ram damage and the flight start."},
+	{"id": &"controls", "title": "Controls", "categories": [&"controls"],
+		"help": "Profiles and rebinding, invert pitch, deadzones, target hold time and mouse speeds."},
+	{"id": &"camera_hud", "title": "Camera & HUD", "categories": [&"camera", &"hud"],
+		"help": "The default view, the camera feel and what the HUD shows."},
+	{"id": &"video", "title": "Video", "categories": [&"graphics"],
+		"help": "Rendering quality and effects."},
+	{"id": &"audio", "title": "Audio", "categories": [&"audio"],
+		"help": "Volumes and voices."},
+]
 ## Menu fields an entry may carry besides its type, default, range and `doc`: `category` (required), `label` (the menu's
 ## name for it), `menu: false` (console-only: debug switches, tuning knobs, text a pad cannot edit), `step` (what one D-pad
 ## press moves a number) and `percent: true` (a 0..1 number the menu shows as 0..100 %).
@@ -27,7 +41,7 @@ const ENTRIES: Dictionary = {
 		"doc": "Trigger deadzone applied after rest calibration"},
 	&"target_hold_s": {"type": TYPE_FLOAT, "default": 0.35, "min": 0.15, "max": 1.0,
 		"category": &"controls", "label": "Target button hold time", "step": 0.05,
-		"doc": "Hold a target button this long for its second function (pad B: previous target; keyboard B, Mouse 2: nearest the nose); a shorter tap selects the next target"},
+		"doc": "Hold a target button (pad B, keyboard B, Mouse 2) this long to open the target menu; a shorter tap selects the nearest enemy"},
 	&"assist_default": {"type": TYPE_BOOL, "default": true,
 		"category": &"flight", "label": "Flight assist at start",
 		"doc": "Flight assist state at spawn"},
@@ -52,6 +66,12 @@ const ENTRIES: Dictionary = {
 	&"camera_default": {"type": TYPE_ENUM, "default": &"chase", "choices": [&"chase", &"cockpit"],
 		"category": &"camera", "label": "Camera at start",
 		"doc": "Camera mode at spawn"},
+	&"pause_backdrop": {"type": TYPE_BOOL, "default": true,
+		"category": &"camera", "label": "Pause menu camera move",
+		"doc": "A slow figure-8 camera around your ship behind the pause menu; off = the frozen frame (M5-T42)"},
+	&"pause_backdrop_loop_s": {"type": TYPE_FLOAT, "default": 30.0, "min": 10.0, "max": 120.0,
+		"category": &"camera", "label": "Pause camera loop time", "step": 5.0,
+		"doc": "Seconds one loop of the pause menu's camera move takes (M5-T42)"},
 	&"particle_density": {"type": TYPE_FLOAT, "default": 1.0, "min": 0.0, "max": 1.0,
 		"category": &"graphics", "label": "Spark and debris density", "step": 0.05, "percent": true,
 		"doc": "How much of each spark and debris burst is thrown, 0 (none) to 1 (full); 0 costs nothing per frame (M3-T23)"},
@@ -104,6 +124,9 @@ const ENTRIES: Dictionary = {
 	&"skip_front_end": {"type": TYPE_BOOL, "default": false,
 		"category": &"game", "label": "Skip the front end", "menu": false,
 		"doc": "Start straight in the scenario setting, without the front end (headless, console-script and --scenario= runs always do)"},
+	&"target_menu_blur": {"type": TYPE_FLOAT, "default": 0.35, "min": 0.0, "max": 1.0,
+		"category": &"hud", "label": "Target menu focus blur", "step": 0.05, "percent": true,
+		"doc": "How far the view and HUD go out of focus while a radial menu is open (0 is off)"},
 	&"show_hud": {"type": TYPE_BOOL, "default": true,
 		"category": &"hud", "label": "Show HUD",
 		"doc": "Show the combat HUD (target box, lead reticle, radar, gauges)"},
@@ -171,6 +194,10 @@ const ENTRIES: Dictionary = {
 	&"ambient_level": {"type": TYPE_FLOAT, "default": 0.1, "min": 0.0, "max": 2.0,
 		"category": &"graphics", "label": "Ambient light", "step": 0.1,
 		"doc": "The environment's ambient light, white at this energy: what the textured meshes and every other lit surface get on every side (M4-T30a, live)"},  # 0.1 since M5-T39: the show's darker shadows
+	# M5-T40
+	&"texture_detail": {"type": TYPE_ENUM, "default": &"high", "choices": [&"low", &"high"],
+		"category": &"graphics", "label": "Ship texture detail",
+		"doc": "Which texture set the ships wear (M5-T40): high = the full surface (seams, hatches, ribs, plating toned plate by plate; the default), low = the major seams alone. The meshes are the same. A hull with one set ignores it: only the civilian hulls have both sets for now, the fighters and later hulls join when their second set is generated; live (hulls already in the scene swap their maps)"},
 	# M4-T38
 	&"anti_aliasing": {"type": TYPE_ENUM, "default": &"smaa", "choices": [&"off", &"fxaa", &"smaa", &"msaa_2x", &"msaa_4x", &"taa"],
 		"category": &"graphics", "label": "Anti-aliasing",
@@ -411,3 +438,20 @@ func _ok(value: Variant) -> Dictionary:
 
 func _fail(message: String) -> Dictionary:
 	return {"ok": false, "value": null, "error": message}
+
+
+## The group a category belongs to (an id of `GROUPS`), or &"" when it falls in none.
+static func group_of_category(category: StringName) -> StringName:
+	for group: Dictionary in GROUPS:
+		if (group["categories"] as Array).has(category):
+			return group["id"]
+	return &""
+
+
+## The categories of the group `group_id`, in the order the group lists them; empty for an unknown group.
+static func categories_of_group(group_id: StringName) -> Array[StringName]:
+	var out: Array[StringName] = []
+	for group: Dictionary in GROUPS:
+		if group["id"] == group_id:
+			out.assign(group["categories"])
+	return out

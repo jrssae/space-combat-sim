@@ -96,7 +96,7 @@ TEXTURE_PACK = {
     "edge_wear": 0.35,
     "streaks": 0.14,
     "grime": 0.07,
-    "extra": {"bare_metal": 0.0, "smudge": 0.12, "speckle": 0.03, "paint_roughness": 0.72, "rivets": 0.4, "panel_grid": 0.0},
+    "extra": {"bare_metal": 0.0, "smudge": 0.12, "speckle": 0.03, "paint_roughness": 0.72, "rivets": 0.4},
 }
 
 

@@ -2,7 +2,10 @@
 
 > "Scripted play." (`docs/roadmap.md`)
 
-**Status:** planned 2026-11-02 on branch `m5`, cut from `main` at `b2f8ce1` (M3 merged) while M4 goes on separately on `m4`.
+**Status:** **built, awaiting the maintainer's confirmation (2026-11-12).** Every task is done except T20, whose automated part is
+finished: AC1 to AC17 and AC19 to AC28 are met (the acceptance table's Done column), the full suite is green, the GPU check and
+the benchmark are in T20's notes. What is left is AC18, the maintainer's play-test (`docs/playtest.md`, "M5 acceptance
+checklist"), and the confirmation; then `m5` merges into `main`. History: planned 2026-11-02 on branch `m5`, cut from `main` at `b2f8ce1` (M3 merged) while M4 goes on separately on `m4`.
 The maintainer asked for M5 to run beside M4 because most of it does not touch the performance work, and expects `m5` to
 be rebased onto `main` once M4 merges (see "Living beside M4"). The planning questions were answered the same day (below),
 including the civilian ships' lengths and a seventh civilian hull, the Centauri Brezebel (Q8, Q11). A ninth hull, the
@@ -76,6 +79,7 @@ performance block.
 | Q41 | (same day) The 16-buoy ring of Q21 | **Drop it**: `BuoyRing`, its tests and the scenario's `buoy_rings` go, and buoys broadcast to 1 000 km again (M3 Q21). Supersedes Q21 |
 | Q42 | (same day) A cinematic intro for the escort? | **Yes, adapted**: the civilian at the start beacon, then the player and the wingman flying past; Control briefs, then hands over |
 | Q43 | (maintainer, same day) Where screenshots go | **`references/screenshots/<a folder named for the request>/`** (gitignored), for every screenshot an agent takes; written into `CLAUDE.md` |
+| Q44 | (maintainer, 2026-11-08) T25's targeting concept | **Tap and a tactical-pause wheel**: a tap of the target button selects the nearest enemy; a tap while it is selected selects the 2nd nearest, and the next tap goes back to the nearest (only those two). Holding the button pauses the game and opens a command wheel that stays open after release: Enemies, Allies, Civilian, Unknown, Navigation, Mission objectives; each opens a second ring of the nearest five (objectives: up to five) plus "none". (Input superseded by the maintainer's layout of 2026-11-09 in T25's section: the menu sits at one side of the screen, the right stick points, A selects, B goes back; keyboard arrows or mouse direction, Enter, Backspace.) Picking a ship makes it the target, closes the wheel and resumes. Beacons and objectives become the HUD waypoint (highlighted on the radar) and never the ship's facing target; the latest of the player's pick and a mission's `m.waypoint` wins. "Hold = nearest the nose" leaves this button (an unbound action). **Unknown** = contacts beyond an identification range (5 km, the AI sensors) with no transponder (allies, civilians and buoys broadcast and are always identified); the radar and HUD show them as unknown. A mockup sheet first, then the build. **Mockup approved (2026-11-11)** with one change: in every radial menu with a "none" entry, "none" sits in the down slice (the target rings, Navigation, Objectives, and T46's comms pages when they have one). T43's info lines approved as proposed: name, class and faction, hull bar, range, closing speed (civilians add their cargo pods, objectives their text instead of a hull); no weapons, absolute speed or heading |
 
 ## Scope
 
@@ -502,34 +506,34 @@ removed or converted when M5 rebases onto `main` after M4.
 
 | # | Criterion | Kind | Done |
 |---|---|---|---|
-| AC1 | Boot: a windowed launch shows the front end; `--headless`, `--console-exec`, `--console-file`, `--scenario=<id>` and `skip_front_end` go straight to `Main` as before; `GameFlow` transitions unit-tested; `game` provider, `menu` and `play` commands work under `--console-strict` | A | |
-| AC2 | Front end and pause: the pause menu and the settings and controls screens use the three-panel frame of Q15 (options left, pad diagram with live bindings bottom left, objectives right; a test checks the legend follows a rebind); every screen is reachable and usable with the pad alone (a test drives focus with injected `ui_*` events); free flight starts with encounters on or off; Missions lists the demo mission (Civilian escort since Q36) with its briefing; Sandbox starts each existing scenario; Quit quits; Start in flight opens the pause menu and Quit to menu returns to the front end; a loading screen shows while `Main` loads; no splat node enters the tree during play | A | |
-| AC3 | Settings menu: every schema entry has a category; entries with `menu: false` are hidden; changing, applying, reverting and resetting a value works and persists through `Settings.save`; four audio buses with their volumes | A | |
-| AC4 | Controls menu: pick a profile; rebind an action by pressing a button; unbind; save as; the profile rules are enforced with the reason shown; applying a profile leaves the `ui_*` actions intact | A | |
-| AC5 | Mission runtime: `MissionScript`, `MissionApi`, `MissionRunner`; every trigger kind unit-tested; `ObjectiveBook` success and failure; the result rules of D51 (all primaries done, a primary failed, the player destroyed, `m.end`); sim time only; console `mission` provider, `mission skip`, `mission goto <step>`, `mission objectives`, `play <id>`; a skip leaves the world as the step would (a test compares a skipped and an unskipped run's spawns and objectives) | A | |
-| AC6 | Dialog: lines and speakers as data with a voice id; every line id used by a script exists (test); subtitles and the comms panel show in cockpit and chase views; `radio_open`/`radio_close` frame each line | A | |
-| AC7 | Comms menu: D-pad Right opens it; the four directions give the four wing orders through `WingDirector`; B or 4 s closes it; while open, the D-pad's flight actions and the target button do not fire; a profile saved before M5 loads with `comms_menu` filled in | A | |
-| AC8 | `CINEMATIC`: shots from data relative to actors or the origin, unit-tested interpolation; a rebase during a shot moves nothing on screen (test); HUD hidden, letterbox, the player's commands zeroed while the ship keeps its physics; A or Start skips | A | |
-| AC9 | Debrief: result and reason, objectives, time, kills and assists, wing losses, shots and hits; retry restarts the same scenario and seed; menu returns to the front end | A | |
-| AC10 | Civilian escort (D62): starts from the menu with its cinematic intro and runs to success and to failure (civilian destroyed; player destroyed) in headless tests driven by console commands, ending in the debrief; the civilian is drawn from all nine hulls by the seed (test over seeds) and only its hull is pooled; it flies from NAV ALPHA through the belt to NAV BETA about 30 km away, flees when attacked and resumes its route (test); three waves of 3, 4 and 6 raiders jump in at the 25, 50 and 75 % points; one wingman; the buoy ring is gone and buoys broadcast to 1 000 km (Q41). Buoy defence's AC10 is superseded | A | |
-| AC11 | Civilian references: each of the nine ships described (the Saturn 4 tanker from the Saturn parts, Q16; the Bokmai, Q17) in `docs/design-references.md` with the lengths from Q8, Q11, Q16 and Q17, from orthographic views and cross-sections of its STL; every ship's colour scheme written from online images (Q11) with the sources listed; nothing from the STL files or the images is in git | A | |
-| AC12 | Civilian generators: nine hulls from five generators meet the output contract (LOD0-3 PLYs and lighting records, fallback mesh, hardpoints with pods, RCS, collision, cockpit camera, chase anchor, running lights, chunks; the Bokmai's pod model and `cargo_pods[]`); Python tests for budgets, frames, symmetry where the design has it, chunk partition, collision coverage and determinism; every PLY imports in Godot with the manifest's count | A | |
-| AC13 | Civilian ships in the game: each flies through `FlightModel` with zero damping (the damping guard covers it), turns by torque only, flees raiders on the `civilian` profile, towards the nearest ship of its own faction (behind it from the threat when it is military) and in a group with other fleeing civilians, and sets same-faction civilians within its sensor range fleeing too (Q24, Q25), takes hull damage, breaks into its chunks, shows running lights and switches LOD; a Bokmai flies with 0-3 cargo pods and sheds them when destroyed; raiders attack them through faction data; on the maintainer's GPU all nine in view at once run with `renderer = forward_plus`, FPS, draw calls and VRAM recorded by the agent | A | |
-| AC14 | Encounters: `EncounterPlan` is deterministic per seed (test); raids jump in 6-12 km out and patrols and traffic cruise in from 26-30 km (D58), all from pools, and are released past 40 km (D58; this line said 30 until T17); raiders sent at a civilian attack it and allies engage them; `encounter_max_ships` holds; encounters off leaves free flight empty; `encounters` provider and `encounters force <kind>` to force one | A | |
-| AC15 | Sounds: generator tests pin the new guns' shape (length, flat hold, constant pitch, energy band after the 0.25 register, inharmonic partials), the impact's length and band, and the engine bursts' band (no energy to speak of below 300 Hz); voices sit at the nozzles; the voice cap holds and the per-frame update is linear in voices (work count); the old loops are gone | A | |
-| AC16 | Cost: M5 adds nothing measurable to AC13 of M3 (the paired 13-ship AI budget still passes, `test_ai_think_time`); the mission runner with 20 triggers and the encounter director stay inside their work counts | A | |
-| AC17 | Docs and the suite: `docs/architecture.md` §18 as built, a `docs/playtest.md` M5 section (how to start, menus, mission, comms menu, encounters, new settings and commands), the roadmap row; `scripts/run_tests.sh` green **once, at the end** (Q10), read from the suite's own totals | A | |
-| AC19 | Defensive turrets (D61): the native turret kernels (aim, fire gate, target pick) and the attacker memory unit-tested in Rust and through GUT, identical with 1 and 6 threads and between `sim_step` threaded and `delayed`; civilians fire only at attackers of themselves or of a civilian or ally within 2 km, and never through their own hull (Q33: a blind spot astern of a Saturn is pinned); they keep running while firing; turret bolts go through the projectile pool and `HitResolver`; the seeded balance holds (Q31: every Saturn variant alone beats two raiders in 1 to 3 of 10 seeds and three raiders in none, a fight running until the Saturn dies or no raider fights on, at most 600 s; its turrets finish a 15 % raider that keeps attacking); `turret_fire` sound | A | |
-| AC20 | Fidelity (Q18): every civilian model's top, side and front silhouettes overlap its STL's by at least 90 % (intersection over union) and its length, width and height are within 10 %, Q16's deliberate departures scored part by part against the model each part was built from; measured on the model's geometry (its fallback mesh) by `tools/refview` compare, with the LOD0 splats covering at least 95 % of their own mesh's silhouette and lying at least 95 % within a one-spacing band of it, and unit tests that pin the tool's calibration; each model's scores recorded in `docs/assets-civilian.md` | A | |
-| AC21 | Asteroids (D63): the generator's Python tests (determinism, closed meshes, budgets, radii); `BeltLayout` unit-tested (seeded, inside the box, gaps held, size spread); the belt's rocks are static rows that the scan, hits, rams and avoidance see; a Saturn 8 crosses the escort's belt in a headless run without hitting a rock; FPS, draw calls and VRAM with the belt in view recorded on the maintainer's GPU | A | |
-| AC22 | Performance block (Q35): each of L1, L2, L3, L5, L8, L9, L12 and L13 fixed as its task says; results unchanged (the recorded parity fixtures, and the same answers with 1 and 6 threads and with `sim_step` threaded and delayed); each task measures `bench battle 1000` before and after with `scripts/bench_quick.sh` on an idle machine, and the per-stage numbers go into its Done notes against Report P3's (flight 3.97 ms, hits 1.41 ms, rams 1.20 ms at 1 000) | A | |
-| AC23 | Sound and test clean-up (Q35): L6 (muzzle flashes and shot sounds culled by range, a ring buffer for the flash pool) and L7 (no audio node per pooled ship walked every frame) with work-count tests; L14's shared test steps fixture, the collapsed recordings, the always-pending balance tests out of the default run, and CI's Python job split off with cached assets, CI green | A | |
-| AC24 | Pause backdrop (T42): with the pause menu open, an outside camera flies a slow closed figure 8 around the player's ship behind the menu (`PauseOrbitPath` unit-tested: closed, smooth, never inside the hull's clearance, always looking at the ship); it blends in from the camera in use and back to it on Resume; the world stays paused; `settings.pause_backdrop` off gives the old still view; no player ship (dead, or mid-load) leaves the still view | A | |
-| AC25 | Target preview (T43): highlighting an entity in the target menu's second level shows its green wireframe on the side of the screen opposite the radial menu, vertically centred, slowly turning, with only the edges on the side facing the viewer (feature edges plus the silhouette, no flat-panel diagonals), its hull bar and distance, and the info lines T43 settles; `FeatureEdges` and `TargetPreviewModel` unit-tested; the preview's viewport renders nothing while the menu's second level is closed; opening it on the largest hull costs what T43 records | A | |
-| AC26 | Focus pull (T44): opening a radial menu (the target menu, or the comms menu since T46) takes everything except that menu and the target information (the 3D view, the flight HUD, its brackets and radar) slightly out of focus over 0.2 s, so only the menu and the target information are sharp; closing it (a pick with A, or B out of the first level) brings the play view back into focus over 0.2 s; reopening mid-pull reverses from where it is; `FocusPull` unit-tested; with the menu closed the blur is off and costs nothing; `settings.target_menu_blur` 0 turns it off | A | |
-| AC27 | Start screen (T45): only the options list shows (no pad diagram, no right panel): New game, Load game (shown disabled; D-pad focus and the mouse skip it), Free flight, Settings, Quit; New game lists the catalogue's missions and then the sandbox scenes, the highlighted entry's briefing or description under the list; Free flight works as before (encounters on or off); Settings opens the groups Gameplay, Controls, Camera & HUD, Video and Audio, Controls holding the profile and rebinding screen and the stick and mouse settings; every schema entry shown in the menu falls in one group (test); the pause menu reads Resume, Restart, Settings, Quit to menu, keeps its pad diagram and objectives, and its Settings opens the same groups; pad-only navigation tested | A | |
-| AC28 | Radial comms menu (T46): D-pad Right opens the comms menu on T25's radial framework, as big as the target menu and vertically centred at the same side, with T44's focus pull, and pauses the game while open as the target menu does; the right stick points at an entry, A confirms, B goes back a page and closes it from the first; nothing it was pressed for fires, steers or targets when the game resumes; a profile saved before M5 still loads with `comms_menu` filled in | A | |
-| AC18 | (H) The maintainer plays it: menus feel right on the pad, the mission's pacing and lines, the cinematic, the civilian ships' look, the new guns, impacts and engines by ear; the pause backdrop's path and speed, the radial target and comms menus, the start screen and the settings groups, the target preview's readability at 1080 and 4K, the focus pull's feel, and the pause and resume of the radial menus mid-fight | H | |
+| AC1 | Boot: a windowed launch shows the front end; `--headless`, `--console-exec`, `--console-file`, `--scenario=<id>` and `skip_front_end` go straight to `Main` as before; `GameFlow` transitions unit-tested; `game` provider, `menu` and `play` commands work under `--console-strict` | A | **Met.** `test_game_flow` (27: the states, moves and the boot rule), `test_boot_routing` (14); the suite's smoke runs `--scenario=free_flight` straight to Main, `menu`, `play` and `game.*` under `--console-strict`, `play nowhere` exits 1, and the front end loading Main with nothing leaked. Windowed launch on the GPU shows the start screen (`T20 acceptance/start_screen.png`) |
+| AC2 | Front end and pause: the pause menu and the settings and controls screens use the three-panel frame of Q15 (options left, pad diagram with live bindings bottom left, objectives right; a test checks the legend follows a rebind); every screen is reachable and usable with the pad alone (a test drives focus with injected `ui_*` events); free flight starts with encounters on or off; Missions lists the demo mission (Civilian escort since Q36) with its briefing; Sandbox starts each existing scenario; Quit quits; Start in flight opens the pause menu and Quit to menu returns to the front end; a loading screen shows while `Main` loads; no splat node enters the tree during play | A | **Met, as changed by T45 (AC27).** `test_menu_frame` (11), `test_front_end` (25), `test_pause_menu` (29), `test_loading_screen` (2), `test_pad_legend`, `test_pad_diagram`, `test_mission_catalog`: the three-panel frame, the legend following a rebind, pad-only focus with injected `ui_*` events, free flight with encounters on or off, the escort with its briefing, each sandbox scene, Quit, Start to the pause menu and Quit to menu. Missions and Sandbox are now under New game (T45). No splat node exists any more (M4-T31) |
+| AC3 | Settings menu: every schema entry has a category; entries with `menu: false` are hidden; changing, applying, reverting and resetting a value works and persists through `Settings.save`; four audio buses with their volumes | A | **Met.** `test_settings_schema` (26: every entry has a known category), `test_settings_menu_model`, `test_settings_screen` (12: change, apply, revert, defaults, persisted through `Settings.save`), `test_audio_buses` (unit and integration: four buses and their volumes). T03's open minor items stand (the console's `audio.volume` sets only `sfx_volume`; Revert reverts every key) |
+| AC4 | Controls menu: pick a profile; rebind an action by pressing a button; unbind; save as; the profile rules are enforced with the reason shown; applying a profile leaves the `ui_*` actions intact | A | **Met.** `test_controls_model`, `test_binding_capture` (25), `test_controls_screen` (35: pick a profile, bind by a press, unbind, save as, each refusal shown with its reason, `ui_*` intact after every change) |
+| AC5 | Mission runtime: `MissionScript`, `MissionApi`, `MissionRunner`; every trigger kind unit-tested; `ObjectiveBook` success and failure; the result rules of D51 (all primaries done, a primary failed, the player destroyed, `m.end`); sim time only; console `mission` provider, `mission skip`, `mission goto <step>`, `mission objectives`, `play <id>`; a skip leaves the world as the step would (a test compares a skipped and an unskipped run's spawns and objectives) | A | **Met.** `test_triggers` (32, all seven kinds with `test` and `force`), `test_objective_book` (19), `test_mission_sequencer` (19), `test_mission_runner` (18: the four result rules, the console's `mission` provider and actions, 20 live triggers inside a counted bound), `test_mission_skip` (7: a skipped run leaves the same spawns and objectives as a played one); `play <id>` in the smoke runs |
+| AC6 | Dialog: lines and speakers as data with a voice id; every line id used by a script exists (test); subtitles and the comms panel show in cockpit and chase views; `radio_open`/`radio_close` frame each line | A | **Met.** `test_dialog_book`, `test_dialog_queue`, `test_dialog_ids` (5: every line id and speaker a script uses exists), `test_mission_say`, `test_comms_layout`, `test_comms_panel` (14: both views, the squelches round each line). Seen on the GPU in the escort (`T20 acceptance/escort_intro_wing_shot.png`, `escort_wave_two_belt.png`) |
+| AC7 | Comms menu: D-pad Right opens it; the four wing orders go through `WingDirector`; while open, the D-pad's flight actions and the target button do not fire; a profile saved before M5 loads with `comms_menu` filled in. **Updated by T46 (2026-11-11):** the orders are picked with the right stick and A on the radial ring (not the four D-pad directions), B or D-pad Right closes it, and there is no 4 s timeout (the game is paused while it is open); AC28 is the full behaviour | A | **Met as updated by T46** (AC28 has the behaviour). `test_comms_menu` (9), `test_comms_menu_input` (13: the four orders through `WingDirector`, nothing else fires while open), `test_control_profile_store` (a profile saved before M5 loads with `comms_menu` filled in) |
+| AC8 | `CINEMATIC`: shots from data relative to actors or the origin, unit-tested interpolation; a rebase during a shot moves nothing on screen (test); HUD hidden, letterbox, the player's commands zeroed while the ship keeps its physics; A or Start skips | A | **Met.** `test_cinematic_shot` (15: the interpolation), `test_cinematic_camera` (12: a rebase during a shot moves nothing on screen, HUD hidden, letterbox, A or Start skips), `test_control_lock` (10), `test_mission_cinematic` |
+| AC9 | Debrief: result and reason, objectives, time, kills and assists, wing losses, shots and hits; retry restarts the same scenario and seed; menu returns to the front end | A | **Met.** `test_debrief_model` (21), `test_mission_tally`, `test_debrief` (26: result and reason, objectives, time, kills and assists, wing losses, shots and hits; retry plays the same scenario and seed through loading; the front end) |
+| AC10 | Civilian escort (D62): starts from the menu with its cinematic intro and runs to success and to failure (civilian destroyed; player destroyed) in headless tests driven by console commands, ending in the debrief; the civilian is drawn from all nine hulls by the seed (test over seeds) and only its hull is pooled; it flies from NAV ALPHA through the belt to NAV BETA about 30 km away, flees when attacked and resumes its route (test); three waves of 3, 4 and 6 raiders jump in at the 25, 50 and 75 % points; one wingman; the buoy ring is gone and buoys broadcast to 1 000 km (Q41). Buoy defence's AC10 is superseded | A | **Met.** `test_civilian_escort` (12: from the menu on a fresh seed, console-driven to success and the debrief, failure by losing the civilian and by losing the player, flee and resume, a skipped wave leaves no raider, a Saturn 8 through the belt, buoys at 1 000 km and no ring), `test_scenario_loader` (the seed draws every one of the nine hulls and only that hull is pooled; a retry flies the same ship). The buoy ring and Buoy defence are removed. On the GPU: the intro and waves one and two at 145 fps, 82 to 85 draw calls |
+| AC11 | Civilian references: each of the nine ships described (the Saturn 4 tanker from the Saturn parts, Q16; the Bokmai, Q17) in `docs/design-references.md` with the lengths from Q8, Q11, Q16 and Q17, from orthographic views and cross-sections of its STL; every ship's colour scheme written from online images (Q11) with the sources listed; nothing from the STL files or the images is in git | A | **Met** (T11, T22). `docs/design-references.md` describes the nine ships with their lengths and colour schemes and lists the sources; `references/` is gitignored and no STL or image is in git |
+| AC12 | Civilian generators: nine hulls from five generators meet the output contract (LOD0-3 PLYs and lighting records, fallback mesh, hardpoints with pods, RCS, collision, cockpit camera, chase anchor, running lights, chunks; the Bokmai's pod model and `cargo_pods[]`); Python tests for budgets, frames, symmetry where the design has it, chunk partition, collision coverage and determinism; every PLY imports in Godot with the manifest's count | A | **Met in the form T27 gave it** (Q29: splats dropped, so the output is a textured mesh with Godot's own mesh levels, not LOD0-3 PLYs). `test_saturn_family`, `test_skylark_transport`, `test_narn_transport`, `test_centauri_brezebel`, `test_brakiri_bokmai` (budgets, frames, symmetry, chunk partition, collision coverage, determinism, the Bokmai's pod model and `cargo_pods[]`), `test_seams`, `test_textured_hulls`; `test_civilian_meshes` (7: every hull imports in Godot as the manifest says). Python: 860 tests, OK |
+| AC13 | Civilian ships in the game: each flies through `FlightModel` with zero damping (the damping guard covers it), turns by torque only, flees raiders on the `civilian` profile, towards the nearest ship of its own faction (behind it from the threat when it is military) and in a group with other fleeing civilians, and sets same-faction civilians within its sensor range fleeing too (Q24, Q25), takes hull damage, breaks into its chunks, shows running lights and switches LOD; a Bokmai flies with 0-3 cargo pods and sheds them when destroyed; raiders attack them through faction data; on the maintainer's GPU all nine in view at once run with `renderer = forward_plus`, FPS, draw calls and VRAM recorded by the agent | A | **Met.** `test_civilian_ships` (6: every hull Newtonian with zero damping and torque-only turning, hull damage, chunks, lights, LOD, the Bokmai's pods mounted and shed), `test_civilian_flight` (5: flees to its own faction, groups, the alarm; 1 and 6 threads, threaded and delayed), `test_ship_catalog`, `test_factions`. **GPU (T20, RX 6950 XT, RADV, Wayland, 1200x675 window):** all nine in view in `civilian_showcase`: `forward_plus`, 145 fps (the Wayland cap), 129 draw calls from the cockpit (96 in chase), `render.vram_mb` 481 MB (the card as a whole 3 262 MB with the desktop, 2 832 MB before the run) |
+| AC14 | Encounters: `EncounterPlan` is deterministic per seed (test); raids jump in 6-12 km out and patrols and traffic cruise in from 26-30 km (D58), all from pools, and are released past 40 km (D58; this line said 30 until T17); raiders sent at a civilian attack it and allies engage them; `encounter_max_ships` holds; encounters off leaves free flight empty; `encounters` provider and `encounters force <kind>` to force one | A | **Met.** `test_encounter_plan` (15: deterministic per seed, the ranges), `test_encounters` (17: pools, raids at a civilian and allies engaging, the cap waiting and trimming, releases past 40 km, off leaves free flight empty, the provider and `encounters force`) |
+| AC15 | Sounds: generator tests pin the new guns' shape (length, flat hold, constant pitch, energy band after the 0.25 register, inharmonic partials), the impact's length and band, and the engine bursts' band (no energy to speak of below 300 Hz); voices sit at the nozzles; the voice cap holds and the per-frame update is linear in voices (work count); the old loops are gone | A | **Met.** `test_sfx_combat` (the guns' length, flat hold, constant pitch, band and inharmonic partials; the impact; the bursts' band), `test_audio`, `test_engine_voices` (23), `test_engine_audio` (14: voices at the nozzles, the cap, work linear in voices), `test_voice_query` (5); the old loops are gone from the generator |
+| AC16 | Cost: M5 adds nothing measurable to AC13 of M3 (the paired 13-ship AI budget still passes, `test_ai_think_time`); the mission runner with 20 triggers and the encounter director stay inside their work counts | A | **Met.** `test_ai_think_time` passes in the full run (13 ships: AiPilot median 195 us against the M2 brain's 2 177 us); `test_twenty_live_triggers_stay_inside_a_counted_bound`; the encounter director's `check_work` tests in `test_encounters`. `bench battle 1000` (T20, headless, idle): tick median 5.44 ms, p99 7.51 ms, real time kept, against 9.22 ms at M4's close |
+| AC17 | Docs and the suite: `docs/architecture.md` §18 as built, a `docs/playtest.md` M5 section (how to start, menus, mission, comms menu, encounters, new settings and commands), the roadmap row; `scripts/run_tests.sh` green **once, at the end** (Q10), read from the suite's own totals | A | **Met.** Architecture §18 as built (a map of its 33 subsections, the file list, the superseded parts marked); `docs/playtest.md` "Play-testing M5" with one (H) checklist; the roadmap row. `scripts/run_tests.sh --full` passed on 2026-11-12 in 4 459 s, exit 0: GUT 303 scripts, 3 433 tests, 3 421 passing, 0 failing, 12 pending (10 need the real renderer, 2 are M3's AC12 balance tests still under the maintainer's review), 134 659 asserts; Python 860 tests OK (2 skipped); Rust 66 passed; every console smoke run passed |
+| AC19 | Defensive turrets (D61): the native turret kernels (aim, fire gate, target pick) and the attacker memory unit-tested in Rust and through GUT, identical with 1 and 6 threads and between `sim_step` threaded and `delayed`; civilians fire only at attackers of themselves or of a civilian or ally within 2 km, and never through their own hull (Q33: a blind spot astern of a Saturn is pinned); they keep running while firing; turret bolts go through the projectile pool and `HitResolver`; the seeded balance holds (Q31: every Saturn variant alone beats two raiders in 1 to 3 of 10 seeds and three raiders in none, a fight running until the Saturn dies or no raider fights on, at most 600 s; its turrets finish a 15 % raider that keeps attacking); `turret_fire` sound | A | **Met.** Rust `turret_kernels/tests.rs` (in the 66 `cargo test --lib`), `test_turret_kernel` (12), `test_turret_threads` (3: threaded against delayed, 1 against 6 threads, byte for byte), `test_turret_line_of_fire` (3: the own hull blocks, the Saturn's blind spot astern), `test_turret_defence` (2), `test_turret_balance` (2, balance tier: every Saturn variant beats two raiders in 1 to 3 of 10 seeds and three in none), `turret_fire` in `test_sfx_combat` |
+| AC20 | Fidelity (Q18): every civilian model's top, side and front silhouettes overlap its STL's by at least 90 % (intersection over union) and its length, width and height are within 10 %, Q16's deliberate departures scored part by part against the model each part was built from; measured on the model's geometry (its fallback mesh) by `tools/refview` compare, with the LOD0 splats covering at least 95 % of their own mesh's silhouette and lying at least 95 % within a one-spacing band of it, and unit tests that pin the tool's calibration; each model's scores recorded in `docs/assets-civilian.md` | A | **Met on the textured mesh** (T27 re-scored it; the splat coverage clause went with the splats, Q29). `test_refview_compare`, `test_refview` (the tool's calibration); every hull's silhouette and size scores are in `docs/assets-civilian.md`, with the Saturn 3 pod stack's deliberate departure (Q23) |
+| AC21 | Asteroids (D63): the generator's Python tests (determinism, closed meshes, budgets, radii); `BeltLayout` unit-tested (seeded, inside the box, gaps held, size spread); the belt's rocks are static rows that the scan, hits, rams and avoidance see; a Saturn 8 crosses the escort's belt in a headless run without hitting a rock; FPS, draw calls and VRAM with the belt in view recorded on the maintainer's GPU | A | **Met.** `test_asteroids` (determinism, closed meshes, budgets, radii), `test_belt_layout` (7), `test_asteroid_belt` (4: static rows seen by the scan, hits, rams and avoidance; a rebase), `test_a_saturn_8_crosses_the_belt_without_hitting_a_rock`. **GPU (T20):** `belt_showcase` (400 rocks, 16 draw groups): 145 fps and 62 draw calls in chase, 131 fps and 94 from the cockpit, `render.vram_mb` 355 to 360 MB; the escort's belt with a wave in view 145 fps, 85 draw calls, 403 MB |
+| AC22 | Performance block (Q35): each of L1, L2, L3, L5, L8, L9, L12 and L13 fixed as its task says; results unchanged (the recorded parity fixtures, and the same answers with 1 and 6 threads and with `sim_step` threaded and delayed); each task measures `bench battle 1000` before and after with `scripts/bench_quick.sh` on an idle machine, and the per-stage numbers go into its Done notes against Report P3's (flight 3.97 ms, hits 1.41 ms, rams 1.20 ms at 1 000) | A | **Met.** L1 T31, L2 T32, L3 T33, L5 T34, L8 and L9 T35, L12 and L13 T36, each with its before and after in its Done notes; the parity fixtures and the thread tests (`test_core_threads`, `test_core_snapshot`, `test_flight_parity_fight`, `test_weapon_rows_battle`) pass in the full run. **T20's run** (`bench_quick.sh t20 battle`, 1 000, seed 1, idle): tick median 5.44 ms, p99 7.51 ms; flight 2.30 ms (P3 3.97), hits 0.78 ms (P3 1.41), rams 0.23 ms (P3 1.20) |
+| AC23 | Sound and test clean-up (Q35): L6 (muzzle flashes and shot sounds culled by range, a ring buffer for the flash pool) and L7 (no audio node per pooled ship walked every frame) with work-count tests; L14's shared test steps fixture, the collapsed recordings, the always-pending balance tests out of the default run, and CI's Python job split off with cached assets, CI green | A | **Met.** `test_shot_cull` (5), `test_muzzle_flash_pool` (4), `test_impact_flash`, `test_engine_audio`'s work counts (L6, L7); `TestSteps`, one recording in `test_core_state`, the balance tier (`tests/balance_suite.txt`), CI's Python job and asset cache (L14). CI green on run 43179401269 (T38) and on T20's pushes |
+| AC24 | Pause backdrop (T42): with the pause menu open, an outside camera flies a slow closed figure 8 around the player's ship behind the menu (`PauseOrbitPath` unit-tested: closed, smooth, never inside the hull's clearance, always looking at the ship); it blends in from the camera in use and back to it on Resume; the world stays paused; `settings.pause_backdrop` off gives the old still view; no player ship (dead, or mid-load) leaves the still view | A | **Met.** `test_pause_orbit_path` (6: closed, smooth, outside the hull's clearance, looking at the ship), `test_pause_menu` (the blend in and back, the world paused, the setting off, no player ship), `test_camera_rig`. GPU: `T20 acceptance/pause_backdrop.png`, 145 fps, 117 draw calls |
+| AC25 | Target preview (T43): highlighting an entity in the target menu's second level shows its green wireframe on the side of the screen opposite the radial menu, vertically centred, slowly turning, with only the edges on the side facing the viewer (feature edges plus the silhouette, no flat-panel diagonals), its hull bar and distance, and the info lines T43 settles; `FeatureEdges` and `TargetPreviewModel` unit-tested; the preview's viewport renders nothing while the menu's second level is closed; opening it on the largest hull costs what T43 records | A | **Met.** `test_feature_edges` (9), `test_wire_framing`, `test_target_preview_model` (11), `test_target_preview` (10: the side, the content per kind, nothing rendered while closed); the cost is in T43's notes. GPU: `T20 acceptance/target_menu_preview_blur.png`, 134 fps with the ring, preview and blur up, 98 draw calls |
+| AC26 | Focus pull (T44): opening a radial menu (the target menu, or the comms menu since T46) takes everything except that menu and the target information (the 3D view, the flight HUD, its brackets and radar) slightly out of focus over 0.2 s, so only the menu and the target information are sharp; closing it (a pick with A, or B out of the first level) brings the play view back into focus over 0.2 s; reopening mid-pull reverses from where it is; `FocusPull` unit-tested; with the menu closed the blur is off and costs nothing; `settings.target_menu_blur` 0 turns it off | A | **Met.** `test_focus_pull` (5: 0.2 s each way, a reversal from where it is), `test_target_menu` (the pull on real time while paused, hidden and not processing at rest, the setting at 0) |
+| AC27 | Start screen (T45): only the options list shows (no pad diagram, no right panel): New game, Load game (shown disabled; D-pad focus and the mouse skip it), Free flight, Settings, Quit; New game lists the catalogue's missions and then the sandbox scenes, the highlighted entry's briefing or description under the list; Free flight works as before (encounters on or off); Settings opens the groups Gameplay, Controls, Camera & HUD, Video and Audio, Controls holding the profile and rebinding screen and the stick and mouse settings; every schema entry shown in the menu falls in one group (test); the pause menu reads Resume, Restart, Settings, Quit to menu, keeps its pad diagram and objectives, and its Settings opens the same groups; pad-only navigation tested | A | **Met.** `test_front_end` (the five entries, Load game disabled and skipped, New game's missions then scenes with the text under the list), `test_settings_groups` (5: every menu entry in one group), `test_pause_menu` (Resume, Restart, Settings, Quit to menu; the same groups), pad-only. GPU: `T20 acceptance/start_screen.png` |
+| AC28 | Radial comms menu (T46): D-pad Right opens the comms menu on T25's radial framework, as big as the target menu and vertically centred at the same side, with T44's focus pull, and pauses the game while open as the target menu does; the right stick points at an entry, A confirms, B goes back a page and closes it from the first; nothing it was pressed for fires, steers or targets when the game resumes; a profile saved before M5 still loads with `comms_menu` filled in | A | **Met.** `test_comms_menu` (9), `test_comms_menu_input` (13: opens and pauses, the stick and A send each order, B, D-pad Right, nothing held fires on close, Start to the pause menu), `test_input_adapter`, `test_control_profile_store`. GPU: `T20 acceptance/comms_ring.png`, 145 fps, 82 draw calls |
+| AC18 | (H) The maintainer plays it: menus feel right on the pad, the mission's pacing and lines, the cinematic, the civilian ships' look, the new guns, impacts and engines by ear; the pause backdrop's path and speed, the radial target and comms menus, the start screen and the settings groups, the target preview's readability at 1080 and 4K, the focus pull's feel, and the pause and resume of the radial menus mid-fight | H | **Open: the maintainer's.** The checklist is `docs/playtest.md`, "M5 acceptance checklist" |
 
 ## Working rules for M5
 
@@ -599,26 +603,31 @@ whose trigger never arose). Update the column with each task's commit.
 | T17 | C | Free-flight encounters | T16, T02 | Opus | Seeded director under a CPU cap | done |
 | T18 | D | New guns and impacts | - | Opus | Synthesis to measured shapes | done |
 | T19 | D | Per-thruster engine bursts | T18 | Opus | Voice placement and a voice budget | done |
-| T25 | A | Targeting at scale: a target menu and other targeting UX for large battles (Q26; placed before T20; numbered last because it was added after the others had numbers) | T02, T07, the M4 rebase | Opus | UX judgement with a concept stop (H); reads M4's on-read candidate list | not started |
+| T25 | A | Targeting at scale: a target menu and other targeting UX for large battles (Q26; placed before T20; numbered last because it was added after the others had numbers) | T02, T07, the M4 rebase | Opus | UX judgement with a concept stop (H); reads M4's on-read candidate list | done |
 | T29 | C | Generated asteroids and a sparse belt (D63, Q38): the `asteroids` generator, `BeltLayout`, `AsteroidBelt` as static rows | T27 | Opus | A new procgen asset and a placement seam M14 builds on | done |
 | T30 | B | Mission: Civilian escort with a cinematic intro (D62, Q36 to Q42), replacing Buoy defence and the ring | T29, T16, T17 | Opus | The random civilian, flee-and-resume in the native brains, three waves, writing and pacing | done |
 | T31 | - | L1: the flight batch's per-ship gather in native for row-commanded ships | T30 | Opus | The biggest measured lever (about 37 % of the tick at 1 000) | done |
 | T32 | - | L2: the hit resolver gets only bolts with live hostile pairs from native; per-hit hash and readout costs | T31 | Opus | 1.41 ms at 1 000; native pair filtering | done |
-| T33 | - | L3: the ram resolver's quick wins, then `RamTracker` in native | T32 | Opus | 1.20 ms at 1 000; string keys and full passes per tick | not started |
-| T34 | - | L5: the radar's dot buffers filled natively | T31 | Sonnet | Per-contact GDScript every frame | not started |
-| T35 | - | L8 and L9: the native allocation pass and the per-event member scans | T33 | Opus | Hash maps and Vec churn per sync; hits times members | not started |
-| T36 | - | L12 and L13: the smaller items and one native constants table with its GUT check | T35 | Sonnet | Many small fixes and a drift guard | not started |
-| T37 | D | L6 and L7: muzzle flashes and shot sounds culled by range; no audio node per pooled ship walked per frame | T28 | Sonnet | Sound-pass cost at scale | not started |
-| T38 | - | L14: the shared test steps fixture, collapsed recordings, balance tests out of the default run, CI's Python job and asset cache | T36 | Sonnet | Duplication and CI time; CI must stay green | not started |
+| T33 | - | L3: the ram resolver's quick wins, then `RamTracker` in native | T32 | Fable (maintainer, 2026-11-11) | 1.20 ms at 1 000; string keys and full passes per tick | done |
+| T34 | - | L5: the radar's dot buffers filled natively | T31 | Sonnet | Per-contact GDScript every frame | done |
+| T35 | - | L8 and L9: the native allocation pass and the per-event member scans | T33 | Fable (maintainer, 2026-11-11) | Hash maps and Vec churn per sync; hits times members | done |
+| T36 | - | L12 and L13: the smaller items and one native constants table with its GUT check | T35 | Sonnet | Many small fixes and a drift guard | done |
+| T37 | D | L6 and L7: muzzle flashes and shot sounds culled by range; no audio node per pooled ship walked per frame | T28 | Sonnet | Sound-pass cost at scale | done |
+| T38 | - | L14: the shared test steps fixture, collapsed recordings, balance tests out of the default run, CI's Python job and asset cache | T36 | Sonnet | Duplication and CI time; CI must stay green | done |
 | T39 | C | Civilian colours as the show shows them, and a sheen on every hull (maintainer, 2026-11-08; added after T38, done before T30) | T27 | controller | Colour read off captures vs lit albedo; the look is (H) | done |
-| T40 | C | Civilian panel seams drawn from the show's references instead of the generic brick grid (maintainer, 2026-11-08) | T39, the maintainer's reference captures | controller | Per-ship seam layouts read off images; the look is (H) | not started |
+| T40 | C | Civilian panel seams drawn from the show's references instead of the generic brick grid (maintainer, 2026-11-08) | T39, the maintainer's reference captures | controller | Per-ship seam layouts read off images; the look is (H) | done |
 | T41 | - | Rock rams by the speed into the rock: a glancing scrape costs its closing speed, not the ship's whole speed (maintainer, 2026-11-08; done before T31) | T29 | controller | A small change to the ram rule for rocks | done |
-| T42 | A | Pause backdrop: a slow figure-8 camera around the Starfury behind the pause menu (maintainer, 2026-11-08) | T02, T08 | Sonnet | A camera path that runs while the tree is paused; the look is (H) | not started |
-| T43 | A | Target preview: a turning green wireframe of the highlighted entity on the side of the screen opposite the radial target menu, with hull bar and distance (maintainer, 2026-11-08) | T25 | Opus | Hidden-line wireframe in a small viewport, edges from the mesh, an info panel kept lean | not started |
-| T44 | A | Focus pull: while the target menu is open only it and the target information are in focus; the play view and HUD blur over 0.2 s and come back over 0.2 s when it closes (maintainer, 2026-11-08, corrected 2026-11-09) | T25 | Sonnet | A short tweened screen blur between the HUD and the menu layers, free when closed | not started |
-| T45 | A | Start screen and settings groups: an options-only start screen (New game, Load game, Free flight, Settings, Quit), the sandbox scenes under New game, Controls inside Settings, five settings groups (maintainer, 2026-11-09) | T02, T03, T04 | Sonnet | Menu re-plumbing on the built kit; mostly tests | not started |
-| T46 | A | Radial comms menu: the comms menu moves onto T25's radial framework, with the focus pull, the right stick to point, A to confirm, B to go back (maintainer, 2026-11-09) | T25, T44, T07 | Sonnet | One framework for both menus; the comms routing changes from the D-pad to the stick; it pauses the game | not started |
-| T20 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
+| T42 | A | Pause backdrop: a slow figure-8 camera around the Starfury behind the pause menu (maintainer, 2026-11-08) | T02, T08 | Sonnet | A camera path that runs while the tree is paused; the look is (H) | done |
+| T43 | A | Target preview: a turning green wireframe of the highlighted entity on the side of the screen opposite the radial target menu, with hull bar and distance (maintainer, 2026-11-08) | T25 | Fable (maintainer, 2026-11-11) | Hidden-line wireframe in a small viewport, edges from the mesh, an info panel kept lean | done |
+| T44 | A | Focus pull: while the target menu is open only it and the target information are in focus; the play view and HUD blur over 0.2 s and come back over 0.2 s when it closes (maintainer, 2026-11-08, corrected 2026-11-09) | T25 | Sonnet | A short tweened screen blur between the HUD and the menu layers, free when closed | done |
+| T45 | A | Start screen and settings groups: an options-only start screen (New game, Load game, Free flight, Settings, Quit), the sandbox scenes under New game, Controls inside Settings, five settings groups (maintainer, 2026-11-09) | T02, T03, T04 | Sonnet | Menu re-plumbing on the built kit; mostly tests | done |
+| T46 | A | Radial comms menu: the comms menu moves onto T25's radial framework, with the focus pull, the right stick to point, A to confirm, B to go back (maintainer, 2026-11-09) | T25, T44, T07 | Sonnet | One framework for both menus; the comms routing changes from the D-pad to the stick; it pauses the game | done |
+| T47 | - | Radar plot input checks and scratch reuse: the code review's two open radar items (maintainer, 2026-11-12; numbered last because it was added after the others had numbers) | T34 | controller | Two small native fixes found by the code review | done |
+| T48 | - | The full code review's three P3 findings (maintainer, 2026-11-12; numbered last because it was added after the others had numbers) | T47 | controller | Small fixes found by the review | done |
+| T20 | - | Integration, full suite, docs and acceptance | all | Fable (maintainer, 2026-11-11) | One full run, the GPU check, the (H) list | in progress — awaiting the maintainer's confirmation |
+
+**Progress (2026-11-12).** Every task in the table is `done` except T20, which is `in progress` until the maintainer confirms
+the milestone (its notes are at the end of this file). The paragraphs below are the build's history, kept as written.
 
 **Progress (2026-11-03).** Done: T01, T02, T05, T11, T15, T18, T19, T24. In progress:
 
@@ -1760,6 +1769,82 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   opening the menu at 500 ships measured (no per-tick cost when closed).
 - **Done when:** the maintainer's chosen set works in the dogfight scenario and a 300-ship battle, the tests pass, and the (H) items
   (readability at 4K and 1080 lines, the feel of the pause and resume mid-fight) are in the playtest list.
+- **Done (as built, 2026-11-11, on the maintainer's machine):**
+  - **Built (Q44's set, the mockup of 2026-11-11):**
+    - **The tap.** A tap of a target button (pad B, keyboard B, Mouse 2) gives `CombatCommand.target_nearest`:
+      `TargetCategories.tap_pick` takes the nearest enemy, or the 2nd nearest when the nearest is selected, and back. The
+      old hold (`target_ahead` on the keyboard, `target_prev` on the pad) left the buttons; both stay actions, unbound.
+      The mouse wheel still cycles every target.
+    - **The hold.** Held `settings.target_hold_s` (0.35 s), a target button gives `UiCommand.target_menu_open`.
+      `TargetMenuDirector` reads the player's candidate list once, pauses the tree (the pause the game had before is put
+      back on close) and shows the menu; it stays open after the release.
+    - **The framework.** `RadialMenu` (pages, highlight, stick to slice, `arrange` with "none" in the down slice),
+      `RadialLayout` (the ring vertically centred at the left, slice polygons, label points) and `RadialMenuView` (a
+      `CanvasLayer` at layer 45 that is hidden and does not process while closed). T46 puts the comms pages on the same
+      three; T44's blur goes between the HUD's layer (40) and 45; T43's panel takes the right side (`right_side` mirrors
+      the ring if that is ever swapped).
+    - **The rings.** First: Enemies, Allies, Civilian, Unknown, Navigation, Objectives, clockwise from the top, with counts.
+      Second: six slices, the nearest five of the category clockwise from the top and NONE straight down. Objectives: the
+      active objectives whose triggers name an actor in play or a fixed place (`ObjectiveBook.subject`, `Trigger.place`),
+      the first five.
+    - **Picking.** A ship becomes the target; a beacon or an objective becomes the HUD waypoint (`HudWaypoint`: the diamond
+      on screen as before, and a diamond round its radar contact), never the target; NONE clears the target or the
+      waypoint. Every pick closes the menu and resumes. The later of the pilot's pick and a script's waypoint wins
+      (`MissionApi.waypoint_serial`, the instructor's route by its `NAV n`).
+    - **Input.** While it is open `InputAdapter.sample_radial` reads only the menu's stick, select, back and Start
+      (`radial_up/down/left/right/select/back`: the right stick or the arrow keys, A or Enter or Mouse 1, B or Backspace or
+      Mouse 2; the mouse's direction of travel points too). `begin_radial` seeds select and back from what is held (the B
+      that opened it is not a back); `end_radial` re-seeds every edge, and the A that selected does not fire and the stick
+      that pointed does not steer until each is let go. Start closes it and opens the pause menu.
+    - **Unknown.** A contact beyond 5 km (`TargetCategories.IDENT_RANGE_M`, the AI's sensor range) with no broadcast range is
+      unidentified: grey on the radar (the native radar kernel flags it, `ScsRadarPlot` colours it), listed under Unknown
+      with no name, and as the target it reads `UNKNOWN` in grey with no hull bar or damage outline.
+    - **Console.** Provider `target_menu`, command `targetmenu open|pick <entry>|back|close`; both in `info.md`.
+  - **Assumptions made where the settled design was silent (say if any should change):**
+    1. Both target buttons share the tap and the hold, so pad B's "hold = previous target" is gone with "nearest the nose".
+    2. With no identified enemy a tap takes the nearest unknown contact (and the 2nd nearest), so the button is never dead
+       while something is out there. With neither (free flight) it does nothing: buoys are reached through Navigation.
+    3. Identification keeps no memory: a contact that opens past 5 km is unknown again. The exception is the selected
+       target, which keeps its name and colour once identified for as long as it stays selected.
+    4. "Broadcasts" means a broadcast range above 0, at any distance (a civilian's 15 km transponder identifies it at 20 km).
+    5. Categories: a hostile ship is an enemy even when it is a civilian hull; a civilian of any people, and any ship of a
+       people neutral to the pilot, is under Civilian; a friendly ship that is not a civilian is an ally. A ship in the
+       low-attention tier is sorted by faction alone (its row carries no role).
+    6. The menu's own actions are fixed, like the menu kit's `ui_*` ones: declared in `project.godot`, not part of a control
+       profile, so nothing was added to saved profiles. Mouse 1 and Mouse 2 also select and go back. A plain left or right
+       arrow takes the upper slice of that side; add Down for the lower one.
+    7. Every category ring keeps six slices, so NONE and "the nearest" are always in the same direction; empty slices are
+       blank and the highlight skips them.
+    8. An objective's slice shows its text cut to 16 characters with its subject and range; the whole text shows under the
+       ring while it is highlighted.
+    9. The pilot's NONE on Navigation or Objectives hides a script's waypoint too, until the script sets one anew.
+    10. A hold does nothing while the controls are not the pilot's (a cinematic, `lock_controls`, the player down, the pause
+        menu). Opening the target menu closes the comms menu.
+    11. A light dim (25 % black) sits behind the ring until T44's blur.
+    12. The HUD keeps the selected target's box and readout behind a pause (it used to drop them behind the pause menu,
+        because a paused marker did not count as in play).
+  - **Changed from the plan:** no smart buttons, pins, scoped cycling or declutter (Q44 chose the tap and the wheel only). The
+    radar's unknown flag went into the native kernel (per contact, per frame); everything else is per-event GDScript.
+    `TargetCategories.summarise` keeps the nearest five per category in one pass instead of sorting every category.
+  - **Measured (RX 6950 XT, Forward+, window 1200x675, overlay off):** opening the menu, median of 10: 0.28 ms in the dogfight
+    (10 candidates), 2.56 ms in `bench battle 300` (304 candidates; 2.4 to 5.5 ms), most of it the candidate list itself;
+    `TargetMenu.open` alone on 500 seeded candidates 0.43 ms. Closed, it costs nothing per tick (no node of it processes,
+    no candidate is built: test). Dogfight: 145 fps and 41 draw calls closed, 145 and 71 on the first ring, 145 and 69 on
+    the second. Battle 300: 144 and 126 closed, 145 and 156 on the first ring, 134 and 154 on the second (the 144 Hz cap
+    throughout; the ring adds about 30 draw calls of text and lines).
+  - **Tests:** `test_radial_menu` 12, `test_target_categories` 6 (seeded sets of 500), `test_target_menu` 12 (with `HudWaypoint`
+    and the 500-candidate opening), integration `test_target_menu` 16 on the main scene (tap, hold and pause, stick, A and B,
+    Start, nothing fired or steered on resume, waypoints, the mission's later word, unknown contacts, no cost closed, the
+    console, the ring's place on screen), `test_input_adapter` 50 (five new, the tap and hold ones rewritten),
+    `test_input_map` 13, `test_radar_model` 15, `test_hud_layout` 52, `test_objective_book` 19,
+    `test_targeting_controller` 20, `test_control_lock` 10, and two Rust tests of the radar kernel. The quick tier passes
+    (1 629 GUT tests), and so does every GUT file with the slow ones left out (303 scripts, 3 318 tests); main-scene smoke
+    runs show no errors or leaks.
+  - **(H):** the screenshots in `references/screenshots/T25 target menu/` (both rings in the dogfight and the battle, and
+    the HUD after a pick); readability of the ring's labels at 1080 lines and at 4K; the feel of the pause and the resume
+    mid-fight, and whether 0.35 s is the right hold; whether a tap falling back to unknown contacts is wanted; whether a
+    far contact should stay identified once it has been seen close (assumption 3); the grey of unknown contacts against
+    the radar; the keyboard and mouse pointing.
 
 ### M5-T29 Generated asteroids and a sparse belt
 
@@ -1922,6 +2007,42 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   rigid and layers tested from columns before `_hull()`), measured; then `RamTracker` in native (integer keys, no strings),
   which the per-tick-native rule asks for.
 - **Done when:** the ram stage at `battle 1000` drops from 1.20 ms, ram results identical, numbers in the Done notes.
+- **Done (as built, 2026-11-11):**
+  - **Built:** `ScsRamTracker` (`native/src/ram_tracker.rs`, an engine-free kernel under the guard test, and its shell
+    `native/src/ram_contacts.rs`) replaces the GDScript `RamTracker`, which moved to `tests/fixtures/ram_tracker.gd` as
+    the reference. Pairs are keyed by their two body ids as integers; the last tick's index by id is built only on a
+    tick with a contact or an open window. One call a tick (`contacts`) reads Jolt's contacts over the core's rigid rows,
+    feeds the tracker and notes the pairs Jolt holds; it asks GDScript back only for the acceleration of a hull the
+    flight step did not fly (`set_accels`) and the ram limits of a hull with a measured window (`land`). `swept_pairs`
+    runs the broad phase (`kernels::ram`) and returns the pairs with the columns of just the hulls they name; it leaves
+    out prop pairs and, for pairs Jolt does not hold, those the swept test's own first two rejects are sure to refuse
+    (`ram::clearly_apart`: the bounding spheres; `ram::cannot_reach`: the first hull's sphere against the second's
+    `ram_bounds`, read from the `Damageable`; both with room for the resolver's 32-bit sums). `RamResolver` no longer
+    copies every hull's columns, keeps no per-hull array or index, tests each pair from the columns and builds a hull's
+    Dictionary only for a pair it sweeps; the hull columns are read whole only on a tick where a contact ram lands or a
+    ship is near a rock. `ScsRamPhase.contacts` is gone (`pairs` stays for the parity tests); `ScsSimCore.hull_count` is
+    new. The rocks' grid (`sweep_cells.rs`, shared with the hit resolver): a look walks only the cells between the
+    lowest and highest held cell of a level; a kept grid marks its held cells (`mark_cells`, a bit a cell) and lists a
+    sparse level's hulls by x range; hulls far from a look are counted as work, not listed; only the pairs that pass the
+    sphere test are sorted. Pairs, their order and `visited` are unchanged (the recorded fixtures hold).
+  - **Not moved:** the shape-by-shape swept test (`_sweep_pair`, `ConvexSweep`) stays in GDScript: about one pair a
+    tick reaches it in the battle after the native rejects. The contact read's cost is now two engine calls a rigid hull
+    (`body_get_direct_state`, `get_contact_count`), which a cache could not replace without changing which hulls count
+    as in play.
+  - **Measured** (`bench_quick.sh`, `battle` 1000, seed 1, `reports/perf/t33_before` at a107cffe and `t33_after` at
+    027956b5): ram stage median 0.577 ms before, 0.230 ms after (P3: 1.20); hit stage 1.013 to 0.926 ms (the rocks'
+    grid); tick median 7.22 to 6.79 ms, p99 9.49 to 9.32 ms (8.85 to 9.38 over four runs). Per part, microseconds a
+    tick (about 330 rigid hulls, 55 of them capitals, 1 000 rocks): gather 35-68 to 6; contacts 168-178 to 98; swept
+    89-197 to 41-59 (9-27 broad-phase pairs, 1 left for GDScript); rocks 136-153 to 66-70.
+  - **Tests:** Rust `cargo test --release --lib` 54 passing (16 new: the tracker's rules 8, the grid 4, the two pair
+    rejects against the resolver's own tests 4). GUT: `test_ram_tracker` (22: the 20 ported to the native class, the
+    native tracker beside the GDScript reference for 1 500 random ticks, a refused feed), `test_ram_scale` (8: new
+    `test_a_ship_inside_a_large_hulls_bounding_sphere_but_out_of_reach_of_its_box_is_not_swept`), the guard test
+    (`ram_tracker.rs` added). Focused run with `GUT_SLOW=1`, 374 passing: the ram files, `test_rocks_and_mines`,
+    `test_tier_outcomes`, `test_core_state`, `test_core_threads`, `test_core_snapshot`, `test_row_commands`,
+    `test_driver_step`, `test_bolt_rows`, `test_sim_core`, `test_weapon_rows_battle`, `test_flight_parity_fight`,
+    `test_hit_resolver`, `test_hit_scale`, `test_hit_broad_phase`, `test_sweep_cells`, `test_rebase_in_play`, the pool,
+    stand-in and run files.
 
 ### M5-T34 L5: the radar's dot buffers
 
@@ -1930,6 +2051,32 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   multimeshes; `factions` built only when read; no `slice` copy when the multimesh is larger.
 - **Done when:** the HUD's frame cost outside the ticks at 1 000 ships drops, the radar tests pass unchanged, numbers in the
   Done notes.
+- **Done (as built, 2026-11-11):**
+  - **State found:** `RadarModel.plot` already ran natively (M4-T23); what stayed in GDScript was the painter's per-contact
+    `_fill_dot_buffers` (12 indexed writes a contact, two with backings), the `buffer.slice` copy when a multimesh was larger,
+    the per-contact `factions` loop in `RadarModel.plot`, and six `push` loops in the native shell.
+  - **Readouts first:** `hud.radar_plot_us` (the plot call) and `hud.radar_paint_us` (`_draw_radar`), each smoothed over about
+    twenty frames. The bench runs headless but the HUD still lays out and draws, so the readouts work there (`bench battle
+    1000 10 warmup=2 seed=1`, then `wait 60; state hud`).
+  - **Built:** `radar_kernel::dot_counts`, `grown_capacity` and `fill_dots` (engine-free, `Vector2` and `Color` added to the
+    kernel's allowed imports) behind `ScsRadarPlot.dot_buffers`. `RadarModel.dot_buffers` returns a `RadarDotBuffers`
+    (plain, rim and backing buffers with their counts). The painter passes its multimeshes' instance counts, so a buffer
+    comes sized for its multimesh (doubling only when it must) and goes to the server whole: no `resize`, no `slice`. The
+    selected and waypoint dots are placed by one transform each; the stalks stay a single transform of the plot's units.
+    `RadarPlot.factions` is built when read (`bind_factions` keeps the order and indices); the native `plot` shell fills its
+    buffers by slice instead of per-element `push`.
+  - **Measured** (`battle` 1000, seed 1, three headless runs each, HUD readouts after `wait 60`; before = this task's
+    readouts on the T35 code): the radar's plot call 323 to 374 us before, 77 to 117 us after; its paint 358 to 436 us
+    before, 91 to 138 us after; together about 0.7 to 0.8 ms before, 0.17 to 0.25 ms after a frame. Tick median 5.86 to 5.93 ms
+    before and 5.90 to 5.96 ms after (the radar is not in the tick); `bench_quick.sh t34_after battle` at 1 000: median 5.89 ms,
+    p99 8.15 ms (T35's recorded run, 5.82 and 7.87 ms, is within the run-to-run spread). No separate `t34_before` bench run:
+    the tick is untouched, and the readouts above are the before and after of the code that changed.
+  - **Look:** `references/screenshots/T34 radar/` before and after in `battle 300` (the same frame, seeded) and the dogfight;
+    the radars read the same. Final judgement of the look stays `(H)`.
+  - **Tests:** 3 Rust tests in `radar_kernel/tests.rs` (63 pass in `cargo test --release --lib`); GUT `test_radar_plot` gains 3
+    (native buffers against the old per-contact loop, with and without backings and a rim selection; buffer sizing; lazy
+    factions), `test_sim_core`'s radar guard allows the new builtins and names `fill_dots`. The radar, HUD, target-menu,
+    cockpit-screen and broadcast files pass unchanged.
 
 ### M5-T35 L8 and L9: native allocations and per-event scans
 
@@ -1939,6 +2086,58 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   member index map rebuilt in `set_members`; `latest_target` pruned for freed bodies).
 - **Done when:** the core's sync and the snapshot cost less at 1 000 (measured), Rust and GUT parity hold, numbers in the
   Done notes.
+- **Done (as built, 2026-11-11):**
+  - **Readouts first:** `core.core_sync_us` (the native `sync_in` call alone), `core.snapshot_us`, `core.select_us`, and
+    `ScsSimCore.sync_parts_us()` (the tier's step, the bodies, the statics, the tier rows, the lookups). A bench sums them
+    over its window and writes the means to `summary.json` under `core`. Readouts only.
+  - **L8, built per item:**
+    - *`index_rows`:* the hull rank is a column beside the rows (`row_ranks`), so no map of ranks is built; `row_of_id`,
+      `row_of_handle`, `touched`, `seen`, `parked_since_sync`, `marker_at`, `slot_of`, `latest_target`, `accels` and the
+      tier's `by_body` hash with `IdHasher` (`IdMap`, `IdSet`); the hull list is built in a kept Vec. The rows' id lookup
+      sorts only the bodies and tier rows and merges the rocks' and mines' pairs, sorted once (`index_ids_around`).
+    - *Names:* a row carries a `u32` name id; the lowered names live in a shared `NameTable` and the brains match a
+      wanted name by its id (`rows_named`, `first_named`, the keeper). Display names are ids too, so a sync clones no
+      engine string. Names no body carries are dropped once the tables pass twice the bodies plus 256.
+    - *`snapshot`:* the faction and name columns are kept and made again only when a row's faction or name changed; the
+      scan gets copies of its own. **Not built as listed:** faction indices are not sent. `ContactScan`, its GDScript
+      readers and several test files read `_factions` as names, and the kept column already removes the per-call cost.
+    - *Statics:* one ready block built in `set_statics`, appended whole each sync.
+    - *Small items, all five:* the sweep grid's cell lists are pooled (`sweep_cells.rs`); the bolt step's `keep` flags,
+      the tier ram's pair set and the weapon step's nine lists (plus `interceptors_of`) are kept between ticks;
+      `resync_touched` asks the set, not a copied Vec.
+  - **L9:** `members_by_body` (sorted, rebuilt in `set_members`) gives `note_hull` and `note_selection` a body's members
+    by binary search. `set_members` drops `latest_target` entries of bodies that are neither a member nor a tier row.
+  - **Beyond the list, found by the readouts:** the tier rows are appended column by column (122 to 10 us); `Rows` and
+    `Bolts` copy into the job snapshot's held columns (`clone_from`; the derived clone allocated every column each tick);
+    a hull with no active marker is asked for its activity only when its body is touched or first seen, as the markers
+    are since M4-T35b (about 700 parked hulls cost four engine calls each a tick; the bodies' part 284 to 124 us).
+  - **Measured** (`bench_quick.sh`, `battle` 1000, seed 1, three runs each; `reports/perf/t35_before` at 797819a8,
+    `t35_after` at d09c4d7e), mean microseconds a tick:
+
+    | | before | after |
+    |---|---|---|
+    | native `sync_in` | 722 | 255 (P3's core sync: 460) |
+    | its parts: tier step / bodies / statics / tier rows / lookups | 53 / 400 / 35 / 122 / 96 | 52 / 124 / 23 / 10 / 30 |
+    | `snapshot` (0.07 calls a tick here) | 47 a call | 21 a call |
+    | think stage median (the job's snapshot copy) | 512 | 335 |
+    | hit stage median | 917 | 775 to 790 |
+    | targeting stage median | 157 | 88 |
+    | tick median | 6 730 to 6 750 | 5 820 to 5 900 |
+    | tick p99 | 8 760 to 9 160 | 7 870 to 8 060 |
+
+    The ram and flight stages are unchanged (0.23 ms, 2.42 ms). What is left of the sync: three engine calls a body in
+    play (pose and velocities) and the tier's step.
+  - **Tests:** Rust `cargo test --release --lib` 60 passing (6 new in `native/src/rows/tests.rs`: the name ids, the
+    merged id lookup against the plain one, the block append, the copy into held columns, the tier's column append
+    against its row push). GUT `test_body_registry` 15 (4 new: the kept snapshot columns, names dropped, an event
+    reaching only its body and a freed body's selection dropped, a parked hull not asked again until touched). Focused
+    run with `GUT_SLOW=1`, 48 files, 431 passing: `test_core_state`, `test_core_threads`, `test_core_snapshot`,
+    `test_row_commands`, `test_driver_step`, `test_bolt_rows`, `test_weapon_rows_battle`, `test_sim_core` (the guard's
+    import lists take `IdMap` and `IdSet`), `test_brain_parity`, `test_brain_think_parity`, `test_tier_outcomes`, the
+    tier, ram, hit, pool, stand-in, destruction and run files. `run_tests.sh --quick` 1 672 passing; the main-scene smoke
+    clean.
+  - **Open:** none. A caller that sets a hull's `destroyed` flag or a body's `process_mode` without the hull's signals
+    or a visibility change must call `ContactScan.touch(body)` (architecture 18.24); the game's own paths all signal.
 
 ### M5-T36 L12 and L13: the smaller items and the constants table
 
@@ -1948,6 +2147,34 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   silhouettes, the two group walks, the drivers' console vars, the output array, the latent `reach`, the duplicated maths).
   L13: a `#[func] constants()` on the core and one GUT test that compares every mirrored constant with its GDScript twin.
 - **Done when:** each item is done or marked not worth it with a measured reason; the constants test passes.
+- **Done (as built, 2026-11-12):** architecture §18.29.
+  - **L12, item by item:**
+
+    | Item | Outcome |
+    |---|---|
+    | Tier `_prune` every tick | Done: `TierDirector._prune` walks only when `SimCore.removals` changed |
+    | Bolt quarantine under TAA | Done, native: `ScsSimCore.bolt_quarantine` (kernel `bolt_kernels::quarantine`, bit-identical in 64-bit over the 32-bit rows); measured 0.39 ms per 1 000 slots per frame in GDScript, no `duplicate`/GDScript loop left |
+    | `FarFlashes` upload per `add()` / with zero flashes | Done: `add` only queues, the next `advance` uploads once; an empty, already-empty multimesh is not uploaded |
+    | `FarHulls` `instance_count` per change | Not worth it: it changes only when the capital count changes (rare), and the exact-size buffer needs the exact count |
+    | Light rig / picker `get_global_transform_interpolated` | Not worth it: only lit emitters pay it; `state lights` in `battle 1000` reads 30 candidates, `cost_us` 33 |
+    | Wing director compare-before-assign | Done: the `AiContext` wing setters return on an equal value, so only a real change (a moving leader's link, an order) marks the pilot for the native push |
+    | `main.gd` readout before `hud.visible`; silhouettes per frame | Done: `_update_bracket` tests `hud.visible` first; `Silhouette.wireframe`/`polygons` are cached per layout and aspect |
+    | Two `get_nodes_in_group(Projectile.GROUP)` per tick | Not worth it: only one call per sync remains (the other is the delayed path), the group holds the player's bolts, beams and missiles only (NPC bolts are core rows); beams as owned rows is a larger task |
+    | Drivers' console vars on enter/exit | Done: the first driver in the tree owns the `ai` entries; the other 999 register nothing |
+    | `PackedFloat64Array` per ship per output read | Done: `group_levels` is filled in place |
+    | Latent `reach: &[]` in `contact_field.rs` | Done: the core-attached view carries `rows.reach` |
+    | Duplicated maths | Done: `weapon_kernels.rs` and `sim_core.rs` use `v3` (about 70 lines gone); the three compute effects share `ComputeUniform.make`. Not done: the PREDELETE scaffolding (each frees different RIDs) and the multimesh setups of `FarDots`/`FarFlashes`/`FarHulls` (formats differ); the "64-bit range" had no identifiable duplicate |
+
+  - **L13:** `native/src/constants.rs` is one table of 32 numbers and `FlightModel.AXIS_SIGN`, served by `ScsSimCore.constants()`
+    (the mirrored consts are `pub` now); `tests/unit/test_native_constants.gd` finds each GDScript twin through the global class
+    list and fails on any difference or missing twin. `MUZZLE_OFFSET_M` has no GDScript twin and stays out.
+  - **`battle 1000` (`bench_quick.sh`, seed 1, other agents working beside it, so a few percent is noise):** before tick median 5.88 ms, p99
+    8.13 ms; after 5.50 ms, p99 7.62 ms. Stages: targeting 0.09 / 0.09, ai 0.41 / 0.40, resolvers 1.00 / 1.00, stand-ins 0.69 / 0.68
+    ms; nothing moved beyond noise (the work done is per-frame and TAA-only, or a spawn cost). Results identical.
+  - **Tests:** cargo `--lib` 66 (3 new: the quarantine kernel); GUT quick suite 1681 tests, all pass after the two guard
+    allow-lists in `test_sim_core.gd` were widened (`use crate::v3::`, the test module's `use super::*;`); new
+    `test_native_constants` 2; the quarantine and TAA mesh tests (17) are unchanged and pass on the native kernel; 20 focused
+    parity/tier/wing/battle files with `GUT_SLOW=1`: 203 pass; main-scene smoke clean.
 
 ### M5-T37 L6 and L7: flashes and sounds at scale
 
@@ -1957,6 +2184,22 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   now); any per-pooled-ship audio node still walked every frame goes, so the per-frame audio work is linear in voices, not
   ships.
 - **Done when:** work-count tests pin both; `battle 1000` frame time with sound on is recorded before and after.
+- **Done (2026-11-12):**
+  - **Built:** `ShotCull` (`src/weapons/shot_cull.gd`): flashes beyond 2 500 m of the camera and gun or turret sounds beyond
+    3 000 m are not made (`MuzzleFlashPool.trigger` returns false and counts `culled`; `AudioDirector.play_shot` counts
+    `shots_culled` and takes no voice). The flash pool is a ring (head, span, dead slots skipped by the head) with a `_lit`
+    counter and ages from a pool clock, so a full pool shifts no arrays and the pass visits the ring's span. Readouts
+    `frame.flashes_culled`, `audio.shots_culled`. L7: T19 and T28 had already left the per-frame audio work linear in
+    voices (the existing `test_a_frames_engine_work_follows_the_voices_not_the_ships` pins it); nothing per pooled ship is walked.
+  - **Measured** (`bench_quick.sh`, `battle` 1000, seed 1, one run each, headless so the flash pass and audio mixing do
+    not run; "before" is the ring with the ranges set to infinity): tick median 5.64 ms to 5.48 ms, p99 8.17 ms to 7.50 ms.
+    The effect is inside the run-to-run noise here; the gain is the work not done (a voice steal and a light per far shot)
+    on a machine with a window. `reports/perf/t37_before`, `t37_after`.
+  - **Tests:** new `test_shot_cull.gd` (5: far flash culled and counted, full ring caps at 256 and holds the light cap, the pass
+    follows live flashes not capacity, `clear_for` leaves the ring consistent, the range maths); `test_audio_director.gd`
+    +1 (a shot beyond earshot takes no voice); `test_muzzle_flash_pool` 4 and `test_engine_audio` 14 unchanged and passing.
+  - **(H):** by ear and eye near the player: shots, flashes and engine hum sound and look as before; distant dogfights
+    no longer thin out the near sounds.
 
 ### M5-T38 L14: test duplication and CI
 
@@ -1968,6 +2211,24 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   the lock paths in one place.
 - **Done when:** the suite's totals are unchanged except the moved balance tests; CI is green on the push, with shard times
   in the Done notes.
+
+- **Done (as built, 2026-11-12):**
+
+  | L14 item | Outcome |
+  | --- | --- |
+  | `TestSteps` fixture for `_ticks`, `_exec`, `_console` | Done now: `tests/fixtures/test_steps.gd`; 54 test files (and one inner class) extend it and lost 41 + 11 + 10 copies in one pass. Two files whose `_ticks` meant something else were renamed (`test_m3_run`: `_wait_seconds`; `test_reaction_mass`: `_ticks_in`, the seconds-to-ticks one); the three files whose `_ticks(seconds)` returns a tick count, and the two that step the flight model directly, keep their own (a different signature). |
+  | `OLD_PATH_CASES` collapsed to one recording | Already done by M6-T18 (cherry-picked in 2c76787): `OLD_PATHS_CASE`, one recording. |
+  | Balance tests out of the default run | Already done by M6-T17: `tests/fixtures/balance_tests.gd`, `tests/balance_suite.txt`, `--balance`/`--full`; confirmed that `test_dogfight` and `test_m3_sandbox` do not run in the standard tier. |
+  | CI: Python tests in their own job, `assets/generated` cached | Done now: job `python` (`unittest discover`), `PYTHON_TESTS=0` on the three GUT shards; `assets/generated` restored on `assets-<os>-py3.12-hashFiles('tools/procgen/**')` in the Python job and the shards, `gen_assets.sh` only on a miss. The key covers T40's low/high civilian texture sets because they are generated from `tools/procgen`. |
+  | `run_tests.sh` smoke blocks through one helper | Done now: `main_run` in `scripts/lib_tests.sh` replaced 23 copies of the run, `cat`, exit-code check (the file lost about 190 lines). The expect/reject lines stay per block: they are the checks. Verified by running every smoke block (exit 0). |
+  | Lock paths in one place | Done now: `scripts/lib_locks.sh` (`GODOT_LOCK`, `BENCH_LOCK`, `GPU_LOCK`, each overridable) sourced by the seven scripts that hard-coded them. |
+
+  - **Totals:** no test added or removed. `--quick` GUT before and after: 111 scripts, 1 686 tests, all passing; the 56 touched
+    scripts run focused with `GUT_SLOW=1`: 740 tests, 8 091 asserts, all passing. Python untouched.
+  - **CI (run 43179401269, green, cold asset cache):** python tests 22.9 min (it generates the assets on the miss), GUT shard 1
+    14.9 min, shard 2 27.4 min, shard 3 25.3 min. Shard 1 fell from about 24 min (it no longer runs the Python tests); shards 2
+    and 3 are now the longest because the heavy files fall on them in path order (a rebalance by cost is a later option). The
+    runs after this one restore `assets/generated` from the cache, which removes the asset generation from every job.
 
 ### M5-T39 Civilian colours and hull sheen
 
@@ -2003,10 +2264,51 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   show's references.
 - **Needs:** the maintainer's captures per ship (Saturn family: Achilles.jpg, Red Star 9.jpg, Epsilon.JPG; Skylark; Narn
   transport; Brakiri Bokmai; Brezebel), which are not on this machine.
+- **References given (maintainer, 2026-11-12):** 42 images in `references/T40 seam references/` (gitignored, never
+  committed). For the civilians: `saturn 8 texture close up`, `EA skylark texture close up`, the `ea transport` close-ups (the
+  Earth Alliance civilian look), the Narn ones (`narn station`, `narn cruiser`, `narn heavy cruiser`, `narn base`, `narn frazi
+  fighter`) for the Narn transport, `centauri fighter close up` for the Brezebel; none shows Brakiri styling. The rest
+  (Babylon 5 station, Omega, Hyperion, Warlock, Starfury, Minbari, Vorlon, Shadow, Vree, raider carrier and battle wagon) are
+  for later ships and the station (M7, M12, M13).
+- **Phase 1 answers (maintainer, 2026-11-12):** option sheets A (major seams only), B (reference density, hatches, ribs) and C
+  (B plus mixed-size plates with per-plate tone and sheen, joint grime, raised hatches) were shown for all nine hulls.
+  (1) A graphics setting picks the texture detail: **low = A, high = C**, for every civilian. (2) C's per-plate tone (5 to 9 %
+  of value, up to 17 % on the Narn crescent) is acceptable, not a colour change. (3) The Saturn 8s' wider lines are good; no
+  4096 atlases. (4) Turrets, trusses, arms, struts, antennas and nozzles stay plain for now. (5) Narn war-paint stays out as a
+  paint scheme, but the **Narn transport takes the Frazi fighter as its model**: the consistent Narn construction, with the
+  fighter's pattern of smaller rectangles in slightly varied colour across the hull. (6) The references are inspiration only,
+  never reused or traced. (7) No re-shoot needed. Phase 2 commits the layouts with tests (per part: feature counts and
+  positions, mirror symmetry, minimum plate size, determinism) and removes `panel_grid` and the civilian path of `plating_for`.
+- **Note (maintainer, 2026-11-12):** the texture detail setting is meant for every ship, but only the civilian hulls have low and
+  high texture sets so far. The Starfury, the raider and the allies keep their one set (the setting changes nothing on them) until
+  their surfaces get the same A/C treatment; the setting's description says so, and `docs/roadmap.md` carries it as a follow-up.
 - **What:** per ship, the seams and hatches read off the captures (where plates break, which way they run, ribs on the
   pods), drawn as per-part seam layouts instead of `plating_for`'s staggered grid; a look sheet per ship for the
   maintainer before the generator commits.
 - **Done when:** each civilian's seams match its references (H), tests pin the layouts, and `panel_grid` is gone or unused.
+- **Done (as built, 2026-11-12, on the maintainer's machine):** per-part surface layouts and two texture sets a hull
+  (architecture §18.30; the reads and the layouts are in `docs/assets-civilian.md`, "Surface layouts").
+  - **Procgen.** `core/seams.py` (features as distances on the surface: cuts, spokes, hoops, paths, hatches with louvres,
+    mixed-size plating; a layout follows its part through moves, turns and mirrors) and `parts/layouts.py` (the five
+    generators' layouts). The baker draws them into the albedo, normal and ORM maps. Every civilian hull and the Bokmai pod
+    are written with the full set and a `_low` set (major seams only); meshes, chunks, hardpoints and the emissive map are
+    unchanged, so fidelity was not re-scored. `panel_grid` is gone from the styles; `Atlas.grid` turns the generic plating
+    off for hulls with layouts, and they compute no `plating_for`.
+  - **The setting.** `settings.texture_detail`, "Ship texture detail" (`low` or `high`, default `high`, Video group of the
+    settings menu), for every ship. It is live: `MeshAssets` swaps the maps on the hulls already in the scene. The loading is
+    general (paint, livery and glass materials): a hull with one set ignores it, and only the civilians have both for now.
+  - **Narn.** Reworked after the Frazi fighter: framed panels, a panel inside a panel, and small rectangles in slightly
+    varied shades (10 % on the green, 7 % on the box) in place of phase 1's larger 17 % mosaic. GPU check on the RX 6950 XT
+    (Forward+, 103 fps, 54 draw calls in the sheet scene): `references/screenshots/T40 seams/narn_final.png`, low and high.
+  - **Kept from the sheets, changed since.** Barrel and disc plating now mirrors across the centre plane (it did not on the
+    sheets), the Skylark's dome petals moved 7.5 degrees to be symmetric, and the Saturn 3's cross beam is plain. The
+    Bokmai's arms and fork struts keep their layout: they are hull limbs, not structure (confirmed by the maintainer, 2026-11-12).
+  - **Tests.** Python `test_seams` 34 (features, plating never under its least size, determinism, mirror symmetry, a layout
+    following its part, every part's feature counts per level pinned, key positions against the parts' own dimensions, the
+    baked maps, the low set's files and manifest entry), `test_textures` (the grid switch) and the five ship suites. GUT
+    `test_civilian_meshes` 7 (the setting picks each hull's set and swaps a loaded hull's maps; a one-set hull ignores it;
+    a shader material takes the set too).
+  - **(H):** the look of each hull at `high` and `low`.
 
 ### M5-T41 Rock rams by the speed into the rock
 
@@ -2054,6 +2356,26 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   restores the mode and the pose, no player ship gives the still view, the setting off gives the still view.
 - **Done when:** AC24, the tests pass, and screenshots of three phases in `references/screenshots/Pause backdrop/` for
   the maintainer's look check (H).
+- **Done (2026-11-12):**
+  - **Built.** `PauseOrbitPath` (pure, `src/camera/pause_orbit_path.gd`) and a backdrop mode in `CameraRig` (`start_backdrop`,
+    `stop_backdrop`, `chosen_mode`) that plays it on the cinematic camera while the tree is paused (the rig goes to process mode
+    always for as long as it runs). `Main` starts it on the pause menu's `opened` and stops it on `resumed`; the flight HUD
+    hides meanwhile. Console: `pausemenu [on|off]` (opens or closes the menu), `camera.backdrop`, `camera.backdrop_phase`;
+    settings `pause_backdrop` (on) and `pause_backdrop_loop_s` (30 s, 10 to 120).
+  - **Choices.** The move is a circle around the ship that rises and dips twice per loop (a vertical figure 8: seen from the side
+    an 8, and its crossing is off to the side, so it never comes near the hull), at the larger of 1.3 times the chase distance and
+    2 times the hull's bounding radius, about 20 degrees of tilt, aimed a little ahead of the ship and pushed aside so the ship
+    sits in the right half. It blends in over 1 s from the current camera, starting at the nearest phase. Resume cuts back to
+    the mode left with the chase camera snapped to the ship (the pose is exactly the one the player left; there is no blend
+    back). A shot playing, no ship or the setting off give the still frame. Not for the radial menus. The `settings.pause_backdrop_speed`
+    name became `pause_backdrop_loop_s`, and the provider keys live on `camera`, not `pause_menu` (T45 owns that file).
+  - **Not done.** The lighter dim and see-through objectives ground (the frame's ground is T45's file): the panels still cover
+    most of the ship in a 960x540 frame. Left as a follow-up for the look check.
+  - **Tests.** `test_pause_orbit_path` (6: closed, seam smooth, clearance for a Starfury and a Saturn 8, nose and tail, faces the ship,
+    nearest phase); `test_pause_menu` +5 (runs while paused and Resume restores the view and HUD, sub pages keep it, setting off,
+    no ship, cockpit comes back); `test_camera_rig` provider keys. Screenshots in `references/screenshots/T42 pause backdrop/`.
+  - **(H).** Whether the move looks right and the panels hide too much of the ship; the loop time; the pick between this and the
+    alternatives (plain orbit, Lissajous, beauty angles).
 
 ### M5-T43 Target preview: a wireframe of the highlighted entity
 
@@ -2108,6 +2430,95 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   battle, `state render` before and after.
 - **Done when:** AC25, the tests pass, and screenshots of a Starfury, a raider and a Saturn 8 in the panel in
   `references/screenshots/Target preview/` for the maintainer's look check (H).
+- **Done (as built, 2026-11-11, on the maintainer's machine):**
+  - **Built:**
+    - **The panel** (`TargetPreview`, a `CanvasLayer` on the ring's layer 45, so above T44's blur): vertically centred at
+      the side opposite the ring, 552 x 624 px at 1080 lines, scaled with the ring. It shows while the second ring is
+      open and follows the highlight; on the first ring and with the menu closed it is hidden.
+    - **The wireframe** (`WirePreview`, a `SubViewport` with its own `World3D`, 504 x 300 px at 1080 lines, MSAA 4x): the
+      hull turns at 15 degrees a second about its up axis under an orthographic camera 20 degrees above, sized from the
+      bounding box so the hull stays inside the view through the whole turn (`WireFraming`). Per part two draws (the solid
+      mesh for depth, then its feature edges with the depth test) and one outline pass on the depth buffer.
+    - **The edges** (`FeatureEdges`, `FeatureEdgeJob`): creases over 25 degrees, open borders and edges of three or more
+      faces, vertices welded at 1 mm; found once per mesh and kept for the session.
+    - **The lines** (`TargetPreviewModel`, Q44's approved set): name in the IFF colour; class and faction; hull bar with
+      percent; range; closing speed, signed. A hull with pod mounts adds `CARGO PODS 2 of 3`. A beacon shows `Nav buoy`
+      and no hull bar. An objective shows its text and range, and its actor's wireframe when it names a ship in play (a
+      diamond for a bare place). `ATTACKING YOU` in red over the drawing. No weapons, absolute speed or heading. Each
+      kind's rows are one list in `TargetPreviewModel.FIELDS`.
+    - **Console:** provider `target_preview`; `targetmenu highlight <entry>` points at an entry without picking it. Both
+      in `info.md`.
+  - **Changed from the plan:**
+    1. The edges come from the full mesh, not LOD1 or LOD2: the generator writes no LOD meshes any more (the importer
+       builds index levels inside the mesh), and the full mesh gives clean creases.
+    2. The edge search costs more than a frame on every ship (table below), so it runs 2 ms a frame (`FeatureEdgeJob`)
+       instead of moving into procgen's output contract: no new asset file, no regeneration. The outline shows at once
+       and the creases follow within 4 to 28 frames, the first time a hull is highlighted in a session.
+    3. The lines are pulled toward the camera (0.6 % of the hull's radius, in view space) instead of the solid being
+       shrunk along its normals: split normals at hard edges would open cracks in a shrunk solid.
+    4. The outline pass measures the bend of the depth across a pixel, not its plain difference, so a steep flat face
+       draws nothing and the line is one pixel wide.
+    5. The panel is the mockup's 552 x 624 px with a 504 x 300 px drawing, not "about 256 px square": a wide drawing
+       suits long hulls.
+    6. `DESTROYED` is not built: the game is paused while the menu shows, so nothing can be destroyed while highlighted.
+    7. Rocks are not in the candidate list, so there is no rock wireframe.
+  - **Assumptions (say if any should change):**
+    1. An unknown contact shows `NO ID` in grey in the drawing's place, with `UNKNOWN`, `No transponder`, range and closing
+       speed: no generic silhouette, since any hull shape would suggest a class.
+    2. `NONE` keeps the panel up with `NONE` and what picking it does (`Clears the target` or `Clears the waypoint`), and
+       no drawing, so the panel does not blink as the stick crosses the down slice.
+    3. `ATTACKING YOU` means the ship's pilot has the player selected and is in an attack (`attack`, `ram`, or `aggro` in
+       its attack state). The player has no attacker memory of its own, and a ship in the low-attention tier is never
+       flagged. "Attacking the escort" is not flagged.
+    4. Class names are a table in `TargetPreviewModel.CLASS_NAMES` (`Aurora Starfury`, `Delta-V raider`, `Saturn 8 tanker`,
+       `Bokmai hauler`, `Brezebel transport`, `Nav buoy`, ...); an unlisted hull reads as its asset id.
+    5. A civilian of the pilot's own faction has its name in the friendly blue (the IFF colour), though it is listed
+       under Civilian in the ring's orange.
+    6. The wireframe shows the hull and a Bokmai's mounted pods; turrets are left off.
+    7. The turn starts at yaw 125 degrees (from ahead and well to one side) each time the highlight moves.
+    8. The panel's ground is the mockup's 72 % dark green; until T44's blur the HUD's drift ring shows faintly through its
+       lower right corner.
+  - **Measured (RX 6950 XT, Forward+, RADV, Wayland):**
+
+    | Hull | Triangles | Edges | In one go | In the game, sliced | Longest frame's share |
+    |---|---|---|---|---|---|
+    | Nav buoy (smallest) | 776 | 296 | 0.8 ms | 1.4 ms, 2 frames | 1.3 ms |
+    | Raider | 5 700 | 1 999 | 5.5 ms | 8.5 to 10.1 ms, 4 frames | 3.0 to 4.5 ms |
+    | Bokmai with 3 pods | 9 284 + pod | 5 726 | 8.9 ms (hull) | 15.1 to 15.5 ms, 9 frames | 2.7 to 3.3 ms |
+    | Starfury | 34 428 | 11 320 | 32.7 ms | 36.4 to 36.8 ms, 17 frames | 4.2 ms |
+    | Saturn 8 tanker | 52 890 | 6 332 | 49.3 ms | 58.7 to 64.6 ms, 26 to 28 frames | 5.0 to 8.3 ms |
+    | Saturn 8 transport (largest) | 55 382 | 11 648 | 51.8 ms | 55.8 to 56.1 ms, 26 frames | 3.7 ms |
+
+    The longest share is the frame that reads the mesh back from the GPU (`Mesh.surface_get_arrays`, one call, 3 to 9 ms
+    on the GPU, 1 ms headless); every other slice is 2 to 3 ms. A hull already seen costs nothing.
+    Per frame with the panel showing: 0.06 ms of CPU in the dogfight and 0.15 ms in `bench battle 300`
+    (`target_preview.frame_ms`), 9 draw calls. Closed or on the first ring: nothing (hidden, not processing, the
+    viewport `UPDATE_DISABLED`: test).
+
+    | Scene (window) | Closed | First ring | Second ring with the panel |
+    |---|---|---|---|
+    | Dogfight (1200x675 and 1920x1080) | 145 fps, 41 draw calls | 145, 71 | 145, 80 |
+    | `bench battle 300` (1200x675) | 145, 88 | 145, 118 | 144, 127 |
+    | Civilian showcase, Saturn 8 tanker (1920x1080) | 145, 53 | | 145, 90 |
+
+    The frame rate is the 144 Hz cap throughout, so the GPU cost shows only as draw calls.
+  - **Tests:** `test_feature_edges` 9 (the cube's 12 edges, the flat panel's diagonal dropped and borders kept, the crease
+    angle, welded seams, the order, slivers, a three-face edge, a mesh and its line mesh, a sliced job giving the same
+    lines), `test_wire_framing` 5 (the turn, both hulls inside the view at every angle and aspect, the camera, the
+    panel's place at five window shapes, the rows inside it), `test_target_preview_model` 11 (a fighter, the formats, the
+    attacker flag and rule, an ally, a civilian with and without pods, a buoy, an unknown contact, an objective, none,
+    every catalogue hull named), integration `test_target_preview` 10 on the main scene (the highlight sets the entity,
+    read once per highlight, the stick moves it, the viewport off while closed and on the first ring, the turn behind
+    the pause, unknown, a buoy, an objective, the flag, the console, the largest hull's edges in slices), and one more in
+    `test_civilian_ships` (a Bokmai's pods in the drawing). The quick tier passes (109 scripts, 1 664 GUT tests, 292
+    Python tests), `test_civilian_ships` 6, `test_target_menu` 16 and 12; main-scene smoke runs show no errors or leaks.
+  - **(H):** the screenshots in `references/screenshots/T43 target preview/` (an enemy raider, an ally Starfury, a Saturn
+    8 tanker and transport, a Bokmai laden and empty, an unknown contact, a nav buoy, `NONE`; 1920x1080): whether the
+    wireframes read as the ships, and whether the dense spots (the Starfury's pods, the Saturn's container ends) want
+    fewer lines (a higher `FeatureEdges.CREASE_DEG`, or short edges dropped); the turn's speed and the 20 degree view;
+    how small a long hull gets when it turns end-on; the outline's one-pixel line beside the anti-aliased creases;
+    readability at 4K; the class names (assumption 4); the `NO ID` placeholder (assumption 1); the panel over the HUD's
+    lower right until T44.
 
 ### M5-T44 Focus pull when the target menu opens
 
@@ -2137,6 +2548,28 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
 - **GPU:** frame cost with the pull at full on oscar (labelled) and, when it is on hand, the main machine.
 - **Done when:** AC26, the tests pass, and a short frame sequence of the pull in `references/screenshots/Focus pull/` for
   the maintainer's look check (H).
+
+- **Done (as built, 2026-11-11, on the maintainer's machine):**
+  - **Built:** `FocusPull` (pure, `src/hud/focus_pull.gd`: progress at 1/0.2 s toward open or closed, smoothstep amount, reversal
+    from where it is), `FocusPullView` (`CanvasLayer` 44, one `ColorRect` with `focus_pull.gdshader`: a mip of the screen read
+    with nine taps, plus a dim) and `RadialMenuView` owning it, so the comms menu (T46) gets the pull by using the view. The pull
+    is a sibling of the view, not its child, so it keeps easing back after the view hides. It runs on real frame time
+    (`delta / Engine.time_scale`) with process mode always; at rest the layer is hidden and does not process.
+    `settings.target_menu_blur` (hud, 0..1, default 0.35; 0 never shows it) sets the radius (up to 3 mip levels) and the dim
+    (up to 35 %); the console's `target_menu.focus` gives the amount.
+  - **Choice:** T25's fixed 25 % dim is removed: the pull dims by itself (about 12 % at the default). At setting 0 the view
+    is neither blurred nor dimmed (the ring's plate carries the menu).
+  - **Layers:** blur 44 sits under the radial menu and `TargetPreview` (both 45) and over the HUD (40) and comms menu (42);
+    the debug overlay (50), console and pause menu stay sharp, as the screenshot shows.
+  - **Measured (RX 6950 XT, Forward+, 960x540 window):** dogfight 59 draw calls closed, 89 with the first ring open (ring,
+    preview, blur), 59 again after; `bench battle 300` 102, 132 open, 103 closed; the frame rate stays at the 144 Hz cap with
+    the menu open (the sampled `fps` reads a window average: 126 to 145). GPU frame time 0.4 to 0.8 ms open. Hidden: nothing.
+  - **Tests:** `test_focus_pull` (5: rest, open in 0.2 s, close in 0.2 s, reversal mid-way, negative step) and two in
+    `test_target_menu` (eases in and out on real time while paused, layer order, hidden and not processing at rest; setting 0
+    never shows); the quick suite passes (110 scripts, 1671 tests, 47663 asserts); main-scene smoke clean.
+  - **Screenshots:** `references/screenshots/T44 focus pull/` (`open1`, `open2`, `battle_open`, `closed`).
+  - **(H):** the strength and dim look right at 0.35 (`set settings.target_menu_blur 0.6` to try more); the 0.2 s ease feels
+    right; the ring and the preview panel read as the only sharp things.
 
 ### M5-T45 Start screen and settings groups
 
@@ -2175,6 +2608,30 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
 - **Done when:** AC27, the tests pass, `docs/playtest.md`'s menu section and `info.md` (if a command changes) updated,
   and screenshots of the start screen, New game and the Settings groups in `references/screenshots/Start screen/` for
   the maintainer's look check (H).
+- **Done (as built, 2026-11-12):** the start screen, New game and the five settings groups (architecture §18.28).
+  - **Built:** `FrontEnd`'s list is New game, Load game, Free flight, Settings, Quit, with no pad diagram and no right panel
+    (`MenuScreen.show_pad` and `show_right`, applied by `MenuFrame`; without the right panel the page's `info()` shows under
+    its list, `MenuFrame.detail_text`). `NewGameSelect` (replaces `MissionSelect` and `SandboxSelect`, both deleted) lists the
+    catalogue's missions and then Combat sandbox, Dogfight, Instructor route and Civilian ships; the scenes' one-line
+    descriptions are a new `description` key in their scenario files (the loader ignores it). `SettingsSchema.GROUPS`
+    (Gameplay: game then flight, Controls, Camera & HUD, Video, Audio) with `group_of_category` and `categories_of_group`;
+    `SettingsGroupsScreen` is the Settings list both hosts push (`MenuScreens.settings()`); `MenuScreens.settings_screen(group)`
+    builds one group's `SettingsScreen` (`SettingsMenuModel` takes the categories; Apply, Revert and Defaults work per page).
+    The pause menu lost its Controls entry (four entries); its Settings opens the same groups.
+  - **Assumptions:** Load game is disabled with the tooltip "No saved games yet." (no save system exists). The Controls group
+    is the controls page itself (it keeps the pad diagram); the `controls` settings (invert pitch, deadzones, hold time, mouse
+    speeds) open from a row "Sensitivity and deadzones..." at the end of its list, through the new `MenuScreen.push_requested`
+    (the frame pushes it and copies `cancel_ignores_keys`, so the pause menu's Esc stays one edge). Free flight also uses the
+    slim layout (its text under the list). Settings group pages hide the pad diagram and keep the help panel. AC1 to AC4 hold
+    with the new routes; AC27 is the criterion for this design.
+  - **Tests (focused, passing):** `test_settings_groups` 5 (new), `test_front_end` rewritten for the new list (start screen,
+    Load game skipped both ways, no pad or right panel, New game's list, starts and text under the list, five groups, Controls
+    inside Settings with its diagram, the controls settings), `test_pause_menu`, `test_controls_screen`, `test_settings_screen`
+    (a group page test added), `test_civilian_escort`, `test_settings_menu_model`, `test_boot_routing`, `test_game_flow`.
+    `run_tests.sh --quick` passed.
+  - **GPU look check:** `references/screenshots/T45 start screen/` (start, New game, Settings, each group), RX 6950 XT.
+  - **(H):** how the slim start screen and the text under New game read; the Controls row for the stick settings; whether
+    Load game's greyed look is clear.
 
 ### M5-T46 Radial comms menu
 
@@ -2198,6 +2655,64 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   follows the stick.
 - **Done when:** AC28, the tests pass, `docs/playtest.md`'s comms section updated, a screenshot in
   `references/screenshots/Radial comms menu/` for the look check (H).
+- **Done (as built, 2026-11-11):** the comms menu is a radial menu on T25's framework (architecture §18.22).
+  - **Built:** `CommsMenu` (pure) is now a thin page stack over a `RadialMenu`: the first ring is the wing orders (ATTACK,
+    FORM ON ME, ENGAGE, COVER ME) on the up, right, down and left slices, in the order of keys 1-4; an entry carrying a
+    `page` opens that ring over it (a mission's replies, sub-orders), `select` returns the confirmed entry and closes,
+    `back` pops a page. `CommsMenuDirector` (a node under `Main`, `src/hud/comms_menu_director.gd`) mirrors the target
+    menu's director: it pauses the game on open, owns a `RadialMenuView` (same ring, size, left side, layer 45 and T44
+    focus pull) and sends the order through `WingDirector.give_order` once the game runs again. Input: `Main` calls
+    `adapter.sample_radial` while it is open, so the right stick (arrows, mouse) points, A sends, B goes back or out,
+    Start hands over to the pause menu, and D-pad Right (Ctrl) again closes it (`UiCommand.comms_open` is read as a
+    close edge by `sample_radial`; `begin_radial` seeds it so the opening press is not a close). Console: provider
+    `comms_menu` (`open`, `page`, `highlight`, `entries`, `picks`, `last_pick`, `closed_by`, `focus`) and the command
+    `commsmenu open|pick|highlight|back|close`, in `info.md`.
+  - **Changed:** removed `CommsMenuView` (the plate), the 4 s timer (`CLOSE_S`, `remaining_s`), `UiCommand.comms_pick` and
+    `comms_close`, `InputAdapter.comms_open` and `COMMS_PICKS`, and every rule in `InputAdapter.sample` that swallowed
+    assist, next weapon, lights and the target button while the menu was open (the pad is read by `sample_radial` then,
+    so none of it can fire). The two menus exclude each other: neither opens over the other (the target menu used to
+    close the comms menu; it now refuses). A cinematic or a script's `lock_controls` closes an open comms menu as before.
+    Profiles are untouched: `comms_menu` is still the same action, so a profile saved before M5 loads with it filled in
+    from the default (the existing `test_control_profile_store` test).
+  - **Assumptions:** the heading reads WING ORDERS (the page title); the hint line is `A  SEND      B  CLOSE` (`B  BACK`
+    on a sub-page); labels are short with a second line (`ATTACK` / `my target`, `ENGAGE` / `at will`); a page needs no
+    "none" entry, so the down-slice rule is not exercised yet (`RadialMenu.arrange` already supports it); a page holds up to
+    eight entries and pads to four slices. Keys 1-4 are unchanged.
+  - **Tests (focused, all passing):** `test_comms_menu` 9 (unit: pages, compass slices, sub-page push and back, pick closes
+    the stack, blanks skipped); `test_comms_menu_input` 13 (integration on the real main scene: opens and pauses, the stick
+    and A send each of the four orders, B, pad B taps no target, D-pad Right closes and the opening press does not, no
+    timeout, flight buttons inert, nothing held fires on close, Start to the pause menu, the console, `pause` refused, ring
+    size and side and highlight follow the stick); `test_input_adapter` 48 (the comms and radial section rewritten);
+    `test_control_lock`, `test_cinematic_camera`, `test_target_menu` adjusted. `run_tests.sh --quick`: GUT 1669 of 1669, exit 0;
+    main-scene smoke clean (no `ERROR:`, no leaks).
+  - **GPU look check (RX 6950 XT, RADV, Forward+):** `references/screenshots/T46 radial comms/comms_ring.png` (the ring at the
+    left with FORM ON ME lit, blurred view behind, hint under it); about 52 fps in the windowed run with the debug overlay on.
+  - **(H):** how the ring feels with a real stick; that the pause-while-open feels right for giving orders in a dogfight;
+    label wording.
+
+### M5-T47 Radar plot input checks and scratch reuse
+
+- **Why (maintainer, 2026-11-12):** the last two open items of `code-review-comments.md`.
+- **Done (as built, 2026-11-12):** `radar_kernel::plot` refuses columns of different lengths (it returns false with an empty
+  plot instead of plotting up to the shortest column), and `ScsRadarPlot.plot` also checks `colour_ix` against `ids` and
+  every colour index against the palette: a mismatch logs an error and returns an empty plot, never a truncated one or a
+  white stand-in. `Plot` keeps its output vectors and its point, range and key scratch between calls and clears them, so a
+  steady plot no longer allocates per call. Tests: Rust `columns_of_different_lengths_plot_nothing` and
+  `a_second_plot_reuses_its_buffers_and_matches_the_first` (8 radar kernel tests pass); GUT
+  `test_mismatched_columns_are_refused_not_truncated` in `test_radar_plot`, with `test_radar_model`, `test_sim_core`,
+  `test_hud` and `test_target_menu`: 71 passing.
+
+### M5-T48 The full code review's findings
+
+- **Why (maintainer, 2026-11-12):** a Fable agent reviewed the whole codebase at `104264ea` (no P1 or P2 issues; three P3 items
+  in `code-review-comments.md`); the maintainer asked for them fixed before the merge.
+- **Done (as built, 2026-11-12):** `Damageable.apply_hit` emits `destroyed` only for the kill of its own hit, so a dead hull hit
+  while invulnerable no longer announces its death again (`test_damage`: `test_a_dead_hull_hit_while_invulnerable_does_not_die_again`);
+  the brains' hosted settle reads each item's place in the hosted list from `Work.hosted_at` instead of searching the list per
+  think (the seeded-battle parity files pass unchanged); a new `SimCore` drops civilian ids of ships freed since instead of
+  handing them to its core (`test_sim_core`: `test_a_new_core_forgets_civilians_freed_with_an_earlier_scene`). Rust 68 pass;
+  GUT: `test_damage`, `test_sim_core`, `test_row_commands`, `test_core_threads`, `test_core_state`, `test_driver_step`,
+  `test_turret_defence`, `test_civilian_ships`, `test_ai_driver`: 89 passing with `GUT_SLOW=1`; the quick tier passes.
 
 ### M5-T20 Integration, full suite, docs and acceptance
 
@@ -2207,3 +2722,74 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   check on the maintainer's machine; then ask the maintainer to confirm the milestone. `m5` already holds all of M4 (Q34);
   once confirmed it merges into `main` (no rebase).
 - **Done when:** the maintainer confirms M5.
+- **Status:** in progress — awaiting the maintainer's confirmation. Not merged into `main`.
+- **Notes (2026-11-12, the automated part):**
+  - **Docs.** Architecture §18: a map of which subsection describes each part of M5 and what a later task replaced; the
+    file list brought up to date (the buoy ring and T02's two select pages gone; the settings and controls menus, dialog,
+    the radial framework, focus pull, comms menu, pause path and engine voices added); the providers and settings M5 added;
+    new as-built subsections §18.31 (settings and controls menus, audio buses), §18.32 (the sound pass) and §18.33 (tests and
+    CI); stale lines corrected (the menus' root lists, the comms menu's layer, Buoy defence in §18.5). Numbers 18.1 to 18.33
+    are unique and in order, and every `§18.n` reference in the docs resolves. `docs/playtest.md`: "Play-testing M5" now
+    covers the start screen and menus, the escort, the target and comms menus, encounters, the civilians, sounds, the new
+    settings and commands, and one "M5 acceptance checklist" with every task's (H) item. The roadmap's M5 row and the
+    carried findings L1 to L14 are marked.
+  - **Loose ends** (fixes in 87be2300 and d9c4d65a; the docs in 99778cb1).
+    - T36's two `ScsWeaponRows.set_turrets` ERROR lines come from
+      `test_turret_kernel.test_turrets_of_a_capital_that_is_not_bound_are_refused`, an error-path test that already expects
+      both with `assert_engine_error`. GUT 9.7.1 counts them as expected but cannot stop the engine printing them; nothing to fix.
+    - T46's "4 resources still in use at exit" was ours: `test_target_menu` built a `Hud` only to read its layer and never
+      freed it (11 objects, a canvas RID, 4 resources). It reads the live HUD now; the file exits clean.
+    - T38's `--quick` on a fresh checkout: the quick tier now runs the same import step as the standard tier before the
+      compile check (`godot_import` in `scripts/lib_tests.sh`; about 3 s on a current cache).
+    - **Found by the full run:** `run_tests.sh --full` runs every GUT file in one process under the standard tier's 3 600 s
+      limit, and with the balance fights that is not enough: the first run was cut at 3 600 s in `test_core_threads` (after
+      173 of 303 scripts) with nothing failing before the cut. `--full` now allows 7 200 s.
+  - **The full suite** (`scripts/run_tests.sh --full`, the run after that fix): exit 0 in 4 459 s, read from each
+    runner's own totals:
+
+    | Runner | Total | Passed | Failed | Other |
+    |---|---|---|---|---|
+    | GUT (slow and balance files on) | 303 scripts, 3 433 tests, 134 659 asserts | 3 421 | 0 | 12 pending |
+    | Python (`unittest discover`) | 860 | 858 | 0 | 2 skipped (the Saturn 3 has no aft frame) |
+    | Rust (`cargo test --release --lib`) | 66 | 66 | 0 | - |
+    | Console smoke runs | 29 | 29 | 0 | - |
+
+    The 12 pending: 10 need the real renderer (`test_motion_vectors_gpu`, `test_upscaling_gpu`), and `test_dogfight` and
+    `test_m3_sandbox` each have their M3 AC12 balance test pending by design (the maintainer's review of the balance). GUT
+    alone took 3 766 s, which is why the old 3 600 s limit cut the first run; that run's 173 scripts had no failure
+    either. No flake seen in either run.
+    **Open, not fixed:** the whole-suite GUT process ends with "61 ObjectDB instances leaked at exit" and "8 resources
+    still in use". No test fails on it and the game's own smoke runs, which reject any leak line, pass. It is not the four
+    menu files that report orphans mid-run (`test_controls_screen`, `test_menu_frame`, `test_pause_menu`,
+    `test_settings_screen`): each exits clean alone. Finding the file means bisecting 303 scripts; left for a later task.
+    **CI:** green on d9c4d65a (run 43195940012, 20 min 55 s with the asset cache warm).
+  - **GPU check** (RX 6950 XT, RADV NAVI21, Wayland, Forward+, a 1200x675 window; fps is capped near 145 by Wayland's
+    vsync; VRAM is `render.vram_mb`, the game's own; the card as a whole read 2 832 MB before the runs and peaked at 3 263 MB
+    during them, desktop included). Screenshots in `references/screenshots/T20 acceptance/`, all looked at, nothing broken:
+
+    | Scene | Shot | fps | Draw calls | VRAM MB |
+    |---|---|---|---|---|
+    | Start screen | `start_screen.png` | - | - | - |
+    | Civilian showcase, all nine in view (cockpit) | `civilian_showcase_all_nine.png` | 145 | 129 | 481 |
+    | Saturn 8 transport at 420 m, texture detail high and low | `saturn_8_transport_high.png`, `_low.png` | 134 | 106 | 481 |
+    | Bokmai at 90 m, high and low | `bokmai_high.png`, `bokmai_low.png` | 145 | - | - |
+    | Escort: the intro's wing shot with the hail, the brief | `escort_intro_wing_shot.png`, `escort_brief.png` | 145 | - | - |
+    | Escort: wave one (3 raiders in), wave two in the belt | `escort_wave_one.png`, `escort_wave_two_belt.png` | 145 | 82, 85 | 403 |
+    | Target menu: categories; a ring with the preview and blur | `target_menu_categories.png`, `target_menu_preview_blur.png` | 134 | 98 | 335 |
+    | Comms ring (FORM ON ME lit) | `comms_ring.png` | 145 | 82 | 335 |
+    | Pause menu and its backdrop | `pause_backdrop.png` | 145 | 117 | 337 |
+    | Belt showcase, chase and cockpit | `belt_showcase.png`, `belt_showcase_cockpit.png` | 145, 131 | 62, 94 | 355, 360 |
+    | `bench battle 300` in view | `bench_battle_300.png` | 144 | 102 | 319 |
+    | `bench battle 1000` in view | `bench_battle_1000.png` | 144 | 98 | 320 |
+
+    The windowed benches kept real time: tick median 3.52 ms (p99 9.65) at 300 and 5.48 ms (p99 10.79) at 1 000.
+    For the maintainer's eye, not faults: in the pause backdrop the ship passes behind the left panel for part of the loop
+    (T42's (H) item); `civilian_showcase` parks its hulls 1.8 km ahead, so they are small until you fly up to them.
+  - **Benchmark** (`QUICK_NS="1000" scripts/bench_quick.sh t20 battle`, headless, seed 1, load 0.9, at 99778cb1): 59.9 ticks a
+    second, tick median **5.44 ms**, p99 **7.51 ms**, worst rebase tick 7.56 ms, budget passed. Stages (median): flight
+    2.30 ms (Report P3: 3.97), hits 0.78 ms (1.41), rams 0.23 ms (1.20), Jolt 1.18 ms, AI on the main thread 0.35 ms,
+    targeting 0.09 ms, the core's sync 0.25 ms. M4 closed at 9.22 ms for the same run.
+  - **Acceptance.** AC1 to AC17 and AC19 to AC28 are met, with the evidence in the table's Done column. AC12 and AC20 are
+    met in the form T27 gave them (textured meshes instead of splat levels, Q29). AC18 is the maintainer's play-test.
+  - **Left for the maintainer:** the (H) checklist in `docs/playtest.md`; the open questions earlier tasks recorded (Q33's
+    narrow blind spot, T25's tap on unknown contacts, T42's choice of path); then the confirmation and the merge into `main`.

@@ -68,6 +68,9 @@ var _played: Dictionary = {}  # StringName -> times played (tests and the consol
 var _loops: Dictionary = {}  # StringName -> a looping copy of the stream
 ## Engine-voice work of the last frame: voices stepped and applied, and their ships checked and read (tests, console).
 var engine_frame_work: int = 0
+## Shots that took a voice and shots skipped as out of earshot (work-count readouts, tests).
+var shots_played: int = 0
+var shots_culled: int = 0
 var _engine := EngineVoices.new()
 var _engine_ships: Array[Combatant] = []  # by EngineVoices ship id
 var _engine_ids: Dictionary = {}  # Ship instance id -> EngineVoices ship id
@@ -109,6 +112,7 @@ func _ready() -> void:
 		&"engine_sounding": {"get": engine_voices_sounding, "doc": "Engine voices playing now"},
 		&"engine_frame_work": {"get": func() -> int: return engine_frame_work,
 				"doc": "Engine voices and voiced ships touched in the last frame"},
+		&"shots_culled": {"get": func() -> int: return shots_culled, "doc": "Gun shots skipped as beyond earshot"},
 		&"engine_rank_work": {"get": engine_allocate_work,
 				"doc": "Ships the last engine-voice re-rank walked (the ones in earshot, not all in play)"},
 	}), self)
@@ -182,6 +186,17 @@ func play(sound_name: StringName, at: Vector3, volume_db: float = 0.0, pitch: fl
 	voice.play()
 	_played[sound_name] = times_played(sound_name) + 1
 	return voice
+
+
+## Plays a gun's shot like `play`, unless it is beyond `ShotCull.SOUND_RANGE_M` of the listener: a shot that far cannot be heard,
+## so it takes no voice (M5-T37, review L6). Returns the voice, or null when culled or not loaded.
+func play_shot(sound_name: StringName, at: Vector3, volume_db: float = 0.0, pitch: float = 1.0) -> AudioStreamPlayer3D:
+	var from: Variant = ShotCull.listener(self)
+	if from != null and not ShotCull.within(from as Vector3, at, ShotCull.SOUND_RANGE_M):
+		shots_culled += 1
+		return null
+	shots_played += 1
+	return play(sound_name, at, volume_db, pitch)
 
 
 ## Plays `sound_name` in 2D (menu sounds, warnings, the target blip) on the bus `AudioBuses.bus_of_sound` gives it: `UI` for a
@@ -315,7 +330,7 @@ func watch_ship(combatant: Combatant) -> void:
 		var shot_db: float = SHOT_DB[shot]
 		# `shot_fired` sounds on both bolt paths; `projectile_fired` is silent for the AI cannons' rows (M4-T35).
 		combatant.cannon.shot_fired.connect(func(_index: int, at: Vector3) -> void:
-			play(shot, at, shot_db, randf_range(0.96, 1.04)))
+			play_shot(shot, at, shot_db, randf_range(0.96, 1.04)))
 	if combatant.ship.is_node_ready():
 		_watch_turrets(combatant)
 	else:
@@ -332,7 +347,7 @@ func _watch_turrets(combatant: Combatant) -> void:
 
 
 func _on_turret_fired(at: Vector3, volume_db: float) -> void:
-	play(&"turret_fire", at, volume_db, randf_range(0.97, 1.03))
+	play_shot(&"turret_fire", at, volume_db, randf_range(0.97, 1.03))
 
 
 ## Engine voices granted now.

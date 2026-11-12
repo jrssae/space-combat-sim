@@ -1,7 +1,8 @@
 extends GutTest
-## RamTracker (M3-T04, architecture §16 D32): which contacts are new, the window that measures a new contact's velocity
-## change, one ram per pair per collision, and the hand-over between swept rams and Jolt's contacts. No Jolt: each tick is a
-## list of bodies, handed to `contacts_columns` as the RamResolver reads them (M6-T18: the per-body sample path is gone).
+## The ram tracker (M3-T04, architecture §16 D32; native since M5-T33, §18.23): which contacts are new, the window that
+## measures a new contact's velocity change, one ram per pair per collision, and the hand-over between swept rams and Jolt's
+## contacts. No Jolt: each tick is a list of bodies, fed to `ScsRamTracker.feed` as columns. `RamTracker` (GDScript, in
+## `tests/fixtures/`) is the reference the native tracker repeats: the last test runs both side by side.
 
 const DT: float = 1.0 / 60.0
 const A: int = 101
@@ -9,12 +10,13 @@ const B: int = 202
 const C: int = 303
 const SAFE: float = 5.0
 const LETHAL: float = 18.0
+const TRACKER_CLASS: StringName = &"ScsRamTracker"
 
-var tracker: RamTracker
+var tracker: Object
 
 
 func before_each() -> void:
-	tracker = RamTracker.new()
+	tracker = NativeLib.instantiate(TRACKER_CLASS)
 
 
 # One rigid body as read this tick: its id, velocity, the bodies it touches and what its own forces add per second.
@@ -26,8 +28,57 @@ func _limits(_id: int) -> PackedFloat64Array:
 	return PackedFloat64Array([SAFE, LETHAL])
 
 
-## The contact phase for `samples`, in the columns the resolver hands over. Returns the contact rams that landed.
+## The contact phase for `samples`, in the columns the native tracker takes. Returns the contact rams that landed.
 func _contacts(samples: Array) -> Array[RamTracker.ContactRam]:
+	return _feed(tracker, samples, Vector3(0.0, 0.0, -5.0))
+
+
+## `samples` fed to the native `to` (every contact at `point`), each asked hull answered with the test's limits.
+func _feed(to: Object, samples: Array, point: Vector3) -> Array[RamTracker.ContactRam]:
+	var ids := PackedInt64Array()
+	var velocities := PackedVector3Array()
+	var accels := PackedVector3Array()
+	var touched := PackedInt32Array()
+	var starts := PackedInt32Array()
+	var others := PackedInt64Array()
+	for sample: Dictionary in samples:
+		var touching: Array[int] = sample["touching"]
+		if not touching.is_empty():
+			touched.append(ids.size())
+			starts.append(others.size())
+			for other_id: int in touching:
+				others.append(other_id)
+		ids.append(sample["id"])
+		velocities.append(sample["velocity"])
+		accels.append(sample["accel"])
+	starts.append(others.size())
+	var points := PackedVector3Array()
+	points.resize(others.size())
+	points.fill(point)
+	var normals := PackedVector3Array()
+	normals.resize(others.size())
+	normals.fill(Vector3(0.0, 0.0, -1.0))
+	var asked: PackedInt64Array = to.feed(ids, velocities, accels, touched, starts, others, points, normals, DT)
+	var limits := PackedFloat64Array()
+	for id: int in asked:
+		limits.append_array(_limits(id))
+	var landed: Array = to.land(limits)
+	var rams: Array[RamTracker.ContactRam] = []
+	for r: int in (landed[0] as PackedInt64Array).size():
+		var ram := RamTracker.ContactRam.new()
+		ram.hull_id = landed[0][r]
+		ram.other_id = landed[1][r]
+		ram.dv = landed[2][r]
+		ram.severity = landed[3][r]
+		ram.point = landed[4][r]
+		ram.normal = landed[5][r]
+		ram.relative_speed = landed[6][r]
+		rams.append(ram)
+	return rams
+
+
+## The same contact phase on the GDScript reference.
+func _feed_reference(to: RamTracker, samples: Array, point: Vector3) -> Array[RamTracker.ContactRam]:
 	var ids := PackedInt64Array()
 	var velocities := PackedVector3Array()
 	var accels := PackedVector3Array()
@@ -41,9 +92,10 @@ func _contacts(samples: Array) -> Array[RamTracker.ContactRam]:
 			continue
 		var contacts: Dictionary = {}
 		for other_id: int in touching:
-			contacts[other_id] = RamTracker.Touch.new(Vector3(0.0, 0.0, -5.0), Vector3(0.0, 0.0, -1.0))
+			if not contacts.has(other_id):
+				contacts[other_id] = RamTracker.Touch.new(point, Vector3(0.0, 0.0, -1.0))
 		touches[int(sample["id"])] = contacts
-	return tracker.contacts_columns(ids, velocities, accels, touches, _limits, DT)
+	return to.contacts_columns(ids, velocities, accels, touches, _limits, DT)
 
 
 ## One tick: the contact phase, then the end of the tick. Returns the contact rams that landed.
@@ -278,3 +330,98 @@ func test_reset_forgets_the_last_ticks_velocities() -> void:
 func test_pair_keys_ignore_the_order() -> void:
 	assert_eq(RamTracker.pair_key(A, B), RamTracker.pair_key(B, A))
 	assert_ne(RamTracker.pair_key(A, B), RamTracker.pair_key(A, C))
+
+
+# --- the native tracker against its GDScript reference (M5-T33) ---------------------------------------------------
+
+
+func test_the_native_tracker_repeats_the_reference_tick_for_tick() -> void:
+	# Six bodies that come and go, touch at random (a pair now and then reported twice), thrust, and are swept or kept
+	# touching at random, with a rebase now and then: every ram and every answer must match, bit for bit.
+	var reference := RamTracker.new()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 3305
+	var bodies: Array[int] = [11, 22, 33, 44, 55, 66]
+	var velocities: Dictionary[int, Vector3] = {}
+	for id: int in bodies:
+		velocities[id] = Vector3.ZERO
+	var rams_seen: int = 0
+	var swept_seen: int = 0
+	for tick: int in 1500:
+		var samples: Array = []
+		for id: int in bodies:
+			if rng.randf() < 0.08:
+				continue  # away this tick
+			if rng.randf() < 0.3:
+				velocities[id] = Vector3(rng.randf_range(-12.0, 12.0), rng.randf_range(-12.0, 12.0), rng.randf_range(-12.0, 12.0))
+			var touching: Array[int] = []
+			for other_id: int in bodies + [777]:
+				if other_id != id and rng.randf() < 0.18:
+					touching.append(other_id)
+					if rng.randf() < 0.2:
+						touching.append(other_id)
+			samples.append(_sample(id, velocities[id], touching, Vector3(rng.randf_range(-40.0, 40.0), 0.0, rng.randf_range(-40.0, 40.0))))
+		var point := Vector3(rng.randf_range(-50.0, 50.0), 0.0, float(tick))
+		var want: Array[RamTracker.ContactRam] = _feed_reference(reference, samples, point)
+		var got: Array[RamTracker.ContactRam] = _feed(tracker, samples, point)
+		rams_seen += want.size()
+		if not _same_rams(got, want):
+			fail_test("tick %d: the rams differ: %s, reference %s" % [tick, _described(got), _described(want)])
+			return
+		for k: int in rng.randi_range(0, 3):
+			var a: int = bodies[rng.randi_range(0, bodies.size() - 1)]
+			var b: int = bodies[rng.randi_range(0, bodies.size() - 1)]
+			if a == b:
+				continue
+			if reference.in_contact(a, b) != tracker.in_contact(a, b):
+				fail_test("tick %d: in_contact(%d, %d) differs" % [tick, a, b])
+				return
+			if rng.randf() < 0.5:
+				var met: bool = reference.swept_meeting(a, b)
+				swept_seen += 1 if met else 0
+				if tracker.swept_meeting(a, b) != met:
+					fail_test("tick %d: swept_meeting(%d, %d) differs (reference %s)" % [tick, a, b, met])
+					return
+			else:
+				reference.keep_touching(a, b)
+				tracker.keep_touching(a, b)
+		if rng.randf() < 0.05:
+			var offset := Vector3(rng.randf_range(-900.0, 900.0), 0.0, rng.randf_range(-900.0, 900.0))
+			reference.shift(offset)
+			tracker.shift(offset)
+		if tick == 900:
+			reference.reset()
+			tracker.reset()
+		reference.end_tick()
+		tracker.end_tick()
+	assert_gt(rams_seen, 100, "the run landed contact rams (%d)" % rams_seen)
+	assert_gt(swept_seen, 100, "and swept ones (%d)" % swept_seen)
+	pass_test("1500 ticks: %d contact rams and %d swept rams, the same on both" % [rams_seen, swept_seen])
+
+
+func test_a_feed_whose_columns_do_not_line_up_is_refused() -> void:
+	var asked: PackedInt64Array = tracker.feed(PackedInt64Array([A]), PackedVector3Array(), PackedVector3Array([Vector3.ZERO]),
+			PackedInt32Array(), PackedInt32Array([0]), PackedInt64Array(), PackedVector3Array(), PackedVector3Array(), DT)
+	assert_engine_error("do not line up")
+	assert_eq(asked.size(), 0)
+	assert_eq(_head_on(4).size(), 2, "and the tracker still works")
+
+
+func _same_rams(got: Array[RamTracker.ContactRam], want: Array[RamTracker.ContactRam]) -> bool:
+	if got.size() != want.size():
+		return false
+	for r: int in want.size():
+		var g: RamTracker.ContactRam = got[r]
+		var w: RamTracker.ContactRam = want[r]
+		if g.hull_id != w.hull_id or g.other_id != w.other_id or g.dv != w.dv or g.severity != w.severity or g.point != w.point \
+				or g.normal != w.normal or g.relative_speed != w.relative_speed:
+			return false
+	return true
+
+
+func _described(rams: Array[RamTracker.ContactRam]) -> String:
+	var out := PackedStringArray()
+	for ram: RamTracker.ContactRam in rams:
+		out.append("%d>%d dv %s sev %s at %s speed %s" % [ram.hull_id, ram.other_id, ram.dv, ram.severity, ram.point,
+				ram.relative_speed])
+	return "[%s]" % ", ".join(out)

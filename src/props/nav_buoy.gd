@@ -160,6 +160,7 @@ func _sync_targetable() -> void:
 	marker.display_name = display_name
 	marker.velocity = velocity
 	marker.broadcast_range_m = BROADCAST_RANGE_M
+	marker.role = Targetable.Role.BEACON
 
 
 ## Loads the textured mesh and the beacon hardpoint once for every buoy. Missing files only warn.

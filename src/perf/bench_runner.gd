@@ -331,6 +331,8 @@ func _physics_process(_delta: float) -> void:
 		_wall_start_us = now
 		if standins != null:
 			standins.restart_weapon_counters()
+		if SimCore.current() != null:
+			SimCore.current().reset_window()
 		MissileStandin.steers = 0
 		MissileStandin.steer_us = 0
 		MissileStandin.native_steers = 0
@@ -376,6 +378,7 @@ func _finish(now: int, aborted: String) -> void:
 		"fights_in_slab": BenchLayout.fights_in_slab(_layout, _n),
 		"intercepts": standins.intercepts if standins != null else 0,
 		"weapons": _weapons(),
+		"core": SimCore.current().window_summary() if SimCore.current() != null else {},
 		"rebase_threshold_m": float(_options["rebase_m"]),
 		"sync_timed": probe.time_sync,
 		"sleep_usec_during_run": OS.low_processor_usage_mode_sleep_usec,

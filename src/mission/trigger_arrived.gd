@@ -20,6 +20,10 @@ func actors() -> PackedStringArray:
 	return PackedStringArray([actor])
 
 
+func place() -> UniversePos:
+	return point
+
+
 func test(world: MissionWorld) -> bool:
 	if point == null:
 		return world.route_done(actor)

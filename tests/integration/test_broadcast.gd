@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## Broadcast contacts, the player's half (M3-T17, Q21, AC25): on the real main scene with the combat sandbox, a buoy at 900 km
 ## and an ally at 90 km are candidates and can be selected (their range in the target box), an ally at 110 km and a
 ## non-broadcasting raider at 30 km are not; beyond the radar's 25 km a broadcast contact sits on the rim in its true
@@ -24,11 +24,6 @@ func before_each() -> void:
 
 func after_each() -> void:
 	DebugConsole.flags.invulnerable = false
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
 
 
 func _buoy(buoy_name: String) -> NavBuoy:

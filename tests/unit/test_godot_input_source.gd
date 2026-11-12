@@ -88,29 +88,29 @@ func test_caps_lock_rolls_left_while_it_is_down() -> void:
 	assert_almost_eq((roll.call() as Vector2).x, 1.0, 1e-5, "G rolls right")
 
 
-func test_b_is_tap_for_next_target_and_hold_for_the_one_nearest_the_nose() -> void:
+func test_b_is_tap_for_the_nearest_enemy_and_hold_for_the_target_menu() -> void:
 	var adapter := InputAdapter.new()
 	var dt: float = 1.0 / 60.0
 	_key(KEY_B, true)
-	assert_false(adapter.sample(source, dt).combat.target_next, "a tap acts on release")
+	assert_false(adapter.sample(source, dt).combat.target_nearest, "a tap acts on release")
 	_key(KEY_B, false)
-	var tap: CombatCommand = adapter.sample(source, dt).combat
-	assert_true(tap.target_next, "tap: next target")
-	assert_false(tap.target_ahead)
+	var tap: PilotCommand = adapter.sample(source, dt)
+	assert_true(tap.combat.target_nearest, "tap: the nearest enemy")
+	assert_false(tap.ui.target_menu_open)
 
 	_key(KEY_B, true)
 	var next_ticks: int = 0
 	var ahead_ticks: int = 0
 	for i: int in 40:  # 0.67 s, well past the 0.35 s hold threshold
-		var combat: CombatCommand = adapter.sample(source, dt).combat
-		next_ticks += 1 if combat.target_next else 0
-		ahead_ticks += 1 if combat.target_ahead else 0
+		var held: PilotCommand = adapter.sample(source, dt)
+		next_ticks += 1 if held.combat.target_nearest else 0
+		ahead_ticks += 1 if held.ui.target_menu_open else 0
 	_key(KEY_B, false)
-	var released: CombatCommand = adapter.sample(source, dt).combat
-	next_ticks += 1 if released.target_next else 0
-	ahead_ticks += 1 if released.target_ahead else 0
-	assert_eq(ahead_ticks, 1, "hold: nearest the nose, once")
-	assert_eq(next_ticks, 0, "and the release after a hold does not also cycle")
+	var released: PilotCommand = adapter.sample(source, dt)
+	next_ticks += 1 if released.combat.target_nearest else 0
+	ahead_ticks += 1 if released.ui.target_menu_open else 0
+	assert_eq(ahead_ticks, 1, "hold: the target menu, once")
+	assert_eq(next_ticks, 0, "and the release after a hold does not also tap")
 
 
 func test_keyboard_masked_pad_passes_through() -> void:

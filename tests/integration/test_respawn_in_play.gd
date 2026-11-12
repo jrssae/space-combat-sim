@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## A respawn restarts only what a lesson needs (the instructor's route, `test_instructor_route`); the wings and the fight carry
 ## on (maintainer Q8: a downed wingman is replaced at the next wave; the play-test guide: the wingmen go back to their order).
 ## On `combat_sandbox` the player's three wingmen keep their slots, behaviours and orders through one respawn and a second; on
@@ -21,11 +21,6 @@ func after_each() -> void:
 	DebugConsole.flags.invulnerable = false
 	get_tree().paused = false
 	ContactScan.invalidate()
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
 
 
 func _launch(path: String) -> Main:

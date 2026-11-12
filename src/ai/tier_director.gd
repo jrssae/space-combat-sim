@@ -599,8 +599,15 @@ func _push_frame(sim: SimCore) -> void:
 			sim.core.tier_set_gravity(PackedVector3Array([moon.local_position()]), PackedFloat64Array([gm]))
 
 
+# The `SimCore.removals` count at the last prune.
+var _pruned_removals: int = -1
+
+
 # Rows whose body is gone (a capital freed by the bench's clear) leave the tier.
 func _prune(sim: SimCore) -> void:
+	if sim.removals == _pruned_removals:
+		return  # nothing left the tree since the last walk
+	_pruned_removals = sim.removals
 	for body_id: int in _tiered_capitals.keys():
 		var cap: CapitalStandin = _tiered_capitals[body_id]
 		if not is_instance_valid(cap) or not cap.is_inside_tree():

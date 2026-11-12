@@ -46,9 +46,21 @@ const _CLAW: Array = [
 const _KNUCKLE: Array = [[Vector3(0.0, 0.75, -1.0), Vector3(0.0, 1.44, -1.0)], [Vector3(0.75, 0.0, -1.0), Vector3(1.46, 0.0, -1.0)]]
 
 
+# The drawings are fixed per layout and aspect, so the painter's per-frame call reuses them (callers only read).
+static var _wire_cache: Dictionary = {}
+static var _poly_cache: Dictionary = {}
+
+
 ## `[{zone: int, segments: PackedVector2Array}, ...]`: line pairs (a0, b0, a1, b1, ...) for `draw_multiline`, in the unit
 ## square and undistorted once scaled into a rect whose width / height is `aspect`. Empty for a layout drawn as `polygons`.
 static func wireframe(layout: DamageZones.Layout, aspect: float = 1.0) -> Array[Dictionary]:
+	var key: Array = [layout, aspect]
+	if not _wire_cache.has(key):
+		_wire_cache[key] = _build_wireframe(layout, aspect)
+	return _wire_cache[key]
+
+
+static func _build_wireframe(layout: DamageZones.Layout, aspect: float) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	if layout != DamageZones.Layout.X_FIGHTER:
 		return out
@@ -89,6 +101,12 @@ static func wireframe(layout: DamageZones.Layout, aspect: float = 1.0) -> Array[
 ## `[{zone: int, points: PackedVector2Array}, ...]` for a layout drawn as outline polygons; empty for `Layout.NONE` and for
 ## a layout drawn as a `wireframe`.
 static func polygons(layout: DamageZones.Layout) -> Array[Dictionary]:
+	if not _poly_cache.has(layout):
+		_poly_cache[layout] = _build_polygons(layout)
+	return _poly_cache[layout]
+
+
+static func _build_polygons(layout: DamageZones.Layout) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	match layout:
 		DamageZones.Layout.DELTA:

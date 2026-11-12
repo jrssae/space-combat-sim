@@ -77,6 +77,8 @@ var running_lights_dark: bool = false
 
 ## The radar's contacts on the sphere (far to near, the selected one last), packed for the painter (M4-T36).
 var radar_plot: RadarPlot = RadarPlot.new()
+## What `RadarModel.plot` cost this frame, us (a readout).
+var radar_plot_us: int = 0
 ## The same as `RadarModel.Dot`s, built when read (tests and readouts).
 var radar_dots: Array[RadarModel.Dot]:
 	get:
@@ -96,6 +98,8 @@ var waypoint_range_m: float = 0.0
 var waypoint_edge_visible: bool = false
 var waypoint_edge_pos: Vector2 = Vector2.ZERO
 var waypoint_edge_angle: float = 0.0
+## The waypoint's contact in `radar_plot` (M5-T25), or -1: the radar marks it with a diamond.
+var waypoint_radar_index: int = -1
 
 ## The mission's objectives list (M5-T05), top right, right-aligned: the caption's baseline, then one line per active objective
 ## (`{text: String, pos: Vector2, primary: bool}`).

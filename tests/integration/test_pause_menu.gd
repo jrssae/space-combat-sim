@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## The pause menu in flight (architecture §18, D57, Q15; AC2): Start opens it over the paused world with Resume, Restart,
 ## Settings, Controls and Quit to menu; the frame beside it shows the objectives (or free flight) and the pad's legend; the
 ## pad drives it with `ui_*` events. A recording stand-in for `Game` takes Restart and Quit.
@@ -26,11 +26,6 @@ func before_each() -> void:
 func after_each() -> void:
 	get_tree().paused = false
 	ControlProfiles.use(ControlProfile.DEFAULT_NAME)  # a test that rebinds leaves the project's map as it found it
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
 
 
 func _tap(action: StringName) -> void:
@@ -82,10 +77,10 @@ func test_start_opens_the_menu_and_pauses_the_world() -> void:
 	assert_eq(_focused_text(), "Resume", "the pad's A resumes without pointing first")
 
 
-func test_the_pause_list_has_the_five_entries() -> void:
+func test_the_pause_list_has_the_four_entries() -> void:
 	await _open()
 	var page: ChoiceListScreen = _menu().frame().current_page() as ChoiceListScreen
-	assert_eq(page.option_ids(), [&"resume", &"restart", &"settings", &"controls", &"quit"] as Array[StringName])
+	assert_eq(page.option_ids(), [&"resume", &"restart", &"settings", &"quit"] as Array[StringName])
 	assert_eq(page.button_of(&"quit").text, "Quit to menu")
 
 
@@ -122,7 +117,7 @@ func test_the_pads_buttons_act_on_nothing_behind_the_menu() -> void:
 	await _open()
 	var position: Vector3 = main.ship.global_position
 	var velocity: Vector3 = main.ship.linear_velocity
-	var camera: CameraRig.Mode = main.camera_rig.mode
+	var camera: CameraRig.Mode = main.camera_rig.chosen_mode()
 	var lights: bool = main.ship.running_lights
 	var navigation: Array[StringName] = [InputAdapter.RESET_SHIP, InputAdapter.TOGGLE_CAMERA,
 			InputAdapter.TOGGLE_RUNNING_LIGHTS, InputAdapter.AUTOTRACK]  # Back, Y, D-pad left, X
@@ -142,7 +137,7 @@ func test_the_pads_buttons_act_on_nothing_behind_the_menu() -> void:
 				source.release(action)
 			await _ticks(4)
 		assert_eq(respawns.size(), 0, "Back did not respawn the ship (pass %d)" % pass_number)
-		assert_eq(main.camera_rig.mode, camera, "Y did not change the camera (pass %d)" % pass_number)
+		assert_eq(main.camera_rig.chosen_mode(), camera, "Y did not change the camera (pass %d)" % pass_number)
 		assert_eq(main.ship.running_lights, lights, "D-pad left did not toggle the lights (pass %d)" % pass_number)
 		assert_false(main.adapter.autotrack_on, "X did not switch auto-track on (pass %d)" % pass_number)
 		assert_false(main.ship.targeting.system.has_selection(), "nor take the nearest hostile (pass %d)" % pass_number)
@@ -216,7 +211,7 @@ func test_a_refused_restart_is_shown() -> void:
 
 func test_quit_to_menu_returns_to_the_front_end() -> void:
 	await _open()
-	for i: int in 4:
+	for i: int in 3:
 		await _pad(&"ui_down")
 	assert_eq(_focused_text(), "Quit to menu")
 	await _pad(&"ui_accept")
@@ -234,20 +229,30 @@ func test_settings_and_controls_open_in_the_frame_and_start_steps_back() -> void
 	await _tap(InputAdapter.PAUSE)
 	assert_true(_menu().is_open(), "Start steps back one page, it does not resume")
 	assert_eq(_menu().frame().depth(), 1)
+	# Controls is the second of the five settings groups (M5-T45); the list keeps the focus on Settings.
+	await _pad(&"ui_accept")
 	await _pad(&"ui_down")
 	await _pad(&"ui_accept")
-	assert_true(_menu().frame().current_page() is ControlsScreen)
+	assert_true(_menu().frame().current_page() is ControlsScreen, "Controls is reached through Settings")
+	assert_eq(_menu().frame().depth(), 3)
 	await _pad(&"ui_cancel")
-	assert_eq(_menu().frame().depth(), 1, "B steps back too")
+	assert_eq(_menu().frame().depth(), 2, "B steps back to the Settings list")
+	await _pad(&"ui_cancel")
+	assert_eq(_menu().frame().depth(), 1)
 	assert_true(get_tree().paused)
 
 
-func test_the_settings_entry_opens_a_settings_page() -> void:
+func test_the_settings_entry_opens_the_five_groups() -> void:
 	await _open()
 	await _pad(&"ui_down")
 	await _pad(&"ui_down")
 	await _pad(&"ui_accept")
-	assert_true(_menu().frame().current_page() is SettingsScreen)
+	var page: ChoiceListScreen = _menu().frame().current_page() as ChoiceListScreen
+	assert_true(page is SettingsGroupsScreen)
+	assert_eq(page.option_ids(), [&"gameplay", &"controls", &"camera_hud", &"video", &"audio"] as Array[StringName])
+	await _pad(&"ui_accept")
+	assert_true(_menu().frame().current_page() is SettingsScreen, "a group opens its settings page")
+	assert_eq(_menu().frame().current_page().title, "Gameplay")
 
 
 func test_the_escape_key_is_the_pause_action_and_does_not_count_twice() -> void:
@@ -358,3 +363,54 @@ func test_freeing_main_with_the_menu_open_unpauses_the_tree() -> void:
 	main.free()
 	assert_false(get_tree().paused)
 	assert_false(DebugConsole.registry.has_provider(&"pause_menu"))
+
+
+# --- The camera move behind the menu (M5-T42) ----------------------------------------------------------------------
+
+func test_the_backdrop_runs_while_the_tree_is_paused_and_resume_restores_the_view() -> void:
+	var rig: CameraRig = main.camera_rig
+	var left_at: Transform3D = rig.active_camera().global_transform
+	await _open()
+	assert_true(get_tree().paused)
+	assert_true(rig.is_backdrop_running())
+	assert_eq(rig.mode, CameraRig.Mode.CINEMATIC)
+	assert_false(main.hud.visible, "the flight HUD steps aside")
+	var phase: float = rig.backdrop_phase()
+	await get_tree().create_timer(0.3, true, false, true).timeout
+	assert_ne(rig.backdrop_phase(), phase, "the camera moves although the world is paused")
+	await _pad(&"ui_cancel")
+	await _ticks(2)
+	assert_false(rig.is_backdrop_running())
+	assert_eq(rig.mode, CameraRig.Mode.CHASE)
+	assert_eq(rig.active_camera(), rig.chase_camera)
+	assert_true(main.hud.visible)
+	assert_lt(rig.chase_camera.global_transform.origin.distance_to(left_at.origin), 0.5, "back where the player left it")
+
+
+func test_the_backdrop_keeps_running_in_a_sub_page() -> void:
+	await _open()
+	_menu().frame().push_screen(MenuScreens.controls())
+	await _ticks(2)
+	assert_true(main.camera_rig.is_backdrop_running())
+
+
+func test_the_setting_off_gives_the_still_frame() -> void:
+	Settings.set_value(&"pause_backdrop", false)
+	await _open()
+	Settings.set_value(&"pause_backdrop", true)
+	assert_false(main.camera_rig.is_backdrop_running())
+	assert_eq(main.camera_rig.mode, CameraRig.Mode.CHASE)
+
+
+func test_no_ship_gives_the_still_view() -> void:
+	var rig: CameraRig = CameraRig.new()
+	autofree(rig)
+	assert_false(rig.start_backdrop(30.0, 8.0))
+
+
+func test_the_cockpit_view_comes_back_after_the_backdrop() -> void:
+	main.camera_rig.set_mode(CameraRig.Mode.COCKPIT)
+	await _open()
+	assert_true(main.camera_rig.is_backdrop_running())
+	_menu().close()
+	assert_eq(main.camera_rig.mode, CameraRig.Mode.COCKPIT)

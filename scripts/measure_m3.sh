@@ -10,6 +10,7 @@ LOG="${OUT}/measure.log"
 mkdir -p "${ROOT}/${OUT}"
 touch "${ROOT}/reports/.gdignore"  # or the next --import takes every screenshot for a game texture
 cd "${ROOT}"
+source "${ROOT}/scripts/lib_locks.sh"
 
 # one <timeout seconds> <vsync flag or "-"> <measure_fight arguments...>
 one() {
@@ -74,5 +75,5 @@ WHICH=("${@:-all}")
 if [[ "${WHICH[0]}" == "all" ]]; then
     WHICH=(ac19 vsync costs hundred)
 fi
-flock /tmp/scs-gpu.lock bash -c 'for step in "$@"; do "${step}"; done' _ "${WHICH[@]}"
+flock "${GPU_LOCK}" bash -c 'for step in "$@"; do "${step}"; done' _ "${WHICH[@]}"
 echo "== done, see ${LOG}"

@@ -75,7 +75,10 @@ Arguments in `<angle brackets>` are required, `[square brackets]` optional, `a|b
 | Command | Arguments | Does | Where |
 |---|---|---|---|
 | `respawn` | | Reset the ship to the scenario start (refused in a mission) | in flight |
+| `pausemenu` | `[on\|off]` | Open or close the pause menu (the camera move starts behind it); no argument toggles | in flight |
 | `pause` | `[on\|off]` | Pause or resume the game; no argument toggles; refused while the pause menu is open (resume from it) | in flight |
+| `targetmenu` | `open\|pick <entry>\|highlight <entry>\|back\|close` | The target menu (a hold of the target button): `open` pauses the game and shows the categories; `pick` takes a slice 0-5 clockwise from the top or its label (`enemies`, `none`, `"raider 2"`) and opens that category or makes the pick; `highlight` points at an entry without picking it (the preview panel shows it); `back` goes back a ring; `close` resumes | in flight |
+| `commsmenu` | `open\|pick <entry>\|highlight <entry>\|back\|close` | The comms menu (D-pad Right), a radial menu: `open` pauses the game and shows the wing orders; `pick` takes a slice 0-3 clockwise from the top or its label (`attack`, `"form on me"`, `engage`, `"cover me"`) and sends the order; `highlight` points at an entry without sending it; `back` goes back a ring or closes; `close` resumes | in flight |
 | `scenario` | `[combat_sandbox\|free_flight\|instructor_route\|dogfight\|civilian_showcase\|belt_showcase]` | Load a scenario for this session and reload the scene | in flight |
 | `window` | `<width> <height>` or `max\|normal` | Resize the window, or maximize or restore it | in flight |
 | `throttle` | `<level>` | Hold both main pods at a level, 0..1, on top of the pilot's input | in flight |
@@ -158,7 +161,7 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `ship` | The player's ship: position, velocity, speed, angular rate, assist, pods, mass flow, fuel | in flight |
 | `hull` | The player's hull points, fraction and destroyed state | in flight |
 | `world` | The local origin, rebases and the automatic rebase distance | in flight |
-| `camera` | The active camera mode (cockpit, chase or cinematic; writable) and field of view, the cinematic shot playing and its time | in flight |
+| `camera` | The active camera mode (cockpit, chase or cinematic; writable) and field of view, the cinematic shot playing and its time, the pause backdrop running (`backdrop`) and its loop phase | in flight |
 | `gate` | The jumpgate: count, name, distance, targeted, whether the jump is offered (`prompt`), the vortex's phase (`activate`, `flash`, `grow`, `open`, `closing`, `closed`), direction, age and openings, ships arrived, departed, waiting and departing, and the player's jump (state, time in it, completed, aborted, last abort) | in flight |
 | `vortex` | Stand-alone jump points: how many are open (console, mission and encounter points), how many `vortex open` opened, the newest console point's phase, mouth radius and depth, and the gate vortex's fit (`gate_rim_m` the rim's half height, `gate_half_width_m` its half width, `gate_depth_m`, `gate_mouth_z_m`) | in flight |
 | `system` | The star system: its bodies (GM, radius, atmosphere top, zone), the places' positions from Epsilon III's centre, the gate's distance from the station and the station's orbit period | in flight |
@@ -173,10 +176,12 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `belts` | The scenario's asteroid belts: belts, rocks, collision spheres and the multimeshes drawing them | in flight |
 | `waves` | The raider waves: wave number, name, state, countdown, raiders alive and the kill tally | in flight |
 | `wing` | The player's wing: name, order, formation, members and the last acknowledgement | in flight |
-| `hud` | Whether the HUD shows, and where the lead, prograde and target marks are | in flight |
+| `hud` | Whether the HUD shows, and where the lead, prograde and target marks are; `radar_plot_us` and `radar_paint_us`, the radar's frame cost (T34) | in flight |
 | `screens` | The cockpit screens: shown, powered, paint counts and the lamps lit | in flight |
 | `pause_menu` | Whether the pause menu is open, the page on top and how many pages are open | in flight |
-| `comms_menu` | The comms menu (D-pad Right): whether it is open, the page, time left, entries picked and why it last closed | in flight |
+| `comms_menu` | The comms menu (D-pad Right): whether it is open, the page, the highlighted entry, the ring's entries, orders picked, the last order, why it last closed and the focus pull | in flight |
+| `target_menu` | The target menu: whether it is open, the ring and its entries, the highlight, the ship's target as the HUD names it, the HUD waypoint, the last pick, why it last closed, and what the last opening cost, and the focus pull's amount (`focus`) | in flight |
+| `target_preview` | The target menu's preview panel: whether it shows, the entry and its kind, the hull drawn as a wireframe and its line count, whether its edges are still being found and its viewport renders, the panel's rows and flag, the meshes whose edges are kept, what the last edge search cost (in all, its longest frame, frames) and the panel's CPU work per frame | in flight |
 | `render` | The renderer (`forward_plus` or `headless`), fps, frame time, draw calls, triangles, VRAM, far dots, GPU, display and window | in flight |
 | `lights` | Which emitters light the scene this frame and what that costs | front end, flight |
 | `sky` | The star points and the nebula panorama: loaded and shown | front end, flight |
@@ -191,7 +196,7 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `perf` | The tick's stage timings and per-entity counts (on while `perf on` or a bench runs) | in flight |
 | `fx` | The particle emitter pool: emitters, busy, bursts thrown and the density in use | in flight |
 | `debris` | The break-up chunk pool: sets, free sets, active chunks and held wrecks | in flight |
-| `audio` | Sounds loaded, voices playing, engine voices (granted, sounding, the frame's work and the re-rank's work, `engine_rank_work`) and the SFX volume (writable) | front end, flight |
+| `audio` | Sounds loaded, voices playing, engine voices (granted, sounding, the frame's work and the re-rank's work, `engine_rank_work`), `shots_culled` (gun shots skipped beyond earshot) and the SFX volume (writable) | front end, flight |
 | `ai` | The AI ships and their behaviours, a count per behaviour and the AI's cost per tick | AI ships |
 | `mission` | The running mission: id, title, state, result, step, objectives, time, trigger counts, waypoint, controls locked and jump points | mission |
 | `dialog` | The comms panel: whether a line shows, its id, speaker callsign and text, lines queued, time left and lines shown | mission |

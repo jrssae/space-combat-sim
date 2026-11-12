@@ -42,7 +42,7 @@ static func from_command(pc: PilotCommand) -> Dictionary:
 	var c: CombatCommand = pc.combat
 	_flag(out, c.fire, InputAdapter.FIRE)
 	_flag(out, c.weapon_next, InputAdapter.WEAPON_NEXT)
-	_flag(out, c.target_next, InputAdapter.TARGET_NEXT)
+	_flag(out, c.target_next or c.target_nearest, InputAdapter.TARGET_NEXT)
 	_flag(out, c.target_prev, InputAdapter.TARGET_PREV)
 	_flag(out, c.target_ahead, InputAdapter.TARGET_AHEAD)
 	var u: UiCommand = pc.ui

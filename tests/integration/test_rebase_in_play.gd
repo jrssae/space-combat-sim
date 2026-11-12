@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## Position rebase in play (M3-T14, AC21, maintainer Q13, architecture §14.1): the main scene keeps the World's local origin
 ## within 5 km of the player, so far from the launch point the ship moves as smoothly as near it. A bare `WorldFrame` keeps the
 ## rebase off (`test_world_frame`).
@@ -39,15 +39,6 @@ func _launch(scenario: String = ScenarioLoader.FREE_FLIGHT_PATH) -> void:
 		main.scenario_path = scenario
 	add_child_autofree(main)
 	await _ticks(2)
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
-
-
-func _exec(line: String) -> ConsoleResult:
-	return DebugConsole.registry.execute(line)[0]
 
 
 ## The player's universe position at the start of each of `n` ticks (before anything moves in it), under full main thrust.

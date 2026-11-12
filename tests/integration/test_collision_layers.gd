@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## Jolt collision layers and the far ships' interpolation (M4-T14, architecture §17.12). Every kind of body pairs with whatever can
 ## hit it, AI fighters with each other too (Q33: contacts and rams as on the base); rocks never pair with rocks; a bolt and a mine
 ## have no body; a rebase's interpolation reset skips the nodes that are not interpolated, which a far dot's ship is not.
@@ -65,11 +65,6 @@ func _fighter(display: String, faction: StringName, at: Vector3, player: bool = 
 	})
 	world.spawn(combatant.ship, world.to_universe(at), Basis.IDENTITY)
 	return combatant
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
 
 
 func _place(combatant: Combatant, position: Vector3, basis: Basis, velocity: Vector3) -> void:

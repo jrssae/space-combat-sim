@@ -53,6 +53,8 @@ var fire_mode: String = "alternating"
 
 ## The selected target (position, velocity, faction, name, range, closing speed, hull or -1, bounding radius), or null.
 var target: TargetReadout = null
+## The selected target has not been identified (M5-T25): it shows as UNKNOWN in grey, with no name, hull or faction colour.
+var target_unknown: bool = false
 ## Every targetable in sensor range as of this tick, and which one is selected (0 = none).
 var contacts: Array[TargetInfo] = []
 ## The radar's contacts as packed arrays (M4-T36): `Main` gathers them each frame without building a `TargetInfo` each; when null
@@ -74,6 +76,12 @@ var prompt_line: String = ""
 var has_waypoint: bool = false
 var waypoint_position: Vector3 = Vector3.ZERO
 var waypoint_label: String = ""
+## The radar contact the waypoint sits on (a beacon's or an actor's `Targetable` id; 0 for a bare place): its radar entry is
+## highlighted (M5-T25).
+var waypoint_id: int = 0
+## Which script set the waypoint above and when ("" for none): it changes whenever the script sets one anew, so the later of
+## it and the pilot's own pick can win (`HudWaypoint`).
+var waypoint_key: String = ""
 ## The running mission's active objectives (M5-T05), `ObjectiveBook.active()`: `{id, text, primary, state}`; empty outside a
 ## mission.
 var objectives: Array[Dictionary] = []

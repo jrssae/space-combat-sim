@@ -34,7 +34,7 @@ fn rows_of(bodies: &[(i64, u32, u8, f64, Vector3, Vector3)]) -> Rows {
         rows.hull_fraction.push(1.0);
         rows.target_ids.push(-1);
         rows.reach.push(0.0);
-        rows.name_keys.push(String::new());
+        rows.name_ids.push(0);
         rows.roles.push(role);
     }
     rows.node_count = bodies.len();
