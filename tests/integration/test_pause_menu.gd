@@ -122,7 +122,7 @@ func test_the_pads_buttons_act_on_nothing_behind_the_menu() -> void:
 	await _open()
 	var position: Vector3 = main.ship.global_position
 	var velocity: Vector3 = main.ship.linear_velocity
-	var camera: CameraRig.Mode = main.camera_rig.mode
+	var camera: CameraRig.Mode = main.camera_rig.chosen_mode()
 	var lights: bool = main.ship.running_lights
 	var navigation: Array[StringName] = [InputAdapter.RESET_SHIP, InputAdapter.TOGGLE_CAMERA,
 			InputAdapter.TOGGLE_RUNNING_LIGHTS, InputAdapter.AUTOTRACK]  # Back, Y, D-pad left, X
@@ -142,7 +142,7 @@ func test_the_pads_buttons_act_on_nothing_behind_the_menu() -> void:
 				source.release(action)
 			await _ticks(4)
 		assert_eq(respawns.size(), 0, "Back did not respawn the ship (pass %d)" % pass_number)
-		assert_eq(main.camera_rig.mode, camera, "Y did not change the camera (pass %d)" % pass_number)
+		assert_eq(main.camera_rig.chosen_mode(), camera, "Y did not change the camera (pass %d)" % pass_number)
 		assert_eq(main.ship.running_lights, lights, "D-pad left did not toggle the lights (pass %d)" % pass_number)
 		assert_false(main.adapter.autotrack_on, "X did not switch auto-track on (pass %d)" % pass_number)
 		assert_false(main.ship.targeting.system.has_selection(), "nor take the nearest hostile (pass %d)" % pass_number)
@@ -358,3 +358,54 @@ func test_freeing_main_with_the_menu_open_unpauses_the_tree() -> void:
 	main.free()
 	assert_false(get_tree().paused)
 	assert_false(DebugConsole.registry.has_provider(&"pause_menu"))
+
+
+# --- The camera move behind the menu (M5-T42) ----------------------------------------------------------------------
+
+func test_the_backdrop_runs_while_the_tree_is_paused_and_resume_restores_the_view() -> void:
+	var rig: CameraRig = main.camera_rig
+	var left_at: Transform3D = rig.active_camera().global_transform
+	await _open()
+	assert_true(get_tree().paused)
+	assert_true(rig.is_backdrop_running())
+	assert_eq(rig.mode, CameraRig.Mode.CINEMATIC)
+	assert_false(main.hud.visible, "the flight HUD steps aside")
+	var phase: float = rig.backdrop_phase()
+	await get_tree().create_timer(0.3, true, false, true).timeout
+	assert_ne(rig.backdrop_phase(), phase, "the camera moves although the world is paused")
+	await _pad(&"ui_cancel")
+	await _ticks(2)
+	assert_false(rig.is_backdrop_running())
+	assert_eq(rig.mode, CameraRig.Mode.CHASE)
+	assert_eq(rig.active_camera(), rig.chase_camera)
+	assert_true(main.hud.visible)
+	assert_lt(rig.chase_camera.global_transform.origin.distance_to(left_at.origin), 0.5, "back where the player left it")
+
+
+func test_the_backdrop_keeps_running_in_a_sub_page() -> void:
+	await _open()
+	_menu().frame().push_screen(MenuScreens.controls())
+	await _ticks(2)
+	assert_true(main.camera_rig.is_backdrop_running())
+
+
+func test_the_setting_off_gives_the_still_frame() -> void:
+	Settings.set_value(&"pause_backdrop", false)
+	await _open()
+	Settings.set_value(&"pause_backdrop", true)
+	assert_false(main.camera_rig.is_backdrop_running())
+	assert_eq(main.camera_rig.mode, CameraRig.Mode.CHASE)
+
+
+func test_no_ship_gives_the_still_view() -> void:
+	var rig: CameraRig = CameraRig.new()
+	autofree(rig)
+	assert_false(rig.start_backdrop(30.0, 8.0))
+
+
+func test_the_cockpit_view_comes_back_after_the_backdrop() -> void:
+	main.camera_rig.set_mode(CameraRig.Mode.COCKPIT)
+	await _open()
+	assert_true(main.camera_rig.is_backdrop_running())
+	_menu().close()
+	assert_eq(main.camera_rig.mode, CameraRig.Mode.COCKPIT)

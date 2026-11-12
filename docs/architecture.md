@@ -4626,3 +4626,18 @@ HudPainter._draw_radar     hands the three buffers to their multimeshes whole; d
 
 Readouts: `hud.radar_plot_us` and `hud.radar_paint_us` (smoothed over about twenty frames). At `battle` 1000 the plot call fell
 from about 350 to about 100 us a frame and the paint from about 400 to about 110 us.
+
+### 18.27 The pause backdrop as built (T42)
+
+```
+PauseOrbitPath.create(chase_distance, hull_radius)   radius = max(1.3 x chase distance, 2 x hull radius)
+  position_at(phase)   (r sin a, 0.36 r sin 2a, r cos a), a = 2 pi phase: a circle that rises and dips twice, ship-local
+  look_at_at(phase)    a point 0.12 r ahead of the ship, pushed 0.22 r to the camera's left (the ship frames right)
+CameraRig.start_backdrop(loop_s, hull_radius)   cinematic camera, process mode always, blend 1 s from the view in use
+CameraRig.stop_backdrop()                       back to the mode left, chase snapped; chosen_mode() = the mode that comes back
+Main                pause_menu.opened -> start (if settings.pause_backdrop), resumed -> stop; the HUD hides while it runs
+```
+
+The path is pure and ship-local; every frame the rig puts the camera on the ship's interpolated pose times it, so it needs no
+state that a rebase could move (the world is paused anyway). The phase advances on the frame's `delta`. The radial menus do not
+start it. A shot playing, no ship or the setting off leave the still frame.

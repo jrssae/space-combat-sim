@@ -207,6 +207,8 @@ func _ready() -> void:
 	pause_menu.objectives_source = objectives
 	# The button that closed the menu may still be down: it must not also tap a target or toggle something.
 	pause_menu.resumed.connect(func() -> void: adapter.resync_edges(input_source))
+	pause_menu.opened.connect(_start_pause_backdrop)
+	pause_menu.resumed.connect(_stop_pause_backdrop)
 	add_child(pause_menu)
 	_setup_perf()
 	_setup_encounters(scenario)
@@ -470,6 +472,20 @@ func _on_camera_mode_changed(new_mode: CameraRig.Mode) -> void:
 	var cinematic: bool = new_mode == CameraRig.Mode.CINEMATIC
 	hud.cinematic = cinematic
 	letterbox.shown = cinematic
+
+
+# The slow camera move behind the pause menu (M5-T42); the flight HUD steps aside while it runs.
+func _start_pause_backdrop() -> void:
+	if not bool(Settings.get_value(&"pause_backdrop")) or ship == null:
+		return
+	if camera_rig.start_backdrop(float(Settings.get_value(&"pause_backdrop_loop_s")), ship.bounding_radius()):
+		hud.cinematic = true
+
+
+func _stop_pause_backdrop() -> void:
+	if camera_rig.is_backdrop_running():
+		camera_rig.stop_backdrop()
+		hud.cinematic = camera_rig.is_playing_shot()
 
 
 ## This frame's `HudInput`, read from the live nodes (the HUD never caches anything).
@@ -769,6 +785,8 @@ func _register_console() -> void:
 			[ConsoleArg.float_required(&"level", 0.0, 1.0)]), _cmd_throttle, self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"pause", "Pause or resume the game (toggles with no argument)",
 			[ConsoleArg.bool_optional(&"state")] as Array[ConsoleArg]), _cmd_pause, self)
+	DebugConsole.registry.register_command(ConsoleCommand.new(&"pausemenu", "Open or close the pause menu (toggles with no argument)",
+			[ConsoleArg.bool_optional(&"state")] as Array[ConsoleArg]), _cmd_pausemenu, self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"scenario",
 			"Load a scenario (%s): sets settings.scenario for this session and reloads the scene" % ", ".join(PackedStringArray(SCENARIO_CHOICES)),
 			[ConsoleArg.enum_optional(&"name", SCENARIO_CHOICES, null)] as Array[ConsoleArg]), _cmd_scenario, self)
@@ -849,6 +867,16 @@ func _cmd_pause(args: Dictionary) -> ConsoleResult:
 	var requested: Variant = args.get(&"state")
 	set_paused(not get_tree().paused if requested == null else bool(requested))
 	return ConsoleResult.line("paused" if get_tree().paused else "running")
+
+
+func _cmd_pausemenu(args: Dictionary) -> ConsoleResult:
+	var requested: Variant = args.get(&"state")
+	var want_open: bool = not pause_menu.is_open() if requested == null else bool(requested)
+	if want_open:
+		pause_menu.open()
+	else:
+		pause_menu.close()
+	return ConsoleResult.line("pause menu open" if pause_menu.is_open() else "pause menu closed")
 
 
 func _on_setting_changed(key: StringName, _value: Variant) -> void:

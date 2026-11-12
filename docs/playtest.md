@@ -686,3 +686,4 @@ Check (T25's (H) items; screenshots of both rings are in `references/screenshots
       not too small; it reads at 1080 lines and at 4K; the class names; `NO ID` for an unknown contact; `ATTACKING YOU`
       appears on the raider that is on you. The first time a hull is highlighted its outline shows at once and its
       inner lines a moment later (up to 0.2 s for a Saturn 8).
+- [ ] **M5-T42 Pause backdrop** (screenshots in `references/screenshots/T42 pause backdrop/`; `pausemenu on` in the console): behind the pause menu the camera drifts in a slow figure 8 around your ship (about 30 s a loop) and the flight HUD steps aside; Settings and Controls keep it going; Resume puts the view back as you left it, in chase and in cockpit; `settings.pause_backdrop off` gives the frozen frame; the ship reads on the right behind the menu, or the panels hide too much of it.

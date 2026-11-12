@@ -614,7 +614,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T39 | C | Civilian colours as the show shows them, and a sheen on every hull (maintainer, 2026-11-08; added after T38, done before T30) | T27 | controller | Colour read off captures vs lit albedo; the look is (H) | done |
 | T40 | C | Civilian panel seams drawn from the show's references instead of the generic brick grid (maintainer, 2026-11-08) | T39, the maintainer's reference captures | controller | Per-ship seam layouts read off images; the look is (H) | in progress |
 | T41 | - | Rock rams by the speed into the rock: a glancing scrape costs its closing speed, not the ship's whole speed (maintainer, 2026-11-08; done before T31) | T29 | controller | A small change to the ram rule for rocks | done |
-| T42 | A | Pause backdrop: a slow figure-8 camera around the Starfury behind the pause menu (maintainer, 2026-11-08) | T02, T08 | Sonnet | A camera path that runs while the tree is paused; the look is (H) | in progress |
+| T42 | A | Pause backdrop: a slow figure-8 camera around the Starfury behind the pause menu (maintainer, 2026-11-08) | T02, T08 | Sonnet | A camera path that runs while the tree is paused; the look is (H) | done |
 | T43 | A | Target preview: a turning green wireframe of the highlighted entity on the side of the screen opposite the radial target menu, with hull bar and distance (maintainer, 2026-11-08) | T25 | Fable (maintainer, 2026-11-11) | Hidden-line wireframe in a small viewport, edges from the mesh, an info panel kept lean | done |
 | T44 | A | Focus pull: while the target menu is open only it and the target information are in focus; the play view and HUD blur over 0.2 s and come back over 0.2 s when it closes (maintainer, 2026-11-08, corrected 2026-11-09) | T25 | Sonnet | A short tweened screen blur between the HUD and the menu layers, free when closed | done |
 | T45 | A | Start screen and settings groups: an options-only start screen (New game, Load game, Free flight, Settings, Quit), the sandbox scenes under New game, Controls inside Settings, five settings groups (maintainer, 2026-11-09) | T02, T03, T04 | Sonnet | Menu re-plumbing on the built kit; mostly tests | in progress |
@@ -2251,6 +2251,26 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   restores the mode and the pose, no player ship gives the still view, the setting off gives the still view.
 - **Done when:** AC24, the tests pass, and screenshots of three phases in `references/screenshots/Pause backdrop/` for
   the maintainer's look check (H).
+- **Done (2026-11-12):**
+  - **Built.** `PauseOrbitPath` (pure, `src/camera/pause_orbit_path.gd`) and a backdrop mode in `CameraRig` (`start_backdrop`,
+    `stop_backdrop`, `chosen_mode`) that plays it on the cinematic camera while the tree is paused (the rig goes to process mode
+    always for as long as it runs). `Main` starts it on the pause menu's `opened` and stops it on `resumed`; the flight HUD
+    hides meanwhile. Console: `pausemenu [on|off]` (opens or closes the menu), `camera.backdrop`, `camera.backdrop_phase`;
+    settings `pause_backdrop` (on) and `pause_backdrop_loop_s` (30 s, 10 to 120).
+  - **Choices.** The move is a circle around the ship that rises and dips twice per loop (a vertical figure 8: seen from the side
+    an 8, and its crossing is off to the side, so it never comes near the hull), at the larger of 1.3 times the chase distance and
+    2 times the hull's bounding radius, about 20 degrees of tilt, aimed a little ahead of the ship and pushed aside so the ship
+    sits in the right half. It blends in over 1 s from the current camera, starting at the nearest phase. Resume cuts back to
+    the mode left with the chase camera snapped to the ship (the pose is exactly the one the player left; there is no blend
+    back). A shot playing, no ship or the setting off give the still frame. Not for the radial menus. The `settings.pause_backdrop_speed`
+    name became `pause_backdrop_loop_s`, and the provider keys live on `camera`, not `pause_menu` (T45 owns that file).
+  - **Not done.** The lighter dim and see-through objectives ground (the frame's ground is T45's file): the panels still cover
+    most of the ship in a 960x540 frame. Left as a follow-up for the look check.
+  - **Tests.** `test_pause_orbit_path` (6: closed, seam smooth, clearance for a Starfury and a Saturn 8, nose and tail, faces the ship,
+    nearest phase); `test_pause_menu` +5 (runs while paused and Resume restores the view and HUD, sub pages keep it, setting off,
+    no ship, cockpit comes back); `test_camera_rig` provider keys. Screenshots in `references/screenshots/T42 pause backdrop/`.
+  - **(H).** Whether the move looks right and the panels hide too much of the ship; the loop time; the pick between this and the
+    alternatives (plain orbit, Lissajous, beauty angles).
 
 ### M5-T43 Target preview: a wireframe of the highlighted entity
 

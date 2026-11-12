@@ -75,6 +75,7 @@ Arguments in `<angle brackets>` are required, `[square brackets]` optional, `a|b
 | Command | Arguments | Does | Where |
 |---|---|---|---|
 | `respawn` | | Reset the ship to the scenario start (refused in a mission) | in flight |
+| `pausemenu` | `[on\|off]` | Open or close the pause menu (the camera move starts behind it); no argument toggles | in flight |
 | `pause` | `[on\|off]` | Pause or resume the game; no argument toggles; refused while the pause menu is open (resume from it) | in flight |
 | `targetmenu` | `open\|pick <entry>\|highlight <entry>\|back\|close` | The target menu (a hold of the target button): `open` pauses the game and shows the categories; `pick` takes a slice 0-5 clockwise from the top or its label (`enemies`, `none`, `"raider 2"`) and opens that category or makes the pick; `highlight` points at an entry without picking it (the preview panel shows it); `back` goes back a ring; `close` resumes | in flight |
 | `commsmenu` | `open\|pick <entry>\|highlight <entry>\|back\|close` | The comms menu (D-pad Right), a radial menu: `open` pauses the game and shows the wing orders; `pick` takes a slice 0-3 clockwise from the top or its label (`attack`, `"form on me"`, `engage`, `"cover me"`) and sends the order; `highlight` points at an entry without sending it; `back` goes back a ring or closes; `close` resumes | in flight |
@@ -158,7 +159,7 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `ship` | The player's ship: position, velocity, speed, angular rate, assist, pods, mass flow, fuel | in flight |
 | `hull` | The player's hull points, fraction and destroyed state | in flight |
 | `world` | The local origin, rebases and the automatic rebase distance | in flight |
-| `camera` | The active camera mode (cockpit, chase or cinematic; writable) and field of view, the cinematic shot playing and its time | in flight |
+| `camera` | The active camera mode (cockpit, chase or cinematic; writable) and field of view, the cinematic shot playing and its time, the pause backdrop running (`backdrop`) and its loop phase | in flight |
 | `weapons` | Pulse cannon fire mode (writable), cooldown and capacitor charge | in flight |
 | `targeting` | The selected target (writable), its range and closing speed, and the targets in sensor range | in flight |
 | `combat` | Bolts swept, hits resolved, the last hit and the cost of resolving them | in flight |
