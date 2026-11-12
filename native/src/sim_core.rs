@@ -229,6 +229,9 @@ pub struct ScsSimCore {
     pub(crate) turrets: crate::turret_rows::TurretState,
     // Promotions moved clear of a rock or mine they overlapped (M4-T23).
     pub(crate) tier_cleared: i64,
+    // The last first sync's wall-clock parts, microseconds (readouts only, M5-T35): the tier's step, the bodies, the
+    // statics, the tier's rows, the lookups.
+    sync_parts: [i64; 5],
 }
 
 #[godot_api]
@@ -410,9 +413,11 @@ impl ScsSimCore {
         self.tick = tick;
         self.syncs += 1;
         self.rows_version += 1;
+        let mut clock = PartClock::new();
         // The tier's integration for the current tick (M4-T21). The body rows read below are a tick older, so a tier row
         // leads them by one tick's motion; a demote and promote pair still steps the ship exactly once a tick.
         self.tier_step(delta);
+        self.sync_parts[0] = clock.lap();
         let now = self.syncs;
         let mut rows = std::mem::take(&mut self.rows);
         rows.clear();
@@ -456,6 +461,7 @@ impl ScsSimCore {
         }
         self.hulls = hulls;
         rows.node_count = rows.body_ids.len();
+        self.sync_parts[1] = clock.lap();
         for s in 0..self.static_ids.len() {
             rows.body_ids.push(self.static_ids[s]);
             rows.ids.push(self.static_ids[s]);
@@ -480,6 +486,7 @@ impl ScsSimCore {
             rows.name_keys.push(String::new());
             rows.roles.push(crate::rows::ROLE_COMBAT);
         }
+        self.sync_parts[2] = clock.lap();
         // The tier's rows after the statics (M4-T21): contacts to the brains, out of the scan GDScript builds.
         let tier_base = rows.body_ids.len();
         self.tier.append_to(&mut rows);
@@ -495,9 +502,18 @@ impl ScsSimCore {
         }
         self.rows = rows;
         self.touched.clear();
+        self.sync_parts[3] = clock.lap();
         self.index_rows();
+        self.sync_parts[4] = clock.lap();
         self.bolts.truncate_to_owned();
         self.rows.node_count as i64
+    }
+
+    /// The last first sync's parts, wall-clock microseconds: `[tier step, bodies, statics, tier rows, lookups]` (readouts
+    /// only).
+    #[func]
+    fn sync_parts_us(&self) -> PackedInt64Array {
+        PackedInt64Array::from(&self.sync_parts[..])
     }
 
     /// The tick's later sync point (the hit resolver's, after the bolts moved): reads the bodies that were touched since
@@ -1537,6 +1553,23 @@ impl ScsSimCore {
 }
 
 // `HullHealth.fraction`'s clamp (`clampf`; a NaN stays NaN either way).
+// A wall clock read in laps, for the readouts.
+struct PartClock(std::time::Instant);
+
+impl PartClock {
+    fn new() -> Self {
+        Self(std::time::Instant::now())
+    }
+
+    // Microseconds since the last lap.
+    fn lap(&mut self) -> i64 {
+        let now = std::time::Instant::now();
+        let us = now.duration_since(self.0).as_micros() as i64;
+        self.0 = now;
+        us
+    }
+}
+
 fn clamp01(v: f64) -> f64 {
     v.clamp(0.0, 1.0)
 }
