@@ -170,7 +170,7 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `belts` | The scenario's asteroid belts: belts, rocks, collision spheres and the multimeshes drawing them | in flight |
 | `waves` | The raider waves: wave number, name, state, countdown, raiders alive and the kill tally | in flight |
 | `wing` | The player's wing: name, order, formation, members and the last acknowledgement | in flight |
-| `hud` | Whether the HUD shows, and where the lead, prograde and target marks are | in flight |
+| `hud` | Whether the HUD shows, and where the lead, prograde and target marks are; `radar_plot_us` and `radar_paint_us`, the radar's frame cost (T34) | in flight |
 | `screens` | The cockpit screens: shown, powered, paint counts and the lamps lit | in flight |
 | `pause_menu` | Whether the pause menu is open, the page on top and how many pages are open | in flight |
 | `comms_menu` | The comms menu (D-pad Right): whether it is open, the page, the highlighted entry, the ring's entries, orders picked, the last order, why it last closed and the focus pull | in flight |

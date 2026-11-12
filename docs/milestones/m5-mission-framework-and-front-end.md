@@ -606,7 +606,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T31 | - | L1: the flight batch's per-ship gather in native for row-commanded ships | T30 | Opus | The biggest measured lever (about 37 % of the tick at 1 000) | done |
 | T32 | - | L2: the hit resolver gets only bolts with live hostile pairs from native; per-hit hash and readout costs | T31 | Opus | 1.41 ms at 1 000; native pair filtering | done |
 | T33 | - | L3: the ram resolver's quick wins, then `RamTracker` in native | T32 | Fable (maintainer, 2026-11-11) | 1.20 ms at 1 000; string keys and full passes per tick | done |
-| T34 | - | L5: the radar's dot buffers filled natively | T31 | Sonnet | Per-contact GDScript every frame | in progress |
+| T34 | - | L5: the radar's dot buffers filled natively | T31 | Sonnet | Per-contact GDScript every frame | done |
 | T35 | - | L8 and L9: the native allocation pass and the per-event member scans | T33 | Fable (maintainer, 2026-11-11) | Hash maps and Vec churn per sync; hits times members | done |
 | T36 | - | L12 and L13: the smaller items and one native constants table with its GUT check | T35 | Sonnet | Many small fixes and a drift guard | not started |
 | T37 | D | L6 and L7: muzzle flashes and shot sounds culled by range; no audio node per pooled ship walked per frame | T28 | Sonnet | Sound-pass cost at scale | not started |
@@ -2043,6 +2043,32 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   multimeshes; `factions` built only when read; no `slice` copy when the multimesh is larger.
 - **Done when:** the HUD's frame cost outside the ticks at 1 000 ships drops, the radar tests pass unchanged, numbers in the
   Done notes.
+- **Done (as built, 2026-11-11):**
+  - **State found:** `RadarModel.plot` already ran natively (M4-T23); what stayed in GDScript was the painter's per-contact
+    `_fill_dot_buffers` (12 indexed writes a contact, two with backings), the `buffer.slice` copy when a multimesh was larger,
+    the per-contact `factions` loop in `RadarModel.plot`, and six `push` loops in the native shell.
+  - **Readouts first:** `hud.radar_plot_us` (the plot call) and `hud.radar_paint_us` (`_draw_radar`), each smoothed over about
+    twenty frames. The bench runs headless but the HUD still lays out and draws, so the readouts work there (`bench battle
+    1000 10 warmup=2 seed=1`, then `wait 60; state hud`).
+  - **Built:** `radar_kernel::dot_counts`, `grown_capacity` and `fill_dots` (engine-free, `Vector2` and `Color` added to the
+    kernel's allowed imports) behind `ScsRadarPlot.dot_buffers`. `RadarModel.dot_buffers` returns a `RadarDotBuffers`
+    (plain, rim and backing buffers with their counts). The painter passes its multimeshes' instance counts, so a buffer
+    comes sized for its multimesh (doubling only when it must) and goes to the server whole: no `resize`, no `slice`. The
+    selected and waypoint dots are placed by one transform each; the stalks stay a single transform of the plot's units.
+    `RadarPlot.factions` is built when read (`bind_factions` keeps the order and indices); the native `plot` shell fills its
+    buffers by slice instead of per-element `push`.
+  - **Measured** (`battle` 1000, seed 1, three headless runs each, HUD readouts after `wait 60`; before = this task's
+    readouts on the T35 code): the radar's plot call 323 to 374 us before, 77 to 117 us after; its paint 358 to 436 us
+    before, 91 to 138 us after; together about 0.7 to 0.8 ms before, 0.17 to 0.25 ms after a frame. Tick median 5.86 to 5.93 ms
+    before and 5.90 to 5.96 ms after (the radar is not in the tick); `bench_quick.sh t34_after battle` at 1 000: median 5.89 ms,
+    p99 8.15 ms (T35's recorded run, 5.82 and 7.87 ms, is within the run-to-run spread). No separate `t34_before` bench run:
+    the tick is untouched, and the readouts above are the before and after of the code that changed.
+  - **Look:** `references/screenshots/T34 radar/` before and after in `battle 300` (the same frame, seeded) and the dogfight;
+    the radars read the same. Final judgement of the look stays `(H)`.
+  - **Tests:** 3 Rust tests in `radar_kernel/tests.rs` (63 pass in `cargo test --release --lib`); GUT `test_radar_plot` gains 3
+    (native buffers against the old per-contact loop, with and without backings and a rim selection; buffer sizing; lazy
+    factions), `test_sim_core`'s radar guard allows the new builtins and names `fill_dots`. The radar, HUD, target-menu,
+    cockpit-screen and broadcast files pass unchanged.
 
 ### M5-T35 L8 and L9: native allocations and per-event scans
 

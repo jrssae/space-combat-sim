@@ -869,12 +869,13 @@ func test_the_step_job_holds_no_engine_type() -> void:
 
 ## The radar sphere's kernel (M4-T23): held to the kernels' rules; its shell (`radar_plot.rs`) is what reaches it.
 const RADAR_KERNEL_FILE: String = "res://native/src/radar_kernel.rs"
-const RADAR_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::{Basis, Vector3};", "use crate::v3::{length_squared, xform_inv};"]
+const RADAR_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::{Basis, Color, Vector2, Vector3};", "use crate::v3::{length_squared, xform_inv};"]
 
 
 func test_the_radar_kernel_holds_no_engine_type() -> void:
 	var violations: PackedStringArray = _engine_free_violations(RADAR_KERNEL_FILE, KERNEL_FORBIDDEN, RADAR_KERNEL_USE_ALLOWED)
 	assert_eq(violations.size(), 0, "no engine type, call, crate path or stray import in the radar kernel: %s" % violations)
-	assert_true(FileAccess.get_file_as_string(RADAR_KERNEL_FILE).contains("pub fn plot("), "the radar kernel holds the plot")
+	assert_true(FileAccess.get_file_as_string(RADAR_KERNEL_FILE).contains("pub fn plot(") and FileAccess.get_file_as_string(RADAR_KERNEL_FILE).contains("pub fn fill_dots("),
+			"the radar kernel holds the plot and the dot buffers")
 	assert_true(FileAccess.get_file_as_string("res://native/src/radar_plot.rs").contains("use crate::radar_kernel::"),
 			"the shell reads the kernel")

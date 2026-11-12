@@ -70,9 +70,26 @@ static func plot(contacts: RadarContacts, selected_id: int, own_position: Vector
 	out.stalk_units = r[7]
 	out.stalk_colors = r[8]
 	out.selected_index = int(r[9])
-	out.factions.resize(order.size())
-	for k: int in order.size():
-		out.factions[k] = contacts.faction_names[contacts.faction_ix[order[k]]]
+	out.bind_factions(order, contacts.faction_ix, contacts.faction_names)
+	return out
+
+
+## The dots of `plot` on a screen radar of `radius_px` centred at `centre`, as the multimeshes' buffers, built natively
+## (M5-T34). `held` is the three multimeshes' instance counts now (plain, rim, backing); a buffer comes sized to hold its
+## dots whole, growing only when it must. `backings` adds a dark `backing_radius` dot under every contact.
+static func dot_buffers(plot: RadarPlot, centre: Vector2, radius_px: float, backing_radius: float, dot_radius: float,
+		backing_colour: Color, backings: bool, held: PackedInt32Array) -> RadarDotBuffers:
+	if _native == null:
+		_native = NativeLib.instantiate(NATIVE_CLASS)
+	var r: Array = _native.dot_buffers(plot.point_units, plot.colors, plot.rims, plot.selected_index, centre, radius_px,
+			backing_radius, dot_radius, backing_colour, backings, held)
+	var out := RadarDotBuffers.new()
+	out.plain = r[0]
+	out.plain_count = int(r[1])
+	out.rim = r[2]
+	out.rim_count = int(r[3])
+	out.backing = r[4]
+	out.backing_count = int(r[5])
 	return out
 
 

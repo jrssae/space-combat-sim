@@ -4602,3 +4602,27 @@ tier's step, the bodies, the statics, the tier rows and the lookups. A bench's `
 
 At `battle` 1000 the native sync fell from 0.72 to 0.26 ms a tick and the tick median from 6.73 to 5.9 ms. What is left of the
 sync is the bodies' pose and velocity reads (three engine calls a body in play) and the tier's own step.
+
+### 18.25 The radar's dot buffers filled natively (T34, L5)
+
+The radar's plot has been native since M4-T23; T34 moves the painter's per-contact loop after it.
+
+```
+RadarModel.plot            ScsRadarPlot.plot: order, ids, points, ranges, colours, rims, unit points, stalks
+RadarModel.dot_buffers     ScsRadarPlot.dot_buffers: plain, rim and backing multimesh buffers (radar_kernel::fill_dots)
+HudPainter._draw_radar     hands the three buffers to their multimeshes whole; draws the stalks, selection, waypoint
+```
+
+- **Buffers come sized for their multimesh.** The painter passes the multimeshes' instance counts; `grown_capacity` keeps
+  the size while the dots fit, else doubles or takes the count, and `0` for no dots. The painter sets `instance_count` only
+  when it differs and hands the buffer to `RenderingServer.multimesh_set_buffer` with no `resize` or `slice`.
+- **Screen placement is native.** `fill_dots` places each unit point on the surface's radar (`centre`, `radius_px`), so the
+  painter keeps no per-contact array. The selection and the waypoint diamond are one transform of one point each; the stalks
+  are still one transform of the plot's stalk units.
+- **`RadarPlot.factions` is built when read** (tests, `to_dots`): `RadarModel.plot` binds the order, the contacts' faction
+  indices and the names, and nothing builds the list per frame.
+- **The kernel stays engine-free.** `radar_kernel.rs` takes `Vector2` and `Color` builtins beside `Basis` and `Vector3`; the
+  guard test lists them.
+
+Readouts: `hud.radar_plot_us` and `hud.radar_paint_us` (smoothed over about twenty frames). At `battle` 1000 the plot call fell
+from about 350 to about 100 us a frame and the paint from about 400 to about 110 us.
