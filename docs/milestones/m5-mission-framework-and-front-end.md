@@ -2244,6 +2244,15 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   fighter`) for the Narn transport, `centauri fighter close up` for the Brezebel; none shows Brakiri styling. The rest
   (Babylon 5 station, Omega, Hyperion, Warlock, Starfury, Minbari, Vorlon, Shadow, Vree, raider carrier and battle wagon) are
   for later ships and the station (M7, M12, M13).
+- **Phase 1 answers (maintainer, 2026-11-12):** option sheets A (major seams only), B (reference density, hatches, ribs) and C
+  (B plus mixed-size plates with per-plate tone and sheen, joint grime, raised hatches) were shown for all nine hulls.
+  (1) A graphics setting picks the texture detail: **low = A, high = C**, for every civilian. (2) C's per-plate tone (5 to 9 %
+  of value, up to 17 % on the Narn crescent) is acceptable, not a colour change. (3) The Saturn 8s' wider lines are good; no
+  4096 atlases. (4) Turrets, trusses, arms, struts, antennas and nozzles stay plain for now. (5) Narn war-paint stays out as a
+  paint scheme, but the **Narn transport takes the Frazi fighter as its model**: the consistent Narn construction, with the
+  fighter's pattern of smaller rectangles in slightly varied colour across the hull. (6) The references are inspiration only,
+  never reused or traced. (7) No re-shoot needed. Phase 2 commits the layouts with tests (per part: feature counts and
+  positions, mirror symmetry, minimum plate size, determinism) and removes `panel_grid` and the civilian path of `plating_for`.
 - **What:** per ship, the seams and hatches read off the captures (where plates break, which way they run, ribs on the
   pods), drawn as per-part seam layouts instead of `plating_for`'s staggered grid; a look sheet per ship for the
   maintainer before the generator commits.
