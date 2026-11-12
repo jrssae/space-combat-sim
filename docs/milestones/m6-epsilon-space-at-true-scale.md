@@ -240,7 +240,7 @@ which changes the same native rows and rebase path:
 | # | Criterion | Kind | Done |
 |---|---|---|---|
 | AC1 | Moving frame: the frame's origin free-falls in 64-bit (test: a frame with nothing in it follows the analytic orbit of a test particle to within the error budget T01 sets over one orbit); the velocity rebase fires at the threshold and leaves every universe position and universe velocity unchanged (test over ships, tier rows, bolts, debris, particles); `RebaseFight` runs with both rebases forced often; the parity recordings in `tests/fixtures/` stay green with gravity and the velocity rebase off | A | |
-| AC2 | Rebase cost (L4): the statics shift natively and in place, hidden ships are skipped; the worst rebase tick at `bench battle 1000` is within 10 % of the median tick (Report P3: 13.07 against 10.50 ms), measured before and after | A | |
+| AC2 | Rebase cost (L4): the statics shift natively and in place, hidden ships are skipped; the worst rebase tick at `bench battle 1000` is within 10 % of the median tick (Report P3: 13.07 against 10.50 ms), measured before and after. **Restated (maintainer, 2026-11-12, after T06):** the cascade's rebuilds are gone and the median rebase tick's extra cost over the median tick is measured before and after (T06: 2.25 to 1.77 ms; the 10 % bar sits inside the tick's own spread, p90 +14 %); the per-node rest is T21 | A | T06 |
 | AC3 | Ephemeris and gravity: Kepler positions and velocities match reference values for circular, elliptic and inclined orbits; a moon's orbit is around its planet; the ephemeris seeks to any time with no carried state; gravity on rows is identical with 1 and 6 threads and between `sim_step` threaded and `delayed`; Rust unit tests and GUT tests through the binding | A | |
 | AC4 | Everything falls: a ship coasting in orbit beside the station's stand-in stays beside it over one orbit (within T01's budget); a bolt fired near the planet curves as the analytic path says; debris and the tier's rows feel the pull; the brake holds a point under gravity; `GravityStandin` is gone and the bench's `battle` layout runs with its pull from data | A | |
 | AC5 | Flying under gravity: the clamp follows Q4; the assist's safe speed and the brake's all stop read against the reference (Q5); with assist on, the player can hold a low orbit; the HUD shows `REF <name>`, range, closing speed, the speed against the reference and the altitude near a body (Q6); hitting the planet or a moon destroys the ship | A | |
@@ -258,7 +258,7 @@ which changes the same native rows and rebase path:
 - **Tracks.** A (frame and gravity: T01, T02, T04 to T08), B (system data and scenarios: T03, T09), C (scaled space and far
   representations: T10, T11, T12, T15), D (the jumpgate: T13, T14), E (test tiers: T17, T18). Inside a track the order holds.
   If work goes one task at a time, the order is T01, T17, T18, T02, T03, T04, T05, T06, T07, T08, T09, T10, T11, T12, T13, T14,
-  T15, T19, T20, T16.
+  T15, T19, T20, T21, T16. T19 is paused at the maintainer's word (2026-11-12, again), so T20 waits behind it.
 - **One working copy** on branch `m6` in the main checkout, no task branches, as in M5; early-start work runs where the maintainer
   says (Early start, above).
 - **Locks** as in M5: Godot runs through `flock /tmp/m6-godot.lock`, commits through `flock /tmp/m6-git.lock` and stage only the
@@ -288,7 +288,7 @@ which changes the same native rows and rebase path:
 | T03 | B | Star system data: bodies and elements in `data/star_systems.json`, the loader, the `system` provider | T02, Q1 to Q3 | Sonnet | Data and validation on a clear format | done |
 | T04 | A | The free-falling frame: the origin as a test particle, `environment_accel` from the ephemeris | T02, T03 | Opus | Touches the tick order and every ship's force step | done |
 | T05 | A | The velocity rebase over every body, row, bolt, chunk, particle and interpolated node | T04 | Fable | The riskiest change of the milestone; every moving thing and the parity recordings | done |
-| T06 | A | L4: the rebase cascade natively, the cached solid shifted in place, hidden ships skipped | T05 | Opus | A measured native fix on the path T05 rewrote | in progress (the cascade is gone; AC2's 10 % bar waits for the maintainer, options in the work notes) |
+| T06 | A | L4: the rebase cascade natively, the cached solid shifted in place, hidden ships skipped | T05 | Opus | A measured native fix on the path T05 rewrote | done (AC2 restated, the per-node rest moved to T21; maintainer, 2026-11-12) |
 | T07 | A | Gravity on everything: ships, tier rows, bolts, debris, the brake's and the AI's feed-forward; the gravity stand-in removed | T04 | Opus | Native kernels with parity at zero gravity | not started |
 | T08 | A | Flying under gravity: the clamp, the assist's and brake's reference, the HUD's reference and altitude, planet impact | T07, Q4 to Q6 | Opus | Flight-model semantics the player feels | not started |
 | T09 | B | Scenarios at true scale: spawns relative to bodies, stations and orbits, epochs, free flight beside the station's stand-in | T03, T08, Q7, Q9 | Opus | Every scenario and mission must keep working | not started |
@@ -303,6 +303,7 @@ which changes the same native rows and rebase path:
 | T18 | E | The review's CONFIRMED test removals (sections A to D), each re-checked, the parity recordings still read | T17 | Opus | Proving two tests cover the same thing needs both read in full; rules on what must stay | done |
 | T19 | D | The vortex reworked and stand-alone: fitted to the gate, a shallow funnel, spiralling soft dark patches; open jump points use it too | T14 | Opus | Shader animation and a shared effect seam; the look is (H) | in progress |
 | T20 | D | Vortex detail by distance and mass arrivals: detail layers dropped with screen size; up to 100 jump points forming at once; every ship of the 1 000-ship battle enters through one; the battle's GPU fps test with them | T19, T07 | Opus | A shader LOD, a pooled effect at a hundred instances and the battle's spawn path, judged on the GPU | not started |
+| T21 | A | The rebase's per-node rest: only the rocks near a ship live in Jolt; a list of the shiftables in play instead of walking the group | T06, T07 | Opus | A measured engine-side follow-up to T06 on the paths T07 also changes | not started |
 
 ### M6-T01 Moving-frame audit and design
 
@@ -1069,3 +1070,18 @@ which changes the same native rows and rebase path:
 - **Tests:** the LOD helper (levels from projected size, the blend band): quick; the pool at 100 points (no allocation while
   open, reuse): quick if pure; the battle entering through points: standard; GPU files (`*_gpu.gd`): standard (Pending headless).
 - **Done when:** AC13; screenshots of one vortex at each level and of 100 points forming in the battle for the maintainer (H).
+
+### M6-T21 The rebase's per-node rest
+
+- **Goal:** what T06 left of a position rebase and of an off-anchor tick (maintainer, 2026-11-12, option (c) after T06). T06
+  measured the rest at `bench battle 1000`: the walk over the shiftable group (1 128 listed, 489 moved, about 0.6 ms), the
+  1 000 rock bodies (0.25 ms, Godot-Jolt's own cost per body), the end-of-tick interpolation reset (0.27 ms), Jolt's next step
+  (+0.33 ms) and the resolvers' rock grids (+0.2 ms); off the anchor the rocks cost about 0.28 ms per tick.
+- **Steps:** keep only the rocks near a ship (or a bolt's sweep) as Jolt bodies, the rest as static rows alone, promoted and
+  demoted with hysteresis as the tier does; keep a list of the shiftables in play (registered on spawn, dropped on park or
+  free) instead of walking the group with the tier's parked ships in it.
+- **Tests:** rams and hits against rocks unchanged (the existing ram and hit tests and the parity recordings); a rock promoted
+  and demoted keeps its place; the rebase tests keep their tiers.
+- **Done when:** the median rebase tick's extra and the off-anchor tick's extra at `bench battle 1000` measured before and
+  after, both lower; nothing about a ram or a hit on a rock changes.
+
