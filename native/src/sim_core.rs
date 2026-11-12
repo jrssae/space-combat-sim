@@ -488,8 +488,14 @@ impl ScsSimCore {
             if self.seen.contains(&m.body_id) {
                 continue;
             }
-            let names = self.names.get_or_insert_with(Names::new);
-            if !hull_only_active(m, names, &mut self.sync_reads) {
+            // As for the markers (M5-T35): checked again only when touched or first asked. A body whose marker turned
+            // inactive was touched for it, so its hull is checked in that same sync.
+            if !cached || !m.active_known || self.touched.contains(&m.body_id) {
+                let names = self.names.get_or_insert_with(Names::new);
+                m.active = hull_only_active(m, names, &mut self.sync_reads);
+                m.active_known = true;
+            }
+            if !m.active {
                 m.active_at = 0;
                 continue;
             }

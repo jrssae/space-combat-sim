@@ -339,6 +339,41 @@ func test_a_hull_event_reaches_its_body_and_a_freed_bodys_selection_is_dropped()
 	assert_eq(int(core.row_of_id(a.get_instance_id())) >= 0, true)
 
 
+func test_a_parked_hull_is_not_asked_again_until_its_body_is_touched() -> void:
+	var drones: Array[RigidBody3D] = []
+	for i: int in 40:
+		drones.append(_drone(Vector3(50.0 * i, 0.0, 0.0)))
+	for i: int in range(20, 40):
+		_park(drones[i])
+	var sim: SimCore = SimCore.for_tree(get_tree())
+	sim.sync_now()
+	sim.sync_now()
+	sim.sync_now()
+	var core: Object = sim.core
+	var quiet: int = core.engine_calls()[0]
+	assert_lt(quiet, 20 * 4 + 1, "a sync asks only the 20 flying drones for their pose (%d calls)" % quiet)
+	var scan := _core_scan()
+	assert_true(scan._body_ids.has(drones[0].get_instance_id()), "a flying drone has a row")
+	assert_false(scan._body_ids.has(drones[30].get_instance_id()), "a parked one has none")
+	_unpark(drones[30])
+	_park(drones[0])
+	scan = _core_scan()
+	assert_true(scan._body_ids.has(drones[30].get_instance_id()), "shown again, it is back at the next scan")
+	assert_false(scan._body_ids.has(drones[0].get_instance_id()), "and the one hidden since is gone")
+	_assert_same_rows(scan, TreeRows.scan(get_tree()), "after the changes")
+	var hull: Damageable = null
+	for child: Node in drones[5].get_children():
+		if child is Damageable:
+			hull = child as Damageable
+	hull.kill()
+	scan = _core_scan()
+	assert_false(scan._body_ids.has(drones[5].get_instance_id()), "a destroyed hull leaves the scan")
+	hull.restore()
+	scan = _core_scan()
+	assert_true(scan._body_ids.has(drones[5].get_instance_id()), "and a restored one is back")
+	_assert_same_rows(scan, TreeRows.scan(get_tree()), "after the hull went and came back")
+
+
 func test_the_shared_scan_is_the_cores() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 13
