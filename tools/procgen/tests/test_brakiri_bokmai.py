@@ -139,6 +139,9 @@ class BrakiriBokmaiTests(unittest.TestCase):
         for stem in ("brakiri_bokmai", "brakiri_bokmai_turret", "brakiri_bokmai_pod"):
             expected |= {f"{stem}.glb", f"{stem}.obj"} | {f"{stem}_{k}.png" for k in ("albedo", "normal", "orm", "emissive")}
         expected |= {f"brakiri_bokmai_chunk_{c}.{ext}" for c in CHUNKS for ext in ("obj", "glb")}
+        # The low texture set of the hull and of the pod (M5-T40); the turret has no layouts, so one set.
+        expected |= {f"{stem}_{k}_low.png" for stem in ("brakiri_bokmai", "brakiri_bokmai_pod") for k in ("albedo", "normal", "orm")}
+        self.assertNotIn("brakiri_bokmai_turret_albedo_low.png", names)
         self.assertTrue(expected <= names, sorted(expected - names))
         self.assertFalse([n for n in names if n.endswith((".ply", ".light"))], "no point clouds")
         for p in self.out_a.files:

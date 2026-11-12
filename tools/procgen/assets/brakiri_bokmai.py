@@ -17,6 +17,8 @@ and mass. A destroyed Bokmai sheds each mounted pod whole, apart from its chunks
 
 from __future__ import annotations
 
+from ..parts import layouts
+
 import json
 from dataclasses import replace
 from pathlib import Path
@@ -200,7 +202,8 @@ def build(ctx: BuildContext) -> AssetOutputs:
 
     # The pod: one model, its origin the mount.
     pod = bp.cargo_pod(style)
-    pod_files, pod_mesh = cv.write_model(out_dir, POD_STEM, [("pod", pod.part.mesh)], BRAKIRI_POD, ctx, comments + ("pod",))
+    pod_files, pod_mesh = cv.write_model(out_dir, POD_STEM, [("pod", pod.part.mesh)], BRAKIRI_POD, ctx, comments + ("pod",),
+                                         seams=layouts.brakiri_pod())
     files += pod_files
     pod_entry = {
         "obj": f"{POD_STEM}.obj",

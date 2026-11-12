@@ -14,6 +14,8 @@ its break-up chunk.
 
 from __future__ import annotations
 
+from . import layouts
+
 import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -798,6 +800,7 @@ def assemble(style: Style) -> list[Piece]:
     names = [p.name for p in pieces]
     if len(names) != len(set(names)):
         raise ValueError("piece names repeat")
+    layouts.dress((p.part for p in pieces), layouts.skylark())
     return pieces
 
 

@@ -194,6 +194,10 @@ const ENTRIES: Dictionary = {
 	&"ambient_level": {"type": TYPE_FLOAT, "default": 0.1, "min": 0.0, "max": 2.0,
 		"category": &"graphics", "label": "Ambient light", "step": 0.1,
 		"doc": "The environment's ambient light, white at this energy: what the textured meshes and every other lit surface get on every side (M4-T30a, live)"},  # 0.1 since M5-T39: the show's darker shadows
+	# M5-T40
+	&"texture_detail": {"type": TYPE_ENUM, "default": &"high", "choices": [&"low", &"high"],
+		"category": &"graphics", "label": "Ship texture detail",
+		"doc": "Which texture set the ships wear (M5-T40): high = the full surface (seams, hatches, ribs, plating toned plate by plate; the default), low = the major seams alone. The meshes are the same. A hull with one set ignores it: only the civilian hulls have both sets for now, the fighters and later hulls join when their second set is generated; live (hulls already in the scene swap their maps)"},
 	# M4-T38
 	&"anti_aliasing": {"type": TYPE_ENUM, "default": &"smaa", "choices": [&"off", &"fxaa", &"smaa", &"msaa_2x", &"msaa_4x", &"taa"],
 		"category": &"graphics", "label": "Anti-aliasing",

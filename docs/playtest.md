@@ -398,6 +398,7 @@ Set one with `set settings.<name> <value>`; add `save` to keep it. Every one is 
 friendly_fire false            bolts hit anything but their shooter when on
 ram_damage true                collisions hurt
 ambient_level 0.3              how much light the dark side of a hull gets (M4-T30a)
+texture_detail high            the ships' texture set: high (seams, hatches, ribs, toned plating) or low (major seams only); only the civilian hulls have both sets for now; live (M5-T40)
 particle_density 1.0           how much of each spark and debris burst is thrown; 0 costs nothing per frame
 lens_flare true                the star's flare (flare on|off)
 motion_blur false              blur on fast turns (blur on|off)

@@ -25,6 +25,9 @@ surface buried inside another part left out. The turret (D61) is its own small t
 
 from __future__ import annotations
 
+from ..core.seams import EMPTY
+from ..parts import layouts
+
 import json
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -98,6 +101,7 @@ class NarnSpec:
 
 
 DEFAULT_SPEC = NarnSpec()
+NARN_LAYOUTS = layouts.narn()
 
 
 @dataclass
@@ -153,7 +157,7 @@ def build_parts(
     fin_body, tower_body, box_body = spec.fin.solid(), spec.tower.body.solid(), spec.box.solid()
 
     def place(part: Part, group: str, buried_by: tuple[Any, ...], symmetric: bool = False, extra=None) -> Placed:
-        part = part.renamed(part.name, group=group)
+        part = part.renamed(part.name, group=group).with_seams(NARN_LAYOUTS.get(part.name, EMPTY))
         samples = sample(part.mesh, part.name)
         samples = _unburied(samples, buried_by, None if extra is None else extra(samples))
         return Placed(part, samples.symmetrized("x") if symmetric else samples, spacing)
@@ -196,7 +200,7 @@ def hull_parts(placed: list[Placed]) -> list[cv.HullPart]:
     """The (centred) hull parts as the textured mesh takes them."""
     return [
         cv.HullPart(p.part.name, p.part.group, p.part.mesh, p.samples.positions if p.samples is not None else np.zeros((0, 3)),
-                    paint_name(p.part.name))
+                    paint_name(p.part.name), seams=p.part.seams)
         for p in placed if p.hull
     ]  # fmt: skip
 

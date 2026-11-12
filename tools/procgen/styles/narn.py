@@ -53,5 +53,5 @@ NARN = Style(
     edge_wear=0.5,
     streaks=0.22,
     grime=0.11,
-    extra={"bare_metal": 0.25, "smudge": 0.22, "speckle": 0.05, "paint_roughness": 0.8, "streak_length_m": 0.35, "rivets": 0.6, "panel_grid": 0.0},
+    extra={"bare_metal": 0.25, "smudge": 0.22, "speckle": 0.05, "paint_roughness": 0.8, "streak_length_m": 0.35, "rivets": 0.6},
 )

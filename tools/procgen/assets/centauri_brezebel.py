@@ -24,6 +24,8 @@ surface buried inside another part left out. The turret (D61, Q19: one, on top) 
 
 from __future__ import annotations
 
+from ..parts import layouts
+
 import json
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -113,6 +115,7 @@ def assemble(spec: BrezebelSpec, style: Style) -> list[Piece]:
     front = [bow(spec.lens, style), *engine_bay(spec.bay, style), *dorsal_fitting(spec.dorsal, style)]
     arm_r = [*arm(spec.lens, spec.tip, spec.retro, spec.rail, style), fairing(spec.fairing, style),
              tip_fin(spec.fin, style, upper=True), tip_fin(spec.fin, style, upper=False)]  # fmt: skip
+    layouts.dress((p.part for p in front + arm_r), layouts.centauri())
     return _grouped(front, "bow") + _grouped(arm_r, "arm_r")
 
 
@@ -187,7 +190,8 @@ def centre(sampled: list[Sampled]) -> np.ndarray:
 
 def hull_parts(sampled: list[Sampled], offset: np.ndarray) -> list[cv.HullPart]:
     """The sampled parts as the textured mesh takes them, in the body frame."""
-    return [cv.HullPart(s.part.name, s.part.group, s.part.mesh.translated(-offset), s.samples.positions - offset, s.paint_name)
+    return [cv.HullPart(s.part.name, s.part.group, s.part.mesh.translated(-offset), s.samples.positions - offset, s.paint_name,
+                        seams=s.part.seams.transformed(np.eye(3), -offset))
             for s in sampled]  # fmt: skip
 
 

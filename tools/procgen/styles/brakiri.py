@@ -40,7 +40,7 @@ TEXTURE_PACK = {
     "edge_wear": 0.35,
     "streaks": 0.12,
     "grime": 0.08,
-    "extra": {"bare_metal": 0.0, "smudge": 0.1, "speckle": 0.03, "paint_roughness": 0.65, "rivets": 0.3, "panel_grid": 0.0},
+    "extra": {"bare_metal": 0.0, "smudge": 0.1, "speckle": 0.03, "paint_roughness": 0.65, "rivets": 0.3},
 }
 POD_SRGB = 0xABAE9A
 POD_PAINT_SRGB = 0xC8CCB4  # the pods' paint, lighter than the written colour (M5-T39)

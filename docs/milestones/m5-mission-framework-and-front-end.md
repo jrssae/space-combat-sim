@@ -612,7 +612,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T37 | D | L6 and L7: muzzle flashes and shot sounds culled by range; no audio node per pooled ship walked per frame | T28 | Sonnet | Sound-pass cost at scale | done |
 | T38 | - | L14: the shared test steps fixture, collapsed recordings, balance tests out of the default run, CI's Python job and asset cache | T36 | Sonnet | Duplication and CI time; CI must stay green | not started |
 | T39 | C | Civilian colours as the show shows them, and a sheen on every hull (maintainer, 2026-11-08; added after T38, done before T30) | T27 | controller | Colour read off captures vs lit albedo; the look is (H) | done |
-| T40 | C | Civilian panel seams drawn from the show's references instead of the generic brick grid (maintainer, 2026-11-08) | T39, the maintainer's reference captures | controller | Per-ship seam layouts read off images; the look is (H) | in progress |
+| T40 | C | Civilian panel seams drawn from the show's references instead of the generic brick grid (maintainer, 2026-11-08) | T39, the maintainer's reference captures | controller | Per-ship seam layouts read off images; the look is (H) | done |
 | T41 | - | Rock rams by the speed into the rock: a glancing scrape costs its closing speed, not the ship's whole speed (maintainer, 2026-11-08; done before T31) | T29 | controller | A small change to the ram rule for rocks | done |
 | T42 | A | Pause backdrop: a slow figure-8 camera around the Starfury behind the pause menu (maintainer, 2026-11-08) | T02, T08 | Sonnet | A camera path that runs while the tree is paused; the look is (H) | done |
 | T43 | A | Target preview: a turning green wireframe of the highlighted entity on the side of the screen opposite the radial target menu, with hull bar and distance (maintainer, 2026-11-08) | T25 | Fable (maintainer, 2026-11-11) | Hidden-line wireframe in a small viewport, edges from the mesh, an info panel kept lean | done |
@@ -2260,6 +2260,29 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   pods), drawn as per-part seam layouts instead of `plating_for`'s staggered grid; a look sheet per ship for the
   maintainer before the generator commits.
 - **Done when:** each civilian's seams match its references (H), tests pin the layouts, and `panel_grid` is gone or unused.
+- **Done (as built, 2026-11-12, on the maintainer's machine):** per-part surface layouts and two texture sets a hull
+  (architecture §18.30; the reads and the layouts are in `docs/assets-civilian.md`, "Surface layouts").
+  - **Procgen.** `core/seams.py` (features as distances on the surface: cuts, spokes, hoops, paths, hatches with louvres,
+    mixed-size plating; a layout follows its part through moves, turns and mirrors) and `parts/layouts.py` (the five
+    generators' layouts). The baker draws them into the albedo, normal and ORM maps. Every civilian hull and the Bokmai pod
+    are written with the full set and a `_low` set (major seams only); meshes, chunks, hardpoints and the emissive map are
+    unchanged, so fidelity was not re-scored. `panel_grid` is gone from the styles; `Atlas.grid` turns the generic plating
+    off for hulls with layouts, and they compute no `plating_for`.
+  - **The setting.** `settings.texture_detail`, "Ship texture detail" (`low` or `high`, default `high`, Video group of the
+    settings menu), for every ship. It is live: `MeshAssets` swaps the maps on the hulls already in the scene. The loading is
+    general (paint, livery and glass materials): a hull with one set ignores it, and only the civilians have both for now.
+  - **Narn.** Reworked after the Frazi fighter: framed panels, a panel inside a panel, and small rectangles in slightly
+    varied shades (10 % on the green, 7 % on the box) in place of phase 1's larger 17 % mosaic. GPU check on the RX 6950 XT
+    (Forward+, 103 fps, 54 draw calls in the sheet scene): `references/screenshots/T40 seams/narn_final.png`, low and high.
+  - **Kept from the sheets, changed since.** Barrel and disc plating now mirrors across the centre plane (it did not on the
+    sheets), the Skylark's dome petals moved 7.5 degrees to be symmetric, and the Saturn 3's cross beam is plain. The
+    Bokmai's arms and fork struts keep their layout: they are hull limbs, not structure.
+  - **Tests.** Python `test_seams` 34 (features, plating never under its least size, determinism, mirror symmetry, a layout
+    following its part, every part's feature counts per level pinned, key positions against the parts' own dimensions, the
+    baked maps, the low set's files and manifest entry), `test_textures` (the grid switch) and the five ship suites. GUT
+    `test_civilian_meshes` 7 (the setting picks each hull's set and swaps a loaded hull's maps; a one-set hull ignores it;
+    a shader material takes the set too).
+  - **(H):** the look of each hull at `high` and `low`.
 
 ### M5-T41 Rock rams by the speed into the rock
 

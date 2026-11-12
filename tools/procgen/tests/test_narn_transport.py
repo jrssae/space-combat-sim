@@ -90,6 +90,8 @@ class NarnTransportTests(unittest.TestCase):
         expected = {narn.OBJ_NAME, "narn_transport.mtl", narn.HARDPOINTS_NAME, "manifest.json"}
         for stem in ("narn_transport", "narn_transport_turret"):
             expected |= {f"{stem}.glb"} | {f"{stem}_{k}.png{x}" for k in ("albedo", "normal", "orm", "emissive") for x in ("", ".import")}
+        # The hull's low texture set (M5-T40); the turret has no layouts, so one set.
+        expected |= {f"narn_transport_{k}_low.png{x}" for k in ("albedo", "normal", "orm") for x in ("", ".import")}
         for entry in self.hp["chunks"]:
             expected |= {entry["mesh"], entry["obj"], entry["obj"].replace(".obj", ".mtl")}
         turret = self.manifest["turret"]

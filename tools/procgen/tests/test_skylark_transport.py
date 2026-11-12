@@ -115,6 +115,8 @@ class SkylarkTransportTests(unittest.TestCase):
         expected = {sky.OBJ_NAME, "skylark_transport.mtl", sky.HARDPOINTS_NAME, "manifest.json"}
         for stem in ("skylark_transport", "skylark_transport_turret"):
             expected |= {f"{stem}.glb"} | {f"{stem}_{k}.png{x}" for k in ("albedo", "normal", "orm", "emissive") for x in ("", ".import")}
+        # The hull's low texture set (M5-T40); the turret has no layouts, so one set.
+        expected |= {f"skylark_transport_{k}_low.png{x}" for k in ("albedo", "normal", "orm") for x in ("", ".import")}
         for entry in self.hp["chunks"]:
             expected |= {entry["mesh"], entry["obj"], entry["obj"].replace(".obj", ".mtl")}
         turret = self.manifest["turret"]

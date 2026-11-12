@@ -4349,8 +4349,8 @@ tests/unit/test_encounter_plan.gd, tests/integration/test_encounters.gd, tests/f
 - **Sheen.** `settings.hull_sheen` (0.25, live): `MeshAssets` gives every hull's paint a clear coat (roughness 0.35;
   `StandardMaterial3D.clearcoat`, the livery shader's `sheen`), and `SpaceEnvironment` turns on the sky's reflection
   (radiance 128) while it is above 0. Glass and rocks take none; 0 is the old flat paint.
-- **Plating.** The civilian styles set `extra["panel_grid"]` 0: no generic staggered seams, tint patchwork, hatches or rivets
-  until T40 draws their seams from the show; the fighters keep the grid.
+- **Plating.** The civilians paint no generic staggered grid (seams, tint patchwork, hatches, rivets); T40 draws their
+  surfaces per part (§18.30). The fighters keep the grid.
 
 ### 18.15 Civilian escort as built (T30, D62, Q36 to Q42)
 
@@ -4695,3 +4695,35 @@ there. Smaller changes: the tier prunes only when the removal count changed, `Ai
 (so the wing director's per-tick assignment no longer pushes every member to native), the far flashes upload once per frame, the
 HUD silhouettes are cached, one driver registers the `ai` console entries, `group_levels` is filled in place and the
 core-attached contact view carries the broadcast reach.
+
+### 18.30 Civilian surfaces drawn per part, and the texture detail setting (T40)
+
+```
+tools/procgen/core/seams.py     Feature (Cut, Spoke, Hoop, Path, Hatch, Plates), SeamLayout, Relief
+tools/procgen/parts/layouts.py  saturn(), saturn_engine(k), skylark(), narn(), centauri(), brakiri(), brakiri_pod()
+Part.seams -> HullPart.seams -> TexturedPart.seams -> Atlas.part_seams -> bake_maps (albedo, normal, ORM)
+manifest mesh.surfaces[].detail.low = { albedo, normal, orm }      settings.texture_detail low | high
+```
+
+- **Features, not a grid.** A part carries a `SeamLayout`: features in the part's own frame, each a distance on the surface
+  (a plane's cut, a seam along or round a barrel, a circle, a polyline, a hatch with optional louvres, plating). The layout
+  keeps the frame it was drawn in and is transformed with the part, so placed, turned and mirrored copies need no second
+  description. The baker asks it per texel for relief (into the normal map), seam cover (darker paint, rougher), and each
+  plate's tone and roughness shift. A seam is 2.2 texels wide (`SEAM_TEXELS`), so it is as thin as each hull's atlas allows.
+- **Plating.** `Plates` cuts fields into rectangles by rounds of uneven splits (never under `min_m`), hashed from the seed:
+  mixed sizes, no rows, no stagger. A plate's tone is a share of the paint's own value, so base colours stay T39's. Plating
+  mirrors across the part's centre plane. `scatter` draws only a share of the plates, standing proud (hatches).
+- **Levels.** A feature is major (1), full (2: the references' seam density, hatches, ribs, louvres) or plating (3). A civilian
+  hull is baked twice from the same atlas: the full set (`<id>_albedo.png` ...) with every level, and the low set
+  (`<id>_albedo_low.png`, `_normal_low`, `_orm_low`) with the major features alone. The emissive map and the mesh are shared.
+  A model without layouts (the turrets) has one set.
+- **The setting.** `settings.texture_detail` ("Ship texture detail", `high` by default, in the Video group) picks the set
+  for every ship. The loading is general: `MeshAssets.map_file` reads a surface's `detail` entry, a hull written with one
+  set ignores the setting, and the paint, livery and glass materials all take their maps through it. Only the civilians
+  have both sets so far; the Starfury, the raider and later hulls join when their generator passes `detail_levels`.
+  Materials with a second set are remembered and take the other set's maps when the setting changes, so it is live and
+  every copy still shares one material. Only the set in use is loaded.
+- **The generic grid.** `Atlas.grid` (on by default: fighters, props, rocks) replaces the styles' `panel_grid` switch; the
+  civilian writers pass it off and compute no `plating_for`.
+- **Cost.** No triangles and no change to video memory (one set is bound); three more PNGs a hull on disk and a second bake
+  (a Saturn builds in about 60 s instead of 40 s).
