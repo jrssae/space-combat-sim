@@ -609,7 +609,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T34 | - | L5: the radar's dot buffers filled natively | T31 | Sonnet | Per-contact GDScript every frame | done |
 | T35 | - | L8 and L9: the native allocation pass and the per-event member scans | T33 | Fable (maintainer, 2026-11-11) | Hash maps and Vec churn per sync; hits times members | done |
 | T36 | - | L12 and L13: the smaller items and one native constants table with its GUT check | T35 | Sonnet | Many small fixes and a drift guard | in progress |
-| T37 | D | L6 and L7: muzzle flashes and shot sounds culled by range; no audio node per pooled ship walked per frame | T28 | Sonnet | Sound-pass cost at scale | in progress |
+| T37 | D | L6 and L7: muzzle flashes and shot sounds culled by range; no audio node per pooled ship walked per frame | T28 | Sonnet | Sound-pass cost at scale | done |
 | T38 | - | L14: the shared test steps fixture, collapsed recordings, balance tests out of the default run, CI's Python job and asset cache | T36 | Sonnet | Duplication and CI time; CI must stay green | not started |
 | T39 | C | Civilian colours as the show shows them, and a sheen on every hull (maintainer, 2026-11-08; added after T38, done before T30) | T27 | controller | Colour read off captures vs lit albedo; the look is (H) | done |
 | T40 | C | Civilian panel seams drawn from the show's references instead of the generic brick grid (maintainer, 2026-11-08) | T39, the maintainer's reference captures | controller | Per-ship seam layouts read off images; the look is (H) | in progress |
@@ -2148,6 +2148,22 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   now); any per-pooled-ship audio node still walked every frame goes, so the per-frame audio work is linear in voices, not
   ships.
 - **Done when:** work-count tests pin both; `battle 1000` frame time with sound on is recorded before and after.
+- **Done (2026-11-12):**
+  - **Built:** `ShotCull` (`src/weapons/shot_cull.gd`): flashes beyond 2 500 m of the camera and gun or turret sounds beyond
+    3 000 m are not made (`MuzzleFlashPool.trigger` returns false and counts `culled`; `AudioDirector.play_shot` counts
+    `shots_culled` and takes no voice). The flash pool is a ring (head, span, dead slots skipped by the head) with a `_lit`
+    counter and ages from a pool clock, so a full pool shifts no arrays and the pass visits the ring's span. Readouts
+    `frame.flashes_culled`, `audio.shots_culled`. L7: T19 and T28 had already left the per-frame audio work linear in
+    voices (the existing `test_a_frames_engine_work_follows_the_voices_not_the_ships` pins it); nothing per pooled ship is walked.
+  - **Measured** (`bench_quick.sh`, `battle` 1000, seed 1, one run each, headless so the flash pass and audio mixing do
+    not run; "before" is the ring with the ranges set to infinity): tick median 5.64 ms to 5.48 ms, p99 8.17 ms to 7.50 ms.
+    The effect is inside the run-to-run noise here; the gain is the work not done (a voice steal and a light per far shot)
+    on a machine with a window. `reports/perf/t37_before`, `t37_after`.
+  - **Tests:** new `test_shot_cull.gd` (5: far flash culled and counted, full ring caps at 256 and holds the light cap, the pass
+    follows live flashes not capacity, `clear_for` leaves the ring consistent, the range maths); `test_audio_director.gd`
+    +1 (a shot beyond earshot takes no voice); `test_muzzle_flash_pool` 4 and `test_engine_audio` 14 unchanged and passing.
+  - **(H):** by ear and eye near the player: shots, flashes and engine hum sound and look as before; distant dogfights
+    no longer thin out the near sounds.
 
 ### M5-T38 L14: test duplication and CI
 

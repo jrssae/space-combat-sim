@@ -4627,6 +4627,27 @@ HudPainter._draw_radar     hands the three buffers to their multimeshes whole; d
 Readouts: `hud.radar_plot_us` and `hud.radar_paint_us` (smoothed over about twenty frames). At `battle` 1000 the plot call fell
 from about 350 to about 100 us a frame and the paint from about 400 to about 110 us.
 
+### 18.26 Flashes and shot sounds culled by range, the flash ring (T37, L6 and L7)
+
+```
+ShotCull                 FLASH_RANGE_M 2500, SOUND_RANGE_M 3000; listener(node) = the camera; within(from, at, range)
+MuzzleFlashPool.trigger  skips (and counts in `culled`) a flash whose ship is beyond FLASH_RANGE_M of the camera
+AudioDirector.play_shot  skips (`shots_culled`) a gun or turret shot beyond SOUND_RANGE_M; takes no voice
+MuzzleFlashPool          a ring of CAPACITY slots: head, span, dead slots until the head passes, `_lit` counter
+```
+
+- **Why those ranges.** A 1.2 m flash is under a pixel past 2.5 km and its light reaches 10 m; a shot is more than 40 dB down
+  past 3 km (inverse distance, 60 m unit size, a 6 km `max_distance` before). Near the player nothing changes. With no
+  camera nothing is culled.
+- **The ring.** Flashes start in time order, so the oldest are at the head. Full: the head's flash ends and the slot is
+  reused; no `remove_at(0)` on four arrays. A flash ended mid-ring (`clear_for`, a ship that left play) leaves a dead slot
+  that the head skips later. A flash's age is the pool's clock less its birth, so the pass does not write an age per flash.
+  The light cap reads the `_lit` counter, not a scan of the emitters.
+- **L7 was done by T19 and T28.** The engine nodes are walked only for granted voices (`engine_frame_work`), the re-rank asks the
+  core for ships near the listener; `test_a_frames_engine_work_follows_the_voices_not_the_ships` and `test_engine_voices` pin it.
+
+Readouts: `frame.flashes_culled`, `audio.shots_culled`; the pool's `advance_work` (the ring's span) and `started`/`culled`.
+
 ### 18.27 The pause backdrop as built (T42)
 
 ```

@@ -114,6 +114,19 @@ func test_a_players_shot_makes_a_pulse_sound_and_a_raiders_shot_a_raider_sound()
 	assert_eq(main.audio.times_played(&"raider_fire"), raider_before + 1)
 
 
+func test_a_shot_beyond_earshot_takes_no_voice() -> void:
+	var camera: Camera3D = get_viewport().get_camera_3d()
+	assert_not_null(camera, "the main scene has a camera")
+	var near: Vector3 = camera.global_position + Vector3(0.0, 0.0, -500.0)
+	var far: Vector3 = camera.global_position + Vector3(0.0, 0.0, -(ShotCull.SOUND_RANGE_M + 500.0))
+	var played: int = main.audio.times_played(&"raider_fire")
+	var culled: int = main.audio.shots_culled
+	assert_not_null(main.audio.play_shot(&"raider_fire", near, -13.0))
+	assert_null(main.audio.play_shot(&"raider_fire", far, -13.0), "a shot out of earshot makes no voice")
+	assert_eq(main.audio.times_played(&"raider_fire"), played + 1, "only the near one played")
+	assert_eq(main.audio.shots_culled, culled + 1)
+
+
 ## A pilot that holds the trigger down (the AI's command path, not the console's).
 class FiringBrain extends PilotBrain:
 	func think(_p: Perception, _dt: float) -> PilotCommand:

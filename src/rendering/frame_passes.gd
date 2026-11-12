@@ -81,6 +81,7 @@ func _ready() -> void:
 		&"flash_pool_us": {"get": func() -> int: return _cost_us[&"flash_pool"], "unit": "us",
 			"doc": "Pooled muzzle flashes pass (the lean ships), last frame"},
 		&"pool_flashes": {"get": pool_flashes, "doc": "Pooled muzzle flashes alight"},
+		&"flashes_culled": {"get": flashes_culled, "doc": "Pooled flashes skipped as beyond the camera's range (M5-T37)"},
 		&"bolts_us": {"get": func() -> int: return _cost_us[&"bolts"], "unit": "us", "doc": "Bolt multimesh pass, last frame"},
 		&"bolt_draws": {"get": bolt_draws, "doc": "Bolt instances the pass drew, last frame"},
 		&"turrets_us": {"get": func() -> int: return _cost_us[&"turrets"], "unit": "us", "doc": "Turret models pass (M5-T21), last frame"},
@@ -205,6 +206,14 @@ func pool_flashes() -> int:
 	var count: int = 0
 	for pool: MuzzleFlashPool in _flash_pools:
 		count += pool.active_count()
+	return count
+
+
+## Pooled flashes skipped for being out of range, over every pool.
+func flashes_culled() -> int:
+	var count: int = 0
+	for pool: MuzzleFlashPool in _flash_pools:
+		count += pool.culled
 	return count
 
 

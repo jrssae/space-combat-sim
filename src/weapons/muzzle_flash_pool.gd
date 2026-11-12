@@ -13,19 +13,32 @@ extends Node3D
 ## no `_process` of its own); how it looks is (H).
 
 const NODE_NAME: StringName = &"MuzzleFlashPool"
-## The most flashes alight at once; older ones are dropped when the pool is full.
+## The most flashes alight at once; the oldest is dropped when the ring is full (M5-T37).
 const CAPACITY: int = 256
 ## The most lights the pool enters at once (the rig has 8 slots; more candidates only cost the picker).
 const LIGHTS: int = 24
 
 ## Flashes drawn in the last frame (a readout).
 var drawn: int = 0
+## Flashes started and flashes skipped for being beyond `ShotCull.FLASH_RANGE_M` of the camera (work-count readouts).
+var started: int = 0
+var culled: int = 0
+## Slots visited by the last `advance` (the ring's span, not its capacity).
+var advance_work: int = 0
 
 var _instance: MultiMeshInstance3D = null
+# A ring of CAPACITY slots from `_head` for `_span` slots; a flash ended mid-ring leaves a dead slot until the head passes it.
+# Flashes start in time order, so the oldest are at the head and expire there.
 var _ships: Array[Node3D] = []
 var _muzzles: Array[Transform3D] = []
-var _ages: PackedFloat64Array = PackedFloat64Array()
-var _emitters: Array[LightEmitter] = []  # per live flash, null when it has no light
+var _births: PackedFloat64Array = PackedFloat64Array()
+var _live := PackedByteArray()
+var _emitters: Array[LightEmitter] = []  # per slot, null when the flash has no light
+var _head: int = 0
+var _span: int = 0
+var _alive: int = 0
+var _lit: int = 0  # flashes holding a light
+var _clock: float = 0.0  # seconds of `advance` so far; a flash's age is the clock less its birth
 var _spare: Array[LightEmitter] = []
 var _rig: LightRig = null
 var _buffer: PackedFloat32Array = PackedFloat32Array()
@@ -54,6 +67,11 @@ func _ready() -> void:
 	_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_instance, false, Node.INTERNAL_MODE_BACK)
 	_buffer.resize(CAPACITY * 16)
+	_ships.resize(CAPACITY)
+	_muzzles.resize(CAPACITY)
+	_births.resize(CAPACITY)
+	_live.resize(CAPACITY)
+	_emitters.resize(CAPACITY)
 
 
 func _enter_tree() -> void:
@@ -66,12 +84,10 @@ func _exit_tree() -> void:
 	var passes: FramePasses = FramePasses.current()
 	if passes != null:
 		passes.remove_flash_pool(self)
-	for emitter: LightEmitter in _emitters:
-		_end_light(emitter)
-	_emitters.clear()
-	_ships.clear()
-	_muzzles.clear()
-	_ages.clear()
+	if _live.size() == CAPACITY:
+		for slot: int in CAPACITY:
+			if _live[slot] == 1:
+				_release(slot)
 
 
 ## The pool under `world`, made on first ask; null without a world.
@@ -86,58 +102,79 @@ static func attach(world: Node) -> MuzzleFlashPool:
 	return made
 
 
-## Starts a flash at `muzzle` (in `ship`'s frame) riding with `ship`.
-func trigger(ship: Node3D, muzzle: Transform3D) -> void:
-	if _ships.size() >= CAPACITY:
-		_drop(0)
-	_ships.append(ship)
-	_muzzles.append(muzzle)
-	_ages.append(0.0)
-	_emitters.append(_start_light(ship, muzzle))
+## Starts a flash at `muzzle` (in `ship`'s frame) riding with `ship`, unless the camera is too far to see it. Returns whether
+## it started.
+func trigger(ship: Node3D, muzzle: Transform3D) -> bool:
+	var from: Variant = ShotCull.listener(self)
+	if from != null and not ShotCull.within(from as Vector3, ship.global_position, ShotCull.FLASH_RANGE_M):
+		culled += 1
+		return false
+	if _span >= CAPACITY:
+		_drop_head()
+	var slot: int = (_head + _span) % CAPACITY
+	_span += 1
+	_alive += 1
+	_live[slot] = 1
+	_ships[slot] = ship
+	_muzzles[slot] = muzzle
+	_births[slot] = _clock
+	var emitter: LightEmitter = _start_light(ship, muzzle)
+	_emitters[slot] = emitter
+	_lit += 1 if emitter != null else 0
+	started += 1
+	return true
 
 
 ## Ends every flash of `ship` at once (a ship back in play shows nothing of its last shot).
 func clear_for(ship: Node3D) -> void:
-	var i: int = _ships.size() - 1
-	while i >= 0:
-		if _ships[i] == ship:
-			_drop(i)
-		i -= 1
+	for k: int in _span:
+		var slot: int = (_head + k) % CAPACITY
+		if _live[slot] == 1 and _ships[slot] == ship:
+			_release(slot)
+	_trim()
 
 
 ## Flashes alight now, and those of `ship`.
 func active_count() -> int:
-	return _ships.size()
+	return _alive
+
+
+## Flashes holding a light now.
+func lit_count() -> int:
+	return _lit
 
 
 func active_for(ship: Node3D) -> int:
 	var count: int = 0
-	for s: Node3D in _ships:
-		if s == ship:
+	for k: int in _span:
+		var slot: int = (_head + k) % CAPACITY
+		if _live[slot] == 1 and _ships[slot] == ship:
 			count += 1
 	return count
 
 
 ## Ages every flash by `delta` seconds and draws the live ones (the frame's pass, `FramePasses.advance_flash_pools`).
 func advance(delta: float) -> void:
-	var i: int = _ships.size() - 1
-	while i >= 0:
-		_ages[i] += delta
-		var ship: Node3D = _ships[i]
-		if _ages[i] >= EmitterCurves.FLASH_S or not is_instance_valid(ship) or not ship.is_inside_tree() \
-				or not ship.is_visible_in_tree():
-			_drop(i)
-		elif _emitters[i] != null:
-			_emitters[i].energy = EmitterCurves.flash_energy(_ages[i])
-		i -= 1
+	_clock += delta
 	drawn = 0
-	for k: int in _ships.size():
-		var age: float = _ages[k]
+	advance_work = _span
+	for k: int in _span:
+		var slot: int = (_head + k) % CAPACITY
+		if _live[slot] == 0:
+			continue
+		var age: float = _clock - _births[slot]
+		var ship: Node3D = _ships[slot]
+		if age >= EmitterCurves.FLASH_S or not is_instance_valid(ship) or not ship.is_inside_tree() \
+				or not ship.is_visible_in_tree():
+			_release(slot)
+			continue
+		if _emitters[slot] != null:
+			_emitters[slot].energy = EmitterCurves.flash_energy(age)
 		if age >= MuzzleFlash.DURATION_S:
 			continue  # the light outlasts the quad by 10 ms
 		var t: float = age / MuzzleFlash.DURATION_S
 		var size: float = MuzzleFlash.SIZE_M * lerpf(MuzzleFlash.START_SCALE, 1.0, t)
-		var at: Vector3 = _ships[k].get_global_transform_interpolated() * _muzzles[k].origin
+		var at: Vector3 = ship.get_global_transform_interpolated() * _muzzles[slot].origin
 		var base: int = drawn * 16
 		_buffer[base] = size
 		_buffer[base + 1] = 0.0
@@ -156,19 +193,36 @@ func advance(delta: float) -> void:
 		_buffer[base + 14] = 1.0
 		_buffer[base + 15] = 1.0 - t
 		drawn += 1
+	_trim()
 	if _instance != null:
 		if drawn > 0:
 			RenderingServer.multimesh_set_buffer(_instance.multimesh.get_rid(), _buffer)
 		_instance.multimesh.visible_instance_count = drawn
 
 
-# Removes flash `i`, its light with it.
-func _drop(i: int) -> void:
-	_end_light(_emitters[i])
-	_ships.remove_at(i)
-	_muzzles.remove_at(i)
-	_ages.remove_at(i)
-	_emitters.remove_at(i)
+# Ends the flash in `slot`, its light with it; the slot stays dead until the head passes it.
+func _release(slot: int) -> void:
+	if _emitters[slot] != null:
+		_lit -= 1
+	_end_light(_emitters[slot])
+	_emitters[slot] = null
+	_ships[slot] = null
+	_live[slot] = 0
+	_alive -= 1
+
+
+# Lets the head pass dead slots, so the span follows the oldest live flash.
+func _trim() -> void:
+	while _span > 0 and _live[_head] == 0:
+		_head = (_head + 1) % CAPACITY
+		_span -= 1
+
+
+# Makes room by ending the oldest flash.
+func _drop_head() -> void:
+	if _live[_head] == 1:
+		_release(_head)
+	_trim()
 
 
 # A light for a new flash on `ship` at `muzzle`, or null when the pool's lights are all alight.
@@ -177,11 +231,7 @@ func _start_light(ship: Node3D, muzzle: Transform3D) -> LightEmitter:
 		_rig = LightRig.of(self)
 	if _rig == null:
 		return null
-	var alight: int = 0
-	for e: LightEmitter in _emitters:
-		if e != null:
-			alight += 1
-	if alight >= LIGHTS:
+	if _lit >= LIGHTS:
 		return null
 	var emitter: LightEmitter
 	if _spare.is_empty():
