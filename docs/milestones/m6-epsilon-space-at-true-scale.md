@@ -673,7 +673,8 @@ which changes the same native rows and rebase path:
       2.6 % (capitals') from the GDScript battle with no gravity, so the recording is still tied to the GDScript
       reference. The tier off, because the test is about the weapon rows the resolver sees and the tier's fire has its
       own test (`test_tier_outcomes.gd`). The GDScript numbers and this comparison are in `tests/fixtures/parity/README.md`.
-      With `GUT_SLOW=1`: recorded [933, 420, 174, 151, 25, 1], now the same.
+      With `GUT_SLOW=1`: recorded [933, 420, 174, 151, 25, 1], now the same. **Confirmed by the maintainer (2026-11-12):**
+      the test keeps the tier off and guards the weapon path; the tier's far fire stays with its own tests.
 
 ### M6-T08 Flying under gravity
 
