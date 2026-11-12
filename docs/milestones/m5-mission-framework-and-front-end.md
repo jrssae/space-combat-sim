@@ -612,7 +612,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T37 | D | L6 and L7: muzzle flashes and shot sounds culled by range; no audio node per pooled ship walked per frame | T28 | Sonnet | Sound-pass cost at scale | in progress |
 | T38 | - | L14: the shared test steps fixture, collapsed recordings, balance tests out of the default run, CI's Python job and asset cache | T36 | Sonnet | Duplication and CI time; CI must stay green | not started |
 | T39 | C | Civilian colours as the show shows them, and a sheen on every hull (maintainer, 2026-11-08; added after T38, done before T30) | T27 | controller | Colour read off captures vs lit albedo; the look is (H) | done |
-| T40 | C | Civilian panel seams drawn from the show's references instead of the generic brick grid (maintainer, 2026-11-08) | T39, the maintainer's reference captures | controller | Per-ship seam layouts read off images; the look is (H) | not started |
+| T40 | C | Civilian panel seams drawn from the show's references instead of the generic brick grid (maintainer, 2026-11-08) | T39, the maintainer's reference captures | controller | Per-ship seam layouts read off images; the look is (H) | in progress |
 | T41 | - | Rock rams by the speed into the rock: a glancing scrape costs its closing speed, not the ship's whole speed (maintainer, 2026-11-08; done before T31) | T29 | controller | A small change to the ram rule for rocks | done |
 | T42 | A | Pause backdrop: a slow figure-8 camera around the Starfury behind the pause menu (maintainer, 2026-11-08) | T02, T08 | Sonnet | A camera path that runs while the tree is paused; the look is (H) | in progress |
 | T43 | A | Target preview: a turning green wireframe of the highlighted entity on the side of the screen opposite the radial target menu, with hull bar and distance (maintainer, 2026-11-08) | T25 | Fable (maintainer, 2026-11-11) | Hidden-line wireframe in a small viewport, edges from the mesh, an info panel kept lean | done |
@@ -2194,6 +2194,12 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   show's references.
 - **Needs:** the maintainer's captures per ship (Saturn family: Achilles.jpg, Red Star 9.jpg, Epsilon.JPG; Skylark; Narn
   transport; Brakiri Bokmai; Brezebel), which are not on this machine.
+- **References given (maintainer, 2026-11-12):** 42 images in `references/T40 seam references/` (gitignored, never
+  committed). For the civilians: `saturn 8 texture close up`, `EA skylark texture close up`, the `ea transport` close-ups (the
+  Earth Alliance civilian look), the Narn ones (`narn station`, `narn cruiser`, `narn heavy cruiser`, `narn base`, `narn frazi
+  fighter`) for the Narn transport, `centauri fighter close up` for the Brezebel; none shows Brakiri styling. The rest
+  (Babylon 5 station, Omega, Hyperion, Warlock, Starfury, Minbari, Vorlon, Shadow, Vree, raider carrier and battle wagon) are
+  for later ships and the station (M7, M12, M13).
 - **What:** per ship, the seams and hatches read off the captures (where plates break, which way they run, ribs on the
   pods), drawn as per-part seam layouts instead of `plating_for`'s staggered grid; a look sheet per ship for the
   maintainer before the generator commits.
