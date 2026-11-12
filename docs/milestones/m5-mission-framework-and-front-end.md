@@ -610,7 +610,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T35 | - | L8 and L9: the native allocation pass and the per-event member scans | T33 | Fable (maintainer, 2026-11-11) | Hash maps and Vec churn per sync; hits times members | done |
 | T36 | - | L12 and L13: the smaller items and one native constants table with its GUT check | T35 | Sonnet | Many small fixes and a drift guard | done |
 | T37 | D | L6 and L7: muzzle flashes and shot sounds culled by range; no audio node per pooled ship walked per frame | T28 | Sonnet | Sound-pass cost at scale | done |
-| T38 | - | L14: the shared test steps fixture, collapsed recordings, balance tests out of the default run, CI's Python job and asset cache | T36 | Sonnet | Duplication and CI time; CI must stay green | in progress |
+| T38 | - | L14: the shared test steps fixture, collapsed recordings, balance tests out of the default run, CI's Python job and asset cache | T36 | Sonnet | Duplication and CI time; CI must stay green | done |
 | T39 | C | Civilian colours as the show shows them, and a sheen on every hull (maintainer, 2026-11-08; added after T38, done before T30) | T27 | controller | Colour read off captures vs lit albedo; the look is (H) | done |
 | T40 | C | Civilian panel seams drawn from the show's references instead of the generic brick grid (maintainer, 2026-11-08) | T39, the maintainer's reference captures | controller | Per-ship seam layouts read off images; the look is (H) | done |
 | T41 | - | Rock rams by the speed into the rock: a glancing scrape costs its closing speed, not the ship's whole speed (maintainer, 2026-11-08; done before T31) | T29 | controller | A small change to the ram rule for rocks | done |
@@ -2217,7 +2217,10 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
 
   - **Totals:** no test added or removed. `--quick` GUT before and after: 111 scripts, 1 686 tests, all passing; the 56 touched
     scripts run focused with `GUT_SLOW=1`: 740 tests, 8 091 asserts, all passing. Python untouched.
-  - **CI shard times:** see the line added after the push.
+  - **CI (run 43179401269, green, cold asset cache):** python tests 22.9 min (it generates the assets on the miss), GUT shard 1
+    14.9 min, shard 2 27.4 min, shard 3 25.3 min. Shard 1 fell from about 24 min (it no longer runs the Python tests); shards 2
+    and 3 are now the longest because the heavy files fall on them in path order (a rebalance by cost is a later option). The
+    runs after this one restore `assets/generated` from the cache, which removes the asset generation from every job.
 
 ### M5-T39 Civilian colours and hull sheen
 
