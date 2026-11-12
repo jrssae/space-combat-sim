@@ -167,6 +167,7 @@ func _make_planet() -> MeshInstance3D:
 	node.mesh = sphere
 	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	node.add_to_group(WorldFrame.SHIFTABLE_GROUP)
+	node.add_to_group(WorldFrame.ANCHORED_GROUP)
 	return node
 
 

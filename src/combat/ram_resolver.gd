@@ -162,14 +162,21 @@ func _physics_process(delta: float) -> void:
 func set_world(value: WorldFrame) -> void:
 	if world != null and world.rebased.is_connected(_on_rebased):
 		world.rebased.disconnect(_on_rebased)
+		world.boosted.disconnect(_on_boosted)
 	world = value
 	if world != null:
 		world.rebased.connect(_on_rebased)
+		world.boosted.connect(_on_boosted)
 
 
 func _on_rebased(offset: Vector3) -> void:
 	_shift_since_step += offset
 	tracker.shift(offset)
+
+
+# A velocity rebase is no ram: the velocities the tracker remembers move with the hulls'.
+func _on_boosted(dv: Vector3) -> void:
+	tracker.boost(dv)
 
 
 ## One tick of ram detection with time step `delta`. `_physics_process` calls it every tick: contacts are compared with the

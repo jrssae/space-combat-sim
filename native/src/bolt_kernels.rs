@@ -318,13 +318,16 @@ pub fn shot_velocity(
 /// The multimesh transforms of the owned bolts drawn with `look`, drawn `fraction` of the way from their last tick's
 /// place to this one (so a frame between ticks shows them where the interpolated node would be), the capsule pointed
 /// along the velocity as `Projectile._face` points it, `child` the mesh's own basis under the node, `visual_scale` the
-/// chase camera's enlargement. Spent bolts are left out. Returns the instances written.
+/// chase camera's enlargement. Spent bolts are left out. Returns the instances written. `frame_velocity` is the local
+/// frame's own velocity against its anchor (M6-T05): a bolt points along its velocity against the anchor, so a velocity
+/// rebase turns no bolt in flight.
 pub fn instance_transforms(
     bolts: &Bolts,
     look: u8,
     fraction: f32,
     visual_scale: f32,
     child: &Basis,
+    frame_velocity: Vector3,
     out: &mut Vec<f32>,
 ) -> usize {
     out.clear();
@@ -339,7 +342,11 @@ pub fn instance_transforms(
             continue;
         };
         let origin = sub(bolts.positions[i], scale(bolts.last_steps[i], behind));
-        let facing = looking_along(bolts.velocities[i]);
+        let facing = if frame_velocity == Vector3::ZERO {
+            looking_along(bolts.velocities[i])
+        } else {
+            looking_along(add(bolts.velocities[i], frame_velocity))
+        };
         let basis = mul(&facing, child);
         let base = slot * INSTANCE_FLOATS;
         for row in 0..3 {

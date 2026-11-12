@@ -94,6 +94,7 @@ static func create(p_display_name: String) -> Jumpgate:
 
 func _init() -> void:
 	add_to_group(WorldFrame.SHIFTABLE_GROUP)
+	add_to_group(WorldFrame.ANCHORED_GROUP)
 
 
 func _ready() -> void:

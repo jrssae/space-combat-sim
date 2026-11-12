@@ -10,6 +10,8 @@ const MEASURE_TICKS: int = 60
 const SPEED_UP: float = 4.0
 const FIGHT_S: float = 480.0
 const FIGHT_WAVES: int = 2
+## The fight across forced velocity rebases, s of sim time.
+const BOOST_FIGHT_S: float = 90.0
 
 var main: Main
 var source: FakeInputSource
@@ -204,6 +206,27 @@ func test_a_sandbox_fight_with_wingmen_rebasing_every_second_clears_its_waves() 
 	# over the fight is asserted and the spread recorded.
 	WallClockBudget.assert_under(self, fight.median_rebase_us(), 500, "a rebase of the full sandbox costs %d us (median; min %d, max %d)" % [
 			fight.median_rebase_us(), fight.min_rebase_us(), fight.max_rebase_us()])
+
+
+func test_a_sandbox_fight_across_many_velocity_rebases_shows_no_jump() -> void:
+	# M6-T05 (AC1): both rebases forced often in a live dogfight. A velocity rebase of 150 m/s every half second, every third
+	# one back onto the anchor, on top of the 40 m position rebases. The fixture compares every hull's, prop's and bolt's
+	# universe position and velocity tick by tick and its drawn position against the player's frame by frame.
+	await _launch(ScenarioLoader.SANDBOX_PATH)
+	assert_true(_exec("wing order engage").ok, "the wingmen hunt the raiders")
+	assert_true(_exec("wave start 1").ok)
+	source.hold(InputAdapter.FIRE)
+	Engine.time_scale = SPEED_UP
+	var fight: RebaseFight = await RebaseFight.run(self, main, BOOST_FIGHT_S, Callable(), 40.0, 60.0, 0.0, 0.5)
+	Engine.time_scale = 1.0
+	source.release(InputAdapter.FIRE)
+	gut.p("sandbox fight, both rebases forced: " + fight.summary())
+	gut.p("  " + fight.boost_summary())
+	assert_gte(fight.boosts, 100, "a velocity rebase every half second")
+	assert_gt(fight.rebases, 20, "and position rebases among them")
+	assert_gt(fight.hits, 0, "bolts still hit")
+	assert_true(main.world.riding(), "the fixture put the frame back on its anchor")
+	assert_eq(main.world.origin_velocity, PackedFloat64Array([0.0, 0.0, 0.0]))
 
 
 func test_flying_at_full_speed_through_5_km_rebases_leaves_nothing_behind() -> void:

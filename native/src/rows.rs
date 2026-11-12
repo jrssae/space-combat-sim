@@ -534,5 +534,26 @@ fn compact<T: Copy>(column: &mut Vec<T>, owned: usize, keep: &[bool]) {
     column.truncate(w);
 }
 
+impl Rows {
+    /// A velocity rebase: every row with a body or a tier row behind it loses `dv`. A static row has no velocity to
+    /// change: it is tied to the anchor.
+    pub fn boost(&mut self, dv: Vector3) {
+        for (v, &handle) in self.velocities.iter_mut().zip(&self.handles) {
+            if handle != 0 {
+                *v -= dv;
+            }
+        }
+    }
+}
+
+impl Bolts {
+    /// A velocity rebase: every bolt loses `dv`. Its last step stays: that displacement was flown in the old frame.
+    pub fn boost(&mut self, dv: Vector3) {
+        for v in self.velocities.iter_mut() {
+            *v -= dv;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests;

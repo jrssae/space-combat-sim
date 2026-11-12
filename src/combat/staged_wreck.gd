@@ -100,3 +100,8 @@ func release_spin(chunk: int) -> Vector3:
 ## A rebase by `offset`: the wreck moves with the world.
 func shift(offset: Vector3) -> void:
 	origin -= offset
+
+
+## A velocity rebase by `dv`: the wreck keeps its universe velocity.
+func boost(dv: Vector3) -> void:
+	velocity -= dv

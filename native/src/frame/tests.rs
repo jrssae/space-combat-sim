@@ -148,3 +148,111 @@ fn no_system_or_a_bad_anchor_leaves_the_frame_without_pull() {
     assert!(!frame.anchor_in_orbit(0, [f64::NAN, 0.0, 0.0], [0.0; 3], 0.0, DT));
     assert_eq!(frame.anchor(), Anchor::None);
 }
+
+// --- the velocity rebase (M6-T05): the frame off its anchor -------------------------------------------------------------
+
+fn add(a: V3, b: V3) -> V3 {
+    [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
+}
+
+// A frame on a low-orbit rail, where the tidal residual is large enough to show any slip.
+fn low_orbit_frame() -> Frame {
+    let mut system = planet_alone(GM_EARTH);
+    let place = system.add_body(Kind::Minor, 0.0, 0, Elements::circular(LOW_ORBIT_M, GM_EARTH)).unwrap();
+    let mut frame = Frame::default();
+    frame.set_system(system, gravity::A_MIN_DEFAULT);
+    assert!(frame.anchor_on_rail(place));
+    frame
+}
+
+// One tick of a mover held in the local frame, as Jolt takes it: kick with the frame's residual, then drift.
+fn fly_mover(frame: &Frame, local: &mut V3, velocity: &mut V3) {
+    let felt = frame.residual(*local);
+    gravity::step(local, velocity, felt, DT);
+}
+
+#[test]
+fn a_boost_and_the_way_back_change_no_movers_path_against_the_anchor() {
+    // Two copies of one mover: one in a frame that never leaves its anchor, one in a frame boosted onto it at tick 300,
+    // boosted again at 900 and brought back at 1500. Their places against the anchor must agree at every tick.
+    let mut riding = low_orbit_frame();
+    let mut boosted = low_orbit_frame();
+    let (mut x_r, mut v_r) = ([1200.0, -300.0, 150.0], [1800.0, 900.0, -400.0]);
+    let (mut x_b, mut v_b) = (x_r, v_r);
+    let mut worst: f64 = 0.0;
+    for tick in 0..2400 {
+        let now = tick as f64 * DT;
+        riding.sample(now);
+        boosted.sample(now);
+        if tick == 300 || tick == 900 {
+            let dv = v_b;
+            boosted.boost(dv);
+            v_b = sub(v_b, dv);
+            assert!(!boosted.riding());
+        }
+        if tick == 1500 {
+            let before = add(boosted.origin_velocity(), v_b);
+            let dv = boosted.boost_to_anchor(DT);
+            v_b = sub(v_b, dv);
+            let after = add(boosted.origin_velocity(), v_b);
+            assert!(length(sub(after, before)) < 1e-9, "a boost changes no velocity against the anchor");
+            assert!(boosted.riding());
+        }
+        fly_mover(&riding, &mut x_r, &mut v_r);
+        fly_mover(&boosted, &mut x_b, &mut v_b);
+        riding.step(DT);
+        boosted.step(DT);
+        if tick == 1500 {
+            assert_eq!(boosted.origin_velocity(), [0.0; 3], "at rest against the anchor once the tick has stepped");
+        }
+        let apart = length(sub(add(boosted.origin(), x_b), add(riding.origin(), x_r)));
+        worst = worst.max(apart);
+        let apart_v = length(sub(add(boosted.origin_velocity(), v_b), v_r));
+        assert!(apart_v < 1e-6, "tick {tick}: velocities {apart_v} m/s apart");
+    }
+    assert!(worst < 1e-5, "worst {worst} m");
+    assert!(length(boosted.origin()) > 10_000.0, "the frame did leave its anchor");
+    assert_eq!(riding.origin(), [0.0; 3], "a frame that rides never moves its origin");
+}
+
+#[test]
+fn a_frame_off_its_anchor_feels_nothing_at_its_own_origin() {
+    let mut frame = low_orbit_frame();
+    frame.set_origin([40_000.0, 5_000.0, -2_000.0]);
+    frame.sample(0.0);
+    let riding_felt = frame.residual([0.0; 3]);
+    assert!(length(riding_felt) > 0.01, "40 km from the anchor the riding frame feels the tide");
+    frame.boost([500.0, 0.0, 0.0]);
+    assert_eq!(frame.residual([0.0; 3]), riding_felt, "the tick's forces were built before the boost");
+    frame.sample(0.0);
+    assert_eq!(frame.residual([0.0; 3]), [0.0; 3], "it falls with its own origin from the next sample");
+    let origin_before = frame.origin();
+    frame.step(DT);
+    let moved = sub(frame.origin(), origin_before);
+    assert!((moved[0] - 500.0 * DT).abs() < 1e-3, "the origin drifts at the frame's velocity");
+    assert!(length(sub(frame.origin_velocity(), [500.0, 0.0, 0.0])) > 1e-6, "and takes the pull at its own place");
+}
+
+#[test]
+fn a_boosted_frame_with_no_pull_drifts_in_a_straight_line_and_keeps_its_motion_through_a_new_anchor() {
+    let mut frame = Frame::default();
+    frame.boost([30.0, -60.0, 90.0]);
+    for tick in 0..60 {
+        frame.sample(tick as f64 * DT);
+        assert_eq!(frame.residual([10.0, 0.0, 0.0]), [0.0; 3]);
+        frame.step(DT);
+    }
+    let origin = frame.origin();
+    assert!(length(sub(origin, [30.0, -60.0, 90.0])) < 1e-9, "one second at the boost's velocity: {origin:?}");
+    frame.set_system(planet_alone(GM_EARTH), gravity::A_MIN_DEFAULT);
+    assert_eq!(frame.origin(), origin);
+    assert_eq!(frame.origin_velocity(), [30.0, -60.0, 90.0]);
+    assert!(!frame.riding());
+    frame.clear();
+    assert_eq!(frame.origin_velocity(), [30.0, -60.0, 90.0]);
+    let dv = frame.boost_to_anchor(DT);
+    assert_eq!(dv, [-30.0, 60.0, -90.0]);
+    frame.step(DT);
+    assert_eq!(frame.origin_velocity(), [0.0; 3]);
+    assert_eq!(frame.origin(), origin, "riding again: the origin stays");
+}

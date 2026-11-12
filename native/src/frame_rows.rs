@@ -13,7 +13,7 @@ fn to_kernel(x: f64, y: f64, z: f64) -> V3 {
 }
 
 fn to_game(v: V3) -> [f64; 3] {
-    [v[0], v[2], -v[1]]
+    [v[0] + 0.0, v[2] + 0.0, 0.0 - v[1]] // never a negative zero: a frame at rest reads as plain zeros
 }
 
 fn game_vector(v: V3) -> Vector3 {
@@ -30,6 +30,11 @@ impl ScsSimCore {
         }
         let at = to_kernel(f64::from(local.x), f64::from(local.y), f64::from(local.z));
         Some(game_vector(self.frame.residual(at)))
+    }
+
+    /// The local frame's velocity against its anchor, in 32 bits for the drawing; zero while it rides.
+    pub(crate) fn frame_velocity(&self) -> Vector3 {
+        game_vector(self.frame.origin_velocity())
     }
 }
 
@@ -77,10 +82,45 @@ impl ScsSimCore {
         self.frame.sample(time_s)
     }
 
-    /// The anchor's own step, last in the tick.
+    /// The frame's step, last in the tick: the anchor, and the local origin while it is off the anchor.
     #[func]
     fn frame_step(&mut self, dt: f64) {
         self.frame.step(dt);
+    }
+
+    /// A velocity rebase (D64): the frame gains `dv` (m/s, game axes) against its anchor, and every velocity the core
+    /// holds loses it. The caller takes the same `dv` off every body and node.
+    #[func]
+    fn boost(&mut self, dv: Vector3) {
+        self.frame.boost(to_kernel(f64::from(dv.x), f64::from(dv.y), f64::from(dv.z)));
+        self.boost_rows(dv);
+    }
+
+    /// The velocity rebase back onto the anchor: returns the `dv` it took off every velocity the core holds, for the
+    /// caller to take off every body and node. `dt` is the tick the frame is stepped with.
+    #[func]
+    fn boost_to_anchor(&mut self, dt: f64) -> Vector3 {
+        let dv = game_vector(self.frame.boost_to_anchor(dt));
+        self.boost_rows(dv);
+        dv
+    }
+
+    /// Where the local origin is against the anchor, metres (three numbers, game axes, 64-bit).
+    #[func]
+    fn frame_origin(&self) -> PackedFloat64Array {
+        PackedFloat64Array::from(&to_game(self.frame.origin())[..])
+    }
+
+    /// The local origin's velocity against the anchor, m/s (three numbers, game axes, 64-bit); zero while riding.
+    #[func]
+    fn frame_origin_velocity(&self) -> PackedFloat64Array {
+        PackedFloat64Array::from(&to_game(self.frame.origin_velocity())[..])
+    }
+
+    /// Whether the frame rides its anchor.
+    #[func]
+    fn frame_riding(&self) -> bool {
+        self.frame.riding()
     }
 
     /// Whether the last sample found anything pulling near the local space.

@@ -21,6 +21,7 @@ func install(p_world: WorldFrame, at: UniversePos, p_gm: float) -> void:
 	world.environment_field = accel
 	if not world.rebased.is_connected(_on_rebased):
 		world.rebased.connect(_on_rebased)
+		world.drifted.connect(_on_rebased)  # the moon is a place: it stays with the anchor
 
 
 ## Takes the pull away again.
@@ -31,6 +32,7 @@ func uninstall() -> void:
 		world.environment_field = Callable()
 	if world.rebased.is_connected(_on_rebased):
 		world.rebased.disconnect(_on_rebased)
+		world.drifted.disconnect(_on_rebased)
 
 
 ## Where the source is now, World-local (the tier's copy of the pull, M4-T21).

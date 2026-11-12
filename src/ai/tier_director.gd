@@ -60,6 +60,8 @@ var _tiered_ships: Dictionary[int, Combatant] = {}
 var _tiered_capitals: Dictionary[int, CapitalStandin] = {}
 ## The world's origin when each body was parked, so a body restored with no row left lands in the frame of now.
 var _park_origins: Dictionary[int, UniversePos] = {}
+## The world's `boost_sum` when each body was parked: the velocity rebases it sat out are settled when it comes back.
+var _park_boosts: Dictionary[int, PackedFloat64Array] = {}
 var _types: Dictionary[ShipSpec, int] = {}
 var _types_core: Object = null
 var _ships_by_body: Dictionary[int, Combatant] = {}
@@ -268,6 +270,7 @@ func promote_all() -> void:
 	_tiered_ships.clear()
 	_tiered_capitals.clear()
 	_park_origins.clear()
+	_park_boosts.clear()
 
 
 ## A pooled ship leaves play while it is in the tier (`ShipPool.release`): its row goes with it.
@@ -278,6 +281,7 @@ func forget(c: Combatant) -> void:
 	if not _tiered_ships.erase(body_id):
 		return
 	_park_origins.erase(body_id)
+	_park_boosts.erase(body_id)
 	if c.driver != null:
 		c.driver.set_tiered(false)
 	if _sim != null and is_instance_valid(_sim) and _sim.core != null:
@@ -293,6 +297,7 @@ func forget_capital(cap: CapitalStandin) -> void:
 	if not _tiered_capitals.erase(body_id):
 		return
 	_park_origins.erase(body_id)
+	_park_boosts.erase(body_id)
 	if _sim != null and is_instance_valid(_sim) and _sim.core != null:
 		_sim.core.tier_remove(body_id)  # dies, not a promotion (fix round 1)
 
@@ -362,6 +367,7 @@ func _demote_ship(sim: SimCore, c: Combatant) -> bool:
 		c.driver.set_tiered(true)
 	_tiered_ships[body_id] = c
 	_park_origins[body_id] = _origin()
+	_park_boosts[body_id] = _boost_mark()
 	demotions += 1
 	return true
 
@@ -385,6 +391,7 @@ func _demote_capital(sim: SimCore, cap: CapitalStandin) -> bool:
 	cap.park_for_tier()
 	_tiered_capitals[body_id] = cap
 	_park_origins[body_id] = _origin()
+	_park_boosts[body_id] = _boost_mark()
 	demotions += 1
 	return true
 
@@ -393,6 +400,7 @@ func _demote_capital(sim: SimCore, cap: CapitalStandin) -> bool:
 func _restore(body_id: int, state: Dictionary) -> void:
 	var parked_origin: UniversePos = _park_origins.get(body_id)
 	_park_origins.erase(body_id)
+	var missed: Vector3 = _boosts_missed(body_id)
 	var c: Combatant = _tiered_ships.get(body_id)
 	if c != null:
 		_tiered_ships.erase(body_id)
@@ -401,6 +409,7 @@ func _restore(body_id: int, state: Dictionary) -> void:
 		if is_instance_valid(c.ship):
 			if state.is_empty():
 				_reframe(c.ship, parked_origin)
+				c.ship.linear_velocity -= missed
 			ships.return_from_tier(c, state)
 			if bool(state.get("hulk", false)):
 				_make_hulk(c)
@@ -409,8 +418,10 @@ func _restore(body_id: int, state: Dictionary) -> void:
 	if cap != null:
 		_tiered_capitals.erase(body_id)
 		if is_instance_valid(cap):
+			cap.cruise_velocity -= missed  # the row's cruise was boosted with the rows; the body's copy was parked
 			if state.is_empty():
 				_reframe(cap, parked_origin)
+				cap.linear_velocity -= missed
 				cap.unpark_from_tier(cap.global_transform, cap.linear_velocity, cap.angular_velocity)
 			else:
 				cap.unpark_from_tier(Transform3D(state["basis"], state["position"]), state["velocity"], state["angular"])
@@ -425,6 +436,17 @@ func _reframe(body: Node3D, parked_origin: UniversePos) -> void:
 
 func _origin() -> UniversePos:
 	return world.origin if world != null and is_instance_valid(world) else null
+
+
+func _boost_mark() -> PackedFloat64Array:
+	return world.boost_sum.duplicate() if world != null and is_instance_valid(world) else PackedFloat64Array()
+
+
+# What the velocity rebases since body `body_id` was parked took off every velocity: a parked body sat them out.
+func _boosts_missed(body_id: int) -> Vector3:
+	var mark: PackedFloat64Array = _park_boosts.get(body_id, PackedFloat64Array())
+	_park_boosts.erase(body_id)
+	return world.boost_since(mark) if world != null and is_instance_valid(world) else Vector3.ZERO
 
 
 # A promoted hulk: no pilot, no thrust, no assist, its trigger released; it coasts under Jolt as it drifted in the tier.
@@ -613,12 +635,14 @@ func _prune(sim: SimCore) -> void:
 		if not is_instance_valid(cap) or not cap.is_inside_tree():
 			_tiered_capitals.erase(body_id)
 			_park_origins.erase(body_id)
+			_park_boosts.erase(body_id)
 			sim.core.tier_remove(body_id)
 	for body_id: int in _tiered_ships.keys():
 		var c: Combatant = _tiered_ships[body_id]
 		if not is_instance_valid(c.ship) or not c.ship.is_inside_tree():
 			_tiered_ships.erase(body_id)
 			_park_origins.erase(body_id)
+			_park_boosts.erase(body_id)
 			sim.core.tier_remove(body_id)
 
 

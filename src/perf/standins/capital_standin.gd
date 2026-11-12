@@ -133,6 +133,12 @@ func unpark_from_tier(xform: Transform3D, velocity: Vector3, spin: Vector3) -> v
 	reset_physics_interpolation()
 
 
+## A velocity rebase (`WorldFrame.boost`): the hull and the cruise its engines hold keep their universe velocity.
+func frame_boost(dv: Vector3) -> void:
+	linear_velocity -= dv
+	cruise_velocity -= dv
+
+
 ## Takes a destroyed capital out of play (M4-T23): hidden and not processing, its turrets and emitters with it, for good.
 func leave_play() -> void:
 	if has_meta(&"_scs_tier_row"):

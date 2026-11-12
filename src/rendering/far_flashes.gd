@@ -65,6 +65,7 @@ func _ready() -> void:
 	var world := get_parent() as WorldFrame
 	if world != null and not world.rebased.is_connected(_on_rebased):
 		world.rebased.connect(_on_rebased)
+		world.boosted.connect(_on_boosted)
 
 
 func _process(delta: float) -> void:
@@ -137,6 +138,12 @@ func _write() -> void:
 	if multimesh.instance_count > 0:
 		RenderingServer.multimesh_set_buffer(multimesh.get_rid(), _buffer)
 	multimesh.visible_instance_count = n
+
+
+# A velocity rebase: every flash keeps its universe velocity.
+func _on_boosted(dv: Vector3) -> void:
+	for i: int in _velocities.size():
+		_velocities[i] -= dv
 
 
 # The rebase moved this node with the world; back to the origin, with the flashes moved instead.

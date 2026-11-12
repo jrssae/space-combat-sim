@@ -279,6 +279,7 @@ func add_mines(rows: Array[Dictionary], anchor: UniversePos) -> MineStandin:
 	_mines.name = "Mines"
 	_mines.world = world
 	world.spawn(_mines, anchor, Basis.IDENTITY, self)
+	_mines.add_to_group(WorldFrame.ANCHORED_GROUP)
 	_mines.build(rows)
 	return _mines
 
@@ -307,8 +308,10 @@ func add_asteroids(rocks: Array[Dictionary], anchor: UniversePos) -> AsteroidFie
 	_field = AsteroidField.new()
 	_field.name = "Asteroids"
 	world.spawn(_field, anchor, Basis.IDENTITY, self)
+	_field.add_to_group(WorldFrame.ANCHORED_GROUP)
 	_field.build(rocks, world.get_world_3d().space, world)
 	world.rebased.connect(_field.on_rebased)
+	world.drifted.connect(_field.on_rebased)
 	return _field
 
 
@@ -334,6 +337,7 @@ func remove_asteroids() -> void:
 	if _field != null and is_instance_valid(_field):
 		if world.rebased.is_connected(_field.on_rebased):
 			world.rebased.disconnect(_field.on_rebased)
+			world.drifted.disconnect(_field.on_rebased)
 		_field.free_bodies()
 		remove_child(_field)
 		_field.queue_free()

@@ -70,6 +70,7 @@ static func create(vortex_data: Dictionary = {}, standalone: bool = true, with_s
 	var vortex := (load(SCENE_PATH) as PackedScene).instantiate() as JumpVortex
 	if standalone:
 		vortex.add_to_group(WorldFrame.SHIFTABLE_GROUP)
+		vortex.add_to_group(WorldFrame.ANCHORED_GROUP)
 	vortex.setup(vortex_data, with_sound)
 	return vortex
 

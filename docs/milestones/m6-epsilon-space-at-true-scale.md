@@ -139,6 +139,8 @@ which changes the same native rows and rebase path:
 - **The tick**: sample; core sync (-11); drivers, brains, flight batch (-10 to -1); `World` at 0: position rebase, then
   velocity rebase (both may fall in one tick; the core's `shift` then its new `boost`, both bump `rows_version`); bolts (1);
   targeting, hits, rams, missions (100 to 400); the settler (position rebases only); `sync_out`; the frame's step.
+  **As built (T05):** the World's slot only decides the velocity rebase; it is taken in the frame's last slot, just before
+  the frame's step, so the movers that step themselves and the bodies change frames in the same step (T05's Done notes).
 - **Speeds are read against a rest velocity**, never the frame: `v_rest` is the reference's velocity in the local frame (D67),
   zero while the frame rides the anchor and the anchor is the reference, so today's results are bit-identical there. T01's
   note lists every reader (section 3); T05 boosts the holders, T08 changes the readers.
@@ -284,7 +286,7 @@ which changes the same native rows and rebase path:
 | T02 | A | Ephemeris and gravity kernel: Kepler rails, the body tree, the strongest body's pull and the tidal residual, the integrator (early start, new native files) | T01 | Fable | Precise, deterministic numerics that M9 and M11 reuse | done |
 | T03 | B | Star system data: bodies and elements in `data/star_systems.json`, the loader, the `system` provider | T02, Q1 to Q3 | Sonnet | Data and validation on a clear format | done |
 | T04 | A | The free-falling frame: the origin as a test particle, `environment_accel` from the ephemeris | T02, T03 | Opus | Touches the tick order and every ship's force step | done |
-| T05 | A | The velocity rebase over every body, row, bolt, chunk, particle and interpolated node | T04 | Fable | The riskiest change of the milestone; every moving thing and the parity recordings | in progress |
+| T05 | A | The velocity rebase over every body, row, bolt, chunk, particle and interpolated node | T04 | Fable | The riskiest change of the milestone; every moving thing and the parity recordings | done |
 | T06 | A | L4: the rebase cascade natively, the cached solid shifted in place, hidden ships skipped | T05 | Opus | A measured native fix on the path T05 rewrote | not started |
 | T07 | A | Gravity on everything: ships, tier rows, bolts, debris, the brake's and the AI's feed-forward; the gravity stand-in removed | T04 | Opus | Native kernels with parity at zero gravity | not started |
 | T08 | A | Flying under gravity: the clamp, the assist's and brake's reference, the HUD's reference and altitude, planet impact | T07, Q4 to Q6 | Opus | Flight-model semantics the player feels | not started |
@@ -425,6 +427,68 @@ which changes the same native rows and rebase path:
 - **Tests:** `test_velocity_rebase.gd` (the sums before and after): quick; `RebaseFight` with both rebases forced and the
   recorded dogfight: standard.
 - **Done when:** AC1; a dogfight across many velocity rebases shows no jump in a recorded run (the test compares drawn positions).
+
+- **Done (2026-11-12):**
+  - **The rule off the anchor** (`native/src/frame.rs`). The frame holds its origin's velocity against the anchor in 64-bit
+    (`origin_velocity`, zero while riding) and, per tick, the pull the origin itself takes: `origin_pull = g(origin) -
+    g(anchor)`, fixed at the tick's sample (zero while riding or quiet). A mover feels `g(mover) - g(anchor) - origin_pull`,
+    so off the anchor it is `g(mover) - g(origin)` and exactly zero at the local origin. The frame's step kicks the origin's
+    velocity with `origin_pull` and drifts the origin, then steps the anchor. Origin plus mover has the acceleration
+    `g(mover) - g(anchor)` whichever frame carries it. The tick's `origin_pull` holds through a position rebase and a boost.
+    The way back takes `dv = -(origin_velocity + origin_pull dt)` and leaves the frame the one kick it still owes the
+    tick's forces, so it is exactly at rest after that tick's step.
+  - **A boost is taken at the end of the tick, not in the World's slot** (a change to D64's tick order, made for
+    correctness). The rule (`WorldFrame._auto_boost`) runs at priority 0 after the position rebase and only asks; the frame's
+    last slot takes it, then steps the frame. Bolts, debris and the tier step themselves inside the tick and the bodies in
+    Jolt's step after it: a boost at priority 0 put the bolts into the new frame one step before the bodies, `dv dt` out of
+    place (33 m at 2 000 m/s; found by the fight fixture). `boost(dv)` and `boost_to_anchor()` ask; `apply_boost` is the
+    immediate form for the last slot and tests. In the same way `origin` and the anchor-tied things take the frame's step
+    when the next tick starts (on `SceneTree.physics_frame`), with the bodies, so frames drawn between ticks stay consistent.
+  - **Native:** `Rows.boost`, `Bolts.boost`, `TierRows.boost` (velocities, and a capital's `cruise`), `ScsSimCore.boost` and
+    `boost_to_anchor` (both bump `rows_version`), `frame_origin`, `frame_origin_velocity`, `frame_riding`, `drift_anchored`
+    (the tier's copy of the moon); `Tracker.boost` (the remembered velocities and each open window's `v_before`);
+    `set_system` and `clear` keep the origin's place and velocity. A bolt row is drawn along its velocity against the
+    anchor, so a boost turns no bolt in flight.
+  - **GDScript:** `WorldFrame`: `boost`, `boost_to_anchor`, `apply_boost*`, `riding`, `rest_velocity()` (for T08's readers),
+    `boost_sum` and `boost_since`, signals `boosted(dv)` and `drifted(shift)`, export `auto_boost_speed_mps` (0 = off) with
+    the return under half of it. A shiftable node is a mover (a rigid body, or it has `frame_boost(dv)`: `Projectile`,
+    `DebrisChunk`, `Explosion`, `CapitalStandin` with its cruise), tied to the anchor (group `world_anchored`: `NavBuoy`,
+    `Jumpgate`, a stand-alone `JumpVortex`, `StationStandin` and its planet, `AsteroidBelt`, `AsteroidField`, the mines), or
+    placed from other nodes every frame (cameras, far dots, voices). Listeners of `boosted`: `DebrisPool` (staged wrecks),
+    `FxPool` (emitter velocities), `FarFlashes`, `RamResolver` (the tracker). Listeners of `drifted`: the belts' and the
+    field's RID bodies, `GravityStandin`. The drift carries its float32 remainder in 64-bit, so a steady drift does not
+    round the same way each tick. `TierDirector` keeps `boost_sum` per parked body and settles the boosts it sat out
+    (the fallback with no row, and a capital's `cruise_velocity`). Pooled hidden ships are skipped.
+  - Console: `boost <dvx> <dvy> <dvz>`, `ride`; `world.origin_velocity`, `riding`, `auto_boost_speed_mps`, `boosts`,
+    `boost_us`. In `info.md`.
+  - Tests. Rust (115 pass, 8 new): the frame off its anchor (a mover in a boosted frame and in a riding one agree to
+    1e-5 m and 1e-6 m/s over 2 400 ticks in low orbit through two boosts and the way back; nothing felt at the origin;
+    a straight line with no pull), rows, bolts, tier rows and cruise, two tracker tests. GUT `test_velocity_rebase.gd`
+    (**quick**, 10 tests, 3.5 s): 27 movers through a forced boost (universe positions unchanged, velocities within
+    6e-5 m/s, sums too), 30 ticks off the anchor (movers on their paths, buoy, rocks and their bodies with the anchor), no
+    ram on a boost mid-contact (fails with 300 damage each without `Tracker.boost`), the automatic boost at 2 000 m/s and
+    the return under 1 000, both rebases in one tick, the tier's parked bodies, gravity off the anchor through the binding,
+    bolts and bodies changing frames together to 2 mm, the console. `RebaseFight` (fixture) grows `boost_every_s`: a
+    150 m/s boost each half second, every third back onto the anchor; it compares universe positions and velocities late
+    in the tick and drawn offsets from the drawn player every frame.
+    `test_rebase_in_play.test_a_sandbox_fight_across_many_velocity_rebases_shows_no_jump` (**standard**, 23 s): 168
+    boosts and 201 position rebases in a 90 s fight, 64 bolt hits, 4 kills, no failure over 41 878 tick checks and 52 574
+    drawn checks. Quick tier: 1 754 of 1 756 pass; the two failures are T10's `scaled` command and provider not yet in
+    `info.md` (not this task's files). `test_rebase_in_play` (9), `test_tier_handover` (13), `test_ai_guard` (2),
+    `test_instructor_route` (4), `test_ram_damage` (14), `test_tier_proxies` (10) pass with `GUT_SLOW=1`. Parity
+    recordings unchanged.
+  - Performance, `bench battle 1000` (`scripts/bench_quick.sh`): tick median 5.53 ms, p99 7.79 ms after; 5.44 to 5.50 ms
+    and 7.50 to 7.62 ms in the three reports of the same day before it (no boost in the bench, so no change). One boost
+    with the battle in play: 0.45 to 0.64 ms (a position rebase there: 0.7 to 1.3 ms). **Off the anchor the tick costs about
+    1.4 ms more** (7.65 against 6.30 ms in one process): every tick the static rows shift in GDScript, the 1 000 rocks'
+    bodies are placed again and the resolvers' grids are rebuilt. That is L4's cascade, now per tick: T06.
+  - **The automatic boost is off in `main.tscn`** (`auto_boost_speed_mps` 0). The readers still take a local speed as a
+    speed against the anchor (T01's R list), so above 2 000 m/s the brake would stop the ship against the moving frame and
+    the HUD would read 0. T08 changes the readers and sets the export to 2 000 in the same commit.
+  - Left for T08 (readers, all in T01's R list): brake, assist, thrust fade and clamp, the HUD's speed, the brains' own
+    speed, spawn velocities ("at rest" means `rest_velocity()`), a missile's held speed and heading (frame speed), rocks
+    and props taken as at rest in the hit sweep, the ram rule and avoidance, a buoy marker's `velocity` for lead. Voices
+    stay in the local frame (no Doppler, short lives). Left for T06: the per-tick static shift above.
 
 ### M6-T06 L4: the rebase cascade
 

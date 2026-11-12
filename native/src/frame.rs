@@ -3,6 +3,13 @@
 // a rail (the station), or a 64-bit test particle on an orbit. Every mover of a tick reads the one sample taken at its start,
 // and the anchor's own step reads it too, last in the tick. Engine-free: 64-bit numbers in the kernel's axes (reference
 // plane xy, z north); the shell converts to the game's.
+//
+// The velocity rebase (M6-T05, D64). The frame rides its anchor until a boost gives it a velocity of its own against the
+// anchor. From then on the local origin is a free-falling point itself: it takes the pull at its own place less the
+// anchor's (`origin_pull`, fixed at the sample), and a mover feels the pull at its place less the origin's, so
+//   mover against the anchor = origin (kick `origin_pull`, drift) + local (kick `residual(local)`, drift)
+// has the acceleration `pull(mover) - pull(anchor)` whichever frame carries it. The tick's `origin_pull` holds for the whole
+// tick, through a position rebase and a boost, because the movers' forces were built with it before either.
 use crate::ephemeris::{State, System, V3};
 use crate::gravity;
 
@@ -29,6 +36,10 @@ pub struct Frame {
     a_min: f64,
     anchor: Anchor,
     origin: V3,
+    // The local origin's velocity against the anchor, zero while riding, and the pull the origin itself takes this tick.
+    origin_velocity: V3,
+    origin_pull: V3,
+    riding: bool,
     time_s: f64,
     positions: Vec<V3>,
     gms: Vec<f64>,
@@ -45,6 +56,9 @@ impl Default for Frame {
             a_min: gravity::A_MIN_DEFAULT,
             anchor: Anchor::None,
             origin: [0.0; 3],
+            origin_velocity: [0.0; 3],
+            origin_pull: [0.0; 3],
+            riding: true,
             time_s: 0.0,
             positions: Vec::new(),
             gms: Vec::new(),
@@ -66,14 +80,19 @@ fn distance(a: V3, b: V3) -> f64 {
 }
 
 impl Frame {
-    /// Takes a star system and its pull floor; the anchor is dropped until one is set again.
+    /// Takes a star system and its pull floor; the anchor is dropped until one is set again. The local origin keeps its
+    /// place and its velocity: they are the local space's, whatever it falls with.
     pub fn set_system(&mut self, system: System, a_min: f64) {
-        *self = Frame { system, a_min, ..Frame::default() };
+        *self = Frame { system, a_min, ..self.unanchored() };
     }
 
-    /// Back to no system and no pull.
+    /// Back to no system and no pull; the local origin keeps its place and its velocity.
     pub fn clear(&mut self) {
-        *self = Frame::default();
+        *self = self.unanchored();
+    }
+
+    fn unanchored(&self) -> Frame {
+        Frame { origin: self.origin, origin_velocity: self.origin_velocity, riding: self.riding, ..Frame::default() }
     }
 
     /// Anchors on a place or body's rail. False for an unknown index.
@@ -113,6 +132,7 @@ impl Frame {
             Anchor::None => {
                 self.positions.clear();
                 self.pull = [0.0; 3];
+                self.origin_pull = [0.0; 3];
                 self.active = false;
                 return false;
             }
@@ -129,21 +149,59 @@ impl Frame {
             .zip(&self.zones)
             .any(|((&body, &gm), &zone)| gm > 0.0 && zone > 0.0 && distance(body, self.origin) - zone < QUIET_MARGIN_M);
         self.active = near || self.pull != [0.0; 3];
+        self.origin_pull = if self.active && !self.riding {
+            gravity::residual(self.origin, &self.positions, &self.gms, &self.zones)
+        } else {
+            [0.0; 3]
+        };
         self.active
     }
 
-    /// What a mover at `local` (against the local origin) feels: the pull there less the anchor's, from the tick's sample.
+    /// What a mover at `local` (against the local origin) feels: the pull there less the frame's own, from the tick's
+    /// sample. The frame's own is the anchor's while it rides, and the pull at its origin once it falls by itself.
     /// Exactly zero while the frame is quiet.
     pub fn residual(&self, local: V3) -> V3 {
         if !self.active {
             return [0.0; 3];
         }
         let offset = [self.origin[0] + local[0], self.origin[1] + local[1], self.origin[2] + local[2]];
-        gravity::residual(offset, &self.positions, &self.gms, &self.zones)
+        let r = gravity::residual(offset, &self.positions, &self.gms, &self.zones);
+        [r[0] - self.origin_pull[0], r[1] - self.origin_pull[1], r[2] - self.origin_pull[2]]
     }
 
-    /// The anchor's own step, last in the tick, with the sample's pull: kick, then drift. A rail moves with time alone.
+    /// A velocity rebase: the frame gains `dv` against the anchor and falls by itself from now on. Every local velocity
+    /// loses `dv` in the same tick (the caller's part), so nothing moves differently.
+    pub fn boost(&mut self, dv: V3) {
+        for i in 0..3 {
+            self.origin_velocity[i] += dv[i];
+        }
+        self.riding = false;
+    }
+
+    /// The boost that puts the frame back on its anchor, and takes it: every local velocity loses the returned `dv`.
+    /// The movers' forces of this tick still hold the origin's pull, so the frame keeps the kick it owes them and is at
+    /// rest against the anchor once this tick's step has run.
+    pub fn boost_to_anchor(&mut self, dt: f64) -> V3 {
+        let owed = [self.origin_pull[0] * dt, self.origin_pull[1] * dt, self.origin_pull[2] * dt];
+        let dv = [
+            -(self.origin_velocity[0] + owed[0]),
+            -(self.origin_velocity[1] + owed[1]),
+            -(self.origin_velocity[2] + owed[2]),
+        ];
+        self.origin_velocity = [0.0 - owed[0], 0.0 - owed[1], 0.0 - owed[2]];
+        self.riding = true;
+        dv
+    }
+
+    /// The frame's step, last in the tick, with the sample's pulls: kick, then drift, for the local origin (only off
+    /// the anchor) and for the anchor. A rail moves with time alone.
     pub fn step(&mut self, dt: f64) {
+        if self.origin_velocity != [0.0; 3] || self.origin_pull != [0.0; 3] {
+            gravity::step(&mut self.origin, &mut self.origin_velocity, self.origin_pull, dt);
+        }
+        if self.riding {
+            self.origin_velocity = [0.0; 3]; // the return's owed kick is paid; no rounding is left to drift on
+        }
         if let Anchor::Particle { home, mut position, mut velocity } = self.anchor {
             gravity::step(&mut position, &mut velocity, self.pull, dt);
             self.anchor = Anchor::Particle { home, position, velocity };
@@ -168,6 +226,21 @@ impl Frame {
 
     pub fn anchor(&self) -> Anchor {
         self.anchor
+    }
+
+    /// Where the local origin is against the anchor.
+    pub fn origin(&self) -> V3 {
+        self.origin
+    }
+
+    /// The local origin's velocity against the anchor, as the integrator holds it; zero while the frame rides.
+    pub fn origin_velocity(&self) -> V3 {
+        self.origin_velocity
+    }
+
+    /// Whether the frame rides its anchor (no velocity of its own).
+    pub fn riding(&self) -> bool {
+        self.riding
     }
 
     /// Whether the last sample found anything pulling near the local space.

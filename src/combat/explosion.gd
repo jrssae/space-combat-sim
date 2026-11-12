@@ -89,6 +89,11 @@ func _physics_process(delta: float) -> void:
 	global_position += velocity * delta
 
 
+## A velocity rebase (`WorldFrame.boost`): the fireball keeps its universe velocity.
+func frame_boost(dv: Vector3) -> void:
+	velocity -= dv
+
+
 func _process(delta: float) -> void:
 	advance(delta)
 

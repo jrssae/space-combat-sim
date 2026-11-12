@@ -142,6 +142,7 @@ impl ScsSimCore {
             fraction as f32,
             visual_scale as f32,
             &child,
+            self.frame_velocity(),
             &mut out,
         );
         let wanted = usize::try_from(min_instances).unwrap_or(0).max(drawn);

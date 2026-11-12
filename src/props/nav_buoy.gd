@@ -92,6 +92,7 @@ static func fade_phase_of(p_display_name: String) -> float:
 
 func _init() -> void:
 	add_to_group(WorldFrame.SHIFTABLE_GROUP)
+	add_to_group(WorldFrame.ANCHORED_GROUP)  # its `velocity` is against the anchor
 
 
 func _ready() -> void:

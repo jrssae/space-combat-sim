@@ -32,7 +32,7 @@ extends Node3D
 ## drawn and tick positions (the HUD's markers through the chase camera, the sky in the cockpit, nodes spawned in that tick) is
 ## kilometres off for that tick. Hidden (parked) nodes and silent voices are skipped: they are re-placed and reset when they
 ## come back; so are the nodes that are not interpolated (a far dot's ship, M4-T14). A rebase outside a tick (the console
-## between frames) resets at once. The velocity rebase (§14.1) is M6-T05: `origin_velocity` stays zero until then.
+## between frames) resets at once.
 ##
 ## The native core (M4-T42): every world attaches its `SimCore` as it becomes ready, so every hull read in it is the core's.
 ##
@@ -42,10 +42,36 @@ extends Node3D
 ## (`SAMPLE_PRIORITY`), so every mover reads the same one, and the anchor steps last (`FRAME_STEP_PRIORITY`, after the core's
 ## `sync_out`), with that same sample. Local physics feels only the residual: the pull at a point less the anchor's. With no
 ## system, or far from every body's zone, the residual is exactly zero and nothing changes from M5.
+##
+## The velocity rebase (M6-T05, D64, Q8): float32 speeds stay small because the frame takes the focus's velocity when it
+## passes `auto_boost_speed_mps`. A boost by `dv` adds `dv` to `origin_velocity` and takes it off every local velocity: the
+## core's rows, tier rows and bolts, every body, every shiftable node with `frame_boost(dv)`, and the holders that listen to
+## `boosted`. No position changes, so nothing is reset and nothing is seen. A boost is asked for at any time (`boost`, the
+## automatic rule in this node's slot at priority 0, after the position rebase) and taken in the frame's last slot of the
+## tick, between the movers that step themselves (bolts, debris, the tier) and Jolt's step, so that all of them fly a tick
+## in one frame. From then on the local origin falls by itself:
+## `origin` moves every tick, and what is tied to the anchor and has no velocity of its own (group `world_anchored`, the
+## static rows, the listeners of `drifted`) moves the other way. The core steps the origin in the frame's last slot; `origin`
+## and the anchor-tied things take that step when the next tick starts, as the bodies take Jolt's. Under half the threshold against
+## the anchor the frame boosts back onto it and rides again. So a shiftable node is one of three things: a mover (a body, or
+## it has `frame_boost`), tied to the anchor (also in `world_anchored`), or placed from other nodes every frame (a camera,
+## the far dots), which needs neither. A local speed is a speed against the anchor only while the frame rides: readers take
+## `rest_velocity()` off (M6-T08).
 
 signal rebased(offset: Vector3)
+## A velocity rebase took `dv` off every local velocity: whoever keeps one outside a shiftable node takes it off too.
+signal boosted(dv: Vector3)
+## The frame is off its anchor and moved this tick: everything tied to the anchor moved by `shift` in local coordinates.
+signal drifted(shift: Vector3)
 
 const SHIFTABLE_GROUP := &"world_shiftable"
+## Shiftable nodes that stand still against the anchor (a buoy, a gate, a rock field): they move with it while the frame is
+## off it. Same rule as `world_shiftable`: never a node whose parent is in it too.
+const ANCHORED_GROUP := &"world_anchored"
+## The method a shiftable node has when it keeps its own velocity: `frame_boost(dv: Vector3)` takes `dv` off it.
+const BOOST_METHOD := &"frame_boost"
+## The frame boosts back onto its anchor when the focus is under this part of the threshold against the anchor (Q8).
+const RETURN_PART: float = 0.5
 const FRAME_ACTIONS: PackedStringArray = ["status", "orbit", "rail", "off"]
 ## The body `frame orbit` circles when none is named.
 const DEFAULT_ORBIT_BODY: StringName = &"epsilon_iii"
@@ -61,9 +87,11 @@ var origin: UniversePos = UniversePos.new()
 ## A pull of the World's own, `func(local_pos: Vector3) -> Vector3`, beside the frame's residual, or empty for none (M4-T07:
 ## the battle's moon stand-in, removed by M6-T07).
 var environment_field: Callable = Callable()
-## Velocity of the local frame against its anchor, m/s, as [x, y, z]. Zero while the frame rides its anchor; the velocity
-## rebase (M6-T05) moves it.
+## Velocity of the local frame against its anchor, m/s, as [x, y, z] (64-bit; the core integrates it). Zero while the frame
+## rides its anchor; a boost moves it, and so does the frame's own fall while it is off the anchor.
 var origin_velocity: PackedFloat64Array = PackedFloat64Array([0.0, 0.0, 0.0])
+## Every boost so far, summed (64-bit): what a body that sat out some boosts (parked for the tier) still owes.
+var boost_sum: PackedFloat64Array = PackedFloat64Array([0.0, 0.0, 0.0])
 ## The star system the frame falls in, or null for none (no pull at all), and the name of its anchor: a place, or the body a
 ## free-falling anchor circles.
 var star_system: StarSystem = null
@@ -71,14 +99,20 @@ var anchor_name: StringName = &""
 ## Automatic position rebase: when `focus` is farther than this many metres from the local origin, rebase onto it.
 ## 0 disables it (the default, which bare-World tests rely on); `main.tscn` sets 5 000 m.
 @export var auto_rebase_distance_m: float = 0.0
-## The object the auto-rebase keeps near the origin (the player ship once it exists). Only read when
-## `auto_rebase_distance_m > 0`.
+## Automatic velocity rebase (Q8): when `focus` is faster than this against the frame, boost onto it; when it is under half
+## of this against the anchor, boost back onto the anchor. 0 disables it (the default, a bare World).
+@export var auto_boost_speed_mps: float = 0.0
+## The object the automatic rebases follow (the player ship once it exists). Only read when one of them is on.
 var focus: Node3D = null
 ## Rebases so far (automatic and `rebase` alike), and the wall-clock cost of the last one in microseconds (a profiling
 ## readout, never gameplay time; 0 before the first). The cost covers the shift, the `rebased` handlers and the end-of-tick
 ## interpolation reset.
 var rebases: int = 0
 var last_rebase_us: int = 0
+## Velocity rebases so far (automatic and console alike), and the wall-clock cost of the last one in microseconds (a
+## profiling readout, never gameplay time).
+var boosts: int = 0
+var last_boost_us: int = 0
 ## Nodes the last interpolation reset reached (M4-T14): a node that is not interpolated, such as a far dot's ship, is left out.
 var last_settle_resets: int = 0
 
@@ -90,6 +124,14 @@ var _settle_pending: bool = false
 var _settled_frame: int = -1
 # The nodes the last rebase moved: the end-of-tick reset walks this list, not the group again (M4-T21).
 var _shifted: Array[Node3D] = []
+# What the anchor-tied things still have to move, below what 32 bits could carry in one tick's shift: carried over, so a
+# steady drift does not round the same way every tick.
+var _drift_owed: PackedFloat64Array = PackedFloat64Array([0.0, 0.0, 0.0])
+# The core stepped the local origin at the end of the last tick and `origin` has not taken it yet.
+var _origin_stepped: bool = false
+# The velocity rebases asked for and not yet taken: a boost (summed), or the way back onto the anchor.
+var _boost_asked := Vector3.ZERO
+var _return_asked: bool = false
 
 
 ## Runs `WorldFrame._settle` last in every physics tick (an internal child, so World's children stay its world objects).
@@ -123,6 +165,7 @@ class FrameSlot extends Node:
 		if sample:
 			world.sample_gravity(SimClock.now())
 		else:
+			world._take_boosts()
 			world.step_anchor(delta)
 
 
@@ -132,11 +175,18 @@ func _ready() -> void:
 	add_child(FrameSlot.new(self, true), false, Node.INTERNAL_MODE_BACK)
 	add_child(FrameSlot.new(self, false), false, Node.INTERNAL_MODE_BACK)
 	_sim = SimCore.attach(self)  # every world simulates on the native core (M4-T42), pools or none
+	get_tree().physics_frame.connect(_adopt_origin)
 	# Console seam (architecture §6.4): `rebase` shifts the origin by hand; `rebases` and `rebase_us` watch the automatic one.
 	DebugConsole.registry.register_provider(&"world", ConsoleVars.new({
 		&"origin": {"get": _origin_array, "unit": "m", "doc": "Universe position of the local origin (64-bit)"},
 		&"origin_velocity": {"get": func() -> PackedFloat64Array: return origin_velocity, "unit": "m/s",
 				"doc": "Velocity of the local frame against its anchor; zero while it rides the anchor"},
+		&"riding": {"get": riding, "doc": "Whether the frame rides its anchor (false after a velocity rebase, until it returns)"},
+		&"auto_boost_speed_mps": {"get": func() -> float: return auto_boost_speed_mps, "unit": "m/s",
+				"doc": "Automatic velocity rebase threshold; 0 = off. Back onto the anchor under half of it"},
+		&"boosts": {"get": func() -> int: return boosts, "doc": "Velocity rebases so far, automatic and console"},
+		&"boost_us": {"get": func() -> int: return last_boost_us, "unit": "us",
+				"doc": "Cost of the last velocity rebase (profiling only, wall clock)"},
 		&"anchor": {"get": anchor_text, "doc": "What the frame falls with: none, rail <place> or orbit <body>"},
 		&"anchor_state": {"get": _anchor_state_km, "unit": "km, m/s",
 				"doc": "The anchor against the centre of the body it circles: position (km) then velocity (m/s), game axes"},
@@ -158,18 +208,37 @@ func _ready() -> void:
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"rebase",
 			"Shift the local origin by an offset in metres (World.rebase); nothing moves in universe terms. With the automatic rebase on, the next one brings the player back",
 			[ConsoleArg.vec3_required(&"offset", PackedStringArray(["dx", "dy", "dz"]))]), _cmd_rebase, self)
+	DebugConsole.registry.register_command(ConsoleCommand.new(&"boost",
+			"Velocity rebase by hand (World.boost): the frame gains this velocity in m/s and every local velocity loses it, at the end of the tick; nothing moves differently. With the automatic one on, it brings the frame back",
+			[ConsoleArg.vec3_required(&"dv", PackedStringArray(["dvx", "dvy", "dvz"]))]), _cmd_boost, self)
+	DebugConsole.registry.register_command(ConsoleCommand.new(&"ride",
+			"Velocity rebase back onto the anchor (World.boost_to_anchor), at the end of the tick: the frame rides its anchor again",
+			[] as Array[ConsoleArg]), _cmd_ride, self)
 
 
 func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
+	if get_tree().physics_frame.is_connected(_adopt_origin):
+		get_tree().physics_frame.disconnect(_adopt_origin)
 
 
 func _physics_process(_delta: float) -> void:
-	if auto_rebase_distance_m <= 0.0 or focus == null or not is_instance_valid(focus):
+	if focus == null or not is_instance_valid(focus):
 		return
-	var focus_pos: Vector3 = focus.global_position
-	if focus_pos.length() > auto_rebase_distance_m:
-		rebase(focus_pos)
+	if auto_rebase_distance_m > 0.0:
+		var focus_pos: Vector3 = focus.global_position
+		if focus_pos.length() > auto_rebase_distance_m:
+			rebase(focus_pos)
+	if auto_boost_speed_mps > 0.0:
+		_auto_boost()
+
+
+## The World `node` lives in (itself or an ancestor), or null outside one.
+static func of(node: Node) -> WorldFrame:
+	var at: Node = node
+	while at != null and not at is WorldFrame:
+		at = at.get_parent()
+	return at as WorldFrame
 
 
 ## Local `World` coordinates of a universe position (the milestone doc calls this `to_local`). Only meaningful for
@@ -208,6 +277,7 @@ func spawn(node: Node3D, at: UniversePos, basis: Basis = Basis.IDENTITY, parent:
 ## end of the tick (class notes); outside one it happens here.
 func rebase(offset: Vector3) -> void:
 	var started_us: int = Time.get_ticks_usec()  # profiling readout only, never gameplay time
+	_adopt_origin()  # between ticks: the core's point is a step ahead, and the new origin is pushed over it below
 	var shift: Vector3 = -offset
 	# A second rebase before the settle keeps the first one's nodes, so the settle still reaches each of them once.
 	var kept: Dictionary[Node3D, bool] = {}
@@ -258,8 +328,139 @@ func _settle() -> void:
 	last_rebase_us += Time.get_ticks_usec() - started_us
 
 
+## Asks for a velocity rebase: the frame gains `dv` against its anchor and every local velocity loses it, so no universe
+## position or velocity changes and nothing needs an interpolation reset. It is taken in the frame's last slot of the tick
+## (the next tick's when called between ticks); several asked in one tick add up. The frame is off its anchor afterwards
+## (class notes).
+func boost(dv: Vector3) -> void:
+	if dv.is_finite():
+		_boost_asked += dv
+		_return_asked = false
+
+
+## Asks for the velocity rebase back onto the anchor, taken in the frame's last slot like `boost`: the frame's own velocity
+## goes back into every local velocity and the frame rides its anchor again. Nothing to do while it rides.
+func boost_to_anchor() -> void:
+	_boost_asked = Vector3.ZERO
+	_return_asked = not riding()
+
+
+## Takes a velocity rebase of `dv` now. Only the frame's last slot is the right moment (hence `boost`): there every mover
+## that steps itself has flown this tick in the old frame, and Jolt and the frame's own step are still to come, in the new
+## one. Anywhere else those movers and the bodies would change frames a tick apart, `dv` times a tick out of place.
+## `boosted` is emitted last.
+func apply_boost(dv: Vector3) -> void:
+	if dv == Vector3.ZERO or not dv.is_finite():
+		return
+	if not _has_core():
+		push_warning("WorldFrame: %s has no core, so no velocity rebase" % name)
+		return
+	var started_us: int = Time.get_ticks_usec()  # profiling readout only, never gameplay time
+	_sim.core.boost(dv)
+	_boost_nodes(dv, started_us)
+
+
+## Takes the velocity rebase back onto the anchor now (see `apply_boost` for when).
+func apply_boost_to_anchor() -> void:
+	if riding():
+		return
+	var started_us: int = Time.get_ticks_usec()  # profiling readout only
+	_boost_nodes(_sim.core.boost_to_anchor(1.0 / float(Engine.physics_ticks_per_second)), started_us)
+
+
+# The velocity rebases asked for during the tick, taken as one.
+func _take_boosts() -> void:
+	if _return_asked:
+		_return_asked = false
+		apply_boost_to_anchor()
+	elif _boost_asked != Vector3.ZERO:
+		var dv: Vector3 = _boost_asked
+		_boost_asked = Vector3.ZERO
+		apply_boost(dv)
+
+
+## Whether the frame rides its anchor: no velocity of its own, `origin` moved only by position rebases.
+func riding() -> bool:
+	return not _has_core() or _sim.core.frame_riding()
+
+
+## The anchor's velocity in the local frame, m/s: what "at rest" means here. Zero while the frame rides.
+func rest_velocity() -> Vector3:
+	return -Vector3(origin_velocity[0], origin_velocity[1], origin_velocity[2])
+
+
+## What the boosts since `mark` (an earlier copy of `boost_sum`) took off every local velocity.
+func boost_since(mark: PackedFloat64Array) -> Vector3:
+	if mark.size() != 3:
+		return Vector3.ZERO
+	return Vector3(boost_sum[0] - mark[0], boost_sum[1] - mark[1], boost_sum[2] - mark[2])
+
+
+# The rule of Q8: onto the focus above the threshold against the frame, back onto the anchor under half of it against the
+# anchor.
+func _auto_boost() -> void:
+	var body := focus as RigidBody3D
+	if body == null or not _has_core():
+		return
+	var local: Vector3 = body.linear_velocity
+	if not riding() and (local - rest_velocity()).length() < auto_boost_speed_mps * RETURN_PART:
+		boost_to_anchor()
+	elif local.length() > auto_boost_speed_mps:
+		_return_asked = false
+		_boost_asked = local  # onto the focus, whatever was asked before
+
+
+# The nodes' part of a boost the core has already taken: bodies, the nodes that keep a velocity, then the listeners.
+func _boost_nodes(dv: Vector3, started_us: int) -> void:
+	for member: Node in get_tree().get_nodes_in_group(SHIFTABLE_GROUP):
+		var node := member as Node3D
+		if node == null or not is_ancestor_of(node):
+			continue
+		if node.has_meta(TierDirector.TIER_META) or node.process_mode == Node.PROCESS_MODE_DISABLED:
+			continue  # parked: a tier row holds its velocity (the director settles the body), a pooled one gets a new one
+		if node.has_method(BOOST_METHOD):
+			node.call(BOOST_METHOD, dv)
+		elif node is RigidBody3D:
+			(node as RigidBody3D).linear_velocity -= dv
+	for axis: int in 3:
+		boost_sum[axis] += dv[axis]
+	origin_velocity = _sim.core.frame_origin_velocity()
+	boosts += 1
+	boosted.emit(dv)
+	last_boost_us = Time.get_ticks_usec() - started_us
+
+
+# The frame moved by `moved` (metres, 64-bit) against its anchor this tick: what is tied to the anchor moves the other way.
+func _drift_anchored(moved: PackedFloat64Array) -> void:
+	var shift := Vector3.ZERO
+	for axis: int in 3:
+		_drift_owed[axis] -= moved[axis]
+		shift[axis] = _drift_owed[axis]
+		_drift_owed[axis] -= shift[axis]
+	if shift == Vector3.ZERO:
+		return
+	for member: Node in get_tree().get_nodes_in_group(ANCHORED_GROUP):
+		var node := member as Node3D
+		if node != null and is_ancestor_of(node):
+			node.global_translate(shift)
+	ContactScan.shift_statics(shift, self)
+	_sim.core.drift_anchored(shift)
+	drifted.emit(shift)
+
+
 func _origin_array() -> PackedFloat64Array:
 	return PackedFloat64Array([origin.x, origin.y, origin.z])
+
+
+func _cmd_boost(args: Dictionary) -> ConsoleResult:
+	boost(args[&"dv"])
+	return ConsoleResult.line("boost of %s m/s asked for; world.origin_velocity is %s m/s until the tick ends" % [
+			_boost_asked, ConsoleFormat.value(origin_velocity)])
+
+
+func _cmd_ride(_args: Dictionary) -> ConsoleResult:
+	boost_to_anchor()
+	return ConsoleResult.line("back onto the anchor when the tick ends" if _return_asked else "the frame rides its anchor")
 
 
 func _cmd_rebase(args: Dictionary) -> ConsoleResult:
@@ -332,10 +533,36 @@ func sample_gravity(time_s: float) -> void:
 	_gravity_active = _sim.core.frame_sample(time_s) if star_system != null and _has_core() else false
 
 
-## The anchor's own step; the last slot of the tick calls it.
+## The frame's step; the last slot of the tick calls it. The anchor moves on its orbit, and off the anchor the local origin
+## moves too, in the core's 64 bits. `origin` takes the new place when the next tick starts (`_adopt_origin`), with the bodies.
 func step_anchor(dt: float) -> void:
-	if star_system != null and _has_core():
+	if not _has_core():
+		return
+	var free: bool = not _sim.core.frame_riding()
+	# The tick of the way back still owes the frame one kick; after it the velocity reads zero again.
+	var settling: bool = free or origin_velocity[0] != 0.0 or origin_velocity[1] != 0.0 or origin_velocity[2] != 0.0
+	if free:
+		_push_origin()
+	if settling or star_system != null:
 		_sim.core.frame_step(dt)
+	if settling:
+		origin_velocity = _sim.core.frame_origin_velocity()
+	_origin_stepped = free
+
+
+# The start of a tick, before any node's `_physics_process`: Jolt's step is in the bodies now, so the frame's own step of
+# the last tick is taken here too. `origin` moves to the core's point and what is tied to the anchor moves the other way.
+# Any earlier and the frames drawn between the ticks would hold a new origin beside the bodies' old places.
+func _adopt_origin() -> void:
+	if not _origin_stepped:
+		return
+	_origin_stepped = false
+	if not _has_core():
+		return
+	var at: PackedFloat64Array = _sim.core.frame_origin()
+	var moved := PackedFloat64Array([at[0] - origin.x, at[1] - origin.y, at[2] - origin.z])
+	origin = UniversePos.new(at[0], at[1], at[2], origin.system_id)
+	_drift_anchored(moved)
 
 
 ## The anchor against the centre of the body it circles: position then velocity (six numbers, m and m/s, game axes, 64-bit);

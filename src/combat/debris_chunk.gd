@@ -179,6 +179,12 @@ func vent_handle() -> int:
 	return _vent_handle
 
 
+## A velocity rebase (`WorldFrame.boost`): a chunk in flight keeps its universe velocity. A held one follows its wreck.
+func frame_boost(dv: Vector3) -> void:
+	if _active:
+		velocity -= dv
+
+
 ## Moves the chunk `delta` seconds: drift, spin, and the shrink-out at the end of its life. Public for tests.
 func advance(delta: float) -> void:
 	if not _active or _held:

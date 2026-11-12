@@ -359,6 +359,12 @@ impl ScsRamTracker {
         self.tracker.shift(offset);
     }
 
+    /// A velocity rebase took `dv` off every velocity: the remembered ones follow.
+    #[func]
+    fn boost(&mut self, dv: Vector3) {
+        self.tracker.boost(dv);
+    }
+
     /// Forgets everything (ram damage switched off).
     #[func]
     fn reset(&mut self) {

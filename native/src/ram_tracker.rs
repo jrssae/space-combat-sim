@@ -295,6 +295,17 @@ impl Tracker {
         }
     }
 
+    /// A velocity rebase took `dv` off every velocity: the remembered ones follow, or every open contact would read the
+    /// boost as its hull's change of velocity.
+    pub fn boost(&mut self, dv: Vector3) {
+        for v in self.prev_velocities.iter_mut() {
+            *v = sub(*v, dv);
+        }
+        for w in self.windows.iter_mut() {
+            w.v_before = sub(w.v_before, dv);
+        }
+    }
+
     /// Forgets everything (ram damage switched off): no velocity, contact, window or grace carries over.
     pub fn reset(&mut self) {
         self.tick = 0;

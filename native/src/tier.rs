@@ -222,6 +222,19 @@ impl TierRows {
         }
     }
 
+    /// A velocity rebase: every row loses `dv`, and so does the cruise a capital holds, which is a velocity in the same
+    /// frame. A fighter's cruise slot is unused and stays zero.
+    pub fn boost(&mut self, dv: Vector3) {
+        for v in self.velocities.iter_mut() {
+            *v -= dv;
+        }
+        for (c, &kind) in self.cruise.iter_mut().zip(&self.kinds) {
+            if kind == KIND_CAPITAL {
+                *c -= dv;
+            }
+        }
+    }
+
     /// Appends every tier row to the scan's rows: a tier row is a ship to the contacts (not a hulk), has a hull but no
     /// active one (nothing sweeps or rams it here), and no Jolt body; its id is its marker's, so a selection that names it
     /// still finds its row. The shell appends the names and RIDs beside them.

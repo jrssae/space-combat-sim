@@ -596,6 +596,13 @@ impl ScsSimCore {
         self.tier_gravity.shift(offset);
     }
 
+    /// Moves what is tied to the anchor and has no row of its own by `shift`, while the frame is off its anchor (M6-T05):
+    /// the tier's copy of the pull's sources. The static rows come again from `StaticRows` at the next sync.
+    #[func]
+    pub fn drift_anchored(&mut self, shift: Vector3) {
+        self.tier_gravity.shift(shift);
+    }
+
     /// Engine calls of the last closed tick: `[sync, fallbacks]`: the sync points' reads, which grow with the bodies and
     /// bolts, and the flight step's reads of the physics server for ships without a row. The kernels make none: they live
     /// in `kernels.rs`, which holds no engine type (`test_sim_core` reads the file).
@@ -773,6 +780,15 @@ impl ScsSimCore {
     #[func]
     pub fn row_of_id(&self, body_id: i64) -> i64 {
         self.row_of_id.get(&body_id).map_or(-1, |&r| i64::from(r))
+    }
+
+    /// A velocity rebase's part in the rows (M6-T05, D64): every velocity the core holds between sync points loses `dv`,
+    /// and the rows count as moved, so a think taken before it is declined as for a rebase.
+    pub(crate) fn boost_rows(&mut self, dv: Vector3) {
+        self.rows_version += 1;
+        self.rows.boost(dv);
+        self.bolts.boost(dv);
+        self.tier.boost(dv);
     }
 
     /// `rows_version` for the crate's own readers (the brain host's grid, M4-T17).

@@ -23,6 +23,14 @@ extends RefCounted
 ## - after every rebase, each object under World is in `world_shiftable` or below a shiftable node, every `top_level` node is
 ##   in the group itself, and no particles below World emit in global space (a rebase cannot move what they already emitted;
 ##   the M3-T14 sparks bug).
+## With `boost_every_s` > 0 (M6-T05) it also forces a velocity rebase of `FORCED_BOOST_MPS` that often, every third one back
+## onto the anchor, so the fight runs across both rebases, and it asserts as well:
+## - the world boosted, and no hull, prop or bolt changed its universe velocity (local plus the frame's) in a tick by more
+##   than `VELOCITY_SLACK_MPS`, unless a ram landed on it within `RAM_WINDOW_TICKS`;
+## - every frame, each interpolated hull, prop and bolt node is drawn where its motion relative to the drawn player allows: its drawn
+##   offset from the player changed by no more than their relative speed over the time drawn plus one tick, plus
+##   `DRAWN_SLACK_M`. A boost that left a velocity behind, or reset an interpolation, shows here as a jump.
+## Speeds in the jump bound are universe speeds, so the bound holds in a frame that is off its anchor.
 ## The counts (`rebases`, `hits`, `rams`, `kills`) and worst cases stay on the returned object for the caller's asserts, and
 ## `summary()` is one line for `gut.p`. Rebases must come from the scene's own ticks, not from the test between frames. A
 ## `Watch` node samples during the run and is freed when it ends.
@@ -35,6 +43,13 @@ const HUD_TOL_M: float = 0.05
 const SNAP_TOL_M: float = 0.01
 ## Size of a forced rebase (`rebase_every_s`), m.
 const FORCED_REBASE_M: float = 1000.0
+## Size of a forced velocity rebase (`boost_every_s`), m/s: a raider's speed in a fight, so a velocity left behind shows.
+const FORCED_BOOST_MPS: float = 150.0
+## The most a hull's universe velocity may change in a tick without a ram: thrust, a gentle bounce and a bolt's push.
+const VELOCITY_SLACK_MPS: float = 20.0
+## Ticks either side of a velocity change in which a ram on that hull explains it.
+const RAM_WINDOW_TICKS: int = 6
+const DRAWN_SLACK_M: float = 0.5
 ## Failures kept for the message (all are counted).
 const MAX_REPORTED: int = 8
 
@@ -62,6 +77,16 @@ var snaps_checked: int = 0
 ## Rebases forced by `rebase_every_s`; ticks with a rebase (two can share one: a forced or console rebase and the automatic
 ## one), and structure checks run (one after each of those ticks).
 var forced_rebases: int = 0
+## Velocity rebases seen and forced (`boost_every_s`), the cost of each (`World.last_boost_us`), and the worst cases: a
+## universe velocity's change in a tick with no ram to explain it (m/s), and a drawn offset from the player past what the
+## relative motion allows (m; negative = inside it).
+var boosts: int = 0
+var forced_boosts: int = 0
+var boost_us: PackedInt64Array = PackedInt64Array()
+var worst_velocity_mps: float = 0.0
+var velocities_checked: int = 0
+var worst_drawn_m: float = -INF
+var drawn_checked: int = 0
 var rebase_ticks: int = 0
 var structure_checks: int = 0
 var failures_total: int = 0
@@ -71,7 +96,7 @@ var failures: PackedStringArray = PackedStringArray()
 ## Runs `main` for `sim_s` seconds of sim time (or until `until` returns true) with the rebase threshold at `threshold_m`, and
 ## asserts the invariants above on `test`. Returns the counts and worst cases.
 static func run(test: GutTest, main: Main, sim_s: float, until: Callable = Callable(), threshold_m: float = 40.0,
-		cruise_mps: float = 60.0, rebase_every_s: float = 0.0) -> RebaseFight:
+		cruise_mps: float = 60.0, rebase_every_s: float = 0.0, boost_every_s: float = 0.0) -> RebaseFight:
 	var fight := RebaseFight.new()
 	var threshold_before: float = main.world.auto_rebase_distance_m
 	main.world.auto_rebase_distance_m = threshold_m
@@ -79,12 +104,21 @@ static func run(test: GutTest, main: Main, sim_s: float, until: Callable = Calla
 		main.ship.linear_velocity = main.ship.forward() * cruise_mps
 	var watch := Watch.new(fight, main)
 	watch.rebase_every_s = rebase_every_s
+	watch.boost_every_s = boost_every_s
 	test.add_child(watch)
 	await watch.run_for(sim_s, until)
 	test.remove_child(watch)
 	watch.free()
 	main.world.auto_rebase_distance_m = threshold_before
+	if boost_every_s > 0.0:
+		main.world.boost_to_anchor()  # the scene goes on in the frame it started in
+		await test.get_tree().physics_frame
+		await test.get_tree().physics_frame
 	fight._assert_on(test)
+	if boost_every_s > 0.0:
+		test.assert_gt(fight.boosts, 0, "the world boosted (%s)" % fight.boost_summary())
+		test.assert_gt(fight.velocities_checked, 0, "universe velocities were compared")
+		test.assert_gt(fight.drawn_checked, 0, "drawn positions were compared")
 	return fight
 
 
@@ -94,6 +128,15 @@ func summary() -> String:
 			% [ticks, rebases, forced_rebases, max_gap_s, min_rebase_us(), median_rebase_us(), max_rebase_us(), hits, hits_in_rebase_ticks, rams,
 			kills, worst_jump_m, jumps_checked, worst_camera_m, worst_camera_rebase_m, frames_checked, worst_hud_m, worst_snap_m, snaps_checked,
 			structure_checks])
+
+
+## One line with the velocity rebases' counts and worst cases.
+func boost_summary() -> String:
+	var sorted: PackedInt64Array = boost_us.duplicate()
+	sorted.sort()
+	return ("%d velocity rebases (%d forced; cost median %d, max %d us); worst: universe velocity changed %.3f m/s in a tick with no ram over %d checks, drawn %+.3f m past its relative motion over %d checks"
+			% [boosts, forced_boosts, sorted[sorted.size() / 2] if not sorted.is_empty() else 0,
+			sorted[sorted.size() - 1] if not sorted.is_empty() else 0, worst_velocity_mps, velocities_checked, worst_drawn_m, drawn_checked])
 
 
 func median_rebase_us() -> int:
@@ -131,11 +174,16 @@ func _fail(message: String) -> void:
 
 
 static func _speed_of(node: Node3D) -> float:
+	return _velocity_of(node).length()
+
+
+# A node's velocity as it holds it: in the local frame, or against the anchor for a node tied to it.
+static func _velocity_of(node: Node3D) -> Vector3:
 	var body := node as RigidBody3D
 	if body != null:
-		return body.linear_velocity.length()
+		return body.linear_velocity
 	var velocity: Variant = node.get(&"velocity")
-	return (velocity as Vector3).length() if velocity is Vector3 else 0.0
+	return velocity as Vector3 if velocity is Vector3 else Vector3.ZERO
 
 
 ## Samples the scene for a `RebaseFight` while it runs.
@@ -144,8 +192,15 @@ class Watch extends Node:
 	var main: Main = null
 	var world: WorldFrame = null
 	var rebase_every_s: float = 0.0
+	var boost_every_s: float = 0.0
 
 	var _start_s: float = 0.0
+	var _last_boost_s: float = 0.0
+	var _seen_boosts: int = 0
+	var _rammed: Dictionary = {}  # instance id -> the tick of its last ram
+	var _suspects: Array[Array] = []  # [instance id, tick, name, change in m/s]: judged once a ram could have been reported
+	var _drawn_previous: Dictionary = {}  # instance id -> [offset from the drawn player, relative velocity, name]
+	var _drawn_at_s: float = 0.0
 	var _last_rebase_s: float = 0.0
 	var _rebase_frame: int = -1
 	var _snap_frame: int = -1
@@ -166,12 +221,15 @@ class Watch extends Node:
 		process_priority = 2000  # every frame after the cameras and the HUD
 
 	func _ready() -> void:
+		add_child(Late.new(self))
 		world.rebased.connect(_on_rebased)
 		(main.get_node(^"Combat/HitResolver") as HitResolver).hit_resolved.connect(_on_hit)
 		main.rams.ram_resolved.connect(_on_ram)
 		_start_s = SimClock.now()
 		_last_rebase_s = _start_s
 		_seen_rebases = world.rebases
+		_seen_boosts = world.boosts
+		_last_boost_s = _start_s
 		_kills_at_start = main.waves.kills
 
 	func _exit_tree() -> void:
@@ -189,11 +247,24 @@ class Watch extends Node:
 		await get_tree().physics_frame
 		fight.max_gap_s = maxf(fight.max_gap_s, SimClock.now() - _last_rebase_s)
 		fight.kills = main.waves.kills - _kills_at_start
+		_judge_suspects(true)
 
 	# --- every tick ---------------------------------------------------------------------------------------------
 
-	func _physics_process(delta: float) -> void:
-		fight.ticks += 1
+	# Late in every tick, once the bolts and the tier have stepped themselves: only there are a bolt's place and a hull's of
+	# the same instant, whatever the frame's velocity (before its step a bolt is a tick behind the bodies).
+	class Late extends Node:
+		var watch: Node = null
+
+		func _init(p_watch: Node) -> void:
+			watch = p_watch
+			name = "RebaseFightLate"
+			process_physics_priority = 900
+
+		func _physics_process(_delta: float) -> void:
+			watch.call(&"_compare_samples")
+
+	func _compare_samples() -> void:
 		var current: Dictionary = _sample()
 		for id: int in current:
 			if not _previous.has(id):
@@ -206,7 +277,18 @@ class Watch extends Node:
 			fight.worst_jump_m = maxf(fight.worst_jump_m, moved - bound)
 			if moved > bound:
 				fight._fail("%s moved %.2f m in universe terms in a tick, its own motion allows %.2f m" % [before[2], moved, bound])
+			if boost_every_s > 0.0:
+				var change: float = (now[3] as Vector3).distance_to(before[3] as Vector3)
+				fight.velocities_checked += 1
+				if change > VELOCITY_SLACK_MPS:
+					_suspects.append([id, fight.ticks, before[2], change])
+				else:
+					fight.worst_velocity_mps = maxf(fight.worst_velocity_mps, change)
+		_judge_suspects(false)
 		_previous = current
+
+	func _physics_process(delta: float) -> void:
+		fight.ticks += 1
 		_dt = delta
 		if world.rebases != _seen_rebases:
 			# The rebases of the last tick (cost, structure), read here, outside the cost they measure.
@@ -218,11 +300,42 @@ class Watch extends Node:
 			fight.forced_rebases += 1
 			var turn: float = float(fight.forced_rebases) * 2.39996  # the golden angle, rad
 			world.rebase(Vector3(cos(turn), 0.3 * sin(3.0 * turn), sin(turn)).normalized() * FORCED_REBASE_M)
+		if world.boosts != _seen_boosts:
+			fight.boosts += world.boosts - _seen_boosts
+			_seen_boosts = world.boosts
+			fight.boost_us.append(world.last_boost_us)
+		if boost_every_s > 0.0 and SimClock.now() - _last_boost_s >= boost_every_s:
+			_last_boost_s = SimClock.now()
+			fight.forced_boosts += 1
+			if fight.forced_boosts % 3 == 0:
+				world.boost_to_anchor()
+			else:
+				var turn: float = float(fight.forced_boosts) * 2.39996  # the golden angle, rad
+				world.boost(Vector3(cos(turn), 0.3 * sin(3.0 * turn), sin(turn)).normalized() * FORCED_BOOST_MPS)
 		_camera_valid = _chase_in_view()
 		if _camera_valid:
 			_camera_at_tick_start = main.camera_rig.chase_camera.global_position - main.ship.global_position
 
-	# Every active hull (ships and props) and every bolt in flight: instance id -> [universe position, speed, name].
+	# A velocity change with no ram on its hull within `RAM_WINDOW_TICKS` is a failure; `all` judges the young ones too.
+	func _judge_suspects(all: bool) -> void:
+		while not _suspects.is_empty() and (all or fight.ticks - int(_suspects[0][1]) > RAM_WINDOW_TICKS):
+			var suspect: Array = _suspects.pop_front()
+			var rammed_at: int = int(_rammed.get(suspect[0], -1000000))
+			if absi(rammed_at - int(suspect[1])) > RAM_WINDOW_TICKS:
+				fight.worst_velocity_mps = maxf(fight.worst_velocity_mps, float(suspect[3]))
+				fight._fail("%s changed its universe velocity by %.1f m/s in tick %d with no ram" % [suspect[2], suspect[3], suspect[1]])
+
+	# How fast `node` moves in the local frame: a node tied to the anchor moves with it.
+	func _local_speed(node: Node3D) -> float:
+		var v: Vector3 = RebaseFight._velocity_of(node)
+		return (v + world.rest_velocity()).length() if node.is_in_group(WorldFrame.ANCHORED_GROUP) else v.length()
+
+	# A velocity in the local frame as one against the anchor, which no boost changes.
+	func _universe_velocity(local: Vector3) -> Vector3:
+		return local - world.rest_velocity()
+
+	# Every active hull (ships and props) and every bolt in flight: instance id -> [universe position, universe speed, name,
+	# universe velocity, speed in the local frame].
 	func _sample() -> Dictionary:
 		var out: Dictionary = {}
 		for node: Node in get_tree().get_nodes_in_group(Damageable.GROUP):
@@ -230,11 +343,16 @@ class Watch extends Node:
 			if damageable == null or not damageable.is_active():
 				continue
 			var body: Node3D = damageable.body()
-			out[body.get_instance_id()] = [world.to_universe(body.global_position), RebaseFight._speed_of(body), String(body.name)]
+			var v: Vector3 = RebaseFight._velocity_of(body)
+			var local: float = _local_speed(body)
+			if not body.is_in_group(WorldFrame.ANCHORED_GROUP):
+				v = _universe_velocity(v)
+			out[body.get_instance_id()] = [world.to_universe(body.global_position), v.length(), String(body.name), v, local]
 		for node: Node in get_tree().get_nodes_in_group(Projectile.GROUP):
 			var bolt := node as Projectile
 			if bolt != null and not bolt.is_spent() and not bolt.is_queued_for_deletion() and bolt.is_inside_tree():
-				out[bolt.get_instance_id()] = [world.to_universe(bolt.global_position), bolt.velocity.length(), "a bolt"]
+				var v: Vector3 = _universe_velocity(bolt.velocity)
+				out[bolt.get_instance_id()] = [world.to_universe(bolt.global_position), v.length(), "a bolt", v]
 		# The core's own bolt rows (M4-T35): their ids are negative, so they never meet a node's.
 		var sim: SimCore = SimCore.current()
 		if sim != null and sim.bolt_rows_on():
@@ -245,7 +363,8 @@ class Watch extends Node:
 			var spent: PackedByteArray = columns[10]
 			for i: int in int(columns[11]):
 				if spent[i] == 0:
-					out[ids[i]] = [world.to_universe(ends[i]), velocities[i].length(), "a bolt row"]
+					var v: Vector3 = _universe_velocity(velocities[i])
+					out[ids[i]] = [world.to_universe(ends[i]), v.length(), "a bolt row", v]
 		return out
 
 	func _on_rebased(_offset: Vector3) -> void:
@@ -308,6 +427,8 @@ class Watch extends Node:
 
 	func _on_ram(info: HitInfo) -> void:
 		fight.rams += 1
+		_rammed[info.target_id] = fight.ticks
+		_rammed[info.shooter_id] = fight.ticks
 		_check_on_hull(info, "ram")
 
 	func _check_on_hull(info: HitInfo, what: String) -> void:
@@ -317,9 +438,9 @@ class Watch extends Node:
 		var damageable: Damageable = Damageable.of(body)
 		var radius: float = damageable.bounding_radius if damageable != null else 0.0
 		# A hull the hit destroyed is parked at once and reads 0 m/s: its speed as of the start of this tick bounds its motion.
-		var speed: float = RebaseFight._speed_of(body)
+		var speed: float = _local_speed(body)
 		if _previous.has(body.get_instance_id()):
-			speed = maxf(speed, float((_previous[body.get_instance_id()] as Array)[1]))
+			speed = maxf(speed, float((_previous[body.get_instance_id()] as Array)[4]))
 		var beyond: float = info.point.distance_to(body.global_position) - radius - speed * _dt - JUMP_SLACK_M
 		if beyond > 0.0:
 			fight._fail("a %s on %s landed %.1f m outside its hull" % [what, body.name, beyond])
@@ -332,6 +453,8 @@ class Watch extends Node:
 		fight.frames_checked += 1
 		_check_camera()
 		_check_hud()
+		if boost_every_s > 0.0:
+			_check_drawn()
 		if _rebase_frame == Engine.get_physics_frames() and _snap_frame != _rebase_frame:
 			_snap_frame = _rebase_frame
 			_check_snap()
@@ -362,6 +485,51 @@ class Watch extends Node:
 		fight.worst_hud_m = maxf(fight.worst_hud_m, error)
 		if error > HUD_TOL_M + 1e-6 * expected:
 			fight._fail("the HUD's reference range is %.2f m, the universe distance %.2f m" % [frame.reference_range_m, expected])
+
+	# Every hull, prop and bolt node as drawn, against the drawn player: between two frames its offset may change by their
+	# relative speed over the time drawn (one tick more: a rebase's reset draws a node at its tick pose), no further.
+	func _check_drawn() -> void:
+		if not main.player_alive or not main.ship.is_visible_in_tree():
+			_drawn_previous.clear()
+			return
+		var at_s: float = (float(Engine.get_physics_frames()) + Engine.get_physics_interpolation_fraction()) * _dt
+		var ship_drawn: Vector3 = main.ship.get_global_transform_interpolated().origin
+		var ship_velocity: Vector3 = main.ship.linear_velocity
+		var nodes: Array[Node3D] = []
+		for node: Node in get_tree().get_nodes_in_group(Damageable.GROUP):
+			var damageable := node as Damageable
+			if damageable != null and damageable.is_active() and damageable.body() != main.ship:
+				nodes.append(damageable.body())
+		for node: Node in get_tree().get_nodes_in_group(Projectile.GROUP):
+			var bolt := node as Projectile
+			if bolt != null and not bolt.is_spent() and not bolt.is_queued_for_deletion() and bolt.is_inside_tree():
+				nodes.append(bolt)
+		var current: Dictionary = {}
+		for node: Node3D in nodes:
+			# A node drawn at its tick pose (a far dot's ship, M4-T14) is off the interpolated player by the player's own
+			# motion in the frame within a tick, boost or none: not compared.
+			if not node.is_visible_in_tree() or not node.is_physics_interpolated_and_enabled():
+				continue
+			var v: Vector3 = RebaseFight._velocity_of(node)
+			if node.is_in_group(WorldFrame.ANCHORED_GROUP):
+				v += world.rest_velocity()
+			current[node.get_instance_id()] = [node.get_global_transform_interpolated().origin - ship_drawn, v - ship_velocity,
+					String(node.name)]
+		var drawn_s: float = maxf(at_s - _drawn_at_s, 0.0) + _dt
+		for id: int in current:
+			if not _drawn_previous.has(id):
+				continue
+			var before: Array = _drawn_previous[id]
+			var now: Array = current[id]
+			var moved: float = (now[0] as Vector3).distance_to(before[0] as Vector3)
+			var bound: float = maxf((before[1] as Vector3).length(), (now[1] as Vector3).length()) * drawn_s + DRAWN_SLACK_M
+			fight.drawn_checked += 1
+			fight.worst_drawn_m = maxf(fight.worst_drawn_m, moved - bound)
+			if moved > bound:
+				fight._fail("%s is drawn %.2f m from where it was against the player a frame ago, its relative motion allows %.2f m" % [
+						now[2], moved, bound])
+		_drawn_previous = current
+		_drawn_at_s = at_s
 
 	# The frame after a rebase: every interpolated node of World is drawn at its tick pose (the world stalls together for the
 	# rebase tick, WorldFrame's class notes). Nodes with interpolation off (the chase camera) are placed every frame; the camera

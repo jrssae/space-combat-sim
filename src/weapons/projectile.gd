@@ -6,7 +6,7 @@ extends Node3D
 ##
 ## Spawn it with `PulseCannon`, or by hand: instantiate `projectile.tscn`, add it to the tree under `World`, then
 ## `launch(...)`. It joins `world_shiftable` itself, so `World.rebase()` moves it with everything else. `velocity` is
-## a World-frame vector; a velocity rebase (roadmap) must subtract the frame velocity from it, as for rigid bodies.
+## a World-frame vector; a velocity rebase takes its `dv` off it (`frame_boost`), as off a rigid body's.
 ##
 ## Hit detection (M2-T03, `HitResolver`): a bolt carries who shot it (`shooter_id`, `faction`), how hard it hits
 ## (`damage`, `hit_radius_m`) and the displacement of its latest tick (`last_step`, zero before its first tick), so the
@@ -90,6 +90,12 @@ func _physics_process(delta: float) -> void:
 		_face(velocity)
 	last_step = velocity * delta
 	global_position += last_step
+
+
+## A velocity rebase (`WorldFrame.boost`): the bolt keeps its universe velocity. It keeps its heading too: nothing turns.
+func frame_boost(dv: Vector3) -> void:
+	if not _laid_beam:
+		velocity -= dv
 
 
 ## Draws the bolt `factor` times its size (all axes); the hit radius stays as it is.

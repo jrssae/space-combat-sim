@@ -731,11 +731,13 @@ func _spawn_belts(belts: Array) -> void:
 		var belt := AsteroidBelt.new()
 		belt.name = "Belt%d" % i
 		world.spawn(belt, entry["centre"])
+		belt.add_to_group(WorldFrame.ANCHORED_GROUP)
 		var layout: BeltLayout = BeltLayout.place(entry, shape_count)
 		if layout.shortfall > 0:
 			push_warning("Belt%d: %d of %d rocks did not fit the box with the gap asked for" % [i, layout.shortfall, entry["count"]])
 		belt.build(layout, world.get_world_3d().space, world)
 		world.rebased.connect(belt.on_rebased)
+		world.drifted.connect(belt.on_rebased)
 		asteroid_belts.append(belt)
 
 
