@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## CameraRig with plain nodes standing in for the ship (architecture §3, §8; AC10 camera part). The Ship class does
 ## not exist yet, so `setup` takes a Node3D body, a Marker3D anchor, the chase offset and a visibility callable.
 ## What the cameras look like on screen is (H); this checks the wiring, the numbers and the console.
@@ -83,12 +83,6 @@ func _remote_under_anchor() -> RemoteTransform3D:
 		if child is RemoteTransform3D:
 			return child as RemoteTransform3D
 	return null
-
-
-func _console(line: String) -> ConsoleResult:
-	var results: Array[ConsoleResult] = DebugConsole.registry.execute(line)
-	assert_eq(results.size(), 1, "one statement: " + line)
-	return results[0]
 
 
 # --- scene ---------------------------------------------------------------------------------------------------

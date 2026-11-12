@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## The nine civilian hulls in the game (M5-T16, AC13, D59): each flies through the one flight model with zero damping, heavy
 ## and slow, turning by torque alone; in play each carries its people's faction with the civilian role, shows its running
 ## lights, takes hull damage and breaks into its chunks; raiders attack them through the faction data; a Bokmai flies with
@@ -31,11 +31,6 @@ func _skipped() -> bool:
 			pending("%s is not generated (scripts/gen_assets.sh)" % type)
 			return true
 	return false
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
 
 
 # --- flight ---------------------------------------------------------------------------------------------------------

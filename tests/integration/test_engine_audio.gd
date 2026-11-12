@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## Engine bursts in the game (M5-T19, AC15, D60): `engine_loop` and `thruster_loop` are gone; every ship has a `main_burst`
 ## voice at each pod and the player's ship an `rcs_burst` voice at each RCS cluster, children of the ship at their
 ## nozzles; thrust and RCS demand bring them up; parked and distant ships are silent; `engine_voice_cap` bounds the voices,
@@ -28,11 +28,6 @@ func after_each() -> void:
 	Settings.set_value(&"engine_voice_cap", _cap_backup)
 	DebugConsole.flags.invulnerable = false
 	get_tree().paused = false
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
 
 
 func _frames(n: int) -> void:

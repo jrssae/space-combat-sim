@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## The debrief (architecture §18, D56, AC9; M5-T09). Part one drives the screen alone with a recording stand-in for `Game`, the
 ## way a pad drives it (injected `ui_*` events). Part two plays the test mission in the real main scene under the real `Game`
 ## autoload (its scene parent pointed at a node of the test): it ends by `mission skip` and by the player's death, the debrief
@@ -79,11 +79,6 @@ func _pad(action: StringName) -> void:
 func _focused_text(screen: DebriefScreen) -> String:
 	var focused: Control = screen.frame().current_page().focused_option()
 	return (focused as Button).text if focused is Button else ""
-
-
-func _ticks(n: int) -> void:
-	for _i: int in n:
-		await get_tree().physics_frame
 
 
 func _beat_ticks() -> int:

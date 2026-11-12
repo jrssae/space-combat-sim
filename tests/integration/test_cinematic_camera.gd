@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## AC8 on the real main scene (architecture §18 D55, M5-T08), on `tests/fixtures/missions/test_cinematic.json`: the mission's intro
 ## shot plays on the cinematic camera with the HUD hidden, the letterbox in and the subtitles still up; the player's commands are
 ## zeroed while the ship keeps its physics; a rebase mid-shot moves nothing on screen; A or Start skips the shot (the A that skipped
@@ -40,11 +40,6 @@ func _make_main(path: String = MISSION_PATH) -> void:
 	add_child_autofree(main)
 	main.cannon.projectile_fired.connect(func(_i: int, _p: Projectile) -> void: shots_fired += 1)
 	await _ticks(2)
-
-
-func _ticks(n: int) -> void:
-	for _i: int in n:
-		await get_tree().physics_frame
 
 
 func _frames(n: int) -> void:

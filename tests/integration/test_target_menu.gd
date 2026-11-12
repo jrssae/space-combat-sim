@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## The target menu on the real main scene (architecture §18.19, M5-T25): a tap toggles the nearest and the 2nd nearest enemy;
 ## a hold pauses the game and opens the radial menu, which the menu's stick, select and back drive and nothing else; a
 ## picked ship is the target, a picked beacon or objective the HUD waypoint (never the target); an unidentified contact
@@ -36,11 +36,6 @@ func _boot(scenario: String, raiders: int = 4) -> void:
 	main.raider_pool_size = raiders
 	add_child_autofree(main)
 	await _ticks(2)
-
-
-func _ticks(n: int) -> void:
-	for _i: int in n:
-		await get_tree().physics_frame
 
 
 func _press(action: StringName) -> void:

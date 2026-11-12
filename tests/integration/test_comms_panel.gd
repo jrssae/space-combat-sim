@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## Dialog, subtitles and the comms panel in the real main scene (architecture §18 D53, AC6, M5-T06), on
 ## `tests/fixtures/missions/test_comms.json`: a mission line shows in the chase and the cockpit view in its speaker's faction
 ## colour, `radio_open` and `radio_close` frame it, the `dialog_finished` trigger fires, a skip logs lines without showing them,
@@ -44,11 +44,6 @@ func _make_main(path: String) -> Main:
 	add_child_autofree(m)
 	await _ticks(2)
 	return m
-
-
-func _ticks(n: int) -> void:
-	for _i: int in n:
-		await get_tree().physics_frame
 
 
 func _frames(n: int) -> void:

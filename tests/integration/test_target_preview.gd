@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## The target menu's preview panel on the real main scene (architecture §18.20, M5-T43): highlighting an entry of the second
 ## ring shows it (read once per highlight), the wireframe's viewport renders only while the panel shows, an unknown contact
 ## gives nothing away, and a hull's edges are found a slice a frame.
@@ -35,11 +35,6 @@ func after_each() -> void:
 	get_tree().paused = false
 	ContactScan.invalidate()
 	WirePreview.clear_cache()
-
-
-func _ticks(n: int) -> void:
-	for _i: int in n:
-		await get_tree().physics_frame
 
 
 func _frames(n: int) -> void:

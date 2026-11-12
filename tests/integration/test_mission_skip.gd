@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## Skipping a mission's steps in the real main scene (architecture §18 D51, AC5, M5-T05): a skipped run leaves the same spawns,
 ## objectives and world as one played by hand; a skipped `destroyed` releases its ships with no explosion and no kill credit; a
 ## skipped `proximity` places the player at the goal with its velocity kept; `mission goto` skips every step before the named one.
@@ -32,11 +32,6 @@ func _make_main() -> Main:
 	add_child_autofree(m)
 	await _ticks(2)
 	return m
-
-
-func _ticks(n: int) -> void:
-	for _i: int in n:
-		await get_tree().physics_frame
 
 
 # Waits for a mission state (dialog lines hold on sim time), failing clearly if it never comes within `max_ticks`.

@@ -14,6 +14,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GODOT="${GODOT_BIN:-${ROOT}/.tools/godot/godot}"
 cd "${ROOT}"
+source "${ROOT}/scripts/lib_locks.sh"
 
 SCENE="${1:?usage: scripts/render_compare.sh <scene> [label]}"
 N="${RC_N:-500}"
@@ -48,7 +49,7 @@ VSYNC_FLAG=(--disable-vsync)
 PAUSE_AT=""
 [[ "${FROZEN}" == "1" ]] && PAUSE_AT="pause_at=$(( WARMUP - 2 ))"
 status=0
-flock /tmp/scs-gpu.lock timeout $(( WARMUP + WINDOW + 240 )) "${GODOT}" --path . --resolution 1920x1080 --fullscreen "${VSYNC_FLAG[@]}" \
+flock "${GPU_LOCK}" timeout $(( WARMUP + WINDOW + 240 )) "${GODOT}" --path . --resolution 1920x1080 --fullscreen "${VSYNC_FLAG[@]}" \
     -s res://scripts/measure_fight.gd -- scene="${SCENE_ARG}" camera=chase warmup="${WARMUP}" window="${WINDOW}" label="${SCENE}" \
     exec="${EXEC}" scale3d=1080p ${PAUSE_AT} shot="${SHOT}" > "${LOG}" 2>&1 || status=$?
 grep -E '^\[measure\]|^\[bench\]|SCRIPT ERROR|console error' "${LOG}" | grep -v "over 25 ms at" || true

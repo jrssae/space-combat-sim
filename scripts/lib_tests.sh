@@ -133,6 +133,20 @@ reject_text() {
     fi
 }
 
+# main_run <log> <timeout s> <expected exit code> <label> <godot args...>: one headless run of the project (the real main scene
+# unless a scene is named) for a smoke block; returns 1 when the exit code is not the expected one.
+main_run() {
+    local log="$1" limit="$2" expected="$3" label="$4"
+    shift 4
+    local status=0
+    timeout "${limit}" "${GODOT}" --headless --path . "$@" > "${log}" 2>&1 || status=$?
+    cat "${log}"
+    if (( status != expected )); then
+        echo "run_tests.sh: ${label} smoke run exited ${status}, expected ${expected} (see ${log})." >&2
+        return 1
+    fi
+}
+
 # smoke_console_host <log>: a strict script that succeeds on the empty console host; returns 1 on any failed check.
 smoke_console_host() {
     local smoke_status=0 log="$1"

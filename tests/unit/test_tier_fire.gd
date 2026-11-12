@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## The low-attention tier's brains and fire (M4-T22, architecture §17.14): a tier fighter thinks at `tier_brain_hz` in the
 ## AI step's job, fires through its cannon's own gate and resolves each shot as a seeded to-hit roll from the shot's
 ## geometry and the shooter's skill, the damage landing through the target's `Damageable` with no bolt row; a near ship's
@@ -47,11 +47,6 @@ func _world(raiders: int, allies: int) -> void:
 func _use_schedule(schedule: StringName) -> void:
 	Settings.set_value(&"sim_step", schedule)
 	assert_eq(BrainBatch.step_mode(), BrainBatch.step_mode_of(schedule), "the batch steps on %s" % schedule)
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
 
 
 func _tiered(c: Combatant) -> bool:

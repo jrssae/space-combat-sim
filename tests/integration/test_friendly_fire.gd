@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## Friendly fire and factions as data in the hit resolver (M3-T02, AC2 and AC3, architecture §16 D30, D31).
 ##
 ## Off (the default) nothing changes from M2: only hostile hulls take hits (and buoys, from anyone else's bolts). On
@@ -100,12 +100,6 @@ func _fly(ticks: int) -> void:
 			if bolt != null and not bolt.is_spent():
 				bolt._physics_process(DT)
 		resolver.resolve(DT)
-
-
-func _console(line: String) -> ConsoleResult:
-	var results: Array[ConsoleResult] = DebugConsole.registry.execute(line)
-	assert_eq(results.size(), 1, "one statement: " + line)
-	return results[0]
 
 
 # --- the setting and the filter ---------------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## AC10: the real main scene runs headless, spawns the scenario, and reacts to pilot input end to end.
 
 var main: Main
@@ -165,11 +165,6 @@ func test_console_commands() -> void:
 
 
 # Physics ticks that keep counting while the tree is paused.
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
-
-
 func _tap(action: StringName) -> void:
 	source.hold(action)
 	await _ticks(2)

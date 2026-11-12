@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## AC20 in Jolt (M3-T13, Q12): on the same seeded runs an `ace` raider lands more hits on a straight-flying drone than a
 ## `rookie`; a `cautious` Starfury retreats at a higher hull than an `aggressive` one; a `rookie` reacts to a hit within 0.6 s
 ## (AC9), later than a regular; a `civilian` never fires, flees a hostile within 3 km and evades when hit; spawns take `skill=`
@@ -29,10 +29,6 @@ func after_each() -> void:
 	Engine.time_scale = _scale_backup
 	DebugConsole.flags.invulnerable = false
 	ContactScan.invalidate()
-
-
-func _exec(line: String) -> ConsoleResult:
-	return DebugConsole.registry.execute(line)[0]
 
 
 func _at(offset: Vector3) -> UniversePos:

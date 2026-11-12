@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## Civilian escort (architecture §18 D62, M5-T30, AC10): the front end lists it and starts it; `play` loads it into its
 ## cinematic intro; console commands drive it to success and to both failures (the civilian destroyed, the player destroyed),
 ## each with its last line and then the debrief; the civilian flees when attacked and resumes its route; a skipped wave leaves
@@ -40,11 +40,6 @@ func after_each() -> void:
 
 
 # --- helpers -----------------------------------------------------------------------------------------------------------
-
-
-func _ticks(n: int) -> void:
-	for _i: int in n:
-		await get_tree().physics_frame
 
 
 func _run(line: String) -> ConsoleResult:

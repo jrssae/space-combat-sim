@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## Damage and god mode (M2-T03, AC8, architecture §15.4): ships built by `ShipAssembly` carry a `Damageable` with the
 ## hull from `ShipSpec.hull_max`; a raider's bolt that reaches the player emits `hit_taken` and an impact flash, and
 ## removes hull points unless `god on`; raiders always take damage; `damage` and `heal` work from the console.
@@ -51,12 +51,6 @@ func _build(spec: ShipSpec, faction: StringName, at: Vector3, is_player: bool) -
 	})
 	world.spawn(combatant.ship, world.to_universe(at))
 	return combatant
-
-
-func _console(line: String) -> ConsoleResult:
-	var results: Array[ConsoleResult] = DebugConsole.registry.execute(line)
-	assert_eq(results.size(), 1, "one statement: " + line)
-	return results[0]
 
 
 ## A bolt from `shooter` (its faction and id) flying at `velocity` from `at`.

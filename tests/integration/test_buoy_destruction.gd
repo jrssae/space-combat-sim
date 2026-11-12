@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## Destructible nav buoys: any bolt hurts one, at zero hull it blows up (explosion and shards) and leaves play hidden but not
 ## freed, nothing targets it afterwards, and the player's respawn brings it back.
 
@@ -20,11 +20,6 @@ func before_each() -> void:
 func after_each() -> void:
 	DebugConsole.flags.invulnerable = false
 	get_tree().paused = false
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
 
 
 # Puts the first buoy on the line of the first gun, 200 m ahead, standing still.

@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## The ram resolver at scale (M4-T03, cycle 2). The resolver's swept pass used to look at every pair of hulls every tick
 ## (N squared), though a pair can only ram in a tick when its two hulls come near each other in it. The work it does per tick in
 ## a spread-out fleet must grow with the ship count, not its square.
@@ -84,11 +84,6 @@ func _ship(path: String, at: Vector3, basis: Basis = Basis.IDENTITY) -> Combatan
 	})
 	world.spawn(combatant.ship, world.to_universe(at), basis)
 	return combatant
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
 
 
 func _place(combatant: Combatant, position: Vector3, basis: Basis, velocity: Vector3) -> void:

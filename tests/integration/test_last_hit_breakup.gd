@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## The Starfury's last-hit break-up (M3-T28, AC38, Q28): the killing hit picks the cabin or the arm that leaves first, the
 ## explosion starts at its joint and the others come away one at a time inside 1.2 s, each at the wreck's motion plus its kick.
 ## Runs the real main scene (free flight, so no waves); the wreck is stepped by hand.
@@ -41,15 +41,6 @@ func _new_main(scenario: String) -> Main:
 	instance.raider_pool_size = 3
 	instance.ally_pool_size = 4
 	return instance
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
-
-
-func _exec(line: String) -> ConsoleResult:
-	return DebugConsole.registry.execute(line)[0]
 
 
 func _spawn_ally(distance: float = 120.0) -> Combatant:

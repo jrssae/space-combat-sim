@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## The Starfury's break-up (M3-T08, AC7, architecture §15.7, §16 D35): a destroyed ally and the dead player both explode into the
 ## five Starfury chunks (the cabin and four arms) as pooled chunks drawing their textured meshes. The pool prepares two Starfury sets
 ## in every scenario, shared by allies and the player; a third simultaneous break-up gets one-shot chunks; an ally goes straight
@@ -45,15 +45,6 @@ func _new_main() -> Main:
 	instance.raider_pool_size = 3
 	instance.ally_pool_size = 4
 	return instance
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
-
-
-func _exec(line: String) -> ConsoleResult:
-	return DebugConsole.registry.execute(line)[0]
 
 
 func _pooled_nodes() -> int:

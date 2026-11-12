@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## The pause menu in flight (architecture §18, D57, Q15; AC2): Start opens it over the paused world with Resume, Restart,
 ## Settings, Controls and Quit to menu; the frame beside it shows the objectives (or free flight) and the pad's legend; the
 ## pad drives it with `ui_*` events. A recording stand-in for `Game` takes Restart and Quit.
@@ -26,11 +26,6 @@ func before_each() -> void:
 func after_each() -> void:
 	get_tree().paused = false
 	ControlProfiles.use(ControlProfile.DEFAULT_NAME)  # a test that rebinds leaves the project's map as it found it
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
 
 
 func _tap(action: StringName) -> void:

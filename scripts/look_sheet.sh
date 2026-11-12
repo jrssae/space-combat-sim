@@ -16,6 +16,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GODOT="${GODOT_BIN:-${ROOT}/.tools/godot/godot}"
 cd "${ROOT}"
+source "${ROOT}/scripts/lib_locks.sh"
 
 ASSET="${1:-starfury_aurora}"
 LABEL="${2:-m4_t30a_sheet_${ASSET}}"
@@ -30,7 +31,7 @@ fi
 mkdir -p "${OUT}"
 touch reports/.gdignore
 status=0
-flock /tmp/scs-gpu.lock timeout 900 "${GODOT}" --path . --resolution "${RES}" --fullscreen --disable-vsync \
+flock "${GPU_LOCK}" timeout 900 "${GODOT}" --path . --resolution "${RES}" --fullscreen --disable-vsync \
     -s res://scripts/look_sheet.gd -- asset="${ASSET}" out="${OUT_DIR}" distances="${SHEET_DISTANCES:-8,30,150,600}" \
     lights="${SHEET_LIGHTS:-lit,dark}" settle="${SHEET_SETTLE:-40}" scale3d=1080p \
     liveries="${SHEET_LIVERIES:-}" compare="${SHEET_COMPARE:-}" compare_label="${SHEET_COMPARE_LABEL:-T30A}" prefix="${SHEET_PREFIX:-m4_t30a}" \

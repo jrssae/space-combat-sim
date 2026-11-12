@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## The HUD (M2-T08, AC10): `HudLayout` agrees with a real `Camera3D.unproject_position` in both camera modes; the main scene
 ## runs with the HUD; the target box, lead and edge arrow follow a real selected raider; `settings.show_hud` shows and hides it;
 ## the debug overlay hides its own bracket while the HUD shows; `Targetable` reports hull and bounding radius.
@@ -22,11 +22,6 @@ func before_each() -> void:
 func after_each() -> void:
 	Settings.set_value(&"show_hud", _show_hud_backup)
 	get_tree().paused = false
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
 
 
 func _frames(n: int) -> void:

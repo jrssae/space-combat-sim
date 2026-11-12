@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## Running lights in play (M3-T27, AC36, AC37): on the real main scene. Every ship has its three markers at its generated hardpoints,
 ## built once; a patrol hides until it attacks, an attack wave does not; a pool ship starts as its new pilot wants; the player's toggle
 ## (a `UiCommand` edge), the HUD, the console and the wing; radar and AI lists are unmoved; the cockpit's red lamp stays on when the
@@ -33,11 +33,6 @@ func _start(scenario: String = ScenarioLoader.FREE_FLIGHT_PATH, raiders: int = 2
 	main.waves_auto_start = false
 	add_child_autofree(main)
 	await _ticks(2)
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
 
 
 func _collect(node: Node, type: Variant, out: Array = []) -> Array:

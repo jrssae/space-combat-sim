@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## SpaceEnvironment against the real scene, headless (architecture §3, §7.2, §17.19). There is no GPU here, so these tests cover
 ## wiring and values, not pixels. What the sky and the compositor look like is (H).
 ##
@@ -44,10 +44,6 @@ func _read_manifest() -> Dictionary:
 func _settle() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
-
-
-func _exec(line: String) -> ConsoleResult:
-	return DebugConsole.registry.execute(line)[0]
 
 
 func _collect(node: Node, out: Array) -> Array:

@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## AC28 on the real main scene (architecture §18.22, M5-T46): D-pad Right opens the comms menu on the radial framework and
 ## pauses the game; the right stick points, A sends the order through `WingDirector` once the game runs again, B backs out,
 ## D-pad Right closes it; while it is open the D-pad's flight actions and the target button do nothing, and nothing that was
@@ -213,11 +213,6 @@ func _point(deg: float) -> void:
 	for action: StringName in [InputAdapter.RADIAL_RIGHT, InputAdapter.RADIAL_LEFT, InputAdapter.RADIAL_UP, InputAdapter.RADIAL_DOWN]:
 		source.release(action)
 	await _ticks(1)
-
-
-func _ticks(n: int) -> void:
-	for _i: int in n:
-		await get_tree().physics_frame
 
 
 func _read(path: String) -> Variant:

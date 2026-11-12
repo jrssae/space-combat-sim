@@ -2204,6 +2204,21 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
 - **Done when:** the suite's totals are unchanged except the moved balance tests; CI is green on the push, with shard times
   in the Done notes.
 
+- **Done (as built, 2026-11-12):**
+
+  | L14 item | Outcome |
+  | --- | --- |
+  | `TestSteps` fixture for `_ticks`, `_exec`, `_console` | Done now: `tests/fixtures/test_steps.gd`; 54 test files (and one inner class) extend it and lost 41 + 11 + 10 copies in one pass. Two files whose `_ticks` meant something else were renamed (`test_m3_run`: `_wait_seconds`; `test_reaction_mass`: `_ticks_in`, the seconds-to-ticks one); the three files whose `_ticks(seconds)` returns a tick count, and the two that step the flight model directly, keep their own (a different signature). |
+  | `OLD_PATH_CASES` collapsed to one recording | Already done by M6-T18 (cherry-picked in 2c76787): `OLD_PATHS_CASE`, one recording. |
+  | Balance tests out of the default run | Already done by M6-T17: `tests/fixtures/balance_tests.gd`, `tests/balance_suite.txt`, `--balance`/`--full`; confirmed that `test_dogfight` and `test_m3_sandbox` do not run in the standard tier. |
+  | CI: Python tests in their own job, `assets/generated` cached | Done now: job `python` (`unittest discover`), `PYTHON_TESTS=0` on the three GUT shards; `assets/generated` restored on `assets-<os>-py3.12-hashFiles('tools/procgen/**')` in the Python job and the shards, `gen_assets.sh` only on a miss. The key covers T40's low/high civilian texture sets because they are generated from `tools/procgen`. |
+  | `run_tests.sh` smoke blocks through one helper | Done now: `main_run` in `scripts/lib_tests.sh` replaced 23 copies of the run, `cat`, exit-code check (the file lost about 190 lines). The expect/reject lines stay per block: they are the checks. Verified by running every smoke block (exit 0). |
+  | Lock paths in one place | Done now: `scripts/lib_locks.sh` (`GODOT_LOCK`, `BENCH_LOCK`, `GPU_LOCK`, each overridable) sourced by the seven scripts that hard-coded them. |
+
+  - **Totals:** no test added or removed. `--quick` GUT before and after: 111 scripts, 1 686 tests, all passing; the 56 touched
+    scripts run focused with `GUT_SLOW=1`: 740 tests, 8 091 asserts, all passing. Python untouched.
+  - **CI shard times:** see the line added after the push.
+
 ### M5-T39 Civilian colours and hull sheen
 
 - **Why (maintainer, 2026-11-08):** the civilian ships look much whiter than in the show, and every hull (the Starfury and the

@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## M3 end to end (M3-T12): one headless build runs the sandbox's fight with orders, lights, deaths and a replacement wingman, and the
 ## node counts the design promises stay fixed through it. The dogfight records AC13's AI time (Q10) and holds its resolver budget.
 
@@ -39,10 +39,6 @@ func _start(scenario_path: String = "") -> void:
 	await get_tree().physics_frame
 
 
-func _exec(line: String) -> ConsoleResult:
-	return DebugConsole.registry.execute(line)[0]
-
-
 func _count(node: Node, kind: Variant) -> int:
 	var n: int = 1 if is_instance_of(node, kind) else 0
 	for child: Node in node.get_children():
@@ -50,7 +46,7 @@ func _count(node: Node, kind: Variant) -> int:
 	return n
 
 
-func _ticks(seconds: float) -> void:
+func _wait_seconds(seconds: float) -> void:
 	var t0: float = SimClock.now()
 	while SimClock.now() - t0 < seconds:
 		await get_tree().physics_frame
@@ -84,9 +80,9 @@ func test_the_sandbox_plays_a_whole_fight_with_every_system_on() -> void:
 	# Every order, then the lights: the wing follows the player's.
 	for order: String in ["form", "cover", "engage"]:
 		assert_true(_exec("wing order %s" % order).ok)
-		await _ticks(1.0)
+		await _wait_seconds(1.0)
 	assert_true(_exec("running_lights off").ok)
-	await _ticks(1.0)
+	await _wait_seconds(1.0)
 	for member: Combatant in main.wings.player_wing().members():
 		assert_false(member.ship.running_lights, "%s follows the player's lights" % member.display_name)
 	assert_true(_exec("running_lights on").ok)
@@ -95,7 +91,7 @@ func test_the_sandbox_plays_a_whole_fight_with_every_system_on() -> void:
 	await get_tree().physics_frame
 	assert_eq(main.wings.player_wing().members().size(), 0, "a downed wingman leaves the wing")
 	assert_true(_exec("kill player").ok)
-	await _ticks(4.0)
+	await _wait_seconds(4.0)
 	assert_true(main.player_alive, "the player respawned")
 	assert_true(_exec("kill all").ok)
 	assert_true(_exec("wave next").ok)

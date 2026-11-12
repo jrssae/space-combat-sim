@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## The turret kernels on the core's rows (M4-T20, architecture §17.13): a gun's target pick, aim step and fire gate, an
 ## interceptor's pick, and a capital's strike target for its beams and missiles run natively over the rows, bit for bit with
 ## the GDScript stand-ins as they were recorded before M4-T37 removed them (`tests/fixtures/parity/turret_kernel.json`). The
@@ -172,11 +172,6 @@ func _mount_scene(mode: StringName = &"threaded") -> Dictionary:
 	var raider_b: Combatant = scene.ship(RAIDER, Factions.RAIDERS, "RAIDER B", Vector3(250.0, 120.0, -330.0))
 	scene.attach()
 	return {"scene": scene, "transport": transport, "mount": mount, "a": raider_a, "b": raider_b}
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
 
 
 static func _id(c: Combatant) -> int:

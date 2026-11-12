@@ -1183,6 +1183,13 @@ everything the script ran before plus `cargo test --release --lib`, with the slo
 runs only the files of `tests/balance_suite.txt` with `GUT_BALANCE=1` (`tests/fixtures/balance_tests.gd`: `test_dogfight`'s six-minute
 fight, `test_m3_sandbox`'s three waves, `test_turret_balance`); *full* is standard with the balance tests on. CI runs the standard tier.
 
+**Shared test steps (M5-T38).** `tests/fixtures/test_steps.gd` (`TestSteps`, extends `GutTest`) holds the helpers scene tests used to
+copy: `_ticks(n)` (n physics frames), `_exec(line)` (one console line) and `_console(line)` (the same, asserting a single
+statement). A test file that needs them extends `TestSteps`; a file with a different `_ticks` (seconds in, ticks out) keeps its own
+under another name. CI runs the Python tests in a job of their own (`PYTHON_TESTS=0` on the GUT shards) and both restore
+`assets/generated` from a cache keyed on `hashFiles('tools/procgen/**')`. The smoke blocks of `run_tests.sh` go through
+`main_run` (`scripts/lib_tests.sh`), and the lock paths of the real-renderer and bench scripts are in `scripts/lib_locks.sh`.
+
 ## 13. Coding conventions
 
 - GDScript 4, **statically typed everywhere** (`var x: float`, typed arrays, return types). Enable

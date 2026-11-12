@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## Ram damage in Jolt (M3-T04, AC4, architecture §16 D32): two Starfuries meeting at 4 m/s closing take no damage; at 30 m/s
 ## each loses at least half its hull, once per contact; at 600 m/s (10 m per tick) both are destroyed and neither passes through
 ## the other unhurt, over 50 seeded offsets where the hulls overlap by at least 0.3 m on the pass; a ship ramming a buoy at
@@ -68,11 +68,6 @@ func _starfury(spec: ShipSpec, display: String, is_player: bool, at: Vector3) ->
 	})
 	world.spawn(combatant.ship, world.to_universe(at), Basis.IDENTITY if is_player else FACING_ALPHA)
 	return combatant
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
 
 
 func _place(combatant: Combatant, position: Vector3, basis: Basis, velocity: Vector3) -> void:

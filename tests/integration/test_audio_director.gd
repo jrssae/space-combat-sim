@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## AudioDirector (M2-T12, AC14): the generated sounds load and play headless without errors; a hit, a shot and an explosion
 ## each make a sound; the 3D voice pool never exceeds 16 (the oldest voice is stolen); the hull warning repeats below 25 %;
 ## `sfx_volume` sets the SFX bus; the console surface works. The engine voices (M5-T19) are in test_engine_audio.gd.
@@ -24,11 +24,6 @@ func after_each() -> void:
 	Settings.set_value(&"sfx_volume", _volume_backup)
 	DebugConsole.flags.invulnerable = false
 	get_tree().paused = false
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
 
 
 ## The 3D voices now playing `sound_name`.

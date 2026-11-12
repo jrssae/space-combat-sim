@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## The benchmark harness on the real main scene (M4-T01, AC1): the `perf` provider shows the last tick's stages, and `bench
 ## <layout> <n> [seconds]` flies a layout from the pools, measures it and writes `summary.json` and `summary.md`. Only that the
 ## numbers are there and add up is checked, never what they are: timings on this machine are the sweep's job
@@ -27,15 +27,6 @@ func after_each() -> void:
 	DebugConsole.flags.invulnerable = false
 	ContactScan.invalidate()
 	Factions.reset()
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
-
-
-func _exec(line: String) -> ConsoleResult:
-	return DebugConsole.registry.execute(line)[0]
 
 
 func _read(path: String) -> Variant:
