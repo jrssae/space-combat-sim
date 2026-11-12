@@ -3898,10 +3898,31 @@ scenes, not as a saving. FSR 1.0 and bilinear save 1.4 to 3.8 ms of GPU at 6K. T
 scene would change that, and the setting is ready for it.
 ## 18. Mission framework and front end (M5)
 
-What M5 adds to §1-§17 (tasks in `docs/milestones/m5-mission-framework-and-front-end.md`). M4's §17 joined `m5` with the merge
-of `main` on 2026-11-07 (M4 through T22); its language split and threading rules (§17.13, `CLAUDE.md`) bind M5's per-tick work
-too. Every earlier rule still holds; task ids below are M5 tasks. Decision
+What M5 adds to §1-§17 (tasks in `docs/milestones/m5-mission-framework-and-front-end.md`). M4's §17 joined `m5` in two merges
+of `main` (2026-11-07, M4 through T22; 2026-11-08, the rest, after M4 was accepted); its language split and threading rules
+(§17.13, `CLAUDE.md`) bind M5's per-tick work too. Every earlier rule still holds; task ids below are M5 tasks. Decision
 numbers start at D50 (D46-D49 are M4's).
+
+The subsections were written task by task, so here is where each part of M5 is described and what a later task replaced:
+
+| Part | Read | Replaced or changed by |
+|---|---|---|
+| Boot, `Game`, loading | D50, §18.3 | - |
+| Menu kit, front end, pause menu | D57, §18.6 | the root lists and the settings entry points: §18.28 (T45); the view behind the pause menu: §18.27 (T42) |
+| Settings and controls menus, audio buses | §18.31 | their grouping: §18.28 |
+| Missions, triggers, objectives | D51, D52, §18.5 | - |
+| Dialog and the comms panel | D53 | - |
+| Comms menu | §18.22 | D54's D-pad picking, plate and timer are gone |
+| Cinematics and locked controls | D55, §18.8 | - |
+| Debrief | D56, §18.7 | - |
+| The demo mission | §18.15 (Civilian escort) | §18.9 (Buoy defence) is removed from the game |
+| Civilian ships, turrets, colours, surfaces | §18.10, §18.11, §18.14, §18.30 | the turret's first strength in §18.10: §18.11 |
+| Encounters | §18.12 | - |
+| Asteroids, belts, rock rams | §18.13, §18.16 | - |
+| Target menu, preview, focus pull | §18.19, §18.20, §18.21 | - |
+| Sound pass | §18.32, §18.26 | - |
+| Performance block (L1 to L13) | §18.17, §18.18, §18.23, §18.24, §18.25, §18.29 | - |
+| Tests and CI (L14) | §12 ("Shared test steps"), §18.33 | - |
 
 ### 18.1 Decisions
 
@@ -3914,7 +3935,7 @@ numbers start at D50 (D46-D49 are M4's).
 | D54 | The comms menu on D-pad Right (T07; the D-pad picking, the plate view and the timer are superseded by §18.22, T46). New action `comms_menu`: D-pad Right and Ctrl (the left hand's last free key; keys 1-4 stay the wing orders, 5 the lights). `CommsMenu` (pure, `src/hud/comms_menu.gd`) holds pages of up to four `{label, payload}` entries, one per D-pad direction (up, right, down, left), a 4 s close timer on sim time, and `push_page` / `pop_page` so a later mission can push a page of replies (M5 builds none). Page one is the wing orders, payload an `AiContext.Order`, in the order of keys 1-4. `Main` owns the model and a `CommsMenuView` (`CanvasLayer` 42, a plate at the left edge, vertically centred: free of the roster and acknowledgements top-left and top-right, the gauges at the bottom and the subtitles at bottom centre), opens it on `UiCommand.comms_open`, and calls `WingDirector.give_order` for a pick, the call keys 1-4 make. A pick closes the menu. `Main` tells `InputAdapter.comms_open`; while set, the adapter turns the D-pad's four actions into `UiCommand.comms_pick` 0-3 and either B button into `comms_close`, and reports no assist, next-weapon, lights or target-cycle edge (a B press held through the close taps nothing when released). The timer is stepped with the physics tick, so it stops behind the pause menu; the pause edge and the player's death close the menu. A profile saved before M5 gets `comms_menu` from `default` when it loads (D36's fill); `m1_classic` keeps its D-pad rolls and has Ctrl alone (`ControlProfile.KEYBOARD_ONLY`) | The pad gets the wing orders without a new button, and one adapter rule keeps every D-pad action quiet while the menu is up |
 | D55 | The `CINEMATIC` camera and locked controls (T08). A shot is data in the scenario's `cinematics: {<shot_id>: {keys: [{t, position, look_at, fov?}]}}`; a point is `{actor, offset?}` (metres in that actor's frame, -z its nose) or `{origin: [x, y, z]}` (a universe offset from the scenario origin, 64-bit); `fov` defaults to 70°. `CinematicShot` (pure) reads and checks a shot and gives the pose at a time from the actors' poses handed in each frame: Catmull-Rom on positions with the key times (Godot's `cubic_interpolate_in_time`, mirrored at the ends), the look-at point and the field of view eased key to key (smoothstep), up the world's +y. It keeps nothing between calls, and `CameraRig`'s `CinematicCamera` is `top_level` in `world_shiftable` with interpolation off, so a rebase mid-shot moves nothing on screen. The rig's `play_shot` switches to `CINEMATIC` (only a shot does; `camera_default` keeps chase and cockpit), clocks the shot on physics ticks and goes back to the mode it left when the shot ends or `stop_shot` cuts it; a mode asked for during a shot is the one it goes back to. Main hides the HUD (`Hud.cinematic`) and slides in the `Letterbox` (layer 39, under the comms panel) while the camera is cinematic. `ControlLock` (pure) zeroes the player's `FlightCommand` and `CombatCommand` during a shot or while `MissionApi.controls_locked` is set (the ship drifts on; assist stays as set), holds the wing orders (keys 1-4, the comms menu's opening and picks; Main closes the menu), and during a shot reads Start or a fresh A press as a skip; the A that skipped does not fire until released. `m.cinematic` plays the shot through `MissionStage` and resolves at its end, on a player skip or a `mission skip` (which cuts it), or when the mission ends; a bad shot stops the mission from starting | Shots as data relative to actors read like direction and survive ships moving; a stateless pose is rebase-proof without bookkeeping; zeroing commands, not physics, keeps the world honest during a shot |
 | D56 | The debrief (T09). When a mission ends, `MissionRunner` asks `DebriefRecorder` for the result with the player's counters (`MissionApi.result` plus `kills` and `assists` from `WaveDirector.credit`, the `KillCredit` of §15.10, and `shots_fired`, `shots_hit` and `wing_losses` from the pure `MissionTally`) and gives it to `Game.end_mission`, which moves the flow to `DEBRIEF` only for a run the flow started as a `mission` (anything else keeps the result and shows nothing). After a short beat the runner calls `Game.show_debrief`, which `GameFlow.debrief_problem` guards (state `DEBRIEF`, a mission request, a result: a debrief with no mission never opens) and which replaces Main with `src/frontend/debrief_screen.tscn`: the sky and a `MenuFrame` (D57) whose `DebriefPage` offers **Retry** (`Game.retry`: the same scenario, encounters and seed through the loading screen) and **Front end** (`Game.show_front_end`), with the whole debrief on the right. `DebriefModel` (pure) turns the result into that panel and into the console's `debrief` provider | The result carries everything, so the debrief needs nothing from the Main it replaces; the menu kit and the one flow serve retry and the way out without a new path |
-| D57 | The front end, the pause menu and the three-panel frame (T02). `MenuFrame` (`menu_frame.tscn`) is the one layout of Q15: the options top left (a scroll container), the controller diagram with what each button does bottom left, the objectives right. It holds a stack of `MenuScreen` pages (the D-pad and left stick walk Godot's `ui_*` focus, A accepts, B goes back; arrow keys, Enter, Esc and the mouse work too) and reads three providers: `bindings_source` (a `ControlProfile`; unset, the InputMap as it is now, so a rebind shows at once), `objectives_source` (`Array[Dictionary]`, the `ObjectiveBook.snapshot()` shape) and `request_source` (`Game`'s request). `PadLegend` (pure) maps each pad descriptor of the profile to a part of the pad and the menu's word for the action; `PadDiagram` draws the pad in code, no image. The right panel shows the page's own content (a mission's briefing), else the objectives, else the run (`Free flight`, `Encounters: on|off`), else nothing (`ObjectivesModel`, pure). The front end is the sky (the camera sways about the nebula view) behind a frame whose root page is Missions, Free flight, Sandbox, Settings, Controls and Quit; the pause menu (`src/hud/pause_menu.tscn`, a `CanvasLayer` that always processes, created by `Main`) opens on the `pause` edge, pauses the tree and offers Resume, Restart, Settings, Controls and Quit to menu. Missions are the scenarios with a `mission` block (`MissionCatalog`, through `ScenarioLoader`); Settings and Controls are placeholders from `MenuScreens` until T03 and T04 return their pages from there | One layout for the pause menu, settings and controls screens, and providers so the mission core and the controls screen plug in without touching the frame |
+| D57 | The front end, the pause menu and the three-panel frame (T02). `MenuFrame` (`menu_frame.tscn`) is the one layout of Q15: the options top left (a scroll container), the controller diagram with what each button does bottom left, the objectives right. It holds a stack of `MenuScreen` pages (the D-pad and left stick walk Godot's `ui_*` focus, A accepts, B goes back; arrow keys, Enter, Esc and the mouse work too) and reads three providers: `bindings_source` (a `ControlProfile`; unset, the InputMap as it is now, so a rebind shows at once), `objectives_source` (`Array[Dictionary]`, the `ObjectiveBook.snapshot()` shape) and `request_source` (`Game`'s request). `PadLegend` (pure) maps each pad descriptor of the profile to a part of the pad and the menu's word for the action; `PadDiagram` draws the pad in code, no image. The right panel shows the page's own content (a mission's briefing), else the objectives, else the run (`Free flight`, `Encounters: on|off`), else nothing (`ObjectivesModel`, pure). The front end is the sky (the camera sways about the nebula view) behind a frame whose root page is Missions, Free flight, Sandbox, Settings, Controls and Quit; the pause menu (`src/hud/pause_menu.tscn`, a `CanvasLayer` that always processes, created by `Main`) opens on the `pause` edge, pauses the tree and offers Resume, Restart, Settings, Controls and Quit to menu. Missions are the scenarios with a `mission` block (`MissionCatalog`, through `ScenarioLoader`); Settings and Controls were placeholders from `MenuScreens` until T03 and T04 returned their pages from there (§18.31). **Changed by T45 (§18.28):** the front end's root is New game, Load game, Free flight, Settings, Quit with no pad diagram or right panel, the pause menu is Resume, Restart, Settings, Quit to menu, and Controls is a group inside Settings | One layout for the pause menu, settings and controls screens, and providers so the mission core and the controls screen plug in without touching the frame |
 
 ### 18.2 Layout additions
 
@@ -3925,7 +3946,14 @@ src/frontend/boot.tscn|.gd               the project's main scene: hands the com
 src/frontend/loading_screen.tscn|.gd     shown while main.tscn loads on a thread (T01)
 src/frontend/front_end.tscn|.gd          the sky with a slow drift and the main menu in a MenuFrame (T01 placeholder, T02)
 src/frontend/menu_frame.tscn|.gd, menu_screen.gd, theme.tres   the three-panel frame, the base page, the one Theme (T02)
-src/frontend/choice_list_screen.gd, mission_select.gd, sandbox_select.gd, free_flight_select.gd, placeholder_screen.gd, menu_screens.gd   the pages (T02)
+src/frontend/choice_list_screen.gd, free_flight_select.gd, placeholder_screen.gd, menu_screens.gd   the pages (T02)
+src/frontend/new_game_select.gd, settings_groups_screen.gd   missions then sandbox scenes; the five settings groups (T45; they
+                                 replaced T02's mission_select.gd and sandbox_select.gd)
+src/frontend/settings_screen.tscn|.gd, settings_menu_model.gd   a settings page built from the schema; its pure model (T03)
+src/frontend/controls_screen.tscn|.gd, controls_model.gd, binding_capture.gd   profiles and rebinding; the pure model and capture (T04)
+src/audio/audio_buses.gd, default_bus_layout.tres   Master, SFX, UI, Comms and their volumes (T03)
+tests/unit/test_settings_schema.gd, test_settings_menu_model.gd, test_settings_groups.gd, test_controls_model.gd,
+  tests/integration/test_settings_screen.gd, test_controls_screen.gd   (T03, T04, T45)
 src/frontend/pad_legend.gd, pad_diagram.gd, objectives_model.gd, objectives_panel.gd, mission_catalog.gd   legend, diagram, right panel, mission list (T02)
 src/hud/pause_menu.tscn|.gd              the pause menu, created by Main (T02)
 tools/procgen/assets/sfx_ui.py           `ui_move`, `ui_accept`, `ui_back` (T02)
@@ -3946,7 +3974,9 @@ src/input/control_lock.gd   zeroes the player's commands during a shot or a lock
 src/hud/letterbox.gd   the cinematic's black bars (T08)
 tests/unit/test_cinematic_shot.gd, test_control_lock.gd, test_mission_cinematic.gd, tests/integration/test_cinematic_camera.gd, tests/fixtures/missions/test_cinematic.json|.gd   (T08)
 tests/unit/test_triggers.gd, test_objective_book.gd, test_mission_sequencer.gd, tests/integration/test_mission_runner.gd, test_mission_skip.gd   (T05)
-src/world/buoy_ring.gd   nav buoys evenly on a ring: positions, names, how many a point hears, pure (T10)
+src/mission/dialog_book.gd, dialog_queue.gd, src/hud/comms_panel.gd, comms_layout.gd, data/dialog/speakers.json   lines as
+                                 data, the one-line queue (pure), the subtitle panel (T06)
+tests/unit/test_dialog_book.gd, test_dialog_queue.gd, test_dialog_ids.gd, test_comms_layout.gd, tests/integration/test_comms_panel.gd   (T06)
 data/scenarios/civilian_escort.json, data/missions/civilian_escort.gd, data/dialog/civilian_escort.json   the Civilian escort
                                  mission (T30; it replaced T10's Buoy defence, whose files and the buoy ring are gone)
 tests/integration/test_civilian_escort.gd   (T30)
@@ -3957,7 +3987,18 @@ tests/unit/test_belt_layout.gd, tests/integration/test_asteroid_belt.gd, data/sc
 src/hud/feature_edges.gd, feature_edge_job.gd, wire_framing.gd, target_preview_layout.gd, src/targeting/target_preview_model.gd   pure (T43)
 src/hud/wire_preview.gd, target_preview.gd, assets/shaders/wire_solid|wire_lines|wire_outline.gdshader   the preview's viewport and panel (T43)
 tests/unit/test_feature_edges.gd, test_wire_framing.gd, test_target_preview_model.gd, tests/integration/test_target_preview.gd   (T43)
+src/hud/radial_menu.gd, radial_layout.gd, radial_menu_view.gd   the radial framework (T25)
+src/targeting/target_menu.gd, target_categories.gd, target_menu_director.gd, src/hud/hud_waypoint.gd   the target menu (T25)
+tests/unit/test_radial_menu.gd, test_target_menu.gd, test_target_categories.gd, tests/integration/test_target_menu.gd   (T25)
+src/hud/focus_pull.gd, focus_pull_view.gd, assets/shaders/focus_pull.gdshader, tests/unit/test_focus_pull.gd   (T44)
+src/hud/comms_menu.gd, comms_menu_director.gd, tests/unit/test_comms_menu.gd, tests/integration/test_comms_menu_input.gd   (T07, T46)
+src/camera/pause_orbit_path.gd, tests/unit/test_pause_orbit_path.gd   the pause backdrop's path, pure (T42)
+src/audio/engine_voices.gd, tests/unit/test_engine_voices.gd, test_voice_query.gd, tests/integration/test_engine_audio.gd   (T19, T28)
+tests/fixtures/test_steps.gd   the scene tests' shared steps (T38, §12)
 ```
+
+The turrets', civilians', encounters' and native files are listed in their own subsections (§18.10 to §18.12, §18.23 to
+§18.26, §18.29, §18.30).
 
 ### 18.3 Boot, scene changes and the console's startup scripts
 
@@ -3991,12 +4032,23 @@ tests/unit/test_feature_edges.gd, test_wire_framing.gd, test_target_preview_mode
 | `debrief` | Game (T09) | `result` (`success`, `failure`), `reason`, `time` (`m:ss`), `kills`, `assists`, `wing_losses`, `shots_fired`, `shots_hit`, `accuracy` (`45%` or `no shots fired`), `objectives` (`id state, ...`); every key `none` until a mission ends |
 | `camera` | CameraRig (M1; T08 adds) | `mode` now also reads `cinematic` while a shot plays (setting it then picks the view after the shot), `shot` (the shot's id or `none`), `shot_time_s` |
 | `encounters` | EncounterDirector (T17), free flight only | `on`, `pools_built`, `seed`, `interval_s`, `max_ships`, `alive`, `raiders`, `patrol`, `traffic`, `next_index`, `next_in_s`, `waiting`, `started`, `released`, `last_event`, `check_work`, `build_ms` |
-| `pause_menu` | PauseMenu (T02) | `open`, `page` (the title of the page on top: `PAUSED`, `Settings`, `Controls`), `depth` (pages open, 1 is the pause list) |
+| `pause_menu` | PauseMenu (T02) | `open`, `page` (the title of the page on top: `PAUSED`, `Settings`, a group's name, `Controls`), `depth` (pages open, 1 is the pause list) |
+| `dialog` | CommsPanel (T06), only while a mission runs | whether a line shows, its id, callsign and text, lines queued, time left, lines shown |
+| `belts` | Main (T29) | `count`, `rocks`, `spheres`, `draw_groups` |
+| `target_menu` | TargetMenuDirector (T25) | open, the ring and its entries, the highlight, the target and waypoint as the HUD names them, the last pick, `focus` (T44) |
+| `comms_menu` | CommsMenuDirector (T46) | open, the page, the highlight, the ring's entries, orders picked, the last order, why it last closed |
+| `audio` | AudioDirector (M2; M5 adds) | `engine_voices`, `engine_sounding`, `engine_frame_work`, `engine_rank_work` (T19, T28), `shots_culled` (T37) |
 | `target_preview` | TargetPreview (T43) | `visible`, `entity`, `kind` (`none`, `ship`, `beacon`, `objective`, `unknown`), `hull` (the asset drawn, `+n pods`), `edges`, `building`, `rendering`, `lines`, `flag`, `cache`, `last_build_ms`, `last_build_slice_ms`, `last_build_frames`, `shows`, `frame_ms` |
 
 Commands: `retry` (T09: in the debrief, play the same mission again, same scenario and seed, through the loading screen; refused anywhere else); `menu` (back to the front end); `play <scenario_id> [seed]` (any `data/scenarios/*.json`, through the loading screen
 as the menu does; seed 0 by default, encounters off). Setting: `skip_front_end` (bool, false). Command line: `--scenario=<id>`
-(goes straight to Main with that scenario for the session). T05: `mission [status|skip|goto <step>|objectives|journal]`, registered only while a mission runs (elsewhere `mission` is an unknown command); a bad action, `goto` without a step or with an unknown or past one, and a step given to anything but `goto` are refused. T43: `targetmenu highlight <entry>` points at an entry of the open ring without picking it.
+(goes straight to Main with that scenario for the session). T05: `mission [status|skip|goto <step>|objectives|journal]`, registered only while a mission runs (elsewhere `mission` is an unknown command); a bad action, `goto` without a step or with an unknown or past one, and a step given to anything but `goto` are refused. T43: `targetmenu highlight <entry>` points at an entry of the open ring without picking it. T25 and T46: `targetmenu` and `commsmenu` (`open|pick <entry>|highlight <entry>|back|close`); T42: `pausemenu [on|off]`; T17: `encounters` (§18.12).
+
+`info.md` at the repository root is the full list of commands and providers, held to the game by
+`tests/integration/test_console_command_list.gd`; the keys above are the ones a script is likely to read. M5's settings:
+`skip_front_end`, `encounters`, `encounter_interval_s`, `encounter_max_ships` (§18.12), `master_volume`, `sfx_volume`,
+`ui_volume`, `comms_volume`, `engine_voice_cap` (§18.31, §18.32), `target_hold_s`, `target_menu_blur` (§18.19, §18.21),
+`pause_backdrop`, `pause_backdrop_loop_s` (§18.27), `hull_sheen`, `ambient_level` (§18.14) and `texture_detail` (§18.30).
 
 ### 18.5 Missions as built (T05)
 
@@ -4034,7 +4086,8 @@ as the menu does; seed 0 by default, encounters off). Setting: `skip_front_end` 
 - **Wingmen's names.** A replacement from `WingDirector.replenish` flies under the lost wingman's callsign, so a `destroyed` on
   wing names is only safe as an objective's `fail` with `all` false (Civilian escort's `home`): it fails at the loss, before any
   replacement, and failure is final. A success trigger or an `until` on wing names could be satisfied, or undone, by a
-  replacement. Buoy defence also pools exactly its three wingmen and runs no waves (which replenish), so no replacement comes.
+  replacement. Civilian escort pools exactly its one wingman and runs no `WaveDirector` waves (which replenish), so no
+  replacement comes.
 - **Left for later.** `cinematic` and the control lock are T08's (§18.8); the debrief screen is T09's (§18.7).
 
 ### 18.6 Front end and pause menu as built (T02)
@@ -4048,12 +4101,12 @@ as the menu does; seed 0 by default, encounters off). Setting: `skip_front_end` 
   the list that closes the menu. In the front end Esc and B both go back.
 - **Sounds.** `AudioDirector` loads `sfx_ui` (`ui_move` on a focus move, `ui_accept` on a press, `ui_back` on going back) and plays it
   with `play_ui`; its UI voices always process, so the sounds play behind the paused World. The front end carries an `AudioDirector`
-  of its own. The gain is `sfx_volume` until T03's `ui_volume` bus.
+  of its own. They play on the UI bus at `ui_volume` (T03, §18.31).
 - **Objectives.** `Main` sets `pause_menu.objectives_source` to its `objectives()` (`ObjectiveBook.snapshot()`, empty outside a mission), so the right panel lists the running mission's objectives with a mark per state and `(optional)` on the secondary ones.
 - **Behind the menu.** While the menu is open `Main._physics_process` calls `InputAdapter.sample_menu` instead of `sample`: only the pause edge is read, every other button is re-seeded from what is held and the mouse and wheel are drained, so Back, Y, D-pad left and X (and T03's D-pad sliders) move the menu and do nothing in the game, and nothing fires when the menu closes. Closing drops the menu's pages (no hidden button keeps the focus), and a page with no focus takes it back on the next D-pad or A press.
 - **Resume.** `Main` re-seeds the adapter's edges when the menu closes (`InputAdapter.resync_edges`), so the button that closed it (B is also the target button) does not also tap a target when it is released.
 - **Missions.** `MissionCatalog.entries(dir, read)` lists the scenario files whose loader result has a non-empty `mission` block (its
-  `title`, else the id made readable, and `briefing`). No shipped scenario has one until T10; the page then says "No missions yet".
+  `title`, else the id made readable, and `briefing`). Civilian escort is the one shipped mission; with none the page says "No missions yet".
 - **Free flight.** `encounters` lives in `Game`'s request (the menu starts it from `Settings.encounters`; `play` and boot keep it
   off); T17 (§18.12) added the setting and a fresh session seed for each menu start. Restart is `Game.restart()`: the request that started the run, else the scenario setting.
 - **Loading.** Leaving the loading screen mid-load collects the threaded request; a failed load is collected too. `Game` refuses a scene
@@ -4514,9 +4567,9 @@ when it closes, so the menu and the target preview are the only sharp things.
 | `FocusPullView` | `CanvasLayer` 44 | one full-screen `ColorRect` with `focus_pull.gdshader`: a mip of the screen read with nine taps, and a dim |
 
 `RadialMenuView.set_showing` opens and closes the pull; the view creates it as its own sibling, so it eases back after the view
-hides, and each radial menu (the target menu, later the comms menu) carries it. It runs on real frame time, since the tree is
-paused: `delta / Engine.time_scale` with process mode always. Layer 44 is above the HUD (40) and comms menu (42) and under the
-menu and `TargetPreview` (45); the console, debug overlay (50) and pause menu (60) stay sharp. At rest the layer is hidden and
+hides, and each radial menu (the target menu, and the comms menu since T46) carries it. It runs on real frame time, since the tree is
+paused: `delta / Engine.time_scale` with process mode always. Layer 44 is above the HUD (40) and the comms panel's subtitles (41) and under the
+radial menus and `TargetPreview` (45); the console, debug overlay (50) and pause menu (60) stay sharp. At rest the layer is hidden and
 does not process; `settings.target_menu_blur` (0 to 1, default 0.35) scales the radius (up to 3 mip levels) and dim (up to
 35 %), and 0 never shows it. T25's fixed 25 % dim is gone. Console: `target_menu.focus`.
 
@@ -4734,3 +4787,53 @@ manifest mesh.surfaces[].detail.low = { albedo, normal, orm }      settings.text
   civilian writers pass it off and compute no `plating_for`.
 - **Cost.** No triangles and no change to video memory (one set is bound); three more PNGs a hull on disk and a second bake
   (a Saturn builds in about 60 s instead of 40 s).
+
+### 18.31 The settings and controls menus and the audio buses as built (T03, T04)
+
+```
+SettingsSchema        every entry has a category; `menu: false` hides debug and tuning switches (test: no entry without one)
+SettingsMenuModel     pure: a toggle, slider or option list per entry, unsaved rows marked `*`
+SettingsScreen        Apply, Revert, Defaults, Back -> Settings.save, revert, reset; the entry's description on the right
+ControlsModel         pure: the profile list (built-in and saved) and each action's bindings (InputAdapter.ACTIONS only)
+BindingCapture        pure: the next pad button, stick direction, key or mouse button is the binding; B, Esc or 6 s cancels
+ControlsScreen        profile picker, add | replace | unbind, save as; every refusal from ControlProfiles shown with its reason
+default_bus_layout    Master -> SFX, UI, Comms; AudioBuses applies master_volume, sfx_volume, ui_volume, comms_volume live
+```
+
+- **One page per group.** T45 (§18.28) opens a `SettingsScreen` per group instead of one long page; the model and the
+  screen are unchanged.
+- **A press binds and does nothing else.** While the controls page waits, the press is swallowed; after a bind B has a
+  0.35 s grace, so the pause action from the same press does not close the page. `MenuScreen.back_step` lets B step back
+  inside the page before it leaves it.
+- **`ui_*` stay.** Only `InputAdapter.ACTIONS` are listed and applied, so no change the page makes can unbind the menus.
+- **Buses.** Menu sounds play on UI, the radio squelches on Comms, everything in the world on SFX.
+
+### 18.32 The sound pass as built (T18, T19, T28, D60)
+
+```
+tools/procgen/assets/sfx_combat.py   pulse_fire, raider_fire, turret_fire, hit_hull, explosion, main_burst, rcs_burst
+tools/procgen/core/audio.py          fm, hold_and_cut, hold_and_release, shaped_periodic_noise
+src/audio/engine_voices.gd           EngineVoices, pure: which pod and jet cluster sounds, the cap, the envelopes
+native/src/voice_kernels.rs, voice_rows.rs   ScsSimCore.ships_near(centre, radius): rigid ships near a point, nearest first
+```
+
+- **Guns and impacts (T18).** A click, then an FM cluster held flat and cut (`pulse_fire` 105 ms, `raider_fire` 150 ms,
+  lower and buzzier); `hit_hull` is FM whose brightness dies faster than its level. All are designed at the written
+  reference's frequencies and played at a quarter of them (`GUN_PITCH`, M3's register). The Python tests pin length, the
+  flat hold, constant pitch, the energy band and the inharmonic partials.
+- **Engines (T19).** The old loops are gone. `main_burst` and `rcs_burst` are seamless noise loops with nothing to speak of
+  below 300 Hz. Every ship has a voice per pod at the nozzle that fires harder; the player's ship also has one per RCS
+  cluster (jets grouped by their side of the centre of mass). `engine_voice_cap` (24) grants the player's voices first,
+  then whole ships nearest first within 1.5 km; the frame touches only granted voices.
+- **The re-rank (T28).** Four times a second the director asks the core for the ships near the listener and offers them
+  until the cap is spent, so its work follows the ships in earshot, not the ships in play. The rows are the tick's, so a
+  candidate's node is checked before it is offered. Without a core only the player's voices sound.
+- **Culling (T37)** is §18.26.
+
+### 18.33 Tests and CI as built (T38, L14)
+
+`TestSteps` (`tests/fixtures/test_steps.gd`, §12) holds the steps the scene tests share. `scripts/run_tests.sh` has four tiers:
+`--quick` (iteration, not a gate), `--standard` (the gate and CI: the slow files, no balance tests), `--balance` and `--full`.
+Each starts with the import, since the compile check and GUT know a new `class_name` only after it (T20). The smoke runs go
+through `main_run` in `scripts/lib_tests.sh`; the lock paths are in `scripts/lib_locks.sh`. CI runs the Python tests in a job of
+their own and the GUT files in three shards, with `assets/generated` cached on a hash of `tools/procgen`.

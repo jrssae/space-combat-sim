@@ -39,7 +39,7 @@ RT / LT       right / left main pods (analog)        RB / LB     right / left re
 Right stick   up/down: pitch (stick back = nose up)   Left stick  strafe left/right, up/down
               left/right: yaw;  the four diagonals: roll toward the side you lean (up-right or down-right = roll right)
 D-pad Up      flight assist on/off                   D-pad Down  fire mode
-D-pad Left    running lights on/off (key 5; the HUD says LIGHTS ON or OFF, and your wingmen follow)     D-pad Right  free
+D-pad Left    running lights on/off (key 5; the HUD says LIGHTS ON or OFF, and your wingmen follow)     D-pad Right  comms menu (M5)
 B             tap: nearest enemy (again: the 2nd nearest)   hold (about 0.35 s): the target menu (see "Target menu", M5)
 X (toggle)    auto-track on/off: the nose swings onto the lead reticle of the selected target and follows it as it moves
               (with none selected it takes the nearest hostile; it switches itself off when none is left); your speed and
@@ -71,7 +71,7 @@ Backspace     respawn                                 Esc         pause (also fr
 ```
 
 No flight key sits right of G and B: pitch and yaw are the mouse (or the pad). Previous target and "nearest the nose" have no
-keys of their own since M5 (the wheel cycles; `bind target_ahead key:H` gives the second one back). Ctrl is free, and keys 1-4 are the wing orders and 5 the
+keys of their own since M5 (the wheel cycles; `bind target_ahead key:H` gives the second one back). Ctrl opens the comms menu (M5), and keys 1-4 are the wing orders and 5 the
 running lights. Caps Lock is read as a held key (down = roll left); if your desktop turns it into a toggle, tell the
 maintainer (the fallback is Ctrl). Your own saved control profiles keep the keys they had: `controls use default` in the console
 loads layout B.
@@ -137,7 +137,7 @@ spawn raider aggro 3000    a raider that patrols dark and lights up when it atta
 
 ### Control profiles
 
-Alternate layouts live in saved profiles you switch from the console (a controls menu comes with M5). Two are
+Alternate layouts live in saved profiles you switch from the console or from Settings, Controls (M5). Two are
 built in and read-only: `default` (the layout above) and `m1_classic` (the original M1 pad layout: right stick X
 yaws, D-pad Left/Right rolls, D-pad Up targets, B toggles assist; keyboard and mouse as in `default`).
 
@@ -608,10 +608,30 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
 
 # Play-testing M5 (Missions and Front End)
 
+How to start and what is new come first; everything for you to judge is in one list at the end, "M5 acceptance checklist".
+
+## Start and the menus
+
+```
+.tools/godot/godot --path .                                  # the start screen
+.tools/godot/godot --path . -- --scenario=civilian_showcase   # straight into a scene, as scripts and tests start
+```
+
+- **Start screen:** New game (Civilian escort, then the sandbox scenes), Load game (greyed out), Free flight (encounters on
+  or off), Settings, Quit. A loading screen shows while the scene builds its pools.
+- **Menus on the pad:** D-pad or left stick moves, A accepts, B goes back a page. Arrow keys, Enter, Esc and the mouse work too.
+- **Settings:** Gameplay, Controls, Camera & HUD, Video, Audio. A changed row shows `*` until Apply; Revert and Defaults undo.
+  Controls picks a profile and rebinds: choose an action, then press the button, stick direction, key or mouse button for it
+  (B, Esc or 6 s cancels); a refused binding says why. Audio has four volumes: master, effects, menus, radio.
+- **In flight, Start** pauses and opens Resume, Restart, Settings, Quit to menu, with the pad's bindings bottom left and the
+  mission's objectives on the right. Behind it the camera circles your ship (`settings.pause_backdrop`).
+- **Debrief:** after a mission, the result with why, the objectives, time, kills and assists, wing losses, shots and hits.
+  Retry flies the same mission and seed again; Front end goes back to the start screen.
+
 ## Civilian escort (M5-T30; replaced Buoy defence)
 
-Start the game windowed (`.tools/godot/godot --path .`), choose **Missions**, then **Civilian escort**. The briefing shows on the
-right while it is focused. Each start from the menu draws a new seed, and with it a different civilian ship (any of the nine hulls;
+Start the game windowed (`.tools/godot/godot --path .`), choose **New game**, then **Civilian escort**. The briefing shows under
+the list while it is focused. Each start from the menu draws a new seed, and with it a different civilian ship (any of the nine hulls;
 **Retry** on the debrief keeps the ship). From the console, `play civilian_escort <seed>` picks the seed (seed 5 is the Skylark).
 
 - **The intro.** The mission opens on the civilian beside NAV ALPHA with the belt somewhere ahead, then cuts to you and ALPHA 2
@@ -628,18 +648,9 @@ right while it is focused. Each start from the menu draws a new seed, and with i
   fast-forwards the step; `mission journal` lists what happened. `ai "<civilian name>"` shows whether it flies its route
   (`follow_path`) or runs (`retreat`).
 
-Check (AC18, this mission's part):
-
-- [ ] The intro reads well: the civilian at the buoy, the wing passing close, the lines readable in their time on screen.
-- [ ] The pacing: the whole mission takes about 6 to 8 minutes when you fight each wave (Q40); the waves come neither too soon
-      nor too late.
-- [ ] The civilian: it runs when attacked and comes back to its route; a Saturn 8 gets through the belt without hitting rocks.
-- [ ] The lines read as people, with the civilian's name filled in; the last line before the debrief is heard out.
-- [ ] Losing the civilian, losing yourself and winning each end where you expect, with the right debrief.
-
 ## Target menu (M5-T25)
 
-Fly the dogfight (`play dogfight`, or **Sandbox**, **Dogfight**) and a big battle (`bench battle 300 120` in the console).
+Fly the dogfight (`play dogfight`, or **New game**, **Dogfight**) and a big battle (`bench battle 300 120` in the console).
 
 ```
 B / Mouse 2 (tap)    the nearest enemy; tap again for the 2nd nearest; again for the nearest
@@ -669,23 +680,148 @@ hull; `targetmenu highlight "saturn 8 tanker"` points at an entry without pickin
 From the console: `targetmenu open`, `targetmenu pick enemies`, `targetmenu pick 1` (a slice, 0 at the top, clockwise) or
 `targetmenu pick "raider 2"`, `targetmenu back`, `targetmenu close`; `state target_menu` shows it.
 
-Check (T25's (H) items; screenshots of both rings are in `references/screenshots/T25 target menu/`):
+## Comms menu (M5-T46)
 
-- [ ] The ring reads at 1080 lines and at 4K: the category names, the ship names and ranges, the highlight.
-- [ ] The pause and the resume mid-fight feel right, and nothing fires, turns or retargets as the game comes back.
-- [ ] 0.35 s is the right hold (`set settings.target_hold_s 0.5` to try another).
-- [ ] The tap: nearest, 2nd nearest, nearest. With no identified enemy it takes the nearest unknown contact: wanted, or not?
-- [ ] Unknown contacts: the grey reads against the radar; a contact turning unknown again when it opens past 5 km is acceptable
-      (the selected target keeps its name).
-- [ ] Navigation and Objectives: the waypoint diamond and its radar mark are easy to find; the ship keeps facing its target.
-- [ ] Keyboard and mouse: arrows (left or right alone take the upper slice), the mouse's direction, Enter, Backspace.
-- [ ] **M5-T44 The focus pull** (screenshots in `references/screenshots/T44 focus pull/`): the view and HUD ease out of focus in 0.2 s
-      and back in 0.2 s, the ring and the preview stay sharp; `set settings.target_menu_blur 0.6` for more (0 is off).
-- [ ] **M5-T43 The preview panel** (screenshots in `references/screenshots/T43 target preview/`): the wireframes read as
-      the ships (a raider, a Starfury, a Saturn 8, a Bokmai with its pods), with no far-side lines and no flat-panel
-      diagonals; the dense spots are acceptable or want fewer lines; the turn's speed and angle; a long hull end-on is
-      not too small; it reads at 1080 lines and at 4K; the class names; `NO ID` for an unknown contact; `ATTACKING YOU`
-      appears on the raider that is on you. The first time a hull is highlighted its outline shows at once and its
-      inner lines a moment later (up to 0.2 s for a Saturn 8).
-- [ ] **M5-T42 Pause backdrop** (screenshots in `references/screenshots/T42 pause backdrop/`; `pausemenu on` in the console): behind the pause menu the camera drifts in a slow figure 8 around your ship (about 30 s a loop) and the flight HUD steps aside; Settings and Controls keep it going; Resume puts the view back as you left it, in chase and in cockpit; `settings.pause_backdrop off` gives the frozen frame; the ship reads on the right behind the menu, or the panels hide too much of it.
-- [ ] **M5-T45 Start screen and settings groups** (screenshots in `references/screenshots/T45 start screen/`): the start screen shows only New game, Load game (greyed out, the D-pad skips it), Free flight, Settings and Quit, no pad diagram and no side panel; New game lists Civilian escort and then Combat sandbox, Dogfight, Instructor route and Civilian ships, with the highlighted one's briefing or description under the list; Free flight still asks for encounters on or off. Settings lists Gameplay, Controls, Camera & HUD, Video and Audio; Controls holds the profiles and rebinding (with the pad diagram) and, at the end of its list, "Sensitivity and deadzones..." for invert pitch, deadzones and mouse speeds. In flight Start shows Resume, Restart, Settings and Quit to menu; its Settings has the same five groups. Everything works with the pad alone, B going back a page at a time.
+D-pad Right (or Ctrl) opens a ring like the target menu's: the game pauses and the view blurs behind it. WING ORDERS has ATTACK
+(my target) up, FORM ON ME right, ENGAGE (at will) down and COVER ME left. The right stick (arrow keys, mouse) points, A sends
+the order and the game resumes, B or D-pad Right closes it, Start hands over to the pause menu. There is no timeout. Keys 1 to
+4 still give the orders directly. Console: `commsmenu open`, `commsmenu pick "form on me"`, `state comms_menu`.
+
+## Free-flight encounters (M5-T17)
+
+**Free flight** with **Encounters: on**. About every one to three minutes one of three things happens: a raid (2 to 6 raiders
+jump in 6 to 12 km out and attack you, or a civilian if one is near), an Earth Alliance patrol (2, 4 or 6 Starfuries passing
+0.5 to 5 km off) or civilian traffic (1 to 3 hulls passing 2 to 10 km off). Patrols and traffic come in from 26 to 30 km and
+leave past 40 km. To see one now: `encounters force raid` (or `patrol`, `traffic`); `encounters next` takes the next scheduled
+one; `state encounters` shows the schedule; `encounters clear` sends every encounter ship home.
+
+## Civilian ships, turrets and the belt
+
+- `play civilian_showcase` (or **New game**, **Civilian ships**): all nine hulls parked in view, a Bokmai with three pods and
+  one with none. `set settings.texture_detail low` and `high` switch every ship's surface detail live (Settings, Video, "Ship
+  texture detail"); `set settings.hull_sheen 0` shows the old flat paint.
+- Civilians carry no guns of their own but have light turrets, which fire only at ships that attacked them or a civilian or
+  ally within 2 km. In `civilian_showcase`, `spawn raider attack` brings raiders to watch them run and shoot back. An Earth
+  Alliance civilian runs towards the nearest Earth Alliance ship (behind it when that is a fighter); others run together.
+- `play belt_showcase`: the asteroid belt by itself. The rocks stop bolts and ships; a scrape costs little, a head-on hit a lot.
+
+## Sounds (M5-T18, T19, T37)
+
+`sfx pulse_fire`, `sfx raider_fire`, `sfx hit_hull`, `sfx main_burst`, `sfx rcs_burst` play one sound at your ship. In flight
+each main pod and each cluster of RCS jets sounds where it sits on the hull while it fires; other ships' pods are heard within
+1.5 km (`settings.engine_voice_cap` limits how many at once). Gun flashes beyond 2.5 km and shots beyond 3 km are not played.
+
+## New settings and commands (M5)
+
+| Setting | Default | What |
+|---|---|---|
+| `skip_front_end` | false | launch straight into the scenario setting's scene |
+| `encounters`, `encounter_interval_s`, `encounter_max_ships` | true, 120, 24 | free-flight encounters |
+| `master_volume`, `sfx_volume`, `ui_volume`, `comms_volume` | | the four audio buses |
+| `engine_voice_cap` | 24 | engine sounds playing at once |
+| `target_hold_s` | 0.35 | how long B is held for the target menu |
+| `target_menu_blur` | 0.35 | the focus pull behind the radial menus (0 is off) |
+| `pause_backdrop`, `pause_backdrop_loop_s` | true, 30 | the camera behind the pause menu |
+| `texture_detail` | high | ship surface detail |
+| `hull_sheen`, `ambient_level` | 0.25, 0.1 | the hulls' clear coat; light on shadow sides |
+
+Commands: `menu`, `play <scenario> [seed]`, `retry`, `mission [status|skip|goto <step>|objectives|journal]`, `encounters ...`,
+`targetmenu ...`, `commsmenu ...`, `pausemenu [on|off]`. Providers: `game`, `mission`, `dialog`, `debrief`, `encounters`,
+`belts`, `pause_menu`, `target_menu`, `comms_menu`, `target_preview`. `info.md` lists every command and provider.
+
+## M5 acceptance checklist (AC18, the (H) criteria)
+
+Everything automated is recorded in the acceptance table of `docs/milestones/m5-mission-framework-and-front-end.md`. These need
+you, a pad and your ears. The agent's screenshots are under `references/screenshots/` (the folder is named with each item);
+T20's own, taken at the end on the RX 6950 XT, are in `references/screenshots/T20 acceptance/`.
+
+**Start screen, menus and settings**
+
+- [ ] **T45 Start screen** (`T45 start screen/`): only New game, Load game (greyed out, the D-pad skips it; is the greyed look
+      clear?), Free flight, Settings and Quit, with no pad diagram and no side panel. New game lists Civilian escort, then
+      Combat sandbox, Dogfight, Instructor route and Civilian ships; the highlighted one's text under the list reads well.
+- [ ] **T45 Settings groups:** Gameplay, Controls, Camera & HUD, Video, Audio, the same from the start screen and from the
+      pause menu. Controls holds the profiles and rebinding (with the pad diagram) and ends with "Sensitivity and
+      deadzones..." for invert pitch, deadzones and mouse speeds: is that row where you would look for them?
+- [ ] **T02 to T04 On the pad alone:** every screen can be reached and left with the D-pad, A and B; a rebind takes the next
+      press and nothing else happens; the pad diagram's legend follows the rebind; the four volumes each change what they say.
+- [ ] **T01 Loading and T09 debrief:** the loading screen shows and goes; the debrief comes about 3 s after the mission ends
+      (not too soon, not too late); A held from the fight does not pick Retry by accident.
+- [ ] **T42 Pause backdrop** (`T42 pause backdrop/`; `pausemenu on`): behind the pause menu the camera drifts in a slow
+      figure 8 around your ship (about 30 s a loop, `settings.pause_backdrop_loop_s`) and the flight HUD steps aside;
+      Settings keeps it going; Resume puts the view back as you left it, in chase and in cockpit;
+      `settings.pause_backdrop off` gives the frozen frame. Does the ship read on the right, or do the panels hide too much?
+      Keep the figure 8, or try a plain orbit or fixed beauty angles?
+
+**Civilian escort** (`T30 civilian escort/`)
+
+- [ ] **The intro** reads well: the civilian at the buoy, the wing passing close, the lines readable in their time on screen;
+      A or Start skips a shot.
+- [ ] **The pacing:** the whole mission takes about 6 to 8 minutes when you fight each wave (Q40; not yet timed by a person);
+      the waves come neither too soon nor too late.
+- [ ] **The civilian** runs when attacked and comes back to its route; a Saturn 8 gets through the belt without hitting rocks;
+      a fragile hull (the Skylark, `play civilian_escort 5`) can survive three waves with a fair escort.
+- [ ] **The lines** read as people, with the civilian's name filled in; the last line before the debrief is heard out.
+- [ ] **The endings:** losing the civilian, losing yourself and winning each end where you expect, with the right debrief.
+
+**Target menu, preview and focus pull**
+
+- [ ] **T25 The ring** (`T25 target menu/`) reads at 1080 lines and at 4K: the category names, the ship names and ranges,
+      the highlight.
+- [ ] **T25 Pause and resume** mid-fight feel right, and nothing fires, turns or retargets as the game comes back.
+- [ ] **T25 The hold:** 0.35 s is right (`set settings.target_hold_s 0.5` to try another).
+- [ ] **T25 The tap:** nearest, 2nd nearest, nearest. With no identified enemy it takes the nearest unknown contact: wanted?
+- [ ] **T25 Unknown contacts:** the grey reads against the radar; a contact turning unknown again when it opens past 5 km is
+      acceptable (the selected target keeps its name).
+- [ ] **T25 Navigation and Objectives:** the waypoint diamond and its radar mark are easy to find; the ship keeps facing its target.
+- [ ] **T25 Keyboard and mouse:** arrows (left or right alone take the upper slice), the mouse's direction, Enter, Backspace.
+- [ ] **T43 The preview panel** (`T43 target preview/`): the wireframes read as the ships (a raider, a Starfury, a Saturn 8,
+      a Bokmai with its pods), with no far-side lines and no flat-panel diagonals; the dense spots are acceptable or want
+      fewer lines; the turn's speed and angle; a long hull end-on is not too small; it reads at 1080 lines and at 4K; the
+      class names; `NO ID` for an unknown contact; `ATTACKING YOU` on the raider that is on you. The first time a hull is
+      highlighted its outline shows at once and its inner lines a moment later (up to 0.2 s for a Saturn 8).
+- [ ] **T44 The focus pull** (`T44 focus pull/`): the view and HUD ease out of focus in 0.2 s and back in 0.2 s; the ring and
+      the preview are the only sharp things; the strength at 0.35 (`set settings.target_menu_blur 0.6` for more, 0 is off).
+
+**Comms menu** (`T46 radial comms/`)
+
+- [ ] **T46 The ring with a real stick:** pointing and A feel right; the pause while it is open suits giving orders in a
+      dogfight; the labels' wording (ATTACK / my target, FORM ON ME, ENGAGE / at will, COVER ME).
+- [ ] **T06 Subtitles:** the callsign and line at the bottom read in cockpit and chase views and during the cinematic; the
+      radio squelch before and after a line is at the right level.
+
+**Civilian ships and turrets** (`civilian_showcase`; `T40 seams/`, `Civilian colours and hull sheen/`, `M5 civilian ships review/`)
+
+- [ ] **T12 to T15, T22, T27 The nine hulls** look like their ships: the Saturn 3 (its added engine section and raised pod
+      stack, Q20, Q23), the Saturn 4 and 8 transports and tankers, the Skylark (sand), the Narn transport (dark green; which
+      way is up), the Centauri Brezebel (dark violet), the Brakiri Bokmai (pale pods on the olive frame, 0 to 3 pods).
+- [ ] **T39 Colours and sheen:** approved 2026-11-08; look once more in play. A saved `ambient_level` overrides the new 0.1.
+- [ ] **T40 Surfaces at `high` and `low`:** each hull's seams, hatches and plating match its references at `high`; `low`
+      keeps the major lines and is acceptable for a low setting.
+- [ ] **T21 Turrets:** the turret model on every hull, its turn and lift, the Saturns' flank turrets on their posts at the
+      disc rim; at high elevation the barrels' roots may show through the dome; `turret_fire`'s level and feel.
+- [ ] **T16 Civilians in a fight:** how the fleeing reads (to shelter, in groups, the panic spreading); the Saturn 8s' slow
+      turns (about 1 degree a second in pitch); the balance (a Saturn alone sometimes beats two raiders, never three; hulls
+      of 330 to 1150); the engine glows.
+- [ ] **Q33 The blind spot:** only a narrow cone straight behind each Saturn is hidden from its turrets. Keep it, or widen it?
+
+**Encounters** (free flight, encounters on)
+
+- [ ] **T17 Pacing and mix:** an event every 1 to 3 minutes; raids, patrols and traffic in a mix that feels alive, not busy.
+- [ ] **T17 Arrivals:** raids read when they jump in at 6 to 12 km; patrols and traffic come over the radar's edge naturally;
+      the civilians' 15 km transponder shows nothing odd on the radar rim.
+
+**The belt** (`T29 asteroid belt/`, `T29 asteroid shapes/`; `play belt_showcase`)
+
+- [ ] **T29 The rocks** from 2 km and 10 km and close up: shapes (the peanut changed after your approval), sizes, how sparse.
+- [ ] **T41 Scrapes:** grazing a rock costs a little hull, a head-on hit a lot; neither feels unfair.
+
+**Sounds, by ear**
+
+- [ ] **T18 Guns and impacts:** the Starfury's and the raider's guns (character, level, the slight pitch change shot to shot)
+      and the hull hit, against the written reference in `docs/design-references.md` ("Combat sounds").
+- [ ] **T19 Engines:** each pod and RCS cluster heard from its place on the ship; levels (four pods about as loud as a held
+      shot); other ships' engines within 1.5 km.
+- [ ] **T37 At scale** (`bench battle 300 120`): near you shots, flashes and engines are as before; distant fights no longer
+      thin out the near sounds.
+- [ ] **T02 Menu sounds:** move, accept and back are audible and not tiring.
