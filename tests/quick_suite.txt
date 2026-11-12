@@ -134,6 +134,10 @@ res://tests/integration/test_audio_director.gd
 res://tests/unit/test_upscaling.gd
 res://tests/unit/test_anti_aliasing_mode.gd
 res://tests/integration/test_post_effects.gd
+# Scaled space (M6-T10)
+res://tests/unit/test_scaled_placement.gd
+res://tests/unit/test_eclipse_math.gd
+res://tests/integration/test_scaled_space.gd
 # Test infrastructure
 res://tests/unit/test_slow_tests.gd
 res://tests/unit/test_balance_tests.gd

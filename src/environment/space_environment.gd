@@ -11,6 +11,11 @@ extends Node3D
 ## `settings.ambient_level` (M4-T30a) is the environment's ambient light: what the textured meshes and every other PBR surface get
 ## on every side, so the dark side of a hull stays legible. It applies live.
 ##
+## The far bodies (M6-T10, D68): `ScaledSpace` draws the star and the planets where they truly are, and the `KeyStar` follows it:
+## the light comes from the true sun direction and dims by the part of the star's disc a planet hides at the camera. The lens
+## flare reads the `KeyStar`, so it follows too. With no star system in view the light stays as the scene made it. A look sheet
+## takes the light for itself with `hold_key_star`.
+##
 ## Anything visual here is (H): it cannot be seen without a GPU.
 
 const SKY_DIR: String = "res://assets/generated/sky_default"
@@ -20,8 +25,14 @@ const SKY_PARTS: Array[StringName] = [&"stars", &"nebula"]
 ## Where the generated sky is read from. A variable so that a test can point it at a directory that does not exist.
 var sky_dir: String = SKY_DIR
 
+## The far bodies' layer; made in `_ready`.
+var scaled_space: ScaledSpace
+
 var _panorama: Texture2D
 var _nebula_shown: bool = true
+## The key star's energy in full sunlight, as the scene set it.
+var _key_energy: float = 1.0
+var _key_held: bool = false
 
 @onready var world_environment: WorldEnvironment = $WorldEnvironment
 @onready var light_rig: LightRig = $LightRig
@@ -33,7 +44,16 @@ var _nebula_shown: bool = true
 @onready var upscaler: Upscaler = $Upscaler
 
 
+func _init() -> void:
+	# After the layer has placed the bodies for this frame's camera.
+	process_priority = ScaledSpace.LATE_PRIORITY + 1
+
+
 func _ready() -> void:
+	_key_energy = key_star.light_energy
+	scaled_space = ScaledSpace.new()
+	scaled_space.name = "ScaledSpace"
+	add_child(scaled_space)
 	_load_sky()
 	_apply_ambient()
 	Settings.changed.connect(_on_setting_changed)
@@ -53,6 +73,32 @@ func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
 	if Settings.changed.is_connected(_on_setting_changed):
 		Settings.changed.disconnect(_on_setting_changed)
+
+
+func _process(_delta: float) -> void:
+	follow_sun()
+
+
+## Turns the key star to shine from the true sun and dims it in a planet's shadow. `_process` calls it; public for the tests.
+func follow_sun() -> void:
+	if _key_held or not scaled_space.has_sun():
+		return
+	key_star.global_transform = Transform3D(key_basis(scaled_space.sun_direction()), key_star.global_position)
+	key_star.light_energy = _key_energy * scaled_space.key_light()
+
+
+## The key star's orientation for a star in direction `to_sun`: the light travels along its -Z, so its +Z points at the star
+## (what the lens flare reads).
+static func key_basis(to_sun: Vector3) -> Basis:
+	var up: Vector3 = Vector3.UP if absf(to_sun.y) < 0.99 else Vector3.RIGHT
+	return Basis.looking_at(-to_sun, up)
+
+
+## Leaves the key star to a caller that lights its own subject (a look sheet), in full light; false gives it back to the sun.
+func hold_key_star(held: bool) -> void:
+	_key_held = held
+	if held:
+		key_star.light_energy = _key_energy
 
 
 func _on_setting_changed(key: StringName, _value: Variant) -> void:

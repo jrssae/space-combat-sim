@@ -101,6 +101,7 @@ Arguments in `<angle brackets>` are required, `[square brackets]` optional, `a|b
 | `flare` | `[on\|off]` | Toggle the star's lens flare | front end, flight |
 | `blur` | `[on\|off]` | Toggle motion blur on fast turns | front end, flight |
 | `sky` | `<stars\|nebula> [on\|off]` | Show or hide the star points or the nebula panorama; no state toggles | front end, flight |
+| `scaled` | `[status\|epoch <hours>\|show\|hide]` | The scaled-space layer (M6-T10), the star and the planets at their true place and size: show it, look at the system `<hours>` later than the sim clock (moves the sun and the planet's phase for captures; 6.47 h by default until scenarios set an epoch), or draw the far bodies or not (to measure them) | front end, flight |
 | `aa` | `[off\|fxaa\|smaa\|msaa_2x\|msaa_4x\|taa]` | Show or set the 3D view's anti-aliasing, live (`settings.anti_aliasing`) | front end, flight |
 | `upscale` | `[native\|bilinear\|fsr1\|fsr2] [preset\|<scale>]` | Show or set how the 3D view is rendered and enlarged to the window, live | front end, flight |
 | `sheet` | `<asset_id> [distance_m] [lit\|dark\|off] [wing:number\|-] [view]` | Park one idle ship of an asset ahead of the camera for a look sheet | in flight |
@@ -188,6 +189,7 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `render` | The renderer (`forward_plus` or `headless`), fps, frame time, draw calls, triangles, VRAM, far dots, GPU, display and window | in flight |
 | `lights` | Which emitters light the scene this frame and what that costs | front end, flight |
 | `sky` | The star points and the nebula panorama: loaded and shown | front end, flight |
+| `scaled` | The scaled-space layer (M6-T10): far `bodies` drawn, each one's angular size, direction, true distance and stand-in (`layout`), whether the key light follows the true sun (`has_sun`), `sun_direction`, the key light's factor in a planet's shadow (`key_light`, 0 to 1) and the layer's epoch offset (`epoch_h`) | front end, flight |
 | `aa` | The anti-aliasing mode, what the viewport uses, and the bolts' and sky's motion-vector state | front end, flight |
 | `upscale` | The upscaler, its preset, the scale applied, sharpness and the window's and 3D view's lines | front end, flight |
 | `post` | Lens flare and motion blur state and where the star is in the picture | front end, flight |

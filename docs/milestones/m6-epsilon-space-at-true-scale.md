@@ -291,7 +291,7 @@ which changes the same native rows and rebase path:
 | T07 | A | Gravity on everything: ships, tier rows, bolts, debris, the brake's and the AI's feed-forward; the gravity stand-in removed | T04 | Opus | Native kernels with parity at zero gravity | not started |
 | T08 | A | Flying under gravity: the clamp, the assist's and brake's reference, the HUD's reference and altitude, planet impact | T07, Q4 to Q6 | Opus | Flight-model semantics the player feels | not started |
 | T09 | B | Scenarios at true scale: spawns relative to bodies, stations and orbits, epochs, free flight beside the station's stand-in | T03, T08, Q7, Q9 | Opus | Every scenario and mission must keep working | not started |
-| T10 | C | Scaled-space layer: placement, draw order and depth, the true sun direction, the planet's shadow | T04 | Fable | Precision and draw order in Forward+ at planetary distances; a design that later layers stand on | in progress |
+| T10 | C | Scaled-space layer: placement, draw order and depth, the true sun direction, the planet's shadow | T04 | Fable | Precision and draw order in Forward+ at planetary distances; a design that later layers stand on | done |
 | T11 | C | The planet and its atmosphere: the `planet` generator and the scattering shader (generator half early) | T10, Q10 | Opus | Shader maths on T10's layer; the look is (H) | in progress |
 | T12 | C | The sun: disc and glow from the star's colour, the lens flare and key light on the true direction | T10 | Sonnet | A small shader and the existing flare | not started |
 | T13 | D | Jumpgate references and the `jumpgate` generator (early start) | Q11 | Opus | Geometry read off references | done |
@@ -540,6 +540,82 @@ which changes the same native rows and rebase path:
 - **Tests:** `scaled_placement` tests: quick; GPU files (`*_gpu.gd`): standard (Pending headless).
 - **Done when:** the placement tests; a placeholder sphere for the planet and the sun draws at the right size from anywhere and
   after any rebase; GPU numbers recorded.
+
+- **Done (2026-11-12):**
+  - **The depth decision: one pass, the layer's depth pinned in its vertex shader** (the "reversed depth with a clamp" option).
+    Each body is a small stand-in sphere a few km from the near world's own camera; `assets/shaders/scaled_body.gdshader` gives
+    every pixel of it one reversed depth from a slab just in front of the far plane (2e-9 to 1e-8: behind everything nearer than
+    about 49.5 km, in front of the star points at 1e-9 and the sky at 0), the nearer body the larger value. So the near world,
+    the far dots and every transparent effect draw over the planet with the ordinary depth test, the planet hides the star
+    points, the nebula and the star's disc, and there is no second camera, viewport or compositing step. The layer therefore
+    has no camera of its own. Measured on the RX 6950 XT (RADV, Wayland, Forward+, combat sandbox, planet in view, `look 150`),
+    against a SubViewport with its own world and camera composited behind (built for the measurement, not kept; a second
+    camera pass in Godot is that same extra viewport):
+
+    | Window | Variant | Draw calls | Triangles | VRAM (`render.vram_mb`) | GPU frame |
+    |---|---|---|---|---|---|
+    | 1200x675 | no layer (`scaled hide`) | 64 | 49 090 | 333.5 MB | 0.31 to 0.66 ms |
+    | 1200x675 | pinned depth (chosen) | 65 | 65 730 | 333.5 MB | 0.31 to 0.75 ms |
+    | 1200x675 | SubViewport | 66 | 65 732 | 369.8 MB (+36 MB) | 0.33 to 0.50 ms + 0.04 to 0.10 ms for the viewport |
+    | 3200x1800 | no layer | 64 | 66 502 | 645.7 MB | 1.25 to 1.51 ms |
+    | 3200x1800 | pinned depth (chosen) | 65 | 83 142 | 645.7 MB | 1.26 to 1.63 ms |
+    | 3200x1800 | SubViewport | 66 | 83 144 | 866.5 MB (+221 MB) | 1.30 to 1.57 ms + 0.09 to 0.28 ms for the viewport |
+
+    FPS sat at the display's 144 to 145 in every run (the compositor caps it even with `--disable-vsync`), so the GPU frame time
+    is the measure; the pinned depth is inside the noise of no layer at all. The SubViewport costs a full second set of render
+    targets (221 MB at 3200x1800) and its picture would bypass the main view's anti-aliasing, upscaler and motion vectors. The
+    plain version of one pass (true depth at the drawn distance) was ruled out without a measurement: a ship 45 km away would
+    be hidden behind a stand-in drawn at 20 km. `/sys/class/drm/card1/device/mem_info_vram_used` read 2 829 to 3 150 MB across
+    the runs, moved more by the desktop's other clients than by the variants, so the table uses Godot's own figure.
+    The slab relies on the 32-bit float depth buffer this GPU has (as the star points' 1e-9 already does).
+  - `src/environment/scaled_placement.gd` (pure): `place(camera, body, radius)` from two 64-bit places against the anchor gives
+    the direction, the true distance, the angular radius, the stand-in's offset and radius (distance and radius shrunk by one
+    factor: 1:1000 while that fits, else onto a 20 km shell, so the angle and the limb's perspective are exact and everything
+    stays inside the 50 km far plane) and its layer depth (by the logarithm of the true distance); `camera_from_anchor`
+    (`origin` + local, 64-bit), `to_game` (kernel axes to the game's). `src/environment/eclipse_math.gd` (pure): the part of
+    the star's disc a body leaves showing, from positions and radii (the two discs' overlap).
+  - `src/environment/scaled_space.gd` (`ScaledSpace`, made by `SpaceEnvironment`): one sphere per body of the star system of
+    **the World the current camera is in** (`WorldFrame.of(camera)`, so no single-frame assumption, D71), re-placed every
+    frame, late, from the ephemeris at `SimClock.now()` and the camera's drawn (interpolated) pose. A rail anchor sees a body
+    straight through `relative_state(body, place)`; a free-falling anchor is `anchor_state()` against its home body, so the
+    planet never passes through a barycentric number. Placeholder look: the star a flat disc in the star's colour
+    (`StarColor` from `StarCatalog`), the planet a rust sphere with a plain day and night side lit from where the star is
+    seen from the planet (unshaded, so it takes none of the 8 lights). With no star system on the World nothing is drawn.
+  - `SpaceEnvironment`: `follow_sun()` each frame turns the `KeyStar` so its +Z points at the true star (what `PostEffects`
+    reads, so the lens flare follows with no change) and multiplies its energy by `ScaledSpace.key_light()`, the smallest lit
+    part over the planets. With no star system the authored light stays. `hold_key_star(true)` gives the light to a look sheet
+    at full energy: `LookScene` takes and returns it (`src/rendering/look_scene.gd`, three small additions).
+  - **A stand-in epoch, to be removed by T09:** at the data's epoch 0 the station is exactly behind Epsilon III from the star,
+    in the middle of a 65 minute eclipse, so every run would start with the key light out. Until scenarios seed an epoch (Q9)
+    the layer looks at the system 23 300 s (a third of the station's orbit) later than the sim clock
+    (`ScaledSpace.STAND_IN_EPOCH_S`, `epoch_offset_s`): the planet is 120 degrees from the sun and three quarters lit.
+    It moves only the picture and the light, not the frame's gravity. T09 should set the scenario's epoch on the sim clock (or
+    here) and set the constant to 0; the maintainer may prefer another phase.
+  - Console: provider `scaled` (`bodies`, `layout`, `has_sun`, `sun_direction`, `key_light`, `epoch_h`), command
+    `scaled [status|epoch <hours>|show|hide]`. In `info.md`. No setting: nothing here is the player's to tune.
+  - Tests: `tests/unit/test_scaled_placement.gd` (quick, 10: directions, 20.02 degrees from the station, the star's 0.65, the
+    angular size kept inside the bounded depth, 1:1000 close in, a rebase changes nothing, a metre and a millimetre kept at
+    planetary range, the axes, the depth order, the centre of a body), `tests/unit/test_eclipse_math.gd` (quick, 6),
+    `tests/integration/test_scaled_space.gd` (quick, 11, 0.5 s: a World on the station's rail and in a 400 km orbit, 3 000 km
+    off the anchor and after a rebase, the planet round the sky over a quarter orbit, no system, the key star's direction and
+    energy in and out of the shadow, the look sheet's hold, the console), `tests/integration/test_scaled_space_gpu.gd`
+    (standard, Pending headless, 3: the disc's height in pixels against its angular size within 3 px, a marker at 10 m, 5 km,
+    30 km and 49 km drawn over the planet, the planet hiding the star's disc; green on the GPU).
+  - GPU, planet in view, 1200x675 window: from the station's rail `forward_plus`, 145 fps (the display's cap), 70 draw calls,
+    99 020 triangles, 333.5 MB; from `frame orbit 400` 144 fps, 85 draw calls, 107 680 triangles, 333.6 MB.
+  - Screenshots (H) in `references/screenshots/M6-T10 scaled space/`: `station_planet.png` and
+    `station_planet_after_rebase.png` (the planet's pixels the same but for the ships in front), `station_sun.png` (the disc
+    under the flare), `station_eclipse.png` (`scaled epoch 0`: key light 0, the night side hides the stars),
+    `orbit400_limb.png`, `orbit400_limb_after_rebase.png`, `orbit400_down.png`, `orbit400_terminator.png`.
+  - For T11: replace the planet's material on `ScaledSpace.sphere_of(id)` (or the sphere itself), keep the shader's vertex
+    stage (`layer_depth`) and read `sun_direction`; an atmosphere shell is a second sphere with the same placement and depth.
+    The 128-segment sphere's limb is about a pixel coarse from 400 km at 1080p; a per-pixel sphere would fix it. `scaled epoch`
+    gives the look sheet its day, terminator and night. For T12: the star's sphere is `sphere_of(&"epsilon")`; no flare shows
+    in `station_eclipse.png`, but nothing here fades it on purpose (`key_light()` is the factor to use), and the disc's
+    brightness (8) is a guess.
+    For T15: a far station or gate is one more `ScaledPlacement.place` with its own stand-in; `layer_depth` orders it among
+    the bodies. Not checked: the stand-ins' motion vectors under TAA and FSR 2 (a custom `POSITION`); `docs/architecture.md`
+    is T16's.
 
 ### M6-T11 The planet and its atmosphere
 
