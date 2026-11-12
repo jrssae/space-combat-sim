@@ -2300,7 +2300,7 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
     (Forward+, 103 fps, 54 draw calls in the sheet scene): `references/screenshots/T40 seams/narn_final.png`, low and high.
   - **Kept from the sheets, changed since.** Barrel and disc plating now mirrors across the centre plane (it did not on the
     sheets), the Skylark's dome petals moved 7.5 degrees to be symmetric, and the Saturn 3's cross beam is plain. The
-    Bokmai's arms and fork struts keep their layout: they are hull limbs, not structure.
+    Bokmai's arms and fork struts keep their layout: they are hull limbs, not structure (confirmed by the maintainer, 2026-11-12).
   - **Tests.** Python `test_seams` 34 (features, plating never under its least size, determinism, mirror symmetry, a layout
     following its part, every part's feature counts per level pinned, key positions against the parts' own dimensions, the
     baked maps, the low set's files and manifest entry), `test_textures` (the grid switch) and the five ship suites. GUT
