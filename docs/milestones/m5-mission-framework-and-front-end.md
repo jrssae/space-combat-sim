@@ -2139,7 +2139,7 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   silhouettes, the two group walks, the drivers' console vars, the output array, the latent `reach`, the duplicated maths).
   L13: a `#[func] constants()` on the core and one GUT test that compares every mirrored constant with its GDScript twin.
 - **Done when:** each item is done or marked not worth it with a measured reason; the constants test passes.
-- **Done (as built, 2026-11-12):** architecture §18.28.
+- **Done (as built, 2026-11-12):** architecture §18.29.
   - **L12, item by item:**
 
     | Item | Outcome |

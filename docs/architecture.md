@@ -4680,7 +4680,7 @@ Both hosts push one `SettingsGroupsScreen`; choosing a group emits `push_request
 front end share the five groups with no code of their own. Controls opens `ControlsScreen`, whose list ends with "Sensitivity
 and deadzones..." pushing the `controls` category's `SettingsScreen`. A test fails when a menu entry falls in no group.
 
-### 18.28 The smaller performance items and the constants table (T36, L12 and L13)
+### 18.29 The smaller performance items and the constants table (T36, L12 and L13)
 
 ```
 ScsSimCore.bolt_quarantine(buffer, last, forward) -> [buffer with the new-occupant slots collapsed, count]   (bolt_kernels::quarantine)
