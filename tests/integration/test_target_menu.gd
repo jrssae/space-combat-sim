@@ -486,7 +486,7 @@ func test_focus_pull_eases_in_and_out_on_real_time() -> void:
 	assert_false(blur.is_processing())
 	assert_eq(main.target_menu.open(), "")
 	assert_true(blur.visible)
-	assert_true(blur.layer > Hud.new().layer and blur.layer < main.target_menu.view.layer, "above the HUD, below the menu")
+	assert_true(blur.layer > main.hud.layer and blur.layer < main.target_menu.view.layer, "above the HUD, below the menu")
 	assert_true(blur.layer < main.target_menu.preview.layer + 1)
 	await get_tree().create_timer(0.4, true, false, true).timeout
 	assert_eq(blur.amount(), 1.0, "full after 0.2 s even though the tree is paused")

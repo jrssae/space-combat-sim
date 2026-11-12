@@ -42,6 +42,17 @@ build_native_or_fail() {
     [[ -f bin/libscs_native.so ]] || fail "No native library at bin/libscs_native.so after the build."
 }
 
+# Godot's import: the resources and the global class list (a new `class_name` is unknown to the compile check and to GUT
+# until it has run). A current cache takes about 3 s. <log> names where the output goes.
+godot_import() {
+    echo "== Godot import"
+    run_logged "$1" timeout 600 "${GODOT}" --headless --path . --import \
+        || fail "Godot import failed (see $1)."
+    if grep -E "${SCRIPT_ERRORS}" "$1"; then
+        fail "Import reported script errors (see $1)."
+    fi
+}
+
 # GUT silently skips a test file that does not parse, so compile everything explicitly. <log> names where the output goes.
 compile_check() {
     echo "== Compile check"

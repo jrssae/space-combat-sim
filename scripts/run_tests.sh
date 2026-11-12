@@ -58,6 +58,8 @@ if [[ "${mode}" == "quick" ]]; then
         echo "run_tests.sh: assets/generated is missing or older than tools/procgen; run scripts/gen_assets.sh and scripts/run_tests.sh before merging."
     fi
     build_native_or_fail
+    # A fresh checkout (or a new class_name) fails the compile check until the import has run (M5-T38's finding).
+    godot_import "${REPORTS}/quick_import.log"
     compile_check "${REPORTS}/quick_check_scripts.log"
     rust_tests "${REPORTS}/quick_cargo.log"
 
@@ -149,12 +151,7 @@ fi
 build_native_or_fail
 
 # --import imports resources but does not compile scripts, hence the separate compile check below.
-echo "== Godot import"
-run_logged "${REPORTS}/import.log" timeout 600 "${GODOT}" --headless --path . --import \
-    || fail "Godot import failed (see reports/import.log)."
-if grep -E "${SCRIPT_ERRORS}" "${REPORTS}/import.log"; then
-    fail "Import reported script errors (see reports/import.log)."
-fi
+godot_import "${REPORTS}/import.log"
 
 compile_check "${REPORTS}/check_scripts.log"
 
