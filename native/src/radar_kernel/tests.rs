@@ -99,3 +99,35 @@ fn a_multimesh_grows_only_when_it_must() {
     assert_eq!(grown_capacity(8, 100), 100);
     assert_eq!(grown_capacity(0, 7), 7);
 }
+
+// Code review (M5-T47): a short column refuses the whole plot instead of dropping the contacts past its end.
+#[test]
+fn columns_of_different_lengths_plot_nothing() {
+    let ids = [1_i64, 2, 3];
+    let positions = [Vector3::new(0.0, 0.0, -100.0), Vector3::new(0.0, 0.0, -200.0)];
+    let mut out = Plot::default();
+    out.order.push(7);
+    let ok = plot(&ids, &positions, &[0.0, 0.0, 0.0], Vector3::ZERO, &Basis::IDENTITY, 0, 5000.0, 0, &mut out);
+    assert!(!ok);
+    assert!(out.order.is_empty());
+    assert_eq!(out.selected, -1);
+}
+
+// Code review (M5-T47): a second plot reuses the first one's buffers and gives the same answer.
+#[test]
+fn a_second_plot_reuses_its_buffers_and_matches_the_first() {
+    let first = plot_of(&[0.0, 0.0, 0.0], 0);
+    let mut again = first;
+    let ids = [1_i64, 2, 3];
+    let positions = [
+        Vector3::new(0.0, 0.0, -4000.0),
+        Vector3::new(0.0, 0.0, -6000.0),
+        Vector3::new(0.0, 0.0, -9000.0),
+    ];
+    let capacity = again.scratch_keys.capacity();
+    assert!(plot(&ids, &positions, &[0.0, 0.0, 0.0], Vector3::ZERO, &Basis::IDENTITY, 0, 5000.0, 0, &mut again));
+    assert_eq!(again.order, vec![2, 1, 0]);
+    assert_eq!(again.unknown, vec![1, 1, 0]);
+    assert!(capacity >= 3 && again.scratch_keys.capacity() == capacity, "no new key buffer");
+}
+

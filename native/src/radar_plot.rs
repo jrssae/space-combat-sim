@@ -19,7 +19,8 @@ impl ScsRadarPlot {
     /// from a ship at `own_position` with attitude `own_basis`, `selected_id` drawn last: `[order (contact indices, far to
     /// near), their ids, points, ranges, colours, rims, point units, stalk units (foot, point), stalk colours, selected
     /// index]`. A contact beyond `ident_range_m` with no reach is drawn in `unknown_colour` instead (M5-T25), unless it is
-    /// `known_id`.
+    /// `known_id`. Columns of different lengths, or a colour index outside `colours`, are refused with an error and an
+    /// empty plot (code review, M5-T47), never truncated or painted a stand-in colour.
     #[func]
     #[allow(clippy::too_many_arguments)]
     fn plot(
@@ -36,6 +37,26 @@ impl ScsRadarPlot {
         unknown_colour: Color,
         known_id: i64,
     ) -> VarArray {
+        let n = ids.len();
+        let palette_len = colours.len() as i32;
+        let lined_up = positions.len() == n
+            && reach.len() == n
+            && colour_ix.len() == n
+            && colour_ix.as_slice().iter().all(|&k| (0..palette_len).contains(&k));
+        if !lined_up {
+            godot_error!(
+                "ScsRadarPlot.plot: columns do not line up (ids {}, positions {}, reach {}, colour_ix {}) or a colour index is \
+                 outside the {} colours; nothing plotted",
+                n,
+                positions.len(),
+                reach.len(),
+                colour_ix.len(),
+                palette_len
+            );
+            self.plot = Plot::default();
+            self.plot.selected = -1;
+            return Self::empty_result();
+        }
         radar_kernel::plot(
             ids.as_slice(),
             positions.as_slice(),
@@ -50,12 +71,7 @@ impl ScsRadarPlot {
         let p = &self.plot;
         let palette = colours.as_slice();
         let ix = colour_ix.as_slice();
-        let colour_of = |i: u32| {
-            ix.get(i as usize)
-                .and_then(|&k| palette.get(k.max(0) as usize))
-                .copied()
-                .unwrap_or(Color::WHITE)
-        };
+        let colour_of = |i: u32| palette[ix[i as usize] as usize];
         let id_list = ids.as_slice();
         let m = p.order.len();
         let mut order = PackedInt32Array::new();
@@ -156,3 +172,22 @@ impl ScsRadarPlot {
         out
     }
 }
+
+impl ScsRadarPlot {
+    // A plot with nothing drawn, in `plot`'s shape.
+    fn empty_result() -> VarArray {
+        let mut out = VarArray::new();
+        out.push(&PackedInt32Array::new().to_variant());
+        out.push(&PackedInt64Array::new().to_variant());
+        out.push(&PackedVector3Array::new().to_variant());
+        out.push(&PackedFloat64Array::new().to_variant());
+        out.push(&PackedColorArray::new().to_variant());
+        out.push(&PackedByteArray::new().to_variant());
+        out.push(&PackedVector2Array::new().to_variant());
+        out.push(&PackedVector2Array::new().to_variant());
+        out.push(&PackedColorArray::new().to_variant());
+        out.push(&(-1_i64).to_variant());
+        out
+    }
+}
+

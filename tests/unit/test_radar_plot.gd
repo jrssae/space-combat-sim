@@ -143,3 +143,26 @@ func test_the_factions_are_named_when_read() -> void:
 	for i: int in plot.size():
 		assert_eq(names[i], by_id[plot.ids[i]], "contact %d" % i)
 	assert_eq(plot.to_dots()[0].faction, names[0])
+
+
+# Code review (M5-T47): columns of different lengths, or a colour index outside the palette, are refused with an error
+# and an empty plot, never truncated or painted a stand-in colour.
+func test_mismatched_columns_are_refused_not_truncated() -> void:
+	var native: Object = NativeLib.instantiate(RadarModel.NATIVE_CLASS)
+	var ids := PackedInt64Array([1, 2, 3])
+	var positions := PackedVector3Array([Vector3(0, 0, -100), Vector3(0, 0, -200)])
+	var reach := PackedFloat64Array([0.0, 0.0, 0.0])
+	var palette := PackedColorArray([Color.RED])
+	var r: Array = native.plot(ids, positions, reach, PackedInt32Array([0, 0, 0]), palette, Vector3.ZERO, Basis.IDENTITY,
+			0, 5000.0, Color.GRAY, 0)
+	assert_engine_error("columns do not line up")
+	assert_eq((r[0] as PackedInt32Array).size(), 0, "nothing plotted")
+	assert_eq(int(r[9]), -1)
+	positions.append(Vector3(0, 0, -300))
+	r = native.plot(ids, positions, reach, PackedInt32Array([0, 1, 0]), palette, Vector3.ZERO, Basis.IDENTITY, 0, 5000.0,
+			Color.GRAY, 0)
+	assert_engine_error("colour index")
+	assert_eq((r[0] as PackedInt32Array).size(), 0, "a colour outside the palette is refused too")
+	r = native.plot(ids, positions, reach, PackedInt32Array([0, 0, 0]), palette, Vector3.ZERO, Basis.IDENTITY, 0, 5000.0,
+			Color.GRAY, 0)
+	assert_eq((r[0] as PackedInt32Array).size(), 3, "matching columns plot every contact")

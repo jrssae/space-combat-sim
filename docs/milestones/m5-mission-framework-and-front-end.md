@@ -622,6 +622,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T44 | A | Focus pull: while the target menu is open only it and the target information are in focus; the play view and HUD blur over 0.2 s and come back over 0.2 s when it closes (maintainer, 2026-11-08, corrected 2026-11-09) | T25 | Sonnet | A short tweened screen blur between the HUD and the menu layers, free when closed | done |
 | T45 | A | Start screen and settings groups: an options-only start screen (New game, Load game, Free flight, Settings, Quit), the sandbox scenes under New game, Controls inside Settings, five settings groups (maintainer, 2026-11-09) | T02, T03, T04 | Sonnet | Menu re-plumbing on the built kit; mostly tests | done |
 | T46 | A | Radial comms menu: the comms menu moves onto T25's radial framework, with the focus pull, the right stick to point, A to confirm, B to go back (maintainer, 2026-11-09) | T25, T44, T07 | Sonnet | One framework for both menus; the comms routing changes from the D-pad to the stick; it pauses the game | done |
+| T47 | - | Radar plot input checks and scratch reuse: the code review's two open radar items (maintainer, 2026-11-12; numbered last because it was added after the others had numbers) | T34 | controller | Two small native fixes found by the code review | done |
 | T20 | - | Integration, full suite, docs and acceptance | all | Fable (maintainer, 2026-11-11) | One full run, the GPU check, the (H) list | in progress — awaiting the maintainer's confirmation |
 
 **Progress (2026-11-12).** Every task in the table is `done` except T20, which is `in progress` until the maintainer confirms
@@ -2687,6 +2688,18 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
     left with FORM ON ME lit, blurred view behind, hint under it); about 52 fps in the windowed run with the debug overlay on.
   - **(H):** how the ring feels with a real stick; that the pause-while-open feels right for giving orders in a dogfight;
     label wording.
+
+### M5-T47 Radar plot input checks and scratch reuse
+
+- **Why (maintainer, 2026-11-12):** the last two open items of `code-review-comments.md`.
+- **Done (as built, 2026-11-12):** `radar_kernel::plot` refuses columns of different lengths (it returns false with an empty
+  plot instead of plotting up to the shortest column), and `ScsRadarPlot.plot` also checks `colour_ix` against `ids` and
+  every colour index against the palette: a mismatch logs an error and returns an empty plot, never a truncated one or a
+  white stand-in. `Plot` keeps its output vectors and its point, range and key scratch between calls and clears them, so a
+  steady plot no longer allocates per call. Tests: Rust `columns_of_different_lengths_plot_nothing` and
+  `a_second_plot_reuses_its_buffers_and_matches_the_first` (8 radar kernel tests pass); GUT
+  `test_mismatched_columns_are_refused_not_truncated` in `test_radar_plot`, with `test_radar_model`, `test_sim_core`,
+  `test_hud` and `test_target_menu`: 71 passing.
 
 ### M5-T20 Integration, full suite, docs and acceptance
 

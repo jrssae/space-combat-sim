@@ -29,6 +29,24 @@ pub struct Plot {
     pub units: Vec<(f32, f32)>,
     pub feet: Vec<(f32, f32)>,
     pub selected: i32,
+    // Scratch kept between plots (code review, M5-T47): every contact's point and range, and the sort keys.
+    scratch_points: Vec<Vector3>,
+    scratch_ranges: Vec<f64>,
+    scratch_keys: Vec<i64>,
+}
+
+impl Plot {
+    // Empties the plot for the next frame, keeping every buffer's capacity.
+    fn clear(&mut self) {
+        self.order.clear();
+        self.points.clear();
+        self.ranges.clear();
+        self.rims.clear();
+        self.unknown.clear();
+        self.units.clear();
+        self.feet.clear();
+        self.selected = -1;
+    }
 }
 
 /// The sphere radius (0..1) for a range: linear to `LINEAR_RADIUS` at 5 km, logarithmic to 1 at 25 km, clamped beyond.
@@ -63,7 +81,8 @@ fn range_between(from: Vector3, to: Vector3) -> f64 {
 /// `RadarModel.plot` without the colours: every contact (`ids`, World `positions`, broadcast `reach`) within
 /// `MAX_RANGE_M` of a ship at `own_position` with attitude `own_basis`, or within its own reach (then on the rim).
 /// A contact beyond `ident_range_m` that does not broadcast is flagged unknown, except `known_id` (a selection the
-/// pilot has already identified).
+/// pilot has already identified). Returns false, with an empty plot, when the three contact columns differ in length
+/// (code review, M5-T47: a short column must not silently drop contacts).
 #[allow(clippy::too_many_arguments)]
 pub fn plot(
     ids: &[i64],
@@ -75,15 +94,20 @@ pub fn plot(
     ident_range_m: f64,
     known_id: i64,
     out: &mut Plot,
-) {
-    *out = Plot {
-        selected: -1,
-        ..Plot::default()
-    };
-    let n = ids.len().min(positions.len()).min(reach.len());
-    let mut points = vec![Vector3::ZERO; n];
-    let mut ranges = vec![0.0; n];
-    let mut keys: Vec<i64> = Vec::with_capacity(n);
+) -> bool {
+    out.clear();
+    let n = ids.len();
+    if positions.len() != n || reach.len() != n {
+        return false;
+    }
+    let mut points = std::mem::take(&mut out.scratch_points);
+    let mut ranges = std::mem::take(&mut out.scratch_ranges);
+    let mut keys = std::mem::take(&mut out.scratch_keys);
+    points.clear();
+    points.resize(n, Vector3::ZERO);
+    ranges.clear();
+    ranges.resize(n, 0.0);
+    keys.clear();
     let mut selected_at: i64 = -1;
     for i in 0..n {
         let at = positions[i];
@@ -123,7 +147,7 @@ pub fn plot(
     if selected_at >= 0 {
         keys.push(selected_at);
     }
-    for key in keys {
+    for &key in &keys {
         let i = (key & INDEX_MASK) as usize;
         let point = points[i];
         out.order.push(i as u32);
@@ -138,6 +162,10 @@ pub fn plot(
     if selected_at >= 0 {
         out.selected = out.order.len() as i32 - 1;
     }
+    out.scratch_points = points;
+    out.scratch_ranges = ranges;
+    out.scratch_keys = keys;
+    true
 }
 
 /// Floats per instance of a 2D multimesh with colours: a 2x3 transform padded to 8, then the colour.
