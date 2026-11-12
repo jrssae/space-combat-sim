@@ -250,6 +250,7 @@ which changes the same native rows and rebase path:
 | AC9 | Far representations: the station's stand-in, the gate and the planet are drawn at every distance from 100 m to their broadcast range with no pop at a hand-off (test on drawn size); the cost at 1 000 km recorded | A | |
 | AC10 | Cost: gravity and the moving frame add no more than 5 % to the `bench battle 1000` tick (measured before and after on an idle machine); the paired 13-ship AI budget (`test_ai_think_time`) still passes | A | |
 | AC11 | Docs and the suite: `docs/architecture.md` §19 as built (and §14.1, §14.2 brought up to date), a `docs/playtest.md` M6 section, the roadmap row, `info.md`; `scripts/run_tests.sh` green once, at the end | A | |
+| AC13 | Mass arrivals (T20): the vortex drops detail layers with distance (its screen size), with no pop between levels; in `bench battle 1000` every ship enters through a jump point, up to 100 points forming at once; the battle's GPU run on the maintainer's machine records fps, GPU frame time, draw calls and VRAM with 100 points forming, against the same battle with ships placed directly | A | |
 | AC12 | (H) The maintainer flies it: an orbit beside the station's stand-in, the planet and the sun from orbit and from 1 000 km, the atmosphere's limb and terminator, the jumpgate and its vortex, the assist and brake under gravity, a dogfight across several velocity rebases with nothing seen to jump | H | |
 
 ## Working rules for M6
@@ -257,7 +258,7 @@ which changes the same native rows and rebase path:
 - **Tracks.** A (frame and gravity: T01, T02, T04 to T08), B (system data and scenarios: T03, T09), C (scaled space and far
   representations: T10, T11, T12, T15), D (the jumpgate: T13, T14), E (test tiers: T17, T18). Inside a track the order holds.
   If work goes one task at a time, the order is T01, T17, T18, T02, T03, T04, T05, T06, T07, T08, T09, T10, T11, T12, T13, T14,
-  T15, T16.
+  T15, T19, T20, T16.
 - **One working copy** on branch `m6` in the main checkout, no task branches, as in M5; early-start work runs where the maintainer
   says (Early start, above).
 - **Locks** as in M5: Godot runs through `flock /tmp/m6-godot.lock`, commits through `flock /tmp/m6-git.lock` and stage only the
@@ -301,6 +302,7 @@ which changes the same native rows and rebase path:
 | T17 | E | Test tiers: quick, standard, balance and full, the quick list, its guard test, the Rust tests in the run | T01 | Sonnet | Scripts and one data file from a written plan (`docs/research/test-review/quick-test-suite.md`) | done |
 | T18 | E | The review's CONFIRMED test removals (sections A to D), each re-checked, the parity recordings still read | T17 | Opus | Proving two tests cover the same thing needs both read in full; rules on what must stay | done |
 | T19 | D | The vortex reworked and stand-alone: fitted to the gate, a shallow funnel, spiralling soft dark patches; open jump points use it too | T14 | Opus | Shader animation and a shared effect seam; the look is (H) | in progress |
+| T20 | D | Vortex detail by distance and mass arrivals: detail layers dropped with screen size; up to 100 jump points forming at once; every ship of the 1 000-ship battle enters through one; the battle's GPU fps test with them | T19, T07 | Opus | A shader LOD, a pooled effect at a hundred instances and the battle's spawn path, judged on the GPU | not started |
 
 ### M6-T01 Moving-frame audit and design
 
@@ -991,3 +993,29 @@ which changes the same native rows and rebase path:
   4. Still open (H): the frame rate with a visible window on the maintainer's machine, and the maintainer's acceptance of the
      side-by-side (`references/screenshots/M6-T19 vortex/acceptance_jumpgate_png.png`). The lamps are accepted for now; the
      top arm reads dim in the acceptance view.
+
+### M6-T20 Vortex detail by distance and mass arrivals
+
+- **Goal:** AC13 (maintainer, 2026-11-12). Scenarios will open many jump points at once: the 1 000-ship battle brings its ships in
+  through up to 100 points forming together, and that is how every ship enters the battle area. The vortex must stay cheap at a
+  hundred instances and at a distance, without losing its look up close.
+- **Detail by distance:** the vortex shader (T19's funnel and flash) drops detail layers as its screen size falls: the hair-like
+  streaks first (finest width first), then the paler and darker patch layers and the noise octaves, down to a soft disc of the
+  base colour with its rim and throat; levels blend over a band (no pop), chosen per instance from its projected radius in
+  pixels, so a point 50 km off costs a few cheap fragments. The light per vortex is capped (the nearest few points carry one;
+  the rest glow without a light), and the centre flash keeps its timing at every level.
+- **Mass arrivals:** `JumpPointPool` holds and reuses up to 100 open points (shared mesh and material variants, no per-point
+  allocation while the battle runs); the group rule (ships within 600 m in the first second share a point) stays. In
+  `bench battle 1000` (and battle scenarios) every ship enters through a jump point, in waves, with no ship placed directly
+  in the battle area; the arrival keeps the seeded outcome rules (the parity recordings use their own fixtures and are not
+  changed by this).
+- **The fps test:** the battle's GPU run on the maintainer's machine (Forward+, the real renderer) records fps, GPU frame time,
+  draw calls and VRAM while 100 points form, beside the same battle with ships placed directly; the tick cost at
+  `bench battle 1000` with the arrivals, from `scripts/bench_quick.sh`.
+- **Files:** the vortex shaders (`assets/shaders/`), `src/props/jump_vortex.gd`, `src/props/jump_point_pool.gd`, the bench's
+  battle layout and spawn path (`src/perf/bench_layout.gd`, `bench_runner.gd`), a pure LOD helper (`RefCounted`) and its tests.
+- **Depends on:** T19 (the shader this thins; it is paused at the maintainer's word, so T20 waits for it) and T07 (which moves
+  the battle layout's pull to data).
+- **Tests:** the LOD helper (levels from projected size, the blend band): quick; the pool at 100 points (no allocation while
+  open, reuse): quick if pure; the battle entering through points: standard; GPU files (`*_gpu.gd`): standard (Pending headless).
+- **Done when:** AC13; screenshots of one vortex at each level and of 100 points forming in the battle for the maintainer (H).
