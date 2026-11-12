@@ -509,7 +509,7 @@ removed or converted when M5 rebases onto `main` after M4.
 | AC4 | Controls menu: pick a profile; rebind an action by pressing a button; unbind; save as; the profile rules are enforced with the reason shown; applying a profile leaves the `ui_*` actions intact | A | |
 | AC5 | Mission runtime: `MissionScript`, `MissionApi`, `MissionRunner`; every trigger kind unit-tested; `ObjectiveBook` success and failure; the result rules of D51 (all primaries done, a primary failed, the player destroyed, `m.end`); sim time only; console `mission` provider, `mission skip`, `mission goto <step>`, `mission objectives`, `play <id>`; a skip leaves the world as the step would (a test compares a skipped and an unskipped run's spawns and objectives) | A | |
 | AC6 | Dialog: lines and speakers as data with a voice id; every line id used by a script exists (test); subtitles and the comms panel show in cockpit and chase views; `radio_open`/`radio_close` frame each line | A | |
-| AC7 | Comms menu: D-pad Right opens it; the four directions give the four wing orders through `WingDirector`; B or 4 s closes it; while open, the D-pad's flight actions and the target button do not fire; a profile saved before M5 loads with `comms_menu` filled in | A | |
+| AC7 | Comms menu: D-pad Right opens it; the four wing orders go through `WingDirector`; while open, the D-pad's flight actions and the target button do not fire; a profile saved before M5 loads with `comms_menu` filled in. **Updated by T46 (2026-11-11):** the orders are picked with the right stick and A on the radial ring (not the four D-pad directions), B or D-pad Right closes it, and there is no 4 s timeout (the game is paused while it is open); AC28 is the full behaviour | A | |
 | AC8 | `CINEMATIC`: shots from data relative to actors or the origin, unit-tested interpolation; a rebase during a shot moves nothing on screen (test); HUD hidden, letterbox, the player's commands zeroed while the ship keeps its physics; A or Start skips | A | |
 | AC9 | Debrief: result and reason, objectives, time, kills and assists, wing losses, shots and hits; retry restarts the same scenario and seed; menu returns to the front end | A | |
 | AC10 | Civilian escort (D62): starts from the menu with its cinematic intro and runs to success and to failure (civilian destroyed; player destroyed) in headless tests driven by console commands, ending in the debrief; the civilian is drawn from all nine hulls by the seed (test over seeds) and only its hull is pooled; it flies from NAV ALPHA through the belt to NAV BETA about 30 km away, flees when attacked and resumes its route (test); three waves of 3, 4 and 6 raiders jump in at the 25, 50 and 75 % points; one wingman; the buoy ring is gone and buoys broadcast to 1 000 km (Q41). Buoy defence's AC10 is superseded | A | |
@@ -618,7 +618,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T43 | A | Target preview: a turning green wireframe of the highlighted entity on the side of the screen opposite the radial target menu, with hull bar and distance (maintainer, 2026-11-08) | T25 | Fable (maintainer, 2026-11-11) | Hidden-line wireframe in a small viewport, edges from the mesh, an info panel kept lean | done |
 | T44 | A | Focus pull: while the target menu is open only it and the target information are in focus; the play view and HUD blur over 0.2 s and come back over 0.2 s when it closes (maintainer, 2026-11-08, corrected 2026-11-09) | T25 | Sonnet | A short tweened screen blur between the HUD and the menu layers, free when closed | done |
 | T45 | A | Start screen and settings groups: an options-only start screen (New game, Load game, Free flight, Settings, Quit), the sandbox scenes under New game, Controls inside Settings, five settings groups (maintainer, 2026-11-09) | T02, T03, T04 | Sonnet | Menu re-plumbing on the built kit; mostly tests | not started |
-| T46 | A | Radial comms menu: the comms menu moves onto T25's radial framework, with the focus pull, the right stick to point, A to confirm, B to go back (maintainer, 2026-11-09) | T25, T44, T07 | Sonnet | One framework for both menus; the comms routing changes from the D-pad to the stick; it pauses the game | in progress |
+| T46 | A | Radial comms menu: the comms menu moves onto T25's radial framework, with the focus pull, the right stick to point, A to confirm, B to go back (maintainer, 2026-11-09) | T25, T44, T07 | Sonnet | One framework for both menus; the comms routing changes from the D-pad to the stick; it pauses the game | done |
 | T20 | - | Integration, full suite, docs and acceptance | all | Fable (maintainer, 2026-11-11) | One full run, the GPU check, the (H) list | not started |
 
 **Progress (2026-11-03).** Done: T01, T02, T05, T11, T15, T18, T19, T24. In progress:
@@ -2386,6 +2386,40 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   follows the stick.
 - **Done when:** AC28, the tests pass, `docs/playtest.md`'s comms section updated, a screenshot in
   `references/screenshots/Radial comms menu/` for the look check (H).
+- **Done (as built, 2026-11-11):** the comms menu is a radial menu on T25's framework (architecture §18.22).
+  - **Built:** `CommsMenu` (pure) is now a thin page stack over a `RadialMenu`: the first ring is the wing orders (ATTACK,
+    FORM ON ME, ENGAGE, COVER ME) on the up, right, down and left slices, in the order of keys 1-4; an entry carrying a
+    `page` opens that ring over it (a mission's replies, sub-orders), `select` returns the confirmed entry and closes,
+    `back` pops a page. `CommsMenuDirector` (a node under `Main`, `src/hud/comms_menu_director.gd`) mirrors the target
+    menu's director: it pauses the game on open, owns a `RadialMenuView` (same ring, size, left side, layer 45 and T44
+    focus pull) and sends the order through `WingDirector.give_order` once the game runs again. Input: `Main` calls
+    `adapter.sample_radial` while it is open, so the right stick (arrows, mouse) points, A sends, B goes back or out,
+    Start hands over to the pause menu, and D-pad Right (Ctrl) again closes it (`UiCommand.comms_open` is read as a
+    close edge by `sample_radial`; `begin_radial` seeds it so the opening press is not a close). Console: provider
+    `comms_menu` (`open`, `page`, `highlight`, `entries`, `picks`, `last_pick`, `closed_by`, `focus`) and the command
+    `commsmenu open|pick|highlight|back|close`, in `info.md`.
+  - **Changed:** removed `CommsMenuView` (the plate), the 4 s timer (`CLOSE_S`, `remaining_s`), `UiCommand.comms_pick` and
+    `comms_close`, `InputAdapter.comms_open` and `COMMS_PICKS`, and every rule in `InputAdapter.sample` that swallowed
+    assist, next weapon, lights and the target button while the menu was open (the pad is read by `sample_radial` then,
+    so none of it can fire). The two menus exclude each other: neither opens over the other (the target menu used to
+    close the comms menu; it now refuses). A cinematic or a script's `lock_controls` closes an open comms menu as before.
+    Profiles are untouched: `comms_menu` is still the same action, so a profile saved before M5 loads with it filled in
+    from the default (the existing `test_control_profile_store` test).
+  - **Assumptions:** the heading reads WING ORDERS (the page title); the hint line is `A  SEND      B  CLOSE` (`B  BACK`
+    on a sub-page); labels are short with a second line (`ATTACK` / `my target`, `ENGAGE` / `at will`); a page needs no
+    "none" entry, so the down-slice rule is not exercised yet (`RadialMenu.arrange` already supports it); a page holds up to
+    eight entries and pads to four slices. Keys 1-4 are unchanged.
+  - **Tests (focused, all passing):** `test_comms_menu` 9 (unit: pages, compass slices, sub-page push and back, pick closes
+    the stack, blanks skipped); `test_comms_menu_input` 13 (integration on the real main scene: opens and pauses, the stick
+    and A send each of the four orders, B, pad B taps no target, D-pad Right closes and the opening press does not, no
+    timeout, flight buttons inert, nothing held fires on close, Start to the pause menu, the console, `pause` refused, ring
+    size and side and highlight follow the stick); `test_input_adapter` 48 (the comms and radial section rewritten);
+    `test_control_lock`, `test_cinematic_camera`, `test_target_menu` adjusted. `run_tests.sh --quick`: GUT 1669 of 1669, exit 0;
+    main-scene smoke clean (no `ERROR:`, no leaks).
+  - **GPU look check (RX 6950 XT, RADV, Forward+):** `references/screenshots/T46 radial comms/comms_ring.png` (the ring at the
+    left with FORM ON ME lit, blurred view behind, hint under it); about 52 fps in the windowed run with the debug overlay on.
+  - **(H):** how the ring feels with a real stick; that the pause-while-open feels right for giving orders in a dogfight;
+    label wording.
 
 ### M5-T20 Integration, full suite, docs and acceptance
 

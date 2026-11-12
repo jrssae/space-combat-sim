@@ -18,11 +18,10 @@ extends RefCounted
 ## of actions at once (W = both main pods, S = both retro pods), which needs nothing here: each pod reads its own action.
 ## The mouse side buttons are bound like any other (Mouse 4 `autotrack`, Mouse 5 `weapon_next`). Keys 1-4 are the wing orders
 ## (attack my target, form on me, engage at will, cover me; M3-T07), press edges in `UiCommand` for `Main` to pass on. D-pad Left
-## and key 5 switch the running lights (M3-T27). D-pad Right and Ctrl open the comms menu (M5-T07); while it is open (`comms_open`,
-## set by `Main`) the D-pad's four directions pick its entries and the target button closes it, so assist, next weapon, lights
-## and target cycling do not fire.
+## and key 5 switch the running lights (M3-T27). D-pad Right and Ctrl open the comms menu (M5-T07), a radial menu (T46) that
+## pauses the game: while it is open the sticks, A and B belong to the menu (below), so no flight action fires.
 ##
-## A radial menu (M5-T25, the target menu; T46's comms menu) pauses the game and owns the pad: `sample_radial` reads only the
+## A radial menu (M5-T25 the target menu, T46 the comms menu) pauses the game and owns the pad: `sample_radial` reads only the
 ## menu's stick, select and back (and Start), `begin_radial` and `end_radial` bracket it so that nothing fires, steers or
 ## targets on the tick the game resumes. The menu's own actions (`RADIAL_ACTIONS`) are fixed like the menu kit's `ui_*`
 ## ones, not part of a control profile: the right stick or the arrow keys point, A or Enter selects, B or Backspace backs.
@@ -90,9 +89,6 @@ const EDGE_ACTIONS: Array[StringName] = [
 	COMMS_MENU,
 ]
 
-## The actions on the D-pad's up, right, down and left, which pick the comms menu's entries 0-3 while it is open.
-const COMMS_PICKS: Array[StringName] = [TOGGLE_ASSIST, COMMS_MENU, WEAPON_NEXT, TOGGLE_RUNNING_LIGHTS]
-
 const AIM_EXPO := 1.5
 ## Default for `mouse_full_rate_px_s` (`Settings.mouse_full_rate_px_s`).
 const MOUSE_FULL_RATE_PX_S := 1200.0
@@ -124,9 +120,6 @@ var last: PilotCommand = PilotCommand.new()
 
 ## Auto-track is switched on (toggled by the `autotrack` action). Main clears it when the target is gone.
 var autotrack_on: bool = false
-
-## The comms menu is open (set by `Main` from its `CommsMenu`): see `UiCommand.comms_pick`.
-var comms_open: bool = false
 
 var _prev_pressed: Dictionary = {}
 ## The mouse's turn command, -1..1 per axis (x yaw right, y pitch up), after smoothing.
@@ -193,8 +186,7 @@ func sample(source: InputSource, dt: float) -> PilotCommand:
 	flight.brake = source.is_pressed(BRAKE)
 
 	var edges: Dictionary = _sample_edges(source)
-	var menu: bool = comms_open
-	flight.toggle_assist = edges[TOGGLE_ASSIST] and not menu
+	flight.toggle_assist = edges[TOGGLE_ASSIST]
 	# Auto-track is a toggle: one press switches it on, the next switches it off.
 	if edges[AUTOTRACK]:
 		autotrack_on = not autotrack_on
@@ -204,18 +196,11 @@ func sample(source: InputSource, dt: float) -> PilotCommand:
 	if _fire_held_over:
 		_fire_held_over = cmd.combat.fire
 		cmd.combat.fire = false
-	cmd.combat.weapon_next = edges[WEAPON_NEXT] and not menu
-	var closing: bool = false
-	if menu:
-		# B belongs to the menu: it closes it instead of targeting, and a hold never opens the target menu over it.
-		var key_b: bool = _swallow_press(source, TARGET_NEXT)
-		var pad_b: bool = _swallow_press(source, TARGET_CYCLE)
-		closing = key_b or pad_b
-	else:
-		for button: StringName in TAP_HOLD:
-			var press: Vector2i = _step_tap_hold(source, button, dt)
-			cmd.combat.target_nearest = cmd.combat.target_nearest or press.x == 1
-			cmd.ui.target_menu_open = cmd.ui.target_menu_open or press.y == 1
+	cmd.combat.weapon_next = edges[WEAPON_NEXT]
+	for button: StringName in TAP_HOLD:
+		var press: Vector2i = _step_tap_hold(source, button, dt)
+		cmd.combat.target_nearest = cmd.combat.target_nearest or press.x == 1
+		cmd.ui.target_menu_open = cmd.ui.target_menu_open or press.y == 1
 	var wheel: int = source.take_wheel_steps()
 	cmd.combat.target_next = wheel > 0
 	cmd.combat.target_prev = edges[TARGET_PREV] or wheel < 0
@@ -230,15 +215,8 @@ func sample(source: InputSource, dt: float) -> PilotCommand:
 	cmd.ui.wing_form = edges[WING_FORM]
 	cmd.ui.wing_engage = edges[WING_ENGAGE]
 	cmd.ui.wing_cover = edges[WING_COVER]
-	cmd.ui.toggle_running_lights = edges[TOGGLE_RUNNING_LIGHTS] and not menu
-	if menu:
-		for i: int in COMMS_PICKS.size():
-			if edges[COMMS_PICKS[i]]:
-				cmd.ui.comms_pick = i
-				break
-		cmd.ui.comms_close = closing and cmd.ui.comms_pick < 0
-	else:
-		cmd.ui.comms_open = edges[COMMS_MENU]
+	cmd.ui.toggle_running_lights = edges[TOGGLE_RUNNING_LIGHTS]
+	cmd.ui.comms_open = edges[COMMS_MENU]
 	cmd.ui.look_active = looking
 	if looking:
 		var look_y: float = -aim.y if not invert_y else aim.y
@@ -275,23 +253,25 @@ func sample_menu(source: InputSource, dt: float) -> UiCommand:
 	return cmd.ui
 
 
-## A radial menu opens: its select and back are seeded from what is held (the button that opened it is also its back), and
+## A radial menu opens: its select and back, and the comms key, are seeded from what is held (the button that opened it is also its back), and
 ## the mouse points from the centre again.
 func begin_radial(source: InputSource) -> void:
-	for action: StringName in [RADIAL_SELECT, RADIAL_BACK, PAUSE]:
+	for action: StringName in [RADIAL_SELECT, RADIAL_BACK, PAUSE, COMMS_MENU]:
 		_prev_pressed[action] = source.is_pressed(action)
 	_radial_pointer = Vector2.ZERO
 	source.take_mouse_delta()
 
 
 ## One tick while a radial menu has the pad: the direction pointed (`UiCommand.radial_point`: the menu's stick or arrow keys,
-## else the mouse while it moves), the select and back edges, and Start. Everything else is re-seeded from what is held, as
+## else the mouse while it moves), the select and back edges, the comms key's edge and Start. Everything else is re-seeded from what is held, as
 ## behind the pause menu.
 func sample_radial(source: InputSource, dt: float) -> UiCommand:
 	source.poll(dt)
 	var cmd := PilotCommand.new()
 	var ui: UiCommand = cmd.ui
 	ui.pause = source.is_pressed(PAUSE) and not bool(_prev_pressed.get(PAUSE, false))
+	# The comms key closes the comms menu again; the target menu ignores it.
+	ui.comms_open = source.is_pressed(COMMS_MENU) and not bool(_prev_pressed.get(COMMS_MENU, false))
 	for action: StringName in [RADIAL_SELECT, RADIAL_BACK]:
 		var pressed: bool = source.is_pressed(action)
 		var edge: bool = pressed and not bool(_prev_pressed.get(action, false))
@@ -377,15 +357,6 @@ func _step_tap_hold(source: InputSource, button: StringName, dt: float) -> Vecto
 		out.x = 1
 		_disarm(button)
 	return out
-
-
-# A tap-or-hold button read as a plain press edge while a menu has it; its tap-or-hold press is dropped.
-func _swallow_press(source: InputSource, button: StringName) -> bool:
-	var pressed: bool = source.is_pressed(button)
-	var edge: bool = pressed and not bool(_prev_pressed.get(button, false))
-	_prev_pressed[button] = pressed
-	_disarm(button)
-	return edge
 
 
 func _disarm(button: StringName) -> void:

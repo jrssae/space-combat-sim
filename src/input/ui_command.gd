@@ -14,11 +14,9 @@ var wing_engage: bool = false
 var wing_cover: bool = false
 ## D-pad Left, key 5 (M3-T27): the player's running lights on or off.
 var toggle_running_lights: bool = false
-## The comms menu (D54, M5-T07): D-pad Right opens it (`comms_open`, an edge); while `InputAdapter.comms_open` is set the four
-## D-pad directions give `comms_pick` 0-3 (up, right, down, left; -1 for none) and B gives `comms_close`.
+## The comms menu (D54, M5-T46): D-pad Right (an edge) opens it, and closes it again while it is open; its stick, A and B are the
+## radial ones below.
 var comms_open: bool = false
-var comms_pick: int = -1
-var comms_close: bool = false
 ## The target menu (M5-T25): a hold of the target button asks for it (`target_menu_open`, an edge). While a radial menu is open
 ## `InputAdapter.sample_radial` gives the direction pointed (`radial_point`: x right, y up, 0..1; zero when nothing points)
 ## and the select and back edges.
@@ -40,7 +38,7 @@ func to_dict() -> Dictionary:
 		"toggle_overlay": toggle_overlay, "screenshot": screenshot,
 		"wing_attack": wing_attack, "wing_form": wing_form, "wing_engage": wing_engage, "wing_cover": wing_cover,
 		"toggle_running_lights": toggle_running_lights,
-		"comms_open": comms_open, "comms_pick": comms_pick, "comms_close": comms_close,
+		"comms_open": comms_open,
 		"target_menu_open": target_menu_open, "radial_point": radial_point, "radial_select": radial_select,
 		"radial_back": radial_back,
 		"look_active": look_active, "look_stick": look_stick, "look_mouse_px": look_mouse_px,

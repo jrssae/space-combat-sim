@@ -331,12 +331,18 @@ Tab              cockpit / chase camera                    Middle mouse  free lo
 On the pad the triggers are the mains and the bumpers the retros. The right stick pitches straight up or down, yaws straight left or
 right, and rolls on the diagonals. The left stick strafes. A fires, B taps to the next target and holds for the previous one, X is
 auto-track, Y the camera. D-pad Up is flight assist, Down the fire mode, Left the running lights, and Right is free. R3 is the brake and L3 held is
-free look. Wing orders have no pad button in M3 (the comms menu comes with M5).
+free look. D-pad Right opens the comms menu (see Wing orders).
 
 ## Wing orders
 
 Keys 1 to 4, or `wing order <attack|form|engage|cover>` in the console. The HUD names the order for 3.5 s, for example
 `ALPHA 2: COPY, FORMING UP`.
+
+The comms menu (D-pad Right, or Ctrl) is a radial menu like the target menu: the same ring at the left, the game paused and the view
+blurred behind it. Point the right stick (or the arrow keys, or the mouse) at WING ORDERS' slices, up to down going clockwise: ATTACK
+(my target), FORM ON ME, ENGAGE (at will), COVER ME. A sends the order and the game resumes; B closes the menu (from a sub-page it
+goes back a page); D-pad Right again also closes it; Start hands over to the pause menu. There is no timeout. Nothing held (fire, the
+aim stick, a D-pad press) acts when it closes. Console: `commsmenu open`, `commsmenu pick "form on me"`, `state comms_menu`.
 
 - **1, attack my target:** every wingman goes for your selected hostile, and only that one. With no hostile selected it is refused
   (`ALPHA 2: UNABLE, NO HOSTILE SELECTED`) and the old order stands. In a console script under `--console-strict`, a refusal stops the

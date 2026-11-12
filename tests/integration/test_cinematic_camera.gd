@@ -215,16 +215,16 @@ func test_lock_controls_alone_zeroes_the_commands_without_the_camera() -> void:
 func test_the_comms_menu_closes_and_waits_while_the_controls_are_held() -> void:
 	await _make_main()
 	await _press(InputAdapter.COMMS_MENU)
-	assert_false(main.comms_menu.is_open(), "no comms menu over a shot")
+	assert_false(main.comms.is_open(), "no comms menu over a shot")
 	DebugConsole.registry.execute("mission skip")
 	await _press(InputAdapter.COMMS_MENU)
-	assert_true(main.comms_menu.is_open(), "it opens with the controls free")
+	assert_true(main.comms.is_open(), "it opens with the controls free")
 	_api().lock_controls(true)
 	await _ticks(1)
-	assert_false(main.comms_menu.is_open(), "locking the controls closes it")
-	assert_false(main.adapter.comms_open, "and the D-pad is the D-pad again")
+	assert_false(main.comms.is_open(), "locking the controls closes it")
+	assert_false(get_tree().paused, "and the game runs")
 	await _press(InputAdapter.COMMS_MENU)
-	assert_false(main.comms_menu.is_open(), "and it stays shut")
+	assert_false(main.comms.is_open(), "and it stays shut")
 
 
 # --- rebase --------------------------------------------------------------------------------------------------------------------

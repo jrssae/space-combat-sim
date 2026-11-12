@@ -1,119 +1,102 @@
 class_name CommsMenu
 extends RefCounted
-## The in-flight comms menu (architecture §18 D54, M5-T07): pages of up to four entries, one per D-pad direction. The first page
-## is the wing orders; a later mission can push a page of replies on top. Pure model: `Main` feeds it the player's picks and the
-## tick, and acts on the entry a pick returns. It closes after a pick, on B, or when `CLOSE_S` of sim time passes untouched.
+## The in-flight comms menu's pages on a `RadialMenu` (architecture §18.22, M5-T46), pure. The first ring is the wing orders; an
+## entry that carries a `page` opens that ring over it (a mission's replies, sub-orders), and B goes back down the stack.
+## `select` returns the entry a pilot confirmed and closes the menu; the owner acts on it once the game runs again.
+##
+## An entry is `{label, sub?, color?, payload?, page?: {title, entries}}`.
 
-## Entries a page holds: up, right, down and left on the D-pad.
-const SLOTS: int = 4
-## How long an untouched menu stays open (s).
-const CLOSE_S: float = 4.0
+const HEADING: String = "COMMS"
+## The fewest slices a ring has: the wing orders sit on the four compass directions, as the D-pad pointed them before.
+const MIN_SLICES: int = 4
+## The most an entry ring holds before the labels get cramped.
+const MAX_SLOTS: int = 8
+const COLOR: Color = Color(0.45, 0.85, 1.0)
 
-## Why the menu last closed: pick, close (B or the game), timeout. Empty before the first close.
-var closed_by: StringName = &""
-## Entries picked so far.
-var picks: int = 0
+var radial: RadialMenu = RadialMenu.new()
 
-var _open: bool = false
-var _remaining_s: float = 0.0
-var _pages: Array[Dictionary] = []  # {"title": String, "entries": Array[Dictionary]}; the first is the root
+var _root_title: String = ""
+var _root_entries: Array[Dictionary] = []
 
 
 ## The wing orders page: the four orders in the order of keys 1-4, payload an `AiContext.Order`.
 static func wing_orders() -> Array[Dictionary]:
 	return [
-		{"label": "ATTACK MY TARGET", "payload": AiContext.Order.ATTACK_MY_TARGET},
-		{"label": "FORM ON ME", "payload": AiContext.Order.FORM_ON_ME},
-		{"label": "ENGAGE AT WILL", "payload": AiContext.Order.ENGAGE_AT_WILL},
-		{"label": "COVER ME", "payload": AiContext.Order.COVER_ME},
+		{"label": "ATTACK", "sub": "my target", "payload": AiContext.Order.ATTACK_MY_TARGET},
+		{"label": "FORM ON ME", "sub": "", "payload": AiContext.Order.FORM_ON_ME},
+		{"label": "ENGAGE", "sub": "at will", "payload": AiContext.Order.ENGAGE_AT_WILL},
+		{"label": "COVER ME", "sub": "", "payload": AiContext.Order.COVER_ME},
 	]
 
 
-## Replaces every page with one root page. Entries are {"label": String, "payload": Variant}.
+## Sets the first ring's title and entries (shown by the next `open`).
 func set_root_page(title: String, entries: Array[Dictionary]) -> void:
-	_pages.clear()
-	_pages.append(_make_page(title, entries))
+	_root_title = title
+	_root_entries = entries
 
 
-## Puts a page over the current one (a mission's replies) and restarts the timer so it can be read.
-func push_page(title: String, entries: Array[Dictionary]) -> void:
-	_pages.append(_make_page(title, entries))
-	_remaining_s = CLOSE_S
-
-
-## Goes back one page; the root page stays.
-func pop_page() -> void:
-	if _pages.size() > 1:
-		_pages.pop_back()
-		_remaining_s = CLOSE_S
-
-
+## Opens on the first ring.
 func open() -> void:
-	if _pages.is_empty():
+	if _root_entries.is_empty():
 		return
-	while _pages.size() > 1:
-		_pages.pop_back()
-	_open = true
-	_remaining_s = CLOSE_S
+	radial.open(_root_title, _slots(_root_title, _root_entries), COLOR)
 
 
-## Closes the menu (B, or the game taking the controls away).
-func close() -> void:
-	_end(&"close")
+## Puts a ring over the current one while the menu is open.
+func push_page(title: String, entries: Array[Dictionary]) -> void:
+	radial.push(title, _slots(title, entries), COLOR)
 
 
-func is_open() -> bool:
-	return _open
-
-
-func page_title() -> String:
-	return String(_pages.back()["title"]) if not _pages.is_empty() else ""
-
-
-func page_count() -> int:
-	return _pages.size()
-
-
-func entries() -> Array[Dictionary]:
-	var out: Array[Dictionary] = []
-	if not _pages.is_empty():
-		out.assign(_pages.back()["entries"])
-	return out
-
-
-func remaining_s() -> float:
-	return _remaining_s if _open else 0.0
-
-
-## Counts the close timer down on sim time.
-func tick(dt: float) -> void:
-	if not _open:
-		return
-	_remaining_s -= dt
-	if _remaining_s <= 1e-9:
-		_end(&"timeout")
-
-
-## The entry in slot `index` (0 up, 1 right, 2 down, 3 left), which closes the menu; empty when closed or the slot has none.
-func pick(index: int) -> Dictionary:
-	var page: Array[Dictionary] = entries()
-	if not _open or index < 0 or index >= page.size():
+## A: opens the highlighted entry's page and returns {}, or closes the menu and returns the entry (empty when none is lit).
+func select() -> Dictionary:
+	var entry: Dictionary = radial.select()
+	if entry.is_empty():
+		return entry
+	var page: Variant = entry.get("page")
+	if page is Dictionary:
+		push_page(str((page as Dictionary).get("title", "")), _entries_of(page as Dictionary))
 		return {}
-	var entry: Dictionary = page[index]
-	picks += 1
-	_end(&"pick")
+	radial.close(&"pick")
 	return entry
 
 
-func _end(reason: StringName) -> void:
-	if not _open:
-		return
-	_open = false
-	_remaining_s = 0.0
-	closed_by = reason
+## B: one ring back, or out of the menu from the first. Returns whether it is still open.
+func back() -> bool:
+	return radial.back()
 
 
-func _make_page(title: String, entries_in: Array[Dictionary]) -> Dictionary:
-	if entries_in.size() > SLOTS:
-		push_warning("CommsMenu: page '%s' has %d entries; only the first %d show" % [title, entries_in.size(), SLOTS])
-	return {"title": title, "entries": entries_in.slice(0, SLOTS)}
+func close(reason: StringName = &"close") -> void:
+	radial.close(reason)
+
+
+func is_open() -> bool:
+	return radial.is_open()
+
+
+## How many rings are stacked (0 closed).
+func page_count() -> int:
+	return radial.depth()
+
+
+func page_title() -> String:
+	return radial.title()
+
+
+func picks() -> int:
+	return radial.picks
+
+
+func closed_by() -> StringName:
+	return radial.closed_by
+
+
+func _entries_of(page: Dictionary) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	out.assign(page.get("entries", []))
+	return out
+
+
+func _slots(title: String, entries: Array[Dictionary]) -> Array[Dictionary]:
+	if entries.size() > MAX_SLOTS:
+		push_warning("CommsMenu: page '%s' has %d entries; only the first %d show" % [title, entries.size(), MAX_SLOTS])
+	return RadialMenu.arrange(entries.slice(0, MAX_SLOTS), {}, MIN_SLICES)

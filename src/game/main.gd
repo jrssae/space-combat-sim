@@ -72,9 +72,8 @@ var bench: BenchRunner = null
 var station_scene: StationScene = null
 ## Times the overlay's text was rebuilt (tests).
 var overlay_refreshes: int = 0
-## The comms menu on D-pad Right (M5-T07): its model, and the view that draws it.
-var comms_menu: CommsMenu = CommsMenu.new()
-var comms_menu_view: CommsMenuView = null
+## The comms menu on D-pad Right (M5-T46): a radial menu, the game pauses while it is open.
+var comms: CommsMenuDirector = null
 ## The target menu on a hold of the target button (M5-T25): the game pauses while it is open.
 var target_menu: TargetMenuDirector = null
 ## Free-flight encounters (M5-T17): null in a scenario without an encounter pools file.
@@ -211,10 +210,9 @@ func _ready() -> void:
 	add_child(pause_menu)
 	_setup_perf()
 	_setup_encounters(scenario)
-	comms_menu.set_root_page("WING ORDERS", CommsMenu.wing_orders())
-	comms_menu_view = CommsMenuView.new()
-	comms_menu_view.menu = comms_menu
-	add_child(comms_menu_view)
+	comms = CommsMenuDirector.new()
+	comms.main = self
+	add_child(comms)
 	target_menu = TargetMenuDirector.new()
 	target_menu.main = self
 	add_child(target_menu)
@@ -235,6 +233,9 @@ func _physics_process(delta: float) -> void:
 		# The target menu has the pad and the game is paused: only its stick, select, back and Start are read.
 		target_menu.step(adapter.sample_radial(input_source, delta))
 		return
+	if comms.is_open():
+		comms.step(adapter.sample_radial(input_source, delta))
+		return
 	var pc: PilotCommand = adapter.sample(input_source, delta)
 	if control_lock.apply(pc, controls_locked(), camera_rig.is_playing_shot()):
 		camera_rig.stop_shot()
@@ -249,7 +250,8 @@ func _physics_process(delta: float) -> void:
 	if not get_tree().paused:
 		camera_rig.set_look(delta, pc.ui.look_active, pc.ui.look_stick, pc.ui.look_mouse_px)
 	_handle_ui(pc.ui)
-	_step_comms_menu(pc.ui, delta)
+	if pc.ui.comms_open:
+		comms.open()  # says nothing when it cannot (the player is down, a cinematic): the press is simply lost
 	if pc.ui.target_menu_open:
 		target_menu.open()  # it says nothing when it cannot (the player is down, a cinematic): the hold is simply lost
 
@@ -712,23 +714,6 @@ func _handle_ui(ui: UiCommand) -> void:
 	_give_wing_orders(ui)
 
 
-# D-pad Right opens the comms menu, its four directions give the wing orders through the same call as keys 1-4, B or 4 s close it.
-# The timer runs here, so it stops while the pause menu has the game. A cinematic or locked controls close it (D55).
-func _step_comms_menu(ui: UiCommand, delta: float) -> void:
-	if ui.pause or not player_alive or controls_locked() or camera_rig.is_playing_shot():
-		comms_menu.close()
-	elif ui.comms_open:
-		comms_menu.open()
-	elif ui.comms_close:
-		comms_menu.close()
-	elif ui.comms_pick >= 0:
-		var entry: Dictionary = comms_menu.pick(ui.comms_pick)
-		if not entry.is_empty() and entry["payload"] is int:
-			wings.give_order(entry["payload"] as AiContext.Order)
-	comms_menu.tick(delta)
-	adapter.comms_open = comms_menu.is_open()
-
-
 # Keys 1-4 (UiCommand edges, never `Input`): orders for the player's wing (architecture §16.3).
 func _give_wing_orders(ui: UiCommand) -> void:
 	if ui.wing_attack:
@@ -747,8 +732,8 @@ func _update_mouse_capture() -> void:
 	var godot_source := input_source as GodotInputSource
 	if godot_source == null or DisplayServer.get_name() == "headless":
 		return
-	# The target menu keeps the mouse too: its direction points at a slice.
-	var in_play: bool = not get_tree().paused or (target_menu != null and target_menu.is_open())
+	# A radial menu keeps the mouse too: its direction points at a slice.
+	var in_play: bool = not get_tree().paused or (target_menu != null and target_menu.is_open()) or (comms != null and comms.is_open())
 	var flying: bool = in_play and not DebugConsole.is_open() and get_window().has_focus() \
 			and not Input.is_physical_key_pressed(KEY_ALT)
 	var wanted: Input.MouseMode = Input.MOUSE_MODE_CAPTURED if flying else Input.MOUSE_MODE_VISIBLE
@@ -859,6 +844,8 @@ func _cmd_pause(args: Dictionary) -> ConsoleResult:
 		return ConsoleResult.failure("the pause menu is open: resume from it")
 	if target_menu != null and target_menu.is_open():
 		return ConsoleResult.failure("the target menu is open: close it first (targetmenu close)")
+	if comms != null and comms.is_open():
+		return ConsoleResult.failure("the comms menu is open: close it first (commsmenu close)")
 	var requested: Variant = args.get(&"state")
 	set_paused(not get_tree().paused if requested == null else bool(requested))
 	return ConsoleResult.line("paused" if get_tree().paused else "running")

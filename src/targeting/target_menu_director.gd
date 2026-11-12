@@ -67,6 +67,8 @@ func why_not() -> String:
 		return "there is no ship to target from"
 	if main.pause_menu != null and main.pause_menu.is_open():
 		return "the pause menu is open"
+	if main.comms != null and main.comms.is_open():
+		return "the comms menu is open"
 	if main.controls_locked() or main.camera_rig.is_playing_shot():
 		return "the controls are held (a cinematic or the mission)"
 	return ""
@@ -84,8 +86,6 @@ func open() -> String:
 	last_open_usec = Time.get_ticks_usec() - started
 	last_candidates = candidates.size()
 	opens += 1
-	main.comms_menu.close()
-	main.adapter.comms_open = false
 	_paused_before = get_tree().paused
 	get_tree().paused = true
 	main.adapter.begin_radial(main.input_source)

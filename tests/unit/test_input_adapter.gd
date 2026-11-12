@@ -531,75 +531,46 @@ func test_a_menu_drains_the_mouse_and_the_wheel() -> void:
 	assert_false(cmd.combat.target_next, "nor does the wheel step a target")
 
 
-# --- The comms menu (D54, M5-T07): while it is open the D-pad picks and B closes --------------------------------------
+# --- The comms menu (D54, M5-T46): D-pad Right opens it, and the radial menu owns the pad until it closes -------------------
 
 
 func test_dpad_right_opens_the_comms_menu_for_one_tick() -> void:
 	source.hold(InputAdapter.COMMS_MENU)
 	var cmd: PilotCommand = adapter.sample(source, DT)
 	assert_true(cmd.ui.comms_open)
-	assert_eq(cmd.ui.comms_pick, -1)
 	assert_true(cmd.ui.to_dict()["comms_open"])
 	assert_false(adapter.sample(source, DT).ui.comms_open, "held is not a second press")
 
 
-func test_while_open_the_four_directions_pick_up_right_down_left() -> void:
-	var directions: Array[StringName] = [InputAdapter.TOGGLE_ASSIST, InputAdapter.COMMS_MENU, InputAdapter.WEAPON_NEXT,
-			InputAdapter.TOGGLE_RUNNING_LIGHTS]
-	for i: int in directions.size():
-		adapter.reset()
-		source.release_all()
-		adapter.comms_open = true
-		source.hold(directions[i])
-		var cmd: PilotCommand = adapter.sample(source, DT)
-		assert_eq(cmd.ui.comms_pick, i, String(directions[i]))
-		assert_false(cmd.ui.comms_open, "D-pad Right picks while open, it does not open again")
-		assert_false(cmd.flight.toggle_assist or cmd.combat.weapon_next or cmd.ui.toggle_running_lights, "no flight action fires")
+func test_dpad_right_closes_the_comms_menu_again_but_not_the_press_that_opened_it() -> void:
+	source.hold(InputAdapter.COMMS_MENU)
+	adapter.begin_radial(source)
+	assert_false(adapter.sample_radial(source, DT).comms_open, "the press that opened it is not a close")
+	source.release(InputAdapter.COMMS_MENU)
+	assert_false(adapter.sample_radial(source, DT).comms_open)
+	source.hold(InputAdapter.COMMS_MENU)
+	assert_true(adapter.sample_radial(source, DT).comms_open, "a fresh press is")
+	assert_false(adapter.sample_radial(source, DT).comms_open, "an edge, not a level")
 
 
-func test_while_open_b_closes_it_and_neither_target_button_cycles() -> void:
-	for button: StringName in [InputAdapter.TARGET_CYCLE, InputAdapter.TARGET_NEXT]:
-		adapter.reset()
-		source.release_all()
-		adapter.comms_open = true
-		source.hold(button)
-		var pressed: PilotCommand = adapter.sample(source, DT)
-		assert_true(pressed.ui.comms_close, String(button))
-		assert_eq(pressed.ui.comms_pick, -1)
-		adapter.comms_open = false
-		source.release(button)
-		var released: PilotCommand = adapter.sample(source, DT)
-		assert_false(released.combat.target_nearest or released.ui.target_menu_open, "the release of the closing press taps nothing")
+func test_the_dpad_does_not_point_the_radial_menu() -> void:
+	adapter.begin_radial(source)
+	for action: StringName in [InputAdapter.TOGGLE_ASSIST, InputAdapter.COMMS_MENU, InputAdapter.WEAPON_NEXT,
+			InputAdapter.TOGGLE_RUNNING_LIGHTS]:
+		source.hold(action)
+	var ui: UiCommand = adapter.sample_radial(source, DT)
+	assert_eq(ui.radial_point, Vector2.ZERO, "only the stick, the arrows and the mouse point")
+	assert_false(ui.radial_select or ui.radial_back)
 
 
-func test_a_long_b_hold_while_open_does_not_open_the_target_menu() -> void:
-	adapter.comms_open = true
-	source.hold(InputAdapter.TARGET_NEXT)
-	for _i: int in 40:
-		var cmd: PilotCommand = adapter.sample(source, DT)
-		assert_false(cmd.ui.target_menu_open)
-	adapter.comms_open = false
-	assert_false(adapter.sample(source, DT).ui.target_menu_open)
-
-
-func test_the_wheel_and_the_other_controls_keep_working_while_open() -> void:
-	adapter.comms_open = true
-	source.hold(InputAdapter.FIRE)
-	source.hold(InputAdapter.MAIN_LEFT, 0.5)
-	source.hold(InputAdapter.WING_FORM, 1.0, true)
-	var cmd: PilotCommand = adapter.sample(source, DT)
-	assert_true(cmd.combat.fire)
-	assert_almost_eq(cmd.flight.main_left, 0.5, 1e-9)
-	assert_true(cmd.ui.wing_form, "keys 1-4 still give the orders")
-
-
-func test_a_press_held_when_the_menu_closes_fires_nothing_afterwards() -> void:
-	adapter.comms_open = true
+func test_a_dpad_press_held_through_the_comms_menu_fires_nothing_when_it_closes() -> void:
+	adapter.begin_radial(source)
 	source.hold(InputAdapter.TOGGLE_ASSIST)
-	assert_eq(adapter.sample(source, DT).ui.comms_pick, 0)
-	adapter.comms_open = false
+	source.hold(InputAdapter.WEAPON_NEXT)
+	adapter.sample_radial(source, DT)
+	adapter.end_radial(source)
 	var after: PilotCommand = adapter.sample(source, DT)
-	assert_false(after.flight.toggle_assist, "D-pad Up still down: no assist toggle")
+	assert_false(after.flight.toggle_assist or after.combat.weapon_next, "D-pad Up and Down still held: nothing toggles")
 
 
 # --- A radial menu (M5-T25): only its stick, select, back and Start are read ------------------------------------------
@@ -669,7 +640,7 @@ func test_nothing_else_is_read_behind_a_radial_menu() -> void:
 	adapter.begin_radial(source)
 	for action: StringName in [InputAdapter.RESET_SHIP, InputAdapter.TOGGLE_CAMERA, InputAdapter.TOGGLE_RUNNING_LIGHTS,
 			InputAdapter.AUTOTRACK, InputAdapter.TOGGLE_ASSIST, InputAdapter.WEAPON_NEXT, InputAdapter.TARGET_CYCLE,
-			InputAdapter.TARGET_NEXT, InputAdapter.COMMS_MENU, InputAdapter.FIRE, InputAdapter.WING_ATTACK]:
+			InputAdapter.TARGET_NEXT, InputAdapter.FIRE, InputAdapter.WING_ATTACK]:
 		source.hold(action)
 	source.push_wheel(2)
 	var ui: UiCommand = adapter.sample_radial(source, DT)

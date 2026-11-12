@@ -217,7 +217,7 @@ func test_only_the_menus_controls_are_read_while_it_is_open() -> void:
 	assert_eq(main.ship.running_lights, lights)
 	assert_eq(main.camera_rig.mode, camera)
 	assert_false(main.adapter.autotrack_on)
-	assert_false(main.comms_menu.is_open())
+	assert_false(main.comms.is_open())
 	# Held when it closes, then let go: still nothing.
 	source.hold(InputAdapter.TOGGLE_ASSIST)
 	source.hold(InputAdapter.TOGGLE_CAMERA)
@@ -248,9 +248,10 @@ func test_it_does_not_open_when_the_controls_are_not_the_pilots() -> void:
 	assert_ne(main.target_menu.open(), "", "not with the player down")
 	main.player_alive = true
 	await _press(InputAdapter.COMMS_MENU)
-	assert_true(main.comms_menu.is_open())
+	assert_true(main.comms.is_open())
+	assert_ne(main.target_menu.open(), "", "not over the comms menu")
+	main.comms.close()
 	assert_eq(main.target_menu.open(), "")
-	assert_false(main.comms_menu.is_open(), "opening it closes the comms menu")
 	assert_ne(main.target_menu.open(), "", "not twice")
 	main.target_menu.close()
 

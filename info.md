@@ -77,6 +77,7 @@ Arguments in `<angle brackets>` are required, `[square brackets]` optional, `a|b
 | `respawn` | | Reset the ship to the scenario start (refused in a mission) | in flight |
 | `pause` | `[on\|off]` | Pause or resume the game; no argument toggles; refused while the pause menu is open (resume from it) | in flight |
 | `targetmenu` | `open\|pick <entry>\|highlight <entry>\|back\|close` | The target menu (a hold of the target button): `open` pauses the game and shows the categories; `pick` takes a slice 0-5 clockwise from the top or its label (`enemies`, `none`, `"raider 2"`) and opens that category or makes the pick; `highlight` points at an entry without picking it (the preview panel shows it); `back` goes back a ring; `close` resumes | in flight |
+| `commsmenu` | `open\|pick <entry>\|highlight <entry>\|back\|close` | The comms menu (D-pad Right), a radial menu: `open` pauses the game and shows the wing orders; `pick` takes a slice 0-3 clockwise from the top or its label (`attack`, `"form on me"`, `engage`, `"cover me"`) and sends the order; `highlight` points at an entry without sending it; `back` goes back a ring or closes; `close` resumes | in flight |
 | `scenario` | `[combat_sandbox\|free_flight\|instructor_route\|dogfight\|civilian_showcase\|belt_showcase]` | Load a scenario for this session and reload the scene | in flight |
 | `window` | `<width> <height>` or `max\|normal` | Resize the window, or maximize or restore it | in flight |
 | `throttle` | `<level>` | Hold both main pods at a level, 0..1, on top of the pilot's input | in flight |
@@ -172,7 +173,7 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `hud` | Whether the HUD shows, and where the lead, prograde and target marks are | in flight |
 | `screens` | The cockpit screens: shown, powered, paint counts and the lamps lit | in flight |
 | `pause_menu` | Whether the pause menu is open, the page on top and how many pages are open | in flight |
-| `comms_menu` | The comms menu (D-pad Right): whether it is open, the page, time left, entries picked and why it last closed | in flight |
+| `comms_menu` | The comms menu (D-pad Right): whether it is open, the page, the highlighted entry, the ring's entries, orders picked, the last order, why it last closed and the focus pull | in flight |
 | `target_menu` | The target menu: whether it is open, the ring and its entries, the highlight, the ship's target as the HUD names it, the HUD waypoint, the last pick, why it last closed, and what the last opening cost, and the focus pull's amount (`focus`) | in flight |
 | `target_preview` | The target menu's preview panel: whether it shows, the entry and its kind, the hull drawn as a wireframe and its line count, whether its edges are still being found and its viewport renders, the panel's rows and flag, the meshes whose edges are kept, what the last edge search cost (in all, its longest frame, frames) and the panel's CPU work per frame | in flight |
 | `render` | The renderer (`forward_plus` or `headless`), fps, frame time, draw calls, triangles, VRAM, far dots, GPU, display and window | in flight |
