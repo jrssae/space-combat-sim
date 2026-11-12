@@ -635,6 +635,11 @@ const TURRET_KERNEL_USE_ALLOWED: Array[String] = ["use std::", "use godot::built
 const VOICE_KERNEL_FILE: String = "res://native/src/voice_kernels.rs"
 const VOICE_KERNEL_USER: String = "res://native/src/voice_rows.rs"
 const VOICE_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::Vector3;", "use crate::rows::", "use crate::v3::"]
+## The ram tracker (M5-T33): contacts, windows and one ram per pair per collision, held to the kernels' rules; it imports the
+## vector maths only. The shell (`ram_contacts.rs`) reads Jolt and the rows for it.
+const RAM_TRACKER_FILE: String = "res://native/src/ram_tracker.rs"
+const RAM_TRACKER_USER: String = "res://native/src/ram_contacts.rs"
+const RAM_TRACKER_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::Vector3;", "use crate::v3::"]
 ## The core's worker threads (M4-T18): engine-free, the standard library and rayon only.
 const THREADS_FILE: String = "res://native/src/threads.rs"
 const THREADS_USE_ALLOWED: Array[String] = ["use std::", "use rayon::"]
@@ -683,6 +688,8 @@ func test_the_kernels_hold_no_engine_type() -> void:
 	violations.append_array(_engine_free_violations(THREADS_FILE, KERNEL_FORBIDDEN, THREADS_USE_ALLOWED))
 	violations.append_array(_engine_free_violations(TURRET_KERNEL_FILE, KERNEL_FORBIDDEN, TURRET_KERNEL_USE_ALLOWED))
 	violations.append_array(_engine_free_violations(VOICE_KERNEL_FILE, KERNEL_FORBIDDEN, VOICE_KERNEL_USE_ALLOWED))
+	violations.append_array(_engine_free_violations(RAM_TRACKER_FILE, KERNEL_FORBIDDEN, RAM_TRACKER_USE_ALLOWED))
+	assert_true(FileAccess.get_file_as_string(RAM_TRACKER_USER).contains("use crate::ram_tracker::"), "the shell reads the ram tracker")
 	assert_true(FileAccess.get_file_as_string(VOICE_KERNEL_FILE).contains("pub fn ships_near("), "the voice kernel holds ships_near")
 	assert_true(FileAccess.get_file_as_string(VOICE_KERNEL_USER).contains("use crate::voice_kernels"), "the shell reads the voice kernel")
 	assert_eq(violations.size(), 0, "no engine type, call, crate path or stray import in the kernels, the row tables or the brains: %s" % violations)

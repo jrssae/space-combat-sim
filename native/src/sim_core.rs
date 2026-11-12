@@ -898,6 +898,12 @@ impl ScsSimCore {
         out
     }
 
+    /// How many hull rows there are (active hulls), without their columns.
+    #[func]
+    fn hull_count(&self) -> i64 {
+        self.hull_rows.len() as i64
+    }
+
     /// The hull rows (an active hull each, in the `damageable` group's order) as `[body_ids, hull_ids, rigid, positions,
     /// velocities, radii, bases, rigid_rows]`: the bases as three columns (x, y and z axes) a hull, and the indices of
     /// the rigid hulls among them. What the resolvers need beside the pairs.

@@ -1,7 +1,9 @@
 class_name RamTracker
 extends RefCounted
-## The bookkeeping behind ram detection (architecture §16 D32, M3-T04), pure. The `RamResolver` reads the bodies and runs the
-## sweeps; this decides which contacts are new, measures each new contact's velocity change, and keeps one ram per pair per
+## The ram tracker as GDScript (architecture §16 D32, M3-T04), the reference the native `ScsRamTracker`
+## (`native/src/ram_tracker.rs`, M5-T33) repeats; a test fixture since M5-T33, as the game runs only the native one
+## (`test_ram_tracker` runs both side by side). Pure: the bookkeeping behind ram detection. The `RamResolver` reads the
+## bodies and runs the sweeps; this decides which contacts are new, measures each new contact's velocity change, and keeps one ram per pair per
 ## collision. Once per physics tick, in this order:
 ##
 ## 1. `contacts_columns(...)`: every rigid body as read this tick. Returns the contact rams that land now.

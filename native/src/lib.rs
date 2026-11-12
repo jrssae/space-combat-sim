@@ -52,3 +52,7 @@ mod voice_rows;
 // M4-T23: the player's radar sphere, an engine-free kernel, and its shell.
 mod radar_kernel;
 mod radar_plot;
+
+// M5-T33: the ram tracker, an engine-free kernel, and its shell over Jolt's contacts and the core's rows.
+mod ram_contacts;
+mod ram_tracker;
