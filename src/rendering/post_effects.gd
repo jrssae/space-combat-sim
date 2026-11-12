@@ -24,6 +24,8 @@ var _gate: MotionBlurGate = MotionBlurGate.new()
 var _world: WorldFrame
 var _sun_uv: Vector2 = Vector2(0.5, 0.5)
 var _sun_facing: float = 1.0
+var _star_color: Color = Color.WHITE
+var _flare_strength: float = 1.0
 
 
 func _ready() -> void:
@@ -71,8 +73,24 @@ func watch_world(world: WorldFrame) -> void:
 
 ## Tints the flare to the star. `color` is linear, as the picture the flare is added to.
 func set_star_color(color: Color) -> void:
+	_star_color = color
+	_apply_flare_color()
+
+
+## Scales the flare from 0 to 1 (a planet covering the star dims it, M6-T12).
+func set_flare_strength(strength: float) -> void:
+	_flare_strength = clampf(strength, 0.0, 1.0)
+	_apply_flare_color()
+
+
+func flare_strength() -> float:
+	return _flare_strength
+
+
+func _apply_flare_color() -> void:
 	if _flare != null:
-		_flare.sun_color = Color(color.r * FLARE_LEVEL, color.g * FLARE_LEVEL, color.b * FLARE_LEVEL)
+		var level: float = FLARE_LEVEL * _flare_strength
+		_flare.sun_color = Color(_star_color.r * level, _star_color.g * level, _star_color.b * level)
 
 
 func flare_effect() -> LensFlareEffect:

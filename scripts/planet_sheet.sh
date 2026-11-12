@@ -11,7 +11,7 @@ GODOT="${GODOT_BIN:-${ROOT}/.tools/godot/godot}"
 cd "${ROOT}"
 source "${ROOT}/scripts/lib_locks.sh"
 OUT="${SHEET_OUT:-references/screenshots/M6-T11 planet}"
-ARGS=("shots=${OUT}")
+ARGS=("shots=${OUT}" "flare=${SHEET_FLARE:-on}" "layer=${SHEET_LAYER:-on}")
 if [[ $# -gt 0 ]]; then
     ARGS+=("views=$1")
 fi

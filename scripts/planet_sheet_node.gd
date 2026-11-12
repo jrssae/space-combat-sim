@@ -8,7 +8,7 @@ extends Node
 ## Each line printed gives the GPU's time for the frame, the mean over the last `measure` frames: `layer=off` hides the
 ## scaled-space layer for the same views, the cost's baseline.
 ##
-## Arguments after `--`: shots=<dir> views=<a,b,...> settle=<frames> measure=<frames> layer=<on|off>
+## Arguments after `--`: shots=<dir> views=<a,b,...> settle=<frames> measure=<frames> layer=<on|off> flare=<on|off>
 
 const ENV_SCENE: String = "res://src/environment/space_environment.tscn"
 const PLANET: StringName = &"epsilon_iii"
@@ -26,6 +26,17 @@ const VIEWS: Dictionary = {
 	"rail_like_still": {"anchor": "rail", "orbit": 0.305, "aim": "planet", "fov": 26.0, "roll": 56.0},
 	"rail_lit_limb_zoom": {"anchor": "rail", "orbit": 0.333, "aim": "lit_limb", "lift_deg": 0.0, "fov": 3.0, "roll": 0.0},
 	"rail_dark_limb_zoom": {"anchor": "rail", "orbit": 0.333, "aim": "dark_limb", "lift_deg": 0.0, "fov": 3.0, "roll": 0.0},
+	"sun_open": {"anchor": "rail", "orbit": 0.333, "aim": "sun", "fov": 24.0, "roll": 0.0},
+	"sun_wide": {"anchor": "rail", "orbit": 0.333, "aim": "sun", "fov": 70.0, "roll": 0.0},
+	"sun_off_axis": {"anchor": "rail", "orbit": 0.333, "aim": "sun", "lift_deg": 14.0, "fov": 60.0, "roll": 0.0},
+	"sun_planet": {"anchor": "rail", "orbit": 0.07, "aim": "sun_planet", "fov": 70.0, "roll": 0.0},
+	"sun_planet_tight": {"anchor": "rail", "orbit": 0.045, "aim": "sun_planet", "fov": 40.0, "roll": 0.0},
+	"sun_limb_a": {"anchor": "rail", "orbit": 0.0268, "aim": "sun", "fov": 12.0, "roll": 0.0},
+	"sun_limb_b": {"anchor": "rail", "orbit": 0.0278, "aim": "sun", "fov": 12.0, "roll": 0.0},
+	"sun_limb_c": {"anchor": "rail", "orbit": 0.0287, "aim": "sun", "fov": 12.0, "roll": 0.0},
+	"sun_limb_d": {"anchor": "rail", "orbit": 0.0310, "aim": "sun", "fov": 12.0, "roll": 0.0},
+	"sun_eclipse": {"anchor": "rail", "orbit": 0.0, "aim": "sun", "fov": 12.0, "roll": 0.0},
+	"sun_orbit400": {"anchor": "orbit", "altitude_km": 400.0, "phase_deg": 100.0, "aim": "sun_planet", "fov": 80.0, "roll": 0.0},
 	"orbit400_lit_limb": {"anchor": "orbit", "altitude_km": 400.0, "phase_deg": 90.0, "aim": "lit_limb", "lift_deg": 12.0,
 			"fov": 60.0, "roll": 0.0},
 	"orbit400_day_limb": {"anchor": "orbit", "altitude_km": 400.0, "phase_deg": 45.0, "aim": "side_limb", "lift_deg": 12.0,
@@ -41,7 +52,7 @@ const VIEWS: Dictionary = {
 }
 
 var options: Dictionary = {"shots": "references/screenshots/M6-T11 planet", "views": ",".join(PackedStringArray(VIEWS.keys())),
-		"settle": "12", "measure": "60", "layer": "on"}
+		"settle": "12", "measure": "60", "layer": "on", "flare": "on"}
 var world: WorldFrame
 var camera: Camera3D
 var env: SpaceEnvironment
@@ -67,6 +78,7 @@ func _ready() -> void:
 	env.scaled_space.epoch_offset_s = 0.0
 	env.scaled_space.visible = options["layer"] != "off"
 	system = StarSystem.load_system(&"local")
+	Settings.set_value(&"lens_flare", options["flare"] != "off")
 	RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(), true)
 	_run.call_deferred()
 
@@ -89,9 +101,9 @@ func _run() -> void:
 		var path: String = String(options["shots"]).path_join(view_name + ".png")
 		get_viewport().get_texture().get_image().save_png(path)
 		var planet: ScaledPlacement = env.scaled_space.placement_of(PLANET)
-		print("[planet_sheet] %s: planet %.2f deg across, sun %.1f deg from it, key light %.2f, GPU %.3f ms, draw calls %d, VRAM %.1f MB -> %s" % [
+		print("[planet_sheet] %s: planet %.2f deg across, sun %.1f deg from it, key light %.2f, flare %.2f, GPU %.3f ms, draw calls %d, VRAM %.1f MB -> %s" % [
 				view_name, planet.angular_size_deg(), rad_to_deg(planet.direction.angle_to(env.scaled_space.sun_direction())),
-				env.scaled_space.key_light(), gpu_ms,
+				env.scaled_space.key_light(), env.post_effects.flare_strength(), gpu_ms,
 				RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME),
 				RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_VIDEO_MEM_USED) / 1048576.0, path])
 	get_tree().quit()
@@ -130,6 +142,11 @@ func _aim(view: Dictionary) -> void:
 	var limb: float = planet.angular_radius_rad + deg_to_rad(float(view.get("lift_deg", 0.0)))
 	var look: Vector3 = down
 	match String(view["aim"]):
+		"sun":
+			var over: Vector3 = sun.cross(Vector3.UP).normalized()
+			look = (sun * cos(deg_to_rad(float(view.get("lift_deg", 0.0)))) + over * sin(deg_to_rad(float(view.get("lift_deg", 0.0))))).normalized()
+		"sun_planet":
+			look = (down + sun).normalized()
 		"lit_limb":
 			look = down * cos(limb) + sunward * sin(limb)
 		"dark_limb":
@@ -138,7 +155,7 @@ func _aim(view: Dictionary) -> void:
 			look = down * cos(limb) + side * sin(limb)
 	# Limb views keep the sky up (away from the planet's centre across the picture); face-on views keep the sun up.
 	var up: Vector3 = sunward
-	if String(view["aim"]) != "planet" and String(view["aim"]) != "down":
+	if not ["planet", "down", "sun", "sun_planet"].has(String(view["aim"])):
 		up = (-down - look * look.dot(-down)).normalized()
 	if absf(up.dot(look)) > 0.999:
 		up = side

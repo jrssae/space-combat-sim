@@ -69,7 +69,9 @@ func test_from_the_station_the_planet_is_20_degrees_across() -> void:
 	assert_almost_eq(_drawn_direction(PLANET).angle_to(planet.direction), 0.0, 1.0e-4, "in the same direction")
 	assert_true(layer.sphere_of(PLANET).visible)
 	assert_almost_eq(layer.placement_of(STAR).angular_size_deg(), 0.652, 0.002, "the star from 0.6 AU")
-	assert_almost_eq(_drawn_size_deg(STAR), 0.652, 0.002)
+	# The star's sphere also holds its corona: SunLook.GLOW_SCALE times the disc.
+	assert_almost_eq(_drawn_size_deg(STAR), 0.652 * SunLook.GLOW_SCALE, 0.05)
+	assert_almost_eq(layer.placement_of(STAR).angular_size_deg(), 0.652, 0.002, "the disc itself is its true size")
 	assert_gt(planet.depth, layer.placement_of(STAR).depth, "the planet is drawn over the star")
 
 
@@ -279,3 +281,45 @@ func test_the_maps_are_mipmapped() -> void:
 	for map: StringName in [&"albedo_map", &"normal_map", &"wisp_map"]:
 		var texture: Texture2D = surface.get_shader_parameter(map)
 		assert_true(texture.get_image().has_mipmaps(), "%s has its mip levels, so the far planet does not shimmer" % map)
+
+
+func test_the_star_is_drawn_with_the_star_look_in_its_data_colour() -> void:
+	_on_the_rail()
+	var material: ShaderMaterial = layer.sphere_of(STAR).material_override as ShaderMaterial
+	assert_eq(material.shader.resource_path, ScaledSpace.STAR_SHADER_PATH)
+	var expected: Color = SunLook.disc_colour(StarCatalog.temperature_k(&"local")).linear_to_srgb()
+	assert_eq(material.get_shader_parameter(&"colour"), expected)
+	assert_eq(material.get_shader_parameter(&"glow_scale"), SunLook.GLOW_SCALE)
+	assert_eq(env.key_star.light_color, expected, "the key light is the star's colour")
+
+
+func test_the_flare_fades_with_the_eclipse_and_the_limb() -> void:
+	layer.epoch_offset_s = system.period_s(&"babylon5") / 3.0
+	_on_the_rail()
+	env.follow_sun()
+	assert_eq(env.post_effects.flare_strength(), 1.0, "full in the open")
+	layer.epoch_offset_s = 0.0
+	layer.refresh(camera)
+	env.follow_sun()
+	assert_eq(env.post_effects.flare_strength(), 0.0, "gone in the middle of the shadow")
+	var period: float = system.period_s(&"babylon5")
+	var last: float = 0.0
+	for step: int in 9:
+		SimClock.reset(period * (9.5 + 0.125 * step) / 360.0)
+		layer.refresh(camera)
+		env.follow_sun()
+		assert_gte(env.post_effects.flare_strength(), last, "the flare only grows as the disc comes out (%d)" % step)
+		last = env.post_effects.flare_strength()
+	assert_eq(last, 1.0)
+	var flare: LensFlareEffect = env.post_effects.flare_effect()
+	if flare != null:
+		assert_gt(flare.sun_color.r, 0.0, "back at full strength")
+
+
+func test_a_held_key_light_leaves_the_flare_whole() -> void:
+	_on_the_rail()
+	env.follow_sun()
+	assert_eq(env.post_effects.flare_strength(), 0.0)
+	env.hold_key_star(true)
+	env.follow_sun()
+	assert_eq(env.post_effects.flare_strength(), 1.0)

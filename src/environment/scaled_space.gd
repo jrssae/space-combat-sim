@@ -13,12 +13,14 @@ extends Node3D
 ## system on that World nothing is drawn and the light is left alone.
 ##
 ## A planet with generated maps (M6-T11, `PlanetLook`) is drawn by its own surface shader on the true sphere, with a haze
-## shell over it; a body without maps keeps the plain stand-in. The star's look is M6-T12's.
+## shell over it; a body without maps keeps the plain stand-in. The star is a limb-darkened disc with a corona (M6-T12,
+## `SunLook`, `scaled_star.gdshader`) on a sphere `SunLook.GLOW_SCALE` times its disc.
 ##
 ## Console (§6.4): provider `scaled`, command `scaled`. The look is (H).
 
 const SHADER_PATH: String = "res://assets/shaders/scaled_body.gdshader"
 const PLANET_SHADER_PATH: String = "res://assets/shaders/scaled_planet.gdshader"
+const STAR_SHADER_PATH: String = "res://assets/shaders/scaled_star.gdshader"
 const ATMOSPHERE_SHADER_PATH: String = "res://assets/shaders/scaled_atmosphere.gdshader"
 ## Runs after the camera rig has moved the cameras this frame, as the sky does.
 const LATE_PRIORITY: int = 1000
@@ -27,8 +29,6 @@ const LATE_PRIORITY: int = 1000
 ## gibbous planet. `scaled epoch` moves it.
 const STAND_IN_EPOCH_S: float = 23_300.0
 const PLANET_COLOUR: Color = Color(0.55, 0.36, 0.25)
-## How bright the star's disc is drawn against a lit surface's 1.
-const STAR_BRIGHTNESS: float = 8.0
 const SPHERE_SEGMENTS: int = 128
 const ACTIONS: PackedStringArray = ["status", "epoch", "show", "hide"]
 
@@ -114,7 +114,9 @@ func refresh(camera: Camera3D) -> void:
 					_from(eye, at), radius_m))
 		sphere.visible = true
 		var axes: Basis = _frames.get(id, Basis.IDENTITY)
-		sphere.global_transform = Transform3D(axes * Basis.from_scale(Vector3.ONE * placed.radius), view.origin + placed.offset)
+		# The star's sphere also holds its corona.
+		var reach: float = placed.radius * (SunLook.GLOW_SCALE if id == _star else 1.0)
+		sphere.global_transform = Transform3D(axes * Basis.from_scale(Vector3.ONE * reach), view.origin + placed.offset)
 		(sphere.material_override as ShaderMaterial).set_shader_parameter(&"layer_depth", placed.depth)
 		if _shells.has(id):
 			(_shells[id].material_override as ShaderMaterial).set_shader_parameter(&"layer_depth", placed.depth)
@@ -197,6 +199,11 @@ func key_light() -> float:
 	return _key_light
 
 
+## The lens flare's share of its strength: it fades as a planet covers the star's disc (M6-T12); 1 with no star in view.
+func flare_strength() -> float:
+	return SunLook.flare_factor(_key_light) if _has_sun else 1.0
+
+
 # One sphere per body of `system`; the star's is the one that glows, in the star's own colour.
 func _build(system: StarSystem) -> void:
 	for sphere: MeshInstance3D in _spheres.values():
@@ -225,11 +232,14 @@ func _build(system: StarSystem) -> void:
 				continue
 			push_warning("ScaledSpace: %s drawn plain: %s" % [id, look.error])
 		var material := ShaderMaterial.new()
-		material.shader = _shader
-		material.set_shader_parameter(&"glows", 1.0 if is_star else 0.0)
-		material.set_shader_parameter(&"brightness", STAR_BRIGHTNESS if is_star else 1.0)
-		material.set_shader_parameter(&"colour",
-				StarColor.linear_from_kelvin(StarCatalog.temperature_k(system.id)).linear_to_srgb() if is_star else PLANET_COLOUR)
+		if is_star:
+			material.shader = load(STAR_SHADER_PATH) as Shader
+			var look: Dictionary = SunLook.uniforms(StarCatalog.temperature_k(system.id))
+			for key: StringName in look:
+				material.set_shader_parameter(key, look[key])
+		else:
+			material.shader = _shader
+			material.set_shader_parameter(&"colour", PLANET_COLOUR)
 		var sphere := MeshInstance3D.new()
 		sphere.name = String(id).to_pascal_case()
 		sphere.mesh = _mesh

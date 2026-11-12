@@ -139,6 +139,7 @@ res://tests/integration/test_post_effects.gd
 # Scaled space and the planet (M6-T10, T11)
 res://tests/unit/test_scaled_placement.gd
 res://tests/unit/test_eclipse_math.gd
+res://tests/unit/test_sun_look.gd
 res://tests/unit/test_planet_look.gd
 res://tests/integration/test_scaled_space.gd
 # Test infrastructure

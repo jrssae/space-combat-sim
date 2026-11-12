@@ -294,7 +294,7 @@ which changes the same native rows and rebase path:
 | T09 | B | Scenarios at true scale: spawns relative to bodies, stations and orbits, epochs, free flight beside the station's stand-in | T03, T08, Q7, Q9 | Opus | Every scenario and mission must keep working | not started |
 | T10 | C | Scaled-space layer: placement, draw order and depth, the true sun direction, the planet's shadow | T04 | Fable | Precision and draw order in Forward+ at planetary distances; a design that later layers stand on | done |
 | T11 | C | The planet and its atmosphere: the `planet` generator and the scattering shader (generator half early) | T10, Q10 | Opus | Shader maths on T10's layer; the look is (H) | done |
-| T12 | C | The sun: disc and glow from the star's colour, the lens flare and key light on the true direction | T10 | Sonnet | A small shader and the existing flare | in progress |
+| T12 | C | The sun: disc and glow from the star's colour, the lens flare and key light on the true direction | T10 | Sonnet | A small shader and the existing flare | done |
 | T13 | D | Jumpgate references and the `jumpgate` generator (early start) | Q11 | Opus | Geometry read off references | done |
 | T14 | D | The jumpgate in the game: the prop, the vortex, 1 000 km broadcast, arrivals through the gate | T13, T09, Q12 | Opus | A new effect and the mission and encounter seams | done |
 | T15 | C | Far representations for the station's stand-in, the gate and the planets | T10, T14 | Opus | Hand-offs across three draw paths with no pop | not started |
@@ -767,6 +767,50 @@ which changes the same native rows and rebase path:
   direction, the star's colour from `data/star_systems.json`.
 - **Tests:** pure direction and colour tests: quick; GPU files: standard.
 - **Done when:** AC7's sun and light; a look sheet for the maintainer (H).
+
+- **Done (2026-11-12):**
+  - `assets/shaders/scaled_star.gdshader`: the star on T10's layer, on a sphere `SunLook.GLOW_SCALE` (10) times its disc. Each
+    pixel works out its distance from the disc's centre in disc radii (sine of the angle over the sine of the disc's angular
+    radius), so the disc is the true size, with limb darkening (0.7) inside and a corona outside (a power-law falloff faded out by
+    9.5 radii), additive, `depth_draw_always`, the same pinned depth (its vertex stage is T10's), so the planet and the near
+    world draw over it and the star points are hidden behind it. The disc's brightness is 2.4 against the planet's full sun
+    (1.5): the Filmic tonemap and the environment's bloom (threshold 1) fold it to a white core with the orange kept in the
+    limb and the corona; a brighter disc (5) was a flat white blob. The corona starts below the limb's own level, so the disc's
+    edge stays a line. The old flat-disc path (`glows`, `brightness`, `STAR_BRIGHTNESS`) is gone from `ScaledSpace` and the
+    plain shader keeps only the planet stand-in's look.
+  - `src/environment/sun_look.gd` (`SunLook`, pure): the disc's colour from the temperature (`StarColor`, 5 084 K for Epsilon
+    Eridani: orange-white), the corona's (warmer, less blue), the shader's uniforms, the brightness law (`profile`, the shader's
+    twin) and `flare_factor(lit_part)`: a smoothstep from 0.02 of the disc showing to all of it.
+  - The flare: `ScaledSpace.flare_strength()` (1 with no star) goes to `PostEffects.set_flare_strength()` from
+    `SpaceEnvironment.follow_sun()` each frame, which scales the flare's tint (`FLARE_LEVEL` times the strength); a held key
+    light (look sheet) leaves it at 1. So the flare fades with the eclipse and through the limb, measured on the look sheet:
+    sun 10.0 degrees from the planet's centre (its limb) gives key light 0.42, flare 0.37; behind the planet 0 and 0. Its
+    direction was already the true sun's: `PostEffects` reads the `KeyStar`, which `follow_sun()` turns (T10), so
+    `lens_flare_aim.gd` needed no change. The key light's colour is the star's, from `set_star` (Q30, set before T12).
+  - One patch to the vendored flare's shader source (`SceneLensFlareEffect.SHADER_PATCHES`, the add-on untouched): a depth
+    of 2e-8 or less reads as open sky. The far bodies' pinned depths are 2e-9 to 1e-8, so without it the star's own disc
+    would have hidden the flare (the star points never did, they write no depth). A planet over the star is the key light's
+    job, not the depth test's.
+  - Tests: `tests/unit/test_sun_look.gd` (quick, 7: colour from the data, hotter is bluer, a warmer corona, the flare full and
+    gone, smooth, the profile, the uniforms); `test_scaled_space.gd` (quick, 3 more, 17 in all, and the star's drawn size now
+    the disc times the glow scale: the star material and colour, the flare against the eclipse over nine steps out of the
+    shadow, a held light); `test_post_effects.gd` (the new patch applies); `tests/integration/test_sun_gpu.gd` (standard,
+    Pending headless, 3: the disc's height in pixels within 3 px of its angular size, the corona three radii out and the
+    orange colour, the flare's streak there in the open and gone in the shadow; green on the RX 6950 XT).
+  - GPU (RX 6950 XT, RADV, Wayland, Forward+): the combat sandbox at 1200x675 reads `forward_plus`, 145 fps (the display's
+    cap), 71 draw calls, 378.6 MB (`render.vram_mb`), the same as T11's planet numbers. With the star filling the bench
+    (`planet_sheet.sh sun_open`) the layer costs 0.025 ms at 1200x675 (0.652 against 0.627 ms) and 0.007 ms at 3200x1800
+    (1.875 against 1.868 ms), one draw call. `planet_sheet.sh` gained the views `sun_*`, `flare=` (`SHEET_FLARE`) and `layer=`
+    (`SHEET_LAYER`) options.
+  - Look sheet (H) in `references/screenshots/M6-T12 sun/`: `sun_open` and `sun_wide` (the star alone, 24 and 70 degree
+    views), `sun_off_axis`, `sun_planet` and `sun_orbit400` (the star and the planet in frame, from the rail and from a 400 km
+    orbit), `sun_limb_a` to `sun_limb_c` (the star going behind the limb: hidden, half, just out, flare 0, 0.37, 1),
+    `sun_eclipse` (the middle of the shadow, no star, no flare).
+  - Open, for the maintainer (H): the disc is a white core under the Filmic tonemap with the orange in the corona (brightness
+    2.4, corona 0.25 of the disc, limb darkening 0.7 are look choices in `SunLook`); the add-on's glare also draws a large flat
+    haloed disc round the star in the picture (about 185 px radius whatever the field of view), which Q31's patches left; it is
+    the flare's, not the corona. Not checked: a flare half under a nearer ship's hull in the real game (the depth patch lets
+    anything above 2e-8 close it, as before).
 
 ### M6-T13 Jumpgate references and generator
 

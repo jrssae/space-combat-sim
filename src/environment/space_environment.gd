@@ -13,7 +13,7 @@ extends Node3D
 ##
 ## The far bodies (M6-T10, D68): `ScaledSpace` draws the star and the planets where they truly are, and the `KeyStar` follows it:
 ## the light comes from the true sun direction and dims by the part of the star's disc a planet hides at the camera. The lens
-## flare reads the `KeyStar`, so it follows too. With no star system in view the light stays as the scene made it. A look sheet
+## flare reads the `KeyStar`, so it follows too, and fades with the same eclipse (M6-T12). With no star system in view the light stays as the scene made it. A look sheet
 ## takes the light for itself with `hold_key_star`.
 ##
 ## Anything visual here is (H): it cannot be seen without a GPU.
@@ -82,7 +82,9 @@ func _process(_delta: float) -> void:
 ## Turns the key star to shine from the true sun and dims it in a planet's shadow. `_process` calls it; public for the tests.
 func follow_sun() -> void:
 	if _key_held or not scaled_space.has_sun():
+		post_effects.set_flare_strength(1.0)
 		return
+	post_effects.set_flare_strength(scaled_space.flare_strength())
 	key_star.global_transform = Transform3D(key_basis(scaled_space.sun_direction()), key_star.global_position)
 	key_star.light_energy = _key_energy * scaled_space.key_light()
 
