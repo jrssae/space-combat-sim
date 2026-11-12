@@ -605,7 +605,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T30 | B | Mission: Civilian escort with a cinematic intro (D62, Q36 to Q42), replacing Buoy defence and the ring | T29, T16, T17 | Opus | The random civilian, flee-and-resume in the native brains, three waves, writing and pacing | done |
 | T31 | - | L1: the flight batch's per-ship gather in native for row-commanded ships | T30 | Opus | The biggest measured lever (about 37 % of the tick at 1 000) | done |
 | T32 | - | L2: the hit resolver gets only bolts with live hostile pairs from native; per-hit hash and readout costs | T31 | Opus | 1.41 ms at 1 000; native pair filtering | done |
-| T33 | - | L3: the ram resolver's quick wins, then `RamTracker` in native | T32 | Fable (maintainer, 2026-11-11) | 1.20 ms at 1 000; string keys and full passes per tick | not started |
+| T33 | - | L3: the ram resolver's quick wins, then `RamTracker` in native | T32 | Fable (maintainer, 2026-11-11) | 1.20 ms at 1 000; string keys and full passes per tick | in progress |
 | T34 | - | L5: the radar's dot buffers filled natively | T31 | Sonnet | Per-contact GDScript every frame | not started |
 | T35 | - | L8 and L9: the native allocation pass and the per-event member scans | T33 | Fable (maintainer, 2026-11-11) | Hash maps and Vec churn per sync; hits times members | not started |
 | T36 | - | L12 and L13: the smaller items and one native constants table with its GUT check | T35 | Sonnet | Many small fixes and a drift guard | not started |
