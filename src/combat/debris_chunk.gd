@@ -2,7 +2,7 @@ class_name DebrisChunk
 extends Node3D
 ## One piece of a broken-up ship (architecture §15.6, §15.7): a `MeshInstance3D` drawing the chunk's textured mesh (M4-T30d, its
 ## `mesh` entry, cut from the hull on the hull's maps, so chunks instance with the hulls), or its OBJ for an entry without one. It
-## drifts and spins kinematically (no collisions), lives `LIFETIME_S`, shrinks to nothing over `SHRINK_S`, hides and parks (`parked`
+## drifts and spins kinematically (no collisions), falls with the frame's pull (M6-T07, `HeldPull`), lives `LIFETIME_S`, shrinks to nothing over `SHRINK_S`, hides and parks (`parked`
 ## is emitted; a one-shot chunk frees itself instead). A Starfury's chunk is first *held* (M3-T28): drawn and busy, but placed by its
 ## wreck (`place_held`) until `release` sets it flying, and it wears its ship's livery (`set_livery`).
 ##
@@ -29,6 +29,7 @@ var mesh_instance: MeshInstance3D = null
 var textured_mesh: Mesh = null
 
 var _age_s: float = 0.0
+var _pull := HeldPull.new()  # gravity (M6-T07), read once a second of its life
 var _vent: FxPool = null
 var _vent_handle: int = 0
 var _orientation: Basis = Basis.IDENTITY  # orthonormal, kept apart from the scale so spinning cannot drift the size
@@ -132,6 +133,7 @@ func launch(xform: Transform3D, p_velocity: Vector3, p_angular_velocity: Vector3
 	velocity = p_velocity
 	angular_velocity = p_angular_velocity
 	_age_s = 0.0
+	_pull.reset()
 	_active = true
 	reset_physics_interpolation()
 
@@ -183,6 +185,7 @@ func vent_handle() -> int:
 func frame_boost(dv: Vector3) -> void:
 	if _active:
 		velocity -= dv
+		_pull.reset()
 
 
 ## Moves the chunk `delta` seconds: drift, spin, and the shrink-out at the end of its life. Public for tests.
@@ -190,6 +193,7 @@ func advance(delta: float) -> void:
 	if not _active or _held:
 		return
 	_age_s += delta
+	velocity = _pull.kick(self, velocity, delta)
 	global_position += velocity * delta
 	var angle: float = angular_velocity.length() * delta
 	if angle > 0.0:

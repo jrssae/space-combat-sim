@@ -368,12 +368,13 @@ func test_the_rock_slab_clears_every_ship() -> void:
 	assert_eq(BenchLayout.rocks(BenchLayout.FURBALL, 50, 1).size(), 0, "the other layouts have no rocks")
 
 
-func test_the_gravity_source_is_a_moon_far_below() -> void:
-	var g: Dictionary = BenchLayout.gravity_source(BenchLayout.BATTLE)
-	assert_almost_eq((g["offset"] as Vector3).length(), 400000.0, 1.0, "a moon 400 km off")
-	var at_centre: float = float(g["gm"]) / (g["offset"] as Vector3).length_squared()
-	assert_almost_eq(at_centre, 0.03, 1e-6, "0.03 m/s^2 at the battle")
-	assert_true(BenchLayout.gravity_source(BenchLayout.SPREAD).is_empty())
+func test_the_battle_is_flown_in_a_low_orbit_of_a_body_of_the_data() -> void:
+	var g: Dictionary = BenchLayout.gravity_orbit(BenchLayout.BATTLE)
+	assert_eq(g["body"], &"epsilon_iii")
+	assert_almost_eq(float(g["altitude_m"]), 400000.0, 1.0, "400 km up")
+	var system: StarSystem = StarSystem.load_system(StarSystemHost.DEFAULT_SYSTEM)
+	assert_false(system.info(g["body"]).is_empty(), "a body the star system holds")
+	assert_true(BenchLayout.gravity_orbit(BenchLayout.SPREAD).is_empty())
 
 
 # --- mine belts (M4-T12) -----------------------------------------------------------------------------------------

@@ -6,8 +6,8 @@ extends RigidBody3D
 ## `TurretStandin` children and its two beam lasers as `BeamStandin` children (M4-T12). It costs the tick what a big body costs Jolt, the scan and every broad phase; `StandinDirector`
 ## steps its engines and turrets.
 ##
-## Newtonian like every body (§15.16): no damping, and the engines hold the cruise velocity with a force each tick that also
-## holds off the environment's pull (the gravity stand-in).
+## Newtonian like every body (§15.16): no damping; gravity pulls it like any mover (D66, M6-T07), and the engines hold the
+## cruise velocity with a force each tick that also holds off that pull.
 
 const CRUISE_MPS: float = 30.0
 ## How fast the engines bring the velocity back to cruise, s, and the most they can push, m/s^2.
@@ -159,9 +159,13 @@ func cruise_force(delta: float) -> Vector3:
 	return mass * (wanted - pull).limit_length(MAX_ACCEL_MPS2)
 
 
-## One tick of the engines (forces are re-applied every tick).
+## One tick of the engines and of the pull they hold off (forces are re-applied every tick).
 func step_engines(delta: float) -> void:
-	apply_central_force(cruise_force(delta))
+	var force: Vector3 = cruise_force(delta)
+	var pull: Vector3 = world.environment_accel(global_position) if world != null and is_instance_valid(world) else Vector3.ZERO
+	if pull != Vector3.ZERO:
+		force += mass * pull
+	apply_central_force(force)
 
 
 func _build(display_name: String) -> void:

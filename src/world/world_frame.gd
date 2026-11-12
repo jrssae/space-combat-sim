@@ -87,9 +87,6 @@ const FRAME_STEP_PRIORITY: int = SimCore.OUT_PRIORITY + 1
 
 ## Universe position of the local origin (64-bit), measured from the frame's anchor (M6-T04).
 var origin: UniversePos = UniversePos.new()
-## A pull of the World's own, `func(local_pos: Vector3) -> Vector3`, beside the frame's residual, or empty for none (M4-T07:
-## the battle's moon stand-in, removed by M6-T07).
-var environment_field: Callable = Callable()
 ## Velocity of the local frame against its anchor, m/s, as [x, y, z] (64-bit; the core integrates it). Zero while the frame
 ## rides its anchor; a boost moves it, and so does the frame's own fall while it is off the anchor.
 var origin_velocity: PackedFloat64Array = PackedFloat64Array([0.0, 0.0, 0.0])
@@ -450,7 +447,6 @@ func _drift_anchored(moved: PackedFloat64Array) -> void:
 		if node != null and is_ancestor_of(node):
 			node.global_translate(shift)
 	ContactScan.shift_statics(shift, self)
-	_sim.core.drift_anchored(shift)
 	drifted.emit(shift)
 
 
@@ -474,19 +470,11 @@ func _cmd_rebase(args: Dictionary) -> ConsoleResult:
 	return ConsoleResult.line(ConsoleFormat.key_value("world.origin", _origin_array(), "m"))
 
 
-## Acceleration, m/s^2, that the environment applies at a local position: the frame's residual (M6-T04) plus the World's own
-## field. A GDScript mover adds `mass * environment_accel(position)` every physics tick; the flight batch packs only
-## `field_accel` and the core adds the residual itself.
+## Acceleration, m/s^2, that the environment applies at a local position: gravity, as the frame's residual (D66; the only
+## pull since M6-T07). A GDScript mover adds `mass * environment_accel(position)` every physics tick; the flight batch packs
+## zero and the core adds the residual itself, as it does for the tier's rows and the bolts.
 func environment_accel(local_pos: Vector3) -> Vector3:
-	return field_accel(local_pos) + gravity_residual(local_pos)
-
-
-## The World's own field at a local position, without the frame's residual: the battle benchmark's moon (M4-T07,
-## `GravityStandin`) until M6-T07 removes it.
-func field_accel(local_pos: Vector3) -> Vector3:
-	if environment_field.is_valid():
-		return environment_field.call(local_pos)
-	return Vector3.ZERO
+	return gravity_residual(local_pos)
 
 
 ## What the frame's fall leaves at a local position this tick: the pull there less the anchor's. Zero with no star system

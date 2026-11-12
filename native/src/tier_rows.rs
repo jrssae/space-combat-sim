@@ -6,6 +6,7 @@ use std::time::Instant;
 use godot::prelude::*;
 
 use crate::flight_step::body_from_arrays;
+use crate::frame_rows;
 use crate::row_commands::{CMD_LEN, RowCommand};
 use crate::sim_core::ScsSimCore;
 use crate::tier::{self, KIND_CAPITAL, KIND_FIGHTER, Type};
@@ -86,6 +87,8 @@ impl ScsSimCore {
     pub(crate) fn tier_step(&mut self, delta: f64) {
         if self.tier.is_empty() {
             self.tier_step_us = 0;
+            self.tier_pulled = 0;
+            self.tier_pull_us = 0;
             return;
         }
         let started = Instant::now();
@@ -96,10 +99,20 @@ impl ScsSimCore {
         };
         // The core's own sync count, so the beat falls the same way in every run of a seeded fight.
         let clock = self.syncs();
+        // Gravity from the tick's one sample (D66), for every row at once.
+        let pull_started = Instant::now();
+        let pulled = frame_rows::residuals(
+            &self.frame,
+            &self.tier.positions,
+            &mut self.pull_scratch,
+            &mut self.tier_pull,
+        );
+        self.tier_pulled = if pulled { self.tier_pull.len() as i64 } else { 0 };
+        self.tier_pull_us = if pulled { pull_started.elapsed().as_micros() as i64 } else { 0 };
         self.tier_beats += tier::step(
             &mut self.tier,
             &self.tier_types,
-            &self.tier_gravity,
+            &self.tier_pull,
             &self.row_commands,
             clock,
             delta,
@@ -392,31 +405,6 @@ impl ScsSimCore {
     #[func]
     fn tier_set_period(&mut self, period: i64) {
         self.tier_period = period.max(1);
-    }
-
-    /// The pull the tier's rows feel: point sources at World-local `positions` with parameters `gm` (m^3/s^2). Empty for
-    /// none. Returns false, after logging why, when the arrays differ in length.
-    #[func]
-    fn tier_set_gravity(&mut self, positions: PackedVector3Array, gm: PackedFloat64Array) -> bool {
-        if positions.len() != gm.len() {
-            godot_error!(
-                "ScsSimCore.tier_set_gravity: {} positions but {} parameters; the pull is dropped",
-                positions.len(),
-                gm.len()
-            );
-            self.tier_gravity.positions.clear();
-            self.tier_gravity.gm.clear();
-            return false;
-        }
-        self.tier_gravity.positions = positions.as_slice().to_vec();
-        self.tier_gravity.gm = gm.as_slice().to_vec();
-        true
-    }
-
-    /// The pull at `at` as the tier computes it (the tests).
-    #[func]
-    fn tier_gravity_at(&self, at: Vector3) -> Vector3 {
-        self.tier_gravity.accel(at)
     }
 
     /// The fighters and capitals in Jolt beyond `radius` of `player_at` (the player's body `exclude` left out), by body id,

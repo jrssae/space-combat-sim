@@ -17,6 +17,7 @@ var _offsets: Array[Vector3] = []
 var _joints: Array[Vector3] = []
 var _released: PackedByteArray = PackedByteArray()
 var _released_count: int = 0
+var _pull := HeldPull.new()  # gravity (M6-T07), read once a second
 
 
 ## `offsets` and `joints` are the chunks' centroids and detachment points in the body frame, `xform` the body's pose.
@@ -32,9 +33,12 @@ func _init(p_plan: BreakupPlan, offsets: Array[Vector3], joints: Array[Vector3],
 	_released.resize(offsets.size())
 
 
-## Moves the wreck `delta` seconds on and returns the chunks whose time has come, in release order.
-func advance(delta: float) -> PackedInt32Array:
+## Moves the wreck `delta` seconds on in `world` (its pull, M6-T07; null for none) and returns the chunks whose time has come,
+## in release order.
+func advance(delta: float, world: WorldFrame = null) -> PackedInt32Array:
 	age_s += delta
+	if world != null:
+		velocity = _pull.kick_at(world, origin, velocity, delta)
 	origin += velocity * delta
 	var angle: float = spin.length() * delta
 	if angle > 0.0:
@@ -105,3 +109,4 @@ func shift(offset: Vector3) -> void:
 ## A velocity rebase by `dv`: the wreck keeps its universe velocity.
 func boost(dv: Vector3) -> void:
 	velocity -= dv
+	_pull.reset()

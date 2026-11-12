@@ -572,6 +572,77 @@ which changes the same native rows and rebase path:
   standard.
 - **Done when:** AC4; bit-identical results at zero gravity; AC10's cost measured.
 
+- **Work notes (2026-11-12; built and measured, one maintainer choice open, below):**
+  - **One sample, every mover.** Every mover reads the frame's residual from the tick's one sample (`frame.rs`), never a
+    second copy of the maths, so nothing pulls outside a body's zone (the station's rail stays quiet) and only the strongest
+    body pulls inside one. `Frame::residual_rows` (over `gravity::residual_rows_in_place`) gives a batch of movers the bits
+    one `residual` per mover gives; its shell `frame_rows::residuals` converts the axes.
+  - **Tier rows** (`tier.rs`, `tier_rows.rs`): `tier::step` takes the pull per row (the shell works it out for every row at
+    once before the step) and adds it to the velocity every tick on top of the engines' held acceleration; the beat takes it
+    only as the brake's and the cruise law's feed-forward (a fighter's held force is the flight kernel's less its environment
+    force). A hulk now falls too, and a capital's engines hold its cruise against the pull while the pull acts on it (M4's
+    tier and `CapitalStandin` had the engines' half only, so a capital was pushed off by the moon it never felt). With no
+    pull the step is the old one, bit for bit. `tier::Gravity`, `tier_set_gravity`, `tier_gravity_at` and
+    `ScsSimCore.drift_anchored` (it moved only the tier's copy of the moon) are gone.
+  - **Bolts** (`bolt_kernels.rs`): the step is split into `expire` and `advance`; `advance` adds each owned bolt's pull times
+    the 32-bit delta to its velocity before the move; empty where nothing pulls, which keeps the bits (the parity recordings
+    stay green). A bolt launched this tick neither moves nor falls.
+  - **Debris, wrecks, explosions, projectile nodes**: `HeldPull` (`src/world/held_pull.gd`), the pull read once a second of a
+    mover's life and after a velocity rebase, added in the move each tick already makes. Measured over a chunk's 8 s life 3 km
+    out on the low orbit: 0.0027 m off a per-tick read, with a 0.25 m bend; one read costs 0.36 us from GDScript (172 us for
+    479 reads against 309 us for the chunk's own 479 ticks), so the held pull is the cheaper path and well inside AC4's 0.5 m.
+    Staged wrecks (through `DebrisPool.advance_wrecks`), the explosion's fireball and `Projectile` (missiles, beams' bolts and
+    a cannon with no core) take it the same way.
+  - **Brake and AI feed-forward:** the flight step's residual is the env acceleration for gathered and row-flown ships alike
+    (the brake's `env_b`); the AI holds a point with the brake (idle hold, a route's hold), so it gets it there; the tier's
+    beat passes it to the flight kernel too. Measured: a braking ship 3 km out holds its point within 5 cm over 10 s on the
+    batch's path and on its own model, where a coasting one is carried 0.39 m.
+  - **`GravityStandin` is gone**, with `StandinDirector.add_gravity` / `remove_gravity` / `gravity`, the tier director's push,
+    and the World's own field (`WorldFrame.environment_field`, `field_accel`): nothing else needed the seam, so
+    `environment_accel` is the residual alone and `Ship.batch_gather` packs zero. The station scene's 12 km planet stand-in
+    pulls nothing now (smaller than a moon). **The bench's `battle` and `typical` layouts** fly in a 400 km circular orbit of
+    Epsilon III, a body of the star system's data (`BenchLayout.gravity_orbit`): the runner anchors the frame on that orbit
+    through the battle's centre and puts the anchor back after (`_restore_frame`). Every mover feels the tide (about 0.026
+    m/s^2 10 km out). `CapitalStandin.step_engines` adds the pull to the body beside the engines' force.
+  - Console: provider fields `core.gravity_rows` (ships, tier rows, bolts the pull reached last tick) and `core.gravity_us`
+    (the tier's and the bolts' batches), from `ScsSimCore.gravity_readouts`. In `info.md`.
+  - **Tests.** Rust 126 pass (8 new: bolts' `advance` keeps the old bits with no pull, the kick before the move and a 10 s
+    drop against `g t (t + dt) / 2`, no fall on the launch tick, expiry first; the tier with no pull and with a pull of zeros
+    bit for bit, every row falling and a capital holding its cruise; `Frame::residual_rows` equal to one `residual` per mover
+    bit for bit in 1 and 6 parts, and zeros with no anchor and on the station's rail). GUT, **quick**:
+    `test_gravity_movers.gd` (new, 5 tests, under a second: a core bolt's kick and move bit for bit, the station rail's bolt
+    unchanged, the chunk against a per-tick read, a wreck, an explosion and a projectile node, the brake on both paths),
+    `test_tier.gd` (the rows and a capital under the low orbit's pull, nothing on the station's rail, a rebase), the
+    `test_sim_core` guards (the tier's tests moved to `native/src/tier/tests.rs`). **Standard**: `test_gravity_orbit.gd` (new,
+    3 tests): a parked (tier) ship along the track over **one whole orbit** (332 692 ticks by hand, about a second): worst
+    0.081 m at 1 km and 0.052 m at 3 km against a 64-bit run of the same start; the same start flown **in Jolt** by the
+    flight batch over the whole orbit with the slow files on (the real tick at 100 times the clock, 32 ticks a frame, about
+    72 s; 30 000 ticks in a focused run): worst 0.025 to 0.061 m; a bolt fired 20 km out curves 0.408 m in 4 s and flies the
+    analytic path (third order, from the frame's own residual) within 0.009 m. `test_standins.gd` (no field with no system; a
+    capital holds its cruise against the pull over 2 s, which fails without the pull on its body), `test_bench.gd` (the
+    battle runs in orbit of `epsilon_iii`, pulls, and the rail is back after), `test_bench_layout.gd`. Quick tier: 1 836 of
+    1 836 GUT, 126 Rust, 331 Python. With `GUT_SLOW=1`: `test_flight_parity_fight` 1, `test_core_threads`, `test_bolt_rows`,
+    `test_tier`, `test_tier_fire`, `test_tier_handover`, `test_tier_outcomes`, `test_tier_proxies`, `test_free_fall`,
+    `test_velocity_rebase`, `test_world_frame`, `test_sim_core`, `test_debris_pool`, `test_explosion`, `test_static_shift`,
+    `test_flight_model`, `test_parity_fixture`, `test_bench`, `test_standins`, `test_ai_think_time` pass.
+    `test_rebase_in_play` failed 4 of 9 on `Targets/Jumpgate/FarProp/Dot` (top level, not shiftable): the jumpgate's work in
+    progress in the same checkout, not this task's files.
+  - **AC10**, `bench battle 1000` (pinned 0-11, the machine idle, load under 1.2): `bench_quick.sh` (500, 1 000) tick
+    median 4.44 and 5.59 ms, p99 5.93 and 7.84 before; 4.52 and 5.63, p99 6.17 and 8.05 after. Two 20 s runs each
+    (`warmup=3 seed=1`): median 5.74 and 5.67 ms before, 5.73 and 5.70 after (mean 6.01 and 5.83 against 5.88 and 5.85).
+    Within 1 %, against 5 % allowed. In the battle the pull reaches about 270 ships, 680 tier rows (12.6 us) and 1 100 bolts
+    (19 us) a tick: about 35 us, 0.6 % of the tick. `test_ai_think_time` passes (AiPilot median 197 us for 13 ships).
+  - **Open: the seeded weapon battle (`test_weapon_rows_battle.gd`, slow) fails.** Hits 802 against the GDScript
+    recording's 918 (10 % allowed: 826), capitals' hits 359 against 446 (allowed 401). The recording was made under M4's
+    moon stand-in: a near-uniform 0.03 m/s^2 on every ship while the capitals' engines held off a pull their bodies never
+    felt. T07 removes that by design (D66). The same battle with no gravity at all gives 822 and 362; under the orbit's tide
+    802 and 359; the moon gave 885 and 406 (T05). So the capitals' extra hits came from the stand-in's lopsided pull, and the
+    recording can no longer be reached by any gravity D66 allows. **Maintainer's choice:** (a) record the native battle now
+    (T07's physics) as the test's reference and hold later changes to it, keeping the GDScript numbers as history; (b) keep
+    the GDScript recording and widen the capitals' tolerance (and every hit's) to cover the moon's removal, about 20 %; (c)
+    run the test's battle with no gravity and widen less (822 and 362: every hit 10.5 % under, capitals 19 %), which still
+    needs (a) or (b) for the capitals.
+
 ### M6-T08 Flying under gravity
 
 - **Goal:** AC5 (D67).

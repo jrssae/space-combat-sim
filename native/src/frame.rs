@@ -169,6 +169,24 @@ impl Frame {
         [r[0] - self.origin_pull[0], r[1] - self.origin_pull[1], r[2] - self.origin_pull[2]]
     }
 
+    /// `residual` for many movers at once (the tier's rows, the bolts): `rows` holds their local places and takes what each
+    /// feels, the same bits as one `residual` per mover, so a row and a ship at one place feel one pull. Zeros while quiet.
+    pub fn residual_rows(&self, rows: &mut [V3]) {
+        if !self.active {
+            rows.fill([0.0; 3]);
+            return;
+        }
+        let o = self.origin;
+        for r in rows.iter_mut() {
+            *r = [o[0] + r[0], o[1] + r[1], o[2] + r[2]];
+        }
+        gravity::residual_rows_in_place(rows, &self.positions, &self.gms, &self.zones);
+        let p = self.origin_pull;
+        for r in rows.iter_mut() {
+            *r = [r[0] - p[0], r[1] - p[1], r[2] - p[2]];
+        }
+    }
+
     /// A velocity rebase: the frame gains `dv` against the anchor and falls by itself from now on. Every local velocity
     /// loses `dv` in the same tick (the caller's part), so nothing moves differently.
     pub fn boost(&mut self, dv: V3) {

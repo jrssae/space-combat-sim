@@ -1,8 +1,8 @@
 class_name Projectile
 extends Node3D
 ## A pulse-cannon bolt (architecture §6.3, §7.1): a kinematic Node3D carrying an emissive capsule, no physics body
-## and no hit detection in M1. It flies in a straight line at the velocity it was launched with and frees itself
-## `lifetime_s` of sim time after launch (`SimClock`, never the wall clock, so time warp and pausing work).
+## and no hit detection in M1. It flies on at the velocity it was launched with, bent only by gravity (M6-T07, `HeldPull`),
+## and frees itself `lifetime_s` of sim time after launch (`SimClock`, never the wall clock, so time warp and pausing work).
 ##
 ## Spawn it with `PulseCannon`, or by hand: instantiate `projectile.tscn`, add it to the tree under `World`, then
 ## `launch(...)`. It joins `world_shiftable` itself, so `World.rebase()` moves it with everything else. `velocity` is
@@ -69,6 +69,7 @@ var last_step: Vector3 = Vector3.ZERO
 
 var _spent: bool = false
 var _laid_beam: bool = false
+var _pull := HeldPull.new()  # gravity (M6-T07), read once a second
 
 @onready var _bolt: MeshInstance3D = $Bolt
 
@@ -88,6 +89,7 @@ func _physics_process(delta: float) -> void:
 	if steering.is_valid():
 		velocity = steering.call(self, delta)
 		_face(velocity)
+	velocity = _pull.kick(self, velocity, delta)
 	last_step = velocity * delta
 	global_position += last_step
 
@@ -96,6 +98,7 @@ func _physics_process(delta: float) -> void:
 func frame_boost(dv: Vector3) -> void:
 	if not _laid_beam:
 		velocity -= dv
+		_pull.reset()
 
 
 ## Draws the bolt `factor` times its size (all axes); the hit radius stays as it is.

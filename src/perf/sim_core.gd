@@ -793,7 +793,24 @@ func _register_console() -> void:
 		&"turret_us": {"get": func() -> int: return turrets.step_us if turrets != null else 0, "unit": "us", "doc": "The last tick's turret step (aim, gate, shots, handed back); wall clock"},
 		&"turret_picks_stale": {"get": func() -> int: return int(core.turret_readouts()[2]) if core != null else 0, "doc": "Turret picks dropped at the AI job's join because the mount was rebound meanwhile (M5-T21)"},
 		&"attackers": {"get": func() -> int: return int(core.attacker_count()) if core != null else 0, "doc": "Attacker and victim pairs the turrets remember (each for 30 s after a hit; M5-T21)"},
+		&"gravity_rows": {"get": func() -> PackedInt64Array: return gravity_rows(), "doc": "Movers the frame's pull reached in the last tick (M6-T07): ships, tier rows, bolts; zeros where nothing pulls"},
+		&"gravity_us": {"get": func() -> int: return gravity_us(), "unit": "us", "doc": "The last tick's pull on the tier's rows and the bolts, worked out in one batch each (the ships' share is inside the flight step); wall clock"},
 	}), self)
+
+
+## Movers the frame's pull reached in the last tick: `[ships, tier rows, bolts]` (M6-T07).
+func gravity_rows() -> PackedInt64Array:
+	if core == null:
+		return PackedInt64Array([0, 0, 0])
+	return (core.gravity_readouts() as PackedInt64Array).slice(0, 3)
+
+
+## The last tick's cost of the tier's and the bolts' pull, microseconds (a readout, wall clock).
+func gravity_us() -> int:
+	if core == null:
+		return 0
+	var r: PackedInt64Array = core.gravity_readouts()
+	return int(r[3] + r[4])
 
 
 # The brain batch under this core.

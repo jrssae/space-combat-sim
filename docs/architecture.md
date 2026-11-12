@@ -2166,12 +2166,11 @@ native/src/contact_field.rs     ScsContactField: the contact scan's queries (T05
 
 ```
 src/perf/battle_mix.gd              BattleMix, pure: the typical and grand profiles, counts per entity type from N
-src/perf/bench_layout.gd            + battle and typical: fights on an 8 km lattice, capitals, rocks, the moon, the sides
+src/perf/bench_layout.gd            + battle and typical: fights on an 8 km lattice, capitals, rocks, the orbit, the sides
 src/perf/standins/standin_director.gd   Node3D (World/Standins): holds and steps the stand-ins, counts the battle
 src/perf/standins/capital_standin.gd    RigidBody3D: a box hull with Targetable (kind capital) and Damageable, cruising
 src/perf/standins/turret_standin.gd     Node3D under a capital: a gun or an interceptor, stepped by the director
 src/perf/standins/asteroid_field.gd     Node3D: one MultiMeshInstance3D, static sphere bodies by RID, a marker per rock
-src/perf/standins/gravity_standin.gd    Node: a point source installed as WorldFrame.environment_field
 scripts/fullscreen_check.sh         a layout fullscreen, the 3D at 1080p, under the GPU lock, with the Q20 verdict
 ```
 
@@ -2187,8 +2186,10 @@ scripts/fullscreen_check.sh         a layout fullscreen, the 3D at 1080p, under 
   holds, the player's fight first, 2.5 km ahead. In each fight every side comes in from its own direction (+Z, -Z, +X, -X; the
   player's side, Earth Alliance, from +Z) in a 400 m ball 800 m out, facing in. A side's capitals sit 5 km behind its fights,
   taken in turn, side by side 2.5 km apart, cruising into the fight at 30 m/s. The rock slab (20 by 5 by 20 km, 1 000 rocks of
-  20 to 200 m, log-uniform) is centred on the player's fight and clears every hull by 100 m; the moon is a point source 400 km
-  below pulling 0.03 m/s^2. Sides 3 and 4 (`bench_c`, `bench_d`) fly raider and Starfury hulls with their own faction, so the
+  20 to 200 m, log-uniform) is centred on the player's fight and clears every hull by 100 m. Its gravity (M6-T07, which
+  removed M4's point-source moon, `GravityStandin`) comes from a body of the star system's data: the runner anchors the
+  World's frame on a 400 km circular orbit of Epsilon III through the battle's centre (`BenchLayout.gravity_orbit`), so every
+  mover feels the tide of a real body (about 0.026 m/s^2 10 km out), and puts the frame's anchor back after. Sides 3 and 4 (`bench_c`, `bench_d`) fly raider and Starfury hulls with their own faction, so the
   runner installs a session `FactionTable` with every pair hostile and puts the game's table and every pool ship's own faction
   back afterwards.
 - **Capitals** are Newtonian bodies like ships (no damping; engines re-apply a force every tick that holds the cruise velocity
@@ -2207,9 +2208,10 @@ scripts/fullscreen_check.sh         a layout fullscreen, the 3D at 1080p, under 
   through `Damageable` nodes, so each rock also has one bare marker `Node3D` with an unbreakable, `hit_by_anyone` sphere hull: the
   scan sees it as a static row (not a ship, no velocity, its radius) and bolts hit it. The field node is shiftable; after a rebase
   `on_rebased` moves the RID bodies. T09's registry and T08's sweep can read rows from the field instead of the markers.
-- **The moon** is `WorldFrame.environment_field` (new), a `Callable` that `environment_accel` calls when set. Ships already add
-  `mass * environment_accel(position)` every tick, and capitals do in their engines. Bolts fly straight (they never took the
-  environment), so the moon bends ships' paths and every intercept's drift, not bolts.
+- **Gravity** (M6-T07, D66) is the World frame's residual alone: `WorldFrame.environment_accel` returns it, and the M4 seam
+  for a field of the World's own (`environment_field`, the moon stand-in) is gone. Every mover takes it: ships (the flight
+  step, natively), capitals (their engines hold it off and the body takes it too), the tier's rows, the core's bolts, and the
+  GDScript movers through `HeldPull`.
 - **Carrier launches**: every 5 s each carrier (first launches spread over the period) releases one in-play fighter of its side
   to the pool, taken in turn, and acquires one again at its bay with a new brain and 80 m/s along its nose, so N holds and the
   pool's release and acquire run in play.
@@ -3216,13 +3218,15 @@ src/perf/standins/capital_standin.gd   park_for_tier, unpark_from_tier; the dire
   held acceleration, then the position by the new velocity, the spin by the held angular acceleration, the attitude by the
   spin (the axis-angle rotation, re-orthonormalised). On its beat (every `tier_hz` ticks, staggered by ordinal) a fighter's
   held command (the row command the brains wrote, `row_commands` by body id, else the command it was demoted with) goes
-  through `kernels::flight::tick` with the beat's dt: the total force (nozzles, RCS, the assist's cap, the environment's
-  pull) over the mass is the acceleration; the RCS torque plus each nozzle force's moment about the centre of mass, turned into
+  through `kernels::flight::tick` with the beat's dt: the engines' force (nozzles, RCS, the assist's cap; the pull is
+  added every tick, below) over the mass is the acceleration; the RCS torque plus each nozzle force's moment about the centre of mass, turned into
   the body frame and divided by the spec's inertia, the angular acceleration; the spec's speed limit clamps every tick. A
   capital follows `CapitalStandin.cruise_force`'s law (toward its cruise at 2 m/s^2 at most, holding off the pull) and keeps
   its attitude. A hulk holds no force and no brain: it coasts on its last motion and is never removed for being idle (M12's
-  disabled hulks, `docs/roadmap.md`). The pull comes from point sources the director pushes from the bench's moon
-  (`tier_set_gravity`), the same `gm / r^2` as `GravityStandin.accel`, bit for bit. Fuel is not drawn in the tier.
+  disabled hulks, `docs/roadmap.md`). The pull (M6-T07) is the World frame's residual, worked out for every row at once from
+  the tick's one sample (`Frame::residual_rows`, the bits a ship at the same place gets) and applied every tick on top of the
+  held engine acceleration (the beat takes it only as the brake's and the cruise law's feed-forward), so a parked ship falls as
+  its body would. Fuel is not drawn in the tier.
 - **The rows in the scan.** After the statics the core appends the tier rows to `Rows`, flagged `FLAG_TIER` and `FLAG_HULL`
   (a hulk `FLAG_HULK` too), `rigid` (a ship to the brains' contacts; a hulk is not) but never `FLAG_RIGID` (no Jolt body) and
   never `FLAG_HULL_ACTIVE` (nothing sweeps or rams a tier row in T21; T22 adds the sphere sweep and the fire). So the near

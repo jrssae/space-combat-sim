@@ -10,7 +10,7 @@ use crate::kernels::flight::{self, Body, Cmd};
 use crate::row_commands::{CommandMap, IdMap, RowCommand};
 use crate::rows::{FLAG_HULK, FLAG_HULL, FLAG_TIER, ROLE_CIVILIAN, ROLE_COMBAT, Rows};
 use crate::v3::{
-    add, cross, length, length_squared, limit_length, normalized, scale, sub, xform, xform_inv,
+    add, cross, length, limit_length, normalized, scale, sub, xform, xform_inv,
 };
 
 /// A tier row's kind: a fighter flown by the flight kernel, or a capital holding its cruise.
@@ -24,39 +24,6 @@ const MAX_ACCEL_MPS2: f64 = 2.0;
 pub struct Type {
     pub body: Body,
     pub center_of_mass: Vector3,
-}
-
-/// The environment's pull: point sources (the bench's moon), each `gm / r^2` toward it, as `GravityStandin.accel`.
-#[derive(Default)]
-pub struct Gravity {
-    pub positions: Vec<Vector3>,
-    pub gm: Vec<f64>,
-}
-
-impl Gravity {
-    /// The pull at `at`, m/s^2.
-    pub fn accel(&self, at: Vector3) -> Vector3 {
-        let mut total = Vector3::ZERO;
-        for (k, &source) in self.positions.iter().enumerate() {
-            let to_source = sub(source, at);
-            let r_sq = f64::from(length_squared(to_source));
-            if r_sq < 1.0 {
-                continue;
-            }
-            total = add(
-                total,
-                scale(to_source, (self.gm[k] / (r_sq * r_sq.sqrt())) as f32),
-            );
-        }
-        total
-    }
-
-    /// Moves every source by a rebase.
-    pub fn shift(&mut self, offset: Vector3) {
-        for p in self.positions.iter_mut() {
-            *p = add(*p, offset);
-        }
-    }
 }
 
 /// The tier's rows, column by column, in no particular order (a removed row's place is taken by the last).
@@ -299,13 +266,15 @@ impl TierRows {
 }
 
 /// One tick of the tier: every row's pose advances from its velocity and spin; the rows on their beat (every `period`
-/// ticks, staggered by ordinal) recompute what pushes them (a fighter's command through the flight kernel, a capital's
-/// cruise law, nothing for a hulk) and hold it until the next beat. Returns how many rows had their beat.
+/// ticks, staggered by ordinal) recompute what their engines push (a fighter's command through the flight kernel, a
+/// capital's cruise law, nothing for a hulk) and hold it until the next beat. `pull` is what each row feels from gravity
+/// this tick (the frame's residual, one per row), applied every tick on top of the engines; empty where nothing pulls.
+/// Returns how many rows had their beat.
 #[allow(clippy::too_many_arguments)]
 pub fn step(
     t: &mut TierRows,
     types: &[Type],
-    gravity: &Gravity,
+    pull: &[Vector3],
     commands: &CommandMap,
     tick: i64,
     dt: f64,
@@ -325,10 +294,14 @@ pub fn step(
             if let Some(rc) = HashMap::get(commands, &t.body_ids[i]) {
                 t.seen_seq[i] = rc.seq;
             }
-            beat(t, i, types, gravity, commands, dt * period as f64, scratch);
+            let env = pull.get(i).copied().unwrap_or(Vector3::ZERO);
+            beat(t, i, types, env, commands, dt * period as f64, scratch);
         }
         // Semi-implicit, as Jolt steps a body: the velocity first, then the pose from the new velocity.
         let mut v = add(t.velocities[i], scale(t.accel[i], dt32));
+        if let Some(&g) = pull.get(i) {
+            v = add(v, scale(g, dt32));
+        }
         let limit = t.speed_limit[i];
         if limit > 0.0 && f64::from(length(v)) > limit {
             v = scale(normalized(v), limit as f32);
@@ -342,12 +315,13 @@ pub fn step(
     beats
 }
 
-// A row's beat: what pushes it until the next one.
+// A row's beat: what its engines push until the next one, against `env`, the pull it feels now (feed-forward only: the
+// step applies the pull itself every tick).
 fn beat(
     t: &mut TierRows,
     i: usize,
     types: &[Type],
-    gravity: &Gravity,
+    env: Vector3,
     commands: &CommandMap,
     dt_beat: f64,
     scratch: &mut Vec<(Vector3, Vector3)>,
@@ -358,7 +332,6 @@ fn beat(
         t.speed_limit[i] = 0.0;
         return;
     }
-    let env = gravity.accel(t.positions[i]);
     if t.kinds[i] == KIND_CAPITAL {
         // `CapitalStandin.cruise_force` divided by the mass: back toward the cruise, holding off the pull, 2 m/s^2 at most.
         let response = if dt_beat > CRUISE_RESPONSE_S {
@@ -373,7 +346,7 @@ fn beat(
         return;
     }
     let Some(ty) = types.get(t.type_ix[i] as usize) else {
-        t.accel[i] = env;
+        t.accel[i] = Vector3::ZERO;
         t.alpha[i] = Vector3::ZERO;
         return;
     };
@@ -407,9 +380,13 @@ fn beat(
         scratch,
     );
     t.pod_yaw[i] = pod_yaw;
-    // `Ship.applied_force() / mass`, as the ram tracker reads a ship's acceleration.
+    // `Ship.applied_force() / mass` less the pull, which the step adds every tick.
     let mass = body.spec.mass as f32;
-    let force = applied.out_vectors[0];
+    let force = if env == Vector3::ZERO {
+        applied.out_vectors[0]
+    } else {
+        sub(applied.out_vectors[0], applied.env_force)
+    };
     t.accel[i] = Vector3::new(force.x / mass, force.y / mass, force.z / mass);
     // The torques Jolt would add: the RCS torque and each nozzle force about the centre of mass.
     let com_w = xform(&basis, ty.center_of_mass);
@@ -734,3 +711,6 @@ fn box_push(to_rock: Vector3, basis: &Basis, half: Vector3, need: f64) -> Option
         Vector3::new(p[0] as f32, p[1] as f32, p[2] as f32),
     ))
 }
+
+#[cfg(test)]
+mod tests;

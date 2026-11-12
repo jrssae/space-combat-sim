@@ -224,6 +224,7 @@ const ENTITY_KEYS: Array[String] = ["fighters_near", "fighters_far", "capitals",
 
 func test_a_short_battle_writes_every_entity_count_and_puts_the_factions_back() -> void:
 	var game_table: FactionTable = Factions.table()
+	var anchor_before: String = main.world.anchor_text()
 	assert_true(_exec("bench battle 50 3 warmup=0.5 seed=1 label=battle_test").ok)
 	await _ticks(2)
 	var sides: Array[StringName] = BenchLayout.sides(BenchLayout.BATTLE)
@@ -234,7 +235,9 @@ func test_a_short_battle_writes_every_entity_count_and_puts_the_factions_back() 
 	var mix: Dictionary = BenchLayout.mix(BenchLayout.BATTLE, 50)
 	assert_eq(main.bench.standins.capitals().size(), int(mix["capitals"]), "the capitals are in play")
 	assert_eq(main.bench.standins.asteroid_count(), int(mix["asteroids"]), "and the rocks")
-	assert_ne(main.world.environment_accel(Vector3.ZERO), Vector3.ZERO, "and the moon")
+	assert_eq(main.world.anchor_text(), "orbit %s" % BenchLayout.GRAVITY_BODY, "the battle is flown in a low orbit of a body of the data")
+	assert_true(main.world.gravity_active(), "so it pulls")
+	assert_gt(main.world.environment_accel(Vector3(0.0, 0.0, -5000.0)).length(), 1e-3, "5 km out: the tide of a real body")
 	var by_faction: Dictionary = {}
 	for c: Combatant in main.ships.alive():
 		by_faction[c.faction] = int(by_faction.get(c.faction, 0)) + 1
@@ -267,7 +270,8 @@ func test_a_short_battle_writes_every_entity_count_and_puts_the_factions_back() 
 		assert_true(c.faction == Factions.EARTH_ALLIANCE or c.faction == Factions.RAIDERS, "%s flies for a game faction again" % c.display_name)
 	assert_eq(main.bench.standins.capitals().size(), 0, "the stand-ins are gone")
 	assert_eq(main.bench.standins.asteroid_count(), 0)
-	assert_eq(main.world.environment_accel(Vector3.ZERO), Vector3.ZERO, "and the moon")
+	assert_eq(main.world.anchor_text(), anchor_before, "the frame's anchor is back (%s)" % anchor_before)
+	assert_eq(main.world.environment_accel(Vector3(0.0, 0.0, -5000.0)), Vector3.ZERO, "and nothing pulls on the station's rail")
 
 
 func test_a_short_typical_run_writes_its_summary() -> void:

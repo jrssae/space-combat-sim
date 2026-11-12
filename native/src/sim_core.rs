@@ -233,12 +233,12 @@ pub struct ScsSimCore {
     // Bodies whose row command GDScript released since the step's last launch (M4-T24): dropped from the job's commands
     // at the join.
     pub(crate) released: Vec<i64>,
-    // The low-attention tier (M4-T21): its rows, the fighter types they fly as, the pull they feel, the beat's period in
+    // The low-attention tier (M4-T21): its rows, the fighter types they fly as, the pull each row feels this tick, the beat's period in
     // ticks, each row's display name beside the engine-free table, the next handle and ordinal, the beat's scratch and the
     // step's readouts.
     pub(crate) tier: crate::tier::TierRows,
     pub(crate) tier_types: Vec<crate::tier::Type>,
-    pub(crate) tier_gravity: crate::tier::Gravity,
+    pub(crate) tier_pull: Vec<Vector3>,
     pub(crate) tier_period: i64,
     pub(crate) tier_name_ids: Vec<u32>,
     pub(crate) next_tier_handle: i64,
@@ -265,6 +265,15 @@ pub struct ScsSimCore {
     sync_parts: [i64; 5],
     // The World's free-falling frame (M6-T04, D64): its star system, its anchor and the tick's gravity sample.
     pub(crate) frame: crate::frame::Frame,
+    // Gravity on the tier's rows and the bolts (M6-T07): the bolts' pull this tick, the kernel-axes scratch both use, and the
+    // last tick's readouts (rows that took a pull, and the wall-clock cost of working it out).
+    pub(crate) bolt_pull: Vec<Vector3>,
+    pub(crate) pull_scratch: Vec<crate::ephemeris::V3>,
+    pub(crate) ships_pulled: i64,
+    pub(crate) tier_pulled: i64,
+    pub(crate) bolts_pulled: i64,
+    pub(crate) tier_pull_us: i64,
+    pub(crate) bolt_pull_us: i64,
 }
 
 #[godot_api]
@@ -611,14 +620,6 @@ impl ScsSimCore {
             *p = add(*p, offset);
         }
         self.tier.shift(offset);
-        self.tier_gravity.shift(offset);
-    }
-
-    /// Moves what is tied to the anchor and has no row of its own by `shift`, while the frame is off its anchor (M6-T05):
-    /// the tier's copy of the pull's sources. The static rows come again from `StaticRows` at the next sync.
-    #[func]
-    pub fn drift_anchored(&mut self, shift: Vector3) {
-        self.tier_gravity.shift(shift);
     }
 
     /// Engine calls of the last closed tick: `[sync, fallbacks]`: the sync points' reads, which grow with the bodies and

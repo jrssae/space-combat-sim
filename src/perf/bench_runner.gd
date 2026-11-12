@@ -7,7 +7,8 @@ extends Node
 ##
 ## `battle` and `typical` (M4-T07, §17.6) also bring the battle's stand-ins through `standins` (`World/Standins`): the
 ## capitals with their turrets and beam lasers, the asteroid field (`rocks=` overrides the mix's count; 0 for none), the mine
-## belts and the missiles the mix holds in flight (M4-T12), the moon, the carriers' launch cycle, and for four sides a session
+## belts and the missiles the mix holds in flight (M4-T12), a low orbit of a body of the star system's data for its gravity
+## (M6-T07; the frame's anchor is put back after), the carriers' launch cycle, and for four sides a session
 ## faction table and the bench factions on the fighters of sides three and four.
 ## All of it goes when the run ends.
 ##
@@ -255,7 +256,7 @@ func _set_up_scene() -> void:
 	probe.enabled = true
 
 
-# The capitals, the rocks, the moon and the launch cycle of a battle or typical run (M4-T07).
+# The capitals, the rocks, the orbit and the launch cycle of a battle or typical run (M4-T07).
 func _set_up_standins(plan: Array[Dictionary], anchor: UniversePos) -> void:
 	standins.clear()
 	standins.sides = int(_mix["sides"])
@@ -279,12 +280,42 @@ func _set_up_standins(plan: Array[Dictionary], anchor: UniversePos) -> void:
 	MissileStandin.steers = 0
 	MissileStandin.steer_us = 0
 	MissileStandin.native_steers = 0
-	var moon: Dictionary = BenchLayout.gravity_source(_layout)
-	if not moon.is_empty():
-		standins.add_gravity(anchor.plus_local(moon["offset"]), float(moon["gm"]))
+	var orbit: Dictionary = BenchLayout.gravity_orbit(_layout)
+	if not orbit.is_empty():
+		_fly_in_orbit(orbit, anchor)
 	_launch_turn.clear()
 	standins.launcher = _launch_from
 	standins.active = true
+
+
+# The battle's gravity (M6-T07): the frame falls on the circular orbit `orbit` names, placed so that the battle's centre
+# `centre` is on it, and the frame's anchor before is kept to put back.
+func _fly_in_orbit(orbit: Dictionary, centre: UniversePos) -> void:
+	var world: WorldFrame = main.world
+	var system: StarSystem = world.star_system if world.star_system != null else StarSystem.load_system(StarSystemHost.DEFAULT_SYSTEM)
+	var info: Dictionary = system.info(orbit["body"]) if system.is_valid() else {}
+	if info.is_empty():
+		push_warning("bench: no body %s to orbit; the battle runs with no gravity" % orbit["body"])
+		return
+	_restore["frame"] = {"kind": world.anchor_text().get_slice(" ", 0), "system": world.star_system, "name": world.anchor_name,
+			"state": world.anchor_state()}
+	var radius: float = float(info["radius_m"]) + float(orbit["altitude_m"])
+	var speed: float = sqrt(float(info["gm"]) / radius)
+	world.anchor_in_orbit(system, orbit["body"], PackedFloat64Array([radius - centre.x, -centre.y, -centre.z, 0.0, 0.0, -speed]))
+
+
+# Puts back the frame's anchor the battle's orbit replaced.
+func _restore_frame() -> void:
+	var was: Dictionary = _restore.get("frame", {})
+	if was.is_empty() or main == null or not is_instance_valid(main.world):
+		return
+	match String(was["kind"]):
+		"rail":
+			main.world.anchor_on_rail(was["system"], was["name"])
+		"orbit":
+			main.world.anchor_in_orbit(was["system"], was["name"], was["state"])
+		_:
+			main.world.clear_anchor()
 
 
 # A carrier's launch: one fighter of its side goes back to the pool and comes out again at the carrier's bay, so N holds.
@@ -432,6 +463,7 @@ func _put_back() -> void:
 			main.world.boost_to_anchor()
 	if standins != null and is_instance_valid(standins):
 		standins.clear()
+	_restore_frame()
 	if main != null and is_instance_valid(main.ships):
 		for c: Combatant in main.ships.all_ships():
 			var own: StringName = ShipCatalog.faction_for(main.ships.type_of(c))

@@ -5,7 +5,7 @@
 // (`accel_at`, `tidal`) is kept beside it. Pure functions over plain slices, with a fixed order of sums, so a worker
 // and the main thread get the same bits. Engine-free by construction (test_sim_core reads this
 // file): plain numbers in, plain numbers out, no statics.
-#![allow(dead_code)] // partly wired in by M6-T04 (the frame); the rest by M6-T07
+#![allow(dead_code)] // the sum over every body (`accel_at`, `tidal`) is kept beside the game's rule for the tests
 
 pub type V3 = [f64; 3];
 
@@ -150,6 +150,15 @@ pub fn residual_rows(offsets: &[V3], positions: &[V3], gms: &[f64], zones: &[f64
     let anchor = strongest([0.0; 3], positions, gms, zones);
     for (slot, &offset) in out.iter_mut().zip(offsets) {
         *slot = residual_from(offset, anchor, positions, gms, zones);
+    }
+}
+
+/// `residual_rows` with each offset turned into its residual where it lies, so a caller needs no second buffer. The
+/// same bits as `residual` row by row.
+pub fn residual_rows_in_place(rows: &mut [V3], positions: &[V3], gms: &[f64], zones: &[f64]) {
+    let anchor = strongest([0.0; 3], positions, gms, zones);
+    for row in rows.iter_mut() {
+        *row = residual_from(*row, anchor, positions, gms, zones);
     }
 }
 

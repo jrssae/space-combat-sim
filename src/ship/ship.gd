@@ -511,9 +511,8 @@ func batch_gather(batch: FlightBatch, row: int, frame: int, delta: float, fuel_u
 		targeting.apply(_combat)  # this node's tick is off (M4-T35): the edges land here, before the World's rebase at 0
 	_prepare_command(delta, global_basis.transposed())
 	_fuel.unlimited = fuel_unlimited
-	# The core adds the frame's residual itself (M6-T04): only the World's own field is packed.
-	var field: Vector3 = world.field_accel(position) if world != null and is_instance_valid(world) else Vector3.ZERO
-	FlightBatch.pack_command(_flight, field, _assist_on and not hulk, not _fuel.is_empty(), scalars, vectors, flags, row)
+	# The core adds the frame's residual itself (M6-T04, M6-T07): nothing else pulls, so the environment is packed as zero.
+	FlightBatch.pack_command(_flight, Vector3.ZERO, _assist_on and not hulk, not _fuel.is_empty(), scalars, vectors, flags, row)
 	if not _native_last:
 		# Onto the batch: it carries on from the assist state this node's model held.
 		if _model != null:

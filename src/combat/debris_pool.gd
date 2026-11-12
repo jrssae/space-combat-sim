@@ -161,7 +161,7 @@ func advance_wrecks(delta: float) -> void:
 	for entry: Dictionary in _wrecks:
 		var wreck: StagedWreck = entry["wreck"]
 		var nodes: Array[DebrisChunk] = entry["chunks"]
-		var due: PackedInt32Array = wreck.advance(delta)
+		var due: PackedInt32Array = wreck.advance(delta, WorldFrame.of(self))
 		for i: int in nodes.size():
 			if not wreck.is_released(i) and is_instance_valid(nodes[i]):
 				nodes[i].place_held(wreck.chunk_transform(i), wreck.point_velocity(wreck.offset_of(i)))

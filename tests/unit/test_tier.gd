@@ -5,6 +5,7 @@ extends GutTest
 ## and move with a rebase; the core names what the director demotes and promotes. Driven through the core's native API
 ## with a hand-held tick, so the beats and the bits are under the test's control.
 
+const FreeFall: GDScript = preload("res://tests/integration/test_free_fall.gd")
 const SPEC_PATH: String = "res://assets/ships/starfury_aurora.tres"
 const LAYOUT_PATH: String = "res://tests/fixtures/hardpoints_nominal.json"
 const DT: float = 1.0 / 60.0
@@ -108,23 +109,38 @@ func test_a_coasting_fighter_keeps_its_velocity_and_spin_bit_for_bit() -> void:
 	assert_eq(int(sim.core.tier_beats()), 200, "a beat every %d ticks" % PERIOD)
 
 
-func test_gravity_pulls_a_tier_row_as_the_stand_in_pulls_a_body() -> void:
+func test_every_row_feels_the_frames_pull_and_a_capital_holds_its_cruise_against_it() -> void:
 	var sim: SimCore = _core()
 	var type_ix: int = _starfury_type(sim)
-	var moon := GravityStandin.new()
-	add_child_autofree(moon)
-	moon.install(world, world.to_universe(Vector3(0.0, -400000.0, 0.0)), 0.03 * 400000.0 * 400000.0)
-	sim.core.tier_set_gravity(PackedVector3Array([Vector3(0.0, -400000.0, 0.0)]), PackedFloat64Array([moon.gm]))
-	var at := Vector3(3000.0, 200.0, -12000.0)
-	assert_eq(sim.core.tier_gravity_at(at), moon.accel(at), "the same pull, bit for bit, as GravityStandin.accel")
+	assert_true(world.anchor_on_rail(FreeFall.fixture_system(), &"post"), "a low fixture orbit, inside the planet's zone")
+	# 3 km along the track and 2 km out: the tide pulls each back toward the anchor and out.
+	var at := Vector3(2000.0, 0.0, -3000.0)
+	var pull: Vector3 = world.gravity_residual(at)
+	assert_gt(pull.length(), 5e-3, "the tide out here")
 	_fighter(sim, type_ix, 702, at, Vector3.ZERO, Vector3.ZERO)
-	_step(sim, PERIOD)  # the first beat sets the pull; then it applies every tick
-	var v0: Vector3 = sim.core.tier_state(702)["velocity"]
+	_fighter(sim, type_ix, 712, at + Vector3(0.0, 1.0, 0.0), Vector3.ZERO, Vector3.ZERO)
+	assert_true(sim.core.tier_set_hulk(712, true))
+	var cruise := Vector3(0.0, 0.0, -30.0)
+	_capital(sim, 713, at - Vector3(0.0, 1.0, 0.0), cruise, cruise)
 	_step(sim, 60)
-	var v1: Vector3 = sim.core.tier_state(702)["velocity"]
-	var dv: Vector3 = v1 - v0
-	assert_lt(dv.distance_to(moon.accel(at) * 1.0), 0.002, "one second of the pull in one second (%s)" % dv)
-	assert_lt(dv.y, 0.0, "downward, toward the moon")
+	for id: int in [702, 712]:
+		var dv: Vector3 = sim.core.tier_state(id)["velocity"]
+		assert_almost_eq(dv, pull, Vector3.ONE * 1e-5, "row %d: one second of the pull in one second (%s against %s)" % [id, dv, pull])
+	var held: Vector3 = sim.core.tier_state(713)["velocity"]
+	assert_almost_eq(held, cruise, Vector3.ONE * 2e-3, "the capital's engines hold its cruise against the pull (%s)" % held)
+	assert_eq(int(sim.core.gravity_readouts()[1]), 3, "three rows took the pull this tick")
+
+
+func test_on_the_stations_rail_no_row_feels_anything() -> void:
+	var sim: SimCore = _core()
+	var type_ix: int = _starfury_type(sim)
+	assert_true(world.anchor_on_rail(StarSystem.load_system(StarSystemHost.DEFAULT_SYSTEM), StarSystemHost.DEFAULT_ANCHOR))
+	assert_false(world.gravity_active(), "Babylon 5's orbit lies outside Epsilon III's zone (D66)")
+	var v := Vector3(12.5, -3.0, 40.25)
+	_fighter(sim, type_ix, 714, Vector3(3000.0, 200.0, -12000.0), v, Vector3.ZERO)
+	_step(sim, 60)
+	assert_eq(sim.core.tier_state(714)["velocity"], v, "no pull: the velocity keeps every bit")
+	assert_eq(int(sim.core.gravity_readouts()[1]), 0, "no row read a pull")
 
 
 func test_a_held_command_pushes_a_fighter_and_the_speed_ceiling_holds() -> void:
@@ -262,20 +278,20 @@ func test_tier_rows_join_the_scan_rows_after_the_statics_flagged_tier() -> void:
 	assert_eq((snapshot[0] as PackedInt64Array).size(), 1, "the registry's face carries the static only")
 
 
-func test_a_rebase_shifts_the_tier_rows_and_the_pull_once() -> void:
+func test_a_rebase_shifts_the_tier_rows_once_and_the_pull_with_them() -> void:
 	var sim: SimCore = _core()
 	var type_ix: int = _starfury_type(sim)
-	sim.core.tier_set_gravity(PackedVector3Array([Vector3(0.0, -400000.0, 0.0)]), PackedFloat64Array([4.8e9]))
+	assert_true(world.anchor_on_rail(FreeFall.fixture_system(), &"post"))
 	_fighter(sim, type_ix, 709, Vector3(100.0, 200.0, -15000.0), Vector3.ZERO, Vector3.ZERO)
 	sim.sync_now()
 	var at: Vector3 = sim.core.tier_state(709)["position"]
-	var pull: Vector3 = sim.core.tier_gravity_at(at)
+	var pull: Vector3 = world.gravity_residual(at)
 	var offset := Vector3(4000.0, -300.0, 2500.0)
 	world.rebase(offset)
 	var after: Vector3 = sim.core.tier_state(709)["position"]
 	assert_eq(after, at - offset, "the row moved by the rebase, as a node does")
 	assert_eq(sim.core.row_position(int(sim.core.row_of_id(709))), after, "and so did its scan row, once")
-	assert_eq(sim.core.tier_gravity_at(after), pull, "the moon moved with it: the same pull at the same place")
+	assert_almost_eq(world.gravity_residual(after), pull, Vector3.ONE * 1e-7, "the frame moved with it: the same pull at the same place")
 
 
 func test_the_core_names_the_far_bodies_to_demote_and_the_near_rows_to_promote() -> void:

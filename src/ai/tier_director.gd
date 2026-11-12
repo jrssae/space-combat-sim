@@ -42,7 +42,7 @@ static var _damageables: Dictionary[int, Damageable] = {}
 
 var world: WorldFrame = null
 var ships: ShipPool = null
-## The battle's stand-ins (the capitals and the moon); null outside the main scene.
+## The battle's stand-ins (the capitals); null outside the main scene.
 var standins: StandinDirector = null
 ## Handovers so far, and the last tick's cost (wall clock, a readout).
 var promotions: int = 0
@@ -70,8 +70,6 @@ var _capitals_by_body: Dictionary[int, CapitalStandin] = {}
 var _capitals_known: int = -1
 var _sim: SimCore = null
 var _period_given: int = -1
-var _gravity_given: GravityStandin = null
-var _gravity_gm_given: float = NAN
 ## Tier fighters' hits landed so far, and the last tick's landing cost (wall clock, a readout).
 var hits_landed: int = 0
 var land_us: int = 0
@@ -601,7 +599,7 @@ func _ram_hull(body_id: int, velocity: Vector3) -> Dictionary:
 # --- the frame and the bookkeeping -----------------------------------------------------------------------------------------
 
 
-# The beat's period and the pull, pushed when they change (a rebase moves the core's own copy of the sources).
+# The seed and the beat's period, pushed when they change. Gravity comes from the World's frame in the core (M6-T07).
 func _push_frame(sim: SimCore) -> void:
 	if seed_value != _seed_given:
 		_seed_given = seed_value
@@ -610,15 +608,6 @@ func _push_frame(sim: SimCore) -> void:
 	if period != _period_given:
 		_period_given = period
 		sim.core.tier_set_period(period)
-	var moon: GravityStandin = standins.gravity() if standins != null and is_instance_valid(standins) else null
-	var gm: float = moon.gm if moon != null else 0.0
-	if moon != _gravity_given or gm != _gravity_gm_given:
-		_gravity_given = moon
-		_gravity_gm_given = gm
-		if moon == null:
-			sim.core.tier_set_gravity(PackedVector3Array(), PackedFloat64Array())
-		else:
-			sim.core.tier_set_gravity(PackedVector3Array([moon.local_position()]), PackedFloat64Array([gm]))
 
 
 # The `SimCore.removals` count at the last prune.

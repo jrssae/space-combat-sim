@@ -195,7 +195,7 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `post` | Lens flare and motion blur state and where the star is in the picture | front end, flight |
 | `livery` | The player's livery and every ship's in the world | in flight |
 | `frame` | The frame's passes (plumes, flashes, impacts, far dots, bolts, turret models): their cost and what each walks | always |
-| `core` | The native simulation core: rows, bodies, bolts, syncs, threads and their costs; the defensive turrets (`turrets`, `turret_shots`, `turret_shots_total`, `turret_us`, `turret_picks_stale`, `attackers`; M5-T21) | in flight |
+| `core` | The native simulation core: rows, bodies, bolts, syncs, threads and their costs; the defensive turrets (`turrets`, `turret_shots`, `turret_shots_total`, `turret_us`, `turret_picks_stale`, `attackers`; M5-T21); gravity on the movers (`gravity_rows`: ships, tier rows and bolts the frame's pull reached last tick; `gravity_us`: the tier's and the bolts' share of its cost; M6-T07) | in flight |
 | `flight` | The native flight batch: ships stepped and the gather and step costs | in flight |
 | `tier` | The low-attention tier: radius, rates, fighter and capital rows, hulks, promotions and demotions | in flight |
 | `perf` | The tick's stage timings and per-entity counts (on while `perf on` or a bench runs) | in flight |

@@ -5,7 +5,7 @@ use godot::prelude::*;
 
 use crate::ephemeris::V3;
 use crate::ephemeris_binding::ScsEphemeris;
-use crate::frame::Anchor;
+use crate::frame::{Anchor, Frame};
 use crate::sim_core::ScsSimCore;
 
 fn to_kernel(x: f64, y: f64, z: f64) -> V3 {
@@ -19,6 +19,20 @@ fn to_game(v: V3) -> [f64; 3] {
 fn game_vector(v: V3) -> Vector3 {
     let g = to_game(v);
     Vector3::new(g[0] as f32, g[1] as f32, g[2] as f32)
+}
+
+/// What each mover at `positions` (World coordinates) feels from `frame` this tick, into `out`, the same bits as
+/// `frame_residual_at` per mover; false, with `out` empty, while the frame is quiet, so a caller adds nothing.
+pub(crate) fn residuals(frame: &Frame, positions: &[Vector3], scratch: &mut Vec<V3>, out: &mut Vec<Vector3>) -> bool {
+    out.clear();
+    if !frame.active() || positions.is_empty() {
+        return false;
+    }
+    scratch.clear();
+    scratch.extend(positions.iter().map(|p| to_kernel(f64::from(p.x), f64::from(p.y), f64::from(p.z))));
+    frame.residual_rows(scratch);
+    out.extend(scratch.iter().map(|&g| game_vector(g)));
+    true
 }
 
 impl ScsSimCore {
@@ -133,6 +147,15 @@ impl ScsSimCore {
     #[func]
     fn frame_residual(&self, local: Vector3) -> Vector3 {
         self.frame_residual_at(local).unwrap_or(Vector3::ZERO)
+    }
+
+    /// Gravity's last tick on the movers (M6-T07): `[ships, tier rows, bolts, tier us, bolts us]`, the movers that took the
+    /// frame's pull and the wall-clock cost of the tier's and the bolts' batches (the ships' share is inside the flight step).
+    #[func]
+    fn gravity_readouts(&self) -> PackedInt64Array {
+        PackedInt64Array::from(
+            &[self.ships_pulled, self.tier_pulled, self.bolts_pulled, self.tier_pull_us, self.bolt_pull_us][..],
+        )
     }
 
     /// What the frame falls with: `none`, `rail` (a place's orbit) or `orbit` (a free-falling particle).

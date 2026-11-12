@@ -15,7 +15,7 @@ extends RefCounted
 ##
 ## - `battle` (M4-T07, Q15, Q19, Q21): the grand multi-side battle, `BattleMix.GRAND`. Fights of 24 on an 8 km lattice, the
 ##   player's fight first, four sides every pair hostile, each side's fighters coming in from its own direction (+Z, -Z, +X,
-##   -X) and its capitals 5 km behind its fights, cruising into them. An asteroid slab over the player's fight and a moon below.
+##   -X) and its capitals 5 km behind its fights, cruising into them. An asteroid slab over the player's fight, the battle in a low orbit of Epsilon III.
 ##   Mine belts (M4-T12) 1.5 km out from each fight, each side's toward its own direction (`mines`).
 ## - `typical` (M4-T07, Q21): most missions, `BattleMix.TYPICAL`: two fights of about 25 on two sides, the capitals behind.
 ##   N counts fighters and capitals; the mix fixes how many of each.
@@ -75,15 +75,16 @@ const ROCK_SLAB_M: Vector3 = Vector3(20000.0, 5000.0, 20000.0)
 const ROCK_RADIUS_MIN_M: float = 20.0
 const ROCK_RADIUS_MAX_M: float = 200.0
 const ROCK_CLEARANCE_M: float = 100.0
-## The moon (Q22): a point source this far below the player, pulling this hard at that distance.
 ## Mine belts (M4-T12): each side's share of a fight's mines on an arc 90 degrees wide toward its own direction, this far out
 ## from the fight's centre (between its fighters' start and its capitals), this deep and this high either way, m.
 const MINE_BELT_RADIUS_M: float = 1500.0
 const MINE_BELT_DEPTH_M: float = 150.0
 const MINE_BELT_HEIGHT_M: float = 150.0
 const MINE_BELT_ARC_RAD: float = PI / 2.0
-const MOON_OFFSET_M: Vector3 = Vector3(0.0, -400000.0, 0.0)
-const MOON_ACCEL_MPS2: float = 0.03
+## The battle's gravity (Q22, M6-T07): the battle is flown in a low orbit of this body of the star system's data, so the
+## tide of a real body's pull reaches every mover (about 0.026 m/s^2 10 km from the battle's centre).
+const GRAVITY_BODY: StringName = &"epsilon_iii"
+const GRAVITY_ALTITUDE_M: float = 400000.0
 
 
 static func is_layout(layout: StringName) -> bool:
@@ -454,11 +455,12 @@ static func _mine_clear(at: Vector3, ships: Array[Dictionary]) -> bool:
 	return true
 
 
-## The layout's gravity source: `offset` (m, from the player) and `gm` (m^3/s^2); empty for a layout without one.
-static func gravity_source(layout: StringName) -> Dictionary:
+## The layout's gravity: the body of the star system's data it orbits (`body`) and at what height (`altitude_m`); empty for a
+## layout flown where nothing pulls.
+static func gravity_orbit(layout: StringName) -> Dictionary:
 	if int(mix(layout, 1).get("gravity_sources", 0)) <= 0:
 		return {}
-	return {"offset": MOON_OFFSET_M, "gm": MOON_ACCEL_MPS2 * MOON_OFFSET_M.length_squared()}
+	return {"body": GRAVITY_BODY, "altitude_m": GRAVITY_ALTITUDE_M}
 
 
 # A point in the ball (`half_sign` > 0: only its +Z half, < 0: only its -Z half, 0: all of it) at least `MIN_SPACING_M` from

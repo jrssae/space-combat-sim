@@ -110,6 +110,8 @@ pub struct ScsFlightStep {
     listed: Vec<bool>,
     // Ships the last `step_core` read from the physics server because the core had no row for them (M4-T15).
     fallback_reads: i64,
+    // Ships the last step gave the frame's pull (M6-T07).
+    pulled: i64,
     // The slot of each output row of the last step, and the output row of each slot (-1: not flown), M5-T31.
     out_slots: Vec<i32>,
     slot_rows: Vec<i32>,
@@ -267,6 +269,7 @@ impl ScsFlightStep {
         dt: f64,
     ) -> bool {
         self.fallback_reads = 0;
+        self.pulled = 0;
         self.run(None, slots, scalars, vectors, flags, states, dt)
     }
 
@@ -286,6 +289,7 @@ impl ScsFlightStep {
         dt: f64,
     ) -> bool {
         self.fallback_reads = 0;
+        self.pulled = 0;
         if body_ids.len() != slots.len() {
             godot_error!(
                 "ScsFlightStep.step_core: {} slots but {} body ids; nothing applied",
@@ -309,6 +313,7 @@ impl ScsFlightStep {
         if self.fallback_reads > 0 {
             c.note_fallback_read(self.fallback_reads);
         }
+        c.ships_pulled = self.pulled;
         // Each flown ship's acceleration from its own forces, as `Ship.applied_force() / ship.mass` gives it (M4-T35: the
         // ram tracker's accel column, read natively). The gathered ships come first, then the row-flown ones.
         c.accels.clear();
@@ -470,16 +475,17 @@ impl ScsFlightStep {
                 item.w_w = st[i * STATE_VECTORS + 4];
                 item.apply = false;
             }
-            // The free-falling frame's residual (M6-T04): GDScript packed only the World's own field.
+            // The free-falling frame's residual (M6-T04, D66): the pull and the brake's feed-forward; GDScript packs zero.
             if let (Some((c, _)), Some(at)) = (core, position)
                 && let Some(g) = c.frame_residual_at(at)
             {
                 item.env_w += g;
+                self.pulled += 1;
             }
         }
         // Row flight (M5-T31): every row-mode ship not gathered this tick, with a command in its row and a row in the core,
         // flies that command from the core's tables alone: its selected target's line of sight (only while it brakes) and
-        // the core's gravity sources stand in for what the gather would have read.
+        // the frame's residual stand in for what the gather would have read.
         self.row_bodies.clear();
         let mut n = n;
         if let Some((c, _)) = core {
@@ -552,10 +558,13 @@ impl ScsFlightStep {
                         }
                     }
                 };
-                item.env_w = position.map_or(Vector3::ZERO, |at| {
-                    let field = c.tier_gravity.accel(at);
-                    c.frame_residual_at(at).map_or(field, |g| field + g)
-                });
+                item.env_w = match position.and_then(|at| c.frame_residual_at(at)) {
+                    Some(g) => {
+                        self.pulled += 1;
+                        g
+                    }
+                    None => Vector3::ZERO,
+                };
                 if cmd.brake
                     && let Some(at) = position
                 {

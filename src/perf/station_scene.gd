@@ -1,8 +1,8 @@
 class_name StationScene
 extends Node
 ## The render comparison's second scene (M4-T27, Q24): the Babylon 5 station stand-in, 10 capital ships holding station around it,
-## 80 fighters in a fight beside it (40 Earth Alliance Starfuries, 40 raiders, invulnerable like the bench's) and a planet 40 km off
-## with its pull (Q6's harness-only point source). Bench-only: nothing in a scenario builds it.
+## 80 fighters in a fight beside it (40 Earth Alliance Starfuries, 40 raiders, invulnerable like the bench's) and a planet 40 km off,
+## drawn only: a 12 km body pulls nothing (D66, M6-T07). Bench-only: nothing in a scenario builds it.
 ##
 ## Every hull is drawn as its textured mesh. The player's ship is moved to a viewpoint near the station or 11 km off it, nose on the station, at rest.
 ##
@@ -30,8 +30,6 @@ const VIEWS: Dictionary = {
 }
 const PLANET_OFFSET: Vector3 = Vector3(-26000.0, -16000.0, -24000.0)
 const PLANET_RADIUS_M: float = 12000.0
-## The planet's pull at the station, m/s^2.
-const PLANET_ACCEL_MPS2: float = 0.05
 const SIDES: Array[Dictionary] = [
 	{"type": ShipPool.ALLY_TYPE, "profile": "ally_starfury", "faction": Factions.EARTH_ALLIANCE},
 	{"type": ShipPool.DEFAULT_TYPE, "profile": "raider", "faction": Factions.RAIDERS},
@@ -118,7 +116,6 @@ func _build() -> bool:
 				centre.plus_local(row["at"]), Basis.IDENTITY, Vector3.ZERO)
 		cap.damageable.invulnerable = true
 		index += 1
-	standins.add_gravity(centre.plus_local(PLANET_OFFSET), PLANET_ACCEL_MPS2 * PLANET_OFFSET.length_squared())
 	standins.sides = 2
 	standins.active = true
 	_spawn_fighters()

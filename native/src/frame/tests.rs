@@ -256,3 +256,44 @@ fn a_boosted_frame_with_no_pull_drifts_in_a_straight_line_and_keeps_its_motion_t
     assert_eq!(frame.origin_velocity(), [0.0; 3]);
     assert_eq!(frame.origin(), origin, "riding again: the origin stays");
 }
+
+// --- many movers at once (M6-T07): the tier's rows and the bolts --------------------------------------------------------
+
+#[test]
+fn the_rows_feel_the_bits_one_mover_feels_however_they_are_split() {
+    let mut frame = low_orbit_frame();
+    assert!(frame.sample(0.0));
+    frame.set_origin([1500.0, -200.0, 40.0]);
+    assert!(frame.sample(0.0));
+    let movers: Vec<V3> = (0..64).map(|i| [i as f64 * 157.3 - 5000.0, (i % 7) as f64 * -91.0, (i % 5) as f64 * 333.3]).collect();
+    let one_by_one: Vec<V3> = movers.iter().map(|&m| frame.residual(m)).collect();
+    let mut all = movers.clone();
+    frame.residual_rows(&mut all);
+    assert_eq!(all, one_by_one, "a batch is the per-mover sum, bit for bit");
+    // Any split (a worker per part) gives the same bits: each row depends on nothing but itself.
+    for parts in [1, 6] {
+        let mut split = movers.clone();
+        let size = split.len().div_ceil(parts);
+        for chunk in split.chunks_mut(size) {
+            frame.residual_rows(chunk);
+        }
+        assert_eq!(split, one_by_one, "{parts} parts");
+    }
+    assert!(all.iter().any(|g| length(*g) > 1e-3), "the tide shows a few km out");
+}
+
+#[test]
+fn a_quiet_frame_gives_every_row_exactly_nothing() {
+    let (system, _, station) = epsilon();
+    let mut frame = Frame::default();
+    frame.set_system(system, gravity::A_MIN_DEFAULT);
+    let mut rows = vec![[1.0e3, 2.0, -3.0e4]; 5];
+    frame.residual_rows(&mut rows);
+    assert_eq!(rows, vec![[0.0; 3]; 5], "no anchor: nothing pulls");
+    // The station's rail lies outside Epsilon III's zone (D66): its space has no gravity at all.
+    assert!(frame.anchor_on_rail(station));
+    assert!(!frame.sample(0.0));
+    let mut rows = vec![[1.0e3, 2.0, -3.0e4]; 5];
+    frame.residual_rows(&mut rows);
+    assert_eq!(rows, vec![[0.0; 3]; 5], "on the station's rail: nothing pulls");
+}
