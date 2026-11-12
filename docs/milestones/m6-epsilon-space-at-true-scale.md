@@ -258,7 +258,7 @@ which changes the same native rows and rebase path:
 - **Tracks.** A (frame and gravity: T01, T02, T04 to T08), B (system data and scenarios: T03, T09), C (scaled space and far
   representations: T10, T11, T12, T15), D (the jumpgate: T13, T14), E (test tiers: T17, T18). Inside a track the order holds.
   If work goes one task at a time, the order is T01, T17, T18, T02, T03, T04, T05, T06, T07, T08, T09, T10, T11, T12, T13, T14,
-  T15, T19, T20, T21, T16. T19 is paused at the maintainer's word (2026-11-12, again), so T20 waits behind it.
+  T15, T19, T20, T21, T16. T19's pause was lifted by the maintainer on 2026-11-12 (evening); it starts after T15, then T20.
 - **One working copy** on branch `m6` in the main checkout, no task branches, as in M5; early-start work runs where the maintainer
   says (Early start, above).
 - **Locks** as in M5: Godot runs through `flock /tmp/m6-godot.lock`, commits through `flock /tmp/m6-git.lock` and stage only the
