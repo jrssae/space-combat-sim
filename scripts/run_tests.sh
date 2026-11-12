@@ -161,6 +161,9 @@ echo "== GUT"
 gut_timeout=3600
 if [[ -n "${GUT_SHARD:-}" ]]; then
     gut_timeout=2400
+elif [[ "${mode}" == "full" ]]; then
+    # The balance fights add about half an hour: with them the run passed the hour and was cut short (M5-T20).
+    gut_timeout=7200
 fi
 gut_status=0
 run_logged "${REPORTS}/gut.log" timeout "${gut_timeout}" "${GODOT}" --headless --path . -s addons/gut/gut_cmdln.gd \

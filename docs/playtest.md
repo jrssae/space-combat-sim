@@ -701,8 +701,10 @@ one; `state encounters` shows the schedule; `encounters clear` sends every encou
   one with none. `set settings.texture_detail low` and `high` switch every ship's surface detail live (Settings, Video, "Ship
   texture detail"); `set settings.hull_sheen 0` shows the old flat paint.
 - Civilians carry no guns of their own but have light turrets, which fire only at ships that attacked them or a civilian or
-  ally within 2 km. In `civilian_showcase`, `spawn raider attack` brings raiders to watch them run and shoot back. An Earth
-  Alliance civilian runs towards the nearest Earth Alliance ship (behind it when that is a fighter); others run together.
+  ally within 2 km. The showcase has no raiders (and its hulls sit 1.8 km ahead: fly up to them); to watch civilians run
+  and shoot back, start free flight and type `encounters force traffic`, then `encounters force raid` once they are near, or
+  fly the escort. An Earth Alliance civilian runs towards the nearest Earth Alliance ship (behind it when that is a
+  fighter); others run together.
 - `play belt_showcase`: the asteroid belt by itself. The rocks stop bolts and ships; a scrape costs little, a head-on hit a lot.
 
 ## Sounds (M5-T18, T19, T37)
