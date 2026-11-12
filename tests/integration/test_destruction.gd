@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## Destruction (M2-T06, AC7, architecture §15.7): a raider at zero hull is destroyed once, leaves play in the same tick, and
 ## becomes an `Explosion` plus a set of debris chunks while it goes back to the pool; the player's death hides the ship,
 ## ignores input and respawns it after 3 s of sim time with a full hull. Runs the real main scene; bolts and the resolver are
@@ -34,11 +34,6 @@ func before_each() -> void:
 func after_each() -> void:
 	DebugConsole.flags.invulnerable = false
 	get_tree().paused = false
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
 
 
 ## A raider `distance` metres ahead of the player, at rest relative to it.

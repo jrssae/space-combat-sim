@@ -1,0 +1,15 @@
+{
+	"scenario_id": "test_comms",
+	"system_id": "local",
+	"player": {"position": [0, 0, 0], "forward": [0, 0, -1]},
+	"mission": {
+		"title": "Comms Test",
+		"briefing": "Listen to Control.",
+		"script": "res://tests/fixtures/missions/test_comms.gd",
+		"dialog": "res://tests/fixtures/dialog/test_comms.json",
+		"objectives": [
+			{"id": "heard", "text": "Hear the warning", "primary": false,
+				"success": {"kind": "dialog_finished", "line": "warning"}}
+		]
+	}
+}

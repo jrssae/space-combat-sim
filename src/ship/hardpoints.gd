@@ -45,6 +45,13 @@ var nav_lights: Dictionary = {}
 ## `corner` (metres cut off each corner; 0 for a rectangle), and `transform` (a screen's plane: +X the pilot's right, +Y up, +Z to the pilot).
 ## Empty when the file has none.
 var screens: Dictionary = {}
+## Defensive turrets (optional; M5-T21, D61), ship frame, in file order: `name` (String), `position` (Vector3: the mount's
+## pivot), `up` (unit Vector3: its base's up), `arc_deg` (float: the cone round `up` the barrel may point into; 200 is a
+## hemisphere and 10 degrees below the base) and `barrel_m` (float: pivot to barrel tip). Empty when the file has none.
+var turrets: Array[Dictionary] = []
+## Cargo pod mounts (optional; M5-T16, D59: the Brakiri Bokmai's removable pods), ship frame, in file order: `name` (String),
+## `position` (Vector3: where the pod model's origin sits), `up` and `forward` (unit Vector3s: its frame). Empty when none.
+var cargo_pods: Array[Dictionary] = []
 
 
 static func load_file(path: String) -> Hardpoints:
@@ -171,6 +178,20 @@ func _parse(data: Dictionary) -> String:
 		var problem: String = _parse_chunk(value)
 		if not problem.is_empty():
 			return problem
+	var turret_list: Variant = data.get("turrets", [])
+	if not (turret_list is Array):
+		return "hardpoints turrets must be an array"
+	for value: Variant in turret_list as Array:
+		var problem: String = _parse_turret(value)
+		if not problem.is_empty():
+			return problem
+	var pod_list: Variant = data.get("cargo_pods", [])
+	if not (pod_list is Array):
+		return "hardpoints cargo_pods must be an array"
+	for value: Variant in pod_list as Array:
+		var problem: String = _parse_cargo_pod(value)
+		if not problem.is_empty():
+			return problem
 	var lights_problem: String = _parse_nav_lights(data.get("nav_lights", {}))
 	if not lights_problem.is_empty():
 		return lights_problem
@@ -248,6 +269,58 @@ func _parse_chunk(value: Variant) -> String:
 		"mesh": String(entry.get("mesh", "")) if entry.get("mesh") is String else "",
 	})
 	return ""
+
+
+func _parse_turret(value: Variant) -> String:
+	var index: int = turrets.size()
+	if not (value is Dictionary) or not _is_vec3((value as Dictionary).get("position")):
+		return "turret %d needs position [x, y, z]" % index
+	var entry: Dictionary = value
+	var up: Vector3 = _vec3_or(entry.get("up"), Vector3.UP)
+	if up.is_zero_approx():
+		return "turret %d has a zero up" % index
+	var arc_deg: float = _number_or(entry.get("arc_deg"), 200.0)
+	if arc_deg <= 0.0 or arc_deg > 360.0:
+		return "turret %d arc_deg must be above 0 and at most 360" % index
+	var barrel_m: float = _number_or(entry.get("barrel_m"), 0.0)
+	if barrel_m < 0.0:
+		return "turret %d barrel_m must not be negative" % index
+	turrets.append({
+		"name": str(entry.get("name", "turret_%d" % index)),
+		"position": _to_vec3(entry["position"]),
+		"up": up.normalized(),
+		"arc_deg": arc_deg,
+		"barrel_m": barrel_m,
+	})
+	return ""
+
+
+func _parse_cargo_pod(value: Variant) -> String:
+	var index: int = cargo_pods.size()
+	if not (value is Dictionary) or not _is_vec3((value as Dictionary).get("position")):
+		return "cargo pod %d needs position [x, y, z]" % index
+	var entry: Dictionary = value
+	var up: Vector3 = _vec3_or(entry.get("up"), Vector3.UP)
+	var forward: Vector3 = _vec3_or(entry.get("forward"), Vector3.FORWARD)
+	if up.is_zero_approx() or forward.is_zero_approx() or absf(up.normalized().dot(forward.normalized())) > 0.01:
+		return "cargo pod %d needs a non-zero up and forward at right angles" % index
+	up = up.normalized()
+	forward = forward.normalized()
+	cargo_pods.append({
+		"name": str(entry.get("name", "pod_%d" % index)),
+		"position": _to_vec3(entry["position"]),
+		"up": up,
+		"forward": forward,
+		"transform": Transform3D(Basis(up.cross(-forward), up, -forward), _to_vec3(entry["position"])),
+	})
+	return ""
+
+
+## One collision primitive as `collision` holds it, from its JSON (a manifest's `pod` entry has the same form, M5-T16);
+## empty when it does not parse.
+static func collision_entry(value: Variant) -> Dictionary:
+	var hp := Hardpoints.new()
+	return hp.collision[0] if hp._parse_collision(value).is_empty() else {}
 
 
 func _parse_muzzle(value: Variant) -> String:

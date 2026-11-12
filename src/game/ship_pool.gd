@@ -34,6 +34,8 @@ const SPAWN_PROFILES: Dictionary[StringName, String] = {&"raider": "raider", &"a
 const DESPAWN_CHOICES: Array[StringName] = [&"target", &"all"]
 ## Allied ships broadcast their position this far (M3-T17, Q21): 100 km. Raiders do not broadcast.
 const ALLY_BROADCAST_RANGE_M: float = 1.0e5
+## A civilian's transponder (M5-T17, T30): raiders sent at it from a jump point beyond sensor range still find it.
+const CIVILIAN_BROADCAST_RANGE_M: float = 15000.0
 ## Where parked ships wait: far below the play area (universe metres).
 const PARK_Y_M: float = -1.0e6
 
@@ -79,10 +81,13 @@ func prepare(type: StringName, count: int) -> int:
 			ShipAssembly.OPT_FORCE_ASSIST: true,
 			ShipAssembly.OPT_AI: true,
 			ShipAssembly.OPT_LEAN: true,  # the AI ship's lean set of nodes (M4-T11)
+			ShipAssembly.OPT_CIVILIAN: ShipCatalog.is_civilian(type),  # M5-T16: the role comes with the type
 		})
 		world.spawn(combatant.ship, _park_position(), Basis.IDENTITY, self)
 		if type == ALLY_TYPE:
 			combatant.targetable.broadcast_range_m = ALLY_BROADCAST_RANGE_M
+		elif ShipCatalog.is_civilian(type):
+			combatant.targetable.broadcast_range_m = CIVILIAN_BROADCAST_RANGE_M
 		_park(combatant)
 		_all.append(combatant)
 		_free.append(combatant)
@@ -119,6 +124,8 @@ func acquire(display_name: String, at: UniversePos, basis: Basis = Basis.IDENTIT
 	ship.set_far_dot(false)  # drawn in full until its switcher next looks (M4-T11)
 	combatant.damageable.restore()
 	combatant.damageable.invulnerable = false  # per spawn (M3-T09); the caller sets it
+	if combatant.cargo_pods != null:
+		combatant.cargo_pods.set_count(-1)  # every pod mounted (M5-T16); the spawn says otherwise after
 	combatant.display_name = display_name
 	combatant.targetable.display_name = display_name
 	# A Starfury of a wing wears its wing's livery and its number from its callsign (M4-T30b); every other ship that takes liveries
@@ -238,6 +245,7 @@ func _park(combatant: Combatant) -> void:
 	var ship: Ship = combatant.ship
 	ship.visible = false
 	ship.process_mode = Node.PROCESS_MODE_DISABLED
+	ship.tier_exempt = false
 	ship.linear_velocity = Vector3.ZERO
 	ship.angular_velocity = Vector3.ZERO
 	combatant.targetable.display_name = ""

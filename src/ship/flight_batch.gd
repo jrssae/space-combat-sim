@@ -15,7 +15,9 @@ extends Node
 ## Every world has a core (M4-T42); with none (it was freed as its world left) the batch flies nothing that tick.
 ##
 ## Commands from rows (M4-T33): a native pilot's ship flies the command its row holds (the step reads it there, whatever was
-## gathered).
+## gathered). Row flight (M5-T31): such a ship is not gathered at all; the step finds it among its slots and reads its pose,
+## its selected target and the gravity from the core. GDScript gathers only the ships without a row command, a row ship
+## with fresh commands (once), and a row ship whose row lost its command.
 ##
 ## The batch owns its ships' ticks (M4-T35): a ship the batch flew has nothing left to do at 0 (its combat edges are taken
 ## in the gather), so its `_physics_process` is switched off and given back when the ship leaves the batch.
@@ -40,8 +42,6 @@ enum Out { FORCE, TORQUE, POD_FORCE, POD_TORQUE, RCS_FORCE, RCS_TORQUE, RCS_FORC
 enum OutScalar { R_MAIN, L_MAIN, R_RETRO, L_RETRO, TRIM, POD_YAW_CMD, MASS_FLOW, FACE_ERROR, BRAKING, FACING, TRACKING,
 		PROPELLANT_EMPTY }
 
-## Rows stepped in the last tick, in row order (empty when the batch did not run).
-var rows: Array[Ship] = []
 ## The physics frame of the last step (-1 before the first).
 var tick: int = -1
 ## The last tick's outputs, `OUT_VECTORS` and `OUT_SCALARS` per row.
@@ -50,9 +50,18 @@ var out_scalars: PackedFloat64Array = PackedFloat64Array()
 ## Wall-clock microseconds of the last tick's gather (GDScript) and native step (readouts only, never gameplay).
 var gather_us: int = 0
 var step_us: int = 0
+## Ships the last tick gathered in GDScript (the rest of `stepped_count` flew from their rows, M5-T31).
+var gathered_count: int = 0
 
 var _ships: Array[Ship] = []
 var _slots: Dictionary[Ship, int] = {}  # the native slot of every registered ship
+var _by_slot: Array[Ship] = []  # the ship of each slot (null for a free slot)
+var _row_ships: Dictionary[Ship, bool] = {}  # ships the step flies from their rows without a gather (M5-T31)
+var _plain: Dictionary[Ship, bool] = {}  # every other joined ship, in join order: the ones the tick gathers
+var _marked: Array[Ship] = []  # row ships to gather once (fresh commands)
+var _out_slots: PackedInt32Array = PackedInt32Array()  # the slot of each output row of the last step
+var _slot_rows: PackedInt32Array = PackedInt32Array()  # the output row of each slot (-1: not flown)
+var _gathered: Dictionary[Ship, int] = {}  # this tick's gathered ships, against gathering one twice
 var _step: Object = null
 var _slot_ids: PackedInt32Array = PackedInt32Array()
 var _body_ids: PackedInt64Array = PackedInt64Array()
@@ -108,6 +117,7 @@ func join(ship: Ship) -> void:
 		_unregister(ship)
 	else:
 		_ships.append(ship)
+	_plain[ship] = true
 	if _native() != null:
 		_register(ship)
 
@@ -116,12 +126,57 @@ func join(ship: Ship) -> void:
 func leave(ship: Ship) -> void:
 	_unregister(ship)
 	_ships.erase(ship)
-	rows.erase(ship)
+	_plain.erase(ship)
 
 
 ## Whether the batch flew `ship` in the latest step.
 func stepped(ship: Ship) -> bool:
-	return rows.has(ship)
+	return _slots.has(ship) and row_of(_slots[ship]) >= 0
+
+
+## The output row the latest step gave slot `slot`, or -1.
+func row_of(slot: int) -> int:
+	return _slot_rows[slot] if slot >= 0 and slot < _slot_rows.size() else -1
+
+
+## How many ships the latest step flew.
+func stepped_count() -> int:
+	return _out_slots.size()
+
+
+## The ships the latest step flew, in row order (tests and the console; built on each call).
+func stepped_ships() -> Array[Ship]:
+	var out: Array[Ship] = []
+	for slot: int in _out_slots:
+		if slot < _by_slot.size() and _by_slot[slot] != null:
+			out.append(_by_slot[slot])
+	return out
+
+
+## Row flight (M5-T31): `ship` flies its native pilot's row command from now on (`on`), with no gather, or is gathered
+## again. The ship calls it when its row flag changes.
+func set_row_flight(ship: Ship, on: bool) -> void:
+	if not _ships.has(ship):
+		return
+	if on:
+		_row_ships[ship] = true
+		_plain.erase(ship)
+	else:
+		_row_ships.erase(ship)
+		_plain[ship] = true
+	_push_row_flight(ship)
+
+
+## The assist, hulk or propellant of a row ship changed: the step's copy follows.
+func flags_changed(ship: Ship) -> void:
+	if _row_ships.has(ship):
+		_push_row_flight(ship)
+
+
+## A row ship took fresh commands (combat edges): it is gathered once, so they land as a gathered ship's do.
+func mark_gather(ship: Ship) -> void:
+	if _row_ships.has(ship) and not _marked.has(ship):
+		_marked.append(ship)
 
 
 ## The assist's smoothed pod-yaw command as the native step holds it for `ship` (0 when the ship has no slot).
@@ -146,12 +201,12 @@ func reset_assist(ship: Ship) -> void:
 ## Where the last step read the ships' poses and motion: &"core" (the native core's rows, M4-T15) or &"none" (nothing
 ## stepped).
 func source() -> StringName:
-	return _source if not rows.is_empty() else &"none"
+	return _source if not _out_slots.is_empty() else &"none"
 
 
 ## Which path flew the last tick: `native` when the batch stepped any ship, else `gdscript`.
 func path() -> StringName:
-	return &"native" if not rows.is_empty() else &"gdscript"
+	return &"native" if not _out_slots.is_empty() else &"gdscript"
 
 
 ## Registers `spec` and `layout` with a native step for the body `rid` and returns the slot, or -1.
@@ -198,62 +253,90 @@ static func pack_command(cmd: FlightCommand, env_accel: Vector3, assist_on: bool
 
 
 func _physics_process(delta: float) -> void:
-	rows.clear()
 	var step: Object = _native()
 	var started: int = Time.get_ticks_usec()  # readout only
 	var frame: int = Engine.get_physics_frames()
-	_fuel_unlimited = bool(Settings.get_value(&"fuel_unlimited"))
-	var n: int = _ships.size()
-	if _slot_ids.size() < n:
+	var unlimited: bool = bool(Settings.get_value(&"fuel_unlimited"))
+	if unlimited != _fuel_unlimited:
+		_fuel_unlimited = unlimited
+		for ship: Ship in _row_ships:
+			_push_row_flight(ship)  # an empty tank counts again, or no longer
+	var sim: SimCore = SimCore.for_tree(get_tree())
+	var synced: bool = sim != null and sim.ensure_synced()
+	_gathered.clear()
+	var row: int = 0
+	for ship: Ship in _plain:
+		row = _gather(ship, row, frame, delta)
+	for ship: Ship in _marked:
+		row = _gather(ship, row, frame, delta)
+	_marked.clear()
+	if synced and not _row_ships.is_empty():
+		for slot: int in (step.row_strays(sim.core) as PackedInt32Array):
+			row = _gather(_by_slot[slot], row, frame, delta)
+	gathered_count = row
+	var gathered: int = Time.get_ticks_usec()
+	gather_us = gathered - started
+	_source = &"none"
+	fallback_reads = 0
+	var stepped: bool = false
+	if synced:
+		_source = &"core"
+		stepped = step.step_core(sim.core, _slot_ids.slice(0, row), _body_ids.slice(0, row), _scalars.slice(0, row * CMD_SCALARS),
+				_vectors.slice(0, row * CMD_VECTORS), _flags.slice(0, row * CMD_FLAGS), delta)
+		fallback_reads = int(step.fallback_reads())
+	if not stepped:
+		# No core (its world is leaving), or the step refused the arrays (it logged why): nothing flies this tick.
+		_out_slots = PackedInt32Array()
+		_slot_rows = PackedInt32Array()
+		step_us = 0
+		return
+	out_vectors = step.out_vectors()
+	out_scalars = step.out_scalars()
+	_out_slots = step.out_slots()
+	_slot_rows = step.slot_rows()
+	tick = frame
+	if not _fuel_unlimited:
+		for i: int in _out_slots.size():
+			var ship: Ship = _by_slot[_out_slots[i]]
+			if ship != null and ship.batch_draw_fuel(out_scalars[i * OUT_SCALARS + OutScalar.MASS_FLOW], delta):
+				flags_changed(ship)
+	step_us = Time.get_ticks_usec() - gathered
+
+
+# Packs `ship`'s command at `row` of the command arrays when it can fly this tick; returns the next free row.
+func _gather(ship: Ship, row: int, frame: int, delta: float) -> int:
+	if ship == null or _gathered.has(ship):
+		return row
+	if not _slots.has(ship):
+		_register(ship)
+		if not _slots.has(ship):
+			return row
+	if not ship.can_process() or not ship.is_inside_tree():
+		return row
+	if _slot_ids.size() <= row:
+		var n: int = maxi(row + 1, _ships.size())
 		_slot_ids.resize(n)
 		_body_ids.resize(n)
 		_scalars.resize(n * CMD_SCALARS)
 		_vectors.resize(n * CMD_VECTORS)
 		_flags.resize(n * CMD_FLAGS)
-	var row: int = 0
-	for ship: Ship in _ships:
-		if not _slots.has(ship):
-			_register(ship)
-			if not _slots.has(ship):
-				continue
-		if not ship.can_process() or not ship.is_inside_tree():
-			continue
-		ship.batch_gather(self, row, frame, delta, _fuel_unlimited, _scalars, _vectors, _flags)
-		_slot_ids[row] = _slots[ship]
-		_body_ids[row] = ship.get_instance_id()
-		rows.append(ship)
-		row += 1
-	var slots: PackedInt32Array = _slot_ids.slice(0, row)
-	var scalars: PackedFloat64Array = _scalars.slice(0, row * CMD_SCALARS)
-	var vectors: PackedVector3Array = _vectors.slice(0, row * CMD_VECTORS)
-	var flags: PackedByteArray = _flags.slice(0, row * CMD_FLAGS)
-	var gathered: int = Time.get_ticks_usec()
-	gather_us = gathered - started
-	if row == 0:
-		step_us = 0
+	ship.batch_gather(self, row, frame, delta, _fuel_unlimited, _scalars, _vectors, _flags)
+	ship.set_batch_owned(true)
+	_slot_ids[row] = _slots[ship]
+	_body_ids[row] = ship.get_instance_id()
+	_gathered[ship] = row
+	return row + 1
+
+
+# The step's copy of a row ship's flight flags (or its row flight switched off).
+func _push_row_flight(ship: Ship) -> void:
+	if _step == null or not _slots.has(ship):
 		return
-	var sim: SimCore = SimCore.for_tree(get_tree())
-	var stepped: bool = false
-	fallback_reads = 0
-	_source = &"none"
-	if sim != null and sim.ensure_synced():
-		_source = &"core"
-		stepped = step.step_core(sim.core, slots, _body_ids.slice(0, row), scalars, vectors, flags, delta)
-		fallback_reads = int(step.fallback_reads())
-	if not stepped:
-		# No core (its world is leaving), or the step refused the arrays (it logged why): nothing flies this tick.
-		rows.clear()
-		step_us = 0
-		return
-	out_vectors = step.out_vectors()
-	out_scalars = step.out_scalars()
-	tick = frame
-	for ship: Ship in rows:
-		ship.set_batch_owned(true)  # a no-op once owned: the per-ship work here is the gather alone
-	if not _fuel_unlimited:
-		for i: int in rows.size():
-			rows[i].batch_draw_fuel(out_scalars[i * OUT_SCALARS + OutScalar.MASS_FLOW], delta)
-	step_us = Time.get_ticks_usec() - gathered
+	var on: bool = _row_ships.has(ship)
+	_step.set_row_flight(_slots[ship], ship.get_instance_id(), on, ship.batch_assist_flag(),
+			_fuel_unlimited or ship.batch_has_propellant())
+	if on:
+		ship.batch_row_flight_started(self)
 
 
 # The native step, made on first use with every joined ship registered.
@@ -272,20 +355,41 @@ func _register(ship: Ship) -> void:
 	var slot: int = register_slot(_step, ship.get_rid(), ship.spec, ship.get_layout())
 	if slot >= 0:
 		_slots[ship] = slot
+		if _by_slot.size() <= slot:
+			_by_slot.resize(slot + 1)
+		_by_slot[slot] = ship
+		ship.batch_slot = slot
+		if ship.is_row_commanded():
+			_row_ships[ship] = true
+			_plain.erase(ship)
+		if _row_ships.has(ship):
+			_push_row_flight(ship)
 
 
 func _unregister(ship: Ship) -> void:
+	if _row_ships.has(ship) and _ships.has(ship):
+		_plain[ship] = true  # gathered again until it registers back into row flight
+	_row_ships.erase(ship)
+	_marked.erase(ship)
 	if _slots.has(ship):
+		var slot: int = _slots[ship]
 		if _step != null:
-			_step.unregister(_slots[ship])
+			_step.unregister(slot)
+		if slot < _by_slot.size():
+			_by_slot[slot] = null
+		if slot < _slot_rows.size():
+			_slot_rows[slot] = -1  # a reused slot must not read this ship's row
 		_slots.erase(ship)
+		ship.batch_slot = -1
 
 
 func _register_console() -> void:
 	DebugConsole.registry.register_provider(&"flight", ConsoleVars.new({
 		&"path": {"get": path, "doc": "native when the batch flew ships in the last tick, else gdscript (every ship its own model)"},
 		&"ships": {"get": func() -> int: return _ships.size(), "doc": "Ships that may fly in the batch (every ship but the player's)"},
-		&"stepped": {"get": func() -> int: return rows.size(), "doc": "Ships the batch flew in the last tick"},
+		&"stepped": {"get": stepped_count, "doc": "Ships the batch flew in the last tick"},
+		&"gathered": {"get": func() -> int: return gathered_count, "doc": "Ships the last tick gathered in GDScript (M5-T31)"},
+		&"row_flown": {"get": func() -> int: return _row_ships.size(), "doc": "Ships flown from their row commands with no gather (M5-T31)"},
 		&"gather_us": {"get": func() -> int: return gather_us, "unit": "us", "doc": "The last tick's GDScript gather; wall clock"},
 		&"step_us": {"get": func() -> int: return step_us, "unit": "us", "doc": "The last tick's native step and its outputs; wall clock"},
 		&"source": {"get": func() -> String: return String(source()), "doc": "Where the last step read the ships' poses: core (the native core's rows, M4-T15) or none"},

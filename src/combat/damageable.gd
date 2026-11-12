@@ -22,6 +22,8 @@ signal damaged(info: HitInfo, applied: float)
 signal destroyed(info: HitInfo)
 ## The hull is whole again (`restore`, a rebuild): what watches the hull points (the core's columns, M4-T35) reads them anew.
 signal restored
+## The hit volumes changed in play (`set_volumes`: cargo pods mounted or taken off, M5-T16).
+signal volumes_changed
 
 const GROUP: StringName = &"damageable"
 
@@ -88,6 +90,15 @@ func setup(collision: Array[Dictionary], hull_max: float, p_faction: StringName,
 	respects_god_mode = p_respects_god_mode
 	hull = HullHealth.new(hull_max)
 	zones = DamageZones.new(DamageZones.layout_from_name(damage_layout))
+	set_volumes(collision)
+	DebugConsole.registry.unregister_owner(self)
+	if register_console:
+		_register_console()
+
+
+## Replaces the hit volumes (and the bounds and ram volumes built from them) and keeps the hull: a hull whose shape changes
+## in play (cargo pods mounted or taken off, M5-T16). `collision` is `Hardpoints.collision`'s form.
+func set_volumes(collision: Array[Dictionary]) -> void:
 	shapes.clear()
 	ram_volumes.clear()
 	ram_cores.clear()
@@ -103,9 +114,7 @@ func setup(collision: Array[Dictionary], hull_max: float, p_faction: StringName,
 		ram_bounds = ram_volumes[-1].bounds if ram_volumes.size() == 1 else ram_bounds.merge(ram_volumes[-1].bounds)
 		bounding_radius = maxf(bounding_radius, shape.extent_radius())
 	core_radius = RamMath.core_radius(shapes)
-	DebugConsole.registry.unregister_owner(self)
-	if register_console:
-		_register_console()
+	volumes_changed.emit()
 
 
 ## Whether a bolt of `bolt_faction` can hurt this hull. With `friendly_fire` (`settings.friendly_fire`, D31) any bolt can:
@@ -141,15 +150,17 @@ func is_active() -> bool:
 func apply_hit(info: HitInfo) -> void:
 	hit_taken.emit(info)
 	var applied: float = 0.0
+	var killed: bool = false  # this hit's own kill, never one left over from an earlier hit (code review 2026-11-12)
 	if not invulnerable and not (respects_god_mode and DebugConsole.flags.invulnerable):
 		applied = hull.apply(info.damage)
+		killed = hull.destroyed_now
 	info.applied = applied
 	if applied > 0.0:
 		var b: Node3D = body()
 		if b != null and b.is_inside_tree():
 			zones.record(b.global_transform.affine_inverse() * info.point, applied)
 		damaged.emit(info, applied)
-	if hull.destroyed_now:
+	if killed:
 		destroyed.emit(info)
 
 

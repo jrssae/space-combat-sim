@@ -6,121 +6,235 @@ extends RefCounted
 
 const TYPE_ENUM := -1  # pseudo type for string settings restricted to `choices`
 
+## The groups the settings menu lists entries under (M5-T03, D57), in the order it shows them. Every entry names one in `category`.
+const CATEGORIES: Array[StringName] = [&"flight", &"controls", &"camera", &"hud", &"graphics", &"audio", &"game"]
+## The five pages the start screen's and the pause menu's Settings list opens (M5-T45), in the order shown. Each takes whole
+## categories; a menu entry's category falls in exactly one group (a test fails when one falls in none).
+const GROUPS: Array[Dictionary] = [
+	{"id": &"gameplay", "title": "Gameplay", "categories": [&"game", &"flight"],
+		"help": "Encounters, friendly fire, ram damage and the flight start."},
+	{"id": &"controls", "title": "Controls", "categories": [&"controls"],
+		"help": "Profiles and rebinding, invert pitch, deadzones, target hold time and mouse speeds."},
+	{"id": &"camera_hud", "title": "Camera & HUD", "categories": [&"camera", &"hud"],
+		"help": "The default view, the camera feel and what the HUD shows."},
+	{"id": &"video", "title": "Video", "categories": [&"graphics"],
+		"help": "Rendering quality and effects."},
+	{"id": &"audio", "title": "Audio", "categories": [&"audio"],
+		"help": "Volumes and voices."},
+]
+## Menu fields an entry may carry besides its type, default, range and `doc`: `category` (required), `label` (the menu's
+## name for it), `menu: false` (console-only: debug switches, tuning knobs, text a pad cannot edit), `step` (what one D-pad
+## press moves a number) and `percent: true` (a 0..1 number the menu shows as 0..100 %).
+
 const ENTRIES: Dictionary = {
 	&"control_profile": {"type": TYPE_STRING, "default": "default", "pattern": "^[a-z0-9_]{1,32}$",
+		"category": &"controls", "label": "Control profile", "menu": false,
 		"doc": "Control profile applied at start-up and on change (console: controls list)"},
 	&"invert_y": {"type": TYPE_BOOL, "default": false,
+		"category": &"controls", "label": "Invert pitch",
 		"doc": "Invert pitch: stick back = nose down"},
 	&"stick_deadzone": {"type": TYPE_FLOAT, "default": 0.15, "min": 0.0, "max": 0.30,
+		"category": &"controls", "label": "Stick deadzone", "step": 0.01,
 		"doc": "Radial stick deadzone, rescaled so full deflection still reaches 1"},
 	&"trigger_deadzone": {"type": TYPE_FLOAT, "default": 0.05, "min": 0.0, "max": 0.20,
+		"category": &"controls", "label": "Trigger deadzone", "step": 0.01,
 		"doc": "Trigger deadzone applied after rest calibration"},
 	&"target_hold_s": {"type": TYPE_FLOAT, "default": 0.35, "min": 0.15, "max": 1.0,
-		"doc": "Hold a target button this long for its second function (pad B: previous target; keyboard B, Mouse 2: nearest the nose); a shorter tap selects the next target"},
+		"category": &"controls", "label": "Target button hold time", "step": 0.05,
+		"doc": "Hold a target button (pad B, keyboard B, Mouse 2) this long to open the target menu; a shorter tap selects the nearest enemy"},
 	&"assist_default": {"type": TYPE_BOOL, "default": true,
+		"category": &"flight", "label": "Flight assist at start",
 		"doc": "Flight assist state at spawn"},
 	&"fuel_unlimited": {"type": TYPE_BOOL, "default": true,
+		"category": &"flight", "label": "Unlimited fuel",
 		"doc": "Reaction mass is never drawn down (the fuel gauge stays full); off = a finite tank that can run dry"},
+	&"encounters": {"type": TYPE_BOOL, "default": true,
+		"category": &"game", "label": "Free-flight encounters",
+		"doc": "Free flight from the menu starts with encounters (raiders, allied patrols, civilian traffic); the Free flight page remembers its last choice here. Runs that go straight to the scene keep them off unless the console says encounters on (M5-T17)"},
+	&"encounter_interval_s": {"type": TYPE_FLOAT, "default": 120.0, "min": 20.0, "max": 600.0,
+		"category": &"game", "label": "Time between encounters", "step": 10.0,
+		"doc": "Sim seconds between free-flight encounters on average (each comes half an interval early to half late); read when encounters start (M5-T17)"},
+	&"encounter_max_ships": {"type": TYPE_INT, "default": 24, "min": 4, "max": 48,
+		"category": &"game", "label": "Most encounter ships", "step": 2,
+		"doc": "Most encounter ships in play at once, besides the player and their wing; an encounter that would pass it waits (M5-T17); live"},
 	&"friendly_fire": {"type": TYPE_BOOL, "default": false,
+		"category": &"game", "label": "Friendly fire",
 		"doc": "Bolts hurt any ship but their shooter, allies and the player included; off = only hostile ships (and buoys) take hits"},
 	&"ram_damage": {"type": TYPE_BOOL, "default": true,
+		"category": &"game", "label": "Ram damage",
 		"doc": "Collisions hurt by the velocity change they cause (rams); off = ships still bounce but take no damage"},
 	&"camera_default": {"type": TYPE_ENUM, "default": &"chase", "choices": [&"chase", &"cockpit"],
+		"category": &"camera", "label": "Camera at start",
 		"doc": "Camera mode at spawn"},
+	&"pause_backdrop": {"type": TYPE_BOOL, "default": true,
+		"category": &"camera", "label": "Pause menu camera move",
+		"doc": "A slow figure-8 camera around your ship behind the pause menu; off = the frozen frame (M5-T42)"},
+	&"pause_backdrop_loop_s": {"type": TYPE_FLOAT, "default": 30.0, "min": 10.0, "max": 120.0,
+		"category": &"camera", "label": "Pause camera loop time", "step": 5.0,
+		"doc": "Seconds one loop of the pause menu's camera move takes (M5-T42)"},
 	&"particle_density": {"type": TYPE_FLOAT, "default": 1.0, "min": 0.0, "max": 1.0,
+		"category": &"graphics", "label": "Spark and debris density", "step": 0.05, "percent": true,
 		"doc": "How much of each spark and debris burst is thrown, 0 (none) to 1 (full); 0 costs nothing per frame (M3-T23)"},
+	&"master_volume": {"type": TYPE_FLOAT, "default": 1.0, "min": 0.0, "max": 1.0,
+		"category": &"audio", "label": "Master volume", "step": 0.05, "percent": true,
+		"doc": "Gain of the Master audio bus, 0 (silent) to 1 (full); every other bus plays through it"},
+	&"sfx_volume": {"type": TYPE_FLOAT, "default": 0.8, "min": 0.0, "max": 1.0,
+		"category": &"audio", "label": "Effects volume", "step": 0.05, "percent": true,
+		"doc": "Gain of the SFX audio bus, 0 (silent) to 1 (full)"},
+	&"ui_volume": {"type": TYPE_FLOAT, "default": 0.8, "min": 0.0, "max": 1.0,
+		"category": &"audio", "label": "Menu volume", "step": 0.05, "percent": true,
+		"doc": "Gain of the UI audio bus (menu sounds), 0 (silent) to 1 (full)"},
+	&"comms_volume": {"type": TYPE_FLOAT, "default": 0.8, "min": 0.0, "max": 1.0,
+		"category": &"audio", "label": "Radio volume", "step": 0.05, "percent": true,
+		"doc": "Gain of the Comms audio bus (radio chatter and its open and close clicks), 0 (silent) to 1 (full)"},
+	&"engine_voice_cap": {"type": TYPE_INT, "default": 24, "min": 8, "max": 64,
+		"category": &"audio", "label": "Engine voices", "step": 4,
+		"doc": "Most engine voices heard at once (M5-T19): your own pods and RCS clusters first, then the nearest ships' pods; at least 8, so your Starfury always fits"},
 	&"lens_flare": {"type": TYPE_BOOL, "default": true,
+		"category": &"graphics", "label": "Lens flare",
 		"doc": "Lens flare and glare from the star, hidden behind hulls (M3-T25)"},
 	&"motion_blur": {"type": TYPE_BOOL, "default": false,
+		"category": &"graphics", "label": "Motion blur",
 		"doc": "Smear the stars and hulls on fast turns; off asks the renderer for nothing (M3-T25)"},
 	&"motion_blur_strength": {"type": TYPE_FLOAT, "default": 0.5, "min": 0.0, "max": 1.0,
+		"category": &"graphics", "label": "Motion blur strength", "step": 0.05, "percent": true,
 		"doc": "How much of each frame's motion the blur smears, 0 (none) to 1 (the whole frame) (M3-T25)"},
 	&"camera_chase_smoothing_s": {"type": TYPE_FLOAT, "default": 0.0, "min": 0.0, "max": 0.5,
+		"category": &"camera", "label": "Chase camera lag", "step": 0.05,
 		"doc": "Chase camera orientation lag, s; 0 = rigid mount locked to the ship"},
 	&"chase_bolt_scale": {"type": TYPE_FLOAT, "default": 3.0, "min": 1.0, "max": 10.0,
+		"category": &"camera", "label": "Bolt size in the chase view", "step": 0.5,
 		"doc": "How much larger bolts are drawn in the chase view (the cockpit view always draws them true size)"},
 	&"debug_text_size": {"type": TYPE_FLOAT, "default": 22.0, "min": 8.0, "max": 64.0,
+		"category": &"hud", "label": "Debug text size", "menu": false, "step": 2.0,
 		"doc": "Font size in pixels of the debug overlay text (1080p; it does not scale with the window)"},
 	&"mouse_full_rate_px_s": {"type": TYPE_FLOAT, "default": 1200.0, "min": 100.0, "max": 10000.0,
+		"category": &"controls", "label": "Mouse full-turn speed", "step": 100.0,
 		"doc": "Mouse speed in pixels per second that commands the full turn rate; lower = more sensitive"},
 	&"mouse_look_deg_per_px": {"type": TYPE_FLOAT, "default": 0.12, "min": 0.01, "max": 1.0,
+		"category": &"controls", "label": "Mouse look sensitivity", "step": 0.01,
 		"doc": "Degrees the camera turns per pixel of mouse travel while free look is held"},
 	&"show_overlay": {"type": TYPE_BOOL, "default": true,
+		"category": &"hud", "label": "Debug overlay", "menu": false,
 		"doc": "Show the debug overlay"},
-	&"scenario": {"type": TYPE_ENUM, "default": &"combat_sandbox", "choices": [&"combat_sandbox", &"free_flight", &"instructor_route", &"dogfight"],
-		"doc": "The scenario the game loads: the wave sandbox, free flight with the nav buoys, or the instructor's route"},
-	&"sfx_volume": {"type": TYPE_FLOAT, "default": 0.8, "min": 0.0, "max": 1.0,
-		"doc": "Gain of the SFX audio bus, 0 (silent) to 1 (full)"},
+	&"scenario": {"type": TYPE_ENUM, "default": &"combat_sandbox", "choices": [&"combat_sandbox", &"free_flight", &"instructor_route", &"dogfight",
+			&"civilian_showcase", &"belt_showcase"],
+		"category": &"game", "label": "Scenario", "menu": false,
+		"doc": "The scenario the game loads: the wave sandbox, free flight with the nav buoys, the instructor's route, the dogfight, the nine civilian hulls parked in view (M5-T16), or the escort-sized asteroid belt ahead (M5-T29)"},
+	&"skip_front_end": {"type": TYPE_BOOL, "default": false,
+		"category": &"game", "label": "Skip the front end", "menu": false,
+		"doc": "Start straight in the scenario setting, without the front end (headless, console-script and --scenario= runs always do)"},
+	&"target_menu_blur": {"type": TYPE_FLOAT, "default": 0.35, "min": 0.0, "max": 1.0,
+		"category": &"hud", "label": "Target menu focus blur", "step": 0.05, "percent": true,
+		"doc": "How far the view and HUD go out of focus while a radial menu is open (0 is off)"},
 	&"show_hud": {"type": TYPE_BOOL, "default": true,
+		"category": &"hud", "label": "Show HUD",
 		"doc": "Show the combat HUD (target box, lead reticle, radar, gauges)"},
 	&"hud_targeting_grid": {"type": TYPE_BOOL, "default": false,
+		"category": &"hud", "label": "Targeting grid in the chase view",
 		"doc": "Show the targeting grid in the chase view too (in the cockpit view it is on the console's octagon)"},
 	&"hud_chase_opacity": {"type": TYPE_FLOAT, "default": 0.7, "min": 0.1, "max": 1.0,
+		"category": &"hud", "label": "HUD opacity in the chase view", "step": 0.05, "percent": true,
 		"doc": "How opaque the HUD is in the chase view (the cockpit view always draws it fully)"},
 	&"cockpit_light_energy": {"type": TYPE_FLOAT, "default": 1.0, "min": 0.0, "max": 8.0,  # M4-T30b (Q37): a subtler red cabin
+		"category": &"graphics", "label": "Cockpit lamp", "menu": false, "step": 0.4,
 		"doc": "Brightness of the cabin lamp that lights the cockpit frame in the first-person view (applies on the next spawn)"},
+	&"hull_sheen": {"type": TYPE_FLOAT, "default": 0.25, "min": 0.0, "max": 1.0,
+		"category": &"graphics", "label": "Hull sheen", "menu": false, "step": 0.05,
+		"doc": "A clear coat over every ship's paint: the key star's highlight and a faint reflection of the nebula; 0 is flat paint (live)"},
 	&"cabin_glow_level": {"type": TYPE_FLOAT, "default": 0.3, "min": 0.0, "max": 2.0,
+		"category": &"graphics", "label": "Cabin glow", "menu": false, "step": 0.1,
 		"doc": "How much red the cockpit glow adds in the canopy, seen from outside"},
 	&"cabin_glow_view_m": {"type": TYPE_FLOAT, "default": 150.0, "min": 1.0, "max": 2000.0,
+		"category": &"graphics", "label": "Cabin glow range", "menu": false, "step": 50.0,
 		"doc": "How far off the cockpit glow can be seen, m (it fades over the last fifth)"},
 	&"running_light_min_px": {"type": TYPE_FLOAT, "default": 1.0, "min": 0.5, "max": 12.0,
+		"category": &"graphics", "label": "Running light size", "menu": false, "step": 0.5,
 		"doc": "A running light is never smaller than this on screen, radius in pixels; past that it dims by the inverse square instead"},
 	&"hud_velocity_marker": {"type": TYPE_BOOL, "default": false,
+		"category": &"hud", "label": "Velocity marker in the world",
 		"doc": "Also draw the prograde / retrograde marker in the world (it is only on screen when you fly near your nose); the drift sphere is always drawn"},
 	&"physics_jitter_fix": {"type": TYPE_FLOAT, "default": 0.5, "min": 0.0, "max": 2.0,
+		"category": &"graphics", "label": "Physics jitter fix", "menu": false, "step": 0.1,
 		"doc": "Debug switch: Godot's physics jitter fix (Engine.physics_jitter_fix); 0 turns the frame-time smoothing off"},
 	&"show_fps": {"type": TYPE_BOOL, "default": false,
+		"category": &"hud", "label": "FPS counter", "menu": false,
 		"doc": "Show the console FPS counter"},
 	&"console_enabled": {"type": TYPE_BOOL, "default": true,
+		"category": &"game", "label": "Debug console", "menu": false,
 		"doc": "Allow the ` key to open the debug console"},
 	&"console_pause_on_open": {"type": TYPE_BOOL, "default": false,
+		"category": &"game", "label": "Pause when the console opens", "menu": false,
 		"doc": "Pause the game while the console is open"},
 	&"ai_think_rate": {"type": TYPE_BOOL, "default": true,
+		"category": &"game", "label": "AI think rate", "menu": false,
 		"doc": "AI ships far from the player think at ai_think_far_hz and hold their last command between (M4-T04); off = every AI ship thinks every tick"},
 	&"ai_think_near_m": {"type": TYPE_FLOAT, "default": 2000.0, "min": 0.0, "max": 100000.0,
+		"category": &"game", "label": "AI near distance", "menu": false, "step": 1000,
 		"doc": "AI ships within this distance of the player think every tick; farther ones (and every one with no player alive) think at ai_think_far_hz"},
 	&"ai_think_far_hz": {"type": TYPE_FLOAT, "default": 20.0, "min": 1.0, "max": 60.0,
+		"category": &"game", "label": "AI far think rate", "menu": false, "step": 1,
 		"doc": "How often a far AI ship thinks, Hz, on staggered physics ticks (20 = every third tick at 60 Hz)"},
 	&"ai_nearest_k": {"type": TYPE_INT, "default": 12, "min": 0, "max": 64,
+		"category": &"game", "label": "AI nearest contacts", "menu": false, "step": 1,
 		"doc": "An AI ship scores, avoids and checks its fire lane against its nearest this many contacts (M4-T04); when that cuts any, the nearest hostile ship, its target, wing, objective and latest attacker are kept too; 0 = every contact"},
 	# M4-T09
 	&"ai_nearest_static_k": {"type": TYPE_INT, "default": 4, "min": 0, "max": 32,
+		"category": &"game", "label": "AI nearest rocks", "menu": false, "step": 1,
 		"doc": "An AI ship avoids its nearest this many rocks and mines within 5 km (M4-T09); they are never among its contacts; 0 = none"},
 	# M4-T11
 	&"far_ship_dot_m": {"type": TYPE_FLOAT, "default": 3000.0, "min": 500.0, "max": 50000.0,
+		"category": &"graphics", "label": "Far ship dot distance", "menu": false, "step": 500,
 		"doc": "Past this distance from the camera an AI ship is drawn as a dot: no hull, plumes or markers (M4-T11); it shows its detail again a tenth inside"},
 	# M4-T18
 	&"perf_threads": {"type": TYPE_INT, "default": 0, "min": 0, "max": 64,
+		"category": &"game", "label": "Native threads", "menu": false, "step": 1,
 		"doc": "Worker threads for the native core's per-ship passes, the brains and the flight step (M4-T18): 0 = as many threads as the machine has performance cores, 1 = the main thread alone; outputs are the same bits whatever the count; live"},
 	# M4-T30a
-	&"ambient_level": {"type": TYPE_FLOAT, "default": 0.3, "min": 0.0, "max": 2.0,
-		"doc": "The environment's ambient light, white at this energy: what the textured meshes and every other lit surface get on every side (M4-T30a, live)"},
+	&"ambient_level": {"type": TYPE_FLOAT, "default": 0.1, "min": 0.0, "max": 2.0,
+		"category": &"graphics", "label": "Ambient light", "step": 0.1,
+		"doc": "The environment's ambient light, white at this energy: what the textured meshes and every other lit surface get on every side (M4-T30a, live)"},  # 0.1 since M5-T39: the show's darker shadows
+	# M5-T40
+	&"texture_detail": {"type": TYPE_ENUM, "default": &"high", "choices": [&"low", &"high"],
+		"category": &"graphics", "label": "Ship texture detail",
+		"doc": "Which texture set the ships wear (M5-T40): high = the full surface (seams, hatches, ribs, plating toned plate by plate; the default), low = the major seams alone. The meshes are the same. A hull with one set ignores it: only the civilian hulls have both sets for now, the fighters and later hulls join when their second set is generated; live (hulls already in the scene swap their maps)"},
 	# M4-T38
 	&"anti_aliasing": {"type": TYPE_ENUM, "default": &"smaa", "choices": [&"off", &"fxaa", &"smaa", &"msaa_2x", &"msaa_4x", &"taa"],
+		"category": &"graphics", "label": "Anti-aliasing",
 		"doc": "Anti-aliasing of the 3D view (M4-T38): off, fxaa, smaa (edge detection, the default), msaa_2x or msaa_4x (geometry edges only), taa (temporal: the smoothest edges, but thin moving things soften and the bolts draw opaque so they carry their motion); live"},
 	# M4-T21
 	&"tier_radius_m": {"type": TYPE_FLOAT, "default": 10000.0, "min": 0.0, "max": 200000.0,
+		"category": &"game", "label": "Tier radius", "menu": false, "step": 2000,
 		"doc": "AI fighters and capitals farther than this from the player leave Jolt and the scene's processing and fly as native core rows at tier_hz (the low-attention tier, M4-T21); within it they are promoted back onto their bodies exactly; demotion happens 10 % beyond it. 0 = off, every ship in Jolt; live. On at 10000 since M4-T23 (tier ships drawn, on the radar and targetable)"},
 	&"tier_hz": {"type": TYPE_FLOAT, "default": 20.0, "min": 1.0, "max": 60.0,
+		"category": &"game", "label": "Tier rate", "menu": false, "step": 1,
 		"doc": "How often a low-attention tier row's forces are recomputed from its held command (M4-T21); its pose still advances every tick; live"},
 	# M4-T22
 	&"tier_brain_hz": {"type": TYPE_FLOAT, "default": 3.0, "min": 1.0, "max": 20.0,
+		"category": &"game", "label": "Tier brain rate", "menu": false, "step": 0.2,
 		"doc": "How often a low-attention tier fighter's brain thinks, on the same contacts as the near brains inside the AI step (M4-T22; 3 since fix round 2: the cheapest rate in the section's 2 to 5 Hz whose fights still match full fidelity, since at 2 the raiders lose half their hits); its command is held between thinks; live"},
 	# M4-T24
 	&"sim_step": {"type": TYPE_ENUM, "default": &"threaded", "choices": [&"delayed", &"threaded"],
+		"category": &"game", "label": "Simulation step", "menu": false,
 		"doc": "Where the AI step (the native brains' batch: perception, thinks, avoidance, the hosted drivers' think rate, the commands into the rows) runs (M4-T24, Q53): threaded = on a worker thread from -9, its results handed over one tick later, so the frame and the player's input never wait on it; delayed = the same one-tick handover on the main thread (the threaded step's reference, bit for bit); live. M4-T37 removed the single-thread inline step (Q67)"},
 	&"perf_step_threads": {"type": TYPE_INT, "default": 1, "min": 0, "max": 64,
+		"category": &"game", "label": "AI step threads", "menu": false, "step": 1,
 		"doc": "Threads the AI step's job runs its brains' pass on (M4-T24): 1 = the step's worker thread alone (the default: the job never queues the main thread's passes behind its chunks), n = a pool of its own with n threads, 0 = the core's pool (perf_threads), shared with the main thread's passes; live"},
 	&"physics_max_steps_per_frame": {"type": TYPE_INT, "default": 3, "min": 1, "max": 8,
+		"category": &"game", "label": "Catch-up ticks", "menu": false, "step": 1,
 		"doc": "Physics ticks one frame may run to catch up (Engine.max_physics_steps_per_frame; Godot's default is 8): past the cap a slow tick lowers the simulation rate instead of the frame rate (M4-T24, refactor finding 15); live"},
 	# M4-T40
 	&"upscaler": {"type": TYPE_ENUM, "default": &"native", "choices": [&"native", &"bilinear", &"fsr1", &"fsr2"],
+		"category": &"graphics", "label": "Upscaler",
 		"doc": "How the 3D view is rendered and enlarged to the window (M4-T40): native (the window's own size, the default: FSR 2.2 measured dearer than native on the RX 6950 XT), bilinear, fsr1 (FSR 1.0, spatial, with fsr_sharpness) or fsr2 (FSR 2.2, temporal, its own anti-aliasing: anti_aliasing is held off while it is on). The HUD stays at the window's size; no frame generation; live"},
 	&"upscale_preset": {"type": TYPE_ENUM, "default": &"quality", "choices": [&"native", &"quality", &"balanced", &"performance", &"ultra_performance", &"custom"],
+		"category": &"graphics", "label": "Render resolution",
 		"doc": "The 3D view's internal resolution for bilinear, fsr1 and fsr2 (M4-T40): native 1.0, quality 0.67 (the default), balanced 0.59, performance 0.5, ultra_performance 0.33 of the window's height, or custom (upscale_custom_scale); ignored when upscaler is native; live"},
 	&"upscale_custom_scale": {"type": TYPE_FLOAT, "default": 0.75, "min": 0.33, "max": 1.0,
+		"category": &"graphics", "label": "Custom render scale", "menu": false, "step": 0.01,
 		"doc": "The 3D view's share of the window's height when upscale_preset is custom (M4-T40); live"},
 	&"fsr_sharpness": {"type": TYPE_FLOAT, "default": 0.2, "min": 0.0, "max": 2.0,
+		"category": &"graphics", "label": "FSR sharpness", "step": 0.1,
 		"doc": "FSR's sharpening, for fsr1 and fsr2 (M4-T40): Godot's scale, 0 the sharpest, 2 the softest; live"},
 }
 
@@ -177,6 +291,42 @@ func old_names(key: StringName) -> Array[StringName]:
 
 func get_entry(key: StringName) -> Dictionary:
 	return ENTRIES.get(key, {})
+
+
+## The group `key` is listed under in the settings menu.
+func category_of(key: StringName) -> StringName:
+	return StringName(get_entry(key).get("category", &""))
+
+
+## False for the entries that stay console-only.
+func is_menu(key: StringName) -> bool:
+	return bool(get_entry(key).get("menu", true))
+
+
+## The menu's name for `key`; the key itself, spaced out, when the entry gives none.
+func label_of(key: StringName) -> String:
+	return String(get_entry(key).get("label", String(key).replace("_", " ").capitalize()))
+
+
+## What one D-pad press moves a number setting: the entry's `step`, else a twentieth of the range (a whole number for ints).
+func step_of(key: StringName) -> float:
+	var entry: Dictionary = get_entry(key)
+	if entry.has("step"):
+		return float(entry["step"])
+	var type: int = get_type(key)
+	if type != TYPE_FLOAT and type != TYPE_INT:
+		return 0.0
+	var step: float = (float(entry["max"]) - float(entry["min"])) / 20.0
+	return maxf(1.0, roundf(step)) if type == TYPE_INT else step
+
+
+## The keys the menu lists (all of them, or those of one `category`), in the order ENTRIES declares them.
+func menu_keys(category: StringName = &"") -> Array[StringName]:
+	var out: Array[StringName] = []
+	for key: StringName in ENTRIES.keys():
+		if is_menu(key) and (category == &"" or category_of(key) == category):
+			out.append(key)
+	return out
 
 
 func get_type(key: StringName) -> int:
@@ -288,3 +438,20 @@ func _ok(value: Variant) -> Dictionary:
 
 func _fail(message: String) -> Dictionary:
 	return {"ok": false, "value": null, "error": message}
+
+
+## The group a category belongs to (an id of `GROUPS`), or &"" when it falls in none.
+static func group_of_category(category: StringName) -> StringName:
+	for group: Dictionary in GROUPS:
+		if (group["categories"] as Array).has(category):
+			return group["id"]
+	return &""
+
+
+## The categories of the group `group_id`, in the order the group lists them; empty for an unknown group.
+static func categories_of_group(group_id: StringName) -> Array[StringName]:
+	var out: Array[StringName] = []
+	for group: Dictionary in GROUPS:
+		if group["id"] == group_id:
+			out.assign(group["categories"])
+	return out

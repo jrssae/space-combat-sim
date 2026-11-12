@@ -14,12 +14,22 @@ const MAX_FIELDS: int = 8
 
 const GLASS_SURFACE: String = "glass"
 const MAP_KEYS: Array[String] = ["albedo", "normal", "orm", "emissive"]
+## The maps a texture detail set replaces (`settings.texture_detail`, M5-T40); the glow is the same in every set.
+const DETAIL_KEYS: Array[String] = ["albedo", "normal", "orm"]
+## The same for a glass surface, which has no normal map.
+const GLASS_DETAIL_KEYS: Array[String] = ["albedo", "orm"]
 
 static var _cache: Dictionary = {}
 ## The textured meshes' glass materials and their manifest strengths, for `settings.cabin_glow_level` (Q36).
 static var _glass: Array[ShaderMaterial] = []
 static var _glass_strength: Array[float] = []
 static var _livery_sections: Dictionary = {}
+## The hulls' paint materials, for `settings.hull_sheen`: a clear coat so painted metal catches the light.
+static var _sheen: Array[Material] = []
+## The materials whose surface names a second texture set, with where their maps are, for `settings.texture_detail`.
+static var _detailed: Array[Dictionary] = []
+## How sharp the sheen's highlight and reflection are.
+const SHEEN_ROUGHNESS: float = 0.35
 
 
 ## The parsed `manifest.json` of `asset_id`, or {} when it is missing or unreadable.
@@ -69,8 +79,9 @@ static func is_textured(asset_id: String, asset_root: String = ShipSpec.ASSET_RO
 
 
 ## The textured mesh a manifest `mesh` section names, under `dir`, each surface with its own `StandardMaterial3D` from the maps;
-## cached per file. Null when the glb is missing or not imported.
-static func load_textured(dir: String, entry: Dictionary) -> Mesh:
+## cached per file. Null when the glb is missing or not imported. A hull's paint takes `settings.hull_sheen`; pass `sheen` false
+## for what is not painted metal (rocks).
+static func load_textured(dir: String, entry: Dictionary, sheen: bool = true) -> Mesh:
 	var path: String = dir.path_join(String(entry.get("file", "")))
 	if _cache.has(path):
 		return _cache[path]
@@ -87,9 +98,10 @@ static func load_textured(dir: String, entry: Dictionary) -> Mesh:
 		if bool(surface.get("blend", false)) and not livery.is_empty():
 			mesh.surface_set_material(i, glass_material(dir, surface))
 		elif not livery.is_empty():
-			mesh.surface_set_material(i, livery_material(dir, surface, livery))
+			mesh.surface_set_material(i, _with_sheen(livery_material(dir, surface, livery), sheen))
 		else:
-			mesh.surface_set_material(i, textured_material(dir, surface))
+			var material: StandardMaterial3D = textured_material(dir, surface)
+			mesh.surface_set_material(i, _with_sheen(material, sheen and not bool(surface.get("blend", false))))
 	_cache[path] = mesh
 	return mesh
 
@@ -109,32 +121,16 @@ static func textured_material(dir: String, surface: Dictionary) -> StandardMater
 	var material := StandardMaterial3D.new()
 	material.resource_name = String(surface.get("name", ""))
 	material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
-	var maps: Dictionary = {}
-	for key: String in MAP_KEYS:
-		var file: String = String(surface.get(key, ""))
-		var texture: Texture2D = _texture(dir.path_join(file)) if not file.is_empty() else null
-		if texture == null and not file.is_empty():
-			push_warning("MeshAssets: %s is missing or not imported" % dir.path_join(file))
-		maps[key] = texture
-	material.albedo_texture = maps["albedo"]
-	if maps["normal"] != null:
-		material.normal_enabled = true
-		material.normal_texture = maps["normal"]
-	var orm: Texture2D = maps["orm"]
-	if orm != null:
-		material.ao_enabled = true
-		material.ao_texture = orm
-		material.ao_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
-		material.roughness_texture = orm
-		material.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_GREEN
-		material.metallic_texture = orm
-		material.metallic_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_BLUE
-		material.roughness = 1.0
-		material.metallic = 1.0
+	_apply_surface_maps(material, dir, surface, DETAIL_KEYS)
+	_watch_detail(material, dir, surface, DETAIL_KEYS)
+	var emissive_file: String = String(surface.get("emissive", ""))
+	var emissive: Texture2D = _texture(dir.path_join(emissive_file)) if not emissive_file.is_empty() else null
+	if emissive == null and not emissive_file.is_empty():
+		push_warning("MeshAssets: %s is missing or not imported" % dir.path_join(emissive_file))
 	var strength: float = float(surface.get("emissive_strength", 1.0))
-	if maps["emissive"] != null and strength > 0.0:
+	if emissive != null and strength > 0.0:
 		material.emission_enabled = true
-		material.emission_texture = maps["emissive"]
+		material.emission_texture = emissive
 		material.emission = Color.BLACK
 		material.emission_energy_multiplier = strength
 	if bool(surface.get("blend", false)):
@@ -142,6 +138,53 @@ static func textured_material(dir: String, surface: Dictionary) -> StandardMater
 		material.albedo_color = Color(1.0, 1.0, 1.0, 1.0 - float(surface.get("transmittance", 0.0)))
 		material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	return material
+
+
+## The file of one of a surface's maps in the texture set `settings.texture_detail` picks: a set the surface's `detail` names
+## (`low`, M5-T40), else the surface's own map: the full set, and the only set of a hull written with one.
+static func map_file(surface: Dictionary, key: String) -> String:
+	var sets: Dictionary = surface.get("detail", {})
+	var chosen: Dictionary = sets.get(String(Settings.get_value(&"texture_detail")), {})
+	return String(chosen.get(key, surface.get(key, "")))
+
+
+# Remembers a material whose surface names a second texture set, so `settings.texture_detail` can swap its maps.
+static func _watch_detail(material: Material, dir: String, surface: Dictionary, keys: Array[String]) -> void:
+	if (surface.get("detail", {}) as Dictionary).is_empty():
+		return
+	_detailed.append({"material": material, "dir": dir, "surface": surface, "keys": keys})
+	if not Settings.changed.is_connected(_on_setting_changed):
+		Settings.changed.connect(_on_setting_changed)
+
+
+# Gives a material the maps (`keys`) of the texture set in use: any hull's paint, livery or glass material.
+static func _apply_surface_maps(material: Material, dir: String, surface: Dictionary, keys: Array[String]) -> void:
+	var maps: Dictionary = {}
+	for key: String in keys:
+		var file: String = map_file(surface, key)
+		var texture: Texture2D = _texture(dir.path_join(file)) if not file.is_empty() else null
+		if texture == null and not file.is_empty():
+			push_warning("MeshAssets: %s is missing or not imported" % dir.path_join(file))
+		maps[key] = texture
+	if material is ShaderMaterial:
+		for key: String in keys:
+			(material as ShaderMaterial).set_shader_parameter(StringName(key + "_map"), maps[key])
+		return
+	var standard := material as StandardMaterial3D
+	standard.albedo_texture = maps["albedo"]
+	standard.normal_enabled = maps["normal"] != null
+	standard.normal_texture = maps["normal"]
+	var orm: Texture2D = maps["orm"]
+	if orm != null:
+		standard.ao_enabled = true
+		standard.ao_texture = orm
+		standard.ao_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
+		standard.roughness_texture = orm
+		standard.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_GREEN
+		standard.metallic_texture = orm
+		standard.metallic_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_BLUE
+		standard.roughness = 1.0
+		standard.metallic = 1.0
 
 
 ## The livery section of an asset's textured mesh (M4-T30b), empty when it takes no livery; read once per asset.
@@ -158,12 +201,13 @@ static func livery_material(dir: String, surface: Dictionary, section: Dictionar
 	var material := ShaderMaterial.new()
 	material.shader = LIVERY_SHADER
 	material.resource_name = String(surface.get("name", ""))
-	for key: String in MAP_KEYS:
-		var file: String = String(surface.get(key, ""))
-		var texture: Texture2D = _texture(dir.path_join(file)) if not file.is_empty() else null
-		if texture == null and not file.is_empty():
-			push_warning("MeshAssets: %s is missing or not imported" % dir.path_join(file))
-		material.set_shader_parameter(StringName(key + "_map"), texture)
+	_apply_surface_maps(material, dir, surface, DETAIL_KEYS)
+	_watch_detail(material, dir, surface, DETAIL_KEYS)
+	var glow_file: String = String(surface.get("emissive", ""))
+	var glow: Texture2D = _texture(dir.path_join(glow_file)) if not glow_file.is_empty() else null
+	if glow == null and not glow_file.is_empty():
+		push_warning("MeshAssets: %s is missing or not imported" % dir.path_join(glow_file))
+	material.set_shader_parameter(&"emissive_map", glow)
 	material.set_shader_parameter(&"emission_energy", float(surface.get("emissive_strength", 1.0)))
 	var paint: Array = section.get("hull_paint", [0.35, 0.35, 0.35])
 	material.set_shader_parameter(&"hull_paint", Vector3(float(paint[0]), float(paint[1]), float(paint[2])))
@@ -242,9 +286,10 @@ static func glass_material(dir: String, surface: Dictionary) -> ShaderMaterial:
 	var material := ShaderMaterial.new()
 	material.shader = HULL_GLASS_SHADER
 	material.resource_name = String(surface.get("name", ""))
-	for key: String in ["albedo", "orm", "emissive"]:
-		var file: String = String(surface.get(key, ""))
-		material.set_shader_parameter(StringName(key + "_map"), _texture(dir.path_join(file)) if not file.is_empty() else null)
+	_apply_surface_maps(material, dir, surface, GLASS_DETAIL_KEYS)
+	_watch_detail(material, dir, surface, GLASS_DETAIL_KEYS)
+	var glow_file: String = String(surface.get("emissive", ""))
+	material.set_shader_parameter(&"emissive_map", _texture(dir.path_join(glow_file)) if not glow_file.is_empty() else null)
 	material.set_shader_parameter(&"glass_alpha", 1.0 - float(surface.get("transmittance", 0.0)))
 	_glass.append(material)
 	_glass_strength.append(float(surface.get("emissive_strength", 0.0)))
@@ -262,10 +307,41 @@ static func _apply_cabin_glow(index: int) -> void:
 	_glass[index].set_shader_parameter(&"glow_view_m", float(Settings.get_value(&"cabin_glow_view_m")))
 
 
+# Registers a hull paint material for `settings.hull_sheen` and gives it the current sheen.
+static func _with_sheen(material: Material, sheen: bool) -> Material:
+	if not sheen:
+		return material
+	_sheen.append(material)
+	_apply_sheen(material)
+	if not Settings.changed.is_connected(_on_setting_changed):
+		Settings.changed.connect(_on_setting_changed)
+	return material
+
+
+static func _apply_sheen(material: Material) -> void:
+	var amount: float = float(Settings.get_value(&"hull_sheen"))
+	if material is StandardMaterial3D:
+		var standard := material as StandardMaterial3D
+		standard.clearcoat_enabled = amount > 0.0
+		standard.clearcoat = amount
+		standard.clearcoat_roughness = SHEEN_ROUGHNESS
+	elif material is ShaderMaterial:
+		(material as ShaderMaterial).set_shader_parameter(&"sheen", amount)
+		(material as ShaderMaterial).set_shader_parameter(&"sheen_roughness", SHEEN_ROUGHNESS)
+
+
 static func _on_setting_changed(key: StringName, _value: Variant) -> void:
 	if key == &"cabin_glow_level" or key == &"cabin_glow_view_m":
 		for i: int in _glass.size():
 			_apply_cabin_glow(i)
+	elif key == &"hull_sheen":
+		for material: Material in _sheen:
+			_apply_sheen(material)
+	elif key == &"texture_detail":
+		for entry: Dictionary in _detailed:
+			var keys: Array[String] = []
+			keys.assign(entry["keys"])
+			_apply_surface_maps(entry["material"] as Material, String(entry["dir"]), entry["surface"] as Dictionary, keys)
 
 
 static func _texture(path: String) -> Texture2D:

@@ -38,75 +38,27 @@ class Dot extends RefCounted:
 	var rim: bool = false
 
 
-## Sphere radius (0..1) for a range; 0 at 0 m, `LINEAR_RADIUS` at 5 km, 1 at 25 km, more than that is clamped to 1.
-static func radius_for_range(range_m: float) -> float:
-	if range_m <= 0.0:
-		return 0.0
-	if range_m <= LINEAR_RANGE_M:
-		return LINEAR_RADIUS * range_m / LINEAR_RANGE_M
-	var t: float = log(minf(range_m, MAX_RANGE_M) / LINEAR_RANGE_M) / log(MAX_RANGE_M / LINEAR_RANGE_M)
-	return LINEAR_RADIUS + (1.0 - LINEAR_RADIUS) * t
-
-
 ## The radar-space direction (unit) of a body-frame offset (+X right, +Y up, -Z forward): X right, Y forward, Z up.
 static func radar_direction(body_offset: Vector3) -> Vector3:
 	var d: Vector3 = Vector3(body_offset.x, -body_offset.z, body_offset.y)
 	return d.normalized() if d.length_squared() > 1e-12 else Vector3.ZERO
 
 
-## The dot for a contact at World-frame `position`, seen from a ship at `own_position` with orientation `own_basis`; null
-## beyond `MAX_RANGE_M` unless within `broadcast_range_m` (then on the rim). `faction` and `selected` are carried onto the
-## dot; `viewer_faction` colours it by relation.
-static func dot_for(id: int, position: Vector3, faction: StringName, selected: bool, own_position: Vector3,
-		own_basis: Basis, viewer_faction: StringName, broadcast_range_m: float = 0.0) -> Dot:
-	var offset: Vector3 = position - own_position
-	var range_m: float = TargetingSystem.range_between(own_position, position)
-	if range_m > MAX_RANGE_M and range_m > broadcast_range_m:
-		return null
-	var dot := Dot.new()
-	dot.id = id
-	dot.range_m = range_m
-	dot.faction = faction
-	dot.color = Factions.hud_color(Factions.relation(viewer_faction, faction))
-	dot.selected = selected
-	dot.rim = range_m > MAX_RANGE_M
-	dot.point = radar_direction(own_basis.transposed() * offset) * radius_for_range(range_m)
-	dot.foot = Vector3(dot.point.x, dot.point.y, 0.0)
-	dot.above = dot.point.z >= 0.0
-	return dot
-
-
-## Every contact in `infos` within sensor or broadcast range, farthest first and the selected one last, so drawing in this
-## order leaves the near ones and the selection on top.
-static func dots(infos: Array[TargetInfo], selected_id: int, own_position: Vector3, own_basis: Basis,
-		viewer_faction: StringName) -> Array[Dot]:
-	var out: Array[Dot] = []
-	for info: TargetInfo in infos:
-		var dot: Dot = dot_for(info.id, info.position, info.faction, info.id == selected_id, own_position, own_basis, viewer_faction,
-				info.broadcast_range_m)
-		if dot != null:
-			out.append(dot)
-	out.sort_custom(func(a: Dot, b: Dot) -> bool:
-		if a.selected != b.selected:
-			return b.selected
-		return a.range_m > b.range_m or (a.range_m == b.range_m and a.id < b.id))
-	return out
-
-
-## Every contact of `contacts` within sensor or broadcast range placed on the sphere, in `dots`' drawing order (far to near, the
-## selected one last), as packed arrays for a batched painter (M4-T36). The same dots as `dots`, bit for bit, but for the order of
-## two contacts whose ranges agree to a millimetre, which follow the contacts' own order instead of their ids. The maths runs in
-## the native library (`NATIVE_CLASS`, M4-T23), in the same steps and precision: with the tier's ships on the radar a frame
-## at `battle` 1 000 plots a thousand contacts.
+## Every contact of `contacts` within sensor or broadcast range placed on the sphere, in drawing order (far to near, so the
+## near ones draw on top, the selected one last; two contacts whose ranges agree to a millimetre follow the contacts' own
+## order), as packed arrays for a batched painter (M4-T36). The maths runs in the native library (`NATIVE_CLASS`, M4-T23):
+## with the tier's ships on the radar a frame at `battle` 1 000 plots a thousand contacts. A contact beyond `ident_range_m` that
+## does not broadcast is unidentified (M5-T25): grey, whatever its faction, unless it is `known_id` (a selection already
+## identified).
 static func plot(contacts: RadarContacts, selected_id: int, own_position: Vector3, own_basis: Basis,
-		viewer_faction: StringName) -> RadarPlot:
+		viewer_faction: StringName, known_id: int = 0, ident_range_m: float = TargetCategories.IDENT_RANGE_M) -> RadarPlot:
 	if _native == null:
 		_native = NativeLib.instantiate(NATIVE_CLASS)  # the native library is required (M4-T37)
 	var palette := PackedColorArray()
 	for faction: StringName in contacts.faction_names:
 		palette.append(Factions.hud_color(Factions.relation(viewer_faction, faction)))
 	var r: Array = _native.plot(contacts.ids, contacts.positions, contacts.reach, contacts.faction_ix, palette, own_position,
-			own_basis, selected_id)
+			own_basis, selected_id, ident_range_m, Factions.UNIDENTIFIED_COLOR, known_id)
 	var out := RadarPlot.new()
 	var order: PackedInt32Array = r[0]
 	out.ids = r[1]
@@ -118,9 +70,26 @@ static func plot(contacts: RadarContacts, selected_id: int, own_position: Vector
 	out.stalk_units = r[7]
 	out.stalk_colors = r[8]
 	out.selected_index = int(r[9])
-	out.factions.resize(order.size())
-	for k: int in order.size():
-		out.factions[k] = contacts.faction_names[contacts.faction_ix[order[k]]]
+	out.bind_factions(order, contacts.faction_ix, contacts.faction_names)
+	return out
+
+
+## The dots of `plot` on a screen radar of `radius_px` centred at `centre`, as the multimeshes' buffers, built natively
+## (M5-T34). `held` is the three multimeshes' instance counts now (plain, rim, backing); a buffer comes sized to hold its
+## dots whole, growing only when it must. `backings` adds a dark `backing_radius` dot under every contact.
+static func dot_buffers(plot: RadarPlot, centre: Vector2, radius_px: float, backing_radius: float, dot_radius: float,
+		backing_colour: Color, backings: bool, held: PackedInt32Array) -> RadarDotBuffers:
+	if _native == null:
+		_native = NativeLib.instantiate(NATIVE_CLASS)
+	var r: Array = _native.dot_buffers(plot.point_units, plot.colors, plot.rims, plot.selected_index, centre, radius_px,
+			backing_radius, dot_radius, backing_colour, backings, held)
+	var out := RadarDotBuffers.new()
+	out.plain = r[0]
+	out.plain_count = int(r[1])
+	out.rim = r[2]
+	out.rim_count = int(r[3])
+	out.backing = r[4]
+	out.backing_count = int(r[5])
 	return out
 
 

@@ -204,14 +204,6 @@ func test_density_scales_the_amount_of_a_burst() -> void:
 	assert_eq(pool.emitter_of(handle).amount_ratio, 1.0)
 
 
-func test_the_schema_has_particle_density_as_a_unit_range() -> void:
-	var entry: Dictionary = SettingsSchema.ENTRIES[&"particle_density"]
-	assert_eq(entry["type"], TYPE_FLOAT)
-	assert_eq(entry["default"], 1.0)
-	assert_eq(entry["min"], 0.0)
-	assert_eq(entry["max"], 1.0)
-
-
 # --- vents ----------------------------------------------------------------------------------------------------------
 
 

@@ -24,10 +24,42 @@ permissions:
   contents: read
 
 jobs:
+  # The generator's own tests (about 5 minutes) beside the GUT shards, not inside shard 1. It builds the assets too (one Python
+  # test reads the built raider), so it fills the cache that the shards then restore on the same key.
+  python:
+    name: python tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: python -m pip install numpy
+
+      - name: Restore generated assets
+        id: assets
+        uses: actions/cache@v4
+        with:
+          path: assets/generated
+          key: assets-${{ runner.os }}-py3.12-${{ hashFiles('tools/procgen/**') }}
+
+      - name: Generate assets
+        if: steps.assets.outputs.cache-hit != 'true'
+        run: scripts/gen_assets.sh
+
+      - name: Python tests
+        run: python -m unittest discover -s tools/procgen/tests -t . -v
+
   test:
     # GUT takes about 40 minutes on the maintainer's machine, more than one runner job should hold, so three jobs share it
-    # (scripts/run_tests.sh, GUT_SHARD); shard 1 also runs the Python tests and the console smoke runs. At M4-T25 the jobs
-    # took 24, 17 and 15 minutes. A shard's GUT timeout (40 minutes, run_tests.sh) fires before this job limit.
+    # (scripts/run_tests.sh, GUT_SHARD); shard 1 also runs the Rust tests and the console smoke runs, the Python tests have the
+    # job above (M5-T38). A shard's GUT timeout (40 minutes, run_tests.sh) fires before this job limit.
     name: test (GUT shard ${{ matrix.shard }} of 3)
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -82,12 +114,21 @@ jobs:
       - name: Build native library
         run: time scripts/build_native.sh
 
+      - name: Restore generated assets
+        id: assets
+        uses: actions/cache@v4
+        with:
+          path: assets/generated
+          key: assets-${{ runner.os }}-py3.12-${{ hashFiles('tools/procgen/**') }}
+
       - name: Generate assets
+        if: steps.assets.outputs.cache-hit != 'true'
         run: scripts/gen_assets.sh
 
       - name: Run tests
         run: scripts/run_tests.sh
         env:
+          PYTHON_TESTS: "0"
           GUT_SHARD: ${{ matrix.shard }}/3
           # The slow files (the long seeded parity fights, the pending balance runs) run here (M4-T36, Q58).
           GUT_SLOW: "1"

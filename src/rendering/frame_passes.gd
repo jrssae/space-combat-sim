@@ -7,7 +7,8 @@ extends Node
 ## every LOD switcher with the camera and the dot distance read once. It also keeps the finished hit flashes for the next hits
 ## (hidden children of this node), so a hit no longer builds and frees nodes.
 ##
-## The lean ships' pooled muzzle flashes and the core's bolt multimeshes (M4-T35) run here too, one pass each.
+## The lean ships' pooled muzzle flashes and the core's bolt multimeshes (M4-T35) run here too, one pass each, and the
+## defensive turrets' models turn to the core's aim in one more (M5-T21: one read of the core's aims a frame).
 ##
 ## One per game: the autoload `FramePassesNode`, so it runs from the first frame in every scene, tests and scenes without `Main`
 ## included (`of` finds it; without the autoload it is made under the root on first use). It runs before the default priority, as
@@ -33,8 +34,10 @@ var _switchers: Array[LodSwitcher] = []
 # The lean ships' pooled muzzle flashes and the core's bolt multimeshes (M4-T35): one per World in play, more in the tests.
 var _flash_pools: Array[MuzzleFlashPool] = []
 var _bolt_meshes: Array[BoltMesh] = []
+# The defensive turrets whose models follow the core's aim (M5-T21).
+var _turrets: Array[TurretMount] = []
 var _cost_us: Dictionary[StringName, int] = {&"plumes": 0, &"flashes": 0, &"impacts": 0, &"lod": 0, &"flash_pool": 0,
-		&"bolts": 0}
+		&"bolts": 0, &"turrets": 0}
 
 
 ## The game's passes when they exist, else null (never makes them).
@@ -78,8 +81,11 @@ func _ready() -> void:
 		&"flash_pool_us": {"get": func() -> int: return _cost_us[&"flash_pool"], "unit": "us",
 			"doc": "Pooled muzzle flashes pass (the lean ships), last frame"},
 		&"pool_flashes": {"get": pool_flashes, "doc": "Pooled muzzle flashes alight"},
+		&"flashes_culled": {"get": flashes_culled, "doc": "Pooled flashes skipped as beyond the camera's range (M5-T37)"},
 		&"bolts_us": {"get": func() -> int: return _cost_us[&"bolts"], "unit": "us", "doc": "Bolt multimesh pass, last frame"},
 		&"bolt_draws": {"get": bolt_draws, "doc": "Bolt instances the pass drew, last frame"},
+		&"turrets_us": {"get": func() -> int: return _cost_us[&"turrets"], "unit": "us", "doc": "Turret models pass (M5-T21), last frame"},
+		&"turrets": {"get": func() -> int: return _turrets.size(), "doc": "Turret mounts whose models follow the core's aim"},
 	}), self)
 
 
@@ -104,12 +110,15 @@ func _process(delta: float) -> void:
 	advance_flash_pools(delta)
 	var pools_done: int = Time.get_ticks_usec()
 	update_bolts()
+	var bolts_done: int = Time.get_ticks_usec()
+	update_turrets()
 	_cost_us[&"plumes"] = plumes_done - started
 	_cost_us[&"flashes"] = flashes_done - plumes_done
 	_cost_us[&"impacts"] = impacts_done - flashes_done
 	_cost_us[&"lod"] = lod_done - impacts_done
 	_cost_us[&"flash_pool"] = pools_done - lod_done
-	_cost_us[&"bolts"] = Time.get_ticks_usec() - pools_done
+	_cost_us[&"bolts"] = bolts_done - pools_done
+	_cost_us[&"turrets"] = Time.get_ticks_usec() - bolts_done
 
 
 ## The far-dot decision for every registered ship: the camera and the dot distance read once (M4-T11's rule per ship). Public
@@ -173,11 +182,38 @@ func update_bolts() -> void:
 			mesh.update()
 
 
+## Turns every bound turret's model to its aim in the core's row (M5-T21): the aims read once per core. Public for the tests.
+func update_turrets() -> void:
+	if _turrets.is_empty():
+		return
+	var aims_of: Dictionary[SimCore, PackedFloat32Array] = {}
+	for mount: TurretMount in _turrets:
+		if not mount.can_process():
+			continue
+		var sim: SimCore = mount.bound_sim()
+		if sim == null:
+			continue
+		if not aims_of.has(sim):
+			aims_of[sim] = sim.core.turret_aims()
+		var aims: PackedFloat32Array = aims_of[sim]
+		var at: int = mount.slot() * 2
+		if at + 1 < aims.size():
+			mount.turn_to(aims[at], aims[at + 1])
+
+
 ## Pooled muzzle flashes alight over every pool.
 func pool_flashes() -> int:
 	var count: int = 0
 	for pool: MuzzleFlashPool in _flash_pools:
 		count += pool.active_count()
+	return count
+
+
+## Pooled flashes skipped for being out of range, over every pool.
+func flashes_culled() -> int:
+	var count: int = 0
+	for pool: MuzzleFlashPool in _flash_pools:
+		count += pool.culled
 	return count
 
 
@@ -218,6 +254,20 @@ func remove_bolt_mesh(mesh: BoltMesh) -> void:
 
 func has_bolt_mesh(mesh: BoltMesh) -> bool:
 	return _bolt_meshes.has(mesh)
+
+
+## A turret mount whose model follows the core's aim each frame while it is in the tree.
+func add_turret(mount: TurretMount) -> void:
+	if not _turrets.has(mount):
+		_turrets.append(mount)
+
+
+func remove_turret(mount: TurretMount) -> void:
+	_turrets.erase(mount)
+
+
+func has_turret(mount: TurretMount) -> bool:
+	return _turrets.has(mount)
 
 
 func add_plumes(visuals: ThrusterVisuals) -> void:
@@ -267,8 +317,10 @@ func keep_impact(impact: ImpactFlash) -> void:
 ## A spare hit flash out of the pool (with no parent), or null when there is none.
 func take_impact() -> ImpactFlash:
 	while not _impact_pool.is_empty():
-		var impact: ImpactFlash = _impact_pool.pop_back()
-		if is_instance_valid(impact):
+		# Untyped first: a flash freed with an old scene must be skipped, and a typed assignment of it is an error.
+		var kept: Variant = _impact_pool.pop_back()
+		if is_instance_valid(kept):
+			var impact: ImpactFlash = kept as ImpactFlash
 			remove_child(impact)
 			return impact
 	return null

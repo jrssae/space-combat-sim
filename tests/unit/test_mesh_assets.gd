@@ -121,3 +121,25 @@ func test_the_livery_zone_survives_the_import() -> void:
 	for zone: int in range(1, 8):
 		assert_true(seen.has(zone), "zone %d is on the hull" % zone)
 	assert_false(seen.keys().any(func(z: int) -> bool: return z > 7), "no zone beyond the table")
+
+
+func test_every_hull_takes_the_sheen_and_rocks_do_not() -> void:
+	# `settings.hull_sheen` (M5-T39): a clear coat on each hull's paint, live; the glass and the rocks stay as they were.
+	var hull: Mesh = MeshAssets.for_asset(STARFURY)
+	var saturn: Mesh = MeshAssets.for_asset("saturn_4_transport")
+	var shapes: Array = AsteroidBelt.shapes()
+	if hull == null or saturn == null or shapes.is_empty():
+		pending(GEN_ASSETS_HINT)
+		return
+	var rock: Mesh = MeshAssets.load_textured(AsteroidBelt.ASSET_DIR, shapes[0]["mesh"], false)
+	var before: float = float(Settings.get_value(&"hull_sheen"))
+	Settings.set_value(&"hull_sheen", 0.4)
+	var livery := hull.surface_get_material(0) as ShaderMaterial
+	assert_almost_eq(float(livery.get_shader_parameter(&"sheen")), 0.4, 1e-6, "the Starfury's livery paint")
+	var paint := saturn.surface_get_material(0) as StandardMaterial3D
+	assert_true(paint.clearcoat_enabled, "a civilian's paint")
+	assert_almost_eq(paint.clearcoat, 0.4, 1e-6)
+	assert_false((rock.surface_get_material(0) as StandardMaterial3D).clearcoat_enabled, "rocks are not painted metal")
+	Settings.set_value(&"hull_sheen", 0.0)
+	assert_false(paint.clearcoat_enabled, "0 is the flat paint")
+	Settings.set_value(&"hull_sheen", before)

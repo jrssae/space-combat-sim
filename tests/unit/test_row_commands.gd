@@ -1,14 +1,12 @@
 extends GutTest
 ## The native pilots' commands as core rows (M4-T33, architecture §17.13): the brains' batch writes each native pilot's
 ## flight and combat command into the core, the flight batch applies it the same tick, and the drivers touch only the ships
-## whose trigger, selection or command source changed. Seeded battles fly the same bits with the rows path on and off, with
-## one thread and six; a command set from GDScript takes over from the row. Each fight runs in a space of its own with the clock reset, as
-## `test_core_threads` flies them.
+## whose trigger, selection or command source changed. The seeded battle (`SeededBattle`) flies the same bits as the drivers'
+## commands did, and as the drivers' own step did at the far rate (`driver_step.json`); a command set from GDScript takes
+## over from the row. One thread against six is `test_core_threads`' (M6-T18).
 
-const SHIPS: int = 120
-const SEED: int = 1
 const TICKS: int = 240
-const SETTINGS: Array[StringName] = [&"perf_threads", &"sim_step"]
+const SETTINGS: Array[StringName] = [&"perf_threads", &"sim_step", &"ai_think_rate"]
 
 var _saved: Dictionary = {}
 # The battle's ships by their `Targetable` id, so selections compare across runs (each run has its own instance ids).
@@ -31,6 +29,7 @@ func after_each() -> void:
 
 
 const FIXTURE: String = "row_commands"
+const DRIVER_STEP_FIXTURE: String = "driver_step"
 
 
 func test_commands_from_rows_fly_the_same_battle_as_today() -> void:
@@ -41,30 +40,33 @@ func test_commands_from_rows_fly_the_same_battle_as_today() -> void:
 	assert_gt(int(rows["native_thinks"]), TICKS * 20, "the native brains thought (%d thinks)" % int(rows["native_thinks"]))
 	assert_eq(int(rows["fallbacks"]), 0, "nothing declined on the rows path")
 	assert_eq(int(rows["finished"]), 0, "on the rows path no driver finishes a think ship by ship")
-	assert_gt(int(rows["live_max"]), SHIPS / 2, "most ships fly a command from the rows (%d at most)" % int(rows["live_max"]))
+	assert_gt(int(rows["live_max"]), SeededBattle.SHIPS / 2, "most ships fly a command from the rows (%d at most)" % int(rows["live_max"]))
 	assert_lt(int(rows["events"]), int(rows["native_thinks"]) / 4,
 			"the drivers handle a few events, not every think (%d events for %d thinks)" % [int(rows["events"]),
 			int(rows["native_thinks"])])
 	gut.p("battle %d seed %d, %d ticks: %d native thinks, %d events on the rows path, %d ships on row commands at most" % [
-			SHIPS, SEED, TICKS, int(rows["native_thinks"]), int(rows["events"]), int(rows["live_max"])])
+			SeededBattle.SHIPS, SeededBattle.SEED, TICKS, int(rows["native_thinks"]), int(rows["events"]), int(rows["live_max"])])
 	assert_eq(ParityFixture.encode(_digest_of(rows)), recorded,
 			"every ship flies the drivers' command, trigger and selection every tick, the same rows and the same pilots (recorded)")
+	# The same battle is the driver step's far-rate case (no player, every ship far): the hosted step against the drivers'
+	# own step, recorded in `driver_step.json` (M6-T18 folded that test of `test_driver_step` in here).
+	var far: Variant = ParityFixture.stored(DRIVER_STEP_FIXTURE, "battle_far_rate")
+	assert_not_null(far, "the drivers' own step was recorded")
+	if far == null:
+		return
+	assert_gt(int(far["hits_total"]), 10, "far rate: hits landed (%d)" % int(far["hits_total"]))
+	assert_gt(int(rows["hosted_max"]), SeededBattle.SHIPS / 2, "far rate: most drivers were hosted (%d)" % int(rows["hosted_max"]))
+	assert_lt(int(rows["processing_min"]), SeededBattle.SHIPS / 10,
+			"far rate: hosted drivers do not tick (%d still processing at the fewest)" % int(rows["processing_min"]))
+	assert_eq(ParityFixture.encode(SeededBattle.hosted_digest(rows["hosted"], 1)), far,
+			"far rate: the same thinks, held ticks, rows, commands, hits and pilots as the drivers' own step (recorded); ship 0: %s" % [
+			rows["first"]])
 
 
 # What the battle is held to: the thinks, and digests of every tick's commands and rows and of the pilots at the end.
 static func _digest_of(battle: Dictionary) -> Dictionary:
 	return {"native_thinks": battle["native_thinks"], "commands": ParityFixture.digest(battle["commands"]),
 			"rows": ParityFixture.digest(battle["rows"]), "pilots": ParityFixture.digest(battle["pilots"])}
-
-
-func test_one_thread_and_six_give_the_same_commands_from_rows() -> void:
-	var one: Dictionary = await _battle(1, true)
-	var six: Dictionary = await _battle(6, true)
-	var first: int = _first_difference(one["row_commands"], six["row_commands"])
-	assert_eq(first, -1, "the core's commands are the same bits every tick with one thread and six (first difference at tick %d)" % first)
-	first = _first_difference(one["rows"], six["rows"])
-	assert_eq(first, -1, "and the rows (first difference at tick %d)" % first)
-	assert_eq(int(one["events"]), int(six["events"]), "the same events")
 
 
 func test_a_declined_think_holds_the_command_the_row_has() -> void:
@@ -119,91 +121,84 @@ func test_a_command_set_from_gdscript_takes_over_from_the_row() -> void:
 	assert_true(c.ship.get_flight_output().braking, "with the GDScript command's brake")
 
 
-# A space of its own with a world and its projectiles.
-func _space() -> SubViewport:
-	var space := SubViewport.new()
-	space.own_world_3d = true
-	space.world_3d = World3D.new()
-	add_child(space)
-	var world := WorldFrame.new()
-	world.name = "World"
-	space.add_child(world)
-	var bolts := Node3D.new()
-	bolts.name = "Projectiles"
-	world.add_child(bolts)
-	return space
+func test_ships_flying_from_their_rows_are_not_gathered() -> void:
+	var fight: Dictionary = await _small_fight()
+	var sim: SimCore = fight["sim"]
+	var row_ships: Array[Combatant] = []
+	for ship: Combatant in fight["ships"]:
+		if ship.ship.is_row_commanded() and not sim.core.row_command(ship.ship.get_instance_id()).is_empty():
+			row_ships.append(ship)
+	assert_gt(row_ships.size(), SeededBattle.SHIPS / 4, "many ships fly from their rows")
+	await get_tree().physics_frame
+	var batch: FlightBatch = row_ships[0].ship.get_parent().get_node("FlightBatch") as FlightBatch
+	assert_lte(batch.gathered_count, batch.stepped_count() - row_ships.size() / 2,
+			"the row ships fly without a GDScript gather (M5-T31; a few take fresh commands through one)")
+	for c: Combatant in row_ships:
+		assert_true(batch.stepped(c.ship), "%s flown" % c.display_name)
+		assert_eq(c.ship.flight_path(), &"native")
 
 
-## The seeded battle's fighters (four sides, the bench's session table) flown `ticks` ticks on the rows path with
-## `threads` threads, every pass in parallel when `parallel`. Returns per tick the rows' digest, the effective commands'
-## digest (every ship's flight command, trigger and selection) and the core's commands' digest; the pilots' digest at the
-## end; the native thinks, declined thinks, driver finishes and events; the most ships on row commands in a tick.
+## The seeded battle's fighters (`SeededBattle`) flown `ticks` ticks on the rows path with `threads` threads, every pass
+## in parallel when `parallel`. Returns per tick the rows' digest, the effective commands' digest (every ship's flight
+## command, trigger and selection) and the core's commands' digest; the pilots' digest at the end; the native thinks,
+## declined thinks, driver finishes and events; the most ships on row commands in a tick. Under `hosted`, what the driver
+## step's recording holds (`SeededBattle.hosted_digest`), with the most drivers hosted and the fewest processing.
 func _battle(threads: int, parallel: bool, ticks: int = TICKS) -> Dictionary:
 	Settings.set_value(&"perf_threads", threads)
-	Factions.reset()
-	Factions.use_table(BenchLayout.faction_table(BenchLayout.BATTLE))
-	ContactScan.invalidate()
-	await get_tree().process_frame
-	await get_tree().physics_frame
-	SimClock.reset()
-	var space := _space()
-	var world := space.get_node("World") as WorldFrame
-	var bolts := world.get_node("Projectiles") as Node3D
-	var resolver := HitResolver.new()
-	resolver.name = "HitResolver"
-	space.add_child(resolver)
-	var anchor: UniversePos = world.to_universe(Vector3.ZERO)
-	var numbers: Dictionary = {}
-	var ships: Array[Combatant] = []
-	for e: Dictionary in BenchLayout.plan(BenchLayout.BATTLE, SHIPS, SEED):
-		if StringName(e["kind"]) != BenchLayout.KIND_FIGHTER:
-			continue
-		var type: StringName = e["type"]
-		numbers[type] = int(numbers.get(type, 0)) + 1
-		var c: Combatant = ShipAssembly.build(ShipCatalog.spec_for(type), world, bolts, {
-			ShipAssembly.OPT_FACTION: StringName(e["faction"]), ShipAssembly.OPT_DISPLAY_NAME: "%s %d" % [type, int(numbers[type])],
-			ShipAssembly.OPT_FORCE_ASSIST: true, ShipAssembly.OPT_AI: true, ShipAssembly.OPT_LEAN: true})
-		world.spawn(c.ship, anchor.plus_local(e["offset"]), e["basis"])
-		c.ship.linear_velocity = e["velocity"]
-		var made: Dictionary = BrainFactory.from_behaviour(e["behaviour"], anchor, int(e["seed"]))
-		c.driver.brain = made["brain"] as PilotBrain
-		ships.append(c)
-	_index_of.clear()
-	for i: int in ships.size():
-		_index_of[ships[i].targetable.get_instance_id()] = i
-	var sim: SimCore = SimCore.attach(world)
-	if parallel:
-		sim.core.set_parallel_min(2)
-		sim.core.set_flight_parallel_min(2)
+	Settings.set_value(&"ai_think_rate", true)
+	var fight: Dictionary = await SeededBattle.start(self, {SeededBattle.OPT_PARALLEL: parallel})
+	var sim: SimCore = fight["sim"]
+	var ships: Array[Combatant] = fight["ships"]
+	_index_of = fight["targetable_index"]
+	var tick_hits: Array = []
+	SeededBattle.log_hits(fight, tick_hits)
 	var digests := PackedInt64Array()
 	var commands := PackedInt64Array()
 	var row_commands := PackedInt64Array()
+	var hits := PackedInt64Array()
+	var held_ticks := PackedInt64Array()
 	var native_thinks: int = 0
 	var fallbacks: int = 0
 	var finished: int = 0
 	var events: int = 0
 	var live_max: int = 0
+	var hosted_max: int = 0
+	var processing_min: int = ships.size()
 	for tick: int in ticks:
+		tick_hits.clear()
 		await get_tree().physics_frame
 		digests.append(int(sim.core.rows_digest()))
 		commands.append(_commands_digest(sim, ships))
 		var batch: BrainBatch = BrainBatch.for_tree(get_tree())
 		row_commands.append(int(sim.core.commands_digest()))
+		hits.append(hash(tick_hits))
 		live_max = maxi(live_max, int(sim.core.live_commands()))
 		if batch != null:
 			finished += batch.finishes
 			events += batch.events
 		native_thinks += AiPilotDriver.thinks_native()
 		fallbacks += AiPilotDriver.thinks_fallback()
+		held_ticks.append(AiPilotDriver.held())
+		hosted_max = maxi(hosted_max, AiPilotDriver.hosted())
+		if tick % 40 == 39:
+			var processing: int = 0
+			for c: Combatant in ships:
+				if c.driver.is_physics_processing():
+					processing += 1
+			processing_min = mini(processing_min, processing)
 	var pilots := PackedInt64Array()
+	var hosted_pilots := PackedInt64Array()
 	for c: Combatant in ships:
 		pilots.append(_pilot_digest(c))
-	space.queue_free()
-	await get_tree().physics_frame
-	await get_tree().physics_frame
-	Factions.reset()
+		hosted_pilots.append(SeededBattle.pilot_digest(c, fight["index_of"]))
+	var hosted: Dictionary = {"rows": digests, "commands": row_commands, "hits": hits,
+			"hits_total": (fight["resolver"] as HitResolver).hits_total, "pilots": hosted_pilots, "native_thinks": native_thinks,
+			"held_ticks": held_ticks}
+	var first: Array = SeededBattle.pilot_parts(ships[0], fight["index_of"])
+	await SeededBattle.finish(fight)
 	return {"rows": digests, "commands": commands, "row_commands": row_commands, "pilots": pilots,
-			"native_thinks": native_thinks, "fallbacks": fallbacks, "finished": finished, "events": events, "live_max": live_max}
+			"native_thinks": native_thinks, "fallbacks": fallbacks, "finished": finished, "events": events, "live_max": live_max,
+			"hosted": hosted, "hosted_max": hosted_max, "processing_min": processing_min, "first": first}
 
 
 # What every ship flies this tick: the flight command (from its row when it flies one), its cannon's trigger, its selection.
@@ -259,44 +254,15 @@ func _row_commands(sim: SimCore, ships: Array) -> PackedFloat64Array:
 	return out
 
 
-# The first index where the two lists differ (or where one ends early), -1 when they are equal.
-func _first_difference(a: PackedInt64Array, b: PackedInt64Array) -> int:
-	for i: int in mini(a.size(), b.size()):
-		if a[i] != b[i]:
-			return i
-	return -1 if a.size() == b.size() else mini(a.size(), b.size())
-
-
-# A fight of the battle's first fighters in a space of its own, flown a few ticks so every pilot has its native slot. The
-# drivers stepped by hand here take their step back from the host (M4-T35), so these fights queue thinks by hand.
+# A fight of the battle's first fighters, flown a few ticks so every pilot has its native slot, on the delayed step: these
+# fights flush by hand and join the job on the main thread (test_core_snapshot). The drivers stepped by hand here take their
+# step back from the host (M4-T35), so these fights queue thinks by hand.
 func _small_fight() -> Dictionary:
 	Settings.set_value(&"perf_threads", 6)
-	Settings.set_value(&"sim_step", &"delayed")  # these fights flush by hand and join the job on the main thread (test_core_snapshot)
-	Factions.reset()
-	Factions.use_table(BenchLayout.faction_table(BenchLayout.BATTLE))
-	ContactScan.invalidate()
-	await get_tree().physics_frame
-	SimClock.reset()
-	var space := _space()
-	var world := space.get_node("World") as WorldFrame
-	var bolts := world.get_node("Projectiles") as Node3D
-	var anchor: UniversePos = world.to_universe(Vector3.ZERO)
-	var ships: Array[Combatant] = []
-	for e: Dictionary in BenchLayout.plan(BenchLayout.BATTLE, 60, SEED):
-		if StringName(e["kind"]) != BenchLayout.KIND_FIGHTER:
-			continue
-		var c: Combatant = ShipAssembly.build(ShipCatalog.spec_for(e["type"]), world, bolts, {
-			ShipAssembly.OPT_FACTION: StringName(e["faction"]), ShipAssembly.OPT_DISPLAY_NAME: "SHIP %d" % ships.size(),
-			ShipAssembly.OPT_FORCE_ASSIST: true, ShipAssembly.OPT_AI: true, ShipAssembly.OPT_LEAN: true})
-		world.spawn(c.ship, anchor.plus_local(e["offset"]), e["basis"])
-		c.ship.linear_velocity = e["velocity"]
-		c.driver.brain = BrainFactory.from_behaviour(e["behaviour"], anchor, int(e["seed"]))["brain"] as PilotBrain
-		ships.append(c)
-	var sim: SimCore = SimCore.attach(world)
-	for i: int in 8:
-		await get_tree().physics_frame
-	autofree(space)
-	return {"space": space, "sim": sim, "ships": ships}
+	Settings.set_value(&"sim_step", &"delayed")
+	var fight: Dictionary = await SeededBattle.small_fight(self)
+	autofree(fight["space"])
+	return fight
 
 
 # Steps every driver by hand into this frame's batch (as `_physics_process` does) and returns how many queued.

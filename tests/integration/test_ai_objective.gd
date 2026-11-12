@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## Broadcast contacts, the AI's half, and the pilot objective (M3-T17, Q21, AC25): every AI ship hears the same broadcasts at
 ## the same ranges whatever its faction (a separate `Perception.broadcasts` list; `contacts`, which avoidance and the fire lane
 ## read, stay the near 5 km scan), and a raider given a buoy as its objective (`ai <name> objective <target>`, or the spawn's
@@ -25,15 +25,6 @@ func before_each() -> void:
 func after_each() -> void:
 	Engine.time_scale = _scale_backup
 	DebugConsole.flags.invulnerable = false
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
-
-
-func _exec(line: String) -> ConsoleResult:
-	return DebugConsole.registry.execute(line)[0]
 
 
 func _buoy(buoy_name: String) -> NavBuoy:

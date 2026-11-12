@@ -14,9 +14,9 @@ const LINE_COLOR: Color = HudLayout.LINE_COLOR
 const TEXT_SHADOW: Color = Color(0.0, 0.0, 0.0, 0.8)
 ## Sides of the radar's batched dots (M4-T36): round at their few pixels.
 const DOT_SEGMENTS: int = 16
-## Floats per instance in a 2D multimesh with colours: a 2x3 transform padded to 8, then the colour.
-const DOT_STRIDE: int = 12
 
+## What the last radar paint cost, us (a readout): the dot buffers and the draws.
+static var radar_paint_us: int = 0
 static var _shared_font: Font = null
 static var _dot_mesh: ArrayMesh = null
 # Hollow rim dots' rings, by their thickness over their radius (M4-T23).
@@ -32,17 +32,16 @@ var _dots: MultiMesh = null
 var _backings: MultiMesh = null
 # The hollow rim dots (broadcasts beyond the sensors) as one draw too (M4-T23: the tier's far allies are hundreds of them).
 var _rims: MultiMesh = null
-var _dot_buffer := PackedFloat32Array()
-var _backing_buffer := PackedFloat32Array()
-var _rim_buffer := PackedFloat32Array()
-var _dot_count: int = 0
-var _backing_count: int = 0
-var _rim_count: int = 0
 
 
 func _init(canvas: CanvasItem) -> void:
 	_canvas = canvas
 	_font = _hud_font()
+
+
+## The HUD's font, for what is drawn beside the instruments (the comms panel's subtitles).
+static func font() -> Font:
+	return _hud_font()
 
 
 static func _hud_font() -> Font:
@@ -86,7 +85,9 @@ func paint(f: HudFrame, surface: HudSurface) -> void:
 	if items.has(HudSurface.RUNNING_LIGHTS):
 		_text(f.running_lights_text, surface.running_lights_pos, 14.0 * s, HudLayout.AMBER if f.running_lights_dark else LINE_COLOR)
 	if items.has(HudSurface.RADAR):
+		var before_us: int = Time.get_ticks_usec()
 		_draw_radar(f, surface, s, w)
+		radar_paint_us = Time.get_ticks_usec() - before_us
 	if items.has(HudSurface.DRIFT):
 		_draw_drift_sphere(f, surface, s, w)
 	if items.has(HudSurface.OWN_SILHOUETTE):
@@ -101,6 +102,8 @@ func paint(f: HudFrame, surface: HudSurface) -> void:
 		_line(surface, f.ack_line, surface.ack_pos, 16.0 * s)
 	if items.has(HudSurface.ROSTER):
 		_draw_roster(surface, s, w)
+	if items.has(HudSurface.OBJECTIVES):
+		_draw_objectives(f, s)
 
 
 # The wing roster (M3-T11): per wingman a hull bar in the wing's colour, the callsign and what it is doing.
@@ -110,6 +113,15 @@ func _draw_roster(surface: HudSurface, s: float, w: float) -> void:
 	for row: HudLayout.RosterRow in surface.roster_rows:
 		_bar(row.bar_rect, row.hull, row.color, w)
 		_text(row.text, row.text_pos, surface.roster_text_size * s, row.color if row.down else LINE_COLOR)
+
+
+# The mission's active objectives (M5-T05), right-aligned at the top right: optional ones fainter.
+func _draw_objectives(f: HudFrame, s: float) -> void:
+	var faint := Color(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, 0.7)
+	_text("OBJECTIVES", f.objectives_caption_pos, 12.0 * s, faint, HORIZONTAL_ALIGNMENT_RIGHT)
+	for line: Dictionary in f.objective_lines:
+		_text(String(line["text"]), line["pos"] as Vector2, 15.0 * s, LINE_COLOR if bool(line["primary"]) else faint,
+				HORIZONTAL_ALIGNMENT_RIGHT)
 
 
 # --- helpers --------------------------------------------------------------------------------------------------
@@ -435,73 +447,43 @@ func _draw_radar(f: HudFrame, surface: HudSurface, s: float, w: float) -> void:
 	# dot in another (M4-T23), then the selection.
 	var plot: RadarPlot = f.radar_plot
 	var to_screen: Transform2D = RadarPlot.screen_transform(c, r)
-	var at: PackedVector2Array = to_screen * plot.point_units
-	_fill_dot_buffers(at, plot, 5.5 * k, 3.0 * k, surface.radar_labels)
+	var dots: RadarDotBuffers = RadarModel.dot_buffers(plot, c, r, 5.5 * k, 3.0 * k, TEXT_SHADOW, surface.radar_labels,
+			PackedInt32Array([_instances(_dots), _instances(_rims), _instances(_backings)]))
 	if surface.radar_labels:  # dark backings under everything, so contacts read over the octagon's grid and never hide each other
-		_backings = _submit_dots(_backings, _backing_buffer, _backing_count, _dot_unit_mesh())
+		_backings = _submit_dots(_backings, dots.backing, dots.backing_count, _dot_unit_mesh())
 	# Own ship at the centre, nose up.
 	_canvas.draw_polyline(PackedVector2Array([c + Vector2(0.0, -6.0 * k), c + Vector2(4.0 * k, 5.0 * k), c + Vector2(-4.0 * k, 5.0 * k), c + Vector2(0.0, -6.0 * k)]), LINE_COLOR, w * 0.75)
 	if plot.size() == 0:
 		return
 	_canvas.draw_multiline_colors(to_screen * plot.stalk_units, plot.stalk_colors, w * 0.5)
-	_dots = _submit_dots(_dots, _dot_buffer, _dot_count, _dot_unit_mesh())
+	_dots = _submit_dots(_dots, dots.plain, dots.plain_count, _dot_unit_mesh())
 	# A broadcast beyond the sensors is hollow, on the rim (M3-T17): every one but the selection in one ring multimesh.
-	_rims = _submit_dots(_rims, _rim_buffer, _rim_count, _ring_unit_mesh((w * 0.6) / (3.0 * k)))
+	_rims = _submit_dots(_rims, dots.rim, dots.rim_count, _ring_unit_mesh((w * 0.6) / (3.0 * k)))
 	var i: int = plot.selected_index
 	if i >= 0:
+		var at_selected: Vector2 = to_screen * plot.point_units[i]
 		if plot.rims[i] == 1:
-			_canvas.draw_arc(at[i], 4.5 * k, 0.0, TAU, 12, plot.colors[i], w * 0.6)
+			_canvas.draw_arc(at_selected, 4.5 * k, 0.0, TAU, 12, plot.colors[i], w * 0.6)
 		else:
-			_canvas.draw_circle(at[i], 4.5 * k, plot.colors[i])
-		_canvas.draw_arc(at[i], 8.0 * k, 0.0, TAU, 20, plot.colors[i], w * 0.75)
+			_canvas.draw_circle(at_selected, 4.5 * k, plot.colors[i])
+		_canvas.draw_arc(at_selected, 8.0 * k, 0.0, TAU, 20, plot.colors[i], w * 0.75)
+	# The waypoint's contact (M5-T25): a diamond in the HUD's own colour, as its marker in the view.
+	var wp: int = f.waypoint_radar_index
+	if wp >= 0 and wp < plot.point_units.size():
+		var at_waypoint: Vector2 = to_screen * plot.point_units[wp]
+		var d: float = 9.0 * k
+		_canvas.draw_polyline(PackedVector2Array([at_waypoint + Vector2(0.0, -d), at_waypoint + Vector2(d, 0.0), at_waypoint + Vector2(0.0, d),
+				at_waypoint + Vector2(-d, 0.0), at_waypoint + Vector2(0.0, -d)]), LINE_COLOR, w * 0.75)
 
 
-# Fills the radar's dot buffers in one pass over the contacts (M4-T23: with the tier's rows a thousand of them): every
-# contact's dark backing (when `backings`), the plain dots (not on the rim, not selected) in their colours, and the hollow
-# rim ones (not selected).
-func _fill_dot_buffers(at: PackedVector2Array, plot: RadarPlot, backing_radius: float, radius: float, backings: bool) -> void:
-	var n: int = at.size()
-	if backings and _backing_buffer.size() < n * DOT_STRIDE:
-		_backing_buffer.resize(n * DOT_STRIDE)
-	if _dot_buffer.size() < n * DOT_STRIDE:
-		_dot_buffer.resize(n * DOT_STRIDE)
-		_rim_buffer.resize(n * DOT_STRIDE)
-	_backing_count = 0
-	_dot_count = 0
-	_rim_count = 0
-	for i: int in n:
-		var p: Vector2 = at[i]
-		if backings:
-			_put_dot(_backing_buffer, _backing_count, p, backing_radius, TEXT_SHADOW)
-			_backing_count += 1
-		if i == plot.selected_index:
-			continue
-		if plot.rims[i] == 1:
-			_put_dot(_rim_buffer, _rim_count, p, radius, plot.colors[i])
-			_rim_count += 1
-		else:
-			_put_dot(_dot_buffer, _dot_count, p, radius, plot.colors[i])
-			_dot_count += 1
+# A multimesh's instance count, 0 before it is made.
+static func _instances(dots: MultiMesh) -> int:
+	return dots.instance_count if dots != null else 0
 
 
-static func _put_dot(buffer: PackedFloat32Array, k: int, p: Vector2, radius: float, colour: Color) -> void:
-	var b: int = k * DOT_STRIDE
-	buffer[b] = radius
-	buffer[b + 1] = 0.0
-	buffer[b + 2] = 0.0
-	buffer[b + 3] = p.x
-	buffer[b + 4] = 0.0
-	buffer[b + 5] = radius
-	buffer[b + 6] = 0.0
-	buffer[b + 7] = p.y
-	buffer[b + 8] = colour.r
-	buffer[b + 9] = colour.g
-	buffer[b + 10] = colour.b
-	buffer[b + 11] = colour.a
-
-
-# Draws the first `count` dots of `buffer` with `mesh` in one multimesh. Returns the multimesh, made on first use (one per
-# kind, as one draw keeps its buffer).
+# Draws the first `count` dots of `buffer` with `mesh` in one multimesh. The buffer comes sized for the multimesh
+# (`RadarModel.dot_buffers`), so it goes to the server whole. Returns the multimesh, made on first use (one per kind, as one
+# draw keeps its buffer).
 func _submit_dots(dots: MultiMesh, buffer: PackedFloat32Array, count: int, mesh: Mesh) -> MultiMesh:
 	if dots == null:
 		dots = MultiMesh.new()
@@ -512,12 +494,10 @@ func _submit_dots(dots: MultiMesh, buffer: PackedFloat32Array, count: int, mesh:
 	if count == 0:
 		dots.visible_instance_count = 0
 		return dots
-	if dots.instance_count < count:
-		dots.instance_count = maxi(count, dots.instance_count * 2)  # grows rarely, never shrinks
-	var whole: int = dots.instance_count * DOT_STRIDE  # the server takes the whole buffer
-	if buffer.size() < whole:
-		buffer.resize(whole)
-	RenderingServer.multimesh_set_buffer(dots.get_rid(), buffer if buffer.size() == whole else buffer.slice(0, whole))
+	var capacity: int = RadarDotBuffers.instances(buffer)
+	if dots.instance_count != capacity:
+		dots.instance_count = capacity  # grows rarely, never shrinks
+	RenderingServer.multimesh_set_buffer(dots.get_rid(), buffer)
 	dots.visible_instance_count = count
 	_canvas.draw_multimesh(dots, null)
 	return dots

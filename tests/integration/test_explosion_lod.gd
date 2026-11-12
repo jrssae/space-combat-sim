@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## The explosion level of detail in play (M4-T23, architecture §17.14): a near death is the full explosion as before, a death
 ## farther out a reduced one (no light, fewer particles, no debris), and a far death a point flash in one shared multimesh
 ## that costs no node and no particle; the distances come from the fireball's size on this picture (fix round 1); a death in the low-attention tier flashes where its row flew; a capital's death
@@ -19,11 +19,6 @@ func before_each() -> void:
 
 func after_each() -> void:
 	DebugConsole.flags.invulnerable = false
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
 
 
 func _raider(distance_m: float) -> Combatant:

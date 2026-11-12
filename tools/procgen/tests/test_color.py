@@ -50,3 +50,35 @@ class ColorTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CaptureAlbedoTests(unittest.TestCase):
+    """A colour read off a lit screen capture becomes the darker albedo that shows it in the game's light."""
+
+    def test_a_capture_grey_becomes_a_darker_neutral_albedo(self) -> None:
+        from tools.procgen.core.color import capture_albedo
+
+        albedo = capture_albedo(0xA4A7AA, darken=1.0)
+        shown = color.linear_to_srgb(np.array(albedo)) * 255.0
+        np.testing.assert_allclose(shown, [0x73, 0x75, 0x77], atol=1.5)  # measured: 0x75 grey shows as 0xA7 at 45 degrees
+
+    def test_the_paint_is_darkened_by_the_maintainers_choice(self) -> None:
+        from tools.procgen.core.color import PAINT_DARKEN, capture_albedo
+
+        self.assertEqual(PAINT_DARKEN, 0.5)
+        np.testing.assert_allclose(capture_albedo(0xA4A7AA), np.array(capture_albedo(0xA4A7AA, darken=1.0)) * 0.5)
+
+    def test_hue_is_kept_and_black_stays_black(self) -> None:
+        from tools.procgen.core.color import capture_albedo, srgb_to_linear
+
+        red = np.array(capture_albedo(0xA8322C))
+        source = srgb_to_linear(np.array([0xA8, 0x32, 0x2C]) / 255.0)
+        np.testing.assert_allclose(red / red.sum(), source / source.sum(), atol=1e-9)
+        self.assertEqual(capture_albedo(0x000000), (0.0, 0.0, 0.0))
+
+    def test_darker_never_lighter(self) -> None:
+        from tools.procgen.core.color import capture_albedo, srgb_to_linear
+
+        for hex_rgb in (0x101010, 0x4F5256, 0x8A8D90, 0xDADCDE, 0xF2E6C8, 0xFFFFFF):
+            source = srgb_to_linear(np.array([(hex_rgb >> 16) & 255, (hex_rgb >> 8) & 255, hex_rgb & 255]) / 255.0)
+            self.assertTrue(np.all(np.array(capture_albedo(hex_rgb)) <= source + 1e-12), f"{hex_rgb:06x}")

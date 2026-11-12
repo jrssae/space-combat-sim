@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## The core's body rows in play (M4-T09's registry, the core's since M4-T15 and every world's since M4-T42): the AI's
 ## shared scan comes from the core's sync, never from a GDScript gather of the tree, and holds exactly what a node-by-node
 ## read of the tree (`TreeRows`) gives. Rocks and mines are kept out of a fighter's nearest contacts; its nearest `ai_nearest_static_k` statics come
@@ -108,11 +108,6 @@ func _ai_ship(spec_path: String, display_name: String, faction: StringName, at: 
 	world.spawn(c.ship, world.to_universe(at), Basis.looking_at(facing, Vector3.UP))
 	c.ship.linear_velocity = velocity
 	return c
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
 
 
 # Eight against eight within 2 km, flown by the game's own pilots, and a rock field of 1 000 statics around them.

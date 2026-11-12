@@ -1,0 +1,5 @@
+# The files with balance tests (tests/fixtures/balance_tests.gd): `scripts/run_tests.sh --balance` runs exactly these with
+# GUT_BALANCE=1. A file here gates only its balance tests; the rest of it still runs in the standard tier.
+res://tests/integration/test_dogfight.gd
+res://tests/integration/test_m3_sandbox.gd
+res://tests/integration/test_turret_balance.gd

@@ -2,7 +2,7 @@
 // rows, run on the main thread or on the step's worker thread. Engine-free by construction (test_sim_core reads this
 // file): the job owns everything it touches (the brains, the hosted drivers' state, the rows' copy, the commands' copy)
 // and hands it all back when it is done, so nothing here can reach the engine or race the main thread.
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Mutex;
 use std::thread::ThreadId;
 use std::time::Instant;
@@ -12,9 +12,10 @@ use godot::builtin::Vector3;
 use crate::brain_behaviours::{self, Brain, Field, Inputs, Scratch};
 use crate::kernels::contact::{self, Grid, Query, Work as QueryWork};
 use crate::row_commands::{CMD_LEN, EVENT_ENTER, EVENT_FIRE, EVENT_SELECT, EVENT_SETTLE};
-use crate::row_commands::{CommandMap, RowCommand};
+use crate::row_commands::{CommandMap, IdMap, IdSet, RowCommand};
 use crate::rows::{Bolts, FLAG_HULK, FLAG_TIER, Rows};
 use crate::threads::{Pass, Runner};
+use crate::turret_kernels::{self, PickJob};
 use crate::v3::dist_sq;
 
 /// Where a think's output holds the wanted target (two halves), the behaviour in control and the contacts it saw.
@@ -154,6 +155,8 @@ pub struct Work {
     pub stride: usize,
     pub rel_scratch: Vec<u8>,
     pub hosted_slots: Vec<i64>,
+    // Each queued hosted item's place in `hosted`, so the settle finds its driver without a search (code review 2026-11-12).
+    pub hosted_at: Vec<usize>,
     // The last job's pass panicked: its thinks were declined and their brains kept (the main thread counts and warns).
     pub failed: bool,
     // The last job's tier thinks and their summed time, ns (M4-T22 fix round 1, readouts).
@@ -167,10 +170,12 @@ pub struct Work {
 pub struct Snapshot {
     pub rows: Rows,
     pub bolts: Bolts,
-    pub body_rows: HashMap<i64, u32>,
-    pub touched: HashSet<i64>,
+    pub body_rows: IdMap<u32>,
+    pub touched: IdSet,
     pub commands: CommandMap,
     pub rows_version: i64,
+    /// The turrets' pick (M5-T21): the live mounts and the attacker memory as the launch found them, and the answers.
+    pub turrets: PickJob,
 }
 
 impl Snapshot {
@@ -244,6 +249,7 @@ pub fn run(job: Job) -> Done {
             work.events.iter_mut().for_each(|e| *e = 0);
             work.hosted_slots.clear();
             work.failed = true;
+            snapshot.turrets.picks.clear();
             Vec::new()
         }
     };
@@ -282,6 +288,7 @@ fn run_body(
     };
     run_batch(work, snapshot, runner, total, &rel, params);
     work.rel_scratch = rel;
+    pick_turrets(snapshot, params.now_s);
     if params.from_rows {
         write_commands(work, snapshot, total);
         settle_hosted(work, params.n, total);
@@ -292,10 +299,46 @@ fn run_body(
     std::mem::take(&mut work.batch_out)
 }
 
+// The turrets' targets on the frozen rows and memory (M5-T21): a decision, so it rides in the job beside the thinks.
+fn pick_turrets(snapshot: &mut Snapshot, now_s: f64) {
+    let Snapshot {
+        rows,
+        body_rows,
+        touched,
+        turrets,
+        ..
+    } = snapshot;
+    if turrets.mounts.is_empty() {
+        turrets.picks.clear();
+        return;
+    }
+    let row_of = |body: i64| {
+        if touched.contains(&body) {
+            return -1;
+        }
+        HashMap::get(body_rows, &body).map_or(-1, |&r| i64::from(r))
+    };
+    turret_kernels::pick_all(rows, row_of, now_s, turrets);
+}
+
 // Thinks the batch's first `n` items (inputs filled, brains taken from their slots) across the runner's threads and
 // packs their outputs in order; with `from_rows` each ship's hull and selection are read from its own row first.
 fn run_batch(work: &mut Work, snap: &Snapshot, runner: &Runner, n: usize, rel: &[u8], p: &Params) {
     refresh_grid(work, snap);
+    // The civilians' flight marks (M5-T16) from every brain's last think, before any think of this pass reads them.
+    {
+        let Work {
+            field,
+            items,
+            slots,
+            ..
+        } = work;
+        let brains = items[..n]
+            .iter()
+            .filter_map(|item| item.brain.as_ref())
+            .chain(slots.iter().flatten());
+        field.mark_flight(&snap.rows, brains, |body| snap.row_for_kernel(body));
+    }
     for item in &mut work.items[..n] {
         item.own_row = match &item.brain {
             None => -1,
@@ -554,6 +597,7 @@ pub fn note_ram(commands: &mut CommandMap, body_id: i64, committed: bool) -> boo
 // (as a declined think did). The thinking ones become items after the `n` queued; returns the item count.
 fn queue_hosted(work: &mut Work, snap: &Snapshot, n: usize, rel_len: usize) -> usize {
     work.hosted_slots.clear();
+    work.hosted_at.clear();
     let mut total = n;
     let frame = &work.frame;
     for at in 0..work.hosted.len() {
@@ -611,6 +655,7 @@ fn queue_hosted(work: &mut Work, snap: &Snapshot, n: usize, rel_len: usize) -> u
         item.last_bolt_hit_s = h.bolt_hit_s;
         item.ok = false;
         work.hosted_slots.push(h.slot as i64);
+        work.hosted_at.push(at);
         total += 1;
     }
     total
@@ -621,10 +666,12 @@ fn queue_hosted(work: &mut Work, snap: &Snapshot, n: usize, rel_len: usize) -> u
 fn settle_hosted(work: &mut Work, n: usize, total: usize) {
     for k in n..total {
         let item = &work.items[k];
-        let Some(at) = work.hosted.iter().position(|h| h.slot == item.slot) else {
+        let Some(&at) = work.hosted_at.get(k - n) else {
             continue;
         };
-        let h = &mut work.hosted[at];
+        let Some(h) = work.hosted.get_mut(at).filter(|h| h.slot == item.slot) else {
+            continue;
+        };
         if item.ok {
             h.dt = h.since_think_s;
             h.since_think_s = 0.0;

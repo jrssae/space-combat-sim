@@ -429,8 +429,9 @@ func test_m1_classic_keeps_the_m1_pad_layout() -> void:
 	# and toggling assist with B.
 	# It has no button left for the running lights (M3-T27): those are key 5 alone.
 	var own: Array[StringName] = [&"roll_left", &"roll_right", &"target_next", &"toggle_flight_assist", &"target_cycle",
-			&"toggle_running_lights"]
+			&"toggle_running_lights", &"comms_menu"]
 	assert_eq(classic.descriptors_for(&"toggle_running_lights"), PackedStringArray(["key:5"]))
+	assert_eq(classic.descriptors_for(&"comms_menu"), PackedStringArray(["key:Ctrl"]), "D-pad Right rolls, so the menu is Ctrl alone")
 	for action: StringName in InputAdapter.ACTIONS:
 		if own.has(action):
 			continue

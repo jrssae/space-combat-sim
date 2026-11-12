@@ -592,7 +592,7 @@ pub mod ram {
     use crate::v3::{add, max_cw as max, min_cw as min, scale, sub};
 
     // `RamResolver.MARGIN_M` (and `RamBroadPhase.MARGIN_M`): room round every box, metres.
-    const MARGIN_M: f64 = 1.0;
+    pub const MARGIN_M: f64 = 1.0;
 
     /// The scratch the pass reuses between ticks.
     #[derive(Default)]
@@ -670,6 +670,112 @@ pub mod ram {
         s.keys.dedup();
         &s.keys
     }
+
+    // Room the reject keeps for the resolver's 32-bit sums: metres, and a share of how far out the two rows sit.
+    const APART_PAD_M: f64 = 0.05;
+    const APART_PAD_REL: f64 = 4e-6;
+
+    /// Whether rows `a` and `b` stay clearly apart through the tick (M5-T33): their bounding spheres never come within
+    /// the pad of each other along the tick's relative motion, so the resolver's own sphere test (`RamResolver.
+    /// _sweep_pair`, in 32 bits and in one hull's frame) is sure to say the same. Never true for a pair that test would
+    /// pass on: it only spares GDScript the pairs whose answer is no ram.
+    pub fn clearly_apart(rows: &Rows, a: usize, b: usize, delta: f64) -> bool {
+        let wide = |v: Vector3| [f64::from(v.x), f64::from(v.y), f64::from(v.z)];
+        // A rigid row is read before its step, a prop after it: both cover `velocity * delta` in the tick.
+        let start = |j: usize| {
+            let (at, v) = (wide(rows.positions[j]), wide(rows.velocities[j]));
+            if rows.flags[j] & FLAG_RIGID != 0 {
+                at
+            } else {
+                [at[0] - v[0] * delta, at[1] - v[1] * delta, at[2] - v[2] * delta]
+            }
+        };
+        let (start_a, start_b) = (start(a), start(b));
+        let (v_a, v_b) = (wide(rows.velocities[a]), wide(rows.velocities[b]));
+        let mut gap = [0.0; 3];
+        let mut step = [0.0; 3];
+        let mut far = 0.0;
+        for k in 0..3 {
+            gap[k] = start_a[k] - start_b[k];
+            step[k] = (v_a[k] - v_b[k]) * delta;
+            far += start_a[k].abs() + start_b[k].abs() + step[k].abs();
+        }
+        let along = gap[0] * step[0] + gap[1] * step[1] + gap[2] * step[2];
+        let step_sq = step[0] * step[0] + step[1] * step[1] + step[2] * step[2];
+        let t = if step_sq > 0.0 {
+            (-along / step_sq).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        let mut nearest_sq = 0.0;
+        for k in 0..3 {
+            let d = gap[k] + step[k] * t;
+            nearest_sq += d * d;
+        }
+        let reach = (rows.radii[a] + rows.radii[b]).max(0.0) + APART_PAD_M + APART_PAD_REL * far;
+        // A row that is not a number anywhere is left to the resolver.
+        nearest_sq.is_finite() && reach.is_finite() && nearest_sq > reach * reach
+    }
+
+    // `RamResolver.SWEEP_CULL_PAD_M`, and the room the reject adds for the resolver's 32-bit sums.
+    pub const SWEEP_CULL_PAD_M: f64 = 0.05;
+    const REACH_PAD_M: f64 = 0.02;
+
+    /// Whether row `a`'s bounding sphere (`radius_a`) cannot reach row `b`'s box (`low_b` to `high_b`, in `b`'s own
+    /// frame) through the tick (M5-T33): the resolver's second reject (`RamResolver._sphere_reaches` in `_sweep_pair`,
+    /// the first hull's sphere swept in the second's frame), with room so that it is never true where that test, in
+    /// 32 bits, would let the pair on. It spares GDScript a fighter passing a capital's bounding sphere but not its hull.
+    pub fn cannot_reach(
+        rows: &Rows,
+        a: usize,
+        b: usize,
+        delta: f64,
+        radius_a: f64,
+        low_b: [f64; 3],
+        high_b: [f64; 3],
+    ) -> bool {
+        let wide = |v: Vector3| [f64::from(v.x), f64::from(v.y), f64::from(v.z)];
+        let start = |j: usize| {
+            let (at, v) = (wide(rows.positions[j]), wide(rows.velocities[j]));
+            if rows.flags[j] & FLAG_RIGID != 0 {
+                at
+            } else {
+                [at[0] - v[0] * delta, at[1] - v[1] * delta, at[2] - v[2] * delta]
+            }
+        };
+        let (start_a, start_b) = (start(a), start(b));
+        let (v_a, v_b) = (wide(rows.velocities[a]), wide(rows.velocities[b]));
+        let mut gap = [0.0; 3];
+        let mut step = [0.0; 3];
+        let mut far = 0.0;
+        for k in 0..3 {
+            gap[k] = start_a[k] - start_b[k];
+            step[k] = (v_a[k] - v_b[k]) * delta;
+            far += start_a[k].abs() + start_b[k].abs() + step[k].abs();
+        }
+        let reach = radius_a.abs() + SWEEP_CULL_PAD_M + REACH_PAD_M + APART_PAD_REL * far;
+        if !reach.is_finite() {
+            return false;
+        }
+        // Into `b`'s frame: axis k of the box is `b`'s basis column k.
+        let basis = &rows.bases[b];
+        let columns = [
+            [basis.rows[0].x, basis.rows[1].x, basis.rows[2].x],
+            [basis.rows[0].y, basis.rows[1].y, basis.rows[2].y],
+            [basis.rows[0].z, basis.rows[1].z, basis.rows[2].z],
+        ];
+        let mut apart = false;
+        for (k, column) in columns.iter().enumerate() {
+            let axis = [f64::from(column[0]), f64::from(column[1]), f64::from(column[2])];
+            let at = gap[0] * axis[0] + gap[1] * axis[1] + gap[2] * axis[2];
+            let moved = at + step[0] * axis[0] + step[1] * axis[1] + step[2] * axis[2];
+            if !(at.is_finite() && moved.is_finite() && low_b[k] <= high_b[k]) {
+                return false; // not a number, or no box: the resolver decides
+            }
+            apart |= at.min(moved) - reach > high_b[k] || at.max(moved) + reach < low_b[k];
+        }
+        apart
+    }
 }
 
 /// The flight force step's maths (`ScsFlightStep`, M4-T10, N4): `FlightModel.compute`, the `SpeedGovernor` and the forces
@@ -684,7 +790,7 @@ pub mod flight {
 
     pub const GROUPS: usize = 4;
     // `FlightAssist.FACE_DECEL_FRACTION`.
-    const FACE_DECEL_FRACTION: f64 = 0.5;
+    pub const FACE_DECEL_FRACTION: f64 = 0.5;
 
     /// A ship's type and nozzles, as `register` snapshots them: what the maths reads.
     pub struct Body {
@@ -1225,7 +1331,7 @@ pub mod pilot {
     };
 
     // `AvoidanceMath`'s constants.
-    const MARGIN_M: f64 = 15.0;
+    pub const MARGIN_M: f64 = 15.0;
     const HORIZON_MIN_S: f64 = 4.0;
     const MATCHED_MPS: f64 = 3.0;
     const PUSH_S: f64 = 2.0;
@@ -1235,7 +1341,7 @@ pub mod pilot {
     const URGENT_SETTLE_S: f64 = 1.0;
     const MIN_TIME_S: f64 = 0.25;
     // `FireLane.CLEARANCE_M`.
-    const CLEARANCE_M: f64 = 5.0;
+    pub const CLEARANCE_M: f64 = 5.0;
 
     /// `Factions.Relation` values, as the relation rows hold them (one per faction of the core's table).
     pub const FRIENDLY: u8 = 0;
@@ -1324,7 +1430,9 @@ pub mod pilot {
             let speed = speed_sq.sqrt();
             let relative = f64::from(length(sub(ship.velocity, c_velocity)));
             let mut horizon = maxf(HORIZON_MIN_S, maxf(speed, relative) / a_stop);
-            if rows.is_static[j] {
+            // A rock, a mine or a big civilian hull (M5-T16) is seen early enough to go round: at least the time a
+            // sideways burn takes to clear its reach.
+            if rows.is_static[j] || rows.is_civilian(j) {
                 horizon = maxf(horizon, (2.0 * reach / a_side).sqrt() + URGENT_SETTLE_S);
             }
             if t_star > horizon {
@@ -1482,3 +1590,6 @@ pub mod pilot {
         clampf(x, 0.0, speed)
     }
 }
+
+#[cfg(test)]
+mod tests;

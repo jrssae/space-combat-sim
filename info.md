@@ -1,159 +1,198 @@
 # Console commands
 
-The debug console is always on. Press the ` key (the physical key left of 1) to open it; keyboard and mouse bindings are ignored while it is open. Type `help` for the full list, `help <command>` for one command's usage, and `state` for the list of state providers.
+Every console command and state provider in the game. A task that adds, renames or removes one updates this file in the
+same commit; `tests/integration/test_console_command_list.gd` fails when the file and the game disagree.
 
-Every statement and its output is also printed to stdout as `[console] > cmd` and `[console] output`. Errors go to stderr as `[console] error: ...`.
+## Using the console
 
-Commands can also run from the command line (all flags go after `--`):
+- The console is always on. Press the ` key to open or close it; Esc also closes it. Type
+  `help` for the command list and `help <command>` for one command's usage. Tab completes names.
+- State is read through `provider.key` paths (`get ship.speed`, `set weapons.mode linked`, `watch hull.hp`). `state` lists
+  the providers and `state <provider>` shows all of one's keys. Only whitelisted keys exist.
+- Several commands go on one line, separated by `;`. `#` starts a comment.
+- Scripts after `--` on the command line:
+  - `--console-exec="cmd; cmd"` runs commands once the first scene is ready.
+  - `--console-file=<path>` runs a file of commands, one or more per line (`user://autoexec.cfg` runs first, if present).
+  - `--console-strict` quits with exit code 1 at the first error.
+  - Example: `.tools/godot/godot --headless --path . -- --console-strict --console-exec="wait 30; state ship; quit"`
+- Details: `docs/architecture.md` §6.4, §15.13, §16.4 and §18.4.
 
-- `--console-exec="cmd; cmd"` runs the commands once the scene is ready.
-- `--console-file=<path>` runs the commands in a file, one or more per line.
-- `user://autoexec.cfg` runs first, if it exists.
-- `--console-strict` quits with exit code 1 on the first error.
+Commands on this list are those on the `m5` branch, which holds all of M4 since the merge of `main` on 2026-11-08.
 
-Example: `.tools/godot/godot --headless --path . -- --console-strict --console-exec="wait 30; state ship; quit"`
+## Where a command exists
 
-Paths are `provider.key`, for example `get ship.speed` or `set settings.show_fps on`.
+| Where | Meaning |
+|---|---|
+| always | Registered at launch by an autoload, so it works on the front end too. |
+| front end, flight | Registered by nodes both the front end and the flight scene hold (the sky, the audio), so it exists in both. |
+| in flight | Registered by the main scene, so it exists whenever flight is loaded (free flight, sandbox, a mission), not on the front end. |
+| AI ships | Exists while at least one AI-flown ship is in the scene. |
+| mission | Exists only while a mission runs. |
+| route | Exists only in a scenario where a ship leads a route (the instructor). |
+| free flight | Exists only in a scenario with an encounter pools file (`data/encounters/<scenario_id>.json`): free flight. |
+| benchmark | Exists only in a benchmark run. The test cannot boot a benchmark and skips these rows. |
 
-Keep this file in step with the code: add a row here in the same commit that registers a command.
+## Commands
 
-## Console basics
+Arguments in `<angle brackets>` are required, `[square brackets]` optional, `a|b` a choice.
 
-Source: `src/autoload/debug_console.gd`
+### Console
 
-| Command | Arguments | What it does |
-|---|---|---|
-| `help` | `[command]` | Lists commands, or shows one command's usage. |
-| `clear` | | Clears the console log. |
-| `state` | `[provider]` | Lists state providers, or shows every key = value of one (`*` marks unsaved settings). |
-| `get` | `<path>` | Prints one value, for example `get ship.speed`. |
-| `set` | `<path> <value>` | Writes a value with a type check; `settings.*` applies now and stays session-only until `save`. |
-| `toggle` | `<path>` | Flips a writable bool. |
-| `default` | `<path>` | Resets a setting to its default (session only until `save`). |
-| `save` | | Persists all settings to `user://settings.cfg`. |
-| `revert` | | Reloads settings from `user://settings.cfg`, dropping unsaved changes. |
-| `watch` | `<path>` | Shows a live value under the FPS counter (at most 8, session only). |
-| `unwatch` | `<path\|all>` | Stops watching a path, or all of them. |
-| `fps` | `[on\|off]` | Shows or hides the FPS counter (toggles `settings.show_fps`). |
-| `god` | `[on\|off]` | Toggles invulnerability (`debug.invulnerable`); session only, never saved. |
-| `timescale` | `<0.05..1>` | Debug slow motion through `Engine.time_scale`, clamped to 0.05..1. |
-| `exec` | `<file>` | Runs commands from a `res://` or `user://` file, one or more per line. |
-| `wait` | `<frames>` | Delays the rest of the queue by N physics frames. |
-| `screenshot` | `[path]` | Saves the last rendered frame as a PNG (default `user://screenshots/`); not available with `--headless`. |
-| `quit` | `[code]` | Quits with an exit code (default 0). |
-
-## Flight and ship
-
-| Command | Arguments | What it does | Source |
+| Command | Arguments | Does | Where |
 |---|---|---|---|
-| `assist` | `[on\|off]` | Toggles or sets flight assist. | `src/ship/ship.gd` |
-| `running_lights` | `[on\|off]` | Toggles or sets the running lights (the wing follows). | `src/ship/ship.gd` |
-| `refuel` | `[kg]` | Refills the reaction-mass tank, or adds kg. | `src/ship/ship.gd` |
-| `throttle` | `<level>` | Holds both main pods at this level, 0..1 (debug; on top of the pilot's input). | `src/game/main.gd` |
-| `respawn` | | Resets the ship to the scenario start. | `src/game/main.gd` |
-| `rebase` | `<dx> <dy> <dz>` | Shifts the local origin by an offset in metres (`World.rebase`); nothing moves in universe terms. With the automatic rebase on, the next one brings the player back. | `src/world/world_frame.gd` |
+| `help` | `[command]` | List the commands, or show one command's usage | always |
+| `clear` | | Clear the console log | always |
+| `state` | `[provider]` | List the state providers, or every key = value of one (`*` marks unsaved settings) | always |
+| `get` | `<path>` | Print one value, e.g. `get ship.speed` | always |
+| `set` | `<path> <value>` | Type-checked write; `settings.*` applies now and stays session-only until `save` | always |
+| `toggle` | `<path>` | Flip a writable bool | always |
+| `default` | `<path>` | Reset a setting to its default (session only until `save`) | always |
+| `save` | | Write all settings to `user://settings.cfg` | always |
+| `revert` | | Reload the settings from disk, dropping unsaved changes | always |
+| `watch` | `<path>` | Show a live value under the FPS counter (at most 8) | always |
+| `unwatch` | `<path\|all>` | Stop watching a path, or all of them | always |
+| `fps` | `[on\|off]` | Show or hide the FPS counter | always |
+| `god` | `[on\|off]` | Toggle invulnerability for the player; session only | always |
+| `timescale` | `<0.05..1>` | Debug slow motion | always |
+| `exec` | `<file>` | Run commands from a `res://` or `user://` file | always |
+| `wait` | `<frames>` | Delay the rest of the line by N physics frames (for scripts) | always |
+| `screenshot` | `[path]` | Save the last rendered frame as a PNG (default `user://screenshots/`) | always |
+| `quit` | `[code]` | Quit with an exit code (default 0) | always |
 
-## Game and scenario
+### Game flow and controls
 
-| Command | Arguments | What it does | Source |
+| Command | Arguments | Does | Where |
 |---|---|---|---|
-| `scenario` | `[combat_sandbox\|free_flight\|instructor_route\|dogfight]` | Loads a scenario: sets `settings.scenario` for this session and reloads the scene. | `src/game/main.gd` |
-| `pause` | `[on\|off]` | Pauses or resumes the game (toggles with no argument). | `src/game/main.gd` |
-| `window` | `<width_or_mode> [height]` | Resizes the game window (width and height in pixels), or `window max` / `window normal` to maximize or restore it. | `src/game/main.gd` |
-| `wave` | `<start\|next\|stop\|restart> [index]` | Drives the waves: `start [index]` (1 = the first), `next` skips this wave, `stop`, `restart`. | `src/game/wave_director.gd` |
+| `menu` | | Go back to the front end | always |
+| `play` | `<scenario_id> [seed]` | Play a scenario through the loading screen, as the menu does; the same seed plays the same run | always |
+| `retry` | | From the debrief, play the same mission again (same scenario and seed) through the loading screen; refused anywhere else | always |
+| `controls` | `[list\|use\|save\|show\|delete] [name\|action]` | Control profiles: list them, use or save one, show bindings, delete a saved one | always |
+| `bind` | `<action> <binding>` | Add a binding to an action (session only until `controls save`) | always |
+| `unbind` | `<action> <binding>` | Remove a binding from an action | always |
 
-## Ships, wing and AI
+### Flight
 
-| Command | Arguments | What it does | Source |
+| Command | Arguments | Does | Where |
 |---|---|---|---|
-| `spawn` | `<raider\|ally> [options]` | Takes a raider or an allied Starfury from the pool ahead of the player, nose toward the player, turned by yaw then pitch. | `src/game/ship_pool.gd` |
-| `despawn` | `[target\|all]` | Returns the selected pooled ship, or every one (raiders and allies), to the pool without effects. | `src/game/ship_pool.gd` |
-| `wing` | `[order\|formation\|replenish] [value]` | Orders the player's wing (`wing order attack\|form\|engage\|cover`), changes its formation (`wing formation finger_four\|wedge\|line_abreast`) or launches replacements for its empty slots from the pool (`wing replenish`); alone, shows the wing. | `src/game/wing_director.gd` |
-| `ai` | `<name>` | Shows an AI ship's behaviour, its state and every behaviour's last score. `ai <name> objective <target\|none>` sends it at a target from any broadcast range; `ai <name> skill <rookie\|regular\|veteran\|ace\|0-1>` and `ai <name> aggression <passive\|cautious\|balanced\|aggressive\|reckless\|0-1>` change its temperament. | `src/ai/ai_console.gd` |
-| `relation` | `<a> [b] [friendly\|neutral\|hostile]` | Shows or sets (this session only) how faction `a` regards faction `b`; `relation reset` reloads `data/factions.json`. | `src/combat/faction_console.gd` |
+| `respawn` | | Reset the ship to the scenario start (refused in a mission) | in flight |
+| `pausemenu` | `[on\|off]` | Open or close the pause menu (the camera move starts behind it); no argument toggles | in flight |
+| `pause` | `[on\|off]` | Pause or resume the game; no argument toggles; refused while the pause menu is open (resume from it) | in flight |
+| `targetmenu` | `open\|pick <entry>\|highlight <entry>\|back\|close` | The target menu (a hold of the target button): `open` pauses the game and shows the categories; `pick` takes a slice 0-5 clockwise from the top or its label (`enemies`, `none`, `"raider 2"`) and opens that category or makes the pick; `highlight` points at an entry without picking it (the preview panel shows it); `back` goes back a ring; `close` resumes | in flight |
+| `commsmenu` | `open\|pick <entry>\|highlight <entry>\|back\|close` | The comms menu (D-pad Right), a radial menu: `open` pauses the game and shows the wing orders; `pick` takes a slice 0-3 clockwise from the top or its label (`attack`, `"form on me"`, `engage`, `"cover me"`) and sends the order; `highlight` points at an entry without sending it; `back` goes back a ring or closes; `close` resumes | in flight |
+| `scenario` | `[combat_sandbox\|free_flight\|instructor_route\|dogfight\|civilian_showcase\|belt_showcase]` | Load a scenario for this session and reload the scene | in flight |
+| `window` | `<width> <height>` or `max\|normal` | Resize the window, or maximize or restore it | in flight |
+| `throttle` | `<level>` | Hold both main pods at a level, 0..1, on top of the pilot's input | in flight |
+| `assist` | `[on\|off]` | Toggle or set flight assist | in flight |
+| `running_lights` | `[on\|off]` | Toggle or set the running lights (the wing follows) | in flight |
+| `refuel` | `[kg]` | Refill the reaction-mass tank, or add kg | in flight |
+| `camera` | `[cockpit\|chase]` | Switch camera; no argument toggles; during a cinematic, the camera to go back to after the shot | in flight |
+| `look` | `<yaw> [pitch]` or `off` | Hold the view at an angle off the nose, for captures | in flight |
+| `rebase` | `<dx> <dy> <dz>` | Shift the local origin by an offset in metres; nothing moves in universe terms | in flight |
 
-## Combat
+### Rendering and effects
 
-| Command | Arguments | What it does | Source |
+| Command | Arguments | Does | Where |
 |---|---|---|---|
-| `damage` | `<amount> [player\|target]` | Hits the player or the selected target with no shooter (god mode applies to the player). | `src/combat/hit_resolver.gd` |
-| `heal` | `[player\|target\|all]` | Restores the player's, the target's or every hull. | `src/combat/hit_resolver.gd` |
-| `kill` | `[target\|all\|allies\|player]` | Destroys the selected target (a pooled ship, or since M4-T23 any target with a hull, such as a capital), every raider, every allied ship or the player now (bypasses god mode). | `src/combat/destruction_director.gd` |
-| `fxburst` | `[hit\|ram\|explosion_sparks\|explosion_fragments\|explosion_gas\|debris]` | Throws one burst of an effect 40 m in front of the camera (for looking at it). | `src/combat/fx_pool.gd` |
+| `flare` | `[on\|off]` | Toggle the star's lens flare | front end, flight |
+| `blur` | `[on\|off]` | Toggle motion blur on fast turns | front end, flight |
+| `sky` | `<stars\|nebula> [on\|off]` | Show or hide the star points or the nebula panorama; no state toggles | front end, flight |
+| `aa` | `[off\|fxaa\|smaa\|msaa_2x\|msaa_4x\|taa]` | Show or set the 3D view's anti-aliasing, live (`settings.anti_aliasing`) | front end, flight |
+| `upscale` | `[native\|bilinear\|fsr1\|fsr2] [preset\|<scale>]` | Show or set how the 3D view is rendered and enlarged to the window, live | front end, flight |
+| `sheet` | `<asset_id> [distance_m] [lit\|dark\|off] [wing:number\|-] [view]` | Park one idle ship of an asset ahead of the camera for a look sheet | in flight |
+| `livery` | `<wing\|plain> [number] [ship]` | Paint a ship in a wing's livery with its number, to look at it | in flight |
+| `fxburst` | `[hit\|ram\|explosion_sparks\|explosion_fragments\|explosion_gas\|debris]` | Throw one burst of an effect 40 m in front of the camera | in flight |
 
-## Camera, rendering and audio
+### Combat
 
-| Command | Arguments | What it does | Source |
+| Command | Arguments | Does | Where |
 |---|---|---|---|
-| `camera` | `[cockpit\|chase]` | Switches to the cockpit or chase camera; with no argument, toggles. | `src/camera/camera_rig.gd` |
-| `look` | `<yaw> [pitch]` | Holds the view at yaw and pitch degrees off the nose, for captures; L3 and the mouse do nothing until `look off`. | `src/camera/camera_rig.gd` |
-| `sky` | `<stars\|nebula> [on\|off]` | Shows or hides one part of the sky (M4-T30c): the star points or the nebula panorama (a hidden nebula no longer dims the stars behind it); with no state, toggles; answers "missing" when no panorama is loaded. For comparisons and measures. | `src/environment/space_environment.gd` |
-| `sheet` | `<asset_id> [distance_m] [lit\|dark\|off] [wing:number\|-] [three_quarter\|top\|side]` | Parks one idle ship of the asset (`starfury_aurora`, `raider_fighter`) ahead of the camera at that distance for a look sheet (M4-T30a), hides the player's hull and turns the key star to light it from behind the camera (`lit`) or from behind the ship (`dark`), optionally in a wing's livery with a number (M4-T30b, e.g. `delta:7`, `plain:0`, `-` for none) and seen from above or the side instead of three-quarters on; `sheet off` puts everything back. M4-T30d: also the hulls that are not pooled ships, `nav_buoy`, `raider_fighter_chunks` and `starfury_aurora_chunks` (the break-up chunks spread apart), `capital_cruiser`, `capital_destroyer`, `capital_carrier` and `b5_station`. M4-T31: the look argument went (every hull has one look, its textured mesh). | `src/rendering/look_scene.gd` |
-| `livery` | `<wing\|plain> [number] [ship]` | Paints a ship in a wing's livery with its number, for looking at it (M4-T30b): `player` (the default), `sheet` (the parked ship) or a ship's name such as `ALPHA 2`. Any wing name works: the named wings have their own, any other a stable pick, `plain` the field grey with no number. | `src/rendering/look_scene.gd` |
-| `flare` | `[on\|off]` | Toggles or sets the star's lens flare. | `src/rendering/post_effects.gd` |
-| `blur` | `[on\|off]` | Toggles or sets motion blur on fast turns. | `src/rendering/post_effects.gd` |
-| `aa` | `[off\|fxaa\|smaa\|msaa_2x\|msaa_4x\|taa]` | Shows or sets the 3D view's anti-aliasing (M4-T38, `settings.anti_aliasing`), live. Under `taa` the sky gets motion vectors and the bolts draw opaque so they carry their own. M4-T40: while FSR 2.2 is on the mode is held off (the line says so) and comes back when FSR 2.2 goes. | `src/rendering/anti_aliasing.gd` |
-| `upscale` | `[native\|bilinear\|fsr1\|fsr2] [native\|quality\|balanced\|performance\|ultra_performance\|custom\|<scale>]` | Shows or sets how the 3D view is rendered and enlarged to the window (M4-T40, `settings.upscaler` and `settings.upscale_preset`), live: a number from 0.33 to 1 is a custom scale (`settings.upscale_custom_scale`). The HUD stays at the window's size; no frame generation. | `src/rendering/upscaler.gd` |
-| `sfx` | `<pulse_fire\|raider_fire\|hit_hull\|explosion\|engine_loop\|thruster_loop\|warning_beep\|target_blip>` | Plays a sound at the player. | `src/audio/audio_director.gd` |
+| `damage` | `<amount> [player\|target]` | Hit the player or the selected target with no shooter (god mode applies to the player) | in flight |
+| `heal` | `[player\|target\|all]` | Restore the player's, the target's or every hull | in flight |
+| `kill` | `[target\|all\|allies\|player]` | Destroy the target (any target with a hull, a capital too), every raider, every ally or the player now (bypasses god mode) | in flight |
+| `relation` | `<a> [b] [friendly\|neutral\|hostile]` or `reset` | Show or set (this session only) how faction a regards faction b; `reset` reloads `data/factions.json` | in flight |
 
-## Controls
+### Ships and waves
 
-| Command | Arguments | What it does | Source |
+| Command | Arguments | Does | Where |
 |---|---|---|---|
-| `controls` | `[list\|use\|save\|show\|delete] [name\|action]` | Control profiles: lists them, uses or saves one, shows bindings, deletes a user profile. | `src/autoload/control_profiles.gd` |
-| `bind` | `<action> <binding>` | Adds a binding to an action (session only until `controls save`); `pad:button:<0-14>`, `pad:axis:<0-5><+\|->`, `key:<name>`, `mouse:<1\|2\|3\|8\|9>`. | `src/autoload/control_profiles.gd` |
-| `unbind` | `<action> <binding>` | Removes a binding from an action (session only until `controls save`). | `src/autoload/control_profiles.gd` |
+| `spawn` | `<raider\|ally> [options]` | Take a raider or an allied Starfury from the pool ahead of the player. Options: a behaviour (`idle`, `patrol`, `attack`, `aggro`, `ai`; allies take `idle` or `ai`), then distance in m, yaw and pitch in degrees, then `skill=`, `aggression=` and `lights=on\|off` | in flight |
+| `despawn` | `[target\|all]` | Return the selected pooled ship, or every one, to the pool without effects | in flight |
+| `wave` | `<start\|next\|stop\|restart> [index]` | Drive the raider waves | in flight |
+| `wing` | `[order\|formation\|replenish] [value]` | Order the player's wing, change its formation or launch replacements; alone, show the wing | in flight |
+| `ai` | `<name> [objective <target\|none>\|skill <rank\|0-1>\|aggression <level\|0-1>]` | Show an AI ship's behaviour and scores; send it at a target, or set its skill or aggression | AI ships |
+| `encounters` | `[status\|on\|off\|next\|force\|clear] [raid\|patrol\|traffic]` | Free-flight encounters: show them, turn them on (building their pools) or off, start the next one now, force one of a kind (off the schedule), or return every encounter ship to its pool | free flight |
 
-## Performance
+### Audio
 
-| Command | Arguments | What it does | Source |
+| Command | Arguments | Does | Where |
 |---|---|---|---|
-| `perf` | `[on\|off]` | Times every tick's stages (the `perf` provider); toggles with no argument. | `src/perf/perf_probe.gd` |
-| `bench` | `<furball\|spread\|transit\|battle\|typical> <n> [options]` | Flies a benchmark layout with n ships from the pools, measures `[seconds]` (30) after `warmup=<s>` (5), and writes `reports/perf/<label>/`. Options: `seed=<k> label=<name> probe=paired rebase_m=<m> sleep=keep rocks=<count> capitals=<share>`. `battle` and `typical` (M4-T07) add the battle's stand-ins (capitals with turrets and interceptors, the asteroid field, the moon, carrier launches; four sides in `battle`) and print the mix; M4-T12 adds the missiles the mix keeps in flight, two beam lasers per capital and the mine belts, and the summary's weapons line; `rocks=` overrides the asteroid count (0 for none). M4-T20: `summary.json`'s `weapons.path` says whether the native rows stepped the weapons (`native`, or `none` without a core; M4-T37 removed the GDScript stand-ins' path). M4-T25: `capitals=` sets the capital share of `battle` or `typical` in place of the mix's (0.2 for the 1 000 stretch's upper edge). | `src/perf/bench_runner.gd` |
-| `station` | `<near\|far\|off>` | Opens the render comparison's station scene (M4-T27): the Babylon 5 station stand-in about 3 km ahead, 10 capitals at rest around it, 80 invulnerable fighters (40 Starfuries, 40 raiders) fighting beside it and a planet 40 km off with its pull; puts the player at rest near the station or 11 km off, nose on it. Every hull is drawn as its textured mesh; `off` takes it all down. | `src/perf/station_scene.gd` |
-| `native` | `[bench]` | Says whether the native library is loaded and which path the probe takes (M4-T37 removed `perf_native`: the library is required); `bench` times calls into the library from GDScript against the GDScript code (M4-T05). | `src/perf/perf_probe.gd` |
+| `sfx` | `<pulse_fire\|raider_fire\|hit_hull\|explosion\|main_burst\|rcs_burst\|warning_beep\|target_blip>` | Play a sound at the player | front end, flight |
+
+### Performance
+
+| Command | Arguments | Does | Where |
+|---|---|---|---|
+| `perf` | `[on\|off]` | Time every tick's stages (the `perf` provider); no argument toggles | in flight |
+| `native` | `[bench]` | Say whether the native library is loaded (it is required since M4-T37); `bench` times calls into it | in flight |
+| `bench` | `<furball\|spread\|transit\|battle\|typical> <n> [options]` | Fly a benchmark layout with n ships and write `reports/perf/<label>/` (`scripts/bench.sh`) | in flight |
+| `station` | `<near\|far\|off>` | Open the render comparison's station scene (M4-T27) | in flight |
+
+### Missions
+
+| Command | Arguments | Does | Where |
+|---|---|---|---|
+| `mission` | `[status\|skip\|goto\|objectives\|journal] [step]` | Show the running mission, fast-forward its step (`skip`), skip to a step (`goto <step>`), list its objectives or the world changes so far | mission |
 
 ## State providers
 
-`state <provider>` prints every key of a provider; `get <provider>.<key>` prints one. The list below is what `state` prints in a normal run.
+Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writable can be changed with `set`.
 
-| Provider | Source |
-|---|---|
-| `ai` | `src/ai/ai_console.gd` (M4-T17 adds `thinks_native`: AI ships whose think ran in the native brains in the last tick, and `thinks_fallback`: native pilots the host declined, each holding its last command; M4-T33 adds `rows_events`: drivers the last rows batch handed something to do, and `row_commands`: AI ships flying their pilot's command from the core's row; M4-T35 adds `hosted`: drivers whose step the native host decides; M4-T21 adds `tiered`: hosted ships the host left alone as low-attention tier rows, apart from `held`) |
-| `allies` | `src/game/ship_pool.gd` |
-| `audio` | `src/audio/audio_director.gd` |
-| `camera` | `src/camera/camera_rig.gd` |
-| `combat` | `src/combat/hit_resolver.gd` (M4-T15 adds `source` and `gather_us`; M4-T42: `source` is core, or none in a tree with no world) |
-| `controls` | `src/autoload/control_profiles.gd` |
-| `debris` | `src/combat/debris_pool.gd` |
-| `debug` | `src/autoload/debug_console.gd` |
-| `factions` | `src/combat/faction_console.gd` (registered by `src/combat/hit_resolver.gd`) |
-| `core` | `src/perf/sim_core.gd` (M4-T15: the native simulation core: `path`, `rows`, `bodies`, `statics`, `bolts`, `syncs`, `sync_us`, `bolts_us`, `sync_calls`, `fallback_calls`, `attribute_reads`, `touched`; M4-T18: `threads`, `parallel_passes`, `parallel_min` and `flight_parallel_min` (both settable with `set core.<key> <n>`), `batch_us`, `batch_ships`, `live_workers`; the thread count itself is the setting `perf_threads`, `set settings.perf_threads <n>`; M4-T35: `owned_bolts`, `cannons`, `cannon_us`, `bolt_step_us`, `shots`, `expired`, `bolt_draws`, `watched_selections`, `selection_clears`; M4-T24: `step_mode` (the setting `sim_step`: threaded or delayed; M4-T37 removed inline), `step_launched`, `step_us` (the job's own run time), `step_wait_us` (how long the join waited), `join_us`, `step_misses` (ticks whose join found the job still running), `step_early_joins`, `step_early_waits`, `step_stale` (results dropped for a ship parked or re-piloted while its job ran), `step_pool` and `step_pool_workers` (the setting `perf_step_threads`), `step_off_main`, `step_threads`; the catch-up cap is the setting `physics_max_steps_per_frame`) |
-| `flight` | `src/ship/flight_batch.gd` (M4-T10: the native flight batch: `path`, `ships`, `stepped`, `gather_us`, `step_us`, `positions`; M4-T15: `source`, `fallback_reads`; M4-T42: `source` is core or none, the server read is gone) |
-| `frame` | `src/rendering/frame_passes.gd` (M4-T36: the frame's passes, `plumes_us`, `flashes_us`, `impacts_us`, `lod_us`, and what each walks: `plumes`, `flashes`, `impacts`, `impact_pool`, `switchers`; M4-T35: `flash_pool_us`, `pool_flashes` (the lean ships' pooled muzzle flashes), `bolts_us`, `bolt_draws` (the bolt multimesh pass)) |
-| `fx` | `src/combat/fx_pool.gd` |
-| `hud` | `src/hud/hud.gd` |
-| `hull` | `src/combat/damageable.gd` |
-| `input` | `src/autoload/debug_console.gd` |
-| `lights` | `src/rendering/light_rig.gd` |
-| `livery` | `src/rendering/look_scene.gd` (M4-T30b: `player`, the player's livery; `list`, every ship in the world and its livery) |
-| `perf` | `src/perf/perf_probe.gd` (M4-T21 adds the counts `tier_fighters` and `tier_capitals`: the low-attention tier's rows in the last tick of a battle bench) |
-| `post` | `src/rendering/post_effects.gd` |
-| `raiders` | `src/game/ship_pool.gd` |
-| `ram` | `src/combat/ram_resolver.gd` (M4-T15 adds `source` and `gather_us`; M4-T42: `source` is core, or none in a tree with no world) |
-| `render` | `src/rendering/render_status.gd` (M4-T31: `renderer` (`forward_plus`, or `headless`), `fps`, `frame_ms`, `draw_calls`, `triangles`, `vram_mb`, `far_dots` (the ships in play drawn as far dots past `settings.far_ship_dot_m`, M4-T11), `gpu`, `gpu_ms`, `display` (`wayland`, `x11` or `headless`, M4-T41), `window` (the window's size in pixels, M4-T41)) |
-| `screens` | `src/hud/cockpit_screens.gd` |
-| `settings` | `src/autoload/debug_console.gd` (one key per settings entry) |
-| `ship` | `src/ship/ship.gd` |
-| `sky` | `src/environment/space_environment.gd` (M4-T30c: `stars`, `stars_shown`, `panorama`, `nebula_shown`) |
-| `aa` | `src/rendering/anti_aliasing.gd` (M4-T38: `mode`, `viewport`, `sky_vectors`, `bolts_opaque`, `bolts_collapsed`; M4-T40: `held`) |
-| `upscale` | `src/rendering/upscaler.gd` (M4-T40: `upscaler`, `preset`, `applied`, `applied_preset`, `scale`, `mode`, `sharpness`, `window_lines`, `internal_lines`) |
-| `targeting` | `src/targeting/targeting_controller.gd` |
-| `time` | `src/autoload/debug_console.gd` |
-| `waves` | `src/game/wave_director.gd` |
-| `weapons` | `src/weapons/pulse_cannon.gd` |
-| `tier` | `src/ai/tier_director.gd` (M4-T21: the low-attention tier: `radius_m` (the setting `tier_radius_m`; 0 = off), `period_ticks` (the setting `tier_hz`), `fighters`, `capitals`, `rows`, `hulks`, `promotions`, `demotions`, `step_us` (the tier's integration inside the core's first sync), `director_us` (the tick's handovers); M4-T22: `brain_period_ticks` (the setting `tier_brain_hz`: how often a tier fighter thinks), `shots` and `hits` (tier fighters' shots rolled and hits rolled so far), `hits_landed` (those landed through a `Damageable`), `land_us` (the tick's landing), `capital_rolls` (far capitals' group rolls so far), `capital_hits` (their hits landed since the bench's window began), `capital_fire_us` (the tick's far-capital rolls), `cost_us` (the tier's main-thread cost per tick and per row since the bench's window began); M4-T22 fix round 1: `seed` (the rolls' seed, the bench's), `rams` (rams the tier landed), `thinks` and `think_us` (the last AI step's tier thinks and their time on the step's clock: the worker thread when threaded, the main thread when delayed); M4-T23: `proxy_dots` and `proxy_hulls` (tier fighters drawn as far dots and tier capitals as far hull instances by the last frame), `proxy_us` (the last frame's far proxy update on the CPU), `flashes` (far deaths shining as point flashes now), `cleared` (promotions moved clear of a rock or mine)) |
-| `wing` | `src/game/wing_director.gd` |
-| `world` | `src/world/world_frame.gd` |
-
-One more provider, `route`, exists only while the `instructor_route` scenario is loaded (`src/game/main.gd`).
+| Provider | Shows | Where |
+|---|---|---|
+| `settings` | Every setting, typed and ranged (all writable; `save` keeps them) | always |
+| `debug` | `invulnerable` (writable): the player takes no damage | always |
+| `time` | Sim time, time warp and the engine time scale | always |
+| `game` | The game flow: `state`, the `request` being played and the `last_result` | always |
+| `debrief` | The last mission's debrief: result, reason, time, kills, assists, wing losses, shots fired and hit, accuracy, objectives (`none` until a mission ends) | always |
+| `controls` | The active control profile, the profile list and unsaved binding changes | always |
+| `input` | Connected pads, whether the keyboard is masked, and the last flight, combat and UI commands | in flight |
+| `ship` | The player's ship: position, velocity, speed, angular rate, assist, pods, mass flow, fuel | in flight |
+| `hull` | The player's hull points, fraction and destroyed state | in flight |
+| `world` | The local origin, rebases and the automatic rebase distance | in flight |
+| `camera` | The active camera mode (cockpit, chase or cinematic; writable) and field of view, the cinematic shot playing and its time, the pause backdrop running (`backdrop`) and its loop phase | in flight |
+| `weapons` | Pulse cannon fire mode (writable), cooldown and capacitor charge | in flight |
+| `targeting` | The selected target (writable), its range and closing speed, and the targets in sensor range | in flight |
+| `combat` | Bolts swept, hits resolved, the last hit and the cost of resolving them | in flight |
+| `ram` | Rams resolved, the last one and the cost of the ram checks | in flight |
+| `factions` | The faction ids, their listed relations and the friendly-fire mirror | in flight |
+| `raiders` | The raider pool: size, free, alive, a list with hull and range, and the selected one's brain | in flight |
+| `encounters` | Free-flight encounters: on, pools built, seed, interval, cap, ships in play by kind, the next event and its time, the one waiting, events started, ships released, the last event, the release check's work and the pools' build time | free flight |
+| `allies` | The allied pool, the same way | in flight |
+| `belts` | The scenario's asteroid belts: belts, rocks, collision spheres and the multimeshes drawing them | in flight |
+| `waves` | The raider waves: wave number, name, state, countdown, raiders alive and the kill tally | in flight |
+| `wing` | The player's wing: name, order, formation, members and the last acknowledgement | in flight |
+| `hud` | Whether the HUD shows, and where the lead, prograde and target marks are; `radar_plot_us` and `radar_paint_us`, the radar's frame cost (T34) | in flight |
+| `screens` | The cockpit screens: shown, powered, paint counts and the lamps lit | in flight |
+| `pause_menu` | Whether the pause menu is open, the page on top and how many pages are open | in flight |
+| `comms_menu` | The comms menu (D-pad Right): whether it is open, the page, the highlighted entry, the ring's entries, orders picked, the last order, why it last closed and the focus pull | in flight |
+| `target_menu` | The target menu: whether it is open, the ring and its entries, the highlight, the ship's target as the HUD names it, the HUD waypoint, the last pick, why it last closed, and what the last opening cost, and the focus pull's amount (`focus`) | in flight |
+| `target_preview` | The target menu's preview panel: whether it shows, the entry and its kind, the hull drawn as a wireframe and its line count, whether its edges are still being found and its viewport renders, the panel's rows and flag, the meshes whose edges are kept, what the last edge search cost (in all, its longest frame, frames) and the panel's CPU work per frame | in flight |
+| `render` | The renderer (`forward_plus` or `headless`), fps, frame time, draw calls, triangles, VRAM, far dots, GPU, display and window | in flight |
+| `lights` | Which emitters light the scene this frame and what that costs | front end, flight |
+| `sky` | The star points and the nebula panorama: loaded and shown | front end, flight |
+| `aa` | The anti-aliasing mode, what the viewport uses, and the bolts' and sky's motion-vector state | front end, flight |
+| `upscale` | The upscaler, its preset, the scale applied, sharpness and the window's and 3D view's lines | front end, flight |
+| `post` | Lens flare and motion blur state and where the star is in the picture | front end, flight |
+| `livery` | The player's livery and every ship's in the world | in flight |
+| `frame` | The frame's passes (plumes, flashes, impacts, far dots, bolts, turret models): their cost and what each walks | always |
+| `core` | The native simulation core: rows, bodies, bolts, syncs, threads and their costs; the defensive turrets (`turrets`, `turret_shots`, `turret_shots_total`, `turret_us`, `turret_picks_stale`, `attackers`; M5-T21) | in flight |
+| `flight` | The native flight batch: ships stepped and the gather and step costs | in flight |
+| `tier` | The low-attention tier: radius, rates, fighter and capital rows, hulks, promotions and demotions | in flight |
+| `perf` | The tick's stage timings and per-entity counts (on while `perf on` or a bench runs) | in flight |
+| `fx` | The particle emitter pool: emitters, busy, bursts thrown and the density in use | in flight |
+| `debris` | The break-up chunk pool: sets, free sets, active chunks and held wrecks | in flight |
+| `audio` | Sounds loaded, voices playing, engine voices (granted, sounding, the frame's work and the re-rank's work, `engine_rank_work`), `shots_culled` (gun shots skipped beyond earshot) and the SFX volume (writable) | front end, flight |
+| `ai` | The AI ships and their behaviours, a count per behaviour and the AI's cost per tick | AI ships |
+| `mission` | The running mission: id, title, state, result, step, objectives, time, trigger counts, waypoint, controls locked and jump points | mission |
+| `dialog` | The comms panel: whether a line shows, its id, speaker callsign and text, lines queued, time left and lines shown | mission |
+| `route` | The instructor's route: waypoint, count, lag, state and demo | route |

@@ -16,6 +16,7 @@ from typing import Any
 import numpy as np
 
 from ..core.geometry import Mesh, mirror_matrix
+from ..core.seams import EMPTY, SeamLayout
 
 
 def _vec(v: Sequence[float]) -> np.ndarray:
@@ -112,6 +113,7 @@ class Part:
     collision: list[Collision] = field(default_factory=list)
     mass_kg: float = 0.0
     group: str = ""  # symmetry group used by the asset when it mirrors samples
+    seams: SeamLayout = EMPTY  # the surface layout drawn on it (M5-T40); it follows every move, turn and mirror
 
     def anchor(self, name: str) -> Anchor:
         try:
@@ -127,6 +129,7 @@ class Part:
             [c.transformed(rotation, translation) for c in self.collision],
             self.mass_kg,
             self.group,
+            self.seams.transformed(rotation, translation),
         )
 
     def translated(self, offset: Sequence[float]) -> Part:
@@ -136,10 +139,13 @@ class Part:
         return self.transformed(mirror_matrix(axis))
 
     def renamed(self, name: str, group: str | None = None) -> Part:
-        return Part(name, self.mesh, dict(self.anchors), list(self.collision), self.mass_kg, self.group if group is None else group)
+        return Part(name, self.mesh, dict(self.anchors), list(self.collision), self.mass_kg, self.group if group is None else group, self.seams)
 
     def with_anchors(self, extra: Mapping[str, Anchor]) -> Part:
-        return Part(self.name, self.mesh, {**self.anchors, **extra}, list(self.collision), self.mass_kg, self.group)
+        return Part(self.name, self.mesh, {**self.anchors, **extra}, list(self.collision), self.mass_kg, self.group, self.seams)
+
+    def with_seams(self, seams: SeamLayout) -> Part:
+        return Part(self.name, self.mesh, dict(self.anchors), list(self.collision), self.mass_kg, self.group, seams)
 
     def area_centroid(self) -> np.ndarray:
         return self.mesh.area_centroid()

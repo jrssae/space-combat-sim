@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## The low-attention tier's fairness (M4-T22, architecture §17.14): a fight out of view wins or loses at the rate one in view
 ## does. Every comparison is the tier against full fidelity on held-out seeds (fix round 1; the Cycle log has the fit): the
 ## hit model's constants by maximum likelihood over full-fidelity melee shots (seeds 11 to 16) and duel rounds (seeds from
@@ -83,11 +83,6 @@ func _world(raiders: int, allies: int, tier_on: bool, schedule: StringName) -> v
 	w = TierWorld.new()
 	w.build(self, raiders, allies)
 	await get_tree().physics_frame
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
 
 
 # --- the duel: the roll against full fidelity, shot for shot ---------------------------------------------------------------

@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## Broadcast contacts, the player's half (M3-T17, Q21, AC25): on the real main scene with the combat sandbox, a buoy at 900 km
 ## and an ally at 90 km are candidates and can be selected (their range in the target box), an ally at 110 km and a
 ## non-broadcasting raider at 30 km are not; beyond the radar's 25 km a broadcast contact sits on the rim in its true
@@ -24,11 +24,6 @@ func before_each() -> void:
 
 func after_each() -> void:
 	DebugConsole.flags.invulnerable = false
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
 
 
 func _buoy(buoy_name: String) -> NavBuoy:
@@ -67,7 +62,7 @@ func _candidate_names() -> PackedStringArray:
 
 func test_buoys_and_allies_broadcast_and_raiders_do_not() -> void:
 	assert_eq(_buoy("NAV ALPHA").targetable.broadcast_range_m, NavBuoy.BROADCAST_RANGE_M)
-	assert_eq(NavBuoy.BROADCAST_RANGE_M, 1.0e6, "1 000 km")
+	assert_eq(NavBuoy.BROADCAST_RANGE_M, 1.0e6, "1 000 km (M3 Q21; back from M5-T10's 10 000 km, Q41)")
 	assert_eq(ShipPool.ALLY_BROADCAST_RANGE_M, 1.0e5, "100 km")
 	var ally: Combatant = _ally("ALPHA 7", Vector3(0.0, 0.0, -1000.0))
 	var raider: Combatant = _raider("RAIDER 9", Vector3(0.0, 0.0, -1000.0))
@@ -105,8 +100,8 @@ func test_the_radar_puts_a_far_broadcast_on_the_rim_in_its_true_direction() -> v
 	_place_buoy("NAV ALPHA", Vector3(0.0, 0.0, -FAR_BUOY_M))
 	_ally("ALPHA 7", Vector3(90000.0, 0.0, 0.0))
 	await _ticks(2)
-	var dots: Array[RadarModel.Dot] = RadarModel.dots(main.ship.targeting.candidates(), 0, main.ship.global_position,
-			main.ship.global_basis, Factions.EARTH_ALLIANCE)
+	var dots: Array[RadarModel.Dot] = RadarModel.plot(RadarContacts.from_infos(main.ship.targeting.candidates()), 0,
+			main.ship.global_position, main.ship.global_basis, Factions.EARTH_ALLIANCE).to_dots()
 	var by_id: Dictionary = {}
 	for dot: RadarModel.Dot in dots:
 		by_id[dot.id] = dot

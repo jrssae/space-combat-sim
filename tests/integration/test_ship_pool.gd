@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## ShipPool (M2-T05, AC6, architecture §15.6): raiders are built once and then only switched. No pooled ship enters or leaves
 ## the tree; parked ships are hidden, not processing, not targetable and not
 ## hittable; `acquire` places a ship within 1 mm of its `UniversePos` at the requested velocity; an empty pool returns
@@ -44,12 +44,6 @@ func _count_pooled_nodes(node: Node) -> int:
 	for child: Node in node.get_children():
 		n += _count_pooled_nodes(child)
 	return n
-
-
-func _console(line: String) -> ConsoleResult:
-	var results: Array[ConsoleResult] = DebugConsole.registry.execute(line)
-	assert_eq(results.size(), 1, "one statement: " + line)
-	return results[0]
 
 
 # --- the pool ----------------------------------------------------------------------------------------------------

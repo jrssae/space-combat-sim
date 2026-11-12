@@ -59,6 +59,13 @@ func test_lethal_at_or_below_safe_is_a_step() -> void:
 func test_the_momentum_split_gives_the_lighter_body_the_larger_change() -> void:
 	assert_almost_eq(RamMath.split_dv(40.0, BUOY_KG, STARFURY_KG), 40.0 * 48.0 / 50.0, 1e-4, "the buoy: 38.4 m/s")
 	assert_almost_eq(RamMath.split_dv(40.0, STARFURY_KG, BUOY_KG), 40.0 * 2.0 / 50.0, 1e-4, "the Starfury: 1.6 m/s")
+
+
+func test_only_the_speed_into_a_surface_closes_on_it() -> void:
+	assert_almost_eq(RamMath.closing_speed(Vector3(0.0, 0.0, -40.0), Vector3.BACK), 40.0, 1e-5, "head-on: all of it")
+	assert_almost_eq(RamMath.closing_speed(Vector3(40.0, 0.0, -3.0), Vector3.BACK), 3.0, 1e-5, "a scrape: the sideways part")
+	assert_eq(RamMath.closing_speed(Vector3(40.0, 0.0, 0.0), Vector3.BACK), 0.0, "along the surface: none")
+	assert_eq(RamMath.closing_speed(Vector3(0.0, 0.0, 10.0), Vector3.BACK), 0.0, "moving away: none")
 	assert_eq(RamMath.split_dv(40.0, 0.0, 0.0), 0.0, "no mass, no change")
 	assert_eq(RamMath.split_dv(40.0, STARFURY_KG, 0.0), 0.0, "a massless prop cannot push")
 

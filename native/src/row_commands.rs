@@ -2,7 +2,7 @@
 // pilot's last flight command and trigger here, by body, and the flight step flies it the same tick. A command stays until
 // the next think replaces it, so a held or declined think flies the one the row has. GDScript releases a ship's command
 // when anything else commands it.
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::hash::{BuildHasherDefault, Hasher};
 
 use godot::prelude::*;
@@ -26,6 +26,11 @@ pub const CMD_LEN: usize = 10;
 /// The commands by body id (fix round 2): a plain integer hash, since the tier reads the map for every row every tick and
 /// the default hasher made that a fifth of a tier row's cost. Nothing iterates it in an order that matters.
 pub type CommandMap = HashMap<i64, RowCommand, BuildHasherDefault<IdHasher>>;
+
+/// Any table or set keyed by an instance id or a row handle (M5-T35): the same plain hash. Nothing may depend on the
+/// order one is walked in.
+pub type IdMap<V> = HashMap<i64, V, BuildHasherDefault<IdHasher>>;
+pub type IdSet = HashSet<i64, BuildHasherDefault<IdHasher>>;
 
 /// Hashes a body id (Godot's instance ids differ in their low bits) with one multiply and a fold.
 #[derive(Default)]
@@ -93,6 +98,7 @@ impl ScsSimCore {
         snapshot.touched.clone_from(self.touched_set());
         snapshot.commands.clone_from(&self.row_commands);
         snapshot.rows_version = self.rows_version_now();
+        self.turret_snapshot_into(&mut snapshot.turrets);
         if own_releases {
             self.released.clear();
         }

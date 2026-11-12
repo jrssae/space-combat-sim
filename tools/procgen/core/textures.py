@@ -22,6 +22,7 @@ from .color import linear_to_srgb, srgb_to_linear
 from .geometry import Material, Mesh, unit
 from .raster import AtlasBuffers
 from .sampling import sample_mesh
+from .seams import SeamLayout
 from ..styles import Style, _hash01
 
 Vec3 = tuple[float, float, float]
@@ -35,6 +36,14 @@ RIVET_RADIUS_M = 0.0075
 RIVET_HEIGHT_M = 0.0018
 RIVET_OFFSET_M = 0.022  # from the edge of a seam's line
 TRANSFER_RADIUS_M = 0.12  # how far the fine mesh's vertices reach a coarse texel
+SEAM_TEXELS = 2.2  # a drawn seam's width in atlas texels: the thinnest line the mipmaps keep (M5-T40)
+SEAM_DEPTH = 0.3  # its depth as a share of its width
+
+
+def seam_size(texel_m: float) -> tuple[float, float]:
+    """A drawn seam's width and depth in metres on a hull texelled at ``texel_m``."""
+    line = SEAM_TEXELS * float(texel_m)
+    return line, SEAM_DEPTH * line
 
 
 # --- the stroke font --------------------------------------------------------------------------
@@ -336,6 +345,8 @@ class Atlas:
     hull_mesh: Mesh
     part_platings: tuple[Plating, ...] = ()
     fine_mesh: Mesh | None = None  # the full-detail mesh whose shape a coarse render mesh's normal map carries (render_triangles)
+    part_seams: tuple[SeamLayout, ...] = ()  # each part's drawn surface layout (M5-T40); empty: none
+    grid: bool = True  # the generic staggered plating; a hull with drawn layouts turns it off
 
 
 def srgb_to_linear8(rgb8: np.ndarray) -> np.ndarray:
@@ -560,12 +571,18 @@ def _normal_map(atlas: Atlas, style: Style, platings: Sequence[Plating], scale: 
         part = b.part[np.ix_(rn, near)]
         material = b.material[np.ix_(rn, near)]
         strip_h = np.zeros(f_near.shape)
-        for p_index, phase in enumerate(atlas.part_phases):
+        for p_index, phase in enumerate(atlas.part_phases if atlas.grid else ()):
             sel = f_near & (part == p_index)
             if not sel.any():
                 continue
             lattice = plating_lattice(style, position[sel], normal[sel], platings[p_index], phase, chart_normal[chart[sel]])
             strip_h[sel] = np.where(paneled_table[material[sel]], _surface_height(style, lattice), 0.0)
+        for p_index, layout in enumerate(atlas.part_seams):
+            sel = f_near & (part == p_index)
+            if not layout or not sel.any():
+                continue
+            drawn = layout.evaluate(position[sel], normal[sel], *seam_size(atlas.texel_m))
+            strip_h[sel] += np.where(paneled_table[material[sel]], drawn.height, 0.0)
         height[rr] = strip_h
     hu, hv = _gradient(height, filled_big)
     su = np.maximum(step_u[np.ix_(near, near)] / scale, 1e-6)
@@ -606,9 +623,9 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
     on_line = np.zeros(n, dtype=bool)
     lattice_aft = np.full(n, np.inf)
     lattice_cell = np.zeros((n, 3), dtype=np.int64)
-    platings = atlas.part_platings or tuple(plating_for(name, atlas.hull_mesh, style) for name in atlas.part_names)
+    platings = atlas.part_platings or (tuple(plating_for(name, atlas.hull_mesh, style) for name in atlas.part_names) if atlas.grid else ())
     chart_normal = _chart_normals(b)
-    for p_index, phase in enumerate(atlas.part_phases):
+    for p_index, phase in enumerate(atlas.part_phases if atlas.grid else ()):
         sel = part == p_index
         if not sel.any():
             continue
@@ -620,6 +637,19 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
         on_line[sel] = lattice["on_line"] & painted
         lattice_aft[sel] = np.where(painted, lattice["aft_m"], np.inf)
         lattice_cell[sel] = np.stack([lattice["cu"], lattice["cv"], lattice["drop"]], axis=1)
+
+    # The drawn layouts (M5-T40): seam lines, and each plate's tone and sheen.
+    plate_rough = np.zeros(n)
+    for p_index, layout in enumerate(atlas.part_seams):
+        sel = part == p_index
+        if not layout or not sel.any():
+            continue
+        drawn = layout.evaluate(pos[sel], nrm[sel], *seam_size(atlas.texel_m))
+        painted = paneled[sel]
+        factor = drawn.tint * (1.0 - (1.0 - style.panel_line_darkness) * drawn.line)
+        albedo[sel] *= np.where(painted, factor, 1.0)[:, None]
+        on_line[sel] |= painted & (drawn.line > 0.5)
+        plate_rough[sel] = np.where(painted, drawn.rough, 0.0)
 
     # Weathering, seeded: worn sharp edges, streaks trailing aft from the seams, smudges and grime over the paint (Q37: no bare metal
     # unless the style asks for it).
@@ -654,7 +684,7 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
     if paint_roughness is not None:
         matte = paneled & (metallic < 0.3) & ~glass
         roughness = np.where(matte, float(paint_roughness), roughness)
-    roughness = roughness + 0.25 * on_line + 0.1 * smudge
+    roughness = roughness + 0.25 * on_line + 0.1 * smudge + plate_rough
 
     # The markings, in world space, on their parts; what they cover is kept from the livery's paint.
     names = list(atlas.part_names)

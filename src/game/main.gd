@@ -11,7 +11,8 @@ extends Node3D
 const SCENARIO_DIR := "res://data/scenarios/"
 ## The debug overlay's text is rebuilt this often while it shows (M4-T36): a readout, not an animation.
 const OVERLAY_INTERVAL_S: float = 0.1
-const SCENARIO_CHOICES: Array[StringName] = [&"combat_sandbox", &"free_flight", &"instructor_route", &"dogfight"]
+const SCENARIO_CHOICES: Array[StringName] = [&"combat_sandbox", &"free_flight", &"instructor_route", &"dogfight",
+		&"civilian_showcase", &"belt_showcase"]
 
 ## The player's hull reached zero (the ship is hidden and disabled; input is ignored until the respawn).
 signal player_died
@@ -30,6 +31,10 @@ var waves_auto_start: bool = true
 ## Mixed into the brain seed of every ship the scenario places (M3-T10): the same seed flies the same fight (the dogfight's
 ## AC12 runs). Set before the node enters the tree.
 var scenario_seed: int = 0
+## Free-flight encounters from the start (M5-T17, D58): the menu's request sets it; every other run starts them off.
+var encounters: bool = false
+## Overrides the scenario's encounter pools file (tests). Empty = `data/encounters/<scenario_id>.json`, if there is one.
+var encounter_pools_path: String = ""
 
 ## Set before the node enters the tree to drive Main from a script (tests use FakeInputSource).
 var input_source: InputSource = null
@@ -41,16 +46,25 @@ var status_line: String = ""
 var debug_throttle: float = 0.0
 ## False from the player's death until the respawn; input is ignored meanwhile.
 var player_alive: bool = true
+## The running mission (M5-T05), or null: free flight and the sandbox have none.
+var mission: MissionRunner = null
+## The bars of a cinematic, and the filter that takes the ship out of the player's hands during one (M5-T08, D55).
+var letterbox: Letterbox = null
+var control_lock: ControlLock = ControlLock.new()
 var combatant: Combatant = null
 var ship: Ship = null
 var thrusters: ThrusterVisuals = null
 var cannon: PulseCannon = null
 var buoys: Array[NavBuoy] = []
+## The scenario's asteroid belts (M5-T29).
+var asteroid_belts: Array[AsteroidBelt] = []
 ## The ships the scenario places at load (`spawns`, M3-T09), from the pool; the route leaders are placed again on a respawn.
 var scenario_ships: Array[Combatant] = []
 ## The ship leading a route (the instructor) and its follow-path behaviour; null when the scenario has none.
 var instructor: Combatant = null
 var instructor_path: BehaviourFollowPath = null
+## The pause menu (M5-T02): Start opens it and the world pauses behind it.
+var pause_menu: PauseMenu = null
 ## The tick's stage timers (`perf`) and the many-ships benchmark (`bench`), M4-T01.
 var perf_probe: PerfProbe = null
 var bench: BenchRunner = null
@@ -58,10 +72,18 @@ var bench: BenchRunner = null
 var station_scene: StationScene = null
 ## Times the overlay's text was rebuilt (tests).
 var overlay_refreshes: int = 0
+## The comms menu on D-pad Right (M5-T46): a radial menu, the game pauses while it is open.
+var comms: CommsMenuDirector = null
+## The target menu on a hold of the target button (M5-T25): the game pauses while it is open.
+var target_menu: TargetMenuDirector = null
+## Free-flight encounters (M5-T17): null in a scenario without an encounter pools file.
+var encounter_director: EncounterDirector = null
 
 var _spawn_position: UniversePos = UniversePos.new()
 var _overlay_in_s: float = 0.0
 var _spawn_basis: Basis = Basis.IDENTITY
+# The player's velocity at the first spawn (a mission that opens in flight); a respawn starts at rest.
+var _start_velocity: Vector3 = Vector3.ZERO
 var _system_id: StringName = &"local"
 var _scenario_spawns: Array[Dictionary] = []
 var _scenario_routes: Array[Route] = []
@@ -113,12 +135,14 @@ func _ready() -> void:
 	world.process_mode = Node.PROCESS_MODE_PAUSABLE
 	_setup_input()
 	var scenario: Dictionary = ScenarioLoader.load(resolved_scenario_path())
+	ScenarioLoader.resolve_random_civilian(scenario, scenario_seed)
 	if not bool(scenario.get("ok", false)):
 		push_warning("Main: %s; spawning at the origin with no props" % scenario.get("error", "no scenario"))
 	else:
 		var player: Dictionary = scenario["player"]
 		_spawn_position = player["position"]
 		_spawn_basis = player["basis"]
+		_start_velocity = player["velocity"]
 		_system_id = scenario["system_id"]
 		_scenario_spawns = scenario["spawns"]
 		_scenario_routes = scenario["routes"]
@@ -141,6 +165,7 @@ func _ready() -> void:
 		ships.prepare(ShipPool.ALLY_TYPE, ally_count)
 	# The Starfury's break-up chunks serve the allies and the player (the player can die in any scenario).
 	debris.prepare(ShipCatalog.PLAYER_TYPE)
+	_prepare_other_pools(scenario)
 	hud.input_provider = _build_hud_input
 	hud.screens = ship.cockpit_screens
 	director.setup(world, ships, debris, effects, combatant)
@@ -160,18 +185,40 @@ func _ready() -> void:
 	waves.wave_started.connect(wings.on_wave_started)
 	if bool(scenario.get("ok", false)):
 		_spawn_props(scenario["props"])
+		_spawn_belts(scenario["belts"])
 	_spawn_scenario_ships()
+	if not (scenario.get("mission", {}) as Dictionary).is_empty():
+		mission = MissionRunner.create(self, scenario)
 	camera_rig.setup(ship, ship.cockpit_anchor, ship.get_chase_offset(), ship.set_cockpit_interior_visible)
 	# The World keeps its origin within `auto_rebase_distance_m` (5 km, main.tscn) of the player (M3-T14, §14.1).
 	world.focus = ship
 	# The cockpit camera follows a RemoteTransform3D, so reset its interpolation on a rebase or the jump smears.
 	world.rebased.connect(func(_offset: Vector3) -> void: camera_rig.cockpit_pivot.reset_physics_interpolation())
+	letterbox = Letterbox.new()
+	add_child(letterbox)
+	camera_rig.mode_changed.connect(_on_camera_mode_changed)
 	# Ram contact points outlive a tick; they move with the rebase.
 	rams.world = world
 	# The motion blur skips the frames around a rebase (M3-T25).
 	space_environment.post_effects.watch_world(world)
 	space_environment.use_star_of(_system_id)
+	pause_menu = (preload("res://src/hud/pause_menu.tscn") as PackedScene).instantiate() as PauseMenu
+	pause_menu.audio = audio
+	pause_menu.objectives_source = objectives
+	# The button that closed the menu may still be down: it must not also tap a target or toggle something.
+	pause_menu.resumed.connect(func() -> void: adapter.resync_edges(input_source))
+	pause_menu.opened.connect(_start_pause_backdrop)
+	pause_menu.resumed.connect(_stop_pause_backdrop)
+	add_child(pause_menu)
 	_setup_perf()
+	_setup_encounters(scenario)
+	comms = CommsMenuDirector.new()
+	comms.main = self
+	add_child(comms)
+	target_menu = TargetMenuDirector.new()
+	target_menu.main = self
+	add_child(target_menu)
+	hud.final_input = target_menu.fill_hud_input
 	_register_console()
 
 
@@ -180,7 +227,20 @@ func _exit_tree() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if pause_menu != null and pause_menu.is_open():
+		# Behind the pause menu the pad belongs to the menu: only Start (and Esc) is read.
+		_handle_ui(adapter.sample_menu(input_source, delta))
+		return
+	if target_menu.is_open():
+		# The target menu has the pad and the game is paused: only its stick, select, back and Start are read.
+		target_menu.step(adapter.sample_radial(input_source, delta))
+		return
+	if comms.is_open():
+		comms.step(adapter.sample_radial(input_source, delta))
+		return
 	var pc: PilotCommand = adapter.sample(input_source, delta)
+	if control_lock.apply(pc, controls_locked(), camera_rig.is_playing_shot()):
+		camera_rig.stop_shot()
 	if debug_throttle > 0.0:
 		pc.flight.main_left = maxf(pc.flight.main_left, debug_throttle)
 		pc.flight.main_right = maxf(pc.flight.main_right, debug_throttle)
@@ -192,6 +252,10 @@ func _physics_process(delta: float) -> void:
 	if not get_tree().paused:
 		camera_rig.set_look(delta, pc.ui.look_active, pc.ui.look_stick, pc.ui.look_mouse_px)
 	_handle_ui(pc.ui)
+	if pc.ui.comms_open:
+		comms.open()  # says nothing when it cannot (the player is down, a cinematic): the press is simply lost
+	if pc.ui.target_menu_open:
+		target_menu.open()  # it says nothing when it cannot (the player is down, a cinematic): the hold is simply lost
 
 
 # Auto-track needs a target: with none selected the nearest hostile is taken; with none in range it switches itself off.
@@ -276,6 +340,16 @@ func _pool_count(scenario: Dictionary, type: StringName, override_count: int) ->
 	return int((scenario.get("pools", {}) as Dictionary).get(type, 0))
 
 
+# The scenario's pools of every other type (the civilians, M5-T16) and their break-up chunks.
+func _prepare_other_pools(scenario: Dictionary) -> void:
+	var pools: Dictionary = scenario.get("pools", {})
+	for type: StringName in pools:
+		if type == ShipPool.DEFAULT_TYPE or type == ShipPool.ALLY_TYPE or int(pools[type]) <= 0:
+			continue
+		ships.prepare(type, int(pools[type]))
+		debris.prepare(type)
+
+
 ## Grows the pool of `type` to at least `count` ships, heard like the scenario's own (the benchmark's load, M4-T01). Returns
 ## how many were built.
 func ensure_pool(type: StringName, count: int) -> int:
@@ -327,6 +401,18 @@ func _setup_perf() -> void:
 	add_child(station_scene)
 
 
+# The encounter director in a scenario with an encounter pools file, on at once when the request asked for encounters.
+func _setup_encounters(scenario: Dictionary) -> void:
+	var path: String = encounter_pools_path
+	if path.is_empty():
+		path = EncounterDirector.pools_file(StringName(scenario.get("scenario_id", &"")))
+	if path.is_empty():
+		return
+	encounter_director = EncounterDirector.create(self, path)
+	if encounter_director != null and encounters:
+		print("[encounters] ", encounter_director.enable())
+
+
 ## The scenario file in use: `scenario_path`, else the one `settings.scenario` names.
 func resolved_scenario_path() -> String:
 	if not scenario_path.is_empty():
@@ -371,6 +457,37 @@ func reference_point() -> UniversePos:
 	return _spawn_position
 
 
+## Every objective of the running mission (`ObjectiveBook.snapshot`), empty outside one: the pause menu's objectives source.
+func objectives() -> Array[Dictionary]:
+	return mission.objectives() if mission != null else ([] as Array[Dictionary])
+
+
+## The running mission holds the player's controls (`MissionApi.lock_controls`): the ship flies on without them.
+func controls_locked() -> bool:
+	return mission != null and mission.api != null and mission.api.controls_locked
+
+
+# A cinematic hides the HUD and brings the letterbox in; the comms panel keeps its subtitles (D55).
+func _on_camera_mode_changed(new_mode: CameraRig.Mode) -> void:
+	var cinematic: bool = new_mode == CameraRig.Mode.CINEMATIC
+	hud.cinematic = cinematic
+	letterbox.shown = cinematic
+
+
+# The slow camera move behind the pause menu (M5-T42); the flight HUD steps aside while it runs.
+func _start_pause_backdrop() -> void:
+	if not bool(Settings.get_value(&"pause_backdrop")) or ship == null:
+		return
+	if camera_rig.start_backdrop(float(Settings.get_value(&"pause_backdrop_loop_s")), ship.bounding_radius()):
+		hud.cinematic = true
+
+
+func _stop_pause_backdrop() -> void:
+	if camera_rig.is_backdrop_running():
+		camera_rig.stop_backdrop()
+		hud.cinematic = camera_rig.is_playing_shot()
+
+
 ## This frame's `HudInput`, read from the live nodes (the HUD never caches anything).
 func _build_hud_input() -> HudInput:
 	var camera: Camera3D = camera_rig.active_camera()
@@ -412,6 +529,7 @@ func _build_hud_input() -> HudInput:
 	input.charge_fraction = cannon.charge_fraction()
 	input.fire_mode = String(PulseCannonGate.mode_name(cannon.gate.mode))
 	input.target = ship.targeting.selected_readout()
+	input.target_unknown = input.target != null and not ship.targeting.selection_identified
 	# The radar's contacts straight from the targetables (M4-T36): the candidate list is built only when something cycles it.
 	input.radar_contacts = RadarContacts.gather(get_tree(), ship, ship.targeting.system.sensor_range_m)
 	input.selected_id = ship.targeting.selected_id()
@@ -426,6 +544,7 @@ func _build_hud_input() -> HudInput:
 			input.has_waypoint = true
 			input.waypoint_position = world.universe_to_local(waypoint)  # this frame's World frame (rebase-proof)
 			input.waypoint_label = instructor_path.waypoint_label()
+			input.waypoint_key = "route:" + input.waypoint_label
 	return input
 
 
@@ -486,16 +605,20 @@ func _place_spawn(entry: Dictionary) -> void:
 	if route != null and brain is AiPilot:
 		route.pace_id = combatant.targetable.get_instance_id() if route.pace == Route.PACE_PLAYER else 0
 		path = BehaviourFollowPath.attach(brain as AiPilot, route)
-	var placed: Combatant = ships.acquire(ship_name, anchor.plus_local(entry["offset"]), _spawn_basis, entry["velocity"], brain, type)
+	var forward: Vector3 = entry.get("forward", Vector3.ZERO)
+	var basis: Basis = _spawn_basis if forward.is_zero_approx() else ScenarioLoader.basis_facing(forward)
+	var placed: Combatant = ships.acquire(ship_name, anchor.plus_local(entry["offset"]), basis, entry["velocity"], brain, type)
 	if placed == null:
 		return
+	if placed.cargo_pods != null:
+		placed.cargo_pods.set_count(int(entry.get("cargo_pods", -1)))  # M5-T16: the spawn's pods, all by default
 	placed.damageable.invulnerable = bool(entry["invulnerable"])
 	scenario_ships.append(placed)
 	_scenario_brains.append(brain)
 	_scenario_entries.append(entry)
 	if not String(entry.get("wing", "")).is_empty():
 		wings.join(String(entry["wing"]), placed)  # says so itself when the wing cannot take it
-	if path != null and instructor == null:
+	if path != null and instructor == null and not ShipCatalog.is_civilian(type):  # a civilian's route is not a lesson
 		instructor = placed
 		instructor_path = path
 
@@ -555,6 +678,7 @@ func _spawn_ship() -> void:
 		ShipAssembly.OPT_CONSOLE_OWNER: true,
 	})
 	world.spawn(combatant.ship, _spawn_position, _spawn_basis)
+	combatant.ship.linear_velocity = _start_velocity
 	# The player is part of the wing the allies broadcast for (M3-T10): heard like an allied Starfury, to 100 km.
 	combatant.targetable.broadcast_range_m = ShipPool.ALLY_BROADCAST_RANGE_M
 	ship = combatant.ship
@@ -573,12 +697,28 @@ func _spawn_props(props: Array) -> void:
 		director.watch_buoy(buoy)
 
 
+# The scenario's asteroid belts (M5-T29, D63), each laid out from its seed and built as static rows.
+func _spawn_belts(belts: Array) -> void:
+	var shape_count: int = maxi(AsteroidBelt.shapes().size(), 1)
+	for i: int in belts.size():
+		var entry: Dictionary = belts[i]
+		var belt := AsteroidBelt.new()
+		belt.name = "Belt%d" % i
+		world.spawn(belt, entry["centre"])
+		var layout: BeltLayout = BeltLayout.place(entry, shape_count)
+		if layout.shortfall > 0:
+			push_warning("Belt%d: %d of %d rocks did not fit the box with the gap asked for" % [i, layout.shortfall, entry["count"]])
+		belt.build(layout, world.get_world_3d().space, world)
+		world.rebased.connect(belt.on_rebased)
+		asteroid_belts.append(belt)
+
+
 func _handle_ui(ui: UiCommand) -> void:
 	if ui.pause:
-		set_paused(not get_tree().paused)
+		pause_menu.on_pause_action()
 	if ui.toggle_camera:
 		camera_rig.toggle()
-	if ui.reset:
+	if ui.reset and mission == null:  # no respawn in a mission (D51)
 		respawn()
 	if ui.toggle_overlay:
 		Settings.set_value(&"show_overlay", not bool(Settings.get_value(&"show_overlay")))
@@ -608,7 +748,9 @@ func _update_mouse_capture() -> void:
 	var godot_source := input_source as GodotInputSource
 	if godot_source == null or DisplayServer.get_name() == "headless":
 		return
-	var flying: bool = not get_tree().paused and not DebugConsole.is_open() and get_window().has_focus() \
+	# A radial menu keeps the mouse too: its direction points at a slice.
+	var in_play: bool = not get_tree().paused or (target_menu != null and target_menu.is_open()) or (comms != null and comms.is_open())
+	var flying: bool = in_play and not DebugConsole.is_open() and get_window().has_focus() \
 			and not Input.is_physical_key_pressed(KEY_ALT)
 	var wanted: Input.MouseMode = Input.MOUSE_MODE_CAPTURED if flying else Input.MOUSE_MODE_VISIBLE
 	if Input.mouse_mode != wanted:
@@ -617,15 +759,27 @@ func _update_mouse_capture() -> void:
 
 
 func _update_bracket() -> void:
-	var readout: TargetReadout = ship.targeting.selected_readout() if ship != null else null
+	if hud.visible or ship == null:  # the HUD has its own box
+		overlay.hide_bracket()
+		return
+	var readout: TargetReadout = ship.targeting.selected_readout()
 	var cam: Camera3D = camera_rig.active_camera()
-	if hud.visible or readout == null or cam == null or cam.is_position_behind(readout.position):  # the HUD has its own box
+	if readout == null or cam == null or cam.is_position_behind(readout.position):
 		overlay.hide_bracket()
 		return
 	overlay.show_bracket(cam.unproject_position(readout.position))
 
 
 func _register_console() -> void:
+	DebugConsole.registry.register_provider(&"belts", ConsoleVars.new({
+		&"count": {"get": func() -> int: return asteroid_belts.size(), "doc": "Asteroid belts in the scenario (M5-T29)"},
+		&"rocks": {"get": func() -> int: return asteroid_belts.reduce(func(n: int, b: AsteroidBelt) -> int: return n + b.rock_count, 0),
+				"doc": "Rocks in every belt"},
+		&"spheres": {"get": func() -> int: return asteroid_belts.reduce(func(n: int, b: AsteroidBelt) -> int: return n + b.sphere_count, 0),
+				"doc": "Collision spheres (static rows) the rocks stand on"},
+		&"draw_groups": {"get": func() -> int: return asteroid_belts.reduce(func(n: int, b: AsteroidBelt) -> int: return n + b.draw_groups, 0),
+				"doc": "Multimeshes drawing the rocks (one per shape)"},
+	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"respawn", "Reset the ship to the scenario start",
 			[] as Array[ConsoleArg]), _cmd_respawn, self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"window", "Resize the game window (width and height in pixels), or `window max` / `window normal` to maximize or restore it",
@@ -634,6 +788,8 @@ func _register_console() -> void:
 			[ConsoleArg.float_required(&"level", 0.0, 1.0)]), _cmd_throttle, self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"pause", "Pause or resume the game (toggles with no argument)",
 			[ConsoleArg.bool_optional(&"state")] as Array[ConsoleArg]), _cmd_pause, self)
+	DebugConsole.registry.register_command(ConsoleCommand.new(&"pausemenu", "Open or close the pause menu (toggles with no argument)",
+			[ConsoleArg.bool_optional(&"state")] as Array[ConsoleArg]), _cmd_pausemenu, self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"scenario",
 			"Load a scenario (%s): sets settings.scenario for this session and reloads the scene" % ", ".join(PackedStringArray(SCENARIO_CHOICES)),
 			[ConsoleArg.enum_optional(&"name", SCENARIO_CHOICES, null)] as Array[ConsoleArg]), _cmd_scenario, self)
@@ -684,9 +840,11 @@ func _cmd_window(args: Dictionary) -> ConsoleResult:
 	return ConsoleResult.line("window %dx%d" % [size.x, size.y])
 
 
-func _cmd_respawn(_args: Dictionary) -> String:
+func _cmd_respawn(_args: Dictionary) -> ConsoleResult:
+	if mission != null:
+		return ConsoleResult.failure("no respawn in a mission (D51)")
 	respawn()
-	return "ship reset to the scenario start"
+	return ConsoleResult.line("ship reset to the scenario start")
 
 
 func _cmd_scenario(args: Dictionary) -> ConsoleResult:
@@ -701,10 +859,27 @@ func _cmd_scenario(args: Dictionary) -> ConsoleResult:
 	return ConsoleResult.line("loading %s" % wanted)
 
 
-func _cmd_pause(args: Dictionary) -> String:
+func _cmd_pause(args: Dictionary) -> ConsoleResult:
+	# The pause menu owns the pause while it is open; resuming behind it would leave the ship uncommanded.
+	if pause_menu != null and pause_menu.is_open():
+		return ConsoleResult.failure("the pause menu is open: resume from it")
+	if target_menu != null and target_menu.is_open():
+		return ConsoleResult.failure("the target menu is open: close it first (targetmenu close)")
+	if comms != null and comms.is_open():
+		return ConsoleResult.failure("the comms menu is open: close it first (commsmenu close)")
 	var requested: Variant = args.get(&"state")
 	set_paused(not get_tree().paused if requested == null else bool(requested))
-	return "paused" if get_tree().paused else "running"
+	return ConsoleResult.line("paused" if get_tree().paused else "running")
+
+
+func _cmd_pausemenu(args: Dictionary) -> ConsoleResult:
+	var requested: Variant = args.get(&"state")
+	var want_open: bool = not pause_menu.is_open() if requested == null else bool(requested)
+	if want_open:
+		pause_menu.open()
+	else:
+		pause_menu.close()
+	return ConsoleResult.line("pause menu open" if pause_menu.is_open() else "pause menu closed")
 
 
 func _on_setting_changed(key: StringName, _value: Variant) -> void:

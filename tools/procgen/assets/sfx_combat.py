@@ -1,25 +1,39 @@
 """``sfx_combat``: the combat sounds (docs/architecture.md section 15.1 D29, M2-T12), synthesised with NumPy.
 
-Eight mono 16-bit 48 kHz WAVs, each peaking at -1.5 dBFS, all from seeded generators (the same seed gives byte-identical files):
+Nine mono 16-bit 48 kHz WAVs, each peaking at -1.5 dBFS, all from seeded generators (the same seed gives byte-identical files):
 
-* ``pulse_fire`` (0.18 s): the Starfury's pulse cannon: a falling sine sweep with a fast decay, a noise click and a low thump.
-* ``raider_fire`` (0.22 s): the raiders' plasma gun: lower and buzzier (a detuned sawtooth pair, band-passed noise).
-* ``hit_hull`` (0.35 s): a bolt on a hull: a clank of inharmonic partials with a fast decay and a short click.
+* ``pulse_fire`` (0.105 s): the Starfury's pulse cannon, shaped on the reference measured in docs/design-references.md
+  ("Combat sounds", M5-T18, D60): a noise click, then a metallic inharmonic cluster held flat for 100 ms and cut hard. The
+  cluster is two-frequency FM, a carrier at 2a + b modulated by a and b, with our own a = 2.10 kHz and b = 0.66 kHz near the
+  reference's 2.06 and 0.67 kHz. Constant pitch, no sweep, no thump.
+* ``raider_fire`` (0.15 s): the raiders' gun, built the same way but another weapon: a lower cluster (a = 1.16 kHz,
+  b = 0.43 kHz) at higher modulation indices and soft-clipped, so denser and buzzier, held 120 ms and ending in a softer
+  exponential cut.
+* ``turret_fire`` (0.075 s): a civilian's defensive turret (M5-T21, D61), built like the guns but lighter: a higher, cleaner
+  cluster (a = 2.70 kHz, b = 0.88 kHz at low modulation indices), held 60 ms and cut hard, with a smaller click.
+* ``hit_hull`` (0.14 s): a bolt on a hull: a short metallic strike, FM at an inharmonic 1 : 1.414 ratio whose brightness
+  dies faster than its level, and a click.
 
-  These three sit two octaves down (``GUN_PITCH``, M3-T15, the maintainer's Q17): every frequency in them (sweeps, partials,
-  noise bands) is a quarter of the original design's, their lengths and envelopes unchanged (not a resample, which would stretch
-  them four times).
+  These four sit two octaves down (``GUN_PITCH``, M3-T15, the maintainer's Q17): they are designed at the reference's
+  frequencies and every frequency in them (carriers, modulators, noise bands) is then a quarter, their lengths and envelopes
+  unchanged (not a resample, which would stretch them four times). Each is one attack: the guns follow the cannon's own rate
+  of fire.
 * ``explosion`` (1.8 s): a boom (a falling sine), noise swept down through a low-pass, and a crackle of sparse impulses.
-* ``engine_loop`` (2.0 s, **seamless**): a low rumble, harmonics of 36 Hz (nothing above 180 Hz) and band-limited periodic noise
-  below 260 Hz; every component repeats exactly within the 2 s, and the manifest gives the loop points (0 to the last sample).
-  The game plays it at a pitch of 0.8 to 1.25 and ramps its level up and down with the thrust.
-* ``thruster_loop`` (2.0 s, **seamless**): the attitude thrusters' hiss-rumble, periodic noise between 90 and 900 Hz, softer and
-  brighter than the engine; the game ramps it with the RCS demand.
+* ``main_burst`` (4.0 s, **seamless**): a main pod's roar, shaped on the reference's step roars (M5-T19, D60): noise from
+  400 Hz to 16 kHz with the most energy of any octave at 4-8 kHz, a presence peak on a spectrum falling 6.5 dB per octave
+  above 1 kHz (fitted over 1-16 kHz, about -5.6 dB per octave), and a slow 3 dB wander at 0.5-1.75 Hz. Nothing below 300 Hz
+  (the maintainer's Q7: bright bursts only).
+* ``rcs_burst`` (2.0 s, **seamless**): an attitude jet, shaped on the reference's swells: noise from 2 to 16 kHz, brightest at
+  6-16 kHz, held flat. The game plays it up to an octave low while the jet spools, so its brightness follows the level.
+
+  The game plays one burst per main pod and per cluster of RCS jets, at their place on the ship, and shapes each voice's
+  attack and release from the reference's numbers (``EngineVoices``). Both loops are whole periods of their spectrum and
+  wander, and the manifest gives their loop points (0 to the last sample).
 * ``warning_beep`` (0.3 s): two short 880 Hz beeps (hull below 25 %).
 * ``target_blip`` (0.08 s): a short 1.2 kHz blip (a target selected).
 
-The manifest has ``kind`` ``audio`` and a ``sounds`` object (file, samples, sample rate, duration, peak level and, for the engine
-loop, ``loop_begin`` / ``loop_end``).
+The manifest has ``kind`` ``audio`` and a ``sounds`` object (file, samples, sample rate, duration, peak level and, for the two
+bursts, ``loop_begin`` / ``loop_end``).
 """
 
 from __future__ import annotations
@@ -34,41 +48,56 @@ from ..core.context import AssetOutputs, BuildContext
 from ..core.manifest import build_audio_manifest, sound_entry, write_manifest
 
 ASSET_ID = "sfx_combat"
-GENERATOR_VERSION = 3
+GENERATOR_VERSION = 6
 PEAK_DBFS = -1.5
-ENGINE_BASE_HZ = 36.0
-ENGINE_SECONDS = 2.0
-PARTIALS = (1.0, 2.76, 5.40, 8.93, 13.34)  # inharmonic partials of a struck plate
-GUN_PITCH = 0.25  # the gun and impact sounds' frequencies against their first design: two octaves down
+MAIN_BURST_S = 4.0
+RCS_BURST_S = 2.0
+WANDER_CYCLES = (2, 3, 5, 7)  # the main burst's swells: whole cycles in its loop, 0.5 to 1.75 Hz
+WANDER_DB = 3.0  # their peak-to-peak depth
+GUN_PITCH = 0.25  # the gun and impact sounds' frequencies against their design: two octaves down
+CLICK_BAND_HZ = (1000.0, 20000.0)  # the attack click's noise, before the register
+
+
+def _click(rng: np.random.Generator, t: np.ndarray, pitch: float, tau_s: float) -> np.ndarray:
+    """The broadband tick that opens a shot or a hit: band-passed noise at unit RMS with a fast decay."""
+    noise = audio.bandpass(audio.white_noise(rng, len(t)), CLICK_BAND_HZ[0] * pitch, CLICK_BAND_HZ[1] * pitch)
+    return noise / max(float(np.sqrt(np.mean(noise**2))), 1e-12) * audio.exp_decay(t, tau_s)
+
+
+def _cluster(t: np.ndarray, a_hz: float, b_hz: float, index_a: float, index_b: float) -> np.ndarray:
+    """The guns' metallic cluster: a carrier at 2a + b modulated by a and b, so its partials sit at 2a + b + k a + j b (the
+    pattern the reference's six partials fit)."""
+    return audio.fm(t, 2.0 * a_hz + b_hz, ((a_hz, index_a), (b_hz, index_b)))
 
 
 def pulse_fire(rng: np.random.Generator, pitch: float = GUN_PITCH) -> np.ndarray:
-    t = audio.time_axis(0.18)
-    body = audio.sine(audio.phase_from_frequency(audio.sweep(t, 1500.0 * pitch, 260.0 * pitch, 0.18))) * audio.attack_decay(t, 0.002, 0.05)
-    thump = audio.sine(audio.phase_from_frequency(audio.sweep(t, 140.0 * pitch, 60.0 * pitch, 0.18))) * audio.exp_decay(t, 0.06)
-    click = audio.highpass(audio.white_noise(rng, len(t)), 2500.0 * pitch) * audio.exp_decay(t, 0.004)
-    return audio.fade(0.8 * body + 0.5 * thump + 0.35 * click, 0.0, 0.01)
+    t = audio.time_axis(0.105)
+    tone = _cluster(t, 2100.0 * pitch, 660.0 * pitch, 0.8, 0.9) * audio.hold_and_cut(t, 0.0015, 0.100, 0.005)
+    return audio.fade(tone + 0.5 * _click(rng, t, pitch, 0.0015), 0.0003, 0.0)
 
 
 def raider_fire(rng: np.random.Generator, pitch: float = GUN_PITCH) -> np.ndarray:
-    t = audio.time_axis(0.22)
-    freq = audio.sweep(t, 520.0 * pitch, 170.0 * pitch, 0.22)
-    buzz = 0.6 * audio.saw(audio.phase_from_frequency(freq)) + 0.5 * audio.saw(audio.phase_from_frequency(freq * 1.013))
-    buzz = audio.lowpass(buzz, 2400.0 * pitch) * audio.attack_decay(t, 0.003, 0.07)
-    hiss = audio.bandpass(audio.white_noise(rng, len(t)), 800.0 * pitch, 4000.0 * pitch) * audio.attack_decay(t, 0.002, 0.04)
-    thump = audio.sine(audio.phase_from_frequency(audio.sweep(t, 110.0 * pitch, 45.0 * pitch, 0.22))) * audio.exp_decay(t, 0.08)
-    return audio.fade(0.7 * buzz + 0.35 * hiss + 0.5 * thump, 0.0, 0.015)
+    t = audio.time_axis(0.15)
+    drive = 1.6  # soft clipping: more intermodulation, the buzz
+    tone = np.tanh(drive * _cluster(t, 1160.0 * pitch, 430.0 * pitch, 1.4, 1.6)) / np.tanh(drive)
+    tone *= audio.hold_and_release(t, 0.002, 0.120, 0.006)
+    return audio.fade(tone + 0.6 * _click(rng, t, pitch, 0.0025), 0.0003, 0.004)
+
+
+def turret_fire(rng: np.random.Generator, pitch: float = GUN_PITCH) -> np.ndarray:
+    t = audio.time_axis(0.075)
+    tone = _cluster(t, 2700.0 * pitch, 880.0 * pitch, 0.5, 0.6) * audio.hold_and_cut(t, 0.0015, 0.060, 0.004)
+    return audio.fade(tone + 0.4 * _click(rng, t, pitch, 0.001), 0.0003, 0.0)
 
 
 def hit_hull(rng: np.random.Generator, pitch: float = GUN_PITCH) -> np.ndarray:
-    t = audio.time_axis(0.35)
-    ring = np.zeros_like(t)
-    base = 310.0 * pitch * (1.0 + 0.08 * rng.uniform(-1.0, 1.0))
-    for k, ratio in enumerate(PARTIALS):
-        tau = 0.09 / (1.0 + 0.7 * k)  # the higher partials die first
-        ring += audio.sine(audio.phase_from_frequency(np.full_like(t, base * ratio)) + rng.uniform(0.0, 6.28)) * audio.exp_decay(t, tau) / (1.0 + 0.4 * k)
-    click = audio.highpass(audio.white_noise(rng, len(t)), 1800.0 * pitch) * audio.exp_decay(t, 0.006)
-    return audio.fade(0.7 * ring + 0.5 * click, 0.003, 0.02)
+    t = audio.time_axis(0.14)
+    detune = 1.0 + 0.03 * rng.uniform(-1.0, 1.0)  # no two hulls ring quite alike
+    carrier = 3300.0 * pitch * detune
+    index = 0.6 + 2.6 * audio.exp_decay(t, 0.02)  # bright at the strike, duller as it rings
+    ring = audio.fm(t, carrier, ((1.414 * carrier, index), (530.0 * pitch * detune, 0.6)))
+    ring *= audio.attack_decay(t, 0.001, 0.028)
+    return audio.fade(ring + 0.4 * _click(rng, t, pitch, 0.002), 0.0003, 0.01)
 
 
 def explosion(rng: np.random.Generator) -> np.ndarray:
@@ -88,23 +117,48 @@ def explosion(rng: np.random.Generator) -> np.ndarray:
     return audio.fade(0.9 * boom + 0.7 * rumble + 0.35 * crackle, 0.0, 0.2)
 
 
-def engine_loop(rng: np.random.Generator) -> np.ndarray:
-    n = int(round(ENGINE_SECONDS * audio.SAMPLE_RATE))
-    t = audio.time_axis(ENGINE_SECONDS)
-    out = np.zeros(n)
-    for harmonic, gain in ((1, 1.0), (2, 0.8), (3, 0.5), (4, 0.3), (5, 0.15)):
-        # Every frequency is a whole number of cycles in the loop, so the end meets the start.
-        out += gain * np.sin(2.0 * np.pi * ENGINE_BASE_HZ * harmonic * t + rng.uniform(0.0, 6.28))
-    out += 0.3 * np.sin(2.0 * np.pi * 0.5 * ENGINE_BASE_HZ * t)  # sub-harmonic, 18 Hz: 36 cycles in 2 s
-    low_bin, high_bin = int(25.0 * ENGINE_SECONDS), int(260.0 * ENGINE_SECONDS)
-    out += 0.5 * audio.periodic_noise(rng, n, low_bin, high_bin)
-    return out
+def _band_edges(f: np.ndarray, low_hz: float, high_hz: float) -> np.ndarray:
+    """Steep (8th-order) high- and low-pass edges: the noise's band, with nothing to speak of outside it."""
+    f = np.maximum(f, 1e-9)
+    return 1.0 / np.sqrt((1.0 + (low_hz / f) ** 16) * (1.0 + (f / high_hz) ** 16))
 
 
-def thruster_loop(rng: np.random.Generator) -> np.ndarray:
-    n = int(round(ENGINE_SECONDS * audio.SAMPLE_RATE))
-    low_bin, high_bin = int(90.0 * ENGINE_SECONDS), int(900.0 * ENGINE_SECONDS)
-    return audio.periodic_noise(rng, n, low_bin, high_bin)
+def main_spectrum(f: np.ndarray) -> np.ndarray:
+    """The roar's amplitude per hertz: rising 6 dB per octave to 1 kHz, falling 6.5 dB per octave above it, with a 10 dB
+    presence peak at 5.7 kHz that makes 4-8 kHz the loudest octave."""
+    octaves = np.log2(np.maximum(f, 1e-9) / 1000.0)
+    tilt_db = np.where(octaves > 0.0, -6.5 * octaves, 6.0 * octaves)
+    peak_db = 10.0 * np.exp(-0.5 * (np.log2(np.maximum(f, 1e-9) / 5657.0) / 0.6) ** 2)
+    return 10.0 ** ((tilt_db + peak_db) / 20.0) * _band_edges(f, 400.0, 16000.0)
+
+
+def rcs_spectrum(f: np.ndarray) -> np.ndarray:
+    """The jet's amplitude per hertz: a 2-16 kHz band whose level climbs 9 dB from 2 to 6 kHz and stays up to the top edge
+    (set at 14 kHz so the steep roll-off is spent by 16 kHz)."""
+    climb = np.clip(np.log2(np.maximum(f, 1e-9) / 2000.0) / np.log2(3.0), 0.0, 1.0)
+    return 10.0 ** (9.0 * (climb - 1.0) / 20.0) * _band_edges(f, 2000.0, 14000.0)
+
+
+def wander_db(t: np.ndarray, phases: np.ndarray) -> np.ndarray:
+    """The main burst's slow swells, in dB from 0 to ``WANDER_DB``. Every component is whole cycles of the loop, so the swell
+    repeats with it."""
+
+    def swing(x: np.ndarray) -> np.ndarray:
+        return sum(np.sin(2.0 * np.pi * cycles / MAIN_BURST_S * x + phase) for cycles, phase in zip(WANDER_CYCLES, phases))
+
+    period = swing(audio.time_axis(MAIN_BURST_S))  # one loop, for the depth
+    return WANDER_DB * (swing(np.asarray(t, dtype=float)) - period.min()) / max(float(np.ptp(period)), 1e-12)
+
+
+def main_burst(rng: np.random.Generator) -> np.ndarray:
+    n = int(round(MAIN_BURST_S * audio.SAMPLE_RATE))
+    noise = audio.shaped_periodic_noise(rng, n, main_spectrum)
+    swell = wander_db(audio.time_axis(MAIN_BURST_S), rng.uniform(0.0, 2.0 * np.pi, len(WANDER_CYCLES)))
+    return noise * 10.0 ** (swell / 20.0)
+
+
+def rcs_burst(rng: np.random.Generator) -> np.ndarray:
+    return audio.shaped_periodic_noise(rng, int(round(RCS_BURST_S * audio.SAMPLE_RATE)), rcs_spectrum)
 
 
 def warning_beep(_rng: np.random.Generator) -> np.ndarray:
@@ -123,14 +177,15 @@ def target_blip(_rng: np.random.Generator) -> np.ndarray:
 SOUNDS: dict[str, Callable[[np.random.Generator], np.ndarray]] = {
     "pulse_fire": pulse_fire,
     "raider_fire": raider_fire,
+    "turret_fire": turret_fire,
     "hit_hull": hit_hull,
     "explosion": explosion,
-    "engine_loop": engine_loop,
-    "thruster_loop": thruster_loop,
+    "main_burst": main_burst,
+    "rcs_burst": rcs_burst,
     "warning_beep": warning_beep,
     "target_blip": target_blip,
 }
-LOOPS = {"engine_loop", "thruster_loop"}
+LOOPS = {"main_burst", "rcs_burst"}
 
 
 def build(ctx: BuildContext) -> AssetOutputs:

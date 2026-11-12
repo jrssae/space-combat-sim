@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## Kill credit in play (M3-T16, Q18, AC24): on the real main scene with the combat sandbox, the player's own bolts make a
 ## player kill; firing at the selected raider and leaving the kill to an ally makes an assist, never both; the player's ram
 ## is a kill; total kills counts every raider; the status line and the `waves` provider show all three; a pool ship handed
@@ -31,15 +31,6 @@ func after_each() -> void:
 	Engine.time_scale = _scale_backup
 	DebugConsole.flags.invulnerable = false
 	get_tree().paused = false
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
-
-
-func _exec(line: String) -> ConsoleResult:
-	return DebugConsole.registry.execute(line)[0]
 
 
 func _spawn(line: String, type: StringName = ShipPool.DEFAULT_TYPE) -> Combatant:

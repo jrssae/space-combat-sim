@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## PulseCannon, Projectile and MuzzleFlash with a plain RigidBody3D standing in for the ship and Marker3D muzzles at
 ## the hardpoints fixture's positions (architecture §6.3, §7.1; AC7). The Ship scene does not exist yet, so the cannon
 ## is wired by hand exactly as Main will: `setup(body, muzzles, projectiles_parent)` and `set_combat_command(cmd)`.
@@ -669,12 +669,6 @@ func test_spend_retires_a_bolt_once() -> void:
 
 
 # --- console --------------------------------------------------------------------------------------------------
-
-
-func _console(line: String) -> ConsoleResult:
-	var results: Array[ConsoleResult] = DebugConsole.registry.execute(line)
-	assert_eq(results.size(), 1, "one statement: " + line)
-	return results[0]
 
 
 func test_console_provider_is_registered_with_a_writable_mode() -> void:

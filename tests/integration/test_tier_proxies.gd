@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## Far proxies for the low-attention tier (M4-T23, architecture §17.14): every tier row is drawn (a fighter as a far dot, a
 ## capital as an instance of its class's mesh, one multimesh per mesh) and shows on the radar; a promoted ship's proxy goes in
 ## the tick its body shows (no double, no gap); the player can select a tier ship, read it from its row, and keep the
@@ -69,11 +69,6 @@ func _build() -> void:
 	FlightBatch.attach(world)
 	sim = SimCore.attach(world)
 	tier = TierDirector.attach(world, pool, standins)
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
 
 
 func _raider(display_name: String, at: Vector3, velocity: Vector3 = Vector3.ZERO) -> Combatant:

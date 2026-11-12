@@ -30,6 +30,33 @@ func test_fuel_unlimited_is_a_bool_that_defaults_to_true() -> void:
 	assert_false(schema.parse(&"fuel_unlimited", "maybe")["ok"])
 
 
+func test_the_feature_settings_keep_their_types_defaults_and_ranges() -> void:
+	# M6-T18: moved from the files of the features that read them (audio, HUD, engine audio, friendly fire, particles, rams,
+	# post effects), which booted a scene to read a schema entry.
+	assert_true(schema.has_key(&"sfx_volume"))
+	assert_eq(schema.get_type(&"show_hud"), TYPE_BOOL)
+	assert_eq(schema.get_default(&"show_hud"), true)
+	assert_eq(schema.get_type(&"hud_targeting_grid"), TYPE_BOOL)
+	assert_eq(schema.get_default(&"hud_targeting_grid"), false)
+	var voices: Dictionary = SettingsSchema.ENTRIES[&"engine_voice_cap"]
+	assert_eq(voices["type"], TYPE_INT)
+	assert_eq(voices["default"], 24)
+	assert_gte(int(voices["min"]), 8, "the player's own voices always fit")
+	assert_eq(schema.get_type(&"friendly_fire"), TYPE_BOOL)
+	assert_eq(schema.get_default(&"friendly_fire"), false, "forgiving by default (maintainer Q2)")
+	assert_eq(DebugConsole.registry.format_path("settings.friendly_fire"), "settings.friendly_fire = false")
+	var density: Dictionary = SettingsSchema.ENTRIES[&"particle_density"]
+	assert_eq(density["type"], TYPE_FLOAT)
+	assert_eq(density["default"], 1.0)
+	assert_eq(density["min"], 0.0)
+	assert_eq(density["max"], 1.0)
+	assert_eq(schema.get_type(&"ram_damage"), TYPE_BOOL)
+	assert_eq(schema.get_default(&"ram_damage"), true)
+	var blur: Dictionary = SettingsSchema.ENTRIES[&"motion_blur_strength"]
+	assert_eq(blur["min"], 0.0)
+	assert_eq(blur["max"], 1.0)
+
+
 func test_renamed_keys_point_at_current_keys() -> void:
 	for old: StringName in SettingsSchema.RENAMED.keys():
 		assert_false(schema.has_key(old), "%s is no longer a key" % old)
@@ -158,3 +185,84 @@ func test_the_catch_up_cap_is_an_int_of_at_least_one_tick_a_frame() -> void:
 	assert_eq(schema.get_default(&"physics_max_steps_per_frame"), 3)
 	assert_false(schema.validate(&"physics_max_steps_per_frame", 0)["ok"], "a frame runs at least one tick")
 	assert_true(schema.validate(&"physics_max_steps_per_frame", 8)["ok"], "Godot's default of 8 stays allowed")
+
+
+# --- Menu metadata (M5-T03, D57): every entry has a category, debug switches stay out of the menu ---------------------
+
+
+func test_every_entry_has_a_known_category() -> void:
+	for key: StringName in schema.keys():
+		var category: Variant = schema.get_entry(key).get("category")
+		assert_true(category is StringName, "%s has a category" % key)
+		assert_true(SettingsSchema.CATEGORIES.has(category), "%s: '%s' is a known category" % [key, category])
+		assert_eq(schema.category_of(key), category)
+
+
+func test_every_category_is_used() -> void:
+	for category: StringName in SettingsSchema.CATEGORIES:
+		var used: bool = false
+		for key: StringName in schema.keys():
+			used = used or schema.category_of(key) == category
+		assert_true(used, "nothing is filed under %s" % category)
+
+
+func test_the_menu_flag_is_a_bool_and_defaults_to_shown() -> void:
+	for key: StringName in schema.keys():
+		var entry: Dictionary = schema.get_entry(key)
+		assert_true(not entry.has("menu") or entry["menu"] is bool, "%s: menu is a bool" % key)
+		assert_eq(schema.is_menu(key), bool(entry.get("menu", true)))
+
+
+func test_the_debug_switches_stay_console_only() -> void:
+	for key: StringName in [&"physics_jitter_fix", &"show_fps", &"show_overlay",
+			&"debug_text_size", &"console_enabled", &"console_pause_on_open", &"scenario", &"skip_front_end", &"control_profile"]:
+		assert_false(schema.is_menu(key), "%s is not in the menu" % key)
+	for key: StringName in [&"invert_y", &"sfx_volume", &"camera_default", &"show_hud", &"lens_flare", &"friendly_fire"]:
+		assert_true(schema.is_menu(key), "%s is in the menu" % key)
+
+
+func test_a_menu_entry_has_a_control_the_pad_can_use() -> void:
+	# Text has no pad editor (the controls page owns the profile name), so a string setting must stay out of the menu.
+	for key: StringName in schema.menu_keys():
+		assert_ne(schema.get_type(key), TYPE_STRING, "%s is text and cannot be edited on a pad" % key)
+		assert_false(schema.label_of(key).is_empty(), "%s has a label" % key)
+		if schema.get_type(key) == TYPE_FLOAT or schema.get_type(key) == TYPE_INT:
+			assert_gt(schema.step_of(key), 0.0, "%s has a step" % key)
+
+
+func test_the_steps_fit_the_ranges() -> void:
+	for key: StringName in schema.keys():
+		var type: int = schema.get_type(key)
+		if type != TYPE_FLOAT and type != TYPE_INT:
+			continue
+		var entry: Dictionary = schema.get_entry(key)
+		var span: float = float(entry["max"]) - float(entry["min"])
+		assert_gt(schema.step_of(key), 0.0, "%s: step above zero" % key)
+		assert_lte(schema.step_of(key), span, "%s: a step fits in the range" % key)
+		assert_gte(span / schema.step_of(key), 4.0, "%s: at least four steps, or a slider is pointless" % key)
+		assert_lte(span / schema.step_of(key), 100.0, "%s: at most a hundred steps, or the D-pad takes forever" % key)
+
+
+func test_menu_keys_come_in_declaration_order_within_a_category() -> void:
+	var flight: Array[StringName] = schema.menu_keys(&"flight")
+	assert_eq(flight, [&"assist_default", &"fuel_unlimited"] as Array[StringName])
+	assert_eq(schema.menu_keys(&"none_such"), [] as Array[StringName])
+	assert_eq(schema.menu_keys().size(), _count_menu_entries())
+
+
+func test_the_four_bus_volumes_are_settings_from_zero_to_one() -> void:
+	for key: StringName in [&"master_volume", &"sfx_volume", &"ui_volume", &"comms_volume"]:
+		assert_true(schema.has_key(key), key)
+		assert_eq(schema.get_type(key), TYPE_FLOAT)
+		assert_eq(schema.category_of(key), &"audio")
+		assert_true(schema.is_menu(key))
+		assert_true(schema.validate(key, 0.0)["ok"])
+		assert_true(schema.validate(key, 1.0)["ok"])
+		assert_false(schema.validate(key, 1.01)["ok"])
+
+
+func _count_menu_entries() -> int:
+	var n: int = 0
+	for key: StringName in schema.keys():
+		n += 1 if bool(schema.get_entry(key).get("menu", true)) else 0
+	return n

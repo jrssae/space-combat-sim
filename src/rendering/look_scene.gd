@@ -14,7 +14,11 @@ extends Node
 const LIGHTS: Array[StringName] = [&"lit", &"dark", &"off"]
 ## How the parked ship faces the camera: three-quarters on (the sheets' rows), its back (the dorsal number), or its left side.
 const VIEWS: Array[StringName] = [&"three_quarter", &"top", &"side"]
-const POOL_TYPES: Dictionary = {"starfury_aurora": ShipPool.ALLY_TYPE, "raider_fighter": ShipPool.DEFAULT_TYPE}
+const POOL_TYPES: Dictionary = {"starfury_aurora": ShipPool.ALLY_TYPE, "raider_fighter": ShipPool.DEFAULT_TYPE,
+		"saturn_3_freighter": &"saturn_3_freighter", "saturn_4_transport": &"saturn_4_transport",
+		"saturn_4_tanker": &"saturn_4_tanker", "saturn_8_transport": &"saturn_8_transport", "saturn_8_tanker": &"saturn_8_tanker",
+		"skylark_transport": &"skylark_transport", "narn_transport": &"narn_transport",
+		"centauri_brezebel": &"centauri_brezebel", "brakiri_bokmai": &"brakiri_bokmai"}  # the civilians (M5-T16)
 ## The hulls that are not pooled ships, for the sheets (M4-T30d).
 const PROP_ASSETS: Array[String] = ["nav_buoy", "raider_fighter_chunks", "starfury_aurora_chunks", "capital_cruiser", "capital_destroyer",
 		"capital_carrier", "b5_station"]

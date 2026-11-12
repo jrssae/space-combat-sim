@@ -1,0 +1,19 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://src/frontend/controls_screen.gd" id="1_screen"]
+
+[node name="ControlsScreen" type="VBoxContainer"]
+theme_override_constants/separation = 6
+script = ExtResource("1_screen")
+
+[node name="Heading" type="Label" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"Heading"
+
+[node name="Status" type="Label" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+autowrap_mode = 3

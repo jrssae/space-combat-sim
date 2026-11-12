@@ -194,6 +194,7 @@ func test_every_edge_maps_to_its_field() -> void:
 		InputAdapter.WING_ENGAGE: func(c: PilotCommand) -> bool: return c.ui.wing_engage,
 		InputAdapter.WING_COVER: func(c: PilotCommand) -> bool: return c.ui.wing_cover,
 		InputAdapter.TOGGLE_RUNNING_LIGHTS: func(c: PilotCommand) -> bool: return c.ui.toggle_running_lights,
+		InputAdapter.COMMS_MENU: func(c: PilotCommand) -> bool: return c.ui.comms_open,
 	}
 	assert_eq(fields.size(), InputAdapter.EDGE_ACTIONS.size(), "every edge action is covered")
 	for action: StringName in fields.keys():
@@ -204,23 +205,27 @@ func test_every_edge_maps_to_its_field() -> void:
 		assert_true((fields[action] as Callable).call(cmd), String(action))
 
 
-# --- D-pad Up: tap = next target (on release), hold = target nearest the nose (once, at the threshold) -----------
+# --- The target button (M5-T25): tap = the nearest enemy (on release), hold = the target menu (once, at the threshold) --
 
 
-## Holds the tap-or-hold button for `ticks` samples of `dt`, then releases it for one more. Returns per-tick flags.
+## Holds the tap-or-hold button for `ticks` samples of `dt`, then releases it for one more. Returns the ticks its tap
+## (`next`: `CombatCommand.target_nearest`) and its hold (`ahead`: `UiCommand.target_menu_open`) fired on, and whether
+## anything of the old behaviour (cycling, nearest the nose) fired at all.
 func _press_for(ticks: int, dt: float = DT) -> Dictionary:
 	var next_ticks: Array[int] = []
 	var ahead_ticks: Array[int] = []
+	var old: bool = false
 	source.hold(InputAdapter.TARGET_NEXT)
 	for i: int in ticks + 1:
 		if i == ticks:
 			source.release(InputAdapter.TARGET_NEXT)
-		var combat: CombatCommand = adapter.sample(source, dt).combat
-		if combat.target_next:
+		var cmd: PilotCommand = adapter.sample(source, dt)
+		if cmd.combat.target_nearest:
 			next_ticks.append(i)
-		if combat.target_ahead:
+		if cmd.ui.target_menu_open:
 			ahead_ticks.append(i)
-	return {"next": next_ticks, "ahead": ahead_ticks}
+		old = old or cmd.combat.target_next or cmd.combat.target_ahead or cmd.combat.target_prev
+	return {"next": next_ticks, "ahead": ahead_ticks, "old": old}
 
 
 func test_target_hold_default_matches_the_setting() -> void:
@@ -230,8 +235,9 @@ func test_target_hold_default_matches_the_setting() -> void:
 
 func test_short_tap_selects_next_target_on_release() -> void:
 	var r: Dictionary = _press_for(3)
-	assert_eq(r["next"], [3] as Array[int], "target_next once, on the release tick")
-	assert_eq(r["ahead"], [] as Array[int], "a tap never targets ahead")
+	assert_eq(r["next"], [3] as Array[int], "target_nearest once, on the release tick")
+	assert_eq(r["ahead"], [] as Array[int], "a tap never opens the menu")
+	assert_false(r["old"], "the button no longer cycles or picks the target nearest the nose")
 
 
 func test_tap_just_under_the_threshold_is_still_a_tap() -> void:
@@ -244,8 +250,9 @@ func test_tap_just_under_the_threshold_is_still_a_tap() -> void:
 func test_hold_targets_ahead_once_at_the_threshold_and_never_cycles() -> void:
 	var crossing: int = ceili(adapter.target_hold_s / DT - 1e-6) - 1  # tick index 20: the 21st tick held = 0.35 s
 	var r: Dictionary = _press_for(60)
-	assert_eq(r["ahead"], [crossing] as Array[int], "target_ahead once, when the hold crosses %.2f s" % adapter.target_hold_s)
-	assert_eq(r["next"], [] as Array[int], "the release after a hold does not cycle")
+	assert_eq(r["ahead"], [crossing] as Array[int], "the target menu once, when the hold crosses %.2f s" % adapter.target_hold_s)
+	assert_eq(r["next"], [] as Array[int], "the release after a hold does not tap")
+	assert_false(r["old"], "a hold is no longer the target nearest the nose")
 
 
 func test_hold_threshold_is_tunable() -> void:
@@ -275,16 +282,16 @@ func test_console_transition_drops_a_press_in_progress() -> void:
 	source.keyboard_mouse_enabled = false  # console opens: B now reads released
 	adapter.resync_edges(source)
 	var cmd: PilotCommand = adapter.sample(source, DT)
-	assert_false(cmd.combat.target_next, "no phantom tap from the mask")
+	assert_false(cmd.combat.target_nearest, "no phantom tap from the mask")
 	source.keyboard_mouse_enabled = true  # console closes with B still down
 	adapter.resync_edges(source)
 	var fired: bool = false
 	for i: int in 60:
-		var combat: CombatCommand = adapter.sample(source, DT).combat
-		fired = fired or combat.target_next or combat.target_ahead
+		var held: PilotCommand = adapter.sample(source, DT)
+		fired = fired or held.combat.target_nearest or held.ui.target_menu_open
 	source.release_all()
-	var released: CombatCommand = adapter.sample(source, DT).combat
-	assert_false(fired or released.target_next or released.target_ahead, "a press already down at the transition never fires")
+	var released: PilotCommand = adapter.sample(source, DT)
+	assert_false(fired or released.combat.target_nearest or released.ui.target_menu_open, "a press already down at the transition never fires")
 
 
 func test_reset_drops_a_press_in_progress() -> void:
@@ -292,7 +299,7 @@ func test_reset_drops_a_press_in_progress() -> void:
 	adapter.sample(source, DT)
 	adapter.reset()
 	source.release_all()
-	assert_false(adapter.sample(source, DT).combat.target_next)
+	assert_false(adapter.sample(source, DT).combat.target_nearest)
 
 
 func test_held_actions() -> void:
@@ -430,30 +437,30 @@ func test_the_wheel_cycles_targets() -> void:
 	assert_false(cmd.combat.target_prev, "one notch, one step")
 
 
-# --- pad B: tap next, hold previous (M3-T15) --------------------------------------------------------------------------
+# --- pad B: tap the nearest enemy, hold the target menu (M5-T25) ------------------------------------------------------
 
 
 func _press_cycle_for(ticks: int) -> Dictionary:
-	var seen: Dictionary = {"next": 0, "prev": 0, "ahead": 0}
+	var seen: Dictionary = {"tap": 0, "menu": 0, "old": 0}
 	for i: int in ticks + 3:
 		if i == 0:
 			source.hold(InputAdapter.TARGET_CYCLE)
 		elif i == ticks:
 			source.release(InputAdapter.TARGET_CYCLE)
-		var combat: CombatCommand = adapter.sample(source, DT).combat
-		seen["next"] += int(combat.target_next)
-		seen["prev"] += int(combat.target_prev)
-		seen["ahead"] += int(combat.target_ahead)
+		var cmd: PilotCommand = adapter.sample(source, DT)
+		seen["tap"] += int(cmd.combat.target_nearest)
+		seen["menu"] += int(cmd.ui.target_menu_open)
+		seen["old"] += int(cmd.combat.target_next) + int(cmd.combat.target_prev) + int(cmd.combat.target_ahead)
 	return seen
 
 
-func test_pad_b_tapped_selects_the_next_target_on_release() -> void:
-	assert_eq(_press_cycle_for(5), {"next": 1, "prev": 0, "ahead": 0})
+func test_pad_b_tapped_picks_the_nearest_enemy_on_release() -> void:
+	assert_eq(_press_cycle_for(5), {"tap": 1, "menu": 0, "old": 0})
 
 
-func test_pad_b_held_selects_the_previous_target_once_and_never_repeats() -> void:
-	assert_eq(_press_cycle_for(int(InputAdapter.TARGET_HOLD_S / DT) + 120), {"next": 0, "prev": 1, "ahead": 0},
-			"a long press steps back one target, as the mouse wheel")
+func test_pad_b_held_opens_the_target_menu_once_and_never_repeats() -> void:
+	assert_eq(_press_cycle_for(int(InputAdapter.TARGET_HOLD_S / DT) + 120), {"tap": 0, "menu": 1, "old": 0},
+			"a long press asks for the menu once; it no longer steps back a target")
 
 
 func test_the_two_tap_or_hold_buttons_run_on_separate_timers() -> void:
@@ -461,14 +468,13 @@ func test_the_two_tap_or_hold_buttons_run_on_separate_timers() -> void:
 	for i: int in 15:
 		adapter.sample(source, DT)
 	source.hold(InputAdapter.TARGET_CYCLE)  # pad B, pressed later
-	var ahead: int = 0
-	var prev: int = 0
+	var holds: int = 0
 	for i: int in 15:
-		var combat: CombatCommand = adapter.sample(source, DT).combat
-		ahead += int(combat.target_ahead)
-		prev += int(combat.target_prev)
-	assert_eq(ahead, 1, "keyboard B reached its hold")
-	assert_eq(prev, 0, "pad B has not yet")
+		holds += int(adapter.sample(source, DT).ui.target_menu_open)
+	assert_eq(holds, 1, "keyboard B reached its hold; pad B has not yet")
+	for i: int in 15:
+		holds += int(adapter.sample(source, DT).ui.target_menu_open)
+	assert_eq(holds, 2, "pad B reaches its own later")
 
 
 func test_reset_and_focus_changes_drop_a_pad_b_press() -> void:
@@ -476,9 +482,202 @@ func test_reset_and_focus_changes_drop_a_pad_b_press() -> void:
 	adapter.sample(source, DT)
 	adapter.reset()
 	source.release(InputAdapter.TARGET_CYCLE)
-	assert_false(adapter.sample(source, DT).combat.target_next, "reset: no tap on the release")
+	assert_false(adapter.sample(source, DT).combat.target_nearest, "reset: no tap on the release")
 	source.hold(InputAdapter.TARGET_CYCLE)
 	adapter.sample(source, DT)
 	adapter.resync_edges(source)
 	for i: int in 60:
-		assert_false(adapter.sample(source, DT).combat.target_prev, "resync: the press in progress never fires")
+		assert_false(adapter.sample(source, DT).ui.target_menu_open, "resync: the press in progress never fires")
+
+
+# --- While a menu has the pad (M5-T02 review): only the pause edge is read -------------------------------------------
+
+
+func test_a_menu_reads_only_the_pause_edge() -> void:
+	var ui: UiCommand = adapter.sample_menu(source, DT)
+	assert_false(ui.pause)
+	source.hold(InputAdapter.PAUSE)
+	assert_true(adapter.sample_menu(source, DT).pause, "Start closes the menu")
+	assert_false(adapter.sample_menu(source, DT).pause, "an edge, not a level")
+	assert_almost_eq(source.polled_dt, DT, 1e-12, "the source is still polled")
+
+
+func test_buttons_that_move_a_menu_do_not_act_behind_it() -> void:
+	for action: StringName in [InputAdapter.RESET_SHIP, InputAdapter.TOGGLE_CAMERA, InputAdapter.TOGGLE_RUNNING_LIGHTS,
+			InputAdapter.AUTOTRACK, InputAdapter.TOGGLE_ASSIST, InputAdapter.WEAPON_NEXT, InputAdapter.TARGET_CYCLE,
+			InputAdapter.COMMS_MENU]:
+		source.hold(action)
+	var ui: UiCommand = adapter.sample_menu(source, DT)
+	assert_false(ui.comms_open, "D-pad Right does not open the comms menu behind the pause menu")
+	assert_false(ui.reset)
+	assert_false(ui.toggle_camera)
+	assert_false(ui.toggle_running_lights)
+	assert_false(adapter.autotrack_on, "X does not switch auto-track on behind the menu")
+	# Still held when the menu closes, and then let go: none of it fires.
+	var held: PilotCommand = adapter.sample(source, DT)
+	assert_false(held.ui.reset or held.ui.toggle_camera or held.ui.toggle_running_lights, "no edge at the first flight tick")
+	assert_false(held.flight.toggle_assist or held.combat.weapon_next or held.flight.autotrack or held.ui.comms_open)
+	source.release_all()
+	var released: PilotCommand = adapter.sample(source, DT)
+	assert_false(released.combat.target_nearest or released.ui.target_menu_open, "a target button held through the menu taps nothing")
+
+
+func test_a_menu_drains_the_mouse_and_the_wheel() -> void:
+	source.push_mouse(Vector2(500.0, 300.0))
+	source.push_wheel(3)
+	adapter.sample_menu(source, DT)
+	var cmd: PilotCommand = adapter.sample(source, DT)
+	assert_eq(cmd.flight.rot, Vector3.ZERO, "the mouse moved behind the menu does not turn the ship afterwards")
+	assert_false(cmd.combat.target_next, "nor does the wheel step a target")
+
+
+# --- The comms menu (D54, M5-T46): D-pad Right opens it, and the radial menu owns the pad until it closes -------------------
+
+
+func test_dpad_right_opens_the_comms_menu_for_one_tick() -> void:
+	source.hold(InputAdapter.COMMS_MENU)
+	var cmd: PilotCommand = adapter.sample(source, DT)
+	assert_true(cmd.ui.comms_open)
+	assert_true(cmd.ui.to_dict()["comms_open"])
+	assert_false(adapter.sample(source, DT).ui.comms_open, "held is not a second press")
+
+
+func test_dpad_right_closes_the_comms_menu_again_but_not_the_press_that_opened_it() -> void:
+	source.hold(InputAdapter.COMMS_MENU)
+	adapter.begin_radial(source)
+	assert_false(adapter.sample_radial(source, DT).comms_open, "the press that opened it is not a close")
+	source.release(InputAdapter.COMMS_MENU)
+	assert_false(adapter.sample_radial(source, DT).comms_open)
+	source.hold(InputAdapter.COMMS_MENU)
+	assert_true(adapter.sample_radial(source, DT).comms_open, "a fresh press is")
+	assert_false(adapter.sample_radial(source, DT).comms_open, "an edge, not a level")
+
+
+func test_the_dpad_does_not_point_the_radial_menu() -> void:
+	adapter.begin_radial(source)
+	for action: StringName in [InputAdapter.TOGGLE_ASSIST, InputAdapter.COMMS_MENU, InputAdapter.WEAPON_NEXT,
+			InputAdapter.TOGGLE_RUNNING_LIGHTS]:
+		source.hold(action)
+	var ui: UiCommand = adapter.sample_radial(source, DT)
+	assert_eq(ui.radial_point, Vector2.ZERO, "only the stick, the arrows and the mouse point")
+	assert_false(ui.radial_select or ui.radial_back)
+
+
+func test_a_dpad_press_held_through_the_comms_menu_fires_nothing_when_it_closes() -> void:
+	adapter.begin_radial(source)
+	source.hold(InputAdapter.TOGGLE_ASSIST)
+	source.hold(InputAdapter.WEAPON_NEXT)
+	adapter.sample_radial(source, DT)
+	adapter.end_radial(source)
+	var after: PilotCommand = adapter.sample(source, DT)
+	assert_false(after.flight.toggle_assist or after.combat.weapon_next, "D-pad Up and Down still held: nothing toggles")
+
+
+# --- A radial menu (M5-T25): only its stick, select, back and Start are read ------------------------------------------
+
+
+func test_a_radial_menu_reads_its_stick_as_a_direction() -> void:
+	adapter.begin_radial(source)
+	assert_eq(adapter.sample_radial(source, DT).radial_point, Vector2.ZERO, "a centred stick points at nothing")
+	source.hold(InputAdapter.RADIAL_UP, 1.0)
+	var up: Vector2 = adapter.sample_radial(source, DT).radial_point
+	assert_almost_eq(up, Vector2(0.0, 1.0), Vector2(1e-6, 1e-6), "stick up: y up")
+	source.release_all()
+	source.hold(InputAdapter.RADIAL_RIGHT, 1.0)
+	source.hold(InputAdapter.RADIAL_DOWN, 1.0)
+	var v: Vector2 = adapter.sample_radial(source, DT).radial_point
+	assert_gt(v.x, 0.5)
+	assert_lt(v.y, -0.5, "two arrow keys: the diagonal")
+	source.release_all()
+	source.hold(InputAdapter.RADIAL_LEFT, adapter.stick_deadzone * 0.5)
+	assert_eq(adapter.sample_radial(source, DT).radial_point, Vector2.ZERO, "inside the deadzone: nothing")
+	assert_almost_eq(source.polled_dt, DT, 1e-12, "the source is still polled")
+
+
+func test_a_radial_menus_select_and_back_are_edges_seeded_from_what_is_held() -> void:
+	# B opened the menu and is still down: it must not also go back.
+	source.hold(InputAdapter.RADIAL_BACK)
+	adapter.begin_radial(source)
+	assert_false(adapter.sample_radial(source, DT).radial_back, "the press that opened it is not a back")
+	source.release(InputAdapter.RADIAL_BACK)
+	assert_false(adapter.sample_radial(source, DT).radial_back)
+	source.hold(InputAdapter.RADIAL_BACK)
+	assert_true(adapter.sample_radial(source, DT).radial_back, "a fresh press is")
+	assert_false(adapter.sample_radial(source, DT).radial_back, "an edge, not a level")
+	source.hold(InputAdapter.RADIAL_SELECT)
+	var ui: UiCommand = adapter.sample_radial(source, DT)
+	assert_true(ui.radial_select)
+	assert_false(adapter.sample_radial(source, DT).radial_select)
+	source.release_all()
+	source.hold(InputAdapter.PAUSE)
+	assert_true(adapter.sample_radial(source, DT).pause, "Start is read, for the pause menu")
+	assert_false(adapter.sample_radial(source, DT).pause)
+
+
+func test_the_mouse_points_a_radial_menu_by_its_direction_of_travel() -> void:
+	adapter.begin_radial(source)
+	source.push_mouse(Vector2(0.0, -200.0))  # up the screen
+	var up: Vector2 = adapter.sample_radial(source, DT).radial_point
+	assert_almost_eq(up, Vector2(0.0, 1.0), Vector2(1e-6, 1e-6), "the mouse pushed away points up, at full reach")
+	assert_eq(adapter.sample_radial(source, DT).radial_point, Vector2.ZERO, "a still mouse points at nothing new: the highlight stays")
+	source.push_mouse(Vector2(120.0, 240.0))
+	var v: Vector2 = adapter.sample_radial(source, DT).radial_point
+	assert_gt(v.x, 0.5, "it travels on from where it pointed")
+	assert_lt(v.y, 0.0)
+	assert_almost_eq(v.length(), 1.0, 1e-6, "never past the rim")
+	# The stick wins while it leans.
+	source.push_mouse(Vector2(-500.0, 0.0))
+	source.hold(InputAdapter.RADIAL_UP, 1.0)
+	assert_almost_eq(adapter.sample_radial(source, DT).radial_point, Vector2(0.0, 1.0), Vector2(1e-6, 1e-6))
+	# A menu opened again starts from the centre.
+	source.release_all()
+	adapter.begin_radial(source)
+	source.push_mouse(Vector2(30.0, 0.0))
+	assert_almost_eq(adapter.sample_radial(source, DT).radial_point.x, 30.0 / InputAdapter.RADIAL_MOUSE_REACH_PX, 1e-6)
+
+
+func test_nothing_else_is_read_behind_a_radial_menu() -> void:
+	adapter.begin_radial(source)
+	for action: StringName in [InputAdapter.RESET_SHIP, InputAdapter.TOGGLE_CAMERA, InputAdapter.TOGGLE_RUNNING_LIGHTS,
+			InputAdapter.AUTOTRACK, InputAdapter.TOGGLE_ASSIST, InputAdapter.WEAPON_NEXT, InputAdapter.TARGET_CYCLE,
+			InputAdapter.TARGET_NEXT, InputAdapter.FIRE, InputAdapter.WING_ATTACK]:
+		source.hold(action)
+	source.push_wheel(2)
+	var ui: UiCommand = adapter.sample_radial(source, DT)
+	assert_false(ui.reset or ui.toggle_camera or ui.toggle_running_lights or ui.comms_open or ui.wing_attack or ui.target_menu_open)
+	assert_false(adapter.autotrack_on, "X takes no part in the menu")
+	assert_false(adapter.last.combat.fire or adapter.last.combat.target_next, "the last command holds no flight or combat input")
+	# The menu closes with all of it still down: nothing fires, taps or steps, then or on the release.
+	adapter.end_radial(source)
+	for _i: int in 40:
+		var held: PilotCommand = adapter.sample(source, DT)
+		assert_false(held.combat.fire, "the button that selected is also fire: held over, it does not shoot")
+		assert_false(held.ui.reset or held.ui.toggle_camera or held.ui.toggle_running_lights or held.ui.comms_open or held.ui.wing_attack)
+		assert_false(held.flight.toggle_assist or held.combat.weapon_next or held.flight.autotrack)
+		assert_false(held.combat.target_nearest or held.ui.target_menu_open or held.combat.target_next, "no tap, no reopening, no wheel step")
+	source.release_all()
+	var released: PilotCommand = adapter.sample(source, DT)
+	assert_false(released.combat.target_nearest or released.combat.fire)
+	source.hold(InputAdapter.FIRE)
+	assert_true(adapter.sample(source, DT).combat.fire, "pressed again, fire fires")
+
+
+func test_the_stick_that_pointed_does_not_steer_until_it_centres() -> void:
+	adapter.begin_radial(source)
+	source.hold(InputAdapter.YAW_RIGHT, 1.0)
+	adapter.sample_radial(source, DT)
+	source.push_mouse(Vector2(900.0, 0.0))
+	adapter.end_radial(source)
+	for _i: int in 5:
+		assert_eq(adapter.sample(source, DT).flight.rot, Vector3.ZERO, "held over from the menu: no turn, from the stick or the mouse")
+	source.release(InputAdapter.YAW_RIGHT)
+	assert_eq(adapter.sample(source, DT).flight.rot, Vector3.ZERO)
+	source.hold(InputAdapter.YAW_RIGHT, 1.0)
+	assert_almost_eq(adapter.sample(source, DT).flight.rot.y, 1.0, 1e-6, "centred once, the stick flies again")
+	# A stick at rest when the menu closes is not held over at all.
+	adapter.end_radial(source)
+	adapter.reset()
+	source.release_all()
+	adapter.end_radial(source)
+	source.hold(InputAdapter.PITCH_UP, 1.0)
+	assert_almost_eq(adapter.sample(source, DT).flight.rot.x, 1.0, 1e-6)

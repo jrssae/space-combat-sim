@@ -28,6 +28,8 @@ const TABLE_PATH: String = "res://data/factions.json"
 const HOSTILE_COLOR: Color = Color(1.0, 0.35, 0.25)
 const NEUTRAL_COLOR: Color = Color(1.0, 0.85, 0.25)
 const FRIENDLY_COLOR: Color = Color(0.45, 0.7, 1.0)
+## A contact too far to identify (M5-T25): no faction colour until it is within `TargetCategories.IDENT_RANGE_M` or broadcasts.
+const UNIDENTIFIED_COLOR: Color = Color(0.73, 0.73, 0.73)
 ## The HUD's own line work (boresight, gauges, radar sphere): green, independent of any faction.
 const HUD_LINE_COLOR: Color = Color(0.55, 1.0, 0.6)
 

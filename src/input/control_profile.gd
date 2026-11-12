@@ -23,15 +23,15 @@ const DEFAULT_NAME: String = "default"
 const NAME_PATTERN: String = "^[a-z0-9_]{1,32}$"
 ## Actions that need no pad binding: no pad button is free for them, or the pad reaches the function another way. The roll
 ## keys add to the right stick's diagonal roll; target_next, target_prev and target_ahead are the keyboard's and the
-## mouse's (the pad cycles with B, `target_cycle`, which a layout that targets with another button, such as m1_classic's
-## D-pad Up on target_next, can leave unbound). The wing orders are keys 1-4 and the console until M5's comms panel gives
-## the pad a route (architecture §16 D36). The running lights are D-pad Left in the default, but a layout that rolls on the
+## mouse's (the pad targets with B, `target_cycle`, which a layout that targets with another button, such as m1_classic's
+## D-pad Up on target_next, can leave unbound). The wing orders are keys 1-4, the console and the comms menu (architecture §16
+## D36, §18 D54). The running lights and the comms menu are D-pad Left and Right in the default, but a layout that rolls on the
 ## D-pad (m1_classic) has no button left for them.
 const KEYBOARD_ONLY: Array[StringName] = [
 	InputAdapter.TOGGLE_OVERLAY, InputAdapter.TARGET_AHEAD, InputAdapter.TARGET_PREV,
 	InputAdapter.SCREENSHOT, InputAdapter.WING_ATTACK, InputAdapter.WING_FORM, InputAdapter.WING_ENGAGE,
 	InputAdapter.WING_COVER, InputAdapter.ROLL_LEFT, InputAdapter.ROLL_RIGHT, InputAdapter.TARGET_NEXT,
-	InputAdapter.TARGET_CYCLE, InputAdapter.TOGGLE_RUNNING_LIGHTS,
+	InputAdapter.TARGET_CYCLE, InputAdapter.TOGGLE_RUNNING_LIGHTS, InputAdapter.COMMS_MENU,
 ]
 ## The default pad layout before M3-T15 (action -> pad descriptors; actions without one are left out). A saved profile with
 ## exactly these pad bindings and no `target_cycle` gets the current default's pad bindings (`from_config`): its keys and
@@ -453,8 +453,9 @@ static func from_config(cfg: ConfigFile, p_name: String = "", fill_from: Control
 			if profile.bindings.has(action) or profile.deadzones.has(action) or not fill_from.bindings.has(action):
 				continue
 			var taken: Array = (fill_from.bindings[action] as Array).duplicate()
-			if action == InputAdapter.TOGGLE_RUNNING_LIGHTS:
-				taken = profile._free_of_others(taken, action)  # a layout that rolls on D-pad Left keeps it; the lights keep their key
+			if action == InputAdapter.TOGGLE_RUNNING_LIGHTS or action == InputAdapter.COMMS_MENU:
+				# A layout that rolls on D-pad Left or Right keeps it; the lights and the comms menu keep their key.
+				taken = profile._free_of_others(taken, action)
 			profile.bindings[action] = taken
 			profile.deadzones[action] = fill_from.deadzones.get(action, 0.5)
 			filled.append(String(action))

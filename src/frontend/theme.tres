@@ -1,0 +1,145 @@
+[gd_resource type="Theme" load_steps=16 format=3]
+
+; The menus' one theme (architecture §18, D57): the HUD's green line colour on dark panels. Every menu screen is a Control
+; under a MenuFrame (or the loading screen) that carries this theme.
+
+[sub_resource type="StyleBoxFlat" id="panel"]
+bg_color = Color(0.012, 0.028, 0.026, 0.68)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.55, 1, 0.6, 0.5)
+content_margin_left = 18.0
+content_margin_top = 14.0
+content_margin_right = 18.0
+content_margin_bottom = 14.0
+
+[sub_resource type="StyleBoxFlat" id="button_normal"]
+bg_color = Color(0.02, 0.05, 0.045, 0.7)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.55, 1, 0.6, 0.35)
+content_margin_left = 16.0
+content_margin_top = 8.0
+content_margin_right = 16.0
+content_margin_bottom = 8.0
+
+[sub_resource type="StyleBoxFlat" id="button_hover"]
+bg_color = Color(0.05, 0.12, 0.09, 0.85)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.55, 1, 0.6, 0.7)
+content_margin_left = 16.0
+content_margin_top = 8.0
+content_margin_right = 16.0
+content_margin_bottom = 8.0
+
+[sub_resource type="StyleBoxFlat" id="button_pressed"]
+bg_color = Color(0.15, 0.4, 0.24, 0.9)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.7, 1, 0.75, 1)
+content_margin_left = 16.0
+content_margin_top = 8.0
+content_margin_right = 16.0
+content_margin_bottom = 8.0
+
+[sub_resource type="StyleBoxFlat" id="button_disabled"]
+bg_color = Color(0.02, 0.03, 0.03, 0.5)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.55, 1, 0.6, 0.15)
+content_margin_left = 16.0
+content_margin_top = 8.0
+content_margin_right = 16.0
+content_margin_bottom = 8.0
+
+; Drawn over the button's own style: the focused option is outlined and lit, the one the pad's A would press.
+[sub_resource type="StyleBoxFlat" id="button_focus"]
+bg_color = Color(0.2, 0.55, 0.32, 0.28)
+border_width_left = 3
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.75, 1, 0.8, 1)
+content_margin_left = 16.0
+content_margin_top = 8.0
+content_margin_right = 16.0
+content_margin_bottom = 8.0
+
+[sub_resource type="StyleBoxFlat" id="scroll_track"]
+bg_color = Color(0.55, 1, 0.6, 0.08)
+
+[sub_resource type="StyleBoxFlat" id="scroll_grabber"]
+bg_color = Color(0.55, 1, 0.6, 0.45)
+
+[sub_resource type="StyleBoxFlat" id="scroll_grabber_hover"]
+bg_color = Color(0.7, 1, 0.75, 0.8)
+
+[sub_resource type="StyleBoxFlat" id="line_edit"]
+bg_color = Color(0.01, 0.025, 0.022, 0.9)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.55, 1, 0.6, 0.5)
+content_margin_left = 10.0
+content_margin_top = 6.0
+content_margin_right = 10.0
+content_margin_bottom = 6.0
+
+[sub_resource type="StyleBoxFlat" id="progress_back"]
+bg_color = Color(0.02, 0.05, 0.045, 0.8)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.55, 1, 0.6, 0.5)
+
+[sub_resource type="StyleBoxFlat" id="progress_fill"]
+bg_color = Color(0.55, 1, 0.6, 0.75)
+
+[sub_resource type="StyleBoxLine" id="separator"]
+color = Color(0.55, 1, 0.6, 0.3)
+thickness = 1
+
+[resource]
+default_font_size = 22
+Button/colors/font_color = Color(0.55, 1, 0.65, 1)
+Button/colors/font_hover_color = Color(0.8, 1, 0.85, 1)
+Button/colors/font_pressed_color = Color(1, 1, 1, 1)
+Button/colors/font_focus_color = Color(0.9, 1, 0.92, 1)
+Button/colors/font_disabled_color = Color(0.55, 1, 0.65, 0.35)
+Button/constants/h_separation = 10
+Button/styles/disabled = SubResource("button_disabled")
+Button/styles/focus = SubResource("button_focus")
+Button/styles/hover = SubResource("button_hover")
+Button/styles/normal = SubResource("button_normal")
+Button/styles/pressed = SubResource("button_pressed")
+HSeparator/styles/separator = SubResource("separator")
+Heading/base_type = &"Label"
+Heading/colors/font_color = Color(0.55, 1, 0.65, 0.75)
+Heading/font_sizes/font_size = 18
+Label/colors/font_color = Color(0.55, 1, 0.65, 1)
+LineEdit/colors/font_color = Color(0.8, 1, 0.85, 1)
+LineEdit/styles/focus = SubResource("button_focus")
+LineEdit/styles/normal = SubResource("line_edit")
+PanelContainer/styles/panel = SubResource("panel")
+ProgressBar/styles/background = SubResource("progress_back")
+ProgressBar/styles/fill = SubResource("progress_fill")
+Title/base_type = &"Label"
+Title/colors/font_color = Color(0.7, 1, 0.78, 1)
+Title/font_sizes/font_size = 34
+VScrollBar/styles/grabber = SubResource("scroll_grabber")
+VScrollBar/styles/grabber_highlight = SubResource("scroll_grabber_hover")
+VScrollBar/styles/grabber_pressed = SubResource("scroll_grabber_hover")
+VScrollBar/styles/scroll = SubResource("scroll_track")

@@ -1,0 +1,12 @@
+{
+	"scenario_id": "test_comms_broken",
+	"system_id": "local",
+	"player": {"position": [0, 0, 0], "forward": [0, 0, -1]},
+	"mission": {
+		"title": "Comms Test, Broken Dialog",
+		"briefing": "Its dialog file does not exist.",
+		"script": "res://tests/fixtures/missions/test_comms.gd",
+		"dialog": "res://tests/fixtures/dialog/missing.json",
+		"objectives": []
+	}
+}

@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## The speed ceilings (assist's 5000 m/s safe speed, the 9999 m/s hard limit with thrust fading toward it) and the X-button
 ## auto-track (the nose follows the lead point of the selected target, the velocity untouched).
 
@@ -21,11 +21,6 @@ func before_each() -> void:
 func after_each() -> void:
 	DebugConsole.flags.invulnerable = false
 	get_tree().paused = false
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
 
 
 func test_the_limits_are_in_the_ship_spec() -> void:

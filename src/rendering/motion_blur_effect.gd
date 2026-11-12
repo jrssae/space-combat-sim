@@ -63,18 +63,18 @@ func _blur_view(buffers: RenderSceneBuffersRD, scene_data: RenderSceneData, size
 	var groups := Vector2i(ceili(float(size.x) / WORKGROUP), ceili(float(size.y) / WORKGROUP))
 	# Pass 1: read the frame, write the blurred one beside it. The colour buffer is never read and written in one pass.
 	var blur_uniforms: Array[RDUniform] = [
-		_uniform(RenderingDevice.UNIFORM_TYPE_UNIFORM_BUFFER, 0, [scene_data.get_uniform_buffer()]),
-		_uniform(RenderingDevice.UNIFORM_TYPE_IMAGE, 1, [scratch]),
-		_uniform(RenderingDevice.UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 2, [_sampler, buffers.get_depth_layer(view)]),
-		_uniform(RenderingDevice.UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 3, [_sampler, velocity]),
-		_uniform(RenderingDevice.UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 4, [_sampler, color]),
+		ComputeUniform.make(RenderingDevice.UNIFORM_TYPE_UNIFORM_BUFFER, 0, [scene_data.get_uniform_buffer()]),
+		ComputeUniform.make(RenderingDevice.UNIFORM_TYPE_IMAGE, 1, [scratch]),
+		ComputeUniform.make(RenderingDevice.UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 2, [_sampler, buffers.get_depth_layer(view)]),
+		ComputeUniform.make(RenderingDevice.UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 3, [_sampler, velocity]),
+		ComputeUniform.make(RenderingDevice.UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 4, [_sampler, color]),
 	]
 	_dispatch(_blur_shader, _blur_pipeline, blur_uniforms, groups,
 			PackedFloat32Array([strength, MAX_BLUR_SCREEN_FRACTION * size.y, size.x, size.y]))
 	# Pass 2: lay the blurred frame over the colour buffer.
 	var copy_uniforms: Array[RDUniform] = [
-		_uniform(RenderingDevice.UNIFORM_TYPE_IMAGE, 0, [color]),
-		_uniform(RenderingDevice.UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 1, [_sampler, scratch]),
+		ComputeUniform.make(RenderingDevice.UNIFORM_TYPE_IMAGE, 0, [color]),
+		ComputeUniform.make(RenderingDevice.UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 1, [_sampler, scratch]),
 	]
 	_dispatch(_copy_shader, _copy_pipeline, copy_uniforms, groups, PackedFloat32Array([size.x, size.y, 0.0, 0.0]))
 
@@ -99,15 +99,6 @@ func _scratch(buffers: RenderSceneBuffersRD, size: Vector2i) -> RID:
 				RenderingDevice.TEXTURE_USAGE_SAMPLING_BIT | RenderingDevice.TEXTURE_USAGE_STORAGE_BIT,
 				RenderingDevice.TEXTURE_SAMPLES_1, size, 1, 1, true, false)
 	return buffers.get_texture(CONTEXT, SCRATCH_TEXTURE)
-
-
-static func _uniform(type: RenderingDevice.UniformType, binding: int, ids: Array) -> RDUniform:
-	var uniform := RDUniform.new()
-	uniform.uniform_type = type
-	uniform.binding = binding
-	for id: RID in ids:
-		uniform.add_id(id)
-	return uniform
 
 
 func _init_render() -> void:

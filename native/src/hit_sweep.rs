@@ -161,6 +161,7 @@ impl ScsHitSweep {
         self.kept_mids = hull_mids.as_slice().to_vec();
         self.kept_reach = hull_reach.as_slice().to_vec();
         self.cell_kept.place(&self.kept_mids, &self.kept_reach);
+        self.cell_kept.mark_cells();
         true
     }
 

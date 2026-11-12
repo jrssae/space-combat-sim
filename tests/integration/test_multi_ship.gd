@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## M2-T02 (AC2): more than one ship can exist. The player and AI ships are built by `ShipAssembly` and commanded by
 ## `Combatant.apply_commands`; only the player's components register console entries, and freeing the others leaves them
 ## alone; `target_next` cycles hostiles first; inactive targetables are never candidates.
@@ -40,12 +40,6 @@ func _spawn(label: StringName, faction: StringName, at: Vector3, is_player: bool
 	})
 	world.spawn(combatant.ship, world.to_universe(at))
 	return combatant
-
-
-func _console(line: String) -> ConsoleResult:
-	var results: Array[ConsoleResult] = DebugConsole.registry.execute(line)
-	assert_eq(results.size(), 1, "one statement: " + line)
-	return results[0]
 
 
 func _free_ship(combatant: Combatant) -> void:

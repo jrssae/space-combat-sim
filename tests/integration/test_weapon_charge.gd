@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## PulseCannon with its capacitor (architecture §6.3, M2-T14), wired by hand as in test_weapons.gd: a plain RigidBody3D
 ## stands in for the ship and Marker3D muzzles sit at the hardpoints fixture's positions. SimClock's own processing is
 ## off and the clock is advanced by hand, so the recharge is exact. Covers the cannon-level behaviour (an empty
@@ -96,12 +96,6 @@ func _bolts() -> int:
 		if child is Projectile and not child.is_queued_for_deletion():
 			count += 1
 	return count
-
-
-func _console(line: String) -> ConsoleResult:
-	var results: Array[ConsoleResult] = DebugConsole.registry.execute(line)
-	assert_eq(results.size(), 1, "one statement: " + line)
-	return results[0]
 
 
 # --- the cannon spends and recharges ------------------------------------------------------------------------------

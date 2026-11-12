@@ -79,7 +79,7 @@ func add(at: Vector3, velocity: Vector3, radius_m: float, energy_j: float) -> vo
 	_lives.append(ExplosionLod.flash_s(energy_j))
 	_ages.append(0.0)
 	started += 1
-	_write()
+	# The next `advance` uploads them all at once, so many deaths in one frame cost one upload.
 
 
 ## Flashes still shining.
@@ -109,6 +109,8 @@ func advance(delta: float) -> void:
 
 func _write() -> void:
 	var n: int = _positions.size()
+	if n == 0 and multimesh.visible_instance_count == 0:
+		return  # nothing shone and nothing is drawn: no upload
 	if n > multimesh.instance_count:
 		multimesh.instance_count = maxi(n, multimesh.instance_count * 2)  # grows rarely, never shrinks
 		_buffer.resize(multimesh.instance_count * STRIDE)

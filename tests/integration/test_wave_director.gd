@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## WaveDirector (M2-T09, AC11, architecture §15.10): on the real main scene with the combat sandbox, a headless run driven by
 ## `wave start`, `kill all` and waiting advances through three waves with the expected kills; spawns arrive where the scenario
 ## says, relative to the player's universe position at wave start; the status line reads out the state; the player's death
@@ -27,15 +27,6 @@ func after_each() -> void:
 	Engine.time_scale = _scale_backup
 	DebugConsole.flags.invulnerable = false
 	get_tree().paused = false
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
-
-
-func _exec(line: String) -> ConsoleResult:
-	return DebugConsole.registry.execute(line)[0]
 
 
 func _wait_for_state(state: StringName, limit_s: float = 60.0) -> void:

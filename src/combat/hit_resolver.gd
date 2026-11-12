@@ -38,7 +38,11 @@ const HEAL_CHOICES: Array[StringName] = [&"player", &"target", &"all"]
 var projectiles_last_tick: int = 0
 var pairs_tested: int = 0
 var hits_total: int = 0
-var last_hit: String = "none"
+var last_hit: String:
+	get = _describe_last_hit
+# The last hit, described only when read (M5-T32: no string built per hit).
+var _last_hit: HitInfo = null
+var _last_hit_rock: bool = false
 var resolve_us: int = 0
 ## Projectile and hull pairs the broad phase put to the bounding-sphere test on the last tick (the work count).
 var pairs_visited: int = 0
@@ -60,9 +64,14 @@ var _velocities := PackedVector3Array()
 var _bases := PackedVector3Array()  # three columns (the x, y and z axes) a hull
 var _damageables: Array[Damageable] = []  # per hull, looked up when first needed (null until then)
 var _to_body: Dictionary = {}  # hull -> Basis, transposed when first needed
+# This tick's candidate bolts (M5-T32): only those with a live pair, in launch order, from the core's `hit_bolts`. Every
+# `_bolt_*` column and the four pair ranges are indexed by candidate; `_bolt_index` is the bolt's index in the core's table.
+var _bolt_index := PackedInt32Array()
 var _bolt_ids := PackedInt64Array()
-# The bolts in launch order (the core's, M4-T35).
-var _bolt_order := PackedInt32Array()
+var _bolt_count: int = 0
+var _hull_keys := PackedInt32Array()  # per kept hull pair, the paired hull's slot in the hull columns
+var _rock_keys := PackedInt64Array()
+var _beam_ids := PackedInt64Array()
 var _hull_first := PackedInt32Array()
 var _hull_next := PackedInt32Array()
 var _rock_first := PackedInt32Array()
@@ -144,61 +153,74 @@ func resolve(delta: float) -> void:
 	pairs_visited = 0
 	friendly_fire = bool(Settings.get_value(&"friendly_fire"))
 	var sim: SimCore = _gather(delta)
-	gather_us = Time.get_ticks_usec() - started_us
-	hulls_last_tick = _hull_count
-	projectiles_last_tick = _bolt_ids.size()
 	if sim == null:
-		resolve_us = Time.get_ticks_usec() - started_us
+		hulls_last_tick = 0
+		projectiles_last_tick = 0
+		gather_us = Time.get_ticks_usec() - started_us
+		resolve_us = gather_us
 		return
-	var hull_count: int = _hull_count
 	var keys: PackedInt64Array = broad_phase.pairs_core(sim.core, delta)
 	pairs_visited = broad_phase.visited
 	var rock_keys: PackedInt64Array = _rock_pairs(sim)
 	var rock_count: int = _solid.ids.size()
-	# Bolts come in table order on both lists; each bolt with a pair on either takes the earliest of its hull and rock
-	# hits. The hits land in launch order (`_bolt_order`), the order the bolt nodes' group had, so an owned row and the
-	# player's node bolt reaching one hull in the same tick give the kill to the one fired first.
-	_pair_ranges(keys, hull_count, _hull_first, _hull_next)
-	_pair_ranges(rock_keys, rock_count, _rock_first, _rock_next)
-	for k: int in _bolt_ids.size():
-		var i: int = _bolt_order[k] if k < _bolt_order.size() else k
-		var first: int = _hull_first[i]
-		var next: int = _hull_next[i]
-		var rock_first: int = _rock_first[i]
-		var rock_next: int = _rock_next[i]
-		if next == first and rock_next == rock_first:
-			continue
+	_candidates(sim, keys, rock_keys, rock_count)
+	projectiles_last_tick = _bolt_count
+	gather_us = Time.get_ticks_usec() - started_us
+	# Each candidate takes the earliest of its hull and rock hits. Candidates come in launch order, the order the bolt
+	# nodes' group had, so an owned row and the player's node bolt reaching one hull in the same tick give the kill to the
+	# one fired first.
+	for c: int in _bolt_index.size():
 		# A hit handler may have retired a bolt later in the list, as the per-bolt checks before the broad phase allowed.
-		if not _bolt_live(i):
+		if not _bolt_live(c):
 			continue
-		var hull_hit: bool = next > first and _earliest_hit(i, keys, first, next, hull_count)
-		var rock: int = _earliest_rock(i, rock_keys, rock_first, rock_next, rock_count) if rock_next > rock_first else -1
+		var first: int = _hull_first[c]
+		var next: int = _hull_next[c]
+		var rock_first: int = _rock_first[c]
+		var rock_next: int = _rock_next[c]
+		var hull_hit: bool = next > first and _earliest_hit(c, first, next)
+		var rock: int = _earliest_rock(c, _rock_keys, rock_first, rock_next, rock_count) if rock_next > rock_first else -1
 		if rock >= 0 and (not hull_hit or _rock_t < _best_t):
-			_land_on_rock(i, rock, delta)
+			_land_on_rock(c, rock, delta)
 		elif hull_hit:
-			_land(i, delta)
-	for i: int in _beams:
-		_spend(i)
+			_land(c, delta)
+	for b: int in _beams.size():
+		_spend_bolt(_beams[b], _beam_ids[b])
 	resolve_us = Time.get_ticks_usec() - started_us
 
 
-# Each bolt's run of pair keys `[first, next)` in `keys` (sorted by bolt index, `key / count` the bolt), empty for a bolt
-# with no pair.
-func _pair_ranges(keys: PackedInt64Array, count: int, first_out: PackedInt32Array, next_out: PackedInt32Array) -> void:
-	var n: int = _bolt_ids.size()
-	first_out.resize(n)
-	next_out.resize(n)
-	first_out.fill(0)
-	next_out.fill(0)
-	var at: int = 0
-	while at < keys.size():
-		@warning_ignore("integer_division")
-		var i: int = keys[at] / count
-		var start: int = at
-		while at < keys.size() and keys[at] / count == i:
-			at += 1
-		first_out[i] = start
-		next_out[i] = at
+# This tick's candidate bolts and the hulls they pair with, from the core (M5-T32): spent bolts and a bolt's pair with its own
+# shooter are dropped there, so GDScript walks only bolts that may hit and reads only the hulls they may hit.
+func _candidates(sim: SimCore, keys: PackedInt64Array, rock_keys: PackedInt64Array, rock_count: int) -> void:
+	var c: Array = sim.core.hit_bolts(keys, rock_keys, rock_count)
+	_bolt_index = c[0]
+	_bolt_ids = c[1]
+	_bolt_starts = c[2]
+	_bolt_ends = c[3]
+	_bolt_radii = c[4]
+	_bolt_shooters = c[5]
+	_bolt_factions = c[6]
+	_bolt_damage = c[7]
+	_bolt_colors = c[8]
+	_hull_first = c[9]
+	_hull_next = c[10]
+	_rock_first = c[11]
+	_rock_next = c[12]
+	_hull_keys = c[13]
+	_rock_keys = c[14]
+	_beams = c[15]
+	_beam_ids = c[16]
+	_bolt_owned = int(c[17])
+	_bolt_count = int(c[18])
+	_body_ids = c[19]
+	_hull_ids = c[20]
+	_starts = c[21]
+	_velocities = c[22]
+	_bases = c[23]
+	hulls_last_tick = int(c[24])
+	_hull_count = _body_ids.size()
+	_damageables.clear()
+	_damageables.resize(_hull_count)
+	_to_body.clear()
 
 
 ## Where the last gather came from: &"core" (the native core's rows, M4-T15), or &"none" with no core in the tree.
@@ -222,33 +244,16 @@ func _gather(delta: float) -> SimCore:
 	var sim: SimCore = SimCore.for_tree(get_tree())
 	if sim != null and _synced(sim):
 		_source = &"core"
-		var hulls: Array = sim.core.sweep_columns()
-		_body_ids = hulls[0]
-		_hull_ids = hulls[1]
-		_starts = hulls[3]
-		_velocities = hulls[4]
-		_bases = hulls[6]
-		_hull_count = _body_ids.size()
-		var bolts: Array = sim.core.bolt_columns()
-		_bolt_ids = bolts[0]
-		_bolt_starts = bolts[1]
-		_bolt_ends = bolts[2]
-		_bolt_radii = bolts[3]
-		_beams = bolts[5]
-		_bolt_shooters = bolts[6]
-		_bolt_factions = bolts[7]
-		_bolt_damage = bolts[8]
-		_bolt_colors = bolts[9]
-		_bolt_owned = int(bolts[11])
-		_bolt_order = bolts[14]
+		_hull_count = 0  # the paired hulls' columns come with the candidates
 	else:
 		_source = &"none"
 		sim = null
 		_hull_count = 0
+		_bolt_index.clear()
 		_bolt_ids.clear()
-		_bolt_order.clear()
 		_beams.clear()
 		_bolt_owned = 0
+		_bolt_count = 0
 	_sim = sim
 	_damageables.resize(_hull_count)
 	return sim
@@ -265,28 +270,34 @@ func _synced(sim: SimCore) -> bool:
 	return sim.ensure_bolts_synced()
 
 
-# Bolt `i`'s node, or null when it is gone or the bolt is a row the core owns.
-func _bolt(i: int) -> Projectile:
+# The node of the bolt at table index `i` with id `id`, or null when it is gone or the bolt is a row the core owns.
+func _bolt_node(i: int, id: int) -> Projectile:
 	if i < _bolt_owned:
 		return null
-	return instance_from_id(_bolt_ids[i]) as Projectile if is_instance_id_valid(_bolt_ids[i]) else null
+	return instance_from_id(id) as Projectile if is_instance_id_valid(id) else null
 
 
-# Whether bolt `i` can still hit: an owned row not spent, or a node still live in the tree.
-func _bolt_live(i: int) -> bool:
+# Whether candidate `c` can still hit: an owned row not spent, or a node still live in the tree.
+func _bolt_live(c: int) -> bool:
+	var i: int = _bolt_index[c]
 	if i < _bolt_owned:
 		return _sim != null and bool(_sim.core.bolt_live(i))
-	var bolt: Projectile = _bolt(i)
+	var bolt: Projectile = _bolt_node(i, _bolt_ids[c])
 	return bolt != null and not bolt.is_spent() and not bolt.is_queued_for_deletion() and bolt.is_inside_tree()
 
 
-# Retires bolt `i` after a hit: the row in the core, or the node.
-func _spend(i: int) -> void:
+# Retires candidate `c` after a hit.
+func _spend(c: int) -> void:
+	_spend_bolt(_bolt_index[c], _bolt_ids[c])
+
+
+# Retires the bolt at table index `i` with id `id`: the row in the core, or the node.
+func _spend_bolt(i: int, id: int) -> void:
 	if i < _bolt_owned:
 		if _sim != null:
 			_sim.core.spend_bolt_row(i)
 		return
-	var bolt: Projectile = _bolt(i)
+	var bolt: Projectile = _bolt_node(i, id)
 	if bolt != null:
 		bolt.spend()
 
@@ -329,15 +340,16 @@ func _rock_pairs(sim: SimCore) -> PackedInt64Array:
 
 
 # The earliest rock bolt `i` reaches among its pairs `keys[first..next)` (its index in `_solid`, with `_rock_*` set), or -1.
-func _earliest_rock(i: int, keys: PackedInt64Array, first: int, next: int, rock_count: int) -> int:
+func _earliest_rock(c: int, keys: PackedInt64Array, first: int, next: int, rock_count: int) -> int:
 	var best: int = -1
 	_rock_t = INF
-	var start: Vector3 = _bolt_starts[i]
-	var p1: Vector3 = _bolt_ends[i]
-	var bolt_faction: StringName = _bolt_factions[i]
-	var hit_radius: float = _bolt_radii[i]
+	var start: Vector3 = _bolt_starts[c]
+	var p1: Vector3 = _bolt_ends[c]
+	var bolt_faction: StringName = _bolt_factions[c]
+	var hit_radius: float = _bolt_radii[c]
+	var base: int = _bolt_index[c] * rock_count
 	for k: int in range(first, next):
-		var s: int = keys[k] - i * rock_count
+		var s: int = keys[k] - base
 		if not friendly_fire and bolt_faction == _solid.factions[s]:
 			continue  # a rock's own faction passes it, as a buoy's does
 		var centre: Vector3 = _solid.positions[s]
@@ -362,23 +374,24 @@ func _land_on_rock(i: int, s: int, delta: float) -> void:
 			relative.length() / maxf(delta, 1e-6))
 	_spend(i)
 	hits_total += 1
-	last_hit = "%s -> %s, 0.0 of %.1f applied" % [name_of(info.shooter_id), name_of(info.target_id), info.damage]
+	_last_hit = info
+	_last_hit_rock = true
 	if fx != null:
 		_throw_sparks(info, centre, Vector3.ZERO)
 	hit_resolved.emit(info)
 
 
-# The earliest hit of bolt `i` among its pairs `keys[first..next)`, kept in `_best_*`; false when it hits nothing.
-func _earliest_hit(i: int, keys: PackedInt64Array, first: int, next: int, hull_count: int) -> bool:
+# The earliest hit of candidate `c` among its pairs `_hull_keys[first..next)`, kept in `_best_*`; false when it hits nothing.
+func _earliest_hit(c: int, first: int, next: int) -> bool:
 	var best_t: float = INF
 	_best = -1
-	var start: Vector3 = _bolt_starts[i]
-	var p1: Vector3 = _bolt_ends[i]
-	var shooter_id: int = _bolt_shooters[i]
-	var bolt_faction: StringName = _bolt_factions[i]
-	var hit_radius: float = _bolt_radii[i]
+	var start: Vector3 = _bolt_starts[c]
+	var p1: Vector3 = _bolt_ends[c]
+	var shooter_id: int = _bolt_shooters[c]
+	var bolt_faction: StringName = _bolt_factions[c]
+	var hit_radius: float = _bolt_radii[c]
 	for k: int in range(first, next):
-		var j: int = keys[k] - i * hull_count
+		var j: int = _hull_keys[k]
 		var damageable: Damageable = _damageable(j)
 		# Already destroyed this tick by another bolt (or gone since the gather).
 		if damageable == null or damageable.hull.destroyed or _body_ids[j] == shooter_id \
@@ -422,11 +435,14 @@ func _land(i: int, delta: float) -> void:
 			-relative.normalized() if relative.length_squared() > 1e-12 else Vector3.ZERO,
 			relative.length() / maxf(delta, 1e-6))
 	_spend(i)
+	var sim: SimCore = SimCore.for_tree(get_tree())
+	if sim != null:
+		sim.note_hit(info.target_id, shooter_id)  # the turrets' attacker memory, in the sweep's order (M5-T21)
 	_apply(damageable, info)
 	# A destroyed hull is hidden and the explosion replaces the flash; a flash on a parked ship would never be processed.
 	var body := instance_from_id(_body_ids[j]) as Node3D
 	if body != null and body.is_visible_in_tree():
-		var flash := ImpactFlash.create(_bolt_colors[i], hash([shooter_id, info.target_id, Engine.get_physics_frames()]))
+		var flash := ImpactFlash.create(_bolt_colors[i])
 		flash.position = local_point
 		body.add_child(flash)
 		flash.reset_physics_interpolation()
@@ -443,8 +459,15 @@ func _throw_sparks(info: HitInfo, hull_centre: Vector3, hull_velocity: Vector3) 
 func _apply(damageable: Damageable, info: HitInfo) -> void:
 	hits_total += 1
 	damageable.apply_hit(info)
-	last_hit = "%s -> %s, %.1f of %.1f applied" % [name_of(info.shooter_id), name_of(info.target_id), info.applied,
-			info.damage]
+	_last_hit = info
+	_last_hit_rock = false
+
+
+func _describe_last_hit() -> String:
+	if _last_hit == null:
+		return "none"
+	return "%s -> %s, %.1f of %.1f applied" % [name_of(_last_hit.shooter_id), name_of(_last_hit.target_id),
+			0.0 if _last_hit_rock else _last_hit.applied, _last_hit.damage]
 
 
 ## The display name of the body with this instance id (its `Targetable`'s, else the node name), "static <id>" for a row with

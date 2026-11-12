@@ -265,6 +265,115 @@ func test_attributes_are_read_once_not_every_tick() -> void:
 	assert_eq(core.attribute_reads(), reads, "ten more scans read no attribute again")
 
 
+func test_the_scans_names_and_factions_are_made_again_only_when_one_changes() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 11
+	_crowd(rng, 60)
+	var a := _body(Vector3(100, 0, 0), Factions.RAIDERS, "RAIDER 1")
+	ContactScan.register_static(900001, Vector3(500.0, 0.0, 0.0), 40.0)
+	_assert_same_rows(_core_scan(), TreeRows.scan(get_tree()), "the first scan")
+	var core: Object = SimCore.for_tree(get_tree()).core
+	var builds: int = core.snapshot_builds()
+	for tick: int in 10:
+		# The scan appends the statics to the columns it was handed: they must be its own, not the core's kept ones.
+		_assert_same_rows(_core_scan(), TreeRows.scan(get_tree()), "scan %d" % tick)
+	assert_eq(core.snapshot_builds(), builds, "ten more scans made neither column again")
+	var marker := a.get_node(^"Targetable") as Targetable
+	marker.display_name = "RAIDER 2"
+	ContactScan.touch(a)
+	var scan := _core_scan()
+	assert_eq(core.snapshot_builds(), builds + 1, "a new name makes them again, once")
+	assert_eq(scan._names[scan._body_ids.find(a.get_instance_id())], "RAIDER 2")
+	marker.faction = Factions.EARTH_ALLIANCE
+	for child: Node in a.get_children():
+		if child is Damageable:
+			(child as Damageable).faction = Factions.EARTH_ALLIANCE
+	ContactScan.touch(a)
+	scan = _core_scan()
+	assert_eq(core.snapshot_builds(), builds + 2, "and so does a new faction")
+	assert_eq(scan._factions[scan._body_ids.find(a.get_instance_id())], Factions.EARTH_ALLIANCE)
+	_assert_same_rows(scan, TreeRows.scan(get_tree()), "after the changes")
+
+
+func test_names_no_body_carries_any_more_are_dropped() -> void:
+	var a := _body(Vector3(100, 0, 0), Factions.RAIDERS, "RAIDER 0")
+	var b := _body(Vector3(200, 0, 0), Factions.RAIDERS, "Wing Leader")
+	var marker := a.get_node(^"Targetable") as Targetable
+	var core: Object = SimCore.for_tree(get_tree()).core
+	var most: int = 0
+	for i: int in range(1, 1200):
+		marker.display_name = "RAIDER %d" % i
+		ContactScan.touch(a)
+		SimCore.for_tree(get_tree()).sync_now()
+		most = maxi(most, int(core.name_count()[0]))
+	assert_lt(most, 400, "the tables hold at most a few names beyond the bodies' (%d at most over 1 200 renames)" % most)
+	assert_eq(int(core.name_count()[1]), int(core.name_count()[0]), "a lowered name for each display name here")
+	var scan := _core_scan()
+	assert_eq(scan._names[scan._body_ids.find(a.get_instance_id())], "RAIDER 1199", "the body keeps its latest name")
+	assert_eq(scan._names[scan._body_ids.find(b.get_instance_id())], "Wing Leader", "and the other its own, in its case")
+	assert_eq(String(core.row_name(core.row_of_id(b.get_instance_id()))), "Wing Leader")
+	_assert_same_rows(scan, TreeRows.scan(get_tree()), "after the names were dropped")
+
+
+func test_a_hull_event_reaches_its_body_and_a_freed_bodys_selection_is_dropped() -> void:
+	var a := _body(Vector3(100, 0, 0), Factions.RAIDERS, "RAIDER 1")
+	var b := _body(Vector3(200, 0, 0), Factions.RAIDERS, "RAIDER 2")
+	var c := _body(Vector3(300, 0, 0), Factions.RAIDERS, "RAIDER 3")
+	var sim: SimCore = SimCore.for_tree(get_tree())
+	var core: Object = sim.core
+	sim.sync_now()
+	var before_a: float = core.row_hull_fraction(core.row_of_id(a.get_instance_id()))
+	var before_b: float = core.row_hull_fraction(core.row_of_id(b.get_instance_id()))
+	assert_gt(before_b, 0.0, "the body's hull is read")
+	core.note_hull(b.get_instance_id(), before_b * 25.0, 100.0)
+	sim.sync_now()
+	assert_almost_eq(float(core.row_hull_fraction(core.row_of_id(b.get_instance_id()))), before_b * 0.25, 1e-9, "the event's hull")
+	assert_eq(float(core.row_hull_fraction(core.row_of_id(a.get_instance_id()))), before_a, "no other body's")
+	assert_eq(float(core.row_hull_fraction(core.row_of_id(c.get_instance_id()))), before_a)
+	core.note_selection(c.get_instance_id(), a.get_node(^"Targetable").get_instance_id())
+	assert_eq(int(core.selections_held()), 3, "a selection a body (none is -1)")
+	c.free()
+	await get_tree().physics_frame
+	sim.sync_now()
+	assert_eq(int(core.selections_held()), 2, "the freed body's selection went with it")
+	assert_eq(int(core.row_of_id(a.get_instance_id())) >= 0, true)
+
+
+func test_a_parked_hull_is_not_asked_again_until_its_body_is_touched() -> void:
+	var drones: Array[RigidBody3D] = []
+	for i: int in 40:
+		drones.append(_drone(Vector3(50.0 * i, 0.0, 0.0)))
+	for i: int in range(20, 40):
+		_park(drones[i])
+	var sim: SimCore = SimCore.for_tree(get_tree())
+	sim.sync_now()
+	sim.sync_now()
+	sim.sync_now()
+	var core: Object = sim.core
+	var quiet: int = core.engine_calls()[0]
+	assert_lt(quiet, 20 * 4 + 1, "a sync asks only the 20 flying drones for their pose (%d calls)" % quiet)
+	var scan := _core_scan()
+	assert_true(scan._body_ids.has(drones[0].get_instance_id()), "a flying drone has a row")
+	assert_false(scan._body_ids.has(drones[30].get_instance_id()), "a parked one has none")
+	_unpark(drones[30])
+	_park(drones[0])
+	scan = _core_scan()
+	assert_true(scan._body_ids.has(drones[30].get_instance_id()), "shown again, it is back at the next scan")
+	assert_false(scan._body_ids.has(drones[0].get_instance_id()), "and the one hidden since is gone")
+	_assert_same_rows(scan, TreeRows.scan(get_tree()), "after the changes")
+	var hull: Damageable = null
+	for child: Node in drones[5].get_children():
+		if child is Damageable:
+			hull = child as Damageable
+	hull.kill()
+	scan = _core_scan()
+	assert_false(scan._body_ids.has(drones[5].get_instance_id()), "a destroyed hull leaves the scan")
+	hull.restore()
+	scan = _core_scan()
+	assert_true(scan._body_ids.has(drones[5].get_instance_id()), "and a restored one is back")
+	_assert_same_rows(scan, TreeRows.scan(get_tree()), "after the hull went and came back")
+
+
 func test_the_shared_scan_is_the_cores() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 13

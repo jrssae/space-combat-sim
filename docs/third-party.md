@@ -24,7 +24,7 @@ Vendored addons are upstream code: do not edit them in place. If a patch is unav
 | Component | Removed | Why |
 |---|---|---|
 | GDGS (Godot Gaussian Splatting plugin, MIT, by ReconWorldLab), the project's fork `addons/gdgs_scs/` (from v3.3.0) | 2026-11-04, M4-T31 | Q29: every hull is a textured polygon mesh now. The GitHub fork `jrssae/godot-gaussian-splatting` was archived on 2026-11-04 (Q30) and the maintainer deletes it; `scripts/sync_gdgs_fork.sh` went with it |
-| Pillow | 2026-11-04, M4-T31 (unused since M4-T30c) | `tools/procgen/core/image.py` writes every PNG; CI no longer installs it |
+| Pillow | 2026-11-04, M4-T31 (unused since M4-T30c) | `tools/procgen/core/image.py` writes every PNG; CI no longer installs it. M5's `tools/refview` still uses it (below) |
 
 ## Used but not vendored
 
@@ -36,6 +36,7 @@ Vendored addons are upstream code: do not edit them in place. If a patch is unav
 | SDL3 | bundled in Godot 4.7 | Zlib | Gamepad input backend |
 | Python | 3.11+ | PSF-2.0 | Asset generators in `tools/` |
 | NumPy | 2.x | BSD-3-Clause | Asset generators |
+| Pillow | 10+ (optional) | MIT-CMU | `tools/refview` only (development only: renders the untracked reference models into the gitignored `reports/refs/`); the game's PNGs come from `tools/procgen/core/image.py` |
 
 ## Built from source, not vendored (`native/`, M4-T05)
 

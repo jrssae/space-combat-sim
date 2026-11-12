@@ -111,7 +111,7 @@ func test_every_ship_but_the_players_flies_in_the_batch() -> void:
 	assert_eq(player.flight_path(), &"gdscript", "the player's ship keeps the GDScript path")
 	assert_true(ai.batched)
 	assert_false(player.batched)
-	assert_eq(batch.rows.size(), 1, "one row stepped")
+	assert_eq(batch.stepped_count(), 1, "one row stepped")
 	assert_eq(batch.path(), &"native")
 
 
@@ -185,17 +185,17 @@ func test_a_parked_ship_leaves_the_step_and_a_woken_one_returns() -> void:
 	var batch: FlightBatch = FlightBatch.attach(world)
 	await _align()
 	await _step(1)
-	assert_eq(batch.rows.size(), 2)
+	assert_eq(batch.stepped_count(), 2)
 	ship.process_mode = Node.PROCESS_MODE_DISABLED
 	await _step(1)
-	assert_eq(batch.rows.size(), 1, "the parked ship is not stepped")
-	assert_true(batch.rows.has(other))
+	assert_eq(batch.stepped_count(), 1, "the parked ship is not stepped")
+	assert_true(batch.stepped(other))
 	ship.process_mode = Node.PROCESS_MODE_INHERIT
 	await _step(1)
-	assert_eq(batch.rows.size(), 2, "back in play, back in the step")
+	assert_eq(batch.stepped_count(), 2, "back in play, back in the step")
 	ship.queue_free()
 	await _step(2)
-	assert_eq(batch.rows.size(), 1, "a freed ship is gone")
+	assert_eq(batch.stepped_count(), 1, "a freed ship is gone")
 
 
 func test_the_flight_provider_reports_the_batch() -> void:

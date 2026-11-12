@@ -9,7 +9,8 @@ extends RefCounted
 ## Result (also on failure, so callers can read it without checking every key):
 ##     {"ok": bool, "error": String,               # error is "" when ok, else "<source>: <what is wrong>"
 ##      "scenario_id": StringName, "system_id": StringName,
-##      "player": {"position": UniversePos, "forward": Vector3, "basis": Basis},
+##      "player": {"position": UniversePos, "forward": Vector3, "basis": Basis,
+##                 "velocity": Vector3},            # the start velocity (M5-T10), zero unless given
 ##      "props": Array[Dictionary],                 # each {"type": StringName, "name": String,
 ##                                                  #       "position": UniversePos, "velocity": Vector3}
 ##      "pools": Dictionary,                        # ship type (StringName) -> how many to build (int); may be empty.
@@ -23,10 +24,23 @@ extends RefCounted
 ##      "spawns": Array[Dictionary],                # ships placed at load (M3-T09): a wave spawn's fields plus
 ##                                                  #       "invulnerable" (bool, false) and "route" (a route's name, "" none);
 ##                                                  #       the members of `wings[]` come last, in their order
-##      "wings": Array[Dictionary]}                 # `wings[]` (M3-T10): {name, faction (StringName, &"" for any), leader
+##      "wings": Array[Dictionary],                 # `wings[]` (M3-T10): {name, faction (StringName, &"" for any), leader
 ##                                                  #       ("player", a spawn's name, or "" for its first ship), formation
 ##                                                  #       (Formation.Shape), order (AiContext.Order)}; may be empty
-## Every spawn (wave or load) carries "wing" (a wing's name, "" for none; it needs an "ai" behaviour). A wing named by a spawn
+##      "mission": Dictionary,                      # (M5-T05, D51) {} for none, else {title, briefing, script (a res://
+##                                                  #       MissionScript path, loaded by the runner), dialog (a dialog file
+##                                                  #       path), objectives: the raw `objectives[]`, already checked by
+##                                                  #       `ObjectiveBook.declare`, closing_lines: {reason, "success" or
+##                                                  #       "failure" -> line id (StringName)} (M5-T10)}; strings may be ""
+##      "cinematics": Dictionary,                   # (M5-T05, D55) shot id -> shot, passed through for T08; may be empty
+##      "belts": Array[Dictionary],                 # `asteroid_belts[]` (M5-T29, D63): each {centre: UniversePos, size: Vector3,
+##                                                  #       count, radius_m: Vector2 (min, max bounding radius), seed, min_gap_m},
+##                                                  #       the input `BeltLayout.place` takes; may be empty
+##      "civilian_names": Dictionary,               # (M5-T30) civilian hull -> PackedStringArray of names; may be empty
+##      "placeholders": Dictionary}                 # (M5-T30) filled by `resolve_random_civilian`: "{civilian}" -> name
+## Every spawn (wave or load) carries "wing" (a wing's name, "" for none; it needs an "ai" behaviour), "cargo_pods" (M5-T16: how
+## many cargo pods a hull with pod mounts flies with, 0-3; -1, the default, mounts them all) and "forward" (M5-T16: the spawn's
+## own heading, a Vector3; zero, the default, takes the player's). A wing named by a spawn
 ## but not declared in `wings[]` is a group led by its first ship, engaging at will, in a finger-four.
 ## Errors are returned, not pushed: the caller decides how loud a broken scenario is.
 
@@ -35,6 +49,10 @@ const FREE_FLIGHT_PATH: String = "res://data/scenarios/free_flight.json"
 const PROP_TYPES: Array[StringName] = [&"nav_buoy"]
 const SANDBOX_PATH: String = "res://data/scenarios/combat_sandbox.json"
 const ANCHORS: Array[StringName] = [&"player", &"origin"]
+## A spawn and pool type that stands for one civilian hull drawn from the run's seed (M5-T30, D62).
+const RANDOM_CIVILIAN: StringName = &"random_civilian"
+## Where the drawn civilian's name goes in spawn names, objectives, cinematics and dialog lines.
+const CIVILIAN_PLACEHOLDER: String = "{civilian}"
 
 
 ## Reads and validates the scenario at `path` (`res://` or `user://`).
@@ -77,6 +95,9 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	if forward == null or (forward as Vector3).is_zero_approx():
 		return _failure("%s: player.forward must be a non-zero [x, y, z]" % source)
 	var forward_unit: Vector3 = (forward as Vector3).normalized()
+	var start_velocity: Variant = _vector3(player_dict.get("velocity", [0.0, 0.0, 0.0]))
+	if start_velocity == null:
+		return _failure("%s: player.velocity must be [x, y, z] (numbers)" % source)
 
 	var props_raw: Variant = root.get("props", [])
 	if not (props_raw is Array):
@@ -129,6 +150,12 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 		if int(at_load[type]) > int((pools as Dictionary).get(type, 0)):
 			return _failure("%s: spawns and wings: %d ships of %s at load but pools.%s holds %d" % [source, at_load[type], type,
 					type, int((pools as Dictionary).get(type, 0))])
+	var mission: Variant = _mission(root.get("mission", {}), system, source)
+	if mission is String:
+		return _failure(mission as String)
+	var cinematics: Variant = root.get("cinematics", {})
+	if not (cinematics is Dictionary):
+		return _failure("%s: cinematics must be an object (shot id -> shot)" % source)
 	var waves: Variant = _waves(root.get("waves", []), pools as Dictionary, system, source, at_load)
 	if waves is String:
 		return _failure(waves as String)
@@ -136,12 +163,19 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	if (loop as Dictionary)["from_wave"] > wave_list.size():
 		return _failure("%s: loop.from_wave %d is beyond the %d waves" % [source, (loop as Dictionary)["from_wave"], wave_list.size()])
 
+	var belts: Variant = _belts(root.get("asteroid_belts", []), system, source)
+	if belts is String:
+		return _failure(belts as String)
+	var civilian_names: Variant = _civilian_names(root.get("civilian_names", {}), source)
+	if civilian_names is String:
+		return _failure(civilian_names as String)
+
 	var result: Dictionary = _empty()
 	result["ok"] = true
 	result["scenario_id"] = StringName(scenario_id as String)
 	result["system_id"] = system
 	result["player"] = {"position": player_pos as UniversePos, "forward": forward_unit,
-			"basis": basis_facing(forward_unit)}
+			"basis": basis_facing(forward_unit), "velocity": start_velocity as Vector3}
 	result["props"] = props
 	result["pools"] = pools
 	result["waves"] = wave_list
@@ -149,7 +183,167 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	result["routes"] = routes
 	result["spawns"] = spawns
 	result["wings"] = wings
+	result["mission"] = mission
+	result["cinematics"] = cinematics
+	result["belts"] = belts
+	result["civilian_names"] = civilian_names
 	return result
+
+
+## Draws the hull of every `random_civilian` spawn from `seed_value` (M5-T30, D62) before the pools are built, so only that
+## hull is pooled and a retry (same seed) flies the same ship. A Bokmai draws 1 to 3 pods from the same seed. The ship's name
+## comes from the scenario's `civilian_names` for that hull and replaces `CIVILIAN_PLACEHOLDER` in spawn names, the mission
+## block and the cinematics; `placeholders` keeps it for the dialog. Changes `scenario` in place.
+static func resolve_random_civilian(scenario: Dictionary, seed_value: int) -> void:
+	var pools: Dictionary = scenario.get("pools", {})
+	if not pools.has(RANDOM_CIVILIAN):
+		return
+	var types: Array[StringName] = ShipCatalog.CIVILIAN_TYPES
+	var hull: StringName = types[posmod(hash([seed_value, "random_civilian"]), types.size())]
+	var names: PackedStringArray = (scenario.get("civilian_names", {}) as Dictionary).get(hull, PackedStringArray())
+	var ship_name: String = names[posmod(hash([seed_value, "civilian_name"]), names.size())] if not names.is_empty() \
+			else String(hull).replace("_", " ").to_upper()
+	pools[hull] = int(pools.get(hull, 0)) + int(pools[RANDOM_CIVILIAN])
+	pools.erase(RANDOM_CIVILIAN)
+	var fill: Dictionary = {CIVILIAN_PLACEHOLDER: ship_name}
+	for spawn: Dictionary in scenario.get("spawns", []):
+		if spawn["type"] != RANDOM_CIVILIAN:
+			continue
+		spawn["type"] = hull
+		if hull == &"brakiri_bokmai" and int(spawn.get("cargo_pods", -1)) < 0:
+			spawn["cargo_pods"] = 1 + posmod(hash([seed_value, "cargo_pods"]), CargoPods.MAX_PODS)
+	for spawn: Dictionary in scenario.get("spawns", []):
+		spawn["name"] = fill_placeholders(spawn["name"], fill)
+	scenario["mission"] = fill_placeholders(scenario.get("mission", {}), fill)
+	scenario["cinematics"] = fill_placeholders(scenario.get("cinematics", {}), fill)
+	scenario["placeholders"] = fill
+
+
+## `value` with every placeholder of `fill` (text -> replacement) replaced in its strings, through arrays and dictionaries.
+static func fill_placeholders(value: Variant, fill: Dictionary) -> Variant:
+	if value is String:
+		var text: String = value
+		for key: String in fill:
+			text = text.replace(key, String(fill[key]))
+		return text
+	if value is Array:
+		var out: Array = (value as Array).duplicate()
+		for i: int in out.size():
+			out[i] = fill_placeholders(out[i], fill)
+		return out
+	if value is Dictionary:
+		var out: Dictionary = (value as Dictionary).duplicate()
+		for key: Variant in out:
+			out[key] = fill_placeholders(out[key], fill)
+		return out
+	return value
+
+
+static func _is_ship_type(type: StringName) -> bool:
+	return type == RANDOM_CIVILIAN or ShipCatalog.has_type(type)
+
+
+## `civilian_names` (M5-T30): civilian hull -> the names a drawn civilian of that hull may fly under; or an error string.
+static func _civilian_names(raw: Variant, source: String) -> Variant:
+	if not (raw is Dictionary):
+		return "%s: civilian_names must be an object (civilian hull -> [names])" % source
+	var out: Dictionary = {}
+	for key: Variant in raw as Dictionary:
+		var hull := StringName(str(key))
+		if not ShipCatalog.is_civilian(hull):
+			return "%s: civilian_names.%s is not a civilian hull (%s)" % [source, key, ShipCatalog.CIVILIAN_TYPES]
+		var list: Variant = (raw as Dictionary)[key]
+		var names := PackedStringArray()
+		if list is Array:
+			for n: Variant in list as Array:
+				if n is String and not (n as String).strip_edges().is_empty():
+					names.append((n as String).strip_edges())
+		if names.is_empty() or not (list is Array) or names.size() != (list as Array).size():
+			return "%s: civilian_names.%s must be a non-empty list of names" % [source, key]
+		out[hull] = names
+	return out
+
+
+## `asteroid_belts[]` (M5-T29, D63): each belt's box, rock count and sizes; or an error string.
+static func _belts(raw: Variant, system: StringName, source: String) -> Variant:
+	if not (raw is Array):
+		return "%s: asteroid_belts must be an array" % source
+	var out: Array[Dictionary] = []
+	for b: int in (raw as Array).size():
+		var where: String = "%s: asteroid_belts[%d]" % [source, b]
+		var entry: Variant = (raw as Array)[b]
+		if not (entry is Dictionary):
+			return "%s must be an object" % where
+		var belt: Dictionary = entry
+		var centre: Variant = _universe_pos(belt.get("centre"), system)
+		if centre == null:
+			return "%s: centre must be [x, y, z] (numbers)" % where
+		var size: Variant = _vector3(belt.get("size"))
+		if size == null or (size as Vector3).x <= 0.0 or (size as Vector3).y <= 0.0 or (size as Vector3).z <= 0.0:
+			return "%s: size must be [x, y, z], each above 0" % where
+		var count: Variant = belt.get("count")
+		if not (count is float or count is int) or int(count) < 1 or float(count) != floorf(float(count)):
+			return "%s: count must be a whole number of at least 1" % where
+		var radii: Variant = belt.get("radius_m")
+		if not (radii is Array) or (radii as Array).size() != 2 or not ((radii as Array)[0] is float or (radii as Array)[0] is int) \
+				or not ((radii as Array)[1] is float or (radii as Array)[1] is int) or float((radii as Array)[0]) <= 0.0 \
+				or float((radii as Array)[1]) < float((radii as Array)[0]):
+			return "%s: radius_m must be [min, max] with 0 < min <= max" % where
+		var gap: Variant = belt.get("min_gap_m", 0.0)
+		if not (gap is float or gap is int) or float(gap) < 0.0:
+			return "%s: min_gap_m must be a number of at least 0" % where
+		var seed_value: Variant = belt.get("seed", 1)
+		if not (seed_value is float or seed_value is int):
+			return "%s: seed must be a number" % where
+		out.append({"centre": centre as UniversePos, "size": size as Vector3, "count": int(count),
+				"radius_m": Vector2(float((radii as Array)[0]), float((radii as Array)[1])), "seed": int(seed_value),
+				"min_gap_m": float(gap)})
+	return out
+
+
+## The `mission` block (D51), or an error string: `{}` when absent. Strings are checked for type only (the script and the
+## dialog file are loaded by the mission runner), the objectives by `ObjectiveBook.declare`.
+static func _mission(raw: Variant, system: StringName, source: String) -> Variant:
+	if not (raw is Dictionary):
+		return "%s: mission must be an object" % source
+	var block: Dictionary = raw
+	if block.is_empty():
+		return {}
+	var out: Dictionary = {}
+	for key: String in ["title", "briefing", "script", "dialog"]:
+		var value: Variant = block.get(key, "")
+		if not (value is String):
+			return "%s: mission.%s must be a string" % [source, key]
+		out[key] = (value as String).strip_edges() if key != "briefing" else value as String
+	var objectives: Variant = block.get("objectives", [])
+	var problem: String = ObjectiveBook.new().declare(objectives, system)
+	if not problem.is_empty():
+		return "%s: mission.%s" % [source, problem]
+	out["objectives"] = objectives
+	var closing: Variant = _closing_lines(block.get("closing_lines", {}), source)
+	if closing is String:
+		return closing
+	out["closing_lines"] = closing
+	return out
+
+
+## A mission's closing lines (M5-T10): the line to say as it ends, by the result's reason or by "success" / "failure"; or an
+## error string. The dialog file is checked by `tests/unit/test_dialog_ids.gd`, not here.
+static func _closing_lines(raw: Variant, source: String) -> Variant:
+	if not (raw is Dictionary):
+		return "%s: mission.closing_lines must be an object (reason, success or failure -> line id)" % source
+	var out: Dictionary = {}
+	for key: Variant in raw as Dictionary:
+		var line_id: Variant = (raw as Dictionary)[key]
+		if not (line_id is String) or (line_id as String).strip_edges().is_empty():
+			return "%s: mission.closing_lines.%s must be a line id" % [source, key]
+		out[str(key)] = StringName((line_id as String).strip_edges())
+	return out
+
+
+## One spawn by the scenario's rules (a mission's `m.spawn`, M5-T05), or an error string naming `where`.
+static func parse_spawn(raw: Variant, where: String, system: StringName) -> Variant:
+	return _spawn(raw, where, system)
 
 
 ## `wings[]` (M3-T10): each wing's declaration, its members appended to `spawns`, or an error string. `leader` is "player",
@@ -226,8 +420,8 @@ static func _pools(raw: Variant, source: String) -> Variant:
 	var out: Dictionary = {}
 	for key: Variant in (raw as Dictionary).keys():
 		var where: String = "%s: pools.%s" % [source, str(key)]
-		if not ShipCatalog.has_type(StringName(str(key))):
-			return "%s: unknown ship type (expected one of %s)" % [where, ShipCatalog.types()]
+		if not _is_ship_type(StringName(str(key))):
+			return "%s: unknown ship type (expected one of %s or %s)" % [where, ShipCatalog.types(), RANDOM_CIVILIAN]
 		var count: Variant = (raw as Dictionary)[key]
 		if typeof(count) != TYPE_FLOAT and typeof(count) != TYPE_INT or float(count) != floorf(float(count)) or int(count) < 0:
 			return "%s must be a whole number, 0 or more" % where
@@ -421,8 +615,8 @@ static func _spawn(raw: Variant, where: String, system: StringName) -> Variant:
 		return "%s must be an object" % where
 	var entry: Dictionary = raw
 	var type: Variant = entry.get("type")
-	if not (type is String) or not ShipCatalog.has_type(StringName(type as String)):
-		return "%s: type must be one of %s, got %s" % [where, ShipCatalog.types(), JSON.stringify(type)]
+	if not (type is String) or not _is_ship_type(StringName(type as String)):
+		return "%s: type must be one of %s or %s, got %s" % [where, ShipCatalog.types(), RANDOM_CIVILIAN, JSON.stringify(type)]
 	var anchor: Variant = entry.get("anchor", "player")
 	if not (anchor is String) or not ANCHORS.has(StringName(anchor as String)):
 		return "%s: anchor must be one of %s, got %s" % [where, ANCHORS, JSON.stringify(anchor)]
@@ -444,9 +638,16 @@ static func _spawn(raw: Variant, where: String, system: StringName) -> Variant:
 		return "%s.wing must be a wing's name" % where
 	if not (wing as String).strip_edges().is_empty() and not (made["brain"] is AiPilot):
 		return "%s.wing needs an \"ai\" behaviour (a wing's members fly an AiPilot)" % where
+	var pods: Variant = entry.get("cargo_pods", -1)
+	if typeof(pods) != TYPE_FLOAT and typeof(pods) != TYPE_INT or float(pods) != floorf(float(pods)) \
+			or int(pods) < -1 or int(pods) > CargoPods.MAX_PODS:
+		return "%s: cargo_pods must be a whole number from 0 to %d" % [where, CargoPods.MAX_PODS]
+	var forward: Variant = _vector3(entry.get("forward", [0.0, 0.0, 0.0]))
+	if forward == null:
+		return "%s: forward must be [x, y, z] (numbers)" % where
 	return {"type": StringName(type as String), "name": str(entry.get("name", "")), "anchor": StringName(anchor as String),
 			"offset": offset as Vector3, "velocity": velocity as Vector3, "at_s": float(at_s), "behaviour": behaviour,
-			"wing": (wing as String).strip_edges()}
+			"wing": (wing as String).strip_edges(), "cargo_pods": int(pods), "forward": forward as Vector3}
 
 
 ## An orientation whose forward axis (-Z) points along `forward`, up as close to +Y as possible.
@@ -489,10 +690,12 @@ static func _numbers3(value: Variant) -> Variant:
 
 static func _empty() -> Dictionary:
 	return {"ok": false, "error": "", "scenario_id": &"", "system_id": &"local",
-			"player": {"position": UniversePos.new(), "forward": Vector3.FORWARD, "basis": Basis.IDENTITY},
+			"player": {"position": UniversePos.new(), "forward": Vector3.FORWARD, "basis": Basis.IDENTITY,
+					"velocity": Vector3.ZERO},
 			"props": [] as Array[Dictionary], "pools": {}, "waves": [] as Array[Dictionary],
 			"loop": {"from_wave": 0, "add_per_loop": 1}, "routes": [] as Array[Route], "spawns": [] as Array[Dictionary],
-			"wings": [] as Array[Dictionary]}
+			"wings": [] as Array[Dictionary], "mission": {}, "cinematics": {}, "belts": [] as Array[Dictionary],
+			"civilian_names": {}, "placeholders": {}}
 
 
 static func _failure(message: String) -> Dictionary:

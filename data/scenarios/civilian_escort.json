@@ -1,0 +1,72 @@
+{
+	"scenario_id": "civilian_escort",
+	"system_id": "local",
+	"player": {"position": [420, 40, 1600], "forward": [0, 0, -1], "velocity": [0, 0, -60]},
+	"props": [
+		{"type": "nav_buoy", "name": "NAV ALPHA", "position": [0, 0, 0]},
+		{"type": "nav_buoy", "name": "NAV BETA", "position": [0, 0, -30000]}
+	],
+	"asteroid_belts": [
+		{"centre": [0, 0, -15000], "size": [24000, 3000, 8000], "count": 400, "radius_m": [10, 150], "seed": 38,
+			"min_gap_m": 200}
+	],
+	"civilian_names": {
+		"saturn_3_freighter": ["CALLIOPE", "IRON MERIDIAN"],
+		"saturn_4_transport": ["TALLIS ROW", "HALCYON DRIFT"],
+		"saturn_4_tanker": ["DEEP WELL", "OSSIAN"],
+		"saturn_8_transport": ["LONG ARC", "MERCY OF CERES"],
+		"saturn_8_tanker": ["BLUE HERON", "GRAND TRAVERSE"],
+		"skylark_transport": ["SKYLARK KESTREL", "SKYLARK WREN"],
+		"narn_transport": ["G'TARN", "NA'KESH"],
+		"centauri_brezebel": ["VELORA", "CASSARINE"],
+		"brakiri_bokmai": ["TOLVAR", "IRRISET"]
+	},
+	"pools": {"raider_fighter": 13, "starfury_ally": 1, "random_civilian": 1},
+	"routes": [
+		{"name": "ESCORT", "cruise_mps": 120, "pace": "none", "waypoints": [
+			{"position": [0, 0, -7500]}, {"position": [0, 0, -15000]}, {"position": [0, 0, -22500]},
+			{"position": [0, 0, -29000]}
+		]}
+	],
+	"spawns": [
+		{"type": "random_civilian", "name": "{civilian}", "anchor": "origin", "offset": [250, 0, -300], "forward": [0, 0, -1],
+			"behaviour": {"type": "ai", "profile": "civilian"}, "route": "ESCORT"}
+	],
+	"wings": [
+		{"name": "ALPHA", "faction": "earth_alliance", "leader": "player", "order": "cover", "formation": "finger_four",
+			"members": [
+				{"type": "starfury_ally", "name": "ALPHA 2", "anchor": "player", "offset": [-40, 0, 40], "velocity": [0, 0, -60],
+					"behaviour": {"type": "ai", "profile": "ally_starfury"}}
+			]}
+	],
+	"cinematics": {
+		"departure": {"keys": [
+			{"t": 0, "position": {"origin": [-420, 90, 380]}, "look_at": {"actor": "{civilian}"}, "fov": 50},
+			{"t": 6, "position": {"origin": [-520, 140, 160]}, "look_at": {"actor": "{civilian}", "offset": [0, 0, -400]},
+				"fov": 44}
+		]},
+		"wing": {"keys": [
+			{"t": 0, "position": {"actor": "player", "offset": [-75, 6, -200]}, "look_at": {"actor": "player"}, "fov": 45},
+			{"t": 3.5, "position": {"actor": "player", "offset": [-75, 6, -60]},
+				"look_at": {"actor": "player", "offset": [20, 0, 30]}},
+			{"t": 7, "position": {"actor": "player", "offset": [-75, 6, 80]},
+				"look_at": {"actor": "player", "offset": [0, 0, -600]}, "fov": 55}
+		]}
+	},
+	"mission": {
+		"title": "Civilian escort",
+		"briefing": "A civilian ship is crossing from NAV ALPHA to NAV BETA, 30 km out, through a field of rock. Raiders work this stretch.\n\nLead Alpha wing with your wingman, ALPHA 2, and see the ship through the belt to NAV BETA. Bring ALPHA 2 home.",
+		"script": "res://data/missions/civilian_escort.gd",
+		"dialog": "res://data/dialog/civilian_escort.json",
+		"closing_lines": {
+			"objective failed: escort": "control_civilian_lost",
+			"player destroyed": "alpha_2_leader_down"
+		},
+		"objectives": [
+			{"id": "escort", "text": "Escort the {civilian} to NAV BETA", "primary": true,
+				"fail": {"kind": "destroyed", "name": "{civilian}"}},
+			{"id": "home", "text": "Bring ALPHA 2 home", "primary": false,
+				"fail": {"kind": "destroyed", "names": ["ALPHA 2"], "all": false}}
+		]
+	}
+}

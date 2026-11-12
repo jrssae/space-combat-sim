@@ -15,6 +15,9 @@ uniform sampler2D orm_map : hint_default_white, filter_linear_mipmap_anisotropic
 uniform sampler2D emissive_map : source_color, hint_default_black, filter_linear_mipmap_anisotropic, repeat_disable;
 uniform sampler2D digit_map : hint_default_black, filter_linear_mipmap, repeat_disable;
 uniform float emission_energy = 1.0;
+// `settings.hull_sheen`: a clear coat over the paint (MeshAssets sets both).
+uniform float sheen = 0.0;
+uniform float sheen_roughness = 0.35;
 // The hull paint the base map was painted with (linear): paint is darkened as the base is (panel lines, grime, streaks).
 uniform vec3 hull_paint = vec3(0.35);
 
@@ -134,5 +137,7 @@ void fragment() {
 	ROUGHNESS = orm.g;
 	METALLIC = orm.b;
 	SPECULAR = 0.35;  // matte paint (Q34: less gloss)
+	CLEARCOAT = sheen;
+	CLEARCOAT_ROUGHNESS = sheen_roughness;
 	EMISSION = texture(emissive_map, UV).rgb * emission_energy;
 }

@@ -6,7 +6,7 @@ extends RefCounted
 
 ## Every class the game needs from the native library (M4-T37: the library is required, Q57 and Q67).
 const REQUIRED: Array[StringName] = [&"ScsSimCore", &"ScsBrains", &"ScsFlightStep", &"ScsCannons", &"ScsBoltSync",
-		&"ScsContactField", &"ScsPilotKernels", &"ScsHitSweep", &"ScsRamPhase", &"ScsWeaponRows", &"ScsNativeProbe"]
+		&"ScsContactField", &"ScsPilotKernels", &"ScsHitSweep", &"ScsRamPhase", &"ScsRamTracker", &"ScsWeaponRows", &"ScsNativeProbe"]
 ## The user argument that adds a class to the required list: the refusal's test seam (`test_native_required`).
 const REQUIRE_ARG: String = "--native-require="
 

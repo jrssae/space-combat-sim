@@ -35,6 +35,9 @@ const ROSTER_BAR: Vector2 = Vector2(64.0, 8.0)
 ## The acknowledgement line's baseline below the status line's (under AUTO-TRACK's, 26 px below it).
 const ACK_BELOW_STATUS_PX: float = 50.0
 const STATUS_Y_PX: float = 36.0
+## The objectives list (M5-T05), top right (at 1080 px; scaled): the caption's baseline below the FPS counter, and the line pitch.
+const OBJECTIVES_TOP_PX: float = 110.0
+const OBJECTIVE_ROW_PX: float = 22.0
 ## A roster row's short form of what a wingman is doing, by behaviour id.
 const ROSTER_TAGS: Dictionary = {"formation": "FORM", "attack": "ATK", "evade": "EVADE", "retreat": "RETREAT",
 		"follow_path": "NAV", "idle": "IDLE", "none": "-"}
@@ -64,6 +67,7 @@ static func compute(input: HudInput) -> HudFrame:
 	_radar(input, f)
 	_waypoint(input, f)
 	_wing(input, f)
+	_objectives(input, f)
 	f.status_line = input.status_line
 	f.items = HudSurface.ALL_ITEMS.duplicate()
 	if not f.grid_visible:
@@ -71,6 +75,8 @@ static func compute(input: HudInput) -> HudFrame:
 	f.lamps = {&"assist": input.assist, &"guns": input.guns_ready, &"lights": input.running_lights, &"track": input.tracking}
 	if on_screens(input):
 		_split_onto_screens(input, f)
+	if not f.objective_lines.is_empty():
+		f.items.append(HudSurface.OBJECTIVES)  # on the window in both views
 	return f
 
 
@@ -181,6 +187,12 @@ static func _target(input: HudInput, f: HudFrame) -> void:
 	f.target_hull = t.hull_fraction
 	f.target_relation = Factions.relation(input.faction, t.faction)
 	f.target_color = Factions.hud_color(f.target_relation)
+	if input.target_unknown:
+		# Too far to tell what it is (M5-T25): no name, no hull, no faction colour.
+		f.target_name = TargetMenu.UNKNOWN_LABEL
+		f.target_hull = -1.0
+		f.target_relation = Factions.Relation.NEUTRAL
+		f.target_color = Factions.UNIDENTIFIED_COLOR
 	var shown: Dictionary = project(input, t.position)
 	if bool(shown["in_front"]) and on_screen(input, shown["pos"]):
 		f.target_on_screen = true
@@ -235,6 +247,7 @@ static func _waypoint(input: HudInput, f: HudFrame) -> void:
 	f.waypoint_present = true
 	f.waypoint_label = input.waypoint_label
 	f.waypoint_range_m = input.own_position.distance_to(input.waypoint_position)
+	f.waypoint_radar_index = f.radar_plot.ids.find(input.waypoint_id) if input.waypoint_id != 0 else -1
 	var shown: Dictionary = project(input, input.waypoint_position)
 	if bool(shown["in_front"]) and on_screen(input, shown["pos"]):
 		f.waypoint_on_screen = true
@@ -322,7 +335,7 @@ static func _radar(input: HudInput, f: HudFrame) -> void:
 	if not input.cockpit:
 		# Chase view: bottom-right corner, over the charge bar.
 		f.radar_centre = Vector2(input.viewport_size.x - 48.0 * f.scale - 130.0 * f.scale, input.viewport_size.y - 56.0 * f.scale - 30.0 * f.scale - f.radar_radius_px)
-	if input.target != null and input.target.damage_layout != DamageZones.Layout.NONE:
+	if input.target != null and input.target.damage_layout != DamageZones.Layout.NONE and not input.target_unknown:
 		f.target_layout = input.target.damage_layout
 		f.target_zones = input.target.damage_zones
 		var outline := Vector2(150.0, 112.0) * f.scale
@@ -337,7 +350,10 @@ static func _radar(input: HudInput, f: HudFrame) -> void:
 	else:
 		f.drift_centre = f.speed_pos + Vector2(-215.0 * f.scale - f.drift_radius_px, 0.0)
 	var contacts: RadarContacts = input.radar_contacts if input.radar_contacts != null else RadarContacts.from_infos(input.contacts)
-	f.radar_plot = RadarModel.plot(contacts, input.selected_id, input.own_position, input.own_basis, input.faction)
+	var before_us: int = Time.get_ticks_usec()
+	f.radar_plot = RadarModel.plot(contacts, input.selected_id, input.own_position, input.own_basis, input.faction,
+			0 if input.target_unknown else input.selected_id)
+	f.radar_plot_us = Time.get_ticks_usec() - before_us
 
 
 # --- wing roster and acknowledgements (M3-T11) -----------------------------------------------------------------------
@@ -382,6 +398,31 @@ static func _roster_rows(input: HudInput, origin: Vector2, s: float, pitch: floa
 		row.text_pos = Vector2(origin.x + (ROSTER_BAR.x + 10.0) * s, top + 16.0 * s)
 		rows.append(row)
 	return rows
+
+
+# --- mission objectives (M5-T05) ------------------------------------------------------------------------------------------
+
+
+## The objectives list's line for one objective: its text (its id when it has none) in capitals, optional ones marked.
+static func objective_text(objective: Dictionary) -> String:
+	var text: String = str(objective.get("text", ""))
+	if text.is_empty():
+		text = str(objective.get("id", ""))
+	return text.to_upper() + ("" if bool(objective.get("primary", true)) else "  (OPTIONAL)")
+
+
+static func _objectives(input: HudInput, f: HudFrame) -> void:
+	f.objective_lines = []
+	if input.objectives.is_empty():
+		return
+	var s: float = f.scale
+	var x: float = input.viewport_size.x - 48.0 * s
+	f.objectives_caption_pos = Vector2(x, OBJECTIVES_TOP_PX * s)
+	for i: int in input.objectives.size():
+		var objective: Dictionary = input.objectives[i]
+		f.objective_lines.append({"text": objective_text(objective),
+				"pos": Vector2(x, (OBJECTIVES_TOP_PX + OBJECTIVE_ROW_PX * float(i + 1)) * s),
+				"primary": bool(objective.get("primary", true))})
 
 
 # --- the console's screens (M3-T29) ---------------------------------------------------------------------------------------

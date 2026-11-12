@@ -19,3 +19,10 @@ physics_interpolation_mode = 2
 fov = 70.0
 near = 0.05
 far = 50000.0
+
+[node name="CinematicCamera" type="Camera3D" parent="." groups=["world_shiftable"]]
+top_level = true
+physics_interpolation_mode = 2
+fov = 70.0
+near = 0.05
+far = 50000.0

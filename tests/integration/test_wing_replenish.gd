@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## Replenishing the wing (M3-T08 phase 2, AC7, AC11, maintainer Q8, architecture §16 D36): when a wave starts,
 ## `WingDirector.replenish()` gives every empty slot of the player's wing an allied Starfury from the pool, named
 ## `Wing.callsign(slot)`, 1 500 m behind the player along its nose axis at the player's velocity, flying the wing's order in
@@ -42,15 +42,6 @@ func _launch(allies: int, scenario: String = FREE_FLIGHT) -> void:
 	add_child_autofree(main)
 	await _ticks(2)
 	wing = main.wings.player_wing()
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
-
-
-func _exec(line: String) -> ConsoleResult:
-	return DebugConsole.registry.execute(line)[0]
 
 
 func _start_wave(number: int = 2) -> void:

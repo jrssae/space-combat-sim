@@ -8,6 +8,8 @@ mod brain_behaviours;
 mod brain_maths;
 mod brain_step;
 mod cannons;
+mod civilian;
+mod constants;
 mod contact_field;
 mod flight_step;
 mod hit_sweep;
@@ -41,6 +43,17 @@ mod tier_rows;
 // M4-T22: the low-attention tier's fire, an engine-free kernel.
 mod tier_fire;
 
+// M5-T21: the defensive turrets, engine-free kernels and the core's shell around them.
+mod turret_kernels;
+mod turret_rows;
+
+// M5-T28: the engine voices' ship query, an engine-free kernel and the core's shell around it.
+mod voice_kernels;
+mod voice_rows;
 // M4-T23: the player's radar sphere, an engine-free kernel, and its shell.
 mod radar_kernel;
 mod radar_plot;
+
+// M5-T33: the ram tracker, an engine-free kernel, and its shell over Jolt's contacts and the core's rows.
+mod ram_contacts;
+mod ram_tracker;

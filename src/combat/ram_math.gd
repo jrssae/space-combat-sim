@@ -9,7 +9,8 @@ extends RefCounted
 ## Δv comes from Jolt at ordinary speeds (`contact_dv`: the velocity change a contact caused). When the swept test
 ## (`ConvexSweep`, shape by shape) finds the hit instead, Δv is the momentum split of a perfectly inelastic hit (`split_dv`): at
 ## tunnelling speeds (`is_tunnelling`), where Jolt cannot be trusted to see it, and whenever the other body is a prop without a
-## physics body. Between two ships the swept test counts only an overlap of at least `RAM_DEPTH_M`.
+## physics body. Between two ships the swept test counts only an overlap of at least `RAM_DEPTH_M`. Against a rock only the
+## speed into its surface counts (`closing_speed`, M5-T41): a glancing scrape costs far less than a head-on hit.
 
 ## One tick of relative motion beyond this share of the smaller core radius is a tunnelling speed (§16 D32).
 const TUNNEL_FRACTION: float = 0.5
@@ -38,6 +39,13 @@ static func damage(dv_mps: float, safe_dv_mps: float, lethal_dv_mps: float, hull
 ## forces do not explain. `own_dv` is what those forces (thrust, the environment) added in between: Σ force / mass × dt.
 static func contact_dv(v_now: Vector3, v_before: Vector3, own_dv: Vector3) -> float:
 	return (v_now - v_before - own_dv).length()
+
+
+## How fast `velocity` drives into a surface whose outward normal is `outward` (unit): only that part of the motion is stopped
+## by a rock, so a ship grazing one at speed is hurt by its slow sideways closing, not by its whole speed (M5-T41). 0 when it
+## moves away or along the surface.
+static func closing_speed(velocity: Vector3, outward: Vector3) -> float:
+	return maxf(-velocity.dot(outward), 0.0)
 
 
 ## The velocity change of a body of `m_self` kg when it meets one of `m_other` kg at `relative_speed` and they move on

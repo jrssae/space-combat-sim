@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## The AI think rate and nearest-k contacts (M4-T04, cycle 3; architecture §17.4). AI ships within `ai_think_near_m` of
 ## the player think every tick; farther ones (all of them with no player alive) think at `ai_think_far_hz` on staggered
 ## ticks and hold their last command between, while their physics still steps every tick. A ship scores, avoids and checks
@@ -91,11 +91,6 @@ func _raider(display_name: String, at: Vector3, brain: PilotBrain, faction: Stri
 	c.damageable.hull = HullHealth.new(1.0e6)
 	c.driver.brain = brain
 	return c
-
-
-func _ticks(n: int) -> void:
-	for i: int in n:
-		await get_tree().physics_frame
 
 
 # Six ships within 1 km of the player and 24 between 3 and 4.3 km out, all inside one another's 5 km.

@@ -141,18 +141,26 @@ def square_to_triangle(uv: np.ndarray) -> np.ndarray:
     return np.stack([1.0 - u2 - v2, u2, v2], axis=1)
 
 
-def face_sample_counts(areas: np.ndarray, spacing: float, rng: np.random.Generator) -> np.ndarray:
-    """Stratified rounding of ``area / spacing**2`` per face (expectation preserved exactly)."""
+def face_sample_counts(areas: np.ndarray, spacing: float, rng: np.random.Generator, systematic: bool = False) -> np.ndarray:
+    """Stratified rounding of ``area / spacing**2`` per face (expectation preserved exactly).
+
+    ``systematic`` shares one random offset along the faces' running total instead, so each face still gets its
+    expected count but neighbours' rounding errors cancel: the total is exact to one sample and a coarse sampling of a
+    mesh made of many small faces keeps its centroid (big hulls at far LODs)."""
     expected = np.asarray(areas, dtype=float) / (spacing * spacing)
+    if systematic:
+        running = np.floor(np.cumsum(expected) + rng.random())
+        return np.diff(running, prepend=0.0).astype(np.int64)
     return np.floor(expected + rng.random(len(expected))).astype(np.int64)
 
 
-def sample_mesh(mesh: Mesh, spacing: float, rng: np.random.Generator, smooth: bool = True) -> SurfaceSamples:
-    """Uniform surface samples at mean spacing ``spacing`` (about ``area / spacing**2`` of them)."""
+def sample_mesh(mesh: Mesh, spacing: float, rng: np.random.Generator, smooth: bool = True, systematic: bool = False) -> SurfaceSamples:
+    """Uniform surface samples at mean spacing ``spacing`` (about ``area / spacing**2`` of them); ``systematic`` as
+    in :func:`face_sample_counts`."""
     if spacing <= 0.0:
         raise ValueError("spacing must be positive")
     areas = mesh.face_areas()
-    counts = face_sample_counts(areas, spacing, rng)
+    counts = face_sample_counts(areas, spacing, rng, systematic)
     offsets = rng.random((mesh.face_count, 2))
     total = int(counts.sum())
     if total == 0:

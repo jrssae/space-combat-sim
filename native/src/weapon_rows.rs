@@ -43,6 +43,37 @@ pub struct ScsWeaponRows {
     // (`(second, shots)`), so its interceptors take at most two a second each (fix round 1).
     next_tier_missile: i64,
     intercept_used: Vec<(i64, i64)>,
+    // The step's lists, kept between ticks so a step with fire allocates none of them (M5-T35).
+    step_lists: StepLists,
+    interceptors_of: Vec<i64>,
+}
+
+// What a step decides, list by list (see `step`).
+#[derive(Default)]
+struct StepLists {
+    gun_rows: Vec<i32>,
+    bolt_at: Vec<Vector3>,
+    bolt_velocity: Vec<Vector3>,
+    spent_ids: Vec<i64>,
+    spent_missile: Vec<u8>,
+    beam_rows: Vec<i32>,
+    beam_targets: Vec<Vector3>,
+    launch_caps: Vec<i32>,
+    launch_targets: Vec<i64>,
+}
+
+impl StepLists {
+    fn clear(&mut self) {
+        self.gun_rows.clear();
+        self.bolt_at.clear();
+        self.bolt_velocity.clear();
+        self.spent_ids.clear();
+        self.spent_missile.clear();
+        self.beam_rows.clear();
+        self.beam_targets.clear();
+        self.launch_caps.clear();
+        self.launch_targets.clear();
+    }
 }
 
 // A far capital's missile, its outcome rolled at launch, landing (or missing) when it would have arrived.
@@ -289,15 +320,19 @@ impl ScsWeaponRows {
         max_launches: i64,
         ticks_per_second: i64,
     ) -> VarArray {
-        let mut gun_rows: Vec<i32> = Vec::new();
-        let mut bolt_at: Vec<Vector3> = Vec::new();
-        let mut bolt_velocity: Vec<Vector3> = Vec::new();
-        let mut spent_ids: Vec<i64> = Vec::new();
-        let mut spent_missile: Vec<u8> = Vec::new();
-        let mut beam_rows: Vec<i32> = Vec::new();
-        let mut beam_targets: Vec<Vector3> = Vec::new();
-        let mut launch_caps: Vec<i32> = Vec::new();
-        let mut launch_targets: Vec<i64> = Vec::new();
+        let mut lists = std::mem::take(&mut self.step_lists);
+        lists.clear();
+        let StepLists {
+            gun_rows,
+            bolt_at,
+            bolt_velocity,
+            spent_ids,
+            spent_missile,
+            beam_rows,
+            beam_targets,
+            launch_caps,
+            launch_targets,
+        } = &mut lists;
         let mut flying: i64 = 0;
         let mut landed = TierLanded::default();
         if let Some(core) = self.core.clone() {
@@ -316,6 +351,7 @@ impl ScsWeaponRows {
                 tier_us,
                 next_tier_missile,
                 intercept_used,
+                interceptors_of,
                 ..
             } = self;
             let n = *factions;
@@ -548,7 +584,8 @@ impl ScsWeaponRows {
             // (not a hulk). GDScript drops a landing on a target that was released and taken out again since its launch.
             intercept_used.resize(capitals.body_ids.len(), (-1, 0));
             let second = tick.div_euclid(second_ticks);
-            let mut interceptors_of = vec![0i64; capitals.body_ids.len()];
+            interceptors_of.clear();
+            interceptors_of.resize(capitals.body_ids.len(), 0);
             for t in 0..turrets.role.len() {
                 if turrets.role[t] == ROLE_INTERCEPTOR {
                     interceptors_of[turrets.capital[t] as usize] += 1;
@@ -692,6 +729,7 @@ impl ScsWeaponRows {
         out.push(&PackedInt64Array::from(landed.launched_targets.as_slice()).to_variant());
         out.push(&PackedInt64Array::from(landed.ended_ids.as_slice()).to_variant());
         out.push(&landed.intercepted.to_variant());
+        self.step_lists = lists;
         out
     }
 

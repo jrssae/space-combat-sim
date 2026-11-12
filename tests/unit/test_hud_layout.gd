@@ -594,3 +594,92 @@ func test_the_acknowledgement_sits_under_the_status_line_and_auto_track() -> voi
 	assert_gt(f.ack_pos.y, 62.0, "below AUTO-TRACK's line")
 	assert_lt(f.ack_pos.y, VIEW.y * 0.15, "near the top")
 	assert_eq(HudLayout.compute(_hud_input()).ack_line, "")
+
+
+# --- mission objectives (M5-T05) ------------------------------------------------------------------------------------------
+
+
+func _objective(id: StringName, text: String, primary: bool = true) -> Dictionary:
+	return {"id": id, "text": text, "primary": primary, "state": &"active"}
+
+
+func test_without_objectives_there_is_no_list() -> void:
+	var f: HudFrame = HudLayout.compute(_hud_input())
+	assert_does_not_have(f.items, HudSurface.OBJECTIVES)
+	assert_eq(f.objective_lines.size(), 0)
+	assert_does_not_have(HudSurface.ALL_ITEMS, HudSurface.OBJECTIVES, "shown only while a mission has some")
+
+
+func test_active_objectives_are_listed_top_right_with_optional_ones_marked() -> void:
+	var input: HudInput = _hud_input()
+	input.objectives.append(_objective(&"protect", "Protect NAV ALPHA"))
+	input.objectives.append(_objective(&"home", "", false))
+	var f: HudFrame = HudLayout.compute(input)
+	assert_has(f.items, HudSurface.OBJECTIVES)
+	assert_eq(f.objective_lines.size(), 2)
+	assert_eq(f.objective_lines[0]["text"], "PROTECT NAV ALPHA")
+	assert_eq(f.objective_lines[1]["text"], "HOME  (OPTIONAL)", "its id when it has no text")
+	assert_false(bool(f.objective_lines[1]["primary"]))
+	var first: Vector2 = f.objective_lines[0]["pos"]
+	var second: Vector2 = f.objective_lines[1]["pos"]
+	assert_almost_eq(first.x, VIEW.x - 48.0, TOL, "right-aligned at the right margin")
+	assert_gt(first.y, f.objectives_caption_pos.y, "under its caption")
+	assert_gt(second.y, first.y)
+	assert_lt(second.y, VIEW.y * 0.25, "in the top quarter, clear of the radar")
+
+
+func test_the_cockpit_view_keeps_the_list_on_the_window() -> void:
+	var input: HudInput = _hud_input()
+	input.cockpit = true
+	input.screen_sizes = {&"octagon": Vector2(300.0, 300.0), &"left": Vector2(640.0, 250.0), &"right": Vector2(640.0, 250.0)}
+	input.objectives.append(_objective(&"protect", "Protect NAV ALPHA"))
+	var f: HudFrame = HudLayout.compute(input)
+	assert_eq(f.items, [HudSurface.BORESIGHT, HudSurface.VELOCITY, HudSurface.TARGET_MARKS, HudSurface.WAYPOINT,
+			HudSurface.OBJECTIVES] as Array[StringName])
+	for id: StringName in f.screens:
+		assert_does_not_have((f.screens[id] as HudSurface).items, HudSurface.OBJECTIVES, "not on the %s screen" % id)
+
+
+# --- unidentified target and the waypoint's radar entry (M5-T25) ------------------------------------------------------
+
+
+func test_an_unidentified_target_has_no_name_hull_or_faction_colour() -> void:
+	var input: HudInput = _hud_input()
+	input.faction = Factions.EARTH_ALLIANCE
+	input.target = _target(Vector3(0.0, 0.0, -7000.0))
+	input.target.damage_layout = DamageZones.Layout.DELTA
+	input.target.damage_zones = PackedFloat32Array([0.0, 0.5])
+	input.selected_id = 7
+	var known: HudFrame = HudLayout.compute(input)
+	assert_eq(known.target_name, "RAIDER 1")
+	assert_eq(known.target_color, Factions.HOSTILE_COLOR)
+	assert_almost_eq(known.target_hull, 0.8, 1e-6)
+	assert_eq(known.target_layout, DamageZones.Layout.DELTA)
+	input.target_unknown = true
+	var unknown: HudFrame = HudLayout.compute(input)
+	assert_eq(unknown.target_name, "UNKNOWN")
+	assert_eq(unknown.target_color, Factions.UNIDENTIFIED_COLOR)
+	assert_eq(unknown.target_hull, -1.0, "no hull bar")
+	assert_eq(unknown.target_layout, DamageZones.Layout.NONE, "no damage silhouette")
+	assert_true(unknown.target_on_screen, "the box, range and lead still show")
+	assert_almost_eq(unknown.target_range_m, 7000.0, TOL)
+
+
+func test_the_waypoints_radar_entry_is_marked() -> void:
+	var input: HudInput = _hud_input()
+	var beacon := TargetInfo.new(31, "NAV BETA", Factions.NEUTRAL, Vector3(0.0, 0.0, -2000.0))
+	beacon.broadcast_range_m = 1.0e6
+	input.contacts = [TargetInfo.new(30, "RAIDER 1", Factions.RAIDERS, Vector3(0.0, 0.0, -900.0)), beacon]
+	input.has_waypoint = true
+	input.waypoint_position = beacon.position
+	input.waypoint_label = "NAV BETA"
+	var f: HudFrame = HudLayout.compute(input)
+	assert_eq(f.waypoint_radar_index, -1, "a waypoint on a bare place marks no contact")
+	input.waypoint_id = 31
+	f = HudLayout.compute(input)
+	assert_eq(f.radar_plot.ids[f.waypoint_radar_index], 31)
+	input.waypoint_id = 99
+	assert_eq(HudLayout.compute(input).waypoint_radar_index, -1, "a contact not on the radar marks nothing")
+	input.has_waypoint = false
+	input.waypoint_id = 31
+	assert_eq(HudLayout.compute(input).waypoint_radar_index, -1, "no waypoint, no mark")

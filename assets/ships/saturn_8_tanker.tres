@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="ShipSpec" load_steps=2 format=3]
+
+[ext_resource type="Script" uid="uid://csixdcdy0fu46" path="res://src/ship/ship_spec.gd" id="1_ship_spec"]
+
+[resource]
+script = ExtResource("1_ship_spec")
+asset_id = "saturn_8_tanker"
+mass = 4.032e+7
+inertia = Vector3(1.34601e+11, 1.36832e+11, 1.13618e+10)
+pod_main_thrust = 2.1e+7
+pod_retro_thrust = 7e+6
+rcs_force_max = Vector3(7e+6, 7e+6, 0)
+rcs_torque_max = Vector3(6.9e+8, 1.15e+9, 5e+8)
+rate_max = Vector3(0.9, 1.4, 7.6)
+assist_gain_k = 2.0
+pod_yaw_gain = 0.5
+pod_yaw_deadzone = 0.1
+pod_yaw_smoothing_s = 0.5
+brake_gain_k = 0.5
+exhaust_velocity = 30000.0
+fuel_capacity_kg = 840000
+assist_speed_max_mps = 400.0
+hull_max = 330.0
+ram_safe_dv_mps = 2.0
+ram_lethal_dv_mps = 10.0
+has_cockpit_interior = false
+engine_glow_color = Color(1.3, 1.45, 1.8, 1)
+damage_layout = &""
+tier_hit_scale = 1.0

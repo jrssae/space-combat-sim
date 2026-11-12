@@ -40,7 +40,7 @@ func test_the_shipped_file_validates() -> void:
 	assert_true(result["ok"], result["error"])
 	assert_eq(result["error"], "")
 	var table: FactionTable = result["table"]
-	assert_eq(table.ids(), [EA, RA, NE] as Array[StringName])
+	assert_eq(table.ids(), [EA, RA, NE, &"narn", &"centauri", &"brakiri"] as Array[StringName], "M2's three, then Q24's peoples")
 	assert_eq(table.display_name(EA), "Earth Alliance")
 	assert_eq(table.display_name(RA), "Raiders")
 	assert_eq(table.display_name(NE), "Neutral")
@@ -48,16 +48,32 @@ func test_the_shipped_file_validates() -> void:
 
 
 func test_the_shipped_file_is_the_built_in_m2_rule() -> void:
-	# AC0: with the file at its defaults, every relation is what M2 computed.
+	# AC0: with the file at its defaults, every relation among M2's factions is what M2 computed; M5-T16 (Q24) adds the
+	# civilians' peoples after them.
 	var file_table: FactionTable = FactionTable.load_file(FILE_PATH)["table"]
 	var built_in: FactionTable = FactionTable.builtin()
-	assert_eq(file_table.ids(), built_in.ids())
+	assert_eq(file_table.ids().slice(0, 3), built_in.ids())
 	assert_eq(file_table.default_relation(), built_in.default_relation())
 	var probes: Array[StringName] = [EA, RA, NE, &"pirates", &""]
 	for a: StringName in probes:
 		for b: StringName in probes:
 			assert_eq(file_table.relation(a, b), built_in.relation(a, b), "%s vs %s" % [a, b])
 			assert_eq(file_table.relation(a, b), _m2_rule(a, b), "%s vs %s against the M2 rule" % [a, b])
+
+
+func test_the_civilians_peoples_are_hostile_to_raiders_only() -> void:
+	# M5-T16 (Q24, D58): every civilian has its people's faction; raiders prey on all of them, the rest is neutral.
+	var file_table: FactionTable = FactionTable.load_file(FILE_PATH)["table"]
+	var peoples: Array[StringName] = [&"narn", &"centauri", &"brakiri"]
+	assert_eq(file_table.ids().slice(3), peoples)
+	for p: StringName in peoples:
+		assert_eq(file_table.relation(p, RA), Factions.Relation.HOSTILE, "%s against raiders" % p)
+		assert_eq(file_table.relation(p, p), Factions.Relation.FRIENDLY)
+		assert_eq(file_table.relation(p, EA), Factions.Relation.NEUTRAL, "%s against the Earth Alliance" % p)
+		assert_eq(file_table.relation(p, NE), Factions.Relation.NEUTRAL)
+		for q: StringName in peoples:
+			if q != p:
+				assert_eq(file_table.relation(p, q), Factions.Relation.NEUTRAL, "%s against %s" % [p, q])
 
 
 # The M2 rule as it was coded before the data file (Factions.relation in M2).

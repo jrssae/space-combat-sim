@@ -1,7 +1,7 @@
 // The player's radar sphere (M4-T23, docs/architecture.md 17.21): `RadarModel.plot`'s maths over packed contacts, in the
 // same steps and precision as the GDScript it replaced, so the HUD's thousand-contact frame at `battle` 1 000 costs a native
 // pass instead of a GDScript loop. Engine-free: plain columns in, plain columns out; `radar_plot.rs` is its shell.
-use godot::builtin::{Basis, Vector3};
+use godot::builtin::{Basis, Color, Vector2, Vector3};
 
 use crate::v3::{length_squared, xform_inv};
 
@@ -24,12 +24,32 @@ pub struct Plot {
     pub points: Vec<Vector3>,
     pub ranges: Vec<f64>,
     pub rims: Vec<u8>,
+    /// 1 for a contact too far to identify (M5-T25): beyond the identification range with no transponder.
+    pub unknown: Vec<u8>,
     pub units: Vec<(f32, f32)>,
     pub feet: Vec<(f32, f32)>,
     pub selected: i32,
+    // Scratch kept between plots (code review, M5-T47): every contact's point and range, and the sort keys.
+    scratch_points: Vec<Vector3>,
+    scratch_ranges: Vec<f64>,
+    scratch_keys: Vec<i64>,
 }
 
-/// `RadarModel.radius_for_range`.
+impl Plot {
+    // Empties the plot for the next frame, keeping every buffer's capacity.
+    fn clear(&mut self) {
+        self.order.clear();
+        self.points.clear();
+        self.ranges.clear();
+        self.rims.clear();
+        self.unknown.clear();
+        self.units.clear();
+        self.feet.clear();
+        self.selected = -1;
+    }
+}
+
+/// The sphere radius (0..1) for a range: linear to `LINEAR_RADIUS` at 5 km, logarithmic to 1 at 25 km, clamped beyond.
 pub fn radius_for_range(range_m: f64) -> f64 {
     if range_m <= 0.0 {
         return 0.0;
@@ -60,6 +80,10 @@ fn range_between(from: Vector3, to: Vector3) -> f64 {
 
 /// `RadarModel.plot` without the colours: every contact (`ids`, World `positions`, broadcast `reach`) within
 /// `MAX_RANGE_M` of a ship at `own_position` with attitude `own_basis`, or within its own reach (then on the rim).
+/// A contact beyond `ident_range_m` that does not broadcast is flagged unknown, except `known_id` (a selection the
+/// pilot has already identified). Returns false, with an empty plot, when the three contact columns differ in length
+/// (code review, M5-T47: a short column must not silently drop contacts).
+#[allow(clippy::too_many_arguments)]
 pub fn plot(
     ids: &[i64],
     positions: &[Vector3],
@@ -67,16 +91,23 @@ pub fn plot(
     own_position: Vector3,
     own_basis: &Basis,
     selected_id: i64,
+    ident_range_m: f64,
+    known_id: i64,
     out: &mut Plot,
-) {
-    *out = Plot {
-        selected: -1,
-        ..Plot::default()
-    };
-    let n = ids.len().min(positions.len()).min(reach.len());
-    let mut points = vec![Vector3::ZERO; n];
-    let mut ranges = vec![0.0; n];
-    let mut keys: Vec<i64> = Vec::with_capacity(n);
+) -> bool {
+    out.clear();
+    let n = ids.len();
+    if positions.len() != n || reach.len() != n {
+        return false;
+    }
+    let mut points = std::mem::take(&mut out.scratch_points);
+    let mut ranges = std::mem::take(&mut out.scratch_ranges);
+    let mut keys = std::mem::take(&mut out.scratch_keys);
+    points.clear();
+    points.resize(n, Vector3::ZERO);
+    ranges.clear();
+    ranges.resize(n, 0.0);
+    keys.clear();
     let mut selected_at: i64 = -1;
     for i in 0..n {
         let at = positions[i];
@@ -116,17 +147,114 @@ pub fn plot(
     if selected_at >= 0 {
         keys.push(selected_at);
     }
-    for key in keys {
+    for &key in &keys {
         let i = (key & INDEX_MASK) as usize;
         let point = points[i];
         out.order.push(i as u32);
         out.points.push(point);
         out.ranges.push(ranges[i]);
         out.rims.push(u8::from(ranges[i] > MAX_RANGE_M));
+        out.unknown
+            .push(u8::from(ranges[i] > ident_range_m && reach[i] <= 0.0 && ids[i] != known_id));
         out.units.push(to_unit(point));
         out.feet.push(to_unit(Vector3::new(point.x, point.y, 0.0)));
     }
     if selected_at >= 0 {
         out.selected = out.order.len() as i32 - 1;
     }
+    out.scratch_points = points;
+    out.scratch_ranges = ranges;
+    out.scratch_keys = keys;
+    true
 }
+
+/// Floats per instance of a 2D multimesh with colours: a 2x3 transform padded to 8, then the colour.
+pub const DOT_STRIDE: usize = 12;
+
+/// Instances in the three dot multimeshes for one frame's plot.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct DotCounts {
+    pub plain: usize,
+    pub rim: usize,
+    pub backing: usize,
+}
+
+/// How many dots of each kind a plot of `rims` draws: a backing under every contact (when asked), and one plain or hollow
+/// dot for every contact but the selected one, which the painter draws itself.
+pub fn dot_counts(rims: &[u8], selected: i32, backings: bool) -> DotCounts {
+    let n = rims.len();
+    let rim_total = rims.iter().filter(|&&r| r == 1).count();
+    let selected_is_rim = usize::try_from(selected).ok().and_then(|i| rims.get(i)).map(|&r| r == 1);
+    let (mut plain, mut rim) = (n - rim_total, rim_total);
+    match selected_is_rim {
+        Some(true) => rim -= 1,
+        Some(false) => plain -= 1,
+        None => {}
+    }
+    DotCounts {
+        plain,
+        rim,
+        backing: if backings { n } else { 0 },
+    }
+}
+
+/// The multimesh size for `count` dots when it holds `held` now: unchanged while it is big enough, else doubled or the count
+/// (it grows rarely and never shrinks); nothing to hold for no dots.
+pub fn grown_capacity(held: usize, count: usize) -> usize {
+    if count == 0 {
+        0
+    } else if count <= held {
+        held
+    } else {
+        count.max(held * 2)
+    }
+}
+
+// One instance: a uniform scale of `radius` at `p`, in `colour`.
+fn put_dot(out: &mut [f32], p: Vector2, radius: f32, colour: Color) {
+    out[..DOT_STRIDE].copy_from_slice(&[
+        radius, 0.0, 0.0, p.x, 0.0, radius, 0.0, p.y, colour.r, colour.g, colour.b, colour.a,
+    ]);
+}
+
+/// The multimesh buffers of a plot's dots on a screen radar of `radius_px` at `centre`, as the painter draws them: every
+/// contact's dark backing (`backing`, when it is sized), the plain dots in their colours and the hollow rim ones, both
+/// without the selected contact. The slices are `DOT_STRIDE` floats per instance, sized by `dot_counts` or larger (the tail
+/// stays as it was).
+#[allow(clippy::too_many_arguments)]
+pub fn fill_dots(
+    units: &[Vector2],
+    colours: &[Color],
+    rims: &[u8],
+    selected: i32,
+    centre: Vector2,
+    radius_px: f32,
+    sizes: (f32, f32),
+    backing_colour: Color,
+    plain: &mut [f32],
+    rim: &mut [f32],
+    backing: &mut [f32],
+) {
+    let (backing_radius, radius) = sizes;
+    let (mut plain_at, mut rim_at, mut backing_at) = (0, 0, 0);
+    for (i, u) in units.iter().enumerate().take(colours.len().min(rims.len())) {
+        let p = Vector2::new(u.x * radius_px + centre.x, u.y * radius_px + centre.y);
+        if backing_at + DOT_STRIDE <= backing.len() {
+            put_dot(&mut backing[backing_at..], p, backing_radius, backing_colour);
+            backing_at += DOT_STRIDE;
+        }
+        if i as i32 == selected {
+            continue;
+        }
+        if rims[i] == 1 {
+            put_dot(&mut rim[rim_at..], p, radius, colours[i]);
+            rim_at += DOT_STRIDE;
+        } else {
+            put_dot(&mut plain[plain_at..], p, radius, colours[i]);
+            plain_at += DOT_STRIDE;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests;

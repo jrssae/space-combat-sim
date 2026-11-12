@@ -1,0 +1,8 @@
+{
+	"lines": [
+		{"id": "control_brief", "speaker": "control", "voice": "control_brief",
+			"text": "Alpha wing, Control. Fly to the relay buoy and check in.", "hold_s": 0.01},
+		{"id": "control_raiders", "speaker": "control", "voice": "control_raiders",
+			"text": "Raiders on the scope, bearing zero zero zero. Intercept.", "hold_s": 0.01}
+	]
+}

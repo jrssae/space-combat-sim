@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## Friendly fire and factions as data in the hit resolver (M3-T02, AC2 and AC3, architecture §16 D30, D31).
 ##
 ## Off (the default) nothing changes from M2: only hostile hulls take hits (and buoys, from anyone else's bolts). On
@@ -102,21 +102,7 @@ func _fly(ticks: int) -> void:
 		resolver.resolve(DT)
 
 
-func _console(line: String) -> ConsoleResult:
-	var results: Array[ConsoleResult] = DebugConsole.registry.execute(line)
-	assert_eq(results.size(), 1, "one statement: " + line)
-	return results[0]
-
-
 # --- the setting and the filter ---------------------------------------------------------------------------------
-
-
-func test_friendly_fire_is_a_setting_that_defaults_off() -> void:
-	var schema := SettingsSchema.new()
-	assert_true(schema.has_key(&"friendly_fire"))
-	assert_eq(schema.get_type(&"friendly_fire"), TYPE_BOOL)
-	assert_eq(schema.get_default(&"friendly_fire"), false, "forgiving by default (maintainer Q2)")
-	assert_eq(DebugConsole.registry.format_path("settings.friendly_fire"), "settings.friendly_fire = false")
 
 
 func test_can_be_hit_by_with_and_without_friendly_fire() -> void:
@@ -285,7 +271,7 @@ func test_the_resolver_registers_the_faction_provider_and_command_and_drops_them
 	var registry: ConsoleRegistry = DebugConsole.registry
 	assert_true(registry.has_provider(&"factions"))
 	assert_true(registry.has_command(&"relation"))
-	assert_eq(registry.format_path("factions.ids"), "factions.ids = [earth_alliance, raiders, neutral]")
+	assert_eq(registry.format_path("factions.ids"), "factions.ids = [earth_alliance, raiders, neutral, narn, centauri, brakiri]")
 	resolver.free()
 	assert_false(registry.has_provider(&"factions"), "owned by the resolver")
 	assert_false(registry.has_command(&"relation"))
@@ -298,7 +284,7 @@ func test_relation_decides_who_gets_shot() -> void:
 
 	var result: ConsoleResult = _console("relation earth_alliance raiders neutral")
 	assert_true(result.ok, result.error)
-	assert_eq(DebugConsole.registry.format_path("factions.relations"), "factions.relations = [earth_alliance raiders neutral]")
+	assert_eq(DebugConsole.registry.format_path("factions.relations"), "factions.relations = [earth_alliance raiders neutral, narn raiders hostile, centauri raiders hostile, brakiri raiders hostile]")
 	_ally_bolt(LANE_RAIDER)
 	_fly(60)
 	assert_eq(hits.size(), 1, "neutral now: the bolt passes")

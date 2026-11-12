@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="ShipSpec" load_steps=2 format=3]
+
+[ext_resource type="Script" uid="uid://csixdcdy0fu46" path="res://src/ship/ship_spec.gd" id="1_ship_spec"]
+
+[resource]
+script = ExtResource("1_ship_spec")
+asset_id = "saturn_3_freighter"
+mass = 1.01647e+7
+inertia = Vector3(5.77036e+9, 8.41043e+9, 3.89685e+9)
+pod_main_thrust = 1.523e+7
+pod_retro_thrust = 5.08e+6
+rcs_force_max = Vector3(5.08e+6, 5.08e+6, 0)
+rcs_torque_max = Vector3(3.28e+8, 4.78e+8, 2.22e+8)
+rate_max = Vector3(9.8, 9.8, 13.1)
+assist_gain_k = 2.0
+pod_yaw_gain = 0.5
+pod_yaw_deadzone = 0.1
+pod_yaw_smoothing_s = 0.5
+brake_gain_k = 0.5
+exhaust_velocity = 30000.0
+fuel_capacity_kg = 609000
+assist_speed_max_mps = 400.0
+hull_max = 640.0
+ram_safe_dv_mps = 2.0
+ram_lethal_dv_mps = 10.0
+has_cockpit_interior = false
+engine_glow_color = Color(1.3, 1.45, 1.8, 1)
+damage_layout = &""
+tier_hit_scale = 1.0

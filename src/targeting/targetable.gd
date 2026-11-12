@@ -12,12 +12,17 @@ const GROUP: StringName = &"targetable"
 ## fighter's contacts. Ships are the default; the battle's stand-ins set their own.
 enum Kind { SHIP, CAPITAL, TURRET, MISSILE, MINE, STATIC, PROP }
 
+## What it is to a pilot picking from the target menu (M5-T25): civilians and nav beacons get their own categories.
+enum Role { SHIP, CIVILIAN, BEACON }
+
 ## What the pilot reads ("NAV ALPHA"); the console selects targets by it.
 @export var display_name: String = ""
 ## IFF (§14.9, `Factions`). Buoys are `neutral`; ships carry their own.
 @export var faction: StringName = &"neutral"
 ## Its `Kind` (M4-T07).
 @export var kind: Kind = Kind.SHIP
+## Its `Role` (M5-T25).
+var role: Role = Role.SHIP
 ## How far this target is heard beyond the sensors (M3-T17, Q21), m: 0 = not at all, `INF` = everywhere. Nav buoys use
 ## 1 000 km, allied ships 100 km. Broadcasters are kept in one list (`broadcasters`) so the AI's
 ## `ContactScan.shared_broadcasts` need not sweep every body.
@@ -111,6 +116,7 @@ func to_target_info() -> TargetInfo:
 			damageable.hull.fraction() if damageable != null else -1.0,
 			damageable.bounding_radius if damageable != null else 0.0)
 	info.broadcast_range_m = broadcast_range_m
+	info.role = role
 	if damageable != null:
 		info.damage_layout = damageable.zones.layout
 		info.damage_zones = damageable.zone_severities()

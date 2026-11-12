@@ -27,7 +27,7 @@ const FADE_PERIOD_S: float = 6.0
 const DEFAULT_BEACON_POSITION: Vector3 = Vector3(0.0, 2.46, 0.0)
 const DEFAULT_BEACON_RADIUS: float = 0.1
 
-## Every buoy broadcasts its position this far (M3-T17, Q21): 1 000 km.
+## Every buoy broadcasts its position this far: 1 000 km (M3 Q21; M5-T10 raised it for the buoy ring, T30 put it back, Q41).
 const BROADCAST_RANGE_M: float = 1.0e6
 ## Hull points of a buoy: six pulse-cannon hits.
 const HULL_MAX: float = 60.0
@@ -160,6 +160,7 @@ func _sync_targetable() -> void:
 	marker.display_name = display_name
 	marker.velocity = velocity
 	marker.broadcast_range_m = BROADCAST_RANGE_M
+	marker.role = Targetable.Role.BEACON
 
 
 ## Loads the textured mesh and the beacon hardpoint once for every buoy. Missing files only warn.

@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="ShipSpec" load_steps=2 format=3]
+
+[ext_resource type="Script" uid="uid://csixdcdy0fu46" path="res://src/ship/ship_spec.gd" id="1_ship_spec"]
+
+[resource]
+script = ExtResource("1_ship_spec")
+asset_id = "centauri_brezebel"
+mass = 690000
+inertia = Vector3(1.08616e+8, 1.55812e+8, 4.88672e+7)
+pod_main_thrust = 1.72e+6
+pod_retro_thrust = 570000
+rcs_force_max = Vector3(690000, 690000, 0)
+rcs_torque_max = Vector3(1e+7, 1.4e+7, 4e+6)
+rate_max = Vector3(15.8, 15.8, 21.1)
+assist_gain_k = 2.0
+pod_yaw_gain = 0.5
+pod_yaw_deadzone = 0.1
+pod_yaw_smoothing_s = 0.5
+brake_gain_k = 0.5
+exhaust_velocity = 30000.0
+fuel_capacity_kg = 69000
+assist_speed_max_mps = 400.0
+hull_max = 300.0
+ram_safe_dv_mps = 2.0
+ram_lethal_dv_mps = 10.0
+has_cockpit_interior = false
+engine_glow_color = Color(1.8, 1.2, 1.55, 1)
+damage_layout = &""
+tier_hit_scale = 1.0

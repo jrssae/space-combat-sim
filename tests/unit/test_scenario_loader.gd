@@ -499,3 +499,178 @@ func test_a_wave_spawn_names_its_wing() -> void:
 	assert_true(result["ok"], str(result["error"]))
 	assert_eq((result["waves"] as Array)[0]["spawns"][0]["wing"], "RED", "trimmed")
 	assert_eq(result["wings"], [] as Array[Dictionary], "an undeclared group needs no declaration")
+
+
+# --- the mission block (M5-T05, D51) -------------------------------------------------------------------------------------
+
+
+func test_a_scenario_without_a_mission_block_has_an_empty_one() -> void:
+	var result: Dictionary = ScenarioLoader.from_data(_minimal(), "case")
+	assert_true(result["ok"], str(result["error"]))
+	assert_eq(result["mission"], {})
+	assert_eq(result["cinematics"], {})
+	assert_eq(ScenarioLoader.load(ScenarioLoader.FREE_FLIGHT_PATH)["mission"], {}, "free flight runs as before")
+
+
+func test_the_mission_block_and_cinematics_are_passed_through() -> void:
+	var data: Dictionary = _minimal()
+	data["mission"] = {"title": " Buoy defence ", "briefing": "Hold the relay.\n", "script": "res://data/missions/x.gd",
+			"dialog": "res://data/dialog/x.json",
+			"objectives": [{"id": "protect", "text": "Protect NAV ALPHA", "fail": {"kind": "destroyed", "name": "NAV ALPHA"}}]}
+	data["cinematics"] = {"intro": {"keys": []}}
+	var result: Dictionary = ScenarioLoader.from_data(data, "case")
+	assert_true(result["ok"], str(result["error"]))
+	var mission: Dictionary = result["mission"]
+	assert_eq(mission["title"], "Buoy defence", "trimmed")
+	assert_eq(mission["briefing"], "Hold the relay.\n", "kept as written")
+	assert_eq(mission["script"], "res://data/missions/x.gd")
+	assert_eq(mission["dialog"], "res://data/dialog/x.json")
+	assert_eq((mission["objectives"] as Array).size(), 1)
+	assert_eq_deep(result["cinematics"], {"intro": {"keys": []}})
+
+
+func test_a_mission_block_may_leave_out_everything_but_what_it_has() -> void:
+	var data: Dictionary = _minimal()
+	data["mission"] = {"briefing": "No title here."}
+	var result: Dictionary = ScenarioLoader.from_data(data, "case")
+	assert_true(result["ok"], str(result["error"]))
+	assert_eq(result["mission"]["title"], "")
+	assert_eq(result["mission"]["script"], "", "the runner, not the loader, needs a script")
+
+
+func test_mission_errors_name_the_json_path() -> void:
+	var data: Dictionary = _minimal()
+	data["mission"] = "buoy"
+	_assert_fails(data, "case: mission must be an object")
+	data["mission"] = {"title": 5}
+	_assert_fails(data, "case: mission.title must be a string")
+	data["mission"] = {"objectives": [{"id": "a", "success": {"kind": "timer", "seconds": -1}}]}
+	_assert_fails(data, "case: mission.objectives[0].success: timer: seconds must be a number, 0 or more")
+	data["mission"] = {"objectives": [{"id": "a"}, {"id": "a"}]}
+	_assert_fails(data, "case: mission.objectives[1].id 'a' is declared twice")
+	data.erase("mission")
+	data["cinematics"] = []
+	_assert_fails(data, "case: cinematics must be an object")
+
+
+func test_the_test_mission_fixture_loads() -> void:
+	var result: Dictionary = ScenarioLoader.load("res://tests/fixtures/missions/test_mission.json")
+	assert_true(result["ok"], str(result["error"]))
+	assert_eq(result["mission"]["title"], "Test Mission")
+	assert_eq((result["mission"]["objectives"] as Array).size(), 4)
+
+
+# --- the start velocity and closing lines (M5-T10) ---------------------------------------------------------------------
+
+
+func test_the_player_may_start_moving() -> void:
+	var data: Dictionary = _minimal()
+	assert_eq(ScenarioLoader.from_data(data, "case")["player"]["velocity"], Vector3.ZERO, "at rest by default")
+	data["player"]["velocity"] = [0, 0, -40]
+	var result: Dictionary = ScenarioLoader.from_data(data, "case")
+	assert_true(result["ok"], str(result["error"]))
+	assert_eq(result["player"]["velocity"], Vector3(0.0, 0.0, -40.0))
+	data["player"]["velocity"] = [0, "fast", 0]
+	_assert_fails(data, "case: player.velocity must be [x, y, z]")
+
+
+func test_closing_lines_pass_through_and_are_checked() -> void:
+	var data: Dictionary = _minimal()
+	data["mission"] = {"title": "T", "closing_lines": {"player destroyed": "down", "failure": "lost"}}
+	var result: Dictionary = ScenarioLoader.from_data(data, "case")
+	assert_true(result["ok"], str(result["error"]))
+	assert_eq_deep(result["mission"]["closing_lines"], {"player destroyed": &"down", "failure": &"lost"})
+	data["mission"] = {"title": "T"}
+	assert_eq(ScenarioLoader.from_data(data, "case")["mission"]["closing_lines"], {}, "none by default")
+	data["mission"] = {"closing_lines": ["lost"]}
+	_assert_fails(data, "case: mission.closing_lines must be an object")
+	data["mission"] = {"closing_lines": {"failure": 5}}
+	_assert_fails(data, "case: mission.closing_lines.failure must be a line id")
+
+
+func test_the_civilian_escort_file_validates() -> void:
+	var result: Dictionary = ScenarioLoader.load("res://data/scenarios/civilian_escort.json")
+	assert_true(result["ok"], str(result["error"]))
+	var props: Array = result["props"]
+	assert_eq(props.size(), 2)
+	assert_eq(props[0]["name"], "NAV ALPHA")
+	assert_almost_eq((props[0]["position"] as UniversePos).distance_to(props[1]["position"]), 30000.0, 1.0, "30 km apart (Q40)")
+	assert_eq_deep(result["pools"], {&"raider_fighter": 13, &"starfury_ally": 1, &"random_civilian": 1})
+	assert_eq((result["belts"] as Array).size(), 1, "the belt across the route")
+	assert_eq((result["civilian_names"] as Dictionary).size(), ShipCatalog.CIVILIAN_TYPES.size(), "names for all nine hulls")
+	var mission: Dictionary = result["mission"]
+	assert_eq(mission["script"], "res://data/missions/civilian_escort.gd")
+	var ids: Array = []
+	for objective: Dictionary in mission["objectives"]:
+		ids.append(objective["id"])
+	assert_eq(ids, ["escort", "home"])
+
+
+func test_the_escort_belt_leaves_the_route_and_its_middle_point_clear() -> void:
+	var result: Dictionary = ScenarioLoader.load("res://data/scenarios/civilian_escort.json")
+	var belt: Dictionary = result["belts"][0]
+	var layout: BeltLayout = BeltLayout.place(belt, 16)
+	assert_eq(layout.rocks.size(), 400, "all 400 rocks fit")
+	var middle: float = INF
+	var line: float = INF
+	for rock: Dictionary in layout.rocks:
+		var o: Vector3 = rock["offset"]
+		middle = minf(middle, o.length() - float(rock["radius"]))
+		line = minf(line, Vector2(o.x, o.y).length() - float(rock["radius"]))
+	# A skip places the civilian at the 50 % point, the belt's centre; a Saturn 8 (about 100 m round) passes the straight line.
+	assert_gt(middle, 500.0, "no rock within 500 m of the 50 % point")
+	assert_gt(line, 200.0, "the straight route clears every rock by 200 m")
+
+
+# --- the random civilian (M5-T30, D62) ------------------------------------------------------------------------------------
+
+
+func _escort(seed_value: int) -> Dictionary:
+	var result: Dictionary = ScenarioLoader.load("res://data/scenarios/civilian_escort.json")
+	ScenarioLoader.resolve_random_civilian(result, seed_value)
+	return result
+
+
+func test_the_seed_draws_every_civilian_hull_and_only_that_hull_is_pooled() -> void:
+	var seen: Dictionary = {}
+	for seed_value: int in 200:
+		var result: Dictionary = _escort(seed_value)
+		var pools: Dictionary = result["pools"]
+		assert_false(pools.has(ScenarioLoader.RANDOM_CIVILIAN), "resolved before the pools are built")
+		var spawn: Dictionary = result["spawns"][0]
+		assert_true(ShipCatalog.is_civilian(spawn["type"]))
+		assert_eq(int(pools.get(spawn["type"], 0)), 1, "only the drawn hull is pooled")
+		var hulls: int = 0
+		for type: StringName in pools:
+			hulls += 1 if ShipCatalog.is_civilian(type) else 0
+		assert_eq(hulls, 1)
+		seen[spawn["type"]] = true
+		if spawn["type"] == &"brakiri_bokmai":
+			assert_between(int(spawn["cargo_pods"]), 1, 3, "a Bokmai flies 1 to 3 pods")
+	assert_eq(seen.size(), ShipCatalog.CIVILIAN_TYPES.size(), "all nine hulls come up")
+
+
+func test_a_retry_with_the_same_seed_flies_the_same_ship() -> void:
+	var a: Dictionary = _escort(77)
+	var b: Dictionary = _escort(77)
+	assert_eq(a["spawns"][0]["type"], b["spawns"][0]["type"])
+	assert_eq(a["spawns"][0]["name"], b["spawns"][0]["name"])
+
+
+func test_the_drawn_name_fills_the_placeholder_everywhere() -> void:
+	var result: Dictionary = _escort(5)
+	var ship_name: String = result["spawns"][0]["name"]
+	assert_false(ship_name.contains("{"), ship_name)
+	assert_has(result["civilian_names"][result["spawns"][0]["type"]], ship_name, "from its hull's list")
+	assert_eq(result["placeholders"], {ScenarioLoader.CIVILIAN_PLACEHOLDER: ship_name})
+	var text: String = JSON.stringify(result["mission"]) + JSON.stringify(result["cinematics"])
+	assert_false(text.contains(ScenarioLoader.CIVILIAN_PLACEHOLDER), "no placeholder left")
+	assert_true(text.contains(ship_name))
+
+
+func test_civilian_names_are_checked() -> void:
+	var data: Dictionary = _minimal()
+	data["civilian_names"] = {"raider_fighter": ["X"]}
+	_assert_fails(data, "case: civilian_names.raider_fighter is not a civilian hull")
+	data["civilian_names"] = {"skylark_transport": []}
+	_assert_fails(data, "case: civilian_names.skylark_transport must be a non-empty list of names")

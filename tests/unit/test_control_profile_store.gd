@@ -167,6 +167,37 @@ func test_a_broken_file_loads_with_its_errors_and_is_flagged_in_the_listing() ->
 	assert_true(rows.filter(func(row: Dictionary) -> bool: return row["name"] == "default")[0]["valid"])
 
 
+func test_a_profile_saved_before_the_comms_menu_gains_dpad_right_and_ctrl() -> void:
+	var old: ControlProfile = default_profile.duplicate_profile()
+	old.name = "pre_t07_comms"
+	old.bindings[&"fire"] = (old.bindings[&"fire"] as Array) + ["key:K"]
+	old.bindings.erase(InputAdapter.COMMS_MENU)
+	old.deadzones.erase(InputAdapter.COMMS_MENU)
+	_write_user_file("pre_t07_comms", old.to_config_text())
+	var loaded: Dictionary = store.load_profile("pre_t07_comms")
+	assert_true(loaded["ok"], "\n".join(loaded["errors"]))
+	assert_eq(loaded["filled"], PackedStringArray(["comms_menu"]))
+	var profile: ControlProfile = loaded["profile"]
+	assert_eq(profile.descriptors_for(InputAdapter.COMMS_MENU), PackedStringArray(["pad:button:14", "key:Ctrl"]))
+	assert_eq(profile.descriptors_for(&"fire"), PackedStringArray(["pad:button:0", "key:Space", "mouse:1", "key:K"]),
+			"its own bindings are kept")
+
+
+func test_a_profile_that_rolls_on_dpad_right_keeps_it_and_gets_the_comms_menu_on_ctrl_alone() -> void:
+	var old: ControlProfile = default_profile.duplicate_profile()
+	old.name = "pre_t07_roll"
+	old.bindings[InputAdapter.ROLL_RIGHT] = ["pad:button:14", "key:G"]
+	old.bindings.erase(InputAdapter.COMMS_MENU)
+	old.deadzones.erase(InputAdapter.COMMS_MENU)
+	_write_user_file("pre_t07_roll", old.to_config_text())
+	var loaded: Dictionary = store.load_profile("pre_t07_roll")
+	assert_true(loaded["ok"], "\n".join(loaded["errors"]))
+	var profile: ControlProfile = loaded["profile"]
+	assert_eq(profile.descriptors_for(InputAdapter.ROLL_RIGHT), PackedStringArray(["pad:button:14", "key:G"]))
+	assert_eq(profile.descriptors_for(InputAdapter.COMMS_MENU), PackedStringArray(["key:Ctrl"]))
+	assert_push_warning_count(1)
+
+
 func test_a_profile_saved_before_the_wing_orders_keeps_its_bindings_and_gains_keys_1_to_4() -> void:
 	var old: ControlProfile = default_profile.duplicate_profile()
 	old.name = "pre_t07"

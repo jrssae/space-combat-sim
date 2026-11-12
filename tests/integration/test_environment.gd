@@ -1,4 +1,4 @@
-extends GutTest
+extends TestSteps
 ## SpaceEnvironment against the real scene, headless (architecture §3, §7.2, §17.19). There is no GPU here, so these tests cover
 ## wiring and values, not pixels. What the sky and the compositor look like is (H).
 ##
@@ -44,10 +44,6 @@ func _read_manifest() -> Dictionary:
 func _settle() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
-
-
-func _exec(line: String) -> ConsoleResult:
-	return DebugConsole.registry.execute(line)[0]
 
 
 func _collect(node: Node, out: Array) -> Array:
@@ -158,7 +154,13 @@ func test_the_environment_shows_the_nebula_panorama_and_keeps_its_look() -> void
 	# Since M4-T30a the ambient is `settings.ambient_level` of white, applied at ready (the resource's own dim grey is overwritten).
 	assert_eq(e.ambient_light_color, Color.WHITE)
 	assert_almost_eq(e.ambient_light_energy, float(Settings.get_value(&"ambient_level")), 0.0001)
-	assert_eq(e.reflected_light_source, Environment.REFLECTION_SOURCE_DISABLED, "hulls keep the look they had on the black sky")
+	# `settings.hull_sheen` (M5-T39): the hulls' clear coat reflects the nebula; at 0 nothing reflects, the old flat paint.
+	var with_sky: bool = env.has_panorama() and float(Settings.get_value(&"hull_sheen")) > 0.0
+	assert_eq(e.reflected_light_source, Environment.REFLECTION_SOURCE_SKY if with_sky else Environment.REFLECTION_SOURCE_DISABLED)
+	var before: float = float(Settings.get_value(&"hull_sheen"))
+	Settings.set_value(&"hull_sheen", 0.0)
+	assert_eq(e.reflected_light_source, Environment.REFLECTION_SOURCE_DISABLED, "no sheen, no reflection")
+	Settings.set_value(&"hull_sheen", before)
 	assert_eq(e.tonemap_mode, Environment.TONE_MAPPER_FILMIC)
 	assert_true(e.glow_enabled)
 	assert_almost_eq(e.glow_intensity, 0.4, 0.0001)

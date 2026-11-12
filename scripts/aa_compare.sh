@@ -10,11 +10,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GODOT="${GODOT_BIN:-${ROOT}/.tools/godot/godot}"
 cd "${ROOT}"
+source "${ROOT}/scripts/lib_locks.sh"
 LABEL="${1:?usage: scripts/aa_compare.sh <label> [option=value ...]}"
 shift
 OUT="reports/perf/aa_compare"
 mkdir -p "${OUT}"
 touch reports/.gdignore
-flock /tmp/m5-godot.lock flock /tmp/scs-bench.lock flock /tmp/scs-gpu.lock timeout 900 "${GODOT}" --path . --fullscreen --disable-vsync \
+flock "${GODOT_LOCK}" flock "${BENCH_LOCK}" flock "${GPU_LOCK}" timeout 900 "${GODOT}" --path . --fullscreen --disable-vsync \
     -s res://scripts/aa_compare.gd -- "$@" shots="${OUT}/${LABEL}" > "${OUT}/${LABEL}.log" 2>&1
 grep -E '^\[aa_compare\]|SCRIPT ERROR' "${OUT}/${LABEL}.log"

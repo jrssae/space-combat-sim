@@ -20,6 +20,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GODOT="${GODOT_BIN:-${ROOT}/.tools/godot/godot}"
 cd "${ROOT}"
+source "${ROOT}/scripts/lib_locks.sh"
 
 LAYOUT="${1:?usage: scripts/fullscreen_check.sh <layout> <n> [label]}"
 N="${2:?usage: scripts/fullscreen_check.sh <layout> <n> [label]}"
@@ -46,7 +47,7 @@ BENCH_S=$(( WARMUP + WINDOW + 30 ))
 EXEC="bench ${LAYOUT} ${N} ${BENCH_S} warmup=0 seed=${SEED} label=${LABEL}/bench ${FULLSCREEN_BENCH_OPTS:-}"
 [[ -n "${EXTRA}" ]] && EXEC="${EXEC}; ${EXTRA}"
 status=0
-flock /tmp/scs-gpu.lock timeout $(( WARMUP + WINDOW + 240 )) "${GODOT}" --path . --resolution "${RES}" --fullscreen --disable-vsync \
+flock "${GPU_LOCK}" timeout $(( WARMUP + WINDOW + 240 )) "${GODOT}" --path . --resolution "${RES}" --fullscreen --disable-vsync \
     -s res://scripts/measure_fight.gd -- scene=quiet camera=chase warmup="${WARMUP}" window="${WINDOW}" label="${LAYOUT}_${N}" \
     exec="${EXEC}" scale3d="${SCALE}" pause_at="${PAUSE_AT}" shot="${OUT}/fullscreen.png" > "${LOG}" 2>&1 || status=$?
 grep -E '^\[measure\]|^\[bench\]|SCRIPT ERROR' "${LOG}" || true

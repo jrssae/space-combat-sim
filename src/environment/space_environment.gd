@@ -58,6 +58,8 @@ func _exit_tree() -> void:
 func _on_setting_changed(key: StringName, _value: Variant) -> void:
 	if key == &"ambient_level":
 		_apply_ambient()
+	elif key == &"hull_sheen":
+		_apply_background()
 
 
 ## The ambient light every PBR surface gets, `settings.ambient_level` of white.
@@ -115,23 +117,25 @@ func _load_sky() -> void:
 	sky_follower.follow()
 
 
-## The environment's background: the nebula panorama when it is loaded and shown, else black. Hulls take no reflection from it,
-## so they keep the look they were approved with on the black sky.
+## The environment's background: the nebula panorama when it is loaded and shown, else black. With `settings.hull_sheen` above 0
+## the hulls' clear coat reflects it faintly; at 0 nothing reflects it, the flat paint they were first approved with.
 func _apply_background() -> void:
 	var environment: Environment = world_environment.environment
 	if environment == null:
 		return
-	environment.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
+	var reflect: bool = float(Settings.get_value(&"hull_sheen")) > 0.0
+	environment.reflected_light_source = Environment.REFLECTION_SOURCE_SKY if reflect else Environment.REFLECTION_SOURCE_DISABLED
 	star_field.set_nebula(_panorama if _nebula_shown else null)
 	if _panorama == null or not _nebula_shown:
+		environment.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
 		environment.background_mode = Environment.BG_COLOR
 		environment.background_color = Color.BLACK
 		return
 	if environment.sky == null or not (environment.sky.sky_material is PanoramaSkyMaterial):
 		var sky := Sky.new()
 		sky.sky_material = PanoramaSkyMaterial.new()
-		# Nothing samples its radiance (the ambient is a colour, reflections are off): keep the cubemap small.
-		sky.radiance_size = Sky.RADIANCE_SIZE_32
+		# Only the hulls' sheen samples its radiance, through a fairly rough clear coat: a small cubemap is enough.
+		sky.radiance_size = Sky.RADIANCE_SIZE_128
 		environment.sky = sky
 	(environment.sky.sky_material as PanoramaSkyMaterial).panorama = _panorama
 	environment.background_mode = Environment.BG_SKY

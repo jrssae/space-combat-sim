@@ -166,7 +166,7 @@ static func from_core(tree: SceneTree) -> ContactScan:
 	if sim == null or not sim.ensure_synced():
 		return null
 	var scan := ContactScan.new()
-	var rows: Array = sim.core.snapshot()
+	var rows: Array = sim.snapshot_rows()
 	scan._take_rows(rows)
 	scan._node_statics = rows[13]
 	scan._append_static_rows()
@@ -393,7 +393,7 @@ static func _broadcast_scan(list: Array[Targetable], sim: SimCore) -> ContactSca
 	for targetable: Targetable in list:
 		marker_ids.append(targetable.get_instance_id())
 		reaches.append(targetable.broadcast_range_m)
-	var rows: Array = sim.core.select(marker_ids)
+	var rows: Array = sim.select_rows(marker_ids)
 	var scan := ContactScan.new()
 	scan._take_rows(rows)
 	scan._rows_of = sim

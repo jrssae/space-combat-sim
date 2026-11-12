@@ -1,0 +1,86 @@
+"""Brakiri design language (docs/design-references.md, "Brakiri Bokmai transport"; docs/assets-civilian.md, "brakiri"):
+olive green frame, pale putty green cargo pods, Brakiri yellow on the fins, neck bands,
+pod straps and turret trim, cream engine domes in dark metal cups.
+
+Albedos are linear RGB from the written sRGB scheme, confirmed by the maintainer (Q19, Q22, 2026-11-03). Roles the
+design leaves open (canopy, barrels, interior) are our choice. The pods use their own role, ``pod``. The turret bolts'
+green is a gameplay colour for T21 and T16, not paint.
+
+The texture pack (M5-T27; docs/design-references.md, "Brakiri Bokmai transport", texture): no capture of a Bokmai
+exists, so the plating follows the Brakiri cruiser's (Brakiri ship.jpg): a mottled satin paint over plates of moderate
+size, darker seams, a mild plate-to-plate tint, edges worn to primer, light grime.
+The window strips glow pale green-white and the cream engine domes glow yellow-white.
+"""
+
+from __future__ import annotations
+
+import numpy as np
+
+from ..core.color import capture_albedo, srgb_to_linear
+from ..core.geometry import Material
+from . import Style
+
+GLOW_SRGB = 0xFFF0B0  # engine glow, yellow-white: the domes' glow and a ShipSpec tint for T16
+BOLT_SRGB = 0x7CFF4F  # the turrets' bright green pulse (Q22, the maintainer chose the value): T21 and T16
+
+
+def _lin(hex_rgb: int) -> tuple[float, float, float]:
+    """Linear RGB of an sRGB ``0xRRGGBB`` value."""
+    srgb = np.array([(hex_rgb >> 16) & 255, (hex_rgb >> 8) & 255, hex_rgb & 255], dtype=float) / 255.0
+    rr, g, b = (float(v) for v in srgb_to_linear(srgb))
+    return (rr, g, b)
+
+
+HULL_SRGB, HULL_DARK_SRGB = 0x5A6B59, 0x3A4538
+# The texture pack at a fighter's scale (``core/civilian.py``'s ``at_texel`` scales it to the hull's texel).
+TEXTURE_PACK = {
+    "panel_line_darkness": 0.7,
+    "panel_tint_jitter": 0.06,
+    "hatch_fraction": 0.12,
+    "edge_wear": 0.35,
+    "streaks": 0.12,
+    "grime": 0.08,
+    "extra": {"bare_metal": 0.0, "smudge": 0.1, "speckle": 0.03, "paint_roughness": 0.65, "rivets": 0.3},
+}
+POD_SRGB = 0xABAE9A
+POD_PAINT_SRGB = 0xC8CCB4  # the pods' paint, lighter than the written colour (M5-T39)
+YELLOW_SRGB = 0xD8B840
+
+
+BRAKIRI = Style(
+    name="brakiri",
+    materials={
+        "hull": Material("bk_hull", capture_albedo(HULL_SRGB), paneled=True),  # the frame
+        "hull_dark": Material("bk_hull_dark", capture_albedo(HULL_DARK_SRGB)),  # recesses, the spindle, sleeves, rails, insets
+        "hull_panel": Material("bk_hull_panel", capture_albedo(HULL_SRGB), paneled=True),
+        "frame_plain": Material("bk_frame_plain", capture_albedo(HULL_SRGB)),  # the frame's green on the pods (top plate, saddles)
+        # The cargo pods' plating: paler than written, so they stay pale putty green in shade (the maintainer, M5-T39).
+        "pod": Material("bk_pod", _lin(POD_PAINT_SRGB), paneled=True),
+        "stripe": Material("bk_stripe", capture_albedo(YELLOW_SRGB)),  # the yellow
+        "window": Material("bk_window", capture_albedo(0xE8F0DC), emissive=_lin(0xE8F0DC), emissive_strength=2.0),
+        "window_strip": Material("bk_window_strip", capture_albedo(0x1E2620)),
+        "engine_dome": Material("bk_engine_dome", capture_albedo(0xF2EDC4), emissive=_lin(GLOW_SRGB), emissive_strength=2.5),
+        "hazard": Material("bk_hazard", capture_albedo(YELLOW_SRGB)),
+        "hazard_dark": Material("bk_hazard_dark", capture_albedo(HULL_DARK_SRGB)),
+        "canopy_glass": Material("bk_canopy", capture_albedo(0x1E2620)),
+        "canopy_frame": Material("bk_canopy_frame", capture_albedo(HULL_DARK_SRGB), metallic=0.5),
+        "nozzle": Material("bk_nozzle", capture_albedo(0x2E3530), metallic=0.8),  # the nacelle cups
+        "nozzle_throat": Material("bk_nozzle_throat", capture_albedo(0x121512), metallic=0.8),
+        "barrel": Material("bk_barrel", capture_albedo(0x2E3530), metallic=0.7),
+        "bore": Material("bk_bore", capture_albedo(0x101210)),
+        "interior": Material("bk_interior", capture_albedo(0x101210)),
+        "rcs": Material("bk_rcs", capture_albedo(HULL_DARK_SRGB), metallic=0.6),
+    },
+    panel_size_m=2.4,
+    panel_line_width_m=0.25,
+    **TEXTURE_PACK,
+)
+
+# The pods' own style over the same roles and pack, a little finer plating.
+BRAKIRI_POD = Style(
+    name="brakiri_pod",
+    materials=BRAKIRI.materials,
+    panel_size_m=2.0,
+    panel_line_width_m=0.25,
+    **TEXTURE_PACK,
+)
