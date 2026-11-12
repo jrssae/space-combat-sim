@@ -3,7 +3,7 @@
 // warp can jump). 64-bit throughout, and answers are given relative to a body so no caller subtracts two numbers of
 // 1e11 m. Axes: the reference plane is xy, z its north; the binding maps them to the game's. Engine-free by
 // construction (test_sim_core reads this file): plain numbers in, plain numbers out, no statics.
-#![allow(dead_code)] // wired in by M6-T04
+#![allow(dead_code)] // partly wired in by M6-T04 (the frame); the rest by M6-T07
 
 use std::f64::consts::{PI, TAU};
 

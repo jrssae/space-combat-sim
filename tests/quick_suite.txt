@@ -99,6 +99,7 @@ res://tests/unit/test_sim_clock.gd
 res://tests/integration/test_world_frame.gd
 res://tests/integration/test_every_world_core.gd
 res://tests/unit/test_star_system.gd
+res://tests/integration/test_free_fall.gd
 # Jumpgate and jump vortex (M6-T14, T19)
 res://tests/unit/test_vortex_timing.gd
 res://tests/unit/test_gate_jump.gd

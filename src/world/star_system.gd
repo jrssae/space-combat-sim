@@ -138,6 +138,16 @@ func has_id(name: StringName) -> bool:
 	return _index.has(name)
 
 
+## The native ephemeris (`ScsEphemeris`) the frame copies its bodies from (M6-T04); null when the system did not load.
+func ephemeris() -> RefCounted:
+	return _native
+
+
+## The ephemeris's index of a body or place, or -1 for an unknown id.
+func index_of(name: StringName) -> int:
+	return int(_index.get(name, -1))
+
+
 ## What the file says about a body: kind, parent, gm, radius_m, atmosphere_top_m. Empty for a place or an unknown id.
 func info(body: StringName) -> Dictionary:
 	return (_info.get(body, {}) as Dictionary).duplicate()

@@ -191,6 +191,8 @@ func _ready() -> void:
 	star_system.name = "StarSystemHost"
 	star_system.setup(_system_id)
 	add_child(star_system)
+	if star_system.system.is_valid() and star_system.system.has_id(StarSystemHost.DEFAULT_ANCHOR):
+		world.anchor_on_rail(star_system.system, StarSystemHost.DEFAULT_ANCHOR)  # the World falls with the station (M6-T04)
 	gates = JumpgateHost.new()
 	gates.name = JumpgateHost.NODE_NAME
 	gates.main = self

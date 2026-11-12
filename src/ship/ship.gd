@@ -3,7 +3,7 @@ extends RigidBody3D
 ## A flyable ship (architecture §3, §4, §5): a thin adapter between the pure `FlightModel` and Jolt. Every physics
 ## tick it hands the stored `FlightCommand` and the body-frame state to the model and applies the resulting
 ## `FlightOutput`: each pod nozzle's force at that nozzle (so pod torque is real `r × F` physics), the RCS force and
-## torque at the centre of mass, and `mass * World.environment_accel(position)` (zero in M1).
+## torque at the centre of mass, and `mass * World.environment_accel(position)` (the frame's residual, M6-T04).
 ##
 ## It never reads `Input`: Main (or later an AI pilot) calls `set_flight_command` / `set_combat_command` every tick
 ## before this node's `_physics_process` (a parent processes before its children). Held values persist until the
@@ -511,8 +511,9 @@ func batch_gather(batch: FlightBatch, row: int, frame: int, delta: float, fuel_u
 		targeting.apply(_combat)  # this node's tick is off (M4-T35): the edges land here, before the World's rebase at 0
 	_prepare_command(delta, global_basis.transposed())
 	_fuel.unlimited = fuel_unlimited
-	FlightBatch.pack_command(_flight, _environment_accel(), _assist_on and not hulk, not _fuel.is_empty(), scalars, vectors, flags,
-			row)
+	# The core adds the frame's residual itself (M6-T04): only the World's own field is packed.
+	var field: Vector3 = world.field_accel(position) if world != null and is_instance_valid(world) else Vector3.ZERO
+	FlightBatch.pack_command(_flight, field, _assist_on and not hulk, not _fuel.is_empty(), scalars, vectors, flags, row)
 	if not _native_last:
 		# Onto the batch: it carries on from the assist state this node's model held.
 		if _model != null:

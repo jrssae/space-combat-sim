@@ -283,7 +283,7 @@ which changes the same native rows and rebase path:
 | T01 | A | Moving-frame audit and design: every World-frame velocity, the rebase order, the error budgets, §19's draft (early start) | - | Fable | Cross-cutting invariants over GDScript, Jolt and the native rows; mistakes surface late | done |
 | T02 | A | Ephemeris and gravity kernel: Kepler rails, the body tree, the strongest body's pull and the tidal residual, the integrator (early start, new native files) | T01 | Fable | Precise, deterministic numerics that M9 and M11 reuse | done |
 | T03 | B | Star system data: bodies and elements in `data/star_systems.json`, the loader, the `system` provider | T02, Q1 to Q3 | Sonnet | Data and validation on a clear format | done |
-| T04 | A | The free-falling frame: the origin as a test particle, `environment_accel` from the ephemeris | T02, T03 | Opus | Touches the tick order and every ship's force step | in progress |
+| T04 | A | The free-falling frame: the origin as a test particle, `environment_accel` from the ephemeris | T02, T03 | Opus | Touches the tick order and every ship's force step | done |
 | T05 | A | The velocity rebase over every body, row, bolt, chunk, particle and interpolated node | T04 | Fable | The riskiest change of the milestone; every moving thing and the parity recordings | not started |
 | T06 | A | L4: the rebase cascade natively, the cached solid shifted in place, hidden ships skipped | T05 | Opus | A measured native fix on the path T05 rewrote | not started |
 | T07 | A | Gravity on everything: ships, tier rows, bolts, debris, the brake's and the AI's feed-forward; the gravity stand-in removed | T04 | Opus | Native kernels with parity at zero gravity | not started |
@@ -383,6 +383,36 @@ which changes the same native rows and rebase path:
 - **Tests:** `test_free_fall.gd`: quick for a short arc and the ship at rest; the one-orbit check is standard.
 - **Done when:** an empty frame follows the analytic orbit within the budget; a ship at rest in the frame stays at rest to within
   the residual; the parity recordings are green with gravity off.
+
+- **Done (2026-11-12):**
+  - `native/src/frame.rs` (engine-free, 64-bit, kernel axes): `Frame` holds a copy of the star system, the anchor (`Rail` on a
+    place's orbit, or `Particle`, a test particle held against its home body's centre, started half a kick back), the local
+    origin against the anchor and the tick's sample (bodies against the anchor, zones, the anchor's pull). `sample`, `residual`
+    (D66's rule through `gravity::residual`), `step` (kick, then drift) and `anchor_state`. The frame is quiet (exactly zero
+    residual, nothing read) when the anchor feels no pull and every zone stays more than 1 000 km (`QUIET_MARGIN_M`) from the
+    local origin.
+  - Its shell on the core, `native/src/frame_rows.rs` (`ScsSimCore.frame_*`): set the system from `ScsEphemeris`, anchor on a
+    rail or in orbit, origin, sample, step, residual, pull, anchor state; the game's axes map to the kernel's as kernel
+    (x, y, z) = game (x, -z, y). The flight step adds the residual natively to every ship it flies, gathered or row-flown,
+    only while the frame is active, so the parity recordings keep their bits.
+  - `WorldFrame`: `anchor_on_rail`, `anchor_in_orbit`, `clear_anchor`; two internal slots, the sample first in the tick
+    (`SAMPLE_PRIORITY` -100, before the tier at -12) and the anchor's step last (`FRAME_STEP_PRIORITY`, after `sync_out`);
+    `environment_accel` = `field_accel` (the World's own field, the battle's moon stand-in until T07) + `gravity_residual`.
+    `Ship.batch_gather` packs only `field_accel`, the core adding the residual; a ship on its own model (the player's) reads the
+    whole `environment_accel`. A rebase pushes the new origin to the core. `Main` anchors on `babylon5`'s rail when the
+    system has it (`StarSystemHost.DEFAULT_ANCHOR`); that rail is outside Epsilon III's zone, so nothing pulls in play yet.
+  - Console: `frame [status|orbit <altitude km> [body]|rail <place>|off]`; `world.anchor`, `anchor_state`, `gravity`,
+    `anchor_pull`. In `info.md`.
+  - Tests: Rust `frame::tests` (8: one low orbit within 0.05 m at every tick, an `e` 0.3 orbit ending within 0.1 m, the same
+    round a planet that circles its star, the station rail quiet, the tidal residual on a rail inside a zone, the origin, the
+    half-kick start, refusals) and the axes test; GUT `test_free_fall.gd` (quick, 7 tests, about 4 s): the short arc in the
+    real tick, **the whole low orbit through the binding, worst 0.0053 m** (332 692 ticks in 0.7 s, so quick, not standard
+    as planned), a ship at rest feels only the residual on the batch's path and on its own model (1 km out: twice the gradient,
+    1 km along the track: once, toward the anchor; exactly zero at the anchor), no system and the station's rail pull nothing,
+    a rebase keeps the residual at a universe point, the console command. `test_sim_core`'s new
+    `test_the_frame_kernel_holds_no_engine_type`. Quick tier green; the parity recordings unchanged.
+  - Left for later tasks: tier rows, bolts and debris feel nothing yet (T07); the velocity rebase (T05); the speed readers
+    against a rest velocity (T08); the gate is placed by its scenario bearing, not on its rail (T09, T15).
 
 ### M6-T05 The velocity rebase
 

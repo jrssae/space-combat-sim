@@ -431,11 +431,13 @@ impl ScsFlightStep {
                     .filter(|&r| c.rows.flags[r] & FLAG_RIGID != 0)
             });
             item.fly = true;
+            let mut position = None;
             if let (Some((c, _)), Some(r)) = (core, row) {
                 item.basis = c.rows.bases[r];
                 item.v_w = c.rows.velocities[r];
                 item.w_w = c.rows.angular[r];
                 item.apply = true;
+                position = Some(c.rows.positions[r]);
             } else if st.is_empty() {
                 if core.is_some() {
                     self.fallback_reads += 1;
@@ -446,10 +448,12 @@ impl ScsFlightStep {
                     .flatten()
                 {
                     Some(body) => {
-                        item.basis = body.get_transform().basis;
+                        let t = body.get_transform();
+                        item.basis = t.basis;
                         item.v_w = body.get_linear_velocity();
                         item.w_w = body.get_angular_velocity();
                         item.apply = true;
+                        position = Some(t.origin);
                     }
                     // Not in a space (parked or freed): nothing to fly; the row reads as zeros.
                     None => item.fly = false,
@@ -465,6 +469,12 @@ impl ScsFlightStep {
                 item.v_w = st[i * STATE_VECTORS + 3];
                 item.w_w = st[i * STATE_VECTORS + 4];
                 item.apply = false;
+            }
+            // The free-falling frame's residual (M6-T04): GDScript packed only the World's own field.
+            if let (Some((c, _)), Some(at)) = (core, position)
+                && let Some(g) = c.frame_residual_at(at)
+            {
+                item.env_w += g;
             }
         }
         // Row flight (M5-T31): every row-mode ship not gathered this tick, with a command in its row and a row in the core,
@@ -542,7 +552,10 @@ impl ScsFlightStep {
                         }
                     }
                 };
-                item.env_w = position.map_or(Vector3::ZERO, |at| c.tier_gravity.accel(at));
+                item.env_w = position.map_or(Vector3::ZERO, |at| {
+                    let field = c.tier_gravity.accel(at);
+                    c.frame_residual_at(at).map_or(field, |g| field + g)
+                });
                 if cmd.brake
                     && let Some(at) = position
                 {

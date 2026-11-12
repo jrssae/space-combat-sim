@@ -263,6 +263,8 @@ pub struct ScsSimCore {
     // The last first sync's wall-clock parts, microseconds (readouts only, M5-T35): the tier's step, the bodies, the
     // statics, the tier's rows, the lookups.
     sync_parts: [i64; 5],
+    // The World's free-falling frame (M6-T04, D64): its star system, its anchor and the tick's gravity sample.
+    pub(crate) frame: crate::frame::Frame,
 }
 
 #[godot_api]

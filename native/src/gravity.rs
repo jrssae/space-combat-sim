@@ -5,7 +5,7 @@
 // (`accel_at`, `tidal`) is kept beside it. Pure functions over plain slices, with a fixed order of sums, so a worker
 // and the main thread get the same bits. Engine-free by construction (test_sim_core reads this
 // file): plain numbers in, plain numbers out, no statics.
-#![allow(dead_code)] // wired in by M6-T04
+#![allow(dead_code)] // partly wired in by M6-T04 (the frame); the rest by M6-T07
 
 pub type V3 = [f64; 3];
 

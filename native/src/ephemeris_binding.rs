@@ -59,6 +59,13 @@ pub struct ScsEphemeris {
     system: System,
 }
 
+impl ScsEphemeris {
+    /// The body tree, for the core's frame (M6-T04), which keeps its own copy.
+    pub(crate) fn system(&self) -> &System {
+        &self.system
+    }
+}
+
 #[godot_api]
 impl ScsEphemeris {
     /// The system's root (the star), at the origin. Kind codes: 0 star, 1 planet, 2 moon, 3 minor (a place).

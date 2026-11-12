@@ -894,6 +894,25 @@ func test_the_ephemeris_kernel_holds_no_engine_type() -> void:
 				or source.contains("f32"), "no shared mutable state and nothing narrower than 64-bit")
 
 
+## The free-falling frame (M6-T04): a kernel over the ephemeris and the gravity alone, 64-bit; its shell on the core
+## (`frame_rows.rs`) is what converts to the game's axes and its 32-bit vectors.
+const FRAME_FILE: String = "res://native/src/frame.rs"
+const FRAME_USER: String = "res://native/src/frame_rows.rs"
+const FRAME_USE_ALLOWED: Array[String] = ["use crate::ephemeris::", "use crate::gravity;"]
+
+
+func test_the_frame_kernel_holds_no_engine_type() -> void:
+	var violations: PackedStringArray = _engine_free_violations(FRAME_FILE, KERNEL_FORBIDDEN, FRAME_USE_ALLOWED)
+	assert_eq(violations.size(), 0, "no engine type, call or stray import in the frame: %s" % violations)
+	var source: String = FileAccess.get_file_as_string(FRAME_FILE)
+	for part: String in ["pub struct Frame", "pub enum Anchor", "pub fn sample(", "pub fn residual(", "pub fn step(",
+			"pub fn anchor_in_orbit(", "pub fn anchor_on_rail("]:
+		assert_true(source.contains(part), "the frame holds %s" % part)
+	assert_false(source.contains("static mut") or source.contains("thread_local") or source.contains("Cell<")
+			or source.contains("f32"), "no shared mutable state and nothing narrower than 64-bit")
+	assert_true(FileAccess.get_file_as_string(FRAME_USER).contains("use crate::frame::"), "the shell reads the frame")
+
+
 ## The radar sphere's kernel (M4-T23): held to the kernels' rules; its shell (`radar_plot.rs`) is what reaches it.
 const RADAR_KERNEL_FILE: String = "res://native/src/radar_kernel.rs"
 const RADAR_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::{Basis, Color, Vector2, Vector3};", "use crate::v3::{length_squared, xform_inv};"]

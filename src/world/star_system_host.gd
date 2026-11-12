@@ -5,6 +5,10 @@ extends Node
 
 ## The planet the station orbits, whose centre the provider measures from.
 const CENTRE: StringName = &"epsilon_iii"
+## The system the flight scene loads unless a scenario names another.
+const DEFAULT_SYSTEM: StringName = &"local"
+## The place the World falls with when the system has it (M6-T04): the station's rail. M6-T09 lets a scenario choose.
+const DEFAULT_ANCHOR: StringName = &"babylon5"
 
 var system: StarSystem
 
