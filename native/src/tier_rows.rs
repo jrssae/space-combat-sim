@@ -64,7 +64,7 @@ impl ScsSimCore {
                     .unwrap_or_default(),
             );
             reach.push(t.reach[i]);
-            names.push(&self.tier_names[i]);
+            names.push(&self.display_name(self.tier_name_ids[i]));
             radii.push(t.radii[i]);
             hulls.push(t.hull_fraction[i]);
             bodies.push(t.body_ids[i]);
@@ -226,7 +226,7 @@ impl ScsSimCore {
         if self.turrets.civilians.contains(&body_id) {
             self.tier.roles[at] = crate::rows::ROLE_CIVILIAN;  // a civilian stays one in the tier (M5-T16)
         }
-        self.tier_names.push(GString::new());
+        self.tier_name_ids.push(0);
         handle
     }
 
@@ -255,8 +255,9 @@ impl ScsSimCore {
         self.tier.radii[i] = radius;
         self.tier.reach[i] = reach;
         self.tier.hull_fraction[i] = hull_fraction;
-        self.tier.name_keys[i] = name.to_string().to_lowercase();
-        self.tier_names[i] = name;
+        let (name_id, key_id) = self.intern_name(&name);
+        self.tier.name_ids[i] = key_id;
+        self.tier_name_ids[i] = name_id;
         true
     }
 
@@ -312,8 +313,8 @@ impl ScsSimCore {
         self.clear_row_of_statics(i);
         let out = self.tier_dict(i);
         if let Some((at, moved)) = self.tier.remove(body_id) {
-            self.tier_names.swap_remove(at);
-            debug_assert!(moved.is_none() || self.tier_names.len() == self.tier.len());
+            self.tier_name_ids.swap_remove(at);
+            debug_assert!(moved.is_none() || self.tier_name_ids.len() == self.tier.len());
         }
         self.tier_promotions += 1;
         out
@@ -325,7 +326,7 @@ impl ScsSimCore {
     fn tier_remove(&mut self, body_id: i64) -> bool {
         match self.tier.remove(body_id) {
             Some((at, _)) => {
-                self.tier_names.swap_remove(at);
+                self.tier_name_ids.swap_remove(at);
                 true
             }
             None => false,
@@ -489,7 +490,8 @@ impl ScsSimCore {
     #[func]
     fn tier_ram_contacts(&mut self, delta: f64) -> VarArray {
         let r = &self.rows;
-        let mut touching = std::collections::HashSet::new();
+        let mut touching = std::mem::take(&mut self.tier_ram_scratch);
+        touching.clear();
         let (mut rammers, mut targets) = (Vec::new(), Vec::new());
         let (mut v_rammers, mut v_targets, mut points) = (Vec::new(), Vec::new(), Vec::new());
         for i in 0..r.body_ids.len() {
@@ -529,7 +531,7 @@ impl ScsSimCore {
             v_targets.push(r.velocities[j]);
             points.push(r.positions[j]);
         }
-        self.tier_ram_pairs = touching;
+        self.tier_ram_scratch = std::mem::replace(&mut self.tier_ram_pairs, touching);
         let mut out = VarArray::new();
         out.push(&PackedInt64Array::from(rammers.as_slice()).to_variant());
         out.push(&PackedInt64Array::from(targets.as_slice()).to_variant());

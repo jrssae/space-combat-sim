@@ -246,10 +246,14 @@ impl Field {
 
 // Every row named `key`, in row order.
 fn rows_named(rows: &Rows, key: &str) -> Vec<u32> {
-    rows.name_keys
+    let wanted = rows.name_id(key);
+    if wanted == 0 {
+        return Vec::new();
+    }
+    rows.name_ids
         .iter()
         .enumerate()
-        .filter(|(_, n)| n.as_str() == key)
+        .filter(|(_, n)| **n == wanted)
         .map(|(r, _)| r as u32)
         .collect()
 }
@@ -827,13 +831,18 @@ impl Brain {
                 scratch.named.clear();
                 match field.named.iter().find(|(k, _)| k == key) {
                     Some((_, list)) => scratch.named.extend_from_slice(list),
-                    None => scratch.named.extend(
-                        rows.name_keys
-                            .iter()
-                            .enumerate()
-                            .filter(|(_, n)| *n == key)
-                            .map(|(r, _)| r as u32),
-                    ),
+                    None => {
+                        let wanted = rows.name_id(key);
+                        if wanted != 0 {
+                            scratch.named.extend(
+                                rows.name_ids
+                                    .iter()
+                                    .enumerate()
+                                    .filter(|(_, n)| **n == wanted)
+                                    .map(|(r, _)| r as u32),
+                            );
+                        }
+                    }
                 }
                 for i in 0..scratch.named.len() {
                     keep(
@@ -1345,17 +1354,18 @@ fn seek_velocity(
     );
 }
 
-// Whether a row's lowered name is the wanted (lowered) name; an empty wanted name matches nothing.
-fn named(key: &str, wanted: &str) -> bool {
-    !wanted.is_empty() && key == wanted
-}
 
 // The first row of `list` named `wanted`, as `AiContext._named` finds it among the contacts every tick (M4-T18: a parked
 // or far row with the same name earlier in the rows never hides the listed one); -1 for none.
 fn first_named(rows: &Rows, list: &[i32], wanted: &str) -> i32 {
+    // An empty wanted name, or one no row was ever given, matches nothing.
+    let wanted = rows.name_id(wanted);
+    if wanted == 0 {
+        return -1;
+    }
     list.iter()
         .copied()
-        .find(|&r| r >= 0 && named(&rows.name_keys[r as usize], wanted))
+        .find(|&r| r >= 0 && rows.name_ids[r as usize] == wanted)
         .unwrap_or(-1)
 }
 

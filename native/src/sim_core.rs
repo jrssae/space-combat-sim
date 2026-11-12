@@ -2,11 +2,14 @@
 // from the engine at the tick's sync points and read by every native kernel.
 // gdext's `init` derive writes `base: base`, which clippy flags on the struct's `base` field.
 #![allow(clippy::redundant_field_names)]
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 use godot::classes::{Node, Node3D, Object, RigidBody3D};
 use godot::prelude::*;
 
+use crate::row_commands::{IdMap, IdSet};
+use crate::rows::NameTable;
 use crate::threads::{self, Pass, Threads};
 
 pub use crate::rows::{Bolts, FLAG_HULL, FLAG_HULL_ACTIVE, FLAG_LATE, FLAG_RIGID, FLAG_TIER, Rows};
@@ -15,10 +18,10 @@ pub use crate::rows::{Bolts, FLAG_HULL, FLAG_HULL_ACTIVE, FLAG_LATE, FLAG_RIGID,
 trait RowsSnapshot {
     fn to_array(
         &self,
-        names: &[GString],
+        names: PackedStringArray,
+        faction_names: Array<StringName>,
         count: usize,
         node_count: usize,
-        factions: &[StringName],
     ) -> VarArray;
 }
 
@@ -73,8 +76,9 @@ impl Names {
 #[derive(Clone)]
 struct Attrs {
     faction_ix: u32,
-    name: GString,
-    name_key: String,
+    // The display name and its lowered form, as ids of the core's two name tables (M5-T35; 0 for no name).
+    name_id: u32,
+    key_id: u32,
     kind: u8,
     radius: f64,
     destroyed: bool,
@@ -103,7 +107,7 @@ struct Member {
     // The sync this member was last a row of, and how often it has turned active (its handle's generation).
     active_at: u64,
     generation: u32,
-    // The hull's place in the `damageable` group: the order the resolvers walk hulls in.
+    // The place of the body's first hull in the `damageable` group: the order the resolvers walk hulls in (-1 with none).
     hull_rank: i64,
     // The member's place in `slot_of`, which outlives `set_members`.
     slot: u32,
@@ -139,17 +143,17 @@ pub struct ScsSimCore {
     names: Option<Names>,
     markers: Vec<Member>,
     hulls: Vec<Member>,
-    marker_at: HashMap<i64, usize>,
+    marker_at: IdMap<usize>,
     // A member's slot by its key, kept across `set_members` with its generation; a member that left the groups gives its
     // slot back (M4-T21), and the slot's generation count goes on when another member takes it, so no old handle names
     // the new row.
-    slot_of: HashMap<i64, (u32, u32)>,
+    slot_of: IdMap<(u32, u32)>,
     slot_generation: Vec<u32>,
     free_slots: Vec<u32>,
-    touched: HashSet<i64>,
+    touched: IdSet,
     // Bodies a resync found parked since the tick's first sync: their rows stay until the next sync, but nothing aims at them.
-    parked_since_sync: HashSet<i64>,
-    seen: HashSet<i64>,
+    parked_since_sync: IdSet,
+    seen: IdSet,
     syncs: u64,
     attribute_reads: i64,
     static_ids: Vec<i64>,
@@ -157,20 +161,45 @@ pub struct ScsSimCore {
     static_radii: Vec<f64>,
     static_factions: Vec<u32>,
     static_kinds: Vec<u8>,
+    // The rocks and mines as ready rows (M5-T35), built when they are set and copied in whole at each sync, with their
+    // `(id, place)` pairs sorted for the rows' id lookup.
+    static_block: Rows,
+    static_sorted: Vec<(i64, u32)>,
+    // Whether the rows hold that block as it is now (not between `set_statics` and the next first sync).
+    statics_current: bool,
     /// Every faction the core has seen, in first-sight order; rows carry an index into it.
     pub factions: Vec<StringName>,
     /// The scan's rows and the bolts, as of the last sync point.
     pub rows: Rows,
     pub bolts: Bolts,
-    /// Each row's display name, beside the rows (an engine string the worker threads must not share, M4-T18).
-    pub row_names: Vec<GString>,
+    /// Each row's display name as an id of `display_names` (0 for none), beside the rows (the names are engine strings
+    /// the worker threads must not share, M4-T18).
+    pub row_name_ids: Vec<u32>,
+    // The display names by id (id 1 first), each with its lowered form's id in `name_table`, and the ids by name.
+    display_names: Vec<GString>,
+    display_keys: Vec<u32>,
+    display_ids: HashMap<String, u32>,
+    // The lowered names the rows' `name_ids` stand for; `names_shared` is the copy the rows and the jobs' snapshots hold,
+    // made again when a name was added.
+    name_table: NameTable,
+    names_shared: Arc<NameTable>,
+    names_stale: bool,
+    // Each row's hull rank (its member's), beside the rows: what orders `hull_rows`.
+    row_ranks: Vec<i64>,
+    // Every member by its body, sorted by body: `(body id, place)`, a place past the markers being a hull's (M5-T35, L9).
+    members_by_body: Vec<(i64, u32)>,
+    // Lists the lookups are built in, kept between syncs.
+    id_scratch: Vec<(i64, u32)>,
+    hull_scratch: Vec<(i64, u32)>,
+    // The scan's faction and name columns as last handed out, and the row columns they were made from.
+    scan_cache: ScanCache,
     /// The rows with an active hull, in the `damageable` group's order: what the sweep and the ram phase walk.
     pub hull_rows: Vec<u32>,
     // The rows the hit sweep tests (M4-T22): the hull rows, then every low-attention tier row (a sphere with no body), so a
     // near ship's bolt hits a tier ship. The ram phase and the weapon kernels keep to the hull rows.
     pub sweep_rows: Vec<u32>,
-    row_of_id: HashMap<i64, u32>,
-    row_of_handle: HashMap<i64, u32>,
+    row_of_id: IdMap<u32>,
+    row_of_handle: IdMap<u32>,
     pub(crate) sync_reads: i64,
     fallback_reads: i64,
     last_calls: [i64; 2],
@@ -195,11 +224,11 @@ pub struct ScsSimCore {
     pub row_rids: Vec<Rid>,
     /// The ships' accelerations from their own forces this tick, by body, as the flight step wrote them (M4-T35: the ram
     /// tracker's accel column; `force / mass` in 32 bits, as `Ship.applied_force() / ship.mass`).
-    pub accels: HashMap<i64, Vector3>,
+    pub accels: IdMap<Vector3>,
     // The AI targeting controllers whose selection check runs here (M4-T35): body id and sensor range; and every body's
     // selection as the events last gave it (or as its attributes read it).
     selection_watch: Vec<(i64, f64)>,
-    latest_target: HashMap<i64, i64>,
+    latest_target: IdMap<i64>,
     // Bodies whose row command GDScript released since the step's last launch (M4-T24): dropped from the job's commands
     // at the join.
     pub(crate) released: Vec<i64>,
@@ -210,7 +239,7 @@ pub struct ScsSimCore {
     pub(crate) tier_types: Vec<crate::tier::Type>,
     pub(crate) tier_gravity: crate::tier::Gravity,
     pub(crate) tier_period: i64,
-    pub(crate) tier_names: Vec<GString>,
+    pub(crate) tier_name_ids: Vec<u32>,
     pub(crate) next_tier_handle: i64,
     pub(crate) next_tier_ordinal: i64,
     pub(crate) tier_scratch: Vec<(Vector3, Vector3)>,
@@ -225,6 +254,7 @@ pub struct ScsSimCore {
     pub(crate) tier_hits_total: i64,
     // The rammer and target pairs in contact at the last check, so a ram lands once, when they first touch (fix round 1).
     pub(crate) tier_ram_pairs: std::collections::HashSet<(i64, i64)>,
+    pub(crate) tier_ram_scratch: std::collections::HashSet<(i64, i64)>,
     // The defensive turrets (M5-T21): mounts on the ships' rows and the attacker memory.
     pub(crate) turrets: crate::turret_rows::TurretState,
     // Promotions moved clear of a rock or mine they overlapped (M4-T23).
@@ -302,6 +332,9 @@ impl ScsSimCore {
                 continue;
             };
             let key = hull.instance_id().to_i64();
+            let body_id = body.instance_id().to_i64();
+            // The body's rank is its first hull's, whichever of its hulls this member is.
+            let rank = first_hull.get(&body_id).map_or(rank as i64, |(_, r)| *r);
             let (attrs, active_at) = known.remove(&key).unwrap_or((None, 0));
             let (slot, generation) = self.slot_for(key);
             let rigid = body.clone().try_cast::<RigidBody3D>().ok();
@@ -309,14 +342,14 @@ impl ScsSimCore {
             self.hulls.push(Member {
                 key,
                 rigid,
-                body_id: body.instance_id().to_i64(),
+                body_id,
                 body,
                 marker: None,
                 hull: Some(hull),
                 attrs,
                 active_at,
                 generation,
-                hull_rank: rank as i64,
+                hull_rank: rank,
                 slot,
                 rid,
                 active: false,
@@ -325,6 +358,7 @@ impl ScsSimCore {
         }
         // Whoever was known and is in neither list has left the groups.
         self.free_slots_of(known.into_keys());
+        self.index_members();
     }
 
     /// Takes the node-less static rows (rocks by RID, mines): ids, positions, radii, factions and kinds, in order. Returns
@@ -353,6 +387,7 @@ impl ScsSimCore {
             self.static_radii.clear();
             self.static_factions.clear();
             self.static_kinds.clear();
+            self.build_static_block();
             return false;
         }
         self.static_ids = ids.as_slice().to_vec();
@@ -363,6 +398,7 @@ impl ScsSimCore {
             .map(|f| self.faction_index(f))
             .collect();
         self.static_kinds = kinds.as_slice().to_vec();
+        self.build_static_block();
         true
     }
 
@@ -421,8 +457,10 @@ impl ScsSimCore {
         let now = self.syncs;
         let mut rows = std::mem::take(&mut self.rows);
         rows.clear();
-        self.row_names.clear();
+        self.row_name_ids.clear();
         self.row_rids.clear();
+        self.row_ranks.clear();
+        self.compact_names();
         self.seen.clear();
         self.parked_since_sync.clear();
         let cached = !self.activity_dirty;
@@ -462,30 +500,12 @@ impl ScsSimCore {
         self.hulls = hulls;
         rows.node_count = rows.body_ids.len();
         self.sync_parts[1] = clock.lap();
-        for s in 0..self.static_ids.len() {
-            rows.body_ids.push(self.static_ids[s]);
-            rows.ids.push(self.static_ids[s]);
-            rows.faction_ix.push(self.static_factions[s]);
-            rows.positions.push(self.static_positions[s]);
-            rows.velocities.push(Vector3::ZERO);
-            rows.bases.push(Basis::IDENTITY);
-            rows.angular.push(Vector3::ZERO);
-            rows.radii.push(self.static_radii[s]);
-            rows.kinds.push(self.static_kinds[s]);
-            rows.flags.push(0);
-            self.row_names.push(GString::new());
-            self.row_rids.push(Rid::Invalid);
-            rows.hull_ids.push(0);
-            rows.handles.push(0);
-            rows.rigid.push(false);
-            rows.is_static.push(is_static_kind(self.static_kinds[s]));
-            rows.is_mine.push(self.static_kinds[s] == KIND_MINE);
-            rows.hull_fraction.push(-1.0);
-            rows.target_ids.push(-1);
-            rows.reach.push(0.0);
-            rows.name_keys.push(String::new());
-            rows.roles.push(crate::rows::ROLE_COMBAT);
-        }
+        rows.extend_from(&self.static_block);
+        self.statics_current = true;
+        let with_statics = rows.body_ids.len();
+        self.row_name_ids.resize(with_statics, 0);
+        self.row_rids.resize(with_statics, Rid::Invalid);
+        self.row_ranks.resize(with_statics, i64::MAX);
         self.sync_parts[2] = clock.lap();
         // The tier's rows after the statics (M4-T21): contacts to the brains, out of the scan GDScript builds.
         let tier_base = rows.body_ids.len();
@@ -496,10 +516,9 @@ impl ScsSimCore {
                 rows.target_ids[tier_base + k] = target;
             }
         }
-        for name in &self.tier_names {
-            self.row_names.push(name.clone());
-            self.row_rids.push(Rid::Invalid);
-        }
+        self.row_name_ids.extend_from_slice(&self.tier_name_ids);
+        self.row_rids.resize(rows.body_ids.len(), Rid::Invalid);
+        self.row_ranks.resize(rows.body_ids.len(), i64::MAX);
         self.rows = rows;
         self.touched.clear();
         self.sync_parts[3] = clock.lap();
@@ -758,11 +777,11 @@ impl ScsSimCore {
     }
 
     /// The rows by body id, and the bodies touched since the last sync point (a job's snapshot copies both, M4-T24).
-    pub(crate) fn body_rows(&self) -> &HashMap<i64, u32> {
+    pub(crate) fn body_rows(&self) -> &IdMap<u32> {
         &self.row_of_id
     }
 
-    pub(crate) fn touched_set(&self) -> &HashSet<i64> {
+    pub(crate) fn touched_set(&self) -> &IdSet {
         &self.touched
     }
 
@@ -778,7 +797,7 @@ impl ScsSimCore {
     #[func]
     fn row_name(&self, row: i64) -> GString {
         self.row_index(row)
-            .map_or_else(GString::new, |r| self.row_names[r].clone())
+            .map_or_else(GString::new, |r| self.display_name(self.row_name_ids[r]))
     }
 
     /// The body a row reads its contacts from (the ram phase's), for tests.
@@ -842,21 +861,60 @@ impl ScsSimCore {
     /// names, hull_ids, node_count, statics]`: the arrays `ContactScan` keeps, without the static rows (the scan appends
     /// those from `StaticRows` itself) and without rows added after the first sync.
     #[func]
-    fn snapshot(&self) -> VarArray {
-        self.rows.to_array(
-            &self.row_names,
-            self.rows.node_count,
-            self.rows.node_count,
-            &self.factions,
-        )
+    fn snapshot(&mut self) -> VarArray {
+        let count = self.rows.node_count.min(self.rows.body_ids.len());
+        // The two columns of engine strings are made again only when a row's faction or name changed (M5-T35); the scan
+        // gets copies of its own, since it appends the statics to them.
+        let cache = &mut self.scan_cache;
+        if !(cache.valid
+            && cache.faction_ix == self.rows.faction_ix[..count]
+            && cache.name_ids == self.row_name_ids[..count])
+        {
+            cache.faction_ix.clear();
+            cache.faction_ix.extend_from_slice(&self.rows.faction_ix[..count]);
+            cache.name_ids.clear();
+            cache.name_ids.extend_from_slice(&self.row_name_ids[..count]);
+            cache.factions = Some(faction_names(&cache.faction_ix, &self.factions));
+            cache.names = names_of(&cache.name_ids, &self.display_names);
+            cache.valid = true;
+            cache.builds += 1;
+        }
+        let factions = cache
+            .factions
+            .as_ref()
+            .map_or_else(Array::new, |a| a.duplicate_shallow());
+        self.rows
+            .to_array(cache.names.clone(), factions, count, self.rows.node_count)
+    }
+
+    /// How often `snapshot` made its faction and name columns again (the work count: not once a call).
+    #[func]
+    fn snapshot_builds(&self) -> i64 {
+        self.scan_cache.builds
+    }
+
+    /// Bodies whose selection the core holds (members and tier rows; a freed body's goes with it).
+    #[func]
+    fn selections_held(&self) -> i64 {
+        self.latest_target.len() as i64
+    }
+
+    /// Display names and lowered names the core holds ids for (they are dropped once most belong to no body).
+    #[func]
+    fn name_count(&self) -> PackedInt64Array {
+        PackedInt64Array::from(&[self.display_names.len() as i64, self.name_table.len() as i64][..])
     }
 
     /// `snapshot` with the static rows too (the registry's face, M4-T09), late rows left out.
     #[func]
     pub fn snapshot_all(&self) -> VarArray {
-        let count = self.rows.node_count + self.static_ids.len();
-        self.rows
-            .to_array(&self.row_names, count, self.rows.node_count, &self.factions)
+        let count = (self.rows.node_count + self.static_ids.len()).min(self.rows.body_ids.len());
+        self.rows.to_array(
+            names_of(&self.row_name_ids[..count.min(self.row_name_ids.len())], &self.display_names),
+            faction_names(&self.rows.faction_ix[..count], &self.factions),
+            count,
+            self.rows.node_count,
+        )
     }
 
     /// The broadcast scan, `ContactScan.from_broadcasters` for the markers `ids` (the broadcasters, in their order): a row
@@ -866,9 +924,10 @@ impl ScsSimCore {
     pub fn select(&mut self, ids: PackedInt64Array) -> VarArray {
         let mut rows = Rows::default();
         let mut found: Vec<i32> = Vec::new();
-        // The selection's names and rids go to lists of their own; the core's rows keep theirs.
-        let core_names = std::mem::take(&mut self.row_names);
+        // The selection's names, rids and ranks go to lists of their own; the core's rows keep theirs.
+        let core_names = std::mem::take(&mut self.row_name_ids);
         let core_rids = std::mem::take(&mut self.row_rids);
+        let core_ranks = std::mem::take(&mut self.row_ranks);
         let mut markers = std::mem::take(&mut self.markers);
         // A parked marker whose ship flies as a tier row is heard from its row (M4-T23), built on the first miss.
         let mut tier_of: Option<std::collections::HashMap<i64, usize>> = None;
@@ -892,7 +951,7 @@ impl ScsSimCore {
                 });
                 if let Some(&i) = map.get(id) {
                     self.tier.push_row(i, &mut rows);
-                    self.row_names.push(self.tier_names[i].clone());
+                    self.row_name_ids.push(self.tier_name_ids[i]);
                     found.push(j as i32);
                 }
                 continue;
@@ -906,10 +965,16 @@ impl ScsSimCore {
             found.push(j as i32);
         }
         self.markers = markers;
-        let names = std::mem::replace(&mut self.row_names, core_names);
+        let names = std::mem::replace(&mut self.row_name_ids, core_names);
         self.row_rids = core_rids;
+        self.row_ranks = core_ranks;
         rows.node_count = rows.body_ids.len();
-        let mut out = rows.to_array(&names, rows.node_count, rows.node_count, &self.factions);
+        let mut out = rows.to_array(
+            names_of(&names, &self.display_names),
+            faction_names(&rows.faction_ix, &self.factions),
+            rows.node_count,
+            rows.node_count,
+        );
         out.push(&PackedInt32Array::from(found.as_slice()).to_variant());
         out
     }
@@ -1284,8 +1349,9 @@ impl ScsSimCore {
         rows.radii.push(attrs.radius);
         rows.kinds.push(attrs.kind);
         rows.flags.push(read.flags);
-        self.row_names.push(attrs.name.clone());
+        self.row_name_ids.push(attrs.name_id);
         self.row_rids.push(m.rid);
+        self.row_ranks.push(m.hull_rank);
         rows.hull_ids
             .push(m.hull.as_ref().map_or(0, |h| h.instance_id().to_i64()));
         rows.handles.push(Self::handle(m));
@@ -1295,7 +1361,7 @@ impl ScsSimCore {
         rows.hull_fraction.push(read.hull_fraction);
         rows.target_ids.push(read.target_id);
         rows.reach.push(attrs.reach);
-        rows.name_keys.push(attrs.name_key.clone());
+        rows.name_ids.push(attrs.key_id);
         rows.roles.push(attrs.role);
     }
 
@@ -1311,13 +1377,13 @@ impl ScsSimCore {
         rows.radii[r] = attrs.radius;
         rows.kinds[r] = attrs.kind;
         rows.flags[r] = read.flags | (rows.flags[r] & FLAG_LATE);
-        self.row_names[r] = attrs.name.clone();
+        self.row_name_ids[r] = attrs.name_id;
         rows.is_static[r] = is_static_kind(attrs.kind);
         rows.is_mine[r] = attrs.kind == KIND_MINE;
         rows.hull_fraction[r] = read.hull_fraction;
         rows.target_ids[r] = read.target_id;
         rows.reach[r] = attrs.reach;
-        rows.name_keys[r] = attrs.name_key.clone();
+        rows.name_ids[r] = attrs.key_id;
         rows.roles[r] = attrs.role;
     }
 
@@ -1326,12 +1392,11 @@ impl ScsSimCore {
     fn resync_touched(&mut self) {
         self.rows_version += 1;
         let now = self.syncs;
-        let touched: Vec<i64> = self.touched.iter().copied().collect();
         let mut markers = std::mem::take(&mut self.markers);
         let mut hulls = std::mem::take(&mut self.hulls);
         let mut rows = std::mem::take(&mut self.rows);
         for m in markers.iter_mut().chain(hulls.iter_mut()) {
-            if !touched.contains(&m.body_id) {
+            if !self.touched.contains(&m.body_id) {
                 continue;
             }
             let names = self.names.get_or_insert_with(Names::new);
@@ -1377,15 +1442,19 @@ impl ScsSimCore {
     // Rebuilds the lookups over the rows: by body id, by handle, by marker id (the kernels'), and the hull rows in the
     // resolvers' order.
     fn index_rows(&mut self) {
-        self.rows.index_ids();
+        if self.statics_current {
+            let mut scratch = std::mem::take(&mut self.id_scratch);
+            self.rows
+                .index_ids_around(self.rows.node_count, &self.static_sorted, &mut scratch);
+            self.id_scratch = scratch;
+        } else {
+            self.rows.index_ids();
+        }
         self.row_of_id.clear();
         self.row_of_handle.clear();
-        let mut hull_rows: Vec<(i64, u32)> = Vec::new();
-        // A body's rank is its first `Damageable`'s (the marker members carry it; the hull members come in group order).
-        let mut ranks: HashMap<i64, i64> = HashMap::new();
-        for m in self.markers.iter().chain(self.hulls.iter()) {
-            ranks.entry(m.body_id).or_insert(m.hull_rank);
-        }
+        self.sweep_rows.clear();
+        let mut ranked = std::mem::take(&mut self.hull_scratch);
+        ranked.clear();
         for i in 0..self.rows.body_ids.len() {
             if self.rows.handles[i] == 0 {
                 continue;
@@ -1393,22 +1462,187 @@ impl ScsSimCore {
             self.row_of_id.insert(self.rows.body_ids[i], i as u32);
             self.row_of_handle.insert(self.rows.handles[i], i as u32);
             if self.rows.flags[i] & FLAG_HULL_ACTIVE != 0 {
-                let rank = ranks
-                    .get(&self.rows.body_ids[i])
-                    .copied()
-                    .unwrap_or(i64::MAX);
-                hull_rows.push((rank, i as u32));
+                ranked.push((self.row_ranks[i], i as u32));
             }
         }
-        hull_rows.sort_unstable();
-        self.hull_rows = hull_rows.into_iter().map(|(_, i)| i).collect();
-        self.sweep_rows.clear();
+        ranked.sort_unstable();
+        self.hull_rows.clear();
+        self.hull_rows.extend(ranked.iter().map(|&(_, i)| i));
+        self.hull_scratch = ranked;
         self.sweep_rows.extend_from_slice(&self.hull_rows);
         self.sweep_rows.extend(
             (0..self.rows.body_ids.len())
                 .filter(|&i| self.rows.flags[i] & FLAG_TIER != 0)
                 .map(|i| i as u32),
         );
+        // The rows name their names through the table as it stands now.
+        if self.names_stale || self.rows.names.is_none() {
+            self.names_shared = Arc::new(self.name_table.clone());
+            self.names_stale = false;
+        }
+        if !self
+            .rows
+            .names
+            .as_ref()
+            .is_some_and(|held| Arc::ptr_eq(held, &self.names_shared))
+        {
+            self.rows.names = Some(Arc::clone(&self.names_shared));
+        }
+    }
+
+    // The rocks and mines as rows, made once for every sync to copy.
+    fn build_static_block(&mut self) {
+        let n = self.static_ids.len();
+        self.statics_current = false;
+        let block = &mut self.static_block;
+        block.clear();
+        block.body_ids.extend_from_slice(&self.static_ids);
+        block.ids.extend_from_slice(&self.static_ids);
+        block.faction_ix.extend_from_slice(&self.static_factions);
+        block.positions.extend_from_slice(&self.static_positions);
+        block.velocities.resize(n, Vector3::ZERO);
+        block.bases.resize(n, Basis::IDENTITY);
+        block.angular.resize(n, Vector3::ZERO);
+        block.radii.extend_from_slice(&self.static_radii);
+        block.kinds.extend_from_slice(&self.static_kinds);
+        block.flags.resize(n, 0);
+        block.hull_ids.resize(n, 0);
+        block.handles.resize(n, 0);
+        block.rigid.resize(n, false);
+        block.is_static.extend(self.static_kinds.iter().map(|&k| is_static_kind(k)));
+        block.is_mine.extend(self.static_kinds.iter().map(|&k| k == KIND_MINE));
+        block.hull_fraction.resize(n, -1.0);
+        block.target_ids.resize(n, -1);
+        block.reach.resize(n, 0.0);
+        block.name_ids.resize(n, 0);
+        block.roles.resize(n, crate::rows::ROLE_COMBAT);
+        self.static_sorted.clear();
+        self.static_sorted
+            .extend(self.static_ids.iter().enumerate().map(|(at, &id)| (id, at as u32)));
+        self.static_sorted.sort_unstable();
+    }
+
+    // Lists the members by body, so an event finds a body's members without walking them all.
+    fn index_members(&mut self) {
+        let markers = self.markers.len();
+        self.members_by_body.clear();
+        self.members_by_body.extend(
+            self.markers
+                .iter()
+                .map(|m| m.body_id)
+                .chain(self.hulls.iter().map(|m| m.body_id))
+                .enumerate()
+                .map(|(at, body_id)| (body_id, at as u32)),
+        );
+        self.members_by_body.sort_unstable();
+        debug_assert!(self.members_by_body.len() == markers + self.hulls.len());
+        // A selection is kept only for a body that is still a member or flies in the tier (L9: freed bodies' go).
+        let (by_body, tier) = (&self.members_by_body, &self.tier);
+        self.latest_target.retain(|body_id, _| {
+            by_body.binary_search_by_key(body_id, |e| e.0).is_ok() || tier.index_of(*body_id).is_some()
+        });
+    }
+
+    // Calls `each` with the attributes of every member of body `body_id` that has them read.
+    fn for_attrs_of(&mut self, body_id: i64, mut each: impl FnMut(&mut Attrs)) {
+        let first = self.members_by_body.partition_point(|e| e.0 < body_id);
+        let markers = self.markers.len();
+        for &(body, at) in &self.members_by_body[first..] {
+            if body != body_id {
+                break;
+            }
+            let at = at as usize;
+            let m = if at < markers {
+                &mut self.markers[at]
+            } else {
+                &mut self.hulls[at - markers]
+            };
+            if let Some(a) = m.attrs.as_mut() {
+                each(a);
+            }
+        }
+    }
+
+    /// The display name with id `id` ("" for 0).
+    pub fn display_name(&self, id: u32) -> GString {
+        id.checked_sub(1)
+            .and_then(|at| self.display_names.get(at as usize))
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// The display name of the row whose marker id is `id` ("" for none), for the debug readouts.
+    pub fn name_of_marker(&self, id: i64) -> String {
+        if id == 0 {
+            return String::new();
+        }
+        self.rows
+            .ids
+            .iter()
+            .position(|&r| r == id)
+            .and_then(|r| self.row_name_ids.get(r))
+            .map_or_else(String::new, |&name| self.display_name(name).to_string())
+    }
+
+    /// The ids of display name `name`: its own, and its lowered form's in the rows' table; given on first sight.
+    pub(crate) fn intern_name(&mut self, name: &GString) -> (u32, u32) {
+        let text = name.to_string();
+        if text.is_empty() {
+            return (0, 0);
+        }
+        if let Some(&id) = self.display_ids.get(&text) {
+            return (id, self.display_keys[id as usize - 1]);
+        }
+        let known = self.name_table.len();
+        let key = self.name_table.intern(&text.to_lowercase());
+        self.names_stale |= self.name_table.len() != known;
+        self.display_names.push(name.clone());
+        self.display_keys.push(key);
+        let id = self.display_names.len() as u32;
+        self.display_ids.insert(text, id);
+        (id, key)
+    }
+
+    // Drops the names no body carries any more once they are most of the tables (ships come and go under new names over a
+    // world's life), giving the ones in use new ids. Only at a first sync, where the rows are made again from the members.
+    fn compact_names(&mut self) {
+        let holders = self.markers.len() + self.hulls.len() + self.tier.len();
+        if self.display_names.len() <= 2 * holders + NAME_SLACK {
+            return;
+        }
+        let old = std::mem::take(&mut self.display_names);
+        self.display_keys.clear();
+        self.display_ids.clear();
+        self.name_table = NameTable::default();
+        self.names_stale = true;
+        self.scan_cache.valid = false;
+        let mut new_ids: Vec<u32> = vec![0; old.len() + 1];
+        let mut markers = std::mem::take(&mut self.markers);
+        let mut hulls = std::mem::take(&mut self.hulls);
+        for m in markers.iter_mut().chain(hulls.iter_mut()) {
+            if let Some(a) = m.attrs.as_mut() {
+                (a.name_id, a.key_id) = self.renamed(&old, &mut new_ids, a.name_id);
+            }
+        }
+        self.markers = markers;
+        self.hulls = hulls;
+        for i in 0..self.tier_name_ids.len() {
+            let (name, key) = self.renamed(&old, &mut new_ids, self.tier_name_ids[i]);
+            self.tier_name_ids[i] = name;
+            self.tier.name_ids[i] = key;
+        }
+    }
+
+    // The new ids of the name that had display id `id` before `compact_names` emptied the tables.
+    fn renamed(&mut self, old: &[GString], new_ids: &mut [u32], id: u32) -> (u32, u32) {
+        if id == 0 || id as usize > old.len() {
+            return (0, 0);
+        }
+        if new_ids[id as usize] == 0 {
+            new_ids[id as usize] = self.intern_name(&old[id as usize - 1]).0;
+        }
+        let now = new_ids[id as usize];
+        (now, now.checked_sub(1).map_or(0, |at| self.display_keys[at as usize]))
     }
 
     fn close_tick(&mut self) {
@@ -1535,11 +1769,12 @@ impl ScsSimCore {
         } else {
             crate::rows::ROLE_COMBAT
         };
+        let (name_id, key_id) = self.intern_name(&name);
         Attrs {
             role,
             faction_ix: self.faction_index(faction),
-            name_key: name.to_string().to_lowercase(),
-            name,
+            name_id,
+            key_id,
             kind,
             radius,
             destroyed,
@@ -1576,19 +1811,15 @@ fn clamp01(v: f64) -> f64 {
 
 impl RowsSnapshot for Rows {
     // The first `count` rows as the `VarArray` `snapshot` documents (forwards and ups from the bases), `node_count` of
-    // them nodes.
+    // them nodes, with their names and faction names as the caller made them.
     fn to_array(
         &self,
-        names: &[GString],
+        names: PackedStringArray,
+        faction_names: Array<StringName>,
         count: usize,
         node_count: usize,
-        factions: &[StringName],
     ) -> VarArray {
         let count = count.min(self.body_ids.len());
-        let faction_names: Array<StringName> = self.faction_ix[..count]
-            .iter()
-            .map(|&f| factions[f as usize].clone())
-            .collect();
         let forwards: Vec<Vector3> = self.bases[..count]
             .iter()
             .map(|b| neg(normalized(col_c(b))))
@@ -1613,12 +1844,47 @@ impl RowsSnapshot for Rows {
         out.push(&PackedFloat64Array::from(&self.radii[..count]).to_variant());
         out.push(&PackedByteArray::from(is_ship.as_slice()).to_variant());
         out.push(&PackedByteArray::from(&self.kinds[..count]).to_variant());
-        out.push(&PackedStringArray::from(&names[..count.min(names.len())]).to_variant());
+        out.push(&names.to_variant());
         out.push(&PackedInt64Array::from(&self.hull_ids[..count]).to_variant());
         out.push(&(node_count.min(count) as i64).to_variant());
         out.push(&statics.to_variant());
         out
     }
+}
+
+// The scan's two columns of engine strings as `snapshot` last made them, with the rows' columns they came from.
+#[derive(Default)]
+struct ScanCache {
+    valid: bool,
+    faction_ix: Vec<u32>,
+    name_ids: Vec<u32>,
+    factions: Option<Array<StringName>>,
+    names: PackedStringArray,
+    builds: i64,
+}
+
+// How many names the tables may hold beyond twice the bodies before the unused ones are dropped.
+const NAME_SLACK: usize = 256;
+
+// The factions' names for a column of faction indices.
+fn faction_names(faction_ix: &[u32], factions: &[StringName]) -> Array<StringName> {
+    faction_ix
+        .iter()
+        .map(|&f| factions[f as usize].clone())
+        .collect()
+}
+
+// The display names for a column of name ids.
+fn names_of(name_ids: &[u32], display: &[GString]) -> PackedStringArray {
+    name_ids
+        .iter()
+        .map(|&id| {
+            id.checked_sub(1)
+                .and_then(|at| display.get(at as usize))
+                .cloned()
+                .unwrap_or_default()
+        })
+        .collect()
 }
 
 // `Targetable.is_active()` for member `m`'s marker (in the tree, visible, its body processing), and both still exist.
@@ -1792,14 +2058,11 @@ impl ScsSimCore {
         if let Some(i) = self.tier.index_of(body_id) {
             self.tier.hull_fraction[i] = fraction;
         }
-        for m in self.markers.iter_mut().chain(self.hulls.iter_mut()) {
-            if m.body_id == body_id
-                && let Some(a) = m.attrs.as_mut()
-                && a.health.is_some()
-            {
+        self.for_attrs_of(body_id, |a| {
+            if a.health.is_some() {
                 a.hull_fraction = fraction;
             }
-        }
+        });
     }
 
     /// A ship's selection changed (`TargetingController.target_changed`): its column reads it from the next sync.
@@ -1807,14 +2070,11 @@ impl ScsSimCore {
     fn note_selection(&mut self, body_id: i64, selected_id: i64) {
         let target = if selected_id != 0 { selected_id } else { -1 };
         self.latest_target.insert(body_id, target);
-        for m in self.markers.iter_mut().chain(self.hulls.iter_mut()) {
-            if m.body_id == body_id
-                && let Some(a) = m.attrs.as_mut()
-                && a.targeting.is_some()
-            {
+        self.for_attrs_of(body_id, |a| {
+            if a.targeting.is_some() {
                 a.target_id = target;
             }
-        }
+        });
     }
 
     /// A row's hull column (0..1, -1 without a hull) and selection column (a `Targetable` id, -1 for none).

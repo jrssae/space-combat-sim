@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use godot::builtin::{Basis, Vector3};
 
 use crate::kernels::flight::{self, Body, Cmd};
-use crate::row_commands::{CommandMap, RowCommand};
+use crate::row_commands::{CommandMap, IdMap, RowCommand};
 use crate::rows::{FLAG_HULK, FLAG_HULL, FLAG_TIER, ROLE_CIVILIAN, ROLE_COMBAT, Rows};
 use crate::v3::{
     add, cross, length, length_squared, limit_length, normalized, scale, sub, xform, xform_inv,
@@ -73,7 +73,8 @@ pub struct TierRows {
     pub radii: Vec<f64>,
     pub reach: Vec<f64>,
     pub hull_fraction: Vec<f64>,
-    pub name_keys: Vec<String>,
+    /// The lowered name as an id of the core's name table (0 for none).
+    pub name_ids: Vec<u32>,
     /// The row's role (M5-T16): a civilian keeps it in the tier.
     pub roles: Vec<u8>,
     pub positions: Vec<Vector3>,
@@ -103,7 +104,7 @@ pub struct TierRows {
     pub paint: Vec<[f32; 3]>,
     /// A capital's hull box (half extents in its own frame, fix round 1); zero for a fighter, held as a sphere.
     pub half_extents: Vec<Vector3>,
-    pub by_body: HashMap<i64, usize>,
+    pub by_body: IdMap<usize>,
 }
 
 impl TierRows {
@@ -150,7 +151,7 @@ impl TierRows {
         self.radii.push(0.0);
         self.reach.push(0.0);
         self.hull_fraction.push(-1.0);
-        self.name_keys.push(String::new());
+        self.name_ids.push(0);
         self.roles.push(ROLE_COMBAT);
         self.positions.push(position);
         self.velocities.push(velocity);
@@ -188,7 +189,7 @@ impl TierRows {
         self.radii.swap_remove(at);
         self.reach.swap_remove(at);
         self.hull_fraction.swap_remove(at);
-        self.name_keys.swap_remove(at);
+        self.name_ids.swap_remove(at);
         self.roles.swap_remove(at);
         self.positions.swap_remove(at);
         self.velocities.swap_remove(at);
@@ -225,10 +226,34 @@ impl TierRows {
     /// active one (nothing sweeps or rams it here), and no Jolt body; its id is its marker's, so a selection that names it
     /// still finds its row. The shell appends the names and RIDs beside them.
     pub fn append_to(&self, rows: &mut Rows) {
-        for i in 0..self.len() {
-            self.push_row(i, rows);
-        }
-        rows.tier_rows = self.len();
+        // Column by column (M5-T35): the same rows `push_row` gives, as block copies.
+        let n = self.len();
+        let total = rows.body_ids.len() + n;
+        rows.body_ids.extend_from_slice(&self.body_ids);
+        rows.ids.extend_from_slice(&self.marker_ids);
+        rows.faction_ix.extend_from_slice(&self.faction_ix);
+        rows.positions.extend_from_slice(&self.positions);
+        rows.velocities.extend_from_slice(&self.velocities);
+        rows.bases.extend_from_slice(&self.bases);
+        rows.angular.extend_from_slice(&self.angular);
+        rows.radii.extend_from_slice(&self.radii);
+        rows.kinds.extend_from_slice(&self.kinds);
+        rows.flags.extend(
+            self.hulk
+                .iter()
+                .map(|&hulk| FLAG_TIER | FLAG_HULL | if hulk { FLAG_HULK } else { 0 }),
+        );
+        rows.hull_ids.extend_from_slice(&self.hull_ids);
+        rows.handles.extend_from_slice(&self.handles);
+        rows.rigid.extend(self.hulk.iter().map(|&hulk| !hulk));
+        rows.is_static.resize(total, false);
+        rows.is_mine.resize(total, false);
+        rows.hull_fraction.extend_from_slice(&self.hull_fraction);
+        rows.target_ids.resize(total, -1);
+        rows.reach.extend_from_slice(&self.reach);
+        rows.name_ids.extend_from_slice(&self.name_ids);
+        rows.roles.extend_from_slice(&self.roles);
+        rows.tier_rows = n;
     }
 
     /// Pushes row `i` onto `rows` as `append_to` does.
@@ -254,7 +279,7 @@ impl TierRows {
             rows.hull_fraction.push(self.hull_fraction[i]);
             rows.target_ids.push(-1);
             rows.reach.push(self.reach[i]);
-            rows.name_keys.push(self.name_keys[i].clone());
+            rows.name_ids.push(self.name_ids[i]);
             rows.roles.push(self.roles[i]);
         }
     }

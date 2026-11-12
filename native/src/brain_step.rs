@@ -2,7 +2,7 @@
 // rows, run on the main thread or on the step's worker thread. Engine-free by construction (test_sim_core reads this
 // file): the job owns everything it touches (the brains, the hosted drivers' state, the rows' copy, the commands' copy)
 // and hands it all back when it is done, so nothing here can reach the engine or race the main thread.
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Mutex;
 use std::thread::ThreadId;
 use std::time::Instant;
@@ -12,7 +12,7 @@ use godot::builtin::Vector3;
 use crate::brain_behaviours::{self, Brain, Field, Inputs, Scratch};
 use crate::kernels::contact::{self, Grid, Query, Work as QueryWork};
 use crate::row_commands::{CMD_LEN, EVENT_ENTER, EVENT_FIRE, EVENT_SELECT, EVENT_SETTLE};
-use crate::row_commands::{CommandMap, RowCommand};
+use crate::row_commands::{CommandMap, IdMap, IdSet, RowCommand};
 use crate::rows::{Bolts, FLAG_HULK, FLAG_TIER, Rows};
 use crate::threads::{Pass, Runner};
 use crate::turret_kernels::{self, PickJob};
@@ -168,8 +168,8 @@ pub struct Work {
 pub struct Snapshot {
     pub rows: Rows,
     pub bolts: Bolts,
-    pub body_rows: HashMap<i64, u32>,
-    pub touched: HashSet<i64>,
+    pub body_rows: IdMap<u32>,
+    pub touched: IdSet,
     pub commands: CommandMap,
     pub rows_version: i64,
     /// The turrets' pick (M5-T21): the live mounts and the attacker memory as the launch found them, and the answers.

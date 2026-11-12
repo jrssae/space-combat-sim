@@ -44,13 +44,17 @@ type Cell = (i32, i32, i32);
 // The span of a level with no hull: no cell lies inside it.
 const EMPTY_LOW: Cell = (i32::MAX, i32::MAX, i32::MAX);
 const EMPTY_HIGH: Cell = (i32::MIN, i32::MIN, i32::MIN);
-type Cells = HashMap<Cell, Vec<u32>, BuildHasherDefault<CellHasher>>;
+// A cell's hulls are one of the grid's `lists`, by its place there.
+type Cells = HashMap<Cell, u32, BuildHasherDefault<CellHasher>>;
 
 /// Hulls placed in a grid of levels: per level its cells (each holding its hulls ascending), its hulls ascending and its
 /// largest reach; the hulls that fit no cell are loose.
 #[derive(Default)]
 pub struct CellGrid {
     cells: Vec<Cells>,
+    // The cells' hull lists, kept from one placing to the next (M5-T35): the first `lists_used` are held by a cell.
+    lists: Vec<Vec<u32>>,
+    lists_used: usize,
     members: Vec<Vec<u32>>,
     level_reach: Vec<f64>,
     loose: Vec<u32>,
@@ -76,6 +80,7 @@ impl CellGrid {
             self.cells[level].clear();
             self.members[level].clear();
         }
+        self.lists_used = 0;
         self.loose.clear();
         self.spans.clear();
         self.spans.resize(LEVELS, (EMPTY_LOW, EMPTY_HIGH));
@@ -125,7 +130,18 @@ impl CellGrid {
                 held.0[k] = held.0[k].min(f64::from(at) - reach);
                 held.1[k] = held.1[k].max(f64::from(at) + reach);
             }
-            self.cells[level].entry(cell).or_default().push(j as u32);
+            let next = self.lists_used;
+            let list = *self.cells[level].entry(cell).or_insert(next as u32) as usize;
+            if list == next {
+                // A cell's first hull: it takes the next list, emptied of what it held at the last placing.
+                if next == self.lists.len() {
+                    self.lists.push(Vec::new());
+                } else {
+                    self.lists[next].clear();
+                }
+                self.lists_used += 1;
+            }
+            self.lists[list].push(j as u32);
             self.members[level].push(j as u32);
             if reach > self.level_reach[level] {
                 self.level_reach[level] = reach;
@@ -227,8 +243,8 @@ impl CellGrid {
                             }
                         }
                         let key: &Cell = &(cx, cy, cz);
-                        if let Some(held) = cells.get(key) {
-                            candidates.extend_from_slice(held);
+                        if let Some(&list) = cells.get(key) {
+                            candidates.extend_from_slice(&self.lists[list as usize]);
                         }
                     }
                 }

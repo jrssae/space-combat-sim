@@ -20,7 +20,8 @@ pub const INSTANCE_FLOATS: usize = 12;
 /// muzzle). Returns how many expired.
 pub fn step(bolts: &mut Bolts, delta: f64, now_s: f64, tick: i64) -> usize {
     let owned = bolts.owned;
-    let mut keep: Vec<bool> = Vec::with_capacity(owned);
+    let mut keep = std::mem::take(&mut bolts.keep_scratch);
+    keep.clear();
     let mut expired = 0;
     for i in 0..owned {
         let alive = now_s < bolts.expires_at[i];
@@ -32,6 +33,7 @@ pub fn step(bolts: &mut Bolts, delta: f64, now_s: f64, tick: i64) -> usize {
     if expired > 0 {
         bolts.retain_owned(&keep);
     }
+    bolts.keep_scratch = keep;
     let dt = delta as f32;
     for i in 0..bolts.owned {
         if bolts.launched[i] >= tick {
@@ -48,11 +50,14 @@ pub fn step(bolts: &mut Bolts, delta: f64, now_s: f64, tick: i64) -> usize {
 /// Returns how many went.
 pub fn drop_spent(bolts: &mut Bolts) -> usize {
     let owned = bolts.owned;
-    let keep: Vec<bool> = (0..owned).map(|i| !bolts.spent[i]).collect();
+    let mut keep = std::mem::take(&mut bolts.keep_scratch);
+    keep.clear();
+    keep.extend(bolts.spent[..owned].iter().map(|&spent| !spent));
     let gone = keep.iter().filter(|&&k| !k).count();
     if gone > 0 {
         bolts.retain_owned(&keep);
     }
+    bolts.keep_scratch = keep;
     gone
 }
 

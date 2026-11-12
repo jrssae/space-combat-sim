@@ -1,5 +1,8 @@
 // The core's row tables (M4-T15, docs/architecture.md 17.13): plain data, the only thing the kernels import from the
 // crate. Nothing here can reach the engine: the columns are value types and the methods clear them.
+use std::collections::HashMap;
+use std::sync::Arc;
+
 use godot::builtin::{Basis, Vector3};
 
 /// Row flags: a rigid body in Jolt (the flight step's and the ram phase's), an active hull (`Damageable.is_active()`: the
@@ -22,7 +25,7 @@ pub const ROLE_CIVILIAN: u8 = 1;
 /// marker), the static rows, then any row added after the tick's first sync. Read by the kernels through `bind()`, from
 /// several threads at once (M4-T18): every column is plain data the threads may share; the display names, an engine
 /// string, live beside the rows in the core.
-#[derive(Default, Clone)]
+#[derive(Default)]
 pub struct Rows {
     pub body_ids: Vec<i64>,
     pub ids: Vec<i64>,
@@ -42,11 +45,14 @@ pub struct Rows {
     pub is_static: Vec<bool>,
     pub is_mine: Vec<bool>,
     // What the brains read of a contact (M4-T17): the hull 0..1 (-1 without a hull), the selection (`Contact.target_id`,
-    // -1 for none), the broadcast range, and the name lowered once for the brains' name matching.
+    // -1 for none), the broadcast range, and the lowered name as an id of `names` (M5-T35; 0 for no name) for the brains'
+    // name matching.
     pub hull_fraction: Vec<f64>,
     pub target_ids: Vec<i64>,
     pub reach: Vec<f64>,
-    pub name_keys: Vec<String>,
+    pub name_ids: Vec<u32>,
+    // The lowered names the ids stand for, shared with whoever filled the rows; `clear` keeps it.
+    pub names: Option<Arc<NameTable>>,
     // The row's role (M5-T16): fed when a body turns active or is touched, never gathered per tick; rows built without the
     // column (hand-made ones in tests) are combat rows (`role`).
     pub roles: Vec<u8>,
@@ -60,7 +66,7 @@ pub struct Rows {
 
 /// The bolts in flight, column by column: first the rows the core owns (M4-T35, stepped by `bolt_kernels`, in launch
 /// order), then the projectiles still read from nodes, in `projectiles` group order.
-#[derive(Default, Clone)]
+#[derive(Default)]
 pub struct Bolts {
     pub ids: Vec<i64>,
     pub positions: Vec<Vector3>,
@@ -86,6 +92,159 @@ pub struct Bolts {
     pub draw_slots: Vec<i32>,
     // Per look, which slots are taken; a look's slot count is its instance count.
     slots_used: Vec<Vec<bool>>,
+    // The step's keep flags, kept between ticks so a step allocates nothing.
+    pub(crate) keep_scratch: Vec<bool>,
+}
+
+/// Lowered display names as small ids (M5-T35), so a row carries a number instead of its own copy of the string and a
+/// name is matched by comparing numbers. Id 0 is the empty name, which no wanted name matches.
+#[derive(Default, Clone, Debug)]
+pub struct NameTable {
+    count: u32,
+    ids: HashMap<Arc<str>, u32>,
+}
+
+impl NameTable {
+    /// The id of `key`, or 0 when it is empty or no row was ever given it.
+    pub fn id_of(&self, key: &str) -> u32 {
+        if key.is_empty() || self.is_empty() {
+            return 0;
+        }
+        self.ids.get(key).copied().unwrap_or(0)
+    }
+
+    /// The id of `key`, given one on first sight (0 for the empty name).
+    pub fn intern(&mut self, key: &str) -> u32 {
+        if key.is_empty() {
+            return 0;
+        }
+        if let Some(&id) = self.ids.get(key) {
+            return id;
+        }
+        self.count += 1;
+        self.ids.insert(Arc::from(key), self.count);
+        self.count
+    }
+
+    /// How many names have an id.
+    pub fn len(&self) -> usize {
+        self.count as usize
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.count == 0
+    }
+}
+
+// Copies into the columns a copy already holds, so a job's snapshot reuses its memory tick after tick. The pattern names
+// every field: a new column that is not copied does not compile.
+impl Clone for Rows {
+    fn clone(&self) -> Self {
+        let mut out = Self::default();
+        out.clone_from(self);
+        out
+    }
+
+    fn clone_from(&mut self, source: &Self) {
+        let Rows {
+            body_ids,
+            ids,
+            faction_ix,
+            positions,
+            velocities,
+            bases,
+            angular,
+            radii,
+            kinds,
+            flags,
+            hull_ids,
+            handles,
+            rigid,
+            is_static,
+            is_mine,
+            hull_fraction,
+            target_ids,
+            reach,
+            name_ids,
+            names,
+            roles,
+            id_rows,
+            node_count,
+            tier_rows,
+        } = source;
+        self.body_ids.clone_from(body_ids);
+        self.ids.clone_from(ids);
+        self.faction_ix.clone_from(faction_ix);
+        self.positions.clone_from(positions);
+        self.velocities.clone_from(velocities);
+        self.bases.clone_from(bases);
+        self.angular.clone_from(angular);
+        self.radii.clone_from(radii);
+        self.kinds.clone_from(kinds);
+        self.flags.clone_from(flags);
+        self.hull_ids.clone_from(hull_ids);
+        self.handles.clone_from(handles);
+        self.rigid.clone_from(rigid);
+        self.is_static.clone_from(is_static);
+        self.is_mine.clone_from(is_mine);
+        self.hull_fraction.clone_from(hull_fraction);
+        self.target_ids.clone_from(target_ids);
+        self.reach.clone_from(reach);
+        self.name_ids.clone_from(name_ids);
+        self.names.clone_from(names);
+        self.roles.clone_from(roles);
+        self.id_rows.clone_from(id_rows);
+        self.node_count = *node_count;
+        self.tier_rows = *tier_rows;
+    }
+}
+
+impl Clone for Bolts {
+    fn clone(&self) -> Self {
+        let mut out = Self::default();
+        out.clone_from(self);
+        out
+    }
+
+    fn clone_from(&mut self, source: &Self) {
+        let Bolts {
+            ids,
+            positions,
+            velocities,
+            last_steps,
+            faction_ix,
+            shooters,
+            kinds,
+            radii,
+            damage,
+            colors,
+            looks,
+            expires_at,
+            launched,
+            spent,
+            owned,
+            draw_slots,
+            slots_used,
+            keep_scratch: _,
+        } = source;
+        self.ids.clone_from(ids);
+        self.positions.clone_from(positions);
+        self.velocities.clone_from(velocities);
+        self.last_steps.clone_from(last_steps);
+        self.faction_ix.clone_from(faction_ix);
+        self.shooters.clone_from(shooters);
+        self.kinds.clone_from(kinds);
+        self.radii.clone_from(radii);
+        self.damage.clone_from(damage);
+        self.colors.clone_from(colors);
+        self.looks.clone_from(looks);
+        self.expires_at.clone_from(expires_at);
+        self.launched.clone_from(launched);
+        self.spent.clone_from(spent);
+        self.owned = *owned;
+        self.draw_slots.clone_from(draw_slots);
+        self.slots_used.clone_from(slots_used);
+    }
 }
 
 /// A bolt row no multimesh draws (a node draws it, or nothing does).
@@ -111,7 +270,7 @@ impl Rows {
         self.hull_fraction.clear();
         self.target_ids.clear();
         self.reach.clear();
-        self.name_keys.clear();
+        self.name_ids.clear();
         self.roles.clear();
         self.id_rows.clear();
         self.node_count = 0;
@@ -124,6 +283,71 @@ impl Rows {
         self.id_rows
             .extend(self.ids.iter().enumerate().map(|(r, &id)| (id, r as u32)));
         self.id_rows.sort_unstable();
+    }
+
+    /// `index_ids` when the rows `first..first + sorted.len()` are a block whose `(id, place in the block)` pairs are
+    /// already sorted (`sorted`, the rocks and mines: the same every tick): only the other rows are sorted, then the two
+    /// lists are merged. `scratch` is the caller's, kept between ticks.
+    pub fn index_ids_around(&mut self, first: usize, sorted: &[(i64, u32)], scratch: &mut Vec<(i64, u32)>) {
+        let end = first + sorted.len();
+        if sorted.is_empty() || end > self.ids.len() {
+            self.index_ids();
+            return;
+        }
+        scratch.clear();
+        scratch.extend(
+            self.ids
+                .iter()
+                .enumerate()
+                .filter(|(r, _)| *r < first || *r >= end)
+                .map(|(r, &id)| (id, r as u32)),
+        );
+        scratch.sort_unstable();
+        self.id_rows.clear();
+        self.id_rows.reserve(self.ids.len());
+        let (mut a, mut b) = (0, 0);
+        while a < scratch.len() && b < sorted.len() {
+            let block = (sorted[b].0, sorted[b].1 + first as u32);
+            if scratch[a] < block {
+                self.id_rows.push(scratch[a]);
+                a += 1;
+            } else {
+                self.id_rows.push(block);
+                b += 1;
+            }
+        }
+        self.id_rows.extend_from_slice(&scratch[a..]);
+        self.id_rows
+            .extend(sorted[b..].iter().map(|&(id, at)| (id, at + first as u32)));
+    }
+
+    /// Appends every row of `block` (its columns only: the lookups and counts are the caller's to rebuild).
+    pub fn extend_from(&mut self, block: &Rows) {
+        self.body_ids.extend_from_slice(&block.body_ids);
+        self.ids.extend_from_slice(&block.ids);
+        self.faction_ix.extend_from_slice(&block.faction_ix);
+        self.positions.extend_from_slice(&block.positions);
+        self.velocities.extend_from_slice(&block.velocities);
+        self.bases.extend_from_slice(&block.bases);
+        self.angular.extend_from_slice(&block.angular);
+        self.radii.extend_from_slice(&block.radii);
+        self.kinds.extend_from_slice(&block.kinds);
+        self.flags.extend_from_slice(&block.flags);
+        self.hull_ids.extend_from_slice(&block.hull_ids);
+        self.handles.extend_from_slice(&block.handles);
+        self.rigid.extend_from_slice(&block.rigid);
+        self.is_static.extend_from_slice(&block.is_static);
+        self.is_mine.extend_from_slice(&block.is_mine);
+        self.hull_fraction.extend_from_slice(&block.hull_fraction);
+        self.target_ids.extend_from_slice(&block.target_ids);
+        self.reach.extend_from_slice(&block.reach);
+        self.name_ids.extend_from_slice(&block.name_ids);
+        self.roles.extend_from_slice(&block.roles);
+    }
+
+    /// The id of the lowered name `key` in these rows' table (0: empty, or no row was ever given it).
+    pub fn name_id(&self, key: &str) -> u32 {
+        self.names.as_ref().map_or(0, |table| table.id_of(key))
     }
 
     /// Row `r`'s role (`ROLE_COMBAT` for a row without one).
@@ -163,6 +387,7 @@ impl Bolts {
         self.spent.clear();
         self.draw_slots.clear();
         self.slots_used.clear();
+        self.keep_scratch.clear();
         self.owned = 0;
     }
 
@@ -308,3 +533,6 @@ fn compact<T: Copy>(column: &mut Vec<T>, owned: usize, keep: &[bool]) {
     }
     column.truncate(w);
 }
+
+#[cfg(test)]
+mod tests;
