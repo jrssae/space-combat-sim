@@ -187,6 +187,7 @@ making its own branch):
 | T11 | D | Maintenance bots: the generator and their loops | T06, Q11 | Sonnet | A small asset and a simple mover | not started |
 | T12 | D | Tour points and a station sandbox scenario (the base of M8's exterior tour) | T05, T08 | Sonnet | Data and `CINEMATIC` shots on existing seams | not started |
 | T13 | B | Performance and the GPU check: the station in view at every range, three squadrons, the grid and a raid | T07, T10 | Opus | Measurement on the maintainer's machine; the budget call | not started |
+| T15 | A | Starfury and raider surfaces from show references, with low and high texture sets for the texture detail setting (maintainer, 2026-11-12; numbered last because it was added after the others had numbers) | M5-T40 | Fable | Two hero hulls seen up close; the look is (H) and needs a sheet first | not started |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M7-T01 Station references and measurements
@@ -296,6 +297,25 @@ making its own branch):
   `state render`); the tick with three squadrons, the grid and a raid of 12; fixes for what does not fit, or a report to the
   maintainer with options.
 - **Done when:** AC10's numbers in the Done notes.
+
+### M7-T15 Starfury and raider surfaces from show references (texture detail low and high)
+
+- **Why (maintainer, 2026-11-12):** M5-T40 gave the nine civilian hulls show-like surfaces in two sets, chosen by the ship
+  texture detail setting (low: major seams only; high: plating in mixed-size rectangles with per-plate tone and sheen, joint
+  grime, recessed hatches and ribs). The setting is meant for every ship, but the Starfury, the allies' Starfuries and the
+  raider still carry one set and ignore it.
+- **Agent:** Fable. **Depends on:** M5-T40 (the surface layout code in `tools/procgen/core/seams.py`, `parts/layouts.py`, the
+  setting and the generic loader: a hull with both sets picks by the setting).
+- **References** (gitignored, inspiration only, never traced or reused): `references/T40 seam references/` holds the
+  maintainer's Starfury close-ups (`ea starfury top close up`, `ea starfury bottom close up`, `ea starfury close up`, the two
+  paint schemes) and the raider ones (`raider close up`, `raider and wagon close up`, `raider carrier` and `raider battle
+  wagon` close-ups for the raiders' construction).
+- **What:** per hull, a written read of its surface off the references; layouts per part for low and high; an A/B/C option
+  sheet on the GPU for the maintainer before the generator commits (their standing rule); the Starfury's liveries (M4-T30's
+  wing liveries) and the raider's paint unchanged unless the maintainer says otherwise. Tests pin the layouts as T40's do
+  (feature counts and positions, mirror symmetry, minimum plate size, determinism).
+- **Done when:** both hulls have low and high sets that the setting switches, the maintainer approved the sheets (H), tests
+  pass, and `docs/roadmap.md`'s T40 follow-up is marked done for these two hulls.
 
 ### M7-T14 Integration, full suite, docs and acceptance
 
