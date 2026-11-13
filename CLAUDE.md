@@ -109,6 +109,13 @@ been planned were taken for done.
   STL's section by IoU >= 0.90. Whole-asset silhouettes cannot see a part's shape (M7-T21: a pentagonal arm built as a slab,
   a roofed bay built open, both at 0.965 overall). Measurement tasks record section profiles, not just extents, and look sheets
   for close-up places show the STL's sections beside the build.
+- Verify against the committed code, not the shared working copy (maintainer, 2026-11-13): several agents share one checkout, so
+  the working copy holds other agents' uncommitted files, and tests run there can pass while CI, which builds from the
+  committed code, fails (M7-T06 went red this way). Before every commit, run your touched Python and GUT files (and any
+  assets they need, built from the generators) against **HEAD plus your staged changes only**: `scripts/scratch_project.sh
+  <name> --staged` makes that copy (real files from the index, its own `.godot/` and `assets/generated/`, the native library),
+  then build, `--import` and test there with `--path reports/scratch/<name>`; until `--staged` exists, use `git checkout-index -a
+  --prefix=reports/scratch/<name>/` and build there. Report the counts from that copy, and `--clean` it after.
 - Screenshots: every screenshot or captured frame an agent takes, for any request, goes under `references/screenshots/`
   (gitignored) in a subfolder named for the request, e.g. `references/screenshots/T13 Saturn 4 current replacement/`.
   Never `/tmp` or `reports/`, and never commit them. In a worktree, use the main checkout's `references/` so the
