@@ -252,6 +252,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T15 | A | Starfury and raider surfaces from show references, with low and high texture sets for the texture detail setting (maintainer, 2026-11-12; numbered last because it was added after the others had numbers) | M5-T40 | Fable | Two hero hulls seen up close; the look is (H) and needs a sheet first | done |
 | T16 | A | Raider fighter rebuilt to its STL at 90% fidelity, the wing's leading-edge panels first (maintainer, 2026-11-13) | T15 | Opus | The raider was built without an STL; the maintainer finds its shape too far from the reference | in progress |
 | T17 | A | The Starfury looks metallic, not plastic: metallic, roughness and normal maps on both texture sets (maintainer, 2026-11-13; the raider's share is in T16, the station's in T04) | T15 | Opus | Material appearance on the hero hull; the look is (H) and needs a sheet first | in progress |
+| T18 | A | Station exterior lighting from the maintainer's references: dashed ring lights, nav and beacon lights, lit windows and markings, the aperture and bay glow (maintainer, 2026-11-13) | T05, T06 | Opus | Emissive patterns, blinking beacons and the 8 light slots on an 8 km hull; the look is (H) | not started |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M7-T01 Station references and measurements
@@ -490,6 +491,29 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   (higher metallic, lower roughness), rougher grime and wear; a normal map from T15's option-A panel layout. Liveries and colours
   unchanged. A before and after GPU sheet with a sunlit grazing view, shown to the maintainer before the generator commits.
 - **Done when:** the maintainer approves the sheet (H); tests pin the material values; both sets switch as before.
+
+### M7-T18 Station exterior lighting
+
+- **Why (maintainer, 2026-11-13):** "add a milestone task for exterior lighting", with three references. It fills out Q10 (running
+  lights, beacons, lit windows, bay lights, windows on the night side) beyond the first-pass emissive windows of T04.
+- **References** (gitignored, inspiration only, never traced or committed): `references/station lighting references/`
+  - `station bow lights show capture.jpg` (show CG, bow three-quarter): the docking aperture's cross door lit red at its centre;
+    short white light dashes in a ring round the docking sphere's rim and along the bands; the hull mostly dark under a rim light.
+  - `station side lights fan render kosonen 2023.jpg` (a fan render, Kari Kosonen 2023; its look only, nothing copied): white
+    dashed ring lights round every band edge and the sphere's rims; red beacons at the top and bottom tip of every vane and at
+    the bow spike's tip; small lit windows in rows on the drum; the red cargo modules glowing; yellow "5" markings lit on the drum,
+    the spine and the bow.
+  - `cobra arms nav lights show capture.png` (show capture, the Cobra arms at the docking sphere): a ring of pink-red navigation
+    lights round the band's edge next to the arms; white dash lights along the arms; the arms' faces lit warm from their bays.
+- **What:** the station's emissive layer (dashed ring strips, window rows, markings, the aperture's red centre, the bay glow) in
+  its maps with the hardpoints T05 gives the lights; blinking beacons (vane tips, the bow spike's tip) and running lights as cheap
+  shader or emissive animation driven by sim time, not one light node each; a few real lights where a fighter flies close
+  (the bays, the aperture) through `LightPicker`'s 8 slots (D74), so the station never starves the fight's muzzle flashes; the
+  lights on the drum turn with it; the night side under the planet's shadow (M6) still shows its windows and lights; readable as
+  a point of light pattern from 10 km and as a dot from 1 000 km (M6's far representations).
+- **Done when:** an A/B lighting sheet against the references on the GPU (from a bay, 1 km, 10 km, the night side) approved by the
+  maintainer (H); `state render` numbers (fps, draw calls, light slots used) recorded; tests for the light hardpoints, the blink
+  timing from sim time and the slot budget.
 
 ### M7-T14 Integration, full suite, docs and acceptance
 
