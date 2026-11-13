@@ -4,8 +4,8 @@
 
 **Status:** **planned, not started.** Branch `m12` was cut from `m7` at `b002bbe` (M7's planning commit) on 2026-11-13 so
 this plan could be written while M7 is in progress; M8 to M11 are not planned yet. The maintainer answered the scope
-questions Q1 to Q9 on 2026-11-13 (table below); Q10 to Q24 carry the planner's proposed answers until the maintainer
-answers them. Before T01 starts, `m12` is rebased onto or re-cut from `main` after M11 merges (the maintainer decides),
+questions Q1 to Q9 and the design questions Q10 to Q24 on 2026-11-13 (table below); Q14 and Q16 are settled in T03,
+Q6's and Q13's rules in T04. Before T01 starts, `m12` is rebased onto or re-cut from `main` after M11 merges (the maintainer decides),
 and every task checks M7 to M11 as built before relying on them. Decisions are labelled D12.1, D12.2, ... until M8 to M11
 have taken their D numbers; they are renumbered when M12 starts, and the design goes into a new section of
 `docs/architecture.md` after M11's. **M12 is not the current milestone** (M7 is, on `m7`): an agent looking for the next task
@@ -32,7 +32,7 @@ blast with distance falloff. The factions (Earth Alliance, Earthforce renegades,
 Brakiri, Vree, the Interstellar Alliance, Shadows, Vorlons, Drakh) are data, each with its own style, fighters and
 weapons, and the Shadows and Vorlons bring the show's mechanics. M4's benchmark stand-ins go, replaced by the real ships.
 
-## Planning questions (asked 2026-11-13)
+## Planning questions (asked and answered 2026-11-13)
 
 | Q | Question | Proposed answer (planner's default, until the maintainer answers) | Answer |
 |---|---|---|---|
@@ -45,21 +45,21 @@ weapons, and the Shadows and Vorlons bring the show's mechanics. M4's benchmark 
 | Q7 | The raider control ship (in the roadmap; no reference in `references/`) | Dropped from M12 | Maintainer, 2026-11-13: the proposed answer. It returns only if references are added |
 | Q8 | Earthforce renegades | A `renegades` faction flying the same EA hulls and Starfuries with their own marking, hostile to Earth Alliance, set per scenario | Maintainer, 2026-11-13: the proposed answer |
 | Q9 | (maintainer's note, 2026-11-13) Capital weapons | - | **Most capital ships carry beam weapons; some, mostly Earth Alliance ships, also carry interceptors.** T03 gives every hull its beams and interceptors on that rule |
-| Q10 | How close must each hull hold to its reference? | The 90 % rule of M5's civilians and M7's station for every hull with an STL: top, side and front silhouette IoU at least 0.90 and length, width and height within 10 % (`tools/refview/compare.py`). The Battle Wagon has no STL: its proportions come from the three-view sheet (`raider battle wagon.png`) and its check is (H) on a look sheet beside that sheet. The Vorlon destroyer's STL lacks its petals: they are built from show images and left out of the compare | open |
-| Q11 | Colours and textures | From show images of each ship, or of its faction's other ships where it has none (the standing rule), one style per faction; every hull and fighter gets the low and high texture sets of the texture detail setting (M5-T40, `docs/roadmap.md`'s follow-up) | open |
-| Q12 | The relations between factions | A base table in `data/factions.json`: every faction hostile to the raiders; renegades hostile to Earth Alliance; Shadows and Drakh hostile to everyone but each other; Vorlons hostile to Shadows and Drakh; the rest neutral to each other. Scenarios override it, as today | open |
-| Q13 | Minbari stealth | Minbari warships are hard to lock for factions without their technology, as T04 settles the Shadows' jamming (short lock range, no missile lock, worse AI aim beyond it) | open |
-| Q14 | Each faction's weapons and the balance | Settled in T03 with the maintainer from the show and T01's notes: each faction's weapon kinds (beams per Q9, cannons, missiles, interceptors per Q9, mines), their numbers, and the fights each hull must win or lose (as M5's Q31 set the Saturns') | open (T03) |
-| Q15 | How capital ships fly | Newtonian like the fighters, through the native flight step with a capital-scale `ShipSpec` (thrust from the engine hardpoints, slow turns, no damping); the player does not fly them | open |
-| Q16 | How capital ships fight | A native brain profile `capital`: hold the range of its main weapons, turn to bring its beams and broadsides to bear, screen with interceptors, launch its fighters, withdraw through its own jump point when crippled; T03 sets the numbers | open |
-| Q17 | Subsystems the player can target | Turrets, beam emitters, engines, launch bays, the bridge and the reactor, as a second level of the radial target menu (M5's idea 6, §18.19), shown on the target box | open |
-| Q18 | Blast sizes | Energy and radius from the class and what is aboard (reactor, magazines, fuel), not a fixed number: a fighter's death can hurt a wingman within about 100 m, a capital's reactor can kill fighters and damage capitals within a few km; T03 sets the numbers | open |
-| Q19 | Disabled hulks | Kept for the mission as drifting rows (the tier carries them, §17.14), still targetable and still able to explode if a reactor or magazine section is hit; a cap on how many stay, the oldest scuttled past it; boarding and salvage are later (M14) | open |
-| Q20 | Mines | Each faction lays its own minefields, placed by scenario and mission data around capitals and chokepoints (stations when they come, Q3); a mine ignores its own faction and its friends, triggers by proximity, and its blast goes through D12.6's falloff; mines show on the radar only within a short range | open |
-| Q21 | The benchmark | The stand-ins go: the bench's capital mix draws real classes from several factions (cruiser, destroyer and carrier sizes), with their real turrets, beams, interceptors, missiles and mines; M4's bars are measured again with them | open |
-| Q22 | Who opens jump points | Every capital warship (M6-T23's rule), not the fighters; a point is sized for its opener; hulls wider than the gate's mouth (2 400 by 1 510 m) use their own points; the Shadows' and Vorlons' arrivals follow T04 | open |
-| Q23 | Where the fleets are seen | A fleet sandbox scenario (sides and hulls from data), capital ships in free-flight encounters (raider carriers launching Delta-Vs, patrols by data), minefields by data; no story missions (M14) | open |
-| Q24 | Sound | Generated sounds for each beam kind, interceptor fire, a capital's engines close by, the break-up and a reactor's blast, from the written references as M5's sound pass did | open |
+| Q10 | How close must each hull hold to its reference? | The 90 % rule of M5's civilians and M7's station for every hull with an STL: top, side and front silhouette IoU at least 0.90 and length, width and height within 10 % (`tools/refview/compare.py`). The Battle Wagon has no STL: its proportions come from the three-view sheet (`raider battle wagon.png`) and its check is (H) on a look sheet beside that sheet. The Vorlon destroyer's STL lacks its petals: they are built from show images and left out of the compare | Maintainer, 2026-11-13: the proposed answer |
+| Q11 | Colours and textures | From show images of each ship, or of its faction's other ships where it has none (the standing rule), one style per faction; every hull and fighter gets the low and high texture sets of the texture detail setting (M5-T40, `docs/roadmap.md`'s follow-up) | Maintainer, 2026-11-13: the proposed answer |
+| Q12 | The relations between factions | A base table in `data/factions.json`: every faction hostile to the raiders; renegades hostile to Earth Alliance; Shadows and Drakh hostile to everyone but each other; Vorlons hostile to Shadows and Drakh; the rest neutral to each other. Scenarios override it, as today | Maintainer, 2026-11-13: the proposed answer |
+| Q13 | Minbari stealth | Minbari warships are hard to lock for factions without their technology, as T04 settles the Shadows' jamming (short lock range, no missile lock, worse AI aim beyond it) | Maintainer, 2026-11-13: **yes, but milder than the Shadows' jamming** (for example only a shorter lock range); T04 sets the rule beside the Shadows' |
+| Q14 | Each faction's weapons and the balance | Settled in T03 with the maintainer from the show and T01's notes: each faction's weapon kinds (beams per Q9, cannons, missiles, interceptors per Q9, mines), their numbers, and the fights each hull must win or lose (as M5's Q31 set the Saturns') | Maintainer, 2026-11-13: settled in T03, after T01 has gathered the show's weapons |
+| Q15 | How capital ships fly | Newtonian like the fighters, through the native flight step with a capital-scale `ShipSpec` (thrust from the engine hardpoints, slow turns, no damping); the player does not fly them | Maintainer, 2026-11-13: Newtonian as proposed, and **the player can fly a capital ship** (in the sandbox and from the console). At the helm the player steers; AI gunners fire every weapon, and the player gives them **firing orders from a radial menu** (for example hold fire, fire at will, target weapons only). T49 |
+| Q16 | How capital ships fight | A native brain profile `capital`: hold the range of its main weapons, turn to bring its beams and broadsides to bear, screen with interceptors, launch its fighters, withdraw through its own jump point when crippled; T03 sets the numbers | Maintainer, 2026-11-13: **settled in T03** as a whole (not only its numbers) |
+| Q17 | Subsystems the player can target | Turrets, beam emitters, engines, launch bays, the bridge and the reactor, as a second level of the radial target menu (M5's idea 6, §18.19), shown on the target box | Maintainer, 2026-11-13: the proposed answer |
+| Q18 | Blast sizes | Energy and radius from the class and what is aboard (reactor, magazines, fuel), not a fixed number: a fighter's death can hurt a wingman within about 100 m, a capital's reactor can kill fighters and damage capitals within a few km; T03 sets the numbers | Maintainer, 2026-11-13: the proposed answer; T03 sets the numbers |
+| Q19 | Disabled hulks | Kept for the mission as drifting rows (the tier carries them, §17.14), still targetable and still able to explode if a reactor or magazine section is hit; a cap on how many stay, the oldest scuttled past it; boarding and salvage are later (M14) | Maintainer, 2026-11-13: the proposed answer |
+| Q20 | Mines | Each faction lays its own minefields, placed by scenario and mission data around capitals and chokepoints (stations when they come, Q3); a mine ignores its own faction and its friends, triggers by proximity, and its blast goes through D12.6's falloff; mines show on the radar only within a short range | Maintainer, 2026-11-13: the proposed answer, and **ships lay mines in battle too** (for example the Narn); T03 says which hulls carry mine layers |
+| Q21 | The benchmark | The stand-ins go: the bench's capital mix draws real classes from several factions (cruiser, destroyer and carrier sizes), with their real turrets, beams, interceptors, missiles and mines; M4's bars are measured again with them | Maintainer, 2026-11-13: the proposed answer |
+| Q22 | Who opens jump points | Every capital warship (M6-T23's rule), not the fighters; a point is sized for its opener; hulls wider than the gate's mouth (2 400 by 1 510 m) use their own points; the Shadows' and Vorlons' arrivals follow T04 | Maintainer, 2026-11-13: **only some classes**: the larger ones (destroyers, carriers, dreadnoughts); smaller cruisers use a gate or another ship's point. T01 and T03 pick the list |
+| Q23 | Where the fleets are seen | A fleet sandbox scenario (sides and hulls from data), capital ships in free-flight encounters (raider carriers launching Delta-Vs, patrols by data), minefields by data; no story missions (M14) | Maintainer, 2026-11-13: the proposed answer |
+| Q24 | Sound | Generated sounds for each beam kind, interceptor fire, a capital's engines close by, the break-up and a reactor's blast, from the written references as M5's sound pass did | Maintainer, 2026-11-13: the proposed answer, **plus the ancients' voices**: the Shadows' scream and the Vorlon ships' tones, synthesised |
 
 ## The hulls
 
@@ -132,12 +132,13 @@ In:
   subsystems; the HUD's sub-targets.
 - **Every hull and fighter** in the tables above, each with its spec, loadout and both texture sets.
 - **The Shadows', Vorlons' and Minbari's mechanics** as T04 settles them.
-- Sounds (Q24), the fleet sandbox and encounters (Q23), the bench on real ships (Q21), the GPU check, console commands
+- **The player at a capital's helm** (Q15): steering, the camera, and firing orders to the AI gunners from a radial menu.
+- Sounds (Q24, with the ancients' voices), the fleet sandbox and encounters (Q23), the bench on real ships (Q21), the GPU check, console commands
   and providers (§6.4), `SettingsSchema` entries for new settings, `info.md` kept current.
 
 Out (explicitly):
 - Stations and big civilian hulls (Q3, Q5), the raider control ship (Q7), the Thunderbolt (M13).
-- Flying a capital ship as the player; commanding fleets.
+- Commanding fleets (orders to other ships than the one the player flies).
 - Docking, recovering fighters into a bay, boarding and salvage of hulks (M14 or later).
 - Story missions with the fleets (M14); voiced lines (M15).
 
@@ -185,6 +186,7 @@ Out (explicitly):
   re-applied every tick; compound collision from the manifest; rotating sections as `AnimatableBody3D` (the Omega's drum).
 - Hit volumes per section in the native core, so the hit sweep, the rams and the turrets' line of fire (Q33) see the real
   shape; `Targetable` kind `CAPITAL`, broadcast range by class; the low-attention tier carries capitals and hulks as rows.
+- Jump capability per class (Q22): the larger classes open points, the list from T01 and T03.
 - `CapitalStandin` and its box hulls (`capital_hulls`) are removed once the bench draws real hulls (T45).
 
 ### D12.5 Sections and subsystems
@@ -228,13 +230,14 @@ Out (explicitly):
 - **Interceptors** (mostly EA, Q9): a native kernel that shoots down incoming bolts and missiles near its ship at a rate,
   replacing M4's stand-in.
 - **Turrets** on M5's native turret rows (§18.10) with new capital kinds; **missiles** on M4-T20's native guidance path;
-  **mines** as native rows (§17.16) with D12.6's blast and Q20's placement.
+  **mines** as native rows (§17.16) with D12.6's blast, placed by data (Q20) and laid in battle by the hulls T03 gives
+  mine layers.
 - Each weapon is a `WeaponSpec` in `assets/weapons/`; every kind's per-tick work is in the native core, threads identical,
   parity recordings green. M4's turret, beam, missile and mine stand-ins and their counters (L11) are removed in T45.
 
 ### D12.10 Capital AI and carriers
 
-- The `capital` brain profile (Q16) runs in the native AI job one tick behind like every brain; its commands are applied at
+- The `capital` brain profile (Q16, its behaviour settled in T03) runs in the native AI job one tick behind like every brain; its commands are applied at
   the join against the pilot's stamp.
 - Fighters gain attack runs on capitals and their subsystems, and keep out of beam arcs.
 - Carriers launch their faction's fighters from their bays and tubes (D12.1's hardpoints) through the ship pool, replacing
@@ -245,9 +248,20 @@ Out (explicitly):
 - **To be settled with the maintainer in T04** and written here (Q6: the full show mechanics). The list T04 starts from:
   Shadow phasing in and out, Shadow jamming (hard to lock for younger races), the slicer beam, the Shadows' and Vorlons'
   self-repair, the Vorlon lightning beam, how Shadow and Vorlon fighters fight, the ancients' arrivals, the Drakh's
-  Shadow-derived technology, Minbari stealth (Q13), and the show's counters to them.
+  Shadow-derived technology, Minbari stealth (Q13: milder than the Shadows' jamming), and the show's counters to them.
 - Fixed by the architecture whatever T04 decides: per-tick work in the native core, threads identical, gameplay through
   `FlightCommand` and `CombatCommand`, no wall clock.
+
+### D12.12 The player at a capital's helm
+
+- A sandbox and console option puts the player in command of a capital ship (Q15). `InputAdapter` writes its
+  `FlightCommand` as for a fighter; the capital's spec limits the response. A camera for a 1 to 3 km hull (chase distance and
+  view from its size).
+- AI gunners fire every weapon. The player gives them **firing orders** from a radial menu on M5's radial framework
+  (`UiCommand`, never `Input`): hold fire, fire at will, target weapons only and the others T03 adds (for example return fire
+  only, focus my target, engines only, point defence only). The orders are data the gunners read at the join, so the AI's
+  capitals can use the same orders.
+- Gameplay never reads `Input`; the tutorial's actions are unchanged.
 
 ## Acceptance criteria
 
@@ -265,14 +279,15 @@ Out (explicitly):
 | AC10 | AI: capitals fight by their profile, carriers launch their fighters, fighters attack capitals and subsystems; T03's balance fights hold in seeded headless runs | A | |
 | AC11 | The special mechanics work as D12.11 says (tests per mechanic) | A | |
 | AC12 | HUD: a capital's subsystems in the target menu's second level and on the target box (M5's menu tests pass) | A | |
-| AC13 | Cost: the bench on real hulls (Q21) with M4's bars measured again; on the maintainer's GPU a fleet action of capitals of several factions in view: `renderer = forward_plus`, FPS, draw calls and VRAM recorded | A | |
-| AC14 | Docs and the suite: the architecture section as built, `docs/assets-capital.md`, a `docs/playtest.md` M12 section, the roadmap row, `info.md`; `scripts/run_tests.sh` green once, at the end | A | |
-| AC15 | (H) The maintainer flies it: each hull's look near and far, the beams and interceptors, a capital's break-up and blast, disabled hulks, the ancients' mechanics, the fleet sandbox | H | |
+| AC13 | Helm: the player flies a capital from the sandbox and the console; the firing orders reach the gunners and change what they fire at (tests per order); gameplay reads no `Input` | A | |
+| AC14 | Cost: the bench on real hulls (Q21) with M4's bars measured again; on the maintainer's GPU a fleet action of capitals of several factions in view: `renderer = forward_plus`, FPS, draw calls and VRAM recorded | A | |
+| AC15 | Docs and the suite: the architecture section as built, `docs/assets-capital.md`, a `docs/playtest.md` M12 section, the roadmap row, `info.md`; `scripts/run_tests.sh` green once, at the end | A | |
+| AC16 | (H) The maintainer flies it: each hull's look near and far, the beams and interceptors, a capital's break-up and blast, disabled hulks, the ancients' mechanics, a capital at the helm and its firing orders, the fleet sandbox | H | |
 
 ## Working rules for M12
 
 - **Tracks.** A (references and the asset framework: T01, T05, T06), B (design with the maintainer: T03, T04), C (damage:
-  T08 to T11), D (weapons: T12 to T15), E (capitals in the game and AI: T07, T16 to T18), F (hulls and fighters: T19 to
+  T08 to T11), D (weapons: T12 to T15), E (capitals in the game, AI and the helm: T07, T16 to T18, T49), F (hulls and fighters: T19 to
   T42), G (factions, mechanics, sound, bench, scenarios: T02, T43 to T46), with T47 and T48 last. Inside a track the order
   holds. The hulls can run in parallel once T05 (and T06 for the organic ones) and T07 are done, if the maintainer says
   where they run.
@@ -311,6 +326,7 @@ Out (explicitly):
 | T16 | E | The `capital` brain and fighters' attacks on capitals | T12, T14 | Opus | Native AI for a new kind of ship | not started |
 | T17 | E | Carriers launch fighters from bays and tubes | T07, T16 | Opus | Pool launches at hardpoints, replacing the stand-in | not started |
 | T18 | E | HUD and targeting: subsystems in the target menu's second level and on the target box | T08 | Sonnet | UI on the radial framework | not started |
+| T49 | E | The player at a capital's helm: controls, camera, firing orders from a radial menu (Q15; numbered last because it was added after the others had numbers) | T16, T18, T19 | Opus | Player input on a new kind of ship; orders the native gunners read | not started |
 | T19 | F | Raider strike carrier | T05, T07, T03 | Fable | First hull: proves the framework end to end | not started |
 | T20 | F | Raider Battle Wagon (from images) | T19 | Fable | No STL; four launch tubes | not started |
 | T21 | F | EA Omega-class destroyer | T19 | Fable | Rotating section, carrier, interceptors | not started |
@@ -336,7 +352,7 @@ Out (explicitly):
 | T41 | F | Shadow fighter and Shadow scout | T38, T06 | Fable | Organic fighters | not started |
 | T42 | F | Vorlon light fighter | T38, T06 | Fable | Organic fighter with open petals | not started |
 | T43 | G | The Shadow, Vorlon and Minbari mechanics in the game, as T04 settled them | T04, T35, T36, T28 | Opus | Native mechanics with parity | not started |
-| T44 | G | Sounds: beams, interceptors, capital engines, break-up and reactor blasts | T12, T13, T11 | Sonnet | Generated SFX on M5's sound pass | not started |
+| T44 | G | Sounds: beams, interceptors, capital engines, break-up and reactor blasts, the Shadows' scream and the Vorlon tones | T12, T13, T11 | Sonnet | Generated SFX on M5's sound pass | not started |
 | T45 | G | The bench on real hulls: the stand-ins and their counters removed (L11), M4's bars measured again | T14, T15, T17, the hulls | Opus | Replace placeholders without losing the measurements | not started |
 | T46 | G | The fleet sandbox, capital encounters and minefields by data | T17, T15, the hulls | Sonnet | Data and scenarios on existing seams | not started |
 | T47 | - | Performance and the GPU check: a fleet action in view, the tick budget | T45, T46 | Opus | Measurement on the maintainer's machine | not started |
@@ -371,7 +387,8 @@ Out (explicitly):
   capitals, interceptors on some, mostly EA); what M5's turret rows, M4's stand-ins and the hit sweep do today; the fights
   M4's bench holds.
 - **Settled in the discussion:** each faction's weapon kinds and each hull's loadout; ranges, rates, damage, arcs, beam
-  durations, interceptor rates; blast sizes by class and cargo; the `capital` brain's ranges and choices; the balance fights
+  durations, interceptor rates; blast sizes by class and cargo; the `capital` brain's whole behaviour (Q16); which hulls lay mines (Q20) and which
+  classes open jump points (Q22); the helm's firing orders (Q15); the balance fights
   (capital against capital, a squadron against a capital, the raider carriers against EA escorts) and their bars.
 - **Files:** D12.9 and D12.10 and the balance fights in this file; the loadouts as data for the hull tasks.
 - **Done when:** the maintainer approves the written concept.
@@ -426,8 +443,8 @@ Out (explicitly):
 - **T13 Interceptors**: the native kernel against bolts and missiles, the EA hulls' screens per T03; tests.
 - **T14 Capital turrets and missiles**: the capital turret kinds on §18.10's rows, missiles on the native guidance path,
   per T03; tests.
-- **T15 Mines and minefields** (Q20): mine rows per faction, scenario placement, the falloff blast, the radar's range;
-  tests.
+- **T15 Mines and minefields** (Q20): mine rows per faction, scenario placement, mines laid in battle by the hulls
+  T03 names, the falloff blast, the radar's range; tests.
 - **Done when:** AC9 apart from the stand-ins' removal (T45).
 
 ### M12-T16 to T18 AI, carriers and the HUD
@@ -437,6 +454,14 @@ Out (explicitly):
 - **T17 Carriers launch fighters** from bays and tubes through the pool, by faction; tests on the launch poses and rates.
 - **T18 Subsystems in the target menu and the target box** (Q17); the M5 menu tests pass.
 - **Done when:** AC10 and AC12.
+
+### M12-T49 The player at a capital's helm
+
+- **Goal:** AC13 (D12.12, Q15).
+- **Files:** the sandbox and console option to take a capital's helm, `InputAdapter`'s capital path (the same actions), the
+  capital camera, the firing-orders radial menu on M5's framework, the orders as data the native gunners read at the join,
+  `info.md`, tests (each order changes what the gunners fire at; the helm reads no `Input` outside `InputAdapter`).
+- **Done when:** AC13; the maintainer has flown a capital (H).
 
 ### M12-T19 to T37 Capital hulls (one task each)
 
@@ -465,12 +490,12 @@ Out (explicitly):
 
 ### M12-T44 Sounds
 
-- **Goal:** Q24 on M5's sound pass (generated, from written references; no ripped audio).
+- **Goal:** Q24 (with the Shadows' scream and the Vorlon ships' tones) on M5's sound pass (generated, from written references; no ripped audio).
 - **Done when:** each kind sounds in a headless check that its stream exists and plays, and the maintainer has heard them (H).
 
 ### M12-T45 The bench on real hulls
 
-- **Goal:** AC9's removal half and AC13's bench half (Q21).
+- **Goal:** AC9's removal half and AC14's bench half (Q21).
 - **Files:** `src/perf/battle_mix.gd` and `bench_layout.gd` drawing real classes, `src/perf/standins/` removed (capitals,
   turrets, beams, missiles, mines; L11's counters from the rows), `capital_hulls` removed, the bench tests updated; M4's bars
   measured again, numbers in the Done notes.
@@ -485,12 +510,12 @@ Out (explicitly):
 
 ### M12-T47 Performance and the GPU check
 
-- **Goal:** AC13's GPU half: a fleet action of several factions in view at the maintainer's GPU (FPS, draw calls, VRAM,
+- **Goal:** AC14's GPU half: a fleet action of several factions in view at the maintainer's GPU (FPS, draw calls, VRAM,
   `state render`), the tick inside the 60 Hz budget; fixes for what does not fit, or a report to the maintainer with options.
 
 ### M12-T48 Integration, full suite, docs and acceptance
 
-- **Goal:** AC14 and the (H) checklist for AC15.
+- **Goal:** AC15 and the (H) checklist for AC16.
 - **Steps:** the architecture section as built; `docs/assets-capital.md` as built; the M12 section of `docs/playtest.md`;
   the roadmap row; `scripts/run_tests.sh` once, read from the suite's own totals; the GPU check; then ask the maintainer to
   confirm the milestone, and once confirmed merge `m12` into `main`.
