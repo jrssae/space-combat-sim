@@ -819,6 +819,18 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   in two waves of six; the hangar is Alpha's, the top arm; each fighter's wave, 1 or 2, in its data), the camera's rail and moves re-checked, the light budget (one work lamp per bay), the sheet refreshed for the
   maintainer (H), tests updated, commit.
 - **Done when:** the sheet approved, the tests green, committed.
+- **Done (sheet approved by the maintainer 2026-11-13):** `b5_interior` reads the arm from `hardpoints.cobra_arm` (T05's six doors,
+  T21's halls; nothing hard-coded): the upper hall over the doors (40 by 17.5 m) under the lower hall (80 m wide, to 30 m), six
+  launch positions at the 23 m pitch. Twelve Starfuries in Alpha's livery: wave 1 on the racks over the doors, held by clamp arms
+  off the upper walls gripping their pods from outboard (the rack's middle open, as T21 has it); wave 2 the second row in the lower
+  hall at T05/T21's staging points, each on a crane trolley that carries it across and down onto its rack (a test sweeps that path
+  clear of the hall). Each fighter's `id`, `wing`, `door`, `wave`, `bay`, `number`, release point and (wave 2) staging path, in the
+  hall and arm frames, match the `cobra_bay_alpha_*` hardpoints. Six work lamps (one per bay) hung between the rows; the camera
+  re-railed in the upper hall beside the racks, looking toward the arm's head; the fixed views in the manifest (`second` added).
+  The look kept (dark grey deck, red and white lamps, overhead clamps). T04's seven-door names are gone from `parts/station.py`.
+  Tests: `test_b5_interior` 17 OK; GUT `test_hangar_camera` 5, `test_hangar_backdrop` 6, `test_front_end` 25 pass; compile check
+  clean. Sheet: `references/screenshots/M7-T09 interior/M7-T09_interior_look_sheet.png` (frames of the six racks and the second
+  row); 6 to 21 draw calls, 85 000 to 263 000 triangles, 640 to 1 460 fps uncapped, card VRAM +234 MB.
 
 ### M7-T21 Cobra arm section, door creases and the cargo bay roof (follow-up to T05)
 

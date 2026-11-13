@@ -1,34 +1,40 @@
 extends GutTest
-## The front end's camera in the Cobra-bay hangar (M7-T09, D77): a slow dolly along the racks that keeps them in view, stays in
-## the hall and clear of the fighters, and the look sheets' fixed views.
+## The front end's camera in the Cobra-bay hangar (M7-T09, M7-T20; D77): a slow dolly beside the racks that keeps them in view,
+## stays in the hall and clear of the fighters, and the look sheets' fixed views as the manifest gives them.
 
-const RACK_Z: Array[float] = [-115.71, -77.14, -38.57, 0.0, 38.57, 77.14, 115.71]
-const SLOT_X: Array[float] = [-20.0, 0.0, 20.0]
+const DOOR_Z: Array[float] = [-57.5, -34.5, -11.5, 11.5, 34.5, 57.5]
+const RACK := Vector3(0.0, 9.0, 0.0)
+const STAGE := Vector3(28.0, 25.0, 0.0)
 const FIGHTER_HALF_SPAN_M: float = 7.7
+const UPPER_HALF_W: float = 20.0
+const END_Z: float = 75.0
 
 
-func _camera() -> HangarCamera:
-	var manifest: Dictionary = {
-		"camera": {"rail": {"x": 31.0, "y": 7.5, "z_from": -112.0, "z_to": 96.0}},
-		"hall": {"half_width_m": 42.0, "height_m": 30.0, "end_z_m": 135.0},
-		"racks": [],
+func _manifest() -> Dictionary:
+	var fighters: Array = []
+	for z: float in DOOR_Z:
+		fighters.append({"wave": 1, "position": [RACK.x, RACK.y, z]})
+		fighters.append({"wave": 2, "position": [STAGE.x, STAGE.y, z]})
+	return {
+		"camera": {
+			"rail": {"x": -12.65, "y": 7.5, "z_from": -43.5, "z_to": 69.0, "look_x": -6.325, "look_dir": -1.0},
+			"views": {"wide": {"at": [-30.0, 26.0, 71.0], "look": [14.0, 10.0, 0.0]},
+					"close": {"at": [-10.65, 10.5, -0.5], "look": [0.0, 9.0, -11.5]}},
+		},
+		"fighters": fighters,
 	}
-	for z: float in RACK_Z:
-		for x: float in SLOT_X:
-			(manifest["racks"] as Array).append({"position": [x, 9.0, z]})
-	return HangarCamera.from_manifest(manifest)
 
 
-func test_it_reads_the_rail_and_the_racks_from_the_manifest() -> void:
-	var camera: HangarCamera = _camera()
-	assert_eq(camera.rail_x, 31.0)
-	assert_eq(camera.z_to, 96.0)
-	assert_eq(camera.rack_z.size(), 21)
-	assert_eq(camera.end_z, 135.0)
+func test_it_reads_the_rail_and_the_views_from_the_manifest() -> void:
+	var camera: HangarCamera = HangarCamera.from_manifest(_manifest())
+	assert_eq(camera.rail_x, -12.65)
+	assert_eq(camera.look_dir, -1.0)
+	assert_eq(camera.rack_y, 9.0)
+	assert_true(camera.views.has("wide"))
 
 
 func test_the_move_is_slow_and_smooth() -> void:
-	var camera: HangarCamera = _camera()
+	var camera: HangarCamera = HangarCamera.from_manifest(_manifest())
 	var fastest_m_s: float = 0.0
 	var fastest_deg_s: float = 0.0
 	var last: Transform3D = camera.pose(0.0)
@@ -42,43 +48,34 @@ func test_the_move_is_slow_and_smooth() -> void:
 	assert_gt(fastest_m_s, 1.0, "but it does move")
 
 
-func test_it_stays_in_the_hall_beside_the_racks_and_keeps_them_in_view() -> void:
-	var camera: HangarCamera = _camera()
+func test_it_stays_beside_the_racks_and_keeps_them_in_view() -> void:
+	var camera: HangarCamera = HangarCamera.from_manifest(_manifest())
 	for step: int in range(0, 241):
 		var pose: Transform3D = camera.pose(float(step))
 		var at: Vector3 = pose.origin
-		assert_between(at.z, -112.0 - 0.01, 96.0 + 0.01)
-		assert_lt(absf(at.x), 42.0)
-		assert_between(at.y, 1.0, 29.0)
-		for x: float in SLOT_X:
-			assert_gt(absf(at.x - x), FIGHTER_HALF_SPAN_M + 2.0, "clear of the held fighters")
-		assert_lt(at.x, 33.5, "short of the crane columns")
+		assert_between(at.z, -43.51, 69.01)
+		assert_lt(absf(at.x), UPPER_HALF_W, "in the upper hall")
+		assert_gt(absf(at.x - RACK.x), FIGHTER_HALF_SPAN_M + 2.0, "clear of the racked fighters")
 		var forward: Vector3 = -pose.basis.z
+		assert_lt(forward.z, 0.0, "looking toward the arm's head")
 		var seen: int = 0
-		for z: float in RACK_Z:
-			for x: float in SLOT_X:
-				if rad_to_deg(forward.angle_to(Vector3(x, 9.0, z) - at)) < 32.0:
-					seen += 1
+		for z: float in DOOR_Z:
+			if rad_to_deg(forward.angle_to(Vector3(RACK.x, RACK.y, z) - at)) < 32.0:
+				seen += 1
 		assert_gt(seen, 0, "a rack in view at %d s" % step)
 
 
-func test_the_move_starts_at_the_head_end_and_turns_at_the_root_end() -> void:
-	var camera: HangarCamera = _camera()
-	assert_almost_eq(camera.pose(0.0).origin.z, -112.0, 0.01)
-	assert_almost_eq(camera.pose(HangarCamera.PERIOD_S * 0.5).origin.z, 96.0, 0.01)
-	assert_almost_eq(camera.pose(HangarCamera.PERIOD_S).origin.z, -112.0, 0.01)
+func test_the_move_starts_at_the_root_end_and_turns_at_the_head_end() -> void:
+	var camera: HangarCamera = HangarCamera.from_manifest(_manifest())
+	assert_almost_eq(camera.pose(0.0).origin.z, 69.0, 0.01)
+	assert_almost_eq(camera.pose(HangarCamera.PERIOD_S * 0.5).origin.z, -43.5, 0.01)
+	assert_almost_eq(camera.pose(HangarCamera.PERIOD_S).origin.z, 69.0, 0.01)
 
 
-func test_the_fixed_views_look_at_the_racks_from_inside_the_hall() -> void:
-	var camera: HangarCamera = _camera()
-	for view: HangarCamera.View in [HangarCamera.View.WIDE, HangarCamera.View.CLOSE, HangarCamera.View.RACK]:
-		var pose: Transform3D = camera.pose(0.0, view)
-		assert_lt(absf(pose.origin.x), 42.0)
-		assert_lt(absf(pose.origin.z), 135.0)
-		assert_between(pose.origin.y, 1.0, 29.0)
-	var close: Transform3D = camera.pose(0.0, HangarCamera.View.CLOSE)
-	assert_lt(close.origin.distance_to(Vector3(0.0, 9.0, 0.0)), 25.0, "close on the middle rack")
-	var rack: Transform3D = camera.pose(0.0, HangarCamera.View.RACK)
-	for x: float in SLOT_X:
-		assert_lt(rad_to_deg((-rack.basis.z).angle_to(Vector3(x, 9.0, 0.0) - rack.origin)), 50.0, "the whole rack in view (54 degrees each side at 16:9)")
+func test_the_fixed_views_are_the_manifests_and_hold_still() -> void:
+	var camera: HangarCamera = HangarCamera.from_manifest(_manifest())
+	var wide: Transform3D = camera.pose(0.0, HangarCamera.View.WIDE)
+	assert_eq(wide.origin, Vector3(-30.0, 26.0, 71.0))
+	assert_almost_eq(rad_to_deg((-wide.basis.z).angle_to(Vector3(14.0, 10.0, 0.0) - wide.origin)), 0.0, 0.01)
 	assert_eq(camera.pose(12.0, HangarCamera.View.WIDE), camera.pose(40.0, HangarCamera.View.WIDE), "the fixed views hold still")
+	assert_eq(camera.pose(5.0, HangarCamera.View.RACK), camera.pose(5.0), "a view the manifest lacks falls back to the move")

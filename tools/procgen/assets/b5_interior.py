@@ -1,19 +1,20 @@
 """``b5_interior``: the inside of one Babylon 5 Cobra-bay arm, the front end's backdrop (M7-T09, D77, Q7).
 
-A long hall along the arm with seven launch positions, each a closed launch door in the floor (the arm's doors from T04, seen from
-inside) under a gantry crane whose clamps hold three Starfuries side by side above it (``parts/cobra_bay.py`` says which reference drove what). The
-fighters are not in this asset: the scene places the real ``starfury_aurora`` at each rack's transform (``racks``), so their
+The launch hall under the top arm's door strip (Alpha wing's), sized from the station's ``hardpoints.cobra_arm`` (M7-T20): six launch
+positions, each a closed launch door in the floor (T05's doors, seen from inside) under a gantry crane whose clamps hold the racked
+Starfury over it and the second row's beside it (``parts/cobra_bay.py`` says which reference drove what). The
+fighters are not in this asset: the scene places the real ``starfury_aurora`` at each fighter's transform (``fighters``), so their
 liveries and texture detail apply.
 
 Three pieces, each one textured mesh on its own atlas with the ``cobra_bay`` style (metallic paint and bare steel, D72):
 
-* ``bay``: one launch position, its door at its origin, drawn seven times (``instances``) so the atlas spends its texels once.
-* ``ends``: the two end walls with their pressure doors and lit booths, in the hall frame.
+* ``bay``: one launch position, its door's row at its origin, drawn six times (``instances``) so the atlas spends its texels once.
+* ``ends``: the two end walls with their pressure doors and lit booths and the hall's ends, in the hall frame.
 * ``signs``: the big red bay numbers on the walls and the plates on the cranes, in the hall frame.
 
-The manifest also carries the hall's lights for the scene (``lights``: one work lamp per position, so all seven fit the light
-rig's omni slots and none ever swaps; ``fill``: the key light's dim red from above), the camera's rail beside the racks
-(``camera``) and the hall's place on a Cobra arm (``to_arm``) for M8's launch from the menu.
+The manifest also carries the hall's lights for the scene (``lights``: one work lamp per position, so all six fit the light
+rig's omni slots and none ever swaps; ``fill``: the key light's faint red from above), the camera's rail down the aisle
+(``camera``) and the hall's place on a Cobra arm (``to_arm``) and each fighter's launch data for M8's squadron launch.
 """
 
 from __future__ import annotations
@@ -94,16 +95,16 @@ def end_parts() -> list[TexturedPart]:
 def sign_parts() -> list[TexturedPart]:
     """The bay numbers, in the hall frame: big and red on both walls, small and white on both faces of each crane's bridge."""
     marks: dict[str, tuple[Marking, ...]] = {}
+    face, half, y0, y1 = cb.number_panel()
+    px, _, py0, py1 = cb.plate()
+    height = min(4.4, 0.85 * (y1 - y0), 1.6 * half)
     for k, z in enumerate(cb.bay_centres(), start=1):
         big, small = cb.number_text(k)
-        _, y0, y1 = cb.NUMBER_PANEL
-        y = 0.5 * (y0 + y1)
         panel, plate = f"number_panels_{k}", f"bridge_plates_{k}"
-        marks[panel] = tuple(Marking.text(panel, big, (sx * (cb.HALF_W - 0.3), y, z), (0.0, 0.0, sx), (0.0, 1.0, 0.0), (-sx, 0.0, 0.0),
-                                          4.4, cb.NUMBER_RED, 0.75) for sx in (-1.0, 1.0))
-        _, py0, py1 = cb.PLATE
-        marks[plate] = tuple(Marking.text(plate, small, (0.0, 0.5 * (py0 + py1), z + sz * (cb.BRIDGE_HALF_Z + 0.1)), (sz, 0.0, 0.0),
-                                          (0.0, 1.0, 0.0), (0.0, 0.0, sz), 1.1, cb.PLATE_WHITE) for sz in (-1.0, 1.0))
+        marks[panel] = tuple(Marking.text(panel, big, (sx * face, 0.5 * (y0 + y1), z), (0.0, 0.0, sx), (0.0, 1.0, 0.0), (-sx, 0.0, 0.0),
+                                          height, cb.NUMBER_RED, 0.17 * height) for sx in (-1.0, 1.0))
+        marks[plate] = tuple(Marking.text(plate, small, (px, 0.5 * (py0 + py1), z + sz * (cb.BRIDGE_HALF_Z + 0.1)), (sz, 0.0, 0.0),
+                                          (0.0, 1.0, 0.0), (0.0, 0.0, sz), 0.8 * (py1 - py0), cb.PLATE_WHITE) for sz in (-1.0, 1.0))
     return _textured(cb.sign_shapes(STYLE.materials), marks)
 
 
@@ -114,25 +115,38 @@ def _in_arm(p: list[float]) -> list[float]:
     return [round(float(v), 5) + 0.0 for v in q]
 
 
-def racks() -> list[dict[str, Any]]:
-    """Every held Starfury (hall frame), three a door: its id, its door (1 at the arm's head) and slot (1 to 3 across the hall
-    from -x), its livery number in Alpha wing, where it hangs (nose toward the arm's head, -z, belly to its door) and where a
-    launch lets it go below the door; the last two also in the arm's frame, for M7-T08's launch steps and M8's squadron launch."""
+def fighters() -> list[dict[str, Any]]:
+    """The hall's twelve Starfuries (hall frame), Alpha wing's: the six on the racks over the doors (wave 1) and the second row
+    of six staged in the lower hall (wave 2, ``WAVE_GAP_S`` later), carried across and down onto the racks once the first wave has
+    dropped. Each: its
+    ``id`` (``alpha_<door>_<wave>``), wing, door (1 at the arm's head), wave, its bay's hardpoint (``cobra_bay_alpha_<door>``),
+    livery number (1 to 6, then 7 to 12), where it hangs (nose to the arm's head, -z, belly to the doors) and where a launch lets
+    it go below its door; a second-row fighter also its path onto the rack (the station's: across, then down). Points also in the arm's
+    frame (``*_arm``, through ``to_arm``), as T05's hardpoints give them."""
+    wing = str(cb.ARM["arms"][0]["wing"])
     out = []
-    for door, z in enumerate(cb.bay_centres(), start=1):
-        for slot, x in enumerate(cb.SLOT_X, start=1):
-            at = [x, cb.HANG_Y, round(z, 5)]
-            release = [x, cb.RELEASE_Y, round(z, 5)]
-            out.append({"id": f"door{door}_slot{slot}", "door": door, "slot": slot, "number": (door - 1) * len(cb.SLOT_X) + slot,
-                        "position": at, "forward": [0.0, 0.0, -1.0], "up": [0.0, 1.0, 0.0], "release": release,
-                        "position_arm": _in_arm(at), "release_arm": _in_arm(release)})
+    for wave, x, y in ((1, cb.RACK_X, cb.HANG_Y), (2, cb.STAGE_X, cb.STAGE_Y)):
+        for door, z in enumerate(cb.bay_centres(), start=1):
+            z = round(z, 5)
+            at = [x, y, z]
+            release = [cb.RACK_X, cb.RELEASE_Y, z]
+            entry: dict[str, Any] = {
+                "id": f"{wing}_{door}_{wave}", "wing": wing, "door": door, "wave": wave, "bay": f"cobra_bay_{wing}_{door}",
+                "number": (wave - 1) * cb.BAYS + door, "position": at, "forward": [0.0, 0.0, -1.0], "up": [0.0, 1.0, 0.0],
+                "release": release, "position_arm": _in_arm(at), "release_arm": _in_arm(release),
+            }
+            if wave == 2:
+                path = [at, [cb.RACK_X, cb.STAGE_Y, z], [cb.RACK_X, cb.HANG_Y, z]]
+                entry["staging_path"] = path
+                entry["staging_path_arm"] = [_in_arm(p) for p in path]
+            out.append(entry)
     return out
 
 
 def lights() -> list[dict[str, Any]]:
-    """One work lamp per position, under its crane's bridge, the side alternating down the hall."""
-    x, y = cb.BRIDGE_LAMP
-    return [{"name": f"work_{k}", "position": [(-1.0 if k % 2 else 1.0) * x, y - 0.8, round(z, 5)], "colour": _srgb(WORK_GLOW),
+    """One work lamp per position, hung between the racked fighter and the second row's, between the doors along the hall."""
+    x, y, dz = cb.LAMP_AT
+    return [{"name": f"work_{k}", "position": [round(x, 5), round(y - 0.3, 5), round(z + dz, 5)], "colour": _srgb(WORK_GLOW),
              "energy": WORK_ENERGY, "range_m": WORK_RANGE_M} for k, z in enumerate(cb.bay_centres(), start=1)]
 
 
@@ -204,15 +218,16 @@ def build_at(ctx: BuildContext, bay_px: int, ends_px: int, signs_px: int, detail
         files={**{f"{name}_mesh": entry["mesh"]["file"] for name, entry in pieces.items()}, "detail_albedo": detail["albedo"],
                "detail_normal": detail["normal"]},
         extra={
-            "hall": {"half_width_m": cb.HALF_W, "height_m": cb.HEIGHT, "end_z_m": round(cb.END_Z, 5), "pitch_m": round(cb.PITCH_M, 5),
-                     "bays": cb.BAYS},
+            "hall": {"half_width_m": cb.HALF_W, "lower_half_width_m": cb.LOW_W, "upper_height_m": cb.UP_H, "height_m": cb.HEIGHT,
+                     "end_z_m": round(cb.END_Z, 5), "pitch_m": round(cb.PITCH_M, 5), "bays": cb.BAYS},
             "pieces": pieces,
-            "racks": racks(),
-            "launch": {"doors": cb.BAYS, "slots_per_door": len(cb.SLOT_X), "release_y_m": cb.RELEASE_Y},
+            "fighters": fighters(),
+            "launch": {"wing": str(cb.ARM["arms"][0]["wing"]), "doors": cb.BAYS, "waves": 2, "wave_gap_s": cb.WAVE_GAP_S,
+                       "release_y_m": cb.RELEASE_Y, "rack_x_m": cb.RACK_X, "staging_x_m": cb.STAGE_X, "staging_y_m": cb.STAGE_Y},
             "fighter": "starfury_aurora",
             "lights": lights(),
             "fill": dict(FILL),
-            "camera": {"rail": dict(cb.CAMERA_RAIL)},
+            "camera": {"rail": dict(cb.CAMERA_RAIL), "views": cb.camera_views()},
             "to_arm": cb.to_arm(),
             "materials": materials(),
         },

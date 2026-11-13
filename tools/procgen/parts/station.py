@@ -59,11 +59,6 @@ ARM_HEAD = [row[:4] for row in ARM_NECK]
 ARM_TOP_HATCH = (800.0, 24.0, 30.0)  # the circular hatch on the head's top: z of its middle, inner and outer radius
 ARM_RIBS = (906.0, 984.0, 9)  # the neck's ribs on both flanks: z from, z to, how many
 ARM_HATCH = (1000.0, 1300.0, 47.2, 202.8, 240.5)  # z from, z to, half width, underside and top of the root section (the STL's)
-# M7-T09's hangar (b5_interior) is laid out on T04's seven 64 x 28 m doors; T20 refits it to the launch doors below and drops
-# these four names.
-COBRA_DOORS = 7
-DOOR_HALF = (32.0, 14.0)  # half across, half along
-DOOR_ROW = (1020.0, 1290.0)  # where T04's row of doors ran along the arm
 DOOR_DEPTH = 4.0  # the deck stands this far above the doors
 # The root's section (M7-T21, read off the STL): a flat top between two creases, chamfers down to a short bevel and vertical sides,
 # a notch in each side near the bottom, an underside rising to a flat middle (a shallow V). Half of it, from the top's middle round
@@ -270,13 +265,6 @@ def flat_plate(outline: Sequence[tuple[float, float]], pieces: Sequence[Sequence
 
 
 # --- the drum --------------------------------------------------------------------------------------------------------
-def door_centres() -> list[float]:
-    """M7-T09's hangar's door positions along the arm (T04's seven doors; T20 refits the hangar to launch_door_centres)."""
-    z0, z1 = DOOR_ROW
-    pitch = (z1 - z0) / COBRA_DOORS
-    return [z0 + pitch * (k + 0.5) for k in range(COBRA_DOORS)]
-
-
 def launch_door_centres() -> list[float]:
     """Where each launch door's middle sits along the arm (z, station frame), 1 nearest the bow."""
     z0, z1 = LAUNCH_ROW

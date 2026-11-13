@@ -1,7 +1,7 @@
 extends Node
-## Photographs the Cobra-bay interior behind the menu for the maintainer's look sheet (M7-T09): the front end on the real renderer,
-## three moments of the slow camera move with the menu up, then a wide and a close view of the racks, one more moment of the move
-## and one door's full rack, without it. Each frame is saved and prints the `render` provider's numbers, a steady frame rate and the card's VRAM. Then
+## Photographs the Cobra-bay interior behind the menu for the maintainer's look sheet (M7-T09, M7-T20): the front end on the real renderer,
+## three moments of the slow camera move with the menu up, then without it the hall wide, one racked fighter close, the six racks
+## and the second row. Each frame is saved and prints the `render` provider's numbers, a steady frame rate and the card's VRAM. Then
 ## one sheet: the frames, a strip of the maintainer's Cobra-bay interior references (inspiration only; the sheet is gitignored)
 ## and the paints' swatches with their metallic and roughness.
 ##
@@ -12,13 +12,13 @@ const FRONT_END: String = "res://src/frontend/front_end.tscn"
 const TIMED_FRAMES: int = 60
 ## Each shot: a name, the backdrop's view and the move's time, and whether the menu is up.
 const SHOTS: Array[Dictionary] = [
-	{"name": "menu_t000", "view": "move", "time": 0.0, "menu": true, "label": "Menu, move at 0 s (head end)"},
+	{"name": "menu_t000", "view": "move", "time": 0.0, "menu": true, "label": "Menu, move at 0 s (root end)"},
 	{"name": "menu_t060", "view": "move", "time": 60.0, "menu": true, "label": "Menu, move at 60 s"},
-	{"name": "menu_t120", "view": "move", "time": 120.0, "menu": true, "label": "Menu, move at 120 s (root end)"},
-	{"name": "racks_wide", "view": "wide", "time": -1.0, "menu": false, "label": "Racks, wide (no menu)"},
-	{"name": "racks_close", "view": "close", "time": -1.0, "menu": false, "label": "Rack 4, close (no menu)"},
-	{"name": "racks_t030", "view": "move", "time": 30.0, "menu": false, "label": "Move at 30 s (no menu)"},
-	{"name": "rack_full", "view": "rack", "time": -1.0, "menu": false, "label": "Door 4's full rack, close (no menu)"},
+	{"name": "menu_t120", "view": "move", "time": 120.0, "menu": true, "label": "Menu, move at 120 s (head end)"},
+	{"name": "racks_wide", "view": "wide", "time": -1.0, "menu": false, "label": "The hall, wide (no menu)"},
+	{"name": "racks_close", "view": "close", "time": -1.0, "menu": false, "label": "Rack 3, close (no menu)"},
+	{"name": "rack_full", "view": "rack", "time": -1.0, "menu": false, "label": "The six racks (wave 1), from the catwalks' height"},
+	{"name": "second_row", "view": "second", "time": -1.0, "menu": false, "label": "The second row (wave 2), in the lower hall"},
 ]
 const REFERENCES: Array[Dictionary] = [
 	{"file": "references/cobra bay interior references/1 SHOW cobra bay interior (most weight).webp", "label": "1 Show capture (most weight)"},
@@ -27,7 +27,7 @@ const REFERENCES: Array[Dictionary] = [
 	{"file": "references/cobra bay interior references/3 fan diorama starfury on launch cradle (suggestion).jpg",
 			"label": "3 Fan diorama (suggestion)"},
 ]
-const SHEET_SIZE: Vector2i = Vector2i(2400, 2140)
+const SHEET_SIZE: Vector2i = Vector2i(2400, 2170)
 
 var options: Dictionary = {"out": "", "settle": "120"}
 var _front: FrontEnd = null
@@ -116,7 +116,7 @@ func _compose() -> void:
 	page.color = Color(0.08, 0.08, 0.09)
 	page.size = Vector2(SHEET_SIZE)
 	viewport.add_child(page)
-	_label(page, "M7-T09 Cobra-bay interior (b5_interior): look sheet, phase 1", Vector2(24, 12), 30)
+	_label(page, "M7-T20 Cobra-bay interior (b5_interior) after the door resize: look sheet", Vector2(24, 12), 30)
 	var frame_size := Vector2(768, 432)
 	for i: int in _frames.size():
 		var at := Vector2(24 + (i % 3) * (frame_size.x + 24), 64 + (i / 3) * (frame_size.y + 56))
