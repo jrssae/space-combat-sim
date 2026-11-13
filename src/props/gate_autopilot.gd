@@ -15,7 +15,7 @@ const K_LATERAL: float = 0.4
 const MAX_LATERAL_MPS: float = 60.0
 ## With the vortex not yet opening, the run-in creeps to this far from the plane and waits.
 const WAIT_SHORT_M: float = 600.0
-## A ship beside or behind the gate, out among the arms (800 m from the axis above and below, 1 080 m at the sides, their fins
+## A ship beside or behind the gate, out among the arms (800 m from the axis above and below, 1 240 m at the sides, their fins
 ## reaching about 140 m to either side), first moves out to a diagonal between two arms at least this far from the axis (about
 ## 1 km clear of every fin), then flies round to the front.
 const DETOUR_RADIUS_M: float = 1600.0

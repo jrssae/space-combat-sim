@@ -25,7 +25,7 @@ func before_all() -> void:
 func test_both_assets_carry_their_silhouettes() -> void:
 	assert_not_null(gate, "the jumpgate's manifest has its far section (generator v4)")
 	assert_not_null(station, "the station's stand-in's manifest has its far section (generator v4)")
-	assert_almost_eq(gate.radius_m, 1265.0, 5.0, "the gate's bounding radius from the middle of its box")
+	assert_almost_eq(gate.radius_m, 1408.0, 5.0, "the gate's bounding radius from the middle of its box (T19 round 4: 1.55 wide)")
 	assert_almost_eq(gate.centre.z, 605.0, 1.0, "half way down the arms")
 	assert_almost_eq(station.radius_m, 4028.0, 5.0)
 	assert_eq(gate.directions.size(), 3 + 3 * 4 * 8 + 128, "the axes, their rings and the spiral")
@@ -84,7 +84,7 @@ func test_the_shrunk_prop_covers_the_same_angle_and_stays_inside_the_far_plane()
 func test_the_dot_takes_over_at_its_pixel_size_and_hands_back_a_tenth_inside() -> void:
 	var out_at: float = gate.dot_distance_m(K_1080)
 	assert_almost_eq(gate.bounding_px(out_at, K_1080), FarPropMath.DOT_PX, 0.01, "%.2f px bounding radius" % FarPropMath.DOT_PX)
-	assert_between(out_at, 200000.0, 250000.0, "a 1080-line cockpit view: the gate turns into a dot about 223 km out")
+	assert_between(out_at, 220000.0, 280000.0, "a 1080-line cockpit view: the gate turns into a dot about 248 km out")
 	assert_between(station.dot_distance_m(K_1080), 650000.0, 750000.0, "the station about 709 km out")
 	var dot: bool = false
 	var switched_out: float = 0.0

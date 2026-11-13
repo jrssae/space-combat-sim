@@ -130,10 +130,11 @@ of the funnel. The side arms stand further from the axis than the top and bottom
 **elliptical mouth, wider than tall**. Nothing joins them; the vortex forms inside them: its mouth at the arms' front ends, its funnel running back along them to
 their back ends. Seen face on the gate is four dots round the vortex; seen obliquely, four long rails round it (the stills). The
 model holds the four arms as separate print pieces, not assembled, so the spacing is read off the stills: the mouth is about as wide
-as an arm is long, so the top and bottom arms stand two thirds of an arm out from the axis. **The ellipse's aspect is 1.35**
-(generator option `mouth_aspect`), chosen from `jumpgate.png`: the camera and the aspect were fitted together to where the four
-rails' ends sit in the still, and the misfit falls from 31 px rms for a square gate to about 20 px between 1.35 and 1.5, where it
-is flat; the low end was taken, the side arms being "slightly" further out.
+as an arm is long, so the top and bottom arms stand two thirds of an arm out from the axis. **The ellipse's aspect is 1.55**
+(generator option `mouth_aspect`; 1.35 in round 3), chosen from `jumpgate.png` (T19 round 4): the camera, the aspect and the
+vortex's visible edge were fitted together to the four rails' ends, the vortex's outline and its throat in the still. The
+still's vortex reads 1.60 to 1 on screen, which 1.55 gives; the rails' misfit hardly changes between 1.35 and 1.6 (about 26 px
+rms in the 385 px still: the still's gate is planar spokes, which parallel rails only approach).
 
 **One arm** (ratios to the arm's length; the model's arm is 164 of its units long):
 - **Truss.** A central spine tube (diameter 1.3 %) inside four slim longerons (diameter 0.55 %) on a square 4.9 % across, two on the
@@ -152,8 +153,8 @@ is flat; the low end was taken, the side arms being "slightly" further out.
 
 **Scale.** No on-screen figure was found. A fan "unofficial technical manual" says large permanent gates have "four seven-mile long
 generators" (11 km each, larger than the station); the stills do not support that, so it is not used. Instead the vortex must take a
-capital ship with room to spare: **arms of 1 200 m**, the top and bottom ones 800 m from the axis and the side ones 1 080 m, a
-vortex mouth about 2 080 m wide, 1 510 m tall and 1 200 m deep, the gate about 2.2 km wide, 1.7 km tall and 1.2 km long. The truss is then about 75 m across, a fin about 120 m long, a station pitch about 210 m; a
+capital ship with room to spare: **arms of 1 200 m**, the top and bottom ones 800 m from the axis and the side ones 1 240 m, a
+vortex mouth about 2 400 m wide, 1 510 m tall and 1 200 m deep, the gate about 2.6 km wide, 1.7 km tall and 1.2 km long. The truss is then about 75 m across, a fin about 120 m long, a station pitch about 210 m; a
 Starfury is a speck beside a fin. The arm length is one option (`arm_length_m`), everything else follows from the ratios.
 
 **Colours and finish.** Industrial and dark. The truss and spine read warm grey to dull tan (a brassy sheen where lit), the collars and
@@ -167,20 +168,24 @@ glows then merging into one flash in the centre.
 **The vortex** (the maintainer's description, 2026-11-11, from T14's screenshots). One effect for every jump point: a gate's,
 a capital ship's own (M12) and the open points raiders arrive through.
 - **Fit at a gate.** The mouth lies at the arms' front ends, an ellipse whose rim comes **within 1 m of the arms** (semi-axes
-  1 038 m across and 755 m up, the trusses reaching about 45 m in from the arms' axes) and fades out to translucent there. The
-  funnel runs back along the arms and ends at their back ends: as deep as an arm is long (1 200 m). The numbers come from the
-  gate's markers, not constants. A ship-made point has no arms to shape it and stays round.
+  1 198 m across and 754 m up, the trusses reaching about 45 m in from the arms' axes). The funnel runs back along the arms and
+  ends at their back ends: as deep as an arm is long (1 200 m). The numbers come from the gate's markers, not constants. A
+  ship-made point has no arms to shape it and stays round.
+- **The visible body** (round 4). As in `jumpgate.png`, the bright body ends well inside the arms: from the acceptance pose its
+  edge lies on the arms' back ends. It ends at two thirds of the mouth's radius (0.665), in a short soft edge feathered along the
+  streaks; a faint veil carries on to the rim at the arms. A ship-made point's body fills 0.9 of its mouth.
 - **Shape.** A slight funnel: visible, not pronounced. A broad well with gently curving walls and a wide, rounded base, elliptical
   in section from the mouth down to the throat (the still's dark eye is a wide ellipse too); the dark
-  throat a soft smudge, not a hard hole. The walls are translucent: stars and the gate's far arms partly show through them.
+  throat a soft smudge, not a hard hole. The eye is where the line of sight runs on down the funnel into hyperspace: seen
+  obliquely it sits toward where the axis recedes, low and to the right in the still. The walls are translucent: stars and the gate's far arms partly show through them.
 - **Colour and motion.** Layers of colour: the base colour (orange to golden yellow for a departure, a **dark sky blue** for an
   arrival: dark against space but not navy, round 3), darker toward the throat and the rim and brightest over a band in between,
   in broad uneven clouds; soft-edged, roughly rectangular patches darker than the base and paler translucent patches of the base
   colour lying along one soft spiral; and over them **fine, hair-like streaks** combed along that spiral, short and many, as the
   still shows, not separate bold bands. **A departure swirls in** (the pattern travels down toward the throat, drawing ships in)
   and **an arrival swirls out** (up from the throat toward the rim). **Seen from in front of the mouth an arrival turns
-  counter-clockwise and a departure clockwise** (round 3); both follow the same spiral, one outward and one inward. The rim
-  fades out to translucent in soft feathers that follow the streaks.
+  counter-clockwise and a departure clockwise** (round 3); both follow the same spiral, one outward and one inward. The body's
+  edge is short and clean, softly feathered along the streaks (round 4: the still's edge, not a wide fuzzy fade).
 - **The base by view.** Only the narrow deep end changes with the view: from in front, looking down the funnel, it fades to
   black; from the side or from behind it shows a moderately bright white glow, local to the base, with the rest of the funnel
   visible round it as usual.

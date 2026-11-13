@@ -1014,6 +1014,7 @@ which changes the same native rows and rebase path:
     round it like the corner rails of a square tube (800 m from the axis), not as flat spokes; the mouth sits at their front
     ends and the funnel runs back to their back ends. Generator v2, markers rebuilt (see T19).
     Round 3: at the top, bottom and sides, the side arms 1 080 m out, an elliptical mouth (generator v3, `mouth_aspect`).
+    Round 4: the side arms 1 240 m out (aspect 1.55, generator v5).
   - Look sheet `references/screenshots/M6-T13 jumpgate/look/look_sheet.png` (H). Open for the maintainer: which way the fins'
     V opens, amber or white lamps, whether 1.2 m per texel is soft at 100 m.
 
@@ -1312,8 +1313,9 @@ which changes the same native rows and rebase path:
 - **Done when:** the fit and sizing tests; every mission and encounter that used `JumpArrival` arrives through a vortex with
   its outcome unchanged; screenshots of the gate's vortex (both colours, front and three-quarter) and of an open point for
   the maintainer (H); GPU numbers with the vortex open. **(H) acceptance view:** `gate view reference` (fitted to where the
-  four rails' ends and the throat sit in the still; round 3's pose: camera at (-526, -533, -1588) m in the gate's frame, 1.6 km in
-  front of the mouth, aimed at (95, 137, 600), about 23 degrees off the axis, 52.4 degree vertical field, no roll), the side by side
+  four rails' ends, the vortex's visible edge and the throat sit in the still; round 4's pose: camera at (-469, -433, -1485) m in
+  the gate's frame, 1.5 km in front of the mouth, aimed at (-45, 80, 364), about 20 degrees off the axis, 59.8 degree vertical
+  field, no roll), the side by side
   `references/screenshots/M6-T19 vortex/acceptance_jumpgate_png.png`, judged at an 80 to 90 % match.
 
 - **Done (2026-11-11; round 2 the same day):**
@@ -1427,6 +1429,71 @@ which changes the same native rows and rebase path:
   4. Still open (H): the frame rate with a visible window on the maintainer's machine, and the maintainer's acceptance of the
      side-by-side (`references/screenshots/M6-T19 vortex/acceptance_jumpgate_png.png`). The lamps are accepted for now; the
      top arm reads dim in the acceptance view.
+- **Round 4 done (2026-11-12, items 1 to 4; the row stays `in progress` until the maintainer accepts the side-by-side):**
+  - **The still:** `references/jumpgate/` was not on this machine (rounds 1 to 3 ran on oscar). `jumpgate.png` was restored from
+    the wiki's `Jumpgate.gif` (the same still, a 385x269 WebP), `jumpgate_open.jpg` beside it; `point_1`, `point_2`, `gathering`
+    and the video frames are still only on oscar. Measured off the still by masking its blue (pixels of the 385x269 still): the
+    visible vortex is centred at (199, 146), its semi-axes 100.8 x 63.1 px, **1.60 to 1** (round 3 judged 1.65 by eye), tilted
+    4 degrees; the throat at (241, 176); the eight rail ends marked by hand (`round4/crop_*`).
+  - **1. The mouth's apparent size.** The two asks are both met by splitting the mouth from the visible body. The mouth (what
+    ships pass, `VortexFit.contains`, the funnel's mesh) still reaches within 1 m of the arms. The bright body ends further in,
+    at **`VortexFit.body_share`** of the radius: **0.665 at a gate**, fitted to the still's visible edge from the acceptance
+    pose. That edge falls on the arms' back ends because by then the funnel's walls have receded about 240 m. Past it, a faint
+    veil (0.4 % opaque) carries on to the rim at the arms. At a ship-made point the share is **0.9**: no arms frame it, and a
+    widened group's ships still come out of the body, not the veil. Shader uniforms `body_edge`, `edge_soft`, `veil`. The look
+    (bands, the throat's smudge, the base's glow) is laid out against the body's edge, so a gate and a point look alike. The
+    unfolding reaches the body's edge near the end of the growth, and the veil's rim with it.
+  - **2. The proportion:** **aspect 1.55** (generator v5): side arms 1 240 m out, the mouth **1 198 x 753.9 m** (1.59), the gate
+    2 562 m wide. Fit: camera position, aim and field plus the body's edge, least squares against the eight rail ends, the still's
+    visible ellipse (centre, semi-axes, tilt) and its throat, at fixed aspects. Columns: aspect, rail rms (still px; times 2.5 at
+    960 wide), the ellipse's on-screen ratio, how far off the throat is:
+    1.35: 25.7 px, 1.38, 37 px; 1.45: 25.6, 1.49, 39; 1.50: 25.8, 1.54, 39; **1.55: 26.2, 1.59, 40**; 1.60: 26.6, 1.65, 41;
+    1.65: 27.2, 1.70, 41; 1.75: 28.5, 1.81, 43. The on-screen ratio is about the aspect plus 0.04, and the rails barely care
+    between 1.35 and 1.6, so the ellipse decides. The rails fit no better than about 25 px at any aspect: the still's gate is
+    planar spokes, and its right and bottom arms reach 35 to 50 px further in than parallel rails can. Round 3's pose with 1.35
+    and its best body edge scores 29 px on the rails with a 1.39 ellipse. **Acceptance pose refitted:** camera
+    (-469, -433, -1485), aimed at (-45, 80, 364), 59.8 degree field, about 20 degrees off the axis.
+  - **The throat:** from any pose that holds the rails, the funnel's real base sits 40 px from the still's throat, too near the
+    middle. The dark eye is now drawn where the line of sight runs on down the funnel into hyperspace, as if the throat carried on
+    as a tube four depths behind the mouth (`eye_depth`, `eye_radius`). From in front it sits on the axis as before; seen
+    obliquely it moves toward where the axis recedes, as in the still. The radial smudge is lighter.
+  - **Measured in the game** (the same mask, 1200x675 cropped to the still's frame): the visible vortex centred at (192, 144),
+    semi-axes 101.2 x 62.8 px, 1.61 to 1, tilted 5 degrees, the throat at (225, 177). The still: (199, 146), 100.8 x 63.1,
+    1.60, 4 degrees, (241, 176).
+  - **3. The rim:** instead of fading from 0.55 to 0.93 of the radius (feathered by 0.04), the body ends in a short edge 0.075
+    wide (0.615 to 0.69 at a gate), feathered by 0.02 along the streaks.
+  - **Side effects (H):** from the side and from `gate view tip`, the bright cone starts about 240 m behind the arms' front ends
+    (the veil in front is nearly invisible). From the tip, the far wall's edge shows as a separate crescent beside the near wall.
+  - **4. GPU, this machine** (RX 6950 XT, RADV, Forward+). Desktop window (Wayland; `--resolution 960x540` draws 1200x675 at the
+    1.25 scale; overlay on), reference pose: 145 fps (the display's cap), 6.9 ms, 22 draw calls, 48 452 triangles, 352.6 MB
+    in the renderer. The session was locked, so GNOME stopped drawing the window a few seconds into each run. The rest ran
+    inside a **headless gamescope** (the same GPU and renderer, X11 inside it, capped at 60 fps, so GPU time is the measure).
+    At 1200x675 with the gate's vortex open: front 0.42 ms GPU, three-quarter 0.44, reference 0.48, close 0.53, inside
+    (`run_in`) 0.50; 4 draw calls (overlay off), 47 608 triangles, 352.6 MB. At 2560x1440, closed and then open from the
+    same poses: close 0.77 to 0.99 ms, inside 0.77 to 1.01, reference 0.79 to 1.01; 526.9 MB. The vortex costs about **0.23 ms
+    and one draw call**, even when it fills the screen from inside. An open point (300 m, `vortex view`): 0.38 ms in its flash,
+    0.70 ms open, 15 draw calls, 0.60 ms once it has closed. sysfs `card1` VRAM: 2.86 GB desktop baseline, 3.22 GB peak at
+    1200x675, 3.55 GB at 1440p. Nothing is costly close up. **For M6-T20 (detail by distance):** the cost is fill, about 0.1 ms
+    per covered megapixel on this GPU. The vertex shader inverts `MODEL_MATRIX` per vertex (4 000 vertices a point); at a
+    hundred points, hand it in per instance.
+  - **Moved with the wider gate (T15's numbers):** the bounding radius 1 265 to 1 408 m, the pull distance 48.2 to 48.1 km, the
+    dot hand-off about 223 to about 248 km at 1 080 lines.
+  - **Tests:** quick `test_vortex_fit` (the body share: a gate's and a point's, kept when widening, a wingman 300 m out inside
+    the body), `test_far_prop_math` (the gate's 1 408 m radius, its hand-off), `test_vortex_swirl`, `test_vortex_timing`,
+    `test_gate_activation`, `test_jumpgate_broadcast`, `test_gate_jump`, `test_far_props`, `test_jumpgate_data` green (60
+    tests). Python: `test_jumpgate_helpers` (quick, 19) and `test_jumpgate` (standard), 33 together, 41 s. Quick tier green
+    (1 858 GUT tests, 124 s).
+  - **Screenshots:** `references/screenshots/M6-T19 vortex/acceptance_jumpgate_png.png` (the still left, the game right, lens
+    flare and overlay off) and `round4/`: `arr_*` and `dep_*` (`front`, `three_quarter`, `reference`, `close`, `inside`,
+    `side`, `behind`; `arr_tip`, `arr_motion_b`), `point_arrival_flash`, `point_arrival_300m`, `point_departure_300m`,
+    `fit_round4_overlay` (on the still: the fitted rails against the marked ends, the body's edge, the mouth at the arms),
+    `fit_round3_overlay`.
+  - **Against `jumpgate.png` (own estimate): about 85 %.** The visible vortex's size, place and proportion match within a few
+    pixels, the rim is a short soft edge, and the eye sits low and to the right. Still different: the still's body is darker and
+    deeper blue (ours is lighter on purpose, round 3), its streaks shorter and crisper (ours longer and more combed), its rails
+    dark navy silhouettes lit by the vortex (ours lit warm by the sun), and its right and bottom rails reach further in
+    (planar spokes). Open (H): the look; the truncated cone from the side and the tip; the frame rate in a visible window
+    (these numbers were taken while the session was locked).
 
 ### M6-T20 Vortex detail by distance and mass arrivals
 

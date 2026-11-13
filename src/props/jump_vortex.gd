@@ -248,6 +248,7 @@ func update_visuals() -> void:
 	funnel.visible = grown > 0.0
 	funnel.scale = Vector3(fit.mouth_half_width_m, fit.mouth_radius_m, fit.depth_m)
 	_material.set_shader_parameter(&"growth", grown)
+	_material.set_shader_parameter(&"body_edge", fit.body_share)
 	_material.set_shader_parameter(&"swirl_time", SimClock.now())
 	var flash_level: float = timing.flash(age_s)
 	flash_quad.visible = flash_level > 0.0

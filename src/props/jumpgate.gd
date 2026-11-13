@@ -29,12 +29,12 @@ const LAMP_GLOW_M: float = 70.0
 const TIP_GLOW_M: float = 260.0
 ## A gate's beacon is heard 1 000 km out (D69; the wiki and the fan manual both say so), as the nav buoys are.
 const BROADCAST_RANGE_M: float = 1.0e6
-## Where the hardpoints are missing: the generator's values for 1 200 m arms, 800 m from the axis above and below, 1 080 m at the sides.
-const DEFAULT_RADIUS_M: float = 755.5
-const DEFAULT_ARRIVAL: Vector3 = Vector3(0.0, 0.0, -75.5)
-const DEFAULT_DEPARTURE: Vector3 = Vector3(0.0, 0.0, -1511.0)
+## Where the hardpoints are missing: the generator's values for 1 200 m arms, 800 m from the axis above and below, 1 240 m at the sides.
+const DEFAULT_RADIUS_M: float = 753.9
+const DEFAULT_ARRIVAL: Vector3 = Vector3(0.0, 0.0, -75.4)
+const DEFAULT_DEPARTURE: Vector3 = Vector3(0.0, 0.0, -1507.8)
 const DEFAULT_ARM_RADIUS_M: float = 800.0
-const DEFAULT_SIDE_RADIUS_M: float = 1080.0
+const DEFAULT_SIDE_RADIUS_M: float = 1240.0
 const DEFAULT_BACK_Z_M: float = 1210.0
 const FALLBACK_REACH_M: float = 2200.0
 ## A departing ship this close to the mouth, in front, opens the vortex: from the departure point (1 500 m) a ship at the

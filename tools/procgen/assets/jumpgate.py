@@ -40,7 +40,7 @@ from ..parts import Collision
 from ..styles import Style
 
 ASSET_ID = "jumpgate"
-GENERATOR_VERSION = 4  # 4: the far view's silhouette table (M6-T15)
+GENERATOR_VERSION = 5  # 4: the far view's silhouette table (M6-T15); 5: the flatter mouth (T19 round 4)
 OBJ_NAME = f"{ASSET_ID}.obj"
 HARDPOINTS_NAME = "hardpoints.json"
 JSON_DIGITS = 4
@@ -51,8 +51,9 @@ JSON_DIGITS = 4
 ARM_LENGTH_M = 1200.0
 ARM_RADIUS_SHARE = 2.0 / 3.0
 # How much further out the side arms stand than the top and bottom ones: the mouth's width over its height (option
-# ``mouth_aspect``). Read off ``jumpgate.png`` (docs/design-references.md, "Jumpgate").
-MOUTH_ASPECT = 1.35
+# ``mouth_aspect``). Fitted with the camera to ``jumpgate.png`` (docs/design-references.md, "Jumpgate"): its vortex reads 1.59 to 1
+# on screen, which 1.55 gives from the acceptance pose (T19 round 4).
+MOUTH_ASPECT = 1.55
 RIM_CLEARANCE_M = 1.0
 ARMS = 4
 # Where a ship comes out (just in front of the mouth) and where one lines up to go in, in mouth half heights along the front normal.

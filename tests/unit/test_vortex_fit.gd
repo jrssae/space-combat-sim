@@ -1,7 +1,8 @@
 extends GutTest
 ## The jump vortex's fit (M6-T19): at a gate, from its markers (the four arms run parallel to the vortex's axis, the side arms
 ## further out): an elliptical rim within a metre of the arms, the funnel as deep as an arm is long, the mouth at the arms' front
-## ends; at a ship-made point, round and sized for the ship coming through.
+## ends; at a ship-made point, round and sized for the ship coming through. The bright body fills less of a gate's mouth than of
+## a point's (round 4).
 
 const HARDPOINTS_PATH: String = "res://assets/generated/jumpgate/hardpoints.json"
 
@@ -15,6 +16,7 @@ func test_a_gate_takes_its_rim_depth_and_mouth_from_the_vortex_marker() -> void:
 	assert_almost_eq(fit.aspect(), 1038.0 / 755.0, 1e-4)
 	assert_almost_eq(fit.depth_m, 1200.0, 0.01)
 	assert_eq(fit.mouth_z_m, 0.0)
+	assert_eq(fit.body_share, VortexFit.GATE_BODY_SHARE, "the body ends inside the arms, as the still shows")
 
 
 func test_the_fit_follows_the_markers_not_constants() -> void:
@@ -86,3 +88,17 @@ func test_a_group_widens_its_point() -> void:
 	fit.widen_for(50.0, 12.0)
 	assert_almost_eq(fit.mouth_radius_m, 360.0, 0.01, "never narrows")
 	assert_almost_eq(fit.mouth_half_width_m, 360.0, 0.01, "and stays round")
+
+
+func test_the_body_fills_less_of_a_gates_mouth_than_of_a_points() -> void:
+	# The still's visible edge lies on the arms' back ends, two thirds of the way out from the acceptance pose; a ship-made point
+	# has no arms, so its body fills nearly the whole mouth and a widened group's ships come out of it, not the veil.
+	assert_between(VortexFit.GATE_BODY_SHARE, 0.6, 0.72)
+	assert_gt(VortexFit.POINT_BODY_SHARE, VortexFit.GATE_BODY_SHARE)
+	assert_lt(VortexFit.POINT_BODY_SHARE, 1.0, "a veil still carries on to the rim")
+	assert_eq(VortexFit.for_gate({}).body_share, VortexFit.GATE_BODY_SHARE, "a gate without markers too")
+	var point: VortexFit = VortexFit.for_ship(12.0)
+	assert_eq(point.body_share, VortexFit.POINT_BODY_SHARE)
+	point.widen_for(300.0, 12.0)
+	assert_eq(point.body_share, VortexFit.POINT_BODY_SHARE, "widening keeps it")
+	assert_lt(300.0, point.mouth_radius_m * point.body_share, "a wingman 300 m out comes out of the body")
