@@ -1241,6 +1241,10 @@ which changes the same native rows and rebase path:
   checklist; the roadmap row; the full tier once (T17's runner), read from the suite's own totals; the GPU check on the maintainer's
   machine; then ask the maintainer to confirm the milestone, and once confirmed merge `m6` into `main`.
 - **Done when:** the maintainer confirms M6.
+- **Work note (2026-11-12):** docs drafted: `docs/architecture.md` §19 as built (with §14.1, §14.2, §14.4 and §14.6, §5.6's ceiling
+  note and §18's D51 and §18.12 `JumpArrival` lines brought up to date; §19.14 is T20's placeholder), the M6 section and (H)
+  checklist of `docs/playtest.md`, and the roadmap rows. Remaining: T20's subsection, the full tier from T17's runner, the GPU check on
+  the maintainer's machine (AC7, AC8, AC9, AC13 numbers) and the maintainer's confirmation.
 
 ### M6-T17 Test tiers: quick, standard, balance and full
 

@@ -827,3 +827,124 @@ T20's own, taken at the end on the RX 6950 XT, are in `references/screenshots/T2
 - [ ] **T37 At scale** (`bench battle 300 120`): near you shots, flashes and engines are as before; distant fights no longer
       thin out the near sounds.
 - [ ] **T02 Menu sounds:** move, accept and back are audible and not tiring.
+
+
+# Play-testing M6 (Epsilon Space at True Scale)
+
+How to get to each new thing comes first; everything for you to judge is in the list at the end, "M6 acceptance checklist". The
+design is `docs/architecture.md` §19. Screenshots the agents took are under `references/screenshots/` in folders named for each
+task (`M6-T09 start/`, `M6-T10 scaled space/`, `M6-T11 planet/`, `M6-T12 sun/`, `M6-T15 far/`, `M6-T19 vortex/`).
+
+## Start
+
+```
+.tools/godot/godot --path .                                   # start screen; Free flight or New game
+.tools/godot/godot --path . -- --scenario=free_flight          # straight into free flight at a seeded epoch
+```
+
+Every scenario now starts beside the Babylon 5 stand-in on its real orbit round Epsilon III, 6 to 12 km from it, with the planet in
+view and a start epoch (free flight picks a lit one from the run's seed; `play free_flight 7` repeats seed 7). The station is
+a look-only stand-in with no collision until M7. The jumpgate stands 50 km from the station on the same orbit.
+
+## What is new to fly
+
+- **The HUD's reference.** `REF <name>  <range>  <closing>` in the corner names what your speed is read against: the station or the
+  gate near them, else the planet. Near the planet (or within one radius of its surface) `ALT <km>` shows under it. Your speed,
+  the velocity marker and the drift sphere are all against the reference, so the number jumps when it changes; the name says why.
+- **Assist and brake under gravity.** Gravity is felt only inside Epsilon III's zone (about 18 300 km from its centre; the station
+  at 27 500 km is outside it). Against a place, the brake stops you against it. Against the planet, holding the brake settles you
+  into the circular orbit at your altitude (an orbit, not a stop against the planet); thrust prograde to climb, retrograde to fall.
+  Hit the planet or drop below the top of its atmosphere (100 km) and the ship is destroyed, `god` or not.
+- **Speed.** The velocity rebase is on: past 2 000 m/s against the frame the world is re-based under you with no visible change;
+  `state world` shows `boosts`, `origin_velocity` and `riding`.
+- **The gate.** Fly within 10 km of it, target it (`gate target`), and the HUD offers `X: REQUEST JUMP`; X flies the jump (a short
+  cinematic out through the orange vortex and back through the blue one).
+
+## Console for M6 (all in `info.md`)
+
+```
+frame orbit 400            anchor the world on a free-falling 400 km circular orbit of Epsilon III (frame orbit 400 epsilon_iii)
+frame rail babylon5        back onto the station's rail (no pull); frame status shows the anchor
+state reference            what you are reading speed against; reference auto | babylon5 | jumpgate | epsilon_iii sets it
+boost 2500 0 0 / ride      a velocity rebase by hand / back onto the anchor (nothing should move on screen)
+scaled epoch 6             look at the system 6 hours later (the sun and the planet's phase move; the key light follows)
+scaled hide | show         the far bodies off or on, to compare; state scaled shows sizes and the key light's factor
+far station                take the stand-in away or put it back; far view gate 500 / far view station 500 hold the camera 500 km out
+far off                    end a far view; state far shows each prop's draw path and size on screen
+gate view reference        the pose of the reference still; gate view front|three_quarter|close|tip|run_in|side|behind|off
+gate open arrival 20       the gate's blue vortex for 20 s; gate open departure 1 the orange one for 1 s; gate close
+vortex open arrival 300    a stand-alone point 300 m in radius ahead of you; vortex view holds the camera on it; vortex close
+state system               the bodies, the places, the epoch and where the scenario put you
+```
+
+## M6 acceptance checklist (AC12, the (H) criteria)
+
+Everything automated is recorded in the acceptance table of `docs/milestones/m6-epsilon-space-at-true-scale.md`. These need you.
+GPU numbers are the agents' (RX 6950 XT); a hidden window stops being drawn on this desktop, so the frame rates marked (visible)
+want a window you can see.
+
+**The start**
+
+- [ ] **Free flight, T09 Start view** (`M6-T09 start/`): the planet is ahead over the ship and the station's stand-in is front
+      right, REF reads BABYLON 5 at about 8 km. For a few seeds (`play free_flight 1`, `2`, `3`) the planet is at least half lit and
+      in view; for the fixed epochs (sandbox, dogfight, instructor's route, escort) the start suits each scene.
+- [ ] **Station and gate in place:** the stand-in sits where the scenario's `at` puts it and is not odd to see without collision;
+      the gate is 50 km off, facing the station, and seen as a faint point from the start.
+
+**The planet and the sun** (`M6-T11 planet/`, `M6-T12 sun/`, `M6-T10 scaled space/`)
+
+- [ ] **Epsilon III's look:** rust and tan, strong relief, no oceans, faint wisps, a hard terminator, a faint warm limb (not
+      blue). The agent's note: a little pink and pale beside the description; the surface's brightness in full sun (1.5) and the
+      haze strength (0.012) are look choices.
+- [ ] **Against the still:** `references/Epsilon III planet.png` is **not on the agent's machine**, so the side-by-side panel
+      (`compare_with_still.png`) is a placeholder. Put the still back and check the planet against it (the generator's `look_sheet`
+      does the panel).
+- [ ] **The limb and terminator from orbit** (`frame orbit 400`, then `scaled epoch 0|6|12`): the limb is round, the lit limb glows,
+      the night limb does not, the night side is near black with no lights.
+- [ ] **From 1 000 km up** (`frame orbit 1000`) the planet fills the view and the map reads; from 400 km straight down it is soft
+      (4 096 texels round). Acceptable?
+- [ ] **The sun:** a white core with the orange in the limb and corona (brightness 2.4, corona 0.25 of the disc, limb darkening
+      0.7), the lens flare on it. The add-on's large flat halo (about 185 px) round the star: keep or remove?
+- [ ] **Going behind the planet** (`scaled epoch` until the star meets the limb): the key light and the flare fade smoothly, the
+      eclipse is dark, nothing pops.
+- [ ] **After a rebase** (`rebase 4000 0 0`, `boost 2500 0 0`): the planet and sun do not move or flicker.
+
+**Flying under gravity**
+
+- [ ] **Hold an orbit:** `frame orbit 400`, assist on, hold the brake: the speed reads about 0, REF is EPSILON III with `ALT` near
+      400 km, and the ship stays in a circular orbit.
+- [ ] **Assist and brake feel:** prograde and retrograde burns, climbing, falling and the brake settling you into the circle feel
+      right; the speed jump when REF changes (station to planet) is understood from the name.
+- [ ] **HUD layout:** the long `REF` line and the `ALT` line in the chase view's corner and the cockpit view are readable and do not
+      cover anything.
+- [ ] **The station's reference range:** 1 000 km (`settings.reference_place_range_km`) is right for REF to stay on the station.
+- [ ] **Falling bolts:** a bolt fired near the planet visibly curves (fire horizontally from 100 km up); debris falls too.
+- [ ] **Planet impact:** diving into the atmosphere destroys the ship even with `god on`; the death reads as intended.
+- [ ] **A dogfight across several velocity rebases** (`play dogfight`, then `boost 2500 0 0` or fly past 2 000 m/s): nothing is seen to
+      jump, bolts stay beside the ship, the HUD marks stay on their targets.
+
+**Far things**
+
+- [ ] **Far dots** (`far view gate 100|250|500|1000`, `far view station 500|1000`): the gate and the station keep their look to the
+      hand-off (about 248 km and 709 km), the cross-fade into a dot shows no pop, and the dot's brightness is acceptable
+      (the gate at 1 000 km is a faint point by M4's rule; keep it, or add a floor?). The station's far frames were not captured by
+      the agent. Check from the planet's far side too (the planet is a dot past about 841 000 km).
+- [ ] **Station range:** the stand-in broadcasting to 1 000 km is right, or wants more.
+
+**The jumpgate and its vortex** (`M6-T19 vortex/`, `gate view reference`)
+
+- [ ] **The side-by-side with the reference still** (`acceptance_jumpgate_png.png`): you accepted round 6 on 2026-11-12; look once
+      more in play from the reference pose, arrival and departure.
+- [ ] **The sequence:** lamps flash along the arms, the centre flash, the funnel unfolds, open, folds back, the white closing flash
+      (`gate open departure 1`, then `gate open arrival 1`); the swirl turns clockwise and inward for a departure, counter-clockwise
+      and outward for an arrival.
+- [ ] **From the side and the tip:** the base glows white from behind and the side; from the tip the near wall covers the dark base.
+- [ ] **The player's jump:** `X: REQUEST JUMP` within 10 km of the gate; the autopilot, the shots, the flash and fade, back out
+      through the blue vortex with control returned after 3 s or 500 m.
+- [ ] **Raiders and open points:** an encounter raid (`encounters force raid`) comes out of a vortex sized to the ship, not a flash.
+- [ ] **Frame rates** (visible window): the vortex open from close up and from the reference pose at the display's rate; free flight
+      with the planet, sun and gate in view; `state render` shows `forward_plus`, fps, draw calls and VRAM.
+- [ ] **T20 (mass arrivals, AC13):** to be added when T20 lands: the vortex's detail by distance with no pop, and `bench battle 1000`
+      with every ship entering through a jump point (100 forming at once) on your GPU.
+
+**Not for you yet:** Babylon 5 itself (M7), time warp (M9), other planets to fly to (M9).
