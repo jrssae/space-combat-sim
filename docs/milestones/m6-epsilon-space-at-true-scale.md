@@ -258,7 +258,7 @@ which changes the same native rows and rebase path:
 - **Tracks.** A (frame and gravity: T01, T02, T04 to T08), B (system data and scenarios: T03, T09), C (scaled space and far
   representations: T10, T11, T12, T15), D (the jumpgate: T13, T14), E (test tiers: T17, T18). Inside a track the order holds.
   If work goes one task at a time, the order is T01, T17, T18, T02, T03, T04, T05, T06, T07, T08, T09, T10, T11, T12, T13, T14,
-  T15, T19, T20, T21, T16. T19's pause was lifted by the maintainer on 2026-11-12 (evening); the maintainer accepted T19 after
+  T15, T19, T20, T21, T22, T16. T19's pause was lifted by the maintainer on 2026-11-12 (evening); the maintainer accepted T19 after
   round 6 and the closing flash (2026-11-12, night).
 - **One working copy** on branch `m6` in the main checkout, no task branches, as in M5; early-start work runs where the maintainer
   says (Early start, above).
@@ -305,6 +305,7 @@ which changes the same native rows and rebase path:
 | T19 | D | The vortex reworked and stand-alone: fitted to the gate, a shallow funnel, spiralling soft dark patches; open jump points use it too | T14 | Opus | Shader animation and a shared effect seam; the look is (H) | done (accepted by the maintainer, 2026-11-12) |
 | T20 | D | Vortex detail by distance and mass arrivals: detail layers dropped with screen size; up to 100 jump points forming at once; every ship of the 1 000-ship battle enters through one; the battle's GPU fps test with them | T19, T07 | Opus | A shader LOD, a pooled effect at a hundred instances and the battle's spawn path, judged on the GPU | done |
 | T21 | A | The rebase's per-node rest: only the rocks near a ship live in Jolt; a list of the shiftables in play instead of walking the group | T06, T07 | Opus | A measured engine-side follow-up to T06 on the paths T07 also changes | done |
+| T22 | D | Ships shrink into and grow out of the vortex: each ship flies the funnel, scaled to fit it, down to the black ring and a white flash (departure), or out of a white flash at the ring growing to full size (arrival); the player's jump in an external shot | T19, T20 | Opus | Gameplay, scaled Jolt bodies and a cinematic on every arrival path, judged by eye | not started |
 
 ### M6-T01 Moving-frame audit and design
 
@@ -1855,4 +1856,26 @@ which changes the same native rows and rebase path:
     `test_asteroid_belt` 4, `test_explosion` 12, `test_weapons` 48, `test_bench` 10, `test_main_scene` 14,
     `test_velocity_rebase` 10, `test_world_frame` 18, `test_sim_core`, `test_every_world_core`, `test_static_shift`
     pass (314 tests).
+
+### M6-T22 Ships shrink into and grow out of the vortex
+
+- **Goal:** the maintainer's description (2026-11-13): ships entering or leaving a jump vortex appear to shrink or grow, seen from
+  outside. A departing ship of any size shrinks to fit into the black ring; when it touches the ring there is a flash of white
+  light as it disappears. An arriving ship comes out of the same white flash at the black ring, appears shrunken, and grows
+  until it is its normal size.
+- **The maintainer's answers (2026-11-13):**
+  - **Fly the funnel:** the ship really flies from the mouth down the axis to the black ring (departure), or from the ring
+    out to the mouth (arrival), at its own speed, steered by the autopilot; what is drawn matches where it is.
+  - **Scale follows the funnel:** at every depth the ship is scaled so it fits the funnel's width there, reaching the black
+    ring's size at the base; a capital shrinks more than a fighter.
+  - **Normal, scaled, in transit:** the ship stays targetable and collides, its collision shapes scaled with its mesh.
+  - **The player's jump is always an external shot:** whatever view is active, the camera cuts to an outside cinematic of the
+    ship shrinking into the ring and the flash (and, arriving, the flash and the growth), then hands back.
+- **Applies to** gate vortices and ship-made points, every ship (AI, capitals, the player, the battle's mass arrivals, T20);
+  each ship its own white flash at the ring, like the vortex's own flashes; the vortex stays open until its last ship is
+  through.
+- **Tests:** the scale law (pure): quick; a departure and an arrival through a gate and through a ship-made point (the ship
+  reaches the ring, flashes, is gone; arrives at ring size and grows to 1.0 at the mouth); collisions and targeting while
+  scaled; the player's external shot; missions and encounters keep their outcomes. Screenshots and a GIF for the maintainer
+  (H).
 
