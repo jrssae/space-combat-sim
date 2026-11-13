@@ -146,6 +146,8 @@ res://tests/unit/test_encounter_plan.gd
 res://tests/unit/test_game_flow.gd
 res://tests/integration/test_boot_routing.gd
 res://tests/integration/test_front_end.gd
+res://tests/unit/test_hangar_camera.gd
+res://tests/integration/test_hangar_backdrop.gd
 res://tests/integration/test_pause_menu.gd
 res://tests/integration/test_main_scene.gd
 # Audio

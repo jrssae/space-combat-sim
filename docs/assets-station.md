@@ -474,3 +474,78 @@ T13 measures with three squadrons and a raid (`rendering/occlusion_culling/use_o
 the hull's. The aperture's door is the `aperture` section (z up to 560): replacing the `aperture` shape changes only that section.
 Collision: `station_collision.drum_pieces` closes the aperture's well for now (`aperture` frustum); the tunnel needs it opened.
 **For T18.** Lights on the drum go under its sections (they turn with it); a light's emissive props can use the prop atlas's glow.
+
+## Interior (M7-T09; look sheet approved 2026-11-13 with changes: three fighters a door, a darker grey floor)
+
+The front end's backdrop (D77, Q7): the inside of one Cobra-bay arm, `tools/procgen/assets/b5_interior.py` (shapes in
+`parts/cobra_bay.py`, paint in `styles/cobra_bay.py`), shown by `src/frontend/hangar_backdrop.gd` with the camera move in
+`hangar_camera.gd`. Sheet: `references/screenshots/M7-T09 interior/M7-T09_interior_look_sheet.png`
+(`scripts/interior_sheet.sh <out dir>`).
+
+**Frame and fit to the arm.** Hall frame: +y up toward the drum's axis (spin gravity pulls outward, so the floor is the arm's outer
+skin and the launch doors lie in it), z along the arm with the head (bow) at -z, origin on the floor under the middle of the
+door row. `to_arm` in the manifest places it in an arm standing on top of the drum: turned half a turn about z, the floor on
+the doors' plane (r 239), the origin at z 1155. The hall is 84 m wide, 30 m tall and 270 m long (inside the arm's 94 m by 40 m
+hatch section); seven launch positions at the doors' pitch of 38.57 m, each door 64 by 28 m with its two leaves meeting along
+the arm, as T04 built them outside.
+
+**What drove each choice** (references in `references/`, inspiration only, never traced):
+
+| Choice | Reference |
+|---|---|
+| Dark, grimy, low-key hall; red and white lamps among the gantries; a dark grey floor, the red kept on the lamps and machinery | 1, the show's Cobra-bay capture (most weight); the maintainer |
+| Three Starfuries a door, side by side, each held from above by its own clamp under the gantry crane over the door: columns, crane rails along the hall, a bridge, and per fighter a trolley, a drop arm, a yoke pad on the fuselage's back and clamp arms to the upper pods | 1 (overhead machinery and clamp arms holding the fighters); 2 (red and white clamp cranes on columns); the maintainer (several a door at the arm's true scale, so the hall feels full) |
+| Hazard striping on the door coamings, the bays' sills and the columns' feet; a hazard band down each door's seam | 1; 2; T04's door faces |
+| Orange canisters with yellow and dark bands along the walls | 1 |
+| A red portal with cut corners framing each launch position; big red bay numbers 1 to 7 on both walls | 2 (a suggestion) |
+| Yellow railings on the catwalks, ladders, yellow lattice on the crane columns | 2 (a suggestion) |
+| "01" to "07" plates on the cranes' bridges | 3, the fan diorama's "01" (a suggestion); its cradle under the fighter is left out, since the show holds them from above |
+| Machinery walls with pink-lit panels; the bay's warm orange glow round the closed leaves (what shows outside as the doors' lit edges) | `references/docking bay references/`, `cobra bay doors lit show capture.jpg` |
+| Pressure doors with toothed leaves at both ends, a lit launch-control booth over each | `docking bay references/6 inner airlock toothed doors.png` |
+
+**Pieces and budgets.** `bay` (one launch position with its three clamps, about 4 100 triangles, drawn seven times from `instances`), `ends`
+(the two end walls, about 650), `signs` (the numbers, 336): about 5 100 triangles of hall in the asset, about 30 000 drawn. Faces nobody
+inside can see (the slabs' backs, the slice ends) are dropped before packing. Atlases: bay 2 048 px at about 9.6 cm a texel, ends
+2 048 px at about 6 cm, signs 1 024 px at about 5 cm; the station's detail tile (8 m, 1 024 px) is laid over the bay and ends
+for the plating near the camera. The bake takes about 50 s and 2.5 GB.
+
+**Paint: metal, not plastic** (D72; `metal_finish` as the station and the raider):
+
+| Role | Capture sRGB | Metallic | Roughness | Where |
+|---|---|---|---|---|
+| deck | #48484A | 0.70 | 0.48 | floor, catwalks, the leaves' inner faces (was #5A5753; darker and greyer, the maintainer) |
+| wall | #6E6A66 | 0.55 | 0.42 | walls, cabinets, the number panels |
+| frame | #9A9998 | 0.50 | 0.40 | gantries, beams, the bridges, the booths |
+| recess | #2E2D2B | 0.50 | 0.66 | wells, the ceiling, vents |
+| trim | #915555 | 0.45 | 0.46 | the portals, trolleys, clamp arms, a red pipe run |
+| hatch | #CAA75F | 0.45 | 0.50 | coamings, sills, railings, ladders, lattice |
+| door | #7A4A3A | 0.55 | 0.44 | the leaves' slats, the end doors |
+| canister | #C2662E | 0.45 | 0.48 | the canisters |
+| machinery (bare steel #8E8B87) | #5A5856 | 0.90 | 0.30 | pipes, rails, hinges, rams, the drop arms' rams |
+| rubber | #1E1E1E | 0.00 | 0.85 | the clamps' pads, hoses |
+
+Glows: bay light (the station's #FFA860, strength 3.0), red lamp (#FF3A2A, 3.0), work light (#FFE2B8, 6.0), pink panel
+(#FF8C9A, 1.4), the booths' windows (warm, 2.0). Paint panels 4.8 m with 16 cm seams, wear scaled 4x a fighter's.
+
+**Lights** (8-light budget, `LightPicker`): seven white work lamps (#FFE2B8, energy 9, range 30 m), one under each crane's bridge
+over its fighter, alternating sides, entered as `LightEmitter`s into the front end's `LightRig`: seven emitters for its seven omni
+slots, so none ever swaps. The key light is held off the sun and turned into a faint, slightly red fill from above (colour 1.0,
+0.66, 0.6, energy 0.1; was 1.0, 0.5, 0.44 at 0.16), so the floor stays dark grey. Everything else is emissive.
+
+**The fighters**: 21 real `starfury_aurora` instances, three a door at x -20, 0 and 20 (4.6 m between neighbours' pods, all within
+the leaves' 62.5 m), origin 9 m above the floor, nose to -z, in Alpha wing's livery numbered 1 to 21 by door and slot, so
+liveries and the texture detail setting apply. Each rack in the manifest has an `id` (`door<d>_slot<s>`), its `door` (1 at
+the arm's head) and `slot` (1 to 3 from -x), its `number`, where it hangs and its `release` point 8 m below the door (outside
+the frame round the doors), both also in the arm's frame (`position_arm`, `release_arm`, through `to_arm`), for M7-T08's launch
+steps and M8's squadron launch; `launch` gives the doors, slots per door and the release height. The pads rest on the fuselage's back (its top at 1.5 m)
+and the upper pods' tops (3.21 m at x 5.53, z 0.77); the Python tests check these against the real hull.
+
+**The camera**: a dolly along the +x walkway (x 31, y 7.5, between the outer fighters and the crane columns) from the head end
+(z -112) to z 96 and back in 240 s (under 3 m/s), looking 30 m ahead and 7 m in toward the racks, with a 0.6 m bob and a
+3 degree sway; the racks run from the frame's right side to its middle, clear of the menu on the left. `backdrop wide|close|rack`
+are the sheets' fixed views (`rack`: one door's three fighters from 24 m in front).
+
+**Cost on the RX 6950 XT** (1920x1080, Forward+, sheet run): 19 to 21 draw calls with the menu, 7 or 8 without (the same as
+with seven fighters: the 21 instances share one mesh and material); 85 000 to 322 000 triangles drawn (about twice the seven
+fighters' 50 000 to 151 000; the Starfuries are most of it); steady 960 to 1 450 fps uncapped (was 1 290 to 1 500); the card's
+VRAM +234 MB with the front end and its hangar loaded (Godot's own count 372 MB), unchanged.

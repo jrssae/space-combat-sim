@@ -1,13 +1,14 @@
 class_name FrontEnd
 extends Control
-## The front end (architecture §18, D57): the sky with a slow camera drift behind a `MenuFrame` whose root page is the main
+## The front end (architecture §18, D57): the Cobra-bay hangar (M7-T09, D77: `HangarBackdrop`, its own lights and a slow dolly
+## along the racks; M5's sky with a slow camera drift when the interior is not generated) behind a `MenuFrame` whose root page is the main
 ## menu (M5-T45: New game, Load game (greyed out until saves exist), Free flight, Settings, Quit). New game (the missions, then
 ## the sandbox scenes) and Free flight start a run through `Game.play` (the loading screen); Settings opens the shared pages in
 ## the frame; Quit leaves. Everything is reachable and usable with the pad alone.
 
 const GameScript := preload("res://src/autoload/game.gd")
 
-## The drift: the camera sways about the view that has the nebula in it, never turning to the empty side of the sky.
+## The sky's drift (without the hangar): the camera sways about the view that has the nebula in it, never turning to the empty side.
 const DRIFT_YAW_DEG: float = 30.0
 const DRIFT_YAW_RATE: float = 0.035  # rad/s: one sway in about three minutes
 const DRIFT_PITCH_DEG: float = 6.0
@@ -32,6 +33,7 @@ var _elapsed_s: float = 0.0
 @onready var _frame: MenuFrame = %Frame
 @onready var _camera: Camera3D = %Camera
 @onready var _audio: AudioDirector = %Audio
+@onready var _backdrop: HangarBackdrop = %Backdrop
 
 
 func _ready() -> void:
@@ -42,12 +44,24 @@ func _ready() -> void:
 	if game == null:
 		push_error("FrontEnd: no Game autoload; nothing can be started")
 		_frame.show_message("The game cannot start a run: no Game autoload.")
-	_camera.basis = drift_basis(0.0)
+	_backdrop.environment = $Sky/SpaceEnvironment as SpaceEnvironment
+	if _backdrop.load_interior():
+		_camera.transform = _backdrop.camera_pose()
+	else:
+		_camera.basis = drift_basis(0.0)
 
 
 func _process(delta: float) -> void:
 	_elapsed_s += delta
-	_camera.basis = drift_basis(_elapsed_s)
+	if _backdrop.is_loaded():
+		_camera.transform = _backdrop.advance(delta)
+	else:
+		_camera.basis = drift_basis(_elapsed_s)
+
+
+## The hangar behind the menu (M7-T09).
+func backdrop() -> HangarBackdrop:
+	return _backdrop
 
 
 ## The camera's orientation `elapsed_s` into the drift. Pure, so the sway is tested without a sky.

@@ -440,6 +440,24 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 - **Files:** `tools/procgen/assets/b5_interior.py` and its tests, the interior scene with its lights and slow camera,
   `src/frontend/front_end.gd` (the backdrop), the M5 front-end tests.
 - **Done when:** AC8; a look sheet for the maintainer (H).
+- **Done (look sheet approved 2026-11-13 with changes, applied):** `b5_interior` (shapes `parts/cobra_bay.py`, paint
+  `styles/cobra_bay.py`): one Cobra arm's launch bay at the arm's true scale, 84 by 30 by 270 m, fitted to the arm outside
+  (`to_arm`); seven launch positions over T04's 64 by 28 m doors, each with a gantry crane whose clamps hold three Starfuries side
+  by side from above (the maintainer: several a door, so the hall feels full), each by its back and upper pods; red portals, bay
+  numbers, catwalks, ladders, pipes, canisters, machinery walls with pink-lit panels, toothed pressure doors and lit booths at
+  both ends. Three pieces (`bay` drawn seven times, `ends`, `signs`), about 5 100 triangles, metal paints with `metal_finish`,
+  the station's detail tile. Steered by the maintainer's Cobra-bay interior references (the show capture first; the fan render
+  and diorama as suggestions, the diorama's cradle left out); which drove what is in `docs/assets-station.md` "Interior
+  (M7-T09)". Fix round: the deck darker and greyer (#48484A) and the red fill fainter (energy 0.1), so the floor reads dark grey
+  and the red stays on the lamps and machinery; Alpha wing's livery kept. Every racked fighter has an `id`, its `door`, `slot`,
+  livery `number` and `release` point (hall and arm frames) for T08's launch steps and M8's squadron launch. The menu's backdrop
+  is `HangarBackdrop` (21 real `starfury_aurora` instances in Alpha 1 to 21, seven work lamps in the light rig's seven omni slots,
+  the key light a faint fill) with `HangarCamera`'s slow dolly along the +x walkway; without the generated interior the front
+  end keeps M5's sky drift. Console `backdrop <move|wide|close|rack>`, provider `backdrop`. Tests: `test_b5_interior.py` (15),
+  GUT `test_hangar_camera.gd` (5), `test_hangar_backdrop.gd` (6); M5's `test_front_end.gd` unchanged (25 pass). Sheet:
+  `references/screenshots/M7-T09 interior/M7-T09_interior_look_sheet.png` (`scripts/interior_sheet.sh`), with a full-rack frame;
+  7 to 21 draw calls (unchanged by the extra fighters), 85 000 to 322 000 triangles (about twice), 960 to 1 450 fps uncapped,
+  card VRAM +234 MB.
 
 ### M7-T10 AI and traffic around the station
 

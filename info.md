@@ -25,6 +25,7 @@ Commands on this list are those on the `m5` branch, which holds all of M4 since 
 |---|---|
 | always | Registered at launch by an autoload, so it works on the front end too. |
 | front end, flight | Registered by nodes both the front end and the flight scene hold (the sky, the audio), so it exists in both. |
+| front end | Registered by the front end alone (M7-T09: its Cobra-bay hangar backdrop), not in flight. |
 | in flight | Registered by the main scene, so it exists whenever flight is loaded (free flight, sandbox, a mission), not on the front end. |
 | AI ships | Exists while at least one AI-flown ship is in the scene. |
 | mission | Exists only while a mission runs. |
@@ -107,6 +108,7 @@ Arguments in `<angle brackets>` are required, `[square brackets]` optional, `a|b
 | `far` | `[status\|station\|view\|off] [gate\|station] [km]` | Far props (M6-T15): each big prop's draw path (near, shrunk toward the eye past the far plane, fading, far dot), distance and size on screen; `station` takes the station's stand-in away or puts it back at the station's place (a scenario that names the station's rail places it for good, M6-T09); `view gate\|station <km>` holds the camera that far from it for captures; `off` ends the view | in flight |
 | `aa` | `[off\|fxaa\|smaa\|msaa_2x\|msaa_4x\|taa]` | Show or set the 3D view's anti-aliasing, live (`settings.anti_aliasing`) | front end, flight |
 | `upscale` | `[native\|bilinear\|fsr1\|fsr2] [preset\|<scale>]` | Show or set how the 3D view is rendered and enlarged to the window, live | front end, flight |
+| `backdrop` | `<move\|wide\|close\|rack> [time_s]` | The menu's Cobra-bay hangar (M7-T09): show it from its slow camera move (`time_s` sets how far into the move) or from the look sheets' fixed views: wide, close, or one door's full rack from in front | front end |
 | `sheet` | `<asset_id> [distance_m] [lit\|dark\|off] [wing:number\|-] [view]` | Park one idle ship of an asset ahead of the camera for a look sheet | in flight |
 | `livery` | `<wing\|plain> [number] [ship]` | Paint a ship in a wing's livery with its number, to look at it | in flight |
 | `fxburst` | `[hit\|ram\|explosion_sparks\|explosion_fragments\|explosion_gas\|debris]` | Throw one burst of an effect 40 m in front of the camera | in flight |
@@ -195,6 +197,7 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `render` | The renderer (`forward_plus` or `headless`), fps, frame time, draw calls, triangles, VRAM, far dots, GPU, display and window | in flight |
 | `lights` | Which emitters light the scene this frame and what that costs | front end, flight |
 | `sky` | The star points and the nebula panorama: loaded and shown | front end, flight |
+| `backdrop` | The menu's Cobra-bay hangar (M7-T09): `loaded` (else M5's sky), `fighters` on the racks, work `lights` in the light rig, the camera's `view` and `time_s` into its move | front end |
 | `scaled` | The scaled-space layer (M6-T10): far `bodies` drawn, each one's angular size, direction, true distance and stand-in (`layout`), whether the key light follows the true sun (`has_sun`), `sun_direction`, the key light's factor in a planet's shadow (`key_light`, 0 to 1), the layer's epoch offset (`epoch_h`) and the planets drawn with their generated maps and haze (`mapped`, M6-T11) | front end, flight |
 | `far` | Far props (M6-T15): how many big props a `FarProp` draws far out (`props`) and each one's draw path, distance, shrink, bounding radius and covered area on screen, cross-fade and range (`layout`) | in flight |
 | `aa` | The anti-aliasing mode, what the viewport uses, and the bolts' and sky's motion-vector state | front end, flight |
