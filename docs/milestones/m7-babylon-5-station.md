@@ -2,13 +2,7 @@
 
 > "The station." (`docs/roadmap.md`)
 
-**Status:** planned 2026-11-10, ahead of time; **not started.** M5 is the current milestone until the maintainer accepts it, and
-M7 follows M6. M7 starts on branch `m7` cut from `main` once M6 has merged, unless the maintainer pulls a task forward ("Early
-start", below). Every task is `not started`. The planning questions (Q1 to Q11) are open: the proposed answers below are the
-planner's defaults, and each task that depends on one waits for the maintainer's answer. **The defence grid is not planned
-here**: where its emplacements sit and how its cannons and interceptors behave is a discussion between the maintainer and the
-controller (T02), and the plan's grid parts are filled in from it. This plan was written against `m5` at `5d81686` and assumes
-M6's plan (`m6-epsilon-space-at-true-scale.md`).
+**Status:** **in progress** on branch `m7` (cut from `main` after M6 merged as WIP, tag `m6-wip`), started 2026-11-13. The maintainer answered Q1 to Q5 and Q7 to Q11 on 2026-11-13 (table below); Q6 is settled in T02 with the maintainer after T01. **The defence grid is not planned here**: where its emplacements sit and how its cannons and interceptors behave is a discussion between the maintainer and the controller (T02), and the plan's grid parts are filled in from it. This plan was written against `m5` at `5d81686` and assumes M6's plan (`m6-epsilon-space-at-true-scale.md`); tasks check M6 as built before relying on it.
 
 Read `docs/architecture.md` first, especially §14.6 (launch bays and the mission framework), §14.7 (capital ships and stations),
 §14.8 (the procedural asset framework), §17.11 (M4's interceptor stand-ins), §17.18 (the textured mesh pipeline), §18 (M5: the
@@ -26,21 +20,21 @@ send raiders at it, and its defence grid fights them as the maintainer and the c
 Cobra bay through a cinematic launch, and the front end sits over a generated station interior instead of the bare sky. M8's
 tutorial (launch, exterior tour, defend the station) is written on top of this.
 
-## Planning questions (open, 2026-11-10)
+## Planning questions (asked 2026-11-10, answered 2026-11-13 except Q6)
 
 | Q | Question | Proposed answer (planner's default, until the maintainer answers) | Answer |
 |---|---|---|---|
-| Q1 | References for the station | **Needed before T01.** The maintainer's images of the station from several sides and close-ups of the bays, the docking aperture and the command section; per the standing rule, its colours and textures come from show images. Nothing from them is committed | open |
-| Q2 | How close must the station hold up? | Panel and window detail that reads from 50 m around the Cobra bays, the docking aperture and the command section, and from about 200 m everywhere else; the importer's levels and M6's far representations beyond that | open |
-| Q3 | Where are the Cobra bays and how does a launch work? | On the arms of the stationary command section (as `docs/design-references.md` reads), the fighter carried out on a rail and released with the station's velocity; or, if the references say the bays turn with the drum, released with the drum's surface speed. A launch of about 8 s from rest in the bay to the hand-off | open |
-| Q4 | Landing back in a bay or docking | Out of M7 (M8's tutorial ends in the debrief); the bays' geometry leaves room for it later | open |
-| Q5 | Can the station be damaged in M7? | Hits are taken by sections (M4's damage zones), shown on the HUD's target box, and a mission can fail on a section lost; the station is never destroyed or disabled in M7 (M12 brings staged break-up and disabled hulks) | open |
+| Q1 | References for the station | **Needed before T01.** The maintainer's images of the station from several sides and close-ups of the bays, the docking aperture and the command section; per the standing rule, its colours and textures come from show images. Nothing from them is committed | Maintainer, 2026-11-13: the references in `references/` (the STL `EA Babylon 5 Station.stl`, the schematic, side-front and details images, the station close-ups in `references/T40 seam references/`, `maintenance bot.webp`). Proportions from the STL with the **90% rule** (top, side and front silhouette IoU >= 0.90, L/W/H within 10%, `tools/refview` compare); colours from the show images |
+| Q2 | How close must the station hold up? | Panel and window detail that reads from 50 m around the Cobra bays, the docking aperture and the command section, and from about 200 m everywhere else; the importer's levels and M6's far representations beyond that | Maintainer, 2026-11-13: the proposed answer |
+| Q3 | Where are the Cobra bays and how does a launch work? | On the arms of the stationary command section (as `docs/design-references.md` reads), the fighter carried out on a rail and released with the station's velocity; or, if the references say the bays turn with the drum, released with the drum's surface speed. A launch of about 8 s from rest in the bay to the hand-off | Maintainer, 2026-11-13: the proposed answer |
+| Q4 | Landing back in a bay or docking | Out of M7 (M8's tutorial ends in the debrief); the bays' geometry leaves room for it later | Maintainer, 2026-11-13: the proposed answer |
+| Q5 | Can the station be damaged in M7? | Hits are taken by sections (M4's damage zones), shown on the HUD's target box, and a mission can fail on a section lost; the station is never destroyed or disabled in M7 (M12 brings staged break-up and disabled hulks) | Maintainer, 2026-11-13: the proposed answer |
 | Q6 | The defence grid | **Settled in T02** with the maintainer: where the emplacements sit, the weapon kinds (cannons, interceptors) and how each behaves. No default is proposed here | open (T02) |
-| Q7 | The front-end interior | The Cobra-bay hangar, with Starfuries on their launch racks, so M8 goes from the menu straight into a launch | open |
-| Q8 | Traffic around the station | Light civilian traffic in free flight: M5's civilians come from the jumpgate, approach the docking aperture and leave the world inside it; and the reverse | open |
-| Q9 | The turning drum and ships that touch it | The drum is a moving surface (`AnimatableBody3D`, about 66 m/s at its skin from M4's spin of 0.148 rad/s): a ship that scrapes it takes a ram at the surface's speed | open |
-| Q10 | The station's lights | Running lights and beacons on its extremities, lit windows on the drum and the command section (emissive maps), bay lights; the night side under the planet's shadow (M6) still shows its windows | open |
-| Q11 | Maintenance bots | A few near the bays and along the hull, flying slow loops between hull points; ambient only (no targets, no damage); they go back inside when fighting starts nearby | open |
+| Q7 | The front-end interior | The Cobra-bay hangar, with Starfuries on their launch racks, so M8 goes from the menu straight into a launch | Maintainer, 2026-11-13: the proposed answer |
+| Q8 | Traffic around the station | Light civilian traffic in free flight: M5's civilians come from the jumpgate, approach the docking aperture and leave the world inside it; and the reverse | Maintainer, 2026-11-13: the proposed answer |
+| Q9 | The turning drum and ships that touch it | The drum is a moving surface (`AnimatableBody3D`, about 66 m/s at its skin from M4's spin of 0.148 rad/s): a ship that scrapes it takes a ram at the surface's speed | Maintainer, 2026-11-13: the proposed answer |
+| Q10 | The station's lights | Running lights and beacons on its extremities, lit windows on the drum and the command section (emissive maps), bay lights; the night side under the planet's shadow (M6) still shows its windows | Maintainer, 2026-11-13: the proposed answer |
+| Q11 | Maintenance bots | A few near the bays and along the hull, flying slow loops between hull points; ambient only (no targets, no damage); they go back inside when fighting starts nearby | Maintainer, 2026-11-13: the proposed answer |
 
 ## Scope
 
@@ -144,7 +138,7 @@ making its own branch):
 | AC1 | References: the station described in `docs/design-references.md` from Q1's images, with its proportions, colours and the sources listed; nothing from the images in git | A | |
 | AC2 | Defence grid concept: T02's decisions written into D75 (positions as data, weapon kinds and behaviours, balance), approved by the maintainer | A | |
 | AC3 | Collision builder: Python tests for the budget, coverage and determinism; the station's pieces built in Godot from the manifest; a fighter flies into a Cobra bay and out without a false contact (headless test) and rams the hull where it touches | A | |
-| AC4 | Generator: `babylon5_station` meets the output contract; Python tests for budgets, frames, the pieces' axes, the hardpoints (bays, aperture, grid mounts, lights, tour points, sections) and determinism; the stand-in is gone; VRAM of the station's maps recorded | A | |
+| AC4 | Generator: `babylon5_station` meets the output contract; Python tests for budgets, frames, the pieces' axes, the hardpoints (bays, aperture, grid mounts, lights, tour points, sections) and determinism; the stand-in is gone; the STL compare passes the 90% rule (Q1); VRAM of the station's maps recorded | A | |
 | AC5 | In the game: the station sits at the system data's point and stays there in the free-falling frame across rebases (test); the drum turns from sim time and a ship scraping it takes a ram at the surface's speed (Q9); the station is targetable, broadcasts to 1 000 km (the AI sees it, test) and takes section damage (Q5) | A | |
 | AC6 | Defence grid: built as D75 says, in the native core, identical with 1 and 6 threads and between `sim_step` threaded and `delayed`; the station's hull blocks its fire; the balance T02 set holds in seeded headless fights | A | |
 | AC7 | Launch: a scenario starting in a bay plays the launch with its cinematic and hands the ship over with the bay's velocity (test on the hand-off state); skipping lands in the same state; wingmen launch from the next bays | A | |
@@ -174,9 +168,9 @@ making its own branch):
 
 | Task | Track | Title | Depends on | Agent | Why | Status |
 |---|---|---|---|---|---|---|
-| T01 | A | Station references and measurements (early start) | Q1 | Opus | Reading shapes and proportions off images; colours from show captures | not started |
+| T01 | A | Station references and measurements (early start) | Q1 | Opus | Reading shapes and proportions off images; colours from show captures | in progress |
 | T02 | B | Defence grid concept: emplacement locations, the cannons and interceptors and their behaviours, the balance (discussion with the maintainer; early start) | T01 | controller | The maintainer's design call, held as a discussion, not delegated | not started |
-| T03 | A | Compound collision builder in `tools/procgen/core` (early start) | - | Fable | Convex pieces with budgets and coverage that M12's capitals reuse | not started |
+| T03 | A | Compound collision builder in `tools/procgen/core` (early start) | - | Fable | Convex pieces with budgets and coverage that M12's capitals reuse | in progress |
 | T04 | A | `babylon5_station` generator: the frame and drum pieces, proportions, paint and texel tiers (early start) | T01 | Fable | An 8 km asset that must read from 50 m and from 1 000 km | not started |
 | T05 | A | Near-field detail and hardpoints: the Cobra bays, the docking aperture, the grid mounts, lights, windows, tour points, sections | T04, T02, T03 | Opus | Geometry around the places a fighter flies close to | not started |
 | T06 | B | The station in the game: placement in the frame, the turning drum, collision, hit volumes, rams, broadcast, section damage | T05, M6 | Opus | A moving 8 km body in Jolt and the native core | not started |
@@ -228,7 +222,7 @@ making its own branch):
   pointed at the new id.
 - **Notes:** the frame and the drum stay separate pieces with the drum's frame on its axis; texel tiers as D72 says, VRAM
   measured; a look sheet from 50 m, 1 km, 10 km and 100 km goes to `references/screenshots/M7-T04 station/` (H).
-- **Done when:** the output contract and Python tests for the shape; the maintainer has seen the look sheet.
+- **Done when:** the output contract and Python tests for the shape; the `tools/refview` compare against `references/EA Babylon 5 Station.stl` passes the 90% rule (Q1: top, side and front silhouette IoU >= 0.90, L/W/H within 10%), scores in `docs/assets-station.md`; the maintainer has seen the look sheet.
 
 ### M7-T05 Near-field detail and hardpoints
 
