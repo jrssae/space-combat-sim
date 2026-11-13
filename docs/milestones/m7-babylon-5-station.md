@@ -468,7 +468,10 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   its cargo pods (M5's modular Saturns), and the pods are moved into the zero-gravity docking bay between the bow's forks, then
   leave the world inside it; the freighter waits and leaves (or takes pods back out). **No loader ships** (maintainer, 2026-11-13: the
   arms and clamps in the zero-g bay capture belong to a cargo loader ship, and loaders are skipped): the pods fly into the bay
-  by themselves. Ships that fit the docking tunnel (94 × 34 m)
+  by themselves. **Two bays** (maintainer, 2026-11-13): the **gravity bay** (the main docking bay: through the
+  docking aperture into the spinning drum, its tunnel turning with the drum) and the **zero-gravity bay** (on the stationary
+  spine between the bow's two forks). A ship flying into the gravity bay matches the drum's roll (0.148 rad/s) before it
+  enters the tunnel, so it does not scrape the turning walls. Ships that fit the docking tunnel (94 × 34 m)
   fly in through the aperture and leave the world at the inner airlock.
 - **Done when:** AC9's AI and traffic.
 
