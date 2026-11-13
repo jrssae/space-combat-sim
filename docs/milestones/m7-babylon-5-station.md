@@ -260,7 +260,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T19 | A | Station sections: the frame and drum cut into linked sections, each with its own LOD and visibility range, and near-only detail props (maintainer, 2026-11-13) | T04 | Opus | One 8 km mesh gets one LOD and is never culled; T05's detail must be built on this | done |
 | T20 | C | The hangar behind the menu after the door resize: one Starfury per door (six), a narrower hall (maintainer, 2026-11-13) | T05, T09 | Opus | T09 sized the hall and racks to the old 64 m doors | in progress |
 | T21 | A | Follow-up to T05 from the STL: the Cobra arm's pentagonal cross-section, creases either side of the launch doors, and a roofed rectangular cargo bay (maintainer, 2026-11-13) | T05 | Opus | Shape read off the STL; the look is (H) | in progress |
-| T22 | A | The dorsal spine and the command section rebuilt to the STL (per-part sections IoU >= 0.90; maintainer, 2026-11-13) | T21 | Opus | T04 built them to the overall silhouette; the per-part check scores them 0.38 to 0.72 | not started |
+| T22 | A | The dorsal spine and the command section rebuilt to the STL (per-part sections IoU >= 0.90; maintainer, 2026-11-13) | T21 | Opus | T04 built them to the overall silhouette; the per-part check scores them 0.38 to 0.72 | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M7-T01 Station references and measurements
@@ -825,7 +825,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   in two waves of six; the hangar is Alpha's, the top arm; each fighter's wave, 1 or 2, in its data), the camera's rail and moves re-checked, the light budget (one work lamp per bay), the sheet refreshed for the
   maintainer (H), tests updated, commit.
 - **Done when:** the sheet approved, the tests green, committed.
-- **Done (refit built, the sheet awaits the maintainer):** `b5_interior` reads the arm from `hardpoints.cobra_arm` (T05's six doors,
+- **Done (sheet approved by the maintainer 2026-11-13):** `b5_interior` reads the arm from `hardpoints.cobra_arm` (T05's six doors,
   T21's halls; nothing hard-coded): the upper hall over the doors (40 by 17.5 m) under the lower hall (80 m wide, to 30 m), six
   launch positions at the 23 m pitch. Twelve Starfuries in Alpha's livery: wave 1 on the racks over the doors, held by clamp arms
   off the upper walls gripping their pods from outboard (the rack's middle open, as T21 has it); wave 2 the second row in the lower
