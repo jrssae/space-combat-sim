@@ -21,7 +21,8 @@ extends Node
 ## that reaches one first is spent there (rocks never break; any bolt of another faction stops on one). The bolt is spent,
 ## `Damageable.apply_hit` runs, an `ImpactFlash` is added and `hit_resolved` is emitted for the HUD and sound. Nothing is cached
 ## between ticks, so a `World.rebase()` changes nothing. The target's rotation during one
-## tick is ignored.
+## tick is ignored. A big hull with a surface (the station's frame and drum, M7-T06) is swept by the core against its
+## volumes: only a bolt that hits one reaches GDScript, with where it entered.
 ##
 ## Console: provider `combat` (`projectiles`, `hits`, `last_hit`, `pairs_tested`, `pairs_visited`, `hit_path`, `resolve_us`)
 ## and commands `damage <amount> [player|target]` and `heal [player|target|all]`. `resolve_us` is wall clock, a profiling
@@ -70,6 +71,7 @@ var _bolt_index := PackedInt32Array()
 var _bolt_ids := PackedInt64Array()
 var _bolt_count: int = 0
 var _hull_keys := PackedInt32Array()  # per kept hull pair, the paired hull's slot in the hull columns
+var _surface_t := PackedFloat64Array()  # per kept hull pair: where the bolt enters a big hull's surface (M7-T06), else -1
 var _rock_keys := PackedInt64Array()
 var _beam_ids := PackedInt64Array()
 var _hull_first := PackedInt32Array()
@@ -196,7 +198,7 @@ func resolve(delta: float) -> void:
 # This tick's candidate bolts and the hulls they pair with, from the core (M5-T32): spent bolts and a bolt's pair with its own
 # shooter are dropped there, so GDScript walks only bolts that may hit and reads only the hulls they may hit.
 func _candidates(sim: SimCore, keys: PackedInt64Array, rock_keys: PackedInt64Array, rock_count: int) -> void:
-	var c: Array = sim.core.hit_bolts(keys, rock_keys, rock_count)
+	var c: Array = sim.core.hit_bolts(keys, rock_keys, rock_count, _delta)
 	_bolt_index = c[0]
 	_bolt_ids = c[1]
 	_bolt_starts = c[2]
@@ -222,6 +224,7 @@ func _candidates(sim: SimCore, keys: PackedInt64Array, rock_keys: PackedInt64Arr
 	_velocities = c[22]
 	_bases = c[23]
 	hulls_last_tick = int(c[24])
+	_surface_t = c[25]
 	_hull_count = _body_ids.size()
 	_damageables.clear()
 	_damageables.resize(_hull_count)
@@ -411,13 +414,16 @@ func _earliest_hit(c: int, first: int, next: int) -> bool:
 		var t0: Vector3 = _starts[j]
 		var a: Vector3 = to_body * (start - t0)
 		var b: Vector3 = to_body * (p1 - (t0 + _velocities[j] * _delta))
-		if SweepMath.segment_sphere(a, b, Vector3.ZERO, damageable.bounding_radius + hit_radius) < 0.0:
-			continue
 		var t: float = INF
-		for shape: HitShape in damageable.shapes:
-			var shape_t: float = shape.sweep(a, b, hit_radius)
-			if shape_t >= 0.0 and shape_t < t:
-				t = shape_t
+		if _surface_t[k] >= 0.0:
+			t = _surface_t[k]  # a big hull (M7-T06): the core swept its volumes and kept only a pair that hits
+		else:
+			if SweepMath.segment_sphere(a, b, Vector3.ZERO, damageable.bounding_radius + hit_radius) < 0.0:
+				continue
+			for shape: HitShape in damageable.shapes:
+				var shape_t: float = shape.sweep(a, b, hit_radius)
+				if shape_t >= 0.0 and shape_t < t:
+					t = shape_t
 		if t < best_t:
 			best_t = t
 			_best = j

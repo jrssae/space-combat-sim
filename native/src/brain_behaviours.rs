@@ -12,6 +12,7 @@ use crate::brain_maths::{
     self, Capability, FlightCmd, Manoeuvre, Pcg, Pose, Temperament, hash_seed,
 };
 use crate::civilian;
+use crate::surface;
 use crate::kernels::{contact, pilot};
 use crate::rows::{Bolts, Rows};
 use crate::v3::{
@@ -456,11 +457,22 @@ impl Tick<'_> {
 
     // How far from its centre a target's surface lies (M5-T16): a civilian hull's radius, so an attack's ranges are
     // measured to a 260 m freighter's skin; 0 for any other target, whose ranges stay centre to centre.
+    // A big hull with a surface (M7-T06, the station) lies as far off as its nearest volume: what is left of the centre
+    // range once that is taken off.
     fn surface_of(&self, target_id: i64) -> f64 {
         let r = self.rows.row_of_id(target_id);
         match usize::try_from(r) {
             Ok(j) if self.rows.is_civilian(j) => self.rows.radii[j],
+            Ok(j) => self.big_hull_depth(j, self.p.position),
             _ => 0.0,
+        }
+    }
+
+    // How much nearer than its centre row `j`'s surface lies from `at` (M7-T06); 0 for a row without one.
+    fn big_hull_depth(&self, j: usize, at: Vector3) -> f64 {
+        match surface::nearest_of_row(self.rows, j, at) {
+            Some((_, d)) => maxf(f64::from(length(sub(self.rows.positions[j], at))) - d, 0.0),
+            None => 0.0,
         }
     }
 
@@ -2208,6 +2220,8 @@ impl AttackState {
             // A big civilian hull is as near as its skin (M5-T16): a raider picks a freighter by how close it really is.
             let d = if tick.rows.is_civilian(row) {
                 maxf(tick.lists.ranges[h] - tick.rows.radii[row], 1e-3)
+            } else if tick.rows.surface(row).is_some() {
+                maxf(tick.lists.ranges[h] - tick.big_hull_depth(row, p.position), 1e-3)
             } else {
                 tick.lists.ranges[h]
             };

@@ -49,6 +49,8 @@ const _KNUCKLE: Array = [[Vector3(0.0, 0.75, -1.0), Vector3(0.0, 1.44, -1.0)], [
 # The drawings are fixed per layout and aspect, so the painter's per-frame call reuses them (callers only read).
 static var _wire_cache: Dictionary = {}
 static var _poly_cache: Dictionary = {}
+# The station's sections seen from the side (M7-T06), from its manifest when it is built: one polygon a zone.
+static var _station_polygons: Array[Dictionary] = []
 
 
 ## `[{zone: int, segments: PackedVector2Array}, ...]`: line pairs (a0, b0, a1, b1, ...) for `draw_multiline`, in the unit
@@ -101,6 +103,8 @@ static func _build_wireframe(layout: DamageZones.Layout, aspect: float) -> Array
 ## `[{zone: int, points: PackedVector2Array}, ...]` for a layout drawn as outline polygons; empty for `Layout.NONE` and for
 ## a layout drawn as a `wireframe`.
 static func polygons(layout: DamageZones.Layout) -> Array[Dictionary]:
+	if layout == DamageZones.Layout.STATION:
+		return _station_polygons
 	if not _poly_cache.has(layout):
 		_poly_cache[layout] = _build_polygons(layout)
 	return _poly_cache[layout]
@@ -117,6 +121,34 @@ static func _build_polygons(layout: DamageZones.Layout) -> Array[Dictionary]:
 			out.append({"zone": DamageZones.DELTA_RIGHT, "points": PackedVector2Array([Vector2(0.1, -0.05), Vector2(0.5, 0.3),
 					Vector2(0.5, 0.4), Vector2(0.1, 0.34)])})
 	return out
+
+
+## Sets the station's drawing (M7-T06): its damage sections as boxes seen from the side, `[{zone, aabb}]` in the station's
+## frame (bow at -Z), laid bow left in the unit square at one scale.
+static func set_station_sections(sections: Array[Dictionary]) -> void:
+	_station_polygons = []
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	var flat: Array[Rect2] = []
+	for entry: Dictionary in sections:
+		var box: AABB = entry["aabb"]
+		var rect := Rect2(Vector2(box.position.z, -box.end.y), Vector2(box.size.z, box.size.y))
+		flat.append(rect)
+		lo = lo.min(rect.position)
+		hi = hi.max(rect.end)
+	if flat.is_empty():
+		return
+	var size: Vector2 = (hi - lo).max(Vector2(1e-6, 1e-6))
+	var k: float = WIRE_FILL / size.x
+	# Sections a few hundred metres tall on an 8 km station would be slivers: stretched up to three times, inside the square.
+	var ky: float = minf(3.0 * k, WIRE_FILL / size.y)
+	var centre: Vector2 = (lo + hi) * 0.5
+	for i: int in flat.size():
+		var r: Rect2 = flat[i]
+		var a: Vector2 = (r.position - centre) * Vector2(k, ky)
+		var b: Vector2 = (r.end - centre) * Vector2(k, ky)
+		_station_polygons.append({"zone": int(sections[i]["zone"]),
+				"points": PackedVector2Array([a, Vector2(b.x, a.y), b, Vector2(a.x, b.y)])})
 
 
 # The view: yaw about +Y, then pitch about +X; returns screen-plane x right, y up.

@@ -114,7 +114,7 @@ var options: Dictionary = {"out": "user://", "settle": "90", "views": ""}
 var _views: Array = VIEWS
 var _index: int = -1
 var _frame: int = 0
-var _station: StationStandin = null
+var _station: Station = null
 var _origin_z: float = 4000.0
 var _timed_us: int = 0  # when the timed frames of this shot began
 var _markers: Array[Dictionary] = []  # each marker node and its size against the view's marker radius
@@ -193,8 +193,9 @@ func _start() -> void:
 		get_tree().quit(1)
 		return
 	_origin_z = float((MeshAssets.read_manifest(StationStandin.ASSET_ID).get("centroid_offset", [0.0, 0.0, 4000.0]) as Array)[2])
-	_station.set_process(false)  # the arms stay where the shots expect them
-	_station.drum_pivot.basis = Basis.IDENTITY
+	_station.set_spinning(false)  # the arms stay where the shots expect them
+	_station.set_drum_angle(0.0)
+	_station.set_process(false)
 	if String(options["views"]) == "markers":
 		_build_markers()
 	if main.space_environment != null:

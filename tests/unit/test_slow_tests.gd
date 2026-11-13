@@ -7,6 +7,7 @@ const SLOW_FILES: Array[String] = [
 	"res://tests/integration/test_brain_tolerance.gd",
 	"res://tests/integration/test_flight_parity_fight.gd",
 	"res://tests/integration/test_weapon_rows_battle.gd",
+	"res://tests/integration/test_station_jolt_cost.gd",
 ]
 
 var _saved: String = ""

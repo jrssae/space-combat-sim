@@ -20,6 +20,34 @@ pub const FLAG_HULK: u32 = 32;
 /// freighter up to 260 m) that the brains, the raiders' picks, the turrets, avoidance and the tier treat by its size.
 pub const ROLE_COMBAT: u8 = 0;
 pub const ROLE_CIVILIAN: u8 = 1;
+/// A big hull with a surface of its own (M7-T06: the station's frame and drum): the hit sweep, the rams, avoidance, the
+/// fire lane and the brains' ranges read its volumes (`Rows::surface`) instead of its bounding sphere.
+pub const ROLE_SURFACE: u8 = 2;
+
+/// One box or capsule of a big hull in its body's frame, in 64 bits: the volume's own x, y and z axes (unit, as columns),
+/// its centre, and its size (a box's half extents; a capsule along its own y: half segment, radius, 0). `reach` bounds it
+/// from its centre.
+#[derive(Clone, Copy, Debug)]
+pub struct SurfaceVolume {
+    pub capsule: bool,
+    pub axes: [[f64; 3]; 3],
+    pub centre: [f64; 3],
+    pub half: [f64; 3],
+    pub reach: f64,
+}
+
+/// A big hull's volumes and its spin (rad/s about its body's own +z; the turning drum, 0 for the frame). A volume fitted to a
+/// convex hull also has that hull's face planes (`hulls`, by volume: each `[nx, ny, nz, d]` in the body frame, a point inside
+/// where `n . p <= d`; empty for a plain box or capsule), so a bolt stops on the shape Jolt collides with, not its box.
+#[derive(Clone, Debug, Default)]
+pub struct Surface {
+    pub volumes: Vec<SurfaceVolume>,
+    pub hulls: Vec<Vec<[f64; 4]>>,
+    pub spin_rad_s: f64,
+}
+
+/// The big hulls by body id.
+pub type Surfaces = HashMap<i64, Arc<Surface>>;
 
 /// The scan's rows, column by column: the bodies in registry order (active markers, then active hulls with no active
 /// marker), the static rows, then any row added after the tick's first sync. Read by the kernels through `bind()`, from
@@ -56,6 +84,9 @@ pub struct Rows {
     // The row's role (M5-T16): fed when a body turns active or is touched, never gathered per tick; rows built without the
     // column (hand-made ones in tests) are combat rows (`role`).
     pub roles: Vec<u8>,
+    // The big hulls' surfaces by body id (M7-T06), shared with the core that set them; `clear` keeps it. A row reads its
+    // own only when its role is `ROLE_SURFACE`.
+    pub surfaces: Option<Arc<Surfaces>>,
     // The rows by marker id, sorted by id, rebuilt with the rows (M4-T17): a kernel finds a contact by its id in a binary
     // search instead of a scan.
     pub id_rows: Vec<(i64, u32)>,
@@ -168,6 +199,7 @@ impl Clone for Rows {
             name_ids,
             names,
             roles,
+            surfaces,
             id_rows,
             node_count,
             tier_rows,
@@ -193,6 +225,7 @@ impl Clone for Rows {
         self.name_ids.clone_from(name_ids);
         self.names.clone_from(names);
         self.roles.clone_from(roles);
+        self.surfaces.clone_from(surfaces);
         self.id_rows.clone_from(id_rows);
         self.node_count = *node_count;
         self.tier_rows = *tier_rows;
@@ -358,6 +391,15 @@ impl Rows {
     /// Whether row `r` is a civilian hull.
     pub fn is_civilian(&self, r: usize) -> bool {
         self.role(r) == ROLE_CIVILIAN
+    }
+
+    /// Row `r`'s surface when it is a big hull with one (M7-T06), else none.
+    pub fn surface(&self, r: usize) -> Option<&Surface> {
+        if self.role(r) != ROLE_SURFACE {
+            return None;
+        }
+        let surfaces = self.surfaces.as_ref()?;
+        surfaces.get(self.body_ids.get(r)?).map(|s| s.as_ref())
     }
 
     /// The row whose marker id is `id`, or -1.

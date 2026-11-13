@@ -3581,7 +3581,7 @@ src/rendering/paint_meshes.gd          PaintMeshes: loads a painted mesh and put
 src/rendering/paint_mesh_lights.gd     PaintMeshLights (under Main): the light rig's 8 lights into every paint material, each frame
 src/rendering/render_piece.gd          RenderPiece: a piece's splat levels (by projected spacing) or its painted mesh
 src/perf/standins/station_standin.gd   StationStandin: the station's two pieces, the drum turning
-src/perf/station_scene.gd              StationScene (under Main): the station, 10 capitals, 80 fighters, the planet; `station near|far|off`
+src/perf/station_scene.gd              StationScene (under Main): the station, 10 capitals, 80 fighters, the planet; `station_scene near|far|off`
 scripts/render_compare.sh              one scene one way, fullscreen, the 3D at 1 080 lines, measured like the fullscreen check
 scripts/probe_draw_calls.gd            what one hull costs in Godot's draw calls, by kind
 ```
@@ -5356,7 +5356,7 @@ velocity rebase is `World.auto_boost_speed_mps`, an export of `main.tscn`, not a
 - A stand-alone jump point beyond the 50 km far plane is not drawn; it has no far stand-in like the gate's.
 - The gate is placed on its rail at the start and then holds still in the frame, while its true place turns round the station once
   an orbit (the chord between them moves about 4.5 m/s, 16 km an hour); M7 or a moving prop row carries it.
-- The station's stand-in has no collision and no `Targetable`; M7 replaces it.
+- The station's stand-in has no collision and no `Targetable`; M7 replaces it (done: M7-T06, §20.1).
 - GDScript-only brains (`perceive()`, the few pilots not native-capable) read frame velocities; a turret marker on a moving capital
   keeps its row velocity; the rocks' broad phase in the hit sweep takes the bolt's own segment off the anchor.
 - The resolvers' kept rock grids are rebuilt on every rebase and off-anchor tick; a ship spawned in a tick right beside a dormant
@@ -5364,3 +5364,46 @@ velocity rebase is `World.auto_boost_speed_mps`, an export of `main.tscn`, not a
 - The planet has no tilt, spin or detail layer (the map is soft from 400 km straight down); the shells' and dots' motion vectors
   under TAA and FSR 2 are not checked.
 - Doppler is out: voices stay in the local frame.
+
+## 20. The Babylon 5 station (M7)
+
+What M7 adds (tasks in `docs/milestones/m7-babylon-5-station.md`, decisions D72 to D78 there). M7-T14 writes the section in full;
+the parts below are contracts other tasks build on.
+
+### 20.1 The station in the game (D74, T06)
+
+```
+src/world/station.gd             Station: the frame and drum bodies, hulls, marker, visuals, the drum's turn; provider and command `station`
+src/world/station_spin.gd        StationSpin (pure): the drum's angle from the system's clock
+src/world/station_sections.gd    StationSections (pure): the damage sections' health, a hit's section, a loss said once
+native/src/surface.rs            big hulls' surfaces: packed volumes and hull planes, nearest points, the segment sweep, a turning skin's speed
+native/src/surface_rows.rs       ScsSimCore.set_surface / clear_surface / surface_count / surface_volume_count / surface_distance
+```
+
+- **Placement.** `FarPropHost.place_station` builds a `Station` where the scenario's anchor puts the station (M6-T09) and dresses
+  its visuals for the far field (`FarPropHost.dress_station`; the bodies never shrink). The node is shiftable and anchored, so
+  rebases and an off-anchor frame's drift move it with the anchor (D65). M4's `StationStandin` stays for the bench's
+  `station_scene` and the look tools only.
+- **Bodies.** The manifest's `collision.pieces` become two `AnimatableBody3D`s (`sync_to_physics` off) on the rock layer: the frame
+  never moves in the station's frame; the drum is set each tick at priority -50 (after the frame's sample, before the core's sync)
+  to `StationSpin.angle_at(system_time)` plus a phase kept when `station spin` holds and restarts it, so Jolt moves it kinematically
+  and its skin has the drum's speed. The visual drum turns each frame to the same clock between ticks. No lights (M7-T18).
+- **Big hulls in the core (`ROLE_SURFACE`).** Each piece carries a `Damageable` (the frame's on the `Station` node beside the
+  `Targetable`) whose row the core marks with the role `ROLE_SURFACE` once `set_surface` gave its body the hit volumes (16 numbers
+  a box or capsule) and the convex hulls they were fitted to (by volume index). `Rows::surface(r)` gives a row's surface. With it:
+  - `hit_bolts(hull_keys, rock_keys, rock_count, delta)` sweeps a pair's bolt against the surface in the hull's frame (hull planes
+    where given, else the box or capsule, grown by the bolt's hit radius) and keeps the pair only when it hits, with where along
+    the tick (a 26th column, `-1` for ordinary hulls); `HitResolver` takes that instead of sweeping the shapes.
+  - The ram tracker's swept pairs leave a surface row out (no prop sweep over 4 km); a ship ramming the station is Jolt's contact.
+    A contact with a turning surface (spin not 0) rams at once by `|v_ship - (v_rest + w x r)|`, the whole speed between the hull
+    and the skin under it (Q9), whatever Jolt's friction made of it; the station takes nothing.
+  - Avoidance treats each volume within reach as a threat at its nearest point (so a tunnel's floor and roof push equally); the
+    fire lane tests the segment against the volumes; the brains' skin range to a surface is the distance to its nearest volume.
+    Every other row's arithmetic is unchanged (parity recordings green); the surfaces travel with the rows into the AI job.
+- **Damage (Q5).** A hit's point in its piece's frame picks the damage section whose box holds it (`StationSections.section_at`);
+  the section's health falls (20 000 each, to be tuned by T07 and T10), the `DamageZones` layout `STATION` shows each section's
+  own share and `Silhouette.set_station_sections` draws them side on; `Station.section_lost` fires once per section. The hulls are
+  invulnerable: the station is never destroyed or disabled.
+- **Marker.** `BABYLON 5`, `earth_alliance`, kind `PROP`, broadcasting to 1 000 km (the AI hears it, M3-T17).
+- **Cost.** Jolt's physics stage with a fighter in the tunnel, along the spine and along the drum: +11 to +31 us a tick on a quiet
+  machine (one and six core threads), +43 to +91 us under load (`test_station_jolt_cost`, slow); T05's 192 shapes a piece stand.

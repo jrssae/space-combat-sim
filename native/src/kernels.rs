@@ -1351,6 +1351,7 @@ pub mod pilot {
     use godot::builtin::Vector3;
 
     use crate::rows::Rows;
+    use crate::surface;
     use crate::v3::{
         FORWARD, RIGHT, UP, add, clampf, cross, div_s, dot, length, length_squared, maxf, minf,
         normalized, rotated, scale, sub,
@@ -1427,61 +1428,109 @@ pub mod pilot {
             .filter(|&j| exempt_id == 0 || rows.ids[j] != exempt_id)
             .chain(statics.iter().filter_map(|&r| row(rows, r)));
         for j in listed {
-            let c_position = rows.positions[j];
             let c_velocity = rows.velocities[j];
-            let reach = ship.radius + rows.radii[j] + MARGIN_M;
-            let s = sub(ship.position, c_position);
-            let w = sub(v_des, c_velocity);
-            let d = f64::from(length(s));
-            if d < reach {
-                let out_dir = if d > TIE_M {
-                    div_s(s, d as f32)
-                } else {
-                    tie_direction(w, ship.tie_hash)
-                };
-                let closing = -f64::from(dot(w, out_dir));
-                let push = (reach - d) / PUSH_S + maxf(closing, 0.0);
-                dodge = add(dodge, scale(out_dir, push as f32));
-                urgent = urgent || closing > MATCHED_MPS;
+            if rows.surface(j).is_some() {
+                // A big hull (M7-T06): each of its volumes near enough to matter is a threat at its nearest point, so a
+                // ship goes round the station's skin, not its 4 km bounding sphere, and keeps off a tunnel's walls.
+                let reach = ship.radius + MARGIN_M;
+                let w = sub(v_des, c_velocity);
+                let speed = f64::from(length(w));
+                let relative = f64::from(length(sub(ship.velocity, c_velocity)));
+                let horizon = maxf(
+                    maxf(HORIZON_MIN_S, maxf(speed, relative) / a_stop),
+                    (2.0 * reach / a_side).sqrt() + URGENT_SETTLE_S,
+                );
+                surface::near_volumes(rows, j, ship.position, reach + speed * horizon, |near, _| {
+                    if let Some((push, hurry)) =
+                        threat(ship, near, c_velocity, 0.0, true, v_des, a_stop, a_side, urgent_s)
+                    {
+                        dodge = add(dodge, push);
+                        urgent = urgent || hurry;
+                    }
+                });
                 continue;
             }
-            let speed_sq = f64::from(length_squared(w));
-            if speed_sq < MATCHED_MPS * MATCHED_MPS {
+            let Some((push, hurry)) = threat(
+                ship,
+                rows.positions[j],
+                c_velocity,
+                rows.radii[j],
+                rows.is_static[j] || rows.is_civilian(j),
+                v_des,
+                a_stop,
+                a_side,
+                urgent_s,
+            ) else {
                 continue;
-            }
-            let t_star = -f64::from(dot(s, w)) / speed_sq;
-            if t_star <= 0.0 {
-                continue; // opening
-            }
-            let speed = speed_sq.sqrt();
-            let relative = f64::from(length(sub(ship.velocity, c_velocity)));
-            let mut horizon = maxf(HORIZON_MIN_S, maxf(speed, relative) / a_stop);
-            // A rock, a mine or a big civilian hull (M5-T16) is seen early enough to go round: at least the time a
-            // sideways burn takes to clear its reach.
-            if rows.is_static[j] || rows.is_civilian(j) {
-                horizon = maxf(horizon, (2.0 * reach / a_side).sqrt() + URGENT_SETTLE_S);
-            }
-            if t_star > horizon {
-                continue;
-            }
-            let offset = add(s, scale(w, t_star as f32));
-            let miss = f64::from(length(offset));
-            if miss >= reach {
-                continue;
-            }
-            let side = if miss > TIE_M {
-                div_s(offset, miss as f32)
-            } else {
-                tie_direction(w, ship.tie_hash)
             };
-            let x = sideways_speed(miss, speed * t_star, reach + AIM_PAST_M, speed, t_star);
-            dodge = add(dodge, scale(side, x as f32));
-            urgent = urgent || t_star < urgent_s;
+            dodge = add(dodge, push);
+            urgent = urgent || hurry;
         }
         Avoided {
             v_des: add(v_des, dodge),
             urgent,
         }
+    }
+
+    // One threat's dodge for `AvoidanceMath.filter` and whether it is urgent: a body at `c_position` moving at `c_velocity`
+    // with `c_radius`; `early` sees it soon enough to go round (a rock, a mine, a big hull).
+    #[allow(clippy::too_many_arguments)]
+    fn threat(
+        ship: &Ship,
+        c_position: Vector3,
+        c_velocity: Vector3,
+        c_radius: f64,
+        early: bool,
+        v_des: Vector3,
+        a_stop: f64,
+        a_side: f64,
+        urgent_s: f64,
+    ) -> Option<(Vector3, bool)> {
+        let reach = ship.radius + c_radius + MARGIN_M;
+        let s = sub(ship.position, c_position);
+        let w = sub(v_des, c_velocity);
+        let d = f64::from(length(s));
+        if d < reach {
+            let out_dir = if d > TIE_M {
+                div_s(s, d as f32)
+            } else {
+                tie_direction(w, ship.tie_hash)
+            };
+            let closing = -f64::from(dot(w, out_dir));
+            let push = (reach - d) / PUSH_S + maxf(closing, 0.0);
+            return Some((scale(out_dir, push as f32), closing > MATCHED_MPS));
+        }
+        let speed_sq = f64::from(length_squared(w));
+        if speed_sq < MATCHED_MPS * MATCHED_MPS {
+            return None;
+        }
+        let t_star = -f64::from(dot(s, w)) / speed_sq;
+        if t_star <= 0.0 {
+            return None; // opening
+        }
+        let speed = speed_sq.sqrt();
+        let relative = f64::from(length(sub(ship.velocity, c_velocity)));
+        let mut horizon = maxf(HORIZON_MIN_S, maxf(speed, relative) / a_stop);
+        // A rock, a mine or a big hull (M5-T16, M7-T06) is seen early enough to go round: at least the time a sideways
+        // burn takes to clear its reach.
+        if early {
+            horizon = maxf(horizon, (2.0 * reach / a_side).sqrt() + URGENT_SETTLE_S);
+        }
+        if t_star > horizon {
+            return None;
+        }
+        let offset = add(s, scale(w, t_star as f32));
+        let miss = f64::from(length(offset));
+        if miss >= reach {
+            return None;
+        }
+        let side = if miss > TIE_M {
+            div_s(offset, miss as f32)
+        } else {
+            tie_direction(w, ship.tie_hash)
+        };
+        let x = sideways_speed(miss, speed * t_star, reach + AIM_PAST_M, speed, t_star);
+        Some((scale(side, x as f32), t_star < urgent_s))
     }
 
     /// `FireLane.clear` over the rows `contacts`: true when nothing that must not be hit sits in the lane from `position`
@@ -1504,6 +1553,14 @@ pub mod pilot {
             if rows.ids[j] == target_id
                 || !protected(relation(rows, relations, j), rows.rigid[j], friendly_fire)
             {
+                continue;
+            }
+            if rows.surface(j).is_some() {
+                // A big hull (M7-T06) is in the lane where its volumes are, not across its bounding sphere.
+                let end = add(position, scale(dir, range_m as f32));
+                if surface::segment_enters(rows, j, position, end, CLEARANCE_M) {
+                    return false;
+                }
                 continue;
             }
             let rel = sub(rows.positions[j], position);

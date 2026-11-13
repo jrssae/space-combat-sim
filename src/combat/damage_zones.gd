@@ -7,8 +7,11 @@ extends RefCounted
 ##
 ## A zone is "gone" when it has taken `ZONE_SHARE` of the ship's full hull in damage, so a zone can be wrecked well before
 ## the ship dies.
+##
+## The station (M7-T06, Q5) has its damage sections as zones, as many as its manifest lists: its owner records each hit by
+## section (`record_zone`) and gives each zone its own health (`set_capacities`), since no point rule fits an 8 km hull.
 
-enum Layout { NONE, X_FIGHTER, DELTA }
+enum Layout { NONE, X_FIGHTER, DELTA, STATION }
 
 ## Zone indices of the X fighter (Starfury): the cabin and the four arms, upper then lower, left then right.
 const CABIN: int = 0
@@ -29,6 +32,8 @@ const DELTA_WING_X: float = 1.8
 
 var layout: Layout = Layout.NONE
 var totals: PackedFloat64Array = PackedFloat64Array()
+## Each zone's own health (the station's sections); empty: a share of the hull, `ZONE_SHARE`.
+var capacities: PackedFloat64Array = PackedFloat64Array()
 
 
 func _init(p_layout: Layout = Layout.NONE) -> void:
@@ -42,6 +47,8 @@ static func layout_from_name(layout_name: StringName) -> Layout:
 			return Layout.X_FIGHTER
 		&"delta":
 			return Layout.DELTA
+		&"station":
+			return Layout.STATION
 	return Layout.NONE
 
 
@@ -70,6 +77,19 @@ static func zone_for(p_layout: Layout, local: Vector3) -> int:
 	return -1
 
 
+## Gives each zone its own health (the station's sections): as many zones as values, all untouched.
+func set_capacities(values: PackedFloat64Array) -> void:
+	capacities = values.duplicate()
+	totals.resize(values.size())
+	totals.fill(0.0)
+
+
+## Adds `amount` of damage to zone `zone` directly (the station's sections); out of range does nothing.
+func record_zone(zone: int, amount: float) -> void:
+	if zone >= 0 and zone < totals.size() and amount > 0.0:
+		totals[zone] += amount
+
+
 ## Adds `amount` hull points of damage at the ship-local point `local`.
 func record(local: Vector3, amount: float) -> void:
 	var zone: int = zone_for(layout, local)
@@ -83,7 +103,8 @@ func severities(hull_max: float) -> PackedFloat32Array:
 	out.resize(totals.size())
 	var capacity: float = maxf(hull_max * ZONE_SHARE, 1e-6)
 	for i: int in totals.size():
-		out[i] = clampf(float(totals[i]) / capacity, 0.0, 1.0)
+		var own: float = maxf(capacities[i], 1e-6) if i < capacities.size() else capacity
+		out[i] = clampf(float(totals[i]) / own, 0.0, 1.0)
 	return out
 
 

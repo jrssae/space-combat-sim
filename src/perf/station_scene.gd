@@ -6,7 +6,7 @@ extends Node
 ##
 ## Every hull is drawn as its textured mesh. The player's ship is moved to a viewpoint near the station or 11 km off it, nose on the station, at rest.
 ##
-## Console: `station <near|far|off>`.
+## Console: `station_scene <near|far|off>` (M7-T06 gave `station` to the station in the game).
 
 const FIGHTERS_PER_SIDE: int = 40
 const FIGHT_BALL_M: float = 500.0
@@ -44,7 +44,7 @@ var centre: UniversePos = null
 
 
 func _ready() -> void:
-	DebugConsole.registry.register_command(ConsoleCommand.new(&"station",
+	DebugConsole.registry.register_command(ConsoleCommand.new(&"station_scene",
 			"Open the render comparison's station scene and put the player near it or far from it, or close it",
 			[ConsoleArg.enum_required(&"view", [&"near", &"far", &"off"])]), _cmd_station, self)
 

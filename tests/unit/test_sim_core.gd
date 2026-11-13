@@ -610,7 +610,12 @@ const BOLT_KERNEL_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin
 const BRAIN_FILES: Array[String] = ["res://native/src/v3.rs", "res://native/src/brain_maths.rs",
 		"res://native/src/brain_behaviours.rs", "res://native/src/civilian.rs"]
 const BRAIN_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::Vector3;", "use godot::builtin::{Basis, Vector3};",
-		"use crate::rows::", "use crate::v3::", "use crate::brain_maths::", "use crate::kernels::", "use crate::civilian;"]
+		"use crate::rows::", "use crate::v3::", "use crate::brain_maths::", "use crate::kernels::", "use crate::civilian;",
+		"use crate::surface;"]
+## The big hulls' surfaces (M7-T06): the station's volumes, nearest points, the sweep and the drum's skin speed, held to the
+## kernels' rules; they import the row tables and the vector maths only. The core's shell (`surface_rows.rs`) reaches them.
+const SURFACE_KERNEL_FILE: String = "res://native/src/surface.rs"
+const SURFACE_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::{Basis, Vector3};", "use crate::rows::", "use crate::v3::"]
 const KERNEL_FORBIDDEN: Array[String] = ["Gd<", "Variant", "InstanceId", "instance_id", "singleton", "PhysicsServer",
 		"godot_error", "godot_print", "godot_warn", "#[func]", "#[godot_api]", "GodotClass", ".get(&", ".call(", "Node",
 		"RigidBody", "StringName", "GString", "Scs", "pub use", "/*", "unsafe"]
@@ -620,7 +625,7 @@ const ROWS_FORBIDDEN: Array[String] = ["Gd<", "Variant", "InstanceId", "instance
 ## The only `use` lines the kernels may hold: the standard library, two maths builtins, and the row tables' plain data.
 const KERNEL_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::Vector3;", "use godot::builtin::{Basis, Vector3};",
 		"use crate::rows::{Bolts, FLAG_RIGID, Rows};", "use crate::rows::{FLAG_RIGID, Rows};", "use crate::rows::Rows;",
-		"use crate::v3::"]
+		"use crate::v3::", "use crate::surface;"]  # surface: the big hulls' volumes (M7-T06), engine-free too
 ## The only `use` lines the row tables may hold: the standard library and the value types the columns are made of. No engine
 ## string: the worker threads share the rows (M4-T18), and an engine string cannot be shared between threads.
 const ROWS_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::{Basis, Vector3};"]
@@ -689,6 +694,9 @@ func test_the_kernels_hold_no_engine_type() -> void:
 	violations.append_array(_engine_free_violations(TURRET_KERNEL_FILE, KERNEL_FORBIDDEN, TURRET_KERNEL_USE_ALLOWED))
 	violations.append_array(_engine_free_violations(VOICE_KERNEL_FILE, KERNEL_FORBIDDEN, VOICE_KERNEL_USE_ALLOWED))
 	violations.append_array(_engine_free_violations(RAM_TRACKER_FILE, KERNEL_FORBIDDEN, RAM_TRACKER_USE_ALLOWED))
+	violations.append_array(_engine_free_violations(SURFACE_KERNEL_FILE, KERNEL_FORBIDDEN, SURFACE_KERNEL_USE_ALLOWED))
+	assert_true(FileAccess.get_file_as_string("res://native/src/surface_rows.rs").contains("use crate::surface;"),
+			"the core's shell reads the surfaces")
 	assert_true(FileAccess.get_file_as_string(RAM_TRACKER_USER).contains("use crate::ram_tracker::"), "the shell reads the ram tracker")
 	assert_true(FileAccess.get_file_as_string(VOICE_KERNEL_FILE).contains("pub fn ships_near("), "the voice kernel holds ships_near")
 	assert_true(FileAccess.get_file_as_string(VOICE_KERNEL_USER).contains("use crate::voice_kernels"), "the shell reads the voice kernel")

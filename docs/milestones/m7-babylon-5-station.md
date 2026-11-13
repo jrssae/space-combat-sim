@@ -453,6 +453,44 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   surface, the big-hull handling for the station, `Targetable` and the broadcast, section damage and the HUD's target box, the
   `station` provider and commands, `info.md`, tests (rebase, the drum's ram, the broadcast, a section hit).
 - **Done when:** AC5.
+- **Done (as built; contracts in `docs/architecture.md` §20.1):**
+  - **`Station`** (`src/world/station.gd`, pure parts `StationSpin` and `StationSections`) replaces `StationStandin` in the game:
+    `FarPropHost.place_station` builds it where the scenario's anchor puts the station (M6-T09) and dresses its visuals for the
+    far field; shiftable and anchored, so it stays at the system data's point across rebases and off the anchor. The frame and
+    the drum are `AnimatableBody3D`s from the manifest's `collision.pieces` (rock layer: ships hit them, rocks and bolts have no
+    body to); the drum is set each tick (priority -50) to the system clock's angle at the manifest's 0.148 rad/s, so Jolt gives
+    its skin the drum's speed; `station spin off|on` holds it and starts it again from where it was. Every place comes from the
+    manifest (bodies, volumes, hulls, hardpoints, sections); nothing of the arms or bays is hard-coded (M7-T21 reshapes them).
+  - **Big hulls in the native core** (`native/src/surface.rs`, `surface_rows.rs`; role `ROLE_SURFACE`): each piece's hit volumes
+    and the convex hulls they were fitted to go to the core once. The hit sweep keeps a bolt's pair with the station only when
+    it hits a hull (a bolt stops on Jolt's shape, not on the volume's box, which stood up to 34 m proud of the bow); the ram
+    tracker leaves the station out of the prop sweep (rams come from Jolt's contacts) and lands a contact with the turning drum
+    at once by the whole speed between the ship and the skin (Q9: 61.7 m/s at the bands' 417 m); avoidance treats each volume in
+    reach as a threat at its nearest point (a tunnel's walls push equally), the fire lane tests the volumes, the brains' skin
+    range is the distance to the nearest volume. Every other row's arithmetic is unchanged.
+  - **Section damage (Q5):** a hit lowers the damage section whose box holds its point (11 from the manifest; 20 000 health each,
+    a starting number for T07 and T10 to tune), the target box shows them (`DamageZones` layout `STATION`, each section its own
+    health; the HUD draws the sections side on from the manifest), `Station.section_lost` fires once per section; the hulls are
+    invulnerable, so the station is never destroyed or disabled.
+  - **Marker:** `BABYLON 5`, `earth_alliance`, kind `PROP`, broadcasting to 1 000 km. **No lights** (T18).
+  - **Console:** provider and command `station` (`info`, `section <name> damage <n>`, `heal`, `spin on|off`, `goto <tour point>`);
+    the bench's scene command `station` is now `station_scene` (`scripts/render_compare.sh` follows).
+  - **Jolt cost** (`test_station_jolt_cost`, slow; the physics stage's median over 300 ticks of a fighter's run, with and without
+    the station): quiet machine, one core thread: tunnel +31 us, along the spine +11 us, along the drum +21 us; six threads: +18,
+    -15, (one noisy pair); under load from parallel agents (baselines about 800 us): +43 to +91 us at one and six threads. Far
+    under a millisecond: T05's 192 shapes a piece stand, no trim. Measured on the asset as built in the shared checkout at the
+    time (with M7-T21's work in progress on the Cobra arms and the cargo bay, not yet committed).
+  - **Tests:** Rust `surface/tests.rs` (9: packing, nearest points, the sweep, hull planes, bolts on the hull, avoidance round the
+    skin and in a tunnel, the fire lane, the drum's skin speed) and the ram tracker's drum scrape (1); GUT `test_station_parts`
+    (4), `test_station_in_game` (8: placement and rebases, off the anchor, the drum from the clock, a bolt on the real shape
+    lowering only its section, the target box's sections, a lost section once, the AI hearing it at 900 km and not 1 100 km, a
+    fighter into the docking bay with a rebase on the way, into the cargo bay and into a Cobra bay's hall with no contact, a
+    frame ram and a drum scrape at the skin's speed, no light), `test_station_threads` (threaded against delayed, one thread
+    against six, with raiders dodging the drum's skin), `test_station_jolt_cost` (slow); the guard test holds `surface.rs`.
+  - **Open:** the Cobra bay test holds the drum (a fighter at rest against the station meets a turning door at 36 m/s; the launch
+    is T08's); the contact lists still pick the station's rows by centre distance (nearest 12 within 5 km), so in a crowd a fighter
+    can miss it as a contact: T10 (avoidance of its surface, AC9) decides; friendly bolts pass through the station as through any
+    friendly hull (`friendly_fire` off).
 
 ### M7-T07 The defence grid in the game
 

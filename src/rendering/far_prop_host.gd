@@ -10,7 +10,7 @@ extends Node
 const NODE_NAME: String = "FarPropHost"
 const ACTIONS: Array[StringName] = [&"status", &"station", &"view", &"off"]
 const TARGETS: Array[StringName] = [&"gate", &"station"]
-## The station's stand-in is seen as far as a nav beacon is heard (D69, M3-T17).
+## The station is seen as far as its beacon is heard (D69, M3-T17).
 const STATION_RANGE_M: float = 1.0e6
 ## `far view`: the camera's bearing from the prop's centre in the prop's frame (in front, a little up and to the side, so a gate
 ## reads as one), and its field of view.
@@ -18,29 +18,33 @@ const VIEW_BEARING: Vector3 = Vector3(-0.35, 0.25, -1.0)
 const VIEW_FOV_DEG: float = 50.0
 
 var main: Main = null
-## The station's stand-in, placed by the scenario or by `far station`, or null.
-var station: StationStandin = null
+## The station, placed by the scenario or by `far station`, or null.
+var station: Station = null
 ## Where the station stands in the scenario's coordinates (M6-T09): where `far station` puts it back.
 var station_place: UniversePos = null
 
 var _view_prop: Node3D = null
 
 
-## Gives the station's stand-in its far drawing: both pieces shrunk together, then a dot. Call after `build()`, before it is
-## spawned. Null when its asset has no far section.
-static func dress_station(standin: StationStandin, range_m: float = STATION_RANGE_M) -> FarProp:
-	var manifest: Dictionary = MeshAssets.read_manifest(StationStandin.ASSET_ID)
-	return FarProp.attach(standin, [standin.frame_piece, standin.drum_pivot] as Array[Node3D], manifest.get("far", {}),
-			FarProp.albedo_of(manifest), range_m, "STATION")
+## Gives the station (a `Station`, or the bench's `StationStandin`) its far drawing: both pieces' visuals shrunk together, then
+## a dot; its bodies never move. Call after `build()`, before it is spawned. Null when its asset has no far section.
+static func dress_station(prop: Node3D, range_m: float = STATION_RANGE_M) -> FarProp:
+	var manifest: Dictionary = MeshAssets.read_manifest(Station.ASSET_ID)
+	var visuals: Array[Node3D] = []
+	if prop is Station:
+		visuals = (prop as Station).far_visuals()
+	elif prop is StationStandin:
+		visuals = [(prop as StationStandin).frame_piece, (prop as StationStandin).drum_pivot] as Array[Node3D]
+	return FarProp.attach(prop, visuals, manifest.get("far", {}), FarProp.albedo_of(manifest), range_m, "STATION")
 
 
 func _ready() -> void:
 	DebugConsole.registry.register_provider(&"far", ConsoleVars.new({
-		&"props": {"get": prop_count, "doc": "Big props drawn far out by a FarProp (M6-T15): the jumpgates and the station's stand-in"},
+		&"props": {"get": prop_count, "doc": "Big props drawn far out by a FarProp (M6-T15): the jumpgates and the station"},
 		&"layout": {"get": _layout_text, "doc": "Each far prop: its draw path (near, shrunk, fading, dot), distance, shrink, bounding radius and covered area on screen, and its range"},
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"far",
-			"Far props (M6-T15): status, station (place the station's stand-in at the station's place, or take it away), view <gate|station> <km> (hold the camera that far from it for captures), off (end the view)",
+			"Far props (M6-T15): status, station (place the station at its place, or take it away), view <gate|station> <km> (hold the camera that far from it for captures), off (end the view)",
 			[ConsoleArg.enum_optional(&"action", ACTIONS), ConsoleArg.enum_optional(&"target", TARGETS),
 					ConsoleArg.float_optional(&"km", null, 0.0)]), _cmd_far, self)
 
@@ -54,8 +58,8 @@ func prop_count() -> int:
 	return get_tree().get_nodes_in_group(FarProp.GROUP).size() if is_inside_tree() else 0
 
 
-## Places the station's stand-in for good at `at` (three numbers in the scenario's coordinates, M6-T09), dressed for the
-## far field. False, with nothing placed, when `at` is empty, beyond the stand-in's range, or its asset is missing.
+## Places the station for good at `at` (three numbers in the scenario's coordinates, M6-T09), dressed for the far field.
+## False, with nothing placed, when `at` is empty, beyond its range, or its asset is missing.
 func place_station(at: PackedFloat64Array) -> bool:
 	if at.size() < 3 or Vector3(at[0], at[1], at[2]).length() > STATION_RANGE_M:
 		return false
@@ -66,18 +70,19 @@ func place_station(at: PackedFloat64Array) -> bool:
 	return toggle_station()
 
 
-## Places the station's stand-in at the station's place (where the scenario put it, else the scenario's origin), or takes it
-## away when it is there. False when its asset is missing.
+## Places the station at its place (where the scenario put it, else the scenario's origin), or takes it away when it is
+## there. False when its asset is missing.
 func toggle_station() -> bool:
 	if station != null and is_instance_valid(station):
 		station.queue_free()
 		station = null
 		return true
-	var made := StationStandin.new()
+	var made := Station.new()
 	made.name = "Station"
 	if not made.build():
 		made.free()
 		return false
+	made.main = main
 	dress_station(made)
 	var at: UniversePos = station_place if station_place != null else UniversePos.new(0.0, 0.0, 0.0, main.world.origin.system_id)
 	main.world.spawn(made, at, Basis.IDENTITY, main.world)
@@ -108,7 +113,7 @@ func _view(which: StringName, km: float) -> ConsoleResult:
 	var prop: Node3D = _target(which)
 	var far: FarProp = FarProp.of(prop)
 	if prop == null or far == null:
-		return ConsoleResult.failure("far view: no %s drawn far out here (far station places the station's stand-in)" % which)
+		return ConsoleResult.failure("far view: no %s drawn far out here (far station places the station)" % which)
 	var centre: Vector3 = far.math.centre
 	var at: Vector3 = centre + VIEW_BEARING.normalized() * maxf(km * 1000.0, 0.1)
 	var frame: Dictionary = {"position": {"actor": "far", "offset": [at.x, at.y, at.z]},
