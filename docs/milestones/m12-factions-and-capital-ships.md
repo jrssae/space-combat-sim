@@ -60,6 +60,13 @@ weapons, and the Shadows and Vorlons bring the show's mechanics. M4's benchmark 
 | Q22 | Who opens jump points | Every capital warship (M6-T23's rule), not the fighters; a point is sized for its opener; hulls wider than the gate's mouth (2 400 by 1 510 m) use their own points; the Shadows' and Vorlons' arrivals follow T04 | Maintainer, 2026-11-13: **only some classes**: the larger ones (destroyers, carriers, dreadnoughts); smaller cruisers use a gate or another ship's point. T01 and T03 pick the list |
 | Q23 | Where the fleets are seen | A fleet sandbox scenario (sides and hulls from data), capital ships in free-flight encounters (raider carriers launching Delta-Vs, patrols by data), minefields by data; no story missions (M14) | Maintainer, 2026-11-13: the proposed answer |
 | Q24 | Sound | Generated sounds for each beam kind, interceptor fire, a capital's engines close by, the break-up and a reactor's blast, from the written references as M5's sound pass did | Maintainer, 2026-11-13: the proposed answer, **plus the ancients' voices**: the Shadows' scream and the Vorlon ships' tones, synthesised |
+| Q25 | (maintainer, 2026-11-13) An early sub-task for the raider capitals | - | Maintainer, 2026-11-13: **get one working capital ship that can merge to `main` early**: the raider strike carrier first. It has **no weapons** (its fighters are its weapons), **launches and retrieves fighters** and **opens its own jump points**. Work on `m12`, and `m12` merges into `main` when the carrier is accepted ("Early delivery" below, T19) |
+| Q26 | The strike carrier's length | A published figure (Q4) | Maintainer, 2026-11-13: none is published (the B5 wiki gives none); **fit the cradles: about 140 m**, the exact figure pinned so a 17 m Delta-V sits in its docking cradle as in `raider ships docked to strike carrier.jpg` |
+| Q27 | How the strike carrier retrieves fighters | Fighters fly back and latch onto a free cradle, shown docked; they return when the raid is over, when badly damaged, or when the carrier is about to jump; it waits for them, with a time limit | Maintainer, 2026-11-13: the proposed answer |
+| Q28 | Can the early strike carrier be destroyed? | Hull points; today's capital explosion and far flash; docked fighters die with it; a jump point it holds collapses (M6-T23) | Maintainer, 2026-11-13: the proposed answer; M12's sections and staged break-up come later |
+| Q29 | How a raid's fighters come in with the strike carrier | Docked on its cradles, launched once it is clear of its point | Maintainer, 2026-11-13: **both, chosen by data per raid**: docked then launched, or out of the carrier's point beside it as M6-T23 does today |
+| Q30 | What the weaponless strike carrier does in a raid | Hangs back at a stand-off from the raid's target, turns away from attackers, recalls its fighters and jumps out when its hull falls below a threshold or the raid ends; fighters not docked within a time limit are left behind | Maintainer, 2026-11-13: the proposed answer |
+| Q31 | The Raider Battle Wagon in the early sub-task? | After the strike carrier, with the same rules | Maintainer, 2026-11-13: **after the strike carrier, and with weapons** (which ones, settled with the maintainer before T20 starts) |
 
 ## The hulls
 
@@ -111,6 +118,28 @@ launches are proposed here and confirmed in T01 from the show.
   transport, the Narn Khnar super freighter, the construction tender, the cargo pod, the EA, atmospheric and Centauri
   shuttles and the Minbari Flyer.
 - Dropped: the raider control ship (Q7).
+
+## Early delivery: the raider capitals (maintainer, 2026-11-13; Q25 to Q31)
+
+The raider strike carrier is built first, ahead of the framework tasks, as one working capital ship merged to `main` early;
+the Battle Wagon follows it. They take only what they need from the later tasks; when T05, T07 and T08 to T11 land, these
+two hulls move onto them like every other.
+
+- **T19, the strike carrier (early slice):** the generator from `Rader_strike_carrier.stl` at about 140 m (Q26), with its
+  docking cradles as hardpoints; its axes are `--right=+y --up=+z --aft=+x` (the bow is the ring end, the stern the box and
+  its engine cluster; the up sign is confirmed on the look sheet). No weapons. A capital body in the game (zero damping, its
+  engines' force re-applied every tick), compound collision a Delta-V can fly up to and dock on, a `Targetable` of kind
+  capital in `raiders` with hull points (Q28). It opens its own jump points and replaces the cruiser stand-in in
+  `CarrierJumps` for raider raids. Its fighters arrive docked and launch, or come out of its point beside it, by data (Q29);
+  they come back and dock on free cradles by order (Q27); it hangs back, recalls its fighters and jumps out when hurt or
+  when the raid ends (Q30). Low and high texture sets after an A/B/C option sheet (the standing rule), the 90 % compare
+  (Q10). `docs/design-references.md`'s "Raider carrier" section is corrected: the gold "launch pods" are Delta-Vs docked on
+  cradle arms.
+- **The collision builder:** M7-T03's compound collision builder (D73) has no code yet; T19 builds it to D73's plan in
+  `tools/procgen/core/collision.py`, general and tested, so M7 and every later hull reuse it.
+- **T20, the Battle Wagon:** after T19 merges, with weapons (Q31; which ones, settled with the maintainer first) and its four
+  launch tubes.
+- **Merge:** when the maintainer accepts T19, the full suite passes on `m12` and `m12` merges into `main` (Q25).
 
 ## Scope
 
@@ -327,8 +356,8 @@ Out (explicitly):
 | T17 | E | Carriers launch fighters from bays and tubes | T07, T16 | Opus | Pool launches at hardpoints, replacing the stand-in | not started |
 | T18 | E | HUD and targeting: subsystems in the target menu's second level and on the target box | T08 | Sonnet | UI on the radial framework | not started |
 | T49 | E | The player at a capital's helm: controls, camera, firing orders from a radial menu (Q15; numbered last because it was added after the others had numbers) | T16, T18, T19 | Opus | Player input on a new kind of ship; orders the native gunners read | not started |
-| T19 | F | Raider strike carrier | T05, T07, T03 | Fable | First hull: proves the framework end to end | not started |
-| T20 | F | Raider Battle Wagon (from images) | T19 | Fable | No STL; four launch tubes | not started |
+| T19 | F | Raider strike carrier, early slice: the hull, flight, collision, hull points, cradle launch and retrieval, its own jump points, no weapons (Q25 to Q30; merged to `main` early) | - (early start) | Fable | The first working capital ship; it builds the collision builder M7 planned | in progress |
+| T20 | F | Raider Battle Wagon (from images), with weapons (Q31) and four launch tubes; second ship of the early sub-task | T19, the maintainer on its weapons | Fable | No STL; four launch tubes | not started |
 | T21 | F | EA Omega-class destroyer | T19 | Fable | Rotating section, carrier, interceptors | not started |
 | T22 | F | EA Hyperion-class heavy cruiser | T19 | Fable | Hull generator | not started |
 | T23 | F | EA Nova-class dreadnought | T19 | Fable | Hull generator | not started |
@@ -471,7 +500,7 @@ Out (explicitly):
   beams, interceptors, turrets, launchers, bays), collision and chunks; its `ShipSpec` and weapon data; Python tests; the
   90 % compare (Q10) with scores in `docs/assets-capital.md`; VRAM; a look sheet from 50 m, 1 km, 10 km and 100 km to
   `references/screenshots/M12-Txx <hull>/` (H); a headless test that it spawns, flies, fights and dies by its plan.
-- **Notes per hull:** T19 is the first and fixes what the framework missed before the others start. T20 has no STL (Q10).
+- **Notes per hull:** T19 and T20 are the early sub-task ("Early delivery" above); T05 then moves T19 onto the framework. T20 has no STL (Q10).
   T21's rotating section is an `AnimatableBody3D` as the station's drum. T21 to T24 carry the renegades' marking (T02). T34
   is the largest hull; check its jump point and its far representation. T36's petals come from show images.
 - **Done when:** AC6 for the hull and its row's look sheet seen by the maintainer.
