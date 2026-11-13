@@ -323,3 +323,43 @@ func test_a_held_key_light_leaves_the_flare_whole() -> void:
 	env.hold_key_star(true)
 	env.follow_sun()
 	assert_eq(env.post_effects.flare_strength(), 1.0)
+
+
+func test_a_planet_a_few_pixels_across_hands_over_to_its_far_dot() -> void:
+	# M6-T15 (D70, AC9): the planet stays visible however far out. On a 1080-line picture at 75 degrees it is DOT_PX across
+	# about 840 000 km out; the dot covers the disc's area and hands back a tenth inside, as a ship's far dot does.
+	var window: Vector2i = get_tree().root.size
+	get_tree().root.size = Vector2i(1920, 1080)
+	camera.fov = 75.0
+	_on_the_rail()
+	var k: float = FarProp.k_of(camera)
+	var out_at: float = PLANET_RADIUS_M * k / FarPropMath.DOT_PX
+	assert_between(out_at, 8.0e8, 8.8e8)
+	var planet_local: Vector3 = layer.placement_of(PLANET).direction * STATION_ORBIT_M
+	var to_sun: Vector3 = layer.sun_direction()
+	var steps: Array[Dictionary] = [
+		{"d": out_at * 0.99, "dot": false}, {"d": out_at * 1.01, "dot": true}, {"d": out_at * 0.95, "dot": true},
+		{"d": out_at * 0.89, "dot": false}, {"d": out_at * 3.0, "dot": true}]
+	for step: Dictionary in steps:
+		var d: float = step["d"]
+		camera.position = planet_local + to_sun * d  # the sun behind the camera: the planet's day side
+		layer.refresh(camera)
+		var placed: ScaledPlacement = layer.placement_of(PLANET)
+		assert_almost_eq(placed.distance_m, d, d * 1e-4)
+		assert_eq(layer.is_dotted(PLANET), step["dot"], "at %.3f million km" % (d / 1e9))
+		assert_eq(layer.dot_of(PLANET).visible, step["dot"])
+		assert_eq(layer.sphere_of(PLANET).visible, not step["dot"], "drawn by one or the other, never both or neither")
+		if step["dot"]:
+			var material := layer.dot_of(PLANET).material_override as ShaderMaterial
+			var r: float = material.get_shader_parameter(&"radius_m")
+			var disc_px2: float = PI * pow(placed.radius * k / placed.offset.length(), 2.0)
+			assert_almost_eq(FarPropMath.dot_cover_px2(r, placed.offset.length(), k), disc_px2, disc_px2 * 1e-6,
+					"the dot covers the disc's area")
+			assert_eq(float(material.get_shader_parameter(&"layer_depth")), placed.depth, "on the layer's pinned depth")
+	var day: Vector3 = (layer.dot_of(PLANET).material_override as ShaderMaterial).get_shader_parameter(&"paint")
+	assert_gt(day.x, 0.2, "full phase: the maps' mean albedo in full sun")
+	camera.position = planet_local - to_sun * out_at * 3.0  # the far side: a thin crescent at most
+	layer.refresh(camera)
+	var night: Vector3 = (layer.dot_of(PLANET).material_override as ShaderMaterial).get_shader_parameter(&"paint")
+	assert_lt(night.x, day.x * 0.05, "seen from its night side it is all but dark")
+	get_tree().root.size = window

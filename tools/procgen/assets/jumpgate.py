@@ -34,12 +34,13 @@ from ..core.context import AssetOutputs, BuildContext
 from ..core.geometry import Material, Mesh, box, inset_convex_polygon, lathe, prism, rotation_x, rotation_y, tapered_box
 from ..core.manifest import build_manifest, write_manifest
 from ..core.obj import write_obj
+from ..core.silhouette import far_section
 from ..core.textured_mesh import TexturedPart, phase_steps, write_textured_mesh
 from ..parts import Collision
 from ..styles import Style
 
 ASSET_ID = "jumpgate"
-GENERATOR_VERSION = 3
+GENERATOR_VERSION = 4  # 4: the far view's silhouette table (M6-T15)
 OBJ_NAME = f"{ASSET_ID}.obj"
 HARDPOINTS_NAME = "hardpoints.json"
 JSON_DIGITS = 4
@@ -528,6 +529,7 @@ def build(ctx: BuildContext) -> AssetOutputs:
                              "vortex_radius": hp["vortex"]["radius_m"], "vortex_half_width": hp["vortex"]["semi_axes_m"][0],
                              "vortex_depth": hp["vortex"]["depth_m"]},
             "mesh": mesh_entry,
+            "far": far_section(body.vertices, body.faces),
             "vortex": {k: hp["vortex"][k] for k in ("center", "normal", "up", "radius_m", "semi_axes_m", "depth_m", "colour_space",
                                                     "colours", "flash")},
         },

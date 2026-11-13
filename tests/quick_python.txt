@@ -22,3 +22,4 @@ tools.procgen.tests.test_sampling
 tools.procgen.tests.test_livery
 tools.procgen.tests.test_planet_helpers
 tools.procgen.tests.test_jumpgate_helpers
+tools.procgen.tests.test_silhouette

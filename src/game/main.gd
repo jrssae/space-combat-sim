@@ -80,6 +80,8 @@ var target_menu: TargetMenuDirector = null
 var encounter_director: EncounterDirector = null
 ## The scenario's jumpgates and the player's jump through one (M6-T14); always present, with no gate in most scenarios.
 var gates: JumpgateHost = null
+## The far props' console and the station's stand-in for captures (M6-T15).
+var far_props: FarPropHost = null
 ## The star system the scene flies in (M6-T03).
 var star_system: StarSystemHost = null
 
@@ -199,6 +201,10 @@ func _ready() -> void:
 	add_child(gates)
 	if bool(scenario.get("ok", false)):
 		_spawn_props(scenario["props"])
+	far_props = FarPropHost.new()
+	far_props.name = FarPropHost.NODE_NAME
+	far_props.main = self
+	add_child(far_props)
 		for entry: Dictionary in scenario["jumpgates"]:
 			gates.place(entry, star_system.system)
 		_spawn_belts(scenario["belts"])

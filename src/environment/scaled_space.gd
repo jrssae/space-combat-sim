@@ -16,6 +16,10 @@ extends Node3D
 ## shell over it; a body without maps keeps the plain stand-in. The star is a limb-darkened disc with a corona (M6-T12,
 ## `SunLook`, `scaled_star.gdshader`) on a sphere `SunLook.GLOW_SCALE` times its disc.
 ##
+## A planet a few pixels across (a million km and more off) hands over to a far dot on the layer (M6-T15, D70): M4's rule
+## and hysteresis at `FarPropMath.DOT_PX`, covering the disc's area, painted with its maps' mean albedo lit as its phase
+## shows it, so it stays visible however far the camera goes.
+##
 ## Console (§6.4): provider `scaled`, command `scaled`. The look is (H).
 
 const SHADER_PATH: String = "res://assets/shaders/scaled_body.gdshader"
@@ -30,6 +34,8 @@ const LATE_PRIORITY: int = 1000
 const STAND_IN_EPOCH_S: float = 23_300.0
 const PLANET_COLOUR: Color = Color(0.55, 0.36, 0.25)
 const SPHERE_SEGMENTS: int = 128
+## The planet surface's full sun (`scaled_planet.gdshader`'s `sun_strength`), which its far dot matches.
+const SUN_STRENGTH: float = 1.5
 const ACTIONS: PackedStringArray = ["status", "epoch", "show", "hide"]
 
 ## Added to the sim clock before the ephemeris is asked, s.
@@ -40,6 +46,9 @@ var _spheres: Dictionary = {}  # StringName -> MeshInstance3D
 var _shells: Dictionary = {}  # StringName -> MeshInstance3D, the haze over a planet with maps
 var _frames: Dictionary = {}  # StringName -> Basis, a planet's own axes in the game's
 var _placements: Dictionary = {}  # StringName -> ScaledPlacement
+var _dots: Dictionary = {}  # StringName -> MeshInstance3D, a planet's far dot
+var _dotted: Dictionary = {}  # StringName -> bool, drawn as its dot now
+var _albedo: Dictionary = {}  # StringName -> Color, a planet's mean albedo (linear)
 var _star: StringName = &""
 var _sun_direction: Vector3 = Vector3.UP
 var _has_sun: bool = false
@@ -97,11 +106,14 @@ func refresh(camera: Camera3D) -> void:
 	var to_star: PackedFloat64Array = _from(eye, places.get(_star, PackedFloat64Array()))
 	_has_sun = to_star.size() == 3
 	_key_light = 1.0
+	var k: float = FarProp.k_of(camera)
 	for id: StringName in system.body_ids:
 		var at: PackedFloat64Array = places[id]
 		var sphere: MeshInstance3D = _spheres[id]
 		if at.size() < 3:
 			sphere.visible = false
+			if _dots.has(id):
+				_dots[id].visible = false
 			_placements.erase(id)
 			continue
 		var radius_m: float = float(system.info(id)["radius_m"])
@@ -112,7 +124,12 @@ func refresh(camera: Camera3D) -> void:
 		elif _has_sun:
 			_key_light = minf(_key_light, EclipseMath.lit_fraction(to_star, float(system.info(_star)["radius_m"]),
 					_from(eye, at), radius_m))
-		sphere.visible = true
+		var dotted: bool = id != _star and LodSwitcherMath.far_dot(placed.distance_m, bool(_dotted.get(id, false)),
+				radius_m * k / FarPropMath.DOT_PX)
+		_dotted[id] = dotted
+		sphere.visible = not dotted
+		if _dots.has(id):
+			_place_dot(_dots[id], dotted, view.origin + placed.offset, placed)
 		var axes: Basis = _frames.get(id, Basis.IDENTITY)
 		# The star's sphere also holds its corona.
 		var reach: float = placed.radius * (SunLook.GLOW_SCALE if id == _star else 1.0)
@@ -126,6 +143,14 @@ func refresh(camera: Camera3D) -> void:
 			var lit_from: PackedFloat64Array = _from(places[id], places[_star])
 			if id == _star or lit_from.size() != 3:
 				continue
+			if bool(_dotted.get(id, false)) and _dots.has(id):
+				# The phase is the angle at the planet between the star and the eye.
+				var phase: float = acos(clampf(_unit(lit_from).dot(_unit(_from(places[id], eye))), -1.0, 1.0))
+				var lit: float = SUN_STRENGTH * FarPropMath.disc_mean_lit(phase)
+				var albedo: Color = _albedo.get(id, PLANET_COLOUR.srgb_to_linear())
+				# A Vector3: a Color would be taken as sRGB (FarProp's note).
+				(_dots[id].material_override as ShaderMaterial).set_shader_parameter(&"paint",
+						Vector3(albedo.r * lit, albedo.g * lit, albedo.b * lit))
 			if not _frames.has(id):
 				(_spheres[id].material_override as ShaderMaterial).set_shader_parameter(&"sun_direction", _unit(lit_from))
 				continue
@@ -172,6 +197,16 @@ func sphere_of(id: StringName) -> MeshInstance3D:
 	return _spheres.get(id) as MeshInstance3D
 
 
+## The far dot of planet `id` (shown once it is a few pixels across), or null.
+func dot_of(id: StringName) -> MeshInstance3D:
+	return _dots.get(id) as MeshInstance3D
+
+
+## Whether planet `id` is drawn as its far dot now.
+func is_dotted(id: StringName) -> bool:
+	return bool(_dotted.get(id, false))
+
+
 ## The haze shell over planet `id` (a child of its sphere), or null when it has no maps.
 func shell_of(id: StringName) -> MeshInstance3D:
 	return _shells.get(id) as MeshInstance3D
@@ -208,7 +243,12 @@ func flare_strength() -> float:
 func _build(system: StarSystem) -> void:
 	for sphere: MeshInstance3D in _spheres.values():
 		sphere.queue_free()
+	for dot: MeshInstance3D in _dots.values():
+		dot.queue_free()
 	_spheres.clear()
+	_dots.clear()
+	_dotted.clear()
+	_albedo.clear()
 	_shells.clear()
 	_frames.clear()
 	_placements.clear()
@@ -227,7 +267,9 @@ func _build(system: StarSystem) -> void:
 			_star = id
 		if not is_star:
 			var look: PlanetLook = PlanetLook.load_body(id, system.info(id))
+			_add_dot(id)
 			if look.valid:
+				_albedo[id] = look.mean_albedo
 				_add_mapped_planet(id, look)
 				continue
 			push_warning("ScaledSpace: %s drawn plain: %s" % [id, look.error])
@@ -293,12 +335,45 @@ func _layer_mesh(node_name: String, material: ShaderMaterial, uniforms: Dictiona
 	return mesh
 
 
+# A planet's far dot: the props' dot shader with the layer's pinned depth.
+func _add_dot(id: StringName) -> void:
+	var quad := QuadMesh.new()
+	quad.size = Vector2.ONE
+	var material := ShaderMaterial.new()
+	material.shader = FarProp.DOT_SHADER
+	var dot := MeshInstance3D.new()
+	dot.name = String(id).to_pascal_case() + "Dot"
+	dot.mesh = quad
+	dot.material_override = material
+	dot.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	dot.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+	dot.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	dot.visible = false
+	add_child(dot)
+	_dots[id] = dot
+
+
+# Shows `dot` at the planet's stand-in when `shown`, as large on screen as its disc's area (half its own disc is covered).
+func _place_dot(dot: MeshInstance3D, shown: bool, at: Vector3, placed: ScaledPlacement) -> void:
+	dot.visible = shown
+	if not shown:
+		return
+	var radius: float = FarPropMath.dot_radius_m(PI * placed.radius * placed.radius)
+	dot.global_transform = Transform3D(Basis.IDENTITY, at)
+	dot.custom_aabb = AABB(-Vector3.ONE * (radius + 1.0), Vector3.ONE * 2.0 * (radius + 1.0))
+	var material := dot.material_override as ShaderMaterial
+	material.set_shader_parameter(&"radius_m", radius)
+	material.set_shader_parameter(&"layer_depth", placed.depth)
+
+
 # No star system in view: nothing drawn, the light left as the scene made it.
 func _clear() -> void:
 	if _placements.is_empty() and not _has_sun:
 		return
 	for sphere: MeshInstance3D in _spheres.values():
 		sphere.visible = false
+	for dot: MeshInstance3D in _dots.values():
+		dot.visible = false
 	_placements.clear()
 	_has_sun = false
 	_key_light = 1.0

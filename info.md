@@ -103,6 +103,7 @@ Arguments in `<angle brackets>` are required, `[square brackets]` optional, `a|b
 | `sky` | `<stars\|nebula> [on\|off]` | Show or hide the star points or the nebula panorama; no state toggles | front end, flight |
 | `scaled` | `[status\|epoch <hours>\|show\|hide]` | The scaled-space layer (M6-T10), the star and the planets at their true place and size: show it, look at the system `<hours>` later than the sim clock (moves the sun and the planet's phase for captures; 6.47 h by default until scenarios set an epoch), or draw the far bodies or not (to measure them) | front end, flight |
 | `aa` | `[off\|fxaa\|smaa\|msaa_2x\|msaa_4x\|taa]` | Show or set the 3D view's anti-aliasing, live (`settings.anti_aliasing`) | front end, flight |
+| `far` | `[status\|station\|view\|off] [gate\|station] [km]` | Far props (M6-T15): each big prop's draw path (near, shrunk toward the eye past the far plane, fading, far dot), distance and size on screen; `station` places the station's stand-in at the station's place (or takes it away; T09 places it for good); `view gate\|station <km>` holds the camera that far from it for captures; `off` ends the view | in flight |
 | `upscale` | `[native\|bilinear\|fsr1\|fsr2] [preset\|<scale>]` | Show or set how the 3D view is rendered and enlarged to the window, live | front end, flight |
 | `sheet` | `<asset_id> [distance_m] [lit\|dark\|off] [wing:number\|-] [view]` | Park one idle ship of an asset ahead of the camera for a look sheet | in flight |
 | `livery` | `<wing\|plain> [number] [ship]` | Paint a ship in a wing's livery with its number, to look at it | in flight |
@@ -192,6 +193,7 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `scaled` | The scaled-space layer (M6-T10): far `bodies` drawn, each one's angular size, direction, true distance and stand-in (`layout`), whether the key light follows the true sun (`has_sun`), `sun_direction`, the key light's factor in a planet's shadow (`key_light`, 0 to 1), the layer's epoch offset (`epoch_h`) and the planets drawn with their generated maps and haze (`mapped`, M6-T11) | front end, flight |
 | `aa` | The anti-aliasing mode, what the viewport uses, and the bolts' and sky's motion-vector state | front end, flight |
 | `upscale` | The upscaler, its preset, the scale applied, sharpness and the window's and 3D view's lines | front end, flight |
+| `far` | Far props (M6-T15): how many big props a `FarProp` draws far out (`props`) and each one's draw path, distance, shrink, bounding radius and covered area on screen, cross-fade and range (`layout`) | in flight |
 | `post` | Lens flare and motion blur state and where the star is in the picture | front end, flight |
 | `livery` | The player's livery and every ship's in the world | in flight |
 | `frame` | The frame's passes (plumes, flashes, impacts, far dots, bolts, turret models): their cost and what each walks | always |

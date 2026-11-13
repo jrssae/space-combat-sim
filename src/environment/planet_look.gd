@@ -23,6 +23,8 @@ var atmosphere_top_m: float = 0.0
 ## The haze on the lit limb and the wisps, sRGB as the manifest gives them.
 var haze_srgb: Color = Color.BLACK
 var wisp_srgb: Color = Color.WHITE
+## The maps' mean albedo, linear: the planet's far dot is painted with it (M6-T15).
+var mean_albedo: Color = Color(0.2, 0.15, 0.1)
 var valid: bool = false
 ## Why `valid` is false. Empty when valid.
 var error: String = ""
@@ -60,6 +62,9 @@ static func from_json_text(text: String, directory: String, info: Dictionary) ->
 	look.normal_path = directory.path_join(maps["normal"]["file"])
 	look.wisp_path = directory.path_join(maps["clouds"]["file"])
 	look.wisp_srgb = _colour8(maps["clouds"].get("tint_srgb"), Color.WHITE)
+	var mean: Variant = (planet as Dictionary).get("mean_albedo")
+	if mean is Array and (mean as Array).size() == 3:
+		look.mean_albedo = Color(float(mean[0]), float(mean[1]), float(mean[2]))
 	var atmosphere: Variant = (planet as Dictionary).get("atmosphere")
 	look.haze_srgb = _colour8((atmosphere as Dictionary).get("limb_srgb") if atmosphere is Dictionary else null, Color.BLACK)
 	look.radius_m = float(info.get("radius_m", (planet as Dictionary).get("radius_m", 0.0)))

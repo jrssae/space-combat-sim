@@ -15,6 +15,9 @@ extends Node3D
 ## one opening); `send_departure` watches a ship flying in, opens the orange vortex as it nears and hands it back through
 ## `on_through` once it crosses the vortex. The rules for who flies where are the callers' (missions, encounters, the player's
 ## jump); the gate only keeps the vortex in step with them. Spawned through `World` from a scenario's `jumpgate` prop.
+##
+## Far away (M6-T15): its `FarProp` draws the body, vortex and lamps shrunk toward the eye past the far plane, then a far dot
+## once the gate is a few pixels across, so it is seen out to its 1 000 km broadcast range with no pop.
 
 const SCENE_PATH: String = "res://src/props/jumpgate.tscn"
 const ASSET_ID: String = "jumpgate"
@@ -56,6 +59,9 @@ var fit: VortexFit = null
 ## The lamps' glows (one per fin-station lamp: steady, flashing in turn during the activation) and the back ends', one multimesh.
 var activation_glows: MultiMeshInstance3D = null
 var collision_body: StaticBody3D = null
+## Keeps the gate drawn its true size out past the far plane, then as a far dot (M6-T15); its `look` holds the body, the
+## vortex and the lamps. Null when the asset has no far section.
+var far_prop: FarProp = null
 ## The mouth's half height: the largest circle inside its ellipse.
 var radius_m: float = DEFAULT_RADIUS_M
 ## Gate-local points and directions from the hardpoints.
@@ -79,6 +85,7 @@ var _departures: Array[Dictionary] = []
 static var _shared_loaded: bool = false
 static var _shared_mesh: Mesh = null
 static var _shared_data: Dictionary = {}
+static var _shared_manifest: Dictionary = {}
 
 @onready var body: MeshInstance3D = $Body
 @onready var targetable: Targetable = $Targetable
@@ -100,6 +107,9 @@ func _init() -> void:
 func _ready() -> void:
 	_load_shared()
 	body.mesh = _shared_mesh
+	far_prop = FarProp.attach(self, [body] as Array[Node3D], _shared_manifest.get("far", {}),
+			FarProp.albedo_of(_shared_manifest), BROADCAST_RANGE_M, display_name)
+	var visuals: Node3D = far_prop.look if far_prop != null else self
 	_read_points(_shared_data)
 	_build_collision(_shared_data)
 	fit = VortexFit.for_gate(_shared_data)
@@ -107,8 +117,10 @@ func _ready() -> void:
 	vortex.name = "Vortex"
 	vortex.fit = fit
 	vortex.position = Vector3(0.0, 0.0, fit.mouth_z_m)
-	add_child(vortex)
-	_build_activation(_shared_data)
+	visuals.add_child(vortex)
+	_build_activation(_shared_data, visuals)
+	if far_prop != null:
+		far_prop.keep_drawn = [vortex] as Array[Node3D]  # a far open vortex stays itself; its own detail by distance is T20's
 	_sync_targetable()
 
 
@@ -279,7 +291,7 @@ func _read_points(data: Dictionary) -> void:
 
 # One glow per fin-station lamp (ranked by its place along the arm, the same on all four arms) and one per back end, in a single
 # multimesh; the lamps' colour from the markers, the back ends' from the vortex's flash.
-func _build_activation(data: Dictionary) -> void:
+func _build_activation(data: Dictionary, visuals: Node3D) -> void:
 	var points: Array[Vector3] = []
 	var colours: Array[Color] = []
 	var along := PackedFloat32Array()
@@ -325,7 +337,7 @@ func _build_activation(data: Dictionary) -> void:
 	for p: Vector3 in points:
 		reach = maxf(reach, p.length() + TIP_GLOW_M)
 	activation_glows.custom_aabb = AABB(-Vector3.ONE * reach, Vector3.ONE * reach * 2.0)
-	add_child(activation_glows)
+	visuals.add_child(activation_glows)
 
 
 func _tips(data: Dictionary) -> Array[Vector3]:
@@ -368,6 +380,7 @@ static func _load_shared() -> void:
 		return
 	_shared_loaded = true
 	_shared_mesh = MeshAssets.for_asset(ASSET_ID)
+	_shared_manifest = MeshAssets.read_manifest(ASSET_ID)
 	if _shared_mesh == null:
 		push_warning("Jumpgate: %s has no textured mesh (run scripts/gen_assets.sh, then import); the gate has no body" % ASSET_ID)
 	var file := FileAccess.open(HARDPOINTS_PATH, FileAccess.READ)

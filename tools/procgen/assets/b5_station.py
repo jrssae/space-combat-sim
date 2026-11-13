@@ -25,12 +25,13 @@ from ..core.context import AssetOutputs, BuildContext
 from ..core.geometry import Material, Mesh, box, lathe, rotation_x, tapered_box
 from ..core.manifest import build_manifest, write_manifest
 from ..core.pieces import PieceTexture, write_piece
+from ..core.silhouette import far_section
 from ..core.textured_mesh import TexturedPart, phase_steps
 from ..core.textures import Marking
 from ..styles import Style
 
 ASSET_ID = "b5_station"
-GENERATOR_VERSION = 3  # 3: the textured pieces only (M4-T31); 2: the textured pieces (M4-T30d)
+GENERATOR_VERSION = 4  # 4: the far view's silhouette table (M6-T15); 3: the textured pieces only (M4-T31); 2: the textured pieces (M4-T30d)
 LENGTH_M = 8000.0
 DRUM_RADIUS_M = LENGTH_M / 18.0  # diameter 1/9 of the length
 DRUM_FRONT_Z = -2450.0
@@ -189,6 +190,13 @@ def frame_parts() -> list[TexturedPart]:
     return parts
 
 
+def _whole_station() -> tuple[np.ndarray, np.ndarray]:
+    """Both pieces as one mesh in the station frame (the drum at rest), for the far view's silhouettes."""
+    drum = Mesh.concatenate(p.mesh for p in drum_parts()).transformed(np.eye(3), drum_centre())
+    whole = Mesh.concatenate([drum] + [p.mesh for p in frame_parts()])
+    return whole.vertices, whole.faces
+
+
 def build(ctx: BuildContext) -> AssetOutputs:
     """Generate both pieces into ``ctx.out_dir``."""
     out_dir: Path = ctx.out_dir
@@ -213,6 +221,7 @@ def build(ctx: BuildContext) -> AssetOutputs:
             "kind_note": "stand-in, shape only (M4-T27)",
             "length_m": LENGTH_M,
             "pieces": {"drum": drum, "frame": frame},
+            "far": far_section(*_whole_station()),
         },
     )
     files.append(write_manifest(out_dir, manifest))

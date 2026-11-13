@@ -137,7 +137,7 @@ res://tests/integration/test_audio_director.gd
 res://tests/unit/test_upscaling.gd
 res://tests/unit/test_anti_aliasing_mode.gd
 res://tests/integration/test_post_effects.gd
-# Scaled space and the planet (M6-T10, T11)
+# Scaled space, the planet and far props (M6-T10, T11, T15)
 res://tests/unit/test_scaled_placement.gd
 res://tests/unit/test_eclipse_math.gd
 res://tests/unit/test_sun_look.gd
@@ -146,4 +146,6 @@ res://tests/integration/test_scaled_space.gd
 # Test infrastructure
 res://tests/unit/test_slow_tests.gd
 res://tests/unit/test_balance_tests.gd
+res://tests/unit/test_far_prop_math.gd
+res://tests/integration/test_far_props.gd
 res://tests/unit/test_quick_suite.gd

@@ -82,6 +82,13 @@ class JumpgateTests(unittest.TestCase):
         self.assertTrue(0.9 * dims["arm_side_radius"] < dims["vortex_half_width"] < dims["arm_side_radius"])
         self.assertEqual(vortex["semi_axes_m"], [dims["vortex_half_width"], dims["vortex_radius"]])
 
+    def test_the_far_view_sees_the_gate_end_on_as_a_sliver(self) -> None:
+        far = self.manifest["far"]  # M6-T15: the far dot covers what the outline covers from each side
+        self.assertEqual(len(far["directions"]), len(far["areas_m2"]))
+        self.assertAlmostEqual(far["centre"][2], 0.5 * self.manifest["aabb_max"][2], delta=1.0)
+        end_on, side = far["areas_m2"][2], far["areas_m2"][0]
+        self.assertLess(end_on, 0.2 * side, "the rails' ends against the rails and their fins")
+
     # --- hardpoints -------------------------------------------------------------------------
     def test_hardpoints_schema(self) -> None:
         for key in ("asset_id", "frame", "units", "span_m", "depth_m", "arm_length_m", "arm_radius_m", "arm_side_radius_m", "mouth_aspect",

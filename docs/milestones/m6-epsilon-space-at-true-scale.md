@@ -297,7 +297,7 @@ which changes the same native rows and rebase path:
 | T12 | C | The sun: disc and glow from the star's colour, the lens flare and key light on the true direction | T10 | Sonnet | A small shader and the existing flare | done |
 | T13 | D | Jumpgate references and the `jumpgate` generator (early start) | Q11 | Opus | Geometry read off references | done |
 | T14 | D | The jumpgate in the game: the prop, the vortex, 1 000 km broadcast, arrivals through the gate | T13, T09, Q12 | Opus | A new effect and the mission and encounter seams | done |
-| T15 | C | Far representations for the station's stand-in, the gate and the planets | T10, T14 | Opus | Hand-offs across three draw paths with no pop | in progress |
+| T15 | C | Far representations for the station's stand-in, the gate and the planets | T10, T14 | Opus | Hand-offs across three draw paths with no pop | done |
 | T16 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 | T17 | E | Test tiers: quick, standard, balance and full, the quick list, its guard test, the Rust tests in the run | T01 | Sonnet | Scripts and one data file from a written plan (`docs/research/test-review/quick-test-suite.md`) | done |
 | T18 | E | The review's CONFIRMED test removals (sections A to D), each re-checked, the parity recordings still read | T17 | Opus | Proving two tests cover the same thing needs both read in full; rules on what must stay | done |
@@ -1052,6 +1052,96 @@ which changes the same native rows and rebase path:
     battle files in the recordings' build order; no recording was re-taken, every digest still matches.
   - A1 to A4 merged: the 1-vs-6 battles of `test_core_state`, `test_bolt_rows`, `test_row_commands` and `test_driver_step`
     folded into `test_core_threads`' 600-tick one, which now flies with the ram resolver and a player (near and far thinkers)
+- **Done (2026-11-12):**
+  - **Three draw paths per big prop** (`FarPropMath`, pure; `FarProp`, the node; both in `src/rendering/`):
+    1. **near**: the prop's own mesh where it is, the importer's levels doing the rest (§14.4), out to `pull_m` = the far plane
+       (50 km) less 1.02 bounding radii and 500 m: **48.2 km for the gate** (bounding radius 1 265 m round the middle of its
+       arms), **45.4 km for the station's stand-in** (4 028 m).
+    2. **shrunk**: past that, the same nodes (body, vortex, lamps; the station's frame and turning drum) drawn shrunk toward the
+       eye by `pull / distance` under one `Look` node, so they cover exactly the same angle in the same direction with the same
+       materials, lights and levels: the hand-off is continuous by construction (no switch, so no hysteresis is needed). Shrunk,
+       the meshes take `lod_bias` 100: at a few pixels the importer's coarsest levels drop the gate's rails altogether
+       (measured: no light at all 6 px out with the default bias). This is D70's "scaled-space impostor" drawn in the near
+       world's own depth rather than on T10's pinned slab: T10's layer is unshaded and near the camera, so a textured hull on
+       it would have had to copy the PBR light, the ambient and the sheen and would have caught the player's own thruster
+       lights; in the near world it is the same picture. The cost: something truly in front of the prop but between the pull
+       distance and the far plane (the last 2 to 5 km before 50 km) is drawn behind it.
+    3. **dot**: once the bounding radius is under **`DOT_PX` = 4 px** a far dot takes over (`far_prop_dot.gdshader`: M4's
+       far-ship rule, the angular size with a 1 px floor and the square dimming under it), drawn at the shrunk centre, with
+       M4's hysteresis (`LodSwitcherMath.far_dot`: back a tenth inside) and a **0.35 s cross-fade** (the mesh's
+       `transparency` up as the dot's alpha comes in). The dot covers what the mesh covers **from that direction**: the
+       generators now write a silhouette table (`tools/procgen/core/silhouette.py`, manifest `far`: the outline's area along
+       227 directions, the axes and rings round them included; generators v4), blended by Shepard's rule (3 % mean error
+       against the true outline, 15 % worst near the gate's axis). A gate seen end on covers a sixteenth of its side view
+       (15 600 against 196 000 m^2), so a dot sized by its bounding sphere would have been twenty times too bright.
+       Hand-off distances: the gate **223 km** at a 1 080-line cockpit view (75 degrees), 139 km at 675 lines, 229 km in
+       `far view` (50 degrees, 675 lines); the station **709 km**, 443 km, 729 km. Why 4 px and not M4's 3 km a ship: below
+       about 10 px the gate's thin rails hit or miss whole pixels (no MSAA by default) and its light jumps by a factor of two
+       or more between sub-pixel shifts; at 4 px the dot carries it steadily.
+  - **The dot's light** follows the mesh's: the mean albedo (manifest) times the ambient, the hull's own glow (lamps, windows,
+    sheen with no sun: 0.41 of the albedo) and the key star's energy and colour times `hull_phase` (a broad term and a back-lit
+    lobe, fitted on the GPU: the textured hulls' sheen keeps them bright past quarter phase and lights the rims against the sun,
+    5.8 times full phase at 160 degrees; a Lambert sphere would have had them go dark there). In the planet's shadow the key
+    light is 0 and so is its share. Measured against the mesh (`test_far_props_gpu.gd`) the dot's light is within a factor of
+    two from every side tried (0.6 to 2.4 at 30 to 60 px); the cross-fade turns that into a gentle change, not a pop (H).
+  - **The planet** keeps T10's layer at every distance; once its disc is under 4 px (about **841 000 km** at 1 080 lines) it
+    hands over to the same dot on the layer's pinned depth (`ScaledSpace.dot_of`, `is_dotted`), sized to the disc's area,
+    painted with its maps' mean albedo (`PlanetLook.mean_albedo`) times the surface shader's full sun (1.5) times a Lambert
+    disc's mean light at its phase, with M4's hysteresis; so it stays visible however far out the camera goes.
+  - **The gate** builds its `FarProp` in `_ready` (body, vortex and lamps under `Look`; collision, marker and the gate's own
+    place untouched). An open vortex is kept drawn as itself when the gate is a dot (its own detail by distance is T20's).
+    **The station's stand-in**: `FarPropHost.dress_station(standin)` after `build()`; no gameplay scene holds the stand-in yet,
+    so `far station` places it at the station's place (the scene origin the scenarios place the gate from) for captures, and
+    **T09 should call `dress_station` where it places the stand-in for good**. It has no `Targetable`, so its range is taken
+    as a nav beacon's, 1 000 km (`FarPropHost.STATION_RANGE_M`).
+  - Nothing here moves with a rebase on its own: the look and the dot are ordinary children of the prop (not `top_level`), so
+    a position rebase or a drift moves them with it until the next frame places them again; `test_rebase_in_play` (GUT_SLOW)
+    green, 9 of 9 (an earlier `top_level` dot failed its "left behind" check).
+  - Console: provider `far` (`props`, `layout`: each prop's path, distance, shrink, bounding px, covered px^2, fade, range) and
+    command `far [status|station|view <gate|station> <km>|off]` (`FarPropHost`, made by `Main`). In `info.md`. No setting.
+  - A Color handed to a `vec3` shader uniform is taken as sRGB and darkened (0.0957 drew as 0.0094); the dots' paint goes in
+    as a `Vector3`.
+  - Tests: `tests/unit/test_far_prop_math.gd` (quick, 11): both manifests' tables, the end-on sliver, the blend continuous
+    (under 30 % a quarter degree, 1.5 % a hundredth, the gate's own outline steps 19 % in its first quarter degree off axis),
+    the shrunk prop's angle equal to 1e-9 rad and its far side inside the far plane, the dot's hand-off and its tenth back
+    with no flapping under 1 % jitter, mesh and dot covering the same area from all 227 directions to 1e-6, flying out from
+    100 m past the dot distance and back at 2 % a frame from three sides with the covered area within **0.5 %** of what the
+    distance alone explains every frame, every distance from 100 m to 1 000 km drawn, the light laws.
+    `tests/integration/test_far_props.gd` (quick, 8): the gate's look holds its visuals and not its collision or marker,
+    drawn where it is to 48.2 km, shrunk to the same angle (1e-6 rad) and direction past it with collision and marker unmoved,
+    the cross-fade in past the dot distance with the same covered area all through it and back a tenth inside, an open
+    vortex kept, the dot's light with the sun, the station's two pieces shrunk with the drum still turning, the console.
+    `test_scaled_space.gd` (quick, one more: the planet's dot, its hysteresis, its area, its pinned depth, day and night
+    paint). `tests/integration/test_far_props_gpu.gd` (standard, Pending headless): near and shrunk draw the same pixels
+    and light either side of the pull distance within 2 % (gate and station); the mesh covers the table's area within 35 %
+    (1.11 to 1.32 measured: the lamps' casings and perspective); the dot draws its shader's law to 0.2 %; the dot's light at
+    the hand-off within a factor of two of the mesh's. Python: `test_silhouette.py` (quick, 5), the generators' tests check
+    the section (standard).
+  - GPU (RX 6950 XT, RADV, Wayland, Forward+, combat sandbox, `far view`, 50 degree field, a 1500x844 window: Wayland's 1.25
+    scale on `--resolution 1200x675`): **the gate at 1 000 km** `forward_plus`, 145 fps (the display's cap), 23 draw calls,
+    40 802 triangles, `render.vram_mb` 379 MB; **the station's stand-in at 1 000 km** (a dot there, the gate one too) 136 to
+    145 fps, 26 to 30 draw calls, 37 648 to 61 494 triangles, 410 MB (its pieces' maps), GPU time 0.51 ms. A far prop's dot
+    is one draw call; the shrunk mesh is the prop's own (the gate 15 840 triangles at `lod_bias` 100). `test_far_props_gpu.gd`
+    on this GPU: near and shrunk within 2 % of each other in pixels and light for both props, the mesh against the table
+    (1.11, 1.20, 1.32 and under 1.35 from four sides), the dot's law to 0.2 %; the hand-off light 0.62 with the sun behind
+    the eye (8 sub-pixel shifts), the second lighting case not finished: the window was hidden and Wayland stopped drawing it
+    mid-run, so that case and a full green run of the file are (H) on a visible window.
+  - Screenshots (H) in `references/screenshots/M6-T15 far/` (X11, 1200x675, the window hidden so 1 fps, HUD on): `gate_0.1km`
+    to `gate_1000km` (0.1, 1, 10, 48.0 and 48.4 either side of the pull, 50, 100, 200 and 225 shrunk, 233 a dot, 215 still a
+    dot, 500, 1 000), `handoff_strip.png` (the centre crops side by side: no change across the pull, a faint few pixels
+    either side of the dot hand-off), `station_0.1km`, `station_1km`, `station_10km`. The station's far frames are missing:
+    the Wayland run drew no new frames with the window hidden, and an X11 run at 1 fps held the shared Godot lock too long;
+    `far station; far view station <km>` takes them on a visible window (its hand-off is 729 km at 1200x675, 911 km at
+    1500x844).
+  - Open, for the maintainer: (1) **the station's range**: it has no `Targetable`, so 1 000 km (a beacon's) was taken; a
+    station may want more, or a `Targetable` of its own (M7). (2) **How visible a far dot should be**: it follows M4's rule
+    (dimmer by the square under a pixel), so the gate at 1 000 km is a faint point (about 0.1 px^2 of its dull hull; end on
+    almost nothing) and the gate is barely visible past about 200 km. Options: keep it (true to the hull's size); a floor on
+    the dot's brightness inside the broadcast range (a beacon's glint, fading out past the range so nothing pops); or the
+    lamps as their own far point. (3) The hand-off light is within a factor of two, not tighter: the truss's sheen and lamps
+    vary with the view more than one law follows (H on the cross-fade). Not done: the open vortex's own far form (T20);
+    `docs/architecture.md` §14.4 (T16); the dots' motion vectors under TAA and FSR 2 (as T10).
+
     and compares the rows, hits and rams, bolt table, core commands and driver events.
   - A5 and A6 merged: `test_driver_step`'s far-rate test went, and its recording (`driver_step.json:battle_far_rate`) is
     checked by `test_row_commands`' battle, which is the same battle (same rows digest and thinks); A6's test stays.
