@@ -306,7 +306,7 @@ which changes the same native rows and rebase path:
 | T20 | D | Vortex detail by distance and mass arrivals: detail layers dropped with screen size; up to 100 jump points forming at once; every ship of the 1 000-ship battle enters through one; the battle's GPU fps test with them | T19, T07 | Opus | A shader LOD, a pooled effect at a hundred instances and the battle's spawn path, judged on the GPU | done |
 | T21 | A | The rebase's per-node rest: only the rocks near a ship live in Jolt; a list of the shiftables in play instead of walking the group | T06, T07 | Opus | A measured engine-side follow-up to T06 on the paths T07 also changes | done |
 | T22 | D | Ships shrink into and grow out of the vortex: each ship flies the funnel, scaled to fit it, down to the black ring and a white flash (departure), or out of a white flash at the ring growing to full size (arrival); the player's jump in an external shot | T19, T20 | Opus | Gameplay, scaled Jolt bodies and a cinematic on every arrival path, judged by eye | in progress |
-| T23 | D | Who may open a jump point: only jump-capable ships (the capital stand-ins today); smaller ships use a gate or a jump-capable ship's open point; the battle's fighters through their side's capital points or the gate; raids and missions say which in data | T22 | Opus | Rules over every arrival and departure path T22 also changes | not started |
+| T23 | D | Who may open a jump point: only jump-capable ships (the capital stand-ins today); smaller ships use a gate or a jump-capable ship's open point; the battle's fighters through their side's capital points or the gate; raids and missions say which in data; a point holds only within 2 x its opener's length, and ships in the funnel die when it collapses | T22 | Opus | Rules over every arrival and departure path T22 also changes | not started |
 
 ### M6-T01 Moving-frame audit and design
 
@@ -1898,6 +1898,18 @@ which changes the same native rows and rebase path:
   a jump-capable ship (it may use any such point, its own side's or not); the data form for raids and missions (gate or
   carrier); departures follow the same rule (an AI ship leaving routes to the gate or a capable ship's point). The console's
   `vortex open` stays a debug tool and says so.
+- **Holding a point (maintainer, 2026-11-13):** a ship can only keep its jump point open within a short range of itself. If it
+  gets too far away, the point closes, and any ship still arriving or departing in the funnel when the vortex closes is
+  destroyed. Answers:
+  - **The range varies per ship:** generally twice the ship's length, measured from the ship to the mouth of the funnel; a
+    value on the jump-capable ship type, defaulting to 2 x its length.
+  - **The opener destroyed or disabled:** the point collapses at once with the white closing flash, and every ship still in
+    the funnel is destroyed.
+  - **The opener departs through its own point:** after it touches the black ring the point stays open briefly (a short hold,
+    a few seconds) for the ships behind it, then closes; anything still inside then is destroyed.
+  - Gates have no such limit; a gate's vortex closes only by its timing, and still waits for the ships in transit (T22).
 - **Tests:** the capability rule (quick); a raid through the gate and a raid behind a carrier (standard); the battle's groups
-  through capital points and the gate (standard); missions and encounters keep their outcomes, or the changed ones are named.
+  through capital points and the gate (standard); missions and encounters keep their outcomes, or the changed ones are named;
+  the hold range (a point closes when its opener passes 2 x its length from the mouth, and a ship in the funnel then dies),
+  the opener's destruction collapsing the point, and the brief hold after the opener departs (quick or standard as fits).
 
