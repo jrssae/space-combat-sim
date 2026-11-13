@@ -530,6 +530,13 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     the spine and the bow.
   - `cobra arms nav lights show capture.png` (show capture, the Cobra arms at the docking sphere): a ring of pink-red navigation
     lights round the band's edge next to the arms; white dash lights along the arms; the arms' faces lit warm from their bays.
+- **The docking bay's red light (maintainer, 2026-11-13).** The entrance bay T05 builds is lit deep red from inside, as
+  `references/docking bay references/` shows: the stepped tunnel's receding frames glowing red layer by layer, machinery walls in
+  red with darker gaps, small red lamps in the mouth, pink-lit vertical panels at the mouth's edge, and the inner airlock's
+  sawtooth doors in red. From outside the mouth reads as a red glow at the centre of the bow disc (`4 bow on toothed ring and
+  cross housing.png`, and the bow capture in `references/station lighting references/`). T18 lights it: emissive red on the
+  tunnel's frames and walls, falling off with depth, and one or two real red lights inside the tunnel through `LightPicker` so a
+  ship flying in is lit red. It turns with the drum.
 - **What:** the station's emissive layer (dashed ring strips, window rows, markings, the aperture's red centre, the bay glow) in
   its maps with the hardpoints T05 gives the lights; blinking beacons (vane tips, the bow spike's tip) and running lights as cheap
   shader or emissive animation driven by sim time, not one light node each; a few real lights where a fighter flies close
