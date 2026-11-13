@@ -31,7 +31,7 @@ tutorial (launch, exterior tour, defend the station) is written on top of this.
 | Q5 | Can the station be damaged in M7? | Hits are taken by sections (M4's damage zones), shown on the HUD's target box, and a mission can fail on a section lost; the station is never destroyed or disabled in M7 (M12 brings staged break-up and disabled hulks) | Maintainer, 2026-11-13: the proposed answer |
 | Q6 | The defence grid | **Settled in T02** with the maintainer: where the emplacements sit, the weapon kinds (cannons, interceptors) and how each behaves. No default is proposed here | Settled in T02 (2026-11-13): D75 |
 | Q7 | The front-end interior | The Cobra-bay hangar, with Starfuries on their launch racks, so M8 goes from the menu straight into a launch | Maintainer, 2026-11-13: the proposed answer |
-| Q8 | Traffic around the station | Light civilian traffic in free flight: M5's civilians come from the jumpgate, approach the docking aperture and leave the world inside it; and the reverse | Maintainer, 2026-11-13: the proposed answer |
+| Q8 | Traffic around the station | Light civilian traffic in free flight: M5's civilians come from the jumpgate, approach the docking aperture and leave the world inside it; and the reverse | Maintainer, 2026-11-13: the proposed answer Refined 2026-11-13: **Saturn cargo vessels never enter the station**: they hold outside, detach their cargo pods, and the pods go in through the **zero-gravity docking bay on the spine between the bow's two forks**; ships small enough for the tunnel (94 × 34 m) fly in through the docking aperture |
 | Q9 | The turning drum and ships that touch it | The drum is a moving surface (`AnimatableBody3D`, about 66 m/s at its skin from M4's spin of 0.148 rad/s): a ship that scrapes it takes a ram at the surface's speed | Maintainer, 2026-11-13: the proposed answer |
 | Q10 | The station's lights | Running lights and beacons on its extremities, lit windows on the drum and the command section (emissive maps), bay lights; the night side under the planet's shadow (M6) still shows its windows | Maintainer, 2026-11-13: the proposed answer |
 | Q11 | Maintenance bots | A few near the bays and along the hull, flying slow loops between hull points; ambient only (no targets, no damage); they go back inside when fighting starts nearby | Maintainer, 2026-11-13: the proposed answer |
@@ -398,6 +398,11 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     its end (closed; M8 or later may open them); grilles, marked panels and the lower hatch round the mouth; the toothed ring.
     The door turns with the drum (Q3). Built on T19's sections and near-only props; collision pieces (T03) keep the tunnel
     open for Q8's traffic. A sheet beside the references (H).
+- **Phase A approved (maintainer, 2026-11-13)** with: the hull reshaped under four grid mounts kept (D75's coordinates stand);
+  the docking bay's red toned down now (dark machinery with red on frames, lamps and edges, as the references show; T18 adds
+  the real red lights and keeps the sun out of the tunnel). **New for phase B: the zero-gravity cargo docking bay** on the bow
+  spine between the two forks (Q8 as refined): an opening for cargo pods with its hardpoints (approach, a hold point outside
+  for the Saturn, the pod transfer path and the pod's entry point), so T10 can fly the transfer.
 - **Done when:** AC4 and the collision half of AC3.
 
 ### M7-T06 The station in the game
@@ -441,6 +446,10 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 - **Goal:** AC9 apart from the bots.
 - **Files:** the native avoidance and pursuit against the station's surface, the encounter director's raids at the station and
   civilian traffic through the aperture (Q8), allies launching from the bays (T08's sequence for AI ships), tests.
+- **Cargo traffic (maintainer, 2026-11-13, Q8 refined):** Saturn freighters never enter: each holds at T05's hold point, detaches
+  its cargo pods (M5's modular Saturns), and the pods are moved into the zero-gravity docking bay between the bow's forks, then
+  leave the world inside it; the freighter waits and leaves (or takes pods back out). Ships that fit the docking tunnel (94 × 34 m)
+  fly in through the aperture and leave the world at the inner airlock.
 - **Done when:** AC9's AI and traffic.
 
 ### M7-T11 Maintenance bots
