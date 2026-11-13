@@ -19,8 +19,9 @@ extends Node
 ##
 ## Arrivals (M6-T20, AC13): in `battle` and `typical` every ship comes in out of a jump point (`BattleArrivals`, the bench's own
 ## `JumpPointPool` of 100): the first wave at the start, the rest in later waves during the warm-up, which is stretched until the
-## last wave is in, so the measured window holds the whole battle. The report's `arrivals` gives the points, the waves and the
-## ticks while they came in. `arrive=placed` puts every ship in place at the start instead (the GPU comparison).
+## last wave is in, so the measured window holds the whole battle. The report's `arrivals` gives the points and the waves,
+## `engine_ticks` the engine's tick time in the warm-up against the window, `render` what the GPU drew (with a window).
+## `arrive=placed` puts every ship in place at the start instead (the comparison).
 
 ## The report is written; the run's summary.
 signal finished(summary: Dictionary)
@@ -79,7 +80,8 @@ var _names := PackedStringArray()
 var _anchor: UniversePos = null
 var _next_point: int = 0  # the next point of `arrivals` to open
 var _radii := PackedFloat32Array()  # by plan entry: the ship's radius once it is in play
-var _arrival_ticks := PackedFloat64Array()  # the engine's physics time of each tick while the ships came in, us
+var _warmup_engine := PackedFloat64Array()  # the engine's physics time of each warm-up tick after the load's, us
+var _window_engine := PackedFloat64Array()  # and of each measured tick
 var _arrival_spawn_us: int = 0  # the worst tick's own cost of bringing ships in, us
 var _render_frames: Array[PackedFloat64Array] = []  # with a window: what each frame drew (`render_phases`)
 
@@ -259,7 +261,8 @@ func _set_up_scene() -> void:
 	_names = _ship_names(plan)
 	_radii = PackedFloat32Array()
 	_radii.resize(plan.size())
-	_arrival_ticks = PackedFloat64Array()
+	_warmup_engine = PackedFloat64Array()
+	_window_engine = PackedFloat64Array()
 	_arrival_spawn_us = 0
 	_render_frames.clear()
 	_next_point = 0
@@ -364,7 +367,9 @@ func _place_capital(i: int, rest: Vector3) -> void:
 	var cap: CapitalStandin = standins.add_capital(StringName(e["class"]), StringName(e["faction"]), _names[i],
 			_anchor.plus_local(e["offset"]), e["basis"], (e["velocity"] as Vector3) + rest)
 	cap.damageable.invulnerable = true
-	_radii[i] = float(e["radius"])
+	# It comes out nose first, so its point fits its cross-section, not its length.
+	var spec: Dictionary = CapitalStandin.CLASSES.get(StringName(e["class"]), CapitalStandin.CLASSES[&"cruiser"])
+	_radii[i] = 0.5 * Vector2(float(spec["width"]), float(spec["height"])).length()
 
 
 # The bench's pool of jump points, made once with room for the largest wave.
@@ -488,8 +493,10 @@ func _physics_process(_delta: float) -> void:
 	var now: int = Time.get_ticks_usec()
 	var first: int = _warmup_ticks + 1
 	var last: int = _warmup_ticks + _measure_ticks
+	if _tick > 2:  # the first ticks' engine time holds the load
+		var engine_us: float = Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1e6
+		(_warmup_engine if _tick <= _warmup_ticks + 1 else _window_engine).append(engine_us)
 	if arrivals != null and _next_point < arrivals.points.size():
-		_arrival_ticks.append(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1e6)
 		var spawn_started: int = Time.get_ticks_usec()  # profiling only
 		_open_due(float(_tick) / float(Engine.physics_ticks_per_second))
 		_arrival_spawn_us = maxi(_arrival_spawn_us, Time.get_ticks_usec() - spawn_started)
@@ -555,6 +562,7 @@ func _finish(now: int, aborted: String) -> void:
 		"aborted": aborted,
 		"machine": BenchReport.machine(),
 		"arrivals": _arrivals_summary(),
+		"engine_ticks": _engine_ticks(),
 		"render": render_phases(_render_frames, float(_warmup_ticks) / tps),
 	}
 	if bool(_options["paired"]):
@@ -615,8 +623,16 @@ func _arrivals_summary() -> Dictionary:
 	return {"mode": String(ARRIVE_JUMP), "points": arrivals.points.size(), "waves": arrivals.waves,
 			"max_open": arrivals.max_open(), "last_at_s": arrivals.last_at_s(), "pool": jumps.size() if jumps != null else 0,
 			"opened": _next_point, "warmup_s": float(_warmup_ticks) / float(Engine.physics_ticks_per_second),
-			"ticks": _arrival_ticks.size(), "tick_median_us": PerfStats.median(_arrival_ticks),
-			"tick_max_us": PerfStats.max_value(_arrival_ticks), "spawn_worst_us": _arrival_spawn_us}
+			"spawn_worst_us": _arrival_spawn_us}
+
+
+# The engine's own physics time a tick, us, in the warm-up (with arrivals, while the ships come in) and in the measured window:
+# the same measure for a run that arrives and one that is placed (M6-T20).
+func _engine_ticks() -> Dictionary:
+	return {"warmup_ticks": _warmup_engine.size(), "warmup_median_us": PerfStats.median(_warmup_engine),
+			"warmup_p99_us": PerfStats.percentile(_warmup_engine, 0.99), "warmup_max_us": PerfStats.max_value(_warmup_engine),
+			"window_ticks": _window_engine.size(), "window_median_us": PerfStats.median(_window_engine),
+			"window_p99_us": PerfStats.percentile(_window_engine, 0.99)}
 
 
 ## What the GPU drew in each part of a run with a window (M6-T20's fps test): `frames` holds one row a frame, (sim s, GPU ms, frame

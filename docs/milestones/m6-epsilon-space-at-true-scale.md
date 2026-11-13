@@ -303,7 +303,7 @@ which changes the same native rows and rebase path:
 | T17 | E | Test tiers: quick, standard, balance and full, the quick list, its guard test, the Rust tests in the run | T01 | Sonnet | Scripts and one data file from a written plan (`docs/research/test-review/quick-test-suite.md`) | done |
 | T18 | E | The review's CONFIRMED test removals (sections A to D), each re-checked, the parity recordings still read | T17 | Opus | Proving two tests cover the same thing needs both read in full; rules on what must stay | done |
 | T19 | D | The vortex reworked and stand-alone: fitted to the gate, a shallow funnel, spiralling soft dark patches; open jump points use it too | T14 | Opus | Shader animation and a shared effect seam; the look is (H) | done (accepted by the maintainer, 2026-11-12) |
-| T20 | D | Vortex detail by distance and mass arrivals: detail layers dropped with screen size; up to 100 jump points forming at once; every ship of the 1 000-ship battle enters through one; the battle's GPU fps test with them | T19, T07 | Opus | A shader LOD, a pooled effect at a hundred instances and the battle's spawn path, judged on the GPU | in progress |
+| T20 | D | Vortex detail by distance and mass arrivals: detail layers dropped with screen size; up to 100 jump points forming at once; every ship of the 1 000-ship battle enters through one; the battle's GPU fps test with them | T19, T07 | Opus | A shader LOD, a pooled effect at a hundred instances and the battle's spawn path, judged on the GPU | done |
 | T21 | A | The rebase's per-node rest: only the rocks near a ship live in Jolt; a list of the shiftables in play instead of walking the group | T06, T07 | Opus | A measured engine-side follow-up to T06 on the paths T07 also changes | done |
 
 ### M6-T01 Moving-frame audit and design
@@ -1700,6 +1700,82 @@ which changes the same native rows and rebase path:
 - **Tests:** the LOD helper (levels from projected size, the blend band): quick; the pool at 100 points (no allocation while
   open, reuse): quick if pure; the battle entering through points: standard; GPU files (`*_gpu.gd`): standard (Pending headless).
 - **Done when:** AC13; screenshots of one vortex at each level and of 100 points forming in the battle for the maintainer (H).
+- **Done (2026-11-13):**
+  - **Detail by distance** (`VortexLod`, pure): six layers drop out as the mouth's projected radius in px falls, finest first,
+    each fading over a band whose top is 1.5 times its bottom (no pop): finest hairs 240 to 160 px, fine hairs 120 to 80,
+    broad hairs 54 to 36, the patches and the rim's wisps 24 to 16, the fine cloud octave 12 to 8, the coarse cloud 6 to 4.
+    Seven levels between the bands: 0 everything (above 240 px), 1 to 3 without the finest, fine and broad hairs, 4 without
+    the patches and wisps, 5 without the fine cloud, 6 the soft disc of the base colour with its band, rim fade and dark
+    throat (under 4 px). Each band sits where the shader's own per-pixel filter has already mostly melted that layer (600,
+    300 and 120 strands melt below about 270, 135 and 55 px). A fading layer blends toward its mean (hairs 0.5; the dark
+    patches' mean darkening 0.89 and the pale ones' mean cover 0.10, measured off the shader's patch function), so the tone
+    does not shift; a layer at weight 0 is not computed. Under 10 px the funnel draws a 24 x 10 grid instead of 96 x 40,
+    back above 14 px. The centre flashes (opening and closing) are not layers and keep their timing at every level (test).
+  - **Per instance:** every vortex of one set of colours shares one funnel material per direction and one flash material
+    (cached in `JumpVortex`), the meshes are shared; growth, the base's view (the per-vertex camera and axis work of the
+    vertex shader, now worked out once per point in GDScript), the swirl's time and the layer weights are instance uniforms
+    (`vortex_state`, `vortex_lod_a`, `vortex_lod_b`; the glow shader's `level` too). A closed vortex does not process.
+  - **Lights and sounds capped:** a pool lights its 3 nearest open points (`VortexLod.lit`, the rest glow without a light in
+    the rig's 7 slots) and starts at most 4 arrival sounds a second.
+  - **The pool** (`JumpPointPool`): up to 100 points (`MAX_POINTS`; `prepare` grows to a count), each driven by the pool's
+    one `_process` (one camera, one pass). Opening fills the point's own fit and timing in place (`VortexTiming.reset`); a
+    free point is found from a cursor, else the oldest is taken back. Opening and drawing 100 points makes no node and no
+    object but the few sounds' playbacks (test). `open_for(..., share = false)` and `join` let a caller that grouped its
+    ships open one point per group.
+  - **The battle arrives through jump points** (`BattleArrivals`, pure, and `BenchRunner`): in `bench battle` and `bench
+    typical` every ship comes out of a point. Groups: ships of one side and one fight within 600 m of the group's first
+    ship share its point (the pool's group rule, widened for each); a capital opens its own, sized for its cross-section
+    (it comes out nose first; by its bounding radius a carrier's mouth was 2.5 km). Waves bring whole fights, the player's
+    first, 100 points to a wave: the first wave at the start, each later one a point's life plus 1.5 s after the last (10 s),
+    its points spread over 1 s so a tick brings a few ships. `bench battle 1000`: 353 points in 4 waves (100, 100, 100, 53;
+    the last at 31 s), never more than 100 open. The warm-up stretches until the last wave is in (32 s), so the measured
+    window holds the whole battle. A battle of one wave (100 ships fit one) places every ship at the start as before:
+    `test_weapon_rows_battle` (GUT_SLOW=1) is still [933, 420, 174, 151, 25, 1]. `arrive=placed` places every ship at the
+    start (the comparison). The report gains `arrivals`, `engine_ticks` (the engine's tick time in the warm-up and the
+    window, the same measure for both modes) and `render` (with a window: GPU time, frame time, draw calls, VRAM and
+    points open for the first wave's forming 0 to 2.5 s, the open points to 6.5 s, and the window). No battle scenario
+    exists in `data/scenarios` yet; the bench's battle and typical are the battles. `bench_quick.sh` takes `QUICK_OPTIONS`.
+  - **Console:** `vortex lod <auto|0-6>` (every vortex at one level, for captures), `vortex view [mouth radii]`, provider
+    `vortex` gains `lod`, `radius_px`, `forced_lod`, `lit`; `vortex` counts the bench's points too. `info.md` updated.
+  - **GPU, the fps test** (RX 6950 XT, RADV, Forward+, 1920x1080; the session was locked, so inside headless gamescope with
+    `--display-driver x11`, capped at 60 fps: GPU time is the measure; `bench battle 1000 10 seed=1`, the bench's `render`):
+
+    | view | phase | GPU ms median (p95) jump | placed | draw calls median jump | placed | fps jump / placed |
+    |---|---|---|---|---|---|---|
+    | chase (the player's) | 100 points forming (0 to 2.5 s) | 0.98 (1.25) | 0.86 (1.22) | 142 | 118 | 59.3 / 58.6 |
+    | chase | 100 points open (2.5 to 6.5 s) | 1.11 (1.40) | 0.82 (1.10) | 111 | 89 | 60.1 / 60.0 |
+    | chase | window (53 points of the last wave still open) | 0.87 (1.14) | 0.87 (1.15) | 87 | 89 | 60.0 / 60.0 |
+    | overview (7 km up, 9 km back) | forming | 0.82 (1.22) | 0.69 (1.03) | 139 | 65 | 59.2 / 58.9 |
+    | overview | open | 0.93 (1.25) | 0.72 (0.99) | 149 | 62 | 60.0 / 60.0 |
+
+    A hundred points cost 0.1 to 0.3 ms of GPU time and about one draw call per point in view. VRAM in the renderer 461 to 462
+    MB in every run; sysfs `card1` peak 3.57 GB in both modes (2.91 GB desktop baseline). Before capitals' points were sized
+    by cross-section the chase view's open phase was 1.35 ms.
+  - **Tick cost** (headless, pinned 0-11, load 0.6): `bench_quick.sh` battle 500 and 1 000 (2 s warm-up asked, stretched to
+    32 s with arrivals; 6 s measured): arriving tick median 5.10 and 6.31 ms, p99 6.87 and 8.48; placed 4.61 and 5.74,
+    p99 6.17 and 7.72; every budget held at 60 FPS. The two windows sit 30 s apart in the battle; measured at the same time
+    (`bench battle 1000 6`, placed with `warmup=32`): 6.44 against 6.06 ms median, p99 8.94 against 8.15. While the waves
+    come in (the warm-up, engine time a tick): median 7.42 against the placed run's 7.59, p99 14.8 against 10.2 ms; bringing
+    in one tick's points costs at most 4.8 ms.
+  - **Tests:** quick `test_vortex_lod` (new, 6: projected size, band order, each level and the blend, no step over 0.025 a
+    0.5 % size change, the coarse mesh's margin, the lit nearest), `test_jump_point_pool` (new, 8: 100 points at most, shared
+    mesh and materials, 100 open at once with nothing made, reuse and the oldest taken back, no processing while closed,
+    lights and sounds capped, a group widening its point, a far point's detail and the same flash), `test_battle_arrivals`
+    (new, 8: one point per ship, groups, waves of 100 and never more open, timing, fights in order, determinism, one wave for
+    a small battle, the fps test's phases); standard `test_bench` (2 new: a battle in waves with every ship out of a point and
+    all in by the window; a placed battle). Green: the three new files, `test_vortex_timing`, `test_jumpgate_broadcast`,
+    `test_vortex_fit`, `test_bench` (12); GUT_SLOW=1 `test_weapon_rows_battle` (unchanged), `test_encounters` (17),
+    `test_jumpgate_in_play` (3), `test_mission_runner` (18). Compile check clean (707 scripts); quick tier green (1 905 GUT
+    tests, 131 s). No native change.
+  - **Screenshots** in `references/screenshots/M6-T20 vortex lod/`: `lod_levels_forced.png` (one 300 m point at 289 px,
+    each level forced) and `forced_level_0..6.png`; `lod_levels_by_distance.png` (the real level at 960 m to 35 km, the blend
+    at 1.7 km) and `distance_*.png`; the battle: `battle_100_points_flash.png`, `_unfolding.png`, `_open.png`,
+    `battle_second_wave.png`, `battle_chase_view_forming.png`, `battle_arrivals_overview.mp4` and `.gif` (Movie Maker in
+    headless gamescope, 1280x720 at 30 fps, the first 36 s: the first wave flashing and opening, its closing flashes, the
+    second and third waves), `battle_arrivals_chase_view.mp4` (the player's view; taken before the capitals' points were resized).
+  - **(H):** the look of each level and of the blends; the battle's arrival waves; capitals' points sized by cross-section;
+    the wave timing (a point's whole life apart); beyond the camera's 50 km far plane a stand-alone point is not drawn at
+    all (a far form like the gate's would be new work); the frame rate in a visible window on the maintainer's desktop.
 
 ### M6-T21 The rebase's per-node rest
 
