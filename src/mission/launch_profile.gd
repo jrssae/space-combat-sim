@@ -23,7 +23,8 @@ var stagger_s: float = 1.5
 var wave_gap_s: float = 10.0
 ## Seconds for the second row to move from staging onto the racks.
 var row_move_s: float = 6.0
-## The shots: each `{shot: CinematicShot, step: StringName, at_s: float}`, in file order.
+## The shots: each `{shot: CinematicShot, step: StringName, at_s: float, fill: Dictionary}`, in file order. `fill` (empty for none)
+## is a light lit for the shot's length: `actor`, `offset` (Vector3 in its frame), `energy`, `range_m`, `color`.
 var shots: Array[Dictionary] = []
 
 
@@ -69,8 +70,29 @@ static func from_dict(data: Variant, source: String = "launch profile") -> Dicti
 		var shot: Dictionary = CinematicShot.from_dict(StringName(str(e.get("id", "launch_%d" % i))), e)
 		if not bool(shot["ok"]):
 			return {"ok": false, "error": "%s: %s" % [source, shot["error"]]}
-		made.shots.append({"shot": shot["shot"], "step": step, "at_s": float(at)})
+		var fill: Variant = _fill(e.get("fill"), "%s: shots[%d].fill" % [source, i])
+		if fill is String:
+			return {"ok": false, "error": fill}
+		made.shots.append({"shot": shot["shot"], "step": step, "at_s": float(at), "fill": fill})
 	return {"ok": true, "profile": made}
+
+
+# A shot's fill light, or why it is not one.
+static func _fill(raw: Variant, where: String) -> Variant:
+	if raw == null:
+		return {}
+	if not raw is Dictionary:
+		return "%s must be an object" % where
+	var d: Dictionary = raw
+	var offset: Variant = d.get("offset", [0.0, 0.0, 0.0])
+	if not (d.get("actor") is String) or not offset is Array or (offset as Array).size() != 3:
+		return "%s needs an actor and an offset [x, y, z]" % where
+	for key: String in ["energy", "range_m"]:
+		if not (d.get(key) is float or d.get(key) is int) or float(d[key]) <= 0.0:
+			return "%s.%s must be a number above 0" % [where, key]
+	var o: Array = offset
+	return {"actor": d["actor"], "offset": Vector3(float(o[0]), float(o[1]), float(o[2])), "energy": float(d["energy"]),
+			"range_m": float(d["range_m"]), "color": Color.html(str(d.get("color", "#FFF2E0")))}
 
 
 ## The shots that start in `step`, in file order.

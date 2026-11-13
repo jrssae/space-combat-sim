@@ -270,3 +270,22 @@ func test_a_missing_actor_on_the_segment_gives_no_pose_but_a_missing_neighbour_d
 	])
 	assert_null(_eval(shot, 0.5), "the segment's own key cannot be placed")
 	assert_not_null(_eval(shot, 1.5), "the key before the segment only shapes the curve")
+
+
+func test_an_up_key_keeps_the_picture_upright_against_its_actor() -> void:
+	# M7-T08: a Cobra arm on the turning drum, here tipped onto its side (its +y along the world's +x).
+	actors["arm"] = Transform3D(Basis(Vector3.BACK, -PI / 2.0), Vector3(0, 0, -50))
+	var key: Dictionary = _origin_key(0, Vector3.ZERO, Vector3(0, 0, -50))
+	key["up"] = {"actor": "arm", "direction": [0, 1, 0]}
+	var shot: CinematicShot = _shot([key, key.merged({"t": 2.0}, true)])
+	var pose: CinematicShot.Pose = _eval(shot, 1.0)
+	assert_almost_eq(pose.transform.basis.y, Vector3.RIGHT, Vector3.ONE * TOL, "the picture's up is the arm's")
+	assert_true(shot.actors().has("arm"), "the up's actor is one of the shot's")
+	actors["arm"] = Transform3D(Basis(Vector3.BACK, PI), Vector3(0, 0, -50))
+	assert_almost_eq(_eval(shot, 1.0).transform.basis.y, Vector3.DOWN, Vector3.ONE * TOL, "and turns with it")
+	actors.erase("arm")
+	assert_almost_eq(_eval(shot, 1.0).transform.basis.y, Vector3.UP, Vector3.ONE * TOL, "the world's up when the actor is gone")
+	var plain: CinematicShot = _shot([_origin_key(0, Vector3.ZERO, Vector3(0, 0, -50))])
+	assert_almost_eq(_eval(plain, 0.0).transform.basis.y, Vector3.UP, Vector3.ONE * TOL, "no up key: the world's up")
+	_assert_parse_error({"keys": [key.merged({"up": {"actor": "arm"}}, true)]}, "up must be")
+	_assert_parse_error({"keys": [key.merged({"up": {"actor": "arm", "direction": [0, 0, 0]}}, true)]}, "up must be")

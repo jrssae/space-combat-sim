@@ -5451,8 +5451,12 @@ data/scenarios/station_launch.json  the player on Alpha 3 with three wingmen
   drawn, so a fighter riding it sits on its rack on screen (before T08 the picture led the body by two ticks, 1.2 m at the doors).
 - **Camera.** `LaunchProfile.shots` are `CinematicShot`s with a step (`door`, `hold`, `drop`, `release`) and `at_s`; each plays once the
   player's fighter has been that long in that step. Actors: `bay` (the player's door frame as the drum is drawn: x across the arm, y out
-  of the drum, z aft) and `fighter` (the player's ship). As built: inside the hall at the opening door, the arm from outside while it
-  holds, from above the door as it drops, then a chase from the fighter's belly side as it clears.
+  of the drum, z aft) and `fighter` (the player's ship). Every key has an `up` (`CinematicShot`'s new key: `{actor, direction}` in
+  that actor's frame), so the picture stays upright against the arm and a launch from Beta, Delta or Zeta frames as Alpha's does. A
+  shot may carry a `fill` (`actor`, `offset`, `energy`, `range_m`, `color`): a `LightEmitter` in the scene's `LightRig`, so the
+  `LightPicker`'s 7 slots hold it, lit only while its shot is on screen. As built: inside the hall at the opening door; the arm from
+  outside while it holds; close above the door as the fighter comes through the opening, lit by a fill; from 0.25 s after the release,
+  a chase keyed on the fighter from its belly side, the arm and the turning drum behind it (up: the fighter's belly).
 - **Wing launches.** `launch wing <wing>` takes twelve Starfuries from the ally pool (topping it up with `ShipPool.prepare`), named
   `<WING> 1` to `12` with the `ally_starfury` profile and no wing yet (T10 gives them their part).
 - **For M8.** A squadron launch is one `LaunchSequence` per wing (or several in turn) with a profile of its own; the shots and the steps

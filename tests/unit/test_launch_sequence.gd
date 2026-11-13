@@ -94,6 +94,14 @@ func test_the_profile_file_reads() -> void:
 	assert_almost_eq(profile.wave_gap_s, 10.0, 1e-9, "the maintainer's 10 s between the waves")
 	for step: StringName in [&"door", &"hold", &"drop"]:
 		assert_false(profile.shots_in(step).is_empty(), "a shot for the %s step" % step)
+	assert_false(profile.shots_in(&"release").is_empty(), "the chase starts after the release")
+	assert_false((profile.shots_in(&"drop")[0]["fill"] as Dictionary).is_empty(), "the drop is lit by a fill")
+	for entry: Dictionary in profile.shots:
+		for key: CinematicShot.Frame in (entry["shot"] as CinematicShot).keys:
+			assert_false(key.up_actor.is_empty(), "%s keeps its picture upright against the arm" % (entry["shot"] as CinematicShot).id)
+	var bad_fill: Dictionary = LaunchProfile.from_dict({"shots": [{"step": "drop", "fill": {"actor": "bay", "energy": 0},
+			"keys": [{"t": 0.0, "position": {"actor": "bay"}, "look_at": {"actor": "bay"}}]}]})
+	assert_false(bool(bad_fill["ok"]), "a fill needs light")
 	var bad: Dictionary = LaunchProfile.from_dict({"shots": [{"step": "landing", "keys": [{"t": 0.0,
 			"position": {"actor": "bay"}, "look_at": {"actor": "bay"}}]}]})
 	assert_false(bool(bad["ok"]), "an unknown step is refused")

@@ -107,6 +107,10 @@ func test_the_scenario_starts_the_player_on_its_rack_with_the_wingmen_beside() -
 
 func test_the_player_is_handed_over_with_the_bays_velocity() -> void:
 	await _start()
+	var rig: LightRig = LightRig.of(main)
+	assert_true(await _until(func() -> bool: return main.launches.fill != null, 400), "the drop is lit by its fill")
+	assert_true(rig.has_emitter(main.launches.fill), "through the scene's light rig (the LightPicker's budget)")
+	var drop_fill: LightEmitter = main.launches.fill
 	assert_true(await _until(func() -> bool: return not main.launches.last_handoff.is_empty(), 900), "the player is let go")
 	var handoff: Dictionary = main.launches.last_handoff
 	assert_eq(handoff["bay"], "cobra_bay_alpha_3")
@@ -126,6 +130,8 @@ func test_the_player_is_handed_over_with_the_bays_velocity() -> void:
 	for shot: String in ["launch_hall", "launch_drop", "launch_chase"]:
 		assert_true(shots_seen.has(shot), "the launch camera played %s (%s)" % [shot, shots_seen])
 	assert_false(main.camera_rig.is_playing_shot(), "and gave the view back")
+	assert_null(main.launches.fill, "the fill went out with its shot")
+	assert_false(rig.has_emitter(drop_fill), "and left the light rig")
 	var door: Vector3 = _on_drum(station.hardpoints.bay("cobra_bay_alpha_3")["door"])
 	assert_gt(main.ship.global_position.distance_to(door), 30.0, "it has left the bay")
 

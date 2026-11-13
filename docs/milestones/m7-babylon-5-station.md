@@ -610,8 +610,14 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     staging path, the doors, a rebase), `test_scenario_loader.gd` (+1: both keys), GUT `tests/integration/test_launch_bay.gd` (8: the
     scenario start on the racks riding the drum, the hand-off state and the shots, the skip with Start, the wingmen's order, a rebase
     mid-drop, a hold under the spine, `launch wing`, `MissionApi.launch_from`). Station asset rebuilt after T21's commit.
-  - **Sheet (H):** `references/screenshots/M7-T08 launch/M7-T08_launch_shots_sheet.png` (frames 1 to 6 beside it; RX 6950 XT,
-    Forward+, X11, 960 x 540: 44 to 59 draw calls, about 75 000 triangles).
+  - **Sheet (H):** `references/screenshots/M7-T08 launch/M7-T08_launch_shots_sheet.png` (frames 1 to 8 beside it; RX 6950 XT,
+    Forward+, X11, 960 x 540: 32 to 59 draw calls, about 75 000 to 78 000 triangles).
+  - **Fix (maintainer, after the sheet):** the outside shots frame the fighter: the drop is seen close above the door as the fighter
+    comes through the opening, lit by a fill light (`fill` in the profile: a `LightEmitter` in the `LightRig`, so inside the
+    `LightPicker`'s budget, gone when the shot ends; T18 adds the bay lights); the chase starts 0.25 s after the release, keyed on the
+    fighter, the arm and the drum turning behind it. **Per-arm roll:** `CinematicShot` keys take an `up` (`{actor, direction}`), and
+    every launch shot is upright against the arm (Beta's frames 7 and 8 match Alpha's). Skip under the spine, the release roll and the
+    respawn in the bay stay as built (maintainer).
 
 ### M7-T09 The station interior for the front end
 

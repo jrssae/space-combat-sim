@@ -48,6 +48,10 @@ var _played: Dictionary = {}  # shot entries already played in the player's curr
 var _skip_asked: bool = false
 var _shots_cut: bool = false  # the player skipped: no more shots this launch
 var _launch_shot: Dictionary = {}  # the player's latest launch: its shots, its skip
+## The fill light of the shot playing (a profile's `fill`), lit through the scene's `LightRig` only while its shot is on screen.
+var fill: LightEmitter = null
+var _fill_shot: CinematicShot = null
+var _fill_spec: Dictionary = {}
 
 
 func _init() -> void:
@@ -69,6 +73,19 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
+	_drop_fill()
+
+
+# The fill follows its actor as drawn, and goes out with its shot.
+func _process(_delta: float) -> void:
+	if fill == null:
+		return
+	if main == null or main.camera_rig == null or main.camera_rig.playing_shot() != _fill_shot:
+		_drop_fill()
+		return
+	var pose: Variant = _actor_pose(String(_fill_spec["actor"]))
+	if pose != null:
+		fill.position = (pose as Transform3D) * (_fill_spec["offset"] as Vector3)
 
 
 ## The station launches come from, or null.
@@ -350,6 +367,35 @@ func _direct_camera(launch: Dictionary) -> void:
 			continue
 		_played[i] = true
 		main.camera_rig.play_shot(entry["shot"], _actor_pose, _origin_to_local)
+		_light_fill(entry)
+
+
+# Lights the shot's fill (replacing the last one), or puts the last one out when this shot has none.
+func _light_fill(entry: Dictionary) -> void:
+	_drop_fill()
+	var spec: Dictionary = entry.get("fill", {})
+	var rig: LightRig = LightRig.of(self)
+	if spec.is_empty() or rig == null:
+		return
+	fill = LightEmitter.new("launch fill", LightEmitter.PRIORITY_MUZZLE_FLASH, spec["color"], float(spec["energy"]),
+			float(spec["range_m"]))
+	_fill_shot = entry["shot"]
+	_fill_spec = spec
+	var pose: Variant = _actor_pose(String(spec["actor"]))
+	if pose != null:
+		fill.position = (pose as Transform3D) * (spec["offset"] as Vector3)
+	rig.add_emitter(fill)
+
+
+func _drop_fill() -> void:
+	if fill == null:
+		return
+	var rig: LightRig = LightRig.of(self)
+	if rig != null:
+		rig.remove_emitter(fill)
+	fill = null
+	_fill_shot = null
+	_fill_spec = {}
 
 
 
