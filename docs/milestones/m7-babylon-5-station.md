@@ -581,6 +581,11 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 - **From T06 (2026-11-13):** T06's bay test held the drum still; with the drum turning, a fighter at rest meets its door at
   about 36 m/s and is rammed, so the launch carries the fighter with the drum (on its rack and rail, in the drum's frame) and
   releases it with the drum's surface velocity (Q3), never as a free body at rest beside a turning door.
+- **Front first (maintainer, 2026-11-13):** Starfuries launch **nose first**: stored on the rack at 90 degrees to the launch
+  direction, the clamp rotates each one nose-out before it drops. The shots follow the maintainer's two show GIFs
+  (`references/cobra bay interior references/starfury launch single.gif` and `... multiple.gif`): through the canopy at the
+  pilot, the fighter on its clamp, the rotation, looking down through the open door, the door row opening outside, the fighter
+  coming out, a chase with the drum behind. The hangar behind the menu (T20) is matched to the stored pose afterwards.
 - **Done when:** AC7.
 - **Done (as built; contracts in `docs/architecture.md` §20.2):**
   - **`LaunchSequence`** (`src/mission/launch_sequence.gd`, pure, in the drum's frame): one wing's launch of up to twelve, the first
