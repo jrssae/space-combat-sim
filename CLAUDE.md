@@ -113,9 +113,10 @@ been planned were taken for done.
   the working copy holds other agents' uncommitted files, and tests run there can pass while CI, which builds from the
   committed code, fails (M7-T06 went red this way). Before every commit, run your touched Python and GUT files (and any
   assets they need, built from the generators) against **HEAD plus your staged changes only**: `scripts/scratch_project.sh
-  <name> --staged` makes that copy (real files from the index, its own `.godot/` and `assets/generated/`, the native library),
-  then build, `--import` and test there with `--path reports/scratch/<name>`; until `--staged` exists, use `git checkout-index -a
-  --prefix=reports/scratch/<name>/` and build there. Report the counts from that copy, and `--clean` it after.
+  <name> --staged` makes that copy (real files from the index, its own `.godot/` and `assets/generated/`, the native library;
+  `--build-native` rebuilds the library from the staged sources when they touch `native/`), then rebuild the assets whose generators
+  you touched there (`cd reports/scratch/<name> && python3 -m tools.procgen build <id> --out assets/generated`), `--import` and test
+  with `--path reports/scratch/<name>` (Python tests from inside it). Report the counts from that copy, and `--clean` it after.
 - Screenshots: every screenshot or captured frame an agent takes, for any request, goes under `references/screenshots/`
   (gitignored) in a subfolder named for the request, e.g. `references/screenshots/T13 Saturn 4 current replacement/`.
   Never `/tmp` or `reports/`, and never commit them. In a worktree, use the main checkout's `references/` so the
