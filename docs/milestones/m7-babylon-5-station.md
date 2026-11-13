@@ -242,8 +242,8 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T11 | D | Maintenance bots: the generator and their loops | T06, Q11 | Sonnet | A small asset and a simple mover | not started |
 | T12 | D | Tour points and a station sandbox scenario (the base of M8's exterior tour) | T05, T08 | Sonnet | Data and `CINEMATIC` shots on existing seams | not started |
 | T13 | B | Performance and the GPU check: the station in view at every range, three squadrons, the grid and a raid | T07, T10 | Opus | Measurement on the maintainer's machine; the budget call | not started |
-| T15 | A | Starfury and raider surfaces from show references, with low and high texture sets for the texture detail setting (maintainer, 2026-11-12; numbered last because it was added after the others had numbers) | M5-T40 | Fable | Two hero hulls seen up close; the look is (H) and needs a sheet first | in progress |
-| T16 | A | Raider fighter rebuilt to its STL at 90% fidelity, the wing's leading-edge panels first (maintainer, 2026-11-13) | T15 | Opus | The raider was built without an STL; the maintainer finds its shape too far from the reference | not started |
+| T15 | A | Starfury and raider surfaces from show references, with low and high texture sets for the texture detail setting (maintainer, 2026-11-12; numbered last because it was added after the others had numbers) | M5-T40 | Fable | Two hero hulls seen up close; the look is (H) and needs a sheet first | done |
+| T16 | A | Raider fighter rebuilt to its STL at 90% fidelity, the wing's leading-edge panels first (maintainer, 2026-11-13) | T15 | Opus | The raider was built without an STL; the maintainer finds its shape too far from the reference | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M7-T01 Station references and measurements
