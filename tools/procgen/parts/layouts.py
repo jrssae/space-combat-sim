@@ -435,74 +435,81 @@ RAIDER_EDGE_M = 0.55  # the edge band's width inside the leading edge
 RAIDER_TE_M = 0.3  # and inside the trailing edge
 
 
-def raider(sweep_deg: float, root_chord: float, half_span: float, tip_chord: float,
-           nacelle_axis: tuple[float, float]) -> dict[str, SeamLayout]:
-    """The raider's parts in the authored frame (the right wing and nacelle; their twins mirror), sized from the wing's own sweep,
-    chords and span (docs/assets-raider.md, "Surface"): framed trapezoid panels in the wing's bays, a hump in plates of mixed size,
-    ribbed nacelles."""
-    slope = 1.0 / math.tan(math.radians(sweep_deg))
-    tip_te = half_span * slope + tip_chord
+def raider(le_ratio: float, half_span: float, trailing_z: float, notch: tuple[float, float], body_x: float,
+           lobe_z: tuple[float, float], lobe_x: tuple[float, float], canopy_z: tuple[float, float]) -> dict[str, SeamLayout]:
+    """The raider's parts in the authored frame (the right wing and housing; their twins mirror), sized from the wing's leading edge
+    (``le_ratio`` metres out per metre aft), span, trailing edge and notch and from the housings' reach (docs/assets-raider.md,
+    "Surface"): framed trapezoid panels in the wing's bays, a ridge in plates of mixed size, ribbed housings."""
+    sweep = math.atan(le_ratio)
+    notch_x, notch_z = notch
+    notch_out = notch_z * le_ratio  # where the notch's back wall meets the leading edge
 
     def le(x: float, inset: float) -> tuple[float, float, float]:
-        return (x, 0.0, x * slope + inset / math.sin(math.radians(sweep_deg)))
+        z = x / le_ratio + inset / math.sin(sweep)
+        return (x, 0.0, max(z, notch_z + inset) if notch_x < x < notch_out else z)
 
     def te(x: float, inset: float) -> tuple[float, float, float]:
-        return (x, 0.0, root_chord + (tip_te - root_chord) * x / half_span - inset)
+        return (x, 0.0, trailing_z - inset)
 
     def both(make) -> list[Feature]:
         return [make(side) for side in (UP, DOWN)]
 
     edge, back = RAIDER_EDGE_M, RAIDER_TE_M
     out_x = half_span - 0.4
+    frames = (notch_out, 5.7)
 
     def bay(xa: float, xb: float, inset: float, level: int = 2, **kw: object) -> list[Feature]:
         """A panel outlined inside a bay of the wing, its sides parallel to the bay's."""
         points = (le(xa + inset, edge + inset), le(xb - inset, edge + inset), te(xb - inset, back + inset), te(xa + inset, back + inset))
         return both(lambda side: Path(points=points, closed=True, facing=side, level=level, **kw))
 
+    facing_le = (math.cos(sweep), 0.0, -math.sin(sweep))
     wing: list[Feature] = [
-        # Low: the line the edge band's plating follows, round the tip and along the trailing edge; the wing's two frames.
-        *both(lambda side: Path(points=(le(0.5, edge), le(out_x, edge), te(out_x, back), te(0.5, back)), facing=side, level=1, width=1.3)),
-        Cut(axis=0, at=3.0, level=1, width=1.3), Cut(axis=0, at=5.7, level=1, width=1.3),
-        # The leading edge's row of teeth.
-        *[Cut(axis=0, at=x, level=2, width=1.6, facing=(math.cos(math.radians(sweep_deg)), 0.0, -math.sin(math.radians(sweep_deg))),
-              min_dot=0.7) for x in every(0.6, half_span - 0.3, 0.42)],
-        # Each bay carries a panel outlined inside it and a smaller one inside that; louvres by the root, a long hatch aft.
-        *bay(1.9, 3.0, 0.22), *bay(3.0, 5.7, 0.28), *bay(5.7, out_x, 0.25),
-        *bay(3.0, 5.7, 0.75, width=0.8), *bay(5.7, out_x, 0.6, width=0.8),
-        Hatch(centre=(2.45, 0.0, 4.75), right=X, up=Z, size=(0.6, 1.0), slats=7, sunk=1.0, tone=0.7, facing=UP, level=2),
-        Hatch(centre=(4.6, 0.0, 5.45), right=X, up=Z, size=(1.3, 0.34), corner_m=0.05, facing=UP, level=2),
-        Hatch(centre=(4.4, 0.0, 4.6), right=X, up=Z, size=(1.5, 0.9), corner_m=0.08, facing=DOWN, level=2),
-        Hatch(centre=(6.6, 0.0, 5.4), right=X, up=Z, size=(0.8, 0.5), slats=5, sunk=1.0, tone=0.7, facing=DOWN, level=2),
+        # Low: the line the edge band's plating follows, from the housing round the tip and along the trailing edge; the frames.
+        *both(lambda side: Path(points=(le(body_x, edge), le(notch_x - 0.05, edge), (notch_x - 0.05, 0.0, notch_z + edge),
+                                        le(notch_out, edge), le(out_x, edge), te(out_x, back), te(body_x, back)), facing=side, level=1, width=1.3)),
+        *[Cut(axis=0, at=x, level=1, width=1.3, **_zbox(notch_z, INF)) for x in frames],
+        # The leading edge's row of teeth, outboard of the notch.
+        *[Cut(axis=0, at=x, level=2, width=1.6, facing=facing_le, min_dot=0.7) for x in every(notch_out + 0.3, half_span - 0.3, 0.42)],
+        # Each bay carries a panel outlined inside it and a smaller one inside that; louvres behind the notch, a long hatch aft.
+        *bay(frames[0], frames[1], 0.28), *bay(frames[1], out_x, 0.25),
+        *bay(frames[0], frames[1], 0.75, width=0.8), *bay(frames[1], out_x, 0.6, width=0.8),
+        Hatch(centre=(2.95, 0.0, 4.6), right=X, up=Z, size=(0.5, 0.9), slats=7, sunk=1.0, tone=0.7, facing=UP, level=2),
+        Hatch(centre=(4.9, 0.0, 6.85), right=X, up=Z, size=(1.3, 0.34), corner_m=0.05, facing=UP, level=2),
+        Hatch(centre=(4.4, 0.0, 5.7), right=X, up=Z, size=(1.5, 0.9), corner_m=0.08, facing=DOWN, level=2),
+        Hatch(centre=(6.3, 0.0, 6.65), right=X, up=Z, size=(0.8, 0.5), slats=5, sunk=1.0, tone=0.7, facing=DOWN, level=2),
         # Large plates in 7 % tone.
         Plates(level=3, wrap="planar", right=Z, up=X, cell=(2.2, 1.35), offset=(0.0, 0.3), splits=1, min_m=0.5, keep=0.4, tone=0.07,
-               sheen=0.07, grime=0.10, grime_m=0.05, depth=0.0, dark=0.0, seed=141, symmetric=False),
+               sheen=0.12, grime=0.10, grime_m=0.05, depth=0.0, dark=0.0, seed=141, symmetric=False),
         _hatches((0.7, 0.4), 0.06, 143, wrap="planar", right=Z, up=X),
     ]
 
-    # The hump: frames behind the canopy, a belt along each flank, hatches low on the sides, plates of mixed size.
-    hump: list[Feature] = [
-        Cut(axis=2, at=2.45, level=1, width=1.3), Cut(axis=2, at=3.4, level=1, width=1.3),
-        Cut(axis=2, at=4.5, level=2), Cut(axis=1, at=0.62, level=2, **_zbox(2.45, 5.4)),
-        *_plating(3, 0.07, wrap="sides", long_axis=2, cell=(0.8, 0.55), splits=1, min_m=0.2, keep=0.3, sheen=0.08, grime=0.12, grime_m=0.04,
+    # The ridge: frames behind the canopy and over the hump, a belt along each flank, hatches low on the sides, plates.
+    behind = canopy_z[1] + 0.25
+    ridge: list[Feature] = [
+        Cut(axis=2, at=canopy_z[0] - 0.15, level=1, width=1.3), Cut(axis=2, at=behind, level=1, width=1.3),
+        Cut(axis=2, at=4.5, level=2), Cut(axis=2, at=5.6, level=2), Cut(axis=1, at=0.2, level=2, **_zbox(behind, 6.1)),
+        *_plating(3, 0.07, wrap="sides", long_axis=2, cell=(0.8, 0.55), splits=1, min_m=0.2, keep=0.3, sheen=0.12, grime=0.12, grime_m=0.04,
                   depth=0.5, dark=0.5, width=0.8, seed=151),
     ]
-    hump_right: list[Feature] = [
-        Hatch(centre=(0.0, 0.34, 2.95), right=Z, up=Y, size=(0.62, 0.3), corner_m=0.04, facing=OUT, min_dot=0.5, level=2),
-        Hatch(centre=(0.0, 0.34, 1.75), right=Z, up=Y, size=(0.5, 0.2), slats=4, sunk=1.0, tone=0.7, facing=OUT, min_dot=0.5, level=2),
+    ridge_right: list[Feature] = [
+        Hatch(centre=(0.0, 0.05, 2.5), right=Z, up=Y, size=(0.5, 0.25), corner_m=0.04, facing=OUT, min_dot=0.5, level=2),
+        Hatch(centre=(0.0, -0.05, 1.5), right=Z, up=Y, size=(0.4, 0.14), slats=4, sunk=1.0, tone=0.7, facing=OUT, min_dot=0.5, level=2),
     ]
 
-    # The nacelle: ribbed housings, as the model's engine cages are.
-    ax = (nacelle_axis[0], nacelle_axis[1], 0.0)
-    nacelle: list[Feature] = [
-        *rings(2, [2.9, 5.3], level=1, width=1.3),
-        *rings(2, [3.5, 4.1, 4.7], level=2, depth=-0.8, flat_m=0.035),
-        *spokes(2, ax, range(0, 360, 30), span=(2.9, 5.3), level=2),
-        Plates(level=3, wrap="barrel", axis=2, centre=ax, radius=0.7, around=12, cell=(0.6, 0.0), offset=(2.9, 0.0), splits=1, min_m=0.2,
-               tone=0.07, sheen=0.08, grime=0.12, grime_m=0.04, depth=0.0, dark=0.0, seed=153, **_zbox(2.0, 5.35)),
+    # The housing: ribbed across like the model's engine cages, strakes along its top and belly, a belt round the outer side.
+    z0, z1 = lobe_z
+    x_in, axis_x = lobe_x
+    housing: list[Feature] = [
+        *rings(2, [z0 + 0.3, z1 - 0.75], level=1, width=1.3),
+        *rings(2, every(z0 + 0.9, z1 - 1.35, 0.45), level=2, depth=-0.8, flat_m=0.035),
+        *[Cut(axis=0, at=x, level=2, **_zbox(z0 + 0.3, z1 - 0.75)) for x in (x_in + 0.35, axis_x, body_x - 0.6)],
+        Cut(axis=1, at=0.0, level=2, **_zbox(z0, z1)),
+        Plates(level=3, wrap="sides", long_axis=2, cell=(0.6, 0.5), offset=(z0 + 0.3, 0.0), splits=1, min_m=0.2, tone=0.07, sheen=0.12,
+               grime=0.12, grime_m=0.04, depth=0.0, dark=0.0, seed=153, **_zbox(z0, z1)),
     ]
-    return {"wing_r": SeamLayout.of(wing), "hump": SeamLayout.of(hump) + SeamLayout.of(hump_right).mirrored_too(0),
-            "nacelle_r": SeamLayout.of(nacelle)}
+    return {"wing_r": SeamLayout.of(wing), "hump": SeamLayout.of(ridge) + SeamLayout.of(ridge_right).mirrored_too(0),
+            "nacelle_r": SeamLayout.of(housing)}
 
 
 __all__ = ["brakiri", "brakiri_pod", "centauri", "dress", "narn", "raider", "saturn", "saturn_engine", "skylark", "starfury"]

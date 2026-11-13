@@ -17,6 +17,6 @@ capacitor_capacity = 100.0
 capacitor_cost_per_shot = 0.0
 capacitor_recharge_per_s = 25.0
 turret_range_m = 1500.0
-turret_spread_deg = 0.5
+turret_spread_deg = 0.4
 turret_traverse_deg_s = 50.0
 turret_elevation_deg_s = 40.0

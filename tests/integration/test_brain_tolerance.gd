@@ -53,7 +53,11 @@ func test_native_brains_stay_within_q16s_tolerance_on_every_seed() -> void:
 	for layout: StringName in LAYOUTS:
 		for seed_value: int in SEEDS:
 			var label: String = "%s %d seed %d" % [layout, SHIPS, seed_value]
-			var recorded: Variant = ParityFixture.stored(FIXTURE, "%s_%d_seed_%d" % [layout, SHIPS, seed_value])
+			var case: String = "%s_%d_seed_%d" % [layout, SHIPS, seed_value]
+			if ParityFixture.recording():  # the threaded step's bit-for-bit reference is the delayed step (M7-T16 re-recorded it)
+				Settings.set_value(&"sim_step", &"delayed")
+				ParityFixture.rerecorded(FIXTURE, case, _outcome(await _fight(layout, seed_value, true)), "native")
+			var recorded: Variant = ParityFixture.stored(FIXTURE, case)
 			assert_not_null(recorded, "%s: the references were recorded" % label)
 			if recorded == null:
 				continue
@@ -95,7 +99,8 @@ static func _outcome(fight: Dictionary) -> Dictionary:
 
 # The recording (M4-T37) was taken at `0586e3e`, whose game code is the tag `m4-gdscript-reference`'s (README): the GDScript fight on the single-thread step
 # (`gdscript`), which the native brains matched bit for bit on that step, and the native fight on the delayed step
-# (`native`). The GDScript brains' batch path and that step are gone, so it is read, never recorded again.
+# (`native`). The GDScript brains' batch path and that step are gone, so `gdscript` is read, never recorded again; M7-T16
+# re-recorded `native` from the delayed step for the raider's new hull (README).
 
 
 ## The seeded fight: `layout` at `SHIPS` ships for `seed_value`, 30 s, with the native brains on or off. Returns the bolt hits,

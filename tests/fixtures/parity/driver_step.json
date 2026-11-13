@@ -1,20 +1,20 @@
 {
   "battle_far_rate": {
-    "native_thinks": 8238.0,
-    "held": 16140.0,
-    "hits_total": 62.0,
-    "rows": "4c06a6c7eabc6270bd2d0f05f6f6b7d9487b8d087b7ce44d0c28740401ed4b0a",
-    "commands": "a3c263839b61def87361eebb6ff54c3e7f292461a76857ea0383574309872d02",
-    "hits": "b94b8b3793c42629498757392054ed6d18c4e5bbd858bab4ad9f02d7d8021250",
-    "pilots": "a6e2f3ef632b569ec19de84fd3bb2cd0a1b5a5c526ec8b2a3d13a9039029636a"
+    "native_thinks": 8239.0,
+    "held": 16139.0,
+    "hits_total": 67.0,
+    "rows": "dfcb4a9e15580e09ca3702bd37580f64375da1e2d0b4a050510fa88a7cffb21c",
+    "commands": "ce6e748affb915495d80386ac3ad6d12e0963e7dd5bf1acfb94b81be0549b28c",
+    "hits": "449e21ed12b5b197af56c3f7482d0a502a2e4ae30d3d4984b7b6b2dc4075505b",
+    "pilots": "22fd3f4c056076ab4352a5101986f6eee87f92caa25028c65f1f0580de3ea4f9"
   },
   "battle_near_and_far": {
-    "native_thinks": 12033.0,
-    "held": 12345.0,
-    "hits_total": 62.0,
-    "rows": "7aedff9af2dafc6683de793519a600652359ea460fcd8c2f84c868f55d1b3a90",
-    "commands": "1e15cf2e9dcaee267ff8d334aad7e49f531364b3a3a0786dfd71edaf093f727c",
-    "hits": "ae1a6ad9a17ecc3166bd591c8bbc52675ed53a2f9f6d4fca508d32f29b19ee4e",
-    "pilots": "09a47d603915a5d4a29da39b57c7917381dbf342d593151bb9642dd2d3fc6466"
+    "native_thinks": 12034.0,
+    "held": 12344.0,
+    "hits_total": 67.0,
+    "rows": "9f8683486e59d3bb1a734a52f3fb7876aaf936b4cdd1b0763cb2ca9270fefc33",
+    "commands": "6b6a490fa7ba810c3f9e8ae6b8bea6134e43e7264809566339ceb0c80397924d",
+    "hits": "12489355c28be10e86fba3ccc782079d07c2301271baac4575d5491ca03ac8c9",
+    "pilots": "f436e76d6b4507a1b35956c9b35ef7ca895895adc56358f0fcffd37e4e7a8ec9"
   }
 }

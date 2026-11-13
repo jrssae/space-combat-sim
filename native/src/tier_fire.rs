@@ -12,8 +12,12 @@ use crate::v3::{add, dist_sq, dot, length, scale, sub};
 // bolt hits when its miss at the target falls inside the disc the hull presents. The miss is spread by how far off the
 // lead the fire gate lets the pilot shoot (its miss distance), by the nose's wander while the brain steers (an angle, so
 // it grows with range), by the pilot's own aim error (its skill), and by the target's manoeuvres while the bolt flies.
-// How much of a hull's bounding radius a bolt must cross to hit (hulls are thinner than their bounding spheres).
-const SIZE_FACTOR: f64 = 0.7;
+// How much of a hull's bounding radius a fighter's bolt must cross to hit (hulls are thinner than their bounding spheres).
+// Refitted in M7-T16 on the held-out duels (seeds from 50 000) and melees (seeds 11 to 16) when the raider's hull became its
+// reference model's: a smaller bounding radius (8.4 m, was 8.8) but more hull across a shot's path. 0.7 before.
+const SIZE_FACTOR: f64 = 0.78;
+// The same for a far capital's gun on a fighter, as fitted in M4-T22 (its fights did not move with the raider's hull).
+const GUN_SIZE_FACTOR: f64 = 0.7;
 // The aim error's spread per axis: the brain's wander is 0.6 and 0.4 of the error on two sines.
 const AIM_SPREAD: f64 = 0.51;
 // The gate's spread: the nose may sit anywhere within the miss distance of the lead.
@@ -90,7 +94,7 @@ pub fn turret_chance(range_m: f64, target_radius_m: f64) -> f64 {
     let gate = range_m * GUN_GATE_RAD.tan() * GATE_SPREAD;
     let dodge = 0.5 * GUN_DODGE_ACCEL_MPS2 * flight_s * flight_s;
     disc_chance(
-        target_radius_m * SIZE_FACTOR,
+        target_radius_m * GUN_SIZE_FACTOR,
         gate * gate + dodge * dodge + MISS_FLOOR_M * MISS_FLOOR_M,
     )
 }
@@ -310,3 +314,6 @@ impl Hits {
         self.points.clear();
     }
 }
+
+#[cfg(test)]
+mod tests;

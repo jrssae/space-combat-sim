@@ -1,28 +1,29 @@
 """``raider_fighter``: the raiders' Delta-V flying wing (docs/architecture.md section 15.11).
 
-Composition only, like ``starfury_aurora``: parts from ``parts/`` placed with the ``raider`` style, and every output
+Composition only, like ``starfury_aurora``: parts from ``parts/raider.py`` placed with the ``raider`` style, and every output
 (the textured mesh, the OBJ, hardpoints, chunks) derived from the placed parts so they agree by construction.
 
-Layout (authored Godot frame, metres, before re-centring; -Z is forward, the nose at z = 0, the nacelle nozzles at
-z = 9). Proportions follow ``docs/design-references.md`` and the maintainer's reference sheet:
+The shape is the reference model's (M7-T16, ``references/Raider_Fighter_16m.stl`` at 16 m across; never committed), held to
+the 90 % rule (``docs/assets-raider.md``, "Fidelity"). Authored Godot frame, metres, before re-centring: -Z is forward, the
+nose at z = 0, the wing's mid-plane at y = 0, the trailing edge at z = 7.37:
 
-* a delta wing 17 m across: leading edges swept 60 degrees from the centre line, a root chord of 5.4 m, square-cut
-  0.9 m tips, thickness tapering from 0.35 m to 0.10 m, a darker plated edge band and a few vent grilles;
-* a raised central hump 1.8 m wide and 1.2 m high running back from the apex, with a dark canopy panel on its
-  forward slope and a louvre grille on its rear top;
-* two cylindrical nacelles side by side behind the hump (x = +-0.9, 1.1 m across), each with a dark intake port
-  in its nose (the retro) and a bell nozzle 0.9 m across at its rear (the main);
-* four spike guns 1.5 m long: two hung under the wing roots, two on the nacelle flanks.
+* a flying wing 16 m across, its leading edge one straight line from the nose to the tip (47.8 degrees from the centre line),
+  a notch cut into it 2.7 to 3.4 m out where two short guns sit, a straight trailing edge chamfered in at the root; the section
+  thickens aft to 0.33 m and closes at the trailing edge;
+* a narrow centre ridge along the whole length: the dark canopy on its top over the nose, the keel below, the hump behind;
+* two engine housings beside the ridge, flat above and below with rounded outer sides, a grilled intake in front and a
+  nozzle on the back of each.
 
-Every part belongs to a *group* (``wing_l``, ``wing_r``, ``hump``, ``nacelle_l``, ``nacelle_r``); each group is written
-as a break-up chunk (``core/chunks.py``), with a textured mesh cut from the hull's (M4-T30d).
+Every part belongs to a *group* (``wing_l``, ``wing_r``, ``hump``, ``nacelle_l``, ``nacelle_r``: the ridge is the hump, the
+housings the nacelles); each group is written as a break-up chunk (``core/chunks.py``), with a textured mesh cut from the
+hull's (M4-T30d).
 
 The textured mesh (M4-T30d, the contract of ``core/textured_mesh.py``): the same hull parts on one atlas, the ``raider`` style's
 wear (chipped edges down to bare metal, streaks, grime), soot behind the nozzles and the two yellow-white engine glows of the
-reference in the main nozzles' throats; the nose intakes stay dark. No insignia. ``render_triangles`` rebuilds the round parts
-coarser with the fine hull baked into the normal map, as the Starfury's option does. The sample set is exactly mirror-symmetric in x (the right-hand groups are sampled once and
-mirrored, the centre-line hump is symmetrised); the samples' centroid is moved to the origin, so the hardpoints frame equals
-the rendered frame. Samples buried inside another part are dropped.
+reference in the main nozzles' throats. No insignia. ``render_triangles`` rebuilds the round parts coarser with the fine hull
+baked into the normal map, as the Starfury's option does. The sample set is exactly mirror-symmetric in x (the right-hand
+groups are sampled once and mirrored, the centre-line ridge is symmetrised); the samples' centroid is moved to the origin, so
+the hardpoints frame equals the rendered frame. Samples buried inside another part are dropped.
 """
 
 from __future__ import annotations
@@ -45,18 +46,19 @@ from ..core.textured_mesh import TexturedPart, phase_steps, write_textured_mesh
 from ..core.textures import Marking
 from ..core.sampling import SurfaceSamples, sample_mesh
 from ..core.seams import MAJOR, SeamLayout
-from ..parts import Anchor, Part, layouts, mass_centroid, total_mass
-from ..parts.hull import HumpSpec, HumpStation, canopy_panel, hump
-from ..parts.propulsion import NacelleSpec, NozzleSpec, nacelle, pilot_tags
+from ..parts import Part, layouts, mass_centroid, total_mass
+from ..parts.hull import tapered_wedge
+from ..parts.propulsion import pilot_tags
+from ..parts.raider import LobeStation, RaiderLobe, RaiderRidge, RaiderWing, RidgeStation, raider_lobe, raider_ridge, raider_wing
 from ..parts.weapons import BarrelSpec, gun_barrel
-from ..parts.wing import WingSpec, delta_wing, vent_grille
+from ..parts.wing import vent_grille
 from ..styles import Style
 from ..styles.raider import RAIDER, TEXTURED_ALBEDO
 
 ASSET_ID = "raider_fighter"
-# 5: drawn surface layouts, low and high texture sets (M7-T15); 4: the textured mesh only (M4-T31); 3: the textured mesh and chunk
+# 6: the shape rebuilt to the reference model at 90 %, painted metal not plastic (M7-T16); 5: drawn surface layouts, low and high texture sets (M7-T15); 4: the textured mesh only (M4-T31); 3: the textured mesh and chunk
 # meshes (M4-T30d)
-GENERATOR_VERSION = 5
+GENERATOR_VERSION = 6
 OBJ_NAME = "raider_fighter.obj"
 HARDPOINTS_NAME = "hardpoints.json"
 MESH_NAME = "raider_fighter.glb"
@@ -67,9 +69,14 @@ TEXEL_M = 0.01
 NORMAL_SCALE = 1
 COARSE_STREAM = "coarse"
 
+# The reference model (M7-T16): ``references/Raider_Fighter_16m.stl`` at 16 m across, its file axes onto the ship's (right, up, aft)
+# and the shift from its box centre onto the authored frame's wing plane; the 90 % rule scores the hull against it.
+REFERENCE_DIMENSIONS_M = {"length": 7.374, "span": 16.0, "height": 1.525}
+REFERENCE_MAPPING = ("-x", "+z", "+y")
+REFERENCE_MODEL_OFFSET = (0.0, 0.079, 0.0)
 DEFAULT_SPACING_M = 0.09  # the surface samples' spacing: the centroid, the buried faces, the chunks' offsets
-CHASE_ANCHOR = (0.0, 3.5, 14.0)  # authored frame: behind and above, frames the 17 m span at 70 degrees
-EYE = (0.0, 0.95, 1.5)  # the pilot's eye under the canopy panel (authored frame); looks down -Z
+CHASE_ANCHOR = (0.0, 3.5, 14.0)  # authored frame: behind and above, frames the 16 m span at 70 degrees
+EYE = (0.0, 0.40, 2.1)  # the pilot's eye under the canopy (authored frame); looks down -Z
 JSON_DIGITS = 5
 # Running lights (M3-T27): how far a marker stands off the hull, where the top one sits, and the lamp over the hump.
 NAV_LIGHT_CLEARANCE_M = 0.12
@@ -80,51 +87,67 @@ NAV_CABIN_RANGE_M = 1.4
 BURIED_MARGIN_M = 0.01
 CHUNK_ORDER = ("wing_l", "wing_r", "hump", "nacelle_l", "nacelle_r")
 MUZZLE_ORDER = ("root_l", "root_r", "nacelle_l", "nacelle_r")  # left and right take turns in ALTERNATING fire
+# The muzzles' names are the hardpoints contract's; both guns of a side now sit in its wing's notch (M7-T16).
+MUZZLE_GUNS = {"root": "inner_gun", "nacelle": "outer_gun"}
 
 
 @dataclass(frozen=True)
 class RaiderSpec:
-    wing: WingSpec = WingSpec(sweep_deg=56.0, root_chord=5.6, mass_kg=4_400.0)
-    hump: HumpSpec = HumpSpec(
+    """The shape, measured off the reference model at 16 m across (sections in ``docs/assets-raider.md``)."""
+
+    wing: RaiderWing = RaiderWing()
+    ridge: RaiderRidge = RaiderRidge(
         stations=(
-            HumpStation(0.50, 0.30, 0.22),
-            HumpStation(1.30, 1.00, 0.65),
-            HumpStation(2.20, 1.50, 1.00),
-            HumpStation(3.40, 1.70, 1.25),
-            HumpStation(5.40, 1.50, 1.10),
+            RidgeStation(0.00, 0.03, 0.03, -0.02),
+            RidgeStation(0.30, 0.12, 0.17, -0.09),
+            RidgeStation(0.70, 0.18, 0.32, -0.13),
+            RidgeStation(1.10, 0.22, 0.43, -0.14),
+            RidgeStation(1.50, 0.25, 0.52, -0.15),
+            RidgeStation(1.70, 0.26, 0.56, -0.18),
+            RidgeStation(1.90, 0.27, 0.59, -0.29),
+            RidgeStation(2.30, 0.29, 0.64, -0.43),
+            RidgeStation(2.70, 0.31, 0.68, -0.52),
+            RidgeStation(3.10, 0.33, 0.74, -0.58),
+            RidgeStation(3.50, 0.38, 0.82, -0.64),
+            RidgeStation(3.90, 0.45, 0.83, -0.68),
+            RidgeStation(4.30, 0.45, 0.84, -0.67),
+            RidgeStation(4.90, 0.45, 0.78, -0.62),
+            RidgeStation(5.50, 0.45, 0.71, -0.58),
+            RidgeStation(6.10, 0.45, 0.63, -0.52),
+            RidgeStation(6.20, 0.45, 0.20, -0.34),
+            RidgeStation(6.80, 0.45, 0.18, -0.28),
+            RidgeStation(7.00, 0.40, 0.12, -0.15),
         ),
-        mass_kg=4_000.0,
     )
-    nacelle: NacelleSpec = NacelleSpec(
-        body_length=4.5,
-        radius=0.70,
-        nose_length=0.9,
-        intake_radius=0.20,
-        retro_radius=0.15,
-        collar_radius=0.78,
-        nozzle=NozzleSpec(throat_r=0.42, exit_r=0.55, length=0.7, wall=0.05),
-        mass_kg=3_000.0,
+    lobe: RaiderLobe = RaiderLobe(
+        stations=(
+            LobeStation(3.70, 2.05, 0.61, -0.54),
+            LobeStation(3.95, 2.33, 0.68, -0.61),
+            LobeStation(4.30, 2.42, 0.69, -0.61),
+            LobeStation(5.00, 2.44, 0.63, -0.55),
+            LobeStation(5.80, 2.42, 0.55, -0.48),
+            LobeStation(6.05, 2.37, 0.52, -0.46),
+            LobeStation(6.15, 2.30, 0.43, -0.38),
+            LobeStation(6.50, 2.20, 0.34, -0.30),
+            LobeStation(6.80, 2.10, 0.22, -0.20),
+        ),
     )
-    nacelle_x: float = 1.15
-    nacelle_y: float = 0.70  # the thrust line: the centre of mass is trimmed onto it
-    nacelle_z: float = 2.0  # front of the drum
-    barrel: BarrelSpec = BarrelSpec(
-        length=1.5, radius=0.045, base_radius=0.11, base_length=0.45, bore_radius=0.02, bore_depth=0.05, segments=14, mass_kg=300.0
+    inner_barrel: BarrelSpec = BarrelSpec(
+        length=0.42, radius=0.05, base_radius=0.06, base_length=0.30, bore_radius=0.025, bore_depth=0.04, segments=14, mass_kg=300.0
     )
-    root_gun_x: float = 3.0
-    root_gun_y: float = -0.42
-    root_gun_muzzle_z: float = 1.4
-    nacelle_gun_muzzle_z: float = 1.7
-    canopy_z: tuple[float, float] = (0.9, 2.3)
-    canopy_widths: tuple[float, float] = (0.30, 1.00)
+    outer_barrel: BarrelSpec = BarrelSpec(
+        length=0.42, radius=0.085, base_radius=0.10, base_length=0.12, bore_radius=0.04, bore_depth=0.04, segments=14, mass_kg=300.0
+    )
+    inner_gun_x: float = 2.84
+    outer_gun_x: float = 3.16
+    gun_muzzle_z: float = 2.70
+    canopy_z: tuple[float, float] = (1.15, 2.95)
+    canopy_widths: tuple[float, float] = (0.20, 0.34)
 
     @property
-    def nacelle_gun_x(self) -> float:
-        return self.nacelle_x + self.nacelle.collar_radius + 0.14
-
-    @property
-    def nacelle_gun_y(self) -> float:
-        return self.nacelle_y
+    def nacelle_y(self) -> float:
+        """The thrust line: the centre of mass is trimmed onto it."""
+        return 0.0
 
 
 DEFAULT_SPEC = RaiderSpec()
@@ -154,14 +177,11 @@ class Placed:
 
 
 # --- burial tests (authored frame) -------------------------------------------------------------------
-def _in_nacelle(spec: RaiderSpec, points: np.ndarray, margin: float) -> np.ndarray:
-    """Inside either nacelle drum (the nozzle bell is not part of the test)."""
-    p = np.asarray(points, dtype=float).reshape(-1, 3)
-    n = spec.nacelle
-    z_local = p[:, 2] - spec.nacelle_z
-    r = np.hypot(np.abs(p[:, 0]) - spec.nacelle_x, p[:, 1] - spec.nacelle_y)
-    radius = np.array([n.radius_at(float(z)) for z in np.clip(z_local, 0.0, n.body_length)])
-    return (z_local > 0.0) & (z_local < n.body_length) & (r < radius - margin)
+def _in_lobes(spec: RaiderSpec, points: np.ndarray, margin: float) -> np.ndarray:
+    """Inside either engine housing (the grille and the nozzle are not part of the test)."""
+    p = np.array(points, dtype=float).reshape(-1, 3)
+    p[:, 0] = np.abs(p[:, 0])
+    return spec.lobe.contains(p, margin)
 
 
 def _unburied(samples: SurfaceSamples, *inside: np.ndarray) -> SurfaceSamples:
@@ -176,6 +196,17 @@ def _plate(width: float, length: float, height: float, role: str, style: Style) 
     return box((width, height, length), style.material(role), center=(0.0, 0.5 * height, 0.0))
 
 
+def canopy(spec: RaiderSpec, style: Style) -> Mesh:
+    """The dark opaque canopy lying along the ridge's top over the nose, following its slope."""
+    z0, z1 = spec.canopy_z
+    (_, top0, _), (_, top1, _) = spec.ridge.at(z0), spec.ridge.at(z1)
+    slope = float(top1 - top0) / (z1 - z0)
+    thickness = 0.10
+    w0, w1 = spec.canopy_widths
+    wedge = tapered_wedge(z1 - z0, (w0, thickness), (w1, thickness), style.material("canopy_glass"), slope)
+    return wedge.translated((0.0, 0.5 * float(top0 + top1) - 0.25 * thickness, 0.5 * (z0 + z1)))
+
+
 def build_parts(
     spec: RaiderSpec, style: Style, ctx: BuildContext, spacing: float, stream_suffix: tuple[str, ...] = ()
 ) -> list[Placed]:
@@ -185,94 +216,73 @@ def build_parts(
     def sample(mesh: Mesh, stream: str) -> SurfaceSamples:
         return sample_mesh(mesh, spacing, ctx.rng("surface", stream, *stream_suffix))
 
-    wing_spec, hump_spec = spec.wing, spec.hump
-    nac_origin = np.array([spec.nacelle_x, spec.nacelle_y, spec.nacelle_z])
+    wing_spec, ridge_spec = spec.wing, spec.ridge
 
-    def in_hump(p: np.ndarray) -> np.ndarray:
-        return hump_spec.contains(p, BURIED_MARGIN_M)
+    def in_ridge(p: np.ndarray) -> np.ndarray:
+        return ridge_spec.contains(p, BURIED_MARGIN_M)
 
     def in_wing(p: np.ndarray) -> np.ndarray:
         return wing_spec.contains(p, BURIED_MARGIN_M)
 
-    def in_nac(p: np.ndarray) -> np.ndarray:
-        return _in_nacelle(spec, p, BURIED_MARGIN_M)
+    def in_lobes(p: np.ndarray) -> np.ndarray:
+        return _in_lobes(spec, p, BURIED_MARGIN_M)
 
     placed: list[Placed] = []
     surface = surface_layouts(spec)
 
-    # --- right wing group: slab, vents, accents, root gun --------------------------------------------
-    wing = delta_wing(wing_spec, style).renamed("wing_r", group="wing_r").with_seams(surface["wing_r"])
+    # --- right wing group: slab, vents, accent band, the notch's two guns ---------------------------------
+    wing = raider_wing(wing_spec, style).renamed("wing_r", group="wing_r").with_seams(surface["wing_r"])
     s_wing = sample(wing.mesh, "wing")
-    s_wing = _unburied(s_wing, in_hump(s_wing.positions), in_nac(s_wing.positions))
+    s_wing = _unburied(s_wing, in_ridge(s_wing.positions), in_lobes(s_wing.positions))
     right: list[Placed] = [Placed(wing, s_wing)]
 
     def on_wing(x: float, z: float, mesh: Mesh, name: str, stream: str) -> Placed:
-        top = 0.5 * float(wing_spec.thickness(x))
-        part = Part(name, mesh.translated((x, top - 0.002, z)), group="wing_r", mass_kg=0.0)
+        """Detail sitting on the top skin at its footprint's lowest point, so no edge floats where the wing thins forward."""
+        lo, hi = mesh.bounds()
+        corners_x, corners_z = np.meshgrid([x + lo[0], x + hi[0]], [z + lo[2], z + hi[2]])
+        top = 0.5 * float(wing_spec.thickness(corners_x.ravel(), corners_z.ravel()).min())
+        part = Part(name, mesh.translated((x, top - 0.004, z)), group="wing_r", mass_kg=0.0)
         return Placed(part, sample(part.mesh, stream))
 
-    right.append(on_wing(3.7, 4.4, vent_grille(1.4, 1.6, 7, style), "wing_vent_a", "wing_vent_a"))
-    right.append(on_wing(5.9, 5.2, vent_grille(1.0, 0.8, 4, style), "wing_vent_b", "wing_vent_b"))
-    right.append(on_wing(7.3, 5.75, _plate(0.42, 1.0, 0.012, "stripe", style), "wing_band", "wing_band"))
-    for k, (x, z, w, d) in enumerate([(4.0, 3.2, 1.2, 0.9), (5.8, 4.0, 1.3, 0.8), (7.0, 5.0, 0.9, 0.7), (2.6, 2.6, 0.8, 0.7)]):
+    # Detail on the top skin, every corner well inside the planform (the old build's plates overhung the leading edge).
+    right.append(on_wing(3.75, 5.7, vent_grille(1.0, 1.4, 7, style, slat_height=0.025), "wing_vent_a", "wing_vent_a"))
+    right.append(on_wing(6.4, 6.75, vent_grille(0.8, 0.7, 4, style, slat_height=0.025), "wing_vent_b", "wing_vent_b"))
+    right.append(on_wing(7.25, 7.12, _plate(0.30, 0.35, 0.012, "stripe", style), "wing_band", "wing_band"))
+    for k, (x, z, w, d) in enumerate([(4.95, 5.4, 1.0, 0.7), (5.6, 6.3, 0.9, 0.6), (3.05, 3.65, 0.6, 0.5)]):
         right.append(on_wing(x, z, _plate(w, d, 0.014, "hull_panel", style), f"wing_plate_{k}", f"wing_plate_{k}"))
-    barrel = gun_barrel(spec.barrel, style).translated((spec.root_gun_x, spec.root_gun_y, spec.root_gun_muzzle_z + spec.barrel.length))
-    root_gun = barrel.renamed("root_gun_r", group="wing_r")
-    pylon_top = 0.5 * float(wing_spec.thickness(spec.root_gun_x))
-    pylon = Part(
-        "root_pylon_r",
-        box((0.34, pylon_top - spec.root_gun_y + 0.02, 0.9), style.material("hull_panel"),
-            center=(spec.root_gun_x, 0.5 * (pylon_top + spec.root_gun_y), spec.root_gun_muzzle_z + spec.barrel.length + 0.1)),
-        group="wing_r",
-    )
-    right.append(Placed(root_gun, sample(root_gun.mesh, "root_gun")))
-    right.append(Placed(pylon, sample(pylon.mesh, "root_pylon")))
+    for name, x, barrel in (("inner_gun_r", spec.inner_gun_x, spec.inner_barrel), ("outer_gun_r", spec.outer_gun_x, spec.outer_barrel)):
+        gun = gun_barrel(barrel, style).translated((x, 0.0, spec.gun_muzzle_z + barrel.length)).renamed(name, group="wing_r")
+        right.append(Placed(gun, sample(gun.mesh, name[:-2])))
     placed += right
     for p in right:
         placed.append(p.mirrored(p.part.name[:-2] + "_l" if p.part.name.endswith("_r") else p.part.name + "_l", "wing_l"))
 
-    # --- hump group: body, canopy, grille (centre line, symmetrised) -----------------------------------
-    body = hump(hump_spec, style).with_seams(surface["hump"])
+    # --- hump group: the ridge and its canopy (centre line, symmetrised) -------------------------------
+    body = raider_ridge(ridge_spec, style).with_seams(surface["hump"])
     s_body = sample(body.mesh, "hump")
-    s_body = _unburied(s_body, in_wing(s_body.positions), in_nac(s_body.positions)).symmetrized("x")
+    s_body = _unburied(s_body, in_wing(s_body.positions), in_lobes(s_body.positions)).symmetrized("x")
     placed.append(Placed(body, s_body))
-    canopy = Part(
-        "canopy",
-        canopy_panel(hump_spec, style, *spec.canopy_z, *spec.canopy_widths),
-        group="hump",
-    )
-    placed.append(Placed(canopy, sample(canopy.mesh, "canopy").symmetrized("x")))
-    grille_y = hump_spec.bottom_y + hump_spec.section(4.0)[1] - 0.012
-    grille = Part("hump_vent", vent_grille(0.9, 1.8, 8, style).translated((0.0, grille_y, 4.2)), group="hump")
-    placed.append(Placed(grille, sample(grille.mesh, "hump_vent").symmetrized("x")))
+    cover = Part("canopy", canopy(spec, style), group="hump")
+    placed.append(Placed(cover, sample(cover.mesh, "canopy").symmetrized("x")))
 
-    # --- right nacelle group: drum, nozzle, flank gun ---------------------------------------------------
-    drum = nacelle(spec.nacelle, style).translated(nac_origin).renamed("nacelle_r", group="nacelle_r").with_seams(surface["nacelle_r"])
-    s_drum = sample(drum.mesh, "nacelle")
-    s_drum = _unburied(s_drum, in_wing(s_drum.positions), in_hump(s_drum.positions))
-    n_right: list[Placed] = [Placed(drum, s_drum)]
-    n_gun = gun_barrel(spec.barrel, style).translated(
-        (spec.nacelle_gun_x, spec.nacelle_gun_y, spec.nacelle_gun_muzzle_z + spec.barrel.length)
-    ).renamed("nacelle_gun_r", group="nacelle_r")
-    n_pylon_x = spec.nacelle_x + spec.nacelle.radius
-    n_pylon = Part(
-        "nacelle_pylon_r",
-        box((spec.nacelle_gun_x - n_pylon_x + 0.1, 0.22, 0.8), style.material("hull_panel"),
-            center=(0.5 * (spec.nacelle_gun_x + n_pylon_x), spec.nacelle_gun_y, spec.nacelle_gun_muzzle_z + spec.barrel.length + 0.1)),
-        group="nacelle_r",
-    )
-    n_right.append(Placed(n_gun, sample(n_gun.mesh, "nacelle_gun")))
-    n_right.append(Placed(n_pylon, sample(n_pylon.mesh, "nacelle_pylon")))
-    placed += n_right
-    for p in n_right:
-        placed.append(p.mirrored(p.part.name[:-2] + "_l", "nacelle_l"))
+    # --- right nacelle group: the engine housing, its grille and nozzle ------------------------------------
+    lobe = raider_lobe(spec.lobe, style).renamed("nacelle_r", group="nacelle_r").with_seams(surface["nacelle_r"])
+    s_lobe = sample(lobe.mesh, "nacelle")
+    s_lobe = _unburied(s_lobe, in_wing(s_lobe.positions), in_ridge(s_lobe.positions))
+    n_right = Placed(lobe, s_lobe)
+    placed.append(n_right)
+    placed.append(n_right.mirrored("nacelle_l", "nacelle_l"))
     return placed
 
 
 def surface_layouts(spec: RaiderSpec) -> dict[str, SeamLayout]:
-    """The drawn surface by part (M7-T15), fitted to the spec's wing and nacelles."""
-    wing = spec.wing
-    return layouts.raider(wing.sweep_deg, wing.root_chord, wing.half_span, wing.tip_chord, (spec.nacelle_x, spec.nacelle_y))
+    """The drawn surface by part (M7-T15), fitted to the spec's wing, ridge and housings (M7-T16)."""
+    wing, lobe = spec.wing, spec.lobe
+    return layouts.raider(
+        le_ratio=wing.le_ratio, half_span=wing.half_span, trailing_z=wing.trailing_z, notch=(wing.notch_x, wing.notch_z),
+        body_x=max(s.x_out for s in lobe.stations), lobe_z=(lobe.stations[0].z, lobe.stations[-1].z), lobe_x=(lobe.x_in, lobe.axis_x),
+        canopy_z=spec.canopy_z,
+    )
 
 
 # --- centring ------------------------------------------------------------------------------------------
@@ -338,26 +348,26 @@ def hardpoints(placed: list[Placed], spec: RaiderSpec, chunks: list[dict[str, An
                 "name": name,
                 "side": side,
                 "center": _r(drum.anchor("axis_centre").position),
-                "main": {"position": _r(main.position), "exhaust": _r(main.direction), "radius": spec.nacelle.nozzle.exit_r},
-                "retro": {"position": _r(retro.position), "exhaust": _r(retro.direction), "radius": spec.nacelle.retro_radius},
+                "main": {"position": _r(main.position), "exhaust": _r(main.direction), "radius": spec.lobe.nozzle_exit_r},
+                "retro": {"position": _r(retro.position), "exhaust": _r(retro.direction), "radius": spec.lobe.retro_radius},
             }
         )
 
     muzzles = []
     for key in MUZZLE_ORDER:
         kind, side = key.split("_")
-        gun = by_name[f"{'root' if kind == 'root' else 'nacelle'}_gun_{side}"]
+        gun = by_name[f"{MUZZLE_GUNS[kind]}_{side}"]
         a = gun.anchor("muzzle")
         muzzles.append({"name": key, "position": _r(a.position), "direction": _r(a.direction)})
 
     rcs = []
     wing = spec.wing
-    ports = []  # cosmetic RCS ports: wing tips up/down, mid-wing leading-edge sides
+    ports = []  # cosmetic RCS ports: wing tips up/down, the leading edge outboard of the notch, sideways
     for sx, tag in ((1.0, "r"), (-1.0, "l")):
         z_tip = 0.5 * (wing.tip_leading_z + wing.tip_trailing_z) - float(offset[2])
         for sy, ey in (("u", 1.0), ("d", -1.0)):
             ports.append((f"{tag}_tip_{sy}", np.array([sx * (wing.half_span - 0.1), 0.0 - float(offset[1]), z_tip]), np.array([0.0, ey, 0.0])))
-        ports.append((f"{tag}_edge_x", np.array([sx * 3.4, 0.0 - float(offset[1]), float(wing.leading_z(3.4)) + 0.4 - float(offset[2])]), np.array([sx, 0.0, 0.0])))
+        ports.append((f"{tag}_edge_x", np.array([sx * 4.0, 0.0 - float(offset[1]), float(wing.leading_z(4.0)) + 0.4 - float(offset[2])]), np.array([sx, 0.0, 0.0])))
     for name, position, exhaust in ports:
         rcs.append({"name": name, "pod": name.split("_")[0], "position": _r(position), "exhaust": _r(exhaust), "tags": pilot_tags(position, exhaust, com)})
 

@@ -521,6 +521,43 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 - **Done when:** the compare passes the 90% rule, scores in `docs/assets-raider.md`; Python tests pin the shape; the GUT files
   touching the raider and the parity recordings pass (or a recording's change is explained and approved); the maintainer has
   seen the sheet.
+- **Done (as built):**
+  - **The model.** `Raider_Fighter_16m.stl` (8 381 triangles) at 16 m across (its name; 0.12446 m per unit): 7.37 m long, 1.53 m
+    high, mapped `--right=-x --up=+z --aft=+y`, the apex forward (the mood shot's glows trail the straight edge).
+  - **What differed, the leading-edge panels first** (`docs/assets-raider.md`, "Fidelity"): the old wing's raised plates, vents
+    and ochre band stood up to 0.4 m ahead of its 56 degree leading edge, a staircase in the top view; the model's edge is one
+    47.8 degree line from the nose to a pointed tip, notched 2.7 to 3.4 m out for two short guns a side, the trailing edge
+    straight and chamfered at the root; its body is a narrow ridge and keel between two flat engine housings across the wing, not
+    a hump with two drums on top; small exhausts in the housings' backs; the canopy along the ridge over the nose.
+  - **Rebuilt** (`parts/raider.py`: `RaiderWing`, `RaiderRidge`, `RaiderLobe`; `raider_fighter.py` generator 6): IoU top 0.605 →
+    0.992, side 0.513 → 0.982, front 0.506 → 0.969; L/W/H 0.976 / 1.062 / 1.316 → 1.000 / 1.000 / 0.992. Every detail part sits
+    0.1 m or more behind the leading edge (tested). Hardpoints moved: both guns of a side in its notch (muzzle names kept), the
+    pods' nozzles in the housings' backs on the wing plane (the thrust line and centre of mass at y = -0.036), boxes for the
+    ridge and housings, five 1.6 m wing steps; nav lights, RCS and the eye follow. `layouts.raider(...)` refitted to the new parts
+    (option A's reading kept).
+  - **Metal, not plastic** (the maintainer, added to T16): metallic and roughness per material (paint 0.45 / 0.50, panels 0.50 /
+    0.46, the housings' bare `hull_metal` 0.72 / 0.34, grilles 0.75 / 0.36, barrels 0.90 / 0.26, nozzles 0.90 / 0.28), and
+    `textures.metal_finish` (opt-in by `style.extra["metal_finish"]`, shared with T04 and T17): roughness +-0.12 per 0.9 m panel
+    and +-0.06 drift, dirt up to 0.3 rougher and half as metallic; plates' sheen +-0.12 in the high set. Both sets; the albedo,
+    normal and emissive maps byte-identical to the shape-only build, only the ORM maps change.
+  - **The tier refit** (`test_tier_outcomes` failed: the model's to-hit 0.118 against full fidelity's 0.153): no stale size;
+    the tier reads the live bounding radius (8.4 m, was 8.8), but full fidelity hits the new hull 17 % more. Refitted as M4 did,
+    never on the test seeds: `tier_fire::SIZE_FACTOR` 0.7 → 0.78 for fighter shots (held-out duels 0.80, melees 0.75; a far
+    gun keeps 0.7; a Rust test pins both), `tier_hit_scale` Starfury 0.92 → 2.3 (the `ShipSpec` default) and raider 1.25 → 2.8
+    on fit seeds 101 to 106 (architecture §17.14). Now: the duel 0.140 against 0.153; the even fight's win share 1 against 0.
+  - **Parity recordings re-recorded** (`SCS_RECORD_FIXTURES=1`, `ParityFixture.rerecorded`; old → new in
+    `tests/fixtures/parity/README.md`): `weapon_rows_battle` 933, 420, 174, 151, 25, 1 → 779, 380, 144, 145, 25, 1; the
+    100-ship battle 62 → 67 hits (`bolt_rows`, `core_state`, `driver_step`, `row_commands`; thinks 12 033 → 12 034 and 8 238 →
+    8 239); `brain_tolerance` native hits furball 264 / 315 / 256 → 268 / 248 / 285, spread 355 / 301 / 298 → 330 / 324 / 293
+    (from the delayed step, the threaded fight bit for bit); `flight_parity_fight` 127 → 144 hits. Its mix against the M4
+    GDScript fight (12 points on the new hull) is printed, no longer gated: that fight cannot be flown again.
+  - **Balance retune** (Q31's order: turret first, then hulls): `turret_light` spread 0.5 → 0.4 degrees, Saturn 8 tanker hull
+    330 → 380, Saturn 8 transport 1150 → 715 (a narrow window, architecture §18.11). Two raiders: Saturn 3 2, Saturn 4
+    transport 1, Saturn 4 tanker 3, Saturn 8 transport 1, Saturn 8 tanker 1 of 10; three raiders: none. The turrets finish the
+    15 % raider in all three seeds (36.6, 40.9, 38.1 s). Dogfight and waves pendings (AC12) as before.
+  - **Sheet (H):** `references/screenshots/M7-T16 raider STL/M7-T16_raider_stl_sheet.png`: the silhouettes old and new against
+    the model with their scores, GPU frames (RX 6950 XT, Forward+) of both, and the material before and after, sunlit and
+    grazing, high and low sets.
 
 ### M7-T17 The Starfury looks metallic, not plastic
 

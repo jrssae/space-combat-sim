@@ -80,8 +80,8 @@ func _battle(threads: int, with_player: bool, ticks: int = TICKS) -> Dictionary:
 # `test_row_commands`, which flies the same battle (M6-T18).
 func test_the_hosted_step_flies_the_same_battle_with_near_and_far_ships() -> void:
 	var label: String = "a player among them"
-	var recorded: Variant = ParityFixture.stored(FIXTURE, "battle_near_and_far")
 	var hosted: Dictionary = await _battle(1, true)
+	var recorded: Variant = ParityFixture.rerecorded(FIXTURE, "battle_near_and_far", SeededBattle.hosted_digest(hosted, 1))
 	assert_not_null(recorded, "%s: the drivers' own step was recorded" % label)
 	if recorded == null:
 		return

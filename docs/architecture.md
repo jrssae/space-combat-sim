@@ -3356,17 +3356,27 @@ src/combat/destruction_director.gd   a tier death where its row flew; every deat
 - **A fighter's fire.** Its parked cannon (`ScsCannons`, T35) keeps its gate and capacitor: in a pass after the near cannons
   (a tier shot makes no bolt, so the bolt order holds) the gate fires on the row command's trigger as on the body, and each
   shot is a seeded roll against the pilot's target, with no bolt row. The chance (`tier_fire::hit_chance`) is a circular
-  Gaussian miss against the disc the hull presents (0.7 of its bounding radius plus the bolt's hit radius): the miss spread by
+  Gaussian miss against the disc the hull presents (0.78 of its bounding radius plus the bolt's hit radius; 0.7 until M7-T16, and
+  still 0.7 for a far capital's gun): the miss spread by
   the gate's miss distance, the nose's wander (0.007 rad), the pilot's aim error (its skill) and the target's manoeuvres over
   the bolt's flight (8 m/s^2, the flight time from the range and the closing speed), and offset by how far outside the gate
   the row's nose points (a 4 Hz brain holds its trigger for a quarter second after a near pilot's gate would have closed),
-  then scaled by the shooter hull's term (`ShipSpec.tier_hit_scale`: 0.92 for the allied Starfury, 1.25 for the raider; a
-  4 Hz brain flown at 20 Hz changes each hull's shots differently, and the term evens the sides). How the constants were found,
+  then scaled by the shooter hull's term (`ShipSpec.tier_hit_scale`: 2.3 for the allied Starfury, 2.8 for the raider since
+  M7-T16, 0.92 and 1.25 before; a 4 Hz brain flown at 20 Hz changes each hull's shots differently, and the term evens the sides). How the constants were found,
   never on the seeds the fairness tests use (fix round 1): the model's by maximum likelihood over every full-fidelity shot of
   six 12 against 12 melees (seeds 11 to 16, 2 853 shots) and of ten rounds of head-on duels (seeds from 50 000, 3 284
   shots), each hit matched to its shot; the hull terms from the tier against full fidelity in the even fight (12 Starfuries
   against 40 raiders, the maintainer's Q63, found by a full-fidelity sweep) on seeds 101 to 103, both schedules (the Cycle
-  log has the sweep and the steps). The draw (`tier_fire::roll`, SplitMix64 over the seed (the bench's,
+  log has the sweep and the steps). **M7-T16 refit.** The raider's hull became its reference model's: a smaller bounding radius
+  (8.4 m, was 8.8) with more hull across a shot's path, so full fidelity hit it 17 % more while the model's size term shrank,
+  and the tier had drifted below full fidelity since M4 (the even fight on the test seeds: 449 tier hits against 761 with the old
+  hull). Refitted the same way, never on the test seeds: the size share by matching the model's expected hits to the landed ones
+  on held-out duels (seeds from 50 000, 3 521 shots: 0.80) and the 12 against 12 melees (seeds 11 to 16, the shots matched to the
+  hostile nearest the nose: 0.75), 0.78 taken; the hull terms on the even fight's fit seeds, widened to 101 to 106 because three seeds flipped the win share on margins of a
+  few hundredths (2.3 and 2.8: the tier's Starfuries win 4 of 6 against full fidelity's 3; Starfury hits 378 in the tier against
+  452, raider hits 930 against 1 227, mean hull loss 1.55 against 2.04 and 1.58 against 1.88; at 2.2 the tier's Starfuries win 1
+  of 6, at 2.4 five). The raider's term barely moves its hits (2.6 to 3.8 gave 972, 786 and 868): its close shots already roll
+  near certain, and a tier raider takes fewer of them than a full-fidelity one. The draw (`tier_fire::roll`, SplitMix64 over the seed (the bench's,
   `TierDirector.seed_value`), the core's own sync count, the row's ordinal and the muzzle) is the same on every thread count
   and every run of a seeded fight; the beat keys on the core's sync count too (T21 keyed it on the engine's frame). The hits wait in the core
   (`tier_take_hits`) until the director's next tick (-12), which lands each through the target's `Damageable.apply_hit`
@@ -4310,7 +4320,7 @@ M4-T20's capital stand-ins rather than into `weapon_kernels.rs` and `weapon_rows
   solvable and inside the arc, the target within range, the gun ready, and the barrel's miss at the lead point no wider than
   the bolt's spread there plus the target's radius.
 - **Strength (Q14; retuned by Q31 to Q33 in T16, §18.11: 6 damage every 2.4 s, 0.5 degree spread, the Saturns'
-  hulls per variant).** As T21 built it: the light turret: 900 m/s, one shot every 3.0 s, 4.5 damage, 2 s life, 1.5 km range, 0.8 degree spread,
+  hulls per variant; M7-T16: 0.4 degree spread for the raider's new hull).** As T21 built it: the light turret: 900 m/s, one shot every 3.0 s, 4.5 damage, 2 s life, 1.5 km range, 0.8 degree spread,
   50 and 40 degrees a second. Few, harder shots: two hits finish a raider at 15 %, but a full raider takes fourteen, so two
   raiders still win. Pinned by `test_turret_defence` against a Saturn 4 of 1000 hull flown by the `civilian` profile: the
   raid wins in all three seeds (52, 91 and 88 s), the turrets finish a 15 % raider in all three (70, 43 and 34 s). The first
@@ -4389,9 +4399,16 @@ tests/integration/test_civilian_flight.gd, test_civilian_ships.gd, test_turret_b
   dorsal one, so a Saturn 3 has 2 and the others 3. The own hull blocks their fire (§18.10): a Saturn 4 transport's blind
   spot lies near its axis astern and a little below (its wide flanks see past the narrow cargo hull elsewhere). Each
   Saturn alone beats two raiders in 1 to 3 of 10 seeds and three raiders in none (`test_turret_balance`, behind
-  `GUT_SLOW`): the light turret 6 damage every 2.4 s with 0.5 degree spread, hulls per variant (Saturn 3 640, Saturn 4
-  transport 450, Saturn 4 tanker 440, Saturn 8 transport 1150, Saturn 8 tanker 330); the counts are in the milestone's
-  T16 Done block. The turrets finish a 15 % raider in every seed of `test_turret_defence`.
+  `GUT_SLOW`): the light turret 6 damage every 2.4 s with 0.4 degree spread, hulls per variant (Saturn 3 640, Saturn 4
+  transport 450, Saturn 4 tanker 440, Saturn 8 transport 715, Saturn 8 tanker 380); the counts are in M5's T16 Done block,
+  and M7-T16's (the raider rebuilt to its model) retune in M7's. **M7-T16 retune** (Q31's order: the turret first, then the
+  hulls; never the raiders' specs or AI): with the raider's new hull the same fights came out within noise of before (turret
+  hits 32 % of shots against 31 %, the same loss times and raider hull left), but three variants fell to 0 wins against two
+  raiders and the Saturn 8 transport won one of ten against three. The spread at 0.4 degrees (0.5 before) brings the Saturn 3
+  to 2 wins and the Saturn 4 tanker to 3; the Saturn 8 tanker needs 380 (330: 0 wins); the Saturn 8 transport sits in a
+  narrow window, 715 (1150 before): its one win against two raiders (seed 8) ends with about 700 points taken, and its
+  three-raider seed 3 kills them all after about 725 taken, so 700 and below wins none against two and 725 and above wins one
+  against three. The turrets finish a 15 % raider in every seed of `test_turret_defence`.
 
 ### 18.12 Free-flight encounters as built (T17, D58, Q3, Q9, Q12)
 

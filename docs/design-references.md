@@ -283,6 +283,12 @@ spikes hanging from the nacelle sides and wing roots. `docs/assets-raider.md` li
 56°) and where they differ from the earlier written defaults (9 m × 17 m, 60°). Open: scale (is 17 m across right?)
 and colour (worn grey-brown is used, per the mood shot); the maintainer can overrule both in `RaiderSpec`.
 
+**M7-T16: the model.** `Raider_Fighter_16m.stl` (binary, 8 381 triangles) now sets the shape, at 16 m across (0.12446 m per file
+unit; 7.37 m long, 1.53 m high), mapped `--right=-x --up=+z --aft=+y`, the apex forward: a 47.8° leading edge in one line from the
+nose to a pointed tip, notched at 2.7 to 3.4 m out for two short guns, a straight trailing edge, a body across the wing (a narrow
+ridge and keel between two flat engine housings). The sections, the scores and what changed are in `docs/assets-raider.md`
+("What it is", "Fidelity"); this supersedes the sheet's proportions above and answers the open scale question (16 m).
+
 ## Raider carrier (M12)
 
 A blocky "battlewagon": a long rectangular box hull, dark green-grey with plating. **Two large concentric

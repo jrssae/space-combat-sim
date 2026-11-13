@@ -412,8 +412,8 @@ func _battle(threads: int, ticks: int = TICKS) -> Dictionary:
 
 
 func test_the_seeded_battle_hits_the_same_with_bolts_as_rows() -> void:
-	var recorded: Variant = ParityFixture.stored(FIXTURE, "battle_with_bolt_nodes")
 	var rows: Dictionary = await _battle(1)
+	var recorded: Variant = ParityFixture.rerecorded(FIXTURE, "battle_with_bolt_nodes", _digest_of(rows))
 	assert_true(rows["bolt_rows"], "the rows path owns its bolts")
 	assert_eq(int(rows["nodes_max"]), 0, "the rows path spawned no bolt node")
 	assert_gt(int(rows["owned_max"]), 50, "and owned the bolts (%d at most)" % int(rows["owned_max"]))

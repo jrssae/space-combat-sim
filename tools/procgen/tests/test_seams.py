@@ -213,7 +213,7 @@ PINNED = {
     },
     "brakiri_pod": {"pod": (2, 5, 2)},
     "starfury": {"strut_ur": (5, 15, 2), "strut_lr": (5, 19, 1), "pod": (2, 17, 1), "fuselage": (2, 15, 1), "claw": (0, 15, 0)},
-    "raider": {"wing_r": (4, 33, 2), "hump": (2, 6, 2), "nacelle_r": (2, 15, 1)},
+    "raider": {"wing_r": (4, 22, 2), "hump": (2, 7, 2), "nacelle_r": (2, 7, 1)},
 }
 # Structure that stays plain (the maintainer, 2026-11-12). The Bokmai's arms and fork struts are its hull limbs, not structure: drawn.
 PLAIN_WORDS = ("truss", "brace", "antenna", "bell", "nozzle", "turret", "pad_", "frame_", "vane", "rail", "ribs", "grille", "spindle")
@@ -392,18 +392,19 @@ class FighterLayoutTests(unittest.TestCase):
     def test_the_raiders_bays_each_hold_a_panel_and_the_outer_two_a_smaller_one_inside(self) -> None:
         spec = raider_fighter.DEFAULT_SPEC
         wing = raider_fighter.surface_layouts(spec)["wing_r"]
-        self.assertEqual(_positions(wing, Cut, MAJOR, axis=0), [3.0, 5.7])
+        notch_out = spec.wing.notch_z * spec.wing.le_ratio  # the frames: the notch's outer corner (M7-T16) and 5.7 m out
+        self.assertEqual([round(x, 4) for x in _positions(wing, Cut, MAJOR, axis=0)], [round(notch_out, 4), 5.7])
         band = [f for f in wing.features() if isinstance(f, SeamPath) and f.level == MAJOR]
         self.assertEqual(sorted(tuple(map(float, f.facing)) for f in band), [(0.0, -1.0, 0.0), (0.0, 1.0, 0.0)], "the edge band on top and belly")
         slope = 1.0 / np.tan(np.radians(spec.wing.sweep_deg))
         x, _, z = band[0].points[0]
         self.assertAlmostEqual(z - x * slope, layouts.RAIDER_EDGE_M / np.sin(np.radians(spec.wing.sweep_deg)))
         panels = [f for f in wing.features() if isinstance(f, SeamPath) and f.level == FULL and float(f.facing[1]) > 0.0]
-        self.assertEqual(len(panels), 5)
+        self.assertEqual(len(panels), 4)
         spans = sorted((round(min(p[0] for p in f.points), 2), round(max(p[0] for p in f.points), 2)) for f in panels)
-        self.assertEqual(spans, [(2.12, 2.78), (3.28, 5.42), (3.75, 4.95), (5.95, 7.85), (6.3, 7.5)])
+        self.assertEqual(spans, [(3.7, 5.42), (4.17, 4.95), (5.95, 7.35), (6.3, 7.0)])
         teeth = [f for f in wing.features() if isinstance(f, Cut) and f.level == FULL and f.axis == 0]
-        self.assertEqual(len(teeth), 19, "a row of teeth along the leading edge")
+        self.assertEqual(len(teeth), 10, "a row of teeth along the leading edge outboard of the notch")
         louvres = [f for f in wing.features() if isinstance(f, Hatch) and f.slats]
         self.assertEqual(len(louvres), 2)
         plates = next(f for f in wing.features() if isinstance(f, Plates) and f.scatter == 0.0)

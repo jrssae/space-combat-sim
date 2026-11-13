@@ -1,6 +1,7 @@
 """Raider design language (docs/design-references.md, "Raider fighter Delta-V"): worn grey-brown plating
 with darker recessed panels, vent grilles and nozzle metal, faded ochre accent bands, a near-black opaque
-canopy. No insignia, no logos. On the textured mesh (M4-T30d) the plating is worn hard: chipped edges down to bare metal, dark streaks
+canopy. No insignia, no logos. Since M7-T16 the plating reads as painted metal, not plastic: metallic and roughness per material
+and a ``metal_finish`` that varies roughness per panel and dulls the dirt. On the textured mesh (M4-T30d) the plating is worn hard: chipped edges down to bare metal, dark streaks
 aft of the seams, grime and smudges, and the main nozzles' throats glow yellow-white (the reference's two engine glows).
 
 Albedos are linear RGB; the sRGB look is hull #A89F96, panels #544E48, ochre #B88A3A. The milestone's "about #77706A"
@@ -31,6 +32,7 @@ def _lin(hex_rgb: int) -> tuple[float, float, float]:
 # take a darker worn grey-brown (sRGB about #6B635A, panels #4A443E, dark #2C2724, ochre #8C6A32), in the Starfury's range.
 TEXTURED_ALBEDO: dict[str, tuple[float, float, float]] = {
     "rd_hull": _lin(0x6B635A),
+    "rd_hull_metal": _lin(0x6B635A),  # the engine housings: the hull's paint worn to metal (M7-T16), the same colour
     "rd_hull_panel": _lin(0x4A443E),
     "rd_hull_dark": _lin(0x2C2724),
     "rd_stripe": _lin(0x8C6A32),
@@ -41,25 +43,29 @@ TEXTURED_ALBEDO: dict[str, tuple[float, float, float]] = {
     "rd_rcs": _lin(0x3E3A37),
 }
 
+# Painted metal, not plastic (M7-T16): the plating is moderately metallic with a satin roughness that steps from panel to panel; the
+# grilles, the engine housings, nozzles and barrels are bare metal, more metallic and smoother; dirt is rougher and duller (the
+# ``metal_finish`` extra). Colours are the M4-T30d paint's, unchanged. The values are listed in docs/assets-raider.md.
 RAIDER = Style(
     name="raider",
     materials={
-        "hull": Material("rd_hull", _lin(0xA89F96), paneled=True),
-        "hull_dark": Material("rd_hull_dark", _lin(0x37312D), paneled=True),
-        "hull_panel": Material("rd_hull_panel", _lin(0x544E48), paneled=True),
-        "stripe": Material("rd_stripe", _lin(0xB88A3A), paneled=True),
-        "hazard": Material("rd_hazard", _lin(0xB88A3A), paneled=True),
-        "hazard_dark": Material("rd_hazard_dark", _lin(0x1C1A18)),
-        "canopy_glass": Material("rd_canopy", (0.006, 0.007, 0.009)),
-        "canopy_frame": Material("rd_canopy_frame", _lin(0x4A4541), metallic=0.5),
-        "nozzle": Material("rd_nozzle", _lin(0x5A5450), metallic=0.8),
+        "hull": Material("rd_hull", _lin(0xA89F96), metallic=0.45, roughness=0.50, paneled=True),
+        "hull_dark": Material("rd_hull_dark", _lin(0x37312D), metallic=0.75, roughness=0.36, paneled=True),
+        "hull_panel": Material("rd_hull_panel", _lin(0x544E48), metallic=0.50, roughness=0.46, paneled=True),
+        "hull_metal": Material("rd_hull_metal", _lin(0xA89F96), metallic=0.72, roughness=0.34, paneled=True),
+        "stripe": Material("rd_stripe", _lin(0xB88A3A), metallic=0.35, roughness=0.55, paneled=True),
+        "hazard": Material("rd_hazard", _lin(0xB88A3A), metallic=0.35, roughness=0.55, paneled=True),
+        "hazard_dark": Material("rd_hazard_dark", _lin(0x1C1A18), metallic=0.3, roughness=0.6),
+        "canopy_glass": Material("rd_canopy", (0.006, 0.007, 0.009), roughness=0.12),
+        "canopy_frame": Material("rd_canopy_frame", _lin(0x4A4541), metallic=0.6, roughness=0.4),
+        "nozzle": Material("rd_nozzle", _lin(0x5A5450), metallic=0.9, roughness=0.28),
         "nozzle_throat": Material(
             "rd_nozzle_throat", _lin(0x0E0D0C), metallic=0.8, roughness=0.45, emissive=(1.0, 0.86, 0.58), emissive_strength=4.0
         ),
-        "barrel": Material("rd_barrel", _lin(0x6A645E), metallic=0.7),
-        "bore": Material("rd_bore", (0.01, 0.01, 0.01)),
+        "barrel": Material("rd_barrel", _lin(0x6A645E), metallic=0.9, roughness=0.26),
+        "bore": Material("rd_bore", (0.01, 0.01, 0.01), metallic=0.5, roughness=0.6),
         "interior": Material("rd_interior", (0.02, 0.02, 0.022)),
-        "rcs": Material("rd_rcs", _lin(0x504B47), metallic=0.6),
+        "rcs": Material("rd_rcs", _lin(0x504B47), metallic=0.8, roughness=0.35),
     },
     panel_size_m=0.5,
     panel_line_width_m=0.035,
@@ -67,9 +73,11 @@ RAIDER = Style(
     panel_tint_jitter=0.12,
     stripe_fraction=0.68,
     stripe_width_m=0.3,
-    # Worn hard (M4-T30d): bare metal at the chipped edges, streaks, grime and smudges; the paint is flat.
+    # Worn hard (M4-T30d): bare metal at the chipped edges, streaks, grime and smudges.
     edge_wear=0.6,
     streaks=0.3,
     grime=0.14,
-    extra={"bare_metal": 0.8, "smudge": 0.3, "smudge_scale_m": 0.6, "speckle": 0.08, "paint_roughness": 0.82, "streak_length_m": 0.4},
+    extra={"bare_metal": 0.8, "smudge": 0.3, "smudge_scale_m": 0.6, "speckle": 0.08, "streak_length_m": 0.4,
+           "metal_finish": {"panel_m": 0.9, "panel_rough": 0.12, "noise_m": 0.35, "noise_rough": 0.06, "dirt_rough": 0.3,
+                            "dirt_metal": 0.5, "grime_dirt": 0.5}},
 )

@@ -297,7 +297,7 @@ const OLD_PATHS_CASE: String = "battle_on_the_old_paths"
 
 func test_the_battle_flies_as_the_old_paths_did() -> void:
 	var candidate: Dictionary = await _battle()
-	var recorded: Variant = ParityFixture.stored(FIXTURE, OLD_PATHS_CASE)
+	var recorded: Variant = ParityFixture.rerecorded(FIXTURE, OLD_PATHS_CASE, _digest_of(candidate))
 	assert_not_null(recorded, "the old paths' battle was recorded")
 	if recorded == null:
 		return

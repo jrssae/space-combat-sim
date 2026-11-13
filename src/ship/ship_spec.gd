@@ -65,7 +65,8 @@ const ASSET_ROOT: String = "res://assets/generated"
 ## The low-attention tier's per-hull term (M4-T22 fix round 1): what its rolled shots' chance is scaled by, so this hull's
 ## fighters land in the tier the hits they land up close (fitted per hull against full-fidelity fights; 1 = the model as is).
 ## The default is the Starfury's fitted term, as the other defaults are the Starfury's (§5.1); the raider sets its own.
-@export var tier_hit_scale: float = 0.92
+## Refitted in M7-T16 with the raider's new hull (0.92 and 1.25 before; the fit in architecture §17.14).
+@export var tier_hit_scale: float = 2.3
 ## The defensive turrets' gun (M5-T21, D61), for a hull whose hardpoints list `turrets[]`; null takes the light turret
 ## (`assets/weapons/turret_light.tres`).
 @export var turret_weapon: WeaponSpec = null

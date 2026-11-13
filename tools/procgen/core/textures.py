@@ -602,6 +602,21 @@ def _normal_map(atlas: Atlas, style: Style, platings: Sequence[Plating], scale: 
     return relief
 
 
+def metal_finish(finish: dict[str, float], pos: np.ndarray, painted: np.ndarray, roughness: np.ndarray, metallic: np.ndarray,
+                 dirt: np.ndarray, seed: int) -> tuple[np.ndarray, np.ndarray]:
+    """Painted metal, not plastic (M7-T16; a style opts in with ``extra["metal_finish"]``): the paint's roughness steps from panel to
+    panel (``panel_m`` cells, +-``panel_rough``) and drifts within them (+-``noise_rough``), so a highlight breaks up across the plating;
+    dirt (0..1) is rougher (``dirt_rough``) and duller (``dirt_metal``) than the metal under it."""
+    seeds = np.full(len(pos), seed + 911, dtype=np.int64)
+    cell = np.floor(pos / float(finish.get("panel_m", 1.0))).astype(np.int64)
+    step = 2.0 * _hash01(cell[:, 0], cell[:, 1], cell[:, 2], seeds) - 1.0
+    drift = 2.0 * value_noise(pos, float(finish.get("noise_m", 0.35)), seed + 913) - 1.0
+    shift = float(finish.get("panel_rough", 0.0)) * step + float(finish.get("noise_rough", 0.0)) * drift
+    roughness = roughness + np.where(painted, shift, 0.0) + float(finish.get("dirt_rough", 0.0)) * dirt
+    metallic = metallic * (1.0 - float(finish.get("dirt_metal", 0.0)) * dirt)
+    return roughness, metallic
+
+
 def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, paintable: Sequence[str] = (),
               normal_scale: int = NORMAL_SCALE) -> dict[str, np.ndarray]:
     """The four maps as 8-bit RGB arrays: ``albedo`` (sRGB), ``normal`` (tangent space, +Y up, ``normal_scale`` times the atlas),
@@ -753,6 +768,12 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
         if marking.kind != "soot":
             metallic[sel] *= 1.0 - 0.6 * cover
             marked[np.flatnonzero(sel)] = np.maximum(marked[np.flatnonzero(sel)], cover)
+
+    # Painted metal (M7-T16, the styles that ask for it): roughness per panel, dirt rough and dull.
+    finish = extra.get("metal_finish")
+    if finish:
+        dirt = np.clip(streak + smudge + np.clip(1.0 - 2.0 * noise_coarse, 0.0, 1.0) * float(finish.get("grime_dirt", 0.5)), 0.0, 1.0)
+        roughness, metallic = metal_finish(finish, pos, paneled & ~glass, roughness, metallic, dirt * ~glass, seed)
 
     # The normal map: the plating's relief at twice the atlas's resolution, Godot's +Y up (Q34).
     normal_ts = _normal_map(atlas, style, platings, normal_scale)

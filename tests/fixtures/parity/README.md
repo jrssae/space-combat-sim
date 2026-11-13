@@ -37,3 +37,21 @@ SCS_RECORD_FIXTURES=1 GUT_SLOW=1 .tools/godot/godot --headless --path . -s addon
 The Q16 fights (`brain_tolerance.json`, `flight_parity_fight.json`) hold two references each: the GDScript fight on the
 single-thread step (Q16's reference, which the native code matched bit for bit on that step when recorded) and the native
 fight on the delayed step (the threaded step's bit-for-bit reference). See each test's header for what is gated.
+
+**M7-T16 re-recorded the native entries** (the raider rebuilt to its reference model: a new hull, hit volumes and muzzles move
+every seeded battle with raiders in it). `ParityFixture.rerecorded(file, case, value[, key])` writes what the test just flew
+when the run sets `SCS_RECORD_FIXTURES=1`; the Q16 fights record their `native` references from the delayed step, which the
+threaded fight then matched bit for bit. Run, at the M7-T16 commit:
+
+```
+SCS_RECORD_FIXTURES=1 GUT_SLOW=1 .tools/godot/godot --headless --path . -s addons/gut/gut_cmdln.gd -gexit \
+    -gtest=res://tests/integration/test_brain_tolerance.gd,res://tests/integration/test_flight_parity_fight.gd,res://tests/integration/test_weapon_rows_battle.gd,res://tests/unit/test_bolt_rows.gd,res://tests/unit/test_core_state.gd,res://tests/unit/test_driver_step.gd,res://tests/unit/test_row_commands.gd
+```
+
+The GDScript entries (`gdscript`, `gdscript_*`) stay as recorded at `0586e3e` on the old raider: `brain_tolerance` still holds
+Q16's hits and mix against them; `flight_parity_fight` prints its mix against them (12 points on the new hull) and gates the hits.
+What moved (old → new): `weapon_rows_battle` 933, 420, 174, 151, 25, 1 → 779, 380, 144, 145, 25, 1; the 100-ship battle of
+`bolt_rows`, `core_state`, `driver_step` and `row_commands` 62 → 67 hits (thinks 12 033 → 12 034 near and far, 8 238 → 8 239 far
+rate; the row, command, hit and pilot digests new); `brain_tolerance` native hits furball 264, 315, 256 → 268, 248, 285, spread
+355, 301, 298 → 330, 324, 293; `flight_parity_fight` 127 → 144 hits over 30 s, mix attack 18 evade 7 → attack 20 evade 5.
+

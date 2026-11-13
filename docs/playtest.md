@@ -804,7 +804,7 @@ T20's own, taken at the end on the RX 6950 XT, are in `references/screenshots/T2
       disc rim; at high elevation the barrels' roots may show through the dome; `turret_fire`'s level and feel.
 - [ ] **T16 Civilians in a fight:** how the fleeing reads (to shelter, in groups, the panic spreading); the Saturn 8s' slow
       turns (about 1 degree a second in pitch); the balance (a Saturn alone sometimes beats two raiders, never three; hulls
-      of 330 to 1150); the engine glows.
+      of 380 to 715, since M7-T16); the engine glows.
 - [ ] **Q33 The blind spot:** only a narrow cone straight behind each Saturn is hidden from its turrets. Keep it, or widen it?
 
 **Encounters** (free flight, encounters on)
