@@ -198,13 +198,14 @@ def arm_trim(p: np.ndarray, n: np.ndarray) -> np.ndarray:
 
 
 def hall_dark(p: np.ndarray, n: np.ndarray) -> np.ndarray:
-    """The launch hall under the doors, dark inside (M7-T05): its ceiling, walls and the deck's underside over it."""
+    """The launch halls under the doors, dark inside (M7-T05): the upper hall between the chamfers and the lower hall under it."""
     q, m = _arm_local(p, n)
-    floor, ceiling = st.ARM_HATCH[4] - st.DOOR_DEPTH, st.HALL_CEILING_R
+    floor, upper, ceiling = st.ARM_HATCH[4] - st.DOOR_DEPTH, st.HALL_UPPER_R, st.HALL_CEILING_R
     x0, x1, z0, z1 = st.LAUNCH_HALL
-    box = (q[:, 0] > x0 - 0.05) & (q[:, 0] < x1 + 0.05) & (q[:, 2] > z0 - 0.05) & (q[:, 2] < z1 + 0.05)
-    inside = box & (q[:, 1] > ceiling - 0.05) & (q[:, 1] < floor + 0.05)
-    return inside.astype(float)
+    along = (q[:, 2] > z0 - 0.05) & (q[:, 2] < z1 + 0.05)
+    upper_hall = (q[:, 0] > x0 - 0.05) & (q[:, 0] < x1 + 0.05) & (q[:, 1] > upper - 0.05) & (q[:, 1] < floor + 0.05)
+    lower_hall = (np.abs(q[:, 0]) < st.HALL_LOWER_HALF + 0.05) & (q[:, 1] > ceiling - 0.05) & (q[:, 1] < upper + 0.05)
+    return (along & (upper_hall | lower_hall)).astype(float)
 
 
 DOOR_BORDER_M = 2.0  # the red border round each door on the deck
@@ -252,7 +253,7 @@ def red_cross(p: np.ndarray, n: np.ndarray) -> np.ndarray:
     """The red cross on the panel along the top of each arm's ribbed neck."""
     q, m = _arm_local(p, n)
     z0, z1, half = RED_CROSS
-    hw = _arm_half_width(q[:, 2]) - 8.0
+    hw = (1.0 - st.ARM_CHAMFER) * _arm_half_width(q[:, 2]) - 3.0  # on the neck's top, between its creases
     on = (m[:, 1] > 0.5) & (q[:, 2] > z0) & (q[:, 2] < z1) & (np.abs(q[:, 0]) < hw) & (q[:, 1] > 250.0)
     return (on & ((np.abs(q[:, 0]) < half) | (np.abs(q[:, 2] - 0.5 * (z0 + z1)) < half))).astype(float)
 
@@ -261,7 +262,7 @@ def cross_frame(p: np.ndarray, n: np.ndarray) -> np.ndarray:
     """... and the darker frame round that panel."""
     q, m = _arm_local(p, n)
     z0, z1, _ = RED_CROSS
-    hw = _arm_half_width(q[:, 2]) - 8.0
+    hw = (1.0 - st.ARM_CHAMFER) * _arm_half_width(q[:, 2]) - 3.0
     inside = (q[:, 2] > z0) & (q[:, 2] < z1) & (np.abs(q[:, 0]) < hw)
     edge = (q[:, 2] < z0 + 4.0) | (q[:, 2] > z1 - 4.0) | (np.abs(q[:, 0]) > hw - 4.0)
     return ((m[:, 1] > 0.5) & (q[:, 1] > 250.0) & inside & edge).astype(float)

@@ -404,76 +404,81 @@ def main_docking_bay(mats: dict[str, Material]) -> Mesh:
 
 
 # --- the cargo bay (zero-gravity) ----------------------------------------------------------------------------------------
-# Between the bow's two forks, cut into the spine's front where the slot ends (the STL's stepped recess at the fork's root; the look
-# from the maintainer's show capture, ``references/zero g cargo bay references/``): an open box, open to the slot ahead and to space
-# above, with a thick greebled rim and stepped machinery on its floor, dark with red and pink on its edges and lamps. Saturn
-# freighters hold outside and their cargo pods (31.1 x 17.2 x 43.0 m, ``saturn.POD``) fly in by themselves (Q8 as refined).
-ZG_FRONT_Z = 420.0  # the spine's front, the slot's end
-ZG_BACK_Z = 490.0  # deep enough to take a whole pod (43 m) with room to spare
-ZG_HALF_X = 30.0  # the bay's inner half width: a pod square-on with 14 m to spare each side, inside the slot (x +-45)
-ZG_FLOOR_Y = 322.0  # 11 m over the spine's underside at its front
-ZG_MACHINE_M = 4.0  # the floor's machinery stands up to this
-ZG_RIM = (8.0, 4.0, 8.0)  # the rim's width, how far it stands over the spine's top, and its posts' depth at the front
-ZG_CENTRE_Y = 346.0  # the pods' path: over the machinery, under the spine's top (368 to 374 here)
+# Inside the spine where the slot between the bow's forks ends (M7-T21, read off the STL): a closed rectangular compartment, roofed,
+# reached only through an octagonal throat facing down the slot; dark machinery with red and pink on its edges and lamps (the
+# maintainer's show capture, ``references/zero g cargo bay references/``). Saturn freighters hold outside and their cargo pods
+# (31.1 x 17.2 x 43.0 m, ``saturn.POD``) fly in by themselves (Q8 as refined).
+ZG_FRONT_Z = 420.0  # the spine's front, the slot's end: the throat's mouth
+ZG_COMPARTMENT_Z = 442.0  # the throat gives onto the compartment here (the STL's)
+ZG_BACK_Z = 490.0  # 8 m deeper than the STL's, so a whole pod (43 m) lies in it lengthwise
+ZG_HALF_X = 94.0  # the compartment's inner half width (the STL's +-96 less its walls): pods side by side
+ZG_FLOOR_Y = 323.0
+ZG_ROOF_Y = 357.0
+ZG_THROAT = (34.1, 7.6)  # the throat's half width and the cut off each of its corners (the STL's octagon)
+ZG_THROAT_Y = (323.3, 354.7)  # its floor and roof (the STL's)
+ZG_MACHINE_M = 4.0  # the compartment's floor machinery stands up to this
+ZG_RING = (2.9, 2.0)  # the frame round the throat's mouth: its width (out to the STL's x +-37) and how far it stands proud
+ZG_CENTRE_Y = 339.0  # the pods' path: the throat's middle
 
 
-def zg_top(z: float) -> float:
-    """The spine's top over the bay at ``z``."""
-    from . import station as st_  # noqa: PLC0415
-
-    return st_.spine_row_at(z)[3]
+def throat_outline(grow: float = 0.0) -> list[tuple[float, float]]:
+    """The throat's octagon (x, y), counter-clockwise, grown by ``grow``."""
+    hx, cut = ZG_THROAT[0] + grow, ZG_THROAT[1]
+    y0, y1 = ZG_THROAT_Y[0] - grow, ZG_THROAT_Y[1] + grow
+    return [(-hx + cut, y0), (hx - cut, y0), (hx, y0 + cut), (hx, y1 - cut), (hx - cut, y1), (-hx + cut, y1), (-hx, y1 - cut),
+            (-hx, y0 + cut)]
 
 
 def cargo_bay_walls(m: Material) -> Mesh:
-    """The spine's front from the slot's end to the bay's back round the open bay: under its floor and beside it (the spine itself
-    starts at its back)."""
+    """The spine's front from the slot's end to the bay's back round the throat and the compartment (the spine itself starts at
+    the compartment's back): roof, floor and sides of each, and the throat's four cut corners."""
     from . import station as st_  # noqa: PLC0415
 
-    hx, floor = ZG_HALF_X, ZG_FLOOR_Y
-    rows = [st_.spine_row_at(ZG_FRONT_Z), st_.spine_row_at(ZG_BACK_Z)]
-    return Mesh.concatenate([
-        st_.slab([(z, -w, w, under, floor) for z, w, under, _ in rows], m),
-        st_.slab([(z, -w, -hx, floor, top) for z, w, _, top in rows], m),
-        st_.slab([(z, hx, w, floor, top) for z, w, _, top in rows], m),
-    ])
+    hx = ZG_THROAT[0]
+    parts = []
+    for (za, zb), half, (lo, hi) in (((ZG_FRONT_Z, ZG_COMPARTMENT_Z), hx, ZG_THROAT_Y), ((ZG_COMPARTMENT_Z, ZG_BACK_Z), ZG_HALF_X,
+                                                                                       (ZG_FLOOR_Y, ZG_ROOF_Y))):
+        rows = [st_.spine_row_at(za), st_.spine_row_at(zb)]
+        parts += [
+            st_.slab([(z, -w, w, hi, top) for z, w, _, top in rows], m),
+            st_.slab([(z, -w, w, under, lo) for z, w, under, _ in rows], m),
+            st_.slab([(z, -w, -half, lo, hi) for z, w, _, _ in rows], m),
+            st_.slab([(z, half, w, lo, hi) for z, w, _, _ in rows], m),
+        ]
+    # The keel under the bay down to the bow's pylon, and the ridge along its roof (the STL's, x +-10).
+    parts.append(st_.block((-10.0, 290.0, ZG_COMPARTMENT_Z + 6.0), (10.0, 316.0, 494.0), m))
+    parts.append(st_.slab([(445.0, -10.0, 10.0, 360.0, 372.0), (495.0, -10.0, 10.0, 370.0, 386.0)], m))
+    cut = ZG_THROAT[1]
+    lo, hi = ZG_THROAT_Y
+    for sx in (-1.0, 1.0):
+        for sy, y in ((1.0, hi), (-1.0, lo)):
+            corner = [(sx * hx, y), (sx * hx, y - sy * cut), (sx * (hx - cut), y)]
+            parts.append(st_.prism_xr(corner, ZG_FRONT_Z, ZG_COMPARTMENT_Z, m))
+    return Mesh.concatenate(parts)
 
 
-def _rim(mats: dict[str, Material]) -> list:
-    """The thick rim round the bay's open sides: posts and a sill round its front, beams along its top edges and across its back,
-    greebles along them."""
-    frame, recess = mats["bay_frame"], mats["recess"]
-    hx, floor = ZG_HALF_X, ZG_FLOOR_Y
-    rw, rise, depth = ZG_RIM
-    front, back = ZG_FRONT_Z, ZG_BACK_Z
-    top0, top1 = zg_top(front), zg_top(back)
-    out = []
-    for sx in (-1.0, 1.0):  # the front posts
-        x0, x1 = sorted((sx * hx, sx * (hx + rw)))
-        out += box_faces((x0, floor - 6.0, front - depth), (x1, top0 + rise, front), frame, skip_back=False)
-    out += box_faces((-hx - rw, floor - 6.0, front - depth), (hx + rw, floor + 1.0, front), frame, skip_back=False)  # the sill
-    for sx in (-1.0, 1.0):  # the beams along the top edges, following the spine's slope
-        x0, x1 = sorted((sx * hx, sx * (hx + rw)))
-        q = [np.array(v) for v in ((x0, top0, front), (x1, top0, front), (x1, top1, back), (x0, top1, back))]
-        lid = [p + [0.0, rise, 0.0] for p in q]
-        out.append((np.array(lid), (0.0, 1.0, 0.0), frame))
-        for a, b, normal in ((0, 3, (-1.0, 0.0, 0.0)), (1, 2, (1.0, 0.0, 0.0))):
-            out.append((np.array([q[a], q[b], lid[b], lid[a]]), normal, frame))
-        for z in np.arange(front + 6.0, back - 4.0, 8.0):  # greebles along the beam
-            t = float(np.interp(z, [front, back], [top0, top1])) + rise
-            out += box_faces((min(x0, x1) + 2.0, t, z - 1.2), (max(x0, x1) - 2.0, t + 1.6, z + 1.2), recess, skip_back=False)
-    out += box_faces((-hx - rw, top1 - 2.0, back - 4.0), (hx + rw, top1 + rise, back + 4.0), frame, skip_back=False)  # across the back
-    return out
+def _ring(mats: dict[str, Material]) -> Mesh:
+    """The frame round the throat's mouth, standing proud of the spine's front."""
+    from . import station as st_  # noqa: PLC0415
+
+    width, proud = ZG_RING
+    inner, outer = throat_outline(), throat_outline(width)
+    parts = []
+    for k in range(len(inner)):
+        quad = [inner[k], inner[(k + 1) % len(inner)], outer[(k + 1) % len(inner)], outer[k]]
+        parts.append(st_.prism_xr(quad, ZG_FRONT_Z - proud, ZG_FRONT_Z, mats["bay_frame"]))
+    return Mesh.concatenate(parts)
 
 
 def _zg_machinery(mats: dict[str, Material]) -> list:
-    """The stepped machinery on the bay's floor and its walls: dark blocks in tiers, a red strip on each block's front edge, pink
-    and red lamps among them, ribs up the walls with red edges."""
-    dark, wall, recess = mats["bay_wall"], mats["bay_wall"], mats["recess"]
+    """The compartment's floor: dark machinery blocks in tiers, a red strip on each block's front edge, pink lamps among them; ribs up
+    the walls with red edges; red lamps on the back wall and under the roof."""
+    dark, recess = mats["bay_wall"], mats["recess"]
     red, pink = mats["bay_red_2"], mats["bay_pink"]
-    hx, floor = ZG_HALF_X, ZG_FLOOR_Y
+    hx, floor, roof = ZG_HALF_X, ZG_FLOOR_Y, ZG_ROOF_Y
     out = []
-    xs = np.linspace(-hx + 1.0, hx - 1.0, 7)
-    zs = np.arange(ZG_FRONT_Z + 4.0, ZG_BACK_Z - 2.0, 8.0)
+    xs = np.linspace(-hx + 1.0, hx - 1.0, 13)
+    zs = np.arange(ZG_COMPARTMENT_Z + 2.0, ZG_BACK_Z - 2.0, 8.0)
     for i, (xa, xb) in enumerate(zip(xs[:-1], xs[1:], strict=True)):
         for k, za in enumerate(zs[:-1]):
             h = 1.0 + 3.0 * (0.5 + 0.5 * math.sin(1.7 * i + 2.3 * k)) * min(1.0, (k + 1) / 3.0)  # tiers stepping up toward the back
@@ -485,20 +490,20 @@ def _zg_machinery(mats: dict[str, Material]) -> list:
                 out += box_faces((cx - 0.8, hi[1], cz - 0.8), (cx + 0.8, hi[1] + 0.8, cz + 0.8), pink, skip_back=False)
     for sx in (-1.0, 1.0):
         x0, x1 = sorted((sx * hx, sx * (hx - 1.2)))
-        for z in np.arange(ZG_FRONT_Z + 10.0, ZG_BACK_Z - 4.0, 12.0):
-            top = zg_top(z)
-            out += box_faces((x0, floor + ZG_MACHINE_M, z - 1.0), (x1, top - 2.0, z + 1.0), wall, skip_back=False)
+        for z in np.arange(ZG_COMPARTMENT_Z + 8.0, ZG_BACK_Z - 4.0, 12.0):
+            out += box_faces((x0, floor + ZG_MACHINE_M, z - 1.0), (x1, roof - 1.0, z + 1.0), dark, skip_back=False)
             edge = sx * (hx - 1.2)
-            out += box_faces((min(edge, edge - sx * 0.3), floor + ZG_MACHINE_M, z - 1.0), (max(edge, edge - sx * 0.3), top - 2.0, z - 0.6),
+            out += box_faces((min(edge, edge - sx * 0.3), floor + ZG_MACHINE_M, z - 1.0), (max(edge, edge - sx * 0.3), roof - 1.0, z - 0.6),
                              red, skip_back=False)
-    for x in (-18.0, -6.0, 6.0, 18.0):  # red lamps along the back wall
+    for x in np.linspace(-80.0, 80.0, 9):  # red lamps along the back wall, and a row under the roof
         out += box_faces((x - 1.0, floor + 14.0, ZG_BACK_Z - 0.6), (x + 1.0, floor + 16.0, ZG_BACK_Z), mats["lamp"], skip_back=False)
+        out += box_faces((x - 0.8, roof - 0.6, 465.0 - 0.8), (x + 0.8, roof, 465.0 + 0.8), mats["lamp"], skip_back=False)
     return out
 
 
 def cargo_bay(mats: dict[str, Material]) -> Mesh:
-    """The bay's rim and the machinery inside it."""
-    return polys(_rim(mats) + _zg_machinery(mats))
+    """The bay's dressing: the frame round the throat's mouth and the compartment's machinery and lamps."""
+    return Mesh.concatenate([_ring(mats), polys(_zg_machinery(mats))])
 
 
 # --- the command section ----------------------------------------------------------------------------------------------

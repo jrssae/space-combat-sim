@@ -132,8 +132,14 @@ class StationShapeTests(unittest.TestCase):
         self.assertGreaterEqual(dz - 4.9, 2.0)
         self.assertGreater(centres[1] - centres[0] - 2.0 * dz, 3.0, "a bar between doors")
         hx0, hx1, hz0, hz1 = st.LAUNCH_HALL
-        self.assertTrue(hx0 < cx - dx and cx + dx < hx1 and hz0 < centres[0] - dz and centres[-1] + dz < hz1, "the hall under the strip")
-        self.assertLess(hx1, st.ARM_HATCH[2], "the strip keeps to the face, not the whole 94 m")
+        self.assertTrue(hx0 < cx - dx and cx + dx < hx1 and hz0 < centres[0] - dz and centres[-1] + dz < hz1, "the hall under the doors")
+        # M7-T21: the root's section off the STL: a flat top between two creases, chamfers down to vertical sides; the doors
+        # between the creases on the top.
+        w, top = st.ARM_HATCH[2], st.ARM_HATCH[4]
+        crease = (1.0 - st.ARM_CHAMFER) * w
+        self.assertAlmostEqual(crease, 24.0, delta=1.0, msg="the creases at x +-24 (the STL's)")
+        self.assertLess(cx + dx, crease - 2.0, "the doors between the creases")
+        self.assertAlmostEqual(np.diff(centres).mean(), 23.0, delta=0.5, msg="the STL's door pitch")
         for angle in st.ARM_ANGLES_DEG:
             a = math.radians(angle)
             # The arm's own +x (built on top, turned by its angle less 90 degrees).
@@ -145,8 +151,11 @@ class StationShapeTests(unittest.TestCase):
                 self.assertAlmostEqual(float(r[door].max()), st.HALL_CEILING_R, delta=0.6, msg="open to the hall's ceiling")
             between = (np.abs(x - cx) < dx - 1.5) & (np.abs(z - 0.5 * (centres[0] + centres[1])) < 1.0) & (r > 200.0)
             self.assertAlmostEqual(float(r[between].max()), top, delta=0.5, msg="the deck's bar stands between doors")
-            beside = (np.abs(x + 25.0) < 5.0) & (np.abs(z - centres[2]) < 5.0) & (r > 200.0)
-            self.assertAlmostEqual(float(r[beside].max()), top, delta=0.5, msg="the rest of the face is deck")
+            for xs in (-35.0, 35.0):  # on a chamfer, half way down from its crease
+                on = (np.abs(x - xs) < 1.0) & (np.abs(z - centres[2]) < 5.0) & (r > 200.0)
+                self.assertAlmostEqual(float(r[on].max()), top - (abs(xs) - crease), delta=1.5, msg=f"the chamfer at x {xs}")
+            beside = (np.abs(x - 18.0) < 3.0) & (np.abs(z - centres[2]) < 3.0) & (r > 200.0)
+            self.assertAlmostEqual(float(r[beside].max()), top, delta=0.5, msg="the top face beside the doors")
         lights = {p.name: p for p in self.drum_parts}["bay_lights"].mesh
         self.assertEqual(lights.face_count, 4 * 6 * 4 * 12, "a lit strip along each edge of every door")
         self.assertTrue(all(m.emissive_strength > 0.0 for m in lights.materials))
@@ -158,8 +167,6 @@ class StationShapeTests(unittest.TestCase):
         self.assertEqual(len(leaves), 12, "two leaves a door number, each its own kind (its half of the number)")
         self.assertTrue(all(len(groups[k].transforms) == 4 for k in leaves), "one of each on every arm")
         self.assertEqual(len(groups["gantry"].transforms), 24, "a gantry over every door in its hall")
-        # M7-T09's hangar keeps T04's seven-door names until T20 refits it.
-        self.assertEqual((st.COBRA_DOORS, st.DOOR_HALF, len(st.door_centres())), (7, (32.0, 14.0), 7))
 
     def test_every_closed_shape_faces_outward(self) -> None:
         for part in self.drum_parts + self.frame_parts:

@@ -195,8 +195,8 @@ class HardpointTests(unittest.TestCase):
             n, across = np.asarray(bay["normal"]), np.asarray(bay["across"])
             stage, door = self.at(bay, "staging"), self.at(bay, "door")
             x = float((stage - door) @ across) + st.LAUNCH_STRIP_X
-            self.assertTrue(hx0 + 7.7 < x and abs(x - st.LAUNCH_STRIP_X) - 7.7 > st.LAUNCH_DOOR_HALF[0], "in the hall, under the deck")
-            self.assertTrue(st.HALL_CEILING_R < float(stage @ n) < floor)
+            self.assertTrue(-st.HALL_LOWER_HALF + 7.7 < x and abs(x - st.LAUNCH_STRIP_X) - 7.7 > st.LAUNCH_DOOR_HALF[0], "in the lower hall")
+            self.assertTrue(st.HALL_CEILING_R < float(stage @ n) < st.HALL_UPPER_R, "under the upper hall's floor line")
             self.assertLess(ray_hit(self.tris["drum"], stage, n), st.ARM_HATCH[4] - float(stage @ n) + 0.1, "no door over it")
             path = [np.asarray(p) + self.shift["drum"] for p in bay["staging_path"]]
             np.testing.assert_allclose(path[0], stage)
@@ -306,14 +306,20 @@ class HardpointTests(unittest.TestCase):
         self.assertGreater(float(np.hypot(hold[0], hold[1])), 200.0)
         self.assertGreater(min(distance_to(self.tris[b], release) for b in ("drum", "frame")), 300.0)
         # The entry point is inside the open bay, a whole pod (43 m) in from its front, and the bay is open above it.
-        self.assertTrue(sd.ZG_FRONT_Z + 0.5 * 43.0 <= entry[2] <= sd.ZG_BACK_Z - 0.5 * 43.0, "the pod lies wholly inside")
+        self.assertTrue(sd.ZG_COMPARTMENT_Z + 0.5 * 43.0 <= entry[2] <= sd.ZG_BACK_Z - 0.5 * 43.0, "the pod lies wholly inside")
         self.assertLess(abs(entry[0]), sd.ZG_HALF_X)
-        self.assertEqual(ray_hit(self.tris["frame"], entry, np.array([0.0, 1.0, 0.0])), math.inf, "open to space above")
+        # Roofed (M7-T21): closed above and to the sides; open only ahead, down the throat and the slot.
+        self.assertLess(ray_hit(self.tris["frame"], entry, np.array([0.0, 1.0, 0.0])), sd.ZG_ROOF_Y - entry[1] + 0.5, "the roof over it")
+        for side in (np.array([1.0, 0.0, 0.0]), np.array([-1.0, 0.0, 0.0])):
+            self.assertLess(ray_hit(self.tris["frame"], entry, side), sd.ZG_HALF_X + 0.5, "its walls")
         self.assertEqual(ray_hit(self.tris["frame"], entry, np.array([0.0, 0.0, -1.0])), math.inf, "open ahead, down the slot")
+        for p in ((60.0, entry[1], 430.0), (0.0, sd.ZG_ROOF_Y + 5.0, 430.0)):
+            p = np.asarray(p)
+            self.assertLess(ray_hit(self.tris["frame"], p - [0.0, 0.0, 30.0], np.array([0.0, 0.0, 1.0])), 30.0, f"closed beside the throat at {p}")
         # A Saturn pod (31.1 x 17.2 m square-on) flies the path without a contact, in collision and against the drawn hull.
         lo, hi = np.asarray(bay["cargo_bay_clear_min"]), np.asarray(bay["cargo_bay_clear_max"])
-        self.assertGreaterEqual(hi[0] - lo[0], 31.1 + 10.0)
-        self.assertGreaterEqual(hi[1] - lo[1], 17.2 + 10.0)
+        self.assertGreaterEqual(hi[0] - lo[0], 31.1 + 10.0)  # a pod square-on with room each side (the STL's octagon: 68.2 x 31.4)
+        self.assertGreaterEqual(hi[1] - lo[1], 17.2 + 8.0)
         frame = next(e for e in self.manifest["collision"]["pieces"] if e["name"] == "frame")
         shapes = col.shapes_from_entry(frame)
         pod = np.array([[x, y, 0.0] for x in np.linspace(-15.55, 15.55, 5) for y in np.linspace(-8.6, 8.6, 3)])
@@ -428,18 +434,20 @@ class BayShapeTests(unittest.TestCase):
         self.assertAlmostEqual(ray_hit(tris, seam, ahead) + seam[2], sd.TUNNEL_BACK_Z, delta=0.01)
         self.assertAlmostEqual(ray_hit(tris, door, ahead) + door[2], sd.AIRLOCK_Z, delta=0.01)
 
-    def test_the_cargo_bay_is_an_open_framed_box_dark_with_red_edges(self) -> None:
+    def test_the_cargo_bay_is_a_roofed_compartment_dark_with_red_edges(self) -> None:
         p = self.cargo.vertices
-        self.assertGreater(float(p[:, 1].max()), st.spine_row_at(sd.ZG_FRONT_Z)[3], "the rim stands over the spine's top")
-        self.assertLess(float(np.abs(p[:, 0]).max()), 45.0, "inside the slot between the forks")
-        self.assertTrue(np.all((p[:, 2] >= sd.ZG_FRONT_Z - sd.ZG_RIM[2] - 1e-6) & (p[:, 2] <= sd.ZG_BACK_Z + sd.ZG_RIM[0])))
+        self.assertLess(float(np.abs(p[:, 0]).max()), sd.ZG_HALF_X + 0.01, "inside the spine")
+        self.assertTrue(np.all((p[:, 2] >= sd.ZG_FRONT_Z - sd.ZG_RING[1] - 1e-6) & (p[:, 2] <= sd.ZG_BACK_Z + 1e-6)))
         used = {m.name for m in self.cargo.materials}
         mats = station.STYLE.materials
         for role in ("bay_frame", "bay_wall", "bay_red_2", "bay_pink", "lamp"):
             self.assertIn(mats[role].name, used, role)
         self.assertEqual(mats["bay_wall"].emissive_strength, 0.0, "dark machinery; only edges and lamps glow")
         walls = sd.cargo_bay_walls(mats["spine"]).vertices
-        self.assertGreaterEqual(float(walls[:, 1].min()), st.spine_row_at(sd.ZG_FRONT_Z)[2] - 1e-6)
+        self.assertGreaterEqual(float(walls[:, 1].min()), 290.0 - 1e-6, "nothing under the keel (the STL's, down to the bow's pylon)")
+        outline = np.array(sd.throat_outline())
+        self.assertEqual(len(outline), 8, "the STL's octagonal throat")
+        self.assertGreaterEqual(2.0 * sd.ZG_THROAT[0] - 31.1, 10.0, "a pod square-on through the throat")
 
     def test_the_bay_turns_inside_the_frames_ring(self) -> None:
         # The door turns with the drum; ahead of the frame's ring (z 488) it may reach past the ring's bore, behind it never.

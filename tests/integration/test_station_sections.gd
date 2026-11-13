@@ -130,10 +130,10 @@ func test_a_door_leaf_lies_on_its_door() -> void:
 			leaves = group["transforms"]
 	# (The instance transforms are read from the manifest's data: a headless run's rendering server keeps none.)
 	assert_eq(leaves.size(), 4, "one per arm")
-	# The top arm's door 1: in the strip at x 18, on the doors' plane (r 239), at station z 1 025.5 (the drum frame's z about its
-	# centre at z 3 000).
+	# The top arm's door 1: on the top face between its creases (x 0, M7-T21), on the doors' plane (r 236.5), at station z 1 055.5
+	# (the drum frame's z about its centre at z 3 000).
 	var hits: int = 0
 	for t: Transform3D in leaves:
-		if (waist.transform * t.origin).distance_to(Vector3(18.0, 239.0, 1025.5 - 3000.0)) < 0.01:
+		if (waist.transform * t.origin).distance_to(Vector3(0.0, 236.5, 1055.5 - 3000.0)) < 0.01:
 			hits += 1
 	assert_eq(hits, 1, "one on the top arm")

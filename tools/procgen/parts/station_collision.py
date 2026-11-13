@@ -133,7 +133,7 @@ def drum_pieces(planes: Sequence[float]) -> list[tuple[str, np.ndarray]]:
                           ("green", st.GREEN_PROFILE), ("aft_band", st.AFT_BAND_PROFILE)):
         out += frusta(name, profile, planes)
     out += main_docking_bay(planes)
-    arm = slab_pieces("arm_head", [(z, -w, w, r0, r1) for z, w, r0, r1 in st.ARM_HEAD], planes, _sec)
+    arm = slab_pieces("arm_neck", list(st.ARM_NECK), planes, _hex)
     arm += cobra_hall(planes)
     pz0, pz1, half, under, top = st.ARM_PRONG
     for x in st.ARM_PRONGS_X:
@@ -201,40 +201,58 @@ def main_docking_bay(planes: Sequence[float]) -> list[tuple[str, np.ndarray]]:
     return out
 
 
+def _hex(row: Sequence[float]) -> np.ndarray:
+    """The neck's or taper's chamfered section at a row (z, half width, underside, top[, chamfer])."""
+    return np.array([[x, r, row[0]] for x, r in st.arm_section(*row[1:])])
+
+
+def _prism(name: str, points: Sequence[tuple[float, float]], z0: float, z1: float, planes: Sequence[float]) -> list[tuple[str, np.ndarray]]:
+    return [(name, np.array([[x, r, z] for z in (a, b) for x, r in points])) for a, b in _split(z0, z1, planes)]
+
+
 def cobra_hall(planes: Sequence[float]) -> list[tuple[str, np.ndarray]]:
-    """An arm's hatch section round its launch hall, open under each door (AC3: a fighter drops out without a false contact): the
-    floor, the solid round the hall, the deck over it in pieces between the doors, the taper aft (``station.launch_deck``)."""
+    """An arm's root section round its launch halls, open under each door (AC3: a fighter drops out without a false contact, and the
+    second row crosses onto the racks): the whole section fore and aft of the halls (its outline's hull: the notches and the V's
+    middle within the gap), the band and wings under them, the walls, shoulders and deck as the render's pieces, the bars between the
+    doors, the taper aft (``station.launch_deck``)."""
     z0, z1, w, r0, top = st.ARM_HATCH
-    floor, ceiling = top - st.DOOR_DEPTH, st.HALL_CEILING_R
-    hx0, hx1, hz0, hz1 = st.LAUNCH_HALL
+    floor, ceiling, upper = top - st.DOOR_DEPTH, st.HALL_CEILING_R, st.HALL_UPPER_R
+    _, hx1, hz0, hz1 = st.LAUNCH_HALL
+    lw = st.HALL_LOWER_HALF
     cx, (dx, dz) = st.LAUNCH_STRIP_X, st.LAUNCH_DOOR_HALF
-    out = slab_pieces("cobra_floor", [(z0, -w, w, r0, ceiling), (z1, -w, w, r0, ceiling)], planes, _sec)
-    for lo, hi in (((-w, ceiling, z0), (hx0, top, z1)), ((hx1, ceiling, z0), (w, top, z1)), ((hx0, ceiling, z0), (hx1, top, hz0)),
-                   ((hx0, ceiling, hz1), (hx1, top, z1)), ((hx0, floor, hz0), (cx - dx, top, hz1)), ((cx + dx, floor, hz0), (hx1, top, hz1))):
-        out += _blocks("cobra_deck", lo, hi, planes)
-    edges = [hz0] + [e for c in st.launch_door_centres() for e in (c - dz, c + dz)] + [hz1]
+    outline = st.root_outline()
+    _, band, wing_r, wing_l = st.root_pieces()
+    out = []
+    for a, b in ((z0, hz0), (hz1, z1)):
+        out += _prism("cobra_end", outline, a, b, planes)
+    out += _prism("cobra_floor", band + wing_r + wing_l, hz0, hz1, planes)
+    (_, crease_top), (crease_x, _), (bevel_x, bevel_r), (side_x, side_r) = st.ROOT_HALF[0], st.ROOT_HALF[1], st.ROOT_HALF[2], st.ROOT_HALF[3]
+    for sx in (-1.0, 1.0):
+        wall = [(lw, ceiling), (side_x, ceiling), (side_x, side_r), (bevel_x, bevel_r), (st.root_chamfer_x(upper), upper), (lw, upper)]
+        shoulder = [(hx1, upper), (st.root_chamfer_x(upper), upper), (st.root_chamfer_x(floor), floor), (hx1, floor)]
+        deck = [(cx + dx, floor), (st.root_chamfer_x(floor), floor), (crease_x, crease_top), (cx + dx, crease_top)]
+        for name, piece in (("cobra_wall", wall), ("cobra_shoulder", shoulder), ("cobra_deck", deck)):
+            out += _prism(name, [(sx * x, r) for x, r in piece], hz0, hz1, planes)
+    edges = [hz0] + [e for k in st.launch_door_centres() for e in (k - dz, k + dz)] + [hz1]
     for a, b in zip(edges[0::2], edges[1::2], strict=True):
         out += _blocks("cobra_bar", (cx - dx, floor, a), (cx + dx, top, b), planes)
-    out += slab_pieces("cobra_taper", [(z1, -w, w, r0, floor), (z1 + 40.0, -0.8 * w, 0.8 * w, r0 + 10.0, top - 5.0)], planes, _sec)
+    out += slab_pieces("cobra_taper", [(z1, w, r0, top), (z1 + 40.0, 0.8 * w, r0 + 10.0, top - 5.0)], planes, _hex)
     return out
 
 
 def cargo_bay(planes: Sequence[float]) -> list[tuple[str, np.ndarray]]:
-    """The spine's front round the open cargo bay: under its floor (with the machinery on it) and beside it, the bay open ahead
-    and above for the pods; the rim's front posts and sill as boxes."""
-    hx = sd.ZG_HALF_X
-    floor = sd.ZG_FLOOR_Y + sd.ZG_MACHINE_M
-    rows = [st.spine_row_at(sd.ZG_FRONT_Z), st.spine_row_at(sd.ZG_BACK_Z)]
+    """The spine's front round the roofed cargo bay (M7-T21): round the throat (its octagon taken as its rectangle, the cut corners
+    within the gap) and round the compartment behind it, each as roof, floor and sides, open only down the throat; the keel under
+    it and the ridge over it."""
     out = []
-    for sections in ([(z, -w, w, under, floor) for z, w, under, _ in rows], [(z, -w, -hx, floor, top + sd.ZG_RIM[1]) for z, w, _, top in rows],
-                     [(z, hx, w, floor, top + sd.ZG_RIM[1]) for z, w, _, top in rows]):
-        out += slab_pieces("cargo_wall", sections, planes, _sec)
-    rw, rise, depth = sd.ZG_RIM
-    top = st.spine_row_at(sd.ZG_FRONT_Z)[3] + rise
-    for sx in (-1.0, 1.0):
-        x0, x1 = sorted((sx * hx, sx * (hx + rw)))
-        out += _blocks("cargo_rim", (x0, sd.ZG_FLOOR_Y - 6.0, sd.ZG_FRONT_Z - depth), (x1, top, sd.ZG_FRONT_Z), planes)
-    out += _blocks("cargo_rim", (-hx, sd.ZG_FLOOR_Y - 6.0, sd.ZG_FRONT_Z - depth), (hx, sd.ZG_FLOOR_Y + 1.0, sd.ZG_FRONT_Z), planes)
+    for (za, zb), half, (lo, hi) in (((sd.ZG_FRONT_Z, sd.ZG_COMPARTMENT_Z), sd.ZG_THROAT[0], sd.ZG_THROAT_Y),
+                                     ((sd.ZG_COMPARTMENT_Z, sd.ZG_BACK_Z), sd.ZG_HALF_X, (sd.ZG_FLOOR_Y, sd.ZG_ROOF_Y))):
+        rows = [st.spine_row_at(za), st.spine_row_at(zb)]
+        for sections in ([(z, -w, w, hi, top) for z, w, _, top in rows], [(z, -w, w, under, lo) for z, w, under, _ in rows],
+                         [(z, -w, -half, lo, hi) for z, w, _, _ in rows], [(z, half, w, lo, hi) for z, w, _, _ in rows]):
+            out += slab_pieces("cargo_wall", sections, planes, _sec)
+    out += _blocks("cargo_keel", (-10.0, 290.0, sd.ZG_COMPARTMENT_Z + 6.0), (10.0, 316.0, 494.0), planes)
+    out += slab_pieces("cargo_ridge", [(445.0, -10.0, 10.0, 360.0, 372.0), (495.0, -10.0, 10.0, 370.0, 386.0)], planes, _sec)
     return out
 
 

@@ -4,7 +4,7 @@
 # numbers (scripts/station_sheet_node.gd). The station's maps are measured first (their bytes and the card's VRAM delta).
 #
 # Usage: scripts/station_sheet.sh <out dir>        Environment: SHEET_RES (1920x1080), SHEET_SETTLE (90 frames), SHEET_VIEWS
-# (t19, fly or doors: M7-T19's sets; t05 or markers: M7-T05's; empty: the look sheet), SHEET_DISPLAY, GODOT_BIN.
+# (t19, fly or doors: M7-T19's sets; t05, cargo, strip or markers: M7-T05's; t21: M7-T21's; empty: the look sheet), SHEET_DISPLAY, GODOT_BIN.
 # It takes the Godot (read) and GPU locks itself (scripts/godot_lock.sh).
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

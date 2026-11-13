@@ -53,7 +53,9 @@ ARM_NAMES = ("top", "starboard", "bottom", "port")  # st.ARM_ANGLES_DEG in order
 # Zeta port (270).
 WINGS = ("alpha", "beta", "delta", "zeta")
 BOW_VIEW_DEG = (0.0, 90.0, 180.0, 270.0)
-STAGING_LIFT_M = 3.0  # a second-row fighter rises this far toward the axis to cross the hall onto its rack
+# Kept for M7-T20's hangar, which reads it: the second row no longer lifts to cross over (M7-T21: it waits lower, crosses under its
+# rack and rises straight onto it; ``cobra_arm`` gives ``staging_r`` and each bay its ``staging_path``).
+STAGING_LIFT_M = 0.0
 APPROACH_M = (1500.0, 300.0)  # the docking approach's far and near points, ahead of the mouth along the axis
 DRUM_SPIN_RAD_S = 0.148  # the generator's spin (babylon5_station.DRUM_SPIN_RAD_S, Q9)
 
@@ -93,8 +95,8 @@ def cobra_bays(f: Frames) -> list[dict]:
     normal, half size: 20 m across the arm, 14 m along it, one Starfury), its two leaves' hinges (outer edges, along the arm), the
     fighter racked over it in the launch hall (the rail from where it hangs to the door, the release point past the door, the
     drop's direction, radially out, the drum's surface velocity there, Q3: released with it, and its pose: nose to the bow, its back
-    to the drum's axis, span across the arm), and the second row's staging point across the hall with the path onto the rack (the
-    second wave)."""
+    to the drum's axis, span across the arm), and the second row's staging point in the lower hall with the path onto the rack (the
+    second wave: across under the rack, then out onto it)."""
     floor = st.ARM_HATCH[4] - st.DOOR_DEPTH
     cx = st.LAUNCH_STRIP_X
     out = []
@@ -104,10 +106,9 @@ def cobra_bays(f: Frames) -> list[dict]:
         wing = WINGS[arm]
         for door, z in enumerate(st.launch_door_centres()):
             hang = turn @ np.array([cx, floor - sp.HANG_DEPTH_M, z])
-            stage = np.array([cx + st.STAGING_OFFSET_X, floor - sp.HANG_DEPTH_M, z])
-            lift = np.array([0.0, -STAGING_LIFT_M, 0.0])
-            staging_path = [stage, stage + lift, np.array([cx, floor - sp.HANG_DEPTH_M, z]) + lift,
-                            np.array([cx, floor - sp.HANG_DEPTH_M, z])]
+            stage = np.array([cx + st.STAGING_OFFSET_X, st.STAGING_R, z])
+            # Across the lower hall under the rack, then straight out onto it between the rack's clamp arms.
+            staging_path = [stage, np.array([cx, st.STAGING_R, z]), np.array([cx, floor - sp.HANG_DEPTH_M, z])]
             release = turn @ np.array([cx, floor + sp.RELEASE_M, z])
             hinges = [{"leaf": side, "point": f.to(DRUM, turn @ np.array([cx + sx * sp.LEAF[1], floor, z])), "axis": [0.0, 0.0, 1.0]}
                       for side, sx in (("r", 1.0), ("l", -1.0))]
@@ -135,7 +136,7 @@ def cobra_bays(f: Frames) -> list[dict]:
     return out
 
 
-CLEAR_DISTANCE_M = 250.0  # the frame's farthest part over the door strip (the spine's top, the dome: r 462 to 465) is 226 m out
+CLEAR_DISTANCE_M = 260.0  # the frame's farthest part over the door strip (the spine's top corners, r 489) is 252 m out
 CLEAR_MARGIN_DEG = 10.0  # 1.2 s of the drum's turn: the drop from the rack through the release point, while the arm keeps turning
 SHIP_CLEARANCE_M = 2.0  # how close the dropping fighter's box may pass the frame
 FURY_HALF = (7.7, 4.9)  # a Starfury's half span (across the arm) and half length (along it)
@@ -194,7 +195,8 @@ def launch_clearance(step_deg: float = 0.5) -> dict:
 def cobra_arm_layout() -> dict:
     """The launch doors' layout on one arm as it stands on top of the drum (station frame, +y outward, z aft), for the hangar behind
     the menu (T20 refits M7-T09's hall to it with its ``to_arm``): the doors' plane and depth, each door's middle (x, z), its half
-    size, the pitch, the hall under them, where a fighter hangs and is released (radius) and where the second row is staged (x);
+    size, the pitch, the halls under them (the upper hall between the chamfers, the wider lower hall), the root's section and its
+    creases, where a fighter hangs and is released (radius) and where the second row is staged (x and radius);
     and each arm's wing and bays. The other arms are this one turned by their ``angle_deg`` - 90 about the axis (``angle_deg`` from
     +x toward +y in the station frame; ``bow_view_deg`` as the maintainer names them, seen from the bow)."""
     x0, x1, z0, z1 = st.LAUNCH_HALL
@@ -209,10 +211,15 @@ def cobra_arm_layout() -> dict:
         "row_z": [st.LAUNCH_ROW[0], st.LAUNCH_ROW[1]],
         "strip_x": st.LAUNCH_STRIP_X,
         "centres": [[st.LAUNCH_STRIP_X, round(z, 4)] for z in st.launch_door_centres()],
-        "hall": {"x": [x0, x1], "z": [z0, z1], "floor_r": floor, "ceiling_r": st.HALL_CEILING_R},
+        "hall": {"x": [x0, x1], "z": [z0, z1], "floor_r": floor, "ceiling_r": st.HALL_UPPER_R},
+        "lower_hall": {"x": [-st.HALL_LOWER_HALF, st.HALL_LOWER_HALF], "z": [z0, z1], "floor_r": st.HALL_UPPER_R,
+                       "ceiling_r": st.HALL_CEILING_R},
+        "section": [[round(x, 4), round(r, 4)] for x, r in st.arm_section(st.ARM_HATCH[2], st.ARM_HATCH[3], st.ARM_HATCH[4])],
+        "creases_x": [round(-(1.0 - st.ARM_CHAMFER) * st.ARM_HATCH[2], 4), round((1.0 - st.ARM_CHAMFER) * st.ARM_HATCH[2], 4)],
         "hang_r": floor - sp.HANG_DEPTH_M,
         "release_r": floor + sp.RELEASE_M,
         "staging_x": st.LAUNCH_STRIP_X + st.STAGING_OFFSET_X,
+        "staging_r": st.STAGING_R,
         "arms": [{"name": n, "wing": w, "angle_deg": a, "bow_view_deg": b, "bays": [f"cobra_bay_{w}_{k}" for k in range(1, st.LAUNCH_DOORS + 1)]}
                  for n, w, a, b in zip(ARM_NAMES, WINGS, st.ARM_ANGLES_DEG, BOW_VIEW_DEG, strict=True)],
     }
@@ -248,7 +255,6 @@ ZG_HOLD_Z = -700.0  # where a Saturn waits, ahead of the bow tip on the slot's l
 ZG_APPROACH_Z = -1800.0
 ZG_RELEASE_Z = -640.0  # where its pods are let go, just ahead of where it holds
 ZG_SLOT_Z = -60.0  # the slot's mouth, just ahead of the prongs' tips
-ZG_ENTRY_IN_M = 45.0  # how far in from the bay's front a pod comes to rest and leaves the world: the whole pod inside
 
 
 def cargo_bay(f: Frames) -> dict:
@@ -258,8 +264,7 @@ def cargo_bay(f: Frames) -> dict:
     the world. The bay is open ahead and above; the clear box is the room over its machinery. All on the frame."""
     y, front = sd.ZG_CENTRE_Y, sd.ZG_FRONT_Z
     hold = (0.0, y, ZG_HOLD_Z)
-    entry = (0.0, y, front + ZG_ENTRY_IN_M)
-    top = st.spine_row_at(front)[3]
+    entry = (0.0, y, 0.5 * (sd.ZG_COMPARTMENT_Z + sd.ZG_BACK_Z))  # a pod's middle with the whole pod in the compartment
     return {
         "name": "cargo_bay",
         "body": FRAME,
@@ -270,8 +275,8 @@ def cargo_bay(f: Frames) -> dict:
         "cargo_bay_path": [f.to(FRAME, (0.0, y, ZG_RELEASE_Z)), f.to(FRAME, (0.0, y, ZG_SLOT_Z)), f.to(FRAME, (0.0, y, front - 40.0)),
                             f.to(FRAME, (0.0, y, front)), f.to(FRAME, entry)],
         "cargo_bay_entry": f.to(FRAME, entry),
-        "cargo_bay_clear_min": f.to(FRAME, (-sd.ZG_HALF_X + 2.0, sd.ZG_FLOOR_Y + sd.ZG_MACHINE_M + 0.5, front)),
-        "cargo_bay_clear_max": f.to(FRAME, (sd.ZG_HALF_X - 2.0, top, sd.ZG_BACK_Z - 2.0)),
+        "cargo_bay_clear_min": f.to(FRAME, (-sd.ZG_THROAT[0] + 2.0, sd.ZG_FLOOR_Y + sd.ZG_MACHINE_M + 0.5, front)),
+        "cargo_bay_clear_max": f.to(FRAME, (sd.ZG_THROAT[0] - 2.0, sd.ZG_THROAT_Y[1] - 0.5, sd.ZG_BACK_Z - 2.0)),
         "axis": [0.0, 0.0, 1.0],
         "up": [0.0, 1.0, 0.0],
     }
@@ -321,8 +326,8 @@ def lights(f: Frames) -> list[dict]:
         out.append(_light(f"bay_light_{bay['wing']}_{bay['door_number']}", "bay", DRUM, inside, AMBER, f))
     for k, z in enumerate((sd.RIB_Z[1] - 10.0, sd.RIB_Z[4] - 10.0)):
         out.append(_light(f"main_docking_bay_red_{k + 1}", "main_docking_bay", DRUM, (0.0, 0.0, z), "#E0281A", f))
-    for k, z in enumerate((440.0, 470.0)):
-        out.append(_light(f"cargo_bay_red_{k + 1}", "cargo_bay", FRAME, (0.0, sd.ZG_CENTRE_Y, z), "#E0281A", f))
+    for k, z in enumerate((452.0, 478.0)):
+        out.append(_light(f"cargo_bay_red_{k + 1}", "cargo_bay", FRAME, (0.0, sd.ZG_CENTRE_Y, z), "#E0281A", f))  # in the compartment
     return out
 
 

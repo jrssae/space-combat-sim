@@ -676,3 +676,52 @@ Measured on the RX 6950 XT (Forward+, X11, fullscreen 6 144 x 3 456, 150 frames 
 `M7-T05_cargo_bay_sheet.png` (beside the show capture), `M7-T05_detail_strip_50m.png` (the new door strip beside the arm model, a
 door swung open onto its hall, the windows, a compartment, both bays at 50 m), `M7-T05_hardpoint_markers_sheet.png` (every hardpoint
 as a ball by kind). View sets `t05`, `cargo`, `strip` and `markers` in `scripts/station_sheet_node.gd`.
+
+## The Cobra arm's section and the roofed cargo bay (M7-T21)
+
+The maintainer, after approving T05: the arm read as one rectangular surface, the doors small on it, the cargo bay roofless. Read
+again off the STL, section by section (`references/screenshots/M7-T21 arm and cargo bay/stl_arm_sections.png`,
+`stl_cargo_bay_sections.png`):
+- **The root** (z 1 000 to 1 300, `station.ROOT_HALF`): a flat top at r 240.5 between two **creases** at x ±24.1, chamfers down to
+  (±45.8, 216), a short bevel to vertical sides at x ±47.2, a **notch** in each side (in to x ±41.3 between r 202.8 and 206.5), and
+  an underside rising from the corners (r 196.2) to a flat middle (r 202.8): a shallow V. Built as four convex pieces (body, band,
+  wings).
+- **The head and neck** (`ARM_NECK`): one chamfered loft from z 735 to the root, each row with its own chamfer across and down: its
+  flat top peaks at r 314 (z 800 to 840, flat ±30) and slopes to x ±80 at r 289; the circular hatch's raised cap (r 10) stands to
+  r 323.5, where D75's I1 to I4 stand. The fork's prongs are **posts** (5 m, the STL's are 1 m) under D75's L1 to L8, which keep
+  their positions.
+- **The doors** on the top face between the creases (the STL's door shafts): six, 20 x 14 m, centred (x 0), at the STL's 23 m pitch
+  from z 1 044 to 1 182, sunk 4 m (the doors' plane r 236.5). **The halls**: the upper hall under the doors (x ±20, r 219 to the
+  doors' plane) over the lower hall (x ±40, r 206.5 to 219, the notch line). The second row waits in the lower hall 28 m to port
+  (r 214), crosses under its rack and rises onto it; the racked fighter hangs at r 227.5, released at r 244.5.
+- **Launch clearance** recomputed: blocked 67 to 113.5 degrees, **57 to 123.5** with the margin; clear distance 260 m (the spine's
+  top corners over the strip, r 489, are 252 m out).
+- **The cargo bay** is the STL's: a **closed compartment inside the spine, roofed**, x ±94 inside, r 323 to 357, z 442 to 490 (the
+  STL's ends at 482; 8 m deeper so a 43 m pod lies in it lengthwise), reached only through the STL's **octagonal throat**: x ±34.1,
+  r 323.3 to 354.7, corners cut 7.6 m, z 420 to 442, in a 2.9 m frame out to x ±37. A pod (31.1 x 17.2 m) passes square-on with
+  18.5 m each side and 7 m over and under. A keel under it (x ±10, down to r 290, to the bow's pylon) and a ridge along its roof
+  (x ±10, to r 386), as the STL's; the spine there 2 m thinner (top 363, underside 313 at z 420). `cargo_bay_entry` is the
+  compartment's middle (z 466, r 339).
+- **Manifest** (field names kept for T06 and T20): `cobra_arm.hall` is the upper hall (`ceiling_r` 219); added `lower_hall`,
+  `section` (the root's outline), `creases_x`, `staging_r`; `staging_path` crosses under the rack (`STAGING_LIFT_M` kept at 0 for
+  M7-T20's import). Drum collision 191 shapes (budget 192), frame 138.
+
+### The per-part section check (CLAUDE.md "STL fidelity")
+
+`tools/refview/sections.py` cuts the STL and the build at a plane, fills each section by the nonzero winding rule (overlapping
+parts as their union, a tunnel left open) and compares them pixel by pixel (0.5 m) in a window round the part: IoU >= 0.90. A plane
+marked `outline` compares the sections filled row by row from their outer edges (the build's rooms, the halls and the cargo bay,
+are open where the STL is solid). The station's planes are data in `parts/station_fidelity.py`; each Cobra arm is cut in its own
+frame (turned onto the top). Tested in `tools/procgen/tests/test_station_fidelity.py`.
+
+| Part | Planes | Before (T05) | After (T21) |
+|---|---|---|---|
+| Cobra arms (each of four) | head 760, 800 (outline); neck 900, 960; root 1 030; root 1 060, 1 101.5 (outline, through the halls); root 1 240 | 0.65, 0.65, 0.41, 0.77, 0.38, 0.63, 0.69, 0.73 | **0.96, 0.95, 0.92, 0.96, 0.97, 0.93, 0.96, 0.98** |
+| Cargo bay | z 430, z 465, top (y 340) (outline) | 0.86, 0.88, 1.00 | **0.96, 0.96, 1.00** |
+| Cargo bay | side (x 0) | 0.26 | 0.46, **exempt**: the throat and compartment are open for the pods (the maintainer: "open only where pods enter"); the STL shuts the throat with a door plate |
+| Main docking bay | z 455, 470, 520, side | 0.00, 0.01, 0.68, 0.79 | the same, **exempt**: built from the maintainer's show references (T05, approved), not the STL's door |
+| Dorsal spine | z 1 500, 2 000, 2 650, 4 500, 5 650 | 0.63, 0.72, 0.60, 0.48, 0.52 | **failing**, unchanged: T04 built the spine to the silhouettes; the STL has sloped side plates and a narrower top it never had |
+| Command section | bow 200, 400; z 600, 1 000, 1 150, 1 250 | 0.66, 0.71, 0.38, 0.53, 0.51, 0.66 | **failing**, unchanged: the same (the bow fork's section, the spine over the docking sphere) |
+
+**Sheet (H):** `references/screenshots/M7-T21 arm and cargo bay/M7-T21_arm_and_cargo_bay_sheet.png` (the section overlays before
+and after with their IoU, the door strip at 50 m beside the model, a door open, the cargo bay; `SHEET_VIEWS=t21`).

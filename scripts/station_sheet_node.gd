@@ -32,8 +32,8 @@ const VIEWS: Array[Dictionary] = [
 ]
 ## M7-T19's sets (`views=<set>`): `t19` the cost views (from a Cobra bay, the aperture, 1 km, 10 km, 1 000 km), `fly` a pass along
 ## the station's underside about 200 m off the hull from the bow to the reactor (section joins and levels of detail), `doors` the
-## Cobra-bay doors close up (the near-only props); M7-T05's `t05` (the docking bay) and `markers` (every hardpoint as a ball). The
-## default set is T04's look sheet.
+## Cobra-bay doors close up (the near-only props); M7-T05's `t05` (the docking bay), `cargo`, `strip` and `markers` (every hardpoint
+## as a ball); M7-T21's `t21` (the creased arm and the roofed cargo bay). The default set is T04's look sheet.
 const VIEW_SETS: Dictionary = {
 	"t19": [
 		{"name": "bay_50m", "at": Vector3(300.0, -55.0, 1085.0), "aim": Vector3(243.0, 0.0, 1150.0), "fov": 62.0},
@@ -66,15 +66,28 @@ const VIEW_SETS: Dictionary = {
 		{"name": "cargo_bay_hold", "at": Vector3(260.0, 520.0, -900.0), "aim": Vector3(0.0, 340.0, 200.0), "fov": 50.0},
 	],
 	"strip": [
-		{"name": "strip_door_open_45m", "at": Vector3(58.0, 272.0, 1035.0), "aim": Vector3(18.0, 232.0, 1066.0), "fov": 62.0,
+		{"name": "strip_door_open_45m", "at": Vector3(38.0, 272.0, 1050.0), "aim": Vector3(0.0, 232.0, 1102.0), "fov": 62.0,
 				"open_door": 3},
-		{"name": "strip_hall_through_door", "at": Vector3(22.0, 258.0, 1052.0), "aim": Vector3(18.0, 222.0, 1066.0), "fov": 70.0,
+		{"name": "strip_hall_through_door", "at": Vector3(4.0, 262.0, 1085.0), "aim": Vector3(0.0, 212.0, 1101.5), "fov": 72.0,
 				"open_door": 3},
-		{"name": "strip_doors_50m", "at": Vector3(-25.0, 285.0, 1000.0), "aim": Vector3(18.0, 240.0, 1075.0), "fov": 62.0},
+		{"name": "strip_doors_50m", "at": Vector3(-48.0, 282.0, 1030.0), "aim": Vector3(0.0, 238.0, 1105.0), "fov": 62.0},
 		{"name": "strip_windows_50m", "at": Vector3(215.0, 432.0, 820.0), "aim": Vector3(165.0, 424.0, 870.0), "fov": 62.0},
 		{"name": "strip_compartment_50m", "at": Vector3(45.0, 500.0, 735.0), "aim": Vector3(0.0, 452.0, 780.0), "fov": 62.0},
 		{"name": "strip_main_docking_bay_50m", "at": Vector3(30.0, 15.0, 400.0), "aim": Vector3(0.0, 0.0, 465.0), "fov": 62.0},
-		{"name": "strip_cargo_bay_50m", "at": Vector3(30.0, 395.0, 395.0), "aim": Vector3(0.0, 345.0, 445.0), "fov": 62.0},
+		{"name": "strip_cargo_bay_50m", "at": Vector3(14.0, 350.0, 375.0), "aim": Vector3(0.0, 340.0, 460.0), "fov": 62.0},
+	],
+	# M7-T21: the Cobra arm's creased section and its door strip between the creases, a door open onto the halls, and the roofed
+	# cargo bay from outside and looking in down its throat.
+	"t21": [
+		{"name": "arm_doors_50m", "at": Vector3(-48.0, 282.0, 1030.0), "aim": Vector3(0.0, 238.0, 1105.0), "fov": 62.0},
+		{"name": "arm_side", "at": Vector3(95.0, 270.0, 1060.0), "aim": Vector3(10.0, 228.0, 1120.0), "fov": 55.0},
+		{"name": "arm_door_open_45m", "at": Vector3(38.0, 272.0, 1050.0), "aim": Vector3(0.0, 232.0, 1102.0), "fov": 62.0,
+				"open_door": 3},
+		{"name": "arm_halls_through_door", "at": Vector3(4.0, 262.0, 1085.0), "aim": Vector3(0.0, 212.0, 1101.5), "fov": 72.0,
+				"open_door": 3},
+		{"name": "cargo_bay_outside", "at": Vector3(120.0, 450.0, 250.0), "aim": Vector3(0.0, 340.0, 440.0), "fov": 55.0},
+		{"name": "cargo_bay_throat", "at": Vector3(10.0, 352.0, 300.0), "aim": Vector3(0.0, 340.0, 470.0), "fov": 58.0, "sun": "aft"},
+		{"name": "cargo_bay_inside", "at": Vector3(0.0, 345.0, 425.0), "aim": Vector3(-20.0, 334.0, 485.0), "fov": 78.0, "sun": "aft"},
 	],
 	"markers": [
 		{"name": "markers_side", "at": Vector3(-3600.0, 1300.0, 3200.0), "aim": Vector3(0.0, 0.0, 3500.0), "fov": 62.0, "markers": 40.0},
@@ -269,6 +282,7 @@ func _on_frame() -> void:
 	if _index < 0 or _index >= _views.size():
 		return
 	_light_from_camera()
+	_station.drum_pivot.basis = Basis.IDENTITY  # held at rest every frame: the arms stay where the shots expect them
 	_frame += 1
 	if _frame == int(options["settle"]) - TIMED_FRAMES:
 		_timed_us = Time.get_ticks_usec()

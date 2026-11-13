@@ -834,6 +834,29 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   collision read the new arm.
 - **Done when:** a sheet of STL section cuts beside the new arm, the doors at 50 m, and the cargo bay, approved by the maintainer
   (H); tests green; committed.
+- **Done (as built; the sheet and the two exemptions approved by the maintainer, 2026-11-13):** details in
+  `docs/assets-station.md`, "The Cobra arm's section and the roofed cargo bay (M7-T21)".
+  - **The arm off the STL's sections:** the root's section (flat top at r 240.5 between creases at x ±24.1, chamfers to a bevel
+    and vertical sides at x ±47.2, a notch in each side, a shallow V underside, `station.ROOT_HALF`); the head and neck one chamfered
+    loft peaking at r 314 with the hatch's cap to r 323.5 (D75's I1 to I4 on it); the fork's prongs as posts under L1 to L8. No D75
+    mount moved.
+  - **The doors** between the creases on the top face: six, 20 x 14 m, x 0, the STL's 23 m pitch from z 1 044; the doors' plane
+    r 236.5. **The halls:** upper (x ±20) over lower (x ±40); the second row waits in the lower hall and rises onto its rack.
+    Launch clearance 57 to 123.5 degrees, clear distance 260 m.
+  - **The cargo bay** as the STL's: a roofed compartment inside the spine (x ±94, z 442 to 490) behind the STL's octagonal throat
+    (x ±34.1, r 323.3 to 354.7, corners cut 7.6 m), with the STL's keel and ridge; a pod passes square-on with 18.5 m each side and
+    7 m over and under.
+  - **The per-part section check** (CLAUDE.md "STL fidelity"): `tools/refview/sections.py` (cuts filled by winding, IoU in a window,
+    outline mode for rooms the STL leaves solid), the planes as data in `parts/station_fidelity.py`, tested in
+    `test_station_fidelity.py`. Scores before (T05) and after: the arms 0.38 to 0.77 → 0.92 to 0.98 (each of the four), the cargo
+    bay 0.86 to 1.00 → 0.96 to 1.00. Exempt (approved): the main docking bay (built from the show references, T05) and the cargo
+    bay's side cut (open for the pods; the STL shuts its throat). **Pending for T22:** the dorsal spine (0.48 to 0.72) and the command
+    section (0.38 to 0.71), their tests skipped until then.
+  - Manifest field names kept (`cobra_arm.hall` now the upper hall; added `lower_hall`, `section`, `creases_x`, `staging_r`).
+    Drum collision 191 shapes (budget 192), frame 138. T04's seven-door names stay in `station.py` for M7-T09's hangar on HEAD;
+    T20 drops them with its refit.
+  - Tests: Python station files 96 (94 pass, 2 pending), GUT station files 61/61. Sheet:
+    `references/screenshots/M7-T21 arm and cargo bay/M7-T21_arm_and_cargo_bay_sheet.png`.
 
 ### M7-T22 The dorsal spine and the command section to the STL
 

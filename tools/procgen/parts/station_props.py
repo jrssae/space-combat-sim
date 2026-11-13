@@ -257,21 +257,21 @@ CLAMP_BLOCKS = (  # in the clamp's frame (origin on the deck at the door's edge)
 HANG_DEPTH_M = 9.0  # a held Starfury's middle under the doors' plane, toward the axis (as M7-T09 hangs them)
 RELEASE_M = 8.0  # where a launch lets it go: this far out past the doors' plane, clear of the deck (4 m) by 4 m
 GANTRY_BLOCKS = (  # over one door, in the arm's frame at the door's middle on its plane (-y into the hall): lo, hi, swatch column
-    ((-34.0, -24.0, -1.2), (16.0, -22.0, 1.2), 0),  # the beam across the hall
-    ((-0.6, -22.0, -0.6), (0.6, -13.0, 0.6), 0),  # the rack's drop arm down to the fighter's back
-    ((-3.0, -13.0, -2.0), (3.0, -11.5, 2.0), 1),  # its clamp head, red
-    ((-3.4, -11.5, -2.4), (-2.2, -10.6, 2.4), 2), ((2.2, -11.5, -2.4), (3.4, -10.6, 2.4), 2),  # its pads
-    ((-22.6, -22.0, -0.6), (-21.4, -13.0, 0.6), 0),  # the staging clamp's arm, over the second row
-    ((-25.0, -13.0, -2.0), (-19.0, -11.5, 2.0), 1),  # its head
-    ((-12.5, -21.8, -0.8), (-10.5, -21.2, 0.8), 4), ((10.5, -21.8, -0.8), (12.5, -21.2, 0.8), 4),  # work lamps under the beam
-    ((-30.5, -21.8, -0.8), (-28.5, -21.2, 0.8), 4),
-    ((-33.8, -20.0, -3.0), (-33.0, -2.0, 3.0), 2), ((15.0, -20.0, -3.0), (15.8, -2.0, 3.0), 2),  # wall panels either side
+    # The rack: an arm from each wall of the upper hall reaching in over the fighter's claw tips, a red clamp head at its end; the
+    # middle stays open so the second row rises onto the rack between them.
+    ((8.2, -15.0, -1.0), (20.0, -13.5, 1.0), 0), ((-20.0, -15.0, -1.0), (-8.2, -13.5, 1.0), 0),
+    ((8.2, -15.5, -2.0), (10.0, -11.0, 2.0), 1), ((-10.0, -15.5, -2.0), (-8.2, -11.0, 2.0), 1),
+    # The staging clamp in the lower hall, from its port wall over the second row's fighter (its back toward the axis).
+    ((-40.0, -29.6, -1.0), (-36.2, -28.2, 1.0), 0), ((-37.4, -29.6, -2.0), (-35.8, -26.0, 2.0), 1),
+    ((19.0, -12.0, -0.8), (19.8, -10.0, 0.8), 4), ((-19.8, -12.0, -0.8), (-19.0, -10.0, 0.8), 4),  # work lamps on the walls
+    ((-39.8, -27.0, -0.8), (-39.0, -26.0, 0.8), 4),
+    ((-19.8, -18.5, -3.0), (-19.0, -2.0, 3.0), 2), ((19.0, -18.5, -3.0), (19.8, -2.0, 3.0), 2),  # wall panels either side
 )
 
 
 def gantry() -> Mesh:
-    """The launch hall's gantry over one door: a beam across the hall, the drop arm and the clamp that holds the racked Starfury by its
-    back, the staging clamp over the second row, work lamps, dark panels on the walls (seen through an open door)."""
+    """The launch hall's rack over one door: clamp arms from the walls holding the racked Starfury by its claw tips, the staging clamp
+    over the second row in the lower hall, work lamps, dark panels on the walls (seen through an open door)."""
     verts, faces, uvs = [], [], []
     for lo, hi, swatch in GANTRY_BLOCKS:
         _box(np.asarray(lo, dtype=float), np.asarray(hi, dtype=float), _flat_uv(swatch), verts, faces, uvs)

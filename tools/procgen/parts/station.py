@@ -47,32 +47,50 @@ ARM_ANGLES_DEG = (90.0, 0.0, 270.0, 180.0)  # top, starboard, bottom, port: the 
 # The Cobra arm's head as it stands on top of the drum: z, half width, inner and outer radius.
 # The head is a box with a flat top (the circular clamped hatch on it), then a ribbed neck tapering to the hatch section
 # (references/cobra bay references/cobra arm untextured model.jpg).
-# The head's front stays under the fork's prongs, so D75's light turrets stand on the prongs' tops (M7-T05).
-ARM_HEAD = [(640.0, 55.0, 225.0, 282.0), (700.0, 80.0, 235.0, 288.0), (730.0, 80.0, 235.0, 320.0), (870.0, 78.0, 232.0, 320.0),
-            (900.0, 75.0, 225.0, 300.0), (980.0, 50.0, 212.0, 258.0), (1000.0, 47.0, 203.0, 243.0)]
+# The head and neck (M7-T21, off the STL's sections): one chamfered loft from behind the fork's posts to the root, its flat top
+# peaking where the circular hatch sits; each row (z, half width, underside, top, chamfer across, chamfer down). The underside lies
+# inside the docking sphere. D75's light turrets keep the posts' tops, its interceptors stand on the hatch's cap at r 324.
+ARM_NECK = ((735.0, 60.0, 232.0, 298.0, 30.0, 16.0), (760.0, 72.0, 235.0, 311.0, 35.0, 27.0), (800.0, 80.0, 235.0, 314.0, 50.0, 25.0),
+            (840.0, 80.0, 235.0, 314.0, 49.0, 25.5), (880.0, 75.0, 240.0, 304.0, 50.0, 26.0), (900.0, 62.0, 246.0, 290.0, 34.0, 36.0),
+            (960.0, 58.8, 220.0, 268.0, 32.4, 27.7), (1000.0, 47.2, 202.8, 240.5, 23.1, 24.5))
+HATCH_CAP = (10.0, 323.5)  # the hatch's raised cap: its radius and top (the STL's)
+# The arm's outline along its length, for what follows its edges (trim, ribs).
+ARM_HEAD = [row[:4] for row in ARM_NECK]
 ARM_TOP_HATCH = (800.0, 24.0, 30.0)  # the circular hatch on the head's top: z of its middle, inner and outer radius
 ARM_RIBS = (906.0, 984.0, 9)  # the neck's ribs on both flanks: z from, z to, how many
-ARM_HATCH = (1000.0, 1300.0, 47.0, 203.0, 243.0)  # z from, z to, half width, inner and outer radius (the frame's top)
-# M7-T09's hangar (``b5_interior``) is laid out on T04's seven 64 x 28 m doors; T20 refits it to the launch doors below and then
-# drops these four names.
+ARM_HATCH = (1000.0, 1300.0, 47.2, 202.8, 240.5)  # z from, z to, half width, underside and top of the root section (the STL's)
+# M7-T09's hangar (b5_interior) is laid out on T04's seven 64 x 28 m doors; T20 refits it to the launch doors below and drops
+# these four names.
 COBRA_DOORS = 7
 DOOR_HALF = (32.0, 14.0)  # half across, half along
 DOOR_ROW = (1020.0, 1290.0)  # where T04's row of doors ran along the arm
 DOOR_DEPTH = 4.0  # the deck stands this far above the doors
-# The launch doors (M7-T05, the maintainer's untextured arm model): six to an arm, each taking one Starfury (15.4 m across its claws,
-# 9.8 m long, its span across the arm) with about 2.3 m to spare each side, in a framed strip on the root section's outward face just
-# aft of the ribbed neck, toward its starboard edge (on the top arm); a launch hall under the strip.
+# The root's section (M7-T21, read off the STL): a flat top between two creases, chamfers down to a short bevel and vertical sides,
+# a notch in each side near the bottom, an underside rising to a flat middle (a shallow V). Half of it, from the top's middle round
+# to the underside's middle (x, r).
+ROOT_HALF = ((0.0, 240.5), (24.1, 240.5), (45.8, 216.0), (47.2, 214.5), (47.2, 206.5), (41.3, 206.5), (41.3, 202.8), (47.2, 202.8),
+             (47.2, 196.2), (24.1, 202.8), (0.0, 202.8))
+ARM_CHAMFER = 23.1 / 47.2  # the taper aft of the root keeps the creases' share
+# The launch doors (M7-T05, M7-T21: the maintainer's untextured arm model and the STL's door shafts): six to an arm, each taking one
+# Starfury (15.4 m across its claws, 9.8 m long, its span across the arm) with about 2.3 m to spare each side, on the root section's
+# flat top between its creases, at the STL's 23 m pitch from just aft of the ribbed neck; a launch hall under them.
 LAUNCH_DOORS = 6
 LAUNCH_DOOR_HALF = (10.0, 7.0)  # half across, half along
-LAUNCH_ROW = (1016.0, 1130.0)  # where the row runs along the arm: a 19 m pitch
-LAUNCH_STRIP_X = 18.0  # the strip's middle across the arm
-LAUNCH_HALL = (-16.0, 34.0, 1010.0, 1136.0)  # the hall under the strip: x from, x to, z from, z to
-# The second row (the maintainer, 2026-11-13: twelve Starfuries an arm, launching in two waves of six): staged across the hall from
-# the racks, under the deck where no open door shows them; each moves over onto its rack when the first wave has dropped.
-STAGING_OFFSET_X = -22.0
-HALL_CEILING_R = 209.0  # the launch hall's ceiling, 30 m in from the doors' plane
-ARM_PRONGS_X = (-41.0, 41.0)  # the fork's two prongs' middles (D75's light turrets stand on them)
-ARM_PRONG = (612.0, 705.0, 19.0, 255.0, 292.0)  # z from, z to, half width, underside and top
+LAUNCH_ROW = (1044.0, 1182.0)  # where the row runs along the arm: a 23 m pitch
+LAUNCH_STRIP_X = 0.0  # the doors' middle across the arm: the top face's middle
+# The launch hall: an upper hall under the doors between the chamfers (x +-20, r 219 to the doors' plane) over a wider lower hall
+# (x +-42, r 207 to 219) where the second row waits.
+LAUNCH_HALL = (-20.0, 20.0, 1038.0, 1188.0)  # the upper hall: x from, x to, z from, z to
+HALL_UPPER_R = 219.0  # where the upper hall gives onto the lower one
+HALL_LOWER_HALF = 40.0
+HALL_CEILING_R = 206.5  # the lower hall's ceiling, toward the axis: the root's notch line
+# The second row (the maintainer, 2026-11-13: twelve Starfuries an arm, launching in two waves of six): staged in the lower hall to
+# port of each rack, under the chamfer where no open door shows it; it crosses under the rack and rises onto it once the first
+# wave has dropped.
+STAGING_OFFSET_X = -28.0
+STAGING_R = 214.0
+ARM_PRONGS_X = (-41.5, 41.5)  # the fork's two posts' middles (D75's light turrets stand on them)
+ARM_PRONG = (620.0, 705.0, 2.5, 255.0, 288.5)  # z from, z to, half width, underside and top: posts, as the STL's (M7-T21)
 ARM_KNOB = (1380.0, 269.0, (45.0, 29.0, 40.0))  # z, radius, semi-axes across, radial, along
 STRINGER_ANGLES_DEG = tuple(270.0 + 36.0 * k for k in range(10))  # from the bottom, every 36 degrees
 STRINGER = (14.0, 331.0, 341.0)  # width, inner and outer radius
@@ -80,7 +98,7 @@ STRINGER = (14.0, 331.0, 341.0)  # width, inner and outer radius
 RING_FRAME = (488.0, 548.0, 133.0, 157.0)  # the aperture's ring: z from, z to, inner and outer radius
 SPINE: list[tuple[float, float, float, float]] = [  # z, half width, underside, top
     # The tops under D75's mounts are flat where a mount stands (H1 and H2 at z 515, L10 and I7 at 2 650, L12 and I9 at 5 650).
-    (420.0, 172.0, 311.0, 368.0), (500.0, 185.0, 315.0, 375.0), (530.0, 172.0, 320.0, 375.0), (580.0, 150.0, 330.0, 400.0), (640.0, 80.0, 340.0, 405.0),
+    (420.0, 172.0, 313.0, 363.0), (500.0, 185.0, 316.0, 375.0), (530.0, 172.0, 320.0, 375.0), (580.0, 150.0, 330.0, 400.0), (640.0, 80.0, 340.0, 405.0),
     (700.0, 150.0, 348.0, 445.0), (800.0, 165.0, 362.0, 452.0), (950.0, 165.0, 362.0, 455.0), (1050.0, 160.0, 395.0, 462.0),
     (1300.0, 150.0, 395.0, 458.0), (1400.0, 110.0, 415.0, 459.0), (1500.0, 100.0, 418.0, 459.0), (1600.0, 100.0, 425.0, 462.0),
     (1700.0, 100.0, 428.0, 475.0), (1790.0, 100.0, 428.0, 520.0), (2085.0, 100.0, 428.0, 480.0), (2300.0, 90.0, 428.0, 500.0),
@@ -253,7 +271,7 @@ def flat_plate(outline: Sequence[tuple[float, float]], pieces: Sequence[Sequence
 
 # --- the drum --------------------------------------------------------------------------------------------------------
 def door_centres() -> list[float]:
-    """M7-T09's hangar's door positions along the arm (T04's seven doors; T20 refits the hangar to ``launch_door_centres``)."""
+    """M7-T09's hangar's door positions along the arm (T04's seven doors; T20 refits the hangar to launch_door_centres)."""
     z0, z1 = DOOR_ROW
     pitch = (z1 - z0) / COBRA_DOORS
     return [z0 + pitch * (k + 0.5) for k in range(COBRA_DOORS)]
@@ -266,20 +284,100 @@ def launch_door_centres() -> list[float]:
     return [z0 + pitch * (k + 0.5) for k in range(LAUNCH_DOORS)]
 
 
+def arm_section(w: float, bottom: float, top: float, chamfer: float | None = None, drop: float | None = None) -> list[tuple[float, float]]:
+    """The head's, neck's and taper's chamfered section (x, r), counter-clockwise from the underside's port corner: the flat top
+    between its creases, the chamfers (``chamfer`` across, ``drop`` down; 45 degrees when only one is given), the sides, the
+    underside."""
+    c = ARM_CHAMFER * w if chamfer is None else chamfer
+    d = c if drop is None else drop
+    return [(-w, bottom), (w, bottom), (w, top - d), (w - c, top), (-(w - c), top), (-w, top - d)]
+
+
+def root_outline() -> list[tuple[float, float]]:
+    """The root's whole section (x, r), counter-clockwise from the top's middle (``ROOT_HALF`` and its mirror)."""
+    right = list(ROOT_HALF)
+    left = [(-x, r) for x, r in reversed(ROOT_HALF[1:-1])]
+    return right + left
+
+
+def root_pieces() -> list[list[tuple[float, float]]]:
+    """The root's section as convex pieces: the body over the notches, the band between them, the underside's two wings."""
+    (_, top), (cx, _), (bx, by), (sx, sy), _, (nx, ny0), (_, ny1), _, (_, wy), (ux, uy), _ = ROOT_HALF
+    body = [(sx, ny0), (sx, sy), (bx, by), (cx, top), (-cx, top), (-bx, by), (-sx, sy), (-sx, ny0)]
+    band = [(-nx, ny1), (nx, ny1), (nx, ny0), (-nx, ny0)]
+    wing = [(ux, uy), (sx, wy), (sx, ny1)]
+    return [body, band, wing, [(-x, r) for x, r in reversed(wing)]]
+
+
+def root_chamfer_x(r: float) -> float:
+    """Where the root's chamfer stands at radius ``r`` (between its crease and its bevel)."""
+    (_, top), (cx, _), (bx, by) = ROOT_HALF[0], ROOT_HALF[1], ROOT_HALF[2]
+    return float(np.interp(r, [by, top], [bx, cx]))
+
+
+def hex_slab(rows: Sequence[tuple[float, ...]], material: Material) -> Mesh:
+    """A solid of chamfered sections along z (``z, half width, underside, top`` and optionally the chamfers), closed at both ends."""
+    corners, insides = [], []
+    rings = [np.array([[x, r, row[0]] for x, r in arm_section(*row[1:])]) for row in rows]
+    for ra, rb in zip(rings[:-1], rings[1:], strict=True):
+        inside = 0.5 * (ra.mean(axis=0) + rb.mean(axis=0))
+        for i in range(6):
+            k = (i + 1) % 6
+            corners.append(np.array([ra[i], ra[k], rb[k], rb[i]]))
+            insides.append(inside)
+    for ring, dz in ((rings[0], 1.0), (rings[-1], -1.0)):  # each end as two quads: the box under the creases and the trapezoid over
+        inside = ring.mean(axis=0) + [0.0, 0.0, dz]
+        corners += [ring[[0, 1, 2, 5]], ring[[5, 2, 3, 4]]]
+        insides += [inside, inside]
+    return quads(corners, insides, material)
+
+
+def prism_xr(points: Sequence[tuple[float, float]], z0: float, z1: float, material: Material) -> Mesh:
+    """A convex section (x, r) extruded from ``z0`` to ``z1``."""
+    ring0 = np.array([[x, r, z0] for x, r in points])
+    ring1 = ring0 + [0.0, 0.0, z1 - z0]
+    n = len(points)
+    inside = 0.5 * (ring0.mean(axis=0) + ring1.mean(axis=0))
+    corners = [np.array([ring0[i], ring0[(i + 1) % n], ring1[(i + 1) % n], ring1[i]]) for i in range(n)]
+    insides = [inside] * n
+    parts = [quads(corners, insides, material)]
+    for ring, dz in ((ring0, 1.0), (ring1, -1.0)):  # each end fanned from its first corner
+        for i in range(1, n - 1):
+            tri = ring[[0, i, i + 1]]
+            parts.append(_triangle(tri, ring.mean(axis=0) + [0.0, 0.0, dz], material))
+    return Mesh.concatenate(parts)
+
+
+def _triangle(tri: np.ndarray, inside: np.ndarray, material: Material) -> Mesh:
+    """One flat triangle facing away from ``inside``, its own chart."""
+    t = np.asarray(tri, dtype=float)
+    if float(np.cross(t[1] - t[0], t[2] - t[0]) @ (t.mean(axis=0) - inside)) < 0.0:
+        t = t[[0, 2, 1]]
+    uv = planar_uv(t)
+    return Mesh(t, np.array([[0, 1, 2]]), np.zeros(1, dtype=np.int64), (material,), np.zeros(1, dtype=np.int64), np.array([uv]))
+
+
 def launch_deck(m: Material) -> list[Mesh]:
-    """The hatch section round the launch doors and the hall under them: the floor under everything, solid round the hall, and the
-    deck over the hall with a hole for each door (sunk ``DOOR_DEPTH`` below the deck), so the hall shows through an open door."""
-    z0, z1, w, r0, top = ARM_HATCH
-    floor, ceiling = top - DOOR_DEPTH, HALL_CEILING_R
-    hx0, hx1, hz0, hz1 = LAUNCH_HALL
+    """The root section round the launch doors and the halls under them (M7-T21: its section off the STL): the whole section fore
+    and aft of the halls; under them its band and wings; the lower hall's walls up to the upper hall, the shoulders between the upper
+    hall and the chamfers, and the deck over it with a hole for each door, sunk ``DOOR_DEPTH`` below the top; so the halls show
+    through an open door."""
+    z0, z1, _, _, top = ARM_HATCH
+    floor, ceiling, upper = top - DOOR_DEPTH, HALL_CEILING_R, HALL_UPPER_R
+    _, hx1, hz0, hz1 = LAUNCH_HALL
+    lw = HALL_LOWER_HALF
     cx, (dx, dz) = LAUNCH_STRIP_X, LAUNCH_DOOR_HALF
-    parts = [
-        slab([(z0, -w, w, r0, ceiling), (z1, -w, w, r0, ceiling)], m),
-        block((-w, ceiling, z0), (hx0, top, z1), m), block((hx1, ceiling, z0), (w, top, z1), m),
-        block((hx0, ceiling, z0), (hx1, top, hz0), m), block((hx0, ceiling, hz1), (hx1, top, z1), m),
-        block((hx0, floor, hz0), (cx - dx, top, hz1), m), block((cx + dx, floor, hz0), (hx1, top, hz1), m),
-    ]
-    edges = [hz0] + [e for c in launch_door_centres() for e in (c - dz, c + dz)] + [hz1]
+    _, band, wing_r, wing_l = root_pieces()
+    parts = [prism_xr(piece, a, b, m) for a, b in ((z0, hz0), (hz1, z1)) for piece in root_pieces()]
+    parts += [prism_xr(piece, hz0, hz1, m) for piece in (band, wing_r, wing_l)]
+    (_, crease_top), (crease_x, _), (bevel_x, bevel_r), (side_x, side_r) = ROOT_HALF[0], ROOT_HALF[1], ROOT_HALF[2], ROOT_HALF[3]
+    for sx in (-1.0, 1.0):
+        wall = [(lw, ceiling), (side_x, ceiling), (side_x, side_r), (bevel_x, bevel_r), (root_chamfer_x(upper), upper), (lw, upper)]
+        shoulder = [(hx1, upper), (root_chamfer_x(upper), upper), (root_chamfer_x(floor), floor), (hx1, floor)]
+        deck = [(cx + dx, floor), (root_chamfer_x(floor), floor), (crease_x, crease_top), (cx + dx, crease_top)]
+        for piece in (wall, shoulder, deck):
+            parts.append(prism_xr([(sx * x, r) for x, r in piece], hz0, hz1, m))
+    edges = [hz0] + [e for c_ in launch_door_centres() for e in (c_ - dz, c_ + dz)] + [hz1]
     for a, b in zip(edges[0::2], edges[1::2], strict=True):
         if b - a > 0.5:
             parts.append(block((cx - dx, floor, a), (cx + dx, top, b), m))
@@ -301,16 +399,17 @@ def door_glow(m: Material) -> Mesh:
 
 
 def arm_mesh(m: Material) -> Mesh:
-    """One Cobra arm standing on top of the drum (+y): the forked head with its circular clamped hatch, the ribbed neck, the hatch
-    section with its frame of launch doors, the knob."""
-    head = slab([(z, -w, w, r0, r1) for z, w, r0, r1 in ARM_HEAD], m)
+    """One Cobra arm standing on top of the drum (+y): the forked head with its circular clamped hatch, the ribbed neck and the
+    root section with their creased, chamfered section (M7-T21), the launch doors and halls in the root, the knob."""
+    neck = hex_slab(ARM_NECK, m)
     z0, z1, w, r0, r1 = ARM_HATCH
-    floor = r1 - DOOR_DEPTH
-    hatch = Mesh.concatenate([*launch_deck(m), slab([(z1, -w, w, r0, floor), (z1 + 40.0, -0.8 * w, 0.8 * w, r0 + 10.0, r1 - 5.0)], m)])
+    hatch = Mesh.concatenate([*launch_deck(m), hex_slab([(z1, w, r0, r1), (z1 + 40.0, 0.8 * w, r0 + 10.0, r1 - 5.0)], m)])
     pz0, pz1, half, under, top = ARM_PRONG
     prongs = [block((x - half, under, pz0), (x + half, top, pz1), m) for x in ARM_PRONGS_X]
     hz, ri, ro = ARM_TOP_HATCH
-    head_top = ARM_HEAD[3][3]
+    head_top = max(r[3] for r in ARM_NECK)  # the peak the hatch sits on
+    cap = lathe([(head_top - 1.0, 0.0), (head_top - 1.0, HATCH_CAP[0]), (HATCH_CAP[1], HATCH_CAP[0]), (HATCH_CAP[1], 0.0)], 24, m,
+                creases=(1, 2)).transformed(rotation_x(-0.5 * math.pi), (0.0, 0.0, ARM_TOP_HATCH[0]))
     rim = lathe([(head_top, ro), (head_top + 1.5, ro), (head_top + 1.5, ri), (head_top, ri)], 32, m, creases=(1, 2))
     rim = rim.transformed(rotation_x(-0.5 * math.pi), (0.0, 0.0, hz))
     clamps = [block((-2.0, head_top, -5.0), (2.0, head_top + 3.0, 5.0), m).transformed(rotation_y(math.radians(a)), (0.0, 0.0, 0.0))
@@ -319,13 +418,15 @@ def arm_mesh(m: Material) -> Mesh:
     rz0, rz1, count = ARM_RIBS
     ribs = []
     for z in np.linspace(rz0, rz1, count):
-        hw = float(np.interp(z, [r[0] for r in ARM_HEAD], [r[1] for r in ARM_HEAD]))
-        r_top = float(np.interp(z, [r[0] for r in ARM_HEAD], [r[3] for r in ARM_HEAD]))
+        zs = [r[0] for r in ARM_NECK]
+        hw = float(np.interp(z, zs, [r[1] for r in ARM_NECK]))
+        r_bottom = float(np.interp(z, zs, [r[2] for r in ARM_NECK]))
+        r_top = float(np.interp(z, zs, [r[3] - r[5] for r in ARM_NECK]))  # up to where the chamfer starts
         for sx in (-1.0, 1.0):
-            ribs.append(block((sx * hw - 1.0 if sx > 0 else -hw - 4.0, 228.0, z - 2.0), (hw + 4.0 if sx > 0 else -hw + 1.0, r_top - 6.0, z + 2.0), m))
+            ribs.append(block((sx * hw - 1.0 if sx > 0 else -hw - 4.0, r_bottom + 2.0, z - 2.0), (hw + 4.0 if sx > 0 else -hw + 1.0, r_top - 2.0, z + 2.0), m))
     kz, kr, semi = ARM_KNOB
     knob = ellipsoid((0.0, kr, kz), semi, m)
-    return Mesh.concatenate([head, hatch, *prongs, rim, *clamps, *ribs, knob])
+    return Mesh.concatenate([neck, hatch, *prongs, cap, rim, *clamps, *ribs, knob])
 
 
 def mount_plinths(m: Material, body: str) -> Mesh:
