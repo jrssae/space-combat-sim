@@ -1,0 +1,361 @@
+// The free-falling frame's unit tests (M6-T04): AC1's frame half, flown as the game flies it (sample, then step).
+use super::*;
+
+use crate::ephemeris::{Elements, Kind};
+
+const DT: f64 = 1.0 / 60.0;
+const GM_EARTH: f64 = 3.986e14;
+const GM_STAR: f64 = 1.088e20;
+const GM_EPSILON_III: f64 = 1.68e14;
+const LOW_ORBIT_M: f64 = 6.771e6;
+// D64's budget for an empty frame against the analytic orbit, at every tick of one low orbit.
+const BUDGET_M: f64 = 0.05;
+
+fn length(v: V3) -> f64 {
+    (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt()
+}
+
+fn sub(a: V3, b: V3) -> V3 {
+    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+}
+
+// A planet alone, at the system's root.
+fn planet_alone(gm: f64) -> System {
+    let mut s = System::new();
+    s.add_root(Kind::Planet, gm);
+    s
+}
+
+// The Epsilon system as the data holds it: the star, Epsilon III, the station's place on its 27 500 km rail.
+fn epsilon() -> (System, usize, usize) {
+    let mut s = System::new();
+    s.add_root(Kind::Star, GM_STAR);
+    let planet = s.add_body(Kind::Planet, GM_EPSILON_III, 0, Elements::circular(8.976e10, GM_STAR)).unwrap();
+    let station = s.add_body(Kind::Minor, 0.0, planet, Elements::circular(2.75e7, GM_EPSILON_III)).unwrap();
+    (s, planet, station)
+}
+
+// Flies an empty frame's anchor along `orbit` around `home` for one period, as the tick does, and gives the worst distance
+// from the analytic orbit and the distance at the end.
+fn fly(system: System, home: usize, orbit: Elements) -> (f64, f64) {
+    let mut frame = Frame::default();
+    frame.set_system(system, gravity::A_MIN_DEFAULT);
+    let start = orbit.state_at(0.0);
+    assert!(frame.anchor_in_orbit(home, start.position, start.velocity, 0.0, DT));
+    let ticks = (orbit.period_s() / DT).ceil() as u64;
+    let (mut worst, mut end) = (0.0_f64, 0.0);
+    for tick in 0..ticks {
+        frame.sample(tick as f64 * DT);
+        frame.step(DT);
+        let Anchor::Particle { position, .. } = frame.anchor() else { panic!("the anchor stays a particle") };
+        end = length(sub(position, orbit.state_at((tick + 1) as f64 * DT).position));
+        worst = worst.max(end);
+    }
+    (worst, end)
+}
+
+#[test]
+fn an_empty_frame_follows_a_low_circular_orbit_within_the_budget() {
+    let (worst, _) = fly(planet_alone(GM_EARTH), 0, Elements::circular(LOW_ORBIT_M, GM_EARTH));
+    assert!(worst < BUDGET_M, "worst {worst} m");
+}
+
+#[test]
+fn an_empty_frame_ends_an_eccentric_orbit_within_a_tenth_of_a_metre() {
+    let orbit = Elements { eccentricity: 0.3, ..Elements::circular(LOW_ORBIT_M / 0.7, GM_EARTH) };
+    let (_, end) = fly(planet_alone(GM_EARTH), 0, orbit);
+    assert!(end < 0.1, "end {end} m");
+}
+
+#[test]
+fn a_frame_round_a_planet_that_circles_its_star_keeps_the_budget() {
+    // Held against the planet's centre: the star is far outside its zone, and its 35 km/s never enters the sums.
+    let (system, planet, _) = epsilon();
+    let radius = 5.2e6;
+    let (worst, _) = fly(system, planet, Elements::circular(radius, GM_EPSILON_III));
+    assert!(worst < BUDGET_M, "worst {worst} m");
+}
+
+#[test]
+fn the_station_rail_lies_outside_every_zone_so_the_frame_is_quiet() {
+    let (system, _, station) = epsilon();
+    let mut frame = Frame::default();
+    frame.set_system(system, gravity::A_MIN_DEFAULT);
+    assert!(frame.anchor_on_rail(station));
+    assert!(!frame.sample(1234.0));
+    assert_eq!(frame.pull(), [0.0; 3]);
+    assert_eq!(frame.residual([5000.0, -300.0, 20.0]), [0.0; 3]);
+    let (home, state) = frame.anchor_state(DT).unwrap();
+    assert_eq!(home, 1, "the rail is measured from the planet it circles");
+    assert!((length(state.position) - 2.75e7).abs() < 1e-3);
+}
+
+#[test]
+fn a_rail_inside_a_zone_feels_the_tidal_residual_and_none_at_its_own_point() {
+    let mut system = planet_alone(GM_EARTH);
+    let place = system.add_body(Kind::Minor, 0.0, 0, Elements::circular(LOW_ORBIT_M, GM_EARTH)).unwrap();
+    let mut frame = Frame::default();
+    frame.set_system(system, gravity::A_MIN_DEFAULT);
+    assert!(frame.anchor_on_rail(place));
+    assert!(frame.sample(100.0));
+    assert_eq!(frame.residual([0.0; 3]), [0.0; 3]);
+    // 1 km straight up from the planet: the pull weakens by twice the tidal gradient times the height.
+    let (_, state) = frame.anchor_state(DT).unwrap();
+    let r = length(state.position);
+    let up = [state.position[0] / r * 1000.0, state.position[1] / r * 1000.0, state.position[2] / r * 1000.0];
+    let felt = frame.residual(up);
+    let expected = 2.0 * GM_EARTH / (r * r * r) * 1000.0;
+    assert!((length(felt) - expected).abs() < expected * 1e-3, "felt {} expected {expected}", length(felt));
+}
+
+#[test]
+fn the_local_origin_is_where_the_residual_is_measured_from() {
+    let mut system = planet_alone(GM_EARTH);
+    let place = system.add_body(Kind::Minor, 0.0, 0, Elements::circular(LOW_ORBIT_M, GM_EARTH)).unwrap();
+    let mut frame = Frame::default();
+    frame.set_system(system, gravity::A_MIN_DEFAULT);
+    frame.anchor_on_rail(place);
+    frame.sample(0.0);
+    let far = frame.residual([4000.0, 2500.0, -700.0]);
+    frame.set_origin([3000.0, 2000.0, -500.0]);
+    frame.sample(0.0);
+    assert_eq!(frame.residual([1000.0, 500.0, -200.0]), far);
+}
+
+#[test]
+fn a_frame_starts_its_particle_half_a_kick_back() {
+    let mut frame = Frame::default();
+    frame.set_system(planet_alone(GM_EARTH), gravity::A_MIN_DEFAULT);
+    let start = Elements::circular(LOW_ORBIT_M, GM_EARTH).state_at(0.0);
+    assert!(frame.anchor_in_orbit(0, start.position, start.velocity, 0.0, DT));
+    let Anchor::Particle { velocity, .. } = frame.anchor() else { panic!("a particle") };
+    assert_ne!(velocity, start.velocity, "held behind the tick");
+    let (_, state) = frame.anchor_state(DT).unwrap();
+    for axis in 0..3 {
+        assert!((state.velocity[axis] - start.velocity[axis]).abs() < 1e-9);
+    }
+}
+
+#[test]
+fn no_system_or_a_bad_anchor_leaves_the_frame_without_pull() {
+    let mut frame = Frame::default();
+    assert!(!frame.sample(0.0));
+    assert_eq!(frame.residual([1.0, 2.0, 3.0]), [0.0; 3]);
+    assert!(frame.anchor_state(DT).is_none());
+    frame.set_system(planet_alone(GM_EARTH), gravity::A_MIN_DEFAULT);
+    assert!(!frame.anchor_on_rail(3));
+    assert!(!frame.anchor_in_orbit(1, [LOW_ORBIT_M, 0.0, 0.0], [0.0; 3], 0.0, DT));
+    assert!(!frame.anchor_in_orbit(0, [f64::NAN, 0.0, 0.0], [0.0; 3], 0.0, DT));
+    assert_eq!(frame.anchor(), Anchor::None);
+}
+
+// --- the velocity rebase (M6-T05): the frame off its anchor -------------------------------------------------------------
+
+fn add(a: V3, b: V3) -> V3 {
+    [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
+}
+
+// A frame on a low-orbit rail, where the tidal residual is large enough to show any slip.
+fn low_orbit_frame() -> Frame {
+    let mut system = planet_alone(GM_EARTH);
+    let place = system.add_body(Kind::Minor, 0.0, 0, Elements::circular(LOW_ORBIT_M, GM_EARTH)).unwrap();
+    let mut frame = Frame::default();
+    frame.set_system(system, gravity::A_MIN_DEFAULT);
+    assert!(frame.anchor_on_rail(place));
+    frame
+}
+
+// One tick of a mover held in the local frame, as Jolt takes it: kick with the frame's residual, then drift.
+fn fly_mover(frame: &Frame, local: &mut V3, velocity: &mut V3) {
+    let felt = frame.residual(*local);
+    gravity::step(local, velocity, felt, DT);
+}
+
+#[test]
+fn a_boost_and_the_way_back_change_no_movers_path_against_the_anchor() {
+    // Two copies of one mover: one in a frame that never leaves its anchor, one in a frame boosted onto it at tick 300,
+    // boosted again at 900 and brought back at 1500. Their places against the anchor must agree at every tick.
+    let mut riding = low_orbit_frame();
+    let mut boosted = low_orbit_frame();
+    let (mut x_r, mut v_r) = ([1200.0, -300.0, 150.0], [1800.0, 900.0, -400.0]);
+    let (mut x_b, mut v_b) = (x_r, v_r);
+    let mut worst: f64 = 0.0;
+    for tick in 0..2400 {
+        let now = tick as f64 * DT;
+        riding.sample(now);
+        boosted.sample(now);
+        if tick == 300 || tick == 900 {
+            let dv = v_b;
+            boosted.boost(dv);
+            v_b = sub(v_b, dv);
+            assert!(!boosted.riding());
+        }
+        if tick == 1500 {
+            let before = add(boosted.origin_velocity(), v_b);
+            let dv = boosted.boost_to_anchor(DT);
+            v_b = sub(v_b, dv);
+            let after = add(boosted.origin_velocity(), v_b);
+            assert!(length(sub(after, before)) < 1e-9, "a boost changes no velocity against the anchor");
+            assert!(boosted.riding());
+        }
+        fly_mover(&riding, &mut x_r, &mut v_r);
+        fly_mover(&boosted, &mut x_b, &mut v_b);
+        riding.step(DT);
+        boosted.step(DT);
+        if tick == 1500 {
+            assert_eq!(boosted.origin_velocity(), [0.0; 3], "at rest against the anchor once the tick has stepped");
+        }
+        let apart = length(sub(add(boosted.origin(), x_b), add(riding.origin(), x_r)));
+        worst = worst.max(apart);
+        let apart_v = length(sub(add(boosted.origin_velocity(), v_b), v_r));
+        assert!(apart_v < 1e-6, "tick {tick}: velocities {apart_v} m/s apart");
+    }
+    assert!(worst < 1e-5, "worst {worst} m");
+    assert!(length(boosted.origin()) > 10_000.0, "the frame did leave its anchor");
+    assert_eq!(riding.origin(), [0.0; 3], "a frame that rides never moves its origin");
+}
+
+#[test]
+fn a_frame_off_its_anchor_feels_nothing_at_its_own_origin() {
+    let mut frame = low_orbit_frame();
+    frame.set_origin([40_000.0, 5_000.0, -2_000.0]);
+    frame.sample(0.0);
+    let riding_felt = frame.residual([0.0; 3]);
+    assert!(length(riding_felt) > 0.01, "40 km from the anchor the riding frame feels the tide");
+    frame.boost([500.0, 0.0, 0.0]);
+    assert_eq!(frame.residual([0.0; 3]), riding_felt, "the tick's forces were built before the boost");
+    frame.sample(0.0);
+    assert_eq!(frame.residual([0.0; 3]), [0.0; 3], "it falls with its own origin from the next sample");
+    let origin_before = frame.origin();
+    frame.step(DT);
+    let moved = sub(frame.origin(), origin_before);
+    assert!((moved[0] - 500.0 * DT).abs() < 1e-3, "the origin drifts at the frame's velocity");
+    assert!(length(sub(frame.origin_velocity(), [500.0, 0.0, 0.0])) > 1e-6, "and takes the pull at its own place");
+}
+
+#[test]
+fn a_boosted_frame_with_no_pull_drifts_in_a_straight_line_and_keeps_its_motion_through_a_new_anchor() {
+    let mut frame = Frame::default();
+    frame.boost([30.0, -60.0, 90.0]);
+    for tick in 0..60 {
+        frame.sample(tick as f64 * DT);
+        assert_eq!(frame.residual([10.0, 0.0, 0.0]), [0.0; 3]);
+        frame.step(DT);
+    }
+    let origin = frame.origin();
+    assert!(length(sub(origin, [30.0, -60.0, 90.0])) < 1e-9, "one second at the boost's velocity: {origin:?}");
+    frame.set_system(planet_alone(GM_EARTH), gravity::A_MIN_DEFAULT);
+    assert_eq!(frame.origin(), origin);
+    assert_eq!(frame.origin_velocity(), [30.0, -60.0, 90.0]);
+    assert!(!frame.riding());
+    frame.clear();
+    assert_eq!(frame.origin_velocity(), [30.0, -60.0, 90.0]);
+    let dv = frame.boost_to_anchor(DT);
+    assert_eq!(dv, [-30.0, 60.0, -90.0]);
+    frame.step(DT);
+    assert_eq!(frame.origin_velocity(), [0.0; 3]);
+    assert_eq!(frame.origin(), origin, "riding again: the origin stays");
+}
+
+// --- many movers at once (M6-T07): the tier's rows and the bolts --------------------------------------------------------
+
+#[test]
+fn the_rows_feel_the_bits_one_mover_feels_however_they_are_split() {
+    let mut frame = low_orbit_frame();
+    assert!(frame.sample(0.0));
+    frame.set_origin([1500.0, -200.0, 40.0]);
+    assert!(frame.sample(0.0));
+    let movers: Vec<V3> = (0..64).map(|i| [i as f64 * 157.3 - 5000.0, (i % 7) as f64 * -91.0, (i % 5) as f64 * 333.3]).collect();
+    let one_by_one: Vec<V3> = movers.iter().map(|&m| frame.residual(m)).collect();
+    let mut all = movers.clone();
+    frame.residual_rows(&mut all);
+    assert_eq!(all, one_by_one, "a batch is the per-mover sum, bit for bit");
+    // Any split (a worker per part) gives the same bits: each row depends on nothing but itself.
+    for parts in [1, 6] {
+        let mut split = movers.clone();
+        let size = split.len().div_ceil(parts);
+        for chunk in split.chunks_mut(size) {
+            frame.residual_rows(chunk);
+        }
+        assert_eq!(split, one_by_one, "{parts} parts");
+    }
+    assert!(all.iter().any(|g| length(*g) > 1e-3), "the tide shows a few km out");
+}
+
+#[test]
+fn a_quiet_frame_gives_every_row_exactly_nothing() {
+    let (system, _, station) = epsilon();
+    let mut frame = Frame::default();
+    frame.set_system(system, gravity::A_MIN_DEFAULT);
+    let mut rows = vec![[1.0e3, 2.0, -3.0e4]; 5];
+    frame.residual_rows(&mut rows);
+    assert_eq!(rows, vec![[0.0; 3]; 5], "no anchor: nothing pulls");
+    // The station's rail lies outside Epsilon III's zone (D66): its space has no gravity at all.
+    assert!(frame.anchor_on_rail(station));
+    assert!(!frame.sample(0.0));
+    let mut rows = vec![[1.0e3, 2.0, -3.0e4]; 5];
+    frame.residual_rows(&mut rows);
+    assert_eq!(rows, vec![[0.0; 3]; 5], "on the station's rail: nothing pulls");
+}
+
+// M6-T08: what the HUD's reference and the impact rule read.
+#[test]
+fn a_body_is_seen_from_a_rail_where_it_is_and_moving_against_the_place() {
+    let (system, planet, station) = epsilon();
+    let mut frame = Frame::default();
+    frame.set_system(system.clone(), gravity::A_MIN_DEFAULT);
+    assert!(frame.anchor_on_rail(station));
+    frame.set_origin([1000.0, -200.0, 50.0]);
+    frame.sample(3600.0);
+    let seen = frame.body_local_state(planet, DT).unwrap();
+    let rail = system.relative_state(station, planet, 3600.0);
+    for i in 0..3 {
+        let origin = [1000.0, -200.0, 50.0][i];
+        assert!((seen.position[i] + rail.position[i] + origin).abs() < 1e-6, "the planet's centre against the local origin");
+        assert!((seen.velocity[i] + rail.velocity[i]).abs() < 1e-9, "the planet moves against the place at minus the rail");
+    }
+    assert!(frame.body_local_state(99, DT).is_none());
+}
+
+#[test]
+fn inside_a_zone_the_dominant_body_and_its_pull_are_given_and_none_outside() {
+    let mut frame = Frame::default();
+    frame.set_system(planet_alone(GM_EARTH), gravity::A_MIN_DEFAULT);
+    let v = (GM_EARTH / LOW_ORBIT_M).sqrt();
+    assert!(frame.anchor_in_orbit(0, [LOW_ORBIT_M, 0.0, 0.0], [0.0, v, 0.0], 0.0, DT));
+    frame.sample(0.0);
+    let (index, pull) = frame.dominant_at([0.0; 3]).unwrap();
+    assert_eq!(index, 0);
+    assert!((length(pull) - GM_EARTH / (LOW_ORBIT_M * LOW_ORBIT_M)).abs() < 1e-9, "the full pull of the planet");
+    let seen = frame.body_local_state(0, DT).unwrap();
+    assert!((seen.position[0] + LOW_ORBIT_M).abs() < 1e-6 && (seen.velocity[1] + v).abs() < 0.01);
+    assert!(frame.dominant_at([1.0e9, 0.0, 0.0]).is_none(), "outside every zone nothing is dominant");
+}
+
+#[test]
+fn a_mover_inside_the_impact_radius_hits_the_body_and_one_above_it_does_not() {
+    let mut frame = Frame::default();
+    frame.set_system(planet_alone(GM_EARTH), gravity::A_MIN_DEFAULT);
+    let v = (GM_EARTH / LOW_ORBIT_M).sqrt();
+    assert!(frame.anchor_in_orbit(0, [LOW_ORBIT_M, 0.0, 0.0], [0.0, v, 0.0], 0.0, DT));
+    frame.sample(0.0);
+    assert_eq!(frame.inside_body([-300_000.0, 0.0, 0.0]), None, "no radii set: nothing hits");
+    frame.set_impact_radii(vec![6.371e6 + 1.0e5]);
+    assert_eq!(frame.inside_body([0.0; 3]), None, "400 km up, above the 100 km atmosphere");
+    assert_eq!(frame.inside_body([-299_000.0, 0.0, 0.0]), None, "101 km up");
+    assert_eq!(frame.inside_body([-301_000.0, 0.0, 0.0]), Some(0), "99 km up: below the atmosphere's top");
+}
+
+#[test]
+fn the_origin_pull_is_zero_while_riding_and_the_anchors_fall_off_it() {
+    let mut frame = Frame::default();
+    frame.set_system(planet_alone(GM_EARTH), gravity::A_MIN_DEFAULT);
+    let v = (GM_EARTH / LOW_ORBIT_M).sqrt();
+    assert!(frame.anchor_in_orbit(0, [LOW_ORBIT_M, 0.0, 0.0], [0.0, v, 0.0], 0.0, DT));
+    frame.set_origin([2000.0, 0.0, 0.0]);
+    frame.sample(0.0);
+    assert_eq!(frame.origin_pull(), [0.0; 3], "riding: the origin takes the anchor's pull");
+    frame.boost([0.0, 10.0, 0.0]);
+    frame.sample(DT);
+    assert!(frame.origin_pull()[0] > 0.0, "2 km farther out the tide pulls the origin outward");
+}

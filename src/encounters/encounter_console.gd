@@ -36,6 +36,10 @@ static func register(director: EncounterDirector) -> void:
 		&"check_work": {"get": func() -> int: return director.check_work,
 				"doc": "Ships the last release check looked at (its own, never every ship in play)"},
 		&"build_ms": {"get": func() -> int: return director.build_ms, "unit": "ms", "doc": "Time the pools took to build"},
+		&"gate_events": {"get": func() -> int: return director.gate_events,
+				"doc": "Events that came out of or left through the jumpgate (M6-T14)"},
+		&"gate_in_transit": {"get": func() -> int: return director.in_transit,
+				"doc": "Ships waiting for the jumpgate's arrival vortex to open"},
 	}), director)
 
 

@@ -18,6 +18,7 @@ var length_m: float = 0.0
 
 func _init() -> void:
 	add_to_group(WorldFrame.SHIFTABLE_GROUP)
+	add_to_group(WorldFrame.ANCHORED_GROUP)
 
 
 ## Builds both pieces from the generated asset; false (and nothing built) when it was not generated.

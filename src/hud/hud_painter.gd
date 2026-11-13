@@ -291,9 +291,18 @@ static func angles_text(f: HudFrame) -> String:
 	return "H %+.1f°   V %+.1f°" % [f.velocity_h_deg, f.velocity_v_deg]
 
 
-## "REF 3.2 km  +450 m/s": distance to the reference point and the speed at which it is closing (+) or opening (-).
+## "REF BABYLON 5  3.20 km  +450 m/s": what the speed is read against (its name explains a jump in the speed when it
+## changes), the distance to it and the speed at which it is closing (+) or opening (-).
 static func reference_text(f: HudFrame) -> String:
-	return "REF %s  %+.0f m/s" % [_range_text(f.reference_range_m), f.reference_closing_mps]
+	var named: String = "REF %s  " % f.reference_name if not f.reference_name.is_empty() else "REF "
+	return "%s%s  %+.0f m/s" % [named, _range_text(f.reference_range_m), f.reference_closing_mps]
+
+
+## "ALT 412 km": the height above the body the ship is near (M6-T08), "" when none is near.
+static func altitude_text(f: HudFrame) -> String:
+	if not f.altitude_valid:
+		return ""
+	return "ALT %s" % _range_text(f.altitude_m)
 
 
 static func _range_text(range_m: float) -> String:
@@ -344,6 +353,8 @@ func _draw_speed(f: HudFrame, surface: HudSurface, s: float) -> void:
 	_text(angles_text(f), at, 16.0 * s, LINE_COLOR, align)
 	if f.reference_valid:
 		_text(reference_text(f), at + Vector2(0.0, 20.0 * s), 14.0 * s, Color(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, 0.75), align)
+	if f.altitude_valid:
+		_text(altitude_text(f), at + Vector2(0.0, 36.0 * s), 14.0 * s, Color(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, 0.75), align)
 
 
 # --- drift sphere -------------------------------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 extends MissionScript
 ## The test mission (M5-T05): every kind of wait the API offers, in three steps. `test_mission.json` declares its objectives.
 
-## Where the two raiders come out of their jump point (universe metres from the scenario's origin).
+## Where the two raiders come out of their carrier's jump point (universe metres from the scenario's origin).
 const RAIDER_OFFSETS: Array[Vector3] = [Vector3(0.0, 0.0, -9000.0), Vector3(300.0, 0.0, -9000.0)]
 
 
@@ -20,7 +20,8 @@ func step_raid(m: MissionApi) -> void:
 	for i: int in RAIDER_OFFSETS.size():
 		var offset: Vector3 = RAIDER_OFFSETS[i]
 		m.spawn({"type": "raider_fighter", "name": "RAIDER %d" % (i + 1), "anchor": "origin",
-				"offset": [offset.x, offset.y, offset.z], "behaviour": {"type": "ai", "profile": "raider"}, "arrival": "jump"})
+				"offset": [offset.x, offset.y, offset.z], "behaviour": {"type": "ai", "profile": "raider"}, "arrival": "jump",
+				"via": "carrier"})
 		m.send("RAIDER %d" % (i + 1), "NAV ALPHA")
 	m.objective_add(&"raiders")
 	m.objective_add(&"protect")

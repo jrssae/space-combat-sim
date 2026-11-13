@@ -206,6 +206,15 @@ func test_the_capital_share_is_an_option_from_0_to_1() -> void:
 	assert_false(bool(BenchRunner.parse_options(PackedStringArray(["capitals=x"]))["ok"]))
 
 
+func test_the_frame_boost_is_an_option_in_m_per_s() -> void:
+	assert_eq(float(BenchRunner.parse_options(PackedStringArray())["boost"]), 0.0, "riding the anchor by default")
+	var o: Dictionary = BenchRunner.parse_options(PackedStringArray(["boost=50"]))
+	assert_true(o["ok"], String(o.get("error", "")))
+	assert_eq(float(o["boost"]), 50.0)
+	assert_false(bool(BenchRunner.parse_options(PackedStringArray(["boost=-1"]))["ok"]))
+	assert_false(bool(BenchRunner.parse_options(PackedStringArray(["boost=x"]))["ok"]))
+
+
 # --- battle and typical (M4-T07) ---------------------------------------------------------------------------------
 
 
@@ -215,6 +224,7 @@ const ENTITY_KEYS: Array[String] = ["fighters_near", "fighters_far", "capitals",
 
 func test_a_short_battle_writes_every_entity_count_and_puts_the_factions_back() -> void:
 	var game_table: FactionTable = Factions.table()
+	var anchor_before: String = main.world.anchor_text()
 	assert_true(_exec("bench battle 50 3 warmup=0.5 seed=1 label=battle_test").ok)
 	await _ticks(2)
 	var sides: Array[StringName] = BenchLayout.sides(BenchLayout.BATTLE)
@@ -225,7 +235,9 @@ func test_a_short_battle_writes_every_entity_count_and_puts_the_factions_back() 
 	var mix: Dictionary = BenchLayout.mix(BenchLayout.BATTLE, 50)
 	assert_eq(main.bench.standins.capitals().size(), int(mix["capitals"]), "the capitals are in play")
 	assert_eq(main.bench.standins.asteroid_count(), int(mix["asteroids"]), "and the rocks")
-	assert_ne(main.world.environment_accel(Vector3.ZERO), Vector3.ZERO, "and the moon")
+	assert_eq(main.world.anchor_text(), "orbit %s" % BenchLayout.GRAVITY_BODY, "the battle is flown in a low orbit of a body of the data")
+	assert_true(main.world.gravity_active(), "so it pulls")
+	assert_gt(main.world.environment_accel(Vector3(0.0, 0.0, -5000.0)).length(), 1e-3, "5 km out: the tide of a real body")
 	var by_faction: Dictionary = {}
 	for c: Combatant in main.ships.alive():
 		by_faction[c.faction] = int(by_faction.get(c.faction, 0)) + 1
@@ -258,7 +270,8 @@ func test_a_short_battle_writes_every_entity_count_and_puts_the_factions_back() 
 		assert_true(c.faction == Factions.EARTH_ALLIANCE or c.faction == Factions.RAIDERS, "%s flies for a game faction again" % c.display_name)
 	assert_eq(main.bench.standins.capitals().size(), 0, "the stand-ins are gone")
 	assert_eq(main.bench.standins.asteroid_count(), 0)
-	assert_eq(main.world.environment_accel(Vector3.ZERO), Vector3.ZERO, "and the moon")
+	assert_eq(main.world.anchor_text(), anchor_before, "the frame's anchor is back (%s)" % anchor_before)
+	assert_eq(main.world.environment_accel(Vector3(0.0, 0.0, -5000.0)), Vector3.ZERO, "and nothing pulls on the station's rail")
 
 
 func test_a_short_typical_run_writes_its_summary() -> void:
@@ -273,3 +286,102 @@ func test_a_short_typical_run_writes_its_summary() -> void:
 	assert_eq(int(entities.get("sides", 0)), 2)
 	assert_gt(int(entities.get("launches", 0)), 0, "the carriers launched")
 	assert_eq(int(s.get("ships_max", 0)), 51, "the fighters and the player; capitals are counted apart")
+
+
+# --- arrivals through jump points (M6-T20) ------------------------------------------------------------------------
+
+
+func test_a_battle_comes_in_through_jump_points_in_waves() -> void:
+	# M6-T23: only the capitals open points; each fighter group comes through its side's capital point or the battle's gate.
+	main.bench.wave_points = 12  # a small battle in several waves
+	var mix: Dictionary = BenchLayout.mix(BenchLayout.BATTLE, 50)
+	assert_true(_exec("bench battle 50 1 warmup=0 seed=1 label=arrivals_test").ok)
+	await _ticks(2)
+	var arrivals: BattleArrivals = main.bench.arrivals
+	assert_not_null(arrivals, "a battle arrives through jump points")
+	assert_gt(arrivals.waves, 1, "%d units in waves of 12" % arrivals.points.size())
+	assert_gt(arrivals.count_via(BattleArrivals.VIA_CAPITAL), 0, "groups through capital points")
+	assert_gt(arrivals.count_via(BattleArrivals.VIA_GATE), 0, "and groups through the gate")
+	var plan: Array[Dictionary] = BenchLayout.plan(BenchLayout.BATTLE, 50, 1)
+	var first_riders: int = 0
+	var first_gate: int = 0
+	var first_capitals: int = 0
+	for point: Dictionary in arrivals.points:
+		if int(point["wave"]) != 0:
+			continue
+		var count: int = (point["members"] as PackedInt32Array).size()
+		match StringName(point["via"]):
+			BattleArrivals.VIA_OWN:
+				first_capitals += count
+			BattleArrivals.VIA_CAPITAL:
+				first_riders += count
+			BattleArrivals.VIA_GATE:
+				first_gate += count
+	assert_gt(first_gate, 0, "the first wave has gate groups (seed 1)")
+	assert_eq(main.bench.standins.capitals().size(), first_capitals, "the first wave's capitals are in")
+	assert_eq(main.ships.alive().size(), first_riders, "with the fighters riding their points; the gate's wait for its vortex")
+	assert_lt(first_riders + first_gate + first_capitals, plan.size(), "the rest are still to come")
+	assert_eq(main.bench.jumps.open_count(), first_capitals, "one point per capital, none for a fighter group")
+	for point: JumpVortex in main.bench.jumps.points():
+		if point.is_active():
+			assert_true(point.held and point.opener is CapitalStandin, "every point is held by the capital that opened it")
+	var gate: Jumpgate = main.bench.gate
+	assert_not_null(gate, "the battle has its own jumpgate")
+	assert_gt(gate.global_position.distance_to(main.ship.global_position),
+			TierDirector.radius_m() * (1.0 + TierDirector.HYSTERESIS) + 2000.0,
+			"beyond the tier's reach from the player, so its ships come in as far ones (after T23)")
+	assert_eq(gate.arrivals_per_tick, BenchRunner.GATE_ARRIVALS_PER_TICK, "a few through it a tick")
+	assert_eq(gate.pending_arrivals(), first_gate, "the gate's groups wait for its blue vortex")
+	assert_eq(gate.vortex.direction_name(), &"arrival")
+	var transits: VortexTransits = VortexTransits.of(main.world)
+	assert_eq(transits.count() + transits.arrivals_unseen, first_riders + first_capitals,
+			"each flies out of its point's funnel, or is too small on screen to and comes out in place (M6-T22)")
+	assert_gt(transits.count(), 0, "the near ones fly the funnel")
+	for c: Combatant in main.ships.alive():
+		assert_true(_inside_a_point(c.ship.global_position), "%s came out of a capital's open point" % c.display_name)
+		if transits.is_passing(c.ship):
+			assert_lt(transits.scale_of(c.ship), 1.0, "%s comes out of the ring shrunk" % c.display_name)
+	await wait_for_signal(main.bench.finished, 120.0, "the bench finishes")
+	assert_null(main.bench.gate, "the battle's gate goes with the run")
+	var s: Dictionary = _summary_of("arrivals_test")
+	var came: Dictionary = s.get("arrivals", {})
+	assert_eq(String(came.get("mode", "")), "jump")
+	assert_eq(int(came.get("points", 0)), arrivals.points.size())
+	assert_eq(int(came.get("opened", 0)), arrivals.points.size(), "every unit came in before the window")
+	assert_lte(int(came.get("max_open", 99)), 12)
+	assert_eq(int(came.get("gate_arrived", 0)), arrivals.ships_via(BattleArrivals.VIA_GATE), "every gate fighter came through it")
+	assert_eq(int(came.get("collapses", -1)), 0, "no point collapsed: every capital stayed by its point")
+	assert_gte(float(came.get("warmup_s", 0.0)), arrivals.last_at_s() + BenchRunner.ARRIVAL_SETTLE_S,
+			"the warm-up stretched until the last wave was in")
+	var entities: Dictionary = s.get("entities", {})
+	assert_eq(int(entities.get("fighters_near", 0)) + int(entities.get("fighters_far", 0)), int(mix["fighters"]),
+			"every fighter in by the measured window")
+	assert_eq(int(entities.get("capitals", 0)), int(mix["capitals"]), "every capital too")
+
+
+func test_a_placed_battle_has_every_ship_from_the_start() -> void:
+	assert_true(_exec("bench battle 50 1 warmup=0 seed=1 arrive=placed label=placed_test").ok)
+	await _ticks(2)
+	var mix: Dictionary = BenchLayout.mix(BenchLayout.BATTLE, 50)
+	assert_null(main.bench.arrivals)
+	assert_eq(main.ships.alive().size(), int(mix["fighters"]), "every fighter in place at once")
+	assert_eq(main.bench.standins.capitals().size(), int(mix["capitals"]))
+	assert_true(main.bench.jumps == null or main.bench.jumps.open_count() == 0, "no jump point")
+	await wait_for_signal(main.bench.finished, 60.0, "the bench finishes")
+	assert_eq(String((_summary_of("placed_test").get("arrivals", {}) as Dictionary).get("mode", "")), "placed")
+	assert_false(BenchRunner.parse_options(PackedStringArray(["arrive=teleport"]))["ok"], "jump or placed only")
+
+
+# Whether `at` (World) lies inside the mouth of one of the bench's open points, near its plane.
+func _inside_a_point(at: Vector3) -> bool:
+	for point: JumpVortex in main.bench.jumps.points():
+		if not point.is_active():
+			continue
+		var axis: Vector3 = -point.global_basis.z.normalized()
+		var off: Vector3 = at - point.global_position
+		var along: float = off.dot(axis)
+		# A rider comes out round the axis just in front of the mouth, or is still a little way down the funnel.
+		if (off - axis * along).length() < point.fit.mouth_radius_m and along > -point.fit.depth_m - 1.0 \
+				and along < point.fit.mouth_radius_m:
+			return true
+	return false

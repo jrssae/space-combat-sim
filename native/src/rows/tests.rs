@@ -232,3 +232,71 @@ fn the_tier_appends_its_rows_column_by_column_as_it_pushes_them() {
     assert_eq!(appended.flags[5], FLAG_TIER | FLAG_HULL | FLAG_HULK, "a hulk stays a hulk");
     assert!(!appended.rigid[5]);
 }
+
+// --- the velocity rebase (M6-T05) -----------------------------------------------------------------------------------
+
+#[test]
+fn a_boost_takes_dv_off_every_row_with_a_body_and_leaves_a_static_row_alone() {
+    let mut rows = rows_with(&[7, 8, 9]);
+    rows.handles[1] = 0; // a rock: tied to the anchor, no velocity of its own
+    let before = rows.velocities.clone();
+    let positions = rows.positions.clone();
+    let dv = Vector3::new(1500.0, -20.0, 800.0);
+    rows.boost(dv);
+    assert_eq!(rows.velocities[0], before[0] - dv);
+    assert_eq!(rows.velocities[1], before[1]);
+    assert_eq!(rows.velocities[2], before[2] - dv);
+    assert_eq!(rows.positions, positions, "a boost moves nothing");
+}
+
+#[test]
+fn a_boost_takes_dv_off_every_bolt_and_keeps_the_step_it_flew() {
+    let mut bolts = Bolts::default();
+    for i in 0..3_i64 {
+        let f = i as f32;
+        bolts.insert_owned(i, Vector3::new(f, 0.0, 0.0), Vector3::new(0.0, 0.0, -1500.0 - f), 0, 1, 0, 0.3, 10.0, [1.0; 4], 0, 9.0, 0);
+    }
+    bolts.last_steps[1] = Vector3::new(0.0, 0.0, -25.0);
+    let dv = Vector3::new(0.0, 0.0, -2000.0);
+    bolts.boost(dv);
+    for i in 0..3 {
+        assert_eq!(bolts.velocities[i], Vector3::new(0.0, 0.0, 500.0 - i as f32));
+        assert_eq!(bolts.positions[i], Vector3::new(i as f32, 0.0, 0.0));
+    }
+    assert_eq!(bolts.last_steps[1], Vector3::new(0.0, 0.0, -25.0));
+}
+
+#[test]
+fn a_boost_takes_dv_off_the_tier_rows_and_off_the_cruise_a_capital_holds() {
+    use crate::tier::{KIND_CAPITAL, KIND_FIGHTER};
+    let mut tier = TierRows::default();
+    for (i, kind) in [KIND_FIGHTER, KIND_CAPITAL].into_iter().enumerate() {
+        let id = i as i64;
+        tier.add(kind, 100 + id, 200 + id, -1 - id, 0, Vector3::new(5.0, 6.0, 7.0), Vector3::new(40.0, 0.0, 0.0),
+            Basis::IDENTITY, Vector3::ZERO, id);
+    }
+    tier.cruise[1] = Vector3::new(40.0, 0.0, 0.0);
+    let dv = Vector3::new(2000.0, 0.0, -10.0);
+    tier.boost(dv);
+    assert_eq!(tier.velocities[0], Vector3::new(-1960.0, 0.0, 10.0));
+    assert_eq!(tier.velocities[1], Vector3::new(-1960.0, 0.0, 10.0));
+    assert_eq!(tier.cruise[0], Vector3::ZERO, "a fighter holds no cruise");
+    assert_eq!(tier.cruise[1], Vector3::new(-1960.0, 0.0, 10.0), "the capital still cruises at 40 m/s against the anchor");
+    assert_eq!(tier.positions[0], Vector3::new(5.0, 6.0, 7.0));
+}
+
+#[test]
+fn taking_positions_changes_only_the_positions_and_refuses_another_count() {
+    let mut rows = rows_with(&[7, 3, 9]);
+    let before_ids = rows.ids.clone();
+    let before_velocities = rows.velocities.clone();
+    let before_radii = rows.radii.clone();
+    let moved = vec![Vector3::new(1.0, 2.0, 3.0), Vector3::new(4.0, 5.0, 6.0), Vector3::new(-1.0, -2.0, -3.0)];
+    assert!(rows.take_positions(&moved));
+    assert_eq!(rows.positions, moved);
+    assert_eq!(rows.ids, before_ids);
+    assert_eq!(rows.velocities, before_velocities);
+    assert_eq!(rows.radii, before_radii);
+    assert!(!rows.take_positions(&moved[..2]), "two positions for three rows");
+    assert_eq!(rows.positions, moved, "nothing changed by the refused call");
+}

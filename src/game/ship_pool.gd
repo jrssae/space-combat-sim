@@ -96,7 +96,8 @@ func prepare(type: StringName, count: int) -> int:
 	return built
 
 
-## Takes a ship of `type` out of the pool, restored and called `display_name`, at `at` (universe) with World-frame `velocity`.
+## Takes a ship of `type` out of the pool, restored and called `display_name`, at `at` (universe) with World-frame `velocity`
+## (a local velocity: callers with a velocity against the place add `WorldFrame.rest_velocity()`, M6-T08).
 ## Returns null, with one warning, when none is free. Interpolation is reset so the move from the park does not smear.
 func acquire(display_name: String, at: UniversePos, basis: Basis = Basis.IDENTITY, velocity: Vector3 = Vector3.ZERO,
 		brain: PilotBrain = null, type: StringName = DEFAULT_TYPE) -> Combatant:
@@ -105,6 +106,7 @@ func acquire(display_name: String, at: UniversePos, basis: Basis = Basis.IDENTIT
 		push_warning("ShipPool: no free %s (pool of %d, all in use)" % [type, _count_of(type)])
 		return null
 	var ship: Ship = combatant.ship
+	ShiftableRegistry.set_out(ship, WorldFrame.PARKED_META, false)
 	ship.process_mode = Node.PROCESS_MODE_INHERIT
 	ship.visible = true
 	ship.reset_to(Transform3D(basis, world.universe_to_local(at)))
@@ -243,8 +245,12 @@ func _park_position() -> UniversePos:
 
 func _park(combatant: Combatant) -> void:
 	var ship: Ship = combatant.ship
+	var transits: VortexTransits = VortexTransits.of(world)
+	if transits != null:
+		transits.cancel(ship)  # whole again, its pilot let go, before its next life (M6-T22)
 	ship.visible = false
 	ship.process_mode = Node.PROCESS_MODE_DISABLED
+	ShiftableRegistry.set_out(ship, WorldFrame.PARKED_META, true)  # rebases leave it: `acquire` places it (M6-T06, M6-T21)
 	ship.tier_exempt = false
 	ship.linear_velocity = Vector3.ZERO
 	ship.angular_velocity = Vector3.ZERO

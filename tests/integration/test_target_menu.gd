@@ -413,7 +413,8 @@ func test_closed_it_costs_nothing_per_tick() -> void:
 	assert_eq(main.target_menu.view.draws, draws, "nothing is drawn")
 	_run("targetmenu open")
 	assert_eq(TargetInfo.built_count - built, int(_read("target_menu.last_candidates")), "opening reads the list once")
-	assert_eq(int(_read("target_menu.last_candidates")), main.buoys.size())
+	# The buoys and the jumpgate (M6-T14) are the scene's broadcasters.
+	assert_eq(int(_read("target_menu.last_candidates")), main.buoys.size() + main.gates.gates.size())
 	built = TargetInfo.built_count
 	await _ticks(10)
 	_run("targetmenu pick navigation")

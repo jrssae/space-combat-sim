@@ -6,6 +6,7 @@ extends Node3D
 ##
 ## Newtonian: the process materials have no gravity and no damping, and a burst inherits its source's velocity by moving its
 ## emitter at that velocity; particles live in the emitter's own frame (`local_coords`), so they go where it goes.
+## A velocity rebase takes its `dv` off every busy emitter's velocity (`boost`).
 ## Rebase: every emitter is `top_level` and in `world_shiftable`, so `WorldFrame.rebase` shifts it, particles and all. A burst
 ## asked for in the physics tick is placed at once and only started (`restart`) in `_process`, so a rebase between the two
 ## shifts it too.
@@ -51,6 +52,9 @@ var _built: bool = false
 
 func _ready() -> void:
 	build()
+	var world: WorldFrame = WorldFrame.of(self)
+	if world != null:
+		world.boosted.connect(boost)
 	density = float(Settings.get_value(&"particle_density"))
 	Settings.changed.connect(_on_setting_changed)
 	DebugConsole.registry.register_provider(&"fx", ConsoleVars.new({
@@ -111,6 +115,7 @@ func burst(effect: int, position: Vector3, direction: Vector3, velocity: Vector3
 		return 0
 	var slot: int = _claim(effect)
 	var node: GPUParticles3D = _nodes[slot]
+	ShiftableRegistry.set_out(node, WorldFrame.PARKED_META, false)
 	node.global_transform = Transform3D(FxSpecs.basis_facing(direction), position)
 	node.amount_ratio = FxSpecs.ratio_for(effect, density)
 	_velocity[slot] = velocity
@@ -178,6 +183,14 @@ func busy_count(effect: int = -1) -> int:
 	for i: int in int(FxSpecs.spec(effect)["emitters"]):
 		n += 1 if _state[_first[effect] + i] != _IDLE else 0
 	return n
+
+
+## A velocity rebase by `dv` (`WorldFrame.boosted`): every emitter keeps its universe velocity. Its particles live in its
+## own frame, so they follow.
+func boost(dv: Vector3) -> void:
+	for slot: int in _velocity.size():
+		if _state[slot] != _IDLE:
+			_velocity[slot] -= dv
 
 
 ## The velocity the emitter behind `handle` flies at, or ZERO for a stale handle.
@@ -260,6 +273,7 @@ func _release(slot: int) -> void:
 	var node: GPUParticles3D = _nodes[slot]
 	node.emitting = false
 	node.visible = false
+	ShiftableRegistry.set_out(node, WorldFrame.PARKED_META, true)  # rebases leave it: `burst` places it (M6-T21)
 	_state[slot] = _IDLE
 	_emitting[slot] = 0
 	_generation[slot] += 1
@@ -274,6 +288,7 @@ func _make_emitter(node_name: String, spec: Dictionary) -> GPUParticles3D:
 	p.top_level = true
 	p.local_coords = true
 	p.add_to_group(WorldFrame.SHIFTABLE_GROUP)
+	p.set_meta(WorldFrame.PARKED_META, true)  # idle until its first burst places it (M6-T21)
 	p.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	p.amount = int(spec["amount"])
 	p.lifetime = float(spec["lifetime_s"])

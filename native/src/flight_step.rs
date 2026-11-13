@@ -8,7 +8,7 @@ use godot::prelude::*;
 
 use std::sync::Mutex;
 
-use crate::kernels::flight::{self, Applied, Body, Cmd, Spec};
+use crate::kernels::flight::{self, Applied, Body, Cmd, Rest, Spec};
 use crate::rows::FLAG_RIGID;
 use crate::sim_core::ScsSimCore;
 use crate::threads::{self, Pass, Threads};
@@ -43,6 +43,8 @@ struct Slot {
     row_mode: bool,
     assist_on: bool,
     has_propellant: bool,
+    // What the ship's speed is read against when it is not the World's rest (M6-T08): the player's reference.
+    rest: Option<Rest>,
 }
 
 // One ship of a step: read on the main thread, flown by the kernel on a worker, applied on the main thread (M4-T18).
@@ -51,6 +53,7 @@ struct Item {
     slot: usize,
     cmd: Option<Cmd>,
     env_w: Vector3,
+    rest: Rest,
     assist_on: bool,
     has_propellant: bool,
     basis: Basis,
@@ -81,6 +84,7 @@ fn fly(slot: &Slot, item: &mut Item, dt: f64) {
         item.v_w,
         item.w_w,
         item.env_w,
+        item.rest,
         item.assist_on,
         dt,
         item.has_propellant,
@@ -110,6 +114,8 @@ pub struct ScsFlightStep {
     listed: Vec<bool>,
     // Ships the last `step_core` read from the physics server because the core had no row for them (M4-T15).
     fallback_reads: i64,
+    // Ships the last step gave the frame's pull (M6-T07).
+    pulled: i64,
     // The slot of each output row of the last step, and the output row of each slot (-1: not flown), M5-T31.
     out_slots: Vec<i32>,
     slot_rows: Vec<i32>,
@@ -161,6 +167,7 @@ impl ScsFlightStep {
             row_mode: false,
             assist_on: true,
             has_propellant: true,
+            rest: None,
         };
         if let Some(free) = self.slots.iter().position(Option::is_none) {
             self.slots[free] = Some(slot);
@@ -233,6 +240,24 @@ impl ScsFlightStep {
         out
     }
 
+    /// Reads the ship of `slot`'s speed against `velocity` (m/s, World frame) from now on, with `accel` (m/s^2) as the
+    /// brake's feed-forward for what that reference falls with (M6-T08, D67: the player's reference). Until set, or after
+    /// `clear_rest`, a ship reads its speed against the World's rest (its anchor's velocity in the local frame).
+    #[func]
+    fn set_rest(&mut self, slot: i64, velocity: Vector3, accel: Vector3) {
+        if let Some(s) = self.slot_mut(slot) {
+            s.rest = Some(Rest { velocity, accel });
+        }
+    }
+
+    /// Back to the World's rest for the ship of `slot`.
+    #[func]
+    fn clear_rest(&mut self, slot: i64) {
+        if let Some(s) = self.slot_mut(slot) {
+            s.rest = None;
+        }
+    }
+
     /// The slot of each output row of the last step, in row order.
     #[func]
     fn out_slots(&self) -> PackedInt32Array {
@@ -267,6 +292,7 @@ impl ScsFlightStep {
         dt: f64,
     ) -> bool {
         self.fallback_reads = 0;
+        self.pulled = 0;
         self.run(None, slots, scalars, vectors, flags, states, dt)
     }
 
@@ -286,6 +312,7 @@ impl ScsFlightStep {
         dt: f64,
     ) -> bool {
         self.fallback_reads = 0;
+        self.pulled = 0;
         if body_ids.len() != slots.len() {
             godot_error!(
                 "ScsFlightStep.step_core: {} slots but {} body ids; nothing applied",
@@ -309,6 +336,7 @@ impl ScsFlightStep {
         if self.fallback_reads > 0 {
             c.note_fallback_read(self.fallback_reads);
         }
+        c.ships_pulled = self.pulled;
         // Each flown ship's acceleration from its own forces, as `Ship.applied_force() / ship.mass` gives it (M4-T35: the
         // ram tracker's accel column, read natively). The gathered ships come first, then the row-flown ones.
         c.accels.clear();
@@ -396,6 +424,7 @@ impl ScsFlightStep {
         let fl = flags.as_slice();
         let st = states.as_slice();
         let mut server = PhysicsServer3D::singleton();
+        let world_rest = core.map_or(Rest::ZERO, |(c, _)| c.frame_rest());
         if self.items.len() < n {
             self.items.resize_with(n, Item::default);
         }
@@ -424,6 +453,7 @@ impl ScsFlightStep {
             item.applied = None;
             let slot = self.slots[item.slot].as_ref().expect("checked above");
             item.pod_yaw = slot.pod_yaw_smoothed;
+            item.rest = slot.rest.unwrap_or(world_rest);
             let row = core.and_then(|(c, ids)| {
                 let r = c.row_for_kernel(ids[i]);
                 usize::try_from(r)
@@ -431,11 +461,13 @@ impl ScsFlightStep {
                     .filter(|&r| c.rows.flags[r] & FLAG_RIGID != 0)
             });
             item.fly = true;
+            let mut position = None;
             if let (Some((c, _)), Some(r)) = (core, row) {
                 item.basis = c.rows.bases[r];
                 item.v_w = c.rows.velocities[r];
                 item.w_w = c.rows.angular[r];
                 item.apply = true;
+                position = Some(c.rows.positions[r]);
             } else if st.is_empty() {
                 if core.is_some() {
                     self.fallback_reads += 1;
@@ -446,10 +478,12 @@ impl ScsFlightStep {
                     .flatten()
                 {
                     Some(body) => {
-                        item.basis = body.get_transform().basis;
+                        let t = body.get_transform();
+                        item.basis = t.basis;
                         item.v_w = body.get_linear_velocity();
                         item.w_w = body.get_angular_velocity();
                         item.apply = true;
+                        position = Some(t.origin);
                     }
                     // Not in a space (parked or freed): nothing to fly; the row reads as zeros.
                     None => item.fly = false,
@@ -466,10 +500,17 @@ impl ScsFlightStep {
                 item.w_w = st[i * STATE_VECTORS + 4];
                 item.apply = false;
             }
+            // The free-falling frame's residual (M6-T04, D66): the pull and the brake's feed-forward; GDScript packs zero.
+            if let (Some((c, _)), Some(at)) = (core, position)
+                && let Some(g) = c.frame_residual_at(at)
+            {
+                item.env_w += g;
+                self.pulled += 1;
+            }
         }
         // Row flight (M5-T31): every row-mode ship not gathered this tick, with a command in its row and a row in the core,
         // flies that command from the core's tables alone: its selected target's line of sight (only while it brakes) and
-        // the core's gravity sources stand in for what the gather would have read.
+        // the frame's residual stand in for what the gather would have read.
         self.row_bodies.clear();
         let mut n = n;
         if let Some((c, _)) = core {
@@ -509,6 +550,7 @@ impl ScsFlightStep {
                 rc.apply_to(&mut cmd);
                 item.assist_on = slot.assist_on;
                 item.has_propellant = slot.has_propellant;
+                item.rest = slot.rest.unwrap_or(world_rest);
                 item.applied = None;
                 item.pod_yaw = slot.pod_yaw_smoothed;
                 item.fly = true;
@@ -542,7 +584,13 @@ impl ScsFlightStep {
                         }
                     }
                 };
-                item.env_w = position.map_or(Vector3::ZERO, |at| c.tier_gravity.accel(at));
+                item.env_w = match position.and_then(|at| c.frame_residual_at(at)) {
+                    Some(g) => {
+                        self.pulled += 1;
+                        g
+                    }
+                    None => Vector3::ZERO,
+                };
                 if cmd.brake
                     && let Some(at) = position
                 {

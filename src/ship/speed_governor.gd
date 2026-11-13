@@ -45,3 +45,11 @@ static func clamp_velocity(velocity: Vector3, limit_mps: float) -> Vector3:
 	if limit_mps > 0.0 and velocity.length() > limit_mps:
 		return velocity.normalized() * limit_mps
 	return velocity
+
+
+## `velocity` brought down to `limit_mps` against `rest` (the reference's velocity, M6-T08, Q4): the ceiling sits on top of the
+## reference's motion; unchanged when it is slower than that.
+static func clamp_against(velocity: Vector3, rest: Vector3, limit_mps: float) -> Vector3:
+	if rest == Vector3.ZERO:
+		return clamp_velocity(velocity, limit_mps)
+	return rest + clamp_velocity(velocity - rest, limit_mps)

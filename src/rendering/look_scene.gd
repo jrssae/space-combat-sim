@@ -35,6 +35,8 @@ var world: WorldFrame = null
 var pool: ShipPool = null
 var player: Ship = null
 var key_star: DirectionalLight3D = null
+## The environment whose key star it is, so the sheet can take the light from the true sun (M6-T10); null in a bare test.
+var environment: SpaceEnvironment = null
 ## Where the props' generated files are read from (tests point it elsewhere).
 var asset_root: String = ShipSpec.ASSET_ROOT
 
@@ -89,6 +91,8 @@ func show(asset_id: String, distance_m: float, light: StringName, view: StringNa
 	if camera == null:
 		return "no current camera"
 	if not is_active():
+		if environment != null:
+			environment.hold_key_star(true)
 		_star_transform = key_star.global_transform
 		_player_was_visible = player.visible
 	else:
@@ -151,6 +155,8 @@ func clear() -> void:
 func _restore() -> void:
 	player.visible = _player_was_visible
 	key_star.global_transform = _star_transform
+	if environment != null:
+		environment.hold_key_star(false)
 
 
 func _release() -> void:
@@ -219,6 +225,8 @@ func _resolve() -> bool:
 			player = main.ship
 		if key_star == null and main.space_environment != null:
 			key_star = main.space_environment.key_star
+		if environment == null:
+			environment = main.space_environment
 	return world != null and pool != null and player != null and key_star != null
 
 

@@ -78,12 +78,22 @@ var comms: CommsMenuDirector = null
 var target_menu: TargetMenuDirector = null
 ## Free-flight encounters (M5-T17): null in a scenario without an encounter pools file.
 var encounter_director: EncounterDirector = null
+## The scenario's jumpgates and the player's jump through one (M6-T14); always present, with no gate in most scenarios.
+var gates: JumpgateHost = null
+## The far props' console and the station's stand-in for captures (M6-T15).
+var far_props: FarPropHost = null
+## The star system the scene flies in (M6-T03).
+var star_system: StarSystemHost = null
+## Where and when the scenario is in its star system (M6-T09): `ScenarioFrame.resolve`'s result, empty without a system.
+var frame: Dictionary = {}
 
 var _spawn_position: UniversePos = UniversePos.new()
 var _overlay_in_s: float = 0.0
 var _spawn_basis: Basis = Basis.IDENTITY
 # The player's velocity at the first spawn (a mission that opens in flight); a respawn starts at rest.
 var _start_velocity: Vector3 = Vector3.ZERO
+## What the player's speed is read against (M6-T08): the HUD's REF, and the ship's brake, assist, fade and ceiling.
+var flight_reference: FlightReference = null
 var _system_id: StringName = &"local"
 var _scenario_spawns: Array[Dictionary] = []
 var _scenario_routes: Array[Route] = []
@@ -183,8 +193,27 @@ func _ready() -> void:
 	player_respawned.connect(waves.on_player_respawned)
 	# Downed wingmen are replaced when the next wave starts (maintainer Q8, AC11).
 	waves.wave_started.connect(wings.on_wave_started)
+	star_system = StarSystemHost.new()
+	star_system.name = "StarSystemHost"
+	star_system.setup(_system_id)
+	star_system.world = world
+	add_child(star_system)
+	_anchor_world(scenario)
+	gates = JumpgateHost.new()
+	gates.name = JumpgateHost.NODE_NAME
+	gates.main = self
+	add_child(gates)
+	far_props = FarPropHost.new()
+	far_props.name = FarPropHost.NODE_NAME
+	far_props.main = self
+	add_child(far_props)
+	if bool(frame.get("standin", false)):
+		far_props.place_station(ScenarioFrame.place_in_scene(frame, star_system.system, ScenarioFrame.DEFAULT_PLACE,
+				world.epoch_s))
 	if bool(scenario.get("ok", false)):
 		_spawn_props(scenario["props"])
+		for entry: Dictionary in scenario["jumpgates"]:
+			gates.place(entry, star_system.system, frame)
 		_spawn_belts(scenario["belts"])
 	_spawn_scenario_ships()
 	if not (scenario.get("mission", {}) as Dictionary).is_empty():
@@ -192,6 +221,11 @@ func _ready() -> void:
 	camera_rig.setup(ship, ship.cockpit_anchor, ship.get_chase_offset(), ship.set_cockpit_interior_visible)
 	# The World keeps its origin within `auto_rebase_distance_m` (5 km, main.tscn) of the player (M3-T14, §14.1).
 	world.focus = ship
+	flight_reference = FlightReference.new()
+	flight_reference.world = world
+	flight_reference.ship = ship
+	flight_reference.place_source = func() -> Array: return gates.gates
+	add_child(flight_reference)
 	# The cockpit camera follows a RemoteTransform3D, so reset its interpolation on a rebase or the jump smears.
 	world.rebased.connect(func(_offset: Vector3) -> void: camera_rig.cockpit_pivot.reset_physics_interpolation())
 	letterbox = Letterbox.new()
@@ -238,9 +272,16 @@ func _physics_process(delta: float) -> void:
 	if comms.is_open():
 		comms.step(adapter.sample_radial(input_source, delta))
 		return
+	# Beside a targeted gate X asks for a jump instead of switching auto-track (M6-T14).
+	adapter.jump_offered = gates.jump_offered()
 	var pc: PilotCommand = adapter.sample(input_source, delta)
 	if control_lock.apply(pc, controls_locked(), camera_rig.is_playing_shot()):
 		camera_rig.stop_shot()
+	if pc.ui.request_jump:
+		gates.start_jump()
+	var autopilot: FlightCommand = gates.step_player(delta) if not get_tree().paused else null
+	if autopilot != null:
+		pc.flight = autopilot
 	if debug_throttle > 0.0:
 		pc.flight.main_left = maxf(pc.flight.main_left, debug_throttle)
 		pc.flight.main_right = maxf(pc.flight.main_right, debug_throttle)
@@ -302,7 +343,7 @@ func update_overlay(delta: float) -> void:
 func snapshot() -> Dictionary:
 	var s: Dictionary = {}
 	if ship != null:
-		s["speed_mps"] = ship.linear_velocity.length()
+		s["speed_mps"] = flight_reference.speed_mps() if flight_reference != null else ship.speed_against_rest()
 		s["body_velocity"] = ship.body_velocity()
 		s["angular_rate_dps"] = ship.body_angular_velocity() * FlightModel.AXIS_SIGN * (180.0 / PI)
 		s["assist_on"] = ship.assist_on
@@ -361,6 +402,30 @@ func ensure_pool(type: StringName, count: int) -> int:
 	for pooled: Combatant in ships.all_ships().slice(known):
 		audio.watch_ship(pooled)
 	return built
+
+
+# The World anchors where the scenario says (M6-T09): on a place's rail with the scenario's origin beside it, or on an orbit,
+# with the system time starting at the scenario's epoch (seeded from the run's seed when it asks). A scenario the system
+# cannot place rides the station's rail, as one with no anchor does.
+func _anchor_world(scenario: Dictionary) -> void:
+	var system: StarSystem = star_system.system
+	if not system.is_valid():
+		return
+	var start := PackedFloat64Array([_spawn_position.x, _spawn_position.y, _spawn_position.z])
+	var spec: Dictionary = scenario.get("frame", ScenarioFrame.default_spec())
+	var resolved: Dictionary = ScenarioFrame.resolve(spec, system, scenario_seed, start, -_spawn_basis.z)
+	if not bool(resolved["ok"]):
+		push_warning("Main: %s; the World rides %s's rail" % [resolved["error"], ScenarioFrame.DEFAULT_PLACE])
+		resolved = ScenarioFrame.resolve(ScenarioFrame.default_spec(), system, scenario_seed, start, -_spawn_basis.z)
+		if not bool(resolved["ok"]):
+			return
+	frame = resolved
+	star_system.frame = resolved
+	world.epoch_s = float(resolved["epoch_s"])
+	if resolved["kind"] == ScenarioFrame.KIND_PLACE:
+		world.anchor_on_rail(system, resolved["id"], resolved["offset"])
+	else:
+		world.anchor_in_orbit(system, resolved["id"], resolved["state"])
 
 
 # The tick's stage timers and the benchmark (M4-T01); both pause with the world. The battle benchmark's stand-ins live in
@@ -430,6 +495,7 @@ func respawn() -> void:
 	for buoy: NavBuoy in buoys:
 		buoy.restore()
 	director.cancel_respawn()  # Back while dead: the death's own respawn must not follow
+	gates.cancel_jump("respawn")
 	_restart_lessons()
 	combatant.cannon.reset_gate()
 	combatant.cannon.reset_flashes()
@@ -452,8 +518,11 @@ func _wire_audio() -> void:
 		audio.watch_ship(pooled)
 
 
-## The HUD's reference point (its `REF` range and closing speed): the launch point, for now. Universe coordinates.
+## The HUD's reference point (its `REF` range and closing speed): the player's reference (M6-T08), or the launch point when
+## there is none. Universe coordinates.
 func reference_point() -> UniversePos:
+	if flight_reference != null and flight_reference.frame.is_set():
+		return flight_reference.universe_position
 	return _spawn_position
 
 
@@ -462,9 +531,10 @@ func objectives() -> Array[Dictionary]:
 	return mission.objectives() if mission != null else ([] as Array[Dictionary])
 
 
-## The running mission holds the player's controls (`MissionApi.lock_controls`): the ship flies on without them.
+## The running mission holds the player's controls (`MissionApi.lock_controls`), or a gate jump does (M6-T14): the ship flies on
+## without them.
 func controls_locked() -> bool:
-	return mission != null and mission.api != null and mission.api.controls_locked
+	return (mission != null and mission.api != null and mission.api.controls_locked) or (gates != null and gates.locks_controls())
 
 
 # A cinematic hides the HUD and brings the letterbox in; the comms panel keeps its subtitles (D55).
@@ -505,6 +575,14 @@ func _build_hud_input() -> HudInput:
 	input.show_velocity_marker = bool(Settings.get_value(&"hud_velocity_marker"))
 	input.has_reference = true
 	input.reference_position = world.universe_to_local(reference_point())  # with this frame's origin: it follows every rebase
+	if flight_reference != null and flight_reference.frame.is_set():
+		input.reference_velocity = flight_reference.frame.rest_velocity
+		input.reference_name = flight_reference.frame.label
+	else:
+		input.reference_velocity = ship.rest_velocity()
+	if flight_reference != null:
+		input.altitude_m = flight_reference.frame.altitude_m
+		input.altitude_body = flight_reference.frame.altitude_body
 	input.tracking = ship.get_flight_output().tracking
 	input.running_lights = ship.running_lights
 	input.assist = ship.assist_on
@@ -537,6 +615,7 @@ func _build_hud_input() -> HudInput:
 	input.roster = wings.hud_roster()
 	input.roster_color = Factions.FRIENDLY_COLOR
 	input.ack_line = wings.ack_text()
+	input.prompt_line = gates.prompt_line()
 	if route_active():
 		input.status_line = instructor_path.status_line(instructor.display_name)
 		var waypoint: UniversePos = instructor_path.waypoint_position()
@@ -607,7 +686,8 @@ func _place_spawn(entry: Dictionary) -> void:
 		path = BehaviourFollowPath.attach(brain as AiPilot, route)
 	var forward: Vector3 = entry.get("forward", Vector3.ZERO)
 	var basis: Basis = _spawn_basis if forward.is_zero_approx() else ScenarioLoader.basis_facing(forward)
-	var placed: Combatant = ships.acquire(ship_name, anchor.plus_local(entry["offset"]), basis, entry["velocity"], brain, type)
+	var placed: Combatant = ships.acquire(ship_name, anchor.plus_local(entry["offset"]), basis,
+			(entry["velocity"] as Vector3) + world.rest_velocity(), brain, type)  # against the place (M6-T08)
 	if placed == null:
 		return
 	if placed.cargo_pods != null:
@@ -678,7 +758,7 @@ func _spawn_ship() -> void:
 		ShipAssembly.OPT_CONSOLE_OWNER: true,
 	})
 	world.spawn(combatant.ship, _spawn_position, _spawn_basis)
-	combatant.ship.linear_velocity = _start_velocity
+	combatant.ship.linear_velocity = _start_velocity + world.rest_velocity()  # the scenario's velocity is against the place
 	# The player is part of the wing the allies broadcast for (M3-T10): heard like an allied Starfury, to 100 km.
 	combatant.targetable.broadcast_range_m = ShipPool.ALLY_BROADCAST_RANGE_M
 	ship = combatant.ship
@@ -705,11 +785,13 @@ func _spawn_belts(belts: Array) -> void:
 		var belt := AsteroidBelt.new()
 		belt.name = "Belt%d" % i
 		world.spawn(belt, entry["centre"])
+		belt.add_to_group(WorldFrame.ANCHORED_GROUP)
 		var layout: BeltLayout = BeltLayout.place(entry, shape_count)
 		if layout.shortfall > 0:
 			push_warning("Belt%d: %d of %d rocks did not fit the box with the gap asked for" % [i, layout.shortfall, entry["count"]])
 		belt.build(layout, world.get_world_3d().space, world)
 		world.rebased.connect(belt.on_rebased)
+		world.drifted.connect(belt.on_rebased)
 		asteroid_belts.append(belt)
 
 

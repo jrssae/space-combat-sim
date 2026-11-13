@@ -683,3 +683,27 @@ func test_the_waypoints_radar_entry_is_marked() -> void:
 	input.has_waypoint = false
 	input.waypoint_id = 31
 	assert_eq(HudLayout.compute(input).waypoint_radar_index, -1, "no waypoint, no mark")
+
+
+func test_the_speed_and_its_direction_are_read_against_the_reference() -> void:
+	var input := HudInput.new()
+	input.has_reference = true
+	input.reference_name = "EPSILON III"
+	input.reference_position = Vector3(-6.771e6, 0.0, 0.0)
+	input.reference_velocity = Vector3(0.0, 0.0, -7672.6)
+	input.own_velocity = Vector3(0.0, 0.0, -7672.6) + Vector3(30.0, 0.0, 0.0)
+	input.altitude_m = 4.0e5
+	input.altitude_body = "EPSILON III"
+	var frame: HudFrame = HudLayout.compute(input)
+	assert_almost_eq(frame.speed_mps, 30.0, 1e-2, "the speed against the reference (M6-T08), not 7.7 km/s")
+	assert_almost_eq(frame.velocity_h_deg, 90.0, 1e-2, "and its direction: to the right of the nose")
+	assert_almost_eq(frame.reference_closing_mps, -30.0, 1e-2, "moving away from the planet's centre")
+	assert_eq(frame.reference_name, "EPSILON III")
+	assert_true(frame.altitude_valid)
+	assert_eq(HudPainter.reference_text(frame), "REF EPSILON III  6771.00 km  -30 m/s")
+	assert_eq(HudPainter.altitude_text(frame), "ALT 400.00 km")
+	input.altitude_m = NAN
+	assert_false(HudLayout.compute(input).altitude_valid, "no body near: no altitude")
+	assert_eq(HudPainter.altitude_text(HudLayout.compute(input)), "")
+	input.has_reference = false
+	assert_almost_eq(HudLayout.compute(input).speed_mps, input.own_velocity.length(), 1e-2, "no reference: the frame's speed")

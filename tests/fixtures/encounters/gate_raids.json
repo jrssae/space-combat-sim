@@ -1,0 +1,3 @@
+{"pools": {"raider_fighter": 6},
+ "weights": {"raid": 1.0, "patrol": 0.0, "traffic": 0.0},
+ "gate": {"arrive": {"raid": 1.0}}}

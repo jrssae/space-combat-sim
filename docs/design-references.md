@@ -103,6 +103,133 @@ About 8 km long, arranged along one axis. From aft to fore:
 Front on: a circular cross-section with a central docking aperture; two short arms carry the Cobra bays; long,
 thin vertical masts. Defence-grid emplacements (tutorial tour points) sit on the hull.
 
+## Epsilon III (M6)
+
+The planet Babylon 5 orbits. No moons. 0.75 g at the surface, about 9 560 km across (`docs/milestones/m6-epsilon-space-at-true-scale.md`,
+Q1). Reference: one show still of the planet in sunlight (`references/Epsilon III planet.png`, maintainer, 2026-11-10).
+
+- **Colour.** Warm and dry: rust, tan and ochre. Darker brown lowlands, lighter beige-cream highlands and plateaus,
+  some pale patches near the top that read as high ground or haze rather than ice. No blue oceans; no visible water.
+- **Surface.** Strong relief at every scale: wrinkled ridges, rough mottled terrain and canyon-like grooves, so the lit
+  side looks bumpy, not smooth. Lit areas show fine grain from the relief catching the light.
+- **Clouds.** Not distinct cloud decks; at most thin pale wisps over the brighter areas. The surface dominates.
+- **Light.** A hard terminator: lit from the upper right, with the lower left in deep shadow that fades to near black.
+  No city lights on the night side.
+- **Limb.** A faint warm orange haze along the lit edge only; no blue atmospheric ring. A thin atmosphere at most.
+- **Setting.** Black space with dense small stars and a blue nebula wash behind (that is the sky, not part of the planet).
+
+## Jumpgate (M6)
+
+The Earth Alliance gate ships use to enter and leave hyperspace (M6-T13, D69, Q11). The shape and proportions come from the
+maintainer's model `references/EA_Jump_Gate.stl`; the colours, lights and the vortex from show stills and the reference video (sources
+below). Nothing from either is copied: `tools/procgen/assets/jumpgate.py` builds its own geometry from the ratios here.
+
+**Layout** (corrected under M6-T19 by the maintainer, 2026-11-11; T13 had laid the arms out as flat spokes). Four identical,
+free-standing arms, **parallel to each other and to the vortex's axis**, 90° apart round it at the **top, bottom and both sides**
+of the funnel. The side arms stand further from the axis than the top and bottom ones (round 3, 2026-11-11), so the four frame an
+**elliptical mouth, wider than tall**. Nothing joins them; the vortex forms inside them: its mouth at the arms' front ends, its funnel running back along them to
+their back ends. Seen face on the gate is four dots round the vortex; seen obliquely, four long rails round it (the stills). The
+model holds the four arms as separate print pieces, not assembled, so the spacing is read off the stills: the mouth is about as wide
+as an arm is long, so the top and bottom arms stand two thirds of an arm out from the axis. **The ellipse's aspect is 1.55**
+(generator option `mouth_aspect`; 1.35 in round 3), chosen from `jumpgate.png` (T19 round 4): the camera, the aspect and the
+vortex's visible edge were fitted together to the four rails' ends, the vortex's outline and its throat in the still. The
+still's vortex reads 1.60 to 1 on screen, which 1.55 gives; the rails' misfit hardly changes between 1.35 and 1.6 (about 26 px
+rms in the 385 px still: the still's gate is planar spokes, which parallel rails only approach).
+
+**One arm** (ratios to the arm's length; the model's arm is 164 of its units long):
+- **Truss.** A central spine tube (diameter 1.3 %) inside four slim longerons (diameter 0.55 %) on a square 4.9 % across, two on the
+  tube's sides and one each toward and away from the axis. Clamp rings sit on the longerons midway between stations and near both ends.
+- **Five stations**, evenly spaced 17.4 % apart about the arm's middle (the end ones about 15 % from each end). Each is a pair of
+  cross-shaped collars (6 % across, 0.85 % thick, 4.1 % apart) with conical sleeves on the spine between and outside them.
+- **Fins.** Each station carries two flat fins, spanning round the tube one each side of the arm: a stretched hexagon, root chord 3 %, widest
+  (5.8 %) a fifth of the way out, tip chord 2.7 %, reaching 11.8 % from the arm's axis, 0.2 % thick, with a raised rim round a darker
+  inset panel. The pair is not flat but a shallow V of 140°: each fin is tilted 20°, so seen down the arm they form a wide dish.
+  Ten fins per arm. The stills show the fins standing out sideways from each rail, round the tube rather than away from the axis,
+  so they span tangentially, the V opening toward the axis (a dish facing the funnel).
+- **End caps.** A cross-shaped cap at each end, as wide as the collars, its four limbs drooping towards the arm's middle like a hipped
+  roof, with a cone and band below it down to the spine.
+- Overall cross-section about 6 % of the length across the truss and 22 % across the fin tips; the arm is long and spindly, like a
+  girder with feathers.
+
+**Scale.** No on-screen figure was found. A fan "unofficial technical manual" says large permanent gates have "four seven-mile long
+generators" (11 km each, larger than the station); the stills do not support that, so it is not used. Instead the vortex must take a
+capital ship with room to spare: **arms of 1 200 m**, the top and bottom ones 800 m from the axis and the side ones 1 240 m, a
+vortex mouth about 2 400 m wide, 1 510 m tall and 1 200 m deep, the gate about 2.6 km wide, 1.7 km tall and 1.2 km long. The truss is then about 75 m across, a fin about 120 m long, a station pitch about 210 m; a
+Starfury is a speck beside a fin. The arm length is one option (`arm_length_m`), everything else follows from the ratios.
+
+**Colours and finish.** Industrial and dark. The truss and spine read warm grey to dull tan (a brassy sheen where lit), the collars and
+caps gunmetal, the fins a paler cool grey with darker slate-blue inset panels. Lit from one side the arms show bright edges against
+black; in shadow they are near-black silhouettes picked out only by their lights.
+
+**Lights.** A row of small warm lamps along each arm, one at each fin station, steady amber to pale yellow-white; they are what you see
+of a gate in shadow. While the vortex forms, the arms' **ends** glow first (the back ends in the game, after the lamps' front-to-back chase): a hot pink-white bloom with spiky rays, the four
+glows then merging into one flash in the centre.
+
+**The vortex** (the maintainer's description, 2026-11-11, from T14's screenshots). One effect for every jump point: a gate's,
+a capital ship's own (M12) and the open points raiders arrive through.
+- **Fit at a gate.** The mouth lies at the arms' front ends, an ellipse whose rim comes **within 1 m of the arms** (semi-axes
+  1 198 m across and 754 m up, the trusses reaching about 45 m in from the arms' axes). The funnel runs back along the arms and
+  ends at their back ends: as deep as an arm is long (1 200 m). The numbers come from the gate's markers, not constants. A
+  ship-made point has no arms to shape it and stays round.
+- **The visible body** (round 5, the maintainer): the bright funnel comes right up to the arms, its short feathered edge gone
+  by the rim (round 4's body ending at two thirds of the radius was rejected: the opening sat too far from the arms).
+- **Shape.** A slight funnel: visible, not pronounced. A broad well with gently curving walls and a wide, rounded base, elliptical
+  in section from the mouth down to the throat (the still's dark eye is a wide ellipse too); the dark
+  throat a soft smudge, not a hard hole. The dark circle lies on the funnel's base itself, its narrow deep end (round 5,
+  the maintainer); from an oblique view the funnel's nearer walls hide part or all of it. The walls are translucent: stars and the gate's far arms partly show through them.
+- **Colour and motion.** Layers of colour: the base colour (orange to golden yellow for a departure, a **dark sky blue** for an
+  arrival: dark against space but not navy, round 3), darker toward the throat and the rim and brightest over a band in between,
+  in broad uneven clouds; soft-edged, roughly rectangular patches darker than the base and paler translucent patches of the base
+  colour lying along one soft spiral; and over them **fine, hair-like streaks** combed along that spiral, short and many, as the
+  still shows, not separate bold bands. **A departure swirls in** (the pattern travels down toward the throat, drawing ships in)
+  and **an arrival swirls out** (up from the throat toward the rim). **Seen from in front of the mouth an arrival turns
+  counter-clockwise and a departure clockwise** (round 3); both follow the same spiral, one outward and one inward. The body's
+  edge fades out like the still's (round 6, measured): a wide soft fade, about a quarter of the radius from 90 % down to 10 %
+  of the body's brightness, broken up into wisps along the spiral, its faint end at the arms.
+- **The base by view.** Only the narrow deep end changes with the view: from in front, looking down the funnel, it fades to
+  black; from the side or from behind it shows a moderately bright white glow, local to the base, with the rest of the funnel
+  visible round it as usual.
+- **Opening.** At a gate, first the gate's own activation: the lamps at the fin stations flash one after another along each
+  arm from its front end to its back end, all four arms together, and the back ends glow (a hot pink-white bloom with spiky rays);
+  then the jump point forms inside the arms. Then, for every jump point,
+  the initiation flash at its centre; the funnel then grows out of that point and unfolds toward the rim of its mouth (it does
+  not scale up in place). It stays open while ships pass, then folds back and is gone within about a second. A ship-made point
+  starts at the flash and goes straight on into the funnel's growth, with no pause (a pause in one reference gif is a fault in
+  the gif, the maintainer, 2026-11-11). Ships coming out of an open point appear in its flash.
+- **Sizes.** A gate's vortex is fitted to the gate. An open point is sized for the ship coming through, with the gate's
+  proportions, and widens when the rest of its group comes out of it.
+- **Timing** from the reference video's frames (about one per second): the activation about 1 s, the flash about 1 s, the
+  funnel full size 1 to 2 s later; open while the ship passes (3 to 4 s in the clips), the ship a dark speck deep in the eye
+  flying out. Ships must pass soon after it opens: the closing vortex is dangerous (the wiki, "backwash"). Only one direction
+  per opening; a gate is not shut down quickly.
+- **The references in `references/jumpgate/`** (not committed): `jumpgate.png` (the acceptance view: the open blue vortex framed
+  by the arms, dim deep blue with paler feathered streaks spiralling to a dark throat), `jumpgate_open` (the tips' activation
+  glow), `gathering` (the gate in shadow, its amber lamps), `point_1` (a ship-made point: a mid-blue funnel packed with soft
+  darker and paler patches, black eye, wispy rim), `point_2` (the initiation flash: a white core with lavender-blue rays), and
+  the video frames (the whole sequence, and the orange-gold departure). `jumpgate.png` is dimmer and deeper blue than the
+  others; the game follows the brighter video colours, a little dimmed.
+
+**What the generator gives the game (T14, T19).** The gate's origin is the centre of the arms' front ends, where the vortex's mouth
+lies; the gate faces -Z (arrivals leave along -Z, departures fly in along +Z) and the arms run back to z = 1 200 m. `hardpoints.json`
+and the manifest carry the vortex (mouth centre, normal, up, rim radius measured a few metres inside the arms, depth = the arm's
+length, the colours by direction in linear RGB with the streak highlight, the opening flash colour), the arrival and departure points
+(each naming its vortex colour), the four emitters on the arms' back ends, the 40 lamps (each with its station, listed front to back),
+the arms' front and back ends and one collision box per truss and per fin. The gate broadcasts to
+1 000 km (D69; the wiki and the fan manual both say about 1 000 km for a gate's beacon).
+
+Sources:
+- `references/EA_Jump_Gate.stl` (the maintainer's model; untracked): the arm's shape and ratios.
+- Babylon 5 wiki, "Jumpgate": https://babylon5.fandom.com/wiki/Jumpgate (three or four separate struts; the beacon's 1 000 km; the
+  stills "Jumpgate, the Gathering", "Jumpgate.jpg", "Jumpgate.gif").
+- Babylon 5 wiki, "Hyperspace", Jump Points: https://babylon5.fandom.com/wiki/Hyperspace (blue inbound, orange outbound; the stills
+  "Jump Point Form" and "Jump Point"; the closing backwash).
+- The Unofficial Babylon 5 Technical Manual (Lurker's Guide archive):
+  https://web.archive.org/web/2005/http://www.midwinter.com/lurk/ftp/b5.tech.htm (the seven-mile figure, not used; yellow out, blue in;
+  free-floating arms holding station with thrusters).
+- "Babylon 5 Data Files - Jumpgate" (video, 31 s): https://www.youtube.com/watch?v=2k8SRxOYC_U (its storyboard frames and
+  thumbnails: the opening sequence, both vortex colours).
+- The maintainer's statement of the vortex colours by direction (2026-11-11).
+
 ## Raider fighter "Delta-V" (M2)
 
 A flying wing. A triangular delta with a leading-edge sweep of about 60° and a span of about twice the length.

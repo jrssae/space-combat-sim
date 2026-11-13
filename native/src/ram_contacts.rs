@@ -148,6 +148,7 @@ impl ScsRamTracker {
         }
         self.starts.push(self.others.len() as u32);
         self.note_pairs_in_contact(&core);
+        self.tracker.rest = core.frame_rest().velocity;
         let asked = self.feed_read(delta);
         let unknown: Vec<i64> = self.unknown.iter().map(|&k| self.ids[k as usize]).collect();
         let nodes: Vec<i64> = asked.iter().map(|&k| self.hull_nodes[k as usize]).collect();
@@ -357,6 +358,12 @@ impl ScsRamTracker {
     #[func]
     fn shift(&mut self, offset: Vector3) {
         self.tracker.shift(offset);
+    }
+
+    /// A velocity rebase took `dv` off every velocity: the remembered ones follow.
+    #[func]
+    fn boost(&mut self, dv: Vector3) {
+        self.tracker.boost(dv);
     }
 
     /// Forgets everything (ram damage switched off).

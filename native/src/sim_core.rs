@@ -233,12 +233,12 @@ pub struct ScsSimCore {
     // Bodies whose row command GDScript released since the step's last launch (M4-T24): dropped from the job's commands
     // at the join.
     pub(crate) released: Vec<i64>,
-    // The low-attention tier (M4-T21): its rows, the fighter types they fly as, the pull they feel, the beat's period in
+    // The low-attention tier (M4-T21): its rows, the fighter types they fly as, the pull each row feels this tick, the beat's period in
     // ticks, each row's display name beside the engine-free table, the next handle and ordinal, the beat's scratch and the
     // step's readouts.
     pub(crate) tier: crate::tier::TierRows,
     pub(crate) tier_types: Vec<crate::tier::Type>,
-    pub(crate) tier_gravity: crate::tier::Gravity,
+    pub(crate) tier_pull: Vec<Vector3>,
     pub(crate) tier_period: i64,
     pub(crate) tier_name_ids: Vec<u32>,
     pub(crate) next_tier_handle: i64,
@@ -263,6 +263,17 @@ pub struct ScsSimCore {
     // The last first sync's wall-clock parts, microseconds (readouts only, M5-T35): the tier's step, the bodies, the
     // statics, the tier's rows, the lookups.
     sync_parts: [i64; 5],
+    // The World's free-falling frame (M6-T04, D64): its star system, its anchor and the tick's gravity sample.
+    pub(crate) frame: crate::frame::Frame,
+    // Gravity on the tier's rows and the bolts (M6-T07): the bolts' pull this tick, the kernel-axes scratch both use, and the
+    // last tick's readouts (rows that took a pull, and the wall-clock cost of working it out).
+    pub(crate) bolt_pull: Vec<Vector3>,
+    pub(crate) pull_scratch: Vec<crate::ephemeris::V3>,
+    pub(crate) ships_pulled: i64,
+    pub(crate) tier_pulled: i64,
+    pub(crate) bolts_pulled: i64,
+    pub(crate) tier_pull_us: i64,
+    pub(crate) bolt_pull_us: i64,
 }
 
 #[godot_api]
@@ -400,6 +411,24 @@ impl ScsSimCore {
             .collect();
         self.static_kinds = kinds.as_slice().to_vec();
         self.build_static_block();
+        true
+    }
+
+    /// Takes the static rows' new positions after a shift (M6-T06, L4): the same rows, so nothing is built again; the rows
+    /// hold them from the next sync, as they would after `set_statics`. Returns false, after logging why, when the count is
+    /// not the statics'; nothing changes then.
+    #[func]
+    pub fn move_statics(&mut self, positions: PackedVector3Array) -> bool {
+        let from = positions.as_slice();
+        if from.len() != self.static_positions.len() || !self.static_block.take_positions(from) {
+            godot_error!(
+                "ScsSimCore.move_statics: {} positions for {} statics; nothing moved",
+                from.len(),
+                self.static_positions.len()
+            );
+            return false;
+        }
+        self.static_positions.copy_from_slice(from);
         true
     }
 
@@ -591,7 +620,6 @@ impl ScsSimCore {
             *p = add(*p, offset);
         }
         self.tier.shift(offset);
-        self.tier_gravity.shift(offset);
     }
 
     /// Engine calls of the last closed tick: `[sync, fallbacks]`: the sync points' reads, which grow with the bodies and
@@ -771,6 +799,15 @@ impl ScsSimCore {
     #[func]
     pub fn row_of_id(&self, body_id: i64) -> i64 {
         self.row_of_id.get(&body_id).map_or(-1, |&r| i64::from(r))
+    }
+
+    /// A velocity rebase's part in the rows (M6-T05, D64): every velocity the core holds between sync points loses `dv`,
+    /// and the rows count as moved, so a think taken before it is declined as for a rebase.
+    pub(crate) fn boost_rows(&mut self, dv: Vector3) {
+        self.rows_version += 1;
+        self.rows.boost(dv);
+        self.bolts.boost(dv);
+        self.tier.boost(dv);
     }
 
     /// `rows_version` for the crate's own readers (the brain host's grid, M4-T17).

@@ -1,11 +1,12 @@
 extends GutTest
-## The battle's stand-ins (M4-T07, Q19 and Q22): capitals with turrets and interceptors, the asteroid field and the gravity
-## source. They put the load of features the game does not have yet on the tick: a turret aims and fires only inside its gate
-## at hostiles within 4 km, an interceptor removes only hostile bolts within 1.5 km, rocks are static rows in the contact scan
-## that bolts hit, a rebase moves them all, and the moon bends a coasting path.
+## The battle's stand-ins (M4-T07, Q19 and Q22): capitals with turrets and interceptors and the asteroid field. They put the
+## load of features the game does not have yet on the tick: a turret aims and fires only inside its gate at hostiles within
+## 4 km, an interceptor removes only hostile bolts within 1.5 km, rocks are static rows in the contact scan that bolts hit, a
+## rebase moves them all, and a capital holds its cruise against the frame's pull (M6-T07: the moon stand-in is gone).
 ##
 ## Turrets and interceptors are stepped by hand with a scan built for the step, as `StandinDirector` does once per tick.
 
+const FreeFall: GDScript = preload("res://tests/integration/test_free_fall.gd")
 const DRONE_SCENE: String = "res://tests/fixtures/target_drone.tscn"
 const DT: float = 1.0 / 60.0
 
@@ -208,8 +209,8 @@ func test_a_rebase_shifts_every_rock_and_the_capitals() -> void:
 	world.rebase(offset)
 	assert_almost_eq(StaticRows.position_of(field.row_id(1)).distance_to(row_before - offset), 0.0, 1e-3, "the row moved")
 	assert_almost_eq(cap.global_position.distance_to(cap_before - offset), 0.0, 1e-3, "the capital moved")
-	for i: int in rocks.size():
-		var xform: Transform3D = PhysicsServer3D.body_get_state(field.body_rids()[i], PhysicsServer3D.BODY_STATE_TRANSFORM)
+	for i: int in rocks.size():  # no ship near, so rows only: each body comes to life where it belongs (M6-T21)
+		var xform: Transform3D = field.rock_bodies().placed(i, field.global_transform)
 		assert_almost_eq(xform.origin.distance_to((rocks[i]["offset"] as Vector3) - offset), 0.0, 1e-3, "rock %d's body moved" % i)
 	# Headless rendering keeps no instance data, so the drawing is checked by what carries it: one multimesh of every rock,
 	# inside the field node the rebase moved.
@@ -217,36 +218,30 @@ func test_a_rebase_shifts_every_rock_and_the_capitals() -> void:
 	assert_true(field.is_ancestor_of(field.get_child(0)) and field.get_child(0) is MultiMeshInstance3D, "and it moves with the field")
 
 
-func test_the_gravity_source_bends_a_coasting_path_over_thirty_seconds() -> void:
-	assert_eq(world.environment_accel(Vector3.ZERO), Vector3.ZERO, "no field before the harness installs one")
-	var gravity: GravityStandin = standins.add_gravity(world.to_universe(Vector3(0.0, -400000.0, 0.0)), 4.8e9)
-	var a: Vector3 = world.environment_accel(Vector3.ZERO)
-	assert_almost_eq(a.length(), 0.03, 1e-6, "0.03 m/s^2 at 400 km")
-	assert_almost_eq(a.normalized().dot(Vector3.DOWN), 1.0, 1e-6, "toward the moon")
-	# A bolt-like coasting point, stepped as a ship's force step would: 30 s of ticks.
-	var p := Vector3.ZERO
-	var v := Vector3(0.0, 0.0, -1000.0)
-	for i: int in 1800:
-		v += world.environment_accel(p) * DT
-		p += v * DT
-	var bend: float = Vector2(p.x, p.y).length()
-	assert_between(bend, 10.0, 16.0, "about 0.5 a t^2 = 13.5 m off the straight line (%.2f m)" % bend)
-	world.rebase(Vector3(0.0, 0.0, -30000.0))
-	assert_almost_eq(world.environment_accel(Vector3.ZERO).length(), 4.8e9 / (400000.0 * 400000.0 + 30000.0 * 30000.0), 1e-7,
-			"the source stays put in the universe across a rebase")
-	standins.remove_gravity()
-	assert_eq(world.environment_accel(Vector3.ZERO), Vector3.ZERO, "uninstalled")
-	assert_false(is_instance_valid(gravity) and gravity.is_inside_tree(), "and gone")
+func test_with_no_star_system_nothing_pulls() -> void:
+	assert_false(world.gravity_active())
+	assert_eq(world.environment_accel(Vector3(0.0, -400000.0, 0.0)), Vector3.ZERO, "no stand-in field any more: nothing pulls")
 
 
-func test_a_capital_holds_its_cruise_and_falls_with_the_moon_only_through_its_engines() -> void:
-	var cap: CapitalStandin = standins.add_capital(&"destroyer", Factions.RAIDERS, "TEST", world.to_universe(Vector3.ZERO),
+func test_a_capital_falls_with_the_frame_and_its_engines_hold_its_cruise_against_the_pull() -> void:
+	assert_true(world.anchor_on_rail(FreeFall.fixture_system(), &"post"), "a low fixture orbit, inside the planet's zone")
+	var at := Vector3(0.0, 0.0, -3000.0)  # 3 km along the track: the residual pulls back toward the anchor
+	var cap: CapitalStandin = standins.add_capital(&"destroyer", Factions.RAIDERS, "TEST", world.to_universe(at),
 			Basis.IDENTITY, Vector3(0.0, 0.0, -CapitalStandin.CRUISE_MPS))
-	standins.add_gravity(world.to_universe(Vector3(0.0, -400000.0, 0.0)), 4.8e9)
+	var pull: Vector3 = world.environment_accel(at)
+	assert_gt(pull.length(), 1e-3, "the tide 3 km out")
 	var force: Vector3 = cap.cruise_force(DT)
-	assert_almost_eq(force.y / cap.mass, 0.03, 1e-4, "at cruise its engines only hold off the moon's pull")
+	assert_almost_eq(force / cap.mass, -pull, Vector3.ONE * 1e-6, "at cruise its engines only hold off the pull")
 	cap.linear_velocity = Vector3.ZERO
 	assert_lt(cap.cruise_force(DT).z, 0.0, "below cruise it thrusts along its nose")
+	# Over two seconds of real ticks the pull and the engines cancel: the cruise holds (with the engines alone the pull's
+	# own share would push it 0.008 m/s off).
+	cap.linear_velocity = Vector3(0.0, 0.0, -CapitalStandin.CRUISE_MPS)
+	for i: int in 120:
+		await get_tree().physics_frame
+		cap.step_engines(DT)
+	assert_almost_eq(cap.linear_velocity, Vector3(0.0, 0.0, -CapitalStandin.CRUISE_MPS), Vector3.ONE * 1e-3,
+			"the engines held the cruise against the pull (%s)" % cap.linear_velocity)
 
 
 # --- missiles, beams, interceptors against missiles, mines (M4-T12) ---------------------------------------------------

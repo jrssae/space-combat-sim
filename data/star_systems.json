@@ -1,6 +1,23 @@
 {
   "default": "local",
   "systems": {
-    "local": {"name": "Epsilon Eridani", "class": "K2V orange dwarf", "temperature_k": 5084.0}
+    "local": {
+      "name": "Epsilon Eridani",
+      "class": "K2V orange dwarf",
+      "temperature_k": 5084.0,
+      "mass_solar": 0.82,
+      "a_min": 0.5,
+      "bodies": [
+        {"id": "epsilon", "name": "Epsilon", "kind": "star", "gm": 1.08824e20, "radius_m": 5.11e8},
+        {"id": "epsilon_iii", "name": "Epsilon III", "kind": "planet", "parent": "epsilon", "gm": 1.68e14, "radius_m": 4.78e6,
+          "atmosphere_top_m": 1.0e5,
+          "orbit": {"a_m": 8.976e10, "e": 0.0, "i_deg": 0.0, "node_deg": 0.0, "peri_deg": 0.0, "m0_deg": 0.0, "epoch_s": 0.0}}
+      ],
+      "places": [
+        {"id": "babylon5", "name": "Babylon 5", "parent": "epsilon_iii",
+          "orbit": {"a_m": 2.75e7, "e": 0.0, "i_deg": 0.0, "node_deg": 0.0, "peri_deg": 0.0, "m0_deg": 0.0, "epoch_s": 0.0}},
+        {"id": "jumpgate", "name": "Jumpgate", "same_orbit_as": "babylon5", "phase_rad": 0.0018181818}
+      ]
+    }
   }
 }

@@ -222,6 +222,7 @@ func test_the_shader_patches_still_apply_to_the_vendored_shader() -> void:
 	assert_string_contains(patched, "vec3 always_on_flare = vec3(0.0);", "no veil over the picture")
 	assert_false(patched.contains("col *= godrays"), "no shafts of light in empty space")
 	assert_string_contains(patched, "for (int i = 0; i < 0; i++) {", "and no depth reads marching them")
+	assert_string_contains(patched, "raw <= 2.0e-8 ? 0.0 : raw", "the far bodies' depth reads as open sky (M6-T12)")
 
 
 func test_the_star_field_leaves_the_flare_open_on_the_sky_and_a_hull_still_hides_it() -> void:

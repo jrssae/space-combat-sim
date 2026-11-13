@@ -43,6 +43,7 @@ func _ready() -> void:
 	var world := get_parent() as WorldFrame
 	if world != null:
 		world.rebased.connect(shift_wrecks)
+		world.boosted.connect(boost_wrecks)
 	DebugConsole.registry.register_provider(&"debris", ConsoleVars.new({
 		&"sets": {"get": func() -> int: return set_count(), "doc": "Chunk sets built at load"},
 		&"free_sets": {"get": func() -> int: return free_set_count(), "doc": "Chunk sets parked and ready"},
@@ -160,7 +161,7 @@ func advance_wrecks(delta: float) -> void:
 	for entry: Dictionary in _wrecks:
 		var wreck: StagedWreck = entry["wreck"]
 		var nodes: Array[DebrisChunk] = entry["chunks"]
-		var due: PackedInt32Array = wreck.advance(delta)
+		var due: PackedInt32Array = wreck.advance(delta, WorldFrame.of(self))
 		for i: int in nodes.size():
 			if not wreck.is_released(i) and is_instance_valid(nodes[i]):
 				nodes[i].place_held(wreck.chunk_transform(i), wreck.point_velocity(wreck.offset_of(i)))
@@ -172,6 +173,12 @@ func advance_wrecks(delta: float) -> void:
 func shift_wrecks(offset: Vector3) -> void:
 	for entry: Dictionary in _wrecks:
 		(entry["wreck"] as StagedWreck).shift(offset)
+
+
+## A velocity rebase by `dv`: held wrecks keep their universe velocity (their chunks take it from them every tick).
+func boost_wrecks(dv: Vector3) -> void:
+	for entry: Dictionary in _wrecks:
+		(entry["wreck"] as StagedWreck).boost(dv)
 
 
 ## Wrecks still holding chunks.

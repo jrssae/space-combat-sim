@@ -110,6 +110,7 @@ var world: WorldFrame = null
 var brain: PilotBrain = null:
 	set(value):
 		brain = value
+		in_passage = false  # a new pilot (or none) is in nobody's passage
 		last_hit_s = -INF
 		last_bolt_hit_s = -INF
 		last_attacker_id = 0
@@ -144,6 +145,18 @@ var last_bolt_hit_s: float = -INF
 var last_attacker_id: int = 0
 ## Whether the ship was within `ai_think_near_m` of a live player at its last step (M4-T04).
 var near_player: bool = false
+## Something else flies the ship for a while (M6-T22: its passage through a jump vortex's funnel): the brain neither thinks nor
+## commands, the host does not step it, and the ship flies what it was last given. The brain is kept, so orders still reach it;
+## it decides afresh the tick it is let go.
+var in_passage: bool = false:
+	set(value):
+		if value == in_passage:
+			return
+		in_passage = value
+		if in_passage:
+			unhost()
+		else:
+			_woken = true
 
 var _capability: ShipCapability = null
 ## The mean of the ship's muzzles, ship-local (muzzles never move on the hull, so computed once).
@@ -243,7 +256,7 @@ func _physics_process(delta: float) -> void:
 ## One tick. `_physics_process` calls it with `batched` (a native think joins the tick's `BrainBatch` rows, M4-T33, and lands
 ## at -9) and `may_host` (the host may take the step over, M4-T35); public so tests can drive it, by default thinking at once.
 func step(delta: float, batched: bool = false, may_host: bool = false) -> void:
-	if brain == null or combatant == null or not is_instance_valid(combatant.ship):
+	if in_passage or brain == null or combatant == null or not is_instance_valid(combatant.ship):
 		return
 	var started_us: int = Time.get_ticks_usec()  # profiling readout only, never gameplay time
 	if _hosted:

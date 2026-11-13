@@ -67,11 +67,9 @@ pub fn quarantine(buffer: &[f32], last: &[f32], forward: [f32; 3], out: &mut Vec
     count
 }
 
-/// Expires the owned bolts whose time is up and moves the rest, as `Projectile._physics_process` does for a node: the
-/// expiry test first (the bolt is gone before it moves), then `last_step = velocity * delta` with the delta rounded to 32
-/// bits and `position += last_step`. A bolt launched this tick does not move yet (§15.3: its launch tick sweeps only its
-/// muzzle). Returns how many expired.
-pub fn step(bolts: &mut Bolts, delta: f64, now_s: f64, tick: i64) -> usize {
+/// Expires the owned bolts whose time is up, as `Projectile._physics_process` does for a node: the expiry test comes
+/// first, so an expired bolt is gone before it moves. Returns how many expired.
+pub fn expire(bolts: &mut Bolts, now_s: f64) -> usize {
     let owned = bolts.owned;
     let mut keep = std::mem::take(&mut bolts.keep_scratch);
     keep.clear();
@@ -87,16 +85,26 @@ pub fn step(bolts: &mut Bolts, delta: f64, now_s: f64, tick: i64) -> usize {
         bolts.retain_owned(&keep);
     }
     bolts.keep_scratch = keep;
+    expired
+}
+
+/// Moves the owned bolts one tick, as `Projectile._physics_process` moves a node: `last_step = velocity * delta` with the
+/// delta rounded to 32 bits and `position += last_step`. `pull` is what each owned bolt feels from gravity this tick (D66),
+/// taken into its velocity before the move; empty where nothing pulls, which leaves today's bits. A bolt launched this tick
+/// does not move yet (§15.3: its launch tick sweeps only its muzzle).
+pub fn advance(bolts: &mut Bolts, delta: f64, tick: i64, pull: &[Vector3]) {
     let dt = delta as f32;
     for i in 0..bolts.owned {
         if bolts.launched[i] >= tick {
             continue;
         }
+        if let Some(&g) = pull.get(i) {
+            bolts.velocities[i] = add(bolts.velocities[i], scale(g, dt));
+        }
         let step = scale(bolts.velocities[i], dt);
         bolts.last_steps[i] = step;
         bolts.positions[i] = add(bolts.positions[i], step);
     }
-    expired
 }
 
 /// Drops the owned bolts a hit spent (a spent node is freed at the end of its frame, gone by the next tick's sync).
@@ -318,13 +326,16 @@ pub fn shot_velocity(
 /// The multimesh transforms of the owned bolts drawn with `look`, drawn `fraction` of the way from their last tick's
 /// place to this one (so a frame between ticks shows them where the interpolated node would be), the capsule pointed
 /// along the velocity as `Projectile._face` points it, `child` the mesh's own basis under the node, `visual_scale` the
-/// chase camera's enlargement. Spent bolts are left out. Returns the instances written.
+/// chase camera's enlargement. Spent bolts are left out. Returns the instances written. `frame_velocity` is the local
+/// frame's own velocity against its anchor (M6-T05): a bolt points along its velocity against the anchor, so a velocity
+/// rebase turns no bolt in flight.
 pub fn instance_transforms(
     bolts: &Bolts,
     look: u8,
     fraction: f32,
     visual_scale: f32,
     child: &Basis,
+    frame_velocity: Vector3,
     out: &mut Vec<f32>,
 ) -> usize {
     out.clear();
@@ -339,7 +350,11 @@ pub fn instance_transforms(
             continue;
         };
         let origin = sub(bolts.positions[i], scale(bolts.last_steps[i], behind));
-        let facing = looking_along(bolts.velocities[i]);
+        let facing = if frame_velocity == Vector3::ZERO {
+            looking_along(bolts.velocities[i])
+        } else {
+            looking_along(add(bolts.velocities[i], frame_velocity))
+        };
         let basis = mul(&facing, child);
         let base = slot * INSTANCE_FLOATS;
         for row in 0..3 {
@@ -446,5 +461,84 @@ mod quarantine_tests {
     fn an_empty_slot_is_left_alone() {
         let mut out = Vec::new();
         assert_eq!(quarantine(&[0.0; 12], &[0.0; 12], [0.0, 0.0, -1.0], &mut out), 0);
+    }
+}
+
+#[cfg(test)]
+mod pull_tests {
+    use super::*;
+
+    const DT: f64 = 1.0 / 60.0;
+
+    fn three_bolts() -> Bolts {
+        let mut bolts = Bolts::default();
+        for i in 0..3 {
+            let v = Vector3::new(1200.5 + i as f32, -3.25, -870.125);
+            bolts.insert_owned(-1 - i, Vector3::new(10.0 * i as f32, 0.5, -3.0), v, 0, 5, 7, 0.1, 2.0, [1.0; 4], 0, 9.0, 0);
+        }
+        bolts
+    }
+
+    // The move as it was before gravity (M4-T35): `last_step = velocity * delta`, then `position += last_step`.
+    fn moved_the_old_way(bolts: &Bolts, i: usize) -> (Vector3, Vector3) {
+        let step = scale(bolts.velocities[i], DT as f32);
+        (add(bolts.positions[i], step), step)
+    }
+
+    #[test]
+    fn with_no_pull_a_bolt_moves_by_the_old_bits() {
+        let mut bolts = three_bolts();
+        for tick in 1..200 {
+            let wanted: Vec<_> = (0..3).map(|i| moved_the_old_way(&bolts, i)).collect();
+            let velocities = bolts.velocities.clone();
+            advance(&mut bolts, DT, tick, &[]);
+            for (i, (p, s)) in wanted.into_iter().enumerate() {
+                assert_eq!(bolts.positions[i], p);
+                assert_eq!(bolts.last_steps[i], s);
+                assert_eq!(bolts.velocities[i], velocities[i], "no pull, no change of velocity");
+            }
+        }
+    }
+
+    #[test]
+    fn a_pull_goes_into_the_velocity_before_the_move() {
+        let mut bolts = three_bolts();
+        let pull = [Vector3::new(0.0, -0.5, 0.0), Vector3::new(0.02, 0.0, -0.01), Vector3::ZERO];
+        let (v0, p0) = (bolts.velocities.clone(), bolts.positions.clone());
+        advance(&mut bolts, DT, 1, &pull);
+        for i in 0..3 {
+            let v = add(v0[i], scale(pull[i], DT as f32));
+            assert_eq!(bolts.velocities[i], v);
+            assert_eq!(bolts.positions[i], add(p0[i], scale(v, DT as f32)), "the move is from the new velocity");
+        }
+        // Ten seconds of a steady pull: the drop is g t^2 / 2, plus the half tick the kick-then-drift step adds.
+        let mut falling = three_bolts();
+        let start = falling.positions[0];
+        let ticks = 600;
+        for tick in 1..=ticks {
+            advance(&mut falling, DT, tick, &pull);
+        }
+        let t = ticks as f64 * DT;
+        let drop = f64::from(start.y - falling.positions[0].y) - f64::from(3.25_f32) * t;
+        let expected = 0.5 * 0.5 * t * (t + DT);
+        assert!((drop - expected).abs() < 0.01, "dropped {drop} m against {expected} m");
+    }
+
+    #[test]
+    fn a_bolt_launched_this_tick_neither_moves_nor_falls() {
+        let mut bolts = three_bolts();
+        let (v0, p0) = (bolts.velocities.clone(), bolts.positions.clone());
+        advance(&mut bolts, DT, 0, &[Vector3::new(0.0, -9.0, 0.0); 3]);
+        assert_eq!(bolts.velocities, v0);
+        assert_eq!(bolts.positions, p0);
+    }
+
+    #[test]
+    fn expiry_comes_before_the_move() {
+        let mut bolts = three_bolts();
+        bolts.expires_at[1] = 1.0;
+        assert_eq!(expire(&mut bolts, 1.0), 1);
+        assert_eq!(bolts.owned, 2);
+        assert_eq!(bolts.ids, vec![-1, -3]);
     }
 }

@@ -39,7 +39,7 @@ func test_assist_stops_accelerating_at_the_safe_speed() -> void:
 	source.hold(InputAdapter.MAIN_LEFT)
 	source.hold(InputAdapter.MAIN_RIGHT)
 	await _ticks(300)
-	var speed: float = main.ship.linear_velocity.length()
+	var speed: float = main.ship.speed_against_rest()  # the velocity rebase at 2 000 m/s moves the frame (M6-T08)
 	assert_gt(speed, 4900.0, "it did accelerate toward the cap")
 	assert_lt(speed, main.ship.spec.assist_speed_max_mps + 2.0, "and stopped there")
 
@@ -49,7 +49,7 @@ func test_assist_does_not_brake_a_ship_that_is_already_faster() -> void:
 	main.ship.linear_velocity = main.ship.forward() * 7000.0
 	main.ship.set_assist(true)
 	await _ticks(120)
-	assert_almost_eq(main.ship.linear_velocity.length(), 7000.0, 1.0, "coasting above the cap is left alone")
+	assert_almost_eq(main.ship.speed_against_rest(), 7000.0, 1.0, "coasting above the cap is left alone")
 
 
 func test_without_assist_thrust_fades_toward_the_hard_limit() -> void:
@@ -58,7 +58,7 @@ func test_without_assist_thrust_fades_toward_the_hard_limit() -> void:
 	source.hold(InputAdapter.MAIN_LEFT)
 	source.hold(InputAdapter.MAIN_RIGHT)
 	await _ticks(600)
-	var speed: float = main.ship.linear_velocity.length()
+	var speed: float = main.ship.speed_against_rest()
 	assert_gt(speed, 9500.0, "still gaining")
 	assert_lte(speed, main.ship.spec.speed_limit_mps, "never past the limit")
 	# At 9500 m/s the gain is sqrt(1 - (9500/9999)^2), about 0.31, so ten seconds of full mains add well under their rest value.

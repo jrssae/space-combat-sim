@@ -103,7 +103,8 @@ func test_the_input_carries_the_players_state() -> void:
 	assert_eq(input.weapon_speed_mps, main.cannon.weapon.muzzle_speed_mps)
 	assert_true(input.fuel_unlimited)
 	assert_eq(input.faction, Factions.EARTH_ALLIANCE)
-	assert_eq(input.radar_contacts.size(), main.buoys.size() + main.ships.alive().size(), "the five buoys and the wingmen")
+	assert_eq(input.radar_contacts.size(), main.buoys.size() + main.gates.gates.size() + main.ships.alive().size(),
+			"the five buoys, the jumpgate (M6-T14) and the wingmen")
 	assert_almost_eq(input.muzzle_position, main.ship.global_position + (main.ship.get_muzzles()[0].global_position - main.ship.global_position + main.ship.get_muzzles()[1].global_position - main.ship.global_position) * 0.5, Vector3.ONE * 1e-3)
 
 

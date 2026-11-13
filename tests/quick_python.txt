@@ -20,3 +20,6 @@ tools.procgen.tests.test_cli
 tools.procgen.tests.test_sfx_combat
 tools.procgen.tests.test_sampling
 tools.procgen.tests.test_livery
+tools.procgen.tests.test_planet_helpers
+tools.procgen.tests.test_jumpgate_helpers
+tools.procgen.tests.test_silhouette

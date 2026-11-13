@@ -45,6 +45,7 @@ var reduced: bool = false
 var fx: FxPool = null
 
 var _age_s: float = 0.0
+var _pull := HeldPull.new()  # gravity (M6-T07), read once a second
 var _rig: LightRig = null
 var _fireball_material: ShaderMaterial = null
 
@@ -86,7 +87,14 @@ func _exit_tree() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	velocity = _pull.kick(self, velocity, delta)
 	global_position += velocity * delta
+
+
+## A velocity rebase (`WorldFrame.boost`): the fireball keeps its universe velocity.
+func frame_boost(dv: Vector3) -> void:
+	velocity -= dv
+	_pull.reset()
 
 
 func _process(delta: float) -> void:

@@ -299,3 +299,24 @@ battle, the AI driver and the in-scene mission. Offer that as an option (`--tier
 - Break one listed test on purpose (a wrong `assert_eq`), see the script fail with that file named, then revert.
 - Break the parse of one listed test file, see the compile check stop the run.
 - `scripts/run_tests.sh` still exits 0 and runs everything it ran before.
+
+## Independent review notes (2026-11-09)
+
+- The trial-run list is a practical fast subset, but it omits direct GUT integration coverage for turret behavior and civilian
+  flight/ships. Rust kernel unit tests are valuable, but do not cover all Godot wiring. Consider adding
+  `tests/integration/test_turret_line_of_fire.gd` (18 s) and `tests/integration/test_civilian_ships.gd` (6 s) to support the
+  “every major area” description, or explicitly call these subsystems out as omitted. Confirm generated assets are present so
+  these tests do not report `Pending`.
+- The “no `--import` needed” rule needs a clean-checkout condition. Generated assets being present does not prove Godot's ignored
+  `.godot/imported` cache exists or is current. On a clean checkout, run/import resources when that cache is missing; thereafter
+  use an import-state check based on source/import metadata rather than only comparing the top-level `assets/generated/` and
+  `tools/procgen/` directory timestamps (nested file edits need not update either parent directory timestamp reliably).
+- The Python runtime instruction is incomplete for the measured maintainer machine: the system `python3` lacked NumPy. Prefer
+  the project environment when it exists and otherwise check imports up front, failing with an actionable dependency/setup hint
+  instead of discovering the missing dependency halfway through the quick suite. Do not silently skip Python tests.
+- The 3.5-minute total sums the measured quick components; the reported warm native build is described as a no-op but has no
+  separate duration in the timing table. Treat 3.5 minutes as the observed trial total for its exact environment, not a guaranteed
+  clean-checkout or cold-build target. The 66-minute full GUT run timed out before completion, so the full ~90-minute figure is an
+  estimate, not a completed full-suite measurement.
+- `test_quick_suite.gd` should assert that it is itself present exactly once in `tests/quick_suite.txt`; otherwise the list can
+  silently omit the guard. Keep the failure-path check for a missing file and for slow/GPU-only entries.

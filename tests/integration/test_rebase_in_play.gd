@@ -10,6 +10,8 @@ const MEASURE_TICKS: int = 60
 const SPEED_UP: float = 4.0
 const FIGHT_S: float = 480.0
 const FIGHT_WAVES: int = 2
+## The fight across forced velocity rebases, s of sim time.
+const BOOST_FIGHT_S: float = 90.0
 
 var main: Main
 var source: FakeInputSource
@@ -206,10 +208,32 @@ func test_a_sandbox_fight_with_wingmen_rebasing_every_second_clears_its_waves() 
 			fight.median_rebase_us(), fight.min_rebase_us(), fight.max_rebase_us()])
 
 
+func test_a_sandbox_fight_across_many_velocity_rebases_shows_no_jump() -> void:
+	# M6-T05 (AC1): both rebases forced often in a live dogfight. A velocity rebase of 150 m/s every half second, every third
+	# one back onto the anchor, on top of the 40 m position rebases. The fixture compares every hull's, prop's and bolt's
+	# universe position and velocity tick by tick and its drawn position against the player's frame by frame.
+	await _launch(ScenarioLoader.SANDBOX_PATH)
+	assert_true(_exec("wing order engage").ok, "the wingmen hunt the raiders")
+	assert_true(_exec("wave start 1").ok)
+	source.hold(InputAdapter.FIRE)
+	Engine.time_scale = SPEED_UP
+	var fight: RebaseFight = await RebaseFight.run(self, main, BOOST_FIGHT_S, Callable(), 40.0, 60.0, 0.0, 0.5)
+	Engine.time_scale = 1.0
+	source.release(InputAdapter.FIRE)
+	gut.p("sandbox fight, both rebases forced: " + fight.summary())
+	gut.p("  " + fight.boost_summary())
+	assert_gte(fight.boosts, 100, "a velocity rebase every half second")
+	assert_gt(fight.rebases, 20, "and position rebases among them")
+	assert_gt(fight.hits, 0, "bolts still hit")
+	assert_true(main.world.riding(), "the fixture put the frame back on its anchor")
+	assert_eq(main.world.origin_velocity, PackedFloat64Array([0.0, 0.0, 0.0]))
+
+
 func test_flying_at_full_speed_through_5_km_rebases_leaves_nothing_behind() -> void:
 	# The main scene's own threshold, crossed every 1.25 s at 4 000 m/s, with an explosion, debris and bolts in flight: a node
 	# left interpolating across a 5 km jump would be drawn kilometres from where it is.
 	await _launch(ScenarioLoader.SANDBOX_PATH)
+	main.world.auto_boost_speed_mps = 0.0  # position rebases at full speed: no velocity rebase to bring the ship to rest (M6-T08)
 	assert_true(_exec("wave stop").ok)
 	assert_true(_exec("spawn raider idle 80").ok)
 	assert_true(_exec('set targeting.selected "RAIDER 1"').ok)
@@ -265,6 +289,7 @@ func test_through_a_rebase_at_full_speed_the_view_keeps_the_ship_its_bolts_and_t
 	# and the HUD's camera sees NAV ALPHA where it is drawn (1 m). The sampler reads a bolt node's interpolated transform, and
 	# the player's cannon keeps its bolt nodes on either bolt path (M4-T35).
 	await _launch()
+	main.world.auto_boost_speed_mps = 0.0  # position rebases at full speed: no velocity rebase to bring the ship to rest (M6-T08)
 	var speed: float = 5000.0
 	main.ship.reset_to(Transform3D(Basis(Vector3.RIGHT, PI / 2.0), main.ship.position))
 	main.ship.linear_velocity = main.ship.forward() * speed
@@ -337,6 +362,7 @@ func test_through_a_rebase_at_full_speed_the_view_keeps_the_ship_its_bolts_and_t
 func test_the_main_scene_rebases_at_5_km() -> void:
 	await _launch()
 	assert_eq(main.world.auto_rebase_distance_m, 5000.0, "main.tscn turns the rebase on at 5 km")
+	assert_eq(main.world.auto_boost_speed_mps, 2000.0, "and the velocity rebase at 2 000 m/s (M6-T08)")
 	assert_eq(main.world.focus, main.ship, "on the player")
 	var bare := WorldFrame.new()
 	assert_eq(bare.auto_rebase_distance_m, 0.0, "a bare WorldFrame keeps it off")

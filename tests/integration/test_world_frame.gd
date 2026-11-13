@@ -170,7 +170,7 @@ func test_a_rebase_leaves_a_body_parked_for_the_tier_where_it_stands_and_settles
 	world.spawn(moved, UniversePos.new(10.0, 0.0, 0.0))
 	var parked := Node3D.new()
 	world.spawn(parked, UniversePos.new(20.0, 0.0, 0.0))
-	parked.set_meta(TierDirector.TIER_META, true)
+	ShiftableRegistry.set_out(parked, TierDirector.TIER_META, true)  # what `park_for_tier` does (M6-T21)
 	parked.visible = false
 	var hidden := Node3D.new()
 	world.spawn(hidden, UniversePos.new(30.0, 0.0, 0.0))
@@ -182,7 +182,7 @@ func test_a_rebase_leaves_a_body_parked_for_the_tier_where_it_stands_and_settles
 	assert_almost_eq(hidden.global_position.x, 30.0 - 5000.0, TOL_M, "a hidden one too (the pool's parked ships are re-placed on acquire)")
 	assert_almost_eq(parked.global_position.x, 20.0, TOL_M, "a body parked for the tier stays: its row moves with the core")
 	assert_eq(world.last_settle_resets, 1, "the reset reached the one visible node the rebase moved")
-	parked.remove_meta(TierDirector.TIER_META)
+	ShiftableRegistry.set_out(parked, TierDirector.TIER_META, false)
 	parked.visible = true
 	world.rebase(Vector3(-5000.0, 0.0, 0.0))
 	assert_almost_eq(parked.global_position.x, 20.0 + 5000.0, TOL_M, "back in play it moves with the rest")

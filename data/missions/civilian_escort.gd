@@ -6,7 +6,7 @@ extends MissionScript
 
 const NAV_BETA: String = "NAV BETA"
 const RAIDER: Dictionary = {"type": "raider_fighter", "anchor": "origin", "behaviour": {"type": "ai", "profile": "raider"},
-		"arrival": "jump"}
+		"arrival": "jump", "via": "carrier"}
 ## The route's progress points (25, 50 and 75 %), metres from the scenario origin; the civilian's route flies through each.
 const POINT_25: Vector3 = Vector3(0.0, 0.0, -7500.0)
 const POINT_50: Vector3 = Vector3(0.0, 0.0, -15000.0)

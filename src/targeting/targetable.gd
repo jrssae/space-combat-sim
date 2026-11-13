@@ -106,6 +106,12 @@ func get_target_velocity() -> Vector3:
 	var body := get_parent() as RigidBody3D
 	if body != null:
 		return body.linear_velocity
+	# A marker on something tied to the World's anchor (a buoy, a gate) holds its own motion against the anchor (M6-T08).
+	var owner_node: Node = get_parent()
+	if owner_node != null and owner_node.is_in_group(WorldFrame.ANCHORED_GROUP):
+		var world: WorldFrame = WorldFrame.of(owner_node)
+		if world != null:
+			return velocity + world.rest_velocity()
 	return velocity
 
 

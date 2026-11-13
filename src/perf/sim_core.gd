@@ -10,7 +10,8 @@ extends Node
 ## 1 000 000), closing the tick's engine-call count; it is the seam where later tasks write rows back. The hit resolver
 ## (200) asks for the bolts again (`ensure_bolts_synced`), since they moved at 0; bodies touched since the first sync
 ## (a ship back from the pool, a parked or destroyed one) are read again then. A rebase shifts the node and bolt rows
-## once (`rebased`); the static rows come again from `StaticRows` at the next sync.
+## once (`rebased`); the static rows' new places come from `StaticRows` at the next sync, alone when only they changed
+## (M6-T06).
 ##
 ## Threads (M4-T18): the core's per-ship passes (the brains, which `BrainBatch`, an internal child at -9, hands one batch a
 ## tick, and the flight step) run on `perf_threads` worker threads, set at once whenever the setting changes.
@@ -120,6 +121,7 @@ var _window_selects: int = 0
 var _window_parts_us: PackedInt64Array = PackedInt64Array([0, 0, 0, 0, 0])
 var _window_select_us: int = 0
 var _statics_version: int = -1
+var _statics_moves: int = -1
 var _out: Node = null
 var _bolts_fresh: bool = false  # the bolts were read again since this tick's first sync
 var _bolt_sync: Object = null  # the bolt reader (M4-T34), made on first use
@@ -543,7 +545,11 @@ func _sync_in() -> void:
 		core.set_members(tree.get_nodes_in_group(Targetable.GROUP), tree.get_nodes_in_group(Damageable.GROUP))
 	if _statics_version != StaticRows.version:
 		_statics_version = StaticRows.version
+		_statics_moves = StaticRows.moves
 		core.set_statics(StaticRows.ids, StaticRows.positions, StaticRows.radii, StaticRows.factions, StaticRows.kinds)
+	elif _statics_moves != StaticRows.moves:
+		_statics_moves = StaticRows.moves  # the same rows, shifted (M6-T06): only their places go over
+		core.move_statics(StaticRows.positions)
 	var frame: int = Engine.get_physics_frames()
 	var delta: float = get_physics_process_delta_time()
 	var reader: Object = _bolt_reader()
@@ -787,7 +793,24 @@ func _register_console() -> void:
 		&"turret_us": {"get": func() -> int: return turrets.step_us if turrets != null else 0, "unit": "us", "doc": "The last tick's turret step (aim, gate, shots, handed back); wall clock"},
 		&"turret_picks_stale": {"get": func() -> int: return int(core.turret_readouts()[2]) if core != null else 0, "doc": "Turret picks dropped at the AI job's join because the mount was rebound meanwhile (M5-T21)"},
 		&"attackers": {"get": func() -> int: return int(core.attacker_count()) if core != null else 0, "doc": "Attacker and victim pairs the turrets remember (each for 30 s after a hit; M5-T21)"},
+		&"gravity_rows": {"get": func() -> PackedInt64Array: return gravity_rows(), "doc": "Movers the frame's pull reached in the last tick (M6-T07): ships, tier rows, bolts; zeros where nothing pulls"},
+		&"gravity_us": {"get": func() -> int: return gravity_us(), "unit": "us", "doc": "The last tick's pull on the tier's rows and the bolts, worked out in one batch each (the ships' share is inside the flight step); wall clock"},
 	}), self)
+
+
+## Movers the frame's pull reached in the last tick: `[ships, tier rows, bolts]` (M6-T07).
+func gravity_rows() -> PackedInt64Array:
+	if core == null:
+		return PackedInt64Array([0, 0, 0])
+	return (core.gravity_readouts() as PackedInt64Array).slice(0, 3)
+
+
+## The last tick's cost of the tier's and the bolts' pull, microseconds (a readout, wall clock).
+func gravity_us() -> int:
+	if core == null:
+		return 0
+	var r: PackedInt64Array = core.gravity_readouts()
+	return int(r[3] + r[4])
 
 
 # The brain batch under this core.

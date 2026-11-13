@@ -258,6 +258,11 @@ class PieceTexturedTests(unittest.TestCase):
         np.testing.assert_allclose((d_lo + d_hi)[:2] * 0.5, [0.0, 0.0], atol=1.0, err_msg="the drum is centred on its axis")
         self.assertAlmostEqual(float(d_hi[0] - d_lo[0]), 8000.0 / 9.0, delta=5.0)
 
+    def test_the_station_carries_its_far_view(self) -> None:
+        far = self.station["far"]  # M6-T15: both pieces' outline from every side, for the far dot
+        self.assertAlmostEqual(far["radius_m"], 4028.0, delta=10.0)
+        self.assertLess(far["areas_m2"][2], far["areas_m2"][0], "end on it is smaller than from the side")
+
     def test_the_command_sphere_has_lit_windows(self) -> None:
         glowing = _glowing_vertices(self.station_dir, self.station["pieces"]["frame"]["mesh"])
         self.assertGreater(len(glowing), 0)

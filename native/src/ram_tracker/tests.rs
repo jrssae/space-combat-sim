@@ -235,3 +235,33 @@ fn a_shift_moves_the_open_windows_points() {
     assert_eq!(rams.len(), 1);
     assert_eq!(rams[0].point, Vector3::new(-100.0, 0.0, -5.0));
 }
+
+#[test]
+fn a_boost_is_no_change_of_velocity_to_an_open_window() {
+    // A gentle touch at 2 m/s closing opens a window; a 2 000 m/s velocity rebase in the middle of it must not land.
+    let boost = 2000.0;
+    let mut tracker = Tracker::default();
+    tick(&mut tracker, &[Body(A, -1.0, vec![]), Body(B, 1.0, vec![])]);
+    let mut rams = tick(&mut tracker, &[Body(A, -1.0, vec![B]), Body(B, 1.0, vec![A])]);
+    assert_eq!(tracker.open_windows(), 2);
+    tracker.boost(Vector3::new(0.0, 0.0, boost));
+    for _ in 0..4 {
+        rams.extend(tick(&mut tracker, &[Body(A, -boost, vec![B]), Body(B, -boost, vec![A])]));
+    }
+    assert!(rams.is_empty(), "1 m/s each is under the safe limit: {rams:?}");
+    assert_eq!(tracker.open_windows(), 0);
+}
+
+#[test]
+fn a_boost_moves_the_velocity_a_new_window_starts_from() {
+    // The boost falls on the tick before the contact: the window must open on the boosted velocity.
+    let boost = 2000.0;
+    let mut tracker = Tracker::default();
+    tick(&mut tracker, &[Body(A, -1.0, vec![]), Body(B, 1.0, vec![])]);
+    tracker.boost(Vector3::new(0.0, 0.0, boost));
+    let mut rams = Vec::new();
+    for _ in 0..4 {
+        rams.extend(tick(&mut tracker, &[Body(A, -boost, vec![B]), Body(B, -boost, vec![A])]));
+    }
+    assert!(rams.is_empty(), "{rams:?}");
+}

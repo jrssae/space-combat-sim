@@ -55,3 +55,13 @@ func test_clamp_velocity_keeps_direction() -> void:
 	assert_almost_eq(clamped.normalized().dot(fast.normalized()), 1.0, 1e-9)
 	var slow: Vector3 = Vector3(10.0, 0.0, 0.0)
 	assert_eq(SpeedGovernor.clamp_velocity(slow, LIMIT), slow)
+
+
+func test_the_ceiling_rides_on_top_of_the_references_motion() -> void:
+	var rest: Vector3 = Vector3(0.0, 0.0, -8000.0)
+	var fast: Vector3 = rest + Vector3(0.0, 0.0, -(LIMIT + 500.0))
+	var clamped: Vector3 = SpeedGovernor.clamp_against(fast, rest, LIMIT)
+	assert_almost_eq((clamped - rest).length(), LIMIT, 1e-3, "cut to the limit against the reference (M6-T08, Q4)")
+	assert_eq(SpeedGovernor.clamp_against(rest + Vector3(10.0, 0.0, 0.0), rest, LIMIT), rest + Vector3(10.0, 0.0, 0.0))
+	assert_eq(SpeedGovernor.clamp_against(fast, Vector3.ZERO, LIMIT), SpeedGovernor.clamp_velocity(fast, LIMIT),
+			"with no reference motion it is the plain ceiling")

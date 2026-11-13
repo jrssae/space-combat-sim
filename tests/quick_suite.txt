@@ -98,8 +98,40 @@ res://tests/unit/test_universe_pos.gd
 res://tests/unit/test_sim_clock.gd
 res://tests/integration/test_world_frame.gd
 res://tests/integration/test_every_world_core.gd
+res://tests/unit/test_star_system.gd
+res://tests/integration/test_free_fall.gd
+res://tests/integration/test_velocity_rebase.gd
+res://tests/integration/test_gravity_movers.gd
+res://tests/unit/test_reference_frame.gd
+res://tests/integration/test_flight_reference.gd
+res://tests/integration/test_low_orbit_flight.gd
+res://tests/unit/test_static_rows.gd
+res://tests/integration/test_static_shift.gd
+res://tests/integration/test_shiftable_registry.gd
+res://tests/integration/test_rock_bodies.gd
+# Jumpgate and jump vortex (M6-T14, T19)
+res://tests/unit/test_vortex_timing.gd
+res://tests/unit/test_gate_jump.gd
+res://tests/unit/test_jumpgate_data.gd
+res://tests/unit/test_jumpgate_broadcast.gd
+res://tests/unit/test_vortex_fit.gd
+res://tests/unit/test_vortex_swirl.gd
+res://tests/unit/test_gate_activation.gd
+# Vortex detail by distance and mass arrivals (M6-T20)
+res://tests/unit/test_vortex_lod.gd
+res://tests/unit/test_jump_point_pool.gd
+res://tests/unit/test_battle_arrivals.gd
+res://tests/unit/test_jump_capability.gd
+# Ships through the vortex's funnel (M6-T22)
+res://tests/unit/test_vortex_transit.gd
+res://tests/integration/test_transit_scale.gd
+res://tests/integration/test_vortex_transits.gd
+res://tests/integration/test_jump_holds.gd
 # Missions, dialog, scenarios
 res://tests/unit/test_scenario_loader.gd
+res://tests/unit/test_scenario_frame.gd
+res://tests/integration/test_scenario_anchor.gd
+res://tests/integration/test_true_scale_start.gd
 res://tests/unit/test_mission_sequencer.gd
 res://tests/unit/test_triggers.gd
 res://tests/unit/test_objective_book.gd
@@ -123,6 +155,14 @@ res://tests/integration/test_audio_director.gd
 res://tests/unit/test_upscaling.gd
 res://tests/unit/test_anti_aliasing_mode.gd
 res://tests/integration/test_post_effects.gd
+# Scaled space, the planet and far props (M6-T10, T11, T15)
+res://tests/unit/test_scaled_placement.gd
+res://tests/unit/test_eclipse_math.gd
+res://tests/unit/test_sun_look.gd
+res://tests/unit/test_planet_look.gd
+res://tests/integration/test_scaled_space.gd
+res://tests/unit/test_far_prop_math.gd
+res://tests/integration/test_far_props.gd
 # Test infrastructure
 res://tests/unit/test_slow_tests.gd
 res://tests/unit/test_balance_tests.gd

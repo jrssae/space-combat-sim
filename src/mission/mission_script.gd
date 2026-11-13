@@ -21,7 +21,8 @@ extends RefCounted
 ##
 ##     func step_wave_one(m: MissionApi) -> void:
 ##         m.spawn({"type": "raider_fighter", "name": "RAIDER 1", "anchor": "origin", "offset": [0, 0, -9000],
-##                 "behaviour": {"type": "ai", "profile": "raider"}, "arrival": "jump"})
+##                 "behaviour": {"type": "ai", "profile": "raider"}, "arrival": "jump",
+##                 "via": "carrier"})
 ##         m.send("RAIDER 1", "NAV ALPHA")
 ##         await m.until(TriggerSpec.destroyed(["RAIDER 1"]))
 

@@ -107,6 +107,7 @@ var _phase_class_known: int = -1
 # never in the tree, freed with this node).
 var _rocks: HitBroadPhase = HitBroadPhase.new()
 var _solid: StaticRows.Solid = null
+var _solid_moves: int = -1
 var _rock_hulls: Dictionary = {}
 var _contact_native: bool = false  # the contacts read in one native call over the rows (M4-T35)
 
@@ -162,14 +163,21 @@ func _physics_process(delta: float) -> void:
 func set_world(value: WorldFrame) -> void:
 	if world != null and world.rebased.is_connected(_on_rebased):
 		world.rebased.disconnect(_on_rebased)
+		world.boosted.disconnect(_on_boosted)
 	world = value
 	if world != null:
 		world.rebased.connect(_on_rebased)
+		world.boosted.connect(_on_boosted)
 
 
 func _on_rebased(offset: Vector3) -> void:
 	_shift_since_step += offset
 	tracker.shift(offset)
+
+
+# A velocity rebase is no ram: the velocities the tracker remembers move with the hulls'.
+func _on_boosted(dv: Vector3) -> void:
+	tracker.boost(dv)
 
 
 ## One tick of ram detection with time step `delta`. `_physics_process` calls it every tick: contacts are compared with the
@@ -262,12 +270,16 @@ func _hull(i: int) -> Dictionary:
 
 
 # A hull as the swept test and the ram maths take it. A rigid body is read before Jolt's step and moves through the tick;
-# a prop has moved itself already.
+# a prop has moved itself already. A prop tied to the World's anchor moves with it too (M6-T08): its row holds only its own
+# motion against the anchor.
 func _hull_from(body_id: int, hull_id: int, rigid: bool, position: Vector3, velocity: Vector3, basis: Basis) -> Dictionary:
 	var damageable := instance_from_id(hull_id) as Damageable
+	var node := instance_from_id(body_id) as Node3D
+	if not rigid and world != null and node != null and node.is_in_group(WorldFrame.ANCHORED_GROUP):
+		velocity += world.rest_velocity()
 	return {
 		"damageable": damageable,
-		"body": instance_from_id(body_id) as Node3D,
+		"body": node,
 		"id": body_id,
 		"rigid": rigid,
 		"basis": basis,
@@ -401,8 +413,9 @@ func _keep_touching(first_id: int, second_id: int) -> void:
 # could reach, and those go through the swept test as props. The hulls' columns are read only when a ship is near a rock.
 func _resolve_rocks(sim: SimCore, delta: float) -> void:
 	var solid: StaticRows.Solid = StaticRows.solid()
-	if solid != _solid:
+	if solid != _solid or solid.moves != _solid_moves:
 		_solid = solid
+		_solid_moves = solid.moves  # shifted in place (M6-T06): the grid takes the new places
 		_rocks.keep(solid.positions, solid.radii)
 	static_pairs_visited = 0
 	if solid.ids.is_empty():
@@ -438,7 +451,8 @@ func _resolve_rocks(sim: SimCore, delta: float) -> void:
 
 
 ## `ship` as it meets the sphere `rock` at `point`: its velocity cut to the part driving into the rock's surface, so the ram
-## rule charges a glancing scrape by its closing speed, not the ship's whole speed (M5-T41). The rock never moves.
+## rule charges a glancing scrape by its closing speed, not the ship's whole speed (M5-T41). The rock moves only with the
+## World's anchor (its `velocity`), so the closing speed is read against that (M6-T08).
 static func head_on(ship: Dictionary, rock: Dictionary, point: Vector3) -> Dictionary:
 	var outward: Vector3 = point - (rock["start"] as Vector3)
 	if outward.length_squared() < 1e-6:
@@ -447,11 +461,16 @@ static func head_on(ship: Dictionary, rock: Dictionary, point: Vector3) -> Dicti
 		return ship
 	outward = outward.normalized()
 	var out: Dictionary = ship.duplicate()
-	out["velocity"] = -outward * RamMath.closing_speed(ship["velocity"], outward)
+	var rock_v: Vector3 = rock.get("velocity", Vector3.ZERO)
+	if rock_v == Vector3.ZERO:
+		out["velocity"] = -outward * RamMath.closing_speed(ship["velocity"], outward)
+	else:
+		out["velocity"] = rock_v - outward * RamMath.closing_speed((ship["velocity"] as Vector3) - rock_v, outward)
 	return out
 
 
-# Rock `s` as the swept test sees a hull: a sphere at rest that nothing moves or breaks.
+# Rock `s` as the swept test sees a hull: a sphere at rest against the World's anchor that nothing moves or breaks. Off the
+# anchor it moves with it (M6-T08), and like a prop it has moved already this tick.
 func _rock(solid: StaticRows.Solid, s: int) -> Dictionary:
 	var id: int = solid.ids[s]
 	var radius: float = solid.radii[s]
@@ -470,6 +489,7 @@ func _rock(solid: StaticRows.Solid, s: int) -> Dictionary:
 		hull.ram_mass_kg = StaticRows.SOLID_MASS_KG
 		_rock_hulls[id] = hull
 	var at: Vector3 = solid.positions[s]
+	var rest: Vector3 = world.rest_velocity() if world != null else Vector3.ZERO
 	return {
 		"damageable": hull,
 		"body": null,
@@ -478,8 +498,8 @@ func _rock(solid: StaticRows.Solid, s: int) -> Dictionary:
 		"basis": Basis.IDENTITY,
 		"to_body": Basis.IDENTITY,
 		"mass": StaticRows.SOLID_MASS_KG,
-		"velocity": Vector3.ZERO,
-		"start": at,
+		"velocity": rest,
+		"start": at - rest * _delta,
 		"end": at,
 	}
 
@@ -589,7 +609,9 @@ func _apply_all(pending: Array[Array]) -> void:
 
 static func _prop_velocity(body: Node3D) -> Vector3:
 	var buoy := body as NavBuoy
-	return buoy.velocity if buoy != null else Vector3.ZERO
+	var own: Vector3 = buoy.velocity if buoy != null else Vector3.ZERO
+	var world: WorldFrame = WorldFrame.of(body) if body != null and body.is_in_group(WorldFrame.ANCHORED_GROUP) else null
+	return own + world.rest_velocity() if world != null else own
 
 
 static func _body_velocity(body: Node3D) -> Vector3:

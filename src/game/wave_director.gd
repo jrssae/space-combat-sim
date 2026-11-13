@@ -150,7 +150,9 @@ func _spawn(request: Dictionary) -> void:
 	if brain is AiPilot and player != null and (brain as AiPilot).context.objective_name.is_empty():
 		# The wave is about the player (Q6): a raider with nothing else in sight comes back for it (M3-T10).
 		(brain as AiPilot).context.objective_name = player.display_name
-	var placed: Combatant = pool.acquire(raider_name, at, basis, velocity, brain, StringName(request["type"]))
+	# The wave's velocity is against the place; the local frame may be moving off it (M6-T08).
+	var placed: Combatant = pool.acquire(raider_name, at, basis, velocity + world.rest_velocity(), brain,
+			StringName(request["type"]))
 	if placed != null and wings != null and not String(request.get("wing", "")).is_empty():
 		wings.join(String(request["wing"]), placed)
 

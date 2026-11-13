@@ -308,3 +308,37 @@ whether it ends Pending too (it passed in this run).
   files left out silently); keep.
 - H3. Stale names: `test_sim_clock.gd` `test_warp_is_fixed_at_one_in_m1`, `test_world_frame.gd`
   `test_environment_accel_is_zero_in_m1`. Check they still describe the current design (time warp, the gravity source).
+
+## Independent review notes (2026-11-09)
+
+The findings are useful candidates, but “CONFIRMED” should mean the specific proposed deletion preserves all distinct assertions,
+not only that two tests share a digest or fixture. Keep these objections attached to the relevant candidates:
+
+- **A1-A6: conditional removals.** The recorded data overlaps, but the thread tests observe different things. `test_core_threads`
+  currently compares rows and think counts; `test_core_state` also compares hit digests. `test_bolt_rows` compares bolt, hit,
+  and row digests; `test_row_commands` checks row commands, rows, and event counts; `test_driver_step` checks hosted/processing
+  counts and pilot/held behavior in the recorded case. Before deleting a test, move each distinct observable to the survivor.
+  The candidate table notes some gaps; A1 also needs to ensure the replacement covers hit results, not only rows. Re-measure after
+  consolidation because helper sharing alone will not save runtime.
+- **A7: duplicate fixture loop.** The one 120-ship battle is run once and its digest is compared three times, so collapsing
+  identical fixture entries is safe after verifying all relevant fields. It saves negligible runtime; it is data/assertion cleanup.
+- **B1: preserve the source check.** `test_core_state` checks `contact_path() == native`; `test_ram_contact_columns` additionally
+  checks the resolver source against the fixture (`source: core`). If removing the integration test and its fixture, first move
+  that source assertion to the kept test and confirm the ram-line and pose representations are equivalent. Do not conflate it with
+  `unit/test_ram_tracker_columns.gd`, which compares sample and column APIs across 400 generated ticks and covers reset behavior.
+- **C6: “no gameplay caller,” not “no project caller.”** `src/perf/native_boundary_bench.gd` uses `NativeProbe.in_range`; it is
+  benchmark tooling even if gameplay does not call it. Keep the bench/test contract if that tool remains supported.
+- **D5 and D6: removal is possible but has limited payoff and distinct boundaries.** `Factions` is the facade gameplay callers
+  use, so retain a focused facade delegation/installation test even if table rule examples move. `test_damage` invokes the console
+  registry in-process, while the shell smoke starts Godot via `--console-exec` and checks process output/status; one does not
+  replace the other's CLI/process coverage.
+- **F3: keep if tolerance is an acceptance rule.** A legacy-path tolerance check constrains an intentional native fixture refresh;
+  the exact fixture usually fails first only while it remains unchanged. Removing the tolerance half changes that policy.
+- **H1: retain Rust tests in the full merge gate.** Similar GUT integration behavior is not proof that private Rust kernel edge
+  cases are covered. Prefer adding `cargo test --release --lib` to the full test script/CI; a quick-only test command does not
+  replace the merge gate.
+
+Entries D1-D4, D7-D10 and E1-E26 are reasonable verification leads, not approved deletions. Read their setup and all assertions;
+in particular, preserve scene wiring, input path, subsystem-specific variants, and test-side parsers where those are the behavior
+under test. The observed pending outcomes in F4 apply to the timed run; the source calls `pending()` conditionally, so verify current
+balance status before describing either test as permanently pending.

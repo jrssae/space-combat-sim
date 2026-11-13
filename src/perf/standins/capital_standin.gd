@@ -6,8 +6,8 @@ extends RigidBody3D
 ## `TurretStandin` children and its two beam lasers as `BeamStandin` children (M4-T12). It costs the tick what a big body costs Jolt, the scan and every broad phase; `StandinDirector`
 ## steps its engines and turrets.
 ##
-## Newtonian like every body (§15.16): no damping, and the engines hold the cruise velocity with a force each tick that also
-## holds off the environment's pull (the gravity stand-in).
+## Newtonian like every body (§15.16): no damping; gravity pulls it like any mover (D66, M6-T07), and the engines hold the
+## cruise velocity with a force each tick that also holds off that pull.
 
 const CRUISE_MPS: float = 30.0
 ## How fast the engines bring the velocity back to cruise, s, and the most they can push, m/s^2.
@@ -17,11 +17,15 @@ const INTERCEPTORS_PER_CAPITAL: int = 4
 const BEAMS_PER_CAPITAL: int = 2
 ## Where a carrier's launches leave from: this far below its keel, m.
 const BAY_DROP_M: float = 40.0
-## Per class: the hull box (m), mass (kg), hull points and gun turrets (the milestone's table).
+## Per class: the hull box (m), mass (kg), hull points, gun turrets (the milestone's table), whether it can open a jump point
+## and how far from the point's mouth it holds it, m (M6-T23: every capital stand-in can; 0 takes twice its length).
 const CLASSES: Dictionary = {
-	&"cruiser": {"length": 300.0, "width": 60.0, "height": 40.0, "mass": 5.0e6, "hull": 2.0e4, "turrets": 8},
-	&"destroyer": {"length": 600.0, "width": 110.0, "height": 70.0, "mass": 2.0e7, "hull": 5.0e4, "turrets": 10},
-	&"carrier": {"length": 1200.0, "width": 220.0, "height": 140.0, "mass": 8.0e7, "hull": 1.2e5, "turrets": 12},
+	&"cruiser": {"length": 300.0, "width": 60.0, "height": 40.0, "mass": 5.0e6, "hull": 2.0e4, "turrets": 8,
+			"can_open_jump_point": true, "jump_hold_range_m": 0.0},
+	&"destroyer": {"length": 600.0, "width": 110.0, "height": 70.0, "mass": 2.0e7, "hull": 5.0e4, "turrets": 10,
+			"can_open_jump_point": true, "jump_hold_range_m": 0.0},
+	&"carrier": {"length": 1200.0, "width": 220.0, "height": 140.0, "mass": 8.0e7, "hull": 1.2e5, "turrets": 12,
+			"can_open_jump_point": true, "jump_hold_range_m": 0.0},
 }
 const HULL_COLOR: Color = Color(0.42, 0.44, 0.47)
 ## The generated hulls (M4-T27) and the looks a capital can take: the bench's plain box or the class's textured hull (M4-T30d).
@@ -37,6 +41,9 @@ var cruise_velocity: Vector3 = Vector3.ZERO
 var world: WorldFrame = null
 var targetable: Targetable = null
 var damageable: Damageable = null
+
+## Kept out of the low-attention tier (M6-T23): while it flies a jump vortex's funnel, as a pooled ship is (`VortexTransits`).
+var tier_exempt: bool = false
 
 ## How the hull is drawn: the plain box, or the generated class's textured hull (`set_look`).
 var look: StringName = LOOK_BOX
@@ -90,6 +97,29 @@ func length_m() -> float:
 	return float((CLASSES[ship_class] as Dictionary)["length"])
 
 
+## Changes its side (a pooled carrier taken by another faction's raid, M6-T23).
+func set_faction(p_faction: StringName) -> void:
+	faction = p_faction
+	targetable.faction = p_faction
+	damageable.faction = p_faction
+
+
+## Whether this class can open a jump point (M6-T23, `JumpCapability`).
+func can_open_jump_point() -> bool:
+	return bool((CLASSES[ship_class] as Dictionary).get("can_open_jump_point", false))
+
+
+## How far from its point's mouth it holds the point open, m.
+func jump_hold_range_m() -> float:
+	return JumpCapability.hold_range_m(length_m(), float((CLASSES[ship_class] as Dictionary).get("jump_hold_range_m", 0.0)))
+
+
+## The radius across its nose, m: what its own jump point is sized for (it comes out nose first).
+func cross_radius_m() -> float:
+	var spec: Dictionary = CLASSES[ship_class]
+	return 0.5 * Vector2(float(spec["width"]), float(spec["height"])).length()
+
+
 func guns() -> Array[TurretStandin]:
 	return _guns
 
@@ -116,15 +146,14 @@ func bay_position() -> Vector3:
 ## Parks the body for the low-attention tier (M4-T21): hidden and not processing, its turrets and emitters with it, so it
 ## leaves Jolt, the scan and the weapon rows while its tier row cruises on.
 func park_for_tier() -> void:
-	set_meta(&"_scs_tier_row", true)
+	ShiftableRegistry.set_out(self, &"_scs_tier_row", true)
 	visible = false
 	process_mode = Node.PROCESS_MODE_DISABLED
 
 
 ## Brings the body back from its tier row exactly where the row left it.
 func unpark_from_tier(xform: Transform3D, velocity: Vector3, spin: Vector3) -> void:
-	if has_meta(&"_scs_tier_row"):
-		remove_meta(&"_scs_tier_row")
+	ShiftableRegistry.set_out(self, &"_scs_tier_row", false)
 	process_mode = Node.PROCESS_MODE_INHERIT
 	visible = true
 	global_transform = xform
@@ -133,10 +162,15 @@ func unpark_from_tier(xform: Transform3D, velocity: Vector3, spin: Vector3) -> v
 	reset_physics_interpolation()
 
 
+## A velocity rebase (`WorldFrame.boost`): the hull and the cruise its engines hold keep their universe velocity.
+func frame_boost(dv: Vector3) -> void:
+	linear_velocity -= dv
+	cruise_velocity -= dv
+
+
 ## Takes a destroyed capital out of play (M4-T23): hidden and not processing, its turrets and emitters with it, for good.
 func leave_play() -> void:
-	if has_meta(&"_scs_tier_row"):
-		remove_meta(&"_scs_tier_row")
+	ShiftableRegistry.set_out(self, &"_scs_tier_row", false)
 	visible = false
 	process_mode = Node.PROCESS_MODE_DISABLED
 
@@ -153,9 +187,13 @@ func cruise_force(delta: float) -> Vector3:
 	return mass * (wanted - pull).limit_length(MAX_ACCEL_MPS2)
 
 
-## One tick of the engines (forces are re-applied every tick).
+## One tick of the engines and of the pull they hold off (forces are re-applied every tick).
 func step_engines(delta: float) -> void:
-	apply_central_force(cruise_force(delta))
+	var force: Vector3 = cruise_force(delta)
+	var pull: Vector3 = world.environment_accel(global_position) if world != null and is_instance_valid(world) else Vector3.ZERO
+	if pull != Vector3.ZERO:
+		force += mass * pull
+	apply_central_force(force)
 
 
 func _build(display_name: String) -> void:

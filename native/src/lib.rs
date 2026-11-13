@@ -54,6 +54,23 @@ mod voice_rows;
 mod radar_kernel;
 mod radar_plot;
 
+// M6-T02: the ephemeris and the gravity on test particles, engine-free kernels (wired in by M6-T04).
+mod ephemeris;
+mod gravity;
+
+// M6-T03: the ephemeris's binding for GDScript.
+mod ephemeris_binding;
+
+// M6-T04: the free-falling frame, an engine-free kernel, and its shell on the core.
+mod frame;
+mod frame_rows;
+
 // M5-T33: the ram tracker, an engine-free kernel, and its shell over Jolt's contacts and the core's rows.
 mod ram_contacts;
 mod ram_tracker;
+
+// M6-T06: the static rows' shift (L4).
+mod static_rows;
+
+// M6-T21: which rocks live as Jolt bodies, an engine-free kernel and its shell over the core's rows.
+mod rock_stream;

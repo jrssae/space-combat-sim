@@ -86,6 +86,8 @@ var _bolt_factions: Array = []
 var _bolt_damage := PackedFloat64Array()
 var _bolt_colors := PackedColorArray()
 var _bolt_owned: int = 0  # rows at the front the core owns (spent in the core, not through a node)
+# How far the rocks move with the World's anchor this tick, off the anchor (M6-T08); zero while the frame rides it.
+var _rock_drift := Vector3.ZERO
 var _sim: SimCore = null
 var _delta: float = 0.0
 var _source: StringName = &"none"
@@ -93,6 +95,7 @@ var _gather_frame: int = -1
 # The rocks (M4-T29): their grid, kept until a rock changes, and the earliest rock hit `_earliest_rock` found.
 var _rocks: HitBroadPhase = HitBroadPhase.new()
 var _solid: StaticRows.Solid = null
+var _solid_moves: int = -1
 var _rock_t: float = INF
 var _rock_a := Vector3.ZERO
 var _rock_b := Vector3.ZERO
@@ -163,6 +166,8 @@ func resolve(delta: float) -> void:
 	pairs_visited = broad_phase.visited
 	var rock_keys: PackedInt64Array = _rock_pairs(sim)
 	var rock_count: int = _solid.ids.size()
+	var world: WorldFrame = sim.world
+	_rock_drift = world.rest_velocity() * delta if world != null and is_instance_valid(world) else Vector3.ZERO
 	_candidates(sim, keys, rock_keys, rock_count)
 	projectiles_last_tick = _bolt_count
 	gather_us = Time.get_ticks_usec() - started_us
@@ -325,11 +330,12 @@ func _to_body_of(j: int) -> Basis:
 
 
 # This tick's projectile and rock pairs that pass the sphere test, as `bolt * rocks + rock`, ascending; the rocks' grid is
-# built again only when a rock changed.
+# built again only when a rock changed or the rocks moved.
 func _rock_pairs(sim: SimCore) -> PackedInt64Array:
 	var solid: StaticRows.Solid = StaticRows.solid()
-	if solid != _solid:
+	if solid != _solid or solid.moves != _solid_moves:
 		_solid = solid
+		_solid_moves = solid.moves  # shifted in place (M6-T06): the grid takes the new places
 		_rocks.keep(solid.positions, solid.radii)
 	static_pairs_visited = 0
 	if solid.ids.is_empty():
@@ -345,6 +351,9 @@ func _earliest_rock(c: int, keys: PackedInt64Array, first: int, next: int, rock_
 	_rock_t = INF
 	var start: Vector3 = _bolt_starts[c]
 	var p1: Vector3 = _bolt_ends[c]
+	# Off the World's anchor a rock moves with it (M6-T08): the bolt's path is taken as seen from the rocks.
+	if _rock_drift != Vector3.ZERO:
+		p1 -= _rock_drift
 	var bolt_faction: StringName = _bolt_factions[c]
 	var hit_radius: float = _bolt_radii[c]
 	var base: int = _bolt_index[c] * rock_count

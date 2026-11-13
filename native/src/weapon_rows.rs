@@ -880,21 +880,25 @@ impl ScsWeaponRows {
             return answer(velocity, 0.0);
         };
         let rows = &guard.rows;
-        let target_velocity = if rows.rigid[j] {
-            rows.velocities[j]
-        } else {
-            Vector3::ZERO
-        };
+        // A missile holds its speed against the World's anchor, not the frame (M6-T08): steered as seen from the anchor.
+        let rest = guard.frame_rest().velocity;
+        let target_velocity = if rows.rigid[j] { rows.velocities[j] } else { rest };
+        if rest == Vector3::ZERO {
+            return answer(
+                wk::steer(position, velocity, rows.positions[j], target_velocity, nav_gain, max_turn_rate, delta),
+                1.0,
+            );
+        }
         let v = wk::steer(
             position,
-            velocity,
+            crate::v3::sub(velocity, rest),
             rows.positions[j],
-            target_velocity,
+            crate::v3::sub(target_velocity, rest),
             nav_gain,
             max_turn_rate,
             delta,
         );
-        answer(v, 1.0)
+        answer(crate::v3::add(v, rest), 1.0)
     }
 
     // --- the kernels' maths alone, for the differential tests ---------------------------------------------------------

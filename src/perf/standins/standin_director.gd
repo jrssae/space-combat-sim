@@ -1,8 +1,8 @@
 class_name StandinDirector
 extends Node3D
 ## The battle's stand-ins in play (M4-T07, architecture §17.6): `World/Standins`, an identity container `Main` makes for the
-## bench runner. It holds the capitals, the asteroid field, the mine belts and the moon, steps every capital's engines, guns,
-## interceptors and beam lasers once per tick (priority -5: after the core's first sync and the AI drivers, before anything
+## bench runner. It holds the capitals, the asteroid field and the mine belts (the pull is the World frame's, M6-T07), steps
+## every capital's engines, guns, interceptors and beam lasers once per tick (priority -5: after the core's first sync and the AI drivers, before anything
 ## moves), keeps `missile_target` missiles in flight (M4-T12), steps the mines, runs the carriers' launch cycle through the
 ## runner's `launcher`, and counts the battle per entity type for the `perf` probe. Bench-only: no scenario spawns stand-ins.
 ##
@@ -74,7 +74,6 @@ var _capital_turn: int = 0
 
 
 var _missiles_flying: int = 0
-var _gravity: GravityStandin = null
 var _tick: int = 0
 var _next_launch: Dictionary = {}  # carrier -> sim time of its next launch
 var _last_frame: int = -1
@@ -279,6 +278,7 @@ func add_mines(rows: Array[Dictionary], anchor: UniversePos) -> MineStandin:
 	_mines.name = "Mines"
 	_mines.world = world
 	world.spawn(_mines, anchor, Basis.IDENTITY, self)
+	_mines.add_to_group(WorldFrame.ANCHORED_GROUP)
 	_mines.build(rows)
 	return _mines
 
@@ -307,33 +307,18 @@ func add_asteroids(rocks: Array[Dictionary], anchor: UniversePos) -> AsteroidFie
 	_field = AsteroidField.new()
 	_field.name = "Asteroids"
 	world.spawn(_field, anchor, Basis.IDENTITY, self)
+	_field.add_to_group(WorldFrame.ANCHORED_GROUP)
 	_field.build(rocks, world.get_world_3d().space, world)
 	world.rebased.connect(_field.on_rebased)
+	world.drifted.connect(_field.on_rebased)
 	return _field
-
-
-## The moon: a point source at `at` (universe) with parameter `gm` (m^3/s^2), installed as the world's environment field.
-func add_gravity(at: UniversePos, gm: float) -> GravityStandin:
-	remove_gravity()
-	_gravity = GravityStandin.new()
-	_gravity.name = "Gravity"
-	add_child(_gravity)
-	_gravity.install(world, at, gm)
-	return _gravity
-
-
-func remove_gravity() -> void:
-	if _gravity != null and is_instance_valid(_gravity):
-		_gravity.uninstall()
-		remove_child(_gravity)
-		_gravity.queue_free()
-	_gravity = null
 
 
 func remove_asteroids() -> void:
 	if _field != null and is_instance_valid(_field):
 		if world.rebased.is_connected(_field.on_rebased):
 			world.rebased.disconnect(_field.on_rebased)
+			world.drifted.disconnect(_field.on_rebased)
 		_field.free_bodies()
 		remove_child(_field)
 		_field.queue_free()
@@ -352,7 +337,6 @@ func clear() -> void:
 	_capitals.clear()
 	remove_asteroids()
 	remove_mines()
-	remove_gravity()
 	_next_launch.clear()
 	_strike.clear()
 	launcher = Callable()
@@ -366,11 +350,6 @@ func clear() -> void:
 
 func capitals() -> Array[CapitalStandin]:
 	return _capitals
-
-
-## The moon, or null without one.
-func gravity() -> GravityStandin:
-	return _gravity if _gravity != null and is_instance_valid(_gravity) else null
 
 
 ## Capitals in play, on their bodies or as tier rows: not the destroyed ones (M4-T23 fix round 1: capitals can die now).

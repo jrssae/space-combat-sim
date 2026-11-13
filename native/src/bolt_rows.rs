@@ -1,9 +1,12 @@
-// The core's own bolts (M4-T35, docs/architecture.md 17.13): the bolt table's front rows are the core's, added by the cannon kernel and the stand-ins, stepped by `bolt_kernels::step` once a tick between the
+// The core's own bolts (M4-T35, docs/architecture.md 17.13): the bolt table's front rows are the core's, added by the cannon kernel and the stand-ins, stepped by `bolt_kernels::expire` and `advance` once a tick between the
 // cannons and the hit resolver, spent by the resolver and dropped at the tick's end. The rows read from nodes (beams and
 // missiles, which still have one) follow them at each sync point.
+use std::time::Instant;
+
 use godot::prelude::*;
 
 use crate::bolt_kernels;
+use crate::frame_rows;
 use crate::sim_core::{KIND_BOLT, ScsSimCore, kind_of};
 
 impl ScsSimCore {
@@ -109,10 +112,22 @@ impl ScsSimCore {
     }
 
     /// Steps the owned bolts for one tick at sim time `now_s`: expires the ones whose time is up, moves the rest (not the
-    /// ones launched this tick). Returns how many expired.
+    /// ones launched this tick), each first taking the frame's pull at its place (M6-T07). Returns how many expired.
     #[func]
     fn step_bolts(&mut self, now_s: f64, delta: f64) -> i64 {
-        bolt_kernels::step(&mut self.bolts, delta, now_s, self.tick) as i64
+        let expired = bolt_kernels::expire(&mut self.bolts, now_s);
+        let started = Instant::now();
+        let owned = self.bolts.owned;
+        let pulled = frame_rows::residuals(
+            &self.frame,
+            &self.bolts.positions[..owned],
+            &mut self.pull_scratch,
+            &mut self.bolt_pull,
+        );
+        self.bolts_pulled = if pulled { owned as i64 } else { 0 };
+        self.bolt_pull_us = if pulled { started.elapsed().as_micros() as i64 } else { 0 };
+        bolt_kernels::advance(&mut self.bolts, delta, self.tick, &self.bolt_pull);
+        expired as i64
     }
 
     /// Owned bolt rows now.
@@ -142,6 +157,7 @@ impl ScsSimCore {
             fraction as f32,
             visual_scale as f32,
             &child,
+            self.frame_velocity(),
             &mut out,
         );
         let wanted = usize::try_from(min_instances).unwrap_or(0).max(drawn);

@@ -11,7 +11,11 @@ extends RefCounted
 ##     await m.until_objective(id)     until the objective is done or failed
 ##     await m.player_did(action)      an `input_performed` trigger (`PlayerActions.NAMES`), for M8's tutorial
 ##     await m.cinematic(shot_id)      a camera shot from the scenario's `cinematics` (D55): until it ends or the player skips it
-##     m.spawn(spawn)                  a ship from a pool, by the scenario's spawn rules; `arrival: "jump"` opens a jump point
+##     m.spawn(spawn)                  a ship from a pool, by the scenario's spawn rules; `arrival: "jump"` with `via: "carrier"`
+##                                     brings it out of a carrier's jump point (M6-T23: only a jump-capable ship opens its own),
+##                                     `arrival: "gate"` (or `via: "gate"`) out of the jumpgate's blue vortex (M6-T14; null now, in
+##                                     play by its name once through)
+##     m.depart(ship)                  an AI ship flies out through the jumpgate's orange vortex and leaves play (M6-T14)
 ##     m.send(ship, target)            the ship's pilot objective (D39)
 ##     m.transient(names)              ships that only matter while the step plays: a skipped step releases them (M5-T30)
 ##     m.objective_add(id [, text, primary]) / m.objective_complete(id) / m.objective_fail(id)
@@ -217,7 +221,8 @@ func cinematic(shot_id: StringName) -> void:
 
 
 ## Takes a ship from its pool: a scenario spawn (`type`, `name`, `anchor`, `offset`, `velocity`, `behaviour`, `wing`) plus
-## `arrival` ("none" or "jump") and `invulnerable`. Returns the ship, or null (with an error when the pool is spent).
+## `arrival` ("none", "jump" or "gate"), `via` ("gate" or "carrier", M6-T23), `carrier` ({"class", "then"}) and `invulnerable`. Returns the ship, or null (with an error when the pool is spent); a
+## gate arrival returns null with no error, as the ship comes through once the vortex has opened.
 func spawn(entry: Dictionary) -> Combatant:
 	if has_ended():
 		return null
@@ -231,10 +236,25 @@ func spawn(entry: Dictionary) -> Combatant:
 		push_error("Mission: spawn.arrival must be one of %s, got %s" % [MissionStage.ARRIVALS, JSON.stringify(arrival)])
 		return null
 	spawn_entry["arrival"] = StringName(arrival as String)
+	var via: Variant = entry.get("via", "")
+	if not (via is String) or not MissionStage.VIAS.has(StringName(via as String)):
+		push_error("Mission: spawn.via must be \"gate\" or \"carrier\", got %s" % JSON.stringify(via))
+		return null
+	spawn_entry["via"] = StringName(via as String)
+	if spawn_entry["via"] == MissionStage.VIA_GATE:
+		spawn_entry["arrival"] = &"gate"
+	var carrier: Variant = entry.get("carrier", {})
+	spawn_entry["carrier"] = carrier if carrier is Dictionary else {}
 	var invulnerable: Variant = entry.get("invulnerable", false)
 	spawn_entry["invulnerable"] = invulnerable is bool and invulnerable as bool
 	var placed: Combatant = null
 	var ship_name: String = String(spawn_entry["name"])
+	if stage != null and spawn_entry["arrival"] == &"gate":
+		ship_name = stage.spawn_through_gate(spawn_entry)
+		if ship_name.is_empty():
+			return null  # the stage said why
+		journal.append("spawn %s %s through the gate" % [ship_name, spawn_entry["type"]])
+		return null  # in play once the vortex has opened; known by its name from then on
 	if stage != null:
 		placed = stage.spawn(spawn_entry)
 		if placed == null:
@@ -248,6 +268,17 @@ func spawn(entry: Dictionary) -> Combatant:
 		world.set_actor(ship_name, _anchor(spawn_entry).plus_local(spawn_entry["offset"]))
 	journal.append("spawn %s %s" % [ship_name, spawn_entry["type"]])
 	return placed
+
+
+## Sends the AI ship `ship_name` out through the scene's jumpgate (M6-T14): the orange vortex opens as it nears and it leaves play
+## once through. False when it cannot go.
+func depart(ship_name: String) -> bool:
+	if has_ended():
+		return false
+	if stage != null and not stage.depart(ship_name):
+		return false
+	journal.append("depart %s through the gate" % ship_name)
+	return true
 
 
 ## Sends `ship_name`'s pilot at `target_name` (D39's objective: it flies there from any broadcast range and attacks).

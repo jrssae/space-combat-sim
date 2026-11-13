@@ -71,6 +71,13 @@ const ASSET_ROOT: String = "res://assets/generated"
 @export var turret_weapon: WeaponSpec = null
 
 
+## Whether this ship can open a jump point of its own (M6-T23, `JumpCapability`). No designed hull can (the Starfury, the raiders,
+## the civilian ships): they come and go through a jumpgate or a point a capable ship holds open.
+@export var can_open_jump_point: bool = false
+## How far from its point's mouth a capable ship holds the point open, m; 0 takes twice its length.
+@export var jump_hold_range_m: float = 0.0
+
+
 ## Whether the asset has a first-person `cockpit_interior.obj` (the Starfury does; AI ships such as the raider do not,
 ## so the ship does not look for it or warn about it).
 @export var has_cockpit_interior: bool = true

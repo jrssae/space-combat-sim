@@ -1,0 +1,14 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/props/jumpgate.gd" id="1_gate"]
+[ext_resource type="Script" path="res://src/targeting/targetable.gd" id="2_target"]
+
+[node name="Jumpgate" type="Node3D"]
+script = ExtResource("1_gate")
+
+[node name="Body" type="MeshInstance3D" parent="."]
+cast_shadow = 0
+
+[node name="Targetable" type="Node3D" parent="."]
+script = ExtResource("2_target")
+kind = 6

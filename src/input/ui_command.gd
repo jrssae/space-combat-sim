@@ -24,6 +24,8 @@ var target_menu_open: bool = false
 var radial_point: Vector2 = Vector2.ZERO
 var radial_select: bool = false
 var radial_back: bool = false
+## X (the auto-track action) while `InputAdapter.jump_offered` is set (M6-T14): ask the targeted gate for a jump. An edge.
+var request_jump: bool = false
 ## Free look (L3 held on a pad, the middle mouse button held): the camera turns, the ship does not. `look_stick` is the right
 ## stick as an absolute look direction (x right, y up, -1..1); `look_mouse_px` is the mouse travel this tick in pixels
 ## (x right, y up).
@@ -40,6 +42,6 @@ func to_dict() -> Dictionary:
 		"toggle_running_lights": toggle_running_lights,
 		"comms_open": comms_open,
 		"target_menu_open": target_menu_open, "radial_point": radial_point, "radial_select": radial_select,
-		"radial_back": radial_back,
+		"radial_back": radial_back, "request_jump": request_jump,
 		"look_active": look_active, "look_stick": look_stick, "look_mouse_px": look_mouse_px,
 	}

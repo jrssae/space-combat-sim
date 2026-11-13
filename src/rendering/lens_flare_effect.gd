@@ -20,6 +20,9 @@ const SHADER_PATCHES: Dictionary[String, String] = {
 	"max(1.0 / (1.0 + 32.0 * length_squared(uvd + 0.8 * pos)), .0) * 00.25;": "0.0;",
 	"max(1.0 / (1.0 + 32.0 * length_squared(uvd + 0.85 * pos)), .0) * 00.23;": "0.0;",
 	"max(1.0 / (1.0 + 32.0 * length_squared(uvd + 0.9 * pos)), .0) * 00.21;": "0.0;",
+	# M6-T12: the far bodies are drawn at a depth just above the sky's 0 (the scaled-space layer); the flare reads that as sky,
+	# else the star's own disc would hide it. A planet covering the star dims it through the key light instead.
+	"    return texelFetch(depth_sampler, p_coord, 0).r;": "    float raw = texelFetch(depth_sampler, p_coord, 0).r;\n    return raw <= 2.0e-8 ? 0.0 : raw;",
 	# Q31: god rays are shafts through a medium that is not there, and marching them costs 64 depth reads per pixel.
 	"    col *= godrays;": "",
 	"for (int i = 0; i < int(sample_count); i++) {": "for (int i = 0; i < 0; i++) {",

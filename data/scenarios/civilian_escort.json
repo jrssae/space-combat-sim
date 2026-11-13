@@ -1,6 +1,8 @@
 {
 	"scenario_id": "civilian_escort",
 	"system_id": "local",
+	"anchor": {"place": "babylon5", "at": [5500, -1200, -6000]},
+	"epoch": 540148,
 	"player": {"position": [420, 40, 1600], "forward": [0, 0, -1], "velocity": [0, 0, -60]},
 	"props": [
 		{"type": "nav_buoy", "name": "NAV ALPHA", "position": [0, 0, 0]},

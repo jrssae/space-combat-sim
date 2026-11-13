@@ -803,6 +803,24 @@ pub mod flight {
         pub retro_total: f64,
     }
 
+    /// What a ship's speed is read against (D67): its reference's velocity in the local frame and that reference's own
+    /// acceleration. The brake, the thrust fade, the assist's safe speed and the hard ceiling read `v - velocity`, and the
+    /// brake holds station on the reference with `accel` as feed-forward. Zero while the frame rides its anchor and the
+    /// anchor is the reference, where every result keeps its old bits.
+    #[derive(Clone, Copy, Debug, Default, PartialEq)]
+    pub struct Rest {
+        pub velocity: Vector3,
+        pub accel: Vector3,
+    }
+
+    impl Rest {
+        pub const ZERO: Rest = Rest { velocity: Vector3::ZERO, accel: Vector3::ZERO };
+
+        pub fn is_zero(&self) -> bool {
+            self.velocity == Vector3::ZERO && self.accel == Vector3::ZERO
+        }
+    }
+
     /// What one tick gives the step to apply and to hand back: the RCS force, the torque, the assist's cap, the environment
     /// force, the velocity after the hard ceiling (when it clamps), and the output rows. The nozzle forces at their world
     /// positions go into the buffer the caller passes `tick` (its own scratch, so a thread owns one).
@@ -818,7 +836,9 @@ pub mod flight {
 
     /// One tick for one ship: the model in the body frame, then the ship's force application in the world frame
     /// (`Ship._physics_process`), with the pod-yaw assist state carried in `pod_yaw` and the nozzle forces (force, world
-    /// position) written into `nozzle_forces`, the caller's buffer.
+    /// position) written into `nozzle_forces`, the caller's buffer. `env_w` is the pull the ship feels; `rest` is what its
+    /// speed is read against (M6-T08).
+    #[allow(clippy::too_many_arguments)]
     pub fn tick(
         body: &Body,
         pod_yaw: &mut f64,
@@ -827,14 +847,19 @@ pub mod flight {
         v_w: Vector3,
         w_w: Vector3,
         env_w: Vector3,
+        rest: Rest,
         assist_on: bool,
         dt: f64,
         has_propellant: bool,
         nozzle_forces: &mut Vec<(Vector3, Vector3)>,
     ) -> Applied {
-        let v_b = xform_inv(basis, v_w);
+        // Speed against the reference; the brake's feed-forward is the pull less what the reference itself falls with.
+        let at_rest = rest.is_zero();
+        let v_rel = if at_rest { v_w } else { sub(v_w, rest.velocity) };
+        let env_ff = if at_rest { env_w } else { sub(env_w, rest.accel) };
+        let v_b = xform_inv(basis, v_rel);
         let w_b = xform_inv(basis, w_w);
-        let env_b = xform_inv(basis, env_w);
+        let env_b = xform_inv(basis, env_ff);
         let out = compute(
             body,
             pod_yaw,
@@ -852,7 +877,7 @@ pub mod flight {
         let mass_f = spec.mass as f32;
         let env_force = scale(env_w, mass_f);
         let mut applied = env_force;
-        let gain = thrust_gain(f64::from(length(v_w)), spec.speed_limit_mps) as f32;
+        let gain = thrust_gain(f64::from(length(v_rel)), spec.speed_limit_mps) as f32;
         nozzle_forces.clear();
         for k in 0..body.nozzle_groups.len() {
             let level = out.levels[body.nozzle_groups[k]];
@@ -868,7 +893,7 @@ pub mod flight {
         let torque_w = xform(basis, out.tau_rcs);
         let cap = if assist_on {
             let net = scale(xform(basis, add(out.pod_force, out.rcs_force)), gain);
-            let cap = assist_cap_correction(net, v_w, spec.assist_speed_max_mps);
+            let cap = assist_cap_correction(net, v_rel, spec.assist_speed_max_mps);
             applied = add(applied, cap);
             Some(cap)
         } else {
@@ -876,8 +901,9 @@ pub mod flight {
         };
         let mut v_after = v_w;
         let mut clamped = None;
-        if spec.speed_limit_mps > 0.0 && f64::from(length(v_w)) > spec.speed_limit_mps {
-            v_after = scale(normalized(v_w), spec.speed_limit_mps as f32);
+        if spec.speed_limit_mps > 0.0 && f64::from(length(v_rel)) > spec.speed_limit_mps {
+            let capped = scale(normalized(v_rel), spec.speed_limit_mps as f32);
+            v_after = if at_rest { capped } else { add(rest.velocity, capped) };
             clamped = Some(v_after);
         }
         Applied {
@@ -1588,6 +1614,270 @@ pub mod pilot {
             (target - miss) / maxf(t_star, MIN_TIME_S)
         };
         clampf(x, 0.0, speed)
+    }
+}
+
+/// The static rows' shift (M6-T06, L4): a rebase or the frame's drift moves one world's rocks and mines by one vector, in
+/// place, so a pure shift costs one pass and no rebuild.
+pub mod statics {
+    use godot::builtin::Vector3;
+
+    /// Adds `offset` to every position whose world is `owner`, in 32-bit as GDScript's `+=` does, so the result is the
+    /// same bits a row registered there would hold. Returns how many moved; none when the columns differ in length.
+    pub fn shift_owned(positions: &mut [Vector3], worlds: &[i64], owner: i64, offset: Vector3) -> usize {
+        if positions.len() != worlds.len() {
+            return 0;
+        }
+        let mut moved = 0;
+        for (p, &world) in positions.iter_mut().zip(worlds) {
+            if world == owner {
+                *p = Vector3::new(p.x + offset.x, p.y + offset.y, p.z + offset.z);
+                moved += 1;
+            }
+        }
+        moved
+    }
+}
+
+/// Which rocks live as Jolt bodies (`ScsRockStream`, M6-T21): the ones a rigid hull could reach soon. The rest stay static
+/// rows only, so a rebase, or a tick off the anchor, moves only the few that live. Promoted and demoted with hysteresis, as
+/// the tier is, so a rock on the line does not flip every tick.
+pub mod rock_stream {
+    use godot::builtin::{Basis, Vector3};
+
+    use crate::rows::{FLAG_RIGID, Rows};
+    use crate::v3::{dist_sq, length, sub, xform_inv};
+
+    // The grid's smallest cell, metres, and the most cells it holds: a hull's look then covers a handful of cells.
+    const CELL_M: f32 = 512.0;
+    const MAX_CELLS: usize = 1 << 15;
+
+    /// The rigid hull rows as spheres in the rocks' own frame (their owner at `origin` with the orthonormal `basis`): each
+    /// hull swept over `lookahead` s at its velocity against the rocks (which move at `rest`), as the swept segment's
+    /// middle with reach `|segment| / 2 + radius + margin`.
+    pub fn hull_spheres(
+        rows: &Rows,
+        hull_rows: &[u32],
+        origin: Vector3,
+        basis: &Basis,
+        rest: Vector3,
+        lookahead: f64,
+        margin_m: f64,
+        mids: &mut Vec<Vector3>,
+        reach: &mut Vec<f64>,
+    ) {
+        mids.clear();
+        reach.clear();
+        let half = (0.5 * lookahead) as f32;
+        for &row in hull_rows {
+            let j = row as usize;
+            if rows.flags[j] & FLAG_RIGID == 0 {
+                continue;
+            }
+            let at = xform_inv(basis, sub(rows.positions[j], origin));
+            let v = xform_inv(basis, sub(rows.velocities[j], rest));
+            mids.push(Vector3::new(at.x + v.x * half, at.y + v.y * half, at.z + v.z * half));
+            reach.push(f64::from(length(v)) * f64::from(half) + rows.radii[j] + margin_m);
+        }
+    }
+
+    /// The rocks in a dense grid of equal cells over their bounds, each rock listed in every cell its sphere's box
+    /// touches. Built once: the rocks never move in their owner's frame.
+    #[derive(Default)]
+    pub struct Grid {
+        low: Vector3,
+        cell: f32,
+        dims: [usize; 3],
+        start: Vec<u32>,
+        items: Vec<u32>,
+    }
+
+    impl Grid {
+        pub fn build(rocks: &[Vector3], radii: &[f64]) -> Grid {
+            let mut grid = Grid::default();
+            if rocks.is_empty() {
+                return grid;
+            }
+            let (mut low, mut high) = (Vector3::splat(f32::MAX), Vector3::splat(f32::MIN));
+            for (p, &r) in rocks.iter().zip(radii) {
+                let r = r as f32;
+                low = Vector3::new(low.x.min(p.x - r), low.y.min(p.y - r), low.z.min(p.z - r));
+                high = Vector3::new(high.x.max(p.x + r), high.y.max(p.y + r), high.z.max(p.z + r));
+            }
+            let mut cell = CELL_M;
+            let size = sub(high, low);
+            let count = |c: f32| -> [usize; 3] {
+                [size.x, size.y, size.z].map(|s| ((s / c).floor() as usize).saturating_add(1))
+            };
+            while count(cell).iter().product::<usize>() > MAX_CELLS {
+                cell *= 2.0;
+            }
+            grid.low = low;
+            grid.cell = cell;
+            grid.dims = count(cell);
+            let total: usize = grid.dims.iter().product();
+            let mut counts = vec![0u32; total + 1];
+            for (p, &r) in rocks.iter().zip(radii) {
+                grid.each_cell(*p, r, |c| counts[c] += 1);
+            }
+            let mut running = 0u32;
+            grid.start = Vec::with_capacity(total + 1);
+            for &c in &counts[..total] {
+                grid.start.push(running);
+                running += c;
+            }
+            grid.start.push(running);
+            grid.items = vec![0; running as usize];
+            let mut fill: Vec<u32> = grid.start[..total].to_vec();
+            for (s, (p, &r)) in rocks.iter().zip(radii).enumerate() {
+                let (items, fill) = (&mut grid.items, &mut fill);
+                Self::cells_of(grid.low, grid.cell, grid.dims, *p, r, |c| {
+                    items[fill[c] as usize] = s as u32;
+                    fill[c] += 1;
+                });
+            }
+            grid
+        }
+
+        /// Calls `f` with every rock listed in a cell that the box of the sphere (`at`, `reach`) touches; a rock may come
+        /// more than once.
+        pub fn each_near(&self, at: Vector3, reach: f64, mut f: impl FnMut(u32)) {
+            if self.items.is_empty() {
+                return;
+            }
+            self.each_cell(at, reach, |c| {
+                for &s in &self.items[self.start[c] as usize..self.start[c + 1] as usize] {
+                    f(s);
+                }
+            });
+        }
+
+        fn each_cell(&self, at: Vector3, reach: f64, f: impl FnMut(usize)) {
+            Self::cells_of(self.low, self.cell, self.dims, at, reach, f);
+        }
+
+        // The cells the box of the sphere (`at`, `reach`) touches, clamped to the grid; none when it misses the grid.
+        fn cells_of(low: Vector3, cell: f32, dims: [usize; 3], at: Vector3, reach: f64, mut f: impl FnMut(usize)) {
+            let r = reach as f32;
+            let lo = [at.x - r - low.x, at.y - r - low.y, at.z - r - low.z];
+            let hi = [at.x + r - low.x, at.y + r - low.y, at.z + r - low.z];
+            let mut a = [0usize; 3];
+            let mut b = [0usize; 3];
+            for k in 0..3 {
+                let last = dims[k] as f32 - 1.0;
+                let (from, to) = ((lo[k] / cell).floor(), (hi[k] / cell).floor());
+                if !(to >= 0.0 && from <= last) {
+                    return; // outside the grid on this axis (or not a number)
+                }
+                a[k] = from.max(0.0) as usize;
+                b[k] = to.min(last) as usize;
+            }
+            for x in a[0]..=b[0] {
+                for y in a[1]..=b[1] {
+                    for z in a[2]..=b[2] {
+                        f((x * dims[1] + y) * dims[2] + z);
+                    }
+                }
+            }
+        }
+    }
+
+    /// The rocks, their grid, the live flags and the scratch of the last step.
+    #[derive(Default)]
+    pub struct Stream {
+        pub live: Vec<bool>,
+        /// Hull and rock pairs the last step put to the sphere test (the work count).
+        pub visited: usize,
+        rocks: Vec<Vector3>,
+        radii: Vec<f64>,
+        grid: Grid,
+        // The step that last found each rock inside a hull's demotion reach, and inside its promotion reach.
+        kept: Vec<u32>,
+        wanted: Vec<u32>,
+        stamp: u32,
+        // The hull that last listed each rock, so a rock in several cells is tested once a hull.
+        seen: Vec<u32>,
+        look: u32,
+    }
+
+    impl Stream {
+        /// Holds `rocks` (centres in the owner's frame) and `radii`, none live. False, holding none, when they differ in
+        /// length.
+        pub fn reset(&mut self, rocks: &[Vector3], radii: &[f64]) -> bool {
+            let ok = rocks.len() == radii.len();
+            let n = if ok { rocks.len() } else { 0 };
+            self.rocks = rocks[..n].to_vec();
+            self.radii = radii[..n].to_vec();
+            self.grid = Grid::build(&self.rocks, &self.radii);
+            self.live = vec![false; n];
+            self.kept = vec![0; n];
+            self.wanted = vec![0; n];
+            self.seen = vec![0; n];
+            self.stamp = 0;
+            self.look = 0;
+            ok
+        }
+
+        pub fn live_count(&self) -> usize {
+            self.live.iter().filter(|&&l| l).count()
+        }
+
+        /// One step over the hulls (`mids` and promotion `reach`, from `hull_spheres`). A hull wants every rock inside its
+        /// promotion reach and keeps every live one inside that reach times `keep_scale`. A dormant rock that is wanted is
+        /// promoted; a live rock no hull kept for more than `hold` steps is demoted (a hull destroyed against it leaves the
+        /// rows before it leaves Jolt). The changes go to `changes` in rock order: a promotion as the rock's index, a
+        /// demotion as `-(index + 1)`.
+        pub fn step(&mut self, mids: &[Vector3], reach: &[f64], keep_scale: f64, hold: u32, changes: &mut Vec<i64>) {
+            changes.clear();
+            self.visited = 0;
+            let n = self.rocks.len();
+            if n == 0 {
+                return;
+            }
+            self.stamp = self.stamp.wrapping_add(1).max(1);
+            let stamp = self.stamp;
+            for (k, &at) in mids.iter().enumerate() {
+                let promote = reach[k];
+                let keep = promote * keep_scale;
+                self.look = self.look.wrapping_add(1);
+                if self.look == 0 {
+                    self.seen.iter_mut().for_each(|s| *s = 0);
+                    self.look = 1;
+                }
+                let look = self.look;
+                let (rocks, radii, seen, kept, wanted) =
+                    (&self.rocks, &self.radii, &mut self.seen, &mut self.kept, &mut self.wanted);
+                let visited = &mut self.visited;
+                self.grid.each_near(at, keep, |s| {
+                    let s = s as usize;
+                    if seen[s] == look {
+                        return;
+                    }
+                    seen[s] = look;
+                    *visited += 1;
+                    let d2 = f64::from(dist_sq(at, rocks[s]));
+                    let keep_r = keep + radii[s];
+                    if d2 > keep_r * keep_r {
+                        return;
+                    }
+                    kept[s] = stamp;
+                    let promote_r = promote + radii[s];
+                    if d2 <= promote_r * promote_r {
+                        wanted[s] = stamp;
+                    }
+                });
+            }
+            for s in 0..n {
+                if !self.live[s] && self.wanted[s] == stamp {
+                    self.live[s] = true;
+                    self.kept[s] = stamp;
+                    changes.push(s as i64);
+                } else if self.live[s] && stamp.wrapping_sub(self.kept[s]) > hold {
+                    self.live[s] = false;
+                    changes.push(-(s as i64) - 1);
+                }
+            }
+        }
     }
 }
 

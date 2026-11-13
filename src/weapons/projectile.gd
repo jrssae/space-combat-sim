@@ -1,12 +1,12 @@
 class_name Projectile
 extends Node3D
 ## A pulse-cannon bolt (architecture §6.3, §7.1): a kinematic Node3D carrying an emissive capsule, no physics body
-## and no hit detection in M1. It flies in a straight line at the velocity it was launched with and frees itself
-## `lifetime_s` of sim time after launch (`SimClock`, never the wall clock, so time warp and pausing work).
+## and no hit detection in M1. It flies on at the velocity it was launched with, bent only by gravity (M6-T07, `HeldPull`),
+## and frees itself `lifetime_s` of sim time after launch (`SimClock`, never the wall clock, so time warp and pausing work).
 ##
 ## Spawn it with `PulseCannon`, or by hand: instantiate `projectile.tscn`, add it to the tree under `World`, then
 ## `launch(...)`. It joins `world_shiftable` itself, so `World.rebase()` moves it with everything else. `velocity` is
-## a World-frame vector; a velocity rebase (roadmap) must subtract the frame velocity from it, as for rigid bodies.
+## a World-frame vector; a velocity rebase takes its `dv` off it (`frame_boost`), as off a rigid body's.
 ##
 ## Hit detection (M2-T03, `HitResolver`): a bolt carries who shot it (`shooter_id`, `faction`), how hard it hits
 ## (`damage`, `hit_radius_m`) and the displacement of its latest tick (`last_step`, zero before its first tick), so the
@@ -69,13 +69,17 @@ var last_step: Vector3 = Vector3.ZERO
 
 var _spent: bool = false
 var _laid_beam: bool = false
+var _pull := HeldPull.new()  # gravity (M6-T07), read once a second
 
 @onready var _bolt: MeshInstance3D = $Bolt
 
 
-func _ready() -> void:
-	add_to_group(WorldFrame.SHIFTABLE_GROUP)
+func _init() -> void:
+	add_to_group(WorldFrame.SHIFTABLE_GROUP)  # before it enters the tree, so `ShiftableRegistry` lists it then (M6-T21)
 	add_to_group(GROUP)
+
+
+func _ready() -> void:
 	set_visual_scale(visual_scale)
 
 
@@ -88,8 +92,16 @@ func _physics_process(delta: float) -> void:
 	if steering.is_valid():
 		velocity = steering.call(self, delta)
 		_face(velocity)
+	velocity = _pull.kick(self, velocity, delta)
 	last_step = velocity * delta
 	global_position += last_step
+
+
+## A velocity rebase (`WorldFrame.boost`): the bolt keeps its universe velocity. It keeps its heading too: nothing turns.
+func frame_boost(dv: Vector3) -> void:
+	if not _laid_beam:
+		velocity -= dv
+		_pull.reset()
 
 
 ## Draws the bolt `factor` times its size (all axes); the hit radius stays as it is.

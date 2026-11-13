@@ -252,21 +252,31 @@ func test_raiders_jump_in_from_the_pool_without_a_new_ship() -> void:
 	var nodes_before: int = _count(main, Node)
 	await _reach_the_buoy()
 	assert_eq(_count(main, Ship), ships_before, "D22: pooled ships only")
-	assert_eq(main.mission.jumps.opened, 1, "the pair 300 m apart came out of one jump point")
+	assert_eq(main.mission.jumps.opened, 1, "the pair 300 m apart came out of one carrier's jump point")
 	assert_eq(main.mission.jumps.open_count(), 1)
-	var point: JumpArrival = null
+	var point: JumpVortex = null
 	for child: Node in main.mission.jumps.get_children():
-		if (child as JumpArrival).is_open():
-			point = child as JumpArrival
+		if (child as JumpVortex).is_active():
+			point = child as JumpVortex
 	assert_not_null(point)
-	assert_true(point.visible)
 	assert_true(point.is_in_group(WorldFrame.SHIFTABLE_GROUP))
+	assert_eq(point.phase_name(), "flash", "a ship-made point opens with its centre flash, no activation")
+	assert_true(point.held and point.opener is CapitalStandin, "raiders cannot open a point: a carrier opened it (M6-T23)")
+	assert_true(JumpCapability.can_open(point.opener))
 	var raider: Combatant = main.ships.alive(ShipPool.DEFAULT_TYPE)[0]
-	assert_lt(raider.ship.global_position.distance_to(point.global_position), 400.0, "the ship comes out of it")
+	assert_lt(raider.ship.global_position.distance_to(point.global_position), point.fit.depth_m + 50.0,
+			"the ship comes out of it, from its ring (M6-T22)")
+	# Sized for the ship and widened for the group: both raiders are inside its mouth.
+	assert_gte(point.fit.mouth_radius_m, VortexFit.for_ship(raider.ship.bounding_radius()).mouth_radius_m)
+	var axis: Vector3 = -point.global_basis.z.normalized()
+	for c: Combatant in main.ships.alive(ShipPool.DEFAULT_TYPE):
+		var off: Vector3 = c.ship.global_position - point.global_position
+		assert_lt((off - axis * off.dot(axis)).length(), point.fit.mouth_radius_m, "%s is inside the mouth" % c.display_name)
 	assert_eq(_count(main, Node), nodes_before, "no node entered the tree for the arrival")
-	point.advance(JumpArrival.LIFETIME_S)
-	assert_false(point.is_open(), "it closes on its own")
-	assert_false(point.visible)
+	point.advance(point.timing.done_at_s())
+	assert_false(point.is_active(), "it closes on its own")
+	point.update_visuals()
+	assert_false(point.funnel.visible)
 
 
 func test_a_spawn_past_its_pool_is_an_error() -> void:

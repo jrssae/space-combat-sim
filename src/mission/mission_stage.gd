@@ -10,15 +10,26 @@ extends RefCounted
 ## Pools (D50): every ship a mission spawns comes from a pool its scenario declares. A spawn past a pool's size is a
 ## `push_error` (tests fail on it), never a new ship; `ShipPool` itself is unchanged.
 
-const ARRIVALS: Array[StringName] = [&"none", &"jump"]
-## The jump point's radius for a spawned ship, metres.
-const JUMP_RADIUS_M: float = 40.0
-
+## How a spawned ship arrives: in place, out of an open jump point (a stand-alone vortex sized for it, `JumpPointPool`, Q12
+## revised) or out of the scene's jumpgate (M6-T14: blue vortex, once it is open); either way it comes out of the funnel's black ring
+## in a flash, shrunk, and grows to its whole size by the mouth (M6-T22, `VortexTransits`).
+const ARRIVALS: Array[StringName] = [&"none", &"jump", &"gate"]
+## Which way a `jump` arrival comes (M6-T23, `JumpCapability`): only a jump-capable ship opens its own point (`own`, the
+## default); any other comes `via` the gate or behind a carrier (`CarrierJumps`: a capital stand-in opens the point and it comes
+## out with it). `arrival: "gate"` is the same as `via: "gate"`.
+const VIA_OWN: StringName = &""
+const VIA_GATE: StringName = &"gate"
+const VIA_CARRIER: StringName = &"carrier"
+const VIAS: Array[StringName] = [VIA_OWN, VIA_GATE, VIA_CARRIER]
+## A ship sent out through the gate flies its run-in at this speed (the player's autopilot's run-in is 250 m/s).
+const DEPART_CRUISE_MPS: float = 200.0
 var world: WorldFrame = null
 var ships: ShipPool = null
 var wings: WingDirector = null
 var player: Combatant = null
-var jumps: JumpArrivalPool = null
+var jumps: JumpPointPool = null
+## The scene's jumpgates (M6-T14); null in a stage without a `Main`.
+var gates: JumpgateHost = null
 ## Plays the mission's cinematics (D55).
 var camera_rig: CameraRig = null
 var system_id: StringName = &"local"
@@ -29,12 +40,13 @@ var _actors: Dictionary = {}  # MissionWorld.key -> Combatant or NavBuoy
 
 
 ## Wires the stage to `main`'s nodes and learns the actors already in play.
-func setup(main: Main, p_jumps: JumpArrivalPool) -> void:
+func setup(main: Main, p_jumps: JumpPointPool) -> void:
 	world = main.world
 	ships = main.ships
 	wings = main.wings
 	player = main.combatant
 	jumps = p_jumps
+	gates = main.gates
 	camera_rig = main.camera_rig
 	system_id = main.world.origin.system_id
 	seed_value = main.scenario_seed
@@ -158,17 +170,122 @@ func spawn(entry: Dictionary) -> Combatant:
 	# Nose along its drift, or toward the player when it starts at rest (as a wave's raiders).
 	var heading: Vector3 = velocity if velocity.length() > 1.0 else player_local - at_local
 	var basis: Basis = ScenarioLoader.basis_facing(heading if heading.length() > 1e-3 else Vector3.FORWARD)
-	if StringName(entry.get("arrival", &"none")) == &"jump" and jumps != null:
-		jumps.open_at(at, JUMP_RADIUS_M)
-	var placed: Combatant = ships.acquire(ship_name, at, basis, velocity, made["brain"] as PilotBrain, type)
+	# The data's velocity is against the place; the local frame may be moving off it (M6-T08).
+	var placed: Combatant = ships.acquire(ship_name, at, basis, velocity + world.rest_velocity(), made["brain"] as PilotBrain,
+			type)
 	if placed == null:
 		push_error("Mission: spawn %s: the %s pool refused" % [ship_name, type])
 		return null
+	if StringName(entry.get("arrival", &"none")) == &"jump" and jumps != null:
+		_jump_in(placed, entry, at, basis)
 	placed.damageable.invulnerable = bool(entry.get("invulnerable", false))
 	register(placed)
 	if not String(entry.get("wing", "")).is_empty():
 		wings.join(String(entry["wing"]), placed)
 	return placed
+
+
+# Brings a ship just placed out of a jump point (M6-T23): behind a carrier when its spawn says `via: "carrier"`, else out of its
+# own point, which only a jump-capable ship may open (any other is an error in the mission's data: it stays where it was placed).
+func _jump_in(placed: Combatant, entry: Dictionary, at: UniversePos, basis: Basis) -> void:
+	var transits: VortexTransits = VortexTransits.attach(world)
+	if StringName(entry.get("via", VIA_OWN)) == VIA_CARRIER:
+		var carriers: CarrierJumps = CarrierJumps.attach(world)
+		var run: CarrierRun = carriers.run_for(jumps, at, -basis.z, placed.faction, entry.get("carrier", {}) as Dictionary) \
+				if carriers != null else null
+		if run != null:
+			carriers.bring_through(run, placed.ship, placed.ship.linear_velocity)
+		return
+	if not JumpCapability.can_open(placed.ship):
+		push_error("Mission: spawn %s: a %s cannot open a jump point; say via \"gate\" or via \"carrier\"" % [
+				placed.display_name, entry["type"]])
+		return
+	var point: JumpVortex = jumps.open_for(at, -basis.z, placed.ship.bounding_radius(), JumpVortex.Direction.ARRIVAL, true,
+			placed.ship)
+	if point != null and transits != null:
+		transits.begin_arrival(placed.ship, point, placed.ship.global_position, placed.ship.linear_velocity)
+
+
+## A spawn that comes out of the gate (`arrival: "gate"`, M6-T14): the blue vortex opens now and the ship is taken from its pool
+## once it is fully open, at the gate's arrival point, its `offset` read in the gate's frame (x right, y up) so a group comes out
+## side by side, flying out at `Jumpgate.ARRIVAL_SPEED_MPS`. Its anchor and velocity are not used. Returns the name it will fly
+## under (it is not in play until it comes through), or "" with an error.
+func spawn_through_gate(entry: Dictionary) -> String:
+	var gate: Jumpgate = gates.gate() if gates != null else null
+	if gate == null:
+		push_error("Mission: spawn %s: arrival \"gate\" needs a jumpgate in the scenario's props" % entry["name"])
+		return ""
+	var type: StringName = entry["type"]
+	if ships.free_count(type) == 0:
+		push_error("Mission: spawn %s: no free %s (pool of %d, %d in play); declare enough in the scenario's pools" % [
+				entry["name"], type, ships.pool_size(type), ships.alive(type).size()])
+		return ""
+	var ship_name: String = String(entry["name"])
+	if ship_name.is_empty():
+		ship_name = ships.next_name(ShipPool.ALLY_NAME_PREFIX, ShipPool.ALLY_FIRST_NUMBER) if type == ShipPool.ALLY_TYPE \
+				else ships.next_name()
+	var made: Dictionary = BrainFactory.from_behaviour(entry["behaviour"], world.to_universe(gate.global_position),
+			hash([ship_name, seed_value]))
+	if not bool(made["ok"]):
+		push_error("Mission: spawn %s: %s" % [ship_name, made["error"]])
+		return ""
+	var offset: Vector3 = entry["offset"]
+	var place: Callable = func() -> void:
+		var xform: Transform3D = gate.arrival_transform(offset)
+		var placed: Combatant = ships.acquire(ship_name, world.to_universe(xform.origin), xform.basis,
+				gate.arrival_velocity() + world.rest_velocity(), made["brain"] as PilotBrain, type)
+		if placed == null:
+			push_error("Mission: spawn %s: the %s pool refused at the gate" % [ship_name, type])
+			return
+		placed.damageable.invulnerable = bool(entry.get("invulnerable", false))
+		gate.bring_through(placed.ship)
+		register(placed)
+		if not String(entry.get("wing", "")).is_empty():
+			wings.join(String(entry["wing"]), placed)
+	gate.request_arrival(place)
+	return ship_name
+
+
+## Sends the AI ship `ship_name` out through the gate (M6-T14): it flies the gate's departure route, the orange vortex opens as
+## it nears, and once through it leaves play as a forced `destroyed` does (back to its pool, no explosion, no kill credit). Its
+## objective is dropped so it does not turn back to fight. With no gate it leaves through the nearest open departure point a
+## jump-capable ship holds (M6-T23: it cannot open its own). False, with an error, when there is no such ship or no way out.
+func depart(ship_name: String) -> bool:
+	var gate: Jumpgate = gates.gate() if gates != null else null
+	var k: String = MissionWorld.key(ship_name)
+	var combatant := _actors.get(k) as Combatant
+	var point: JumpVortex = _held_departure_near(combatant.ship) if gate == null and combatant != null else null
+	if gate == null and point == null:
+		push_error("Mission: depart %s: no jumpgate in the scenario's props and no capable ship's departure point open" % ship_name)
+		return false
+	if combatant == null or _node_of(k) == null or combatant == player:
+		push_error("Mission: depart: no AI ship '%s' in play" % ship_name)
+		return false
+	var pilot := combatant.driver.brain as AiPilot if combatant.driver != null else null
+	if pilot == null:
+		push_error("Mission: depart: %s flies no AI pilot" % ship_name)
+		return false
+	pilot.context.objective_name = ""
+	if gate == null:
+		BehaviourFollowPath.attach(pilot, CarrierJumps.departure_route(point, world, DEPART_CRUISE_MPS))
+		CarrierJumps.attach(world).send_departure(combatant.ship, point, func(_ship: Node3D) -> void: release(ship_name))
+		return true
+	BehaviourFollowPath.attach(pilot, gate.departure_route(world, DEPART_CRUISE_MPS))
+	gate.send_departure(combatant.ship, func(_ship: Node3D) -> void: release(ship_name))
+	return true
+
+
+# The open departure point nearest `ship` that a jump-capable ship holds, or null.
+func _held_departure_near(ship: Node3D) -> JumpVortex:
+	var carriers: CarrierJumps = CarrierJumps.attach(world) if world != null else null
+	if carriers == null or ship == null:
+		return null
+	var best: JumpVortex = null
+	for point: JumpVortex in carriers.held_departures():
+		if best == null or ship.global_position.distance_to(point.global_position) \
+				< ship.global_position.distance_to(best.global_position):
+			best = point
+	return best
 
 
 ## Sets the pilot objective of the AI ship `ship_name` (D39): `target_name` ("none" or "" clears it). False, with an error, when

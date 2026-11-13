@@ -419,6 +419,9 @@ Expected test behaviour (verified headless): with F applied for n ticks from res
   safe speed": with assist on, thrust that would push the speed past 5 000 m/s is cancelled along the velocity (sideways thrust
   stays, so the ship can still turn its velocity; coasting faster is left alone). `Ship` applies both to the force each
   tick (never to torque) and clamps the speed at the limit as a last resort. Bolts leave at 1 000 m/s relative to the ship.
+  **As built (M6-T08, D67, §19.5):** these speeds are read against the ship's reference (`v - v_rest`: a place's velocity, or the
+  circular orbit's at the ship near a body), not against the frame, so a ship in a steady low orbit reads about 0 and the ceiling
+  and the assist's limit apply on top of the orbit.
 - If Jolt ever becomes the obstacle, the fallback is a custom integrator driving a `Node3D`; the pure-class split
   (D5) keeps that contained.
 
@@ -1108,7 +1111,27 @@ authored positions to centre the hull on its surface samples. A big stand-in (th
   amber lens under the beacon. Outputs the textured `nav_buoy.glb` and its maps, `nav_buoy.obj`, `hardpoints.json` (`beacon`
   position), manifest.
 
-### 9.4 Running
+### 9.4 `planet` (M6-T11, D68)
+
+- One asset per `PlanetSpec` in `tools/procgen/assets/planet.py`; the first is `epsilon_iii` (the show still described in
+  `docs/design-references.md`, "Epsilon III"). Equirectangular maps from noise sampled on the unit sphere, so they are seamless
+  at 0/360 degrees with no pinch at the poles: albedo (sRGB), height, tangent-space normal (red east, green north, relief
+  exaggerated by `planet.normal_exaggeration`) at 4096x2048, and the wisp cover at 2048x1024, each with a VRAM-compressed,
+  mipmapped `.import` sidecar. The manifest's `planet` section gives the layout (`uv`: u = 0 at the planet's +Z growing east
+  toward +X, v = 0 at the north pole, +Y), the height range, the wisps' tint and the lit limb's haze tint
+  (`atmosphere.limb_srgb`).
+- In the game (`ScaledSpace`, D68): `PlanetLook` reads the manifest and the star system's `radius_m` and `atmosphere_top_m`.
+  The planet's frame puts the maps' north on the ephemeris's z (the game's +Y) and u = 0 toward the ephemeris's +x; no tilt or
+  spin yet (the data has none). `assets/shaders/scaled_planet.gdshader` draws the surface on a coarse 64x32 sphere pushed out
+  just enough to enclose the true one, finds each pixel's point on the true sphere (a round limb at any distance), samples
+  the maps with seam-safe gradients (anisotropic, mipmapped), lights the relief only where the sun is up, with a hard
+  terminator and a near-black night side. `assets/shaders/scaled_atmosphere.gdshader` is a shell to the atmosphere's top,
+  added over it: sunlit air along each view ray, so the lit limb gets a faint warm rim and glow and the night limb none.
+  Both keep T10's pinned layer depth. A body without built maps keeps T10's plain stand-in, with a warning.
+- `scripts/planet_sheet.sh` photographs the planet from the station's rail, a 400 km orbit, 1 000 and 10 000 km up for
+  the look sheets.
+
+### 9.5 Running
 
 `scripts/gen_assets.sh` runs `python3 -m tools.procgen build all`. `scripts/run_tests.sh` first runs
 `python3 -m unittest discover -s tools/procgen/tests -t .`. CI regenerates assets on every run (they are not
@@ -1237,9 +1260,13 @@ Verified for Godot 4.7.2 (details in `docs/research-notes.md`):
 **Decision:** official single-precision engine; no double build.
 - `UniversePos`: 3 × 64-bit floats, metres, in the inertial frame of the current star system (barycentric), plus
   `system_id`. Never stored in `Vector3`.
-- `WorldFrame` (the `World` node): the local Jolt/render space. It holds the frame origin's universe position and
-  velocity (64-bit) and propagates them as a **free-falling test particle**, so local physics only feels tidal
-  gravity (a ship near the orbiting station is effectively weightless, which is physically right).
+- `WorldFrame` (the `World` node): the local Jolt/render space. **As built (M6, D64):** it has one **anchor**, a free-falling
+  point in 64-bit (a place on a Kepler rail such as the station, or a test particle in orbit), and a `UniversePos` is relative
+  to that anchor in axes that do not rotate (barycentric numbers live only in the ephemeris, so stored places never fall
+  behind). The frame's origin rides the anchor and moves by position rebases; after a velocity rebase it falls freely itself.
+  Either way local physics only feels the tidal residual `g(x) - g(anchor)`, so a ship near the orbiting station is effectively
+  weightless, which is physically right. `SimClock` stays at 0 at the start; the World holds the scenario's epoch and
+  `system_time()` = epoch + sim time is what the ephemeris is asked (§19.3, §19.6).
 - **Position rebase** when the focus object is > 5 km from the local origin: every `world_shiftable` node moves
   by `-offset` (`global_translate`); `origin += offset`; interpolation is reset at the end of that tick (below). **On in play since M3-T14**
   (maintainer Q13: at 900 km a float32 coordinate steps in 6.25 cm, and the ship's hull jumped while thrusting):
@@ -1274,9 +1301,12 @@ Verified for Godot 4.7.2 (details in `docs/research-notes.md`):
     the end-of-tick reset together; the ships dominate it (a Starfury is 108 nodes, which the shift and the reset both walk).
     `world.rebases` and `world.rebase_us` watch it. Tests: `tests/integration/test_rebase_in_play.gd` and the `RebaseFight`
     fixture (`tests/fixtures/rebase_fight.gd`), which runs any live scene with the threshold forced low.
-- **Velocity rebase** (roadmap M6, still off) when the focus speed relative to the frame exceeds 200 m/s: subtract `v`
-  from every body's `linear_velocity` and projectile velocity; `origin_velocity += v`. Keeps Jolt well under its cap and
-  keeps float32 velocities small.
+- **Velocity rebase** (on since M6-T05/T08, as built in §19.3): when the focus speed against the frame passes 2 000 m/s
+  (`World.auto_boost_speed_mps`; Q8 chose 2 000 over this section's first draft of 200 because the frame rides its anchor below it)
+  the frame is boosted onto the focus: `dv` comes off every body's `linear_velocity`, every core row, bolt and projectile,
+  and `origin_velocity += dv`. The frame is then off its anchor and falls freely; back under 1 000 m/s it is boosted back onto
+  the anchor and rides again. The boost is taken at the end of the tick and moves no position. Keeps Jolt well under its cap and
+  float32 velocities small.
 - Local space radius ~10 km. Anything farther (planets, sun, distant ships and stations) is not in Jolt: it is
   propagated in universe coordinates and rendered in scaled space (§14.4). B5's ~8 km length fits: at ±8 km
   float32 resolution is ~1 mm.
@@ -1284,17 +1314,24 @@ Verified for Godot 4.7.2 (details in `docs/research-notes.md`):
 ### 14.2 Gravity
 
 **Decision:** celestial bodies (sun, planets, moons) move on analytic Kepler orbits ("on rails", deterministic,
-seekable in time). Ships, projectiles, asteroids and comets are massless test particles under **restricted n-body**
-gravity, the sum of `μ_i / r²` over all bodies of the system (a dozen bodies per system is cheap). No patched
-conics for actual motion: sphere-of-influence switching makes flybys discontinuous, and the user asked for
-physically honest assists. Patched conics may still be used for UI orbit previews.
+seekable in time). Ships, projectiles, debris and (later) comets are massless test particles. No patched
+conics for actual motion: sphere-of-influence switching makes flybys discontinuous. Patched conics may still be used for UI orbit previews.
 
-Coexistence with Jolt: project gravity stays 0 forever. Each tick the Ship (and any body) gets
-`World.environment_accel(local_pos) = g(x_body) - g(x_frame)` applied as a central force. The tidal residual is
-tiny near the frame origin, which is why the free-falling frame is chosen. The brake and future velocity-hold
-assists receive `env_accel` as feed-forward (§5.2 already takes `env_accel_b`). Expectation to communicate to
+**As built (M6, D66, §19.4): not a full n-body sum.** The maintainer chose that **only the strongest body inside its zone pulls**
+(2026-11-10). A body's zone is the radius where its pull is at least `a_min` (0.5 m/s^2 in `data/star_systems.json`; 18 300 km
+for Epsilon III), and the pull eases to zero over the outer fifth, so crossing a zone's edge is no jolt. Outside every zone nothing
+pulls, inside a moon's zone the moon takes over from its planet, and nothing smaller than a moon pulls (`CLAUDE.md`). The star
+does not pull near a planet: the frame falls with it. The n-body sum (`gravity::tidal`) stays in the kernel for tests only.
+
+Coexistence with Jolt: project gravity stays 0 forever. Each tick every mover gets the residual `g(x_mover) - g(x_anchor)`
+(off the anchor, `g(x_mover) - g(x_origin)`), taken from the tick's one sample of the frame (`frame.rs`), applied as a central
+force on a ship, as an added velocity on a tier row or bolt (`bolt_kernels::advance`, `tier::step`) and through `HeldPull` on
+debris, wrecks, explosions and projectile nodes. The brake and the AI's idle hold receive the residual as feed-forward
+(`env_accel_b`). `WorldFrame.environment_accel` is that residual alone (the World's own field and M4's `GravityStandin` are
+gone). Babylon 5's orbit (27 500 km, a pull of 0.22 m/s^2) is outside Epsilon III's zone, so the space around the station has no
+pull; gravity is felt closer in. Expectation to communicate to
 players: a solar flyby alone does not add heliocentric energy (that is physics); gains come from an Oberth burn at
-perihelion or from flybys of moving planets, and the sim does both correctly because it is honest.
+perihelion or from flybys of moving planets (M9), and the sim does both correctly because it is honest.
 
 ### 14.3 Time acceleration
 
@@ -1328,12 +1365,18 @@ Decisions (M4-T31: the hulls are textured meshes, §7):
   user's model blurring). A `LodSwitcher` per ship decides with hysteresis (back a tenth inside).
 - Objects beyond the near field need not be resident at all, only their far representation; paging them in and out is later
   (the low-attention tier, §17.14, is the first step).
-- **Scaled space** for the sun, Epsilon III, moons and anything beyond ~50 km: a separate render layer drawn
-  before the near world, placed at `camera_dir × (distance / scale)` with matching angular size, lit from the true
-  sun direction. Planets and the sun are procedural-shader meshes (sphere + atmosphere scattering + generated
+- **Scaled space** for the sun, Epsilon III, moons and anything beyond ~50 km: **as built (M6-T10, D68, §19.8)** not a separate
+  camera or viewport but a layer of stand-in spheres in the near world's own pass, a few km from the camera at the body's true
+  angular size, each pixel's depth pinned in the vertex shader to a slab in front of the far plane (a SubViewport cost 221 MB more
+  at 3200x1800), lit from the true sun direction. Planets and the sun are procedural-shader meshes (sphere + atmosphere scattering + generated
   textures), because they are huge smooth bodies needing day/night lighting and limb effects; their near-field
   features (cloud layers, rings, belts) get their own meshes or particles.
 - The starfield stays camera-relative (one per star system, generated).
+- **Big props (M6-T15, D70, §19.9):** the jumpgate and the station's stand-in keep their own meshes out to the far plane (less their
+  radius and 500 m), then are drawn shrunk toward the eye (the same angle, a continuous hand-off), and become a far dot once their
+  bounding radius is under 4 px (`FarPropMath.DOT_PX`; the dot's size comes from a silhouette table the generators write). The
+  planet hands over to the same dot when its disc is under 4 px. M4's rule (the 1 px floor, the square dimming, a tenth of
+  hysteresis) is kept.
 
 ### 14.5 Hyperspace
 
@@ -1366,6 +1409,8 @@ volumetric shaders and a shader backdrop. Combat in hyperspace reuses everything
   by code, so they satisfy the procedural-only rule; generated audio stays out of git like every other generated
   asset. Dialog lines are data (speaker, text, voice id), so adding voices changes no mission scripts.
 - M1 seam: the free-flight scene is already driven by `data/scenarios/free_flight.json` through `ScenarioLoader`.
+- **As built (M6-T09, §19.6):** a scenario names its place in the system with `anchor` (the station's rail with `at` the station's
+  position in the scenario's coordinates, a body and altitude, or any orbit) and its `epoch` (system seconds, or `"seeded"`).
 
 ### 14.7 AI, allies, towing, capital ships
 
@@ -2146,12 +2191,11 @@ native/src/contact_field.rs     ScsContactField: the contact scan's queries (T05
 
 ```
 src/perf/battle_mix.gd              BattleMix, pure: the typical and grand profiles, counts per entity type from N
-src/perf/bench_layout.gd            + battle and typical: fights on an 8 km lattice, capitals, rocks, the moon, the sides
+src/perf/bench_layout.gd            + battle and typical: fights on an 8 km lattice, capitals, rocks, the orbit, the sides
 src/perf/standins/standin_director.gd   Node3D (World/Standins): holds and steps the stand-ins, counts the battle
 src/perf/standins/capital_standin.gd    RigidBody3D: a box hull with Targetable (kind capital) and Damageable, cruising
 src/perf/standins/turret_standin.gd     Node3D under a capital: a gun or an interceptor, stepped by the director
 src/perf/standins/asteroid_field.gd     Node3D: one MultiMeshInstance3D, static sphere bodies by RID, a marker per rock
-src/perf/standins/gravity_standin.gd    Node: a point source installed as WorldFrame.environment_field
 scripts/fullscreen_check.sh         a layout fullscreen, the 3D at 1080p, under the GPU lock, with the Q20 verdict
 ```
 
@@ -2167,8 +2211,10 @@ scripts/fullscreen_check.sh         a layout fullscreen, the 3D at 1080p, under 
   holds, the player's fight first, 2.5 km ahead. In each fight every side comes in from its own direction (+Z, -Z, +X, -X; the
   player's side, Earth Alliance, from +Z) in a 400 m ball 800 m out, facing in. A side's capitals sit 5 km behind its fights,
   taken in turn, side by side 2.5 km apart, cruising into the fight at 30 m/s. The rock slab (20 by 5 by 20 km, 1 000 rocks of
-  20 to 200 m, log-uniform) is centred on the player's fight and clears every hull by 100 m; the moon is a point source 400 km
-  below pulling 0.03 m/s^2. Sides 3 and 4 (`bench_c`, `bench_d`) fly raider and Starfury hulls with their own faction, so the
+  20 to 200 m, log-uniform) is centred on the player's fight and clears every hull by 100 m. Its gravity (M6-T07, which
+  removed M4's point-source moon, `GravityStandin`) comes from a body of the star system's data: the runner anchors the
+  World's frame on a 400 km circular orbit of Epsilon III through the battle's centre (`BenchLayout.gravity_orbit`), so every
+  mover feels the tide of a real body (about 0.026 m/s^2 10 km out), and puts the frame's anchor back after. Sides 3 and 4 (`bench_c`, `bench_d`) fly raider and Starfury hulls with their own faction, so the
   runner installs a session `FactionTable` with every pair hostile and puts the game's table and every pool ship's own faction
   back afterwards.
 - **Capitals** are Newtonian bodies like ships (no damping; engines re-apply a force every tick that holds the cruise velocity
@@ -2187,9 +2233,10 @@ scripts/fullscreen_check.sh         a layout fullscreen, the 3D at 1080p, under 
   through `Damageable` nodes, so each rock also has one bare marker `Node3D` with an unbreakable, `hit_by_anyone` sphere hull: the
   scan sees it as a static row (not a ship, no velocity, its radius) and bolts hit it. The field node is shiftable; after a rebase
   `on_rebased` moves the RID bodies. T09's registry and T08's sweep can read rows from the field instead of the markers.
-- **The moon** is `WorldFrame.environment_field` (new), a `Callable` that `environment_accel` calls when set. Ships already add
-  `mass * environment_accel(position)` every tick, and capitals do in their engines. Bolts fly straight (they never took the
-  environment), so the moon bends ships' paths and every intercept's drift, not bolts.
+- **Gravity** (M6-T07, D66) is the World frame's residual alone: `WorldFrame.environment_accel` returns it, and the M4 seam
+  for a field of the World's own (`environment_field`, the moon stand-in) is gone. Every mover takes it: ships (the flight
+  step, natively), capitals (their engines hold it off and the body takes it too), the tier's rows, the core's bolts, and the
+  GDScript movers through `HeldPull`.
 - **Carrier launches**: every 5 s each carrier (first launches spread over the period) releases one in-play fighter of its side
   to the pool, taken in turn, and acquires one again at its bay with a new brain and 80 m/s along its nose, so N holds and the
   pool's release and acquire run in play.
@@ -3196,13 +3243,15 @@ src/perf/standins/capital_standin.gd   park_for_tier, unpark_from_tier; the dire
   held acceleration, then the position by the new velocity, the spin by the held angular acceleration, the attitude by the
   spin (the axis-angle rotation, re-orthonormalised). On its beat (every `tier_hz` ticks, staggered by ordinal) a fighter's
   held command (the row command the brains wrote, `row_commands` by body id, else the command it was demoted with) goes
-  through `kernels::flight::tick` with the beat's dt: the total force (nozzles, RCS, the assist's cap, the environment's
-  pull) over the mass is the acceleration; the RCS torque plus each nozzle force's moment about the centre of mass, turned into
+  through `kernels::flight::tick` with the beat's dt: the engines' force (nozzles, RCS, the assist's cap; the pull is
+  added every tick, below) over the mass is the acceleration; the RCS torque plus each nozzle force's moment about the centre of mass, turned into
   the body frame and divided by the spec's inertia, the angular acceleration; the spec's speed limit clamps every tick. A
   capital follows `CapitalStandin.cruise_force`'s law (toward its cruise at 2 m/s^2 at most, holding off the pull) and keeps
   its attitude. A hulk holds no force and no brain: it coasts on its last motion and is never removed for being idle (M12's
-  disabled hulks, `docs/roadmap.md`). The pull comes from point sources the director pushes from the bench's moon
-  (`tier_set_gravity`), the same `gm / r^2` as `GravityStandin.accel`, bit for bit. Fuel is not drawn in the tier.
+  disabled hulks, `docs/roadmap.md`). The pull (M6-T07) is the World frame's residual, worked out for every row at once from
+  the tick's one sample (`Frame::residual_rows`, the bits a ship at the same place gets) and applied every tick on top of the
+  held engine acceleration (the beat takes it only as the brake's and the cruise law's feed-forward), so a parked ship falls as
+  its body would. Fuel is not drawn in the tier.
 - **The rows in the scan.** After the statics the core appends the tier rows to `Rows`, flagged `FLAG_TIER` and `FLAG_HULL`
   (a hulk `FLAG_HULK` too), `rigid` (a ship to the brains' contacts; a hulk is not) but never `FLAG_RIGID` (no Jolt body) and
   never `FLAG_HULL_ACTIVE` (nothing sweeps or rams a tier row in T21; T22 adds the sphere sweep and the fire). So the near
@@ -3256,9 +3305,12 @@ src/perf/standins/capital_standin.gd   park_for_tier, unpark_from_tier; the dire
   contacts; `threaded` equals `delayed` (the tier runs on the main thread inside the sync; the job only reads its rows).
 - **The rebase** (refactor finding 11) walks the shiftable group once: the nodes it moved are kept for the end-of-tick
   interpolation reset, and a body parked for the tier is left where it stands (its row moves with the core and promotion
-  places it); a second rebase before the end-of-tick settle keeps the first one's nodes. The group is still walked, not kept as a list: nodes join it after entering the tree (`Projectile._ready`, the
-  camera rig, test fixtures), so a kept list would need every site to register with the World, and the walk itself is a
-  pointer copy; the cost was the translate of fifteen child nodes a ship, which the tier removes for parked ships.
+  places it); a second rebase before the end-of-tick settle keeps the first one's nodes. **Since M6-T21 the walk is a kept
+  list**, `ShiftableRegistry`: the group's nodes in play, World by World, kept from the tree's `node_added` and
+  `node_removed` (no site registers by hand), with what the pools and the tier park (`ShiftableRegistry.set_out`: the
+  tier's and the pool's parked ships, idle debris chunks and effect emitters) out of it until they are back. A node that
+  joins the group after entering the tree (test fixtures; `Projectile` now joins in `_init`) is caught by comparing the
+  group's size with what is known before each walk, which reads the group again. The velocity rebase walks the same list.
 - **Settings and console.** `tier_radius_m` (10 000 since T23; 0 = off, live), `tier_hz` (20, live). Provider `tier`: `radius_m`,
   `period_ticks`, `fighters`, `capitals`, `rows`, `hulks`, `promotions`, `demotions`, `step_us` (the tier's integration inside
   the sync), `director_us`. Provider `perf` and the bench's entity counts gain `tier_fighters` and `tier_capitals`;
@@ -3464,6 +3516,15 @@ native/src/contact_field.rs         + set_friendly_row; statics(..., faction, ..
 - **Rocks.** `AsteroidField.build(rocks, space, world)` registers each rock (kind `STATIC`, neutral, its radius) as it makes the
   RID body, and `free_bodies` removes the rows with the bodies. The field keeps only its multimesh node; `on_rebased` still moves
   the RID bodies (a node rebase does not reach them), the rows move with the world.
+- **Live rocks (M6-T21).** Only the rocks a rigid hull could reach soon are live Jolt bodies (`RockBodies`, shared by the
+  stand-ins' field and `AsteroidBelt`): each tick, late (just before `sync_out`), the native `ScsRockStream` sweeps the core's
+  rigid rows, seen in the owner's frame and moving against the rocks at the World's rest velocity, over a grid of the rocks
+  that no rebase or drift changes. A rock within `0.25 s` of motion plus 20 m of a hull comes to life; one is demoted once no
+  hull has been within that reach plus 10 % for 30 ticks (a hull destroyed against a rock leaves the rows before it leaves
+  Jolt). A dormant rock keeps its body with layer and mask 0, never moved, so `on_rebased` and every drift place only the live
+  ones; a rock that comes back is placed under its owner exactly as one that lived along. The bodies stay in Jolt rather than
+  leaving its space so no body is made again: Jolt orders contacts by body id, so the battle's bits hold. The hit sweep, the
+  rams and the scan read the rows, never the bodies, so nothing about a hit or a ram on a rock changes.
 - **Mines.** `MineStandin` registers every mine in play (kind `MINE`, its layer's faction, the trigger's 50 m as its radius, the
   director's world) when the belts are laid; a mine that goes off is unregistered at once, and laid again 10 s later it is
   registered again with the same id at its place. Leaving the tree (`remove_mines`, the director's `clear`) unregisters the
@@ -3929,7 +3990,7 @@ The subsections were written task by task, so here is where each part of M5 is d
 | # | Decision | Rationale (short) |
 |---|---|---|
 | D50 | Boot and the `Game` flow (T01). The main scene is `src/frontend/boot.tscn`; `Boot` hands the command line to the `Game` autoload once, and the pure `GameFlow.boot_route` decides: a windowed launch shows the front end; `--headless` (the display server or the engine argument), `--console-exec` or `--console-file` with a script, `--scenario=<id>` (after `--`, or before it) and `settings.skip_front_end` go straight to Main, which reads `Settings.scenario` as before (`--scenario=<id>` sets it for the session, like the `scenario` command). `GameFlow` (`RefCounted`) holds the states `FRONT_END`, `LOADING`, `IN_SPACE`, `DEBRIEF`, the request `{kind: free_flight \| mission \| sandbox, scenario_id, encounters, seed}` and the last result; a run starts at `FRONT_END`, and a refused move changes nothing and says why. `Game` only swaps scenes: the loading screen loads `main.tscn` with `ResourceLoader.load_threaded_request` (its scripts compiled first on the main thread, §18.3), `Game` builds Main with the request's `scenario_path` and `scenario_seed`, and `Main._ready` fills the pools behind the loading screen (D22 unchanged). Leaving a scene unpauses the tree and frees the mouse. The console's `scenario <id>` still reloads Main in place | Every tool, benchmark, smoke run and test starts as it did, and the menus get a flow that the debrief, retry and missions plug into without touching Main |
-| D51 | Missions are scenarios with a script of named steps (T05). `ScenarioLoader` passes a scenario's `mission` block through (`title`, `briefing`, `script`, `dialog`, `objectives[]`; strings type-checked only, objectives by `ObjectiveBook.declare`) and `cinematics` beside it; `Main` creates a `MissionRunner` (under Main, physics priority 400, pausable) when the block is there. The script extends `MissionScript` (`steps()`, `step_<name>(m)`); `MissionSequencer` awaits each step as a coroutine, and every wait in `MissionApi` resumes on the sequencer's `wake`, emitted once per tick after the world moved, so mission time is sim time. `mission skip` marks the step skipped and emits `wake` at once: waits return, an awaited trigger is first made true (`Trigger.make_true`), the objectives are evaluated right after, and the step runs to its end and the next starts inside the command (an emission calls only the waits it began with); `mission goto <step>` skips every step before the named one. World changes go through `MissionStage`: pools, `AiContext.objective_name` for `send`, the jump points. `cinematic` and `lock_controls` are D55's (T08); `say` is D53's (T06). Success: every primary done, or `m.end(true)`; failure: a primary failed, `m.end(false)`, or the player destroyed. The result goes to `Game.end_mission` (`last_result`, `DEBRIEF`); Main stays in space with `MISSION COMPLETE` or `MISSION FAILED - <REASON>` on the status line until T09's debrief. In a mission the player does not respawn (the runner cancels it, Back is ignored); a spawn past its pool is a `push_error`, never a new ship. Jump arrivals (Q12): `JumpArrivalPool` holds 4 `JumpArrival`s under `World/Effects` (billboard flash, a `LightEmitter`, the `sfx_world` `jump_in` sound; no splats), a spawn with `arrival: "jump"` opens one (a group within 600 m in the same second shares it) and comes out of it on its own velocity | Scripts read like the mission; skipping by forcing leaves the world where the step would have (a skipped wave is gone, not alive and ignored), which M8's tutorial checks need; one script surface keeps missions out of Main |
+| D51 | Missions are scenarios with a script of named steps (T05). `ScenarioLoader` passes a scenario's `mission` block through (`title`, `briefing`, `script`, `dialog`, `objectives[]`; strings type-checked only, objectives by `ObjectiveBook.declare`) and `cinematics` beside it; `Main` creates a `MissionRunner` (under Main, physics priority 400, pausable) when the block is there. The script extends `MissionScript` (`steps()`, `step_<name>(m)`); `MissionSequencer` awaits each step as a coroutine, and every wait in `MissionApi` resumes on the sequencer's `wake`, emitted once per tick after the world moved, so mission time is sim time. `mission skip` marks the step skipped and emits `wake` at once: waits return, an awaited trigger is first made true (`Trigger.make_true`), the objectives are evaluated right after, and the step runs to its end and the next starts inside the command (an emission calls only the waits it began with); `mission goto <step>` skips every step before the named one. World changes go through `MissionStage`: pools, `AiContext.objective_name` for `send`, the jump points. `cinematic` and `lock_controls` are D55's (T08); `say` is D53's (T06). Success: every primary done, or `m.end(true)`; failure: a primary failed, `m.end(false)`, or the player destroyed. The result goes to `Game.end_mission` (`last_result`, `DEBRIEF`); Main stays in space with `MISSION COMPLETE` or `MISSION FAILED - <REASON>` on the status line until T09's debrief. In a mission the player does not respawn (the runner cancels it, Back is ignored); a spawn past its pool is a `push_error`, never a new ship. Jump arrivals (Q12): **as built, M6-T19 replaced M5's `JumpArrivalPool` and `JumpArrival` flash with `JumpPointPool` (§19.10)**: it holds 4 stand-alone `JumpVortex` points (the gate's vortex, sized for the ship, the `jump_in` sound and a light), a spawn with `arrival: "jump"` opens one (a group within 600 m in the same second shares it) and comes out of it on its own velocity; `arrival: "gate"` comes through the jumpgate | Scripts read like the mission; skipping by forcing leaves the world where the step would have (a skipped wave is gone, not alive and ignored), which M8's tutorial checks need; one script surface keeps missions out of Main |
 | D52 | Triggers and objectives (T05). Seven kinds (`proximity`, `area`, `timer`, `destroyed`, `dialog_finished`, `input_performed`, `arrived`), each a `RefCounted` with its `test` and `force` side by side, over a `MissionWorld` snapshot: actors by name (case-free; `player` is the player) with `UniversePos`, alive and route end, sim time, finished lines, and this tick's `PlayerActions` from the `PilotCommand` Main sampled (`InputAdapter.last`; held controls past half way and edges). Forced, `destroyed` releases its ships to the pool (no explosion, no credit), `proximity`, `area` and `arrived` place the actor (`reset_to`, velocity kept; beside a goal actor at half the radius), the rest latch. `TriggerSpec.from_dict` builds them from JSON and has builders for scripts. `ObjectiveBook` (pure): hidden, active, done, failed (final); success and fail triggers evaluated while active, fail first; `snapshot()` is `{id, text, primary, state}`. Cost: every lookup is one unit of `MissionWorld.work`, and the stage refreshes only the names the live triggers read, from a name map `ShipPool.acquired` keeps current, so a tick costs a check and at most two lookups per trigger plus one refresh per name, whatever the number of ships | Pure predicates are unit-tested without a scene; a counted bound is stable on any machine where a millisecond budget is not |
 | D53 | Dialog, subtitles and the comms panel (T06). Lines are data: `data/dialog/<file>.json` `{lines: [{id, speaker, text, voice, hold_s?}]}` and `data/dialog/speakers.json` `{id, name, callsign, faction}`; `DialogBook` loads and validates them (a bad file stops the mission from starting), a line's hold is `hold_s` or about 2.5 words a second, at least 2 s. `DialogQueue` (pure, sim-time deltas) plays one line at a time with a 0.4 s gap, and a `say` with `interrupt` cuts the line showing. `MissionApi.say` queues the line and resolves when it has finished showing; skipped, it is logged and recorded finished. `CommsPanel` (a `CanvasLayer`, layer 41, above the HUD and below the pause menu) draws the callsign in the faction's colour over the subtitle at the bottom of the window in both views, and plays the `sfx_ui` `radio_open` / `radio_close` squelches (a cut line makes no close); the cockpit's right screen keeps the wing roster. A test checks every line id a mission script uses exists in its dialog file and every speaker exists | Lines as data keep M15's voices from touching any script; the panel sits on its own layer so a cinematic that hides the HUD keeps its subtitles |
 | D54 | The comms menu on D-pad Right (T07; the D-pad picking, the plate view and the timer are superseded by §18.22, T46). New action `comms_menu`: D-pad Right and Ctrl (the left hand's last free key; keys 1-4 stay the wing orders, 5 the lights). `CommsMenu` (pure, `src/hud/comms_menu.gd`) holds pages of up to four `{label, payload}` entries, one per D-pad direction (up, right, down, left), a 4 s close timer on sim time, and `push_page` / `pop_page` so a later mission can push a page of replies (M5 builds none). Page one is the wing orders, payload an `AiContext.Order`, in the order of keys 1-4. `Main` owns the model and a `CommsMenuView` (`CanvasLayer` 42, a plate at the left edge, vertically centred: free of the roster and acknowledgements top-left and top-right, the gauges at the bottom and the subtitles at bottom centre), opens it on `UiCommand.comms_open`, and calls `WingDirector.give_order` for a pick, the call keys 1-4 make. A pick closes the menu. `Main` tells `InputAdapter.comms_open`; while set, the adapter turns the D-pad's four actions into `UiCommand.comms_pick` 0-3 and either B button into `comms_close`, and reports no assist, next-weapon, lights or target-cycle edge (a B press held through the close taps nothing when released). The timer is stepped with the physics tick, so it stops behind the pause menu; the pause edge and the player's death close the menu. A profile saved before M5 gets `comms_menu` from `default` when it loads (D36's fill); `m1_classic` keeps its D-pad rolls and has Ctrl alone (`ControlProfile.KEYBOARD_ONLY`) | The pad gets the wing orders without a new button, and one adapter rule keeps every D-pad action quiet while the menu is up |
@@ -4176,7 +4237,7 @@ fly-past shot.*
   turns each into nav buoy props (after the hand-placed ones, names checked for duplicates) from `BuoyRing` (pure): the ring in the
   plane square to `normal`, the first buoy along `first` from the centre, the rest at equal angles, named `prefix` + ALPHA, BRAVO,
   ... (3 to 26 buoys), sums in 64 bits. Buoy defence has 16 on a ring of 20 000 km radius centred 20 000 km behind the scenario
-  origin, so NAV ALPHA sits at the origin and its neighbours are 7 804 km away (7 854 km along the arc). No planet yet (M6).
+  origin, so NAV ALPHA sits at the origin and its neighbours are 7 804 km away (7 854 km along the arc). No planet there (M6 put Epsilon III in the system, but this scenario's ring is gone, §18.15).
 - **Broadcast range: 10 000 km (changes M3's Q21).** `NavBuoy.BROADCAST_RANGE_M` is 1.0e7 m for every buoy in the game (M3-T17 had
   1.0e6 m, 1 000 km). On the ring every point hears at least two buoys. Off it the rule holds in every direction to about 4 900 km
   (`test_buoy_ring.gd`); straight out of the plane and inward it holds to 6 000 km and more, but straight outward beside a buoy the
@@ -4357,7 +4418,7 @@ tests/unit/test_encounter_plan.gd, tests/integration/test_encounters.gd, tests/f
   `Main.ensure_pool`, their debris sets prepared and every pooled ship watched by the `DestructionDirector` (ships built after
   load were not). Ships come from the existing paths: `ShipPool.acquire`, `BrainFactory` (`raider` with the target as
   objective; `ally_starfury` engaging; `civilian`), a `Route` (`pace` none, no loop; a patrol's yields to attacks) through
-  `BehaviourFollowPath`, raiders through the director's own `JumpArrivalPool` (4 points, built with the director). Encounter
+  `BehaviourFollowPath`, raiders through the director's own `JumpPointPool` (4 points, built with the director; M6-T19 replaced `JumpArrivalPool`). Encounter
   civilians broadcast 15 km (a transponder) so a raid sent from 6-12 km finds them; the range is cleared when they leave.
 - **Cap.** `encounter_max_ships` (24, live) counts the director's ships in play. A due event that would pass it waits (one at a
   time; later events queue behind it); one bigger than the whole cap is trimmed to it once nothing else is in play. Raids and
@@ -4837,3 +4898,452 @@ native/src/voice_kernels.rs, voice_rows.rs   ScsSimCore.ships_near(centre, radiu
 Each starts with the import, since the compile check and GUT know a new `class_name` only after it (T20). The smoke runs go
 through `main_run` in `scripts/lib_tests.sh`; the lock paths are in `scripts/lib_locks.sh`. CI runs the Python tests in a job of
 their own and the GUT files in three shards, with `assets/generated` cached on a hash of `tools/procgen`.
+
+## 19. Epsilon space at true scale (M6)
+
+What M6 adds to §1-§18 (tasks in `docs/milestones/m6-epsilon-space-at-true-scale.md`; evidence for the frame in
+`docs/research/m6-moving-frame.md`). The game now sits in the real Epsilon Eridani system at true scale: the local space is a
+moving, free-falling frame, bodies move on Kepler rails, one gravity rule acts on every mover, the planet and the sun are drawn in
+a scaled-space layer, and the first jumpgate has its vortex. Decision numbers D64 to D71 are M6's. The kernels are engine-free
+Rust under `native/src/` (`test_the_kernels_hold_no_engine_type` and its two M6 siblings); the rest is statically typed
+GDScript. Task ids below are M6 tasks.
+
+| Part | Read | Replaced or changed by |
+|---|---|---|
+| The moving frame, the anchor, the velocity rebase | D64, §19.3 | the 200 m/s threshold of §14.1's first draft: 2 000 m/s (Q8) |
+| Ephemeris and gravity | D65, D66, §19.4 | M4's `GravityStandin` and the World's own field: gone |
+| Flying under gravity | D67, §19.5 | the 9 999 m/s clamp as an absolute speed (§5.6): now against the reference |
+| Scenarios at true scale | §19.6 | - |
+| The rebase's cost (L4) | §19.7 | AC2 restated |
+| Scaled space, the planet, the sun | D68, §19.8, §9.4 | - |
+| Far representations | D70, §19.9 | §14.4 |
+| The jumpgate and the vortex | D69, §19.10 | M5's `JumpArrival` and its pool (§18.1 D51, §18.12) |
+| Seams for M9 and M11 | D71, §19.11 | - |
+| Vortex detail by distance, mass arrivals | §19.14 | M6-T20 |
+| Ships fly the vortex funnel | §19.15 | M6-T22 |
+| Who may open a jump point | §19.16 | M6-T23 |
+
+### 19.1 Decisions
+
+| # | Decision | Rationale (short) |
+|---|---|---|
+| D64 | Each `WorldFrame` has one **anchor**, a free-falling point in 64-bit (a place on a rail, or a test particle in orbit), and a `UniversePos` is relative to it. The frame **rides its anchor** (`origin_velocity` 0) and moves only by position rebases until the focus passes **2 000 m/s** against it; the **velocity rebase** then boosts the frame onto the focus and it falls on its own until the focus is back under 1 000 m/s. One gravity sample per tick; the frame's step is last in the tick | Stored places and static rows stay valid with no change; float32 speeds stay small; Jolt stays far under its cap; a boost moves no position |
+| D65 | One ephemeris in the native core: Kepler orbits, one element set per body around its parent, evaluated directly at any time (seekable, no state between ticks), answering in 64-bit **relative to a point it is given**. The station and the gate are on rails like bodies | Seekable for M9's warp; no barycentric subtraction of 1e11 m numbers |
+| D66 | **Only the strongest body inside its zone pulls.** A zone is the radius where a body's pull is at least `a_min` (0.5 m/s^2; `sqrt(GM / a_min)`, 18 300 km for Epsilon III); the pull eases to zero over the outer fifth. Outside every zone nothing pulls; nothing smaller than a moon pulls. A mover feels `g(x) - g(anchor)` (the tidal residual), both under the same rule | A frame that falls with its anchor feels almost nothing; the station's orbit (27 500 km) is outside the zone, so station keeping costs nothing |
+| D67 | Speed is read against the ship's **reference** (a place's velocity, or the circular orbit's at the ship near a body), never against the frame. The brake, assist, thrust fade and the 9 999 m/s ceiling read `v - v_rest`; against a body the brake **settles the ship into the circular orbit** at its altitude. Hitting a body or its atmosphere's top destroys the ship | A ship in a steady orbit reads about 0 and can hold the orbit; escaping is just thrust |
+| D68 | The star, the planets and (for the far station and gate) other big things are drawn in a **scaled-space layer** in the near world's own pass: a small stand-in per body a few km from the camera at its true angular size, its depth pinned in the vertex shader to a slab in front of the far plane | No second camera or viewport (a SubViewport cost 221 MB more at 3200x1800); the near world, dots and effects draw over it by the ordinary depth test |
+| D69 | The jumpgate is a generated prop with collision and a `Targetable` broadcasting to 1 000 km, with a stand-alone **vortex** (meshes and shaders only): orange/yellow for a departure, blue for an arrival. **The same vortex everywhere**: open jump points of ships use it too, and it replaced `JumpArrival` | One effect, one set of tests (Q12, revised) |
+| D70 | Big props (the gate, the station's stand-in) have three draw paths by distance: their own meshes, the same meshes **shrunk toward the eye** past the far plane, then a **far dot** under 4 px. The planet keeps the scaled layer, then the dot | No pop: size and direction are continuous by construction |
+| D71 | M6's state (anchor, sample, rest velocity) lives on the `WorldFrame` and its core, never in an autoload or a static; the ephemeris is seekable and the integrator takes any step | M9 reuses both; M11 adds a second frame |
+
+### 19.2 Layout additions
+
+```
+native/src/ephemeris.rs        Kepler elements, the body tree, add_on_orbit (T02)
+native/src/gravity.rs          the zone rule (pull_at, dominant, residual, residual_rows), kick, drift, step (T02)
+native/src/ephemeris_binding.rs ScsEphemeris: state, relative_state, zone_radius, dominant (T03)
+native/src/frame.rs            Frame: anchor (Rail or Particle), origin, origin_velocity, the tick's sample (T04, T05)
+native/src/frame_rows.rs       ScsSimCore.frame_*: the frame's shell; game axes (x, y, z) -> kernel (x, -z, y)
+native/src/static_rows.rs      the statics' in-place shift (T06)
+native/src/rock_stream.rs      ScsRockStream: which rocks are live in Jolt (T21)
+data/star_systems.json         a_min, bodies (Epsilon III), places (babylon5, the gate on its orbit) (T03)
+src/world/star_system.gd       StarSystem: load, validate, build ScsEphemeris, impact radii, orbit_state
+src/world/star_system_host.gd  StarSystemHost: the `system` provider, DEFAULT_ANCHOR
+src/world/world_frame.gd       WorldFrame: anchor, sample and frame-step slots, boost, riding, system_time()
+src/world/scenario_frame.gd    ScenarioFrame (pure): a scenario's anchor and epoch
+src/world/reference_frame.gd   ReferenceFrame (pure): the reference pick, rest velocity, altitude rule
+src/world/flight_reference.gd  FlightReference: the shell that feeds the player's ship (priority -5)
+src/world/planet_impact.gd     PlanetImpact (priority 205)
+src/world/held_pull.gd         HeldPull: a mover's pull, read once a second of its life
+src/world/rock_bodies.gd       RockBodies: dormant and live rock bodies
+src/world/shiftable_registry.gd ShiftableRegistry: the shiftables in play
+src/environment/scaled_placement.gd, eclipse_math.gd   pure: placement, the star's lit part
+src/environment/scaled_space.gd, planet_look.gd, sun_look.gd   the layer, the planet's and the star's look
+assets/shaders/scaled_body.gdshader, scaled_planet.gdshader, scaled_atmosphere.gdshader, scaled_star.gdshader
+src/rendering/far_prop_math.gd, far_prop.gd, far_prop_host.gd   far representations (T15)
+src/props/jumpgate.gd, jumpgate_host.gd, jump_vortex.gd(+shader), jump_point_pool.gd, vortex_timing.gd, vortex_fit.gd,
+  vortex_swirl.gd, gate_activation.gd, gate_jump.gd, gate_jump_prompt.gd, gate_autopilot.gd
+tools/procgen/assets/planet.py, jumpgate.py; tools/procgen/core/silhouette.py   generators (§9.4 for the planet)
+```
+
+### 19.3 The moving frame (D64, T04, T05)
+
+**The anchor.** `Frame` (`native/src/frame.rs`, 64-bit, kernel axes) holds a copy of the star system, the anchor, the local
+origin against the anchor and the tick's sample. The anchor is a `Rail` (a place on its orbit: the station) or a `Particle` (a
+test particle in orbit about a body, started half a kick back). `WorldFrame.anchor_on_rail(place)`, `anchor_in_orbit(body,
+altitude)` and `clear_anchor()` set it; `anchor_offset` (T09) is the scenario's origin from the place the World rides. A
+`UniversePos` is relative to the anchor in axes that do not rotate; barycentric numbers exist only inside the ephemeris. The frame
+is **quiet** (a residual of exactly zero, nothing read) when the anchor feels no pull and every zone stays more than 1 000 km
+(`QUIET_MARGIN_M`) from the local origin, which is the station's case and keeps the parity recordings' bits.
+
+**One sample, the step last.** The tick's slots, around the order of §15.3:
+
+| Priority | Who | What |
+|---|---|---|
+| -100 (`SAMPLE_PRIORITY`) | `WorldFrame` | takes the tick's time once: bodies placed against the anchor, the zones, the anchor's pull and the origin's own pull. Every mover reads this one sample |
+| -12 to -1 | tier, drivers, brains, the flight batch | the movers; the flight step adds the residual natively |
+| -5 | `FlightReference` | hands the player's ship its rest velocity |
+| 0 | `World` | position rebase; decides whether a velocity rebase is wanted (`_auto_boost`), does not take it |
+| 1, 100 to 400 | bolts, hits, rams, missions | |
+| 205 | `PlanetImpact` | ships and capitals inside a body's impact radius die |
+| `SimCore.OUT_PRIORITY` + 1 (`FRAME_STEP_PRIORITY`) | `WorldFrame` | takes a wanted boost, then steps the anchor and the origin |
+| 1 000 000 | `RebaseSettler` | resets interpolation after a rebase |
+
+**The integrator** is kick, then drift, once per physics tick in 64-bit (`gravity::kick`, `drift`, `step`): leapfrog with the
+velocity half a step behind, the step Jolt and the tier already take. One fixed step and operation order, so the same bits on
+every run; M9's warp composes the same two with its own step. Budgets (measured): an empty frame follows a 400 km circular orbit
+within 0.005 m over a whole orbit (budget 0.05 m) and an `e` 0.3 orbit ends within 0.1 m; a ship coasting along the track from the
+station's point stays within 0.08 m of a 64-bit run at 1 km, 0.05 m at 3 km (tier) and 0.025 to 0.06 m in Jolt over a whole orbit
+(budget 0.5 m).
+
+**The velocity rebase.** When the focus passes `auto_boost_speed_mps` (2 000 in `main.tscn`; 0 turns it off) against the frame,
+`WorldFrame.boost(dv)` is asked for; the frame's last slot takes it. **It is taken at the end of the tick, not in `World`'s slot**
+(a change to D64's first draft): bolts, debris and the tier step themselves inside the tick and the bodies in Jolt's step after
+it, so a boost at priority 0 put the bolts one step ahead of the bodies (33 m at 2 000 m/s). A boost takes `dv` off every body's
+`linear_velocity`, every core row (`Rows.boost`, `Bolts.boost`, `TierRows.boost` with a capital's `cruise`), the ram tracker's
+remembered velocities and open windows (`Tracker.boost`), and every projectile, chunk, wreck, explosion, emitter and far flash
+(`frame_boost(dv)` or a `boosted` listener: `DebrisPool`, `FxPool`, `FarFlashes`, `RamResolver`); `origin_velocity += dv`, and
+`TierDirector` settles the boosts a parked body sat out (`boost_sum`). The frame is then **off its anchor**: it falls freely and a
+mover feels `g(mover) - g(origin)` (`origin_pull` fixed at the sample), exactly zero at the local origin; the anchor-tied things
+(group `world_anchored`: buoys, the gate, a stand-alone vortex, the station's stand-in, belts and fields, mines) and the static
+rows move with the anchor each tick (`drifted(shift)`). When the focus is under half the threshold the boost goes back onto the
+anchor and the frame rides again. A boost moves no position, so it needs no interpolation reset. Particles stay in their node's
+frame.
+
+**Rest velocity.** Speeds are read against `v_rest`, never against the frame (§19.5). While the frame rides its anchor and the
+anchor is the reference, it is zero and every result is bit-identical to before M6.
+
+### 19.4 The ephemeris and gravity (D65, D66, T02, T03, T07)
+
+- **Ephemeris** (`ephemeris.rs`): elliptic orbits (e up to 0.99), Kepler's equation by Newton with a fixed 24 steps, a body tree
+  evaluated at any time (`state`, `relative_state` against a body or place), `add_on_orbit` for a point sharing an orbit at a phase
+  offset (the gate on the station's orbit, 50 km ahead). GDScript reads it through `ScsEphemeris` only (`StarSystem`); no second
+  implementation. `data/star_systems.json` holds `a_min`, the bodies (Epsilon III: `gm` 1.68e14, radius 4 780 km, atmosphere top
+  100 km, a 0.6 AU circular orbit; no moon, Q1) and the places (Babylon 5 on a 27 500 km circular orbit, period 19.4 h; the gate).
+  Metres, seconds, degrees; `gm` is authoritative; every refusal on load names the key.
+- **Gravity** (`gravity.rs`): `pull_at`, `dominant`, `residual` and `residual_rows` implement D66; the n-body sum and `tidal` stay
+  beside it for tests. `Frame::residual_rows` gives a batch the bits one `residual` per mover gives, in 1 and 6 parts.
+- **Who feels it.** Ships: the native flight step adds the residual to every ship it flies, as `env_accel` and the brake's
+  feed-forward (`env_b`); a ship on its own model (the player's) reads `WorldFrame.environment_accel`, which is the residual alone
+  (the World's own field and `GravityStandin` are gone). Tier rows: `tier::step` takes the pull per row on top of the engines' held
+  acceleration; a hulk falls, a capital's engines hold its cruise against the pull. Bolts: `bolt_kernels::advance` adds the pull times
+  the 32-bit delta before the move (a bolt launched this tick neither moves nor falls). Debris, wrecks, explosions and projectile
+  nodes: `HeldPull` reads the pull once per second of the mover's life and after a boost (0.0027 m off a per-tick read over an 8 s
+  chunk, cheaper than a per-tick read). With no pull every step is the old one bit for bit.
+- **The bench.** `battle` and `typical` fly in a 400 km circular orbit of Epsilon III (`BenchLayout.gravity_orbit`); the runner
+  anchors the frame there and puts the rail back after. The seeded weapon battle's recording (`weapon_rows_battle.json`) is that
+  orbit with the tier off (comparison table in `tests/fixtures/parity/README.md`).
+
+### 19.5 Flying under gravity (D67, T08)
+
+- **Rest.** `kernels::flight::Rest` goes into `flight::tick` beside `env_accel`: the brake gets `v - v_rest` and the feed-forward
+  `env - a_rest`; the thrust fade, the assist's safe speed and the 9 999 m/s ceiling read `|v - v_rest|` (the pull itself is
+  applied in full). The flight step gives each ship the World's rest (`frame_rest`: minus the frame's velocity and its origin's
+  pull) or a ship's own (`set_rest`, `clear_rest`); the tier's step does the same for fighters. `Ship` does it in GDScript for the
+  player (`rest_velocity()`, `set_reference_rest`, `SpeedGovernor.clamp_against`); `ship.speed` is the speed against it. A zero
+  rest is a branch that keeps the old expressions.
+- **The reference** (`ReferenceFrame`, pure, `FlightReference`, its shell): the mission's reference if it names a candidate; else
+  the nearest place whose broadcast holds the ship (`settings.reference_place_range_km`, 1 000, held to a tenth beyond); else the
+  dominant body; else none (the World's anchor). A body's rest is the **circular orbit's velocity at the ship**, prograde in the
+  plane of the ship's motion, `sqrt(pull r)` from the zone rule, falling with the ship's own pull so the brake's feed-forward cancels:
+  holding the brake settles the ship into that circle, and holding it far from any place is an orbit, not a stop against the
+  planet. Console `reference [auto|<id>]`, provider `reference`.
+- **HUD** (`HudLayout.relative_velocity`): `REF <name>  <range>  <closing>`; the speed, the velocity marker, the drift sphere and
+  the angles read against the reference; `ALT <km>` on a line under it while a body is the reference or the ship is within
+  `settings.hud_altitude_radii` (1.0) radii of its surface. `Main.reference_point()` is the reference's universe position.
+- **Brains** get their snapshot (`snapshot_into`) with the World's rest taken off every local velocity (bodies, tier rows, missiles,
+  bolts), so cruise, stop and run-up speeds mean speed against the place with no brain changed. Spawn velocities in data, waves,
+  missions, gate arrivals and encounters are against the place. GDScript-only brains (`perceive()`) still read frame velocities.
+- **Planet impact.** `PlanetImpact` asks the core each tick for rows (tier rows and the player included) inside a body's radius
+  plus `atmosphere_top_m` (`frame_set_impact_radii`) and kills each with `HitInfo.CAUSE_PLANET`; god mode does not hold a ship up.
+- Held under assist in a 400 km orbit with the brake held 20 s: within 0.000 m / 0.0011 m/s riding, 0.029 m / 0.0027 m/s in a frame
+  boosted 2 500 m/s (`test_low_orbit_flight.gd`).
+
+### 19.6 Scenarios at true scale (T09)
+
+- **`anchor`** in a scenario file (`ScenarioFrame`, parsed by `ScenarioLoader`): `{"place": "babylon5", "at": [x, y, z]}` (the
+  World rides the place's rail; `at` is where the place stands in the scenario's coordinates, so every layout keeps its numbers;
+  `standin` puts the station's stand-in there), `{"body", "altitude_m", "phase_deg", "inclination_deg"}` (a circle that high) or
+  `{"orbit": {...}}` (any orbit; the start state comes from the ephemeris on a copy of the system, `StarSystem.orbit_state`).
+  With no `anchor` the scenario's origin is on the station's rail with no stand-in. The anchor is the scenario's origin: for the
+  place form the World rides the rail with `anchor_offset`, and the few readers that took the anchor for the place subtract it
+  (`ScaledSpace.body_from_anchor`, `FlightReference.places`), so no scenario position moved.
+- **`epoch`**: seconds of system time at the start, or `"seeded"`. **The sim clock still starts at 0**; the World holds `epoch_s`
+  and `system_time()` = epoch + `SimClock.now()` is what every ephemeris reader asks. A seeded epoch (`ScenarioFrame.seeded_epoch`)
+  takes a lit start with the planet's centre within 25 degrees of the player's forward and its disc at least half lit.
+- All seven scenarios place the station 6.6 to 9.6 km from the start (`[5500, -1200, -6000]`; `belt_showcase` `[2000, 4500,
+  -9000]`) with an epoch (free flight seeded; the sandbox, showcases and escort 540 148 s; the instructor's route 3 267 594 s; the
+  dogfight 7 482 671 s). `Main._anchor_world` resolves the frame (a frame the system cannot place falls back to the station's rail
+  with a warning); `FarPropHost.place_station` builds and dresses the stand-in; the gate stands on its rail 50 km ahead on the
+  station's orbit, facing the station (`JumpgateHost.place`). Encounters take planned velocities against the player's reference.
+- Console: `system` gains `epoch_h`, `time_h` and `anchor`; `scaled epoch <hours>` offsets the World's system time for captures;
+  `frame [status|orbit <km> [body]|rail <place>|off]`.
+
+### 19.7 The rebase's cost (L4, AC2; T06, T21)
+
+- **A shift is not a new version** (T06): `StaticRows.shift` moves a world's rows in one native call (`ScsStaticRows.shift`) and
+  bumps `moves`, not `version`; the cached `Solid` shifts in place; the resolvers' kept grids take the new places by a native
+  `keep`; `ScsSimCore.move_statics` updates the core's copy. Parked pool ships are skipped (`WorldFrame.PARKED_META`).
+- **Live rocks** (T21): each rock keeps its RID body, but only rocks a rigid hull could reach soon are live; the rest have layer
+  and mask 0 and are never moved. `ScsRockStream` looks the core's rigid rows up in a dense grid of the rocks in their owner's frame
+  every tick (before `sync_out`); a rock within 0.25 s of motion plus 20 m comes to life, and is demoted once no hull has been within
+  that reach plus 10 % for 30 ticks. Bodies stay in Jolt (never made again), which keeps Jolt's contact order and the recordings'
+  bits. Bolts, rams and the scan read the rows, never the bodies.
+- **`ShiftableRegistry`** keeps the shiftables in play from `node_added` and `node_removed`; `set_out` parks a node out of it
+  (the pool's and the tier's parked ships, idle debris chunks and effect emitters). A rebase walks about 450 nodes instead of 1 130.
+- **Numbers**, `bench battle 1000 20 warmup=3 seed=1` (headless, pinned 0-11): the rebase tick's median extra over the tick median
+  2.25 ms (before L4) -> 1.77 (T06) -> about 1.2 (T21); the off-anchor tick's extra 1.21 -> 0.64 -> 0.28 ms. **AC2 is restated
+  (maintainer, 2026-11-12)**: the original bar (worst rebase tick within 10 % of the median) sits inside the tick's own spread (p90
+  is +14 %), so AC2 asks for the cascade's removal and the median extra measured before and after. Left: the resolvers' kept rock
+  grids are rebuilt on every rebase and off-anchor tick (about 45 us each).
+
+### 19.8 Scaled space, the planet and the sun (D68, T10 to T12; the planet's maps are §9.4)
+
+- **Depth.** One pass: `assets/shaders/scaled_body.gdshader` gives every pixel of a body one reversed depth from a slab just in
+  front of the far plane (2e-9 to 1e-8, the nearer body the larger): behind everything nearer than about 49.5 km and in front of the
+  star points (1e-9) and the sky. Measured on the RX 6950 XT: the pinned depth is inside the noise of no layer at all (1 200x675
+  0.31 to 0.75 ms against 0.31 to 0.66); a SubViewport cost +36 MB (+221 MB at 3200x1800) and bypassed anti-aliasing and motion
+  vectors. It relies on a 32-bit float depth buffer.
+- **Placement** (`ScaledPlacement.place`, pure): from two 64-bit places against the anchor gives the direction, the true distance,
+  the angular radius, and the stand-in's offset and radius (distance and radius shrunk by one factor: 1:1000 while that fits, else
+  onto a 20 km shell), so the angle and the limb's perspective are exact and everything stays inside the 50 km far plane. No
+  position beyond the local space reaches the GPU as a world coordinate. `ScaledSpace` makes one sphere per body of **the World the
+  current camera is in** (`WorldFrame.of(camera)`), re-placed every frame from the ephemeris at `system_time()` and the camera's
+  drawn pose; a rail anchor sees a body through `relative_state(body, place)`, a free-falling one through `anchor_state()` against
+  its home body. A World with no star system draws nothing.
+- **Light.** `SpaceEnvironment.follow_sun()` turns the `KeyStar` to the true star each frame (what `PostEffects` reads, so the lens
+  flare follows) and multiplies its energy by `ScaledSpace.key_light()`, the smallest lit part over the planets (`EclipseMath`, the
+  overlap of the two discs). The planet's shadow is a key-light factor, not a shadow map. `hold_key_star(true)` gives the light to
+  a look sheet. The flare fades with `ScaledSpace.flare_strength()` (`SunLook.flare_factor`: from 0.02 of the disc showing to all).
+  One patch to the vendored flare's shader source (`SceneLensFlareEffect.SHADER_PATCHES`) reads a depth of 2e-8 or less as open sky,
+  so the star's own disc does not hide the flare.
+- **The planet** (`scaled_planet.gdshader`, `PlanetLook`): the surface on a 64x32 sphere pushed out to enclose the true one, each
+  pixel finding its own point on the true sphere (a round limb at any distance), maps sampled with seam-safe gradients; relief lit
+  only where the sun is up, a hard terminator, the night side 0.004 of the albedo with no lights; full sun is 1.5 against the Filmic
+  tonemap. `scaled_atmosphere.gdshader` is a shell to the atmosphere's top, added over it (16 samples of sunlit air per view ray):
+  a faint warm rim and glow on the lit limb, none on the night limb. No tilt or spin (the data has none). A body without built maps
+  keeps the plain stand-in, with a warning. Cost with the planet filling the view: +0.08 ms from the rail and +0.24 ms looking
+  down from 1 000 km at 1200x675.
+- **The sun** (`scaled_star.gdshader`, `SunLook`): a sphere ten times the disc, each pixel working out its distance from the centre
+  in disc radii, so the disc is the true size, with limb darkening (0.7) and a corona out to 9.5 radii; the colour from the star's
+  temperature (`StarColor`: 5 084 K, orange-white); disc brightness 2.4. 0.025 ms with the star filling the view. Brightness,
+  corona and haze strengths are look choices (H).
+- Console: `scaled [status|epoch <hours>|show|hide]` and provider `scaled`; `scripts/planet_sheet.sh` makes the look sheets.
+
+### 19.9 Far representations (D70, T15; changes §14.4)
+
+`FarPropMath` (pure) and `FarProp` (the node) give a big prop three draw paths:
+
+1. **near**: the prop's own mesh, out to `pull_m` = the far plane less 1.02 bounding radii and 500 m (48.1 km for the gate, bounding
+   radius 1 408 m; 45.4 km for the station's stand-in, 4 028 m);
+2. **shrunk**: the same nodes under one `Look` node, drawn shrunk toward the eye by `pull / distance`, so they cover exactly the same
+   angle in the same direction with the same materials and levels (a continuous hand-off, so no hysteresis); the meshes take
+   `lod_bias` 100. The cost: something truly in front of the prop but between the pull distance and 50 km is drawn behind it;
+3. **dot**: once the bounding radius is under `DOT_PX` = 4 px a far dot (`far_prop_dot.gdshader`: M4's rule, the angular size with
+   a 1 px floor and the square dimming under it) takes over with M4's hysteresis (back a tenth inside) and a 0.35 s cross-fade. Its
+   area comes from a silhouette table the generators write (`tools/procgen/core/silhouette.py`, manifest `far`: the outline's area
+   along 227 directions, blended by Shepard's rule; 3 % mean error), because a gate seen end on covers a sixteenth of its side
+   view. Its light follows the mesh's (mean albedo times ambient, the hull's own glow, the key star's energy times `hull_phase`),
+   and is 0 in the planet's shadow. The hand-off is at about 248 km for the gate and 709 km for the station at 1 080 lines.
+
+The **planet** keeps the scaled layer at every distance and hands over to the same dot once its disc is under 4 px (about 841 000 km
+at 1 080 lines; `ScaledSpace.dot_of`, `is_dotted`). Per the maintainer (2026-11-12): the station's stand-in keeps a **1 000 km**
+range (`FarPropHost.STATION_RANGE_M`; it has no `Targetable`) and a far dot keeps M4's honest dimming (the gate at 1 000 km is a faint
+point; the HUD and radar find it). `FarPropHost.dress_station` is called where the stand-in is placed for good. Nothing here is
+`top_level`: a rebase or a drift moves the look and the dot with the prop. Drawn size across each hand-off is within 0.5 % of what
+the distance alone explains (`test_far_prop_math.gd`). Console `far [status|station|view <gate|station> <km>|off]`, provider `far`.
+At 1 000 km (GPU): the gate 23 draw calls, 145 fps (the display's cap), 379 MB; the station 26 to 30 draw calls, 410 MB.
+
+### 19.10 The jumpgate and the vortex (D69, Q12, T13, T14, T19)
+
+- **The gate** (`tools/procgen/assets/jumpgate.py`, generator v5; shape and colours in `docs/design-references.md`, "Jumpgate
+  (M6)"): four arms **parallel to the vortex's axis**, round it like the corner rails of a square tube, 1 200 m long, the top and
+  bottom arms 800 m from the axis and the side arms 1 240 m (an elliptical mouth, `mouth_aspect` 1.55), 2 562 m wide, 44 collision
+  boxes on the rock layer, no hull (bolts pass through), 40 lamps, four tip emitters, 2 048 px maps. The manifest and
+  `hardpoints.json` carry the `vortex` marker: the mouth's semi-axes (`mouth_semi_axes` draws them within 1 m of the arms: 1 198 m by
+  753.9 m), depth 1 200 m, the arrival and departure points and the colours. `Jumpgate` (`src/props/jumpgate.gd`) is a `Targetable`
+  (`PROP`) broadcasting to 1 000 km (`BROADCAST_RANGE_M` 1.0e6, so the radar, targeting and the AI see it at that range).
+- **The vortex** (`JumpVortex`, `jump_vortex.tscn`, `jump_vortex.gdshader`) is its own logic and scene, sized and placed by whoever
+  opens it: `JumpVortex.create(colours, standalone)`, then `open_at(transform, VortexFit, direction, hold_s, lead_s)` (origin at the
+  mouth's centre, -Z the way out). `VortexFit` holds the mouth's semi-axes and depth: `for_gate` from the marker, `for_ship` for an
+  open point (mouth radius 4 bounding radii, never under 60 m, depth 1.6 radii, one ship radius behind the ship, facing its
+  heading; widened to hold a group). The funnel's triangles run from the base out to the rim, the base drawn first with the walls
+  (72 % opaque) blending over it, so the walls hide the dark circle on the base from oblique views; from the side or behind the base
+  glows white. Meshes and shaders only (D22).
+- **Timing** (`VortexTiming`, pure, a function of the age in sim seconds): an optional lead-in belonging to the opener, then the
+  phases `activate`, `flash` (1 s), `grow` (1.5 s, the funnel unfolds from the centre point to the rim), `open` (4 s by default,
+  `extend` while a ship is on its way, `close_now`), `closing` (1 s, folding back to the point), `end_flash` (1 s, a white flash like
+  the opening one, in both directions and at every point) and `closed`. Nothing passes from `closing` on (`is_open` false, `open_in_s`
+  INF); a departing ship counts as through at half grown. A gate's lead-in is `GateActivation` (1 s: the 40 lamps flash from the
+  front ends to the back ends along all four arms, then the back ends glow into the flash).
+- **Swirl** (`VortexSwirl`): seen from in front, an **arrival** turns counter-clockwise and its patches travel out; a **departure**
+  turns clockwise and travels in, along one spiral (checked frame by frame). Colours: arrival blue, dark sky blue; departure
+  orange/yellow. The rim fades over a soft wisped edge measured against `references/jumpgate/jumpgate.png`.
+- **Open points** (`JumpPointPool`, replacing `JumpArrival` and `JumpArrivalPool`, which are gone): `open_for(at, forward,
+  ship_radius, ..., opener)` sizes a point for the ship (only a jump-capable opener, §19.16); a group arriving within 600 m (`SHARE_M`) in the first second (`SHARE_S`) shares
+  one point; the pool (`DEFAULT_COUNT` 4 until M6-T20) takes back its oldest point when none is free. The ship is placed as before
+  (the pool opens after the ship is acquired), so missions and encounters keep their outcomes. Missions use `arrival: "jump"` (an
+  open point) or `arrival: "gate"` (through the gate) and `m.depart(name)`; an encounter pool's `gate` table sends a share of arrivals
+  or departures through the gate while the player is within 25 km (free flight has one).
+- **The player's jump** (`GateJumpPrompt`, `GateJump`, `GateAutopilot`, `JumpgateHost`): within 10 km with the gate targeted the HUD
+  shows `X: REQUEST JUMP` (X is auto-track everywhere else); the controls lock, the autopilot lines up 1 440 m out (around the arms
+  if behind) and runs in at 250 m/s under a `CinematicShot`, a flash, a fade and 2 s of black, then the ship comes **back out through
+  the blue vortex** at 200 m/s and control returns after 3 s or 500 m. In M6 the trip is a round trip; hyperspace (M11) replaces it.
+- Console `gate [status|open|close|jump|cancel|target|approach|view]` (`gate open <dir> <hold_s>`; `gate view reference` is the
+  acceptance pose of the still), `vortex [status|open|close|view]`; providers `gate`, `vortex`.
+- GPU (RX 6950 XT, headless gamescope): the vortex costs about 0.23 ms and one draw call, even filling the screen from inside; the
+  cost is fill (about 0.1 ms per covered megapixel). An open point at 300 m: 0.70 ms open, 15 draw calls. Frame rate in a visible
+  window is (H).
+
+### 19.11 Seams for M9 and M11 (D71)
+
+- The ephemeris is seekable and the integrator takes any step, so M9's on-rails warp calls the same `kick` and `drift`. M9 changes
+  the anchor when the player travels: a hand-over that converts or drops the places held against the old one.
+- One `WorldFrame` per space, each with its own anchor, sample and rest velocity; M11's hyperspace adds a second one. Statics that
+  still assume one frame (found by T01; M6 adds none and fixes none): `SimCore._current`, `StaticRows`, `ContactScan._shared`, the
+  directors' `_current`, the `_live` lists, the console's `world` provider. M11 fixes them.
+- The station is a stand-in (M4's look-only `StationStandin`, no collision, no `Targetable`) on a rail; M7 replaces it.
+
+### 19.12 Console and settings
+
+Commands: `frame`, `boost`, `ride`, `reference`, `scaled`, `far`, `gate`, `vortex` (listed in `info.md`). Providers: `system`, `world`
+(anchor, `origin_velocity`, `riding`, `boosts`, `planet_impacts`), `reference`, `scaled`, `far`, `gate`, `vortex`, `core`
+(`gravity_rows`, `gravity_us`). New settings: `hud_altitude_radii` (1.0) and `reference_place_range_km` (1 000). The automatic
+velocity rebase is `World.auto_boost_speed_mps`, an export of `main.tscn`, not a setting.
+
+### 19.13 Tests and measurements
+
+- **Tiers (T17, T18).** `scripts/run_tests.sh` has `--quick`, `--standard`, `--balance`, `--full` (§12). A test names its tier: quick
+  for pure or fast files (under about 5 s, no `SlowTests` gate; listed in `tests/quick_suite.txt`), standard for scene-booting fights,
+  whole-asset builds and anything slow-gated, GPU files (`*_gpu.gd`) standard and Pending headless (green on the RX 6950 XT). T18
+  removed 9 files and 27 GUT tests the review confirmed as duplicates; the parity recordings, the damping guard and the
+  engine-free guards were kept.
+- **Frame and gravity:** Rust `frame::tests`, `gravity`, `ephemeris` (138 Rust tests at T21); GUT `test_free_fall` (the whole low
+  orbit through the binding), `test_velocity_rebase` (27 movers through a boost: universe positions unchanged, velocities within
+  6e-5 m/s), `test_gravity_movers`, `test_gravity_orbit` (standard: a whole orbit in the tier and in Jolt, a curved bolt),
+  `test_flight_reference`, `test_low_orbit_flight`, `RebaseFight` with `boost_every_s`
+  (`test_rebase_in_play`: 168 boosts and 201 position rebases in a 90 s fight, no jump over 41 878 tick checks).
+- **Scenarios, scaled space, props:** `test_scenario_frame`, `test_scenario_anchor`, `test_true_scale_start`, `test_scaled_placement`,
+  `test_eclipse_math`, `test_scaled_space`, `test_planet_look`, `test_sun_look`, `test_far_prop_math`, `test_far_props`,
+  `test_vortex_timing`, `test_vortex_fit`, `test_vortex_swirl`, `test_gate_activation`, `test_gate_jump`, `test_jumpgate_broadcast`,
+  `test_jumpgate_in_play` (standard), Python `test_planet`, `test_jumpgate` (standard), their helpers (quick) and `test_silhouette`.
+- **Cost (AC10),** `bench battle 1000` (pinned 0-11, idle): tick median 5.74 and 5.67 ms before gravity, 5.73 and 5.70 after (within
+  1 %, 5 % allowed); gravity reaches about 270 ships, 680 tier rows and 1 100 bolts a tick for about 35 us. `test_ai_think_time`
+  passes (AiPilot median 185 us for 13 ships). The velocity rebase adds nothing while riding (one boost: 0.45 to 0.64 ms).
+- **Full tier (T16), `scripts/run_tests.sh --full`, at `b75e0785` (2026-11-13):** passed in 4 886 s. Python 925 tests OK (2
+  skipped), 679 s. Rust kernels 138 passed, 0 failed. GUT with `GUT_SLOW` and the balance tests: 344 scripts, 3 705 tests, 3 680
+  passing, 25 risky or pending, 170 142 asserts, 4 040 s. The pending ones are the GPU files ("needs the real renderer, no
+  RenderingDevice headless") and two balance fights under the maintainer's review (AC12: 5 of 5 seeds did not finish in 360 s, and
+  waves [1] cleared in 900 s with no wingman left). Every console smoke passed; CI is green for that commit.
+- **GPU check and acceptance.** GPU numbers so far are in the tasks' notes (T10 to T12, T15, T19, T20, T22; §19.14 has T20's: a
+  hundred points cost 0.1 to 0.3 ms of GPU time). The agents' runs were headless gamescope with a 60 fps cap, so the frame rate in a
+  visible window on the maintainer's desktop is an (H) item, with the rest of the checklist in `docs/playtest.md`.
+
+### 19.14 Vortex detail by distance and mass arrivals (M6-T20)
+
+- **Detail by distance** (`VortexLod`, `src/props/vortex_lod.gd`, pure). Six layers drop out as the mouth's projected radius in
+  pixels falls, finest first, each fading over a band whose top is 1.5 times its bottom (no pop): finest hairs 240 to 160 px, fine
+  hairs 120 to 80, broad hairs 54 to 36, patches and rim wisps 24 to 16, fine cloud octave 12 to 8, coarse cloud 6 to 4. That gives
+  seven levels (0 everything, 6 the soft disc of the base colour with its band, rim fade and dark throat). A fading layer blends
+  toward its mean so the tone does not shift, and a layer at weight 0 is not computed. Under 10 px the funnel uses a 24 x 10 mesh
+  instead of 96 x 40 (back above 14 px). The centre flashes are not layers and keep their timing at every level.
+- **Per instance.** Vortexes of one set of colours share one funnel material per direction and one flash material; growth, the
+  base's view, swirl time and layer weights are instance uniforms (`vortex_state`, `vortex_lod_a`, `vortex_lod_b`). A closed vortex
+  does not process. A pool lights its 3 nearest open points (`VortexLod.lit`) and starts at most 4 arrival sounds a second.
+- **`JumpPointPool`.** Up to 100 points (`MAX_POINTS`), driven by one `_process`; opening fills the point's fit and timing in place
+  (`VortexTiming.reset`); a free point comes from a cursor, else the oldest is taken back. Opening and drawing 100 points makes no
+  node or object but a few sound playbacks. `open_for(..., share = false)` and `join` let a caller that grouped its ships open one
+  point per group.
+- **Battle arrivals** (`BattleArrivals`, pure, and `BenchRunner`). In `bench battle` and `bench typical` every ship comes out of a
+  jump point. Ships of one side and one fight within 600 m share the group's first point; a capital opens its own, sized by cross-section.
+  Waves bring whole fights (the player's first), 100 points a wave, each later wave a point's life plus 1.5 s (10 s) after the last,
+  the points spread over 1 s. `battle 1000`: 353 points in 4 waves (100, 100, 100, 53; the last at 31 s), never more than 100 open.
+  The warm-up stretches until the last wave is in (32 s). A battle of one wave places every ship at the start as before
+  (`test_weapon_rows_battle` unchanged). `arrive=placed` places every ship at the start. The report gains `arrivals`, `engine_ticks`
+  and `render`.
+- **Measured.** GPU (RX 6950 XT, 1920x1080, `battle 1000`, headless gamescope, 60 fps cap so GPU time is the measure): chase view
+  0.98 ms median with 100 points forming against 0.86 placed, 1.11 against 0.82 with 100 open; overview 0.82 against 0.69 and 0.93
+  against 0.72; about one draw call per point in view; renderer VRAM 461 to 462 MB in all runs. Tick (headless): arriving median
+  5.10 and 6.31 ms at battle 500 and 1 000, p99 6.87 and 8.48 (placed 4.61 and 5.74; 6.17 and 7.72). While the waves come in the
+  engine tick p99 is 14.8 ms against 10.2 placed, and one tick's arrivals cost up to 4.8 ms.
+- **Console.** `vortex lod <auto|0-6>` forces one level on every vortex, `vortex view [mouth radii]` holds the camera on a point;
+  provider `vortex` gains `lod`, `radius_px`, `forced_lod`, `lit`.
+
+### 19.15 Ships fly the vortex funnel (M6-T22)
+
+- **The passage** (`VortexTransits`, one per World; rules in the pure `VortexTransit`, scaling in `TransitScale`, the record in
+  `VortexPassage`). It serves any ship through any open point or gate, whoever opened it: `begin_arrival(body, vortex, exit_position,
+  exit_velocity)` and `begin_departure(body, vortex, on_through)`. An arriving ship waits on the funnel's base through the opening
+  flash, comes out of the black ring in its own white flash, shrunk, and flies out to its place in the mouth, growing to exactly 1.0
+  there with the velocity its spawn asked for. A departing ship flies on down the axis, shrinking, and flashes and vanishes when its
+  nose touches the base. The vortex is held open for each passage; a gate closes after its last ship is through.
+- **Scale law** (`VortexTransit.scale_at`). The ship keeps its share of the funnel's width as it narrows, at most `MARGIN` (0.8) of it
+  and never above 1; every ship reaches the ring's share of the mouth (0.24) at the base, and one too big for that shrinks further.
+  The size used is the radius across the line of flight. In a ship-made point the funnel keeps T19's depth and the passage takes
+  `MIN_TRANSIT_S` (2.5 s) to `MAX_TRANSIT_S` (6 s) instead, the ship's own speed held between them.
+- **Normal, scaled, in transit** (`TransitScale`). The body is never scaled; its children and Jolt shapes are, and so are the hit
+  volumes (`Damageable.set_hull_scale`), so the ship stays targetable and collides at its scaled size. Mass, inertia and zero damping
+  are kept. Ships in one funnel do not collide with each other. Rebuilds are throttled (6 a tick, exactly 1 at the end).
+- **Pilots and flashes.** An AI pilot is held for the passage (`AiPilotDriver.in_passage`) and decides afresh afterward. Ring flashes
+  are one pooled multimesh of up to 256 (`transit_flash.gdshader`), a rendering-server instance placed in global coordinates every
+  tick so the rebase guard holds. An arrival under 2 px on screen comes out in place with the flash (`VortexTransit.worth_flying`),
+  which keeps a far battle wave as cheap as T20's.
+- **The player's jump** (`JumpgateHost`, `GateJump`) is always an outside shot, whatever view was active: it follows the ship down
+  the funnel to the ring's flash, fades to black, and on arrival watches the ship come out and grow, then hands the controls back.
+- **Every path:** missions, encounters, the battle's waves, the gate's departures and the player's jump. Console `transit`, provider
+  `transit` (`info.md`). Costs: `battle 1000` window tick median 5.94 ms, p99 7.81 against T20's 6.31 and 8.48.
+
+### 19.16 Who may open a jump point (M6-T23)
+
+- **The rule** (`JumpCapability`, pure; the maintainer, 2026-11-13): only a jump-capable ship opens a point. `ShipSpec` has
+  `can_open_jump_point` (false for every designed hull: the Starfuries, the raider, the nine civilian ships) and `jump_hold_range_m`
+  (0: twice the ship's length); `CapitalStandin.CLASSES` gives every class `can_open_jump_point: true`. Any other ship arrives or
+  leaves through a gate or through an open point a capable ship holds, of any side. `JumpPointPool.open_for` / `open_with` take the
+  `opener` and refuse one that cannot (`refused`); a point with no opener is a debug tool's (`vortex open`, a fighter's
+  `transit arrive point`) or a test's, held by nothing.
+- **Holding** (`JumpPointPool._physics_process`, its held points only, a hundred at most): a point holds while its opener is within
+  `hold_range_m` of the mouth (the opener's position, or its tier row's). Out of range, destroyed, disabled (a hulk) or gone, it
+  collapses at once (`JumpVortex.collapse`, `VortexTiming.collapse_now`: no fold, the closing flash at its peak) and every ship in
+  its funnel, arriving or departing, is destroyed (`VortexTransits.kill_in`, `HitInfo.CAUSE_VORTEX_COLLAPSE`, no shooter, no kill
+  credit). An opener that touches the black ring of its own point holds it `OWN_DEPARTURE_HOLD_S` (3 s) more, then it collapses on
+  whatever is still inside. Gates are exempt: their vortex closes by its timing and waits for its ships (T22).
+- **Raids and missions, by data.** A mission spawn says `arrival: "jump"` with `via: "carrier"` or `via: "gate"` (`arrival: "gate"`
+  is the same as `via: "gate"`; a `jump` with no `via` is only for a capable ship, else an error), and optionally
+  `carrier: {"class", "then"}`. An encounter pools file has `via: {"raid": "carrier" | "gate"}` and `carrier`; its `gate` share still
+  sends raids through the gate while the player is within 25 km of it. `CarrierJumps` (one per World, the carriers pooled at load,
+  D22: 3 for a mission, 3 for the encounters) brings a capital stand-in (a cruiser by default) out of its own point where the raid
+  comes in; fighters of one side arriving within 2 km in that second come out of the same point, each at 0.6 mouth radii round its
+  axis. Once they are out the carrier waits 2 s, lets its arrival point close, opens a departure point 3 s of its 20 m/s ahead of
+  its bow and leaves through it (or stays, `then: "stay"`), back to the pool at the ring. Its guns are silent; it can be shot. A
+  departing AI ship with no gate (`MissionStage.depart`) routes to the nearest departure point a capable ship holds
+  (`CarrierJumps.send_departure`).
+- **The battle** (`BattleArrivals`, `BenchRunner`): units and waves as T20 (the same 353 units in 4 waves at `battle 1000`); each
+  fighter group then rides the nearest capital point of its side in its wave within 6 km (its own fight's capitals) that has room
+  (one group per capital) and comes in with that capital, at its point's mouth; any other group comes through the battle's own
+  jumpgate (`BENCH GATE`, 14 km below the first fight, beyond the tier's reach from the player, facing up, made for the run and
+  freed after), on a spiral across its mouth at its 200 m/s, 4 a tick (`Jumpgate.arrivals_per_tick`; 0, all at once, elsewhere).
+  Only capitals open points: `battle 1000` 150 points (46 open at most), 138 groups (713 fighters) through capital points, 65
+  groups (137 fighters) through the gate. A later wave's capitals open two to a tick, evenly over its second
+  (`CAPITALS_PER_SLOT`), and once the battle runs their riders come out 8 a tick in the ticks between (`RIDERS_PER_TICK`), inside
+  their point's opening flash. The warm-up waits `ARRIVAL_SETTLE_S` (14.5 s, the gate's lead-in included) past the last wave.
+  Measured (after T23's follow-up): window tick median 4.55 and 5.76 ms at 500 and 1 000, p99 7.20 and 7.80; engine tick while
+  the waves come in p99 14.4 to 15.1 ms (T22 14.9).
+- **Console.** `vortex collapse` (destroys the newest held point's opener), `transit carrier [-] [-] [none|follow]`; provider `vortex`
+  gains `opener`, `hold_range_m`, `opener_distance_m`, `held`, `collapses`, `collapse_kills`, `last_collapse`; provider `carriers`.
+
+### 19.17 Known gaps (carried to later milestones)
+
+- Arrival-tick spike: while the battle's waves come in, the engine tick p99 is 14.4 to 15.1 ms against 10.2 placed. What is left
+  is a capital joining play, about 7 ms in its tick whatever the number (the core's member rebuild when a hull enters the tree,
+  the stand-ins' native capital set); pooling the later waves' capitals, or adding members to the core one by one, would flatten it.
+- A stand-alone jump point beyond the 50 km far plane is not drawn; it has no far stand-in like the gate's.
+- The gate is placed on its rail at the start and then holds still in the frame, while its true place turns round the station once
+  an orbit (the chord between them moves about 4.5 m/s, 16 km an hour); M7 or a moving prop row carries it.
+- The station's stand-in has no collision and no `Targetable`; M7 replaces it.
+- GDScript-only brains (`perceive()`, the few pilots not native-capable) read frame velocities; a turret marker on a moving capital
+  keeps its row velocity; the rocks' broad phase in the hit sweep takes the bolt's own segment off the anchor.
+- The resolvers' kept rock grids are rebuilt on every rebase and off-anchor tick; a ship spawned in a tick right beside a dormant
+  rock meets it one Jolt step late (the row-based ram still lands).
+- The planet has no tilt, spin or detail layer (the map is soft from 400 km straight down); the shells' and dots' motion vectors
+  under TAA and FSR 2 are not checked.
+- Doppler is out: voices stay in the local frame.

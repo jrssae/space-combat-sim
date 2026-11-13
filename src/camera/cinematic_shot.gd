@@ -3,7 +3,7 @@ extends RefCounted
 ## One camera shot of a mission (architecture §18 D55, M5-T08), read from the scenario's `cinematics: {<shot_id>: {keys: [...]}}`.
 ##
 ## A key is `{t, position, look_at, fov?}`: `t` is seconds from the start of the shot (increasing), `fov` degrees (default
-## `DEFAULT_FOV_DEG`). `position` and `look_at` are points: `{actor: <name>, offset?: [x, y, z]}` is an offset in that actor's own
+## `DEFAULT_FOV_DEG`), `roll` degrees about the view axis (default 0, positive turns the picture clockwise). `position` and `look_at` are points: `{actor: <name>, offset?: [x, y, z]}` is an offset in that actor's own
 ## frame (Godot axes: -z is its nose, +y its top), `{origin: [x, y, z]}` is a universe offset from the scenario's origin, kept in
 ## 64-bit. The shot lasts until its last key.
 ##
@@ -34,6 +34,7 @@ class Frame:
 	var position: Point = null
 	var look_at: Point = null
 	var fov: float = DEFAULT_FOV_DEG
+	var roll: float = 0.0
 
 
 ## The camera for one instant: a World-local transform (-z looks at the aim point) and the field of view in degrees.
@@ -83,6 +84,10 @@ static func from_dict(shot_id: StringName, data: Variant) -> Dictionary:
 		if not _is_number(fov) or float(fov) < MIN_FOV_DEG or float(fov) > MAX_FOV_DEG:
 			return _failure("%s.fov must be degrees between %.0f and %.0f" % [key_where, MIN_FOV_DEG, MAX_FOV_DEG])
 		key.fov = float(fov)
+		var roll: Variant = entry.get("roll", 0.0)
+		if not _is_number(roll) or absf(float(roll)) > 180.0:
+			return _failure("%s.roll must be degrees between -180 and 180" % key_where)
+		key.roll = float(roll)
 		shot.keys.append(key)
 	shot.duration_s = shot.keys[-1].t
 	return {"ok": true, "shot": shot}
@@ -117,6 +122,10 @@ func pose_at(t: float, actor_pose: Callable, origin_to_local: Callable) -> Pose:
 	var eased: float = smoothstep(0.0, 1.0, u)
 	var pose := Pose.new()
 	pose.transform = _looking(position, (l1 as Vector3).lerp(l2 as Vector3, eased))
+	var roll: float = lerpf(a.roll, b.roll, eased)
+	if roll != 0.0:
+		# The camera turns the other way about its view axis, so the picture turns clockwise.
+		pose.transform.basis = pose.transform.basis * Basis(Vector3.BACK, deg_to_rad(roll))
 	pose.fov = lerpf(a.fov, b.fov, eased)
 	return pose
 

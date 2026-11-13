@@ -140,8 +140,41 @@ func test_a_raid_jumps_in_6_to_12_km_out_and_goes_for_the_player() -> void:
 		var pilot := c.driver.brain as AiPilot
 		assert_not_null(pilot, "an AI pilot")
 		assert_eq(pilot.context.objective_name, "PLAYER", "sent at the player")
+	# Out of the point's funnel first (M6-T22), each leaves it with its spawn's velocity.
+	var transits: VortexTransits = VortexTransits.of(main.world)
+	for c: Combatant in raiders:
+		var ticks: int = 0
+		while transits.is_passing(c.ship) and ticks < 12 * 60:
+			await get_tree().physics_frame
+			ticks += 1
+		assert_false(transits.is_passing(c.ship), "%s came out of its funnel" % c.display_name)
 		assert_gt(c.ship.linear_velocity.dot((main.ship.global_position - c.ship.global_position).normalized()), 100.0,
 				"flying at it")
+
+
+func test_a_raid_comes_in_behind_a_carrier_that_then_jumps_back() -> void:
+	# M6-T23: raiders cannot open a jump point; a cruiser stand-in opens one, they come out with it, and it leaves through its own.
+	main = await _make_main(true)
+	var carriers: CarrierJumps = CarrierJumps.attach(main.world)
+	assert_eq(carriers.size(), EncounterDirector.CARRIERS, "the carriers are built with the pools, not in play (D22)")
+	var e: EncounterEvent = _raid(false)
+	assert_true(_director().start(e))
+	assert_eq(carriers.runs().size(), 1, "one carrier brings the whole raid")
+	var run: CarrierRun = carriers.runs()[0]
+	assert_eq(run.arrival.opener, run.carrier, "the carrier opened the point and holds it")
+	assert_almost_eq(run.arrival.hold_range_m, 2.0 * run.carrier.length_m(), 1e-3)
+	assert_eq(run.fighters.size(), e.count(), "every raider comes through it")
+	assert_eq(run.carrier.faction, Factions.RAIDERS)
+	var departed: int = carriers.carriers_departed
+	await _fly(60.0, func() -> bool: return carriers.carriers_departed > departed)
+	assert_eq(carriers.carriers_departed, departed + 1, "the carrier jumped back through its own point")
+	assert_eq(_director().jumps.opened, 2, "its arrival point and its departure point")
+	assert_eq(carriers.free_count(), carriers.size(), "and is back in its pool")
+	await _fly(JumpCapability.OWN_DEPARTURE_HOLD_S + 0.5)
+	assert_eq(_director().jumps.collapses, 1, "its departure point closed once the short hold was over")
+	assert_eq(_director().jumps.collapse_kills, 0, "with nothing in it")
+	for c: Combatant in _director().alive():
+		assert_false(c.damageable.hull.destroyed, "%s flies on" % c.display_name)
 
 
 func test_patrols_and_traffic_cruise_in_from_26_to_30_km_on_their_routes() -> void:

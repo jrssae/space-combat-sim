@@ -154,6 +154,13 @@ const ENTRIES: Dictionary = {
 	&"hud_velocity_marker": {"type": TYPE_BOOL, "default": false,
 		"category": &"hud", "label": "Velocity marker in the world",
 		"doc": "Also draw the prograde / retrograde marker in the world (it is only on screen when you fly near your nose); the drift sphere is always drawn"},
+	# M6-T08
+	&"hud_altitude_radii": {"type": TYPE_FLOAT, "default": 1.0, "min": 0.0, "max": 10.0,
+		"category": &"hud", "label": "Altitude shown within", "menu": false, "step": 0.1,
+		"doc": "The HUD shows the altitude while a body is the reference, or while the ship is within this many of the body's radii from its surface (M6-T08, Q6)"},
+	&"reference_place_range_km": {"type": TYPE_FLOAT, "default": 1000.0, "min": 1.0, "max": 10000.0,
+		"category": &"game", "label": "Station reference range", "menu": false, "step": 100,
+		"doc": "How far the place the World falls with (the station) is heard as the HUD's reference, km, as a gate's broadcast is; beyond it the dominant body is the reference (M6-T08, Q6)"},
 	&"physics_jitter_fix": {"type": TYPE_FLOAT, "default": 0.5, "min": 0.0, "max": 2.0,
 		"category": &"graphics", "label": "Physics jitter fix", "menu": false, "step": 0.1,
 		"doc": "Debug switch: Godot's physics jitter fix (Engine.physics_jitter_fix); 0 turns the frame-time smoothing off"},

@@ -198,6 +198,19 @@ func reset_assist(ship: Ship) -> void:
 		_step.reset_assist(_slots[ship])
 
 
+## Reads a ship's speed against its own reference from now on (M6-T08): `velocity` in the local frame and `accel`, what that
+## reference falls with. Without it the native step reads the World's rest.
+func set_rest(ship: Ship, velocity: Vector3, accel: Vector3) -> void:
+	if _step != null and _slots.has(ship):
+		_step.set_rest(_slots[ship], velocity, accel)
+
+
+## Back to the World's rest for a ship.
+func clear_rest(ship: Ship) -> void:
+	if _step != null and _slots.has(ship):
+		_step.clear_rest(_slots[ship])
+
+
 ## Where the last step read the ships' poses and motion: &"core" (the native core's rows, M4-T15) or &"none" (nothing
 ## stepped).
 func source() -> StringName:
@@ -364,6 +377,8 @@ func _register(ship: Ship) -> void:
 			_plain.erase(ship)
 		if _row_ships.has(ship):
 			_push_row_flight(ship)
+		if ship.has_reference_rest():
+			_step.set_rest(slot, ship.rest_velocity(), ship.rest_accel())
 
 
 func _unregister(ship: Ship) -> void:

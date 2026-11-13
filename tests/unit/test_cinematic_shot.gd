@@ -192,6 +192,20 @@ func test_looking_straight_up_or_down_still_gives_a_camera() -> void:
 	assert_true(pose.transform.basis.is_conformal(), "an orthonormal basis")
 
 
+func test_roll_turns_the_picture_about_the_view_axis() -> void:
+	var still: Dictionary = _origin_key(0.0, Vector3.ZERO, Vector3(0, 0, -100))
+	var rolled: Dictionary = _origin_key(1.0, Vector3.ZERO, Vector3(0, 0, -100))
+	rolled["roll"] = 90.0
+	var shot: CinematicShot = _shot([still, rolled])
+	assert_almost_eq(_eval(shot, 0.0).transform.basis.x, Vector3.RIGHT, Vector3.ONE * TOL, "no roll by default")
+	var pose: CinematicShot.Pose = _eval(shot, 1.0)
+	assert_almost_eq(-pose.transform.basis.z, Vector3.FORWARD, Vector3.ONE * TOL, "still looking at its point")
+	assert_almost_eq(pose.transform.basis.x, Vector3.UP, Vector3.ONE * TOL, "world up now reads to the right: turned clockwise")
+	assert_almost_eq(_eval(shot, 0.5).transform.basis.x.angle_to(Vector3.RIGHT), deg_to_rad(45.0), TOL, "eased between keys")
+	_assert_parse_error({"keys": [{"t": 0, "position": {"origin": [0, 0, 0]}, "look_at": {"origin": [0, 0, -1]}, "roll": 200}]},
+			"roll")
+
+
 func test_the_field_of_view_eases_between_keys() -> void:
 	var shot: CinematicShot = _shot([_origin_key(0.0, Vector3.ZERO, Vector3(0, 0, -100), 60.0),
 			_origin_key(2.0, Vector3(10, 0, 0), Vector3(0, 0, -100), 30.0)])
