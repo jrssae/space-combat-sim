@@ -174,6 +174,10 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   get through, its bolts and missiles are intercepted); M12 checks it again with real capital ships. "Beats" means it destroys
   the whole enemy force within the fight's time limit (T07 sets it; the station is never destroyed, Q5). Seeded headless fights
   pin it in three seeds, as Q31 did for the Saturns.
+- **After T07 (maintainer, 2026-11-13):** light pulse turrets also fire at a capital when no fighter is in reach; each of the
+  23 mounts has its own health and **is knocked out** (stops firing) when it is lost, its section taking the damage too
+  (repaired only by a mission or the console in M7); the balance is tuned so the grid alone takes **90 to 120 s** to destroy 12
+  raiders and the station shows visible section damage (the first build did it in 28 to 44 s, far stronger than the rule needs).
 - Fixed by the architecture: per-tick aim, gates, shots and interceptions run in the native core on M5-T21's turret rows
   (`CLAUDE.md`'s language split), results identical with 1 and 6 threads; the station's own hull blocks its fire (Q33's rule);
   shots go through the projectile pool and `HitResolver`. A behaviour this section does not cover goes to the maintainer before
@@ -652,6 +656,8 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   two waves of six through T08's sequence.
 - **From T06 (2026-11-13):** the AI picks the station's rows by centre distance (the nearest 12 within 5 km), so in a crowd a
   fighter can miss the station as a contact and not avoid it; the station's surface must always reach avoidance (AC9).
+- **Raid targeting (maintainer, 2026-11-13):** raiders prioritise whatever is firing at them, station allies or the station;
+  when they go for the station, its **weapon systems** (the grid's mounts, which can be knocked out) are their first targets.
 - **Done when:** AC9's AI and traffic.
 
 ### M7-T11 Maintenance bots
