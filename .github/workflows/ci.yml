@@ -24,12 +24,57 @@ permissions:
   contents: read
 
 jobs:
-  # The generator's own tests (about 5 minutes) beside the GUT shards, not inside shard 1. It builds the assets too (one Python
-  # test reads the built raider), so it fills the cache that the shards then restore on the same key.
-  python:
-    name: python tests
+  # Builds the generated assets once and fills the cache that every other job restores, so a cache miss costs one
+  # generation (about 6 minutes) instead of one per job. On a hit this job only looks the key up and downloads nothing.
+  assets:
+    name: generated assets
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
+    outputs:
+      shards: ${{ steps.shards.outputs.shards }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: python -m pip install numpy
+
+      # The shard list and count live in scripts/python_shards.py only; the check fails the run if any test module would
+      # run in no shard, so a new test file is never skipped.
+      - name: Plan the Python test shards
+        id: shards
+        run: |
+          python scripts/python_shards.py check
+          echo "shards=$(python scripts/python_shards.py matrix)" >> "${GITHUB_OUTPUT}"
+
+      - name: Restore generated assets
+        id: assets
+        uses: actions/cache@v4
+        with:
+          path: assets/generated
+          lookup-only: true
+          key: assets-${{ runner.os }}-py3.12-${{ hashFiles('tools/procgen/**') }}
+
+      - name: Generate assets
+        if: steps.assets.outputs.cache-hit != 'true'
+        run: scripts/gen_assets.sh
+
+  # The generator's own tests, split over runners (scripts/python_shards.py): one runner needed 24 minutes and hit the
+  # 30-minute limit. One Python test reads the built raider, so each shard restores the assets from the job above.
+  python:
+    name: python tests (shard ${{ matrix.shard }})
+    needs: assets
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.assets.outputs.shards) }}
     steps:
       - name: Check out
         uses: actions/checkout@v4
@@ -44,23 +89,28 @@ jobs:
 
       - name: Restore generated assets
         id: assets
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: assets/generated
           key: assets-${{ runner.os }}-py3.12-${{ hashFiles('tools/procgen/**') }}
 
+      # Only if the entry was evicted between the jobs.
       - name: Generate assets
         if: steps.assets.outputs.cache-hit != 'true'
         run: scripts/gen_assets.sh
 
       - name: Python tests
-        run: python -m unittest discover -s tools/procgen/tests -t . -v
+        run: |
+          mapfile -t modules < <(python scripts/python_shards.py modules "${{ matrix.shard }}")
+          printf 'shard ${{ matrix.shard }}: %s\n' "${modules[@]}"
+          python -m unittest -v "${modules[@]}"
 
   test:
     # GUT takes about 40 minutes on the maintainer's machine, more than one runner job should hold, so three jobs share it
     # (scripts/run_tests.sh, GUT_SHARD); shard 1 also runs the Rust tests and the console smoke runs, the Python tests have the
-    # job above (M5-T38). A shard's GUT timeout (40 minutes, run_tests.sh) fires before this job limit.
+    # sharded job above (M5-T38). A shard's GUT timeout (40 minutes, run_tests.sh) fires before this job limit.
     name: test (GUT shard ${{ matrix.shard }} of 3)
+    needs: assets
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
@@ -121,6 +171,7 @@ jobs:
           path: assets/generated
           key: assets-${{ runner.os }}-py3.12-${{ hashFiles('tools/procgen/**') }}
 
+      # The assets job has filled the cache; this only runs if the entry was evicted since.
       - name: Generate assets
         if: steps.assets.outputs.cache-hit != 'true'
         run: scripts/gen_assets.sh
