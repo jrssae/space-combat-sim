@@ -94,6 +94,14 @@ been planned were taken for done.
   `/sys/class/drm/card1/device/mem_info_vram_used`. Judging how something looks (visual appearance, feel) stays with the
   human tester as `(H)`. In a container without a GPU, mark GPU checks `(H)` instead of faking them; llvmpipe
   (`scripts/capture.sh`) shows geometry and layout, not the GPU's speed (`docs/research-notes.md`).
+- Locks (parallel agents share one machine): wrap every Godot or asset-building command in `scripts/godot_lock.sh`, with
+  `SCS_LOCK_LABEL=<task id>` set (once per shell command is enough). `write` for `--import`, the native build and builds into
+  `assets/generated/` (`gen_assets.sh`, `python3 -m tools.procgen build`); `read` for tests, the compile check, smokes and
+  `--console-exec` runs (readers overlap); add `--gpu` for anything that opens a window. The Godot lock comes before the GPU lock,
+  never the reverse. Hold a lock per command, never around a long script or a whole test-suite wrapper (`run_tests.sh` and the
+  render scripts take their own). Never swap or rebuild a shared asset to get a baseline: make an isolated copy with
+  `scripts/scratch_project.sh <name>` (own `.godot/` and `assets/generated/`, under `reports/scratch/`) and run Godot with
+  `--path` there, then `--clean` it. `scripts/godot_lock.sh status` shows who holds and waits; every run is logged in `reports/locks.log`.
 - Screenshots: every screenshot or captured frame an agent takes, for any request, goes under `references/screenshots/`
   (gitignored) in a subfolder named for the request, e.g. `references/screenshots/T13 Saturn 4 current replacement/`.
   Never `/tmp` or `reports/`, and never commit them. In a worktree, use the main checkout's `references/` so the

@@ -13,7 +13,7 @@ cd "${ROOT}"
 
 run() {  # run "<console commands>"
     if [[ "${CAPTURE_REAL_GPU:-0}" == "1" ]]; then
-        timeout 600 "${GODOT}" --path . --resolution "${SIZE}" -- --console-strict --console-exec="$1; quit"
+        "${ROOT}/scripts/godot_lock.sh" read --gpu -- timeout 600 "${GODOT}" --path . --resolution "${SIZE}" -- --console-strict --console-exec="$1; quit"
     else
         scripts/capture.sh "$1" "${SIZE}"
     fi

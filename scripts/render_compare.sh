@@ -9,7 +9,7 @@
 # Usage: scripts/render_compare.sh <scene> [label]
 # Environment: RC_N (500), RC_WARMUP (8), RC_WINDOW (20), RC_VSYNC (off|on), RC_FROZEN (0|1: pause the game 2 s before the window,
 #              so it measures the drawing alone), RC_EXEC (more console statements), RC_BENCH_OPTS (more bench options), GODOT_BIN.
-# Run it under the bench locks: flock /tmp/m5-godot.lock flock /tmp/scs-bench.lock scripts/render_compare.sh ...
+# It takes the Godot (read), GPU and bench locks itself (scripts/godot_lock.sh).
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GODOT="${GODOT_BIN:-${ROOT}/.tools/godot/godot}"
@@ -49,7 +49,7 @@ VSYNC_FLAG=(--disable-vsync)
 PAUSE_AT=""
 [[ "${FROZEN}" == "1" ]] && PAUSE_AT="pause_at=$(( WARMUP - 2 ))"
 status=0
-flock "${GPU_LOCK}" timeout $(( WARMUP + WINDOW + 240 )) "${GODOT}" --path . --resolution 1920x1080 --fullscreen "${VSYNC_FLAG[@]}" \
+"${GODOT_LOCK_SH}" read --gpu --bench -- timeout $(( WARMUP + WINDOW + 240 )) "${GODOT}" --path . --resolution 1920x1080 --fullscreen "${VSYNC_FLAG[@]}" \
     -s res://scripts/measure_fight.gd -- scene="${SCENE_ARG}" camera=chase warmup="${WARMUP}" window="${WINDOW}" label="${SCENE}" \
     exec="${EXEC}" scale3d=1080p ${PAUSE_AT} shot="${SHOT}" > "${LOG}" 2>&1 || status=$?
 grep -E '^\[measure\]|^\[bench\]|SCRIPT ERROR|console error' "${LOG}" | grep -v "over 25 ms at" || true

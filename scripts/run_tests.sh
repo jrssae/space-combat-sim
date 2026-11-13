@@ -41,7 +41,7 @@ run_gut() {
     local log="$1" xml="$2" limit="$3"
     shift 3
     local status=0
-    run_logged "${log}" timeout "${limit}" "${GODOT}" --headless --path . -s addons/gut/gut_cmdln.gd "$@" -gexit \
+    run_logged "${log}" "${GODOT_READ[@]}" timeout "${limit}" "${GODOT}" --headless --path . -s addons/gut/gut_cmdln.gd "$@" -gexit \
         -gjunit_xml_file="${xml}" || status=$?
     return "${status}"
 }
@@ -166,7 +166,7 @@ elif [[ "${mode}" == "full" ]]; then
     gut_timeout=7200
 fi
 gut_status=0
-run_logged "${REPORTS}/gut.log" timeout "${gut_timeout}" "${GODOT}" --headless --path . -s addons/gut/gut_cmdln.gd \
+run_logged "${REPORTS}/gut.log" "${GODOT_READ[@]}" timeout "${gut_timeout}" "${GODOT}" --headless --path . -s addons/gut/gut_cmdln.gd \
     "${gut_select[@]}" -gexit -gjunit_xml_file=reports/gut.xml \
     || gut_status=$?
 if (( gut_status != 0 )); then

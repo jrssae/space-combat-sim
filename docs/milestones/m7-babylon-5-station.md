@@ -220,8 +220,12 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 - **The defence grid is the maintainer's call.** T02 is held with the maintainer by the controller; no agent picks emplacement
   positions or weapon behaviours. A question about the grid that comes up in T05 or T07 goes back to the maintainer.
 - **One working copy** on branch `m7` in the main checkout, no task branches; early-start work runs where the maintainer says.
-- **Locks** as in M5 and M6: `flock /tmp/m7-godot.lock` for Godot runs and asset builds of the station (they may take minutes),
-  `flock /tmp/m7-git.lock` for commits with only the task's paths staged, `flock /tmp/gpu.lock` for GPU checks.
+- **Locks**: every Godot or asset-building command goes through `scripts/godot_lock.sh` with `SCS_LOCK_LABEL=<task id>` set:
+  `write` for `--import`, the native build and builds into `assets/generated/`; `read` for tests, the compile check, smokes and
+  console runs (readers overlap); `--gpu` for anything that opens a window. Godot lock before GPU lock, one lock per command,
+  never around a long script. For a before/after comparison use `scripts/scratch_project.sh <name>`, never swap or rebuild a shared
+  asset. `scripts/godot_lock.sh status` shows holders and waiters. Commits stay under `flock /tmp/m7-git.lock` with only the
+  task's paths staged.
 - **Native changes** keep the parity recordings green; new native behaviour gets its own Rust and GUT tests. No GDScript fallback.
 - **Tests.** Each task runs the Python and GUT files it touched and its new tests; the full suite runs once, in T14. Test first for
   the pure classes (`LaunchSequence`, the collision builder's merge, the bots' paths).

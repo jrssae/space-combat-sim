@@ -10,7 +10,6 @@ SIZE="${CAPTURE_SIZE:-1920x1080}"
 GODOT="${GODOT_BIN:-${ROOT}/.tools/godot/godot}"
 OUT="reports/m3"
 source "${ROOT}/scripts/lib_locks.sh"
-LOCK="${GPU_LOCK}"
 mkdir -p "${ROOT}/${OUT}"
 touch "${ROOT}/reports/.gdignore"  # or the next --import takes every screenshot for a game texture
 cd "${ROOT}"
@@ -18,7 +17,7 @@ cd "${ROOT}"
 # run <name> <seconds> "<console commands>": one window, under the GPU lock, killed after <seconds>.
 run() {
     local name="$1" seconds="$2" commands="$3" status=0
-    flock "${LOCK}" timeout "${seconds}" "${GODOT}" --path . --resolution "${SIZE}" -- --console-strict \
+    "${GODOT_LOCK_SH}" read --gpu -- timeout "${seconds}" "${GODOT}" --path . --resolution "${SIZE}" -- --console-strict \
         --console-exec="${commands}; quit" > "${OUT}/${name}.log" 2>&1 || status=$?
     grep -E '^\[console\]|^SCRIPT ERROR|^ERROR' "${OUT}/${name}.log" | grep -vE '^\[console\] > ' || true
     if (( status != 0 )); then

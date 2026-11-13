@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# The lock files that keep one machine's Godot, bench and real-renderer runs from overlapping (sourced, never run). A script
-# that opens a window or times a run takes the lock with `flock "${GPU_LOCK}" ...`; the paths live here and nowhere else.
-GODOT_LOCK="${SCS_GODOT_LOCK:-/tmp/m5-godot.lock}"
-BENCH_LOCK="${SCS_BENCH_LOCK:-/tmp/scs-bench.lock}"
-GPU_LOCK="${SCS_GPU_LOCK:-/tmp/scs-gpu.lock}"
+# Where the lock wrapper is (sourced, never run). A script that opens a window or times a run starts its Godot command with
+# `"${GODOT_LOCK_SH}" read --gpu -- ...`; the lock files, their order and the modes are in scripts/godot_lock.sh and nowhere else.
+GODOT_LOCK_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/godot_lock.sh"

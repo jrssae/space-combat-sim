@@ -1211,7 +1211,7 @@ copy: `_ticks(n)` (n physics frames), `_exec(line)` (one console line) and `_con
 statement). A test file that needs them extends `TestSteps`; a file with a different `_ticks` (seconds in, ticks out) keeps its own
 under another name. CI runs the Python tests in a job of their own (`PYTHON_TESTS=0` on the GUT shards) and both restore
 `assets/generated` from a cache keyed on `hashFiles('tools/procgen/**')`. The smoke blocks of `run_tests.sh` go through
-`main_run` (`scripts/lib_tests.sh`), and the lock paths of the real-renderer and bench scripts are in `scripts/lib_locks.sh`.
+`main_run` (`scripts/lib_tests.sh`), and the lock files and their order are in `scripts/godot_lock.sh`.
 
 ## 13. Coding conventions
 
@@ -4896,7 +4896,7 @@ native/src/voice_kernels.rs, voice_rows.rs   ScsSimCore.ships_near(centre, radiu
 `TestSteps` (`tests/fixtures/test_steps.gd`, §12) holds the steps the scene tests share. `scripts/run_tests.sh` has four tiers:
 `--quick` (iteration, not a gate), `--standard` (the gate and CI: the slow files, no balance tests), `--balance` and `--full`.
 Each starts with the import, since the compile check and GUT know a new `class_name` only after it (T20). The smoke runs go
-through `main_run` in `scripts/lib_tests.sh`; the lock paths are in `scripts/lib_locks.sh`. CI runs the Python tests in a job of
+through `main_run` in `scripts/lib_tests.sh`; the lock files and their order are in `scripts/godot_lock.sh`. CI runs the Python tests in a job of
 their own and the GUT files in three shards, with `assets/generated` cached on a hash of `tools/procgen`.
 
 ## 19. Epsilon space at true scale (M6)

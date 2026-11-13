@@ -75,5 +75,5 @@ WHICH=("${@:-all}")
 if [[ "${WHICH[0]}" == "all" ]]; then
     WHICH=(ac19 vsync costs hundred)
 fi
-flock "${GPU_LOCK}" bash -c 'for step in "$@"; do "${step}"; done' _ "${WHICH[@]}"
+"${GODOT_LOCK_SH}" read --gpu --bench -- bash -c 'for step in "$@"; do "${step}"; done' _ "${WHICH[@]}"
 echo "== done, see ${LOG}"

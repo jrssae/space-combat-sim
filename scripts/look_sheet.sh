@@ -11,7 +11,7 @@
 #              earlier shots, %d metres and %s lit or dark, as one more column), SHEET_COMPARE_LABEL, SHEET_PREFIX (m4_t30a), SHEET_PATH.
 #              M4-T30d: SHEET_COCKPIT (1; 0 leaves the cockpit view out, for the props: nav_buoy, raider_fighter_chunks,
 #              starfury_aurora_chunks, capital_cruiser, capital_destroyer, capital_carrier, b5_station).
-# Run it under the bench locks: flock /tmp/m5-godot.lock flock /tmp/scs-bench.lock scripts/look_sheet.sh ...
+# It takes the Godot (read), GPU and bench locks itself (scripts/godot_lock.sh).
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GODOT="${GODOT_BIN:-${ROOT}/.tools/godot/godot}"
@@ -31,7 +31,7 @@ fi
 mkdir -p "${OUT}"
 touch reports/.gdignore
 status=0
-flock "${GPU_LOCK}" timeout 900 "${GODOT}" --path . --resolution "${RES}" --fullscreen --disable-vsync \
+"${GODOT_LOCK_SH}" read --gpu --bench -- timeout 900 "${GODOT}" --path . --resolution "${RES}" --fullscreen --disable-vsync \
     -s res://scripts/look_sheet.gd -- asset="${ASSET}" out="${OUT_DIR}" distances="${SHEET_DISTANCES:-8,30,150,600}" \
     lights="${SHEET_LIGHTS:-lit,dark}" settle="${SHEET_SETTLE:-40}" scale3d=1080p \
     liveries="${SHEET_LIVERIES:-}" compare="${SHEET_COMPARE:-}" compare_label="${SHEET_COMPARE_LABEL:-T30A}" prefix="${SHEET_PREFIX:-m4_t30a}" \

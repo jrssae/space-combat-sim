@@ -4,7 +4,7 @@
 # (scripts/planet_sheet_node.gd). One PNG per view in references/screenshots/M6-T11 planet/ (or SHEET_OUT).
 #
 # Usage: scripts/planet_sheet.sh [view,view,...]          (every view by default; the names are in planet_sheet_node.gd)
-# Environment: SHEET_OUT, SHEET_RES (1200x675), GODOT_BIN. Runs under the Godot and GPU locks.
+# Environment: SHEET_OUT, SHEET_RES (1200x675), GODOT_BIN. Runs under the Godot (read) and GPU locks.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GODOT="${GODOT_BIN:-${ROOT}/.tools/godot/godot}"
@@ -15,5 +15,5 @@ ARGS=("shots=${OUT}" "flare=${SHEET_FLARE:-on}" "layer=${SHEET_LAYER:-on}")
 if [[ $# -gt 0 ]]; then
     ARGS+=("views=$1")
 fi
-flock "${GODOT_LOCK}" flock "${GPU_LOCK}" timeout 900 "${GODOT}" --path . --resolution "${SHEET_RES:-1200x675}" \
+"${GODOT_LOCK_SH}" read --gpu -- timeout 900 "${GODOT}" --path . --resolution "${SHEET_RES:-1200x675}" \
     -s res://scripts/planet_sheet.gd -- "${ARGS[@]}" 2>&1 | grep -E '^\[planet_sheet\]|SCRIPT ERROR|ERROR'
