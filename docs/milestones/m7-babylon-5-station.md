@@ -170,7 +170,7 @@ making its own branch):
 |---|---|---|---|---|---|---|
 | T01 | A | Station references and measurements (early start) | Q1 | Opus | Reading shapes and proportions off images; colours from show captures | in progress |
 | T02 | B | Defence grid concept: emplacement locations, the cannons and interceptors and their behaviours, the balance (discussion with the maintainer; early start) | T01 | controller | The maintainer's design call, held as a discussion, not delegated | not started |
-| T03 | A | Compound collision builder in `tools/procgen/core` (early start) | - | Fable | Convex pieces with budgets and coverage that M12's capitals reuse | in progress |
+| T03 | A | Compound collision builder in `tools/procgen/core` (early start) | - | Fable | Convex pieces with budgets and coverage that M12's capitals reuse | done |
 | T04 | A | `babylon5_station` generator: the frame and drum pieces, proportions, paint and texel tiers (early start) | T01 | Fable | An 8 km asset that must read from 50 m and from 1 000 km | not started |
 | T05 | A | Near-field detail and hardpoints: the Cobra bays, the docking aperture, the grid mounts, lights, windows, tour points, sections | T04, T02, T03 | Opus | Geometry around the places a fighter flies close to | not started |
 | T06 | B | The station in the game: placement in the frame, the turning drum, collision, hit volumes, rams, broadcast, section damage | T05, M6 | Opus | A moving 8 km body in Jolt and the native core | not started |
@@ -181,7 +181,7 @@ making its own branch):
 | T11 | D | Maintenance bots: the generator and their loops | T06, Q11 | Sonnet | A small asset and a simple mover | not started |
 | T12 | D | Tour points and a station sandbox scenario (the base of M8's exterior tour) | T05, T08 | Sonnet | Data and `CINEMATIC` shots on existing seams | not started |
 | T13 | B | Performance and the GPU check: the station in view at every range, three squadrons, the grid and a raid | T07, T10 | Opus | Measurement on the maintainer's machine; the budget call | not started |
-| T15 | A | Starfury and raider surfaces from show references, with low and high texture sets for the texture detail setting (maintainer, 2026-11-12; numbered last because it was added after the others had numbers) | M5-T40 | Fable | Two hero hulls seen up close; the look is (H) and needs a sheet first | not started |
+| T15 | A | Starfury and raider surfaces from show references, with low and high texture sets for the texture detail setting (maintainer, 2026-11-12; numbered last because it was added after the others had numbers) | M5-T40 | Fable | Two hero hulls seen up close; the look is (H) and needs a sheet first | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M7-T01 Station references and measurements
