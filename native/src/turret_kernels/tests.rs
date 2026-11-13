@@ -63,6 +63,7 @@ fn mount(body: i64) -> PickMount {
         up: Vector3::new(0.0, 1.0, 0.0),
         min_elevation: (-10_f64).to_radians(),
         reach_m: 1500.0 * PICK_REACH,
+        kind: MOUNT_TURRET,
     }
 }
 
@@ -286,7 +287,7 @@ fn the_mounts_reuse_a_freed_slot_and_change_its_stamp() {
     assert_eq!(m.add(3, 9, 12, 0, Vector3::ZERO, Vector3::new(0.0, 1.0, 0.0), 200.0, 3.0, gun()), 0);
     let mut job = PickJob::default();
     m.live[1] = false;
-    job.take_from(&m, &Memory::default(), &table(), 3, &Hulls::default());
+    job.take_from(&m, &Memory::default(), &table(), 3, &Hulls::default(), &Latch::default(), &[]);
     assert_eq!(job.mounts.len(), 1, "only live mounts are picked for");
     assert_eq!((job.mounts[0].slot, job.mounts[0].stamp), (0, 9));
 }
@@ -300,8 +301,8 @@ fn the_pick_over_a_job_answers_every_live_mount_with_its_stamp() {
     let mut memory = Memory::default();
     memory.note(1, 2, 0.0, true);
     let mut job = PickJob::default();
-    job.take_from(&m, &memory, &table(), 3, &Hulls::default());
-    pick_all(&rows, row_finder(&rows), 0.0, &mut job);
+    job.take_from(&m, &memory, &table(), 3, &Hulls::default(), &Latch::default(), &[]);
+    pick_all(&rows, row_finder(&rows), 0.0, &mut job, &Grid::default());
     assert_eq!(
         job.picks,
         vec![

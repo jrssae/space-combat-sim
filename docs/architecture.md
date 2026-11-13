@@ -5389,7 +5389,10 @@ native/src/surface_rows.rs       ScsSimCore.set_surface / clear_surface / surfac
   to `StationSpin.angle_at(system_time)` plus a phase kept when `station spin` holds and restarts it, so Jolt moves it kinematically
   and its skin has the drum's speed. The drum's body is a node of the World beside the station, shiftable and tied to the anchor
   itself (a group member never sits inside another), placed at its pose before it joins: a rebase or the frame's drift moves it
-  once, and a velocity rebase leaves its motion against the anchor (its turn) as it was. The visual drum turns each frame to the
+  once, and a velocity rebase leaves its motion against the anchor (its turn) as it was. A position rebase teleports both bodies
+  in Jolt (`Station._teleport_bodies` on `WorldFrame.rebased`: static for the moment they are placed where their last step left
+  them, shifted, then kinematic with their node's pose as the target), so the shift never becomes a one-step velocity (240 km/s at
+  4 km) that rams whatever touches them. The visual drum turns each frame to the
   same clock between ticks. No lights (M7-T18).
 - **Big hulls in the core (`ROLE_SURFACE`).** Each piece carries a `Damageable` (the frame's on the `Station` node beside the
   `Targetable`) whose row the core marks with the role `ROLE_SURFACE` once `set_surface` gave its body the hit volumes (16 numbers
@@ -5454,3 +5457,48 @@ data/scenarios/station_launch.json  the player on Alpha 3 with three wingmen
   `<WING> 1` to `12` with the `ally_starfury` profile and no wing yet (T10 gives them their part).
 - **For M8.** A squadron launch is one `LaunchSequence` per wing (or several in turn) with a profile of its own; the shots and the steps
   are data.
+
+### 20.3 The defence grid (D75, T07)
+
+```
+native/src/grid_kernels.rs       the grid's kinds on the turret rows: the latch, the guns' pick through the brains' broad phase,
+                                 the interceptors' incoming fire and choice, the big hulls' line of fire; engine-free (guard test)
+native/src/turret_rows.rs        + add_grid_mount, set_grid_free, grid_free_sides, grid_readouts, turret_kind; step_turrets runs
+                                 the batteries; note_attackers sets the latch
+native/src/surface.rs            + enters_from_outside: a line entering a volume its start is not inside
+src/world/station_grid.gd        StationGrid: D75's 23 mounts from the hardpoints, their models, flashes, provider and command `grid`
+src/combat/turret_mount.gd       + host (the body a mount binds to), grid_kind, the intercepted signal
+assets/weapons/grid_*.tres       the light pulse turret, the heavy cannon and the interceptor battery
+```
+
+- **Kinds on the turret rows.** `Mounts.kind` (and `PickMount.kind`) is `grid_kernels::MOUNT_*`: 0 a ship's turret (§18.10,
+  unchanged), 1 light pulse, 2 heavy cannon, 3 interceptor battery. `add_turret` mounts kind 0; `add_grid_mount(..., kind)` the
+  grid's. A grid mount binds to a big hull's body (the station's frame or drum row: a live hull, not a rigid body); its shot
+  inherits the row's velocity plus the turning skin's speed under the pivot (`surface_velocity`), and its lead takes the same.
+- **The latch (never first).** `TurretState.latch` holds `(grid faction, enemy faction)` pairs, written only on the main thread:
+  by `note_attackers` in the sweep's order (a hit by a hostile ship on a big hull friendly to the grid, or on a friend within a
+  grid gun's range of its mount) and by the batteries (a hostile shot within a battery's reach whose path meets the hull), and
+  by `set_grid_free` (the console). Nothing clears it but `set_grid_free(grid, side, false)` (`grid hold`), which also drops the
+  grid guns' targets. The launch copies it into the job with the surfaces' body ids; `turret_digest` hashes it.
+- **The guns' pick** (in the AI job, `pick_all` now takes the brains' `Grid`): for a gun whose people are weapons free, the
+  rows within its reach (1.25 times its range) from `contact::contacts_into` on the job's broad phase; candidates are live
+  rigid hulls, not tier rows, not big hulls, of a hostile side the latch frees. A light pulse turret takes fighters only (radius
+  up to 50 m and not of kind capital, D75 "anti-fighter"); a heavy cannon ranks capitals ahead of fighters. Inside the arc before
+  outside it, nearest first; the would-be winner's line from the trunnion is tested against every big hull's surface
+  (`enters_from_outside`: a volume the line starts in does not count). Work: one broad-phase query per gun and a line test per
+  improving candidate. Interceptors are not in the job.
+- **The batteries** (main thread, in `step_turrets` after the guns): per battery, the core's bolt rows that are missiles or
+  pulse bolts (never beams or mines), not spent, of a side hostile to it, within its reach, whose straight path over their life
+  (at most 6 s), relative to each big hull, meets a surface (`time_to_hull`). Each sets the latch; a ready battery takes one: a
+  missile before any bolt, then the soonest to hit, among equals the earlier row, one a tick per battery and none taken twice.
+  `step_turrets` returns three more arrays (battery slots, the bolt ids taken, where they were); `TurretRows.step` spends each
+  (`SimCore.spend_bolt` for an owned row, `Projectile.spend` for a node) and calls `TurretMount.on_intercepted`.
+- **Friendly bolts stop on the station.** `Damageable.stops_friendly_bolts` (the station's two hulls): `HitResolver` keeps a
+  big hull's surface pair for a bolt that cannot hurt it, and such a bolt is spent with its flash and nothing else (no damage,
+  no attacker note, no `hit_resolved`; `HitResolver.friendly_stops` counts them). Other friendly hulls still let bolts through.
+- **Visuals and sound.** Every mount wears the Saturns' turret model (T27) scaled per kind (light 2, heavy 4, interceptor 1.2),
+  hung from the frame's visual piece or the drum's visual pivot (so the far dress shrinks them with the station and the drum's
+  turn carries them); a shot or a kill flashes the barrel through the World's `MuzzleFlashPool`, and a kill adds an
+  `ImpactFlash` where the projectile was. `AudioDirector.watch_grid` plays `turret_fire` pitched and levelled per kind.
+- **Threads.** Threaded equals `delayed`, one thread equals six, rows, commands and the turret digest byte for byte
+  (`test_station_grid_threads`). Every per-tick grid decision is native; GDScript only spends what the core named.

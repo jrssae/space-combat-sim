@@ -39,6 +39,8 @@ const HEAL_CHOICES: Array[StringName] = [&"player", &"target", &"all"]
 var projectiles_last_tick: int = 0
 var pairs_tested: int = 0
 var hits_total: int = 0
+## Bolts that stopped on a big hull of their own side without harm (the station, M7-T07).
+var friendly_stops: int = 0
 var last_hit: String:
 	get = _describe_last_hit
 # The last hit, described only when read (M5-T32: no string built per hit).
@@ -106,6 +108,7 @@ var _best: int = -1
 var _best_t: float = INF
 var _best_a := Vector3.ZERO
 var _best_b := Vector3.ZERO
+var _best_stop: bool = false  # the best hit is a bolt stopping on a big hull it cannot hurt (M7-T07)
 ## `settings.friendly_fire` as of the last tick.
 var friendly_fire: bool = false
 ## Throws the sparks of a hull hit (`Main` sets it); none without it.
@@ -397,6 +400,7 @@ func _land_on_rock(i: int, s: int, delta: float) -> void:
 func _earliest_hit(c: int, first: int, next: int) -> bool:
 	var best_t: float = INF
 	_best = -1
+	_best_stop = false
 	var start: Vector3 = _bolt_starts[c]
 	var p1: Vector3 = _bolt_ends[c]
 	var shooter_id: int = _bolt_shooters[c]
@@ -406,8 +410,11 @@ func _earliest_hit(c: int, first: int, next: int) -> bool:
 		var j: int = _hull_keys[k]
 		var damageable: Damageable = _damageable(j)
 		# Already destroyed this tick by another bolt (or gone since the gather).
-		if damageable == null or damageable.hull.destroyed or _body_ids[j] == shooter_id \
-				or not damageable.can_be_hit_by(bolt_faction, friendly_fire):
+		if damageable == null or damageable.hull.destroyed or _body_ids[j] == shooter_id:
+			continue
+		# A big hull's own side's bolts stop on it without harm (the station, M7-T07); other friendly hulls let them through.
+		var stops: bool = not damageable.can_be_hit_by(bolt_faction, friendly_fire)
+		if stops and not (damageable.stops_friendly_bolts and _surface_t[k] >= 0.0):
 			continue
 		pairs_tested += 1
 		var to_body: Basis = _to_body_of(j)
@@ -430,6 +437,7 @@ func _earliest_hit(c: int, first: int, next: int) -> bool:
 			_best_t = t
 			_best_a = a
 			_best_b = b
+			_best_stop = stops
 	return _best >= 0
 
 
@@ -450,20 +458,29 @@ func _land(i: int, delta: float) -> void:
 			-relative.normalized() if relative.length_squared() > 1e-12 else Vector3.ZERO,
 			relative.length() / maxf(delta, 1e-6))
 	_spend(i)
+	if _best_stop:
+		friendly_stops += 1
+		_flash_at(j, local_point, i)
+		return
 	var sim: SimCore = SimCore.for_tree(get_tree())
 	if sim != null:
 		sim.note_hit(info.target_id, shooter_id)  # the turrets' attacker memory, in the sweep's order (M5-T21)
 	_apply(damageable, info)
-	# A destroyed hull is hidden and the explosion replaces the flash; a flash on a parked ship would never be processed.
+	_flash_at(j, local_point, i)
+	if fx != null:
+		_throw_sparks(info, t0 + move * t, move / maxf(delta, 1e-6))
+	hit_resolved.emit(info)
+
+
+# The bolt's flash where it struck, riding with the hull. A destroyed hull is hidden and the explosion replaces the flash; a
+# flash on a parked ship would never be processed.
+func _flash_at(j: int, local_point: Vector3, i: int) -> void:
 	var body := instance_from_id(_body_ids[j]) as Node3D
 	if body != null and body.is_visible_in_tree():
 		var flash := ImpactFlash.create(_bolt_colors[i])
 		flash.position = local_point
 		body.add_child(flash)
 		flash.reset_physics_interpolation()
-	if fx != null:
-		_throw_sparks(info, t0 + move * t, move / maxf(delta, 1e-6))
-	hit_resolved.emit(info)
 
 
 # Sparks fly back off the hull, mirrored about the surface (taken as radial from the centre).

@@ -13,6 +13,8 @@ use std::f64::consts::{FRAC_PI_2, PI, TAU};
 use godot::builtin::{Basis, Vector3};
 
 use crate::brain_maths::solve;
+use crate::grid_kernels::{self, Latch, MOUNT_INTERCEPTOR, MOUNT_TURRET};
+use crate::kernels::contact::{Grid, Query};
 use crate::rows::{FLAG_HULL_ACTIVE, FLAG_RIGID, FLAG_TIER, Rows};
 use crate::v3::{add, col_a, col_b, col_c, cross, dist_sq, dot, normalized, scale, sub, xform};
 
@@ -70,6 +72,8 @@ pub struct Mounts {
     pub target: Vec<i64>,
     pub ready_at: Vec<f64>,
     pub shots: Vec<i64>,
+    /// `grid_kernels::MOUNT_*`: a ship's turret, or one of the station grid's kinds (M7-T07).
+    pub kind: Vec<u8>,
 }
 
 impl Mounts {
@@ -113,6 +117,7 @@ impl Mounts {
             self.target.push(0);
             self.ready_at.push(f64::NEG_INFINITY);
             self.shots.push(0);
+            self.kind.push(MOUNT_TURRET);
         }
         self.taken[slot] = true;
         self.id[slot] = id;
@@ -131,6 +136,7 @@ impl Mounts {
         self.target[slot] = 0;
         self.ready_at[slot] = f64::NEG_INFINITY;
         self.shots[slot] = 0;
+        self.kind[slot] = MOUNT_TURRET;
         slot
     }
 
@@ -239,6 +245,8 @@ pub struct PickMount {
     pub up: Vector3,
     pub min_elevation: f64,
     pub reach_m: f64,
+    /// `grid_kernels::MOUNT_*` (M7-T07).
+    pub kind: u8,
 }
 
 /// A pick's answer: the target for a mount's binding (0 for none).
@@ -260,17 +268,33 @@ pub struct PickJob {
     pub picks: Vec<Pick>,
     /// The turreted ships' own hit volumes (Q33), copied again only when they changed (`hulls_version`).
     pub hulls: Hulls,
+    /// The grid's weapons-free latch and the big hulls that block its guns (M7-T07), and the grid pick's scratch.
+    pub latch: Latch,
+    pub surface_bodies: Vec<i64>,
+    pub query: Query,
+    pub found: Vec<i32>,
+    pub surface_rows: Vec<usize>,
 }
 
 impl PickJob {
     /// Fills the job from the mounts and memory as they stand (the launch's copy).
-    pub fn take_from(&mut self, mounts: &Mounts, memory: &Memory, relations: &[u8], stride: usize, hulls: &Hulls) {
+    pub fn take_from(
+        &mut self,
+        mounts: &Mounts,
+        memory: &Memory,
+        relations: &[u8],
+        stride: usize,
+        hulls: &Hulls,
+        latch: &Latch,
+        surface_bodies: &[i64],
+    ) {
         if self.hulls.version != hulls.version {
             self.hulls.clone_from(hulls);
         }
         self.mounts.clear();
         for s in 0..mounts.taken.len() {
-            if !mounts.taken[s] || !mounts.live[s] {
+            // An interceptor's choice is made on the main thread, where it shoots the same tick.
+            if !mounts.taken[s] || !mounts.live[s] || mounts.kind[s] == MOUNT_INTERCEPTOR {
                 continue;
             }
             self.mounts.push(PickMount {
@@ -282,12 +306,16 @@ impl PickJob {
                 up: mounts.up[s],
                 min_elevation: mounts.min_elevation[s],
                 reach_m: mounts.gun[s].range_m * PICK_REACH,
+                kind: mounts.kind[s],
             });
         }
         self.memory.clone_from(memory);
         self.relations.clear();
         self.relations.extend_from_slice(relations);
         self.stride = stride;
+        self.latch.clone_from(latch);
+        self.surface_bodies.clear();
+        self.surface_bodies.extend_from_slice(surface_bodies);
         self.picks.clear();
     }
 
@@ -307,8 +335,9 @@ pub fn relation(relations: &[u8], stride: usize, a: u32, b: u32) -> u8 {
     relations.get(a * stride + b).copied().unwrap_or(REL_NEUTRAL)
 }
 
-/// Every live mount's target, from the frozen rows (`row_of` gives a body's row, or -1) and the frozen memory at `now_s`.
-pub fn pick_all<F: Fn(i64) -> i64>(rows: &Rows, row_of: F, now_s: f64, job: &mut PickJob) {
+/// Every live mount's target, from the frozen rows (`row_of` gives a body's row, or -1) and the frozen memory at `now_s`; the
+/// grid's guns look through the brains' broad phase `grid` (M7-T07).
+pub fn pick_all<F: Fn(i64) -> i64>(rows: &Rows, row_of: F, now_s: f64, job: &mut PickJob, grid: &Grid) {
     let PickJob {
         mounts,
         memory,
@@ -316,11 +345,29 @@ pub fn pick_all<F: Fn(i64) -> i64>(rows: &Rows, row_of: F, now_s: f64, job: &mut
         stride,
         picks,
         hulls,
+        latch,
+        surface_bodies,
+        query,
+        found,
+        surface_rows,
     } = job;
     picks.clear();
+    grid_kernels::surface_rows_of(rows, &row_of, surface_bodies, surface_rows);
     for m in mounts.iter() {
-        let own = hulls.of(m.body);
-        let target = pick(rows, &row_of, m, memory, relations, *stride, now_s, own);
+        let target = if m.kind == MOUNT_TURRET {
+            pick(rows, &row_of, m, memory, relations, *stride, now_s, hulls.of(m.body))
+        } else {
+            let mut ctx = grid_kernels::PickCtx {
+                relations,
+                stride: *stride,
+                latch,
+                surface_rows,
+                grid,
+                query,
+                found,
+            };
+            grid_kernels::pick(rows, &row_of, m, &mut ctx)
+        };
         picks.push(Pick {
             slot: m.slot,
             stamp: m.stamp,

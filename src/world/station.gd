@@ -9,7 +9,9 @@ extends Node3D
 ##   one turned in `_physics_process` from the system's clock (`StationSpin`), so Jolt gives its skin the drum's speed. The
 ##   drum's body is a node of the World beside the station, shiftable and tied to the anchor in its own right (a group member
 ##   may not sit inside another), so a rebase or the frame's drift moves it once, and its motion against the anchor is only
-##   its turn: a velocity rebase changes nothing of it in universe terms. Both
+##   its turn: a velocity rebase changes nothing of it in universe terms. A rebase teleports both bodies in Jolt
+##   (`_teleport_bodies`): moved as kinematic bodies they would sweep the shift in one step, about 240 km/s at a 4 km
+##   rebase, and ram whatever touched them. Both
 ##   are built from the manifest's `collision.pieces` (`CollisionBodies`) on the rock layer: ships collide with them, rocks
 ##   and bolts do not (bolts have no body; the hit sweep lands them).
 ## - **Hit volumes** go to the native core as the big hulls' surfaces (`ScsSimCore.set_surface`), with the convex hulls they
@@ -18,6 +20,8 @@ extends Node3D
 ##   whose hits go to the damage sections (`StationSections`, Q5); the hull itself never falls.
 ## - **Visuals** are the pieces' `RenderPiece`s, with the drum's on a pivot turned each frame to the body's angle.
 ## - No lights: M7-T18 lights the station, and nothing here takes a `LightPicker` slot.
+## - **The defence grid** (M7-T07, D75) is a `StationGrid` child: its mounts hang from the visuals and bind to the frame and drum
+##   bodies in the core. A bolt of the station's own side stops on its hull without harm (maintainer).
 ##
 ## Console: provider and command `station`.
 
@@ -49,6 +53,8 @@ var drum_body: AnimatableBody3D = null
 var frame_hull: Damageable = null
 var drum_hull: Damageable = null
 var targetable: Targetable = null
+## The defence grid (M7-T07).
+var grid: StationGrid = null
 ## The pieces' visuals; the drum's turns on `drum_pivot`.
 var frame_piece: RenderPiece = null
 var drum_piece: RenderPiece = null
@@ -71,6 +77,7 @@ var _drum_hulls := PackedFloat64Array()
 var _core: Object = null  # the native core the surfaces were given to
 var _held_angle: float = 0.0
 var _phase: float = 0.0  # added to the clock's angle, so a drum started again goes on from where it was held
+var _world: WorldFrame = null  # whose rebases teleport the bodies
 
 
 func _init() -> void:
@@ -99,6 +106,9 @@ func build() -> bool:
 	_build_visuals(pieces)
 	_build_bodies(collision)
 	_build_hulls(collision)
+	grid = StationGrid.new()
+	grid.build(self)
+	add_child(grid)
 	return true
 
 
@@ -110,6 +120,9 @@ func far_visuals() -> Array[Node3D]:
 func _ready() -> void:
 	_register_surfaces()
 	_register_console()
+	_world = WorldFrame.of(self)
+	if _world != null and not _world.rebased.is_connected(_teleport_bodies):
+		_world.rebased.connect(_teleport_bodies)
 	# The drum's body joins the World beside the station: at once when the spawner calls `place_drum_body`, else once the
 	# World is free to take a child.
 	place_drum_body.call_deferred()
@@ -117,6 +130,9 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
+	if _world != null and is_instance_valid(_world) and _world.rebased.is_connected(_teleport_bodies):
+		_world.rebased.disconnect(_teleport_bodies)
+	_world = null
 	if _core != null and is_instance_valid(_core):
 		_core.clear_surface(get_instance_id())
 		if drum_body != null:
@@ -170,6 +186,21 @@ func set_drum_angle(angle: float) -> void:
 		drum_body.global_transform = global_transform * Transform3D(Basis(Vector3.BACK, angle), drum_origin)
 	if drum_pivot != null:
 		drum_pivot.transform = Transform3D(Basis(Vector3.BACK, angle), drum_origin)
+
+
+## After a rebase moved the nodes by `-offset`: each body is put in Jolt where its last step left it, moved by the shift, as
+## a teleport (static for the moment it is placed), then given the pose its node now asks for as its kinematic target. So
+## the shift adds no velocity: the drum's skin keeps its spin and the frame stays at rest against the anchor.
+func _teleport_bodies(offset: Vector3) -> void:
+	for body: AnimatableBody3D in [frame_body, drum_body]:
+		if body == null or not body.is_inside_tree():
+			continue
+		var rid: RID = body.get_rid()
+		var was: Transform3D = PhysicsServer3D.body_get_state(rid, PhysicsServer3D.BODY_STATE_TRANSFORM)
+		PhysicsServer3D.body_set_mode(rid, PhysicsServer3D.BODY_MODE_STATIC)
+		PhysicsServer3D.body_set_state(rid, PhysicsServer3D.BODY_STATE_TRANSFORM, Transform3D(was.basis, was.origin - offset))
+		PhysicsServer3D.body_set_mode(rid, PhysicsServer3D.BODY_MODE_KINEMATIC)
+		PhysicsServer3D.body_set_state(rid, PhysicsServer3D.BODY_STATE_TRANSFORM, body.global_transform)
 
 
 ## Starts or stops the drum (`station spin`); stopped, its skin is still to a ship that touches it.
@@ -302,6 +333,7 @@ func _hull(volumes: Array[HitShape], layout: StringName) -> Damageable:
 	var hull := Damageable.new()
 	hull.setup(entries, HULL_MAX, Factions.EARTH_ALLIANCE, false, false, layout)
 	hull.invulnerable = true
+	hull.stops_friendly_bolts = true
 	return hull
 
 

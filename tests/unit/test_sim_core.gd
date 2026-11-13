@@ -634,7 +634,11 @@ const ROWS_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::{Basi
 const TURRET_KERNEL_FILE: String = "res://native/src/turret_kernels.rs"
 const TURRET_KERNEL_USERS: Array[String] = ["res://native/src/turret_rows.rs", "res://native/src/brain_step.rs"]
 const TURRET_KERNEL_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::{Basis, Vector3};", "use crate::rows::",
-		"use crate::v3::", "use crate::brain_maths::"]
+		"use crate::v3::", "use crate::brain_maths::", "use crate::grid_kernels::", "use crate::kernels::contact::"]
+## The station grid's kinds (M7-T07): the guns' pick, the latch and the interceptors, held to the kernels' rules.
+const GRID_KERNEL_FILE: String = "res://native/src/grid_kernels.rs"
+const GRID_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::{Basis, Vector3};", "use crate::kernels::contact::",
+		"use crate::rows::", "use crate::surface;", "use crate::turret_kernels::", "use crate::v3::"]
 ## The engine voices' ship query (M5-T28): the ships near the listener from the rows, held to the kernels' rules; it imports
 ## the row tables and the vector maths only. The shell (`voice_rows.rs`) is what reaches it.
 const VOICE_KERNEL_FILE: String = "res://native/src/voice_kernels.rs"
@@ -692,6 +696,9 @@ func test_the_kernels_hold_no_engine_type() -> void:
 		violations.append_array(_engine_free_violations(brain_file, KERNEL_FORBIDDEN, BRAIN_USE_ALLOWED))
 	violations.append_array(_engine_free_violations(THREADS_FILE, KERNEL_FORBIDDEN, THREADS_USE_ALLOWED))
 	violations.append_array(_engine_free_violations(TURRET_KERNEL_FILE, KERNEL_FORBIDDEN, TURRET_KERNEL_USE_ALLOWED))
+	violations.append_array(_engine_free_violations(GRID_KERNEL_FILE, KERNEL_FORBIDDEN, GRID_KERNEL_USE_ALLOWED))
+	assert_true(FileAccess.get_file_as_string("res://native/src/turret_rows.rs").contains("use crate::grid_kernels::"),
+			"the turrets' shell reads the grid's kernels")
 	violations.append_array(_engine_free_violations(VOICE_KERNEL_FILE, KERNEL_FORBIDDEN, VOICE_KERNEL_USE_ALLOWED))
 	violations.append_array(_engine_free_violations(RAM_TRACKER_FILE, KERNEL_FORBIDDEN, RAM_TRACKER_USE_ALLOWED))
 	violations.append_array(_engine_free_violations(SURFACE_KERNEL_FILE, KERNEL_FORBIDDEN, SURFACE_KERNEL_USE_ALLOWED))

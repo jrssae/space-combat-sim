@@ -88,6 +88,8 @@ func toggle_station() -> bool:
 	main.world.spawn(made, at, Basis.IDENTITY, main.world)
 	made.place_drum_body()
 	station = made
+	if main.audio != null:
+		main.audio.watch_grid(made.grid)
 	return true
 
 

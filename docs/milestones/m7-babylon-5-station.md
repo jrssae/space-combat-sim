@@ -494,6 +494,11 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     it lay across the player at the origin for one step and the turning skin rammed him); `test_station_in_game` rebases six
     times with the drum turning. The target menu lists the station among the allies, a target (`test_target_menu`); the far
     props' station check says its numbers when it fails.
+  - **Fix (found by M7-T08's probe):** a position rebase moved the frame and drum bodies kinematically, so Jolt swept the
+    shift in one step (246 km/s at a 4 km rebase) and a ship touching either would be rammed at that speed. A rebase now
+    teleports both (static while placed, then kinematic again with the node's pose as the target): on the rebase tick the drum
+    turns at its spin and neither moves; a ship resting on the held drum and on the frame stays at rest, unrammed
+    (`test_a_rebase_teleports_the_drum_and_frame_bodies_with_no_velocity_spike`).
   - **Open:** the Cobra bay test holds the drum (a fighter at rest against the station meets a turning door at 36 m/s; the launch
     is T08's); the contact lists still pick the station's rows by centre distance (nearest 12 within 5 km), so in a crowd a fighter
     can miss it as a contact: T10 (avoidance of its surface, AC9) decides; friendly bolts pass through the station as through any
@@ -510,6 +515,45 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   (maintainer), instead of passing through as through a friendly ship: the grid fires many bolts close to the hull. Section
   health is T06's placeholder (20 000 each, about 3 300 raider bolts); tune it in the balance fights.
 - **Done when:** AC6.
+- **Done (as built; contracts in `docs/architecture.md` §20.3):**
+  - **Mounts:** `StationGrid` (`src/world/station_grid.gd`, built by `Station.build`) binds D75's 23 mounts from the hardpoints to
+    the native turret rows as new kinds (`native/src/grid_kernels.rs`; `Mounts.kind`): the frame's to the frame's row, the drum's
+    to the drum body's row, so they turn with the drum and their shots carry the skin's speed. Models: the Saturns' turret (T27)
+    scaled 2 (light), 4 (heavy), 1.2 (interceptor), on the frame's visual piece or the drum's pivot; muzzle flashes from the
+    World's flash pool, a spark at each kill; `turret_fire` pitched per kind (1.0, 0.55, 1.6).
+  - **Weapons** (`assets/weapons/`), the starting numbers, which held the balance rule untuned:
+    `grid_light_pulse` 1 500 m/s, a shot every 1.0 s, 10 damage (a Starfury bolt's), 2.4 s life, 3 km range, 0.3 degree spread,
+    60 and 50 degrees a second; `grid_heavy_cannon` 2 000 m/s, every 4.0 s, 300 damage, 3.5 s, 6 km, 0.1 degree, 15 and 12;
+    `grid_interceptor` one kill every 0.5 s a battery within 1.5 km. Section health stays T06's 20 000 (the most any fight took
+    off the station was 3 500, all from the capital's beams, on one section).
+  - **Behaviour (native):** never first (a per-side latch set on the main thread by a hostile's hit on the station or on a friend
+    within a grid gun's range of its mount, and by any hostile shot the batteries see heading into the hull; kept until `grid
+    hold`); the guns' pick in the AI job through the brains' broad phase: light pulse turrets take fighters only, heavy cannons
+    capitals first; every big hull's surface blocks the line of fire; interceptors on the main thread: missiles first, then the
+    bolt that hits soonest, capped per battery, never beams or mines. Friendly bolts stop on the station's hull without damage
+    (`Damageable.stops_friendly_bolts`, `HitResolver.friendly_stops`).
+  - **AC6, balance** (`test_station_grid_balance`, `GUT_BALANCE`, limits 180 s for the raid and 300 s for the capital):
+    - 12 raiders (raider profile, the station as their objective, 0.8 to 1.6 km off the bow): seed 1 all destroyed at 43.8 s
+      (144 light and 13 heavy shots, 201 shot down, station lost 6), seed 2 at 28.0 s (128, 7, 156, 0), seed 3 at 28.0 s
+      (128, 9, 129, 0); in the grid's fire all the time.
+    - One cruiser stand-in (20 000 hull) 2.2 to 2.7 km off the bow tower, its eight guns, two beams and a missile every 3 s fired
+      at the bow by the test (its own director picks fighters only): destroyed at 138.3, 138.5 and 138.7 s by 70 heavy shots;
+      1 141 to 1 145 of its bolts and missiles shot down (46 missiles), 140 beams through (3 500 off one section).
+    - Tunings: none; the starting numbers hold the rule. A destroyer (50 000) or a carrier (120 000) would outlast 300 s against
+      the two heavy cannons alone (not pinned; M12 checks real capitals).
+  - **Console:** provider and command `grid` (`info`, `free <side>`, `hold [side]`), in `info.md`.
+  - **Tests:** Rust `grid_kernels/tests.rs` (12: never first, each gun kind's pick, friends and neutrals never picked, the hull
+    hiding a target and a gun inside a volume still firing out, the latch, a hit freeing the grid, the battery's incoming fire,
+    its choice and the taken ones, beams never, the drum's skin speed, capital or fighter); 161 Rust tests in all. GUT
+    `test_station_grid` (6: the 23 bound with their kinds and bodies, the drum's mounts turning and firing from where the drum
+    put them, never first and opening on the side that fired, `grid hold`, the hull hiding a target, a friendly bolt stopping
+    without harm, interceptors taking a bolt and a missile, one per battery per interval, never a beam), `test_station_grid_threads`
+    (threaded against delayed, one thread against six: rows, commands and turret digests), `test_station_grid_balance` (2, three
+    seeds each); `test_sim_core`'s guard holds `grid_kernels.rs`; `test_station_in_game`'s section-hit test parks the batteries.
+    The parity files, the turret files and the station files pass unchanged (no recording moved); main-scene smoke clean.
+  - **Open (maintainer):** the light pulse turrets never engage a capital (D75 says "anti-fighter"; say if they should take one
+    when no fighter is in reach); the capital stand-in's own interceptors do not shoot at the grid's heavy bolts (they never
+    shot bolts in M4); raiders attack the station only when ordered to (a scenario objective), as M5's brains pick ships (T10).
 
 ### M7-T08 Launch bays and the launch sequence
 

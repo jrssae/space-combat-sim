@@ -288,6 +288,7 @@ fn turrets_cover_a_civilian_hull_within_two_km_of_skin() {
         up: v(0.0, 1.0, 0.0),
         min_elevation: (-10_f64).to_radians(),
         reach_m: 1500.0 * PICK_REACH,
+        kind: 0,
     };
     let mut memory = Memory::default();
     memory.note(2, 3, 0.0, false);

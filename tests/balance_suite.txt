@@ -3,3 +3,4 @@
 res://tests/integration/test_dogfight.gd
 res://tests/integration/test_m3_sandbox.gd
 res://tests/integration/test_turret_balance.gd
+res://tests/integration/test_station_grid_balance.gd

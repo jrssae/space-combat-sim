@@ -405,6 +405,31 @@ pub fn sweep(s: &Surface, a: V, b: V, inflate: f64) -> Option<(f64, usize)> {
     best
 }
 
+/// Whether the body-frame line from `a` to `b` enters one of the surface's volumes that `a` is not already in (M7-T07): the
+/// station's own hull in a grid gun's line of fire, where a gun on its plinth may stand inside a volume's box.
+pub fn enters_from_outside(s: &Surface, a: V, b: V) -> bool {
+    const STARTS_INSIDE: f64 = 1e-9;
+    for (k, v) in s.volumes.iter().enumerate() {
+        if segment_point_distance(a, b, v.centre) > v.reach {
+            continue;
+        }
+        let t = if let Some(planes) = s.hulls.get(k).filter(|p| !p.is_empty()) {
+            hull_entry(a, b, planes, 0.0)
+        } else {
+            let (la, lb) = (local(v, a), local(v, b));
+            if v.capsule {
+                capsule_entry(la, lb, v.half[0], v.half[1])
+            } else {
+                box_entry(la, lb, v.half)
+            }
+        };
+        if t.is_some_and(|t| t > STARTS_INSIDE) {
+            return true;
+        }
+    }
+    false
+}
+
 /// The velocity of World point `point` on a body at `origin` turned by `basis` that spins at `spin_rad_s` about its own
 /// +z: the turning drum's skin under a ship that touches it (Q9).
 pub fn surface_velocity(

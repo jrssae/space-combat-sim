@@ -137,6 +137,69 @@ func test_the_turning_drum_follows_velocity_rebases_with_the_frame() -> void:
 	assert_almost_eq(_universe(station), FREE_FLIGHT_STATION, Vector3.ONE * 0.05, "the station where it was")
 
 
+func test_a_rebase_teleports_the_drum_and_frame_bodies_with_no_velocity_spike() -> void:
+	# M7-T06 fix (found by M7-T08): moved as kinematic bodies by a 4 km rebase, both swept the shift in one Jolt step (240 km/s)
+	# and rammed whatever touched them. A rebase teleports them: on its tick the drum moves at its spin, the frame not at all.
+	await _start()
+	DebugConsole.flags.invulnerable = true  # the player survives to be measured
+	var drum: RID = station.drum_body.get_rid()
+	var frame: RID = station.frame_body.get_rid()
+	var spin_axis: Vector3 = station.global_basis.z
+	for k: int in 3:
+		main.world.rebase(Vector3(4000.0, -1500.0 * k, 900.0))
+		await _ticks(1)
+		var drum_v: Vector3 = PhysicsServer3D.body_get_state(drum, PhysicsServer3D.BODY_STATE_LINEAR_VELOCITY)
+		var drum_w: Vector3 = PhysicsServer3D.body_get_state(drum, PhysicsServer3D.BODY_STATE_ANGULAR_VELOCITY)
+		var frame_v: Vector3 = PhysicsServer3D.body_get_state(frame, PhysicsServer3D.BODY_STATE_LINEAR_VELOCITY)
+		assert_lt(drum_v.length(), 0.01, "rebase %d: the drum's centre does not move (%.1f m/s)" % [k, drum_v.length()])
+		assert_almost_eq(drum_w.dot(spin_axis), station.spin.rate_rad_s, 1e-3, "it turns at its spin")
+		assert_lt(frame_v.length(), 0.01, "the frame does not move (%.1f m/s)" % frame_v.length())
+	# A ship at rest on each body's skin through a rebase: the drum held (its turning skin would ram at once, Q9), then the
+	# frame's command section.
+	var rams: Array[HitInfo] = []
+	main.rams.ram_resolved.connect(func(info: HitInfo) -> void: rams.append(info))
+	station.set_spinning(false)
+	var drum_box: AABB = station.sections.sections[station.sections.index_of("forward_drum")]["aabb"]
+	var command: AABB = station.sections.sections[station.sections.index_of("command")]["aabb"]
+	for body: String in ["drum", "frame"]:
+		# Where its skin is now (each rebase moves it on screen).
+		var from: Vector3
+		var to: Vector3
+		var normal: Vector3
+		if body == "drum":
+			to = station.to_world(Vector3(0.0, 0.0, drum_box.get_center().z), StationHardpoints.DRUM)
+			normal = station.global_basis.x
+			from = to + normal * 900.0
+		else:
+			to = station.global_transform * command.get_center()
+			normal = station.global_basis.y
+			from = station.global_transform * Vector3(command.get_center().x, command.end.y + 300.0, command.get_center().z)
+		var hit: Variant = _hit_point(from, to)
+		assert_not_null(hit, "%s: its skin is under the ray" % body)
+		var skin: Vector3 = hit
+		var rest: Array = [body]
+		main.ship.reset_to(Transform3D(Basis.looking_at(-normal, station.global_basis.z), skin + normal * 12.0))
+		main.ship.linear_velocity = -normal * 1.0
+		main.ship.angular_velocity = Vector3.ZERO
+		var ship_rid: RID = main.ship.get_rid()
+		var touching: bool = false
+		for i: int in 900:
+			await _ticks(1)
+			var state: PhysicsDirectBodyState3D = PhysicsServer3D.body_get_direct_state(ship_rid)
+			if state != null and state.get_contact_count() > 0:
+				touching = true
+				break
+		assert_true(touching, "%s: the ship came to rest on its skin" % rest[0])
+		await _ticks(20)
+		rams.clear()
+		main.world.rebase(Vector3(-4000.0, 300.0, 2500.0))
+		await _ticks(20)
+		var on_player: Array[HitInfo] = rams.filter(func(r: HitInfo) -> bool: return r.target_id == main.ship.get_instance_id())
+		assert_eq(on_player.size(), 0, "%s: no ram through the rebase" % rest[0])
+		assert_lt(main.ship.linear_velocity.length(), 2.0, "%s: the ship still at rest on it (%.2f m/s)" % [rest[0],
+				main.ship.linear_velocity.length()])
+
+
 func test_the_drum_turns_from_the_system_clock() -> void:
 	await _start()
 	assert_almost_eq(station.spin.rate_rad_s, 0.148, 1e-6, "the manifest's spin")
@@ -178,7 +241,10 @@ func test_a_bolt_lands_on_the_real_shape_and_lowers_only_its_section() -> void:
 	_bolt(side - axis * 300.0, axis * 900.0)
 	await _ticks(60)
 	assert_eq(hits.size(), 0, "no hit on the station's empty bounding sphere")
-	# Now one at the frame's command section, from straight above it.
+	# Now one at the frame's command section, from straight above it, with the grid's interceptors parked (M7-T07: they would
+	# shoot it down first).
+	for battery: TurretMount in station.grid.of_kind(StationGrid.Kind.INTERCEPTOR):
+		battery.process_mode = Node.PROCESS_MODE_DISABLED
 	var command: int = station.sections.index_of("command")
 	var box: AABB = station.sections.sections[command]["aabb"]
 	var top: Vector3 = station.global_transform * Vector3(box.get_center().x, box.end.y + 400.0, box.get_center().z)

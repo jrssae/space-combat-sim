@@ -44,6 +44,7 @@ mod tier_rows;
 mod tier_fire;
 
 // M5-T21: the defensive turrets, engine-free kernels and the core's shell around them.
+mod grid_kernels;
 mod turret_kernels;
 mod turret_rows;
 

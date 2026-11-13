@@ -288,7 +288,7 @@ fn run_body(
     };
     run_batch(work, snapshot, runner, total, &rel, params);
     work.rel_scratch = rel;
-    pick_turrets(snapshot, params.now_s);
+    pick_turrets(snapshot, &work.grid, params.now_s);
     if params.from_rows {
         write_commands(work, snapshot, total);
         settle_hosted(work, params.n, total);
@@ -299,8 +299,9 @@ fn run_body(
     std::mem::take(&mut work.batch_out)
 }
 
-// The turrets' targets on the frozen rows and memory (M5-T21): a decision, so it rides in the job beside the thinks.
-fn pick_turrets(snapshot: &mut Snapshot, now_s: f64) {
+// The turrets' targets on the frozen rows and memory (M5-T21): a decision, so it rides in the job beside the thinks. The
+// station grid's guns look up hostiles through the brains' broad phase (M7-T07).
+fn pick_turrets(snapshot: &mut Snapshot, grid: &Grid, now_s: f64) {
     let Snapshot {
         rows,
         body_rows,
@@ -318,7 +319,7 @@ fn pick_turrets(snapshot: &mut Snapshot, now_s: f64) {
         }
         HashMap::get(body_rows, &body).map_or(-1, |&r| i64::from(r))
     };
-    turret_kernels::pick_all(rows, row_of, now_s, turrets);
+    turret_kernels::pick_all(rows, row_of, now_s, turrets, grid);
 }
 
 // Thinks the batch's first `n` items (inputs filled, brains taken from their slots) across the runner's threads and

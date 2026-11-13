@@ -12,6 +12,8 @@ extends Node3D
 
 ## A shot left the barrel at `at` (World frame): the sound and anything else that follows a shot.
 signal shot_fired(at: Vector3)
+## An interceptor battery shot down a projectile at `point` (World frame), M7-T07.
+signal intercepted(point: Vector3)
 
 ## The entry's name in `hardpoints.json`.
 var mount_name: String = ""
@@ -28,6 +30,13 @@ var faction: StringName = Factions.NEUTRAL:
 		if _slot >= 0 and _sim != null and is_instance_valid(_sim) and _sim.core != null:
 			_sim.core.set_turret_faction(_slot, value)
 
+## The body the core binds the mount to (its row gives the pose each tick); null means the parent ship. The station's mounts
+## hang from its visuals but bind to its frame or drum body (M7-T07).
+var host: Node3D = null
+## 0 a ship's turret (M5-T21); 1, 2 or 3 one of the station grid's light pulse turrets, heavy cannons or interceptor batteries
+## (`StationGrid.Kind`, the core's `grid_kernels::MOUNT_*`).
+var grid_kind: int = 0
+
 var yaw: Node3D = null
 var pitch: Node3D = null
 ## Shots this mount fired (a readout).
@@ -38,7 +47,7 @@ static var _live: Array[TurretMount] = []
 # The turret models split for their mounts, by asset id (empty when the asset has none).
 static var _models: Dictionary[String, Dictionary] = {}
 
-var _body: RigidBody3D = null
+var _body: Node3D = null
 var _sim: SimCore = null
 var _slot: int = -1
 
@@ -80,7 +89,7 @@ func _init() -> void:
 
 func _enter_tree() -> void:
 	_live.append(self)
-	_body = get_parent() as RigidBody3D
+	_body = host if host != null else (get_parent() as RigidBody3D)
 	_bind()
 	var passes: FramePasses = FramePasses.of(self)
 	if passes != null:
@@ -232,6 +241,12 @@ func on_fired(at: Vector3) -> void:
 	shot_fired.emit(at)
 
 
+## The core's interceptor battery on this mount shot down a projectile at `point` (`TurretRows.step`).
+func on_intercepted(point: Vector3) -> void:
+	shots += 1
+	intercepted.emit(point)
+
+
 ## Binds every mount to the core, as the core stands now (it came or went).
 static func rebind_all() -> void:
 	for mount: TurretMount in _live:
@@ -248,7 +263,8 @@ func _bind() -> void:
 	if _slot >= 0 and _sim == sim:
 		return
 	_unbind()
-	var slot_now: int = sim.turrets.register(self, _body.get_instance_id(), weapon, faction)
+	var slot_now: int = sim.turrets.register(self, _body.get_instance_id(), weapon, faction) if grid_kind == 0 \
+			else sim.turrets.register_grid(self, _body.get_instance_id(), weapon, faction, grid_kind)
 	if slot_now < 0:
 		return
 	_sim = sim
