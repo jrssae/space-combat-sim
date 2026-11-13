@@ -184,7 +184,8 @@ a capital ship's own (M12) and the open points raiders arrive through.
   still shows, not separate bold bands. **A departure swirls in** (the pattern travels down toward the throat, drawing ships in)
   and **an arrival swirls out** (up from the throat toward the rim). **Seen from in front of the mouth an arrival turns
   counter-clockwise and a departure clockwise** (round 3); both follow the same spiral, one outward and one inward. The body's
-  edge is short and clean, softly feathered along the streaks (round 4: the still's edge, not a wide fuzzy fade).
+  edge fades out like the still's (round 6, measured): a wide soft fade, about a quarter of the radius from 90 % down to 10 %
+  of the body's brightness, broken up into wisps along the spiral, its faint end at the arms.
 - **The base by view.** Only the narrow deep end changes with the view: from in front, looking down the funnel, it fades to
   black; from the side or from behind it shows a moderately bright white glow, local to the base, with the rest of the funnel
   visible round it as usual.

@@ -1607,6 +1607,40 @@ which changes the same native rows and rebase path:
   - **Own estimate against `jumpgate.png`:** about 75 to 80 %. The colour, the streaks, the soft rim, the ellipse and the throat
     at the base are there. The opening is larger than the still's because it now meets our rails, as asked. Open (H): the
     side-by-side.
+- **Round 5 reviewed (maintainer, 2026-11-12):** "Round 5 looks great overall but now the edge is too defined. Let's see if we can
+  get closer to the reference edge." Round 6: keep everything else from round 5 and soften only the rim toward
+  `jumpgate.png`'s edge, measured: neither round 3's fuzzy spread nor round 5's crisp line.
+- **Round 6 done (2026-11-12; the row stays `in progress` until the maintainer accepts the side-by-side):**
+  - **The still's edge, looked at** (`round6/still_edge_crops.png`): a soft haze, not an even ramp. The body dims over a wide band
+    and its streaks carry on into the fade as thin combed wisps along the spiral, with darker gaps between them. A faint haze
+    lies just past it.
+  - **Measured:** a radial brightness profile (blue channel, 1 px blur) across the edge along 36 rays, in each picture's
+    own elliptical coordinate ρ (1 on the ellipse fitted to its vortex), normalised from the background (0) to the body at ρ
+    0.55 to 0.8 (1), averaged over the rays with no arm or nebula behind them (24 in the still, 25 to 26 in the game). The
+    game is cropped to the still's frame from `gate view reference`. Where the mean profile crosses each level:
+
+    | | 90 % | 75 % | 50 % | 25 % | 10 % | 90 to 10 width | 75 to 25 width |
+    |---|---|---|---|---|---|---|---|
+    | `jumpgate.png` | 0.808 | 0.866 | 0.934 | 1.026 | 1.077 | 0.269 | 0.160 |
+    | round 5 | 0.831 | 0.954 | 0.987 | 1.014 | 1.035 | 0.205 | 0.060 |
+    | **round 6** | 0.792 | 0.852 | 0.936 | 1.007 | 1.052 | **0.260** | **0.155** |
+
+    Mean profile at ρ 0.80, 0.85 ... 1.10: still 0.91 0.80 0.61 0.45 0.34 0.17 0.07; round 5 0.97 0.90 0.89 0.77 0.38 0.04
+    0.01; round 6 0.87 0.75 0.62 0.46 0.28 0.10 0.03. Round 5's edge was nearly three times too sharp; round 6's is within
+    0.07 of the still's at every sample, the still keeping a slightly longer faint tail (its haze).
+  - **The shader:** the body fades from `rim_from` 0.69 of the radius toward `rim_to` 1.08 (past the rim, so about 8 % of the
+    body is left at the rim and the faint edge still reaches the arms). The fade's edge moves by up to `rim_feather` 0.3
+    times a wisp noise (48 coarse strands round the funnel, drawn out along the spiral, sharpened, with a little of the fine
+    hairs). That breaks it up into wisps visible from afar, where the fine hairs alone melt into their mean (tried first: no
+    visible change). The rest of round 5 is unchanged: the opening at the arms (171 x 100 px in the still's frame), the dark
+    circle on the base at (200, 156) with the walls hiding it from the tip, the 1.55 ellipse, colour and streaks.
+  - **Tests:** shader only. Compile check clean (702 scripts); quick tier green (1 881 GUT tests, 131 s).
+  - **Screenshots:** `references/screenshots/M6-T19 vortex/acceptance_jumpgate_png.png` (refreshed) and `round6/`: `arr_*` and
+    `dep_*` (`reference`, `front`, `three_quarter`, `close`, `side`, `inside`, `tip`), `point_arrival_300m`,
+    `point_departure_300m`, `edge_still_vs_game.png` (the edge at three angles: the still, round 5, round 6),
+    `still_edge_crops.png`.
+  - **Own estimate against `jumpgate.png`:** about 80 %. The edge now fades and breaks up like the still's. Still different: the
+    opening is larger (it meets our rails), the blue lighter, the streaks longer. Open (H): the side-by-side.
 
 ### M6-T20 Vortex detail by distance and mass arrivals
 

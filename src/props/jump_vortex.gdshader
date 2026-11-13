@@ -4,7 +4,7 @@ render_mode unshaded, blend_mix, depth_draw_always, cull_disabled, shadows_disab
 // its soft throat, combed with fine hair-like streaks along one soft spiral, over soft-edged darker patches and paler
 // translucent ones that lie along the same spiral. Everything turns round the axis and drifts along the spiral (out from the
 // throat for an arrival, in toward it for a departure). The body reaches the rim of its mouth, at a gate's arms, and ends there
-// in a short feathered edge. The funnel unfolds from its base forward to the rim as it opens. A dark circle lies on the base
+// in a wide soft fade broken up along the streaks. The funnel unfolds from its base forward to the rim as it opens. A dark circle lies on the base
 // itself; from in front it shows down the funnel, from an oblique view the nearer walls hide it (the mesh draws its base first,
 // so the walls lie over it). From the side or behind, the base glows white instead.
 //
@@ -31,9 +31,11 @@ uniform float travel = 0.1;
 uniform float body_alpha = 0.72;
 // How wide the well is: its walls fall away over about this share of the radius, round a broad, rounded base.
 uniform float well = 0.55;
-// Where the body's feathered edge sits and how wide it is, shares of the mouth's radius: it is gone by the rim.
-uniform float body_edge = 0.965;
-uniform float edge_soft = 0.035;
+// The rim's fade, shares of the mouth's radius: from `rim_from` it thins out toward `rim_to` (past the rim, so a faint edge
+// still reaches the arms), its edge broken up along the streaks by `rim_feather`. Matched to the still's edge (round 6).
+uniform float rim_from = 0.69;
+uniform float rim_to = 1.08;
+uniform float rim_feather = 0.3;
 uniform vec3 base_glow = vec3(1.2, 1.2, 1.3);
 // The dark circle on the base, a share of the mouth's radius.
 uniform float throat_radius = 0.24;
@@ -159,9 +161,11 @@ void fragment() {
 	deep = max(deep * 0.55, throat);
 	float glow = 1.0 - smoothstep(0.0, 0.17, look_r);
 	c = mix(c * (1.0 - deep * (1.0 - v_glow)), base_glow, glow * v_glow);
-	// The body ends at the rim in a short edge feathered along the streaks; the unfolding edge is soft.
-	float feather = (0.6 * broad + 0.4 * fine - 0.5) * edge_soft;
-	float rim = 1.0 - smoothstep(body_edge - edge_soft, body_edge + 0.5 * edge_soft, r + feather);
+	// The body thins out toward the rim in a wide soft fade whose edge follows the streaks, as wisps; the unfolding edge is soft.
+	// Wisps: coarse strands drawn out along the spiral, wide enough to stay visible from afar where the hairs melt into their mean.
+	float wisp = smoothstep(0.25, 0.75, pnoise(vec2(w * 48.0, along * 7.0 + 2.0), 48.0)) * 0.75 + (0.6 * broad + 0.4 * fine) * 0.25;
+	float feather = (wisp - 0.5) * rim_feather * smoothstep(rim_from, 1.0, r);
+	float rim = 1.0 - smoothstep(rim_from, rim_to, r + feather);
 	float edge = 1.0 - smoothstep(growth - 0.08, growth, r);
 	// Translucent walls; the base is opaque, black from in front and its glow from behind.
 	float solid = max(glow * v_glow, deep * (1.0 - v_glow));
