@@ -32,7 +32,7 @@ tutorial (launch, exterior tour, defend the station) is written on top of this.
 | Q6 | The defence grid | **Settled in T02** with the maintainer: where the emplacements sit, the weapon kinds (cannons, interceptors) and how each behaves. No default is proposed here | Settled in T02 (2026-11-13): D75 |
 | Q7 | The front-end interior | The Cobra-bay hangar, with Starfuries on their launch racks, so M8 goes from the menu straight into a launch | Maintainer, 2026-11-13: the proposed answer |
 | Q8 | Traffic around the station | Light civilian traffic in free flight: M5's civilians come from the jumpgate, approach the docking aperture and leave the world inside it; and the reverse | Maintainer, 2026-11-13: the proposed answer Refined 2026-11-13: **Saturn cargo vessels never enter the station**: they hold outside, detach their cargo pods, and the pods go in through the **cargo bay** (the zero-gravity bay) **on the spine between the bow's two forks**; ships small enough for the tunnel (94 × 34 m) fly in through the docking aperture |
-| Q9 | The turning drum and ships that touch it | The drum is a moving surface (`AnimatableBody3D`, about 66 m/s at its skin from M4's spin of 0.148 rad/s): a ship that scrapes it takes a ram at the surface's speed | Maintainer, 2026-11-13: the proposed answer |
+| Q9 | The turning drum and ships that touch it | The drum is a moving surface (`AnimatableBody3D`, about 66 m/s at its skin from M4's spin of 0.148 rad/s): a ship that scrapes it takes a ram at the surface's speed | Maintainer, 2026-11-13: the proposed answer Confirmed 2026-11-13 after T06: the skin moves at about 62 m/s, so **touching the turning drum is fatal** to a Starfury (lethal change 18 m/s); kept |
 | Q10 | The station's lights | Running lights and beacons on its extremities, lit windows on the drum and the command section (emissive maps), bay lights; the night side under the planet's shadow (M6) still shows its windows | Maintainer, 2026-11-13: the proposed answer |
 | Q11 | Maintenance bots | A few near the bays and along the hull, flying slow loops between hull points; ambient only (no targets, no damage); they go back inside when fighting starts nearby | Maintainer, 2026-11-13: the proposed answer |
 
@@ -499,6 +499,9 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   behaviour D75 names, `assets/weapons/` specs for the grid's weapons, the station's mounts bound to the turret rows, the sounds
   and flashes for each kind, Rust and GUT tests, the seeded balance fights.
 - **Notes:** a behaviour D75 does not cover goes to the maintainer before it is built.
+- **From T06 (2026-11-13):** friendly bolts (any ship friendly to the station) **stop on the station's hull without damage**
+  (maintainer), instead of passing through as through a friendly ship: the grid fires many bolts close to the hull. Section
+  health is T06's placeholder (20 000 each, about 3 300 raider bolts); tune it in the balance fights.
 - **Done when:** AC6.
 
 ### M7-T08 Launch bays and the launch sequence
@@ -520,6 +523,9 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   a margin), not a hard-coded angle; a held fighter's wave timing slips by the hold, and the 10 s gap is measured from the
   first wave's last release. Tests: a launch requested inside the sector holds and releases on leaving it; none releases inside. A launch names a wing and a door (`launch_from("alpha", 3)`); the
   player's wingmen launch from the other doors of the same wing.
+- **From T06 (2026-11-13):** T06's bay test held the drum still; with the drum turning, a fighter at rest meets its door at
+  about 36 m/s and is rammed, so the launch carries the fighter with the drum (on its rack and rail, in the drum's frame) and
+  releases it with the drum's surface velocity (Q3), never as a free body at rest beside a turning door.
 - **Done when:** AC7.
 
 ### M7-T09 The station interior for the front end
@@ -563,6 +569,8 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   fly in through the aperture and leave the world at the inner airlock.
 - **Allies from the bays (Q3):** up to 48 Starfuries: four wings (Alpha, Beta, Delta, Zeta), each launching from its own arm in
   two waves of six through T08's sequence.
+- **From T06 (2026-11-13):** the AI picks the station's rows by centre distance (the nearest 12 within 5 km), so in a crowd a
+  fighter can miss the station as a contact and not avoid it; the station's surface must always reach avoidance (AC9).
 - **Done when:** AC9's AI and traffic.
 
 ### M7-T11 Maintenance bots
