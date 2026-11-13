@@ -240,7 +240,7 @@ func start(e: EncounterEvent) -> bool:
 		return false
 	var target: Combatant = _raid_target(e) if e.kind == &"raid" else null
 	var anchor: UniversePos = _anchor_of(e, target)
-	var anchor_velocity: Vector3 = main.world.rest_velocity()  # planned velocities are against the place (M6-T08)
+	var anchor_velocity: Vector3 = _reference_rest()  # planned velocities are against the player's reference (M6-T08, T09)
 	if e.anchor == EncounterEvent.ANCHOR_TARGET:
 		anchor_velocity = target.ship.linear_velocity if target != null else main.ship.linear_velocity
 	var target_name: String = target.display_name if target != null else main.combatant.display_name
@@ -351,6 +351,15 @@ func _raid_target(e: EncounterEvent) -> Combatant:
 	if near.is_empty():
 		return null
 	return near[mini(floori(e.target_pick * float(near.size())), near.size() - 1)]
+
+
+# What "at rest" is where the player is (M6-T09): the player's reference's velocity (a station, a gate, or the circular orbit
+# under a planet), else the World's anchor's.
+func _reference_rest() -> Vector3:
+	var reference: FlightReference = main.flight_reference
+	if reference != null and is_instance_valid(reference) and reference.frame.is_set():
+		return reference.frame.rest_velocity
+	return main.world.rest_velocity()
 
 
 func _anchor_of(e: EncounterEvent, target: Combatant) -> UniversePos:

@@ -7,10 +7,14 @@ extends Node
 const CENTRE: StringName = &"epsilon_iii"
 ## The system the flight scene loads unless a scenario names another.
 const DEFAULT_SYSTEM: StringName = &"local"
-## The place the World falls with when the system has it (M6-T04): the station's rail. M6-T09 lets a scenario choose.
-const DEFAULT_ANCHOR: StringName = &"babylon5"
+## The place the World falls with when a scenario names no anchor (M6-T04, M6-T09): the station's rail.
+const DEFAULT_ANCHOR: StringName = ScenarioFrame.DEFAULT_PLACE
 
 var system: StarSystem
+## The World whose system time the provider reads (M6-T09); without one, the sim clock.
+var world: WorldFrame = null
+## The scenario's frame as resolved (`ScenarioFrame.resolve`), for the provider; empty before `Main` sets it.
+var frame: Dictionary = {}
 
 
 func setup(system_id: StringName) -> void:
@@ -27,7 +31,11 @@ func _ready() -> void:
 		&"a_min": {"get": func() -> float: return system.a_min, "unit": "m/s^2", "doc": "The weakest pull that still counts"},
 		&"bodies": {"get": _bodies_text, "doc": "Each body: kind, GM, radius, atmosphere top and the zone its pull reaches"},
 		&"places": {"get": _places_text, "doc": "Each place: its position from Epsilon III's centre now, in km"},
-		&"gate_distance_km": {"get": func() -> float: return system.distance_m(&"jumpgate", &"babylon5", SimClock.now()) / 1000.0,
+		&"epoch_h": {"get": func() -> float: return world.epoch_s / 3600.0 if world != null else 0.0, "unit": "h",
+				"doc": "The scenario's epoch: the system time at its start, from the data's epoch (M6-T09)"},
+		&"time_h": {"get": func() -> float: return _now() / 3600.0, "unit": "h", "doc": "The system time now: the epoch plus the sim clock"},
+		&"anchor": {"get": _anchor_text, "doc": "Where the scenario put the World: place <id> at <x y z> m, body <id> or orbit <id>"},
+		&"gate_distance_km": {"get": func() -> float: return system.distance_m(&"jumpgate", &"babylon5", _now()) / 1000.0,
 				"unit": "km", "doc": "How far the jumpgate is from the station now"},
 		&"station_period_h": {"get": func() -> float: return system.period_s(&"babylon5") / 3600.0, "unit": "h",
 				"doc": "The station's orbit period around Epsilon III"},
@@ -42,7 +50,8 @@ func _bodies_text() -> String:
 	var lines := PackedStringArray()
 	for key: StringName in system.body_ids:
 		var row: Dictionary = system.info(key)
-		lines.append("%s (%s) gm %.3e radius %.0f km atmosphere %.0f km zone %.0f km" % [key, row["kind"], row["gm"],
+		# GDScript's `%` has no %e: the GM goes in through `num_scientific`.
+		lines.append("%s (%s) gm %s radius %.0f km atmosphere %.0f km zone %.0f km" % [key, row["kind"], String.num_scientific(row["gm"]),
 				float(row["radius_m"]) / 1000.0, float(row["atmosphere_top_m"]) / 1000.0, system.zone_radius_m(key) / 1000.0])
 	return "; ".join(lines)
 
@@ -50,7 +59,20 @@ func _bodies_text() -> String:
 func _places_text() -> String:
 	var lines := PackedStringArray()
 	for key: StringName in system.place_ids:
-		var rel: PackedFloat64Array = system.relative_state(key, CENTRE, SimClock.now())
+		var rel: PackedFloat64Array = system.relative_state(key, CENTRE, _now())
 		if rel.size() >= 3:
 			lines.append("%s %.1f %.1f %.1f" % [key, rel[0] / 1000.0, rel[1] / 1000.0, rel[2] / 1000.0])
 	return "; ".join(lines)
+
+
+func _now() -> float:
+	return world.system_time() if world != null else SimClock.now()
+
+
+func _anchor_text() -> String:
+	if frame.is_empty():
+		return "none"
+	if frame["kind"] == ScenarioFrame.KIND_PLACE:
+		var off: PackedFloat64Array = frame["offset"]
+		return "place %s at %.0f %.0f %.0f" % [frame["id"], -off[0], -off[1], -off[2]]
+	return "%s %s" % [frame["kind"], frame["id"]]

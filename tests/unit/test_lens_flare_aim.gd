@@ -42,3 +42,10 @@ func test_a_star_to_the_right_projects_right_of_centre_and_one_above_projects_ab
 	assert_almost_eq(right.y, 0.5, 0.001)
 	var above: Vector2 = LensFlareAim.sun_uv(camera, Vector3(0.0, 0.2, -1.0).normalized())
 	assert_lt(above.y, 0.5, "screen y runs down")
+
+
+func test_a_star_square_to_the_view_projects_off_screen_without_an_error() -> void:
+	# M6-T09: the sun lies in the game's XZ plane, so a camera looking along -Z can have it exactly to its side.
+	var uv: Vector2 = LensFlareAim.sun_uv(camera, Vector3(-1.0, 0.0, 0.0))
+	assert_true(is_finite(uv.x) and is_finite(uv.y))
+	assert_lt(uv.x, -1.0, "far off the left edge")

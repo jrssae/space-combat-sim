@@ -96,6 +96,11 @@ var boost_sum: PackedFloat64Array = PackedFloat64Array([0.0, 0.0, 0.0])
 ## free-falling anchor circles.
 var star_system: StarSystem = null
 var anchor_name: StringName = &""
+## Where the scenario's origin (a `UniversePos` of zero) stands from the place the World rides (M6-T09): game axes, m, 64-bit;
+## zero on an orbit. The anchor is that point, carried along the place's rail.
+var anchor_offset: PackedFloat64Array = PackedFloat64Array([0.0, 0.0, 0.0])
+## The system time at sim time 0 (M6-T09, Q9): the scenario's epoch. Everything that asks the ephemeris uses `system_time()`.
+var epoch_s: float = 0.0
 ## Automatic position rebase: when `focus` is farther than this many metres from the local origin, rebase onto it.
 ## 0 disables it (the default, which bare-World tests rely on); `main.tscn` sets 5 000 m.
 @export var auto_rebase_distance_m: float = 0.0
@@ -165,7 +170,7 @@ class FrameSlot extends Node:
 
 	func _physics_process(delta: float) -> void:
 		if sample:
-			world.sample_gravity(SimClock.now())
+			world.sample_gravity(world.system_time())
 		else:
 			world._take_boosts()
 			world.step_anchor(delta)
@@ -544,14 +549,21 @@ func gravity_active() -> bool:
 
 
 ## Falls with place `place`'s rail (the station's orbit): nothing integrates, the ephemeris gives its state at each tick's
-## time. False, with a warning, when the system or the place cannot be used.
-func anchor_on_rail(system: StarSystem, place: StringName) -> bool:
+## time. `offset` is where the scenario's origin stands from the place (`anchor_offset`). False, with a warning, when the
+## system or the place cannot be used.
+func anchor_on_rail(system: StarSystem, place: StringName, offset: PackedFloat64Array = PackedFloat64Array()) -> bool:
 	if not _take_system(system, place):
 		return false
 	if not _sim.core.frame_anchor_on_rail(system.index_of(place)):
 		push_warning("WorldFrame: %s cannot anchor on %s" % [name, place])
 		return false
+	anchor_offset = offset.duplicate() if offset.size() == 3 else PackedFloat64Array([0.0, 0.0, 0.0])
 	return _anchored(system, place)
+
+
+## The system time now (M6-T09): the scenario's epoch plus the sim clock.
+func system_time() -> float:
+	return epoch_s + SimClock.now()
 
 
 ## Falls with a free-falling test particle: `state` is its position then velocity (six numbers, m and m/s, game axes)
@@ -560,9 +572,10 @@ func anchor_in_orbit(system: StarSystem, body: StringName, state: PackedFloat64A
 	if not _take_system(system, body):
 		return false
 	var dt: float = 1.0 / float(Engine.physics_ticks_per_second)
-	if not _sim.core.frame_anchor_in_orbit(system.index_of(body), state, SimClock.now(), dt):
+	if not _sim.core.frame_anchor_in_orbit(system.index_of(body), state, system_time(), dt):
 		push_warning("WorldFrame: %s cannot fall round %s from %s" % [name, body, state])
 		return false
+	anchor_offset = PackedFloat64Array([0.0, 0.0, 0.0])
 	return _anchored(system, body)
 
 
@@ -570,6 +583,7 @@ func anchor_in_orbit(system: StarSystem, body: StringName, state: PackedFloat64A
 func clear_anchor() -> void:
 	star_system = null
 	anchor_name = &""
+	anchor_offset = PackedFloat64Array([0.0, 0.0, 0.0])
 	_gravity_active = false
 	if _has_core():
 		_sim.core.frame_clear()
@@ -606,7 +620,9 @@ func _adopt_origin() -> void:
 	_origin_stepped = false
 	if not _has_core():
 		return
-	var at: PackedFloat64Array = _sim.core.frame_origin()
+	# The core measures from the place itself; `origin` from the scenario's origin beside it.
+	var raw: PackedFloat64Array = _sim.core.frame_origin()
+	var at := PackedFloat64Array([raw[0] - anchor_offset[0], raw[1] - anchor_offset[1], raw[2] - anchor_offset[2]])
 	var moved := PackedFloat64Array([at[0] - origin.x, at[1] - origin.y, at[2] - origin.z])
 	origin = UniversePos.new(at[0], at[1], at[2], origin.system_id)
 	_drift_anchored(moved)
@@ -648,13 +664,13 @@ func _anchored(system: StarSystem, id: StringName) -> bool:
 	star_system = system
 	anchor_name = id
 	_push_origin()
-	sample_gravity(SimClock.now())
+	sample_gravity(system_time())
 	return true
 
 
 func _push_origin() -> void:
 	if _has_core():
-		_sim.core.frame_set_origin(origin.x, origin.y, origin.z)
+		_sim.core.frame_set_origin(origin.x + anchor_offset[0], origin.y + anchor_offset[1], origin.z + anchor_offset[2])
 
 
 func _frame_call(method: StringName, args: Array, fallback: Variant) -> Variant:

@@ -51,7 +51,9 @@ func _put_player_in_front(metres: float) -> void:
 func test_the_player_jumps_out_and_comes_back_through_the_blue_vortex() -> void:
 	await _start()
 	assert_not_null(gate, "free flight places the gate")
-	assert_almost_eq(gate.global_position.distance_to(main.ship.global_position), 50000.0, 10.0, "50 km from the station's place")
+	assert_not_null(main.far_props.station, "free flight places the station's stand-in (M6-T09)")
+	assert_almost_eq(gate.global_position.distance_to(main.far_props.station.global_position), 50000.0, 10.0,
+			"on the station's rail, 50 km from it (M6-T09)")
 	await _put_player_in_front(2600.0)
 	assert_false(main.gates.jump_offered(), "not offered until the gate is targeted")
 	assert_true(main.ship.targeting.select_id(gate.targetable.get_instance_id()))

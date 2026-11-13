@@ -4,8 +4,8 @@ extends Node
 ## distance and size on screen) and command `far` (`status`, `station` to place the station's stand-in where the scenarios put
 ## the station, `view <gate|station> <km>` to hold the camera that far from one for captures, `off`).
 ##
-## The stand-in has no `Targetable` of its own yet, so it is heard, and drawn, as far as a gate or a nav buoy: 1 000 km. Placing
-## it in free flight for good is M6-T09's (it calls `dress_station`).
+## The stand-in has no `Targetable` of its own yet, so it is heard, and drawn, as far as a gate or a nav buoy: 1 000 km. A
+## scenario that anchors on the station's rail has `Main` place it for good (`place_station`, M6-T09).
 
 const NODE_NAME: String = "FarPropHost"
 const ACTIONS: Array[StringName] = [&"status", &"station", &"view", &"off"]
@@ -18,8 +18,10 @@ const VIEW_BEARING: Vector3 = Vector3(-0.35, 0.25, -1.0)
 const VIEW_FOV_DEG: float = 50.0
 
 var main: Main = null
-## The station's stand-in placed by `far station`, or null.
+## The station's stand-in, placed by the scenario or by `far station`, or null.
 var station: StationStandin = null
+## Where the station stands in the scenario's coordinates (M6-T09): where `far station` puts it back.
+var station_place: UniversePos = null
 
 var _view_prop: Node3D = null
 
@@ -52,8 +54,20 @@ func prop_count() -> int:
 	return get_tree().get_nodes_in_group(FarProp.GROUP).size() if is_inside_tree() else 0
 
 
-## Places the station's stand-in at the station's place (the scene's origin: the scenarios place the gate from there), or
-## takes it away when it is there. False when its asset is missing.
+## Places the station's stand-in for good at `at` (three numbers in the scenario's coordinates, M6-T09), dressed for the
+## far field. False, with nothing placed, when `at` is empty, beyond the stand-in's range, or its asset is missing.
+func place_station(at: PackedFloat64Array) -> bool:
+	if at.size() < 3 or Vector3(at[0], at[1], at[2]).length() > STATION_RANGE_M:
+		return false
+	station_place = UniversePos.new(at[0], at[1], at[2], main.world.origin.system_id)
+	if station != null and is_instance_valid(station):
+		station.queue_free()
+		station = null
+	return toggle_station()
+
+
+## Places the station's stand-in at the station's place (where the scenario put it, else the scenario's origin), or takes it
+## away when it is there. False when its asset is missing.
 func toggle_station() -> bool:
 	if station != null and is_instance_valid(station):
 		station.queue_free()
@@ -65,7 +79,8 @@ func toggle_station() -> bool:
 		made.free()
 		return false
 	dress_station(made)
-	main.world.spawn(made, UniversePos.new(0.0, 0.0, 0.0, main.world.origin.system_id), Basis.IDENTITY, main.world)
+	var at: UniversePos = station_place if station_place != null else UniversePos.new(0.0, 0.0, 0.0, main.world.origin.system_id)
+	main.world.spawn(made, at, Basis.IDENTITY, main.world)
 	station = made
 	return true
 

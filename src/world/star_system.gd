@@ -15,6 +15,8 @@ const MINOR_KIND: int = 3
 ## Matches the kernel's `MAX_ECCENTRICITY`.
 const MAX_ECCENTRICITY: float = 0.99
 const A_MIN_DEFAULT: float = 0.5
+## The id `orbit_state` gives a scenario's orbit on its copy of the system.
+const SCENARIO_ORBIT: StringName = &"__scenario_orbit"
 
 var id: StringName = &""
 var title: String = ""
@@ -30,6 +32,8 @@ var _native: RefCounted = null
 var _index: Dictionary = {}  # StringName -> the kernel's index
 var _info: Dictionary = {}  # StringName -> {kind, parent, gm, radius_m, atmosphere_top_m}
 var _names: Dictionary = {}  # StringName -> the optional display name of a body or place
+var _place_body: Dictionary = {}  # StringName -> the body a place circles (M6-T09)
+var _table: Dictionary = {}  # the system's own table, kept to build a scenario's orbit beside it (M6-T09)
 
 
 ## The system `system_id` of the shipped file, or one with `errors` when it cannot be used.
@@ -62,6 +66,7 @@ func build(system_id: StringName, entry: Variant) -> void:
 		errors.append("system %s is not an object" % system_id)
 		return
 	var table: Dictionary = entry
+	_table = table
 	title = str(table.get("name", system_id))
 	var floor_value: Variant = table.get("a_min", A_MIN_DEFAULT)
 	if not _is_number(floor_value) or float(floor_value) < 0.0:
@@ -137,6 +142,33 @@ func dominant_body(point: PackedFloat64Array, reference: StringName, time_s: flo
 
 func has_id(name: StringName) -> bool:
 	return _index.has(name)
+
+
+## The star every other body circles (the first body), or an empty name.
+func star_id() -> StringName:
+	return body_ids[0] if not body_ids.is_empty() else &""
+
+
+## The body a place circles (M6-T09): the station's planet, also for a place that rides another's orbit. Empty for a body.
+func body_of_place(place: StringName) -> StringName:
+	return _place_body.get(place, &"")
+
+
+## Where a point on `orbit` (the file's orbit keys, degrees) is against `body`'s centre at `time_s` (M6-T09): six numbers,
+## position then velocity, kernel axes. The ephemeris works it out on a copy of this system with the orbit added as a place,
+## so GDScript still computes no orbit. `{"state", "error"}`: the state is empty and the error says why when it is refused.
+func orbit_state(body: StringName, orbit: Dictionary, time_s: float) -> Dictionary:
+	if not is_valid() or not _info.has(body):
+		return {"state": PackedFloat64Array(), "error": "no body %s in system %s" % [body, id]}
+	var table: Dictionary = _table.duplicate(true)
+	var places: Array = (table.get("places", []) as Array).duplicate(true)
+	places.append({"id": SCENARIO_ORBIT, "parent": String(body), "orbit": orbit})
+	table["places"] = places
+	var copy := StarSystem.new()
+	copy.build(id, table)
+	if not copy.is_valid():
+		return {"state": PackedFloat64Array(), "error": "; ".join(copy.errors)}
+	return {"state": copy.relative_state(SCENARIO_ORBIT, body, time_s), "error": ""}
 
 
 ## The body or place at the ephemeris's `index`, or an empty name.
@@ -254,6 +286,7 @@ func _add_place(native: RefCounted, position: int, raw: Variant) -> void:
 			errors.append("%s: phase_rad must be a number" % where)
 			return
 		index = native.call(&"add_place", _index[leader], float(row["phase_rad"]))
+		_place_body[key] = _place_body.get(leader, &"")
 	else:
 		var parent_name: StringName = StringName(str(row.get("parent", "")))
 		if not _info.has(parent_name):
@@ -263,6 +296,7 @@ func _add_place(native: RefCounted, position: int, raw: Variant) -> void:
 		if orbit.is_empty():
 			return
 		index = native.call(&"add_body", MINOR_KIND, 0.0, _index[parent_name], orbit)
+		_place_body[key] = parent_name
 	if index < 0:
 		errors.append("%s: the ephemeris refused it (a place needs an orbit to ride)" % where)
 		return

@@ -42,7 +42,10 @@ extends RefCounted
 ##                                                  #       count, radius_m: Vector2 (min, max bounding radius), seed, min_gap_m},
 ##                                                  #       the input `BeltLayout.place` takes; may be empty
 ##      "civilian_names": Dictionary,               # (M5-T30) civilian hull -> PackedStringArray of names; may be empty
-##      "placeholders": Dictionary}                 # (M5-T30) filled by `resolve_random_civilian`: "{civilian}" -> name
+##      "placeholders": Dictionary,                 # (M5-T30) filled by `resolve_random_civilian`: "{civilian}" -> name
+##      "frame": Dictionary}                        # (M6-T09) the `anchor` and `epoch` blocks: where the World anchors and
+##                                                  #       the system time at the start (`ScenarioFrame.parse`); every
+##                                                  #       position above is measured from that anchor
 ## Every spawn (wave or load) carries "wing" (a wing's name, "" for none; it needs an "ai" behaviour), "cargo_pods" (M5-T16: how
 ## many cargo pods a hull with pod mounts flies with, 0-3; -1, the default, mounts them all) and "forward" (M5-T16: the spawn's
 ## own heading, a Vector3; zero, the default, takes the player's). A wing named by a spawn
@@ -197,6 +200,9 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	var civilian_names: Variant = _civilian_names(root.get("civilian_names", {}), source)
 	if civilian_names is String:
 		return _failure(civilian_names as String)
+	var frame: Variant = ScenarioFrame.parse(root.get("anchor"), root.get("epoch"), source)
+	if frame is String:
+		return _failure(frame as String)
 
 	var result: Dictionary = _empty()
 	result["ok"] = true
@@ -216,6 +222,7 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	result["cinematics"] = cinematics
 	result["belts"] = belts
 	result["civilian_names"] = civilian_names
+	result["frame"] = frame
 	return result
 
 
@@ -686,11 +693,11 @@ static func basis_facing(forward: Vector3) -> Basis:
 	return Basis.looking_at(f, up)
 
 
-## Three finite numbers -> UniversePos in `system`, or null. Validated here so UniversePos.from_array never errors.
-# A `jumpgates[]` entry (M6-T14): `position` [x, y, z] puts it there; else it stands `bearing` (default [0, 0, -1]) from `station` (the
-# stand-in of the star-system place `from`, default "babylon5", at [0, 0, 0] unless given) at the distance the system data
-# gives between `from` and `place` (default "jumpgate"), which `Main` reads. `facing` is the way its arrivals leave (its front,
-# -Z): back toward the station unless given. Returns the entry or why it is wrong.
+# A `jumpgates[]` entry (M6-T14, M6-T09): `position` [x, y, z] puts it there; else `Main` puts it on the rail of the star-system
+# place `place` (default "jumpgate") from the ephemeris, its front (-Z, the way its arrivals leave) toward the place `from`
+# (default "babylon5") unless `facing` is given. Only when the system cannot place it does it stand `bearing` (default
+# [0, 0, -1]) from `station` ([0, 0, 0] unless given) at the data's distance between the two. Returns the entry or why it is
+# wrong.
 static func _jumpgate(entry: Dictionary, prop_name: String, system: StringName, where: String) -> Variant:
 	var position: Variant = null
 	if entry.has("position"):
@@ -714,6 +721,7 @@ static func _jumpgate(entry: Dictionary, prop_name: String, system: StringName, 
 			"station": station, "bearing": (bearing as Vector3).normalized(), "facing": (facing as Vector3).normalized()}
 
 
+## Three finite numbers -> UniversePos in `system`, or null. Validated here so UniversePos.from_array never errors.
 static func _universe_pos(value: Variant, system: StringName) -> Variant:
 	var parts: Variant = _numbers3(value)
 	if parts == null:

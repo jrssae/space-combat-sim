@@ -117,6 +117,9 @@ res://tests/unit/test_vortex_swirl.gd
 res://tests/unit/test_gate_activation.gd
 # Missions, dialog, scenarios
 res://tests/unit/test_scenario_loader.gd
+res://tests/unit/test_scenario_frame.gd
+res://tests/integration/test_scenario_anchor.gd
+res://tests/integration/test_true_scale_start.gd
 res://tests/unit/test_mission_sequencer.gd
 res://tests/unit/test_triggers.gd
 res://tests/unit/test_objective_book.gd

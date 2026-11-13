@@ -291,7 +291,7 @@ which changes the same native rows and rebase path:
 | T06 | A | L4: the rebase cascade natively, the cached solid shifted in place, hidden ships skipped | T05 | Opus | A measured native fix on the path T05 rewrote | done (AC2 restated, the per-node rest moved to T21; maintainer, 2026-11-12) |
 | T07 | A | Gravity on everything: ships, tier rows, bolts, debris, the brake's and the AI's feed-forward; the gravity stand-in removed | T04 | Opus | Native kernels with parity at zero gravity | done |
 | T08 | A | Flying under gravity: the clamp, the assist's and brake's reference, the HUD's reference and altitude, planet impact | T07, Q4 to Q6 | Opus | Flight-model semantics the player feels | done |
-| T09 | B | Scenarios at true scale: spawns relative to bodies, stations and orbits, epochs, free flight beside the station's stand-in | T03, T08, Q7, Q9 | Opus | Every scenario and mission must keep working | in progress |
+| T09 | B | Scenarios at true scale: spawns relative to bodies, stations and orbits, epochs, free flight beside the station's stand-in | T03, T08, Q7, Q9 | Opus | Every scenario and mission must keep working | done |
 | T10 | C | Scaled-space layer: placement, draw order and depth, the true sun direction, the planet's shadow | T04 | Fable | Precision and draw order in Forward+ at planetary distances; a design that later layers stand on | done |
 | T11 | C | The planet and its atmosphere: the `planet` generator and the scattering shader (generator half early) | T10, Q10 | Opus | Shader maths on T10's layer; the look is (H) | done |
 | T12 | C | The sun: disc and glow from the star's colour, the lens flare and key light on the true direction | T10 | Sonnet | A small shader and the existing flare | done |
@@ -773,6 +773,82 @@ which changes the same native rows and rebase path:
   headless tests run unchanged in outcome.
 - **Tests:** each spawn form in the loader: quick; the missions' headless runs keep their tiers.
 - **Done when:** AC6; free flight starts beside the station's stand-in with the planet in view.
+
+- **Done (2026-11-12):**
+  - **Where a scenario is: `anchor`** (`src/world/scenario_frame.gd`, `ScenarioFrame`, pure; parsed by `ScenarioLoader` into
+    `frame`). Three forms: `{"place": "babylon5", "at": [x, y, z]}` (on a place's rail; `at` is where the place stands in the
+    scenario's coordinates, so every layout keeps its numbers; `standin`, default true, puts the station's stand-in there);
+    `{"body": "epsilon_iii", "altitude_m": h, "phase_deg", "inclination_deg"}` (a circle that high, at that phase at the
+    epoch); `{"orbit": {"body", "a_m", "e", ...}}` (any orbit, the star system's own keys). The orbit forms get their start
+    state from the ephemeris on a copy of the system with the orbit added as a place (`StarSystem.orbit_state`), so GDScript
+    still computes no orbit. No `anchor`: the station's rail with the scenario's origin on it and no stand-in, which is what
+    every test's own scenario had before. Refusals name the key and why.
+  - **The anchor is the scenario's origin** (D64 kept: a `UniversePos` is relative to the World's anchor). For the place
+    form the World rides the place's rail with `WorldFrame.anchor_offset` (the scenario's origin from the place, 64-bit): the
+    core is told the origin against the place itself (`_push_origin` adds the offset, `_adopt_origin` takes it off), so the
+    gravity, the bodies, the impacts and the rest velocity need no change. The few readers that took the anchor to be the
+    place subtract it: `ScaledSpace.body_from_anchor` and `FlightReference.places` (the station's place). So no scenario
+    position moved: the layouts, the missions' scripts, triggers, cinematics and wave anchors are untouched, and the
+    missions' outcomes are the same by construction. The alternative (moving every position in the loader by the offset)
+    would have touched six consumers of `"origin"` and the escort's script for no gain.
+  - **When: `epoch`**, seconds of system time at the start (or `"seeded"`). Decision: **the sim clock still starts at 0**;
+    the World holds `epoch_s` and `system_time()` = epoch + `SimClock.now()` is what every ephemeris reader asks (the frame's
+    sample and orbit anchor, `ScaledSpace`, `StarSystemHost`, the gate's placing). Seeding `SimClock` itself would have
+    changed every gameplay timer's rounding (M4-T37 starts each battle at 0 for that) and fed large times to shaders; on the
+    World it also keeps D71 (no new state in an autoload) and cannot leak between tests. `ScaledSpace.STAND_IN_EPOCH_S` is
+    gone; `epoch_offset_s` stays 0 for `scaled epoch` captures. A seeded epoch (`ScenarioFrame.seeded_epoch`) takes a day of
+    the planet's year from the seed and, on a place's rail, the times of one turn of the station whose start is lit (key
+    light 0.999 or more), has the planet's centre within 25 degrees of the player's forward and its disc at least half lit,
+    and picks one from the seed; on an orbit only the light counts. About 3 to 8 ms.
+  - **Every scenario at true scale**: all seven files name `{"place": "babylon5", "at": [5500, -1200, -6000]}` (the
+    station 6.6 to 9.6 km from each start, front right of the -Z layouts; `belt_showcase` has it at [2000, 4500, -9000], above
+    its belt) and an epoch: free flight `"seeded"` (from the run's seed, as its encounters); the sandbox, the civilian
+    showcase, the belt showcase and the civilian escort 540 148 s (the planet 8 degrees off ahead, 67 % lit); the instructor's
+    route 3 267 594 s (3 degrees, 98 %); the dogfight 7 482 671 s (its player faces -X: 13 degrees, 95 %). The escort's belt,
+    beacons and route keep their layout with the station beside its start. `Main._anchor_world` resolves the frame (a frame
+    the system cannot place falls back to the station's rail with a warning), sets the epoch and anchors; `FarPropHost.
+    place_station` builds, dresses (`dress_station`) and places the stand-in for good (`far station` takes it away and puts it
+    back at the same place); the gate stands on its rail where the ephemeris has it at the start (`JumpgateHost.place` with
+    the frame: 50 km ahead on the station's orbit, its front toward the station), the bearing only a fallback with no frame,
+    and a rail beyond the gate's 1 000 km broadcast is not placed.
+  - **Encounters** take their planned velocities against the player's reference (`EncounterDirector._reference_rest`: the
+    reference's rest, else the World's); against the station that is zero, as before.
+  - **Found on the way:** with an epoch of 0 the sun lies exactly to the side of a camera looking along -Z (the sun's
+    direction has no Y), and `LensFlareAim.sun_uv` asked Godot to project a point on the camera plane (`p.d == 0`, an error
+    each frame that failed the mission tests); the probe is now nudged a hair in front (off screen). `system.bodies` printed
+    a format error (GDScript has no `%e`); fixed with `String.num_scientific`.
+  - Console: `system` gains `epoch_h`, `time_h` and `anchor`; `scaled epoch` is an offset on the World's system time; `far
+    station` toggles at the station's place. In `info.md`.
+  - Tests. **Quick** (in `tests/quick_suite.txt`): `test_scenario_frame.gd` (new, 9, 0.4 s: no anchor, the place form and
+    the station where `at` says, the gate 50 km ahead on the rail at three epochs, the body form's circle, phase and tilt, the
+    orbit form at periapsis with the vis-viva speed and its own `epoch_s`, nine refusals, seeded epochs for seven seeds lit
+    with the planet ahead and repeatable, epoch 0 in the shadow, every shipped scenario lit with the planet in view and the
+    station 6 to 12 km off); `test_scenario_anchor.gd` (new, 4, 0.8 s: the core sees the station at `at` and the planet at the
+    epoch's place, through a position rebase, off the anchor at 2 500 m/s and back; the layer and the HUD's reference measure
+    from the scenario's origin; a body anchor falls from the scenario's state with the planet pulling);
+    `test_true_scale_start.gd` (new, 2, 0.8 s, the real main scene: free flight's seeded epoch with the sim clock at 0, the
+    dressed stand-in at [5500, -1200, -6000], the gate 50 km from it facing it, the planet drawn within 30 degrees of the
+    view, key light 1, REF BABYLON 5 at the stand-in; another seed another epoch; the sandbox keeps 540 148 s). Standard:
+    `test_lens_flare_aim.gd` (one new test), `test_jumpgate_in_play.gd` (the gate's 50 km now measured from the stand-in).
+    The missions' and scenarios' headless runs with `GUT_SLOW=1`, outcomes unchanged: `test_civilian_escort` 12/12,
+    `test_civilian_flight` 5/5, `test_dogfight` 4/5 (the balance fight pending, as gated; the same-seed fight identical),
+    `test_instructor_route` 4/4, `test_m3_sandbox` 1/2 (balance pending), `test_asteroid_belt` 4/4, `test_mission_runner`
+    18/18, `test_mission_skip` 7/7, `test_rebase_in_play` 9/9, `test_speed_and_autotrack` 16/16, `test_wave_director` 15/15,
+    `test_jumpgate_in_play` 3/3, `test_hud` 13/13, `test_main_scene` 14/14, `test_encounters` 17/17, `test_scaled_space`
+    18/18, `test_far_props` 8/8, `test_flight_reference` 4/4, `test_free_fall` 7/7. Quick tier: 1 872 of 1 873 GUT (the one
+    failure is `test_velocity_rebase` reading `AsteroidField._bodies`, which T21's work in progress changes), 136 Rust, 331
+    Python. The compile check and the console smoke (`wait 30; state ship; state system`) clean.
+  - GPU (RX 6950 XT, RADV, Wayland, Forward+, free flight, 1200x675 asked, 1500x844 drawn): `forward_plus`, 64 draw calls,
+    `render.vram_mb` 411 MB (sysfs 2 893 MB with the desktop), 41 fps in the short run (the window opened and closed
+    unfocused); key light 1.00. Screenshot (H): `references/screenshots/M6-T09 start/free_flight_start.png`: the planet ahead
+    over the ship, the station's stand-in front right, REF BABYLON 5 at 8.2 km.
+  - (H): the start view (the station's place `at` [5500, -1200, -6000] and its orientation along Z; the planet's phase
+    rules: within 25 degrees, half lit or more); the fixed epochs chosen per scenario; free flight's planet is nearly full
+    for some seeds (the sun behind the player), half lit at worst.
+  - Left: the gate is placed on its rail at the start and then holds still in the frame, while its true place turns round
+    the station once an orbit (the chord between them moves about 4.5 m/s, 16 km an hour); M7 or a moving prop row can carry
+    it. The station's stand-in has no collision (M4's look-only stand-in; M7 replaces it). `docs/architecture.md` §14.6 and
+    §19 are T16's.
 
 ### M6-T10 Scaled-space layer
 

@@ -99,8 +99,8 @@ func speed_mps() -> float:
 	return frame.speed_of(ship.linear_velocity) if frame.is_set() else ship.speed_against_rest()
 
 
-## The places that can be the reference for a ship at `at`: the World's anchor when it is a place of the star system, and the
-## broadcasting nodes of `place_source`, each moving with the anchor.
+## The places that can be the reference for a ship at `at`: the place the World rides when it is one (where it stands from the
+## scenario's origin, M6-T09), and the broadcasting nodes of `place_source`, each moving with the anchor.
 func places(at: Vector3) -> Array[ReferenceFrame.Candidate]:
 	var out: Array[ReferenceFrame.Candidate] = []
 	var rest_v: Vector3 = world.rest_velocity()
@@ -108,7 +108,8 @@ func places(at: Vector3) -> Array[ReferenceFrame.Candidate]:
 	var system: StarSystem = world.star_system
 	if system != null and system.place_ids.has(world.anchor_name):
 		out.append(ReferenceFrame.Candidate.place(world.anchor_name, system.display_name(world.anchor_name).to_upper(),
-				world.universe_to_local(UniversePos.new(0.0, 0.0, 0.0, world.origin.system_id)), rest_v, rest_a,
+				world.universe_to_local(UniversePos.new(-world.anchor_offset[0], -world.anchor_offset[1], -world.anchor_offset[2],
+						world.origin.system_id)), rest_v, rest_a,
 				float(Settings.get_value(&"reference_place_range_km")) * KM))
 	if place_source.is_valid():
 		for node: Variant in place_source.call():

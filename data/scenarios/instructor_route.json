@@ -1,4 +1,5 @@
 {"scenario_id": "instructor_route", "description": "A training route past nav buoys, with an ally Starfury to follow. A quiet place to practise flying.", "system_id": "local",
+ "anchor": {"place": "babylon5", "at": [5500, -1200, -6000]}, "epoch": 3267594,
  "player": {"position": [0, 0, 0], "forward": [0, 0, -1]},
  "props": [
    {"type": "nav_buoy", "name": "NAV ALPHA",   "position": [0, 0, -500]},

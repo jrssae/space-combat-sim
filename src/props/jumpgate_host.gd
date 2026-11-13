@@ -100,10 +100,24 @@ func _process(_delta: float) -> void:
 	_fade.color = Color(_flash_colour.r * flash, _flash_colour.g * flash, _flash_colour.b * flash, maxf(flash, black))
 
 
-## Spawns a scenario's `jumpgate` prop (`ScenarioLoader._jumpgate`): at its position, else `bearing` from its station at the
-## distance `system` gives between the two places, its front along `facing`. Returns the gate.
-func place(entry: Dictionary, system: StarSystem) -> Jumpgate:
+## Spawns a scenario's `jumpgate` prop (`ScenarioLoader._jumpgate`): at its position, else on its rail where the ephemeris has
+## it at the scenario's start (M6-T09; `frame` is `ScenarioFrame.resolve`'s result), its front toward its station unless the
+## entry gives `facing`. Only with no frame does it stand `bearing` from its station at the data's distance. Returns the gate,
+## or null when its rail is beyond its broadcast range from the scenario's origin (a scenario on another orbit).
+func place(entry: Dictionary, system: StarSystem, frame: Dictionary = {}) -> Jumpgate:
 	var at: UniversePos = entry["position"] as UniversePos
+	var facing: Vector3 = entry["facing"]
+	var on_rail: PackedFloat64Array = ScenarioFrame.place_in_scene(frame, system, entry["place"], float(frame.get("epoch_s", 0.0))) \
+			if at == null else PackedFloat64Array()
+	if on_rail.size() == 3:
+		var rail := Vector3(on_rail[0], on_rail[1], on_rail[2])  # the rail's numbers fit 32 bits here: within 1 000 km
+		if rail.length() > Jumpgate.BROADCAST_RANGE_M:
+			push_warning("JumpgateHost: %s is %.0f km from the scenario's origin; not placed" % [entry["place"], rail.length() / 1000.0])
+			return null
+		at = UniversePos.new(on_rail[0], on_rail[1], on_rail[2], main.world.origin.system_id)
+		var station: PackedFloat64Array = ScenarioFrame.place_in_scene(frame, system, entry["from"], float(frame["epoch_s"]))
+		if not bool(entry.get("facing_given", false)) and station.size() == 3:
+			facing = (Vector3(station[0], station[1], station[2]) - rail).normalized()
 	if at == null:
 		var distance: float = FALLBACK_DISTANCE_M
 		if system != null and system.is_valid() and system.has_id(entry["place"]) and system.has_id(entry["from"]):
@@ -112,7 +126,6 @@ func place(entry: Dictionary, system: StarSystem) -> Jumpgate:
 			push_warning("JumpgateHost: the star system cannot place %s from %s; %.0f km from the station" % [entry["place"],
 					entry["from"], FALLBACK_DISTANCE_M / 1000.0])
 		at = (entry["station"] as UniversePos).plus_local((entry["bearing"] as Vector3) * distance)
-	var facing: Vector3 = entry["facing"]
 	var up: Vector3 = Vector3.UP if absf(facing.normalized().dot(Vector3.UP)) < 0.99 else Vector3.BACK
 	var gate: Jumpgate = Jumpgate.create(String(entry["name"]))
 	main.world.spawn(gate, at, Basis.looking_at(facing, up), main.targets)

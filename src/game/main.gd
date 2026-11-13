@@ -84,6 +84,8 @@ var gates: JumpgateHost = null
 var far_props: FarPropHost = null
 ## The star system the scene flies in (M6-T03).
 var star_system: StarSystemHost = null
+## Where and when the scenario is in its star system (M6-T09): `ScenarioFrame.resolve`'s result, empty without a system.
+var frame: Dictionary = {}
 
 var _spawn_position: UniversePos = UniversePos.new()
 var _overlay_in_s: float = 0.0
@@ -194,9 +196,9 @@ func _ready() -> void:
 	star_system = StarSystemHost.new()
 	star_system.name = "StarSystemHost"
 	star_system.setup(_system_id)
+	star_system.world = world
 	add_child(star_system)
-	if star_system.system.is_valid() and star_system.system.has_id(StarSystemHost.DEFAULT_ANCHOR):
-		world.anchor_on_rail(star_system.system, StarSystemHost.DEFAULT_ANCHOR)  # the World falls with the station (M6-T04)
+	_anchor_world(scenario)
 	gates = JumpgateHost.new()
 	gates.name = JumpgateHost.NODE_NAME
 	gates.main = self
@@ -205,10 +207,13 @@ func _ready() -> void:
 	far_props.name = FarPropHost.NODE_NAME
 	far_props.main = self
 	add_child(far_props)
+	if bool(frame.get("standin", false)):
+		far_props.place_station(ScenarioFrame.place_in_scene(frame, star_system.system, ScenarioFrame.DEFAULT_PLACE,
+				world.epoch_s))
 	if bool(scenario.get("ok", false)):
 		_spawn_props(scenario["props"])
 		for entry: Dictionary in scenario["jumpgates"]:
-			gates.place(entry, star_system.system)
+			gates.place(entry, star_system.system, frame)
 		_spawn_belts(scenario["belts"])
 	_spawn_scenario_ships()
 	if not (scenario.get("mission", {}) as Dictionary).is_empty():
@@ -397,6 +402,30 @@ func ensure_pool(type: StringName, count: int) -> int:
 	for pooled: Combatant in ships.all_ships().slice(known):
 		audio.watch_ship(pooled)
 	return built
+
+
+# The World anchors where the scenario says (M6-T09): on a place's rail with the scenario's origin beside it, or on an orbit,
+# with the system time starting at the scenario's epoch (seeded from the run's seed when it asks). A scenario the system
+# cannot place rides the station's rail, as one with no anchor does.
+func _anchor_world(scenario: Dictionary) -> void:
+	var system: StarSystem = star_system.system
+	if not system.is_valid():
+		return
+	var start := PackedFloat64Array([_spawn_position.x, _spawn_position.y, _spawn_position.z])
+	var spec: Dictionary = scenario.get("frame", ScenarioFrame.default_spec())
+	var resolved: Dictionary = ScenarioFrame.resolve(spec, system, scenario_seed, start, -_spawn_basis.z)
+	if not bool(resolved["ok"]):
+		push_warning("Main: %s; the World rides %s's rail" % [resolved["error"], ScenarioFrame.DEFAULT_PLACE])
+		resolved = ScenarioFrame.resolve(ScenarioFrame.default_spec(), system, scenario_seed, start, -_spawn_basis.z)
+		if not bool(resolved["ok"]):
+			return
+	frame = resolved
+	star_system.frame = resolved
+	world.epoch_s = float(resolved["epoch_s"])
+	if resolved["kind"] == ScenarioFrame.KIND_PLACE:
+		world.anchor_on_rail(system, resolved["id"], resolved["offset"])
+	else:
+		world.anchor_in_orbit(system, resolved["id"], resolved["state"])
 
 
 # The tick's stage timers and the benchmark (M4-T01); both pause with the world. The battle benchmark's stand-ins live in

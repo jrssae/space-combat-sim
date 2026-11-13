@@ -28,18 +28,15 @@ const STAR_SHADER_PATH: String = "res://assets/shaders/scaled_star.gdshader"
 const ATMOSPHERE_SHADER_PATH: String = "res://assets/shaders/scaled_atmosphere.gdshader"
 ## Runs after the camera rig has moved the cameras this frame, as the sky does.
 const LATE_PRIORITY: int = 1000
-## Until scenarios seed their epoch (M6-T09, Q9), the layer looks at the system this much later than the sim clock: at the
-## data's epoch 0 the station sits in the middle of the planet's shadow, and a third of its orbit on it has the sun and a
-## gibbous planet. `scaled epoch` moves it.
-const STAND_IN_EPOCH_S: float = 23_300.0
 const PLANET_COLOUR: Color = Color(0.55, 0.36, 0.25)
 const SPHERE_SEGMENTS: int = 128
 ## The planet surface's full sun (`scaled_planet.gdshader`'s `sun_strength`), which its far dot matches.
 const SUN_STRENGTH: float = 1.5
 const ACTIONS: PackedStringArray = ["status", "epoch", "show", "hide"]
 
-## Added to the sim clock before the ephemeris is asked, s.
-var epoch_offset_s: float = STAND_IN_EPOCH_S
+## Added to the World's system time (its scenario's epoch and the sim clock, M6-T09) before the ephemeris is asked, s: zero
+## but for captures (`scaled epoch`).
+var epoch_offset_s: float = 0.0
 
 var _system: StarSystem = null
 var _spheres: Dictionary = {}  # StringName -> MeshInstance3D
@@ -72,11 +69,11 @@ func _ready() -> void:
 		&"sun_direction": {"get": sun_direction, "doc": "Unit vector from the camera to the star, game axes"},
 		&"key_light": {"get": key_light, "doc": "The part of the star's disc no planet hides at the camera, 0 to 1: the key light's factor"},
 		&"epoch_h": {"get": func() -> float: return epoch_offset_s / 3600.0, "unit": "h",
-				"doc": "How much later than the sim clock the layer looks at the system (a stand-in until scenarios set an epoch)"},
+				"doc": "How much later than the World's system time the layer looks at the system (captures only; the scenario sets the epoch, M6-T09)"},
 		&"mapped": {"get": mapped_bodies, "doc": "The planets drawn with their generated maps and haze (M6-T11); the others are plain stand-ins"},
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"scaled",
-			"The scaled-space layer (M6-T10): status, epoch <hours> (look at the system that much later than the sim clock, to move the sun and the planet's phase for captures), show or hide (draw the far bodies or not, to measure them)",
+			"The scaled-space layer (M6-T10): status, epoch <hours> (look at the system that much later than the World's system time, to move the sun and the planet's phase for captures), show or hide (draw the far bodies or not, to measure them)",
 			[ConsoleArg.enum_optional(&"action", ACTIONS), ConsoleArg.float_optional(&"hours")]), _cmd_scaled, self)
 
 
@@ -97,7 +94,7 @@ func refresh(camera: Camera3D) -> void:
 		return
 	if system != _system:
 		_build(system)
-	var time_s: float = SimClock.now() + epoch_offset_s
+	var time_s: float = world.system_time() + epoch_offset_s
 	var view: Transform3D = camera.get_global_transform_interpolated()
 	var eye: PackedFloat64Array = ScaledPlacement.camera_from_anchor(world.origin, view.origin)
 	var places: Dictionary = {}
@@ -167,9 +164,13 @@ static func body_from_anchor(world: WorldFrame, id: StringName, time_s: float) -
 	var system: StarSystem = world.star_system
 	if system == null or not system.has_id(id) or not system.has_id(world.anchor_name):
 		return PackedFloat64Array()
+	var off: PackedFloat64Array = world.anchor_offset
 	if system.place_ids.has(world.anchor_name):
 		var seen: PackedFloat64Array = system.relative_state(id, world.anchor_name, time_s)
-		return ScaledPlacement.to_game(seen) if seen.size() >= 3 else PackedFloat64Array()
+		if seen.size() < 3:
+			return PackedFloat64Array()
+		var from_place: PackedFloat64Array = ScaledPlacement.to_game(seen)
+		return PackedFloat64Array([from_place[0] - off[0], from_place[1] - off[1], from_place[2] - off[2]])
 	var anchor: PackedFloat64Array = world.anchor_state()
 	if anchor.size() < 3:
 		return PackedFloat64Array()
@@ -405,7 +406,7 @@ func _cmd_scaled(args: Dictionary) -> ConsoleResult:
 	match action:
 		&"epoch":
 			if args[&"hours"] == null:
-				return ConsoleResult.failure("scaled epoch: give the hours to look ahead of the sim clock")
+				return ConsoleResult.failure("scaled epoch: give the hours to look ahead of the World's system time")
 			epoch_offset_s = float(args[&"hours"]) * 3600.0
 		&"show":
 			visible = true
