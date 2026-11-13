@@ -86,22 +86,60 @@ closer to a Thunderbolt than a Starfury. The rework must hit the silhouette abov
 
 ## Babylon 5 station (M7)
 
-About 8 km long, arranged along one axis. From aft to fore:
+Refined in M7-T01 from the maintainer's references (Q1): the STL `references/EA Babylon 5 Station.stl` for the proportions,
+two blueprints (Andy Crook's schematic, Lawrence Miller's lettered sheets), a show still (`babylon 5 station colors.jpg`) and
+fan close-ups for colour, surfaces and lights. The numbers, the source list and the colour table are in
+`docs/assets-station.md`; this is the description in words.
 
-1. **Reactor/engine end.** A cylindrical drum with a flared cap.
-2. **Spine.** A long, thin lattice of truss segments, about 25-30 % of the total length.
-3. **Hub and vanes.** A funnel or cone transition into the main body, with **three pairs of huge paddle-shaped
-   vanes** (dark blue). They stand out above and below in profile like a comb, each pair spanning about 2.5x the
-   drum diameter.
-4. **Rotating habitat drum.** The largest part, about 40-45 % of the length, with a diameter of roughly
-   1/9 of the total length. Segmented bands with blue/purple and grey panelling. A row of small reddish cargo
-   modules runs along the top.
-5. **Command section.** A blue-grey sphere and a ring structure ("Blue section"): the docking aperture at the
-   bow, the Cobra-bay launch arms on the sides, and thin antenna masts extending far above and below.
-6. **Bow.** A long forked spike or antenna array.
+8 km long along one axis, about 830 m across the drum's widest bands. Two long booms beside the aft drum carry twelve
+vane blades that reach 1.5 km above and below the axis, so the station is 3 km tall and 1.1 km wide overall. Two
+structures share the axis. A **turning drum** runs from the docking sphere at the bow to the aft band, a little under
+5 km. A **stationary frame** holds it from behind (hub, booms, reactor) and from above, where one long dorsal spine runs
+from the stern over the whole drum to the bow spike.
 
-Front on: a circular cross-section with a central docking aperture; two short arms carry the Cobra bays; long,
-thin vertical masts. Defence-grid emplacements (tutorial tour points) sit on the hull.
+From the bow to the stern:
+
+1. **Bow spike.** A flat fork on the dorsal spine's front end, two prongs with a slot between them, about 560 m long. A
+   pylon drops from it to the docking aperture's outer ring.
+2. **Docking aperture.** A toothed ring about 300 m across on the axis, a cross-shaped four-leaf door inside it.
+3. **Docking sphere** (the Blue section's command sphere). A sphere about 550 m across, blue and grey checkerboard.
+4. **Cobra-bay arms.** Four long arms at 90 degree spacing (top, both sides, bottom) on the sphere and the waist behind it,
+   each with a broad head on the sphere, two forward prongs, and a narrower 94 m wide section aft. A row of seven numbered,
+   hazard-striped hatches on the outward face; red stripes along the edges.
+5. **Forward body, ring and forward band.** A barrel about 660 m across, a toothed ring, then the first wide band (about
+   830 m across, 550 m long).
+6. **Green zone.** The long middle of the drum, about 660 m across and 2.5 km long, with a slightly wider belt at mid
+   length and raised stringers along it.
+7. **Aft band.** A second wide band like the forward one, rounded at both shoulders.
+8. **Hub.** Behind a narrow neck (the drum's aft bearing): a short drum, then a cone tapering to the truss, with two flat
+   delta fins out to the sides.
+9. **Vane booms and vanes.** Two thin rails at the hub's sides running forward beside the aft drum, about 120 m clear of
+   it. Each carries three tall vanes ("ionization vanes"), each a pair of blades, one up and one down: thin deep-blue
+   plates in a grey frame, widest near the root and tapering to a notched tip. In profile they stand above and below like
+   a comb; front on they are long thin vertical lines at the sides (there are no separate antenna masts).
+10. **Truss spine.** An open box truss about 210 m across and 760 m long.
+11. **Torus disc.** A disc about 510 m across with radial ribs and toothed rim.
+12. **Shaft and reactor.** A slim shaft with machinery bays, then the reactor drum (about 340 m across), its aft face a
+    ring of bulging pipe sections round a flat disc.
+
+**The dorsal spine** (the Brown section) is the frame's backbone: warm grey-brown, faceted, 9 m above the drum's wide
+bands and about 90 m above the green zone. It carries the observation dome near the bow, two ribbed radiator blocks over
+the wide bands and a row of six red cargo modules over the green zone.
+
+**What turns.** The references (Miller's Blue section sheet: rotation compensators, scanners matching the station's
+rotation, elevators from the Blue section to the Green zone; the support spine the rotation section can be jettisoned
+from) put the docking sphere, the Cobra arms and the whole drum on the turning part. That moves the Cobra bays from the
+stationary command section, as this page read before T01, onto the drum. The maintainer confirms it (Q3).
+
+**Defence grid.** Its emplacements are settled with the maintainer in T02; `docs/assets-station.md` lists where the
+references show turret-like features.
+
+**Colours.** The drum light grey with large blue-violet panels in stepped blocks; the vanes deep blue; the spine, the bow
+spike and the hub warm grey-brown; the reactor end darker bronze grey; the cargo modules dull red; red trim stripes on the
+arms and the bow spine, hazard yellow on the bay hatches.
+
+**Lights.** A red lamp at the observation dome, red lit panels on the bow spine, yellow strip lights on the arms; windows
+are not readable in the captures and come from Q10.
 
 ## Epsilon III (M6)
 

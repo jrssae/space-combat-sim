@@ -193,6 +193,20 @@ making its own branch):
 - **Files:** `docs/design-references.md` (the Babylon 5 station section expanded), `docs/assets-station.md` (measurements, as
   `docs/assets-civilian.md` does for the civilians).
 - **Done when:** AC1; the maintainer has read the measurements.
+- **Done (as built, 2026-11-13; awaiting the maintainer's read):**
+  - `docs/assets-station.md`: the STL's conventions (bow at file +x, up +z, mapping `--right=-y --up=+z --aft=-x`, 3.3743 m
+    per unit at 8 km), 17 sections bow to stern with z ranges and radii, the frame parts along the drum, the clearances, the
+    compare command and targets, the colour table (hex off lit captures), surfaces, the Q2 near-field places, Q10 lights,
+    defence-grid candidate surfaces (observations only), the maintenance bot. `docs/design-references.md`'s station section
+    rewritten from it.
+  - Key numbers: 8 000 x 1 111 x 3 006 m (L, W, H; width and height set by the vane booms and vane tips). Drum from the docking
+    sphere (z 560) to the aft band (z 5 460): bands r 417, green zone r 330. Twelve vane blades on two booms at x ±535,
+    z 4 118 to 5 800, tips at y ±1 503. Dorsal spine 9 m above the wide bands.
+  - **Contradicts the planner** (Q3, the old design-references text): the references show **four** Cobra-bay arms at 90 degree
+    spacing on the docking sphere and waist (z 620 to 1 420), and Miller's blueprint puts this Blue section on the turning
+    drum. So the bays turn with the drum (36 m/s at their r 243 under Q9's spin), which Q3's fallback covers. The "antenna
+    masts" were the vanes seen edge-on. The Q table is unchanged until the maintainer decides.
+  - Views and crops: `references/screenshots/M7-T01 station references/` (gitignored).
 
 ### M7-T02 Defence grid concept (discussion with the maintainer)
 
