@@ -244,8 +244,8 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T02 | B | Defence grid concept: emplacement locations, the cannons and interceptors and their behaviours, the balance (discussion with the maintainer; early start) | T01 | controller | The maintainer's design call, held as a discussion, not delegated | done |
 | T03 | A | Compound collision builder in `tools/procgen/core` (early start) | - | Fable | Convex pieces with budgets and coverage that M12's capitals reuse | done |
 | T04 | A | `babylon5_station` generator: the frame and drum pieces, proportions, paint and texel tiers (early start) | T01 | Fable | An 8 km asset that must read from 50 m and from 1 000 km | done |
-| T05 | A | Near-field detail and hardpoints: the Cobra bays, the docking aperture, the grid mounts, lights, windows, tour points, sections | T04, T19, T02, T03 | Opus | Geometry around the places a fighter flies close to | in progress |
-| T06 | B | The station in the game: placement in the frame, the turning drum, collision, hit volumes, rams, broadcast, section damage | T05, M6 | Opus | A moving 8 km body in Jolt and the native core | not started |
+| T05 | A | Near-field detail and hardpoints: the Cobra bays, the docking aperture, the grid mounts, lights, windows, tour points, sections | T04, T19, T02, T03 | Opus | Geometry around the places a fighter flies close to | done |
+| T06 | B | The station in the game: placement in the frame, the turning drum, collision, hit volumes, rams, broadcast, section damage | T05, M6 | Opus | A moving 8 km body in Jolt and the native core | in progress |
 | T07 | B | The defence grid in the game, as T02 settled it, on the native turret rows | T06, T02 | Opus | Native turret kinds and interceptor behaviour with parity | not started |
 | T08 | C | Launch bays and the launch sequence: the rail, the cinematic launch camera, the hand-off, `launch_from` | T06 | Opus | Rebase-safe scripted motion and the mission API | not started |
 | T09 | C | The station interior for the front end: the `b5_interior` generator and the backdrop | T01, Q7 | Opus | A new interior asset and its lighting | done |
@@ -258,7 +258,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T17 | A | The Starfury looks metallic, not plastic: metallic, roughness and normal maps on both texture sets (maintainer, 2026-11-13; the raider's share is in T16, the station's in T04) | T15 | Opus | Material appearance on the hero hull; the look is (H) and needs a sheet first | done |
 | T18 | A | Station exterior lighting from the maintainer's references: dashed ring lights, nav and beacon lights, lit windows and markings, the aperture and bay glow (maintainer, 2026-11-13) | T05, T06 | Opus | Emissive patterns, blinking beacons and the 8 light slots on an 8 km hull; the look is (H) | not started |
 | T19 | A | Station sections: the frame and drum cut into linked sections, each with its own LOD and visibility range, and near-only detail props (maintainer, 2026-11-13) | T04 | Opus | One 8 km mesh gets one LOD and is never culled; T05's detail must be built on this | done |
-| T20 | C | The hangar behind the menu after the door resize: one Starfury per door (six), a narrower hall (maintainer, 2026-11-13) | T05, T09 | Opus | T09 sized the hall and racks to the old 64 m doors | not started |
+| T20 | C | The hangar behind the menu after the door resize: one Starfury per door (six), a narrower hall (maintainer, 2026-11-13) | T05, T09 | Opus | T09 sized the hall and racks to the old 64 m doors | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M7-T01 Station references and measurements
