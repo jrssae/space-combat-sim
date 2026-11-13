@@ -259,6 +259,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T18 | A | Station exterior lighting from the maintainer's references: dashed ring lights, nav and beacon lights, lit windows and markings, the aperture and bay glow (maintainer, 2026-11-13) | T05, T06 | Opus | Emissive patterns, blinking beacons and the 8 light slots on an 8 km hull; the look is (H) | not started |
 | T19 | A | Station sections: the frame and drum cut into linked sections, each with its own LOD and visibility range, and near-only detail props (maintainer, 2026-11-13) | T04 | Opus | One 8 km mesh gets one LOD and is never culled; T05's detail must be built on this | done |
 | T20 | C | The hangar behind the menu after the door resize: one Starfury per door (six), a narrower hall (maintainer, 2026-11-13) | T05, T09 | Opus | T09 sized the hall and racks to the old 64 m doors | in progress |
+| T21 | A | Follow-up to T05 from the STL: the Cobra arm's pentagonal cross-section, creases either side of the launch doors, and a roofed rectangular cargo bay (maintainer, 2026-11-13) | T05 | Opus | Shape read off the STL; the look is (H) | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M7-T01 Station references and measurements
@@ -771,6 +772,21 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   in two waves of six; the hangar is Alpha's, the top arm; each fighter's wave, 1 or 2, in its data), the camera's rail and moves re-checked, the light budget (one work lamp per bay), the sheet refreshed for the
   maintainer (H), tests updated, commit.
 - **Done when:** the sheet approved, the tests green, committed.
+
+### M7-T21 Cobra arm section, door creases and the cargo bay roof (follow-up to T05)
+
+- **Why (maintainer, 2026-11-13, after approving T05):** "the Cobra bay arm appears to be one rectangular surface rather than a
+  pentagonal one. The Cobra bay doors look unusually small because they are expected to have a crease on either side of them.
+  Refer back to the STL for reference. Also, the cargo bay is missing the roof. The cargo bay is expected to be rectangular, not an
+  open box on two sides."
+- **Agent:** Opus (T05's agent, resumed). **Depends on:** T05.
+- **What:** read the arm's cross-section off `references/EA Babylon 5 Station.stl` (section cuts along the arm, the facets and the
+  creases beside the door strip) and rebuild the arm as that pentagonal section, the doors sitting between their creases as the
+  STL has them; the cargo bay as a closed rectangular compartment with a roof, open only where the pods enter. Hardpoints,
+  collision, T19's sections and props, and the launch clearance follow; the STL compare must still pass; T20's hangar and T06's
+  collision read the new arm.
+- **Done when:** a sheet of STL section cuts beside the new arm, the doors at 50 m, and the cargo bay, approved by the maintainer
+  (H); tests green; committed.
 
 ### M7-T14 Integration, full suite, docs and acceptance
 
