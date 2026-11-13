@@ -9,6 +9,8 @@ hazard #D8B21E / #2A2A2C, marker stripe #C0522E, glass #191A1C, frame #7A7C80, c
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from ..core.geometry import Material
 from . import Style
 
@@ -60,4 +62,36 @@ EARTHFORCE = Style(
     edge_wear=0.5,
     extra={"bare_metal": 0.0, "smudge": 0.38, "smudge_scale_m": 0.45, "speckle": 0.07, "paint_roughness": 0.86,
            "streak_length_m": 0.32},
+)
+
+# The Starfury's finish (M7-T17, the maintainer: "metallic, not plastic"): the same colours as EARTHFORCE, but the plating reads
+# as painted metal (moderate metal, roughness varied plate to plate and dulled by wear and grime) and the claws, the pods' rear
+# housings, the bells, the barrels, the RCS cones and the canopy frame as bare metal. The nav buoy keeps EARTHFORCE.
+_EF = EARTHFORCE.materials
+FIGHTER_FINISH: dict[str, tuple[float, float]] = {  # role: (metallic, roughness)
+    "hull": (0.45, 0.48),
+    "hull_panel": (0.4, 0.55),
+    "hull_dark": (0.6, 0.45),
+    "canopy_frame": (0.75, 0.3),
+    "nozzle": (0.9, 0.28),
+    "barrel": (0.85, 0.26),
+    "rcs": (0.8, 0.32),
+}
+EARTHFORCE_FIGHTER = replace(
+    EARTHFORCE,
+    name="earthforce_fighter",
+    materials={
+        **_EF,
+        **{role: replace(_EF[role], metallic=m, roughness=r) for role, (m, r) in FIGHTER_FINISH.items()},
+        # Bare metal where the paint never went or wore off long ago: the claws' blades and the pods' rear housings in the hull's
+        # colour, their brackets, clamps and rails in the panels'.
+        "bare": Material("ef_bare", _EF["hull"].albedo, paneled=True, metallic=0.8, roughness=0.3),
+        "bare_trim": Material("ef_bare_trim", _EF["hull_panel"].albedo, paneled=True, metallic=0.75, roughness=0.32),
+    },
+    # No paint_roughness: the paint's roughness is the materials' own, varied by the plates' sheen (T15's layout) and a broad drift
+    # (``metal_finish``, shared with the raider and the station); chips, seams, streaks, smudges and grime on the paint are rougher
+    # and duller.
+    extra={"bare_metal": 0.0, "smudge": 0.38, "smudge_scale_m": 0.45, "speckle": 0.07, "streak_length_m": 0.32,
+           "metal_finish": {"noise_m": 1.4, "noise_rough": 0.07, "dirt_rough": 0.3, "dirt_metal": 0.6, "grime_dirt": 1.0,
+                            "chip_dirt": 1.0, "seam_dirt": 0.5, "dirt_on_paint_only": 1.0}},
 )

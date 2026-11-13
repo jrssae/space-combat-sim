@@ -573,6 +573,23 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   (higher metallic, lower roughness), rougher grime and wear; a normal map from T15's option-A panel layout. Liveries and colours
   unchanged. A before and after GPU sheet with a sunlit grazing view, shown to the maintainer before the generator commits.
 - **Done when:** the maintainer approves the sheet (H); tests pin the material values; both sets switch as before.
+- **Done (as built):**
+  - **Approved (maintainer, 2026-11-13):** the sheet as is,
+    `references/screenshots/M7-T17 starfury metal/M7-T17_starfury_metal_sheet.png` (before v10 and after v11; high and low sets; a
+    grazing sun over the decks, the three-quarter view, a close view at 7 m; the alpha livery; RX 6950 XT, Forward+, the game's
+    lighting unchanged).
+  - **Code:** the Starfury bakes with `EARTHFORCE_FIGHTER` (`styles/earthforce.py`): `EARTHFORCE`'s colours with a metallic and
+    roughness per material (paint 0.45 / 0.48, panels 0.40 / 0.55, dark 0.60 / 0.45, frame 0.75 / 0.30, bells 0.90 / 0.28, barrels
+    0.85 / 0.26, RCS 0.80 / 0.32) and two bare materials in the paint's colours (`ef_bare` 0.80 / 0.30, `ef_bare_trim` 0.75 /
+    0.32) that `starfury_aurora.bare_metal` puts on the claws and the pods' rear housings, outside the liveries. The roughness drift
+    and the dirt use T16's shared `textures.metal_finish`, with three keys added for the Starfury (`chip_dirt`, `seam_dirt`,
+    `dirt_on_paint_only`; off by default, so the raider and the station are unchanged). The livery shader's clear coat lies on the
+    paint only and follows its roughness. Albedo and normal maps unchanged; generator version 11. The nav buoy keeps `EARTHFORCE`.
+  - **Tests:** `test_starfury_aurora.py` pins the values and colours, the bare faces, no livery on bare metal, both sets' ORM spread
+    and the Starfury's `metal_finish` parameters; the GUT texture-set, livery, textured-hull, break-up and mesh-asset files pass.
+  - **Sheet script:** `scripts/starfury_metal_sheet.sh` (one run per scratch project and prefix; X11, `godot_lock.sh read --gpu`).
+  - **Reflections:** the key star's highlight, the white ambient (diffuse only) and, with `settings.hull_sheen` above 0, the nebula
+    as sky radiance; no probes. Bare metal in shadow reads dark gunmetal under that lighting, which the maintainer kept as it is.
 
 ### M7-T18 Station exterior lighting
 

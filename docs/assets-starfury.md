@@ -171,7 +171,8 @@ The hull is the parts' own meshes, unwrapped into one UV atlas and painted into 
   (Q37, Q41). The wing livery is a layer in `hull_livery.gdshader` over the shared maps, per ship as instance uniforms.
 - **Normal**: panel grooves, hatch bevels and rivets as a height field, at twice the atlas (4 096 px); with `render_triangles` the
   fine hull's shape is baked in too.
-- **ORM**: occlusion from a disk-to-point sum over the surface samples, roughness and metal from the materials (matte paint).
+- **ORM**: occlusion from a disk-to-point sum over the surface samples, roughness and metal from the materials (painted and bare
+  metal since M7-T17, below).
 - **Emissive**: the canopy's dark red cabin glow (the glass shader scales it by `settings.cabin_glow_level`), the top lamp's lens
   and the main nozzles' throats.
 - **Glass**: the window panes are the second primitive, dark and see-through (`hull_glass.gdshader`).
@@ -204,6 +205,48 @@ not change: the liveries still paint over the maps per ship, and the allies' Sta
   Written as `starfury_aurora_{albedo,normal,orm}_low.png`, named in every surface's `detail.low`; the glow map is shared.
 - **Sheet.** `references/screenshots/M7-T15 surface sheets/M7-T15_options_starfury.png` (the choice: current, low, A, B, C;
   RX 6950 XT, Forward+) and the as-built low and high frames under `final/`. Generator version 10.
+
+## Finish (M7-T17)
+
+The maintainer asked for metal, not plastic (2026-11-13). The Starfury bakes with `EARTHFORCE_FIGHTER`
+(`tools/procgen/styles/earthforce.py`): the same colours as `EARTHFORCE` (every albedo, glow and the glass unchanged; the nav
+buoy keeps `EARTHFORCE`), with metallic and roughness per material. The plating reads as painted metal and the working metal as
+bare. Both texture sets (high and low) carry it. Generator version 11.
+
+| Material | Where | Metallic | Roughness |
+|---|---|---|---|
+| `ef_hull` | the painted plating (decks, fuselage, pods ahead of the rear groove) | 0.45 | 0.48 |
+| `ef_hull_panel` | the panel strips, grooves and slot walls | 0.40 | 0.55 |
+| `ef_hull_dark` | dark edges, slot floors, caps, the rear panel | 0.60 | 0.45 |
+| `ef_bare` (new) | the claws' blades, the pods' rear housings (pod frame z > 1.2: the rear groove, clamp ring, rails, housing) | 0.80 | 0.30 |
+| `ef_bare_trim` (new) | the claws' bracket blocks, the rear clamps and rails | 0.75 | 0.32 |
+| `ef_canopy_frame` | the window frame bars (trim) | 0.75 | 0.30 |
+| `ef_nozzle` | the main and retro bells | 0.90 | 0.28 |
+| `ef_barrel` | the gun barrels | 0.85 | 0.26 |
+| `ef_rcs` | the RCS cones | 0.80 | 0.32 |
+| `ef_nozzle_throat`, `ef_bore`, `ef_interior` | unchanged | 0.80, 0, 0 | 0.45, 0.70, 0.70 |
+| `ef_canopy_glass` | unchanged: glass | 0 | 0.08 |
+
+`ef_bare` and `ef_bare_trim` take the albedo of the paint they replace, so the colour map is byte-identical to version 10. They are
+not in `PAINTABLE`: no livery stripe or number field reaches them (tested), so the liveries look as before.
+
+On top of the materials' values the bake's shared `textures.metal_finish` (M7-T16's, the style's `metal_finish`: `noise_rough`
+0.07 over `noise_m` 1.4 m, `dirt_rough` 0.3, `dirt_metal` 0.6, with the Starfury's additions `chip_dirt` 1, `seam_dirt` 0.5,
+`grime_dirt` 1 and `dirt_on_paint_only`) varies the finish: the plates' own sheen (T15's layout, +-0.07 to 0.09) and a broad drift
+vary the roughness from plate to plate; chipped edges, streaks, smudges, grime and seams on the paint make it up to 0.3 rougher and
+up to 60 % less metallic; worn edges still show dark primer, not metal (Q37). The paint a livery may cover comes out at a mean metallic of 0.38 and a
+mean roughness of 0.58 (5th to 95th percentile 0.43 to 0.81 in the high set, 0.45 to 0.76 in the low), the bare metal at 0.7 to
+0.9 metallic under 0.4 rough.
+The normal map is T15's (seams, recesses, ribs, hatches), unchanged.
+
+The livery shader (`assets/shaders/hull_livery.gdshader`) reads the same ORM map under the paint, so a wing's colours read as
+painted metal too. Its clear coat (`settings.hull_sheen`) now lies on the paint only: none on bare metal, less on worn and
+grimy paint, and its sharpness follows each plate's roughness, so it no longer covers the hull as one even gloss.
+
+What the hull reflects in the game: the key star's specular, white ambient light at `settings.ambient_level` (0.1, diffuse only)
+and, while `settings.hull_sheen` is above 0 and the nebula is shown, the nebula panorama as the sky's radiance (a 128 px cubemap,
+`SpaceEnvironment._apply_background`). No reflection probes. Bare metal in shadow therefore reflects the dark nebula and reads
+dark; it is the sun's highlight that shows it.
 
 ## Break-up chunks (M3-T03)
 

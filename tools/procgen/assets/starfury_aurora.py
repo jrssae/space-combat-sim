@@ -37,6 +37,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -80,12 +81,13 @@ from ..parts.starfury import (
     fury_strut,
 )
 from ..styles import Style
-from ..styles.earthforce import EARTHFORCE
+from ..styles.earthforce import EARTHFORCE_FIGHTER
 
 ASSET_ID = "starfury_aurora"
-# 10: drawn surface layouts, low and high texture sets (M7-T15); 9: the textured mesh only (M4-T31); 8: chunk meshes (M4-T30d);
+STYLE = EARTHFORCE_FIGHTER  # painted and bare metal (M7-T17)
+# 11: painted and bare metal, metallic and roughness maps (M7-T17); 10: drawn surface layouts, low and high texture sets (M7-T15); 9: the textured mesh only (M4-T31); 8: chunk meshes (M4-T30d);
 # 7: wing liveries, Q36 cabin glow (M4-T30b); 6: the textured mesh (M4-T30a)
-GENERATOR_VERSION = 10
+GENERATOR_VERSION = 11
 OBJ_NAME = "starfury_aurora.obj"
 MESH_NAME = "starfury_aurora.glb"
 # The textured mesh (M4-T30a): a 2 048 px atlas at about a centimetre a texel (the packer grows the texel until the hull fits).
@@ -350,6 +352,32 @@ def _unburied(samples: SurfaceSamples, *inside: np.ndarray) -> SurfaceSamples:
     return samples.subset(~buried)
 
 
+# Bare metal (M7-T17): the paint roles a bare face takes instead, and where the pods' bare rear begins (pod frame: the rear clamp
+# ring and groove, the rails and the housing round the main bell).
+BARE_ROLES = {"hull": "bare", "hull_panel": "bare_trim"}
+POD_HOUSING_FROM_Z = 1.2
+
+
+def bare_metal(part: Part, style: Style, where: Callable[[np.ndarray], np.ndarray] | None = None) -> Part:
+    """``part`` with its paint stripped to bare metal on the faces ``where`` picks (by face centroid, in the part's frame; every
+    face by default), for a style that has the bare roles. Colours stay; only the finish changes."""
+    if not all(role in style.materials for role in BARE_ROLES.values()):
+        return part
+    mesh = part.mesh
+    picked = np.ones(mesh.face_count, dtype=bool) if where is None else np.asarray(where(mesh.face_centroids()), dtype=bool)
+    materials = list(mesh.materials)
+    face_material = mesh.face_material.copy()
+    for paint, bare in BARE_ROLES.items():
+        if style.material(paint) not in materials:
+            continue
+        sel = picked & (face_material == materials.index(style.material(paint)))
+        if sel.any():
+            if style.material(bare) not in materials:
+                materials.append(style.material(bare))
+            face_material[sel] = materials.index(style.material(bare))
+    return dataclasses.replace(part, mesh=Mesh(mesh.vertices, mesh.faces, face_material, tuple(materials), mesh.face_chart, mesh.face_uv))
+
+
 def build_parts(
     spec: StarfurySpec,
     style: Style,
@@ -414,10 +442,11 @@ def build_parts(
     def in_pod(points: np.ndarray) -> np.ndarray:
         return spec.pod.contains(points - pod_c, BURIED_MARGIN_M)
 
-    pod = fury_pod(spec.pod, style).with_seams(LAYOUTS["pod"]).translated(pod_c).renamed("pod_ur", group="cross")
+    pod = bare_metal(fury_pod(spec.pod, style), style, lambda c: c[:, 2] > POD_HOUSING_FROM_Z)
+    pod = pod.with_seams(LAYOUTS["pod"]).translated(pod_c).renamed("pod_ur", group="cross")
     strut = fury_strut(spec.strut, style).renamed("strut_ur", group="cross").with_seams(LAYOUTS["strut_ur"])
     lower = fury_strut(spec.lower_strut, style).renamed("strut_lr", group="cross").with_seams(LAYOUTS["strut_lr"])
-    claw = fury_claw(spec.claw, style).with_seams(LAYOUTS["claw"]).translated(pod_c).renamed("claw_ur", group="cross")
+    claw = bare_metal(fury_claw(spec.claw, style), style).with_seams(LAYOUTS["claw"]).translated(pod_c).renamed("claw_ur", group="cross")
     s_pod = sample(pod.mesh, "pod")
     # The bells' outer walls and the knuckle cones' bases are inside the shell; the bells' inner
     # walls (facing the axis, near it) are what shows through the exits and stay.
@@ -520,7 +549,7 @@ def _textured(placed: list[Placed], style: Style) -> list[TexturedPart]:
             for p in placed if p.hull]
 
 
-def textured_parts(spec: StarfurySpec, ctx: BuildContext, style: Style = EARTHFORCE) -> list[TexturedPart]:
+def textured_parts(spec: StarfurySpec, ctx: BuildContext, style: Style = STYLE) -> list[TexturedPart]:
     """The textured mesh's parts of ``spec``, centred as the build centres them (for tests and tools)."""
     placed, _ = centre(build_parts(spec, style, ctx, DEFAULT_SPACING_M, COCKPIT_SPACING_FACTOR * DEFAULT_SPACING_M))
     return _textured(placed, style)
@@ -604,7 +633,7 @@ def nav_lights(placed: list[Placed], by_name: dict[str, Any], eye: np.ndarray) -
     pod_top = hull[on_pod][np.argmax(hull[on_pod, 1])]
     outer_x, pod_y, pod_z = float(pod_top[0]), float(pod_top[1]) + NAV_LIGHT_CLEARANCE_M, float(pod_top[2])
     fuselage = by_name["fuselage"].mesh
-    glass = fuselage.face_material == fuselage.material_index(EARTHFORCE.material("canopy_glass").name)
+    glass = fuselage.face_material == fuselage.material_index(STYLE.material("canopy_glass").name)
     glass_rear_z = float(fuselage.face_centroids()[glass][:, 2].max())
     top_z = glass_rear_z + NAV_TOP_BEHIND_GLASS_M
     on_top = (np.abs(hull[:, 0]) < NAV_NEAR_M) & (np.abs(hull[:, 2] - top_z) < NAV_NEAR_M)
@@ -749,7 +778,7 @@ def build(ctx: BuildContext) -> AssetOutputs:
     cockpit_spacing = float(ctx.option("cockpit_spacing", COCKPIT_SPACING_FACTOR * spacing))
     if min(spacing, cockpit_spacing) <= 0.0:
         raise ValueError("spacing and cockpit_spacing must be positive")
-    spec, style = DEFAULT_SPEC, EARTHFORCE
+    spec, style = DEFAULT_SPEC, STYLE
 
     out_dir = ctx.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)

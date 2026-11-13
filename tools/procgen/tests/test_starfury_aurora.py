@@ -14,9 +14,12 @@ import numpy as np
 from tools.procgen.assets import starfury_aurora as ship
 from tools.procgen.core import manifest as manifest_io
 from tools.procgen.core.context import BuildContext
+from tools.procgen.core.image import read_png
 from tools.procgen.core.obj import read_obj
 from tools.procgen.parts import cockpit
-from tools.procgen.styles.earthforce import EARTHFORCE
+from tools.procgen.core import livery
+from tools.procgen.core.textures import metal_finish
+from tools.procgen.styles.earthforce import EARTHFORCE, EARTHFORCE_FIGHTER, FIGHTER_FINISH
 from tools.procgen.tests.test_cockpit import first_hit, sphere
 
 PILOT_TERMS = {
@@ -91,7 +94,7 @@ class StarfuryAuroraTests(unittest.TestCase):
         cls.out_b = ship.build(BuildContext(cls.dir_b, seed=42))
         cls.manifest = manifest_io.read_manifest(cls.dir_a)
         spacing = ship.DEFAULT_SPACING_M
-        cls.placed, _ = ship.centre(ship.build_parts(SPEC, EARTHFORCE, BuildContext(cls.dir_a, seed=42), spacing,
+        cls.placed, _ = ship.centre(ship.build_parts(SPEC, ship.STYLE, BuildContext(cls.dir_a, seed=42), spacing,
                                                      ship.COCKPIT_SPACING_FACTOR * spacing))
         sampled = [p.samples for p in cls.placed if p.samples is not None]
         cls.godot_xyz = np.concatenate([s.positions for s in sampled])  # centred Godot frame (the hardpoints frame)
@@ -634,8 +637,9 @@ class StarfuryAuroraTests(unittest.TestCase):
     def test_a_new_interior_leaves_the_hull_alone(self) -> None:
         # M4-T30a's version 6 added the textured mesh, M4-T30b's 7 the liveries, M4-T30d's 8 the chunk meshes and M4-T31's 9 dropped the
         # point-cloud outputs and renamed the sample stream, which moves the centring by 1.5 mm; M7-T15's 10 drew the surface layouts
-        # (the maps only); the design is unchanged. The hull's OBJ has none of the interior's materials.
-        self.assertEqual(ship.GENERATOR_VERSION, 10)
+        # (the maps only) and M7-T17's 11 the painted and bare metal finish (the maps and the bare faces' materials); the design is
+        # unchanged. The hull's OBJ has none of the interior's materials.
+        self.assertEqual(ship.GENERATOR_VERSION, 11)
         hull = read_obj(self.dir_a / ship.OBJ_NAME)
         self.assertFalse([m for m in hull.materials if "ef_cockpit" in m])
 
@@ -765,6 +769,81 @@ class StarfuryAuroraTests(unittest.TestCase):
             np.testing.assert_allclose(there.line, here.line, atol=1e-9, err_msg=twin)
             np.testing.assert_allclose(there.tint, here.tint, atol=1e-9, err_msg=twin)
 
+    # --- finish (M7-T17) --------------------------------------------------------------------
+    def test_the_finish_is_painted_and_bare_metal_in_the_confirmed_colours(self) -> None:
+        self.assertIs(ship.STYLE, EARTHFORCE_FIGHTER)
+        style = EARTHFORCE_FIGHTER.materials
+        self.assertEqual(FIGHTER_FINISH, {"hull": (0.45, 0.48), "hull_panel": (0.4, 0.55), "hull_dark": (0.6, 0.45),
+                                          "canopy_frame": (0.75, 0.3), "nozzle": (0.9, 0.28), "barrel": (0.85, 0.26),
+                                          "rcs": (0.8, 0.32)})
+        for role, (metallic, roughness) in FIGHTER_FINISH.items():
+            self.assertEqual((style[role].metallic, style[role].roughness), (metallic, roughness), role)
+        self.assertEqual((style["bare"].metallic, style["bare"].roughness), (0.8, 0.3))
+        self.assertEqual((style["bare_trim"].metallic, style["bare_trim"].roughness), (0.75, 0.32))
+        # Colours unchanged: every role keeps EARTHFORCE's albedo and glow, the bare ones the paint's they replace.
+        for role, material in EARTHFORCE.materials.items():
+            mine = style[role]
+            self.assertEqual((mine.name, mine.albedo, mine.emissive, mine.emissive_strength, mine.transmittance, mine.paneled),
+                             (material.name, material.albedo, material.emissive, material.emissive_strength,
+                              material.transmittance, material.paneled), role)
+        self.assertEqual(style["bare"].albedo, style["hull"].albedo)
+        self.assertEqual(style["bare_trim"].albedo, style["hull_panel"].albedo)
+        # The glass stays glass, and the nav buoy's EARTHFORCE stays matte paint.
+        self.assertEqual((style["canopy_glass"].metallic, style["canopy_glass"].roughness), (0.0, 0.08))
+        self.assertEqual(EARTHFORCE.material("hull").metallic, 0.0)
+        self.assertEqual(EARTHFORCE.extra["paint_roughness"], 0.86)
+        # Bare metal is never under a livery.
+        self.assertFalse({"ef_bare", "ef_bare_trim"} & set(ship.PAINTABLE))
+
+    def test_the_claws_and_the_pods_rear_housings_are_bare_metal(self) -> None:
+        paint = {"ef_hull", "ef_hull_panel"}
+        bare = {"ef_bare", "ef_bare_trim"}
+        for p in self.placed:
+            mesh = p.part.mesh
+            names = np.array([mesh.materials[i].name for i in mesh.face_material])
+            kind = p.part.name.split("_")[0]
+            if kind == "claw":
+                self.assertFalse(paint & set(names), p.part.name)
+                self.assertTrue(bare <= set(names), p.part.name)
+            elif kind == "pod":
+                pod = next(q for q in self.hp["pods"] if q["name"] == p.part.name.split("_")[1])
+                z = mesh.face_centroids()[:, 2] - pod["center"][2]  # the pod's own frame: its centre at 0
+                rear = z > ship.POD_HOUSING_FROM_Z + 1e-6
+                self.assertFalse(np.isin(names[rear], list(paint)).any(), p.part.name)
+                self.assertTrue(np.isin(names[~rear], ["ef_hull"]).any(), f"{p.part.name}: painted ahead of the housing")
+                self.assertTrue(np.isin(names[rear], list(bare)).any(), p.part.name)
+            else:
+                self.assertFalse(bare & set(names), f"{p.part.name}: painted, not bare")
+
+    def test_no_livery_paints_bare_metal(self) -> None:
+        for p in self.placed:
+            mesh = p.part.mesh
+            bare = np.isin([mesh.materials[i].name for i in mesh.face_material], ["ef_bare", "ef_bare_trim"])
+            if not bare.any():
+                continue
+            points, normals = mesh.face_centroids()[bare], mesh.face_normals()[bare]
+            zones = np.full(len(points), livery.zone_of(p.part.name))
+            for name, stripes in livery.PATTERNS.items():
+                self.assertFalse(livery.paint_slots(stripes, points, normals, zones).any(), f"{name} on {p.part.name}")
+            for name, field in livery.NUMBER_FIELDS.items():
+                self.assertNotIn(int(zones[0]), field.zones, f"{name} on {p.part.name}")
+
+    def test_both_texture_sets_vary_the_finish(self) -> None:
+        for suffix in ("", "_low"):
+            orm = read_png(self.dir_a / f"starfury_aurora_orm{suffix}.png").astype(float) / 255.0
+            albedo = read_png(self.dir_a / f"starfury_aurora_albedo{suffix}.png")
+            paint = albedo[..., 3] > 200  # the livery's paint: clean painted plating
+            rough, metal = orm[..., 1][paint], orm[..., 2][paint]
+            # Painted metal: moderate metal, roughness neither wet (uniform low) nor matte (uniform high), varied plate to plate.
+            self.assertTrue(0.3 < float(metal.mean()) < 0.5, (suffix, float(metal.mean())))
+            self.assertTrue(0.4 < float(rough.mean()) < 0.65, (suffix, float(rough.mean())))
+            low, high = np.percentile(rough, [5, 95])
+            self.assertGreater(high - low, 0.15, suffix)
+            # Bare metal: shinier and more metallic than any clean paint.
+            unpainted = albedo[..., 3] == 0
+            shiny = unpainted & (orm[..., 2] > 0.7) & (orm[..., 1] < 0.4)
+            self.assertGreater(int(shiny.sum()), 20_000, suffix)
+
     def test_hardpoints_and_manifest_only_gain_the_new_keys_at_the_end(self) -> None:
         self.assertEqual(list(self.hp)[-1], "chunks")
         self.assertEqual(list(self.manifest)[-3:], ["dimensions_m", "chunks", "mesh"])
@@ -875,6 +954,30 @@ class StarfuryOptionTests(unittest.TestCase):
             with self.subTest(bad), self.assertRaises(ValueError):
                 ship.build(BuildContext(self.dir / "bad", seed=1, options=bad))
 
+
+
+class MetalFinishTests(unittest.TestCase):
+    """The Starfury's share of ``textures.metal_finish`` (M7-T17): a drift in the paint's roughness, and chips, seams and grime on
+    the paint rougher and duller; the bare metal kept clean."""
+
+    def test_the_starfury_finish_parameters(self) -> None:
+        self.assertEqual(EARTHFORCE_FIGHTER.extra["metal_finish"], {
+            "noise_m": 1.4, "noise_rough": 0.07, "dirt_rough": 0.3, "dirt_metal": 0.6, "grime_dirt": 1.0, "chip_dirt": 1.0,
+            "seam_dirt": 0.5, "dirt_on_paint_only": 1.0})
+        self.assertNotIn("metal_finish", EARTHFORCE.extra)  # the nav buoy stays as it was
+
+    def test_dirt_roughens_and_dulls_and_the_drift_varies(self) -> None:
+        finish = EARTHFORCE_FIGHTER.extra["metal_finish"]
+        rng = np.random.default_rng(3)
+        pos = rng.uniform(-3.0, 3.0, (4000, 3))
+        dirt = np.where(np.arange(4000) < 2000, 1.0, 0.0)
+        rough, metal = metal_finish(finish, pos, np.ones(4000, dtype=bool), np.full(4000, 0.5), np.full(4000, 0.45), dirt, 1)
+        worn, clean = slice(0, 2000), slice(2000, 4000)
+        self.assertAlmostEqual(float(rough[worn].mean() - rough[clean].mean()), finish["dirt_rough"], delta=0.02)
+        np.testing.assert_allclose(metal[worn], 0.45 * (1.0 - finish["dirt_metal"]))
+        np.testing.assert_allclose(metal[clean], 0.45)
+        self.assertGreater(float(rough[clean].std()), 0.015)
+        self.assertLessEqual(float(np.abs(rough[clean] - 0.5).max()), finish["noise_rough"] + 1e-9)
 
 
 if __name__ == "__main__":

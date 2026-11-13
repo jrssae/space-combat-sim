@@ -772,8 +772,11 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
     # Painted metal (M7-T16, the styles that ask for it): roughness per panel, dirt rough and dull.
     finish = extra.get("metal_finish")
     if finish:
-        dirt = np.clip(streak + smudge + np.clip(1.0 - 2.0 * noise_coarse, 0.0, 1.0) * float(finish.get("grime_dirt", 0.5)), 0.0, 1.0)
-        roughness, metallic = metal_finish(finish, pos, paneled & ~glass, roughness, metallic, dirt * ~glass, seed)
+        dirt = np.clip(streak + smudge + np.clip(1.0 - 2.0 * noise_coarse, 0.0, 1.0) * float(finish.get("grime_dirt", 0.5))
+                       + float(finish.get("chip_dirt", 0.0)) * chips + float(finish.get("seam_dirt", 0.0)) * on_line, 0.0, 1.0)
+        # M7-T17: chipped edges and seams count as dirt too, and a style may keep the dirt off its bare metal (the paint only).
+        dirty = (paneled & ~glass) if finish.get("dirt_on_paint_only") else ~glass
+        roughness, metallic = metal_finish(finish, pos, paneled & ~glass, roughness, metallic, dirt * dirty, seed)
 
     # The normal map: the plating's relief at twice the atlas's resolution, Godot's +Y up (Q34).
     normal_ts = _normal_map(atlas, style, platings, normal_scale)
