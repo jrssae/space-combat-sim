@@ -260,7 +260,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T19 | A | Station sections: the frame and drum cut into linked sections, each with its own LOD and visibility range, and near-only detail props (maintainer, 2026-11-13) | T04 | Opus | One 8 km mesh gets one LOD and is never culled; T05's detail must be built on this | done |
 | T20 | C | The hangar behind the menu after the door resize: one Starfury per door (six), a narrower hall (maintainer, 2026-11-13) | T05, T09 | Opus | T09 sized the hall and racks to the old 64 m doors | in progress |
 | T21 | A | Follow-up to T05 from the STL: the Cobra arm's pentagonal cross-section, creases either side of the launch doors, and a roofed rectangular cargo bay (maintainer, 2026-11-13) | T05 | Opus | Shape read off the STL; the look is (H) | in progress |
-| T22 | A | The dorsal spine and the command section rebuilt to the STL (per-part sections IoU >= 0.90; maintainer, 2026-11-13) | T21 | Opus | T04 built them to the overall silhouette; the per-part check scores them 0.38 to 0.72 | in progress |
+| T22 | A | The dorsal spine and the command section rebuilt to the STL (per-part sections IoU >= 0.90; maintainer, 2026-11-13) | T21 | Opus | T04 built them to the overall silhouette; the per-part check scores them 0.38 to 0.72 | not started |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M7-T01 Station references and measurements
@@ -488,6 +488,12 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     fighter into the docking bay with a rebase on the way, into the cargo bay and into a Cobra bay's hall with no contact, a
     frame ram and a drum scrape at the skin's speed, no light), `test_station_threads` (threaded against delayed, one thread
     against six, with raiders dodging the drum's skin), `test_station_jolt_cost` (slow); the guard test holds `surface.rs`.
+  - **Fix (CI run 43517555147):** the drum's body was a child of the station, so it was not tied to the anchor in its own
+    right and a velocity rebase changed its universe velocity by the boost (`test_rebase_in_play`, 224 traces). It is now a node
+    of the World beside the station, shiftable and anchored, placed at its pose before it joins (placed first at its local pivot,
+    it lay across the player at the origin for one step and the turning skin rammed him); `test_station_in_game` rebases six
+    times with the drum turning. The target menu lists the station among the allies, a target (`test_target_menu`); the far
+    props' station check says its numbers when it fails.
   - **Open:** the Cobra bay test holds the drum (a fighter at rest against the station meets a turning door at 36 m/s; the launch
     is T08's); the contact lists still pick the station's rows by centre distance (nearest 12 within 5 km), so in a crowd a fighter
     can miss it as a contact: T10 (avoidance of its surface, AC9) decides; friendly bolts pass through the station as through any
@@ -819,7 +825,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   in two waves of six; the hangar is Alpha's, the top arm; each fighter's wave, 1 or 2, in its data), the camera's rail and moves re-checked, the light budget (one work lamp per bay), the sheet refreshed for the
   maintainer (H), tests updated, commit.
 - **Done when:** the sheet approved, the tests green, committed.
-- **Done (sheet approved by the maintainer 2026-11-13):** `b5_interior` reads the arm from `hardpoints.cobra_arm` (T05's six doors,
+- **Done (refit built, the sheet awaits the maintainer):** `b5_interior` reads the arm from `hardpoints.cobra_arm` (T05's six doors,
   T21's halls; nothing hard-coded): the upper hall over the doors (40 by 17.5 m) under the lower hall (80 m wide, to 30 m), six
   launch positions at the 23 m pitch. Twelve Starfuries in Alpha's livery: wave 1 on the racks over the doors, held by clamp arms
   off the upper walls gripping their pods from outboard (the rack's middle open, as T21 has it); wave 2 the second row in the lower

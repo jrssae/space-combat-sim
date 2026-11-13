@@ -413,8 +413,9 @@ func test_closed_it_costs_nothing_per_tick() -> void:
 	assert_eq(main.target_menu.view.draws, draws, "nothing is drawn")
 	_run("targetmenu open")
 	assert_eq(TargetInfo.built_count - built, int(_read("target_menu.last_candidates")), "opening reads the list once")
-	# The buoys and the jumpgate (M6-T14) are the scene's broadcasters.
-	assert_eq(int(_read("target_menu.last_candidates")), main.buoys.size() + main.gates.gates.size())
+	# The buoys, the jumpgate (M6-T14) and the station (M7-T06) are the scene's broadcasters.
+	assert_eq(int(_read("target_menu.last_candidates")), main.buoys.size() + main.gates.gates.size()
+			+ (1 if main.far_props.station != null else 0))
 	built = TargetInfo.built_count
 	await _ticks(10)
 	_run("targetmenu pick navigation")
@@ -422,6 +423,21 @@ func test_closed_it_costs_nothing_per_tick() -> void:
 	assert_eq(TargetInfo.built_count, built, "and never again while it is open: the rings come from that one read")
 	_run("targetmenu close")
 	assert_false(main.target_menu.view.is_processing())
+
+
+func test_the_station_is_an_ally_to_pick_as_a_target() -> void:
+	# M7-T06: Babylon 5 broadcasts, so it is identified from anywhere, and it is the player's own side: an ally, a target (not
+	# a beacon, which would only be the waypoint).
+	await _ticks(2)
+	assert_not_null(main.far_props.station, "the scenario places the station")
+	_run("targetmenu open")
+	_run("targetmenu pick allies")
+	assert_eq(_read("target_menu.page"), "allies")
+	assert_has(Array(_read("target_menu.entries") as PackedStringArray), "babylon 5")
+	_run("targetmenu pick \"babylon 5\"")
+	await _ticks(2)
+	assert_eq(main.ship.targeting.selected_id(), main.far_props.station.targetable.get_instance_id(), "selected as the target")
+	assert_false(main.target_menu.view.visible, "the pick closed the menu")
 
 
 func test_the_console_opens_picks_and_closes_it() -> void:

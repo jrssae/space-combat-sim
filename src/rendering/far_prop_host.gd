@@ -86,6 +86,7 @@ func toggle_station() -> bool:
 	dress_station(made)
 	var at: UniversePos = station_place if station_place != null else UniversePos.new(0.0, 0.0, 0.0, main.world.origin.system_id)
 	main.world.spawn(made, at, Basis.IDENTITY, main.world)
+	made.place_drum_body()
 	station = made
 	return true
 

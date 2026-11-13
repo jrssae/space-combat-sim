@@ -110,6 +110,33 @@ func test_free_flight_places_the_station_and_it_stays_there_across_rebases() -> 
 	assert_almost_eq(_universe(station), FREE_FLIGHT_STATION, Vector3.ONE * 0.05, "with its anchor off the frame's")
 
 
+func test_the_turning_drum_follows_velocity_rebases_with_the_frame() -> void:
+	# M7-T06 fix: the drum's body is tied to the anchor like the station, so a velocity rebase (and the frame's drift after it)
+	# moves it with the station and leaves its motion against the anchor as it was: the turn alone.
+	await _start()
+	assert_true(station.drum_body.is_in_group(WorldFrame.ANCHORED_GROUP), "tied to the anchor")
+	assert_true(station.drum_body.is_in_group(WorldFrame.SHIFTABLE_GROUP), "shifted by a rebase")
+	assert_eq(station.drum_body.get_parent(), station.get_parent(), "beside the station, not inside it (one group member per branch)")
+	var rid: RID = station.drum_body.get_rid()
+	var worst_speed: float = 0.0
+	var worst_offset: float = 0.0
+	for k: int in 6:
+		main.world.boost(Vector3(150.0 * (1 if k % 2 == 0 else -1), 40.0, 0.0) if k < 5 else Vector3(-150.0, -200.0, 0.0))
+		for i: int in 20:
+			await _ticks(1)
+			var origin_v: PackedFloat64Array = main.world.origin_velocity
+			var local_v: Vector3 = PhysicsServer3D.body_get_state(rid, PhysicsServer3D.BODY_STATE_LINEAR_VELOCITY)
+			# Its centre's velocity against the anchor: what Jolt moves it at, plus the frame's own.
+			var against_anchor := Vector3(local_v.x + origin_v[0], local_v.y + origin_v[1], local_v.z + origin_v[2])
+			if i > 1:
+				worst_speed = maxf(worst_speed, against_anchor.length())
+			var expected: Vector3 = station.global_transform * Transform3D(Basis(Vector3.BACK, station.drum_angle), station.drum_origin).origin
+			worst_offset = maxf(worst_offset, station.drum_body.global_position.distance_to(expected))
+	assert_lt(worst_speed, 0.5, "the drum's centre stays at rest against the anchor through six velocity rebases (worst %.3f m/s)" % worst_speed)
+	assert_lt(worst_offset, 0.01, "and on the station's axis (worst %.4f m)" % worst_offset)
+	assert_almost_eq(_universe(station), FREE_FLIGHT_STATION, Vector3.ONE * 0.05, "the station where it was")
+
+
 func test_the_drum_turns_from_the_system_clock() -> void:
 	await _start()
 	assert_almost_eq(station.spin.rate_rad_s, 0.148, 1e-6, "the manifest's spin")
@@ -118,7 +145,8 @@ func test_the_drum_turns_from_the_system_clock() -> void:
 		# The tick turned the drum before the clock moved on: the angle of the tick's own time.
 		var expected: float = station.spin.angle_at(main.world.system_time() - DT)
 		assert_almost_eq(station.drum_angle, expected, 1e-9, "the angle the clock gives")
-		assert_almost_eq(station.drum_body.transform.basis.get_euler().z, wrapf(expected, -PI, PI), 1e-4, "the body turned to it")
+		var turn: Basis = station.global_basis.inverse() * station.drum_body.global_basis
+		assert_almost_eq(turn.get_euler().z, wrapf(expected, -PI, PI), 1e-4, "the body turned to it")
 	# The core's row of the drum holds that pose, so the hit sweep sees the drum where Jolt has it.
 	var sim: SimCore = SimCore.for_tree(get_tree())
 	assert_eq(int(sim.core.surface_count()), 2, "the frame and the drum are big hulls in the core")

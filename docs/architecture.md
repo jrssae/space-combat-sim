@@ -5387,7 +5387,10 @@ native/src/surface_rows.rs       ScsSimCore.set_surface / clear_surface / surfac
 - **Bodies.** The manifest's `collision.pieces` become two `AnimatableBody3D`s (`sync_to_physics` off) on the rock layer: the frame
   never moves in the station's frame; the drum is set each tick at priority -50 (after the frame's sample, before the core's sync)
   to `StationSpin.angle_at(system_time)` plus a phase kept when `station spin` holds and restarts it, so Jolt moves it kinematically
-  and its skin has the drum's speed. The visual drum turns each frame to the same clock between ticks. No lights (M7-T18).
+  and its skin has the drum's speed. The drum's body is a node of the World beside the station, shiftable and tied to the anchor
+  itself (a group member never sits inside another), placed at its pose before it joins: a rebase or the frame's drift moves it
+  once, and a velocity rebase leaves its motion against the anchor (its turn) as it was. The visual drum turns each frame to the
+  same clock between ticks. No lights (M7-T18).
 - **Big hulls in the core (`ROLE_SURFACE`).** Each piece carries a `Damageable` (the frame's on the `Station` node beside the
   `Targetable`) whose row the core marks with the role `ROLE_SURFACE` once `set_surface` gave its body the hit volumes (16 numbers
   a box or capsule) and the convex hulls they were fitted to (by volume index). `Rows::surface(r)` gives a row's surface. With it:

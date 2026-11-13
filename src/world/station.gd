@@ -6,7 +6,10 @@ extends Node3D
 ## dresses it for the far field.
 ##
 ## - **The frame** is a kinematic body (`AnimatableBody3D`) that never moves in the station's frame; **the drum** is a second
-##   one turned in `_physics_process` from the system's clock (`StationSpin`), so Jolt gives its skin the drum's speed. Both
+##   one turned in `_physics_process` from the system's clock (`StationSpin`), so Jolt gives its skin the drum's speed. The
+##   drum's body is a node of the World beside the station, shiftable and tied to the anchor in its own right (a group member
+##   may not sit inside another), so a rebase or the frame's drift moves it once, and its motion against the anchor is only
+##   its turn: a velocity rebase changes nothing of it in universe terms. Both
 ##   are built from the manifest's `collision.pieces` (`CollisionBodies`) on the rock layer: ships collide with them, rocks
 ##   and bolts do not (bolts have no body; the hit sweep lands them).
 ## - **Hit volumes** go to the native core as the big hulls' surfaces (`ScsSimCore.set_surface`), with the convex hulls they
@@ -107,7 +110,9 @@ func far_visuals() -> Array[Node3D]:
 func _ready() -> void:
 	_register_surfaces()
 	_register_console()
-	set_drum_angle(_angle_now())
+	# The drum's body joins the World beside the station: at once when the spawner calls `place_drum_body`, else once the
+	# World is free to take a child.
+	place_drum_body.call_deferred()
 
 
 func _exit_tree() -> void:
@@ -117,6 +122,27 @@ func _exit_tree() -> void:
 		if drum_body != null:
 			_core.clear_surface(drum_body.get_instance_id())
 	_core = null
+	if drum_body != null and is_instance_valid(drum_body) and drum_body.is_inside_tree():
+		drum_body.queue_free()
+
+
+func _notification(what: int) -> void:
+	# A station freed before it was ever placed takes its drum's body with it.
+	if what == NOTIFICATION_PREDELETE and drum_body != null and is_instance_valid(drum_body) and not drum_body.is_inside_tree():
+		drum_body.free()
+
+
+## Puts the drum's body in the World beside the station (call after spawning it; `_ready` does it a frame late otherwise).
+func place_drum_body() -> void:
+	var parent: Node = get_parent()
+	if not is_inside_tree() or parent == null or drum_body == null or drum_body.is_inside_tree():
+		return
+	# Placed before it joins, so Jolt first sees it where it belongs, never across whatever lies at its local pivot.
+	drum_angle = _angle_now()
+	drum_body.transform = transform * Transform3D(Basis(Vector3.BACK, drum_angle), drum_origin)
+	parent.add_child(drum_body, true)
+	set_drum_angle(drum_angle)
+	drum_body.reset_physics_interpolation()
 
 
 func _physics_process(_delta: float) -> void:
@@ -135,8 +161,8 @@ func _process(_delta: float) -> void:
 ## Turns the drum's body (and its picture) to `angle` radians about +Z.
 func set_drum_angle(angle: float) -> void:
 	drum_angle = angle
-	if drum_body != null:
-		drum_body.transform = Transform3D(Basis(Vector3.BACK, angle), drum_origin)
+	if drum_body != null and drum_body.is_inside_tree() and is_inside_tree():
+		drum_body.global_transform = global_transform * Transform3D(Basis(Vector3.BACK, angle), drum_origin)
 	if drum_pivot != null:
 		drum_pivot.transform = Transform3D(Basis(Vector3.BACK, angle), drum_origin)
 
@@ -219,12 +245,14 @@ func _build_bodies(collision: CollisionPieces) -> void:
 	drum_body = CollisionBodies.build(drum_entry, true) as AnimatableBody3D
 	drum_body.name = "DrumBody"
 	drum_body.position = drum_origin
+	drum_body.add_to_group(WorldFrame.SHIFTABLE_GROUP)
+	drum_body.add_to_group(WorldFrame.ANCHORED_GROUP)
 	for body: AnimatableBody3D in [frame_body, drum_body]:
 		# The script places them each tick: what it sets is where Jolt moves them, with the speed that takes.
 		body.sync_to_physics = false
 		body.collision_layer = CollisionLayers.layer_of(COLLISION_KIND)
 		body.collision_mask = CollisionLayers.mask_of(COLLISION_KIND)
-		add_child(body)
+	add_child(frame_body)
 	frame_shapes = (frame_entry["shapes"] as Array).size()
 	drum_shapes = (drum_entry["shapes"] as Array).size()
 

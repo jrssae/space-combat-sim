@@ -188,8 +188,14 @@ func test_the_station_shrinks_both_pieces_and_its_drum_keeps_turning() -> void:
 	var turned: Basis = station.drum_pivot.basis
 	await wait_process_frames(3)
 	assert_ne(station.drum_pivot.basis, turned, "the drum turns inside the shrunk look")
+	# M7-T06: the station stands still; its picture between ticks is where it is (a tick's history must not move the eye's
+	# measure). The hand-off at this picture lies inside the broadcast range (M6), so it is a dot beyond it.
+	station.reset_physics_interpolation()
 	_view(far, station, FarPropHost.STATION_RANGE_M * 1.5, Vector3(1.0, 0.4, 0.3), 30)
-	assert_eq(far.path(), &"dot", "a dot beyond its range")
+	var why: String = "distance %.0f km, hand-off %.0f km at %.1f px/rad, fade %.2f, window %s" % [far.distance_m / 1000.0,
+			far.math.dot_distance_m(far.k_px_per_rad) / 1000.0, far.k_px_per_rad, far.fade, get_tree().root.size]
+	assert_lt(far.math.dot_distance_m(far.k_px_per_rad), FarPropHost.STATION_RANGE_M, "the hand-off inside its range: " + why)
+	assert_eq(far.path(), &"dot", "a dot beyond its range: " + why)
 
 
 func test_the_console_lists_the_far_props() -> void:
