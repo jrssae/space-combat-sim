@@ -1,7 +1,8 @@
 extends GutTest
 ## How the battle's ships come in (M6-T20, AC13): every ship out of a jump point, a group of one side and one fight sharing its
 ## point (within 600 m of the first), a capital its own; waves of at most a hundred points, the player's fight first, never
-## more than a hundred open at once; a battle small enough for one wave is all in at the start.
+## more than a hundred open at once; a battle small enough for one wave is all in at the start. M6-T23: only capitals open
+## points; a fighter group comes through a capital's point of its side in its wave close by, or through the jumpgate.
 
 var _big: Array[Dictionary] = []
 var _arrivals: BattleArrivals = null
@@ -47,10 +48,47 @@ func test_waves_of_a_hundred_points_never_more_open_at_once() -> void:
 	var per_wave: Dictionary = {}
 	for point: Dictionary in _arrivals.points:
 		per_wave[int(point["wave"])] = int(per_wave.get(int(point["wave"]), 0)) + 1
-	assert_eq(int(per_wave[0]), JumpPointPool.MAX_POINTS, "the first wave forms a hundred points at once")
+	assert_eq(int(per_wave[0]), JumpPointPool.MAX_POINTS, "the first wave brings a hundred units at once")
+	var capitals: Dictionary = {}
+	for point: Dictionary in _arrivals.points:
+		if StringName(point["via"]) == BattleArrivals.VIA_OWN:
+			capitals[int(point["wave"])] = int(capitals.get(int(point["wave"]), 0)) + 1
+	var most: int = 0
 	for wave: int in per_wave:
 		assert_lte(int(per_wave[wave]), JumpPointPool.MAX_POINTS)
-	assert_eq(_arrivals.max_open(), JumpPointPool.MAX_POINTS, "at most a hundred open at any time")
+		most = maxi(most, int(capitals.get(wave, 0)))
+	assert_eq(_arrivals.max_open(), most, "only the capitals open points: the most in one wave are open at once")
+	assert_lte(_arrivals.max_open(), JumpPointPool.MAX_POINTS, "at most a hundred open at any time")
+
+
+func test_fighter_groups_ride_a_near_capital_of_their_side_in_their_wave_or_take_the_gate() -> void:
+	var brought: Dictionary = {}
+	for point: Dictionary in _arrivals.points:
+		var via: StringName = point["via"]
+		var first: Dictionary = _big[(point["members"] as PackedInt32Array)[0]]
+		if bool(point["capital"]):
+			assert_eq(via, BattleArrivals.VIA_OWN, "a capital opens its own point")
+			assert_eq(int(point["rides"]), -1)
+			continue
+		assert_ne(via, BattleArrivals.VIA_OWN, "a fighter group never opens a point")
+		if via == BattleArrivals.VIA_GATE:
+			assert_eq(int(point["rides"]), -1)
+			continue
+		var cap: Dictionary = _arrivals.points[int(point["rides"])]
+		var cap_entry: Dictionary = _big[(cap["members"] as PackedInt32Array)[0]]
+		assert_eq(StringName(cap["via"]), BattleArrivals.VIA_OWN, "it rides a capital's point")
+		assert_eq(int(cap_entry["side"]), int(first["side"]), "of its own side")
+		assert_eq(int(cap["wave"]), int(point["wave"]), "in its wave")
+		assert_eq(float(cap["at_s"]), float(point["at_s"]), "and comes in when that capital does")
+		assert_lte((cap_entry["offset"] as Vector3).distance_to(first["offset"] as Vector3), BattleArrivals.CAPITAL_NEAR_M)
+		brought[int(point["rides"])] = int(brought.get(int(point["rides"]), 0)) + 1
+	for cap: int in brought:
+		assert_lte(int(brought[cap]), BattleArrivals.GROUPS_PER_CAPITAL)
+	var via_capital: int = _arrivals.ships_via(BattleArrivals.VIA_CAPITAL)
+	var via_gate: int = _arrivals.ships_via(BattleArrivals.VIA_GATE)
+	assert_gt(via_capital, 0, "a mix: some groups through their side's capital points")
+	assert_gt(via_gate, 0, "and some through the gate (%d and %d fighters)" % [via_capital, via_gate])
+	assert_eq(via_capital + via_gate + _arrivals.ships_via(BattleArrivals.VIA_OWN), _big.size())
 
 
 func test_the_first_wave_opens_at_the_start_and_later_ones_spread_out_in_turn() -> void:

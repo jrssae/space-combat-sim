@@ -11,6 +11,12 @@ extends Node3D
 ## made while they open and close (their fit and timing are filled in place). The pool draws its points itself, once per frame
 ## for one camera, and caps their lights to the nearest few (`VortexLod.LIT_POINTS`) and their sounds to a few a second, so a
 ## wave of a hundred neither floods the light rig nor the mixer.
+##
+## Who may open one (M6-T23, `JumpCapability`): a point is opened by a jump-capable ship (`open_for`'s `opener`), which holds it
+## while it stays within its hold range of the mouth. Each tick the pool checks its held points (a hundred at most, cheap): one
+## whose opener is out of range, destroyed or disabled collapses at once in its closing flash, and every ship in its funnel is
+## destroyed (`HitInfo.CAUSE_VORTEX_COLLAPSE`, no kill credit); an opener gone through its own point holds it
+## `JumpCapability.OWN_DEPARTURE_HOLD_S` more, then the same. A point with no opener is a debug tool's (the console) or a test's.
 
 const DEFAULT_COUNT: int = 4
 ## The most points one pool holds: the 1 000-ship battle's arrival waves open this many at once.
@@ -24,6 +30,12 @@ const SHARE_S: float = 1.0
 var world: WorldFrame = null
 ## Points opened so far (tests, console).
 var opened: int = 0
+## Points collapsed so far, the ships they destroyed, and why the last one went (`JumpCapability`'s reasons).
+var collapses: int = 0
+var collapse_kills: int = 0
+var last_collapse: StringName = &""
+## Openings refused because the opener cannot open a point.
+var refused: int = 0
 
 var _points: Array[JumpVortex] = []
 var _cursor: int = 0  # where the search for a free point starts: points free up in the order they opened
@@ -67,17 +79,22 @@ func _process(_delta: float) -> void:
 ## Opens a point (or joins one just opened close by) for a ship of `ship_radius_m` coming out at universe `at`, flying along
 ## `forward` (World frame), and returns it; null without points. The mouth sits just behind the ship, so it comes out of it.
 ## `share` false always opens a new point (a caller that has grouped its ships already, as the battle's arrivals, then `join`s
-## the rest of the group to it).
+## the rest of the group to it). `opener` is the jump-capable ship that opens and holds it (M6-T23); a ship that cannot open a
+## point is refused (null). With no opener the point is a debug tool's, held by nothing.
 func open_for(at: UniversePos, forward: Vector3, ship_radius_m: float,
-		direction: JumpVortex.Direction = JumpVortex.Direction.ARRIVAL, share: bool = true) -> JumpVortex:
+		direction: JumpVortex.Direction = JumpVortex.Direction.ARRIVAL, share: bool = true, opener: Node3D = null) -> JumpVortex:
 	if world == null or _points.is_empty():
+		return null
+	if opener != null and not JumpCapability.can_open(opener):
+		refused += 1
+		push_warning("JumpPointPool: %s cannot open a jump point; it must use a gate or a capable ship's point" % opener.name)
 		return null
 	var ahead: Vector3 = forward.normalized() if forward.length() > 1e-3 else Vector3.FORWARD
 	var local: Vector3 = world.universe_to_local(at)
 	if share:
 		for point: JumpVortex in _points:
 			if point.is_active() and point.direction == direction and point.age_s < SHARE_S \
-					and point.position.distance_to(local) < SHARE_M:
+					and point.position.distance_to(local) < SHARE_M and (opener == null or point.held):
 				_widen(point, local, ship_radius_m)
 				return point
 	var up: Vector3 = Vector3.UP if absf(ahead.dot(Vector3.UP)) < 0.99 else Vector3.BACK
@@ -89,7 +106,54 @@ func open_for(at: UniversePos, forward: Vector3, ship_radius_m: float,
 	point.fit.depth_m = r * VortexFit.POINT_DEPTH_RATIO
 	point.fit.mouth_z_m = 0.0
 	_open(point, Transform3D(Basis.looking_at(ahead, up), mouth), direction, VortexTiming.DEFAULT_HOLD_S)
+	if opener != null:
+		point.hold_by(opener, JumpCapability.hold_range_of(opener))
 	return point
+
+
+# Collapses each held point whose opener has lost it.
+func _physics_process(_delta: float) -> void:
+	for point: JumpVortex in _points:
+		if point.held and point.is_active():
+			var why: StringName = hold_verdict(point)
+			if why != JumpCapability.HOLDS:
+				collapse(point, why)
+
+
+## Whether `point` still holds, and if not, why (`JumpCapability`'s reasons).
+static func hold_verdict(point: JumpVortex) -> StringName:
+	var opener: Node3D = point.opener
+	var through_s: float = SimClock.now() - point.opener_through_at_s if point.opener_through_at_s >= 0.0 else -1.0
+	var alive: bool = opener != null and is_instance_valid(opener)
+	if alive and through_s < 0.0 and JumpCapability.is_destroyed(opener):
+		return JumpCapability.DESTROYED  # its wreck is taken out of play in the same tick
+	var valid: bool = alive and opener.is_inside_tree() \
+			and (opener.is_visible_in_tree() or opener.has_meta(TierDirector.TIER_META))  # parked in its pool: gone
+	if not valid or through_s >= 0.0:
+		return JumpCapability.verdict(valid, false, false, 0.0, 0.0, through_s)
+	var at: Vector3 = TierDirector.flying_position(opener)  # a capital parked in the tier still flies its row
+	return JumpCapability.verdict(true, JumpCapability.is_destroyed(opener), JumpCapability.is_disabled(opener),
+			at.distance_to(point.true_frame().origin), point.hold_range_m)
+
+
+## Collapses `point` now for `reason`: its closing flash at once, and every ship in its funnel destroyed. Returns the ships killed.
+func collapse(point: JumpVortex, reason: StringName) -> int:
+	if point == null or not point.is_active():
+		return 0
+	point.collapse(reason)
+	collapses += 1
+	last_collapse = reason
+	var transits: VortexTransits = VortexTransits.of(world)
+	var killed: int = transits.kill_in(point) if transits != null else 0
+	collapse_kills += killed
+	return killed
+
+
+## The distance from `point`'s opener to its mouth, m (-1 with no opener in play).
+static func opener_distance_m(point: JumpVortex) -> float:
+	if point == null or point.opener == null or not is_instance_valid(point.opener) or not point.opener.is_inside_tree():
+		return -1.0
+	return TierDirector.flying_position(point.opener).distance_to(point.true_frame().origin)
 
 
 ## Brings another ship of `point`'s group out of it: a ship of `ship_radius_m` coming out at universe `at`; the mouth widens to
@@ -106,10 +170,14 @@ func _widen(point: JumpVortex, local: Vector3, ship_radius_m: float) -> void:
 
 
 ## Opens a point at World-local `xform` (the origin the mouth's centre, -Z the way out) with the size `p_fit`; the oldest point
-## is taken back when all are open. Null without points.
+## is taken back when all are open. Null without points. `opener` as in `open_for` (none: a debug tool's point).
 func open_with(xform: Transform3D, p_fit: VortexFit, direction: JumpVortex.Direction,
-		hold_s: float = VortexTiming.DEFAULT_HOLD_S) -> JumpVortex:
+		hold_s: float = VortexTiming.DEFAULT_HOLD_S, opener: Node3D = null) -> JumpVortex:
 	if _points.is_empty():
+		return null
+	if opener != null and not JumpCapability.can_open(opener):
+		refused += 1
+		push_warning("JumpPointPool: %s cannot open a jump point; it must use a gate or a capable ship's point" % opener.name)
 		return null
 	var chosen: JumpVortex = _take()
 	chosen.fit.mouth_radius_m = p_fit.mouth_radius_m
@@ -117,6 +185,8 @@ func open_with(xform: Transform3D, p_fit: VortexFit, direction: JumpVortex.Direc
 	chosen.fit.depth_m = p_fit.depth_m
 	chosen.fit.mouth_z_m = p_fit.mouth_z_m
 	_open(chosen, xform, direction, hold_s)
+	if opener != null:
+		chosen.hold_by(opener, JumpCapability.hold_range_of(opener))
 	return chosen
 
 
@@ -147,6 +217,18 @@ func _open(point: JumpVortex, xform: Transform3D, direction: JumpVortex.Directio
 	_sounds += 0 if point.muted else 1
 	point.open_at(xform, point.fit, direction, hold_s)
 	opened += 1
+
+
+## Ends every opening at once, with no close and no collapse, and lets the ships in their funnels go whole (a run's end).
+func stop_all() -> void:
+	var transits: VortexTransits = VortexTransits.of(world) if world != null else null
+	for point: JumpVortex in _points:
+		if not point.is_active():
+			continue
+		if transits != null:
+			for body: RigidBody3D in transits.bodies_in(point):
+				transits.cancel(body)
+		point.stop()
 
 
 ## Points showing now.

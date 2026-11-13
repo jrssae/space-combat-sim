@@ -42,8 +42,15 @@ const OPTION_KEYS: Array[String] = ["warmup", "seed", "label", "probe", "rebase_
 const ARRIVE_JUMP: StringName = &"jump"
 const ARRIVE_PLACED: StringName = &"placed"
 ## With arrivals, the measured window starts at least this long after the last point opened: its ships fly out of the funnel
-## first (M6-T22, at most `VortexTransit.MAX_TRANSIT_S`).
-const ARRIVAL_SETTLE_S: float = 1.0 + VortexTransit.MAX_TRANSIT_S
+## first (M6-T22, at most `VortexTransit.MAX_TRANSIT_S`), and the gate's groups wait for its vortex to open (M6-T23).
+const ARRIVAL_SETTLE_S: float = 1.0 + VortexTransit.MAX_TRANSIT_S + GateActivation.DURATION_S + VortexTiming.FLASH_S \
+		+ VortexTiming.GROW_S
+## The battle's jumpgate (M6-T23), for the fighter groups with no capital to bring them: this far below the first fight, facing
+## up into the battle.
+const GATE_BELOW_M: float = 4000.0
+## Ships of one wave come out of the gate on a spiral this far apart, m, at most `GATE_SLOTS` before it starts over.
+const GATE_SPACING_M: float = 35.0
+const GATE_SLOTS: int = 300
 ## A carrier's launch leaves its bay this much faster than the carrier, along its nose, m/s.
 const LAUNCH_MPS: float = 80.0
 
@@ -74,6 +81,10 @@ var _launch_turn: Dictionary = {}  # carrier -> how many it launched, to take it
 var jumps: JumpPointPool = null
 ## This run's arrivals, or null when its ships are placed.
 var arrivals: BattleArrivals = null
+## The battle's jumpgate while a run that needs one is set up (M6-T23), else null.
+var gate: Jumpgate = null
+var _gate_slot: int = 0  # the next spiral spot at the gate
+var _riders: Dictionary = {}  # capital unit -> ships brought through its point so far
 ## The most points a wave opens: the pool's hundred; a test asks for fewer to see several waves in a small battle.
 var wave_points: int = JumpPointPool.MAX_POINTS
 var _plan: Array[Dictionary] = []
@@ -201,7 +212,7 @@ func start(layout: StringName, n: int, options: Dictionary) -> ConsoleResult:
 	var tps: float = float(Engine.physics_ticks_per_second)
 	_warmup_ticks = roundi(float(_options["warmup"]) * tps)
 	_measure_ticks = maxi(1, roundi(float(_options["seconds"]) * tps))
-	if arrivals != null and arrivals.waves > 1:
+	if arrivals != null and (arrivals.waves > 1 or arrivals.count_via(BattleArrivals.VIA_GATE) > 0):  # the gate's open later
 		_warmup_ticks = maxi(_warmup_ticks, ceili((arrivals.last_at_s() + ARRIVAL_SETTLE_S) * tps))
 	_tick = 0
 	_engine_worst = PackedFloat64Array()
@@ -275,9 +286,13 @@ func _set_up_scene() -> void:
 		_ensure_jumps()
 		arrivals = BattleArrivals.plan(plan, mini(wave_points, jumps.size()))
 	_placed = {ShipPool.ALLY_TYPE: 0, ShipPool.DEFAULT_TYPE: 0}
+	_riders.clear()
+	_gate_slot = 0
+	if arrivals != null and arrivals.count_via(BattleArrivals.VIA_GATE) > 0:
+		_ensure_gate()
 	for i: int in plan.size():
-		if StringName(plan[i]["kind"]) == BenchLayout.KIND_FIGHTER and _arrives_at_start(i):
-			_place_fighter(i, Vector3.ZERO)
+		if StringName(plan[i]["kind"]) == BenchLayout.KIND_FIGHTER and arrivals == null:
+			_place_fighter(i, Vector3.ZERO)  # with arrivals, every fighter comes in with its unit (M6-T23)
 	_mix = BenchLayout.mix(_layout, _n)
 	_rocks_placed = 0
 	if not _mix.is_empty() and standins != null:
@@ -344,18 +359,22 @@ func _arrives_at_start(i: int) -> bool:
 	return arrivals == null or int(arrivals.points[arrivals.entry_point[i]]["wave"]) == 0
 
 
-# Plan entry `i`, a fighter, into play from its pool; `rest` is the frame's rest velocity for a ship arriving mid-run.
-func _place_fighter(i: int, rest: Vector3) -> void:
+# Plan entry `i`, a fighter, into play from its pool; `rest` is the frame's rest velocity for a ship arriving mid-run. `xform`
+# (World-local) and `velocity` (World) place it elsewhere than its plan's place: at a capital's point or the gate (M6-T23).
+func _place_fighter(i: int, rest: Vector3, xform: Variant = null, velocity: Variant = null) -> Combatant:
 	var e: Dictionary = _plan[i]
 	var type: StringName = e["type"]
 	var made: Dictionary = BrainFactory.from_behaviour(e["behaviour"], _anchor, int(e["seed"]))
 	if not bool(made["ok"]):
 		push_warning("bench: %s: %s" % [_names[i], made["error"]])
-		return
-	var placed: Combatant = main.ships.acquire(_names[i], _anchor.plus_local(e["offset"]), e["basis"],
-			(e["velocity"] as Vector3) + rest, made["brain"] as PilotBrain, type)
+		return null
+	var at: UniversePos = _anchor.plus_local(e["offset"]) if xform == null \
+			else main.world.to_universe((xform as Transform3D).origin)
+	var basis: Basis = e["basis"] if xform == null else (xform as Transform3D).basis
+	var v: Vector3 = (e["velocity"] as Vector3) + rest if velocity == null else velocity as Vector3
+	var placed: Combatant = main.ships.acquire(_names[i], at, basis, v, made["brain"] as PilotBrain, type)
 	if placed == null:
-		return
+		return null
 	placed.damageable.invulnerable = true
 	if placed.faction != StringName(e["faction"]):
 		set_faction(placed, StringName(e["faction"]))
@@ -364,6 +383,7 @@ func _place_fighter(i: int, rest: Vector3) -> void:
 	_bodies[i] = placed.ship
 	if not String(e["wing"]).is_empty():
 		main.wings.join(String(e["wing"]), placed)
+	return placed
 
 
 # Plan entry `i`, a capital, into play as a stand-in.
@@ -388,30 +408,101 @@ func _ensure_jumps() -> void:
 	jumps.prepare(JumpPointPool.MAX_POINTS)
 
 
-# Opens every point of `arrivals` due by `now_s`: the first wave's ships are already in play; a later point brings its ships in
-# first, then opens round them. Each ship then comes out of the point's black ring and flies out to its place (M6-T22).
+# Brings in every unit of `arrivals` due by `now_s` (M6-T23): each capital first (the first wave's are in play already; a later
+# one is placed), out of the point it opens; then the fighter groups riding a capital's point come out of it round its axis, and
+# the rest come through the gate once its vortex is open. Each ship comes out of its black ring and flies out (M6-T22).
 func _open_due(now_s: float) -> void:
 	var rest: Vector3 = main.world.rest_velocity()
-	while _next_point < arrivals.points.size() and float(arrivals.points[_next_point]["at_s"]) <= now_s:
-		var point: Dictionary = arrivals.points[_next_point]
-		var members: PackedInt32Array = point["members"]
-		if int(point["wave"]) > 0:
-			for i: int in members:
-				if StringName(_plan[i]["kind"]) == BenchLayout.KIND_CAPITAL:
-					_place_capital(i, rest)
-				else:
-					_place_fighter(i, rest)
-		var first: Dictionary = _plan[members[0]]
-		var opened: JumpVortex = jumps.open_for(_anchor.plus_local(first["offset"]), -(first["basis"] as Basis).z,
-				_radii[members[0]], JumpVortex.Direction.ARRIVAL, false)
-		for k: int in range(1, members.size()):
-			jumps.join(opened, _anchor.plus_local(_plan[members[k]]["offset"]), _radii[members[k]])
-		var transits: VortexTransits = VortexTransits.attach(main.world)
-		for i: int in members:
-			var body: RigidBody3D = _bodies[i]
-			if opened != null and transits != null and body != null and is_instance_valid(body) and body.is_inside_tree():
-				transits.begin_arrival(body, opened, body.global_position, body.linear_velocity)
-		_next_point += 1
+	var due: int = _next_point
+	while due < arrivals.points.size() and float(arrivals.points[due]["at_s"]) <= now_s:
+		due += 1
+	var transits: VortexTransits = VortexTransits.attach(main.world)
+	for p: int in range(_next_point, due):
+		var unit: Dictionary = arrivals.points[p]
+		if StringName(unit["via"]) != BattleArrivals.VIA_OWN:
+			continue
+		var i: int = (unit["members"] as PackedInt32Array)[0]
+		if int(unit["wave"]) > 0:
+			_place_capital(i, rest)
+		var cap := _bodies[i] as CapitalStandin
+		if cap == null or not is_instance_valid(cap):
+			continue
+		var e: Dictionary = _plan[i]
+		var opened: JumpVortex = jumps.open_for(_anchor.plus_local(e["offset"]), -(e["basis"] as Basis).z, _radii[i],
+				JumpVortex.Direction.ARRIVAL, false, cap)
+		unit["point"] = opened
+		if opened != null and transits != null and cap.is_inside_tree():
+			transits.begin_arrival(cap, opened, cap.global_position, cap.linear_velocity)
+	for p: int in range(_next_point, due):
+		var unit: Dictionary = arrivals.points[p]
+		match StringName(unit["via"]):
+			BattleArrivals.VIA_CAPITAL:
+				_ride_in(unit, rest, transits)
+			BattleArrivals.VIA_GATE:
+				for i: int in unit["members"] as PackedInt32Array:
+					_through_gate(i, rest)
+	_next_point = due
+
+
+# A fighter group comes out of its capital's point with it, each ship round the axis, moving as the capital does; with the
+# capital's point gone (refused or taken back) the ships take their plan places instead.
+func _ride_in(unit: Dictionary, rest: Vector3, transits: VortexTransits) -> void:
+	var capital_unit: Dictionary = arrivals.points[int(unit["rides"])]
+	var point := capital_unit.get("point") as JumpVortex
+	var cap_entry: Dictionary = _plan[(capital_unit["members"] as PackedInt32Array)[0]]
+	var velocity: Vector3 = (cap_entry["velocity"] as Vector3) + rest
+	for i: int in unit["members"] as PackedInt32Array:
+		if point == null or not point.is_active():
+			_place_fighter(i, rest)
+			continue
+		var k: int = int(_riders.get(int(unit["rides"]), 0))
+		_riders[int(unit["rides"])] = k + 1
+		var placed: Combatant = _place_fighter(i, rest, CarrierJumps.ride_transform(point, k, null), velocity)
+		if placed == null:
+			continue
+		var xform: Transform3D = CarrierJumps.ride_transform(point, k, placed.ship)  # clear of the mouth by its own size
+		placed.ship.reset_to(xform)
+		placed.ship.linear_velocity = velocity
+		if transits != null:
+			transits.begin_arrival(placed.ship, point, xform.origin, velocity)
+
+
+# Plan entry `i`, a fighter with no capital to bring it, comes through the battle's gate once its vortex is open: side by side on a
+# spiral across the mouth, flying out at the gate's arrival speed.
+func _through_gate(i: int, rest: Vector3) -> void:
+	if gate == null or not is_instance_valid(gate):
+		_place_fighter(i, rest)
+		return
+	var k: int = _gate_slot % GATE_SLOTS
+	_gate_slot += 1
+	var r: float = GATE_SPACING_M * sqrt(float(k))
+	var angle: float = float(k) * 2.39996323
+	var offset := Vector3(cos(angle) * r * Jumpgate.DEFAULT_SIDE_RADIUS_M / Jumpgate.DEFAULT_ARM_RADIUS_M, sin(angle) * r, 0.0)
+	var g: Jumpgate = gate
+	gate.request_arrival(func() -> void:
+		if not running or g != gate:
+			return
+		var placed: Combatant = _place_fighter(i, Vector3.ZERO, g.arrival_transform(offset),
+				g.arrival_velocity() + main.world.rest_velocity())
+		if placed != null:
+			g.bring_through(placed.ship))
+
+
+# The battle's gate below its first fight, facing up into it; made for a run that needs it, freed when it ends.
+func _ensure_gate() -> void:
+	if gate != null and is_instance_valid(gate):
+		return
+	var centres: Array[Vector3] = BenchLayout.fight_centres(_layout, _n)
+	var below: Vector3 = (centres[0] if not centres.is_empty() else Vector3.ZERO) + Vector3.DOWN * GATE_BELOW_M
+	gate = Jumpgate.create("BENCH GATE")
+	main.world.spawn(gate, _anchor.plus_local(below), Basis.looking_at(Vector3.UP, Vector3.BACK), main.targets)
+
+
+func _free_gate() -> void:
+	if gate != null and is_instance_valid(gate):
+		gate.get_parent().remove_child(gate)
+		gate.queue_free()
+	gate = null
 
 
 # The battle's gravity (M6-T07): the frame falls on the circular orbit `orbit` names, placed so that the battle's centre
@@ -611,8 +702,11 @@ func _put_back() -> void:
 		main.world.auto_boost_speed_mps = float(_restore["boost_speed"])
 		if float(_options.get("boost", 0.0)) > 0.0:
 			main.world.boost_to_anchor()
+	if jumps != null and is_instance_valid(jumps):
+		jumps.stop_all()  # before their capitals go: a point losing its opener would collapse on whatever is in it
 	if standins != null and is_instance_valid(standins):
 		standins.clear()
+	_free_gate()
 	_restore_frame()
 	if main != null and is_instance_valid(main.ships):
 		for c: Combatant in main.ships.all_ships():
@@ -634,7 +728,14 @@ func _arrivals_summary() -> Dictionary:
 	return {"mode": String(ARRIVE_JUMP), "points": arrivals.points.size(), "waves": arrivals.waves,
 			"max_open": arrivals.max_open(), "last_at_s": arrivals.last_at_s(), "pool": jumps.size() if jumps != null else 0,
 			"opened": _next_point, "warmup_s": float(_warmup_ticks) / float(Engine.physics_ticks_per_second),
-			"spawn_worst_us": _arrival_spawn_us}
+			"spawn_worst_us": _arrival_spawn_us,
+			"capital_points": arrivals.count_via(BattleArrivals.VIA_OWN),
+			"groups_via_capital": arrivals.count_via(BattleArrivals.VIA_CAPITAL),
+			"groups_via_gate": arrivals.count_via(BattleArrivals.VIA_GATE),
+			"fighters_via_capital": arrivals.ships_via(BattleArrivals.VIA_CAPITAL),
+			"fighters_via_gate": arrivals.ships_via(BattleArrivals.VIA_GATE),
+			"gate_arrived": gate.arrived if gate != null and is_instance_valid(gate) else 0,
+			"collapses": jumps.collapses if jumps != null else 0}
 
 
 # The engine's own physics time a tick, us, in the warm-up (with arrivals, while the ships come in) and in the measured window:

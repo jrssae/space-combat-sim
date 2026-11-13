@@ -21,6 +21,9 @@ signal mission_ended(result: Dictionary)
 ## After `HitResolver` (200), `RamResolver` (210), `WingDirector` (290) and `WaveDirector` (300).
 const PRIORITY: int = 400
 const JUMP_POINTS: int = JumpPointPool.DEFAULT_COUNT
+## Carriers a mission's raids may bring in at once: each brings a whole wave and jumps back within half a minute, and a skipped
+## run brings the civilian escort's three waves in at once.
+const CARRIERS: int = 3
 ## Sim seconds between the end of the mission and the debrief: long enough to read the result line and watch the last
 ## explosion, short enough not to feel stuck. Sim time, so a pause holds it and leaving the scene drops it.
 const DEBRIEF_DELAY_S: float = 3.0
@@ -66,6 +69,7 @@ func _ready() -> void:
 	jumps.world = main.world
 	main.effects.add_child(jumps)
 	jumps.prepare(JUMP_POINTS)
+	CarrierJumps.attach(main.world).prepare(CARRIERS)  # raids behind a carrier (M6-T23), built at load (D22)
 	stage = MissionStage.new()
 	stage.setup(main, jumps)
 	var world := MissionWorld.new()

@@ -41,7 +41,7 @@ const VIEW_NAMES: Array[StringName] = [&"front", &"three_quarter", &"close", &"t
 		&"off"]
 ## `gate open` and `vortex open` hold the vortex open this long, to look at it.
 const CONSOLE_HOLD_S: float = 20.0
-const VORTEX_ACTIONS: Array[StringName] = [&"status", &"open", &"close", &"view", &"lod"]
+const VORTEX_ACTIONS: Array[StringName] = [&"status", &"open", &"close", &"view", &"lod", &"collapse"]
 ## `vortex view`: the camera in front of the newest open point, off its axis, this many mouth radii away.
 const POINT_VIEW: Vector3 = Vector3(1.2, 0.8, -4.5)
 ## `vortex open`: the mouth's radius when none is given, and the point's distance ahead of the player in mouth radii (plus a
@@ -80,7 +80,7 @@ func _ready() -> void:
 		console_points.name = "ConsoleJumpPoints"
 		console_points.world = main.world
 		main.effects.add_child(console_points)
-		console_points.prepare(2)
+		console_points.prepare(4)  # room for a console carrier's arrival and departure points (M6-T23)
 	var layer := CanvasLayer.new()
 	layer.name = "JumpFade"
 	layer.layer = FADE_LAYER
@@ -375,7 +375,7 @@ func _register_console() -> void:
 			ConsoleArg.string_optional(&"option", null),
 			ConsoleArg.float_optional(&"hold_s", CONSOLE_HOLD_S, 0.0, 600.0)] as Array[ConsoleArg]), _cmd_gate, self)
 	registry.register_command(ConsoleCommand.new(&"vortex",
-			"A stand-alone jump point ahead of the player, to look at: status, open <arrival|departure> [mouth radius m] (facing the player), close (every one), view [mouth radii away] (hold the camera in front of the newest open point: console, mission, encounter or bench), lod <auto|0-6> (every vortex at one detail level, for captures)",
+			"A stand-alone jump point ahead of the player, a debug tool: status, open <arrival|departure> [mouth radius m] (facing the player; held by no ship, which only a jump-capable ship could open in play, M6-T23), close (every one), view [mouth radii away] (hold the camera in front of the newest open point: console, mission, encounter or bench), lod <auto|0-6> (every vortex at one detail level, for captures), collapse (destroy the newest held point's opener, so the point collapses and kills the ships in its funnel)",
 			[ConsoleArg.enum_optional(&"action", VORTEX_ACTIONS, &"status"),
 			ConsoleArg.string_optional(&"option", "arrival"),
 			ConsoleArg.float_optional(&"radius_m", CONSOLE_POINT_RADIUS_M, 5.0, 5000.0)] as Array[ConsoleArg]), _cmd_vortex, self)
@@ -396,6 +396,29 @@ func _register_console() -> void:
 				"unit": "m", "doc": "The newest console point's mouth radius"},
 		&"depth_m": {"get": func() -> float: return _console_point().fit.depth_m if _console_point() != null else 0.0,
 				"unit": "m", "doc": "The newest console point's depth"},
+		&"opener": {"get": func() -> String: return _newest_held_point().opener.name if _newest_held_point() != null \
+				and is_instance_valid(_newest_held_point().opener) else "none",
+				"doc": "The ship holding the newest held point (M6-T23: only a jump-capable ship opens one; none with no held point)"},
+		&"hold_range_m": {"get": func() -> float: return _newest_held_point().hold_range_m if _newest_held_point() != null else 0.0,
+				"unit": "m", "doc": "How far from the newest held point's mouth its opener may be (twice its length by default)"},
+		&"opener_distance_m": {"get": func() -> float: return JumpPointPool.opener_distance_m(_newest_held_point()),
+				"unit": "m", "doc": "From the newest held point's opener to its mouth (-1 with none); past the hold range it collapses"},
+		&"held": {"get": func() -> int:
+					var n: int = 0
+					for pool: JumpPointPool in _pools():
+						for point: JumpVortex in pool.points():
+							n += 1 if point.is_active() and point.held else 0
+					return n,
+				"doc": "Open points a ship holds now"},
+		&"collapses": {"get": _collapses, "doc": "Points collapsed so far (opener out of range, destroyed, disabled or gone through)"},
+		&"collapse_kills": {"get": _collapse_kills, "doc": "Ships destroyed in collapsing points' funnels so far"},
+		&"last_collapse": {"get": func() -> String:
+					var why: String = "none"
+					for pool: JumpPointPool in _pools():
+						if pool.last_collapse != &"":
+							why = String(pool.last_collapse)
+					return why,
+				"doc": "Why the last point collapsed: out_of_range, opener_destroyed, opener_disabled, opener_gone or opener_through"},
 		&"gate_rim_m": {"get": func() -> float: return gate().fit.mouth_radius_m if gate() != null else 0.0, "unit": "m",
 				"doc": "The gate vortex's rim half height, its smaller semi-axis (from the markers)"},
 		&"gate_half_width_m": {"get": func() -> float: return gate().fit.mouth_half_width_m if gate() != null else 0.0,
@@ -507,6 +530,15 @@ func _cmd_vortex(args: Dictionary) -> ConsoleResult:
 			main.camera_rig.play_shot(made["shot"], _view_pose, _origin_to_local)
 			main.letterbox.shown = false
 			return ConsoleResult.line("viewing a %.0f m point (%s) from %.0f m" % [r, newest.phase_name(), at.length()])
+		&"collapse":
+			var held: JumpVortex = _newest_held_point()
+			if held == null:
+				return ConsoleResult.failure("no open point is held by a ship")
+			var damageable: Damageable = Damageable.of(held.opener) if is_instance_valid(held.opener) else null
+			if damageable == null or not damageable.kill():
+				return ConsoleResult.failure("its opener cannot be destroyed")
+			return ConsoleResult.line("%s destroyed; its point collapses with %d ships in its funnel" % [held.opener.name,
+					VortexTransits.attach(main.world).bodies_in(held).size()])
 		&"lod":
 			var level: String = str(args[&"option"])
 			if level == "auto" or level == "arrival":
@@ -527,6 +559,30 @@ func _newest_point() -> JumpVortex:
 			if point.is_active() and (newest == null or point.age_s < newest.age_s):
 				newest = point
 	return newest
+
+
+# The newest open point a ship holds, in any pool, or null.
+func _newest_held_point() -> JumpVortex:
+	var newest: JumpVortex = null
+	for pool: JumpPointPool in _pools():
+		for point: JumpVortex in pool.points():
+			if point.is_active() and point.held and (newest == null or point.age_s < newest.age_s):
+				newest = point
+	return newest
+
+
+func _collapses() -> int:
+	var n: int = 0
+	for pool: JumpPointPool in _pools():
+		n += pool.collapses
+	return n
+
+
+func _collapse_kills() -> int:
+	var n: int = 0
+	for pool: JumpPointPool in _pools():
+		n += pool.collapse_kills
+	return n
 
 
 # The newest point `vortex open` opened, or null.

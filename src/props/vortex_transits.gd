@@ -149,6 +149,26 @@ func cancel_departure(body: Node) -> void:
 		_end(p)
 
 
+## The bodies in `vortex`'s funnel now, arriving or departing (M6-T23).
+func bodies_in(vortex: JumpVortex) -> Array[RigidBody3D]:
+	var out: Array[RigidBody3D] = []
+	for p: VortexPassage in _passages:
+		if p.vortex == vortex and is_instance_valid(p.body):
+			out.append(p.body)
+	return out
+
+
+## Destroys every ship in `vortex`'s funnel (its point collapsed, M6-T23): no shooter, no kill credit. Returns how many died.
+func kill_in(vortex: JumpVortex) -> int:
+	var killed: int = 0
+	for body: RigidBody3D in bodies_in(vortex):
+		var damageable: Damageable = Damageable.of(body)
+		if damageable != null and body.is_inside_tree() and damageable.kill(HitInfo.CAUSE_VORTEX_COLLAPSE):
+			killed += 1
+		cancel(body)
+	return killed
+
+
 ## Whether `body` is in a funnel now.
 func is_passing(body: Node) -> bool:
 	return _by_body.has(body)
@@ -228,6 +248,9 @@ func _step(p: VortexPassage, delta: float) -> void:
 				frame.origin, axis, frame.basis.y, p.speed_mps, p.capability))
 	if VortexTransit.reached_base(fit, local.z, p.bounding_radius_m * factor) or p.age_s > p.limit_s:
 		flash(p.vortex, body.global_position)
+		if p.vortex.opener == body and p.vortex.held:
+			p.vortex.opener_through_at_s = SimClock.now()  # its own point holds a moment for the ships behind it (M6-T23)
+			p.vortex.extend(JumpCapability.OWN_DEPARTURE_HOLD_S + KEEP_OPEN_S)
 		var on_through: Callable = p.on_through
 		departures_done += 1
 		_end(p)
@@ -249,10 +272,9 @@ func _start(body: RigidBody3D, vortex: JumpVortex, kind: VortexPassage.Kind) -> 
 	else:
 		p.lateral_radius_m = 10.0
 		p.bounding_radius_m = 10.0
-	var ship := body as Ship
-	if ship != null:
-		p.tier_exempt_was = ship.tier_exempt
-		ship.tier_exempt = true
+	if &"tier_exempt" in body:  # a pooled ship or a capital stand-in
+		p.tier_exempt_was = bool(body.get(&"tier_exempt"))
+		body.set(&"tier_exempt", true)
 	for child: Node in body.get_children():
 		if child is AiPilotDriver and (child as AiPilotDriver).brain != null:
 			p.driver = child as AiPilotDriver
@@ -337,8 +359,8 @@ func _end(p: VortexPassage) -> void:
 			if theirs != null:
 				theirs.exempt.erase(body)
 	p.exempt.clear()
-	if body is Ship:
-		(body as Ship).tier_exempt = p.tier_exempt_was
+	if body != null and &"tier_exempt" in body:
+		body.set(&"tier_exempt", p.tier_exempt_was)
 	if p.driver != null and is_instance_valid(p.driver):
 		p.driver.in_passage = false
 

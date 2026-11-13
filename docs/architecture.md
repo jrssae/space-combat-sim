@@ -5178,7 +5178,7 @@ At 1 000 km (GPU): the gate 23 draw calls, 145 fps (the display's cap), 379 MB; 
   turns clockwise and travels in, along one spiral (checked frame by frame). Colours: arrival blue, dark sky blue; departure
   orange/yellow. The rim fades over a soft wisped edge measured against `references/jumpgate/jumpgate.png`.
 - **Open points** (`JumpPointPool`, replacing `JumpArrival` and `JumpArrivalPool`, which are gone): `open_for(at, forward,
-  ship_radius, ...)` sizes a point for the ship; a group arriving within 600 m (`SHARE_M`) in the first second (`SHARE_S`) shares
+  ship_radius, ..., opener)` sizes a point for the ship (only a jump-capable opener, §19.15); a group arriving within 600 m (`SHARE_M`) in the first second (`SHARE_S`) shares
   one point; the pool (`DEFAULT_COUNT` 4 until M6-T20) takes back its oldest point when none is free. The ship is placed as before
   (the pool opens after the ship is acquired), so missions and encounters keep their outcomes. Missions use `arrival: "jump"` (an
   open point) or `arrival: "gate"` (through the gate) and `m.depart(name)`; an encounter pool's `gate` table sends a share of arrivals
@@ -5263,7 +5263,41 @@ velocity rebase is `World.auto_boost_speed_mps`, an export of `main.tscn`, not a
 - **Console.** `vortex lod <auto|0-6>` forces one level on every vortex, `vortex view [mouth radii]` holds the camera on a point;
   provider `vortex` gains `lod`, `radius_px`, `forced_lod`, `lit`.
 
-### 19.15 Known gaps (carried to later milestones)
+### 19.15 Who may open a jump point (M6-T23)
+
+- **The rule** (`JumpCapability`, pure; the maintainer, 2026-11-13): only a jump-capable ship opens a point. `ShipSpec` has
+  `can_open_jump_point` (false for every designed hull: the Starfuries, the raider, the nine civilian ships) and `jump_hold_range_m`
+  (0: twice the ship's length); `CapitalStandin.CLASSES` gives every class `can_open_jump_point: true`. Any other ship arrives or
+  leaves through a gate or through an open point a capable ship holds, of any side. `JumpPointPool.open_for` / `open_with` take the
+  `opener` and refuse one that cannot (`refused`); a point with no opener is a debug tool's (`vortex open`, a fighter's
+  `transit arrive point`) or a test's, held by nothing.
+- **Holding** (`JumpPointPool._physics_process`, its held points only, a hundred at most): a point holds while its opener is within
+  `hold_range_m` of the mouth (the opener's position, or its tier row's). Out of range, destroyed, disabled (a hulk) or gone, it
+  collapses at once (`JumpVortex.collapse`, `VortexTiming.collapse_now`: no fold, the closing flash at its peak) and every ship in
+  its funnel, arriving or departing, is destroyed (`VortexTransits.kill_in`, `HitInfo.CAUSE_VORTEX_COLLAPSE`, no shooter, no kill
+  credit). An opener that touches the black ring of its own point holds it `OWN_DEPARTURE_HOLD_S` (3 s) more, then it collapses on
+  whatever is still inside. Gates are exempt: their vortex closes by its timing and waits for its ships (T22).
+- **Raids and missions, by data.** A mission spawn says `arrival: "jump"` with `via: "carrier"` or `via: "gate"` (`arrival: "gate"`
+  is the same as `via: "gate"`; a `jump` with no `via` is only for a capable ship, else an error), and optionally
+  `carrier: {"class", "then"}`. An encounter pools file has `via: {"raid": "carrier" | "gate"}` and `carrier`; its `gate` share still
+  sends raids through the gate while the player is within 25 km of it. `CarrierJumps` (one per World, the carriers pooled at load,
+  D22: 3 for a mission, 3 for the encounters) brings a capital stand-in (a cruiser by default) out of its own point where the raid
+  comes in; fighters of one side arriving within 2 km in that second come out of the same point, each at 0.6 mouth radii round its
+  axis. Once they are out the carrier waits 2 s, lets its arrival point close, opens a departure point 3 s of its 20 m/s ahead of
+  its bow and leaves through it (or stays, `then: "stay"`), back to the pool at the ring. Its guns are silent; it can be shot. A
+  departing AI ship with no gate (`MissionStage.depart`) routes to the nearest departure point a capable ship holds
+  (`CarrierJumps.send_departure`).
+- **The battle** (`BattleArrivals`, `BenchRunner`): units and waves as T20 (the same 353 units in 4 waves at `battle 1000`); each
+  fighter group then rides the nearest capital point of its side in its wave within 6 km (its own fight's capitals) that has room
+  (one group per capital) and comes in with that capital, at its point's mouth; any other group comes through the battle's own
+  jumpgate (`BENCH GATE`, 4 km below the first fight, facing up, made for the run and freed after), on a spiral across its mouth
+  at its 200 m/s. Only capitals open points: `battle 1000` 150 points (46 open at most), 138 groups (713 fighters) through
+  capital points, 65 groups (137 fighters) through the gate. The warm-up waits `ARRIVAL_SETTLE_S` (14.5 s, the gate's lead-in
+  included) past the last wave.
+- **Console.** `vortex collapse` (destroys the newest held point's opener), `transit carrier [-] [-] [none|follow]`; provider `vortex`
+  gains `opener`, `hold_range_m`, `opener_distance_m`, `held`, `collapses`, `collapse_kills`, `last_collapse`; provider `carriers`.
+
+### 19.16 Known gaps (carried to later milestones)
 
 - Arrival-tick spike: while the battle's waves come in, the engine tick p99 is 14.8 ms against 10.2 placed (one tick's arrivals cost
   up to 4.8 ms); spreading a wave over more than 1 s or opening points in smaller steps would flatten it.

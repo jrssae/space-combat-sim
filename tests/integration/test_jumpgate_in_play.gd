@@ -154,7 +154,7 @@ func test_an_ai_ship_arrives_through_the_gate_and_leaves_through_it() -> void:
 	stage.teardown()
 
 
-func test_an_encounter_raid_comes_out_of_the_gate_when_its_file_asks() -> void:
+func test_an_encounter_raid_comes_out_of_the_gate_when_its_file_asks() -> void:  # via the gate (M6-T23)
 	DebugConsole.flags.invulnerable = true
 	await _start(0, 0, "res://tests/fixtures/encounters/gate_raids.json")
 	await _put_player_in_front(6000.0)
@@ -171,6 +171,8 @@ func test_an_encounter_raid_comes_out_of_the_gate_when_its_file_asks() -> void:
 			break
 	assert_eq(director.alive_of(&"raid"), e.count(), "every raider came through")
 	assert_eq(director.gate_events, 1)
+	assert_eq(CarrierJumps.attach(main.world).carriers_used, 0, "a raid through the gate needs no carrier (M6-T23)")
+	assert_eq(director.jumps.opened, 0, "and opens no jump point")
 	for c: Combatant in director.alive():
 		assert_lt(gate.local_of(c.ship.global_position).length(), gate.fit.depth_m + 100.0,
 				"%s came out of the gate's funnel" % c.display_name)

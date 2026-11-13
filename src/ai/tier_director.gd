@@ -371,7 +371,7 @@ func _demote_ship(sim: SimCore, c: Combatant) -> bool:
 
 
 func _demote_capital(sim: SimCore, cap: CapitalStandin) -> bool:
-	if not is_instance_valid(cap) or not cap.is_inside_tree() or not cap.can_process() or not cap.visible:
+	if not is_instance_valid(cap) or not cap.is_inside_tree() or not cap.can_process() or not cap.visible or cap.tier_exempt:
 		return false
 	var body_id: int = cap.get_instance_id()
 	var handle: int = int(sim.core.tier_add(SimCore.KIND_CAPITAL, body_id, cap.damageable.get_instance_id(), 0,

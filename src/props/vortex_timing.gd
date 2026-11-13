@@ -29,6 +29,8 @@ var lead_s: float = 0.0
 var open_at_s: float = FLASH_S + GROW_S
 ## Age at which the close starts.
 var close_from_s: float = open_at_s + DEFAULT_HOLD_S
+## The opening collapsed (M6-T23): straight into its closing flash, whatever phase it was in.
+var collapsed: bool = false
 
 
 func _init(hold_s: float = DEFAULT_HOLD_S, p_lead_s: float = 0.0) -> void:
@@ -40,12 +42,15 @@ func reset(hold_s: float = DEFAULT_HOLD_S, p_lead_s: float = 0.0) -> void:
 	lead_s = maxf(p_lead_s, 0.0)
 	open_at_s = lead_s + FLASH_S + GROW_S
 	close_from_s = open_at_s + maxf(hold_s, 0.0)
+	collapsed = false
 
 
 ## Which part of the opening `age_s` falls in.
 func phase(age_s: float) -> Phase:
 	if age_s < 0.0:
 		return Phase.CLOSED
+	if collapsed and age_s >= close_from_s + CLOSE_S:
+		return Phase.END_FLASH if age_s < done_at_s() else Phase.CLOSED
 	if age_s < lead_s:
 		return Phase.ACTIVATE
 	if age_s < lead_s + FLASH_S:
@@ -95,6 +100,14 @@ func extend(age_s: float, hold_s: float) -> void:
 func close_now(age_s: float) -> void:
 	if age_s < close_from_s:
 		close_from_s = maxf(age_s, open_at_s)
+
+
+## Collapses it at `age_s` (its opener lost it, M6-T23): no fold, the closing flash at its peak at once.
+func collapse_now(age_s: float) -> void:
+	if collapsed or age_s >= close_from_s + CLOSE_S:
+		return
+	close_from_s = age_s - CLOSE_S
+	collapsed = true
 
 
 ## How far the funnel has unfolded from its centre toward the rim, 0..1: nothing until the flash ends, an eased unfolding, full

@@ -76,6 +76,17 @@ var radius_px: float = VortexLod.MAX_PX
 var lod_level: int = 0
 ## Ships flying its funnel now (M6-T22, `VortexTransits`): it is kept open while any is, and a pool does not take it back.
 var passing: int = 0
+## The ship holding this opening (M6-T23, `JumpCapability`): a point closes when it leaves its hold range, is destroyed or is
+## disabled. Null for a gate's vortex and a debug point (the console's), which nothing holds.
+var opener: Node3D = null
+## Whether an opener holds this opening (an opener freed meanwhile still counts, and collapses it).
+var held: bool = false
+## How far from the mouth the opener may be, m.
+var hold_range_m: float = 0.0
+## Sim time at which the opener touched this point's own black ring on its way out (-1: it has not).
+var opener_through_at_s: float = -1.0
+## Why the last opening collapsed (`JumpCapability`'s reasons; empty when it closed by its timing).
+var collapse_reason: StringName = &""
 ## The node whose frame is the vortex's true one when it is drawn under a far stand-in (a gate's vortex follows its gate's
 ## `FarProp` look, which shrinks toward the eye far away); null for a stand-alone point.
 var frame_owner: Node3D = null
@@ -224,6 +235,11 @@ func open(p_direction: Direction, hold_s: float = VortexTiming.DEFAULT_HOLD_S, l
 	if _active:
 		return false  # closing or in its closing flash: it must finish before it opens again
 	direction = p_direction
+	opener = null
+	held = false
+	hold_range_m = 0.0
+	opener_through_at_s = -1.0
+	collapse_reason = &""
 	timing.reset(hold_s, lead_s)
 	age_s = 0.0
 	_active = true
@@ -244,6 +260,26 @@ func open(p_direction: Direction, hold_s: float = VortexTiming.DEFAULT_HOLD_S, l
 func close() -> void:
 	if _active:
 		timing.close_now(age_s)
+
+
+## Collapses the opening now (its opener lost it, M6-T23): the closing flash at once, nothing passes from now on. The ships in its
+## funnel are the caller's to kill (`JumpPointPool.collapse`).
+func collapse(reason: StringName) -> void:
+	if not _active or timing.collapsed:
+		return
+	collapse_reason = reason
+	held = false
+	timing.collapse_now(age_s)
+	if not driven:
+		update_visuals()
+
+
+## Holds this opening by `ship`, `range_m` from its mouth at most (cleared by the next opening).
+func hold_by(ship: Node3D, range_m: float) -> void:
+	opener = ship
+	held = ship != null
+	hold_range_m = range_m
+	opener_through_at_s = -1.0
 
 
 ## Ends the opening at once, with no close (a pool taking its oldest point back).

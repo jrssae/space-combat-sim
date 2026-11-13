@@ -252,7 +252,7 @@ func test_raiders_jump_in_from_the_pool_without_a_new_ship() -> void:
 	var nodes_before: int = _count(main, Node)
 	await _reach_the_buoy()
 	assert_eq(_count(main, Ship), ships_before, "D22: pooled ships only")
-	assert_eq(main.mission.jumps.opened, 1, "the pair 300 m apart came out of one jump point")
+	assert_eq(main.mission.jumps.opened, 1, "the pair 300 m apart came out of one carrier's jump point")
 	assert_eq(main.mission.jumps.open_count(), 1)
 	var point: JumpVortex = null
 	for child: Node in main.mission.jumps.get_children():
@@ -261,6 +261,8 @@ func test_raiders_jump_in_from_the_pool_without_a_new_ship() -> void:
 	assert_not_null(point)
 	assert_true(point.is_in_group(WorldFrame.SHIFTABLE_GROUP))
 	assert_eq(point.phase_name(), "flash", "a ship-made point opens with its centre flash, no activation")
+	assert_true(point.held and point.opener is CapitalStandin, "raiders cannot open a point: a carrier opened it (M6-T23)")
+	assert_true(JumpCapability.can_open(point.opener))
 	var raider: Combatant = main.ships.alive(ShipPool.DEFAULT_TYPE)[0]
 	assert_lt(raider.ship.global_position.distance_to(point.global_position), point.fit.depth_m + 50.0,
 			"the ship comes out of it, from its ring (M6-T22)")

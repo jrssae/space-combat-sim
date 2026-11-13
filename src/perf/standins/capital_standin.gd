@@ -17,11 +17,15 @@ const INTERCEPTORS_PER_CAPITAL: int = 4
 const BEAMS_PER_CAPITAL: int = 2
 ## Where a carrier's launches leave from: this far below its keel, m.
 const BAY_DROP_M: float = 40.0
-## Per class: the hull box (m), mass (kg), hull points and gun turrets (the milestone's table).
+## Per class: the hull box (m), mass (kg), hull points, gun turrets (the milestone's table), whether it can open a jump point
+## and how far from the point's mouth it holds it, m (M6-T23: every capital stand-in can; 0 takes twice its length).
 const CLASSES: Dictionary = {
-	&"cruiser": {"length": 300.0, "width": 60.0, "height": 40.0, "mass": 5.0e6, "hull": 2.0e4, "turrets": 8},
-	&"destroyer": {"length": 600.0, "width": 110.0, "height": 70.0, "mass": 2.0e7, "hull": 5.0e4, "turrets": 10},
-	&"carrier": {"length": 1200.0, "width": 220.0, "height": 140.0, "mass": 8.0e7, "hull": 1.2e5, "turrets": 12},
+	&"cruiser": {"length": 300.0, "width": 60.0, "height": 40.0, "mass": 5.0e6, "hull": 2.0e4, "turrets": 8,
+			"can_open_jump_point": true, "jump_hold_range_m": 0.0},
+	&"destroyer": {"length": 600.0, "width": 110.0, "height": 70.0, "mass": 2.0e7, "hull": 5.0e4, "turrets": 10,
+			"can_open_jump_point": true, "jump_hold_range_m": 0.0},
+	&"carrier": {"length": 1200.0, "width": 220.0, "height": 140.0, "mass": 8.0e7, "hull": 1.2e5, "turrets": 12,
+			"can_open_jump_point": true, "jump_hold_range_m": 0.0},
 }
 const HULL_COLOR: Color = Color(0.42, 0.44, 0.47)
 ## The generated hulls (M4-T27) and the looks a capital can take: the bench's plain box or the class's textured hull (M4-T30d).
@@ -37,6 +41,9 @@ var cruise_velocity: Vector3 = Vector3.ZERO
 var world: WorldFrame = null
 var targetable: Targetable = null
 var damageable: Damageable = null
+
+## Kept out of the low-attention tier (M6-T23): while it flies a jump vortex's funnel, as a pooled ship is (`VortexTransits`).
+var tier_exempt: bool = false
 
 ## How the hull is drawn: the plain box, or the generated class's textured hull (`set_look`).
 var look: StringName = LOOK_BOX
@@ -88,6 +95,29 @@ func _init() -> void:
 
 func length_m() -> float:
 	return float((CLASSES[ship_class] as Dictionary)["length"])
+
+
+## Changes its side (a pooled carrier taken by another faction's raid, M6-T23).
+func set_faction(p_faction: StringName) -> void:
+	faction = p_faction
+	targetable.faction = p_faction
+	damageable.faction = p_faction
+
+
+## Whether this class can open a jump point (M6-T23, `JumpCapability`).
+func can_open_jump_point() -> bool:
+	return bool((CLASSES[ship_class] as Dictionary).get("can_open_jump_point", false))
+
+
+## How far from its point's mouth it holds the point open, m.
+func jump_hold_range_m() -> float:
+	return JumpCapability.hold_range_m(length_m(), float((CLASSES[ship_class] as Dictionary).get("jump_hold_range_m", 0.0)))
+
+
+## The radius across its nose, m: what its own jump point is sized for (it comes out nose first).
+func cross_radius_m() -> float:
+	var spec: Dictionary = CLASSES[ship_class]
+	return 0.5 * Vector2(float(spec["width"]), float(spec["height"])).length()
 
 
 func guns() -> Array[TurretStandin]:

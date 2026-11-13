@@ -16,6 +16,11 @@ extends Node
 ## point, patrols and traffic flying out along its axis), departures fly their way in and leave through its orange one. With no
 ## table, no gate or the player far from it, every event is placed as before.
 ##
+## Who opens a raid's jump point (M6-T23): raiders cannot open their own, so a raid not sent through the gate comes in behind a
+## carrier (`CarrierJumps`: a capital stand-in opens the point, its raiders come out with it, and it jumps back). The pools file's
+## `via` table says which for raids (`carrier`, the default, or `gate`: every raid through the gate while it is in reach), and
+## `carrier` its class and what it does after (`{"class": "cruiser", "then": "depart"}`).
+##
 ## Console (`EncounterConsole`): command `encounters`, provider `encounters`.
 
 ## A director sits in any scenario with a pools file here, named after the scenario.
@@ -28,7 +33,13 @@ const CHECK_S: float = 1.0
 const CIVILIAN_REACH_M: float = 20000.0
 ## Encounter civilians call out their position this far (a transponder), so a raid sent at one from 6-12 km finds it.
 const TRANSPONDER_M: float = ShipPool.CIVILIAN_BROADCAST_RANGE_M
-const JUMP_POINTS: int = 4
+## Room for a carrier's arrival and departure points for a few raids at once.
+const JUMP_POINTS: int = 8
+## Carriers built with the pools: enough for the raids that can overlap under the ship cap.
+const CARRIERS: int = 3
+## How a raid not sent through the gate by the share comes in (the pools file's `via.raid`).
+const VIA_CARRIER: StringName = &"carrier"
+const VIA_GATE: StringName = &"gate"
 ## Forced events' indices start here, far past any session's schedule.
 const FORCED_INDEX: int = 1000000
 ## Events use the gate only while the player is this close to it, so its traffic is seen (and not released at once at 40 km).
@@ -82,6 +93,9 @@ var gate_shares: Dictionary = {}
 ## Events that used the gate so far, and ships waiting for the arrival vortex (counted against the cap).
 var gate_events: int = 0
 var in_transit: int = 0
+## The pools file's `via.raid` and its carrier options (M6-T23).
+var raid_via: StringName = VIA_CARRIER
+var carrier_options: Dictionary = {}
 
 var _check_in_s: float = 0.0
 # One entry a ship in play: {combatant, brain, path (BehaviourFollowPath or null), index, kind}.
@@ -119,6 +133,16 @@ static func create(p_main: Main, path: String) -> EncounterDirector:
 			w[kind] = float((raw_weights as Dictionary).get(String(kind), 0.0))
 		director.weights = w
 	director.gate_shares = EncounterPlan.parse_gate_shares((parsed as Dictionary).get("gate"))
+	var raw_via: Variant = (parsed as Dictionary).get("via", {})
+	if raw_via is Dictionary:
+		var raid: StringName = StringName(str((raw_via as Dictionary).get("raid", VIA_CARRIER)))
+		if raid == VIA_CARRIER or raid == VIA_GATE:
+			director.raid_via = raid
+		else:
+			push_warning("EncounterDirector: %s: via.raid must be carrier or gate, not '%s'" % [path, raid])
+	var raw_carrier: Variant = (parsed as Dictionary).get("carrier", {})
+	if raw_carrier is Dictionary:
+		director.carrier_options = raw_carrier
 	director.process_mode = Node.PROCESS_MODE_PAUSABLE
 	p_main.add_child(director)
 	return director
@@ -149,6 +173,7 @@ func enable() -> String:
 		# Ships built after load still break up and go back to their pools when destroyed (watching twice is harmless).
 		for pooled: Combatant in main.ships.all_ships():
 			main.director.watch(pooled)
+		CarrierJumps.attach(main.world).prepare(CARRIERS)  # raids behind a carrier (M6-T23; a gate raid with the gate out of reach too)
 		build_ms = Time.get_ticks_msec() - t0
 		pools_built = true
 	if plan == null:
@@ -246,6 +271,10 @@ func start(e: EncounterEvent) -> bool:
 	var target_name: String = target.display_name if target != null else main.combatant.display_name
 	var gate: Jumpgate = _gate_for(e)
 	var via: StringName = plan.gate_use(e.index, e.kind) if gate != null else &""
+	if e.jumps and raid_via == VIA_GATE and gate == null and main.gates != null:
+		gate = main.gates.gate()  # every raid through the gate, wherever the player is
+	if e.jumps and raid_via == VIA_GATE and gate != null:
+		via = EncounterPlan.GATE_ARRIVE
 	if via != &"":
 		gate_events += 1
 	for k: int in e.count():
@@ -388,10 +417,11 @@ func _place(e: EncounterEvent, k: int, type: StringName, anchor: UniversePos, an
 	if placed == null:
 		return
 	if e.jumps and jumps != null:
-		var point: JumpVortex = jumps.open_for(at, -basis.z, placed.ship.bounding_radius())
-		var transits: VortexTransits = VortexTransits.attach(main.world)
-		if point != null and transits != null:
-			transits.begin_arrival(placed.ship, point, placed.ship.global_position, placed.ship.linear_velocity)
+		# Raiders cannot open a point: they come in behind their raid's carrier (M6-T23).
+		var carriers: CarrierJumps = CarrierJumps.attach(main.world)
+		var run: CarrierRun = carriers.run_for(jumps, at, -basis.z, placed.faction, carrier_options) if carriers != null else null
+		if run != null:
+			carriers.bring_through(run, placed.ship, placed.ship.linear_velocity)
 	if placed.cargo_pods != null and e.cargo_pods[k] >= 0:
 		placed.cargo_pods.set_count(e.cargo_pods[k])
 	if ShipCatalog.is_civilian(type):

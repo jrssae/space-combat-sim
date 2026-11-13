@@ -14,6 +14,13 @@ extends RefCounted
 ## revised) or out of the scene's jumpgate (M6-T14: blue vortex, once it is open); either way it comes out of the funnel's black ring
 ## in a flash, shrunk, and grows to its whole size by the mouth (M6-T22, `VortexTransits`).
 const ARRIVALS: Array[StringName] = [&"none", &"jump", &"gate"]
+## Which way a `jump` arrival comes (M6-T23, `JumpCapability`): only a jump-capable ship opens its own point (`own`, the
+## default); any other comes `via` the gate or behind a carrier (`CarrierJumps`: a capital stand-in opens the point and it comes
+## out with it). `arrival: "gate"` is the same as `via: "gate"`.
+const VIA_OWN: StringName = &""
+const VIA_GATE: StringName = &"gate"
+const VIA_CARRIER: StringName = &"carrier"
+const VIAS: Array[StringName] = [VIA_OWN, VIA_GATE, VIA_CARRIER]
 ## A ship sent out through the gate flies its run-in at this speed (the player's autopilot's run-in is 250 m/s).
 const DEPART_CRUISE_MPS: float = 200.0
 var world: WorldFrame = null
@@ -170,15 +177,33 @@ func spawn(entry: Dictionary) -> Combatant:
 		push_error("Mission: spawn %s: the %s pool refused" % [ship_name, type])
 		return null
 	if StringName(entry.get("arrival", &"none")) == &"jump" and jumps != null:
-		var point: JumpVortex = jumps.open_for(at, -basis.z, placed.ship.bounding_radius())
-		var transits: VortexTransits = VortexTransits.attach(world)
-		if point != null and transits != null:
-			transits.begin_arrival(placed.ship, point, placed.ship.global_position, placed.ship.linear_velocity)
+		_jump_in(placed, entry, at, basis)
 	placed.damageable.invulnerable = bool(entry.get("invulnerable", false))
 	register(placed)
 	if not String(entry.get("wing", "")).is_empty():
 		wings.join(String(entry["wing"]), placed)
 	return placed
+
+
+# Brings a ship just placed out of a jump point (M6-T23): behind a carrier when its spawn says `via: "carrier"`, else out of its
+# own point, which only a jump-capable ship may open (any other is an error in the mission's data: it stays where it was placed).
+func _jump_in(placed: Combatant, entry: Dictionary, at: UniversePos, basis: Basis) -> void:
+	var transits: VortexTransits = VortexTransits.attach(world)
+	if StringName(entry.get("via", VIA_OWN)) == VIA_CARRIER:
+		var carriers: CarrierJumps = CarrierJumps.attach(world)
+		var run: CarrierRun = carriers.run_for(jumps, at, -basis.z, placed.faction, entry.get("carrier", {}) as Dictionary) \
+				if carriers != null else null
+		if run != null:
+			carriers.bring_through(run, placed.ship, placed.ship.linear_velocity)
+		return
+	if not JumpCapability.can_open(placed.ship):
+		push_error("Mission: spawn %s: a %s cannot open a jump point; say via \"gate\" or via \"carrier\"" % [
+				placed.display_name, entry["type"]])
+		return
+	var point: JumpVortex = jumps.open_for(at, -basis.z, placed.ship.bounding_radius(), JumpVortex.Direction.ARRIVAL, true,
+			placed.ship)
+	if point != null and transits != null:
+		transits.begin_arrival(placed.ship, point, placed.ship.global_position, placed.ship.linear_velocity)
 
 
 ## A spawn that comes out of the gate (`arrival: "gate"`, M6-T14): the blue vortex opens now and the ship is taken from its pool
@@ -223,13 +248,15 @@ func spawn_through_gate(entry: Dictionary) -> String:
 
 ## Sends the AI ship `ship_name` out through the gate (M6-T14): it flies the gate's departure route, the orange vortex opens as
 ## it nears, and once through it leaves play as a forced `destroyed` does (back to its pool, no explosion, no kill credit). Its
-## objective is dropped so it does not turn back to fight. False, with an error, when there is no such ship or no gate.
+## objective is dropped so it does not turn back to fight. With no gate it leaves through the nearest open departure point a
+## jump-capable ship holds (M6-T23: it cannot open its own). False, with an error, when there is no such ship or no way out.
 func depart(ship_name: String) -> bool:
 	var gate: Jumpgate = gates.gate() if gates != null else null
 	var k: String = MissionWorld.key(ship_name)
 	var combatant := _actors.get(k) as Combatant
-	if gate == null:
-		push_error("Mission: depart %s: no jumpgate in the scenario's props" % ship_name)
+	var point: JumpVortex = _held_departure_near(combatant.ship) if gate == null and combatant != null else null
+	if gate == null and point == null:
+		push_error("Mission: depart %s: no jumpgate in the scenario's props and no capable ship's departure point open" % ship_name)
 		return false
 	if combatant == null or _node_of(k) == null or combatant == player:
 		push_error("Mission: depart: no AI ship '%s' in play" % ship_name)
@@ -239,9 +266,26 @@ func depart(ship_name: String) -> bool:
 		push_error("Mission: depart: %s flies no AI pilot" % ship_name)
 		return false
 	pilot.context.objective_name = ""
+	if gate == null:
+		BehaviourFollowPath.attach(pilot, CarrierJumps.departure_route(point, world, DEPART_CRUISE_MPS))
+		CarrierJumps.attach(world).send_departure(combatant.ship, point, func(_ship: Node3D) -> void: release(ship_name))
+		return true
 	BehaviourFollowPath.attach(pilot, gate.departure_route(world, DEPART_CRUISE_MPS))
 	gate.send_departure(combatant.ship, func(_ship: Node3D) -> void: release(ship_name))
 	return true
+
+
+# The open departure point nearest `ship` that a jump-capable ship holds, or null.
+func _held_departure_near(ship: Node3D) -> JumpVortex:
+	var carriers: CarrierJumps = CarrierJumps.attach(world) if world != null else null
+	if carriers == null or ship == null:
+		return null
+	var best: JumpVortex = null
+	for point: JumpVortex in carriers.held_departures():
+		if best == null or ship.global_position.distance_to(point.global_position) \
+				< ship.global_position.distance_to(best.global_position):
+			best = point
+	return best
 
 
 ## Sets the pilot objective of the AI ship `ship_name` (D39): `target_name` ("none" or "" clears it). False, with an error, when

@@ -4,8 +4,12 @@ extends RefCounted
 ## capture: a fighter (a pooled raider, no pilot, so it coasts) or a capital (a bench cruiser stand-in) through the scene's gate or
 ## out of a ship-made point ahead of the player, optionally followed by a cinematic camera (`follow`) for captures and play-tests.
 ## Registered by `JumpgateHost`, which owns the scene's gates and console points.
+##
+## A debug tool (M6-T23): a capital opens its own point (it may), but a fighter's `arrive point` opens one held by nothing, which
+## no fighter could in play. `carrier` shows the real way: a cruiser stand-in opens a point ahead of the player and two fighters
+## come out with it (`CarrierJumps`), then it jumps back.
 
-const ACTIONS: Array[StringName] = [&"arrive", &"depart", &"status"]
+const ACTIONS: Array[StringName] = [&"arrive", &"depart", &"carrier", &"status"]
 const WHERES: Array[StringName] = [&"gate", &"point"]
 const KINDS: Array[StringName] = [&"fighter", &"capital"]
 const CAMERAS: Array[StringName] = [&"none", &"follow"]
@@ -27,7 +31,7 @@ func _init(p_host: JumpgateHost) -> void:
 
 func register(registry: ConsoleRegistry) -> void:
 	registry.register_command(ConsoleCommand.new(&"transit",
-			"Ships through a jump vortex's funnel (M6-T22), to look at: arrive <gate|point> [fighter|capital] [none|follow] (out of the gate's black ring once it opens, or out of a point opened 2.5 km ahead of the player), depart gate [fighter|capital] [none|follow] (one flies in from 1.7 km in front of the gate and down its funnel), status; follow holds a cinematic camera on it",
+			"Ships through a jump vortex's funnel (M6-T22), a debug tool: arrive <gate|point> [fighter|capital] [none|follow] (out of the gate's black ring once it opens, or out of a point opened 2.5 km ahead of the player: a capital opens and holds its own, a fighter's is held by nothing, which no fighter could do in play, M6-T23), depart gate [fighter|capital] [none|follow] (one flies in from 1.7 km in front of the gate and down its funnel), carrier [-] [-] [none|follow] (a cruiser stand-in opens a point 2.5 km ahead, two fighters come out with it, then it jumps back; follow watches the second fighter), status; follow holds a cinematic camera on it",
 			[ConsoleArg.enum_optional(&"action", ACTIONS, &"status"),
 			ConsoleArg.enum_optional(&"where", WHERES, &"gate"),
 			ConsoleArg.enum_optional(&"kind", KINDS, &"fighter"),
@@ -47,6 +51,8 @@ func _cmd(args: Dictionary) -> ConsoleResult:
 	var gate: Jumpgate = host.gate()
 	if where == &"gate" and gate == null:
 		return ConsoleResult.failure("no jumpgate in this scenario")
+	if action == &"carrier":
+		return _carrier(follow)
 	if action == &"depart" and where != &"gate":
 		return ConsoleResult.failure("transit depart gate [fighter|capital]: only the gate takes departures from the console")
 	if action == &"arrive" and where == &"gate":
@@ -68,7 +74,10 @@ func _cmd(args: Dictionary) -> ConsoleResult:
 		if body == null:
 			return ConsoleResult.failure("no free ship to bring in")
 		var radius: float = _cross_radius(body)
-		var point: JumpVortex = host.console_points.open_for(main.world.to_universe(at), out_dir, radius)
+		# A capital opens and holds its own point; a fighter's is a debug point nothing holds (M6-T23).
+		var opener: Node3D = body if JumpCapability.can_open(body) else null
+		var point: JumpVortex = host.console_points.open_for(main.world.to_universe(at), out_dir, radius,
+				JumpVortex.Direction.ARRIVAL, true, opener)
 		if point == null or not transits.begin_arrival(body, point, at, body.linear_velocity, true):
 			return ConsoleResult.failure("no point to bring it through")
 		_followed = body
@@ -87,6 +96,32 @@ func _cmd(args: Dictionary) -> ConsoleResult:
 	if follow:
 		_play(_departure_shot(capital))
 	return ConsoleResult.line("a %s flies in to depart through the gate" % ("capital" if capital else "fighter"))
+
+
+# A cruiser stand-in opens a point 2.5 km ahead of the player, across its view, and two pilotless raiders come out with it.
+func _carrier(follow: bool) -> ConsoleResult:
+	var main: Main = host.main
+	if main.ships.free_count(ShipPool.DEFAULT_TYPE) < 2:
+		return ConsoleResult.failure("no two free raiders to bring in")
+	var nose: Vector3 = -main.ship.global_basis.z
+	var at: Vector3 = main.ship.global_position + nose * POINT_AHEAD_M
+	var out_dir: Vector3 = (main.ship.global_basis.x - nose).normalized()
+	var carriers: CarrierJumps = CarrierJumps.attach(main.world)
+	if carriers.free_count() == 0:
+		carriers.prepare(carriers.size() + 1)  # a console hitch, not play
+	var run: CarrierRun = carriers.run_for(host.console_points, main.world.to_universe(at), out_dir, Factions.RAIDERS)
+	if run == null:
+		return ConsoleResult.failure("no carrier could open a point")
+	for k: int in 2:
+		var body: RigidBody3D = _make(false, Transform3D(Basis.looking_at(out_dir, main.ship.global_basis.y), at),
+				run.exit_velocity)
+		if body != null:
+			carriers.bring_through(run, body, run.exit_velocity)
+			_followed = body
+	if follow:
+		_play(_arrival_shot(false))
+	return ConsoleResult.line("%s opens a %.0f m point 2.5 km ahead; two fighters come out with it" % [
+			run.carrier.targetable.display_name, run.arrival.fit.mouth_radius_m])
 
 
 # A fighter from the raider pool with no pilot (it coasts), or a cruiser stand-in holding its velocity, at `xform`.

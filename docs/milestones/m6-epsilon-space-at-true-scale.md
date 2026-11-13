@@ -306,7 +306,7 @@ which changes the same native rows and rebase path:
 | T20 | D | Vortex detail by distance and mass arrivals: detail layers dropped with screen size; up to 100 jump points forming at once; every ship of the 1 000-ship battle enters through one; the battle's GPU fps test with them | T19, T07 | Opus | A shader LOD, a pooled effect at a hundred instances and the battle's spawn path, judged on the GPU | done |
 | T21 | A | The rebase's per-node rest: only the rocks near a ship live in Jolt; a list of the shiftables in play instead of walking the group | T06, T07 | Opus | A measured engine-side follow-up to T06 on the paths T07 also changes | done |
 | T22 | D | Ships shrink into and grow out of the vortex: each ship flies the funnel, scaled to fit it, down to the black ring and a white flash (departure), or out of a white flash at the ring growing to full size (arrival); the player's jump in an external shot | T19, T20 | Opus | Gameplay, scaled Jolt bodies and a cinematic on every arrival path, judged by eye | done |
-| T23 | D | Who may open a jump point: only jump-capable ships (the capital stand-ins today); smaller ships use a gate or a jump-capable ship's open point; the battle's fighters through their side's capital points or the gate; raids and missions say which in data; a point holds only within 2 x its opener's length, and ships in the funnel die when it collapses | T22 | Opus | Rules over every arrival and departure path T22 also changes | in progress |
+| T23 | D | Who may open a jump point: only jump-capable ships (the capital stand-ins today); smaller ships use a gate or a jump-capable ship's open point; the battle's fighters through their side's capital points or the gate; raids and missions say which in data; a point holds only within 2 x its opener's length, and ships in the funnel die when it collapses | T22 | Opus | Rules over every arrival and departure path T22 also changes | done |
 
 ### M6-T01 Moving-frame audit and design
 
@@ -2006,4 +2006,72 @@ which changes the same native rows and rebase path:
   through capital points and the gate (standard); missions and encounters keep their outcomes, or the changed ones are named;
   the hold range (a point closes when its opener passes 2 x its length from the mouth, and a ship in the funnel then dies),
   the opener's destruction collapsing the point, and the brief hold after the opener departs (quick or standard as fits).
+
+- **Done (2026-11-13):**
+  - **The capability** (`JumpCapability`, pure): `ShipSpec.can_open_jump_point` (false in every `.tres`: the two Starfuries, the
+    raider, the nine civilian hulls) and `jump_hold_range_m` (0: twice the length); `CapitalStandin.CLASSES` gives the cruiser,
+    destroyer and carrier `can_open_jump_point: true`. `JumpPointPool.open_for` / `open_with` take the `opener` and refuse a ship
+    that cannot (`refused`, a warning); with no opener a point is a debug tool's or a test's. The console's `vortex open` and a
+    fighter's `transit arrive point` stay debug tools and say so in their help.
+  - **Holding** (`JumpPointPool._physics_process`, held points only): the opener (or its tier row) more than its hold range from
+    the mouth, destroyed, a hulk, or gone, and the point collapses at once (`JumpVortex.collapse`, `VortexTiming.collapse_now`: the
+    closing flash at its peak, no fold); every ship in its funnel, waiting at the base, arriving or departing, is destroyed
+    (`VortexTransits.kill_in`, cause `vortex_collapse`, no shooter, so no kill credit). An opener touching its own point's ring
+    (`VortexTransits` marks `opener_through_at_s` and keeps the point open) holds it `OWN_DEPARTURE_HOLD_S` = 3 s, then the point
+    collapses on whatever is still inside. Gates are exempt (no opener).
+  - **Raids and missions in data.** Mission spawns: `arrival: "jump"` with `via: "carrier"` or `via: "gate"` (`arrival: "gate"` is
+    `via: "gate"`; `jump` without `via` is for a capable ship only, else an error), optional `carrier: {"class", "then"}`. Encounter
+    pools file: `via: {"raid": "carrier" | "gate"}` and `carrier`. `CarrierJumps` (one per World, carriers pooled at load: 3 for a
+    mission, 3 with the encounter pools; D22 holds, `test_mission_runner`'s node count unchanged) brings a cruiser stand-in out of
+    its own point where the raid arrives; a raid's fighters (one side, within 2 km, in that second) come out of the same point at 0.6
+    mouth radii round its axis with the carrier at 30 m/s along it; 2 s after the last is out the carrier lets its arrival point
+    close, opens a departure point 1.5 s of its speed ahead of its bow, flies in and goes back to the pool at the ring (`then:
+    "stay"` keeps it in play). It holds its course itself, its guns silent; it can be shot, and killing it with fighters in the
+    funnel kills them. `MissionStage.depart` with no gate routes the ship to the nearest departure point a capable ship holds
+    (`CarrierJumps.send_departure`, the gate's crossing rule).
+  - **Data changed:** `data/missions/civilian_escort.gd` (all three raider waves `via: "carrier"`: each wave behind its own
+    cruiser, coming out where it did, so the escort's outcome is unchanged and its tests are green), `data/encounters/free_flight.json`
+    (`via.raid: "carrier"`, `carrier: cruiser, depart`; the gate share still sends half the raids through the gate within 25 km of
+    it), the test fixture `tests/fixtures/missions/test_mission.gd` (`via: "carrier"`). No outcome changed: raiders still come out
+    where their spawn put them, within the carrier's mouth (a group 300 m apart now comes out within 87 m of the axis).
+  - **The battle** (`BattleArrivals`, `BenchRunner`): T20's units and waves kept (`battle 1000`: 353 units, 4 waves, the last at 31 s);
+    each fighter group rides the nearest capital of its side arriving in its wave within 6 km (its own fight's capitals, never the
+    next fight's at 8 km) with room (`GROUPS_PER_CAPITAL` 1), coming out round that capital's point axis with its velocity; the rest
+    come through the battle's own `BENCH GATE`, 4 km below the first fight facing up into it (made for the run, freed after), on a
+    35 m spiral across its mouth at its 200 m/s. Only capitals open points: at 1 000, 150 points (46 open at most, under T20's 100),
+    138 groups (713 fighters) through capital points, 65 groups (137 fighters) through the gate; at 500: 69 groups (324) and 40 (101).
+    The warm-up waits `ARRIVAL_SETTLE_S` 14.5 s past the last wave (the gate's lead-in added). The bench stops its points before it
+    clears its capitals, so a run's end collapses nothing. The report's `arrivals` gains the counts by way, `gate_arrived`, `collapses`.
+  - **Console:** `vortex collapse` (destroys the newest held point's opener), `transit carrier [-] [-] [none|follow]`; provider
+    `vortex` gains `opener`, `hold_range_m`, `opener_distance_m`, `held`, `collapses`, `collapse_kills`, `last_collapse`; provider
+    `carriers` (`active`, `built`, `free`, `used`, `fighters`, `departed`, `state`); in `info.md`; architecture §19.15.
+  - **Tests:** quick `test_jump_capability` (new, 6: no designed hull opens, every capital class does at 2 x its length, the range
+    law, the verdicts, the short hold, the collapse timing), `test_jump_holds` (new, 4, headless: a raider refused and a cruiser
+    holding its point; out of range at 650 m of 600 the point collapses and the raider in its funnel dies; the cruiser destroyed
+    collapses it, the raider's death uncredited; the cruiser through its own departure point holds it 3 s, then the raider still
+    inside dies), `test_battle_arrivals` (9: riders by side, wave, reach and room; a mix of both ways at 1 000; only capitals' points
+    open). Standard: `test_encounters` (new `test_a_raid_comes_in_behind_a_carrier_that_then_jumps_back`), `test_jumpgate_in_play`
+    (the gate raid needs no carrier and opens no point), `test_mission_runner` (the raiders' point is a carrier's), `test_bench`
+    (12; the arrival test rewritten: capital points only, riders inside them, the gate's groups waiting for its vortex then all
+    through, no collapse), `test_mission_skip`, `test_civilian_escort`, `test_vortex_transits`, `test_weapon_rows_battle`
+    ([933, 420, 174, 151, 25, 1], placed), `test_ai_think_time` green. Parity recordings unchanged (no native change). Compile
+    check clean (720 scripts); quick tier green (1 933 GUT tests, Rust 138, Python 331).
+  - **Costs** (headless, `bench_quick.sh battle`, pinned 0-11, two runs agreeing within 0.1 ms): 500 and 1 000 ships, window tick
+    median 5.31 and 6.45 ms, p99 8.84 and 9.32 (T22 4.76 and 5.94, p99 7.18 and 7.81), every budget held. The difference is the
+    battle's state, not the rules: the gate's 137 fighters come out near the player and fly out to their fights, so 324 fighters
+    fly in Jolt in the window against T22's 231. While the waves come in the engine tick p99 is 20.6 ms (T22 14.9): the gate places a
+    wave's waiting ships in the tick its vortex opens (worst spawn tick 6.2 ms against 3.7). The hold checks cost nothing measurable.
+  - **Media** (Movie Maker in headless gamescope, 1920x1080 at 30 fps; GIFs 720 px at 15 fps) in
+    `references/screenshots/M6-T23 jump capability/`: `carrier_follow.mp4/.gif` (`transit carrier ... follow`: the point's flash,
+    three ring flashes, a fighter growing out beside the cruiser's hull, then the cruiser's orange departure point), `carrier_overview`
+    (from in front of the point: the cruiser out of the blue point, its departure point opening ahead, the cruiser gone through, the
+    point's closing flash 3 s later), `collapse.mp4/.gif` (`vortex collapse` with both fighters mid-funnel: the cruiser explodes, the
+    point's white closing flash at once, the fighters break up), and contact sheets `sheet_*.png`.
+  - **(H):** a raid's carrier is a cruiser stand-in of the raiders' faction, silent but shootable, coming out at 30 m/s and jumping
+    back about 15 s after its fighters (missions and the encounters default to `then: depart`); the fighters' spot round its axis at
+    0.6 mouth radii; a collapse credits no one (not even whoever killed the opener); a point collapsing kills a ship still waiting at
+    the base too; the hold is measured from the opener's centre to the mouth's centre; the 3 s own-departure hold; the battle's
+    rule "near" = 6 km, one group per capital (with the grand mix almost every side of every fight has a capital, so without a
+    capacity there would be no gate traffic at all), the gate's place 4 km below the first fight (seen from the player's fight; a
+    gate beyond the 10 km tier radius would bring the costs back to T22's), and the cost above.
 
