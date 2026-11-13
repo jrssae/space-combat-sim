@@ -247,6 +247,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T13 | B | Performance and the GPU check: the station in view at every range, three squadrons, the grid and a raid | T07, T10 | Opus | Measurement on the maintainer's machine; the budget call | not started |
 | T15 | A | Starfury and raider surfaces from show references, with low and high texture sets for the texture detail setting (maintainer, 2026-11-12; numbered last because it was added after the others had numbers) | M5-T40 | Fable | Two hero hulls seen up close; the look is (H) and needs a sheet first | done |
 | T16 | A | Raider fighter rebuilt to its STL at 90% fidelity, the wing's leading-edge panels first (maintainer, 2026-11-13) | T15 | Opus | The raider was built without an STL; the maintainer finds its shape too far from the reference | in progress |
+| T17 | A | The Starfury looks metallic, not plastic: metallic, roughness and normal maps on both texture sets (maintainer, 2026-11-13; the raider's share is in T16, the station's in T04) | T15 | Opus | Material appearance on the hero hull; the look is (H) and needs a sheet first | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M7-T01 Station references and measurements
@@ -474,6 +475,17 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 - **Done when:** the compare passes the 90% rule, scores in `docs/assets-raider.md`; Python tests pin the shape; the GUT files
   touching the raider and the parity recordings pass (or a recording's change is explained and approved); the maintainer has
   seen the sheet.
+
+### M7-T17 The Starfury looks metallic, not plastic
+
+- **Why (maintainer, 2026-11-13):** "pay attention to reflection and material appearance. We want the station to look metallic,
+  not plastic", then "add the metallic not plastic instruction for both the Starfury and raider". The station's share is in T04
+  (D72), the raider's in T16.
+- **What:** real metallic and roughness maps for both texture-detail sets: painted plating reads as painted metal (moderate
+  metallic, roughness varied per plate and panel), bare metal on the claws, gun barrels, engine pods' housings and nozzles
+  (higher metallic, lower roughness), rougher grime and wear; a normal map from T15's option-A panel layout. Liveries and colours
+  unchanged. A before and after GPU sheet with a sunlit grazing view, shown to the maintainer before the generator commits.
+- **Done when:** the maintainer approves the sheet (H); tests pin the material values; both sets switch as before.
 
 ### M7-T14 Integration, full suite, docs and acceptance
 
