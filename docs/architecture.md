@@ -5290,17 +5290,22 @@ velocity rebase is `World.auto_boost_speed_mps`, an export of `main.tscn`, not a
 - **The battle** (`BattleArrivals`, `BenchRunner`): units and waves as T20 (the same 353 units in 4 waves at `battle 1000`); each
   fighter group then rides the nearest capital point of its side in its wave within 6 km (its own fight's capitals) that has room
   (one group per capital) and comes in with that capital, at its point's mouth; any other group comes through the battle's own
-  jumpgate (`BENCH GATE`, 4 km below the first fight, facing up, made for the run and freed after), on a spiral across its mouth
-  at its 200 m/s. Only capitals open points: `battle 1000` 150 points (46 open at most), 138 groups (713 fighters) through
-  capital points, 65 groups (137 fighters) through the gate. The warm-up waits `ARRIVAL_SETTLE_S` (14.5 s, the gate's lead-in
-  included) past the last wave.
+  jumpgate (`BENCH GATE`, 14 km below the first fight, beyond the tier's reach from the player, facing up, made for the run and
+  freed after), on a spiral across its mouth at its 200 m/s, 4 a tick (`Jumpgate.arrivals_per_tick`; 0, all at once, elsewhere).
+  Only capitals open points: `battle 1000` 150 points (46 open at most), 138 groups (713 fighters) through capital points, 65
+  groups (137 fighters) through the gate. A later wave's capitals open two to a tick, evenly over its second
+  (`CAPITALS_PER_SLOT`), and once the battle runs their riders come out 8 a tick in the ticks between (`RIDERS_PER_TICK`), inside
+  their point's opening flash. The warm-up waits `ARRIVAL_SETTLE_S` (14.5 s, the gate's lead-in included) past the last wave.
+  Measured (after T23's follow-up): window tick median 4.55 and 5.76 ms at 500 and 1 000, p99 7.20 and 7.80; engine tick while
+  the waves come in p99 14.4 to 15.1 ms (T22 14.9).
 - **Console.** `vortex collapse` (destroys the newest held point's opener), `transit carrier [-] [-] [none|follow]`; provider `vortex`
   gains `opener`, `hold_range_m`, `opener_distance_m`, `held`, `collapses`, `collapse_kills`, `last_collapse`; provider `carriers`.
 
 ### 19.16 Known gaps (carried to later milestones)
 
-- Arrival-tick spike: while the battle's waves come in, the engine tick p99 is 14.8 ms against 10.2 placed (one tick's arrivals cost
-  up to 4.8 ms); spreading a wave over more than 1 s or opening points in smaller steps would flatten it.
+- Arrival-tick spike: while the battle's waves come in, the engine tick p99 is 14.4 to 15.1 ms against 10.2 placed. What is left
+  is a capital joining play, about 7 ms in its tick whatever the number (the core's member rebuild when a hull enters the tree,
+  the stand-ins' native capital set); pooling the later waves' capitals, or adding members to the core one by one, would flatten it.
 - A stand-alone jump point beyond the 50 km far plane is not drawn; it has no far stand-in like the gate's.
 - The gate is placed on its rail at the start and then holds still in the frame, while its true place turns round the station once
   an orbit (the chord between them moves about 4.5 m/s, 16 km an hour); M7 or a moving prop row carries it.

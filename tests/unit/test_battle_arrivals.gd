@@ -106,6 +106,34 @@ func test_the_first_wave_opens_at_the_start_and_later_ones_spread_out_in_turn() 
 	assert_almost_eq(_arrivals.life_s, VortexTiming.new().done_at_s(), 1e-4)
 
 
+func test_a_later_waves_capitals_open_two_to_a_tick_evenly_over_the_spread() -> void:
+	# After M6-T23: a capital's arrival costs mostly once a tick, so they come in pairs, each pair a tick of its own, and the
+	# bench brings their riders in the ticks between.
+	var slots: Dictionary = {}  # wave -> {at_s: capitals}
+	var counts: Dictionary = {}
+	for point: Dictionary in _arrivals.points:
+		var wave: int = point["wave"]
+		if wave == 0 or StringName(point["via"]) != BattleArrivals.VIA_OWN:
+			continue
+		if not slots.has(wave):
+			slots[wave] = {}
+		var at: float = point["at_s"]
+		slots[wave][at] = int((slots[wave] as Dictionary).get(at, 0)) + 1
+		counts[wave] = int(counts.get(wave, 0)) + 1
+	assert_gt(slots.size(), 1, "later waves bring capitals")
+	for wave: int in slots:
+		var times: Array = (slots[wave] as Dictionary).keys()
+		times.sort()
+		assert_eq(times.size(), ceili(int(counts[wave]) / float(BattleArrivals.CAPITALS_PER_SLOT)), "wave %d: pairs" % wave)
+		for at: float in times:
+			assert_lte(int(slots[wave][at]), BattleArrivals.CAPITALS_PER_SLOT)
+		var gap: float = BattleArrivals.SPREAD_S / float(times.size())
+		assert_gt(gap, 1.0 / 60.0, "each pair a tick of its own")
+		for k: int in range(1, times.size()):
+			assert_almost_eq(float(times[k]) - float(times[k - 1]), gap, 1e-4, "evenly over the spread")
+		assert_lt(float(times[-1]), wave * _arrivals.period_s + BattleArrivals.SPREAD_S, "within the second")
+
+
 func test_whole_fights_come_in_the_players_first() -> void:
 	var last_fight: int = 0
 	for point: Dictionary in _arrivals.points:

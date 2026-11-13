@@ -327,6 +327,10 @@ func test_a_battle_comes_in_through_jump_points_in_waves() -> void:
 			assert_true(point.held and point.opener is CapitalStandin, "every point is held by the capital that opened it")
 	var gate: Jumpgate = main.bench.gate
 	assert_not_null(gate, "the battle has its own jumpgate")
+	assert_gt(gate.global_position.distance_to(main.ship.global_position),
+			TierDirector.radius_m() * (1.0 + TierDirector.HYSTERESIS) + 2000.0,
+			"beyond the tier's reach from the player, so its ships come in as far ones (after T23)")
+	assert_eq(gate.arrivals_per_tick, BenchRunner.GATE_ARRIVALS_PER_TICK, "a few through it a tick")
 	assert_eq(gate.pending_arrivals(), first_gate, "the gate's groups wait for its blue vortex")
 	assert_eq(gate.vortex.direction_name(), &"arrival")
 	var transits: VortexTransits = VortexTransits.of(main.world)

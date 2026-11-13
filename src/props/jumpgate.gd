@@ -12,9 +12,10 @@ extends Node3D
 ## ships bounce off its arms.
 ##
 ## Traffic: `request_arrival` opens the blue vortex and places the waiting ships once it is fully open (a group comes through
-## one opening), each brought out of the funnel's black ring by `bring_through`; `send_departure` watches a ship flying in, opens
-## the orange vortex as it nears, takes it on down the funnel once it crosses the mouth (M6-T22, `VortexTransits`) and hands it
-## back through `on_through` when it vanishes at the ring. The vortex stays open while any ship is in its funnel. The rules for who flies where are the callers' (missions, encounters, the player's
+## one opening, `arrivals_per_tick` at most a tick when set), each brought out of the funnel's black ring by `bring_through`;
+## `send_departure` watches a ship flying in, opens the orange vortex as it nears, takes it on down the funnel once it crosses
+## the mouth (M6-T22, `VortexTransits`) and hands it back through `on_through` when it vanishes at the ring. The vortex stays
+## open while any ship is in its funnel. The rules for who flies where are the callers' (missions, encounters, the player's
 ## jump); the gate only keeps the vortex in step with them. Spawned through `World` from a scenario's `jumpgate` prop.
 ##
 ## Far away (M6-T15): its `FarProp` draws the body, vortex and lamps shrunk toward the eye past the far plane, then a far dot
@@ -73,8 +74,13 @@ var departure_forward: Vector3 = Vector3.BACK
 ## Ships placed through an arrival and handed back through a departure (tests, console).
 var arrived: int = 0
 var departed: int = 0
+## Waiting ships placed a tick at most once the vortex is open (0: all at once). A battle's gate spreads a wave over a few
+## ticks so no single tick pays for all of it.
+var arrivals_per_tick: int = 0
 
 var _pending_arrivals: Array[Callable] = []
+var _arrival_tick: int = -1  # the physics tick `_arrived_this_tick` counts in
+var _arrived_this_tick: int = 0
 # Per activation glow: the lamp's station rank (0 the front), or -1 for a back end.
 var _glow_ranks: PackedInt32Array = PackedInt32Array()
 var _stations: int = 0
@@ -242,8 +248,16 @@ func _step_arrivals() -> void:
 	if _pending_arrivals.is_empty() or vortex == null:
 		return
 	if vortex.is_open_for(JumpVortex.Direction.ARRIVAL):
-		var waiting: Array[Callable] = _pending_arrivals.duplicate()
-		_pending_arrivals.clear()
+		var tick: int = Engine.get_physics_frames()
+		if tick != _arrival_tick:
+			_arrival_tick = tick
+			_arrived_this_tick = 0
+		var take: int = _pending_arrivals.size()
+		if arrivals_per_tick > 0:
+			take = mini(take, maxi(arrivals_per_tick - _arrived_this_tick, 0))
+		var waiting: Array[Callable] = _pending_arrivals.slice(0, take)
+		_pending_arrivals = _pending_arrivals.slice(take)
+		_arrived_this_tick += take
 		for place: Callable in waiting:
 			if place.is_valid():
 				place.call()

@@ -12,7 +12,8 @@ extends RefCounted
 ## Who opens the points (M6-T23): only a capital can. Each fighter group comes through a capital's point of its side arriving in
 ## the same wave within `CAPITAL_NEAR_M` of it (the nearest with room: a capital brings `GROUPS_PER_CAPITAL` groups), coming in
 ## with that capital; a group with no such capital comes through the battle's jumpgate. So the pool opens one point per capital,
-## never more than `max_points` a wave; a group's unit still counts toward its wave, so the waves keep T20's pace.
+## never more than `max_points` a wave; a group's unit still counts toward its wave, so the waves keep T20's pace. A later wave's
+## capitals open evenly over `SPREAD_S`, `CAPITALS_PER_SLOT` to a tick (after T23).
 
 const SHARE_M: float = JumpPointPool.SHARE_M
 ## A later wave's points open one after another over this long, so a tick brings a few ships, not hundreds.
@@ -28,6 +29,8 @@ const VIA_GATE: StringName = &"gate"
 const CAPITAL_NEAR_M: float = 6000.0
 ## The fighter groups one capital brings through its point (the rest of its fight's groups take the gate).
 const GROUPS_PER_CAPITAL: int = 1
+## A later wave's capitals open this many to a tick, evenly over `SPREAD_S` (after T23).
+const CAPITALS_PER_SLOT: int = 2
 
 ## Each unit: `members` (plan indices, the first opens it), `fight` (its ships' fight), `capital` (a capital's own), `side`,
 ## `wave`, `at_s` (sim seconds after the start), `via` (`VIA_OWN`, `VIA_CAPITAL` or `VIA_GATE`) and `rides` (for `VIA_CAPITAL`,
@@ -80,6 +83,7 @@ static func plan(entries: Array[Dictionary], max_points: int = JumpPointPool.MAX
 		units.append({"members": made[p]["members"], "fight": made[p]["fight"], "capital": capital, "side": made[p]["side"],
 				"wave": wave, "at_s": at_s, "via": VIA_OWN if capital else VIA_GATE, "rides": -1, "at": made[p]["at"], "order": p})
 	_ride_capitals(units)
+	_spread_openers(units, out.waves, out.period_s)
 	units.sort_custom(_open_order)  # a group riding a capital comes in with it
 	var index_of: Dictionary = {}
 	for p: int in units.size():
@@ -122,6 +126,36 @@ static func _ride_capitals(units: Array[Dictionary]) -> void:
 		unit["via"] = VIA_CAPITAL
 		unit["rides"] = int(best["order"])
 		unit["at_s"] = best["at_s"]
+
+
+# Re-times each later wave so its capitals open evenly over `SPREAD_S`, `CAPITALS_PER_SLOT` at a time; a gate group keeps its
+# place in fight order (the gate brings its ships in at its own pace) and a riding group its capital's time. A capital's arrival
+# costs mostly once per tick whatever the count (the core and the stand-ins take in the new hulls), so pairs leave ticks free
+# for the riders, which the bench brings in on their own budget.
+static func _spread_openers(units: Array[Dictionary], waves: int, period_s: float) -> void:
+	var by_order: Dictionary = {}
+	var openers := PackedInt32Array()
+	openers.resize(waves)
+	for unit: Dictionary in units:
+		by_order[int(unit["order"])] = unit
+		if bool(unit["capital"]):
+			openers[int(unit["wave"])] += 1
+	var seen := PackedInt32Array()
+	seen.resize(waves)
+	for unit: Dictionary in units:  # in fight order
+		var wave: int = unit["wave"]
+		if wave == 0 or StringName(unit["via"]) == VIA_CAPITAL:
+			continue
+		var k: int = seen[wave]
+		if bool(unit["capital"]):
+			seen[wave] = k + 1
+		else:
+			k = maxi(k - 1, 0)  # with the capital before it
+		var slots: int = maxi(ceili(float(openers[wave]) / float(CAPITALS_PER_SLOT)), 1)
+		unit["at_s"] = wave * period_s + SPREAD_S * float(k / CAPITALS_PER_SLOT) / float(slots)
+	for unit: Dictionary in units:
+		if StringName(unit["via"]) == VIA_CAPITAL:
+			unit["at_s"] = by_order[int(unit["rides"])]["at_s"]
 
 
 static func _open_order(a: Dictionary, b: Dictionary) -> bool:

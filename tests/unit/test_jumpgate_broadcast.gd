@@ -72,3 +72,27 @@ func test_its_points_and_vortex_come_from_the_hardpoints() -> void:
 	gate.vortex.advance(VortexTiming.END_FLASH_S)
 	assert_false(gate.vortex.is_active(), "gone once the flash is out")
 	assert_false(gate.vortex.funnel.visible)
+
+
+func test_a_budgeted_gate_brings_its_waiting_ships_through_a_few_a_tick() -> void:
+	# After M6-T23: the bench's gate spreads a wave over ticks; with no budget every waiting ship comes through at once.
+	var gate: Jumpgate = _gate()
+	var placed: Array[int] = [0]
+	assert_true(gate.open_vortex(JumpVortex.Direction.ARRIVAL))
+	gate.vortex.advance(gate.vortex.timing.open_at_s + 0.01)
+	assert_true(gate.vortex.is_open_for(JumpVortex.Direction.ARRIVAL))
+	for i: int in 3:
+		gate.request_arrival(func() -> void: placed[0] += 1)
+	assert_eq(placed[0], 3, "no budget: each through as soon as asked")
+	gate.arrivals_per_tick = 4
+	await get_tree().physics_frame
+	for i: int in 10:
+		gate.request_arrival(func() -> void: placed[0] += 1)
+	assert_eq(placed[0], 3 + 4, "four this tick")
+	assert_eq(gate.pending_arrivals(), 6, "the rest wait")
+	await get_tree().physics_frame  # this resumes as a tick starts, before the gate's step in it
+	await get_tree().physics_frame
+	assert_eq(placed[0], 3 + 8, "four more the next")
+	await get_tree().physics_frame
+	assert_eq(placed[0], 3 + 10, "and the last two")
+	assert_eq(gate.arrived, 13)

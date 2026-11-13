@@ -2080,3 +2080,30 @@ which changes the same native rows and rebase path:
     capacity there would be no gate traffic at all), the gate's place 4 km below the first fight (seen from the player's fight; a
     gate beyond the 10 km tier radius would bring the costs back to T22's), and the cost above.
 
+- **Follow-up (after T23, 2026-11-13): the arrival spikes.**
+  - **The gate beyond the tier:** `BENCH GATE` is now 14 km below the first fight (`GATE_BELOW_M`): past the tier's 10 km and its
+    10 % hysteresis from the player with 3 km to spare, and 6 km below the battle's lowest layer of fights. Its fighters are under
+    2 px from the player's camera, so they come out in place with the ring's flash (T22's rule), never in a funnel, and the tier
+    takes them as far ships. A ship in a funnel stays tier-exempt as before; none is at that gate.
+  - **A gate wave over ticks:** `Jumpgate.arrivals_per_tick` (0, all at once, by default: missions and encounters unchanged); the
+    bench's gate brings 4 a tick (`GATE_ARRIVALS_PER_TICK`), so its largest wave (44 fighters) takes 11 ticks.
+  - **What was left were the capitals:** a tick with a capital coming in costs about 7 ms beyond its own spawn whatever the number
+    (the core rebuilds its members when a hull joins the tree, the stand-ins their native capital set, and the flight stage grows),
+    and T23's riders came in that same tick, so a tick brought two capitals and twelve riders (5.3 ms of spawn on top). Now a later
+    wave's capitals open two to a tick, evenly over its second (`BattleArrivals.CAPITALS_PER_SLOT`; at most 23 of its 60 ticks at
+    1 000), and the bench brings their riders on their own, 8 a tick, only in ticks with no capital (`RIDERS_PER_TICK`): they wait
+    in their point's 1.5 s opening flash anyway, so it does not show; the queue never held more than 13 and emptied within a few
+    ticks of a wave's last capital. The waves keep their times and points (353 units, 4 waves, the last at 31 s, 46 open at most).
+  - **Costs** (headless, pinned 0-11; T23's code measured the same day first): `bench_quick.sh battle`, window tick median and p99
+    at 500 4.55 and 7.20 ms (T23 5.55 and 9.41; T22 4.76 and 7.18), at 1 000 5.76 and 7.80 (T23 6.58 and 9.72; T22 5.94 and 7.81).
+    `bench battle 1000 20`: tick median 5.86 ms, p99 8.08 (T23 6.42, 9.32); engine tick while the waves come in median 7.53 ms,
+    p99 14.4 (T23 8.97 and 21.7; T22 7.53 and 14.9), 15.1 in the quick run; worst spawn tick 3.3 ms (T23 6.4). The engine
+    monitor is the worst tick of each second, so its p99 is close to the run's worst tick; read per tick, the wave ticks' p99 is
+    14.9 ms and their worst 15.0 (T23 18.6 and 20.0). Moving the gate alone brought the window back to T22's (5.88 ms) but left
+    the waves' p99 at 20.8.
+  - **Tests:** `test_jumpgate_broadcast` (a budgeted gate brings four a tick, an unbudgeted one all at once),
+    `test_battle_arrivals` (a later wave's capitals two to a tick, evenly, within its second), `test_bench` (the gate beyond the
+    tier's reach, its budget). Green: those three, GUT_SLOW=1 `test_weapon_rows_battle` ([933, 420, 174, 151, 25, 1], placed),
+    `test_jump_holds`, `test_vortex_transits`, `test_encounters`; compile check clean (720 scripts); quick tier green (1 935 GUT tests).
+  - **(H):** the gate's place (14 km below the first fight, seen from the player's fight as a far gate); riders coming out up to a
+    few ticks after their capital, inside its opening flash.
