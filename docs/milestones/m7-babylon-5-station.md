@@ -79,6 +79,10 @@ making its own branch):
 - **Metallic, not plastic (maintainer, 2026-11-13).** Real metallic and roughness maps: painted plating moderately metallic
   with roughness varied per plate and panel, bare metal on trim, rails, truss and machinery, rougher grime and wear; a normal
   map from the panel and detail layers; the scene gives the metal something to reflect. Judged (H) on T04's look sheet.
+- **Sections (T19, maintainer 2026-11-13).** Each piece is cut into linked sections along T01's section lines, children of
+  the frame or drum node, each with its own LOD chain and visibility range, so the part near the camera draws full detail and
+  the far end coarse, and sections out of view are culled. Near-field detail (doors, clamps, antennas, bay interiors) comes as
+  instanced props shown only within a near range.
 - Hardpoints: each Cobra bay (opening, rail start and end, light), the docking aperture, the defence-grid mounts (T02's
   positions, as data), running lights and beacons, tour points (a name, a position and a view direction each), and the hull's
   damage sections (Q5).
@@ -240,7 +244,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T02 | B | Defence grid concept: emplacement locations, the cannons and interceptors and their behaviours, the balance (discussion with the maintainer; early start) | T01 | controller | The maintainer's design call, held as a discussion, not delegated | done |
 | T03 | A | Compound collision builder in `tools/procgen/core` (early start) | - | Fable | Convex pieces with budgets and coverage that M12's capitals reuse | done |
 | T04 | A | `babylon5_station` generator: the frame and drum pieces, proportions, paint and texel tiers (early start) | T01 | Fable | An 8 km asset that must read from 50 m and from 1 000 km | in progress |
-| T05 | A | Near-field detail and hardpoints: the Cobra bays, the docking aperture, the grid mounts, lights, windows, tour points, sections | T04, T02, T03 | Opus | Geometry around the places a fighter flies close to | not started |
+| T05 | A | Near-field detail and hardpoints: the Cobra bays, the docking aperture, the grid mounts, lights, windows, tour points, sections | T04, T19, T02, T03 | Opus | Geometry around the places a fighter flies close to | not started |
 | T06 | B | The station in the game: placement in the frame, the turning drum, collision, hit volumes, rams, broadcast, section damage | T05, M6 | Opus | A moving 8 km body in Jolt and the native core | not started |
 | T07 | B | The defence grid in the game, as T02 settled it, on the native turret rows | T06, T02 | Opus | Native turret kinds and interceptor behaviour with parity | not started |
 | T08 | C | Launch bays and the launch sequence: the rail, the cinematic launch camera, the hand-off, `launch_from` | T06 | Opus | Rebase-safe scripted motion and the mission API | not started |
@@ -253,6 +257,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T16 | A | Raider fighter rebuilt to its STL at 90% fidelity, the wing's leading-edge panels first (maintainer, 2026-11-13) | T15 | Opus | The raider was built without an STL; the maintainer finds its shape too far from the reference | in progress |
 | T17 | A | The Starfury looks metallic, not plastic: metallic, roughness and normal maps on both texture sets (maintainer, 2026-11-13; the raider's share is in T16, the station's in T04) | T15 | Opus | Material appearance on the hero hull; the look is (H) and needs a sheet first | in progress |
 | T18 | A | Station exterior lighting from the maintainer's references: dashed ring lights, nav and beacon lights, lit windows and markings, the aperture and bay glow (maintainer, 2026-11-13) | T05, T06 | Opus | Emissive patterns, blinking beacons and the 8 light slots on an 8 km hull; the look is (H) | not started |
+| T19 | A | Station sections: the frame and drum cut into linked sections, each with its own LOD and visibility range, and near-only detail props (maintainer, 2026-11-13) | T04 | Opus | One 8 km mesh gets one LOD and is never culled; T05's detail must be built on this | not started |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M7-T01 Station references and measurements
@@ -514,6 +519,31 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 - **Done when:** an A/B lighting sheet against the references on the GPU (from a bay, 1 km, 10 km, the night side) approved by the
   maintainer (H); `state render` numbers (fps, draw calls, light slots used) recorded; tests for the light hardpoints, the blink
   timing from sim time and the slot budget.
+
+### M7-T19 Station sections and near-only detail
+
+- **Why (maintainer, 2026-11-13):** "because of the huge size of Babylon 5, is it possible to apply the reduced fidelity for distant
+  models logic to subsets of the model?" Godot picks one LOD per mesh instance from its distance to that instance's bounds, so a
+  fighter 50 m from a bay draws all 8 km at full detail, and one 8 km mesh is almost never frustum culled.
+- **Agent:** Opus. **Depends on:** T04 committed. **Before:** T05, whose detail is built on these sections and props.
+- **What:**
+  - The generator cuts the frame and the drum into sections along T01's section lines (about 10 to 20 per piece; long sections
+    such as the green zone split further), each a mesh with its own origin and LOD chain. The manifest lists them per piece;
+    Godot builds each as a child `MeshInstance3D` of the frame or drum node, so the drum's sections turn as one rigid body with
+    no seams opening. The collision pieces (D73) follow the same sections.
+  - Per section: automatic mesh LOD and a visibility range with fade, shadows off beyond a distance; sections out of view are
+    culled. Section boundaries hidden at seams the hull already has (band edges, rings).
+  - Near-only detail props: a `MultiMesh` path for repeated small parts (door frames, clamp arms, antennas, pipes, greebles),
+    shown only within a near range (about 1 to 2 km, measured), as the seam T05 builds its detail on. A few T04 parts move to it
+    as the proof.
+  - Occlusion: occluders built in code inside the drum and the spine (`OccluderInstance3D` with an `ArrayOccluder3D`) if the
+    measurement shows a gain; else noted for T13.
+  - Far representations (M6) unchanged beyond their range.
+- **Measure** on the GPU: from a Cobra bay, the aperture, 1 km, 10 km, 1 000 km, before and after: fps, GPU time, draw calls,
+  triangles drawn, VRAM (`state render`). Record them in `docs/assets-station.md`.
+- **Done when:** the sections and props in the manifest and in the game, the drum turning as one body, the STL compare still
+  passing, the numbers recorded, tests (sections cover the piece without gaps, each section's LOD chain and range, the props'
+  range, determinism), and no visible popping or seams on a fly-along sheet (H).
 
 ### M7-T14 Integration, full suite, docs and acceptance
 
