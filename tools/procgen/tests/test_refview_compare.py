@@ -91,6 +91,25 @@ def write_asset(
     return folder
 
 
+def write_piece_asset(folder: Path, asset_id: str, pieces: dict[str, tuple[np.ndarray, tuple[float, float, float]]],
+                      offset: tuple[float, float, float] = (0.0, 0.0, 0.0)) -> Path:
+    """An asset written in pieces, as the station is (M7-T04): each piece's ``<id>_<name>.glb`` in its own frame, its ``pivot`` in
+    the asset's centred frame, and no top-level ``mesh``. ``pieces`` maps a name to its authored triangles and its pivot."""
+    folder.mkdir(parents=True, exist_ok=True)
+    entries, every = {}, []
+    maps = {key: "x.png" for key in ("albedo", "normal", "orm", "emissive")}
+    for name, (tris, pivot) in pieces.items():
+        local = tris - np.asarray(offset) - np.asarray(pivot)
+        write_glb_triangles(folder / f"{asset_id}_{name}.glb", local)
+        lo, hi = local.reshape(-1, 3).min(axis=0), local.reshape(-1, 3).max(axis=0)
+        entries[name] = {"pivot": list(pivot), "aabb_min": lo.tolist(), "aabb_max": hi.tolist(),
+                         "mesh": {"file": f"{asset_id}_{name}.glb", "surfaces": [{"name": "hull", **maps}]}}
+        every.append(tris - np.asarray(offset))
+    whole = np.concatenate(every).reshape(-1, 3)
+    write_manifest(folder, build_manifest(asset_id, 1, 1, whole.min(axis=0), whole.max(axis=0), offset, extra={"pieces": entries}))
+    return folder
+
+
 def run(argv: list[str]) -> tuple[int, str, str]:
     out, err = io.StringIO(), io.StringIO()
     with redirect_stdout(out), redirect_stderr(err):
@@ -198,6 +217,26 @@ class AssetFrameTests(TmpCase):
         del manifest["mesh"]
         self.assertEqual(compare.asset_mesh_name(manifest), "m.obj")  # an asset without a textured mesh: its OBJ
         self.assertEqual(compare.asset_mesh_name({"asset_id": "x"}), "x.obj")
+
+    def test_an_asset_in_pieces_is_read_as_every_piece_at_its_pivot(self) -> None:
+        # The station's frame and drum (M7-T04): each glb is in its own frame, the drum's centred on its axis at its pivot.
+        frame = _boxes([((-2.0, 3.0, 0.0), (2.0, 4.0, 40.0))])
+        drum = _boxes([((-3.0, -3.0, 10.0), (3.0, 3.0, 30.0))])
+        folder = write_piece_asset(self.dir / "st", "st", {"frame": (frame, (0.0, 0.0, 0.0)), "drum": (drum, (0.0, 0.0, 0.0))},
+                                   offset=(0.0, 0.0, 20.0))
+        manifest = json.loads((folder / "manifest.json").read_text())
+        manifest["pieces"]["drum"]["pivot"] = [0.0, 0.0, 0.0]
+        self.assertEqual([f for f, _ in compare.asset_pieces(manifest)], ["st_drum.glb", "st_frame.glb"])
+        got = compare.load_asset_mesh(folder)
+        np.testing.assert_allclose(got, np.concatenate([drum, frame]), atol=2e-4)
+        moved = write_piece_asset(self.dir / "mv", "mv", {"frame": (frame, (0.0, 0.0, 0.0)), "drum": (drum, (0.0, 0.0, 0.0))},
+                                  offset=(0.0, 0.0, 20.0))
+        m = json.loads((moved / "manifest.json").read_text())
+        m["pieces"]["drum"]["pivot"] = [0.0, 0.0, 5.0]  # the drum's frame sits 5 m aft of the asset's origin
+        (moved / "manifest.json").write_text(json.dumps(m))
+        got = compare.load_asset_mesh(moved)
+        np.testing.assert_allclose(got[: len(drum)], drum + np.array([0.0, 0.0, 5.0]), atol=2e-4)
+        self.assertEqual(compare.asset_pieces({"asset_id": "x", "mesh": {"file": "x.glb"}}), [])
 
     def test_an_asset_id_is_looked_up_under_the_generated_folder(self) -> None:
         write_asset(self.dir / "gen" / "ship", "ship", _box(*HULL))
@@ -349,6 +388,16 @@ class MainTests(TmpCase):
         self.assertEqual(top["iou"], 1.0)  # the mesh is the STL
         self.assertEqual(top["both_px"] + top["model_only_px"], top["model_px"])
         self.assertEqual(top["both_px"] + top["asset_only_px"], top["asset_px"])
+
+    def test_an_asset_in_pieces_is_scored_whole(self) -> None:
+        # The STL is one solid; the asset's two pieces together match it, so the check passes on both pieces, not one.
+        frame, drum = ((-2.0, 1.0, 0.0), (2.0, 2.0, 12.0)), ((-2.0, -2.0, 2.0), (2.0, 1.0, 10.0))  # y about the box centre, as refview reads the STL
+        folder = write_piece_asset(self.dir / "st", "st", {"frame": (_box(*frame), (0.0, 0.0, 0.0)),
+                                                           "drum": (_box(*drum), (0.0, 0.0, 6.0))}, offset=(0.0, 0.0, 6.0))
+        code, out, _ = self.compare(self.stl(_boxes([frame, drum])), folder)
+        self.assertEqual(code, 0, out)
+        self.assertIn("st_drum.glb + st_frame.glb", out)
+        self.assertEqual(self.report()["views"]["side"]["iou"], 1.0)
 
     def test_the_glb_is_scored_not_the_obj(self) -> None:
         # The fallback OBJ is the hull alone; the textured mesh adds a wing the STL has. The verdict follows the glb.

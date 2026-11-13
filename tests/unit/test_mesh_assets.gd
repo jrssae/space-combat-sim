@@ -143,3 +143,29 @@ func test_every_hull_takes_the_sheen_and_rocks_do_not() -> void:
 	Settings.set_value(&"hull_sheen", 0.0)
 	assert_false(paint.clearcoat_enabled, "0 is the flat paint")
 	Settings.set_value(&"hull_sheen", before)
+
+
+func test_a_big_hulls_detail_tile_is_laid_in_its_own_space() -> void:
+	# M7-T04 (D72): the station's surfaces name a shared detail tile; the material multiplies it in, triplanar in the mesh's space.
+	var entry: Dictionary = (_manifest("babylon5_station").get("pieces", {}) as Dictionary).get("drum", {})
+	if entry.is_empty():
+		fail_test(GEN_ASSETS_HINT)
+		return
+	var dir: String = _dir("babylon5_station")
+	var surface: Dictionary = entry["mesh"]["surfaces"][0]
+	var material: StandardMaterial3D = MeshAssets.textured_material(dir, surface)
+	assert_true(material.detail_enabled)
+	assert_eq(material.detail_blend_mode, BaseMaterial3D.BLEND_MODE_MUL)
+	assert_eq(material.detail_uv_layer, BaseMaterial3D.DETAIL_UV_2)
+	assert_true(material.uv2_triplanar, "laid on all three axes")
+	assert_false(material.uv2_world_triplanar, "in the mesh's own space, so it turns with the drum")
+	var tile_m: float = float(surface["world_detail"]["tile_m"])
+	assert_almost_eq(material.uv2_scale.x, 1.0 / tile_m, 1e-6)
+	assert_not_null(material.detail_albedo)
+	assert_not_null(material.detail_normal)
+	var plain: StandardMaterial3D = MeshAssets.textured_material(_dir(STARFURY), {"name": "x", "blend": false, "transmittance": 0.0})
+	assert_false(plain.detail_enabled, "a hull without a tile has no detail layer")
+	var broken: Dictionary = surface.duplicate(true)
+	broken["world_detail"]["albedo"] = "missing.png"
+	assert_false(MeshAssets.textured_material(dir, broken).detail_enabled, "a missing tile leaves the layer off")
+

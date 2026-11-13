@@ -137,7 +137,7 @@ func _cmd_far(args: Dictionary) -> ConsoleResult:
 	match action:
 		&"station":
 			if not toggle_station():
-				return ConsoleResult.failure("the b5_station asset is not generated (run scripts/gen_assets.sh, then import)")
+				return ConsoleResult.failure("the babylon5_station asset is not generated (run scripts/gen_assets.sh, then import)")
 			return ConsoleResult.line("far station: %s" % ("placed at the station's place" if station != null else "taken away"))
 		&"view":
 			if args[&"target"] == null or args[&"km"] == null:

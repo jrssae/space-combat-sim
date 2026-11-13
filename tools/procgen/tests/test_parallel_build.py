@@ -91,6 +91,34 @@ class ParallelFailureTests(unittest.TestCase):
         self.assertNotIn("alpha failed", err)
 
 
+    def test_an_asset_that_builds_alone_waits_for_the_pool(self) -> None:
+        # M7-T04: the station's bake needs the memory to itself, so it starts only once every pooled build has finished.
+        import json
+        import time
+
+        def timed(name: str):
+            inner = make_fake([], name)
+
+            def builder(ctx: BuildContext) -> AssetOutputs:
+                start = time.monotonic()
+                time.sleep(0.3)
+                out = inner(ctx)
+                (self.out / f"{name}.json").write_text(json.dumps([start, time.monotonic()]))
+                return out
+
+            return builder
+
+        fakes = {i: timed(i) for i in ("alpha", "bravo", "charlie")}
+        with mock.patch.dict(ASSETS, fakes, clear=True), mock.patch.object(cli, "BUILD_ALONE", frozenset({"alpha"})):
+            code, out, err = run("build", "all", "--out", str(self.out), "--jobs", "3")
+        self.assertEqual(code, 0, err)
+        spans = {i: json.loads((self.out / f"{i}.json").read_text()) for i in fakes}
+        self.assertGreaterEqual(spans["alpha"][0], max(spans["bravo"][1], spans["charlie"][1]))
+        self.assertLess(spans["bravo"][0], spans["charlie"][1], "the others still share the pool")
+        self.assertEqual([line.split()[1].rstrip(":") for line in out.splitlines() if line.startswith("built")],
+                         ["alpha", "bravo", "charlie"], "reported in the asked order")
+
+
 class GenAssetsJobsTests(unittest.TestCase):
     def test_gen_assets_takes_its_jobs_from_the_cores_up_to_four(self) -> None:
         script = (REPO_ROOT / "scripts" / "gen_assets.sh").read_text(encoding="utf-8")

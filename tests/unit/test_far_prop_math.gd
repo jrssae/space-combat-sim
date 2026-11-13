@@ -24,10 +24,10 @@ func before_all() -> void:
 
 func test_both_assets_carry_their_silhouettes() -> void:
 	assert_not_null(gate, "the jumpgate's manifest has its far section (generator v4)")
-	assert_not_null(station, "the station's stand-in's manifest has its far section (generator v4)")
+	assert_not_null(station, "the station's manifest has its far section")
 	assert_almost_eq(gate.radius_m, 1408.0, 5.0, "the gate's bounding radius from the middle of its box (T19 round 4: 1.55 wide)")
 	assert_almost_eq(gate.centre.z, 605.0, 1.0, "half way down the arms")
-	assert_almost_eq(station.radius_m, 4028.0, 5.0)
+	assert_almost_eq(station.radius_m, 4014.0, 5.0, "M7-T04: the bow tip, 4 km fore of the middle")
 	assert_eq(gate.directions.size(), 3 + 3 * 4 * 8 + 128, "the axes, their rings and the spiral")
 	assert_null(FarPropMath.from_section({}), "no section, no far prop")
 

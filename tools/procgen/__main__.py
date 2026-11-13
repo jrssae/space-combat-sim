@@ -18,7 +18,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from .assets import ASSETS
+from .assets import ASSETS, BUILD_ALONE
 from .core.context import DEFAULT_OUT_ROOT, DEFAULT_SEED
 from .build import BuildResult, timed_build
 
@@ -127,16 +127,20 @@ def _pool_context() -> BaseContext | None:
 
 def _parallel(asset_ids: Sequence[str], jobs: int, seed: int, out_root: Path, options: dict[str, Any]) -> list[BuildResult]:
     """Build ``asset_ids`` in up to ``jobs`` workers. When a worker dies, every asset that had not finished is built again in a
-    worker of its own, so only the one that kills its worker is reported failed."""
+    worker of its own, so only the one that kills its worker is reported failed. The ``BUILD_ALONE`` assets wait for the pool and
+    are then built one at a time, each in a worker of its own."""
     results: dict[str, BuildResult] = {}
+    pooled = [asset_id for asset_id in asset_ids if asset_id not in BUILD_ALONE]
     unfinished: list[str] = []
-    with ProcessPoolExecutor(max_workers=min(jobs, len(asset_ids)), mp_context=_pool_context()) as executor:
-        futures = {asset_id: executor.submit(timed_build, asset_id, seed, out_root, options) for asset_id in asset_ids}
-        for asset_id, future in futures.items():
-            try:
-                results[asset_id] = future.result()
-            except BrokenProcessPool:
-                unfinished.append(asset_id)
+    if pooled:
+        with ProcessPoolExecutor(max_workers=min(jobs, len(pooled)), mp_context=_pool_context()) as executor:
+            futures = {asset_id: executor.submit(timed_build, asset_id, seed, out_root, options) for asset_id in pooled}
+            for asset_id, future in futures.items():
+                try:
+                    results[asset_id] = future.result()
+                except BrokenProcessPool:
+                    unfinished.append(asset_id)
+    unfinished += [asset_id for asset_id in asset_ids if asset_id in BUILD_ALONE]
     for asset_id in unfinished:
         with ProcessPoolExecutor(max_workers=1, mp_context=_pool_context()) as alone:
             try:

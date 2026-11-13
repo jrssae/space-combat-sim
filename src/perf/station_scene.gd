@@ -183,6 +183,6 @@ func _cmd_station(args: Dictionary) -> ConsoleResult:
 		close()
 		return ConsoleResult.line("station scene closed")
 	if not open(view):
-		return ConsoleResult.failure("the b5_station asset is not generated (run scripts/gen_assets.sh, then import)")
+		return ConsoleResult.failure("the babylon5_station asset is not generated (run scripts/gen_assets.sh, then import)")
 	return ConsoleResult.line("station scene: %s view, %d fighters, %d capitals" % [view, fighters.size(),
 			main.bench.standins.capitals().size()])

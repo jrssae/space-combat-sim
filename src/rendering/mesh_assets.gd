@@ -137,7 +137,33 @@ static func textured_material(dir: String, surface: Dictionary) -> StandardMater
 		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		material.albedo_color = Color(1.0, 1.0, 1.0, 1.0 - float(surface.get("transmittance", 0.0)))
 		material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	apply_world_detail(material, dir, surface)
 	return material
+
+
+## Lays a big hull's shared detail tile over its atlas (M7-T04, D72): the surface's `world_detail` names the tile's two maps and its
+## size in metres. The tile repeats in the mesh's own space on all three axes (so it turns with a turning piece) and multiplies the
+## paint, so plating a few metres across shows from 50 m without a bigger atlas. A surface without one, or with its maps missing,
+## is left as it is.
+static func apply_world_detail(material: StandardMaterial3D, dir: String, surface: Dictionary) -> void:
+	var detail: Dictionary = surface.get("world_detail", {})
+	var tile_m: float = float(detail.get("tile_m", 0.0))
+	if detail.is_empty() or tile_m <= 0.0:
+		return
+	var albedo: Texture2D = _texture(dir.path_join(String(detail.get("albedo", ""))))
+	var normal: Texture2D = _texture(dir.path_join(String(detail.get("normal", ""))))
+	if albedo == null or normal == null:
+		push_warning("MeshAssets: the detail tile of %s is missing or not imported" % dir)
+		return
+	material.detail_enabled = true
+	material.detail_blend_mode = BaseMaterial3D.BLEND_MODE_MUL
+	material.detail_uv_layer = BaseMaterial3D.DETAIL_UV_2
+	material.detail_albedo = albedo
+	material.detail_normal = normal
+	material.uv2_triplanar = true
+	material.uv2_world_triplanar = false
+	material.uv2_triplanar_sharpness = 4.0
+	material.uv2_scale = Vector3.ONE / tile_m
 
 
 ## The file of one of a surface's maps in the texture set `settings.texture_detail` picks: a set the surface's `detail` names

@@ -355,6 +355,22 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 - **Notes:** the frame and the drum stay separate pieces with the drum's frame on its axis; texel tiers as D72 says, VRAM
   measured; a look sheet from 50 m, 1 km, 10 km and 100 km goes to `references/screenshots/M7-T04 station/` (H).
 - **Done when:** the output contract and Python tests for the shape; the `tools/refview` compare against `references/EA Babylon 5 Station.stl` passes the 90% rule (Q1: top, side and front silhouette IoU >= 0.90, L/W/H within 10%), scores in `docs/assets-station.md`; the maintainer has seen the look sheet.
+- **Done (phase 1, as built; look sheet approved 2026-11-13, fix round applied):** `babylon5_station` (shapes `parts/station.py`,
+  surfaces `parts/station_layouts.py`, paint and metal `styles/earth_alliance_station.py`) replaces `b5_station`: frame and drum
+  pieces, the drum's frame on the axis, the four Cobra arms on the drum, at least 8 m between the turning drum and the frame.
+  Compare PASS: top 0.965, side 0.954, front 0.970, L/W/H 1.000 / 1.001 / 1.000 (`compare.py` reads every piece). 40 788
+  triangles; a 4 096 px atlas per piece (about 1.3 and 1.5 m a texel) plus a shared 16 m detail tile laid triplanar by
+  `MeshAssets.apply_world_detail` (D72); maps 109.3 MB, card VRAM about +220 to 245 MB. Paint by pattern (`Marking.paint`);
+  painted and bare metal with roughness varied per plate (the maintainer's "metallic, not plastic"; values in
+  `docs/assets-station.md`); lit windows (Q10). Fix round: the bow end pinned by a test (the aperture shot was the bow; the door
+  looked like the reactor's cap): the aperture is now a framed wheel with a lit opening, spokes and lamps, and the reactor has
+  its ring of pipe sections; each Cobra arm has seven sunk, framed, grated, numbered launch doors with lit edges and red-capped
+  clamps, and its head the fork, the clamped circular hatch, ribs and the red cross, from the maintainer's three Cobra-bay
+  references; `BUILD_ALONE` builds the station (9.3 GB peak) after the `--jobs` pool. `StationStandin` points at the new id.
+  Sheet: `references/screenshots/M7-T04 station/M7-T04_station_look_sheet.png`. For T05: the aperture wheel is one drum shape
+  (`aperture`) that T05 replaces whole; the sphere's lathe is open at its front (r 126), so the tunnel can be recessed there; the
+  bow-end test's hub line follows the new front. For T18: one emissive map and one strength per
+  surface, so very bright beacons want their own material; ring lights as thin emissive geometry (see `docs/assets-station.md`).
 
 ### M7-T05 Near-field detail and hardpoints
 

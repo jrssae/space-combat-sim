@@ -21,13 +21,15 @@ from .textured_mesh import TexturedPart, write_textured_mesh
 
 @dataclass(frozen=True)
 class PieceTexture:
-    """How a piece's textured mesh is baked: the atlas's size, the texel to start packing at, the seed."""
+    """How a piece's textured mesh is baked: the atlas's size, the texel to start packing at, the seed, the normal map's scale,
+    occlusion and the generic plating."""
 
     atlas_px: int
     texel_m: float
     seed: int = 0
     normal_scale: int = 1
     occlusion: bool = False
+    grid: bool = True  # the generic staggered plating; off for a piece whose parts carry drawn layouts (M7-T04)
 
 
 def write_piece(
@@ -36,7 +38,8 @@ def write_piece(
     """Write the textured mesh ``<name>.glb`` and its maps; return the files and the piece's entry: its bounds and its ``mesh``."""
     bounds = mesh_of(parts).vertices
     files, section = write_textured_mesh(out_dir, name, list(parts), style, atlas_px=texture.atlas_px, texel_m=texture.texel_m,
-                                         seed=texture.seed, occlusion=texture.occlusion, normal_scale=texture.normal_scale)
+                                         seed=texture.seed, occlusion=texture.occlusion, normal_scale=texture.normal_scale,
+                                         grid=texture.grid)
     entry: dict[str, Any] = {
         "aabb_min": [round(float(c), 5) for c in np.min(bounds, axis=0)],
         "aabb_max": [round(float(c), 5) for c in np.max(bounds, axis=0)],

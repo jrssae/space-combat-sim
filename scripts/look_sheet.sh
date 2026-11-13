@@ -10,7 +10,7 @@
 #              M4-T30b (checkpoint 1c): SHEET_LIVERIES (wing:number,... a column each), SHEET_COMPARE (a pattern of
 #              earlier shots, %d metres and %s lit or dark, as one more column), SHEET_COMPARE_LABEL, SHEET_PREFIX (m4_t30a), SHEET_PATH.
 #              M4-T30d: SHEET_COCKPIT (1; 0 leaves the cockpit view out, for the props: nav_buoy, raider_fighter_chunks,
-#              starfury_aurora_chunks, capital_cruiser, capital_destroyer, capital_carrier, b5_station).
+#              starfury_aurora_chunks, capital_cruiser, capital_destroyer, capital_carrier, babylon5_station).
 # It takes the Godot (read), GPU and bench locks itself (scripts/godot_lock.sh).
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

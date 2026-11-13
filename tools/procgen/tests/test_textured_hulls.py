@@ -4,13 +4,14 @@ buoy, the capital hulls, the station's pieces and the Starfury's chunks under th
 from __future__ import annotations
 
 import json
+import math
 import tempfile
 import unittest
 from pathlib import Path
 
 import numpy as np
 
-from tools.procgen.assets import b5_station, capital_hulls, nav_buoy
+from tools.procgen.assets import babylon5_station, capital_hulls, nav_buoy
 from tools.procgen.assets import raider_fighter as raider
 from tools.procgen.assets import starfury_aurora as starfury
 from tools.procgen.core import geometry as g
@@ -231,7 +232,7 @@ class PieceTexturedTests(unittest.TestCase):
         cls._tmp = tempfile.TemporaryDirectory()
         root = Path(cls._tmp.name)
         cls.station_dir, cls.capital_dir = root / "station", root / "capitals"
-        b5_station.build(BuildContext(cls.station_dir, seed=42))
+        babylon5_station.build_at(BuildContext(cls.station_dir, seed=42), 1024, 1024, 64)  # M7-T04's station, baked small
         capital_hulls.build(BuildContext(cls.capital_dir, seed=42))
         cls.station = manifest_io.read_manifest(cls.station_dir)
         cls.capitals = manifest_io.read_manifest(cls.capital_dir)
@@ -244,7 +245,7 @@ class PieceTexturedTests(unittest.TestCase):
         for name in ("drum", "frame"):
             section = self.station["pieces"][name]["mesh"]
             manifest_io.validate_mesh_section(section)
-            self.assertEqual(section["file"], f"b5_station_{name}.glb")
+            self.assertEqual(section["file"], f"babylon5_station_{name}.glb")
             for key in ("albedo", "normal", "orm", "emissive"):
                 self.assertTrue((self.station_dir / section["surfaces"][0][key]).is_file())
 
@@ -256,18 +257,12 @@ class PieceTexturedTests(unittest.TestCase):
         self.assertAlmostEqual(float(hi[2] - lo[2]), 8000.0, delta=80.0)
         d_lo, d_hi = np.array(drum["mesh"]["aabb_min"]), np.array(drum["mesh"]["aabb_max"])
         np.testing.assert_allclose((d_lo + d_hi)[:2] * 0.5, [0.0, 0.0], atol=1.0, err_msg="the drum is centred on its axis")
-        self.assertAlmostEqual(float(d_hi[0] - d_lo[0]), 8000.0 / 9.0, delta=5.0)
+        self.assertAlmostEqual(float(d_hi[0] - d_lo[0]), 2.0 * 417.0, delta=5.0)  # the bands (M7-T01's measurements)
 
     def test_the_station_carries_its_far_view(self) -> None:
         far = self.station["far"]  # M6-T15: both pieces' outline from every side, for the far dot
-        self.assertAlmostEqual(far["radius_m"], 4028.0, delta=10.0)
+        self.assertAlmostEqual(far["radius_m"], math.hypot(4000.0, 330.0), delta=30.0)  # the bow tip, 4 km fore of the middle
         self.assertLess(far["areas_m2"][2], far["areas_m2"][0], "end on it is smaller than from the side")
-
-    def test_the_command_sphere_has_lit_windows(self) -> None:
-        glowing = _glowing_vertices(self.station_dir, self.station["pieces"]["frame"]["mesh"])
-        self.assertGreater(len(glowing), 0)
-        near_command = np.abs(glowing[:, 2] - b5_station.COMMAND_Z) < 700.0
-        self.assertGreater(near_command.mean(), 0.5, "most of the frame's lights are the command section's windows")
 
     def test_each_capital_class_is_a_textured_box_with_window_rows(self) -> None:
         for cls, (w, h, length) in capital_hulls.CLASSES.items():

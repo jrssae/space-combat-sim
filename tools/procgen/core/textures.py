@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import math
 import zlib
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -154,6 +154,12 @@ class Marking:
                                                         "pitch_m": (float(pitch_m[0]), float(pitch_m[1])),
                                                         "window_m": (float(window_m[0]), float(window_m[1])),
                                                         "strength": float(strength), "lit": float(lit)})
+
+    @staticmethod
+    def paint(part: str, colour: Vec3, cover: Callable[[np.ndarray, np.ndarray], np.ndarray]) -> Marking:
+        """A base coat of ``colour`` wherever ``cover(points, normals)`` (0..1 per point, in the part's frame) says, laid before the
+        seams and the wear so they show through it (M7-T04: the station's blue panel blocks, too irregular for bands and decals)."""
+        return Marking("paint", part, tuple(colour), {"cover": cover})
 
     @staticmethod
     def soot(part: str, exit_point: Sequence[float], direction: Sequence[float], radius_m: float, length_m: float, strength: float = 1.0) -> Marking:
@@ -618,6 +624,16 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
     emissive = np.array([m.emissive for m in table], dtype=float)[mat]
     strength = np.array([m.emissive_strength for m in table], dtype=float)[mat]
     glass = transmittance > 0.0
+    names = list(atlas.part_names)
+
+    # Base coats painted by pattern (M7-T04), under the plating, the seams and the wear.
+    for marking in atlas.markings:
+        if marking.kind != "paint":
+            continue
+        sel = (np.ones(n, dtype=bool) if not marking.part else part == names.index(marking.part)) & ~glass
+        if sel.any():
+            cover = np.clip(np.asarray(marking.params["cover"](pos[sel], nrm[sel]), dtype=float), 0.0, 1.0)
+            albedo[sel] = albedo[sel] * (1.0 - cover)[:, None] + np.asarray(marking.colour, dtype=float) * cover[:, None]
 
     # The paint: each part's plating (panel lines and tint) with the part's own phase.
     on_line = np.zeros(n, dtype=bool)
@@ -687,11 +703,12 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
     roughness = roughness + 0.25 * on_line + 0.1 * smudge + plate_rough
 
     # The markings, in world space, on their parts; what they cover is kept from the livery's paint.
-    names = list(atlas.part_names)
     marked = np.zeros(n)
     window_glow = np.zeros((n, 3))
     window_strength = np.zeros(n)
     for marking in atlas.markings:
+        if marking.kind == "paint":
+            continue
         sel = np.ones(n, dtype=bool) if not marking.part else part == names.index(marking.part)
         sel &= ~glass
         if not sel.any():

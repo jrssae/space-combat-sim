@@ -172,7 +172,7 @@ func test_the_dots_light_follows_the_sun_as_the_mesh_does() -> void:
 func test_the_station_shrinks_both_pieces_and_its_drum_keeps_turning() -> void:
 	var station := StationStandin.new()
 	if not station.build():
-		fail_test("the b5_station asset is not generated")
+		fail_test("the babylon5_station asset is not generated")
 		station.free()
 		return
 	var far: FarProp = FarPropHost.dress_station(station)

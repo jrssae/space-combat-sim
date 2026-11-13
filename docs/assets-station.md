@@ -136,8 +136,7 @@ each within 10 % (8 000, 1 111 and 3 006 m).
 ```
 
 - No `--model-offset` is needed if the generator authors x and y about the drum axis: the STL's box is centred on it.
-- `compare.py` reads one mesh (the manifest's `mesh.file`). The station has two pieces, so T04 has to make the compare read
-  both (the frame, and the drum moved to its `pivot`), for example by loading every entry of the manifest's `pieces`.
+- `compare.py` reads every entry of the manifest's `pieces` (T04): the frame, and the drum moved to its `pivot`, at rest.
 - The pixel is 0.25 % of the length, 20 m. The vanes and booms are 19 % of the side silhouette and 18 % of the front one (edge-on
   lines), but under 3 % of the top. The front view therefore needs the vanes at x ±535 to within a pixel, and they set the
   width and height on their own: a vane 10 % short fails the height.
@@ -226,3 +225,158 @@ side like a split egg, each a long blue-violet pod (#746FBA lit, #6662B5 mid, cl
 (#C0A866) and a painted number ("9"). A grey truss body joins them along the middle. Below: two jointed manipulator arms (three segments
 each) ending in claw grippers, and a sensor head under the front centre with a green lens. Panel lines on the shells, grey
 trusses (#A29E9B lit, #83807D mid), dark joints #33312F. Colours read off the sheet's render (lit).
+
+## As built (M7-T04, phase 1: in the working tree, awaiting the maintainer's look sheet)
+
+`tools/procgen/assets/babylon5_station.py` (shapes in `parts/station.py`, seams, paint and windows in
+`parts/station_layouts.py`, paint in `styles/earth_alliance_station.py`). The asset's origin is on the drum axis at z 4 000
+(`centroid_offset` [0, 0, 4000]); the drum's frame sits on the axis at z 3 000 (`pivot` [0, 0, -1000], `axis` +Z,
+`spin_rad_s` 0.148).
+
+**Compare (Q1's 90 % rule), PASS** (`compare.py` as above, 20 m pixel, no shift needed):
+
+| View | IoU | | Dimension | Asset / STL |
+|---|---|---|---|---|
+| top | 0.965 | | length | 8 000.0 / 8 000.0 m (1.000) |
+| side | 0.954 | | width | 1 112.0 / 1 110.7 m (1.001) |
+| front | 0.970 | | height | 3 006.0 / 3 005.8 m (1.000) |
+
+Changed from the plan above while fitting the silhouettes (the measurements were vertex reads; these come from the STL's own
+silhouettes):
+- The spine over the green zone is low (underside y 365, top 415, x ±75) and the cargo modules stand on it (y 415 to 565);
+  between the forward radiators and the first module it rises as a ramp to y 555, and after the last module it holds at 535
+  (where D75's L10, L11, I7 and I8 sit). Over the docking sphere a deck at y 459 carries a central ramp (x ±32) rising from
+  459 at z 1 300 to 548 at z 1 750 (L9 on the ramp, I6 on the deck). A box hangs under the spine at z 960 to 1 260 (y 316 to
+  358). The bow spine's top is y 380 at z 500, with a tower to y 436 at z 495 to 545 (I5 on it, H1 and H2 beside it).
+- The waist core is r 135 from z 1 020 to 1 300 (r 188 at its ends); the green zone is r 334 with stringers to r 341; the
+  cone falls fast from the hub (r 300 at z 5 830, 225 at 5 900, then 190, 160, 130, 100 to r 90 at 6 360); the reactor is r 166.
+- Clearances kept: the drum turning through 360 degrees stays at least 8 m from the frame (the neck between the drum's end at z
+  5 500 and the hub at 5 508; the aperture's ring z 488 to 548 at r 133 against the door r 126; the spine 11 m over the bands);
+  the test samples both surfaces every 3 m and holds 5 m.
+
+**Pieces and budgets** (after the fix round). Drum 20 768 triangles (sphere, aperture wheel, forward body and waist, the bands, the
+green zone, four Cobra arms with their heads, doors, lit door edges and clamps, four pods, toothed rims, stringers); frame 20 020 (bow spike, aperture ring and pylon, spine, ramp,
+radiators, cargo, dome and lamps, hub and cone, delta fins, booms and twelve vanes, truss, torus disc, shaft, reactor). Each
+piece has a 4 096 px atlas: drum 1.39 m a texel (60 % filled), frame 1.50 m (64 %). The test budget is 40 000 triangles a
+piece. Full build 2 to 3.5 minutes, 9.2 to 9.4 GB peak memory (after the fix round: 40 788 triangles, 9.3 GB).
+
+**Texel tiers (D72).** The atlases carry the paint, the seams (about 3 m lines), the windows and the weathering. The near field
+comes from one shared detail tile (`core/detail_layer.py`): 16 m square at 1 024 px (1.6 cm a texel), plates of 1 to 4 m with
+fine seams, a few inset hatches and a plate-to-plate tone, seamless; each surface's `world_detail` names it and
+`MeshAssets.apply_world_detail` lays it with Godot's detail layer (multiply, UV2 triplanar in the mesh's own space, so it turns
+with the drum).
+
+**VRAM.** The maps as imported: four maps per piece at 4 096 px (albedo, ORM and emissive BC1 10.7 MB each, normal BC5 21.3 MB,
+all with mipmaps) and the tile's two at 1 024 px (1.3 MB each): **109.3 MB**. The card's VRAM
+(`/sys/class/drm/card1/device/mem_info_vram_used`) rose **228 to 245 MB** loading both pieces in three clean runs (one run with
+something else on the card read 353 MB); the difference over the maps' bytes is the driver's, not measured further.
+
+**Paint.** Base coats painted by pattern (`Marking.paint`, under the seams and the wear): the bands' blue-violet blocks
+(checker of 12 x 3 blocks per band whose edges step out and back in 26 m notches, a 7 m grey frame in each); the docking
+sphere's and forward body's checkerboard (32 and 36 round, 52 and 56 m along); the green zone's blue blocks between grey strips
+(20 round, two blocks per 304 m section); the spine's upward faces darker; the vanes deep blue with a 24 m grey frame and small
+dark recesses; red trim along the Cobra arms' edges and seven yellow-orange hatches (22 by 40 m) with hazard bands on each arm.
+Colours are the table above through `capture_albedo` (at the civilians' 0.5). Lit windows (Q10): rings on the sphere, forward
+body, bands and green zone, and rows on the spine's flanks over the sphere; a red lamp on the dome and four on the bow spine's
+flanks.
+
+**Look sheet:** `scripts/station_sheet.sh <dir>` (on this machine with the session locked, `SHEET_DISPLAY=x11`: Wayland stops
+drawing a window nobody sees) shoots 50 m off a Cobra bay, 60 m off an arm's head, 50 and 150 m off the aperture, 200 m off a
+band, 1 km, 10 km and 100 km. Per view: forward_plus, 14 to 18 draw calls near, 6 at 100 km, 223 to 489 fps steady at
+6 144 x 3 456, GPU 1.8 to 4.2 ms. The sheet: `references/screenshots/M7-T04 station/M7-T04_station_look_sheet.png`.
+
+## Metal and reflection (M7-T04 phase 1, the maintainer 2026-11-13: "metallic, not plastic")
+
+**Materials** (`styles/earth_alliance_station.py`, `SCHEME`; metallic and base roughness as baked into the ORM map before the
+variation below). Painted metal on the plating; bare metal, more metallic and smoother, on the trim, booms, truss, radiators,
+reactor and dome. A painted metal's albedo is raised by `1 / (1 - 0.7 x metallic)` so its diffuse colour stays near the capture's;
+a bare metal's albedo is its reflectance (`BARE_METAL`).
+
+| Material | Where | Metallic | Roughness |
+|---|---|---|---|
+| drum_grey | drum, sphere, arm plating | 0.45 | 0.42 |
+| drum_blue | blue-violet blocks (painted over drum_grey) | 0.45 | 0.46 |
+| spine / spine_top | spine, bow, hub, fins / their upward faces | 0.50 | 0.48 / 0.56 |
+| cargo | cargo modules | 0.40 | 0.50 |
+| trim / hatch | Cobra arm stripes / hatches (painted over the arm's grey) | 0.45 | 0.46 / 0.50 |
+| vane / vane_dark | vane blades / their small recesses | 0.55 | 0.34 / 0.55 |
+| recess | teeth gaps, waist frame, truss core | 0.50 | 0.66 |
+| vane_frame (bare, #9C9B99) | booms, vane mounts | 0.75 | 0.32 |
+| reactor (bare, #7A6E62) | reactor, shaft, torus disc | 0.75 | 0.38 |
+| machinery (bare, #8E8B87) | radiators, truss bars, waist pipes | 0.85 | 0.28 |
+| dome (bare, #6E7078) | observation dome | 0.90 | 0.12 |
+| window | unlit glass | 0.00 | 0.15 |
+
+**Variation**, so a highlight breaks up instead of one sheen: each drawn plate's roughness is its paint's +-0.14 (`PLATE_SHEEN`,
+`parts/station_layouts.py`); the `metal_finish` extra (M7-T16's helper in `core/textures.py`, shared with the raider) steps it
++-0.08 per 40 m panel and drifts it +-0.05 over 30 m; seam lines are 0.25 rougher; dirt (streaks, smudges and low grime) is up to
+0.28 rougher and half as metallic; worn edges show metal (`bare_metal` 0.35: metallic 0.85, 0.25 smoother). As baked (median, 10th to 90th
+percentile): forward band roughness 0.45 (0.33 to 0.63), metallic 0.44 (0.38 to 0.45); spine 0.52 (0.37 to 0.73), 0.50 (0.44 to
+0.53); truss 0.28 (0.18 to 0.44), 0.83 (0.67 to 0.85); booms 0.37 (0.20 to 0.61), 0.75 (0.62 to 0.76). The near field's detail tile tilts each 1 to 4 m
+plate up to +-0.06 rad (laid at 35 % on a plate's face), so a sunlit hull breaks into plates even at 50 m; Godot's detail layer
+carries colour and normal only, so the roughness itself does not vary below the atlas's metre texel.
+
+**What the station reflects** (the game's environment, unchanged): the key star (`KeyStar`, energy 1.5, Godot's default
+specular 0.5) is the specular source; with `settings.hull_sheen` above 0 (0.25 by default) and the nebula shown, the
+environment's reflected light is the sky (the nebula panorama, a 128 px radiance map) and every hull's paint, the station's too,
+carries a clear coat of that strength at roughness 0.35; ambient light is a flat white at `settings.ambient_level` (0.1), which
+lights diffuse only, so a bare metal face turned from the sun shows the dim nebula and goes dark, as metal in space does. There
+are no reflection probes and the planet (scaled-space layer) is not reflected. Two global knobs were left alone for the
+maintainer: the key star's specular (0.5) and the sky's radiance size (128).
+
+## The Cobra arms and the docking aperture (M7-T04 fix round, the maintainer 2026-11-13)
+
+Sources for the arms (gitignored, inspiration only, never traced): `references/cobra bay references/cobra bay doors lit show
+capture.jpg` (show capture), `references/cobra bay references/cobra bay starfury launch render.jpg` (game render) and
+`references/cobra bay references/cobra arm untextured model.jpg` (an untextured model of one arm).
+
+What they show:
+- **The launch doors** (all three): a row of seven closed doors in a framed strip along the arm's root section. In the show
+  capture each door is a framed grating with a warm orange-red lit interior showing through, in a dark, red-trimmed recessed
+  band; above the row, a hinged clamp or rail arm per door with a red cap block. In the game render the doors are rust-brown
+  panels in a red-bordered frame with stepped, notched ends, and a Starfury drops out of the bay below. The model puts the strip
+  near the top of the root section's flank; the show and the render show it on the face a fighter leaves from. T04 keeps it on
+  the outward face (T01's read and Q3: the fighter drops out radially).
+- **The head** (the model): a fork of two box prongs at the bow end (D75's L1 to L8 stand on them), a flat-topped box with a
+  circular hatch held by four clamps (D75's I1 to I4 stand in it), ribbed flanks on the neck that tapers to the root section, and
+  on the neck's top a framed panel with a red cross.
+
+As built (`parts/station.py`, `parts/station_layouts.py`):
+- Doors: seven per arm, 28 m along and 64 m across, sunk 4 m into a frame of two side rails and a bar between each pair (z 1 020
+  to 1 290, centres every 38.6 m); each door two grated leaves (six slats each) painted rust-brown (`door`, #7A4A3A, metallic
+  0.55, roughness 0.44), numbered 1 to 7 from the bow in pale stencil 14 m tall; the frame's top red (`trim`). Not built: the
+  frame's stepped, notched ends (paint only would blur at the atlas's metre texel; T05 can add them as geometry).
+- Bay light: a lit strip along all four edges of every door at the bottom of its well (`bay_light`, warm orange #FFA860,
+  strength 3.5): the light leaking round a closed door.
+- Clamps: beside each door a post on the rail, an arm reaching 6 m over the door's edge and a red cap block (`clamps`).
+- Head: the two prongs are boxes (x 22 to 60 each side, r 255 to 292, z 612 to 705); the head's top is flat at r 320 from z 730
+  to 870 with the circular hatch (r 24 to 30, a 1.5 m rim) and its four clamps at z 800; nine ribs on each flank of the neck
+  (z 906 to 984); the red cross panel on the neck's top. T05 adds the bays behind the doors and their hardpoints.
+
+**The docking aperture.** The maintainer read the old aperture shot as the reactor's end. Orientation checked and pinned
+(`test_the_bow_is_at_minus_z_with_the_aperture_and_the_reactor_at_plus_z`): the bow and the aperture are at the game's -Z, the
+reactor at +Z, and the shot looked at the bow. The trouble was the look: the door was a plain grey disc, much like the reactor's
+cap. From the docking sphere close-up (`references/T40 seam references/babylon 5 docking sphere close up.jpg`) the door is now a
+framed wheel: a front ring (r 88 to 126, panelled, sixteen red lamps) round a dark opening 34 m deep, crossed by four spokes
+on a hub, with warm light at the back of the opening between the spokes (`aperture`, turns with the drum). The reactor's aft
+face gained its ring of twelve bulging pipe sections, so the two ends no longer look alike.
+
+**For T05 (the docking bay, `references/docking bay references/`).** The wheel is a first pass, one drum shape of its own
+(`aperture` in `parts/station.py`: the front ring r 88 to 126, the 34 m well with its back wall at z 512, the hub, the four spokes,
+the lit panels and the lamps). T05 replaces that shape whole with the cross housing across the bow disc, the stepped cross mouth in
+its vented frame and the tunnel. Nothing else depends on it: the docking sphere's lathe starts at an open ring (z 478, r 126) with
+no front cap, so taking the `aperture` shape out leaves a 126 m hole into the hull for the tunnel. The frame's toothed ring (r 133
+to 157, z 488 to 548) and its pylon are separate and stay. The bow-end test checks only that the drum's foremost 40 m lie
+inside r 126 and that its front is the aperture's hub, so T05 will need to adjust that one line.
+
+**Build memory.** The station's bake peaks at 9.3 GB (9 305 776 kB maximum resident, measured with `/usr/bin/time -v` after the fix
+round, 3.0 minutes). `tools/procgen/assets/__init__.py` lists it in `BUILD_ALONE`: `build --jobs N` (and so `scripts/gen_assets.sh`)
+builds it after the pool has finished, in a worker of its own, so a 16 GB runner never holds it beside the other bakes
+(`test_an_asset_that_builds_alone_waits_for_the_pool`).
+
+**For T18 (exterior lighting).** Each piece has one emissive map (sRGB) with one strength per surface, the strongest glow on it
+(the bay light 3.5, the red lamps 3.0, the windows 2.2); fainter glows are fractions of it in 8 bits, so a beacon far brighter
+than these would dim the rest's precision: give beacons and ring lights their own emissive material, or a second surface. The
+atlas texel is about a metre and a third, so the dashed ring lights on the band edges and sphere rims will want to be thin
+emissive geometry (as the bay strips are) rather than paint. The atlases are about 64 % full; a strip light as geometry adds
+its own small charts.

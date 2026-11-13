@@ -210,11 +210,21 @@ map. Options: `spacing`, `atlas_px`, `model_atlas_px`, `occlusion`.
 Fidelity (Q18, AC20) is scored on the textured mesh by `tools/refview/compare.py` against the STLs in `references/`; the
 commands and scores are in docs/assets-civilian.md.
 
-## `capital_hulls` and `b5_station`
+## `capital_hulls`
 
-The bench's capital stand-ins (one textured box per class, window rows on the flanks) and the Babylon 5 station stand-in (a
-turning drum and a stationary frame), each piece a textured mesh with its bounds (`core/pieces.py`; manifest `classes` and
-`pieces`). The station's drum is centred on its axis, so turning its node about local Z turns it in place.
+The bench's capital stand-ins: one textured box per class, window rows on the flanks, each a textured mesh with its bounds
+(`core/pieces.py`; manifest `classes`).
+
+## `babylon5_station`
+
+The Babylon 5 station (M7-T04, D72; replaced M4's `b5_station` stand-in), built from the measurements in
+docs/assets-station.md: two pieces, `frame` (stationary) and `drum` (turns about the long axis; its frame sits on the axis at
+the manifest's `pivot`, with `axis` and `spin_rad_s`), each a textured mesh on its own 4 096 px atlas (`core/pieces.py`,
+manifest `pieces`). The shapes are `parts/station.py`, their seams, paint and windows `parts/station_layouts.py`, the paint
+`styles/earth_alliance_station.py`. Every surface also names a shared detail tile (`world_detail`: `core/detail_layer.py`,
+16 m of small plating that the game lays triplanar in the mesh's own space), so it reads from 50 m. About 2 to 3.5 minutes and
+9 GB of memory at full size; `build_at` bakes small atlases for the tests. Scored against the reference STL with
+`tools/refview/compare.py` (both pieces); scores in docs/assets-station.md.
 
 ## `sfx_combat`
 
