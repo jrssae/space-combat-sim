@@ -248,7 +248,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T06 | B | The station in the game: placement in the frame, the turning drum, collision, hit volumes, rams, broadcast, section damage | T05, M6 | Opus | A moving 8 km body in Jolt and the native core | not started |
 | T07 | B | The defence grid in the game, as T02 settled it, on the native turret rows | T06, T02 | Opus | Native turret kinds and interceptor behaviour with parity | not started |
 | T08 | C | Launch bays and the launch sequence: the rail, the cinematic launch camera, the hand-off, `launch_from` | T06 | Opus | Rebase-safe scripted motion and the mission API | not started |
-| T09 | C | The station interior for the front end: the `b5_interior` generator and the backdrop | T01, Q7 | Opus | A new interior asset and its lighting | in progress |
+| T09 | C | The station interior for the front end: the `b5_interior` generator and the backdrop | T01, Q7 | Opus | A new interior asset and its lighting | done |
 | T10 | D | AI and traffic around the station: raids at it, avoidance of its surface, allies from the bays, civilians through the aperture | T07, T08, Q8 | Opus | Native AI at a body far larger than any hull so far | not started |
 | T11 | D | Maintenance bots: the generator and their loops | T06, Q11 | Sonnet | A small asset and a simple mover | not started |
 | T12 | D | Tour points and a station sandbox scenario (the base of M8's exterior tour) | T05, T08 | Sonnet | Data and `CINEMATIC` shots on existing seams | not started |
