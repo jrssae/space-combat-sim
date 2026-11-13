@@ -4,7 +4,8 @@ same section planes as the render sections, so each shape belongs to one section
 Round bodies are frusta between their profile's points (a 16-sided ring drawn round the circle, so the hull holds the mesh), slabs
 are hulls between consecutive rows, boxes are boxes. Small parts (ribs, rails' clamps, stringers, the doors' wells) are left to
 the gap tolerance. A piece over the budget has its sections' neighbouring shapes merged, inside each section. T05 refines the
-bays and the aperture (a tunnel open to traffic).
+bays; the main docking bay's tunnel is open to traffic (M7-T05): the sphere round it is four pieces about the clear passage, closed only
+by the airlock's end.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from ..core import collision as col
 from ..core.geometry import rotation_z
 from ..core.sections import SectionCut
 from . import station as st
+from . import station_detail as sd
 
 RING_SIDES = 16
 RING_SECTORS = 8  # the aperture's ring
@@ -126,15 +128,13 @@ def _turned(pieces: list[tuple[str, np.ndarray]], angles_deg: Sequence[float]) -
 def drum_pieces(planes: Sequence[float]) -> list[tuple[str, np.ndarray]]:
     """What turns, in the station frame."""
     out = []
-    for name, profile in (("sphere", st.SPHERE_PROFILE), ("body", st.BODY_PROFILE), ("fwd_band", st.FWD_BAND_PROFILE),
+    solid_sphere = [(z, r) for z, r in st.SPHERE_PROFILE if z >= sd.AIRLOCK_Z]
+    for name, profile in (("sphere", solid_sphere), ("body", st.BODY_PROFILE), ("fwd_band", st.FWD_BAND_PROFILE),
                           ("green", st.GREEN_PROFILE), ("aft_band", st.AFT_BAND_PROFILE)):
         out += frusta(name, profile, planes)
-    # The aperture's door: its front ring and well closed for now (T05 opens the tunnel).
-    out += frusta("aperture", [(st.APERTURE_HUB[1], st.DOOR_R), (st.DOOR_Z, st.DOOR_R)], planes)
+    out += main_docking_bay(planes)
     arm = slab_pieces("arm_head", [(z, -w, w, r0, r1) for z, w, r0, r1 in st.ARM_HEAD], planes, _sec)
-    z0, z1, w, r0, r1 = st.ARM_HATCH
-    arm += slab_pieces("arm_hatch", [(z0, -w, w, r0, r1), (z1, -w, w, r0, r1), (z1 + 40.0, -0.8 * w, 0.8 * w, r0 + 10.0, r1 - 5.0)], planes,
-                       _sec)
+    arm += cobra_hall(planes)
     pz0, pz1, half, under, top = st.ARM_PRONG
     for x in st.ARM_PRONGS_X:
         arm += _blocks("arm_prong", (x - half, under, pz0), (x + half, top, pz1), planes)
@@ -149,6 +149,92 @@ def drum_pieces(planes: Sequence[float]) -> list[tuple[str, np.ndarray]]:
     out += frusta("rim_aft", [(4792.0, 414.0), (4838.0, 414.0)], planes)
     out += frusta("waist_teeth", [(1010.0, 165.0), (1310.0, 165.0)], planes)
     out += frusta("body_teeth", [(1325.0, 262.0), (1338.0, 262.0)], planes)
+    return out
+
+
+def _clip(poly: np.ndarray, normal: Sequence[float], at: float) -> np.ndarray:
+    """A convex polygon (x, y) cut to the side where ``normal . p >= at``."""
+    n = np.asarray(normal, dtype=float)
+    out = []
+    for a, b in zip(poly, np.roll(poly, -1, axis=0), strict=True):
+        da, db = float(a @ n) - at, float(b @ n) - at
+        if da >= 0.0:
+            out.append(a)
+        if da * db < 0.0:
+            out.append(a + (b - a) * da / (da - db))
+    return np.array(out)
+
+
+def main_docking_bay(planes: Sequence[float]) -> list[tuple[str, np.ndarray]]:
+    """The main docking bay with its tunnel open (Q8's traffic): the sphere round the tunnel, from the plate to the airlock, as four
+    pieces about the clear passage (above, below and either side; its profile is convex there, so one piece per side and section);
+    the block round the mouth the same way; the housing and the bar as boxes."""
+    hw, hh = sd.clear_passage()
+    sides = (("top", [((0.0, 1.0), hh)]), ("bottom", [((0.0, -1.0), hh)]),
+             ("right", [((1.0, 0.0), hw), ((0.0, 1.0), -hh), ((0.0, -1.0), -hh)]),
+             ("left", [((-1.0, 0.0), hw), ((0.0, 1.0), -hh), ((0.0, -1.0), -hh)]))
+    profile = [(z, r) for z, r in st.SPHERE_PROFILE if z <= sd.AIRLOCK_Z]
+    zs, rs = [z for z, _ in profile], [r for _, r in profile]
+    out = []
+    # The cylinder at the opening, then the convex rest of the sphere to the airlock, cut at the section planes.
+    for za, zb in _split(zs[0], zs[1], planes) + _split(zs[1], zs[-1], planes):
+        ring_z = [za] + [z for z in zs if za < z < zb] + [zb]
+        for name, cuts in sides:
+            pts = []
+            for z in ring_z:
+                poly = _ring(z, float(np.interp(z, zs, rs)))[:, :2]
+                for normal, at in cuts:
+                    poly = _clip(poly, normal, at)
+                pts += [[x, y, z] for x, y in poly]
+            out.append((f"bay_{name}", np.array(pts)))
+    bw, bh, bz = sd.BLOCK
+    for lo, hi in (((-bw, hh), (bw, bh)), ((-bw, -bh), (bw, -hh)), ((hw, -hh), (bw, hh)), ((-bw, -hh), (-hw, hh))):
+        out += _blocks("bay_block", (lo[0], lo[1], bz - 1.5), (hi[0], hi[1], st.DOOR_Z), planes)
+    xw, yh, xz = sd.HOUSING
+    for sx in (-1.0, 1.0):
+        x0, x1 = sorted((sx * bw, sx * xw))
+        out += _blocks("bay_housing", (x0, -yh - 1.0, xz - 1.5), (x1, yh + 1.0, st.DOOR_Z), planes)
+    uw, uh, uz = sd.BAR_UP
+    out += _blocks("bay_bar", (-uw, bh, uz), (uw, uh, st.DOOR_Z), planes)
+    dw, dh, dz = sd.BAR_DOWN
+    out += _blocks("bay_bar", (-dw, -dh, dz - 2.0), (dw, -bh, st.DOOR_Z), planes)
+    return out
+
+
+def cobra_hall(planes: Sequence[float]) -> list[tuple[str, np.ndarray]]:
+    """An arm's hatch section round its launch hall, open under each door (AC3: a fighter drops out without a false contact): the
+    floor, the solid round the hall, the deck over it in pieces between the doors, the taper aft (``station.launch_deck``)."""
+    z0, z1, w, r0, top = st.ARM_HATCH
+    floor, ceiling = top - st.DOOR_DEPTH, st.HALL_CEILING_R
+    hx0, hx1, hz0, hz1 = st.LAUNCH_HALL
+    cx, (dx, dz) = st.LAUNCH_STRIP_X, st.LAUNCH_DOOR_HALF
+    out = slab_pieces("cobra_floor", [(z0, -w, w, r0, ceiling), (z1, -w, w, r0, ceiling)], planes, _sec)
+    for lo, hi in (((-w, ceiling, z0), (hx0, top, z1)), ((hx1, ceiling, z0), (w, top, z1)), ((hx0, ceiling, z0), (hx1, top, hz0)),
+                   ((hx0, ceiling, hz1), (hx1, top, z1)), ((hx0, floor, hz0), (cx - dx, top, hz1)), ((cx + dx, floor, hz0), (hx1, top, hz1))):
+        out += _blocks("cobra_deck", lo, hi, planes)
+    edges = [hz0] + [e for c in st.launch_door_centres() for e in (c - dz, c + dz)] + [hz1]
+    for a, b in zip(edges[0::2], edges[1::2], strict=True):
+        out += _blocks("cobra_bar", (cx - dx, floor, a), (cx + dx, top, b), planes)
+    out += slab_pieces("cobra_taper", [(z1, -w, w, r0, floor), (z1 + 40.0, -0.8 * w, 0.8 * w, r0 + 10.0, top - 5.0)], planes, _sec)
+    return out
+
+
+def cargo_bay(planes: Sequence[float]) -> list[tuple[str, np.ndarray]]:
+    """The spine's front round the open cargo bay: under its floor (with the machinery on it) and beside it, the bay open ahead
+    and above for the pods; the rim's front posts and sill as boxes."""
+    hx = sd.ZG_HALF_X
+    floor = sd.ZG_FLOOR_Y + sd.ZG_MACHINE_M
+    rows = [st.spine_row_at(sd.ZG_FRONT_Z), st.spine_row_at(sd.ZG_BACK_Z)]
+    out = []
+    for sections in ([(z, -w, w, under, floor) for z, w, under, _ in rows], [(z, -w, -hx, floor, top + sd.ZG_RIM[1]) for z, w, _, top in rows],
+                     [(z, hx, w, floor, top + sd.ZG_RIM[1]) for z, w, _, top in rows]):
+        out += slab_pieces("cargo_wall", sections, planes, _sec)
+    rw, rise, depth = sd.ZG_RIM
+    top = st.spine_row_at(sd.ZG_FRONT_Z)[3] + rise
+    for sx in (-1.0, 1.0):
+        x0, x1 = sorted((sx * hx, sx * (hx + rw)))
+        out += _blocks("cargo_rim", (x0, sd.ZG_FLOOR_Y - 6.0, sd.ZG_FRONT_Z - depth), (x1, top, sd.ZG_FRONT_Z), planes)
+    out += _blocks("cargo_rim", (-hx, sd.ZG_FLOOR_Y - 6.0, sd.ZG_FRONT_Z - depth), (hx, sd.ZG_FLOOR_Y + 1.0, sd.ZG_FRONT_Z), planes)
     return out
 
 
@@ -177,7 +263,8 @@ def frame_pieces(planes: Sequence[float]) -> list[tuple[str, np.ndarray]]:
             out.append(("ring", pts))
     out += _blocks("pylon", (-25.0, ro - 4.0, 494.0), (25.0, 330.0, 542.0), planes)
     out += _blocks("tower", (-20.0, 370.0, 495.0), (20.0, st.BOW_TOWER_TOP, 545.0), planes)
-    out += slab_pieces("spine", st.SPINE, planes, _sym, tol=10.0)
+    out += slab_pieces("spine", st.spine_rows_from(sd.ZG_BACK_Z), planes, _sym, tol=10.0)
+    out += cargo_bay(planes)
     out += slab_pieces("ramp", st.RAMP, planes, _sym, tol=6.0)
     hz0, hz1, hw, hy0, hy1 = st.HANGING_BOX
     out += _blocks("hanging_box", (-hw, hy0, hz0), (hw, 400.0, hz1), planes)  # up to the spine, over its struts
@@ -211,6 +298,13 @@ def frame_pieces(planes: Sequence[float]) -> list[tuple[str, np.ndarray]]:
     return out
 
 
+KEEP = ("/bay_", "/cargo_", "/cobra_")  # the pieces round the bays' openings
+
+
+def _kept(name: str) -> bool:
+    return any(k in name for k in KEEP)
+
+
 def section_shapes(pieces: list[tuple[str, np.ndarray]], cuts: Sequence[SectionCut], shift: np.ndarray, budget: col.Budget
                    ) -> tuple[list[col.Shape], dict[str, list[int]]]:
     """The pieces moved by ``-shift`` into their piece's frame, as hulls named ``<section>/<part>.<n>``, merged inside their
@@ -231,6 +325,8 @@ def section_shapes(pieces: list[tuple[str, np.ndarray]], cuts: Sequence[SectionC
         added = np.prod(np.maximum(hi[:, None], hi[None]) - np.minimum(lo[:, None], lo[None]), axis=2) - own[:, None] - own[None]
         added[np.tril_indices(len(shapes))] = np.inf
         added[home[:, None] != home[None]] = np.inf
+        keep = np.array([_kept(s.name) for s in shapes])
+        added[keep[:, None] | keep[None]] = np.inf  # a bay's pieces stay apart, or a merge would close its opening
         i, j = (int(k) for k in np.unravel_index(int(np.argmin(added)), added.shape))
         shapes[i] = col.hull(shapes[i].name, np.concatenate([shapes[i].corners(), shapes[j].corners()]), budget.max_hull_points)
         del shapes[j]

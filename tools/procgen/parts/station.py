@@ -1,7 +1,7 @@
 """The Babylon 5 station's shapes (M7-T04), from the measurements in docs/assets-station.md: every number is metres in the station
 frame read off the reference model, x to starboard, y up, z aft from the bow tip (0 to 8 000), x and y about the drum's axis.
 
-Two sets: :func:`drum_shapes` (what turns: the docking sphere and its door, the waist, the four Cobra arms, the forward body, the
+Two sets: :func:`drum_shapes` (what turns: the docking sphere and its main docking bay (``station_detail.py``), the waist, the four Cobra arms, the forward body, the
 rings and bands, the green zone) and :func:`frame_shapes` (what stands still: the bow spike, the aperture's ring, the dorsal spine
 with its radiators, cargo modules and dome, the hub and cone, the delta fins, the vane booms and vanes, the truss, the torus disc,
 the shaft and the reactor). Each shape is a named mesh; the generator gives it its surface layout, paint and windows
@@ -24,11 +24,7 @@ Section = tuple[float, float, float, float, float]  # z, x0, x1, y0, y1 of an ax
 # --- the drum --------------------------------------------------------------------------------------------------------
 DOOR_Z = 478.0
 DOOR_R = 126.0
-# The docking aperture's door (turns with the drum): a front ring round a dark opening crossed by four spokes on a hub, lit inside.
-APERTURE_R = 88.0  # the opening's radius
-APERTURE_BACK_Z = 512.0  # the lit wall at the back of the opening
-APERTURE_SPOKE = (18.0, 482.0)  # each spoke's width and the z of its front face
-APERTURE_HUB = (22.0, 474.0)  # the hub's radius and the z of its front face
+# The main docking bay's door plate closes the sphere's front opening (``station_detail.py``, M7-T05; it turns with the drum).
 SPHERE_PROFILE = [(DOOR_Z, DOOR_R), (558.0, DOOR_R), (562.0, 150.0), (575.0, 178.0), (600.0, 205.0), (640.0, 236.0),
                   (700.0, 262.0), (760.0, 275.0), (800.0, 277.0), (860.0, 271.0), (900.0, 262.0), (935.0, 248.0), (945.0, 196.0)]
 WAIST_R = 188.0
@@ -51,16 +47,30 @@ ARM_ANGLES_DEG = (90.0, 0.0, 270.0, 180.0)  # top, starboard, bottom, port: the 
 # The Cobra arm's head as it stands on top of the drum: z, half width, inner and outer radius.
 # The head is a box with a flat top (the circular clamped hatch on it), then a ribbed neck tapering to the hatch section
 # (references/cobra bay references/cobra arm untextured model.jpg).
-ARM_HEAD = [(640.0, 55.0, 225.0, 282.0), (700.0, 80.0, 235.0, 305.0), (730.0, 80.0, 235.0, 320.0), (870.0, 78.0, 232.0, 320.0),
+# The head's front stays under the fork's prongs, so D75's light turrets stand on the prongs' tops (M7-T05).
+ARM_HEAD = [(640.0, 55.0, 225.0, 282.0), (700.0, 80.0, 235.0, 288.0), (730.0, 80.0, 235.0, 320.0), (870.0, 78.0, 232.0, 320.0),
             (900.0, 75.0, 225.0, 300.0), (980.0, 50.0, 212.0, 258.0), (1000.0, 47.0, 203.0, 243.0)]
 ARM_TOP_HATCH = (800.0, 24.0, 30.0)  # the circular hatch on the head's top: z of its middle, inner and outer radius
 ARM_RIBS = (906.0, 984.0, 9)  # the neck's ribs on both flanks: z from, z to, how many
 ARM_HATCH = (1000.0, 1300.0, 47.0, 203.0, 243.0)  # z from, z to, half width, inner and outer radius (the frame's top)
-# The launch doors on each arm's hatch section: seven in a row, sunk into a frame of rails and bars (T05 adds the bays behind).
+# M7-T09's hangar (``b5_interior``) is laid out on T04's seven 64 x 28 m doors; T20 refits it to the launch doors below and then
+# drops these four names.
 COBRA_DOORS = 7
 DOOR_HALF = (32.0, 14.0)  # half across, half along
-DOOR_DEPTH = 4.0  # the frame stands this far above the doors
-DOOR_ROW = (1020.0, 1290.0)  # where the row of doors runs along the arm
+DOOR_ROW = (1020.0, 1290.0)  # where T04's row of doors ran along the arm
+DOOR_DEPTH = 4.0  # the deck stands this far above the doors
+# The launch doors (M7-T05, the maintainer's untextured arm model): six to an arm, each taking one Starfury (15.4 m across its claws,
+# 9.8 m long, its span across the arm) with about 2.3 m to spare each side, in a framed strip on the root section's outward face just
+# aft of the ribbed neck, toward its starboard edge (on the top arm); a launch hall under the strip.
+LAUNCH_DOORS = 6
+LAUNCH_DOOR_HALF = (10.0, 7.0)  # half across, half along
+LAUNCH_ROW = (1016.0, 1130.0)  # where the row runs along the arm: a 19 m pitch
+LAUNCH_STRIP_X = 18.0  # the strip's middle across the arm
+LAUNCH_HALL = (-16.0, 34.0, 1010.0, 1136.0)  # the hall under the strip: x from, x to, z from, z to
+# The second row (the maintainer, 2026-11-13: twelve Starfuries an arm, launching in two waves of six): staged across the hall from
+# the racks, under the deck where no open door shows them; each moves over onto its rack when the first wave has dropped.
+STAGING_OFFSET_X = -22.0
+HALL_CEILING_R = 209.0  # the launch hall's ceiling, 30 m in from the doors' plane
 ARM_PRONGS_X = (-41.0, 41.0)  # the fork's two prongs' middles (D75's light turrets stand on them)
 ARM_PRONG = (612.0, 705.0, 19.0, 255.0, 292.0)  # z from, z to, half width, underside and top
 ARM_KNOB = (1380.0, 269.0, (45.0, 29.0, 40.0))  # z, radius, semi-axes across, radial, along
@@ -69,15 +79,16 @@ STRINGER = (14.0, 331.0, 341.0)  # width, inner and outer radius
 # --- the frame -------------------------------------------------------------------------------------------------------
 RING_FRAME = (488.0, 548.0, 133.0, 157.0)  # the aperture's ring: z from, z to, inner and outer radius
 SPINE: list[tuple[float, float, float, float]] = [  # z, half width, underside, top
-    (420.0, 172.0, 311.0, 368.0), (500.0, 185.0, 315.0, 380.0), (580.0, 150.0, 330.0, 400.0), (640.0, 80.0, 340.0, 405.0),
+    # The tops under D75's mounts are flat where a mount stands (H1 and H2 at z 515, L10 and I7 at 2 650, L12 and I9 at 5 650).
+    (420.0, 172.0, 311.0, 368.0), (500.0, 185.0, 315.0, 375.0), (530.0, 172.0, 320.0, 375.0), (580.0, 150.0, 330.0, 400.0), (640.0, 80.0, 340.0, 405.0),
     (700.0, 150.0, 348.0, 445.0), (800.0, 165.0, 362.0, 452.0), (950.0, 165.0, 362.0, 455.0), (1050.0, 160.0, 395.0, 462.0),
     (1300.0, 150.0, 395.0, 458.0), (1400.0, 110.0, 415.0, 459.0), (1500.0, 100.0, 418.0, 459.0), (1600.0, 100.0, 425.0, 462.0),
     (1700.0, 100.0, 428.0, 475.0), (1790.0, 100.0, 428.0, 520.0), (2085.0, 100.0, 428.0, 480.0), (2300.0, 90.0, 428.0, 500.0),
-    (2350.0, 85.0, 428.0, 505.0), (2362.0, 80.0, 380.0, 505.0), (2420.0, 75.0, 368.0, 505.0), (2750.0, 75.0, 365.0, 555.0), (2832.0, 75.0, 365.0, 552.0),
+    (2350.0, 85.0, 428.0, 505.0), (2362.0, 80.0, 380.0, 505.0), (2420.0, 75.0, 368.0, 505.0), (2650.0, 75.0, 366.0, 537.0), (2750.0, 75.0, 365.0, 555.0), (2832.0, 75.0, 365.0, 552.0),
     (2834.0, 75.0, 365.0, 415.0), (4321.0, 75.0, 365.0, 415.0), (4323.0, 75.0, 365.0, 535.0), (4600.0, 75.0, 365.0, 535.0),
     (4700.0, 78.0, 366.0, 505.0), (4760.0, 80.0, 367.0, 505.0), (4772.0, 84.0, 370.0, 508.0), (4782.0, 85.0, 428.0, 510.0),
     (4840.0, 90.0, 428.0, 520.0), (5440.0, 90.0, 426.0, 505.0),
-    (5520.0, 90.0, 400.0, 470.0), (5560.0, 100.0, 395.0, 480.0), (5790.0, 100.0, 395.0, 485.0), (5800.0, 90.0, 300.0, 435.0),
+    (5520.0, 90.0, 400.0, 470.0), (5560.0, 100.0, 395.0, 472.0), (5790.0, 100.0, 395.0, 472.0), (5800.0, 90.0, 300.0, 435.0),
     (5900.0, 80.0, 200.0, 385.0), (6000.0, 70.0, 170.0, 325.0), (6100.0, 60.0, 140.0, 275.0), (6200.0, 50.0, 110.0, 130.0),
     (6360.0, 40.0, 80.0, 100.0),
 ]
@@ -171,6 +182,17 @@ def block(lo: Sequence[float], hi: Sequence[float], material: Material) -> Mesh:
     return box(hi - lo, material, 0.5 * (lo + hi))
 
 
+def spine_row_at(z: float) -> tuple[float, float, float, float]:
+    """The spine's row (z, half width, underside, top) at ``z``, between its listed rows."""
+    zs = [r[0] for r in SPINE]
+    return (z, *(float(np.interp(z, zs, [r[k] for r in SPINE])) for k in (1, 2, 3)))
+
+
+def spine_rows_from(z: float) -> list[tuple[float, float, float, float]]:
+    """The spine's rows from ``z`` aft (the cargo bay is cut into its front, M7-T05)."""
+    return [spine_row_at(z)] + [r for r in SPINE if r[0] > z + 1e-6]
+
+
 def spine_slab(rows: Sequence[tuple[float, float, float, float]], material: Material) -> Mesh:
     """A slab symmetric about x = 0 from ``(z, half width, underside, top)`` rows."""
     return slab([(z, -w, w, y0, y1) for z, w, y0, y1 in rows], material)
@@ -231,35 +253,50 @@ def flat_plate(outline: Sequence[tuple[float, float]], pieces: Sequence[Sequence
 
 # --- the drum --------------------------------------------------------------------------------------------------------
 def door_centres() -> list[float]:
-    """Where each launch door's middle sits along the arm (z, station frame)."""
+    """M7-T09's hangar's door positions along the arm (T04's seven doors; T20 refits the hangar to ``launch_door_centres``)."""
     z0, z1 = DOOR_ROW
     pitch = (z1 - z0) / COBRA_DOORS
     return [z0 + pitch * (k + 0.5) for k in range(COBRA_DOORS)]
 
 
-def door_frame(m: Material) -> Mesh:
-    """The frame round an arm's launch doors: two rails along the sides and a bar between each door and the next."""
-    z0, z1, w, _, top = ARM_HATCH
-    floor, dx, dz = top - DOOR_DEPTH, DOOR_HALF[0], DOOR_HALF[1]
-    parts = [block((sx * dx if sx > 0 else -w, floor, z0), (w if sx > 0 else -dx, top, z1), m) for sx in (-1.0, 1.0)]
-    edges = [z0] + [e for c in door_centres() for e in (c - dz, c + dz)] + [z1]
+def launch_door_centres() -> list[float]:
+    """Where each launch door's middle sits along the arm (z, station frame), 1 nearest the bow."""
+    z0, z1 = LAUNCH_ROW
+    pitch = (z1 - z0) / LAUNCH_DOORS
+    return [z0 + pitch * (k + 0.5) for k in range(LAUNCH_DOORS)]
+
+
+def launch_deck(m: Material) -> list[Mesh]:
+    """The hatch section round the launch doors and the hall under them: the floor under everything, solid round the hall, and the
+    deck over the hall with a hole for each door (sunk ``DOOR_DEPTH`` below the deck), so the hall shows through an open door."""
+    z0, z1, w, r0, top = ARM_HATCH
+    floor, ceiling = top - DOOR_DEPTH, HALL_CEILING_R
+    hx0, hx1, hz0, hz1 = LAUNCH_HALL
+    cx, (dx, dz) = LAUNCH_STRIP_X, LAUNCH_DOOR_HALF
+    parts = [
+        slab([(z0, -w, w, r0, ceiling), (z1, -w, w, r0, ceiling)], m),
+        block((-w, ceiling, z0), (hx0, top, z1), m), block((hx1, ceiling, z0), (w, top, z1), m),
+        block((hx0, ceiling, z0), (hx1, top, hz0), m), block((hx0, ceiling, hz1), (hx1, top, z1), m),
+        block((hx0, floor, hz0), (cx - dx, top, hz1), m), block((cx + dx, floor, hz0), (hx1, top, hz1), m),
+    ]
+    edges = [hz0] + [e for c in launch_door_centres() for e in (c - dz, c + dz)] + [hz1]
     for a, b in zip(edges[0::2], edges[1::2], strict=True):
         if b - a > 0.5:
-            parts.append(block((-dx, floor, a), (dx, top, b), m))
-    return Mesh.concatenate(parts)
+            parts.append(block((cx - dx, floor, a), (cx + dx, top, b), m))
+    return parts
 
 
 def door_glow(m: Material) -> Mesh:
     """The bays' light leaking round each closed door: a lit strip along each of its four edges, at the bottom of its well."""
-    floor, dx, dz = ARM_HATCH[4] - DOOR_DEPTH, DOOR_HALF[0], DOOR_HALF[1]
+    floor, cx, (dx, dz) = ARM_HATCH[4] - DOOR_DEPTH, LAUNCH_STRIP_X, LAUNCH_DOOR_HALF
     strips = []
-    for c in door_centres():
+    for c in launch_door_centres():
         for sz in (-1.0, 1.0):
-            z = c + sz * (dz - 0.9)
-            strips.append(block((-dx + 0.5, floor, z - 0.6), (dx - 0.5, floor + 0.5, z + 0.6), m))
+            z = c + sz * (dz - 0.5)
+            strips.append(block((cx - dx + 0.3, floor, z - 0.3), (cx + dx - 0.3, floor + 0.4, z + 0.3), m))
         for sx in (-1.0, 1.0):
-            x = sx * (dx - 0.9)
-            strips.append(block((x - 0.6, floor, c - dz + 1.5), (x + 0.6, floor + 0.5, c + dz - 1.5), m))
+            x = cx + sx * (dx - 0.5)
+            strips.append(block((x - 0.3, floor, c - dz + 0.8), (x + 0.3, floor + 0.4, c + dz - 0.8), m))
     return Mesh.concatenate(strips)
 
 
@@ -269,8 +306,7 @@ def arm_mesh(m: Material) -> Mesh:
     head = slab([(z, -w, w, r0, r1) for z, w, r0, r1 in ARM_HEAD], m)
     z0, z1, w, r0, r1 = ARM_HATCH
     floor = r1 - DOOR_DEPTH
-    hatch = slab([(z0, -w, w, r0, floor), (z1, -w, w, r0, floor), (z1 + 40.0, -0.8 * w, 0.8 * w, r0 + 10.0, r1 - 5.0)], m)
-    hatch = Mesh.concatenate([hatch, door_frame(m)])
+    hatch = Mesh.concatenate([*launch_deck(m), slab([(z1, -w, w, r0, floor), (z1 + 40.0, -0.8 * w, 0.8 * w, r0 + 10.0, r1 - 5.0)], m)])
     pz0, pz1, half, under, top = ARM_PRONG
     prongs = [block((x - half, under, pz0), (x + half, top, pz1), m) for x in ARM_PRONGS_X]
     hz, ri, ro = ARM_TOP_HATCH
@@ -292,24 +328,18 @@ def arm_mesh(m: Material) -> Mesh:
     return Mesh.concatenate([head, hatch, *prongs, rim, *clamps, *ribs, knob])
 
 
-def aperture_mesh(mats: dict[str, Material]) -> Mesh:
-    """The docking aperture's door: a front ring round the dark opening, four spokes on a hub across it, the lit back wall, and
-    lamps round the ring."""
-    grey, recess = mats["drum_grey"], mats["recess"]
-    back, r = APERTURE_BACK_Z, APERTURE_R
-    well = lathe([(back, 0.0), (back, r), (DOOR_Z, r), (DOOR_Z, DOOR_R)], 96, [recess, recess, grey], creases=(1, 2))
-    hub_r, hub_z = APERTURE_HUB
-    hub = lathe([(hub_z, 0.0), (hub_z, hub_r), (back, hub_r)], 32, grey, creases=(1,))
-    width, spoke_z = APERTURE_SPOKE
-    spoke = block((-0.5 * width, hub_r - 2.0, spoke_z), (0.5 * width, r + 1.0, back), grey)
-    spokes = around(spoke, (0.0, 90.0, 180.0, 270.0))
-    glow = around(block((-14.0, 38.0, back - 1.5), (14.0, 62.0, back), mats["bay_light"]), (45.0, 135.0, 225.0, 315.0))
-    lamps = teeth(16, DOOR_Z - 1.5, DOOR_Z, 104.0, 112.0, 0.25, mats["lamp"], 11.25)
-    return Mesh.concatenate([well, hub, spokes, glow, lamps])
+def mount_plinths(m: Material, body: str) -> Mesh:
+    """The plinths under the defence grid's mounts on one piece (D75, M7-T05)."""
+    from . import station_detail as sd  # noqa: PLC0415 - it builds on this module's shapes
+    from . import station_hardpoints as sh  # noqa: PLC0415
+
+    return Mesh.concatenate(sd.plinth(p, u, sd.PLINTH_R[k], m) for _, k, b, p, u in sh.GRID_MOUNTS if b == body)
 
 
 def drum_shapes(mats: dict[str, Material]) -> list[Shape]:
     """What turns, in the station frame (the generator moves it onto the drum's own axis frame)."""
+    from . import station_detail as sd  # noqa: PLC0415 - it builds on this module's shapes
+
     grey, recess, machinery = mats["drum_grey"], mats["recess"], mats["machinery"]
 
     def revolve(profile: Sequence[tuple[float, float]], segments: int = SEGMENTS) -> Mesh:
@@ -323,7 +353,8 @@ def drum_shapes(mats: dict[str, Material]) -> list[Shape]:
         Shape("fwd_band", revolve(FWD_BAND_PROFILE)),
         Shape("green", revolve(GREEN_PROFILE)),
         Shape("aft_band", revolve(AFT_BAND_PROFILE)),
-        Shape("aperture", aperture_mesh(mats)),
+        Shape("aperture", sd.main_docking_bay(mats)),
+        Shape("drum_plinths", mount_plinths(mats["machinery"], "drum")),
         Shape("arms", around(arm_mesh(grey), ARM_ANGLES_DEG)),
         Shape("bay_lights", around(door_glow(mats["bay_light"]), ARM_ANGLES_DEG)),
         Shape("pods", around(slab([(1450.0, -30.0, 30.0, 300.0, 350.0), (1550.0, -35.0, 35.0, 300.0, 368.0),
@@ -431,6 +462,8 @@ def truss_mesh(core_m: Material, bar_m: Material) -> Mesh:
 
 def frame_shapes(mats: dict[str, Material]) -> list[Shape]:
     """What stands still, in the station frame."""
+    from . import station_detail as sd  # noqa: PLC0415 - it builds on this module's shapes
+
     spine, grey, recess, machinery = mats["spine"], mats["drum_grey"], mats["recess"], mats["machinery"]
     rz0, rz1, ri, ro = RING_FRAME
     ring = lathe([(rz0, ri), (rz0, ro - 6.0), (rz0 + 8.0, ro), (rz1 - 8.0, ro), (rz1, ro - 6.0), (rz1, ri), (rz0, ri)], 96, grey,
@@ -454,11 +487,15 @@ def frame_shapes(mats: dict[str, Material]) -> list[Shape]:
     struts = [block((-12.0, hy1, z - 12.0), (12.0, 400.0, z + 12.0), mats["machinery"]) for z in (hz0 + 40.0, hz1 - 40.0)]
     return [
         Shape("bow", Mesh.concatenate([bow_mesh(spine), ring, ring_teeth, pylon, tower])),
-        Shape("spine", Mesh.concatenate([spine_slab(SPINE, spine), spine_slab(RAMP, spine), block((-hw, hy0, hz0), (hw, hy1, hz1), spine),
+        Shape("spine", Mesh.concatenate([spine_slab(spine_rows_from(sd.ZG_BACK_Z), spine), sd.cargo_bay_walls(spine), spine_slab(RAMP, spine),
+                                         block((-hw, hy0, hz0), (hw, hy1, hz1), spine),
                                          *struts])),
         Shape("radiators", Mesh.concatenate(radiators)),
         Shape("cargo", Mesh.concatenate(cargo)),
         Shape("dome", Mesh.concatenate([dome, lamp, *flank_lamps])),
+        Shape("frame_plinths", mount_plinths(machinery, "frame")),
+        Shape("cargo_bay", sd.cargo_bay(mats)),
+        Shape("command_detail", sd.command_detail(mats)),
         Shape("hub", lathe(HUB_PROFILE, 96, spine, creases=(1, 2, 3, 4, 5, 6))),
         Shape("fins", fins_mesh(spine)),
         Shape("booms", booms_mesh(mats["vane_frame"])),

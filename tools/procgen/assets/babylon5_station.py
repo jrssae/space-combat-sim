@@ -11,12 +11,19 @@ along Z with the bow at -Z, in two pieces so the game can turn one:
 
 Texel tiers (D72): each piece has its own atlas for the broad paint, the panel seams and the windows (about a metre a texel), and
 both share one detail tile laid in their own space by the renderer (``core/detail_layer.py``), so a fighter 50 m off a bay sees
-plating a few metres across. The bays' and aperture's near-field geometry and every hardpoint come in T05.
+plating a few metres across.
+
+Near field and hardpoints (M7-T05): the docking bay at the bow (``station_detail.py``: the cross housing, the stepped mouth, the
+red-lit tunnel and the inner airlock, turning with the drum), plinths under the defence grid's mounts, and the manifest's
+``hardpoints`` (``station_hardpoints.py``): the 28 Cobra-bay launch positions, the docking approach, D75's mounts, the lights for
+T18, the tour points and the damage sections, each in the frame of the piece that carries it.
 
 Sections (M7-T19, D72): each piece is also written cut across its length into sections along T01's section lines (band edges,
 rings, the gaps between cargo modules and vanes), each a glb with its own origin, so the game picks a level of detail per section
-and culls the ones out of view; the collision shapes (D73) follow the same sections. Near-only props (``station_props.py``): the
-Cobra-bay doors' close-up faces and their clamps, instanced on the drum's waist section with a small atlas of their own.
+and culls the ones out of view; the collision shapes (D73) follow the same sections. Props (``station_props.py``), instanced with
+small atlases of their own: on the drum's waist section the Cobra-bay doors' leaves (drawn far: they are the doors), their clamps
+and the launch hall seen through an open door (near only); on the frame's spine over the docking sphere the command section's
+windows (near only).
 """
 
 from __future__ import annotations
@@ -39,17 +46,18 @@ from ..core.silhouette import far_section
 from ..core.textured_mesh import TexturedPart, import_sidecar, phase_steps
 from ..parts import station as st
 from ..parts import station_collision as sc
+from ..parts import station_hardpoints as sh
 from ..parts import station_layouts as sl
 from ..parts import station_props as sp
 from ..styles.earth_alliance_station import EARTH_ALLIANCE_STATION as STYLE
 
 ASSET_ID = "babylon5_station"
-GENERATOR_VERSION = 2
+GENERATOR_VERSION = 3
 LENGTH_M = 8000.0
 # The asset's origin in the station frame: on the drum's axis, half way along. The drum's own frame sits on the axis at its middle.
 ORIGIN = np.array([0.0, 0.0, 0.5 * LENGTH_M])
 DRUM_CENTRE = np.array([0.0, 0.0, 3000.0])
-DRUM_SPIN_RAD_S = 0.148  # Q9: about 62 m/s at the bands' r 417
+DRUM_SPIN_RAD_S = sh.DRUM_SPIN_RAD_S  # Q9: 0.148 rad/s, about 62 m/s at the bands' r 417
 # Each piece's atlas; the packer starts at this texel and grows it until every chart fits.
 DRUM_ATLAS_PX = 4096
 FRAME_ATLAS_PX = 4096
@@ -66,6 +74,10 @@ FRAME_SECTIONS = ("bow", "bow_ring", "spine_sphere", "ramp", "radiators", "cargo
                   "hub", "cone", "truss", "torus_shaft", "reactor")
 FRAME_PLANES = (420.0, 700.0, 1300.0, 1725.0, 2340.0, 3068.0, 3577.0, 4087.0, 4585.0, 5030.0, 5460.0, 5735.0, 6360.0, 7110.0, 7704.0)
 PROP_SECTION = "waist"  # the drum section the Cobra doors lie in
+FRAME_PROP_SECTION = "spine_sphere"  # the frame section the command section's windows lie in
+# Shapes a piece may have (T03's default is 128): the open bays (the docking tunnel, 28 launch doors over their halls, the zero-g
+# bay) take pieces round each opening that a merge would close.
+COLLISION_SHAPES = 192
 
 
 def _parts(shapes: list[st.Shape], shift: np.ndarray) -> list[TexturedPart]:
@@ -98,13 +110,21 @@ def section_cuts(piece: str) -> tuple[SectionCut, ...]:
 
 def collision_section() -> dict[str, object]:
     """The manifest's ``collision`` (D73): each piece's convex shapes, named and listed by section (``sections``: first, count)."""
-    budget = col.Budget()
+    budget = col.Budget(max_shapes=COLLISION_SHAPES)
     drum, drum_spans = sc.section_shapes(sc.drum_pieces(DRUM_PLANES), section_cuts("drum"), DRUM_CENTRE, budget)
     frame, frame_spans = sc.section_shapes(sc.frame_pieces(FRAME_PLANES), section_cuts("frame"), ORIGIN, budget)
     out = col.section({"drum": drum, "frame": frame}, budget)
     for entry, spans in zip(out["pieces"], (drum_spans, frame_spans), strict=True):
         entry["sections"] = spans
     return out
+
+
+def hardpoints(pieces: dict[str, dict]) -> dict[str, object]:
+    """The manifest's ``hardpoints``, the damage sections boxed from the pieces' written sections."""
+    boxes = {name: {s["name"]: ([o + a for o, a in zip(s["origin"], s["aabb_min"], strict=True)],
+                                [o + a for o, a in zip(s["origin"], s["aabb_max"], strict=True)])
+                    for s in entry["mesh"]["sections"]} for name, entry in pieces.items()}
+    return sh.section(sh.Frames(DRUM_CENTRE, ORIGIN), boxes)
 
 
 def drum_pivot() -> list[float]:
@@ -156,6 +176,11 @@ def build_at(ctx: BuildContext, drum_px: int, frame_px: int, detail_px: int) -> 
     prop_files, drum["props"] = write_props(out_dir, ASSET_ID, sp.kinds(), sp.groups(PROP_SECTION, DRUM_CENTRE + home["origin"]),
                                             sp.prop_maps(ctx.seed), sp.EMISSIVE_STRENGTH, sp.NEAR_M, sp.MARGIN_M)
     files += prop_files
+    home = next(e for e in frame["mesh"]["sections"] if e["name"] == FRAME_PROP_SECTION)
+    prop_files, frame["props"] = write_props(out_dir, f"{ASSET_ID}_frame", sp.frame_kinds(),
+                                             sp.frame_groups(FRAME_PROP_SECTION, ORIGIN + home["origin"]), sp.frame_maps(ctx.seed),
+                                             sp.FRAME_EMISSIVE_STRENGTH, sp.NEAR_M, sp.MARGIN_M)
+    files += prop_files
     for entry in (drum, frame):
         for surface in entry["mesh"]["surfaces"]:
             surface["world_detail"] = dict(detail)
@@ -176,6 +201,7 @@ def build_at(ctx: BuildContext, drum_px: int, frame_px: int, detail_px: int) -> 
             "pieces": {"drum": drum, "frame": frame},
             "far": far_section(whole.vertices, whole.faces),
             "collision": collision_section(),
+            "hardpoints": hardpoints({"drum": drum, "frame": frame}),
         },
     )
     files.append(write_manifest(out_dir, manifest))

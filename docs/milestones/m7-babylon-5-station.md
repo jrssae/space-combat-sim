@@ -411,6 +411,39 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 - **Wings (maintainer, 2026-11-13, Q3):** the arms are Alpha (top), Beta (starboard), Delta (bottom), Zeta (port); launch
   hardpoints are named per wing and door (`cobra_bay_alpha_1` to `cobra_bay_zeta_6`), each with its wing.
 - **Done when:** AC4 and the collision half of AC3.
+- **Done (as built; phase A approved 2026-11-13, the phase B sheets await the maintainer):** details in `docs/assets-station.md`,
+  "Near field and hardpoints (M7-T05)". Generator version 3: drum 23 910 triangles, frame 23 608 (budget 40 000 each), atlas texels
+  unchanged (1.39 and 1.50 m); STL compare still PASS.
+  - **Main docking bay** (`parts/station_detail.py`, the drum's `aperture`, turning with it): plate with a toothed rim, the cross
+    housing and bar with the lower hatch, the vented block, the stepped cross mouth, three inner frames, the tunnel ringed by six
+    frames to the inner airlock's sawtooth doors (z 640). Toned down: dark machinery, red only on the frames' inner edges, the
+    lamps and the seam. Clear passage 94 x 34 m.
+  - **Cargo bay (zero-gravity)** between the forks: an open box cut into the spine's front (x ±30, z 420 to 490, floor y 322), open
+    down the slot and above, a thick greebled rim, stepped machinery with red edges; sized to the Saturn pods (31.1 x 17.2 x 43 m).
+    Read off the STL's stepped recess at the forks' root and the show capture (its arms, rings and canisters are a loader ship's;
+    not built, no loader ships).
+  - **Cobra bays:** six 20 x 14 m doors an arm (one Starfury, 2.3 / 2.1 m clearance) at a 19 m pitch in a framed strip at x 18,
+    z 1 016 to 1 130; a launch hall under the strip (x -16 to 34, r 209 to 239) open through each door; the doors' leaves are props
+    (one instance each, swung on their hinges by T08; drawn to 30 km), a near-only gantry over each door (the rack's clamp, the
+    second row's staging clamp, lamps). M7-T09's hangar keeps T04's seven-door names (`COBRA_DOORS`, `DOOR_HALF`, `DOOR_ROW`,
+    `door_centres`) until **T20** refits it from `hardpoints.cobra_arm`.
+  - **Command section:** crisp window panels on the spine's flanks (a frame prop with its own atlas), three open machinery
+    compartments on the spine's top, serrated fork edges. **Grid:** D75's 23 mounts exactly, on plinths; the hull flattened under four.
+  - **Hardpoints** (`parts/station_hardpoints.py`, read by `StationHardpoints`): 24 `cobra_bay_<wing>_<door>` (Alpha top, Beta
+    starboard, Delta bottom, Zeta port) with door, leaves' hinges, rail, release, drop direction, surface velocity, pose, the second
+    row's staging point and path; `cobra_arm` (the layout and each arm's wing, for T08 and T20); `launch_clearance` (blocked sector
+    58.5 to 126.5 degrees, 250 m, 10 degrees margin); `main_docking_bay_*` (in the drum's frame, with the spin); `cargo_bay_*`
+    (hold, release, path, entry); 23 grid mounts; 57 lights; 8 tour points; 11 damage sections.
+  - **Collision:** budget 192 shapes a piece (drum 179, frame 134; bay pieces never merged); the tunnel, the halls under the doors
+    and the cargo bay open, tested with a Starfury's and a pod's boxes.
+  - **Props:** a per-kind draw range (`near_props.PropKind.near_m`, `PieceSections.prop_range(kind)`).
+  - **GPU** (RX 6950 XT, Forward+, X11, 6 144 x 3 456): bow on 53 draw calls, 86 004 triangles, 3.2 ms, 286 fps; the mouth 57, 87 k,
+    4.5 ms, 209 fps; the tunnel 57, 4.5 ms, 208 fps; the cargo bay 36 to 58, 3.9 to 4.1 ms, 175 to 243 fps; the door strip at 50 m
+    38, 3.5 ms, 267 fps; a door open 31, 3.8 ms, 245 fps; card VRAM 4 733 to 4 841 MB.
+  - **Tests:** `test_station_hardpoints.py` (new), `test_babylon5_station.py` and `test_station_sections.py` updated;
+    `tests/unit/test_station_hardpoints.gd` (new), `tests/integration/test_station_sections.gd` updated.
+  - **Sheets (H):** `references/screenshots/M7-T05 near field/` (`M7-T05_main_docking_bay_sheet.png`, `M7-T05_cargo_bay_sheet.png`,
+    `M7-T05_detail_strip_50m.png`, `M7-T05_hardpoint_markers_sheet.png`).
 
 ### M7-T06 The station in the game
 

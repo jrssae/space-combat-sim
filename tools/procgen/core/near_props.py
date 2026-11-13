@@ -26,10 +26,12 @@ SURFACE = "prop"
 
 @dataclass(frozen=True)
 class PropKind:
-    """A prop's mesh in its own frame; its ``face_uv`` are already in the prop atlas (0..1)."""
+    """A prop's mesh in its own frame; its ``face_uv`` are already in the prop atlas (0..1). ``near_m``: a draw range of its own,
+    for a kind that has no painted stand-in on the piece (the Cobra bays' door leaves are the doors)."""
 
     name: str
     mesh: Mesh
+    near_m: float | None = None
 
 
 @dataclass(frozen=True)
@@ -78,6 +80,8 @@ def write_props(out_dir: Path, asset_id: str, kinds: Sequence[PropKind], groups:
         lo, hi = kind.mesh.bounds()
         entry_kinds[kind.name] = {"file": file, "triangles": kind.mesh.face_count, "aabb_min": [round(float(c), 5) for c in lo],
                                   "aabb_max": [round(float(c), 5) for c in hi]}
+        if kind.near_m is not None:
+            entry_kinds[kind.name]["near_m"] = float(kind.near_m)
     surface: dict[str, Any] = {"name": SURFACE, "blend": False, "transmittance": 0.0,
                                "emissive_strength": round(float(emissive_strength), 6)}
     for key in MAP_KEYS:

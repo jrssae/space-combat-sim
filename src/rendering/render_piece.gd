@@ -107,7 +107,7 @@ func _add_props(dir: String, section: MeshInstance3D, group: Dictionary) -> void
 	var node := MultiMeshInstance3D.new()
 	node.name = "Props_%s" % String(group["kind"]).to_pascal_case()
 	node.multimesh = multimesh
-	var range_: Dictionary = sections.prop_range()
+	var range_: Dictionary = sections.prop_range(String(group["kind"]))
 	node.visibility_range_end = float(range_["end"])
 	node.visibility_range_end_margin = float(range_["end_margin"])
 	node.visibility_range_fade_mode = range_["fade"] as GeometryInstance3D.VisibilityRangeFadeMode

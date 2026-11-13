@@ -177,33 +177,43 @@ class StationSectionTests(unittest.TestCase):
         props = self.manifest["pieces"]["drum"]["props"]
         self.assertTrue(1000.0 <= props["near_m"] <= 2000.0)
         self.assertGreater(props["margin_m"], 0.0)
-        self.assertEqual(set(props["kinds"]), {"door_row", "clamp"})
+        leaves = {f"door_leaf_{n}_{s}" for n in range(1, 7) for s in "rl"}
+        self.assertEqual(set(props["kinds"]), leaves | {"clamp", "gantry"})
+        for kind in leaves:  # the leaves are the doors: drawn as far as the hull
+            self.assertGreater(props["kinds"][kind]["near_m"], 10_000.0)
+        self.assertNotIn("near_m", props["kinds"]["clamp"])
         for key in ("albedo", "normal", "orm", "emissive"):
             image = read_png(self.dir / props["surface"][key])
             self.assertEqual(image.shape[:2], (sp.ATLAS_H, sp.ATLAS_W), key)
             self.assertTrue((self.dir / (props["surface"][key] + ".import")).is_file())
-        self.assertLess(2.0 * st.DOOR_HALF[0] / sp.ATLAS_W, 0.07, "a door's face is finer than 7 cm a texel")
+        self.assertLess(1.0 / sp.PX_PER_M, 0.05, "a door's face is finer than 5 cm a texel")
         waist = next(s for s in self.manifest["pieces"]["drum"]["mesh"]["sections"] if s["name"] == "waist")
         origin = np.asarray(station.DRUM_CENTRE) + np.asarray(waist["origin"])
-        rows = next(g for g in props["groups"] if g["kind"] == "door_row")
-        self.assertEqual(rows["section"], "waist")
-        self.assertEqual(len(rows["transforms"]), 4)
         floor = st.ARM_HATCH[4] - st.DOOR_DEPTH
-        for flat in rows["transforms"]:
-            at = np.asarray(flat[9:12]) + origin
-            self.assertAlmostEqual(float(np.hypot(at[0], at[1])), floor, delta=1e-3)
-            self.assertAlmostEqual(float(at[2]), 0.5 * sum(st.DOOR_ROW), delta=1e-3)
+        for n in range(1, 7):
+            group = next(g for g in props["groups"] if g["kind"] == f"door_leaf_{n}_r")
+            self.assertEqual(group["section"], "waist")
+            self.assertEqual(len(group["transforms"]), 4)
+            for flat in group["transforms"]:
+                at = np.asarray(flat[9:12]) + origin
+                self.assertAlmostEqual(float(np.hypot(at[0], at[1])), float(np.hypot(st.LAUNCH_STRIP_X, floor)), delta=1e-3)
+                self.assertAlmostEqual(float(at[2]), st.launch_door_centres()[n - 1], delta=1e-3)
         clamps = next(g for g in props["groups"] if g["kind"] == "clamp")
-        self.assertEqual(len(clamps["transforms"]), 28)
-        mesh = read_glb(self.dir / props["kinds"]["door_row"]["file"])
-        uv = np.concatenate([p.uv for p in mesh.primitives])
-        self.assertTrue(np.all((uv >= 0.0) & (uv <= 1.0)))
+        self.assertEqual(len(clamps["transforms"]), 24)
+        for kind in props["kinds"]:
+            mesh = read_glb(self.dir / props["kinds"][kind]["file"])
+            uv = np.concatenate([p.uv for p in mesh.primitives])
+            self.assertTrue(np.all((uv >= 0.0) & (uv <= 1.0)), kind)
+        frame = self.manifest["pieces"]["frame"]["props"]
+        self.assertEqual(set(frame["kinds"]), {"window_panel"})
+        self.assertEqual(next(g for g in frame["groups"] if g["kind"] == "window_panel")["section"], "spine_sphere")
 
     def test_the_door_faces_carry_their_numbers_crisp(self) -> None:
         albedo = read_png(self.dir / self.manifest["pieces"]["drum"]["props"]["surface"]["albedo"]).astype(float)
-        for k in range(st.COBRA_DOORS):
+        row, col = int(st.LAUNCH_DOOR_HALF[1] * sp.PX_PER_M), int(st.LAUNCH_DOOR_HALF[0] * sp.PX_PER_M)  # the door's middle in its cell
+        for k in range(st.LAUNCH_DOORS):
             cell = albedo[k * sp.CELL_H: k * sp.CELL_H + sp.CELL_H, :, :3].mean(axis=2)
-            middle = cell[sp.CELL_H // 2 - 100: sp.CELL_H // 2 + 100, sp.ATLAS_W // 2 - 100: sp.ATLAS_W // 2 + 100]
+            middle = cell[row - 70: row + 70, col - 70: col + 70]
             self.assertGreater(float((middle > 90).mean()), 0.05, f"door {k + 1}'s number is pale paint")
             # A sharp edge: the stroke goes from door to paint within a few texels.
             self.assertGreater(float(np.abs(np.diff(middle, axis=1)).max()), 40.0)

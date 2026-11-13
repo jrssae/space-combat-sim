@@ -39,6 +39,7 @@ SCHEME: dict[str, tuple[int, bool, float, float]] = {
     "machinery": (0x5A5856, True, 0.85, 0.28),
     "dome": (0x3A3A40, False, 0.90, 0.12),
     "window": (0x141618, False, 0.0, 0.15),
+    "bay_frame": (0x8A8770, True, 0.45, 0.50),
 }
 # The bare metals' reflectance (sRGB), in place of a painted colour: steel for the trim and machinery, a bronze cast for the reactor.
 BARE_METAL: dict[str, int] = {"vane_frame": 0x9C9B99, "reactor": 0x7A6E62, "machinery": 0x8E8B87, "dome": 0x6E7078}
@@ -56,6 +57,14 @@ LAMP_GLOW = 0xFF3A2A  # the red lamp on the observation dome and the bow spine's
 LAMP_STRENGTH = 3.0
 BAY_GLOW = 0xFFA860  # warm orange: the Cobra bays' light round the doors (the show capture) and the docking aperture's lit interior
 BAY_STRENGTH = 3.5
+# The docking bay (M7-T05): dark machinery in deep shadow, red only on the frames' edges, the lamps and the airlock's seam, brightest
+# at the mouth and dimmer the deeper; pink panels at the mouth's sides. T18 adds the real red lights.
+BAY_RED = 0xE0281A
+BAY_RED_STRENGTHS = (1.6, 1.35, 1.15, 0.95, 0.8, 0.65)  # the edges: the mouth's frames, then the tunnel's inward  # the mouth's frames, then the tunnel's frames from the mouth inward
+BAY_WALL_STRENGTH = 0.0
+BAY_DOOR_STRENGTH = 0.08
+BAY_PINK = 0xFF7A9A
+BAY_PINK_STRENGTH = 0.8
 
 
 def lin(hex_rgb: int) -> tuple[float, float, float]:
@@ -80,6 +89,16 @@ def _materials() -> dict[str, Material]:
            for role, (_, paneled, metallic, roughness) in SCHEME.items()}
     out["lamp"] = Material(f"{PREFIX}_lamp", capture_albedo(0x7A2A24), emissive=lin(LAMP_GLOW), emissive_strength=LAMP_STRENGTH)
     out["bay_light"] = Material(f"{PREFIX}_bay_light", capture_albedo(0xD8D0C0), emissive=lin(BAY_GLOW), emissive_strength=BAY_STRENGTH)
+    red = lin(BAY_RED)
+    for k, strength in enumerate(BAY_RED_STRENGTHS):
+        out[f"bay_red_{k}"] = Material(f"{PREFIX}_bay_red_{k}", capture_albedo(0x5A2420), metallic=0.5, roughness=0.5, emissive=red,
+                                       emissive_strength=strength)
+    out["bay_wall"] = Material(f"{PREFIX}_bay_wall", capture_albedo(0x231C1A), paneled=True, metallic=0.6, roughness=0.55, emissive=red,
+                               emissive_strength=BAY_WALL_STRENGTH)
+    out["bay_door"] = Material(f"{PREFIX}_bay_door", capture_albedo(0x2E1A16), metallic=0.6, roughness=0.5, emissive=red,
+                               emissive_strength=BAY_DOOR_STRENGTH)
+    out["bay_pink"] = Material(f"{PREFIX}_bay_pink", capture_albedo(0xC8A0A8), emissive=lin(BAY_PINK), emissive_strength=BAY_PINK_STRENGTH)
+    out["bay_dark"] = Material(f"{PREFIX}_bay_dark", capture_albedo(0x0A0A0A), metallic=0.3, roughness=0.8)
     for role, target in ALIASES.items():
         out[role] = out[target]
     return out
@@ -106,4 +125,4 @@ EARTH_ALLIANCE_STATION = Style(
                             "dirt_metal": 0.5, "grime_dirt": 0.6}},
 )
 
-__all__ = ["EARTH_ALLIANCE_STATION", "LAMP_GLOW", "SCHEME", "WINDOW_GLOW", "WINDOW_STRENGTH", "colour", "lin"]
+__all__ = ["BAY_RED", "EARTH_ALLIANCE_STATION", "LAMP_GLOW", "SCHEME", "WINDOW_GLOW", "WINDOW_STRENGTH", "colour", "lin"]

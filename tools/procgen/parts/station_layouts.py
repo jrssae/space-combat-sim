@@ -15,8 +15,7 @@ from collections.abc import Callable
 
 import numpy as np
 
-from ..core.geometry import rotation_z
-from ..core.seams import EMPTY, Cut, Feature, Hatch, Plates, SeamLayout, every, rings
+from ..core.seams import Cut, Feature, Plates, SeamLayout, every, rings
 from ..core.textures import Marking
 from ..styles import _hash01
 from ..styles.earth_alliance_station import WINDOW_GLOW, WINDOW_STRENGTH, colour, lin
@@ -84,7 +83,7 @@ def layouts() -> dict[str, SeamLayout]:
         "fwd_band": SeamLayout.of(_barrel(1790.0, 2340.0, st.BAND_R, 61.25, 48, 7, band_joints)),
         "green": SeamLayout.of(_barrel(2348.0, 4782.0, st.GREEN_R, 76.0, 40, 11, green_joints)),
         "aft_band": SeamLayout.of(_barrel(4782.0, 5500.0, st.BAND_R, 70.0, 48, 13, aft_joints)),
-        "arms": SeamLayout.of(_faceted((30.0, 16.0), 17)) + door_leaves(),
+        "arms": SeamLayout.of(_faceted((30.0, 16.0), 17)),
         "aperture": SeamLayout.of([Plates(level=2, wrap="polar", axis=2, radius=105.0, around=32, cell=(19.0, 0.0), offset=(88.0, 0.0),
                                           splits=0, min_m=6.0, tone=0.06, sheen=PLATE_SHEEN, depth=0.9, dark=0.75, seed=83,
                                           lo=(-math.inf, -math.inf, st.DOOR_Z - 1.0), hi=(math.inf, math.inf, st.DOOR_Z + 1.0))]),
@@ -198,40 +197,52 @@ def arm_trim(p: np.ndarray, n: np.ndarray) -> np.ndarray:
     return (outer & edge & (q[:, 2] > 640.0) & (q[:, 2] < st.ARM_HATCH[0])).astype(float)
 
 
-def _in_door(q: np.ndarray) -> np.ndarray:
-    centres = np.asarray(st.door_centres())
-    along = np.abs(q[:, 2][:, None] - centres[None, :]).min(axis=1)
-    return (along < st.DOOR_HALF[1]) & (np.abs(q[:, 0]) < st.DOOR_HALF[0])
-
-
-def door_panels(p: np.ndarray, n: np.ndarray) -> np.ndarray:
-    """Each closed launch door rust-brown, in its sunk well."""
+def hall_dark(p: np.ndarray, n: np.ndarray) -> np.ndarray:
+    """The launch hall under the doors, dark inside (M7-T05): its ceiling, walls and the deck's underside over it."""
     q, m = _arm_local(p, n)
-    floor = st.ARM_HATCH[4] - st.DOOR_DEPTH
-    return ((m[:, 1] > 0.6) & (np.abs(q[:, 1] - floor) < 1.0) & _in_door(q)).astype(float)
+    floor, ceiling = st.ARM_HATCH[4] - st.DOOR_DEPTH, st.HALL_CEILING_R
+    x0, x1, z0, z1 = st.LAUNCH_HALL
+    box = (q[:, 0] > x0 - 0.05) & (q[:, 0] < x1 + 0.05) & (q[:, 2] > z0 - 0.05) & (q[:, 2] < z1 + 0.05)
+    inside = box & (q[:, 1] > ceiling - 0.05) & (q[:, 1] < floor + 0.05)
+    return inside.astype(float)
 
 
-DOOR_BORDER_M = 3.5  # the red border round each door on the frame's top
+DOOR_BORDER_M = 2.0  # the red border round each door on the deck
+STRIP_FRAME_M = 4.0  # the darker strip framing the row of doors, beyond their borders
+
+
+def _door_gap(q: np.ndarray) -> np.ndarray:
+    """How far each point lies outside the nearest launch door's outline, across the deck."""
+    centres = np.asarray(st.launch_door_centres())
+    along = np.abs(q[:, 2][:, None] - centres[None, :]).min(axis=1) - st.LAUNCH_DOOR_HALF[1]
+    across = np.abs(q[:, 0] - st.LAUNCH_STRIP_X) - st.LAUNCH_DOOR_HALF[0]
+    return np.hypot(np.maximum(along, 0.0), np.maximum(across, 0.0))
+
+
+def door_strip(p: np.ndarray, n: np.ndarray) -> np.ndarray:
+    """The framed strip the doors sit in, darker than the deck round it (the arm model's strip)."""
+    q, m = _arm_local(p, n)
+    top = st.ARM_HATCH[4]
+    z0, z1 = st.LAUNCH_ROW
+    on = (np.abs(q[:, 0] - st.LAUNCH_STRIP_X) < st.LAUNCH_DOOR_HALF[0] + DOOR_BORDER_M + STRIP_FRAME_M) & (q[:, 2] > z0 - STRIP_FRAME_M) \
+        & (q[:, 2] < z1 + STRIP_FRAME_M)
+    return ((m[:, 1] > 0.6) & (q[:, 1] > top - 0.6) & on).astype(float)
 
 
 def door_frame_red(p: np.ndarray, n: np.ndarray) -> np.ndarray:
-    """A red border round each door on the frame's top; the rest of the frame stays grey."""
+    """A red border round each door on the deck."""
     q, m = _arm_local(p, n)
-    _, _, w, _, top = st.ARM_HATCH
-    centres = np.asarray(st.door_centres())
-    along = np.abs(q[:, 2][:, None] - centres[None, :]).min(axis=1) - st.DOOR_HALF[1]
-    across = np.abs(q[:, 0]) - st.DOOR_HALF[0]
-    gap = np.hypot(np.maximum(along, 0.0), np.maximum(across, 0.0))
-    return ((m[:, 1] > 0.6) & (q[:, 1] > top - 0.6) & (np.abs(q[:, 0]) < w + 1.0) & (gap < DOOR_BORDER_M)).astype(float)
+    top = st.ARM_HATCH[4]
+    return ((m[:, 1] > 0.6) & (q[:, 1] > top - 0.6) & (_door_gap(q) < DOOR_BORDER_M)).astype(float)
 
 
 def clamp_caps(p: np.ndarray, n: np.ndarray) -> np.ndarray:
-    """Each door clamp's red cap seen from afar: painted on the rail under it, since the clamps are near-only props (M7-T19)."""
+    """Each door clamp's red cap seen from afar: painted on the deck under it, since the clamps are near-only props (M7-T19)."""
     q, m = _arm_local(p, n)
-    top, dx = st.ARM_HATCH[4], st.DOOR_HALF[0]
-    centres = np.asarray(st.door_centres())
+    top, edge = st.ARM_HATCH[4], st.LAUNCH_STRIP_X + st.LAUNCH_DOOR_HALF[0]
+    centres = np.asarray(st.launch_door_centres())
     along = np.abs(q[:, 2][:, None] - centres[None, :]).min(axis=1)
-    return ((m[:, 1] > 0.6) & (q[:, 1] > top - 0.6) & (q[:, 0] > dx + 3.0) & (q[:, 0] < dx + 10.0) & (along < 3.0)).astype(float)
+    return ((m[:, 1] > 0.6) & (q[:, 1] > top - 0.6) & (q[:, 0] > edge + 1.5) & (q[:, 0] < edge + 5.0) & (along < 1.5)).astype(float)
 
 
 RED_CROSS = (906.0, 984.0, 5.0)  # the framed panel on the neck's top: z from, z to, the cross's half width
@@ -254,35 +265,6 @@ def cross_frame(p: np.ndarray, n: np.ndarray) -> np.ndarray:
     inside = (q[:, 2] > z0) & (q[:, 2] < z1) & (np.abs(q[:, 0]) < hw)
     edge = (q[:, 2] < z0 + 4.0) | (q[:, 2] > z1 - 4.0) | (np.abs(q[:, 0]) > hw - 4.0)
     return ((m[:, 1] > 0.5) & (q[:, 1] > 250.0) & inside & edge).astype(float)
-
-
-def _arm_turns() -> list[np.ndarray]:
-    return [rotation_z(math.radians(a - 90.0)) for a in st.ARM_ANGLES_DEG]
-
-
-def door_leaves() -> SeamLayout:
-    """Each launch door split into two grated leaves meeting down the arm's middle, on every arm."""
-    floor, dx, dz = st.ARM_HATCH[4] - st.DOOR_DEPTH, st.DOOR_HALF[0], st.DOOR_HALF[1]
-    leaves = [Hatch(level=1, centre=(sx * 0.5 * dx, floor, c), right=(1.0, 0.0, 0.0), up=(0.0, 0.0, 1.0), size=(dx - 1.5, 2.0 * dz - 2.0),
-                    corner_m=1.0, sunk=0.3, tone=0.9, slats=6, facing=(0.0, 1.0, 0.0), min_dot=0.8)
-              for c in st.door_centres() for sx in (-1.0, 1.0)]
-    out = EMPTY
-    for turn in _arm_turns():
-        out = out + SeamLayout.of(leaves).transformed(turn)
-    return out
-
-
-def door_numbers(shift: np.ndarray) -> tuple[Marking, ...]:
-    """Each door's number, 1 to 7 from the bow, stencilled across it, its top toward the bow."""
-    floor = st.ARM_HATCH[4] - st.DOOR_DEPTH
-    pale = (0.42, 0.42, 0.4)
-    out = []
-    for turn in _arm_turns():
-        facing, right, up = turn @ np.array([0.0, 1.0, 0.0]), turn @ np.array([1.0, 0.0, 0.0]), np.array([0.0, 0.0, -1.0])
-        for k, c in enumerate(st.door_centres()):
-            centre = turn @ np.array([0.0, floor, c]) - shift
-            out.append(Marking.text("arms", str(k + 1), tuple(centre), tuple(right), tuple(up), tuple(facing), 14.0, pale, 2.2))
-    return tuple(out)
 
 
 def top_faces(p: np.ndarray, n: np.ndarray) -> np.ndarray:
@@ -328,7 +310,7 @@ def paint() -> dict[str, list[tuple[str, Cover]]]:
         "fwd_band": [("drum_blue", band_blocks(1800.0, 2290.0, st.BAND_R, 12, 3, 26.0, 7.0, 71))],
         "green": [("drum_blue", green_blocks(GREEN_JOINTS, st.GREEN_R, 20, 73))],
         "aft_band": [("drum_blue", band_blocks(4840.0, 5400.0, st.BAND_R, 12, 3, 26.0, 7.0, 79))],
-        "arms": [("trim", arm_trim), ("door", door_panels), ("trim", door_frame_red), ("trim", clamp_caps), ("recess", cross_frame), ("trim", red_cross)],
+        "arms": [("trim", arm_trim), ("recess", hall_dark), ("recess", door_strip), ("trim", door_frame_red), ("trim", clamp_caps), ("recess", cross_frame), ("trim", red_cross)],
         "bow": [("spine_top", top_faces)],
         "spine": [("spine_top", top_faces)],
         "hub": [("spine_top", top_faces)],
@@ -358,9 +340,7 @@ WINDOW_ROWS: dict[str, tuple[tuple[float, float], ...]] = {  # part: (centre alo
 
 
 def window_markings(part: str, shift: np.ndarray) -> tuple[Marking, ...]:
-    """The shape's lit windows (and, on the arms, the doors' numbers), in its piece's frame."""
-    if part == "arms":
-        return door_numbers(shift)
+    """The shape's lit windows, in its piece's frame (the doors' numbers are on their leaves, near-field props)."""
     glow = lin(WINDOW_GLOW)
     out = [Marking.window_rings(part, tuple(-shift), (0.0, 0.0, 1.0), z, h, WINDOW_PITCH, WINDOW, glow, WINDOW_STRENGTH, lit=0.55)
            for z, h in WINDOW_ROWS.get(part, ())]

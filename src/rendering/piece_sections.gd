@@ -24,6 +24,8 @@ var margin_m: float = 0.0
 var prop_surface: Dictionary = {}
 ## Each prop kind's mesh file, by kind.
 var prop_files: Dictionary = {}
+## A kind's own draw range where it has one (M7-T05: the Cobra bays' door leaves are the doors, drawn as far as the hull), by kind.
+var prop_near: Dictionary = {}
 ## Each group of props: `kind`, `section`, `transforms` (Array[Transform3D] in the section's frame), `aabb` (in that frame).
 var prop_groups: Array[Dictionary] = []
 
@@ -109,9 +111,10 @@ func groups_in(section: String) -> Array[Dictionary]:
 	return out
 
 
-## The draw range a prop group's instance gets: `end` and `end_margin` for its visibility range, and the fade.
-func prop_range() -> Dictionary:
-	return {"end": near_m, "end_margin": margin_m, "fade": GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF}
+## The draw range a prop group's instance gets: `end` and `end_margin` for its visibility range, and the fade; a kind with a
+## range of its own (`kind`) gets that.
+func prop_range(kind: String = "") -> Dictionary:
+	return {"end": float(prop_near.get(kind, near_m)), "end_margin": margin_m, "fade": GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF}
 
 
 ## A transform as the manifest writes it: the basis' x, y and z columns, then the origin (12 numbers).
@@ -131,6 +134,8 @@ func _read_props(entry: Dictionary) -> void:
 	var kinds: Dictionary = entry.get("kinds", {})
 	for kind: String in kinds:
 		prop_files[kind] = String((kinds[kind] as Dictionary).get("file", ""))
+		if (kinds[kind] as Dictionary).has("near_m"):
+			prop_near[kind] = float((kinds[kind] as Dictionary)["near_m"])
 	for item: Variant in entry.get("groups", []):
 		var g: Dictionary = item
 		var kind: String = String(g.get("kind", ""))

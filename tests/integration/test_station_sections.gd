@@ -90,45 +90,50 @@ func test_the_drums_sections_turn_as_one_body() -> void:
 		assert_almost_eq(from_a, from_b, Vector3.ONE * 1e-3, "no seam opens at %s" % sections[k]["name"])
 
 
-func test_the_cobra_doors_props_are_instanced_near_only_under_the_waist() -> void:
+func test_the_cobra_doors_props_are_instanced_under_the_waist() -> void:
 	if station == null:
 		fail_test(GEN_ASSETS_HINT)
 		return
 	var props: Dictionary = _pieces()["drum"].get("props", {})
 	assert_false(props.is_empty(), GEN_ASSETS_HINT)
 	var nodes: Array[MultiMeshInstance3D] = station.drum_piece.prop_nodes()
-	assert_eq(nodes.size(), 2, "the door faces and the clamps")
+	assert_eq(nodes.size(), 14, "twelve door leaves (M7-T05: six doors, two leaves each), the clamps and the gantries")
 	var counts: Dictionary = {}
 	for node: MultiMeshInstance3D in nodes:
 		assert_eq(node.get_parent(), station.drum_piece.section_node("waist"))
-		assert_eq(node.visibility_range_end, float(props["near_m"]))
+		if String(node.name).begins_with("Props_DoorLeaf"):  # the leaves are the doors: drawn as far as the hull
+			assert_gt(node.visibility_range_end, 10_000.0)
+		else:
+			assert_eq(node.visibility_range_end, float(props["near_m"]))
+			assert_between(node.visibility_range_end, 1000.0, 2000.0, "about 1 to 2 km")
 		assert_eq(node.visibility_range_end_margin, float(props["margin_m"]))
 		assert_eq(node.visibility_range_fade_mode, GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF)
-		assert_between(node.visibility_range_end, 1000.0, 2000.0, "about 1 to 2 km")
 		assert_eq(node.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
 		assert_not_null(node.multimesh.mesh)
 		var material := node.multimesh.mesh.surface_get_material(0) as StandardMaterial3D
 		assert_not_null(material.albedo_texture if material != null else null, "the props' own atlas")
 		assert_eq(material.albedo_texture.get_height(), 4096, "the props' atlas, not the hull's")
 		counts[String(node.name)] = node.multimesh.instance_count
-	assert_eq(counts, {"Props_DoorRow": 4, "Props_Clamp": 28})
+	assert_eq(counts.get("Props_Clamp"), 24)
+	assert_eq(counts.get("Props_Gantry"), 24)
+	assert_eq(counts.get("Props_DoorLeaf3R"), 4, "one of each leaf on every arm")
 
 
-func test_a_door_face_lies_on_its_door() -> void:
+func test_a_door_leaf_lies_on_its_door() -> void:
 	if station == null:
 		fail_test(GEN_ASSETS_HINT)
 		return
 	var waist: MeshInstance3D = station.drum_piece.section_node("waist")
-	var rows: Array[Transform3D] = []
+	var leaves: Array[Transform3D] = []
 	for group: Dictionary in station.drum_piece.sections.groups_in("waist"):
-		if group["kind"] == "door_row":
-			rows = group["transforms"]
+		if group["kind"] == "door_leaf_1_r":
+			leaves = group["transforms"]
 	# (The instance transforms are read from the manifest's data: a headless run's rendering server keeps none.)
-	assert_eq(rows.size(), 4, "one row of door faces per arm")
-	# The top arm's row: on the axis's +y at the well's floor (r 239), half way along the row (station frame z 1 155, the drum
-	# frame's z -1 845 about its centre at z 3 000).
+	assert_eq(leaves.size(), 4, "one per arm")
+	# The top arm's door 1: in the strip at x 18, on the doors' plane (r 239), at station z 1 025.5 (the drum frame's z about its
+	# centre at z 3 000).
 	var hits: int = 0
-	for t: Transform3D in rows:
-		if (waist.transform * t.origin).distance_to(Vector3(0.0, 239.0, 1155.0 - 3000.0)) < 0.01:
+	for t: Transform3D in leaves:
+		if (waist.transform * t.origin).distance_to(Vector3(18.0, 239.0, 1025.5 - 3000.0)) < 0.01:
 			hits += 1
-	assert_eq(hits, 1, "one row on the top arm")
+	assert_eq(hits, 1, "one on the top arm")

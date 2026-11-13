@@ -549,3 +549,130 @@ are the sheets' fixed views (`rack`: one door's three fighters from 24 m in fron
 with seven fighters: the 21 instances share one mesh and material); 85 000 to 322 000 triangles drawn (about twice the seven
 fighters' 50 000 to 151 000; the Starfuries are most of it); steady 960 to 1 450 fps uncapped (was 1 290 to 1 500); the card's
 VRAM +234 MB with the front end and its hangar loaded (Godot's own count 372 MB), unchanged.
+
+## Near field and hardpoints (M7-T05)
+
+Phase A (the main docking bay, the grid's plinths and the hardpoints) approved by the maintainer on 2026-11-13; phase B added the
+cargo bay (zero-gravity), the six-door launch strips with their halls, the command section's detail and the toned-down red.
+Generator version 3.
+
+### The main docking bay (in the drum)
+
+`parts/station_detail.py` (`main_docking_bay`, the drum's `aperture` shape: it turns with the drum; the outer toothed ring is frame).
+References in `references/docking bay references/`, inspiration only. Station frame, z aft from the bow tip:
+- A plate across the sphere's front opening at z 478 (r 126) with 24 sawtooth teeth round its rim (r 112 to 124, 5 m proud; none
+  under the housing or the bar).
+- The cross housing: arms x 70 to 128, y ±30, front z 460, ribbed; the bar up (x ±16 to y 124, z 466) and down (x ±28 to y -122,
+  z 462) carrying the lower hatch.
+- The central block (x ±70, y ±56, front z 450, olive grey `bay_frame` #8A8770): slatted grilles above, below and beside the mouth,
+  four marked panels at its corners.
+- The mouth: a stepped cross (half sizes 58 x 28, 40 x 36, 26 x 44), three frames each stepping in 3 m and back 6 m (red lamps on
+  their steps, pink panels at the outer sides); the tunnel from z 468 to the inner airlock at z 640, ringed by six frames (z 490 to
+  610, 2 m in, 3 m deep) with machinery between them.
+- The inner airlock at z 640: two doors closed on a trapezoid sawtooth (10 m teeth every 22 m, a 2.4 m gap), ribbed, a dark wall
+  at z 646 through the seam.
+- **Toned down (phase B):** every surface dark machinery (`bay_wall`, no glow); red only on a 0.8 m strip round each frame's inner
+  edge, the frames' inner faces, the lamps and the airlock's seam, brightest at the mouth (`bay_red_0` 1.6) and dimmer inward
+  (`bay_red_5` 0.65); the pink panels 0.8; the doors' faces 0.08. T18 adds the real red lights and keeps the sun out of the tunnel
+  (no light casts shadows, so a sun ahead lights the tunnel's depths; the sheet's inside views light from astern).
+- Clear passage: **94 x 34 m** about the axis (the cross's middle 30 m wide is 66 m tall): the small civilians; the Saturns stay out.
+
+### The cargo bay (zero-gravity, on the spine between the forks)
+
+Q8 as refined: Saturn freighters never enter; their pods fly in by themselves (no loader ships). Read off the STL (a stepped
+square recess at the forks' root, facing down the slot) and the Mallacore render (a lit machinery compartment there); the look from
+the maintainer's show capture (`references/zero g cargo bay references/`; its arms, toothed rings and canisters belong to a loader
+ship and are not built). An open box cut into the spine's front where the slot ends, open ahead (down the slot) and above:
+- Inside x ±30, floor y 322, from z 420 to 490 (70 m deep: a whole pod, 43 m, with room); the spine starts again at its back.
+- A thick rim (`bay_frame`, 8 m wide, 4 m over the spine's top) round the open sides, with greebles along its beams; stepped
+  machinery on the floor (dark blocks in tiers to 4 m, a red strip on each block's front edge, pink and red lamps), ribs up the walls
+  with red edges, red lamps on the back wall.
+- Sized to the Saturn pods (31.1 x 17.2 x 43.0 m, `parts/saturn.py`): 60 m across the inside, a pod square-on clears 14 m a side;
+  the room over the machinery is 56 x 42 m to the spine's top and open above. The slot (x ±45 to ±50) takes it all.
+
+### The Cobra bays: six launch doors an arm
+
+The maintainer's untextured arm model: six doors in a framed strip on the root section, each one Starfury. `parts/station.py`
+(`LAUNCH_*`, `launch_deck`):
+- **Doors:** 20 m across the arm by 14 m along it (a Starfury, 15.4 m across its claws and 9.8 m long, its span across, clears
+  2.3 m and 2.1 m), sunk 4 m into the deck at r 239, at a 19 m pitch from z 1 016 to 1 130 (just aft of the ribbed neck), their
+  middles at x 18 on the top arm (the strip toward its starboard edge, as the model has it). A darker framed strip round the
+  row, a red border round each door, a lit strip along each door's edges, a clamp beside each.
+- **The launch hall** under the strip: x -16 to 34, z 1 010 to 1 136, from the doors' plane (r 239) in to its ceiling (r 209),
+  dark inside. Over each door a gantry (near-only prop): a beam across the hall, the rack's drop arm and red clamp head 11 to 13 m
+  in from the doors, work lamps, and a staging clamp over the **second row**: twelve Starfuries an arm, six on the racks and six
+  staged 22 m to port of them under the deck (no open door shows them), each crossing onto its rack once the first wave has dropped.
+- **The doors are props:** two leaves a door (`door_leaf_<n>_<r|l>`, one kind each so each carries its half of the number), each
+  its own instance so a launch swings it about its hinge on the outer edge; drawn as far as the hull (30 km), since the hull has no
+  painted door under them now. Their faces on the prop atlas at 3.1 cm a texel (slats, the bay's light between them, rivets, the
+  hazard band, the number). The sheet's `open_door` view swings door 3's leaves open (`scripts/station_sheet_node.gd`).
+- **M7-T09's hangar** still reads T04's seven 64 x 28 m doors (`COBRA_DOORS`, `DOOR_HALF`, `DOOR_ROW`, `door_centres`, kept for
+  it); **T20** refits it to these doors from the manifest's `hardpoints.cobra_arm` and drops the old names.
+- **Wings** (the maintainer, 2026-11-13), seen from the bow: Alpha top (0 degrees), Beta starboard (90), Delta bottom (180), Zeta
+  port (270); each arm is one wing and launches in two waves of six.
+
+### The command section (Q2: from 50 m)
+
+- **Windows:** crisp panels (`window_panel`, a frame prop on `spine_sphere`, the frame's own small atlas at 3.1 cm a texel) over the
+  spine's flanks where the hull paints its windows, seven runs a side between z 700 and 1 300: panes 5.6 x 3 m with frames and
+  mullions, 62 % lit warm. Near only; the hull's painted rows beyond.
+- **Compartments:** three open machinery compartments on the bow spine's top (z 610, 780, 905): a rim round a dark floor, tanks,
+  a coil housing, a red lamp.
+- **Serrated forks:** sawtooth teeth (5 m) every 14 m along each fork's outer lower edge.
+
+### The defence grid's plinths
+
+D75's 23 positions exactly. Each gets a 16-sided plinth along its up (light turret r 5 m, heavy cannon 9, interceptor 6.5), its face
+0.4 m over the pivot, reaching 6 m below. Where the T04 hull buried a mount it was flattened under it (kept, the maintainer): the
+arm's head lowered at the fork (L1 to L8 on the prongs), the bow spine flat at y 375 from z 500 to 530 (H1, H2), a spine row at z
+2 650 at y 537 (L10, I7), the spine over the hub at y 472 (L12, I9).
+
+### Hardpoints
+
+`parts/station_hardpoints.py`, the manifest's `hardpoints`; Godot reads them with `StationHardpoints` (`src/world/`). Each entry in
+its `body`'s frame: `drum` (the drum node, on its axis at the pivot, turning with it) or `frame` (the asset's frame); no axis flips.
+
+| Section | Count | Fields |
+|---|---|---|
+| `cobra_bays` | 24: `cobra_bay_alpha_1` to `_6` (top arm, door 1 at the bow), then `beta` (starboard), `delta` (bottom), `zeta` (port) | `wing`, `arm`, `door_number`, `door` (r 239), `door_half_m` [10, 7], `normal` (radially out), `across`, `leaves` (hinge `point` and `axis`), `rail_start` (where the fighter hangs, r 230), `rail_end` (the door), `release` (r 247), `release_direction`, `surface_velocity` (w x r, 36.6 m/s), `forward` (bow), `up` (toward the axis), `staging` (the second row's fighter), `staging_path` (up 3 m, across, down onto the rack) |
+| `cobra_arm` | 1 | the doors' layout on an arm standing on top (for T20): `door_floor_r`, `door_depth_m`, `door_half_m`, `pitch_m` 19, `row_z`, `strip_x`, `centres`, `hall`, `hang_r`, `release_r`, `staging_x`, `arms` (each `name`, `wing`, `angle_deg`, `bow_view_deg`, `bays`) |
+| `main_docking_bay` | 1 (drum) | `main_docking_bay_approach` (1 500 and 300 m ahead), `_path` (to the mouth and the airlock), `_mouth` (z 450), `_airlock` (z 640), `_clear_half_m` [47, 17]; `spin_axis`, `spin_rad_s` 0.148, `pivot` (a ship flying in matches the drum's roll; the same as `pieces.drum`) |
+| `cargo_bay` | 1 (frame) | `cargo_bay_approach` (to the hold), `_hold` (z -700, y 346: on the slot's line, 346 m off the main bay's axis), `_hold_forward`, `_release` (z -640), `_path` (down the slot into the bay), `_entry` (45 m in), `_clear_min`, `_clear_max` |
+| `grid_mounts` | 23 (L1 to L12, H1, H2, I1 to I9) | `kind`, `position` (pivot), `up` (D75's, normalised) |
+| `launch_clearance` | 1 | `blocked_sectors_deg` [[58.5, 126.5]], `clear_distance_m` 250, `margin_deg` 10, `ship_clearance_m` 2, `angle` (how an arm's angle and the drum's turn give a door's angle) |
+| `lights` | 57: 14 `beacon` (`blink`), 8 `running`, 7 `ring` (`radius`, `axis`, `dashes`), 24 `bay`, 2 `main_docking_bay`, 2 `cargo_bay` | `position`, `colour` |
+| `tour_points` | 8: bow, main_docking_bay, cargo_bay, cobra_arm (drum), grid_tower, drum, vanes, reactor | `position`, `look_at`, `direction` |
+| `damage_sections` | 11 | `sections` (T19's render sections, each once), `aabb_min`, `aabb_max` |
+
+### Launch clearance (M7-T08's rule)
+
+A Starfury does not launch while its arm points at the stationary frame. `launch_clearance` gives the arm angles (its outward
+normal about the drum's axis, from +x toward +y in the frame's coordinates: the arm's `cobra_arm.arms[].angle_deg` plus the drum's
+turn) at which a Starfury's box (15.4 x 9.8 m, its span across the arm) dropping radially out of any of the six doors would pass
+within 2 m of the frame's collision shapes within 250 m: **68.5 to 116.5 degrees**, widened by 10 degrees each side to
+**58.5 to 126.5** (one sector: the dorsal spine and its hanging box over the drum; nothing else of the frame stands over the strip's
+z). The top arm at rest (90 degrees) is blocked; with the drum turning at 0.148 rad/s (8.5 degrees a second) an arm spends 8 s of
+its 42 s turn in the sector.
+- **The clear distance, 250 m:** the frame's farthest part over the door strip (the spine's top and the observation dome, r 462 to
+  465) is 226 m out from the doors' plane, so a drop path clear for 250 m is clear for good; nothing of the frame reaches farther
+  out at those z.
+- **The margin, 10 degrees:** 1.2 s of the drum's turn, the time from the rack through the release point while the arm keeps turning.
+
+### Collision
+
+Budget raised to **192 shapes a piece** (T03's default 128): the bays' openings take pieces round each one that a merge would close
+(`station_collision.KEEP` never merges them). Drum 179, frame 134, no merge.
+- Main docking bay: the sphere from the plate to the airlock as four pieces about the clear passage, the block round the mouth the
+  same way, the housing and the bar as boxes. Tested: nothing within 0.3 m of the passage from 60 m ahead to the airlock.
+- Cobra arms: the hatch round the hall (floor, the solid round it, the deck in pieces between the doors, the taper). Tested: a
+  Starfury's box drops from its rack out through its door, and the second row crosses onto the racks, without a contact.
+- Cargo bay: the spine's front round the open box (under the floor and machinery, beside it, the rim's posts and sill). Tested: a
+  pod square-on flies from the release point down the slot to the entry point without a contact, in collision and on the hull.
+
+### Cost and sheets
+
+Measured on the RX 6950 XT (Forward+, X11, fullscreen 6 144 x 3 456, 150 frames settled; see the Done notes for each view). Sheets
+(H), `references/screenshots/M7-T05 near field/`: `M7-T05_main_docking_bay_sheet.png` (beside the six references),
+`M7-T05_cargo_bay_sheet.png` (beside the show capture), `M7-T05_detail_strip_50m.png` (the new door strip beside the arm model, a
+door swung open onto its hall, the windows, a compartment, both bays at 50 m), `M7-T05_hardpoint_markers_sheet.png` (every hardpoint
+as a ball by kind). View sets `t05`, `cargo`, `strip` and `markers` in `scripts/station_sheet_node.gd`.

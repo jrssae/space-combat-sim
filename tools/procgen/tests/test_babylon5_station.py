@@ -21,6 +21,7 @@ from tools.procgen.core.glb import read_glb
 from tools.procgen.core.image import read_png
 from tools.procgen.core.sampling import sample_mesh
 from tools.procgen.parts import station as st
+from tools.procgen.parts import station_detail as sd
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 STL = REPO_ROOT / "references" / "EA Babylon 5 Station.stl"
@@ -118,35 +119,47 @@ class StationShapeTests(unittest.TestCase):
             under = (np.abs(p[:, 0]) < 85.0) & (p[:, 2] > 1800.0) & (p[:, 2] < 2290.0)
             self.assertLess(float(p[under, 1].max()), 428.0 - 5.0)
 
-    def test_each_cobra_arm_has_seven_sunk_framed_lit_clamped_and_numbered_launch_doors(self) -> None:
-        from tools.procgen.parts import station_layouts as sl  # noqa: PLC0415
-
-        z0, z1, _, _, top = st.ARM_HATCH
-        floor = top - st.DOOR_DEPTH
-        centres = st.door_centres()
-        self.assertEqual(len(centres), 7)
-        for angle in st.ARM_ANGLES_DEG:
-            a = math.radians(angle)
-            out, across = np.array([math.cos(a), math.sin(a), 0.0]), np.array([-math.sin(a), math.cos(a), 0.0])
-            r, x, z = self.drum_pts @ out, self.drum_pts @ across, self.drum_pts[:, 2]
-            on_arm = (np.abs(x) < st.DOOR_HALF[0] - 10.0) & (z > z0) & (z < z1) & (r > floor - 20.0)  # clear of the clamps' arms
-            for c in centres:
-                door = on_arm & (np.abs(z - c) < st.DOOR_HALF[1] - 2.0)
-                self.assertAlmostEqual(float(r[door].max()), floor, delta=0.5, msg=f"door at z {c:.0f} on the arm at {angle}")
-            between = on_arm & (np.abs(z - (centres[0] + centres[1]) / 2.0) < 2.0)
-            self.assertAlmostEqual(float(r[between].max()), top, delta=0.5, msg="the frame's bar stands between doors")
-        lights = {p.name: p for p in self.drum_parts}["bay_lights"].mesh
-        self.assertEqual(lights.face_count, 4 * 7 * 4 * 12, "a lit strip along each edge of every door")
-        self.assertTrue(all(m.emissive_strength > 0.0 for m in lights.materials))
+    def test_each_cobra_arm_has_six_framed_lit_clamped_doors_over_an_open_hall(self) -> None:
         from tools.procgen.parts import station_props as sp  # noqa: PLC0415
 
+        top = st.ARM_HATCH[4]
+        floor = top - st.DOOR_DEPTH
+        centres = st.launch_door_centres()
+        cx, (dx, dz) = st.LAUNCH_STRIP_X, st.LAUNCH_DOOR_HALF
+        self.assertEqual(len(centres), 6, "six doors an arm (the maintainer's arm model)")
+        # One Starfury (15.4 m across its claws, 9.8 m long, span across the arm) drops through with 2 m or more to spare round it.
+        self.assertGreaterEqual(dx - 7.7, 2.0)
+        self.assertGreaterEqual(dz - 4.9, 2.0)
+        self.assertGreater(centres[1] - centres[0] - 2.0 * dz, 3.0, "a bar between doors")
+        hx0, hx1, hz0, hz1 = st.LAUNCH_HALL
+        self.assertTrue(hx0 < cx - dx and cx + dx < hx1 and hz0 < centres[0] - dz and centres[-1] + dz < hz1, "the hall under the strip")
+        self.assertLess(hx1, st.ARM_HATCH[2], "the strip keeps to the face, not the whole 94 m")
+        for angle in st.ARM_ANGLES_DEG:
+            a = math.radians(angle)
+            # The arm's own +x (built on top, turned by its angle less 90 degrees).
+            out, across = np.array([math.cos(a), math.sin(a), 0.0]), np.array([math.sin(a), -math.cos(a), 0.0])
+            r, x, z = self.drum_pts @ out, self.drum_pts @ across, self.drum_pts[:, 2]
+            in_door = (np.abs(x - cx) < dx - 1.5) & (r > st.HALL_CEILING_R - 20.0)
+            for c in centres:
+                door = in_door & (np.abs(z - c) < dz - 1.5)
+                self.assertAlmostEqual(float(r[door].max()), st.HALL_CEILING_R, delta=0.6, msg="open to the hall's ceiling")
+            between = (np.abs(x - cx) < dx - 1.5) & (np.abs(z - 0.5 * (centres[0] + centres[1])) < 1.0) & (r > 200.0)
+            self.assertAlmostEqual(float(r[between].max()), top, delta=0.5, msg="the deck's bar stands between doors")
+            beside = (np.abs(x + 25.0) < 5.0) & (np.abs(z - centres[2]) < 5.0) & (r > 200.0)
+            self.assertAlmostEqual(float(r[beside].max()), top, delta=0.5, msg="the rest of the face is deck")
+        lights = {p.name: p for p in self.drum_parts}["bay_lights"].mesh
+        self.assertEqual(lights.face_count, 4 * 6 * 4 * 12, "a lit strip along each edge of every door")
+        self.assertTrue(all(m.emissive_strength > 0.0 for m in lights.materials))
         self.assertNotIn("clamps", {p.name for p in self.drum_parts}, "the clamps are near-only props (M7-T19)")
-        clamps = next(g for g in sp.groups("waist", station.DRUM_CENTRE) if g.kind == "clamp")
-        self.assertEqual(len(clamps.transforms), 4 * 7, "a clamp beside every door")
+        groups = {g.kind: g for g in sp.groups("waist", station.DRUM_CENTRE)}
+        self.assertEqual(len(groups["clamp"].transforms), 4 * 6, "a clamp beside every door")
         self.assertEqual(sp.clamp().face_count, 3 * 12, "a post, an arm and a red cap")
-        numbers = [m for m in sl.window_markings("arms", station.DRUM_CENTRE) if m.kind == "text"]
-        self.assertEqual(sorted({m.params["text"] for m in numbers}), [str(k) for k in range(1, 8)])
-        self.assertEqual(len(numbers), 28)
+        leaves = [k for k in groups if k.startswith("door_leaf_")]
+        self.assertEqual(len(leaves), 12, "two leaves a door number, each its own kind (its half of the number)")
+        self.assertTrue(all(len(groups[k].transforms) == 4 for k in leaves), "one of each on every arm")
+        self.assertEqual(len(groups["gantry"].transforms), 24, "a gantry over every door in its hall")
+        # M7-T09's hangar keeps T04's seven-door names until T20 refits it.
+        self.assertEqual((st.COBRA_DOORS, st.DOOR_HALF, len(st.door_centres())), (7, (32.0, 14.0), 7))
 
     def test_every_closed_shape_faces_outward(self) -> None:
         for part in self.drum_parts + self.frame_parts:
@@ -226,12 +239,12 @@ class PaintTests(unittest.TestCase):
         red = (cargo[:, 0] > cargo[:, 1] + 20.0) & (cargo[:, 0] > cargo[:, 2] + 20.0)
         self.assertGreater(float(red.mean()), 0.8)
 
-    def test_the_cobra_arms_carry_red_trim_and_rust_doors(self) -> None:
+    def test_the_cobra_arms_carry_red_trim(self) -> None:
         arms, _ = _bake("arms")
         red = (arms[:, 0] > arms[:, 1] + 20.0) & (arms[:, 0] > arms[:, 2] + 20.0) & (arms[:, 1] < arms[:, 0] * 0.7)
         rust = (arms[:, 0] > arms[:, 2] + 12.0) & (arms[:, 1] > arms[:, 2]) & (arms[:, 1] > arms[:, 0] * 0.55)
         self.assertGreater(float(red.mean()), 0.01, "the doors' red border, the arm's trim and the red cross")
-        self.assertGreater(float(rust.mean()), 0.01, "the closed doors")
+        self.assertLess(float(rust.mean()), 0.01, "the doors are their leaves (props) now; the hall under them is dark")
 
 
 class MetalTests(unittest.TestCase):
@@ -335,9 +348,11 @@ class StationBuildTests(unittest.TestCase):
         origin = self.manifest["centroid_offset"][2]
         self.assertAlmostEqual(float(frame[:, 2].min()), -origin, delta=1.0, msg="the bow tip at -Z")
         self.assertAlmostEqual(float(frame[:, 2].max()), 8000.0 - origin, delta=1.0, msg="the reactor's aft face at +Z")
-        front = drum[drum[:, 2] < drum[:, 2].min() + 40.0]  # the drum's foremost 40 m: the aperture's door
-        self.assertAlmostEqual(float(drum[:, 2].min()), st.APERTURE_HUB[1] - origin, delta=1.0, msg="the aperture's hub is the drum's front")
-        self.assertLess(float(np.hypot(front[:, 0], front[:, 1]).max()), st.DOOR_R + 1.0)
+        front = drum[drum[:, 2] < drum[:, 2].min() + 40.0]  # the drum's foremost 40 m: the docking bay (M7-T05)
+        mouth_front = sd.BLOCK[2] - sd.GRILLE[2]  # the grilles on the block round the mouth
+        self.assertAlmostEqual(float(drum[:, 2].min()), mouth_front - origin, delta=1.0, msg="the docking bay's block is the drum's front")
+        self.assertLess(float(np.hypot(front[:, 0], front[:, 1]).max()), math.hypot(sd.HOUSING[0], sd.HOUSING[1]) + 1.0,
+                        "the cross housing inside the frame's ring")
         reactor = frame[frame[:, 2] > 7700.0 - origin]
         self.assertLess(float(np.hypot(reactor[:, 0], reactor[:, 1]).max()), 175.0, "the reactor, not a docking ring")
         ring = frame[(frame[:, 2] > st.RING_FRAME[0] - origin - 1.0) & (frame[:, 2] < st.RING_FRAME[1] - origin + 1.0)]
