@@ -248,7 +248,6 @@ func update_visuals() -> void:
 	funnel.visible = grown > 0.0
 	funnel.scale = Vector3(fit.mouth_half_width_m, fit.mouth_radius_m, fit.depth_m)
 	_material.set_shader_parameter(&"growth", grown)
-	_material.set_shader_parameter(&"body_edge", fit.body_share)
 	_material.set_shader_parameter(&"swirl_time", SimClock.now())
 	var flash_level: float = timing.flash(age_s)
 	flash_quad.visible = flash_level > 0.0
@@ -259,7 +258,8 @@ func update_visuals() -> void:
 
 
 ## A unit funnel grid shared by every vortex: UV.x round it, UV.y from the rim (0) to the centre (1), closed at the centre. The
-## shader shapes it (and unfolds it); the vertices here only give it the right bounds.
+## shader shapes it (and unfolds it); the vertices here only give it the right bounds. Its triangles run from the base out to the
+## rim, so the translucent walls are drawn over the base and hide its dark circle from an oblique view.
 static func funnel_mesh() -> ArrayMesh:
 	if _funnel_mesh != null:
 		return _funnel_mesh
@@ -274,7 +274,7 @@ static func funnel_mesh() -> ArrayMesh:
 			vertices.append(Vector3(cos(u * TAU) * r, sin(u * TAU) * r, v))
 			uvs.append(Vector2(u, v))
 	var row: int = SEGMENTS + 1
-	for ring: int in RINGS:
+	for ring: int in range(RINGS - 1, -1, -1):
 		for seg: int in SEGMENTS:
 			var a: int = ring * row + seg
 			indices.append_array([a, a + row, a + 1, a + 1, a + row, a + row + 1])

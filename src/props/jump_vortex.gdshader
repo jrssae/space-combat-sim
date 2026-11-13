@@ -3,10 +3,10 @@ render_mode unshaded, blend_mix, depth_draw_always, cull_disabled, shadows_disab
 // A jump vortex's funnel (M6-T19, D69): a broad, gently curving, translucent well of the base colour, darker toward its rim and
 // its soft throat, combed with fine hair-like streaks along one soft spiral, over soft-edged darker patches and paler
 // translucent ones that lie along the same spiral. Everything turns round the axis and drifts along the spiral (out from the
-// throat for an arrival, in toward it for a departure). The bright body ends in a short feathered edge inside the mouth
-// (`body_edge`) and a faint veil carries on to the rim. The funnel unfolds from its base forward to the rim of its mouth as it
-// opens. Its base looks black from in front, down the funnel, and glows white from the side or
-// behind.
+// throat for an arrival, in toward it for a departure). The body reaches the rim of its mouth, at a gate's arms, and ends there
+// in a short feathered edge. The funnel unfolds from its base forward to the rim as it opens. A dark circle lies on the base
+// itself; from in front it shows down the funnel, from an oblique view the nearer walls hide it (the mesh draws its base first,
+// so the walls lie over it). From the side or behind, the base glows white instead.
 //
 // The mesh is a unit grid: UV.x round the funnel, UV.y from the rim (0) to the centre (1); the node's scale gives the mouth's
 // semi-axes (x, y: an ellipse at a gate) and the depth (z, behind the mouth). `swirl_time` is sim time, so a pause freezes it.
@@ -31,29 +31,16 @@ uniform float travel = 0.1;
 uniform float body_alpha = 0.72;
 // How wide the well is: its walls fall away over about this share of the radius, round a broad, rounded base.
 uniform float well = 0.55;
-// Where the bright body ends, a share of the mouth's radius (`VortexFit.body_share`), and how wide its feathered edge is.
-uniform float body_edge = 0.9;
-uniform float edge_soft = 0.05;
-// How opaque the veil between the body's edge and the rim is.
-uniform float veil = 0.004;
+// Where the body's feathered edge sits and how wide it is, shares of the mouth's radius: it is gone by the rim.
+uniform float body_edge = 0.965;
+uniform float edge_soft = 0.035;
 uniform vec3 base_glow = vec3(1.2, 1.2, 1.3);
-// The dark eye: a tube on past the base into hyperspace, this many depths behind the mouth, and its radius there (a share of the
-// mouth's). Seen obliquely the eye then sits toward where the axis recedes, low and to one side, as in the still.
-uniform float eye_depth = 4.0;
-uniform float eye_radius = 1.5;
+// The dark circle on the base, a share of the mouth's radius.
+uniform float throat_radius = 0.24;
 
 varying float v_s;
 varying float v_glow;
 varying vec2 v_flat;
-varying vec3 v_local;
-varying vec3 v_eye_cam;
-
-// How far the funnel has unfolded (a share of the mouth's radius) at `g`: the body is whole near the end of the growth and the
-// veil reaches the rim with it.
-float reach(float g) {
-	float body = body_edge + edge_soft;
-	return g * body + smoothstep(0.8, 1.0, g) * (1.0 - body);
-}
 
 // Depth behind the mouth (0 at the rim, 1 at the centre) at radius `r`: a rounded base and gently curving walls.
 float profile_z(float r) {
@@ -111,7 +98,7 @@ void vertex() {
 	float s = 1.0 - UV.y;
 	// Unfolding: the part from the base out to `growth` is in its final place, so the funnel builds forward from the base to the
 	// mouth; the rest waits folded at its edge.
-	float se = min(s, reach(growth));
+	float se = min(s, growth);
 	float a = UV.x * TAU;
 	VERTEX = vec3(cos(a) * se, sin(a) * se, profile_z(se));
 	v_s = s;
@@ -122,16 +109,13 @@ void vertex() {
 	vec3 cam = INV_VIEW_MATRIX[3].xyz;
 	float t = dot(normalize(cam - mouth + axis * 1e-3), axis);
 	v_glow = smoothstep(-0.45, -0.05, t);
-	v_local = VERTEX;
-	v_eye_cam = (inverse(MODEL_MATRIX) * vec4(cam, 1.0)).xyz;
 }
 
 void fragment() {
 	float r = v_s;
 	float rp = max(r, 0.04);
-	// The look is laid out against the body's edge (1 there), so a gate's body and a point's look alike whatever share of the
-	// mouth they fill.
-	float look_r = r / (body_edge * 1.18);
+	// The look's bands and smudge are laid out a little inside the rim, so the body darkens toward its edge.
+	float look_r = r / 1.14;
 	float u = UV.x;
 	float t = swirl_time;
 	// How many funnel radii one pixel covers, and how many turns round the funnel that is here.
@@ -170,19 +154,15 @@ void fragment() {
 	// The base: a soft black smudge down the funnel from in front, a white glow on the base alone from the side or behind.
 	float deep = 1.0 - smoothstep(0.05, 0.7, look_r);
 	deep *= deep * (3.0 - 2.0 * deep);
-	// The eye: dark where the line of sight through this point carries on down the funnel into hyperspace.
-	vec3 ray = v_local - v_eye_cam;
-	vec2 beyond = v_local.xy + ray.xy * (eye_depth - v_local.z) / max(ray.z, 1e-4);
-	float eye = ray.z > 1e-4 ? 1.0 - smoothstep(0.08 * eye_radius, eye_radius, length(beyond)) : 0.0;
-	deep = max(deep * 0.55, eye * eye * (3.0 - 2.0 * eye));
+	// The dark circle on the base itself, soft-edged.
+	float throat = 1.0 - smoothstep(0.55 * throat_radius, throat_radius, r);
+	deep = max(deep * 0.55, throat);
 	float glow = 1.0 - smoothstep(0.0, 0.17, look_r);
 	c = mix(c * (1.0 - deep * (1.0 - v_glow)), base_glow, glow * v_glow);
-	// The body ends in a short edge feathered along the streaks; past it the veil thins out to the rim. The unfolding edge is soft.
-	float feather = (0.6 * broad + 0.4 * fine - 0.5) * 1.5 * edge_soft;
-	float body = 1.0 - smoothstep(body_edge - edge_soft, body_edge + 0.5 * edge_soft, r + feather);
-	float rim = max(body, veil * (1.0 - smoothstep(body_edge, 1.0, r)));
-	float grown = reach(growth);
-	float edge = 1.0 - smoothstep(grown - 0.08, grown, r);
+	// The body ends at the rim in a short edge feathered along the streaks; the unfolding edge is soft.
+	float feather = (0.6 * broad + 0.4 * fine - 0.5) * edge_soft;
+	float rim = 1.0 - smoothstep(body_edge - edge_soft, body_edge + 0.5 * edge_soft, r + feather);
+	float edge = 1.0 - smoothstep(growth - 0.08, growth, r);
 	// Translucent walls; the base is opaque, black from in front and its glow from behind.
 	float solid = max(glow * v_glow, deep * (1.0 - v_glow));
 	float a = rim * edge * smoothstep(0.0, 0.05, growth) * mix(body_alpha, 1.0, solid);

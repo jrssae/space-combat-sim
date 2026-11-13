@@ -8,9 +8,6 @@ extends RefCounted
 ## the funnel runs back to their back ends (as deep as an arm is long). At a ship-made point: round (no arms shape it), sized
 ## for the ship that comes through (`for_ship`), with the gate's proportions, and widened when more ships of the same group
 ## come out of it (`widen_for`).
-##
-## The mouth is where ships may pass; the funnel's bright body ends further in (`body_share`) and a faint veil carries on to the
-## rim. At a gate the body ends inside the arms' back ends as `jumpgate.png` shows, while the mouth still reaches the arms.
 
 ## A ship-made point: the mouth is this many times the ship's bounding radius across (a fighter sits well inside it), never
 ## smaller than `MIN_POINT_RADIUS_M`; the funnel is `POINT_DEPTH_RATIO` mouth radii deep, about a gate's 1 200 m to 754 m.
@@ -21,11 +18,6 @@ const POINT_DEPTH_RATIO: float = 1.6
 const FALLBACK_RIM_M: float = 753.9
 const FALLBACK_HALF_WIDTH_M: float = 1198.0
 const FALLBACK_ARM_M: float = 1200.0
-## How much of the mouth's radius the bright body fills. A gate's: fitted to the still's visible edge from its acceptance pose
-## (T19 round 4), which lies on the arms' back ends. A ship-made point's: nearly all of it, so a ship of a widened group still
-## comes out of the body, not the veil.
-const GATE_BODY_SHARE: float = 0.665
-const POINT_BODY_SHARE: float = 0.9
 
 ## The rim's half height, metres: the radius of a round mouth, and of the largest circle inside an elliptical one.
 var mouth_radius_m: float = 0.0
@@ -35,8 +27,6 @@ var mouth_half_width_m: float = 0.0
 var depth_m: float = 0.0
 ## Where the mouth lies along the opener's axis, metres (gate-local z; 0 for a ship-made point).
 var mouth_z_m: float = 0.0
-## The share of the mouth's radius the bright body fills; a faint veil carries on to the rim.
-var body_share: float = POINT_BODY_SHARE
 
 
 func _init(p_mouth_radius_m: float = MIN_POINT_RADIUS_M, p_depth_m: float = MIN_POINT_RADIUS_M * POINT_DEPTH_RATIO,
@@ -63,9 +53,7 @@ static func for_gate(hardpoints: Dictionary) -> VortexFit:
 	var centre: Variant = v.get("center")
 	if centre is Array and (centre as Array).size() == 3:
 		mouth = float(centre[2])
-	var fit := VortexFit.new(rim, depth, mouth, half_width)
-	fit.body_share = GATE_BODY_SHARE
-	return fit
+	return VortexFit.new(rim, depth, mouth, half_width)
 
 
 ## A ship-made point for a ship of `ship_radius_m` (its bounding radius).

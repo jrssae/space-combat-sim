@@ -171,13 +171,12 @@ a capital ship's own (M12) and the open points raiders arrive through.
   1 198 m across and 754 m up, the trusses reaching about 45 m in from the arms' axes). The funnel runs back along the arms and
   ends at their back ends: as deep as an arm is long (1 200 m). The numbers come from the gate's markers, not constants. A
   ship-made point has no arms to shape it and stays round.
-- **The visible body** (round 4). As in `jumpgate.png`, the bright body ends well inside the arms: from the acceptance pose its
-  edge lies on the arms' back ends. It ends at two thirds of the mouth's radius (0.665), in a short soft edge feathered along the
-  streaks; a faint veil carries on to the rim at the arms. A ship-made point's body fills 0.9 of its mouth.
+- **The visible body** (round 5, the maintainer): the bright funnel comes right up to the arms, its short feathered edge gone
+  by the rim (round 4's body ending at two thirds of the radius was rejected: the opening sat too far from the arms).
 - **Shape.** A slight funnel: visible, not pronounced. A broad well with gently curving walls and a wide, rounded base, elliptical
   in section from the mouth down to the throat (the still's dark eye is a wide ellipse too); the dark
-  throat a soft smudge, not a hard hole. The eye is where the line of sight runs on down the funnel into hyperspace: seen
-  obliquely it sits toward where the axis recedes, low and to the right in the still. The walls are translucent: stars and the gate's far arms partly show through them.
+  throat a soft smudge, not a hard hole. The dark circle lies on the funnel's base itself, its narrow deep end (round 5,
+  the maintainer); from an oblique view the funnel's nearer walls hide part or all of it. The walls are translucent: stars and the gate's far arms partly show through them.
 - **Colour and motion.** Layers of colour: the base colour (orange to golden yellow for a departure, a **dark sky blue** for an
   arrival: dark against space but not navy, round 3), darker toward the throat and the rim and brightest over a band in between,
   in broad uneven clouds; soft-edged, roughly rectangular patches darker than the base and paler translucent patches of the base

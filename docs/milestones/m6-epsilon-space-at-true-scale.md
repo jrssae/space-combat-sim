@@ -1572,6 +1572,41 @@ which changes the same native rows and rebase path:
     dark navy silhouettes lit by the vortex (ours lit warm by the sun), and its right and bottom rails reach further in
     (planar spokes). Open (H): the look; the truncated cone from the side and the tip; the frame rate in a visible window
     (these numbers were taken while the session was locked).
+- **Round 4 not accepted (maintainer, 2026-11-12):** "Vortex funnel opening is too far away from jump gate arms. Bottom of funnel
+  black circle is misplaced; must be at base of funnel. May be occluded by the rest of the funnel." Round 5: the visible opening
+  comes right up to the arms (round 3's rule, for the visible edge too); the dark circle sits on the funnel's base, placed in 3D,
+  and the nearer walls hide it from oblique views. Keep the aspect 1.55 and the cleaner rim.
+- **Round 5 done (2026-11-12; the row stays `in progress` until the maintainer accepts the side-by-side):**
+  - **The opening at the arms:** round 4's `VortexFit.body_share` and the veil are gone. The body runs to the rim and ends
+    there in a short edge (from 0.93 to 0.98 of the radius, feathered by 0.01 along the streaks): half faded about 35 m inside
+    the rim at the top and bottom and 55 m at the sides, gone 13 to 21 m inside it, and the rim itself 1 m from the arms. Points and gates
+    look alike again. Aspect 1.55 and the short edge are kept.
+  - **The dark circle on the base:** round 4's line-of-sight eye is gone (and with it the per-vertex matrix inverse that
+    M6-T20 would have had to move). The circle is drawn on the funnel's own base, within 0.24 of the radius (soft from 0.13),
+    with the funnel darkening toward it as before. For the walls to hide it, the funnel's triangles now run from the base out to
+    the rim (`JumpVortex.funnel_mesh`): the base is drawn first and writes depth, the translucent walls (72 % opaque) blend over
+    it. From in front and from `run_in` it shows down the funnel; from the reference and close poses it shows through the mouth
+    (the base is in direct view at 20 degrees off the axis); from `gate view tip` the near wall covers it. From the side and
+    behind the base glows white, as before.
+  - **The pose:** refitted to the rails and the throat at the real base (the visible edge no longer enters the fit): it lands
+    on round 4's pose again (rails 26.1 px rms against 26.2, the base 40 px from the still's throat either way), so `gate view
+    reference` is unchanged.
+  - **Against the still, measured:** the opening at the arms is 171 x 103 px in the 385 px frame (1.66 to 1), centred at (193,
+    141). The still's visible vortex is 101 x 63 px: the still's gate is planar spokes whose inner ends frame its vortex, while
+    our rails' front ends stand at the outer ends of the still's spokes from this pose. Opening the funnel to the arms makes it
+    about 1.7 times the still's across. The dark circle is at (200, 156), the still's throat at (241, 176).
+  - **GPU** (RX 6950 XT, headless gamescope as round 4, 1200x675; the session was still locked): reference 0.87 ms (the scene now
+    has T09's nebula and lighting in view), close 0.43, inside 0.42; 4 draw calls, 384.7 MB in the renderer.
+  - **Tests:** `test_vortex_fit` (round 4's body-share test out; new: the funnel draws its base before its walls), the vortex,
+    gate and far-prop tests green; compile check clean. Quick tier: 1 840 of 1 858; the 18 failures are other tasks' work in
+    the checkout (a camera `unproject` error in mission, target-menu, preview, pause and console scenes while T09 moves the
+    scenarios to true scale; `AsteroidField._bodies` in `test_velocity_rebase` under T21), none in the vortex's files.
+  - **Screenshots:** `references/screenshots/M6-T19 vortex/acceptance_jumpgate_png.png` (refreshed) and `round5/`: `arr_*` and
+    `dep_*` (`reference`, `front`, `three_quarter`, `close`, `side`, `inside`, `tip`), `point_arrival_300m`,
+    `point_departure_300m`.
+  - **Own estimate against `jumpgate.png`:** about 75 to 80 %. The colour, the streaks, the soft rim, the ellipse and the throat
+    at the base are there. The opening is larger than the still's because it now meets our rails, as asked. Open (H): the
+    side-by-side.
 
 ### M6-T20 Vortex detail by distance and mass arrivals
 
