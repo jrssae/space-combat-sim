@@ -155,6 +155,8 @@ class StarfuryAuroraTests(unittest.TestCase):
                     "starfury_aurora_digits.png",
                     "starfury_aurora_digits.png.import",
                 ]
+                # M7-T15: the low texture set (major seams only) beside the full one
+                + [f"starfury_aurora_{k}_low.png{ext}" for k in ("albedo", "normal", "orm") for ext in ("", ".import")]
                 + chunk_files
             ),
         )
@@ -631,9 +633,9 @@ class StarfuryAuroraTests(unittest.TestCase):
 
     def test_a_new_interior_leaves_the_hull_alone(self) -> None:
         # M4-T30a's version 6 added the textured mesh, M4-T30b's 7 the liveries, M4-T30d's 8 the chunk meshes and M4-T31's 9 dropped the
-        # point-cloud outputs and renamed the sample stream, which moves the centring by 1.5 mm; the design is unchanged. The hull's OBJ
-        # has none of the interior's materials.
-        self.assertEqual(ship.GENERATOR_VERSION, 9)
+        # point-cloud outputs and renamed the sample stream, which moves the centring by 1.5 mm; M7-T15's 10 drew the surface layouts
+        # (the maps only); the design is unchanged. The hull's OBJ has none of the interior's materials.
+        self.assertEqual(ship.GENERATOR_VERSION, 10)
         hull = read_obj(self.dir_a / ship.OBJ_NAME)
         self.assertFalse([m for m in hull.materials if "ef_cockpit" in m])
 
@@ -737,6 +739,31 @@ class StarfuryAuroraTests(unittest.TestCase):
         arm = read_obj(self.dir_a / "starfury_aurora_chunk_arm_ur.obj")
         self.assertIn("ef_nozzle", arm.materials)
         self.assertNotIn("ef_canopy_glass", arm.materials)
+
+    # --- surface (M7-T15) -------------------------------------------------------------------
+    def test_every_surface_names_the_low_texture_set(self) -> None:
+        surfaces = self.manifest["mesh"]["surfaces"]
+        self.assertGreaterEqual(len(surfaces), 2, "paint and glass")
+        for surface in surfaces:
+            low = surface["detail"]["low"]
+            self.assertEqual(low, {k: f"starfury_aurora_{k}_low.png" for k in ("albedo", "normal", "orm")})
+            for file in low.values():
+                self.assertTrue((self.dir_a / file).is_file(), file)
+        for key in ("albedo", "normal", "orm"):
+            self.assertNotEqual(sha256(self.dir_a / f"starfury_aurora_{key}_low.png"), sha256(self.dir_a / f"starfury_aurora_{key}.png"), key)
+
+    def test_the_hull_parts_carry_their_layouts_and_twins_mirror(self) -> None:
+        parts = {p.part.name: p for p in self.placed}
+        drawn = {name for name, p in parts.items() if p.part.seams}
+        self.assertEqual(drawn, {"fuselage"} | {f"{k}_{n}" for k in ("pod", "strut", "claw") for n in POD_NAMES})
+        twins = [("strut_ur", "strut_ul"), ("strut_lr", "strut_ll")] + [(f"{k}_ur", f"{k}_{n}") for k in ("pod", "claw") for n in ("lr", "ul", "ll")]
+        for right, twin in twins:
+            a, b = parts[right], parts[twin]
+            here = a.part.seams.evaluate(a.samples.positions, a.samples.normals, 0.02, 0.005)
+            there = b.part.seams.evaluate(b.samples.positions, b.samples.normals, 0.02, 0.005)
+            self.assertGreater(float(here.line.max()), 0.4, f"{right}: the samples meet its seams")
+            np.testing.assert_allclose(there.line, here.line, atol=1e-9, err_msg=twin)
+            np.testing.assert_allclose(there.tint, here.tint, atol=1e-9, err_msg=twin)
 
     def test_hardpoints_and_manifest_only_gain_the_new_keys_at_the_end(self) -> None:
         self.assertEqual(list(self.hp)[-1], "chunks")

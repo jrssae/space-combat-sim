@@ -44,7 +44,8 @@ from ..core.obj import write_obj
 from ..core.textured_mesh import TexturedPart, phase_steps, write_textured_mesh
 from ..core.textures import Marking
 from ..core.sampling import SurfaceSamples, sample_mesh
-from ..parts import Anchor, Part, mass_centroid, total_mass
+from ..core.seams import MAJOR, SeamLayout
+from ..parts import Anchor, Part, layouts, mass_centroid, total_mass
 from ..parts.hull import HumpSpec, HumpStation, canopy_panel, hump
 from ..parts.propulsion import NacelleSpec, NozzleSpec, nacelle, pilot_tags
 from ..parts.weapons import BarrelSpec, gun_barrel
@@ -53,12 +54,15 @@ from ..styles import Style
 from ..styles.raider import RAIDER, TEXTURED_ALBEDO
 
 ASSET_ID = "raider_fighter"
-GENERATOR_VERSION = 4  # 4: the textured mesh only (M4-T31); 3: the textured mesh and chunk meshes (M4-T30d)
+# 5: drawn surface layouts, low and high texture sets (M7-T15); 4: the textured mesh only (M4-T31); 3: the textured mesh and chunk
+# meshes (M4-T30d)
+GENERATOR_VERSION = 5
 OBJ_NAME = "raider_fighter.obj"
 HARDPOINTS_NAME = "hardpoints.json"
 MESH_NAME = "raider_fighter.glb"
 # The textured mesh (M4-T30d): about 190 m² of hull at a centimetre a texel in a 2 048 px atlas, the normal map at the atlas's size.
 ATLAS_PX = 2048
+DETAIL_LEVELS = {"low": MAJOR}  # the second texture set, major seams only, for `settings.texture_detail` (M7-T15)
 TEXEL_M = 0.01
 NORMAL_SCALE = 1
 COARSE_STREAM = "coarse"
@@ -194,9 +198,10 @@ def build_parts(
         return _in_nacelle(spec, p, BURIED_MARGIN_M)
 
     placed: list[Placed] = []
+    surface = surface_layouts(spec)
 
     # --- right wing group: slab, vents, accents, root gun --------------------------------------------
-    wing = delta_wing(wing_spec, style).renamed("wing_r", group="wing_r")
+    wing = delta_wing(wing_spec, style).renamed("wing_r", group="wing_r").with_seams(surface["wing_r"])
     s_wing = sample(wing.mesh, "wing")
     s_wing = _unburied(s_wing, in_hump(s_wing.positions), in_nac(s_wing.positions))
     right: list[Placed] = [Placed(wing, s_wing)]
@@ -227,7 +232,7 @@ def build_parts(
         placed.append(p.mirrored(p.part.name[:-2] + "_l" if p.part.name.endswith("_r") else p.part.name + "_l", "wing_l"))
 
     # --- hump group: body, canopy, grille (centre line, symmetrised) -----------------------------------
-    body = hump(hump_spec, style)
+    body = hump(hump_spec, style).with_seams(surface["hump"])
     s_body = sample(body.mesh, "hump")
     s_body = _unburied(s_body, in_wing(s_body.positions), in_nac(s_body.positions)).symmetrized("x")
     placed.append(Placed(body, s_body))
@@ -242,7 +247,7 @@ def build_parts(
     placed.append(Placed(grille, sample(grille.mesh, "hump_vent").symmetrized("x")))
 
     # --- right nacelle group: drum, nozzle, flank gun ---------------------------------------------------
-    drum = nacelle(spec.nacelle, style).translated(nac_origin).renamed("nacelle_r", group="nacelle_r")
+    drum = nacelle(spec.nacelle, style).translated(nac_origin).renamed("nacelle_r", group="nacelle_r").with_seams(surface["nacelle_r"])
     s_drum = sample(drum.mesh, "nacelle")
     s_drum = _unburied(s_drum, in_wing(s_drum.positions), in_hump(s_drum.positions))
     n_right: list[Placed] = [Placed(drum, s_drum)]
@@ -262,6 +267,12 @@ def build_parts(
     for p in n_right:
         placed.append(p.mirrored(p.part.name[:-2] + "_l", "nacelle_l"))
     return placed
+
+
+def surface_layouts(spec: RaiderSpec) -> dict[str, SeamLayout]:
+    """The drawn surface by part (M7-T15), fitted to the spec's wing and nacelles."""
+    wing = spec.wing
+    return layouts.raider(wing.sweep_deg, wing.root_chord, wing.half_span, wing.tip_chord, (spec.nacelle_x, spec.nacelle_y))
 
 
 # --- centring ------------------------------------------------------------------------------------------
@@ -411,7 +422,7 @@ def textured_parts(placed: list[Placed], style: Style) -> list[TexturedPart]:
             main = p.part.anchor("main")
             mesh = _cold_intakes(mesh, float(main.position[2]))
             marks = (Marking.soot(p.part.name, main.position, main.direction, 0.6, 0.45, 0.9),)
-        out.append(TexturedPart(mesh, phase_steps(p.part.name, False), marks, p.part.name))
+        out.append(TexturedPart(mesh, phase_steps(p.part.name, False), marks, p.part.name, seams=p.part.seams))
     return out
 
 
@@ -484,6 +495,7 @@ def build(ctx: BuildContext) -> AssetOutputs:
         out_dir, ASSET_ID, textured_parts(textured_source, style), style, atlas_px=int(ctx.option("atlas_px", ATLAS_PX)),
         texel_m=float(ctx.option("texel_m", TEXEL_M)), seed=ctx.seed, occlusion=bool(ctx.option("occlusion", True)),
         fine_mesh=hull_mesh if render_triangles > 0 else None, normal_scale=NORMAL_SCALE, chunks=cuts,
+        grid=False, detail_levels=DETAIL_LEVELS,
     )
     if render_triangles > 0:
         mesh_entry["render_triangles"] = render_triangles

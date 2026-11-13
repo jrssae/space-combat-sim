@@ -61,6 +61,7 @@ class RaiderFighterTests(unittest.TestCase):
     def test_all_files_are_written_and_listed(self) -> None:
         expected = {raider.OBJ_NAME, "raider_fighter.mtl", raider.HARDPOINTS_NAME, "manifest.json", raider.MESH_NAME}
         expected |= {f"raider_fighter_{k}.png{ext}" for k in ("albedo", "emissive", "normal", "orm") for ext in ("", ".import")}  # M4-T30d
+        expected |= {f"raider_fighter_{k}_low.png{ext}" for k in ("albedo", "normal", "orm") for ext in ("", ".import")}  # M7-T15
         for entry in self.hp["chunks"]:
             expected |= {entry["obj"], entry["obj"].replace(".obj", ".mtl"), entry["mesh"]}
         self.assertEqual({p.name for p in self.dir_a.iterdir()}, expected)
@@ -71,6 +72,27 @@ class RaiderFighterTests(unittest.TestCase):
         self.assertEqual(self.manifest["files"], {"obj": raider.OBJ_NAME, "mesh": raider.MESH_NAME, "hardpoints": raider.HARDPOINTS_NAME})
         self.assertEqual(self.manifest["chunks"], list(raider.CHUNK_ORDER))
         self.assertEqual(self.out_a.triangle_count, self.manifest["mesh"]["triangles"])
+
+    # --- surface (M7-T15) --------------------------------------------------------------------------------
+    def test_every_surface_names_the_low_texture_set(self) -> None:
+        for surface in self.manifest["mesh"]["surfaces"]:
+            low = surface["detail"]["low"]
+            self.assertEqual(low, {k: f"raider_fighter_{k}_low.png" for k in ("albedo", "normal", "orm")})
+            for file in low.values():
+                self.assertTrue((self.dir_a / file).is_file(), file)
+        for key in ("albedo", "normal", "orm"):
+            self.assertNotEqual(sha256(self.dir_a / f"raider_fighter_{key}_low.png"), sha256(self.dir_a / f"raider_fighter_{key}.png"), key)
+
+    def test_the_hull_parts_carry_their_layouts_and_twins_mirror(self) -> None:
+        parts = {p.part.name: p for p in self.placed}
+        self.assertEqual({name for name, p in parts.items() if p.part.seams}, {"wing_r", "wing_l", "hump", "nacelle_r", "nacelle_l"})
+        for right, twin in (("wing_r", "wing_l"), ("nacelle_r", "nacelle_l")):
+            a, b = parts[right], parts[twin]
+            here = a.part.seams.evaluate(a.samples.positions, a.samples.normals, 0.02, 0.005)
+            there = b.part.seams.evaluate(b.samples.positions, b.samples.normals, 0.02, 0.005)
+            self.assertGreater(float(here.line.max()), 0.4, f"{right}: the samples meet its seams")
+            np.testing.assert_allclose(there.line, here.line, atol=1e-9, err_msg=twin)
+            np.testing.assert_allclose(there.tint, here.tint, atol=1e-9, err_msg=twin)
 
     def test_dimensions_match_the_design(self) -> None:
         self.assertAlmostEqual(self.hp["span_m"], 2.0 * SPEC.wing.half_span, places=3)

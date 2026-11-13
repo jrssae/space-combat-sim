@@ -52,6 +52,7 @@ from ..core.textured_mesh import TexturedPart, phase_steps, write_textured_mesh
 from ..core.textures import Marking
 from ..core.livery import zone_of
 from ..core.sampling import SurfaceSamples, sample_mesh
+from ..core.seams import MAJOR
 from ..parts import Anchor, Part, mass_centroid, total_mass
 from ..parts.hull import (
     WedgeFuselageSpec,
@@ -60,6 +61,7 @@ from ..parts.hull import (
     wedge_fuselage,
 )
 from ..parts.cockpit import CockpitSpec, cockpit_interior, cockpit_screens
+from ..parts import layouts
 from ..parts.propulsion import pilot_tags
 from ..parts.starfury import (
     BladeSpec,
@@ -81,12 +83,16 @@ from ..styles import Style
 from ..styles.earthforce import EARTHFORCE
 
 ASSET_ID = "starfury_aurora"
-GENERATOR_VERSION = 9  # 9: the textured mesh only (M4-T31); 8: chunk meshes (M4-T30d); 7: wing liveries, Q36 cabin glow (M4-T30b); 6: the textured mesh (M4-T30a)
+# 10: drawn surface layouts, low and high texture sets (M7-T15); 9: the textured mesh only (M4-T31); 8: chunk meshes (M4-T30d);
+# 7: wing liveries, Q36 cabin glow (M4-T30b); 6: the textured mesh (M4-T30a)
+GENERATOR_VERSION = 10
 OBJ_NAME = "starfury_aurora.obj"
 MESH_NAME = "starfury_aurora.glb"
 # The textured mesh (M4-T30a): a 2 048 px atlas at about a centimetre a texel (the packer grows the texel until the hull fits).
 ATLAS_PX = 2048
 TEXEL_M = 0.011
+LAYOUTS = layouts.starfury()  # the drawn surface by part (M7-T15)
+DETAIL_LEVELS = {"low": MAJOR}  # the second texture set, major seams only, for `settings.texture_detail`
 PAINTABLE = ("ef_hull", "ef_hull_panel")  # what a wing's livery may paint over (M4-T30b)
 STENCIL = (0.035, 0.036, 0.04)  # near-black stencil paint, linear RGB
 COCKPIT_NAME = "cockpit_interior.obj"
@@ -363,7 +369,7 @@ def build_parts(
         return sample_mesh(mesh, step, ctx.rng("surface", stream, *stream_suffix))
 
     # Body: centre-line parts, sampled and made exactly x-symmetric.
-    fus = wedge_fuselage(spec.fuselage, style).renamed("fuselage", group="body")
+    fus = wedge_fuselage(spec.fuselage, style).renamed("fuselage", group="body").with_seams(LAYOUTS["fuselage"])
     near = wedge_cockpit_faces(spec.fuselage, fus.mesh, style)
     fus_samples = sample(fus.mesh.face_subset(~near), "fuselage").symmetrized("x")
     cockpit = Part("cockpit", fus.mesh.face_subset(near), group="body")
@@ -408,10 +414,10 @@ def build_parts(
     def in_pod(points: np.ndarray) -> np.ndarray:
         return spec.pod.contains(points - pod_c, BURIED_MARGIN_M)
 
-    pod = fury_pod(spec.pod, style).translated(pod_c).renamed("pod_ur", group="cross")
-    strut = fury_strut(spec.strut, style).renamed("strut_ur", group="cross")
-    lower = fury_strut(spec.lower_strut, style).renamed("strut_lr", group="cross")
-    claw = fury_claw(spec.claw, style).translated(pod_c).renamed("claw_ur", group="cross")
+    pod = fury_pod(spec.pod, style).with_seams(LAYOUTS["pod"]).translated(pod_c).renamed("pod_ur", group="cross")
+    strut = fury_strut(spec.strut, style).renamed("strut_ur", group="cross").with_seams(LAYOUTS["strut_ur"])
+    lower = fury_strut(spec.lower_strut, style).renamed("strut_lr", group="cross").with_seams(LAYOUTS["strut_lr"])
+    claw = fury_claw(spec.claw, style).with_seams(LAYOUTS["claw"]).translated(pod_c).renamed("claw_ur", group="cross")
     s_pod = sample(pod.mesh, "pod")
     # The bells' outer walls and the knuckle cones' bases are inside the shell; the bells' inner
     # walls (facing the axis, near it) are what shows through the exits and stay.
@@ -510,7 +516,7 @@ MIN_SEGMENTS = 6
 def _textured(placed: list[Placed], style: Style) -> list[TexturedPart]:
     """The hull parts as the textured mesh takes them: mesh, panel phase, markings and livery zone."""
     marks = markings_for(placed, style)
-    return [TexturedPart(p.part.mesh, phase_steps(p.part.name, True), marks.get(p.part.name, ()), p.part.name, zone_of(p.part.name))
+    return [TexturedPart(p.part.mesh, phase_steps(p.part.name, True), marks.get(p.part.name, ()), p.part.name, zone_of(p.part.name), p.part.seams)
             for p in placed if p.hull]
 
 
@@ -782,6 +788,8 @@ def build(ctx: BuildContext) -> AssetOutputs:
         paintable=PAINTABLE,
         fine_mesh=hull_mesh if render_triangles > 0 else None,
         chunks=cuts,
+        grid=False,
+        detail_levels=DETAIL_LEVELS,
     )
     if render_triangles > 0:
         mesh_entry["render_triangles"] = render_triangles

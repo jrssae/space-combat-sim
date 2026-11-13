@@ -428,6 +428,29 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   (feature counts and positions, mirror symmetry, minimum plate size, determinism).
 - **Done when:** both hulls have low and high sets that the setting switches, the maintainer approved the sheets (H), tests
   pass, and `docs/roadmap.md`'s T40 follow-up is marked done for these two hulls.
+- **Done (as built):**
+  - **Choice (maintainer, 2026-11-13):** option A for both hulls from the phase 1 sheets
+    (`references/screenshots/M7-T15 surface sheets/M7-T15_options_{starfury,raider}.png`). Starfury: framed panels with the two
+    bent channels and the oblong port on the upper decks, the cabin roof's spine, panels and ports, swept strakes on the lower
+    decks, ring courses on the pods over a ribbed rear housing, tone 6 %. Raider: a trapezoid panel in each wing bay with a
+    smaller one inside the outer two, louvres, a long hatch, large plates, tone 7 %; the belly's weathering, the raider's paint,
+    the claws' tooth rings and the Starfury's liveries unchanged. The allies' Starfuries share the player's asset and both sets.
+  - **Code:** `layouts.starfury()` and `layouts.raider(sweep, root chord, half span, tip chord, nacelle axis)` in
+    `tools/procgen/parts/layouts.py` (B and C and the prototype `surface` build option removed). `starfury_aurora.LAYOUTS` and
+    `raider_fighter.surface_layouts(spec)` dress the parts; both generators bake with the generic plating off and
+    `DETAIL_LEVELS = {"low": MAJOR}`, so each writes `<asset>_{albedo,normal,orm}_low.png` beside the full maps and names them in
+    every surface's `detail.low`. Generator versions: `starfury_aurora` 10, `raider_fighter` 5. The loader needed no change: the
+    livery and glass shaders and the raider's paint already swap sets through `MeshAssets._watch_detail` (M5-T40).
+  - **Tests:** `test_seams.py` pins both hulls' feature counts per level beside the civilians' (`PINNED`), their plates' least
+    size, centre-part symmetry, and a `FighterLayoutTests` class (the low sets' positions, the Starfury's deck frame inside its
+    outline, channels and strakes parallel to the leading edge, the raider's bays and panels, teeth, louvres, tones,
+    determinism). `test_starfury_aurora.py` and `test_raider_fighter.py`: the low maps in the file list and every surface's
+    `detail.low`, the drawn parts and their twins' mirrored layouts. GUT `tests/integration/test_fighter_texture_sets.gd`: the
+    setting swaps both fighters' maps in place (livery, glass and paint materials), glow shared, one mesh.
+  - **GPU check** (RX 6950 XT, Forward+): `references/screenshots/M7-T15 surface sheets/final/{starfury,raider}_{high,low}.png`,
+    the same ship before and after `set settings.texture_detail low`.
+  - **Open:** the maintainer's look at the as-built frames (H). T16 rebuilds the raider's shape to its STL and keeps these
+    layouts on the new parts.
 
 ### M7-T16 Raider fighter to its STL at 90% fidelity
 

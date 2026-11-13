@@ -133,5 +133,6 @@ events plus those settings, applied before the first frame. The tutorial checks 
 **Follow-up from M5-T40 (maintainer, 2026-11-12):** the texture detail setting (low = major seams only, high = show-like plating
 with per-plate tone, hatches and ribs) applies to every ship, but only the nine civilian hulls have both texture sets. The Starfury,
 the raider and every later hull (capitals, station, other races) need low and high sets built the same way, from show references,
-when their surfaces are next worked on. The Starfury and the raider are M7-T15 (planned on `m6`, 2026-11-12).
+when their surfaces are next worked on. **Done for the Starfury (with the allies' Starfuries, which share its asset) and the
+raider in M7-T15 (2026-11-13);** the capitals, the station and the other races' hulls are still open.
 

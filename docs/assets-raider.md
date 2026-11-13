@@ -84,6 +84,34 @@ get different panel phases on purpose (positions are symmetric, colours are not)
 
 The game lights the textured hull from the scene (`docs/architecture.md` section 7.3).
 
+## Surface (M7-T15)
+
+The hull's surface is drawn per part from the maintainer's references (`references/T40 seam references/`: `raider close up`,
+`raider and wagon close up`, and the raider carrier and battle wagon close-ups for the raiders' construction; never committed,
+other artists' renders, inspiration only, nothing reused or traced). The layouts are `layouts.raider(...)` in
+`tools/procgen/parts/layouts.py`, sized from the wing's own sweep, chords and span and the nacelles' axis
+(`raider_fighter.surface_layouts(spec)`), baked as the civilians' are (architecture §18.30) with the generic plating off.
+Meshes, chunks, hardpoints, the emissive map and the raider's paint (hull, panels, ochre accent, the belly's weathering) do not
+change.
+
+- **Read, wing.** A band of plating runs inside the leading edge, round the tip and along the trailing edge, and the leading
+  edge carries a row of teeth. Inside the band each bay between the wing's frames holds a trapezoid panel outlined parallel
+  to the bay's sides, often with a smaller one inside it. Louvre banks sit by the root, a long hatch near the trailing edge.
+- **Read, hump and nacelles.** The hump has frames behind the canopy, a belt along each flank and small hatches and louvres
+  low on the sides. The engine housings are ribbed cages: close rings and longitudinal strakes. The carrier and battle wagon
+  show the same salvaged construction: patched plates of mixed size and shade over a regular frame.
+- **High set (`texture_detail = high`, the default; the maintainer's option A, 2026-11-13).** Wing, top and belly: the edge
+  band 0.55 m inside the leading edge and 0.3 m inside the trailing edge, the two frames (x 3.0 and 5.7 m), nineteen teeth
+  along the leading edge, a trapezoid panel inside each of the three bays and a smaller one inside the outer two, a louvre
+  bank by the root and a long hatch aft on top, a hatch and a slatted panel underneath; large plates (2.2 by 1.35 m) in 7 %
+  tone with a few small proud hatches. Hump: two frames behind the canopy, a third aft, the flank belt, a hatch and a louvre
+  low on each side, plates of mixed size in 7 % tone. Nacelles: end rings, three ribs, twelve strakes, plates in 7 % tone.
+- **Low set (`texture_detail = low`: major seams only).** The edge band's line on top and belly, the wing's two frames, the
+  hump's two frames behind the canopy, the nacelle's two end rings. Written as `raider_fighter_{albedo,normal,orm}_low.png`,
+  named in every surface's `detail.low`; the glow map is shared.
+- **Sheet.** `references/screenshots/M7-T15 surface sheets/M7-T15_options_raider.png` (the choice: current, low, A, B, C;
+  RX 6950 XT, Forward+) and the as-built low and high frames under `final/`. Generator version 5.
+
 ## Determinism and options
 
 As for the Starfury: `ctx.rng("surface", <part>)` streams, byte-identical output for the same seed. Options:

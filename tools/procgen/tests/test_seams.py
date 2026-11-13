@@ -1,5 +1,6 @@
 """``core/seams.py`` and ``parts/layouts.py`` (M5-T40): the drawn surface features, the plating, a layout following its part, the
-civilians' layouts pinned per part, and the two texture sets a hull with layouts is written with."""
+civilians' layouts pinned per part (and the Starfury's and the raider's, M7-T15), and the two texture sets a hull with layouts is
+written with."""
 
 from __future__ import annotations
 
@@ -10,7 +11,7 @@ from pathlib import Path
 
 import numpy as np
 
-from tools.procgen.assets import centauri_brezebel, narn_transport, saturn_family
+from tools.procgen.assets import centauri_brezebel, narn_transport, raider_fighter, saturn_family, starfury_aurora
 from tools.procgen.core import geometry as g
 from tools.procgen.core.civilian import DETAIL_LEVELS
 from tools.procgen.core.seams import EMPTY, FULL, MAJOR, PLATING, Cut, Hatch, Hoop, Path as SeamPath, Plates, SeamLayout, Spoke, every
@@ -211,6 +212,8 @@ PINNED = {
         "nacelle_r": (2, 1, 2), "fin_top_r": (2, 4, 1), "fin_bot_r": (3, 5, 1),
     },
     "brakiri_pod": {"pod": (2, 5, 2)},
+    "starfury": {"strut_ur": (5, 15, 2), "strut_lr": (5, 19, 1), "pod": (2, 17, 1), "fuselage": (2, 15, 1), "claw": (0, 15, 0)},
+    "raider": {"wing_r": (4, 33, 2), "hump": (2, 6, 2), "nacelle_r": (2, 15, 1)},
 }
 # Structure that stays plain (the maintainer, 2026-11-12). The Bokmai's arms and fork struts are its hull limbs, not structure: drawn.
 PLAIN_WORDS = ("truss", "brace", "antenna", "bell", "nozzle", "turret", "pad_", "frame_", "vane", "rail", "ribs", "grille", "spindle")
@@ -218,7 +221,8 @@ PLAIN_WORDS = ("truss", "brace", "antenna", "bell", "nozzle", "turret", "pad_", 
 
 def _layouts() -> dict[str, dict[str, SeamLayout]]:
     return {"saturn": saturn_family.LAYOUTS, "saturn_engine": layouts.saturn_engine(1.0), "skylark": layouts.skylark(), "narn": layouts.narn(),
-            "centauri": layouts.centauri(), "brakiri": layouts.brakiri(), "brakiri_pod": {"pod": layouts.brakiri_pod()}}
+            "centauri": layouts.centauri(), "brakiri": layouts.brakiri(), "brakiri_pod": {"pod": layouts.brakiri_pod()},
+            "starfury": layouts.starfury(), "raider": raider_fighter.surface_layouts(raider_fighter.DEFAULT_SPEC)}
 
 
 def _positions(layout: SeamLayout, kind: type, level: int, **match: object) -> list[float]:
@@ -285,7 +289,8 @@ class CivilianLayoutTests(unittest.TestCase):
         rng = np.random.default_rng(11)
         cases = (("skylark", "capsule", (0, 0, 12), 4.0), ("skylark", "body", (0, 2, 42), 10.0), ("narn", "crescent_centre", (0, 3, 33), 12.0),
                  ("narn", "box", (0, 5, 51), 12.0), ("centauri", "bow", (0, 4, 10), 18.0), ("brakiri", "bow", (0, 6, 8), 6.0),
-                 ("brakiri", "spine", (0, 13, 30), 4.0), ("brakiri_pod", "pod", (0, 6, 0), 6.0))
+                 ("brakiri", "spine", (0, 13, 30), 4.0), ("brakiri_pod", "pod", (0, 6, 0), 6.0), ("starfury", "fuselage", (0, 0, -2), 1.2),
+                 ("raider", "hump", (0, 0.6, 3.5), 1.0))
         for ship, name, centre, span in cases:
             layout = _layouts()[ship][name]
             p = np.asarray(centre) + rng.uniform(-span, span, (1500, 3)) * np.array([1.0, 0.0, 1.0])
@@ -339,6 +344,70 @@ class CivilianLayoutTests(unittest.TestCase):
         z = v.section_start(1) + saturn.CYLINDER_Z[0] + ring.at
         on_ring = second.part.seams.evaluate(np.array([(0.0, saturn.CYLINDER_RADIUS, z)]), UP, LINE, DEPTH)
         self.assertAlmostEqual(float(on_ring.line[0]), 1.0, msg="the ring moved aft with its cylinder")
+
+
+class FighterLayoutTests(unittest.TestCase):
+    """The Starfury's and the raider's drawn surfaces (M7-T15): the maintainer's option A of each, its low set the major seams."""
+
+    def test_the_generators_draw_the_layouts_from_parts_layouts(self) -> None:
+        self.assertEqual(repr(starfury_aurora.LAYOUTS), repr(layouts.starfury()))
+        self.assertEqual(starfury_aurora.DETAIL_LEVELS, {"low": MAJOR})
+        self.assertEqual(raider_fighter.DETAIL_LEVELS, {"low": MAJOR})
+
+    def test_the_layouts_are_the_same_every_time(self) -> None:
+        self.assertEqual(repr(layouts.starfury()), repr(layouts.starfury()))
+        spec = raider_fighter.DEFAULT_SPEC
+        self.assertEqual(repr(raider_fighter.surface_layouts(spec)), repr(raider_fighter.surface_layouts(spec)))
+
+    def test_the_starfurys_low_set_is_its_deck_frames_joints_and_pod_grooves(self) -> None:
+        fury = layouts.starfury()
+        for name in ("strut_ur", "strut_lr"):
+            self.assertEqual(_positions(fury[name], Cut, MAJOR, axis=0), [1.97, 3.4], name)
+            self.assertEqual(_positions(fury[name], Cut, MAJOR, axis=2), [-2.95, -1.45], name)
+            frame = [f for f in fury[name].features() if isinstance(f, SeamPath) and f.level == MAJOR]
+            self.assertEqual(len(frame), 1, name)
+            for x, _, z in frame[0].points:  # inside the deck's outline, between its leading and trailing edges
+                self.assertGreater(z, float(np.interp(x, *zip(*layouts._FURY_LE))), name)
+                self.assertLess(z, float(np.interp(x, *zip(*reversed(layouts._FURY_TE)))), name)
+        self.assertEqual(_positions(fury["fuselage"], Cut, MAJOR, axis=2), [-2.95, -1.45])
+        self.assertEqual(_positions(fury["pod"], Cut, MAJOR, axis=2), [-0.95, 0.2])
+        self.assertFalse([f for f in fury["claw"].features() if f.level == MAJOR], "the claws' teeth are full detail only")
+
+    def test_the_starfurys_upper_decks_are_framed_and_its_lower_decks_swept(self) -> None:
+        fury = layouts.starfury()
+        channels = [f for f in fury["strut_ur"].features() if isinstance(f, SeamPath) and f.level == FULL]
+        self.assertEqual(len(channels), 2, "two bent channels on each upper deck")
+        self.assertTrue(all(len(f.points) == 4 and f.width == 2.6 for f in channels))
+        strakes = [f for f in fury["strut_lr"].features() if isinstance(f, SeamPath) and f.level == FULL]
+        self.assertEqual(len(strakes), 3)
+        for f, inset in zip(strakes, (0.85, 1.5, 2.15)):
+            for (x, _, z), (lx, lz) in zip(f.points, layouts._FURY_LE):
+                self.assertAlmostEqual(x, lx)
+                self.assertAlmostEqual(z - lz, inset / 0.847, msg="parallel to the leading edge")
+        ports = [f for f in fury["strut_ur"].features() if isinstance(f, Hatch) and f.sunk > 1.0]
+        self.assertEqual(len(ports), 2, "the oblong port and the cabin roof's round one")
+        tones = {name: [f.tone for f in lay.features() if isinstance(f, Plates) and f.scatter == 0.0] for name, lay in fury.items()}
+        self.assertEqual(tones, {"strut_ur": [0.06], "strut_lr": [0.045], "pod": [0.07], "fuselage": [0.06], "claw": []})
+
+    def test_the_raiders_bays_each_hold_a_panel_and_the_outer_two_a_smaller_one_inside(self) -> None:
+        spec = raider_fighter.DEFAULT_SPEC
+        wing = raider_fighter.surface_layouts(spec)["wing_r"]
+        self.assertEqual(_positions(wing, Cut, MAJOR, axis=0), [3.0, 5.7])
+        band = [f for f in wing.features() if isinstance(f, SeamPath) and f.level == MAJOR]
+        self.assertEqual(sorted(tuple(map(float, f.facing)) for f in band), [(0.0, -1.0, 0.0), (0.0, 1.0, 0.0)], "the edge band on top and belly")
+        slope = 1.0 / np.tan(np.radians(spec.wing.sweep_deg))
+        x, _, z = band[0].points[0]
+        self.assertAlmostEqual(z - x * slope, layouts.RAIDER_EDGE_M / np.sin(np.radians(spec.wing.sweep_deg)))
+        panels = [f for f in wing.features() if isinstance(f, SeamPath) and f.level == FULL and float(f.facing[1]) > 0.0]
+        self.assertEqual(len(panels), 5)
+        spans = sorted((round(min(p[0] for p in f.points), 2), round(max(p[0] for p in f.points), 2)) for f in panels)
+        self.assertEqual(spans, [(2.12, 2.78), (3.28, 5.42), (3.75, 4.95), (5.95, 7.85), (6.3, 7.5)])
+        teeth = [f for f in wing.features() if isinstance(f, Cut) and f.level == FULL and f.axis == 0]
+        self.assertEqual(len(teeth), 19, "a row of teeth along the leading edge")
+        louvres = [f for f in wing.features() if isinstance(f, Hatch) and f.slats]
+        self.assertEqual(len(louvres), 2)
+        plates = next(f for f in wing.features() if isinstance(f, Plates) and f.scatter == 0.0)
+        self.assertEqual((plates.cell, plates.tone), ((2.2, 1.35), 0.07), "large plates, 7 % tone")
 
 
 class BakedLayoutTests(unittest.TestCase):

@@ -176,6 +176,35 @@ The hull is the parts' own meshes, unwrapped into one UV atlas and painted into 
   and the main nozzles' throats.
 - **Glass**: the window panes are the second primitive, dark and see-through (`hull_glass.gdshader`).
 
+## Surface (M7-T15)
+
+The hull's surface is drawn per part from the maintainer's references (`references/T40 seam references/`: the top, bottom and
+three-quarter close-ups and the two paint schemes; never committed, other artists' renders, inspiration only, nothing reused or
+traced). The layouts are `layouts.starfury()` in `tools/procgen/parts/layouts.py`, baked as the civilians' are (architecture
+§18.30) with the generic staggered plating off. Meshes, chunks, hardpoints, the emissive map and the wing liveries (M4-T30) do
+not change: the liveries still paint over the maps per ship, and the allies' Starfuries share this asset and both texture sets.
+
+- **Read, top.** The deck is the busiest face. Each arm's upper deck carries a frame inside its leading and trailing edges
+  and two dark channels bent round lighter panels, one inboard and one outboard, with an oblong port between them and a few
+  small rectangular hatches. The cabin roof has a spine channel, darker panels either side of it, two round ports side by
+  side and wedge panels beside the canopy. Plates are mid-sized (0.4 to 1 m) and differ in grey a little.
+- **Read, bottom.** The lower decks are plainer: long strakes swept with the leading edge, a row of slots just behind it,
+  short ribs, a framed rectangle or two. The keel is a ladder of sunk pockets down the centre between the guns' fairings.
+- **Read, pods and claws.** The pods are ringed: courses of plates round the drum between the grooves, a ribbed rear housing
+  over the nozzle, panels of mixed length. The claws are toothed along their length.
+- **High set (`texture_detail = high`, the default; the maintainer's option A, 2026-11-13).** Upper decks (`strut_ur`, its
+  twin `strut_ul`): the frame, the two bent channels and the oblong port, small hatches, plates 0.9 by 0.7 m split down to
+  0.2 m in 6 % tone. Lower decks (`strut_lr`, `strut_ll`, seen from below): three strakes parallel to the leading edge, four
+  slots behind it, two framed rectangles, cabin rings, plates 1.5 by 0.65 m swept with the edge in 4.5 % tone. Both carry the
+  cabin roof's spine, panels and ports. Pods: ring courses of plates of mixed length (7 % tone) between the grooves and a
+  ribbed rear housing (twelve ribs). Fuselage: the flank belt, two rings, the keel's ladder of sunk pockets (two rows of
+  five), a hatch on each flank, plates in 6 % tone. Claws: rings of teeth every 0.2 m (unchanged from the references' blades).
+- **Low set (`texture_detail = low`: major seams only).** The frame inside each deck's edges, the joints where the arm leaves
+  the cabin (x 1.97 m) and at mid span (x 3.4 m), the cabin's two frames (z -2.95 and -1.45 m), and the pod's two grooves.
+  Written as `starfury_aurora_{albedo,normal,orm}_low.png`, named in every surface's `detail.low`; the glow map is shared.
+- **Sheet.** `references/screenshots/M7-T15 surface sheets/M7-T15_options_starfury.png` (the choice: current, low, A, B, C;
+  RX 6950 XT, Forward+) and the as-built low and high frames under `final/`. Generator version 10.
+
 ## Break-up chunks (M3-T03)
 
 `core/chunks.py` groups the parts into `cabin` (fuselage, cockpit faces, guns, fittings) and `arm_ur`, `arm_lr`, `arm_ul`,

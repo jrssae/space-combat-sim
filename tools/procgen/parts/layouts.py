@@ -1,13 +1,15 @@
-"""The civilian hulls' surface layouts (M5-T40): per part, the seams, hatches, ribs and plating read off the show's references
-(docs/assets-civilian.md, "Surface layouts"). Each function returns the layouts by part name, in the frame the part is built in.
+"""The hulls' surface layouts: per part, the seams, hatches, ribs and plating read off the show's references (the civilians,
+M5-T40, docs/assets-civilian.md "Surface layouts"; the Starfury and the raider, M7-T15, their asset docs' "Surface"). Each function
+returns the layouts by part name, in the frame the part is built in.
 
 Levels (``core/seams.py``): 1 the major breaks (all the low texture set draws), 2 the references' seam density with hatches and
 ribs, 3 the plating texture: plate to plate tone, sheen and grime, small proud hatches. The full set draws all three. Parts not
-named stay plain: trusses, arms, struts, antennas, nozzles, turrets.
+named stay plain: trusses, antennas, nozzles, turrets, and the civilians' arms and struts.
 """
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable
 
 from ..core.seams import EMPTY, Cut, Feature, Hatch, Hoop, Path, Plates, SeamLayout, every, rings, spokes
@@ -340,4 +342,167 @@ def brakiri_pod() -> SeamLayout:
     ])
 
 
-__all__ = ["brakiri", "brakiri_pod", "centauri", "dress", "narn", "saturn", "saturn_engine", "skylark"]
+# --- Earthforce: the Starfury (M7-T15) ----------------------------------------------------------------------------------
+# The upper right deck's outline from above (x, leading edge z, trailing edge z), outboard of the cabin.
+_FURY_LE = ((2.05, -2.82), (2.5, -2.53), (3.25, -2.03), (3.75, -1.71), (4.25, -1.45), (4.7, -1.32))
+_FURY_TE = ((4.7, 1.36), (4.25, 1.2), (3.75, 0.98), (3.25, 0.74), (2.95, 0.6), (2.05, 0.6))
+_FURY_SWEEP, _FURY_ACROSS = (0.847, 0.0, 0.531), (-0.531, 0.0, 0.847)  # along the leading edge, and square to it
+
+
+def _fury_le(inset: float, x0: float = 2.05, x1: float = 4.7) -> tuple[tuple[float, float, float], ...]:
+    """A line parallel to the deck's leading edge, ``inset`` metres behind it."""
+    return tuple((x, 0.0, z + inset / 0.847) for x, z in _FURY_LE if x0 <= x <= x1)
+
+
+def starfury() -> dict[str, SeamLayout]:
+    """The Starfury's parts (docs/assets-starfury.md, "Surface"): struts and fuselage in the authored frame (the upper right arm;
+    the others mirror), pod and claw in the pod's frame. The upper decks carry framed panels, the lower decks swept strakes, the
+    pods ring courses over a ribbed rear housing."""
+    deck = {"lo": (1.95, -INF, -INF), "hi": (4.8, INF, INF), "facing": UP}
+    cabin = {"lo": (-INF, -INF, -4.3), "hi": (1.95, INF, 0.3), "facing": UP}
+    frame = (*_fury_le(0.24), *((x, 0.0, z - 0.26) for x, z in _FURY_TE))
+
+    major: list[Feature] = [
+        # Low: the frame inside the deck's edges, the joints where the arm leaves the cabin and at mid span, the cabin's frames.
+        Path(points=frame, closed=True, facing=UP, level=1, width=1.3),
+        Cut(axis=0, at=1.97, level=1, width=1.3), Cut(axis=0, at=3.4, level=1, width=1.3),
+        Cut(axis=2, at=-2.95, level=1, **cabin), Cut(axis=2, at=-1.45, level=1, **cabin),
+    ]
+    cabin_top: list[Feature] = [
+        # The cabin's roof: a spine channel, dark panels either side of it, two round ports, wedges beside the canopy.
+        Cut(axis=0, at=0.3, level=2, lo=(-INF, -INF, -3.9), hi=(INF, INF, 0.1), facing=UP),
+        Hatch(centre=(0.62, 0.0, -2.2), right=X, up=Z, size=(0.3, 0.95), corner_m=0.03, sunk=0.8, tone=0.72, facing=UP, level=2),
+        Hatch(centre=(0.62, 0.0, -0.75), right=X, up=Z, size=(0.3, 0.8), corner_m=0.03, sunk=0.8, tone=0.72, facing=UP, level=2),
+        Hatch(centre=(0.14, 0.0, -1.45), right=X, up=Z, size=(0.16, 0.16), corner_m=0.08, sunk=1.4, tone=0.5, facing=UP, level=2),
+        Hatch(centre=(1.3, 0.0, -3.3), right=X, up=Z, size=(0.42, 0.75), corner_m=0.05, sunk=0.6, tone=0.78, facing=UP, level=2),
+        Hatch(centre=(1.35, 0.0, -1.9), right=X, up=Z, size=(0.5, 0.36), corner_m=0.05, facing=UP, level=2),
+    ]
+    framed: list[Feature] = [
+        # The upper decks: two dark channels bent round lighter panels, an oblong port between them, small hatches.
+        Path(points=((3.1, 0.0, -1.45), (2.45, 0.0, -1.85), (2.45, 0.0, -0.1), (3.1, 0.0, -0.1)), facing=UP, level=2, width=2.6, flat_m=0.025),
+        Path(points=((3.75, 0.0, -1.05), (4.35, 0.0, -0.75), (4.35, 0.0, 0.6), (3.75, 0.0, 0.42)), facing=UP, level=2, width=2.6, flat_m=0.025),
+        Hatch(centre=(3.38, 0.0, -0.75), right=X, up=Z, size=(0.2, 0.52), corner_m=0.1, sunk=1.4, tone=0.55, level=2, **deck),
+        Hatch(centre=(2.8, 0.0, -0.95), right=X, up=Z, size=(0.3, 0.42), corner_m=0.04, level=2, **deck),
+        Hatch(centre=(4.0, 0.0, -0.1), right=X, up=Z, size=(0.32, 0.24), corner_m=0.04, level=2, **deck),
+        Hatch(centre=(2.5, 0.0, 0.42), right=X, up=Z, size=(0.5, 0.2), corner_m=0.04, tone=0.8, level=2, **deck),
+        Cut(axis=0, at=2.75, level=2, **{**deck, "lo": (1.95, -INF, -0.1)}), Cut(axis=0, at=4.05, level=2, **{**deck, "hi": (4.8, INF, -0.75)}),
+        Cut(axis=2, at=-0.1, level=2, **{**deck, "lo": (3.1, -INF, -INF), "hi": (3.75, INF, INF)}),
+        Plates(level=3, wrap="planar", right=X, up=Z, cell=(0.9, 0.7), splits=2, min_m=0.2, keep=0.3, tone=0.06, sheen=0.07, grime=0.10,
+               grime_m=0.035, depth=0.5, dark=0.45, width=0.8, seed=121),
+        _hatches((0.45, 0.28), 0.06, 123, wrap="planar", right=X, up=Z, facing=UP),
+    ]
+    swept: list[Feature] = [
+        # The lower decks: long strakes swept with the leading edge, slots just behind it, ribs, cabin rings.
+        *[Path(points=_fury_le(d), facing=UP, level=2) for d in (0.85, 1.5, 2.15)],
+        Cut(axis=0, at=2.75, level=2, **deck), Cut(axis=0, at=4.05, level=2, **deck),
+        *[Hatch(centre=(x, 0.0, z + 0.62), right=_FURY_SWEEP, up=_FURY_ACROSS, size=(0.4, 0.07), corner_m=0.03, sunk=1.6, tone=0.4,
+                level=2, **deck) for x, z in ((2.4, -2.6), (3.0, -2.2), (3.6, -1.81), (4.2, -1.48))],
+        Hatch(centre=(3.0, 0.0, -0.3), right=_FURY_SWEEP, up=_FURY_ACROSS, size=(0.5, 0.3), corner_m=0.04, level=2, **deck),
+        Hatch(centre=(4.25, 0.0, 0.35), right=_FURY_SWEEP, up=_FURY_ACROSS, size=(0.36, 0.24), corner_m=0.04, level=2, **deck),
+        *rings(2, [-2.45, -1.95], level=2, depth=-0.8, flat_m=0.03, **cabin),
+        Plates(level=3, wrap="planar", right=_FURY_SWEEP, up=_FURY_ACROSS, cell=(1.5, 0.65), offset=(0.0, 0.2), splits=1, min_m=0.35, keep=0.3,
+               tone=0.045, sheen=0.09, grime=0.08, grime_m=0.035, depth=0.4, dark=0.4, width=0.8, seed=125, symmetric=False),
+    ]
+
+    # The pod: a body of revolution about its own z axis, grooved at -1.855 and 1.31; ring courses of plates of mixed length over
+    # the drum, a ribbed rear housing over the nozzle.
+    pod: list[Feature] = [
+        *rings(2, [-0.95, 0.2], level=1, width=1.3),
+        *rings(2, [z for z in every(-1.4, 1.1, 0.45) if abs(z + 0.95) > 0.1 and abs(z - 0.2) > 0.1], level=2),
+        *spokes(2, (0.0, 0.0, 0.0), range(15, 360, 30), span=(1.5, 2.7), level=2, depth=-0.7, flat_m=0.012),
+        Plates(level=3, wrap="barrel", axis=2, radius=0.8, around=10, cell=(0.45, 0.0), offset=(-1.4, 0.0), splits=1, min_m=0.16, keep=0.35,
+               tone=0.07, sheen=0.08, grime=0.10, grime_m=0.03, depth=0.5, dark=0.5, width=0.8, seed=131, **_zbox(-1.65, 1.15)),
+    ]
+
+    # The fuselage under the decks: its flanks, the rear panel and the keel's ladder of sunk pockets.
+    fuselage: list[Feature] = [
+        Cut(axis=2, at=-2.95, level=1, width=1.3), Cut(axis=2, at=-1.45, level=1, width=1.3),
+        Cut(axis=1, at=-0.55, level=2), *rings(2, [-2.2, -0.9], level=2),
+        *[Hatch(centre=(sx * 0.16, 0.0, z), right=X, up=Z, size=(0.2, 0.3), corner_m=0.02, sunk=1.4, tone=0.6, facing=DOWN, level=2)
+          for sx in (1.0, -1.0) for z in every(-3.1, -1.1, 0.5)],
+        *[Hatch(centre=(0.0, -0.2, -2.2), right=Z, up=Y, size=(0.7, 0.36), corner_m=0.05, facing=side, min_dot=0.5, level=2) for side in (OUT, IN)],
+        Plates(level=3, wrap="sides", long_axis=2, cell=(0.9, 0.6), splits=1, min_m=0.2, tone=0.06, sheen=0.08, grime=0.08, grime_m=0.035,
+               depth=0.0, dark=0.0, seed=139),
+    ]
+    # The claws: toothed along their length, as the references' blades are.
+    claw = [*rings(2, every(1.6, 4.4, 0.2), level=2, depth=-0.6, flat_m=0.012)]
+    return {"strut_ur": SeamLayout.of([*major, *cabin_top, *framed]), "strut_lr": SeamLayout.of([*major, *cabin_top, *swept]),
+            "pod": SeamLayout.of(pod), "fuselage": SeamLayout.of(fuselage), "claw": SeamLayout.of(claw)}
+
+
+# --- Raiders: the Delta-V fighter (M7-T15) ------------------------------------------------------------------------------
+RAIDER_EDGE_M = 0.55  # the edge band's width inside the leading edge
+RAIDER_TE_M = 0.3  # and inside the trailing edge
+
+
+def raider(sweep_deg: float, root_chord: float, half_span: float, tip_chord: float,
+           nacelle_axis: tuple[float, float]) -> dict[str, SeamLayout]:
+    """The raider's parts in the authored frame (the right wing and nacelle; their twins mirror), sized from the wing's own sweep,
+    chords and span (docs/assets-raider.md, "Surface"): framed trapezoid panels in the wing's bays, a hump in plates of mixed size,
+    ribbed nacelles."""
+    slope = 1.0 / math.tan(math.radians(sweep_deg))
+    tip_te = half_span * slope + tip_chord
+
+    def le(x: float, inset: float) -> tuple[float, float, float]:
+        return (x, 0.0, x * slope + inset / math.sin(math.radians(sweep_deg)))
+
+    def te(x: float, inset: float) -> tuple[float, float, float]:
+        return (x, 0.0, root_chord + (tip_te - root_chord) * x / half_span - inset)
+
+    def both(make) -> list[Feature]:
+        return [make(side) for side in (UP, DOWN)]
+
+    edge, back = RAIDER_EDGE_M, RAIDER_TE_M
+    out_x = half_span - 0.4
+
+    def bay(xa: float, xb: float, inset: float, level: int = 2, **kw: object) -> list[Feature]:
+        """A panel outlined inside a bay of the wing, its sides parallel to the bay's."""
+        points = (le(xa + inset, edge + inset), le(xb - inset, edge + inset), te(xb - inset, back + inset), te(xa + inset, back + inset))
+        return both(lambda side: Path(points=points, closed=True, facing=side, level=level, **kw))
+
+    wing: list[Feature] = [
+        # Low: the line the edge band's plating follows, round the tip and along the trailing edge; the wing's two frames.
+        *both(lambda side: Path(points=(le(0.5, edge), le(out_x, edge), te(out_x, back), te(0.5, back)), facing=side, level=1, width=1.3)),
+        Cut(axis=0, at=3.0, level=1, width=1.3), Cut(axis=0, at=5.7, level=1, width=1.3),
+        # The leading edge's row of teeth.
+        *[Cut(axis=0, at=x, level=2, width=1.6, facing=(math.cos(math.radians(sweep_deg)), 0.0, -math.sin(math.radians(sweep_deg))),
+              min_dot=0.7) for x in every(0.6, half_span - 0.3, 0.42)],
+        # Each bay carries a panel outlined inside it and a smaller one inside that; louvres by the root, a long hatch aft.
+        *bay(1.9, 3.0, 0.22), *bay(3.0, 5.7, 0.28), *bay(5.7, out_x, 0.25),
+        *bay(3.0, 5.7, 0.75, width=0.8), *bay(5.7, out_x, 0.6, width=0.8),
+        Hatch(centre=(2.45, 0.0, 4.75), right=X, up=Z, size=(0.6, 1.0), slats=7, sunk=1.0, tone=0.7, facing=UP, level=2),
+        Hatch(centre=(4.6, 0.0, 5.45), right=X, up=Z, size=(1.3, 0.34), corner_m=0.05, facing=UP, level=2),
+        Hatch(centre=(4.4, 0.0, 4.6), right=X, up=Z, size=(1.5, 0.9), corner_m=0.08, facing=DOWN, level=2),
+        Hatch(centre=(6.6, 0.0, 5.4), right=X, up=Z, size=(0.8, 0.5), slats=5, sunk=1.0, tone=0.7, facing=DOWN, level=2),
+        # Large plates in 7 % tone.
+        Plates(level=3, wrap="planar", right=Z, up=X, cell=(2.2, 1.35), offset=(0.0, 0.3), splits=1, min_m=0.5, keep=0.4, tone=0.07,
+               sheen=0.07, grime=0.10, grime_m=0.05, depth=0.0, dark=0.0, seed=141, symmetric=False),
+        _hatches((0.7, 0.4), 0.06, 143, wrap="planar", right=Z, up=X),
+    ]
+
+    # The hump: frames behind the canopy, a belt along each flank, hatches low on the sides, plates of mixed size.
+    hump: list[Feature] = [
+        Cut(axis=2, at=2.45, level=1, width=1.3), Cut(axis=2, at=3.4, level=1, width=1.3),
+        Cut(axis=2, at=4.5, level=2), Cut(axis=1, at=0.62, level=2, **_zbox(2.45, 5.4)),
+        *_plating(3, 0.07, wrap="sides", long_axis=2, cell=(0.8, 0.55), splits=1, min_m=0.2, keep=0.3, sheen=0.08, grime=0.12, grime_m=0.04,
+                  depth=0.5, dark=0.5, width=0.8, seed=151),
+    ]
+    hump_right: list[Feature] = [
+        Hatch(centre=(0.0, 0.34, 2.95), right=Z, up=Y, size=(0.62, 0.3), corner_m=0.04, facing=OUT, min_dot=0.5, level=2),
+        Hatch(centre=(0.0, 0.34, 1.75), right=Z, up=Y, size=(0.5, 0.2), slats=4, sunk=1.0, tone=0.7, facing=OUT, min_dot=0.5, level=2),
+    ]
+
+    # The nacelle: ribbed housings, as the model's engine cages are.
+    ax = (nacelle_axis[0], nacelle_axis[1], 0.0)
+    nacelle: list[Feature] = [
+        *rings(2, [2.9, 5.3], level=1, width=1.3),
+        *rings(2, [3.5, 4.1, 4.7], level=2, depth=-0.8, flat_m=0.035),
+        *spokes(2, ax, range(0, 360, 30), span=(2.9, 5.3), level=2),
+        Plates(level=3, wrap="barrel", axis=2, centre=ax, radius=0.7, around=12, cell=(0.6, 0.0), offset=(2.9, 0.0), splits=1, min_m=0.2,
+               tone=0.07, sheen=0.08, grime=0.12, grime_m=0.04, depth=0.0, dark=0.0, seed=153, **_zbox(2.0, 5.35)),
+    ]
+    return {"wing_r": SeamLayout.of(wing), "hump": SeamLayout.of(hump) + SeamLayout.of(hump_right).mirrored_too(0),
+            "nacelle_r": SeamLayout.of(nacelle)}
+
+
+__all__ = ["brakiri", "brakiri_pod", "centauri", "dress", "narn", "raider", "saturn", "saturn_engine", "skylark", "starfury"]
