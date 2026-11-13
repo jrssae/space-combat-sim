@@ -243,6 +243,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T12 | D | Tour points and a station sandbox scenario (the base of M8's exterior tour) | T05, T08 | Sonnet | Data and `CINEMATIC` shots on existing seams | not started |
 | T13 | B | Performance and the GPU check: the station in view at every range, three squadrons, the grid and a raid | T07, T10 | Opus | Measurement on the maintainer's machine; the budget call | not started |
 | T15 | A | Starfury and raider surfaces from show references, with low and high texture sets for the texture detail setting (maintainer, 2026-11-12; numbered last because it was added after the others had numbers) | M5-T40 | Fable | Two hero hulls seen up close; the look is (H) and needs a sheet first | in progress |
+| T16 | A | Raider fighter rebuilt to its STL at 90% fidelity, the wing's leading-edge panels first (maintainer, 2026-11-13) | T15 | Opus | The raider was built without an STL; the maintainer finds its shape too far from the reference | not started |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M7-T01 Station references and measurements
@@ -427,6 +428,26 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   (feature counts and positions, mirror symmetry, minimum plate size, determinism).
 - **Done when:** both hulls have low and high sets that the setting switches, the maintainer approved the sheets (H), tests
   pass, and `docs/roadmap.md`'s T40 follow-up is marked done for these two hulls.
+
+### M7-T16 Raider fighter to its STL at 90% fidelity
+
+- **Why (maintainer, 2026-11-13):** "the raider model differs too much from the reference STL ... the panels leading the wing
+  are really wrong". The raider was built in M2/M4 without an STL (M5's 90% rule covered the civilians only); the maintainer now
+  extends the rule to it.
+- **Agent:** Opus. **Depends on:** T15 (its raider surface sets, option A, are committed first; T16 keeps that reading on the new
+  shape).
+- **Reference** (gitignored, never committed): `references/Raider_Fighter_16m.stl`; `references/raider.jpg`,
+  `references/raider ships and battle wagon.png`, `references/T40 seam references/raider close up.jpg` for details the STL
+  lacks.
+- **What:** measure the STL with `tools/refview` (scale, axes, sections), list the differences (the wing's leading-edge panels
+  first), rebuild `tools/procgen/assets/raider_fighter.py`'s shape to the 90% rule (top, side and front silhouette IoU >= 0.90,
+  L/W/H within 10%), with the hardpoints (guns, engines, lights, hit volumes) moved to match. T15's surface layouts (low and
+  high, option A) follow the new parts; paint unchanged. A before/after sheet against the STL for the maintainer (H).
+- **Watch:** the raider's size and hit volumes feed the balance fights (M5's Q31 turret fight, M4's battle fixtures); a change
+  in its hit volumes may move `tests/fixtures/` recordings and balance numbers, which the agent reports rather than retunes.
+- **Done when:** the compare passes the 90% rule, scores in `docs/assets-raider.md`; Python tests pin the shape; the GUT files
+  touching the raider and the parity recordings pass (or a recording's change is explained and approved); the maintainer has
+  seen the sheet.
 
 ### M7-T14 Integration, full suite, docs and acceptance
 
