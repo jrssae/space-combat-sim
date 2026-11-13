@@ -76,6 +76,9 @@ making its own branch):
   `docs/design-references.md` and Q1's references.
 - Texel density in tiers, so an 8 km hull reads from 50 m (Q2) without one huge atlas: per-piece atlases for the broad paint and
   panels, and a shared detail layer (trim and panel maps tiled in world space) for the near field; T04 measures the VRAM.
+- **Metallic, not plastic (maintainer, 2026-11-13).** Real metallic and roughness maps: painted plating moderately metallic
+  with roughness varied per plate and panel, bare metal on trim, rails, truss and machinery, rougher grime and wear; a normal
+  map from the panel and detail layers; the scene gives the metal something to reflect. Judged (H) on T04's look sheet.
 - Hardpoints: each Cobra bay (opening, rail start and end, light), the docking aperture, the defence-grid mounts (T02's
   positions, as data), running lights and beacons, tour points (a name, a position and a view direction each), and the hull's
   damage sections (Q5).
