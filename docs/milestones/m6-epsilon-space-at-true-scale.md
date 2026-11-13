@@ -305,7 +305,7 @@ which changes the same native rows and rebase path:
 | T19 | D | The vortex reworked and stand-alone: fitted to the gate, a shallow funnel, spiralling soft dark patches; open jump points use it too | T14 | Opus | Shader animation and a shared effect seam; the look is (H) | done (accepted by the maintainer, 2026-11-12) |
 | T20 | D | Vortex detail by distance and mass arrivals: detail layers dropped with screen size; up to 100 jump points forming at once; every ship of the 1 000-ship battle enters through one; the battle's GPU fps test with them | T19, T07 | Opus | A shader LOD, a pooled effect at a hundred instances and the battle's spawn path, judged on the GPU | done |
 | T21 | A | The rebase's per-node rest: only the rocks near a ship live in Jolt; a list of the shiftables in play instead of walking the group | T06, T07 | Opus | A measured engine-side follow-up to T06 on the paths T07 also changes | done |
-| T22 | D | Ships shrink into and grow out of the vortex: each ship flies the funnel, scaled to fit it, down to the black ring and a white flash (departure), or out of a white flash at the ring growing to full size (arrival); the player's jump in an external shot | T19, T20 | Opus | Gameplay, scaled Jolt bodies and a cinematic on every arrival path, judged by eye | not started |
+| T22 | D | Ships shrink into and grow out of the vortex: each ship flies the funnel, scaled to fit it, down to the black ring and a white flash (departure), or out of a white flash at the ring growing to full size (arrival); the player's jump in an external shot | T19, T20 | Opus | Gameplay, scaled Jolt bodies and a cinematic on every arrival path, judged by eye | in progress |
 
 ### M6-T01 Moving-frame audit and design
 
