@@ -112,18 +112,52 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   | Cobra-arm prongs (z 620 to 700, two posts on each of the four arms) | drum | 8 (one per post) | | |
   | The Cobra arms (one battery on each arm) | drum | | | 4 |
   | The bow spine's tower (about mid-length of the bow spike) | frame | | 2 | 1 |
-  | The dorsal spine (the support spine over the drum) | frame | 4 | | 4 |
+  | The dorsal spine, stations S1 to S4 (below) | frame | 4 (one per station) | | 4 (one per station) |
   | **Total** | | **12** | **2** | **9** |
 
-  T05 proposes the dorsal spine's eight spots and each battery's place on its arm as a sheet (top, side and front views with
-  numbered markers); the maintainer confirms them before the generator commits. No other surface carries grid weapons: the aft
+  The dorsal spine's stations, each a light turret on the spine's top centreline with an interceptor battery beside it
+  (alternating sides): S1 z 1 500, S2 z 2 650, S3 z 4 500, S4 z 5 650 (moved from 6 100, where the spine slopes onto the cone).
+  **Mount positions, approved by the maintainer on the marker sheet (2026-11-13)**, in metres in the STL-derived station frame
+  of `docs/assets-station.md` (z aft from the bow tip, y up, x starboard; the game puts the bow at -Z, so T05 maps them); drum
+  mounts are given at the arms' angles as modelled and turn with the drum; "up" is the base's outward normal:
+
+  | Mount | Kind | Body | x | y | z | Up |
+  |---|---|---|---|---|---|---|
+  | L1 | light pulse | drum | -41 | 292 | 690 | up |
+  | L2 | light pulse | drum | 41 | 292 | 690 | up |
+  | L3 | light pulse | drum | 292 | 41 | 690 | (1.00, 0.00, 0.00) |
+  | L4 | light pulse | drum | 292 | -41 | 690 | (1.00, 0.00, 0.00) |
+  | L5 | light pulse | drum | 41 | -292 | 690 | (0.00, -1.00, 0.00) |
+  | L6 | light pulse | drum | -41 | -292 | 690 | (0.00, -1.00, 0.00) |
+  | L7 | light pulse | drum | -292 | -41 | 690 | (-1.00, 0.00, 0.00) |
+  | L8 | light pulse | drum | -292 | 41 | 690 | (-1.00, 0.00, 0.00) |
+  | L9 | light pulse | frame | 0 | 507 | 1500 | (0.00, 0.98, -0.21) |
+  | L10 | light pulse | frame | 0 | 537 | 2650 | up |
+  | L11 | light pulse | frame | 0 | 537 | 4500 | up |
+  | L12 | light pulse | frame | 0 | 472 | 5650 | up |
+  | H1 | heavy cannon | frame | -45 | 375 | 515 | (0.00, 0.99, -0.13) |
+  | H2 | heavy cannon | frame | 45 | 375 | 515 | (0.00, 0.99, -0.13) |
+  | I1 | interceptor | drum | 0 | 324 | 800 | up |
+  | I2 | interceptor | drum | 324 | 0 | 800 | (1.00, 0.00, 0.00) |
+  | I3 | interceptor | drum | 0 | -324 | 800 | (0.00, -1.00, 0.00) |
+  | I4 | interceptor | drum | -324 | 0 | 800 | (-1.00, 0.00, 0.00) |
+  | I5 | interceptor | frame | 0 | 438 | 520 | (0.00, 1.00, -0.02) |
+  | I6 | interceptor | frame | 40 | 459 | 1500 | (0.00, 1.00, -0.05) |
+  | I7 | interceptor | frame | -40 | 537 | 2650 | up |
+  | I8 | interceptor | frame | 40 | 537 | 4500 | up |
+  | I9 | interceptor | frame | -40 | 472 | 5650 | up |
+
+  No other surface carries grid weapons: the aft
   (green zone, hub, fins, reactor) has no cover beyond the dorsal spine's reach, by design, so raids that swing aft meet only
   the fighters.
-- **Light pulse turret (anti-fighter).** Engages any hostile fighter in range (not only remembered attackers: the grid's pick
-  looks up hostiles near each mount through the broad phase), nearest inside the arc first. Starting numbers, tuned in T07 to
+- **The station never fires first (maintainer).** The cannons hold fire until a hostile fires on the station or on a friendly
+  ship near it (within the grid's reach); from then on the grid is weapons free against that hostile's side, and engages any
+  ship of it in range for the rest of the fight. The interceptors are always active (anything they stop was fired already).
+- **Light pulse turret (anti-fighter).** Once weapons free, engages any hostile fighter in range (not only remembered attackers:
+  the grid's pick looks up hostiles near each mount through the broad phase), nearest inside the arc first. Starting numbers, tuned in T07 to
   the balance rule: about 3 km range, a shot about every 1 s, damage near a Starfury cannon bolt, a pulse bolt on the projectile
   pool.
-- **Heavy cannon (anti-capital).** Engages capital ships and big hulls first, fighters only when no capital is in range. Starting
+- **Heavy cannon (anti-capital).** Once weapons free, engages capital ships and big hulls first, fighters only when no capital is in range. Starting
   numbers: about 6 km range, a slow rate, hard hits; tuned in T07.
 - **Interceptor battery.** Shoots down hostile **missiles and pulse bolts** whose path meets the station's hull, inside about
   1.5 km of the battery, missiles first, then the bolt that hits soonest. Each battery has a capped rate, so a dense raid
@@ -196,9 +230,9 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | Task | Track | Title | Depends on | Agent | Why | Status |
 |---|---|---|---|---|---|---|
 | T01 | A | Station references and measurements (early start) | Q1 | Opus | Reading shapes and proportions off images; colours from show captures | done |
-| T02 | B | Defence grid concept: emplacement locations, the cannons and interceptors and their behaviours, the balance (discussion with the maintainer; early start) | T01 | controller | The maintainer's design call, held as a discussion, not delegated | in progress |
+| T02 | B | Defence grid concept: emplacement locations, the cannons and interceptors and their behaviours, the balance (discussion with the maintainer; early start) | T01 | controller | The maintainer's design call, held as a discussion, not delegated | done |
 | T03 | A | Compound collision builder in `tools/procgen/core` (early start) | - | Fable | Convex pieces with budgets and coverage that M12's capitals reuse | done |
-| T04 | A | `babylon5_station` generator: the frame and drum pieces, proportions, paint and texel tiers (early start) | T01 | Fable | An 8 km asset that must read from 50 m and from 1 000 km | not started |
+| T04 | A | `babylon5_station` generator: the frame and drum pieces, proportions, paint and texel tiers (early start) | T01 | Fable | An 8 km asset that must read from 50 m and from 1 000 km | in progress |
 | T05 | A | Near-field detail and hardpoints: the Cobra bays, the docking aperture, the grid mounts, lights, windows, tour points, sections | T04, T02, T03 | Opus | Geometry around the places a fighter flies close to | not started |
 | T06 | B | The station in the game: placement in the frame, the turning drum, collision, hit volumes, rams, broadcast, section damage | T05, M6 | Opus | A moving 8 km body in Jolt and the native core | not started |
 | T07 | B | The defence grid in the game, as T02 settled it, on the native turret rows | T06, T02 | Opus | Native turret kinds and interceptor behaviour with parity | not started |
@@ -245,6 +279,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   rate, spread, what an interceptor does about incoming bolts or missiles); the balance rule, as Q31 set the Saturns'.
 - **Files:** D75 and the AC6 balance rule in this file; the mounts as data for T05.
 - **Done when:** the maintainer approves the written D75.
+- **Done (2026-11-13):** held with the maintainer in four rounds; D75 written and approved with the mount sheet (`references/screenshots/M7-T02 defence grid/`, gitignored). Decisions: Cobra bays on the drum (Q3), the aperture's door turns, two cannon kinds plus interceptors, the station never fires first, interceptors stop pulse bolts and missiles but not beams, the balance rule (12 raiders or one capital).
 
 ### M7-T03 Compound collision builder
 
