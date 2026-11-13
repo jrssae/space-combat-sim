@@ -138,8 +138,12 @@ class StationShapeTests(unittest.TestCase):
         lights = {p.name: p for p in self.drum_parts}["bay_lights"].mesh
         self.assertEqual(lights.face_count, 4 * 7 * 4 * 12, "a lit strip along each edge of every door")
         self.assertTrue(all(m.emissive_strength > 0.0 for m in lights.materials))
-        clamps = {p.name: p for p in self.drum_parts}["clamps"].mesh
-        self.assertEqual(clamps.face_count, 4 * 7 * 3 * 12, "a post, an arm and a red cap beside every door")
+        from tools.procgen.parts import station_props as sp  # noqa: PLC0415
+
+        self.assertNotIn("clamps", {p.name for p in self.drum_parts}, "the clamps are near-only props (M7-T19)")
+        clamps = next(g for g in sp.groups("waist", station.DRUM_CENTRE) if g.kind == "clamp")
+        self.assertEqual(len(clamps.transforms), 4 * 7, "a clamp beside every door")
+        self.assertEqual(sp.clamp().face_count, 3 * 12, "a post, an arm and a red cap")
         numbers = [m for m in sl.window_markings("arms", station.DRUM_CENTRE) if m.kind == "text"]
         self.assertEqual(sorted({m.params["text"] for m in numbers}), [str(k) for k in range(1, 8)])
         self.assertEqual(len(numbers), 28)

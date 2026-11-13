@@ -5,7 +5,8 @@ Two sets: :func:`drum_shapes` (what turns: the docking sphere and its door, the 
 rings and bands, the green zone) and :func:`frame_shapes` (what stands still: the bow spike, the aperture's ring, the dorsal spine
 with its radiators, cargo modules and dome, the hub and cone, the delta fins, the vane booms and vanes, the truss, the torus disc,
 the shaft and the reactor). Each shape is a named mesh; the generator gives it its surface layout, paint and windows
-(``station_layouts.py``) and moves it into its piece's frame.
+(``station_layouts.py``) and moves it into its piece's frame. The launch doors' clamps and close-up faces are near-only props
+(``station_props.py``, M7-T19).
 """
 
 from __future__ import annotations
@@ -262,17 +263,6 @@ def door_glow(m: Material) -> Mesh:
     return Mesh.concatenate(strips)
 
 
-def door_clamps(post: Material, cap: Material) -> Mesh:
-    """Beside each door a hinged clamp: a post on the rail, an arm reaching over the door's edge and a red cap block."""
-    top, dx = ARM_HATCH[4], DOOR_HALF[0]
-    parts = []
-    for c in door_centres():
-        parts.append(block((dx + 4.0, top, c - 2.0), (dx + 9.0, top + 8.0, c + 2.0), post))
-        parts.append(block((dx - 6.0, top + 6.0, c - 1.5), (dx + 9.0, top + 8.0, c + 1.5), post))
-        parts.append(block((dx + 3.0, top + 8.0, c - 3.0), (dx + 10.0, top + 12.0, c + 3.0), cap))
-    return Mesh.concatenate(parts)
-
-
 def arm_mesh(m: Material) -> Mesh:
     """One Cobra arm standing on top of the drum (+y): the forked head with its circular clamped hatch, the ribbed neck, the hatch
     section with its frame of launch doors, the knob."""
@@ -336,7 +326,6 @@ def drum_shapes(mats: dict[str, Material]) -> list[Shape]:
         Shape("aperture", aperture_mesh(mats)),
         Shape("arms", around(arm_mesh(grey), ARM_ANGLES_DEG)),
         Shape("bay_lights", around(door_glow(mats["bay_light"]), ARM_ANGLES_DEG)),
-        Shape("clamps", around(door_clamps(mats["machinery"], mats["trim"]), ARM_ANGLES_DEG)),
         Shape("pods", around(slab([(1450.0, -30.0, 30.0, 300.0, 350.0), (1550.0, -35.0, 35.0, 300.0, 368.0),
                                    (1650.0, -30.0, 30.0, 290.0, 350.0)], grey), ARM_ANGLES_DEG)),
         Shape("rims", Mesh.concatenate([

@@ -30,10 +30,42 @@ const VIEWS: Array[Dictionary] = [
 	{"name": "10km", "far": 10.0},
 	{"name": "100km", "far": 100.0},
 ]
+## M7-T19's sets (`views=<set>`): `t19` the cost views (from a Cobra bay, the aperture, 1 km, 10 km, 1 000 km), `fly` a pass along
+## the station's underside about 200 m off the hull from the bow to the reactor (section joins and levels of detail), `doors` the
+## Cobra-bay doors close up (the near-only props). The default set is T04's look sheet.
+const VIEW_SETS: Dictionary = {
+	"t19": [
+		{"name": "bay_50m", "at": Vector3(300.0, -55.0, 1085.0), "aim": Vector3(243.0, 0.0, 1150.0), "fov": 62.0},
+		{"name": "aperture_50m", "at": Vector3(40.0, -45.0, 420.0), "aim": Vector3(0.0, 0.0, 495.0), "fov": 62.0},
+		{"name": "1km", "at": Vector3(700.0, 380.0, 700.0), "aim": Vector3(0.0, 0.0, 1500.0), "fov": 55.0},
+		{"name": "10km", "far": 10.0},
+		{"name": "1000km", "far": 1000.0},
+	],
+	"doors": [
+		{"name": "bay_doors_50m", "at": Vector3(287.0, 16.0, 1118.0), "aim": Vector3(239.0, 0.0, 1160.0), "fov": 62.0},
+		{"name": "bay_doors_20m", "at": Vector3(262.0, 4.0, 1140.0), "aim": Vector3(239.0, 0.0, 1160.0), "fov": 62.0},
+		{"name": "bay_doors_300m", "at": Vector3(520.0, -120.0, 1000.0), "aim": Vector3(243.0, 0.0, 1150.0), "fov": 50.0},
+	],
+	"fly": [
+		{"name": "fly_01_bow", "at": Vector3(60.0, -540.0, 200.0), "aim": Vector3(0.0, 0.0, 900.0), "fov": 62.0},
+		{"name": "fly_02_sphere", "at": Vector3(60.0, -560.0, 800.0), "aim": Vector3(0.0, 0.0, 1500.0), "fov": 62.0},
+		{"name": "fly_03_waist", "at": Vector3(60.0, -540.0, 1300.0), "aim": Vector3(0.0, 0.0, 2000.0), "fov": 62.0},
+		{"name": "fly_04_ring", "at": Vector3(60.0, -620.0, 1750.0), "aim": Vector3(0.0, 0.0, 2500.0), "fov": 62.0},
+		{"name": "fly_05_green", "at": Vector3(60.0, -540.0, 2600.0), "aim": Vector3(0.0, 0.0, 3300.0), "fov": 62.0},
+		{"name": "fly_06_green", "at": Vector3(60.0, -545.0, 3500.0), "aim": Vector3(0.0, 0.0, 4200.0), "fov": 62.0},
+		{"name": "fly_07_green", "at": Vector3(60.0, -540.0, 4300.0), "aim": Vector3(0.0, 0.0, 5000.0), "fov": 62.0},
+		{"name": "fly_08_aft_band", "at": Vector3(60.0, -620.0, 5000.0), "aim": Vector3(0.0, 0.0, 5700.0), "fov": 62.0},
+		{"name": "fly_09_hub", "at": Vector3(60.0, -550.0, 5650.0), "aim": Vector3(0.0, 0.0, 6350.0), "fov": 62.0},
+		{"name": "fly_10_truss", "at": Vector3(60.0, -320.0, 6500.0), "aim": Vector3(0.0, 0.0, 7200.0), "fov": 62.0},
+		{"name": "fly_11_shaft", "at": Vector3(60.0, -330.0, 7250.0), "aim": Vector3(0.0, 0.0, 7900.0), "fov": 62.0},
+		{"name": "fly_12_reactor", "at": Vector3(60.0, -380.0, 7800.0), "aim": Vector3(0.0, 0.0, 8100.0), "fov": 62.0},
+	],
+}
 const LIT_LIGHT: Vector3 = Vector3(0.3, -0.35, -1.0)  # camera frame: over the camera's left shoulder, as the look sheets
 
 var main: Main
-var options: Dictionary = {"out": "user://", "settle": "90"}
+var options: Dictionary = {"out": "user://", "settle": "90", "views": ""}
+var _views: Array = VIEWS
 var _index: int = -1
 var _frame: int = 0
 var _station: StationStandin = null
@@ -47,6 +79,7 @@ func _ready() -> void:
 		var pair: PackedStringArray = arg.split("=", true, 1)
 		if pair.size() == 2:
 			options[pair[0]] = pair[1]
+	_views = VIEW_SETS.get(String(options["views"]), VIEWS)
 	await _measure_maps()
 	main = (load("res://src/game/main.tscn") as PackedScene).instantiate() as Main
 	main.waves_auto_start = false
@@ -135,10 +168,10 @@ func _local(p: Vector3) -> Array[float]:
 func _next() -> void:
 	_index += 1
 	_frame = 0
-	if _index >= VIEWS.size():
+	if _index >= _views.size():
 		get_tree().quit(0)
 		return
-	var view: Dictionary = VIEWS[_index]
+	var view: Dictionary = _views[_index]
 	if view.has("far"):
 		_run("far view station %s" % view["far"])
 		return
@@ -162,7 +195,7 @@ func _light_from_camera() -> void:
 	if camera == null or star == null:
 		return
 	var direction: Vector3 = (camera.global_basis * LIT_LIGHT).normalized()
-	var view: Dictionary = VIEWS[_index]
+	var view: Dictionary = _views[_index]
 	if view.has("glint"):
 		# Light that leaves the surface toward the camera: the mirror of the camera's direction about the surface's normal.
 		var glint: Array = view["glint"]
@@ -176,7 +209,7 @@ func _light_from_camera() -> void:
 
 
 func _on_frame() -> void:
-	if _index < 0 or _index >= VIEWS.size():
+	if _index < 0 or _index >= _views.size():
 		return
 	_light_from_camera()
 	_frame += 1
@@ -185,7 +218,7 @@ func _on_frame() -> void:
 	if _frame < int(options["settle"]):
 		return
 	var steady_fps: float = TIMED_FRAMES / maxf((Time.get_ticks_usec() - _timed_us) / 1e6, 1e-6)
-	var name: String = String(VIEWS[_index]["name"])
+	var name: String = String(_views[_index]["name"])
 	var camera: Camera3D = get_viewport().get_camera_3d()
 	print("[station_sheet] %s: camera %s at %s, station at %s" % [name, camera.get_path() if camera != null else "none",
 			camera.global_position if camera != null else Vector3.ZERO, _station.global_position])
@@ -195,6 +228,14 @@ func _on_frame() -> void:
 	var stats: Array[String] = []
 	for key: String in ["renderer", "fps", "draw_calls", "triangles", "vram_mb", "gpu_ms"]:
 		stats.append("%s=%s" % [key, str(DebugConsole.registry.read("render.%s" % key).get("value", "?"))])
-	print("[station_sheet] %s: %s steady_fps=%.0f card_vram_mb=%.0f -> %s" % [name, " ".join(stats), steady_fps, _vram_bytes() / 1048576.0,
-			path])
+	print("[station_sheet] %s: %s steady_fps=%.0f card_vram_mb=%.0f station_meshes_shown=%d -> %s" % [name, " ".join(stats), steady_fps,
+			_vram_bytes() / 1048576.0, _shown(_station), path])
 	_next()
+
+
+# The station's meshes drawn now (sections, props, the dot), for the cost readout.
+func _shown(node: Node) -> int:
+	var count: int = 1 if node is GeometryInstance3D and (node as GeometryInstance3D).is_visible_in_tree() else 0
+	for child: Node in node.get_children():
+		count += _shown(child)
+	return count

@@ -225,6 +225,15 @@ def door_frame_red(p: np.ndarray, n: np.ndarray) -> np.ndarray:
     return ((m[:, 1] > 0.6) & (q[:, 1] > top - 0.6) & (np.abs(q[:, 0]) < w + 1.0) & (gap < DOOR_BORDER_M)).astype(float)
 
 
+def clamp_caps(p: np.ndarray, n: np.ndarray) -> np.ndarray:
+    """Each door clamp's red cap seen from afar: painted on the rail under it, since the clamps are near-only props (M7-T19)."""
+    q, m = _arm_local(p, n)
+    top, dx = st.ARM_HATCH[4], st.DOOR_HALF[0]
+    centres = np.asarray(st.door_centres())
+    along = np.abs(q[:, 2][:, None] - centres[None, :]).min(axis=1)
+    return ((m[:, 1] > 0.6) & (q[:, 1] > top - 0.6) & (q[:, 0] > dx + 3.0) & (q[:, 0] < dx + 10.0) & (along < 3.0)).astype(float)
+
+
 RED_CROSS = (906.0, 984.0, 5.0)  # the framed panel on the neck's top: z from, z to, the cross's half width
 
 
@@ -319,7 +328,7 @@ def paint() -> dict[str, list[tuple[str, Cover]]]:
         "fwd_band": [("drum_blue", band_blocks(1800.0, 2290.0, st.BAND_R, 12, 3, 26.0, 7.0, 71))],
         "green": [("drum_blue", green_blocks(GREEN_JOINTS, st.GREEN_R, 20, 73))],
         "aft_band": [("drum_blue", band_blocks(4840.0, 5400.0, st.BAND_R, 12, 3, 26.0, 7.0, 79))],
-        "arms": [("trim", arm_trim), ("door", door_panels), ("trim", door_frame_red), ("recess", cross_frame), ("trim", red_cross)],
+        "arms": [("trim", arm_trim), ("door", door_panels), ("trim", door_frame_red), ("trim", clamp_caps), ("recess", cross_frame), ("trim", red_cross)],
         "bow": [("spine_top", top_faces)],
         "spine": [("spine_top", top_faces)],
         "hub": [("spine_top", top_faces)],

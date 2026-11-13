@@ -624,6 +624,37 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 - **Done when:** the sections and props in the manifest and in the game, the drum turning as one body, the STL compare still
   passing, the numbers recorded, tests (sections cover the piece without gaps, each section's LOD chain and range, the props'
   range, determinism), and no visible popping or seams on a fly-along sheet (H).
+- **Done (as built; the fly-along sheet awaits the maintainer):**
+  - **Sections:** the drum in 12 and the frame in 16 (`DRUM_PLANES`, `FRAME_PLANES` in `babylon5_station.py`, generator 2), cut on
+    the hull's own joints (band edges, rings, the gaps between cargo modules and between vanes; the green zone at its blocks'
+    joints). `core/sections.py` clips the packed piece's triangles exactly (positions, normals and UVs), so the sections tile the
+    piece with no gap or overlap and draw on the piece's maps; each is `<piece>_sec_<name>.glb` with its origin on the axis, listed
+    in `mesh.sections`. Godot: `PieceSections` (pure: reads and checks the list, the props' range) and `RenderPiece` (a
+    `MeshInstance3D` per section under the drum's or frame's node, one material set per piece, `MeshAssets.section_mesh`); the
+    drum's sections turn as one body (tested at a turned drum: every joint point lands at one place).
+  - **Levels of detail:** the importer builds a chain per section, but does not hold a section's border still (measured: up to
+    half a section's border vertices gone at its coarser levels), so each section has a 6 m **skirt** in its cut planes, facing out
+    of it, that shows hull through any crack between neighbours at different levels (9 480 triangles).
+  - **Ranges, shadows:** the hull's sections are drawn at every distance (they are the hull; M6's far prop still shrinks them and
+    hands over to the dot); no light in the game casts shadows, so `cast_shadow` stays off (nothing to switch by distance).
+  - **Near-only props:** `core/near_props.py` (kinds with their own atlas, groups of copies per section) and `parts/station_props.py`:
+    the Cobra doors' faces (6.25 cm a texel: grated leaves, rivets, a hazard band, the bay's light between the slats, the number
+    crisp) and the clamps (moved off the hull; their red caps painted on the rails as the far stand-in), instanced under the drum's
+    `waist` section, shown within 1 500 m and faded over 400 m (where the hull atlas's 1.39 m texel reaches a pixel at 1 080 rows).
+  - **Collision by section** (`parts/station_collision.py`, the manifest's `collision`): frusta, slab runs and boxes cut at the
+    same planes, named `<section>/...`, each piece listing its sections' spans; drum 114 shapes, frame 128; gap at most 12.8 m and
+    outer faces at most 58 m off the hull (the vanes' roots and notches). A first pass: T05 opens the aperture's tunnel and fits the
+    bays.
+  - **Measured** (RX 6950 XT, 6 144 x 3 456, `SHEET_VIEWS=t19 scripts/station_sheet.sh`; numbers in `docs/assets-station.md`): GPU
+    time unchanged within 0.05 ms at every view (bay 3.92 ms, aperture 4.00, 1 km 4.00, 10 km 2.18, 1 000 km 1.76), draw calls
+    15 to 18 → 41 to 44 near, triangles drawn up 5 to 15 % (the skirts), card VRAM unchanged within the spread (the prop atlas
+    about 14 MB). The 40 k-triangle hull is not geometry bound at 6K, so the sections buy nothing yet; they are the seam T05's
+    detail needs. **Occluders not built:** the station's geometry costs at most about 0.4 ms, so they are noted for T13 (ships
+    behind the station in a fight).
+  - **STL compare** still PASS (the clamps were the only shape removed; whole-piece glbs still written for the tools).
+  - **Sheet (H):** `references/screenshots/M7-T19 station sections/M7-T19_station_sections_sheet.png` (the fly-along under the
+    station from the bow to the reactor at about 200 m, the doors at 20, 50 and 300 m before and after).
+  - **For T05 and T18:** see `docs/assets-station.md`, "Sections and near-only props".
 
 ### M7-T14 Integration, full suite, docs and acceptance
 

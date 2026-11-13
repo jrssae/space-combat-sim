@@ -16,6 +16,7 @@ import numpy as np
 
 from ..styles import Style
 from .geometry import Mesh
+from .sections import SectionCut
 from .textured_mesh import TexturedPart, write_textured_mesh
 
 
@@ -33,13 +34,14 @@ class PieceTexture:
 
 
 def write_piece(
-    out_dir: Path, name: str, parts: Sequence[TexturedPart], style: Style, texture: PieceTexture
+    out_dir: Path, name: str, parts: Sequence[TexturedPart], style: Style, texture: PieceTexture, sections: Sequence[SectionCut] = ()
 ) -> tuple[list[Path], dict[str, Any]]:
-    """Write the textured mesh ``<name>.glb`` and its maps; return the files and the piece's entry: its bounds and its ``mesh``."""
+    """Write the textured mesh ``<name>.glb`` and its maps; return the files and the piece's entry: its bounds and its ``mesh``.
+    With ``sections`` (M7-T19) the mesh is also written cut into them, listed in ``mesh.sections``."""
     bounds = mesh_of(parts).vertices
     files, section = write_textured_mesh(out_dir, name, list(parts), style, atlas_px=texture.atlas_px, texel_m=texture.texel_m,
                                          seed=texture.seed, occlusion=texture.occlusion, normal_scale=texture.normal_scale,
-                                         grid=texture.grid)
+                                         grid=texture.grid, sections=sections)
     entry: dict[str, Any] = {
         "aabb_min": [round(float(c), 5) for c in np.min(bounds, axis=0)],
         "aabb_max": [round(float(c), 5) for c in np.max(bounds, axis=0)],

@@ -380,3 +380,97 @@ than these would dim the rest's precision: give beacons and ring lights their ow
 atlas texel is about a metre and a third, so the dashed ring lights on the band edges and sphere rims will want to be thin
 emissive geometry (as the bay strips are) rather than paint. The atlases are about 64 % full; a strip light as geometry adds
 its own small charts.
+
+## Sections and near-only props (M7-T19)
+
+**Why.** Godot picks one level of detail per mesh instance from its distance to that instance's bounds, and culls whole
+instances, so a fighter 50 m off a bay drew both 8 km pieces at full detail and neither was ever culled. Each piece is now drawn
+as sections, each its own mesh with its own origin, levels of detail and culling; T05's detail is built on them.
+
+**Cuts** (`babylon5_station.py`, `DRUM_PLANES` and `FRAME_PLANES`, station z aft from the bow tip). On joints the hull already has
+(band edges and rings, the sphere's widest ring, the gaps between cargo modules and between vanes); the green zone split at its blue
+blocks' joints; no cut crosses a small part (a vane, a cargo module, a fin, a clamp).
+
+| Piece | Sections | Cut planes (z) |
+|---|---|---|
+| drum (12) | aperture, sphere_fore, sphere_aft, waist, fwd_body, fwd_band, green_1, green_2, green_band, green_3, green_4, aft_band | 560, 750, 945, 1 340, 1 692, 2 348, 2 840, 3 340, 3 800, 4 290, 4 782 |
+| frame (16) | bow, bow_ring, spine_sphere, ramp, radiators, cargo_1, cargo_2, cargo_3, vanes_1, vanes_2, vanes_3, hub, cone, truss, torus_shaft, reactor | 420, 700, 1 300, 1 725, 2 340, 3 068, 3 577, 4 087, 4 585, 5 030, 5 460, 5 735, 6 360, 7 110, 7 704 |
+
+**How** (`core/sections.py`, called from `write_textured_mesh(..., sections=...)`). The cut runs after the atlas is packed, on the
+piece's own triangles: a triangle across a plane is clipped (positions, normals and UVs interpolated along its edges from the
+endpoints in a fixed order, so both sides get the same point), so the sections tile the piece exactly (area within 1e-5, tested),
+each texel lands where it did, and the shading matches across a joint. Each section is `babylon5_station_<piece>_sec_<name>.glb`,
+its origin on the axis half way along it, listed in the piece's `mesh.sections` (name, file, origin, slab `z0`/`z1`, box,
+`triangles`, `skirt_triangles`). The whole-piece glb is still written (the STL compare and the tools read it); the game no longer
+loads it. The drum's sections sit under the drum's node, so they turn as one body.
+
+**Levels of detail and skirts.** The importer gives each section its own chain (most sections over 1 500 triangles have 1 to 5
+levels), but it does not hold a section's border still: measured on the import, 0 to 70 % of a section's border vertices are gone
+from its coarser levels (the waist's 370 border vertices fall to 194 at its third level). Two neighbours at different levels could
+open a hairline crack at their joint, so each section carries a **skirt**: a 6 m wall in the cut plane hanging inward from its
+border, with the border's normals and UVs, facing out of its section (the fore section's wall faces aft, the aft one's forward), so
+whichever neighbour is finer shows hull through a crack. 9 480 skirt triangles in all (drum 7 328, frame 2 152), inside the hull
+and rejected by the depth test unless a crack shows them.
+
+**Ranges and shadows.** The hull's sections have no visibility range: together they are the hull, drawn at every distance the piece
+is (past the far plane M6's far prop shrinks them; far beyond, the dot). No light in the game casts shadows (the key star and the
+light slots have them off), so the sections and props keep `cast_shadow` off; there is no shadow distance to set. Sections out of
+view are frustum culled.
+
+**Near-only props** (`core/near_props.py`, `parts/station_props.py`). Small repeated parts drawn instanced (`MultiMeshInstance3D`)
+under their section, with a small atlas of their own, shown within `near_m` 1 500 m and faded out (`VISIBILITY_RANGE_FADE_SELF`,
+margin 400 m). The range is where the hull atlas's texel (1.39 m) reaches one pixel at 1 080 rows and a 62 degree view
+(1.39 m x 1 080 / 1.08 rad = 1.39 km): beyond it the atlas is as sharp as the screen, so the props only add relief. On the
+maintainer's 3 456-row display the atlas texel stays above a pixel to about 4.4 km, so there a prop's fade can be seen. The proof:
+- **The doors' faces** (`door_row`, one per arm, 4 copies): a face 60.8 by 24.8 m laid 0.2 m over each of the seven doors, inside
+  the bay light's strips, on its own atlas at 6.25 cm a texel (1 024 x 4 096, one cell per door): two grated leaves of six slats,
+  rivets, worn edges, a hazard band down the seam, the bay's light faint between the slats and in the seam, and the number
+  stencilled crisp. The hull keeps its painted door under it, so past the range the door still reads, only softer.
+- **The clamps** (`clamp`, 28 copies): moved off the hull for good (1 008 triangles fewer); their red caps stay painted on the
+  rails as the far stand-in (`clamp_caps`).
+- Manifest: the drum's `props` (`near_m`, `margin_m`, the atlas's `surface`, `kinds`, `groups` with each copy's transform in its
+  section's frame). Godot: `PieceSections` (pure) and `RenderPiece`; `MeshAssets.section_mesh`, `piece_materials`, `prop_mesh`.
+- VRAM: the prop atlas's four maps about 14 MB as imported; the renderer's own count rose 1 721.7 → 1 739.4 MB.
+
+**Collision by section** (`parts/station_collision.py`, the manifest's `collision`, D73). A first pass, built from the same numbers
+as the shapes and cut at the same planes: round bodies as frusta between their profile's points (a 16-sided ring drawn round the
+circle), slabs as hulls of runs of rows (runs within 6 to 10 m of straight), boxes for the rest, the aperture's ring as 8 sectors so
+its hole stays open (tested). Each shape is named `<section>/<part>.<n>`; each piece lists `sections` (first, count). Drum 114
+shapes, frame 128 (the budget, no merging needed). Against the drawn hull, probed every 10 m: the widest gap 12.8 m (the reactor's
+ring of pipes) and 7.0 m on the drum; the farthest outer face 58 m off the hull (the vanes' roots and tip notches, filled) and 21 m
+(the waist's teeth). Ribs, rail clamps, stringers and the doors' wells are left to the gap. T05 refines the bays and opens the
+aperture's tunnel; T06 builds the bodies.
+
+**Cost before and after** (RX 6950 XT, RADV, Forward+, X11, fullscreen 6 144 x 3 456, `scripts/station_sheet.sh` with
+`SHEET_VIEWS=t19`, 150 frames settled, the last 60 timed; before: a scratch project with the T04 build, after: this build).
+
+| View | Draw calls | Triangles drawn | GPU ms | Steady fps | Before: draw calls, triangles, GPU ms, fps |
+|---|---|---|---|---|---|
+| Cobra bay, 50 m | 42 | 89 554 | 3.92 | 230 | 18, 85 072, 3.96, 233 |
+| Docking aperture, 50 m | 44 | 78 752 | 4.00 | 232 | 17, 68 432, 3.98, 235 |
+| 1 km | 41 | 92 936 | 4.00 | 236 | 15, 84 344, 3.97, 236 |
+| 10 km | 44 | 74 344 | 2.18 | 390 to 415 | 18, 68 432, 2.16, 412 |
+| 1 000 km | 32 | 85 060 | 1.76 | 469 to 498 | 6, 80 716, 1.75, 500 |
+
+Card VRAM (`mem_info_vram_used`) 4 817 / 4 709 MB after against 4 816 / 4 718 before (bay and far views), within the run-to-run
+spread. At 1 000 km on this display the station is still about 15 px, so it is drawn shrunk as a mesh, not a dot: 28 sections at
+their coarsest instead of two meshes.
+
+**What it buys now: nothing measurable.** The hull is 40 k triangles; the GPU time is the 6K screen's shading, not geometry (10 km and
+1 000 km differ by 0.4 ms with the whole station drawn in both). The section joints and the skirts add 7 to 10 k triangles and 24 to
+27 draw calls, and the GPU time is the same within 0.05 ms. The sections are the seam T05's near-field detail needs: detail added to
+a section is drawn at full detail only near it and culled with it.
+
+**Occlusion: not built, noted for T13.** The station's whole geometry costs at most about 0.4 ms (above), so occluders inside the
+drum and the spine could save a fraction of that; they would pay off for ships and props hidden behind the station in a fight, which
+T13 measures with three squadrons and a raid (`rendering/occlusion_culling/use_occlusion_culling` is off in the project).
+
+**Sheets (H)**, `references/screenshots/M7-T19 station sections/`: `before/` and `after/` (the cost views and the doors at 20, 50 and
+300 m), `fly/` (a pass under the station about 200 m off the hull from the bow to the reactor), and the contact sheet
+`M7-T19_station_sections_sheet.png`.
+
+**For T05.** Put new detail in the section it lies in (its slab in the manifest) or as props under that section
+(`station_props.groups`-style: a kind, a section, transforms in the section's frame); a prop's fine paint goes on the prop atlas, not
+the hull's. The aperture's door is the `aperture` section (z up to 560): replacing the `aperture` shape changes only that section.
+Collision: `station_collision.drum_pieces` closes the aperture's well for now (`aperture` frustum); the tunnel needs it opened.
+**For T18.** Lights on the drum go under its sections (they turn with it); a light's emissive props can use the prop atlas's glow.

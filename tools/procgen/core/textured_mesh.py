@@ -22,6 +22,7 @@ from .geometry import Material, Mesh
 from .glb import GlbPrimitive, write_glb
 from .image import write_png
 from .chunks import ChunkCut, chunk_mesh_name
+from .sections import SectionCut, write_sections
 from .livery import digit_atlas, digit_import_sidecar, livery_section
 from .raster import dilate, rasterize, sharp_edges
 from .seams import EMPTY, SeamLayout
@@ -194,7 +195,8 @@ def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPa
                         texel_m: float = DEFAULT_TEXEL_M, seed: int = 0, occlusion: bool = True,
                         paintable: Sequence[str] = (), fine_mesh: Mesh | None = None, normal_scale: int = NORMAL_SCALE,
                         chunks: Sequence[ChunkCut] = (), grid: bool = True,
-                        detail_levels: Mapping[str, int] | None = None) -> tuple[list[Path], dict[str, Any]]:
+                        detail_levels: Mapping[str, int] | None = None,
+                        sections: Sequence[SectionCut] = ()) -> tuple[list[Path], dict[str, Any]]:
     """Write the textured mesh of ``parts`` into ``out_dir`` and return its files and the manifest's ``mesh`` section. With
     ``paintable`` material names the hull takes wing liveries (M4-T30b): the vertices carry their parts' zones, the albedo's alpha
     says where paint may go, and the digit atlas and the ``livery`` section are written too. With ``fine_mesh`` the parts are a
@@ -203,7 +205,8 @@ def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPa
     faces on the same atlas, so it draws with these maps. ``grid`` off leaves the generic staggered plating out (a hull whose parts
     carry drawn layouts, M5-T40). Each of ``detail_levels`` (a name and a layout level) is one more set of the albedo, normal and
     ORM maps with the layouts drawn up to that level only, ``<asset_id>_<map>_<name>.png``, named in every surface's ``detail``:
-    the game picks a set by ``settings.texture_detail``; the maps without a suffix are the full layouts."""
+    the game picks a set by ``settings.texture_detail``; the maps without a suffix are the full layouts. ``sections`` (M7-T19) cut
+    the mesh across z into ``<asset_id>_sec_<name>.glb`` on the same maps, listed in the section's ``sections``."""
     out_dir = Path(out_dir)
     packed = pack_parts(parts, atlas_px, texel_m)
     mesh = packed.mesh
@@ -235,6 +238,12 @@ def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPa
         sidecar.write_text(import_sidecar(key), encoding="utf-8", newline="\n")
         paths.append(sidecar)
     section = manifest_section(asset_id, parts, packed, [opaque, glass], maps, atlas)
+    if sections:
+        glass_face = np.array([m.transmittance for m in mesh.materials], dtype=float)[mesh.face_material] > 0.0
+        cut_files, section["sections"] = write_sections(
+            out_dir, asset_id, mesh.vertices[mesh.faces], mesh.vertex_normals()[mesh.faces], packed.face_uv01, glass_face, sections,
+            (OPAQUE_SURFACE, GLASS_SURFACE), ((1.0, 1.0, 1.0, 1.0), (0.0, 0.0, 0.0, 0.3)))
+        paths += cut_files
     for name, level in (detail_levels or {}).items() if any(p.seams for p in parts) else ():
         lesser = bake_maps(dataclasses.replace(atlas, part_seams=tuple(p.seams.up_to(level) for p in parts)), style, seed, occlusion,
                            paintable, normal_scale)
@@ -257,5 +266,5 @@ def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPa
     return paths, section
 
 
-__all__ = ["DEFAULT_ATLAS_PX", "DEFAULT_TEXEL_M", "ChunkCut", "PackedParts", "TexturedPart", "atlas_of", "import_sidecar", "pack_parts",
+__all__ = ["DEFAULT_ATLAS_PX", "DEFAULT_TEXEL_M", "ChunkCut", "PackedParts", "SectionCut", "TexturedPart", "atlas_of", "import_sidecar", "pack_parts",
            "write_textured_mesh"]

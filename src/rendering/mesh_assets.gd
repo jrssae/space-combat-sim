@@ -73,6 +73,58 @@ static func chunk_mesh(dir: String, file: String) -> Mesh:
 	return mesh
 
 
+## One section of a big piece (M7-T19): its glb (`file`, under `dir`) drawn with the piece's materials (one set per piece, made
+## from the piece's `mesh` entry as `load_textured` makes them), so every section shares the piece's maps. Null when missing.
+static func section_mesh(dir: String, entry: Dictionary, file: String) -> Mesh:
+	var path: String = dir.path_join(file)
+	if _cache.has(path):
+		return _cache[path]
+	var mesh: Mesh = _imported_mesh(path)
+	if mesh == null:
+		push_warning("MeshAssets: %s is missing or not imported (run scripts/gen_assets.sh, then import)" % path)
+		return null
+	var by_name: Dictionary = piece_materials(dir, entry)
+	for i: int in mesh.get_surface_count():
+		var current: Material = mesh.surface_get_material(i)
+		var name: String = String(current.resource_name) if current != null else ""
+		if by_name.has(name):
+			mesh.surface_set_material(i, by_name[name])
+	_cache[path] = mesh
+	return mesh
+
+
+## A big piece's materials by surface name, made once from its `mesh` entry (paint with the hull sheen, glass without).
+static func piece_materials(dir: String, entry: Dictionary) -> Dictionary:
+	var key: String = dir.path_join(String(entry.get("file", ""))) + "#materials"
+	if _cache.has(key):
+		return _cache[key]
+	var out: Dictionary = {}
+	for surface: Dictionary in entry.get("surfaces", []):
+		var material: StandardMaterial3D = textured_material(dir, surface)
+		out[String(surface.get("name", ""))] = _with_sheen(material, not bool(surface.get("blend", false)))
+	_cache[key] = out
+	return out
+
+
+## A near-only prop's mesh (M7-T19): its glb (`file`, under `dir`) drawn with the prop atlas's material (`surface`, a textured
+## mesh surface entry, made once per atlas), with the hull sheen as the hull's paint has it. Null when missing.
+static func prop_mesh(dir: String, surface: Dictionary, file: String) -> Mesh:
+	var path: String = dir.path_join(file)
+	if _cache.has(path):
+		return _cache[path]
+	var mesh: Mesh = _imported_mesh(path)
+	if mesh == null:
+		push_warning("MeshAssets: %s is missing or not imported (run scripts/gen_assets.sh, then import)" % path)
+		return null
+	var key: String = dir.path_join(String(surface.get("albedo", ""))) + "#prop"
+	if not _cache.has(key):
+		_cache[key] = _with_sheen(textured_material(dir, surface), true)
+	for i: int in mesh.get_surface_count():
+		mesh.surface_set_material(i, _cache[key])
+	_cache[path] = mesh
+	return mesh
+
+
 ## Whether an asset's manifest names a textured mesh.
 static func is_textured(asset_id: String, asset_root: String = ShipSpec.ASSET_ROOT) -> bool:
 	return not (read_manifest(asset_id, asset_root).get("mesh", {}) as Dictionary).is_empty()
