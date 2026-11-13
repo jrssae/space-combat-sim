@@ -1154,6 +1154,8 @@ which changes the same native rows and rebase path:
     lamps as their own far point. (3) The hand-off light is within a factor of two, not tighter: the truss's sheen and lamps
     vary with the view more than one law follows (H on the cross-fade). Not done: the open vortex's own far form (T20);
     `docs/architecture.md` §14.4 (T16); the dots' motion vectors under TAA and FSR 2 (as T10).
+  - **Decided (maintainer, 2026-11-12):** (1) the station's stand-in keeps 1 000 km (M7 may revisit with the real station);
+    (2) the far dot keeps M4's rule (far objects fade honestly; the HUD and radar find them).
 
 ### M6-T16 Integration, full suite, docs and acceptance
 
