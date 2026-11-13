@@ -1914,7 +1914,12 @@ which changes the same native rows and rebase path:
     flown by its jump. A ship in a funnel stays out of the low-attention tier.
   - **Flashes:** one multimesh of up to 256 (`transit_flash.gdshader`, the vortex's own glow from `jump_glow.gdshaderinc`, drawn
     after the funnels and without the depth test so the curving base does not cut it), one per ship at the ring, radius = the
-    ring's, 0.1 s up and 0.5 s out, kept in its vortex's frame. Nothing is made per flash.
+    ring's, 0.1 s up and 0.5 s out, kept in its vortex's frame. Nothing is made per flash. **Fix (after CI):** the multimesh is a
+    rendering-server instance placed in global coordinates every tick, not a node: as a `MultiMeshInstance3D` child it sat in
+    World space unshifted and failed the rebase guard (`rebase_fight.gd`: `test_rebase_in_play`, `test_ai_guard`,
+    `test_instructor_route`); putting it in the shift groups instead reordered the rebase's walk and moved the seeded battle to
+    [935, 422, ...]. Green with `GUT_SLOW=1`: those three, `test_jump_holds`, `test_weapon_rows_battle` (recording unchanged),
+    `test_vortex_transits`, `test_bench` (35 tests); quick tier 1 933.
   - **On-screen detail:** an arrival smaller than 2 px on the camera (its bounding radius) does not fly the funnel: it comes
     out in place as before, with the ring's flash (`VortexTransit.worth_flying`, counted as `transit.unseen`); the player's own
     arrival and the console's always fly. This keeps a far battle wave as cheap as T20's.

@@ -14,9 +14,10 @@ extends Node3D
 ## low-attention tier, and the vortex stays open until its last ship is through.
 ##
 ## The flashes are one multimesh (`MAX_FLASHES` at once, nothing made per flash), so a wave of a hundred points bringing in
-## hundreds of ships costs one draw call. Each flash is kept in its vortex's frame, so it moves with it through a rebase (this node
-## joins no shift group: an extra member would reorder the rebase's walk and the seeded battles' sums). Console: provider
-## `transit`.
+## hundreds of ships costs one draw call. It is a rendering-server instance, not a node: each flash is kept in its vortex's frame
+## and placed from it every tick, so a rebase moves it with its funnel, and nothing new sits in World space (this node is a bare
+## holder at the World's origin and joins no shift group: an extra member would reorder the rebase's walk and the seeded battles'
+## sums). Console: provider `transit`.
 
 const NODE_NAME: StringName = &"VortexTransits"
 const FLASH_SHADER: Shader = preload("res://src/props/transit_flash.gdshader")
@@ -44,7 +45,11 @@ var worst_step_us: int = 0
 var _passages: Array[VortexPassage] = []
 var _steps_left: int = 0  # this tick's shape rebuilds still allowed
 var _by_body: Dictionary = {}  # body -> VortexPassage
-var _flashes: MultiMeshInstance3D = null
+var _flash_mesh: QuadMesh = null  # the rendering-server multimesh's mesh and material, kept alive with it
+var _flash_material: ShaderMaterial = null
+var _flash_multimesh := RID()
+var _flash_instance := RID()
+var _flash_shown: bool = false
 var _flash_vortex: Array[JumpVortex] = []  # each flash's vortex, which it moves with
 var _flash_at := PackedVector3Array()  # in its vortex's frame
 var _flash_radius := PackedFloat32Array()
@@ -88,6 +93,12 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
+	if _flash_instance.is_valid():
+		RenderingServer.free_rid(_flash_instance)
+	if _flash_multimesh.is_valid():
+		RenderingServer.free_rid(_flash_multimesh)
+	_flash_instance = RID()
+	_flash_multimesh = RID()
 
 
 ## Brings `body` out of `vortex`: it starts at the ring now, shrunk, and flies out to where it was placed (`exit_position`, World),
@@ -383,19 +394,22 @@ func _step_flashes(delta: float) -> void:
 			_flash_colour.resize(last)
 			continue
 		i += 1
-	if _flashes == null:
+	if not _flash_multimesh.is_valid():
 		return
-	var mm: MultiMesh = _flashes.multimesh
 	for k: int in _flash_age.size():
 		var level: float = VortexTransit.flash_level(_flash_age[k])
 		var size: float = _flash_radius[k] * maxf(sqrt(level), 1e-3)
-		var at: Vector3 = _flash_vortex[k].true_frame() * _flash_at[k] - global_position
-		mm.set_instance_transform(k, Transform3D(Basis.from_scale(Vector3.ONE * size), at))
+		var at: Vector3 = _flash_vortex[k].true_frame() * _flash_at[k]
+		RenderingServer.multimesh_instance_set_transform(_flash_multimesh, k,
+				Transform3D(Basis.from_scale(Vector3.ONE * size), at))
 		var c: Color = _flash_colour[k]
 		c.a = level
-		mm.set_instance_color(k, c)
-	mm.visible_instance_count = _flash_age.size()
-	_flashes.visible = not _flash_age.is_empty()
+		RenderingServer.multimesh_instance_set_color(_flash_multimesh, k, c)
+	RenderingServer.multimesh_set_visible_instances(_flash_multimesh, _flash_age.size())
+	var shown: bool = not _flash_age.is_empty()
+	if shown != _flash_shown:
+		_flash_shown = shown
+		RenderingServer.instance_set_visible(_flash_instance, shown)
 
 
 func _build_flashes() -> void:
@@ -407,20 +421,18 @@ func _build_flashes() -> void:
 	material.set_shader_parameter(&"rays", 1.2)
 	material.set_shader_parameter(&"lift", 0.0)
 	material.render_priority = 1  # after the funnels it sits in (all flashes share one far-reaching box, so sorting cannot tell)
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_colors = true
-	mm.mesh = quad
-	mm.instance_count = MAX_FLASHES
-	mm.visible_instance_count = 0
-	_flashes = MultiMeshInstance3D.new()
-	_flashes.name = "Flashes"
-	_flashes.multimesh = mm
-	_flashes.material_override = material
-	_flashes.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_flashes.custom_aabb = AABB(-Vector3.ONE * 1.0e6, Vector3.ONE * 2.0e6)  # flashes anywhere in play; drawn only while any shows
-	_flashes.visible = false
-	add_child(_flashes)
+	_flash_mesh = quad
+	_flash_material = material
+	_flash_multimesh = RenderingServer.multimesh_create()
+	RenderingServer.multimesh_allocate_data(_flash_multimesh, MAX_FLASHES, RenderingServer.MULTIMESH_TRANSFORM_3D, true)
+	RenderingServer.multimesh_set_mesh(_flash_multimesh, quad.get_rid())
+	RenderingServer.multimesh_set_visible_instances(_flash_multimesh, 0)
+	# Flashes are placed in global coordinates every tick, so the instance sits at the identity.
+	_flash_instance = RenderingServer.instance_create2(_flash_multimesh, get_world_3d().scenario)
+	RenderingServer.instance_geometry_set_material_override(_flash_instance, material.get_rid())
+	RenderingServer.instance_geometry_set_cast_shadows_setting(_flash_instance, RenderingServer.SHADOW_CASTING_SETTING_OFF)
+	RenderingServer.instance_set_custom_aabb(_flash_instance, AABB(-Vector3.ONE * 1.0e6, Vector3.ONE * 2.0e6))  # anywhere in play
+	RenderingServer.instance_set_visible(_flash_instance, false)
 
 
 # Whether `body` at `at` is big enough on the viewport's camera to fly its passage (always, with no camera).
