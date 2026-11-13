@@ -423,6 +423,10 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 - **Files:** `src/mission/launch_sequence.gd` (pure) and its node, the scenario loader's `launch_bay` start, the launch camera's
   shots, `MissionApi.launch_from`, the wingmen's launch order, a `launch` console command, `info.md`, tests (the hand-off state,
   skip lands in the same state, a rebase during the launch moves nothing on screen).
+- **For M8 (maintainer, 2026-11-13):** M8's tutorial opens with a squadron-launch cinematic (the bay doors open, Starfuries drop
+  out one after another, flip, light their engines and form up, exterior shots as in the show; `docs/roadmap.md`). Build the
+  launch's shots as data (a list of `CinematicShot`s keyed on the bay hardpoints) and the door opening and the drop as steps a
+  sequence can run for several ships in turn, so M8 extends this rather than rewriting it.
 - **Done when:** AC7.
 
 ### M7-T09 The station interior for the front end
