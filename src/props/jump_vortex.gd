@@ -7,7 +7,7 @@ extends Node3D
 ## The node's origin is the mouth's centre and its -Z the way ships come out (the funnel recedes along +Z); `fit` gives the mouth's
 ## radius and the depth. An opening runs on `VortexTiming`: the opener's lead-in (a gate's arm sequence; none for a ship-made
 ## point), the flash at the jump point's centre (the funnel's base), the funnel unfolding from that point forward to the rim of
-## its mouth, open, then folding back. Blue for an arrival, turning counter-clockwise seen from in front, its patches spiralling
+## its mouth, open, then folding back to the centre and a flash there as it goes. Blue for an arrival, turning counter-clockwise seen from in front, its patches spiralling
 ## out from the throat; orange to golden yellow for a departure, turning clockwise, its patches spiralling in (`VortexSwirl`).
 ## A gate's mouth is an ellipse (`VortexFit`); the funnel keeps that section down to its throat. The age runs on physics ticks from `delta` (a pause freezes it); the visuals follow it
 ## each rendered frame. In `world_shiftable` when it stands alone, so a rebase moves it; a gate's moves with the gate.
@@ -143,11 +143,11 @@ func open_at(xform: Transform3D, p_fit: VortexFit, p_direction: Direction, hold_
 func open(p_direction: Direction, hold_s: float = VortexTiming.DEFAULT_HOLD_S, lead_s: float = 0.0) -> bool:
 	if _active and direction != p_direction:
 		return false
-	if _active and timing.phase(age_s) != VortexTiming.Phase.CLOSING:
+	if _active and timing.phase(age_s) < VortexTiming.Phase.CLOSING:
 		timing.extend(age_s, hold_s)
 		return true
 	if _active:
-		return false  # closing: it must finish before it opens again
+		return false  # closing or in its closing flash: it must finish before it opens again
 	direction = p_direction
 	timing = VortexTiming.new(hold_s, lead_s)
 	age_s = 0.0

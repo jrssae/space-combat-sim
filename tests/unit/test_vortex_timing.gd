@@ -1,6 +1,6 @@
 extends GutTest
-## A jump vortex's timing (M6-T14, T19, D69): the opener's lead-in, the centre flash, the unfolding, the hold and the close, from
-## the age alone. A gate's lead-in is its arm activation (1 s, so it still opens in T14's 3.5 s); a ship-made point has none.
+## A jump vortex's timing (M6-T14, T19, D69): the opener's lead-in, the centre flash, the unfolding, the hold, the close and the
+## closing flash, from the age alone. A gate's lead-in is its arm activation (1 s, so it still opens in T14's 3.5 s); a ship-made point has none.
 
 const EPS: float = 1e-4
 
@@ -15,9 +15,12 @@ func test_phases_follow_the_reference_order_at_a_gate() -> void:
 	assert_eq(t.phase(t.open_at_s), VortexTiming.Phase.OPEN, "fully open at 3.5 s")
 	assert_eq(t.phase(t.open_at_s + 3.9), VortexTiming.Phase.OPEN, "open for the hold")
 	assert_eq(t.phase(t.open_at_s + 4.5), VortexTiming.Phase.CLOSING, "then it closes")
-	assert_eq(t.phase(t.open_at_s + 5.1), VortexTiming.Phase.CLOSED, "gone within a second")
-	assert_true(t.is_done(t.open_at_s + 5.0))
-	assert_almost_eq(t.done_at_s(), t.open_at_s + 5.0, EPS)
+	assert_eq(t.phase(t.open_at_s + 5.1), VortexTiming.Phase.END_FLASH, "folded back within a second, it flashes")
+	assert_eq(t.phase(t.open_at_s + 6.1), VortexTiming.Phase.CLOSED, "gone once the flash is out")
+	assert_false(t.is_done(t.open_at_s + 5.9))
+	assert_true(t.is_done(t.open_at_s + 6.0))
+	assert_almost_eq(t.done_at_s(), t.open_at_s + 5.0 + VortexTiming.END_FLASH_S, EPS)
+	assert_eq(t.phase_name(t.open_at_s + 5.5), "end_flash")
 
 
 func test_a_ship_made_point_starts_at_the_flash() -> void:
@@ -70,3 +73,32 @@ func test_open_in_s_counts_down_to_open() -> void:
 	assert_almost_eq(t.open_in_s(0.0), 3.5, EPS)
 	assert_almost_eq(t.open_in_s(2.0), 1.5, EPS)
 	assert_eq(t.open_in_s(5.0), 0.0)
+
+
+func test_the_close_ends_in_a_flash_like_the_opening() -> void:
+	# The maintainer (2026-11-12): a flash when the vortex closes as when it opens, for arrivals and departures alike.
+	var t := VortexTiming.new(2.0, 1.0)
+	var folded: float = t.close_from_s + VortexTiming.CLOSE_S
+	assert_eq(t.flash(t.close_from_s + 0.1), 0.0, "no flash early in the fold")
+	assert_gt(t.flash(folded - 0.1), 0.0, "it rises through the last third of the fold")
+	assert_almost_eq(t.flash(folded), 1.0, EPS, "at its peak as the funnel reaches the centre")
+	assert_eq(t.growth(folded), 0.0, "the funnel is gone by then")
+	assert_almost_eq(t.flash(folded + VortexTiming.END_FLASH_S * 0.5), 0.5, EPS, "dying away")
+	assert_eq(t.flash(t.done_at_s()), 0.0, "out when the opening is over")
+	assert_false(t.is_open(folded + 0.1), "no ship passes during it")
+	assert_eq(t.open_in_s(folded + 0.1), 0.0)
+	var last: float = 2.0
+	for i: int in 11:
+		var level: float = t.flash(folded + 0.1 * float(i))
+		assert_true(level <= last + EPS, "it only fades after the peak")
+		last = level
+	var never_held := VortexTiming.new(0.0, 0.0)
+	assert_eq(never_held.flash(never_held.open_at_s), 0.0, "an opening held for no time keeps its two flashes apart")
+
+
+func test_extend_and_close_now_leave_the_closing_flash_alone() -> void:
+	var t := VortexTiming.new(1.0, 1.0)
+	var flash_at: float = t.close_from_s + VortexTiming.CLOSE_S + 0.2
+	t.extend(flash_at, 5.0)
+	t.close_now(flash_at)
+	assert_eq(t.phase(flash_at), VortexTiming.Phase.END_FLASH, "a vortex in its closing flash is not held open again")

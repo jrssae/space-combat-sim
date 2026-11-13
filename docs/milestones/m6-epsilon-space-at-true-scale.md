@@ -1641,6 +1641,34 @@ which changes the same native rows and rebase path:
     `still_edge_crops.png`.
   - **Own estimate against `jumpgate.png`:** about 80 %. The edge now fades and breaks up like the still's. Still different: the
     opening is larger (it meets our rails), the blue lighter, the streaks longer. Open (H): the side-by-side.
+- **The closing flash (maintainer, 2026-11-12, after the departure and arrival sequence `round6/sequence_departure_arrival.gif`):**
+  "The same way there's a flash when the vortex opens, there needs to be a flash when the vortex closes as well. Same for both
+  arrival and departures." The flash is white like the opening one, not in the direction's colours (a correction the same day).
+  - **Done:** `VortexTiming` has a phase `END_FLASH` (`end_flash`) between `CLOSING` and `CLOSED`, `END_FLASH_S` = 1 s (the
+    opening flash's length). The funnel folds back to its centre during the 1 s close as before (the reverse of the
+    unfold: it is pulled in from the rim to the base). The flash then mirrors the opening one: it rises through the last
+    third of the fold, peaks as the funnel reaches the centre, and dies away over the second after it. It is the opening's
+    own flash quad (`jump_glow`, white with pale rays) at the funnel's base, with the vortex's light. It plays for every
+    jump point, gate or ship-made, in both directions. An opening now lasts 1 s longer (`done_at_s`). Nothing passes
+    during the flash (`is_open` false, `open_in_s` INF from `CLOSING` on). `JumpVortex.open` keeps an opening only while it
+    is still before its close, so a new one waits for the flash to finish. A departing ship still counts as through at half
+    grown, before the close, and the gate's arrivals still wait for `open_in_s`. Neither `GateJump`, `JumpPointPool`
+    (it takes back its oldest point when none is free) nor `JumpgateHost` needed changes beyond the providers' phase
+    lists. `info.md`'s `gate` row lists the new phase.
+  - **Tests:** `test_vortex_timing` (the phases with `end_flash`; new: the close ends in a flash like the opening, which rises
+    through the fold, peaks with the funnel gone, fades, and keeps apart from the opening flash at a zero hold; a vortex in
+    its closing flash is not held open again), `test_jumpgate_broadcast` (the gate's close: `end_flash`, no funnel, the flash
+    shown, then gone). Green with `GUT_SLOW=1`: those, `test_gate_jump`, `test_vortex_fit`, `test_gate_activation`,
+    `test_vortex_swirl`, `test_mission_runner` (55), `test_jumpgate_in_play`, `test_encounters` (20). Compile check clean (702
+    scripts); quick tier green (1 883 GUT tests, 131 s).
+  - **The sequence again** (Movie Maker inside headless gamescope, `--display-driver x11 --write-movie --fixed-fps 30`,
+    1920x1080, `gate view reference`, `gate open departure 1`, then `gate open arrival 1`):
+    `round6/sequence_departure_arrival_v2.gif` (720 px, 20 fps) and `..._v2.mp4` (1080p, crf 17), captioned. Each opening
+    now ends in the white flash.
+  - **The swirl checked frame by frame** from the reference pose (seen from in front): the open funnel's annulus unwrapped
+    into angle and log radius, and the best shift found between frames a third of a second apart. Departure: **clockwise**
+    (-3.5 degrees per third of a second) and **inward** (-0.03 in log radius). Arrival: **counter-clockwise** (+3.0) and
+    **outward** (+0.015 to +0.03). Every pair matches at 0.6 to 0.78 while the funnel is open, as round 3 specified.
 
 ### M6-T20 Vortex detail by distance and mass arrivals
 
