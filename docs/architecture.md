@@ -5410,3 +5410,47 @@ native/src/surface_rows.rs       ScsSimCore.set_surface / clear_surface / surfac
 - **Marker.** `BABYLON 5`, `earth_alliance`, kind `PROP`, broadcasting to 1 000 km (the AI hears it, M3-T17).
 - **Cost.** Jolt's physics stage with a fighter in the tunnel, along the spine and along the drum: +11 to +31 us a tick on a quiet
   machine (one and six core threads), +43 to +91 us under load (`test_station_jolt_cost`, slow); T05's 192 shapes a piece stand.
+
+### 20.2 Cobra-bay launches (D76, T08)
+
+```
+src/mission/launch_sequence.gd   LaunchSequence (pure): one wing's launch in the drum's frame: racks, second row, doors, holds, hand-off
+src/mission/launch_profile.gd    LaunchProfile: the steps' timings and the launch camera's shots, from data/launch/cobra_launch.json
+src/mission/launch_director.gd   LaunchDirector (Main's child, priority -45): carries the fighters, hands them over, the camera, console `launch`
+src/world/station_door_leaves.gd StationDoorLeaves: the doors' leaf props swung outward on their hinges
+data/launch/cobra_launch.json    door 3 s, drop 3 s, stagger 1.5 s, wave gap 10 s, second row 6 s; shots per step
+data/scenarios/station_launch.json  the player on Alpha 3 with three wingmen
+```
+
+- **Contract.** A scenario starts in a bay with `player.launch_bay: "cobra_bay_<wing>_<door>"` (or `player.launch: {"wing", "door"}`,
+  read as the same name; `player.position` is then optional and only a fallback). A mission calls `await m.launch_from(wing, door)`
+  (`MissionApi`, through `MissionStage.launch_from`): it resolves at the player's hand-off; in a skipped step it jumps the player to
+  the hand-off and returns at once. A respawn in a `launch_bay` scenario launches again from the same bay, without the wingmen.
+  `Main.controls_locked()` holds while the player is on its rack or rail; Main's shot skip (A or Start) also skips the launch.
+- **A launch** (`LaunchSequence.create(hardpoints, wing, ids, profile, first_door, drum_angle, spin)`): up to twelve fighters; the first
+  six take the arm's racks from `first_door` round the arm (the player first, its wingmen next, in the wave order), the next six the
+  second row behind the same doors. Each first-wave door opens a stagger after the one before; a fighter drops when its door is open,
+  its time has come and the fighter before it in the wave dropped a stagger ago. The drop is from rest at a steady acceleration down
+  `rail_start`, `rail_end`, `release` (17 m in 3 s: 11.3 m/s at the release). The second row moves along `staging_path` once its rack is
+  empty and drops `wave_gap_s` after the first wave's last release. A door closes `door_close_after_s` after its last fighter left.
+- **Hold under the spine.** A drop starts only when the arm (`cobra_arm.arms[].angle_deg` plus the drum's turn) stays out of every
+  `launch_clearance` sector for the whole drop, checked every 0.5 degrees of its sweep; otherwise the fighter holds and the wave's later
+  drops wait behind it. A skip under the spine waits on the rack, door open, and goes the tick the arm is clear. So no fighter is let go
+  inside a blocked sector.
+- **The hand-off state** is the release point turned with the drum, moving at the drum's surface velocity there (`w x r`) plus the
+  rail's speed along `release_direction`, spinning with the drum; in the World, plus the station's place and `WorldFrame.rest_velocity()`.
+  A played launch and a skipped one end in the same state against the drum (`LaunchDirector.last_handoff` records it).
+- **Riding the drum.** A fighter on a rack or rail keeps its dynamic body but with `custom_integrator` on (no force moves it), no
+  collision layers and `tier_exempt`; each tick the director sets its pose and velocity from the drum's angle before Jolt's step (the
+  angle the drum's body still has), so after the step it stands where the drum's body does. A rebase moves the station and the fighter
+  together (both are shifted; nothing is kinematic, so there is no velocity spike). At the release the layers come back and Jolt flies it.
+- **The drawn drum.** `Station.visual_angle(fraction)` draws the drum between its body's last two angles, as interpolated ships are
+  drawn, so a fighter riding it sits on its rack on screen (before T08 the picture led the body by two ticks, 1.2 m at the doors).
+- **Camera.** `LaunchProfile.shots` are `CinematicShot`s with a step (`door`, `hold`, `drop`, `release`) and `at_s`; each plays once the
+  player's fighter has been that long in that step. Actors: `bay` (the player's door frame as the drum is drawn: x across the arm, y out
+  of the drum, z aft) and `fighter` (the player's ship). As built: inside the hall at the opening door, the arm from outside while it
+  holds, from above the door as it drops, then a chase from the fighter's belly side as it clears.
+- **Wing launches.** `launch wing <wing>` takes twelve Starfuries from the ally pool (topping it up with `ShipPool.prepare`), named
+  `<WING> 1` to `12` with the `ally_starfury` profile and no wing yet (T10 gives them their part).
+- **For M8.** A squadron launch is one `LaunchSequence` per wing (or several in turn) with a profile of its own; the shots and the steps
+  are data.

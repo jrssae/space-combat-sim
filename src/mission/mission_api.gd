@@ -21,6 +21,8 @@ extends RefCounted
 ##     m.objective_add(id [, text, primary]) / m.objective_complete(id) / m.objective_fail(id)
 ##     m.waypoint(name or null)        the HUD's waypoint marker on an actor
 ##     m.lock_controls(on)             the player's flight and combat commands held at zero; the ship flies on (D55)
+##     await m.launch_from(wing, door) the player launches from a Cobra bay (M7-T08, D76: "alpha" and 1 to 6), its wingmen from the
+##                                     arm's other doors in the wave order; resolves at the player's hand-off
 ##     m.end(success [, reason])
 ##     m.time_s(), m.alive(name), m.objective_state(id)
 ##     m.filled(text)                  `text` with the scenario's placeholders filled in ("{civilian}" -> the drawn ship's name)
@@ -334,6 +336,30 @@ func waypoint(target: Variant) -> void:
 	waypoint_name = "" if target == null else String(target).strip_edges()
 	waypoint_serial += 1
 	journal.append("waypoint %s" % (waypoint_name if not waypoint_name.is_empty() else "none"))
+
+
+## Launches the player from wing `wing`'s Cobra bay door `door` (M7-T08, D76) and waits for the hand-off: its door opens, it drops
+## from its rack with the launch camera's shots and is let go with the drum's surface velocity; its wingmen take the arm's other
+## racks. In a skipped step the player's part jumps to the hand-off (the wingmen go on with theirs) and it returns at once.
+func launch_from(wing: String, door: int) -> void:
+	if has_ended():
+		return
+	journal.append("launch_from %s %d" % [wing, door])
+	if stage == null:
+		return
+	var why: String = stage.launch_from(wing, door)
+	if not why.is_empty():
+		push_error("Mission: launch_from: %s" % why)
+		return
+	if _seq.skipping:
+		stage.skip_launch()
+		return
+	while not _seq.stopped and not _seq.skipping and stage.launching():
+		await _seq.wake
+	if _seq.skipping:
+		stage.skip_launch()
+	while _seq.stopped:
+		await _seq.wake
 
 
 ## Holds or frees the player's controls: while held, `Main` zeroes their flight and combat commands and the ship flies on.

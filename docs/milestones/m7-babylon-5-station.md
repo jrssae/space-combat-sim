@@ -534,6 +534,36 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   about 36 m/s and is rammed, so the launch carries the fighter with the drum (on its rack and rail, in the drum's frame) and
   releases it with the drum's surface velocity (Q3), never as a free body at rest beside a turning door.
 - **Done when:** AC7.
+- **Done (as built; contracts in `docs/architecture.md` §20.2):**
+  - **`LaunchSequence`** (`src/mission/launch_sequence.gd`, pure, in the drum's frame): one wing's launch of up to twelve, the first
+    six on the racks from the named door round the arm (the player first, its wingmen in the wave order), the second row behind the
+    same doors; doors open a stagger apart, each fighter drops from rest down its rail (`rail_start`, `rail_end`, `release`: 17 m in
+    3 s) and is let go with the drum's surface velocity plus the rail's 11.3 m/s along `release_direction`, spinning with the drum;
+    the second row moves up along `staging_path` once its rack is empty and drops **10 s after the first wave's last release**. The
+    **hold**: a drop starts only if the arm stays out of `launch_clearance`'s sectors (via `StationHardpoints.launch_blocked`) until
+    its release; else it holds and the wave's later drops wait behind it. A **skip** lets the fighter go from its release point at once
+    in the same hand-off state, or, under the spine, the tick the arm is clear. Timings and shots are data
+    (`data/launch/cobra_launch.json`, `LaunchProfile`): door 3 s, drop 3 s, stagger 1.5 s, wave gap 10 s, second row 6 s.
+  - **`LaunchDirector`** (Main's child, priority -45): carries every fighter on a rack or rail with the drum (dynamic body,
+    `custom_integrator` on, no collision layers, `tier_exempt`; pose and velocity set each tick from the drum's pre-step angle, so a
+    rebase moves fighter and station together), swings the doors' leaves (`StationDoorLeaves`, outward on their hinges), hands each
+    fighter over at its release, holds the player's controls until then and plays the launch camera's shots by step (in the hall at
+    the opening door, the arm from outside while held, from above the door as it drops, a chase as it clears). A or Start (Main's
+    shot skip) skips the launch. A respawn in a bay scenario launches again from the same bay, without the wingmen.
+  - **Scenario key `player.launch_bay`** (`"cobra_bay_alpha_3"`); `player.launch: {"wing", "door"}` is read as the same name.
+    `data/scenarios/station_launch.json` starts the player on Alpha 3 with three wingmen (also in `settings.scenario`'s choices).
+    **`MissionApi.launch_from(wing, door)`** resolves at the hand-off. Console `launch <wing> <door>`, `launch wing <wing>` (twelve
+    AI Starfuries in two waves, the ally pool topped up), `launch skip`, `launch status`; provider `launch`; `info.md` updated.
+  - **`Station.visual_angle`**: the drum is drawn between its body's last two angles, as interpolated ships are; before, the picture
+    led the body by two ticks (1.2 m at the doors), which showed a riding fighter off its rack. One hunk in `station.gd`.
+  - **Tests:** `tests/unit/test_launch_sequence.gd` (15: the profile file, bad launches, rack order, the hand-off state, the rail into
+    it, skip lands in the same state, skip under the spine, hold and release on leaving the sector, a drop that would end inside
+    waits, no release inside a sector over whole wings from six angles, the 10 s gap and the second row, a hold slips the wave, the
+    staging path, the doors, a rebase), `test_scenario_loader.gd` (+1: both keys), GUT `tests/integration/test_launch_bay.gd` (8: the
+    scenario start on the racks riding the drum, the hand-off state and the shots, the skip with Start, the wingmen's order, a rebase
+    mid-drop, a hold under the spine, `launch wing`, `MissionApi.launch_from`). Station asset rebuilt after T21's commit.
+  - **Sheet (H):** `references/screenshots/M7-T08 launch/M7-T08_launch_shots_sheet.png` (frames 1 to 6 beside it; RX 6950 XT,
+    Forward+, X11, 960 x 540: 44 to 59 draw calls, about 75 000 triangles).
 
 ### M7-T09 The station interior for the front end
 

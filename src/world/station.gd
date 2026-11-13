@@ -152,10 +152,15 @@ func _physics_process(_delta: float) -> void:
 func _process(_delta: float) -> void:
 	if drum_pivot == null:
 		return
-	# Between ticks the picture turns on to where the next tick will put the body.
-	var ahead: float = Engine.get_physics_interpolation_fraction() / float(Engine.physics_ticks_per_second)
-	var angle: float = fposmod(spin.angle_at(_system_time() + ahead) + _phase, TAU) if spinning else drum_angle
-	drum_pivot.transform = Transform3D(Basis(Vector3.BACK, angle), drum_origin)
+	drum_pivot.transform = Transform3D(Basis(Vector3.BACK, visual_angle(Engine.get_physics_interpolation_fraction())), drum_origin)
+
+
+## The drum's angle as drawn `fraction` of the way through the frame's tick: between the body's last two angles, as the
+## interpolated ships beside it and riding it are drawn (M7-T08: a launching fighter rides the drum).
+func visual_angle(fraction: float) -> float:
+	if not spinning:
+		return drum_angle
+	return fposmod(drum_angle + spin.rate_rad_s * (fraction - 1.0) / float(Engine.physics_ticks_per_second), TAU)
 
 
 ## Turns the drum's body (and its picture) to `angle` radians about +Z.

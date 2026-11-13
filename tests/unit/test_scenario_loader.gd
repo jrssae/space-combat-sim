@@ -674,3 +674,24 @@ func test_civilian_names_are_checked() -> void:
 	_assert_fails(data, "case: civilian_names.raider_fighter is not a civilian hull")
 	data["civilian_names"] = {"skylark_transport": []}
 	_assert_fails(data, "case: civilian_names.skylark_transport must be a non-empty list of names")
+
+
+func test_a_launch_bay_start_is_read_either_way() -> void:
+	# M7-T08: `player.launch_bay` names the bay; `player.launch` {wing, door} is written as the same name.
+	var data: Dictionary = _minimal()
+	assert_eq(ScenarioLoader.from_data(data)["player"]["launch_bay"], "", "in flight by default")
+	data["player"] = {"launch_bay": "cobra_bay_alpha_3"}
+	var named: Dictionary = ScenarioLoader.from_data(data, "case")
+	assert_true(bool(named["ok"]), str(named.get("error", "")))
+	assert_eq(named["player"]["launch_bay"], "cobra_bay_alpha_3", "no position needed")
+	data["player"] = {"launch": {"wing": "Zeta", "door": 6}, "position": [10, 0, 0]}
+	assert_eq(ScenarioLoader.from_data(data)["player"]["launch_bay"], "cobra_bay_zeta_6")
+	data["player"] = {"launch_bay": "bay_3"}
+	_assert_fails(data, "player.launch_bay must name a bay")
+	data["player"] = {"launch_bay": "cobra_bay_alpha_3", "launch": {"wing": "alpha", "door": 3}}
+	_assert_fails(data, "player takes launch_bay or launch, not both")
+	data["player"] = {"launch": {"wing": "alpha"}}
+	_assert_fails(data, "player.launch must be")
+	var file: Dictionary = ScenarioLoader.load("res://data/scenarios/station_launch.json")
+	assert_true(bool(file["ok"]), str(file.get("error", "")))
+	assert_eq(file["player"]["launch_bay"], "cobra_bay_alpha_3", "the station launch scenario starts in Alpha 3")

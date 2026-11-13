@@ -32,6 +32,8 @@ var jumps: JumpPointPool = null
 var gates: JumpgateHost = null
 ## Plays the mission's cinematics (D55).
 var camera_rig: CameraRig = null
+## Cobra-bay launches (M7-T08); null in a stage without a `Main`.
+var launches: LaunchDirector = null
 var system_id: StringName = &"local"
 ## Mixed into spawned pilots' brain seeds (the scenario's seed: the same seed flies the same mission).
 var seed_value: int = 0
@@ -48,6 +50,7 @@ func setup(main: Main, p_jumps: JumpPointPool) -> void:
 	jumps = p_jumps
 	gates = main.gates
 	camera_rig = main.camera_rig
+	launches = main.launches
 	system_id = main.world.origin.system_id
 	seed_value = main.scenario_seed
 	if player != null:
@@ -303,6 +306,24 @@ func send(ship_name: String, target_name: String) -> bool:
 	var target: String = target_name.strip_edges()
 	pilot.context.objective_name = "" if target.to_lower() == "none" else target
 	return true
+
+
+## Starts the player's launch from wing `wing`'s door `door`, wingmen on the arm's other racks (M7-T08); "" or why not.
+func launch_from(wing: String, door: int) -> String:
+	if launches == null or not is_instance_valid(launches):
+		return "no launch director in this scene"
+	return launches.launch_player(wing, door)
+
+
+## The player is still on its rack or rail.
+func launching() -> bool:
+	return launches != null and is_instance_valid(launches) and launches.locks_controls()
+
+
+## Jumps the player's launch to the hand-off (a skipped step).
+func skip_launch() -> void:
+	if launches != null and is_instance_valid(launches):
+		launches.skip()
 
 
 ## Plays `shot` on the camera rig (D55): its actors are found by name every frame, its origin points from the scenario's origin.

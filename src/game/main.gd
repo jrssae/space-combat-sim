@@ -12,7 +12,7 @@ const SCENARIO_DIR := "res://data/scenarios/"
 ## The debug overlay's text is rebuilt this often while it shows (M4-T36): a readout, not an animation.
 const OVERLAY_INTERVAL_S: float = 0.1
 const SCENARIO_CHOICES: Array[StringName] = [&"combat_sandbox", &"free_flight", &"instructor_route", &"dogfight",
-		&"civilian_showcase", &"belt_showcase"]
+		&"civilian_showcase", &"belt_showcase", &"station_launch"]
 
 ## The player's hull reached zero (the ship is hidden and disabled; input is ignored until the respawn).
 signal player_died
@@ -84,6 +84,8 @@ var gates: JumpgateHost = null
 var far_props: FarPropHost = null
 ## The star system the scene flies in (M6-T03).
 var star_system: StarSystemHost = null
+## Cobra-bay launches from the station (M7-T08): the scenario's `launch_bay` start, `MissionApi.launch_from`, console `launch`.
+var launches: LaunchDirector = null
 ## Where and when the scenario is in its star system (M6-T09): `ScenarioFrame.resolve`'s result, empty without a system.
 var frame: Dictionary = {}
 
@@ -216,6 +218,15 @@ func _ready() -> void:
 			gates.place(entry, star_system.system, frame)
 		_spawn_belts(scenario["belts"])
 	_spawn_scenario_ships()
+	launches = LaunchDirector.new()
+	launches.main = self
+	add_child(launches)
+	var launch_bay: String = String((scenario.get("player", {}) as Dictionary).get("launch_bay", ""))
+	if not launch_bay.is_empty():
+		launches.start_bay = launch_bay
+		var why: String = launches.launch_from_bay(launch_bay)
+		if not why.is_empty():
+			push_warning("Main: the scenario starts in %s: %s" % [launch_bay, why])
 	if not (scenario.get("mission", {}) as Dictionary).is_empty():
 		mission = MissionRunner.create(self, scenario)
 	camera_rig.setup(ship, ship.cockpit_anchor, ship.get_chase_offset(), ship.set_cockpit_interior_visible)
@@ -277,6 +288,7 @@ func _physics_process(delta: float) -> void:
 	var pc: PilotCommand = adapter.sample(input_source, delta)
 	if control_lock.apply(pc, controls_locked(), camera_rig.is_playing_shot()):
 		camera_rig.stop_shot()
+		launches.skip()  # a launch's shot skipped jumps the player to the hand-off (M7-T08)
 	if pc.ui.request_jump:
 		gates.start_jump()
 	var autopilot: FlightCommand = gates.step_player(delta) if not get_tree().paused else null
@@ -531,10 +543,11 @@ func objectives() -> Array[Dictionary]:
 	return mission.objectives() if mission != null else ([] as Array[Dictionary])
 
 
-## The running mission holds the player's controls (`MissionApi.lock_controls`), or a gate jump does (M6-T14): the ship flies on
-## without them.
+## The running mission holds the player's controls (`MissionApi.lock_controls`), or a gate jump does (M6-T14), or the player is
+## on a Cobra bay's rack (M7-T08): the ship flies on without them.
 func controls_locked() -> bool:
-	return (mission != null and mission.api != null and mission.api.controls_locked) or (gates != null and gates.locks_controls())
+	return (mission != null and mission.api != null and mission.api.controls_locked) or (gates != null and gates.locks_controls()) \
+			or (launches != null and launches.locks_controls())
 
 
 # A cinematic hides the HUD and brings the letterbox in; the comms panel keeps its subtitles (D55).
