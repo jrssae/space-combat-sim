@@ -124,12 +124,18 @@ func test_each_kind_of_body_gets_its_layer_and_mask() -> void:
 	world.spawn(cap, world.to_universe(Vector3(0.0, 0.0, -3000.0)))
 	assert_eq(cap.collision_layer, CollisionLayers.layer_of(&"capital"))
 	assert_eq(cap.collision_mask, CollisionLayers.mask_of(&"capital"))
+	# A rock lives as a body only near a ship (M6-T21): the one 20 m off the fighter's centre, not the one 5.5 km out.
 	var field := AsteroidField.new()
 	world.spawn(field, world.to_universe(Vector3(0.0, 0.0, -6000.0)))
-	field.build([{"offset": Vector3.ZERO, "radius": 50.0}] as Array[Dictionary], world.get_world_3d().space, world)
-	var rock: RID = field.body_rids()[0]
-	assert_eq(PhysicsServer3D.body_get_collision_layer(rock), CollisionLayers.layer_of(&"rock"))
-	assert_eq(PhysicsServer3D.body_get_collision_mask(rock), CollisionLayers.mask_of(&"rock"))
+	field.build([{"offset": Vector3.ZERO, "radius": 50.0}, {"offset": Vector3(0.0, 0.0, 5430.0), "radius": 50.0}] \
+			as Array[Dictionary], world.get_world_3d().space, world)
+	await _ticks(1)
+	var near: RID = field.body_rids()[1]
+	assert_eq(PhysicsServer3D.body_get_collision_layer(near), CollisionLayers.layer_of(&"rock"))
+	assert_eq(PhysicsServer3D.body_get_collision_mask(near), CollisionLayers.mask_of(&"rock"))
+	var far: RID = field.body_rids()[0]
+	assert_eq(PhysicsServer3D.body_get_collision_layer(far), 0, "a dormant rock: nothing touches it")
+	assert_eq(PhysicsServer3D.body_get_collision_mask(far), 0)
 
 
 # --- fighters meeting (Q33: they collide in Jolt, as on the base) ---------------------------------------------------

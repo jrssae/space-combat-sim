@@ -13,7 +13,8 @@ extends Node
 ## All of it goes when the run ends.
 ##
 ## `boost=` (M6-T06) boosts the frame off its anchor once the scene is placed, so the run measures the frame falling
-## freely (the anchor-tied things drift every tick) with the same relative motion as a run that rides the anchor.
+## freely (the anchor-tied things drift every tick) with the same relative motion as a run that rides the anchor. The
+## automatic velocity rebase is held off for the run (M6-T21), or it would boost the frame straight back.
 
 ## The report is written; the run's summary.
 signal finished(summary: Dictionary)
@@ -187,6 +188,7 @@ func _set_up_scene() -> void:
 	_restore = {
 		"table": Factions.table(),
 		"threshold": main.world.auto_rebase_distance_m,
+		"boost_speed": main.world.auto_boost_speed_mps,
 		"god": DebugConsole.flags.invulnerable,
 		"probe": probe.enabled,
 		"sleep": OS.low_processor_usage_mode_sleep_usec,
@@ -249,6 +251,7 @@ func _set_up_scene() -> void:
 		OS.low_processor_usage_mode_sleep_usec = 0
 		probe.time_sync = true
 	if float(_options.get("boost", 0.0)) > 0.0:
+		main.world.auto_boost_speed_mps = 0.0
 		main.world.boost(Vector3(float(_options["boost"]), 0.0, 0.0))
 	probe.recording = false
 	probe.clear_series()
@@ -459,6 +462,7 @@ func _put_back() -> void:
 	DebugConsole.flags.invulnerable = bool(_restore["god"])
 	if main != null and is_instance_valid(main.world):
 		main.world.auto_rebase_distance_m = float(_restore["threshold"])
+		main.world.auto_boost_speed_mps = float(_restore["boost_speed"])
 		if float(_options.get("boost", 0.0)) > 0.0:
 			main.world.boost_to_anchor()
 	if standins != null and is_instance_valid(standins):

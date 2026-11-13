@@ -209,8 +209,8 @@ func test_a_rebase_shifts_every_rock_and_the_capitals() -> void:
 	world.rebase(offset)
 	assert_almost_eq(StaticRows.position_of(field.row_id(1)).distance_to(row_before - offset), 0.0, 1e-3, "the row moved")
 	assert_almost_eq(cap.global_position.distance_to(cap_before - offset), 0.0, 1e-3, "the capital moved")
-	for i: int in rocks.size():
-		var xform: Transform3D = PhysicsServer3D.body_get_state(field.body_rids()[i], PhysicsServer3D.BODY_STATE_TRANSFORM)
+	for i: int in rocks.size():  # no ship near, so rows only: each body comes to life where it belongs (M6-T21)
+		var xform: Transform3D = field.rock_bodies().placed(i, field.global_transform)
 		assert_almost_eq(xform.origin.distance_to((rocks[i]["offset"] as Vector3) - offset), 0.0, 1e-3, "rock %d's body moved" % i)
 	# Headless rendering keeps no instance data, so the drawing is checked by what carries it: one multimesh of every rock,
 	# inside the field node the rebase moved.

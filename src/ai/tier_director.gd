@@ -284,7 +284,7 @@ func forget(c: Combatant) -> void:
 		c.driver.set_tiered(false)
 	if _sim != null and is_instance_valid(_sim) and _sim.core != null:
 		_sim.core.tier_remove(body_id)  # leaves play, not a promotion (fix round 1)
-	c.ship.remove_meta(TIER_META)
+	ShiftableRegistry.set_out(c.ship, TIER_META, false)
 
 
 ## A capital leaves play while it is in the tier (destroyed, M4-T23): its row goes with it.

@@ -106,7 +106,7 @@ func acquire(display_name: String, at: UniversePos, basis: Basis = Basis.IDENTIT
 		push_warning("ShipPool: no free %s (pool of %d, all in use)" % [type, _count_of(type)])
 		return null
 	var ship: Ship = combatant.ship
-	ship.remove_meta(WorldFrame.PARKED_META)
+	ShiftableRegistry.set_out(ship, WorldFrame.PARKED_META, false)
 	ship.process_mode = Node.PROCESS_MODE_INHERIT
 	ship.visible = true
 	ship.reset_to(Transform3D(basis, world.universe_to_local(at)))
@@ -247,7 +247,7 @@ func _park(combatant: Combatant) -> void:
 	var ship: Ship = combatant.ship
 	ship.visible = false
 	ship.process_mode = Node.PROCESS_MODE_DISABLED
-	ship.set_meta(WorldFrame.PARKED_META, true)  # rebases leave it: `acquire` places it (M6-T06)
+	ShiftableRegistry.set_out(ship, WorldFrame.PARKED_META, true)  # rebases leave it: `acquire` places it (M6-T06, M6-T21)
 	ship.tier_exempt = false
 	ship.linear_velocity = Vector3.ZERO
 	ship.angular_velocity = Vector3.ZERO

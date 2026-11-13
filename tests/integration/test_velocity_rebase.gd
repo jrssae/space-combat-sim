@@ -222,7 +222,7 @@ func test_off_the_anchor_everything_flies_on_and_the_anchored_things_stay_with_t
 	var start: Dictionary = _movers()
 	var still: Dictionary = _anchored()
 	var origin_at_start: UniversePos = world.origin
-	var rock_body_before: Vector3 = (PhysicsServer3D.body_get_state(field._bodies[0], PhysicsServer3D.BODY_STATE_TRANSFORM) as Transform3D).origin
+	var rock_body_before: Vector3 = _rock_body(0)
 	world.apply_boost(DV)
 	var ticks: int = 30
 	await _ticks(ticks)
@@ -250,9 +250,16 @@ func test_off_the_anchor_everything_flies_on_and_the_anchored_things_stay_with_t
 		var b: PackedFloat64Array = _anchored()[key]
 		assert_lt(Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]).length(), 0.01, "%s stayed where it is in the universe" % key)
 	assert_lt(float(held["dv"]), VELOCITY_TOL)
-	var rock_body_now: Vector3 = (PhysicsServer3D.body_get_state(field._bodies[0], PhysicsServer3D.BODY_STATE_TRANSFORM) as Transform3D).origin
+	var rock_body_now: Vector3 = _rock_body(0)
 	assert_almost_eq(rock_body_now - rock_body_before, -DV * t, Vector3.ONE * 0.05, "the rock's body moved with its row")
 	assert_lt(buoy.global_position.distance_to(Vector3(900.0, -100.0, 300.0) - DV * t), 5.0, "in local terms the buoy fell behind")
+
+
+# Where rock `i`'s body stands: the live body itself, or the place a dormant one comes to life at (M6-T21).
+func _rock_body(i: int) -> Vector3:
+	if field.rock_bodies().is_live(i):
+		return (PhysicsServer3D.body_get_state(field.body_rids()[i], PhysicsServer3D.BODY_STATE_TRANSFORM) as Transform3D).origin
+	return field.rock_bodies().placed(i, field.global_transform).origin
 
 
 func test_a_boost_in_the_middle_of_a_gentle_touch_is_no_ram() -> void:

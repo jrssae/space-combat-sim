@@ -303,7 +303,7 @@ which changes the same native rows and rebase path:
 | T18 | E | The review's CONFIRMED test removals (sections A to D), each re-checked, the parity recordings still read | T17 | Opus | Proving two tests cover the same thing needs both read in full; rules on what must stay | done |
 | T19 | D | The vortex reworked and stand-alone: fitted to the gate, a shallow funnel, spiralling soft dark patches; open jump points use it too | T14 | Opus | Shader animation and a shared effect seam; the look is (H) | in progress |
 | T20 | D | Vortex detail by distance and mass arrivals: detail layers dropped with screen size; up to 100 jump points forming at once; every ship of the 1 000-ship battle enters through one; the battle's GPU fps test with them | T19, T07 | Opus | A shader LOD, a pooled effect at a hundred instances and the battle's spawn path, judged on the GPU | not started |
-| T21 | A | The rebase's per-node rest: only the rocks near a ship live in Jolt; a list of the shiftables in play instead of walking the group | T06, T07 | Opus | A measured engine-side follow-up to T06 on the paths T07 also changes | in progress |
+| T21 | A | The rebase's per-node rest: only the rocks near a ship live in Jolt; a list of the shiftables in play instead of walking the group | T06, T07 | Opus | A measured engine-side follow-up to T06 on the paths T07 also changes | done |
 
 ### M6-T01 Moving-frame audit and design
 
@@ -1647,4 +1647,69 @@ which changes the same native rows and rebase path:
   and demoted keeps its place; the rebase tests keep their tiers.
 - **Done when:** the median rebase tick's extra and the off-anchor tick's extra at `bench battle 1000` measured before and
   after, both lower; nothing about a ram or a hit on a rock changes.
+
+- **Done (2026-11-12):**
+  - **Live rocks** (`src/world/rock_bodies.gd`, `native/src/rock_stream.rs`, `kernels::rock_stream`). Each rock keeps its RID
+    body, but only the rocks a rigid hull could reach soon are live; the rest have layer and mask 0 and are never moved, so a
+    rebase or a drift places only the live ones. Every tick, just before `sync_out`, the native `ScsRockStream` looks the
+    core's rigid rows up in a dense grid of the rocks in their owner's frame (512 m cells, built once: no rebase or drift
+    changes it). Each hull is seen from the owner and moves against the rocks at the World's rest velocity. A rock within
+    0.25 s of motion plus 20 m comes to life; it is demoted once no hull has been within that reach plus 10 % (the tier's
+    `HYSTERESIS`) for 30 ticks. The hold exists because a ship destroyed against a rock leaves the rows in that tick but stays
+    in Jolt, and without it the destroyed fighter of `test_collision_layers` flew through. `AsteroidField` and `AsteroidBelt`
+    both use it. A rock that comes back is placed under its owner by the same rule a live one follows (`placed`), to the bit.
+    Why bodies stay in Jolt rather than leaving its space: no body is ever made again, so Jolt's body ids, by which it orders
+    a tick's contacts, stay as they were. The battle's recording keeps its bits. Bolts never needed the bodies: the hit sweep,
+    the rams and the scan read the rows. Cost: about 25 us a tick at `battle 1000`. A first try with the hit sweep's grid of
+    levels cost 88 us, about 125 cells probed per hull at this reach. In this battle no rock is near a ship most of the time
+    (332 hulls, 1 000 sparse rocks).
+  - **The shiftables in play** (`src/world/shiftable_registry.gd`). Kept from the tree's `node_added` and `node_removed`, so no
+    spawn site registers by hand. `ShiftableRegistry.set_out` parks a node out of it and brings it back: the pool's and the
+    tier's parked ships (`ShipPool`, `Ship` and `CapitalStandin.park_for_tier`, `TierDirector.forget`) and, new, idle debris
+    chunks and effect emitters (`DebrisChunk._park_state` and `launch`, `FxPool._release` and `burst`), which a rebase moved
+    hidden until now (about 54 a rebase). A node that joins the group after entering the tree, or leaves it while staying in
+    the tree, is caught before each walk by comparing the group's size with what is known, and the group is read once more.
+    `Projectile` now joins in `_init`. The rebase and the velocity rebase walk the list (about 450 nodes against 1 130).
+  - **The bench:** a `boost=` run now holds the automatic velocity rebase off. Since T08 turned it on in `main.tscn`, the
+    frame boosted straight back onto its anchor, and T06's off-anchor run measured a riding frame (+0.07 ms).
+  - **Numbers**, `bench battle 1000 20 warmup=3 seed=1` (headless, pinned 0-11, load 0.4 to 1.3; T09 and T19 shared the
+    machine for the first round). The extras are each round's own: the rebase-tick median over that run's tick median, and
+    the off-anchor median over the riding median.
+
+    | run | riding median ms | rebase ticks: median, worst ms | rebase-tick extra ms | off-anchor median ms | off-anchor extra ms |
+    |---|---|---|---|---|---|
+    | before, `dcaea040`, round 1 | 5.74 | 7.73, 8.36 | +1.91 | 6.35 | +0.61 |
+    | before, `dcaea040`, round 2 | 5.73 | 7.83, 10.64 | +2.05 | 6.34 | +0.61 |
+    | HEAD baseline (`de2b535e`, T09 and T19 in), round 1 | 5.81 | 7.55, 8.15 | +1.76 | 6.36 | +0.55 |
+    | HEAD baseline, round 2 | 5.75 | 7.62, 8.08 | +1.82 | 6.34 | +0.59 |
+    | after, round 1 (first stream kernel) | 5.87 | 6.91, 7.59 | +1.05 | 6.15 | +0.28 |
+    | after, round 2 | 5.87 | 7.17, 8.31 | +1.34 | 6.12 | +0.25 |
+    | after, round 3 | 5.82 | 7.03, 7.60 | +1.18 | 6.12 | +0.30 |
+
+    The rebase tick's extra drops from about 1.9 ms to 1.2 ms, and the off-anchor extra from about 0.59 ms to 0.28 ms. The
+    rebase's own readout (`shift`, the rebase and its settle) drops from 1.2 to 0.64 ms. The riding median is about 0.06 ms
+    above the HEAD baseline: the stream's 25 us, the rest inside the spread. `bench_quick.sh` battle (500, 1 000): HEAD tick
+    median 4.53 and 5.76 ms, p99 6.12 and 7.80, worst rebase tick 5.79 and 7.53; after 4.63 and 5.79, p99 6.20 and 8.57 (a
+    6 s run; the 20 s runs do not repeat it), worst rebase tick 5.34 and 6.80. Every budget held.
+  - **Left:** the resolvers' kept rock grids are still built again on every rebase and every off-anchor tick (two native
+    `keep` calls, about 45 us each). A ship spawned in the same tick right next to a dormant rock meets it one Jolt step
+    late (the stream reads the rows of the tick's sync); the row-based ram still lands.
+  - Tests. Rust 138 (new: the stream wants and keeps by reach and hysteresis, the hold, hulls in the owner's frame, against
+    the rocks' motion and out of Jolt, columns out of step, the grid against a test of every pair). GUT, **quick** (both
+    added to `tests/quick_suite.txt`): `test_rock_bodies.gd` (new, 4 tests, about 4 s): only the near rock lives and the
+    rest have no layer; a rock demoted after the hold, left by a rebase, then promoted stands where its owner puts it, to
+    the bit, as the control that lived along does; a ship flown into a dormant rock is stopped by it and the rock is never
+    dormant while the ship is within 15 m of its face; off the anchor the live body follows the drift and the dormant one
+    stays put. `test_shiftable_registry.gd` (new, 4 tests): listed on entering and dropped on leaving or freeing; parked by
+    the pool or the tier out of the walk and back; a late joiner and a node leaving the group in the tree found by the
+    count; a node outside the World never walked. Changed: `test_world_frame` parks through `set_out`; `test_standins`,
+    `test_rocks_and_mines`, `test_asteroid_belt` and `test_velocity_rebase` read a dormant rock's place from `placed`;
+    `test_collision_layers` checks a live and a dormant rock's layers. Quick tier 1 881 of 1 881 GUT, 138 Rust, 331
+    Python. With `GUT_SLOW=1`: `test_weapon_rows_battle` (recorded [933, 420, 174, 151, 25, 1], now the same),
+    `test_rebase_in_play` 9, `test_parity_fixture` 3, `test_flight_parity_fight` 1, `test_ship_pool` 21,
+    `test_debris_pool` 12, `test_fx_pool` 24, `test_tier` 11, `test_tier_handover` 13, `test_ram_damage` 14,
+    `test_hit_resolver` 17, `test_collision_layers` 15, `test_rocks_and_mines` 9, `test_standins` 20,
+    `test_asteroid_belt` 4, `test_explosion` 12, `test_weapons` 48, `test_bench` 10, `test_main_scene` 14,
+    `test_velocity_rebase` 10, `test_world_frame` 18, `test_sim_core`, `test_every_world_core`, `test_static_shift`
+    pass (314 tests).
 

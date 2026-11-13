@@ -3280,9 +3280,12 @@ src/perf/standins/capital_standin.gd   park_for_tier, unpark_from_tier; the dire
   contacts; `threaded` equals `delayed` (the tier runs on the main thread inside the sync; the job only reads its rows).
 - **The rebase** (refactor finding 11) walks the shiftable group once: the nodes it moved are kept for the end-of-tick
   interpolation reset, and a body parked for the tier is left where it stands (its row moves with the core and promotion
-  places it); a second rebase before the end-of-tick settle keeps the first one's nodes. The group is still walked, not kept as a list: nodes join it after entering the tree (`Projectile._ready`, the
-  camera rig, test fixtures), so a kept list would need every site to register with the World, and the walk itself is a
-  pointer copy; the cost was the translate of fifteen child nodes a ship, which the tier removes for parked ships.
+  places it); a second rebase before the end-of-tick settle keeps the first one's nodes. **Since M6-T21 the walk is a kept
+  list**, `ShiftableRegistry`: the group's nodes in play, World by World, kept from the tree's `node_added` and
+  `node_removed` (no site registers by hand), with what the pools and the tier park (`ShiftableRegistry.set_out`: the
+  tier's and the pool's parked ships, idle debris chunks and effect emitters) out of it until they are back. A node that
+  joins the group after entering the tree (test fixtures; `Projectile` now joins in `_init`) is caught by comparing the
+  group's size with what is known before each walk, which reads the group again. The velocity rebase walks the same list.
 - **Settings and console.** `tier_radius_m` (10 000 since T23; 0 = off, live), `tier_hz` (20, live). Provider `tier`: `radius_m`,
   `period_ticks`, `fighters`, `capitals`, `rows`, `hulks`, `promotions`, `demotions`, `step_us` (the tier's integration inside
   the sync), `director_us`. Provider `perf` and the bench's entity counts gain `tier_fighters` and `tier_capitals`;
@@ -3488,6 +3491,15 @@ native/src/contact_field.rs         + set_friendly_row; statics(..., faction, ..
 - **Rocks.** `AsteroidField.build(rocks, space, world)` registers each rock (kind `STATIC`, neutral, its radius) as it makes the
   RID body, and `free_bodies` removes the rows with the bodies. The field keeps only its multimesh node; `on_rebased` still moves
   the RID bodies (a node rebase does not reach them), the rows move with the world.
+- **Live rocks (M6-T21).** Only the rocks a rigid hull could reach soon are live Jolt bodies (`RockBodies`, shared by the
+  stand-ins' field and `AsteroidBelt`): each tick, late (just before `sync_out`), the native `ScsRockStream` sweeps the core's
+  rigid rows, seen in the owner's frame and moving against the rocks at the World's rest velocity, over a grid of the rocks
+  that no rebase or drift changes. A rock within `0.25 s` of motion plus 20 m of a hull comes to life; one is demoted once no
+  hull has been within that reach plus 10 % for 30 ticks (a hull destroyed against a rock leaves the rows before it leaves
+  Jolt). A dormant rock keeps its body with layer and mask 0, never moved, so `on_rebased` and every drift place only the live
+  ones; a rock that comes back is placed under its owner exactly as one that lived along. The bodies stay in Jolt rather than
+  leaving its space so no body is made again: Jolt orders contacts by body id, so the battle's bits hold. The hit sweep, the
+  rams and the scan read the rows, never the bodies, so nothing about a hit or a ram on a rock changes.
 - **Mines.** `MineStandin` registers every mine in play (kind `MINE`, its layer's faction, the trigger's 50 m as its radius, the
   director's world) when the belts are laid; a mine that goes off is unregistered at once, and laid again 10 s later it is
   registered again with the same id at its place. Leaving the tree (`remove_mines`, the director's `clear`) unregisters the

@@ -465,7 +465,7 @@ func speed_against_rest() -> float:
 ## Parks the body for the low-attention tier (M4-T21): hidden and not processing, so it leaves Jolt, the scan and every
 ## per-ship pass, while its name, pilot, hull and commands stay. The tier row carries its motion from here.
 func park_for_tier() -> void:
-	set_meta(&"_scs_tier_row", true)
+	ShiftableRegistry.set_out(self, &"_scs_tier_row", true)
 	visible = false
 	process_mode = Node.PROCESS_MODE_DISABLED
 
@@ -473,8 +473,7 @@ func park_for_tier() -> void:
 ## Brings the body back from its tier row exactly where the row left it: the pose, the velocities and the assist's state;
 ## the row command, when it flies one, is still in the core.
 func unpark_from_tier(xform: Transform3D, velocity: Vector3, spin: Vector3, pod_yaw: float) -> void:
-	if has_meta(&"_scs_tier_row"):
-		remove_meta(&"_scs_tier_row")
+	ShiftableRegistry.set_out(self, &"_scs_tier_row", false)
 	process_mode = Node.PROCESS_MODE_INHERIT
 	visible = true
 	global_transform = xform

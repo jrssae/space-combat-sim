@@ -74,9 +74,12 @@ var _pull := HeldPull.new()  # gravity (M6-T07), read once a second
 @onready var _bolt: MeshInstance3D = $Bolt
 
 
-func _ready() -> void:
-	add_to_group(WorldFrame.SHIFTABLE_GROUP)
+func _init() -> void:
+	add_to_group(WorldFrame.SHIFTABLE_GROUP)  # before it enters the tree, so `ShiftableRegistry` lists it then (M6-T21)
 	add_to_group(GROUP)
+
+
+func _ready() -> void:
 	set_visual_scale(visual_scale)
 
 

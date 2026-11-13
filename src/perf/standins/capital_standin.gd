@@ -116,15 +116,14 @@ func bay_position() -> Vector3:
 ## Parks the body for the low-attention tier (M4-T21): hidden and not processing, its turrets and emitters with it, so it
 ## leaves Jolt, the scan and the weapon rows while its tier row cruises on.
 func park_for_tier() -> void:
-	set_meta(&"_scs_tier_row", true)
+	ShiftableRegistry.set_out(self, &"_scs_tier_row", true)
 	visible = false
 	process_mode = Node.PROCESS_MODE_DISABLED
 
 
 ## Brings the body back from its tier row exactly where the row left it.
 func unpark_from_tier(xform: Transform3D, velocity: Vector3, spin: Vector3) -> void:
-	if has_meta(&"_scs_tier_row"):
-		remove_meta(&"_scs_tier_row")
+	ShiftableRegistry.set_out(self, &"_scs_tier_row", false)
 	process_mode = Node.PROCESS_MODE_INHERIT
 	visible = true
 	global_transform = xform
@@ -141,8 +140,7 @@ func frame_boost(dv: Vector3) -> void:
 
 ## Takes a destroyed capital out of play (M4-T23): hidden and not processing, its turrets and emitters with it, for good.
 func leave_play() -> void:
-	if has_meta(&"_scs_tier_row"):
-		remove_meta(&"_scs_tier_row")
+	ShiftableRegistry.set_out(self, &"_scs_tier_row", false)
 	visible = false
 	process_mode = Node.PROCESS_MODE_DISABLED
 

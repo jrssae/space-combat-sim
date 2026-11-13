@@ -115,6 +115,7 @@ func burst(effect: int, position: Vector3, direction: Vector3, velocity: Vector3
 		return 0
 	var slot: int = _claim(effect)
 	var node: GPUParticles3D = _nodes[slot]
+	ShiftableRegistry.set_out(node, WorldFrame.PARKED_META, false)
 	node.global_transform = Transform3D(FxSpecs.basis_facing(direction), position)
 	node.amount_ratio = FxSpecs.ratio_for(effect, density)
 	_velocity[slot] = velocity
@@ -272,6 +273,7 @@ func _release(slot: int) -> void:
 	var node: GPUParticles3D = _nodes[slot]
 	node.emitting = false
 	node.visible = false
+	ShiftableRegistry.set_out(node, WorldFrame.PARKED_META, true)  # rebases leave it: `burst` places it (M6-T21)
 	_state[slot] = _IDLE
 	_emitting[slot] = 0
 	_generation[slot] += 1
@@ -286,6 +288,7 @@ func _make_emitter(node_name: String, spec: Dictionary) -> GPUParticles3D:
 	p.top_level = true
 	p.local_coords = true
 	p.add_to_group(WorldFrame.SHIFTABLE_GROUP)
+	p.set_meta(WorldFrame.PARKED_META, true)  # idle until its first burst places it (M6-T21)
 	p.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	p.amount = int(spec["amount"])
 	p.lifetime = float(spec["lifetime_s"])

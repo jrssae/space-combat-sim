@@ -107,6 +107,8 @@ res://tests/integration/test_flight_reference.gd
 res://tests/integration/test_low_orbit_flight.gd
 res://tests/unit/test_static_rows.gd
 res://tests/integration/test_static_shift.gd
+res://tests/integration/test_shiftable_registry.gd
+res://tests/integration/test_rock_bodies.gd
 # Jumpgate and jump vortex (M6-T14, T19)
 res://tests/unit/test_vortex_timing.gd
 res://tests/unit/test_gate_jump.gd

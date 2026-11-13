@@ -10,7 +10,9 @@ extends Node3D
 ## `origin`, so `to_universe(local)` of any object is unchanged.
 ##
 ## Group `world_shiftable` is for objects that are direct children of this node, or `top_level` nodes (which do not
-## follow their parent). Never put a node in it whose parent is also in it: it would be shifted twice.
+## follow their parent). Never put a node in it whose parent is also in it: it would be shifted twice. A rebase walks the
+## group's nodes in play, which `ShiftableRegistry` keeps as they enter and leave the tree (M6-T21): a node its pool or the
+## tier parks (`ShiftableRegistry.set_out`) is not walked, and its pool or the tier places it when it comes back.
 ##
 ## The automatic position rebase (§14.1) keeps `focus` (the player) within `auto_rebase_distance_m` of the local origin, so
 ## float32 positions stay fine-grained however far the player flies (maintainer Q13: at 900 km a float32 coordinate steps in
@@ -131,6 +133,8 @@ var _settle_pending: bool = false
 var _settled_frame: int = -1
 # The nodes the last rebase moved: the end-of-tick reset walks this list, not the group again (M4-T21).
 var _shifted: Array[Node3D] = []
+# The shiftable nodes in play (M6-T21).
+var _registry: ShiftableRegistry = null
 # What the anchor-tied things still have to move, below what 32 bits could carry in one tick's shift: carried over, so a
 # steady drift does not round the same way every tick.
 var _drift_owed: PackedFloat64Array = PackedFloat64Array([0.0, 0.0, 0.0])
@@ -184,6 +188,7 @@ func _ready() -> void:
 	impact = PlanetImpact.new(self)
 	add_child(impact, false, Node.INTERNAL_MODE_BACK)
 	_sim = SimCore.attach(self)  # every world simulates on the native core (M4-T42), pools or none
+	_registry = ShiftableRegistry.of_tree(get_tree())
 	get_tree().physics_frame.connect(_adopt_origin)
 	# Console seam (architecture §6.4): `rebase` shifts the origin by hand; `rebases` and `rebase_us` watch the automatic one.
 	DebugConsole.registry.register_provider(&"world", ConsoleVars.new({
@@ -214,6 +219,10 @@ func _ready() -> void:
 		&"rebases": {"get": func() -> int: return rebases, "doc": "Rebases so far, automatic and console"},
 		&"rebase_us": {"get": func() -> int: return last_rebase_us, "unit": "us",
 				"doc": "Cost of the last rebase (profiling only, wall clock)"},
+		&"shiftables_in_play": {"get": func() -> int: return _registry.in_play(self).size() if _registry != null else 0,
+				"doc": "Shiftable nodes a rebase walks: the group less what pools and the tier parked (M6-T21)"},
+		&"rocks_live": {"get": func() -> int: return RockBodies.live_total,
+				"doc": "Rocks that live as Jolt bodies now, near a ship; the rest are static rows only (M6-T21)"},
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"frame",
 			"The free-falling frame's anchor: status, orbit <altitude km> [body] (a free-falling anchor on a circular orbit, prograde along -Z; default body epsilon_iii), rail <place> (ride a place's orbit, such as babylon5), off (no pull)",
@@ -233,6 +242,8 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
+	if _registry != null:
+		_registry.forget_world(self)
 	if get_tree().physics_frame.is_connected(_adopt_origin):
 		get_tree().physics_frame.disconnect(_adopt_origin)
 
@@ -303,14 +314,9 @@ func rebase(offset: Vector3) -> void:
 				kept[node] = true
 	else:
 		_shifted.clear()
-	for member: Node in get_tree().get_nodes_in_group(SHIFTABLE_GROUP):
-		# Parked for the low-attention tier (M4-T21): its row moves with the core and promotion places the body. Parked in its
-		# pool (M6-T06, L4): out of play, and `acquire` places it.
-		if member.has_meta(TierDirector.TIER_META) or member.has_meta(PARKED_META):
-			continue
-		var node := member as Node3D
-		if node == null or not is_ancestor_of(node):
-			continue
+	# Parked ones are not in play (M6-T21): a tier row moves with the core and promotion places the body (M4-T21); a pool's
+	# `acquire` or launch places its node (M6-T06, L4).
+	for node: Node3D in _in_play():
 		node.global_translate(shift)
 		if not kept.has(node):
 			_shifted.append(node)
@@ -473,11 +479,8 @@ func _auto_boost() -> void:
 
 # The nodes' part of a boost the core has already taken: bodies, the nodes that keep a velocity, then the listeners.
 func _boost_nodes(dv: Vector3, started_us: int) -> void:
-	for member: Node in get_tree().get_nodes_in_group(SHIFTABLE_GROUP):
-		var node := member as Node3D
-		if node == null or not is_ancestor_of(node):
-			continue
-		if node.has_meta(TierDirector.TIER_META) or node.process_mode == Node.PROCESS_MODE_DISABLED:
+	for node: Node3D in _in_play():
+		if node.process_mode == Node.PROCESS_MODE_DISABLED:
 			continue  # parked: a tier row holds its velocity (the director settles the body), a pooled one gets a new one
 		if node.has_method(BOOST_METHOD):
 			node.call(BOOST_METHOD, dv)
@@ -506,6 +509,13 @@ func _drift_anchored(moved: PackedFloat64Array) -> void:
 			node.global_translate(shift)
 	ContactScan.shift_statics(shift, self)
 	drifted.emit(shift)
+
+
+# This world's shiftable nodes in play (`ShiftableRegistry`): walk the keys, never change them.
+func _in_play() -> Dictionary:
+	if _registry == null:
+		_registry = ShiftableRegistry.of_tree(get_tree())
+	return _registry.in_play(self)
 
 
 func _origin_array() -> PackedFloat64Array:

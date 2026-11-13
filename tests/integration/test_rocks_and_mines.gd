@@ -262,8 +262,10 @@ func test_a_rebase_moves_rocks_and_mines_once() -> void:
 	assert_eq(StaticRows.position_of(mines.row_id(0)), mine_before - offset, "the mine's row moved once")
 	assert_almost_eq(StaticRows.position_of(mines.row_id(0)).distance_to(mines.position_of(0)), 0.0, 1e-3,
 			"and is still where the mine is")
-	var xform: Transform3D = PhysicsServer3D.body_get_state(field.body_rids()[1], PhysicsServer3D.BODY_STATE_TRANSFORM)
-	assert_almost_eq(xform.origin.distance_to(rock_before - offset), 0.0, 1e-3, "the rock's physics body moved with it")
+	# No ship near: the rock is a row only, and its body comes to life where the row is (M6-T21, `test_rock_bodies`).
+	assert_false(field.rock_bodies().is_live(1), "no ship near: no live body")
+	assert_almost_eq(field.rock_bodies().placed(1, field.global_transform).origin.distance_to(rock_before - offset), 0.0, 1e-3,
+			"the rock's physics body comes to life with it")
 	# The resolvers see the rock at its new place.
 	var hits: HitResolver = _resolvers()[0]
 	var at: Vector3 = rock_before - offset

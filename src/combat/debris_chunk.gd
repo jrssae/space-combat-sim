@@ -126,6 +126,7 @@ func is_active() -> bool:
 ## Puts the chunk at `xform` (World-local, the chunk's own centroid) and sets it flying. Resets physics interpolation so
 ## it does not smear from where it was parked.
 func launch(xform: Transform3D, p_velocity: Vector3, p_angular_velocity: Vector3) -> void:
+	ShiftableRegistry.set_out(self, WorldFrame.PARKED_META, false)
 	process_mode = Node.PROCESS_MODE_INHERIT
 	visible = true
 	_orientation = xform.basis.orthonormalized()
@@ -238,6 +239,7 @@ func _stop_vent() -> void:
 
 
 func _park_state() -> void:
+	ShiftableRegistry.set_out(self, WorldFrame.PARKED_META, true)  # rebases leave it: `launch` places it (M6-T21)
 	visible = false
 	process_mode = Node.PROCESS_MODE_DISABLED
 	velocity = Vector3.ZERO

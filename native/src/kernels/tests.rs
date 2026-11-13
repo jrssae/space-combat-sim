@@ -357,3 +357,135 @@ fn with_no_rest_the_flight_keeps_its_bits_and_the_ceiling_rides_on_the_rest() {
     assert!((f64::from(cut.z) + 17_999.0).abs() < 0.01, "8 000 + 9 999 ({})", cut.z);
     assert!(fly_once(&cmd, Vector3::new(0.0, 0.0, -15_000.0), Vector3::ZERO, rest).clamped.is_none());
 }
+
+// M6-T21: which rocks live as Jolt bodies.
+fn rock_rows(at: &[Vector3], v: &[Vector3], radii: &[f64], rigid: &[bool]) -> (Rows, Vec<u32>) {
+    let rows = Rows {
+        positions: at.to_vec(),
+        velocities: v.to_vec(),
+        radii: radii.to_vec(),
+        flags: rigid.iter().map(|&r| if r { FLAG_RIGID } else { 0 }).collect(),
+        ..Rows::default()
+    };
+    let hull_rows = (0..at.len() as u32).collect();
+    (rows, hull_rows)
+}
+
+// One stream step with the reaches `hull_spheres` makes (0.25 s, 20 m), the keep reach 10 % wider, no hold.
+fn stream_step(stream: &mut super::rock_stream::Stream, rows: &Rows, hull_rows: &[u32], origin: Vector3, rest: Vector3)
+        -> Vec<i64> {
+    use super::rock_stream::hull_spheres;
+    let (mut mids, mut reach) = (Vec::new(), Vec::new());
+    hull_spheres(rows, hull_rows, origin, &Basis::IDENTITY, rest, 0.25, 20.0, &mut mids, &mut reach);
+    let mut changes = Vec::new();
+    stream.step(&mids, &reach, 1.1, 0, &mut changes);
+    changes
+}
+
+#[test]
+fn a_rock_lives_while_a_rigid_hull_could_reach_it_and_leaves_past_the_hysteresis() {
+    let mut stream = super::rock_stream::Stream::default();
+    assert!(stream.reset(&[Vector3::new(0.0, 0.0, -200.0), Vector3::new(5_000.0, 0.0, 0.0)], &[40.0, 40.0]));
+    // A 10 m ship at rest 300 m from the first rock: 300 > 40 + 10 + 20, so nothing lives.
+    let (rows, hulls) = rock_rows(&[Vector3::new(0.0, 0.0, 100.0)], &[Vector3::ZERO], &[10.0], &[true]);
+    assert!(stream_step(&mut stream, &rows, &hulls, Vector3::ZERO, Vector3::ZERO).is_empty());
+    // At 400 m/s toward it the 0.25 s look covers 100 m: the reach is 50 + 10 + 20 = 80 m round a point 50 m on, so
+    // 300 - 50 = 250 m is still out of it.
+    let (rows, hulls) = rock_rows(&[Vector3::new(0.0, 0.0, 100.0)], &[Vector3::new(0.0, 0.0, -400.0)], &[10.0], &[true]);
+    assert!(stream_step(&mut stream, &rows, &hulls, Vector3::ZERO, Vector3::ZERO).is_empty());
+    // 60 m from the rock's centre at rest: promoted, the far rock not.
+    let (rows, hulls) = rock_rows(&[Vector3::new(0.0, 0.0, -140.0)], &[Vector3::ZERO], &[10.0], &[true]);
+    assert_eq!(stream_step(&mut stream, &rows, &hulls, Vector3::ZERO, Vector3::ZERO), vec![0]);
+    assert!(stream.live[0] && !stream.live[1]);
+    // Just past the promotion reach (70 m) but inside the demotion reach (40 + 30 * 1.1 = 73 m): it stays.
+    let (rows, hulls) = rock_rows(&[Vector3::new(0.0, 0.0, -128.0)], &[Vector3::ZERO], &[10.0], &[true]);
+    assert!(stream_step(&mut stream, &rows, &hulls, Vector3::ZERO, Vector3::ZERO).is_empty());
+    assert!(stream.live[0], "held by the hysteresis");
+    // Out past it: demoted.
+    let (rows, hulls) = rock_rows(&[Vector3::new(0.0, 0.0, -100.0)], &[Vector3::ZERO], &[10.0], &[true]);
+    assert_eq!(stream_step(&mut stream, &rows, &hulls, Vector3::ZERO, Vector3::ZERO), vec![-1]);
+    assert_eq!(stream.live_count(), 0);
+}
+
+#[test]
+fn a_rock_stream_reads_hulls_in_the_owners_frame_against_the_rocks_motion_and_skips_rows_out_of_jolt() {
+    use super::rock_stream::hull_spheres;
+    let mut stream = super::rock_stream::Stream::default();
+    stream.reset(&[Vector3::ZERO], &[40.0]);
+    // The owner moved 10 km along x: a ship 60 m from the rock in the owner's frame stands at x = 10 000 locally.
+    let (rows, hulls) = rock_rows(&[Vector3::new(10_000.0, 0.0, 60.0)], &[Vector3::ZERO], &[10.0], &[true]);
+    let origin = Vector3::new(10_000.0, 0.0, 0.0);
+    assert_eq!(stream_step(&mut stream, &rows, &hulls, origin, Vector3::ZERO), vec![0]);
+    // A ship at rest in the frame with the rocks flying at it at 2 000 m/s (off the anchor) wants it 300 m out.
+    stream.reset(&[Vector3::ZERO], &[40.0]);
+    let (rows, hulls) = rock_rows(&[Vector3::new(0.0, 0.0, 300.0)], &[Vector3::ZERO], &[10.0], &[true]);
+    let rest = Vector3::new(0.0, 0.0, 2_000.0);
+    assert_eq!(stream_step(&mut stream, &rows, &hulls, Vector3::ZERO, rest), vec![0]);
+    // A row that is not a rigid body (a tier row, a prop) wants nothing.
+    let (rows, hulls) = rock_rows(&[Vector3::new(0.0, 0.0, 50.0)], &[Vector3::ZERO], &[10.0], &[false]);
+    let (mut mids, mut reach) = (Vec::new(), Vec::new());
+    hull_spheres(&rows, &hulls, Vector3::ZERO, &Basis::IDENTITY, Vector3::ZERO, 0.25, 20.0, &mut mids, &mut reach);
+    assert!(mids.is_empty() && reach.is_empty());
+    // A turned owner (a quarter turn about up): its frame's -z is the world's -x.
+    let turned = Basis::from_axis_angle(Vector3::UP, std::f32::consts::FRAC_PI_2);
+    let (rows, hulls) = rock_rows(&[Vector3::new(-50.0, 0.0, 0.0)], &[Vector3::ZERO], &[10.0], &[true]);
+    hull_spheres(&rows, &hulls, Vector3::ZERO, &turned, Vector3::ZERO, 0.25, 20.0, &mut mids, &mut reach);
+    assert!((mids[0] - Vector3::new(0.0, 0.0, -50.0)).length() < 1e-3, "{:?}", mids[0]);
+}
+
+#[test]
+fn a_rock_stream_with_columns_out_of_step_holds_nothing() {
+    let mut stream = super::rock_stream::Stream::default();
+    assert!(!stream.reset(&[Vector3::ZERO; 2], &[1.0]));
+    let mut changes = vec![7];
+    stream.step(&[Vector3::ZERO], &[100.0], 1.1, 0, &mut changes);
+    assert!(changes.is_empty() && stream.live_count() == 0);
+}
+
+#[test]
+fn a_live_rock_is_held_for_the_hold_steps_after_its_last_hull_leaves() {
+    let mut stream = super::rock_stream::Stream::default();
+    stream.reset(&[Vector3::ZERO], &[40.0]);
+    let (near, reach) = (vec![Vector3::new(0.0, 0.0, 50.0)], vec![30.0]);
+    let mut changes = Vec::new();
+    stream.step(&near, &reach, 1.1, 3, &mut changes);
+    assert_eq!(changes, vec![0], "promoted");
+    for step in 1..=3 {
+        stream.step(&[], &[], 1.1, 3, &mut changes);
+        assert!(changes.is_empty() && stream.live[0], "held through step {step} with no hull near");
+    }
+    stream.step(&[], &[], 1.1, 3, &mut changes);
+    assert_eq!(changes, vec![-1], "demoted after the hold");
+    stream.step(&near, &reach, 1.1, 3, &mut changes);
+    assert_eq!(changes, vec![0], "and promoted again when a hull comes back");
+}
+
+#[test]
+fn the_rock_grid_finds_what_a_test_of_every_pair_finds() {
+    // A slab of rocks of 20 to 200 m over 20 by 5 by 20 km and hulls of every reach: the grid's answer equals the brute force.
+    let mut seed = 5u64;
+    let rocks: Vec<Vector3> = (0..800)
+        .map(|_| Vector3::new(next(&mut seed) * 1.0e4, next(&mut seed) * 2.5e3, next(&mut seed) * 1.0e4))
+        .collect();
+    let radii: Vec<f64> = (0..800).map(|_| 20.0 + 180.0 * f64::from(next(&mut seed).abs())).collect();
+    let mids: Vec<Vector3> = (0..400)
+        .map(|_| Vector3::new(next(&mut seed) * 1.2e4, next(&mut seed) * 3.0e3, next(&mut seed) * 1.2e4))
+        .collect();
+    let reach: Vec<f64> = (0..400).map(|i| [30.0, 80.0, 400.0, 3_000.0][i % 4]).collect();
+    let mut stream = super::rock_stream::Stream::default();
+    stream.reset(&rocks, &radii);
+    let mut changes = Vec::new();
+    stream.step(&mids, &reach, 1.0, 0, &mut changes);
+    let mut want = Vec::new();
+    for s in 0..rocks.len() {
+        let near = mids.iter().zip(&reach).any(|(m, r)| f64::from((rocks[s] - *m).length_squared()) <= (r + radii[s]).powi(2));
+        if near {
+            want.push(s as i64);
+        }
+    }
+    assert!(!want.is_empty());
+    assert_eq!(changes, want);
+    // A hull outside the grid finds nothing and costs nothing.
+    stream.step(&[Vector3::new(1.0e6, 0.0, 0.0)], &[100.0], 1.0, 0, &mut changes);
+    assert_eq!(stream.visited, 0);
+}

@@ -58,11 +58,11 @@ func test_a_rebase_moves_the_rows_and_the_bodies_with_the_belt() -> void:
 	var belt: AsteroidBelt = _belt()
 	var id: int = StaticRows.ids[0]
 	var before: Vector3 = StaticRows.position_of(id)
-	var body: RID = belt._bodies[0]
-	var body_before: Vector3 = (PhysicsServer3D.body_get_state(body, PhysicsServer3D.BODY_STATE_TRANSFORM) as Transform3D).origin
+	# No ship near, so the spheres are rows only: a body comes to life where `placed` says (M6-T21, `test_rock_bodies`).
+	var body_before: Vector3 = belt.rock_bodies().placed(0, belt.global_transform).origin
 	world.rebase(Vector3(0.0, 0.0, -4000.0))
 	assert_almost_eq(StaticRows.position_of(id), before + Vector3(0.0, 0.0, 4000.0), Vector3.ONE * 1e-2, "the row moved")
-	var body_after: Vector3 = (PhysicsServer3D.body_get_state(body, PhysicsServer3D.BODY_STATE_TRANSFORM) as Transform3D).origin
+	var body_after: Vector3 = belt.rock_bodies().placed(0, belt.global_transform).origin
 	assert_almost_eq(body_after, body_before + Vector3(0.0, 0.0, 4000.0), Vector3.ONE * 1e-2, "the body moved")
 	assert_almost_eq(body_after, StaticRows.position_of(id), Vector3.ONE * 1e-2, "and they agree")
 
