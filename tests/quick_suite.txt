@@ -146,9 +146,9 @@ res://tests/unit/test_eclipse_math.gd
 res://tests/unit/test_sun_look.gd
 res://tests/unit/test_planet_look.gd
 res://tests/integration/test_scaled_space.gd
+res://tests/unit/test_far_prop_math.gd
+res://tests/integration/test_far_props.gd
 # Test infrastructure
 res://tests/unit/test_slow_tests.gd
 res://tests/unit/test_balance_tests.gd
-res://tests/unit/test_far_prop_math.gd
-res://tests/integration/test_far_props.gd
 res://tests/unit/test_quick_suite.gd

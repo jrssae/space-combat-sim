@@ -1065,71 +1065,6 @@ which changes the same native rows and rebase path:
 - **Tests:** the drawn size across each hand-off: quick if pure, else standard.
 - **Done when:** AC9.
 
-### M6-T16 Integration, full suite, docs and acceptance
-
-- **Goal:** AC10, AC11 and the (H) checklist for AC12.
-- **Steps:** §19 in `docs/architecture.md` as built (and §14.1, §14.2 updated); the M6 section of `docs/playtest.md` with the (H)
-  checklist; the roadmap row; the full tier once (T17's runner), read from the suite's own totals; the GPU check on the maintainer's
-  machine; then ask the maintainer to confirm the milestone, and once confirmed merge `m6` into `main`.
-- **Done when:** the maintainer confirms M6.
-
-### M6-T17 Test tiers: quick, standard, balance and full
-
-- **Goal:** a few-minute check for iteration, a merge gate that skips the balance fights, and a full run that includes them
-  (2026-11-10, maintainer: four tiers instead of the review's two).
-- **Steps:** follow `docs/research/test-review/quick-test-suite.md` for the quick tier (its GUT and Python lists, the compile
-  check, `cargo test`, the two console smokes, the guard test), with these changes:
-  - One entry point: `scripts/run_tests.sh --quick | --standard | --balance | --full`, default `--standard`, so
-    `scripts/run_tests.sh` alone stays the gate CLAUDE.md names. Shared helpers in a sourced `scripts/lib_tests.sh`.
-  - Standard is what `run_tests.sh` checks today, plus `cargo test --release --lib` (the review's H1: no run calls it), minus
-    the balance tests.
-  - Balance: a `BalanceTests` gate like `SlowTests` (`GUT_BALANCE=1`), on the tests that judge balance: `test_dogfight`'s
-    six-minute fight and `test_m3_sandbox`'s three waves (both end Pending today, review F4), and `test_turret_balance` and any
-    other file whose verdict is a balance judgement. The other tests in those files stay standard. `--balance` runs only these.
-  - Full: standard plus balance.
-- **Files:** `scripts/run_tests.sh`, `scripts/lib_tests.sh`, `tests/quick_suite.txt`, the balance gate beside `SlowTests` and
-  its users, `tests/unit/test_quick_suite.gd` (also checks no listed file is a balance file), `CLAUDE.md`'s Commands block,
-  `docs/architecture.md`'s tests section, `docs/research/test-review/quick-test-suite.md` (as built).
-- **Tests:** `test_quick_suite.gd` and the balance gate's own test: quick.
-- **Done when:** `--quick` exits 0 and prints its time (about 3.5 min); a broken listed test and a broken parse each stop it;
-  `--balance` runs only the balance tests; `--standard` runs everything it ran before except those, plus the Rust tests, and
-  exits 0 (its time in the Done notes); CI keeps running the standard tier.
-- **Done (2026-11-10):**
-  - `scripts/run_tests.sh --quick | --standard | --balance | --full` (default standard, unknown flag exits 2), helpers in
-    `scripts/lib_tests.sh`. Standard is what it ran before plus `cargo test --release --lib` (66 Rust tests; shard 1 in CI), with
-    `GUT_BALANCE=0`; CI still calls it with no flag, so it runs the standard tier. Full is standard with `GUT_BALANCE=1`; balance
-    runs only the files of `tests/balance_suite.txt` with `GUT_SLOW=1 GUT_BALANCE=1`.
-  - `BalanceTests` (`tests/fixtures/balance_tests.gd`, `GUT_BALANCE=1`) with `tests/unit/test_balance_tests.gd`. Gated:
-    `test_dogfight`'s six-minute test and `test_m3_sandbox`'s three-waves test (each skips up front; the rest of their files
-    stays standard) and the whole of `test_turret_balance` (moved from `GUT_SLOW` to `GUT_BALANCE`). No other test judges
-    balance (`test_tier_outcomes` and `test_rebase_in_play` compare tiers and rebases, not balance).
-  - `tests/quick_suite.txt` (103 files: the plan's list, minus none, plus `test_balance_tests`, `test_quick_suite` and T03's
-    `test_star_system`), `tests/quick_python.txt` (20 modules), `tests/unit/test_quick_suite.gd`. Every file in the plan still
-    existed on `m6`; none used SlowTests or BalanceTests.
-  - Times (maintainer's machine): quick 208 to 300 s (1,588 GUT tests; the Rust tests ran 66 passed); balance 1,152 s (9 tests,
-    turret balance passes, the dogfight and sandbox end Pending as before); standard 6,633 s (110 min), exit 0, 3,322 tests,
-    13 pending (including the two skipped balance tests). Full was not run separately (standard and balance both pass).
-  - A broken assert in `test_fuel_tank` fails `--quick` naming it; a parse error in it stops the compile check. Both reverted.
-  - Quick does no `--import`: after a task adds a `class_name` the compile check fails until one `godot --headless --import`.
-
-### M6-T18 The review's CONFIRMED test removals
-
-- **Goal:** cut duplicated run time without losing coverage (`docs/research/test-review/removal-candidates.md`).
-- **Steps:** sections A to D only, each re-checked as the file's "How to verify an entry" says (the branch has moved since
-  `5c65d81`); A8's shared seeded-battle fixture first so A1 to A7 are safe. C5 (`StarPointMath`) stays as a design oracle unless
-  the maintainer says otherwise; C7 (dead `PlaceholderScreen`) is reported, not deleted. Sections E, F and G wait for the
-  maintainer. Then update `tests/quick_suite.txt` as the quick suite's "Interplay" section says.
-- **Rules:** the file's five (every parity recording still read, the damping guard, the engine-free guards, one 1-vs-6 and one
-  threaded-vs-delayed test per threaded subsystem).
-- **Tests:** a removal keeps the kept test's tier; a moved assert takes the tier of the file it lands in.
-- **Done when:** each entry is removed, merged or kept with the reason in the Done notes; the standard tier exits 0 and its time
-  before and after is recorded.
-- **Done (2026-11-11):** commits `cb4784e` (A, B), `96119a0` (C), `6b26d03` (C8, D). Every entry re-read in full against
-  `m6` (both tests with their `before_each` and helpers); asserts only the removed side made were moved first.
-  - A8 done: `tests/fixtures/seeded_battle.gd` (`SeededBattle`) builds the seeded battle and the small fights for the six
-    battle files in the recordings' build order; no recording was re-taken, every digest still matches.
-  - A1 to A4 merged: the 1-vs-6 battles of `test_core_state`, `test_bolt_rows`, `test_row_commands` and `test_driver_step`
-    folded into `test_core_threads`' 600-tick one, which now flies with the ram resolver and a player (near and far thinkers)
 - **Done (2026-11-12):**
   - **Three draw paths per big prop** (`FarPropMath`, pure; `FarProp`, the node; both in `src/rendering/`):
     1. **near**: the prop's own mesh where it is, the importer's levels doing the rest (§14.4), out to `pull_m` = the far plane
@@ -1220,6 +1155,71 @@ which changes the same native rows and rebase path:
     vary with the view more than one law follows (H on the cross-fade). Not done: the open vortex's own far form (T20);
     `docs/architecture.md` §14.4 (T16); the dots' motion vectors under TAA and FSR 2 (as T10).
 
+### M6-T16 Integration, full suite, docs and acceptance
+
+- **Goal:** AC10, AC11 and the (H) checklist for AC12.
+- **Steps:** §19 in `docs/architecture.md` as built (and §14.1, §14.2 updated); the M6 section of `docs/playtest.md` with the (H)
+  checklist; the roadmap row; the full tier once (T17's runner), read from the suite's own totals; the GPU check on the maintainer's
+  machine; then ask the maintainer to confirm the milestone, and once confirmed merge `m6` into `main`.
+- **Done when:** the maintainer confirms M6.
+
+### M6-T17 Test tiers: quick, standard, balance and full
+
+- **Goal:** a few-minute check for iteration, a merge gate that skips the balance fights, and a full run that includes them
+  (2026-11-10, maintainer: four tiers instead of the review's two).
+- **Steps:** follow `docs/research/test-review/quick-test-suite.md` for the quick tier (its GUT and Python lists, the compile
+  check, `cargo test`, the two console smokes, the guard test), with these changes:
+  - One entry point: `scripts/run_tests.sh --quick | --standard | --balance | --full`, default `--standard`, so
+    `scripts/run_tests.sh` alone stays the gate CLAUDE.md names. Shared helpers in a sourced `scripts/lib_tests.sh`.
+  - Standard is what `run_tests.sh` checks today, plus `cargo test --release --lib` (the review's H1: no run calls it), minus
+    the balance tests.
+  - Balance: a `BalanceTests` gate like `SlowTests` (`GUT_BALANCE=1`), on the tests that judge balance: `test_dogfight`'s
+    six-minute fight and `test_m3_sandbox`'s three waves (both end Pending today, review F4), and `test_turret_balance` and any
+    other file whose verdict is a balance judgement. The other tests in those files stay standard. `--balance` runs only these.
+  - Full: standard plus balance.
+- **Files:** `scripts/run_tests.sh`, `scripts/lib_tests.sh`, `tests/quick_suite.txt`, the balance gate beside `SlowTests` and
+  its users, `tests/unit/test_quick_suite.gd` (also checks no listed file is a balance file), `CLAUDE.md`'s Commands block,
+  `docs/architecture.md`'s tests section, `docs/research/test-review/quick-test-suite.md` (as built).
+- **Tests:** `test_quick_suite.gd` and the balance gate's own test: quick.
+- **Done when:** `--quick` exits 0 and prints its time (about 3.5 min); a broken listed test and a broken parse each stop it;
+  `--balance` runs only the balance tests; `--standard` runs everything it ran before except those, plus the Rust tests, and
+  exits 0 (its time in the Done notes); CI keeps running the standard tier.
+- **Done (2026-11-10):**
+  - `scripts/run_tests.sh --quick | --standard | --balance | --full` (default standard, unknown flag exits 2), helpers in
+    `scripts/lib_tests.sh`. Standard is what it ran before plus `cargo test --release --lib` (66 Rust tests; shard 1 in CI), with
+    `GUT_BALANCE=0`; CI still calls it with no flag, so it runs the standard tier. Full is standard with `GUT_BALANCE=1`; balance
+    runs only the files of `tests/balance_suite.txt` with `GUT_SLOW=1 GUT_BALANCE=1`.
+  - `BalanceTests` (`tests/fixtures/balance_tests.gd`, `GUT_BALANCE=1`) with `tests/unit/test_balance_tests.gd`. Gated:
+    `test_dogfight`'s six-minute test and `test_m3_sandbox`'s three-waves test (each skips up front; the rest of their files
+    stays standard) and the whole of `test_turret_balance` (moved from `GUT_SLOW` to `GUT_BALANCE`). No other test judges
+    balance (`test_tier_outcomes` and `test_rebase_in_play` compare tiers and rebases, not balance).
+  - `tests/quick_suite.txt` (103 files: the plan's list, minus none, plus `test_balance_tests`, `test_quick_suite` and T03's
+    `test_star_system`), `tests/quick_python.txt` (20 modules), `tests/unit/test_quick_suite.gd`. Every file in the plan still
+    existed on `m6`; none used SlowTests or BalanceTests.
+  - Times (maintainer's machine): quick 208 to 300 s (1,588 GUT tests; the Rust tests ran 66 passed); balance 1,152 s (9 tests,
+    turret balance passes, the dogfight and sandbox end Pending as before); standard 6,633 s (110 min), exit 0, 3,322 tests,
+    13 pending (including the two skipped balance tests). Full was not run separately (standard and balance both pass).
+  - A broken assert in `test_fuel_tank` fails `--quick` naming it; a parse error in it stops the compile check. Both reverted.
+  - Quick does no `--import`: after a task adds a `class_name` the compile check fails until one `godot --headless --import`.
+
+### M6-T18 The review's CONFIRMED test removals
+
+- **Goal:** cut duplicated run time without losing coverage (`docs/research/test-review/removal-candidates.md`).
+- **Steps:** sections A to D only, each re-checked as the file's "How to verify an entry" says (the branch has moved since
+  `5c65d81`); A8's shared seeded-battle fixture first so A1 to A7 are safe. C5 (`StarPointMath`) stays as a design oracle unless
+  the maintainer says otherwise; C7 (dead `PlaceholderScreen`) is reported, not deleted. Sections E, F and G wait for the
+  maintainer. Then update `tests/quick_suite.txt` as the quick suite's "Interplay" section says.
+- **Rules:** the file's five (every parity recording still read, the damping guard, the engine-free guards, one 1-vs-6 and one
+  threaded-vs-delayed test per threaded subsystem).
+- **Tests:** a removal keeps the kept test's tier; a moved assert takes the tier of the file it lands in.
+- **Done when:** each entry is removed, merged or kept with the reason in the Done notes; the standard tier exits 0 and its time
+  before and after is recorded.
+- **Done (2026-11-11):** commits `cb4784e` (A, B), `96119a0` (C), `6b26d03` (C8, D). Every entry re-read in full against
+  `m6` (both tests with their `before_each` and helpers); asserts only the removed side made were moved first.
+  - A8 done: `tests/fixtures/seeded_battle.gd` (`SeededBattle`) builds the seeded battle and the small fights for the six
+    battle files in the recordings' build order; no recording was re-taken, every digest still matches.
+  - A1 to A4 merged: the 1-vs-6 battles of `test_core_state`, `test_bolt_rows`, `test_row_commands` and `test_driver_step`
+    folded into `test_core_threads`' 600-tick one, which now flies with the ram resolver and a player (near and far thinkers)
     and compares the rows, hits and rams, bolt table, core commands and driver events.
   - A5 and A6 merged: `test_driver_step`'s far-rate test went, and its recording (`driver_step.json:battle_far_rate`) is
     checked by `test_row_commands`' battle, which is the same battle (same rows digest and thinks); A6's test stays.
