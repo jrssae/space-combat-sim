@@ -440,7 +440,13 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   launch's shots as data (a list of `CinematicShot`s keyed on the bay hardpoints) and the door opening and the drop as steps a
   sequence can run for several ships in turn, so M8 extends this rather than rewriting it.
 - **Waves (maintainer, 2026-11-13, Q3):** a wing launches from its own arm in two waves of six: the six on the racks drop, then
-  the second row moves forward onto the racks and drops **10 s after the first wave** (maintainer, 2026-11-13; a data value). A launch names a wing and a door (`launch_from("alpha", 3)`); the
+  the second row moves forward onto the racks and drops **10 s after the first wave** (maintainer, 2026-11-13; a data value).
+- **Hold under the spine (maintainer, 2026-11-13):** the drum turns (0.148 rad/s, one turn in about 42 s), so each arm passes
+  under the stationary dorsal spine once a turn. While a bay's door points toward the spine (its outward drop path meets the
+  frame within the clear distance), its Starfury does not launch: it holds on the rack until the door has turned into clear
+  space, then drops. The blocked sector comes from the station's data (T05: the frame's angular extent over the door strip plus
+  a margin), not a hard-coded angle; a held fighter's wave timing slips by the hold, and the 10 s gap is measured from the
+  first wave's last release. Tests: a launch requested inside the sector holds and releases on leaving it; none releases inside. A launch names a wing and a door (`launch_from("alpha", 3)`); the
   player's wingmen launch from the other doors of the same wing.
 - **Done when:** AC7.
 
