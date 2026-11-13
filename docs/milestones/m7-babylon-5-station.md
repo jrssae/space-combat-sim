@@ -362,6 +362,26 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 - **Files:** the generator's detail parts (bay openings and interiors as deep as a launch shows, the docking aperture, the grid
   mounts at T02's positions, windows, lights, beacons), the hardpoints (bays, aperture, mounts, lights, tour points, sections), the
   collision pieces from T03, tests.
+- **The docking aperture (maintainer, 2026-11-13: "the main Babylon 5 entrance bay is lacking detail").** References
+  (gitignored, inspiration only, never traced or committed), `references/docking bay references/`:
+  - `1 ship entering red bay interior.png`: inside the bay, walls of machinery lit deep red, pink-lit vertical panels at the
+    mouth, a grey outer frame of grated panels.
+  - `2 stepped bay opening with ship inside.png`: the mouth seen from outside: a rectangular opening with stepped, notched
+    corners in a thick olive-grey frame ribbed with vents along its edges, the interior red with small red lamps.
+  - `3 ship approaching bay frame and lower hatch.png`: the same mouth from the side: grilles above and below it, small marked
+    panels at its corners, a second framed hatch below, and the docking sphere's rim with its sawtooth teeth.
+  - `4 bow on toothed ring and cross housing.png`: bow on: the toothed (gear) ring round the disc, a long rectangular housing
+    across the disc carrying the bay, a vertical bar forming a cross with it, the red-lit mouth at the centre, the blue panelled
+    outer ring.
+  - `5 entrance stepped red tunnel close.png`: the mouth close: a cross-shaped stepped opening whose stepped frames recede in
+    layers into a red-lit tunnel, ribbed vents round it.
+  - `6 inner airlock toothed doors.png`: the inner airlock at the tunnel's end: two doors meeting along an interlocking sawtooth
+    edge, a black gap between them, everything lit red.
+  - **What:** a real recessed bay, not a lit disc: the cross housing across the bow disc; the stepped cross-shaped mouth in its
+    vented frame; a tunnel of receding stepped frames lit red, as deep as an approach shows; the inner airlock's sawtooth doors at
+    its end (closed; M8 or later may open them); grilles, marked panels and the lower hatch round the mouth; the toothed ring.
+    The door turns with the drum (Q3). Built on T19's sections and near-only props; collision pieces (T03) keep the tunnel
+    open for Q8's traffic. A sheet beside the references (H).
 - **Done when:** AC4 and the collision half of AC3.
 
 ### M7-T06 The station in the game
