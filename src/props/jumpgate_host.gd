@@ -342,9 +342,10 @@ func _others_hold_controls() -> bool:
 func _register_console() -> void:
 	var registry: ConsoleRegistry = DebugConsole.registry
 	registry.register_command(ConsoleCommand.new(&"gate",
-			"The jumpgate: status, open <arrival|departure> (the vortex, after the arms' activation), close, jump (start the player's jump through it, from anywhere), cancel (end the jump), target (select it), approach (put the player 6 km in front of it, facing it), view <front|three_quarter|close|tip|run_in|side|behind|reference|off> (hold the camera on it for captures)",
+			"The jumpgate: status, open <arrival|departure> [hold seconds] (the vortex, after the arms' activation), close, jump (start the player's jump through it, from anywhere), cancel (end the jump), target (select it), approach (put the player 6 km in front of it, facing it), view <front|three_quarter|close|tip|run_in|side|behind|reference|off> (hold the camera on it for captures)",
 			[ConsoleArg.enum_optional(&"action", ACTIONS, &"status"),
-			ConsoleArg.string_optional(&"option", null)] as Array[ConsoleArg]), _cmd_gate, self)
+			ConsoleArg.string_optional(&"option", null),
+			ConsoleArg.float_optional(&"hold_s", CONSOLE_HOLD_S, 0.0, 600.0)] as Array[ConsoleArg]), _cmd_gate, self)
 	registry.register_command(ConsoleCommand.new(&"vortex",
 			"A stand-alone jump point ahead of the player, to look at: status, open <arrival|departure> [mouth radius m] (facing the player), close (every one), view (hold the camera in front of the newest open point: console, mission or encounter)",
 			[ConsoleArg.enum_optional(&"action", VORTEX_ACTIONS, &"status"),
@@ -518,7 +519,7 @@ func _cmd_gate(args: Dictionary) -> ConsoleResult:
 				return ConsoleResult.failure("gate open <arrival|departure>")
 			var dir: JumpVortex.Direction = JumpVortex.Direction.ARRIVAL if StringName(str(option)) == &"arrival" \
 					else JumpVortex.Direction.DEPARTURE
-			if not g.open_vortex(dir, CONSOLE_HOLD_S):
+			if not g.open_vortex(dir, float(args.get(&"hold_s", CONSOLE_HOLD_S))):
 				return ConsoleResult.failure("the vortex is %s for %s; one direction per opening" % [g.vortex.phase_name(),
 						g.vortex.direction_name()])
 			return ConsoleResult.line("%s vortex opening" % option)
