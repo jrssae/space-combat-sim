@@ -102,6 +102,13 @@ been planned were taken for done.
   render scripts take their own). Never swap or rebuild a shared asset to get a baseline: make an isolated copy with
   `scripts/scratch_project.sh <name>` (own `.godot/` and `assets/generated/`, under `reports/scratch/`) and run Godot with
   `--path` there, then `--clean` it. `scripts/godot_lock.sh status` shows who holds and waits; every run is logged in `reports/locks.log`.
+- STL fidelity (maintainer, M5 Q18, extended 2026-11-13): a generator built from a reference STL in `references/` passes the
+  **90% rule**: top, side and front silhouette IoU >= 0.90 against the STL at the same length and L/W/H within 10%
+  (`tools/refview` compare), **and, for large assets (stations, capital ships), per-part cross-sections**: cuts at fixed planes
+  through every part seen up close (for Babylon 5: the Cobra arms, both bays, the spine, the command section) each overlap the
+  STL's section by IoU >= 0.90. Whole-asset silhouettes cannot see a part's shape (M7-T21: a pentagonal arm built as a slab,
+  a roofed bay built open, both at 0.965 overall). Measurement tasks record section profiles, not just extents, and look sheets
+  for close-up places show the STL's sections beside the build.
 - Screenshots: every screenshot or captured frame an agent takes, for any request, goes under `references/screenshots/`
   (gitignored) in a subfolder named for the request, e.g. `references/screenshots/T13 Saturn 4 current replacement/`.
   Never `/tmp` or `reports/`, and never commit them. In a worktree, use the main checkout's `references/` so the
