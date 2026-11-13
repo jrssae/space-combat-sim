@@ -258,7 +258,7 @@ which changes the same native rows and rebase path:
 - **Tracks.** A (frame and gravity: T01, T02, T04 to T08), B (system data and scenarios: T03, T09), C (scaled space and far
   representations: T10, T11, T12, T15), D (the jumpgate: T13, T14), E (test tiers: T17, T18). Inside a track the order holds.
   If work goes one task at a time, the order is T01, T17, T18, T02, T03, T04, T05, T06, T07, T08, T09, T10, T11, T12, T13, T14,
-  T15, T19, T20, T21, T22, T16. T19's pause was lifted by the maintainer on 2026-11-12 (evening); the maintainer accepted T19 after
+  T15, T19, T20, T21, T22, T23, T16. T19's pause was lifted by the maintainer on 2026-11-12 (evening); the maintainer accepted T19 after
   round 6 and the closing flash (2026-11-12, night).
 - **One working copy** on branch `m6` in the main checkout, no task branches, as in M5; early-start work runs where the maintainer
   says (Early start, above).
@@ -306,6 +306,7 @@ which changes the same native rows and rebase path:
 | T20 | D | Vortex detail by distance and mass arrivals: detail layers dropped with screen size; up to 100 jump points forming at once; every ship of the 1 000-ship battle enters through one; the battle's GPU fps test with them | T19, T07 | Opus | A shader LOD, a pooled effect at a hundred instances and the battle's spawn path, judged on the GPU | done |
 | T21 | A | The rebase's per-node rest: only the rocks near a ship live in Jolt; a list of the shiftables in play instead of walking the group | T06, T07 | Opus | A measured engine-side follow-up to T06 on the paths T07 also changes | done |
 | T22 | D | Ships shrink into and grow out of the vortex: each ship flies the funnel, scaled to fit it, down to the black ring and a white flash (departure), or out of a white flash at the ring growing to full size (arrival); the player's jump in an external shot | T19, T20 | Opus | Gameplay, scaled Jolt bodies and a cinematic on every arrival path, judged by eye | in progress |
+| T23 | D | Who may open a jump point: only jump-capable ships (the capital stand-ins today); smaller ships use a gate or a jump-capable ship's open point; the battle's fighters through their side's capital points or the gate; raids and missions say which in data | T22 | Opus | Rules over every arrival and departure path T22 also changes | not started |
 
 ### M6-T01 Moving-frame audit and design
 
@@ -1878,4 +1879,25 @@ which changes the same native rows and rebase path:
   reaches the ring, flashes, is gone; arrives at ring size and grows to 1.0 at the mouth); collisions and targeting while
   scaled; the player's external shot; missions and encounters keep their outcomes. Screenshots and a GIF for the maintainer
   (H).
+
+### M6-T23 Who may open a jump point
+
+- **Goal:** the maintainer's rule (2026-11-13): not every ship can open its own jump point. Smaller ships cannot, and must use
+  a jumpgate or a jump point formed by a larger ship. Of the ships designed so far, none can form its own jump point; only
+  capital ships typically can, and any ship can use a capital ship's jump point.
+- **The maintainer's answers (2026-11-13):**
+  - **The capital stand-ins can open points** (the cruiser, destroyer and carrier placeholders stand in for future capital
+    ships); every designed hull so far (Starfury, raiders, the civilian ships) cannot.
+  - **Raids and missions: both, by scenario:** each encounter or mission says in data whether its raiders come through the
+    jumpgate or behind a jump-capable ship (a carrier or capital stand-in opens the point and the fighters come through it).
+  - **The 1 000-ship battle: a mix:** fighter groups arrive through their side's capital points; any group with no capital
+    near it comes through the jumpgate.
+- **Steps:** a jump capability on the ship type (`ShipSpec` or the capital stand-in's data), false for every designed hull,
+  true for the capital stand-ins; every opener of a point (`JumpPointPool`, `BattleArrivals`, the encounter and wave
+  directors, missions, scenarios) checks it, and a ship without it arrives or departs only through a gate or an open point of
+  a jump-capable ship (it may use any such point, its own side's or not); the data form for raids and missions (gate or
+  carrier); departures follow the same rule (an AI ship leaving routes to the gate or a capable ship's point). The console's
+  `vortex open` stays a debug tool and says so.
+- **Tests:** the capability rule (quick); a raid through the gate and a raid behind a carrier (standard); the battle's groups
+  through capital points and the gate (standard); missions and encounters keep their outcomes, or the changed ones are named.
 
