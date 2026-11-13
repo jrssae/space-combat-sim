@@ -109,10 +109,12 @@ impl ScsSimCore {
         );
         self.tier_pulled = if pulled { self.tier_pull.len() as i64 } else { 0 };
         self.tier_pull_us = if pulled { pull_started.elapsed().as_micros() as i64 } else { 0 };
+        let rest = self.frame_rest();
         self.tier_beats += tier::step(
             &mut self.tier,
             &self.tier_types,
             &self.tier_pull,
+            rest,
             &self.row_commands,
             clock,
             delta,

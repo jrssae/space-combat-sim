@@ -47,6 +47,8 @@ pub struct Frame {
     zones: Vec<f64>,
     pull: V3,
     active: bool,
+    // Per body, how close to its centre a mover is destroyed (its radius and atmosphere's top, M6-T08); 0 for none.
+    impact_radii: Vec<f64>,
 }
 
 impl Default for Frame {
@@ -66,6 +68,7 @@ impl Default for Frame {
             zones: Vec::new(),
             pull: [0.0; 3],
             active: false,
+            impact_radii: Vec::new(),
         }
     }
 }
@@ -269,6 +272,57 @@ impl Frame {
     /// The anchor's own pull at the last sample.
     pub fn pull(&self) -> V3 {
         self.pull
+    }
+
+    /// The pull the local origin takes this tick beyond the anchor's (zero while riding): the anchor falls with minus
+    /// this in the local frame.
+    pub fn origin_pull(&self) -> V3 {
+        self.origin_pull
+    }
+
+    /// A body's place and velocity against the local origin and frame at the sample's time (M6-T08: what the HUD's
+    /// reference reads); None with no anchor or an unknown body.
+    pub fn body_local_state(&self, index: usize, dt: f64) -> Option<State> {
+        if index >= self.system.len() {
+            return None;
+        }
+        let (home, anchor) = self.anchor_state(dt)?;
+        let body = self.system.relative_state(index, home, self.time_s);
+        let mut state = State::default();
+        for i in 0..3 {
+            state.position[i] = body.position[i] - anchor.position[i] - self.origin[i];
+            state.velocity[i] = body.velocity[i] - anchor.velocity[i] - self.origin_velocity[i];
+        }
+        Some(state)
+    }
+
+    /// The body that pulls hardest at `local` and its pull there, under the zone rule (the circular orbit's speed is read
+    /// from it); None where nothing pulls or with no anchor.
+    pub fn dominant_at(&self, local: V3) -> Option<(usize, V3)> {
+        if matches!(self.anchor, Anchor::None) || self.positions.is_empty() {
+            return None;
+        }
+        let at = [self.origin[0] + local[0], self.origin[1] + local[1], self.origin[2] + local[2]];
+        let index = gravity::dominant(at, &self.positions, &self.gms, &self.zones)?;
+        Some((index, gravity::pull_at(at, &self.positions, &self.gms, &self.zones)))
+    }
+
+    /// How close to each body's centre a mover is destroyed, by body index (0 or missing: never).
+    pub fn set_impact_radii(&mut self, radii: Vec<f64>) {
+        self.impact_radii = radii;
+    }
+
+    /// The body a mover at `local` has hit (within its impact radius), from the tick's sample; None while the frame is
+    /// quiet, since then every zone, and so every body, is far beyond the local space.
+    pub fn inside_body(&self, local: V3) -> Option<usize> {
+        if !self.active {
+            return None;
+        }
+        let at = [self.origin[0] + local[0], self.origin[1] + local[1], self.origin[2] + local[2]];
+        self.positions
+            .iter()
+            .zip(&self.impact_radii)
+            .position(|(&body, &radius)| radius > 0.0 && distance(body, at) < radius)
     }
 }
 

@@ -162,7 +162,9 @@ func spawn(entry: Dictionary) -> Combatant:
 	# Nose along its drift, or toward the player when it starts at rest (as a wave's raiders).
 	var heading: Vector3 = velocity if velocity.length() > 1.0 else player_local - at_local
 	var basis: Basis = ScenarioLoader.basis_facing(heading if heading.length() > 1e-3 else Vector3.FORWARD)
-	var placed: Combatant = ships.acquire(ship_name, at, basis, velocity, made["brain"] as PilotBrain, type)
+	# The data's velocity is against the place; the local frame may be moving off it (M6-T08).
+	var placed: Combatant = ships.acquire(ship_name, at, basis, velocity + world.rest_velocity(), made["brain"] as PilotBrain,
+			type)
 	if placed == null:
 		push_error("Mission: spawn %s: the %s pool refused" % [ship_name, type])
 		return null
@@ -201,8 +203,8 @@ func spawn_through_gate(entry: Dictionary) -> String:
 	var offset: Vector3 = entry["offset"]
 	var place: Callable = func() -> void:
 		var xform: Transform3D = gate.arrival_transform(offset)
-		var placed: Combatant = ships.acquire(ship_name, world.to_universe(xform.origin), xform.basis, gate.arrival_velocity(),
-				made["brain"] as PilotBrain, type)
+		var placed: Combatant = ships.acquire(ship_name, world.to_universe(xform.origin), xform.basis,
+				gate.arrival_velocity() + world.rest_velocity(), made["brain"] as PilotBrain, type)
 		if placed == null:
 			push_error("Mission: spawn %s: the %s pool refused at the gate" % [ship_name, type])
 			return

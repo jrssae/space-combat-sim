@@ -76,6 +76,9 @@ type Pair = (i64, i64);
 /// The state between ticks. Pairs are keyed by their two body ids as integers.
 #[derive(Default)]
 pub struct Tracker {
+    /// The World's rest velocity this tick (M6-T08): a body the feed does not hold (the station, a rock's body) moves with
+    /// the anchor, so its velocity is this.
+    pub rest: Vector3,
     tick: i64,
     // The open windows in the order they opened, and their (hull, other) keys.
     windows: Vec<Window>,
@@ -141,7 +144,7 @@ impl Tracker {
                 let v_before = self.prev_velocities[p];
                 let other_v = match self.prev_at(other) {
                     Some(o) => self.prev_velocities[o],
-                    None => Vector3::ZERO,
+                    None => self.rest,
                 };
                 self.window_keys.insert((id, other));
                 self.windows.push(Window {

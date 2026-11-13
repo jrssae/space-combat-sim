@@ -177,14 +177,15 @@ func zone_severities() -> PackedFloat32Array:
 	return zones.severities(hull.max_hp)
 
 
-## Destroys the hull outright, bypassing god mode (console `kill`): the remaining hull points are applied as one hit with
-## no shooter, so `hit_taken`, `damaged` and `destroyed` fire as for any other hit. Returns false if it was already dead.
-func kill() -> bool:
+## Destroys the hull outright, bypassing god mode (console `kill`, a planet's surface): the remaining hull points are applied
+## as one hit with no shooter and `cause`, so `hit_taken`, `damaged` and `destroyed` fire as for any other hit. Returns false
+## if it was already dead.
+func kill(cause: StringName = HitInfo.CAUSE_CONSOLE) -> bool:
 	if hull.destroyed:
 		return false
 	var b: Node3D = body()
 	var info := HitInfo.new(b.get_instance_id() if b != null else 0, 0, &"", hull.hp, b.global_position if b != null else Vector3.ZERO,
-			Vector3.ZERO, 0.0, HitInfo.CAUSE_CONSOLE)
+			Vector3.ZERO, 0.0, cause)
 	hit_taken.emit(info)
 	info.applied = hull.apply(hull.hp)
 	damaged.emit(info, info.applied)

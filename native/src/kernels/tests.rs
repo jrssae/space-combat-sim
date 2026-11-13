@@ -1,6 +1,7 @@
 // The kernels' unit tests (M5-T33): the ram pass's sphere reject against the sphere test it stands in for.
-use godot::builtin::Vector3;
+use godot::builtin::{Basis, Vector3};
 
+use super::flight;
 use super::ram::{cannot_reach, clearly_apart};
 use crate::rows::{FLAG_RIGID, Rows};
 
@@ -269,4 +270,90 @@ fn a_static_shift_with_columns_out_of_step_moves_nothing() {
     let mut positions = vec![Vector3::new(1.0, 2.0, 3.0); 3];
     assert_eq!(shift_owned(&mut positions, &[1, 1], 1, Vector3::ONE), 0);
     assert_eq!(positions, vec![Vector3::new(1.0, 2.0, 3.0); 3]);
+}
+
+// M6-T08: a ship's flight read against its reference's rest velocity.
+fn flight_body() -> flight::Body {
+    let spec = flight::Spec {
+        mass: 48_000.0,
+        pod_main_thrust: 360_000.0,
+        pod_retro_thrust: 180_000.0,
+        assist_gain_k: 2.0,
+        pod_yaw_gain: 0.5,
+        pod_yaw_deadzone: 0.05,
+        pod_yaw_smoothing_s: 0.2,
+        brake_gain_k: 1.5,
+        exhaust_velocity: 0.0,
+        speed_limit_mps: 9999.0,
+        assist_speed_max_mps: 5000.0,
+        inertia: Vector3::new(4.0e5, 5.0e5, 3.0e5),
+        rcs_force_max: Vector3::new(6.0e4, 6.0e4, 6.0e4),
+        rcs_torque_max: Vector3::new(1.0e5, 1.0e5, 1.0e5),
+        rate_max_rad: Vector3::new(1.0, 1.0, 1.0),
+    };
+    let (main, retro) = (Vector3::new(0.0, 0.0, 1.0), Vector3::new(0.0, 0.0, -1.0));
+    flight::Body {
+        main_total: spec.pod_main_thrust * 2.0,
+        retro_total: spec.pod_retro_thrust * 2.0,
+        spec,
+        nozzle_groups: vec![0, 1, 2, 3],
+        nozzle_positions: vec![
+            Vector3::new(4.0, 0.0, 5.0),
+            Vector3::new(-4.0, 0.0, 5.0),
+            Vector3::new(4.0, 0.0, -5.0),
+            Vector3::new(-4.0, 0.0, -5.0),
+        ],
+        nozzle_exhausts: vec![main, main, retro, retro],
+        torque_axes: [Vector3::ZERO; flight::GROUPS],
+    }
+}
+
+fn fly_once(cmd: &flight::Cmd, v: Vector3, env: Vector3, rest: flight::Rest) -> flight::Applied {
+    let mut pod_yaw = 0.0;
+    let mut forces = Vec::new();
+    flight::tick(&flight_body(), &mut pod_yaw, cmd, &Basis::IDENTITY, v, Vector3::ZERO, env, rest, true, 1.0 / 60.0, true,
+        &mut forces)
+}
+
+fn brake() -> flight::Cmd {
+    flight::Cmd {
+        levels: [0.0; flight::GROUPS],
+        strafe: Vector3::ZERO,
+        rot: Vector3::ZERO,
+        track_dir_b: Vector3::ZERO,
+        track_rate_b: Vector3::ZERO,
+        face_dir_b: Vector3::ZERO,
+        brake: true,
+        autotrack: false,
+    }
+}
+
+#[test]
+fn the_brake_stops_a_ship_against_its_reference_not_the_frame() {
+    let v = Vector3::new(30.0, -4.0, -2500.0);
+    let env = Vector3::new(0.0, -0.2, 0.05);
+    let moving = fly_once(&brake(), v, env, flight::Rest { velocity: v, accel: env });
+    let still = fly_once(&brake(), Vector3::ZERO, Vector3::ZERO, flight::Rest::ZERO);
+    assert_eq!(moving.out_vectors[0], moving.env_force, "at rest against its reference, falling with it: no thrust, only the pull");
+    assert_eq!(moving.out_vectors[2], still.out_vectors[2], "the pods do what they do for a ship at rest");
+    let against_frame = fly_once(&brake(), v, env, flight::Rest::ZERO);
+    assert!(against_frame.out_vectors[2].z > 1.0e5, "against the frame its retros fire hard ({})", against_frame.out_vectors[2]);
+}
+
+#[test]
+fn with_no_rest_the_flight_keeps_its_bits_and_the_ceiling_rides_on_the_rest() {
+    let v = Vector3::new(120.0, 7.5, -9000.0);
+    let cmd = flight::Cmd { brake: false, levels: [1.0, 1.0, 0.0, 0.0], ..brake() };
+    let plain = fly_once(&cmd, v, Vector3::ZERO, flight::Rest::ZERO);
+    let zero = fly_once(&cmd, v, Vector3::ZERO, flight::Rest { velocity: Vector3::ZERO, accel: Vector3::ZERO });
+    assert_eq!(plain.out_vectors, zero.out_vectors);
+    // 9 000 m/s against the frame but 1 000 against a reference moving at 8 000: the fade leaves almost all the thrust.
+    let rest = flight::Rest { velocity: Vector3::new(0.0, 0.0, -8000.0), accel: Vector3::ZERO };
+    let on_rest = fly_once(&cmd, v, Vector3::ZERO, rest);
+    assert!(on_rest.out_vectors[0].length() > 1.5 * plain.out_vectors[0].length(), "the fade reads the speed against the rest");
+    // 12 000 m/s against the frame: cut to 9 999 on top of the rest.
+    let fast = Vector3::new(0.0, 0.0, -18_000.0);
+    let cut = fly_once(&cmd, fast, Vector3::ZERO, rest).clamped.expect("over the ceiling against the rest");
+    assert!((f64::from(cut.z) + 17_999.0).abs() < 0.01, "8 000 + 9 999 ({})", cut.z);
+    assert!(fly_once(&cmd, Vector3::new(0.0, 0.0, -15_000.0), Vector3::ZERO, rest).clamped.is_none());
 }

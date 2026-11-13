@@ -161,6 +161,11 @@ var hulk: bool = false
 var tier_exempt: bool = false
 # The flight batch flies this ship and owns its tick (M4-T35): this node's `_physics_process` is off until the batch gives it back.
 var _batch_owned: bool = false
+# What the ship's speed is read against when not the World's rest (M6-T08, D67): the player's reference, set each tick by its
+# `FlightReference`; its velocity in the local frame and what it falls with.
+var _rest_set: bool = false
+var _rest_velocity: Vector3 = Vector3.ZERO
+var _rest_accel: Vector3 = Vector3.ZERO
 
 @onready var hull: MeshInstance3D = $Hull
 @onready var cockpit_interior: MeshInstance3D = $CockpitInterior
@@ -257,13 +262,19 @@ func _physics_process(delta: float) -> void:
 
 	var env_accel: Vector3 = _environment_accel()
 	_applied_force = mass * env_accel
+	# Speeds are read against the reference (M6-T08, D67): the brake stops the ship on it, falling as it falls.
+	var rest_v: Vector3 = rest_velocity()
+	var rest_a: Vector3 = rest_accel()
+	var at_rest: bool = rest_v == Vector3.ZERO and rest_a == Vector3.ZERO
+	var v_rel: Vector3 = linear_velocity if at_rest else linear_velocity - rest_v
 	if _model != null:
 		var fuel: FuelTank = get_fuel_tank()
-		_output = _model.compute(_flight, to_body * linear_velocity, to_body * angular_velocity, to_body * env_accel,
+		var env_ff: Vector3 = env_accel if at_rest else env_accel - rest_a
+		_output = _model.compute(_flight, to_body * v_rel, to_body * angular_velocity, to_body * env_ff,
 				_assist_on and not hulk, delta, not fuel.is_empty())
 		fuel.draw(_output.mass_flow_kg_s, delta)
 		# Inertia grows with speed: the same thrust gives less acceleration the faster the ship goes (SpeedGovernor).
-		var gain: float = SpeedGovernor.thrust_gain(linear_velocity.length(), spec.speed_limit_mps)
+		var gain: float = SpeedGovernor.thrust_gain(v_rel.length(), spec.speed_limit_mps)
 		for nozzle: Dictionary in _output.nozzle_forces:
 			var force: Vector3 = b * (nozzle["force"] as Vector3) * gain
 			var at: Vector3 = nozzle["position"]
@@ -275,13 +286,13 @@ func _physics_process(delta: float) -> void:
 		apply_torque(b * _output.rcs_torque_b)
 		if _assist_on and not hulk:
 			var net: Vector3 = b * (_output.pod_force_b + _output.rcs_force_b) * gain
-			var cap: Vector3 = SpeedGovernor.assist_cap_correction(net, linear_velocity, spec.assist_speed_max_mps)
+			var cap: Vector3 = SpeedGovernor.assist_cap_correction(net, v_rel, spec.assist_speed_max_mps)
 			apply_central_force(cap)
 			_applied_force += cap
 	apply_central_force(mass * env_accel)
-	# Hard ceiling: nothing takes the ship past the speed limit.
-	if spec != null and spec.speed_limit_mps > 0.0 and linear_velocity.length() > spec.speed_limit_mps:
-		linear_velocity = SpeedGovernor.clamp_velocity(linear_velocity, spec.speed_limit_mps)
+	# Hard ceiling: nothing takes the ship past the speed limit against its reference (Q4).
+	if spec != null and spec.speed_limit_mps > 0.0 and v_rel.length() > spec.speed_limit_mps:
+		linear_velocity = SpeedGovernor.clamp_against(linear_velocity, rest_v, spec.speed_limit_mps)
 
 	if combat_fresh:
 		targeting.apply(_combat)
@@ -388,11 +399,11 @@ func set_assist(on: bool) -> void:
 	assist_toggled.emit(on)
 
 
-## Teleports to a World-local pose at rest (respawn): velocities zeroed, assist state cleared, tank refilled, no
-## interpolation smear.
+## Teleports to a World-local pose at rest (respawn): at rest against the World's anchor, spin zeroed, assist state cleared,
+## tank refilled, no interpolation smear.
 func reset_to(xform: Transform3D) -> void:
 	transform = xform
-	linear_velocity = Vector3.ZERO
+	linear_velocity = world.rest_velocity() if world != null and is_instance_valid(world) else Vector3.ZERO
 	angular_velocity = Vector3.ZERO
 	_fuel.refuel()
 	if _model != null:
@@ -403,6 +414,52 @@ func reset_to(xform: Transform3D) -> void:
 	_mark_batch_row_stale()
 	_output_tick = -1
 	reset_physics_interpolation()
+
+
+## Reads this ship's speed against `velocity` (local frame) from now on, `accel` being what that reference falls with (M6-T08,
+## D67): the player's `FlightReference` sets it each tick. The brake, the assist's safe speed, the thrust fade and the
+## ceiling all read the speed against it.
+func set_reference_rest(velocity: Vector3, accel: Vector3) -> void:
+	_rest_set = true
+	_rest_velocity = velocity
+	_rest_accel = accel
+	if _batch != null and is_instance_valid(_batch):
+		_batch.set_rest(self, velocity, accel)
+
+
+## Back to the World's rest: the speed is read against the World's anchor.
+func clear_reference_rest() -> void:
+	if not _rest_set:
+		return
+	_rest_set = false
+	_rest_velocity = Vector3.ZERO
+	_rest_accel = Vector3.ZERO
+	if _batch != null and is_instance_valid(_batch):
+		_batch.clear_rest(self)
+
+
+## Whether the ship reads its speed against a reference of its own (`set_reference_rest`).
+func has_reference_rest() -> bool:
+	return _rest_set
+
+
+## The velocity this ship's speed is read against, local frame: its reference's, else the World's anchor's.
+func rest_velocity() -> Vector3:
+	if _rest_set:
+		return _rest_velocity
+	return world.rest_velocity() if world != null and is_instance_valid(world) else Vector3.ZERO
+
+
+## What the reference falls with, local frame (the brake's feed-forward beside the pull).
+func rest_accel() -> Vector3:
+	if _rest_set:
+		return _rest_accel
+	return world.rest_accel() if world != null and is_instance_valid(world) else Vector3.ZERO
+
+
+## The ship's speed against what it reads its speed against, m/s.
+func speed_against_rest() -> float:
+	return (linear_velocity - rest_velocity()).length()
 
 
 ## Parks the body for the low-attention tier (M4-T21): hidden and not processing, so it leaves Jolt, the scan and every
@@ -1132,8 +1189,10 @@ func _register_console() -> void:
 		&"velocity": {"get": func() -> Vector3: return linear_velocity,
 				"set": func(value: Variant) -> void: linear_velocity = value as Vector3,
 				"type": TYPE_VECTOR3, "unit": "m/s", "doc": "World-frame velocity (settable: a debug shove, the only console write to it)"},
-		&"speed": {"get": func() -> float: return linear_velocity.length(), "type": TYPE_FLOAT, "unit": "m/s",
-				"doc": "Speed relative to the World frame"},
+		&"speed": {"get": speed_against_rest, "type": TYPE_FLOAT, "unit": "m/s",
+				"doc": "Speed against the reference (the HUD's REF; the World's anchor when there is none), M6-T08"},
+		&"rest_velocity": {"get": rest_velocity, "unit": "m/s",
+				"doc": "The velocity the speed is read against, World frame: the reference's (a place, or near a body the circular orbit's at the ship), M6-T08"},
 		&"body_velocity": {"get": body_velocity, "unit": "m/s",
 				"doc": "Velocity in body axes (+x right, +y up, -z forward)"},
 		&"angular_rate_dps": {"get": _angular_rate_dps, "unit": "deg/s",

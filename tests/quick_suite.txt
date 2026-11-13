@@ -102,6 +102,9 @@ res://tests/unit/test_star_system.gd
 res://tests/integration/test_free_fall.gd
 res://tests/integration/test_velocity_rebase.gd
 res://tests/integration/test_gravity_movers.gd
+res://tests/unit/test_reference_frame.gd
+res://tests/integration/test_flight_reference.gd
+res://tests/integration/test_low_orbit_flight.gd
 res://tests/unit/test_static_rows.gd
 res://tests/integration/test_static_shift.gd
 # Jumpgate and jump vortex (M6-T14, T19)

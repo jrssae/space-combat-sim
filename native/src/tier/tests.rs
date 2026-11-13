@@ -19,7 +19,7 @@ fn run(t: &mut TierRows, pull: &[Vector3], ticks: i64) {
     let commands = CommandMap::default();
     let mut scratch = Vec::new();
     for tick in 0..ticks {
-        step(t, &[], pull, &commands, tick, DT, PERIOD, &mut scratch);
+        step(t, &[], pull, Rest::ZERO, &commands, tick, DT, PERIOD, &mut scratch);
     }
 }
 
@@ -48,4 +48,26 @@ fn every_row_falls_with_its_pull_and_a_capital_holds_its_cruise_against_it() {
     let held = sub(t.velocities[1], v0[1]);
     assert!(f64::from(length(held)) < 0.02, "the capital's engines hold off the pull: {held:?}");
     assert!(f64::from(length(t.accel[1])) > 0.0, "and they push against it");
+}
+
+// M6-T08: the ceiling reads a row's speed against the World's rest, so a row moving with a boosted frame's anchor is not slowed.
+#[test]
+fn the_speed_ceiling_reads_the_speed_against_the_rest() {
+    let commands = CommandMap::default();
+    let mut scratch = Vec::new();
+    let v = rows().velocities[0];
+    let (mut capped, mut riding) = (rows(), rows());
+    capped.speed_limit[0] = 100.0;
+    riding.speed_limit[0] = 100.0;
+    step(&mut capped, &[], &[], Rest::ZERO, &commands, 1, DT, PERIOD, &mut scratch);
+    let rest = Rest { velocity: v, accel: Vector3::ZERO };
+    step(&mut riding, &[], &[], rest, &commands, 1, DT, PERIOD, &mut scratch);
+    assert!((f64::from(length(capped.velocities[0])) - 100.0).abs() < 1e-3, "against zero: cut to the ceiling");
+    assert_eq!(riding.velocities[0], v, "at rest against the anchor: nothing to cut");
+    let mut fast = rows();
+    fast.speed_limit[0] = 100.0;
+    let slow = Rest { velocity: scale(v, 0.5), accel: Vector3::ZERO };
+    step(&mut fast, &[], &[], slow, &commands, 1, DT, PERIOD, &mut scratch);
+    let against = sub(fast.velocities[0], slow.velocity);
+    assert!((f64::from(length(against)) - 100.0).abs() < 1e-3, "cut to the ceiling on top of the rest");
 }

@@ -147,3 +147,16 @@ func test_a_missing_system_or_file_says_why() -> void:
 func test_the_star_catalog_still_reads_the_file() -> void:
 	assert_eq(StarCatalog.temperature_k(&"local"), 5084.0, "temperature")
 	assert_false(StarCatalog.parse(FileAccess.get_file_as_string(StarCatalog.PATH)).has("error"), "parses")
+
+
+func test_names_indices_and_impact_radii() -> void:
+	var system := StarSystem.load_system(&"local")
+	assert_eq(system.display_name(&"babylon5"), "Babylon 5", "the file's name (M6-T08)")
+	assert_eq(system.display_name(&"epsilon_iii"), "Epsilon III")
+	var unnamed: StarSystem = _build(_table())
+	assert_eq(unnamed.display_name(&"rock"), "ROCK", "no name: the id in capitals")
+	assert_eq(system.id_at(system.index_of(&"jumpgate")), &"jumpgate")
+	assert_eq(system.id_at(99), &"")
+	var radii: PackedFloat64Array = system.impact_radii()
+	assert_eq(radii[system.index_of(&"epsilon_iii")], PLANET_RADIUS_M + 1.0e5, "the radius plus the atmosphere's top")
+	assert_eq(radii[system.index_of(&"babylon5")], 0.0, "nothing hits a place")

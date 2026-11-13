@@ -8,7 +8,7 @@ use godot::prelude::*;
 
 use std::sync::Mutex;
 
-use crate::kernels::flight::{self, Applied, Body, Cmd, Spec};
+use crate::kernels::flight::{self, Applied, Body, Cmd, Rest, Spec};
 use crate::rows::FLAG_RIGID;
 use crate::sim_core::ScsSimCore;
 use crate::threads::{self, Pass, Threads};
@@ -43,6 +43,8 @@ struct Slot {
     row_mode: bool,
     assist_on: bool,
     has_propellant: bool,
+    // What the ship's speed is read against when it is not the World's rest (M6-T08): the player's reference.
+    rest: Option<Rest>,
 }
 
 // One ship of a step: read on the main thread, flown by the kernel on a worker, applied on the main thread (M4-T18).
@@ -51,6 +53,7 @@ struct Item {
     slot: usize,
     cmd: Option<Cmd>,
     env_w: Vector3,
+    rest: Rest,
     assist_on: bool,
     has_propellant: bool,
     basis: Basis,
@@ -81,6 +84,7 @@ fn fly(slot: &Slot, item: &mut Item, dt: f64) {
         item.v_w,
         item.w_w,
         item.env_w,
+        item.rest,
         item.assist_on,
         dt,
         item.has_propellant,
@@ -163,6 +167,7 @@ impl ScsFlightStep {
             row_mode: false,
             assist_on: true,
             has_propellant: true,
+            rest: None,
         };
         if let Some(free) = self.slots.iter().position(Option::is_none) {
             self.slots[free] = Some(slot);
@@ -233,6 +238,24 @@ impl ScsFlightStep {
             }
         }
         out
+    }
+
+    /// Reads the ship of `slot`'s speed against `velocity` (m/s, World frame) from now on, with `accel` (m/s^2) as the
+    /// brake's feed-forward for what that reference falls with (M6-T08, D67: the player's reference). Until set, or after
+    /// `clear_rest`, a ship reads its speed against the World's rest (its anchor's velocity in the local frame).
+    #[func]
+    fn set_rest(&mut self, slot: i64, velocity: Vector3, accel: Vector3) {
+        if let Some(s) = self.slot_mut(slot) {
+            s.rest = Some(Rest { velocity, accel });
+        }
+    }
+
+    /// Back to the World's rest for the ship of `slot`.
+    #[func]
+    fn clear_rest(&mut self, slot: i64) {
+        if let Some(s) = self.slot_mut(slot) {
+            s.rest = None;
+        }
     }
 
     /// The slot of each output row of the last step, in row order.
@@ -401,6 +424,7 @@ impl ScsFlightStep {
         let fl = flags.as_slice();
         let st = states.as_slice();
         let mut server = PhysicsServer3D::singleton();
+        let world_rest = core.map_or(Rest::ZERO, |(c, _)| c.frame_rest());
         if self.items.len() < n {
             self.items.resize_with(n, Item::default);
         }
@@ -429,6 +453,7 @@ impl ScsFlightStep {
             item.applied = None;
             let slot = self.slots[item.slot].as_ref().expect("checked above");
             item.pod_yaw = slot.pod_yaw_smoothed;
+            item.rest = slot.rest.unwrap_or(world_rest);
             let row = core.and_then(|(c, ids)| {
                 let r = c.row_for_kernel(ids[i]);
                 usize::try_from(r)
@@ -525,6 +550,7 @@ impl ScsFlightStep {
                 rc.apply_to(&mut cmd);
                 item.assist_on = slot.assist_on;
                 item.has_propellant = slot.has_propellant;
+                item.rest = slot.rest.unwrap_or(world_rest);
                 item.applied = None;
                 item.pod_yaw = slot.pod_yaw_smoothed;
                 item.fly = true;

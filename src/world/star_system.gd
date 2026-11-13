@@ -29,6 +29,7 @@ var place_ids: Array[StringName] = []
 var _native: RefCounted = null
 var _index: Dictionary = {}  # StringName -> the kernel's index
 var _info: Dictionary = {}  # StringName -> {kind, parent, gm, radius_m, atmosphere_top_m}
+var _names: Dictionary = {}  # StringName -> the optional display name of a body or place
 
 
 ## The system `system_id` of the shipped file, or one with `errors` when it cannot be used.
@@ -138,6 +139,36 @@ func has_id(name: StringName) -> bool:
 	return _index.has(name)
 
 
+## The body or place at the ephemeris's `index`, or an empty name.
+func id_at(index: int) -> StringName:
+	for key: StringName in _index:
+		if int(_index[key]) == index:
+			return key
+	return &""
+
+
+## What the HUD calls a body or place: its `name` in the file, else its id in capitals with spaces.
+func display_name(body: StringName) -> String:
+	if _names.has(body):
+		return String(_names[body])
+	return String(body).to_upper().replace("_", " ")
+
+
+## How close to each body's centre a ship is destroyed (M6-T08, D67): its radius plus its atmosphere's top, by ephemeris
+## index; 0 for a place.
+func impact_radii() -> PackedFloat64Array:
+	var radii := PackedFloat64Array()
+	radii.resize(body_ids.size() + place_ids.size())
+	radii.fill(0.0)
+	for key: StringName in body_ids:
+		var row: Dictionary = _info[key]
+		var index: int = int(_index[key])
+		if index >= radii.size():
+			radii.resize(index + 1)
+		radii[index] = float(row["radius_m"]) + float(row["atmosphere_top_m"])
+	return radii
+
+
 ## The native ephemeris (`ScsEphemeris`) the frame copies its bodies from (M6-T04); null when the system did not load.
 func ephemeris() -> RefCounted:
 	return _native
@@ -198,6 +229,7 @@ func _add_body(native: RefCounted, position: int, raw: Variant) -> void:
 		return
 	_index[key] = index
 	body_ids.append(key)
+	_keep_name(key, row)
 	_info[key] = {"kind": StringName(kind_name), "parent": parent_name, "gm": gm, "radius_m": float(row["radius_m"]),
 			"atmosphere_top_m": float(atmosphere)}
 
@@ -236,6 +268,12 @@ func _add_place(native: RefCounted, position: int, raw: Variant) -> void:
 		return
 	_index[key] = index
 	place_ids.append(key)
+	_keep_name(key, row)
+
+
+func _keep_name(key: StringName, row: Dictionary) -> void:
+	if row.get("name") is String and not String(row["name"]).is_empty():
+		_names[key] = String(row["name"])
 
 
 # The id of a row, or "" with a reason when it is missing or used already.

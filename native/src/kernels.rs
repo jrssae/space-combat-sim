@@ -803,6 +803,24 @@ pub mod flight {
         pub retro_total: f64,
     }
 
+    /// What a ship's speed is read against (D67): its reference's velocity in the local frame and that reference's own
+    /// acceleration. The brake, the thrust fade, the assist's safe speed and the hard ceiling read `v - velocity`, and the
+    /// brake holds station on the reference with `accel` as feed-forward. Zero while the frame rides its anchor and the
+    /// anchor is the reference, where every result keeps its old bits.
+    #[derive(Clone, Copy, Debug, Default, PartialEq)]
+    pub struct Rest {
+        pub velocity: Vector3,
+        pub accel: Vector3,
+    }
+
+    impl Rest {
+        pub const ZERO: Rest = Rest { velocity: Vector3::ZERO, accel: Vector3::ZERO };
+
+        pub fn is_zero(&self) -> bool {
+            self.velocity == Vector3::ZERO && self.accel == Vector3::ZERO
+        }
+    }
+
     /// What one tick gives the step to apply and to hand back: the RCS force, the torque, the assist's cap, the environment
     /// force, the velocity after the hard ceiling (when it clamps), and the output rows. The nozzle forces at their world
     /// positions go into the buffer the caller passes `tick` (its own scratch, so a thread owns one).
@@ -818,7 +836,9 @@ pub mod flight {
 
     /// One tick for one ship: the model in the body frame, then the ship's force application in the world frame
     /// (`Ship._physics_process`), with the pod-yaw assist state carried in `pod_yaw` and the nozzle forces (force, world
-    /// position) written into `nozzle_forces`, the caller's buffer.
+    /// position) written into `nozzle_forces`, the caller's buffer. `env_w` is the pull the ship feels; `rest` is what its
+    /// speed is read against (M6-T08).
+    #[allow(clippy::too_many_arguments)]
     pub fn tick(
         body: &Body,
         pod_yaw: &mut f64,
@@ -827,14 +847,19 @@ pub mod flight {
         v_w: Vector3,
         w_w: Vector3,
         env_w: Vector3,
+        rest: Rest,
         assist_on: bool,
         dt: f64,
         has_propellant: bool,
         nozzle_forces: &mut Vec<(Vector3, Vector3)>,
     ) -> Applied {
-        let v_b = xform_inv(basis, v_w);
+        // Speed against the reference; the brake's feed-forward is the pull less what the reference itself falls with.
+        let at_rest = rest.is_zero();
+        let v_rel = if at_rest { v_w } else { sub(v_w, rest.velocity) };
+        let env_ff = if at_rest { env_w } else { sub(env_w, rest.accel) };
+        let v_b = xform_inv(basis, v_rel);
         let w_b = xform_inv(basis, w_w);
-        let env_b = xform_inv(basis, env_w);
+        let env_b = xform_inv(basis, env_ff);
         let out = compute(
             body,
             pod_yaw,
@@ -852,7 +877,7 @@ pub mod flight {
         let mass_f = spec.mass as f32;
         let env_force = scale(env_w, mass_f);
         let mut applied = env_force;
-        let gain = thrust_gain(f64::from(length(v_w)), spec.speed_limit_mps) as f32;
+        let gain = thrust_gain(f64::from(length(v_rel)), spec.speed_limit_mps) as f32;
         nozzle_forces.clear();
         for k in 0..body.nozzle_groups.len() {
             let level = out.levels[body.nozzle_groups[k]];
@@ -868,7 +893,7 @@ pub mod flight {
         let torque_w = xform(basis, out.tau_rcs);
         let cap = if assist_on {
             let net = scale(xform(basis, add(out.pod_force, out.rcs_force)), gain);
-            let cap = assist_cap_correction(net, v_w, spec.assist_speed_max_mps);
+            let cap = assist_cap_correction(net, v_rel, spec.assist_speed_max_mps);
             applied = add(applied, cap);
             Some(cap)
         } else {
@@ -876,8 +901,9 @@ pub mod flight {
         };
         let mut v_after = v_w;
         let mut clamped = None;
-        if spec.speed_limit_mps > 0.0 && f64::from(length(v_w)) > spec.speed_limit_mps {
-            v_after = scale(normalized(v_w), spec.speed_limit_mps as f32);
+        if spec.speed_limit_mps > 0.0 && f64::from(length(v_rel)) > spec.speed_limit_mps {
+            let capped = scale(normalized(v_rel), spec.speed_limit_mps as f32);
+            v_after = if at_rest { capped } else { add(rest.velocity, capped) };
             clamped = Some(v_after);
         }
         Applied {

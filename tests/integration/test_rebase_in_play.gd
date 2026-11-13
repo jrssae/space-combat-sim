@@ -233,6 +233,7 @@ func test_flying_at_full_speed_through_5_km_rebases_leaves_nothing_behind() -> v
 	# The main scene's own threshold, crossed every 1.25 s at 4 000 m/s, with an explosion, debris and bolts in flight: a node
 	# left interpolating across a 5 km jump would be drawn kilometres from where it is.
 	await _launch(ScenarioLoader.SANDBOX_PATH)
+	main.world.auto_boost_speed_mps = 0.0  # position rebases at full speed: no velocity rebase to bring the ship to rest (M6-T08)
 	assert_true(_exec("wave stop").ok)
 	assert_true(_exec("spawn raider idle 80").ok)
 	assert_true(_exec('set targeting.selected "RAIDER 1"').ok)
@@ -288,6 +289,7 @@ func test_through_a_rebase_at_full_speed_the_view_keeps_the_ship_its_bolts_and_t
 	# and the HUD's camera sees NAV ALPHA where it is drawn (1 m). The sampler reads a bolt node's interpolated transform, and
 	# the player's cannon keeps its bolt nodes on either bolt path (M4-T35).
 	await _launch()
+	main.world.auto_boost_speed_mps = 0.0  # position rebases at full speed: no velocity rebase to bring the ship to rest (M6-T08)
 	var speed: float = 5000.0
 	main.ship.reset_to(Transform3D(Basis(Vector3.RIGHT, PI / 2.0), main.ship.position))
 	main.ship.linear_velocity = main.ship.forward() * speed
@@ -360,6 +362,7 @@ func test_through_a_rebase_at_full_speed_the_view_keeps_the_ship_its_bolts_and_t
 func test_the_main_scene_rebases_at_5_km() -> void:
 	await _launch()
 	assert_eq(main.world.auto_rebase_distance_m, 5000.0, "main.tscn turns the rebase on at 5 km")
+	assert_eq(main.world.auto_boost_speed_mps, 2000.0, "and the velocity rebase at 2 000 m/s (M6-T08)")
 	assert_eq(main.world.focus, main.ship, "on the player")
 	var bare := WorldFrame.new()
 	assert_eq(bare.auto_rebase_distance_m, 0.0, "a bare WorldFrame keeps it off")

@@ -94,6 +94,11 @@ impl ScsSimCore {
     pub(crate) fn snapshot_into(&mut self, snapshot: &mut Snapshot, own_releases: bool) {
         snapshot.rows.clone_from(&self.rows);
         snapshot.bolts.clone_from(&self.bolts);
+        // The brains read every speed against the World's rest (M6-T08, D67): the one place they are fed.
+        let rest = self.frame_rest().velocity;
+        if rest != Vector3::ZERO {
+            take_rest(&mut snapshot.rows, &mut snapshot.bolts, rest);
+        }
         snapshot.body_rows.clone_from(self.body_rows());
         snapshot.touched.clone_from(self.touched_set());
         snapshot.commands.clone_from(&self.row_commands);
@@ -169,5 +174,23 @@ impl ScsSimCore {
             }
         }
         h as i64
+    }
+}
+
+// `BodyKind.MISSILE`: a missile's marker carries its local velocity, as a body does.
+const KIND_MISSILE: u8 = 3;
+
+/// The brains' copy of the rows with `rest` taken off every velocity that is a local one (bodies, tier rows, missiles and
+/// bolts), so a speed the brains read is a speed against the World's anchor (M6-T08, D67). Rocks, mines and props keep
+/// their own motion against the anchor, which is what their rows hold already.
+pub(crate) fn take_rest(rows: &mut crate::rows::Rows, bolts: &mut crate::rows::Bolts, rest: Vector3) {
+    use crate::rows::{FLAG_RIGID, FLAG_TIER};
+    for j in 0..rows.velocities.len() {
+        if rows.flags[j] & (FLAG_RIGID | FLAG_TIER) != 0 || rows.kinds[j] == KIND_MISSILE {
+            rows.velocities[j] = crate::v3::sub(rows.velocities[j], rest);
+        }
+    }
+    for v in &mut bolts.velocities {
+        *v = crate::v3::sub(*v, rest);
     }
 }

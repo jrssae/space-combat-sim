@@ -90,6 +90,8 @@ var _overlay_in_s: float = 0.0
 var _spawn_basis: Basis = Basis.IDENTITY
 # The player's velocity at the first spawn (a mission that opens in flight); a respawn starts at rest.
 var _start_velocity: Vector3 = Vector3.ZERO
+## What the player's speed is read against (M6-T08): the HUD's REF, and the ship's brake, assist, fade and ceiling.
+var flight_reference: FlightReference = null
 var _system_id: StringName = &"local"
 var _scenario_spawns: Array[Dictionary] = []
 var _scenario_routes: Array[Route] = []
@@ -199,12 +201,12 @@ func _ready() -> void:
 	gates.name = JumpgateHost.NODE_NAME
 	gates.main = self
 	add_child(gates)
-	if bool(scenario.get("ok", false)):
-		_spawn_props(scenario["props"])
 	far_props = FarPropHost.new()
 	far_props.name = FarPropHost.NODE_NAME
 	far_props.main = self
 	add_child(far_props)
+	if bool(scenario.get("ok", false)):
+		_spawn_props(scenario["props"])
 		for entry: Dictionary in scenario["jumpgates"]:
 			gates.place(entry, star_system.system)
 		_spawn_belts(scenario["belts"])
@@ -214,6 +216,11 @@ func _ready() -> void:
 	camera_rig.setup(ship, ship.cockpit_anchor, ship.get_chase_offset(), ship.set_cockpit_interior_visible)
 	# The World keeps its origin within `auto_rebase_distance_m` (5 km, main.tscn) of the player (M3-T14, §14.1).
 	world.focus = ship
+	flight_reference = FlightReference.new()
+	flight_reference.world = world
+	flight_reference.ship = ship
+	flight_reference.place_source = func() -> Array: return gates.gates
+	add_child(flight_reference)
 	# The cockpit camera follows a RemoteTransform3D, so reset its interpolation on a rebase or the jump smears.
 	world.rebased.connect(func(_offset: Vector3) -> void: camera_rig.cockpit_pivot.reset_physics_interpolation())
 	letterbox = Letterbox.new()
@@ -331,7 +338,7 @@ func update_overlay(delta: float) -> void:
 func snapshot() -> Dictionary:
 	var s: Dictionary = {}
 	if ship != null:
-		s["speed_mps"] = ship.linear_velocity.length()
+		s["speed_mps"] = flight_reference.speed_mps() if flight_reference != null else ship.speed_against_rest()
 		s["body_velocity"] = ship.body_velocity()
 		s["angular_rate_dps"] = ship.body_angular_velocity() * FlightModel.AXIS_SIGN * (180.0 / PI)
 		s["assist_on"] = ship.assist_on
@@ -482,8 +489,11 @@ func _wire_audio() -> void:
 		audio.watch_ship(pooled)
 
 
-## The HUD's reference point (its `REF` range and closing speed): the launch point, for now. Universe coordinates.
+## The HUD's reference point (its `REF` range and closing speed): the player's reference (M6-T08), or the launch point when
+## there is none. Universe coordinates.
 func reference_point() -> UniversePos:
+	if flight_reference != null and flight_reference.frame.is_set():
+		return flight_reference.universe_position
 	return _spawn_position
 
 
@@ -536,6 +546,14 @@ func _build_hud_input() -> HudInput:
 	input.show_velocity_marker = bool(Settings.get_value(&"hud_velocity_marker"))
 	input.has_reference = true
 	input.reference_position = world.universe_to_local(reference_point())  # with this frame's origin: it follows every rebase
+	if flight_reference != null and flight_reference.frame.is_set():
+		input.reference_velocity = flight_reference.frame.rest_velocity
+		input.reference_name = flight_reference.frame.label
+	else:
+		input.reference_velocity = ship.rest_velocity()
+	if flight_reference != null:
+		input.altitude_m = flight_reference.frame.altitude_m
+		input.altitude_body = flight_reference.frame.altitude_body
 	input.tracking = ship.get_flight_output().tracking
 	input.running_lights = ship.running_lights
 	input.assist = ship.assist_on
@@ -639,7 +657,8 @@ func _place_spawn(entry: Dictionary) -> void:
 		path = BehaviourFollowPath.attach(brain as AiPilot, route)
 	var forward: Vector3 = entry.get("forward", Vector3.ZERO)
 	var basis: Basis = _spawn_basis if forward.is_zero_approx() else ScenarioLoader.basis_facing(forward)
-	var placed: Combatant = ships.acquire(ship_name, anchor.plus_local(entry["offset"]), basis, entry["velocity"], brain, type)
+	var placed: Combatant = ships.acquire(ship_name, anchor.plus_local(entry["offset"]), basis,
+			(entry["velocity"] as Vector3) + world.rest_velocity(), brain, type)  # against the place (M6-T08)
 	if placed == null:
 		return
 	if placed.cargo_pods != null:
@@ -710,7 +729,7 @@ func _spawn_ship() -> void:
 		ShipAssembly.OPT_CONSOLE_OWNER: true,
 	})
 	world.spawn(combatant.ship, _spawn_position, _spawn_basis)
-	combatant.ship.linear_velocity = _start_velocity
+	combatant.ship.linear_velocity = _start_velocity + world.rest_velocity()  # the scenario's velocity is against the place
 	# The player is part of the wing the allies broadcast for (M3-T10): heard like an allied Starfury, to 100 km.
 	combatant.targetable.broadcast_range_m = ShipPool.ALLY_BROADCAST_RANGE_M
 	ship = combatant.ship

@@ -290,7 +290,7 @@ which changes the same native rows and rebase path:
 | T05 | A | The velocity rebase over every body, row, bolt, chunk, particle and interpolated node | T04 | Fable | The riskiest change of the milestone; every moving thing and the parity recordings | done |
 | T06 | A | L4: the rebase cascade natively, the cached solid shifted in place, hidden ships skipped | T05 | Opus | A measured native fix on the path T05 rewrote | done (AC2 restated, the per-node rest moved to T21; maintainer, 2026-11-12) |
 | T07 | A | Gravity on everything: ships, tier rows, bolts, debris, the brake's and the AI's feed-forward; the gravity stand-in removed | T04 | Opus | Native kernels with parity at zero gravity | done |
-| T08 | A | Flying under gravity: the clamp, the assist's and brake's reference, the HUD's reference and altitude, planet impact | T07, Q4 to Q6 | Opus | Flight-model semantics the player feels | in progress |
+| T08 | A | Flying under gravity: the clamp, the assist's and brake's reference, the HUD's reference and altitude, planet impact | T07, Q4 to Q6 | Opus | Flight-model semantics the player feels | done |
 | T09 | B | Scenarios at true scale: spawns relative to bodies, stations and orbits, epochs, free flight beside the station's stand-in | T03, T08, Q7, Q9 | Opus | Every scenario and mission must keep working | not started |
 | T10 | C | Scaled-space layer: placement, draw order and depth, the true sun direction, the planet's shadow | T04 | Fable | Precision and draw order in Forward+ at planetary distances; a design that later layers stand on | done |
 | T11 | C | The planet and its atmosphere: the `planet` generator and the scattering shader (generator half early) | T10, Q10 | Opus | Shader maths on T10's layer; the look is (H) | done |
@@ -685,6 +685,83 @@ which changes the same native rows and rebase path:
 - **Tests:** `ReferenceFrame` and the brake's stop against the reference: quick; the headless low orbit held with assist on:
   standard.
 - **Done when:** AC5.
+
+- **Done (2026-11-12):**
+  - **The rest velocity** (D64, D67). Every ship reads its speed against a rest: its reference's velocity in the local frame
+    and what that reference falls with. `kernels::flight::Rest` goes into `flight::tick` beside `env_accel`: the brake gets
+    `v - v_rest` and the feed-forward `env - a_rest`, the thrust fade, the assist's safe speed and the hard ceiling read
+    `|v - v_rest|`, and the ceiling cuts to 9 999 m/s on top of the rest (Q4); the pull itself is still applied in full. With a
+    zero rest every expression is the old one (kept as a branch), so the parity recordings keep their bits. The flight step
+    (`flight_step.rs`) gives each ship the World's rest (`ScsSimCore.frame_rest`: minus the frame's velocity against its anchor
+    and minus the origin's own pull; zero while the frame rides), or a ship's own (`set_rest` / `clear_rest`, for a batched
+    ship with a reference). The tier's step takes the World's rest for its fighters' beat and its ceiling. `Ship`'s own model
+    (the player's) does the same in GDScript (`rest_velocity()`, `rest_accel()`, `set_reference_rest`,
+    `SpeedGovernor.clamp_against`); `ship.speed` in the console is the speed against it.
+  - **`ReferenceFrame`** (`src/world/reference_frame.gd`, pure): Q6's pick (the mission's reference when it names a candidate,
+    else the nearest place whose broadcast holds the ship, holding a tenth beyond its range, else the dominant body, else
+    none and the World's anchor), the rest of each (a place's velocity and fall; for a body the circular orbit's velocity at
+    the ship, prograde in the plane of the ship's motion about the body, at `sqrt(pull r)` from the zone rule's pull, falling
+    with the ship's own pull, so the brake's feed-forward cancels and it settles the ship into that circle), and the
+    altitude rule (a body is the reference, or the ship is within `settings.hud_altitude_radii` radii of its surface).
+    **`FlightReference`** (`src/world/flight_reference.gd`, priority -5, after the core's sync and before the ship) is its
+    shell for the player: candidates are the place the World falls with (when it is a place, with
+    `settings.reference_place_range_km`, 1 000 km), the jumpgates (their `Targetable`'s broadcast) and the dominant body from
+    the core (`frame_reference_body`: index, centre and velocity in the local frame in 64-bit, the pull at the ship;
+    `frame_body_state` for a mission's body). It hands the ship its rest every tick and takes a boost's `dv` off it at the end
+    of the tick, so the HUD's speed does not jump between ticks. Console `reference [auto|<id>]` (the mission's seam) and
+    provider `reference` (name, kind, rest velocity and acceleration, speed, range, altitude, mission).
+  - **HUD:** `REF <name>  <range>  <closing>`; the speed, the velocity marker, the drift sphere and the angles are read against
+    the reference (`HudLayout.relative_velocity`); `ALT <km>` on a line under it near a body. `Main.reference_point()` is the
+    reference's universe position (the launch point when there is none), so `RebaseFight`'s HUD check still holds. Names come
+    from the data (`name` on bodies and places, `StarSystem.display_name`), so the speed's jump on a change of reference
+    (station to planet) is explained beside it.
+  - **Brains:** the brains' snapshot (`snapshot_into`) takes the World's rest off every local velocity (bodies, tier rows,
+    missiles, bolts); rocks, mines and props keep their own motion against the anchor, which is what their rows hold, so in
+    the brains a rock is at rest and cruise, stop and run-up speeds are against the place. Zero rest: no change.
+  - **The other readers of T05's list:** spawn velocities in data are against the place (`Main`'s player and scenario spawns,
+    waves, mission spawns and gate arrivals, encounters with no ship anchor add `rest_velocity()`); `Ship.reset_to` leaves a
+    ship at rest against the anchor; a missile steers and holds its speed as seen from the anchor (`steer_missile`); rocks in
+    the ram resolver move with the anchor (velocity and start) and `head_on` reads the closing speed against the rock; an
+    anchored prop's row velocity gets the rest added in the ram resolver; the hit resolver sweeps a bolt against the rocks on
+    its path as seen from them (the narrow phase; the rocks' broad phase still takes the bolt's own segment); the ram tracker
+    takes a body it does not hold as moving with the anchor; an anchored marker's target velocity (a buoy's lead) adds the rest.
+  - **Planet impact** (D67, Out): `PlanetImpact` (an internal child of the `WorldFrame`, priority 205) asks the core each tick
+    for the ships and capitals among its rows (tier rows included, the player's ship too) inside a body's impact radius (its
+    radius plus `atmosphere_top_m`, pushed with the system: `StarSystem.impact_radii`, `frame_set_impact_radii`), and kills
+    each with `HitInfo.CAUSE_PLANET` (god mode does not hold a ship up). Nothing is read while the frame is quiet. Provider
+    fields `world.planet_impacts`, `world.last_impact`, `world.rest_velocity`.
+  - **The automatic velocity rebase is on** in `main.tscn` (`auto_boost_speed_mps` 2 000, back under half).
+  - Tests. Rust 133 (7 new: the brake stops a ship against its reference and falls with it; no rest keeps the bits, the fade and
+    the ceiling ride on the rest; a body seen from a rail, the dominant body and its pull, the impact radius, the origin's pull;
+    the tier's ceiling against the rest). GUT, **quick**: `test_reference_frame.gd` (new, 8), `test_flight_reference.gd` (new,
+    4, 1.7 s: the brake on both paths, the station then the planet as reference with the circle 2 km along the track reading 0,
+    the player and an AI row destroyed 70 km up and one at 150 km not, the automatic boost at 2 500 m/s with the HUD's speed
+    unchanged across it and through the way back), `test_low_orbit_flight.gd` (new, 5, about 2 s, so quick rather than the
+    planned standard: in the 400 km orbit the speed reads under 0.01 m/s; with assist on and the brake held 20 s the ship stays
+    within 0.000 m / 0.0011 m/s of its orbit riding, 0.029 m / 0.0027 m/s in a frame boosted 2 500 m/s and 0.097 m / 0.0059
+    m/s at 6 000 m/s, past the assist's 5 000 m/s safe speed; the brake settles a ship 48 m/s off the orbit into the circle at
+    400.02 km within 0.1 m/s, which then coasts within 0.0011 m/s of circular for a minute), `test_hud_layout.gd`,
+    `test_speed_governor.gd`, `test_star_system.gd` (one new test each), `test_ship_scene.gd` (the new `ship` key).
+    With the automatic velocity rebase on, the main-scene tests that fly past 2 000 m/s read the speed against the reference
+    (`test_speed_and_autotrack.gd`: the assist's safe speed, coasting above it, the fade toward the ceiling, now with the frame
+    boosted under them), and the two position-rebase runs at 4 000 and 5 000 m/s in `test_rebase_in_play.gd` turn it off to
+    keep crossing 5 km (one more assert: `main.tscn` sets 2 000). Quick tier: 1 857 of 1 857 GUT, 133 Rust, 331 Python. With
+    `GUT_SLOW=1`: `test_weapon_rows_battle` (recorded [933, 420, 174, 151, 25, 1], now the same), `test_ai_think_time`
+    (AiPilot median 185 us for 13 ships), `test_parity_fixture`, `test_flight_parity_fight`, `test_rebase_in_play` (9),
+    `test_speed_and_autotrack`, `test_tier_handover`, `test_ram_damage`, `test_rocks_and_mines`, `test_hit_resolver`,
+    `test_gravity_orbit`, `test_standins`, `test_main_scene`, `test_hud`, `test_free_fall`, `test_velocity_rebase`,
+    `test_world_frame`, `test_flight_batch`, `test_flight_step`, `test_tier`, `test_sim_core` pass. The parity recordings
+    keep their bits.
+  - Bench, `bench_quick.sh m6_t08_after battle` (500, 1 000; pinned 0-11, load 0.6, T15's GPU runs in the same hours): tick
+    median 4.59 and 5.71 ms, p99 6.17 and 7.62, every budget held; T07's after: 4.52 and 5.63, p99 6.17 and 8.05. The bench
+    rides its anchor, so every rest is zero and the new work is one branch per ship and the planet-impact check over the rows
+    (two bodies). Within the run-to-run spread.
+  - (H): the assist and the brake under gravity (the brake settling into the circle; holding the brake far from any place is
+    an orbit, not a stop against the planet); the `ALT` line under `REF` and the long `REF` line in the chase view's corner;
+    the 1 000 km station reference range; planet impact bypassing god mode.
+  - Left: GDScript-only brains (`perceive()`, the few pilots not native-capable) still read frame velocities (the native
+    snapshot is the seam in play); a turret marker on a moving capital keeps its row velocity; the rocks' broad phase in the
+    hit sweep takes the bolt's own segment off the anchor; T09 places the scenarios (the reference picks whatever is there).
 
 ### M6-T09 Scenarios at true scale
 

@@ -297,3 +297,65 @@ fn a_quiet_frame_gives_every_row_exactly_nothing() {
     frame.residual_rows(&mut rows);
     assert_eq!(rows, vec![[0.0; 3]; 5], "on the station's rail: nothing pulls");
 }
+
+// M6-T08: what the HUD's reference and the impact rule read.
+#[test]
+fn a_body_is_seen_from_a_rail_where_it_is_and_moving_against_the_place() {
+    let (system, planet, station) = epsilon();
+    let mut frame = Frame::default();
+    frame.set_system(system.clone(), gravity::A_MIN_DEFAULT);
+    assert!(frame.anchor_on_rail(station));
+    frame.set_origin([1000.0, -200.0, 50.0]);
+    frame.sample(3600.0);
+    let seen = frame.body_local_state(planet, DT).unwrap();
+    let rail = system.relative_state(station, planet, 3600.0);
+    for i in 0..3 {
+        let origin = [1000.0, -200.0, 50.0][i];
+        assert!((seen.position[i] + rail.position[i] + origin).abs() < 1e-6, "the planet's centre against the local origin");
+        assert!((seen.velocity[i] + rail.velocity[i]).abs() < 1e-9, "the planet moves against the place at minus the rail");
+    }
+    assert!(frame.body_local_state(99, DT).is_none());
+}
+
+#[test]
+fn inside_a_zone_the_dominant_body_and_its_pull_are_given_and_none_outside() {
+    let mut frame = Frame::default();
+    frame.set_system(planet_alone(GM_EARTH), gravity::A_MIN_DEFAULT);
+    let v = (GM_EARTH / LOW_ORBIT_M).sqrt();
+    assert!(frame.anchor_in_orbit(0, [LOW_ORBIT_M, 0.0, 0.0], [0.0, v, 0.0], 0.0, DT));
+    frame.sample(0.0);
+    let (index, pull) = frame.dominant_at([0.0; 3]).unwrap();
+    assert_eq!(index, 0);
+    assert!((length(pull) - GM_EARTH / (LOW_ORBIT_M * LOW_ORBIT_M)).abs() < 1e-9, "the full pull of the planet");
+    let seen = frame.body_local_state(0, DT).unwrap();
+    assert!((seen.position[0] + LOW_ORBIT_M).abs() < 1e-6 && (seen.velocity[1] + v).abs() < 0.01);
+    assert!(frame.dominant_at([1.0e9, 0.0, 0.0]).is_none(), "outside every zone nothing is dominant");
+}
+
+#[test]
+fn a_mover_inside_the_impact_radius_hits_the_body_and_one_above_it_does_not() {
+    let mut frame = Frame::default();
+    frame.set_system(planet_alone(GM_EARTH), gravity::A_MIN_DEFAULT);
+    let v = (GM_EARTH / LOW_ORBIT_M).sqrt();
+    assert!(frame.anchor_in_orbit(0, [LOW_ORBIT_M, 0.0, 0.0], [0.0, v, 0.0], 0.0, DT));
+    frame.sample(0.0);
+    assert_eq!(frame.inside_body([-300_000.0, 0.0, 0.0]), None, "no radii set: nothing hits");
+    frame.set_impact_radii(vec![6.371e6 + 1.0e5]);
+    assert_eq!(frame.inside_body([0.0; 3]), None, "400 km up, above the 100 km atmosphere");
+    assert_eq!(frame.inside_body([-299_000.0, 0.0, 0.0]), None, "101 km up");
+    assert_eq!(frame.inside_body([-301_000.0, 0.0, 0.0]), Some(0), "99 km up: below the atmosphere's top");
+}
+
+#[test]
+fn the_origin_pull_is_zero_while_riding_and_the_anchors_fall_off_it() {
+    let mut frame = Frame::default();
+    frame.set_system(planet_alone(GM_EARTH), gravity::A_MIN_DEFAULT);
+    let v = (GM_EARTH / LOW_ORBIT_M).sqrt();
+    assert!(frame.anchor_in_orbit(0, [LOW_ORBIT_M, 0.0, 0.0], [0.0, v, 0.0], 0.0, DT));
+    frame.set_origin([2000.0, 0.0, 0.0]);
+    frame.sample(0.0);
+    assert_eq!(frame.origin_pull(), [0.0; 3], "riding: the origin takes the anchor's pull");
+    frame.boost([0.0, 10.0, 0.0]);
+    frame.sample(DT);
+    assert!(frame.origin_pull()[0] > 0.0, "2 km farther out the tide pulls the origin outward");
+}

@@ -116,6 +116,8 @@ var last_boost_us: int = 0
 ## Nodes the last interpolation reset reached (M4-T14): a node that is not interpolated, such as a far dot's ship, is left out.
 var last_settle_resets: int = 0
 
+## The rule that destroys a ship on a planet's surface or below its atmosphere's top (M6-T08, D67).
+var impact: PlanetImpact = null
 var _settler: Settler = null
 var _sim: SimCore = null
 # The last sample found a pull near the local space: only then does anything read the residual.
@@ -174,6 +176,8 @@ func _ready() -> void:
 	add_child(_settler, false, Node.INTERNAL_MODE_BACK)
 	add_child(FrameSlot.new(self, true), false, Node.INTERNAL_MODE_BACK)
 	add_child(FrameSlot.new(self, false), false, Node.INTERNAL_MODE_BACK)
+	impact = PlanetImpact.new(self)
+	add_child(impact, false, Node.INTERNAL_MODE_BACK)
 	_sim = SimCore.attach(self)  # every world simulates on the native core (M4-T42), pools or none
 	get_tree().physics_frame.connect(_adopt_origin)
 	# Console seam (architecture §6.4): `rebase` shifts the origin by hand; `rebases` and `rebase_us` watch the automatic one.
@@ -194,6 +198,12 @@ func _ready() -> void:
 				"doc": "Whether anything pulls near the local space this tick (the residual is read only then)"},
 		&"anchor_pull": {"get": func() -> Vector3: return _frame_call(&"frame_pull", [], Vector3.ZERO), "unit": "m/s^2",
 				"doc": "The pull at the anchor this tick, which the whole frame falls with"},
+		&"rest_velocity": {"get": rest_velocity, "unit": "m/s",
+				"doc": "The anchor's velocity in the local frame: what at rest means for the AI and for a ship with no reference (M6-T08)"},
+		&"planet_impacts": {"get": func() -> int: return impact.destroyed if impact != null else 0,
+				"doc": "Ships destroyed on a planet's surface or below its atmosphere's top so far (M6-T08)"},
+		&"last_impact": {"get": func() -> String: return impact.last if impact != null else "",
+				"doc": "The last ship destroyed on a planet, and the planet"},
 		&"auto_rebase_distance_m": {"get": func() -> float: return auto_rebase_distance_m, "unit": "m",
 				"doc": "Automatic rebase threshold; 0 = off (a bare World), 5 000 in the main scene"},
 		&"rebases": {"get": func() -> int: return rebases, "doc": "Rebases so far, automatic and console"},
@@ -392,6 +402,49 @@ func rest_velocity() -> Vector3:
 	return -Vector3(origin_velocity[0], origin_velocity[1], origin_velocity[2])
 
 
+## The anchor's acceleration in the local frame, m/s^2 (M6-T08): what a ship at rest against it falls with beyond the pull at
+## its own place. Zero while the frame rides.
+func rest_accel() -> Vector3:
+	if not _has_core() or (riding() and origin_velocity[0] == 0.0 and origin_velocity[1] == 0.0 \
+			and origin_velocity[2] == 0.0):
+		return Vector3.ZERO
+	var rest: PackedVector3Array = _sim.core.frame_rest_state()
+	return rest[1]
+
+
+## The body that pulls hardest at a local position, for the HUD's reference (M6-T08): `{index, id, position, velocity, pull}`,
+## its centre and velocity in the local frame (64-bit numbers, `PackedFloat64Array` of three) and its pull there; empty
+## where nothing pulls.
+func reference_body(local_pos: Vector3) -> Dictionary:
+	if star_system == null or not _has_core():
+		return {}
+	var raw: PackedFloat64Array = _sim.core.frame_reference_body(local_pos, _tick_s())
+	if raw.size() != 10:
+		return {}
+	var index: int = int(raw[0])
+	return {"index": index, "id": star_system.id_at(index), "position": raw.slice(1, 4), "velocity": raw.slice(4, 7),
+			"pull": Vector3(raw[7], raw[8], raw[9])}
+
+
+## The ships and capitals that hit a body this tick, as `[body id, body index, ...]` (the core checks every row).
+func impacts() -> PackedInt64Array:
+	if star_system == null or not _has_core():
+		return PackedInt64Array()
+	return _sim.core.frame_impacts()
+
+
+## A body or place's centre and velocity in the local frame (six numbers, 64-bit), empty when it cannot be placed.
+func body_state(id: StringName) -> PackedFloat64Array:
+	if star_system == null or not _has_core() or not star_system.has_id(id):
+		return PackedFloat64Array()
+	return _sim.core.frame_body_state(star_system.index_of(id), _tick_s())
+
+
+# The sim time one physics tick covers (what `delta` is), with the engine's time scale in it.
+func _tick_s() -> float:
+	return Engine.time_scale / float(Engine.physics_ticks_per_second)
+
+
 ## What the boosts since `mark` (an earlier copy of `boost_sum`) took off every local velocity.
 func boost_since(mark: PackedFloat64Array) -> Vector3:
 	if mark.size() != 3:
@@ -587,6 +640,7 @@ func _take_system(system: StarSystem, id: StringName) -> bool:
 		push_warning("WorldFrame: %s: no usable star system with %s" % [name, id])
 		return false
 	_sim.core.frame_set_system(system.ephemeris(), system.a_min)
+	_sim.core.frame_set_impact_radii(system.impact_radii())
 	return true
 
 

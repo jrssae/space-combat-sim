@@ -30,10 +30,16 @@ var velocity_v_deg: float = 0.0
 var velocity_angles_valid: bool = false
 ## The drift sphere's arrow: the unit direction of travel in radar space (X right, Y forward, Z up; zero when the ship is not moving).
 var drift_dir: Vector3 = Vector3.ZERO
-## The reference point: distance to it, and the rate at which that distance closes (+ = approaching), m/s.
+## The reference: its name, distance to it, and the rate at which that distance closes (+ = approaching), m/s. `speed_mps` is
+## read against it (M6-T08).
 var reference_valid: bool = false
+var reference_name: String = ""
 var reference_range_m: float = 0.0
 var reference_closing_mps: float = 0.0
+## The altitude above the body the ship is near (M6-T08, Q6), m, and that body's name; `altitude_valid` false when none.
+var altitude_valid: bool = false
+var altitude_m: float = 0.0
+var altitude_body: String = ""
 ## Auto-track is holding the nose on the lead point.
 var tracking: bool = false
 

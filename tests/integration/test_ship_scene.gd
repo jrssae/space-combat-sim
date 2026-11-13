@@ -14,7 +14,8 @@ const CAMERA_RIG_PATH: String = "res://src/camera/camera_rig.tscn"
 const ENVIRONMENT_PATH: String = "res://src/environment/space_environment.tscn"
 const GEN_ASSETS_HINT: String = "run scripts/gen_assets.sh, then scripts/run_tests.sh (it imports first)"
 const TOL: float = 1e-4
-const SHIP_KEYS: Array[StringName] = [&"position", &"universe_position", &"velocity", &"speed", &"body_velocity",
+const SHIP_KEYS: Array[StringName] = [&"position", &"universe_position", &"velocity", &"speed", &"rest_velocity",
+		&"body_velocity",
 		&"angular_rate_dps", &"assist_on", &"running_lights", &"trim", &"pod_yaw", &"main_levels", &"retro_levels", &"mass_flow", &"fuel_kg", &"fuel_fraction"]
 
 var world: WorldFrame

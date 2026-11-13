@@ -7,6 +7,8 @@ extends RefCounted
 const CAUSE_BOLT: StringName = &"bolt"
 const CAUSE_RAM: StringName = &"ram"
 const CAUSE_CONSOLE: StringName = &"console"
+## The ship hit a planet or dropped below its atmosphere's top (M6-T08, D67).
+const CAUSE_PLANET: StringName = &"planet"
 
 ## Instance id of the `Damageable` (or its ship) that was hit.
 var target_id: int = 0
@@ -23,7 +25,7 @@ var point: Vector3 = Vector3.ZERO
 var normal: Vector3 = Vector3.ZERO
 ## Speed of the bolt (or the other body) relative to the target at impact.
 var relative_speed_mps: float = 0.0
-## What did it: `bolt` (`HitResolver`), `ram` (`RamResolver`) or `console` (`damage`, `kill`).
+## What did it: `bolt` (`HitResolver`), `ram` (`RamResolver`), `console` (`damage`, `kill`) or `planet` (`PlanetImpact`).
 var cause: StringName = CAUSE_BOLT
 ## Hull points actually removed; 0 until the `Damageable` has applied the hit (and for god mode or a dead hull).
 var applied: float = 0.0

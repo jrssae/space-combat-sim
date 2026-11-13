@@ -96,7 +96,8 @@ func prepare(type: StringName, count: int) -> int:
 	return built
 
 
-## Takes a ship of `type` out of the pool, restored and called `display_name`, at `at` (universe) with World-frame `velocity`.
+## Takes a ship of `type` out of the pool, restored and called `display_name`, at `at` (universe) with World-frame `velocity`
+## (a local velocity: callers with a velocity against the place add `WorldFrame.rest_velocity()`, M6-T08).
 ## Returns null, with one warning, when none is free. Interpolation is reset so the move from the park does not smear.
 func acquire(display_name: String, at: UniversePos, basis: Basis = Basis.IDENTITY, velocity: Vector3 = Vector3.ZERO,
 		brain: PilotBrain = null, type: StringName = DEFAULT_TYPE) -> Combatant:

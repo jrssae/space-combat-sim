@@ -240,7 +240,7 @@ func start(e: EncounterEvent) -> bool:
 		return false
 	var target: Combatant = _raid_target(e) if e.kind == &"raid" else null
 	var anchor: UniversePos = _anchor_of(e, target)
-	var anchor_velocity: Vector3 = Vector3.ZERO
+	var anchor_velocity: Vector3 = main.world.rest_velocity()  # planned velocities are against the place (M6-T08)
 	if e.anchor == EncounterEvent.ANCHOR_TARGET:
 		anchor_velocity = target.ship.linear_velocity if target != null else main.ship.linear_velocity
 	var target_name: String = target.display_name if target != null else main.combatant.display_name
@@ -416,7 +416,7 @@ func _arrive_at_gate(e: EncounterEvent, k: int, type: StringName, target_name: S
 			route.add(main.world.to_universe(xform.origin + gate.arrival_velocity().normalized() * GATE_OUT_M))
 			path = BehaviourFollowPath.attach(brain as AiPilot, route)
 		var placed: Combatant = main.ships.acquire(ship_name, main.world.to_universe(xform.origin), xform.basis,
-				gate.arrival_velocity(), brain, type)
+				gate.arrival_velocity() + main.world.rest_velocity(), brain, type)
 		if placed == null:
 			return
 		if ShipCatalog.is_civilian(type):

@@ -126,12 +126,13 @@ static func _markers(input: HudInput, f: HudFrame) -> void:
 	var nose: Dictionary = project(input, input.own_position - input.own_basis.z * BORESIGHT_RANGE_M)
 	f.boresight_pos = nose["pos"]
 	f.boresight_visible = bool(nose["in_front"]) and on_screen(input, f.boresight_pos)
-	f.speed_mps = input.own_velocity.length()
+	var velocity: Vector3 = relative_velocity(input)
+	f.speed_mps = velocity.length()
 	f.tracking = input.tracking
-	_velocity_readout(input, f)
+	_velocity_readout(input, f, velocity)
 	if f.speed_mps < MIN_SPEED_FOR_MARKER_MPS or not input.show_velocity_marker:
 		return
-	var heading: Vector3 = input.own_velocity / f.speed_mps
+	var heading: Vector3 = velocity / f.speed_mps
 	var prograde: Dictionary = project(input, input.own_position + heading * BORESIGHT_RANGE_M)
 	if bool(prograde["in_front"]):
 		f.velocity_pos = prograde["pos"]
@@ -144,11 +145,16 @@ static func _markers(input: HudInput, f: HudFrame) -> void:
 	f.velocity_visible = bool(retro["in_front"]) and on_screen(input, f.velocity_pos)
 
 
-# The speed with its direction against the nose, and the reference point's range and closing speed.
-static func _velocity_readout(input: HudInput, f: HudFrame) -> void:
+## The ship's velocity against its reference (M6-T08): what the speed, the velocity marker, the drift sphere and the angles show.
+static func relative_velocity(input: HudInput) -> Vector3:
+	return input.own_velocity - input.reference_velocity if input.has_reference else input.own_velocity
+
+
+# The speed with its direction against the nose, the reference's name, range and closing speed, and the altitude.
+static func _velocity_readout(input: HudInput, f: HudFrame, velocity: Vector3) -> void:
 	if f.speed_mps >= MIN_SPEED_FOR_MARKER_MPS:
-		f.drift_dir = RadarModel.radar_direction(input.own_basis.transposed() * input.own_velocity)
-		var angles: Vector2 = velocity_angles_deg(input.own_basis, input.own_velocity)
+		f.drift_dir = RadarModel.radar_direction(input.own_basis.transposed() * velocity)
+		var angles: Vector2 = velocity_angles_deg(input.own_basis, velocity)
 		f.velocity_h_deg = angles.x
 		f.velocity_v_deg = angles.y
 		f.velocity_angles_valid = true
@@ -156,9 +162,14 @@ static func _velocity_readout(input: HudInput, f: HudFrame) -> void:
 		var offset: Vector3 = input.reference_position - input.own_position
 		f.reference_range_m = offset.length()
 		f.reference_valid = true
+		f.reference_name = input.reference_name
 		if f.reference_range_m > 1e-3:
 			# Positive when the ship is closing on the reference: the ship's velocity relative to it, along the line to it.
 			f.reference_closing_mps = (input.own_velocity - input.reference_velocity).dot(offset / f.reference_range_m)
+	f.altitude_valid = not is_nan(input.altitude_m)
+	if f.altitude_valid:
+		f.altitude_m = input.altitude_m
+		f.altitude_body = input.altitude_body
 
 
 ## Direction of `velocity` against the nose of a ship with orientation `basis` (-Z forward): `x` is the horizontal angle,

@@ -6,6 +6,7 @@ use godot::prelude::*;
 use crate::ephemeris::V3;
 use crate::ephemeris_binding::ScsEphemeris;
 use crate::frame::{Anchor, Frame};
+use crate::kernels::flight::Rest;
 use crate::sim_core::ScsSimCore;
 
 fn to_kernel(x: f64, y: f64, z: f64) -> V3 {
@@ -15,6 +16,9 @@ fn to_kernel(x: f64, y: f64, z: f64) -> V3 {
 fn to_game(v: V3) -> [f64; 3] {
     [v[0] + 0.0, v[2] + 0.0, 0.0 - v[1]] // never a negative zero: a frame at rest reads as plain zeros
 }
+
+// `BodyKind.CAPITAL`.
+const KIND_CAPITAL: u8 = 1;
 
 fn game_vector(v: V3) -> Vector3 {
     let g = to_game(v);
@@ -50,6 +54,27 @@ impl ScsSimCore {
     pub(crate) fn frame_velocity(&self) -> Vector3 {
         game_vector(self.frame.origin_velocity())
     }
+
+    /// The World's rest (M6-T08, D64): the anchor's velocity and acceleration in the local frame, what "at rest" means for
+    /// every ship that reads no reference of its own. Zero while the frame rides its anchor.
+    pub(crate) fn frame_rest(&self) -> Rest {
+        let (v, a) = (self.frame.origin_velocity(), self.frame.origin_pull());
+        if v == [0.0; 3] && a == [0.0; 3] {
+            return Rest::ZERO;
+        }
+        Rest { velocity: game_vector([-v[0], -v[1], -v[2]]), accel: game_vector([-a[0], -a[1], -a[2]]) }
+    }
+
+    /// The body a mover at `local` (World coordinates) has hit this tick, if any (M6-T08).
+    pub(crate) fn frame_inside_body(&self, local: Vector3) -> Option<usize> {
+        self.frame.inside_body(to_kernel(f64::from(local.x), f64::from(local.y), f64::from(local.z)))
+    }
+}
+
+// A body's local state as `[px, py, pz, vx, vy, vz]` (game axes, 64-bit).
+fn state_numbers(state: crate::ephemeris::State) -> [f64; 6] {
+    let (p, v) = (to_game(state.position), to_game(state.velocity));
+    [p[0], p[1], p[2], v[0], v[1], v[2]]
 }
 
 #[godot_api(secondary)]
@@ -156,6 +181,74 @@ impl ScsSimCore {
         PackedInt64Array::from(
             &[self.ships_pulled, self.tier_pulled, self.bolts_pulled, self.tier_pull_us, self.bolt_pull_us][..],
         )
+    }
+
+    /// The World's rest (M6-T08): `[velocity, accel]`, the anchor's velocity (m/s) and acceleration (m/s^2) in the local
+    /// frame; zeros while the frame rides its anchor.
+    #[func]
+    fn frame_rest_state(&self) -> PackedVector3Array {
+        let rest = self.frame_rest();
+        PackedVector3Array::from(&[rest.velocity, rest.accel][..])
+    }
+
+    /// The body that pulls hardest at `local` (World coordinates) and what the HUD's reference needs of it (M6-T08):
+    /// `[index, px, py, pz, vx, vy, vz, pull_x, pull_y, pull_z]`, its centre and velocity in the local frame and its pull at
+    /// `local` under the zone rule (game axes, 64-bit). Empty where nothing pulls. `dt` is the tick the frame is stepped with.
+    #[func]
+    fn frame_reference_body(&self, local: Vector3, dt: f64) -> PackedFloat64Array {
+        let at = to_kernel(f64::from(local.x), f64::from(local.y), f64::from(local.z));
+        let Some((index, pull)) = self.frame.dominant_at(at) else {
+            return PackedFloat64Array::new();
+        };
+        let Some(state) = self.frame.body_local_state(index, dt) else {
+            return PackedFloat64Array::new();
+        };
+        let (s, g) = (state_numbers(state), to_game(pull));
+        PackedFloat64Array::from(&[index as f64, s[0], s[1], s[2], s[3], s[4], s[5], g[0], g[1], g[2]][..])
+    }
+
+    /// Body or place `index`'s centre and velocity in the local frame, `[px, py, pz, vx, vy, vz]` (game axes, 64-bit);
+    /// empty with no anchor or an unknown index.
+    #[func]
+    fn frame_body_state(&self, index: i64, dt: f64) -> PackedFloat64Array {
+        usize::try_from(index)
+            .ok()
+            .and_then(|i| self.frame.body_local_state(i, dt))
+            .map_or_else(PackedFloat64Array::new, |s| PackedFloat64Array::from(&state_numbers(s)[..]))
+    }
+
+    /// How close to each body's centre a mover is destroyed (its radius plus its atmosphere's top), by ephemeris index; 0
+    /// for a place or a body nothing hits. Set again after every `frame_set_system`.
+    #[func]
+    fn frame_set_impact_radii(&mut self, radii: PackedFloat64Array) {
+        self.frame.set_impact_radii(radii.as_slice().to_vec());
+    }
+
+    /// The body index a mover at `local` (World coordinates) has hit this tick, or -1.
+    #[func]
+    fn frame_body_at(&self, local: Vector3) -> i64 {
+        self.frame_inside_body(local).map_or(-1, |i| i as i64)
+    }
+
+    /// The ships and capitals among the rows (tier rows included) that hit a body this tick (M6-T08, D67): `[body id, body
+    /// index, ...]`. Empty while the frame is quiet.
+    #[func]
+    fn frame_impacts(&self) -> PackedInt64Array {
+        let mut out = PackedInt64Array::new();
+        if !self.frame.active() {
+            return out;
+        }
+        let r = &self.rows;
+        for j in 0..r.positions.len() {
+            if r.is_static[j] || !(r.kinds[j] == crate::sim_core::KIND_SHIP || r.kinds[j] == KIND_CAPITAL) {
+                continue;
+            }
+            if let Some(index) = self.frame_inside_body(r.positions[j]) {
+                out.push(r.body_ids[j]);
+                out.push(index as i64);
+            }
+        }
+        out
     }
 
     /// What the frame falls with: `none`, `rail` (a place's orbit) or `orbit` (a free-falling particle).

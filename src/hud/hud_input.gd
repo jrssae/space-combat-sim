@@ -21,11 +21,16 @@ var overlay_bottom_px: float = 0.0
 var own_position: Vector3 = Vector3.ZERO
 var own_basis: Basis = Basis.IDENTITY
 var own_velocity: Vector3 = Vector3.ZERO
-## The reference point the velocity is also read against (the launch point for now; later a station bay or a jump gate),
-## World frame, and its own velocity.
+## The reference the speed is read against (M6-T08, Q6: a station, a gate, or near a body the circular orbit at the ship),
+## World frame, its velocity (the speed, the velocity marker, the drift sphere and the angles are read against it) and its
+## name beside `REF` (empty: none shown).
 var reference_position: Vector3 = Vector3.ZERO
 var reference_velocity: Vector3 = Vector3.ZERO
 var has_reference: bool = false
+var reference_name: String = ""
+## The ship's height above the body it is near, m, and that body's name; NAN when no body is near (the altitude rule).
+var altitude_m: float = NAN
+var altitude_body: String = ""
 ## Draw the in-world prograde / retrograde marker (`settings.hud_velocity_marker`; the drift sphere is always drawn).
 var show_velocity_marker: bool = true
 ## Auto-track is holding the nose on the lead point.
