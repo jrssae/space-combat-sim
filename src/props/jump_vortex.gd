@@ -11,6 +11,11 @@ extends Node3D
 ## out from the throat; orange to golden yellow for a departure, turning clockwise, its patches spiralling in (`VortexSwirl`).
 ## A gate's mouth is an ellipse (`VortexFit`); the funnel keeps that section down to its throat. The age runs on physics ticks from `delta` (a pause freezes it); the visuals follow it
 ## each rendered frame. In `world_shiftable` when it stands alone, so a rebase moves it; a gate's moves with the gate.
+##
+## Cheap at a hundred (M6-T20): every vortex of one set of colours shares its materials (one per direction, one flash) and the
+## meshes; its own values (growth, the base's view, the swirl's time, the detail) are instance uniforms. The detail follows the
+## mouth's size on screen (`VortexLod`), and a pool may cap which of its points carry a light (`lit`) or a sound (`muted`).
+## Nothing processes while it is closed; a pool can draw its points itself (`driven`).
 
 enum Direction { ARRIVAL, DEPARTURE }
 const DIRECTION_NAMES: Array[StringName] = [&"arrival", &"departure"]
@@ -26,6 +31,9 @@ const DEFAULT_COLOURS: Dictionary = {
 const DEFAULT_FLASH: Color = Color(1.0, 0.62, 0.86)
 const SEGMENTS: int = 96
 const RINGS: int = 40
+## The coarse funnel a point a few pixels across draws (`VortexLod.coarse_mesh`).
+const COARSE_SEGMENTS: int = 24
+const COARSE_RINGS: int = 10
 ## The flash at its peak, as a share of the mouth's radius.
 const FLASH_SIZE: float = 1.1
 const LIGHT_PEAK_ENERGY: float = 12.0
@@ -46,6 +54,28 @@ var age_s: float = 0.0
 ## Openings so far (tests, console).
 var openings: int = 0
 var timing: VortexTiming = VortexTiming.new()
+## Whether its light enters the rig while it is open (a pool lights only its nearest few points).
+var lit: bool = true:
+	set(value):
+		if value == lit:
+			return
+		lit = value
+		if _active and lit:
+			_join_rig()
+		elif _active:
+			_leave_rig()
+## No arrival sound on this opening (a pool keeps a wave of points from all sounding at once).
+var muted: bool = false
+## Drawn by its pool (`update_visuals_for`), not by its own `_process`.
+var driven: bool = false:
+	set(value):
+		driven = value
+		_sync_processing()
+## The mouth's radius on screen at the last draw, px, and the detail level it gave (`VortexLod.level`).
+var radius_px: float = VortexLod.MAX_PX
+var lod_level: int = 0
+## Every vortex draws this level when 0 or more (`vortex lod <level>`, for captures); -1 follows the size on screen.
+static var forced_level: int = -1
 
 var funnel: MeshInstance3D = null
 var flash_quad: MeshInstance3D = null
@@ -53,13 +83,19 @@ var emitter: LightEmitter = null
 var sound: AudioStreamPlayer3D = null
 
 var _active: bool = false
-var _material: ShaderMaterial = null
-var _flash_material: ShaderMaterial = null
+var _materials: Array[ShaderMaterial] = []  # by direction, shared with every vortex of these colours
 var _colours: Dictionary = DEFAULT_COLOURS.duplicate()
 var _rig: LightRig = null
 var _sounded: bool = false
+var _coarse: bool = false
+var _lod_a: Vector4 = Vector4(-1.0, -1.0, -1.0, -1.0)
+var _lod_b: Vector4 = Vector4(-1.0, -1.0, -1.0, -1.0)
 
 static var _funnel_mesh: ArrayMesh = null
+static var _coarse_mesh: ArrayMesh = null
+static var _quad: QuadMesh = null
+static var _material_cache: Dictionary = {}  # colours and direction -> the funnel's material
+static var _flash_cache: Dictionary = {}  # flash colour -> the flash's material
 static var _stream: AudioStreamWAV = null
 static var _stream_checked: bool = false
 
@@ -85,25 +121,17 @@ func setup(vortex_data: Dictionary = {}, with_sound: bool = true) -> void:
 				_colours[key] = [_colour((entry as Dictionary).get("colour"), DEFAULT_COLOURS[key][0]),
 						_colour((entry as Dictionary).get("highlight"), DEFAULT_COLOURS[key][1])]
 	flash_colour = _colour(vortex_data.get("flash"), DEFAULT_FLASH)
-	_material = ShaderMaterial.new()
-	_material.shader = FUNNEL_SHADER
+	_materials = [funnel_material(_colours, Direction.ARRIVAL), funnel_material(_colours, Direction.DEPARTURE)]
 	funnel = MeshInstance3D.new()
 	funnel.name = "Funnel"
 	funnel.mesh = funnel_mesh()
-	funnel.material_override = _material
+	funnel.material_override = _materials[Direction.ARRIVAL]
 	funnel.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(funnel)
-	_flash_material = ShaderMaterial.new()
-	_flash_material.shader = GLOW_SHADER
-	_flash_material.set_shader_parameter(&"tint", Vector3(flash_colour.r, flash_colour.g, flash_colour.b) * 3.0)
-	_flash_material.set_shader_parameter(&"rays", 1.2)
-	_flash_material.set_shader_parameter(&"lift", 0.0)
 	flash_quad = MeshInstance3D.new()
 	flash_quad.name = "Flash"
-	var quad := QuadMesh.new()
-	quad.size = Vector2(2.0, 2.0)
-	flash_quad.mesh = quad
-	flash_quad.material_override = _flash_material
+	flash_quad.mesh = _flash_mesh()
+	flash_quad.material_override = flash_material(flash_colour)
 	flash_quad.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	flash_quad.custom_aabb = AABB(Vector3(-1.0, -1.0, -1.0), Vector3(2.0, 2.0, 2.0))
 	add_child(flash_quad)
@@ -121,8 +149,47 @@ func setup(vortex_data: Dictionary = {}, with_sound: bool = true) -> void:
 	_hide_all()
 
 
+func _ready() -> void:
+	_sync_processing()
+
+
 func _exit_tree() -> void:
 	_leave_rig()
+
+
+## The funnel's shared material for `colours` (as `DEFAULT_COLOURS`) going `p_direction`: made once, then every vortex of those
+## colours draws with it.
+static func funnel_material(colours: Dictionary, p_direction: Direction) -> ShaderMaterial:
+	var way: StringName = DIRECTION_NAMES[p_direction]
+	var pair: Array = colours[way]
+	var key: String = "%s %s %s" % [way, pair[0], pair[1]]
+	var cached: ShaderMaterial = _material_cache.get(key)
+	if cached != null:
+		return cached
+	var material := ShaderMaterial.new()
+	material.shader = FUNNEL_SHADER
+	material.set_shader_parameter(&"colour", pair[0])
+	material.set_shader_parameter(&"highlight", pair[1])
+	material.set_shader_parameter(&"flow", VortexSwirl.radial(p_direction))
+	material.set_shader_parameter(&"turn", VortexSwirl.turn_in_mesh(p_direction))
+	material.set_shader_parameter(&"brightness", BRIGHTNESS[way])
+	_material_cache[key] = material
+	return material
+
+
+## The centre flash's shared material for `colour`.
+static func flash_material(colour: Color) -> ShaderMaterial:
+	var key: String = str(colour)
+	var cached: ShaderMaterial = _flash_cache.get(key)
+	if cached != null:
+		return cached
+	var material := ShaderMaterial.new()
+	material.shader = GLOW_SHADER
+	material.set_shader_parameter(&"tint", Vector3(colour.r, colour.g, colour.b) * 3.0)
+	material.set_shader_parameter(&"rays", 1.2)
+	material.set_shader_parameter(&"lift", 0.0)
+	_flash_cache[key] = material
+	return material
 
 
 ## Places the vortex at `xform` (its parent's frame: the origin the mouth's centre, -Z the way ships come out), sizes it by
@@ -132,7 +199,10 @@ func open_at(xform: Transform3D, p_fit: VortexFit, p_direction: Direction, hold_
 	if _active:
 		return false
 	transform = xform
-	fit = p_fit
+	fit.mouth_radius_m = p_fit.mouth_radius_m
+	fit.mouth_half_width_m = p_fit.mouth_half_width_m
+	fit.depth_m = p_fit.depth_m
+	fit.mouth_z_m = p_fit.mouth_z_m
 	reset_physics_interpolation()
 	return open(p_direction, hold_s, lead_s)
 
@@ -149,23 +219,19 @@ func open(p_direction: Direction, hold_s: float = VortexTiming.DEFAULT_HOLD_S, l
 	if _active:
 		return false  # closing or in its closing flash: it must finish before it opens again
 	direction = p_direction
-	timing = VortexTiming.new(hold_s, lead_s)
+	timing.reset(hold_s, lead_s)
 	age_s = 0.0
 	_active = true
 	_sounded = false
 	openings += 1
-	var pair: Array = _colours[DIRECTION_NAMES[direction]]
-	_material.set_shader_parameter(&"colour", pair[0])
-	_material.set_shader_parameter(&"highlight", pair[1])
-	_material.set_shader_parameter(&"flow", VortexSwirl.radial(direction))
-	_material.set_shader_parameter(&"turn", VortexSwirl.turn_in_mesh(direction))
-	_material.set_shader_parameter(&"brightness", BRIGHTNESS[DIRECTION_NAMES[direction]])
-	emitter.color = (pair[1] as Color)
+	funnel.material_override = _materials[direction]
+	emitter.color = (_colours[DIRECTION_NAMES[direction]][1] as Color)
 	emitter.omni_range = fit.mouth_radius_m * 6.0
-	_rig = LightRig.of(self)
-	if _rig != null:
-		_rig.add_emitter(emitter)
-	update_visuals()
+	if lit:
+		_join_rig()
+	_sync_processing()
+	if not driven:
+		update_visuals()
 	return true
 
 
@@ -180,6 +246,7 @@ func stop() -> void:
 	_active = false
 	_leave_rig()
 	_hide_all()
+	_sync_processing()
 
 
 ## Keeps the current opening open at least `hold_s` more.
@@ -232,50 +299,121 @@ func advance(delta: float) -> void:
 	age_s += delta
 	if not _sounded and age_s >= timing.lead_s:
 		_sounded = true
-		if sound != null and sound.stream != null and direction == Direction.ARRIVAL and is_inside_tree():
+		if not muted and sound != null and sound.stream != null and direction == Direction.ARRIVAL and is_inside_tree():
 			sound.play()
 	if timing.is_done(age_s):
-		_active = false
-		_leave_rig()
-		_hide_all()
+		stop()
 
 
-## Puts the meshes and the light on the opening's current age.
+## Puts the meshes and the light on the opening's current age, its detail on its size from the viewport's camera (full detail
+## with none).
 func update_visuals() -> void:
+	if not _active:
+		return
+	var camera: Camera3D = get_viewport().get_camera_3d() if is_inside_tree() else null
+	if camera == null:
+		update_visuals_for(global_position if is_inside_tree() else position, 0.0)
+		return
+	var height: float = get_viewport().get_visible_rect().size.y
+	update_visuals_for(camera.global_position, camera.get_camera_projection().y.y * 0.5 * height)
+
+
+## `update_visuals` for a camera at `camera_position` with `px_per_unit` (`VortexLod.px_per_unit`; 0 for full detail); a pool
+## works these out once for all its points.
+func update_visuals_for(camera_position: Vector3, px_per_unit: float) -> void:
 	if not _active:
 		return
 	var grown: float = timing.growth(age_s)
 	funnel.visible = grown > 0.0
 	funnel.scale = Vector3(fit.mouth_half_width_m, fit.mouth_radius_m, fit.depth_m)
-	_material.set_shader_parameter(&"growth", grown)
-	_material.set_shader_parameter(&"swirl_time", SimClock.now())
+	var xform: Transform3D = global_transform if is_inside_tree() else transform
+	var to_camera: Vector3 = camera_position - xform.origin
+	var axis: Vector3 = xform.basis.z.normalized()
+	var facing: float = (to_camera + axis * 1e-3).normalized().dot(axis)
+	# The base glows from the side and behind, and fades to black looking down the funnel from in front.
+	funnel.set_instance_shader_parameter(&"vortex_state", Vector4(grown, smoothstep(-0.45, -0.05, facing), SimClock.now(), 0.0))
+	if px_per_unit > 0.0:
+		var scale_m: float = maxf(fit.mouth_half_width_m, fit.mouth_radius_m) * xform.basis.y.length()
+		radius_px = VortexLod.projected_radius_px(scale_m, to_camera.length(), px_per_unit)
+	else:
+		radius_px = VortexLod.MAX_PX
+	_set_detail()
 	var flash_level: float = timing.flash(age_s)
 	flash_quad.visible = flash_level > 0.0
 	flash_quad.position = Vector3(0.0, 0.0, fit.depth_m)
 	flash_quad.scale = Vector3.ONE * fit.mouth_radius_m * FLASH_SIZE * maxf(sqrt(flash_level), 1e-3)
-	_flash_material.set_shader_parameter(&"level", flash_level)
+	flash_quad.set_instance_shader_parameter(&"level", flash_level)
 	emitter.energy = LIGHT_PEAK_ENERGY * maxf(flash_level, grown * 0.5)
+
+
+## The layers' weights the funnel draws now (`VortexLod.LAYER_NAMES` order): from its size on screen, or the forced level.
+func detail() -> PackedFloat32Array:
+	if forced_level >= 0:
+		return VortexLod.level_weights(forced_level)
+	return VortexLod.weights(radius_px)
+
+
+# Hands the funnel its layers' weights and mesh, only when they change.
+func _set_detail() -> void:
+	var w: PackedFloat32Array = detail()
+	lod_level = VortexLod.level(radius_px) if forced_level < 0 else forced_level
+	var a := Vector4(w[0], w[1], w[2], w[3])
+	var b := Vector4(w[4], w[5], 0.0, 0.0)
+	if a != _lod_a:
+		_lod_a = a
+		funnel.set_instance_shader_parameter(&"vortex_lod_a", a)
+	if b != _lod_b:
+		_lod_b = b
+		funnel.set_instance_shader_parameter(&"vortex_lod_b", b)
+	var coarse: bool = VortexLod.coarse_mesh(radius_px, _coarse) and forced_level < 0
+	if coarse != _coarse:
+		_coarse = coarse
+		funnel.mesh = coarse_funnel_mesh() if coarse else funnel_mesh()
+
+
+## Whether the funnel draws its coarse mesh now.
+func is_coarse() -> bool:
+	return _coarse
 
 
 ## A unit funnel grid shared by every vortex: UV.x round it, UV.y from the rim (0) to the centre (1), closed at the centre. The
 ## shader shapes it (and unfolds it); the vertices here only give it the right bounds. Its triangles run from the base out to the
 ## rim, so the translucent walls are drawn over the base and hide its dark circle from an oblique view.
 static func funnel_mesh() -> ArrayMesh:
-	if _funnel_mesh != null:
-		return _funnel_mesh
+	if _funnel_mesh == null:
+		_funnel_mesh = _grid(SEGMENTS, RINGS)
+	return _funnel_mesh
+
+
+## The same funnel with fewer vertices, for a point a few pixels across.
+static func coarse_funnel_mesh() -> ArrayMesh:
+	if _coarse_mesh == null:
+		_coarse_mesh = _grid(COARSE_SEGMENTS, COARSE_RINGS)
+	return _coarse_mesh
+
+
+static func _flash_mesh() -> QuadMesh:
+	if _quad == null:
+		_quad = QuadMesh.new()
+		_quad.size = Vector2(2.0, 2.0)
+	return _quad
+
+
+# The funnel's unit grid with `segments` round it and `rings` from the rim to the centre.
+static func _grid(segments: int, rings: int) -> ArrayMesh:
 	var vertices := PackedVector3Array()
 	var uvs := PackedVector2Array()
 	var indices := PackedInt32Array()
-	for ring: int in RINGS + 1:
-		var v: float = float(ring) / float(RINGS)
+	for ring: int in rings + 1:
+		var v: float = float(ring) / float(rings)
 		var r: float = 1.0 - v
-		for seg: int in SEGMENTS + 1:
-			var u: float = float(seg) / float(SEGMENTS)
+		for seg: int in segments + 1:
+			var u: float = float(seg) / float(segments)
 			vertices.append(Vector3(cos(u * TAU) * r, sin(u * TAU) * r, v))
 			uvs.append(Vector2(u, v))
-	var row: int = SEGMENTS + 1
-	for ring: int in range(RINGS - 1, -1, -1):
-		for seg: int in SEGMENTS:
+	var row: int = segments + 1
+	for ring: int in range(rings - 1, -1, -1):
+		for seg: int in segments:
 			var a: int = ring * row + seg
 			indices.append_array([a, a + row, a + 1, a + 1, a + row, a + row + 1])
 	var arrays: Array = []
@@ -283,9 +421,9 @@ static func funnel_mesh() -> ArrayMesh:
 	arrays[Mesh.ARRAY_VERTEX] = vertices
 	arrays[Mesh.ARRAY_TEX_UV] = uvs
 	arrays[Mesh.ARRAY_INDEX] = indices
-	_funnel_mesh = ArrayMesh.new()
-	_funnel_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	return _funnel_mesh
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return mesh
 
 
 func _hide_all() -> void:
@@ -297,10 +435,22 @@ func _hide_all() -> void:
 		emitter.energy = 0.0
 
 
+func _join_rig() -> void:
+	_rig = LightRig.of(self)
+	if _rig != null:
+		_rig.add_emitter(emitter)
+
+
 func _leave_rig() -> void:
 	if _rig != null and is_instance_valid(_rig):
 		_rig.remove_emitter(emitter)
 	_rig = null
+
+
+# Processes only while open: a hundred closed points cost nothing a tick. A driven one is drawn by its pool.
+func _sync_processing() -> void:
+	set_physics_process(_active)
+	set_process(_active and not driven)
 
 
 static func _colour(raw: Variant, fallback: Color) -> Color:

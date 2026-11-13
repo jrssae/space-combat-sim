@@ -32,6 +32,11 @@ var close_from_s: float = open_at_s + DEFAULT_HOLD_S
 
 
 func _init(hold_s: float = DEFAULT_HOLD_S, p_lead_s: float = 0.0) -> void:
+	reset(hold_s, p_lead_s)
+
+
+## Starts over as a new opening held `hold_s` after the lead-in `p_lead_s` (a pooled vortex reuses its timing).
+func reset(hold_s: float = DEFAULT_HOLD_S, p_lead_s: float = 0.0) -> void:
 	lead_s = maxf(p_lead_s, 0.0)
 	open_at_s = lead_s + FLASH_S + GROW_S
 	close_from_s = open_at_s + maxf(hold_s, 0.0)

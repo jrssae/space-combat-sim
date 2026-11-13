@@ -1,7 +1,8 @@
 class_name BenchRunner
 extends Node
 ## Runs one many-ships benchmark on the live main scene (M4-T01, architecture §17.1): `bench <layout> <n> [seconds]
-## [warmup=<s>] [seed=<k>] [label=<name>] [probe=paired] [rebase_m=<m>] [sleep=keep] [rocks=<count>] [capitals=<share>] [boost=<m/s>]`. Sets the scene up from
+## [warmup=<s>] [seed=<k>] [label=<name>] [probe=paired] [rebase_m=<m>] [sleep=keep] [rocks=<count>] [capitals=<share>] [boost=<m/s>]
+## [arrive=jump|placed]`. Sets the scene up from
 ## the pools, warms up, records ticks with the `PerfProbe`, writes the report and puts back what it changed; the ships stay in
 ## play.
 ##
@@ -15,6 +16,11 @@ extends Node
 ## `boost=` (M6-T06) boosts the frame off its anchor once the scene is placed, so the run measures the frame falling
 ## freely (the anchor-tied things drift every tick) with the same relative motion as a run that rides the anchor. The
 ## automatic velocity rebase is held off for the run (M6-T21), or it would boost the frame straight back.
+##
+## Arrivals (M6-T20, AC13): in `battle` and `typical` every ship comes in out of a jump point (`BattleArrivals`, the bench's own
+## `JumpPointPool` of 100): the first wave at the start, the rest in later waves during the warm-up, which is stretched until the
+## last wave is in, so the measured window holds the whole battle. The report's `arrivals` gives the points, the waves and the
+## ticks while they came in. `arrive=placed` puts every ship in place at the start instead (the GPU comparison).
 
 ## The report is written; the run's summary.
 signal finished(summary: Dictionary)
@@ -31,7 +37,11 @@ const MAX_SLOWDOWN: float = 10.0
 ## The console waits this many frames at most; the run releases the wait when it ends.
 const HOLD_FRAMES: int = 1_000_000
 const DEFAULT_ROOT: String = "res://reports/perf"
-const OPTION_KEYS: Array[String] = ["warmup", "seed", "label", "probe", "rebase_m", "sleep", "rocks", "capitals", "boost"]
+const OPTION_KEYS: Array[String] = ["warmup", "seed", "label", "probe", "rebase_m", "sleep", "rocks", "capitals", "boost", "arrive"]
+const ARRIVE_JUMP: StringName = &"jump"
+const ARRIVE_PLACED: StringName = &"placed"
+## With arrivals, the measured window starts at least this long after the last point opened.
+const ARRIVAL_SETTLE_S: float = 1.0
 ## A carrier's launch leaves its bay this much faster than the carrier, along its nose, m/s.
 const LAUNCH_MPS: float = 80.0
 
@@ -58,6 +68,20 @@ var _restore: Dictionary = {}
 var _mix: Dictionary = {}
 var _rocks_placed: int = 0
 var _launch_turn: Dictionary = {}  # carrier -> how many it launched, to take its side's fighters in turn
+## The battle's jump points (M6-T20), made at the first battle that arrives through them and kept.
+var jumps: JumpPointPool = null
+## This run's arrivals, or null when its ships are placed.
+var arrivals: BattleArrivals = null
+## The most points a wave opens: the pool's hundred; a test asks for fewer to see several waves in a small battle.
+var wave_points: int = JumpPointPool.MAX_POINTS
+var _plan: Array[Dictionary] = []
+var _names := PackedStringArray()
+var _anchor: UniversePos = null
+var _next_point: int = 0  # the next point of `arrivals` to open
+var _radii := PackedFloat32Array()  # by plan entry: the ship's radius once it is in play
+var _arrival_ticks := PackedFloat64Array()  # the engine's physics time of each tick while the ships came in, us
+var _arrival_spawn_us: int = 0  # the worst tick's own cost of bringing ships in, us
+var _render_frames: Array[PackedFloat64Array] = []  # with a window: what each frame drew (`render_phases`)
 
 
 func _init() -> void:
@@ -66,7 +90,7 @@ func _init() -> void:
 
 func _ready() -> void:
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"bench",
-			"Fly a benchmark layout (%s) with n ships from the pools, measure [seconds] (30) after warmup=<s> (5), and write reports/perf/<label>/ (seed=<k> label=<name> probe=paired rebase_m=<m> rocks=<count> capitals=<share> boost=<m/s>)"
+			"Fly a benchmark layout (%s) with n ships from the pools, measure [seconds] (30) after warmup=<s> (5), and write reports/perf/<label>/ (seed=<k> label=<name> probe=paired rebase_m=<m> rocks=<count> capitals=<share> boost=<m/s> arrive=jump|placed: battle and typical ships come in through jump points, in waves, or are placed)"
 			% ", ".join(PackedStringArray(BenchLayout.NAMES)),
 			[ConsoleArg.enum_required(&"layout", BenchLayout.NAMES), ConsoleArg.int_required(&"n", 1, 2000),
 			ConsoleArg.string_rest(&"options").make_optional("")]), _cmd_bench, self)
@@ -80,12 +104,12 @@ func _exit_tree() -> void:
 
 
 ## Reads the words after `bench <layout> <n>`: an optional window in seconds first, then `key=value` options.
-## `{"ok", "error", "seconds", "warmup", "seed", "label", "paired", "rebase_m", "keep_sleep", "rocks", "capitals", "boost"}` (`rocks`
-## and `capitals`, the capital share, -1: the mix's; `boost`, m/s, 0 for none).
+## `{"ok", "error", "seconds", "warmup", "seed", "label", "paired", "rebase_m", "keep_sleep", "rocks", "capitals", "boost", "arrive"}`
+## (`rocks` and `capitals`, the capital share, -1: the mix's; `boost`, m/s, 0 for none; `arrive`, jump or placed).
 static func parse_options(words: PackedStringArray) -> Dictionary:
 	var out: Dictionary = {"ok": true, "error": "", "seconds": DEFAULT_SECONDS, "warmup": DEFAULT_WARMUP_S, "seed": 1, "label": "",
 			"paired": false, "rebase_m": REBASE_THRESHOLD_M, "keep_sleep": false, "rocks": -1,
-			"capitals": -1.0, "boost": 0.0}
+			"capitals": -1.0, "boost": 0.0, "arrive": ARRIVE_JUMP}
 	for i: int in words.size():
 		var word: String = words[i]
 		var pair: PackedStringArray = word.split("=", true, 1)
@@ -134,6 +158,10 @@ static func parse_options(words: PackedStringArray) -> Dictionary:
 				if not text.is_valid_float() or float(text) < 0.0:
 					return _bad("boost must be m/s, 0 or more")
 				out["boost"] = float(text)
+			"arrive":
+				if text != String(ARRIVE_JUMP) and text != String(ARRIVE_PLACED):
+					return _bad("arrive must be jump or placed")
+				out["arrive"] = StringName(text)
 			_:
 				return _bad("unknown option '%s' (%s)" % [key, ", ".join(PackedStringArray(OPTION_KEYS))])
 	return out
@@ -169,13 +197,19 @@ func start(layout: StringName, n: int, options: Dictionary) -> ConsoleResult:
 	var tps: float = float(Engine.physics_ticks_per_second)
 	_warmup_ticks = roundi(float(_options["warmup"]) * tps)
 	_measure_ticks = maxi(1, roundi(float(_options["seconds"]) * tps))
+	if arrivals != null and arrivals.waves > 1:
+		_warmup_ticks = maxi(_warmup_ticks, ceili((arrivals.last_at_s() + ARRIVAL_SETTLE_S) * tps))
 	_tick = 0
 	_engine_worst = PackedFloat64Array()
 	_started_us = Time.get_ticks_usec()
 	running = true
 	var result := ConsoleResult.line("bench %s %d: %d ships in play after %.1f s of load; warm-up %.1f s, measuring %.1f s -> %s" % [
-			layout, n, main.ships.in_use_count(), _load_ms * 1e-3, float(_options["warmup"]), float(_options["seconds"]),
+			layout, n, main.ships.in_use_count(), _load_ms * 1e-3, float(_warmup_ticks) / tps, float(_options["seconds"]),
 			report_root.path_join(String(_options["label"]))])
+	if arrivals != null:
+		result.lines.append("bench %s %d arrivals: %d jump points in %d waves (%d open at most), the last at %.1f s" % [layout, n,
+				arrivals.points.size(), arrivals.waves, arrivals.max_open(), arrivals.last_at_s()])
+		print("[bench] %s" % result.lines[-1])
 	if not _mix.is_empty():
 		result.lines.append("bench %s %d mix: %s; %d rocks placed, %d fights among them" % [layout, n, BattleMix.describe(_mix),
 				_rocks_placed, BenchLayout.fights_in_slab(layout, n)])
@@ -220,33 +254,29 @@ func _set_up_scene() -> void:
 	if session_table != null:
 		Factions.use_table(session_table)
 	var anchor: UniversePos = main.world.to_universe(ship.global_position)
-	var numbers: Dictionary = {ShipPool.ALLY_TYPE: ShipPool.ALLY_FIRST_NUMBER, ShipPool.DEFAULT_TYPE: 1}
+	_plan = plan
+	_anchor = anchor
+	_names = _ship_names(plan)
+	_radii = PackedFloat32Array()
+	_radii.resize(plan.size())
+	_arrival_ticks = PackedFloat64Array()
+	_arrival_spawn_us = 0
+	_render_frames.clear()
+	_next_point = 0
+	arrivals = null
+	if BenchLayout.has_mix(_layout) and StringName(_options.get("arrive", ARRIVE_JUMP)) == ARRIVE_JUMP:
+		_ensure_jumps()
+		arrivals = BattleArrivals.plan(plan, mini(wave_points, jumps.size()))
 	_placed = {ShipPool.ALLY_TYPE: 0, ShipPool.DEFAULT_TYPE: 0}
-	for e: Dictionary in plan:
-		if StringName(e["kind"]) != BenchLayout.KIND_FIGHTER:
-			continue
-		var type: StringName = e["type"]
-		var prefix: String = ShipPool.ALLY_NAME_PREFIX if type == ShipPool.ALLY_TYPE else ShipPool.NAME_PREFIX
-		var ship_name: String = "%s %d" % [prefix, int(numbers[type])]
-		numbers[type] = int(numbers[type]) + 1
-		var made: Dictionary = BrainFactory.from_behaviour(e["behaviour"], anchor, int(e["seed"]))
-		if not bool(made["ok"]):
-			push_warning("bench: %s: %s" % [ship_name, made["error"]])
-			continue
-		var placed: Combatant = main.ships.acquire(ship_name, anchor.plus_local(e["offset"]), e["basis"], e["velocity"],
-				made["brain"] as PilotBrain, type)
-		if placed == null:
-			continue
-		placed.damageable.invulnerable = true
-		if placed.faction != StringName(e["faction"]):
-			set_faction(placed, StringName(e["faction"]))
-		_placed[type] = int(_placed[type]) + 1
-		if not String(e["wing"]).is_empty():
-			main.wings.join(String(e["wing"]), placed)
+	for i: int in plan.size():
+		if StringName(plan[i]["kind"]) == BenchLayout.KIND_FIGHTER and _arrives_at_start(i):
+			_place_fighter(i, Vector3.ZERO)
 	_mix = BenchLayout.mix(_layout, _n)
 	_rocks_placed = 0
 	if not _mix.is_empty() and standins != null:
 		_set_up_standins(plan, anchor)
+	if arrivals != null:
+		_open_due(0.0)
 	if DisplayServer.get_name() == "headless" and not bool(_options["keep_sleep"]):
 		OS.low_processor_usage_mode_sleep_usec = 0
 		probe.time_sync = true
@@ -263,15 +293,9 @@ func _set_up_scene() -> void:
 func _set_up_standins(plan: Array[Dictionary], anchor: UniversePos) -> void:
 	standins.clear()
 	standins.sides = int(_mix["sides"])
-	var numbers: Dictionary = {}
-	for e: Dictionary in plan:
-		if StringName(e["kind"]) != BenchLayout.KIND_CAPITAL:
-			continue
-		var cls: String = String(e["class"])
-		numbers[cls] = int(numbers.get(cls, 0)) + 1
-		var cap: CapitalStandin = standins.add_capital(StringName(cls), StringName(e["faction"]),
-				"%s %d" % [cls.to_upper(), int(numbers[cls])], anchor.plus_local(e["offset"]), e["basis"], e["velocity"])
-		cap.damageable.invulnerable = true
+	for i: int in plan.size():
+		if StringName(plan[i]["kind"]) == BenchLayout.KIND_CAPITAL and _arrives_at_start(i):
+			_place_capital(i, Vector3.ZERO)
 	var rocks: Array[Dictionary] = BenchLayout.rocks(_layout, _n, int(_options["seed"]), int(_options.get("rocks", -1)))
 	if not rocks.is_empty():
 		standins.add_asteroids(rocks, anchor)
@@ -289,6 +313,89 @@ func _set_up_standins(plan: Array[Dictionary], anchor: UniversePos) -> void:
 	_launch_turn.clear()
 	standins.launcher = _launch_from
 	standins.active = true
+
+
+# Every plan entry's name: fighters numbered per pool type, capitals per class, in plan order.
+static func _ship_names(plan: Array[Dictionary]) -> PackedStringArray:
+	var out := PackedStringArray()
+	var numbers: Dictionary = {ShipPool.ALLY_TYPE: ShipPool.ALLY_FIRST_NUMBER, ShipPool.DEFAULT_TYPE: 1}
+	for e: Dictionary in plan:
+		if StringName(e["kind"]) == BenchLayout.KIND_CAPITAL:
+			var cls: String = String(e["class"])
+			numbers[cls] = int(numbers.get(cls, 0)) + 1
+			out.append("%s %d" % [cls.to_upper(), int(numbers[cls])])
+			continue
+		var type: StringName = e["type"]
+		var prefix: String = ShipPool.ALLY_NAME_PREFIX if type == ShipPool.ALLY_TYPE else ShipPool.NAME_PREFIX
+		out.append("%s %d" % [prefix, int(numbers[type])])
+		numbers[type] = int(numbers[type]) + 1
+	return out
+
+
+# Whether plan entry `i` is in play from the start: every ship when they are placed, else the first wave's.
+func _arrives_at_start(i: int) -> bool:
+	return arrivals == null or int(arrivals.points[arrivals.entry_point[i]]["wave"]) == 0
+
+
+# Plan entry `i`, a fighter, into play from its pool; `rest` is the frame's rest velocity for a ship arriving mid-run.
+func _place_fighter(i: int, rest: Vector3) -> void:
+	var e: Dictionary = _plan[i]
+	var type: StringName = e["type"]
+	var made: Dictionary = BrainFactory.from_behaviour(e["behaviour"], _anchor, int(e["seed"]))
+	if not bool(made["ok"]):
+		push_warning("bench: %s: %s" % [_names[i], made["error"]])
+		return
+	var placed: Combatant = main.ships.acquire(_names[i], _anchor.plus_local(e["offset"]), e["basis"],
+			(e["velocity"] as Vector3) + rest, made["brain"] as PilotBrain, type)
+	if placed == null:
+		return
+	placed.damageable.invulnerable = true
+	if placed.faction != StringName(e["faction"]):
+		set_faction(placed, StringName(e["faction"]))
+	_placed[type] = int(_placed[type]) + 1
+	_radii[i] = placed.ship.bounding_radius()
+	if not String(e["wing"]).is_empty():
+		main.wings.join(String(e["wing"]), placed)
+
+
+# Plan entry `i`, a capital, into play as a stand-in.
+func _place_capital(i: int, rest: Vector3) -> void:
+	var e: Dictionary = _plan[i]
+	var cap: CapitalStandin = standins.add_capital(StringName(e["class"]), StringName(e["faction"]), _names[i],
+			_anchor.plus_local(e["offset"]), e["basis"], (e["velocity"] as Vector3) + rest)
+	cap.damageable.invulnerable = true
+	_radii[i] = float(e["radius"])
+
+
+# The bench's pool of jump points, made once with room for the largest wave.
+func _ensure_jumps() -> void:
+	if jumps == null or not is_instance_valid(jumps):
+		jumps = JumpPointPool.new()
+		jumps.name = "BenchJumpPoints"
+		main.effects.add_child(jumps)
+	jumps.world = main.world
+	jumps.prepare(JumpPointPool.MAX_POINTS)
+
+
+# Opens every point of `arrivals` due by `now_s`: the first wave's ships are already in play; a later point brings its ships in
+# first, then opens round them.
+func _open_due(now_s: float) -> void:
+	var rest: Vector3 = main.world.rest_velocity()
+	while _next_point < arrivals.points.size() and float(arrivals.points[_next_point]["at_s"]) <= now_s:
+		var point: Dictionary = arrivals.points[_next_point]
+		var members: PackedInt32Array = point["members"]
+		if int(point["wave"]) > 0:
+			for i: int in members:
+				if StringName(_plan[i]["kind"]) == BenchLayout.KIND_CAPITAL:
+					_place_capital(i, rest)
+				else:
+					_place_fighter(i, rest)
+		var first: Dictionary = _plan[members[0]]
+		var opened: JumpVortex = jumps.open_for(_anchor.plus_local(first["offset"]), -(first["basis"] as Basis).z,
+				_radii[members[0]], JumpVortex.Direction.ARRIVAL, false)
+		for k: int in range(1, members.size()):
+			jumps.join(opened, _anchor.plus_local(_plan[members[k]]["offset"]), _radii[members[k]])
+		_next_point += 1
 
 
 # The battle's gravity (M6-T07): the frame falls on the circular orbit `orbit` names, placed so that the battle's centre
@@ -361,6 +468,19 @@ static func set_faction(c: Combatant, faction: StringName) -> void:
 	c.ship.targeting.system.own_faction = faction
 
 
+# With a window, what the GPU drew this frame, for the report's `render` (M6-T20).
+func _process(delta: float) -> void:
+	if not running or DisplayServer.get_name() == "headless":
+		return
+	var viewport: RID = get_viewport().get_viewport_rid()
+	RenderingServer.viewport_set_measure_render_time(viewport, true)
+	_render_frames.append(PackedFloat64Array([float(_tick) / float(Engine.physics_ticks_per_second),
+			RenderingServer.viewport_get_measured_render_time_gpu(viewport), delta * 1000.0,
+			Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),
+			Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1e6,
+			float(jumps.open_count()) if jumps != null and is_instance_valid(jumps) else 0.0]))
+
+
 func _physics_process(_delta: float) -> void:
 	if not running:
 		return
@@ -368,6 +488,11 @@ func _physics_process(_delta: float) -> void:
 	var now: int = Time.get_ticks_usec()
 	var first: int = _warmup_ticks + 1
 	var last: int = _warmup_ticks + _measure_ticks
+	if arrivals != null and _next_point < arrivals.points.size():
+		_arrival_ticks.append(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1e6)
+		var spawn_started: int = Time.get_ticks_usec()  # profiling only
+		_open_due(float(_tick) / float(Engine.physics_ticks_per_second))
+		_arrival_spawn_us = maxi(_arrival_spawn_us, Time.get_ticks_usec() - spawn_started)
 	if _tick == first:
 		probe.clear_series()
 		probe.recording = true
@@ -388,7 +513,7 @@ func _physics_process(_delta: float) -> void:
 			probe.stages_enabled = (into / BLOCK_TICKS) % 2 == 0
 		if into > 0 and into % int(Engine.physics_ticks_per_second) == 0:
 			_engine_worst.append(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1e6)
-	var budget_s: float = (float(_options["warmup"]) + float(_options["seconds"])) * MAX_SLOWDOWN
+	var budget_s: float = (float(_warmup_ticks + _measure_ticks) / float(Engine.physics_ticks_per_second)) * MAX_SLOWDOWN
 	if float(now - _started_us) * 1e-6 > maxf(budget_s, 30.0):
 		_finish(now, "the simulation ran under 1/%d of real time" % int(MAX_SLOWDOWN))
 
@@ -429,6 +554,8 @@ func _finish(now: int, aborted: String) -> void:
 		"engine_check": _engine_check(series[PerfProbe.Field.TICK], int(tps)),
 		"aborted": aborted,
 		"machine": BenchReport.machine(),
+		"arrivals": _arrivals_summary(),
+		"render": render_phases(_render_frames, float(_warmup_ticks) / tps),
 	}
 	if bool(_options["paired"]):
 		meta["probe_cost"] = _probe_cost(series[PerfProbe.Field.TICK])
@@ -477,6 +604,53 @@ func _put_back() -> void:
 	Factions.table().set_relation(Factions.EARTH_ALLIANCE, Factions.RAIDERS, int(_restore["relation"]) as Factions.Relation)
 	_mix = {}
 	_restore = {}
+	arrivals = null
+	_plan = []
+
+
+# How the ships came in (M6-T20): the points, the waves and the ticks while they arrived.
+func _arrivals_summary() -> Dictionary:
+	if arrivals == null:
+		return {"mode": String(ARRIVE_PLACED)}
+	return {"mode": String(ARRIVE_JUMP), "points": arrivals.points.size(), "waves": arrivals.waves,
+			"max_open": arrivals.max_open(), "last_at_s": arrivals.last_at_s(), "pool": jumps.size() if jumps != null else 0,
+			"opened": _next_point, "warmup_s": float(_warmup_ticks) / float(Engine.physics_ticks_per_second),
+			"ticks": _arrival_ticks.size(), "tick_median_us": PerfStats.median(_arrival_ticks),
+			"tick_max_us": PerfStats.max_value(_arrival_ticks), "spawn_worst_us": _arrival_spawn_us}
+
+
+## What the GPU drew in each part of a run with a window (M6-T20's fps test): `frames` holds one row a frame, (sim s, GPU ms, frame
+## ms, draw calls, VRAM MB, points open). The parts: the first wave's points forming (flash and growth), the points open, the
+## measured window from `window_s`. Empty without frames.
+static func render_phases(frames: Array[PackedFloat64Array], window_s: float) -> Dictionary:
+	if frames.is_empty():
+		return {}
+	var forming_s: float = VortexTiming.FLASH_S + VortexTiming.GROW_S
+	var open_s: float = VortexTiming.new().close_from_s
+	var bounds: Dictionary = {"forming": Vector2(0.0, forming_s), "open": Vector2(forming_s, open_s), "window": Vector2(window_s, INF)}
+	var out: Dictionary = {}
+	for part: String in bounds:
+		var span: Vector2 = bounds[part]
+		var gpu := PackedFloat64Array()
+		var frame := PackedFloat64Array()
+		var calls := PackedFloat64Array()
+		var vram: float = 0.0
+		var points: float = 0.0
+		for row: PackedFloat64Array in frames:
+			if row[0] < span.x or row[0] >= span.y:
+				continue
+			gpu.append(row[1])
+			frame.append(row[2])
+			calls.append(row[3])
+			vram = maxf(vram, row[4])
+			points = maxf(points, row[5])
+		if gpu.is_empty():
+			continue
+		out[part] = {"frames": gpu.size(), "gpu_ms_median": PerfStats.median(gpu), "gpu_ms_p95": PerfStats.percentile(gpu, 0.95),
+				"gpu_ms_max": PerfStats.max_value(gpu), "frame_ms_median": PerfStats.median(frame),
+				"fps": 1000.0 / maxf(PerfStats.mean(frame), 1e-3), "draw_calls_median": PerfStats.median(calls),
+				"draw_calls_max": PerfStats.max_value(calls), "vram_mb_max": vram, "points_open_max": int(points)}
+	return out
 
 
 # What the battle's weapons did over the measured window (M4-T12) and what each stand-in part cost per tick, us.

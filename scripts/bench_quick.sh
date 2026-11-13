@@ -6,7 +6,8 @@
 #
 # Usage: scripts/bench_quick.sh [label] [layout...]   (furball and spread by default; or transit, battle, typical (M4-T07))
 # Environment: QUICK_NS ("10 15 20 25 30 40 50 75 100 150 200 300 400 500"), QUICK_MIN_FPS (30), QUICK_SECONDS (6),
-#              QUICK_WARMUP (2), QUICK_SEED (1), QUICK_BUDGET_S (540), BENCH_CPUS (0-11; empty for no pinning), GODOT_BIN.
+#              QUICK_WARMUP (2), QUICK_SEED (1), QUICK_BUDGET_S (540), BENCH_CPUS (0-11; empty for no pinning), GODOT_BIN,
+#              QUICK_OPTIONS (more bench options, e.g. "arrive=placed"; battle and typical arrive through jump points by default).
 # Writes reports/perf/<label>/quick.md and each run's summary under runs/.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -24,6 +25,7 @@ MIN_FPS="${QUICK_MIN_FPS:-30}"
 SECONDS_MEASURED="${QUICK_SECONDS:-6}"
 WARMUP="${QUICK_WARMUP:-2}"
 SEED="${QUICK_SEED:-1}"
+EXTRA="${QUICK_OPTIONS:-}"
 BUDGET_S="${QUICK_BUDGET_S:-540}"
 CPUS="${BENCH_CPUS-0-11}"
 OUT="reports/perf/${LABEL}"
@@ -65,7 +67,7 @@ EOF
 
 START=$(date +%s)
 {
-    echo "# Quick check ${LABEL}: ${LAYOUTS[*]}, seed ${SEED}, ${WARMUP} s + ${SECONDS_MEASURED} s per count, floor ${MIN_FPS} FPS"
+    echo "# Quick check ${LABEL}: ${LAYOUTS[*]}, seed ${SEED}, ${WARMUP} s + ${SECONDS_MEASURED} s per count, floor ${MIN_FPS} FPS${EXTRA:+, options: ${EXTRA}}"
     echo
     echo "Commit ${COMMIT}, $(date -Iseconds), load $(cut -d' ' -f1-3 /proc/loadavg). One short run per count: indicative, not the verdict."
     echo "FPS is simulation ticks per wall-clock second (60 while it keeps real time). The budget is the milestone's: tick median"
@@ -97,7 +99,7 @@ ramp() {
         rm -rf "${OUT:?}/runs/${name}"
         t0=$(date +%s)
         "${PIN[@]}" timeout $(( budget - elapsed + 30 )) "${GODOT}" --headless --path . -- --console-strict \
-            --console-exec="scenario combat_sandbox; wait 30; bench ${layout} ${n} ${SECONDS_MEASURED} warmup=${WARMUP} seed=${SEED} label=${LABEL}/runs/${name}; quit" \
+            --console-exec="scenario combat_sandbox; wait 30; bench ${layout} ${n} ${SECONDS_MEASURED} warmup=${WARMUP} seed=${SEED} ${EXTRA} label=${LABEL}/runs/${name}; quit" \
             > "${OUT}/runs/${name}.log" 2>&1 || true
         last_wall=$(( $(date +%s) - t0 ))
         if [[ ! -f "${OUT}/runs/${name}/summary.json" ]]; then

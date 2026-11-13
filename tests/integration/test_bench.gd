@@ -286,3 +286,74 @@ func test_a_short_typical_run_writes_its_summary() -> void:
 	assert_eq(int(entities.get("sides", 0)), 2)
 	assert_gt(int(entities.get("launches", 0)), 0, "the carriers launched")
 	assert_eq(int(s.get("ships_max", 0)), 51, "the fighters and the player; capitals are counted apart")
+
+
+# --- arrivals through jump points (M6-T20) ------------------------------------------------------------------------
+
+
+func test_a_battle_comes_in_through_jump_points_in_waves() -> void:
+	main.bench.wave_points = 12  # a small battle in several waves
+	var mix: Dictionary = BenchLayout.mix(BenchLayout.BATTLE, 50)
+	assert_true(_exec("bench battle 50 1 warmup=0 seed=1 label=arrivals_test").ok)
+	await _ticks(2)
+	var arrivals: BattleArrivals = main.bench.arrivals
+	assert_not_null(arrivals, "a battle arrives through jump points")
+	assert_gt(arrivals.waves, 1, "%d points in waves of 12" % arrivals.points.size())
+	var plan: Array[Dictionary] = BenchLayout.plan(BenchLayout.BATTLE, 50, 1)
+	var first_fighters: int = 0
+	var first_capitals: int = 0
+	var first_points: int = 0
+	for i: int in arrivals.first_wave_entries():
+		if StringName(plan[i]["kind"]) == BenchLayout.KIND_CAPITAL:
+			first_capitals += 1
+		else:
+			first_fighters += 1
+	for point: Dictionary in arrivals.points:
+		first_points += 1 if int(point["wave"]) == 0 else 0
+	assert_eq(main.ships.alive().size(), first_fighters, "only the first wave's fighters are in, none placed ahead of its point")
+	assert_eq(main.bench.standins.capitals().size(), first_capitals, "and its capitals")
+	assert_lt(first_fighters + first_capitals, plan.size(), "the rest are still to come")
+	assert_eq(main.bench.jumps.open_count(), first_points, "a point open for each group of the first wave")
+	for c: Combatant in main.ships.alive():
+		assert_true(_inside_a_point(c.ship.global_position), "%s came out of an open point" % c.display_name)
+	await wait_for_signal(main.bench.finished, 120.0, "the bench finishes")
+	var s: Dictionary = _summary_of("arrivals_test")
+	var came: Dictionary = s.get("arrivals", {})
+	assert_eq(String(came.get("mode", "")), "jump")
+	assert_eq(int(came.get("points", 0)), arrivals.points.size())
+	assert_eq(int(came.get("opened", 0)), arrivals.points.size(), "every point opened before the window")
+	assert_lte(int(came.get("max_open", 99)), 12)
+	assert_gte(float(came.get("warmup_s", 0.0)), arrivals.last_at_s() + BenchRunner.ARRIVAL_SETTLE_S,
+			"the warm-up stretched until the last wave was in")
+	var entities: Dictionary = s.get("entities", {})
+	assert_eq(int(entities.get("fighters_near", 0)) + int(entities.get("fighters_far", 0)), int(mix["fighters"]),
+			"every fighter in by the measured window")
+	assert_eq(int(entities.get("capitals", 0)), int(mix["capitals"]), "every capital too")
+
+
+func test_a_placed_battle_has_every_ship_from_the_start() -> void:
+	assert_true(_exec("bench battle 50 1 warmup=0 seed=1 arrive=placed label=placed_test").ok)
+	await _ticks(2)
+	var mix: Dictionary = BenchLayout.mix(BenchLayout.BATTLE, 50)
+	assert_null(main.bench.arrivals)
+	assert_eq(main.ships.alive().size(), int(mix["fighters"]), "every fighter in place at once")
+	assert_eq(main.bench.standins.capitals().size(), int(mix["capitals"]))
+	assert_true(main.bench.jumps == null or main.bench.jumps.open_count() == 0, "no jump point")
+	await wait_for_signal(main.bench.finished, 60.0, "the bench finishes")
+	assert_eq(String((_summary_of("placed_test").get("arrivals", {}) as Dictionary).get("mode", "")), "placed")
+	assert_false(BenchRunner.parse_options(PackedStringArray(["arrive=teleport"]))["ok"], "jump or placed only")
+
+
+# Whether `at` (World) lies inside the mouth of one of the bench's open points, near its plane.
+func _inside_a_point(at: Vector3) -> bool:
+	for point: JumpVortex in main.bench.jumps.points():
+		if not point.is_active():
+			continue
+		var axis: Vector3 = -point.global_basis.z.normalized()
+		var off: Vector3 = at - point.global_position
+		var along: float = off.dot(axis)
+		# A group's wingmen come out up to the group's reach in front of the mouth, or a little way down the funnel.
+		if (off - axis * along).length() < point.fit.mouth_radius_m and along > -point.fit.depth_m \
+				and along < BattleArrivals.SHARE_M + point.fit.mouth_radius_m:
+			return true
+	return false

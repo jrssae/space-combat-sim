@@ -117,6 +117,10 @@ res://tests/unit/test_jumpgate_broadcast.gd
 res://tests/unit/test_vortex_fit.gd
 res://tests/unit/test_vortex_swirl.gd
 res://tests/unit/test_gate_activation.gd
+# Vortex detail by distance and mass arrivals (M6-T20)
+res://tests/unit/test_vortex_lod.gd
+res://tests/unit/test_jump_point_pool.gd
+res://tests/unit/test_battle_arrivals.gd
 # Missions, dialog, scenarios
 res://tests/unit/test_scenario_loader.gd
 res://tests/unit/test_scenario_frame.gd

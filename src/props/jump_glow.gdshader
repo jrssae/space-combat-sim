@@ -5,7 +5,8 @@ render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabl
 // draws all of a gate's lamps.
 
 uniform vec3 tint = vec3(1.0);
-uniform float level = 1.0;
+// Per instance, so every jump point shares one flash material (M6-T20).
+instance uniform float level = 1.0;
 // How strong the rays are against the round core, and how many.
 uniform float rays = 0.6;
 uniform float ray_count = 12.0;

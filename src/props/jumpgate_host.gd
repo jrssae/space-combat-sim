@@ -39,7 +39,7 @@ const VIEW_NAMES: Array[StringName] = [&"front", &"three_quarter", &"close", &"t
 		&"off"]
 ## `gate open` and `vortex open` hold the vortex open this long, to look at it.
 const CONSOLE_HOLD_S: float = 20.0
-const VORTEX_ACTIONS: Array[StringName] = [&"status", &"open", &"close", &"view"]
+const VORTEX_ACTIONS: Array[StringName] = [&"status", &"open", &"close", &"view", &"lod"]
 ## `vortex view`: the camera in front of the newest open point, off its axis, this many mouth radii away.
 const POINT_VIEW: Vector3 = Vector3(1.2, 0.8, -4.5)
 ## `vortex open`: the mouth's radius when none is given, and the point's distance ahead of the player in mouth radii (plus a
@@ -91,6 +91,7 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
+	JumpVortex.forced_level = -1  # a capture's forced detail ends with its scene
 
 
 func _process(_delta: float) -> void:
@@ -347,12 +348,19 @@ func _register_console() -> void:
 			ConsoleArg.string_optional(&"option", null),
 			ConsoleArg.float_optional(&"hold_s", CONSOLE_HOLD_S, 0.0, 600.0)] as Array[ConsoleArg]), _cmd_gate, self)
 	registry.register_command(ConsoleCommand.new(&"vortex",
-			"A stand-alone jump point ahead of the player, to look at: status, open <arrival|departure> [mouth radius m] (facing the player), close (every one), view (hold the camera in front of the newest open point: console, mission or encounter)",
+			"A stand-alone jump point ahead of the player, to look at: status, open <arrival|departure> [mouth radius m] (facing the player), close (every one), view [mouth radii away] (hold the camera in front of the newest open point: console, mission, encounter or bench), lod <auto|0-6> (every vortex at one detail level, for captures)",
 			[ConsoleArg.enum_optional(&"action", VORTEX_ACTIONS, &"status"),
-			ConsoleArg.enum_optional(&"direction", DIRECTIONS, &"arrival"),
+			ConsoleArg.string_optional(&"option", "arrival"),
 			ConsoleArg.float_optional(&"radius_m", CONSOLE_POINT_RADIUS_M, 5.0, 5000.0)] as Array[ConsoleArg]), _cmd_vortex, self)
 	registry.register_provider(&"vortex", ConsoleVars.new({
-		&"open": {"get": _open_points, "doc": "Stand-alone jump points showing now (console, mission and encounter points)"},
+		&"open": {"get": _open_points, "doc": "Stand-alone jump points showing now (console, mission, encounter and bench points)"},
+		&"lod": {"get": func() -> int: return _newest_point().lod_level if _newest_point() != null else -1,
+				"doc": "The newest open point's detail level: 0 every layer, 6 the soft disc (VortexLod; -1 with none open)"},
+		&"radius_px": {"get": func() -> float: return _newest_point().radius_px if _newest_point() != null else 0.0, "unit": "px",
+				"doc": "The newest open point's mouth radius on screen, which picks its detail"},
+		&"forced_lod": {"get": func() -> int: return JumpVortex.forced_level,
+				"doc": "The detail level `vortex lod` forces on every vortex, -1 for by size on screen"},
+		&"lit": {"get": _lit_points, "doc": "Open stand-alone points carrying a light (each pool lights its nearest 3)"},
 		&"opened": {"get": func() -> int: return console_points.opened if console_points != null else 0,
 				"doc": "Points `vortex open` has opened"},
 		&"phase": {"get": func() -> String: return _console_point().phase_name() if _console_point() != null else "closed",
@@ -436,16 +444,18 @@ func _cmd_vortex(args: Dictionary) -> ConsoleResult:
 		return ConsoleResult.failure("no jump points in this scene")
 	match StringName(args[&"action"]):
 		&"open":
+			var option: String = str(args[&"option"])
+			if not DIRECTIONS.has(StringName(option)):
+				return ConsoleResult.failure("vortex open <arrival|departure> [radius_m]")
 			var radius: float = float(args[&"radius_m"])
-			var dir: JumpVortex.Direction = JumpVortex.Direction.ARRIVAL if StringName(args[&"direction"]) == &"arrival" \
-					else JumpVortex.Direction.DEPARTURE
+			var dir: JumpVortex.Direction = JumpVortex.Direction.ARRIVAL if option == "arrival" else JumpVortex.Direction.DEPARTURE
 			var nose: Vector3 = -main.ship.global_basis.z
 			var at: Vector3 = main.ship.global_position + nose * (radius * CONSOLE_POINT_AHEAD + CONSOLE_POINT_MARGIN_M)
 			# Its way out points at the player, so the player looks into the mouth.
 			var xform := Transform3D(Basis.looking_at(-nose, main.ship.global_basis.y), at)
 			var fit := VortexFit.new(radius, radius * VortexFit.POINT_DEPTH_RATIO)
 			console_points.open_with(xform, fit, dir, CONSOLE_HOLD_S)
-			return ConsoleResult.line("%s point opening, %.0f m mouth, %.0f m ahead" % [args[&"direction"], radius,
+			return ConsoleResult.line("%s point opening, %.0f m mouth, %.0f m ahead" % [option, radius,
 					radius * CONSOLE_POINT_AHEAD + CONSOLE_POINT_MARGIN_M])
 		&"close":
 			for point: JumpVortex in console_points.points():
@@ -457,6 +467,11 @@ func _cmd_vortex(args: Dictionary) -> ConsoleResult:
 				return ConsoleResult.failure("no stand-alone jump point is open")
 			var r: float = newest.fit.mouth_radius_m
 			var at: Vector3 = POINT_VIEW * r
+			var away: String = str(args[&"option"])
+			if away != "arrival":  # the option's default: no distance given
+				if not away.is_valid_float() or float(away) <= 0.0:
+					return ConsoleResult.failure("vortex view [mouth radii away, above 0]")
+				at = POINT_VIEW.normalized() * r * float(away)
 			var frame: Dictionary = {"position": {"actor": "vortex", "offset": [at.x, at.y, at.z]},
 					"look_at": {"actor": "vortex", "offset": [0.0, 0.0, 0.0]}, "fov": 50.0}
 			var made: Dictionary = CinematicShot.from_dict(&"vortex_view", {"keys": [frame.merged({"t": 0.0}),
@@ -464,17 +479,23 @@ func _cmd_vortex(args: Dictionary) -> ConsoleResult:
 			_view_point = newest
 			main.camera_rig.play_shot(made["shot"], _view_pose, _origin_to_local)
 			main.letterbox.shown = false
-			return ConsoleResult.line("viewing a %.0f m point (%s)" % [r, newest.phase_name()])
+			return ConsoleResult.line("viewing a %.0f m point (%s) from %.0f m" % [r, newest.phase_name(), at.length()])
+		&"lod":
+			var level: String = str(args[&"option"])
+			if level == "auto" or level == "arrival":
+				JumpVortex.forced_level = -1
+				return ConsoleResult.line("vortex detail by size on screen")
+			if not level.is_valid_int() or int(level) < 0 or int(level) >= VortexLod.LEVEL_COUNT:
+				return ConsoleResult.failure("vortex lod <auto|0-%d>" % (VortexLod.LEVEL_COUNT - 1))
+			JumpVortex.forced_level = int(level)
+			return ConsoleResult.line("every vortex at detail level %d" % int(level))
 	return ConsoleResult.line("%d stand-alone jump points open (%d opened here)" % [_open_points(), console_points.opened])
 
 
 # The newest open stand-alone point in the scene (console, mission or encounters), or null.
 func _newest_point() -> JumpVortex:
 	var newest: JumpVortex = null
-	for pool: JumpPointPool in [console_points, main.mission.jumps if main.mission != null else null,
-			main.encounter_director.jumps if main.encounter_director != null else null]:
-		if pool == null:
-			continue
+	for pool: JumpPointPool in _pools():
 		for point: JumpVortex in pool.points():
 			if point.is_active() and (newest == null or point.age_s < newest.age_s):
 				newest = point
@@ -493,12 +514,29 @@ func _console_point() -> JumpVortex:
 
 
 func _open_points() -> int:
-	var n: int = console_points.open_count() if console_points != null else 0
-	if main != null and main.mission != null and main.mission.jumps != null:
-		n += main.mission.jumps.open_count()
-	if main != null and main.encounter_director != null and main.encounter_director.jumps != null:
-		n += main.encounter_director.jumps.open_count()
+	var n: int = 0
+	for pool: JumpPointPool in _pools():
+		n += pool.open_count()
 	return n
+
+
+func _lit_points() -> int:
+	var n: int = 0
+	for pool: JumpPointPool in _pools():
+		for point: JumpVortex in pool.points():
+			n += 1 if point.is_active() and point.lit else 0
+	return n
+
+
+# The scene's pools of stand-alone points: the console's, the mission's, the encounters' and the bench's.
+func _pools() -> Array[JumpPointPool]:
+	var out: Array[JumpPointPool] = []
+	for pool: JumpPointPool in [console_points, main.mission.jumps if main != null and main.mission != null else null,
+			main.encounter_director.jumps if main != null and main.encounter_director != null else null,
+			main.bench.jumps if main != null and main.bench != null else null]:
+		if pool != null and is_instance_valid(pool):
+			out.append(pool)
+	return out
 
 
 func _distance_km() -> float:
