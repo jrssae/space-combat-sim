@@ -944,7 +944,13 @@ want a window you can see.
 - [ ] **Raiders and open points:** an encounter raid (`encounters force raid`) comes out of a vortex sized to the ship, not a flash.
 - [ ] **Frame rates** (visible window): the vortex open from close up and from the reference pose at the display's rate; free flight
       with the planet, sun and gate in view; `state render` shows `forward_plus`, fps, draw calls and VRAM.
-- [ ] **T20 (mass arrivals, AC13):** to be added when T20 lands: the vortex's detail by distance with no pop, and `bench battle 1000`
-      with every ship entering through a jump point (100 forming at once) on your GPU.
+- [ ] **T20, detail by distance:** `vortex open arrival 300`, then `vortex lod 0` to `vortex lod 6` (and `auto`): each level looks right
+      and the blends between them show no pop as you back away (hairs first, then patches and wisps, then cloud, down to a soft
+      disc under 4 px); the centre flash keeps its timing at every level.
+- [ ] **T20, mass arrivals (AC13):** `bench battle 1000` (a window, `vortex view` to follow): every ship comes out of a jump point,
+      groups within 600 m share one, 100 points to a wave, waves about 10 s apart (a point's life plus 1.5 s), the player's fight
+      first. Capitals open their own point sized by cross-section (a carrier's mouth is not 2.5 km). `arrive=placed` is the
+      comparison. Frame rate with 100 points forming on your GPU in a visible window (the agents' numbers are in the milestone file).
+- [ ] **T20, far points:** a stand-alone point beyond the 50 km far plane is not drawn at all (no far stand-in yet); say if that matters.
 
 **Not for you yet:** Babylon 5 itself (M7), time warp (M9), other planets to fly to (M9).

@@ -5228,18 +5228,46 @@ velocity rebase is `World.auto_boost_speed_mps`, an export of `main.tscn`, not a
 - **Cost (AC10),** `bench battle 1000` (pinned 0-11, idle): tick median 5.74 and 5.67 ms before gravity, 5.73 and 5.70 after (within
   1 %, 5 % allowed); gravity reaches about 270 ships, 680 tier rows and 1 100 bolts a tick for about 35 us. `test_ai_think_time`
   passes (AiPilot median 185 us for 13 ships). The velocity rebase adds nothing while riding (one boost: 0.45 to 0.64 ms).
-- **Full tier, GPU check and acceptance.** *To be filled in by M6-T16 when the full tier runs: the suite's own totals, the time,
-  and `state render` numbers (fps, draw calls, VRAM) on the maintainer's machine with the planet in view and the vortex open.*
+- **Full tier, GPU check and acceptance.** Full tier pending: after M6-T22 (ships shrink into and grow out of the vortex), so the
+  run is not stale; the suite's totals go here then. GPU numbers so far are in the tasks' notes (T10 to T12, T15, T19, T20; §19.14
+  has T20's: a hundred points cost 0.1 to 0.3 ms of GPU time). The agents' runs were headless gamescope with a 60 fps cap (the
+  session was locked), so the frame rate in a visible window on the maintainer's desktop is an (H) item.
 
 ### 19.14 Vortex detail by distance and mass arrivals (M6-T20)
 
-*Placeholder: M6-T20 is in progress. It is to describe the vortex shader's detail levels by projected radius in pixels (streaks,
-then patch layers, then noise octaves, down to a soft disc), the light cap, `JumpPointPool` at up to 100 reusable points, the
-battle's ships entering through jump points in waves, and the GPU run with 100 points forming (AC13). Replace this paragraph with
-what T20 built.*
+- **Detail by distance** (`VortexLod`, `src/props/vortex_lod.gd`, pure). Six layers drop out as the mouth's projected radius in
+  pixels falls, finest first, each fading over a band whose top is 1.5 times its bottom (no pop): finest hairs 240 to 160 px, fine
+  hairs 120 to 80, broad hairs 54 to 36, patches and rim wisps 24 to 16, fine cloud octave 12 to 8, coarse cloud 6 to 4. That gives
+  seven levels (0 everything, 6 the soft disc of the base colour with its band, rim fade and dark throat). A fading layer blends
+  toward its mean so the tone does not shift, and a layer at weight 0 is not computed. Under 10 px the funnel uses a 24 x 10 mesh
+  instead of 96 x 40 (back above 14 px). The centre flashes are not layers and keep their timing at every level.
+- **Per instance.** Vortexes of one set of colours share one funnel material per direction and one flash material; growth, the
+  base's view, swirl time and layer weights are instance uniforms (`vortex_state`, `vortex_lod_a`, `vortex_lod_b`). A closed vortex
+  does not process. A pool lights its 3 nearest open points (`VortexLod.lit`) and starts at most 4 arrival sounds a second.
+- **`JumpPointPool`.** Up to 100 points (`MAX_POINTS`), driven by one `_process`; opening fills the point's fit and timing in place
+  (`VortexTiming.reset`); a free point comes from a cursor, else the oldest is taken back. Opening and drawing 100 points makes no
+  node or object but a few sound playbacks. `open_for(..., share = false)` and `join` let a caller that grouped its ships open one
+  point per group.
+- **Battle arrivals** (`BattleArrivals`, pure, and `BenchRunner`). In `bench battle` and `bench typical` every ship comes out of a
+  jump point. Ships of one side and one fight within 600 m share the group's first point; a capital opens its own, sized by cross-section.
+  Waves bring whole fights (the player's first), 100 points a wave, each later wave a point's life plus 1.5 s (10 s) after the last,
+  the points spread over 1 s. `battle 1000`: 353 points in 4 waves (100, 100, 100, 53; the last at 31 s), never more than 100 open.
+  The warm-up stretches until the last wave is in (32 s). A battle of one wave places every ship at the start as before
+  (`test_weapon_rows_battle` unchanged). `arrive=placed` places every ship at the start. The report gains `arrivals`, `engine_ticks`
+  and `render`.
+- **Measured.** GPU (RX 6950 XT, 1920x1080, `battle 1000`, headless gamescope, 60 fps cap so GPU time is the measure): chase view
+  0.98 ms median with 100 points forming against 0.86 placed, 1.11 against 0.82 with 100 open; overview 0.82 against 0.69 and 0.93
+  against 0.72; about one draw call per point in view; renderer VRAM 461 to 462 MB in all runs. Tick (headless): arriving median
+  5.10 and 6.31 ms at battle 500 and 1 000, p99 6.87 and 8.48 (placed 4.61 and 5.74; 6.17 and 7.72). While the waves come in the
+  engine tick p99 is 14.8 ms against 10.2 placed, and one tick's arrivals cost up to 4.8 ms.
+- **Console.** `vortex lod <auto|0-6>` forces one level on every vortex, `vortex view [mouth radii]` holds the camera on a point;
+  provider `vortex` gains `lod`, `radius_px`, `forced_lod`, `lit`.
 
 ### 19.15 Known gaps (carried to later milestones)
 
+- Arrival-tick spike: while the battle's waves come in, the engine tick p99 is 14.8 ms against 10.2 placed (one tick's arrivals cost
+  up to 4.8 ms); spreading a wave over more than 1 s or opening points in smaller steps would flatten it.
+- A stand-alone jump point beyond the 50 km far plane is not drawn; it has no far stand-in like the gate's.
 - The gate is placed on its rail at the start and then holds still in the frame, while its true place turns round the station once
   an orbit (the chord between them moves about 4.5 m/s, 16 km an hour); M7 or a moving prop row carries it.
 - The station's stand-in has no collision and no `Targetable`; M7 replaces it.
