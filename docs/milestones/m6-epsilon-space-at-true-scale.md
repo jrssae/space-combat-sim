@@ -305,7 +305,7 @@ which changes the same native rows and rebase path:
 | T19 | D | The vortex reworked and stand-alone: fitted to the gate, a shallow funnel, spiralling soft dark patches; open jump points use it too | T14 | Opus | Shader animation and a shared effect seam; the look is (H) | done (accepted by the maintainer, 2026-11-12) |
 | T20 | D | Vortex detail by distance and mass arrivals: detail layers dropped with screen size; up to 100 jump points forming at once; every ship of the 1 000-ship battle enters through one; the battle's GPU fps test with them | T19, T07 | Opus | A shader LOD, a pooled effect at a hundred instances and the battle's spawn path, judged on the GPU | done |
 | T21 | A | The rebase's per-node rest: only the rocks near a ship live in Jolt; a list of the shiftables in play instead of walking the group | T06, T07 | Opus | A measured engine-side follow-up to T06 on the paths T07 also changes | done |
-| T22 | D | Ships shrink into and grow out of the vortex: each ship flies the funnel, scaled to fit it, down to the black ring and a white flash (departure), or out of a white flash at the ring growing to full size (arrival); the player's jump in an external shot | T19, T20 | Opus | Gameplay, scaled Jolt bodies and a cinematic on every arrival path, judged by eye | in progress |
+| T22 | D | Ships shrink into and grow out of the vortex: each ship flies the funnel, scaled to fit it, down to the black ring and a white flash (departure), or out of a white flash at the ring growing to full size (arrival); the player's jump in an external shot | T19, T20 | Opus | Gameplay, scaled Jolt bodies and a cinematic on every arrival path, judged by eye | done |
 | T23 | D | Who may open a jump point: only jump-capable ships (the capital stand-ins today); smaller ships use a gate or a jump-capable ship's open point; the battle's fighters through their side's capital points or the gate; raids and missions say which in data; a point holds only within 2 x its opener's length, and ships in the funnel die when it collapses | T22 | Opus | Rules over every arrival and departure path T22 also changes | not started |
 
 ### M6-T01 Moving-frame audit and design
@@ -1879,6 +1879,100 @@ which changes the same native rows and rebase path:
   reaches the ring, flashes, is gone; arrives at ring size and grows to 1.0 at the mouth); collisions and targeting while
   scaled; the player's external shot; missions and encounters keep their outcomes. Screenshots and a GIF for the maintainer
   (H).
+
+- **Done (2026-11-13):**
+  - **The passage** (`VortexTransits`, one per World; the rules in the pure `VortexTransit`, the scaling in `TransitScale`, the
+    record in `VortexPassage`): independent of who opened the vortex, so it serves any ship through any open point or gate
+    (`begin_arrival(body, vortex, exit_position, exit_velocity)`, `begin_departure(body, vortex, on_through)`). **Arriving**,
+    the ship waits on the funnel's base, as good as gone (scale 0.01, at rest in the vortex's frame), through the vortex's
+    opening flash (a gate's vortex is already open), then comes out at the black ring in its own white flash, shrunk, and flies
+    straight out to its place in the mouth (its offset across the mouth shrunk by the ring's share at the base), growing to
+    exactly 1.0 by the mouth, where it takes the velocity its spawn asked for. A group sharing a point starts together inside
+    the ring and spreads out along its rays. **Departing**, a ship that crosses the mouth flies on down the axis, shrinking, and
+    when its nose touches the base it flashes, is made whole and handed back (`on_through`: the pool, the player's jump). The
+    vortex is kept open for the rest of each passage (`extend`); the gate closes once its last ship is through; a pool takes
+    back a point with no ship in it first.
+  - **The scale law** (`VortexTransit.scale_at`): the ship keeps its share of the funnel's width as it narrows (the funnel's
+    shape is the shader's gaussian well, inverted), never more than 0.8 of the width (`MARGIN`), never above 1; in front of
+    the mouth the room opens out at 45 degrees, so a ship too wide for the mouth shrinks in smoothly. Every ship reaches the
+    ring's share of the mouth (0.24) at the base; a ship too big for that (a capital at a gate: a 700 m-wide one goes to 0.21)
+    shrinks further, inside the ring. Its size is its radius across its line of flight (the hull's box, not its length).
+  - **Depth rule for ship-made points:** the funnel keeps T19's shape (1.6 mouth radii deep); instead the passage takes at
+    least 2.5 s (the point's unfolding) and at most 6 s (a ship at rest still comes out; a gate's 1 200 m at its 200 m/s
+    arrival is exactly 6 s): the speed in the funnel is the ship's own, held between those (`MIN_TRANSIT_S`, `MAX_TRANSIT_S`).
+  - **Normal, scaled, in transit** (`TransitScale`): the body is never scaled; each direct child (meshes, plumes, lights,
+    turrets, markers; not the cockpit camera's anchor) and each Jolt shape (`CollisionShape3D` nodes and the lean ships' shape
+    owners) is, about the body's origin. Mass, inertia and zero damping stay (a body whose inertia Jolt took from its shapes,
+    the capital stand-ins, is pinned to it for the passage). The hit volumes follow (`Damageable.set_hull_scale`: scaled copies
+    of the whole hull's shapes and ram volumes), and the core is touched so its radius row re-reads: the hit sweep, the ram
+    tracker, the contacts, the radar and the HUD's brackets see the scaled size. Meshes follow every 1 % change (not while a
+    far dot), shapes and hit volumes every 15 %, at most 6 rebuilds a tick across all passages, exactly 1 at the end. Ships in
+    the same funnel do not collide with each other while both pass (collision exceptions). Targetable throughout.
+  - **Autopilot:** an AI pilot is held for the passage (`AiPilotDriver.in_passage`: no think, not hosted, the brain kept so
+    orders still reach it; it decides afresh when let go); an arriving ship coasts out on its course (Newtonian, the idle
+    command), a departing one is steered down the axis (`GateAutopilot.follow_axis`, the run-in's law). The player's ship is
+    flown by its jump. A ship in a funnel stays out of the low-attention tier.
+  - **Flashes:** one multimesh of up to 256 (`transit_flash.gdshader`, the vortex's own glow from `jump_glow.gdshaderinc`, drawn
+    after the funnels and without the depth test so the curving base does not cut it), one per ship at the ring, radius = the
+    ring's, 0.1 s up and 0.5 s out, kept in its vortex's frame. Nothing is made per flash.
+  - **On-screen detail:** an arrival smaller than 2 px on the camera (its bounding radius) does not fly the funnel: it comes
+    out in place as before, with the ring's flash (`VortexTransit.worth_flying`, counted as `transit.unseen`); the player's own
+    arrival and the console's always fly. This keeps a far battle wave as cheap as T20's.
+  - **The player's jump** (`JumpgateHost`, `GateJump`): the departure shot cuts in at the run-in whatever the view and follows
+    close behind the ship all the way down the funnel, so it is seen shrinking against the black ring, to the ring's flash; it
+    holds there 0.8 s and fades to black (the old white screen flash is gone, the fade kept only as the shot's last frame, H);
+    the arrival shot watches the gate open from in front and in on the base, and when the ship comes out of the ring it cuts to
+    a camera ahead of it, looking back as it grows on its way out, then draws back over the mouth; the controls come back 500 m
+    or 3 s past the mouth (30 s at most). The shots hold where they last saw the ship once it has gone through.
+  - **Vortex look, one change:** the base's black-or-glow choice is now taken from the funnel's base, not its mouth, so a camera
+    inside the funnel (following a ship) sees the black ring, not the white glow meant for side views. From outside it barely
+    changes (a side view 600 m behind the mouth is a little less glowing; the acceptance pose is unchanged).
+  - **Every path:** missions' `jump` and `gate` arrivals (`MissionStage`), the encounters' points and gate arrivals and departures
+    (`EncounterDirector`), the battle's waves (`BenchRunner`: every point's members, fighters and capitals, after the point opens
+    and widens; `ARRIVAL_SETTLE_S` 7 s), the gate's departures (`Jumpgate._through_mouth`, `bring_through`), the player's jump.
+    The pool cancels a passage when it parks a ship.
+  - **Console:** `transit <arrive|depart|status> [gate|point] [fighter|capital] [none|follow]` (a pooled raider with no pilot or a
+    cruiser stand-in through the gate or out of a point 2.5 km ahead; `follow` holds a cinematic camera on it) and provider
+    `transit` (`passing`, `arrivals`, `arrived`, `unseen`, `departures`, `departed`, `flashes`, `flashes_shown`, `step_us`,
+    `worst_step_us`); in `info.md`.
+  - **Tests:** quick `test_vortex_transit` (new, 10: the shader's shape and its inverse, whole at and before the mouth, every
+    ship shrinking to the ring's share, a capital shrinking more and fitting the ring, no jump at the mouth for a too-wide ship,
+    start and exit places, passage times, through at the base, the lateral radius, the flash), `test_transit_scale` (new, 4: a
+    lean ship and the player's at half scale collide at their half-size shapes by Jolt point queries against the scaled hit
+    volumes, mass, inertia and damping kept, the marker's radius halved, steps and turns, a bolt missing where only the whole
+    hull was), `test_vortex_transits` (new, 3, headless: out of a point held through its flash, at the ring in a flash, growing
+    only, to 1.0 at the mouth with its spawn's velocity, its pilot held; down a point to the ring and handed back whole; in and
+    out of the gate, held open past its own hold, closing after its last ship), `test_gate_jump` (the ring's flash, clearing
+    from the mouth). Standard: `test_jumpgate_in_play` (3: the player shrinks going and coming), `test_mission_runner`,
+    `test_encounters`, `test_mission_skip`, `test_civilian_escort`, `test_bench` (12; first-wave ships fly out of the ring or
+    are too small on screen), `test_ai_think_time` green. **`test_weapon_rows_battle` now places its ships (`arrive=placed`):** it
+    guards the weapons path, and a battle arriving through funnels starts seconds later and elsewhere; placed it is
+    [933, 420, 174, 151, 25, 1], the recording unchanged. Parity recordings unchanged (no native change). Compile check clean
+    (715 scripts); quick tier green (1 922 GUT tests, Rust 138, Python).
+  - **Costs** (headless, `bench_quick.sh battle`, pinned 0-11): 500 and 1 000 ships, window tick median 4.76 and 5.94 ms, p99
+    7.18 and 7.81 (T20 5.10 and 6.31, p99 6.87 and 8.48), every budget held; engine time while the 1 000's waves come in, median
+    7.53 ms, p99 14.9 (with every ship flying its funnel it was 17.6 and 52.9: hence the 2 px rule, the far-dot rule and the
+    rebuild cap; with no passages at all 7.55 and 16.5). GPU (RX 6950 XT, headless
+    gamescope, 1080p, a cruiser in the gate's funnel with the follow camera): 60 fps (capped), 1.09 ms GPU, 7 draw calls, 460 MB.
+  - **Media** (Movie Maker in headless gamescope, 1920x1080 at 30 fps; GIFs 720 px at 15 fps) in
+    `references/screenshots/M6-T22 ship transit/`: `gate_fighter.mp4/.gif` (a fighter flies in and down the gate's funnel to the
+    ring's flash, then one comes out of the blue gate), `gate_capital.mp4/.gif` (the same with a cruiser stand-in), 
+    `point_arrivals.mp4/.gif` (a fighter, then a cruiser, out of ship-made points), `player_jump.mp4/.gif` (the player's jump:
+    chase view, the cut to the outside shot at the run-in, the shrink and flash, the fade, the arrival and growth, the view
+    handed back), and contact sheets `sheet_*.png`.
+  - **For M6-T23:** points are opened in `MissionStage.spawn` (`jump`), `EncounterDirector._place` (`e.jumps`), `BenchRunner._open_due`
+    (one per `BattleArrivals` group: `open_for(..., share = false)` then `join` for the rest) and `TransitConsole`; ships within
+    600 m in the first second share a point (`JumpPointPool.SHARE_M`, `SHARE_S`), the battle's groups by `BattleArrivals`. Each
+    caller then hands every ship to `VortexTransits.begin_arrival`; departures go through `Jumpgate.send_departure` (its
+    `_through_mouth` hands over) or `begin_departure` directly for a point. `JumpVortex.passing` counts the ships in a funnel; to
+    kill the ships of a collapsing point, walk the passages for that vortex (a small accessor on `VortexTransits` is all it needs).
+  - **(H):** the scale law's reading (every ship keeps its share of the funnel, so a fighter at a gate shrinks to 0.24 though it
+    would fit the ring whole; the literal "fits the width" alone would leave a fighter at a gate unshrunk); the depth rule for
+    points (2.5 to 6 s, T19's shape kept) and the ship leaving with its spawn's velocity at the mouth (a raider spawned at rest
+    stops there); the wait through a point's opening flash (1.5 s, a contact at the base meanwhile); the ring flash's size (the
+    ring's radius: a camera close behind sees a whiteout for a moment) and that it shows through walls and arms; the 2 px rule
+    (a raid 6 km off comes out in place); the player's shots and the fade kept as the departure's last frame; the base's view
+    reference moved to the base; the frame rate with many funnels on screen at once.
 
 ### M6-T23 Who may open a jump point
 

@@ -11,7 +11,8 @@ extends RefCounted
 ## `push_error` (tests fail on it), never a new ship; `ShipPool` itself is unchanged.
 
 ## How a spawned ship arrives: in place, out of an open jump point (a stand-alone vortex sized for it, `JumpPointPool`, Q12
-## revised; it appears in the centre flash) or out of the scene's jumpgate (M6-T14: blue vortex; the ship appears once it is open).
+## revised) or out of the scene's jumpgate (M6-T14: blue vortex, once it is open); either way it comes out of the funnel's black ring
+## in a flash, shrunk, and grows to its whole size by the mouth (M6-T22, `VortexTransits`).
 const ARRIVALS: Array[StringName] = [&"none", &"jump", &"gate"]
 ## A ship sent out through the gate flies its run-in at this speed (the player's autopilot's run-in is 250 m/s).
 const DEPART_CRUISE_MPS: float = 200.0
@@ -169,7 +170,10 @@ func spawn(entry: Dictionary) -> Combatant:
 		push_error("Mission: spawn %s: the %s pool refused" % [ship_name, type])
 		return null
 	if StringName(entry.get("arrival", &"none")) == &"jump" and jumps != null:
-		jumps.open_for(at, -basis.z, placed.ship.bounding_radius())
+		var point: JumpVortex = jumps.open_for(at, -basis.z, placed.ship.bounding_radius())
+		var transits: VortexTransits = VortexTransits.attach(world)
+		if point != null and transits != null:
+			transits.begin_arrival(placed.ship, point, placed.ship.global_position, placed.ship.linear_velocity)
 	placed.damageable.invulnerable = bool(entry.get("invulnerable", false))
 	register(placed)
 	if not String(entry.get("wing", "")).is_empty():
@@ -209,6 +213,7 @@ func spawn_through_gate(entry: Dictionary) -> String:
 			push_error("Mission: spawn %s: the %s pool refused at the gate" % [ship_name, type])
 			return
 		placed.damageable.invulnerable = bool(entry.get("invulnerable", false))
+		gate.bring_through(placed.ship)
 		register(placed)
 		if not String(entry.get("wing", "")).is_empty():
 			wings.join(String(entry["wing"]), placed)

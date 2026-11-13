@@ -76,22 +76,29 @@ func test_the_jump_goes_out_and_comes_back() -> void:
 	assert_eq(_run(jump, DT, Vector3(0.0, 0.0, 5.0), true), PackedStringArray([GateJump.EV_THROUGH]))
 	assert_true(jump.ship_hidden())
 	assert_false(jump.autopilot_on())
-	var away: PackedStringArray = _run(jump, GateJump.FLASH_S + GateJump.FADE_OUT_S + GateJump.AWAY_S + DT, Vector3.ZERO)
-	assert_eq(away, PackedStringArray([GateJump.EV_ASK_ARRIVAL]), "after the flash, the fade and the time away")
+	var away: PackedStringArray = _run(jump, GateJump.RING_HOLD_S + GateJump.FADE_OUT_S + GateJump.AWAY_S + 3.0 * DT, Vector3.ZERO)
+	assert_eq(away, PackedStringArray([GateJump.EV_ASK_ARRIVAL]), "after the ring's flash, the fade and the time away")
 	assert_eq(jump.state, GateJump.State.ARRIVING)
-	assert_eq(_run(jump, DT, Vector3(0.0, 0.0, -72.0), false, true), PackedStringArray([GateJump.EV_ARRIVED]))
+	assert_eq(_run(jump, DT, Vector3(0.0, 0.0, 1200.0), false, true), PackedStringArray([GateJump.EV_ARRIVED]),
+			"brought out at the funnel's ring (M6-T22)")
 	assert_false(jump.ship_hidden())
-	assert_eq(_run(jump, DT, Vector3(0.0, 0.0, -72.0 - GateJump.CLEAR_M - 1.0)), PackedStringArray([GateJump.EV_DONE]))
+	assert_eq(_run(jump, 6.0, Vector3(0.0, 0.0, 600.0)), PackedStringArray(), "still flying out of the funnel: not clear yet")
+	assert_eq(_run(jump, DT, Vector3(0.0, 0.0, -GateJump.CLEAR_M - 1.0)), PackedStringArray([GateJump.EV_DONE]))
 	assert_false(jump.is_active())
 	assert_eq(jump.completed, 1)
 	assert_eq(jump.start(), PackedStringArray([GateJump.EV_START]), "another jump may follow")
 
 
-func test_clearing_also_ends_on_time() -> void:
+func test_clearing_also_ends_on_time_once_out_of_the_mouth() -> void:
 	var jump := GateJump.new()
 	jump.start()
 	jump.state = GateJump.State.CLEARING
+	assert_eq(_run(jump, GateJump.CLEAR_S + DT, Vector3(0.0, 0.0, 300.0)), PackedStringArray(), "still in the funnel")
 	assert_eq(_run(jump, GateJump.CLEAR_S + DT, Vector3(0.0, 0.0, -100.0)), PackedStringArray([GateJump.EV_DONE]))
+	jump.start()
+	jump.state = GateJump.State.CLEARING
+	assert_eq(_run(jump, GateJump.CLEARING_TIMEOUT_S + DT, Vector3(0.0, 0.0, 300.0)), PackedStringArray([GateJump.EV_DONE]),
+			"never longer than the timeout")
 
 
 func test_the_jump_ends_early_when_it_must() -> void:
@@ -111,12 +118,12 @@ func test_the_jump_ends_early_when_it_must() -> void:
 	assert_eq(jump.start().size(), 0, "one jump at a time")
 
 
-func test_flash_then_black_then_the_fade_lifts() -> void:
+func test_the_ring_flash_then_black_then_the_fade_lifts() -> void:
 	assert_eq(GateJump.screen_at(GateJump.State.RUN_IN, 3.0), Vector2.ZERO)
-	var peak: Vector2 = GateJump.screen_at(GateJump.State.FLASH, GateJump.FLASH_S)
-	assert_almost_eq(peak.x, 1.0, 1e-4, "the flash peaks")
-	assert_almost_eq(peak.y, 0.0, 1e-4, "before the black comes in")
-	var black: Vector2 = GateJump.screen_at(GateJump.State.FLASH, GateJump.FLASH_S + GateJump.FADE_OUT_S)
+	var held: Vector2 = GateJump.screen_at(GateJump.State.FLASH, GateJump.RING_HOLD_S)
+	assert_almost_eq(held.x, 0.0, 1e-4, "no flash on the screen: the ring's own flash is in the shot (M6-T22)")
+	assert_almost_eq(held.y, 0.0, 1e-4, "the shot holds on it before the black comes in")
+	var black: Vector2 = GateJump.screen_at(GateJump.State.FLASH, GateJump.RING_HOLD_S + GateJump.FADE_OUT_S)
 	assert_almost_eq(black.y, 1.0, 1e-4)
 	assert_almost_eq(black.x, 0.0, 1e-4)
 	assert_eq(GateJump.screen_at(GateJump.State.AWAY, 1.0), Vector2(0.0, 1.0))

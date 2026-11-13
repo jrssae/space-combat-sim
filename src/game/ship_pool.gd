@@ -245,6 +245,9 @@ func _park_position() -> UniversePos:
 
 func _park(combatant: Combatant) -> void:
 	var ship: Ship = combatant.ship
+	var transits: VortexTransits = VortexTransits.of(world)
+	if transits != null:
+		transits.cancel(ship)  # whole again, its pilot let go, before its next life (M6-T22)
 	ship.visible = false
 	ship.process_mode = Node.PROCESS_MODE_DISABLED
 	ShiftableRegistry.set_out(ship, WorldFrame.PARKED_META, true)  # rebases leave it: `acquire` places it (M6-T06, M6-T21)

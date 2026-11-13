@@ -2,12 +2,14 @@ class_name JumpgateHost
 extends Node
 ## The flight scene's jumpgates and the player's jump (M6-T14, D69): places the scenario's `jumpgate` props from the star-system
 ## data, offers the jump when the gate is targeted within `GateJumpPrompt.RANGE_M`, and carries out `GateJump`'s events: the
-## controls held, `GateAutopilot` flying, the departure and arrival shots (`CinematicShot`), the flash and the fade, the ship
-## hidden while away and placed back by the gate's blue arrival. A thin adapter: the rules are in `GateJump`, `GateJumpPrompt`,
+## controls held, `GateAutopilot` flying, the departure and arrival shots (`CinematicShot`): whatever view was on, an outside shot
+## of the ship flying into the funnel, shrinking down to the black ring and vanishing in its white flash, a fade to black, then
+## the blue arrival opening, the ring's flash and the ship growing as it flies out of the funnel (M6-T22); the ship hidden while
+## away and brought back out of the ring by the gate's arrival. A thin adapter: the rules are in `GateJump`, `GateJumpPrompt`,
 ## `GateAutopilot` and `VortexTiming`.
 ##
-## Console: commands `gate` and `vortex`, providers `gate` and `vortex` (they exist in every flight scene; with no gate `gate` says
-## so). `vortex` opens stand-alone jump points ahead of the player from its own small `JumpPointPool`, to look at.
+## Console: commands `gate`, `vortex` and `transit` (`TransitConsole`, M6-T22), providers `gate` and `vortex` (they exist in every
+## flight scene; with no gate `gate` says so). `vortex` opens stand-alone jump points ahead of the player from its own small `JumpPointPool`, to look at.
 
 const NODE_NAME: StringName = &"JumpgateHost"
 ## Q3: the gate is about 50 km from the station on its orbit; used only when the star-system data cannot say.
@@ -64,11 +66,15 @@ var _flash_colour: Color = JumpVortex.DEFAULT_FLASH
 ## The stand-alone points `vortex open` shows.
 var console_points: JumpPointPool = null
 
+var _transit_console: TransitConsole = null
+var _player_pose: Variant = null  # the player's pose while last in sight, for the shots
 var _view_gate: Jumpgate = null
 var _view_point: JumpVortex = null
 
 
 func _ready() -> void:
+	if main != null and main.world != null:
+		VortexTransits.attach(main.world)  # its `transit` provider in every flight scene
 	if main != null and main.effects != null:
 		console_points = JumpPointPool.new()
 		console_points.name = "ConsoleJumpPoints"
@@ -179,7 +185,7 @@ func start_jump(through: Jumpgate = null) -> String:
 	if jump.is_active():
 		return "a jump is under way (%s)" % jump.state_name()
 	jump_gate = g
-	jump.arrival_z = g.arrival_point.z
+	jump.arrival_z = g.fit.mouth_z_m
 	_went_through = false
 	_placed = false
 	_flash_colour = g.vortex.flash_colour
@@ -257,14 +263,19 @@ func _place_player() -> void:
 		return
 	var ship: Ship = main.ship
 	ship.reset_to(jump_gate.arrival_transform())
-	ship.linear_velocity = jump_gate.arrival_velocity()
+	ship.linear_velocity = jump_gate.arrival_velocity() + main.world.rest_velocity()
 	ship.visible = true
 	ship.reset_physics_interpolation()
+	jump_gate.bring_through(ship, true)
+	_play(_arrival_follow_shot())
 	_placed = true
 
 
 func _finish() -> void:
 	var ship: Ship = main.ship
+	var transits: VortexTransits = VortexTransits.of(main.world)
+	if transits != null:
+		transits.cancel(ship)  # an aborted jump leaves no shrunk ship behind
 	if jump_gate != null and is_instance_valid(jump_gate):
 		jump_gate.cancel_departure(ship)
 		if main.player_alive and not ship.visible:
@@ -286,24 +297,34 @@ func _play(shot: CinematicShot) -> void:
 		main.camera_rig.play_shot(shot, _actor_pose, _origin_to_local)
 
 
-# Follows the ship in from behind and beside, then watches it from in front of the gate as it goes into the funnel.
+# Beside and behind the ship as it lines up on the axis, then close behind it all the way in, at a fixed distance, so it is seen
+# shrinking as the funnel narrows round it, down to the black ring and its flash (M6-T22).
 func _departure_shot() -> CinematicShot:
-	var g: String = _gate_key()
 	return _shot(&"gate_departure", [
 		{"t": 0.0, "position": {"actor": "player", "offset": [45, 18, 95]}, "look_at": {"actor": "player", "offset": [0, 0, -300]}, "fov": 62},
-		{"t": 3.0, "position": {"actor": "player", "offset": [140, 45, 70]}, "look_at": {"actor": g, "offset": [0, 0, 0]}, "fov": 60},
-		{"t": 7.0, "position": {"actor": g, "offset": [420, 170, -950]}, "look_at": {"actor": "player"}, "fov": 55},
-		{"t": 30.0, "position": {"actor": g, "offset": [380, 150, -800]}, "look_at": {"actor": g, "offset": [0, 0, 600]}, "fov": 55},
+		{"t": 4.0, "position": {"actor": "player", "offset": [22, 9, 62]}, "look_at": {"actor": "player", "offset": [0, 0, -40]}, "fov": 55},
+		{"t": 60.0, "position": {"actor": "player", "offset": [22, 9, 62]}, "look_at": {"actor": "player", "offset": [0, 0, -40]}, "fov": 55},
 	])
 
 
-# From in front of the gate, on the vortex opening, then easing onto the way the ship comes out.
+# From in front of the gate on the vortex opening, then in on the funnel's base, where the ship will come out of its ring.
 func _arrival_shot() -> CinematicShot:
 	var g: String = _gate_key()
 	return _shot(&"gate_arrival", [
 		{"t": 0.0, "position": {"actor": g, "offset": [520, 210, -2700]}, "look_at": {"actor": g, "offset": [0, 0, 0]}, "fov": 55},
-		{"t": 4.0, "position": {"actor": g, "offset": [470, 190, -2550]}, "look_at": {"actor": g, "offset": [0, 0, -150]}, "fov": 52},
-		{"t": 30.0, "position": {"actor": g, "offset": [300, 130, -2300]}, "look_at": {"actor": g, "offset": [0, 0, -2000]}, "fov": 55},
+		{"t": 3.0, "position": {"actor": g, "offset": [300, 130, -1600]}, "look_at": {"actor": g, "offset": [0, 0, 1200]}, "fov": 30},
+		{"t": 60.0, "position": {"actor": g, "offset": [300, 130, -1600]}, "look_at": {"actor": g, "offset": [0, 0, 1200]}, "fov": 30},
+	])
+
+
+# Once the ship is out of the ring's flash: ahead of it, looking back as it grows on its way out of the funnel, then drawing
+# back over the mouth (M6-T22).
+func _arrival_follow_shot() -> CinematicShot:
+	return _shot(&"gate_arrival_follow", [
+		{"t": 0.0, "position": {"actor": "player", "offset": [14, 6, -60]}, "look_at": {"actor": "player"}, "fov": 55},
+		{"t": 5.0, "position": {"actor": "player", "offset": [16, 7, -66]}, "look_at": {"actor": "player"}, "fov": 55},
+		{"t": 9.0, "position": {"actor": "player", "offset": [45, 18, -150]}, "look_at": {"actor": "player"}, "fov": 55},
+		{"t": 60.0, "position": {"actor": "player", "offset": [45, 18, -150]}, "look_at": {"actor": "player"}, "fov": 55},
 	])
 
 
@@ -321,7 +342,11 @@ func _gate_key() -> String:
 
 func _actor_pose(actor: String) -> Variant:
 	if actor == "player":
-		return main.ship.get_global_transform_interpolated() if main.ship != null else null
+		if main.ship == null:
+			return null
+		if main.ship.visible or _player_pose == null:
+			_player_pose = main.ship.get_global_transform_interpolated()
+		return _player_pose  # gone through the ring, the shot holds where it last saw the ship
 	if jump_gate != null and is_instance_valid(jump_gate) and actor == _gate_key():
 		return jump_gate.global_transform
 	return null
@@ -342,6 +367,8 @@ func _others_hold_controls() -> bool:
 
 func _register_console() -> void:
 	var registry: ConsoleRegistry = DebugConsole.registry
+	_transit_console = TransitConsole.new(self)
+	_transit_console.register(registry)
 	registry.register_command(ConsoleCommand.new(&"gate",
 			"The jumpgate: status, open <arrival|departure> [hold seconds] (the vortex, after the arms' activation), close, jump (start the player's jump through it, from anywhere), cancel (end the jump), target (select it), approach (put the player 6 km in front of it, facing it), view <front|three_quarter|close|tip|run_in|side|behind|reference|off> (hold the camera on it for captures)",
 			[ConsoleArg.enum_optional(&"action", ACTIONS, &"status"),

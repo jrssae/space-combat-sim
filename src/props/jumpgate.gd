@@ -12,8 +12,9 @@ extends Node3D
 ## ships bounce off its arms.
 ##
 ## Traffic: `request_arrival` opens the blue vortex and places the waiting ships once it is fully open (a group comes through
-## one opening); `send_departure` watches a ship flying in, opens the orange vortex as it nears and hands it back through
-## `on_through` once it crosses the vortex. The rules for who flies where are the callers' (missions, encounters, the player's
+## one opening), each brought out of the funnel's black ring by `bring_through`; `send_departure` watches a ship flying in, opens
+## the orange vortex as it nears, takes it on down the funnel once it crosses the mouth (M6-T22, `VortexTransits`) and hands it
+## back through `on_through` when it vanishes at the ring. The vortex stays open while any ship is in its funnel. The rules for who flies where are the callers' (missions, encounters, the player's
 ## jump); the gate only keeps the vortex in step with them. Spawned through `World` from a scenario's `jumpgate` prop.
 ##
 ## Far away (M6-T15): its `FarProp` draws the body, vortex and lamps shrunk toward the eye past the far plane, then a far dot
@@ -116,6 +117,7 @@ func _ready() -> void:
 	vortex = JumpVortex.create(_shared_data.get("vortex", {}) as Dictionary, false)
 	vortex.name = "Vortex"
 	vortex.fit = fit
+	vortex.frame_owner = self
 	vortex.position = Vector3(0.0, 0.0, fit.mouth_z_m)
 	visuals.add_child(vortex)
 	_build_activation(_shared_data, visuals)
@@ -180,8 +182,11 @@ func send_departure(ship: Node3D, on_through: Callable) -> void:
 	_departures.append({"body": ship, "on_through": on_through, "z": to_local(ship.global_position).z})
 
 
-## Stops watching `ship` (it was destroyed, or its mission changed its mind).
+## Stops watching `ship` (it was destroyed, or its mission changed its mind); one already in the funnel is let go there, whole.
 func cancel_departure(ship: Node3D) -> void:
+	var transits: VortexTransits = VortexTransits.for_node(self)
+	if transits != null:
+		transits.cancel_departure(ship)
 	for i: int in range(_departures.size() - 1, -1, -1):
 		if _departures[i]["body"] == ship:
 			_departures.remove_at(i)
@@ -193,6 +198,15 @@ func pending_arrivals() -> int:
 
 func departing() -> int:
 	return _departures.size()
+
+
+## Brings `body`, just placed at `arrival_transform(offset)` with its exit velocity, out of the open arrival vortex (M6-T22): it
+## starts at the funnel's black ring, shrunk, and flies out to that place, growing to its whole size by the mouth (`always`: even
+## when too small on screen to see, as the player's own ship).
+func bring_through(body: RigidBody3D, always: bool = false) -> void:
+	var transits: VortexTransits = VortexTransits.for_node(self)
+	if transits != null:
+		transits.begin_arrival(body, vortex, body.global_position, body.linear_velocity, always)
 
 
 ## Where the `k`-th ship of an arrival comes out, World-local: the arrival point plus `offset` in the gate's frame (x right, y up,
@@ -254,15 +268,27 @@ func _step_departures() -> void:
 		var inside: bool = fit.contains(Vector2(local.x, local.y), THROUGH_RADIUS)
 		if was_z < 0.0 and local.z >= 0.0 and inside and vortex.is_passable_for(JumpVortex.Direction.DEPARTURE):
 			_departures.remove_at(i)
-			departed += 1
-			(entry["on_through"] as Callable).call(ship)
+			_through_mouth(ship, entry["on_through"] as Callable)
 			continue
 		if local.z < 0.0 and local.length() <= DEPARTURE_OPEN_M:
 			if not open_vortex(JumpVortex.Direction.DEPARTURE):
 				continue  # an arrival is running: it opens once that one has closed
 			vortex.extend(DEPARTURE_KEEP_S)
-	if _departures.is_empty() and vortex.direction == JumpVortex.Direction.DEPARTURE:
+	if _departures.is_empty() and vortex.direction == JumpVortex.Direction.DEPARTURE and vortex.passing == 0:
 		vortex.close()
+
+
+# A departing ship crossed the mouth: it flies on down the funnel to the ring (M6-T22) and is handed back from there.
+func _through_mouth(ship: Node3D, on_through: Callable) -> void:
+	var through: Callable = func(body: Node3D) -> void:
+		departed += 1
+		on_through.call(body)
+		if _departures.is_empty() and vortex.passing == 0 and vortex.direction == JumpVortex.Direction.DEPARTURE:
+			vortex.close()  # its last ship is through
+	var transits: VortexTransits = VortexTransits.for_node(self)
+	if ship is RigidBody3D and transits != null and transits.begin_departure(ship as RigidBody3D, vortex, through):
+		return
+	through.call(ship)
 
 
 func _sync_targetable() -> void:

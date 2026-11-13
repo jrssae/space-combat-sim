@@ -314,8 +314,14 @@ func test_a_battle_comes_in_through_jump_points_in_waves() -> void:
 	assert_eq(main.bench.standins.capitals().size(), first_capitals, "and its capitals")
 	assert_lt(first_fighters + first_capitals, plan.size(), "the rest are still to come")
 	assert_eq(main.bench.jumps.open_count(), first_points, "a point open for each group of the first wave")
+	var transits: VortexTransits = VortexTransits.of(main.world)
+	assert_eq(transits.count() + transits.arrivals_unseen, first_fighters + first_capitals,
+			"each flies out of its point's funnel, or is too small on screen to and comes out in place (M6-T22)")
+	assert_gt(transits.count(), 0, "the near ones fly the funnel")
 	for c: Combatant in main.ships.alive():
 		assert_true(_inside_a_point(c.ship.global_position), "%s came out of an open point" % c.display_name)
+		if transits.is_passing(c.ship):
+			assert_lt(transits.scale_of(c.ship), 1.0, "%s comes out of the ring shrunk" % c.display_name)
 	await wait_for_signal(main.bench.finished, 120.0, "the bench finishes")
 	var s: Dictionary = _summary_of("arrivals_test")
 	var came: Dictionary = s.get("arrivals", {})
@@ -353,7 +359,7 @@ func _inside_a_point(at: Vector3) -> bool:
 		var off: Vector3 = at - point.global_position
 		var along: float = off.dot(axis)
 		# A group's wingmen come out up to the group's reach in front of the mouth, or a little way down the funnel.
-		if (off - axis * along).length() < point.fit.mouth_radius_m and along > -point.fit.depth_m \
+		if (off - axis * along).length() < point.fit.mouth_radius_m and along > -point.fit.depth_m - 1.0 \
 				and along < BattleArrivals.SHARE_M + point.fit.mouth_radius_m:
 			return true
 	return false

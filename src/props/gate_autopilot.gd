@@ -40,14 +40,21 @@ static func line_up(position: Vector3, velocity: Vector3, basis: Basis, target: 
 ## at a speed that reaches the plane no sooner than the vortex opens (`open_in_s`, INF while it is not opening).
 static func run_in(position: Vector3, velocity: Vector3, basis: Basis, centre: Vector3, axis: Vector3, up: Vector3,
 		open_in_s: float, capability: ShipCapability) -> FlightCommand:
-	var rel: Vector3 = position - centre
-	var to_plane: float = -rel.dot(axis)
-	var lateral: Vector3 = rel + axis * to_plane
+	var to_plane: float = -(position - centre).dot(axis)
 	var speed: float = RUN_IN_MPS
 	if open_in_s == INF:
 		speed = minf(speed, maxf(to_plane - WAIT_SHORT_M, 0.0) * 0.25)
 	elif open_in_s > 0.0 and to_plane > 0.0:
 		speed = minf(speed, to_plane / open_in_s)
+	return follow_axis(position, velocity, basis, centre, axis, up, speed, capability)
+
+
+## Along `axis` (World, unit) through `centre` at `speed`, pulled onto the axis, nose on the axis and rolled to `up`: the run-in,
+## and a departing ship flying down a jump vortex's funnel to its base (M6-T22). `velocity` is against the frame's rest.
+static func follow_axis(position: Vector3, velocity: Vector3, basis: Basis, centre: Vector3, axis: Vector3, up: Vector3,
+		speed: float, capability: ShipCapability) -> FlightCommand:
+	var rel: Vector3 = position - centre
+	var lateral: Vector3 = rel - axis * rel.dot(axis)
 	var correction: Vector3 = (-lateral * K_LATERAL).limit_length(MAX_LATERAL_MPS)
 	var v_des: Vector3 = axis * speed + correction
 	var cmd: FlightCommand = _fly(velocity, v_des, basis, capability, axis)

@@ -74,6 +74,11 @@ var driven: bool = false:
 ## The mouth's radius on screen at the last draw, px, and the detail level it gave (`VortexLod.level`).
 var radius_px: float = VortexLod.MAX_PX
 var lod_level: int = 0
+## Ships flying its funnel now (M6-T22, `VortexTransits`): it is kept open while any is, and a pool does not take it back.
+var passing: int = 0
+## The node whose frame is the vortex's true one when it is drawn under a far stand-in (a gate's vortex follows its gate's
+## `FarProp` look, which shrinks toward the eye far away); null for a stand-alone point.
+var frame_owner: Node3D = null
 ## Every vortex draws this level when 0 or more (`vortex lod <level>`, for captures); -1 follows the size on screen.
 static var forced_level: int = -1
 
@@ -276,6 +281,13 @@ func open_in_s(p_direction: Direction) -> float:
 	return timing.open_in_s(age_s)
 
 
+## The vortex's frame in the World (origin the mouth's centre, +Z down the funnel), wherever it is drawn.
+func true_frame() -> Transform3D:
+	if frame_owner != null and is_instance_valid(frame_owner):
+		return frame_owner.global_transform * Transform3D(Basis.IDENTITY, Vector3(0.0, 0.0, fit.mouth_z_m))
+	return global_transform if is_inside_tree() else transform
+
+
 func phase_name() -> String:
 	return timing.phase_name(age_s) if _active else "closed"
 
@@ -329,7 +341,9 @@ func update_visuals_for(camera_position: Vector3, px_per_unit: float) -> void:
 	var xform: Transform3D = global_transform if is_inside_tree() else transform
 	var to_camera: Vector3 = camera_position - xform.origin
 	var axis: Vector3 = xform.basis.z.normalized()
-	var facing: float = (to_camera + axis * 1e-3).normalized().dot(axis)
+	# Seen from its base (M6-T22): a camera inside the funnel, following a ship down it, looks at the base from in front.
+	var from_base: Vector3 = camera_position - xform * Vector3(0.0, 0.0, fit.depth_m)
+	var facing: float = (from_base + axis * 1e-3).normalized().dot(axis)
 	# The base glows from the side and behind, and fades to black looking down the funnel from in front.
 	funnel.set_instance_shader_parameter(&"vortex_state", Vector4(grown, smoothstep(-0.45, -0.05, facing), SimClock.now(), 0.0))
 	if px_per_unit > 0.0:

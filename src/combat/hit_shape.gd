@@ -65,6 +65,18 @@ static func from_collision(entry: Dictionary) -> HitShape:
 	return null
 
 
+## A copy grown or shrunk by `factor` about the body origin (a ship scaled in a jump vortex's funnel, M6-T22).
+func scaled(factor: float) -> HitShape:
+	var copy := HitShape.new()
+	copy.kind = kind
+	copy.shape_name = shape_name
+	copy.transform = Transform3D(transform.basis, transform.origin * factor)
+	copy.half_extents = half_extents * factor
+	copy.radius = radius * factor
+	copy.half_segment = half_segment * factor
+	return copy
+
+
 ## Entry fraction (0 when `a_body` is inside, -1 for no hit; see `SweepMath`) of the segment `a_body` -> `b_body`,
 ## given in the ship's body frame, against this shape grown by `inflate` (the bolt's hit radius). A box grows by
 ## `inflate` on each half extent (conservative at edges and corners); a capsule grows exactly.

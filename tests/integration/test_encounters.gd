@@ -140,6 +140,14 @@ func test_a_raid_jumps_in_6_to_12_km_out_and_goes_for_the_player() -> void:
 		var pilot := c.driver.brain as AiPilot
 		assert_not_null(pilot, "an AI pilot")
 		assert_eq(pilot.context.objective_name, "PLAYER", "sent at the player")
+	# Out of the point's funnel first (M6-T22), each leaves it with its spawn's velocity.
+	var transits: VortexTransits = VortexTransits.of(main.world)
+	for c: Combatant in raiders:
+		var ticks: int = 0
+		while transits.is_passing(c.ship) and ticks < 12 * 60:
+			await get_tree().physics_frame
+			ticks += 1
+		assert_false(transits.is_passing(c.ship), "%s came out of its funnel" % c.display_name)
 		assert_gt(c.ship.linear_velocity.dot((main.ship.global_position - c.ship.global_position).normalized()), 100.0,
 				"flying at it")
 

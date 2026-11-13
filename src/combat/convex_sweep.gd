@@ -66,6 +66,22 @@ class Convex extends RefCounted:
 		convex.bounds = convex._bound()
 		return convex
 
+	## This volume grown or shrunk by `factor` about its frame's origin (a ship scaled in a jump vortex's funnel, M6-T22). A shrunk
+	## core is the whole core scaled, close to the scaled hull's own core.
+	func scaled(factor: float) -> Convex:
+		var convex := Convex.new()
+		convex.is_box = is_box
+		convex.empty = empty
+		convex.centre = centre * factor
+		convex.axes = axes
+		convex.half = half * factor
+		convex.p0 = p0 * factor
+		convex.p1 = p1 * factor
+		convex.radius = radius * factor
+		convex.reach = reach * factor
+		convex.bounds = AABB(bounds.position * factor, bounds.size * factor)
+		return convex
+
 	## `bounds` swept along `move`.
 	func swept_bounds(move: Vector3) -> AABB:
 		return bounds.merge(AABB(bounds.position + move, bounds.size))

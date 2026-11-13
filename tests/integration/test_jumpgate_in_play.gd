@@ -71,15 +71,27 @@ func test_the_player_jumps_out_and_comes_back_through_the_blue_vortex() -> void:
 	var came_back_blue: bool = false
 	var came_out_ahead: bool = false
 	var shot_seen: bool = false
+	var shrank_going: float = 1.0
+	var shrank_coming: float = 1.0
+	var transits: VortexTransits = VortexTransits.attach(main.world)
+	var clearing_ticks: int = 0
 	for i: int in 60 * 60:
 		await _ticks(1)
 		saw_departure_open = saw_departure_open or gate.vortex.is_open_for(JumpVortex.Direction.DEPARTURE)
 		saw_hidden = saw_hidden or not main.ship.visible
 		shot_seen = shot_seen or main.camera_rig.is_playing_shot()
-		if main.gates.jump.state == GateJump.State.CLEARING and not came_back_blue:
-			came_back_blue = gate.vortex.is_open_for(JumpVortex.Direction.ARRIVAL)
+		if main.gates.jump.state == GateJump.State.RUN_IN:
+			shrank_going = minf(shrank_going, transits.scale_of(main.ship))
+		if main.gates.jump.state == GateJump.State.CLEARING:
+			clearing_ticks += 1
+			shrank_coming = minf(shrank_coming, transits.scale_of(main.ship))
+			if clearing_ticks == 1:
+				came_back_blue = gate.vortex.is_open_for(JumpVortex.Direction.ARRIVAL)
+				assert_gt(gate.local_of(main.ship.global_position).z, gate.fit.depth_m * 0.9,
+						"it comes back out of the funnel's ring (M6-T22)")
 			var local: Vector3 = gate.local_of(main.ship.global_position)
-			came_out_ahead = local.z < 0.0 and main.ship.linear_velocity.dot(gate.global_basis * Vector3.FORWARD) > 100.0
+			came_out_ahead = came_out_ahead or (local.z < 0.0
+					and main.ship.linear_velocity.dot(gate.global_basis * Vector3.FORWARD) > 100.0)
 		if not main.gates.jump.is_active():
 			break
 	assert_eq(main.gates.jump.completed, 1, "the jump finished (%s)" % main.gates.jump.ended_why)
@@ -88,6 +100,9 @@ func test_the_player_jumps_out_and_comes_back_through_the_blue_vortex() -> void:
 	assert_true(came_back_blue, "it came back while the blue (arrival) vortex was open")
 	assert_true(came_out_ahead, "flying out of the gate's front")
 	assert_true(shot_seen, "the cinematic followed it")
+	assert_lt(shrank_going, 0.5, "it shrank flying down the funnel to the ring")
+	assert_lt(shrank_coming, 0.5, "and came out shrunk, growing")
+	assert_eq(transits.scale_of(main.ship), 1.0, "whole at the end")
 	assert_eq(gate.departed, 1)
 	assert_eq(gate.arrived, 1)
 	assert_true(main.ship.visible)
@@ -119,7 +134,13 @@ func test_an_ai_ship_arrives_through_the_gate_and_leaves_through_it() -> void:
 	assert_not_null(visitor)
 	if visitor == null:
 		return
-	assert_lt(gate.local_of(visitor.ship.global_position).distance_to(gate.arrival_point), 50.0, "at the arrival point")
+	var transits: VortexTransits = VortexTransits.of(main.world)
+	if transits.is_passing(visitor.ship):
+		assert_gt(gate.local_of(visitor.ship.global_position).z, gate.fit.depth_m * 0.9, "out of the funnel's ring (M6-T22)")
+	else:
+		# 6 km off it is under 2 px on screen: it comes out in place, with only the ring's flash (M6-T22).
+		assert_eq(transits.arrivals_unseen, 1, "too small on screen to fly the funnel")
+		assert_lt(gate.local_of(visitor.ship.global_position).distance_to(gate.arrival_point), 50.0, "at the arrival point")
 	assert_true(stage.depart("VISITOR"))
 	var saw_orange: bool = false
 	for i: int in 90 * 60:
@@ -151,4 +172,5 @@ func test_an_encounter_raid_comes_out_of_the_gate_when_its_file_asks() -> void:
 	assert_eq(director.alive_of(&"raid"), e.count(), "every raider came through")
 	assert_eq(director.gate_events, 1)
 	for c: Combatant in director.alive():
-		assert_lt(gate.local_of(c.ship.global_position).length(), 1000.0, "%s came out at the gate" % c.display_name)
+		assert_lt(gate.local_of(c.ship.global_position).length(), gate.fit.depth_m + 100.0,
+				"%s came out of the gate's funnel" % c.display_name)

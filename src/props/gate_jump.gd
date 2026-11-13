@@ -5,10 +5,12 @@ extends RefCounted
 ## it back) and carries out the events it returns; the screen's flash and fade are functions of its state and clock.
 ##
 ## The flow: `LINE_UP` (controls locked, the autopilot flies to the departure point), `RUN_IN` (it accelerates along the gate's
-## axis, the orange vortex opens, the cinematic follows), `FLASH` (through: a flash, then a fade to black), `AWAY` (black, "in
-## hyperspace"; M11 puts hyperspace here), `ARRIVING` (the fade lifts on the blue vortex opening; the gate places the ship),
-## `CLEARING` (the ship flies out of the arrival), then `IDLE` with the controls back. Losing the ship, or a stage that takes
-## too long, ends it early (`ended_why`).
+## axis, the orange vortex opens, the cinematic follows it in and down the funnel as it shrinks, M6-T22), `FLASH` (through the
+## black ring: the shot holds on the ring's white flash, then fades to black, the shot's last frame), `AWAY` (black, "in
+## hyperspace"; M11 puts hyperspace here), `ARRIVING` (the fade lifts on the blue vortex opening; the gate brings the ship out of
+## its ring), `CLEARING` (the ship flies out of the funnel, growing, and on clear of the mouth), then `IDLE` with the controls
+## back. Losing the ship, or a stage that takes too long, ends it early (`ended_why`). The screen shows no flash of its own: the
+## flash is the ring's, in the world.
 
 enum State { IDLE, LINE_UP, RUN_IN, FLASH, AWAY, ARRIVING, CLEARING }
 const STATE_NAMES: Array[String] = ["idle", "line_up", "run_in", "flash", "away", "arriving", "clearing"]
@@ -26,10 +28,11 @@ const EV_ABORT: StringName = &"abort"  # the same, early (`ended_why` says why)
 const LINE_UP_DONE_M: float = 200.0
 ## From 10 km at the autopilot's 300 m/s the line-up takes well under a minute; past this something is in the way.
 const LINE_UP_TIMEOUT_S: float = 120.0
-## The run-in is 1 440 m; at the slowest it waits for the vortex and then flies it in about 15 s.
-const RUN_IN_TIMEOUT_S: float = 40.0
-## The flash comes up in a blink, then the picture fades to black.
-const FLASH_S: float = 0.3
+## The run-in is 1 440 m to the mouth and 1 200 m on down the funnel; at the slowest it waits for the vortex and then flies it in
+## about 20 s.
+const RUN_IN_TIMEOUT_S: float = 45.0
+## Through the ring the shot holds on its flash this long, then the picture fades to black.
+const RING_HOLD_S: float = 0.8
 const FADE_OUT_S: float = 0.9
 ## Black while "in hyperspace": long enough to read as a passage, short enough not to bore (M11 replaces it).
 const AWAY_S: float = 2.0
@@ -37,9 +40,12 @@ const AWAY_S: float = 2.0
 const FADE_IN_S: float = 1.2
 ## The vortex takes 3.5 s to open; past this the arrival is stuck.
 const ARRIVING_TIMEOUT_S: float = 20.0
-## Out of the arrival: clear once this far in front of the plane, or this long after coming out.
+## Out of the arrival: clear once this far in front of the mouth, or this long after leaving it (M6-T22: the ship first flies out
+## of the funnel from its ring, about 6 s at a gate).
 const CLEAR_M: float = 500.0
 const CLEAR_S: float = 3.0
+## Coming out of the funnel takes no longer than this; past it the controls come back wherever the ship is.
+const CLEARING_TIMEOUT_S: float = 30.0
 
 var state: State = State.IDLE
 ## Seconds in the current state.
@@ -53,8 +59,10 @@ var aborted: int = 0
 var flash_level: float = 0.0
 var black_level: float = 0.0
 
-## Gate-local z of the arrival point (CLEARING measures from it).
-var arrival_z: float = -72.0
+## Gate-local z of the mouth (CLEARING measures from it).
+var arrival_z: float = 0.0
+
+var _out_s: float = 0.0  # seconds since the ship left the mouth, while clearing
 
 
 func state_name() -> String:
@@ -102,7 +110,7 @@ func step(dt: float, local: Vector3, departure: Vector3, alive: bool, went_throu
 			elif state_s > RUN_IN_TIMEOUT_S:
 				return _abort("did not reach the vortex in %.0f s" % RUN_IN_TIMEOUT_S)
 		State.FLASH:
-			if state_s >= FLASH_S + FADE_OUT_S:
+			if state_s >= RING_HOLD_S + FADE_OUT_S:
 				_enter(State.AWAY)
 		State.AWAY:
 			if state_s >= AWAY_S:
@@ -115,7 +123,8 @@ func step(dt: float, local: Vector3, departure: Vector3, alive: bool, went_throu
 			elif state_s > ARRIVING_TIMEOUT_S:
 				return _abort("the arrival did not open in %.0f s" % ARRIVING_TIMEOUT_S)
 		State.CLEARING:
-			if local.z <= arrival_z - CLEAR_M or state_s >= CLEAR_S:
+			_out_s = _out_s + dt if local.z < arrival_z else 0.0
+			if local.z <= arrival_z - CLEAR_M or _out_s >= CLEAR_S or state_s >= CLEARING_TIMEOUT_S:
 				_enter(State.IDLE)
 				completed += 1
 				out.append(EV_DONE)
@@ -144,8 +153,7 @@ func autopilot_on() -> bool:
 static func screen_at(p_state: State, t: float) -> Vector2:
 	match p_state:
 		State.FLASH:
-			var flash: float = clampf(t / FLASH_S, 0.0, 1.0) * (1.0 - clampf((t - FLASH_S) / FADE_OUT_S, 0.0, 1.0))
-			return Vector2(flash, clampf((t - FLASH_S) / FADE_OUT_S, 0.0, 1.0))
+			return Vector2(0.0, clampf((t - RING_HOLD_S) / FADE_OUT_S, 0.0, 1.0))
 		State.AWAY:
 			return Vector2(0.0, 1.0)
 		State.ARRIVING:
@@ -162,6 +170,7 @@ func _update_screen() -> void:
 func _enter(p_state: State) -> void:
 	state = p_state
 	state_s = 0.0
+	_out_s = 0.0
 	_update_screen()
 
 

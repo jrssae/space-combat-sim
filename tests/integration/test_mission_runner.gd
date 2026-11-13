@@ -262,7 +262,8 @@ func test_raiders_jump_in_from_the_pool_without_a_new_ship() -> void:
 	assert_true(point.is_in_group(WorldFrame.SHIFTABLE_GROUP))
 	assert_eq(point.phase_name(), "flash", "a ship-made point opens with its centre flash, no activation")
 	var raider: Combatant = main.ships.alive(ShipPool.DEFAULT_TYPE)[0]
-	assert_lt(raider.ship.global_position.distance_to(point.global_position), 400.0, "the ship comes out of it")
+	assert_lt(raider.ship.global_position.distance_to(point.global_position), point.fit.depth_m + 50.0,
+			"the ship comes out of it, from its ring (M6-T22)")
 	# Sized for the ship and widened for the group: both raiders are inside its mouth.
 	assert_gte(point.fit.mouth_radius_m, VortexFit.for_ship(raider.ship.bounding_radius()).mouth_radius_m)
 	var axis: Vector3 = -point.global_basis.z.normalized()

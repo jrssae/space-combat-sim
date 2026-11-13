@@ -59,9 +59,19 @@ var respects_god_mode: bool = false
 ## `invulnerable`). Hits still arrive (`hit_taken`); only the console's `kill` gets through, as it does through god mode.
 ## The pool clears it on every acquire.
 var invulnerable: bool = false
+## The hit volumes' scale about the body origin (M6-T22: a ship shrunk in a jump vortex's funnel); 1 normally.
+var hull_scale: float = 1.0
 ## How many times the hull was made whole again (`restore`: a respawn, a pool re-use, a heal): a far missile launched at one
 ## life does not land on the next (M4-T22 fix round 1).
 var life: int = 0
+
+var _base_shapes: Array[HitShape] = []  # as built, before `hull_scale`
+var _whole_volumes: Array[ConvexSweep.Convex] = []  # the ram volumes, bounds and radii of the whole hull
+var _whole_cores: Array[ConvexSweep.Convex] = []
+var _whole_bounds: AABB = AABB()
+var _whole_radius: float = 0.0
+var _whole_core: float = 0.0
+var _whole_dirty: bool = true
 
 
 func _init() -> void:
@@ -99,22 +109,63 @@ func setup(collision: Array[Dictionary], hull_max: float, p_faction: StringName,
 ## Replaces the hit volumes (and the bounds and ram volumes built from them) and keeps the hull: a hull whose shape changes
 ## in play (cargo pods mounted or taken off, M5-T16). `collision` is `Hardpoints.collision`'s form.
 func set_volumes(collision: Array[Dictionary]) -> void:
-	shapes.clear()
-	ram_volumes.clear()
-	ram_cores.clear()
-	ram_bounds = AABB()
-	bounding_radius = 0.0
+	_base_shapes.clear()
+	_whole_dirty = true
 	for entry: Dictionary in collision:
 		var shape: HitShape = HitShape.from_collision(entry)
-		if shape == null:
-			continue
-		shapes.append(shape)
-		ram_volumes.append(ConvexSweep.Convex.of(shape, Transform3D.IDENTITY))
-		ram_cores.append(ConvexSweep.Convex.of(shape, Transform3D.IDENTITY, RamMath.RAM_DEPTH_M))
-		ram_bounds = ram_volumes[-1].bounds if ram_volumes.size() == 1 else ram_bounds.merge(ram_volumes[-1].bounds)
-		bounding_radius = maxf(bounding_radius, shape.extent_radius())
-	core_radius = RamMath.core_radius(shapes)
+		if shape != null:
+			_base_shapes.append(shape)
+	_build_volumes()
+
+
+## Scales the hit volumes (and the bounds and ram volumes) by `factor` about the body origin, the hull kept: a ship shrinking
+## or growing in a jump vortex's funnel (M6-T22). 1 puts them back as built.
+func set_hull_scale(factor: float) -> void:
+	if is_equal_approx(factor, hull_scale):
+		return
+	hull_scale = factor
+	_build_volumes()
+
+
+# The volumes from the unscaled shapes at `hull_scale`: built in full at 1, scaled copies of those otherwise (a ship shrinking
+# in a funnel rebuilds its hull many times; scaling about the origin keeps every bound in proportion).
+func _build_volumes() -> void:
+	if _whole_dirty:
+		_build_whole()
+	if hull_scale == 1.0:
+		shapes = _base_shapes.duplicate()
+		ram_volumes = _whole_volumes.duplicate()
+		ram_cores = _whole_cores.duplicate()
+		ram_bounds = _whole_bounds
+		bounding_radius = _whole_radius
+		core_radius = _whole_core
+	else:
+		shapes.clear()
+		ram_volumes.clear()
+		ram_cores.clear()
+		for i: int in _base_shapes.size():
+			shapes.append(_base_shapes[i].scaled(hull_scale))
+			ram_volumes.append(_whole_volumes[i].scaled(hull_scale))
+			ram_cores.append(_whole_cores[i].scaled(hull_scale))
+		ram_bounds = AABB(_whole_bounds.position * hull_scale, _whole_bounds.size * hull_scale)
+		bounding_radius = _whole_radius * hull_scale
+		core_radius = _whole_core * hull_scale
 	volumes_changed.emit()
+
+
+# The whole hull's ram volumes, bounds and radii, from the unscaled shapes.
+func _build_whole() -> void:
+	_whole_volumes.clear()
+	_whole_cores.clear()
+	_whole_bounds = AABB()
+	_whole_radius = 0.0
+	for shape: HitShape in _base_shapes:
+		_whole_volumes.append(ConvexSweep.Convex.of(shape, Transform3D.IDENTITY))
+		_whole_cores.append(ConvexSweep.Convex.of(shape, Transform3D.IDENTITY, RamMath.RAM_DEPTH_M))
+		_whole_bounds = _whole_volumes[-1].bounds if _whole_volumes.size() == 1 else _whole_bounds.merge(_whole_volumes[-1].bounds)
+		_whole_radius = maxf(_whole_radius, shape.extent_radius())
+	_whole_core = RamMath.core_radius(_base_shapes)
+	_whole_dirty = false
 
 
 ## Whether a bolt of `bolt_faction` can hurt this hull. With `friendly_fire` (`settings.friendly_fire`, D31) any bolt can:

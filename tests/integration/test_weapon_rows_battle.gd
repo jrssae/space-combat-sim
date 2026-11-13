@@ -8,7 +8,9 @@ extends GutTest
 ## The recording is the native battle in the bench's orbit (M6-T07). With no gravity it repeats the GDScript stand-ins'
 ## battle hit for hit (920 hits, 431 by capitals; the README beside the recording), so the recording differs from the
 ## GDScript's by the orbit's tide alone. The tier is off, as when the GDScript battle was recorded: this file counts the
-## hits the resolver lands, and a tier row's fire is rolled, not resolved (`test_tier_outcomes.gd` holds that).
+## hits the resolver lands, and a tier row's fire is rolled, not resolved (`test_tier_outcomes.gd` holds that). Its ships are placed
+## (`arrive=placed`, M6-T22): since ships fly out of their jump points' funnels, an arriving battle starts seconds later and
+## elsewhere; this file guards the weapons, so it keeps the start it was recorded with.
 
 const NATIVE_CLASS: StringName = &"ScsWeaponRows"
 const ROOT: String = "user://test_weapon_rows_battle"
@@ -63,7 +65,7 @@ func _battle() -> Array:
 	var resolver := main.get_node("Combat/HitResolver") as HitResolver
 	resolver.hit_resolved.connect(_on_hit)
 	var label: String = "native"
-	var result: ConsoleResult = DebugConsole.registry.execute("bench battle 100 %d warmup=0 seed=1 label=%s" % [SECONDS, label])[0]
+	var result: ConsoleResult = DebugConsole.registry.execute("bench battle 100 %d warmup=0 seed=1 arrive=placed label=%s" % [SECONDS, label])[0]
 	assert_true(result.ok, result.text())
 	await wait_for_signal(main.bench.finished, 240.0, "the battle finishes")
 	assert_eq(main.bench.standins.weapons_path(), &"native", "the weapons ran on the native rows")

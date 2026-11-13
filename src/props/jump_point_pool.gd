@@ -128,9 +128,10 @@ func _take() -> JumpVortex:
 		if not _points[i].is_active():
 			_cursor = (i + 1) % n
 			return _points[i]
-	var oldest: JumpVortex = _points[0]
+	var oldest: JumpVortex = null  # one that no ship is still flying through, when there is one
 	for point: JumpVortex in _points:
-		if point.age_s > oldest.age_s:
+		if oldest == null or (point.passing == 0 and oldest.passing > 0) \
+				or ((point.passing == 0) == (oldest.passing == 0) and point.age_s > oldest.age_s):
 			oldest = point
 	oldest.stop()
 	return oldest

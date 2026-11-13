@@ -121,6 +121,10 @@ res://tests/unit/test_gate_activation.gd
 res://tests/unit/test_vortex_lod.gd
 res://tests/unit/test_jump_point_pool.gd
 res://tests/unit/test_battle_arrivals.gd
+# Ships through the vortex's funnel (M6-T22)
+res://tests/unit/test_vortex_transit.gd
+res://tests/integration/test_transit_scale.gd
+res://tests/integration/test_vortex_transits.gd
 # Missions, dialog, scenarios
 res://tests/unit/test_scenario_loader.gd
 res://tests/unit/test_scenario_frame.gd

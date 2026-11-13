@@ -388,7 +388,10 @@ func _place(e: EncounterEvent, k: int, type: StringName, anchor: UniversePos, an
 	if placed == null:
 		return
 	if e.jumps and jumps != null:
-		jumps.open_for(at, -basis.z, placed.ship.bounding_radius())
+		var point: JumpVortex = jumps.open_for(at, -basis.z, placed.ship.bounding_radius())
+		var transits: VortexTransits = VortexTransits.attach(main.world)
+		if point != null and transits != null:
+			transits.begin_arrival(placed.ship, point, placed.ship.global_position, placed.ship.linear_velocity)
 	if placed.cargo_pods != null and e.cargo_pods[k] >= 0:
 		placed.cargo_pods.set_count(e.cargo_pods[k])
 	if ShipCatalog.is_civilian(type):
@@ -428,6 +431,7 @@ func _arrive_at_gate(e: EncounterEvent, k: int, type: StringName, target_name: S
 				gate.arrival_velocity() + main.world.rest_velocity(), brain, type)
 		if placed == null:
 			return
+		gate.bring_through(placed.ship)
 		if ShipCatalog.is_civilian(type):
 			placed.targetable.broadcast_range_m = TRANSPONDER_M
 		_own.append({"combatant": placed, "brain": brain, "path": path, "index": e.index, "kind": e.kind}))

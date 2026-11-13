@@ -41,8 +41,9 @@ const DEFAULT_ROOT: String = "res://reports/perf"
 const OPTION_KEYS: Array[String] = ["warmup", "seed", "label", "probe", "rebase_m", "sleep", "rocks", "capitals", "boost", "arrive"]
 const ARRIVE_JUMP: StringName = &"jump"
 const ARRIVE_PLACED: StringName = &"placed"
-## With arrivals, the measured window starts at least this long after the last point opened.
-const ARRIVAL_SETTLE_S: float = 1.0
+## With arrivals, the measured window starts at least this long after the last point opened: its ships fly out of the funnel
+## first (M6-T22, at most `VortexTransit.MAX_TRANSIT_S`).
+const ARRIVAL_SETTLE_S: float = 1.0 + VortexTransit.MAX_TRANSIT_S
 ## A carrier's launch leaves its bay this much faster than the carrier, along its nose, m/s.
 const LAUNCH_MPS: float = 80.0
 
@@ -82,6 +83,7 @@ var _next_point: int = 0  # the next point of `arrivals` to open
 var _radii := PackedFloat32Array()  # by plan entry: the ship's radius once it is in play
 var _warmup_engine := PackedFloat64Array()  # the engine's physics time of each warm-up tick after the load's, us
 var _window_engine := PackedFloat64Array()  # and of each measured tick
+var _bodies: Array[RigidBody3D] = []  # each plan entry's body once in play (null before), for its passage out of its point
 var _arrival_spawn_us: int = 0  # the worst tick's own cost of bringing ships in, us
 var _render_frames: Array[PackedFloat64Array] = []  # with a window: what each frame drew (`render_phases`)
 
@@ -261,6 +263,8 @@ func _set_up_scene() -> void:
 	_names = _ship_names(plan)
 	_radii = PackedFloat32Array()
 	_radii.resize(plan.size())
+	_bodies.clear()
+	_bodies.resize(plan.size())
 	_warmup_engine = PackedFloat64Array()
 	_window_engine = PackedFloat64Array()
 	_arrival_spawn_us = 0
@@ -357,6 +361,7 @@ func _place_fighter(i: int, rest: Vector3) -> void:
 		set_faction(placed, StringName(e["faction"]))
 	_placed[type] = int(_placed[type]) + 1
 	_radii[i] = placed.ship.bounding_radius()
+	_bodies[i] = placed.ship
 	if not String(e["wing"]).is_empty():
 		main.wings.join(String(e["wing"]), placed)
 
@@ -370,6 +375,7 @@ func _place_capital(i: int, rest: Vector3) -> void:
 	# It comes out nose first, so its point fits its cross-section, not its length.
 	var spec: Dictionary = CapitalStandin.CLASSES.get(StringName(e["class"]), CapitalStandin.CLASSES[&"cruiser"])
 	_radii[i] = 0.5 * Vector2(float(spec["width"]), float(spec["height"])).length()
+	_bodies[i] = cap
 
 
 # The bench's pool of jump points, made once with room for the largest wave.
@@ -383,7 +389,7 @@ func _ensure_jumps() -> void:
 
 
 # Opens every point of `arrivals` due by `now_s`: the first wave's ships are already in play; a later point brings its ships in
-# first, then opens round them.
+# first, then opens round them. Each ship then comes out of the point's black ring and flies out to its place (M6-T22).
 func _open_due(now_s: float) -> void:
 	var rest: Vector3 = main.world.rest_velocity()
 	while _next_point < arrivals.points.size() and float(arrivals.points[_next_point]["at_s"]) <= now_s:
@@ -400,6 +406,11 @@ func _open_due(now_s: float) -> void:
 				_radii[members[0]], JumpVortex.Direction.ARRIVAL, false)
 		for k: int in range(1, members.size()):
 			jumps.join(opened, _anchor.plus_local(_plan[members[k]]["offset"]), _radii[members[k]])
+		var transits: VortexTransits = VortexTransits.attach(main.world)
+		for i: int in members:
+			var body: RigidBody3D = _bodies[i]
+			if opened != null and transits != null and body != null and is_instance_valid(body) and body.is_inside_tree():
+				transits.begin_arrival(body, opened, body.global_position, body.linear_velocity)
 		_next_point += 1
 
 
