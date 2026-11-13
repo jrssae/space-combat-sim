@@ -26,7 +26,7 @@ tutorial (launch, exterior tour, defend the station) is written on top of this.
 |---|---|---|---|
 | Q1 | References for the station | **Needed before T01.** The maintainer's images of the station from several sides and close-ups of the bays, the docking aperture and the command section; per the standing rule, its colours and textures come from show images. Nothing from them is committed | Maintainer, 2026-11-13: the references in `references/` (the STL `EA Babylon 5 Station.stl`, the schematic, side-front and details images, the station close-ups in `references/T40 seam references/`, `maintenance bot.webp`). Proportions from the STL with the **90% rule** (top, side and front silhouette IoU >= 0.90, L/W/H within 10%, `tools/refview` compare); colours from the show images |
 | Q2 | How close must the station hold up? | Panel and window detail that reads from 50 m around the Cobra bays, the docking aperture and the command section, and from about 200 m everywhere else; the importer's levels and M6's far representations beyond that | Maintainer, 2026-11-13: the proposed answer |
-| Q3 | Where are the Cobra bays and how does a launch work? | On the arms of the stationary command section (as `docs/design-references.md` reads), the fighter carried out on a rail and released with the station's velocity; or, if the references say the bays turn with the drum, released with the drum's surface speed. A launch of about 8 s from rest in the bay to the hand-off | Maintainer, 2026-11-13: the proposed answer, corrected by T01's read: **four Cobra-bay arms on the turning drum** (Blue section, z 620 to 1 420), hatches facing outward; the fighter is dropped out radially and released with the drum's surface velocity (about 36 m/s at r 243). The docking aperture's ring is frame; its door turns with the drum Door count and size corrected 2026-11-13 (maintainer, from the untextured Cobra-arm model): **six launch doors per arm, each about 20 × 14 m** (one Starfury, 15.4 × 9.8 m, with about 2.5 m clearance), in a framed strip on the arm's root section; 24 launch positions in all |
+| Q3 | Where are the Cobra bays and how does a launch work? | On the arms of the stationary command section (as `docs/design-references.md` reads), the fighter carried out on a rail and released with the station's velocity; or, if the references say the bays turn with the drum, released with the drum's surface speed. A launch of about 8 s from rest in the bay to the hand-off | Maintainer, 2026-11-13: the proposed answer, corrected by T01's read: **four Cobra-bay arms on the turning drum** (Blue section, z 620 to 1 420), hatches facing outward; the fighter is dropped out radially and released with the drum's surface velocity (about 36 m/s at r 243). The docking aperture's ring is frame; its door turns with the drum Door count and size corrected 2026-11-13 (maintainer, from the untextured Cobra-arm model): **six launch doors per arm, each about 20 × 14 m** (one Starfury, 15.4 × 9.8 m, with about 2.5 m clearance), in a framed strip on the arm's root section; 24 launch positions in all **Wings and launch waves** (maintainer, 2026-11-13): each arm's bays belong to one wing, seen from the bow **Alpha top (0°), Beta starboard (90°), Delta bottom (180°), Zeta port (270°)**; each arm holds **12 Starfuries**: six on the racks over the six doors and a second row of six staged behind them (not visible from outside), so a wing launches in **two waves of six**; 48 fighters in all |
 | Q4 | Landing back in a bay or docking | Out of M7 (M8's tutorial ends in the debrief); the bays' geometry leaves room for it later | Maintainer, 2026-11-13: the proposed answer |
 | Q5 | Can the station be damaged in M7? | Hits are taken by sections (M4's damage zones), shown on the HUD's target box, and a mission can fail on a section lost; the station is never destroyed or disabled in M7 (M12 brings staged break-up and disabled hulks) | Maintainer, 2026-11-13: the proposed answer |
 | Q6 | The defence grid | **Settled in T02** with the maintainer: where the emplacements sit, the weapon kinds (cannons, interceptors) and how each behaves. No default is proposed here | Settled in T02 (2026-11-13): D75 |
@@ -408,6 +408,8 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   Starfuries wide. The untextured Cobra-arm model (`references/cobra bay references/cobra arm untextured model.jpg`) shows **six**
   doors in a framed strip on the arm's root section, each fitting one Starfury. Phase B rebuilds them: six per arm, about
   20 × 14 m, in that strip; the clamps, frame, near-only door props (T19) and bay lights follow; 24 launch positions.
+- **Wings (maintainer, 2026-11-13, Q3):** the arms are Alpha (top), Beta (starboard), Delta (bottom), Zeta (port); launch
+  hardpoints are named per wing and door (`cobra_bay_alpha_1` to `cobra_bay_zeta_6`), each with its wing.
 - **Done when:** AC4 and the collision half of AC3.
 
 ### M7-T06 The station in the game
@@ -437,6 +439,9 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   out one after another, flip, light their engines and form up, exterior shots as in the show; `docs/roadmap.md`). Build the
   launch's shots as data (a list of `CinematicShot`s keyed on the bay hardpoints) and the door opening and the drop as steps a
   sequence can run for several ships in turn, so M8 extends this rather than rewriting it.
+- **Waves (maintainer, 2026-11-13, Q3):** a wing launches from its own arm in two waves of six: the six on the racks drop, then
+  the second row moves forward onto the racks and drops. A launch names a wing and a door (`launch_from("alpha", 3)`); the
+  player's wingmen launch from the other doors of the same wing.
 - **Done when:** AC7.
 
 ### M7-T09 The station interior for the front end
@@ -478,6 +483,8 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   bow's two forks). A ship flying into the main docking bay matches the drum's roll (0.148 rad/s) before it enters the
   tunnel, so it does not scrape the turning walls. Ships that fit the docking tunnel (94 × 34 m)
   fly in through the aperture and leave the world at the inner airlock.
+- **Allies from the bays (Q3):** up to 48 Starfuries: four wings (Alpha, Beta, Delta, Zeta), each launching from its own arm in
+  two waves of six through T08's sequence.
 - **Done when:** AC9's AI and traffic.
 
 ### M7-T11 Maintenance bots
@@ -718,10 +725,11 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 
 - **Why (maintainer, 2026-11-13):** the launch doors were far too big (64 × 28 m; see T05's note), so T09 hung three Starfuries per
   door in a 84 m wide hall. With six doors of about 20 × 14 m per arm, the hangar holds **one Starfury per door (six)** in a
-  **narrower hall** sized to the door strip.
+  **narrower hall** sized to the door strip, with a second row of six behind.
 - **Agent:** Opus (T09's agent, resumed). **Depends on:** T05 committed (the new door positions).
 - **What:** `b5_interior` re-fitted to the new doors (hall width and length, six racks, each fighter's id, door, slot and release
-  point for M8), the camera's rail and moves re-checked, the light budget (one work lamp per bay), the sheet refreshed for the
+  point for M8), **and a second row of six Starfuries staged behind the racks** (maintainer, 2026-11-13: twelve per arm, launching
+  in two waves of six; the hangar is Alpha's, the top arm; each fighter's wave, 1 or 2, in its data), the camera's rail and moves re-checked, the light budget (one work lamp per bay), the sheet refreshed for the
   maintainer (H), tests updated, commit.
 - **Done when:** the sheet approved, the tests green, committed.
 
