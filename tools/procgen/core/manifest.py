@@ -137,6 +137,8 @@ def validate_manifest(manifest: Mapping[str, Any]) -> None:
 
     if "mesh" in manifest:
         validate_mesh_section(manifest["mesh"])
+    if "collision" in manifest:
+        validate_collision_section(manifest["collision"])
 
     for key in ("aabb_min", "aabb_max", "centroid_offset"):
         _check_vec3(manifest, key)
@@ -148,6 +150,74 @@ def validate_manifest(manifest: Mapping[str, Any]) -> None:
         isinstance(k, str) and isinstance(v, str) for k, v in files.items()
     ):
         raise ValueError("manifest 'files' must map names to file names")
+
+
+def _positive_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def validate_collision_section(entry: Any) -> None:
+    """The compound collision contract (M7-T03, D73; ``core/collision.py``): the budget and, per piece of the asset, its
+    bounds, the convex shapes its physics body is built from and the hit volumes fitted to them. Every number is finite and
+    every piece is inside the budget the section states."""
+    if not isinstance(entry, dict):
+        raise ValueError("manifest 'collision' must be an object")  # noqa: TRY004
+    for key in ("max_shapes", "max_hull_points"):
+        if not _positive_int(entry.get(key)):
+            raise ValueError(f"manifest collision.{key} must be a positive integer")
+    pieces = entry.get("pieces")
+    if not isinstance(pieces, list) or not pieces:
+        raise ValueError("manifest collision.pieces must be a non-empty list")
+    names = [piece.get("name") if isinstance(piece, dict) else None for piece in pieces]
+    if not all(isinstance(name, str) and name for name in names) or len(set(names)) != len(names):
+        raise ValueError("manifest collision.pieces must be objects with unique, non-empty names")
+    for piece in pieces:
+        where = f"manifest collision piece {piece['name']!r}"
+        try:
+            for key in ("aabb_min", "aabb_max"):
+                _check_vec3(piece, key)
+            bound = piece.get("bound")
+            if not isinstance(bound, dict) or not _is_number(bound.get("radius")) or bound["radius"] <= 0:
+                raise ValueError("'bound' must have a center and a positive radius")
+            _check_vec3(bound, "center")
+            shapes, volumes = piece.get("shapes"), piece.get("hit_volumes")
+            if not isinstance(shapes, list) or not shapes or not isinstance(volumes, list):
+                raise ValueError("needs a non-empty 'shapes' list and a 'hit_volumes' list")
+            if len(shapes) > entry["max_shapes"]:
+                raise ValueError(f"has {len(shapes)} shapes, over the budget of {entry['max_shapes']}")
+            for shape in shapes:
+                _check_collision_shape(shape, ("box", "capsule", "hull"), entry["max_hull_points"])
+            for volume in volumes:
+                _check_collision_shape(volume, ("box", "capsule"), 0)
+        except ValueError as exc:
+            raise ValueError(f"{where}: {exc}") from None
+
+
+def _check_collision_shape(shape: Any, kinds: Sequence[str], max_hull_points: int) -> None:
+    if not isinstance(shape, dict) or not isinstance(shape.get("name"), str) or shape.get("type") not in kinds:
+        raise ValueError(f"a shape needs a name and a type among {list(kinds)}")
+    label = f"shape {shape['name']!r}"
+    if shape["type"] == "hull":
+        points = shape.get("points")
+        if not isinstance(points, list) or not 4 <= len(points) <= max_hull_points:
+            raise ValueError(f"{label} needs 4 to {max_hull_points} points")
+        if not all(isinstance(p, list) and len(p) == 3 and all(_is_number(v) for v in p) for p in points):
+            raise ValueError(f"{label} points must be lists of 3 numbers")
+        return
+    _check_vec3(shape, "position")
+    basis = shape.get("basis")
+    if not isinstance(basis, dict):
+        raise ValueError(f"{label} needs a basis with x, y and z")
+    for axis in "xyz":
+        _check_vec3(basis, axis)
+    if shape["type"] == "box":
+        _check_vec3(shape, "size")
+        if min(shape["size"]) <= 0:
+            raise ValueError(f"{label} needs a positive size")
+    else:
+        radius, height = shape.get("radius"), shape.get("height")
+        if not _is_number(radius) or not _is_number(height) or radius <= 0 or height < 2 * radius or shape.get("axis") not in ("x", "y", "z"):
+            raise ValueError(f"{label} needs radius > 0, height >= 2 * radius and an axis")
 
 
 MESH_SURFACE_KEYS = ("name", "blend", "albedo", "normal", "orm", "emissive", "transmittance")

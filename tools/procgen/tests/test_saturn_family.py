@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -24,6 +25,7 @@ from tools.procgen.core.color import capture_albedo
 from tools.procgen.assets import saturn_family as saturn
 from tools.procgen.parts import saturn as sp
 from tools.procgen.core import civilian as cv
+from tools.procgen.core import collision as col
 from tools.procgen.core import manifest as manifest_io
 from tools.procgen.core.context import BuildContext
 from tools.procgen.core.obj import read_obj
@@ -34,6 +36,7 @@ from tools.procgen.tests.mesh_checks import (
     assert_hull_mesh,
     assert_mirror_symmetric,
     assert_model_mesh,
+    glb_triangles,
     glowing_points,
     painted_faces,
 )
@@ -99,6 +102,11 @@ DESIGN: dict[str, dict[str, Any]] = {
 }
 TRIANGLE_BUDGET = 70_000  # every hull (41 518 to 54 998 as built); the importer adds the levels of detail
 TURRET_TRIANGLE_BUDGET = 5_000
+# M7-T03 (D73): the compound collision against the drawn mesh, probed every metre. As built the widest gap is 0.75 m (the
+# command disc's rim, a 28 m lens held by 32 corners) and the farthest excess 4.75 m (a hull across a concave strut set).
+COLLISION_STEP_M, COLLISION_GAP_M, COLLISION_EXCESS_M = 1.0, 1.0, 5.0
+# The hit volumes are boxes around those hulls: nothing left out (0.15 m as built), corners up to 6.8 m off a slanted pod.
+HIT_VOLUME_GAP_M, HIT_VOLUME_EXCESS_M = 0.5, 7.5
 TEXEL_MAX_M = 0.2  # the biggest hull (the Saturn 8 transport, 19 cm as built) at the default 2 048 px atlas
 
 _TMP = tempfile.TemporaryDirectory()
@@ -423,6 +431,56 @@ class SaturnVariantChecks:
             self.assertTrue(np.all(extent.min(axis=0) >= lo - 1.0) and np.all(extent.max(axis=0) <= hi + 1.0), c["name"])
 
     # --- turret model ------------------------------------------------------------------------------------------
+    def collision_piece(self) -> dict[str, Any]:
+        (piece,) = self.manifest["collision"]["pieces"]
+        return piece
+
+    def test_the_collision_piece_is_one_shape_a_part_inside_the_budget(self) -> None:
+        section, piece = self.manifest["collision"], self.collision_piece()
+        self.assertEqual((section["max_shapes"], section["max_hull_points"]), (128, 32))
+        self.assertEqual(piece["name"], "hull")
+        variant = saturn.VARIANTS[self.ASSET_ID]
+        parts = saturn.with_twins(saturn.assemble(variant, saturn.EA_CIVILIAN))
+        self.assertEqual([s["name"] for s in piece["shapes"]], [p.name for p in parts])
+        self.assertLessEqual(len(piece["shapes"]), 128)
+        for shape in piece["shapes"]:
+            self.assertIn(shape["type"], ("capsule", "hull"), shape["name"])
+            if shape["type"] == "hull":
+                self.assertTrue(4 <= len(shape["points"]) <= 32, shape["name"])
+        # The round cargo cylinders and tanks are capsules, not faceted hulls.
+        round_parts = [s["type"] for s in piece["shapes"] if re.fullmatch(r"s\d_(cylinder|tank(_[lr])?)", s["name"])]
+        self.assertEqual(round_parts, ["capsule"] * {"transport": 1, "tank": 3, "stack": 0}[variant.cargo] * max(variant.sections, 1))
+
+    def test_the_collision_piece_covers_the_drawn_mesh_and_stays_on_it(self) -> None:
+        shapes = col.shapes_from_entry(self.collision_piece())
+        fit = col.coverage(glb_triangles(self.dir / f"{self.ASSET_ID}.glb"), shapes, COLLISION_STEP_M)
+        fit.check(COLLISION_GAP_M, COLLISION_EXCESS_M)
+        self.assertGreater(fit.max_gap_m, 0.1, "the measure is not vacuous: 32 corners cannot hold the disc's rim exactly")
+
+    def test_the_collision_piece_is_mirror_symmetric_and_bounded(self) -> None:
+        piece = self.collision_piece()
+        shapes = col.shapes_from_entry(piece)
+        corners = np.concatenate([s.corners() for s in shapes])
+        lo, hi = np.array(piece["aabb_min"]), np.array(piece["aabb_max"])
+        self.assertAlmostEqual(lo[0], -hi[0], places=3)
+        self.assertTrue(np.all(corners >= lo - 1e-3) and np.all(corners <= hi + 1e-3))
+        reach = np.linalg.norm(corners - np.array(piece["bound"]["center"]), axis=1).max()
+        self.assertLessEqual(reach, piece["bound"]["radius"] + 1e-3)
+        # The shapes stay inside the drawn hull's box (a capsule's caps may round past a flat end by a hair).
+        mesh = self.manifest["mesh"]
+        self.assertTrue(np.all(lo >= np.array(mesh["aabb_min"]) - 0.5) and np.all(hi <= np.array(mesh["aabb_max"]) + 0.5))
+
+    def test_the_hit_volumes_hold_the_collision_shapes(self) -> None:
+        piece = self.collision_piece()
+        shapes, volumes = col.shapes_from_entry(piece), col.shapes_from_entry(piece, "hit_volumes")
+        self.assertEqual(len(volumes), len(shapes))
+        for shape, volume in zip(shapes, volumes):
+            self.assertEqual(volume.name, shape.name)
+            self.assertIn(volume.kind, ("box", "capsule"))
+            self.assertLess(volume.distance(shape.corners()).max(), 1e-3, shape.name)
+        fit = col.coverage(glb_triangles(self.dir / f"{self.ASSET_ID}.glb"), volumes, COLLISION_STEP_M)
+        fit.check(HIT_VOLUME_GAP_M, HIT_VOLUME_EXCESS_M)
+
     def test_turret_model_is_its_own_textured_mesh(self) -> None:
         t = self.manifest["turret"]
         self.assertEqual(set(t), {"obj", "mesh", "barrel_m", "trunnion", "muzzles"})
@@ -514,6 +572,17 @@ class SaturnFamilyTests(unittest.TestCase):
         parts = [TexturedPart(p.part.mesh, phase_steps(p.name, False), (), p.name)
                  for p in saturn.with_twins(saturn.assemble(variant, saturn.EA_CIVILIAN))]  # fmt: skip
         self.assertLess(cv.texel_of(parts, cv.HULL_ATLAS_PX), TEXEL_MAX_M)
+
+    def test_a_tight_collision_budget_merges_neighbours_and_still_covers(self) -> None:
+        asset_id = "saturn_8_transport"  # the most parts: 106 shapes
+        piece = manifest_io.read_manifest(build_once(asset_id))["collision"]["pieces"][0]
+        shapes = col.shapes_from_entry(piece)
+        budget = col.Budget(max_shapes=48)
+        merged = col.merge_to_budget(shapes, budget)
+        self.assertEqual((len(shapes), len(merged)), (106, 48))
+        col.check_budget("hull", merged, budget)
+        fit = col.coverage(glb_triangles(build_once(asset_id) / f"{asset_id}.glb"), merged, COLLISION_STEP_M)
+        fit.check(COLLISION_GAP_M, COLLISION_EXCESS_M)
 
     def test_every_variant_has_the_same_engine_section(self) -> None:
         # The Saturn 3's is the same section scaled down (Q20).

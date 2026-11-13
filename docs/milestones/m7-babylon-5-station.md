@@ -227,6 +227,47 @@ making its own branch):
 - **Notes:** start from one existing hull (a Saturn) so the builder is tested before the station exists; the native hit volumes
   come from the same parts.
 - **Done when:** a test asset's pieces cover its render hull within tolerance and inside the budget, built in Godot.
+- **Done (as built):**
+  - **Builder:** `tools/procgen/core/collision.py`. A `Shape` is a box, a capsule (along its basis' z) or a hull (`box`, `capsule`,
+    `hull`, `from_primitive` for a part's existing `parts.Collision`, `shape_for_part` for a part that does not pick: its own
+    capsule if that holds its mesh within 0.5 m, else the hull of its points). `hull` keeps the corners that matter most (the
+    axis extremes, then the point farthest outside the hull so far) up to the point budget. NumPy only, no new dependency.
+  - **Budget** (`Budget`, the defaults): **128 shapes a piece, 32 points a hull**. Chosen for Jolt, not forced by it (Jolt refuses
+    a hull above 256 points; cost per contact grows with both). `merge_to_budget` joins the pair whose common box adds the least
+    empty space into one hull until the piece fits; `check_budget` raises on what is left over.
+  - **Coverage:** `coverage(triangles, shapes, step)` probes every render triangle every `step` and returns `max_gap_m` (the
+    render point farthest outside every shape) and `max_excess_m` (the shape point farthest from the render surface, read up to
+    one `step` long), each with where; `Coverage.check(gap, excess)` raises. It is a test-time measure, not run in a build.
+  - **Manifest:** `collision` = `max_shapes`, `max_hull_points`, `pieces[]`; a piece has `name`, `aabb_min`, `aabb_max`,
+    `bound` (centre, radius), `shapes[]` and `hit_volumes[]`. A box or capsule entry reads exactly as a `hardpoints.json`
+    collision entry; a hull is `points` in the piece's frame. `validate_collision_section` (`core/manifest.py`) refuses
+    values that are not finite, unknown types and a piece over the section's own budget.
+  - **Hit volumes:** one per shape, same order and name: a box or capsule is its own, a hull gets the tighter of its
+    axis-aligned and principal-axes boxes. They are data only; nothing native reads them yet.
+  - **Godot:** `src/world/collision_pieces.gd` (`CollisionPieces`, pure: `for_asset`, `from_manifest`, `piece(name)`; shapes as
+    `BoxShape3D`, `CapsuleShape3D`, `ConvexPolygonShape3D`, hit volumes as `HitShape`s; a broken section is refused whole) and
+    `src/world/collision_bodies.gd` (`CollisionBodies.build(piece, animatable)`: a `StaticBody3D` or `AnimatableBody3D` with a
+    `CollisionShape3D` per shape; the caller sets layers and adds it).
+  - **The Saturns** (`saturn_family`, generator version 3) write one piece, `hull`, a shape per part: 56 to 106 shapes (76 on
+    the Saturn 4 transport: 75 hulls and the cargo cylinder's capsule), 51 to 86 kB of manifest. Against the drawn glb at a 1 m
+    step: gap 0.73 to 0.75 m (the command disc's rim, a 28 m lens on 32 corners), excess 2.1 to 4.75 m (a hull across a concave
+    strut set); the tests hold **gap <= 1.0 m, excess <= 5.0 m**. Merged to 48 shapes the Saturn 8 transport still passes
+    (0.88 m, 4.75 m). The hit volumes: gap <= 0.15 m, excess <= 6.8 m (tests: 0.5 m, 7.5 m).
+  - **The live game is unchanged:** ships still collide and take hits through `hardpoints.json`'s `collision[]`; no native code
+    and no parity recording was touched. Putting 76 hulls on every Saturn would change contacts and cost, so it was not done.
+  - **Tests:** `tools/procgen/tests/test_collision.py` (30: hulls, distances, the merge, coverage, the section, the manifest's
+    refusals), four per Saturn variant and a tight-budget one in `test_saturn_family.py` (determinism is its existing
+    byte-identical test, which now covers the section), `tests/unit/test_collision_pieces.gd` (10, with rays against a built
+    body) on `tests/fixtures/collision_demo_manifest.json`; both new files are in the quick tier.
+  - **For T04/T05:** call `col.section({"frame": [...], "drum": [...]})` with each piece's shapes in that piece's own frame (the
+    drum's centred on its axis) and put it in the manifest's `extra`. A part that is concave (a bay mouth, the docking aperture)
+    must be given as several shapes, or its hull closes the opening: the excess number shows it. Pick the station's step and
+    tolerances there (a bay needs an excess well under a fighter's clearance) and run `coverage` in its tests; on a mesh that
+    size keep `step` near the tolerance, since probes grow with area / step².
+  - **For T06:** build bodies with `CollisionBodies.build`, set `CollisionLayers`, and feed `piece["hit_volumes"]` to
+    `Damageable`/`HitResolver`, the rams and `set_turret_hull` (boxes and capsules, as today's 16-number volumes). The sweep's
+    broad phase can start from `bound_center` and `bound_radius`. `HitShape` and the native `Volume` have no convex hull: if a
+    box per hull is too loose for a bay, that is where a native hull sweep would be added, with its own tests.
 
 ### M7-T04 `babylon5_station` generator
 

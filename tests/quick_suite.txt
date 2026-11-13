@@ -48,6 +48,7 @@ res://tests/unit/test_pulse_cannon_capacitor.gd
 res://tests/unit/test_weapon_capacitor.gd
 res://tests/unit/test_hull_health.gd
 res://tests/unit/test_hit_shape.gd
+res://tests/unit/test_collision_pieces.gd
 res://tests/unit/test_intercept_math.gd
 res://tests/unit/test_ram_math.gd
 res://tests/unit/test_ram_tracker.gd

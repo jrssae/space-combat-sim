@@ -6,6 +6,7 @@ tools.procgen.tests.test_color
 tools.procgen.tests.test_image
 tools.procgen.tests.test_audio
 tools.procgen.tests.test_manifest
+tools.procgen.tests.test_collision
 tools.procgen.tests.test_panorama
 tools.procgen.tests.test_chunks
 tools.procgen.tests.test_uv_atlas

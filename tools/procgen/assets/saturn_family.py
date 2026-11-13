@@ -27,6 +27,7 @@ from typing import Any
 import numpy as np
 
 from ..core import civilian as cv
+from ..core import collision as col
 from ..core.context import AssetOutputs, BuildContext
 from ..core.geometry import Mesh, mirror_matrix
 from ..core.manifest import build_manifest, write_manifest
@@ -40,7 +41,8 @@ from ..parts.turret import TurretSpec, write_turret
 from ..styles import Style
 from ..styles.ea_civilian import EA_CIVILIAN
 
-GENERATOR_VERSION = 2  # 2: textured meshes (M5-T27)
+GENERATOR_VERSION = 3  # 2: textured meshes (M5-T27); 3: the manifest's collision pieces (M7-T03)
+COLLISION_PIECE = "hull"  # a Saturn is one rigid body
 HARDPOINTS_NAME = "hardpoints.json"
 JSON_DIGITS = 5
 BURIED_MARGIN_M = 0.01
@@ -507,6 +509,13 @@ def hardpoints(v: Variant, everything: list[Piece], chunks: list[dict[str, Any]]
     }
 
 
+def collision_section(everything: Sequence[Piece], offset: np.ndarray) -> dict[str, Any]:
+    """The manifest's compound collision (D73), body frame: one convex shape per part, twins included, so the physics body
+    follows the hull's real outline (the gaps between pods and trusses stay open) where ``hardpoints.json``'s few big
+    primitives close them."""
+    return col.section({COLLISION_PIECE: [col.shape_for_part(p.part, offset) for p in everything]})
+
+
 # --- build -----------------------------------------------------------------------------------------------------------------
 def build_variant(asset_id: str, ctx: BuildContext) -> AssetOutputs:
     """Generate one Saturn into ``ctx.out_dir``.
@@ -550,6 +559,7 @@ def build_variant(asset_id: str, ctx: BuildContext) -> AssetOutputs:
         files={"obj": f"{asset_id}.obj", "mesh": hull.mesh_section["file"], "hardpoints": HARDPOINTS_NAME},
         extra={
             "mesh": hull.mesh_section,
+            "collision": collision_section(everything, offset),
             "chunks": [c["name"] for c in chunk_entries],
             "surface_spacing_m": spacing,
             "dimensions_m": {"length": hp["length_m"], "span": hp["span_m"], "height": hp["height_m"]},
