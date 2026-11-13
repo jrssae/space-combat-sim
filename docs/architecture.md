@@ -4919,7 +4919,9 @@ GDScript. Task ids below are M6 tasks.
 | Far representations | D70, §19.9 | §14.4 |
 | The jumpgate and the vortex | D69, §19.10 | M5's `JumpArrival` and its pool (§18.1 D51, §18.12) |
 | Seams for M9 and M11 | D71, §19.11 | - |
-| Vortex detail by distance, mass arrivals | §19.14 | M6-T20, in progress when this was written |
+| Vortex detail by distance, mass arrivals | §19.14 | M6-T20 |
+| Ships fly the vortex funnel | §19.15 | M6-T22 |
+| Who may open a jump point | §19.16 | M6-T23 |
 
 ### 19.1 Decisions
 
@@ -5178,7 +5180,7 @@ At 1 000 km (GPU): the gate 23 draw calls, 145 fps (the display's cap), 379 MB; 
   turns clockwise and travels in, along one spiral (checked frame by frame). Colours: arrival blue, dark sky blue; departure
   orange/yellow. The rim fades over a soft wisped edge measured against `references/jumpgate/jumpgate.png`.
 - **Open points** (`JumpPointPool`, replacing `JumpArrival` and `JumpArrivalPool`, which are gone): `open_for(at, forward,
-  ship_radius, ..., opener)` sizes a point for the ship (only a jump-capable opener, §19.15); a group arriving within 600 m (`SHARE_M`) in the first second (`SHARE_S`) shares
+  ship_radius, ..., opener)` sizes a point for the ship (only a jump-capable opener, §19.16); a group arriving within 600 m (`SHARE_M`) in the first second (`SHARE_S`) shares
   one point; the pool (`DEFAULT_COUNT` 4 until M6-T20) takes back its oldest point when none is free. The ship is placed as before
   (the pool opens after the ship is acquired), so missions and encounters keep their outcomes. Missions use `arrival: "jump"` (an
   open point) or `arrival: "gate"` (through the gate) and `m.depart(name)`; an encounter pool's `gate` table sends a share of arrivals
@@ -5228,10 +5230,14 @@ velocity rebase is `World.auto_boost_speed_mps`, an export of `main.tscn`, not a
 - **Cost (AC10),** `bench battle 1000` (pinned 0-11, idle): tick median 5.74 and 5.67 ms before gravity, 5.73 and 5.70 after (within
   1 %, 5 % allowed); gravity reaches about 270 ships, 680 tier rows and 1 100 bolts a tick for about 35 us. `test_ai_think_time`
   passes (AiPilot median 185 us for 13 ships). The velocity rebase adds nothing while riding (one boost: 0.45 to 0.64 ms).
-- **Full tier, GPU check and acceptance.** Full tier pending: after M6-T22 (ships shrink into and grow out of the vortex), so the
-  run is not stale; the suite's totals go here then. GPU numbers so far are in the tasks' notes (T10 to T12, T15, T19, T20; §19.14
-  has T20's: a hundred points cost 0.1 to 0.3 ms of GPU time). The agents' runs were headless gamescope with a 60 fps cap (the
-  session was locked), so the frame rate in a visible window on the maintainer's desktop is an (H) item.
+- **Full tier (T16), `scripts/run_tests.sh --full`, at `b75e0785` (2026-11-13):** passed in 4 886 s. Python 925 tests OK (2
+  skipped), 679 s. Rust kernels 138 passed, 0 failed. GUT with `GUT_SLOW` and the balance tests: 344 scripts, 3 705 tests, 3 680
+  passing, 25 risky or pending, 170 142 asserts, 4 040 s. The pending ones are the GPU files ("needs the real renderer, no
+  RenderingDevice headless") and two balance fights under the maintainer's review (AC12: 5 of 5 seeds did not finish in 360 s, and
+  waves [1] cleared in 900 s with no wingman left). Every console smoke passed; CI is green for that commit.
+- **GPU check and acceptance.** GPU numbers so far are in the tasks' notes (T10 to T12, T15, T19, T20, T22; §19.14 has T20's: a
+  hundred points cost 0.1 to 0.3 ms of GPU time). The agents' runs were headless gamescope with a 60 fps cap, so the frame rate in a
+  visible window on the maintainer's desktop is an (H) item, with the rest of the checklist in `docs/playtest.md`.
 
 ### 19.14 Vortex detail by distance and mass arrivals (M6-T20)
 
@@ -5263,7 +5269,31 @@ velocity rebase is `World.auto_boost_speed_mps`, an export of `main.tscn`, not a
 - **Console.** `vortex lod <auto|0-6>` forces one level on every vortex, `vortex view [mouth radii]` holds the camera on a point;
   provider `vortex` gains `lod`, `radius_px`, `forced_lod`, `lit`.
 
-### 19.15 Who may open a jump point (M6-T23)
+### 19.15 Ships fly the vortex funnel (M6-T22)
+
+- **The passage** (`VortexTransits`, one per World; rules in the pure `VortexTransit`, scaling in `TransitScale`, the record in
+  `VortexPassage`). It serves any ship through any open point or gate, whoever opened it: `begin_arrival(body, vortex, exit_position,
+  exit_velocity)` and `begin_departure(body, vortex, on_through)`. An arriving ship waits on the funnel's base through the opening
+  flash, comes out of the black ring in its own white flash, shrunk, and flies out to its place in the mouth, growing to exactly 1.0
+  there with the velocity its spawn asked for. A departing ship flies on down the axis, shrinking, and flashes and vanishes when its
+  nose touches the base. The vortex is held open for each passage; a gate closes after its last ship is through.
+- **Scale law** (`VortexTransit.scale_at`). The ship keeps its share of the funnel's width as it narrows, at most `MARGIN` (0.8) of it
+  and never above 1; every ship reaches the ring's share of the mouth (0.24) at the base, and one too big for that shrinks further.
+  The size used is the radius across the line of flight. In a ship-made point the funnel keeps T19's depth and the passage takes
+  `MIN_TRANSIT_S` (2.5 s) to `MAX_TRANSIT_S` (6 s) instead, the ship's own speed held between them.
+- **Normal, scaled, in transit** (`TransitScale`). The body is never scaled; its children and Jolt shapes are, and so are the hit
+  volumes (`Damageable.set_hull_scale`), so the ship stays targetable and collides at its scaled size. Mass, inertia and zero damping
+  are kept. Ships in one funnel do not collide with each other. Rebuilds are throttled (6 a tick, exactly 1 at the end).
+- **Pilots and flashes.** An AI pilot is held for the passage (`AiPilotDriver.in_passage`) and decides afresh afterward. Ring flashes
+  are one pooled multimesh of up to 256 (`transit_flash.gdshader`), a rendering-server instance placed in global coordinates every
+  tick so the rebase guard holds. An arrival under 2 px on screen comes out in place with the flash (`VortexTransit.worth_flying`),
+  which keeps a far battle wave as cheap as T20's.
+- **The player's jump** (`JumpgateHost`, `GateJump`) is always an outside shot, whatever view was active: it follows the ship down
+  the funnel to the ring's flash, fades to black, and on arrival watches the ship come out and grow, then hands the controls back.
+- **Every path:** missions, encounters, the battle's waves, the gate's departures and the player's jump. Console `transit`, provider
+  `transit` (`info.md`). Costs: `battle 1000` window tick median 5.94 ms, p99 7.81 against T20's 6.31 and 8.48.
+
+### 19.16 Who may open a jump point (M6-T23)
 
 - **The rule** (`JumpCapability`, pure; the maintainer, 2026-11-13): only a jump-capable ship opens a point. `ShipSpec` has
   `can_open_jump_point` (false for every designed hull: the Starfuries, the raider, the nine civilian ships) and `jump_hold_range_m`
@@ -5301,7 +5331,7 @@ velocity rebase is `World.auto_boost_speed_mps`, an export of `main.tscn`, not a
 - **Console.** `vortex collapse` (destroys the newest held point's opener), `transit carrier [-] [-] [none|follow]`; provider `vortex`
   gains `opener`, `hold_range_m`, `opener_distance_m`, `held`, `collapses`, `collapse_kills`, `last_collapse`; provider `carriers`.
 
-### 19.16 Known gaps (carried to later milestones)
+### 19.17 Known gaps (carried to later milestones)
 
 - Arrival-tick spike: while the battle's waves come in, the engine tick p99 is 14.4 to 15.1 ms against 10.2 placed. What is left
   is a capital joining play, about 7 ms in its tick whatever the number (the core's member rebuild when a hull enters the tree,

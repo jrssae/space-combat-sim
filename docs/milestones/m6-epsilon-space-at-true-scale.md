@@ -299,7 +299,7 @@ which changes the same native rows and rebase path:
 | T13 | D | Jumpgate references and the `jumpgate` generator (early start) | Q11 | Opus | Geometry read off references | done |
 | T14 | D | The jumpgate in the game: the prop, the vortex, 1 000 km broadcast, arrivals through the gate | T13, T09, Q12 | Opus | A new effect and the mission and encounter seams | done |
 | T15 | C | Far representations for the station's stand-in, the gate and the planets | T10, T14 | Opus | Hand-offs across three draw paths with no pop | done |
-| T16 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress (docs drafted beside T20) |
+| T16 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress (awaiting maintainer sign-off) |
 | T17 | E | Test tiers: quick, standard, balance and full, the quick list, its guard test, the Rust tests in the run | T01 | Sonnet | Scripts and one data file from a written plan (`docs/research/test-review/quick-test-suite.md`) | done |
 | T18 | E | The review's CONFIRMED test removals (sections A to D), each re-checked, the parity recordings still read | T17 | Opus | Proving two tests cover the same thing needs both read in full; rules on what must stay | done |
 | T19 | D | The vortex reworked and stand-alone: fitted to the gate, a shallow funnel, spiralling soft dark patches; open jump points use it too | T14 | Opus | Shader animation and a shared effect seam; the look is (H) | done (accepted by the maintainer, 2026-11-12) |
@@ -1247,6 +1247,15 @@ which changes the same native rows and rebase path:
   note and §18's D51 and §18.12 `JumpArrival` lines brought up to date; §19.14 is T20's placeholder), the M6 section and (H)
   checklist of `docs/playtest.md`, and the roadmap rows. Remaining: T20's subsection, the full tier from T17's runner, the GPU check on
   the maintainer's machine (AC7, AC8, AC9, AC13 numbers) and the maintainer's confirmation.
+
+- **Done (2026-11-13), all but the maintainer's part:** `scripts/run_tests.sh --full` passed in 4 886 s at `b75e0785`.
+  Python 925 tests OK (2 skipped); Rust kernels 138 passed; GUT (`GUT_SLOW` and balance) 344 scripts, 3 705 tests, 3 680 passing,
+  25 risky or pending, 170 142 asserts. The pending: GPU files that need the real renderer (no RenderingDevice headless) and two
+  balance fights under review (AC12: 5 of 5 seeds did not finish in 360 s; waves [1] cleared in 900 s with 0 wingmen left). Every
+  console smoke passed and CI is green. `docs/architecture.md` §19 is as built, with T20 (§19.14), T22 (§19.15) and T23 (§19.16) and
+  the full tier's totals in §19.13; the playtest checklist gained T22 and T23; the roadmap row says awaiting acceptance.
+- **Remaining for the maintainer:** the (H) play-test of `docs/playtest.md` "M6 acceptance checklist", the frame rates in a visible
+  window (the agents measured headless at a 60 fps cap), the two balance fights, and confirming M6; then `m6` merges into `main`.
 
 ### M6-T17 Test tiers: quick, standard, balance and full
 

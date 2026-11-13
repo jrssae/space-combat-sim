@@ -953,4 +953,23 @@ want a window you can see.
       comparison. Frame rate with 100 points forming on your GPU in a visible window (the agents' numbers are in the milestone file).
 - [ ] **T20, far points:** a stand-alone point beyond the 50 km far plane is not drawn at all (no far stand-in yet); say if that matters.
 
+**Ships in the vortex (T22) and who may open a point (T23)** (`M6-T22 ship transit/`, `M6-T23 jump capability/`)
+
+- [ ] **T22, shrink and grow:** `transit depart gate fighter follow`, then `transit arrive gate capital follow` (and `point` for
+      ship-made points): the ship flies down the funnel shrinking into the black ring and vanishes in a white flash; an arrival comes
+      out of the ring in a flash, small, and grows to full size by the mouth. A capital shrinks more than a fighter. It stays
+      targetable and can be hit while scaled.
+- [ ] **T22, the player's jump:** `X: REQUEST JUMP` from any view (chase, cockpit): the camera cuts to an outside shot that follows
+      the ship down the funnel to the ring's flash, fades, and on the way back shows it come out and grow before handing control
+      back. Say if the flash is too bright close up.
+- [ ] **T23, a fighter cannot open a point:** `transit arrive point fighter` is a debug point held by nothing; in play no fighter
+      opens one. A raid (`encounters force raid`) arrives through a capital's point or the gate, as its data says.
+- [ ] **T23, a capital's point collapses:** `transit carrier point follow`, then `vortex collapse` (destroys the opener), or fly a
+      carrier away beyond twice its length from its mouth: the point collapses at once with a flash. Check `state vortex`
+      (`last_collapse`: `opener_destroyed` or `out_of_range`).
+- [ ] **T23, ships caught inside die:** collapse a point while a ship is still in its funnel (`vortex collapse` right after
+      `transit arrive point capital`): the ship is destroyed with no kill credit (`collapse_kills` in `state vortex`).
+- [ ] **T23, the battle:** `bench battle 1000`: fighters ride their side's capital points or come through the battle's own gate;
+      only capitals open points.
+
 **Not for you yet:** Babylon 5 itself (M7), time warp (M9), other planets to fly to (M9).
