@@ -260,6 +260,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T19 | A | Station sections: the frame and drum cut into linked sections, each with its own LOD and visibility range, and near-only detail props (maintainer, 2026-11-13) | T04 | Opus | One 8 km mesh gets one LOD and is never culled; T05's detail must be built on this | done |
 | T20 | C | The hangar behind the menu after the door resize: one Starfury per door (six), a narrower hall (maintainer, 2026-11-13) | T05, T09 | Opus | T09 sized the hall and racks to the old 64 m doors | in progress |
 | T21 | A | Follow-up to T05 from the STL: the Cobra arm's pentagonal cross-section, creases either side of the launch doors, and a roofed rectangular cargo bay (maintainer, 2026-11-13) | T05 | Opus | Shape read off the STL; the look is (H) | in progress |
+| T22 | A | The dorsal spine and the command section rebuilt to the STL (per-part sections IoU >= 0.90; maintainer, 2026-11-13) | T21 | Opus | T04 built them to the overall silhouette; the per-part check scores them 0.38 to 0.72 | not started |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M7-T01 Station references and measurements
@@ -833,6 +834,19 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   collision read the new arm.
 - **Done when:** a sheet of STL section cuts beside the new arm, the doors at 50 m, and the cargo bay, approved by the maintainer
   (H); tests green; committed.
+
+### M7-T22 The dorsal spine and the command section to the STL
+
+- **Why (maintainer, 2026-11-13):** T21's per-part section check (CLAUDE.md, "STL fidelity") scores the dorsal spine 0.48 to 0.72
+  and the command section and bow 0.38 to 0.71: T04 built them to the overall silhouettes; the STL's sloped side plates and spine
+  profile were never built. The maintainer approved T21 with this as a follow-up; until it lands, the two section tests are
+  pending with T22 named as the reason.
+- **Agent:** Opus. **Depends on:** T21.
+- **What:** rebuild the spine (bow to z 6 360, the cargo modules, radiators, the observation dome) and the command section and bow
+  to the STL's sections; the window panels, compartments, D75's spine and tower mounts (kept in place, reshaping locally),
+  collision, the launch clearance sector, T19's sections and T05's hardpoints follow; the two tests un-pended and passing.
+- **Done when:** each spine and command-section plane at IoU >= 0.90 (or an exemption the maintainer accepts), a sheet (H), tests
+  green, committed.
 
 ### M7-T14 Integration, full suite, docs and acceptance
 
