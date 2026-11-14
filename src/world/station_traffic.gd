@@ -41,10 +41,10 @@ const DEFAULT_RAID: int = 6
 ## watches from toward the bay, to the side and above, looking a little toward the bay from the hold point (m).
 const SHOW_BACK_M: float = 300.0
 const SHOW_BACK_MPS: float = 8.0
-const VIEW_TOWARD_M: float = 240.0
-const VIEW_SIDE_M: float = 120.0
-const VIEW_UP_M: float = 45.0
-const VIEW_LOOK_M: float = 70.0
+const VIEW_TOWARD_M: float = 190.0
+const VIEW_SIDE_M: float = 85.0
+const VIEW_UP_M: float = 35.0
+const VIEW_LOOK_M: float = 20.0
 
 signal docked(ship_name: String)
 signal undocked(ship_name: String)
