@@ -633,6 +633,8 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   the ejection.
 - **Shot holds (maintainer, 2026-11-13):** every shot holds at least **1 s**; in a wing launch the row and exit shots hold long
   enough to show several Starfuries coming out before cutting; badly framed variants are dropped from the pools.
+- **Door to launch (maintainer, 2026-11-13):** the time between the doors opening and the launch is short: the clamp turns the
+  fighter while the leaves swing, and it is ejected within about 0.25 to 0.5 s of the doors being fully open.
 - **Done when:** AC7.
 - **Done (as built; contracts in `docs/architecture.md` §20.2):**
   - **`LaunchSequence`** (`src/mission/launch_sequence.gd`, pure, in the drum's frame): one wing's launch of up to twelve, the first
