@@ -202,13 +202,13 @@ func test_a_refused_start_is_shown_not_swallowed() -> void:
 # --- New game ----------------------------------------------------------------------------------------------------
 
 
-func test_new_game_lists_the_missions_then_the_four_scenes() -> void:
+func test_new_game_lists_the_missions_then_the_five_scenes() -> void:
 	var front: FrontEnd = await _front_end(_missions())
 	await _pad(&"ui_accept")
 	assert_eq(_page_title(front), "New game")
 	var page: NewGameSelect = front.frame().current_page() as NewGameSelect
 	assert_eq(page.option_ids(), [&"mission_demo", &"mission_second", &"combat_sandbox", &"dogfight", &"instructor_route",
-			&"civilian_showcase"] as Array[StringName])
+			&"civilian_showcase", &"station_showcase"] as Array[StringName])
 	assert_eq(_focused_text(front), "Demo Run")
 	assert_false(page.show_right, "the text goes under the list")
 
@@ -246,7 +246,7 @@ func test_new_game_starts_each_sandbox_scene() -> void:
 	var front: FrontEnd = await _front_end()
 	await _pad(&"ui_accept")
 	var page: NewGameSelect = front.frame().current_page() as NewGameSelect
-	assert_eq(page.option_ids(), [&"combat_sandbox", &"dogfight", &"instructor_route", &"civilian_showcase"] as Array[StringName],
+	assert_eq(page.option_ids(), [&"combat_sandbox", &"dogfight", &"instructor_route", &"civilian_showcase", &"station_showcase"] as Array[StringName],
 			"with no missions the scenes alone")
 	for id: StringName in page.option_ids():
 		page.button_of(id).pressed.emit()
@@ -255,6 +255,7 @@ func test_new_game_starts_each_sandbox_scene() -> void:
 		GameFlow.make_request(&"sandbox", &"dogfight"),
 		GameFlow.make_request(&"sandbox", &"instructor_route"),
 		GameFlow.make_request(&"sandbox", &"civilian_showcase"),  # M5-T16
+		GameFlow.make_request(&"sandbox", &"station_showcase"),  # M7-T12
 	] as Array[Dictionary])
 	for request: Dictionary in game.played:
 		assert_true(FileAccess.file_exists(GameFlow.scenario_path(request["scenario_id"])), "%s exists" % request["scenario_id"])

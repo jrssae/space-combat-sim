@@ -12,7 +12,7 @@ const SCENARIO_DIR := "res://data/scenarios/"
 ## The debug overlay's text is rebuilt this often while it shows (M4-T36): a readout, not an animation.
 const OVERLAY_INTERVAL_S: float = 0.1
 const SCENARIO_CHOICES: Array[StringName] = [&"combat_sandbox", &"free_flight", &"instructor_route", &"dogfight",
-		&"civilian_showcase", &"belt_showcase", &"station_launch"]
+		&"civilian_showcase", &"belt_showcase", &"station_launch", &"station_showcase"]
 
 ## The player's hull reached zero (the ship is hidden and disabled; input is ignored until the respawn).
 signal player_died
@@ -88,6 +88,8 @@ var star_system: StarSystemHost = null
 var launches: LaunchDirector = null
 ## Traffic at the station (M7-T10): docking, freighters, raids at it; console `traffic`.
 var traffic: StationTraffic = null
+## The station's exterior tour (M7-T12): console `tour`; the tour's shots play on the cinematic camera.
+var tours: TourDirector = null
 ## Where and when the scenario is in its star system (M6-T09): `ScenarioFrame.resolve`'s result, empty without a system.
 var frame: Dictionary = {}
 
@@ -232,6 +234,10 @@ func _ready() -> void:
 		var why: String = launches.launch_from_bay(launch_bay)
 		if not why.is_empty():
 			push_warning("Main: the scenario starts in %s: %s" % [launch_bay, why])
+	tours = TourDirector.new()
+	tours.main = self
+	add_child(tours)
+	_start_station_traffic(scenario.get("station", {}) as Dictionary)
 	if not (scenario.get("mission", {}) as Dictionary).is_empty():
 		mission = MissionRunner.create(self, scenario)
 	camera_rig.setup(ship, ship.cockpit_anchor, ship.get_chase_offset(), ship.set_cockpit_interior_visible)
@@ -795,6 +801,18 @@ func _spawn_props(props: Array) -> void:
 		world.spawn(buoy, entry["position"], Basis.IDENTITY, targets)
 		buoys.append(buoy)
 		director.watch_buoy(buoy)
+
+
+# The station's traffic the scenario asks for at the start (M7-T12): the maintenance bots are always there; the cargo ferry, a Saturn
+# backed in at the cargo bay with its bots, is what `station.cargo_ferry` adds.
+func _start_station_traffic(wanted: Dictionary) -> void:
+	var ferry: int = int(wanted.get("cargo_ferry", 0))
+	var station: Station = far_props.station if far_props != null else null
+	if ferry <= 0 or station == null or station.bots == null or station.bots.cargo == null:
+		return
+	var made: ConsoleResult = station.bots.cargo.load_scene(ferry)
+	if not made.ok:
+		push_warning("Main: the cargo ferry did not start: %s" % made.error)
 
 
 # The scenario's asteroid belts (M5-T29, D63), each laid out from its seed and built as static rows.

@@ -13,6 +13,8 @@ extends RefCounted
 ##                 "velocity": Vector3,             # the start velocity (M5-T10), zero unless given
 ##                 "launch_bay": String},           # (M7-T08) `player.launch_bay` or `player.launch` {wing, door}: the start on
 ##                                                  #       that Cobra bay's rack ("cobra_bay_alpha_3"); "" in flight
+##      "station": Dictionary,                      # (M7-T12) the station's traffic at the start: {"cargo_ferry": int} (the Saturn 3 backed
+##                                                  #       in at the cargo bay and that many ferry bots, 0 for none); {} for none
 ##      "props": Array[Dictionary],                 # each {"type": StringName, "name": String,
 ##                                                  #       "position": UniversePos, "velocity": Vector3}
 ##      "jumpgates": Array[Dictionary],             # (M6-T14) `jumpgates[]`, each {"type": &"jumpgate", "name", "position"
@@ -213,6 +215,10 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	if frame is String:
 		return _failure(frame as String)
 
+	var station: Variant = _station(root.get("station", {}), source)
+	if station is String:
+		return _failure(station as String)
+
 	var result: Dictionary = _empty()
 	result["ok"] = true
 	result["scenario_id"] = StringName(scenario_id as String)
@@ -230,6 +236,7 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	result["mission"] = mission
 	result["cinematics"] = cinematics
 	result["belts"] = belts
+	result["station"] = station
 	result["civilian_names"] = civilian_names
 	result["frame"] = frame
 	return result
@@ -306,6 +313,21 @@ static func _civilian_names(raw: Variant, source: String) -> Variant:
 		if names.is_empty() or not (list is Array) or names.size() != (list as Array).size():
 			return "%s: civilian_names.%s must be a non-empty list of names" % [source, key]
 		out[hull] = names
+	return out
+
+
+## `station` (M7-T12): the station's traffic at the start, `{"cargo_ferry": n}` with n from 0 to 12 (the cargo ferry's bots); or an error string.
+static func _station(raw: Variant, source: String) -> Variant:
+	if not raw is Dictionary:
+		return "%s: station must be an object" % source
+	var out: Dictionary = {}
+	for key: String in (raw as Dictionary).keys():
+		if key != "cargo_ferry":
+			return "%s: station.%s is not a known key (cargo_ferry)" % [source, key]
+		var n: Variant = (raw as Dictionary)[key]
+		if typeof(n) != TYPE_INT and typeof(n) != TYPE_FLOAT or float(n) != floorf(float(n)) or int(n) < 0 or int(n) > BotCargoScene.MAX_BOTS:
+			return "%s: station.cargo_ferry must be a whole number from 0 to %d" % [source, BotCargoScene.MAX_BOTS]
+		out["cargo_ferry"] = int(n)
 	return out
 
 
@@ -786,7 +808,7 @@ static func _empty() -> Dictionary:
 			"props": [] as Array[Dictionary], "jumpgates": [] as Array[Dictionary], "pools": {}, "waves": [] as Array[Dictionary],
 			"loop": {"from_wave": 0, "add_per_loop": 1}, "routes": [] as Array[Route], "spawns": [] as Array[Dictionary],
 			"wings": [] as Array[Dictionary], "mission": {}, "cinematics": {}, "belts": [] as Array[Dictionary],
-			"civilian_names": {}, "placeholders": {}}
+			"civilian_names": {}, "placeholders": {}, "station": {}}
 
 
 static func _failure(message: String) -> Dictionary:

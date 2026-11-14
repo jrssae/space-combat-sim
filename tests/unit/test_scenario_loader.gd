@@ -695,3 +695,20 @@ func test_a_launch_bay_start_is_read_either_way() -> void:
 	var file: Dictionary = ScenarioLoader.load("res://data/scenarios/station_launch.json")
 	assert_true(bool(file["ok"]), str(file.get("error", "")))
 	assert_eq(file["player"]["launch_bay"], "cobra_bay_alpha_3", "the station launch scenario starts in Alpha 3")
+	assert_eq(file["station"], {}, "no station traffic unless it is asked for")
+
+
+# M7-T12: the station showcase starts in a bay with the cargo ferry's bots; the traffic key is checked.
+func test_station_traffic_at_the_start() -> void:
+	var file: Dictionary = ScenarioLoader.load("res://data/scenarios/station_showcase.json")
+	assert_true(bool(file["ok"]), str(file.get("error", "")))
+	assert_eq(file["player"]["launch_bay"], "cobra_bay_alpha_3", "the showcase starts in a bay, so the launch plays")
+	assert_eq(file["station"], {"cargo_ferry": 5})
+	var data: Dictionary = {"scenario_id": "t", "player": {"position": [0, 0, 0]}, "station": {"cargo_ferry": 20}}
+	_assert_fails(data, "station.cargo_ferry must be a whole number from 0 to 12")
+	data["station"] = {"patrols": 2}
+	_assert_fails(data, "station.patrols is not a known key")
+	data["station"] = []
+	_assert_fails(data, "station must be an object")
+	data["station"] = {"cargo_ferry": 0}
+	assert_eq(ScenarioLoader.from_data(data)["station"], {"cargo_ferry": 0})

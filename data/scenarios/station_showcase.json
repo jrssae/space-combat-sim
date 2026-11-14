@@ -1,0 +1,14 @@
+{"scenario_id": "station_showcase", "description": "Babylon 5: launch from a Cobra bay with your wing, then fly free round the station with its maintenance bots and a freighter at the cargo bay. The console's `tour` shows the station's sights (M7-T12).", "system_id": "local",
+ "anchor": {"place": "babylon5", "at": [5500, -1200, -6000]}, "epoch": 7482650,
+ "player": {"launch_bay": "cobra_bay_alpha_3", "position": [0, 0, 0], "forward": [0, 0, -1]},
+ "station": {"cargo_ferry": 5},
+ "pools": {"starfury_ally": 3},
+ "wings": [
+   {"name": "ALPHA", "faction": "earth_alliance", "leader": "player", "order": "cover", "formation": "finger_four",
+    "members": [
+      {"type": "starfury_ally", "name": "ALPHA 2", "anchor": "player", "offset": [-60, 0, 40],
+       "behaviour": {"type": "ai", "profile": "ally_starfury"}},
+      {"type": "starfury_ally", "name": "ALPHA 3", "anchor": "player", "offset": [60, 0, 40],
+       "behaviour": {"type": "ai", "profile": "ally_starfury"}},
+      {"type": "starfury_ally", "name": "ALPHA 4", "anchor": "player", "offset": [120, 0, 80],
+       "behaviour": {"type": "ai", "profile": "ally_starfury"}}]}]}

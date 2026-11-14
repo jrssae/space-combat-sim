@@ -275,7 +275,7 @@
         "offset": [
          9,
          -14,
-         19
+         10
         ]
        },
        "look_at": {
@@ -303,7 +303,7 @@
         "offset": [
          8,
          -14,
-         17
+         9
         ]
        },
        "look_at": {
@@ -428,7 +428,7 @@
        "position": {
         "actor": "bay",
         "offset": [
-         17,
+         15,
          -11,
          0
         ]
@@ -456,7 +456,7 @@
        "position": {
         "actor": "bay",
         "offset": [
-         17,
+         15,
          -10,
          -2
         ]
@@ -585,7 +585,7 @@
         "offset": [
          14,
          -14,
-         16
+         9
         ]
        },
        "look_at": {
@@ -613,7 +613,7 @@
         "offset": [
          16,
          -14,
-         18
+         9
         ]
        },
        "look_at": {
@@ -803,7 +803,7 @@
        "position": {
         "actor": "bay",
         "offset": [
-         -14,
+         -18,
          9,
          -45
         ]
@@ -831,7 +831,7 @@
        "position": {
         "actor": "bay",
         "offset": [
-         -12,
+         -17,
          10,
          -22
         ]
@@ -1098,7 +1098,7 @@
        "position": {
         "actor": "fighter",
         "offset": [
-         -14,
+         14,
          0,
          6
         ]
@@ -1126,7 +1126,7 @@
        "position": {
         "actor": "fighter",
         "offset": [
-         -18,
+         18,
          -2,
          12
         ]

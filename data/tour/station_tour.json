@@ -1,0 +1,141 @@
+{
+  "min_shot_s": 1.0,
+  "order": ["bow", "main_docking_bay", "cobra_arm", "defence_grid", "drum", "vanes", "cargo_bay"],
+  "templates": {
+    "push_in": {
+      "keys": [
+        {
+          "t": 0.0,
+          "at": [0.0, 0.02, 0.1],
+          "aim": [0.0, 0.0, 0.0],
+          "fov": 62.0
+        },
+        {
+          "t": 9.0,
+          "at": [0.0, 0.0, -0.35],
+          "aim": [0.0, 0.0, 0.0],
+          "fov": 56.0
+        }
+      ]
+    },
+    "drift_right": {
+      "keys": [
+        {
+          "t": 0.0,
+          "at": [-0.28, 0.05, 0.0],
+          "aim": [0.0, 0.0, 0.0],
+          "fov": 58.0
+        },
+        {
+          "t": 4.5,
+          "at": [0.0, 0.07, -0.12],
+          "aim": [0.0, 0.0, 0.0],
+          "fov": 58.0
+        },
+        {
+          "t": 9.0,
+          "at": [0.28, 0.05, 0.0],
+          "aim": [0.0, 0.0, 0.0],
+          "fov": 58.0
+        }
+      ]
+    },
+    "drift_left": {
+      "keys": [
+        {
+          "t": 0.0,
+          "at": [0.28, 0.0, 0.0],
+          "aim": [0.0, 0.0, 0.0],
+          "fov": 58.0
+        },
+        {
+          "t": 4.5,
+          "at": [0.0, 0.02, -0.12],
+          "aim": [0.0, 0.0, 0.0],
+          "fov": 58.0
+        },
+        {
+          "t": 9.0,
+          "at": [-0.28, 0.0, 0.0],
+          "aim": [0.0, 0.0, 0.0],
+          "fov": 58.0
+        }
+      ]
+    },
+    "crane_up": {
+      "keys": [
+        {
+          "t": 0.0,
+          "at": [0.05, -0.2, 0.08],
+          "aim": [0.0, 0.0, 0.0],
+          "fov": 60.0
+        },
+        {
+          "t": 9.0,
+          "at": [-0.05, 0.22, -0.12],
+          "aim": [0.0, 0.0, 0.0],
+          "fov": 60.0
+        }
+      ]
+    },
+    "pull_back": {
+      "keys": [
+        {
+          "t": 0.0,
+          "at": [0.08, 0.04, -0.4],
+          "aim": [0.0, 0.0, 0.0],
+          "fov": 52.0
+        },
+        {
+          "t": 9.0,
+          "at": [-0.04, 0.08, 0.15],
+          "aim": [0.0, 0.0, 0.0],
+          "fov": 62.0
+        }
+      ]
+    }
+  },
+  "points": {
+    "bow": {
+      "caption": "BOW: THE COMMAND SECTION AND THE DOCKING APERTURE",
+      "scale": 0.6,
+      "stand": [0, 0, -450]
+    },
+    "main_docking_bay": {
+      "caption": "MAIN DOCKING BAY",
+      "scale": 1.0
+    },
+    "cobra_arm": {
+      "caption": "COBRA ARM, WING {wing}: LAUNCH BAYS",
+      "scale": 0.5,
+      "arm": true,
+      "camera": [100.0, 285.0, -2060.0],
+      "subject": [0.0, 240.0, -1887.0],
+      "templates": ["push_in", "drift_right", "drift_left"]
+    },
+    "defence_grid": {
+      "caption": "DEFENCE GRID: LIGHT TURRETS ON THE PRONG OF WING {wing}",
+      "scale": 0.5,
+      "arm": true,
+      "hardpoint": "",
+      "body": "drum",
+      "camera": [0.0, 385.0, -2110.0],
+      "subject": [0.0, 292.0, -2310.0],
+      "shows": ["L1", "L2"],
+      "templates": ["push_in", "drift_right", "drift_left"]
+    },
+    "drum": {
+      "caption": "THE DRUM: ROTATING HABITAT",
+      "scale": 1.0
+    },
+    "vanes": {
+      "caption": "THE VANES",
+      "scale": 1.0
+    },
+    "cargo_bay": {
+      "caption": "THE CARGO BAY: ZERO GRAVITY",
+      "scale": 0.7,
+      "stand": [0, 0, -90]
+    }
+  }
+}

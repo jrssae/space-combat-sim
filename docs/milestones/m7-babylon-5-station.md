@@ -264,7 +264,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T09 | C | The station interior for the front end: the `b5_interior` generator and the backdrop | T01, Q7 | Opus | A new interior asset and its lighting | done |
 | T10 | D | AI and traffic around the station: raids at it, avoidance of its surface, allies from the bays, civilians through the aperture | T07, T08, Q8 | Opus | Native AI at a body far larger than any hull so far | in progress |
 | T11 | D | Maintenance bots: the generator and their loops | T06, Q11 | Sonnet | A small asset and a simple mover | in progress |
-| T12 | D | Tour points and a station sandbox scenario (the base of M8's exterior tour) | T05, T08 | Sonnet | Data and `CINEMATIC` shots on existing seams | in progress |
+| T12 | D | Tour points and a station sandbox scenario (the base of M8's exterior tour) | T05, T08 | Sonnet | Data and `CINEMATIC` shots on existing seams | done |
 | T13 | B | Performance and the GPU check: the station in view at every range, three squadrons, the grid and a raid | T07, T10 | Opus | Measurement on the maintainer's machine; the budget call | not started |
 | T15 | A | Starfury and raider surfaces from show references, with low and high texture sets for the texture detail setting (maintainer, 2026-11-12; numbered last because it was added after the others had numbers) | M5-T40 | Fable | Two hero hulls seen up close; the look is (H) and needs a sheet first | done |
 | T16 | A | Raider fighter rebuilt to its STL at 90% fidelity, the wing's leading-edge panels first (maintainer, 2026-11-13) | T15 | Opus | The raider was built without an STL; the maintainer finds its shape too far from the reference | done |
@@ -900,6 +900,48 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 - **Files:** `data/scenarios/station_showcase.json` (start in a bay, the station's traffic on), the tour shots keyed on the tour
   points (`CinematicShot`), a `tour` console command that plays them, `info.md`, a test that every tour point exists in the asset.
 - **Done when:** the sandbox starts from the menu and the tour plays end to end.
+- **Done (as built; approved by the maintainer 2026-11-14 after watching the tour live):**
+  - **Sandbox:** `data/scenarios/station_showcase.json` (also in the New game list as "Babylon 5 station", in `settings.scenario`'s choices
+    and `Main.SCENARIO_CHOICES`): the player starts on Alpha 3 with three wingmen, so the launch plays, then flies free. New scenario key
+    `station: {"cargo_ferry": n}` (`ScenarioLoader._station`, 0 to 12) starts T11's cargo scene (the Saturn backed in at the cargo bay and
+    n ferry bots) at load (`Main._start_station_traffic`); the maintenance bots are always on. T10's `StationTraffic` is a separate switch
+    (`traffic auto on`, or free-flight encounters): `traffic freighter` while the ferry's Saturn sits at the hold point would put a second
+    one there.
+  - **The tour** (`data/tour/station_tour.json`, `TourBook` in `src/camera/tour_book.gd`, pure; `TourDirector` in `src/camera/tour_director.gd`,
+    Main's child): seven stops in order, `bow`, `main_docking_bay`, `cobra_arm`, `defence_grid`, `drum`, `vanes`, `cargo_bay`, one 9 s shot
+    each (never under the 1 s floor, enforced when the file loads), captioned in the lower letterbox bar. The reactor and the grid tower
+    are not toured (maintainer, after the first sheet); their hardpoints stay. A stop is a tour hardpoint (`StationHardpoints.tour_points`)
+    or a view of its own (`camera`, `subject`, `body`; the grid stop has no hardpoint); `shows` names the grid mounts a shot points out.
+    Moves are five templates (`push_in`, `drift_right`, `drift_left`, `crane_up`, `pull_back`) written in fractions of the camera-to-subject
+    distance, drawn per stop from a seeded shuffle bag (`LaunchCut.unit`), so a tour differs run to run and no move repeats before its pool
+    has played. Shots name their actors `<stop>.stop` and `<stop>.subject` (`TourBook.pose_of`, placed from the station's pose every frame, so
+    a drum stop rides the drum and a rebase moves nothing on screen); every key carries an `up` against its stop, so the arm is never sideways.
+  - **Arms:** the `cobra_arm` stop (camera above and beside the arm looking along the six-door strip, the drum behind) and the `defence_grid`
+    stop (the light turrets L1 and L2 on an arm's forward prong) are `arm: true`: `TourBook.arm_turn` turns the stop about the drum's axis
+    onto the arm whose whole sweep over the shot, from when the stops before it have played, stays 20 degrees clear of the launch-blocked
+    sectors (the spine over the drum), drawn from the seed among the fit ones; the caption names the wing.
+  - **Console:** `tour`, `tour <stop>`, `tour stop`, `tour status`, `tour seed <n|off>` and the `tour` provider (`info.md`). Not while the
+    player is still launching. A or Start ends the whole tour (a shot that stops before its end was cut: `TourDirector._on_shot_finished`).
+  - **Clearance (maintainer: "the camera is clipping through the Cobra bay walls"):** `tests/unit/station_clearance.gd` reads the distance
+    from a point to the drawn hull (the frame's and the drum's meshes and their props, the drum turned to its angle at that moment).
+    `test_tour_book.gd` holds every tour shot, every arm choice and 24 drum angles to 2 m (closest approach: over 8 m); the new
+    `test_launch_shot_clearance.gd` plays every launch variant, in the phase's own window, on launches through the pure `LaunchSequence`
+    (alpha doors 1 to 6, beta, delta and zeta door 3, three drum angles) against the hull, props and the open door leaves, 2 m. It found five
+    launch variants in `data/launch/cobra_launch.json` with the camera in a wall or leaf, all moved: `rack_wingman` (19 m aft of door 6 was
+    past the hall's end wall, now z 10 and 9), `hold_inside` (the same, now z 9), `drop_low_pass` (1.7 m from an open leaf, x -18 and -17),
+    `turn_side` (1.7 m from a hall prop, x 15), `exit_side` (inside a prop at the release point, mirrored to the fighter's clear side). It
+    also found a fighter released at the edge of the blocked sector skimming the spine (0.9 m, 3 s out): that is the hold's, fixed in T08's
+    new bullet.
+  - **Tests:** `tests/unit/test_tour_book.gd` (15: the file, every stop exists in the station, 1 s shots, bad files refused, plan order, the
+    shuffle bag, the subject in frame in every shot, the grid stop's mounts on screen in every shot, the arm choice clear of the spine for
+    its whole shot, the strip in frame on every arm and upright, a drum stop rides the drum, a rebase, unknown actors, the clearance, the
+    field's own sanity), `test_launch_shot_clearance.gd` (1), integration `test_station_tour.gd` (8: the start in a bay with the bots, the
+    ferry and the Saturn; no tour from the rack; all seven stops end to end with the subject on screen at three moments of each and each
+    held its whole shot; A or Start skips; one stop alone and `tour stop`; the arm shot upright and rebase-proof; the filmed arm clear of
+    the spine and named in the caption; the grid's turrets on screen), `test_scenario_loader.gd` (+1), `test_front_end.gd` (the menu lists
+    and starts it).
+  - **Sheets (H, approved):** `references/screenshots/M7-T12 tour/M7-T12_tour_sheet.png` and `M7-T12_launch_fixes_sheet.png`
+    (RX 6950 XT, Forward+, X11, 1 280 x 720). `run_sheet.sh` beside them rebuilds both in one window.
 
 ### M7-T13 Performance and the GPU check
 
