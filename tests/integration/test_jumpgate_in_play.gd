@@ -54,7 +54,7 @@ func test_the_player_jumps_out_and_comes_back_through_the_blue_vortex() -> void:
 	assert_not_null(main.far_props.station, "free flight places the station's stand-in (M6-T09)")
 	assert_almost_eq(gate.global_position.distance_to(main.far_props.station.global_position), 50000.0, 10.0,
 			"on the station's rail, 50 km from it (M6-T09)")
-	await _put_player_in_front(2600.0)
+	await _put_player_in_front(1900.0)
 	assert_false(main.gates.jump_offered(), "not offered until the gate is targeted")
 	assert_true(main.ship.targeting.select_id(gate.targetable.get_instance_id()))
 	await _ticks(2)
@@ -114,8 +114,10 @@ func test_the_player_jumps_out_and_comes_back_through_the_blue_vortex() -> void:
 # then at once), each jump opens the vortex once going and once coming back, and the cinematic stays on the ship, facing the gate.
 func test_jumping_again_opens_the_vortex_once_each_way_and_the_camera_stays_on_the_ship() -> void:
 	await _start()
-	await _put_player_in_front(2600.0)
+	await _put_player_in_front(1900.0)
 	var axis: Vector3 = gate.global_basis * gate.departure_forward
+	assert_true(main.ship.targeting.select_id(gate.targetable.get_instance_id()), "the gate targeted, as in play")
+	assert_true(main.overlay.visible, "the debug readout shows, as it does by default")
 	var waits: Array[int] = [0, 180, 1]  # ticks after the jump before, before asking again
 	for n: int in waits.size():
 		await _ticks(waits[n])
@@ -129,6 +131,7 @@ func test_jumping_again_opens_the_vortex_once_each_way_and_the_camera_stays_on_t
 		var worst_off_ship_deg: float = 0.0
 		var farthest_m: float = 0.0
 		var watched_other: int = 0
+		var squares: int = 0
 		for i: int in 90 * 60:
 			await _ticks(1)
 			var active: bool = gate.vortex.is_active()
@@ -139,6 +142,8 @@ func test_jumping_again_opens_the_vortex_once_each_way_and_the_camera_stays_on_t
 					arrivals += 1
 			was_active = active
 			var state: GateJump.State = main.gates.jump.state
+			if main.camera_rig.is_playing_shot() and main.overlay.bracket().is_shown():
+				squares += 1
 			if main.ship.visible and (state == GateJump.State.RUN_IN or state == GateJump.State.CLEARING):
 				var cam: Camera3D = main.camera_rig.active_camera()
 				var to_ship: Vector3 = main.ship.get_global_transform_interpolated().origin - cam.global_position
@@ -160,10 +165,67 @@ func test_jumping_again_opens_the_vortex_once_each_way_and_the_camera_stays_on_t
 		assert_lt(farthest_m, 200.0, "%s: the camera stays by the ship" % label)
 		assert_lt(worst_off_ship_deg, 30.0, "%s: with the ship in the picture" % label)
 		assert_lt(worst_off_axis_deg, 35.0, "%s: looking into the gate all the way in, not swinging round with a turning ship" % label)
+		assert_eq(squares, 0, "%s: no target square over the gate while the cinematic plays" % label)
 		assert_false(main.camera_rig.is_playing_shot(), "%s: the shot ended" % label)
 		assert_false(main.controls_locked(), "%s: the controls are back" % label)
 	assert_eq(gate.departed, 3)
 	assert_eq(gate.arrived, 3)
+
+
+# M7-T28: the gate takes the player's request only from within 2 km; farther out it answers "out of range" and nothing starts.
+func test_a_jump_is_refused_beyond_two_km() -> void:
+	await _start()
+	await _put_player_in_front(GateJumpRequest.range_m() + 300.0)
+	assert_true(main.ship.targeting.select_id(gate.targetable.get_instance_id()))
+	assert_false(main.gates.can_request_jump(), "2.3 km out: too far")
+	assert_eq(main.gates.jump_refusal(), GateJumpRequest.out_of_range_text())
+	assert_eq(main.gates.start_jump(), GateJumpRequest.out_of_range_text(), "the request is refused with the answer")
+	assert_false(main.gates.jump.is_active(), "and no jump starts")
+	assert_false(main.controls_locked())
+	assert_eq(gate.vortex.openings, 0)
+	var refused: ConsoleResult = main.gates._cmd_gate({&"action": &"jump"})
+	assert_false(refused.ok, "the console's jump obeys the same rule")
+	assert_false(main.gates.jump.is_active())
+	assert_true(main.gates._cmd_gate({&"action": &"approach", &"option": "1.8"}).ok, "the console approaches to a given distance")
+	await _ticks(3)
+	assert_almost_eq(main.ship.global_position.distance_to(gate.global_position), 1800.0, 5.0)
+	assert_true(main.gates.can_request_jump(), "1.8 km out: the gate takes it")
+	assert_true(main.gates._cmd_gate({&"action": &"jump"}).ok)
+	assert_true(main.gates.jump.is_active())
+	main.gates.cancel_jump()
+
+
+# M7-T28: a ship just out of the gate, at any roll, asked to jump again turns round and flies in without rolling: the run-in
+# used to roll it level with the gate (up to half a turn at 90 degrees a second).
+func test_jumping_again_at_once_does_not_roll_the_ship() -> void:
+	await _start()
+	for roll_deg: float in [0.0, 60.0, 180.0]:
+		# As it comes out: 520 m in front of the mouth, nose away, 200 m/s, rolled about its nose.
+		var out: Vector3 = gate.global_basis * Vector3.FORWARD
+		var basis: Basis = Basis.looking_at(out, gate.global_basis.y) * Basis(Vector3.BACK, deg_to_rad(roll_deg))
+		main.ship.reset_to(Transform3D(basis, gate.global_transform * Vector3(0.0, 0.0, -520.0)))
+		main.ship.linear_velocity = out * Jumpgate.ARRIVAL_SPEED_MPS + main.world.rest_velocity()
+		await _ticks(2)
+		var label: String = "out of the gate rolled %.0f degrees" % roll_deg
+		assert_eq(main.gates.start_jump(gate), "", label)
+		var rolled_rad: float = 0.0
+		var fastest_rad: float = 0.0
+		var reached_run_in: bool = false
+		for i: int in 60 * 60:
+			await _ticks(1)
+			var state: GateJump.State = main.gates.jump.state
+			if state != GateJump.State.LINE_UP and state != GateJump.State.RUN_IN:
+				break
+			reached_run_in = reached_run_in or state == GateJump.State.RUN_IN
+			var about_nose: float = absf(main.ship.angular_velocity.dot(main.ship.global_basis.z))
+			rolled_rad += about_nose * DT
+			fastest_rad = maxf(fastest_rad, about_nose)
+		assert_true(reached_run_in, "%s: it lined up" % label)
+		assert_eq(main.gates.jump.state, GateJump.State.FLASH, "%s: and went through the ring" % label)
+		assert_lt(rad_to_deg(rolled_rad), 10.0, "%s: no roll on the way in (all of it summed)" % label)
+		assert_lt(rad_to_deg(fastest_rad), 5.0, "%s: never rolling faster than 5 degrees a second" % label)
+		main.gates.cancel_jump()
+		await _ticks(5)
 
 
 func test_an_ai_ship_arrives_through_the_gate_and_leaves_through_it() -> void:

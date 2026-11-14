@@ -16,7 +16,8 @@ const NODE_NAME: StringName = &"JumpgateHost"
 const FALLBACK_DISTANCE_M: float = 50000.0
 ## Where the hidden ship waits while away: behind the gate on its axis, out of every path.
 const PARK_BEHIND_M: float = 3000.0
-## `gate approach` puts the player this far in front of the gate, facing it (inside the prompt's 10 km).
+## `gate approach` puts the player this far in front of the gate, facing it (inside the prompt's 10 km), unless it names a
+## distance (`gate approach 1.8`, km: inside the 2 km a jump may be asked from, M7-T28).
 const APPROACH_M: float = 6000.0
 ## Lit layer of the flash and the fade: over the HUD and the letterbox (39), under the console.
 const FADE_LAYER: int = 60
@@ -175,8 +176,10 @@ func locks_controls() -> bool:
 	return jump.is_active()
 
 
-## Starts the player's jump through `through` (the targeted gate by default). Returns "" or why it cannot start.
-func start_jump(through: Jumpgate = null) -> String:
+## Why the player cannot ask `through` (the targeted gate by default) for a jump now, or "" when the gate takes the request
+## (M7-T28): a gate answers only a ship within `GateJumpRequest.range_m()` of its mouth. The one rule for every way of asking
+## (the hold of X, the console); the HUD shows the answer after the gate's name.
+func jump_refusal(through: Jumpgate = null) -> String:
 	var g: Jumpgate = through if through != null else targeted_gate()
 	if g == null:
 		return "no gate targeted"
@@ -184,6 +187,20 @@ func start_jump(through: Jumpgate = null) -> String:
 		return "the player's ship is lost"
 	if jump.is_active():
 		return "a jump is under way (%s)" % jump.state_name()
+	return GateJumpRequest.refusal(main.ship.global_position.distance_to(g.global_position))
+
+
+## Whether `start_jump(through)` would start a jump now.
+func can_request_jump(through: Jumpgate = null) -> bool:
+	return jump_refusal(through).is_empty()
+
+
+## Starts the player's jump through `through` (the targeted gate by default). Returns "" or why it cannot start (`jump_refusal`).
+func start_jump(through: Jumpgate = null) -> String:
+	var g: Jumpgate = through if through != null else targeted_gate()
+	var why: String = jump_refusal(g)
+	if not why.is_empty():
+		return why
 	jump_gate = g
 	jump.arrival_z = g.fit.mouth_z_m
 	_went_through = false
@@ -224,8 +241,11 @@ func step_player(delta: float) -> FlightCommand:
 		var target: Vector3 = jump_gate.global_transform * GateAutopilot.line_up_target(local, jump_gate.departure_point)
 		return GateAutopilot.line_up(ship.global_position, ship.linear_velocity, ship.global_basis, target, _capability)
 	var axis: Vector3 = (jump_gate.global_basis * jump_gate.departure_forward).normalized()
+	var damageable: Damageable = Damageable.of(ship)
+	var up: Vector3 = GateAutopilot.roll_up(jump_gate.global_basis.y, jump_gate.fit.mouth_radius_m,
+			damageable.bounding_radius if damageable != null else 0.0)
 	return GateAutopilot.run_in(ship.global_position, ship.linear_velocity, ship.global_basis, jump_gate.global_position, axis,
-			jump_gate.global_basis.y, jump_gate.vortex.open_in_s(JumpVortex.Direction.DEPARTURE), _capability)
+			up, jump_gate.vortex.open_in_s(JumpVortex.Direction.DEPARTURE), _capability)
 
 
 func _handle(events: PackedStringArray) -> void:
@@ -372,7 +392,7 @@ func _register_console() -> void:
 	_transit_console = TransitConsole.new(self)
 	_transit_console.register(registry)
 	registry.register_command(ConsoleCommand.new(&"gate",
-			"The jumpgate: status, open <arrival|departure> [hold seconds] (the vortex, after the arms' activation), close, jump (start the player's jump through it, from anywhere), cancel (end the jump), target (select it), approach (put the player 6 km in front of it, facing it), view <front|three_quarter|close|tip|run_in|side|behind|reference|off> (hold the camera on it for captures)",
+			"The jumpgate: status, open <arrival|departure> [hold seconds] (the vortex, after the arms' activation), close, jump (start the player's jump through it, from within 2 km), cancel (end the jump), target (select it), approach [km] (put the player 6 km in front of it, facing it, or that many km), view <front|three_quarter|close|tip|run_in|side|behind|reference|off> (hold the camera on it for captures)",
 			[ConsoleArg.enum_optional(&"action", ACTIONS, &"status"),
 			ConsoleArg.string_optional(&"option", null),
 			ConsoleArg.float_optional(&"hold_s", CONSOLE_HOLD_S, 0.0, 600.0)] as Array[ConsoleArg]), _cmd_gate, self)
@@ -665,10 +685,12 @@ func _cmd_gate(args: Dictionary) -> ConsoleResult:
 				return ConsoleResult.failure("the gate is not in the target list yet")
 			return ConsoleResult.line("%s targeted" % g.display_name)
 		&"approach":
-			var at: Vector3 = g.global_transform * Vector3(0.0, 0.0, -APPROACH_M)
+			var option: String = str(args.get(&"option", ""))
+			var approach_m: float = clampf(option.to_float() * 1000.0, 200.0, 100000.0) if option.is_valid_float() else APPROACH_M
+			var at: Vector3 = g.global_transform * Vector3(0.0, 0.0, -approach_m)
 			main.ship.reset_to(Transform3D(Basis.looking_at(g.global_position - at, g.global_basis.y), at))
 			main.camera_rig.snap_chase()
-			return ConsoleResult.line("player %.0f km in front of %s" % [APPROACH_M / 1000.0, g.display_name])
+			return ConsoleResult.line("player %.1f km in front of %s" % [approach_m / 1000.0, g.display_name])
 	if g == null:
 		return ConsoleResult.line("no jumpgate in this scenario")
 	return ConsoleResult.line("%s %.1f km; vortex %s (%s); jump %s; %d arrived, %d departed" % [g.display_name, _distance_km(),

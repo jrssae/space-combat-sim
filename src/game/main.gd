@@ -883,7 +883,8 @@ func _update_mouse_capture() -> void:
 
 
 func _update_bracket() -> void:
-	if hud.visible or ship == null:  # the HUD has its own box
+	# The HUD has its own box, and a cinematic shows neither (M7-T28: the square sat on the gate as its jump point formed).
+	if hud.visible or hud.cinematic or ship == null:
 		overlay.hide_bracket()
 		return
 	var readout: TargetReadout = ship.targeting.selected_readout()

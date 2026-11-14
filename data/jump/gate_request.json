@@ -1,0 +1,5 @@
+{
+  "_comment": "The player's request for a gate jump (M7-T28): how close to the gate's mouth the ship must be to ask, and the answer shown when it is not (the HUD upper-cases it after the gate's name: JUMPGATE: OUT OF RANGE).",
+  "range_m": 2000.0,
+  "out_of_range": "out of range"
+}

@@ -256,7 +256,8 @@ func _step(p: VortexPassage, delta: float) -> void:
 		var axis: Vector3 = frame.basis.z.normalized()
 		var ship := body as Ship
 		ship.set_flight_command(GateAutopilot.follow_axis(ship.global_position, ship.linear_velocity - _rest(), ship.global_basis,
-				frame.origin, axis, frame.basis.y, p.speed_mps, p.capability))
+				frame.origin, axis, GateAutopilot.roll_up(frame.basis.y, fit.mouth_radius_m, p.bounding_radius_m), p.speed_mps,
+				p.capability))
 	if VortexTransit.reached_base(fit, local.z, p.bounding_radius_m * factor) or p.age_s > p.limit_s:
 		flash(p.vortex, body.global_position)
 		if p.vortex.opener == body and p.vortex.held:

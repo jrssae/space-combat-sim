@@ -1480,6 +1480,28 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     the camera within 35 degrees of the gate's axis all the way in (15 to 23 degrees now; 130 and 173 before).
   - **Watch it:** `.tools/godot/godot --path . -- --console-exec="wait 120; gate approach; gate jump; wait 3500; gate jump"`
     (the second jump starts about 3 s after the first hands the controls back; `state gate` then reads 4 openings, 2 completed).
+- **Three more from the maintainer's flight (2026-11-14):**
+  1. **A green square showed where the jump point was about to form.** It was the debug readout's target square
+     (`TargetBracket`, M1-T15), which `Main` draws on the selected target whenever the HUD is hidden. A cinematic hides the HUD,
+     so during the jump's shots the square sat on the targeted gate's centre. Fixed: no square while a cinematic plays. GPU
+     frames before and after in `references/screenshots/M7-T28 gate/`.
+  2. **Re-entering at once, the Starfury sometimes rolled.** The run-in (and the flight down the funnel) rolled every ship level
+     with the gate's up. The first jump arrives level, so nothing showed; a ship that had just turned round came out of the turn
+     up to 150 degrees off and was rolled back at 90 degrees a second (measured: 89, 149, 49 and 94 degrees of roll from four
+     starting rolls). Fixed: a ship that fits the mouth any way up keeps its roll (`GateAutopilot.roll_up`); only one wider than
+     half the mouth's half height is still turned, as before. Measured after: under 10 degrees in all, never above 5 degrees a
+     second.
+  3. **A jump may be asked only within 2 km of the gate.** `JumpgateHost.jump_refusal(gate) -> String` ("" or why not) and
+     `can_request_jump(gate) -> bool` are the rule; `start_jump` and the console's `gate jump` go through it. Beyond the range
+     the answer is `out of range` (the HUD shows `JUMPGATE: OUT OF RANGE`). The range and the answer are data:
+     `data/jump/gate_request.json`, read by `GateJumpRequest`. `gate approach` takes a distance in km (`gate approach 1.9`).
+     The prompt's 10 km (`GateJumpPrompt.RANGE_M`) is unchanged here; T27 owns what the HUD offers.
+  - **Tests:** `test_gate_jump_request` (the range and answer from data, `roll_up`, the run-in commands no roll);
+    `test_jumpgate_in_play`: a request 2.3 km out is refused and nothing starts, 1.8 km out it starts; three starting rolls just
+    out of the gate reach the ring with under 10 degrees of roll (86 to 94 before); no square in any tick of the three jumps'
+    shots (about 1 000 ticks each before).
+  - **Watch it:** `.tools/godot/godot --path . -- --console-exec="wait 120; gate approach; gate jump; gate approach 1.9; gate jump; wait 2250; gate jump"`
+    (refused at 6 km, a jump from 1.9 km, then again about 3 s after the controls come back).
 
 ### M7-T29 Fix: civilians attacked in free flight don't flee
 

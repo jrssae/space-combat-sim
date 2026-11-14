@@ -24,6 +24,8 @@ const DETOUR_RADIUS_M: float = 1600.0
 const INSIDE_ARMS_M: float = 650.0
 ## The nose turns onto the velocity error while it is larger than this (a flip and burn); else onto the course.
 const FACE_DV_MPS: float = 30.0
+## A ship no wider than this share of the mouth's smaller half axis fits through any way up, and keeps its roll (M7-T28).
+const FITS_ANY_WAY_UP: float = 0.5
 
 
 ## The line-up's command: to `target` (World) at a speed that it can shed on the way, nose on the velocity error.
@@ -36,8 +38,15 @@ static func line_up(position: Vector3, velocity: Vector3, basis: Basis, target: 
 	return _fly(velocity, v_des, basis, capability, v_des)
 
 
+## The way up a ship of `ship_radius_m` must be turned to pass a mouth whose smaller half axis is `mouth_radius_m`: `up` for one
+## too wide to fit any way up, zero (keep its roll) for the rest. A fighter never rolls for a gate (M7-T28).
+static func roll_up(up: Vector3, mouth_radius_m: float, ship_radius_m: float) -> Vector3:
+	return up if ship_radius_m > mouth_radius_m * FITS_ANY_WAY_UP else Vector3.ZERO
+
+
 ## The run-in's command: along the gate's `axis` (World, unit, the way departures fly) through `centre`, pulled onto the axis,
-## at a speed that reaches the plane no sooner than the vortex opens (`open_in_s`, INF while it is not opening).
+## at a speed that reaches the plane no sooner than the vortex opens (`open_in_s`, INF while it is not opening). `up` as
+## `follow_axis`.
 static func run_in(position: Vector3, velocity: Vector3, basis: Basis, centre: Vector3, axis: Vector3, up: Vector3,
 		open_in_s: float, capability: ShipCapability) -> FlightCommand:
 	var to_plane: float = -(position - centre).dot(axis)
@@ -49,8 +58,9 @@ static func run_in(position: Vector3, velocity: Vector3, basis: Basis, centre: V
 	return follow_axis(position, velocity, basis, centre, axis, up, speed, capability)
 
 
-## Along `axis` (World, unit) through `centre` at `speed`, pulled onto the axis, nose on the axis and rolled to `up`: the run-in,
-## and a departing ship flying down a jump vortex's funnel to its base (M6-T22). `velocity` is against the frame's rest.
+## Along `axis` (World, unit) through `centre` at `speed`, pulled onto the axis, nose on the axis: the run-in, and a departing
+## ship flying down a jump vortex's funnel to its base (M6-T22). Rolled to `up` only when one is given (`roll_up`); with zero the
+## ship keeps the roll it has. `velocity` is against the frame's rest.
 static func follow_axis(position: Vector3, velocity: Vector3, basis: Basis, centre: Vector3, axis: Vector3, up: Vector3,
 		speed: float, capability: ShipCapability) -> FlightCommand:
 	var rel: Vector3 = position - centre
@@ -58,7 +68,8 @@ static func follow_axis(position: Vector3, velocity: Vector3, basis: Basis, cent
 	var correction: Vector3 = (-lateral * K_LATERAL).limit_length(MAX_LATERAL_MPS)
 	var v_des: Vector3 = axis * speed + correction
 	var cmd: FlightCommand = _fly(velocity, v_des, basis, capability, axis)
-	cmd.rot.z = PilotSteering.align_roll(basis, up, capability.rate_max_rad)
+	if not up.is_zero_approx():
+		cmd.rot.z = PilotSteering.align_roll(basis, up, capability.rate_max_rad)
 	return cmd
 
 
