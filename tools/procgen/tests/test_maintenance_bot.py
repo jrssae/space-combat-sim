@@ -15,9 +15,15 @@ from tools.procgen.assets import ASSETS
 from tools.procgen.assets import maintenance_bot as bot
 from tools.procgen.core import manifest as manifest_io
 from tools.procgen.core.context import BuildContext
+from tools.procgen.core.image import read_png
 from tools.procgen.core.obj import read_obj
 from tools.procgen.styles import REQUIRED_ROLES
 from tools.procgen.styles.maintenance_bot import MAINTENANCE_BOT
+
+
+def _rgb(path: Path) -> np.ndarray:
+    """A PNG's colour channels as floats (the project's reader, so no PIL)."""
+    return read_png(path)[..., :3].astype(float)
 
 TRIANGLE_BUDGET = 6000
 
@@ -102,18 +108,14 @@ class MaintenanceBotTests(unittest.TestCase):
 
     def test_the_maps_carry_the_metal_finish(self) -> None:
         # ORM: R occlusion, G roughness, B metallic. Metal in the shells and truss, roughness that varies plate to plate.
-        from PIL import Image
-
-        orm = np.asarray(Image.open(self.dir_a / "maintenance_bot_orm.png").convert("RGB"), dtype=float) / 255.0
-        albedo = np.asarray(Image.open(self.dir_a / "maintenance_bot_albedo.png").convert("RGB"), dtype=float)
+        orm = _rgb(self.dir_a / "maintenance_bot_orm.png") / 255.0
+        albedo = _rgb(self.dir_a / "maintenance_bot_albedo.png")
         filled = albedo.sum(axis=2) > 0
         self.assertGreater(float(orm[..., 2][filled].mean()), 0.3)
         self.assertGreater(float(orm[..., 1][filled].std()), 0.04)
 
     def test_the_lens_and_lamps_glow(self) -> None:
-        from PIL import Image
-
-        emissive = np.asarray(Image.open(self.dir_a / "maintenance_bot_emissive.png").convert("RGB"), dtype=float)
+        emissive = _rgb(self.dir_a / "maintenance_bot_emissive.png")
         lit = emissive.sum(axis=2) > 60
         self.assertGreater(int(lit.sum()), 100)
         green = emissive[..., 1] > 1.5 * emissive[..., 0]
