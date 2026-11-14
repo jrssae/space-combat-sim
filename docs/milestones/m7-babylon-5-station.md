@@ -266,6 +266,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T21 | A | Follow-up to T05 from the STL: the Cobra arm's pentagonal cross-section, creases either side of the launch doors, and a roofed rectangular cargo bay (maintainer, 2026-11-13) | T05 | Opus | Shape read off the STL; the look is (H) | done |
 | T22 | A | The dorsal spine and the command section rebuilt to the STL (per-part sections IoU >= 0.90; maintainer, 2026-11-13) | T21 | Opus | T04 built them to the overall silhouette; the per-part check scores them 0.38 to 0.72 | in progress |
 | T23 | D | The jumpgate and jump points refined from the maintainer's GIF: gate opening, the blue vortex, a ship's jump point (maintainer, 2026-11-13) | - | Opus | Shader and asset look against a show reference; (H) | not started |
+| T24 | A | The station's surfaces refined for fullscreen, in both texture-detail sets (low and high): resolution, detail, colour and material, no visible tiling (maintainer, 2026-11-13) | T22 | Opus | A look task on an 8 km hull at 6K within a VRAM budget; (H) | not started |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M7-T01 Station references and measurements
@@ -1006,6 +1007,30 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 - **Agent:** Opus (or Fable). **Depends on:** nothing in M7; runs beside the station work.
 - **Done when:** an A/B sheet and short frame strips beside the GIF on the GPU, approved by the maintainer (H); the battle GPU test
   from M6 still inside its budget; tests green; committed.
+
+### M7-T24 The station's surfaces refined for fullscreen (low and high texture sets)
+
+- **Why (maintainer, 2026-11-13, watching the launch cinematics fullscreen):** the station's textures need refinement, "even at
+  the low texture level". All four faults were named: **blurry / low resolution** (the hull atlas's ~1.3 m texel shows up close),
+  **flat / lacking detail** (large plain areas), **colour and material wrong** against the references, and a **repeating, tiled
+  look** (the 16 m detail tile or the panel pattern).
+- **Agent:** Opus. **Depends on:** T22 (the spine and command section rebuilt, so their surfaces are not redone twice).
+- **What:**
+  - Give the station the **two texture-detail sets** the ships have (M5-T40, M7-T15): `low` reads cleanly fullscreen on its own
+    (major seams, plate tones, no blur at the views a player sees), `high` adds the fine plating, joint grime, recessed hatches and
+    ribs; the setting switches them like the ships'.
+  - Resolution where it shows: per-section atlases or texel tiers (T19's sections allow it) for the places seen up close (Q2), the
+    near-only detail props for fine marks, and mipmapping and filtering checked; VRAM measured and kept inside a budget the agent
+    states (today 109 MB of maps, +14 MB props).
+  - Detail: plating and panel layouts read off the references (T01's "Surface and panels", the station close-ups in
+    `references/T40 seam references/`, the lighting and bay references), so large areas are never plain.
+  - Colour and material: re-read the colours off lit captures as M5-T39 did, and re-check the metal and roughness against
+    "metallic, not plastic" (D72); show swatches beside the captures.
+  - No visible tiling: break up the 16 m detail tile (rotation and offset per plate, a second scale, masks), checked at grazing
+    angles.
+- **Done when:** a fullscreen (6144 × 3456) A/B sheet of the low and high sets from the launch-cinematic views, the bays, 1 km and
+  10 km, beside the references, approved by the maintainer (H); VRAM and fps recorded; tests (both sets present, the switch, budgets,
+  determinism); committed.
 
 ### M7-T14 Integration, full suite, docs and acceptance
 
