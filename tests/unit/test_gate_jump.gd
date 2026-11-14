@@ -57,11 +57,12 @@ func test_hud_shows_the_prompt_on_the_acknowledgement_line() -> void:
 # --- the state machine ---------------------------------------------------------------------------------------------
 
 
-func _run(jump: GateJump, seconds: float, local: Vector3, through: bool = false, placed: bool = false) -> PackedStringArray:
+func _run(jump: GateJump, seconds: float, local: Vector3, through: bool = false, placed: bool = false,
+		closing_mps: float = 0.0) -> PackedStringArray:
 	var all := PackedStringArray()
 	var ticks: int = roundi(seconds / DT)
 	for i: int in ticks:
-		all.append_array(jump.step(DT, local, DEPARTURE, true, through and i == 0, placed and i == 0))
+		all.append_array(jump.step(DT, local, DEPARTURE, true, through and i == 0, placed and i == 0, closing_mps))
 	return all
 
 
@@ -89,6 +90,20 @@ func test_the_jump_goes_out_and_comes_back() -> void:
 	assert_eq(jump.start(), PackedStringArray([GateJump.EV_START]), "another jump may follow")
 
 
+# A ship just out of the gate crosses the departure point flying away: the run-in (and with it the vortex and the shot) waits
+# until it has turned round (M7-T28).
+func test_the_run_in_waits_for_a_ship_flying_away_from_the_gate() -> void:
+	var jump := GateJump.new()
+	jump.start()
+	assert_eq(_run(jump, 1.0, DEPARTURE, false, false, -175.0), PackedStringArray(), "at the departure point, outbound: not yet")
+	assert_eq(jump.state, GateJump.State.LINE_UP)
+	assert_eq(_run(jump, DT, DEPARTURE, false, false, -GateJump.LINE_UP_RECEDE_MAX_MPS - 1.0), PackedStringArray())
+	assert_eq(_run(jump, DT, DEPARTURE, false, false, 80.0), PackedStringArray([GateJump.EV_RUN_IN]), "inbound: the run-in starts")
+	jump = GateJump.new()
+	jump.start()
+	assert_eq(_run(jump, DT, DEPARTURE), PackedStringArray([GateJump.EV_RUN_IN]), "at rest there: it starts at once")
+
+
 func test_clearing_also_ends_on_time_once_out_of_the_mouth() -> void:
 	var jump := GateJump.new()
 	jump.start()
@@ -104,7 +119,7 @@ func test_clearing_also_ends_on_time_once_out_of_the_mouth() -> void:
 func test_the_jump_ends_early_when_it_must() -> void:
 	var jump := GateJump.new()
 	jump.start()
-	assert_eq(jump.step(DT, Vector3.ZERO, DEPARTURE, false, false, false), PackedStringArray([GateJump.EV_ABORT]))
+	assert_eq(jump.step(DT, Vector3.ZERO, DEPARTURE, false, false, false, 0.0), PackedStringArray([GateJump.EV_ABORT]))
 	assert_eq(jump.ended_why, "the ship was lost")
 	jump.start()
 	assert_eq(_run(jump, GateJump.LINE_UP_TIMEOUT_S + 1.0, Vector3(0.0, 0.0, -9000.0)), PackedStringArray([GateJump.EV_ABORT]))

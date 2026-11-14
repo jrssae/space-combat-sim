@@ -208,7 +208,9 @@ func step_player(delta: float) -> FlightCommand:
 		return null
 	var ship: Ship = main.ship
 	var local: Vector3 = jump_gate.local_of(ship.global_position)
-	var events: PackedStringArray = jump.step(delta, local, jump_gate.departure_point, main.player_alive, _went_through, _placed)
+	var closing_mps: float = (ship.linear_velocity - main.world.rest_velocity()).dot(jump_gate.global_basis * jump_gate.departure_forward)
+	var events: PackedStringArray = jump.step(delta, local, jump_gate.departure_point, main.player_alive, _went_through, _placed,
+			closing_mps)
 	_went_through = false
 	_placed = false
 	_handle(events)

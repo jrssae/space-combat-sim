@@ -26,6 +26,9 @@ const EV_ABORT: StringName = &"abort"  # the same, early (`ended_why` says why)
 
 ## Within this of the departure point the line-up is done and the run-in starts.
 const LINE_UP_DONE_M: float = 200.0
+## The run-in starts only once the ship is no longer flying away from the gate faster than this: one that has just come out of
+## the gate crosses the departure point outbound, and must turn round first (M7-T28).
+const LINE_UP_RECEDE_MAX_MPS: float = 10.0
 ## From 10 km at the autopilot's 300 m/s the line-up takes well under a minute; past this something is in the way.
 const LINE_UP_TIMEOUT_S: float = 120.0
 ## The run-in is 1 440 m to the mouth and 1 200 m on down the funnel; at the slowest it waits for the vortex and then flies it in
@@ -86,8 +89,10 @@ func start() -> PackedStringArray:
 
 ## One tick: `dt` seconds, the ship's gate-local position `local`, its departure point `departure` (gate-local), whether it is
 ## `alive`, and the gate's two reports this tick: `went_through` (the departure handed it back) and `placed` (the arrival put
-## it back). Returns the events to carry out.
-func step(dt: float, local: Vector3, departure: Vector3, alive: bool, went_through: bool, placed: bool) -> PackedStringArray:
+## it back), and `closing_mps`, its speed toward the gate along the departure axis (negative flying away). Returns the events to
+## carry out.
+func step(dt: float, local: Vector3, departure: Vector3, alive: bool, went_through: bool, placed: bool,
+		closing_mps: float) -> PackedStringArray:
 	var out := PackedStringArray()
 	if state == State.IDLE:
 		return out
@@ -98,7 +103,7 @@ func step(dt: float, local: Vector3, departure: Vector3, alive: bool, went_throu
 		State.LINE_UP:
 			if went_through:
 				return _abort("went through before lining up")
-			if local.distance_to(departure) <= LINE_UP_DONE_M:
+			if local.distance_to(departure) <= LINE_UP_DONE_M and closing_mps >= -LINE_UP_RECEDE_MAX_MPS:
 				_enter(State.RUN_IN)
 				out.append(EV_RUN_IN)
 			elif state_s > LINE_UP_TIMEOUT_S:

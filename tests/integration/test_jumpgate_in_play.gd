@@ -110,6 +110,62 @@ func test_the_player_jumps_out_and_comes_back_through_the_blue_vortex() -> void:
 	assert_false(main.camera_rig.is_playing_shot())
 
 
+# M7-T28: a ship just back from a jump is in front of the gate flying away from it. Asked to jump again (three seconds later,
+# then at once), each jump opens the vortex once going and once coming back, and the cinematic stays on the ship, facing the gate.
+func test_jumping_again_opens_the_vortex_once_each_way_and_the_camera_stays_on_the_ship() -> void:
+	await _start()
+	await _put_player_in_front(2600.0)
+	var axis: Vector3 = gate.global_basis * gate.departure_forward
+	var waits: Array[int] = [0, 180, 1]  # ticks after the jump before, before asking again
+	for n: int in waits.size():
+		await _ticks(waits[n])
+		var label: String = "jump %d" % (n + 1)
+		var openings_before: int = gate.vortex.openings
+		assert_eq(main.gates.start_jump(gate), "", label)
+		var departures: int = 0
+		var arrivals: int = 0
+		var was_active: bool = false
+		var worst_off_axis_deg: float = 0.0
+		var worst_off_ship_deg: float = 0.0
+		var farthest_m: float = 0.0
+		var watched_other: int = 0
+		for i: int in 90 * 60:
+			await _ticks(1)
+			var active: bool = gate.vortex.is_active()
+			if active and not was_active:
+				if gate.vortex.direction == JumpVortex.Direction.DEPARTURE:
+					departures += 1
+				else:
+					arrivals += 1
+			was_active = active
+			var state: GateJump.State = main.gates.jump.state
+			if main.ship.visible and (state == GateJump.State.RUN_IN or state == GateJump.State.CLEARING):
+				var cam: Camera3D = main.camera_rig.active_camera()
+				var to_ship: Vector3 = main.ship.get_global_transform_interpolated().origin - cam.global_position
+				if cam != main.camera_rig.cinematic_camera or main.gates._actor_pose("player") != main.ship.get_global_transform_interpolated():
+					watched_other += 1
+				farthest_m = maxf(farthest_m, to_ship.length())
+				# Whole, in front of the mouth: down the funnel it shrinks, and a tick's lag is a large angle at that size.
+				if gate.local_of(main.ship.global_position).z < 0.0:
+					worst_off_ship_deg = maxf(worst_off_ship_deg, rad_to_deg((-cam.global_basis.z).angle_to(to_ship)))
+				if state == GateJump.State.RUN_IN:
+					worst_off_axis_deg = maxf(worst_off_axis_deg, rad_to_deg((-cam.global_basis.z).angle_to(axis)))
+			if not main.gates.jump.is_active():
+				break
+		assert_eq(main.gates.jump.completed, n + 1, "%s finished (%s)" % [label, main.gates.jump.ended_why])
+		assert_eq(departures, 1, "%s: the orange vortex opened once" % label)
+		assert_eq(arrivals, 1, "%s: the blue vortex opened once" % label)
+		assert_eq(gate.vortex.openings - openings_before, 2, "%s: two openings in all" % label)
+		assert_eq(watched_other, 0, "%s: the cinematic camera follows the player's own ship every tick" % label)
+		assert_lt(farthest_m, 200.0, "%s: the camera stays by the ship" % label)
+		assert_lt(worst_off_ship_deg, 30.0, "%s: with the ship in the picture" % label)
+		assert_lt(worst_off_axis_deg, 35.0, "%s: looking into the gate all the way in, not swinging round with a turning ship" % label)
+		assert_false(main.camera_rig.is_playing_shot(), "%s: the shot ended" % label)
+		assert_false(main.controls_locked(), "%s: the controls are back" % label)
+	assert_eq(gate.departed, 3)
+	assert_eq(gate.arrived, 3)
+
+
 func test_an_ai_ship_arrives_through_the_gate_and_leaves_through_it() -> void:
 	await _start(0, 2)
 	await _put_player_in_front(6000.0)

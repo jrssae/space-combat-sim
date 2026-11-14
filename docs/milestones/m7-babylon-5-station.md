@@ -278,7 +278,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T24 | A | The station's surfaces refined for fullscreen, in both texture-detail sets (low and high): resolution, detail, colour and material, no visible tiling (maintainer, 2026-11-13) | T22 | Opus | A look task on an 8 km hull at 6K within a VRAM budget; (H) | not started |
 | T25 | A | The main docking bay rebuilt: shape and proportions from the STL (its section exemption lifted, IoU >= 0.90), the look from the show captures (maintainer, 2026-11-14) | T05, the flicker and light-leak fix | Opus | The bay reads wrong against the show in shape, mouth detail, tunnel and light; (H) | not started |
 | T26 | B | All ships keep a low-polygon model at range instead of turning into a grey sphere; a dot only when a few pixels across (maintainer, 2026-11-14) | - | Opus | A Saturn 3 and a Narn transport became grey spheres while still clearly visible | not started |
-| T27 | C | Navigation targets and a hold-X interaction: the main docking bay, cargo bay and jumpgate as navigation targets; hold X for 2 s with a progress bar to act on them (maintainer, 2026-11-14) | T10 | Opus | A new input mechanic over targeting, HUD and the gate jump | not started |
+| T27 | C | Navigation targets and a hold-X interaction: the main docking bay, cargo bay and jumpgate as navigation targets; hold X for 2 s with a progress bar to act on them (maintainer, 2026-11-14) | T10 | Opus | A new input mechanic over targeting, HUD and the gate jump | in progress |
 | T28 | D | Fix: entering the jumpgate a second time opens the vortex twice and the camera stops tracking the ship (maintainer, 2026-11-14) | - | Fable | A state bug in M6's gate jump | in progress |
 | T29 | D | Fix: a civilian attacked in free flight does not flee (no change of speed or heading) (maintainer, 2026-11-14) | T10 | Fable | AI regression or a free-flight wiring gap | not started |
 | T30 | D | Maintenance bots carry the freighters' cargo pods (Saturn 3, 4 and 8; cargo and tankers) between the ship and the cargo bay (maintainer, 2026-11-14) | T10, T11 | Opus | Replaces the pods flying by themselves | not started |
@@ -1441,6 +1441,24 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   time the camera didn't track the ship correctly."
 - **What:** reproduce (jump through the gate, return, jump again), find the state that isn't reset (gate activation, vortex
   instances, the camera's follow target or the jump sequence), fix at the source, test two and three jumps in a row.
+- **Done:**
+  - Reproduced on the main scene (free flight, three jumps in a row, logged per tick). A second jump asked 3 s after the first
+    opened the orange vortex twice (openings 3 and 4), and the departure shot's camera swung up to 130 degrees off the gate
+    (173 degrees when asked at once, where the vortex opened once but stood open 15 s while the ship dawdled).
+  - **Root cause:** no stale state. `GateJump` ended the line-up on position alone (within 200 m of the departure point). A ship
+    just back from a jump is between the gate and that point flying away at 200 m/s, so it crossed the point outbound and the
+    run-in began with the ship leaving. The gate opened the vortex (ship within 1 600 m), the ship overshot out of range while it
+    turned round, the vortex timed out and closed, and opened again when the ship came back. The departure shot rides the ship's
+    own frame, so it swung round with the ship as it flipped. The first jump never showed it: it reaches the point inbound.
+  - **Fix:** the line-up ends only when the ship is at the departure point and not flying away from the gate
+    (`GateJump.LINE_UP_RECEDE_MAX_MPS`, 10 m/s; `JumpgateHost` feeds the speed toward the gate along the departure axis). The
+    turn-round now happens under the chase camera, before the vortex and the shot start.
+  - **Tests:** `test_gate_jump` (the run-in waits for an outbound ship, starts for one inbound or at rest);
+    `test_jumpgate_in_play` flies three jumps in a row (the second asked 3 s after the first, the third at once): one orange and
+    one blue opening each, the cinematic camera on the player's own ship every tick, within 200 m, the ship in the picture, and
+    the camera within 35 degrees of the gate's axis all the way in (15 to 23 degrees now; 130 and 173 before).
+  - **Watch it:** `.tools/godot/godot --path . -- --console-exec="wait 120; gate approach; gate jump; wait 3500; gate jump"`
+    (the second jump starts about 3 s after the first hands the controls back; `state gate` then reads 4 openings, 2 completed).
 
 ### M7-T29 Fix: civilians attacked in free flight don't flee
 

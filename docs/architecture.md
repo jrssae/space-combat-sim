@@ -5259,6 +5259,8 @@ At 1 000 km (GPU): the gate 23 draw calls, 145 fps (the display's cap), 379 MB; 
   shows `X: REQUEST JUMP` (X is auto-track everywhere else); the controls lock, the autopilot lines up 1 440 m out (around the arms
   if behind) and runs in at 250 m/s under a `CinematicShot`, a flash, a fade and 2 s of black, then the ship comes **back out through
   the blue vortex** at 200 m/s and control returns after 3 s or 500 m. In M6 the trip is a round trip; hyperspace (M11) replaces it.
+  The run-in (and with it the vortex and the shot) starts only once the ship is at the departure point and no longer flying away
+  from the gate: a ship just back from a jump crosses that point outbound and turns round first (M7-T28).
 - Console `gate [status|open|close|jump|cancel|target|approach|view]` (`gate open <dir> <hold_s>`; `gate view reference` is the
   acceptance pose of the still), `vortex [status|open|close|view]`; providers `gate`, `vortex`.
 - GPU (RX 6950 XT, headless gamescope): the vortex costs about 0.23 ms and one draw call, even filling the screen from inside; the
