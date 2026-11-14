@@ -586,6 +586,10 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   (`references/cobra bay interior references/starfury launch single.gif` and `... multiple.gif`): through the canopy at the
   pilot, the fighter on its clamp, the rotation, looking down through the open door, the door row opening outside, the fighter
   coming out, a chase with the drum behind. The hangar behind the menu (T20) is matched to the stored pose afterwards.
+- **Shot pools, shuffled (maintainer, 2026-11-13):** the GIF angles are inspiration, not a fixed list. Each phase of a launch
+  (on the rack, the rotation, the drop, the exit, the chase) has a pool of several shot variants, picked by a seeded shuffle
+  bag so none repeats until the others have played and none plays twice in a row; some phases are optional, to vary the length.
+  Pools, variants and weights are data, reused by M8's squadron cinematic.
 - **Done when:** AC7.
 - **Done (as built; contracts in `docs/architecture.md` §20.2):**
   - **`LaunchSequence`** (`src/mission/launch_sequence.gd`, pure, in the drum's frame): one wing's launch of up to twelve, the first
