@@ -277,6 +277,12 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T23 | D | The jumpgate and jump points refined from the maintainer's GIF: gate opening, the blue vortex, a ship's jump point (maintainer, 2026-11-13) | - | Opus | Shader and asset look against a show reference; (H) | done |
 | T24 | A | The station's surfaces refined for fullscreen, in both texture-detail sets (low and high): resolution, detail, colour and material, no visible tiling (maintainer, 2026-11-13) | T22 | Opus | A look task on an 8 km hull at 6K within a VRAM budget; (H) | not started |
 | T25 | A | The main docking bay rebuilt: shape and proportions from the STL (its section exemption lifted, IoU >= 0.90), the look from the show captures (maintainer, 2026-11-14) | T05, the flicker and light-leak fix | Opus | The bay reads wrong against the show in shape, mouth detail, tunnel and light; (H) | not started |
+| T26 | B | Big ships keep a low-polygon model at range instead of turning into a grey sphere; a dot only when a few pixels across (maintainer, 2026-11-14) | - | Opus | A Saturn 3 became a grey sphere at about 2.7 km while still clearly visible | not started |
+| T27 | C | Navigation targets and a hold-X interaction: the main docking bay, cargo bay and jumpgate as navigation targets; hold X for 2 s with a progress bar to act on them (maintainer, 2026-11-14) | T10 | Opus | A new input mechanic over targeting, HUD and the gate jump | not started |
+| T28 | D | Fix: entering the jumpgate a second time opens the vortex twice and the camera stops tracking the ship (maintainer, 2026-11-14) | - | Fable | A state bug in M6's gate jump | not started |
+| T29 | D | Fix: a civilian attacked in free flight does not flee (no change of speed or heading) (maintainer, 2026-11-14) | T10 | Fable | AI regression or a free-flight wiring gap | not started |
+| T30 | D | Maintenance bots carry the freighters' cargo pods (Saturn 3, 4 and 8; cargo and tankers) between the ship and the cargo bay (maintainer, 2026-11-14) | T10, T11 | Opus | Replaces the pods flying by themselves | not started |
+| T31 | C | The pause menu gets Quit (exit the game); the start and pause menus' boxes shrink to their content (Settings keeps its layout) (maintainer, 2026-11-14) | - | Sonnet | Front-end layout | not started |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M7-T01 Station references and measurements
@@ -659,6 +665,10 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   enough to show several Starfuries coming out before cutting; badly framed variants are dropped from the pools.
 - **Door to launch (maintainer, 2026-11-13):** the time between the doors opening and the launch is short: the clamp turns the
   fighter while the leaves swing, and it is ejected within about 0.25 to 0.5 s of the doors being fully open.
+- **Hold covers the path after release (maintainer, 2026-11-14, from T12's clearance test):** a fighter released at the edge of
+  the blocked sector passed within 0.9 m of the spine about 3 s later, the arm turning into the sector. The hold checks the
+  fighter's first ~5 s of flight after release (the drum turning, the surface velocity) against the frame and waits until that
+  whole path is clear.
 - **Done when:** AC7.
 - **Done (as built; contracts in `docs/architecture.md` §20.2):**
   - **`LaunchSequence`** (`src/mission/launch_sequence.gd`, pure, in the drum's frame): one wing's launch of up to twelve, the first
@@ -1365,6 +1375,69 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   the build, and the bay from the bow, three-quarter and inside, beside the show captures (H); the maintainer may send more
   captures of the bay from outside.
 - **Done when:** the sections pass, the sheet is approved, tests green, committed.
+
+### M7-T26 Big ships keep a low-polygon model at range
+
+- **Why (maintainer, 2026-11-14, flying the station showcase):** "when I was more than about 2.7 km away from the Saturn 3, it
+  turned into a grey sphere, even though it was still visible. I was expecting a lower polygon model, not a sphere."
+- **What:** find which far representation draws the grey sphere (M4's far hulls or dots, M6's far props, the ship LOD chain) and
+  why it switches by distance rather than by size on screen. Ships keep their real silhouette at range: a generated low-polygon LOD
+  (or the existing chain's coarsest level) until the ship is a few pixels across, then the far dot; the switch by screen size, so a
+  100 m Saturn holds its shape far longer than a 10 m fighter. Applies to every hull (civilians, capitals' stand-ins, fighters).
+  Within the battle budget (M4's 1 000-ship bench, M6's battle test).
+- **Agent:** Opus. **Done when:** a strip of a Saturn 3 and a Starfury from 500 m to 50 km showing the shape held, then a dot; the
+  bench inside budget; tests (switch by screen size); the maintainer has seen it (H).
+
+### M7-T27 Navigation targets and the hold-X interaction
+
+- **Why (maintainer, 2026-11-14):** "Babylon 5 docking bay, Babylon 5 cargo bay, and jumpgate must be navigation targets (not
+  civilian targets)"; "when the docking bay, cargo bay, or jumpgate are targeted, you must hold X for 2 seconds to initiate the
+  appropriate action for that element (only valid for jumpgate currently, but eventually will be able to enter the docking bay
+  and/or offload/load cargo, depending on the mission). Show a progress bar across the top of the screen to show it's working.
+  This will allow the normal X press to change auto-target. The goal is to create a new long hold X mechanic for interactions
+  with different objects."
+- **What:** the main docking bay, the cargo bay and the jumpgate are **navigation targets** (their own target class and HUD look,
+  not civilian ships; the station itself stays as it is). A general **interaction** seam: a target can offer an action; with it
+  targeted, **holding X for 2 s** runs it, with a progress bar across the top of the screen that fills over the hold and cancels on
+  release; a **tap** of X keeps toggling auto-track as today. In M7 only the jumpgate's action works (the player's gate jump, M6);
+  the docking bay and cargo bay offer a placeholder ("not available") that missions later fill (docking, loading, unloading).
+  Pad and keyboard both (the keyboard's auto-track key held the same way); the hold time and the bar are data and settings.
+- **Done when:** tests (tap toggles auto-track, hold 2 s runs the action, release cancels, the bar's progress, the three targets are
+  navigation targets), a live run for the maintainer (H), committed.
+
+### M7-T28 Fix: the jumpgate's second entry
+
+- **Why (maintainer, 2026-11-14):** "when entering the jumpgate a second time, the jumpgate's vortex activated twice; the second
+  time the camera didn't track the ship correctly."
+- **What:** reproduce (jump through the gate, return, jump again), find the state that isn't reset (gate activation, vortex
+  instances, the camera's follow target or the jump sequence), fix at the source, test two and three jumps in a row.
+
+### M7-T29 Fix: civilians attacked in free flight don't flee
+
+- **Why (maintainer, 2026-11-14):** "when attacking a civilian vessel in free flight mode, it failed to run. No change in velocity or
+  direction."
+- **What:** reproduce in free flight; find whether the civilian's brain never hears the attack (perception, the attacker memory,
+  the faction relation), the flee behaviour is suppressed (M7-T10's new station rules, the idle brain T11 used for the parked
+  Saturn), or the civilians spawned in free flight lack a brain; fix; a test that an attacked civilian changes heading and speed
+  and flees toward its own faction (M5's rule).
+
+### M7-T30 Maintenance bots carry the freighters' cargo pods
+
+- **Why (maintainer, 2026-11-14):** "maintenance pods should be grabbing and moving the Saturn 3's cargo pods. Same with a Saturn 4
+  or 8, for either cargo or tankers." This replaces T10's pods flying into the cargo bay by themselves.
+- **What:** when a freighter has backed in at the cargo bay's hold point (T10), maintenance bots fly out, grab each cargo pod (or tank
+  on the tankers), carry it into the cargo bay and come back; the reverse for loading. Saturn 3, Saturn 4 (transport and tanker) and
+  Saturn 8 (transport and tanker), each by its own pod layout from M5's modular Saturns. Bots and pods ambient as before; clearance
+  tested; hide when fighting starts (pods wait). A live run for the maintainer (H).
+
+### M7-T31 The pause menu's Quit and compact menus
+
+- **Why (maintainer, 2026-11-14):** "in the pause menu, add a quit option that exits the game entirely"; "in the pause menu and start
+  menu, shrink each of the boxes to fit only as much as is being displayed for the main views. Settings can use its current
+  layout. But for everything else, it ends up being a lot of space taken up that just feels empty."
+- **What:** Quit in the pause menu (with a confirm, pad-reachable), leaving the game; the start menu's and pause menu's main views
+  (and their simple sub-pages, not Settings) sized to their content; M5's front-end tests and pad-only navigation unchanged; a sheet
+  (H).
 
 ### M7-T14 Integration, full suite, docs and acceptance
 
