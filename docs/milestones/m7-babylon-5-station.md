@@ -1252,6 +1252,9 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   **colour and lighting**. T05 built it from the six close-up show captures (`references/docking bay references/`) and exempted
   it from the STL section check (scores 0.00 to 0.79 against 0.90 to 0.99 for every other part); the maintainer chose to take
   the **shape from the STL** and the **look from the show**.
+- **Size (maintainer, 2026-11-14):** the main docking bay's entrance is **about 80 m wide**. The STL's measure and this estimate
+  should agree; if they differ by more than about 10 %, the agent reports both before building. The passage for traffic (T05
+  built 94 x 34 m; T10's civilians that fit it fly in) follows the new size, and T10 is told the new limits.
 - **Agent:** Opus. **Depends on:** the flicker and light-leak fix committed (it seals the bays and keeps the sun out of
   interiors; the rebuild keeps both).
 - **What:** read the main docking bay off `references/EA Babylon 5 Station.stl` with T21's section tools (the cross housing, the
