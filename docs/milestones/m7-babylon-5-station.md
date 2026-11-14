@@ -1253,7 +1253,9 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   it from the STL section check (scores 0.00 to 0.79 against 0.90 to 0.99 for every other part); the maintainer chose to take
   the **shape from the STL** and the **look from the show**.
 - **Size (maintainer, 2026-11-14):** the main docking bay's entrance is **about 80 m wide**. The STL's measure and this estimate
-  should agree; if they differ by more than about 10 %, the agent reports both before building. The passage for traffic (T05
+  should agree; if they differ by more than about 10 %, the agent reports both before building. **First step:** measure the STL's
+  main docking bay entrance at the 8 km scale (3.3743 m per unit), compare it with the 80 m estimate, and report the ratio and what
+  it means for the cargo bay (built from the same STL: an octagonal opening about 68 x 31 m) before building anything. The passage for traffic (T05
   built 94 x 34 m; T10's civilians that fit it fly in) follows the new size, and T10 is told the new limits.
 - **Agent:** Opus. **Depends on:** the flicker and light-leak fix committed (it seals the bays and keeps the sun out of
   interiors; the rebuild keeps both).
