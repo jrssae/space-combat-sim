@@ -178,6 +178,8 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   23 mounts has its own health and **is knocked out** (stops firing) when it is lost, its section taking the damage too
   (repaired only by a mission or the console in M7); the balance is tuned so the grid alone takes **90 to 120 s** to destroy 12
   raiders and the station shows visible section damage (the first build did it in 28 to 44 s, far stronger than the rule needs).
+  The 90 to 120 s is the **mean of the three seeds**, each seed inside **75 to 140 s** (maintainer, 2026-11-13: the fight is
+  chaotic and a per-seed band of 90 to 120 s broke with every change to the hull).
 - Fixed by the architecture: per-tick aim, gates, shots and interceptions run in the native core on M5-T21's turret rows
   (`CLAUDE.md`'s language split), results identical with 1 and 6 threads; the station's own hull blocks its fire (Q33's rule);
   shots go through the projectile pool and `HitResolver`. A behaviour this section does not cover goes to the maintainer before
@@ -566,7 +568,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     damage 300 → 900 (the same damage a second on a capital, a third of the shots at fighters); `grid_interceptor` one kill every
     0.5 → 1.0 s a battery; section health 20 000 → 5 000 (`StationSections.SECTION_HEALTH`, T06's placeholder). The fights' limits
     stay 180 s (raid) and 300 s (capital).
-  - **The raid** (`test_station_grid_balance`, now pinned to 90 to 120 s and to section damage): 12 raiders dive from 0.9 to
+  - **The raid** (`test_station_grid_balance`, pinned to section damage and to 90 to 120 s on the three seeds' mean, each seed 75 to 140 s): 12 raiders dive from 0.9 to
     1.7 km on a decoy 450 m over L9 (a marker with no hull; their shots at it carry on into the hull). On T22's station: seed 1
     all destroyed at 103.8 s (249 light shots with 111 hits, 14 heavy with 4, 178 shot down, station lost 708, worst section
     10 %), seed 2 at 115.5 s (182 / 84, 10 / 5, 137, 480, 5 %), seed 3 at 90.4 s (255 / 81, 13 / 8, 156, 396, 5 %); no mount
@@ -605,8 +607,10 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   - **The raid's band is brittle (maintainer):** the fight is chaotic. On T22's hull the same numbers gave 117, 129 and
     125 s; light damage 5 gave 123, 122, 114; 6 gave 96, 92, 83; a shot every 1.9 s at damage 5 gave 90, a stalled raider
     (no win in 180 s) and 107; 5.5 is the one setting tried with all three seeds inside 90 to 120 s, seed 3 by 0.4 s. Any change
-    to the hull or the AI (T10) will move it again. A steadier pin would be the three seeds' mean in 90 to 120 s with each seed
-    in a wider band; say if that is wanted.
+    to the hull or the AI (T10) will move it again.
+  - **The band loosened (maintainer, 2026-11-13):** the test now asserts the three seeds' mean in 90 to 120 s and each seed in
+    75 to 140 s; the capital keeps its 300 s limit. The light pulse stays at 5.5: mean 103.2 s (103.8, 115.5, 90.4). Retune
+    only when the mean leaves the band.
 
 ### M7-T08 Launch bays and the launch sequence
 

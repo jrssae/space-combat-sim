@@ -6,15 +6,18 @@ extends GutTest
 ##
 ## - **The raid**: 12 raiders on the raider profile dive from a loose box 0.9 to 1.7 km up and forward of a decoy 450 m over the
 ##   spine's first light turret (`DECOY_NAME`), ordered to attack it. Their shots at it carry on into the hull and set the grid
-##   weapons free; the grid answers. Tuned (maintainer, after T07) so the grid takes 90 to 120 s and the hull shows damage.
+##   weapons free; the grid answers. Tuned (maintainer, after T07) so the grid takes 90 to 120 s on the three seeds' mean, each
+##   seed 75 to 140 s, and the hull shows damage.
 ## - **The capital**: a cruiser stand-in holding station 2.2 to 2.7 km off the bow tower (placed by the seed). The stand-in's own director picks fighters
 ##   only, so this file fires its weapons at the bow (its eight guns' bolts once a second each, its two beams every 2 s, a
 ##   missile every 3 s): the interceptors take its bolts and missiles, its beams get through (D75).
 
 const RAID_SIZE: int = 12
 const RAID_LIMIT_S: float = 180.0
-## The maintainer's band for the raid (after T07): the grid alone takes this long, s.
-const RAID_BAND_S: Vector2 = Vector2(90.0, 120.0)
+## The maintainer's bands for the raid (after T07), s: the three seeds' mean, and each seed. The fight is chaotic, so one seed
+## may stray further than the mean.
+const RAID_MEAN_BAND_S: Vector2 = Vector2(90.0, 120.0)
+const RAID_SEED_BAND_S: Vector2 = Vector2(75.0, 140.0)
 const CAPITAL_LIMIT_S: float = 300.0
 const SEEDS: Array[int] = [1, 2, 3]
 const RAIDER: StringName = &"raider_fighter"
@@ -54,6 +57,7 @@ func after_each() -> void:
 
 func test_the_grid_alone_beats_twelve_raiders() -> void:
 	var lines := PackedStringArray()
+	var total_s: float = 0.0
 	for seed_value: int in SEEDS:
 		var f: Dictionary = await _fight(seed_value, false)
 		if f.is_empty():
@@ -61,9 +65,14 @@ func test_the_grid_alone_beats_twelve_raiders() -> void:
 			return
 		lines.append("seed %d %s" % [seed_value, _line(f)])
 		assert_true(bool(f["won"]), "seed %d: every raider destroyed inside %.0f s (%s)" % [seed_value, RAID_LIMIT_S, _line(f)])
-		assert_between(float(f["time_s"]), RAID_BAND_S.x, RAID_BAND_S.y, "seed %d: the raid lasts 90 to 120 s" % seed_value)
+		assert_between(float(f["time_s"]), RAID_SEED_BAND_S.x, RAID_SEED_BAND_S.y, "seed %d: the raid lasts %.0f to %.0f s" % [
+				seed_value, RAID_SEED_BAND_S.x, RAID_SEED_BAND_S.y])
+		total_s += float(f["time_s"])
 		assert_gt(float(f["worst_section"]), 0.03, "seed %d: the station shows section damage" % seed_value)
-	gut.p("BALANCE grid vs %d raiders:\n    %s" % [RAID_SIZE, "\n    ".join(lines)])
+	var mean_s: float = total_s / float(SEEDS.size())
+	assert_between(mean_s, RAID_MEAN_BAND_S.x, RAID_MEAN_BAND_S.y, "the seeds' mean lasts %.0f to %.0f s" % [RAID_MEAN_BAND_S.x,
+			RAID_MEAN_BAND_S.y])
+	gut.p("BALANCE grid vs %d raiders (mean %.1f s):\n    %s" % [RAID_SIZE, mean_s, "\n    ".join(lines)])
 
 
 func test_the_grid_alone_beats_one_capital() -> void:
