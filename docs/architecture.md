@@ -5490,6 +5490,9 @@ data/scenarios/station_launch.json  the player on Alpha 3 with three wingmen
   `launch_clearance` sector for the whole ejection, checked every 0.5 degrees of its sweep; otherwise the fighter holds, nose out, and
   the rest of the wave goes on in order (on one arm they come clear together and ripple out `stagger_min_s` apart). A skip under the
   spine waits on the rack, door open, and goes the tick the arm is clear. So no fighter is let go inside a blocked sector.
+  The fighter's way out is held to the same sectors (M7-T12's finding): let go at the drum's surface velocity it flies straight on while
+  the drum turns beneath it, so a drop (and a skip) also waits until its first 5 s of flight, sampled every 0.1 s from the release
+  point, stay out of every sector out to the release radius plus `clear_distance_m` (`LaunchSequence._flight_clear`).
 - **The hand-off state** is the release point turned with the drum, nose out, moving at the drum's surface velocity there (`w x r`) plus
   the rail's speed along `release_direction`, spinning with the drum; in the World, plus the station's place and
   `WorldFrame.rest_velocity()`. A played launch and a skipped one end in the same state against the drum (`last_handoff`).

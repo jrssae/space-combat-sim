@@ -731,6 +731,14 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     to the launch's stored pose in a follow-up. Final tests (staged copy): `test_launch_sequence.gd` 23, `test_launch_cut.gd` 7,
     `test_launch_bay.gd` 11, `test_cinematic_shot.gd` 17, with `test_mission_cinematic`, `test_scenario_loader`,
     `test_cinematic_camera` and `test_station_in_game` green; compile check and the main-scene smoke clean.
+  - **Fix: the hold checks the fighter's path after release (maintainer, 2026-11-14, from M7-T12's clearance test):** a fighter let go
+    at the edge of a blocked sector flew straight on, the drum turning under it, and passed 0.9 m from the spine about 3 s out. A drop
+    (and a skip's release) now also needs `LaunchSequence._flight_clear`: from the release point at the hand-off velocity (the rail's
+    speed plus the drum's surface velocity), the fighter's first `FLIGHT_CHECK_S` (5 s) of straight flight, sampled every 0.1 s, stays out
+    of every blocked sector at the radii the frame reaches (out to the release radius plus `clear_distance_m`); until then the fighter holds.
+    Tests: `test_launch_sequence.gd` (25: every fighter of 24 starts is let go onto a clear path; an arm at 45 degrees, clear during
+    the drop, holds), and `test_launch_shot_clearance.gd` (2: no released fighter within 6 m of the hull on 54 launches, and the camera
+    variants clear without the skip they needed before).
 
 ### M7-T09 The station interior for the front end
 

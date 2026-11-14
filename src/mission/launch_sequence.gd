@@ -12,6 +12,9 @@ extends RefCounted
 ## Hold under the spine (maintainer): the stationary frame passes over each arm once a turn. A drop starts only when the arm stays
 ## out of every blocked sector (`StationHardpoints.launch_blocked`) from the drop's start to its release; until then the fighter holds
 ## on its rack while the rest of the wave goes on in order; held fighters that come clear together go at least `stagger_min_s` apart.
+## The hold also covers the fighter's way out: let go with the drum's surface velocity it flies straight on while the drum turns under
+## it, so its first `FLIGHT_CHECK_S` seconds are checked against the same sectors (where its path from the axis is, out to the frame's
+## reach) and a drop waits until that whole path is clear (maintainer, M7-T12's finding: a release at a sector's edge skimmed the spine).
 ##
 ## Steps and timings come from a `LaunchProfile`, so M8's squadron launch runs this for several wings in turn.
 
@@ -22,6 +25,9 @@ const PHASE_NAMES: PackedStringArray = ["staged", "moving", "racked", "rotating"
 const DOOR_NAMES: PackedStringArray = ["closed", "opening", "open", "closing"]
 ## How finely a drop's sweep of arm angles is checked against the blocked sectors, degrees.
 const CLEAR_STEP_DEG: float = 0.5
+## How long after its release a fighter's straight flight is checked against the blocked sectors, and how finely, seconds.
+const FLIGHT_CHECK_S: float = 5.0
+const FLIGHT_STEP_S: float = 0.1
 const EPS_S: float = 1e-6
 ## A door leaf's thickness, m (the generator's leaves are 0.5 m deep).
 const LEAF_THICKNESS_M: float = 0.5
@@ -353,7 +359,7 @@ func _step_fighter(f: Dictionary, delta: float, events: Array[Dictionary]) -> vo
 			if f["phase"] == Phase.HELD:
 				f["held_s"] = float(f["held_s"]) + delta
 			if bool(f["skip"]):
-				if not blocked_now():
+				if not blocked_now() and _flight_clear(bays[f["bay"]], 0.0):
 					_release(f, events)
 				return
 			if float(f["turn"]) < 1.0:
@@ -364,7 +370,7 @@ func _step_fighter(f: Dictionary, delta: float, events: Array[Dictionary]) -> vo
 				return
 			if not _due(f) or (doors[f["bay"]] as Dictionary)["state"] != DoorState.OPEN:
 				return
-			if _clear_for_drop():
+			if _clear_for_drop() and _flight_clear(bays[f["bay"]], profile.drop_s):
 				f["drop_start"] = time_s
 				_enter(f, Phase.DROPPING)
 				events.append({"kind": "drop", "id": f["id"], "bay": bay_name})
@@ -418,6 +424,24 @@ func _clear_for_drop() -> bool:
 	for s: int in steps + 1:
 		var a: float = start + (sweep * float(s) / float(steps) if steps > 0 else 0.0)
 		if _hardpoints.launch_blocked(a):
+			return false
+	return true
+
+
+# The fighter's first seconds of flight after a release `lead_s` from now stay out of every blocked sector at the radii the frame
+# reaches: straight on from its release point at the hand-off velocity, while the drum turns beneath it.
+func _flight_clear(bay: Dictionary, lead_s: float) -> bool:
+	var reach: float = float(_hardpoints.launch_clearance.get("clear_distance_m", 0.0))
+	var turn := Basis(Vector3.BACK, drum_angle + spin_rate_rad_s * lead_s)
+	var start: Vector3 = turn * release_point(bay)
+	var velocity: Vector3 = turn * ((bay["release_direction"] as Vector3).normalized() * release_speed(bay)) \
+			+ Vector3(0.0, 0.0, spin_rate_rad_s).cross(start)
+	var start_r: float = Vector2(start.x, start.y).length()
+	for step: int in ceili(FLIGHT_CHECK_S / FLIGHT_STEP_S) + 1:
+		var at: Vector3 = start + velocity * (float(step) * FLIGHT_STEP_S)
+		if Vector2(at.x, at.y).length() > start_r + reach:
+			break
+		if _hardpoints.launch_blocked(rad_to_deg(atan2(at.y, at.x))):
 			return false
 	return true
 

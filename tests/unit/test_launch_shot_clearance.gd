@@ -32,7 +32,7 @@ func before_all() -> void:
 	assert_true(bool(made["ok"]), str(made.get("error", "")))
 	profile = made["profile"]
 	for combo: Array in [["alpha", 1], ["alpha", 2], ["alpha", 3], ["alpha", 4], ["alpha", 5], ["alpha", 6], ["beta", 3], ["delta", 3], ["zeta", 3]]:
-		for start_deg: float in [0.0, 120.0, 240.0]:
+		for start_deg: float in [0.0, 60.0, 120.0, 180.0, 240.0, 300.0]:
 			timelines.append(_timeline(combo[0], combo[1], deg_to_rad(start_deg), hash([combo[0], combo[1], start_deg])))
 
 
@@ -64,9 +64,7 @@ func _timeline(wing: String, door: int, start_angle: float, seed_value: int) -> 
 			xf = seq.state_of("PLAYER", field.pivot)["transform"]
 		ticks.append({"angle": angle, "step": seq.step_of("PLAYER"), "step_time": seq.step_time("PLAYER"), "fighter": xf,
 				"bay": drum * LaunchSequence.door_frame(bay), "leaves": _leaves(seq, drum), "time": seq.time_s})
-	# How near the hull the fighter itself flies in its first seconds out: a launch released at the edge of the blocked sector can
-	# graze the spine (found by this test; the launch's hold, not a shot, decides that), and no shot can keep clear of a hull the
-	# fighter it films is skimming.
+	# How near the hull the fighter itself flies in its first seconds out (the hold keeps it off the spine).
 	var graze: float = INF
 	if released_at >= 0:
 		for i: int in range(released_at, mini(released_at + roundi(FLIGHT_S / DT), ticks.size()), SAMPLE_EVERY):
@@ -154,12 +152,20 @@ func _start_of(timeline: Dictionary, step: StringName, at_s: float) -> int:
 	return -1
 
 
+# The fighter itself never skims the hull after its release (M7-T12 found one 0.9 m from the spine; the hold now checks its path).
+func test_a_released_fighter_keeps_clear_of_the_hull() -> void:
+	if field == null:
+		pass_test("the station is not generated here")
+		return
+	for timeline: Dictionary in timelines:
+		assert_gte(float(timeline["graze_m"]), GRAZE_M, "%s door %d, drum %.0f deg at the start: the fighter comes within %.1f m of the hull" % [timeline["wing"], timeline["door"], timeline["start_deg"], timeline["graze_m"]])
+
+
 func test_every_launch_shot_keeps_the_camera_clear_of_the_walls() -> void:
 	if field == null:
 		pass_test("the station is not generated here")
 		return
 	var checked: int = 0
-	var skipped: Dictionary = {}
 	for index: int in profile.phases.size():
 		var phase: Dictionary = profile.phases[index]
 		for variant: Dictionary in phase["variants"]:
@@ -170,9 +176,6 @@ func test_every_launch_shot_keeps_the_camera_clear_of_the_walls() -> void:
 				var start: int = _start_of(timeline, phase["step"], float(phase["at_s"]))
 				if start < 0:
 					continue
-				if phase["step"] == &"release" and float(timeline["graze_m"]) < GRAZE_M:
-					skipped["%s door %d, drum %.0f deg (the fighter comes within %.1f m of the hull)" % [timeline["wing"], timeline["door"], timeline["start_deg"], timeline["graze_m"]]] = true
-					continue
 				var result: Dictionary = _closest(shot, timeline, start, _end_of(timeline, index, start))
 				checked += 1
 				if float(result["gap"]) < worst:
@@ -180,5 +183,3 @@ func test_every_launch_shot_keeps_the_camera_clear_of_the_walls() -> void:
 					where = "%s door %d, drum %.0f deg at the start, %.2f s in" % [timeline["wing"], timeline["door"], timeline["start_deg"], result["at_s"]]
 			assert_gte(worst, CLEAR_M, "%s (%s): the camera comes %.2f m from a wall or leaf (%s)" % [variant["id"], phase["phase"], worst, where])
 	assert_gt(checked, 100, "the variants were played on many launches")
-	if not skipped.is_empty():
-		gut.p("chase and exit shots left out where the fighter itself grazes the hull: %s" % ["; ".join(PackedStringArray(skipped.keys()))])

@@ -260,6 +260,40 @@ func test_no_release_inside_a_blocked_sector_over_a_whole_wing() -> void:
 		assert_true(seq.finished(), "and the doors shut (start %.0f)" % start)
 
 
+# A fighter let go flies straight on while the drum turns under it (its surface velocity), so a release at a sector's edge can fly
+# into the frame a few seconds later (M7-T12's clearance test found one 0.9 m from the spine): the hold checks that path too.
+func test_no_fighter_is_let_go_onto_a_path_that_meets_the_frame() -> void:
+	var reach: float = float(_hardpoints().launch_clearance["clear_distance_m"])
+	var checked: int = 0
+	for start: float in range(0, 360, 15):
+		var hp := _hardpoints()
+		var seq := LaunchSequence.create(hp, "alpha", _ids(6), _profile(), 3, _drum_for(start), SPIN)
+		for tick: int in roundi(120.0 / DT):
+			var angle: float = seq.drum_angle + SPIN * DT
+			for e: Dictionary in seq.advance(DT, angle, SPIN):
+				if e["kind"] != "release":
+					continue
+				var state: Dictionary = seq.handoff_of(String(e["id"]), PIVOT)
+				var from: Vector3 = (state["transform"] as Transform3D).origin - PIVOT
+				var velocity: Vector3 = state["velocity"]
+				for step: int in 51:
+					var at: Vector3 = from + velocity * (float(step) * 0.1)
+					if Vector2(at.x, at.y).length() > Vector2(from.x, from.y).length() + reach:
+						break
+					assert_false(hp.launch_blocked(rad_to_deg(atan2(at.y, at.x))),
+							"%s (start %.0f deg) is on a path into a blocked sector %.1f s out" % [e["id"], start, step * 0.1])
+				checked += 1
+	assert_gte(checked, 24 * 6 - 6, "the fighters of every start were let go")
+
+
+# Arm at 45 degrees: out of the sector for the whole 0.75 s drop, yet the fighter's path curves into it a few seconds later.
+func test_a_drop_whose_flight_would_meet_the_frame_waits() -> void:
+	var seq := LaunchSequence.create(_hardpoints(), "alpha", _ids(1), _profile(), 1, _drum_for(45.0), SPIN)
+	var log: Array[Dictionary] = _run(seq, 60.0, SPIN, true)
+	assert_false(_first(log, "hold", "F1").is_empty(), "it holds although the arm is clear during the drop")
+	assert_false(_first(log, "release", "F1").is_empty(), "and goes once the path is clear")
+
+
 func test_the_second_wave_drops_ten_seconds_after_the_first_waves_last_release() -> void:
 	var seq := LaunchSequence.create(_hardpoints(), "alpha", _ids(12), _profile(), 1, _drum_for(200.0), 0.0)
 	var log: Array[Dictionary] = _run(seq, 60.0, 0.0)
