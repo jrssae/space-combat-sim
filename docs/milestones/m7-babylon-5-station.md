@@ -596,6 +596,8 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   under a second, released briskly); within a wave the doors fire **in sequence along the arm, 0.25 to 0.5 s apart** (as the
   multiple-launch GIF shows); the 90-degree rotation is done by the clamp alone, with **no thrusters**: they fire only as part of
   the ejection.
+- **Shot holds (maintainer, 2026-11-13):** every shot holds at least **1 s**; in a wing launch the row and exit shots hold long
+  enough to show several Starfuries coming out before cutting; badly framed variants are dropped from the pools.
 - **Done when:** AC7.
 - **Done (as built; contracts in `docs/architecture.md` §20.2):**
   - **`LaunchSequence`** (`src/mission/launch_sequence.gd`, pure, in the drum's frame): one wing's launch of up to twelve, the first
