@@ -770,6 +770,74 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 - **Raid targeting (maintainer, 2026-11-13):** raiders prioritise whatever is firing at them, station allies or the station;
   when they go for the station, its **weapon systems** (the grid's mounts, which can be knocked out) are their first targets.
 - **Done when:** AC9's AI and traffic.
+- **Done (as built; contracts in `docs/architecture.md` §20.4; awaiting the maintainer's live run):**
+  - **The station always reaches avoidance (T06's open point).** A big hull whose skin is within 2 km of a ship is one of its
+    contacts whatever the nearest-12 cut kept (`brain_behaviours::SURFACE_SIGHT_M`; `Field.surface_rows`), so the fire lane,
+    avoidance and the attack always see it. Test: 16 raiders in a pack, cut at the nearest 2 and at 12.
+  - **Why raiders stalled beside the hull (T07's finding), and the fix.** Three causes: an attack on the station flew at its
+    centre, 300 m inside the hull; avoidance only cancelled a wish into the skin, so a ship whose target lay beyond the hull
+    hung beside it; and a dive at 60 m/s could not be stopped by the side thrusters, which is all the dodge used. Now
+    (`kernels::pilot::avoid`, `surface.rs`): within 60 m of the keep-off distance a wish into the skin is **turned along it**;
+    a ship falling at the skin faster than a quarter turn and its retros can stop **pulls out** (nose to the burn, every
+    thruster, guns held); a **turning hull is kept off where its parts sweep** (each volume's ring about the drum's axis, from
+    its hull's points), not where they are this tick; the limits of two hulls are applied together, the nearer last. And an
+    attack whose straight way is through a hull **flies round the station's axis outside the girth of every hull in sight**
+    (`brain_behaviours::detour`), so nothing enters the 50 m slot between the spine and the drum, where the reactive rules
+    alone still squeezed ships into the drum.
+  - **Raid targeting (maintainer).** At a hostile big hull the ship's last attacker (inside M3's 10 s memory) outranks every
+    other target: a fighter, or the station itself when the grid hit it (the drum's guns name the station:
+    `Targetable.SPEAKS_FOR`). A run on the station aims at **the nearest working grid mount** (interceptors too), kept while
+    it works, then the next, then the nearest skin; a mount on the drum is led with its skin's speed; such a run is a gun
+    run, never a slashing pass. The mounts reach the brains from the launch's copy of the turret rows
+    (`PickJob.points` → `Field.sub_points`). Away from any big hull the pick is M5's, bit for bit.
+  - **Balance (D75), measured again with the raid at the station itself, no decoy:** 12 raiders from 0.9 to 1.7 km over L9,
+    objective `BABYLON 5`: seed 1 all destroyed at 97.5 s, seed 2 at 110.2 s, seed 3 at 113.1 s, **mean 106.9 s** (band 90 to
+    120, each seed 75 to 140); station lost 426 to 522 (worst section 8 to 10 %), one mount knocked out in every seed, no
+    raider rammed the station, 1.8 to 2.5 % of the raid's flying time under 8 m/s. **No retune.** The capital is unchanged
+    (134.3, 134.5, 134.7 s). The test now asserts no ram and under 5 % hanging.
+  - **Docking lanes (native, `Route.lane`, `ScsBrains.set_route_lane`).** A route flown along its legs with every thruster,
+    the sideways error steered out, slowing into a waypoint that holds, arriving within 15 m; per waypoint a nose direction
+    (kept on the way and in the hold; a ship turns where it is before it flies such a leg) and a turn rate to match about
+    the nose, with the hull's top brought to the turning hull's own. A lane is trusted against the big hulls (it leads
+    through their openings); ships and rocks are still dodged.
+  - **Traffic** (`StationTraffic`, Main's child; `DockingPlan`, pure; `FreighterPods`):
+    - **Main docking bay:** a Skylark, Narn transport or Brezebel (the hulls that fit 94 x 34 m) flies the lane on the
+      drum's axis, matches the drum's roll from the approach's near point (measured 0.141 to 0.155 rad/s against 0.148 from
+      120 m outside the mouth, 0.2 m off the axis, lying square in the tunnel: a 40 m span does not pass it on its side), and
+      goes back to its pool 50 m short of the inner airlock's wall. Undocking starts there, turning with the drum, and flies
+      the lane out.
+    - **Cargo bay:** a Saturn 3 flies to the lane at 20 m/s, stops 700 m short of the hold point, turns its stern to the
+      bay there, backs in to the hold point (nose away within 0.9 over the last 300 m, inside 20 m of the point), its
+      **three pods fly into the cargo bay by themselves** along `cargo_bay_path` (7 s apart, 22 m/s) and leave the world at
+      the entry, it waits 75 s and leaves nose first. The Saturn's hull is one mesh, so while unloaded its hull is hidden and
+      its break-up chunks stand in (bow and engine ride the ship, the pod chunks fly). The pods in flight are ambient (no
+      body, target or row) and the Saturn's mass and hit volumes stay as they were. T11's ferry bots are not started with
+      it (`bots cargo` still shows them; say if they should accompany every cycle).
+    - **Through the gate:** arrivals come out of the scene's jumpgate and cross to the lane at 120 m/s, departures leave
+      through it; with no gate they start 2.5 km beyond the lane and are let go 12 km out.
+    - **Raids and defenders:** `StationTraffic.raid(n)` (console, `MissionApi.raid_station`) sends raiders with the station
+      as objective and scrambles the wings in `data/station/traffic.json` (Alpha). **`launch wing` ships are a wing now**
+      (`LaunchDirector._station_wing`): twelve strong, the first its leader, engaging at will, the others on its slots
+      (they form on the leader with nothing in reach and rally on a wingmate in a fight); a wing name the player leads is
+      left to the player.
+    - **Light traffic by itself** while free-flight encounters are on: every 150 s one of dock 0.35, undock 0.25,
+      freighter 0.25 (one at a time), raid 0.15 (4 to 6 raiders), at most 8 traffic ships, each a hash of the session seed
+      and the event's index.
+  - **Console:** command and provider `traffic` (`status`, `dock [near]`, `undock`, `freighter [near]`, `raid [n]`,
+    `scramble <wing>`, `auto on|off`, `clear`), in `info.md`.
+  - **Threads and parity.** Every per-tick decision above is in the AI job on the frozen rows; threaded against delayed and
+    one thread against six give the same rows, commands and turret digests (`test_station_threads`,
+    `test_station_grid_threads`, with raiders detouring round the drum). **No parity recording moved**: every new rule needs
+    a big hull among the contacts, a grid mount or a lane, and the recordings have none.
+  - **Tests:** Rust 173 (+11: the contact in a crowd, attacker first, not away from a hull, mounts first, a drum mount's
+    lead, the lane's roll, backing in and turning first, the slide, the pull-out, the swept rings, an arm coming round). GUT
+    `test_station_ai` (2: sixteen raiders round the spine to their targets with no ram and under 5 % hanging; a raid's first
+    worn mount), `test_station_traffic` (4, on the main scene: docking with the roll matched, undocking, the freighter's
+    cycle with its pods, a scrambled wing with orders engaging a raid), `test_docking_plan` (4), `test_station_grid_balance`
+    (2, the raid at the station).
+  - **Open (maintainer):** the ferry bots with a freighter cycle (above); section health and the mounts' health were left as
+    T07 set them; a raid started inside the slot between the spine and the drum is not covered (ships are kept out of it,
+    not led out); the Bokmai (30.9 m tall) is left out of the tunnel's hulls for want of room.
 
 ### M7-T11 Maintenance bots
 

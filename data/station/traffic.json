@@ -1,0 +1,5 @@
+{"interval_s": 150.0,
+ "weights": {"dock": 0.35, "undock": 0.25, "freighter": 0.25, "raid": 0.15},
+ "raid_size": [4, 6],
+ "scramble": ["alpha"],
+ "max_ships": 8}

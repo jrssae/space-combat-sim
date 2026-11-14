@@ -5583,3 +5583,78 @@ assets/weapons/grid_*.tres       the light pulse turret, the heavy cannon and th
   aims at them yet.
 - **Threads.** Threaded equals `delayed`, one thread equals six, rows, commands and the turret digest byte for byte
   (`test_station_grid_threads`). Every per-tick grid decision is native; GDScript only spends what the core named.
+
+### 20.4 AI and traffic at the station (D74, D78, T10)
+
+```
+native/src/kernels.rs            pilot::avoid at a big hull: slide_along (the wish turned along the skin), the pull-out, swept rings
+                                 for a turning hull, two hulls' limits together
+native/src/surface.rs            + SurfaceVolume.swept and Surface.girth, near_swept, nearest_to_avoid
+native/src/brain_behaviours.rs   + big hulls always contacts (SURFACE_SIGHT_M), the attacker first at a hostile hull, the station
+                                 as a target, its mounts as aim points (Field.sub_points), detour, docking lanes (Route.precise)
+native/src/turret_kernels.rs     + PickJob.points: every working grid mount, for the brains
+native/src/brain.rs              + ScsBrains.set_route_lane, restart_route
+src/ai/route.gd                  + lane, lane_arrival_m, a waypoint's face and spin (add_lane)
+src/targeting/targetable.gd      + SPEAKS_FOR: a body whose shots are answered at another's marker (the drum, for the station)
+src/world/docking_plan.gd        DockingPlan (pure): the main docking bay's lane in and out, the freighter's lane, the pods' path
+src/world/station_traffic.gd     StationTraffic (Main's child): dock, undock, freighter, raid, scramble, light traffic by itself;
+                                 command and provider `traffic`
+src/props/freighter_pods.gd      FreighterPods: a Saturn's pods flying into the cargo bay, its hull shown as its other chunks
+data/station/traffic.json        the interval, the kinds' weights, the raid's size, the wings scrambled, the ship cap
+```
+
+- **A big hull is always a contact.** After the nearest-k pick a think adds every row with a surface whose skin is within
+  `SURFACE_SIGHT_M` (2 km) of the ship (`Field.surface_rows`, listed once per rows version), in row order. So the station
+  reaches avoidance, the fire lane and the attack in any crowd, and from beyond 5 km of its centre.
+- **Avoidance at a big hull** (`pilot::avoid`; every other row's arithmetic is unchanged). For each hull among the contacts:
+  - its nearest point to keep off (`surface::nearest_to_avoid`): the volumes as they stand, or for a turning hull the **ring
+    each volume sweeps** about the hull's +z (`SurfaceVolume.swept`: from the hull's points where the volume has one, else
+    its box or capsule), so a ship never waits where an arm comes round; inside a ring the point marks the nearest way out
+    (inward only where the ring has a hole: a tunnel);
+  - **slide**: within `SLIDE_BAND_M` (60 m) of the keep-off distance (radius + 15 m) the part of the wish that heads into
+    the skin is turned along it, wholly at the keep-off distance, at the wish's speed; head on, the ship's seeded side
+    picks the way;
+  - **pull-out** (`Avoided.pull_out`): closing on the skin at `c` with less room than `c * turn_s + c^2 / (2 a_retro)`
+    (a quarter turn and a second, then the retros), the wish loses all of its way in and the brain re-seeks it on every
+    thruster with the nose turned to the burn and the trigger off;
+  - each near volume (or ring) is a threat at its nearest point, as T06 built;
+  - at the end what is left of a way in to any hull within the band is taken out of the sum, the nearest hull last.
+- **The detour** (`brain_behaviours::detour`, attacks only). When the straight way to the run's goal, tested to 83 m short
+  of it, enters a hull among the contacts, the wish is replaced: out to beyond the girth (`Surface.girth`, the farthest any
+  volume reaches from the axis) of every hull in sight plus 83 m, then round the blocking hull's +z the shorter way to the
+  goal's side, drifting along the axis toward it. It counts as avoiding. A goal on the hull (a mount) is so reached from
+  its own side, and the slot between the spine and the drum is never a way through.
+- **Raid targeting (maintainer).** `AttackState.score`: with a hostile big hull among the contacts, the last attacker
+  inside `KEEP_ATTACKER_S` gets `ATTACK_W_ANSWER` (1.0, above every other term); when that attacker is the hull itself (the
+  grid's guns; the drum's shots name the station through `Targetable.SPEAKS_FOR`) the hull is the target though no rigid
+  hostile list holds it. `AttackState.hull_aim`: a run on a hull aims at the mount it aimed at last while that works, else
+  the nearest working mount on a hostile hull (lower slot on a tie), else the hull's nearest skin; the point's velocity is
+  the row's plus the skin's (`Tick::velocity_at`); the run is the gun run (approach, break, extend), never the slash. An
+  objective that is a hull is transited to until its skin, not its centre, is within sensor range. The mounts come from
+  `PickJob.points` (taken at the launch: taken, live, not knocked out, any grid kind) resolved to rows in the job before the
+  pass (`Field.sub_points`).
+- **Docking lanes.** `Route.lane` makes `PathState` fly `fly_lane`: velocity along the leg from the last waypoint at the
+  route's cruise, the sideways offset pulled in (gain 0.5 /s, at most half the speed), back toward a waypoint it overshot;
+  into a waypoint with a hold the speed falls as `sqrt(2 a d)` on 0.4 of the weakest of the retros and side thrusters (never
+  under 3 m/s); thrust on every axis. A waypoint's `face` (World) is where the nose points on the way to it and while it
+  holds, and no way is made until the nose is within about 25 degrees of it (a freighter turns, then backs in); its `spin`
+  (World, rad/s) is matched about the nose (`brain_maths::match_roll`) and the hull's top is brought to the +y of the
+  turning hull among the contacts (`align_roll`). A waypoint is reached within `lane_arrival_m` (15 m), or, without a hold,
+  when it lies behind along its leg. A lane given in place of another route starts at its first waypoint
+  (`restart_route`). On a lane the big hulls are left out of avoidance.
+- **`DockingPlan`** reads `main_docking_bay` (points in the drum's frame, on its axis: moved by the drum's pivot) and
+  `cargo_bay` (frame). Docking in: the approach's far point, its near point, the mouth, 50 m short of the airlock's wall,
+  the drum's turn asked from the near point on, 45 m/s. Out: the reverse. Freighter: the approach's far point, a stop 700 m
+  short of the hold point, the hold point with the nose away (75 s), the far point again; 20 m/s.
+- **`StationTraffic`** starts ships from the pools with the `civilian` profile and a route, marks them `tier_exempt`, and
+  steps its own few entries a tick: a transit that ended takes the lane; a docking ship at the lane's end goes back to its
+  pool (`docked`); a freighter in the hold at the bay unloads (`FreighterPods.unload`, `freighter_unloading`); a lane that
+  ended leaves through the gate (`Jumpgate.departure_route`, `send_departure`) or 12 km straight on, then the ship is
+  released (`undocked`, `freighter_left`). `raid(n, scramble)` acquires raiders with the station as objective, out of the
+  gate when there is one. Light traffic runs while the `EncounterDirector` is on (or `traffic auto on`).
+- **Station wings.** `LaunchDirector.launch_wing` makes (once) a `Wing` of the arm's name with eleven slots, engage at
+  will, and joins each of the twelve as it is taken from the pool: the first leads. `WingDirector.refresh` briefs them as
+  any wing.
+- **Threads.** All of the above per tick is in the AI job on the frozen rows; `Field.sub_points` is filled in the job
+  before the pass. Threaded equals delayed and one thread equals six (`test_station_threads`, `test_station_grid_threads`).
+  No recording in `tests/fixtures/` moved.

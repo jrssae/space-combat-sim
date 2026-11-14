@@ -315,6 +315,14 @@ func launch_from(wing: String, door: int) -> String:
 	return launches.launch_player(wing, door)
 
 
+## Sends `count` raiders at the station, its wings scrambled when `scramble` (M7-T10); "" or why not.
+func raid_station(count: int, scramble: bool) -> String:
+	var traffic: StationTraffic = launches.main.traffic if launches != null and is_instance_valid(launches) and launches.main != null else null
+	if traffic == null:
+		return "no station traffic in this scene"
+	return traffic.raid(count, scramble)
+
+
 ## The player is still on its rack or rail.
 func launching() -> bool:
 	return launches != null and is_instance_valid(launches) and launches.locks_controls()

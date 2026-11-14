@@ -86,6 +86,8 @@ var far_props: FarPropHost = null
 var star_system: StarSystemHost = null
 ## Cobra-bay launches from the station (M7-T08): the scenario's `launch_bay` start, `MissionApi.launch_from`, console `launch`.
 var launches: LaunchDirector = null
+## Traffic at the station (M7-T10): docking, freighters, raids at it; console `traffic`.
+var traffic: StationTraffic = null
 ## Where and when the scenario is in its star system (M6-T09): `ScenarioFrame.resolve`'s result, empty without a system.
 var frame: Dictionary = {}
 
@@ -221,6 +223,9 @@ func _ready() -> void:
 	launches = LaunchDirector.new()
 	launches.main = self
 	add_child(launches)
+	traffic = StationTraffic.new()
+	traffic.main = self
+	add_child(traffic)
 	var launch_bay: String = String((scenario.get("player", {}) as Dictionary).get("launch_bay", ""))
 	if not launch_bay.is_empty():
 		launches.start_bay = launch_bay

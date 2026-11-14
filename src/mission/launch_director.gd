@@ -162,6 +162,7 @@ func launch_wing(wing: String) -> String:
 	var ships: Array[Combatant] = []
 	var prefix: String = wing.to_upper()
 	var at: UniversePos = main.world.to_universe(s.global_position)
+	var squadron: Wing = _station_wing(prefix)
 	for i: int in 12:
 		var callsign: String = pool.next_name(prefix, 1)
 		var made: Dictionary = BrainFactory.from_behaviour({"type": "ai", "profile": WING_PROFILE}, at,
@@ -171,6 +172,8 @@ func launch_wing(wing: String) -> String:
 		if ally == null:
 			break
 		ships.append(ally)
+		if squadron != null:
+			main.wings.join(squadron.name, ally)  # the first leads, the rest take its slots (M7-T10)
 	if ships.is_empty():
 		return "no allied Starfury free"
 	var why: String = _start(wing, 1, ships, "", hash([main.scenario_seed, wing.to_lower(), "wing", SimClock.now()]))
@@ -178,6 +181,21 @@ func launch_wing(wing: String) -> String:
 		for ally: Combatant in ships:
 			pool.release(ally)
 	return why
+
+
+# The station's wing called `wing_name`, twelve strong and engaging at will, made on its first launch (M7-T10): its members
+# form on their leader when nothing is in reach and fight when something is. None when the player leads a wing of that name
+# (its own wingmen keep it), or without a wing director.
+func _station_wing(wing_name: String) -> Wing:
+	if main.wings == null:
+		return null
+	var wing: Wing = main.wings.wing_named(wing_name)
+	if wing != null:
+		return null if wing.leader != null and wing.leader.is_player else wing
+	wing = Wing.new(wing_name, null, 11)
+	wing.order = AiContext.Order.ENGAGE_AT_WILL
+	main.wings.wings.append(wing)
+	return wing
 
 
 # A scenario that starts in a bay starts there again after a respawn, without the wingmen (they flew on).

@@ -339,7 +339,7 @@ fn a_docking_lane_matches_the_tunnels_roll_on_its_way_in() {
     let out = bench.think(&mut brain, 1.1, 0, NEVER, 12);
     let want = brain_maths::match_roll(&bench.rows.bases[1], spin, capability().rate_max);
     assert!(want.abs() > 0.05, "a roll worth commanding: {want}");
-    assert_eq!(f64::from(out.flight.rot.z), f64::from(want as f32));
+    assert_eq!(f64::from(out.flight.rot.z), f64::from(want as f32), "far from the drum: its rate alone");
     // The roll is about the nose: turned the other way round, the same drum asks the opposite roll.
     assert!((want.abs() - 0.148 / 2.0).abs() < 1e-6, "0.148 rad/s of a 2 rad/s roll rate: {want}");
 }
@@ -356,6 +356,12 @@ fn a_docking_lane_backs_a_freighter_in_and_holds_it_stern_to_the_bay() {
     assert!(out.flight.retro_left > 0.0 && out.flight.main_left == 0.0, "astern on the retros: {:?}", out.flight);
     assert!(f64::from(length(out.flight.rot)) < 1e-6, "nose already away from the bay: {:?}", out.flight.rot);
     assert!(brain.desired_velocity.z > 0.0 && brain.desired_all_axes, "toward the bay on every thruster");
+    // Nose toward the bay (not yet turned): it turns where it is and makes no way.
+    bench.rows.bases[1] = Basis::from_cols(Vector3::new(-1.0, 0.0, 0.0), Vector3::UP, Vector3::new(0.0, 0.0, -1.0));
+    let out = bench.think(&mut brain, 1.05, 0, NEVER, 12);
+    assert!(f64::from(length(brain.desired_velocity)) < 1e-6, "no way made until it has turned: {:?}", brain.desired_velocity);
+    assert!(f64::from(length(out.flight.rot)) > 0.5, "turning: {:?}", out.flight.rot);
+    bench.rows.bases[1] = Basis::IDENTITY;
     // Close in it creeps: far slower than cruise 30 m short of a waypoint that holds.
     bench.rows.positions[1] = Vector3::new(0.0, 0.0, 20_370.0);
     bench.think(&mut brain, 1.1, 0, NEVER, 12);

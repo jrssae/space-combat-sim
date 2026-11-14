@@ -162,6 +162,7 @@ pub struct Scratch {
     pub lists: pilot::Lists,
     pub bolt_candidates: Vec<u32>,
     named: Vec<u32>,
+    lane_contacts: Vec<i32>,
     hostile_row: Vec<bool>,
     friendly_row: Vec<bool>,
 }
@@ -616,6 +617,11 @@ pub struct Output {
 }
 
 impl Brain {
+    /// The route from its first waypoint again.
+    pub fn restart_route(&mut self) {
+        self.path.reset();
+    }
+
     /// `AiPilot._init`: the profile scaled by the temperament, the behaviours given (in tie order), each retuned.
     pub fn new(base: Profile, temperament: Temperament, seed: i64, kinds: &[u8]) -> Self {
         let profile = base.scaled(&temperament);
@@ -1142,6 +1148,16 @@ impl Brain {
                 p.velocity
             };
             let cap = &self.ship.capability;
+            // A docking lane leads through a big hull's openings (a tunnel, a bay's mouth): the lane is trusted against
+            // the hulls, and only ships and rocks are dodged on it (M7-T10).
+            let on_lane = self.current_kind() == i32::from(KIND_FOLLOW_PATH)
+                && self.ctx.route.as_ref().is_some_and(|r| r.precise);
+            if on_lane {
+                scratch.lane_contacts.clear();
+                scratch.lane_contacts.extend(
+                    scratch.contacts.iter().copied().filter(|&r| rows.surface(r as usize).is_none()),
+                );
+            }
             let avoided = pilot::avoid(
                 rows,
                 &pilot::Ship {
@@ -1155,7 +1171,7 @@ impl Brain {
                     a_rcs_y: cap.a_rcs_y,
                     tie_hash: self.ship.tie_hash,
                 },
-                &scratch.contacts,
+                if on_lane { &scratch.lane_contacts } else { &scratch.contacts },
                 &scratch.statics,
                 self.avoid_exempt_id,
                 wish,
@@ -3592,7 +3608,7 @@ impl PathState {
         self.lag_m = Self::lag_to(tick, route);
         self.settle(p, route);
         match self.phase {
-            Self::LEAD if route.precise => self.fly_lane(cmd, p, ship, route, wish),
+            Self::LEAD if route.precise => self.fly_lane(tick, cmd, ship, route, wish),
             Self::LEAD => {
                 let to = sub(p.local_of(route.points[self.index]), p.position);
                 self.fly(cmd, p, ship, to, route.pace_speed(self.lag_m), wish);
@@ -3650,6 +3666,7 @@ impl PathState {
                         p.local_of(route.points[self.index]),
                         p.position,
                     ))) < Self::arrival_m(route)
+                        || Self::passed(p, route, self.index)
                     {
                         self.arrive(route);
                     }
@@ -3749,10 +3766,21 @@ impl PathState {
         }
     }
 
+    // Whether a docking lane's waypoint that does not hold lies behind the ship along its leg: flown past, a little wide.
+    fn passed(p: &Percept, route: &Route, index: usize) -> bool {
+        if !route.precise || index == 0 || route.holds[index] > 0.0 {
+            return false;
+        }
+        let goal = p.local_of(route.points[index]);
+        let leg = sub(goal, p.local_of(route.points[index - 1]));
+        f64::from(length(leg)) > 1.0 && f64::from(dot(sub(goal, p.position), leg)) <= 0.0
+    }
+
     // One tick along a docking lane (M7-T10): along the leg to the waypoint with the sideways error steered out, slowing
     // into a waypoint that holds; the nose where the lane asks (a freighter backs in), any thruster doing the work; and
     // the hull turning with the lane's spin (a ship matches the drum's roll before its tunnel).
-    fn fly_lane(&mut self, cmd: &mut FlightCmd, p: &Percept, ship: &Ship, route: &Route, wish: &mut Wish) {
+    fn fly_lane(&mut self, tick: &Tick, cmd: &mut FlightCmd, ship: &Ship, route: &Route, wish: &mut Wish) {
+        let p = &tick.p;
         const LANE_GAIN: f64 = 0.5;
         const BRAKE_SHARE: f64 = 0.4;
         const CREEP_MPS: f64 = 3.0;
@@ -3781,15 +3809,36 @@ impl PathState {
                 if f64::from(length(pull)) > most {
                     pull = scale(normalized(pull), most as f32);
                 }
-                v_des = add(scale(along, speed as f32), pull);
+                // Past the waypoint (an overshoot) the way along the leg is back to it.
+                let left = f64::from(dot(to, along));
+                let ahead = clampf(left / maxf(Self::arrival_m(route), 1.0), -1.0, 1.0);
+                v_des = add(scale(along, (speed * ahead) as f32), pull);
             }
         }
         let face = route.faces.get(self.index).copied().unwrap_or(Vector3::ZERO);
         let nose = if f64::from(length_squared(face)) > 1e-12 { face } else { along };
+        // A nose the lane fixes is brought round before the leg is flown (a freighter turns, then backs in): no way
+        // made beyond a quarter turn off, all of it within `ALIGNED_COS`.
+        if f64::from(length_squared(face)) > 1e-12 {
+            const ALIGNED_COS: f64 = 0.9;
+            let cos = f64::from(dot(p.forward, normalized(face)));
+            v_des = scale(v_des, clampf(cos / ALIGNED_COS, 0.0, 1.0) as f32);
+        }
         cmd.rot = brain_maths::face(&p.basis, nose, cap.rate_max, brain_maths::K_FACE);
         let spin = route.spins.get(self.index).copied().unwrap_or(Vector3::ZERO);
         if f64::from(length_squared(spin)) > 1e-12 {
-            cmd.rot.z = brain_maths::match_roll(&p.basis, spin, cap.rate_max) as f32;
+            let mut roll = brain_maths::match_roll(&p.basis, spin, cap.rate_max);
+            // Turning as fast as the tunnel is not yet lying square in it: the hull's top is also brought to the
+            // turning hull's own (a 40 m span does not pass a 34 m tunnel on its side).
+            if let Some(j) = tick
+                .contacts
+                .iter()
+                .map(|&r| r as usize)
+                .find(|&j| tick.rows.surface(j).is_some_and(|s| s.spin_rad_s != 0.0))
+            {
+                roll += brain_maths::align_roll(&p.basis, tick.up_of(j), cap.rate_max, brain_maths::K_FACE);
+            }
+            cmd.rot.z = clampf(roll, -1.0, 1.0) as f32;
         }
         seek_velocity(cmd, p, cap, v_des, true, wish);
     }

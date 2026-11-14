@@ -594,6 +594,14 @@ impl ScsBrains {
         true
     }
 
+    /// Starts the pilot's route again from its first waypoint (M7-T10: a docking lane given after another route).
+    #[func]
+    fn restart_route(&mut self, slot: i64) {
+        if let Some(b) = self.brain_mut(slot) {
+            b.restart_route();
+        }
+    }
+
     #[func]
     fn clear_route(&mut self, slot: i64) {
         if let Some(b) = self.brain_mut(slot) {

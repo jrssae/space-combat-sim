@@ -362,6 +362,19 @@ func launch_from(wing: String, door: int) -> void:
 		await _seq.wake
 
 
+## Sends `count` raiders at the station (M7-T10): they come out of the scene's jumpgate when it has one and go for the grid's
+## mounts and whoever fires at them; `scramble` launches the station's wings named in `data/station/traffic.json` against them.
+func raid_station(count: int, scramble: bool = true) -> void:
+	if has_ended():
+		return
+	journal.append("raid_station %d" % count)
+	if stage == null:
+		return
+	var why: String = stage.raid_station(count, scramble)
+	if not why.is_empty():
+		push_error("Mission: raid_station: %s" % why)
+
+
 ## Holds or frees the player's controls: while held, `Main` zeroes their flight and combat commands and the ship flies on.
 func lock_controls(on: bool) -> void:
 	if has_ended():

@@ -853,6 +853,12 @@ func _sync_context(host: Object) -> void:
 	if route != _pushed_route or count != _pushed_route_count or (route != null and (route.pace_id != _pushed_route_pace \
 			or route.cruise_mps != _pushed_route_cruise or route.loop != _pushed_route_loop \
 			or route.yield_to_attack != _pushed_route_yield)):
+		# A docking lane given in place of another route starts at its first waypoint (M7-T10).
+		if route != null and route.lane and route != _pushed_route:
+			host.restart_route(_slot)
+			var follow := behaviour(&"follow_path") as BehaviourFollowPath
+			if follow != null:
+				follow.reset()
 		_pushed_route = route
 		_pushed_route_count = count
 		if route != null:
