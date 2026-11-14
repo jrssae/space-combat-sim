@@ -51,7 +51,7 @@ pub fn from_packed(packed: &[f64], spin_rad_s: f64) -> Surface {
         .map(|v| {
             let capsule = v[0] != 0.0;
             let half = [v[13].abs(), v[14].abs(), v[15].abs()];
-            SurfaceVolume {
+            let mut made = SurfaceVolume {
                 capsule,
                 axes: [
                     unit3([v[1], v[2], v[3]]),
@@ -65,10 +65,14 @@ pub fn from_packed(packed: &[f64], spin_rad_s: f64) -> Surface {
                 } else {
                     len3(half)
                 },
-            }
+                swept: [0.0; 4],
+            };
+            made.swept = swept_ring(&made);
+            made
         })
-        .collect();
+        .collect::<Vec<SurfaceVolume>>();
     Surface {
+        girth: volumes.iter().map(|v| v.swept[1]).fold(0.0, f64::max),
         volumes,
         hulls: Vec::new(),
         spin_rad_s: if spin_rad_s.is_finite() {
@@ -77,6 +81,132 @@ pub fn from_packed(packed: &[f64], spin_rad_s: f64) -> Surface {
             0.0
         },
     }
+}
+
+// The distance from the origin to the 2D segment from `a` to `b`.
+fn origin_to_segment(a: [f64; 2], b: [f64; 2]) -> f64 {
+    let ab = [b[0] - a[0], b[1] - a[1]];
+    let len_sq = ab[0] * ab[0] + ab[1] * ab[1];
+    let t = if len_sq > 1e-18 {
+        (-(a[0] * ab[0] + a[1] * ab[1]) / len_sq).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    (a[0] + ab[0] * t).hypot(a[1] + ab[1] * t)
+}
+
+// The ring volume `v` sweeps about the body's +z (`SurfaceVolume::swept`). A box: from its corners and edges seen along
+// the axis (0 inside when the axis passes through it); a capsule: from its segment, grown by its radius.
+fn swept_ring(v: &SurfaceVolume) -> [f64; 4] {
+    if v.capsule {
+        let (h, r) = (v.half[0], v.half[1]);
+        let (a, b) = (to_body(v, [0.0, -h, 0.0]), to_body(v, [0.0, h, 0.0]));
+        let near = origin_to_segment([a[0], a[1]], [b[0], b[1]]);
+        let far = a[0].hypot(a[1]).max(b[0].hypot(b[1]));
+        return [(near - r).max(0.0), far + r, a[2].min(b[2]) - r, a[2].max(b[2]) + r];
+    }
+    let mut corners = [[0.0_f64; 3]; 8];
+    for (k, c) in corners.iter_mut().enumerate() {
+        let sign = |bit: usize| if k & bit != 0 { 1.0 } else { -1.0 };
+        *c = to_body(v, [sign(1) * v.half[0], sign(2) * v.half[1], sign(4) * v.half[2]]);
+    }
+    let (mut far, mut near) = (0.0_f64, f64::INFINITY);
+    let (mut z_lo, mut z_hi) = (f64::INFINITY, f64::NEG_INFINITY);
+    for c in &corners {
+        far = far.max(c[0].hypot(c[1]));
+        z_lo = z_lo.min(c[2]);
+        z_hi = z_hi.max(c[2]);
+    }
+    for i in 0..8 {
+        for bit in [1, 2, 4] {
+            if i & bit == 0 {
+                let (a, b) = (corners[i], corners[i | bit]);
+                near = near.min(origin_to_segment([a[0], a[1]], [b[0], b[1]]));
+            }
+        }
+    }
+    // The axis passes through the box when some point of it lies on the axis: the axis' line, in the box's own frame,
+    // meets the box.
+    let on_axis_a = local(v, [0.0, 0.0, z_lo - 1.0]);
+    let on_axis_b = local(v, [0.0, 0.0, z_hi + 1.0]);
+    if box_entry(on_axis_a, on_axis_b, v.half).is_some() {
+        near = 0.0;
+    }
+    [near, far, z_lo, z_hi]
+}
+
+// The ring a convex hull sweeps about the body's +z, from its points: a box fitted to a round part has corners far outside
+// it, so the hull's own points give the ring where there is one.
+fn swept_ring_of_hull(points: &[V], planes: &[[f64; 4]]) -> [f64; 4] {
+    let (mut far, mut near) = (0.0_f64, f64::INFINITY);
+    let (mut z_lo, mut z_hi) = (f64::INFINITY, f64::NEG_INFINITY);
+    for (i, a) in points.iter().enumerate() {
+        far = far.max(a[0].hypot(a[1]));
+        z_lo = z_lo.min(a[2]);
+        z_hi = z_hi.max(a[2]);
+        // Every chord lies in the hull, and seen along the axis the chords cover its outline.
+        for b in &points[i + 1..] {
+            near = near.min(origin_to_segment([a[0], a[1]], [b[0], b[1]]));
+        }
+    }
+    if hull_entry([0.0, 0.0, z_lo - 1.0], [0.0, 0.0, z_hi + 1.0], planes, 0.0).is_some() {
+        near = 0.0;
+    }
+    [near, far, z_lo, z_hi]
+}
+
+/// For each volume of spinning row `j` whose swept ring is within `within` m of World point `p`: the ring's nearest point
+/// to `p` (World) and the distance. Inside a ring the point given lies a hand's breadth from `p`, opposite the nearest way
+/// out, so a push "away from it" leads out. Nothing for a row without a surface.
+pub fn near_swept(rows: &Rows, j: usize, p: Vector3, within: f64, mut each: impl FnMut(Vector3, f64)) {
+    let Some(s) = rows.surface(j) else {
+        return;
+    };
+    let (basis, origin) = (&rows.bases[j], rows.positions[j]);
+    let q = into_body(basis, origin, p);
+    let r = q[0].hypot(q[1]);
+    let radial = if r > 1e-6 { [q[0] / r, q[1] / r] } else { [1.0, 0.0] };
+    for v in &s.volumes {
+        let [r_lo, r_hi, z_lo, z_hi] = v.swept;
+        let (rc, zc) = (r.clamp(r_lo, r_hi), q[2].clamp(z_lo, z_hi));
+        let d = (r - rc).hypot(q[2] - zc);
+        if d > within {
+            continue;
+        }
+        if d > 0.0 {
+            each(from_body(basis, origin, [radial[0] * rc, radial[1] * rc, zc]), d);
+            continue;
+        }
+        // Inside: out by the nearest face of the ring (inward only when the ring has a hole there).
+        const INSIDE_M: f64 = 0.2;
+        let mut out = ([radial[0], radial[1], 0.0], r_hi - r);
+        if r_lo > 0.0 && r - r_lo < out.1 {
+            out = ([-radial[0], -radial[1], 0.0], r - r_lo);
+        }
+        if q[2] - z_lo < out.1 {
+            out = ([0.0, 0.0, -1.0], q[2] - z_lo);
+        }
+        if z_hi - q[2] < out.1 {
+            out = ([0.0, 0.0, 1.0], z_hi - q[2]);
+        }
+        each(from_body(basis, origin, sub3(q, scale3(out.0, INSIDE_M))), 0.0);
+    }
+}
+
+/// Row `j`'s nearest point to World point `p` as avoidance keeps off it, and how far it is: a turning hull's swept rings,
+/// any other hull's volumes as they stand. None for a row without a surface.
+pub fn nearest_to_avoid(rows: &Rows, j: usize, p: Vector3) -> Option<(Vector3, f64)> {
+    let s = rows.surface(j)?;
+    if s.spin_rad_s == 0.0 {
+        return nearest_of_row(rows, j, p);
+    }
+    let mut best: Option<(Vector3, f64)> = None;
+    near_swept(rows, j, p, f64::INFINITY, |at, d| {
+        if best.is_none_or(|(_, b)| d < b) {
+            best = Some((at, d));
+        }
+    });
+    best
 }
 
 /// Adds convex hulls to `s`'s volumes from `flat`: per hull its volume's index, its point count and the points (body frame),
@@ -102,7 +232,9 @@ pub fn add_hulls(s: &mut Surface, flat: &[f64]) {
         let k = index as usize;
         if index >= 0.0 && k < s.volumes.len() && n >= 4 {
             s.hulls[k] = hull_planes(&points);
+            s.volumes[k].swept = swept_ring_of_hull(&points, &s.hulls[k]);
         }
+        s.girth = s.volumes.iter().map(|v| v.swept[1]).fold(0.0, f64::max);
     }
 }
 

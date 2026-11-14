@@ -4,10 +4,10 @@ extends GutTest
 ## station is never destroyed (Q5). Seeded and headless through the native core, three seeds each, as Q31 pinned the Saturns.
 ## A balance file, so behind `GUT_BALANCE`.
 ##
-## - **The raid**: 12 raiders on the raider profile dive from a loose box 0.9 to 1.7 km up and forward of a decoy 450 m over the
-##   spine's first light turret (`DECOY_NAME`), ordered to attack it. Their shots at it carry on into the hull and set the grid
-##   weapons free; the grid answers. Tuned (maintainer, after T07) so the grid takes 90 to 120 s on the three seeds' mean, each
-##   seed 75 to 140 s, and the hull shows damage.
+## - **The raid**: 12 raiders on the raider profile dive from a loose box 0.9 to 1.7 km up and forward of a point 450 m over the
+##   spine's first light turret, ordered to attack the station itself (M7-T10: they aim at the grid's mounts, go round the hull
+##   and none may ram it or hang beside it). Their hits set the grid weapons free; the grid answers. Tuned (maintainer, after
+##   T07) so the grid takes 90 to 120 s on the three seeds' mean, each seed 75 to 140 s, and the hull shows damage.
 ## - **The capital**: a cruiser stand-in holding station 2.2 to 2.7 km off the bow tower (placed by the seed). The stand-in's own director picks fighters
 ##   only, so this file fires its weapons at the bow (its eight guns' bolts once a second each, its two beams every 2 s, a
 ##   missile every 3 s): the interceptors take its bolts and missiles, its beams get through (D75).
@@ -21,13 +21,15 @@ const RAID_SEED_BAND_S: Vector2 = Vector2(75.0, 140.0)
 const CAPITAL_LIMIT_S: float = 300.0
 const SEEDS: Array[int] = [1, 2, 3]
 const RAIDER: StringName = &"raider_fighter"
-## The raid's objective: a marker with no hull, in open space over the grid, standing in for T10's raids on the grid's mounts.
-## High enough that the raiders stay in the grid's fire (D75's premise): nearer the hull they stall beside the spine, under the
-## guns' arcs, until T10 teaches them the station's surface.
-const DECOY_NAME: String = "GRID DECOY"
-const DECOY_OVER: String = "L9"
-const DECOY_UP_M: float = 450.0
-const RAIDER_AI: Dictionary = {"type": "ai", "profile": "raider", "orders": "attack", "objective": DECOY_NAME}
+## Where the raid forms up: over this mount, this high. Its objective is the station (M7-T10; T07 needed a decoy here, because
+## raiders near the hull stalled beside it).
+const RAID_OVER: String = "L9"
+const RAID_UP_M: float = 450.0
+const RAIDER_AI: Dictionary = {"type": "ai", "profile": "raider", "orders": "attack", "objective": Station.DISPLAY_NAME}
+## A raider slower than this against the station counts as hanging (the stall T07 found), m/s; and the most of the raid's
+## flying time that may be spent so, and the fewest metres any raider may come to the hull without it being a scrape.
+const HANG_MPS: float = 8.0
+const HANG_SHARE_MAX: float = 0.05
 const CAPITAL_CLASS: StringName = &"cruiser"
 ## The capital's weapons as this file fires them (the stand-ins' own cadences, M4-T07 and T12).
 const GUN_INTERVAL_S: float = TurretStandin.SHOT_INTERVAL_S
@@ -69,6 +71,8 @@ func test_the_grid_alone_beats_twelve_raiders() -> void:
 				seed_value, RAID_SEED_BAND_S.x, RAID_SEED_BAND_S.y])
 		total_s += float(f["time_s"])
 		assert_gt(float(f["worst_section"]), 0.03, "seed %d: the station shows section damage" % seed_value)
+		assert_eq(int(f["rammed"]), 0, "seed %d: no raider rams the station" % seed_value)
+		assert_lt(float(f["hanging"]), HANG_SHARE_MAX, "seed %d: the raiders do not hang beside the hull" % seed_value)
 	var mean_s: float = total_s / float(SEEDS.size())
 	assert_between(mean_s, RAID_MEAN_BAND_S.x, RAID_MEAN_BAND_S.y, "the seeds' mean lasts %.0f to %.0f s" % [RAID_MEAN_BAND_S.x,
 			RAID_MEAN_BAND_S.y])
@@ -105,6 +109,7 @@ func _fight(seed_value: int, capital: bool) -> Dictionary:
 	var bow: Vector3 = station.to_world(station.hardpoints.mount("H1")["position"], StationHardpoints.FRAME)
 	var enemies: Array[Node3D] = []
 	var hulls: Array[Damageable] = []
+	var rammed: Array[int] = [0]
 	var cap: CapitalStandin = null
 	if capital:
 		cap = CapitalStandin.create(CAPITAL_CLASS, Factions.RAIDERS, "CRUISER", Vector3.ZERO)
@@ -117,9 +122,8 @@ func _fight(seed_value: int, capital: bool) -> Dictionary:
 		enemies.append(cap)
 		hulls.append(cap.damageable)
 	else:
-		var over: Dictionary = station.hardpoints.mount(DECOY_OVER)
-		var decoy: Vector3 = station.to_world(over["position"], String(over["body"])) + Vector3.UP * DECOY_UP_M
-		_add_decoy(scene, decoy)
+		var over: Dictionary = station.hardpoints.mount(RAID_OVER)
+		var decoy: Vector3 = station.to_world(over["position"], String(over["body"])) + Vector3.UP * RAID_UP_M
 		var rng := RandomNumberGenerator.new()
 		rng.seed = seed_value
 		for i: int in RAID_SIZE:
@@ -130,7 +134,12 @@ func _fight(seed_value: int, capital: bool) -> Dictionary:
 			scene.park_on_death(c)
 			enemies.append(c.ship)
 			hulls.append(c.damageable)
+			c.damageable.hit_taken.connect(func(info: HitInfo) -> void:
+				rammed[0] += 1 if info != null and info.cause == HitInfo.CAUSE_RAM else 0)
 	var health_before: float = _health(station)
+	var hang_ticks: int = 0
+	var flown_ticks: int = 0
+	var nearest_m: float = INF
 	var beam_hits: Array[int] = [0]
 	# The grid's hits on the enemy by gun kind, told apart by their damage.
 	var grid_hits: Array[int] = [0, 0]
@@ -182,6 +191,16 @@ func _fight(seed_value: int, capital: bool) -> Dictionary:
 				next_missile += MISSILE_INTERVAL_S
 				_missile(cap, station, scene, now)
 		in_fire_ticks += 1 if _any_in_fire(station, enemies, hulls) else 0
+		if cap == null and ticks % 6 == 0:
+			for i: int in enemies.size():
+				if hulls[i].hull.destroyed:
+					continue
+				var body := enemies[i] as RigidBody3D
+				flown_ticks += 1
+				hang_ticks += 1 if body.linear_velocity.length() < HANG_MPS else 0
+				for hull_body: Node in [station, station.drum_body]:
+					var d: float = scene.sim.core.surface_distance(hull_body.get_instance_id(), body.global_position)
+					nearest_m = minf(nearest_m, d)
 	_restore_speed()
 	var r: PackedInt64Array = station.grid.readouts()
 	var left: int = hulls.filter(func(h: Damageable) -> bool: return not h.hull.destroyed).size()
@@ -190,22 +209,10 @@ func _fight(seed_value: int, capital: bool) -> Dictionary:
 			"beam_hits": beam_hits[0], "in_fire": float(in_fire_ticks) / float(maxi(ticks, 1)),
 			"capital_hull": cap.damageable.hull.fraction() if cap != null else -1.0,
 			"knocked_out": station.grid.knocked_out().size(), "worst_section": _worst_section(station),
-			"light_hits": grid_hits[0], "heavy_hits": grid_hits[1], "kills_at": kills_at}
+			"light_hits": grid_hits[0], "heavy_hits": grid_hits[1], "kills_at": kills_at, "rammed": rammed[0],
+			"hanging": float(hang_ticks) / float(maxi(flown_ticks, 1)), "nearest_m": nearest_m}
 	await scene.free_scene(get_tree())
 	return f
-
-
-# The raid's objective: a named marker of the station's people and nothing else (no hull, no body), at `at`.
-static func _add_decoy(scene: TurretScene, at: Vector3) -> void:
-	var holder := Node3D.new()
-	holder.name = "BowDecoy"
-	var marker := Targetable.new()
-	marker.name = "Targetable"
-	marker.display_name = DECOY_NAME
-	marker.faction = Factions.EARTH_ALLIANCE
-	marker.kind = Targetable.Kind.PROP
-	holder.add_child(marker)
-	scene.world.spawn(holder, scene.world.to_universe(at))
 
 
 # The capital's guns, each on its cadence, at the bow from where it sits.
@@ -275,7 +282,7 @@ func _restore_speed() -> void:
 
 
 static func _line(f: Dictionary) -> String:
-	return "%s at %.1f s, %d left, in fire %.0f %%, light %d (%d hits), heavy %d (%d hits) shots, kills at %s s, shot down %d (missiles %d), blocked %d, beams through %d, station lost %.0f (worst section %.0f %%), mounts knocked out %d, capital hull %.0f %%" % [
+	return "%s at %.1f s, %d left, in fire %.0f %%, light %d (%d hits), heavy %d (%d hits) shots, kills at %s s, shot down %d (missiles %d), blocked %d, beams through %d, station lost %.0f (worst section %.0f %%), mounts knocked out %d, capital hull %.0f %%, rammed %d, hanging %.1f %%, nearest %.0f m" % [
 		"WIN" if bool(f["won"]) else "LOSS", float(f["time_s"]), int(f["left"]), 100.0 * float(f["in_fire"]), int(f["light"]),
 		int(f["light_hits"]), int(f["heavy"]), int(f["heavy_hits"]), f["kills_at"], int(f["intercepts"]), int(f["missiles"]), int(f["blocked"]), int(f["beam_hits"]),
-		float(f["station_lost"]), 100.0 * float(f["worst_section"]), int(f["knocked_out"]), 100.0 * float(f["capital_hull"])]
+		float(f["station_lost"]), 100.0 * float(f["worst_section"]), int(f["knocked_out"]), 100.0 * float(f["capital_hull"]), int(f["rammed"]), 100.0 * float(f["hanging"]), float(f["nearest_m"])]

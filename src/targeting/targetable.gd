@@ -7,6 +7,9 @@ extends Node3D
 ## Do not add it to `world_shiftable`: it moves with its parent, which is the shiftable node.
 
 const GROUP: StringName = &"targetable"
+## Metadata on a body with no marker of its own, naming the `Targetable` that speaks for it (the station's turning drum, whose
+## guns fire for the station): a pilot hit by that body's shots knows whom to answer.
+const SPEAKS_FOR: StringName = &"speaks_for"
 
 ## What sort of thing it marks (M4-T07): later scans, broad phases and the tier read it so a rock or a mine never fills a
 ## fighter's contacts. Ships are the default; the battle's stand-ins set their own.

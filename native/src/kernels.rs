@@ -1393,6 +1393,9 @@ pub mod pilot {
     pub struct Avoided {
         pub v_des: Vector3,
         pub urgent: bool,
+        /// The ship is closing on a big hull faster than its side thrusters can stop it in the room left (M7-T10): it
+        /// must turn its nose and burn for `v_des` with everything.
+        pub pull_out: bool,
     }
 
     /// `AiContext.refresh`'s lists for one ship: the hostile ships (their places in the contact list), their offsets and
@@ -1418,6 +1421,11 @@ pub mod pilot {
     ) -> Avoided {
         let mut dodge = Vector3::new(0.0, 0.0, 0.0);
         let mut urgent = false;
+        let mut pull_out = false;
+        // The big hulls near enough to shape the wish: each one's outward normal here, how much of a way in it forbids
+        // (0..1), its velocity and how far it is. A handful at most (the station's frame and drum).
+        let mut walls: [(Vector3, f32, Vector3, f32); 4] = [(Vector3::ZERO, 0.0, Vector3::ZERO, 0.0); 4];
+        let mut wall_count = 0;
         let a_stop = maxf(ship.a_retro, 0.01);
         let turn_rate = maxf(minf(ship.rate_max_x, ship.rate_max_y), 0.01);
         let urgent_s = 0.5 * PI / turn_rate + URGENT_SETTLE_S;
@@ -1429,25 +1437,43 @@ pub mod pilot {
             .chain(statics.iter().filter_map(|&r| row(rows, r)));
         for j in listed {
             let c_velocity = rows.velocities[j];
-            if rows.surface(j).is_some() {
+            if let Some(surface) = rows.surface(j) {
                 // A big hull (M7-T06): each of its volumes near enough to matter is a threat at its nearest point, so a
                 // ship goes round the station's skin, not its 4 km bounding sphere, and keeps off a tunnel's walls.
                 let reach = ship.radius + MARGIN_M;
-                let w = sub(v_des, c_velocity);
+                // Near the skin a wish that heads into it is turned along it (M7-T10), so a ship whose way is through
+                // the hull goes round instead of hanging beside it with its wish cancelled.
+                let (slid, pull, wall) = slide_along(rows, j, ship, v_des, reach, a_stop, urgent_s);
+                if wall.1 > 0.0 && wall_count < walls.len() {
+                    walls[wall_count] = (wall.0, 1.0, c_velocity, wall.2);
+                    wall_count += 1;
+                }
+                pull_out = pull_out || pull;
+                urgent = urgent || pull;
+                dodge = add(dodge, sub(slid, v_des));
+                let w = sub(slid, c_velocity);
                 let speed = f64::from(length(w));
                 let relative = f64::from(length(sub(ship.velocity, c_velocity)));
                 let horizon = maxf(
                     maxf(HORIZON_MIN_S, maxf(speed, relative) / a_stop),
                     (2.0 * reach / a_side).sqrt() + URGENT_SETTLE_S,
                 );
-                surface::near_volumes(rows, j, ship.position, reach + speed * horizon, |near, _| {
+                // A turning hull is kept off where its parts sweep (the drum's arms come round at 40 m/s), not where
+                // they are this tick.
+                let within = reach + speed * horizon;
+                let mut meet = |near: Vector3, _: f64| {
                     if let Some((push, hurry)) =
-                        threat(ship, near, c_velocity, 0.0, true, v_des, a_stop, a_side, urgent_s)
+                        threat(ship, near, c_velocity, 0.0, true, slid, a_stop, a_side, urgent_s)
                     {
                         dodge = add(dodge, push);
                         urgent = urgent || hurry;
                     }
-                });
+                };
+                if surface.spin_rad_s != 0.0 {
+                    surface::near_swept(rows, j, ship.position, within, &mut meet);
+                } else {
+                    surface::near_volumes(rows, j, ship.position, within, &mut meet);
+                }
                 continue;
             }
             let Some((push, hurry)) = threat(
@@ -1466,10 +1492,81 @@ pub mod pilot {
             dodge = add(dodge, push);
             urgent = urgent || hurry;
         }
-        Avoided {
-            v_des: add(v_des, dodge),
-            urgent,
+        // Between two hulls (the drum under the spine) one's dodge must not lead into the other: what is left of a way
+        // in to each is taken out of the sum, twice round so the second does not undo the first.
+        // The nearest hull has the last word.
+        walls[..wall_count].sort_by(|a, b| b.3.total_cmp(&a.3));
+        let mut v_out = add(v_des, dodge);
+        for _ in 0..2 {
+            for &(n, share, c_velocity, _) in &walls[..wall_count] {
+                let into = -dot(sub(v_out, c_velocity), n);
+                if into > 0.0 {
+                    v_out = add(v_out, scale(n, into * share));
+                }
+            }
         }
+        Avoided {
+            v_des: v_out,
+            urgent,
+            pull_out,
+        }
+    }
+
+    /// How far outside a big hull's keep-off distance a wish into it starts to turn along the skin, m.
+    pub const SLIDE_BAND_M: f64 = 60.0;
+    // A wish this much along the skin already is kept; under it (head on) the ship's seeded side picks the way round.
+    const SLIDE_HEAD_ON: f64 = 0.25;
+
+    // The wish `v_des` as big hull `j` lets it stand (M7-T10), and whether the ship must pull out. Within `SLIDE_BAND_M` of
+    // its keep-off distance `reach`, the part of the wish that heads into the nearest skin is turned along it, wholly at
+    // `reach`, at the wish's own speed. A ship already falling at the skin faster than it can be stopped in the room
+    // left (a turn of `turn_s`, then `a_stop`) pulls out: its wish loses all of its way in, wherever it is.
+    // A wish that does not close on the skin, and a ship farther out, keep theirs.
+    fn slide_along(
+        rows: &Rows,
+        j: usize,
+        ship: &Ship,
+        v_des: Vector3,
+        reach: f64,
+        a_stop: f64,
+        turn_s: f64,
+    ) -> (Vector3, bool, (Vector3, f32, f32)) {
+        let Some((near, d)) = surface::nearest_to_avoid(rows, j, ship.position) else {
+            return (v_des, false, (Vector3::ZERO, 0.0, 0.0));
+        };
+        // Inside a turning hull's swept ring the point given marks the way out; inside a volume at rest there is none.
+        let off = sub(ship.position, near);
+        if f64::from(length(off)) < 1e-3 {
+            return (v_des, false, (Vector3::ZERO, 0.0, 0.0));
+        }
+        let c_velocity = rows.velocities[j];
+        let n = normalized(off);
+        let falling = -f64::from(dot(sub(ship.velocity, c_velocity), n));
+        let pull = falling > MATCHED_MPS
+            && d - reach <= falling * turn_s + falling * falling / (2.0 * a_stop);
+        let soft = reach + SLIDE_BAND_M;
+        let share = if pull {
+            1.0
+        } else {
+            clampf((soft - d) / SLIDE_BAND_M, 0.0, 1.0) as f32
+        };
+        let wall = (n, share, d as f32);
+        let w = sub(v_des, c_velocity);
+        let into = -f64::from(dot(w, n));
+        if into <= MATCHED_MPS || (d >= soft && !pull) {
+            return (v_des, pull, wall);
+        }
+        let speed = f64::from(length(w));
+        let mut along = add(w, scale(n, into as f32));
+        if f64::from(length(along)) < SLIDE_HEAD_ON * speed {
+            along = tie_direction(scale(n, -1.0), ship.tie_hash);
+        }
+        let along = scale(normalized(along), speed as f32);
+        (
+            add(c_velocity, add(scale(w, 1.0 - share), scale(along, share))),
+            pull,
+            wall,
+        )
     }
 
     // One threat's dodge for `AvoidanceMath.filter` and whether it is urgent: a body at `c_position` moving at `c_velocity`

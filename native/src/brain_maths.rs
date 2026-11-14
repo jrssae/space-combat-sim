@@ -246,6 +246,17 @@ pub fn align_roll(basis: &Basis, up: Vector3, rate_max: Vector3, gain: f64) -> f
     )
 }
 
+/// The pilot roll that turns the hull about its nose as fast as `omega` (a World turn rate) does about that axis (M7-T10):
+/// a ship matching the drum's roll before its tunnel.
+pub fn match_roll(basis: &Basis, omega: Vector3, rate_max: Vector3) -> f64 {
+    let w_b = xform_inv(basis, omega);
+    clampf(
+        f64::from(w_b.z) * f64::from(AXIS_SIGN.z) / f64::from(rate_max.z),
+        -1.0,
+        1.0,
+    )
+}
+
 /// `PilotSteering.seek`: the thrust levels that move the velocity toward `v_des`.
 pub fn seek(
     velocity: Vector3,

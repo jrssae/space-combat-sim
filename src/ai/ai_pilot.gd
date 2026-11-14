@@ -948,3 +948,9 @@ static func _push_route(host: Object, slot: int, route: Route) -> void:
 		points.append_array([w.position.x, w.position.y, w.position.z, w.hold_s])
 		demos.append(Manoeuvres.NAMES.find(w.demo) + 1 if w.demo != &"" else 0)
 	host.set_route(slot, points, demos, route.cruise_mps, route.pace_id, route.loop, route.yield_to_attack)
+	if route.lane:
+		var attitudes := PackedFloat64Array()
+		for i: int in route.count():
+			var w: Route.Waypoint = route.waypoint(i)
+			attitudes.append_array([w.face.x, w.face.y, w.face.z, w.spin.x, w.spin.y, w.spin.z])
+		host.set_route_lane(slot, attitudes, route.lane_arrival_m)

@@ -324,6 +324,7 @@ func _build_hulls(collision: CollisionPieces) -> void:
 	targetable.kind = Targetable.Kind.PROP
 	targetable.broadcast_range_m = BROADCAST_RANGE_M
 	add_child(targetable)
+	drum_body.set_meta(Targetable.SPEAKS_FOR, targetable)  # the drum's guns fire for the station (M7-T10)
 	var drawn: Array[Dictionary] = []
 	for i: int in sections.count():
 		var box: AABB = sections.sections[i]["aabb"]

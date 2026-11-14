@@ -12,6 +12,10 @@ extends RefCounted
 ##   beyond `WAIT_BEYOND_M` the leader brakes, faces the pace ship and waits until it is within `RESUME_WITHIN_M`.
 ## - `yield_to_attack` (M3-T10, an AI patrol): the route stands aside while the orders allow an attack on something in
 ##   sight, then resumes from the waypoint it was flying to.
+## - `lane` (M7-T10, a docking lane; flown by the native core only): the ship keeps to the legs between waypoints with every
+##   thruster, slows into a waypoint that holds and arrives within `lane_arrival_m`. A waypoint's `face` (a World direction)
+##   holds the nose there on the way to it and while it holds (a freighter backs in); its `spin` (a World turn rate, rad/s)
+##   is matched about the nose (a ship rolls with the drum before its tunnel).
 ## Scenarios describe routes as `routes[]` (`ScenarioLoader`); an `ai` behaviour's `patrol` builds one (`BrainFactory`).
 
 const DEFAULT_CRUISE_MPS: float = 60.0
@@ -33,6 +37,9 @@ class Waypoint extends RefCounted:
 	var demo: StringName = &""
 	## Seconds held at the waypoint with the brake (after its demo).
 	var hold_s: float = 0.0
+	## A lane's attitude on the way to this waypoint: where the nose points and the turn rate to match; zero for none.
+	var face: Vector3 = Vector3.ZERO
+	var spin: Vector3 = Vector3.ZERO
 
 
 var name: String = ""
@@ -43,6 +50,9 @@ var pace: StringName = PACE_PLAYER
 var pace_id: int = 0
 var loop: bool = false
 var yield_to_attack: bool = false
+## A docking lane (see above) and how near a waypoint counts as reached on one, metres.
+var lane: bool = false
+var lane_arrival_m: float = 15.0
 
 
 ## Appends a waypoint.
@@ -52,6 +62,13 @@ func add(position: UniversePos, demo: StringName = &"", hold_s: float = 0.0) -> 
 	w.demo = demo
 	w.hold_s = hold_s
 	waypoints.append(w)
+
+
+## Appends a lane waypoint with its attitude (`lane` routes).
+func add_lane(position: UniversePos, hold_s: float = 0.0, face: Vector3 = Vector3.ZERO, spin: Vector3 = Vector3.ZERO) -> void:
+	add(position, &"", hold_s)
+	waypoints[waypoints.size() - 1].face = face
+	waypoints[waypoints.size() - 1].spin = spin
 
 
 func count() -> int:

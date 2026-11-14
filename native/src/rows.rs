@@ -34,6 +34,9 @@ pub struct SurfaceVolume {
     pub centre: [f64; 3],
     pub half: [f64; 3],
     pub reach: f64,
+    /// What the volume sweeps as its hull turns about its own +z (M7-T10): the ring from `[0]` to `[1]` m off the axis,
+    /// between `[2]` and `[3]` along it. Avoidance keeps off this, so a ship never waits where an arm comes round.
+    pub swept: [f64; 4],
 }
 
 /// A big hull's volumes and its spin (rad/s about its body's own +z; the turning drum, 0 for the frame). A volume fitted to a
@@ -44,6 +47,8 @@ pub struct Surface {
     pub volumes: Vec<SurfaceVolume>,
     pub hulls: Vec<Vec<[f64; 4]>>,
     pub spin_rad_s: f64,
+    /// How far from its own +z axis the hull reaches (M7-T10): a ship flying round it keeps outside this.
+    pub girth: f64,
 }
 
 /// The big hulls by body id.

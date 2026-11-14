@@ -278,6 +278,16 @@ pub struct PickJob {
     pub query: Query,
     pub found: Vec<i32>,
     pub surface_rows: Vec<usize>,
+    /// Every working grid mount, interceptors too (M7-T10): what a raid on the station aims at.
+    pub points: Vec<AimPoint>,
+}
+
+/// A working grid mount as the launch found it: its slot, its hull's body and its pivot in that hull's frame.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AimPoint {
+    pub slot: u32,
+    pub body: i64,
+    pub local: Vector3,
 }
 
 impl PickJob {
@@ -294,6 +304,16 @@ impl PickJob {
     ) {
         if self.hulls.version != hulls.version {
             self.hulls.clone_from(hulls);
+        }
+        self.points.clear();
+        for s in 0..mounts.taken.len() {
+            if mounts.taken[s] && mounts.live[s] && !mounts.out[s] && mounts.kind[s] != MOUNT_TURRET {
+                self.points.push(AimPoint {
+                    slot: s as u32,
+                    body: mounts.body[s],
+                    local: mounts.local[s],
+                });
+            }
         }
         self.mounts.clear();
         for s in 0..mounts.taken.len() {
@@ -324,6 +344,7 @@ impl PickJob {
     }
 
     pub fn clear(&mut self) {
+        self.points.clear();
         self.mounts.clear();
         self.memory.clear();
         self.picks.clear();
@@ -354,6 +375,7 @@ pub fn pick_all<F: Fn(i64) -> i64>(rows: &Rows, row_of: F, now_s: f64, job: &mut
         query,
         found,
         surface_rows,
+        ..
     } = job;
     picks.clear();
     grid_kernels::surface_rows_of(rows, &row_of, surface_bodies, surface_rows);

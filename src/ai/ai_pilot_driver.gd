@@ -769,6 +769,9 @@ func _on_hit_taken(info: HitInfo) -> void:
 	if info != null and info.shooter_id != 0 and is_instance_id_valid(info.shooter_id):
 		var shooter := instance_from_id(info.shooter_id) as Node
 		var marker := shooter.get_node_or_null(^"Targetable") as Targetable if shooter != null else null
+		# A body that fires for another's marker (the station's drum, M7-T10) names it.
+		if marker == null and shooter != null and shooter.has_meta(Targetable.SPEAKS_FOR):
+			marker = shooter.get_meta(Targetable.SPEAKS_FOR) as Targetable
 		if marker != null:
 			last_attacker_id = marker.get_instance_id()
 	if _hosted and is_instance_valid(_hosted_host):

@@ -326,6 +326,17 @@ fn pick_turrets(snapshot: &mut Snapshot, grid: &Grid, now_s: f64) {
 // packs their outputs in order; with `from_rows` each ship's hull and selection are read from its own row first.
 fn run_batch(work: &mut Work, snap: &Snapshot, runner: &Runner, n: usize, rel: &[u8], p: &Params) {
     refresh_grid(work, snap);
+    // The grid's working mounts on their hulls' rows (M7-T10), for the thinks that attack a big hull.
+    work.field.sub_points.clear();
+    for point in &snap.turrets.points {
+        if let Some(row) = turret_kernels::usable_row(&snap.rows, snap.row_for_kernel(point.body)) {
+            work.field.sub_points.push(brain_behaviours::SubPoint {
+                row: row as u32,
+                slot: point.slot,
+                local: point.local,
+            });
+        }
+    }
     // The civilians' flight marks (M5-T16) from every brain's last think, before any think of this pass reads them.
     {
         let Work {

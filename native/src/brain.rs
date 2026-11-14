@@ -564,6 +564,36 @@ impl ScsBrains {
         true
     }
 
+    /// Makes the pilot's route a docking lane (M7-T10; after `set_route`): six numbers a waypoint (the nose's direction and
+    /// the turn rate to match on the way to it, World axes, zeros for none) and how near a waypoint counts as reached.
+    #[func]
+    fn set_route_lane(&mut self, slot: i64, attitudes: PackedFloat64Array, arrival_m: f64) -> bool {
+        let a = attitudes.as_slice();
+        let Some(b) = self.brain_mut(slot) else {
+            return false;
+        };
+        let Some(route) = b.ctx.route.as_mut() else {
+            return false;
+        };
+        if a.len() != route.points.len() * 6 {
+            godot_error!(
+                "ScsBrains.set_route_lane: {} numbers for {} waypoints; no lane",
+                a.len(),
+                route.points.len()
+            );
+            return false;
+        }
+        route.precise = true;
+        route.arrival_m = arrival_m;
+        route.faces.clear();
+        route.spins.clear();
+        for w in a.as_chunks::<6>().0 {
+            route.faces.push(Vector3::new(w[0] as f32, w[1] as f32, w[2] as f32));
+            route.spins.push(Vector3::new(w[3] as f32, w[4] as f32, w[5] as f32));
+        }
+        true
+    }
+
     #[func]
     fn clear_route(&mut self, slot: i64) {
         if let Some(b) = self.brain_mut(slot) {
