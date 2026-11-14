@@ -754,6 +754,10 @@ func set_paused(paused: bool) -> void:
 
 
 func _setup_input() -> void:
+	if input_source == null and DisplayServer.get_name() == "headless":
+		# No window, no pilot: a pad or key touched during a headless run must never steer a recorded or console-driven
+		# fight (M7-T10). The base source reads idle; tests and tools still give their own.
+		input_source = InputSource.new()
 	if input_source == null:
 		var source := GodotInputSource.new()
 		source.load_calibration(Settings.get_pad_calibration())
