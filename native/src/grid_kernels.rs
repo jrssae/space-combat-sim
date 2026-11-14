@@ -5,8 +5,9 @@
 //!   is weapons free against that side (`Latch`, written on the main thread in the hit sweep's order and by the interceptors'
 //!   look at incoming fire). The pick reads a frozen copy in the AI job.
 //! - **The pick** (in the AI job, one tick behind) looks up hostiles near each gun through the brains' broad phase, not the
-//!   attacker memory: light pulse turrets take fighters, heavy cannons take capitals first and fighters only when none is in
-//!   reach; inside the arc before outside it, nearest first.
+//!   attacker memory: light pulse turrets take fighters first, heavy cannons capitals first, each the other class only when
+//!   none of its own is in reach; inside the arc before outside it, nearest first. A knocked-out mount neither picks nor fires.
+//! - **Sub-points.** Each grid mount's place and whether it still works (`mount_points`), for the AI to aim at (T10).
 //! - **Interceptors** (main thread: a shot down projectile is gone the same tick) take hostile missiles and pulse bolts whose
 //!   path meets the station's hull: missiles first, then the bolt that hits soonest, one per battery per interval. Beams
 //!   are never candidates.
@@ -128,7 +129,8 @@ pub struct PickCtx<'a> {
 }
 
 /// A grid gun's target (a body id, 0 for none): the nearest hostile of a side the grid is weapons free against within its
-/// reach, looked up through the broad phase. A light pulse turret takes fighters only; a heavy cannon takes capitals first.
+/// reach, looked up through the broad phase. A light pulse turret takes fighters first and a capital only when no fighter is
+/// in reach; a heavy cannon the other way round.
 /// Inside the arc before outside it; a target the station's hull hides is never picked.
 pub fn pick<F: Fn(i64) -> i64>(rows: &Rows, row_of: &F, m: &PickMount, ctx: &mut PickCtx<'_>) -> i64 {
     if (m.kind != MOUNT_LIGHT && m.kind != MOUNT_HEAVY) || !ctx.latch.free_any(m.faction_ix) {
@@ -175,9 +177,6 @@ pub fn pick<F: Fn(i64) -> i64>(rows: &Rows, row_of: &F, m: &PickMount, ctx: &mut
             continue;
         }
         let capital = is_capital(rows, j);
-        if m.kind == MOUNT_LIGHT && capital {
-            continue;
-        }
         let d_sq = f64::from(dist_sq(rows.positions[j], pivot));
         if d_sq > reach_sq {
             continue;
@@ -188,7 +187,8 @@ pub fn pick<F: Fn(i64) -> i64>(rows: &Rows, row_of: &F, m: &PickMount, ctx: &mut
         if elevation < m.min_elevation {
             score += ARC_PENALTY * reach_sq;
         }
-        if m.kind == MOUNT_HEAVY && !capital {
+        // Each gun's own class first: a light turret's fighters, a heavy cannon's capitals (maintainer, after T07).
+        if (m.kind == MOUNT_HEAVY) != capital {
             score += CLASS_PENALTY * reach_sq;
         }
         // The hull is tested only for a candidate that would win, off the common path.
@@ -198,6 +198,34 @@ pub fn pick<F: Fn(i64) -> i64>(rows: &Rows, row_of: &F, m: &PickMount, ctx: &mut
         }
     }
     best
+}
+
+/// Every grid mount's World place and whether it still works (not knocked out, its body's row usable), in slot order, with its
+/// slot and kind: what an attacker can aim at (M7-T10). Ship turrets are left out.
+pub fn mount_points<F: Fn(i64) -> i64>(rows: &Rows, row_of: &F, mounts: &tk::Mounts, out: &mut Vec<MountPoint>) {
+    out.clear();
+    for s in 0..mounts.taken.len() {
+        if !mounts.taken[s] || mounts.kind[s] == MOUNT_TURRET {
+            continue;
+        }
+        let row = firing_row(rows, row_of(mounts.body[s]));
+        let at = row.map_or(Vector3::ZERO, |r| add(xform(&rows.bases[r], mounts.local[s]), rows.positions[r]));
+        out.push(MountPoint {
+            slot: s as u32,
+            kind: mounts.kind[s],
+            at,
+            alive: row.is_some() && mounts.live[s] && !mounts.out[s],
+        });
+    }
+}
+
+/// One grid mount as an attacker sees it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MountPoint {
+    pub slot: u32,
+    pub kind: u8,
+    pub at: Vector3,
+    pub alive: bool,
 }
 
 /// A projectile an interceptor may take: its bolt row, whether it is a missile and how soon its path meets the hull, s.

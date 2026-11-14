@@ -4,8 +4,9 @@ extends RefCounted
 ## a section at zero is lost (once). The station itself is never destroyed or disabled in M7: a lost section only says so.
 ## Pure: the sections come from the manifest's hardpoints (`StationHardpoints.damage_sections`), the hits from `Station`.
 
-## A section's health when whole. A starting number (about 3 300 raider bolts of 6): T07 and T10 tune it with the raids.
-const SECTION_HEALTH: float = 20000.0
+## A section's health when whole (about 830 raider bolts of 6). T07's fix round set it so a 12-raider raid leaves visible
+## damage and a cruiser stand-in's whole fight does not lose a section; T10 tunes it again with its raids.
+const SECTION_HEALTH: float = 5000.0
 ## A point this far outside every section's box of its body still lands in the nearest one (a hit on a hull plate's skin).
 const SNAP_M: float = 50.0
 

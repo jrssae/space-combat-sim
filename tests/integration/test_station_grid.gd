@@ -235,3 +235,54 @@ func test_interceptors_take_bolts_and_missiles_at_the_hull_at_a_capped_rate_and_
 	await _ticks(3)
 	assert_eq(_shots()[2], taken, "no beam shot down")
 	assert_lt(_health_total(), whole, "the beam reached the hull")
+
+
+func test_a_mount_worn_down_by_hits_near_it_is_knocked_out_until_repaired() -> void:
+	if not await _start():
+		return
+	var l9: TurretMount = station.grid.mount("L9")
+	var raider: Combatant = _raider(_at_mount("L9", 1500.0))
+	scene.attach()
+	TurretMount.rebind_all()
+	station.grid.set_free(Factions.RAIDERS, true)
+	await _ticks(300)
+	assert_gt(int(scene.state(l9)["shots"]), 0, "L9 fires while whole")
+	var entry: Dictionary = station.hardpoints.mount("L9")
+	var whole: float = _health_total()
+	var knocked: Array[String] = []
+	station.grid.mount_knocked_out.connect(func(n: String) -> void: knocked.append(n))
+	# Hits on the hull beside L9, as the hit resolver lands them: the section takes them and the mount wears down.
+	for i: int in 3:
+		var info := HitInfo.new(station.get_instance_id(), raider.ship.get_instance_id(), Factions.RAIDERS, 120.0,
+				station.to_world((entry["position"] as Vector3) + Vector3(5.0, -3.0, 0.0), StationHardpoints.FRAME),
+				Vector3.UP, 300.0)
+		station.frame_hull.apply_hit(info)
+	assert_eq(knocked, ["L9"] as Array[String], "L9 knocked out once")
+	assert_lt(_health_total(), whole - 359.0, "its section took the hits too")
+	assert_true(l9.knocked_out)
+	assert_true(bool(scene.sim.core.turret_out(l9.slot())), "the core holds it out")
+	assert_true(String(DebugConsole.registry.read("grid.knocked_out")["value"]).contains("L9 KNOCKED OUT"), "the provider says so")
+	var base := l9.yaw.get_node_or_null("Base") as MeshInstance3D
+	if base != null:
+		assert_not_null(base.material_override, "its model is dark")
+	var shots: int = int(scene.state(l9)["shots"])
+	await _ticks(400)
+	assert_eq(int(scene.state(l9)["shots"]), shots, "a knocked-out mount does not fire")
+	var points: Array = scene.sim.core.grid_points()
+	var alive: PackedByteArray = points[3]
+	var slots: PackedInt32Array = points[0]
+	assert_eq(slots.size(), 23, "every grid mount is a point an attacker can aim at")
+	var places: PackedVector3Array = points[2]
+	for p: Dictionary in station.grid.sub_points():
+		var m: TurretMount = station.grid.mount(p["name"])
+		var e: Dictionary = station.hardpoints.mount(p["name"])
+		assert_almost_eq((p["position"] as Vector3).distance_to(station.to_world(e["position"], String(e["body"]))), 0.0, 0.5,
+				"%s's point is at its hardpoint" % p["name"])
+		assert_almost_eq(places[Array(slots).find(m.slot())].distance_to(p["position"]), 0.0, 0.5, "the core agrees on %s" % p["name"])
+	assert_eq(alive[Array(slots).find(l9.slot())], 0, "L9's point is dead")
+	assert_false(station.grid.sub_points().filter(func(p: Dictionary) -> bool: return p["name"] == "L9")[0]["alive"])
+	assert_true(station.grid.repair("L9"))
+	assert_false(l9.knocked_out)
+	assert_false(bool(scene.sim.core.turret_out(l9.slot())))
+	await _ticks(400)
+	assert_gt(int(scene.state(l9)["shots"]), shots, "repaired, it fires again")

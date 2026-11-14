@@ -401,6 +401,8 @@ func _on_hit(info: HitInfo, body: String) -> void:
 	var index: int = sections.section_at(body, local)
 	if index >= 0:
 		damage_section(index, info.damage)
+	if grid != null:
+		grid.take_hit(body, local, info.damage)  # the grid's mounts near the hit wear down too (M7-T07)
 
 
 func _on_section_lost(index: int) -> void:

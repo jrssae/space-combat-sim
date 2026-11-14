@@ -36,6 +36,13 @@ var host: Node3D = null
 ## 0 a ship's turret (M5-T21); 1, 2 or 3 one of the station grid's light pulse turrets, heavy cannons or interceptor batteries
 ## (`StationGrid.Kind`, the core's `grid_kernels::MOUNT_*`).
 var grid_kind: int = 0
+## Knocked out (a grid mount whose health is gone, M7-T07): the core neither picks nor fires for it, and its model goes dark.
+var knocked_out: bool = false:
+	set(value):
+		knocked_out = value
+		if _slot >= 0 and _sim != null and is_instance_valid(_sim) and _sim.core != null:
+			_sim.core.set_turret_out(_slot, value)
+		_show_knocked_out()
 
 var yaw: Node3D = null
 var pitch: Node3D = null
@@ -46,6 +53,8 @@ var shots: int = 0
 static var _live: Array[TurretMount] = []
 # The turret models split for their mounts, by asset id (empty when the asset has none).
 static var _models: Dictionary[String, Dictionary] = {}
+# The dark look every knocked-out mount shares.
+static var _burnt_material: StandardMaterial3D = null
 
 var _body: Node3D = null
 var _sim: SimCore = null
@@ -219,6 +228,24 @@ static func _vec3(v: Variant) -> Vector3:
 	return Vector3(float(a[0]), float(a[1]), float(a[2])) if a.size() >= 3 else Vector3.ZERO
 
 
+# A knocked-out mount's model is dark (burnt), its own look when repaired.
+func _show_knocked_out() -> void:
+	for holder: Node3D in [yaw, pitch]:
+		for child: Node in holder.get_children():
+			var mesh := child as MeshInstance3D
+			if mesh != null:
+				mesh.material_override = _burnt() if knocked_out else null
+
+
+
+static func _burnt() -> StandardMaterial3D:
+	if _burnt_material == null:
+		_burnt_material = StandardMaterial3D.new()
+		_burnt_material.albedo_color = Color(0.04, 0.035, 0.03)
+		_burnt_material.roughness = 1.0
+	return _burnt_material
+
+
 ## Turns the model to an azimuth and elevation (rad), as the core's row holds them (the frame pass calls it).
 func turn_to(azimuth: float, elevation: float) -> void:
 	yaw.rotation = Vector3(0.0, azimuth, 0.0)
@@ -269,6 +296,8 @@ func _bind() -> void:
 		return
 	_sim = sim
 	_slot = slot_now
+	if knocked_out:
+		_sim.core.set_turret_out(_slot, true)
 	if not can_process():
 		_sim.core.set_turret_live(_slot, false)
 

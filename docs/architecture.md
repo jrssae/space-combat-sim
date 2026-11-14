@@ -5407,7 +5407,7 @@ native/src/surface_rows.rs       ScsSimCore.set_surface / clear_surface / surfac
     fire lane tests the segment against the volumes; the brains' skin range to a surface is the distance to its nearest volume.
     Every other row's arithmetic is unchanged (parity recordings green); the surfaces travel with the rows into the AI job.
 - **Damage (Q5).** A hit's point in its piece's frame picks the damage section whose box holds it (`StationSections.section_at`);
-  the section's health falls (20 000 each, to be tuned by T07 and T10), the `DamageZones` layout `STATION` shows each section's
+  the section's health falls (5 000 each since T07's fix round, first 20 000; T10 tunes it again), the `DamageZones` layout `STATION` shows each section's
   own share and `Silhouette.set_station_sections` draws them side on; `Station.section_lost` fires once per section. The hulls are
   invulnerable: the station is never destroyed or disabled.
 - **Marker.** `BABYLON 5`, `earth_alliance`, kind `PROP`, broadcasting to 1 000 km (the AI hears it, M3-T17).
@@ -5467,11 +5467,12 @@ data/scenarios/station_launch.json  the player on Alpha 3 with three wingmen
 ```
 native/src/grid_kernels.rs       the grid's kinds on the turret rows: the latch, the guns' pick through the brains' broad phase,
                                  the interceptors' incoming fire and choice, the big hulls' line of fire; engine-free (guard test)
-native/src/turret_rows.rs        + add_grid_mount, set_grid_free, grid_free_sides, grid_readouts, turret_kind; step_turrets runs
+native/src/turret_rows.rs        + add_grid_mount, set_grid_free, grid_free_sides, grid_readouts, turret_kind, set_turret_out,
                                  the batteries; note_attackers sets the latch
 native/src/surface.rs            + enters_from_outside: a line entering a volume its start is not inside
 src/world/station_grid.gd        StationGrid: D75's 23 mounts from the hardpoints, their models, flashes, provider and command `grid`
-src/combat/turret_mount.gd       + host (the body a mount binds to), grid_kind, the intercepted signal
+src/combat/turret_mount.gd       + host (the body a mount binds to), grid_kind, the intercepted signal, knocked_out
+src/world/grid_mount_health.gd   GridMountHealth: each mount's own health, worn down by hits near it (pure)
 assets/weapons/grid_*.tres       the light pulse turret, the heavy cannon and the interceptor battery
 ```
 
@@ -5486,8 +5487,9 @@ assets/weapons/grid_*.tres       the light pulse turret, the heavy cannon and th
   grid guns' targets. The launch copies it into the job with the surfaces' body ids; `turret_digest` hashes it.
 - **The guns' pick** (in the AI job, `pick_all` now takes the brains' `Grid`): for a gun whose people are weapons free, the
   rows within its reach (1.25 times its range) from `contact::contacts_into` on the job's broad phase; candidates are live
-  rigid hulls, not tier rows, not big hulls, of a hostile side the latch frees. A light pulse turret takes fighters only (radius
-  up to 50 m and not of kind capital, D75 "anti-fighter"); a heavy cannon ranks capitals ahead of fighters. Inside the arc before
+  rigid hulls, not tier rows, not big hulls, of a hostile side the latch frees. A light pulse turret ranks fighters (radius
+  up to 50 m and not of kind capital) ahead of capitals, a heavy cannon capitals ahead of fighters: each takes the other class
+  only when none of its own is in reach (maintainer, after T07). Inside the arc before
   outside it, nearest first; the would-be winner's line from the trunnion is tested against every big hull's surface
   (`enters_from_outside`: a volume the line starts in does not count). Work: one broad-phase query per gun and a line test per
   improving candidate. Interceptors are not in the job.
@@ -5504,5 +5506,16 @@ assets/weapons/grid_*.tres       the light pulse turret, the heavy cannon and th
   hung from the frame's visual piece or the drum's visual pivot (so the far dress shrinks them with the station and the drum's
   turn carries them); a shot or a kill flashes the barrel through the World's `MuzzleFlashPool`, and a kill adds an
   `ImpactFlash` where the projectile was. `AudioDirector.watch_grid` plays `turret_fire` pitched and levelled per kind.
+- **Knocked-out mounts** (maintainer, after T07). Each of the 23 mounts has its own health (`GridMountHealth`: light 300,
+  heavy 4 000, interceptor 200). `Station._on_hit` passes every hit to `StationGrid.take_hit` beside the section's share: a
+  mount on the hit body within its radius of the hit (30, 45, 25 m) loses the hit's damage. At zero `TurretMount.knocked_out`
+  sets `Mounts.out` in the core (`set_turret_out`, which also drops its target): the pick job, the gun step and the batteries
+  skip the slot, so it neither picks nor fires; its model wears a dark material; `mount_knocked_out` fires once. Only
+  `StationGrid.repair(name | "all")` (a mission, or `grid repair`) brings it back (`mount_repaired`). The wear is per hit, so
+  it is GDScript; the per-tick skip is native, and `turret_digest` hashes the flag.
+- **Mounts as target points** (for T10's raids). `ScsSimCore.grid_points()` gives `[slots, kinds, World places, alive]` for
+  every grid mount in slot order from the rows as they stand (`grid_kernels::mount_points`; alive = bound to a usable row,
+  live and not knocked out); `StationGrid.sub_points()` gives the same per mount with its name. T10 reads them; nothing
+  aims at them yet.
 - **Threads.** Threaded equals `delayed`, one thread equals six, rows, commands and the turret digest byte for byte
   (`test_station_grid_threads`). Every per-tick grid decision is native; GDScript only spends what the core named.

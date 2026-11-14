@@ -12,6 +12,9 @@ extends Node
 ##   battery per interval.
 ## - **The drum's mounts turn with the drum**: they bind to the drum's body and hang from its visual pivot; the frame's stay
 ##   fixed. The station's own frame and drum block every gun's line of fire.
+## - **Mounts can be knocked out** (maintainer, after T07): each has its own health (`GridMountHealth`); a hit on the station near
+##   it wears it down as well as its section, and at zero it stops (dark, silent) until `repair` (a mission, or `grid repair`).
+## - **Sub-points**: `sub_points` (and the core's `grid_points`) give each mount's place and whether it works, for attackers (T10).
 ## - The models are the Saturns' turret (T27) scaled per kind; sounds are the turret shot pitched per kind.
 ##
 ## Console: provider and command `grid`.
@@ -37,12 +40,18 @@ const ARC_DEG: float = 200.0
 const SOUND_PITCH: Dictionary[Kind, float] = {Kind.LIGHT: 1.0, Kind.HEAVY: 0.55, Kind.INTERCEPTOR: 1.6}
 const SOUND_DB: Dictionary[Kind, float] = {Kind.LIGHT: -13.0, Kind.HEAVY: -8.0, Kind.INTERCEPTOR: -16.0}
 const PROVIDER: StringName = &"grid"
-const ACTIONS: Array[StringName] = [&"info", &"free", &"hold"]
+const ACTIONS: Array[StringName] = [&"info", &"free", &"hold", &"repair"]
+
+## A mount was knocked out (its health gone) or repaired: its name.
+signal mount_knocked_out(mount_name: String)
+signal mount_repaired(mount_name: String)
 
 var station: Station = null
 var mounts: Array[TurretMount] = []
 ## The station's people: who the grid fires for.
 var faction: StringName = Factions.EARTH_ALLIANCE
+## Each mount's own health, in `mounts`' order.
+var health: GridMountHealth = null
 
 var _pool: MuzzleFlashPool = null
 
@@ -66,6 +75,54 @@ func build(p_station: Station) -> void:
 		mount.intercepted.connect(_on_intercepted.bind(mount))
 		(station.drum_pivot if on_drum else station.frame_piece).add_child(mount)
 		mounts.append(mount)
+	health = GridMountHealth.from_mounts(station.hardpoints.grid_mounts,
+			func(kind_name: String) -> int: return KIND_OF.get(kind_name, Kind.LIGHT))
+
+
+## A hit of `amount` on the station at `point` in `body`'s frame (`Station`, beside its section's share): the mounts near it wear
+## down, and one that reaches zero is knocked out.
+func take_hit(body: String, point: Vector3, amount: float) -> void:
+	if health == null:
+		return
+	for i: int in health.hit(body, point, amount):
+		mounts[i].knocked_out = true
+		mount_knocked_out.emit(mounts[i].mount_name)
+
+
+## Repairs mount `mount_name` (or every mount for `all`); false for no such mount.
+func repair(mount_name: String) -> bool:
+	if mount_name == "all":
+		for i: int in mounts.size():
+			_repair_at(i)
+		return true
+	var i: int = health.index_of(mount_name)
+	if i < 0:
+		return false
+	_repair_at(i)
+	return true
+
+
+func _repair_at(i: int) -> void:
+	if health.repair(i):
+		mounts[i].knocked_out = false
+		mount_repaired.emit(mounts[i].mount_name)
+
+
+## The knocked-out mounts' names.
+func knocked_out() -> PackedStringArray:
+	var out := PackedStringArray()
+	for m: TurretMount in mounts:
+		if m.knocked_out:
+			out.append(m.mount_name)
+	return out
+
+
+## Each mount as a point an attacker can aim at (M7-T10): `name`, `kind`, `position` (World, now) and `alive`.
+func sub_points() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for m: TurretMount in mounts:
+		out.append({"name": m.mount_name, "kind": m.grid_kind, "position": m.global_position, "alive": not m.knocked_out})
+	return out
 
 
 func _ready() -> void:
@@ -163,17 +220,28 @@ func _register_console() -> void:
 				"doc": "The grid's mounts by kind (D75: 12 light pulse, 2 heavy cannons, 9 interceptors) and how many the core holds"},
 		&"free": {"get": func() -> String: return ", ".join(free_sides()) if not free_sides().is_empty() else "holding",
 				"doc": "The sides the grid is weapons free against (it never fires first; a hostile shot at the station frees it)"},
+		&"knocked_out": {"get": func() -> String: return _knocked_out_text(),
+				"doc": "The mounts knocked out (dark and silent until grid repair), and each damaged one's health"},
 		&"shots": {"get": func() -> String: return _shots_text(),
 				"doc": "Shots by the light and heavy guns, projectiles shot down (missiles), shots the station's hull blocked"},
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(PROVIDER,
-			"The station's defence grid (M7-T07): info, free <side>, hold [side]",
+			"The station's defence grid (M7-T07): info, free <side>, hold [side], repair <mount|all>",
 			[ConsoleArg.enum_optional(&"action", ACTIONS, &"info"), ConsoleArg.string_optional(&"side")]), _cmd_grid, self)
 
 
 func _mounts_text() -> String:
 	return "%d light pulse, %d heavy cannons, %d interceptors; %d bound" % [of_kind(Kind.LIGHT).size(),
 			of_kind(Kind.HEAVY).size(), of_kind(Kind.INTERCEPTOR).size(), bound_count()]
+
+
+func _knocked_out_text() -> String:
+	var parts := PackedStringArray()
+	for i: int in health.count():
+		if health.health[i] < health.max_health[i]:
+			parts.append("%s %s" % [health.names[i], "KNOCKED OUT" if health.is_out(i) else "%.0f/%.0f" % [health.health[i],
+					health.max_health[i]]])
+	return "%d knocked out%s" % [health.out_count(), (": " + ", ".join(parts)) if not parts.is_empty() else ""]
 
 
 func _shots_text() -> String:
@@ -194,5 +262,9 @@ func _cmd_grid(args: Dictionary) -> ConsoleResult:
 		&"hold":
 			set_free(StringName(side), false)
 			return ConsoleResult.line("grid holding fire%s" % (" against %s" % side if not side.is_empty() else ""))
-	return ConsoleResult.line("grid: %s; free against %s; %s" % [_mounts_text(),
-			", ".join(free_sides()) if not free_sides().is_empty() else "nobody (holding)", _shots_text()])
+		&"repair":
+			if side.is_empty() or not repair(side):
+				return ConsoleResult.failure("grid repair <mount|all>; mounts: %s" % ", ".join(health.names))
+			return ConsoleResult.line("grid repaired %s; %s" % [side, _knocked_out_text()])
+	return ConsoleResult.line("grid: %s; free against %s; %s; %s" % [_mounts_text(),
+			", ".join(free_sides()) if not free_sides().is_empty() else "nobody (holding)", _knocked_out_text(), _shots_text()])

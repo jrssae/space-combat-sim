@@ -560,6 +560,41 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   - **Open (maintainer):** the light pulse turrets never engage a capital (D75 says "anti-fighter"; say if they should take one
     when no fighter is in reach); the capital stand-in's own interceptors do not shoot at the grid's heavy bolts (they never
     shot bolts in M4); raiders attack the station only when ordered to (a scenario objective), as M5's brains pick ships (T10).
+- **Fix (maintainer's decisions after T07, 2026-11-13; contracts in `docs/architecture.md` §20.3):**
+  - **Tunings (old → new):** `grid_light_pulse` a shot every 1.0 → 2.0 s, damage 10 → 4; `grid_heavy_cannon` every 4.0 → 12.0 s,
+    damage 300 → 900 (the same damage a second on a capital, a third of the shots at fighters); `grid_interceptor` one kill every
+    0.5 → 1.0 s a battery; section health 20 000 → 5 000 (`StationSections.SECTION_HEALTH`, T06's placeholder). The fights' limits
+    stay 180 s (raid) and 300 s (capital).
+  - **The raid** (`test_station_grid_balance`, now pinned to 90 to 120 s and to section damage): 12 raiders dive from 0.9 to
+    1.7 km on a decoy 450 m over L9 (a marker with no hull; their shots at it carry on into the hull). Seed 1 all destroyed at
+    111.5 s (282 light shots with 114 hits, 18 heavy with 7, 157 shot down, station lost 744, worst section 10 %), seed 2 at
+    104.8 s (297 / 119, 15 / 7, 210, 468, 5 %), seed 3 at 104.8 s (219 / 100, 13 / 6, 137, 420, 5 %); no mount knocked out.
+  - **The capital** (cruiser stand-in, 20 000 hull): destroyed at 134.3, 134.5 and 134.7 s by 22 heavy hits and 173 to 201 light
+    hits (the light turrets now fire at it); 929 to 930 of its bolts and missiles shot down (44 missiles), 136 beams through;
+    station lost 5 110, worst section 77 % (none lost), one mount knocked out. The limit of 300 s holds unchanged.
+  - **Light pulse turrets on capitals:** the pick ranks each gun's own class first (light: fighters, heavy: capitals) and takes
+    the other only when none of its own is in reach (`grid_kernels::pick`).
+  - **Mounts knocked out:** `GridMountHealth` (pure): light 300, heavy 4 000, interceptor 200; a hit on the station within 30,
+    45 or 25 m of a mount on the same body takes its damage off the mount as well as the section (`Station._on_hit` →
+    `StationGrid.take_hit`). At zero `TurretMount.knocked_out` sets the core's `Mounts.out`: no pick, no shot, no interception
+    (native, hashed by `turret_digest`), a dark model, `mount_knocked_out` once, `grid info` and the provider's `knocked_out`
+    name it. Repair only by `StationGrid.repair` (a mission) or `grid repair <mount|all>`. The heavy cannons' 4 000 lets them
+    outlast the cruiser's beams (12.5 a second each for the whole fight).
+  - **Mounts as target points (for T10):** `ScsSimCore.grid_points()` (`[slots, kinds, World places, alive]`, native) and
+    `StationGrid.sub_points()` (name, kind, position, alive). Nothing aims at them yet.
+  - **Tests:** Rust 162 (+1: a knocked-out mount is left out of the pick and is a dead point; the light turret's test now covers
+    the capital). GUT `test_grid_mount_health` (2), `test_station_grid` (7, +1: worn down, knocked out, dark, silent, reported,
+    a dead point at its hardpoint in the node, the hardpoints and the core, repaired and firing), `test_station_grid_balance`
+    (2, three seeds each, the band and the damage asserted). In a staged copy with the station built from HEAD: 82 GUT tests in
+    14 files pass (the grid, threads, station, sections, the four parity files, the turret files, the kernel guard), the
+    compile check and the main-scene smoke are clean; no recording moved.
+  - **Not done:** the station's target box does not show mount state (it draws sections only; a line for the grid needs a new
+    `TargetInfo` field through `HudInput` and the painter, not cheap). The dark model, `grid info` and the provider show it.
+  - **Found, for T10:** raiders that come near the hull stall beside the spine, almost still, under the frame guns' arcs
+    (they lose sight of their target and no gun can depress onto them), and a raid ordered at the station itself parks on or
+    under the hull. So the raid here is held 450 m off the hull, and most of its damage lands in its first dive; a raid that
+    reaches the mounts needs T10's avoidance and targeting, and the balance should be measured again then. A raid started
+    under the drum flew off and idled 2 km below.
 
 ### M7-T08 Launch bays and the launch sequence
 

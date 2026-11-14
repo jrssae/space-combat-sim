@@ -74,6 +74,8 @@ pub struct Mounts {
     pub shots: Vec<i64>,
     /// `grid_kernels::MOUNT_*`: a ship's turret, or one of the station grid's kinds (M7-T07).
     pub kind: Vec<u8>,
+    /// Knocked out (M7-T07: a grid mount whose health is gone): it neither picks nor fires until repaired.
+    pub out: Vec<bool>,
 }
 
 impl Mounts {
@@ -118,6 +120,7 @@ impl Mounts {
             self.ready_at.push(f64::NEG_INFINITY);
             self.shots.push(0);
             self.kind.push(MOUNT_TURRET);
+            self.out.push(false);
         }
         self.taken[slot] = true;
         self.id[slot] = id;
@@ -137,6 +140,7 @@ impl Mounts {
         self.ready_at[slot] = f64::NEG_INFINITY;
         self.shots[slot] = 0;
         self.kind[slot] = MOUNT_TURRET;
+        self.out[slot] = false;
         slot
     }
 
@@ -294,7 +298,7 @@ impl PickJob {
         self.mounts.clear();
         for s in 0..mounts.taken.len() {
             // An interceptor's choice is made on the main thread, where it shoots the same tick.
-            if !mounts.taken[s] || !mounts.live[s] || mounts.kind[s] == MOUNT_INTERCEPTOR {
+            if !mounts.taken[s] || !mounts.live[s] || mounts.out[s] || mounts.kind[s] == MOUNT_INTERCEPTOR {
                 continue;
             }
             self.mounts.push(PickMount {

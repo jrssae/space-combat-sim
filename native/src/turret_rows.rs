@@ -171,6 +171,41 @@ impl ScsSimCore {
         )
     }
 
+    /// Knocks a mount out (`out`: its health is gone; it neither picks nor fires and drops its target) or repairs it (M7-T07).
+    #[func]
+    fn set_turret_out(&mut self, slot: i64, out: bool) {
+        let Some(s) = self.mount_slot(slot) else {
+            return;
+        };
+        let m = &mut self.turrets.mounts;
+        m.out[s] = out;
+        m.target[s] = 0;
+    }
+
+    /// Whether a mount is knocked out.
+    #[func]
+    fn turret_out(&self, slot: i64) -> bool {
+        self.mount_slot(slot).is_some_and(|s| self.turrets.mounts.out[s])
+    }
+
+    /// The grid's mounts as points an attacker can aim at (M7-T10): `[slots, kinds, World places, alive (1) or not (0)]`, in
+    /// slot order, from the rows as they stand.
+    #[func]
+    fn grid_points(&self) -> VarArray {
+        let mut points = Vec::new();
+        gk::mount_points(&self.rows, &|b| self.row_for_kernel(b), &self.turrets.mounts, &mut points);
+        let slots: Vec<i32> = points.iter().map(|p| p.slot as i32).collect();
+        let kinds: Vec<i32> = points.iter().map(|p| i32::from(p.kind)).collect();
+        let at: Vec<Vector3> = points.iter().map(|p| p.at).collect();
+        let alive: Vec<u8> = points.iter().map(|p| u8::from(p.alive)).collect();
+        let mut out = VarArray::new();
+        out.push(&PackedInt32Array::from(slots.as_slice()).to_variant());
+        out.push(&PackedInt32Array::from(kinds.as_slice()).to_variant());
+        out.push(&PackedVector3Array::from(at.as_slice()).to_variant());
+        out.push(&PackedByteArray::from(alive.as_slice()).to_variant());
+        out
+    }
+
     /// A mount's kind (`grid_kernels::MOUNT_*`), -1 for no mount.
     #[func]
     fn turret_kind(&self, slot: i64) -> i64 {
@@ -364,7 +399,7 @@ impl ScsSimCore {
         self.grid_surface_rows(&mut surface_rows);
         let mut m = std::mem::take(&mut self.turrets.mounts);
         for s in 0..m.taken.len() {
-            if !m.taken[s] || !m.live[s] || m.target[s] == 0 || m.kind[s] == MOUNT_INTERCEPTOR {
+            if !m.taken[s] || !m.live[s] || m.out[s] || m.target[s] == 0 || m.kind[s] == MOUNT_INTERCEPTOR {
                 continue;
             }
             let body = m.body[s];
@@ -555,6 +590,7 @@ impl ScsSimCore {
             word(self.row_of_id(m.target[s]) as u64);
             word(m.ready_at[s].to_bits());
             word(m.shots[s] as u64);
+            word(u64::from(m.out[s]));
         }
         let mem = &self.turrets.memory;
         for k in 0..mem.len() {
@@ -625,7 +661,7 @@ impl ScsSimCore {
         let relations = std::mem::take(&mut self.turrets.relations);
         let stride = self.turrets.stride;
         for s in 0..m.taken.len() {
-            if !m.taken[s] || !m.live[s] || m.kind[s] != MOUNT_INTERCEPTOR {
+            if !m.taken[s] || !m.live[s] || m.out[s] || m.kind[s] != MOUNT_INTERCEPTOR {
                 continue;
             }
             let Some(own) = gk::firing_row(&self.rows, self.row_for_kernel(m.body[s])) else {

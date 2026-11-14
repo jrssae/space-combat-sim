@@ -129,7 +129,7 @@ fn the_guns_hold_fire_until_the_latch_frees_them() {
 }
 
 #[test]
-fn a_light_turret_takes_the_nearest_fighter_and_never_a_capital() {
+fn a_light_turret_takes_the_nearest_fighter_first_and_a_capital_when_none_is_in_reach() {
     let rows = rows_with(
         &[
             (1, 1, Vector3::new(0.0, 300.0, 0.0), true),
@@ -139,7 +139,29 @@ fn a_light_turret_takes_the_nearest_fighter_and_never_a_capital() {
         ],
         0.0,
     );
-    assert_eq!(pick_with(&rows, &gun(MOUNT_LIGHT, 3000.0), &free_against(&[1])), 3);
+    assert_eq!(pick_with(&rows, &gun(MOUNT_LIGHT, 3000.0), &free_against(&[1])), 3, "the nearest fighter, not the nearer capital");
+    let rows = rows_with(&[(1, 1, Vector3::new(0.0, 300.0, 0.0), true), (4, 1, Vector3::new(0.0, 5000.0, 0.0), false)], 0.0);
+    assert_eq!(pick_with(&rows, &gun(MOUNT_LIGHT, 3000.0), &free_against(&[1])), 1, "the capital when no fighter is in reach");
+}
+
+#[test]
+fn a_knocked_out_mount_is_left_out_of_the_pick_and_shows_as_a_dead_point() {
+    let rows = rows_with(&[(1, 1, Vector3::new(0.0, 900.0, 0.0), false)], 0.0);
+    let mut m = tk::Mounts::default();
+    let gun_spec = tk::Gun { range_m: 3000.0, ..tk::Gun::default() };
+    for (id, kind) in [(1, MOUNT_LIGHT), (2, MOUNT_HEAVY), (3, MOUNT_INTERCEPTOR)] {
+        let slot = m.add(id, 1, STATION, 0, Vector3::new(0.0, 52.0, 0.0), Vector3::new(0.0, 1.0, 0.0), 200.0, 3.0, gun_spec);
+        m.kind[slot] = kind;
+    }
+    m.out[1] = true;
+    let mut job = tk::PickJob::default();
+    job.take_from(&m, &tk::Memory::default(), &table(), STRIDE, &tk::Hulls::default(), &free_against(&[1]), &[STATION]);
+    let slots: Vec<u32> = job.mounts.iter().map(|p| p.slot).collect();
+    assert_eq!(slots, vec![0], "the knocked-out heavy and the interceptor (main thread) are not picked for");
+    let mut points = Vec::new();
+    mount_points(&rows, &finder(&rows), &m, &mut points);
+    assert_eq!(points.iter().map(|p| (p.slot, p.alive)).collect::<Vec<_>>(), vec![(0, true), (1, false), (2, true)]);
+    assert!((points[0].at - Vector3::new(0.0, 52.0, 0.0)).length() < 1e-4, "at the mount's pivot on its body");
 }
 
 #[test]
