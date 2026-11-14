@@ -276,7 +276,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T22 | A | The dorsal spine and the command section rebuilt to the STL (per-part sections IoU >= 0.90; maintainer, 2026-11-13) | T21 | Opus | T04 built them to the overall silhouette; the per-part check scores them 0.38 to 0.72 | done |
 | T23 | D | The jumpgate and jump points refined from the maintainer's GIF: gate opening, the blue vortex, a ship's jump point (maintainer, 2026-11-13) | - | Opus | Shader and asset look against a show reference; (H) | done |
 | T24 | A | The station's surfaces refined for fullscreen, in both texture-detail sets (low and high): resolution, detail, colour and material, no visible tiling (maintainer, 2026-11-13) | T22 | Opus | A look task on an 8 km hull at 6K within a VRAM budget; (H) | not started |
-| T25 | A | The main docking bay rebuilt: shape and proportions from the STL (its section exemption lifted, IoU >= 0.90), the look from the show captures (maintainer, 2026-11-14) | T05, the flicker and light-leak fix | Opus | The bay reads wrong against the show in shape, mouth detail, tunnel and light; (H) | not started |
+| T25 | A | The main docking bay rebuilt: shape and proportions from the STL (its section exemption lifted, IoU >= 0.90), the look from the show captures (maintainer, 2026-11-14) | T05, the flicker and light-leak fix | Opus | The bay reads wrong against the show in shape, mouth detail, tunnel and light; (H) | in progress |
 | T26 | B | All ships keep a low-polygon model at range instead of turning into a grey sphere; a dot only when a few pixels across (maintainer, 2026-11-14) | - | Opus | A Saturn 3 and a Narn transport became grey spheres while still clearly visible | not started |
 | T27 | C | Navigation targets and a hold-X interaction: the main docking bay, cargo bay and jumpgate as navigation targets; hold X for 2 s with a progress bar to act on them (maintainer, 2026-11-14) | T10 | Opus | A new input mechanic over targeting, HUD and the gate jump | in progress |
 | T28 | D | Fix: entering the jumpgate a second time opens the vortex twice and the camera stops tracking the ship (maintainer, 2026-11-14) | - | Fable | A state bug in M6's gate jump | in progress |
@@ -1403,6 +1403,27 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   the build, and the bay from the bow, three-quarter and inside, beside the show captures (H); the maintainer may send more
   captures of the bay from outside.
 - **Done when:** the sections pass, the sheet is approved, tests green, committed.
+- **Phase 1, the STL measured (2026-11-14; the maintainer decides before the build):** the bay is in the STL, on the bow face, at
+  the 8 km scale (3.3743 m a unit):
+  - **Mouth:** a stepped cut in the frame block, **45 m wide and 20 m high** (a band 45 x 10 m across a core 27 x 20 m); clear
+    inside its liner 40 x 16 m. **40.5 m deep**, from the block's face (z 480.4) to a back wall at z 520.9 carrying the closed
+    sawtooth doors (the show's inner airlock). Nothing behind the doors: the STL is solid there.
+  - **Frame block:** an octagon 95 x 51 m (corners cut to a flat top 62 m wide), face z 480.4, slatted grilles over and under the
+    mouth, marked panels at its corners; a fan-shaped grilled housing each side (x 35 to 58) stands forward to z 449.
+  - **Cross housing:** the bar across 226 m (x +-113, y +-13.5, face z 480.4); the bar up and down 40 m wide at the block, 26 m at
+    its ends, its face sloping back from z 490 to 496. **Toothed ring** r 107 to 139, front z 470 to 475. The disc behind is recessed:
+    r 59.5 to 107 at z 505 to 513, r 43 to 59.5 to z 517.
+  - **Against 80 m:** the mouth is 0.56 of it (80 m would be 1.78 times the STL's), the frame block 1.19; neither within 10 %.
+    Today's build: block 140 x 112 m with its face at z 450, mouth frame 116 m, passage 94 x 34, tunnel to z 640; section IoU 0.11
+    to 0.65 at z 476 to 519.
+  - **The cargo bay:** already the STL's (T21: throat 68.2 x 31.4 m, compartment x +-94). The same scale reading leaves it as it is.
+    Scaling it by 1.78 to match an 80 m mouth would make the compartment 335 m wide, wider than the spine (x +-166), so the STL's
+    bays read as consistent with the 8 km hull.
+  - **The check:** the STL's bow is overlapping shells with mixed winding, so the nonzero fill calls the mouth solid at every z
+    plane; the docking bay's planes compare the face as seen from ahead (a relief section: solid where the first surface from the
+    bow lies before the plane).
+  - **Traffic:** at the STL's size none of T10's tunnel hulls fit (Skylark 40 x 10, Narn transport 46 x 18, Brezebel 39 x 25).
+  - Sheet: `references/screenshots/M7-T25 docking bay/M7-T25_phase1_sheet.png` (gitignored).
 
 ### M7-T26 All ships keep a low-polygon model at range
 
