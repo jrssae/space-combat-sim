@@ -164,7 +164,8 @@ func advance(delta: float) -> void:
 			continue
 		var age: float = _clock - _births[slot]
 		var ship: Node3D = _ships[slot]
-		if age >= EmitterCurves.FLASH_S or not is_instance_valid(ship) or not ship.is_inside_tree() \
+		# Clock against birth + FLASH_S, not an age: `clock - birth` can round a hair under FLASH_S on the pass that reaches it.
+		if _clock >= _births[slot] + EmitterCurves.FLASH_S or not is_instance_valid(ship) or not ship.is_inside_tree() \
 				or not ship.is_visible_in_tree():
 			_release(slot)
 			continue
