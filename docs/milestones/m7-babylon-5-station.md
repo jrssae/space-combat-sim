@@ -283,6 +283,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T29 | D | Fix: a civilian attacked in free flight does not flee (no change of speed or heading) (maintainer, 2026-11-14) | T10 | Fable | AI regression or a free-flight wiring gap | done |
 | T30 | D | Maintenance bots carry the freighters' cargo pods (Saturn 3, 4 and 8; cargo and tankers) between the ship and the cargo bay (maintainer, 2026-11-14) | T10, T11 | Opus | Replaces the pods flying by themselves | in progress |
 | T31 | C | The pause menu gets Quit (exit the game); the start and pause menus' boxes shrink to their content (Settings keeps its layout) (maintainer, 2026-11-14) | - | Sonnet | Front-end layout | done |
+| T32 | A | The cargo bay gets the main docking bay's look: metallic grey walls and doors with the Earth Alliance mosaic, lit red by lamps through the light slots, no self-lit rings or bands (maintainer, 2026-11-14) | T25 | Opus | Same surfaces and lamps as T25 on the spine's cargo bay; (H) | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M7-T01 Station references and measurements
@@ -1688,3 +1689,13 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     three frames a hull from `traffic freighter <type> show` (backing in at 20 s, the bots taking the first pod at 80 s, carried
     at 105 s). The look and the feel stay (H): the maintainer's live run, one line a hull (`show` puts the player beside the lane on
     the side whose pods come off first; the bots are small at that distance).
+
+### M7-T32 The cargo bay in red-lit grey metal
+
+- **Goal:** the maintainer approved T25's red-lit tunnel (sheet `references/screenshots/T25 red-lit tunnel/`) and wants the same
+  surfaces on the cargo bay (zero-gravity, on the spine between the bow's forks; T21 roofed it).
+- **Scope:** the cargo bay's walls, roof, floor and any doors take T25's grey metal (metallic, panelled, ribbed where walls are set
+  back, the shared mosaic tile) and its red response; red light comes from lamps through the `LightRig` slots as `BayLights` does,
+  never from self-lit rings, strips or bands. Its shape and section IoU (>= 0.90) stay; T30's pod and bot clearances stay green.
+- **Done when:** a GPU sheet of the bay (outside the mouth, inside looking in, inside looking out; before and after, with draw calls,
+  GPU time and VRAM) is approved by the maintainer, the touched Python and GUT tests pass in a `--staged` copy, and the row is `done`.
