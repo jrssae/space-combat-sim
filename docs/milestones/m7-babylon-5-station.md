@@ -981,6 +981,23 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   maintainer (H); `state render` numbers (fps, draw calls, light slots used) recorded; tests for the light hardpoints, the blink
   timing from sim time and the slot budget.
 
+- **Fix (maintainer, 2026-11-13, before this task is built): flicker, the sun through the station, glints along the core.** Seen in
+  the launch shots and from outside as the drum turned; approved live. Causes and fixes (details in `docs/assets-station.md`
+  "No two faces in one plane" and "Solid to the eye, and the sun kept out"):
+  - The halls' work lamps blinked: each lamp's box lay flush in its wall panel (z-fighting). Lamps stand 0.3 m proud; every
+    other pair of faces in one plane in the props, the drum, the frame's detail and the hangar behind the menu moved apart
+    (`test_coplanar_overlaps.py`). `LightPicker` was not involved: its slots held steady throughout.
+  - The sun through the Cobra doors and light at their corners: the leaves did not meet and the lit strips did not reach the
+    wells' walls or corners. Leaves meet, a lit sill closes each well; no ray leaves a hall with its doors closed
+    (`test_station_sealed.py`).
+  - Sun rays through the core: rings left open between the drum's shells. Each shell ends and starts in a flange; no line
+    passes through the station.
+  - Glints off the arms, teeth and decks on the night side, and sunlit halls: nothing cast a shadow. The key star casts the
+    station's shadow (the station only; ships receive it), and what stands inside a hall or a bay is on an interior layer the
+    star's light leaves out (`LightRig`). T18's real bay lights go through the 7 slots as planned and light that layer.
+  - Tools: `scripts/flicker_probe.sh` and `scripts/flicker_metric.py`. Sheets: `references/screenshots/M7 bay flicker/`
+    (`outside_before_after.png`, `compare_heat_before_after.png`).
+
 ### M7-T19 Station sections and near-only detail
 
 - **Why (maintainer, 2026-11-13):** "because of the huge size of Babylon 5, is it possible to apply the reduced fidelity for distant

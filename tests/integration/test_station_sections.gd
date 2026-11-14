@@ -43,7 +43,8 @@ func test_each_piece_draws_one_mesh_per_section_at_its_origin() -> void:
 			var origin: Array = item["origin"]
 			assert_eq(node.position, Vector3(origin[0], origin[1], origin[2]))
 			assert_not_null(node.mesh, "%s is imported" % item["name"])
-			assert_eq(node.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
+			assert_eq(node.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_ON, "a station casts the key star's shadow (M7)")
+			assert_eq(node.layers, 1 | LightRig.SHADOW_CASTER_LAYER)
 			assert_eq(node.visibility_range_end, 0.0, "the hull is drawn at every distance")
 			materials[node.mesh.surface_get_material(0)] = true
 		assert_eq(materials.size(), 1, "%s: every section draws with the piece's one material" % name)
@@ -108,7 +109,7 @@ func test_the_cobra_doors_props_are_instanced_under_the_waist() -> void:
 			assert_between(node.visibility_range_end, 1000.0, 2000.0, "about 1 to 2 km")
 		assert_eq(node.visibility_range_end_margin, float(props["margin_m"]))
 		assert_eq(node.visibility_range_fade_mode, GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF)
-		assert_eq(node.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
+		assert_eq(node.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_ON)
 		assert_not_null(node.multimesh.mesh)
 		var material := node.multimesh.mesh.surface_get_material(0) as StandardMaterial3D
 		assert_not_null(material.albedo_texture if material != null else null, "the props' own atlas")
@@ -117,6 +118,38 @@ func test_the_cobra_doors_props_are_instanced_under_the_waist() -> void:
 	assert_eq(counts.get("Props_Clamp"), 24)
 	assert_eq(counts.get("Props_Gantry"), 24)
 	assert_eq(counts.get("Props_DoorLeaf3R"), 4, "one of each leaf on every arm")
+
+
+func test_what_stands_inside_is_drawn_out_of_the_suns_light() -> void:
+	# M7: the sun lit the halls and glinted off the doors down their wells (a shadow map cannot tell a hall from the hull at this
+	# size). Their faces and props are on the interior layer, which the key star's light leaves out.
+	if station == null:
+		fail_test(GEN_ASSETS_HINT)
+		return
+	var inside: int = 0
+	for piece: RenderPiece in [station.drum_piece, station.frame_piece]:
+		for s: Dictionary in piece.sections.sections:
+			var node: MeshInstance3D = piece.interior_node(String(s["name"]))
+			if String(s["interior_file"]).is_empty():
+				assert_null(node, String(s["name"]))
+				continue
+			inside += 1
+			assert_not_null(node, "%s: its interior faces are drawn" % s["name"])
+			if node == null:
+				continue
+			assert_eq(node.layers, LightRig.INTERIOR_LAYER | LightRig.SHADOW_CASTER_LAYER)
+			assert_eq(node.get_parent(), piece.section_node(String(s["name"])), "it turns with its section")
+			assert_not_null(node.mesh, "%s is imported" % s["interior_file"])
+			assert_eq(node.mesh.surface_get_material(0), piece.section_node(String(s["name"])).mesh.surface_get_material(0),
+					"the hull's own material")
+			assert_eq(piece.section_node(String(s["name"])).layers & LightRig.INTERIOR_LAYER, 0, "the hull outside stays in the sun")
+	assert_gt(inside, 2, "the launch halls, the main docking bay and the cargo bay")
+	assert_not_null(station.drum_piece.interior_node("waist"), "the launch halls")
+	for node: MultiMeshInstance3D in station.drum_piece.prop_nodes():
+		var on_deck: bool = String(node.name) == "Props_Clamp"
+		assert_eq(node.layers, (1 if on_deck else LightRig.INTERIOR_LAYER) | LightRig.SHADOW_CASTER_LAYER, String(node.name))
+	for node: MultiMeshInstance3D in station.frame_piece.prop_nodes():
+		assert_eq(node.layers, 1 | LightRig.SHADOW_CASTER_LAYER, "the command section's windows are outside")
 
 
 func test_a_door_leaf_lies_on_its_door() -> void:

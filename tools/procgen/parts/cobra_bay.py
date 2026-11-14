@@ -147,6 +147,12 @@ def to_arm() -> dict[str, list]:
     return {"basis": [[-1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, 1.0]], "origin": [ARM_X, DOOR_FLOOR_R, ARM_Z]}
 
 
+# Two faces in one plane facing the same way z-fight, and a lamp set flush in a panel flickers (M7): where parts meet, one stands
+# this far proud of the other, or a crossing bar is this much slimmer a side.
+PROUD_M = 0.05
+INSET_M = 0.03
+
+
 # --- primitives --------------------------------------------------------------------------------------------------------
 def block(lo: Sequence[float], hi: Sequence[float], m: Material) -> Mesh:
     return st.block(lo, hi, m)
@@ -268,14 +274,14 @@ def _wall_side(m: Mapping[str, Material]) -> dict[str, list[Mesh]]:
     # The machinery bank along the floor: cabinets of different depths with pink-lit panels (the docking-bay captures).
     for z0, z1, depth, ctop, lit in ((-h + 1.2, -h + 5.4, 1.6, 6.5, ((3.5, 5.0),)), (h - 6.4, h - 1.2, 1.8, 8.0, ((2.2, 3.4), (5.2, 6.6)))):
         out["cabinets"].append(block((w - depth, 0.0, z0), (w, ctop, z1), m["wall"]))
-        out["cabinets"].append(block((w - depth - 0.25, ctop - 0.4, z0 - 0.2), (w, ctop, z1 + 0.2), m["frame"]))  # a lip on top
+        out["cabinets"].append(block((w - depth - 0.25, ctop - 0.4, z0 - 0.15), (w, ctop + PROUD_M, z1 + 0.15), m["frame"]))  # a lip on top
         for y0, y1 in lit:
             out["panels"].append(block((w - depth - 0.03, y0, z0 + 0.5), (w - depth, y1, z1 - 0.5), m["panel_light"]))
     # Vertical pipes up to the catwalk, and a ladder (the fan render's ladders).
     out["pipes"] += [pipe("y", (w - 0.5, z), (0.0, 11.8), 0.22, m["machinery"]) for z in (-2.6, -2.0)]
     lz = 0.0
     out["ladder"] += [block((w - 0.8, 0.0, lz + s - 0.05), (w - 0.7, 13.0, lz + s + 0.05), m["hatch"]) for s in (-0.3, 0.3)]
-    out["ladder"] += [block((w - 0.8, y - 0.03, lz - 0.3), (w - 0.7, y + 0.03, lz + 0.3), m["hatch"])
+    out["ladder"] += [block((w - 0.8 + INSET_M, y - 0.03, lz - 0.3), (w - 0.7 - INSET_M, y + 0.03, lz + 0.3), m["hatch"])
                       for y in np.arange(0.4, 12.0, 0.4)]
     out["ladder"] += [block((w - 0.7, y - 0.05, lz - 0.35), (w, y + 0.05, lz - 0.25), m["hatch"]) for y in (2.0, 6.0, 10.0)]
     # The catwalk at 12 m, its brackets and its yellow railing.
@@ -283,10 +289,10 @@ def _wall_side(m: Mapping[str, Material]) -> dict[str, list[Mesh]]:
     out["catwalk"] += [block((w - 3.0, 10.9, z - 0.08), (w, 11.8, z + 0.08), m["frame"]) for z in (-h + 3.0, h - 3.0)]
     out["railing"] += [block((w - 3.0, 12.0, z - 0.05), (w - 2.9, 13.1, z + 0.05), m["hatch"])
                        for z in np.arange(-h + 1.6, h, 3.2) if abs(z - lz) > 1.0]
-    out["railing"] += [block((w - 3.0, y - 0.05, -h), (w - 2.9, y + 0.05, h), m["hatch"]) for y in (12.55, 13.1)]
+    out["railing"] += [block((w - 3.0 + INSET_M, y - 0.05, -h), (w - 2.9 - INSET_M, y + 0.05, h), m["hatch"]) for y in (12.55, 13.1)]
     # The red lamps under the catwalk and the bay's warm light along the wall.
     out["wall_lamps"] += [block((w - 0.45, 10.2, z - 0.5), (w, 10.6, z + 0.5), m["lamp"]) for z in (-h * 0.5, h * 0.5)]
-    out["wall_glow"].append(block((w - 0.25, 10.85, -h + 1.0), (w, 11.0, h - 1.0), m["bay_light"]))
+    out["wall_glow"].append(block((w - 0.25, 10.85, -h + 1.0), (w, 11.0, h - 1.0 - 2.0 * PROUD_M), m["bay_light"]))
     # Pipe runs along the hall above the catwalk, on brackets.
     for x, y, r, role in PIPE_RUNS:
         out["pipes"].append(pipe("z", (w - x, y), (-h, h), r, m[role]))
@@ -298,7 +304,8 @@ def _wall_side(m: Mapping[str, Material]) -> dict[str, list[Mesh]]:
         out["ledge"].append(block((w, UP_H - LEDGE_T, -h), (lw, UP_H, h), m["deck"]))
         out["ledge"].append(block((w - 0.3, UP_H - 1.4, -h), (w, UP_H, h), m["hatch"]))  # the striped fascia
         out["railing"] += [block((w + 0.2, UP_H, z - 0.05), (w + 0.3, UP_H + 1.1, z + 0.05), m["hatch"]) for z in np.arange(-h + 1.6, h, 3.2)]
-        out["railing"] += [block((w + 0.2, UP_H + y - 0.05, -h), (w + 0.3, UP_H + y + 0.05, h), m["hatch"]) for y in (0.55, 1.1)]
+        out["railing"] += [block((w + 0.2 + INSET_M, UP_H + y - 0.05, -h), (w + 0.3 - INSET_M, UP_H + y + 0.05, h), m["hatch"])
+                           for y in (0.55, 1.1)]
         out["wall"].append(block((lw, UP_H - LEDGE_T, -h), (lw + 1.0, HEIGHT, h), m["wall"]))
         out["pilasters"] += [block((lw - 0.6, UP_H, z - 0.4), (lw, HEIGHT, z + 0.4), m["frame"]) for z in (-h * 0.5, h * 0.5)]
         out["pilasters"] += [block((lw - 0.12, HEIGHT - 3.0, z0), (lw, HEIGHT - 2.2, z1), m["recess"])
@@ -350,10 +357,10 @@ def _portal(m: Mapping[str, Material]) -> list[Shape]:
     parts, gussets = [], []
     for sz in (-1.0, 1.0):
         z = (-HALF_PITCH, -HALF_PITCH + 0.7) if sz < 0 else (HALF_PITCH - 0.7, HALF_PITCH)
-        parts.append(mirror_x(block((HALF_W - 1.2, 0.0, z[0]), (HALF_W, UP_H if TWO_LEVELS else HEIGHT, z[1]), m["trim"])))
+        parts.append(mirror_x(block((HALF_W - 1.2, 0.0, z[0]), (HALF_W, UP_H + PROUD_M if TWO_LEVELS else HEIGHT - 1.2, z[1]), m["trim"])))
         gussets.append(mirror_x(gusset((HALF_W - 1.2, 0.3), -1.6, 1.6, z, m["trim"])))
         if TWO_LEVELS:
-            parts.append(mirror_x(block((LOW_W - 1.2, UP_H, z[0]), (LOW_W, HEIGHT, z[1]), m["trim"])))
+            parts.append(mirror_x(block((LOW_W - 1.2, UP_H, z[0]), (LOW_W, HEIGHT - 1.2, z[1]), m["trim"])))
             gussets.append(mirror_x(gusset((HALF_W - 1.2, UP_H - 1.4), -2.0, -2.0, z, m["trim"])))
         parts.append(block((-LOW_W, HEIGHT - 1.2, z[0]), (LOW_W, HEIGHT, z[1]), m["trim"]))
         gussets.append(mirror_x(gusset((LOW_W - 1.2, HEIGHT - 1.2), -2.4, -2.4, z, m["trim"])))
@@ -369,8 +376,9 @@ def _ceiling(m: Mapping[str, Material]) -> list[Shape]:
     beams += [mirror_x(block((x - 0.8, HEIGHT - 0.25, -h), (x + 0.8, HEIGHT - 0.1, h), m["frame"])) for x in (0.2 * LOW_W, 0.75 * LOW_W)]
     beams += [block((-LOW_W, HEIGHT - 0.6, z - 0.3), (LOW_W, HEIGHT, z + 0.3), m["frame"]) for z in (-h * 0.5, h * 0.5)]
     fx = 0.6 * LOW_W
-    floods = [mirror_x(block((fx - 1.2, HEIGHT - 0.7, z - 0.6), (fx + 1.2, HEIGHT - 0.6, z + 0.6), m["work_light"])) for z in (-h * 0.5, h * 0.5)]
-    housings = [mirror_x(block((fx - 1.4, HEIGHT - 0.6, z - 0.8), (fx + 1.4, HEIGHT - 0.1, z + 0.8), m["frame"])) for z in (-h * 0.5, h * 0.5)]
+    low = HEIGHT - 0.6 - PROUD_M  # the housings' undersides, below the cross beams'
+    floods = [mirror_x(block((fx - 1.2, low - 0.1, z - 0.6), (fx + 1.2, low, z + 0.6), m["work_light"])) for z in (-h * 0.5, h * 0.5)]
+    housings = [mirror_x(block((fx - 1.4, low, z - 0.8), (fx + 1.4, HEIGHT - 0.1, z + 0.8), m["frame"])) for z in (-h * 0.5, h * 0.5)]
     return [Shape("ceiling", Mesh.concatenate(ceiling)), Shape("beams", Mesh.concatenate(beams + housings)),
             Shape("floods", Mesh.concatenate(floods))]
 
@@ -385,14 +393,15 @@ def _gantry(m: Mapping[str, Material]) -> list[Shape]:
     rails = mirror_x(Mesh.concatenate([block((r0, BRIDGE_Y[0] - 0.6, -h), (r1, BRIDGE_Y[0], h), m["machinery"]),
                                        block((r1, BRIDGE_Y[0] - 1.6, -h), (LOW_W, BRIDGE_Y[0], h), m["frame"])]))
     bridge = Mesh.concatenate([block((-r1, BRIDGE_Y[0], -BRIDGE_HALF_Z), (r1, BRIDGE_Y[1], BRIDGE_HALF_Z), m["frame"]),
-                               mirror_x(block((r0 - 1.0, BRIDGE_Y[0], -1.8), (r1, BRIDGE_Y[1], 1.8), m["trim"]))])
+                               mirror_x(block((r0 - 1.0, BRIDGE_Y[0] - PROUD_M, -1.8), (r1 + PROUD_M, BRIDGE_Y[1] + PROUD_M, 1.8), m["trim"]))])
     # A column against each upper wall with a yellow lattice (the fan render's braced columns), under the ledge.
     top = UP_H - LEDGE_T if TWO_LEVELS else BRIDGE_Y[0] - 1.6
     lattice = [block((HALF_W - 1.2, 0.0, h - 2.2), (HALF_W, top, h - 1.0), m["frame"])]
     for k in range(int((top - 2.0) // 2.4)):
         y0, y1 = 1.8 + 2.4 * k, 1.8 + 2.4 * (k + 1)
         za, zb = (h - 2.0, h - 1.2) if k % 2 else (h - 1.2, h - 2.0)
-        lattice.append(bar((HALF_W - 1.35, y0, za), (HALF_W - 1.35, y1, zb), 0.14, m["hatch"]))
+        bx = HALF_W - 1.35 - (PROUD_M if k % 2 else 0.0)  # every other brace a step out, so their ends share no face
+        lattice.append(bar((bx, y0, za), (bx, y1, zb), 0.14, m["hatch"]))
     lattice = [mirror_x(Mesh.concatenate(lattice))]
     lx, ly, lz = LAMP_AT
     lamps = Mesh.concatenate([block((lx - 0.15, ly + 0.5, lz - 0.15), (lx + 0.15, HEIGHT, lz + 0.15), m["machinery"]),
@@ -424,7 +433,7 @@ def _clamp(m: Mapping[str, Material], hang_y: float) -> dict[str, Mesh]:
         block((-0.8, sleeve, cz - 0.8), (0.8, TROLLEY_Y, cz + 0.8), m["frame"]),  # the drop arm's sleeve
         block((-0.55, pad_y + 0.6, cz - 0.55), (0.55, sleeve, cz + 0.55), m["machinery"]),  # its ram
         block((-0.6, pad_y + 0.12, pz0), (0.6, pad_y + 0.6, pz1), m["frame"]),  # the yoke over the fuselage's back
-        block((-0.4, pod_y + 0.8, cz - 0.4), (0.4, pod_y + 1.4, pod_z + 0.5), m["frame"]),  # the spine out to the pod clamps
+        block((-0.4, pod_y + 0.8 + PROUD_M, cz - 0.4), (0.4, pod_y + 1.4 - PROUD_M, pod_z + 0.5 - PROUD_M), m["frame"]),  # the spine out to the pod clamps, ending inside them
     ])
     clamp_arms = Mesh.concatenate([
         block((-px - 0.8, pod_y + 0.8, pod_z - 0.5), (px + 0.8, pod_y + 1.4, pod_z + 0.5), m["trim"]),  # across, over the pods
@@ -517,8 +526,8 @@ def _end_wall(m: Mapping[str, Material], sz: float) -> list[Shape]:
 
     wall = [block((-LOW_W, 0.0, zs[0]), (LOW_W, HEIGHT + 1.0, zs[1]), m["wall"])]
     dw, dh = min(7.0, HALF_W - 6.0), min(12.0, UP_H - 6.0)
-    frame = [block((-dw - 2.0, 0.0, zin(0.8)[0]), (-dw, dh + 2.0, zin(0.8)[1]), m["frame"]),
-             block((dw, 0.0, zin(0.8)[0]), (dw + 2.0, dh + 2.0, zin(0.8)[1]), m["frame"]),
+    frame = [block((-dw - 2.0, 0.0, zin(0.8)[0]), (-dw, dh, zin(0.8)[1]), m["frame"]),
+             block((dw, 0.0, zin(0.8)[0]), (dw + 2.0, dh, zin(0.8)[1]), m["frame"]),
              block((-dw - 2.0, dh, zin(0.8)[0]), (dw + 2.0, dh + 2.0, zin(0.8)[1]), m["frame"])]
     # The leaves meet along a sawtooth: each tooth belongs to the left or right leaf in turn.
     leaves = [block((-dw, 0.0, zin(0.3)[0]), (-1.0, dh, zin(0.3)[1]), m["door"]), block((1.0, 0.0, zin(0.3)[0]), (dw, dh, zin(0.3)[1]), m["door"])]
@@ -574,11 +583,12 @@ def _end_bay(m: Mapping[str, Material], sz: float) -> list[Shape]:
             block((r0, BRIDGE_Y[0] - 0.6, z[0]), (r1, BRIDGE_Y[0], z[1]), m["machinery"]),
             block((r1, BRIDGE_Y[0] - 1.6, z[0]), (lw, BRIDGE_Y[0], z[1]), m["frame"]),
             block((w - 0.25, 10.85, z[0]), (w, 11.0, z[1]), m["bay_light"])]
-    side += [block((w - 3.0, y - 0.05, z[0]), (w - 2.9, y + 0.05, z[1]), m["hatch"]) for y in (12.55, 13.1)]
+    side += [block((w - 3.0 + INSET_M, y - 0.05, z[0]), (w - 2.9 - INSET_M, y + 0.05, z[1]), m["hatch"]) for y in (12.55, 13.1)]
     if TWO_LEVELS:
         side += [block((w, UP_H - LEDGE_T, z[0]), (lw, UP_H, z[1]), m["deck"]), block((w - 0.3, UP_H - 1.4, z[0]), (w, UP_H, z[1]), m["hatch"]),
                  block((lw, UP_H - LEDGE_T, z[0]), (lw + 1.0, HEIGHT, z[1]), m["wall"])]
-        side += [block((w + 0.2, UP_H + y - 0.05, z[0]), (w + 0.3, UP_H + y + 0.05, z[1]), m["hatch"]) for y in (0.55, 1.1)]
+        side += [block((w + 0.2 + INSET_M, UP_H + y - 0.05, z[0]), (w + 0.3 - INSET_M, UP_H + y + 0.05, z[1]), m["hatch"])
+                 for y in (0.55, 1.1)]
     pipes = [pipe("z", (w - x, y), z, r, m[role]) for x, y, r, role in PIPE_RUNS]
     shell = [block((-w, -0.6, z[0]), (w, 0.0, z[1]), m["deck"]), block((-lw, HEIGHT, z[0]), (lw, HEIGHT + 1.0, z[1]), m["recess"])]
     return [Shape(f"{tag}_bay_shell", Mesh.concatenate(shell)), Shape(f"{tag}_bay_sides", mirror_x(Mesh.concatenate(side))),

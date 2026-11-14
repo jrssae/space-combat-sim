@@ -10,7 +10,7 @@ same triangles and bounds as the OBJ.
 from __future__ import annotations
 
 import dataclasses
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -196,7 +196,8 @@ def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPa
                         paintable: Sequence[str] = (), fine_mesh: Mesh | None = None, normal_scale: int = NORMAL_SCALE,
                         chunks: Sequence[ChunkCut] = (), grid: bool = True,
                         detail_levels: Mapping[str, int] | None = None,
-                        sections: Sequence[SectionCut] = ()) -> tuple[list[Path], dict[str, Any]]:
+                        sections: Sequence[SectionCut] = (),
+                        interior: Callable[[np.ndarray, np.ndarray], np.ndarray] | None = None) -> tuple[list[Path], dict[str, Any]]:
     """Write the textured mesh of ``parts`` into ``out_dir`` and return its files and the manifest's ``mesh`` section. With
     ``paintable`` material names the hull takes wing liveries (M4-T30b): the vertices carry their parts' zones, the albedo's alpha
     says where paint may go, and the digit atlas and the ``livery`` section are written too. With ``fine_mesh`` the parts are a
@@ -206,7 +207,9 @@ def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPa
     carry drawn layouts, M5-T40). Each of ``detail_levels`` (a name and a layout level) is one more set of the albedo, normal and
     ORM maps with the layouts drawn up to that level only, ``<asset_id>_<map>_<name>.png``, named in every surface's ``detail``:
     the game picks a set by ``settings.texture_detail``; the maps without a suffix are the full layouts. ``sections`` (M7-T19) cut
-    the mesh across z into ``<asset_id>_sec_<name>.glb`` on the same maps, listed in the section's ``sections``."""
+    the mesh across z into ``<asset_id>_sec_<name>.glb`` on the same maps, listed in the section's ``sections``; ``interior``
+    (face centroids, face normals -> a flag per face) says which faces lie inside a hall or a bay, written apart in each section
+    so the game keeps the sun off them (no light casts shadows)."""
     out_dir = Path(out_dir)
     packed = pack_parts(parts, atlas_px, texel_m)
     mesh = packed.mesh
@@ -242,7 +245,8 @@ def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPa
         glass_face = np.array([m.transmittance for m in mesh.materials], dtype=float)[mesh.face_material] > 0.0
         cut_files, section["sections"] = write_sections(
             out_dir, asset_id, mesh.vertices[mesh.faces], mesh.vertex_normals()[mesh.faces], packed.face_uv01, glass_face, sections,
-            (OPAQUE_SURFACE, GLASS_SURFACE), ((1.0, 1.0, 1.0, 1.0), (0.0, 0.0, 0.0, 0.3)))
+            (OPAQUE_SURFACE, GLASS_SURFACE), ((1.0, 1.0, 1.0, 1.0), (0.0, 0.0, 0.0, 0.3)),
+            None if interior is None else np.asarray(interior(mesh.face_centroids(), mesh.face_normals()), dtype=bool))
         paths += cut_files
     for name, level in (detail_levels or {}).items() if any(p.seams for p in parts) else ():
         lesser = bake_maps(dataclasses.replace(atlas, part_seams=tuple(p.seams.up_to(level) for p in parts)), style, seed, occlusion,

@@ -17,6 +17,7 @@ from tools.procgen.core.glb import read_glb
 from tools.procgen.core.image import read_png
 from tools.procgen.core.sections import SectionCorners, cut_corners, cuts_from_planes, skirts
 from tools.procgen.parts import station as st
+from tools.procgen.parts import station_layouts as sl
 from tools.procgen.parts import station_props as sp
 
 SMALL = (1024, 1024, 64)
@@ -113,6 +114,17 @@ class StationSectionTests(unittest.TestCase):
                 uvs.append(prim.uv[np.asarray(prim.indices).reshape(-1, 3)])
         return np.concatenate(tris), np.concatenate(uvs)
 
+    def _section(self, entry: dict) -> tuple[np.ndarray, np.ndarray]:
+        """A section's triangles and UVs, the hull's first and then its skirt's: its glb's, with those of its faces inside a hall
+        or a bay (written apart, M7) among the hull's."""
+        tris, uvs = self._glb(entry["file"])
+        if "interior_file" in entry:
+            more, more_uvs = self._glb(entry["interior_file"])
+            outside = entry["triangles"] - entry["interior_triangles"]
+            tris = np.concatenate([tris[:outside], more, tris[outside:]])
+            uvs = np.concatenate([uvs[:outside], more_uvs, uvs[outside:]])
+        return tris, uvs
+
     def test_each_piece_is_cut_into_ten_to_twenty_sections_along_the_planned_lines(self) -> None:
         for piece, names in (("drum", station.DRUM_SECTIONS), ("frame", station.FRAME_SECTIONS)):
             sections = self.manifest["pieces"][piece]["mesh"]["sections"]
@@ -129,7 +141,7 @@ class StationSectionTests(unittest.TestCase):
             whole, _ = self._glb(entry["file"])
             total, lo, hi = 0.0, np.full(3, np.inf), np.full(3, -np.inf)
             for s in entry["sections"]:
-                tris, _ = self._glb(s["file"])
+                tris, _ = self._section(s)
                 hull = tris[: s["triangles"]]  # the hull's triangles come first, then its skirt's
                 self.assertEqual(len(tris), s["triangles"] + s["skirt_triangles"])
                 origin = np.asarray(s["origin"])
@@ -163,7 +175,7 @@ class StationSectionTests(unittest.TestCase):
                 c = a["z1"]
                 sides = []
                 for s in (a, b):
-                    tris, uvs = self._glb(s["file"])
+                    tris, uvs = self._section(s)
                     n = s["triangles"]
                     keys = np.concatenate([tris[:n].reshape(-1, 3) + np.asarray(s["origin"]), uvs[:n].reshape(-1, 2)], axis=1)
                     sides.append(np.unique(keys[np.abs(keys[:, 2] - c) < 1e-3], axis=0))
@@ -207,6 +219,28 @@ class StationSectionTests(unittest.TestCase):
         frame = self.manifest["pieces"]["frame"]["props"]
         self.assertEqual(set(frame["kinds"]), {"window_panel"})
         self.assertEqual(next(g for g in frame["groups"] if g["kind"] == "window_panel")["section"], "spine_sphere")
+
+    def test_the_faces_inside_the_halls_and_bays_are_written_apart(self) -> None:
+        """M7: each section's faces inside a hall or a bay in a glb of their own, for the game to keep the sun off them."""
+        drum = {s["name"]: s for s in self.manifest["pieces"]["drum"]["mesh"]["sections"]}
+        frame = {s["name"]: s for s in self.manifest["pieces"]["frame"]["mesh"]["sections"]}
+        self.assertIn("interior_file", drum["waist"], "the launch halls")
+        self.assertIn("interior_file", drum["aperture"], "the main docking bay's mouth")
+        self.assertIn("interior_file", drum["sphere_fore"], "and its tunnel")
+        self.assertTrue(any("interior_file" in s for s in frame.values()), "the cargo bay")
+        self.assertNotIn("interior_file", drum["green_1"], "the drum's long middle has no inside")
+        waist = drum["waist"]
+        inside, _ = self._glb(waist["interior_file"])
+        outside, _ = self._glb(waist["file"])
+        self.assertEqual(len(inside), waist["interior_triangles"])
+        self.assertEqual(len(inside) + len(outside), waist["triangles"] + waist["skirt_triangles"])
+        centre = np.asarray(station.DRUM_CENTRE) + np.asarray(waist["origin"])
+        flags = sl.drum_interior((inside.mean(axis=1) + centre), np.cross(inside[:, 1] - inside[:, 0], inside[:, 2] - inside[:, 0]))
+        self.assertGreater(float(flags.mean()), 0.99, "what is written apart is what the rule calls inside")
+        kinds = self.manifest["pieces"]["drum"]["props"]["kinds"]
+        self.assertTrue(kinds["gantry"].get("interior"))
+        self.assertTrue(kinds["door_leaf_1_r"].get("interior"))
+        self.assertNotIn("interior", kinds["clamp"])
 
     def test_the_door_faces_carry_their_numbers_crisp(self) -> None:
         albedo = read_png(self.dir / self.manifest["pieces"]["drum"]["props"]["surface"]["albedo"]).astype(float)

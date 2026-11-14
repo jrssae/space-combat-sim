@@ -484,7 +484,8 @@ def _zg_machinery(mats: dict[str, Material]) -> list:
             h = 1.0 + 3.0 * (0.5 + 0.5 * math.sin(1.7 * i + 2.3 * k)) * min(1.0, (k + 1) / 3.0)  # tiers stepping up toward the back
             lo, hi = (xa + 0.4, floor, za + 0.4), (xb - 0.4, floor + h, za + 7.6)
             out += box_faces(lo, hi, dark if (i + k) % 3 else recess, skip_back=False)
-            out += box_faces((lo[0], hi[1] - 0.3, lo[2] - 0.05), (hi[0], hi[1], lo[2] + 0.4), red, skip_back=False)
+            # The red strip caps the block's front edge, proud of its top and sides: flush faces would z-fight and the red flicker.
+            out += box_faces((lo[0] - 0.05, hi[1] - 0.3, lo[2] - 0.05), (hi[0] + 0.05, hi[1] + 0.05, lo[2] + 0.4), red, skip_back=False)
             if (i * 3 + k) % 7 == 2:
                 cx, cz = 0.5 * (xa + xb), za + 4.0
                 out += box_faces((cx - 0.8, hi[1], cz - 0.8), (cx + 0.8, hi[1] + 0.8, cz + 0.8), pink, skip_back=False)
@@ -534,7 +535,7 @@ def _compartment(x: float, z: float, hw: float, hl: float, mats: dict[str, Mater
             out += box_faces((tx - 4.0, top + 0.3, z - 0.6 * hl), (tx + 4.0, top + 6.0, z + 0.2 * hl), machinery, skip_back=False)
             continue
         out += box_faces((tx - 3.0, top + 0.3, z - 0.8 * hl), (tx + 3.0, top + 5.5, z + 0.8 * hl), machinery, skip_back=False)
-        out += box_faces((tx - 3.4, top + 0.3, z - 0.1 * hl - 1.0), (tx + 3.4, top + 6.0, z - 0.1 * hl + 1.0), recess, skip_back=False)
+        out += box_faces((tx - 3.4, top + 0.2, z - 0.1 * hl - 1.0), (tx + 3.4, top + 6.0, z - 0.1 * hl + 1.0), recess, skip_back=False)
     out += box_faces((x + hw - 2.0, top + 0.3, z + hl - 2.0), (x + hw - 0.5, top + 1.8, z + hl - 0.5), mats["lamp"], skip_back=False)
     return out
 

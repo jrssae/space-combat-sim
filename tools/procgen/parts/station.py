@@ -28,6 +28,10 @@ DOOR_R = 126.0
 # The main docking bay's door plate closes the sphere's front opening (``station_detail.py``, M7-T05; it turns with the drum).
 SPHERE_PROFILE = [(DOOR_Z, DOOR_R), (558.0, DOOR_R), (562.0, 150.0), (575.0, 178.0), (600.0, 205.0), (640.0, 236.0),
                   (700.0, 262.0), (760.0, 275.0), (800.0, 277.0), (860.0, 271.0), (900.0, 262.0), (935.0, 248.0), (945.0, 196.0)]
+# Each of the drum's shells ends in a flange turned in past the next one's radius, and starts with one (``sealed_profile``): a ring
+# left open between two shells, or the slivers between two shells of different segment counts, are slits through the hollow drum,
+# and the sun shows through them (M7).
+SHELL_FLANGE_M = 4.0
 WAIST_R = 188.0
 WAIST_CORE_R = 135.0
 BODY_PROFILE = [(945.0, WAIST_R), (1000.0, WAIST_R), (1020.0, WAIST_CORE_R), (1300.0, WAIST_CORE_R), (1310.0, WAIST_R), (1325.0, WAIST_R), (1332.0, 210.0), (1340.0, 272.0), (1400.0, 303.0), (1460.0, 322.0),
@@ -360,17 +364,24 @@ def launch_deck(m: Material) -> list[Mesh]:
     return parts
 
 
+DOOR_GLOW_TOP_M = 0.3  # the lit sills' tops over the wells' floors
+DOOR_SILL_M = 0.8  # how far a sill reaches in from its well's wall: under the leaves' edges (0.4 m short of the walls)
+
+
 def door_glow(m: Material) -> Mesh:
-    """The bays' light leaking round each closed door: a lit strip along each of its four edges, at the bottom of its well."""
+    """The bays' light leaking round each closed door: a lit sill round the bottom of its well, from the well's walls in under the
+    leaves' edges, so a closed door is sealed (no line of sight between the hall and space, M7). Its top lies under the leaves'
+    faces (0.4 m up, ``station_props.LEAF_FACE``): level with them, sill and leaf would z-fight."""
     floor, cx, (dx, dz) = ARM_HATCH[4] - DOOR_DEPTH, LAUNCH_STRIP_X, LAUNCH_DOOR_HALF
+    top, w = floor + DOOR_GLOW_TOP_M, DOOR_SILL_M
     strips = []
     for c in launch_door_centres():
         for sz in (-1.0, 1.0):
-            z = c + sz * (dz - 0.5)
-            strips.append(block((cx - dx + 0.3, floor, z - 0.3), (cx + dx - 0.3, floor + 0.4, z + 0.3), m))
+            z0, z1 = sorted((c + sz * dz, c + sz * (dz - w)))
+            strips.append(block((cx - dx, floor, z0), (cx + dx, top, z1), m))
         for sx in (-1.0, 1.0):
-            x = cx + sx * (dx - 0.5)
-            strips.append(block((x - 0.3, floor, c - dz + 0.8), (x + 0.3, floor + 0.4, c + dz - 0.8), m))
+            x0, x1 = sorted((cx + sx * dx, cx + sx * (dx - w)))
+            strips.append(block((x0, floor, c - dz + w), (x1, top, c + dz - w), m))
     return Mesh.concatenate(strips)
 
 
@@ -413,6 +424,24 @@ def mount_plinths(m: Material, body: str) -> Mesh:
     return Mesh.concatenate(sd.plinth(p, u, sd.PLINTH_R[k], m) for _, k, b, p, u in sh.GRID_MOUNTS if b == body)
 
 
+def sealed_profile(profile: Sequence[tuple[float, float]], before: Sequence[tuple[float, float]] | None = None,
+                   after: Sequence[tuple[float, float]] | None = None) -> list[tuple[float, float]]:
+    """A shell's profile with a flange across each end that meets a neighbour (the shell ``before`` it, the shell ``after`` it):
+    from its own radius in past the neighbour's, facing out of the shell."""
+    out = list(profile)
+    if before is not None:
+        (z, r), (zb, rb) = profile[0], before[-1]
+        if abs(z - zb) > 1e-6:
+            raise ValueError(f"the shells do not meet: one ends at z {zb}, the next starts at {z}")
+        out.insert(0, (z, min(r, rb) - SHELL_FLANGE_M))
+    if after is not None:
+        (z, r), (za, ra) = profile[-1], after[0]
+        if abs(z - za) > 1e-6:
+            raise ValueError(f"the shells do not meet: one ends at z {z}, the next starts at {za}")
+        out.append((z, min(r, ra) - SHELL_FLANGE_M))
+    return out
+
+
 def drum_shapes(mats: dict[str, Material]) -> list[Shape]:
     """What turns, in the station frame (the generator moves it onto the drum's own axis frame)."""
     from . import station_detail as sd  # noqa: PLC0415 - it builds on this module's shapes
@@ -425,11 +454,11 @@ def drum_shapes(mats: dict[str, Material]) -> list[Shape]:
         return lathe(profile, segments, grey, creases=creases)
 
     shapes = [
-        Shape("sphere", revolve(SPHERE_PROFILE, 96)),
-        Shape("fwd_body", revolve(BODY_PROFILE, 96)),
-        Shape("fwd_band", revolve(FWD_BAND_PROFILE)),
-        Shape("green", revolve(GREEN_PROFILE)),
-        Shape("aft_band", revolve(AFT_BAND_PROFILE)),
+        Shape("sphere", revolve(sealed_profile(SPHERE_PROFILE, None, BODY_PROFILE), 96)),
+        Shape("fwd_body", revolve(sealed_profile(BODY_PROFILE, SPHERE_PROFILE, FWD_BAND_PROFILE), 96)),
+        Shape("fwd_band", revolve(sealed_profile(FWD_BAND_PROFILE, BODY_PROFILE, GREEN_PROFILE))),
+        Shape("green", revolve(sealed_profile(GREEN_PROFILE, FWD_BAND_PROFILE, AFT_BAND_PROFILE))),
+        Shape("aft_band", revolve(sealed_profile(AFT_BAND_PROFILE, GREEN_PROFILE))),
         Shape("aperture", sd.main_docking_bay(mats)),
         Shape("drum_plinths", mount_plinths(mats["machinery"], "drum")),
         Shape("arms", around(arm_mesh(grey), ARM_ANGLES_DEG)),

@@ -22,6 +22,8 @@ import numpy as np
 from .glb import GlbPrimitive, write_glb
 
 EPS_M = 1e-6
+OPAQUE, GLASS, INTERIOR = 0, 1, 2  # a face's kind: which primitive, and which file, it is written to
+INTERIOR_SUFFIX = "_in"
 SKIRT_M = 6.0  # how far a skirt reaches into the hull: more than a level's chord error near the joint, less than a thin part
 
 
@@ -105,7 +107,7 @@ def cut_corners(positions: np.ndarray, normals: np.ndarray, uvs: np.ndarray, gla
                 if np.linalg.norm(np.cross(c[1, :3] - c[0, :3], c[2, :3] - c[0, :3])) < 1e-9:
                     continue
                 n = c[:, 3:6] / np.maximum(np.linalg.norm(c[:, 3:6], axis=1, keepdims=True), 1e-12)
-                acc[s].append((c[:, :3], n, c[:, 6:8], bool(glass[f])))
+                acc[s].append((c[:, :3], n, c[:, 6:8], glass[f]))
     out = []
     for s in range(len(cuts)):
         mine = np.flatnonzero(home == s)
@@ -113,7 +115,7 @@ def cut_corners(positions: np.ndarray, normals: np.ndarray, uvs: np.ndarray, gla
         p = np.concatenate([positions[mine], np.array([e[0] for e in extra]).reshape(-1, 3, 3)])
         n = np.concatenate([normals[mine], np.array([e[1] for e in extra]).reshape(-1, 3, 3)])
         u = np.concatenate([uvs[mine], np.array([e[2] for e in extra]).reshape(-1, 3, 2)])
-        g = np.concatenate([glass[mine], np.array([e[3] for e in extra], dtype=bool)])
+        g = np.concatenate([glass[mine], np.array([e[3] for e in extra], dtype=glass.dtype)])
         out.append(SectionCorners(p, n, u, g))
     return out
 
@@ -151,8 +153,10 @@ def _joined(a: SectionCorners, b: SectionCorners) -> SectionCorners:
                           np.concatenate([a.uvs, b.uvs]), np.concatenate([a.glass, b.glass]))
 
 
-def _primitive(corners: SectionCorners, glass: bool, origin: np.ndarray, name: str, base: tuple[float, float, float, float]) -> GlbPrimitive:
-    faces = np.flatnonzero(corners.glass == glass)
+def _primitive(corners: SectionCorners, kind: int, origin: np.ndarray, name: str, base: tuple[float, float, float, float]) -> GlbPrimitive:
+    """The faces of one kind (``OPAQUE``, ``GLASS`` or ``INTERIOR``) as a primitive."""
+    glass = kind == GLASS
+    faces = np.flatnonzero(corners.glass == kind)
     if len(faces) == 0:
         return GlbPrimitive(np.zeros((0, 3)), np.zeros((0, 3)), np.zeros((0, 2)), [], name, base, glass)
     p = corners.positions[faces].reshape(-1, 3)
@@ -164,16 +168,21 @@ def _primitive(corners: SectionCorners, glass: bool, origin: np.ndarray, name: s
 
 
 def write_sections(out_dir: Path, asset_id: str, positions: np.ndarray, normals: np.ndarray, uvs: np.ndarray, glass: np.ndarray,
-                   cuts: Sequence[SectionCut], names: tuple[str, str], bases: tuple[tuple[float, ...], tuple[float, ...]]
-                   ) -> tuple[list[Path], list[dict[str, Any]]]:
+                   cuts: Sequence[SectionCut], names: tuple[str, str], bases: tuple[tuple[float, ...], tuple[float, ...]],
+                   interior: np.ndarray | None = None) -> tuple[list[Path], list[dict[str, Any]]]:
     """Write each section's glb (its opaque and glass primitives, named as the whole piece's ``names``, so it draws with the
     piece's materials) and return the files and the manifest's ``sections`` entries: ``name``, ``file``, ``origin`` (in the piece's
     frame: on the axis, half way along the section's triangles), ``z0`` and ``z1`` (its slab, ``null`` at an open end),
     ``aabb_min`` and ``aabb_max`` (about its origin), ``triangles`` (the hull's) and ``skirt_triangles``. A section with no
-    triangles is left out."""
+    triangles is left out. The faces flagged in ``interior`` (inside a hall or a bay, where the sun cannot reach) go to a glb of
+    their own, ``interior_file`` (``interior_triangles`` of the section's ``triangles``), in the same frame and on the same
+    material, so the game can draw them out of the sun's light."""
     files: list[Path] = []
     entries: list[dict[str, Any]] = []
-    for cut, corners in zip(cuts, cut_corners(positions, normals, uvs, glass, cuts), strict=True):
+    kind = np.where(np.asarray(glass, dtype=bool), GLASS, OPAQUE).astype(np.int8)
+    if interior is not None:
+        kind[np.asarray(interior, dtype=bool) & (kind == OPAQUE)] = INTERIOR
+    for cut, corners in zip(cuts, cut_corners(positions, normals, uvs, kind, cuts), strict=True):
         if len(corners.glass) == 0:
             continue
         pts = corners.positions.reshape(-1, 3)
@@ -181,9 +190,16 @@ def write_sections(out_dir: Path, asset_id: str, positions: np.ndarray, normals:
         origin = np.array([0.0, 0.0, round(0.5 * float(lo[2] + hi[2]), 3)])
         skirt = skirts(corners, [(z, side) for z, side in ((cut.z0, -1.0), (cut.z1, 1.0)) if np.isfinite(z)])
         drawn = _joined(corners, skirt)
-        prims = [_primitive(drawn, g, origin, names[int(g)], bases[int(g)]) for g in (False, True)]
+        prims = [_primitive(drawn, k, origin, names[k], bases[k]) for k in (OPAQUE, GLASS)]
         file = section_mesh_name(asset_id, cut.name)
         files.append(write_glb(out_dir / file, prims, f"{asset_id}_sec_{cut.name}"))
+        inside = int((corners.glass == INTERIOR).sum())
+        inside_entry: dict[str, Any] = {}
+        if inside > 0:
+            inside_file = section_mesh_name(asset_id, cut.name + INTERIOR_SUFFIX)
+            files.append(write_glb(out_dir / inside_file, [_primitive(drawn, INTERIOR, origin, names[OPAQUE], bases[OPAQUE])],
+                                   f"{asset_id}_sec_{cut.name}{INTERIOR_SUFFIX}"))
+            inside_entry = {"interior_file": inside_file, "interior_triangles": inside}
         entries.append({
             "name": cut.name,
             "file": file,
@@ -194,8 +210,9 @@ def write_sections(out_dir: Path, asset_id: str, positions: np.ndarray, normals:
             "aabb_max": [round(float(c), 5) for c in hi - origin],
             "triangles": int(len(corners.glass)),
             "skirt_triangles": int(len(skirt.glass)),
+            **inside_entry,
         })
     return files, entries
 
 
-__all__ = ["SKIRT_M", "SectionCut", "SectionCorners", "cut_corners", "cuts_from_planes", "section_mesh_name", "skirts", "write_sections"]
+__all__ = ["INTERIOR_SUFFIX", "SKIRT_M", "SectionCut", "SectionCorners", "cut_corners", "cuts_from_planes", "section_mesh_name", "skirts", "write_sections"]

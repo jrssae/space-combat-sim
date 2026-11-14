@@ -73,8 +73,21 @@ func test_props_are_shown_near_and_fade_out_and_nothing_casts_a_shadow() -> void
 	assert_eq(range_["end"], 1500.0)
 	assert_eq(range_["end_margin"], 400.0)
 	assert_eq(range_["fade"], GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF)
-	assert_eq(PieceSections.CAST_SHADOW, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "no light in the game casts shadows")
+	assert_eq(PieceSections.CAST_SHADOW, GeometryInstance3D.SHADOW_CASTING_SETTING_ON, "a sectioned piece casts the key star's shadow (M7)")
 
 
 func test_a_malformed_transform_is_the_identity() -> void:
 	assert_eq(PieceSections.transform_of([1, 2, 3]), Transform3D.IDENTITY)
+
+
+func test_reads_what_stands_inside_out_of_the_sun() -> void:
+	var entry: Dictionary = _entry()
+	entry["sections"][1]["interior_file"] = "x_sec_mid_in.glb"
+	var props: Dictionary = _props()
+	props["kinds"]["gantry"] = {"file": "x_prop_gantry.glb", "interior": true}
+	var made: PieceSections = PieceSections.from_entry(entry, props)
+	assert_eq(made.find("mid")["interior_file"], "x_sec_mid_in.glb", "the section's faces inside a hall")
+	assert_eq(made.find("fore")["interior_file"], "", "none in a section that is all hull")
+	assert_true(made.prop_interior.has("gantry"))
+	assert_false(made.prop_interior.has("clamp"), "a prop on the deck stays in the sun")
+	assert_push_warning_count(2)

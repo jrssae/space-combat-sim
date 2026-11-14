@@ -7,7 +7,7 @@ Big pieces bake the normal map at the atlas's size and without occlusion.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -34,14 +34,16 @@ class PieceTexture:
 
 
 def write_piece(
-    out_dir: Path, name: str, parts: Sequence[TexturedPart], style: Style, texture: PieceTexture, sections: Sequence[SectionCut] = ()
+    out_dir: Path, name: str, parts: Sequence[TexturedPart], style: Style, texture: PieceTexture, sections: Sequence[SectionCut] = (),
+    interior: Callable[[np.ndarray, np.ndarray], np.ndarray] | None = None
 ) -> tuple[list[Path], dict[str, Any]]:
     """Write the textured mesh ``<name>.glb`` and its maps; return the files and the piece's entry: its bounds and its ``mesh``.
-    With ``sections`` (M7-T19) the mesh is also written cut into them, listed in ``mesh.sections``."""
+    With ``sections`` (M7-T19) the mesh is also written cut into them, listed in ``mesh.sections``; ``interior`` flags the faces
+    inside its halls and bays (``write_textured_mesh``)."""
     bounds = mesh_of(parts).vertices
     files, section = write_textured_mesh(out_dir, name, list(parts), style, atlas_px=texture.atlas_px, texel_m=texture.texel_m,
                                          seed=texture.seed, occlusion=texture.occlusion, normal_scale=texture.normal_scale,
-                                         grid=texture.grid, sections=sections)
+                                         grid=texture.grid, sections=sections, interior=interior)
     entry: dict[str, Any] = {
         "aabb_min": [round(float(c), 5) for c in np.min(bounds, axis=0)],
         "aabb_max": [round(float(c), 5) for c in np.max(bounds, axis=0)],

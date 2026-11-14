@@ -783,6 +783,61 @@ scores 0.81 against the STL's open cut; 0.995 at z 4 504.
 `M7-T22_sections_command_section.png` (each plane's overlay before and after with its IoU), `M7-T22_z4500_vs_z4520.png` (why the
 plane moved), `M7-T22_views_sheet.png` (GPU: the command section, bow and spine at 50 m to 1 km; `SHEET_VIEWS=t22`).
 
+## No two faces in one plane (M7, the flickering bay lamps)
+
+The launch halls' work lamps flickered in the launch shots: each lamp's box sat inside its wall panel's box with the same inner
+face (x = 19.0 m), so the lit face and the dark one lay in one plane, facing the same way, and the depth test chose a different
+one each frame as the drum turned (z-fighting; bloom made it a blinking light). `LightPicker` was not involved: the lamps are
+emissive texels, and the slots held the same emitters throughout.
+
+The rule, for every generator: **two faces that face the same way never share a plane where they overlap.** A part that sits on
+another stands proud of it (5 cm or more; the lamps 0.3 m), ends inside it, or is slimmer than the bar it crosses.
+`tools/procgen/tests/coplanar_checks.py` finds such pairs in any triangle set (same normal, planes within 2 cm, more than
+10 cm² shared; faces back to back are left alone, since only one is drawn), and `test_coplanar_overlaps.py` holds at zero: each
+prop, the drum with its props in place, the frame's detail and the whole hangar behind the menu.
+
+Fixed with it: the hall lamps, the rack arms in their clamp heads, the staging clamp, the door clamps' arm, post and cap; the
+doors' lit sills (their tops were level with the leaves' faces, now 0.1 m under); the cargo bay's red strips on its machinery
+blocks (now a proud cap); the command section's tank bands; in the hangar the cabinets' lips, the ladder's rungs, the railings,
+the wall's glow strip at the lattice column, the portals' corners, the flood lamps' housings, the crane bridge's carriages, the
+lattice braces, the clamp's spine and the end doors' frames.
+
+**Still open (hull, one paint, no lamp):** the frame's `radiators`, `spine`, `truss`, `vanes` and `bow` overlap themselves in
+one paint (about 108 000 m², mostly the radiators and the spine's slabs). They can shimmer in their plating up close; the test
+lists them (`HULL_SELF_OVERLAPS`) so nothing new joins them, and the list shrinks as the hull parts are rebuilt.
+
+## Solid to the eye, and the sun kept out (M7)
+
+Seen from outside as the drum turned, the Cobra bays' doors flashed white, the sun showed through the doors and through the
+core, and glints ran along the core off the toothed rings. Four causes, each with its test:
+
+- **The doors were not shut.** The two leaves of a door stopped 0.4 m short of its middle and of its well's walls, and the lit
+  strips did not reach the walls or the corners: a 0.8 m seam and gaps round every door, open between the hall and space. Now
+  the leaves meet at the door's middle (the seam's glow is painted on their inner edges) and a lit **sill** runs round the bottom
+  of each well from its walls in under the leaves' edges (`DOOR_SILL_M` 0.8 m, corners closed). `test_station_sealed.py` casts
+  rays from eyes inside the halls: none reaches space with the doors closed; the main docking bay and the cargo bay open only at
+  their mouths.
+- **The drum had slits.** Its five shells of revolution ended where the next began, but at different radii (8 m at the sphere's
+  back, 4 m at the green drum's front) and with different segment counts (slivers where a 96-sided ring met a 128-sided one):
+  rings open through the hollow drum. Each shell now ends, and starts, in a flange turned 4 m in past its neighbour's radius
+  (`sealed_profile`, `SHELL_FLANGE_M`). The test casts lines through every joint and through the whole station: none passes
+  without meeting a face that looks at it (`sealed_checks.see_through`).
+- **Nothing cast a shadow.** The sun lit every face tilted toward it, also those the hull itself hides: arm tops, teeth and deck
+  plates on the night side glinted and bloomed as they turned, and the halls' walls were lit like the hull. The key star now
+  casts shadows, of the sectioned pieces only (the station: `LightRig.SHADOW_CASTER_LAYER`, four cascades to 20 km, an 8 192 px
+  atlas); ships cast none and receive the station's. Cost on the RX 6950 XT at 1 km: 0.49 to 0.59 ms GPU a frame, 55 to 184 draw
+  calls (the station drawn into the cascades).
+- **A shadow map cannot tell a hall from the hull at this size**, so what stands inside is also taken out of the star's light:
+  the generator flags the faces inside the launch halls, the doors' wells and sills, the main docking bay from its mouth to
+  the airlock and the cargo bay (`station_layouts.drum_interior`, `frame_interior`), writes them in a glb of their own per
+  section (`interior_file` in the manifest; the same atlas and material) and marks the leaves and gantries `interior`; the game
+  draws those on `LightRig.INTERIOR_LAYER`, which the star's light leaves out. Lamps (the 7 slots), glow and ambient light them.
+  Ships are not on that layer: a fighter on its rack is still lit by the star unless the hull shades it.
+
+`scripts/flicker_probe.sh <out dir>` films the turning drum from 50 m to 3 km off a door row and from the star's far side at
+1, 3 and 10 km (`PROBE_VIEWS`), and `scripts/flicker_metric.py` measures each run: how much the picture changes and changes
+straight back from one frame to the next. Before and after: `references/screenshots/M7 bay flicker/`.
+
 ## Maintenance bots as built (M7-T11)
 
 `tools/procgen/assets/maintenance_bot.py` (style `styles/maintenance_bot.py`, generator 1; 2 348 triangles, 4.6 x 3.1 x 3.5 m,

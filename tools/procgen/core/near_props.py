@@ -27,11 +27,13 @@ SURFACE = "prop"
 @dataclass(frozen=True)
 class PropKind:
     """A prop's mesh in its own frame; its ``face_uv`` are already in the prop atlas (0..1). ``near_m``: a draw range of its own,
-    for a kind that has no painted stand-in on the piece (the Cobra bays' door leaves are the doors)."""
+    for a kind that has no painted stand-in on the piece (the Cobra bays' door leaves are the doors). ``interior``: it stands
+    inside a hall or down a door's well, where the sun cannot reach, so the game draws it out of the sun's light."""
 
     name: str
     mesh: Mesh
     near_m: float | None = None
+    interior: bool = False
 
 
 @dataclass(frozen=True)
@@ -82,6 +84,8 @@ def write_props(out_dir: Path, asset_id: str, kinds: Sequence[PropKind], groups:
                                   "aabb_max": [round(float(c), 5) for c in hi]}
         if kind.near_m is not None:
             entry_kinds[kind.name]["near_m"] = float(kind.near_m)
+        if kind.interior:
+            entry_kinds[kind.name]["interior"] = True
     surface: dict[str, Any] = {"name": SURFACE, "blend": False, "transmittance": 0.0,
                                "emissive_strength": round(float(emissive_strength), 6)}
     for key in MAP_KEYS:

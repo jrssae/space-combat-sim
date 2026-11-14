@@ -165,12 +165,14 @@ def build_at(ctx: BuildContext, drum_px: int, frame_px: int, detail_px: int) -> 
     out_dir.mkdir(parents=True, exist_ok=True)
     files, detail = _write_detail(out_dir, ctx.seed, detail_px)
     drum_files, drum = write_piece(out_dir, f"{ASSET_ID}_drum", drum_parts(), STYLE,
-                                   PieceTexture(drum_px, START_TEXEL_M, ctx.seed, grid=False), section_cuts("drum"))
+                                   PieceTexture(drum_px, START_TEXEL_M, ctx.seed, grid=False), section_cuts("drum"),
+                                   interior=lambda p, n: sl.drum_interior(p + DRUM_CENTRE, n))
     drum["pivot"] = drum_pivot()
     drum["axis"] = [0.0, 0.0, 1.0]
     drum["spin_rad_s"] = DRUM_SPIN_RAD_S
     frame_files, frame = write_piece(out_dir, f"{ASSET_ID}_frame", frame_parts(), STYLE,
-                                     PieceTexture(frame_px, START_TEXEL_M, ctx.seed, grid=False), section_cuts("frame"))
+                                     PieceTexture(frame_px, START_TEXEL_M, ctx.seed, grid=False), section_cuts("frame"),
+                                     interior=lambda p, n: sl.frame_interior(p + ORIGIN, n))
     files += drum_files + frame_files
     home = next(e for e in drum["mesh"]["sections"] if e["name"] == PROP_SECTION)
     prop_files, drum["props"] = write_props(out_dir, ASSET_ID, sp.kinds(), sp.groups(PROP_SECTION, DRUM_CENTRE + home["origin"]),

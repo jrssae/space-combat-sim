@@ -97,7 +97,10 @@ func test_the_station_draws_both_pieces_textured() -> void:
 	var station := StationStandin.new()
 	assert_true(station.build(), GEN_ASSETS_HINT)
 	world.spawn(station, world.to_universe(Vector3(0.0, 0.0, -6000.0)))
-	var sections: int = station.frame_piece.sections.sections.size() + station.drum_piece.sections.sections.size()
+	var sections: int = 0
+	for piece: RenderPiece in [station.frame_piece, station.drum_piece]:
+		for s: Dictionary in piece.sections.sections:
+			sections += 1 if String(s["interior_file"]).is_empty() else 2  # its faces inside a hall are a mesh of their own (M7)
 	assert_eq(_textured_instances(station).size(), sections, "the frame's and the turning drum's sections (M7-T19)")
 	assert_almost_eq(station.drum_piece.bounds().size.x, 2.0 * 417.0, 5.0, "the bands across (M7-T04)")
 

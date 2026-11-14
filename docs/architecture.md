@@ -842,6 +842,13 @@ range and attenuation into the slots; an unused slot sits at energy 0. An emitte
 muzzle flash is never missed and a far explosion cannot push out the player's nozzles. The cabin lamp is an emitter in the rig only
 while the cockpit interior is shown.
 
+**Shadows and the interior layer (M7).** The key star casts shadows, of the big sectioned pieces alone (a station): they are on
+`LightRig.SHADOW_CASTER_LAYER` beside their own layer, the star's `shadow_caster_mask` is that layer, four cascades reach 20 km.
+Ships cast none (500 of them in four cascades is the cost the light budget avoids) and are shaded by the station. What stands
+inside a station's halls and bays is on `LightRig.INTERIOR_LAYER`, which the star's light leaves out, since a shadow map over
+8 km cannot keep the sun out of a 40 m hall: lamps, glow and ambient light it. The omni slots cast no shadow and light every
+layer. Before, nothing cast a shadow, and the sun glinted off a station's night side and shone into its bays.
+
 **Running lights (M3-T27, Q27).** Every ship has a port red marker on -X, a starboard green on +X and a top white, steady, at its `nav_lights`
 hardpoints: `RunningLights`, one node per ship with three `MeshInstance3D`s, built once with the pool. A marker is one shared quad and one
 material per colour (`assets/shaders/running_light_marker.gdshader`): additive, facing the camera, 0.1 m in radius and never under

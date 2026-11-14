@@ -16,6 +16,8 @@ var sections: PieceSections = null
 var _mesh_node: MeshInstance3D = null
 ## Each section's mesh node, by name.
 var _section_nodes: Dictionary = {}
+## The mesh nodes of the sections' interior faces, by section name (only the sections that have any).
+var _interior_nodes: Dictionary = {}
 var _prop_nodes: Array[MultiMeshInstance3D] = []
 
 
@@ -73,6 +75,11 @@ func section_node(name: String) -> MeshInstance3D:
 	return _section_nodes.get(name) as MeshInstance3D
 
 
+## The mesh node of a section's interior faces (on `LightRig.INTERIOR_LAYER`), or null.
+func interior_node(name: String) -> MeshInstance3D:
+	return _interior_nodes.get(name) as MeshInstance3D
+
+
 ## The near-only props' instanced meshes.
 func prop_nodes() -> Array[MultiMeshInstance3D]:
 	return _prop_nodes
@@ -85,11 +92,26 @@ func _build_sections(dir: String, mesh_entry: Dictionary) -> void:
 		node.position = s["origin"]
 		node.mesh = MeshAssets.section_mesh(dir, mesh_entry, String(s["file"]))
 		node.cast_shadow = PieceSections.CAST_SHADOW
+		node.layers = 1 | LightRig.SHADOW_CASTER_LAYER
 		node.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 		add_child(node)
 		_section_nodes[String(s["name"])] = node
+		if not String(s["interior_file"]).is_empty():
+			_add_interior(dir, mesh_entry, node, s)
 		for group: Dictionary in sections.groups_in(String(s["name"])):
 			_add_props(dir, node, group)
+
+
+# The section's faces inside a hall or a bay: the same material, drawn on the layer the sun's light leaves out.
+func _add_interior(dir: String, mesh_entry: Dictionary, section: MeshInstance3D, s: Dictionary) -> void:
+	var node := MeshInstance3D.new()
+	node.name = "Interior"
+	node.mesh = MeshAssets.section_mesh(dir, mesh_entry, String(s["interior_file"]))
+	node.layers = LightRig.INTERIOR_LAYER | LightRig.SHADOW_CASTER_LAYER
+	node.cast_shadow = PieceSections.CAST_SHADOW
+	node.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+	section.add_child(node)
+	_interior_nodes[String(s["name"])] = node
 
 
 # One group of props as an instanced mesh under its section, shown only near.
@@ -113,5 +135,7 @@ func _add_props(dir: String, section: MeshInstance3D, group: Dictionary) -> void
 	node.visibility_range_fade_mode = range_["fade"] as GeometryInstance3D.VisibilityRangeFadeMode
 	node.cast_shadow = PieceSections.CAST_SHADOW
 	node.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+	var inside: bool = sections.prop_interior.has(String(group["kind"]))
+	node.layers = (LightRig.INTERIOR_LAYER if inside else 1) | LightRig.SHADOW_CASTER_LAYER
 	section.add_child(node)
 	_prop_nodes.append(node)

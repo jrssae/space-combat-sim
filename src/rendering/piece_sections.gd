@@ -7,15 +7,17 @@ extends RefCounted
 ##
 ## The hull's sections have no visibility range: together they are the hull, drawn at every distance the piece is (the far prop
 ## shrinks them past the far plane). Only the props fade out, past `near_m`, where the piece's atlas carries their painted
-## stand-in. No light in the game casts shadows (the key star and the light slots have them off), so nothing here casts one.
+## stand-in. A sectioned piece casts the key star's shadow (M7, `LightRig`): its sections and props are on the shadow casters'
+## layer beside their own, so a station shades itself and what flies behind it.
 
-## How each section and prop is drawn with respect to shadows: off (see above).
-const CAST_SHADOW: GeometryInstance3D.ShadowCastingSetting = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+## How each section and prop is drawn with respect to shadows: it casts the key star's (see above).
+const CAST_SHADOW: GeometryInstance3D.ShadowCastingSetting = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 ## How far two neighbours' cut planes may disagree, m.
 const JOIN_TOLERANCE_M: float = 0.01
 
 ## Each section, in the generator's order (bow to stern): `name`, `file`, `origin` (Vector3, the piece's frame), `aabb` (AABB about
-## its origin), `z0` and `z1` (its slab, -INF and INF at the open ends), `triangles`.
+## its origin), `z0` and `z1` (its slab, -INF and INF at the open ends), `triangles`, `interior_file` (the mesh of its faces inside
+## a hall or a bay, drawn out of the sun's light; "" for none).
 var sections: Array[Dictionary] = []
 ## The props' draw range: shown within `near_m`, faded out over `margin_m`.
 var near_m: float = 0.0
@@ -26,6 +28,8 @@ var prop_surface: Dictionary = {}
 var prop_files: Dictionary = {}
 ## A kind's own draw range where it has one (M7-T05: the Cobra bays' door leaves are the doors, drawn as far as the hull), by kind.
 var prop_near: Dictionary = {}
+## The kinds that stand inside a hall or down a door's well (drawn out of the sun's light), by kind.
+var prop_interior: Dictionary = {}
 ## Each group of props: `kind`, `section`, `transforms` (Array[Transform3D] in the section's frame), `aabb` (in that frame).
 var prop_groups: Array[Dictionary] = []
 
@@ -51,6 +55,7 @@ static func from_entry(mesh_entry: Dictionary, props_entry: Dictionary = {}) -> 
 			"z0": -INF if z0 == null else float(z0),
 			"z1": INF if z1 == null else float(z1),
 			"triangles": int(s.get("triangles", 0)),
+			"interior_file": String(s.get("interior_file", "")),
 		})
 	if not made.is_contiguous():
 		push_warning("PieceSections: the sections do not tile the piece; it is drawn whole")
@@ -136,6 +141,8 @@ func _read_props(entry: Dictionary) -> void:
 		prop_files[kind] = String((kinds[kind] as Dictionary).get("file", ""))
 		if (kinds[kind] as Dictionary).has("near_m"):
 			prop_near[kind] = float((kinds[kind] as Dictionary)["near_m"])
+		if bool((kinds[kind] as Dictionary).get("interior", false)):
+			prop_interior[kind] = true
 	for item: Variant in entry.get("groups", []):
 		var g: Dictionary = item
 		var kind: String = String(g.get("kind", ""))

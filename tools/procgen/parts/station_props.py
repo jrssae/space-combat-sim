@@ -222,9 +222,10 @@ def door_leaf(number: int, side: float) -> Mesh:
     """One leaf of door ``number`` (1 to 6 from the bow), ``side`` +1 (+x, starboard on the top arm) or -1, in the arm's frame as it
     stands on top (+y), its origin on the doors' plane at the door's middle. Its face is its half of the door's cell (number,
     slats, hazard band); its edges and back a dark steel."""
-    inner, outer, half = LEAF
-    lo = np.array([min(side * inner, side * outer), LEAF_FACE[0], -half])
-    hi = np.array([max(side * inner, side * outer), LEAF_FACE[1], half])
+    _, outer, half = LEAF
+    # The two leaves meet at the door's middle, so a closed door is sealed; the seam's glow is painted on their inner edges.
+    lo = np.array([min(0.0, side * outer), LEAF_FACE[0], -half])
+    hi = np.array([max(0.0, side * outer), LEAF_FACE[1], half])
     edge = _flat_uv(STATION_SWATCHES.index("machinery"))
     cell = number - 1
 
@@ -249,8 +250,8 @@ def clamp() -> Mesh:
 
 CLAMP_BLOCKS = (  # in the clamp's frame (origin on the deck at the door's edge): lo, hi, swatch column
     ((2.0, 0.0, -1.0), (4.5, 4.0, 1.0), 0),
-    ((-3.0, 3.0, -0.75), (4.5, 4.0, 0.75), 0),
-    ((1.5, 4.0, -1.5), (5.0, 6.0, 1.5), 1),
+    ((-3.0, 2.9, -0.75), (4.4, 3.9, 0.75), 0),  # the arm ends inside the post and under its top
+    ((1.5, 3.9, -1.5), (5.0, 6.0, 1.5), 1),
 )
 
 
@@ -259,11 +260,12 @@ RELEASE_M = 8.0  # where a launch lets it go: this far out past the doors' plane
 GANTRY_BLOCKS = (  # over one door, in the arm's frame at the door's middle on its plane (-y into the hall): lo, hi, swatch column
     # The rack: an arm from each wall of the upper hall reaching in over the fighter's claw tips, a red clamp head at its end; the
     # middle stays open so the second row rises onto the rack between them.
-    ((8.2, -15.0, -1.0), (20.0, -13.5, 1.0), 0), ((-20.0, -15.0, -1.0), (-8.2, -13.5, 1.0), 0),
+    ((8.3, -15.0, -1.0), (20.0, -13.5, 1.0), 0), ((-20.0, -15.0, -1.0), (-8.3, -13.5, 1.0), 0),  # ending inside the heads
     ((8.2, -15.5, -2.0), (10.0, -11.0, 2.0), 1), ((-10.0, -15.5, -2.0), (-8.2, -11.0, 2.0), 1),
     # The staging clamp in the lower hall, from its port wall over the second row's fighter (its back toward the axis).
-    ((-40.0, -29.6, -1.0), (-36.2, -28.2, 1.0), 0), ((-37.4, -29.6, -2.0), (-35.8, -26.0, 2.0), 1),
-    ((19.0, -12.0, -0.8), (19.8, -10.0, 0.8), 4), ((-19.8, -12.0, -0.8), (-19.0, -10.0, 0.8), 4),  # work lamps on the walls
+    ((-40.0, -29.5, -1.0), (-36.2, -28.2, 1.0), 0), ((-37.4, -29.6, -2.0), (-35.8, -26.0, 2.0), 1),
+    # Work lamps on the walls, 0.3 m proud of the panels behind them: flush, lamp and panel shared a plane and the lamps flickered.
+    ((18.7, -12.0, -0.8), (19.7, -10.0, 0.8), 4), ((-19.7, -12.0, -0.8), (-18.7, -10.0, 0.8), 4),
     ((-39.8, -27.0, -0.8), (-39.0, -26.0, 0.8), 4),
     ((-19.8, -18.5, -3.0), (-19.0, -2.0, 3.0), 2), ((19.0, -18.5, -3.0), (19.8, -2.0, 3.0), 2),  # wall panels either side
 )
@@ -279,8 +281,10 @@ def gantry() -> Mesh:
 
 
 def kinds() -> list[PropKind]:
-    out = [PropKind(leaf_kind(n, side), door_leaf(n, side), LEAF_RANGE_M) for n in range(1, st.LAUNCH_DOORS + 1) for side in (1.0, -1.0)]
-    return out + [PropKind("clamp", clamp()), PropKind("gantry", gantry())]
+    # The leaves lie at the bottom of their wells and the gantries in the halls: out of the sun (no light casts shadows).
+    out = [PropKind(leaf_kind(n, side), door_leaf(n, side), LEAF_RANGE_M, interior=True)
+           for n in range(1, st.LAUNCH_DOORS + 1) for side in (1.0, -1.0)]
+    return out + [PropKind("clamp", clamp()), PropKind("gantry", gantry(), interior=True)]
 
 
 def leaf_kind(number: int, side: float) -> str:

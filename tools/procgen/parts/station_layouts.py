@@ -20,6 +20,7 @@ from ..core.textures import Marking
 from ..styles import _hash01
 from ..styles.earth_alliance_station import WINDOW_GLOW, WINDOW_STRENGTH, colour, lin
 from . import station as st
+from . import station_detail as sd
 
 Cover = Callable[[np.ndarray, np.ndarray], np.ndarray]
 
@@ -206,6 +207,46 @@ def hall_dark(p: np.ndarray, n: np.ndarray) -> np.ndarray:
     upper_hall = (q[:, 0] > x0 - 0.05) & (q[:, 0] < x1 + 0.05) & (q[:, 1] > upper - 0.05) & (q[:, 1] < floor + 0.05)
     lower_hall = (np.abs(q[:, 0]) < st.HALL_LOWER_HALF + 0.05) & (q[:, 1] > ceiling - 0.05) & (q[:, 1] < upper + 0.05)
     return (along & (upper_hall | lower_hall)).astype(float)
+
+
+# --- inside or outside ---------------------------------------------------------------------------------------------------
+# No light in the game casts shadows, so the sun would light a hall's walls as it does the hull. The faces inside the station's
+# closed spaces are told apart here and drawn out of the sun's light (the game's interior layer): lit by lamps, glow and ambient.
+INSIDE_EPS_M = 0.05
+
+
+def drum_interior(p: np.ndarray, n: np.ndarray) -> np.ndarray:
+    """Which of the drum's faces (centroids ``p`` and normals ``n``, station frame) lie inside: the Cobra arms' launch halls, the
+    doors' wells with their lit sills, the halls' end walls, and the main docking bay from its mouth to the airlock."""
+    e = INSIDE_EPS_M
+    q, m = _arm_local(p, n)
+    top = st.ARM_HATCH[4]
+    floor = top - st.DOOR_DEPTH
+    _, _, z0, z1 = st.LAUNCH_HALL
+    cx, (dx, dz) = st.LAUNCH_STRIP_X, st.LAUNCH_DOOR_HALF
+    in_door = np.zeros(len(q), dtype=bool)
+    for c in st.launch_door_centres():
+        in_door |= np.abs(q[:, 2] - c) < dz + e
+    well = in_door & (np.abs(q[:, 0] - cx) < dx + e) & (q[:, 1] > floor - e) & (q[:, 1] < top - e)
+    # The root's sections fore and aft end on the halls: those faces are the halls' end walls, or hidden against the next part.
+    ends = ((np.abs(q[:, 2] - z0) < e) | (np.abs(q[:, 2] - z1) < e)) & (np.abs(m[:, 2]) > 0.9)
+    ends &= (np.abs(q[:, 0]) < st.ARM_HATCH[2] + e) & (q[:, 1] > st.HALL_CEILING_R - e) & (q[:, 1] < top - e)
+    grown = sd.shrunk(sd.MOUTH, -e)
+    reach = np.array([sd.half_height(grown, float(x)) for x in p[:, 0]])
+    tunnel = (p[:, 2] > sd.layer_z(0) + e) & (p[:, 2] < sd.TUNNEL_BACK_Z + e) & (np.abs(p[:, 1]) < reach)
+    return (hall_dark(p, n) > 0.0) | well | ends | tunnel
+
+
+def frame_interior(p: np.ndarray, n: np.ndarray) -> np.ndarray:
+    """Which of the frame's faces lie inside: the cargo bay's throat and compartment, and the walls across their ends."""
+    e = INSIDE_EPS_M
+    throat = (p[:, 2] > sd.ZG_FRONT_Z + e) & (p[:, 2] < sd.ZG_COMPARTMENT_Z + e) & (np.abs(p[:, 0]) < sd.ZG_THROAT[0] + e)
+    throat &= (p[:, 1] > sd.ZG_THROAT_Y[0] - e) & (p[:, 1] < sd.ZG_THROAT_Y[1] + e)
+    room = (p[:, 2] > sd.ZG_COMPARTMENT_Z - e) & (p[:, 2] < sd.ZG_BACK_Z + e) & (np.abs(p[:, 0]) < sd.ZG_HALF_X + e)
+    room &= (p[:, 1] > sd.ZG_FLOOR_Y - e) & (p[:, 1] < sd.ZG_ROOF_Y + e)
+    ends = ((np.abs(p[:, 2] - sd.ZG_COMPARTMENT_Z) < e) | (np.abs(p[:, 2] - sd.ZG_BACK_Z) < e)) & (np.abs(n[:, 2]) > 0.9)
+    ends &= (np.abs(p[:, 0]) < sd.ZG_HALF_X + 12.0) & (p[:, 1] > sd.ZG_FLOOR_Y - 40.0) & (p[:, 1] < sd.ZG_ROOF_Y + 40.0)
+    return throat | room | ends
 
 
 DOOR_BORDER_M = 2.0  # the red border round each door on the deck
