@@ -4919,6 +4919,25 @@ native/src/voice_kernels.rs, voice_rows.rs   ScsSimCore.ships_near(centre, radiu
   candidate's node is checked before it is offered. Without a core only the player's voices sound.
 - **Culling (T37)** is §18.26.
 
+### 18.34 Compact menus and the pause menu's Quit as built (M7-T31)
+
+```
+MenuScreen.compact    the frame sizes every box to what the page shows: the start screen, New game, Free flight, the pause list
+                      and ConfirmScreen are compact; Settings, Controls and the debrief keep the filled layout
+MenuFrame             _apply_compact_layout / _apply_filled_layout; COMPACT_WIDTH (options box), COMPACT_RIGHT_WIDTH;
+                      _sync_visibility(): a compact page shows no empty right panel, detail line or message
+PadDiagram.set_min_width  the compact pause list's pad box is docked to the lower left corner (the margins' distance), the diagram
+                      at its drawn size, shrinking in a small window so it never meets the options box; the objectives box sits
+                      top aligned right of the left column and narrows down to 160 px
+ConfirmScreen         "Quit to desktop?" with No (first, focused) and Yes; B and No step back, Yes emits `confirmed`
+PauseMenu             Resume | Restart | Settings | Quit to menu | Quit to desktop; `quit_game` Callable (unset: get_tree().quit())
+```
+
+A compact page's description (New game's briefing or scene text, Free flight's note) sits in the right box (`MenuScreen.wide_right`: it takes
+all the width from the 24 px gap to the right margin), top aligned beside the options box, as tall as its text; a longer text stops at the window's height and scrolls (`ObjectivesPanel.set_fit_content(fit,
+max_height)`). `MenuFrame.detail_text()` still returns the page's own text for tests and the console. The options list is as tall as its buttons (its scroll container stops scrolling) unless the window cannot hold it. The UI is
+not scaled with the window (no stretch mode), so at 4K a compact menu is small at the top left, as every menu already was.
+
 ### 18.33 Tests and CI as built (T38, L14)
 
 `TestSteps` (`tests/fixtures/test_steps.gd`, §12) holds the steps the scene tests share. `scripts/run_tests.sh` has four tiers:

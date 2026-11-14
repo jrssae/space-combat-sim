@@ -13,6 +13,8 @@ var _toggle: Button = null
 
 func setup_free_flight() -> void:
 	title = "Free flight"
+	compact = true
+	wide_right = true
 	encounters = bool(Settings.get_value(&"encounters"))
 	_toggle = add_option("", _on_toggle)
 	_refresh_toggle()

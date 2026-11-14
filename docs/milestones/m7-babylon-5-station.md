@@ -1468,6 +1468,20 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 - **What:** Quit in the pause menu (with a confirm, pad-reachable), leaving the game; the start menu's and pause menu's main views
   (and their simple sub-pages, not Settings) sized to their content; M5's front-end tests and pad-only navigation unchanged; a sheet
   (H).
+- **Done (2026-11-14, maintainer-approved from the sheet):**
+  - **Quit.** The pause list ends with Quit to desktop. It opens a "Quit to desktop?" page (`ConfirmScreen`) with No first and focused, so a
+    stray double A never quits; B and No step back, Yes leaves the game. Pad-reachable; `PauseMenu.quit_game` is injectable for tests.
+  - **Compact boxes.** The start screen, New game, Free flight, the pause list and the confirm page size each box to its content
+    (`MenuScreen.compact`, `MenuFrame` compact layout). Settings, Controls and the debrief keep the filled layout.
+  - **Pause menu.** The pad box is docked to the lower left corner (48 px from the left, 40 px from the bottom) and shrinks in a small
+    window instead of meeting the options box; the objectives box stays 440 px, top aligned right of the left column, narrowing in
+    a narrow window.
+  - **Descriptions.** New game's briefing and Free flight's note sit in a box on the right (`MenuScreen.wide_right`): top aligned beside
+    the options box, from the 24 px gap to the right margin, as tall as the text, capped at the window and scrolling when long (no
+    scroll indicator, by the maintainer's decision). It follows the focus and is hidden while Back has the focus.
+  - **Tests.** `test_menu_compact` (box heights, the pad dock, the description box at 1920x1080, 1920x1200, 3840x2160, 1100x700 and
+    800x600), `test_pause_quit` (confirm, cancel, Yes, pad only); `test_pause_menu` lists five entries and `test_front_end` expects the
+    description box on New game and Free flight, the only M5 assertions that changed. Sheet tooling: `scripts/menu_sheet.sh`.
 
 ### M7-T14 Integration, full suite, docs and acceptance
 

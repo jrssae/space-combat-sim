@@ -26,6 +26,10 @@ var cancel_ignores_keys: bool = false
 ## page's `info()` shows under its list instead (the start screen's slim layout).
 var show_pad: bool = true
 var show_right: bool = true
+## The frame sizes its boxes to what this page shows instead of filling the window (M7-T31). Settings pages leave it off.
+var compact: bool = false
+## A compact page's right box takes all the width left of the options box (a description) instead of the fixed objectives width.
+var wide_right: bool = false
 
 var _last_focus: Control = null
 var _silent: bool = false

@@ -2,7 +2,7 @@ class_name NewGameSelect
 extends ChoiceListScreen
 ## The New game list (M5-T45): the missions of the `MissionCatalog` first, then the sandbox scenes. Until a campaign exists this
 ## is the one place a run with a goal or a test arena is picked. The highlighted entry's briefing (a mission) or one-line
-## description (a scene, the `description` of its scenario file) shows under the list.
+## description (a scene, the `description` of its scenario file) shows in a box beside the list.
 
 const SCENES: Array[Dictionary] = [
 	{"id": &"combat_sandbox", "text": "Combat sandbox"},
@@ -27,8 +27,9 @@ func setup_new_game(missions: Array[Dictionary], describe: Callable = Callable()
 		entries.append({"id": scene["id"], "text": scene["text"], "info": ObjectivesModel.briefing(String(scene["text"]), text)})
 	setup("New game", entries)
 	add_back_option()
-	show_pad = false
-	show_right = false
+	show_pad = false  # the text sits in a box of its own beside the list
+	compact = true
+	wide_right = true
 
 
 func is_mission(id: StringName) -> bool:

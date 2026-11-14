@@ -87,6 +87,7 @@ func _main_menu() -> MenuScreen:
 	page.button_of(&"load_game").tooltip_text = "No saved games yet."
 	page.show_pad = false  # only the options on the start screen
 	page.show_right = false
+	page.compact = true
 	page.chosen.connect(_on_main_chosen)
 	return page
 
@@ -108,7 +109,6 @@ func _on_main_chosen(id: StringName) -> void:
 			var page := FreeFlightSelect.new()
 			page.setup_free_flight()
 			page.show_pad = false
-			page.show_right = false
 			page.start_requested.connect(func(encounters: bool) -> void:
 				_start(GameFlow.make_request(&"free_flight", &"free_flight", encounters, session_seed())))
 			_frame.push_screen(page)

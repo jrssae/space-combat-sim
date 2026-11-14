@@ -77,11 +77,12 @@ func test_start_opens_the_menu_and_pauses_the_world() -> void:
 	assert_eq(_focused_text(), "Resume", "the pad's A resumes without pointing first")
 
 
-func test_the_pause_list_has_the_four_entries() -> void:
+func test_the_pause_list_has_the_five_entries() -> void:
 	await _open()
 	var page: ChoiceListScreen = _menu().frame().current_page() as ChoiceListScreen
-	assert_eq(page.option_ids(), [&"resume", &"restart", &"settings", &"quit"] as Array[StringName])
+	assert_eq(page.option_ids(), [&"resume", &"restart", &"settings", &"quit", &"quit_game"] as Array[StringName])
 	assert_eq(page.button_of(&"quit").text, "Quit to menu")
+	assert_eq(page.button_of(&"quit_game").text, "Quit to desktop")
 
 
 func test_start_again_resumes() -> void:

@@ -49,6 +49,12 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
+## Asks for the diagram to be at least `width` wide at the layout's own proportions (a compact page); 0 returns to the
+## default minimum, and the box stretches.
+func set_min_width(width: float) -> void:
+	custom_minimum_size = Vector2(width, width * DESIGN.y / DESIGN.x) if width > 0.0 else Vector2(240.0, 100.0)
+
+
 func set_legend(new_legend: PadLegend) -> void:
 	legend = new_legend
 	queue_redraw()
