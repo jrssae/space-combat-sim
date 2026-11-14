@@ -1617,3 +1617,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     about 6 min); neighbours unchanged: `test_bot_ferry_motion` 6/6, `test_bot_ferry_fleet` 4/4, `test_cargo_ferry_plan` 5/5,
     `test_cargo_ferry_clearance` 3/3, `test_docking_plan` 4/4, `test_bots_on_station` 8/8, `test_station_ai` 2/2,
     `test_station_tour` 8/8, `test_slow_tests` 3/3; compile check clean; main-scene smoke clean.
+  - **GPU sheet** (Forward+, RX 6950 XT, about 145 fps, 265 draw calls, 684 MB VRAM): `references/screenshots/M7-T30 cargo pods/`,
+    three frames a hull from `traffic freighter <type> show` (backing in at 20 s, the bots taking the first pod at 80 s, carried
+    at 105 s). The look and the feel stay (H): the maintainer's live run, one line a hull (`show` puts the player beside the lane on
+    the side whose pods come off first; the bots are small at that distance).
