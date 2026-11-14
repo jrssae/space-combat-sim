@@ -38,11 +38,12 @@ const RAID_SPREAD_M: float = 150.0
 const AIRLOCK_M: float = 30.0
 const DEFAULT_RAID: int = 6
 ## `traffic freighter show`: the Saturn starts this far short of the hold point backing in at this speed (m, m/s), and the player
-## watches from toward the bay, to the side and above, looking a little toward the bay from the hold point (m).
+## watches from toward the bay, on the left (the side whose pods come off first) and above, looking a little toward the bay
+## from the hold point (m).
 const SHOW_BACK_M: float = 300.0
 const SHOW_BACK_MPS: float = 8.0
 const VIEW_TOWARD_M: float = 190.0
-const VIEW_SIDE_M: float = 85.0
+const VIEW_SIDE_M: float = -85.0
 const VIEW_UP_M: float = 35.0
 const VIEW_LOOK_M: float = 20.0
 
