@@ -265,7 +265,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T20 | C | The hangar behind the menu after the door resize: one Starfury per door (six), a narrower hall (maintainer, 2026-11-13) | T05, T09 | Opus | T09 sized the hall and racks to the old 64 m doors | done |
 | T21 | A | Follow-up to T05 from the STL: the Cobra arm's pentagonal cross-section, creases either side of the launch doors, and a roofed rectangular cargo bay (maintainer, 2026-11-13) | T05 | Opus | Shape read off the STL; the look is (H) | done |
 | T22 | A | The dorsal spine and the command section rebuilt to the STL (per-part sections IoU >= 0.90; maintainer, 2026-11-13) | T21 | Opus | T04 built them to the overall silhouette; the per-part check scores them 0.38 to 0.72 | in progress |
-| T23 | D | The jumpgate and jump points refined from the maintainer's GIF: gate opening, the blue vortex, a ship's jump point (maintainer, 2026-11-13) | - | Opus | Shader and asset look against a show reference; (H) | not started |
+| T23 | D | The jumpgate and jump points refined from the maintainer's GIF: gate opening, the blue vortex, a ship's jump point (maintainer, 2026-11-13) | - | Opus | Shader and asset look against a show reference; (H) | in progress |
 | T24 | A | The station's surfaces refined for fullscreen, in both texture-detail sets (low and high): resolution, detail, colour and material, no visible tiling (maintainer, 2026-11-13) | T22 | Opus | A look task on an 8 km hull at 6K within a VRAM budget; (H) | not started |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
