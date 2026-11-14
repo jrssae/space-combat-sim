@@ -5417,11 +5417,15 @@ native/src/surface_rows.rs       ScsSimCore.set_surface / clear_surface / surfac
 ### 20.2 Cobra-bay launches (D76, T08)
 
 ```
-src/mission/launch_sequence.gd   LaunchSequence (pure): one wing's launch in the drum's frame: racks, second row, doors, holds, hand-off
-src/mission/launch_profile.gd    LaunchProfile: the steps' timings and the launch camera's shots, from data/launch/cobra_launch.json
+src/mission/launch_sequence.gd   LaunchSequence (pure): one wing's launch in the drum's frame: racks, the clamp's turn, second row,
+                                 doors, the ripple, holds, the nose-first ejection, hand-off, clearances
+src/mission/launch_profile.gd    LaunchProfile: timings, the stored and launch poses, the camera's phases and pools (data/launch/cobra_launch.json)
+src/mission/launch_cut.gd        LaunchCut (pure): one shot variant a phase per launch, seeded shuffle bags kept per scenario run
+src/mission/launch_shot_sequencer.gd LaunchShotSequencer (pure): when the cut cuts: 1 s least hold, row shots over three ejections
 src/mission/launch_director.gd   LaunchDirector (Main's child, priority -45): carries the fighters, hands them over, the camera, console `launch`
 src/world/station_door_leaves.gd StationDoorLeaves: the doors' leaf props swung outward on their hinges
-data/launch/cobra_launch.json    door 3 s, drop 3 s, stagger 1.5 s, wave gap 10 s, second row 6 s; shots per step
+data/launch/cobra_launch.json    door 2 s, clamp turn 0.8 s into it for 1.4 s, ejection 0.3 s after the door is open and 0.75 s long,
+                                 ripple 0.25 to 0.5 s, wave gap 10 s, second row 6 s
 data/scenarios/station_launch.json  the player on Alpha 3 with three wingmen
 ```
 
@@ -5430,37 +5434,63 @@ data/scenarios/station_launch.json  the player on Alpha 3 with three wingmen
   (`MissionApi`, through `MissionStage.launch_from`): it resolves at the player's hand-off; in a skipped step it jumps the player to
   the hand-off and returns at once. A respawn in a `launch_bay` scenario launches again from the same bay, without the wingmen.
   `Main.controls_locked()` holds while the player is on its rack or rail; Main's shot skip (A or Start) also skips the launch.
-- **A launch** (`LaunchSequence.create(hardpoints, wing, ids, profile, first_door, drum_angle, spin)`): up to twelve fighters; the first
-  six take the arm's racks from `first_door` round the arm (the player first, its wingmen next, in the wave order), the next six the
-  second row behind the same doors. Each first-wave door opens a stagger after the one before; a fighter drops when its door is open,
-  its time has come and the fighter before it in the wave dropped a stagger ago. The drop is from rest at a steady acceleration down
-  `rail_start`, `rail_end`, `release` (17 m in 3 s: 11.3 m/s at the release). The second row moves along `staging_path` once its rack is
-  empty and drops `wave_gap_s` after the first wave's last release. A door closes `door_close_after_s` after its last fighter left.
-- **Hold under the spine.** A drop starts only when the arm (`cobra_arm.arms[].angle_deg` plus the drum's turn) stays out of every
-  `launch_clearance` sector for the whole drop, checked every 0.5 degrees of its sweep; otherwise the fighter holds and the wave's later
-  drops wait behind it. A skip under the spine waits on the rack, door open, and goes the tick the arm is clear. So no fighter is let go
-  inside a blocked sector.
-- **The hand-off state** is the release point turned with the drum, moving at the drum's surface velocity there (`w x r`) plus the
-  rail's speed along `release_direction`, spinning with the drum; in the World, plus the station's place and `WorldFrame.rest_velocity()`.
-  A played launch and a skipped one end in the same state against the drum (`LaunchDirector.last_handoff` records it).
+- **Front first (maintainer, from the show GIFs).** A Starfury is stored on the rack at 90 degrees to its launch: in the door's
+  frame (x across the arm, y out of the drum, z aft) its nose points along -z (to the bow) and its top along -y (toward the drum's
+  axis), the station's hardpoint `forward` and `up` exactly (`stored_pose_offset_deg` checks it; 0 on every bay). The clamp turns it
+  `rotate_s` (an eased quarter pitch, nose down, starting `rotate_after_s` into its door's opening, so it turns while the leaves
+  swing) to the launch pose, nose along +y out through the door and top along -z; it is
+  ejected nose first. Fit, from `LaunchSequence.clearances` on the Starfury's bounds and the arm as built: 2.3 m each side across the
+  20 m door, 3.2 m along the 14 m door, the turn 1.9 m from the hall's ceiling and 3.3 m from the doors' plane, 11 m from the next rack's
+  fighter; released `release_extra_m` (6 m) past the station's release point so its tail is 4.6 m past the arm's top.
+- **A launch** (`LaunchSequence.create(hardpoints, wing, ids, profile, first_door, drum_angle, spin, seed)`): up to twelve fighters; the
+  first six take the arm's racks from `first_door`, then the doors aft of it along the arm, then those forward of it (the player first,
+  its wingmen next), the next six the second row behind the same doors. The doors fire in that order with gaps drawn per launch from
+  `stagger_min_s` to `stagger_max_s` (0.25 to 0.5 s, a hash of the launch's seed): a ripple along the row. A fighter's door opens at its
+  slot, the clamp turns it `rotate_after_s` in, and it is ejected when its slot plus `lead_s()` comes (the door's opening plus
+  `eject_after_open_s`, 0.3 s, or the turn's end if later; maintainer: the launch follows the doors briskly), its door is fully open
+  and no fighter of its wave started less than `stagger_min_s` ago. The turn stays 3.3 m inside the doors' plane and nothing reaches
+  the plane before the leaves are fully open; open, they stand 1.5 m clear of a Starfury's wings (`leaf_clearance`). The ejection is from rest at a steady acceleration down `rail_start`, `rail_end` and
+  the release point: 23 m in 0.75 s, 61.3 m/s at the release (about 8 g), its tail clear of the door's well 0.67 s in. The second row
+  moves along `staging_path` once its rack is empty, turns on the rack and fires `wave_gap_s` after the first wave's last release.
+- **Hold under the spine.** An ejection starts only when the arm (`cobra_arm.arms[].angle_deg` plus the drum's turn) stays out of every
+  `launch_clearance` sector for the whole ejection, checked every 0.5 degrees of its sweep; otherwise the fighter holds, nose out, and
+  the rest of the wave goes on in order (on one arm they come clear together and ripple out `stagger_min_s` apart). A skip under the
+  spine waits on the rack, door open, and goes the tick the arm is clear. So no fighter is let go inside a blocked sector.
+- **The hand-off state** is the release point turned with the drum, nose out, moving at the drum's surface velocity there (`w x r`) plus
+  the rail's speed along `release_direction`, spinning with the drum; in the World, plus the station's place and
+  `WorldFrame.rest_velocity()`. A played launch and a skipped one end in the same state against the drum (`last_handoff`).
+- **Thrusters only on the ejection.** While carried a ship is `Ship.clamped`: `get_flight_output` reports idle, so its plumes, RCS
+  puffs and engine voices (both read that output) stay cold whatever its flight model or AI asks while the clamp turns or holds it.
+  The flag clears at the release; the player's main pods then burn `burn_s` at `burn_throttle` (`step_player`, Main's autopilot slot)
+  unless the launch was skipped, the AI wingmen fly on from their brains.
 - **Riding the drum.** A fighter on a rack or rail keeps its dynamic body but with `custom_integrator` on (no force moves it), no
-  collision layers and `tier_exempt`; each tick the director sets its pose and velocity from the drum's angle before Jolt's step (the
-  angle the drum's body still has), so after the step it stands where the drum's body does. A rebase moves the station and the fighter
-  together (both are shifted; nothing is kinematic, so there is no velocity spike). At the release the layers come back and Jolt flies it.
+  collision layers and `tier_exempt`; each tick the director sets its pose, velocity and spin (the drum's plus the clamp's turn) from
+  the drum's angle before Jolt's step, so after the step it stands where the drum's body does. A rebase moves the station and the
+  fighter together (nothing is kinematic, so there is no velocity spike). At the release the layers come back and Jolt flies it.
 - **The drawn drum.** `Station.visual_angle(fraction)` draws the drum between its body's last two angles, as interpolated ships are
-  drawn, so a fighter riding it sits on its rack on screen (before T08 the picture led the body by two ticks, 1.2 m at the doors).
-- **Camera.** `LaunchProfile.shots` are `CinematicShot`s with a step (`door`, `hold`, `drop`, `release`) and `at_s`; each plays once the
-  player's fighter has been that long in that step. Actors: `bay` (the player's door frame as the drum is drawn: x across the arm, y out
-  of the drum, z aft) and `fighter` (the player's ship). Every key has an `up` (`CinematicShot`'s new key: `{actor, direction}` in
-  that actor's frame), so the picture stays upright against the arm and a launch from Beta, Delta or Zeta frames as Alpha's does. A
-  shot may carry a `fill` (`actor`, `offset`, `energy`, `range_m`, `color`): a `LightEmitter` in the scene's `LightRig`, so the
-  `LightPicker`'s 7 slots hold it, lit only while its shot is on screen. As built: inside the hall at the opening door; the arm from
-  outside while it holds; close above the door as the fighter comes through the opening, lit by a fill; from 0.25 s after the release,
-  a chase keyed on the fighter from its belly side, the arm and the turning drum behind it (up: the fighter's belly).
+  drawn, so a fighter riding it sits on its rack on screen.
+- **Camera: phases and pools (maintainer).** `LaunchProfile.phases`: rack (step `door`), rotate (`rotate`), hold (`hold`), drop
+  (`drop`), exit (`release`, optional: left out 35% of launches) and chase (`release`, 1.2 s in); each a pool of `CinematicShot`
+  variants with a weight and an optional `fill`. `LaunchCut.pick(seed)` takes one variant a phase from a shuffle bag (weighted draw
+  without replacement, refilled when empty, never the variant played last), every draw a hash of the seed, the phase and the draw.
+  The director keeps one `LaunchCut` per scenario run and seeds each player launch from the scenario's seed, the bay and the run's
+  launch count (`launch seed <n>` pins it). Actors: `bay` (the player's door frame as the drum is drawn) and `fighter`. Every key has an
+  `up` (`{actor, direction}`), so a launch from Beta, Delta or Zeta frames as Alpha's does; a `fill` is a `LightEmitter` in the scene's
+  `LightRig` (inside the `LightPicker`'s 7 slots), lit only while its shot is on screen. 18 variants after the maintainer's review
+  (4 rack, 2 rotate, 2 hold, 5 drop, 2 exit, 3 chase; 10 from the show's GIFs, the profile naming the frame).
+- **Holds (maintainer: at least 1 s a camera angle; in a wave, see a few fighters launch before cutting).** `LaunchShotSequencer`
+  plays a due shot only once the one on screen has had `min_shot_s` (1.0, refused below 1.0); shots that came due meanwhile are
+  superseded by the latest. A row variant (`row`, subject the door row) is held until `row_ejections` (3) fighters were let go
+  during it, the wave has none left, or `row_max_s` (4). Every variant's last key is held to its least hold (a row shot's to
+  `row_max_s`), so the camera never falls back to the cockpit early. A first wave of `row_wave_min` (3) or more films its drop with a
+  row shot (the row variants' own bag) and leaves the exit out. A unit test runs seeded launches (one fighter and a wave of four)
+  through the sequencer and requires every shot on screen for at least 1 s, every row shot over three ejections, and each shot's
+  subject (the fighter, or the wave's first three doors) in the picture for its whole hold.
 - **Wing launches.** `launch wing <wing>` takes twelve Starfuries from the ally pool (topping it up with `ShipPool.prepare`), named
-  `<WING> 1` to `12` with the `ally_starfury` profile and no wing yet (T10 gives them their part).
-- **For M8.** A squadron launch is one `LaunchSequence` per wing (or several in turn) with a profile of its own; the shots and the steps
-  are data.
+  `<WING> 1` to `12` with the `ally_starfury` profile and no wing yet (T10 gives them their part); its ripple is seeded from the wing and
+  the sim time.
+- **For M8.** A squadron launch is one `LaunchSequence` per wing (or several in turn) with the same profile, its cuts drawn from the
+  same pools.
 
 ### 20.3 The defence grid (D75, T07)
 

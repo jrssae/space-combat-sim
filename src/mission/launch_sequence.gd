@@ -1,25 +1,30 @@
 class_name LaunchSequence
 extends RefCounted
 ## One wing's launch from its Cobra arm (M7-T08, D76, AC7; Q3 as corrected): up to twelve Starfuries, six on the racks over the arm's
-## six doors (wave 1) and six in the second row (wave 2). Each fighter's door opens, it drops down its rail from the rack and is let
-## go at the release point with the drum's surface velocity plus the rail's speed along the drop direction. The second row moves
+## six doors (wave 1) and six in the second row (wave 2). Starfuries launch front first (maintainer): stored on the rack at 90 degrees
+## to the launch, each one's door opens and the clamp turns it nose-out (`rotate_s`), then it drops nose first down its rail and is let
+## go past the release point with the drum's surface velocity plus the rail's speed along the drop direction. The ejection is quick
+## (`drop_s`, under a second), and a wave's doors fire in turn along the arm a seeded 0.25 to 0.5 s apart (maintainer, after the
+## show's launch). The second row moves
 ## onto the racks once they are free and drops `wave_gap_s` after the first wave's last release. Pure: it lives in the drum's frame
 ## and is told the drum's angle each tick, so a rebase or the drum's turn moves nothing in it.
 ##
 ## Hold under the spine (maintainer): the stationary frame passes over each arm once a turn. A drop starts only when the arm stays
 ## out of every blocked sector (`StationHardpoints.launch_blocked`) from the drop's start to its release; until then the fighter holds
-## on its rack and the wave's later drops wait behind it.
+## on its rack while the rest of the wave goes on in order; held fighters that come clear together go at least `stagger_min_s` apart.
 ##
 ## Steps and timings come from a `LaunchProfile`, so M8's squadron launch runs this for several wings in turn.
 
-enum Phase { STAGED, MOVING, RACKED, HELD, DROPPING, RELEASED }
+enum Phase { STAGED, MOVING, RACKED, ROTATING, HELD, DROPPING, RELEASED }
 enum DoorState { CLOSED, OPENING, OPEN, CLOSING }
 
-const PHASE_NAMES: PackedStringArray = ["staged", "moving", "racked", "held", "dropping", "released"]
+const PHASE_NAMES: PackedStringArray = ["staged", "moving", "racked", "rotating", "held", "dropping", "released"]
 const DOOR_NAMES: PackedStringArray = ["closed", "opening", "open", "closing"]
 ## How finely a drop's sweep of arm angles is checked against the blocked sectors, degrees.
 const CLEAR_STEP_DEG: float = 0.5
 const EPS_S: float = 1e-6
+## A door leaf's thickness, m (the generator's leaves are 0.5 m deep).
+const LEAF_THICKNESS_M: float = 0.5
 
 var valid: bool = false
 var error: String = ""
@@ -35,21 +40,27 @@ var time_s: float = 0.0
 var drum_angle: float = 0.0
 var spin_rate_rad_s: float = 0.0
 ## Each fighter: `id`, `bay` (index into `bays`), `wave` (1 or 2), `k` (its place in the wave's order), `phase`, `step_since`,
-## `drop_start`, `released_at` (-1 until then), `held_s` (seconds spent holding), `skip`.
+## `drop_start`, `released_at` (-1 until then), `held_s` (seconds spent holding), `skip`, `turn` (0 stored to 1 turned nose-out).
 var fighters: Array[Dictionary] = []
 ## Each door (by bay index): `state`, `open` (0 shut to 1 open), `last_release` (-1 until one left).
 var doors: Array[Dictionary] = []
 ## When the first wave's last fighter was let go (-1 until then).
 var first_wave_done_s: float = -1.0
+## Each wave's firing times from its start, by place in the wave (seeded gaps between `stagger_min_s` and `stagger_max_s`).
+var slots: Array[PackedFloat64Array] = []
+## The launch's seed: the gaps between the doors come from it.
+var seed_value: int = 0
 
 var _hardpoints: StationHardpoints = null
 
 
-## A launch of `ids` from `wing_name`'s arm: the first six take the racks, starting at door `first_door` and going on round the
-## arm, and drop in that order; the next six wait in the second row behind the same doors. Check `valid`.
+## A launch of `ids` from `wing_name`'s arm: the first six take the racks, starting at door `first_door`, then the doors aft of it
+## along the arm, then those forward of it, and fire in that order; the next six wait in the second row behind the same doors. The
+## gaps between the doors come from `p_seed`. Check `valid`.
 static func create(hardpoints: StationHardpoints, wing_name: String, ids: PackedStringArray, p_profile: LaunchProfile,
-		first_door: int = 1, p_drum_angle: float = 0.0, p_spin: float = 0.0) -> LaunchSequence:
+		first_door: int = 1, p_drum_angle: float = 0.0, p_spin: float = 0.0, p_seed: int = 0) -> LaunchSequence:
 	var made := LaunchSequence.new()
+	made.seed_value = p_seed
 	made.error = made._setup(hardpoints, wing_name, ids, p_profile, first_door)
 	made.valid = made.error.is_empty()
 	made.drum_angle = p_drum_angle
@@ -59,7 +70,7 @@ static func create(hardpoints: StationHardpoints, wing_name: String, ids: Packed
 
 ## Moves the launch on by `delta` seconds with the drum at `p_drum_angle` (radians about +Z) turning at `p_spin` rad/s. Returns what
 ## happened, in order: each `{kind, id, bay}` with kind `door_opening`, `door_open`, `door_closing`, `door_closed`, `move`,
-## `racked`, `hold`, `drop`, `release`.
+## `racked`, `rotate`, `turned`, `hold`, `drop`, `release`.
 func advance(delta: float, p_drum_angle: float, p_spin: float) -> Array[Dictionary]:
 	var events: Array[Dictionary] = []
 	if not valid:
@@ -83,6 +94,7 @@ func skip(id: String) -> void:
 	if f.is_empty() or f["phase"] == Phase.RELEASED:
 		return
 	f["skip"] = true
+	f["turn"] = 1.0
 	var door: Dictionary = doors[f["bay"]]
 	door["state"] = DoorState.OPEN
 	door["open"] = 1.0
@@ -121,15 +133,17 @@ func arm_angle_now() -> float:
 	return fposmod(arm_angle_deg + rad_to_deg(drum_angle), 360.0)
 
 
-## The fighter's step for the launch camera: `door` (on its rack, its door opening or open), `hold`, `drop`, `release`, or
-## `&""` while it waits in the second row.
+## The fighter's step for the launch camera: `door` (stored on its rack, its door opening), `rotate` (the clamp turning it, then
+## waiting nose-out for its drop), `hold`, `drop`, `release`, or `&""` while it waits in the second row.
 func step_of(id: String) -> StringName:
 	var f: Dictionary = fighter(id)
 	if f.is_empty():
 		return &""
 	match int(f["phase"]):
 		Phase.RACKED:
-			return &"door"
+			return &"door" if float(f["turn"]) < 1.0 else &"rotate"
+		Phase.ROTATING:
+			return &"rotate"
 		Phase.HELD:
 			return &"hold"
 		Phase.DROPPING:
@@ -150,31 +164,32 @@ func door_angle_deg(bay_index: int) -> float:
 	return smoothstep(0.0, 1.0, float(doors[bay_index]["open"])) * profile.door_open_deg
 
 
-## The fighter's pose in the drum's frame: on its rack, on its way there, or on its rail.
+## The fighter's pose in the drum's frame: stored on its rack, turning in the clamp, on its way up, or nose first on its rail.
 func local_pose(id: String) -> Transform3D:
 	var f: Dictionary = fighter(id)
 	var bay: Dictionary = bays[f["bay"]]
-	return Transform3D(rack_basis(bay), _local_point(f, bay))
+	return Transform3D(_local_basis(f, bay), _local_point(f, bay))
 
 
 ## The fighter's state in the station's frame with the drum's axis through `drum_pivot`: `transform`, `velocity` (against the
-## station: the rail's speed plus the drum's turn) and `angular` (the drum's spin). A released fighter reads its hand-off state.
+## station: the rail's speed plus the drum's turn) and `angular` (the drum's spin, plus the clamp's turn while it turns). A released
+## fighter reads its hand-off state.
 func state_of(id: String, drum_pivot: Vector3) -> Dictionary:
 	var f: Dictionary = fighter(id)
 	if f.is_empty():
 		return {}
 	var bay: Dictionary = bays[f["bay"]]
-	return _state(_local_point(f, bay), _local_velocity(f, bay), rack_basis(bay), drum_pivot)
+	return _state(_local_point(f, bay), _local_velocity(f, bay), _local_basis(f, bay), drum_pivot, _local_turn_rate(f, bay))
 
 
-## The hand-off state of the fighter `id` with the drum as it is now: at its release point with the drum's surface velocity there
-## plus the rail's speed along the drop direction, turning with the drum (see `state_of`).
+## The hand-off state of the fighter `id` with the drum as it is now: nose out at its release point, with the drum's surface
+## velocity there plus the rail's speed along the drop direction, turning with the drum (see `state_of`).
 func handoff_of(id: String, drum_pivot: Vector3) -> Dictionary:
 	var f: Dictionary = fighter(id)
 	if f.is_empty():
 		return {}
 	var bay: Dictionary = bays[f["bay"]]
-	return _state(bay["release"], (bay["release_direction"] as Vector3).normalized() * release_speed(bay), rack_basis(bay),
+	return _state(release_point(bay), (bay["release_direction"] as Vector3).normalized() * release_speed(bay), launch_basis(bay),
 			drum_pivot)
 
 
@@ -183,7 +198,85 @@ func release_speed(bay: Dictionary) -> float:
 	return 2.0 * _length(_rail(bay)) / profile.drop_s
 
 
-## A racked fighter's attitude in the drum's frame: its nose along the bay's `forward`, its top along `up` (toward the axis).
+## Where a nose-first fighter is let go: the station's release point, `release_extra_m` further out along the drop.
+func release_point(bay: Dictionary) -> Vector3:
+	return (bay["release"] as Vector3) + (bay["release_direction"] as Vector3).normalized() * profile.release_extra_m
+
+
+## The stored attitude in the drum's frame (the profile's, in the bay's door frame).
+func stored_basis(bay: Dictionary) -> Basis:
+	return door_frame(bay).basis * profile.stored_basis()
+
+
+## The launch attitude in the drum's frame: nose out through the door.
+func launch_basis(bay: Dictionary) -> Basis:
+	return door_frame(bay).basis * profile.launch_basis()
+
+
+## How far the station's rack pose (its hardpoint `forward` and `up`) is from the profile's stored pose, degrees: 0 when they agree.
+func stored_pose_offset_deg(bay: Dictionary) -> float:
+	return rad_to_deg(rack_basis(bay).get_rotation_quaternion().angle_to(stored_basis(bay).get_rotation_quaternion()))
+
+
+## How a fighter of bounds `fighter_aabb` (its own frame) fits the arm `cobra_arm` lays out, in metres to spare (negative: it does not
+## fit): through the door nose first (`door_across_m`, `door_along_m`), turning in the clamp at the rack (`turn_ceiling_m` to the hall's
+## ceiling, `turn_floor_m` to the doors' plane, `turn_neighbour_m` to the next rack's stored fighter along the arm) and let go
+## (`release_tail_m`, its tail past the arm's top).
+static func clearances(fighter_aabb: AABB, arm: Dictionary, p_profile: LaunchProfile) -> Dictionary:
+	var floor_r: float = float(arm["door_floor_r"])
+	var hang_y: float = float(arm["hang_r"]) - floor_r
+	var ceiling_y: float = float((arm["hall"] as Dictionary)["ceiling_r"]) - floor_r
+	var top_y: float = float(arm.get("door_depth_m", 0.0))
+	var half: Array = arm["door_half_m"]
+	var corners: Array[Vector3] = []
+	for i: int in 8:
+		corners.append(fighter_aabb.get_endpoint(i))
+	var launch: Basis = p_profile.launch_basis()
+	var stored: Basis = p_profile.stored_basis()
+	var lo := Vector3.INF
+	var hi := -Vector3.INF
+	for c: Vector3 in corners:
+		var p: Vector3 = launch * c
+		lo = lo.min(p)
+		hi = hi.max(p)
+	var turn_lo: float = INF
+	var turn_hi: float = -INF
+	var turn_z: float = 0.0
+	var qs: Quaternion = stored.get_rotation_quaternion()
+	var ql: Quaternion = launch.get_rotation_quaternion()
+	for step: int in 61:
+		var b := Basis(qs.slerp(ql, float(step) / 60.0))
+		for c: Vector3 in corners:
+			var p: Vector3 = b * c
+			turn_lo = minf(turn_lo, hang_y + p.y)
+			turn_hi = maxf(turn_hi, hang_y + p.y)
+			turn_z = maxf(turn_z, absf(p.z))
+	var stored_z: float = 0.0
+	for c: Vector3 in corners:
+		stored_z = maxf(stored_z, absf((stored * c).z))
+	var release_y: float = float(arm["release_r"]) - floor_r + p_profile.release_extra_m
+	return {"door_across_m": float(half[0]) - maxf(absf(lo.x), absf(hi.x)), "door_along_m": float(half[1]) - maxf(absf(lo.z), absf(hi.z)),
+			"turn_ceiling_m": turn_lo - ceiling_y, "turn_floor_m": -turn_hi,
+			"turn_neighbour_m": float(arm.get("pitch_m", 0.0)) - turn_z - stored_z, "release_tail_m": release_y + lo.y - top_y}
+
+
+## Room across between a nose-first fighter of bounds `fighter_aabb` and the leaves of `bay`'s door swung `open_deg` outward, m
+## (negative: they meet). Each leaf runs from its hinge toward the door's middle and is `LEAF_THICKNESS_M` thick; a leaf opened past
+## 90 degrees stands outside the opening, short of it leans over it.
+static func leaf_clearance(fighter_aabb: AABB, bay: Dictionary, open_deg: float, p_profile: LaunchProfile) -> float:
+	var frame: Transform3D = door_frame(bay)
+	var half_span: float = 0.0
+	for i: int in 8:
+		half_span = maxf(half_span, absf((p_profile.launch_basis() * fighter_aabb.get_endpoint(i)).x))
+	var room: float = INF
+	for leaf: Dictionary in bay.get("leaves", []) as Array:
+		var hinge: float = absf((frame.affine_inverse() * (leaf["point"] as Vector3)).x)
+		var lean: float = hinge * cos(deg_to_rad(open_deg))  # how far its free edge reaches back over the opening
+		room = minf(room, hinge - LEAF_THICKNESS_M - maxf(lean, 0.0) - half_span)
+	return room
+
+
+## A racked fighter's attitude in the drum's frame as the station's hardpoints give it: its nose along `forward`, its top along `up`.
 static func rack_basis(bay: Dictionary) -> Basis:
 	var back: Vector3 = -(bay["forward"] as Vector3).normalized()
 	var up: Vector3 = (bay["up"] as Vector3).normalized()
@@ -248,12 +341,26 @@ func _step_fighter(f: Dictionary, delta: float, events: Array[Dictionary]) -> vo
 		Phase.DROPPING:
 			if time_s - float(f["drop_start"]) >= profile.drop_s - EPS_S:
 				_release(f, events)
+		Phase.ROTATING:
+			var turning: float = time_s - float(f["step_since"])
+			f["turn"] = clampf(turning / profile.rotate_s, 0.0, 1.0) if profile.rotate_s > 0.0 else 1.0
+			if float(f["turn"]) >= 1.0 - EPS_S:
+				f["turn"] = 1.0
+				f["phase"] = Phase.RACKED  # nose out, waiting for its drop: still the `rotate` step
+				events.append({"kind": "turned", "id": f["id"], "bay": bay_name})
+				_step_fighter(f, 0.0, events)
 		Phase.RACKED, Phase.HELD:
 			if f["phase"] == Phase.HELD:
 				f["held_s"] = float(f["held_s"]) + delta
 			if bool(f["skip"]):
 				if not blocked_now():
 					_release(f, events)
+				return
+			if float(f["turn"]) < 1.0:
+				if time_s >= _nominal_due(f) - profile.rotate_s - EPS_S:
+					_enter(f, Phase.ROTATING)
+					events.append({"kind": "rotate", "id": f["id"], "bay": bay_name})
+					_step_fighter(f, delta, events)
 				return
 			if not _due(f) or (doors[f["bay"]] as Dictionary)["state"] != DoorState.OPEN:
 				return
@@ -280,25 +387,27 @@ func _release(f: Dictionary, events: Array[Dictionary]) -> void:
 	events.append({"kind": "release", "id": f["id"], "bay": (bays[f["bay"]] as Dictionary)["name"]})
 
 
-# The drop is due: its time has come and the fighter before it in the wave dropped at least a stagger ago (a hold slips the rest).
-func _due(f: Dictionary) -> bool:
+# When a fighter's drop is due by the clock alone: its door open and its turn done for the first wave, `wave_gap_s` after the
+# first wave's last release for the second (INF until then).
+func _nominal_due(f: Dictionary) -> float:
 	var k: int = f["k"]
-	var due: float
 	if int(f["wave"]) == 1:
-		due = k * profile.stagger_s + profile.door_open_s
-	else:
-		if first_wave_done_s < 0.0:
-			return false
-		due = first_wave_done_s + profile.wave_gap_s + k * profile.stagger_s
-	if time_s < due - EPS_S:
+		return slots[0][k] + profile.lead_s()
+	if first_wave_done_s < 0.0:
+		return INF
+	return first_wave_done_s + profile.wave_gap_s + slots[1][k]
+
+
+# The drop is due: its time has come, and no other fighter of its wave started its drop less than `stagger_min_s` ago (so held fighters
+# that come clear together still ripple out in order).
+func _due(f: Dictionary) -> bool:
+	if time_s < _nominal_due(f) - EPS_S:
 		return false
-	if k == 0:
-		return true
-	var before: Dictionary = _in_wave(int(f["wave"]), k - 1)
-	if before.is_empty():
-		return true
-	var started: float = float(before["drop_start"])
-	return started >= 0.0 and time_s >= started + profile.stagger_s - EPS_S
+	for other: Dictionary in fighters:
+		if other != f and int(other["wave"]) == int(f["wave"]) and float(other["drop_start"]) >= 0.0 \
+				and time_s < float(other["drop_start"]) + profile.stagger_min_s - EPS_S:
+			return false
+	return true
 
 
 # The arm stays clear of every blocked sector from now to the end of a drop started now.
@@ -318,7 +427,7 @@ func _door_wanted(bay_index: int) -> bool:
 	for f: Dictionary in fighters:
 		if int(f["bay"]) != bay_index or f["phase"] == Phase.RELEASED:
 			continue
-		if int(f["wave"]) == 1 and time_s > int(f["k"]) * profile.stagger_s + EPS_S:
+		if int(f["wave"]) == 1 and time_s > slots[0][int(f["k"])] + EPS_S:
 			return true
 		if int(f["wave"]) == 2 and first_wave_done_s >= 0.0:
 			return true
@@ -351,13 +460,6 @@ func _wave_released(wave: int) -> bool:
 	return any
 
 
-func _in_wave(wave: int, k: int) -> Dictionary:
-	for f: Dictionary in fighters:
-		if int(f["wave"]) == wave and int(f["k"]) == k:
-			return f
-	return {}
-
-
 # --- poses -------------------------------------------------------------------------------------------------------------
 
 
@@ -374,7 +476,7 @@ func _local_point(f: Dictionary, bay: Dictionary) -> Vector3:
 			var rail: Array[Vector3] = _rail(bay)
 			return _along(rail, u * u * _length(rail))
 		Phase.RELEASED:
-			return bay["release"]
+			return release_point(bay)
 	return bay["rail_start"]
 
 
@@ -396,16 +498,36 @@ func _local_velocity(f: Dictionary, bay: Dictionary) -> Vector3:
 	return Vector3.ZERO
 
 
-func _state(point: Vector3, rail_velocity: Vector3, basis: Basis, drum_pivot: Vector3) -> Dictionary:
+# Stored, turning in the clamp (eased), or nose out.
+func _local_basis(f: Dictionary, bay: Dictionary) -> Basis:
+	var turned: float = smoothstep(0.0, 1.0, float(f["turn"]))
+	var q: Quaternion = profile.stored_basis().get_rotation_quaternion().slerp(profile.launch_basis().get_rotation_quaternion(), turned)
+	return door_frame(bay).basis * Basis(q)
+
+
+# The clamp's turn rate against the drum while it turns (rad/s, drum frame).
+func _local_turn_rate(f: Dictionary, bay: Dictionary) -> Vector3:
+	if f["phase"] != Phase.ROTATING or profile.rotate_s <= 0.0:
+		return Vector3.ZERO
+	var u: float = clampf((time_s - float(f["step_since"])) / profile.rotate_s, 0.0, 1.0)
+	var qs: Quaternion = profile.stored_basis().get_rotation_quaternion()
+	var delta_q: Quaternion = qs.inverse() * profile.launch_basis().get_rotation_quaternion()
+	if delta_q.w < 0.0:
+		delta_q = -delta_q  # the short way round, as the slerp turns it
+	var axis: Vector3 = qs * delta_q.get_axis().normalized()
+	return door_frame(bay).basis * axis * (delta_q.get_angle() * 6.0 * u * (1.0 - u) / profile.rotate_s)
+
+
+func _state(point: Vector3, rail_velocity: Vector3, basis: Basis, drum_pivot: Vector3, turn_rate: Vector3 = Vector3.ZERO) -> Dictionary:
 	var turn := Basis(Vector3.BACK, drum_angle)
 	var omega := Vector3(0.0, 0.0, spin_rate_rad_s)
 	var arm: Vector3 = turn * point
 	return {"transform": Transform3D(turn * basis, drum_pivot + arm), "velocity": turn * rail_velocity + omega.cross(arm),
-			"angular": omega}
+			"angular": omega + turn * turn_rate}
 
 
-static func _rail(bay: Dictionary) -> Array[Vector3]:
-	return [bay["rail_start"], bay["rail_end"], bay["release"]] as Array[Vector3]
+func _rail(bay: Dictionary) -> Array[Vector3]:
+	return [bay["rail_start"], bay["rail_end"], release_point(bay)] as Array[Vector3]
 
 
 static func _length(path: Array[Vector3]) -> float:
@@ -472,10 +594,22 @@ func _setup(hardpoints: StationHardpoints, wing_name: String, ids: PackedStringA
 		return "a wing launches 1 to %d fighters, not %d" % [2 * per_wave, ids.size()]
 	for i: int in per_wave:
 		doors.append({"state": DoorState.CLOSED, "open": 0.0, "last_release": -1.0})
+	# The named door first, then the doors aft of it along the arm, then those forward of it, nearest first: a ripple along the row.
+	var order: Array[int] = []
+	for d: int in range(first_door - 1, per_wave):
+		order.append(d)
+	for d: int in range(first_door - 2, -1, -1):
+		order.append(d)
+	for wave: int in 2:
+		var times := PackedFloat64Array([0.0])
+		for k: int in range(1, per_wave):
+			var gap: float = lerpf(profile.stagger_min_s, profile.stagger_max_s, LaunchCut.unit(seed_value, "stagger %d" % wave, k))
+			times.append(times[k - 1] + gap)
+		slots.append(times)
 	for i: int in ids.size():
 		var wave: int = 1 if i < per_wave else 2
 		var k: int = i % per_wave
-		fighters.append({"id": ids[i], "bay": (first_door - 1 + k) % per_wave, "wave": wave, "k": k,
+		fighters.append({"id": ids[i], "bay": order[k], "wave": wave, "k": k,
 				"phase": Phase.RACKED if wave == 1 else Phase.STAGED, "step_since": 0.0, "drop_start": -1.0, "released_at": -1.0,
-				"held_s": 0.0, "skip": false})
+				"held_s": 0.0, "skip": false, "turn": 0.0})
 	return ""

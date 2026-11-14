@@ -75,11 +75,14 @@ func _in_drum(xform: Transform3D, velocity: Vector3, drum_angle: float) -> Dicti
 	return {"point": turn.inverse() * arm, "velocity": turn.inverse() * relative}
 
 
+# Nose first, let go `release_extra_m` past the station's release point at the rail's speed there.
 func _expected_release(bay_name: String) -> Dictionary:
 	var bay: Dictionary = station.hardpoints.bay(bay_name)
-	var rail: float = (bay["rail_end"] as Vector3).distance_to(bay["rail_start"]) + (bay["release"] as Vector3).distance_to(bay["rail_end"])
-	var speed: float = 2.0 * rail / main.launches.profile.drop_s
-	return {"point": bay["release"], "velocity": (bay["release_direction"] as Vector3).normalized() * speed}
+	var profile: LaunchProfile = main.launches.profile
+	var out: Vector3 = (bay["release_direction"] as Vector3).normalized()
+	var point: Vector3 = (bay["release"] as Vector3) + out * profile.release_extra_m
+	var rail: float = (bay["rail_end"] as Vector3).distance_to(bay["rail_start"]) + point.distance_to(bay["rail_end"])
+	return {"point": point, "velocity": out * (2.0 * rail / profile.drop_s), "nose": out}
 
 
 func test_the_scenario_starts_the_player_on_its_rack_with_the_wingmen_beside() -> void:
@@ -94,6 +97,13 @@ func test_the_scenario_starts_the_player_on_its_rack_with_the_wingmen_beside() -
 		var rack: Vector3 = _on_drum(station.hardpoints.bay(bays[ship_name])["rail_start"])
 		assert_almost_eq(ship.global_position, rack, Vector3.ONE * 0.05, "%s hangs on %s's rack" % [ship_name, bays[ship_name]])
 		assert_eq(ship.collision_layer, 0, "%s touches nothing while it rides the drum" % ship_name)
+	# Stored at 90 degrees to the launch: nose along the arm, as the station's rack pose has it.
+	var bay: Dictionary = station.hardpoints.bay("cobra_bay_alpha_3")
+	var drum_basis: Basis = station.global_basis * Basis(Vector3.BACK, station.drum_angle)
+	assert_almost_eq(main.ship.global_basis * Vector3.FORWARD, drum_basis * (bay["forward"] as Vector3), Vector3.ONE * 0.01,
+			"stored nose along the arm")
+	assert_almost_eq(main.ship.global_basis * Vector3.UP, drum_basis * (bay["up"] as Vector3), Vector3.ONE * 0.01,
+			"its top toward the drum's axis")
 	# Carried with the drum: a second later still on its rack, which has moved some 36 m with the turn.
 	var before: Vector3 = main.ship.global_position
 	await _ticks(60)
@@ -101,7 +111,10 @@ func test_the_scenario_starts_the_player_on_its_rack_with_the_wingmen_beside() -
 	assert_almost_eq(main.ship.global_position, rack_now, Vector3.ONE * 0.05, "still on the rack")
 	assert_gt(main.ship.global_position.distance_to(before), 25.0, "which turned with the drum")
 	assert_almost_eq(main.ship.linear_velocity.length(), station.spin.rate_rad_s * 227.5, 0.5, "at the drum's speed there")
-	assert_eq(shots_seen[0], "launch_hall", "the launch camera opens in the hall")
+	var cut: Array = main.launches.launches[0]["cut"]
+	assert_eq(cut[0]["phase"], "rack", "the cut opens on the rack")
+	assert_eq(shots_seen[0], String(cut[0]["variant"]), "the launch camera opens with the cut's rack shot")
+
 	assert_eq(DebugConsole.registry.execute("get launch.player")[0].lines[0], "launch.player = true")
 
 
@@ -119,6 +132,9 @@ func test_the_player_is_handed_over_with_the_bays_velocity() -> void:
 	var expected: Dictionary = _expected_release("cobra_bay_alpha_3")
 	assert_almost_eq(drum["point"], expected["point"], Vector3.ONE * 0.01, "at the release point")
 	assert_almost_eq(drum["velocity"], expected["velocity"], Vector3.ONE * 0.01, "moving with the drum plus the rail's speed")
+	var turn := Basis(Vector3.BACK, float(handoff["drum_angle"]))
+	assert_almost_eq((handoff["transform"] as Transform3D).basis * Vector3.FORWARD,
+			station.global_basis * turn * (expected["nose"] as Vector3), Vector3.ONE * 0.01, "nose first, out of the drum")
 	assert_false(main.launches.locks_controls(), "the controls come back at the hand-off")
 	assert_ne(main.ship.collision_layer, 0, "it collides again")
 	assert_false(main.ship.custom_integrator, "and thrust moves it again")
@@ -126,14 +142,42 @@ func test_the_player_is_handed_over_with_the_bays_velocity() -> void:
 	var at: Vector3 = (handoff["transform"] as Transform3D).origin
 	assert_almost_eq(main.ship.global_position, at + (handoff["velocity"] as Vector3) * DT, Vector3.ONE * 0.05,
 			"flies on from the release point")
-	await _ticks(240)
-	for shot: String in ["launch_hall", "launch_drop", "launch_chase"]:
-		assert_true(shots_seen.has(shot), "the launch camera played %s (%s)" % [shot, shots_seen])
+	# Its engines light as it clears: a second later it is moving faster along its nose than it was let go.
+	var nose: Vector3 = (handoff["transform"] as Transform3D).basis * Vector3.FORWARD
+	await _ticks(60)
+	assert_gt((main.ship.linear_velocity - (handoff["velocity"] as Vector3)).dot(nose), 5.0, "under thrust, nose first")
+	await _ticks(320)
+	var played := PackedStringArray()
+	var log: Array[Dictionary] = main.launches.sequencer.log
+	for k: int in log.size():
+		played.append(String(main.launches._launch_shot["cut"][log[k]["index"]]["variant"]))
+		if k > 0:
+			assert_gte(float(log[k]["start"]) - float(log[k - 1]["start"]), main.launches.profile.min_shot_s - 1e-6,
+					"each shot held at least a second")
+	assert_eq(shots_seen, played, "the launch camera played its cut as the sequencer called it")
+	assert_true(played.size() >= 4, "rack, turn, drop and chase at least (%s)" % played)
 	assert_false(main.camera_rig.is_playing_shot(), "and gave the view back")
 	assert_null(main.launches.fill, "the fill went out with its shot")
 	assert_false(rig.has_emitter(drop_fill), "and left the light rig")
 	var door: Vector3 = _on_drum(station.hardpoints.bay("cobra_bay_alpha_3")["door"])
 	assert_gt(main.ship.global_position.distance_to(door), 30.0, "it has left the bay")
+
+
+func test_a_starfury_fits_the_real_arm_nose_first() -> void:
+	await _start()
+	var manifest: Dictionary = MeshAssets.read_manifest("starfury_aurora")
+	var lo: Array = manifest["aabb_min"]
+	var hi: Array = manifest["aabb_max"]
+	var box := AABB(Vector3(lo[0], lo[1], lo[2]), Vector3(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]))
+	var fit: Dictionary = LaunchSequence.clearances(box, station.hardpoints.cobra_arm, main.launches.profile)
+	gut.p("clearances: %s" % fit)
+	for key: String in fit:
+		assert_gt(float(fit[key]), 1.0, "%s: %.2f m to spare" % [key, fit[key]])
+	var seq: LaunchSequence = main.launches.launches[0]["seq"]
+	for bay: Dictionary in seq.bays:
+		assert_almost_eq(seq.stored_pose_offset_deg(bay), 0.0, 0.5, "%s: the station's rack pose is the stored pose" % bay["name"])
+		var leaf: float = LaunchSequence.leaf_clearance(box, bay, main.launches.profile.door_open_deg, main.launches.profile)
+		assert_gt(leaf, 1.0, "%s: its open leaves stand %.2f m clear of the wings" % [bay["name"], leaf])
 
 
 func test_skipping_lands_in_the_same_state() -> void:
@@ -173,7 +217,8 @@ func test_the_wingmen_launch_from_the_next_doors_in_the_wave_order() -> void:
 	assert_eq(released, [main.combatant.display_name, "ALPHA 2", "ALPHA 3", "ALPHA 4"] as Array[String],
 			"the player first, then the wing in order")
 	for k: int in range(1, 4):
-		assert_gte(times[k] - times[k - 1], main.launches.profile.stagger_s - 1e-6, "a stagger apart")
+		assert_between(times[k] - times[k - 1], main.launches.profile.stagger_min_s - DT, main.launches.profile.stagger_max_s + DT,
+				"the doors ripple a quarter to half a second apart")
 	var wingman: Ship = _ship("ALPHA 4").ship
 	assert_ne(wingman.collision_layer, 0, "the last wingman flies free")
 	assert_gt(wingman.global_position.distance_to(_on_drum(station.hardpoints.bay("cobra_bay_alpha_6")["rail_start"])), 15.0,
@@ -182,7 +227,7 @@ func test_the_wingmen_launch_from_the_next_doors_in_the_wave_order() -> void:
 
 func test_a_rebase_mid_launch_moves_nothing_on_screen() -> void:
 	await _start()
-	await _ticks(200)  # on the rail
+	await _ticks(150)  # nose first on the rail (the ejection runs 2.3 s to 3.05 s)
 	var seq: LaunchSequence = main.launches.launches[0]["seq"]
 	assert_eq(seq.fighter(main.combatant.display_name)["phase"], LaunchSequence.Phase.DROPPING, "dropping down the rail")
 	var offset := Vector3(4000.0, -1500.0, 2500.0)
@@ -207,32 +252,40 @@ func test_a_launch_due_under_the_spine_holds_until_clear() -> void:
 	await _start()
 	DebugConsole.registry.execute("launch skip")
 	await _ticks(2)
-	# The wing whose arm will be under the spine when its drop is due (one always is: the sector and a drop's sweep span 92 deg).
-	var rate_deg: float = rad_to_deg(station.spin.rate_rad_s)
-	var due_s: float = main.launches.profile.door_open_s + 2.0 * DT
-	var pick: String = ""
-	for arm: Variant in station.hardpoints.cobra_arm["arms"]:
-		var at_due: float = float(arm["angle_deg"]) + rad_to_deg(station.drum_angle) + rate_deg * due_s
-		var blocked: bool = false
-		for s: int in 52:
-			blocked = blocked or station.hardpoints.launch_blocked(at_due + rate_deg * main.launches.profile.drop_s * s / 51.0)
-		if blocked and String(arm["wing"]) != "alpha":
-			pick = String(arm["wing"])
-	if pick.is_empty():
-		pass_test("alpha's arm is the blocked one now; the pure tests cover the hold")
-		return
+	# Wait for a wing (not Alpha's, still launching its wingmen) whose arm will be under the spine when its drop is due.
+	assert_true(await _until(func() -> bool: return not _blocked_wing().is_empty(), 900), "an arm comes under the spine within a turn")
+	var pick: String = _blocked_wing()
 	gut.p("held launch from wing %s" % pick)
 	var result: ConsoleResult = DebugConsole.registry.execute("launch %s 2" % pick)[0]
 	assert_true(result.ok, "\n".join(result.lines))
 	var seq: LaunchSequence = main.launches.player_launch()["seq"]
 	assert_true(await _until(func() -> bool: return seq.fighter(main.combatant.display_name)["phase"] == LaunchSequence.Phase.HELD, 300),
 			"held on the rack")
-	assert_true(shots_seen.has("launch_hold"), "the camera watches the arm wait")
+	var hold_ids := PackedStringArray()
+	for variant: Dictionary in main.launches.profile.phase("hold")["variants"]:
+		hold_ids.append(String(variant["id"]))
+	assert_true(Array(shots_seen).any(func(id: String) -> bool: return hold_ids.has(id)), "the camera watches it wait (%s)" % shots_seen)
+	await _ticks(30)
+	_assert_cold(main.combatant, "held under the spine")
 	assert_ne(DebugConsole.registry.execute("get launch.held")[0].lines[0], "launch.held = none")
 	main.launches.last_handoff = {}
 	assert_true(await _until(func() -> bool: return not main.launches.last_handoff.is_empty(), 1500), "let go once clear")
 	assert_false(station.hardpoints.launch_blocked(seq.arm_angle_now()), "not inside the blocked sector")
 	assert_gt(float(seq.fighter(main.combatant.display_name)["held_s"]), 0.0)
+
+
+# The wing (not Alpha) whose arm will be well inside a blocked sector when a drop asked for now is due, or "".
+func _blocked_wing() -> String:
+	var rate_deg: float = rad_to_deg(station.spin.rate_rad_s)
+	var due_s: float = main.launches.profile.lead_s() + 2.0 * DT
+	for arm: Variant in station.hardpoints.cobra_arm["arms"]:
+		var at_due: float = float(arm["angle_deg"]) + rad_to_deg(station.drum_angle) + rate_deg * due_s
+		var blocked: bool = true
+		for margin: float in [-2.0, 0.0, 2.0]:
+			blocked = blocked and station.hardpoints.launch_blocked(at_due + margin)
+		if blocked and String(arm["wing"]) != "alpha":
+			return String(arm["wing"])
+	return ""
 
 
 func test_launch_wing_sends_twelve_starfuries_in_two_waves() -> void:
@@ -279,3 +332,74 @@ func test_mission_api_launch_from_starts_the_players_launch() -> void:
 		assert_eq(main.launches.last_handoff["bay"], "cobra_bay_zeta_2", "a skip hands the player over")
 	api.release()
 	stage.teardown()
+
+
+func test_each_launch_draws_a_cut_and_a_pinned_seed_repeats_it() -> void:
+	await _start()
+	assert_string_contains(main.launches._cut_text(), "rack ")
+	DebugConsole.registry.execute("launch skip")
+	await _ticks(3)
+	var cuts := PackedStringArray()
+	for wing: String in ["zeta", "beta", "delta"]:
+		assert_eq(main.launches.launch_player(wing, 2, false), "", "launch from %s 2" % wing)
+		cuts.append(main.launches._cut_text().split(": ")[1])
+		DebugConsole.registry.execute("launch skip")
+		assert_true(await _until(func() -> bool: return not main.launches.locks_controls(), 900))
+	assert_eq(main.launches.launch_count, 4, "four player launches this run")
+	assert_ne(cuts[0], cuts[1], "the next launch draws another cut")
+	DebugConsole.registry.execute("launch seed 4242")
+	var fresh := LaunchCut.new(main.launches.profile)
+	var expected: String = ", ".join(fresh.pick(4242).map(func(e: Dictionary) -> String: return "%s %s" % [e["phase"], e["variant"]]))
+	var seeded := LaunchCut.new(main.launches.profile)
+	main.launches.cut = seeded  # fresh bags, as a new scenario run has
+	assert_true(await _until(func() -> bool: return main.launches.launches.all(
+			func(l: Dictionary) -> bool: return l["wing"] != "alpha"), 1800), "Alpha's launch is over")
+	assert_eq(main.launches.launch_player("alpha", 4, false), "")
+	assert_string_contains(main.launches._cut_text(), "seed 4242")
+	assert_eq(main.launches._cut_text().split(": ")[1], expected, "a pinned seed with fresh bags gives the seed's cut")
+	assert_eq(DebugConsole.registry.execute("get launch.launches")[0].lines[0], "launch.launches = 5")
+
+
+# No plume, RCS puff or engine level: what the flight output (read by the plumes and the engine voices) and the plumes show.
+func _assert_cold(c: Combatant, when: String) -> void:
+	var out: FlightOutput = c.ship.get_flight_output()
+	assert_true(c.ship.clamped, "%s: in the clamp (%s)" % [c.display_name, when])
+	for level: float in out.main_levels:
+		assert_eq(level, 0.0, "%s: no main pod %s" % [c.display_name, when])
+	for level: float in out.retro_levels:
+		assert_eq(level, 0.0, "%s: no retro %s" % [c.display_name, when])
+	assert_eq(out.rcs_force_b, Vector3.ZERO, "%s: no RCS thrust %s" % [c.display_name, when])
+	assert_eq(out.rcs_torque_b, Vector3.ZERO, "%s: no RCS turn %s" % [c.display_name, when])
+	if c.thrusters != null:
+		for i: int in c.thrusters.glow_count():
+			assert_almost_eq(c.thrusters.glow_level(i), 0.0, 1e-3, "%s: plume %d dark %s" % [c.display_name, i, when])
+
+
+func test_thrusters_stay_cold_in_the_clamp_and_fire_at_the_ejection() -> void:
+	await _start()
+	var seq: LaunchSequence = main.launches.launches[0]["seq"]
+	var me: String = main.combatant.display_name
+	await _ticks(60)
+	_assert_cold(main.combatant, "stored on the rack")
+	assert_true(await _until(func() -> bool: return seq.fighter(me)["phase"] == LaunchSequence.Phase.ROTATING, 200), "the clamp turns it")
+	for i: int in 4:
+		await _ticks(15)
+		assert_eq(seq.fighter(me)["phase"], LaunchSequence.Phase.ROTATING)
+		_assert_cold(main.combatant, "while the clamp turns it")
+		_assert_cold(_ship("ALPHA 2"), "on the next rack")
+	assert_true(await _until(func() -> bool: return not main.launches.last_handoff.is_empty(), 200), "ejected")
+	await _ticks(5)
+	assert_false(main.ship.clamped, "out of the clamp at the ejection")
+	var out: FlightOutput = main.ship.get_flight_output()
+	var lit: float = 0.0
+	for level: float in out.main_levels:
+		lit = maxf(lit, level)
+	assert_gt(lit, 0.5, "its main pods fire as it clears the arm")
+	await _ticks(10)
+	var glowing: float = 0.0
+	for i: int in main.combatant.thrusters.glow_count():
+		glowing = maxf(glowing, main.combatant.thrusters.glow_level(i))
+	assert_gt(glowing, 0.1, "and their plumes show")
+	assert_true(await _until(func() -> bool: return seq.fighter("ALPHA 2")["phase"] == LaunchSequence.Phase.RELEASED, 120))
+	await _ticks(2)
+	assert_false(_ship("ALPHA 2").ship.clamped, "a wingman leaves the clamp at its ejection too")

@@ -1,315 +1,1393 @@
 {
- "about": "A Cobra-bay launch (M7-T08, D76): timings of the steps and the launch camera's shots. Shots use the actors 'bay' (the launching door: x across the arm, y out of the drum, z aft) and 'fighter' (the player's ship: -z its nose, +y its top, which faces the drum's axis on the rack). Each shot plays when the player's fighter has been in its step for at_s seconds. A key's 'up' keeps the picture upright against the arm, so every arm's launch looks alike; a shot's 'fill' is a light lit through the LightPicker for the shot's length only.",
- "door_open_s": 3.0,
+ "about": "A Cobra-bay launch (M7-T08, D76), after the maintainer's show GIFs: Starfuries are stored on the rack at 90 degrees to the launch, the clamp turns them nose-out while their door's leaves swing open, and they are ejected nose first, quickly (0.75 s from the rack past the door, 61 m/s at the release), a wave's doors firing in turn along the arm 0.25 to 0.5 s apart (a seeded draw per launch). Poses are in the door's frame (x across the arm, y out of the drum, z aft): forward is the nose, up the top. The camera comes in phases, each a pool of shot variants; every launch draws one variant a phase from a seeded shuffle bag (LaunchCut), and an optional phase is left out with its 'optional' chance. A phase plays once the player's fighter has been 'at_s' seconds in its step (door, rotate, hold, drop, release). Shots use the actors 'bay' (the launching door, same frame) and 'fighter' (the player's ship: -z its nose, +y its top). A key's 'up' keeps the picture upright against the arm (inside the hall toward the drum's axis, outside away from it); a variant's 'fill' is a light lit through the LightPicker for the shot's length only. 'gif' names the show frame a variant came from (references/, gitignored), when one did.",
+ "door_open_s": 2.0,
  "door_open_deg": 95.0,
  "door_close_s": 3.0,
  "door_close_after_s": 2.0,
- "drop_s": 3.0,
- "stagger_s": 1.5,
+ "drop_s": 0.75,
  "wave_gap_s": 10.0,
  "row_move_s": 6.0,
- "shots": [
+ "rotate_after_s": 0.8,
+ "rotate_s": 1.4,
+ "release_extra_m": 6.0,
+ "burn_s": 3.0,
+ "burn_throttle": 1.0,
+ "stored_pose": {
+  "forward": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "up": [
+   0.0,
+   -1.0,
+   0.0
+  ]
+ },
+ "launch_pose": {
+  "forward": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "up": [
+   0.0,
+   0.0,
+   -1.0
+  ]
+ },
+ "phases": [
   {
-   "id": "launch_hall",
+   "phase": "rack",
    "step": "door",
    "at_s": 0.0,
-   "keys": [
+   "optional": 0.0,
+   "variants": [
     {
-     "t": 0.0,
-     "position": {
+     "id": "rack_pilot",
+     "weight": 2.0,
+     "keys": [
+      {
+       "t": 0,
+       "position": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0.8,
+         -12.5
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0.6,
+         -2.6
+        ]
+       },
+       "fov": 48,
+       "up": {
+        "actor": "fighter",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 2.3,
+       "position": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0.7,
+         -10.5
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0.6,
+         -2.6
+        ]
+       },
+       "fov": 44,
+       "up": {
+        "actor": "fighter",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      }
+     ],
+     "fill": {
+      "actor": "fighter",
+      "offset": [
+       0,
+       2.5,
+       -8
+      ],
+      "energy": 2.5,
+      "range_m": 16,
+      "color": "#FF5A40"
+     },
+     "gif": "single 0.0 s: through the canopy at the pilot"
+    },
+    {
+     "id": "rack_clamp",
+     "weight": 2.0,
+     "keys": [
+      {
+       "t": 0,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         15,
+         -4,
+         9
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         -10,
+         0
+        ]
+       },
+       "fov": 60,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         -1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 2.3,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         14,
+         -4.5,
+         7
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         -10,
+         0
+        ]
+       },
+       "fov": 56,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         -1.0,
+         0.0
+        ]
+       }
+      }
+     ],
+     "fill": {
       "actor": "bay",
       "offset": [
-       13.0,
-       -15.5,
-       11.0
-      ]
+       8,
+       -15,
+       4
+      ],
+      "energy": 3,
+      "range_m": 22,
+      "color": "#9A6BFF"
      },
-     "look_at": {
+     "gif": "single 0.9 s, multiple 4.0 s: on its clamp among the machinery"
+    },
+    {
+     "id": "rack_hall",
+     "weight": 1.0,
+     "keys": [
+      {
+       "t": 0,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         13,
+         -15.5,
+         14
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         0
+        ]
+       },
+       "fov": 62,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         -1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 2.3,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         12,
+         -14.5,
+         11
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         0
+        ]
+       },
+       "fov": 58,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         -1.0,
+         0.0
+        ]
+       }
+      }
+     ],
+     "fill": {
       "actor": "bay",
       "offset": [
-       0.0,
-       -3.0,
-       0.0
-      ]
-     },
-     "fov": 62,
-     "up": {
-      "actor": "bay",
-      "direction": [
-       0.0,
-       1.0,
-       0.0
-      ]
+       6,
+       -13,
+       8
+      ],
+      "energy": 3,
+      "range_m": 22,
+      "color": "#FF5A40"
      }
     },
     {
-     "t": 3.5,
-     "position": {
+     "id": "rack_wingman",
+     "weight": 1.0,
+     "keys": [
+      {
+       "t": 0,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         9,
+         -14,
+         19
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         0
+        ]
+       },
+       "fov": 55,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         -1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 2.3,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         8,
+         -14,
+         17
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         0
+        ]
+       },
+       "fov": 52,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         -1.0,
+         0.0
+        ]
+       }
+      }
+     ],
+     "fill": {
       "actor": "bay",
       "offset": [
-       12.0,
-       -14.5,
-       8.5
-      ]
-     },
-     "look_at": {
-      "actor": "bay",
-      "offset": [
-       0.0,
-       -1.0,
-       0.0
-      ]
-     },
-     "fov": 58,
-     "up": {
-      "actor": "bay",
-      "direction": [
-       0.0,
-       1.0,
-       0.0
-      ]
+       4,
+       -12,
+       10
+      ],
+      "energy": 3,
+      "range_m": 22,
+      "color": "#9A6BFF"
      }
     }
    ]
   },
   {
-   "id": "launch_hold",
+   "phase": "rotate",
+   "step": "rotate",
+   "at_s": 0.0,
+   "optional": 0.0,
+   "variants": [
+    {
+     "id": "turn_close",
+     "weight": 2.0,
+     "keys": [
+      {
+       "t": 0,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         14,
+         -10,
+         14
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         0
+        ]
+       },
+       "fov": 55,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         -1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 1.8,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         13,
+         -11,
+         12
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         0
+        ]
+       },
+       "fov": 52,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         -1.0,
+         0.0
+        ]
+       }
+      }
+     ],
+     "fill": {
+      "actor": "bay",
+      "offset": [
+       6,
+       -13,
+       -5
+      ],
+      "energy": 3,
+      "range_m": 20,
+      "color": "#FF4A38"
+     },
+     "gif": "single 1.8 s: the turn in the clamp, close"
+    },
+    {
+     "id": "turn_side",
+     "weight": 2.0,
+     "keys": [
+      {
+       "t": 0,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         17,
+         -11,
+         0
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         -9,
+         0
+        ]
+       },
+       "fov": 62,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         -1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 1.8,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         17,
+         -10,
+         -2
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         -9,
+         0
+        ]
+       },
+       "fov": 60,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         -1.0,
+         0.0
+        ]
+       }
+      }
+     ],
+     "fill": {
+      "actor": "bay",
+      "offset": [
+       10,
+       -13,
+       0
+      ],
+      "energy": 3,
+      "range_m": 22,
+      "color": "#9A6BFF"
+     },
+     "gif": "multiple 5.5 s: turned, wings spread"
+    }
+   ]
+  },
+  {
+   "phase": "hold",
    "step": "hold",
    "at_s": 0.0,
-   "keys": [
+   "optional": 0.0,
+   "variants": [
     {
-     "t": 0.0,
-     "position": {
+     "id": "hold_arm",
+     "weight": 1.0,
+     "keys": [
+      {
+       "t": 0,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -3,
+         24,
+         -9
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         0
+        ]
+       },
+       "fov": 55,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         0.0,
+         -1.0
+        ]
+       }
+      },
+      {
+       "t": 60,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -4,
+         30,
+         -12
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         0
+        ]
+       },
+       "fov": 55,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         0.0,
+         -1.0
+        ]
+       }
+      }
+     ],
+     "fill": {
       "actor": "bay",
       "offset": [
-       70.0,
-       45.0,
-       -60.0
-      ]
-     },
-     "look_at": {
-      "actor": "bay",
-      "offset": [
-       0.0,
-       30.0,
-       0.0
-      ]
-     },
-     "fov": 60,
-     "up": {
-      "actor": "bay",
-      "direction": [
-       0.0,
-       1.0,
-       0.0
-      ]
+       0,
+       6,
+       -3
+      ],
+      "energy": 3.0,
+      "range_m": 25.0,
+      "color": "#FFF2E0"
      }
     },
     {
-     "t": 60.0,
-     "position": {
+     "id": "hold_inside",
+     "weight": 1.0,
+     "keys": [
+      {
+       "t": 0,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         14,
+         -14,
+         16
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         0
+        ]
+       },
+       "fov": 58,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         -1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 60,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         16,
+         -14,
+         18
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         0
+        ]
+       },
+       "fov": 58,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         -1.0,
+         0.0
+        ]
+       }
+      }
+     ],
+     "fill": {
       "actor": "bay",
       "offset": [
-       80.0,
-       55.0,
-       -70.0
-      ]
-     },
-     "look_at": {
-      "actor": "bay",
-      "offset": [
-       0.0,
-       30.0,
-       0.0
-      ]
-     },
-     "fov": 60,
-     "up": {
-      "actor": "bay",
-      "direction": [
-       0.0,
-       1.0,
-       0.0
-      ]
+       5,
+       -12,
+       6
+      ],
+      "energy": 3,
+      "range_m": 20,
+      "color": "#FF5A40"
      }
     }
    ]
   },
   {
-   "id": "launch_drop",
+   "phase": "drop",
    "step": "drop",
    "at_s": 0.0,
-   "fill": {
-    "actor": "bay",
-    "offset": [
-     0.0,
-     6.0,
-     -4.0
-    ],
-    "energy": 4.0,
-    "range_m": 32.0,
-    "color": "#FFF2E0"
-   },
-   "keys": [
+   "optional": 0.0,
+   "variants": [
     {
-     "t": 0.0,
-     "position": {
+     "id": "drop_down",
+     "weight": 2.0,
+     "keys": [
+      {
+       "t": 0,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         4,
+         -17,
+         5
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         12,
+         0
+        ]
+       },
+       "fov": 60,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         0.0,
+         -1.0
+        ]
+       }
+      },
+      {
+       "t": 2.2,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         4,
+         -17,
+         5
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         16,
+         0
+        ]
+       },
+       "fov": 60,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         0.0,
+         -1.0
+        ]
+       }
+      }
+     ],
+     "fill": {
       "actor": "bay",
       "offset": [
-       3.0,
-       13.0,
-       -11.0
-      ]
+       0,
+       -4,
+       3
+      ],
+      "energy": 3,
+      "range_m": 22,
+      "color": "#FFF2E0"
      },
-     "look_at": {
-      "actor": "fighter",
-      "offset": [
-       0.0,
-       0.0,
-       0.0
-      ]
-     },
-     "fov": 58,
-     "up": {
+     "gif": "single 2.7 s: the open door, the fighter in it"
+    },
+    {
+     "id": "drop_doors",
+     "weight": 2.0,
+     "keys": [
+      {
+       "t": 0,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -22,
+         16,
+         -38
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         3,
+         30
+        ]
+       },
+       "fov": 58,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 2.2,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -21,
+         16,
+         -35
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         4,
+         30
+        ]
+       },
+       "fov": 58,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      }
+     ],
+     "gif": "multiple 1.0 s and 8.5 s: the row of doors opening",
+     "row": true,
+     "subject": "row"
+    },
+    {
+     "id": "drop_low_pass",
+     "weight": 1.0,
+     "keys": [
+      {
+       "t": 0,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -14,
+         9,
+         -45
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         4,
+         40
+        ]
+       },
+       "fov": 60,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 2.2,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -12,
+         10,
+         -22
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         5,
+         40
+        ]
+       },
+       "fov": 60,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      }
+     ],
+     "fill": {
       "actor": "bay",
-      "direction": [
-       0.0,
-       1.0,
-       0.0
-      ]
+      "offset": [
+       0,
+       8,
+       -4
+      ],
+      "energy": 3,
+      "range_m": 25,
+      "color": "#FFF2E0"
+     },
+     "row": true,
+     "subject": "row"
+    },
+    {
+     "id": "drop_wingman_rack",
+     "weight": 1.0,
+     "keys": [
+      {
+       "t": 0,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         10,
+         -14,
+         12
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         0
+        ]
+       },
+       "fov": 56,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         -1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 2.2,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         9,
+         -14,
+         11
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         0
+        ]
+       },
+       "fov": 60,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         -1.0,
+         0.0
+        ]
+       }
+      }
+     ],
+     "fill": {
+      "actor": "bay",
+      "offset": [
+       0,
+       -4,
+       6
+      ],
+      "energy": 3,
+      "range_m": 22,
+      "color": "#FFF2E0"
      }
     },
     {
-     "t": 2.0,
-     "position": {
+     "id": "drop_row",
+     "weight": 1.0,
+     "gif": "multiple 8.5 s and 10 s: the open doors, fighters out in turn",
+     "keys": [
+      {
+       "t": 0,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -42,
+         20,
+         -30
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         10,
+         30
+        ]
+       },
+       "fov": 62,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 2.2,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -44,
+         21,
+         -32
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         12,
+         30
+        ]
+       },
+       "fov": 62,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      }
+     ],
+     "row": true,
+     "subject": "row"
+    }
+   ]
+  },
+  {
+   "phase": "exit",
+   "step": "release",
+   "at_s": 0.0,
+   "optional": 0.35,
+   "variants": [
+    {
+     "id": "exit_past",
+     "weight": 2.0,
+     "keys": [
+      {
+       "t": 0,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         12,
+         24,
+         -6
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         0
+        ]
+       },
+       "fov": 58,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         0.0,
+         -1.0
+        ]
+       }
+      },
+      {
+       "t": 1.5,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         12,
+         24,
+         -6
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         0
+        ]
+       },
+       "fov": 62,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         0.0,
+         -1.0
+        ]
+       }
+      }
+     ],
+     "fill": {
       "actor": "bay",
       "offset": [
-       3.5,
-       12.0,
-       -13.0
-      ]
+       0,
+       8,
+       -3
+      ],
+      "energy": 3,
+      "range_m": 25,
+      "color": "#FFF2E0"
      },
-     "look_at": {
-      "actor": "fighter",
-      "offset": [
-       0.0,
-       0.0,
-       0.0
-      ]
-     },
-     "fov": 55,
-     "up": {
-      "actor": "bay",
-      "direction": [
-       0.0,
-       1.0,
-       0.0
-      ]
-     }
+     "gif": "single 3.3 s: coming out past the camera"
     },
     {
-     "t": 3.6,
-     "position": {
-      "actor": "bay",
-      "offset": [
-       6.0,
-       16.0,
-       -19.0
-      ]
-     },
-     "look_at": {
+     "id": "exit_side",
+     "weight": 1.0,
+     "keys": [
+      {
+       "t": 0,
+       "position": {
+        "actor": "fighter",
+        "offset": [
+         -14,
+         0,
+         6
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         -4
+        ]
+       },
+       "fov": 58,
+       "up": {
+        "actor": "fighter",
+        "direction": [
+         0.0,
+         0.0,
+         -1.0
+        ]
+       }
+      },
+      {
+       "t": 1.5,
+       "position": {
+        "actor": "fighter",
+        "offset": [
+         -18,
+         -2,
+         12
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         -6
+        ]
+       },
+       "fov": 62,
+       "up": {
+        "actor": "fighter",
+        "direction": [
+         0.0,
+         0.0,
+         -1.0
+        ]
+       }
+      }
+     ],
+     "fill": {
       "actor": "fighter",
       "offset": [
-       0.0,
-       0.0,
-       0.0
-      ]
-     },
-     "fov": 55,
-     "up": {
-      "actor": "bay",
-      "direction": [
-       0.0,
-       1.0,
-       0.0
-      ]
+       -6,
+       0,
+       2
+      ],
+      "energy": 2.0,
+      "range_m": 20.0,
+      "color": "#FFF2E0"
      }
     }
    ]
   },
   {
-   "id": "launch_chase",
+   "phase": "chase",
    "step": "release",
-   "at_s": 0.25,
-   "fill": {
-    "actor": "fighter",
-    "offset": [
-     0.0,
-     -7.0,
-     10.0
-    ],
-    "energy": 2.0,
-    "range_m": 24.0,
-    "color": "#FFF2E0"
-   },
-   "keys": [
+   "at_s": 1.2,
+   "optional": 0.0,
+   "variants": [
     {
-     "t": 0.0,
-     "position": {
+     "id": "chase_behind",
+     "weight": 2.0,
+     "keys": [
+      {
+       "t": 0,
+       "position": {
+        "actor": "fighter",
+        "offset": [
+         2,
+         -12,
+         10
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         -8
+        ]
+       },
+       "fov": 64,
+       "up": {
+        "actor": "fighter",
+        "direction": [
+         0.0,
+         0.0,
+         -1.0
+        ]
+       }
+      },
+      {
+       "t": 4.5,
+       "position": {
+        "actor": "fighter",
+        "offset": [
+         4,
+         -18,
+         18
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         -10
+        ]
+       },
+       "fov": 68,
+       "up": {
+        "actor": "fighter",
+        "direction": [
+         0.0,
+         0.0,
+         -1.0
+        ]
+       }
+      }
+     ],
+     "fill": {
       "actor": "fighter",
       "offset": [
-       0.0,
-       -10.0,
-       16.0
-      ]
+       0,
+       -5,
+       6
+      ],
+      "energy": 2,
+      "range_m": 24,
+      "color": "#FFF2E0"
      },
-     "look_at": {
-      "actor": "fighter",
-      "offset": [
-       0.0,
-       3.0,
-       -6.0
-      ]
-     },
-     "fov": 62,
-     "up": {
-      "actor": "fighter",
-      "direction": [
-       0.0,
-       -1.0,
-       0.0
-      ]
-     }
+     "gif": "single 4.5 s, multiple 11 s: from behind and below, engines lit"
     },
     {
-     "t": 3.0,
-     "position": {
+     "id": "chase_drum",
+     "weight": 1.0,
+     "keys": [
+      {
+       "t": 0,
+       "position": {
+        "actor": "fighter",
+        "offset": [
+         -4,
+         -7,
+         -18
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         6
+        ]
+       },
+       "fov": 60,
+       "up": {
+        "actor": "fighter",
+        "direction": [
+         0.0,
+         0.0,
+         -1.0
+        ]
+       }
+      },
+      {
+       "t": 4.5,
+       "position": {
+        "actor": "fighter",
+        "offset": [
+         -6,
+         -10,
+         -26
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         8
+        ]
+       },
+       "fov": 62,
+       "up": {
+        "actor": "fighter",
+        "direction": [
+         0.0,
+         0.0,
+         -1.0
+        ]
+       }
+      }
+     ],
+     "fill": {
       "actor": "fighter",
       "offset": [
-       2.0,
-       -15.0,
-       28.0
-      ]
+       0,
+       -4,
+       -8
+      ],
+      "energy": 2,
+      "range_m": 24,
+      "color": "#FFF2E0"
      },
-     "look_at": {
-      "actor": "fighter",
-      "offset": [
-       0.0,
-       4.0,
-       -10.0
-      ]
-     },
-     "fov": 66,
-     "up": {
-      "actor": "fighter",
-      "direction": [
-       0.0,
-       -1.0,
-       0.0
-      ]
-     }
+     "gif": "multiple 12 s: the station behind the fighter"
+    },
+    {
+     "id": "chase_wingman",
+     "weight": 1.0,
+     "keys": [
+      {
+       "t": 0,
+       "position": {
+        "actor": "fighter",
+        "offset": [
+         10,
+         -3,
+         14
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         -10
+        ]
+       },
+       "fov": 62,
+       "up": {
+        "actor": "fighter",
+        "direction": [
+         0.0,
+         0.0,
+         -1.0
+        ]
+       }
+      },
+      {
+       "t": 4.5,
+       "position": {
+        "actor": "fighter",
+        "offset": [
+         12,
+         -5,
+         20
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         -12
+        ]
+       },
+       "fov": 66,
+       "up": {
+        "actor": "fighter",
+        "direction": [
+         0.0,
+         0.0,
+         -1.0
+        ]
+       }
+      }
+     ]
     }
    ]
   }
- ]
+ ],
+ "stagger_min_s": 0.25,
+ "stagger_max_s": 0.5,
+ "min_shot_s": 1.0,
+ "row_ejections": 3,
+ "row_max_s": 4.0,
+ "row_wave_min": 3,
+ "eject_after_open_s": 0.3
 }

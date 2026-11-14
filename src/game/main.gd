@@ -292,6 +292,8 @@ func _physics_process(delta: float) -> void:
 	if pc.ui.request_jump:
 		gates.start_jump()
 	var autopilot: FlightCommand = gates.step_player(delta) if not get_tree().paused else null
+	if autopilot == null and not get_tree().paused:
+		autopilot = launches.step_player(delta)  # a launched fighter's engines light as it clears the arm (M7-T08)
 	if autopilot != null:
 		pc.flight = autopilot
 	if debug_throttle > 0.0:

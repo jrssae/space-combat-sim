@@ -672,6 +672,31 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     fighter, the arm and the drum turning behind it. **Per-arm roll:** `CinematicShot` keys take an `up` (`{actor, direction}`), and
     every launch shot is upright against the arm (Beta's frames 7 and 8 match Alpha's). Skip under the spine, the release roll and the
     respawn in the bay stay as built (maintainer).
+  - **Changes (maintainer, from the show's launch GIFs and watching it live):** Starfuries are stored at 90 degrees and launch front
+    first: the clamp turns each nose-out (1.5 s, 2 s after its slot), then it is ejected nose first, 23 m in 0.75 s, let go at 61 m/s
+    6 m past the station's release point (tail clear of the arm). The doors fire in a seeded 0.25 to 0.5 s ripple along the arm (named
+    door, then aft, then forward); a held fighter no longer holds back the others. Thrusters only on the ejection: a carried ship is
+    `Ship.clamped` (idle flight output: no plume, puff or engine sound), and the player's pods burn 3 s from the release. The camera
+    is phases with pools (5 rack, 3 rotate, 2 hold, 5 drop, 3 exit (optional), 4 chase; 10 from the GIFs), one variant a phase per
+    launch from seeded shuffle bags (`LaunchCut`). The station's rack pose is the stored pose (no offset needed; T20's hangar can
+    match it). Clearances on the arm as built: 2.3 / 3.2 m through the door, the turn 1.9 m under the hall's ceiling. Console
+    `launch cut`, `launch seed`, `launch preview`. Tests: `test_launch_sequence.gd` (21), `test_launch_cut.gd` (6, new),
+    `test_launch_bay.gd` (11), `test_cinematic_shot.gd` (17). Sheets (H): `M7-T08_launch_pools_sheet.png` (every variant beside its
+    GIF frame) and `M7-T08_launch_ripple_sheet.png` (a wave rippling out of the door row beside the multiple GIF).
+  - **Holds (maintainer, watching live):** at least 1 s a shot (`min_shot_s`, refused below 1.0, `LaunchShotSequencer`); a wave of 3 or
+    more films its drop with a row shot held over three ejections (up to 4 s) and no exit shot. Dropped: `rack_floor` (cut off, too
+    close), `turn_low` (cut off, too close), `exit_wide` (fighter a speck, looking at nothing), `chase_wide` (same). Changed:
+    `turn_close` and `hold_inside` pulled back (cut off), `exit_side` keyed on the fighter (it had shot out of frame), `drop_doors`,
+    `drop_row`, `drop_low_pass` aimed at the door row as row shots. Sheets: `M7-T08_launch_pools_sheet.png` (the 18 kept),
+    `M7-T08_launch_row_strip_sheet.png` (one held row shot, four fighters coming out, beside the multiple GIF).
+  - **Doors to launch (maintainer, live):** the door opens in 2 s, the clamp turns the fighter 0.8 s into it (1.4 s, while the leaves
+    swing), and it is ejected 0.3 s after the door is fully open (`eject_after_open_s`): slot to ejection 2.3 s (was 3.5). The turn
+    stays 3.3 m inside the doors' plane, nothing reaches the plane before the leaves are fully open, and the open leaves stand 1.5 m
+    clear of the wings. The sequencer's 1 s holds give the rack, turn and drop shots each their second.
+  - **Approved by the maintainer from the live run (2026-11-13):** "door to launch is good". The hangar's stored pose (T20) is matched
+    to the launch's stored pose in a follow-up. Final tests (staged copy): `test_launch_sequence.gd` 23, `test_launch_cut.gd` 7,
+    `test_launch_bay.gd` 11, `test_cinematic_shot.gd` 17, with `test_mission_cinematic`, `test_scenario_loader`,
+    `test_cinematic_camera` and `test_station_in_game` green; compile check and the main-scene smoke clean.
 
 ### M7-T09 The station interior for the front end
 

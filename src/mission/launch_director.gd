@@ -9,8 +9,11 @@ extends Node
 ##   (`custom_integrator`), touches nothing (no collision layers) and stays out of the low-attention tier. It is placed in the
 ##   drum's pose from before Jolt's step, so after the step it stands where the drum's body does, and a rebase moves the two
 ##   together. At the release it gets its layers back and flies on with the hand-off state.
-## - **The player** is first in the wave: the controls stay held until the hand-off; the shots of the `LaunchProfile` play as the
-##   fighter enters each step. A or Start (`Main`'s skip) jumps to the hand-off state; under the spine it waits for clear space.
+## - **The player** is first in the wave: the controls stay held until the hand-off. Each launch gets its own camera cut, one variant
+##   per phase from the profile's pools (`LaunchCut`, seeded by the scenario's seed, the bay and the run's launch count, or
+##   `cut_seed` when pinned), each played as the fighter has been long enough in its step. A or Start (`Main`'s skip) jumps to the hand-off state; under the spine it waits for clear space.
+##   After a played hand-off its engines light for `burn_s` (`step_player`, as the gate jump's autopilot), so it clears the arm
+##   under thrust; a skip leaves the controls to the player at once.
 ##   Wingmen (the player's wing) take the other racks of the arm, in the wave order, and the second row behind them.
 ## - **Wing launches** (`launch wing <wing>`): twelve AI Starfuries from the ally pool (topped up when short), named after the
 ##   wing, launched in two waves.
@@ -43,11 +46,18 @@ var start_bay: String = ""
 var _leaves: StationDoorLeaves = null
 var _carried: Dictionary = {}  # Ship instance id -> {layer, mask, exempt}
 var _prev_angle: float = NAN  # the drum's angle last tick: its body's pose before this tick's step
-var _player_step: StringName = &""
-var _played: Dictionary = {}  # shot entries already played in the player's current step
+var _step_starts: Dictionary = {}  # each step the player's fighter has been in -> when it began (launch time)
+## When the player's launch cuts: the least hold, and a row shot held over several ejections (`LaunchShotSequencer`).
+var sequencer: LaunchShotSequencer = null
 var _skip_asked: bool = false
 var _shots_cut: bool = false  # the player skipped: no more shots this launch
 var _launch_shot: Dictionary = {}  # the player's latest launch: its shots, its skip
+var _burn_left_s: float = 0.0  # the player's engines after the hand-off
+## The shuffle bags of this scenario run's cuts, and how many player launches it has had.
+var cut: LaunchCut = null
+var launch_count: int = 0
+## Pins every cut's seed (tests, `launch seed <n>`); -1 seeds each launch from the scenario, the bay and the launch count.
+var cut_seed: int = -1
 ## The fill light of the shot playing (a profile's `fill`), lit through the scene's `LightRig` only while its shot is on screen.
 var fill: LightEmitter = null
 var _fill_shot: CinematicShot = null
@@ -66,6 +76,7 @@ func _ready() -> void:
 	var made: Dictionary = LaunchProfile.load_file()
 	if bool(made["ok"]):
 		profile = made["profile"]
+		cut = LaunchCut.new(profile)
 	else:
 		push_error("LaunchDirector: %s" % made["error"])
 	_register_console()
@@ -110,10 +121,14 @@ func launch_player(wing: String, door: int, with_wingmen: bool = true) -> String
 			for member: Combatant in own.members():
 				if _can_carry(member) and ships.size() < 12:
 					ships.append(member)
-	var why: String = _start(wing, door, ships, main.combatant.display_name)
+	var seed_value: int = cut_seed if cut_seed >= 0 else hash([main.scenario_seed, wing.to_lower(), door, launch_count])
+	var why: String = _start(wing, door, ships, main.combatant.display_name, seed_value)
 	if why.is_empty():
-		_player_step = &""
-		_played.clear()
+		launch_count += 1
+		_launch_shot["cut"] = cut.pick(seed_value, mini(ships.size(), (_launch_shot["seq"] as LaunchSequence).bays.size()))
+		_launch_shot["cut_seed"] = seed_value
+		_step_starts.clear()
+		sequencer = LaunchShotSequencer.new(profile)
 		_shots_cut = false
 		_skip_asked = false
 	return why
@@ -158,7 +173,7 @@ func launch_wing(wing: String) -> String:
 		ships.append(ally)
 	if ships.is_empty():
 		return "no allied Starfury free"
-	var why: String = _start(wing, 1, ships, "")
+	var why: String = _start(wing, 1, ships, "", hash([main.scenario_seed, wing.to_lower(), "wing", SimClock.now()]))
 	if not why.is_empty():
 		for ally: Combatant in ships:
 			pool.release(ally)
@@ -189,10 +204,24 @@ func locks_controls() -> bool:
 
 ## The player asked to skip the launch (A or Start during its shots, `launch skip`, a skipped mission step).
 func skip() -> void:
+	_burn_left_s = 0.0
 	if player_launch().is_empty():
 		return
 	_skip_asked = true
 	_shots_cut = true
+
+
+## The player's flight command for this tick while its engines burn after the hand-off (`Main` flies it as the gate jump's
+## autopilot), else null.
+func step_player(delta: float) -> FlightCommand:
+	if _burn_left_s <= 0.0 or profile == null or main == null or not main.player_alive:
+		_burn_left_s = 0.0
+		return null
+	_burn_left_s -= delta
+	var burn := FlightCommand.new()
+	burn.main_left = profile.burn_throttle
+	burn.main_right = profile.burn_throttle
+	return burn
 
 
 ## Every launch's state, one line each.
@@ -264,6 +293,7 @@ func _carry(launch: Dictionary, id: String, s: Station) -> void:
 		ship.collision_mask = 0
 		ship.custom_integrator = true  # no thrust or assist moves it while it rides the drum
 		ship.tier_exempt = true
+		ship.clamped = true  # the clamp moves it: no plume, puff or engine sound until the ejection
 	_place(ship, _world_state((launch["seq"] as LaunchSequence).state_of(id, s.drum_origin), s))
 	if first:
 		ship.reset_physics_interpolation()
@@ -282,6 +312,7 @@ func _hand_over(launch: Dictionary, id: String, s: Station, skipped: bool) -> vo
 	if id == launch["player"]:
 		last_handoff = state.merged({"id": id, "bay": seq.bays[seq.fighter(id)["bay"]]["name"], "drum_angle": seq.drum_angle,
 				"skipped": skipped})
+		_burn_left_s = 0.0 if skipped else profile.burn_s
 		player_released.emit()
 
 
@@ -300,6 +331,7 @@ func _free(ship: Ship) -> void:
 	ship.collision_mask = int(kept["mask"])
 	ship.tier_exempt = bool(kept["exempt"])
 	ship.custom_integrator = false
+	ship.clamped = false
 	_carried.erase(key)
 
 
@@ -311,7 +343,7 @@ func _world_state(state: Dictionary, s: Station) -> Dictionary:
 			"angular": xform.basis * (state["angular"] as Vector3)}
 
 
-func _start(wing: String, door: int, ships: Array[Combatant], player_id: String) -> String:
+func _start(wing: String, door: int, ships: Array[Combatant], player_id: String, seed_value: int) -> String:
 	var s: Station = station()
 	if s == null:
 		return "no station in this scenario (anchor it on babylon5)"
@@ -327,9 +359,12 @@ func _start(wing: String, door: int, ships: Array[Combatant], player_id: String)
 		by_id[c.display_name] = c
 	var rate: float = s.spin.rate_rad_s if s.spinning else 0.0
 	var angle: float = s.drum_angle if is_nan(_prev_angle) else _prev_angle
-	var seq := LaunchSequence.create(s.hardpoints, wing, ids, profile, door, angle, rate)
+	var seq := LaunchSequence.create(s.hardpoints, wing, ids, profile, door, angle, rate, seed_value)
 	if not seq.valid:
 		return seq.error
+	var offset: float = seq.stored_pose_offset_deg(seq.bays[0])
+	if offset > 1.0:
+		push_warning("LaunchDirector: the station's rack pose is %.1f deg from the profile's stored pose; the profile's is used" % offset)
 	var launch: Dictionary = {"seq": seq, "ships": by_id, "player": player_id, "wing": wing.to_lower()}
 	launches.append(launch)
 	if not player_id.is_empty():
@@ -356,18 +391,31 @@ func _direct_camera(launch: Dictionary) -> void:
 	var seq: LaunchSequence = launch["seq"]
 	var id: String = launch["player"]
 	var step: StringName = seq.step_of(id)
-	if step != _player_step:
-		_player_step = step
-		_played.clear()
-	if _shots_cut or main == null or main.camera_rig == null:
+	if not step.is_empty() and not _step_starts.has(step):
+		_step_starts[step] = seq.time_s - seq.step_time(id)
+	if _shots_cut or main == null or main.camera_rig == null or sequencer == null:
 		return
-	for i: int in profile.shots.size():
-		var entry: Dictionary = profile.shots[i]
-		if entry["step"] != step or _played.has(i) or seq.step_time(id) < float(entry["at_s"]) - LaunchSequence.EPS_S:
-			continue
-		_played[i] = true
-		main.camera_rig.play_shot(entry["shot"], _actor_pose, _origin_to_local)
-		_light_fill(entry)
+	var shots: Array[Dictionary] = launch.get("cut", [] as Array[Dictionary])
+	var due := PackedInt32Array()
+	for i: int in shots.size():
+		var entry: Dictionary = shots[i]
+		if _step_starts.has(entry["step"]) and seq.time_s - float(_step_starts[entry["step"]]) >= float(entry["at_s"]) - LaunchSequence.EPS_S:
+			due.append(i)
+	var play: int = sequencer.next(seq.time_s, due, shots, released_count(seq), wave_left(seq))
+	if play >= 0:
+		main.camera_rig.play_shot(shots[play]["shot"], _actor_pose, _origin_to_local)
+		_light_fill(shots[play])
+
+
+## How many fighters of a launch were let go so far.
+static func released_count(seq: LaunchSequence) -> int:
+	return seq.fighters.filter(func(f: Dictionary) -> bool: return f["phase"] == LaunchSequence.Phase.RELEASED).size()
+
+
+## How many of a launch's first wave are still to go.
+static func wave_left(seq: LaunchSequence) -> int:
+	return seq.fighters.filter(func(f: Dictionary) -> bool:
+		return int(f["wave"]) == 1 and f["phase"] != LaunchSequence.Phase.RELEASED).size()
 
 
 # Lights the shot's fill (replacing the last one), or puts the last one out when this shot has none.
@@ -430,9 +478,11 @@ func _register_console() -> void:
 		&"held": {"get": _held_text, "doc": "Fighters holding under the spine (their arm in a blocked sector)"},
 		&"handoff": {"get": _handoff_text, "doc": "The player's last hand-off: bay, speed against the station, skipped or played"},
 		&"start_bay": {"get": func() -> String: return start_bay, "doc": "The scenario's launch bay (player.launch_bay), or empty"},
+		&"cut": {"get": _cut_text, "doc": "The player's last launch's camera cut: its seed and each phase's shot variant (a phase left out is missing)"},
+		&"launches": {"get": func() -> int: return launch_count, "type": TYPE_INT, "doc": "Player launches this scenario run (seeds the cuts)"},
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(PROVIDER,
-			"Cobra-bay launches (M7-T08): launch <wing> <door> (the player and its wingmen), launch wing <wing> (twelve AI Starfuries in two waves), launch skip, launch status",
+			"Cobra-bay launches (M7-T08): launch <wing> <door> (the player and its wingmen), launch wing <wing> (twelve AI Starfuries in two waves), launch skip, launch status, launch cut (the last camera cut), launch seed <n|off> (pin the cuts' seed), launch preview <variant> (play one shot variant now, for look sheets)",
 			[ConsoleArg.string_optional(&"a", "status"), ConsoleArg.string_optional(&"b")]), _cmd_launch, self)
 
 
@@ -458,6 +508,18 @@ func _cmd_launch(args: Dictionary) -> ConsoleResult:
 	var b: String = str(args[&"b"]).to_lower() if args[&"b"] != null else ""
 	if a == "status":
 		return ConsoleResult.line(describe())
+	if a == "cut":
+		return ConsoleResult.line(_cut_text())
+	if a == "preview":
+		return _preview(str(args[&"b"]) if args[&"b"] != null else "")
+	if a == "seed":
+		if b == "off":
+			cut_seed = -1
+			return ConsoleResult.line("launch cuts seeded per launch")
+		if not b.is_valid_int() or int(b) < 0:
+			return ConsoleResult.failure("launch seed <n|off>")
+		cut_seed = int(b)
+		return ConsoleResult.line("launch cuts seeded with %d" % cut_seed)
 	if a == "skip":
 		if player_launch().is_empty():
 			return ConsoleResult.failure("launch skip: the player is not launching")
@@ -471,4 +533,29 @@ func _cmd_launch(args: Dictionary) -> ConsoleResult:
 		var why: String = launch_player(a, int(b))
 		return ConsoleResult.failure("launch: %s" % why) if not why.is_empty() \
 				else ConsoleResult.line("launching from cobra_bay_%s_%s" % [a, b])
-	return ConsoleResult.failure("launch <alpha|beta|delta|zeta> <1-6>, launch wing <wing>, launch skip, launch status")
+	return ConsoleResult.failure("launch <alpha|beta|delta|zeta> <1-6>, launch wing <wing>, launch skip, launch status, launch cut, launch seed <n|off>")
+
+
+# Plays one variant of the profile's pools on the player's launch now, as its phase would (for look sheets).
+func _preview(id: String) -> ConsoleResult:
+	if _launch_shot.is_empty():
+		return ConsoleResult.failure("launch preview: no player launch to film")
+	var ids := PackedStringArray()
+	for phase: Dictionary in profile.phases:
+		for variant: Dictionary in phase["variants"]:
+			ids.append(String(variant["id"]))
+			if String(variant["id"]) == id:
+				_shots_cut = true  # the cut's own shots stand aside
+				main.camera_rig.play_shot(variant["shot"], _actor_pose, _origin_to_local)
+				_light_fill(variant)
+				return ConsoleResult.line("previewing %s (%s phase)" % [id, phase["phase"]])
+	return ConsoleResult.failure("launch preview <%s>" % "|".join(ids))
+
+
+func _cut_text() -> String:
+	if _launch_shot.is_empty() or not _launch_shot.has("cut"):
+		return "none"
+	var parts := PackedStringArray()
+	for entry: Dictionary in _launch_shot["cut"] as Array[Dictionary]:
+		parts.append("%s %s" % [entry["phase"], entry["variant"]])
+	return "seed %d: %s" % [int(_launch_shot["cut_seed"]), ", ".join(parts)]

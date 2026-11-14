@@ -156,6 +156,14 @@ var _row_command: bool = false
 ## A disabled hulk (M4-T21, M12 groundwork): its assist is off for good; `set_hulk` clears its command and the tier director
 ## takes its pilot, so it coasts on its last motion until something commands it again. The pool clears it on reuse.
 var hulk: bool = false
+## Held in a Cobra bay's launch clamp (M7-T08): the clamp, not the ship, moves it, so its plumes, RCS puffs and engine sounds stay
+## cold whatever its flight model asks for (`get_flight_output` reports idle). The launch clears it at the ejection.
+var clamped: bool = false:
+	set(value):
+		clamped = value
+		if value:
+			_clamped_output = _idle_output()  # sized for the nozzles, every level zero
+var _clamped_output: FlightOutput = FlightOutput.new()
 ## A mission watches this ship (M5-T30): it stays out of the low-attention tier, so the mission sees where it is and that it
 ## lives. The pool clears it on parking.
 var tier_exempt: bool = false
@@ -628,8 +636,10 @@ func get_fuel_tank() -> FuelTank:
 
 
 ## What the flight model produced on the last physics tick (all zero before the first one). Never null. On the batched
-## path it is filled from the batch's row when first asked after a tick.
+## path it is filled from the batch's row when first asked after a tick. Idle while `clamped`.
 func get_flight_output() -> FlightOutput:
+	if clamped:
+		return _clamped_output
 	if _in_batch_row() and _output_tick != _batch.tick:
 		_fill_output_from_batch()
 		_output_tick = _batch.tick
