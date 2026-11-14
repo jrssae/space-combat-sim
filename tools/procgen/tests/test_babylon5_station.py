@@ -242,7 +242,7 @@ class PaintTests(unittest.TestCase):
         self.assertGreater(float(_blue(vanes, 20.0).mean()), 0.5)
         grey = np.abs(vanes[:, 0] - vanes[:, 2]) < 6.0
         self.assertGreater(float(grey.mean()), 0.1, "the frame round each blade")
-        cargo, _ = _bake("cargo", 512)
+        cargo, _ = _bake("cargo")  # the six-sided modules and their end frames (M7-T22) need the full texel: worn edges fill a coarser one
         red = (cargo[:, 0] > cargo[:, 1] + 20.0) & (cargo[:, 0] > cargo[:, 2] + 20.0)
         self.assertGreater(float(red.mean()), 0.8)
 

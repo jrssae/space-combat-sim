@@ -1000,6 +1000,24 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     r 236.5. **The halls:** upper (x ±20) over lower (x ±40); the second row waits in the lower hall and rises onto its rack.
     Launch clearance 57 to 123.5 degrees, clear distance 260 m.
   - **The cargo bay** as the STL's: a roofed compartment inside the spine (x ±94, z 442 to 490) behind the STL's octagonal throat
+- **Done (2026-11-13; the maintainer approved the sheet):** `parts/station_spine.py` lofts the bow's prongs,
+  the command section (side beams and centre box, the body, the pointed beam over its keel and strut, the dome in its recess) and the
+  spine (deck, ramp, radiators, green-zone slab with sloped side plates, turret blocks, six-sided cargo modules, the hub end) through
+  the STL's sections; details in `docs/assets-station.md`, "The dorsal spine, command section and bow to the STL (M7-T22)".
+  - Sections: spine z 1 500 / 2 000 / 2 650 / 4 520 / 5 650 at 0.955, 0.986, 0.996, 0.993, 0.976; bow z 200 / 400 at 0.905, 0.952;
+    command z 600 / 1 000 / 1 150 / 1 250 at 0.975, 0.993, 0.980, 0.991. No exemptions; both tests un-pended.
+  - **Approved with the look (maintainer):** the z 4 500 check plane moved to z 4 520 (window x +-145): the STL's own cut at z 4 500
+    is open (a filled band below y 368 across the window), so the build scores 0.81 there and 0.995 from z 4 504; the ramp kept to
+    x +-33 (the STL's is +-37) so I6's turret turns clear; each bow prong the mean of the STL's unequal port and starboard prongs.
+  - D75's spine and tower mounts where they were; the drum turns clear; the whole-asset 90% rule passes; frame collision within 192.
+  - Launch clearance: blocked 56.5 to 124 degrees with the margin (was 57 to 123.5), clear distance 240 m (was 260: the farthest part
+    over the door strip is now the dome's lamp, r 471).
+  - The `cobra_arm` tour point moved inside the frame's radius (it swept through the beam-keel gap); a test turns it a whole turn.
+  - Tests, on HEAD plus this task's files only: Python 67 (station fidelity, hardpoints, sections, the station's own), GUT 49 in the
+    nine station and launch files, the compile check. The grid's files (T07) were not run: the frame's collision changed, so T07
+    reruns its balance on this build.
+  - Sheet (H, approved): `references/screenshots/M7-T22 spine and command section/` (`M7-T22_sections_dorsal_spine.png`,
+    `M7-T22_sections_command_section.png`, `M7-T22_views_sheet.png`, `M7-T22_z4500_vs_z4520.png`).
     (x ±34.1, r 323.3 to 354.7, corners cut 7.6 m), with the STL's keel and ridge; a pod passes square-on with 18.5 m each side and
     7 m over and under.
   - **The per-part section check** (CLAUDE.md "STL fidelity"): `tools/refview/sections.py` (cuts filled by winding, IoU in a window,

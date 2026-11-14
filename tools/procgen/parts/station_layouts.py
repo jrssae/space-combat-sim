@@ -345,10 +345,17 @@ def window_markings(part: str, shift: np.ndarray) -> tuple[Marking, ...]:
     glow = lin(WINDOW_GLOW)
     out = [Marking.window_rings(part, tuple(-shift), (0.0, 0.0, 1.0), z, h, WINDOW_PITCH, WINDOW, glow, WINDOW_STRENGTH, lit=0.55)
            for z, h in WINDOW_ROWS.get(part, ())]
-    if part == "spine":  # the command section's windows along both flanks of the spine over the docking sphere
+    if part == "spine":  # the command section's windows: on both sloped flanks of its beam and along the body's sides before it
+        from . import station_spine as ssp  # noqa: PLC0415
+
+        (xt, yt), (xe, ye) = (ssp.BEAM_TOP_X, ssp.BEAM_TOP), ssp.BEAM_EDGE
         for sx in (-1.0, 1.0):
-            centre = np.array([sx * 160.0, 425.0, 1000.0]) - shift
-            out.append(Marking.windows(part, tuple(centre), (0.0, 0.0, 1.0), (0.0, 1.0, 0.0), (sx, 0.0, 0.0), (520.0, 40.0),
+            centre = np.array([sx * 0.5 * (xt + xe), 0.5 * (yt + ye), 1140.0]) - shift
+            up, facing = (sx * (xt - xe), yt - ye, 0.0), (sx * (yt - ye), xe - xt, 0.0)
+            out.append(Marking.windows(part, tuple(centre), (0.0, 0.0, 1.0), up, facing, (280.0, 80.0), (11.0, 9.0), (6.0, 3.0), glow,
+                                       WINDOW_STRENGTH, lit=0.6))
+            centre = np.array([sx * 97.0, 382.0, 790.0]) - shift
+            out.append(Marking.windows(part, tuple(centre), (0.0, 0.0, 1.0), (0.0, 1.0, 0.0), (sx, 0.0, 0.0), (180.0, 20.0),
                                        (11.0, 9.0), (6.0, 3.0), glow, WINDOW_STRENGTH, lit=0.6))
     return tuple(out)
 

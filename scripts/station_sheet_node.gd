@@ -33,7 +33,8 @@ const VIEWS: Array[Dictionary] = [
 ## M7-T19's sets (`views=<set>`): `t19` the cost views (from a Cobra bay, the aperture, 1 km, 10 km, 1 000 km), `fly` a pass along
 ## the station's underside about 200 m off the hull from the bow to the reactor (section joins and levels of detail), `doors` the
 ## Cobra-bay doors close up (the near-only props); M7-T05's `t05` (the docking bay), `cargo`, `strip` and `markers` (every hardpoint
-## as a ball); M7-T21's `t21` (the creased arm and the roofed cargo bay). The default set is T04's look sheet.
+## as a ball); M7-T21's `t21` (the creased arm and the roofed cargo bay); M7-T22's `t22` (the spine and command section). The
+## default set is T04's look sheet.
 const VIEW_SETS: Dictionary = {
 	"t19": [
 		{"name": "bay_50m", "at": Vector3(300.0, -55.0, 1085.0), "aim": Vector3(243.0, 0.0, 1150.0), "fov": 62.0},
@@ -88,6 +89,23 @@ const VIEW_SETS: Dictionary = {
 		{"name": "cargo_bay_outside", "at": Vector3(120.0, 450.0, 250.0), "aim": Vector3(0.0, 340.0, 440.0), "fov": 55.0},
 		{"name": "cargo_bay_throat", "at": Vector3(10.0, 352.0, 300.0), "aim": Vector3(0.0, 340.0, 470.0), "fov": 58.0, "sun": "aft"},
 		{"name": "cargo_bay_inside", "at": Vector3(0.0, 345.0, 425.0), "aim": Vector3(-20.0, 334.0, 485.0), "fov": 78.0, "sun": "aft"},
+	],
+	# M7-T22: the spine and the command section rebuilt to the STL's sections, at 50 m and 1 km, and the bow's prongs.
+	"t22": [
+		{"name": "command_beam_50m", "at": Vector3(165.0, 478.0, 1085.0), "aim": Vector3(127.0, 430.0, 1140.0), "fov": 62.0},
+		{"name": "command_dome_50m", "at": Vector3(45.0, 492.0, 1050.0), "aim": Vector3(0.0, 440.0, 1115.0), "fov": 62.0},
+		{"name": "command_body_50m", "at": Vector3(170.0, 395.0, 760.0), "aim": Vector3(105.0, 385.0, 820.0), "fov": 62.0},
+		{"name": "command_under_200m", "at": Vector3(260.0, 250.0, 980.0), "aim": Vector3(60.0, 360.0, 1130.0), "fov": 55.0},
+		{"name": "command_1km", "at": Vector3(850.0, 760.0, 350.0), "aim": Vector3(0.0, 400.0, 1100.0), "fov": 50.0},
+		{"name": "bow_50m", "at": Vector3(150.0, 372.0, 140.0), "aim": Vector3(95.0, 335.0, 210.0), "fov": 62.0},
+		{"name": "bow_300m", "at": Vector3(330.0, 470.0, -200.0), "aim": Vector3(80.0, 335.0, 280.0), "fov": 55.0},
+		{"name": "spine_deck_50m", "at": Vector3(170.0, 500.0, 1450.0), "aim": Vector3(90.0, 470.0, 1520.0), "fov": 62.0},
+		{"name": "spine_radiator_50m", "at": Vector3(190.0, 560.0, 1945.0), "aim": Vector3(110.0, 500.0, 2000.0), "fov": 62.0},
+		{"name": "spine_green_zone_50m", "at": Vector3(215.0, 470.0, 2600.0), "aim": Vector3(125.0, 420.0, 2660.0), "fov": 62.0},
+		{"name": "spine_cargo_300m", "at": Vector3(520.0, 700.0, 3200.0), "aim": Vector3(0.0, 470.0, 3450.0), "fov": 55.0},
+		{"name": "spine_1km", "at": Vector3(900.0, 950.0, 1700.0), "aim": Vector3(0.0, 420.0, 2900.0), "fov": 50.0},
+		{"name": "spine_aft_1km", "at": Vector3(900.0, 950.0, 4400.0), "aim": Vector3(0.0, 400.0, 5500.0), "fov": 50.0},
+		{"name": "spine_hub_50m", "at": Vector3(190.0, 520.0, 5600.0), "aim": Vector3(100.0, 450.0, 5670.0), "fov": 62.0},
 	],
 	"markers": [
 		{"name": "markers_side", "at": Vector3(-3600.0, 1300.0, 3200.0), "aim": Vector3(0.0, 0.0, 3500.0), "fov": 62.0, "markers": 40.0},

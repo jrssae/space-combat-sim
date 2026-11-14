@@ -310,10 +310,11 @@ FRAME_ATLAS_H = 2 * CELL_H
 WINDOW_PANEL = (64.0, 32.0)  # along the flank, up it: one window cell at the doors' texel
 WINDOW_GRID = (6, 4)  # windows along and up a panel
 WINDOW_PANE = (5.6, 3.0)
-WINDOW_Y = 424.0  # the panels' middle height on the spine's flanks over the docking sphere (the hull's painted rows, Q10)
 WINDOW_LIFT_M = 0.3
-# The flank runs straight between these spine rows; each run carries whole panels (z from, z to, how many).
-WINDOW_RUNS = ((700.0, 800.0, 1), (800.0, 950.0, 2), (950.0, 1050.0, 1), (1050.0, 1300.0, 3))
+# The panels lie on the command section's beam, on its sloped flanks (M7-T22: the STL's pointed beam): two rows up each flank (their
+# middles this far down the slope from the top's edge) of whole panels along it (z from, z to, how many).
+WINDOW_SLOPE_M = (28.5, 66.5)
+WINDOW_RUNS = ((1012.0, 1268.0, 4),)
 FRAME_SECTION = "spine_sphere"
 
 
@@ -367,21 +368,25 @@ def frame_kinds() -> list[PropKind]:
 
 
 def window_placements() -> list[tuple[np.ndarray, np.ndarray]]:
-    """Each panel's basis (columns: out of the flank, up, along) and middle, station frame, on both flanks."""
+    """Each panel's basis (columns: out of the flank, up, along) and middle, station frame, on both flanks of the beam."""
+    from . import station_spine as ssp  # noqa: PLC0415
+
+    (xt, yt), (xe, ye) = (ssp.BEAM_TOP_X, ssp.BEAM_TOP), ssp.BEAM_EDGE
+    down = np.array([xe - xt, ye - yt])
+    down /= np.linalg.norm(down)
     out = []
     for z0, z1, count in WINDOW_RUNS:
-        w0, w1 = st.spine_row_at(z0)[1], st.spine_row_at(z1)[1]
         length = (z1 - z0) / count
         for k in range(count):
             zm = z0 + length * (k + 0.5)
-            wm = float(np.interp(zm, [z0, z1], [w0, w1]))
-            for sx in (-1.0, 1.0):
-                along = np.array([sx * (w1 - w0), 0.0, z1 - z0])
-                along = sx * along / np.linalg.norm(along)
-                out_n = np.cross([0.0, 1.0, 0.0], along)
-                basis = np.column_stack([out_n, [0.0, 1.0, 0.0], along])
-                at = np.array([sx * wm, WINDOW_Y, zm]) + WINDOW_LIFT_M * out_n
-                out.append((basis, at))
+            for s in WINDOW_SLOPE_M:
+                for sx in (-1.0, 1.0):
+                    up = np.array([-sx * down[0], -down[1], 0.0])
+                    along = np.array([0.0, 0.0, sx])
+                    out_n = np.cross(up, along)
+                    basis = np.column_stack([out_n, up, along])
+                    at = np.array([sx * (xt + s * down[0]), yt + s * down[1], zm]) + WINDOW_LIFT_M * out_n
+                    out.append((basis, at))
     return out
 
 

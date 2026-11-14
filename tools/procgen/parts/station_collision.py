@@ -20,6 +20,7 @@ from ..core.geometry import rotation_z
 from ..core.sections import SectionCut
 from . import station as st
 from . import station_detail as sd
+from . import station_spine as ssp
 
 RING_SIDES = 16
 RING_SECTORS = 8  # the aperture's ring
@@ -119,6 +120,12 @@ def _block(lo: Sequence[float], hi: Sequence[float]) -> np.ndarray:
 
 def _blocks(name: str, lo: Sequence[float], hi: Sequence[float], planes: Sequence[float]) -> list[tuple[str, np.ndarray]]:
     return [(name, _block((lo[0], lo[1], z0), (hi[0], hi[1], z1))) for z0, z1 in _split(lo[2], hi[2], planes)]
+
+
+def _split_points(name: str, pts: np.ndarray, planes: Sequence[float]) -> list[tuple[str, np.ndarray]]:
+    """A box of points cut at the planes through it."""
+    lo, hi = pts.min(axis=0), pts.max(axis=0)
+    return _blocks(name, lo, hi, planes)
 
 
 def _turned(pieces: list[tuple[str, np.ndarray]], angles_deg: Sequence[float]) -> list[tuple[str, np.ndarray]]:
@@ -270,9 +277,6 @@ def _knob_points(kz: float, kr: float, semi: Sequence[float]) -> np.ndarray:
 def frame_pieces(planes: Sequence[float]) -> list[tuple[str, np.ndarray]]:
     """What stands still, in the station frame."""
     out: list[tuple[str, np.ndarray]] = []
-    prong = [(0.0, 45.0, 62.0, 312.0, 328.0), (200.0, 47.0, 115.0, 311.0, 336.0), (430.0, 50.0, 172.0, 311.0, 368.0)]
-    out += slab_pieces("bow", prong, planes, _sec)
-    out += slab_pieces("bow", [(z, -x1, -x0, y0, y1) for z, x0, x1, y0, y1 in prong], planes, _sec)
     rz0, rz1, ri, ro = st.RING_FRAME
     for k in range(RING_SECTORS):  # the aperture's ring in sectors, so its hole stays open
         a0, a1 = 2.0 * math.pi * k / RING_SECTORS, 2.0 * math.pi * (k + 1) / RING_SECTORS
@@ -283,15 +287,8 @@ def frame_pieces(planes: Sequence[float]) -> list[tuple[str, np.ndarray]]:
     out += _blocks("tower", (-20.0, 370.0, 495.0), (20.0, st.BOW_TOWER_TOP, 545.0), planes)
     out += slab_pieces("spine", st.spine_rows_from(sd.ZG_BACK_Z), planes, _sym, tol=10.0)
     out += cargo_bay(planes)
-    out += slab_pieces("ramp", st.RAMP, planes, _sym, tol=6.0)
-    hz0, hz1, hw, hy0, hy1 = st.HANGING_BOX
-    out += _blocks("hanging_box", (-hw, hy0, hz0), (hw, 400.0, hz1), planes)  # up to the spine, over its struts
-    for z0, z1, w, top in st.RADIATORS:
-        out += _blocks("radiator", (-w, 470.0, z0), (w, top, z1), planes)
-    for z in st.CARGO_Z:
-        out += _blocks("cargo", (-st.CARGO[1], st.CARGO[2], z), (st.CARGO[1], st.CARGO[3], z + st.CARGO[0]), planes)
-    dz, dy, dr = st.DOME
-    out += _blocks("dome", (-dr, dy, dz - dr), (dr, dy + dr + 6.0, dz + dr), planes)
+    out += ssp.collision_pieces(planes)  # the prongs, the command section, the spine, its radiators and cargo modules (M7-T22)
+    out += _split_points("dome", ssp.dome_collision(), planes)
     out += frusta("hub", st.HUB_PROFILE, planes)
     outline, thick = st.FIN
     fin = np.array([[x, y, z] for x, z in outline for y in (-0.5 * thick, 0.5 * thick)])

@@ -136,7 +136,7 @@ def cobra_bays(f: Frames) -> list[dict]:
     return out
 
 
-CLEAR_DISTANCE_M = 260.0  # the frame's farthest part over the door strip (the spine's top corners, r 489) is 252 m out
+CLEAR_DISTANCE_M = 240.0  # the frame's farthest part over the door strip (the dome's lamp on the beam, r 471) is 234 m out
 CLEAR_MARGIN_DEG = 10.0  # 1.2 s of the drum's turn: the drop from the rack through the release point, while the arm keeps turning
 SHIP_CLEARANCE_M = 2.0  # how close the dropping fighter's box may pass the frame
 FURY_HALF = (7.7, 4.9)  # a Starfury's half span (across the arm) and half length (along it)
@@ -305,7 +305,7 @@ def lights(f: Frames) -> list[dict]:
     ``dashes``); a light in each Cobra bay; the main docking bay's red lights down its tunnel; the cargo bay's red lights."""
     out = []
     for sx, side in ((-1.0, "port"), (1.0, "starboard")):
-        out.append(_light(f"beacon_bow_{side}", "beacon", FRAME, (sx * 53.5, 329.0, 0.5), RED, f, blink=True))
+        out.append(_light(f"beacon_bow_{side}", "beacon", FRAME, (sx * 51.0, 322.0, 0.5), RED, f, blink=True))
     for sx, side in ((-1.0, "port"), (1.0, "starboard")):
         for k, zc in enumerate(st.VANE_Z):
             for up, end in ((1.0, "top"), (-1.0, "bottom")):
@@ -333,12 +333,13 @@ def lights(f: Frames) -> list[dict]:
 
 def tour_points(f: Frames) -> list[dict]:
     """The exterior tour's stops (T12, M8): a name, the camera's position and the point it looks at, and the view direction. All on
-    the frame (the camera does not spin) except the Cobra arm's, which rides the drum with its arm."""
+    the frame (the camera does not spin) except the Cobra arm's, which rides the drum with its arm, inside the radius of everything
+    on the frame over the docking sphere (the command section's strut, r 310) so it stays clear through a whole turn."""
     stops = (
         ("bow", FRAME, (260.0, 520.0, -700.0), (0.0, 250.0, 450.0)),
         ("main_docking_bay", FRAME, (60.0, -40.0, 120.0), (0.0, 0.0, 470.0)),
         ("cargo_bay", FRAME, (120.0, 420.0, 250.0), (0.0, 345.0, 450.0)),
-        ("cobra_arm", DRUM, (150.0, 340.0, 1010.0), (0.0, 243.0, 1160.0)),
+        ("cobra_arm", DRUM, (160.0, 215.0, 1010.0), (0.0, 243.0, 1160.0)),
         ("grid_tower", FRAME, (180.0, 520.0, 330.0), (0.0, 410.0, 520.0)),
         ("drum", FRAME, (1100.0, -350.0, 2300.0), (0.0, 0.0, 3200.0)),
         ("vanes", FRAME, (1500.0, 700.0, 3900.0), (535.0, 600.0, 4800.0)),

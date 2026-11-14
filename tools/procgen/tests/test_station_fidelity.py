@@ -95,11 +95,9 @@ class StationSectionTests(unittest.TestCase):
     def test_the_cargo_bay(self) -> None:
         self._part("cargo_bay")
 
-    @unittest.skip("pending: rebuilt to the STL in M7-T22 (maintainer, 2026-11-13); scores 0.48-0.72")
     def test_the_dorsal_spine(self) -> None:
         self._part("dorsal_spine")
 
-    @unittest.skip("pending: rebuilt to the STL in M7-T22 (maintainer, 2026-11-13); scores 0.38-0.71")
     def test_the_command_section(self) -> None:
         self._part("command_section")
 

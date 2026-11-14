@@ -18,6 +18,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from ..core.geometry import Material, Mesh, box, lathe, planar_uv, polygon_area_2d, prism, rotation_x, rotation_y, rotation_z, unit
+from . import station_spine as ssp
 
 Section = tuple[float, float, float, float, float]  # z, x0, x1, y0, y1 of an axis-aligned slab's cross-section
 
@@ -91,29 +92,16 @@ STRINGER_ANGLES_DEG = tuple(270.0 + 36.0 * k for k in range(10))  # from the bot
 STRINGER = (14.0, 331.0, 341.0)  # width, inner and outer radius
 # --- the frame -------------------------------------------------------------------------------------------------------
 RING_FRAME = (488.0, 548.0, 133.0, 157.0)  # the aperture's ring: z from, z to, inner and outer radius
-SPINE: list[tuple[float, float, float, float]] = [  # z, half width, underside, top
-    # The tops under D75's mounts are flat where a mount stands (H1 and H2 at z 515, L10 and I7 at 2 650, L12 and I9 at 5 650).
-    (420.0, 172.0, 313.0, 363.0), (500.0, 185.0, 316.0, 375.0), (530.0, 172.0, 320.0, 375.0), (580.0, 150.0, 330.0, 400.0), (640.0, 80.0, 340.0, 405.0),
-    (700.0, 150.0, 348.0, 445.0), (800.0, 165.0, 362.0, 452.0), (950.0, 165.0, 362.0, 455.0), (1050.0, 160.0, 395.0, 462.0),
-    (1300.0, 150.0, 395.0, 458.0), (1400.0, 110.0, 415.0, 459.0), (1500.0, 100.0, 418.0, 459.0), (1600.0, 100.0, 425.0, 462.0),
-    (1700.0, 100.0, 428.0, 475.0), (1790.0, 100.0, 428.0, 520.0), (2085.0, 100.0, 428.0, 480.0), (2300.0, 90.0, 428.0, 500.0),
-    (2350.0, 85.0, 428.0, 505.0), (2362.0, 80.0, 380.0, 505.0), (2420.0, 75.0, 368.0, 505.0), (2650.0, 75.0, 366.0, 537.0), (2750.0, 75.0, 365.0, 555.0), (2832.0, 75.0, 365.0, 552.0),
-    (2834.0, 75.0, 365.0, 415.0), (4321.0, 75.0, 365.0, 415.0), (4323.0, 75.0, 365.0, 535.0), (4600.0, 75.0, 365.0, 535.0),
-    (4700.0, 78.0, 366.0, 505.0), (4760.0, 80.0, 367.0, 505.0), (4772.0, 84.0, 370.0, 508.0), (4782.0, 85.0, 428.0, 510.0),
-    (4840.0, 90.0, 428.0, 520.0), (5440.0, 90.0, 426.0, 505.0),
-    (5520.0, 90.0, 400.0, 470.0), (5560.0, 100.0, 395.0, 472.0), (5790.0, 100.0, 395.0, 472.0), (5800.0, 90.0, 300.0, 435.0),
-    (5900.0, 80.0, 200.0, 385.0), (6000.0, 70.0, 170.0, 325.0), (6100.0, 60.0, 140.0, 275.0), (6200.0, 50.0, 110.0, 130.0),
-    (6360.0, 40.0, 80.0, 100.0),
+# The spine's front round the cargo bay (T21) and over the aperture's ring, to where the command section splits (z 595): rows of
+# z, half width, underside, top. H1 and H2 stand on its flat top at z 515. The rest of the spine, the command section and the bow's
+# prongs are lofted through the STL's sections (``station_spine.py``, M7-T22).
+SPINE: list[tuple[float, float, float, float]] = [
+    (420.0, 172.0, 313.0, 363.0), (500.0, 185.0, 316.0, 375.0), (530.0, 172.0, 320.0, 375.0), (560.0, 160.0, 315.0, 382.0),
+    (597.0, 134.0, 319.0, 387.0),
 ]
-RAMP = [(1300.0, 32.0, 440.0, 459.0), (1500.0, 32.0, 440.0, 507.0), (1750.0, 32.0, 440.0, 548.0), (1790.0, 32.0, 440.0, 520.0)]  # the
-# ramp up the spine's middle from the deck over the docking sphere to the radiators: z, half width, underside, top
 BOW_TOWER_TOP = 436.0  # the tower on the bow spine (D75's interceptor I5 stands on it, the heavy cannons beside it)
-HANGING_BOX = (960.0, 1260.0, 60.0, 316.0, 358.0)  # z from, z to, half width, underside, top
-CARGO_Z = (2834.0, 3089.0, 3344.0, 3598.0, 3853.0, 4108.0)
-CARGO = (213.0, 108.0, 415.0, 565.0)  # length, half width, underside, top
-RADIATORS = ((1725.0, 2085.0, 100.0, 548.0), (5070.0, 5340.0, 90.0, 528.0))  # z from, z to, half width, fin tops
-FIN_PITCH_M = 23.0
-DOME = (1115.0, 420.0, 45.0)  # z, its base's height, radius
+CARGO_Z = ssp.CARGO_Z
+FLANK_LAMPS_Z = (1180.0, 1230.0)  # the lamps on the beam's outer edges
 HUB_PROFILE = [(5508.0, 0.0), (5508.0, 292.0), (5560.0, 292.0), (5562.0, 347.0), (5788.0, 347.0), (5792.0, 335.0), (5830.0, 300.0),
                (5900.0, 225.0), (6000.0, 190.0), (6100.0, 160.0), (6200.0, 130.0), (6300.0, 100.0), (6360.0, 90.0), (6362.0, 0.0)]
 FIN = ([(60.0, 5740.0), (522.0, 5765.0), (522.0, 5945.0), (105.0, 6340.0), (60.0, 6340.0)], 66.0)  # outline (x, z), thickness
@@ -466,12 +454,6 @@ def drum_shapes(mats: dict[str, Material]) -> list[Shape]:
 
 
 # --- the frame -------------------------------------------------------------------------------------------------------
-def bow_mesh(m: Material) -> Mesh:
-    """The forked bow spike: two prongs from the tip to z 420, where they meet the spine's front."""
-    prong = slab([(0.0, 45.0, 62.0, 312.0, 328.0), (200.0, 47.0, 115.0, 311.0, 336.0), (430.0, 50.0, 172.0, 311.0, 368.0)], m)
-    return Mesh.concatenate([prong, prong.mirrored("x")])
-
-
 def vane_outline() -> tuple[list[tuple[float, float]], list[list[tuple[float, float]]]]:
     """One blade in its own plane: u along the station's z about the blade's centre line, v out from the axis (|y|). Returns the
     rim and the convex pieces that tile it, the V notch cut in the tip."""
@@ -560,28 +542,16 @@ def frame_shapes(mats: dict[str, Material]) -> list[Shape]:
     ring_teeth = teeth(36, rz0 + 12.0, rz1 - 12.0, ro - 2.0, ro + 6.0, 0.5, recess)
     pylon = block((-25.0, ro - 4.0, 494.0), (25.0, 330.0, 542.0), spine)
     tower = block((-20.0, 370.0, 495.0), (20.0, BOW_TOWER_TOP, 545.0), spine)
-    radiators = []
-    for z0, z1, w, top in RADIATORS:
-        radiators.append(block((-w, 470.0, z0), (w, top - 28.0, z1), machinery))
-        for z in np.arange(z0 + 0.5 * FIN_PITCH_M, z1, FIN_PITCH_M):
-            radiators.append(block((-w, top - 30.0, z - 3.0), (w, top, z + 3.0), machinery))
-    cargo = [block((-CARGO[1], CARGO[2], z), (CARGO[1], CARGO[3], z + CARGO[0]), mats["cargo"]) for z in CARGO_Z]
-    dz, dy, dr = DOME
-    dome = lathe([(0.0, dr)] + [(dr * math.sin(a), dr * math.cos(a)) for a in np.linspace(0.15, 0.5 * math.pi, 8)], 32, mats["dome"])
-    dome = dome.transformed(rotation_x(-0.5 * math.pi), (0.0, dy, dz))
-    lamp = block((-5.0, dy + dr - 2.0, dz - 5.0), (5.0, dy + dr + 6.0, dz + 5.0), mats["lamp"])
-    flank_lamps = [block((sx * 150.5 - 1.0, 410.0, z - 12.0), (sx * 150.5 + 1.0, 422.0, z + 12.0), mats["lamp"])
-                   for sx in (-1.0, 1.0) for z in (1180.0, 1230.0)]
-    hz0, hz1, hw, hy0, hy1 = HANGING_BOX
-    struts = [block((-12.0, hy1, z - 12.0), (12.0, 400.0, z + 12.0), mats["machinery"]) for z in (hz0 + 40.0, hz1 - 40.0)]
+    lofted = ssp.shapes(mats)
+    ex, ey = ssp.BEAM_EDGE
+    flank_lamps = [block((sx * ex - 1.5, ey - 1.0, z - 12.0), (sx * ex + 1.5, ey + 2.0, z + 12.0), mats["lamp"])
+                   for sx in (-1.0, 1.0) for z in FLANK_LAMPS_Z]
     return [
-        Shape("bow", Mesh.concatenate([bow_mesh(spine), ring, ring_teeth, pylon, tower])),
-        Shape("spine", Mesh.concatenate([spine_slab(spine_rows_from(sd.ZG_BACK_Z), spine), sd.cargo_bay_walls(spine), spine_slab(RAMP, spine),
-                                         block((-hw, hy0, hz0), (hw, hy1, hz1), spine),
-                                         *struts])),
-        Shape("radiators", Mesh.concatenate(radiators)),
-        Shape("cargo", Mesh.concatenate(cargo)),
-        Shape("dome", Mesh.concatenate([dome, lamp, *flank_lamps])),
+        Shape("bow", Mesh.concatenate([lofted["bow"], ring, ring_teeth, pylon, tower])),
+        Shape("spine", Mesh.concatenate([spine_slab(spine_rows_from(sd.ZG_BACK_Z), spine), sd.cargo_bay_walls(spine), lofted["spine"]])),
+        Shape("radiators", lofted["radiators"]),
+        Shape("cargo", lofted["cargo"]),
+        Shape("dome", Mesh.concatenate([ssp.dome_mesh(mats["dome"], mats["lamp"]), *flank_lamps])),
         Shape("frame_plinths", mount_plinths(machinery, "frame")),
         Shape("cargo_bay", sd.cargo_bay(mats)),
         Shape("command_detail", sd.command_detail(mats)),

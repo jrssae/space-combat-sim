@@ -509,16 +509,16 @@ def cargo_bay(mats: dict[str, Material]) -> Mesh:
 # --- the command section ----------------------------------------------------------------------------------------------
 # The bow spine over the docking sphere (Q2: it holds from 50 m): open machinery compartments along its top (the STL's recesses, the
 # Mallacore render's lit bays of tanks and coils) and serrated lower edges along the forks.
-COMPARTMENTS = ((0.0, 610.0, 22.0, 15.0), (0.0, 780.0, 30.0, 22.0), (0.0, 905.0, 30.0, 20.0))  # x, z, half width, half length
+COMPARTMENTS = ((0.0, 635.0, 22.0, 12.0), (0.0, 780.0, 30.0, 22.0), (0.0, 905.0, 30.0, 20.0))  # x, z, half width, half length
 COMPARTMENT_RIM = (3.0, 4.0)  # the rim's thickness and height
 FORK_TEETH = (14.0, 8.0, 5.0)  # pitch, base, how far each tooth hangs below the fork's outer lower edge
 
 
 def _compartment(x: float, z: float, hw: float, hl: float, mats: dict[str, Material]) -> list:
     """An open compartment on the spine's top: a rim round a dark floor, tanks and a coil housing inside, a red lamp."""
-    from . import station as st_  # noqa: PLC0415
+    from . import station_spine as ssp  # noqa: PLC0415
 
-    top = max(st_.spine_row_at(z - hl)[3], st_.spine_row_at(z + hl)[3])
+    top = max(ssp.top_at(z - hl, x), ssp.top_at(z + hl, x))
     t, h = COMPARTMENT_RIM
     frame, recess, machinery = mats["bay_frame"], mats["recess"], mats["machinery"]
     out = []
@@ -541,12 +541,12 @@ def _compartment(x: float, z: float, hw: float, hl: float, mats: dict[str, Mater
 
 def _fork_teeth(m: Material) -> list:
     """Sawtooth teeth hanging along each fork's outer lower edge."""
+    from . import station_spine as ssp  # noqa: PLC0415
+
     pitch, base, drop = FORK_TEETH
-    rows = [(0.0, 62.0, 312.0), (200.0, 115.0, 311.0), (430.0, 172.0, 311.0)]  # z, the outer edge's x, the underside (bow_mesh)
     out = []
     for z in np.arange(20.0, 420.0, pitch):
-        xe = float(np.interp(z, [r[0] for r in rows], [r[1] for r in rows]))
-        y = float(np.interp(z, [r[0] for r in rows], [r[2] for r in rows]))
+        xe, y = ssp.prong_edge(z)
         for sx in (-1.0, 1.0):
             a, b, tip = np.array([sx * xe, y, z - 0.5 * base]), np.array([sx * xe, y, z + 0.5 * base]), np.array([sx * xe, y - drop, z])
             inner = np.array([-sx * 4.0, 0.0, 0.0])

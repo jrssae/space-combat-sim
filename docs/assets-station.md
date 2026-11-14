@@ -638,7 +638,7 @@ its `body`'s frame: `drum` (the drum node, on its axis at the pivot, turning wit
 | `main_docking_bay` | 1 (drum) | `main_docking_bay_approach` (1 500 and 300 m ahead), `_path` (to the mouth and the airlock), `_mouth` (z 450), `_airlock` (z 640), `_clear_half_m` [47, 17]; `spin_axis`, `spin_rad_s` 0.148, `pivot` (a ship flying in matches the drum's roll; the same as `pieces.drum`) |
 | `cargo_bay` | 1 (frame) | `cargo_bay_approach` (to the hold), `_hold` (z -700, y 346: on the slot's line, 346 m off the main bay's axis), `_hold_forward`, `_release` (z -640), `_path` (down the slot into the bay), `_entry` (45 m in), `_clear_min`, `_clear_max` |
 | `grid_mounts` | 23 (L1 to L12, H1, H2, I1 to I9) | `kind`, `position` (pivot), `up` (D75's, normalised) |
-| `launch_clearance` | 1 | `blocked_sectors_deg` [[58.5, 126.5]], `clear_distance_m` 250, `margin_deg` 10, `ship_clearance_m` 2, `angle` (how an arm's angle and the drum's turn give a door's angle) |
+| `launch_clearance` | 1 | `blocked_sectors_deg` [[56.5, 124]], `clear_distance_m` 240 (M7-T22), `margin_deg` 10, `ship_clearance_m` 2, `angle` (how an arm's angle and the drum's turn give a door's angle) |
 | `lights` | 57: 14 `beacon` (`blink`), 8 `running`, 7 `ring` (`radius`, `axis`, `dashes`), 24 `bay`, 2 `main_docking_bay`, 2 `cargo_bay` | `position`, `colour` |
 | `tour_points` | 8: bow, main_docking_bay, cargo_bay, cobra_arm (drum), grid_tower, drum, vanes, reactor | `position`, `look_at`, `direction` |
 | `damage_sections` | 11 | `sections` (T19's render sections, each once), `aabb_min`, `aabb_max` |
@@ -719,8 +719,66 @@ frame (turned onto the top). Tested in `tools/procgen/tests/test_station_fidelit
 | Cargo bay | z 430, z 465, top (y 340) (outline) | 0.86, 0.88, 1.00 | **0.96, 0.96, 1.00** |
 | Cargo bay | side (x 0) | 0.26 | 0.46, **exempt**: the throat and compartment are open for the pods (the maintainer: "open only where pods enter"); the STL shuts the throat with a door plate |
 | Main docking bay | z 455, 470, 520, side | 0.00, 0.01, 0.68, 0.79 | the same, **exempt**: built from the maintainer's show references (T05, approved), not the STL's door |
-| Dorsal spine | z 1 500, 2 000, 2 650, 4 500, 5 650 | 0.63, 0.72, 0.60, 0.48, 0.52 | **failing**, unchanged: T04 built the spine to the silhouettes; the STL has sloped side plates and a narrower top it never had |
-| Command section | bow 200, 400; z 600, 1 000, 1 150, 1 250 | 0.66, 0.71, 0.38, 0.53, 0.51, 0.66 | **failing**, unchanged: the same (the bow fork's section, the spine over the docking sphere) |
+| Dorsal spine | z 1 500, 2 000, 2 650, 4 500, 5 650 | 0.63, 0.72, 0.60, 0.48, 0.52 | rebuilt in M7-T22 (below) |
+| Command section | bow 200, 400; z 600, 1 000, 1 150, 1 250 | 0.66, 0.71, 0.38, 0.53, 0.51, 0.66 | rebuilt in M7-T22 (below) |
 
 **Sheet (H):** `references/screenshots/M7-T21 arm and cargo bay/M7-T21_arm_and_cargo_bay_sheet.png` (the section overlays before
 and after with their IoU, the door strip at 50 m beside the model, a door open, the cargo bay; `SHEET_VIEWS=t21`).
+
+## The dorsal spine, command section and bow to the STL (M7-T22)
+
+T04 built the spine to the silhouettes; T21's section check scored it 0.38 to 0.72. Rebuilt in `parts/station_spine.py`: every part
+a solid lofted through sections read off the STL (z cuts every 50 m and finer where the shape changes; the STL's long x and y cuts
+leak, so only z cuts are used), the numbers as data. A member's sections may be non-convex (ledges, radiator wings); collision takes
+the hull of each run of sections. The spine aft of the cargo modules mirrors the spine before them about z 3 577, as the STL does.
+- **The bow:** each prong a six-sided section (flat top, a shoulder bending out to the side, vertical outer side, flat underside at
+  y 315), lofted z 0 to 430 (outer edge x 55 at the tip to 162.5), a raised lip along its inner top edge (x 42.5 to 52), a flange
+  under its outer half and a strip under its inner edge. The STL's port and starboard prongs differ slightly (the shoulder, the
+  flange); the build takes their mean.
+- **The command section:** at z 597 the spine splits into two side beams (x 81 to 166, a sloped top) and a centre box (x +-59.5 to
+  +-73.5, y 338 to 375) with a slot through it (x +-9.5); from z 688 a body widening from a ledged box (x +-95, y 342 to 404) to a
+  six-sided block (x +-164, y 313 to 458) at z 997; then the **pointed beam** (flat top x +-88.5 at y 458, out to +-166 at y 403)
+  with twelve ribs under it (every 23.2 m), over a **keel** (x +-88 from y 361, down to 329, 352 or 310 along it) on a strut (x +-14,
+  to y 310), the 42 m between beam and keel open; the observation dome (an ellipsoid x +-41, 27 high, z 1 069 to 1 165, a disc and
+  lamp on top) in a recess in the beam's top (z 1 058 to 1 176), a groove (x +-37, floor 435) along the top from z 1 245; the beam's
+  tail closes down onto the deck by z 1 405.
+- **The spine:** the deck over the waist (chamfered, x +-97 to +-140, top 458 to 472), the ramp (x +-33, top 487 at z 1 405 to 558 at
+  1 738; the STL's is +-37, kept clear of I6's turret) with its stepped tip; over the bands the base section (top 472 x +-84.5,
+  chamfer to x +-92.5, underside 426: 9 m over the bands); the radiators z 1 814 to 2 091 and 5 063 to 5 340 (a core x +-92.5 to
+  y 542 with a diamond wing each side, twelve fins to y 553 every 23.2 m); a rib (x +-12) and two pipes (r 23.5) on the top before
+  the green zone. Over the green zone: a lower slab (top 417) with **sloped side plates** down to y 357 (x +-56 to +-151), a tower
+  x +-60 rising to the **turret block** (cap x +-46.5 at y 537 over a body x +-103 to +-115.5, z 2 560 to 2 686; L10 and I7 on the
+  cap, and aft L11 and I8), fins x +-92.5 between. The **cargo modules** (the STL's six at the old z) are six-sided, x +-168.5,
+  y 357 to 560, with an end frame (to x +-176, y 565) each end, standing on the lower slab. The hub end: rails, the body sloping
+  into the hub (x +-106.5 at y 472 to the hub's surface, z 5 562 to 5 788; L12 and I9 between the rails), a narrow tail (x +-33.5)
+  down the cone to z 6 188.
+- **D75's mounts** all where they were (L9 to L12, H1, H2, I5 to I9 sit on the STL's surfaces as they stand). The drum turns clear
+  (tested; the lower slab starts aft of the forward band's rim, z 2 342, and ends before the aft band's, z 4 784).
+- **Follows the spine:** the window panels lie on the beam's sloped flanks (two rows of four a side, z 1 012 to 1 268), the painted
+  windows there and along the body's sides (z 700 to 880); the compartments stand on the new tops (the first moved to z 635, on the
+  centre box); the flank lamps on the beam's outer edges; the bow beacons on the prongs' tips (x +-51, y 322); collision from the
+  same sections.
+- **Launch clearance** recomputed: **56.5 to 124 degrees** with the margin; clear distance **240 m** (the farthest part of the frame
+  over the door strip is now the dome's lamp, r 471, 234 m out; was the old spine's corners, r 489).
+- **Tour point:** `cobra_arm` (it rides the drum) moved from (150, 340, 1 010) to (160, 215, 1 010): at r 372 it swept through the
+  gap between the beam and the keel (2.5 m off the keel's corner); at r 268 it turns inside everything on the frame there (42 m clear
+  through a whole turn, tested).
+- **Paint test:** the cargo modules' red share is measured at the full texel (1 024 px, was 512): the six-sided modules and their end
+  frames have more worn edges, which fill a coarser map.
+- **The check:** the z 1 500 plane's window starts at y 400 (from 340 it caught the drum's pods under the deck); the z 4 500 plane
+  moved to **z 4 520** with its window narrowed to x +-145: the STL is open round z 4 330 to 4 500 (its cut there fills whole rows
+  below y 368 to the window's edges and between the side plates), clean from z 4 504; z 4 520 is the same section (the turret block
+  under L11).
+
+| Plane | Before (T21) | After (T22) |
+|---|---|---|
+| spine z 1 500 / 2 000 / 2 650 / 4 520 / 5 650 | 0.67, 0.72, 0.60, 0.59, 0.52 | **0.955, 0.986, 0.996, 0.993, 0.976** |
+| bow z 200 / 400 | 0.66, 0.71 | **0.905, 0.952** |
+| command z 600 / 1 000 / 1 150 / 1 250 | 0.38, 0.53, 0.51, 0.66 | **0.975, 0.993, 0.980, 0.991** |
+
+(Before at the new windows; at T21's own, z 1 500 0.63 and z 4 500 0.48.) No exemptions. The build at z 4 500 itself (window x +-145)
+scores 0.81 against the STL's open cut; 0.995 at z 4 504.
+
+**Sheet (H):** `references/screenshots/M7-T22 spine and command section/`: `M7-T22_sections_dorsal_spine.png` and
+`M7-T22_sections_command_section.png` (each plane's overlay before and after with its IoU), `M7-T22_z4500_vs_z4520.png` (why the
+plane moved), `M7-T22_views_sheet.png` (GPU: the command section, bow and spine at 50 m to 1 km; `SHEET_VIEWS=t22`).

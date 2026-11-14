@@ -366,6 +366,16 @@ class HardpointTests(unittest.TestCase):
             hit = min(ray_hit(self.tris[b], p, d) for b in ("drum", "frame"))
             self.assertLess(hit, 3000.0, f"{tour['name']} looks at the station")
 
+    def test_a_tour_point_on_the_drum_clears_the_frame_through_a_whole_turn(self) -> None:
+        for tour in self.hp["tour_points"]:
+            if tour["body"] != "drum":
+                continue
+            p = self.at(tour)
+            r = float(np.hypot(p[0], p[1]))
+            for a in np.linspace(0.0, 2.0 * math.pi, 120, endpoint=False):
+                turned = np.array([r * math.cos(a), r * math.sin(a), p[2]])
+                self.assertGreater(distance_to(self.tris["frame"], turned), 30.0, f"{tour['name']} at {math.degrees(a):.0f} degrees")
+
     def test_the_damage_sections_cover_the_render_sections_once(self) -> None:
         for piece in ("drum", "frame"):
             names = [s["name"] for s in self.manifest["pieces"][piece]["mesh"]["sections"]]

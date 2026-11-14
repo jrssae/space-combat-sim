@@ -52,10 +52,10 @@ PLANES: dict[str, list[SectionPlane]] = {
         SectionPlane("cargo_bay_top", 1, 340.0, (-110.0, 110.0, 400.0, 500.0), outline=True),
     ],
     "dorsal_spine": [
-        SectionPlane("spine_z1500", 2, 1500.0, (-200.0, 200.0, 340.0, 600.0)),
+        SectionPlane("spine_z1500", 2, 1500.0, (-200.0, 200.0, 400.0, 600.0)),
         SectionPlane("spine_z2000", 2, 2000.0, (-200.0, 200.0, 425.0, 600.0)),
         SectionPlane("spine_z2650", 2, 2650.0, (-200.0, 200.0, 340.0, 600.0)),
-        SectionPlane("spine_z4500", 2, 4500.0, (-200.0, 200.0, 340.0, 600.0)),
+        SectionPlane("spine_z4520", 2, 4520.0, (-145.0, 145.0, 340.0, 600.0)),
         SectionPlane("spine_z5650", 2, 5650.0, (-200.0, 200.0, 350.0, 600.0)),
     ],
     "command_section": [
