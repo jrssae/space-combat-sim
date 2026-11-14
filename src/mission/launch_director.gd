@@ -294,6 +294,7 @@ func _carry(launch: Dictionary, id: String, s: Station) -> void:
 		ship.custom_integrator = true  # no thrust or assist moves it while it rides the drum
 		ship.tier_exempt = true
 		ship.clamped = true  # the clamp moves it: no plume, puff or engine sound until the ejection
+		InteriorLight.set_inside(ship, true)  # in the hall the sun does not reach it; back in the open at its hand-off
 	_place(ship, _world_state((launch["seq"] as LaunchSequence).state_of(id, s.drum_origin), s))
 	if first:
 		ship.reset_physics_interpolation()
@@ -332,6 +333,7 @@ func _free(ship: Ship) -> void:
 	ship.tier_exempt = bool(kept["exempt"])
 	ship.custom_integrator = false
 	ship.clamped = false
+	InteriorLight.set_inside(ship, false)
 	_carried.erase(key)
 
 

@@ -87,6 +87,9 @@ func toggle_station() -> bool:
 	var at: UniversePos = station_place if station_place != null else UniversePos.new(0.0, 0.0, 0.0, main.world.origin.system_id)
 	main.world.spawn(made, at, Basis.IDENTITY, main.world)
 	made.place_drum_body()
+	var zones: InteriorZones = InteriorZones.for_manifest(MeshAssets.read_manifest(Station.ASSET_ID))
+	if zones != null:
+		made.add_child(zones)  # ships in its open bays are lit as the bays are (M7)
 	station = made
 	if main.audio != null:
 		main.audio.watch_grid(made.grid)

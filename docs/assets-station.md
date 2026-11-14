@@ -832,7 +832,11 @@ core, and glints ran along the core off the toothed rings. Four causes, each wit
   the airlock and the cargo bay (`station_layouts.drum_interior`, `frame_interior`), writes them in a glb of their own per
   section (`interior_file` in the manifest; the same atlas and material) and marks the leaves and gantries `interior`; the game
   draws those on `LightRig.INTERIOR_LAYER`, which the star's light leaves out. Lamps (the 7 slots), glow and ambient light them.
-  Ships are not on that layer: a fighter on its rack is still lit by the star unless the hull shades it.
+  **Ships inside** go on that layer too (the maintainer, 2026-11-14), and back to the first layer as they leave
+  (`InteriorLight`): a fighter while `LaunchDirector` carries it on its rack and rail, until its hand-off outside the door; a
+  ship in the main docking bay's tunnel or the cargo bay, by `InteriorZones`, two trigger volumes under the station built from
+  the bays' hardpoints (the tunnel's a cylinder on the drum's axis from 8 m inside the mouth to the airlock; the engine reports
+  the crossings, so nothing runs per tick, and a ship taken from the world inside counts as leaving).
 
 `scripts/flicker_probe.sh <out dir>` films the turning drum from 50 m to 3 km off a door row and from the star's far side at
 1, 3 and 10 km (`PROBE_VIEWS`), and `scripts/flicker_metric.py` measures each run: how much the picture changes and changes

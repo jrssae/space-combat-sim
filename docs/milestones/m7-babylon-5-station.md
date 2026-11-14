@@ -76,6 +76,13 @@ making its own branch):
   `docs/design-references.md` and Q1's references.
 - Texel density in tiers, so an 8 km hull reads from 50 m (Q2) without one huge atlas: per-piece atlases for the broad paint and
   panels, and a shared detail layer (trim and panel maps tiled in world space) for the near field; T04 measures the VRAM.
+- **The station casts the sun's shadow (maintainer, 2026-11-14).** "No light casts shadows" (M3, M4) no longer holds for the
+  station: the key star casts the shadow of its sections and props, and of nothing else; ships cast none and are shaded by
+  it. Why: with no shadow the sun lit every face tilted toward it, also those the hull itself hides, so the arms, teeth and
+  decks on the night side glinted as the drum turned and the halls were sunlit. What stands inside a hall or a bay, ships
+  included while they are there, is also on an interior layer the star's light leaves out, since a shadow map over 8 km
+  cannot keep the sun out of a 40 m hall. Cost on the RX 6950 XT, the station at 1 km: 0.49 to 0.59 ms GPU a frame, 55 to 184
+  draw calls; T13 measures it under load. Contract in `docs/architecture.md` §7.3.
 - **Metallic, not plastic (maintainer, 2026-11-13).** Real metallic and roughness maps: painted plating moderately metallic
   with roughness varied per plate and panel, bare metal on trim, rails, truss and machinery, rougher grime and wear; a normal
   map from the panel and detail layers; the scene gives the metal something to reflect. Judged (H) on T04's look sheet.
@@ -995,6 +1002,8 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   - Glints off the arms, teeth and decks on the night side, and sunlit halls: nothing cast a shadow. The key star casts the
     station's shadow (the station only; ships receive it), and what stands inside a hall or a bay is on an interior layer the
     star's light leaves out (`LightRig`). T18's real bay lights go through the 7 slots as planned and light that layer.
+  - Ships inside are lit as interiors (maintainer, 2026-11-14): a fighter on its rack and rail, a ship in the docking tunnel
+    or the cargo bay (`InteriorLight`, `InteriorZones`); `test_interior_light.gd` (3), `test_interior_ships.gd` (3).
   - Tools: `scripts/flicker_probe.sh` and `scripts/flicker_metric.py`. Sheets: `references/screenshots/M7 bay flicker/`
     (`outside_before_after.png`, `compare_heat_before_after.png`).
 
@@ -1245,6 +1254,9 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   **flat / lacking detail** (large plain areas), **colour and material wrong** against the references, and a **repeating, tiled
   look** (the 16 m detail tile or the panel pattern).
 - **Agent:** Opus. **Depends on:** T22 (the spine and command section rebuilt, so their surfaces are not redone twice).
+- **From the flicker fix (2026-11-14):** the frame's `radiators`, `spine`, `truss`, `vanes` and `bow` still overlap themselves in
+  one plane and one paint (about 108 000 m², `HULL_SELF_OVERLAPS` in `test_coplanar_overlaps.py`); they can shimmer up close.
+  Take them apart here and shrink that list.
 - **What:**
   - Give the station the **two texture-detail sets** the ships have (M5-T40, M7-T15): `low` reads cleanly fullscreen on its own
     (major seams, plate tones, no blur at the views a player sees), `high` adds the fine plating, joint grime, recessed hatches and

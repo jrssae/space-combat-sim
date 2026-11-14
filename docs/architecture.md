@@ -847,7 +847,11 @@ while the cockpit interior is shown.
 Ships cast none (500 of them in four cascades is the cost the light budget avoids) and are shaded by the station. What stands
 inside a station's halls and bays is on `LightRig.INTERIOR_LAYER`, which the star's light leaves out, since a shadow map over
 8 km cannot keep the sun out of a 40 m hall: lamps, glow and ambient light it. The omni slots cast no shadow and light every
-layer. Before, nothing cast a shadow, and the sun glinted off a station's night side and shone into its bays.
+layer. Before, nothing cast a shadow, and the sun glinted off a station's night side and shone into its bays. So the rule
+"no light casts shadows" holds for every light but the key star, and for every caster but the station (the maintainer,
+2026-11-14). Cost on the RX 6950 XT, the station at 1 km: 0.49 to 0.59 ms GPU a frame, 55 to 184 draw calls; M7-T13
+measures it under load. A ship inside a hall or a bay is on the interior layer while it is there (`InteriorLight`: on its
+rack and rail by `LaunchDirector`, in the docking tunnel and the cargo bay by `InteriorZones`' trigger volumes).
 
 **Running lights (M3-T27, Q27).** Every ship has a port red marker on -X, a starboard green on +X and a top white, steady, at its `nav_lights`
 hardpoints: `RunningLights`, one node per ship with three `MeshInstance3D`s, built once with the pool. A marker is one shared quad and one
