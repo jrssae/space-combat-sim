@@ -283,7 +283,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T29 | D | Fix: a civilian attacked in free flight does not flee (no change of speed or heading) (maintainer, 2026-11-14) | T10 | Fable | AI regression or a free-flight wiring gap | done |
 | T30 | D | Maintenance bots carry the freighters' cargo pods (Saturn 3, 4 and 8; cargo and tankers) between the ship and the cargo bay (maintainer, 2026-11-14) | T10, T11 | Opus | Replaces the pods flying by themselves | in progress |
 | T31 | C | The pause menu gets Quit (exit the game); the start and pause menus' boxes shrink to their content (Settings keeps its layout) (maintainer, 2026-11-14) | - | Sonnet | Front-end layout | done |
-| T32 | A | The cargo bay gets the main docking bay's look: metallic grey walls and doors with the Earth Alliance mosaic, lit red by lamps through the light slots, no self-lit rings or bands (maintainer, 2026-11-14) | T25 | Opus | Same surfaces and lamps as T25 on the spine's cargo bay; (H) | in progress |
+| T32 | A | The cargo bay gets the main docking bay's look: metallic grey walls and doors with the Earth Alliance mosaic, lit red by lamps through the light slots, no self-lit rings or bands (maintainer, 2026-11-14) | T25 | Opus | Same surfaces and lamps as T25 on the spine's cargo bay; (H) | done |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M7-T01 Station references and measurements
@@ -1699,3 +1699,28 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   never from self-lit rings, strips or bands. Its shape and section IoU (>= 0.90) stay; T30's pod and bot clearances stay green.
 - **Done when:** a GPU sheet of the bay (outside the mouth, inside looking in, inside looking out; before and after, with draw calls,
   GPU time and VRAM) is approved by the maintainer, the touched Python and GUT tests pass in a `--staged` copy, and the row is `done`.
+- **Done (2026-11-14; approved by the maintainer as is):**
+  - **Surfaces:** the bay's walls, roof, floor and back wall inside (the faces the game draws out of the sun,
+    `station_layouts.frame_interior`) take T25's `bay_tunnel` grey metal (`station_detail.lined`, over the spine's whole shape);
+    the spine outside keeps its paint. The floor's machinery blocks and the ribs up the walls are the same metal and `machinery`;
+    the red strips on the blocks and ribs and the pink lamps are gone; the small lamps on the back wall and under the roof stay.
+    The shared mosaic tile lies over all of it, as over the hull. No doors (the throat is open for the pods).
+  - **Lamps:** `BayLights` also lights the manifest's `cargo_bay_red_1` and `_2` (in the compartment, z 452 and 478 on the pods'
+    path), through `LightRig`'s slots. The bays are about 340 m apart, so only the near bay's two win slots; never more than two of
+    the four hold one for a bay view.
+  - **Kept:** the bay's shape and sections (z 430 0.959, z 465 0.956, top 1.000; the side plane exempt as before), T27's nav point,
+    T30's clearances.
+  - **Cost** (RX 6950 XT, Forward+, X11 fullscreen 6 144 x 3 456, before and after; `SHEET_VIEWS=t32`): draw calls unchanged;
+    triangles -4.5 k (the strips and pink lamps); Godot's VRAM 1 891.9 to 1 891.8 MB. GPU times are within run-to-run noise.
+
+    | View | Draw calls | GPU ms |
+    |---|---|---|
+    | Outside the mouth | 236 to 236 | 6.95 to 4.38 |
+    | Inside looking in | 254 to 254 | 6.20 to 4.47 |
+    | Inside looking out | 196 to 196 | 5.42 to 4.41 |
+
+  - **Tests:** `test_station_hardpoints` (the bay's look: only lamp-sized faces glow red, every inside face lined, the outside not,
+    the back wall lined), GUT `test_bay_lights` (four lamps; each bay's own two win slots in it). In a `--staged` copy: Python
+    station modules, GUT 61/61 (with T30's `test_cargo_carry_clearance`, `test_cargo_ferry_clearance`, `test_freighter_cargo`, T27's
+    `test_nav_targets`).
+  - **Sheet (H):** `references/screenshots/T32 cargo bay red-lit/T32_cargo_bay_red_lit_sheet.png`.

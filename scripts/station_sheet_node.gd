@@ -32,7 +32,7 @@ const VIEWS: Array[Dictionary] = [
 ]
 ## M7-T25's `t25` (the main docking bay rebuilt to the STL with an 80 m mouth: bow on, three-quarter, the mouth close and inside, the
 ## doors open onto the black void, the lower hatch, the ring), `t25tunnel` (the mouth close up: its red-lit grey plating) and
-## `t25seq` (live: a civilian docks through the opening doors, then
+## `t32` (the cargo bay in the same metal: outside its throat, inside looking in and out), `t25seq` (live: a civilian docks through the opening doors, then
 ## one undocks; each frame taken when the traffic reaches a stage). M7-T19's sets (`views=<set>`): `t19` the cost views (from a Cobra bay, the aperture, 1 km, 10 km, 1 000 km), `fly` a pass along
 ## the station's underside about 200 m off the hull from the bow to the reactor (section joins and levels of detail), `doors` the
 ## Cobra-bay doors close up (the near-only props); M7-T05's `t05` (the docking bay), `cargo`, `strip` and `markers` (every hardpoint
@@ -129,6 +129,13 @@ const VIEW_SETS: Dictionary = {
 		{"name": "tunnel_mid", "at": Vector3(8.0, 4.0, 512.0), "aim": Vector3(-6.0, 0.0, 553.0), "fov": 74.0},
 		{"name": "tunnel_doors", "at": Vector3(5.0, 3.0, 538.0), "aim": Vector3(0.0, 0.0, 553.0), "fov": 78.0},
 		{"name": "tunnel_mid_looking_out", "at": Vector3(-6.0, 3.0, 535.0), "aim": Vector3(6.0, 0.0, 470.0), "fov": 74.0},
+	],
+	# M7-T32: the cargo bay in the docking bay's red-lit grey metal: outside its throat down the slot, inside looking in, inside
+	# looking out.
+	"t32": [
+		{"name": "cargo_outside_mouth", "at": Vector3(22.0, 356.0, 300.0), "aim": Vector3(0.0, 340.0, 470.0), "fov": 55.0},
+		{"name": "cargo_inside_looking_in", "at": Vector3(18.0, 346.0, 446.0), "aim": Vector3(-40.0, 333.0, 489.0), "fov": 80.0},
+		{"name": "cargo_inside_looking_out", "at": Vector3(-30.0, 347.0, 486.0), "aim": Vector3(8.0, 338.0, 410.0), "fov": 80.0},
 	],
 	# Live (the drum turning, the traffic flying): a civilian docks and one undocks, seen from beside the lane outside the mouth.
 	"t25seq": [

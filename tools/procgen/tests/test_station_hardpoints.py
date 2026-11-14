@@ -21,6 +21,7 @@ from tools.procgen.core.geometry import Mesh
 from tools.procgen.parts import station as st
 from tools.procgen.parts import station_detail as sd
 from tools.procgen.parts import station_props as sp
+from tools.procgen.parts import station_layouts as sl
 
 SMALL = (1024, 1024, 64)
 # D75 as approved (docs/milestones/m7-babylon-5-station.md), station frame: name, kind, body, position, up.
@@ -532,15 +533,29 @@ class BayShapeTests(unittest.TestCase):
         self.assertGreater(sd.VOID_HALF[0], hw)
         self.assertGreater(sd.VOID_HALF[1], hh)
 
-    def test_the_cargo_bay_is_a_roofed_compartment_dark_with_red_edges(self) -> None:
+    def test_the_cargo_bay_is_a_roofed_compartment_in_red_lit_grey_metal(self) -> None:
         p = self.cargo.vertices
         self.assertLess(float(np.abs(p[:, 0]).max()), sd.ZG_HALF_X + 0.01, "inside the spine")
         self.assertTrue(np.all((p[:, 2] >= sd.ZG_FRONT_Z - sd.ZG_RING[1] - 1e-6) & (p[:, 2] <= sd.ZG_BACK_Z + 1e-6)))
         used = {m.name for m in self.cargo.materials}
         mats = station.STYLE.materials
-        for role in ("bay_frame", "bay_wall", "bay_red_2", "bay_pink", "lamp"):
+        for role in ("bay_frame", "bay_tunnel", "machinery", "lamp"):
             self.assertIn(mats[role].name, used, role)
-        self.assertEqual(mats["bay_wall"].emissive_strength, 0.0, "dark machinery; only edges and lamps glow")
+        for role in ("bay_wall", "bay_red_2", "bay_pink"):
+            self.assertNotIn(mats[role].name, used, f"{role}: the docking bay's red-lit grey metal, no red strips (M7-T32)")
+        tint = mats["bay_tunnel"].emissive_strength
+        tris = self.cargo.vertices[self.cargo.faces]
+        area = 0.5 * np.linalg.norm(np.cross(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0]), axis=1)
+        red = np.array([m.emissive_strength > tint and m.emissive[0] > 4.0 * m.emissive[1] for m in self.cargo.materials])
+        self.assertLess(float(area[red[self.cargo.face_material]].max()), 4.0, "only lamp-sized faces glow red")
+        spine = next(s.mesh for s in st.frame_shapes(mats) if s.name == "spine")
+        names = np.array([spine.materials[k].name for k in spine.face_material])
+        centre = spine.vertices[spine.faces].mean(axis=1)
+        inside = sl.frame_interior(centre, spine.face_normals())
+        self.assertTrue(np.all(names[inside] == mats["bay_tunnel"].name), "the walls, roof, floor and back wall inside lined with the grey metal")
+        self.assertFalse(np.any(names[~inside] == mats["bay_tunnel"].name), "the spine outside keeps its paint")
+        back = inside & (np.abs(centre[:, 2] - sd.ZG_BACK_Z) < 0.1)
+        self.assertGreater(int(back.sum()), 0, "the back wall is lined too")
         walls = sd.cargo_bay_walls(mats["spine"]).vertices
         self.assertGreaterEqual(float(walls[:, 1].min()), 290.0 - 1e-6, "nothing under the keel (the STL's, down to the bow's pylon)")
         outline = np.array(sd.throat_outline())

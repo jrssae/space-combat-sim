@@ -19,8 +19,8 @@ extends Node3D
 ##   a ram at the skin's speed (Q9). Each piece also carries a `Damageable` (the frame's on this node, beside the `Targetable`)
 ##   whose hits go to the damage sections (`StationSections`, Q5); the hull itself never falls.
 ## - **Visuals** are the pieces' `RenderPiece`s, with the drum's on a pivot turned each frame to the body's angle.
-## - Lights: the main docking bay's two red lamps down its mouth take `LightPicker` slots (`BayLights`, M7-T25); M7-T18 lights
-##   the rest of the station.
+## - Lights: the bays' red lamps (two down the main docking bay's mouth, two in the cargo bay) take `LightPicker` slots
+##   (`BayLights`, M7-T25, M7-T32); M7-T18 lights the rest of the station.
 ## - **The defence grid** (M7-T07, D75) is a `StationGrid` child: its mounts hang from the visuals and bind to the frame and drum
 ##   bodies in the core. A bolt of the station's own side stops on its hull without harm (maintainer).
 ##

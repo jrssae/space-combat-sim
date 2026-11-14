@@ -583,7 +583,9 @@ def frame_shapes(mats: dict[str, Material]) -> list[Shape]:
                    for sx in (-1.0, 1.0) for z in FLANK_LAMPS_Z]
     return [
         Shape("bow", Mesh.concatenate([lofted["bow"], ring, ring_teeth, pylon, tower])),
-        Shape("spine", Mesh.concatenate([spine_slab(spine_rows_from(sd.ZG_BACK_Z), spine), sd.cargo_bay_walls(spine), lofted["spine"]])),
+        # The cargo bay inside in the docking bay's grey metal (M7-T32).
+        Shape("spine", sd.lined(Mesh.concatenate([spine_slab(spine_rows_from(sd.ZG_BACK_Z), spine), sd.cargo_bay_walls(spine),
+                                                  lofted["spine"]]), mats["bay_tunnel"])),
         Shape("radiators", lofted["radiators"]),
         Shape("cargo", lofted["cargo"]),
         Shape("dome", Mesh.concatenate([ssp.dome_mesh(mats["dome"], mats["lamp"]), *flank_lamps])),

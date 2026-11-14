@@ -861,6 +861,22 @@ them). `parts/station_detail.py` (`main_docking_bay`, turning with the drum), `p
   `SHEET_VIEWS=t25` and `t25seq` (live) in `scripts/station_sheet_node.gd`. GPU, RX 6950 XT, Forward+, X11 fullscreen 6 144 x 3 456: the bay bow on
   229 draw calls, 343 k triangles, 3.0 ms GPU; the mouth close 188 draw calls, 4.6 ms.
 
+## The cargo bay in red-lit grey metal (M7-T32)
+
+The maintainer, after approving T25's tunnel: the same surfaces on the cargo bay. Its shape is T21's (above), unchanged.
+- **Lining:** `station_detail.lined` gives the spine's faces inside the bay (the faces the game draws out of the sun,
+  `station_layouts.frame_interior`: the throat's and the compartment's walls, roof and floor, and the back wall) T25's `bay_tunnel`
+  (grey metal, metallic 0.7, roughness 0.32, panelled, a faint red tint 0.04), the shared mosaic tile over it; the spine outside keeps
+  its paint. The throat has no doors (open for the pods).
+- **Dressing:** the floor's machinery blocks and the ribs up the walls in `bay_tunnel` and `machinery`; the red strips on them and
+  the pink lamps removed (no self-lit strips or bands); the small red lamps on the back wall and under the roof kept; the frame
+  round the throat's mouth stays `bay_frame`.
+- **Lamps:** `BayLights` lights the `cargo_bay_red_1` and `_2` lights (z 452 and 478, on the pods' path) as well as the docking bay's
+  two, all four through `LightRig`'s slots; the bays are about 340 m apart, so only the near bay's pair win slots.
+- **Sections** unchanged: z 430 0.959, z 465 0.956, top 1.000 (side exempt, T21). **Cost:** draw calls unchanged (236, 254, 196),
+  triangles -4.5 k, Godot's VRAM 1 891.9 to 1 891.8 MB; GPU 6.95 to 4.38, 6.20 to 4.47, 5.42 to 4.41 ms (within run-to-run noise).
+- **Sheet (H):** `references/screenshots/T32 cargo bay red-lit/T32_cargo_bay_red_lit_sheet.png` (`SHEET_VIEWS=t32`).
+
 ## No two faces in one plane (M7, the flickering bay lamps)
 
 The launch halls' work lamps flickered in the launch shots: each lamp's box sat inside its wall panel's box with the same inner

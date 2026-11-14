@@ -511,9 +511,10 @@ def door_leaf_outline(upper: bool) -> list[tuple[float, float, float]]:
 
 # --- the cargo bay (zero-gravity) ----------------------------------------------------------------------------------------
 # Inside the spine where the slot between the bow's forks ends (M7-T21, read off the STL): a closed rectangular compartment, roofed,
-# reached only through an octagonal throat facing down the slot; dark machinery with red and pink on its edges and lamps (the
-# maintainer's show capture, ``references/zero g cargo bay references/``). Saturn freighters hold outside and their cargo pods
-# (31.1 x 17.2 x 43.0 m, ``saturn.POD``) fly in by themselves (Q8 as refined).
+# reached only through an octagonal throat facing down the slot. Inside it is the main docking bay's red-lit grey metal (M7-T32):
+# the walls, roof and floor lined with ``bay_tunnel``, grey machinery and ribs, small lamps, lit red by two lamps through the light
+# rig's slots (``BayLights``); nothing self-lit but the lamps. Saturn freighters hold outside and the station's maintenance bots
+# carry their cargo pods (31.1 x 17.2 x 43.0 m, ``saturn.POD``) in and out (M7-T30).
 ZG_FRONT_Z = 420.0  # the spine's front, the slot's end: the throat's mouth
 ZG_COMPARTMENT_Z = 442.0  # the throat gives onto the compartment here (the STL's)
 ZG_BACK_Z = 490.0  # 8 m deeper than the STL's, so a whole pod (43 m) lies in it lengthwise
@@ -563,6 +564,20 @@ def cargo_bay_walls(m: Material) -> Mesh:
     return Mesh.concatenate(parts)
 
 
+def lined(mesh: Mesh, lining: Material) -> Mesh:
+    """``mesh`` (the frame, in the station frame) with its faces inside the cargo bay, the faces the game draws out of the sun (its
+    walls, roof, floor and back wall), in ``lining`` (M7-T32)."""
+    from .station_layouts import frame_interior  # noqa: PLC0415 - the layouts build on this module
+
+    tris = mesh.vertices[mesh.faces]
+    inside = frame_interior(tris.mean(axis=1), mesh.face_normals())
+    table = list(mesh.materials)
+    if lining not in table:
+        table.append(lining)
+    material = np.where(inside, table.index(lining), mesh.face_material)
+    return Mesh(mesh.vertices, mesh.faces, material, tuple(table), mesh.face_chart, mesh.face_uv)
+
+
 def _ring(mats: dict[str, Material]) -> Mesh:
     """The frame round the throat's mouth, standing proud of the spine's front."""
     from . import station as st_  # noqa: PLC0415
@@ -577,10 +592,9 @@ def _ring(mats: dict[str, Material]) -> Mesh:
 
 
 def _zg_machinery(mats: dict[str, Material]) -> list:
-    """The compartment's floor: dark machinery blocks in tiers, a red strip on each block's front edge, pink lamps among them; ribs up
-    the walls with red edges; red lamps on the back wall and under the roof."""
-    dark, recess = mats["bay_wall"], mats["recess"]
-    red, pink = mats["bay_red_2"], mats["bay_pink"]
+    """The compartment's floor: grey machinery blocks in tiers; ribs up the walls; small red lamps on the back wall and under the roof.
+    No red strips or pink lamps (the maintainer: the red is the lamps' light on grey metal, M7-T32)."""
+    plating, machinery = mats["bay_tunnel"], mats["machinery"]
     hx, floor, roof = ZG_HALF_X, ZG_FLOOR_Y, ZG_ROOF_Y
     out = []
     xs = np.linspace(-hx + 1.0, hx - 1.0, 13)
@@ -589,19 +603,11 @@ def _zg_machinery(mats: dict[str, Material]) -> list:
         for k, za in enumerate(zs[:-1]):
             h = 1.0 + 3.0 * (0.5 + 0.5 * math.sin(1.7 * i + 2.3 * k)) * min(1.0, (k + 1) / 3.0)  # tiers stepping up toward the back
             lo, hi = (xa + 0.4, floor, za + 0.4), (xb - 0.4, floor + h, za + 7.6)
-            out += box_faces(lo, hi, dark if (i + k) % 3 else recess, skip_back=False)
-            # The red strip caps the block's front edge, proud of its top and sides: flush faces would z-fight and the red flicker.
-            out += box_faces((lo[0] - 0.05, hi[1] - 0.3, lo[2] - 0.05), (hi[0] + 0.05, hi[1] + 0.05, lo[2] + 0.4), red, skip_back=False)
-            if (i * 3 + k) % 7 == 2:
-                cx, cz = 0.5 * (xa + xb), za + 4.0
-                out += box_faces((cx - 0.8, hi[1], cz - 0.8), (cx + 0.8, hi[1] + 0.8, cz + 0.8), pink, skip_back=False)
+            out += box_faces(lo, hi, plating if (i + k) % 3 else machinery, skip_back=False)
     for sx in (-1.0, 1.0):
         x0, x1 = sorted((sx * hx, sx * (hx - 1.2)))
         for z in np.arange(ZG_COMPARTMENT_Z + 8.0, ZG_BACK_Z - 4.0, 12.0):
-            out += box_faces((x0, floor + ZG_MACHINE_M, z - 1.0), (x1, roof - 1.0, z + 1.0), dark, skip_back=False)
-            edge = sx * (hx - 1.2)
-            out += box_faces((min(edge, edge - sx * 0.3), floor + ZG_MACHINE_M, z - 1.0), (max(edge, edge - sx * 0.3), roof - 1.0, z - 0.6),
-                             red, skip_back=False)
+            out += box_faces((x0, floor + ZG_MACHINE_M, z - 1.0), (x1, roof - 1.0, z + 1.0), plating, skip_back=False)
     for x in np.linspace(-80.0, 80.0, 9):  # red lamps along the back wall, and a row under the roof
         out += box_faces((x - 1.0, floor + 14.0, ZG_BACK_Z - 0.6), (x + 1.0, floor + 16.0, ZG_BACK_Z), mats["lamp"], skip_back=False)
         out += box_faces((x - 0.8, roof - 0.6, 465.0 - 0.8), (x + 0.8, roof, 465.0 + 0.8), mats["lamp"], skip_back=False)
