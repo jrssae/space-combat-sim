@@ -97,7 +97,10 @@ func test_the_cobra_doors_props_are_instanced_under_the_waist() -> void:
 		return
 	var props: Dictionary = _pieces()["drum"].get("props", {})
 	assert_false(props.is_empty(), GEN_ASSETS_HINT)
-	var nodes: Array[MultiMeshInstance3D] = station.drum_piece.prop_nodes()
+	var nodes: Array[MultiMeshInstance3D] = []
+	for node: MultiMeshInstance3D in station.drum_piece.prop_nodes():
+		if not String(node.name).begins_with("Props_AirlockLeaf"):  # the docking bay's inner doors (M7-T25) sit in their own section
+			nodes.append(node)
 	assert_eq(nodes.size(), 14, "twelve door leaves (M7-T05: six doors, two leaves each), the clamps and the gantries")
 	var counts: Dictionary = {}
 	for node: MultiMeshInstance3D in nodes:
