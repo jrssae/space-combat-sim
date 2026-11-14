@@ -269,6 +269,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T22 | A | The dorsal spine and the command section rebuilt to the STL (per-part sections IoU >= 0.90; maintainer, 2026-11-13) | T21 | Opus | T04 built them to the overall silhouette; the per-part check scores them 0.38 to 0.72 | done |
 | T23 | D | The jumpgate and jump points refined from the maintainer's GIF: gate opening, the blue vortex, a ship's jump point (maintainer, 2026-11-13) | - | Opus | Shader and asset look against a show reference; (H) | done |
 | T24 | A | The station's surfaces refined for fullscreen, in both texture-detail sets (low and high): resolution, detail, colour and material, no visible tiling (maintainer, 2026-11-13) | T22 | Opus | A look task on an 8 km hull at 6K within a VRAM budget; (H) | not started |
+| T25 | A | The main docking bay rebuilt: shape and proportions from the STL (its section exemption lifted, IoU >= 0.90), the look from the show captures (maintainer, 2026-11-14) | T05, the flicker and light-leak fix | Opus | The bay reads wrong against the show in shape, mouth detail, tunnel and light; (H) | not started |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M7-T01 Station references and measurements
@@ -1219,7 +1220,49 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   - **Sheets** (H, approved as a direction over the rounds): `references/screenshots/M7-T23 jumpgate/`: `M7-T23_AB_gate_arrival.png`,
     `M7-T23_AB_jump_point.png` (the GIF, M6, now), `M7-T23_strip_gate_arrival.png`, `M7-T23_strip_jump_point.png`,
     `M7-T23_lens_flare_off_centre.png`, `M7-T23_gate_flash_whiteout_vs_round.png` (the rejected white-out beside the round flash).
+
+### M7-T24 The station's surfaces refined for fullscreen (low and high texture sets)
+
+- **Why (maintainer, 2026-11-13, watching the launch cinematics fullscreen):** the station's textures need refinement, "even at
+  the low texture level". All four faults were named: **blurry / low resolution** (the hull atlas's ~1.3 m texel shows up close),
+  **flat / lacking detail** (large plain areas), **colour and material wrong** against the references, and a **repeating, tiled
+  look** (the 16 m detail tile or the panel pattern).
+- **Agent:** Opus. **Depends on:** T22 (the spine and command section rebuilt, so their surfaces are not redone twice).
+- **What:**
+  - Give the station the **two texture-detail sets** the ships have (M5-T40, M7-T15): `low` reads cleanly fullscreen on its own
+    (major seams, plate tones, no blur at the views a player sees), `high` adds the fine plating, joint grime, recessed hatches and
+    ribs; the setting switches them like the ships'.
+  - Resolution where it shows: per-section atlases or texel tiers (T19's sections allow it) for the places seen up close (Q2), the
+    near-only detail props for fine marks, and mipmapping and filtering checked; VRAM measured and kept inside a budget the agent
+    states (today 109 MB of maps, +14 MB props).
+  - Detail: plating and panel layouts read off the references (T01's "Surface and panels", the station close-ups in
+    `references/T40 seam references/`, the lighting and bay references), so large areas are never plain.
+  - Colour and material: re-read the colours off lit captures as M5-T39 did, and re-check the metal and roughness against
+    "metallic, not plastic" (D72); show swatches beside the captures.
+  - No visible tiling: break up the 16 m detail tile (rotation and offset per plate, a second scale, masks), checked at grazing
+    angles.
+- **Done when:** a fullscreen (6144 × 3456) A/B sheet of the low and high sets from the launch-cinematic views, the bays, 1 km and
+  10 km, beside the references, approved by the maintainer (H); VRAM and fps recorded; tests (both sets present, the switch, budgets,
   determinism); committed.
+
+### M7-T25 The main docking bay rebuilt to the STL and the show
+
+- **Why (maintainer, 2026-11-14, watching the tour):** the main docking bay "doesn't look close enough to the show and needs
+  revision"; all four faults named: **overall shape and proportions**, **the mouth and frame detail**, **the tunnel interior**,
+  **colour and lighting**. T05 built it from the six close-up show captures (`references/docking bay references/`) and exempted
+  it from the STL section check (scores 0.00 to 0.79 against 0.90 to 0.99 for every other part); the maintainer chose to take
+  the **shape from the STL** and the **look from the show**.
+- **Agent:** Opus. **Depends on:** the flicker and light-leak fix committed (it seals the bays and keeps the sun out of
+  interiors; the rebuild keeps both).
+- **What:** read the main docking bay off `references/EA Babylon 5 Station.stl` with T21's section tools (the cross housing, the
+  mouth and its frame, the tunnel's depth and steps, the airlock, the lower hatch, the toothed rim) and rebuild it to **IoU >= 0.90
+  per section plane** (the exemption in `station_fidelity.py` removed); the look (the stepped red frames, dark machinery, red on
+  edges and lamps, the sawtooth airlock, the pink panels at the mouth) from the six show captures and the bow-lights capture;
+  the passage stays open for the traffic that fits (T10), the drum's roll kept, the bay sealed (no line of sight to space but the
+  mouth), the sun kept out. Hardpoints (`main_docking_bay_*`), collision, sections and lights follow. A sheet: STL sections beside
+  the build, and the bay from the bow, three-quarter and inside, beside the show captures (H); the maintainer may send more
+  captures of the bay from outside.
+- **Done when:** the sections pass, the sheet is approved, tests green, committed.
 
 ### M7-T14 Integration, full suite, docs and acceptance
 
