@@ -1302,28 +1302,6 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 - **Done when:** an A/B sheet and short frame strips beside the GIF on the GPU, approved by the maintainer (H); the battle GPU test
   from M6 still inside its budget; tests green; committed.
 
-### M7-T24 The station's surfaces refined for fullscreen (low and high texture sets)
-
-- **Why (maintainer, 2026-11-13, watching the launch cinematics fullscreen):** the station's textures need refinement, "even at
-  the low texture level". All four faults were named: **blurry / low resolution** (the hull atlas's ~1.3 m texel shows up close),
-  **flat / lacking detail** (large plain areas), **colour and material wrong** against the references, and a **repeating, tiled
-  look** (the 16 m detail tile or the panel pattern).
-- **Agent:** Opus. **Depends on:** T22 (the spine and command section rebuilt, so their surfaces are not redone twice).
-- **What:**
-  - Give the station the **two texture-detail sets** the ships have (M5-T40, M7-T15): `low` reads cleanly fullscreen on its own
-    (major seams, plate tones, no blur at the views a player sees), `high` adds the fine plating, joint grime, recessed hatches and
-    ribs; the setting switches them like the ships'.
-  - Resolution where it shows: per-section atlases or texel tiers (T19's sections allow it) for the places seen up close (Q2), the
-    near-only detail props for fine marks, and mipmapping and filtering checked; VRAM measured and kept inside a budget the agent
-    states (today 109 MB of maps, +14 MB props).
-  - Detail: plating and panel layouts read off the references (T01's "Surface and panels", the station close-ups in
-    `references/T40 seam references/`, the lighting and bay references), so large areas are never plain.
-  - Colour and material: re-read the colours off lit captures as M5-T39 did, and re-check the metal and roughness against
-    "metallic, not plastic" (D72); show swatches beside the captures.
-  - No visible tiling: break up the 16 m detail tile (rotation and offset per plate, a second scale, masks), checked at grazing
-    angles.
-- **Done when:** a fullscreen (6144 × 3456) A/B sheet of the low and high sets from the launch-cinematic views, the bays, 1 km and
-  10 km, beside the references, approved by the maintainer (H); VRAM and fps recorded; tests (both sets present, the switch, budgets,
 - **Done (2026-11-13):**
   - **The maintainer's decisions** over four rounds of sheets: (1) **no pause** before a ship's own point flares (M6-T19 round 2's
     judgement stands; `point.lead_s` 0, a value there would hold the small star that long); (2) **round flashes with lens flares,
