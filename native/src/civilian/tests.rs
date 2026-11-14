@@ -54,6 +54,7 @@ fn view<'a>(rows: &'a Rows, contacts: &'a [i32], fleeing: &'a [bool]) -> View<'a
         radius: 80.0,
         speed_mps: 130.0,
         fleeing,
+        shun: -1,
     }
 }
 

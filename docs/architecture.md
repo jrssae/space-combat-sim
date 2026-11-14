@@ -4389,6 +4389,15 @@ tests/integration/test_civilian_flight.gd, test_civilian_ships.gd, test_turret_b
   alarm it heard. The alarm is one hop (only a civilian that sees a threat raises it), so two panicked ships never keep
   each other running. Every query walks the ship's own contacts; the marks are one pass over the brains a tick, sequential
   inside the job, so one thread and six, `threaded` and `delayed`, give the same bits (`test_civilian_flight`).
+- **Fire from a ship that is not an enemy (M7-T29).** A bolt cannot land on a friendly or neutral hull (D31), so a civilian
+  hears no hit from the player. Its think therefore also takes any side's bolt but its own that passes within its radius
+  plus `CLOSE_FIRE_M` (15 m) in the incoming-fire horizon (`contact::close_fire_from`): the shooter, when among the contacts
+  and not hostile, is kept `PANIC_HOLD_S` as a threat (`RetreatState.scare`) and fled from by the rules above, never run to
+  (`civilian::View.shun`); the civilian counts as alarmed. If the shooter had the civilian selected, the job reports the
+  pair (`PickJob.provoked`) and the main thread notes it at the join (`Memory.note_provoked`): that civilian's own turrets
+  may then pick the shooter though it is a friend, and `HitResolver` lets that civilian's bolts land on that shooter alone
+  (`ScsSimCore.provoked_pair`, asked only while `provoked_count` is above 0). Stray fire is fled from with the turrets
+  silent. Civilian rows only, so every other row's maths and every recording is unchanged.
 - **A big hull for what it is.** Against a civilian target the attack brain and the slashing pass measure their ranges to
   its skin (centre distance less its radius) and widen the miss gate by half the radius; the attack's pick ranks a civilian
   by its skin distance. Avoidance gives a civilian contact the rocks' horizon (time for a sideways burn to clear its reach).

@@ -374,3 +374,120 @@ fn a_docking_lane_backs_a_freighter_in_and_holds_it_stern_to_the_bay() {
     assert!(out.flight.brake, "holding");
     assert!(out.flight.rot.y.abs() > 0.05, "the hold turns the nose back: {:?}", out.flight.rot);
 }
+
+// A bolt of faction `faction` from `shooter`, at `at` flying at `v`.
+fn bolt(bench: &mut Bench, shooter: i64, faction: u32, at: Vector3, v: Vector3) {
+    let b = &mut bench.bolts;
+    b.ids.push(900 + b.ids.len() as i64);
+    b.positions.push(at);
+    b.velocities.push(v);
+    b.last_steps.push(Vector3::ZERO);
+    b.faction_ix.push(faction);
+    b.shooters.push(shooter);
+    b.kinds.push(0);
+    b.radii.push(0.5);
+    bench.field.build(&bench.rows, &bench.bolts, bench.grid.cell_m);
+}
+
+// A civilian (the thinking row, of the station's people) far from the station, a fighter of its own people 600 m off its
+// beam, and a kin freighter 3 km ahead to run to.
+fn civilian_bench() -> Bench {
+    let at = Vector3::new(0.0, 0.0, 30_000.0);
+    let ships = [
+        (RAIDER, 0, at),
+        (400, 0, at + Vector3::new(600.0, 0.0, 0.0)),
+        (401, 0, at + Vector3::new(0.0, 0.0, -3000.0)),
+    ];
+    let mut rows = rows_with(&ships, 500.0, 0.0);
+    rows.roles[1] = crate::rows::ROLE_CIVILIAN;
+    rows.roles[3] = crate::rows::ROLE_CIVILIAN;
+    Bench::new(rows)
+}
+
+// The civilian thinks as one of the station's people: its own side friendly, raiders hostile.
+fn civilian_think(bench: &mut Bench, brain: &mut Brain, now_s: f64) -> Output {
+    let inputs = Inputs {
+        relations: &[pilot::FRIENDLY, pilot::HOSTILE],
+        own_body_id: RAIDER,
+        now_s,
+        dt: 1.0 / 60.0,
+        hull_fraction: 1.0,
+        self_id: RAIDER,
+        selected_id: 0,
+        last_hit_s: NEVER,
+        last_bolt_hit_s: NEVER,
+        last_attacker_id: 0,
+        friendly_fire: false,
+        origin: [0.0; 3],
+        nearest_k: 12,
+        static_k: 8,
+        lean: false,
+    };
+    brain.think(
+        &bench.rows,
+        &bench.bolts,
+        &mut Work { grid: &bench.grid, query: &mut bench.query },
+        &bench.field,
+        1,
+        &mut bench.scratch,
+        &mut bench.keep,
+        &inputs,
+    )
+}
+
+fn civilian_brain() -> Brain {
+    let mut brain = raider_brain(&[KIND_RETREAT, KIND_IDLE]);
+    brain.ship.radius = 40.0;
+    brain
+}
+
+#[test]
+fn a_civilian_flees_from_a_friends_fire_that_comes_close_and_toward_its_kin() {
+    let mut bench = civilian_bench();
+    let mut brain = civilian_brain();
+    civilian_think(&mut bench, &mut brain, 1.0);
+    assert_ne!(brain.current_kind(), i32::from(KIND_RETREAT), "nothing to fear yet");
+    // The fighter's bolt passes 30 m from the civilian's centre: inside its hull's radius and the margin.
+    let at = bench.rows.positions[1];
+    bolt(&mut bench, 400, 0, at + Vector3::new(500.0, 30.0, 0.0), Vector3::new(-900.0, 0.0, 0.0));
+    civilian_think(&mut bench, &mut brain, 1.1);
+    assert_eq!(brain.current_kind(), i32::from(KIND_RETREAT), "it runs");
+    assert!(brain.flight_flags().1, "and its alarm spreads to its kin");
+    let wish = normalized(brain.desired_velocity);
+    assert!(wish.z < -0.9, "to its kin ahead (M5's rule), not to the friend that fired: {wish:?}");
+    assert!(wish.x <= 0.01, "and no nearer the ship that fired: {wish:?}");
+    assert_eq!(brain.provoked_by, 0, "stray fire: the shooter had something else selected");
+    // The bolt gone, the fright holds for the panic's time, then it calms.
+    bench.bolts = Bolts::default();
+    bench.field.build(&bench.rows, &bench.bolts, bench.grid.cell_m);
+    civilian_think(&mut bench, &mut brain, 10.0);
+    assert_eq!(brain.current_kind(), i32::from(KIND_RETREAT), "still running 9 s on");
+    civilian_think(&mut bench, &mut brain, 1.1 + civilian::PANIC_HOLD_S + 2.0);
+    assert_ne!(brain.current_kind(), i32::from(KIND_RETREAT), "calm again");
+}
+
+#[test]
+fn fire_from_a_ship_that_has_the_civilian_selected_is_a_provocation_and_a_wide_miss_is_nothing() {
+    let mut bench = civilian_bench();
+    let mut brain = civilian_brain();
+    let at = bench.rows.positions[1];
+    // 200 m wide of a 40 m hull: no fright.
+    bolt(&mut bench, 400, 0, at + Vector3::new(500.0, 200.0, 0.0), Vector3::new(-900.0, 0.0, 0.0));
+    civilian_think(&mut bench, &mut brain, 1.0);
+    assert_ne!(brain.current_kind(), i32::from(KIND_RETREAT));
+    assert_eq!(brain.provoked_by, 0);
+    // Close, with the civilian selected by the shooter: the turrets are told.
+    bench.bolts = Bolts::default();
+    bench.rows.target_ids[2] = RAIDER;
+    bolt(&mut bench, 400, 0, at + Vector3::new(500.0, 10.0, 0.0), Vector3::new(-900.0, 0.0, 0.0));
+    civilian_think(&mut bench, &mut brain, 1.1);
+    assert_eq!(brain.current_kind(), i32::from(KIND_RETREAT));
+    assert_eq!(brain.provoked_by, 400, "fired on by the ship that selected it");
+    // A fighter (not a civilian) under the same fire does not run: M5's rule stands for every other ship.
+    let mut bench = civilian_bench();
+    bench.rows.roles[1] = 0;
+    let mut brain = civilian_brain();
+    bolt(&mut bench, 400, 0, at + Vector3::new(500.0, 10.0, 0.0), Vector3::new(-900.0, 0.0, 0.0));
+    civilian_think(&mut bench, &mut brain, 1.0);
+    assert_ne!(brain.current_kind(), i32::from(KIND_RETREAT));
+}

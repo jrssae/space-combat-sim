@@ -173,6 +173,9 @@ pub struct Memory {
     pub attacker: Vec<i64>,
     pub until_s: Vec<f64>,
     pub civilian: Vec<bool>,
+    /// The attacker fired close to the victim with the victim selected (M7-T29), though it may be a friend or a neutral
+    /// whose bolts cannot land: the victim's own turrets may answer it, and their bolts may hit it.
+    pub provoked: Vec<bool>,
 }
 
 impl Memory {
@@ -193,6 +196,27 @@ impl Memory {
         self.attacker.push(attacker);
         self.until_s.push(until);
         self.civilian.push(civilian);
+        self.provoked.push(false);
+    }
+
+    /// `attacker` fired close to civilian `victim` while it had it selected, at `now_s` (M7-T29).
+    pub fn note_provoked(&mut self, victim: i64, attacker: i64, now_s: f64) {
+        self.note(victim, attacker, now_s, true);
+        if let Some(k) = (0..self.victim.len()).find(|&k| self.victim[k] == victim && self.attacker[k] == attacker) {
+            self.provoked[k] = true;
+        }
+    }
+
+    /// Whether `victim` still remembers being provoked by `attacker` at `now_s`.
+    pub fn is_provoked(&self, victim: i64, attacker: i64, now_s: f64) -> bool {
+        (0..self.victim.len()).any(|k| {
+            self.provoked[k] && self.victim[k] == victim && self.attacker[k] == attacker && self.until_s[k] >= now_s
+        })
+    }
+
+    /// How many provoked pairs are remembered (the hit resolver asks about a pair only when there is one).
+    pub fn provoked_count(&self) -> usize {
+        self.provoked.iter().filter(|p| **p).count()
     }
 
     /// Drops what is older than the memory lasts, keeping the order of the rest.
@@ -218,6 +242,7 @@ impl Memory {
         self.attacker.clear();
         self.until_s.clear();
         self.civilian.clear();
+        self.provoked.clear();
     }
 
     fn retain(&mut self, keep: impl Fn(&Memory, usize) -> bool) {
@@ -228,6 +253,7 @@ impl Memory {
                 self.attacker[w] = self.attacker[k];
                 self.until_s[w] = self.until_s[k];
                 self.civilian[w] = self.civilian[k];
+                self.provoked[w] = self.provoked[k];
                 w += 1;
             }
         }
@@ -235,6 +261,7 @@ impl Memory {
         self.attacker.truncate(w);
         self.until_s.truncate(w);
         self.civilian.truncate(w);
+        self.provoked.truncate(w);
     }
 }
 
@@ -280,6 +307,9 @@ pub struct PickJob {
     pub surface_rows: Vec<usize>,
     /// Every working grid mount, interceptors too (M7-T10): what a raid on the station aims at.
     pub points: Vec<AimPoint>,
+    /// The job's answer beside the picks (M7-T29): civilians fired on by a ship that had them selected, as (victim body,
+    /// shooter body), in the batch's order; noted in the memory on the main thread at the join.
+    pub provoked: Vec<(i64, i64)>,
 }
 
 /// A working grid mount as the launch found it: its slot, its hull's body and its pivot in that hull's frame.
@@ -341,6 +371,7 @@ impl PickJob {
         self.surface_bodies.clear();
         self.surface_bodies.extend_from_slice(surface_bodies);
         self.picks.clear();
+        self.provoked.clear();
     }
 
     pub fn clear(&mut self) {
@@ -463,7 +494,10 @@ pub fn pick<F: Fn(i64) -> i64>(
         let Some(a) = usable_row(rows, row_of(attacker)) else {
             continue;
         };
-        if relation(relations, stride, m.faction_ix, rows.faction_ix[a]) == REL_FRIENDLY {
+        // A friend is never a target, but for the one that fired on this very ship with it selected (M7-T29).
+        if relation(relations, stride, m.faction_ix, rows.faction_ix[a]) == REL_FRIENDLY
+            && !(memory.provoked[k] && victim == m.body)
+        {
             continue;
         }
         let d_sq = f64::from(dist_sq(rows.positions[a], pivot));

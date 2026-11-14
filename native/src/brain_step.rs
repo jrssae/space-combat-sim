@@ -525,6 +525,9 @@ fn write_commands(work: &mut Work, snap: &mut Snapshot, n: usize) {
             continue;
         };
         let body = brain.ship.own_body_id;
+        if brain.provoked_by != 0 {
+            snap.turrets.provoked.push((body, brain.provoked_by));
+        }
         let mut events = write_command(&mut snap.commands, body, &item.out[..=CMD_LEN]);
         let wanted = brain.wanted_target_id;
         note_aim(&mut snap.commands, body, brain);

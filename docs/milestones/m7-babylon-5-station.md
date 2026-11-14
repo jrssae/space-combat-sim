@@ -280,7 +280,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T26 | B | All ships keep a low-polygon model at range instead of turning into a grey sphere; a dot only when a few pixels across (maintainer, 2026-11-14) | - | Opus | A Saturn 3 and a Narn transport became grey spheres while still clearly visible | not started |
 | T27 | C | Navigation targets and a hold-X interaction: the main docking bay, cargo bay and jumpgate as navigation targets; hold X for 2 s with a progress bar to act on them (maintainer, 2026-11-14) | T10 | Opus | A new input mechanic over targeting, HUD and the gate jump | in progress |
 | T28 | D | Fix: entering the jumpgate a second time opens the vortex twice and the camera stops tracking the ship (maintainer, 2026-11-14) | - | Fable | A state bug in M6's gate jump | in progress |
-| T29 | D | Fix: a civilian attacked in free flight does not flee (no change of speed or heading) (maintainer, 2026-11-14) | T10 | Fable | AI regression or a free-flight wiring gap | not started |
+| T29 | D | Fix: a civilian attacked in free flight does not flee (no change of speed or heading) (maintainer, 2026-11-14) | T10 | Fable | AI regression or a free-flight wiring gap | in progress |
 | T30 | D | Maintenance bots carry the freighters' cargo pods (Saturn 3, 4 and 8; cargo and tankers) between the ship and the cargo bay (maintainer, 2026-11-14) | T10, T11 | Opus | Replaces the pods flying by themselves | not started |
 | T31 | C | The pause menu gets Quit (exit the game); the start and pause menus' boxes shrink to their content (Settings keeps its layout) (maintainer, 2026-11-14) | - | Sonnet | Front-end layout | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
@@ -1468,6 +1468,44 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   the faction relation), the flee behaviour is suppressed (M7-T10's new station rules, the idle brain T11 used for the parked
   Saturn), or the civilians spawned in free flight lack a brain; fix; a test that an attacked civilian changes heading and speed
   and flees toward its own faction (M5's rule).
+- **Decisions (maintainer, 2026-11-14):**
+  1. **Fear, no damage.** The player's bolts still pass through a friendly or neutral civilian (D31 stands). A civilian flees
+     from any ship whose fire comes close, toward its own faction, and raises the alarm for its kin. Gated on the civilian
+     role, so no parity recording moves.
+  2. **Turrets:** "if the civilian was targeted first, then they fire back. if it was stray fire, then they stay silent." A
+     shooter that had that civilian selected when its close fire came may be engaged by that civilian's turrets, and their
+     bolts land on that shooter only; fire from a ship with something else selected is fled from in silence.
+- **Root cause.** Not a T10 regression and not a missing brain: the civilian never heard the attack. Every gate was keyed on
+  faction hostility. The player is `earth_alliance`; the Saturns and the Skylark are too, and the Narn, Centauri and Brakiri
+  hulls are neutral to it. So the player's bolts passed through (`Damageable.can_be_hit_by`: no hit, no attacker), were not
+  counted as incoming fire (`contact::incoming_one`: hostile bolts only), and the retreat scores 0 with no hostile in sight.
+  Reproduced on the build before the fix with the new test: the fighter fired, the Saturn stayed idle and moved 0 m.
+- **Done (as built; contracts in `docs/architecture.md` §18.11; awaiting the maintainer's check in free flight):**
+  - **The scare (native, in the AI job).** A civilian's think looks for a bolt of any side, not its own, that passes within
+    its hull's radius plus 15 m in the incoming-fire horizon (`contact::close_fire_from`, through the bolts' grid; the
+    earliest bolt row decides). When its shooter is among the contacts and not hostile (a hostile's fire is M5's rule,
+    unchanged), the retreat keeps that body for 20 s (`RetreatState.scare`, the panic's hold): it scores as a threat in
+    sight does, the flight is M5's (`civilian::flee_from`, to kin, a warship's far side, closing up with fleeing kin) with
+    the shooter never taken as the kin to run to (`View.shun`), and the civilian counts as alarmed, so kin within 5 km run
+    too (Q25).
+  - **Meant or stray.** When the shooter's selection (`rows.target_ids`) is that civilian, the think names it
+    (`Brain.provoked_by`); the job lists the pair (`PickJob.provoked`, in the batch's order) and the main thread notes it at
+    the join in the turrets' memory (`Memory.note_provoked`, 30 s as any attacker, refreshed while the fire goes on). A
+    provoked pair lets **that civilian's own turrets** pick the shooter though it is a friend (`turret_kernels::pick`; a
+    neighbour's turrets stay silent), and lets **that civilian's bolts land on that shooter** though their sides are not
+    hostile (`HitResolver` asks `ScsSimCore.provoked_pair` only while `provoked_count` is above 0). Nothing else changes
+    who can be hit: the shooter's bolts still pass through the civilian.
+  - **Measured** (`test_civilian_attacked`, a Saturn 4 with one turret, a Starfury of its own people 700 m astern holding
+    its trigger 4 s): stray fire: the Saturn went from rest to 59 m/s and 588 m toward its kin in 20 s, its kin 3 km off
+    ran too, 0 turret shots, no damage; with the Saturn selected, 12 s of fire: 16 turret shots, 7 hits on the shooter, 0
+    on a second Starfury beside it, 0 on the Saturn.
+  - **Threads and parity.** Threaded against delayed and one thread against six: the same rows, commands and turret digests
+    tick for tick with the provocation live. `turret_digest` adds a word only for a provoked pair, so every digest without
+    one is as it was. No recording moved.
+  - **Tests:** Rust 176 (+3: the scare and its end, meant against stray and a wide miss and a fighter left alone, the
+    provoked turret and its neighbours). GUT `test_civilian_attacked` (3).
+  - **Not changed:** T10's lane traffic needs nothing: a frightened lane ship runs for 20 s after the last close shot and
+    then takes its lane up again.
 
 ### M7-T30 Maintenance bots carry the freighters' cargo pods
 

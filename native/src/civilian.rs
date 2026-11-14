@@ -39,6 +39,8 @@ pub struct View<'a> {
     pub speed_mps: f64,
     /// Fleeing civilians by row (running from a threat or from an alarm), as the job marked them from the last thinks.
     pub fleeing: &'a [bool],
+    /// A row never run to though it is of the own people (M7-T29: the friend whose fire it flees); -1 for none.
+    pub shun: i32,
 }
 
 impl View<'_> {
@@ -50,6 +52,7 @@ impl View<'_> {
     fn kin(&self, j: usize) -> bool {
         let rows = self.rows;
         j != self.own_row
+            && j as i32 != self.shun
             && rows.rigid[j]
             && !rows.is_static[j]
             && rows.body_ids[j] != rows.body_ids[self.own_row]

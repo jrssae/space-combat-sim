@@ -31,6 +31,8 @@ pub struct TurretState {
     picks_applied: i64,
     picks_stale: i64,
     step_us: i64,
+    // The clock of the turrets' last step: when a provocation handed over at the join is remembered from (M7-T29).
+    provoked_now_s: f64,
     /// The turreted ships' own hit volumes (Q33): what blocks their turrets' fire.
     pub hulls: Hulls,
     // Shots the gate would have fired but the own hull was in the way (a readout).
@@ -77,6 +79,12 @@ impl ScsSimCore {
                 t.picks_applied += 1;
             } else {
                 t.picks_stale += 1;
+            }
+        }
+        // Civilians fired on by a ship that had them selected (M7-T29): remembered from the tick the job read.
+        if t.mounts.count() > 0 {
+            for &(victim, shooter) in &job.provoked {
+                t.memory.note_provoked(victim, shooter, t.provoked_now_s);
             }
         }
     }
@@ -394,6 +402,7 @@ impl ScsSimCore {
         let mut starts: Vec<Vector3> = Vec::new();
         let mut ids: Vec<i64> = Vec::new();
         self.turrets.memory.prune(now_s);
+        self.turrets.provoked_now_s = now_s;
         let tick = self.syncs();
         let mut surface_rows = std::mem::take(&mut self.turrets.surface_rows);
         self.grid_surface_rows(&mut surface_rows);
@@ -522,6 +531,18 @@ impl ScsSimCore {
         }
     }
 
+    /// Whether any civilian remembers a provocation (M7-T29), and whether `shooter`'s bolts may land on `target` though
+    /// their sides are not hostile: `shooter` is a civilian that `target` fired on with it selected, at `now_s`.
+    #[func]
+    fn provoked_count(&self) -> i64 {
+        self.turrets.memory.provoked_count() as i64
+    }
+
+    #[func]
+    fn provoked_pair(&self, shooter: i64, target: i64, now_s: f64) -> bool {
+        self.turrets.memory.is_provoked(shooter, target, now_s)
+    }
+
     /// Forgets a ship in the memory, as attacker and victim (it was destroyed).
     #[func]
     fn forget_attacker(&mut self, body_id: i64) {
@@ -597,6 +618,9 @@ impl ScsSimCore {
             word(self.row_of_id(mem.victim[k]) as u64);
             word(self.row_of_id(mem.attacker[k]) as u64);
             word(mem.until_s[k].to_bits());
+            if mem.provoked[k] {
+                word(1); // only a provoked pair adds a word, so every digest without one is as it was
+            }
         }
         for &(g, e) in &self.turrets.latch.pairs {
             word(u64::from(g) << 32 | u64::from(e));

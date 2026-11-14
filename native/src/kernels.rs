@@ -366,6 +366,60 @@ pub mod contact {
         closest_approach(rel_pos, rel_vel, INCOMING_HORIZON_S) < INCOMING_MISS_M
     }
 
+    /// The shooter (a body id) of a bolt of any side, not `own_body_id`'s, that passes within `miss_m` of a ship at `at`
+    /// in the incoming-fire horizon (M7-T29: a civilian is frightened by fire that comes close, whoever fires it); the
+    /// earliest bolt row among them, 0 for none. Walks the bolts near enough through the grid of their cells, as
+    /// `incoming_near` does.
+    #[allow(clippy::too_many_arguments)]
+    pub fn close_fire_from(
+        view: &View,
+        own_body_id: i64,
+        at: Vector3,
+        velocity: Vector3,
+        miss_m: f64,
+        bolt_cells: &[((i32, i32, i32), u32)],
+        cell_m: f64,
+        reach_max: f64,
+        candidates: &mut Vec<u32>,
+    ) -> i64 {
+        candidates.clear();
+        let pad = reach_max * (1.0 + PAD_REL) + PAD_M;
+        let lo = |v: f32| cell_of(f64::from(v) - pad, cell_m);
+        let hi = |v: f32| cell_of(f64::from(v) + pad, cell_m);
+        let (lx, ly, lz) = (lo(at.x), lo(at.y), lo(at.z));
+        let (hx, hy, hz) = (hi(at.x), hi(at.y), hi(at.z));
+        let span = |l: i32, h: i32| i64::from(h) - i64::from(l) + 1;
+        let columns = span(lx, hx).checked_mul(span(ly, hy));
+        if cell_m > 0.0 && reach_max.is_finite() && columns.is_some_and(|c| c <= bolt_cells.len() as i64) {
+            for cx in lx..=hx {
+                for cy in ly..=hy {
+                    let start = bolt_cells.partition_point(|e| e.0 < (cx, cy, lz));
+                    let end = bolt_cells.partition_point(|e| e.0 <= (cx, cy, hz));
+                    candidates.extend(bolt_cells[start..end].iter().map(|e| e.1));
+                }
+            }
+        } else {
+            candidates.extend(0..view.bolt_positions.len() as u32);
+        }
+        let mut first: Option<u32> = None;
+        for &i in candidates.iter() {
+            let b = i as usize;
+            let shooter = view.bolt_shooters[b];
+            if shooter == own_body_id || shooter == 0 || first.is_some_and(|f| f <= i) {
+                continue;
+            }
+            let rel_pos = sub(view.bolt_positions[b], at);
+            let rel_vel = sub(view.bolt_velocities[b], velocity);
+            let reach = f64::from(length(rel_vel)) * INCOMING_HORIZON_S + miss_m + 1.0;
+            if f64::from(length_squared(rel_pos)) <= reach * reach
+                && closest_approach(rel_pos, rel_vel, INCOMING_HORIZON_S) < miss_m
+            {
+                first = Some(i);
+            }
+        }
+        first.map_or(0, |i| view.bolt_shooters[i as usize])
+    }
+
     /// `incoming` over the bolts a grid of their cells (`sorted_cells_into`) puts within `reach_max` of `at`: the same count
     /// when no bolt can be incoming from farther than `reach_max` (the caller bounds it by the fastest bolt plus the
     /// ship's own speed, times the horizon, plus the miss distance). `candidates` is the caller's scratch.

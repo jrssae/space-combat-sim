@@ -58,6 +58,8 @@ const TARGET_NONE: i64 = -1;
 /// A big hull whose skin is within this of a ship is one of its contacts whatever the nearest-k cut kept (M7-T10): far
 /// enough to see it coming at any speed a fighter flies near it.
 pub const SURFACE_SIGHT_M: f64 = 2000.0;
+/// Fire passing within this of a civilian's hull (its radius added) frightens it (M7-T29).
+pub const CLOSE_FIRE_M: f64 = 15.0;
 
 /// A ship's constants as its brain needs them: the capability, where the bolts leave (ship frame), the weapon's muzzle
 /// speed and lifetime, the hull's bounding radius, and the avoidance tie-break (`hash(display_name)`).
@@ -481,6 +483,7 @@ impl Tick<'_> {
             radius,
             speed_mps,
             fleeing: self.fleeing,
+            shun: -1,
         }
     }
 
@@ -599,6 +602,8 @@ pub struct Brain {
     pub avoiding: bool,
     pub avoiding_urgent: bool,
     pub contacts_seen: i64,
+    /// The body whose close fire, with this civilian selected, the last think saw (0 none): the job tells the turrets.
+    pub provoked_by: i64,
     ram: RamState,
     retreat: RetreatState,
     evade: EvadeState,
@@ -647,6 +652,7 @@ impl Brain {
             avoiding: false,
             avoiding_urgent: false,
             contacts_seen: 0,
+            provoked_by: 0,
             ram: RamState::new(hash_seed(seed, "ram")),
             retreat: RetreatState::new(&profile),
             evade: EvadeState::new(hash_seed(seed, "evade")),
@@ -980,6 +986,33 @@ impl Brain {
             &mut scratch.broadcasts,
         );
         self.contacts_seen = scratch.contacts.len() as i64;
+        // A civilian is frightened by any ship's fire that comes close to its hull (M7-T29), and when that ship had it
+        // selected the fire was meant: its turrets may answer (the job hands the pair to the turrets' memory).
+        self.provoked_by = 0;
+        if !inputs.lean && rows.is_civilian(own_row) {
+            let shooter = contact::close_fire_from(
+                &view,
+                inputs.own_body_id,
+                p.position,
+                p.velocity,
+                self.ship.radius + CLOSE_FIRE_M,
+                &field.bolt_cells,
+                work.grid.cell_m,
+                reach_max + self.ship.radius,
+                &mut scratch.bolt_candidates,
+            );
+            if let Some(&r) = scratch.contacts.iter().find(|&&r| rows.body_ids[r as usize] == shooter && shooter != 0) {
+                let j = r as usize;
+                let relation = inputs.relations.get(rows.faction_ix[j] as usize).copied().unwrap_or(pilot::NEUTRAL);
+                // A hostile's fire is M5's business (the threat list); this is for everyone else's.
+                if relation != pilot::HOSTILE {
+                    self.retreat.scare(shooter, p.now_s);
+                    if rows.target_ids[j] == rows.ids[own_row] {
+                        self.provoked_by = shooter;
+                    }
+                }
+            }
+        }
         // `AiContext.refresh`.
         pilot::context_lists(
             rows,
@@ -1810,6 +1843,9 @@ struct RetreatState {
     alarm_row: i32,
     goal_id: i64,
     shelter: bool,
+    // Fire that came close (M7-T29): the body that fired it, of any side, and until when it keeps a civilian running.
+    scare_body: i64,
+    scare_until_s: f64,
 }
 
 impl RetreatState {
@@ -1828,6 +1864,8 @@ impl RetreatState {
             alarm_row: -1,
             goal_id: 0,
             shelter: false,
+            scare_body: 0,
+            scare_until_s: f64::NEG_INFINITY,
         }
     }
 
@@ -1843,14 +1881,17 @@ impl RetreatState {
         self.alarm_row = -1;
         self.goal_id = 0;
         self.shelter = false;
+        self.scare_body = 0;
+        self.scare_until_s = f64::NEG_INFINITY;
     }
 
     fn score(&mut self, tick: &Tick, ctx: &Context) -> f64 {
         if !may_retreat(ctx) {
             return 0.0;
         }
-        // A civilian runs on its people's alarm too (Q25), with no threat of its own in sight.
-        let panicked = tick.own_civilian() && self.panicked(tick);
+        // A civilian runs on its people's alarm too (Q25), with no threat of its own in sight, and from whoever's fire
+        // came close, hostile or not (M7-T29).
+        let panicked = tick.own_civilian() && (self.panicked(tick) | (self.scared_by(tick) >= 0));
         if tick.lists.hostiles.is_empty() {
             return if panicked { Self::SCORE_MIN } else { 0.0 };
         }
@@ -1870,6 +1911,24 @@ impl RetreatState {
             return Self::SCORE_MIN;
         }
         low
+    }
+
+    // Notes fire that came close from `body` at `now_s`: the civilian runs from it for `PANIC_HOLD_S`.
+    fn scare(&mut self, body: i64, now_s: f64) {
+        self.scare_body = body;
+        self.scare_until_s = now_s + civilian::PANIC_HOLD_S;
+    }
+
+    // The row of the ship whose close fire still frightens this civilian, when it is among the contacts; else -1.
+    fn scared_by(&self, tick: &Tick) -> i32 {
+        if self.scare_body == 0 || tick.p.now_s >= self.scare_until_s {
+            return -1;
+        }
+        tick.contacts
+            .iter()
+            .copied()
+            .find(|&r| tick.rows.body_ids[r as usize] == self.scare_body)
+            .unwrap_or(-1)
     }
 
     // Whether an alarm keeps this civilian running: one heard now (it holds `PANIC_HOLD_S` on), or one heard lately.
@@ -1900,6 +1959,16 @@ impl RetreatState {
                 threat = row as i32;
             }
         }
+        // No hostile in sight, but someone's fire came close: that ship is the threat (M7-T29).
+        if threat < 0 && tick.own_civilian() {
+            threat = self.scared_by(tick);
+            if let Ok(t) = usize::try_from(threat) {
+                let off = sub(p.position, tick.rows.positions[t]);
+                self.from_range_m = maxf(f64::from(length(off)), 1.0);
+                self.from_id = tick.rows.ids[t];
+                away = off;
+            }
+        }
         self.threatened = threat >= 0;
         if f64::from(length_squared(away)) < 1e-18 {
             away = p.forward;
@@ -1909,11 +1978,9 @@ impl RetreatState {
         let flight = if !tick.own_civilian() {
             None
         } else if let Ok(t) = usize::try_from(threat) {
-            civilian::flee_from(
-                &tick.civilian_view(ship.radius, self.speed_mps),
-                dir,
-                tick.rows.positions[t],
-            )
+            let mut view = tick.civilian_view(ship.radius, self.speed_mps);
+            view.shun = threat; // never to the ship it runs from, were it of its own people
+            civilian::flee_from(&view, dir, tick.rows.positions[t])
         } else {
             Some(civilian::flee_alarm(
                 &tick.civilian_view(ship.radius, self.speed_mps),

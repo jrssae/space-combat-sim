@@ -94,6 +94,10 @@ var _bolt_owned: int = 0  # rows at the front the core owns (spent in the core, 
 var _rock_drift := Vector3.ZERO
 var _sim: SimCore = null
 var _delta: float = 0.0
+# Provoked pairs the turrets remember this tick (M7-T29) and the clock they are asked at: none is the common case, and then
+# no pair is ever asked about.
+var _provoked_pairs: int = 0
+var _now_s: float = 0.0
 var _source: StringName = &"none"
 var _gather_frame: int = -1
 # The rocks (M4-T29): their grid, kept until a rock changes, and the earliest rock hit `_earliest_rock` found.
@@ -167,6 +171,8 @@ func resolve(delta: float) -> void:
 		gather_us = Time.get_ticks_usec() - started_us
 		resolve_us = gather_us
 		return
+	_provoked_pairs = int(sim.core.provoked_count())
+	_now_s = SimClock.now()
 	var keys: PackedInt64Array = broad_phase.pairs_core(sim.core, delta)
 	pairs_visited = broad_phase.visited
 	var rock_keys: PackedInt64Array = _rock_pairs(sim)
@@ -414,6 +420,9 @@ func _earliest_hit(c: int, first: int, next: int) -> bool:
 			continue
 		# A big hull's own side's bolts stop on it without harm (the station, M7-T07); other friendly hulls let them through.
 		var stops: bool = not damageable.can_be_hit_by(bolt_faction, friendly_fire)
+		# A civilian's bolt lands on the one ship that fired on it with it selected, friend or neutral (M7-T29).
+		if stops and _provoked_pairs > 0 and _sim != null and _sim.core.provoked_pair(shooter_id, _body_ids[j], _now_s):
+			stops = false
 		if stops and not (damageable.stops_friendly_bolts and _surface_t[k] >= 0.0):
 			continue
 		pairs_tested += 1

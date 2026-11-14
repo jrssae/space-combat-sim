@@ -397,3 +397,36 @@ fn the_hull_table_unpacks_and_versions() {
     assert!((v[1].reach - 7.0).abs() < 1e-9);
     assert!(h.of(8).is_empty());
 }
+
+#[test]
+fn a_friend_that_fired_on_a_civilian_it_had_selected_is_answered_by_that_civilians_turrets_only() {
+    // Ship 1 the civilian with the turret, 7 a friend 400 m above it, 8 another civilian of the same people nearby.
+    let rows = rows_of(&[
+        (1, 0, Vector3::ZERO),
+        (7, 0, Vector3::new(0.0, 400.0, 0.0)),
+        (8, 0, Vector3::new(600.0, 0.0, 0.0)),
+    ]);
+    let find = row_finder(&rows);
+    let t = table();
+    let mut memory = Memory::default();
+    // A friend's hit, as with friendly fire on: never answered.
+    memory.note(1, 7, 0.0, true);
+    assert_eq!(pick(&rows, &find, &mount(1), &memory, &t, 3, 0.0, &[]), 0, "a friend is not a target");
+    assert!(!memory.is_provoked(1, 7, 0.0));
+    assert_eq!(memory.provoked_count(), 0);
+    // It fired close with the civilian selected: the civilian's own turret answers.
+    memory.note_provoked(1, 7, 1.0);
+    assert_eq!(pick(&rows, &find, &mount(1), &memory, &t, 3, 1.0, &[]), 7, "the provoked civilian's turret picks it");
+    assert!(memory.is_provoked(1, 7, 1.0), "and its bolts may land on it");
+    assert!(!memory.is_provoked(7, 1, 1.0), "not the other way round");
+    assert!(!memory.is_provoked(8, 7, 1.0), "nor from anyone else");
+    assert_eq!(memory.provoked_count(), 1);
+    // A neighbour's turret does not join in against a friend.
+    assert_eq!(pick(&rows, &find, &mount(8), &memory, &t, 3, 1.0, &[]), 0, "the civilian beside it stays silent");
+    // A later ordinary hit keeps the provocation; the memory's time ends it.
+    memory.note(1, 7, 2.0, true);
+    assert!(memory.is_provoked(1, 7, 2.0));
+    memory.prune(2.0 + MEMORY_S + 1.0);
+    assert_eq!(memory.provoked_count(), 0, "forgotten with the memory");
+    assert_eq!(pick(&rows, &find, &mount(1), &memory, &t, 3, 40.0, &[]), 0);
+}
