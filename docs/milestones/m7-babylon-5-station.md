@@ -1589,3 +1589,31 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   `scripts/run_tests.sh` once, read from the suite's own totals; the GPU check; then ask the maintainer to confirm the milestone,
   and once confirmed merge `m7` into `main`.
 - **Done when:** the maintainer confirms M7.
+- **Maintainer's choices (2026-11-14):** transport pods carried as whole blocks (no generator change); one bot a Saturn 3 pod, two
+  (front and back) a transport block or a tank; tanks turned 90 degrees onto their side before the bay.
+- **Done (as built, 2026-11-14; awaiting the maintainer's live run):**
+  - **Cargo.** `FreighterCargo` (T10's `FreighterPods` renamed; the self-flying pods are gone): the chunks named `pod*`/`tank*` are
+    cargo on all five Saturns (3, 2, 2, 4, 4); the hull hides while they are off, the other chunks ride the ship, a pod on the hull is
+    the ship's child and a carried one is in the station's frame. Loading brings the Saturn in without its pods and puts the hull back
+    when the last is on.
+  - **Plan.** `CargoFerryPlan.for_freighter` from the chunks' boxes and the collision shapes: pods nearest the bay first; per pod a
+    `CargoTrip` (slide clear of front mounts, lift outboard, aft past the stern, onto the bay's middle, in until wholly behind the
+    back wall; stops at the corners off the hull), each bot's hold 8 m off its end and its route out (behind the stern, in from the
+    side). A bot whose end is boxed in on the hull takes hold after the lift (the Saturn 8's inner ends). Tanks turn onto their side
+    120 m long, done 80 m before the leading face reaches the mouth. The Saturn 3's 1 m pylon gap is now 6 m (slide margin).
+  - **Carrying.** `FerryPod` (moves only while every bot it needs holds it), `CargoFerryJob` (pod by pod, a crew of two
+    `BotFerryMotion`s in the fleet), `BotFerryMotion` carrying (out, hold, carry, home; T11's shuttle unchanged for `bots cargo`).
+    Fighting: away from the mouth the bots let go and go home (the far one over the pod), the pod waits, they come back after the
+    quiet; near the mouth they carry on in (unloading) or back in (loading).
+  - **Traffic.** `traffic freighter [type] [near|hold|show] [load]` (`show`: backing in its last 300 m, the bots already on their
+    way, berth re-plans from where it stopped, the player beside the lane; first pod taken about 75 s after the command); the cycle picks any of the five (auto: hull and loading from the
+    seed); the hold lasts until the bots are done (`DockingPlan.WAIT_S` 1800 s as a cap), then a lane from the hold out; `pods_in`,
+    `pods_out`, `cargo` in the provider. `DockingPlan.pod_path` dropped.
+  - **Fixes found on the way.** The plan uses the station's own frame (its frame piece is drawn closer while the station is far
+    off); a pod creeping into a stop at the main scene's 1/480 s step slipped past its second bot's grab point (now snapped).
+  - **Tests** (from a `--staged --build-native` copy): `test_cargo_ferry_carry` 6/6 (399 asserts), `test_ferry_pod` 8/8 (86),
+    `test_cargo_carry_clearance` 5/5 (1545; least: bot 11.7 m hull, 7.3 m Saturn; pod 6.0 m Saturn, 5.0 m in the bay's mouth),
+    `test_station_traffic` 4/4 (44), slow `test_freighter_cargo` 3/3 (all five hulls unload and leave, loading, the combat pause;
+    about 6 min); neighbours unchanged: `test_bot_ferry_motion` 6/6, `test_bot_ferry_fleet` 4/4, `test_cargo_ferry_plan` 5/5,
+    `test_cargo_ferry_clearance` 3/3, `test_docking_plan` 4/4, `test_bots_on_station` 8/8, `test_station_ai` 2/2,
+    `test_station_tour` 8/8, `test_slow_tests` 3/3; compile check clean; main-scene smoke clean.

@@ -47,8 +47,9 @@ func test_the_freighters_lane_turns_short_backs_in_nose_away_and_leaves_the_way_
 	assert_eq(float(hold["hold_s"]), DockingPlan.WAIT_S)
 	assert_eq(lane[lane.size() - 1]["at"], lane[0]["at"], "and out the way it came")
 	assert_eq(lane[lane.size() - 1]["face"], Vector3.ZERO, "nose first")
-	assert_eq(plan.pod_path[plan.pod_path.size() - 1], Vector3(0, 339, -3534), "the pods end at the bay's entry")
-	assert_false(DockingPlan.TUNNEL_TYPES.has(DockingPlan.FREIGHTER_TYPE), "a Saturn never enters the tunnel")
+	assert_gt(DockingPlan.WAIT_S, 600.0, "it waits for the bots, not a fixed minute (M7-T30)")
+	for type: StringName in DockingPlan.FREIGHTER_TYPES:
+		assert_false(DockingPlan.TUNNEL_TYPES.has(type), "a Saturn never enters the tunnel (%s)" % type)
 
 
 func test_a_lane_becomes_a_route_in_the_stations_place() -> void:

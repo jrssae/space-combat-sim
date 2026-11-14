@@ -1,7 +1,8 @@
 extends GutTest
 ## Traffic at the station on the real main scene (M7-T10, AC9, Q8 as refined): a civilian flies into the main docking bay
 ## with the drum's roll matched and leaves the world at the inner airlock; one comes out and leaves; a Saturn backs in at the
-## cargo bay's hold point, its pods fly into the bay by themselves, and it leaves nose first; a wing scrambled from its Cobra
+## cargo bay's hold point and the station's maintenance bots start carrying its pods into the bay (M7-T30; the whole cycle of
+## each hull is in `test_freighter_cargo`), and it leaves nose first; a wing scrambled from its Cobra
 ## arm is a wing with a leader and orders, and it engages a raid sent at the station. Flown with the physics rate and the
 ## time scale raised together.
 
@@ -71,6 +72,14 @@ func _run(line: String) -> ConsoleResult:
 	return DebugConsole.registry.execute(line)[0]
 
 
+# Whether a bot the pod needs is not holding it.
+static func _unheld(pod: FerryPod) -> bool:
+	for k: int in pod.holding.size():
+		if pod.needs(k) and pod.holding[k] == 0:
+			return true
+	return false
+
+
 func test_a_civilian_matches_the_drums_roll_flies_in_and_leaves_the_world_at_the_airlock() -> void:
 	if not await _start():
 		pending("the babylon5_station asset is not generated")
@@ -131,11 +140,11 @@ func test_a_civilian_comes_out_of_the_main_docking_bay_and_departs() -> void:
 	assert_eq(main.traffic.alive_of(&"undock"), 1, "and flies on to where it leaves")
 
 
-func test_a_freighter_backs_in_its_pods_fly_into_the_cargo_bay_and_it_leaves_nose_first() -> void:
+func test_a_freighter_backs_in_and_the_bots_carry_its_first_pod_into_the_cargo_bay() -> void:
 	if not await _start():
 		pending("the babylon5_station asset is not generated")
 		return
-	var result: ConsoleResult = _run("traffic freighter near")
+	var result: ConsoleResult = _run("traffic freighter saturn_3_freighter near")
 	assert_true(result.ok, "\n".join(result.lines))
 	var c: Combatant = main.traffic.last_ship()
 	assert_eq(main.ships.type_of(c), DockingPlan.FREIGHTER_TYPE)
@@ -157,20 +166,28 @@ func test_a_freighter_backs_in_its_pods_fly_into_the_cargo_bay_and_it_leaves_nos
 	assert_gt(backing[0], 0.9, "backing in: its nose away from the bay all the way (worst %.2f)" % backing[0])
 	assert_lt(station.to_local(ship.global_position).distance_to(hold), 20.0, "at the hold point")
 	assert_lt((-ship.global_basis.z).dot(to_bay), -0.9, "stern and pods toward the bay")
-	assert_false(ship.hull.visible, "its pods are off the hull (the stand-in parts show)")
-	var pods := ship.get_node_or_null(^"FreighterPods") as FreighterPods
-	assert_not_null(pods)
-	assert_eq(pods.flying.size(), 3, "three pods on their way")
-	assert_true(await _until(func() -> bool: return main.traffic.pods_in == 3, 150.0), "the pods flew into the cargo bay (%d in)" % main.traffic.pods_in)
+	assert_false(ship.hull.visible, "its hull is hidden: the stand-in parts and the pods show")
+	var cargo := ship.get_node_or_null(NodePath(FreighterCargo.NODE_NAME)) as FreighterCargo
+	assert_not_null(cargo)
+	assert_eq(cargo.pod_count(), 3)
+	assert_eq(cargo.crew_bots.size(), CargoFerryJob.CREW, "a crew of bots for it in the station's fleet")
+	var moved_alone: Array[int] = [0]
+	var last: Array = [null, 0.0]
+	var carried: bool = await _until(func() -> bool:
+		var pod: FerryPod = cargo.job.current() if is_instance_valid(cargo) and cargo.job != null else null
+		if pod != null and pod == last[0] and absf(pod.s - float(last[1])) > 1e-6 and _unheld(pod):
+			moved_alone[0] += 1
+		last[0] = pod
+		last[1] = pod.s if pod != null else 0.0
+		return main.traffic.pods_in >= 1, 240.0)
+	assert_true(carried, "a bot carried the first pod into the cargo bay")
+	assert_eq(moved_alone[0], 0, "no pod moved by itself")
 	assert_eq(main.traffic.alive_of(&"freighter"), 1, "the freighter never went in")
-	# It waits out its hold, then leaves the way its nose points.
-	var leaving: bool = await _until(func() -> bool:
-		return station.to_local(ship.global_position).distance_to(hold) > 150.0, 150.0)
-	assert_true(leaving, "it left the hold point")
-	var away: Vector3 = (ship.linear_velocity - main.world.rest_velocity()).normalized()
-	assert_gt(away.dot(-ship.global_basis.z), 0.9, "nose first")
-	assert_gt(away.dot(-to_bay), 0.9, "away from the station")
 	assert_eq(rams, 0, "and touched nothing")
+	var bots_before: int = station.bots.ferry_bots.size()
+	_run("traffic clear")
+	assert_eq(station.bots.ferry_bots.size(), bots_before - CargoFerryJob.CREW, "its crew went with it")
+	assert_true(ship.hull.visible or ship.is_far_dot(), "back in its pool whole")
 
 
 func test_a_scrambled_wing_is_a_wing_with_orders_and_engages_a_raid_on_the_station() -> void:

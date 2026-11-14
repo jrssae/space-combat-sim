@@ -30,10 +30,12 @@ var station: Station = null
 var plan: CargoFerryPlan = null
 ## The Saturn, null until loaded.
 var freighter: Combatant = null
+## This scene's ferry bots (a traffic freighter's crew is not the scene's).
+var own_bots: Array[MaintenanceBot] = []
 
 
 func loaded() -> bool:
-	return freighter != null or not fleet.ferry_bots.is_empty()
+	return freighter != null or not own_bots.is_empty()
 
 
 ## `bots cargo [n|off|view]`.
@@ -70,7 +72,7 @@ func load_scene(n: int) -> ConsoleResult:
 		var motion := BotFerryMotion.new()
 		motion.setup(routes[0], routes[1], Vector3.UP, 0.0)
 		warm(motion, cycle_s * float(lane) / float(n))
-		fleet.add_ferry_bot(motion)
+		own_bots.append(fleet.add_ferry_bot(motion))
 	return ConsoleResult.line("%s backed in at the cargo bay's hold point, %d ferry bots (a trip takes %.0f s)" % [FREIGHTER_NAME, n, cycle_s])
 
 
@@ -89,7 +91,9 @@ func place_freighter(brain: PilotBrain) -> String:
 
 ## Removes the ferry bots and sends the Saturn back to the pool.
 func unload() -> void:
-	fleet.clear_ferry()
+	for bot: MaintenanceBot in own_bots:
+		fleet.remove_ferry_bot(bot)
+	own_bots.clear()
 	if freighter != null and station != null and station.main != null:
 		station.main.ships.release(freighter)
 	freighter = null

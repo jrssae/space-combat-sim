@@ -161,6 +161,23 @@ func add_ferry_bot(motion: BotMover) -> MaintenanceBot:
 	return bot
 
 
+## Takes one ferry bot away (a freighter's crew when its cargo is done).
+func remove_ferry_bot(bot: MaintenanceBot) -> void:
+	var i: int = ferry_bots.find(bot)
+	if i < 0:
+		return
+	ferry_bots.remove_at(i)
+	if is_instance_valid(bot):
+		bot.get_parent().remove_child(bot)
+		bot.free()
+	_resize_alarms()
+
+
+## The node the ferry bots (and the pods they carry) hang from: the station's frame.
+func frame_parent() -> Node3D:
+	return _frame_parent
+
+
 ## Takes every ferry bot away.
 func clear_ferry() -> void:
 	for bot: MaintenanceBot in ferry_bots:

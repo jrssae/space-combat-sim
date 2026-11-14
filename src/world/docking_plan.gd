@@ -8,20 +8,24 @@ extends RefCounted
 ##   same lane backwards.
 ## - **Cargo bay** (on the frame): a freighter flies nose first to a turning point short of the hold point; the leg from
 ##   there to the hold point asks for its nose away from the station, so it turns where it is and then backs in; it waits,
-##   and leaves nose first the way it came.
-##   Its pods fly on from the release point along the bay's path and leave the world at the bay's entry.
+##   and leaves nose first the way it came. The station's maintenance bots carry its cargo meanwhile (M7-T30); the traffic sends
+##   it on when they are done.
 
 ## Hulls that fit the docking tunnel (94 x 34 m) with room to spare; every other civilian holds outside (the Saturns never enter).
 const TUNNEL_TYPES: Array[StringName] = [&"skylark_transport", &"narn_transport", &"centauri_brezebel"]
 const FREIGHTER_TYPE: StringName = &"saturn_3_freighter"
+## Every Saturn that comes to the cargo bay (M7-T30: each by its own pods or tanks).
+const FREIGHTER_TYPES: Array[StringName] = [&"saturn_3_freighter", &"saturn_4_transport", &"saturn_4_tanker",
+		&"saturn_8_transport", &"saturn_8_tanker"]
 ## How far short of the hold point a freighter turns its stern to the bay, metres.
 const TURN_SHORT_M: float = 700.0
 ## How far short of the inner airlock's wall a docking lane ends (and an undocking one starts), metres: half the longest
 ## tunnel hull and some room.
 const AIRLOCK_SHORT_M: float = 50.0
-## Seconds a freighter rests at its turning point (so it slows into it), and waits at the hold point.
+## Seconds a freighter rests at its turning point (so it slows into it), and the longest it waits at the hold point (the traffic
+## sends it on as soon as the bots have carried its cargo).
 const TURN_STOP_S: float = 1.0
-const WAIT_S: float = 75.0
+const WAIT_S: float = 1800.0
 ## Lane speeds, m/s: the docking lane (through a 34 m tunnel) and the freighter's (a Saturn brakes at a few hundredths of a g).
 const DOCK_CRUISE_MPS: float = 45.0
 const FREIGHTER_CRUISE_MPS: float = 20.0
@@ -38,8 +42,6 @@ var dock_out: Array[Dictionary] = []
 ## The freighter's lane, and which of its waypoints is the hold at the bay.
 var freighter: Array[Dictionary] = []
 var freighter_hold_index: int = -1
-## The pods' way from the release point into the cargo bay.
-var pod_path: PackedVector3Array = PackedVector3Array()
 ## The unit vector a held freighter's nose points along (away from the bay).
 var away: Vector3 = Vector3.FORWARD
 
@@ -54,7 +56,7 @@ static func build(hardpoints: StationHardpoints, drum_origin: Vector3) -> Dockin
 		if not dock.has(key):
 			plan.error = "the main docking bay has no %s" % key
 			return plan
-	for key: String in ["cargo_bay_approach", "cargo_bay_hold", "cargo_bay_hold_forward", "cargo_bay_path"]:
+	for key: String in ["cargo_bay_approach", "cargo_bay_hold", "cargo_bay_hold_forward"]:
 		if not cargo.has(key):
 			plan.error = "the cargo bay has no %s" % key
 			return plan
@@ -83,8 +85,6 @@ static func build(hardpoints: StationHardpoints, drum_origin: Vector3) -> Dockin
 	var turn: Vector3 = hold - toward * TURN_SHORT_M
 	plan.freighter = [_point(out), _point(turn, TURN_STOP_S), _point(hold, WAIT_S, plan.away), _point(out)]
 	plan.freighter_hold_index = 2
-	for p: Variant in cargo["cargo_bay_path"] as Array:
-		plan.pod_path.append(p as Vector3)
 	plan.valid = true
 	return plan
 

@@ -7,8 +7,9 @@ extends Node
 ##
 ## - **Docking**: a hull that fits the tunnel flies the lane in, matching the drum's turn, and goes back to its pool at the
 ##   inner airlock (it left the world). **Undocking** is the same lane outward, from the airlock, already turning with the drum.
-## - **Freighter cycle**: a Saturn 3 flies to the cargo bay's lane, turns short of the hold point, backs in (stern and pods
-##   to the bay), its pods fly into the bay by themselves (`FreighterPods`), it waits and leaves nose first.
+## - **Freighter cycle**: any of the five Saturns flies to the cargo bay's lane, turns short of the hold point, backs in (stern and
+##   pods to the bay), waits while the station's maintenance bots carry its pods or tanks into the bay one by one (or, loading,
+##   out of the bay onto it; `FreighterCargo`, M7-T30), and leaves nose first when they are done.
 ## - **Raid**: raiders with the station as their objective (they aim at the grid's mounts, native), and the wings named in
 ##   the data scrambled against them.
 ## - Arrivals come out of the scene's jumpgate when it has one, and departures leave through it; without one they start
@@ -36,10 +37,19 @@ const RAID_SPREAD_M: float = 150.0
 ## A docking ship this near the airlock has left the world.
 const AIRLOCK_M: float = 30.0
 const DEFAULT_RAID: int = 6
+## `traffic freighter show`: the Saturn starts this far short of the hold point backing in at this speed (m, m/s), and the player
+## watches from toward the bay, to the side and above, looking a little toward the bay from the hold point (m).
+const SHOW_BACK_M: float = 300.0
+const SHOW_BACK_MPS: float = 8.0
+const VIEW_TOWARD_M: float = 240.0
+const VIEW_SIDE_M: float = 120.0
+const VIEW_UP_M: float = 45.0
+const VIEW_LOOK_M: float = 70.0
 
 signal docked(ship_name: String)
 signal undocked(ship_name: String)
 signal freighter_unloading(ship_name: String)
+signal freighter_loading(ship_name: String)
 signal freighter_left(ship_name: String)
 
 var main: Main = null
@@ -57,10 +67,12 @@ var events: int = 0
 var docked_count: int = 0
 var undocked_count: int = 0
 var freighters_done: int = 0
+## Cargo pods the bots carried into the cargo bay, and onto freighters.
 var pods_in: int = 0
+var pods_out: int = 0
 var raids: int = 0
 var last_event: String = "none"
-# One entry a ship: {combatant, brain, kind, state, pods}.
+# One entry a ship: {combatant, brain, kind, state, cargo, loading, cargo_state} (the last three for freighters).
 var _own: Array[Dictionary] = []
 var _spawned: int = 0
 
@@ -146,12 +158,51 @@ func undock(type: StringName = &"") -> String:
 	return ""
 
 
-## A Saturn 3 flies the cargo bay's cycle. `near` starts it on the lane's first point. Returns "" or why not.
-func freighter(near: bool = false) -> String:
+## A Saturn of `type` (any of `DockingPlan.FREIGHTER_TYPES`; "" picks one) flies the cargo bay's cycle, unloading or `loading`.
+## `start`: "" out of the gate (or far out), `near` on the lane's first point, `hold` already holding at the bay, `show` backing in
+## its last `SHOW_BACK_M` with the bots already on their way and the player put beside the lane to watch. Returns "" or why not.
+func freighter(type: StringName = &"", loading: bool = false, start: StringName = &"") -> String:
 	var why: String = _ready_plan()
 	if not why.is_empty():
 		return why
-	return _arrive(DockingPlan.FREIGHTER_TYPE, &"freighter", plan.freighter, near)
+	var hull: StringName = type
+	if hull == &"":
+		hull = DockingPlan.FREIGHTER_TYPES[_spawned % DockingPlan.FREIGHTER_TYPES.size()]
+	if not DockingPlan.FREIGHTER_TYPES.has(hull):
+		return "%s does not come to the cargo bay (%s do)" % [type, ", ".join(DockingPlan.FREIGHTER_TYPES)]
+	if start == &"hold" or start == &"show":
+		var xform: Transform3D = station().global_transform
+		var lane: Array[Dictionary] = [plan.freighter[plan.freighter_hold_index], plan.freighter[plan.freighter.size() - 1]]
+		var at: Vector3 = xform * (lane[0]["at"] as Vector3)
+		var velocity: Vector3 = main.world.rest_velocity()
+		if start == &"show":
+			at += xform.basis * plan.away * SHOW_BACK_M
+			velocity += xform.basis * -plan.away * SHOW_BACK_MPS
+		var c: Combatant = _take(hull, _lane_route(&"freighter", lane), at, Basis.looking_at(xform.basis * plan.away, xform.basis.y),
+				velocity, &"freighter", &"lane", {"loading": loading, "hold_index": 0})
+		if c == null:
+			return "no %s is free in the ship pool" % hull
+		if start == &"show":
+			_start_cargo(_own[_own.size() - 1], true)
+			return view_cargo_bay()
+		return ""
+	return _arrive(hull, &"freighter", plan.freighter, start == &"near", {"loading": loading})
+
+
+## Puts the player beside the freighters' lane, toward the bay from the hold point, looking at a held Saturn's pods: the bots come
+## past on their way out and back. "" or why not.
+func view_cargo_bay() -> String:
+	var s: Station = station()
+	if s == null or not main.player_alive:
+		return "no player to move"
+	var hold: Vector3 = s.hardpoints.cargo_bay["cargo_bay_hold"]
+	var toward: Vector3 = -plan.away
+	var at: Vector3 = s.to_global(hold + toward * VIEW_TOWARD_M + Vector3(VIEW_SIDE_M, VIEW_UP_M, 0.0))
+	var look: Vector3 = s.to_global(hold + toward * VIEW_LOOK_M)
+	main.ship.reset_to(Transform3D(Basis.looking_at((look - at).normalized(), s.global_basis.y), at))
+	main.ship.linear_velocity = main.world.rest_velocity()
+	main.ship.angular_velocity = Vector3.ZERO
+	return ""
 
 
 ## `count` raiders sent at the station, and the data's wings scrambled against them. Returns "" or why not.
@@ -181,14 +232,14 @@ func raid(count: int = DEFAULT_RAID, scramble_defenders: bool = true) -> String:
 						gate.arrival_velocity() + main.world.rest_velocity(), brain, ShipPool.DEFAULT_TYPE)
 				if c != null:
 					gate.bring_through(c.ship)
-					_own.append({"combatant": c, "brain": brain, "kind": &"raid", "state": &"raid", "pods": null}))
+					_own.append({"combatant": c, "brain": brain, "kind": &"raid", "state": &"raid", "cargo": null}))
 		else:
 			var at: Vector3 = s.global_transform * (RAID_FROM + offset)
 			var toward: Vector3 = (s.global_position - at).normalized()
 			var c: Combatant = main.ships.acquire(main.ships.next_name(), main.world.to_universe(at),
 					Basis.looking_at(toward, Vector3.UP), main.world.rest_velocity() + toward * RAID_SPEED_MPS, brain, ShipPool.DEFAULT_TYPE)
 			if c != null:
-				_own.append({"combatant": c, "brain": brain, "kind": &"raid", "state": &"raid", "pods": null})
+				_own.append({"combatant": c, "brain": brain, "kind": &"raid", "state": &"raid", "cargo": null})
 	if placed == 0:
 		return "no raider is free in the ship pool"
 	raids += 1
@@ -253,7 +304,7 @@ func _gate() -> Jumpgate:
 
 # A ship of `type` on its way to `lane`: out of the gate and across to the lane's first point, or with no gate (or `near`)
 # straight onto the lane from a little way out.
-func _arrive(type: StringName, kind: StringName, lane: Array[Dictionary], near: bool) -> String:
+func _arrive(type: StringName, kind: StringName, lane: Array[Dictionary], near: bool, extra: Dictionary = {}) -> String:
 	var s: Station = station()
 	var xform: Transform3D = s.global_transform
 	_ensure_free(type, 1)
@@ -270,7 +321,7 @@ func _arrive(type: StringName, kind: StringName, lane: Array[Dictionary], near: 
 		gate.request_arrival(func() -> void:
 			var at: Transform3D = gate.arrival_transform()
 			var c: Combatant = _take(type, transit, at.origin, at.basis, gate.arrival_velocity() + main.world.rest_velocity(),
-					kind, &"transit")
+					kind, &"transit", extra)
 			if c != null:
 				gate.bring_through(c.ship))
 		return ""
@@ -279,7 +330,7 @@ func _arrive(type: StringName, kind: StringName, lane: Array[Dictionary], near: 
 	var heading: Vector3 = xform.basis * inward
 	var route: Route = _lane_route(kind, lane)
 	var c: Combatant = _take(type, route, start, Basis.looking_at(heading, xform.basis.y),
-			main.world.rest_velocity() + heading * route.cruise_mps, kind, &"lane")
+			main.world.rest_velocity() + heading * route.cruise_mps, kind, &"lane", extra)
 	return "" if c != null else "no %s is free in the ship pool" % type
 
 
@@ -299,7 +350,8 @@ func _lane_route(kind: StringName, lane: Array[Dictionary]) -> Route:
 
 
 # Takes a ship of `type` out of the pool at `at` (World) flying `route`; null when the pool has none.
-func _take(type: StringName, route: Route, at: Vector3, basis: Basis, velocity: Vector3, kind: StringName, state: StringName) -> Combatant:
+func _take(type: StringName, route: Route, at: Vector3, basis: Basis, velocity: Vector3, kind: StringName, state: StringName,
+		extra: Dictionary = {}) -> Combatant:
 	_ensure_free(type, 1)
 	var made: Dictionary = BrainFactory.from_behaviour(CIVILIAN_AI, main.world.to_universe(at), hash([main.scenario_seed, "traffic", _spawned]))
 	if not bool(made["ok"]):
@@ -314,7 +366,13 @@ func _take(type: StringName, route: Route, at: Vector3, basis: Basis, velocity: 
 	_spawned += 1
 	c.ship.tier_exempt = true  # a lane is flown in full, wherever the player is
 	c.targetable.broadcast_range_m = ShipPool.CIVILIAN_BROADCAST_RANGE_M
-	_own.append({"combatant": c, "brain": brain, "kind": kind, "state": state, "pods": null})
+	var entry: Dictionary = {"combatant": c, "brain": brain, "kind": kind, "state": state, "cargo": null, "loading": false,
+			"cargo_state": &"", "hold_index": plan.freighter_hold_index if plan != null else -1}
+	entry.merge(extra, true)
+	# A freighter come to load arrives without its pods.
+	if kind == &"freighter" and bool(entry["loading"]):
+		entry["cargo"] = FreighterCargo.attach(c.ship, false)
+	_own.append(entry)
 	last_event = "%s %s" % [kind, callsign]
 	return c
 
@@ -332,7 +390,10 @@ func _start_auto() -> void:
 		&"undock":
 			why = undock()
 		&"freighter":
-			why = freighter() if alive_of(&"freighter") == 0 else "a freighter is at the cargo bay already"
+			var pick: int = hash([main.scenario_seed, "traffic freighter", index])
+			var hull: StringName = DockingPlan.FREIGHTER_TYPES[absi(pick) % DockingPlan.FREIGHTER_TYPES.size()]
+			why = freighter(hull, (absi(pick) >> 8) % 2 == 1) if alive_of(&"freighter") == 0 \
+					else "a freighter is at the cargo bay already"
 		&"raid":
 			var u: float = float(hash([main.scenario_seed, "traffic size", index])) / 4294967296.0
 			why = raid(raid_size.x + mini(floori(u * float(raid_size.y - raid_size.x + 1)), raid_size.y - raid_size.x))
@@ -356,7 +417,7 @@ func _draw_kind(index: int) -> StringName:
 
 
 # One of the traffic's ships this tick: a transit that reached the lane takes the lane, a freighter at the hold point
-# sends its pods in, a ship at its lane's end docks or leaves, and one that left is let go.
+# has its cargo carried and leaves when the bots are done, a ship at its lane's end docks or leaves, and one that left is let go.
 func _step(i: int) -> void:
 	var entry: Dictionary = _own[i]
 	if not _still_ours(entry):
@@ -383,18 +444,55 @@ func _step(i: int) -> void:
 					docked.emit(c.display_name)
 					_release(i)
 				return
-			if kind == &"freighter" and entry["pods"] == null and path != null and path.phase == BehaviourFollowPath.Phase.HOLD \
-					and path.index == plan.freighter_hold_index:
-				var pods: FreighterPods = FreighterPods.unload(c.ship, station(), plan.pod_path)
-				if pods != null:
-					pods.pod_entered.connect(func(_pod: String) -> void: pods_in += 1)
-					entry["pods"] = pods
-					freighter_unloading.emit(c.display_name)
+			var holding_at_bay: bool = path != null and path.phase == BehaviourFollowPath.Phase.HOLD \
+					and path.index == int(entry["hold_index"])
+			if kind == &"freighter" and entry["cargo_state"] == &"" and holding_at_bay:
+				_start_cargo(entry)
+			elif kind == &"freighter" and entry["cargo_state"] == &"working" and holding_at_bay and not bool(entry.get("berthed", true)):
+				entry["berthed"] = true
+				(entry["cargo"] as FreighterCargo).berth(station())
+			if kind == &"freighter" and entry["cargo_state"] == &"done":
+				_depart(entry)
 			if done:
 				_leave(entry)
 		&"leave":
 			if done:
 				_finish(i)
+
+
+# The bots come for a freighter's cargo now it holds at the bay (or, `early`, while it backs in: they wait for it to stop); with
+# no bots (or no plan) it just goes on.
+func _start_cargo(entry: Dictionary, early: bool = false) -> void:
+	var c: Combatant = entry["combatant"]
+	var loading: bool = entry["loading"]
+	entry["cargo_state"] = &"working"
+	var cargo := entry["cargo"] as FreighterCargo
+	if cargo == null:
+		cargo = FreighterCargo.attach(c.ship, true)
+		entry["cargo"] = cargo
+	var why: String = "no cargo chunks" if cargo == null else cargo.start(station(), early)
+	entry["berthed"] = not early
+	if not why.is_empty():
+		push_warning("StationTraffic: %s's cargo stays put: %s" % [c.display_name, why])
+		entry["cargo_state"] = &"done"
+		return
+	cargo.pod_done.connect(func(_pod: String) -> void:
+		if loading:
+			pods_out += 1
+		else:
+			pods_in += 1)
+	cargo.finished.connect(func() -> void: entry["cargo_state"] = &"done")
+	if loading:
+		freighter_loading.emit(c.display_name)
+	else:
+		freighter_unloading.emit(c.display_name)
+
+
+# The bots are done: the freighter leaves its hold point now, out along its lane.
+func _depart(entry: Dictionary) -> void:
+	entry["cargo_state"] = &"gone"
+	var lane: Array[Dictionary] = [plan.freighter[plan.freighter.size() - 1]]
+	BehaviourFollowPath.attach(entry["brain"] as AiPilot, _lane_route(&"freighter", lane))
 
 
 # The way out after a lane: through the gate when there is one, else straight on to where it is let go.
@@ -447,10 +545,10 @@ func _release(i: int) -> void:
 
 
 static func _drop_pods(entry: Dictionary) -> void:
-	var pods := entry["pods"] as FreighterPods
-	if pods != null and is_instance_valid(pods):
-		pods.restore()
-	entry["pods"] = null
+	var cargo: Variant = entry.get("cargo")
+	if cargo is FreighterCargo and is_instance_valid(cargo) and not (cargo as FreighterCargo).restored:
+		(cargo as FreighterCargo).restore()
+	entry["cargo"] = null
 
 
 # Whether the entry's ship still flies for the traffic (a destroyed one went back to its pool and may fly for someone else).
@@ -496,13 +594,15 @@ func _register_console() -> void:
 		&"docked": {"get": func() -> int: return docked_count, "doc": "Ships that left the world at the inner airlock"},
 		&"undocked": {"get": func() -> int: return undocked_count, "doc": "Ships that came out of the bay and left"},
 		&"freighters_done": {"get": func() -> int: return freighters_done, "doc": "Freighter cycles finished"},
-		&"pods_in": {"get": func() -> int: return pods_in, "doc": "Cargo pods that flew into the cargo bay"},
+		&"pods_in": {"get": func() -> int: return pods_in, "doc": "Cargo pods the maintenance bots carried into the cargo bay"},
+		&"pods_out": {"get": func() -> int: return pods_out, "doc": "Cargo pods the maintenance bots carried onto freighters"},
+		&"cargo": {"get": _cargo_text, "doc": "Each freighter at the cargo bay: its hull, unloading or loading, and pods carried"},
 		&"raids": {"get": func() -> int: return raids, "doc": "Raids sent at the station"},
 		&"last_event": {"get": func() -> String: return last_event, "doc": "The last thing the traffic started"},
 	}), self)
 	registry.register_command(ConsoleCommand.new(&"traffic",
-			"Station traffic: status, dock [near] (a civilian into the main docking bay), undock (one out of it), freighter [near] (a Saturn's cargo cycle), raid [n] (raiders at the station, its wings scrambled), scramble <wing>, auto <on|off>, clear",
-			[ConsoleArg.enum_optional(&"action", ACTIONS, &"status"), ConsoleArg.string_optional(&"arg", "")] as Array[ConsoleArg]),
+			"Station traffic: status, dock [near] (a civilian into the main docking bay), undock (one out of it), freighter [type] [near|hold|show] [load] (a Saturn's cargo cycle: the station's bots carry its pods or tanks into the cargo bay, or with load onto it; near starts it on the lane, hold already at the bay, show backing in its last 300 m with the bots on their way and you beside the lane to watch; type is one of %s, default each in turn), raid [n] (raiders at the station, its wings scrambled), scramble <wing>, auto <on|off>, clear" % ", ".join(DockingPlan.FREIGHTER_TYPES),
+			[ConsoleArg.enum_optional(&"action", ACTIONS, &"status"), _rest_arg()] as Array[ConsoleArg]),
 			_cmd_traffic, self)
 
 
@@ -517,8 +617,19 @@ func _cmd_traffic(args: Dictionary) -> ConsoleResult:
 			why = undock()
 			return _answer(why, "a civilian is coming out of the main docking bay")
 		&"freighter":
-			why = freighter(arg == "near")
-			return _answer(why, "a Saturn 3 is on its way to the cargo bay")
+			var words: PackedStringArray = arg.split(" ", false)
+			var type: StringName = &""
+			var start: StringName = &""
+			for word: String in words:
+				if ["near", "hold", "show"].has(word):
+					start = StringName(word)
+				elif word != "load":
+					type = StringName(word)
+			var loading: bool = words.has("load")
+			why = freighter(type, loading, start)
+			var c: Combatant = last_ship()
+			var hull: String = String(main.ships.type_of(c)) if c != null and why.is_empty() and main.ships.type_of(c) != &"" else "a Saturn"
+			return _answer(why, "%s is on its way to the cargo bay to %s" % [hull, "load" if loading else "unload"])
 		&"raid":
 			var n: int = int(arg) if arg.is_valid_int() else DEFAULT_RAID
 			why = raid(n)
@@ -535,9 +646,30 @@ func _cmd_traffic(args: Dictionary) -> ConsoleResult:
 			return ConsoleResult.line("traffic by itself %s (every %.0f s)" % [arg, interval_s])
 		&"clear":
 			return ConsoleResult.line("returned %d traffic ship(s) to their pools" % clear())
-	return ConsoleResult.line("traffic: %d in play (%d docking, %d undocking, %d freighters, %d raiders); docked %d, undocked %d, freighter cycles %d, pods in %d, raids %d; auto %s; last: %s" % [
+	return ConsoleResult.line("traffic: %d in play (%d docking, %d undocking, %d freighters, %d raiders); docked %d, undocked %d, freighter cycles %d, pods in %d, pods out %d, raids %d; auto %s; cargo: %s; last: %s" % [
 			alive_count(), alive_of(&"dock"), alive_of(&"undock"), alive_of(&"freighter"), alive_of(&"raid"), docked_count,
-			undocked_count, freighters_done, pods_in, raids, "on" if auto else "off", last_event])
+			undocked_count, freighters_done, pods_in, pods_out, raids, "on" if auto else "off", _cargo_text(), last_event])
+
+
+func _cargo_text() -> String:
+	var parts := PackedStringArray()
+	for entry: Dictionary in _own:
+		if entry["kind"] != &"freighter":
+			continue
+		var c: Combatant = entry["combatant"]
+		var cargo: Variant = entry.get("cargo")
+		var carried: String = ""
+		if cargo is FreighterCargo and is_instance_valid(cargo):
+			carried = ", %d of %d pods" % [(cargo as FreighterCargo).pods_done(), (cargo as FreighterCargo).pod_count()]
+		parts.append("%s %s %s (%s%s)" % [c.display_name, main.ships.type_of(c), "loading" if bool(entry["loading"]) else "unloading",
+				entry["cargo_state"] if entry["cargo_state"] != &"" else "on its way", carried])
+	return "; ".join(parts) if not parts.is_empty() else "none"
+
+
+static func _rest_arg() -> ConsoleArg:
+	var arg := ConsoleArg.string_optional(&"arg", "")
+	arg.rest = true
+	return arg
 
 
 static func _answer(why: String, done: String) -> ConsoleResult:

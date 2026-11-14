@@ -5633,10 +5633,15 @@ native/src/turret_kernels.rs     + PickJob.points: every working grid mount, for
 native/src/brain.rs              + ScsBrains.set_route_lane, restart_route
 src/ai/route.gd                  + lane, lane_arrival_m, a waypoint's face and spin (add_lane)
 src/targeting/targetable.gd      + SPEAKS_FOR: a body whose shots are answered at another's marker (the drum, for the station)
-src/world/docking_plan.gd        DockingPlan (pure): the main docking bay's lane in and out, the freighter's lane, the pods' path
+src/world/docking_plan.gd        DockingPlan (pure): the main docking bay's lane in and out, the freighter's lane
 src/world/station_traffic.gd     StationTraffic (Main's child): dock, undock, freighter, raid, scramble, light traffic by itself;
                                  command and provider `traffic`
-src/props/freighter_pods.gd      FreighterPods: a Saturn's pods flying into the cargo bay, its hull shown as its other chunks
+src/props/freighter_cargo.gd     FreighterCargo (T30): a Saturn's cargo off its hull for the bots, its hull shown as its other chunks
+src/props/cargo_ferry_plan.gd    + CargoFerryPlan.for_freighter (T30, pure): one CargoTrip a pod, from the chunks' boxes
+src/props/cargo_trip.gd          CargoTrip (pure): a pod's path, its bots' holds and routes, the tank's turn, the way home
+src/props/ferry_pod.gd           FerryPod (pure): a carried pod's place along its trip; waits, moves, dropped, done
+src/props/cargo_ferry_job.gd     CargoFerryJob (pure): pod by pod with a crew of two bots
+src/props/bot_ferry_motion.gd    + carrying: a crew bot flies out, holds the pod, lets go in a fight and comes back for it
 data/station/traffic.json        the interval, the kinds' weights, the raid's size, the wings scrambled, the ship cap
 ```
 
@@ -5682,15 +5687,48 @@ data/station/traffic.json        the interval, the kinds' weights, the raid's si
 - **`DockingPlan`** reads `main_docking_bay` (points in the drum's frame, on its axis: moved by the drum's pivot) and
   `cargo_bay` (frame). Docking in: the approach's far point, its near point, the mouth, 50 m short of the airlock's wall,
   the drum's turn asked from the near point on, 45 m/s. Out: the reverse. Freighter: the approach's far point, a stop 700 m
-  short of the hold point, the hold point with the nose away (75 s), the far point again; 20 m/s.
+  short of the hold point, the hold point with the nose away (at most 1800 s: the traffic sends it on when the bots are done),
+  the far point again; 20 m/s.
 - **`StationTraffic`** starts ships from the pools with the `civilian` profile and a route, marks them `tier_exempt`, and
   steps its own few entries a tick: a transit that ended takes the lane; a docking ship at the lane's end goes back to its
-  pool (`docked`); a freighter in the hold at the bay unloads (`FreighterPods.unload`, `freighter_unloading`); a lane that
+  pool (`docked`); a freighter in the hold at the bay has its cargo carried (`FreighterCargo`, `freighter_unloading` or
+  `freighter_loading`) and, when the bots are done, flies its lane's last leg (a new lane from where it holds); a lane that
   ended leaves through the gate (`Jumpgate.departure_route`, `send_departure`) or 12 km straight on, then the ship is
   released (`undocked`, `freighter_left`). `raid(n, scramble)` acquires raiders with the station as objective, out of the
   gate when there is one. Light traffic runs while the `EncounterDirector` is on (or `traffic auto on`).
 - **Station wings.** `LaunchDirector.launch_wing` makes (once) a `Wing` of the arm's name with eleven slots, engage at
   will, and joins each of the twelve as it is taken from the pool: the first leads. `WingDirector.refresh` briefs them as
+- **Cargo carried by the maintenance bots (T30, maintainer 2026-11-14).** Any of the five Saturns (`DockingPlan.FREIGHTER_TYPES`;
+  the traffic draws hull and unloading or loading from the session seed) holds at the cargo bay while the station's bots carry its
+  cargo between it and the bay's back wall; nothing flies by itself.
+  - **Cargo** is the break-up chunks named `pod*` and `tank*` (`FreighterCargo.is_cargo`): a Saturn 3's three pods, a Saturn 4's
+    two pod blocks or tanks, a Saturn 8's four. The transports' blocks of two pods are carried whole (no generator change). The
+    hull is hidden while its cargo is off; the other chunks ride the ship; a pod on the hull is the ship's child, a carried one is
+    in the station's frame (with the bots, physics interpolated, stepped after the fleet, `PRIORITY` 50).
+  - **`CargoFerryPlan.for_freighter`** (station frame, from the chunks' boxes and the collision shapes not inside a cargo box):
+    pods come off nearest the bay first (unloading; loading is the reverse). A pod longer than `LONG_POD_M` (60 m) has two bots,
+    at the end toward the bay and the far end, else one; each holds `STANDOFF_M` (8 m) off its end. The pod slides aft clear of
+    mounts in its front (a Saturn 3's pylons), lifts outboard (the first of `LIFTS_M` whose aft sweep keeps `SWEEP_CLEAR_M` from
+    the boxes and the pods still on), slides aft past the stern, eases onto the bay's middle and goes in until wholly behind the
+    back wall; it stops at the corners off the hull. A bot whose end is boxed in on the hull (`GRAB_CLEAR_M`) takes hold after the
+    lift. A tank turns 90 degrees onto its side over `ROLL_LENGTH_M`, done `ROLL_DONE_M` before its leading face reaches the
+    mouth, so it fits the 26.7 m opening. Empty bots come out of the wall on their lanes, behind the stern, and in from the side
+    (stepping outboard until the way clears the boxes by `BOT_CLEAR_M`, the last leg as clear as the hold).
+  - **`CargoFerryJob`**: one pod at a time with a crew of two `BotFerryMotion`s in the station's `BotFleet` (one idle for a short
+    pod); the next trip starts when the pod is done and the crew is back inside. `FerryPod` moves only while every bot it needs
+    there holds it (they hold `GRAB_S` first); bots holding it sit at their fixed offsets. Loading lets go of a bot at its grab
+    point and the last on the hull, then the bots fly home empty; the hull mesh comes back when the last pod is on.
+  - **Fighting** (the fleet's alarm, `bots hide`): with the pod's leading face more than `DROP_SHORT_M` short of the mouth its bots
+    let go and hurry home (the far bot over the pod), it waits where it is, and after the quiet they come back along the same way
+    and carry on; nearer the bay they carry it on inside (unloading) or back inside (loading). An empty bot turns back as before.
+  - **Clearance** (`test_cargo_carry_clearance`, every pod of the five hulls, against the station frame's and the Saturn's chunk
+    meshes): bots 8 m from the hull and 5 m from the Saturn and from a pod they let go of; a carried pod 5 m from the Saturn after
+    its lift and 8 m from the hull outside the bay, 4 m in the bay's mouth (17.2 m of pod in a 26.7 m opening).
+  - **To watch it** (`traffic freighter <type> show`): the Saturn starts 300 m short of the hold point backing in, the bots leave
+    the wall at once (`FreighterCargo.start(early)`: the pods wait, `FerryPod.berthed`), and when it holds `berth` plans the job
+    again from exactly where it stopped (`CargoFerryJob.replan`, the bots go on along the same lanes); the player is put beside the
+    lane (`StationTraffic.view_cargo_bay`). The first pod is taken about 75 s after the command.
+  - Ambient as the bots: no body, target or row; GDScript (a pod and two bots a tick).
   any wing.
 - **Threads.** All of the above per tick is in the AI job on the frozen rows; `Field.sub_points` is filled in the job
   before the pass. Threaded equals delayed and one thread equals six (`test_station_threads`, `test_station_grid_threads`).
