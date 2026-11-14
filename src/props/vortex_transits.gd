@@ -418,7 +418,6 @@ func _build_flashes() -> void:
 	var material := ShaderMaterial.new()
 	material.shader = FLASH_SHADER
 	material.set_shader_parameter(&"tint", Vector3(3.0, 3.0, 3.0))
-	material.set_shader_parameter(&"rays", 1.2)
 	material.set_shader_parameter(&"lift", 0.0)
 	material.render_priority = 1  # after the funnels it sits in (all flashes share one far-reaching box, so sorting cannot tell)
 	_flash_mesh = quad

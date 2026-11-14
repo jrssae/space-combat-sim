@@ -1,8 +1,8 @@
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_always, cull_disabled, shadows_disabled;
 // A jump vortex's funnel (M6-T19, D69): a broad, gently curving, translucent well of the base colour, darker toward its rim and
-// its soft throat, combed with fine hair-like streaks along one soft spiral, over soft-edged darker patches and paler
-// translucent ones that lie along the same spiral. Everything turns round the axis and drifts along the spiral (out from the
+// its soft throat, covered in short pale feathers along one soft spiral (M7-T23, the maintainer's GIF), over soft-edged darker
+// patches and fine hair-like streaks that lie along the same spiral. Everything turns round the axis and drifts along the spiral (out from the
 // throat for an arrival, in toward it for a departure). The body reaches the rim of its mouth, at a gate's arms, and ends there
 // in a wide soft fade broken up along the streaks. The funnel unfolds from its base forward to the rim as it opens. A dark circle lies on the base
 // itself; from in front it shows down the funnel, from an oblique view the nearer walls hide it (the mesh draws its base first,
@@ -18,8 +18,9 @@ render_mode unshaded, blend_mix, depth_draw_always, cull_disabled, shadows_disab
 uniform vec3 colour = vec3(0.06, 0.38, 0.85);
 uniform vec3 highlight = vec3(0.36, 0.75, 1.0);
 // Per point: x how far the funnel has unfolded from its centre toward the rim (0..1); y the base's view, 0 looking down the
-// funnel from in front, 1 from the side or behind; z sim time for the swirl (a pause freezes it).
-instance uniform vec4 vortex_state = vec4(1.0, 0.0, 0.0, 0.0);
+// funnel from in front, 1 from the side or behind; z sim time for the swirl (a pause freezes it); w the dark eye's radius on the
+// base, a share of the mouth's radius (it opens with the funnel).
+instance uniform vec4 vortex_state = vec4(1.0, 0.0, 0.0, 0.24);
 // Per point, the layers' weights (`VortexLod`): finest, fine and broad hairs, patches and wisps; then the fine and coarse cloud.
 instance uniform vec4 vortex_lod_a = vec4(1.0);
 instance uniform vec4 vortex_lod_b = vec4(1.0);
@@ -44,11 +45,16 @@ uniform float rim_from = 0.69;
 uniform float rim_to = 1.08;
 uniform float rim_feather = 0.3;
 uniform vec3 base_glow = vec3(1.2, 1.2, 1.3);
-// The dark circle on the base, a share of the mouth's radius.
+// The settled dark eye's radius (a share of the mouth's), and how far the soft darkening round it reaches when it is that size.
 uniform float throat_radius = 0.24;
-// The patch layers' mean effect, for blending them out: the dark patches' mean darkening and the pale ones' mean cover.
+uniform float eye_reach = 0.5;
+// How dark the darker patches are, how bright the feathers and how strong the hair streaks.
+uniform float dark_depth = 0.55;
+uniform float feather_gain = 1.0;
+uniform float hair_gain = 0.45;
+// The patch layers' mean effect, for blending them out: the dark patches' mean darkening and the feathers' mean cover.
 const float DARK_MEAN = 0.89;
-const float PALE_MEAN = 0.1;
+const float FEATHER_MEAN = 0.12;
 
 varying float v_s;
 varying vec2 v_flat;
@@ -108,6 +114,25 @@ vec2 patches(float w, float along, float around, float per_fold, float seed, flo
 	return vec2(1.0 - smoothstep(-soft, soft, sd), h3);
 }
 
+// Feathers: short pale tongues lying along the spiral, widest near the head and drawn out to a point down the tail, `around`
+// columns round the funnel and `per_fold` rows per e-fold of radius, each column slid so they do not line up in rings.
+float feathers(float w, float along, float around, float per_fold, float seed, float blur) {
+	vec2 q = vec2(w * around, along * per_fold);
+	float column = mod(floor(q.x), around);
+	q.y += hash2(vec2(column, seed)) * 7.0;
+	vec2 id = vec2(column, floor(q.y)) + seed;
+	float h1 = hash2(id);
+	float h2 = hash2(id + 23.9);
+	if (h2 > 0.8) {
+		return 0.0;
+	}
+	vec2 f = fract(q);
+	float body = smoothstep(0.0, 0.3, f.y) * (1.0 - smoothstep(0.62, 1.0, f.y));
+	float width = (0.1 + 0.14 * h2) * (0.35 + f.y) + blur;
+	float x = (f.x - 0.5 - (h1 - 0.5) * 0.45) / width;
+	return exp(-x * x) * body * (0.35 + 0.65 * h1);
+}
+
 void vertex() {
 	float s = 1.0 - UV.y;
 	// Unfolding: the part from the base out to `growth` is in its final place, so the funnel builds forward from the base to the
@@ -123,9 +148,10 @@ void fragment() {
 	float r = v_s;
 	float rp = max(r, 0.04);
 	// The look's bands and smudge are laid out a little inside the rim, so the body darkens toward its edge.
-	float look_r = r / 1.14;
 	float u = UV.x;
 	float growth = vortex_state.x;
+	// While it unfolds the look is laid out over what has unfolded, so a small disc or a first ring is as blue as the open funnel.
+	float look_r = r / (1.14 * max(growth, 0.05));
 	float v_glow = vortex_state.y;
 	float t = vortex_state.z;
 	float w_patches = vortex_lod_a.w;
@@ -150,31 +176,34 @@ void fragment() {
 	vec3 c = base * level;
 	// The darker patches, soft-edged and roughly rectangular, lying along the spiral.
 	float darken = DARK_MEAN;
-	float pale_cover = PALE_MEAN;
+	float pale_cover = FEATHER_MEAN;
 	if (w_patches > 0.0) {
 		float around_d = 30.0;
 		vec2 dark = patches(w, along, around_d, 5.0, 0.0, 0.55, 0.5 * px_turns * around_d);
-		darken = mix(DARK_MEAN, 1.0 - (0.35 + 0.25 * dark.y) * dark.x, w_patches);
-		// Paler, translucent patches of the base colour, longer, a little slower.
-		float around_l = 22.0;
-		vec2 light = patches(w + 0.37, along + flow * travel * t * 0.3, around_l, 3.0, 3.0, 0.5, 0.5 * px_turns * around_l);
-		pale_cover = mix(PALE_MEAN, (0.35 + 0.25 * light.y) * light.x, w_patches);
+		darken = mix(DARK_MEAN, 1.0 - dark_depth * (0.6 + 0.4 * dark.y) * dark.x, w_patches);
+		// The feathers, two sizes, the smaller a little slower so they slide past each other.
+		// A slow sideways wander keeps the columns from reading as spokes.
+		float wander = (cloud - 0.5) * 0.035;
+		float big = feathers(w + 0.37 + wander, along, 38.0, 5.0, 3.0, px_turns * 38.0);
+		float small = feathers(w + 0.11 - wander, along + flow * travel * t * 0.3, 62.0, 8.5, 7.0, px_turns * 62.0);
+		pale_cover = mix(FEATHER_MEAN, max(big, 0.7 * small), w_patches);
 	}
 	c *= darken;
-	vec3 pale = mix(base, highlight, 0.35) * (0.25 + level);
-	c = mix(c, pale, pale_cover);
+	vec3 pale = mix(base, highlight, 0.5) * (0.45 + level) * feather_gain;
+	c = mix(c, pale, pale_cover * (0.25 + 0.75 * band));
 	// Fine hair-like streaks combed along the spiral, three widths; the finest carry the most light.
 	float broad = hairs(w, along, 120.0, 11.0, px_turns, vortex_lod_a.z);
 	float fine = hairs(w, along + 3.0, 300.0, 18.0, px_turns, vortex_lod_a.y);
 	float finest = hairs(w, along + 11.0, 600.0, 28.0, px_turns, vortex_lod_a.x);
 	float strands = smoothstep(0.52, 0.86, 0.2 * broad + 0.45 * fine + 0.35 * finest + 0.2 * (cloud - 0.5));
 	float combed = 0.7 + 0.6 * (0.4 * broad + 0.6 * fine);
-	c = c * combed + mix(base, highlight, 0.42) * strands * (0.12 + 0.95 * band) * (0.4 + cloud);
+	c = c * combed + mix(base, highlight, 0.42) * strands * (0.12 + 0.95 * band) * (0.4 + cloud) * hair_gain;
 	// The base: a soft black smudge down the funnel from in front, a white glow on the base alone from the side or behind.
-	float deep = 1.0 - smoothstep(0.05, 0.7, look_r);
+	float eye = max(vortex_state.w, 1e-3);
+	float deep = 1.0 - smoothstep(0.05, eye_reach * clamp(eye / (max(growth, 0.05) * throat_radius), 0.5, 1.5), look_r);
 	deep *= deep * (3.0 - 2.0 * deep);
 	// The dark circle on the base itself, soft-edged.
-	float throat = 1.0 - smoothstep(0.55 * throat_radius, throat_radius, r);
+	float throat = 1.0 - smoothstep(0.55 * eye, eye, r);
 	deep = max(deep * 0.55, throat);
 	float glow = 1.0 - smoothstep(0.0, 0.17, look_r);
 	c = mix(c * (1.0 - deep * (1.0 - v_glow)), base_glow, glow * v_glow);

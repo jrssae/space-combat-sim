@@ -57,14 +57,14 @@ func test_a_hundred_points_open_at_once_with_nothing_made() -> void:
 	once.advance(1.5)
 	once.update_visuals_for(Vector3.ZERO, VortexLod.px_per_unit(60.0, 1080.0))
 	once.update_visuals_for(xforms[-1].origin, VortexLod.px_per_unit(60.0, 1080.0))
-	once.advance(VortexTiming.new().done_at_s())
+	once.advance(VortexTiming.for_point().done_at_s())
 	var objects: float = Performance.get_monitor(Performance.OBJECT_COUNT)
 	var nodes: float = Performance.get_monitor(Performance.OBJECT_NODE_COUNT)
 	var opened: Array[JumpVortex] = []
 	for xform: Transform3D in xforms:
 		opened.append(pool.open_with(xform, fit, JumpVortex.Direction.ARRIVAL))
 	for point: JumpVortex in opened:
-		point.advance(1.5)
+		point.advance(VortexTiming.point_forming_s() - VortexTiming.GROW_S * 0.5)
 		point.update_visuals_for(Vector3.ZERO, VortexLod.px_per_unit(60.0, 1080.0))
 	var made: float = Performance.get_monitor(Performance.OBJECT_COUNT) - objects
 	var made_nodes: float = Performance.get_monitor(Performance.OBJECT_NODE_COUNT) - nodes
@@ -90,7 +90,7 @@ func test_closed_points_are_reused_and_with_all_open_the_oldest_goes() -> void:
 	assert_same(extra, first[0], "with every point open the oldest is taken back")
 	assert_eq(extra.age_s, 0.0, "and opens anew")
 	for point: JumpVortex in first:
-		point.advance(VortexTiming.new().done_at_s() + 0.1)
+		point.advance(VortexTiming.for_point().done_at_s() + 0.1)
 	assert_eq(pool.open_count(), 0, "all closed after a point's life")
 	var again: Dictionary = {}
 	for xform: Transform3D in xforms:
@@ -107,7 +107,7 @@ func test_closed_points_do_not_process() -> void:
 	pool.open_with(Transform3D.IDENTITY, VortexFit.new(), JumpVortex.Direction.ARRIVAL)
 	assert_true(point.is_physics_processing(), "open: it ages each tick")
 	assert_false(point.is_processing(), "its pool draws it")
-	point.advance(VortexTiming.new().done_at_s() + 0.1)
+	point.advance(VortexTiming.for_point().done_at_s() + 0.1)
 	assert_false(point.is_physics_processing(), "closed again")
 
 

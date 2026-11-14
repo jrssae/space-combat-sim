@@ -5188,11 +5188,34 @@ At 1 000 km (GPU): the gate 23 draw calls, 145 fps (the display's cap), 379 MB; 
   (72 % opaque) blending over it, so the walls hide the dark circle on the base from oblique views; from the side or behind the base
   glows white. Meshes and shaders only (D22).
 - **Timing** (`VortexTiming`, pure, a function of the age in sim seconds): an optional lead-in belonging to the opener, then the
-  phases `activate`, `flash` (1 s), `grow` (1.5 s, the funnel unfolds from the centre point to the rim), `open` (4 s by default,
+  phases `activate`, `flash` (1.4 s), `grow` (1.2 s, the funnel unfolds from the centre point to the rim), `open` (4 s by default,
   `extend` while a ship is on its way, `close_now`), `closing` (1 s, folding back to the point), `end_flash` (1 s, a white flash like
   the opening one, in both directions and at every point) and `closed`. Nothing passes from `closing` on (`is_open` false, `open_in_s`
-  INF); a departing ship counts as through at half grown. A gate's lead-in is `GateActivation` (1 s: the 40 lamps flash from the
-  front ends to the back ends along all four arms, then the back ends glow into the flash).
+  INF); a departing ship counts as through at half grown. A gate's lead-in is `GateActivation` (2 s: the 40 lamps flash from the
+  front ends to the back ends along all four arms in 1.2 s, then the back ends throb twice into the flash).
+- **Data, and the two ways to open (M7-T23, the maintainer's GIF; `docs/design-references.md`, "The GIF's sequence").** Every
+  timing, colour and look value is in `data/jump/vortex_look.json` (`VortexLook`; sections `timing`, `gate`, `point`, `colours`,
+  `look`, whose keys are the funnel shader's uniforms). `VortexTiming`'s and `GateActivation`'s seconds are static values read
+  from it, so nothing may use them in a `const`. A **gate's** vortex bursts at once (peak 0.15 into the flash) into a round flash
+  3.2 mouth radii across, **with no white-out** (the maintainer; the glow shader's `bloom`, a flat white disc over the quad, stays
+  for data but is 0), and falls fast to a pink-red spark (`gate.flash_colour`, also the arm ends' glows; the ship's ring flash and the player's screen
+  fade keep `flash_colour`). It opens as a disc with a small eye. **Every flash is round, with a lens flare, no star rays**
+  (the maintainer): the glow shader draws a core, a soft halo and a thin lens ring (`flash_halo`, `flash_ring`; `rays` is 0
+  for the centre flashes, the gate's lamps and arm ends and the ships' ring flashes), and the brightest centre flash in view
+  drives a lens flare. The add-on's effect takes one light, so `PostEffects` adds a **second pass of the same effect**
+  (`SceneLensFlareEffect`, a copy of the star's with its settings, appended to the Compositor the first time a flash needs it
+  and disabled whenever none does) and feeds it from `FlashFlare`: each vortex offers its flash every frame with a weight
+  (`flare_level` x the flash's level x its size on screen, nothing under `flare.from_px` 40 px of mouth radius, whole from 160),
+  and the brightest offer gets the flare in its own colour. One pass at most however many points flash; a battle's far points
+  offer nothing. The pass reads depth at the flash as the star's does, so a hull in front hides the flare. A **ship's own point** (`JumpVortex.own_point`, every
+  stand-alone vortex) starts as a blue-purple star that swells to its flare late in the flash (0.7; `timing.spark`), with **no
+  pause** (`point.lead_s` 0, the maintainer; a value would hold the star that long as the point's lead-in, phase `activate`).
+  Its funnel springs out as a blue ring a third of the mouth across (`ring_start`), wide and shallow (`eye_share`, `shallow`),
+  and grows and deepens to the full funnel and the settled eye once open. While a funnel unfolds its look is laid out over what
+  has unfolded, so a small disc or ring is as blue as the open funnel. A point is open 2.6 s after it is asked for
+  (`VortexTiming.point_forming_s()`; 2.5 s before), a gate 4.6 s (3.5 s). The funnel's pale layer is **feathers**: short
+  tongues along the spiral in two sizes, in the patch layer's place in `VortexLod`, so the detail levels and their cost are M6's.
+  The amber hyperspace side of the GIF is recorded for M11, not built.
 - **Swirl** (`VortexSwirl`): seen from in front, an **arrival** turns counter-clockwise and its patches travel out; a **departure**
   turns clockwise and travels in, along one spiral (checked frame by frame). Colours: arrival blue, dark sky blue; departure
   orange/yellow. The rim fades over a soft wisped edge measured against `references/jumpgate/jumpgate.png`.

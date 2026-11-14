@@ -7,7 +7,8 @@ extends Node3D
 ## The node's origin is the mouth's centre and its -Z the way ships come out (the funnel recedes along +Z); `fit` gives the mouth's
 ## radius and the depth. An opening runs on `VortexTiming`: the opener's lead-in (a gate's arm sequence; none for a ship-made
 ## point), the flash at the jump point's centre (the funnel's base), the funnel unfolding from that point forward to the rim of
-## its mouth, open, then folding back to the centre and a flash there as it goes. Blue for an arrival, turning counter-clockwise seen from in front, its patches spiralling
+## its mouth, open, then folding back to the centre and a flash there as it goes. A ship's own point first shows a small star that
+## holds a moment (M7-T23). Timings and colours are data (`VortexLook`). Blue for an arrival, turning counter-clockwise seen from in front, its patches spiralling
 ## out from the throat; orange to golden yellow for a departure, turning clockwise, its patches spiralling in (`VortexSwirl`).
 ## A gate's mouth is an ellipse (`VortexFit`); the funnel keeps that section down to its throat. The age runs on physics ticks from `delta` (a pause freezes it); the visuals follow it
 ## each rendered frame. In `world_shiftable` when it stands alone, so a rebase moves it; a gate's moves with the gate.
@@ -23,23 +24,24 @@ const DIRECTION_NAMES: Array[StringName] = [&"arrival", &"departure"]
 const SCENE_PATH: String = "res://src/props/jump_vortex.tscn"
 const FUNNEL_SHADER: Shader = preload("res://src/props/jump_vortex.gdshader")
 const GLOW_SHADER: Shader = preload("res://src/props/jump_glow.gdshader")
-## Colours (linear) when the opener gives none: the gate generator's values.
-const DEFAULT_COLOURS: Dictionary = {
-	&"arrival": [Color(0.06, 0.38, 0.85), Color(0.36, 0.75, 1.0)],
-	&"departure": [Color(0.95, 0.42, 0.06), Color(1.0, 0.82, 0.38)],
+## Colours (linear) when the opener gives none, from `data/jump/vortex_look.json` (the gate generator's values).
+static var DEFAULT_COLOURS: Dictionary = {
+	&"arrival": VortexLook.funnel_colours("arrival", [Color(0.06, 0.38, 0.85), Color(0.36, 0.75, 1.0)]),
+	&"departure": VortexLook.funnel_colours("departure", [Color(0.95, 0.42, 0.06), Color(1.0, 0.82, 0.38)]),
 }
-const DEFAULT_FLASH: Color = Color(1.0, 0.62, 0.86)
+static var DEFAULT_FLASH: Color = VortexLook.colour(VortexLook.data().get("flash_colour"), Color(1.0, 0.62, 0.86))
 const SEGMENTS: int = 96
 const RINGS: int = 40
 ## The coarse funnel a point a few pixels across draws (`VortexLod.coarse_mesh`).
 const COARSE_SEGMENTS: int = 24
 const COARSE_RINGS: int = 10
-## The flash at its peak, as a share of the mouth's radius.
-const FLASH_SIZE: float = 1.1
-const LIGHT_PEAK_ENERGY: float = 12.0
-## The funnel's overall brightness by direction: the blue arrival follows the dim show still (`jumpgate.png`), the orange
-## departure the brighter video frames.
-const BRIGHTNESS: Dictionary = {&"arrival": 0.5, &"departure": 1.2}
+## A flash's lens flare by the mouth's radius on screen, px: none under the first, whole from the second.
+static var FLARE_FROM_PX: float = VortexLook.number("flare", "from_px", 40.0)
+static var FLARE_FULL_PX: float = VortexLook.number("flare", "full_px", 160.0)
+static var LIGHT_PEAK_ENERGY: float = float(VortexLook.data().get("light_peak_energy", 12.0))
+## The funnel's overall brightness by direction (data): the blue arrival as bright as the maintainer's GIF (M7-T23).
+static var BRIGHTNESS: Dictionary = {&"arrival": VortexLook.brightness("arrival", 0.8),
+		&"departure": VortexLook.brightness("departure", 1.2)}
 ## An arrival's sound (the generated `jump_in`); silent without it.
 const SOUND_PATH: String = "res://assets/generated/sfx_world/jump_in.wav"
 const SOUND_DB: float = 2.0
@@ -48,6 +50,8 @@ const SOUND_DB: float = 2.0
 var fit: VortexFit = VortexFit.new()
 ## The opening flash's colour, also the screen's flash in the player's jump.
 var flash_colour: Color = DEFAULT_FLASH
+## The centre flash's own colour, and a gate's arm-end glows' (data, by opener): pink-red at a gate, blue-purple at a ship's point.
+var centre_colour: Color = DEFAULT_FLASH
 var direction: Direction = Direction.ARRIVAL
 ## Sim seconds since this opening began; meaningless while closed.
 var age_s: float = 0.0
@@ -90,6 +94,26 @@ var collapse_reason: StringName = &""
 ## The node whose frame is the vortex's true one when it is drawn under a far stand-in (a gate's vortex follows its gate's
 ## `FarProp` look, which shrinks toward the eye far away); null for a stand-alone point.
 var frame_owner: Node3D = null
+## A ship's own jump point (not a gate's vortex): it starts as a small star that holds before it flares (M7-T23).
+var own_point: bool = true
+## The flash at its peak as a share of the mouth's radius, and how strong its rays are (data, by opener).
+var flash_size: float = 1.1
+var flash_rays: float = 0.0
+## Its soft halo and thin lens ring, and how strong its lens flare is at its peak, seen close (`FlashFlare`).
+var flash_halo: float = 0.25
+var flash_ring: float = 0.0
+var flare_level: float = 0.5
+## A gate's flash whites out a close view at its peak: the star's size inside the quad, the bloom's strength and the level it
+## starts from (`jump_glow.gdshaderinc`).
+var flash_spread: float = 1.0
+var flash_bloom: float = 0.0
+var flash_bloom_from: float = 0.55
+## A point's funnel first shows as a ring this share of its mouth's radius, then grows.
+var ring_start: float = 0.0
+## The dark eye as a share of the funnel's radius while it unfolds: a gate's opens as a disc, a point's as a ring.
+var eye_share: float = 0.3
+## The funnel's depth as it starts to unfold, as a share of its full depth: a point opens wide and shallow, then deepens.
+var shallow: float = 1.0
 ## Every vortex draws this level when 0 or more (`vortex lod <level>`, for captures); -1 follows the size on screen.
 static var forced_level: int = -1
 
@@ -106,6 +130,7 @@ var _sounded: bool = false
 var _coarse: bool = false
 var _lod_a: Vector4 = Vector4(-1.0, -1.0, -1.0, -1.0)
 var _lod_b: Vector4 = Vector4(-1.0, -1.0, -1.0, -1.0)
+var _throat: float = 0.24
 
 static var _funnel_mesh: ArrayMesh = null
 static var _coarse_mesh: ArrayMesh = null
@@ -123,6 +148,7 @@ static func create(vortex_data: Dictionary = {}, standalone: bool = true, with_s
 	if standalone:
 		vortex.add_to_group(WorldFrame.SHIFTABLE_GROUP)
 		vortex.add_to_group(WorldFrame.ANCHORED_GROUP)
+	vortex.own_point = standalone
 	vortex.setup(vortex_data, with_sound)
 	return vortex
 
@@ -136,7 +162,21 @@ func setup(vortex_data: Dictionary = {}, with_sound: bool = true) -> void:
 			if entry is Dictionary:
 				_colours[key] = [_colour((entry as Dictionary).get("colour"), DEFAULT_COLOURS[key][0]),
 						_colour((entry as Dictionary).get("highlight"), DEFAULT_COLOURS[key][1])]
+	var kind: String = "point" if own_point else "gate"
 	flash_colour = _colour(vortex_data.get("flash"), DEFAULT_FLASH)
+	centre_colour = VortexLook.colour(VortexLook.section(kind).get("flash_colour"), flash_colour)
+	flash_spread = VortexLook.number(kind, "flash_spread", flash_spread)
+	flash_bloom = VortexLook.number(kind, "flash_bloom", flash_bloom)
+	flash_bloom_from = VortexLook.number(kind, "flash_bloom_from", flash_bloom_from)
+	ring_start = VortexLook.number(kind, "ring_start", ring_start)
+	flash_size = VortexLook.number(kind, "flash_size", flash_size)
+	flash_rays = VortexLook.number(kind, "flash_rays", flash_rays)
+	flash_halo = VortexLook.number(kind, "flash_halo", flash_halo)
+	flash_ring = VortexLook.number(kind, "flash_ring", flash_ring)
+	flare_level = VortexLook.number(kind, "flare_level", flare_level)
+	eye_share = VortexLook.number(kind, "eye_share", eye_share)
+	shallow = VortexLook.number(kind, "shallow", shallow)
+	_throat = VortexLook.number("look", "throat_radius", _throat)
 	_materials = [funnel_material(_colours, Direction.ARRIVAL), funnel_material(_colours, Direction.DEPARTURE)]
 	funnel = MeshInstance3D.new()
 	funnel.name = "Funnel"
@@ -147,7 +187,7 @@ func setup(vortex_data: Dictionary = {}, with_sound: bool = true) -> void:
 	flash_quad = MeshInstance3D.new()
 	flash_quad.name = "Flash"
 	flash_quad.mesh = _flash_mesh()
-	flash_quad.material_override = flash_material(flash_colour)
+	flash_quad.material_override = flash_material(centre_colour, flash_rays, flash_spread, flash_bloom, flash_bloom_from, flash_halo, flash_ring)
 	flash_quad.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	flash_quad.custom_aabb = AABB(Vector3(-1.0, -1.0, -1.0), Vector3(2.0, 2.0, 2.0))
 	add_child(flash_quad)
@@ -189,20 +229,30 @@ static func funnel_material(colours: Dictionary, p_direction: Direction) -> Shad
 	material.set_shader_parameter(&"flow", VortexSwirl.radial(p_direction))
 	material.set_shader_parameter(&"turn", VortexSwirl.turn_in_mesh(p_direction))
 	material.set_shader_parameter(&"brightness", BRIGHTNESS[way])
+	var look: Dictionary = VortexLook.section("look")
+	for name: String in look:
+		if look[name] is float:
+			material.set_shader_parameter(StringName(name), float(look[name]))
 	_material_cache[key] = material
 	return material
 
 
 ## The centre flash's shared material for `colour`.
-static func flash_material(colour: Color) -> ShaderMaterial:
-	var key: String = str(colour)
+static func flash_material(colour: Color, rays: float = 0.0, spread: float = 1.0, bloom: float = 0.0,
+		bloom_from: float = 0.55, halo: float = 0.25, ring: float = 0.0) -> ShaderMaterial:
+	var key: String = "%s %s %s %s %s %s %s" % [colour, rays, spread, bloom, bloom_from, halo, ring]
 	var cached: ShaderMaterial = _flash_cache.get(key)
 	if cached != null:
 		return cached
 	var material := ShaderMaterial.new()
 	material.shader = GLOW_SHADER
 	material.set_shader_parameter(&"tint", Vector3(colour.r, colour.g, colour.b) * 3.0)
-	material.set_shader_parameter(&"rays", 1.2)
+	material.set_shader_parameter(&"rays", rays)
+	material.set_shader_parameter(&"halo", halo)
+	material.set_shader_parameter(&"ring", ring)
+	material.set_shader_parameter(&"spread", spread)
+	material.set_shader_parameter(&"bloom", bloom)
+	material.set_shader_parameter(&"bloom_from", bloom_from)
 	material.set_shader_parameter(&"lift", 0.0)
 	_flash_cache[key] = material
 	return material
@@ -240,7 +290,8 @@ func open(p_direction: Direction, hold_s: float = VortexTiming.DEFAULT_HOLD_S, l
 	hold_range_m = 0.0
 	opener_through_at_s = -1.0
 	collapse_reason = &""
-	timing.reset(hold_s, lead_s)
+	# A ship's own point shows its star and pause first, unless its opener gave a lead-in of its own.
+	timing.reset(hold_s, VortexTiming.POINT_LEAD_S if own_point and lead_s <= 0.0 else lead_s, own_point)
 	age_s = 0.0
 	_active = true
 	_sounded = false
@@ -373,15 +424,21 @@ func update_visuals_for(camera_position: Vector3, px_per_unit: float) -> void:
 		return
 	var grown: float = timing.growth(age_s)
 	funnel.visible = grown > 0.0
-	funnel.scale = Vector3(fit.mouth_half_width_m, fit.mouth_radius_m, fit.depth_m)
+	# Wide and shallow as it starts to unfold, its eye a share of what has unfolded; the full funnel and eye once open.
+	var settled: float = smoothstep(0.0, 0.7, grown)
+	var depth_m: float = fit.depth_m * lerpf(shallow, 1.0, settled)
+	# A point's funnel springs out as a ring, then grows; a gate's grows from its centre.
+	var shown: float = lerpf(ring_start * minf(grown * 10.0, 1.0), 1.0, grown)
+	var eye: float = lerpf(eye_share * shown, _throat, smoothstep(0.5, 1.0, grown))
+	funnel.scale = Vector3(fit.mouth_half_width_m, fit.mouth_radius_m, depth_m)
 	var xform: Transform3D = global_transform if is_inside_tree() else transform
 	var to_camera: Vector3 = camera_position - xform.origin
 	var axis: Vector3 = xform.basis.z.normalized()
 	# Seen from its base (M6-T22): a camera inside the funnel, following a ship down it, looks at the base from in front.
-	var from_base: Vector3 = camera_position - xform * Vector3(0.0, 0.0, fit.depth_m)
+	var from_base: Vector3 = camera_position - xform * Vector3(0.0, 0.0, depth_m)
 	var facing: float = (from_base + axis * 1e-3).normalized().dot(axis)
 	# The base glows from the side and behind, and fades to black looking down the funnel from in front.
-	funnel.set_instance_shader_parameter(&"vortex_state", Vector4(grown, smoothstep(-0.45, -0.05, facing), SimClock.now(), 0.0))
+	funnel.set_instance_shader_parameter(&"vortex_state", Vector4(shown, smoothstep(-0.45, -0.05, facing), SimClock.now(), eye))
 	if px_per_unit > 0.0:
 		var scale_m: float = maxf(fit.mouth_half_width_m, fit.mouth_radius_m) * xform.basis.y.length()
 		radius_px = VortexLod.projected_radius_px(scale_m, to_camera.length(), px_per_unit)
@@ -390,10 +447,15 @@ func update_visuals_for(camera_position: Vector3, px_per_unit: float) -> void:
 	_set_detail()
 	var flash_level: float = timing.flash(age_s)
 	flash_quad.visible = flash_level > 0.0
-	flash_quad.position = Vector3(0.0, 0.0, fit.depth_m)
-	flash_quad.scale = Vector3.ONE * fit.mouth_radius_m * FLASH_SIZE * maxf(sqrt(flash_level), 1e-3)
+	flash_quad.position = Vector3(0.0, 0.0, depth_m)
+	flash_quad.scale = Vector3.ONE * fit.mouth_radius_m * flash_size * maxf(flash_level, 1e-3)
 	flash_quad.set_instance_shader_parameter(&"level", flash_level)
 	emitter.energy = LIGHT_PEAK_ENERGY * maxf(flash_level, grown * 0.5)
+	# Its lens flare, when it is large enough on screen to earn one; the brightest flash in view gets it.
+	if flash_level > 0.0 and is_inside_tree():
+		var near: float = FlashFlare.by_size(radius_px, FLARE_FROM_PX, FLARE_FULL_PX)
+		if near > 0.0:
+			FlashFlare.offer(xform * Vector3(0.0, 0.0, depth_m), centre_colour, flare_level * flash_level * near)
 
 
 ## The layers' weights the funnel draws now (`VortexLod.LAYER_NAMES` order): from its size on screen, or the forced level.

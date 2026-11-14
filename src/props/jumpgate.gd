@@ -27,8 +27,8 @@ const ASSET_DIR: String = "res://assets/generated/jumpgate"
 const HARDPOINTS_PATH: String = ASSET_DIR + "/hardpoints.json"
 const GLOW_SHADER: Shader = preload("res://src/props/jump_glow.gdshader")
 ## The activation's glows, metres across: a lamp's flash and a back end's.
-const LAMP_GLOW_M: float = 70.0
-const TIP_GLOW_M: float = 260.0
+static var LAMP_GLOW_M: float = VortexLook.number("gate", "lamp_glow_m", 120.0)
+static var TIP_GLOW_M: float = VortexLook.number("gate", "tip_glow_m", 520.0)
 ## A gate's beacon is heard 1 000 km out (D69; the wiki and the fan manual both say so), as the nav buoys are.
 const BROADCAST_RANGE_M: float = 1.0e6
 ## Where the hardpoints are missing: the generator's values for 1 200 m arms, 800 m from the axis above and below, 1 240 m at the sides.
@@ -350,7 +350,7 @@ func _build_activation(data: Dictionary, visuals: Node3D) -> void:
 	var tips: Array[Vector3] = _tips(data)
 	for tip: Vector3 in tips:
 		points.append(tip)
-		colours.append(vortex.flash_colour)
+		colours.append(vortex.centre_colour)
 		_glow_ranks.append(-1)
 	var quad := QuadMesh.new()
 	quad.size = Vector2(2.0, 2.0)

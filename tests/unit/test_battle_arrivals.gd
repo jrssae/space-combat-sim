@@ -103,7 +103,7 @@ func test_the_first_wave_opens_at_the_start_and_later_ones_spread_out_in_turn() 
 		else:
 			assert_between(at, wave * _arrivals.period_s, wave * _arrivals.period_s + BattleArrivals.SPREAD_S)
 	assert_gte(_arrivals.period_s, _arrivals.life_s + BattleArrivals.SPREAD_S, "a wave's points all close before the next opens")
-	assert_almost_eq(_arrivals.life_s, VortexTiming.new().done_at_s(), 1e-4)
+	assert_almost_eq(_arrivals.life_s, VortexTiming.for_point().done_at_s(), 1e-4)
 
 
 func test_a_later_waves_capitals_open_two_to_a_tick_evenly_over_the_spread() -> void:
@@ -163,11 +163,11 @@ func test_the_fps_test_splits_the_frames_into_forming_open_and_the_window() -> v
 	var frames: Array[PackedFloat64Array] = []
 	for k: int in 1200:  # 20 s at 60 frames a second
 		var t: float = k / 60.0
-		var forming: bool = t < VortexTiming.FLASH_S + VortexTiming.GROW_S
+		var forming: bool = t < VortexTiming.point_forming_s()
 		frames.append(PackedFloat64Array([t, 2.0 if forming else 1.0, 16.7, 300.0 if forming else 200.0, 900.0, 100.0 if t < 8.5 else 0.0]))
 	var parts: Dictionary = BenchRunner.render_phases(frames, 12.0)
 	assert_eq(parts.keys(), ["forming", "open", "window"])
-	assert_eq(int(parts["forming"]["frames"]), 150, "the first 2.5 s: the flash and the growth")
+	assert_eq(int(parts["forming"]["frames"]), ceili(VortexTiming.point_forming_s() * 60.0), "the star, the flash and the growth")
 	assert_eq(float(parts["forming"]["gpu_ms_median"]), 2.0)
 	assert_eq(float(parts["forming"]["draw_calls_max"]), 300.0)
 	assert_eq(int(parts["forming"]["points_open_max"]), 100)

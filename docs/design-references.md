@@ -247,6 +247,37 @@ a capital ship's own (M12) and the open points raiders arrive through.
   the video frames (the whole sequence, and the orange-gold departure). `jumpgate.png` is dimmer and deeper blue than the
   others; the game follows the brighter video colours, a little dimmed.
 
+**The GIF's sequence (M7-T23).** `references/jumpgate/Jump gate opening (arrival), jump point forming (with small pause), and jump
+gate jump to hyperspace.gif` (28.7 s, 430 frames at about 15 a second; inspiration only, never traced or committed). Times are
+seconds into the GIF; the game's values are in `data/jump/vortex_look.json`.
+
+| GIF time | Stage | Lasts | In the game |
+|---|---|---|---|
+| 0 to 1.7 | title card | | |
+| **A gate arrival** | | | |
+| 1.8 to 3.0 | lights run along all four arms together, toward the centre | 1.2 s | `gate.chase_s` 1.2 |
+| 3.2 to 3.8 | the four ends glow pink-red round white cores and throb twice, each throb larger | 0.6 s | `gate.lead_s` 2.0 in all, `gate.tip_pulses` 2, `gate.flash_colour` |
+| 3.8 to 4.0 | the glows merge into a white flash that whites out the whole picture | 0.2 s | `gate.flash_peak` 0.15 of `timing.flash_s` 1.4; **not a white-out** (the maintainer: "keep the flash but it doesn't need to white out the whole screen"): a round flash 3.2 mouth radii across (`gate.flash_size`; `gate.flash_bloom` 0) |
+| 4.0 to 5.2 | the flash shrinks to a round pink-red glow with a halo ring and lens ghosts | 1.2 s | the rest of `timing.flash_s`; round glows with `flash_halo` and `flash_ring`, and the lens flare (`flare_level`, `FlashFlare`), no star rays (the maintainer) |
+| 5.2 to 6.2 | a blue disc grows from the spark to the full mouth, a tiny dark eye in it from the start | 1.0 s | `timing.grow_s` 1.2, `gate.eye_share` |
+| 6.4 to 7.0 | a flash at the eye as a ship comes through | 0.6 s | the ring flash (M6-T22), unchanged |
+| 7.0 to 12.4 | open: a bright mid-blue body covered in short pale feathers, lying along a slight spiral and drifting slowly outward; a soft darker rim; the ship grows out of the eye | | the funnel shader's feathers |
+| **A ship's own jump point** | | | |
+| 12.8 to 14.0 | a small dim blue-purple star with a few rays, steady: the pause | 1.2 s | **not built** (`point.lead_s` 0, the maintainer): the star swells at once |
+| 14.2 to 15.4 | the star swells and flickers to a blue-purple flare with long rays and a white core | 1.2 s | `point.flash_peak` 0.7 of `timing.flash_s`, `point.flash_colour` |
+| 15.4 to 16.0 | the flare falls back to a spark | 0.6 s | the rest of the flash |
+| 16.0 to 17.4 | a thin blue ring opens beside the spark, wide and shallow, its dark centre most of it; it grows, thickens inward and deepens into a funnel with a dark eye a quarter of its radius | 1.4 s | `timing.grow_s`; `point.ring_start` 0.32 (the ring springs out a third of the mouth across, blue at once), `point.eye_share` 0.6, `point.shallow` 0.35 |
+| 17.6 to 18.0 | a flash at the eye as the ship comes through | 0.4 s | the ring flash |
+| 18.0 to 20.6 | open, the camera closing in | | |
+| **A jump into hyperspace through the gate (for M11, not built)** | | | |
+| 21.2 to 25.3 | an amber-orange vortex between the arms, the same feathers in orange and brown round a dark eye; the ship flies in and the view follows it down an amber tunnel | 4.1 s | recorded for M11 (Hyperspace); today's departure keeps M6's orange funnel |
+| 25.3 to 25.7 | a white flash, then the title card | | |
+
+The GIF shows no closing; the fold back and the closing flash stay as M6 built them. The point's pause is **not built**: M6-T19
+round 2 took it for a fault in the gif, and the maintainer confirmed that under M7-T23 (`point.lead_s` is 0; a value there would
+hold the small star that long). The dark eye stays M6's 0.24 of the mouth (ships come out of that ring), and the lamps chase
+front to back along the rails (the GIF's gate has spoke arms).
+
 **What the generator gives the game (T14, T19).** The gate's origin is the centre of the arms' front ends, where the vortex's mouth
 lies; the gate faces -Z (arrivals leave along -Z, departures fly in along +Z) and the arms run back to z = 1 200 m. `hardpoints.json`
 and the manifest carry the vortex (mouth centre, normal, up, rim radius measured a few metres inside the arms, depth = the arm's

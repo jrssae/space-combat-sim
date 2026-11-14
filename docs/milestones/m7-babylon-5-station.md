@@ -267,7 +267,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T20 | C | The hangar behind the menu after the door resize: one Starfury per door (six), a narrower hall (maintainer, 2026-11-13) | T05, T09 | Opus | T09 sized the hall and racks to the old 64 m doors | done |
 | T21 | A | Follow-up to T05 from the STL: the Cobra arm's pentagonal cross-section, creases either side of the launch doors, and a roofed rectangular cargo bay (maintainer, 2026-11-13) | T05 | Opus | Shape read off the STL; the look is (H) | done |
 | T22 | A | The dorsal spine and the command section rebuilt to the STL (per-part sections IoU >= 0.90; maintainer, 2026-11-13) | T21 | Opus | T04 built them to the overall silhouette; the per-part check scores them 0.38 to 0.72 | done |
-| T23 | D | The jumpgate and jump points refined from the maintainer's GIF: gate opening, the blue vortex, a ship's jump point (maintainer, 2026-11-13) | - | Opus | Shader and asset look against a show reference; (H) | in progress |
+| T23 | D | The jumpgate and jump points refined from the maintainer's GIF: gate opening, the blue vortex, a ship's jump point (maintainer, 2026-11-13) | - | Opus | Shader and asset look against a show reference; (H) | done |
 | T24 | A | The station's surfaces refined for fullscreen, in both texture-detail sets (low and high): resolution, detail, colour and material, no visible tiling (maintainer, 2026-11-13) | T22 | Opus | A look task on an 8 km hull at 6K within a VRAM budget; (H) | not started |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
@@ -1128,6 +1128,56 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     angles.
 - **Done when:** a fullscreen (6144 × 3456) A/B sheet of the low and high sets from the launch-cinematic views, the bays, 1 km and
   10 km, beside the references, approved by the maintainer (H); VRAM and fps recorded; tests (both sets present, the switch, budgets,
+- **Done (2026-11-13):**
+  - **The maintainer's decisions** over four rounds of sheets: (1) **no pause** before a ship's own point flares (M6-T19 round 2's
+    judgement stands; `point.lead_s` 0, a value there would hold the small star that long); (2) **round flashes with lens flares,
+    no star rays** ("rather than having star rays from the flash, let's have lens flares for a more circular flash"); (3) **no
+    white-out** at the gate's flash ("keep the flash but it doesn't need to white out the whole screen": a round flash 3.2 mouth
+    radii across; the glow shader's `bloom` stays for data at 0); (4) the gate's slower opening from the GIF kept (open at 4.6 s,
+    3.5 s before); (5) the dark eye stays 0.24 of the mouth (ships come out of that ring, M6-T22) and the lamps chase front to
+    back along the rails (the GIF's gate has spoke arms); (6) the player's jump screen fade (`jumpgate_host.gd`, M6) untouched.
+  - **The GIF's sequence with timings**: `docs/design-references.md`, "The GIF's sequence (M7-T23)" (the existing jumpgate doc):
+    a table of each stage, its seconds in the GIF and the data key that carries it, and the amber hyperspace side recorded for M11.
+  - **Data**: `data/jump/vortex_look.json` (`VortexLook`): `timing` (flash 1.4 s, unfolding 1.2 s, close 1 s, closing flash 1 s,
+    hold 4 s), `gate` (lead-in 2.0 s, the lamps' chase 1.2 s, the arm ends throbbing twice, glow sizes, the flash's peak at 0.15,
+    size, halo, ring, flare level and pink-red colour), `point` (no lead-in, the star's level, the flare's peak at 0.7, its
+    blue-purple colour, `ring_start`, `eye_share`, `shallow`), `colours` (both directions and their brightness), `flare` (the size
+    on screen a flash needs for a lens flare) and `look` (the funnel shader's uniforms). `VortexTiming`'s and `GateActivation`'s
+    seconds are static values read from it (two `const` that used them, in `VortexTransit` and `BenchRunner`, became static).
+  - **The gate**: the lamps chase in 1.2 s (0.6 s before), the arm ends glow pink-red and throb twice (520 m glows, 260 m before;
+    lamps 120 m, 70 m before), the round flash bursts at once and falls fast to a pink-red spark, and the funnel grows from it as
+    a blue disc with a small eye.
+  - **A ship's own point** (`JumpVortex.own_point`): a blue-purple star swells to its flare (peak 0.7 into the flash), then the
+    funnel springs out as a blue ring a third of the mouth across, wide and shallow (depth 0.35), and grows and deepens to the
+    full funnel. Open 2.6 s after it is asked for (2.5 s before).
+  - **The funnel**: the pale patches are now **feathers** (short tongues along the spiral in two sizes, with a slow sideways
+    wander), in the patch layer's place in `VortexLod`, so the distance levels are M6's; the arrival's brightness 0.5 to 0.7, the
+    hair streaks toned down; while it unfolds the look is laid out over what has unfolded, so a small disc or first ring is blue.
+  - **Round flashes and the lens flare**: `jump_glow.gdshaderinc` draws a core, a soft halo and a thin lens ring; `rays` is 0 for
+    the centre flashes, the lamps, the arm ends and the ships' ring flashes. The add-on's lens flare takes one light (the star), and
+    the add-on is not edited: `PostEffects` appends a **second pass of the same effect** (a copy of the star's
+    `SceneLensFlareEffect`) the first time a flash needs it and disables it when none does; `FlashFlare` (new, pure) takes each
+    vortex's offer a frame (flare level x flash level x size on screen: none under 40 px of mouth radius, whole from 160) and
+    gives the brightest the flare in its colour. One pass at most however many points flash. With the flash dead centre the
+    ghosts sit on the light; off centre they separate (`M7-T23_lens_flare_off_centre.png`). The arm ends do not drive it, and a
+    hull or the grown funnel in front hides it, as with the star's. Console: `post.flash_flare`.
+  - **The battle GPU budget** (M6-T20's fps test, `bench battle 1000 10 seed=1`, 1920x1080, RX 6950 XT, Forward+, one run each,
+    M6 then now, with the lens-flare pass; taken with the white-out variant, which the final values only make cheaper): points
+    forming GPU 0.93 (p95 1.18) to 0.87 (1.27) ms, draw calls 181 to 171, fps 59.4 to 59.6; points open 1.03 (1.17) to 1.03
+    (1.22) ms, 182 to 187, 59.8 to 60.0; the window 0.77 (0.89) to 0.76 (0.83) ms, 156 to 158; VRAM 571 MB both, 46 points open
+    at most in both. Inside the budget. One gate in the close view: 4 draw calls at 60 fps.
+  - **Tests**: new `test_vortex_look` (5: the file and its keys, both directions' colours, the code reading the file, every `look`
+    key a shader uniform, a point and a gate opening their own ways with the maintainer's decisions) and `test_flash_flare` (4);
+    `test_vortex_timing` rewritten to read the data's seconds (10); `test_battle_arrivals`, `test_jump_point_pool` and
+    `test_vortex_transits` take a point's forming time from `VortexTiming` instead of 2.5 s. No GPU budget GUT test was added:
+    the budget is M6's bench run above.
+  - **Verified** on HEAD plus this task's files only (a `--staged` copy): import clean, the compile check (765 scripts), GUT 193
+    passing and 3 pending headless in 23 files (the vortex, gate and jump files, `test_mission_runner`, `test_encounters`,
+    `test_bench`, the far props, `test_post_effects`, `test_environment`), the main-scene smoke and a console run opening the
+    gate's vortex and a point. No generator changed, so no Python test ran.
+  - **Sheets** (H, approved as a direction over the rounds): `references/screenshots/M7-T23 jumpgate/`: `M7-T23_AB_gate_arrival.png`,
+    `M7-T23_AB_jump_point.png` (the GIF, M6, now), `M7-T23_strip_gate_arrival.png`, `M7-T23_strip_jump_point.png`,
+    `M7-T23_lens_flare_off_centre.png`, `M7-T23_gate_flash_whiteout_vs_round.png` (the rejected white-out beside the round flash).
   determinism); committed.
 
 ### M7-T14 Integration, full suite, docs and acceptance

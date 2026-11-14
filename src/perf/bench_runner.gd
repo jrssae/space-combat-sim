@@ -43,7 +43,7 @@ const ARRIVE_JUMP: StringName = &"jump"
 const ARRIVE_PLACED: StringName = &"placed"
 ## With arrivals, the measured window starts at least this long after the last point opened: its ships fly out of the funnel
 ## first (M6-T22, at most `VortexTransit.MAX_TRANSIT_S`), and the gate's groups wait for its vortex to open (M6-T23).
-const ARRIVAL_SETTLE_S: float = 1.0 + VortexTransit.MAX_TRANSIT_S + GateActivation.DURATION_S + VortexTiming.FLASH_S \
+static var ARRIVAL_SETTLE_S: float = 1.0 + VortexTransit.MAX_TRANSIT_S + GateActivation.DURATION_S + VortexTiming.FLASH_S \
 		+ VortexTiming.GROW_S
 ## The battle's jumpgate (M6-T23), for the fighter groups with no capital to bring them: this far below the first fight, facing
 ## up into the battle. Past the low-attention tier's reach from the player (10 km and its 10 % hysteresis, with 3 km to spare)
@@ -787,8 +787,8 @@ func _engine_ticks() -> Dictionary:
 static func render_phases(frames: Array[PackedFloat64Array], window_s: float) -> Dictionary:
 	if frames.is_empty():
 		return {}
-	var forming_s: float = VortexTiming.FLASH_S + VortexTiming.GROW_S
-	var open_s: float = VortexTiming.new().close_from_s
+	var forming_s: float = VortexTiming.point_forming_s()
+	var open_s: float = VortexTiming.for_point().close_from_s
 	var bounds: Dictionary = {"forming": Vector2(0.0, forming_s), "open": Vector2(forming_s, open_s), "window": Vector2(window_s, INF)}
 	var out: Dictionary = {}
 	for part: String in bounds:
