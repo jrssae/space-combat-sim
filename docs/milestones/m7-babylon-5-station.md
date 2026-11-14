@@ -746,7 +746,9 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   civilian traffic through the aperture (Q8), allies launching from the bays (T08's sequence for AI ships), tests.
 - **Cargo traffic (maintainer, 2026-11-13, Q8 refined):** Saturn freighters never enter: each holds at T05's hold point, detaches
   its cargo pods (M5's modular Saturns), and the pods are moved into the cargo bay between the bow's forks, then
-  leave the world inside it; the freighter waits and leaves (or takes pods back out). **No loader ships** (maintainer, 2026-11-13: the
+  leave the world inside it; the freighter waits and leaves (or takes pods back out). **Freighters back in** (maintainer, 2026-11-13): a
+  Saturn approaches the hold point stern first, its pods toward the cargo bay and its nose away from the station, and leaves
+  nose first. **No loader ships** (maintainer, 2026-11-13: the
   arms and clamps in the cargo bay capture belong to a cargo loader ship, and loaders are skipped): the pods fly into the bay
   by themselves. **Two bays** (maintainer, 2026-11-13): the **main docking bay** (through the docking aperture
   into the spinning drum, its tunnel turning with the drum) and the **cargo bay** (the zero-gravity bay, on the stationary spine between the
