@@ -561,14 +561,16 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     when no fighter is in reach); the capital stand-in's own interceptors do not shoot at the grid's heavy bolts (they never
     shot bolts in M4); raiders attack the station only when ordered to (a scenario objective), as M5's brains pick ships (T10).
 - **Fix (maintainer's decisions after T07, 2026-11-13; contracts in `docs/architecture.md` §20.3):**
-  - **Tunings (old → new):** `grid_light_pulse` a shot every 1.0 → 2.0 s, damage 10 → 4; `grid_heavy_cannon` every 4.0 → 12.0 s,
+  - **Tunings (old → new):** `grid_light_pulse` a shot every 1.0 → 2.0 s, damage 10 → 5.5 (4 on
+    the hull before T22; 5.5 on T22's rebuilt spine, see **CI fix** below); `grid_heavy_cannon` every 4.0 → 12.0 s,
     damage 300 → 900 (the same damage a second on a capital, a third of the shots at fighters); `grid_interceptor` one kill every
     0.5 → 1.0 s a battery; section health 20 000 → 5 000 (`StationSections.SECTION_HEALTH`, T06's placeholder). The fights' limits
     stay 180 s (raid) and 300 s (capital).
   - **The raid** (`test_station_grid_balance`, now pinned to 90 to 120 s and to section damage): 12 raiders dive from 0.9 to
-    1.7 km on a decoy 450 m over L9 (a marker with no hull; their shots at it carry on into the hull). Seed 1 all destroyed at
-    111.5 s (282 light shots with 114 hits, 18 heavy with 7, 157 shot down, station lost 744, worst section 10 %), seed 2 at
-    104.8 s (297 / 119, 15 / 7, 210, 468, 5 %), seed 3 at 104.8 s (219 / 100, 13 / 6, 137, 420, 5 %); no mount knocked out.
+    1.7 km on a decoy 450 m over L9 (a marker with no hull; their shots at it carry on into the hull). On T22's station: seed 1
+    all destroyed at 103.8 s (249 light shots with 111 hits, 14 heavy with 4, 178 shot down, station lost 708, worst section
+    10 %), seed 2 at 115.5 s (182 / 84, 10 / 5, 137, 480, 5 %), seed 3 at 90.4 s (255 / 81, 13 / 8, 156, 396, 5 %); no mount
+    knocked out. (Before T22, with damage 4: 111.5, 104.8 and 104.8 s.)
   - **The capital** (cruiser stand-in, 20 000 hull): destroyed at 134.3, 134.5 and 134.7 s by 22 heavy hits and 173 to 201 light
     hits (the light turrets now fire at it); 929 to 930 of its bolts and missiles shot down (44 missiles), 136 beams through;
     station lost 5 110, worst section 77 % (none lost), one mount knocked out. The limit of 300 s holds unchanged.
@@ -595,6 +597,16 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     under the hull. So the raid here is held 450 m off the hull, and most of its damage lands in its first dive; a raid that
     reaches the mounts needs T10's avoidance and targeting, and the balance should be measured again then. A raid started
     under the drum flew off and idled 2 km below.
+  - **CI fix (run 43530412019, `test_ai_skill`):** the default scene has the station at (5500, -1200, -6000) from the player
+    (T06) and the skill test's ace lane (x = +5000, flying -z) ran 500 m beside it. The ace's hit on the friendly drone inside
+    a gun's range set the grid weapons free against raiders (D75's rule, as built) and 86 light shots made the ace evade: 16
+    to 23 hits against the rookie's 119. The grid was right and the lane was wrong: the lanes now run 4.5 km above and below
+    the player, 2 km to port (ace 190, rookie 119), and the test asserts `grid.free` stayed `holding`.
+  - **The raid's band is brittle (maintainer):** the fight is chaotic. On T22's hull the same numbers gave 117, 129 and
+    125 s; light damage 5 gave 123, 122, 114; 6 gave 96, 92, 83; a shot every 1.9 s at damage 5 gave 90, a stalled raider
+    (no win in 180 s) and 107; 5.5 is the one setting tried with all three seeds inside 90 to 120 s, seed 3 by 0.4 s. Any change
+    to the hull or the AI (T10) will move it again. A steadier pin would be the three seeds' mean in 90 to 120 s with each seed
+    in a wider band; say if that is wanted.
 
 ### M7-T08 Launch bays and the launch sequence
 
