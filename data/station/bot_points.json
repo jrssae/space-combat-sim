@@ -1,0 +1,150 @@
+{
+"_comment": "M7-T11 maintenance bot loops (docs/assets-station.md). Points are in the frame of `body` (station frame, or the drum's own frame: it turns with the drum); each loop is a closed smooth curve through its points, flown slowly (speed_mps) by `bots` bots spread round it; the clearance to the hull is tested by tests/unit/test_bot_loops.gd. A hatch is the loop point `at` (an index) and an `inside` point sunk into the hull a bot vanishes at when fighting starts.",
+"clearance_m": 8.0,
+"loops": [
+  {
+   "name": "cobra_alpha", "body": "drum", "speed_mps": 3, "bots": 1,
+   "up": [0.642, 0.766, 0],
+   "points": [
+    [50, 254, -1888],
+    [47.1, 257, -1838.5],
+    [40, 254, -1818],
+    [32.9, 251, -1838.5],
+    [30, 254, -1888],
+    [32.9, 257, -1937.5],
+    [40, 254, -1958],
+    [47.1, 251, -1937.5]
+   ],
+   "hatches": [
+    {"name": "cobra_alpha_hatch_1", "at": 3, "inside": [20.6, 236.3, -1838.5]},
+    {"name": "cobra_alpha_hatch_2", "at": 7, "inside": [24.9, 231.3, -1937.5]}
+   ]
+  },
+  {
+   "name": "cobra_beta", "body": "drum", "speed_mps": 3, "bots": 1,
+   "up": [0.766, -0.642, 0],
+   "points": [
+    [254, -50, -1888],
+    [257, -47.1, -1838.5],
+    [254, -40, -1818],
+    [251, -32.9, -1838.5],
+    [254, -30, -1888],
+    [257, -32.9, -1937.5],
+    [254, -40, -1958],
+    [251, -47.1, -1937.5]
+   ],
+   "hatches": [
+    {"name": "cobra_beta_hatch_1", "at": 3, "inside": [236.3, -20.6, -1838.5]},
+    {"name": "cobra_beta_hatch_2", "at": 7, "inside": [231.3, -24.9, -1937.5]}
+   ]
+  },
+  {
+   "name": "cobra_delta", "body": "drum", "speed_mps": 3, "bots": 1,
+   "up": [-0.642, -0.766, 0],
+   "points": [
+    [-50, -254, -1888],
+    [-47.1, -257, -1838.5],
+    [-40, -254, -1818],
+    [-32.9, -251, -1838.5],
+    [-30, -254, -1888],
+    [-32.9, -257, -1937.5],
+    [-40, -254, -1958],
+    [-47.1, -251, -1937.5]
+   ],
+   "hatches": [
+    {"name": "cobra_delta_hatch_1", "at": 3, "inside": [-20.6, -236.3, -1838.5]},
+    {"name": "cobra_delta_hatch_2", "at": 7, "inside": [-24.9, -231.3, -1937.5]}
+   ]
+  },
+  {
+   "name": "cobra_zeta", "body": "drum", "speed_mps": 3, "bots": 1,
+   "up": [-0.766, 0.642, 0],
+   "points": [
+    [-254, 50, -1888],
+    [-257, 47.1, -1838.5],
+    [-254, 40, -1818],
+    [-251, 32.9, -1838.5],
+    [-254, 30, -1888],
+    [-257, 32.9, -1937.5],
+    [-254, 40, -1958],
+    [-251, 47.1, -1937.5]
+   ],
+   "hatches": [
+    {"name": "cobra_zeta_hatch_1", "at": 3, "inside": [-236.3, 20.6, -1838.5]},
+    {"name": "cobra_zeta_hatch_2", "at": 7, "inside": [-231.3, 24.9, -1937.5]}
+   ]
+  },
+  {
+   "name": "spine_modules", "body": "frame", "speed_mps": 4, "bots": 1,
+   "up": [0, 1, 0],
+   "points": [
+    [22, 490, -2900],
+    [15.6, 493, -2779.8],
+    [0, 490, -2730],
+    [-15.6, 487, -2779.8],
+    [-22, 490, -2900],
+    [-15.6, 493, -3020.2],
+    [0, 490, -3070],
+    [15.6, 487, -3020.2]
+   ],
+   "hatches": [
+    {"name": "spine_modules_hatch_1", "at": 0, "inside": [22, 458.5, -2900]},
+    {"name": "spine_modules_hatch_2", "at": 4, "inside": [-22, 458.5, -2900]}
+   ]
+  },
+  {
+   "name": "bow_prong", "body": "frame", "speed_mps": 3.5, "bots": 1,
+   "up": [0, 0.995, -0.104],
+   "points": [
+    [120, 372, -3790],
+    [114.1, 374, -3726.4],
+    [100, 372, -3700],
+    [85.9, 370, -3726.4],
+    [80, 372, -3790],
+    [85.9, 374, -3853.6],
+    [100, 372, -3880],
+    [114.1, 370, -3853.6]
+   ],
+   "hatches": [
+    {"name": "bow_prong_hatch_1", "at": 2, "inside": [100, 344.3, -3697.1]},
+    {"name": "bow_prong_hatch_2", "at": 6, "inside": [74.4, 328.8, -3871.8]}
+   ]
+  },
+  {
+   "name": "drum_band", "body": "drum", "speed_mps": 4, "bots": 1,
+   "up": [0, 1, 0],
+   "points": [
+    [25, 356, -300],
+    [17.7, 356, -193.9],
+    [0, 356, -150],
+    [-17.7, 356, -193.9],
+    [-25, 356, -300],
+    [-17.7, 356, -406.1],
+    [0, 356, -450],
+    [17.7, 356, -406.1]
+   ],
+   "hatches": [
+    {"name": "drum_band_hatch_1", "at": 2, "inside": [0, 335.5, -150]},
+    {"name": "drum_band_hatch_2", "at": 6, "inside": [0, 335.5, -450]}
+   ]
+  },
+  {
+   "name": "reactor_top", "body": "frame", "speed_mps": 3, "bots": 1,
+   "up": [-0.049, 0.999, 0],
+   "points": [
+    [20, 186, 3860],
+    [14.1, 189, 3923.6],
+    [0, 186, 3950],
+    [-14.1, 183, 3923.6],
+    [-20, 186, 3860],
+    [-14.1, 189, 3796.4],
+    [0, 186, 3770],
+    [14.1, 183, 3796.4]
+   ],
+   "hatches": [
+    {"name": "reactor_top_hatch_1", "at": 3, "inside": [-13, 159.9, 3923.6]},
+    {"name": "reactor_top_hatch_2", "at": 7, "inside": [13, 159.9, 3796.4]}
+   ]
+  }
+ ]
+}

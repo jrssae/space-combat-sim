@@ -55,6 +55,8 @@ var drum_hull: Damageable = null
 var targetable: Targetable = null
 ## The defence grid (M7-T07).
 var grid: StationGrid = null
+## The maintenance bots (M7-T11, Q11): ambient drones on loops round the hull, in the frame's and the drum's visuals.
+var bots: BotFleet = null
 ## The pieces' visuals; the drum's turns on `drum_pivot`.
 var frame_piece: RenderPiece = null
 var drum_piece: RenderPiece = null
@@ -109,6 +111,12 @@ func build() -> bool:
 	grid = StationGrid.new()
 	grid.build(self)
 	add_child(grid)
+	bots = BotFleet.new()
+	if bots.build(self):
+		add_child(bots)
+	else:
+		bots.free()
+		bots = null
 	return true
 
 

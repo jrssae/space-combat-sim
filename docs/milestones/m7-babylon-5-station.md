@@ -768,6 +768,45 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 - **Goal:** AC9's bots (D78, Q11).
 - **Files:** `tools/procgen/assets/maintenance_bot.py` and its tests, `src/props/maintenance_bot.gd` and its loop path, tests.
 - **Done when:** the bots fly and hide as Q11 says; their count and per-tick cost recorded.
+- **Done (as built; approved by the maintainer 2026-11-13 after live runs, the loop bots and the cargo ferry with the backed-in Saturn 3; details in `docs/assets-station.md`, "Maintenance bots as built"):**
+  - **Generator:** `maintenance_bot.py` (style `maintenance_bot.py`, metal finish): 2 348 triangles, 4.6 x 3.1 x 3.5 m, no collision,
+    from `references/maintenance bot.webp` (shells with bands and a 9, truss, sensor head with a green lens, two three-segment arms with
+    claws, thrusters). Python tests `test_maintenance_bot.py` (12: contract, budget, frame, metal maps, glow, determinism).
+  - **Bots** (`src/props/`): `BotLoop` (closed Catmull-Rom path by arc length), `BotMotion` (patrol, retreat along the loop to the
+    nearest of two hatches, enter, hidden, exit; fixed acceleration, never faster than 9 m/s), `BotAlert` (events within 1.5 km, quiet
+    for 60 s), `BotData` (reads `data/station/bot_points.json`), `MaintenanceBot` (the thin node) and `BotFleet` (the pool, the alarms and
+    the console). **Eight bots** on eight loops: the four Cobra arms (drum frame, they ride it), the spine, the bow prong, the drum's
+    green zone (drum) and the reactor. The station builds them (`Station.build`, three additive lines in `station.gd`: a `bots` var and
+    the fleet after the grid); they hang from `frame_piece` and `drum_pivot`, so rebases and the drum's turn cost nothing.
+  - **Fighting:** any hit the hit resolver reports, any shot of the grid's mounts (both at their World point) and the grid going weapons free
+    (edge only: the latch never clears by itself) alarm the bots within 1.5 km of it (everyone for the latch); a bot goes on round its loop to
+    a hatch, sinks 5.5 m into the hull and stays in at least 8 s and until 60 s without an alarm, then each comes out 3 s after the last.
+  - **Ambient only:** no `Targetable`, `Damageable`, body or core row; tests check none exists under a bot.
+  - **Cost (D78):** `bots.tick_us`: 46 to 120 us a physics tick for all eight loop bots (about 6 to 15 us a bot) and about 100 us on
+    average with the five ferry bots loaded too (13 bots), under 1 % of a 60 Hz tick, measured in the running game beside the renderer, so
+    they stay in GDScript; more than a few dozen would go native.
+  - **Console:** `bots info|hide|show|goto <n> [m]` and the `bots` provider (`info.md`).
+  - **Tests:** GUT `test_bot_loop` (6), `test_bot_motion` (8), `test_bot_alert` (5), `test_bot_data` (2), `test_bot_fleet` (13: loops, speeds,
+    riding the drum, a rebase, hiding near a hit only, coming back after the quiet, staggered, `bots hide`/`show`, ambient),
+    `test_bot_loops_clear_of_hull` (3: the loops and hatch legs keep 8 m from the drawn hull over a full turn of the drum; helper
+    `bot_mesh_field.gd`), integration `test_bots_on_station` (6: on the real station: mesh, drum, rebases, a hit, the grid's latch, no target).
+  - **Cargo scene (maintainer's request after the live run; `bots cargo [n|off|view]`):** a Saturn 3 and 5 (up to 12) ferry bots
+    shuttling between its cargo pods and the cargo bay. **The Saturn backs in** (maintainer): it holds at `cargo_bay_hold` **stern toward the
+    bay**, its nose away from the station and its pods nearest the bay (test: its forward points away from `cargo_bay_entry`), and **T10
+    must fly freighters the same way** (T10's section carries the rule). It is a pooled `saturn_3_freighter` taken out of M5's ship pool
+    (`ShipPool.acquire`, the way every civilian is spawned) with an `IdleBrain` holding the brake, so nothing flies it away;
+    `BotCargoScene.place_freighter(brain)` takes any `PilotBrain` and `CargoFerryPlan` says where the hold point is and which way a
+    freighter faces: that is the seam for T10. The bots (`BotFerryMotion`, routes from `CargoFerryPlan` read from the station's
+    `cargo_bay` hardpoints and the Saturn's pod boxes) come out of the bay's back wall, fly out the throat and the slot on their own
+    lane (the return is the other side, lower), stop 8 m behind a pod's aft face for 6 s, fly back and sink into the wall for 6 s;
+    20 m/s cruise, 4 m/s^2; staggered round a trip (138 s) so some go out as others come back; they hide in the wall when fighting is
+    near (a bot on its way out turns round on its route). Tests: `test_cargo_ferry_plan` (5), `test_bot_ferry_motion` (6),
+    `test_bot_ferry_fleet` (4), `test_cargo_ferry_clearance` (3: 8 m from the drawn hull, 5 m from the Saturn, 12 lanes, out and back,
+    leaving out the last 20 m at the bay's back wall where the machinery stands close), and in `test_bots_on_station` (8) the Saturn at the hold
+    point with its forward pointing away from `cargo_bay_entry`, the staggered phases and `bots cargo off`. `bots cargo view` and `bayview` put the
+    player beside the lane or behind the Saturn.
+  - **Sheet (H):** `references/screenshots/M7-T11 bots/M7-T11_bots_sheet.png` (bots at 11 m by the arms, spine, bow, band and reactor, and
+    from 40 and 60 m).
 
 ### M7-T12 Tour points and the station sandbox
 

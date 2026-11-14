@@ -782,3 +782,26 @@ scores 0.81 against the STL's open cut; 0.995 at z 4 504.
 **Sheet (H):** `references/screenshots/M7-T22 spine and command section/`: `M7-T22_sections_dorsal_spine.png` and
 `M7-T22_sections_command_section.png` (each plane's overlay before and after with its IoU), `M7-T22_z4500_vs_z4520.png` (why the
 plane moved), `M7-T22_views_sheet.png` (GPU: the command section, bow and spine at 50 m to 1 km; `SHEET_VIEWS=t22`).
+
+## Maintenance bots as built (M7-T11)
+
+`tools/procgen/assets/maintenance_bot.py` (style `styles/maintenance_bot.py`, generator 1; 2 348 triangles, 4.6 x 3.1 x 3.5 m,
+one 1 024 px atlas at 1.2 cm a texel, 5 s to build). Two flattened egg shells with two ochre bands each and a painted 9 on the back,
+a grey truss beam with cross braces, three amber lamps and a small dish, a sensor head under the front with a green lens, two
+three-segment arms with claws (one reaching fore, one aft) and six little thrusters with faintly glowing throats. A metal finish
+(`extra["metal_finish"]`: shells metal 0.5 at roughness 0.42, truss 0.8 at 0.34, roughness stepping plate to plate, dirt rougher and
+duller). No collision: the bot is ambient. Colours are the sheet's lit values (shell #6662B5, band #C0A866, truss #83807D, joints
+#33312F). Reference, as for the station: inspiration only, nothing traced.
+
+The loops are data, `data/station/bot_points.json` (read by `BotData`): per loop its body (`frame`, or `drum` in the drum's own frame,
+so the bot turns with it), the control points of a closed Catmull-Rom curve, the speed (3 to 4 m/s), the number of bots, an up vector
+(away from the hull) and two hatches (a control point `at` and an `inside` point sunk 5.5 m below the hull surface). Eight loops, one
+bot each: the four Cobra arms (an oval over each arm's shoulder, 254 m from the axis, 20 m off the door lane), the spine over the cargo
+modules, the bow prong, the drum's green zone and the reactor's top. They were fitted against the drawn triangles (least distance
+over a full turn of the drum: arms 13.2 m, spine 24.8, bow 21.9, band 13.8, reactor 17.7; the file states 8 m, the bot's own radius
+is 2.9 m) and `tests/unit/test_bot_loops_clear_of_hull.gd` holds it on every build of the station. Move a loop only with that test.
+
+The cargo ferry (`bots cargo`, M7-T11) reuses the bot on the frame: `CargoFerryPlan` reads the station's `cargo_bay` hardpoints (hold, entry, clear box) and the
+Saturn 3's three cargo-pod boxes, and gives each bot an out route and a return route from just inside the bay's back wall (z -3 505, where the bot is hidden)
+through the throat and the slot to a point 8 m behind a pod's aft face; the Saturn backs in at the hold point, nose away (-Z in the station's frame), so the pods
+(at 11.8 m aft of its origin) are the end nearest the bay.
