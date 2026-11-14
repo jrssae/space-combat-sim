@@ -226,22 +226,28 @@ def cobra_arm_layout() -> dict:
 
 
 def main_docking_bay(f: Frames) -> dict:
-    """The main docking bay (through the aperture, in the turning drum), for Q8's traffic that fits its tunnel: the
-    approach from far ahead along the axis to the mouth, down the tunnel to the inner airlock, and the clear passage's half size
-    about the axis. In the drum's frame: a ship flying in matches the drum's roll, so the bay's spin (axis, rate, and where the
-    drum's pivot sits) is given with it; the same numbers are the manifest's ``pieces.drum`` ``axis``, ``spin_rad_s`` and ``pivot``."""
-    mouth_z, airlock_z = sd.BLOCK[2], sd.AIRLOCK_Z
+    """The main docking bay (in the turning drum), for the traffic that fits its mouth (M7-T25): the approach from far ahead along
+    the axis to the mouth, down it through the inner doors into the black void, and the mouth's clear outline about the axis (its
+    half width across the band, half height up the core, and the outline itself). ``main_docking_bay_airlock`` is the void's back
+    wall, where a docking lane measures its end from; ``_doors`` the inner doors' plane, ``_doors_open_m`` how far each leaf slides.
+    In the drum's frame: a ship flying in matches the drum's roll, so the bay's spin (axis, rate, and where the drum's pivot sits)
+    is given with it; the same numbers are the manifest's ``pieces.drum`` ``axis``, ``spin_rad_s`` and ``pivot``."""
+    mouth_z, airlock_z = sd.FACE_Z, sd.VOID_BACK_Z
     far, near = APPROACH_M
-    clear = sd.clear_passage()
+    clear = sd.opening_half()
     return {
         "name": "main_docking_bay",
         "body": DRUM,
         "main_docking_bay_approach": [f.to(DRUM, (0.0, 0.0, mouth_z - far)), f.to(DRUM, (0.0, 0.0, mouth_z - near))],
         "main_docking_bay_mouth": f.to(DRUM, (0.0, 0.0, mouth_z)),
+        "main_docking_bay_doors": f.to(DRUM, (0.0, 0.0, sd.DOORS_Z)),
+        "main_docking_bay_doors_open_m": sd.DOOR_OPEN_M,
         "main_docking_bay_airlock": f.to(DRUM, (0.0, 0.0, airlock_z)),
         "main_docking_bay_path": [f.to(DRUM, (0.0, 0.0, mouth_z - far)), f.to(DRUM, (0.0, 0.0, mouth_z - near)),
-                             f.to(DRUM, (0.0, 0.0, mouth_z)), f.to(DRUM, (0.0, 0.0, airlock_z))],
-        "main_docking_bay_clear_half_m": [clear[0], clear[1]],
+                                  f.to(DRUM, (0.0, 0.0, mouth_z)), f.to(DRUM, (0.0, 0.0, airlock_z))],
+        "main_docking_bay_clear_half_m": [round(clear[0], 4), round(clear[1], 4)],
+        "main_docking_bay_opening": [_r(p) for p in sd.opening()],
+        "main_docking_bay_void_half_m": list(sd.VOID_HALF),
         "axis": [0.0, 0.0, 1.0],
         "up": [0.0, 1.0, 0.0],
         "spin_axis": [0.0, 0.0, 1.0],
@@ -293,7 +299,7 @@ def _light(name: str, kind: str, body: str, p: Sequence[float], colour: str, f: 
 
 
 # The dashed ring lights (T18's references): z, radius and the colour of each ring round the drum, on the band edges and sphere rims.
-RINGS = (("sphere_fore_rim", 575.0, 178.0, WHITE), ("sphere_aft_rim", 935.0, 248.0, WHITE), ("arms_nav_ring", 1400.0, 303.0, PINK),
+RINGS = (("sphere_fore_rim", 586.0, 178.0, WHITE), ("sphere_aft_rim", 935.0, 248.0, WHITE), ("arms_nav_ring", 1400.0, 303.0, PINK),
          ("fwd_band_fore", 1800.0, st.BAND_R, WHITE), ("fwd_band_aft", 2290.0, st.BAND_R, WHITE),
          ("aft_band_fore", 4840.0, st.BAND_R, WHITE), ("aft_band_aft", 5400.0, st.BAND_R, WHITE))
 RING_DASHES = 48
@@ -324,8 +330,11 @@ def lights(f: Frames) -> list[dict]:
     for bay in cobra_bays(f):
         inside = 0.5 * (np.asarray(bay["rail_start"]) + np.asarray(bay["rail_end"])) + f.drum
         out.append(_light(f"bay_light_{bay['wing']}_{bay['door_number']}", "bay", DRUM, inside, AMBER, f))
-    for k, z in enumerate((sd.RIB_Z[1] - 10.0, sd.RIB_Z[4] - 10.0)):
+    # Down the mouth, one near the face and one near the doors (the game lights these two, M7-T25; the void stays black).
+    for k, z in enumerate((sd.FRAME_Z[0] + sd.FRAME_M + 5.0, sd.FRAME_Z[3] + sd.FRAME_M + 5.0)):
         out.append(_light(f"main_docking_bay_red_{k + 1}", "main_docking_bay", DRUM, (0.0, 0.0, z), "#E0281A", f))
+    for k, (x, y) in enumerate(sd.entrance_lamps()):  # the red lamps round the mouth on the block's face
+        out.append(_light(f"main_docking_bay_entrance_{k + 1}", "main_docking_bay", DRUM, (x, y, sd.FACE_Z - 1.5), "#E0281A", f))
     for k, z in enumerate((452.0, 478.0)):
         out.append(_light(f"cargo_bay_red_{k + 1}", "cargo_bay", FRAME, (0.0, sd.ZG_CENTRE_Y, z), "#E0281A", f))  # in the compartment
     return out

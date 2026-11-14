@@ -107,8 +107,9 @@ static func piece_materials(dir: String, entry: Dictionary) -> Dictionary:
 
 
 ## A near-only prop's mesh (M7-T19): its glb (`file`, under `dir`) drawn with the prop atlas's material (`surface`, a textured
-## mesh surface entry, made once per atlas), with the hull sheen as the hull's paint has it. Null when missing.
-static func prop_mesh(dir: String, surface: Dictionary, file: String) -> Mesh:
+## mesh surface entry, made once per atlas), with the hull sheen as the hull's paint has it; with `world_detail` (the piece's detail
+## tile) laid over it as over the hull, for a prop among the piece's plating. Null when missing.
+static func prop_mesh(dir: String, surface: Dictionary, file: String, world_detail: Dictionary = {}) -> Mesh:
 	var path: String = dir.path_join(file)
 	if _cache.has(path):
 		return _cache[path]
@@ -116,9 +117,11 @@ static func prop_mesh(dir: String, surface: Dictionary, file: String) -> Mesh:
 	if mesh == null:
 		push_warning("MeshAssets: %s is missing or not imported (run scripts/gen_assets.sh, then import)" % path)
 		return null
-	var key: String = dir.path_join(String(surface.get("albedo", ""))) + "#prop"
+	# A prop among the piece's plating takes the piece's detail tile too (M7-T25): its own material, the same maps.
+	var key: String = dir.path_join(String(surface.get("albedo", ""))) + ("#prop_detail" if not world_detail.is_empty() else "#prop")
 	if not _cache.has(key):
-		_cache[key] = _with_sheen(textured_material(dir, surface), true)
+		var with_detail: Dictionary = surface.merged({"world_detail": world_detail}, true) if not world_detail.is_empty() else surface
+		_cache[key] = _with_sheen(textured_material(dir, with_detail), true)
 	for i: int in mesh.get_surface_count():
 		mesh.surface_set_material(i, _cache[key])
 	_cache[path] = mesh

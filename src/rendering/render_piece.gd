@@ -116,7 +116,9 @@ func _add_interior(dir: String, mesh_entry: Dictionary, section: MeshInstance3D,
 
 # One group of props as an instanced mesh under its section, shown only near.
 func _add_props(dir: String, section: MeshInstance3D, group: Dictionary) -> void:
-	var mesh: Mesh = MeshAssets.prop_mesh(dir, sections.prop_surface, String(sections.prop_files[group["kind"]]))
+	var kind: String = String(group["kind"])
+	var detail: Dictionary = sections.prop_detail if sections.prop_detailed.has(kind) else {}
+	var mesh: Mesh = MeshAssets.prop_mesh(dir, sections.prop_surface, String(sections.prop_files[kind]), detail)
 	if mesh == null:
 		return
 	var transforms: Array[Transform3D] = group["transforms"]

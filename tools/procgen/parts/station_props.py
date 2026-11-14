@@ -15,6 +15,7 @@ ones (Q2: they hold from 50 m).
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -24,7 +25,8 @@ from ..core.geometry import Material, Mesh, rotation_z
 from ..core.near_props import PropGroup, PropKind
 from ..core.textures import text_coverage
 from ..styles import _hash01
-from ..styles.earth_alliance_station import BAY_GLOW, BAY_STRENGTH, SCHEME, WINDOW_GLOW, WINDOW_STRENGTH, colour, lin
+from ..styles.earth_alliance_station import (BAY_GLOW, BAY_RED, BAY_STRENGTH, BAY_TUNNEL, BAY_TUNNEL_STRENGTH, SCHEME, WINDOW_GLOW,
+                                             WINDOW_STRENGTH, colour, lin)
 from . import station as st
 
 NEAR_M = 1500.0  # where the hull atlas's texel (1.39 m) reaches a pixel at 1080 rows and a 62 degree view (docs/assets-station.md)
@@ -120,11 +122,15 @@ def _station_swatch(role: str) -> Swatch:
 
 
 LAMP_SWATCH = Swatch(lin(0xD8D0C0), 0.4, 0.0, tuple(float(c) for c in lin(BAY_GLOW)))
+# The main docking bay's inner doors (M7-T25): the tunnel's grey plating (``bay_tunnel``), the same faint red glow at range, as a share
+# of this atlas's strength; the lamps light them red up close. Its panels are the plating cell (``_plating_cell``).
+TUNNEL_SWATCH = Swatch(lin(BAY_TUNNEL), 0.32, 0.7, tuple(float(c) * BAY_TUNNEL_STRENGTH / BAY_STRENGTH for c in lin(BAY_RED)))
+TUNNEL_COLUMN = len(STATION_SWATCHES) + 1
 
 
 def swatches() -> list[Swatch]:
     """The swatch cell's paints, left to right: the station's, then a lamp's glow."""
-    return [_station_swatch(r) for r in STATION_SWATCHES] + [LAMP_SWATCH]
+    return [_station_swatch(r) for r in STATION_SWATCHES] + [LAMP_SWATCH, TUNNEL_SWATCH]
 
 
 def _swatch_cell(paints: list[Swatch], rows: int = CELL_H) -> dict[str, np.ndarray]:
@@ -159,11 +165,48 @@ def _maps(cells: list[dict[str, np.ndarray]], glow_colour: np.ndarray | None) ->
     return {"albedo": _srgb8(stack["albedo"]), "normal": to8(n * 0.5 + 0.5), "orm": to8(orm), "emissive": _srgb8(glow)}
 
 
+# The docking bay's inner doors' plating (M7-T25): the last cell, the tunnel's grey metal in panels, one leaf mapped across it.
+PLATING_CELL = ATLAS_H // CELL_H - 1
+PLATING_SPAN = (76.4, 22.6)  # the metres a leaf's face spans across and up, mapped onto the cell
+
+
+def _plating_cell(seed: int) -> dict[str, np.ndarray]:
+    """The inner doors' plating, as the walls' atlas paints the tunnel's metal (``bay_tunnel``): grey, its tone and roughness
+    drifting in soft blotches, the same faint red tint. The plates themselves come from the piece's detail tile laid over it in the
+    game, as over the walls."""
+    from ..core.textures import value_noise  # noqa: PLC0415 - the hull bake's own noise
+
+    cols, rows = np.meshgrid(np.arange(ATLAS_W), np.arange(CELL_H))
+    points = np.column_stack([((cols + 0.5) / ATLAS_W * PLATING_SPAN[0]).ravel(), ((rows + 0.5) / CELL_H * PLATING_SPAN[1]).ravel(),
+                              np.zeros(cols.size)])
+    blotch = (0.6 * value_noise(points, 6.0, seed + 211) + 0.4 * value_noise(points, 1.5, seed + 212)).reshape(cols.shape)
+    base = np.asarray(TUNNEL_SWATCH.albedo)
+    albedo = base[None, None, :] * (0.88 + 0.16 * blotch)[..., None]
+    rough = TUNNEL_SWATCH.rough + 0.10 * (blotch - 0.5)
+    return {"albedo": albedo, "height": np.zeros(cols.shape), "rough": rough, "metal": np.full(cols.shape, TUNNEL_SWATCH.metal),
+            "ao": np.ones(cols.shape), "glow": np.tile(np.asarray(TUNNEL_SWATCH.glow), (CELL_H, ATLAS_W, 1))}
+
+
+def plating_uv(x: float, y: float, upper: bool) -> list[float]:
+    """Where a point of a leaf (its x across, y up in the station frame) falls on the plating cell."""
+    from . import station_detail as sd  # noqa: PLC0415 - the bay's numbers
+
+    _, span_y = PLATING_SPAN
+    teeth = 0.5 * sd.SAW[0]
+    y0 = -teeth - sd.SAW[2] if upper else -(span_y - teeth)
+    u = (x + 0.5 * PLATING_SPAN[0]) / PLATING_SPAN[0]
+    v = (y - y0) / span_y
+    u = min(max(u, 0.004), 0.996)
+    v = min(max(v, 0.01), 0.99)
+    return [u, (PLATING_CELL * CELL_H + v * CELL_H) / ATLAS_H]
+
+
 def prop_maps(seed: int) -> dict[str, np.ndarray]:
-    """The drum's prop atlas: the six doors' faces, then the swatches."""
+    """The drum's prop atlas: the six doors' faces, the swatches, then the docking bay's door plating."""
     cells = [_door_cell(k + 1, seed) for k in range(st.LAUNCH_DOORS)]
     paints = swatches()
-    cells += [_swatch_cell(paints) for _ in range(ATLAS_H // CELL_H - len(cells))]
+    cells += [_swatch_cell(paints) for _ in range(PLATING_CELL - len(cells))]
+    cells.append(_plating_cell(seed))
     return _maps(cells, np.asarray(lin(BAY_GLOW)))
 
 
@@ -281,10 +324,64 @@ def gantry() -> Mesh:
 
 
 def kinds() -> list[PropKind]:
-    # The leaves lie at the bottom of their wells and the gantries in the halls: out of the sun (no light casts shadows).
+    # The leaves lie at the bottom of their wells and the gantries in the halls: out of the sun (no light casts shadows). The
+    # docking bay's inner doors stand at the back of its mouth, inside too.
     out = [PropKind(leaf_kind(n, side), door_leaf(n, side), LEAF_RANGE_M, interior=True)
            for n in range(1, st.LAUNCH_DOORS + 1) for side in (1.0, -1.0)]
+    out += [PropKind(airlock_kind(upper), airlock_leaf(upper), LEAF_RANGE_M, interior=True, world_detail=True) for upper in (True, False)]
     return out + [PropKind("clamp", clamp()), PropKind("gantry", gantry(), interior=True)]
+
+
+def airlock_kind(upper: bool) -> str:
+    return f"airlock_leaf_{'upper' if upper else 'lower'}"
+
+
+def airlock_origin() -> np.ndarray:
+    """Where the inner doors' leaves sit closed, in the station frame: on the axis, in the middle of their slab's thickness."""
+    from . import station_detail as sd  # noqa: PLC0415 - the bay's numbers
+
+    front, back, _, _ = sd.DOOR_LEAF
+    return np.array([0.0, 0.0, sd.DOORS_Z + 0.5 * (front + back)])
+
+
+def airlock_leaf(upper: bool) -> Mesh:
+    """One of the main docking bay's inner doors (M7-T25), closed, in its own frame (``airlock_origin``): a plate of the tunnel's grey
+    metal across the doorway from the sawtooth seam to past the opening. The game slides it up (``upper``) or down by the manifest's
+    ``main_docking_bay_doors_open_m`` to open the bay."""
+    from . import station_detail as sd  # noqa: PLC0415 - the bay's numbers
+
+    front, back, _, _ = sd.DOOR_LEAF
+    hz = 0.5 * (back - front)
+    verts, faces, uvs = [], [], []
+
+    def quad(pts: list[list[float]], normal: Sequence[float]) -> None:
+        p = np.asarray(pts, dtype=float)
+        if float(np.cross(p[1] - p[0], p[2] - p[0]) @ np.asarray(normal, dtype=float)) < 0.0:
+            p = p[::-1]
+        uv = [plating_uv(float(q[0]), float(q[1]), upper) for q in p]  # the plating laid flat across the leaf
+        base = len(verts)
+        verts.extend(p)
+        faces.extend([[base, base + 1, base + 2], [base, base + 2, base + 3]])
+        uvs.extend([[uv[0], uv[1], uv[2]], [uv[0], uv[2], uv[3]]])
+
+    strips = sd.door_leaf_outline(upper)
+    away = 1.0 if upper else -1.0  # the far edge's side
+    for a, b, ya, yb, far in strips:
+        quad([[a, ya, -hz], [b, yb, -hz], [b, far, -hz], [a, far, -hz]], (0.0, 0.0, -1.0))
+        quad([[a, ya, hz], [b, yb, hz], [b, far, hz], [a, far, hz]], (0.0, 0.0, 1.0))
+        quad([[a, far, -hz], [b, far, -hz], [b, far, hz], [a, far, hz]], (0.0, away, 0.0))
+        dx, dy = b - a, yb - ya
+        quad([[a, ya, -hz], [b, yb, -hz], [b, yb, hz], [a, ya, hz]], (away * dy, -away * dx, 0.0))
+    for (a, _, ya, _, far), x, facing in ((strips[0], strips[0][0], -1.0), (strips[-1], strips[-1][1], 1.0)):
+        y = ya if facing < 0.0 else strips[-1][3]
+        quad([[x, y, -hz], [x, far, -hz], [x, far, hz], [x, y, hz]], (facing, 0.0, 0.0))
+    return _prop_mesh(verts, faces, uvs)
+
+
+def airlock_groups(section: str, shift: np.ndarray) -> list[PropGroup]:
+    """The inner doors' two leaves, one instance each, closed, in the frame of ``section`` (the station frame moved by ``shift``)."""
+    at = airlock_origin() - shift
+    return [PropGroup(airlock_kind(upper), section, (np.column_stack([np.eye(3), at]),)) for upper in (True, False)]
 
 
 def leaf_kind(number: int, side: float) -> str:

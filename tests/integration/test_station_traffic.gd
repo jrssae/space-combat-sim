@@ -1,6 +1,7 @@
 extends GutTest
 ## Traffic at the station on the real main scene (M7-T10, AC9, Q8 as refined): a civilian flies into the main docking bay
-## with the drum's roll matched and leaves the world at the inner airlock; one comes out and leaves; a Saturn backs in at the
+## with the drum's roll matched, the inner doors open ahead of it, it flies wholly into the black void behind them, they shut and
+## it leaves the world (M7-T25); one comes out of the void through the opened doors, which shut behind it, and leaves; a Saturn backs in at the
 ## cargo bay's hold point and the station's maintenance bots start carrying its pods into the bay (M7-T30; the whole cycle of
 ## each hull is in `test_freighter_cargo`), and it leaves nose first; a wing scrambled from its Cobra
 ## arm is a wing with a leader and orders, and it engages a raid sent at the station. Flown with the physics rate and the
@@ -80,7 +81,7 @@ static func _unheld(pod: FerryPod) -> bool:
 	return false
 
 
-func test_a_civilian_matches_the_drums_roll_flies_in_and_leaves_the_world_at_the_airlock() -> void:
+func test_a_civilian_matches_the_drums_roll_flies_through_the_opened_doors_and_leaves_the_world_once_they_shut() -> void:
 	if not await _start():
 		pending("the babylon5_station asset is not generated")
 		return
@@ -90,39 +91,70 @@ func test_a_civilian_matches_the_drums_roll_flies_in_and_leaves_the_world_at_the
 	assert_not_null(c, "a civilian took the lane")
 	if c == null:
 		return
-	assert_true(DockingPlan.TUNNEL_TYPES.has(main.ships.type_of(c)), "a hull that fits the tunnel")
+	assert_true(DockingPlan.TUNNEL_TYPES.has(main.ships.type_of(c)), "a hull that fits the mouth")
 	_watch_rams(c)
+	var lock: StationAirlock = station.airlock
+	assert_not_null(lock, "the bay has its inner doors")
+	assert_eq(lock.leaves.count(), 2, "both leaves found on the drum")
 	var mouth: Vector3 = main.traffic.plan.mouth
 	var axis: Vector3 = (station.global_basis * Vector3.BACK).normalized()
+	var reach: Vector2 = StationAirlock.hull_reach(c.ship)
 	var rolls := PackedFloat64Array()
 	var off_axis: Array[float] = [0.0]
+	var seen: Dictionary = {"open_at_nose": -1.0, "closing_tail": INF, "last": 0.0, "shut_when_docked": false}
 	var docked: Array[String] = []
-	main.traffic.docked.connect(func(ship_name: String) -> void: docked.append(ship_name))
+	main.traffic.docked.connect(func(ship_name: String) -> void:
+		docked.append(ship_name)
+		seen["shut_when_docked"] = lock.doors.is_shut())
 	var ship: Ship = c.ship
 	var ok: bool = await _until(func() -> bool:
 		if docked.is_empty() and is_instance_valid(ship):
 			var local: Vector3 = station.to_local(ship.global_position)
-			if local.z > mouth.z - 120.0:
-				# From 120 m outside the mouth on: the roll about the tunnel's axis, and how far off the axis it flies.
+			var depth: float = lock.depth_of(local)
+			if float(seen["open_at_nose"]) < 0.0 and depth + reach.x >= 0.0:
+				seen["open_at_nose"] = lock.doors.fraction  # how far open as its nose reaches the doors' plane
+			if lock.doors.fraction < float(seen["last"]):
+				seen["closing_tail"] = minf(float(seen["closing_tail"]), depth - reach.y)  # its tail while they close
+			seen["last"] = lock.doors.fraction
+			if local.z > mouth.z - 120.0 and depth < 0.0:
+				# From 120 m outside the mouth to the doors: the roll about the bay's axis, and how far off the axis it flies.
 				rolls.append(ship.angular_velocity.dot(axis))
 				off_axis[0] = maxf(off_axis[0], Vector2(local.x, local.y).length())
-		return not docked.is_empty(), 90.0)
-	assert_true(ok, "it reached the inner airlock (%s)" % main.traffic.last_event)
+		return not docked.is_empty(), 150.0)
+	assert_true(ok, "it docked (%s)" % main.traffic.last_event)
 	assert_eq(main.traffic.docked_count, 1)
 	assert_eq(main.traffic.alive_count(), 0, "and left the world: back in its pool")
-	assert_eq(rams, 0, "without touching the turning tunnel")
+	assert_eq(rams, 0, "without touching the turning bay or its doors")
+	assert_eq(float(seen["open_at_nose"]), 1.0, "the doors stood open before its nose reached them")
+	assert_gt(float(seen["closing_tail"]), 0.0, "they closed only once it lay wholly behind them")
+	assert_true(bool(seen["shut_when_docked"]), "it left the world behind shut doors")
 	assert_gt(rolls.size(), 10)
 	var spin: float = station.hardpoints.spin_rad_s
 	for roll: float in rolls:
 		if absf(roll - spin) > 0.2 * spin:
 			fail_test("the roll matches the drum's %.3f rad/s from before the mouth: %.3f" % [spin, roll])
 			break
-	assert_lt(off_axis[0], 12.0, "on the tunnel's axis (17 m to its floor and roof)")
-	gut.p("docking: roll %.3f to %.3f rad/s against the drum's %.3f, at most %.1f m off the axis" % [
-			Array(rolls).min(), Array(rolls).max(), spin, off_axis[0]])
+	var clear: Vector2 = station.hardpoints.main_docking_bay["main_docking_bay_clear_half_m"]
+	assert_lt(off_axis[0], clear.y - 10.0, "on the bay's axis (%.0f m to the core's roof)" % clear.y)
+	gut.p("docking: roll %.3f to %.3f rad/s against the drum's %.3f, at most %.1f m off the axis; tail %.1f m past the doors as they closed" % [
+			Array(rolls).min(), Array(rolls).max(), spin, off_axis[0], float(seen["closing_tail"])])
 
 
-func test_a_civilian_comes_out_of_the_main_docking_bay_and_departs() -> void:
+func test_every_tunnel_hull_docks_without_touching_the_bay() -> void:
+	if not await _start():
+		pending("the babylon5_station asset is not generated")
+		return
+	for type: StringName in [&"narn_transport", &"centauri_brezebel"]:  # the Skylark docks above
+		var before: int = main.traffic.docked_count
+		assert_eq(main.traffic.dock(type, true), "", String(type))
+		var c: Combatant = main.traffic.last_ship()
+		rams = 0
+		_watch_rams(c)
+		assert_true(await _until(func() -> bool: return main.traffic.docked_count > before, 150.0), "%s docked" % type)
+		assert_eq(rams, 0, "%s without touching the bay or its doors" % type)
+
+
+func test_a_civilian_waits_in_the_void_comes_out_through_the_opened_doors_and_departs() -> void:
 	if not await _start():
 		pending("the babylon5_station asset is not generated")
 		return
@@ -130,13 +162,27 @@ func test_a_civilian_comes_out_of_the_main_docking_bay_and_departs() -> void:
 	assert_true(result.ok, "\n".join(result.lines))
 	var c: Combatant = main.traffic.last_ship()
 	_watch_rams(c)
+	var lock: StationAirlock = station.airlock
 	var far: Vector3 = main.traffic.plan.dock_in[0]["at"]
 	var ship: Ship = c.ship
+	var reach: Vector2 = StationAirlock.hull_reach(ship)
 	assert_almost_eq(ship.angular_velocity.dot(station.global_basis * Vector3.BACK), station.hardpoints.spin_rad_s, 0.01,
 			"it starts turning with the drum")
-	assert_true(await _until(func() -> bool: return station.to_local(ship.global_position).z < far.z + 200.0, 90.0),
-			"it flew out past the approach's far point")
-	assert_eq(rams, 0, "without touching the tunnel")
+	assert_gt(lock.depth_of(station.to_local(ship.global_position)) - reach.x, 0.0, "it starts wholly behind the doors, in the void")
+	var seen: Dictionary = {"nose_before_open": INF, "rear_closing": -INF, "last": 0.0, "opened": false}
+	assert_true(await _until(func() -> bool:
+		var depth: float = lock.depth_of(station.to_local(ship.global_position))
+		if not bool(seen["opened"]):
+			seen["opened"] = lock.doors.is_open()
+			seen["nose_before_open"] = minf(float(seen["nose_before_open"]), depth - reach.x)
+		if lock.doors.fraction < float(seen["last"]):
+			seen["rear_closing"] = maxf(float(seen["rear_closing"]), depth + reach.y)
+		seen["last"] = lock.doors.fraction
+		return station.to_local(ship.global_position).z < far.z + 200.0 and lock.doors.is_shut(), 120.0),
+			"it flew out past the approach's far point and the doors shut behind it")
+	assert_gt(float(seen["nose_before_open"]), 0.0, "it waited behind the doors until they stood open")
+	assert_lt(float(seen["rear_closing"]), 0.0, "they closed only once it was wholly out")
+	assert_eq(rams, 0, "without touching the bay or its doors")
 	assert_eq(main.traffic.alive_of(&"undock"), 1, "and flies on to where it leaves")
 
 

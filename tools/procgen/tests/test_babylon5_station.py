@@ -69,7 +69,8 @@ class StationShapeTests(unittest.TestCase):
         np.testing.assert_allclose(0.5 * (lo + hi)[:2], [0.0, 0.0], atol=1.0, err_msg="centred on its axis, so it turns in place")
         self.assertEqual(station.drum_pivot()[:2], [0.0, 0.0])
         self.assertAlmostEqual(station.drum_pivot()[2], float(station.DRUM_CENTRE[2] - station.ORIGIN[2]))
-        self.assertLess(abs(0.5 * (lo[2] + hi[2])), 30.0, "the drum's frame is near its middle")
+        # Near its middle: the docking bay's fans stand 56 m ahead of its block (M7-T25), so the drum's front is 26 m further forward.
+        self.assertLess(abs(0.5 * (lo[2] + hi[2])), 45.0, "the drum's frame is near its middle")
 
     def test_the_station_is_8_km_long_and_as_wide_and_high_as_the_measurements(self) -> None:
         pts = np.concatenate([self.drum_pts, self.frame_pts])
@@ -211,7 +212,26 @@ class DetailTileTests(unittest.TestCase):
         self.assertGreater(float((alpha > 0.6).mean()), 0.02, "the seams take most of it")
         self.assertTrue(np.array_equal(detail_tile(1024, 16.0, seed=3)["albedo"], maps["albedo"]))
         with self.assertRaises(ValueError):
-            detail_tile(256, 15.0)
+            detail_tile(256, 4.0)
+
+    def test_the_mosaic_varies_in_both_directions(self) -> None:
+        # The Earth Alliance ships' mosaic (the maintainer, 2026-11-14): a line across the tile, either way, crosses plates of many
+        # rows (or columns), not one long seam after another; and plates vary in width and in height.
+        from tools.procgen.core import detail_layer as dl  # noqa: PLC0415
+
+        px, tile = 256, 16.0
+        c = (np.arange(px) + 0.5) * tile / px
+        u, v = np.meshgrid(c, c)
+        key, u0, u1, v0, v1 = dl._plates(u, v, tile, 3)
+        inner_h = [int(np.unique(v0[r]).size) for r in range(1, px - 1)]
+        inner_w = [int(np.unique(u0[:, k]).size) for k in range(1, px - 1)]
+        self.assertGreater(float(np.median(inner_h)), 3.0, "across the width a line meets plates of several heights")
+        self.assertGreater(float(np.median(inner_w)), 3.0, "and down the height, of several widths")
+        widths, heights = np.unique(np.round(u1 - u0, 3)), np.unique(np.round(v1 - v0, 3))
+        self.assertGreater(widths.size, 8)
+        self.assertGreater(heights.size, 8)
+        self.assertLessEqual(float((u1 - u0).max()), dl.MAX_PLATE_M + 1e-9)
+        self.assertGreaterEqual(float((u1 - u0).min()), dl.MIN_PLATE_M - 1e-9)
 
 
 def _bake(name: str, px: int = 1024) -> tuple[np.ndarray, dict[str, np.ndarray]]:
@@ -355,14 +375,13 @@ class StationBuildTests(unittest.TestCase):
         origin = self.manifest["centroid_offset"][2]
         self.assertAlmostEqual(float(frame[:, 2].min()), -origin, delta=1.0, msg="the bow tip at -Z")
         self.assertAlmostEqual(float(frame[:, 2].max()), 8000.0 - origin, delta=1.0, msg="the reactor's aft face at +Z")
-        front = drum[drum[:, 2] < drum[:, 2].min() + 40.0]  # the drum's foremost 40 m: the docking bay (M7-T05)
-        mouth_front = sd.BLOCK[2] - sd.GRILLE[2]  # the grilles on the block round the mouth
-        self.assertAlmostEqual(float(drum[:, 2].min()), mouth_front - origin, delta=1.0, msg="the docking bay's block is the drum's front")
-        self.assertLess(float(np.hypot(front[:, 0], front[:, 1]).max()), math.hypot(sd.HOUSING[0], sd.HOUSING[1]) + 1.0,
-                        "the cross housing inside the frame's ring")
+        front = drum[drum[:, 2] < st.RING_BACK_Z - origin]  # the drum ahead of the ring's back: the docking bay (M7-T25)
+        fans_front = min(z for _, _, z in sd.FAN)  # the fans beside the block stand furthest forward
+        self.assertAlmostEqual(float(drum[:, 2].min()), fans_front - origin, delta=1.0, msg="the docking bay is the drum's front")
+        self.assertLessEqual(float(np.hypot(front[:, 0], front[:, 1]).max()), st.DRUM_FRONT_R + 1e-3, "inside the frame's ring")
         reactor = frame[frame[:, 2] > 7700.0 - origin]
         self.assertLess(float(np.hypot(reactor[:, 0], reactor[:, 1]).max()), 175.0, "the reactor, not a docking ring")
-        ring = frame[(frame[:, 2] > st.RING_FRAME[0] - origin - 1.0) & (frame[:, 2] < st.RING_FRAME[1] - origin + 1.0)]
+        ring = frame[(frame[:, 2] > st.RING_FRONT_Z - origin - 1.0) & (frame[:, 2] < st.RING_BACK_Z - origin + 1.0)]
         self.assertGreater(len(ring), 0, "the aperture's ring stands at the bow end of the frame")
 
     def test_deterministic(self) -> None:

@@ -79,7 +79,7 @@ def layouts() -> dict[str, SeamLayout]:
     green_joints = GREEN_JOINTS
     return {
         "sphere": SeamLayout.of([*_barrel(560.0, 945.0, 270.0, 46.0, 36, 3, (700.0, 800.0, 900.0)),
-                                 Cut(axis=2, at=st.DOOR_Z + 30.0, level=1, width=1.4)]),
+                                 Cut(axis=2, at=540.0, level=1, width=1.4)]),
         "fwd_body": SeamLayout.of(_barrel(1330.0, 1692.0, 320.0, 60.0, 40, 5, (1400.0, 1540.0, 1640.0))),
         "fwd_band": SeamLayout.of(_barrel(1790.0, 2340.0, st.BAND_R, 61.25, 48, 7, band_joints)),
         "green": SeamLayout.of(_barrel(2348.0, 4782.0, st.GREEN_R, 76.0, 40, 11, green_joints)),
@@ -87,7 +87,7 @@ def layouts() -> dict[str, SeamLayout]:
         "arms": SeamLayout.of(_faceted((30.0, 16.0), 17)),
         "aperture": SeamLayout.of([Plates(level=2, wrap="polar", axis=2, radius=105.0, around=32, cell=(19.0, 0.0), offset=(88.0, 0.0),
                                           splits=0, min_m=6.0, tone=0.06, sheen=PLATE_SHEEN, depth=0.9, dark=0.75, seed=83,
-                                          lo=(-math.inf, -math.inf, st.DOOR_Z - 1.0), hi=(math.inf, math.inf, st.DOOR_Z + 1.0))]),
+                                          lo=(-math.inf, -math.inf, sd.FACE_Z - 1.0), hi=(math.inf, math.inf, sd.FACE_Z + 1.0))]),
         "pods": SeamLayout.of(_faceted((20.0, 12.0), 19)),
         "stringers": SeamLayout.of([Cut(axis=2, at=z, level=2) for z in every(2360.0, 4770.0, 60.0)]),
         "bow": SeamLayout.of(_faceted((40.0, 22.0), 23)),
@@ -217,7 +217,8 @@ INSIDE_EPS_M = 0.05
 
 def drum_interior(p: np.ndarray, n: np.ndarray) -> np.ndarray:
     """Which of the drum's faces (centroids ``p`` and normals ``n``, station frame) lie inside: the Cobra arms' launch halls, the
-    doors' wells with their lit sills, the halls' end walls, and the main docking bay from its mouth to the airlock."""
+    doors' wells with their lit sills, the halls' end walls, and the main docking bay from its mouth through the doors' slab to the
+    void's back wall."""
     e = INSIDE_EPS_M
     q, m = _arm_local(p, n)
     top = st.ARM_HATCH[4]
@@ -231,10 +232,20 @@ def drum_interior(p: np.ndarray, n: np.ndarray) -> np.ndarray:
     # The root's sections fore and aft end on the halls: those faces are the halls' end walls, or hidden against the next part.
     ends = ((np.abs(q[:, 2] - z0) < e) | (np.abs(q[:, 2] - z1) < e)) & (np.abs(m[:, 2]) > 0.9)
     ends &= (np.abs(q[:, 0]) < st.ARM_HATCH[2] + e) & (q[:, 1] > st.HALL_CEILING_R - e) & (q[:, 1] < top - e)
-    grown = sd.shrunk(sd.MOUTH, -e)
-    reach = np.array([sd.half_height(grown, float(x)) for x in p[:, 0]])
-    tunnel = (p[:, 2] > sd.layer_z(0) + e) & (p[:, 2] < sd.TUNNEL_BACK_Z + e) & (np.abs(p[:, 1]) < reach)
-    return (hall_dark(p, n) > 0.0) | well | ends | tunnel
+    return (hall_dark(p, n) > 0.0) | well | ends | bay_interior(p)
+
+
+def bay_interior(p: np.ndarray) -> np.ndarray:
+    """Which points lie inside the main docking bay: within the mouth's set-back walls from just inside the face to the doors, and
+    within the void behind them."""
+    e = INSIDE_EPS_M
+    grown = sd.offset(sd.opening(), sd.RECESS_M + e)
+    mouth = (p[:, 2] > sd.FACE_Z + e) & (p[:, 2] < sd.DOORS_Z + sd.DOOR_SLAB_M + e)
+    for i in np.flatnonzero(mouth):
+        mouth[i] = sd.contains(grown, float(p[i, 0]), float(p[i, 1]))
+    hx, hy = sd.VOID_HALF
+    void = (np.abs(p[:, 0]) < hx + e) & (np.abs(p[:, 1]) < hy + e) & (p[:, 2] > sd.DOORS_Z + sd.DOOR_SLAB_M - e) & (p[:, 2] < sd.VOID_BACK_Z + e)
+    return mouth | void
 
 
 def frame_interior(p: np.ndarray, n: np.ndarray) -> np.ndarray:

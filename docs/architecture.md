@@ -851,7 +851,7 @@ layer. Before, nothing cast a shadow, and the sun glinted off a station's night 
 "no light casts shadows" holds for every light but the key star, and for every caster but the station (the maintainer,
 2026-11-14). Cost on the RX 6950 XT, the station at 1 km: 0.49 to 0.59 ms GPU a frame, 55 to 184 draw calls; M7-T13
 measures it under load. A ship inside a hall or a bay is on the interior layer while it is there (`InteriorLight`: on its
-rack and rail by `LaunchDirector`, in the docking tunnel and the cargo bay by `InteriorZones`' trigger volumes).
+rack and rail by `LaunchDirector`, in the main docking bay's mouth and void and the cargo bay by `InteriorZones`' trigger volumes).
 
 **Running lights (M3-T27, Q27).** Every ship has a port red marker on -X, a starboard green on +X and a top white, steady, at its `nav_lights`
 hardpoints: `RunningLights`, one node per ship with three `MeshInstance3D`s, built once with the pool. A marker is one shared quad and one
@@ -5685,13 +5685,18 @@ data/station/traffic.json        the interval, the kinds' weights, the raid's si
   when it lies behind along its leg. A lane given in place of another route starts at its first waypoint
   (`restart_route`). On a lane the big hulls are left out of avoidance.
 - **`DockingPlan`** reads `main_docking_bay` (points in the drum's frame, on its axis: moved by the drum's pivot) and
-  `cargo_bay` (frame). Docking in: the approach's far point, its near point, the mouth, 50 m short of the airlock's wall,
-  the drum's turn asked from the near point on, 45 m/s. Out: the reverse. Freighter: the approach's far point, a stop 700 m
+  `cargo_bay` (frame). Docking in: the approach's far point, its near point, the mouth, then a hold in the black void behind the
+  inner doors 145 m short of its back wall (`main_docking_bay_airlock`), the drum's turn asked from the near point on, 45 m/s to
+  the far point and 20 m/s from there (M7-T25: a hull's brakes are weaker than the lane's braking plan assumes). Out: the
+  reverse, from the void. Freighter: the approach's far point, a stop 700 m
   short of the hold point, the hold point with the nose away (at most 1800 s: the traffic sends it on when the bots are done),
   the far point again; 20 m/s.
 - **`StationTraffic`** starts ships from the pools with the `civilian` profile and a route, marks them `tier_exempt`, and
-  steps its own few entries a tick: a transit that ended takes the lane; a docking ship at the lane's end goes back to its
-  pool (`docked`); a freighter in the hold at the bay has its cargo carried (`FreighterCargo`, `freighter_unloading` or
+  steps its own few entries a tick: a transit that ended takes the lane; a docking ship asks the main docking bay's inner
+  doors open (`StationAirlock`, M7-T25: `AirlockDoors` stepped each tick, the leaves slid each frame, timing in
+  `data/station/airlock.json`) once its nose is 400 m from them, lets go once its tail is 3 m past their plane, and goes back
+  to its pool (`docked`) when they have shut; an undocking ship waits in the void until they stand open and lets go once wholly
+  out; a freighter in the hold at the bay has its cargo carried (`FreighterCargo`, `freighter_unloading` or
   `freighter_loading`) and, when the bots are done, flies its lane's last leg (a new lane from where it holds); a lane that
   ended leaves through the gate (`Jumpgate.departure_route`, `send_departure`) or 12 km straight on, then the ship is
   released (`undocked`, `freighter_left`). `raid(n, scramble)` acquires raiders with the station as objective, out of the
@@ -5733,3 +5738,40 @@ data/station/traffic.json        the interval, the kinds' weights, the raid's si
 - **Threads.** All of the above per tick is in the AI job on the frozen rows; `Field.sub_points` is filled in the job
   before the pass. Threaded equals delayed and one thread equals six (`test_station_threads`, `test_station_grid_threads`).
   No recording in `tests/fixtures/` moved.
+
+### 20.5 Navigation targets and the hold-X interaction (T27)
+
+- **Navigation targets.** `Targetable.Role.BEACON` is every navigation target: the nav buoys, the jumpgate (`Jumpgate`
+  sets it) and the station's two bays. `TargetCategories` puts them under NAVIGATION before any faction rule, so a gate or a
+  bay is never CIVILIAN or ALLIES. The bays are `NavPoint`s (a `Node3D` with a navigation `Targetable`: neutral, kind PROP,
+  heard as far as the station's beacon, the anchor's rest velocity as its own) that `Station` puts at the main docking bay's
+  mouth (on the drum's axis, plus its pivot, so the turn never moves it) and the cargo bay's entry: `BABYLON 5 DOCKING BAY`,
+  `BABYLON 5 CARGO BAY`. A bay is a place, not a thing: `NavPoint` tells the core (`SimCore.set_navigation`, native
+  `ROLE_NAV`), and avoidance skips those rows, so a docking ship flies its lane through the mouth (the radar, targeting and
+  the brains' other reads still see the row; no existing body takes the role, so no recording moved). The station's own
+  marker is unchanged. `TargetReadout.role` carries the role to the HUD: a
+  navigation target is drawn as a diamond round its box in the NAVIGATION colour (`HudFrame.target_nav`), not corner brackets;
+  the radar's dots keep their faction colours.
+- **The interaction.** `Targetable.interaction` holds a `TargetInteraction` (`kind`, `label`, an `offered` and an `action`
+  Callable); with no action it is a placeholder whose `run()` answers `not available`. The bays carry `dock` and `cargo`
+  placeholders for the missions to fill (docking, loading, unloading). The gate's is the player's jump: `Main` gives each
+  placed gate one offered whenever it is targeted and no jump runs, whose action is `JumpgateHost.start_jump(gate)`; the gate
+  refuses a request from beyond 2 km (`jump_refusal`, M7-T28), and the answer shows (`JUMPGATE: OUT OF RANGE`).
+- **Picking one.** `TargetInfo.interaction_kind` carries the interaction's kind. In the target menu's NAVIGATION ring an entry
+  that offers an interaction is a target pick (`ACTION_TARGET`), a plain nav buoy still the waypoint (M5-T25), and the ring
+  lists the places that offer an interaction first, then the nearest buoys (`TargetCategories._priority`), so a crowd of
+  buoys never pushes the gate 50 km out off its five slices. The wheel, target ahead and the console reach them as any target;
+  the target button's tap stays the nearest enemy.
+- **Tap and hold.** `HoldInteract` (pure) splits X: a press that starts while nothing is offered toggles auto-track at once,
+  as before; a press that starts while the selected target offers its interaction taps on a release within
+  `settings.target_hold_s` (0.35 s, the target button's split, so both tap-or-hold buttons feel alike), fires
+  `UiCommand.interact` once at `settings.interact_hold_s` (2 s), and is cancelled by a release in between or by the offer going
+  away. `UiCommand.interact_progress` (0 inside the tap window, so a tap never flashes the bar) is the bar.
+  `InputAdapter.interaction_offered` is set each tick by `Main` from `InteractionHost.offer()`; `ControlLock` drops both.
+- **`InteractionHost`** (Main's child): the offer (the selected marker's interaction while it is offered, the player alive and
+  the controls free), `run_offered()` on the hold, and the prompt line: `HOLD X: <label>`, or for 3 s the answer of one that
+  did not run (`BABYLON 5 DOCKING BAY: NOT AVAILABLE`), on the acknowledgement's line. The bar (`HudSurface.INTERACT`) runs
+  across the top of the window, 60 % of its width, above the status line, in both views.
+- **Console.** Provider and command `interact` (`status`, `run` as a completed hold, `hold [s]`: X held that long through
+  `InputAdapter.console_hold_s`, for scripts and captures). Tests: `test_hold_interact`, `test_nav_interaction`,
+  `test_nav_targets`, `test_gate_jump`, `test_jumpgate_in_play` (the jump now takes a 2 s hold).

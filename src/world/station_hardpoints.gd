@@ -25,8 +25,10 @@ var cobra_arm: Dictionary = {}
 ## Where a launch must wait (M7-T08): `blocked_sectors_deg` (each [from, to], counter-clockwise), `clear_distance_m`, `margin_deg`;
 ## see `launch_blocked`.
 var launch_clearance: Dictionary = {}
-## The main docking bay (in the drum, turning with it): `main_docking_bay_approach` and `_path` (Array[Vector3]), `_mouth`, `_airlock`,
-## `_clear_half_m` (Vector2), and the drum's `spin_axis`, `spin_rad_s` and `pivot` a ship matches to fly in.
+## The main docking bay (in the drum, turning with it): `main_docking_bay_approach` and `_path` (Array[Vector3]), `_mouth`, `_doors`
+## (the inner doors' plane), `_airlock` (the black void's back wall, M7-T25), `_doors_open_m`, `_clear_half_m` and `_void_half_m`
+## (Vector2), `_opening` (the mouth's clear outline about the axis, PackedVector2Array), and the drum's `spin_axis`, `spin_rad_s` and
+## `pivot` a ship matches to fly in.
 var main_docking_bay: Dictionary = {}
 ## The cargo bay (zero-gravity, on the frame): `cargo_bay_approach` and `_path` (Array[Vector3]), `_hold`, `_hold_forward`, `_release`,
 ## `_entry`, `_clear_min`, `_clear_max`.
@@ -162,6 +164,13 @@ static func _typed(raw: Dictionary, name: String) -> Variant:
 			out[k] = Color.html(str(v))
 		elif k == "sections":
 			out[k] = PackedStringArray(v as Array)
+		elif k.ends_with("_opening") and v is Array:
+			var outline := PackedVector2Array()
+			for p: Variant in v as Array:
+				if not (p is Array and (p as Array).size() == 2):
+					return "%s.%s has a point that is not [x, y]" % [name, k]
+				outline.append(Vector2(float(p[0]), float(p[1])))
+			out[k] = outline
 		elif k.ends_with("_half_m") and v is Array:
 			if (v as Array).size() != 2:
 				return "%s.%s is not [x, y]" % [name, k]

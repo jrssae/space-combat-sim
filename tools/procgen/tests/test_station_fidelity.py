@@ -55,6 +55,21 @@ class SectionToolTests(unittest.TestCase):
         upper, lower = box((8.0, 4.0, 2.0), GREY, (0.0, 0.0, 1.0)), box((8.0, 4.0, 2.0), GREY, (0.0, 0.0, -1.0))
         self.assertEqual(int(section_mask(_tris(upper, lower), self.PLANE, 0.5).sum()), 16 * 8)
 
+    def test_a_relief_plane_sees_the_face_from_the_bow(self) -> None:
+        # A frame round a hole with a back plate 8 m behind its face: the hole is open until the plate, whatever the winding.
+        walls = [box((10.0, 2.0, 4.0), GREY, (0.0, 4.0, 0.0)), box((10.0, 2.0, 4.0), GREY, (0.0, -4.0, 0.0)),
+                 box((2.0, 6.0, 4.0), GREY, (4.0, 0.0, 0.0)), box((2.0, 6.0, 4.0), GREY, (-4.0, 0.0, 0.0))]
+        plate = box((10.0, 10.0, 1.0), GREY, (0.0, 0.0, 8.5))
+        tris = _tris(*walls, plate)
+        inverted = tris[:, ::-1]  # the same faces wound the other way
+        for t in (tris, inverted):
+            front = section_mask(t, SectionPlane("r", 2, 1.0, (-10.0, 10.0, -10.0, 10.0), relief=True), 0.5)
+            self.assertEqual(int(front.sum()), 10 * 10 * 4 - 6 * 6 * 4, "the frame, the hole open")
+            back = section_mask(t, SectionPlane("r", 2, 8.5, (-10.0, 10.0, -10.0, 10.0), relief=True), 0.5)
+            self.assertEqual(int(back.sum()), 20 * 20, "the plate closes it")
+        with self.assertRaises(ValueError):
+            section_mask(tris, SectionPlane("r", 0, 0.0, (-10.0, 10.0, -10.0, 10.0), relief=True), 0.5)
+
     def test_an_arm_is_cut_in_its_own_frame(self) -> None:
         # A box standing out along +x (an arm at 0 degrees), turned onto the top (+y), fills the window over the top.
         side = _tris(box((20.0, 6.0, 2.0), GREY, (30.0, 0.0, 0.0)))
@@ -80,8 +95,9 @@ class StationSectionTests(unittest.TestCase):
 
     def _part(self, part: str) -> None:
         failures = []
+        reference = sf.reference_for(part, self.stl)
         for plane in sf.PLANES[part]:
-            score = section_score(self.stl, self.model, plane)
+            score = section_score(reference, self.model, plane)
             if score.iou < PASS_IOU and plane.name not in sf.EXEMPTIONS:
                 failures.append(f"{plane.name} {score.iou:.3f}")
         self.assertEqual(failures, [], f"{part}: sections under {PASS_IOU}")

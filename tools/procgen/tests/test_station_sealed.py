@@ -69,9 +69,11 @@ class BayTests(unittest.TestCase):
             self.assertTrue(inside(eye[0] + s * d[0], eye[1] + s * d[1]), f"{np.round(d, 3)}: not through the mouth")
 
     def test_the_main_docking_bay_opens_only_at_its_mouth(self) -> None:
+        # From the black void behind the doors (open: they are props) and from inside the mouth, only the mouth looks out (M7-T25).
         tris = np.concatenate([mesh_triangles(s.mesh) for s in st.drum_shapes(MATERIALS)])
-        for eye in ((0.0, 0.0, 600.0), (20.0, -10.0, 520.0)):
-            self._only_through(tris, np.array(eye), sd.layer_z(0), lambda x, y: abs(y) < sd.half_height(sd.MOUTH, x))
+        outline = sd.opening()
+        for eye in ((0.0, 0.0, 600.0), (30.0, -15.0, 630.0), (20.0, -10.0, 520.0)):
+            self._only_through(tris, np.array(eye), sd.FACE_Z, lambda x, y: sd.contains(outline, x, y))
 
     def test_the_cargo_bay_opens_only_at_its_throat(self) -> None:
         tris = np.concatenate([mesh_triangles(s.mesh) for s in st.frame_shapes(MATERIALS)])
@@ -155,11 +157,14 @@ class InteriorTests(unittest.TestCase):
         points = [(0.0, r, z), (r, 0.0, z), (0.0, -r, z), (-r, 0.0, z)]
         self.assertEqual(self._flags(points, [(0.0, 0.0, 1.0)] * 4), [True] * 4)
 
-    def test_the_docking_bay_is_inside_from_its_mouth_to_the_airlock(self) -> None:
-        x = sd.tunnel()[0][0]
-        flags = self._flags([(x, 0.0, 600.0), (0.0, 0.0, sd.AIRLOCK_Z), (60.0, 40.0, sd.BLOCK[2]), (0.0, 300.0, 600.0)],
-                            [(-1.0, 0.0, 0.0), (0.0, 0.0, -1.0), (0.0, 0.0, -1.0), (0.0, 1.0, 0.0)])
-        self.assertEqual(flags, [True, True, False, False], "the tunnel's wall, the airlock, the block's face outside, the sphere's skin")
+    def test_the_docking_bay_is_inside_from_its_mouth_to_the_void(self) -> None:
+        hw, hh = sd.opening_half()
+        vx, _ = sd.VOID_HALF
+        flags = self._flags([(0.0, hh + sd.RECESS_M, 520.0), (0.0, 0.0, sd.VOID_BACK_Z), (vx, 0.0, 600.0), (60.0, 40.0, sd.FACE_Z),
+                             (0.0, 300.0, 600.0)],
+                            [(0.0, -1.0, 0.0), (0.0, 0.0, -1.0), (-1.0, 0.0, 0.0), (0.0, 0.0, -1.0), (0.0, 1.0, 0.0)])
+        self.assertEqual(flags, [True, True, True, False, False],
+                         "the mouth's wall, the void's back and side, the block's face outside, the sphere's skin")
 
     def test_the_cargo_bay_is_inside_behind_its_throat(self) -> None:
         flags = self._flags([(sd.ZG_HALF_X, sd.ZG_CENTRE_Y, 470.0), (0.0, sd.ZG_THROAT_Y[0], 430.0), (0.0, sd.ZG_CENTRE_Y + 60.0, sd.ZG_FRONT_Z),

@@ -5,8 +5,9 @@ extends Node
 ## pooled ship flown by the native brains on a `Route` (a `DockingPlan` lane near the station), so this node only starts
 ## things and looks at its own few ships once a tick.
 ##
-## - **Docking**: a hull that fits the tunnel flies the lane in, matching the drum's turn, and goes back to its pool at the
-##   inner airlock (it left the world). **Undocking** is the same lane outward, from the airlock, already turning with the drum.
+## - **Docking**: a hull that fits the mouth flies the lane in, matching the drum's turn; the inner doors open ahead of it, it
+##   flies through into the black void behind them, they shut, and it goes back to its pool (it left the world; M7-T25).
+##   **Undocking** is the same backwards: it waits in the void, the doors open, it comes out turning with the drum and they shut.
 ## - **Freighter cycle**: any of the five Saturns flies to the cargo bay's lane, turns short of the hold point, backs in (stern and
 ##   pods to the bay), waits while the station's maintenance bots carry its pods or tanks into the bay one by one (or, loading,
 ##   out of the bay onto it; `FreighterCargo`, M7-T30), and leaves nose first when they are done.
@@ -34,9 +35,9 @@ const LEAVE_OUT_M: float = 12000.0
 const RAID_FROM: Vector3 = Vector3(0.0, 2500.0, -11000.0)
 const RAID_SPEED_MPS: float = 120.0
 const RAID_SPREAD_M: float = 150.0
-## A docking ship this near the airlock has left the world.
-const AIRLOCK_M: float = 30.0
 const DEFAULT_RAID: int = 6
+## An undocking ship waits in the void behind the inner doors at most this long for them to open, seconds.
+const UNDOCK_WAIT_S: float = 600.0
 ## `traffic freighter show`: the Saturn starts this far short of the hold point backing in at this speed (m, m/s), and the player
 ## watches from toward the bay, on the left (the side whose pods come off first) and above, looking a little toward the bay
 ## from the hold point (m).
@@ -148,14 +149,15 @@ func undock(type: StringName = &"") -> String:
 	var xform: Transform3D = s.global_transform
 	var airlock: Vector3 = plan.airlock
 	var out_dir: Vector3 = ((plan.dock_out[0]["at"] as Vector3) - airlock).normalized()
-	# Lying square in the tunnel as the drum has turned it.
+	# Lying square in the black void behind the inner doors as the drum has turned it, waiting there until they open (M7-T25).
 	var basis: Basis = Basis.looking_at(xform.basis * out_dir, s.drum_body.global_basis.y)
-	var velocity: Vector3 = main.world.rest_velocity() + xform.basis * out_dir * (DockingPlan.DOCK_CRUISE_MPS * 0.5)
-	var route: Route = DockingPlan.route_of(plan.dock_out, xform, main.world, DockingPlan.DOCK_CRUISE_MPS, "UNDOCKING")
-	var c: Combatant = _take(hull, route, xform * airlock, basis, velocity, &"undock", &"lane")
+	var wait: Array[Dictionary] = [{"at": airlock, "hold_s": UNDOCK_WAIT_S, "face": Vector3.ZERO, "spin": plan.spin}]
+	var route: Route = DockingPlan.route_of(wait, xform, main.world, DockingPlan.DOCK_CRUISE_MPS, "UNDOCKING")
+	var c: Combatant = _take(hull, route, xform * airlock, basis, main.world.rest_velocity(), &"undock", &"airlock")
 	if c == null:
 		return "no %s is free in the ship pool" % hull
 	c.ship.angular_velocity = xform.basis * plan.spin  # it comes out turning with the drum
+	_ask_doors(_own[_own.size() - 1])
 	return ""
 
 
@@ -423,6 +425,7 @@ func _step(i: int) -> void:
 	var entry: Dictionary = _own[i]
 	if not _still_ours(entry):
 		_drop_pods(entry)
+		_let_doors_go(entry)
 		_own.remove_at(i)
 		return
 	var c: Combatant = entry["combatant"]
@@ -436,15 +439,18 @@ func _step(i: int) -> void:
 			if done:
 				BehaviourFollowPath.attach(entry["brain"] as AiPilot, _lane_route(kind, plan.freighter if kind == &"freighter" else plan.dock_in))
 				entry["state"] = &"lane"
+		&"airlock":  # an undocking ship waits in the void until the inner doors stand open
+			var lock: StationAirlock = _airlock()
+			if lock == null or lock.doors.is_open():
+				BehaviourFollowPath.attach(entry["brain"] as AiPilot, DockingPlan.route_of(plan.dock_out, station().global_transform,
+						main.world, DockingPlan.DOCK_CRUISE_MPS, "UNDOCKING"))
+				entry["state"] = &"lane"
 		&"lane":
 			if kind == &"dock":
-				var s: Station = station()
-				var airlock: Vector3 = s.global_transform * plan.airlock
-				if done or c.ship.global_position.distance_to(airlock) < AIRLOCK_M:
-					docked_count += 1
-					docked.emit(c.display_name)
-					_release(i)
+				_dock_step(i, entry, path, done)
 				return
+			if kind == &"undock":
+				_undock_step(entry)
 			var holding_at_bay: bool = path != null and path.phase == BehaviourFollowPath.Phase.HOLD \
 					and path.index == int(entry["hold_index"])
 			if kind == &"freighter" and entry["cargo_state"] == &"" and holding_at_bay:
@@ -531,11 +537,83 @@ func _finish(i: int) -> void:
 	_release(i)
 
 
+# The main docking bay (M7-T25): a docking ship asks the inner doors open on its way in and lets go once it lies wholly past their
+# plane, in the black void; once they have shut it has docked and leaves the world.
+func _dock_step(i: int, entry: Dictionary, path: BehaviourFollowPath, done: bool) -> void:
+	if not bool(entry.get("inner", false)) and path != null and path.index > DockingPlan.DOCK_INNER_FROM:
+		# Past the approach's far point: the rest of the lane slower, to stop in the void.
+		entry["inner"] = true
+		BehaviourFollowPath.attach(entry["brain"] as AiPilot, DockingPlan.route_of(plan.dock_in.slice(DockingPlan.DOCK_INNER_FROM + 1),
+				station().global_transform, main.world, DockingPlan.DOCK_INNER_MPS, "DOCKING"))
+	var lock: StationAirlock = _airlock()
+	if lock == null:
+		if done:
+			_docked(i)
+		return
+	if bool(entry.get("through", false)):
+		if lock.doors.is_shut():
+			_docked(i)
+		return
+	var depth: float = _depth(entry, lock)
+	var reach: Vector2 = entry["reach"]
+	if depth + reach.x > -lock.ask_ahead_m:
+		_ask_doors(entry)
+	if depth - reach.y > lock.clear_m:  # its tail is past the doors' plane
+		entry["through"] = true
+		_let_doors_go(entry)
+
+
+# An undocking ship lets the doors go once it lies wholly ahead of their plane.
+func _undock_step(entry: Dictionary) -> void:
+	var lock: StationAirlock = _airlock()
+	if lock == null or not lock.doors.has_ask(entry.get("airlock_key", 0)):
+		return
+	if _depth(entry, lock) + (entry["reach"] as Vector2).y < -lock.clear_m:
+		_let_doors_go(entry)
+
+
+func _docked(i: int) -> void:
+	docked_count += 1
+	docked.emit((_own[i]["combatant"] as Combatant).display_name)
+	_release(i)
+
+
+func _airlock() -> StationAirlock:
+	var s: Station = station()
+	return s.airlock if s != null else null
+
+
+# How far the ship's origin lies past the doors' plane, into the bay; caches its hull's reach along its nose.
+func _depth(entry: Dictionary, lock: StationAirlock) -> float:
+	var c: Combatant = entry["combatant"]
+	if not entry.has("reach"):
+		entry["reach"] = StationAirlock.hull_reach(c.ship)
+	return lock.depth_of(station().global_transform.affine_inverse() * c.ship.global_position)
+
+
+func _ask_doors(entry: Dictionary) -> void:
+	var lock: StationAirlock = _airlock()
+	if lock == null:
+		return
+	var c: Combatant = entry["combatant"]
+	if not entry.has("reach"):
+		entry["reach"] = StationAirlock.hull_reach(c.ship)
+	entry["airlock_key"] = c.ship.get_instance_id()
+	lock.doors.ask(entry["airlock_key"])
+
+
+func _let_doors_go(entry: Dictionary) -> void:
+	var lock: StationAirlock = _airlock()
+	if lock != null and entry.has("airlock_key"):
+		lock.doors.release(entry["airlock_key"])
+
+
 func _release(i: int) -> void:
 	var entry: Dictionary = _own[i]
 	var c: Combatant = entry["combatant"]
 	_own.remove_at(i)
 	_drop_pods(entry)
+	_let_doors_go(entry)
 	var gate: Jumpgate = _gate()
 	if gate != null:
 		gate.cancel_departure(c.ship)
@@ -592,7 +670,7 @@ func _register_console() -> void:
 		&"undocking": {"get": func() -> int: return alive_of(&"undock"), "doc": "Of them, leaving the main docking bay"},
 		&"freighters": {"get": func() -> int: return alive_of(&"freighter"), "doc": "Of them, freighters at the cargo bay"},
 		&"raiders": {"get": func() -> int: return alive_of(&"raid"), "doc": "Of them, raiders sent at the station"},
-		&"docked": {"get": func() -> int: return docked_count, "doc": "Ships that left the world at the inner airlock"},
+		&"docked": {"get": func() -> int: return docked_count, "doc": "Ships that docked: flew into the void behind the inner doors, which shut behind them"},
 		&"undocked": {"get": func() -> int: return undocked_count, "doc": "Ships that came out of the bay and left"},
 		&"freighters_done": {"get": func() -> int: return freighters_done, "doc": "Freighter cycles finished"},
 		&"pods_in": {"get": func() -> int: return pods_in, "doc": "Cargo pods the maintenance bots carried into the cargo bay"},

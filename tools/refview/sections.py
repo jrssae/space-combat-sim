@@ -6,6 +6,10 @@ compared pixel by pixel inside a window round the part: the intersection over un
 
 A section is filled by the nonzero winding rule from the cut's segments, each oriented by its triangle's outward normal, so a model
 built of overlapping closed parts fills as their union and a hole (a tunnel, a bay) stays empty.
+
+A ``relief`` plane (z cuts only) reads the face as seen from the bow instead: a pixel is solid where the first surface met looking
+aft lies at or before the plane. It serves a reference whose shells overlap with mixed winding (the STL's bow, M7-T25), where the
+nonzero fill calls an open mouth solid; it sees only what faces the bow, which is what a bay's mouth is judged by.
 """
 
 from __future__ import annotations
@@ -27,7 +31,8 @@ class SectionPlane:
     """One cut: ``axis`` (0 x, 1 y, 2 z) at ``value``; ``window`` (u0, u1, v0, v1) round the part in the plane's (u, v); a
     ``turn_deg`` about the z axis applied to both meshes first (a Cobra arm seen in its own frame: turned onto the top); with
     ``outline`` the sections are compared filled row by row from their outermost edges (the part's shape, where the build hollows a
-    room the reference leaves solid, or the reverse)."""
+    room the reference leaves solid, or the reverse); with ``relief`` (z cuts only) the section is what the bow sees in front of
+    the plane."""
 
     name: str
     axis: int
@@ -35,6 +40,7 @@ class SectionPlane:
     window: tuple[float, float, float, float]
     turn_deg: float = 0.0
     outline: bool = False
+    relief: bool = False
 
 
 @dataclass(frozen=True)
@@ -92,8 +98,35 @@ def cut_segments(tris: np.ndarray, axis: int, value: float) -> np.ndarray:
     return ends[:, :, [u, v]]
 
 
+def relief_mask(tris: np.ndarray, plane: SectionPlane, pixel_m: float) -> np.ndarray:
+    """What the bow sees in front of a z plane, in its window: solid where the nearest surface looking aft is at or before it."""
+    from .refview import rasterize  # noqa: PLC0415 - the renderer's rasteriser, only for relief planes
+
+    if plane.axis != 2:
+        raise ValueError(f"{plane.name}: a relief plane cuts across z")
+    u0, u1, v0, v1 = plane.window
+    cols = int(round((u1 - u0) / pixel_m))
+    rows = int(round((v1 - v0) / pixel_m))
+    t = turned(np.asarray(tris, dtype=float).reshape(-1, 3, 3), plane.turn_deg)
+    t = t[t[:, :, 2].min(axis=1) <= plane.value]
+    # Faces seen edge-on (walls along the view) cover nothing; the rasteriser would still mark a pixel under each.
+    e1, e2 = t[:, 1, :2] - t[:, 0, :2], t[:, 2, :2] - t[:, 0, :2]
+    t = t[np.abs(e1[:, 0] * e2[:, 1] - e1[:, 1] * e2[:, 0]) > 1e-9]
+    if len(t) == 0:
+        return np.zeros((rows, cols), dtype=bool)
+    screen = np.empty_like(t)
+    screen[:, :, 0] = (t[:, :, 0] - u0) / pixel_m
+    screen[:, :, 1] = (v1 - t[:, :, 1]) / pixel_m
+    screen[:, :, 2] = t[:, :, 2]
+    depth, _ = rasterize(screen, cols, rows)
+    return depth <= plane.value
+
+
 def section_mask(tris: np.ndarray, plane: SectionPlane, pixel_m: float) -> np.ndarray:
-    """The filled section in the plane's window, rows from the window's top (v1) down, by the nonzero winding rule."""
+    """The filled section in the plane's window, rows from the window's top (v1) down, by the nonzero winding rule (or the relief
+    a ``relief`` plane asks for)."""
+    if plane.relief:
+        return relief_mask(tris, plane, pixel_m)
     u0, u1, v0, v1 = plane.window
     # A hair off the plane, so a plane laid on a row of the mesh's corners still cuts every face through it.
     segs = cut_segments(turned(tris, plane.turn_deg), plane.axis, plane.value + PLANE_NUDGE_M)
@@ -158,4 +191,5 @@ def score_all(reference: np.ndarray, model: np.ndarray, planes: Sequence[Section
     return [section_score(reference, model, p, pixel_m) for p in planes]
 
 
-__all__ = ["PASS_IOU", "SectionPlane", "SectionScore", "cut_segments", "fill_holes", "overlay", "score_all", "section_mask", "section_score", "turned"]
+__all__ = ["PASS_IOU", "SectionPlane", "SectionScore", "cut_segments", "fill_holes", "overlay", "relief_mask", "score_all", "section_mask", "section_score",
+           "turned"]

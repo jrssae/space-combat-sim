@@ -189,7 +189,7 @@ class StationSectionTests(unittest.TestCase):
         props = self.manifest["pieces"]["drum"]["props"]
         self.assertTrue(1000.0 <= props["near_m"] <= 2000.0)
         self.assertGreater(props["margin_m"], 0.0)
-        leaves = {f"door_leaf_{n}_{s}" for n in range(1, 7) for s in "rl"}
+        leaves = {f"door_leaf_{n}_{s}" for n in range(1, 7) for s in "rl"} | {"airlock_leaf_upper", "airlock_leaf_lower"}
         self.assertEqual(set(props["kinds"]), leaves | {"clamp", "gantry"})
         for kind in leaves:  # the leaves are the doors: drawn as far as the hull
             self.assertGreater(props["kinds"][kind]["near_m"], 10_000.0)
@@ -210,6 +210,15 @@ class StationSectionTests(unittest.TestCase):
                 at = np.asarray(flat[9:12]) + origin
                 self.assertAlmostEqual(float(np.hypot(at[0], at[1])), float(np.hypot(st.LAUNCH_STRIP_X, floor)), delta=1e-3)
                 self.assertAlmostEqual(float(at[2]), st.launch_door_centres()[n - 1], delta=1e-3)
+        # The main docking bay's inner doors (M7-T25): one leaf each, closed in the doors' slab, in the bay's section.
+        aperture = next(s for s in self.manifest["pieces"]["drum"]["mesh"]["sections"] if s["name"] == "aperture")
+        for kind in ("airlock_leaf_upper", "airlock_leaf_lower"):
+            group = next(g for g in props["groups"] if g["kind"] == kind)
+            self.assertEqual(group["section"], "aperture")
+            self.assertEqual(len(group["transforms"]), 1)
+            at = np.asarray(group["transforms"][0][9:12]) + np.asarray(station.DRUM_CENTRE) + np.asarray(aperture["origin"])
+            np.testing.assert_allclose(at, sp.airlock_origin(), atol=1e-3)
+            self.assertTrue(props["kinds"][kind]["interior"])
         clamps = next(g for g in props["groups"] if g["kind"] == "clamp")
         self.assertEqual(len(clamps["transforms"]), 24)
         for kind in props["kinds"]:
@@ -292,7 +301,7 @@ class StationSectionTests(unittest.TestCase):
     def test_the_apertures_ring_stays_open(self) -> None:
         frame = next(e for e in self.manifest["collision"]["pieces"] if e["name"] == "frame")
         shapes = col.shapes_from_entry(frame)
-        axis = np.array([[0.0, 0.0, z - station.ORIGIN[2]] for z in np.linspace(st.RING_FRAME[0], st.RING_FRAME[1], 7)])
+        axis = np.array([[0.0, 0.0, z - station.ORIGIN[2]] for z in np.linspace(st.RING_FRONT_Z, st.RING_BACK_Z, 7)])
         for shape in shapes:
             self.assertTrue(np.all(shape.distance(axis) > 50.0), f"{shape.name} closes the aperture's ring")
 

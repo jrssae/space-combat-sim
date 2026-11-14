@@ -4,14 +4,15 @@ extends RefCounted
 ## station's frame. Each lane is a list of waypoints `{at, hold_s, face, spin}` for a `Route.lane`:
 ##
 ## - **Main docking bay** (in the turning drum): in along the approach, with the drum's turn matched (`spin`, about the nose)
-##   from the last approach point on, through the mouth to the inner airlock, where the ship leaves the world; out is the
-##   same lane backwards.
+##   from the last approach point on, through the mouth and the inner doors into the black void behind them, where the ship
+##   leaves the world once they shut (M7-T25, `StationAirlock`); out is the same lane backwards.
 ## - **Cargo bay** (on the frame): a freighter flies nose first to a turning point short of the hold point; the leg from
 ##   there to the hold point asks for its nose away from the station, so it turns where it is and then backs in; it waits,
 ##   and leaves nose first the way it came. The station's maintenance bots carry its cargo meanwhile (M7-T30); the traffic sends
 ##   it on when they are done.
 
-## Hulls that fit the docking tunnel (94 x 34 m) with room to spare; every other civilian holds outside (the Saturns never enter).
+## Hulls that fit the docking bay's mouth (M7-T25: a band 73 x 17 m across a core 45 x 30 m) with room to spare, lying square in it;
+## every other civilian holds outside (the Saturns never enter).
 const TUNNEL_TYPES: Array[StringName] = [&"skylark_transport", &"narn_transport", &"centauri_brezebel"]
 const FREIGHTER_TYPE: StringName = &"saturn_3_freighter"
 ## Every Saturn that comes to the cargo bay (M7-T30: each by its own pods or tanks).
@@ -19,15 +20,23 @@ const FREIGHTER_TYPES: Array[StringName] = [&"saturn_3_freighter", &"saturn_4_tr
 		&"saturn_8_transport", &"saturn_8_tanker"]
 ## How far short of the hold point a freighter turns its stern to the bay, metres.
 const TURN_SHORT_M: float = 700.0
-## How far short of the inner airlock's wall a docking lane ends (and an undocking one starts), metres: half the longest
-## tunnel hull and some room.
-const AIRLOCK_SHORT_M: float = 50.0
+## How far short of the void's back wall (the manifest's `main_docking_bay_airlock`) a docking lane ends, and an undocking one
+## starts, metres: the longest tunnel hull lies wholly behind the inner doors there, with room before the wall for a hull that
+## brakes late.
+const AIRLOCK_SHORT_M: float = 145.0
+## A docking ship stops at its lane's end, in the void behind the inner doors, and waits there until they have shut (M7-T25).
+const DOCKED_HOLD_S: float = 120.0
 ## Seconds a freighter rests at its turning point (so it slows into it), and the longest it waits at the hold point (the traffic
 ## sends it on as soon as the bots have carried its cargo).
 const TURN_STOP_S: float = 1.0
 const WAIT_S: float = 1800.0
 ## Lane speeds, m/s: the docking lane (through a 34 m tunnel) and the freighter's (a Saturn brakes at a few hundredths of a g).
 const DOCK_CRUISE_MPS: float = 45.0
+## From the approach's far point in, a docking ship flies slower (M7-T25): it stops in the void behind the inner doors, and a
+## hull's brakes are weaker than the lane's braking plan assumes.
+const DOCK_INNER_MPS: float = 20.0
+## The docking lane's index of the approach's far point, where the slower inner leg starts.
+const DOCK_INNER_FROM: int = 0
 const FREIGHTER_CRUISE_MPS: float = 20.0
 
 var valid: bool = false
@@ -76,7 +85,7 @@ static func build(hardpoints: StationHardpoints, drum_origin: Vector3) -> Dockin
 	plan.mouth = mouth
 	plan.airlock = airlock
 	plan.dock_in = [_point(far), _point(near, 0.0, Vector3.ZERO, plan.spin), _point(mouth, 0.0, Vector3.ZERO, plan.spin),
-			_point(airlock, 0.0, Vector3.ZERO, plan.spin)]
+			_point(airlock, DOCKED_HOLD_S, Vector3.ZERO, plan.spin)]
 	plan.dock_out = [_point(mouth, 0.0, Vector3.ZERO, plan.spin), _point(near, 0.0, Vector3.ZERO, plan.spin), _point(far)]
 	var hold: Vector3 = cargo["cargo_bay_hold"]
 	var toward: Vector3 = (cargo["cargo_bay_hold_forward"] as Vector3).normalized()

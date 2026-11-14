@@ -4,13 +4,21 @@ v1) in the plane's (u, v) round the part, clear of other parts where it can be (
 Each Cobra arm is cut in its own frame: turned onto the top before the cut, so one set of windows serves all four.
 
 Exemptions: planes a part may fail for a reason the maintainer accepted, with that reason.
+
+The main docking bay (M7-T25) is compared as the bow sees it (relief planes: the STL's bow is overlapping shells with mixed winding,
+which the nonzero fill reads as a solid mouth) against the STL **locally scaled**: its frame block and mouth, and what stands on the
+block, scaled by ``station_detail.BAY_SCALE`` (80/45) about the axis and the block's face, the ring and the cross housing at the STL's
+size. The maintainer signed this (2026-11-14): the mouth is 80 m wide so T10's inbound civilians fit, the STL's is 45 m.
 """
 
 from __future__ import annotations
 
+import numpy as np
+
 from tools.refview.sections import SectionPlane
 
 from . import station as st
+from . import station_detail as sd
 
 ARM_PLANES = (  # (name, z, window: x from, x to, y from, y to, outline) on an arm standing on top
     # The head's planes compare outlines: the STL's circular hatch is a recess in the peak.
@@ -39,11 +47,10 @@ def arm_planes() -> list[SectionPlane]:
 
 PLANES: dict[str, list[SectionPlane]] = {
     "cobra_arms": arm_planes(),
-    "main_docking_bay": [
-        SectionPlane("main_docking_bay_z455", 2, 455.0, (-140.0, 140.0, -140.0, 140.0)),
-        SectionPlane("main_docking_bay_z470", 2, 470.0, (-140.0, 140.0, -140.0, 140.0)),
-        SectionPlane("main_docking_bay_z520", 2, 520.0, (-140.0, 140.0, -140.0, 140.0)),
-        SectionPlane("main_docking_bay_side", 0, 0.0, (440.0, 660.0, -130.0, 130.0)),
+    "main_docking_bay": [  # the whole face (the ring, the housing, the block and its fans), then the block round the mouth, deeper
+        *(SectionPlane(f"main_docking_bay_z{z:.0f}", 2, z, (-140.0, 140.0, -140.0, 140.0), relief=True)
+          for z in (455.0, 472.0, 478.0, 483.0, 494.0, 508.0)),
+        *(SectionPlane(f"main_docking_bay_mouth_z{z:.0f}", 2, z, (-90.0, 90.0, -50.0, 50.0), relief=True) for z in (500.0, 530.0, 550.0)),
     ],
     "cargo_bay": [
         SectionPlane("cargo_bay_z430", 2, 430.0, (-110.0, 110.0, 300.0, 380.0), outline=True),
@@ -70,17 +77,91 @@ PLANES: dict[str, list[SectionPlane]] = {
 
 # Plane name -> the accepted reason it may score under 0.90.
 EXEMPTIONS: dict[str, str] = {
-    "main_docking_bay_z455": "the main docking bay is built from the maintainer's show references (T05, approved), not the STL's door",
-    "main_docking_bay_z470": "the main docking bay is built from the maintainer's show references (T05, approved), not the STL's door",
-    "main_docking_bay_z520": "the main docking bay is built from the maintainer's show references (T05, approved), not the STL's door",
-    "main_docking_bay_side": "the main docking bay is built from the maintainer's show references (T05, approved), not the STL's door",
     "cargo_bay_side": "the throat and compartment are open for the pods (Q8 as refined; the maintainer: 'open only where the pods "
                       "enter'); the STL shuts the throat with a door plate",
 }
+
+
+# What the maintainer had scaled (M7-T25), in the STL's frame at the 8 km scale: the frame block and its mouth back to behind its door (|x|, |y|, z),
+# and the fans and rails standing in front of the housing's face beside it (|x|, |y|, and in front of z). The housing keeps its size.
+STL_BAY_REGION = (47.6, 25.7, 440.0, 570.0)
+STL_FAN_REGION = (58.5, 11.5, 480.0)
+
+
+def _split(poly: np.ndarray, axis: int, at: float) -> tuple[np.ndarray, np.ndarray]:
+    """A convex polygon cut by the plane ``p[axis] = at``: the part below it and the part above (either may be empty)."""
+    lo, hi = [], []
+    n = len(poly)
+    for i in range(n):
+        a, b = poly[i], poly[(i + 1) % n]
+        da, db = a[axis] - at, b[axis] - at
+        (lo if da <= 0.0 else hi).append(a)
+        if da * db < 0.0:
+            q = a + (b - a) * (da / (da - db))
+            lo.append(q)
+            hi.append(q)
+    return np.array(lo), np.array(hi)
+
+
+def _clip_box(tri: np.ndarray, hx: float, hy: float) -> tuple[list[np.ndarray], list[np.ndarray]]:
+    """A triangle's pieces inside the box |x| <= hx, |y| <= hy, and outside it, as convex polygons."""
+    inside, outside = tri, []
+    for axis, at, keep_below in ((0, hx, True), (0, -hx, False), (1, hy, True), (1, -hy, False)):
+        if len(inside) < 3:
+            break
+        below, above = _split(inside, axis, at)
+        kept, cut = (below, above) if keep_below else (above, below)
+        if len(cut) >= 3:
+            outside.append(cut)
+        inside = kept
+    return ([inside] if len(inside) >= 3 else []), outside
+
+
+def _fan(polys: list[np.ndarray]) -> np.ndarray:
+    tris = [np.array([p[0], p[i], p[i + 1]]) for p in polys for i in range(1, len(p) - 1)]
+    return np.array(tris).reshape(-1, 3, 3)
+
+
+def _region(t: np.ndarray, hx: float, hy: float) -> tuple[np.ndarray, np.ndarray]:
+    """The triangles' parts inside a box about the axis (|x| <= hx, |y| <= hy) and the rest, triangles cut where they cross it."""
+    ax, ay = np.abs(t[:, :, 0]), np.abs(t[:, :, 1])
+    inside = (ax <= hx).all(axis=1) & (ay <= hy).all(axis=1)
+    outside = (t[:, :, 0].min(axis=1) >= hx) | (t[:, :, 0].max(axis=1) <= -hx) | (t[:, :, 1].min(axis=1) >= hy) | (t[:, :, 1].max(axis=1) <= -hy)
+    crossing = ~inside & ~outside
+    ins, outs = [], []
+    for tri in t[crossing]:
+        a, b = _clip_box(tri, hx, hy)
+        ins += a
+        outs += b
+    return np.concatenate([t[inside], _fan(ins)]), np.concatenate([t[outside], _fan(outs)])
+
+
+def scaled_reference(stl: np.ndarray) -> np.ndarray:
+    """The STL with its frame block, mouth and fans scaled as the build's (``sd.BAY_SCALE`` about the axis and the block's face),
+    triangles cut where they cross the scaled region."""
+    t = np.asarray(stl, dtype=float).reshape(-1, 3, 3)
+    hx, hy, z0, z1 = STL_BAY_REGION
+    near = (t[:, :, 2] >= z0).all(axis=1) & (t[:, :, 2] <= z1).all(axis=1)
+    block, rest = _region(t[near], hx, hy)
+    fx, fy, fz = STL_FAN_REGION
+    front = (rest[:, :, 2] < fz).all(axis=1)
+    fans, beside = _region(rest[front], fx, fy)
+    moved = np.concatenate([block, fans])
+    moved[:, :, :2] *= sd.BAY_SCALE
+    moved[:, :, 2] = sd.FACE_Z + (moved[:, :, 2] - sd.FACE_Z) * sd.BAY_SCALE
+    return np.concatenate([t[~near], rest[~front], beside, moved])
+
+
+# Part -> how its reference is made from the STL (the identity for every part but the main docking bay).
+REFERENCES = {"main_docking_bay": scaled_reference}
+
+
+def reference_for(part: str, stl: np.ndarray) -> np.ndarray:
+    return REFERENCES.get(part, lambda t: t)(stl)
 
 
 def all_planes() -> list[SectionPlane]:
     return [p for planes in PLANES.values() for p in planes]
 
 
-__all__ = ["ARM_PLANES", "EXEMPTIONS", "PLANES", "all_planes", "arm_planes"]
+__all__ = ["ARM_PLANES", "EXEMPTIONS", "PLANES", "REFERENCES", "STL_BAY_REGION", "STL_FAN_REGION", "all_planes", "arm_planes", "reference_for", "scaled_reference"]

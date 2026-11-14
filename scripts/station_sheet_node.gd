@@ -30,7 +30,10 @@ const VIEWS: Array[Dictionary] = [
 	{"name": "10km", "far": 10.0},
 	{"name": "100km", "far": 100.0},
 ]
-## M7-T19's sets (`views=<set>`): `t19` the cost views (from a Cobra bay, the aperture, 1 km, 10 km, 1 000 km), `fly` a pass along
+## M7-T25's `t25` (the main docking bay rebuilt to the STL with an 80 m mouth: bow on, three-quarter, the mouth close and inside, the
+## doors open onto the black void, the lower hatch, the ring), `t25tunnel` (the mouth close up: its red-lit grey plating) and
+## `t25seq` (live: a civilian docks through the opening doors, then
+## one undocks; each frame taken when the traffic reaches a stage). M7-T19's sets (`views=<set>`): `t19` the cost views (from a Cobra bay, the aperture, 1 km, 10 km, 1 000 km), `fly` a pass along
 ## the station's underside about 200 m off the hull from the bow to the reactor (section joins and levels of detail), `doors` the
 ## Cobra-bay doors close up (the near-only props); M7-T05's `t05` (the docking bay), `cargo`, `strip` and `markers` (every hardpoint
 ## as a ball); M7-T21's `t21` (the creased arm and the roofed cargo bay); M7-T22's `t22` (the spine and command section). The
@@ -107,6 +110,37 @@ const VIEW_SETS: Dictionary = {
 		{"name": "spine_aft_1km", "at": Vector3(900.0, 950.0, 4400.0), "aim": Vector3(0.0, 400.0, 5500.0), "fov": 50.0},
 		{"name": "spine_hub_50m", "at": Vector3(190.0, 520.0, 5600.0), "aim": Vector3(100.0, 450.0, 5670.0), "fov": 62.0},
 	],
+	"t25": [
+		{"name": "bay_bow_on", "at": Vector3(0.0, 12.0, -260.0), "aim": Vector3(0.0, 0.0, 480.0), "fov": 42.0},
+		{"name": "bay_bow_on_lit_aft", "at": Vector3(0.0, 12.0, -260.0), "aim": Vector3(0.0, 0.0, 480.0), "fov": 42.0, "sun": "aft"},
+		{"name": "bay_three_quarter", "at": Vector3(-170.0, 70.0, 260.0), "aim": Vector3(0.0, 0.0, 490.0), "fov": 55.0},
+		{"name": "bay_mouth_close", "at": Vector3(28.0, 10.0, 405.0), "aim": Vector3(0.0, 0.0, 505.0), "fov": 62.0, "sun": "aft"},
+		{"name": "bay_mouth_in", "at": Vector3(0.0, 4.0, 470.0), "aim": Vector3(0.0, 0.0, 552.0), "fov": 72.0, "sun": "aft"},
+		{"name": "bay_doors_open", "at": Vector3(0.0, 4.0, 470.0), "aim": Vector3(0.0, 0.0, 552.0), "fov": 72.0, "sun": "aft",
+				"airlock": "open"},
+		{"name": "bay_lower_hatch", "at": Vector3(70.0, -190.0, 330.0), "aim": Vector3(0.0, -75.0, 485.0), "fov": 55.0},
+		{"name": "bay_ring_side", "at": Vector3(190.0, -70.0, 400.0), "aim": Vector3(0.0, 0.0, 500.0), "fov": 55.0},
+	],
+	# The mouth from outside, then close up (the show's red-lit grey plating, the doors closed): approaching it, half way down it,
+	# and at the inner doors.
+	"t25tunnel": [
+		{"name": "tunnel_mouth_outside", "at": Vector3(75.0, 32.0, 270.0), "aim": Vector3(0.0, 0.0, 500.0), "fov": 45.0},
+		{"name": "tunnel_approach", "at": Vector3(14.0, 7.0, 395.0), "aim": Vector3(0.0, 0.0, 530.0), "fov": 62.0},
+		{"name": "tunnel_mid", "at": Vector3(8.0, 4.0, 512.0), "aim": Vector3(-6.0, 0.0, 553.0), "fov": 74.0},
+		{"name": "tunnel_doors", "at": Vector3(5.0, 3.0, 538.0), "aim": Vector3(0.0, 0.0, 553.0), "fov": 78.0},
+		{"name": "tunnel_mid_looking_out", "at": Vector3(-6.0, 3.0, 535.0), "aim": Vector3(6.0, 0.0, 470.0), "fov": 74.0},
+	],
+	# Live (the drum turning, the traffic flying): a civilian docks and one undocks, seen from beside the lane outside the mouth.
+	"t25seq": [
+		{"name": "seq_1_approach", "live": true, "run": "traffic dock near", "depth_ge": -260.0},
+		{"name": "seq_2_doors_open", "live": true, "depth_ge": -75.0},
+		{"name": "seq_3_entering", "live": true, "depth_ge": 0.0},
+		{"name": "seq_4_inside_closing", "live": true, "doors_closing_le": 0.5},
+		{"name": "seq_5_docked_shut", "live": true, "docked": true},
+		{"name": "seq_6_undock_opening", "live": true, "run": "traffic undock", "doors_opening_ge": 0.6},
+		{"name": "seq_7_emerging", "live": true, "depth_le": -40.0},
+		{"name": "seq_8_out_shut", "live": true, "doors_shut_after": true},
+	],
 	"markers": [
 		{"name": "markers_side", "at": Vector3(-3600.0, 1300.0, 3200.0), "aim": Vector3(0.0, 0.0, 3500.0), "fov": 62.0, "markers": 40.0},
 		{"name": "markers_aft", "at": Vector3(-1700.0, 1000.0, 6900.0), "aim": Vector3(0.0, 100.0, 5000.0), "fov": 62.0, "markers": 28.0},
@@ -150,6 +184,11 @@ var _origin_z: float = 4000.0
 var _timed_us: int = 0  # when the timed frames of this shot began
 var _markers: Array[Dictionary] = []  # each marker node and its size against the view's marker radius
 const TIMED_FRAMES: int = 60  # the last frames before each capture, timed for a steady frame rate
+## The live sequence (`t25seq`): where its camera stands, the time scale it runs at, and the most frames a stage may wait.
+const LIVE_SHOT: Dictionary = {"at": Vector3(150.0, 55.0, 150.0), "aim": Vector3(0.0, 0.0, 470.0), "fov": 48.0}
+const LIVE_SPEED: float = 4.0
+const LIVE_LIMIT_FRAMES: int = 6000
+var _live: bool = false
 
 
 func _ready() -> void:
@@ -256,6 +295,10 @@ func _next() -> void:
 	for marker: Dictionary in _markers:
 		(marker["node"] as Node3D).scale = Vector3.ONE * float(marker["size"]) * float(view.get("markers", 1.0))
 	_open_door(int(view.get("open_door", 0)))
+	_set_airlock(String(view.get("airlock", "")))
+	if bool(view.get("live", false)):
+		_go_live(view)
+		return
 	if view.has("far"):
 		_run("far view station %s" % view["far"])
 		return
@@ -263,6 +306,56 @@ func _next() -> void:
 			"look_at": {"actor": "station", "offset": _local(view["aim"])}, "fov": view["fov"]}
 	var made: Dictionary = CinematicShot.from_dict(StringName(view["name"]), {"keys": [key.merged({"t": 0.0}), key.merged({"t": 3600.0})]})
 	main.camera_rig.play_shot(made["shot"], _pose, _origin_to_local)
+
+
+# The main docking bay's doors held open or shut for a static view (M7-T25), at once; "" leaves them to the traffic.
+func _set_airlock(how: String) -> void:
+	var lock: StationAirlock = _station.airlock if is_instance_valid(_station) else null
+	if lock == null or _live:
+		return
+	lock.doors.mode = {"open": AirlockDoors.Mode.OPEN, "shut": AirlockDoors.Mode.SHUT}.get(how, AirlockDoors.Mode.AUTO)
+	lock.doors.fraction = 1.0 if how == "open" else 0.0
+	lock.leaves.set_offset(lock.open_m * lock.doors.fraction)
+
+
+# The live sequence's stage: the station turning and the traffic flying at `LIVE_SPEED`, the camera beside the lane.
+func _go_live(view: Dictionary) -> void:
+	if not _live:
+		_live = true
+		_station.set_spinning(true)
+		_station.set_process(true)
+		Engine.physics_ticks_per_second = roundi(60.0 * LIVE_SPEED)
+		Engine.time_scale = LIVE_SPEED
+		Engine.max_physics_steps_per_frame = maxi(Engine.max_physics_steps_per_frame, roundi(LIVE_SPEED))
+		var key: Dictionary = {"position": {"actor": "station", "offset": _local(LIVE_SHOT["at"])},
+				"look_at": {"actor": "station", "offset": _local(LIVE_SHOT["aim"])}, "fov": LIVE_SHOT["fov"]}
+		var made: Dictionary = CinematicShot.from_dict(&"t25seq", {"keys": [key.merged({"t": 0.0}), key.merged({"t": 36000.0})]})
+		main.camera_rig.play_shot(made["shot"], _pose, _origin_to_local)
+	if view.has("run"):
+		_run(String(view["run"]))
+
+
+# Whether a live stage has come: the traffic's last ship this deep past the doors' plane (or this far out), the doors this far
+# open or shut, or the docked ship gone behind shut doors.
+func _live_ready(view: Dictionary) -> bool:
+	var lock: StationAirlock = _station.airlock
+	var c: Combatant = main.traffic.last_ship() if main.traffic != null else null
+	var depth: float = NAN
+	if c != null and is_instance_valid(c.ship) and c.ship.is_inside_tree():
+		depth = lock.depth_of(_station.to_local(c.ship.global_position))
+	if view.has("depth_ge"):
+		return not is_nan(depth) and depth >= float(view["depth_ge"])
+	if view.has("depth_le"):
+		return not is_nan(depth) and depth <= float(view["depth_le"])
+	if view.has("doors_closing_le"):
+		return not lock.doors.wants_open() and lock.doors.fraction <= float(view["doors_closing_le"])
+	if view.has("doors_opening_ge"):
+		return lock.doors.wants_open() and lock.doors.fraction >= float(view["doors_opening_ge"])
+	if view.has("docked"):
+		return main.traffic.docked_count > 0 and lock.doors.is_shut()
+	if view.has("doors_shut_after"):
+		return lock.doors.is_shut() and not is_nan(depth) and depth < -100.0
+	return true
 
 
 func _pose(actor: String) -> Variant:
@@ -300,14 +393,24 @@ func _on_frame() -> void:
 	if _index < 0 or _index >= _views.size():
 		return
 	_light_from_camera()
+	if _live:
+		_frame += 1
+		if _live_ready(_views[_index]) or _frame >= LIVE_LIMIT_FRAMES:
+			_capture(String(_views[_index]["name"]), Engine.get_frames_per_second())
+			_next()
+		return
 	_station.drum_pivot.basis = Basis.IDENTITY  # held at rest every frame: the arms stay where the shots expect them
 	_frame += 1
 	if _frame == int(options["settle"]) - TIMED_FRAMES:
 		_timed_us = Time.get_ticks_usec()
 	if _frame < int(options["settle"]):
 		return
-	var steady_fps: float = TIMED_FRAMES / maxf((Time.get_ticks_usec() - _timed_us) / 1e6, 1e-6)
-	var name: String = String(_views[_index]["name"])
+	_capture(String(_views[_index]["name"]), TIMED_FRAMES / maxf((Time.get_ticks_usec() - _timed_us) / 1e6, 1e-6))
+	_next()
+
+
+# Saves the frame as the view `name` and prints the `render` provider's numbers.
+func _capture(name: String, steady_fps: float) -> void:
 	var camera: Camera3D = get_viewport().get_camera_3d()
 	print("[station_sheet] %s: camera %s at %s, station at %s" % [name, camera.get_path() if camera != null else "none",
 			camera.global_position if camera != null else Vector3.ZERO, _station.global_position])
@@ -319,7 +422,6 @@ func _on_frame() -> void:
 		stats.append("%s=%s" % [key, str(DebugConsole.registry.read("render.%s" % key).get("value", "?"))])
 	print("[station_sheet] %s: %s steady_fps=%.0f card_vram_mb=%.0f station_meshes_shown=%d -> %s" % [name, " ".join(stats), steady_fps,
 			_vram_bytes() / 1048576.0, _shown(_station), path])
-	_next()
 
 
 # Swings door `number`'s two leaves open on every arm (0 closes them all), each about its hinge on its outer edge, as a launch would.

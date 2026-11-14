@@ -1,14 +1,15 @@
 """The station's near-field detail (M7-T05): the main docking bay at the bow, the cargo bay (zero-gravity) between the bow's forks and the
 defence grid's mount plinths.
 
-The main docking bay (``references/docking bay references/``, described in docs/milestones/m7-babylon-5-station.md, M7-T05; nothing from
-them is traced) is the drum's door, turning with it: a plate across the docking sphere's front opening with a toothed rim, a long
-housing across it and a bar up and down it (a cross), a vented central block carrying the stepped, cross-shaped mouth, a funnel of
-frames stepping in, a straight tunnel lined with machinery and ringed by frames that glow red, deeper ones dimmer, and the inner
-airlock's two doors closed on a sawtooth seam at its end. Grilles, marked panels and a lower hatch dress the block and the bar.
+The main docking bay (M7-T25) is the STL's (``references/EA Babylon 5 Station.stl``, docs/assets-station.md) with its frame block and
+mouth scaled up so the mouth is 80 m wide (the maintainer's estimate, so T10's civilians fit), and the show's look
+(``references/docking bay references/``; nothing traced). It turns with the drum: the cross housing over the disc at the STL's size,
+the octagonal frame block with its grilles and marked panels, the fan-shaped grille housings beside it, the mouth (the STL's band
+across a taller core) running straight back to the inner airlock, its grey walls set back between frames and lit red by lamps, and the sawtooth doors
+(``station_props.py``, opened by the game) onto a black void where a docking ship leaves the world. The toothed ring round it stands
+still (``station.py``).
 
-Every outline here is rectilinear (the mouth is a stepped cross), so faces are rectangles cut in strips and walls run along the
-outline's edges. Numbers are metres in the station frame of ``station.py`` (z aft from the bow tip).
+Numbers are metres in the station frame of ``station.py`` (z aft from the bow tip). Outlines are lists of (x, y), counter-clockwise.
 """
 
 from __future__ import annotations
@@ -21,62 +22,115 @@ import numpy as np
 from ..core.geometry import Material, Mesh, basis_from_z, lathe, planar_uv, unit
 from . import station as st
 
-Steps = tuple[tuple[float, float], ...]  # a stepped cross: (half width, half height) from the widest step to the tallest
+Outline = list[tuple[float, float]]
 
-# The door plate across the sphere's front opening, and what stands on it (half sizes, and the z of the front face).
-PLATE_Z = st.DOOR_Z
-BLOCK = (70.0, 56.0, 450.0)  # the vented central block carrying the mouth
-HOUSING = (128.0, 30.0, 460.0)  # the long housing across the plate (each arm from the block's side to x 128)
-BAR_UP = (16.0, 124.0, 466.0)  # the bar up the plate (from the block's top)
-BAR_DOWN = (28.0, 122.0, 462.0)  # and down it, wider, carrying the lower hatch
-HATCH = (20.0, 62.0, 112.0)  # the lower hatch: half width, top and bottom (|y|)
-# The mouth: the outer frame's stepped cross, then frames each stepping in by MOUTH_INSET and back by MOUTH_LAYER_M.
-MOUTH: Steps = ((58.0, 28.0), (40.0, 36.0), (26.0, 44.0))
-MOUTH_LAYERS = 4
-MOUTH_INSET = 3.0
-MOUTH_LAYER_M = 6.0
-# The tunnel from the last frame to the inner airlock, ringed by frames that stand in from its walls.
-AIRLOCK_Z = 640.0  # the doors' faces
-TUNNEL_BACK_Z = 646.0  # the dark wall behind the doors' seam
-RIB_Z = (490.0, 514.0, 538.0, 562.0, 586.0, 610.0)
-RIB_INSET = 2.0
-RIB_DEPTH = 3.0
-EDGE_STRIP_M = 0.8  # the lit strip round each frame's inner edge
-EDGE_LIFT_M = 0.05  # how far a strip stands off its face
-# The airlock's sawtooth seam: the teeth's height, the period, and the gap between the doors.
-SAW = (10.0, 22.0, 2.4)
-PLATE_TEETH = (40, 112.0, 124.0, 5.0)  # the toothed rim: count, the tips' and the bases' radius, how far they stand out
-# The block's grilles: slats standing 1.5 m off its face, every 4 m.
-GRILLE = (1.6, 4.0, 1.5)
-
-
-def mouth(layer: int) -> Steps:
-    """The stepped cross of frame ``layer`` (0 the outer one at the block's face)."""
-    return tuple((x - layer * MOUTH_INSET, y - layer * MOUTH_INSET) for x, y in MOUTH)
-
-
-def tunnel() -> Steps:
-    """The tunnel's walls: the last frame's outline."""
-    return mouth(MOUTH_LAYERS - 1)
-
-
-def clear_passage() -> tuple[float, float]:
-    """The clear passage's half width and half height through the whole bay: the tunnel's widest step inside its frames."""
-    x, y = tunnel()[0]
-    return x - RIB_INSET, y - RIB_INSET
-
-
-def layer_z(layer: int) -> float:
-    return BLOCK[2] + layer * MOUTH_LAYER_M
-
-
-def half_height(steps: Steps, x: float) -> float:
-    """How high a stepped cross reaches at ``|x|`` (0 outside it)."""
-    return max((y for sx, y in steps if abs(x) < sx - 1e-9), default=0.0)
+# --- the main docking bay --------------------------------------------------------------------------------------------
+# The STL's frame block and mouth, scaled about the axis and about the block's face so the mouth is 80 m wide (the STL's is 45 m at the
+# 8 km scale): the maintainer's choice, so the tunnel hulls fit (the ring and the cross housing keep the STL's size).
+BAY_SCALE = 80.0 / 45.0
+FACE_Z = 480.4  # the block's and the housing's face (the STL's)
+STL_OCTAGON = ((47.5, 0.0), (47.5, 13.4), (31.25, 25.5), (0.0, 25.5))  # the block's outline, first quadrant, STL size
+STL_OPENING = ((20.6, 0.0), (19.25, 4.7), (12.8, 4.7), (11.2, 8.45), (0.0, 8.45))  # the mouth's clear outline, STL size
+STL_DEPTH_M = 40.5  # the block's face to the STL's back wall (the inner airlock)
+DOORS_Z = FACE_Z + STL_DEPTH_M * BAY_SCALE  # the inner airlock's doors
+BLOCK_BACK_Z = 516.0  # the block's walls end inside the drum
+RIM = (2.8, 0.9)  # the raised rim round the block's face: width, height
+# The mouth: a lip at the face, then walls set back round the clear outline, with frames standing in to it (lit red, dimmer deeper).
+LIP_M = 3.0
+RECESS_M = 2.0
+FRAME_M = 2.5
+FRAME_Z = tuple(FACE_Z + LIP_M + 9.0 + 12.5 * k for k in range(5))
+RIB = (0.35, 0.8)  # the ribs round the set-back walls between the frames: how far they stand in, how long along the axis
+# The inner airlock: the doors slide up and down into a slab between the mouth's back wall and the void's front wall.
+DOOR_SLAB_M = 2.0
+DOOR_LEAF = (0.5, 1.5, 1.5, 2.0)  # a leaf's front and back behind the doors' plane, how far it reaches past the outline across and up
+DOOR_OPEN_M = 21.0  # how far each leaf slides to clear the opening
+SAW = (10.0, 20.5, 0.3)  # the seam's teeth: height, period, the gap between the leaves
+# The void behind the doors: black, sealed, deep enough for the longest tunnel hull to lie wholly behind the doors with room ahead of
+# it for one that brakes late (the docking lane ends 145 m short of the back wall, ``DockingPlan``).
+VOID_HALF = (42.0, 22.0)
+VOID_BACK_Z = 740.0
+# The cross housing at the STL's size: the bar across (half height, its end) and the bars up and down, their ends 5 m inside the
+# ring's bore so the drum turns clear (``station.DRUM_FRONT_R``; the STL's reach the ring).
+HOUSING = (13.25, 102.5)
+BAR = ((45.3, 18.3, 488.5), (102.3, 14.6, 492.0))  # (|y|, half width, face z) at the block's top and at the bar's end
+BAR_BACK_Z = 515.0
+BAR_BOXES = (52.0, 68.0, 84.0, 98.0)  # the boxes along each bar's sides
+# The fan-shaped grille housings beside the block (STL: x 37 to 58.2, half height 11.3 to 5.6, front z 449 to 471), scaled with it.
+# Its sections as scaled (x, half height, front z), read off the scaled STL: chamfered at the inner end, tallest just out from it,
+# narrowing and standing further forward to the outer end.
+FAN = ((65.8, 13.0, 471.5), (70.0, 19.7, 465.7), (90.0, 11.3, 440.5), (102.5, 8.9, 424.0))
+STL_FAN_RAILS = (24.3, 37.0, 1.6, 2.7, 477.4)  # two rails from the mouth's side to the fan: x from, x to, |y| from, to, front z
+HOUSING_POSTS = (98.0, 100.4, 17.2, 23.8, 481.0)  # posts beside the bar across, near its ends: x from, to, |y| from, to, front z
+# The block's face (STL size): the slats over and under the mouth, the short ones beside it, the marked panels at its corners and the
+# notches at its top and bottom.
+STL_SLATS = (11.6, 9.2, 14.0, 12)  # half span, y from, y to, count
+STL_SIDE_SLATS = (21.0, 23.5, 5.0, 7.6)  # x from, x to, y from, y to
+STL_PANEL = (13.25, 21.4, 10.75, 14.5)
+STL_NOTCH = (5.0, 22.6)  # half width, y from (to the rim)
 
 
-def shrunk(steps: Steps, d: float) -> Steps:
-    return tuple((x - d, y - d) for x, y in steps)
+def scaled(points: Sequence[tuple[float, float]]) -> Outline:
+    return [(BAY_SCALE * x, BAY_SCALE * y) for x, y in points]
+
+
+def scaled_z(z: float) -> float:
+    """An STL depth moved by the block's scale about its face."""
+    return FACE_Z + (z - FACE_Z) * BAY_SCALE
+
+
+def full_outline(first_quadrant: Sequence[tuple[float, float]]) -> Outline:
+    """A shape symmetric about both axes from its first quadrant (from the +x axis round to the +y axis), counter-clockwise."""
+    q1 = list(first_quadrant)
+    q2 = [(-x, y) for x, y in reversed(q1)]
+    q3 = [(-x, -y) for x, y in q1]
+    q4 = [(x, -y) for x, y in reversed(q1)]
+    out = q1 + q2[1:] + q3[1:] + q4[1:-1]
+    return [p for i, p in enumerate(out) if i == 0 or (abs(p[0] - out[i - 1][0]) + abs(p[1] - out[i - 1][1])) > 1e-9]
+
+
+def octagon() -> Outline:
+    return full_outline(scaled(STL_OCTAGON))
+
+
+def opening() -> Outline:
+    """The mouth's clear outline: the passage traffic flies through, from the face to the doors."""
+    return full_outline(scaled(STL_OPENING))
+
+
+def opening_half() -> tuple[float, float]:
+    """The clear outline's half width (the band) and half height (the core)."""
+    q = scaled(STL_OPENING)
+    return q[0][0], q[-1][1]
+
+
+def offset(outline: Sequence[tuple[float, float]], d: float) -> Outline:
+    """An outline moved out by ``d`` (in for a negative ``d``), its corners mitred."""
+    p = np.asarray(outline, dtype=float)
+    out = []
+    for i in range(len(p)):
+        a, b, c = p[i - 1], p[i], p[(i + 1) % len(p)]
+        n1, n2 = _out_normal(b - a), _out_normal(c - b)
+        out.append(tuple(b + d * (n1 + n2) / (1.0 + float(n1 @ n2))))
+    return out
+
+
+def _out_normal(edge: np.ndarray) -> np.ndarray:
+    return np.array([edge[1], -edge[0]]) / float(np.hypot(edge[0], edge[1]))
+
+
+def contains(outline: Sequence[tuple[float, float]], x: float, y: float) -> bool:
+    """Whether a point lies inside an outline (even-odd)."""
+    p = np.asarray(outline, dtype=float)
+    inside = False
+    for (x0, y0), (x1, y1) in zip(p, np.roll(p, -1, axis=0), strict=True):
+        if (y0 > y) != (y1 > y) and x < x0 + (y - y0) * (x1 - x0) / (y1 - y0):
+            inside = not inside
+    return inside
+
+
+def rect(hx: float, hy: float) -> Outline:
+    return [(hx, -hy), (hx, hy), (-hx, hy), (-hx, -hy)]
 
 
 # --- flat faces ------------------------------------------------------------------------------------------------------
@@ -110,52 +164,52 @@ def rect_z(x0: float, x1: float, y0: float, y1: float, z: float) -> np.ndarray:
     return np.array([[x0, y0, z], [x1, y0, z], [x1, y1, z], [x0, y1, z]])
 
 
-def annulus(outer: Steps, inner: Steps, z: float, facing: float, material: Material) -> list:
-    """The face between two stepped crosses (``inner`` may be empty: the whole of ``outer``) in the plane ``z``, in strips."""
-    xs = sorted({0.0} | {x for x, _ in outer} | {x for x, _ in inner})
-    out = []
-    for a, b in zip(xs[:-1], xs[1:], strict=True):
-        mid = 0.5 * (a + b)
-        ho, hi = half_height(outer, mid), half_height(inner, mid)
-        if ho <= hi + 1e-9:
+def _ray(outline: Sequence[tuple[float, float]], angle: float) -> np.ndarray:
+    """Where a ray from the axis at ``angle`` leaves a shape that is star-shaped about the axis."""
+    d = np.array([math.cos(angle), math.sin(angle)])
+    p = np.asarray(outline, dtype=float)
+    best = math.inf
+    for a, b in zip(p, np.roll(p, -1, axis=0), strict=True):
+        e = b - a
+        den = d[0] * -e[1] - d[1] * -e[0]
+        if abs(den) < 1e-12:
             continue
-        for sx in (-1.0, 1.0):
-            x0, x1 = sorted((sx * a, sx * b))
-            for y0, y1 in ((hi, ho), (-ho, -hi)) if hi > 0.0 else ((-ho, ho),):
-                out.append((rect_z(x0, x1, y0, y1, z), (0.0, 0.0, facing), material))
+        t = (a[0] * -e[1] - a[1] * -e[0]) / den
+        s = (d[0] * a[1] - d[1] * a[0]) / den
+        if t > 1e-9 and -1e-9 <= s <= 1.0 + 1e-9:
+            best = min(best, t)
+    return d * best
+
+
+def ring_face(outer: Sequence[tuple[float, float]], inner: Sequence[tuple[float, float]], z: float, facing: float,
+              material: Material) -> list:
+    """The face between two outlines star-shaped about the axis (``inner`` inside ``outer``) in the plane ``z``, in quads between
+    rays through every corner of either."""
+    angles = sorted({round(math.atan2(y, x) % (2.0 * math.pi), 9) for x, y in [*outer, *inner]})
+    out = []
+    for a0, a1 in zip(angles, angles[1:] + [angles[0] + 2.0 * math.pi], strict=True):
+        i0, i1, o0, o1 = _ray(inner, a0), _ray(inner, a1), _ray(outer, a0), _ray(outer, a1)
+        quad = np.array([[*i0, z], [*i1, z], [*o1, z], [*o0, z]])
+        out.append((quad, (0.0, 0.0, facing), material))
     return out
 
 
-def walls(steps: Steps, z0: float, z1: float, material: Material, first: Material | None = None) -> list:
-    """The walls along a stepped cross's edges from ``z0`` to ``z1``, facing in toward the axis; ``first`` paints the outermost
-    step's upright sides."""
+def outline_walls(outline: Sequence[tuple[float, float]], z0: float, z1: float, inward: bool, material: Material,
+                  pick=None) -> list:
+    """The walls along an outline's edges from ``z0`` to ``z1``, facing in toward the axis (a hole) or out (a solid); ``pick(a, b)``
+    may choose an edge's material."""
+    p = np.asarray(outline, dtype=float)
     out = []
-
-    def wall(a: Sequence[float], b: Sequence[float], normal: Sequence[float], m: Material) -> None:
-        out.append((np.array([[a[0], a[1], z0], [b[0], b[1], z0], [b[0], b[1], z1], [a[0], a[1], z1]]), normal, m))
-
-    n = len(steps)
-    for i, (x, y) in enumerate(steps):
-        y_lo = -y if i == 0 else steps[i - 1][1]
-        for sx in (-1.0, 1.0):
-            m = first if (i == 0 and first is not None) else material
-            if i == 0:
-                wall((sx * x, -y), (sx * x, y), (-sx, 0.0, 0.0), m)
-            else:
-                for sy in (-1.0, 1.0):
-                    wall((sx * x, sy * y_lo), (sx * x, sy * y), (-sx, 0.0, 0.0), m)
-        x_in = steps[i + 1][0] if i + 1 < n else 0.0
-        for sy in (-1.0, 1.0):
-            if i + 1 < n:
-                for sx in (-1.0, 1.0):
-                    wall((sx * x_in, sy * y), (sx * x, sy * y), (0.0, -sy, 0.0), material)
-            else:
-                wall((-x, sy * y), (x, sy * y), (0.0, -sy, 0.0), material)
+    for a, b in zip(p, np.roll(p, -1, axis=0), strict=True):
+        n = _out_normal(b - a) * (-1.0 if inward else 1.0)
+        m = pick(a, b) if pick is not None else None
+        out.append((np.array([[a[0], a[1], z0], [b[0], b[1], z0], [b[0], b[1], z1], [a[0], a[1], z1]]), (n[0], n[1], 0.0),
+                    m or material))
     return out
 
 
 def box_faces(lo: Sequence[float], hi: Sequence[float], material: Material, skip_back: bool = True) -> list:
-    """A box's faces (the aft face left out when ``skip_back``: it lies on the plate and is never seen)."""
+    """A box's faces (the aft face left out when ``skip_back``: it lies on what it stands on and is never seen)."""
     lo, hi = np.asarray(lo, dtype=float), np.asarray(hi, dtype=float)
     out = []
     for axis in range(3):
@@ -174,147 +228,247 @@ def box_faces(lo: Sequence[float], hi: Sequence[float], material: Material, skip
     return out
 
 
-# --- the bay ---------------------------------------------------------------------------------------------------------
-def _plate(m: Material) -> list:
-    """The plate across the sphere's opening, from the block's footprint out to the rim, in rays from the axis."""
-    hw, hh, _ = BLOCK
-    corners = [math.atan2(sy * hh, sx * hw) % (2.0 * math.pi) for sx, sy in ((1, 1), (-1, 1), (-1, -1), (1, -1))]
-    angles = sorted(set(np.round(np.linspace(0.0, 2.0 * math.pi, 64, endpoint=False), 9)) | set(np.round(corners, 9)))
+def hexahedron(corners: np.ndarray, material: Material, skip: Sequence[str] = ()) -> list:
+    """A convex six-faced solid from its eight corners (``corners[i]`` for i = x + 2 y + 4 z, each 0 or 1 at the low or high side),
+    its faces turned outward; ``skip`` names faces left out (``-x``, ``+x``, ``-y``, ``+y``, ``-z``, ``+z``)."""
+    c = np.asarray(corners, dtype=float)
+    centre = c.mean(axis=0)
     out = []
-    for a0, a1 in zip(angles, angles[1:] + [angles[0] + 2.0 * math.pi], strict=True):
-        pts = []
-        for a in (a0, a1):
-            c, s = math.cos(a), math.sin(a)
-            t = min(hw / abs(c) if abs(c) > 1e-9 else math.inf, hh / abs(s) if abs(s) > 1e-9 else math.inf)
-            pts.append(((t * c, t * s), (st.DOOR_R * c, st.DOOR_R * s)))
-        (i0, o0), (i1, o1) = pts
-        quad = np.array([[*i0, PLATE_Z], [*i1, PLATE_Z], [*o1, PLATE_Z], [*o0, PLATE_Z]])
+    for axis, name in ((0, "x"), (1, "y"), (2, "z")):
+        for side in (0, 1):
+            if f"{'+' if side else '-'}{name}" in skip:
+                continue
+            idx = [i for i in range(8) if (i >> axis) & 1 == side]
+            q = c[[idx[0], idx[1], idx[3], idx[2]]]
+            normal = np.cross(q[1] - q[0], q[2] - q[0])
+            if float(normal @ (q.mean(axis=0) - centre)) < 0.0:
+                normal = -normal
+            out.append((q, normal, material))
+    return out
+
+
+# --- the bay ---------------------------------------------------------------------------------------------------------
+def _block(mats: dict[str, Material]) -> list:
+    """The frame block: its rim and face round the mouth, its walls back into the drum, the slats, side grilles, marked panels,
+    notches and the red lamps round the mouth."""
+    frame, recess, grey, lamp = mats["bay_frame"], mats["recess"], mats["drum_grey"], mats["lamp"]
+    outer, mouth = octagon(), opening()
+    inner = offset(outer, -RIM[0])
+    rim_z = FACE_Z - RIM[1]
+    out = ring_face(outer, inner, rim_z, -1.0, frame) + outline_walls(inner, rim_z, FACE_Z, True, frame)
+    out += outline_walls(outer, rim_z, BLOCK_BACK_Z, False, frame)
+    out += ring_face(inner, mouth, FACE_Z, -1.0, frame)
+    s = BAY_SCALE
+    stand = 0.8 * s
+    half, y0, y1, count = STL_SLATS
+    for sy in (-1.0, 1.0):  # the slats over and under the mouth
+        for x in np.linspace(-half, half, count):
+            ya, yb = sorted((sy * y0 * s, sy * y1 * s))
+            out += box_faces((x * s - 0.8, ya, FACE_Z - stand), (x * s + 0.8, yb, FACE_Z), recess)
+    xa, xb, ya, yb = STL_SIDE_SLATS
+    for sx in (-1.0, 1.0):  # the short grilles beside it
+        for sy in (-1.0, 1.0):
+            for y in np.linspace(ya, yb, 3):
+                x0, x1 = sorted((sx * xa * s, sx * xb * s))
+                out += box_faces((x0, sy * y * s - 0.6, FACE_Z - stand), (x1, sy * y * s + 0.6, FACE_Z), recess)
+    px0, px1, py0, py1 = STL_PANEL
+    for sx in (-1.0, 1.0):  # the marked panels: a dark plate with pale bars
+        for sy in (-1.0, 1.0):
+            x0, x1 = sorted((sx * px0 * s, sx * px1 * s))
+            y0_, y1_ = sorted((sy * py0 * s, sy * py1 * s))
+            out += box_faces((x0, y0_, FACE_Z - 0.6), (x1, y1_, FACE_Z), recess)
+            for k in range(3):
+                yb_ = y0_ + 1.5 + 3.5 * k
+                out += box_faces((x0 + 1.5, yb_, FACE_Z - 1.0), (x0 + 1.5 + (12.0 if k != 1 else 7.0), yb_ + 1.4, FACE_Z - 0.6), grey)
+    nx, ny = STL_NOTCH
+    top = STL_OCTAGON[-1][1] * s - RIM[0]
+    for sy in (-1.0, 1.0):  # the notches at the top and bottom, a lamp in each
+        y0_, y1_ = sorted((sy * ny * s, sy * top))
+        out += box_faces((-nx * s, y0_, FACE_Z - 1.0), (nx * s, y1_, FACE_Z), recess)
+        yl = sy * 0.5 * (ny * s + top)
+        out += box_faces((-1.0, yl - 1.0, FACE_Z - 2.2), (1.0, yl + 1.0, FACE_Z - 1.0), lamp)
+    for x, y in entrance_lamps():
+        out += box_faces((x - 0.8, y - 0.8, FACE_Z - 1.4), (x + 0.8, y + 0.8, FACE_Z), lamp)
+    return out
+
+
+def entrance_lamps() -> list[tuple[float, float]]:
+    """The red lamps round the mouth on the block's face (T18 lights them)."""
+    hw, hh = opening_half()
+    return [(sx * (hw + 3.0), 0.0) for sx in (-1.0, 1.0)] + [(sx * 28.0, sy * (hh + 2.4)) for sx in (-1.0, 1.0) for sy in (-1.0, 1.0)]
+
+
+def _mouth(mats: dict[str, Material]) -> list:
+    """The mouth from the face to the doors, in the show's metallic grey lit red by its lamps (``BayLights``): the lip, the walls set
+    back round the clear outline with ribs round them, the frames standing in to the outline, machinery on the set-back walls, and
+    the back wall round the doors. Nothing in it glows but its small lamps and the plating's faint tint (the maintainer: no self-lit
+    rings or bands)."""
+    wall, mouth = mats["bay_tunnel"], opening()
+    grown = offset(mouth, RECESS_M)
+    lip_z = FACE_Z + LIP_M
+    out = outline_walls(mouth, FACE_Z, lip_z, True, wall)
+    out += ring_face(grown, mouth, lip_z, 1.0, wall)
+    edges = [lip_z, *[z for k in FRAME_Z for z in (k, k + FRAME_M)], DOORS_Z]
+    for z0, z1 in zip(edges[0::2], edges[1::2], strict=True):
+        out += outline_walls(grown, z0, z1, True, wall)
+    for z in FRAME_Z:  # plain grey metal: the red on them is the lamps' light (the maintainer: no self-lit rings)
+        out += ring_face(grown, mouth, z, -1.0, wall)
+        out += ring_face(grown, mouth, z + FRAME_M, 1.0, wall)
+        out += outline_walls(mouth, z, z + FRAME_M, True, wall)
+    out += _machinery(mats, grown, edges)
+    out += _ribs(wall, grown, edges)
+    out += ring_face(grown, mouth, DOORS_Z, -1.0, wall)
+    return out
+
+
+def _ribs(wall: Material, grown: Outline, edges: Sequence[float]) -> list:
+    """Two ribs round the set-back walls in each gap between the frames, clear of the machinery's ends: the show's ribbed plating."""
+    stand, length = RIB
+    inner = offset(grown, -stand)
+    out = []
+    for za, zb in zip(edges[0::2], edges[1::2], strict=True):
+        if zb - za < 6.0:
+            continue
+        for z0 in (za + 0.5, zb - 0.5 - length):
+            out += outline_walls(inner, z0, z0 + length, True, wall)
+            out += ring_face(grown, inner, z0, -1.0, wall)
+            out += ring_face(grown, inner, z0 + length, 1.0, wall)
+    return out
+
+
+def _machinery(mats: dict[str, Material], grown: Outline, edges: Sequence[float]) -> list:
+    """Boxes on the set-back walls between the frames (the core's roof and floor, the band's), standing in less than the set-back,
+    a red lamp on every other one."""
+    out = []
+    hw, hh = opening_half()
+    band_top = scaled(STL_OPENING)[1][1] + RECESS_M
+    core_top = hh + RECESS_M
+    stand = RECESS_M - 0.5
+    gaps = list(zip(edges[0::2], edges[1::2], strict=True))  # between the frames
+    for k, (za, zb) in enumerate(gaps):
+        za, zb = za + 1.5, zb - 1.5
+        if zb - za < 3.0:
+            continue
+        m = mats["machinery"] if k % 2 else mats["bay_tunnel"]
+        for sy in (-1.0, 1.0):
+            for x0, x1, wall_y in ((-16.0, -4.0, core_top), (4.0, 16.0, core_top), (26.0, 31.0, band_top), (-31.0, -26.0, band_top)):
+                y0, y1 = sorted((sy * (wall_y - stand), sy * (wall_y + 0.1)))
+                out += box_faces((x0, y0, za), (x1, y1, zb), m, skip_back=False)
+            if k % 2 == 0:
+                face = sy * (core_top - stand)
+                y0, y1 = sorted((face, face - sy * 0.4))
+                out += box_faces((-1.0, y0, 0.5 * (za + zb) - 1.0), (1.0, y1, 0.5 * (za + zb) + 1.0), mats["bay_red_2"], skip_back=False)
+    return out
+
+
+def _void(mats: dict[str, Material]) -> list:
+    """The doorway through the doors' slab, and the black void behind it: sealed, unlit, where a docking ship leaves the world."""
+    void, mouth = mats["bay_void"], opening()
+    front = DOORS_Z + DOOR_SLAB_M
+    hold = rect(*VOID_HALF)
+    out = outline_walls(mouth, DOORS_Z, front, True, mats["bay_tunnel"])  # the doorway's lip: the tunnel's metal
+    out += ring_face(hold, mouth, front, 1.0, void)
+    out += outline_walls(hold, front, VOID_BACK_Z, True, void)
+    out.append((rect_z(-VOID_HALF[0], VOID_HALF[0], -VOID_HALF[1], VOID_HALF[1], VOID_BACK_Z), (0.0, 0.0, -1.0), void))
+    return out
+
+
+def bar_at(y: float) -> tuple[float, float]:
+    """A bar's half width and face z at ``|y|``."""
+    (y0, w0, z0), (y1, w1, z1) = BAR
+    t = (abs(y) - y0) / (y1 - y0)
+    return w0 + (w1 - w0) * t, z0 + (z1 - z0) * t
+
+
+def _housing(mats: dict[str, Material]) -> list:
+    """The cross housing at the STL's size: the bar across from the block's sides, the bars up and down from its top and bottom with
+    boxes along their sides, and the lower hatch."""
+    machinery, recess, frame = mats["machinery"], mats["recess"], mats["bay_frame"]
+    hh, end = HOUSING
+    side = STL_OCTAGON[0][0] * BAY_SCALE
+    out = []
+    for sx in (-1.0, 1.0):
+        x0, x1 = sorted((sx * side, sx * end))
+        out += box_faces((x0, -hh, FACE_Z), (x1, hh, BAR_BACK_Z), machinery)
+    (y0, _, _), (y1, _, _) = BAR
+    for sy in (-1.0, 1.0):
+        corners = []
+        for z_side in (0, 1):
+            for y_side in (0, 1):
+                y = y1 if y_side else y0
+                w, zf = bar_at(y)
+                for x_side in (0, 1):
+                    corners.append((w if x_side else -w, sy * y, BAR_BACK_Z if z_side else zf))
+        out += hexahedron(np.array(corners), machinery, skip=("-y", "+z"))
+        for y in BAR_BOXES:
+            w, zf = bar_at(y)
+            for sx in (-1.0, 1.0):
+                xa, xb = sorted((sx * (w - 0.5), sx * (w + 5.0)))
+                ya, yb = sorted((sy * (y - 3.0), sy * (y + 3.0)))
+                out += box_faces((xa, ya, zf + 2.0), (xb, yb, BAR_BACK_Z), recess)
+    px0, px1, py0, py1, pz = HOUSING_POSTS
+    for sx in (-1.0, 1.0):
+        for sy in (-1.0, 1.0):
+            xa, xb = sorted((sx * px0, sx * px1))
+            ya, yb = sorted((sy * py0, sy * py1))
+            out += box_faces((xa, ya, pz), (xb, yb, BAR_BACK_Z), recess)
+    # The lower hatch on the bar below: a dark leaf in a pale frame just off its sloping face.
+    for (ya, yb, inset, m) in ((-92.0, -60.0, 0.4, frame), (-89.0, -63.0, 0.7, recess)):
+        corners = []
+        for y in (ya, yb):
+            w, zf = bar_at(y)
+            corners.append((y, w - (3.0 if m is frame else 5.5), zf - inset))
+        quad = np.array([[-corners[0][1], ya, corners[0][2]], [corners[0][1], ya, corners[0][2]],
+                         [corners[1][1], yb, corners[1][2]], [-corners[1][1], yb, corners[1][2]]])
         out.append((quad, (0.0, 0.0, -1.0), m))
     return out
 
 
-def _tooth(a: float, m: Material) -> list:
-    """One of the plate rim's sawtooth teeth: a triangle standing off the plate, its tip toward the axis."""
-    count, r_tip, r_base, height = PLATE_TEETH
-    half = 0.3 * math.pi / count
-    base = [np.array([r_base * math.cos(a + d), r_base * math.sin(a + d)]) for d in (-half, half)]
-    tip = np.array([r_tip * math.cos(a), r_tip * math.sin(a)])
-    z0, z1 = PLATE_Z - height, PLATE_Z
-    tri = [base[0], base[1], tip]
-    out = [(np.array([[*p, z0] for p in tri]), (0.0, 0.0, -1.0), m)]
-    for p, q in ((base[0], tip), (tip, base[1]), (base[1], base[0])):
-        mid = 0.5 * (p + q)
-        normal = np.array([q[1] - p[1], p[0] - q[0], 0.0])
-        if float(normal[:2] @ (mid - (base[0] + base[1] + tip) / 3.0)) < 0.0:
-            normal = -normal
-        out.append((np.array([[*p, z0], [*q, z0], [*q, z1], [*p, z1]]), normal, m))
-    return out
-
-
-def _teeth(m: Material) -> list:
-    count = PLATE_TEETH[0]
+def _fans(mats: dict[str, Material]) -> list:
+    """The fan-shaped grille housings beside the block (scaled with it), lofted through ``FAN``, their sloping faces striped with
+    dark slats, two rails from the mouth's side to each."""
+    machinery, recess = mats["machinery"], mats["recess"]
+    s = BAY_SCALE
+    rx0, rx1, ry0, ry1, rz = STL_FAN_RAILS
     out = []
-    for k in range(count):
-        a = 2.0 * math.pi * (k + 0.5) / count
-        deg = math.degrees(a) % 180.0
-        if min(deg, 180.0 - deg) < 17.0 or abs(deg - 90.0) < 15.0:
-            continue  # under the housing or the bar
-        out += _tooth(a, m)
-    return out
-
-
-def _block(mats: dict[str, Material]) -> list:
-    """The central block: its face round the mouth, its sides, the grilles, the marked panels and the red lamps."""
-    hw, hh, z = BLOCK
-    frame, recess, grey = mats["bay_frame"], mats["recess"], mats["drum_grey"]
-    out = annulus(((hw, hh),), mouth(0), z, -1.0, frame)
     for sx in (-1.0, 1.0):
-        out.append((np.array([[sx * hw, -hh, z], [sx * hw, hh, z], [sx * hw, hh, PLATE_Z], [sx * hw, -hh, PLATE_Z]]), (sx, 0.0, 0.0), frame))
-    for sy in (-1.0, 1.0):
-        out.append((np.array([[-hw, sy * hh, z], [hw, sy * hh, z], [hw, sy * hh, PLATE_Z], [-hw, sy * hh, PLATE_Z]]), (0.0, sy, 0.0), frame))
-    width, pitch, stand = GRILLE
-    for sy in (-1.0, 1.0):  # above and below the mouth
-        for x in np.arange(-44.0 + 0.5 * pitch, 44.0, pitch):
-            y0, y1 = sorted((sy * 47.0, sy * 54.0))
-            out += box_faces((x - 0.5 * width, y0, z - stand), (x + 0.5 * width, y1, z), recess)
-    for sx in (-1.0, 1.0):  # beside it
-        for y in np.arange(-24.0 + 0.5 * pitch, 24.0, pitch):
-            x0, x1 = sorted((sx * 61.0, sx * 68.0))
-            out += box_faces((x0, y - 0.5 * width, z - stand), (x1, y + 0.5 * width, z), recess)
-    for sx in (-1.0, 1.0):  # the marked panels at the block's corners: a dark plate with pale bars
-        for sy in (-1.0, 1.0):
-            x0, x1 = sorted((sx * 48.0, sx * 66.0))
-            y0, y1 = sorted((sy * 42.0, sy * 54.0))
-            out += box_faces((x0, y0, z - 1.0), (x1, y1, z), recess)
-            for k in range(2):
-                yb = y0 + 3.0 + 4.0 * k
-                out += box_faces((x0 + 2.0, yb, z - 1.5), (x0 + 2.0 + (11.0 if k == 0 else 6.0), yb + 1.6, z - 1.0), grey)
-    lamp = mats["lamp"]
-    for k in range(1, MOUTH_LAYERS):  # small red lamps on the frames' steps
-        (x, y), _, _ = mouth(k)
-        zl = layer_z(k)
-        for sx in (-1.0, 1.0):
+        def p(x: float, y: float, z: float) -> list[float]:
+            return [sx * x, y, z]
+        for (x0, h0, z0), (x1, h1, z1) in zip(FAN[:-1], FAN[1:], strict=True):
+            front = np.array([p(x0, -h0, z0), p(x1, -h1, z1), p(x1, h1, z1), p(x0, h0, z0)])
+            normal = np.cross(front[1] - front[0], front[2] - front[0])
+            normal *= -1.0 if normal[2] > 0.0 else 1.0
+            out.append((front, normal, machinery))
             for sy in (-1.0, 1.0):
-                cx, cy = sx * (x + 0.5 * MOUTH_INSET), sy * 0.5 * y
-                out += box_faces((cx - 0.7, cy - 0.7, zl - 1.2), (cx + 0.7, cy + 0.7, zl), lamp)
+                q = np.array([p(x0, sy * h0, z0), p(x1, sy * h1, z1), p(x1, sy * h1, FACE_Z), p(x0, sy * h0, FACE_Z)])
+                n = np.cross(q[1] - q[0], q[2] - q[0])
+                if float(n[1]) * sy < 0.0:
+                    n = -n
+                out.append((q, n, machinery))
+            out.append((np.array([p(x0, -h0, FACE_Z), p(x1, -h1, FACE_Z), p(x1, h1, FACE_Z), p(x0, h0, FACE_Z)]), (0.0, 0.0, 1.0), machinery))
+            lift = unit(normal) * 0.3
+            for t in np.linspace(0.15, 0.85, max(1, int(round((x1 - x0) / 4.0)))):  # the slats across the sloping face
+                ta, tb = t - 0.6 / (x1 - x0), t + 0.6 / (x1 - x0)
+                xa, ha, za = x0 + (x1 - x0) * ta, h0 + (h1 - h0) * ta, z0 + (z1 - z0) * ta
+                xb, hb, zb = x0 + (x1 - x0) * tb, h0 + (h1 - h0) * tb, z0 + (z1 - z0) * tb
+                slat = np.array([p(xa, -ha + 1.0, za), p(xb, -hb + 1.0, zb), p(xb, hb - 1.0, zb), p(xa, ha - 1.0, za)]) + lift
+                out.append((slat, normal, recess))
+        for (x, h, z), facing in ((FAN[0], -sx), (FAN[-1], sx)):
+            out.append((np.array([p(x, -h, z), p(x, h, z), p(x, h, FACE_Z), p(x, -h, FACE_Z)]), (facing, 0.0, 0.0), machinery))
+        xa, xb = sorted((sx * rx0 * s, sx * rx1 * s))
+        for sy in (-1.0, 1.0):
+            ya, yb = sorted((sy * ry0 * s, sy * ry1 * s))
+            out += box_faces((xa, ya, scaled_z(rz)), (xb, yb, FACE_Z), machinery)
     return out
 
 
-def _edge_strip(steps: Steps, width: float, z: float, facing: float, m: Material) -> list:
-    """A lit strip ``width`` wide round a stepped cross's edge, just off a face in the plane ``z``."""
-    return annulus(shrunk(steps, -width), steps, z + facing * EDGE_LIFT_M, facing, m)
-
-
-def _mouth(mats: dict[str, Material]) -> list:
-    """The funnel of frames stepping in from the block's face: dark machinery, pink-lit at its outer sides, each frame's inner edge
-    lit red."""
-    out = []
-    for k in range(MOUTH_LAYERS - 1):
-        z0, z1 = layer_z(k), layer_z(k + 1)
-        out += walls(mouth(k), z0, z1, mats["bay_wall"], mats["bay_pink"] if k == 0 else None)
-        out += annulus(mouth(k), mouth(k + 1), z1, -1.0, mats["bay_wall"])
-        out += _edge_strip(mouth(k + 1), EDGE_STRIP_M, z1, -1.0, mats["bay_red_0"])
-    return out
-
-
-def _tunnel(mats: dict[str, Material]) -> list:
-    """The tunnel to the airlock: dark machinery walls, the frames ringing it with their inner edges lit red (dimmer the deeper),
-    and the machinery between them, a red lamp on every other block; deep shadow everywhere else."""
-    t = tunnel()
-    out = walls(t, layer_z(MOUTH_LAYERS - 1), TUNNEL_BACK_Z, mats["bay_wall"])
-    inner = shrunk(t, RIB_INSET)
-    for k, z in enumerate(RIB_Z):
-        glow = mats[f"bay_red_{min(k + 1, 5)}"]
-        out += annulus(t, inner, z, -1.0, mats["bay_wall"])
-        out += _edge_strip(inner, EDGE_STRIP_M, z, -1.0, glow)
-        out += walls(inner, z, z + RIB_DEPTH, glow)
-        out += annulus(t, inner, z + RIB_DEPTH, 1.0, mats["bay_wall"])
-    # Machinery between the frames: boxes on the side walls and on the main step's top and bottom, standing in less than a frame.
-    (x0, y0), (x1, _), _ = t
-    stand = RIB_INSET - 0.6
-    starts = [layer_z(MOUTH_LAYERS - 1)] + [z + RIB_DEPTH for z in RIB_Z[:-1]]
-    lamp = mats["bay_red_2"]
-    for k, (za, zb) in enumerate(zip(starts, RIB_Z, strict=True)):
-        za, zb = za + 2.0, zb - 2.0
-        if zb - za < 4.0:
-            continue
-        zm = 0.5 * (za + zb)
-        m = mats["recess"] if k % 2 else mats["bay_wall"]
-        for sx in (-1.0, 1.0):
-            xa, xb = sorted((sx * x0, sx * (x0 - stand)))
-            out += box_faces((xa, -12.0, za), (xb, -3.0, zm - 1.0), m, skip_back=False)
-            out += box_faces((xa, 3.0, zm + 1.0), (xb, 14.0, zb), m, skip_back=False)
-            face = sx * (x0 - stand)  # a small red lamp on the face of the upper block
-            out += box_faces((min(face, face - sx * 0.5), 7.0, zm + 3.0), (max(face, face - sx * 0.5), 8.2, zm + 4.2), lamp, skip_back=False)
-            xa, xb = sorted((sx * (x1 + 3.0), sx * (x0 - 3.0)))
-            for sy, (z0, z1) in ((1.0, (za, zm - 1.0)), (-1.0, (zm + 1.0, zb))):
-                ya, yb = sorted((sy * y0, sy * (y0 - stand)))
-                out += box_faces((xa, ya, z0), (xb, yb, z1), m, skip_back=False)
-    return out
+def main_docking_bay(mats: dict[str, Material]) -> Mesh:
+    """The main docking bay at the bow (turns with the drum)."""
+    return polys(_block(mats) + _mouth(mats) + _void(mats) + _housing(mats) + _fans(mats))
 
 
 def saw_edge(x: np.ndarray | float) -> np.ndarray:
-    """The upper airlock door's lower edge: a trapezoid wave of teeth across the tunnel."""
+    """The upper door's lower edge: a trapezoid wave of teeth across the doorway."""
     height, period, _ = SAW
     t = np.mod(np.asarray(x, dtype=float) + 0.5 * period, period) / period
     rise = np.clip((t - 3.0 / 14.0) / (4.0 / 14.0), 0.0, 1.0) - np.clip((t - 10.0 / 14.0) / (4.0 / 14.0), 0.0, 1.0)
@@ -322,6 +476,7 @@ def saw_edge(x: np.ndarray | float) -> np.ndarray:
 
 
 def saw_breaks(x0: float, x1: float) -> list[float]:
+    """The seam's corners between ``x0`` and ``x1``."""
     _, period, _ = SAW
     out = []
     k = math.floor((x0 + 0.5 * period) / period) - 1
@@ -337,70 +492,21 @@ def saw_breaks(x0: float, x1: float) -> list[float]:
     return out
 
 
-def _airlock(mats: dict[str, Material]) -> list:
-    """The inner airlock's two doors, dark, closed on an interlocking sawtooth seam whose edges glow red, and the dark wall seen
-    through the seam."""
-    t = tunnel()
-    width = t[0][0]
+def door_leaf_outline(upper: bool) -> list[tuple[float, float, float]]:
+    """A leaf's strips across the doorway, closed: (x0, x1, its seam edge's y at x0, at x1, its far edge's y), in the station frame."""
+    hw, hh = opening_half()
+    _, _, past_x, past_y = DOOR_LEAF
+    w, top = hw + past_x, hh + past_y
     _, _, gap = SAW
-    xs = sorted({-width, width} | {sx * x for x, _ in t for sx in (-1.0, 1.0)} | set(saw_breaks(-width, width)))
-    door, dark = mats["bay_door"], mats["bay_dark"]
+    xs = sorted({-w, w, *saw_breaks(-w, w)})
     out = []
     for a, b in zip(xs[:-1], xs[1:], strict=True):
-        h = half_height(t, 0.5 * (a + b))
         ya, yb = float(saw_edge(a)), float(saw_edge(b))
-        z = AIRLOCK_Z
-        out.append((np.array([[a, ya, z], [b, yb, z], [b, h, z], [a, h, z]]), (0.0, 0.0, -1.0), door))
-        out.append((np.array([[a, -h, z], [b, -h, z], [b, yb - gap, z], [a, ya - gap, z]]), (0.0, 0.0, -1.0), door))
-        # The doors' edges along the seam, seen through it: the upper door's facing down, the lower's up.
-        dx, dy = b - a, yb - ya
-        for y_a, y_b, sign in ((ya, yb, 1.0), (ya - gap, yb - gap, -1.0)):
-            normal = (sign * dy, -sign * dx, 0.0)
-            out.append((np.array([[a, y_a, z], [b, y_b, z], [b, y_b, z + 4.0], [a, y_a, z + 4.0]]), normal, mats["bay_red_3"]))
-    h = SAW[0]
-    out.append((rect_z(-width, width, -h - gap - 1.0, h + 1.0, TUNNEL_BACK_Z), (0.0, 0.0, -1.0), dark))
-    # Ribs across each door, clear of the teeth.
-    main = t[0][1]
-    for y in np.arange(0.5 * h + 4.0, main - 1.0, 4.0):
-        for sy in (-1.0, 1.0):
-            y0, y1 = sorted((sy * y, sy * (y + 1.2)))
-            out += box_faces((-width + 1.0, y0, AIRLOCK_Z - 0.8), (width - 1.0, y1, AIRLOCK_Z), mats["bay_wall"])
+        if upper:
+            out.append((a, b, ya, yb, top))
+        else:
+            out.append((a, b, ya - gap, yb - gap, -top))
     return out
-
-
-def _housing(mats: dict[str, Material]) -> list:
-    """The long housing across the plate, the bar up and down it, and the lower hatch on the bar."""
-    frame, recess, machinery = mats["bay_frame"], mats["recess"], mats["machinery"]
-    bw, bh, _ = BLOCK
-    hw, hh, hz = HOUSING
-    out = []
-    for sx in (-1.0, 1.0):
-        x0, x1 = sorted((sx * bw, sx * hw))
-        out += box_faces((x0, -hh, hz), (x1, hh, PLATE_Z), frame)
-        for k in range(5):  # ribs across each arm
-            xr = sx * (bw + 10.0 + 11.0 * k)
-            out += box_faces((xr - 1.5, -hh - 1.0, hz - 1.5), (xr + 1.5, hh + 1.0, hz + 6.0), recess)
-    uw, uh, uz = BAR_UP
-    out += box_faces((-uw, bh, uz), (uw, uh, PLATE_Z), frame)
-    dw, dh, dz = BAR_DOWN
-    out += box_faces((-dw, -dh, dz), (dw, -bh, PLATE_Z), frame)
-    xw, ytop, ybot = HATCH
-    out += box_faces((-xw - 3.0, -ybot - 3.0, dz - 2.0), (xw + 3.0, -ybot, dz), frame)  # the hatch's frame
-    out += box_faces((-xw - 3.0, -ytop, dz - 2.0), (xw + 3.0, -ytop + 3.0, dz), frame)
-    for sx in (-1.0, 1.0):
-        x0, x1 = sorted((sx * xw, sx * (xw + 3.0)))
-        out += box_faces((x0, -ybot, dz - 2.0), (x1, -ytop, dz), frame)
-    out.append((rect_z(-xw, xw, -ybot, -ytop, dz - 0.4), (0.0, 0.0, -1.0), recess))  # its leaf, dark, just off the bar
-    for x in (-12.0, 0.0, 12.0):  # machinery behind its grating
-        out += box_faces((x - 2.0, -ybot + 4.0, dz - 1.6), (x + 2.0, -ytop - 4.0, dz - 0.4), machinery)
-    return out
-
-
-def main_docking_bay(mats: dict[str, Material]) -> Mesh:
-    """The main docking bay at the bow (turns with the drum)."""
-    plate = mats["drum_grey"]
-    faces = _plate(plate) + _teeth(mats["recess"]) + _block(mats) + _mouth(mats) + _tunnel(mats) + _airlock(mats) + _housing(mats)
-    return polys(faces)
 
 
 # --- the cargo bay (zero-gravity) ----------------------------------------------------------------------------------------
@@ -586,5 +692,5 @@ def plinth(position: Sequence[float], up: Sequence[float], radius: float, m: Mat
     return mesh.transformed(basis_from_z(unit(np.asarray(up, dtype=float))), position)
 
 
-__all__ = ["AIRLOCK_Z", "BLOCK", "MOUTH", "ZG_HALF_X", "cargo_bay", "cargo_bay_walls", "clear_passage", "command_detail", "half_height", "main_docking_bay", "mouth",
-           "plinth", "saw_edge", "tunnel"]
+__all__ = ["BAY_SCALE", "DOORS_Z", "FACE_Z", "VOID_BACK_Z", "VOID_HALF", "ZG_HALF_X", "cargo_bay", "cargo_bay_walls", "command_detail",
+           "door_leaf_outline", "entrance_lamps", "main_docking_bay", "octagon", "offset", "opening", "opening_half", "plinth", "saw_edge"]

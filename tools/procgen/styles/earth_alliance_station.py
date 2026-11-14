@@ -65,6 +65,10 @@ BAY_WALL_STRENGTH = 0.0
 BAY_DOOR_STRENGTH = 0.08
 BAY_PINK = 0xFF7A9A
 BAY_PINK_STRENGTH = 0.8
+# The main docking bay's mouth (M7-T25): metallic grey plating lit red, as in the show. Its red lamps light it up close (two of
+# `LightRig`'s slots); this faint red glow is what it keeps at range, where the lamps lose their slots.
+BAY_TUNNEL = 0xA8AAAE  # sRGB; taken as the metal's own colour, not a lit capture
+BAY_TUNNEL_STRENGTH = 0.04
 
 
 def lin(hex_rgb: int) -> tuple[float, float, float]:
@@ -99,6 +103,10 @@ def _materials() -> dict[str, Material]:
                                emissive_strength=BAY_DOOR_STRENGTH)
     out["bay_pink"] = Material(f"{PREFIX}_bay_pink", capture_albedo(0xC8A0A8), emissive=lin(BAY_PINK), emissive_strength=BAY_PINK_STRENGTH)
     out["bay_dark"] = Material(f"{PREFIX}_bay_dark", capture_albedo(0x0A0A0A), metallic=0.3, roughness=0.8)
+    out["bay_tunnel"] = Material(f"{PREFIX}_bay_tunnel", lin(BAY_TUNNEL), paneled=True, metallic=0.7, roughness=0.32,
+                                 emissive=red, emissive_strength=BAY_TUNNEL_STRENGTH)
+    # The black void behind the main docking bay's inner doors (M7-T25): a docking ship flies into it out of sight.
+    out["bay_void"] = Material(f"{PREFIX}_bay_void", capture_albedo(0x020202), metallic=0.0, roughness=1.0)
     for role, target in ALIASES.items():
         out[role] = out[target]
     return out
@@ -125,4 +133,4 @@ EARTH_ALLIANCE_STATION = Style(
                             "dirt_metal": 0.5, "grime_dirt": 0.6}},
 )
 
-__all__ = ["BAY_RED", "EARTH_ALLIANCE_STATION", "LAMP_GLOW", "SCHEME", "WINDOW_GLOW", "WINDOW_STRENGTH", "colour", "lin"]
+__all__ = ["BAY_RED", "BAY_TUNNEL", "BAY_TUNNEL_STRENGTH", "EARTH_ALLIANCE_STATION", "LAMP_GLOW", "SCHEME", "WINDOW_GLOW", "WINDOW_STRENGTH", "colour", "lin"]

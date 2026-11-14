@@ -1,4 +1,5 @@
-"""The station's near field and hardpoints (M7-T05): the main docking bay (its tunnel open to traffic, closed at the airlock), the
+"""The station's near field and hardpoints (M7-T05): the main docking bay (M7-T25: its mouth open to traffic, the black void behind
+its inner doors closed at the back), the
 cargo bay (zero-gravity) between the bow's forks, the 28 Cobra-bay launch doors over their open hall with M7-T09's racks, D75's
 mounts where the maintainer approved them, the lights, the tour points and the damage sections. Each hardpoint must exist, sit on or just off the hull (or inside its bay), and lie on the piece that carries
 it, in that piece's frame."""
@@ -19,6 +20,7 @@ from tools.procgen.core.context import BuildContext
 from tools.procgen.core.geometry import Mesh
 from tools.procgen.parts import station as st
 from tools.procgen.parts import station_detail as sd
+from tools.procgen.parts import station_props as sp
 
 SMALL = (1024, 1024, 64)
 # D75 as approved (docs/milestones/m7-babylon-5-station.md), station frame: name, kind, body, position, up.
@@ -111,7 +113,7 @@ class HardpointTests(unittest.TestCase):
         kinds: dict[str, int] = {}
         for light in self.hp["lights"]:
             kinds[light["kind"]] = kinds.get(light["kind"], 0) + 1
-        self.assertEqual(kinds, {"beacon": 14, "running": 8, "ring": 7, "bay": 24, "main_docking_bay": 2, "cargo_bay": 2})
+        self.assertEqual(kinds, {"beacon": 14, "running": 8, "ring": 7, "bay": 24, "main_docking_bay": 8, "cargo_bay": 2})
         names = {t["name"] for t in self.hp["tour_points"]}
         self.assertTrue({"bow", "main_docking_bay", "cargo_bay", "cobra_arm", "grid_tower", "drum", "vanes", "reactor"} <= names)
         for key in ("cobra_bays", "grid_mounts", "lights", "tour_points", "damage_sections"):
@@ -255,7 +257,7 @@ class HardpointTests(unittest.TestCase):
             for shape in shapes:
                 self.assertGreater(float(shape.distance(pts).min()), 0.2, f"{shape.name} is in {bay['name']}'s drop")
 
-    def test_the_main_docking_bay_runs_down_the_axis_to_the_airlock(self) -> None:
+    def test_the_main_docking_bay_runs_down_the_axis_into_the_void(self) -> None:
         bay = self.hp["main_docking_bay"]
         self.assertEqual(bay["body"], "drum")
         self.assertEqual(bay["spin_axis"], self.manifest["pieces"]["drum"]["axis"])
@@ -268,29 +270,39 @@ class HardpointTests(unittest.TestCase):
         np.testing.assert_allclose(path[:2], [np.asarray(p) + self.shift["drum"] for p in bay["main_docking_bay_approach"]])
         np.testing.assert_allclose(path[2], self.at(bay, "main_docking_bay_mouth"))
         np.testing.assert_allclose(path[3], self.at(bay, "main_docking_bay_airlock"))
-        self.assertAlmostEqual(float(self.at(bay, "main_docking_bay_mouth")[2]), sd.BLOCK[2])
-        # The mouth's face is the drum's front: nothing of the drum stands ahead of it but the grilles.
-        self.assertGreater(float(self.tris["drum"][:, :, 2].min()), sd.BLOCK[2] - 2.0)
-        # Straight down the axis, the first thing met is the airlock's doors.
-        self.assertAlmostEqual(ray_hit(self.tris["drum"], path[0], np.array([0.0, 0.0, 1.0])), sd.AIRLOCK_Z - path[0][2], delta=0.01)
+        self.assertAlmostEqual(float(self.at(bay, "main_docking_bay_mouth")[2]), sd.FACE_Z)
+        self.assertAlmostEqual(float(self.at(bay, "main_docking_bay_doors")[2]), sd.DOORS_Z)
+        self.assertAlmostEqual(float(self.at(bay, "main_docking_bay_airlock")[2]), sd.VOID_BACK_Z)
+        self.assertEqual(bay["main_docking_bay_doors_open_m"], sd.DOOR_OPEN_M)
+        np.testing.assert_allclose(bay["main_docking_bay_opening"], np.round(sd.opening(), 4))
+        # Nothing of the drum stands ahead of the fans beside the block.
+        self.assertGreater(float(self.tris["drum"][:, :, 2].min()), min(z for _, _, z in sd.FAN) - 0.5)
+        # Straight down the axis the hull leaves the way open (the doors are props) to the black void's back wall.
+        self.assertAlmostEqual(ray_hit(self.tris["drum"], path[0], np.array([0.0, 0.0, 1.0])), sd.VOID_BACK_Z - path[0][2], delta=0.01)
 
-    def test_the_tunnel_is_open_in_collision_and_closed_at_the_airlock(self) -> None:
+    def test_the_mouth_is_open_in_collision_and_the_void_closed_behind(self) -> None:
         drum = next(e for e in self.manifest["collision"]["pieces"] if e["name"] == "drum")
         shapes = col.shapes_from_entry(drum)
-        hw, hh = self.hp["main_docking_bay"]["main_docking_bay_clear_half_m"]
-        self.assertGreaterEqual(2.0 * hw, 80.0, "the clear passage takes the small civilians")
-        self.assertGreaterEqual(2.0 * hh, 30.0)
-        zs = np.arange(sd.BLOCK[2] - 60.0, sd.AIRLOCK_Z - 0.5, 2.0)
-        inside = np.array([[x, y, z] for z in zs for x in np.linspace(-hw + 0.5, hw - 0.5, 9) for y in np.linspace(-hh + 0.5, hh - 0.5, 5)])
-        inside = inside - station.DRUM_CENTRE
+        bay = self.hp["main_docking_bay"]
+        hw, hh = bay["main_docking_bay_clear_half_m"]
+        self.assertGreaterEqual(2.0 * hw, 72.0, "the band: the STL's, scaled to an 80 m mouth (M7-T25)")
+        self.assertGreaterEqual(2.0 * hh, 30.0, "the core")
+        inner = sd.offset(sd.opening(), -0.5)
+        grid = [(x, y) for x in np.linspace(-hw, hw, 25) for y in np.linspace(-hh, hh, 11) if sd.contains(inner, x, y)]
+        zs = np.arange(sd.FACE_Z - 60.0, sd.VOID_BACK_Z - 0.5, 2.0)
+        inside = np.array([[x, y, z] for z in zs for x, y in grid]) - station.DRUM_CENTRE
+        vx, vy = sd.VOID_HALF
+        void = np.array([[x, y, z] for z in np.arange(sd.DOORS_Z + sd.DOOR_SLAB_M + 0.5, sd.VOID_BACK_Z - 0.5, 4.0)
+                         for x in np.linspace(-vx + 0.5, vx - 0.5, 9) for y in np.linspace(-vy + 0.5, vy - 0.5, 5)]) - station.DRUM_CENTRE
         for shape in shapes:
-            gap = shape.distance(inside)
-            self.assertGreater(float(gap.min()), 0.3, f"{shape.name} blocks the tunnel at {inside[int(np.argmin(gap))] + station.DRUM_CENTRE}")
-        past = np.array([[0.0, 0.0, sd.AIRLOCK_Z + 5.0]]) - station.DRUM_CENTRE
-        self.assertTrue(any(float(s.distance(past)[0]) <= 0.0 for s in shapes), "the airlock closes the tunnel")
+            for pts, where in ((inside, "the mouth"), (void, "the void")):
+                gap = shape.distance(pts)
+                self.assertGreater(float(gap.min()), 0.3, f"{shape.name} blocks {where} at {pts[int(np.argmin(gap))] + station.DRUM_CENTRE}")
+        past = np.array([[0.0, 0.0, sd.VOID_BACK_Z + 5.0]]) - station.DRUM_CENTRE
+        self.assertTrue(any(float(s.distance(past)[0]) <= 0.0 for s in shapes), "the void's back wall closes it")
         for side in ((hw + 1.5, 0.0), (-hw - 1.5, 0.0), (0.0, hh + 1.5), (0.0, -hh - 1.5)):
-            wall = np.array([[side[0], side[1], 560.0]]) - station.DRUM_CENTRE
-            self.assertTrue(any(float(s.distance(wall)[0]) <= 0.0 for s in shapes), f"a wall beside the passage at {side}")
+            wall = np.array([[side[0], side[1], 520.0]]) - station.DRUM_CENTRE
+            self.assertTrue(any(float(s.distance(wall)[0]) <= 0.0 for s in shapes), f"a wall beside the mouth at {side}")
 
     def test_the_cargo_bay_takes_a_pod_down_the_slot(self) -> None:
         bay = self.hp["cargo_bay"]
@@ -340,8 +352,12 @@ class HardpointTests(unittest.TestCase):
             elif light["kind"] == "bay":
                 r = float(np.hypot(p[0], p[1]))
                 self.assertTrue(st.ARM_HATCH[3] < r < st.ARM_HATCH[4] - st.DOOR_DEPTH, f"{light['name']} inside its bay")
+            elif light["kind"] == "main_docking_bay" and "entrance" in light["name"]:
+                self.assertAlmostEqual(float(p[2]), sd.FACE_Z - 1.5, msg=light["name"])
+                self.assertFalse(sd.contains(sd.opening(), float(p[0]), float(p[1])), f"{light['name']} on the block, by the mouth")
+                self.assertTrue(sd.contains(sd.octagon(), float(p[0]), float(p[1])), light["name"])
             elif light["kind"] == "main_docking_bay":
-                self.assertTrue(sd.BLOCK[2] < p[2] < sd.AIRLOCK_Z, light["name"])
+                self.assertTrue(sd.FACE_Z < p[2] < sd.DOORS_Z, f"{light['name']} down the mouth, not in the black void")
                 self.assertAlmostEqual(float(np.hypot(p[0], p[1])), 0.0)
             else:
                 self.assertEqual(light["kind"], "cargo_bay")
@@ -405,44 +421,116 @@ class BayShapeTests(unittest.TestCase):
         cls.bay = sd.main_docking_bay(mats)
         cls.cargo = sd.cargo_bay(mats)
 
-    def test_the_mouth_is_a_stepped_cross_stepping_in_to_the_tunnel(self) -> None:
-        outer, inner = sd.mouth(0), sd.tunnel()
-        self.assertEqual(len(outer), 3, "three steps a quadrant: notched corners")
-        for (xa, ya), (xb, yb) in zip(outer[:-1], outer[1:], strict=True):
-            self.assertGreater(xa, xb)
-            self.assertLess(ya, yb)
-        for k in range(1, sd.MOUTH_LAYERS):
-            for (xa, ya), (xb, yb) in zip(sd.mouth(k - 1), sd.mouth(k), strict=True):
-                self.assertAlmostEqual(xa - xb, sd.MOUTH_INSET)
-                self.assertAlmostEqual(ya - yb, sd.MOUTH_INSET)
-        self.assertEqual(sd.half_height(inner, 0.0), inner[-1][1])
-        self.assertEqual(sd.half_height(inner, inner[0][0] + 1.0), 0.0)
+    def test_the_mouth_is_the_stls_scaled_to_80_m(self) -> None:
+        # The STL's mouth (its band across a taller core, 45 m wide in the block's face) scaled with its block by 80/45 (M7-T25).
+        self.assertAlmostEqual(sd.BAY_SCALE * 45.0, 80.0)
+        hw, hh = sd.opening_half()
+        self.assertAlmostEqual(hw, 20.6 * sd.BAY_SCALE)
+        self.assertAlmostEqual(hh, 8.45 * sd.BAY_SCALE)
+        outline = np.array(sd.opening())
+        np.testing.assert_allclose(sorted(map(tuple, np.round(outline, 6))), sorted(map(tuple, np.round(outline * [-1.0, 1.0], 6))))
+        np.testing.assert_allclose(sorted(map(tuple, np.round(outline, 6))), sorted(map(tuple, np.round(outline * [1.0, -1.0], 6))))
+        self.assertTrue(sd.contains(outline, hw - 1.0, 0.0) and not sd.contains(outline, hw - 1.0, hh - 1.0), "the band is low")
+        self.assertTrue(sd.contains(outline, 0.0, hh - 1.0), "the core is tall")
+        self.assertAlmostEqual(sd.DOORS_Z - sd.FACE_Z, 40.5 * sd.BAY_SCALE, msg="the mouth's depth scaled with it")
+        oct_ = np.array(sd.octagon())
+        self.assertAlmostEqual(float(oct_[:, 0].max()), 47.5 * sd.BAY_SCALE)
+        self.assertAlmostEqual(float(oct_[:, 1].max()), 25.5 * sd.BAY_SCALE)
 
-    def test_the_frames_glow_red_and_dimmer_the_deeper(self) -> None:
-        strengths = []
-        for k in range(6):
-            m = station.STYLE.materials[f"bay_red_{k}"]
-            self.assertGreater(m.emissive[0], 4.0 * m.emissive[1], "red")
-            strengths.append(m.emissive_strength)
-        self.assertEqual(strengths, sorted(strengths, reverse=True))
+    def test_no_self_lit_red_rings_round_the_mouth_only_lamps(self) -> None:
+        # The maintainer (2026-11-14): the red is the lamps' light on grey metal, not glowing rings or bands. Of the bay's faces only
+        # small lamps glow red more than the plating's faint tint; the frames are the plating.
+        mats = station.STYLE.materials
+        tint = mats["bay_tunnel"].emissive_strength
+        tris = self.bay.vertices[self.bay.faces]
+        area = 0.5 * np.linalg.norm(np.cross(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0]), axis=1)
+        red = np.array([m.emissive_strength > tint and m.emissive[0] > 4.0 * m.emissive[1] for m in self.bay.materials])
+        glowing = red[self.bay.face_material]
+        self.assertLess(float(area[glowing].max()), 4.0, "only lamp-sized faces glow red")
+        self.assertLess(float(area[glowing].sum()), 200.0, "a few lamps (every side of their boxes), no rings")
         used = {m.name for m in self.bay.materials}
-        for role in ("bay_red_0", "bay_red_5", "bay_wall", "bay_door", "bay_pink", "bay_dark", "bay_frame", "lamp"):
-            self.assertIn(station.STYLE.materials[role].name, used, role)
+        for role in ("bay_tunnel", "bay_void", "bay_frame", "lamp"):
+            self.assertIn(mats[role].name, used, role)
+        for role in ("bay_red_0", "bay_red_1", "bay_red_3", "bay_red_4", "bay_red_5", "bay_pink", "bay_dark", "bay_wall"):
+            self.assertNotIn(mats[role].name, used, f"{role}: no red strips, no black walls")
+        void = mats["bay_void"]
+        self.assertLess(max(void.albedo), 0.01, "the void behind the doors stays black")
+        self.assertEqual(void.emissive_strength, 0.0)
 
-    def test_the_airlock_doors_meet_on_a_sawtooth_with_a_gap(self) -> None:
+    def test_the_doors_are_the_tunnels_grey_metal(self) -> None:
+        swatch = sp.TUNNEL_SWATCH
+        np.testing.assert_allclose(swatch.albedo, station.STYLE.materials["bay_tunnel"].albedo, atol=1e-6, err_msg="the plating's grey")
+        self.assertEqual((swatch.metal, swatch.rough), (station.STYLE.materials["bay_tunnel"].metallic,
+                                                         station.STYLE.materials["bay_tunnel"].roughness))
+        self.assertLess(max(swatch.glow), 0.05, "only the faint tint, no glowing seam")
+        v0, v1 = sp.PLATING_CELL * sp.CELL_H / sp.ATLAS_H, (sp.PLATING_CELL + 1) * sp.CELL_H / sp.ATLAS_H
+        for upper in (True, False):
+            uv = sp.airlock_leaf(upper).face_uv.reshape(-1, 2)
+            self.assertTrue(np.all((uv[:, 1] > v0) & (uv[:, 1] < v1)), "every face of a leaf on the plating cell")
+            self.assertGreater(float(np.ptp(uv[:, 0])), 0.9, "laid flat across it, not squeezed")
+        cell = sp._plating_cell(7)
+        np.testing.assert_allclose(np.median(cell["albedo"].reshape(-1, 3), axis=0), swatch.albedo, rtol=0.12, err_msg="the plating's grey")
+        self.assertGreater(float(np.std(cell["albedo"][..., 0])), 0.003, "its tone drifts as the walls' does")
+        self.assertTrue(all(k.world_detail for k in sp.kinds() if k.name.startswith("airlock_leaf")), "the walls' detail tile over it")
+        self.assertFalse(any(k.world_detail for k in sp.kinds() if not k.name.startswith("airlock_leaf")), "and over nothing else")
+
+    def test_the_mouth_is_metallic_grey_plating_with_a_faint_red_glow(self) -> None:
+        # The show's look (the maintainer, 2026-11-14): grey metal lit red, not black walls with red strips. The lamps light it up
+        # close; the faint glow is what it keeps at range.
+        tunnel = station.STYLE.materials["bay_tunnel"]
+        r, g, b = tunnel.albedo
+        self.assertGreater(min(r, g, b), 0.15, "grey, not black")
+        self.assertLess(max(r, g, b) - min(r, g, b), 0.05, "a neutral grey")
+        self.assertGreaterEqual(tunnel.metallic, 0.6)
+        self.assertLessEqual(tunnel.roughness, 0.4, "low roughness: the red lamps show in it")
+        self.assertTrue(tunnel.paneled)
+        self.assertGreater(tunnel.emissive[0], 4.0 * tunnel.emissive[1], "its glow is red")
+        self.assertLess(tunnel.emissive_strength, station.STYLE.materials["bay_red_5"].emissive_strength, "and fainter than any frame")
+        tris = self.bay.vertices[self.bay.faces]
+        mats = [self.bay.materials[k].name for k in self.bay.face_material]
+        centre = tris.mean(axis=1)
+        inside = (centre[:, 2] > sd.FACE_Z + sd.LIP_M) & (centre[:, 2] < sd.DOORS_Z)
+        grey = sum(1 for k in np.flatnonzero(inside) if mats[k] == tunnel.name)
+        self.assertGreater(grey, 0.5 * int(inside.sum()), "most of the mouth's faces are the grey plating")
+
+    def test_the_inner_doors_close_the_doorway_on_a_sawtooth_and_slide_clear(self) -> None:
         xs = np.linspace(-40.0, 40.0, 801)
         edge = sd.saw_edge(xs)
         height, period, gap = sd.SAW
         self.assertAlmostEqual(float(edge.max() - edge.min()), height, places=6)
-        self.assertGreaterEqual(int(np.sum(np.diff(np.sign(np.diff(edge))) != 0)), 2 * int(80.0 / period), "teeth across the tunnel")
-        self.assertGreater(gap, 0.5)
-        # Through the seam the eye meets the dark wall behind the doors; elsewhere the doors.
+        self.assertGreaterEqual(int(np.sum(np.diff(np.sign(np.diff(edge))) != 0)), 2 * int(70.0 / period), "teeth across the doorway")
+        hw, hh = sd.opening_half()
+        upper, lower = sd.door_leaf_outline(True), sd.door_leaf_outline(False)
+
+        def covered(strips, x: float, y: float, shift: float = 0.0) -> bool:
+            for a, b, ya, yb, far in strips:
+                if a <= x <= b:
+                    seam = ya + (yb - ya) * (x - a) / (b - a) + shift
+                    return min(seam, far + shift) <= y <= max(seam, far + shift)
+            return False
+
+        outline = sd.opening()
+        for x in np.linspace(-hw + 0.2, hw - 0.2, 61):
+            for y in np.linspace(-hh + 0.2, hh - 0.2, 31):
+                if not sd.contains(outline, x, y):
+                    continue
+                seam = float(sd.saw_edge(x))
+                if seam - gap < y < seam:
+                    continue  # the lit seam between the leaves
+                self.assertTrue(covered(upper, x, y) or covered(lower, x, y), f"closed, ({x:.1f}, {y:.1f}) is behind a leaf")
+                self.assertFalse(covered(upper, x, y, sd.DOOR_OPEN_M) or covered(lower, x, y, -sd.DOOR_OPEN_M),
+                                 f"open, ({x:.1f}, {y:.1f}) is clear")
+        # Through the doorway, with the doors open (they are props), the eye meets the black void's back wall.
         tris = self.bay.vertices[self.bay.faces]
-        seam = np.array([0.5, float(sd.saw_edge(0.5)) - 0.5 * gap, sd.BLOCK[2] - 10.0])
-        door = np.array([0.5, 15.0, sd.BLOCK[2] - 10.0])  # between the door's ribs
-        ahead = np.array([0.0, 0.0, 1.0])
-        self.assertAlmostEqual(ray_hit(tris, seam, ahead) + seam[2], sd.TUNNEL_BACK_Z, delta=0.01)
-        self.assertAlmostEqual(ray_hit(tris, door, ahead) + door[2], sd.AIRLOCK_Z, delta=0.01)
+        ray = np.array([0.5, float(sd.saw_edge(0.5)) - 0.5 * gap, sd.FACE_Z - 10.0])
+        self.assertAlmostEqual(ray_hit(tris, ray, np.array([0.0, 0.0, 1.0])) + ray[2], sd.VOID_BACK_Z, delta=0.01)
+
+    def test_the_void_holds_the_longest_tunnel_hull_behind_the_doors(self) -> None:
+        depth = sd.VOID_BACK_Z - (sd.DOORS_Z + sd.DOOR_SLAB_M)
+        self.assertGreaterEqual(depth, 70.0 + 20.0, "a 70 m hull wholly behind the doors with room fore and aft")
+        hw, hh = sd.opening_half()
+        self.assertGreater(sd.VOID_HALF[0], hw)
+        self.assertGreater(sd.VOID_HALF[1], hh)
 
     def test_the_cargo_bay_is_a_roofed_compartment_dark_with_red_edges(self) -> None:
         p = self.cargo.vertices
@@ -459,14 +547,16 @@ class BayShapeTests(unittest.TestCase):
         self.assertEqual(len(outline), 8, "the STL's octagonal throat")
         self.assertGreaterEqual(2.0 * sd.ZG_THROAT[0] - 31.1, 10.0, "a pod square-on through the throat")
 
-    def test_the_bay_turns_inside_the_frames_ring(self) -> None:
-        # The door turns with the drum; ahead of the frame's ring (z 488) it may reach past the ring's bore, behind it never.
-        p = self.bay.vertices
-        r = np.hypot(p[:, 0], p[:, 1])
-        behind = p[:, 2] > st.RING_FRAME[0] - 8.0
-        self.assertLessEqual(float(r[behind].max()), st.DOOR_R + 1e-6)
-        self.assertLess(float(r.max()), st.RING_FRAME[2] + 1.0)
-        self.assertLess(float(p[r > st.DOOR_R + 1e-6][:, 2].max()), st.RING_FRAME[0] - 8.0)
+    def test_the_drum_turns_inside_the_frames_ring(self) -> None:
+        # In front of the ring's back face everything of the drum stays inside its bore, with room; the ring (frame) stays out of it.
+        mats = station.STYLE.materials
+        drum = np.concatenate([s.mesh.vertices for s in st.drum_shapes(mats)])
+        ahead = drum[drum[:, 2] < st.RING_BACK_Z + 1.0]
+        self.assertLessEqual(float(np.hypot(ahead[:, 0], ahead[:, 1]).max()), st.DRUM_FRONT_R + 1e-6)
+        self.assertGreaterEqual(st.RING_INNER_R - st.DRUM_FRONT_R, 5.0)
+        ring = next(s.mesh for s in st.frame_shapes(mats) if s.name == "bow").vertices
+        near = ring[(ring[:, 2] > st.RING_FRONT_Z - 7.0) & (ring[:, 2] < st.RING_BACK_Z + 1.0) & (np.hypot(ring[:, 0], ring[:, 1]) < 150.0)]
+        self.assertGreaterEqual(float(np.hypot(near[:, 0], near[:, 1]).min()), st.RING_INNER_R - 1e-6)
 
 
 if __name__ == "__main__":

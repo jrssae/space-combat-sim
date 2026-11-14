@@ -23,10 +23,11 @@ from . import station_spine as ssp
 Section = tuple[float, float, float, float, float]  # z, x0, x1, y0, y1 of an axis-aligned slab's cross-section
 
 # --- the drum --------------------------------------------------------------------------------------------------------
-DOOR_Z = 478.0
-DOOR_R = 126.0
-# The main docking bay's door plate closes the sphere's front opening (``station_detail.py``, M7-T05; it turns with the drum).
-SPHERE_PROFILE = [(DOOR_Z, DOOR_R), (558.0, DOOR_R), (562.0, 150.0), (575.0, 178.0), (600.0, 205.0), (640.0, 236.0),
+# The sphere's front, read off the STL (M7-T25): a bowl round the main docking bay's block (``station_detail.py``, which closes the
+# opening at r 44), a shallow cone to r 105 inside the toothed ring, then behind the ring a flat face out to the neck (r 157) and the
+# neck flaring into the sphere. The ring (``RING_PROFILE``) stands still in front of the face; the drum turns clear of it.
+SPHERE_PROFILE = [(513.2, 44.0), (513.2, 59.5), (504.9, 60.0), (507.5, 90.0), (510.5, 103.4), (520.9, 103.4), (520.9, 157.0), (568.0, 157.0),
+                  (586.0, 178.0), (600.0, 205.0), (640.0, 236.0),
                   (700.0, 262.0), (760.0, 275.0), (800.0, 277.0), (860.0, 271.0), (900.0, 262.0), (935.0, 248.0), (945.0, 196.0)]
 # Each of the drum's shells ends in a flange turned in past the next one's radius, and starts with one (``sealed_profile``): a ring
 # left open between two shells, or the slivers between two shells of different segment counts, are slits through the hollow drum,
@@ -47,7 +48,6 @@ GREEN_PROFILE = [(2348.0, GREEN_R), (3330.0, GREEN_R), (3340.0, GREEN_BAND[2]), 
                  (4782.0, GREEN_R)]
 AFT_BAND_PROFILE = [(4782.0, GREEN_R), (4790.0, 352.0), (4840.0, BAND_R), (5400.0, BAND_R), (5440.0, 382.0), (5458.0, 330.0),
                     (5464.0, 292.0), (5500.0, 292.0), (5500.0, 0.0)]
-DRUM_Z = (DOOR_Z, 5500.0)
 ARM_ANGLES_DEG = (90.0, 0.0, 270.0, 180.0)  # top, starboard, bottom, port: the angle from +x toward +y
 # The Cobra arm's head as it stands on top of the drum: z, half width, inner and outer radius.
 # The head is a box with a flat top (the circular clamped hatch on it), then a ribbed neck tapering to the hatch section
@@ -95,7 +95,14 @@ ARM_KNOB = (1380.0, 269.0, (45.0, 29.0, 40.0))  # z, radius, semi-axes across, r
 STRINGER_ANGLES_DEG = tuple(270.0 + 36.0 * k for k in range(10))  # from the bottom, every 36 degrees
 STRINGER = (14.0, 331.0, 341.0)  # width, inner and outer radius
 # --- the frame -------------------------------------------------------------------------------------------------------
-RING_FRAME = (488.0, 548.0, 133.0, 157.0)  # the aperture's ring: z from, z to, inner and outer radius
+# The toothed ring round the main docking bay (the STL's, M7-T25): its section (z, r) from the back's inner corner round, and its
+# 30 teeth standing off its face. Its bore clears everything of the drum's in front of the face (r 103.4) by 5 m as the drum
+# turns (the STL's ring and disc meet there).
+RING_PROFILE = [(513.0, 108.5), (509.0, 108.5), (474.8, 114.0), (474.8, 122.5), (497.6, 138.0), (513.0, 138.0), (513.0, 108.5)]
+RING_INNER_R, RING_OUTER_R, RING_FRONT_Z, RING_BACK_Z = 108.5, 138.0, 474.8, 513.0
+DRUM_FRONT_R = 103.4  # nothing of the drum's ahead of the ring's back face reaches past this
+RING_TEETH = (30, 469.0, 486.0, 118.0, 127.7, 0.2, 0.0)  # count, z from, z to, inner and outer radius, share of the girth, phase
+PYLON = ((-4.25, 135.0, 506.0), (4.25, 330.0, 515.0))  # the slim fin holding the ring from the spine (the STL's)
 # The spine's front round the cargo bay (T21) and over the aperture's ring, to where the command section splits (z 595): rows of
 # z, half width, underside, top. H1 and H2 stand on its flat top at z 515. The rest of the spine, the command section and the bow's
 # prongs are lofted through the STL's sections (``station_spine.py``, M7-T22).
@@ -565,11 +572,10 @@ def frame_shapes(mats: dict[str, Material]) -> list[Shape]:
     from . import station_detail as sd  # noqa: PLC0415 - it builds on this module's shapes
 
     spine, grey, recess, machinery = mats["spine"], mats["drum_grey"], mats["recess"], mats["machinery"]
-    rz0, rz1, ri, ro = RING_FRAME
-    ring = lathe([(rz0, ri), (rz0, ro - 6.0), (rz0 + 8.0, ro), (rz1 - 8.0, ro), (rz1, ro - 6.0), (rz1, ri), (rz0, ri)], 96, grey,
-                 creases=(1, 2, 3, 4, 5))
-    ring_teeth = teeth(36, rz0 + 12.0, rz1 - 12.0, ro - 2.0, ro + 6.0, 0.5, recess)
-    pylon = block((-25.0, ro - 4.0, 494.0), (25.0, 330.0, 542.0), spine)
+    ring = lathe(RING_PROFILE, 96, grey, creases=(1, 2, 3, 4, 5, 6))
+    count, tz0, tz1, tr0, tr1, fill, phase = RING_TEETH
+    ring_teeth = teeth(count, tz0, tz1, tr0, tr1, fill, recess, phase)
+    pylon = block(PYLON[0], PYLON[1], spine)
     tower = block((-20.0, 370.0, 495.0), (20.0, BOW_TOWER_TOP, 545.0), spine)
     lofted = ssp.shapes(mats)
     ex, ey = ssp.BEAM_EDGE

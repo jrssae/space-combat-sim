@@ -276,7 +276,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T22 | A | The dorsal spine and the command section rebuilt to the STL (per-part sections IoU >= 0.90; maintainer, 2026-11-13) | T21 | Opus | T04 built them to the overall silhouette; the per-part check scores them 0.38 to 0.72 | done |
 | T23 | D | The jumpgate and jump points refined from the maintainer's GIF: gate opening, the blue vortex, a ship's jump point (maintainer, 2026-11-13) | - | Opus | Shader and asset look against a show reference; (H) | done |
 | T24 | A | The station's surfaces refined for fullscreen, in both texture-detail sets (low and high): resolution, detail, colour and material, no visible tiling (maintainer, 2026-11-13) | T22 | Opus | A look task on an 8 km hull at 6K within a VRAM budget; (H) | not started |
-| T25 | A | The main docking bay rebuilt: shape and proportions from the STL (its section exemption lifted, IoU >= 0.90), the look from the show captures (maintainer, 2026-11-14) | T05, the flicker and light-leak fix | Opus | The bay reads wrong against the show in shape, mouth detail, tunnel and light; (H) | in progress |
+| T25 | A | The main docking bay rebuilt: shape and proportions from the STL (its section exemption lifted, IoU >= 0.90), the look from the show captures (maintainer, 2026-11-14) | T05, the flicker and light-leak fix | Opus | The bay reads wrong against the show in shape, mouth detail, tunnel and light; (H) | done |
 | T26 | B | All ships keep a low-polygon model at range instead of turning into a grey sphere; a dot only when a few pixels across (maintainer, 2026-11-14) | - | Opus | A Saturn 3 and a Narn transport became grey spheres while still clearly visible | in progress |
 | T27 | C | Navigation targets and a hold-X interaction: the main docking bay, cargo bay and jumpgate as navigation targets; hold X for 2 s with a progress bar to act on them (maintainer, 2026-11-14) | T10 | Opus | A new input mechanic over targeting, HUD and the gate jump | in progress |
 | T28 | D | Fix: entering the jumpgate a second time opens the vortex twice and the camera stops tracking the ship (maintainer, 2026-11-14) | - | Fable | A state bug in M6's gate jump | in progress |
@@ -1424,6 +1424,73 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     bow lies before the plane).
   - **Traffic:** at the STL's size none of T10's tunnel hulls fit (Skylark 40 x 10, Narn transport 46 x 18, Brezebel 39 x 25).
   - Sheet: `references/screenshots/M7-T25 docking bay/M7-T25_phase1_sheet.png` (gitignored).
+- **Maintainer's choice (2026-11-14), signed exception to the 90 % rule:** an **80 m mouth**: the frame block and the mouth (its
+  depth, grilles, panels, stepped cut, sawtooth doors) scaled by **80/45 (1.778)** about the axis and the block's face, the toothed
+  ring and the cross housing at the STL's size; the section check runs against the STL **locally scaled** the same way. Why: T10's
+  inbound civilians must fit (the STL's 45 m mouth takes none of them).
+- **Added (maintainer, 2026-11-14, watching T10's docking):** "the interior doors don't open and the ship does not disappear into
+  the open doors. Expecting a black opening behind the interior doors that the docking ship moves into, and then when fully behind
+  the black veil, the doors close." The sawtooth doors open and close (data-driven timing), a black void behind them; a docking
+  ship flies through, the doors close once it is wholly behind their plane and it leaves the world; undocking the reverse.
+- **Done (as built, 2026-11-14; the shape and the doors approved by the maintainer):**
+  - **The bay** (`parts/station_detail.py`, `parts/station.py`; generator 4): the block 168.9 x 90.7 m with the STL's slats,
+    grilles, marked panels and notches, its mouth (a band 73.2 x 16.7 m across a core 45.5 x 30.0 m) straight back 72 m to the
+    doors with five red-lit frames, the fans beside it, the cross housing, bars and lower hatch, the toothed ring and its fin
+    (frame), the disc and the sphere's new front; the drum's front 5 m inside the ring's bore. Numbers in `docs/assets-station.md`
+    ("The main docking bay to the STL (M7-T25)").
+  - **Sections:** `tools/refview/sections.py` gains **relief** planes (what the bow sees in front of a z plane; the STL's bow is
+    overlapping shells the nonzero fill reads as a solid mouth); `station_fidelity.scaled_reference` makes the locally scaled STL;
+    nine planes **0.907 to 0.993** (T05's build: 0.00 to 0.77); the four exemptions removed.
+  - **Doors and void:** two leaves (`station_props.airlock_leaf`, props in the `aperture` section) slide 21 m apart; the void
+    behind them is unlit `bay_void`, sealed, interior, x +-42, y +-22, to z 740. `StationAirlock` (`AirlockDoors` stepped each tick,
+    `AirlockLeaves` slid each frame, `data/station/airlock.json`: open 3 s, close 2 s, ask 400 m ahead, clear 3 m) under the station.
+  - **Traffic** (`StationTraffic`, `DockingPlan`): a docking ship asks the doors open with its nose 400 m out, flies the inner leg
+    at 20 m/s from the approach's far point (`DOCK_INNER_MPS`: the hulls brake at about 1.6 m/s^2, the lane's plan assumes more),
+    stops 145 m short of the void's back wall (`AIRLOCK_SHORT_M`), lets the doors go once its tail is 3 m past their plane and
+    leaves the world when they have shut; an undocking ship waits in the void until they stand open, comes out, and they shut once
+    it is wholly out. T10's three tunnel hulls fit: 6.0, 4.5 and 2.0 m clear of the mouth (Skylark, Narn transport, Brezebel).
+  - **Hardpoints, collision, lights:** `main_docking_bay_doors`, `_doors_open_m`, `_opening`, `_void_half_m`; `_airlock` is the
+    void's back wall; the drum's collision 188 shapes (no merge); 8 `main_docking_bay` lights for T18 (2 down the mouth, 6
+    entrance lamps), the void unlit; `ring_sphere_fore_rim` moved onto the new flare (z 586).
+  - **Tests:** Python `test_station_fidelity` (relief planes, the bay's nine), `test_station_hardpoints` (mouth open in
+    collision, void closed, doors cover the doorway shut and clear it open, the void holds the longest hull, the drum inside the
+    ring's bore), `test_station_sealed` (only the mouth looks out of the mouth and the void), `test_station_sections`,
+    `test_babylon5_station`, `test_coplanar_overlaps`; GUT `test_airlock_doors` (3), `test_docking_fit` (2), `test_station_traffic`
+    (the doors open before the nose reaches them, close only once the tail is past, no ram, docked behind shut doors; each tunnel
+    hull docks clean; undocking waits, comes out, doors shut behind).
+  - **Console:** command and provider `airlock` (`info.md`).
+  - **Sheet (H):** `references/screenshots/M7-T25 docking bay/M7-T25_final_sheet.png`; GPU views `SHEET_VIEWS=t25`, the live
+    docking and undocking sequence `t25seq` (`scripts/station_sheet_node.gd`).
+- **The look round (maintainer, 2026-11-14, after the shape and doors were approved):** the tunnel's walls "metallic grey, lit red,
+  as in the show", not black with red strips; the doors "too black": the same grey metal; "several lit rings around the bay that
+  glow red ... not in the show, so remove them"; the doors' texture to match the walls, less red than before; the shared plating
+  "the mosaic pattern of the walls of the Earth Alliance ships rather than the brick pattern", "in both" directions.
+  - **Done (approved by the maintainer as is, 2026-11-14):** the mouth all `bay_tunnel` grey metal (metallic 0.7, roughness 0.32, panelled, a faint red
+    tint 0.04) with ribs round its set-back walls; no red strips, lit frames or pink bands, only small lamps glow; two red lamps
+    down the mouth (`BayLights`, the `main_docking_bay_red_*` lights T18 also has) through `LightRig`'s slots; the doors the same
+    metal (a plating cell in the prop atlas, the piece's detail tile over them: `PropKind.world_detail`, `PieceSections.prop_detail`,
+    `MeshAssets.prop_mesh`), the seam no longer self-lit, the doorway's lip grey; the void stays black. The shared detail tile
+    (`core/detail_layer.py`, the whole station and the hangar) is now the Earth Alliance mosaic in both directions. Draw calls
+    unchanged, triangles +7 k, Godot VRAM +0.2 MB, GPU about +0.1 to +0.9 ms in the tunnel. Tests: `test_station_hardpoints`
+    (no self-lit rings, only lamps; the plating; the doors' metal and detail tile), `test_babylon5_station` (the mosaic varies both
+    ways), GUT `test_bay_lights`. Sheet: `references/screenshots/T25 red-lit tunnel/T25_red_lit_tunnel_sheet.png`
+    (`SHEET_VIEWS=t25tunnel`).
+  - **The pink band-end panels were removed** with the red strips and the lit frames (the maintainer: no glowing rings or bands;
+    they stay removed).
+  - **The mosaic replaced the shared plating tile station-wide**: `core/detail_layer.py` is laid over the whole station's hull and
+    over the hangar behind the menu (`b5_interior`), not only the bay (the maintainer: it stays station-wide).
+  - **Cost** (RX 6950 XT, Forward+, X11 fullscreen 6 144 x 3 456; triangles +7 k, Godot's VRAM 1 891.7 to 1 891.9 MB):
+
+    | View | Draw calls | GPU ms |
+    |---|---|---|
+    | Mouth outside | 239 to 239 | 6.77 to 7.05 |
+    | Approach | 242 to 242 | 6.26 to 6.43 |
+    | Mid-tunnel | 245 to 245 | 6.05 to 5.98 |
+    | At the doors | 245 to 245 | 5.48 to 6.37 |
+    | Looking out | 201 to 201 | 4.20 to 4.28 |
+
+  - **Sheets:** `references/screenshots/T25 red-lit tunnel/T25_red_lit_tunnel_sheet.png` (the look),
+    `references/screenshots/M7-T25 docking bay/M7-T25_final_sheet.png` (the shape, the sections, the doors' sequence; gitignored).
 
 ### M7-T26 All ships keep a low-polygon model at range
 

@@ -19,7 +19,8 @@ extends Node3D
 ##   a ram at the skin's speed (Q9). Each piece also carries a `Damageable` (the frame's on this node, beside the `Targetable`)
 ##   whose hits go to the damage sections (`StationSections`, Q5); the hull itself never falls.
 ## - **Visuals** are the pieces' `RenderPiece`s, with the drum's on a pivot turned each frame to the body's angle.
-## - No lights: M7-T18 lights the station, and nothing here takes a `LightPicker` slot.
+## - Lights: the main docking bay's two red lamps down its mouth take `LightPicker` slots (`BayLights`, M7-T25); M7-T18 lights
+##   the rest of the station.
 ## - **The defence grid** (M7-T07, D75) is a `StationGrid` child: its mounts hang from the visuals and bind to the frame and drum
 ##   bodies in the core. A bolt of the station's own side stops on its hull without harm (maintainer).
 ##
@@ -55,6 +56,9 @@ var drum_hull: Damageable = null
 var targetable: Targetable = null
 ## The defence grid (M7-T07).
 var grid: StationGrid = null
+## The main docking bay's inner doors, and its red lamps (M7-T25).
+var airlock: StationAirlock = null
+var bay_lights: BayLights = null
 ## The maintenance bots (M7-T11, Q11): ambient drones on loops round the hull, in the frame's and the drum's visuals.
 var bots: BotFleet = null
 ## The pieces' visuals; the drum's turns on `drum_pivot`.
@@ -111,6 +115,12 @@ func build() -> bool:
 	grid = StationGrid.new()
 	grid.build(self)
 	add_child(grid)
+	airlock = StationAirlock.make(self)
+	if airlock != null:
+		add_child(airlock)
+	bay_lights = BayLights.make(self)
+	if bay_lights != null:
+		add_child(bay_lights)
 	bots = BotFleet.new()
 	if bots.build(self):
 		add_child(bots)

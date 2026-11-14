@@ -52,7 +52,7 @@ from ..parts import station_props as sp
 from ..styles.earth_alliance_station import EARTH_ALLIANCE_STATION as STYLE
 
 ASSET_ID = "babylon5_station"
-GENERATOR_VERSION = 3
+GENERATOR_VERSION = 4
 LENGTH_M = 8000.0
 # The asset's origin in the station frame: on the drum's axis, half way along. The drum's own frame sits on the axis at its middle.
 ORIGIN = np.array([0.0, 0.0, 0.5 * LENGTH_M])
@@ -74,6 +74,7 @@ FRAME_SECTIONS = ("bow", "bow_ring", "spine_sphere", "ramp", "radiators", "cargo
                   "hub", "cone", "truss", "torus_shaft", "reactor")
 FRAME_PLANES = (420.0, 700.0, 1300.0, 1725.0, 2340.0, 3068.0, 3577.0, 4087.0, 4585.0, 5030.0, 5460.0, 5735.0, 6360.0, 7110.0, 7704.0)
 PROP_SECTION = "waist"  # the drum section the Cobra doors lie in
+DOOR_SECTION = "aperture"  # and the main docking bay's inner doors (M7-T25)
 FRAME_PROP_SECTION = "spine_sphere"  # the frame section the command section's windows lie in
 # Shapes a piece may have (T03's default is 128): the open bays (the docking tunnel, 28 launch doors over their halls, the zero-g
 # bay) take pieces round each opening that a merge would close.
@@ -175,7 +176,9 @@ def build_at(ctx: BuildContext, drum_px: int, frame_px: int, detail_px: int) -> 
                                      interior=lambda p, n: sl.frame_interior(p + ORIGIN, n))
     files += drum_files + frame_files
     home = next(e for e in drum["mesh"]["sections"] if e["name"] == PROP_SECTION)
-    prop_files, drum["props"] = write_props(out_dir, ASSET_ID, sp.kinds(), sp.groups(PROP_SECTION, DRUM_CENTRE + home["origin"]),
+    door = next(e for e in drum["mesh"]["sections"] if e["name"] == DOOR_SECTION)
+    groups = sp.groups(PROP_SECTION, DRUM_CENTRE + home["origin"]) + sp.airlock_groups(DOOR_SECTION, DRUM_CENTRE + door["origin"])
+    prop_files, drum["props"] = write_props(out_dir, ASSET_ID, sp.kinds(), groups,
                                             sp.prop_maps(ctx.seed), sp.EMISSIVE_STRENGTH, sp.NEAR_M, sp.MARGIN_M)
     files += prop_files
     home = next(e for e in frame["mesh"]["sections"] if e["name"] == FRAME_PROP_SECTION)
@@ -186,6 +189,7 @@ def build_at(ctx: BuildContext, drum_px: int, frame_px: int, detail_px: int) -> 
     for entry in (drum, frame):
         for surface in entry["mesh"]["surfaces"]:
             surface["world_detail"] = dict(detail)
+        entry["props"]["world_detail"] = dict(detail)  # for the prop kinds that lie among the plating (the bay's inner doors)
     lo = np.minimum(np.array(frame["aabb_min"]), np.array(drum["aabb_min"]) + drum["pivot"])
     hi = np.maximum(np.array(frame["aabb_max"]), np.array(drum["aabb_max"]) + drum["pivot"])
     whole = whole_station()

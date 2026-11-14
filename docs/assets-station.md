@@ -557,6 +557,8 @@ Generator version 3.
 
 ### The main docking bay (in the drum)
 
+Superseded by M7-T25 (below, "The main docking bay to the STL"): T05's build, kept here for the record.
+
 `parts/station_detail.py` (`main_docking_bay`, the drum's `aperture` shape: it turns with the drum; the outer toothed ring is frame).
 References in `references/docking bay references/`, inspiration only. Station frame, z aft from the bow tip:
 - A plate across the sphere's front opening at z 478 (r 126) with 24 sawtooth teeth round its rim (r 112 to 124, 5 m proud; none
@@ -635,11 +637,11 @@ its `body`'s frame: `drum` (the drum node, on its axis at the pivot, turning wit
 |---|---|---|
 | `cobra_bays` | 24: `cobra_bay_alpha_1` to `_6` (top arm, door 1 at the bow), then `beta` (starboard), `delta` (bottom), `zeta` (port) | `wing`, `arm`, `door_number`, `door` (r 239), `door_half_m` [10, 7], `normal` (radially out), `across`, `leaves` (hinge `point` and `axis`), `rail_start` (where the fighter hangs, r 230), `rail_end` (the door), `release` (r 247), `release_direction`, `surface_velocity` (w x r, 36.6 m/s), `forward` (bow), `up` (toward the axis), `staging` (the second row's fighter), `staging_path` (up 3 m, across, down onto the rack) |
 | `cobra_arm` | 1 | the doors' layout on an arm standing on top (for T20): `door_floor_r`, `door_depth_m`, `door_half_m`, `pitch_m` 19, `row_z`, `strip_x`, `centres`, `hall`, `hang_r`, `release_r`, `staging_x`, `arms` (each `name`, `wing`, `angle_deg`, `bow_view_deg`, `bays`) |
-| `main_docking_bay` | 1 (drum) | `main_docking_bay_approach` (1 500 and 300 m ahead), `_path` (to the mouth and the airlock), `_mouth` (z 450), `_airlock` (z 640), `_clear_half_m` [47, 17]; `spin_axis`, `spin_rad_s` 0.148, `pivot` (a ship flying in matches the drum's roll; the same as `pieces.drum`) |
+| `main_docking_bay` | 1 (drum) | `main_docking_bay_approach` (1 500 and 300 m ahead), `_path` (to the mouth and the void's back wall), `_mouth` (z 480.4), `_doors` (z 552.4), `_doors_open_m` 21, `_airlock` (the black void's back wall, z 740), `_clear_half_m` [36.6, 15.0], `_opening` (the mouth's clear outline), `_void_half_m` [42, 22]; `spin_axis`, `spin_rad_s` 0.148, `pivot` (a ship flying in matches the drum's roll; the same as `pieces.drum`). M7-T25 |
 | `cargo_bay` | 1 (frame) | `cargo_bay_approach` (to the hold), `_hold` (z -700, y 346: on the slot's line, 346 m off the main bay's axis), `_hold_forward`, `_release` (z -640), `_path` (down the slot into the bay), `_entry` (45 m in), `_clear_min`, `_clear_max` |
 | `grid_mounts` | 23 (L1 to L12, H1, H2, I1 to I9) | `kind`, `position` (pivot), `up` (D75's, normalised) |
 | `launch_clearance` | 1 | `blocked_sectors_deg` [[56.5, 124]], `clear_distance_m` 240 (M7-T22), `margin_deg` 10, `ship_clearance_m` 2, `angle` (how an arm's angle and the drum's turn give a door's angle) |
-| `lights` | 57: 14 `beacon` (`blink`), 8 `running`, 7 `ring` (`radius`, `axis`, `dashes`), 24 `bay`, 2 `main_docking_bay`, 2 `cargo_bay` | `position`, `colour` |
+| `lights` | 63: 14 `beacon` (`blink`), 8 `running`, 7 `ring` (`radius`, `axis`, `dashes`), 24 `bay`, 8 `main_docking_bay` (2 down the mouth, lit in the game by `BayLights`; 6 entrance lamps round it on the block's face, M7-T25), 2 `cargo_bay` | `position`, `colour` |
 | `tour_points` | 8: bow, main_docking_bay, cargo_bay, cobra_arm (drum), grid_tower, drum, vanes, reactor | `position`, `look_at`, `direction` |
 | `damage_sections` | 11 | `sections` (T19's render sections, each once), `aabb_min`, `aabb_max` |
 
@@ -718,7 +720,7 @@ frame (turned onto the top). Tested in `tools/procgen/tests/test_station_fidelit
 | Cobra arms (each of four) | head 760, 800 (outline); neck 900, 960; root 1 030; root 1 060, 1 101.5 (outline, through the halls); root 1 240 | 0.65, 0.65, 0.41, 0.77, 0.38, 0.63, 0.69, 0.73 | **0.96, 0.95, 0.92, 0.96, 0.97, 0.93, 0.96, 0.98** |
 | Cargo bay | z 430, z 465, top (y 340) (outline) | 0.86, 0.88, 1.00 | **0.96, 0.96, 1.00** |
 | Cargo bay | side (x 0) | 0.26 | 0.46, **exempt**: the throat and compartment are open for the pods (the maintainer: "open only where pods enter"); the STL shuts the throat with a door plate |
-| Main docking bay | z 455, 470, 520, side | 0.00, 0.01, 0.68, 0.79 | the same, **exempt**: built from the maintainer's show references (T05, approved), not the STL's door |
+| Main docking bay | z 455, 470, 520, side | 0.00, 0.01, 0.68, 0.79 | the same, exempt then; rebuilt to the STL in M7-T25 (below), no exemption |
 | Dorsal spine | z 1 500, 2 000, 2 650, 4 500, 5 650 | 0.63, 0.72, 0.60, 0.48, 0.52 | rebuilt in M7-T22 (below) |
 | Command section | bow 200, 400; z 600, 1 000, 1 150, 1 250 | 0.66, 0.71, 0.38, 0.53, 0.51, 0.66 | rebuilt in M7-T22 (below) |
 
@@ -782,6 +784,82 @@ scores 0.81 against the STL's open cut; 0.995 at z 4 504.
 **Sheet (H):** `references/screenshots/M7-T22 spine and command section/`: `M7-T22_sections_dorsal_spine.png` and
 `M7-T22_sections_command_section.png` (each plane's overlay before and after with its IoU), `M7-T22_z4500_vs_z4520.png` (why the
 plane moved), `M7-T22_views_sheet.png` (GPU: the command section, bow and spine at 50 m to 1 km; `SHEET_VIEWS=t22`).
+
+## The main docking bay to the STL (M7-T25)
+
+The maintainer (2026-11-14): the T05 bay "doesn't look close enough to the show"; shape from the STL, look from the show, the
+entrance "about 80 m wide". Phase 1 measured the STL's bay (`references/screenshots/M7-T25 docking bay/M7-T25_phase1_sheet.png`):
+its mouth is 45 x 20 m and 40.5 m deep at the 8 km scale, in a frame block 95 x 51 m. **The maintainer chose (2026-11-14) an 80 m
+mouth: the frame block and the mouth, and what stands on the block, scaled by 80/45 (1.778) about the axis and the block's face;
+the toothed ring and the cross housing at the STL's size.** Why: T10's inbound civilians must fit (the STL's mouth takes none of
+them). `parts/station_detail.py` (`main_docking_bay`, turning with the drum), `parts/station.py` (the ring, the disc, the pylon):
+
+- **Frame block:** the STL's octagon scaled, 168.9 x 90.7 m (corners at x 84.4, y 23.8 and x 55.6, y 45.3), its face at z 480.4
+  flush with the housing's, a raised rim (2.8 m, 0.9 m proud), olive `bay_frame`. On it, scaled from the STL: twelve slats over and
+  under the mouth, three short grilles each side of it, four marked panels at its corners, a notch with a red lamp at its top and
+  bottom, six red entrance lamps round the mouth (T18 lights them: the `main_docking_bay_entrance_*` hardpoints).
+- **Mouth:** the STL's clear outline scaled: a band 73.2 x 16.7 m (its ends pointed) across a core 45.5 x 30.0 m (its sides
+  sloping in to 39.8 m at the top). Straight back 72 m to the inner doors at z 552.4: a 3 m lip on the outline, then walls set back
+  2 m with two ribs round them between each pair of frames, five frames standing in to the outline (2.5 m deep, every 12.5 m from
+  z 492.4), machinery on the set-back roof and floor.
+- **The show's look (the maintainer, 2026-11-14): metallic grey lit red.** Everything in the mouth is `bay_tunnel` (#A8AAAE taken as
+  the metal's own colour, metallic 0.7, roughness 0.32, panelled, a faint red tint 0.04 for range); nothing glows but its small
+  lamps (no red strips, no lit frames, no pink bands: "the red comes from lighting falling on the grey metal"). The red is two
+  lamps down the mouth (`BayLights`: the `main_docking_bay_red_1` and `_2` lights, z 499.9 and 537.4 on the axis, red, energy 3.5,
+  range 55 m) entering `LightRig`'s competition for its 7 omni slots like any emitter, so they cost no draw call of their own.
+- **Fans:** the STL's two fan-shaped grille housings beside the block, scaled: lofted through four sections from x 65.8 (13 m half
+  high, front z 471.5) to x 102.5 (8.9 m, z 424), their sloping faces striped with dark slats; two rails from the mouth's side.
+- **Cross housing (STL size):** the bar across, y +-13.25, face z 480.4, to x 102.5; the bars up and down from the block's top,
+  36.6 m wide there to 29.2 m at their ends (y +-102.3), their faces sloping back from z 488.5 to 492, boxes along their sides; the
+  lower hatch on the bar below. Posts beside the bar across near its ends.
+- **Toothed ring (frame, STL size):** section (z, r) 108.5 at the back to 114 at the face (z 474.8), the face to r 122.5, the outer
+  bevel to r 138 at z 497.6, back face z 513; 30 teeth (2.4 degrees, r 118 to 127.7) standing to z 469. The pylon holding it is
+  the STL's slim fin (x +-4.25, z 506 to 515).
+- **Disc and sphere front (drum):** the bowl round the block at z 513.2 (r 44 to 59.5), the cone to r 103.4 (z 504.9 to 510.5),
+  then behind the ring a flat face at z 520.9 out to the neck (r 157), flaring into the sphere (r 178 at z 586). The ring's bore and
+  the drum's front (everything ahead of the ring's back reaches at most r 103.4: `station.DRUM_FRONT_R`) are 5 m apart, the
+  station's turning clearance (the STL's ring and disc meet; its housing reaches the ring: built 5 m short).
+- **Inner doors** (`station_props.airlock_leaf`, two prop instances in the `aperture` section, interior): leaves of the tunnel's
+  grey metal across the doorway (the prop atlas's last cell, `_plating_cell`, painted as the walls' atlas paints `bay_tunnel`, with
+  the piece's detail tile laid over them as over the walls: `PropKind.world_detail`), closed on a sawtooth seam (teeth 10 m high
+  every 20.5 m, a 0.3 m gap), sliding up and down 21 m into the slab between the mouth's back wall and the void's front wall. The
+  game opens them (`StationAirlock`).
+- **The shared detail tile** (`core/detail_layer.py`, the whole station's and the hangar's near plating): the Earth Alliance ships'
+  mosaic, varied in both directions (the tile cut up to 12 times, each piece across its longer side at 30 to 70 %, down to plates of
+  0.8 to 3.2 m), replacing the 4 m fields split twice that read as brickwork (the maintainer, 2026-11-14).
+- **Black void:** behind the doors' slab (z 554.4), x +-42, y +-22, back wall z 740: unlit `bay_void` (#020202, no glow, no lights),
+  sealed, interior layer. The longest tunnel hull lies wholly behind the doors at the lane's end (145 m short of the back wall), with
+  40 m and more before the wall for a hull that brakes late.
+- **In play:** a docking ship asks the doors open when its nose is 400 m out (`data/station/airlock.json`: open 3 s, close 2 s),
+  flies the inner leg at 20 m/s from the approach's far point, lets them go once its tail is 3 m past their plane, and leaves the
+  world once they have shut; undocking is the same backwards (it waits in the void until they stand open). Console `airlock`.
+- **Fit (tests):** every tunnel hull's collision shapes seen from ahead, lying square (the lane aligns its top to the drum's),
+  clear the mouth's outline by at least 2 m: Skylark 6.0 m, Narn transport 4.5 m, Brezebel 2.0 m (its fins); docked in flight
+  within 0.1 m of the axis, no contact.
+- **The check** (`parts/station_fidelity.py`, `tools/refview/sections.py`): the STL's bow is overlapping shells with mixed winding
+  (the nonzero fill calls its mouth solid), so the bay is compared as the bow sees it (**relief** planes: solid where the first
+  surface looking aft lies before the plane), against the STL **locally scaled** as the maintainer signed (`scaled_reference`:
+  triangles cut at the scaled region's edges, the block and mouth to behind the STL's door, and the fans and rails in front of the
+  housing, scaled; the rest as it is). No exemption.
+
+| Plane (relief) | Window | T05 build | M7-T25 |
+|---|---|---|---|
+| z 455 / 472 / 478 (fans, teeth, ring face) | x, y +-140 | 0.00, 0.09, 0.24 | **0.925, 0.929, 0.907** |
+| z 483 / 494 / 508 (block, housing, bars, ring, disc) | x, y +-140 | 0.42, 0.42, 0.62 | **0.926, 0.919, 0.931** |
+| mouth z 500 / 530 / 550 | x +-90, y +-50 | 0.63, 0.77, 0.77 | **0.981, 0.993, 0.992** |
+
+- **Collision:** the block round the mouth as ten pieces to the doors' slab (those beside the mouth reaching over the housing), the
+  disc and sphere round the void as four pieces in two runs to its back wall, the bars and fans riding them: drum 188 shapes (no
+  merge; budget 192), frame unchanged in count. Tested: nothing within 0.3 m of the mouth's outline from 60 m ahead to the void's
+  back wall, nor of the void, the wall closed behind.
+- **Cost of the look** (RX 6950 XT, Forward+, X11 fullscreen 6 144 x 3 456, before and after; `SHEET_VIEWS=t25tunnel`): draw calls
+  unchanged (239, 242, 245, 245, 201 for the mouth outside, the approach, mid-tunnel, the doors, looking out); triangles +7 k (the
+  ribs); Godot's VRAM 1 891.7 to 1 891.9 MB; GPU 6.77 to 7.05, 6.26 to 6.43, 6.05 to 5.98, 5.48 to 6.37, 4.20 to 4.28 ms. Sheet:
+  `references/screenshots/T25 red-lit tunnel/T25_red_lit_tunnel_sheet.png`.
+- **Generator 4.** Sheet (H): `references/screenshots/M7-T25 docking bay/M7-T25_final_sheet.png` (each plane's overlay with its
+  IoU before and after, the GPU views beside the six show captures, the docking and undocking sequence on the GPU); views
+  `SHEET_VIEWS=t25` and `t25seq` (live) in `scripts/station_sheet_node.gd`. GPU, RX 6950 XT, Forward+, X11 fullscreen 6 144 x 3 456: the bay bow on
+  229 draw calls, 343 k triangles, 3.0 ms GPU; the mouth close 188 draw calls, 4.6 ms.
 
 ## No two faces in one plane (M7, the flickering bay lamps)
 

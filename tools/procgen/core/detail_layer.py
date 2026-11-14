@@ -2,8 +2,10 @@
 reads from 50 m without an atlas the size of its surface.
 
 The per-piece atlas carries the broad paint and the large panels at about a metre a texel. This layer adds what that texel cannot:
-plates of one to four metres with fine seams, a few inset hatches and a plate-to-plate tone. It is one seamless square tile, laid
-by the renderer three ways along the piece's axes (triplanar in object space), so it travels with a turning drum.
+a mosaic of plates as on the Earth Alliance ships, varied in both directions (the tile cut again and again, each cut across its
+piece's longer side at a varied place, down to plates of about one to three metres) with fine seams, a few inset hatches and a
+plate-to-plate tone. It is one seamless square tile (its edges are seams), laid by the renderer three ways along the piece's axes
+(triplanar in object space), so it travels with a turning drum.
 
 The game blends it as Godot's detail layer in multiply mode: ``albedo *= mix(1, rgb, a)`` and the normal map moves toward the
 tile's by ``a``. So the alpha is high on the seams (where the tile's normal matters) and low on a plate's face, where the atlas's
@@ -19,9 +21,12 @@ from .color import linear_to_srgb
 
 DEFAULT_PX = 1024
 DEFAULT_TILE_M = 16.0
-CELL_M = 4.0  # the plating's fields before they are split; the tile holds a whole number of them, so it wraps
-SPLITS = 2
-MIN_PLATE_M = 1.0
+# The mosaic: the tile cut up to ``LEVELS`` times, each piece across its longer side at 30 to 70 % of it; a piece over ``MAX_PLATE_M``
+# is always cut, one under it now and then, none into plates under ``MIN_PLATE_M``.
+LEVELS = 12
+MAX_PLATE_M = 3.2
+MIN_PLATE_M = 0.8
+STOP_SHARE = 0.35
 LINE_M = 0.09
 GROOVE_M = 0.025
 FACE_ALPHA = 0.35  # how much of the tile reaches a plate's face (its tone, and its flat normal over the atlas's)
@@ -36,19 +41,21 @@ def _smooth(t: np.ndarray) -> np.ndarray:
     return t * t * (3.0 - 2.0 * t)
 
 
-def _plates(u: np.ndarray, v: np.ndarray, fields: int, seed: int) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Each point's plate: its key and its bounds. The fields' indices wrap every ``fields`` cells, so the plating is periodic."""
-    iu, iv = np.floor(u / CELL_M).astype(np.int64), np.floor(v / CELL_M).astype(np.int64)
-    u0, v0 = iu * CELL_M, iv * CELL_M
-    u1, v1 = u0 + CELL_M, v0 + CELL_M
+def _plates(u: np.ndarray, v: np.ndarray, tile_m: float, seed: int
+            ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Each point's plate in the mosaic (``u``, ``v`` inside the tile): its key and its bounds."""
     s = np.full(u.shape, seed, dtype=np.int64)
-    key = (_hash01(np.mod(iu, fields), np.mod(iv, fields), s) * 0xFFFFFF).astype(np.int64)
-    for k in range(SPLITS):
+    u0, v0 = np.zeros(u.shape), np.zeros(u.shape)
+    u1, v1 = np.full(u.shape, tile_m), np.full(u.shape, tile_m)
+    key = (_hash01(s) * 0xFFFFFF).astype(np.int64)
+    for k in range(LEVELS):
         w, h = u1 - u0, v1 - v0
         at = 0.3 + 0.4 * _hash01(key, s + 307 + k)
-        along_u = np.where(w > 1.4 * h, True, np.where(h > 1.4 * w, False, _hash01(key, s + 211 + k) < 0.5))
+        # Across the longer side, or either way when the piece is near square.
+        along_u = np.where(w > 1.3 * h, True, np.where(h > 1.3 * w, False, _hash01(key, s + 211 + k) < 0.5))
         size = np.where(along_u, w, h)
-        split = (_hash01(key, s + 101 + k) >= 0.2) & (size * np.minimum(at, 1.0 - at) >= MIN_PLATE_M)
+        wanted = (np.maximum(w, h) > MAX_PLATE_M) | (_hash01(key, s + 101 + k) >= STOP_SHARE)
+        split = wanted & (size * np.minimum(at, 1.0 - at) >= MIN_PLATE_M)
         cu, cv = u0 + at * w, v0 + at * h
         first = np.where(along_u, u < cu, v < cv)
         su, sv = split & along_u, split & ~along_u
@@ -62,14 +69,13 @@ def _plates(u: np.ndarray, v: np.ndarray, fields: int, seed: int) -> tuple[np.nd
 
 def detail_tile(px: int = DEFAULT_PX, tile_m: float = DEFAULT_TILE_M, seed: int = 0) -> dict[str, np.ndarray]:
     """The tile's two maps as 8-bit arrays: ``albedo`` (RGBA, the multiply factor in sRGB and the blend in alpha) and ``normal``
-    (tangent space, +Y up). ``tile_m`` must hold a whole number of plating fields."""
-    fields = round(tile_m / CELL_M)
-    if fields < 1 or abs(fields * CELL_M - tile_m) > 1e-9:
-        raise ValueError(f"the tile ({tile_m} m) must hold a whole number of {CELL_M} m fields")
+    (tangent space, +Y up). ``tile_m`` must hold a few of the mosaic's largest plates."""
+    if tile_m < 2.0 * MAX_PLATE_M:
+        raise ValueError(f"the tile ({tile_m} m) must be at least {2.0 * MAX_PLATE_M} m across")
     texel = tile_m / px
     centres = (np.arange(px) + 0.5) * texel
     u, v = np.meshgrid(centres, centres)
-    key, u0, u1, v0, v1 = _plates(u, v, fields, seed)
+    key, u0, u1, v0, v1 = _plates(u, v, tile_m, seed)
     edge = np.minimum(np.minimum(u - u0, u1 - u), np.minimum(v - v0, v1 - v))
     s = np.full(u.shape, seed, dtype=np.int64)
     line = _smooth(1.0 - edge / (0.5 * LINE_M))

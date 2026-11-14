@@ -30,6 +30,10 @@ var prop_files: Dictionary = {}
 var prop_near: Dictionary = {}
 ## The kinds that stand inside a hall or down a door's well (drawn out of the sun's light), by kind.
 var prop_interior: Dictionary = {}
+## The kinds that lie among the piece's plating and take its shared detail tile (M7-T25: the docking bay's inner doors), by kind;
+## and the tile (`world_detail`: its maps and size).
+var prop_detailed: Dictionary = {}
+var prop_detail: Dictionary = {}
 ## Each group of props: `kind`, `section`, `transforms` (Array[Transform3D] in the section's frame), `aabb` (in that frame).
 var prop_groups: Array[Dictionary] = []
 
@@ -136,6 +140,7 @@ func _read_props(entry: Dictionary) -> void:
 	near_m = float(entry.get("near_m", 0.0))
 	margin_m = float(entry.get("margin_m", 0.0))
 	prop_surface = entry.get("surface", {})
+	prop_detail = entry.get("world_detail", {})
 	var kinds: Dictionary = entry.get("kinds", {})
 	for kind: String in kinds:
 		prop_files[kind] = String((kinds[kind] as Dictionary).get("file", ""))
@@ -143,6 +148,8 @@ func _read_props(entry: Dictionary) -> void:
 			prop_near[kind] = float((kinds[kind] as Dictionary)["near_m"])
 		if bool((kinds[kind] as Dictionary).get("interior", false)):
 			prop_interior[kind] = true
+		if bool((kinds[kind] as Dictionary).get("world_detail", false)):
+			prop_detailed[kind] = true
 	for item: Variant in entry.get("groups", []):
 		var g: Dictionary = item
 		var kind: String = String(g.get("kind", ""))

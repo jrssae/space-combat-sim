@@ -135,7 +135,7 @@ def _turned(pieces: list[tuple[str, np.ndarray]], angles_deg: Sequence[float]) -
 def drum_pieces(planes: Sequence[float]) -> list[tuple[str, np.ndarray]]:
     """What turns, in the station frame."""
     out = []
-    solid_sphere = [(z, r) for z, r in st.SPHERE_PROFILE if z >= sd.AIRLOCK_Z]
+    solid_sphere = [(sd.VOID_BACK_Z, _profile_r(sd.VOID_BACK_Z))] + [(z, r) for z, r in st.SPHERE_PROFILE if z > sd.VOID_BACK_Z]
     for name, profile in (("sphere", solid_sphere), ("body", st.BODY_PROFILE), ("fwd_band", st.FWD_BAND_PROFILE),
                           ("green", st.GREEN_PROFILE), ("aft_band", st.AFT_BAND_PROFILE)):
         out += frusta(name, profile, planes)
@@ -172,39 +172,71 @@ def _clip(poly: np.ndarray, normal: Sequence[float], at: float) -> np.ndarray:
     return np.array(out)
 
 
+def _profile_r(z: float) -> float:
+    """The sphere's radius at ``z`` behind its front face (the profile's last point at each z)."""
+    zs, rs = [], []
+    for zp, rp in st.SPHERE_PROFILE:
+        if zs and abs(zp - zs[-1]) < 1e-9:
+            rs[-1] = rp
+        else:
+            zs.append(zp)
+            rs.append(rp)
+    return float(np.interp(z, zs, rs))
+
+
+def _prism_xy(name: str, outline: Sequence[tuple[float, float]], z0: float, z1: float, planes: Sequence[float]) -> list[tuple[str, np.ndarray]]:
+    return [(name, np.array([[x, y, z] for z in (a, b) for x, y in outline])) for a, b in _split(z0, z1, planes)]
+
+
 def main_docking_bay(planes: Sequence[float]) -> list[tuple[str, np.ndarray]]:
-    """The main docking bay with its tunnel open (Q8's traffic): the sphere round the tunnel, from the plate to the airlock, as four
-    pieces about the clear passage (above, below and either side; its profile is convex there, so one piece per side and section);
-    the block round the mouth the same way; the housing and the bar as boxes."""
-    hw, hh = sd.clear_passage()
+    """The main docking bay open to traffic (M7-T25): the frame block round the mouth's clear outline as ten pieces from its face to
+    the doors' slab (above and below the core, beside the core and the band each side; those beside reach out over the cross
+    housing), the disc and sphere round the void as four pieces about it (above, below and either side) to its back wall, the bars
+    and the fans riding them. No more shapes than the tunnel had (T05), so the drum stays inside its budget without merging."""
+    out = []
+    o0, o1, o2, o3, o4 = sd.scaled(sd.STL_OPENING)
+    (side, _), (_, corner_y), (cx, top), _ = sd.scaled(sd.STL_OCTAGON)
+    z0, z1 = sd.FACE_Z - sd.RIM[1], sd.DOORS_Z + sd.DOOR_SLAB_M
+    for sx in (-1.0, 1.0):
+        for sy in (-1.0, 1.0):
+            reach = sd.HOUSING[1]
+            for name, piece in (("bay_mid", [o0, (reach, 0.0), (reach, o1[1]), o1]), ("bay_side", [o2, (reach, o2[1]), (reach, o3[1]), o3])):
+                out += _prism_xy(name, [(sx * x, sy * y) for x, y in piece], z0, z1, planes)
+    for sy in (-1.0, 1.0):
+        cap = [(-side, o3[1]), (side, o3[1]), (side, corner_y), (cx, top), (-cx, top), (-side, corner_y)]
+        out += _prism_xy("bay_cap", [(x, sy * y) for x, y in cap], z0, z1, planes)
+    # The disc and the sphere round the void, from just behind the disc's face to the void's back wall.
+    hw, hh = sd.VOID_HALF
     sides = (("top", [((0.0, 1.0), hh)]), ("bottom", [((0.0, -1.0), hh)]),
              ("right", [((1.0, 0.0), hw), ((0.0, 1.0), -hh), ((0.0, -1.0), -hh)]),
              ("left", [((-1.0, 0.0), hw), ((0.0, 1.0), -hh), ((0.0, -1.0), -hh)]))
-    profile = [(z, r) for z, r in st.SPHERE_PROFILE if z <= sd.AIRLOCK_Z]
-    zs, rs = [z for z, _ in profile], [r for _, r in profile]
-    out = []
-    # The cylinder at the opening, then the convex rest of the sphere to the airlock, cut at the section planes.
-    for za, zb in _split(zs[0], zs[1], planes) + _split(zs[1], zs[-1], planes):
-        ring_z = [za] + [z for z in zs if za < z < zb] + [zb]
-        for name, cuts in sides:
-            pts = []
-            for z in ring_z:
-                poly = _ring(z, float(np.interp(z, zs, rs)))[:, :2]
-                for normal, at in cuts:
-                    poly = _clip(poly, normal, at)
-                pts += [[x, y, z] for x, y in poly]
-            out.append((f"bay_{name}", np.array(pts)))
-    bw, bh, bz = sd.BLOCK
-    for lo, hi in (((-bw, hh), (bw, bh)), ((-bw, -bh), (bw, -hh)), ((hw, -hh), (bw, hh)), ((-bw, -hh), (-hw, hh))):
-        out += _blocks("bay_block", (lo[0], lo[1], bz - 1.5), (hi[0], hi[1], st.DOOR_Z), planes)
-    xw, yh, xz = sd.HOUSING
-    for sx in (-1.0, 1.0):
-        x0, x1 = sorted((sx * bw, sx * xw))
-        out += _blocks("bay_housing", (x0, -yh - 1.0, xz - 1.5), (x1, yh + 1.0, st.DOOR_Z), planes)
-    uw, uh, uz = sd.BAR_UP
-    out += _blocks("bay_bar", (-uw, bh, uz), (uw, uh, st.DOOR_Z), planes)
-    dw, dh, dz = sd.BAR_DOWN
-    out += _blocks("bay_bar", (-dw, -dh, dz - 2.0), (dw, -bh, st.DOOR_Z), planes)
+    face = 520.9
+    # The disc inside the ring, then behind the face the neck flaring into the sphere: each run the hull of its rings.
+    runs = [(508.0, sd.VOID_BACK_Z)]
+    # The bars ride the pieces above and below the void, the fans those beside it (the run just behind the face): as many shapes as
+    # the tunnel had, at the cost of a wedge a few metres deep over the disc's face between them.
+    (y0, _, _), (y1, _, _) = sd.BAR
+    bars = {}
+    for sy, name in ((1.0, "top"), (-1.0, "bottom")):
+        pts = []
+        for y in (y0, y1):
+            w, zf = sd.bar_at(y)
+            pts += [[sx * w, sy * y, z] for sx in (-1.0, 1.0) for z in (zf, sd.BAR_BACK_Z)]
+        bars[name] = pts
+    for sx, name in ((1.0, "right"), (-1.0, "left")):
+        bars[name] = [[sx * x, sy * h, z] for x, h, zf in sd.FAN for sy in (-1.0, 1.0) for z in (zf, sd.FACE_Z)]
+    for za, zb in runs:
+        for k, (a, b) in enumerate(_split(za, zb, planes)):
+            for name, cuts in sides:
+                pts = list(bars[name]) if k == 0 else []
+                rings = [(z, st.DRUM_FRONT_R) for z in (a, face) if a <= z <= min(b, face)]
+                rings += [(z, _profile_r(z)) for z in sorted({max(a, face), b, *(z for z, _ in st.SPHERE_PROFILE if a < z < b)}) if z >= face]
+                for z, r in rings:
+                    poly = _ring(z, r)[:, :2]
+                    for normal, at in cuts:
+                        poly = _clip(poly, normal, at)
+                    pts += [[x, y, z] for x, y in poly]
+                out.append((f"bay_{name}", np.array(pts)))
     return out
 
 
@@ -277,13 +309,11 @@ def _knob_points(kz: float, kr: float, semi: Sequence[float]) -> np.ndarray:
 def frame_pieces(planes: Sequence[float]) -> list[tuple[str, np.ndarray]]:
     """What stands still, in the station frame."""
     out: list[tuple[str, np.ndarray]] = []
-    rz0, rz1, ri, ro = st.RING_FRAME
-    for k in range(RING_SECTORS):  # the aperture's ring in sectors, so its hole stays open
+    for k in range(RING_SECTORS):  # the toothed ring in sectors, so its hole stays open
         a0, a1 = 2.0 * math.pi * k / RING_SECTORS, 2.0 * math.pi * (k + 1) / RING_SECTORS
-        for z0, z1 in _split(rz0, rz1, planes):
-            pts = np.concatenate([_ring(z, r, 3, a0, a1) for z in (z0, z1) for r in (ri, ro + 6.0)])
-            out.append(("ring", pts))
-    out += _blocks("pylon", (-25.0, ro - 4.0, 494.0), (25.0, 330.0, 542.0), planes)
+        pts = np.concatenate([_ring(z, r, 3, a0, a1) for z, r in st.RING_PROFILE[:-1]])
+        out.append(("ring", pts))
+    out += _blocks("pylon", st.PYLON[0], st.PYLON[1], planes)
     out += _blocks("tower", (-20.0, 370.0, 495.0), (20.0, st.BOW_TOWER_TOP, 545.0), planes)
     out += slab_pieces("spine", st.spine_rows_from(sd.ZG_BACK_Z), planes, _sym, tol=10.0)
     out += cargo_bay(planes)
