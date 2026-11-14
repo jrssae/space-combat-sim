@@ -100,7 +100,7 @@ def cut_segments(tris: np.ndarray, axis: int, value: float) -> np.ndarray:
 
 def relief_mask(tris: np.ndarray, plane: SectionPlane, pixel_m: float) -> np.ndarray:
     """What the bow sees in front of a z plane, in its window: solid where the nearest surface looking aft is at or before it."""
-    from .refview import rasterize  # noqa: PLC0415 - the renderer's rasteriser, only for relief planes
+    from .raster import rasterize  # noqa: PLC0415 - the renderer's rasteriser, only for relief planes
 
     if plane.axis != 2:
         raise ValueError(f"{plane.name}: a relief plane cuts across z")
