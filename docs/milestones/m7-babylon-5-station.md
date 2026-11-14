@@ -265,6 +265,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T20 | C | The hangar behind the menu after the door resize: one Starfury per door (six), a narrower hall (maintainer, 2026-11-13) | T05, T09 | Opus | T09 sized the hall and racks to the old 64 m doors | done |
 | T21 | A | Follow-up to T05 from the STL: the Cobra arm's pentagonal cross-section, creases either side of the launch doors, and a roofed rectangular cargo bay (maintainer, 2026-11-13) | T05 | Opus | Shape read off the STL; the look is (H) | done |
 | T22 | A | The dorsal spine and the command section rebuilt to the STL (per-part sections IoU >= 0.90; maintainer, 2026-11-13) | T21 | Opus | T04 built them to the overall silhouette; the per-part check scores them 0.38 to 0.72 | in progress |
+| T23 | D | The jumpgate and jump points refined from the maintainer's GIF: gate opening, the blue vortex, a ship's jump point (maintainer, 2026-11-13) | - | Opus | Shader and asset look against a show reference; (H) | not started |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M7-T01 Station references and measurements
@@ -983,6 +984,24 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   collision, the launch clearance sector, T19's sections and T05's hardpoints follow; the two tests un-pended and passing.
 - **Done when:** each spine and command-section plane at IoU >= 0.90 (or an exemption the maintainer accepts), a sheet (H), tests
   green, committed.
+
+### M7-T23 The jumpgate and jump points refined from the maintainer's GIF
+
+- **Why (maintainer, 2026-11-13):** "I've updated the jumpgate reference folder with a gif to refine the jumpgate appearance."
+  Raids and civilian traffic (T10) and M8's tutorial raiders arrive through the gate and through jump points, and the gate stands
+  50 km from the station in the same scene.
+- **Reference** (gitignored, inspiration only, never traced or committed): `references/jumpgate/Jump gate opening (arrival), jump
+  point forming (with small pause), and jump gate jump to hyperspace.gif` (28.7 s; contact sheet in `references/screenshots/
+  jumpgate gif frames/`): the gate's four arms light, a white flash fills the centre, then a feathery, swirling blue vortex with a
+  deep dark eye opens and a ship comes out; a ship's own jump point starts as a small bright star, pauses, then opens into the same
+  blue swirl, wide then funnel-shaped; a jump into hyperspace through the gate shows an amber-orange vortex and tunnel.
+- **What:** M6's `jumpgate` asset and its vortex (M6-T19, T20) refined to the GIF: the arms' light-up sequence, the white flash,
+  the vortex's feathered swirl, depth and eye, its opening and closing timing, and the jump point's spark, pause and opening, as
+  data; distance detail as M6 built it (up to 100 jump points in a battle) kept within its GPU budget. The amber hyperspace side
+  is recorded for M11 (Hyperspace), not built here.
+- **Agent:** Opus (or Fable). **Depends on:** nothing in M7; runs beside the station work.
+- **Done when:** an A/B sheet and short frame strips beside the GIF on the GPU, approved by the maintainer (H); the battle GPU test
+  from M6 still inside its budget; tests green; committed.
 
 ### M7-T14 Integration, full suite, docs and acceptance
 
