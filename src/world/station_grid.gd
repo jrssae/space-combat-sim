@@ -16,8 +16,10 @@ extends Node
 ## - **Mounts can be knocked out** (maintainer, after T07): each has its own health (`GridMountHealth`); a hit on the station near
 ##   it wears it down as well as its section, and at zero it stops (dark, silent) until `repair` (a mission, or `grid repair`).
 ## - **Sub-points**: `sub_points` (and the core's `grid_points`) give each mount's place and whether it works, for attackers (T10).
-## - The models are per kind (`MODEL_ASSETS`): the light and heavy guns wear the Saturns' turret (T27) scaled, the interceptor
-##   batteries their own (M7-T42); sounds are the turret shot pitched per kind.
+## - The models are per kind (`MODEL_ASSETS`): the light guns wear the Saturns' turret (T27) scaled, the heavy cannons their oval
+##   gun in its recess (M7-T43), the interceptor batteries their own (M7-T42); sounds are the turret shot pitched per kind.
+## - **Heavy cannons** (M7-T43) fire three-shot bursts from their trunnion (the line of fire starts there, clear of the recess), a
+##   large green pulse with a large green flash at the oval muzzle.
 ##
 ## Console: provider and command `grid`.
 
@@ -32,17 +34,20 @@ const WEAPONS: Dictionary[Kind, String] = {
 	Kind.HEAVY: "res://assets/weapons/grid_heavy_cannon.tres",
 	Kind.INTERCEPTOR: "res://assets/weapons/grid_interceptor.tres",
 }
-## The model each kind wears, by asset id, and its scale: the guns the Saturns' turret (M5-T27), the interceptor batteries their
-## own four-barrel battery at its own size (M7-T42). A kind with its own model takes its entry here.
-const MODEL_ASSETS: Dictionary[Kind, String] = {Kind.LIGHT: "saturn_4_transport", Kind.HEAVY: "saturn_4_transport",
+## The model each kind wears, by asset id, and its scale: the light guns the Saturns' turret (M5-T27), the heavy cannons their
+## oval gun (M7-T43) and the interceptor batteries their four-barrel battery (M7-T42), each at its own size.
+const MODEL_ASSETS: Dictionary[Kind, String] = {Kind.LIGHT: "saturn_4_transport", Kind.HEAVY: "grid_heavy_cannon",
 		Kind.INTERCEPTOR: "grid_interceptor_battery"}
-const MODEL_SCALE: Dictionary[Kind, float] = {Kind.LIGHT: 2.0, Kind.HEAVY: 4.0, Kind.INTERCEPTOR: 1.0}
+const MODEL_SCALE: Dictionary[Kind, float] = {Kind.LIGHT: 2.0, Kind.HEAVY: 1.0, Kind.INTERCEPTOR: 1.0}
 ## A model's barrel reach when its manifest gives none (the Saturns' turret at scale 1), m.
 const MODEL_BARREL_M: float = 4.5
 ## An interceptor battery's barrels (M7-T41): each recharges this long after it fires, s; the battery's interval spaces them.
 const BARREL_RECHARGE_S: float = 1.0
 ## A battery's muzzle glow: the flash's warm colour scaled to the pulses' blue-white (M7-T41).
 const PULSE_GLOW: Color = Color(0.53, 1.0, 2.0)
+## A heavy cannon's muzzle flash (M7-T43): the warm flash turned green, and as big as its 9 m muzzle.
+const HEAVY_GLOW: Color = Color(0.35, 1.6, 0.55)
+const HEAVY_FLASH_SCALE: float = 9.0
 ## A pulse meeting a projectile shows a smaller flash than a hit on a hull (M7-T41).
 const MEET_FLASH_SCALE: float = 0.6
 ## Each mount's cone round its base's up, degrees (a hemisphere and a little below it).
@@ -89,6 +94,8 @@ func build(p_station: Station) -> void:
 			mount.muzzles_m = muzzles_for(kind)
 			mount.trunnion_m = mount.pitch.position * scale_k
 			mount.barrel_recharge_s = BARREL_RECHARGE_S
+		elif kind == Kind.HEAVY:
+			mount.trunnion_m = mount.pitch.position * scale_k  # it fires from its trunnion, over its recess
 		mount.shot_fired.connect(_on_fired.bind(mount))
 		mount.intercepted.connect(_on_intercepted.bind(mount))
 		(station.drum_pivot if on_drum else station.frame_piece).add_child(mount)
@@ -237,6 +244,8 @@ func _sim() -> SimCore:
 func _on_fired(_at: Vector3, m: TurretMount) -> void:
 	if m.grid_kind == Kind.INTERCEPTOR and m.last_barrel >= 0 and m.last_barrel < m.muzzles_m.size():
 		_flash(m, m.muzzles_m[m.last_barrel] / MODEL_SCALE[Kind.INTERCEPTOR], PULSE_GLOW)
+	elif m.grid_kind == Kind.HEAVY:
+		_flash(m, Vector3(0.0, 0.0, -m.barrel_m / MODEL_SCALE[Kind.HEAVY]), HEAVY_GLOW, HEAVY_FLASH_SCALE)
 	else:
 		_flash(m, Vector3(0.0, 0.0, -MODEL_BARREL_M))
 
@@ -257,12 +266,12 @@ func _on_intercepted(point: Vector3, color: Color, _m: TurretMount) -> void:
 		_fx.tint(_fx.burst(FxSpecs.INTERCEPT, point, Vector3.UP, Vector3.ZERO), color)
 
 
-# A muzzle flash at `local` in the mount's pitch frame, its warm colour scaled by `tint`.
-func _flash(m: TurretMount, local: Vector3, tint: Color = Color.WHITE) -> void:
+# A muzzle flash at `local` in the mount's pitch frame, its warm colour scaled by `tint` and its size by `size_scale`.
+func _flash(m: TurretMount, local: Vector3, tint: Color = Color.WHITE, size_scale: float = 1.0) -> void:
 	if _pool == null or not is_instance_valid(_pool):
 		_pool = MuzzleFlashPool.attach(WorldFrame.of(self))
 	if _pool != null:
-		_pool.trigger(m.pitch, Transform3D(Basis.IDENTITY, local), tint)
+		_pool.trigger(m.pitch, Transform3D(Basis.IDENTITY, local), tint, size_scale)
 
 
 # --- console -----------------------------------------------------------------------------------------------------

@@ -149,8 +149,8 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   | L10 | light pulse | frame | 0 | 537 | 2650 | up |
   | L11 | light pulse | frame | 0 | 537 | 4500 | up |
   | L12 | light pulse | frame | 0 | 472 | 5650 | up |
-  | H1 | heavy cannon | frame | -45 | 375 | 515 | (0.00, 0.99, -0.13) |
-  | H2 | heavy cannon | frame | 45 | 375 | 515 | (0.00, 0.99, -0.13) |
+  | H1 | heavy cannon | frame | -45 | 368.2 | 522 | up |
+  | H2 | heavy cannon | frame | 45 | 368.2 | 522 | up |
   | I1 | interceptor | drum | 0 | 324 | 800 | up |
   | I2 | interceptor | drum | 324 | 0 | 800 | (1.00, 0.00, 0.00) |
   | I3 | interceptor | drum | 0 | -324 | 800 | (0.00, -1.00, 0.00) |
@@ -161,6 +161,9 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   | I8 | interceptor | frame | 40 | 537 | 4500 | up |
   | I9 | interceptor | frame | -40 | 472 | 5650 | up |
 
+  H1 and H2 moved in M7-T43 (the maintainer approved the look sheet, 2026-11-15): onto the floors of their recesses in the spine's
+  top beside the bow's rook tower, 6.8 m under the deck and 7 m aft of the marker sheet's places, standing straight up; each fires
+  from its trunnion 9.5 m up.
   L1 to L8 moved in M7-T24 (the maintainer): the fork's posts they stood on (z 620 to 705) were in neither the references nor the STL,
   so the posts are gone and each pair sits on the side facets of its arm's nose, flush, facing out and about 17 degrees to the bow.
   No other surface carries grid weapons: the aft
@@ -174,7 +177,9 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   the balance rule: about 3 km range, a shot about every 1 s, damage near a Starfury cannon bolt, a pulse bolt on the projectile
   pool.
 - **Heavy cannon (anti-capital).** Once weapons free, engages capital ships and big hulls first, fighters only when no capital is in range. Starting
-  numbers: about 6 km range, a slow rate, hard hits; tuned in T07.
+  numbers: about 6 km range, a slow rate, hard hits; tuned in T07. M7-T43 (the maintainer, after the show's clips): three-shot bursts
+  0.35 s apart, a new burst 12 s after the last began, 300 a shot (900 every 12 s, as before), a large green pulse with a large
+  green flash, from its trunnion over its recess.
 - **Interceptor battery.** Shoots down hostile **missiles and pulse bolts** whose path meets the station's hull, inside about
   1.5 km of the battery, missiles first, then the bolt that hits soonest. Each battery has a capped rate, so a dense raid
   saturates the grid. It never damages ships. **Beam weapons cannot be intercepted.** M4's stand-in (§17.11) is the start.
@@ -2318,3 +2323,30 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   4. The balance re-run (raid and capital, three seeds): unchanged within its bands.
 - **Done when:** a look sheet (the gun and the recess beside the clips' frames, the STL's section beside the build) approved by the
   maintainer (H); the burst and pulse tests; balance in its bands; committed; seen live with T41's raid window (H).
+- **Done (phase 1, the look sheet):** approved by the maintainer 2026-11-15 ("Approve, lean it like the STL"):
+  `references/screenshots/M7-T43 heavy cannons/t43_look_sheet.png` (the gun beside the clips' frames, the recess, the tower before
+  and after, the cross-fire coverage, the STL's sections), the leaned tower in `.../leaned/`. The gun (`grid_heavy_cannon`,
+  original, built from primitives): 30 m long, an oval muzzle 9 x 4 m on a 12 m deep bore, a boxy ribbed body on a yoke, the
+  trunnion 9.5 m over its base; base, yaw and pitch parts and one muzzle in its manifest. The recesses (`station_recess`): 18 x 36 m,
+  6.8 m deep in the spine's top beside the tower, a diagonal hazard band down the top of each wall, slatted machinery, rails, a
+  raised frame and a red lamp in each corner. The maintainer's additions on the sheet: the tower between the cannons became a
+  rook (`station_tower`: an 18 m round shaft on a flared base, a smooth round top 25 m across for I5), leaned 0.36 m aft a metre
+  below its top as the STL's neck is, and the cargo bay's ridge runs on into its front (the STL's slope to 386 m, then level
+  into the tower's base).
+- **Done (phase 2):** both heavy cannons wear the gun (`StationGrid.MODEL_ASSETS`), on D75's new rows (H1, H2 at (-+45, 368.2,
+  522), up). The spine's collision leaves the recesses open (`station_collision.spine_pieces`), and a gun can stand its line of
+  fire and its shots on a raised trunnion (`set_turret_lift`, 9.5 m for the heavy cannons): the recess never stops its fire,
+  the deck round it still stops a shot aimed down through it. Bursts in the native gun gate (`set_turret_burst`,
+  `turret_kernels::next_ready`; `WeaponSpec.burst_shots`, `burst_spacing_s`): three shots 0.35 s apart, a new burst 12 s after the
+  last began, 300 a shot (900 every 12 s, as before); only the heavy cannon uses them, every other mount is as it was (the
+  digest adds words only for a burst in progress). The pulse a 40 x 1.6 m green bolt (`heavy_pulse.tres`) with a green flash nine
+  times the usual size (the flash pool's per-flash size). Cross-fire (the line-of-fire surface): each cannon's free arc 66.8 % before,
+  75.5 % after; the sky both can fire into 44.8 % before, 66.1 % after. STL: the recess planes 0.911 to 0.942 (pass, new part
+  `bow_recesses`); the tower 0.340, 0.389, 0.446 (exempt, `bow_tower`: rook shape by the maintainer's request 2026-11-15, leaned aft
+  like the STL; the block it replaced 0.373, 0.544, 0.264); `docs/assets-station.md` records them. Balance (GUT_BALANCE=1, seeds
+  1 to 3): raid mean 100.1 s (111.7, 96.6, 91.8; T41's 111.7: 119.7, 107.8, 107.7), worst section 3 to 8 %; the capital destroyed
+  at 122.1, 122.2, 122.4 s, no section lost (worst 99.5 % and over, 70 %, 69 %; T41's 89, 68, 73 %: seed 1 now comes close), heavy
+  shots 66 a fight (61 hits); the interceptors' proof holds (209/848, 402/1 218, 336/822 station lost with the batteries and parked). Tests: Rust
+  (`next_ready`, the trunnion line, a reused slot plain), GUT `test_heavy_cannon` (the model, the core's lift and burst, burst
+  timing, damage a cycle, the pulse's size and colour, a low shot over the recess, the deck still blocking), Python
+  (`test_grid_heavy_cannon`, `test_station_tower`, the recesses and the tower in the fidelity and hardpoint tests).

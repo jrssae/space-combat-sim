@@ -76,6 +76,15 @@ pub struct Mounts {
     pub kind: Vec<u8>,
     /// Knocked out (M7-T07: a grid mount whose health is gone): it neither picks nor fires until repaired.
     pub out: Vec<bool>,
+    /// How far up its base's axis the trunnion stands (M7-T43): the line of fire and the shot start there; 0 for a turret
+    /// whose barrels sit on its base (the line then starts `LINE_LIFT_M` up).
+    pub lift_m: Vec<f64>,
+    /// Bursts (M7-T43): shots a burst, the time between them, and the burst in progress (shots fired, when it began). A gun of
+    /// one shot a burst fires every `interval_s`; a longer burst starts a new one `interval_s` after the last began.
+    pub burst_shots: Vec<u32>,
+    pub burst_spacing_s: Vec<f64>,
+    pub burst_fired: Vec<u32>,
+    pub burst_started_s: Vec<f64>,
 }
 
 impl Mounts {
@@ -121,6 +130,11 @@ impl Mounts {
             self.shots.push(0);
             self.kind.push(MOUNT_TURRET);
             self.out.push(false);
+            self.lift_m.push(0.0);
+            self.burst_shots.push(1);
+            self.burst_spacing_s.push(0.0);
+            self.burst_fired.push(0);
+            self.burst_started_s.push(0.0);
         }
         self.taken[slot] = true;
         self.id[slot] = id;
@@ -141,7 +155,29 @@ impl Mounts {
         self.shots[slot] = 0;
         self.kind[slot] = MOUNT_TURRET;
         self.out[slot] = false;
+        self.lift_m[slot] = 0.0;
+        self.burst_shots[slot] = 1;
+        self.burst_spacing_s[slot] = 0.0;
+        self.burst_fired[slot] = 0;
+        self.burst_started_s[slot] = 0.0;
         slot
+    }
+
+    /// Where `slot`'s line of fire starts, up its base's axis from the pivot.
+    pub fn line_lift(&self, slot: usize) -> f64 {
+        self.lift_m[slot].max(LINE_LIFT_M)
+    }
+
+    /// `slot` fired at `now_s`: when it may fire again, its burst counted on.
+    pub fn fired(&mut self, slot: usize, now_s: f64) -> f64 {
+        next_ready(
+            self.gun[slot].interval_s,
+            self.burst_shots[slot],
+            self.burst_spacing_s[slot],
+            &mut self.burst_fired[slot],
+            &mut self.burst_started_s[slot],
+            now_s,
+        )
     }
 
     /// Whether `slot` holds a mount.
@@ -265,6 +301,23 @@ impl Memory {
     }
 }
 
+/// When a gun that fired at `now_s` may fire again: `interval_s` on for a gun of one shot a burst; within a burst of `shots`,
+/// `spacing_s` on, and after its last shot `interval_s` after the burst began. `fired` and `started_s` carry the burst.
+pub fn next_ready(interval_s: f64, shots: u32, spacing_s: f64, fired: &mut u32, started_s: &mut f64, now_s: f64) -> f64 {
+    if shots <= 1 {
+        return now_s + interval_s;
+    }
+    if *fired == 0 {
+        *started_s = now_s;
+    }
+    *fired += 1;
+    if *fired < shots {
+        return now_s + spacing_s;
+    }
+    *fired = 0;
+    (*started_s + interval_s).max(now_s + spacing_s)
+}
+
 /// One mount as the pick sees it.
 #[derive(Clone, Copy)]
 pub struct PickMount {
@@ -278,6 +331,8 @@ pub struct PickMount {
     pub reach_m: f64,
     /// `grid_kernels::MOUNT_*` (M7-T07).
     pub kind: u8,
+    /// How far up its axis its line of fire starts (`Mounts::line_lift`).
+    pub line_lift_m: f64,
 }
 
 /// A pick's answer: the target for a mount's binding (0 for none).
@@ -361,6 +416,7 @@ impl PickJob {
                 min_elevation: mounts.min_elevation[s],
                 reach_m: mounts.gun[s].range_m * PICK_REACH,
                 kind: mounts.kind[s],
+                line_lift_m: mounts.line_lift(s),
             });
         }
         self.memory.clone_from(memory);
@@ -514,7 +570,7 @@ pub fn pick<F: Fn(i64) -> i64>(
         };
         // The line is tested only for a candidate that would win: the volume test stays off the common path.
         if score < best_score {
-            let from = add(pivot, scale(up, LINE_LIFT_M as f32));  // `line_start` of the mount's frame
+            let from = add(pivot, scale(up, m.line_lift_m as f32));  // where the mount's line of fire starts
             if line_blocked(basis, ship_at, from, rows.positions[a], own_hull) {
                 continue;
             }

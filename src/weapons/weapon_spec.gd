@@ -41,6 +41,10 @@ extends Resource
 @export var turret_spread_deg: float = 0.8
 @export var turret_traverse_deg_s: float = 50.0
 @export var turret_elevation_deg_s: float = 40.0
+## Bursts (M7-T43, the heavy cannon): shots a burst, `burst_spacing_s` apart; `shot_interval_s` is then the whole cycle, from one
+## burst's first shot to the next's. One shot a burst is a plain gun.
+@export var burst_shots: int = 1
+@export var burst_spacing_s: float = 0.0
 
 
 ## A capacitor sized for this weapon, full.

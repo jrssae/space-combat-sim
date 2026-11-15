@@ -55,6 +55,10 @@ func register_grid(mount: TurretMount, body_id: int, weapon: WeaponSpec, faction
 		return -1
 	if not mount.muzzles_m.is_empty():
 		sim.core.set_battery_barrels(slot, mount.trunnion_m, PackedVector3Array(mount.muzzles_m), mount.barrel_recharge_s)
+	elif mount.trunnion_m.y > 0.0:
+		sim.core.set_turret_lift(slot, mount.trunnion_m.y)  # a gun on a raised trunnion fires from it (M7-T43)
+	if weapon.burst_shots > 1:
+		sim.core.set_turret_burst(slot, weapon.burst_shots, weapon.burst_spacing_s)
 	_mounts[slot] = mount
 	return slot
 
