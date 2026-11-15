@@ -2256,6 +2256,18 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   levels of detail. Every interceptor battery wears it (`StationGrid`); the light and heavy guns keep theirs.
 - **Done when:** a look sheet beside the clip's frames approved by the maintainer (H); the model on every battery; tests (parts,
   muzzles, scale, bound to the mounts); committed.
+- **Done (2026-11-15):** `grid_interceptor_battery` (`tools/procgen/assets/grid_interceptor_battery.py`), an original model 15.0 m
+  tall and 9.9 m wide: an 8 m truss pedestal with X braces (fixed), an inverted-T bracket that turns on it (a base bar, one central
+  upright and the swivel head on top; the maintainer chose it over the first sheet's U yoke) and four 9 m barrels with ribbed shrouds
+  and red and blue bands, clamped in pairs outside the bracket on the ends of the pitch axle, so they clear it at any elevation. Its
+  three parts are files of their own on one 2 048 px atlas; the manifest's `turret` entry names them, the trunnion (0, 12.5, 0) and
+  `pitch_muzzles` (+-3.9, +-1.4, -8.4), in firing order. `TurretMount` hangs a three-part model (the pedestal on the mount, the
+  bracket on `yaw`, the barrels on `pitch`) and reads the muzzles with `TurretMount.pitch_muzzles(asset_id)` (T41's barrels);
+  `StationGrid.MODEL_ASSETS` gives each kind its model, so all nine batteries wear it at scale 1 and the light and heavy guns keep
+  the Saturns' turret (T43's heavy cannon takes its own entry). Look sheet beside the clip's frames:
+  `references/screenshots/M7-T42 interceptor model/t42_interceptor_look_sheet.png`, approved by the maintainer 2026-11-15. Tests:
+  `test_grid_interceptor_battery` (parts, sizes, muzzles, symmetry, clearance) and `test_interceptor_battery_model` (parts, muzzles,
+  turning, all nine batteries).
 
 ### M7-T43 The heavy cannons
 

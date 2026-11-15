@@ -8,7 +8,8 @@ extends Node3D
 ##
 ## The model hangs from two holders: `yaw` turns round the base's up by the azimuth, `pitch` (its child, at the trunnion) lifts
 ## by the elevation. A model's base goes under `yaw`, its barrels under `pitch`, both with the barrel along -Z at rest. The
-## hull's own model is its manifest's `turret` entry (`model_for`, T27's textured mesh), pooled with the ship (D22).
+## hull's own model is its manifest's `turret` entry (`model_for`, T27's textured mesh), pooled with the ship (D22). A model
+## built in three parts (M7-T42's interceptor battery) also has a fixed pedestal, which stays on the mount itself.
 
 ## A shot left the barrel at `at` (World frame): the sound and anything else that follows a shot.
 signal shot_fired(at: Vector3)
@@ -46,6 +47,8 @@ var knocked_out: bool = false:
 
 var yaw: Node3D = null
 var pitch: Node3D = null
+## A three-part model's pedestal, fixed to the mount (M7-T42); null for a two-part model.
+var pedestal: MeshInstance3D = null
 ## Shots this mount fired (a readout).
 var shots: int = 0
 
@@ -134,6 +137,12 @@ func use_model(model: Dictionary) -> void:
 		return
 	var trunnion: Vector3 = model["trunnion"]
 	pitch.position = trunnion
+	if model.has("pitch"):
+		# Three parts, each from its own file; the pitch part's origin is already the trunnion.
+		pedestal = _part(model["pedestal"], "Pedestal")
+		add_child(pedestal)
+		set_model(_part(model["yaw"], "Yoke"), _part(model["pitch"], "Barrels"))
+		return
 	var base := MeshInstance3D.new()
 	base.name = "Base"
 	base.mesh = model["base"]
@@ -144,13 +153,56 @@ func use_model(model: Dictionary) -> void:
 	set_model(base, barrel)
 
 
-## The turret model a hull's manifest names (`turret`: its mesh in the turret's frame, the trunnion and the muzzles), split
-## once per asset into `base` (what turns round the base) and `barrel` (the barrels, which lift too), with `trunnion`;
-## empty when the asset has no turret model.
+# One part of a model as its own node.
+static func _part(mesh: Mesh, part_name: String) -> MeshInstance3D:
+	var part := MeshInstance3D.new()
+	part.name = part_name
+	part.mesh = mesh
+	return part
+
+
+## The turret model an asset's manifest names (`turret`), once per asset: a model in three parts (`parts`: its pedestal, yaw and
+## pitch files, M7-T42) as `pedestal`, `yaw` and `pitch`; else one mesh in the turret's frame split into `base` (what turns round
+## the base) and `barrel` (the barrels, which lift too). Both with `trunnion`; empty when the asset has no turret model or a part
+## is missing.
 static func model_for(asset_id: String) -> Dictionary:
 	if _models.has(asset_id):
 		return _models[asset_id]
 	var entry: Dictionary = MeshAssets.read_manifest(asset_id).get("turret", {})
+	var model: Dictionary = _parts_model(asset_id, entry) if entry.has("parts") else _split_model(asset_id, entry)
+	_models[asset_id] = model
+	return model
+
+
+## The muzzles of an asset's turret model in its pitch frame (origin at the trunnion, -Z down the barrels), metres, in firing
+## order: the manifest's `pitch_muzzles` (M7-T42); empty when it names none.
+static func pitch_muzzles(asset_id: String) -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	for m: Variant in (MeshAssets.read_manifest(asset_id).get("turret", {}) as Dictionary).get("pitch_muzzles", []):
+		out.append(_vec3(m))
+	return out
+
+
+## How far an asset's turret model reaches from its pivot to the muzzles, metres (the manifest's `barrel_m`), else `fallback`.
+static func barrel_reach(asset_id: String, fallback: float) -> float:
+	return float((MeshAssets.read_manifest(asset_id).get("turret", {}) as Dictionary).get("barrel_m", fallback))
+
+
+# A three-part model: each part's own file, drawn with the whole model's maps.
+static func _parts_model(asset_id: String, entry: Dictionary) -> Dictionary:
+	var dir: String = ShipSpec.ASSET_ROOT.path_join(asset_id)
+	var files: Dictionary = entry["parts"]
+	var model: Dictionary = {"trunnion": _vec3(entry.get("trunnion", [0.0, 0.0, 0.0]))}
+	for pair: Array in [["pedestal", "base"], ["yaw", "yaw"], ["pitch", "pitch"]]:
+		var mesh: Mesh = MeshAssets.section_mesh(dir, entry.get("mesh", {}), String(files.get(pair[1], "")))
+		if mesh == null:
+			return {}
+		model[pair[0]] = mesh
+	return model
+
+
+# A one-mesh model split at its barrels.
+static func _split_model(asset_id: String, entry: Dictionary) -> Dictionary:
 	var model: Dictionary = {}
 	var mesh: Mesh = null
 	if not (entry.get("mesh", {}) as Dictionary).is_empty():
@@ -162,7 +214,6 @@ static func model_for(asset_id: String) -> Dictionary:
 			muzzles.append(_vec3(m))
 		var parts: Array[ArrayMesh] = split_barrels(mesh, muzzles, trunnion)
 		model = {"base": parts[0], "barrel": parts[1], "trunnion": trunnion}
-	_models[asset_id] = model
 	return model
 
 
@@ -230,6 +281,8 @@ static func _vec3(v: Variant) -> Vector3:
 
 # A knocked-out mount's model is dark (burnt), its own look when repaired.
 func _show_knocked_out() -> void:
+	if pedestal != null:
+		pedestal.material_override = _burnt() if knocked_out else null
 	for holder: Node3D in [yaw, pitch]:
 		for child: Node in holder.get_children():
 			var mesh := child as MeshInstance3D

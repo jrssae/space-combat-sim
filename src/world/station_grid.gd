@@ -15,7 +15,8 @@ extends Node
 ## - **Mounts can be knocked out** (maintainer, after T07): each has its own health (`GridMountHealth`); a hit on the station near
 ##   it wears it down as well as its section, and at zero it stops (dark, silent) until `repair` (a mission, or `grid repair`).
 ## - **Sub-points**: `sub_points` (and the core's `grid_points`) give each mount's place and whether it works, for attackers (T10).
-## - The models are the Saturns' turret (T27) scaled per kind; sounds are the turret shot pitched per kind.
+## - The models are per kind (`MODEL_ASSETS`): the light and heavy guns wear the Saturns' turret (T27) scaled, the interceptor
+##   batteries their own (M7-T42); sounds are the turret shot pitched per kind.
 ##
 ## Console: provider and command `grid`.
 
@@ -30,10 +31,13 @@ const WEAPONS: Dictionary[Kind, String] = {
 	Kind.HEAVY: "res://assets/weapons/grid_heavy_cannon.tres",
 	Kind.INTERCEPTOR: "res://assets/weapons/grid_interceptor.tres",
 }
-## The model every mount wears (the Saturns' turret, M5-T27), scaled per kind; its barrel is 4.5 m long at scale 1.
-const MODEL_ASSET: String = "saturn_4_transport"
+## The model each kind wears, by asset id, and its scale: the guns the Saturns' turret (M5-T27), the interceptor batteries their
+## own four-barrel battery at its own size (M7-T42). A kind with its own model takes its entry here.
+const MODEL_ASSETS: Dictionary[Kind, String] = {Kind.LIGHT: "saturn_4_transport", Kind.HEAVY: "saturn_4_transport",
+		Kind.INTERCEPTOR: "grid_interceptor_battery"}
+const MODEL_SCALE: Dictionary[Kind, float] = {Kind.LIGHT: 2.0, Kind.HEAVY: 4.0, Kind.INTERCEPTOR: 1.0}
+## A model's barrel reach when its manifest gives none (the Saturns' turret at scale 1), m.
 const MODEL_BARREL_M: float = 4.5
-const MODEL_SCALE: Dictionary[Kind, float] = {Kind.LIGHT: 2.0, Kind.HEAVY: 4.0, Kind.INTERCEPTOR: 1.2}
 ## Each mount's cone round its base's up, degrees (a hemisphere and a little below it).
 const ARC_DEG: float = 200.0
 ## How the turret shot sounds per kind: pitch and level (dB).
@@ -65,12 +69,14 @@ func build(p_station: Station) -> void:
 		var kind: Kind = KIND_OF.get(String(entry.get("kind", "")), Kind.LIGHT)
 		var on_drum: bool = entry["body"] == StationHardpoints.DRUM
 		var scale_k: float = MODEL_SCALE[kind]
+		var model_id: String = MODEL_ASSETS[kind]
 		var mount: TurretMount = TurretMount.create({"name": entry["name"], "position": entry["position"], "up": entry["up"],
-				"arc_deg": ARC_DEG, "barrel_m": MODEL_BARREL_M * scale_k}, load(WEAPONS[kind]) as WeaponSpec, faction)
+				"arc_deg": ARC_DEG, "barrel_m": TurretMount.barrel_reach(model_id, MODEL_BARREL_M) * scale_k},
+				load(WEAPONS[kind]) as WeaponSpec, faction)
 		mount.grid_kind = kind
 		mount.host = station.drum_body if on_drum else station
 		mount.transform.basis = TurretMount.base_basis(mount.up).scaled(Vector3.ONE * scale_k)
-		mount.use_model(TurretMount.model_for(MODEL_ASSET))
+		mount.use_model(TurretMount.model_for(model_id))
 		mount.shot_fired.connect(_on_fired.bind(mount))
 		mount.intercepted.connect(_on_intercepted.bind(mount))
 		(station.drum_pivot if on_drum else station.frame_piece).add_child(mount)
