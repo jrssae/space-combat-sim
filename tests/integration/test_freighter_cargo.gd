@@ -1,8 +1,9 @@
 extends GutTest
-## The station's maintenance bots carrying a freighter's cargo on the real main scene (M7-T30): each of the five Saturns holding at
-## the cargo bay has its pods or tanks carried into the bay by bots, pod by pod, nothing flying by itself, and then leaves; a
-## Saturn come to load has its pods brought out to it and its hull whole again at the end; and when fighting starts the bots let go,
-## the pod waits, and after the quiet they come back for it. Flown with the physics rate and the time scale raised together; a slow
+## The station's cargo pods carrying a freighter's cargo on the real main scene (M7-T30, M7-T34; "bots" in T30): each of the five
+## Saturns holding at the cargo bay has its blocks or tanks carried into the bay by cargo pods, block by block, nothing flying by
+## itself, and then leaves; a Saturn come to load has its blocks brought out to it and its hull whole again at the end; a carried
+## block hangs in the pods' grip points; and when fighting starts the pods let go, the block waits, and after the quiet they come
+## back for it. Flown with the physics rate and the time scale raised together; a slow
 ## file (several minutes of cargo work per hull).
 
 const SCENARIO: String = "res://data/scenarios/station_launch.json"
@@ -51,7 +52,7 @@ func _start() -> bool:
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 	station = main.far_props.station
-	if station == null or station.bots == null:
+	if station == null or station.cargo_pods == null:
 		return false
 	main.combatant.damageable.invulnerable = true
 	Engine.physics_ticks_per_second = roundi(60.0 * SPEED_UP)
@@ -90,7 +91,7 @@ func _until(done: Callable, limit_s: float, cargo: FreighterCargo = null) -> boo
 	return bool(done.call())
 
 
-# Starts `line` and returns the freighter's cargo once its bots are at work, or null.
+# Starts `line` and returns the freighter's cargo once its cargo pods are at work, or null.
 func _freighter(line: String) -> FreighterCargo:
 	var result: ConsoleResult = _run(line)
 	assert_true(result.ok, "\n".join(result.lines))
@@ -104,30 +105,30 @@ func _freighter(line: String) -> FreighterCargo:
 	return cargo[0]
 
 
-func test_each_saturn_is_unloaded_by_the_bots_and_leaves() -> void:
+func test_each_saturn_is_unloaded_by_the_cargo_pods_and_leaves() -> void:
 	if not await _start():
-		pending("the babylon5_station asset (or its bots) is not generated")
+		pending("the babylon5_station asset (or its cargo pods) is not generated")
 		return
-	var fleet: BotFleet = station.bots
-	var baseline: int = fleet.ferry_bots.size()
+	var fleet: CargoPodFleet = station.cargo_pods
+	var baseline: int = fleet.pods.size()
 	for hull: String in PODS:
 		moved_alone = 0
 		var before_in: int = main.traffic.pods_in
 		var cargo: FreighterCargo = await _freighter("traffic freighter %s hold" % hull)
-		assert_not_null(cargo, "%s: the bots came for its cargo" % hull)
+		assert_not_null(cargo, "%s: the cargo pods came for its cargo" % hull)
 		if cargo == null:
 			continue
 		var ship: Ship = cargo.ship
 		assert_eq(cargo.pod_count(), int(PODS[hull]), hull)
-		assert_eq(fleet.ferry_bots.size(), baseline + CargoFerryJob.CREW, "%s: its crew is in the fleet" % hull)
+		assert_eq(fleet.pods.size(), baseline + CargoFerryJob.CREW, "%s: its crew is in the fleet" % hull)
 		var done: bool = await _until(func() -> bool: return main.traffic.pods_in - before_in == int(PODS[hull]), 900.0, cargo)
 		assert_true(done, "%s: every pod carried into the bay (%d)" % [hull, main.traffic.pods_in - before_in])
 		assert_eq(moved_alone, 0, "%s: no pod moved by itself" % hull)
-		assert_true(await _until(func() -> bool: return fleet.ferry_bots.size() == baseline, 30.0), "%s: the crew is gone" % hull)
+		assert_true(await _until(func() -> bool: return fleet.pods.size() == baseline, 30.0), "%s: the crew is gone" % hull)
 		var hold: Vector3 = station.hardpoints.cargo_bay["cargo_bay_hold"]
 		var left: bool = await _until(func() -> bool:
 			return not is_instance_valid(ship) or station.to_local(ship.global_position).distance_to(hold) > 150.0, 120.0)
-		assert_true(left, "%s: it left once the bots were done" % hull)
+		assert_true(left, "%s: it left once the cargo pods were done" % hull)
 		if is_instance_valid(ship) and ship.visible:
 			assert_false(ship.hull.visible, "%s leaves without its pods" % hull)
 		_run("traffic clear")
@@ -135,7 +136,7 @@ func test_each_saturn_is_unloaded_by_the_bots_and_leaves() -> void:
 
 func test_a_saturn_come_to_load_gets_its_pods_and_its_hull_back() -> void:
 	if not await _start():
-		pending("the babylon5_station asset (or its bots) is not generated")
+		pending("the babylon5_station asset (or its cargo pods) is not generated")
 		return
 	var cargo: FreighterCargo = await _freighter("traffic freighter saturn_4_transport hold load")
 	assert_not_null(cargo)
@@ -146,15 +147,15 @@ func test_a_saturn_come_to_load_gets_its_pods_and_its_hull_back() -> void:
 	var done: bool = await _until(func() -> bool: return main.traffic.pods_out == 2, 600.0, cargo)
 	assert_true(done, "both pods carried out onto it (%d)" % main.traffic.pods_out)
 	assert_eq(moved_alone, 0, "no pod moved by itself")
-	# The hull comes back once the bots are home from the last pod.
+	# The hull comes back once the cargo pods are home from the last block.
 	var whole: bool = await _until(func() -> bool: return ship.get_node_or_null(NodePath(FreighterCargo.NODE_NAME)) == null, 120.0)
 	assert_true(whole, "the stand-ins are gone")
 	assert_true(ship.hull.visible or ship.is_far_dot(), "the hull is whole again once the last pod is on")
 
 
-func test_fighting_makes_the_bots_let_go_and_after_the_quiet_they_come_back() -> void:
+func test_fighting_makes_the_cargo_pods_let_go_and_after_the_quiet_they_come_back() -> void:
 	if not await _start():
-		pending("the babylon5_station asset (or its bots) is not generated")
+		pending("the babylon5_station asset (or its cargo pods) is not generated")
 		return
 	var cargo: FreighterCargo = await _freighter("traffic freighter saturn_4_transport hold")
 	assert_not_null(cargo)
@@ -163,15 +164,22 @@ func test_fighting_makes_the_bots_let_go_and_after_the_quiet_they_come_back() ->
 	var pod: FerryPod = cargo.job.current()
 	assert_true(await _until(func() -> bool: return pod.state == FerryPod.State.MOVING and pod.s > pod.trip.unberth_s + 100.0, 300.0, cargo),
 			"the first pod is on its way")
-	_run("bots hide")
-	assert_true(await _until(func() -> bool: return pod.state == FerryPod.State.DROPPED, 5.0), "the bots let go")
+	# Its cargo pods hold it with their hands on its end faces (the drawn rig's grip points).
+	for k: int in pod.trip.bot_count():
+		var craft: CargoPodCraft = cargo.crew_pods[k]
+		var face: Vector3 = pod.pose().origin + pod.trip.offsets[k].normalized() * (pod.trip.size.z * 0.5 + CargoFerryPlan.GRIP_GAP_M)
+		var hands: Vector3 = (craft.grip_point("r") + craft.grip_point("l")) * 0.5
+		assert_almost_eq(hands, face, Vector3.ONE * 0.05, "cargo pod %d's hands on the block's face" % k)
+		assert_eq(craft.rig.jaw_open, 0.0, "its jaws shut")
+	_run("pods hide")
+	assert_true(await _until(func() -> bool: return pod.state == FerryPod.State.DROPPED, 5.0), "the pods let go")
 	var lie: float = pod.s
 	assert_true(await _until(func() -> bool: return cargo.job.crew_inside(), 120.0), "and went inside")
 	await _until(func() -> bool: return false, 20.0)
 	assert_almost_eq(pod.s, lie, 1e-6, "the pod waits where it was let go")
-	var node: Node3D = station.bots.frame_parent().find_child(pod.trip.pod_name.to_pascal_case(), false, false) as Node3D
+	var node: Node3D = station.cargo_pods.frame_parent().find_child(pod.trip.pod_name.to_pascal_case(), false, false) as Node3D
 	assert_true(node != null and node.visible, "and is still there to see")
-	_run("bots show")
+	_run("pods show")
 	assert_true(await _until(func() -> bool: return pod.state == FerryPod.State.MOVING, 300.0), "after the quiet they took it again")
 	assert_true(await _until(func() -> bool: return pod.done(), 300.0, cargo), "and carried it into the bay")
 	assert_eq(moved_alone, 0, "no pod moved by itself")

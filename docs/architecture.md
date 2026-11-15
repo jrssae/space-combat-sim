@@ -5719,7 +5719,7 @@ data/station/traffic.json        the interval, the kinds' weights, the raid's si
     lift. A tank turns 90 degrees onto its side over `ROLL_LENGTH_M`, done `ROLL_DONE_M` before its leading face reaches the
     mouth, so it fits the 26.7 m opening. Empty bots come out of the wall on their lanes, behind the stern, and in from the side
     (stepping outboard until the way clears the boxes by `BOT_CLEAR_M`, the last leg as clear as the hold).
-  - **`CargoFerryJob`**: one pod at a time with a crew of two `BotFerryMotion`s in the station's `BotFleet` (one idle for a short
+  - **`CargoFerryJob`**: one pod at a time with a crew of two `CargoPodMotion`s in the station's `CargoPodFleet` (T34; one idle for a short
     pod); the next trip starts when the pod is done and the crew is back inside. `FerryPod` moves only while every bot it needs
     there holds it (they hold `GRAB_S` first); bots holding it sit at their fixed offsets. Loading lets go of a bot at its grab
     point and the last on the hull, then the bots fly home empty; the hull mesh comes back when the last pod is on.
@@ -5734,6 +5734,16 @@ data/station/traffic.json        the interval, the kinds' weights, the raid's si
     again from exactly where it stopped (`CargoFerryJob.replan`, the bots go on along the same lanes); the player is put beside the
     lane (`StationTraffic.view_cargo_bay`). The first pod is taken about 75 s after the command.
   - Ambient as the bots: no body, target or row; GDScript (a pod and two bots a tick).
+- **Cargo pods carry it (T34, maintainer 2026-11-14; accepted live).** The carriers above are cargo pods (T33's 6 m craft), not
+  maintenance bots; the bots are the repair crew only (T35). `CargoPodFleet` (the station's child beside `Bots`) holds the
+  `CargoPodCraft`s (`CargoPodRig` on a node following its `CargoPodMotion`, T30's `BotFerryMotion` renamed; `CargoPodScene` is T11's
+  cargo scene, `pods cargo` or `bots cargo`), on the frame, launching from the cargo bay's back wall and landing there; it reads the
+  crew's `BotAlert` log and clock, so fighting stops both alike (`pods hide` holds the pods in). A pod holds an end face at its centre,
+  hands on it (`CargoFerryPlan.HOLD_REACH_M` 3.85 m off, `GRIP_BELOW_M` 0.40 m above the middle, turning with a rolling tank; tied to
+  the rig's `grip_point()` by `test_cargo_pod_grip`), and comes the last `APPROACH_IN_M` (10 m) straight in, nose first. The arms
+  (pure, in the motion): reach and open over the last 20 m, shut over 1.25 s once holding (within `FerryPod.GRAB_S`), held while
+  carrying, opened standing still 1.25 s on letting go, then folded flying off (at once in a fight). Clearance is measured over the
+  craft's body and hands (5 m from the hull, 2.5 m from the Saturn; least 10.6 m and 3.0 m).
   any wing.
 - **Threads.** All of the above per tick is in the AI job on the frozen rows; `Field.sub_points` is filled in the job
   before the pass. Threaded equals delayed and one thread equals six (`test_station_threads`, `test_station_grid_threads`).

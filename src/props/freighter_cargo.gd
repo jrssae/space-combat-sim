@@ -1,16 +1,16 @@
 class_name FreighterCargo
 extends Node3D
-## A Saturn's cargo (its pods, or a tanker's tanks) carried between it and the station's cargo bay by maintenance bots (M7-T30;
-## T10's `FreighterPods` flew the pods in by themselves). The Saturn's hull is one mesh, so while its cargo is off its hull is
+## A Saturn's cargo (its pods, or a tanker's tanks) carried between it and the station's cargo bay by the station's cargo pods
+## (M7-T34; maintenance bots in M7-T30; T10's `FreighterPods` flew the pods in by themselves). The Saturn's hull is one mesh, so while its cargo is off its hull is
 ## hidden and its break-up chunks stand in: the parts that are not cargo ride the ship, and each pod is a node of its own, on the
-## ship while it sits on the hull and in the station's frame while the bots carry it (`CargoFerryJob`). Unloading leaves the
+## ship while it sits on the hull and in the station's frame while the cargo pods carry it (`CargoFerryJob`). Unloading leaves the
 ## Saturn without its pods (`restore` when it goes back to its pool); loading puts the hull back once the last pod is on.
 ##
 ## Ambient: the pods have no body, target or row, and the freighter's mass and hit volumes stay as they were. A few nodes for a
-## few minutes, so this is GDScript (`CLAUDE.md`'s split). Runs after the bots each tick, so a pod and its bots move together.
+## few minutes, so this is GDScript (`CLAUDE.md`'s split). Runs after the cargo pods each tick, so a block and its pods move together.
 
 const NODE_NAME: String = "FreighterCargo"
-## After the bots' fleet in the physics tick.
+## After the cargo pods' fleet in the physics tick.
 const PRIORITY: int = 50
 
 signal pod_done(pod_name: String)
@@ -19,9 +19,9 @@ signal finished
 var ship: Ship = null
 var job: CargoFerryJob = null
 var loading: bool = false
-## The crew's nodes in the station's bot fleet while the job runs.
-var crew_bots: Array[MaintenanceBot] = []
-var fleet: BotFleet = null
+## The crew's craft in the station's cargo pod fleet while the job runs.
+var crew_pods: Array[CargoPodCraft] = []
+var fleet: CargoPodFleet = null
 var restored: bool = false
 
 var _riding: Array[MeshInstance3D] = []
@@ -30,7 +30,7 @@ var _pods: Dictionary = {}
 var _frame: Node3D = null
 
 
-## Whether a break-up chunk is cargo the bots carry.
+## Whether a break-up chunk is cargo the cargo pods carry.
 static func is_cargo(chunk_name: String) -> bool:
 	return chunk_name.begins_with("pod") or chunk_name.begins_with("tank")
 
@@ -58,7 +58,7 @@ static func chunk_boxes_of(asset_id: String, hardpoints: Hardpoints = null) -> A
 	return out
 
 
-## Takes `freighter`'s cargo off its hull for the bots: its pods sit on it (`aboard`, to unload) or are in the bay (to load). Null
+## Takes `freighter`'s cargo off its hull for the cargo pods: its pods sit on it (`aboard`, to unload) or are in the bay (to load). Null
 ## for a hull without cargo chunks.
 static func attach(freighter: Ship, aboard: bool) -> FreighterCargo:
 	var cargo := FreighterCargo.new()
@@ -86,12 +86,12 @@ static func attach(freighter: Ship, aboard: bool) -> FreighterCargo:
 	return cargo
 
 
-## Sends the station's bots to carry the cargo, the Saturn where it is now (or, `early`, still on its way to the hold point: the
-## bots go out now and `berth` plans again from where it stops). "" or why not (no bots, no plan).
+## Sends the station's cargo pods to carry the cargo, the Saturn where it is now (or, `early`, still on its way to the hold point:
+## the pods go out now and `berth` plans again from where it stops). "" or why not (no pods, no plan).
 func start(station: Station, early: bool = false) -> String:
-	if station == null or station.bots == null:
-		return "the station has no maintenance bots"
-	fleet = station.bots
+	if station == null or station.cargo_pods == null:
+		return "the station has no cargo pods"
+	fleet = station.cargo_pods
 	_frame = fleet.frame_parent()
 	var boxes: Array[Dictionary] = chunk_boxes(ship)
 	var collision: Array[Dictionary] = Hardpoints.load_collision_only(
@@ -105,8 +105,8 @@ func start(station: Station, early: bool = false) -> String:
 	if early:
 		for pod: FerryPod in job.pods:
 			pod.berthed = false
-	for m: BotFerryMotion in job.crew:
-		crew_bots.append(fleet.add_ferry_bot(m))
+	for m: CargoPodMotion in job.crew:
+		crew_pods.append(fleet.add_pod(m))
 	return ""
 
 
@@ -190,7 +190,7 @@ func _process(_delta: float) -> void:
 			node.visible = bool(entry["aboard"]) and not far
 
 
-## Puts the hull back and removes the stand-ins, the pods and the bots still out.
+## Puts the hull back and removes the stand-ins, the blocks and the cargo pods still out.
 func restore() -> void:
 	_remove_crew()
 	for entry: Dictionary in _pods.values():
@@ -205,6 +205,6 @@ func restore() -> void:
 
 func _remove_crew() -> void:
 	if fleet != null and is_instance_valid(fleet):
-		for bot: MaintenanceBot in crew_bots:
-			fleet.remove_ferry_bot(bot)
-	crew_bots.clear()
+		for craft: CargoPodCraft in crew_pods:
+			fleet.remove_pod(craft)
+	crew_pods.clear()

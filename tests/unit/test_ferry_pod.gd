@@ -1,8 +1,10 @@
 extends GutTest
-## Maintenance bots carrying cargo (M7-T30): `CargoFerryJob`, `FerryPod` and `BotFerryMotion`'s carrying, stepped by hand. A pod
-## only moves while its bots hold it, and they hold it at fixed places; the job goes pod by pod; loading is the trip reversed;
-## fighting near makes the bots let go away from the bay and come back for the pod after the quiet, and nearer the bay carry it on
-## inside (or back inside when loading).
+## Cargo pods carrying a freighter's cargo (M7-T30, M7-T34): `CargoFerryJob`, `FerryPod` and `CargoPodMotion`'s carrying, stepped
+## by hand. ("Pod" in the test names is the freighter's block, "bot" the cargo pod carrying it, as in T30.) A block only moves while
+## its pods hold it, jaws shut and arms out, and they hold it at fixed places; the job goes block by block; loading is the trip
+## reversed; fighting near makes the pods let go away from the bay and come back for the block after the quiet, and nearer the bay
+## carry it on inside (or back inside when loading). The arms through a trip: reach and open on the way in, shut on the grip, held
+## while carrying, opened standing still and folded on the way home.
 
 const DT: float = 0.05
 const BAY: Dictionary = {
@@ -13,6 +15,7 @@ const LIMIT_S: float = 3600.0
 
 var held_violations: int = 0
 var offset_error: float = 0.0
+var arm_violations: int = 0
 
 
 func _job(hull: String, loading: bool) -> CargoFerryJob:
@@ -31,13 +34,17 @@ func _run(job: CargoFerryJob, seconds: float, alarm: bool = false, until: Callab
 			break
 		var pod: FerryPod = job.current()
 		var before: float = pod.s if pod != null else 0.0
-		for m: BotFerryMotion in job.crew:
+		# Who held it as the tick began: a pod taking hold where the block has just stopped did not carry it.
+		var held_before: PackedByteArray = pod.holding.duplicate() if pod != null else PackedByteArray()
+		for m: CargoPodMotion in job.crew:
 			m.step(dt, alarm)
 		if pod != null:
 			if absf(pod.s - before) > 1e-6:
 				for k: int in pod.trip.bot_count():
 					if pod.needs(k) and pod.holding[k] == 0:
 						held_violations += 1
+					if held_before[k] != 0 and pod.holding[k] != 0 and (job.crew[k].jaw_open > 0.0 or job.crew[k].extend < 1.0):
+						arm_violations += 1
 			for k: int in pod.trip.bot_count():
 				if pod.holding[k] != 0:
 					offset_error = maxf(offset_error, job.crew[k].position.distance_to(pod.trip.bot_position(k, pod.s)))
@@ -49,6 +56,11 @@ func _run(job: CargoFerryJob, seconds: float, alarm: bool = false, until: Callab
 func before_each() -> void:
 	held_violations = 0
 	offset_error = 0.0
+	arm_violations = 0
+
+
+func after_each() -> void:
+	assert_eq(arm_violations, 0, "a block moves only with its pods' jaws shut and arms out")
 
 
 func test_a_saturn_3_is_unloaded_pod_by_pod_by_one_bot() -> void:
@@ -59,8 +71,8 @@ func test_a_saturn_3_is_unloaded_pod_by_pod_by_one_bot() -> void:
 	var t: float = _run(job, LIMIT_S, false, func() -> bool: return first.state == FerryPod.State.MOVING)
 	assert_eq(first.holding[0], 1, "its bot holds it")
 	assert_lt(t, 120.0, "the bot flew out and took it (%.0f s)" % t)
-	var bot: BotFerryMotion = job.crew[0]
-	assert_eq(bot.phase, BotFerryMotion.Phase.CARRY)
+	var bot: CargoPodMotion = job.crew[0]
+	assert_eq(bot.phase, CargoPodMotion.Phase.CARRY)
 	t = _run(job, LIMIT_S, false, func() -> bool: return job.done())
 	assert_true(job.done(), "all three in the bay (%.0f s)" % t)
 	assert_eq(job.pods_done(), 3)
@@ -160,8 +172,8 @@ func test_bots_sent_early_wait_for_the_freighter_and_take_the_plan_from_where_it
 		pod.berthed = false
 	var first: FerryPod = job.current()
 	_run(job, 30.0)
-	var bot: BotFerryMotion = job.crew[0]
-	assert_eq(bot.phase, BotFerryMotion.Phase.OUT, "on its way before the freighter is there")
+	var bot: CargoPodMotion = job.crew[0]
+	assert_eq(bot.phase, CargoPodMotion.Phase.OUT, "on its way before the freighter is there")
 	var s_before: float = bot.s
 	# The freighter stopped 3 m short of the hold point.
 	var stopped: Vector3 = Vector3(BAY["cargo_bay_hold"]) + Vector3(0.0, 0.0, -3.0)
@@ -189,3 +201,59 @@ func test_at_small_time_steps_a_pod_still_stops_for_its_second_bot() -> void:
 	_run(job, 400.0, false, func() -> bool: return pod.s > pod.trip.unberth_s + 50.0, 1.0 / 480.0)
 	assert_eq(pod.holding[1], 1, "both bots hold it past the lift")
 	assert_eq(held_violations, 0)
+
+
+func test_the_arms_reach_and_open_on_the_way_in_shut_on_the_grip_and_open_then_fold_after_letting_go() -> void:
+	var job: CargoFerryJob = _job("saturn_4_transport", false)
+	var m: CargoPodMotion = job.crew[0]
+	var pod: FerryPod = job.current()
+	_run(job, LIMIT_S, false, func() -> bool: return m.phase == CargoPodMotion.Phase.OUT)
+	assert_eq(m.extend, 0.0, "stowed out of the bay")
+	assert_eq(m.jaw_open, 1.0)
+	var route: BotRoute = pod.trip.out_routes[0]
+	_run(job, LIMIT_S, false, func() -> bool: return m.phase == CargoPodMotion.Phase.OUT and route.length_m - m.s < CargoPodMotion.REACH_FROM_M * 0.5)
+	assert_gt(m.extend, 0.0, "reaching over the last metres")
+	assert_eq(m.jaw_open, 1.0, "jaws open as it comes in")
+	assert_almost_eq(m.heading, pod.trip.bot_heading(0), Vector3.ONE * 0.05, "coming straight in, nose to the block")
+	_run(job, LIMIT_S, false, func() -> bool: return m.phase == CargoPodMotion.Phase.CARRY)
+	assert_almost_eq(m.extend, 1.0, 1e-6, "arms out at the hold")
+	var closing: float = m.jaw_open
+	_run(job, 0.5)
+	assert_lt(m.jaw_open, closing, "the jaws close on the grip")
+	_run(job, LIMIT_S, false, func() -> bool: return pod.state == FerryPod.State.MOVING)
+	assert_eq(m.jaw_open, 0.0, "shut before the block moves")
+	_run(job, 30.0)
+	assert_eq(m.jaw_open, 0.0, "held while carrying")
+	assert_almost_eq(m.heading, pod.trip.bot_heading(0), Vector3.ONE * 1e-6, "facing the block")
+	# Unloading, both hold it into the wall; the first release is loading's, at the hull. (Lambdas capture by value: an array.)
+	var found: Array[CargoPodMotion] = [null]
+	job = _job("saturn_4_transport", true)
+	_run(job, LIMIT_S, false, func() -> bool:
+		for c: CargoPodMotion in job.crew:
+			if c.phase == CargoPodMotion.Phase.BACK and c.pod != null:
+				found[0] = c
+				return true
+		return false)
+	var released: CargoPodMotion = found[0]
+	assert_not_null(released, "a pod lets go")
+	if released == null:
+		return
+	var at: Vector3 = released.position
+	_run(job, CargoPodMotion.RELEASE_S * 0.5)
+	assert_almost_eq(released.position, at, Vector3.ONE * 1e-6, "it stands still while its jaws open")
+	assert_gt(released.jaw_open, 0.0, "opening")
+	assert_eq(released.extend, 1.0, "arms still out")
+	_run(job, CargoPodMotion.RELEASE_S + 0.1)
+	assert_eq(released.jaw_open, 1.0, "open")
+	assert_gt(released.position.distance_to(at), 0.0, "and away")
+	_run(job, 3.0)
+	assert_eq(released.extend, 0.0, "arms folded going home")
+
+
+func test_a_pod_loading_takes_the_block_behind_the_wall_already_gripping() -> void:
+	var job: CargoFerryJob = _job("saturn_3_freighter", true)
+	var m: CargoPodMotion = job.crew[0]
+	_run(job, LIMIT_S, false, func() -> bool: return m.phase == CargoPodMotion.Phase.CARRY)
+	assert_eq(m.extend, 1.0)
+	assert_eq(m.jaw_open, 0.0)
+	assert_false(m.is_visible(), "behind the wall")

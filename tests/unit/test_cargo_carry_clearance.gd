@@ -1,20 +1,30 @@
 extends GutTest
-## The bots carrying cargo keep their distance (M7-T30), for every pod of the five Saturns, measured against the drawn meshes: the
-## station's frame and the Saturn's chunks (what stays on it, and the pods still on it). Each bot's way out to its hold, each
-## carried pod and its bots on the way in, and the way home of a bot letting go of the pod in a fight. Left out by design: the pod's
-## lift off the hull (it starts touching its mounts), and the last metres at the bay's back wall, where bot and pod go in.
+## The cargo pods carrying cargo keep their distance (M7-T30; M7-T34: measured over the 6 m craft's body and its hands, not a point),
+## for every block of the five Saturns, against the drawn meshes: the station's frame and the Saturn's chunks (what stays on it, and
+## the blocks still on it). Each pod's way out to its hold, each carried block and its pods on the way in, and the way home of a pod
+## letting go of the block in a fight. Left out by design: the block's lift off the hull (it starts touching its mounts), the last
+## metres at the bay's back wall, where pod and block go in, and the block a pod comes to or leaves (its hands touch it): the last
+## leg in to its hold and the first metres backing off.
 ##
-## A pod in the bay's mouth has less room than a bot: the opening is 26.7 m high and a pod 17.2 m (a tank on its side 17.6 m).
+## A block in the bay's mouth has less room than a pod: the opening is 26.7 m high and a block 17.2 m (a tank on its side 17.6 m).
 
 const DIR: String = "res://assets/generated/babylon5_station/"
-const HULL_CLEARANCE_M: float = 8.0
-const SATURN_CLEARANCE_M: float = 5.0
-## A pod's room from the hull in the bay's mouth and inside it (and that far outside it), m.
+## The craft's body (hull and hands) from the hull and from the Saturn, m: T30's bot centre kept 8 m and 5 m, its 4.65 m body about
+## 5.7 m and 2.7 m.
+const HULL_CLEARANCE_M: float = 5.0
+const SATURN_CLEARANCE_M: float = 2.5
+## A block from the Saturn and the hull outside the bay (its own surface), m.
+const POD_SATURN_CLEARANCE_M: float = 5.0
+const POD_HULL_CLEARANCE_M: float = 8.0
+## A block's room from the hull in the bay's mouth and inside it (and that far outside it), m.
 const POD_BAY_CLEARANCE_M: float = 4.0
 const BAY_REACH_M: float = 60.0
 const WALL_M: float = 20.0
 const STEP_M: float = 12.0
 const FACE_STEP_M: float = 6.0
+## The cargo pod's body about its centre (its nose -Z): half its width, height and length, and its hands with the arms out.
+const CRAFT_HALF: Vector3 = Vector3(1.65, 1.05, 3.0)
+const HANDS: Array[Vector3] = [Vector3(1.32, -0.4, -4.0), Vector3(-1.32, -0.4, -4.0)]
 
 var hull: BotMeshField
 var bay: Dictionary
@@ -82,46 +92,65 @@ func _check(hull_id: String) -> void:
 		for later: int in range(n + 1, plan.trips.size()):
 			saturn_faces.append_array(pod_faces[plan.trips[later].pod_name])
 		var saturn: BotMeshField = BotMeshField.of_faces(saturn_faces)
-		var with_own_faces := saturn_faces.duplicate()
-		with_own_faces.append_array(pod_faces[trip.pod_name])
-		var with_own: BotMeshField = BotMeshField.of_faces(with_own_faces)
 		for k: int in trip.bot_count():
-			_route_clear("%s bot %d out" % [label, k], trip.out_routes[k], plan, with_own, null, 0.0)
+			var route: BotRoute = trip.out_routes[k]
+			_route_clear("%s pod %d out" % [label, k], route, plan, saturn, trip, trip.grab_s[k], 0.0,
+					route.length_m - CargoFerryPlan.APPROACH_IN_M - 2.0)
 		_carry_clear(label, trip, plan, saturn)
 		var s: float = maxf(trip.unberth_s, 0.0)
 		while s <= trip.commit_s:
 			for k: int in trip.bot_count():
 				if trip.grab_s[k] <= s:
 					var home: BotRoute = BotRoute.from_points(trip.escape_points(k, s))
-					_route_clear("%s bot %d home from %.0f m" % [label, k, s], home, plan, saturn, trip, s)
+					_route_clear("%s pod %d home from %.0f m" % [label, k, s], home, plan, saturn, trip, s,
+							CargoFerryPlan.APPROACH_IN_M, INF)
 			s += 60.0
 
 
-# A bot's route keeps its distance from the hull and the Saturn (and from a pod it let go of at `pod_s`).
-func _route_clear(label: String, route: BotRoute, plan: CargoFerryPlan, saturn: BotMeshField, trip: CargoTrip, pod_s: float) -> void:
+# A pod's route keeps its body's distance from the hull and the Saturn, and from the block it comes to or let go of (at `pod_s`)
+# between `own_from` and `own_to` metres along the route.
+func _route_clear(label: String, route: BotRoute, plan: CargoFerryPlan, saturn: BotMeshField, trip: CargoTrip, pod_s: float,
+		own_from: float, own_to: float) -> void:
 	var low_hull: float = INF
 	var low_saturn: float = INF
 	var low_pod: float = INF
 	var at: float = 0.0
-	var pod_inverse: Transform3D = trip.pose_at(pod_s).affine_inverse() if trip != null else Transform3D()
+	var pod_inverse: Transform3D = trip.pose_at(pod_s).affine_inverse()
 	while at <= route.length_m:
-		var p: Vector3 = route.point_at(at)
+		var points: PackedVector3Array = _craft_points(route.point_at(at), route.direction_at(at), Vector3.UP)
+		var own: bool = at >= own_from and at <= own_to
 		at += 3.0
-		if p.z > plan.wall_z - WALL_M:
+		if points[0].z > plan.wall_z - WALL_M:
 			continue
-		low_hull = minf(low_hull, hull.distance(p, 30.0))
-		low_saturn = minf(low_saturn, saturn.distance(p, 30.0))
-		if trip != null:
-			low_pod = minf(low_pod, _box_distance(pod_inverse * p, trip.size))
+		for p: Vector3 in points:
+			low_hull = minf(low_hull, hull.distance(p, 30.0))
+			low_saturn = minf(low_saturn, saturn.distance(p, 30.0))
+			if own:
+				low_pod = minf(low_pod, _box_distance(pod_inverse * p, trip.size))
 	assert_gte(low_hull, HULL_CLEARANCE_M, "%s keeps %.1f m from the hull" % [label, low_hull])
 	assert_gte(low_saturn, SATURN_CLEARANCE_M, "%s keeps %.1f m from the Saturn" % [label, low_saturn])
-	if trip != null:
-		assert_gte(low_pod, SATURN_CLEARANCE_M, "%s keeps %.1f m from the pod it let go of" % [label, low_pod])
-	_note("bot hull", low_hull)
-	_note("bot saturn", low_saturn)
+	assert_gte(low_pod, SATURN_CLEARANCE_M, "%s keeps %.1f m from the block" % [label, low_pod])
+	_note("craft hull", low_hull)
+	_note("craft saturn", low_saturn)
+	_note("craft block", low_pod)
 
 
-# The carried pod (its surface, sampled) and its bots on the way in, from the end of the lift.
+# The craft's body (its box's corners, edges and faces) and its hands, at `at` with its nose along `heading`.
+static func _craft_points(at: Vector3, heading: Vector3, up: Vector3) -> PackedVector3Array:
+	var basis: Basis = Basis.looking_at(heading, up if absf(heading.normalized().dot(up)) < 0.99 else Vector3.BACK)
+	var out := PackedVector3Array([at])
+	for i: int in 3:
+		for j: int in 3:
+			for k: int in 3:
+				if i == 1 and j == 1 and k == 1:
+					continue
+				out.append(at + basis * (Vector3(i - 1, j - 1, k - 1) * CRAFT_HALF))
+	for hand: Vector3 in HANDS:
+		out.append(at + basis * hand)
+	return out
+
+
+# The carried block (its surface, sampled) and its pods on the way in, from the end of the lift.
 func _carry_clear(label: String, trip: CargoTrip, plan: CargoFerryPlan, saturn: BotMeshField) -> void:
 	var surface: PackedVector3Array = _surface(trip.size)
 	var low_hull: float = INF
@@ -149,14 +178,17 @@ func _carry_clear(label: String, trip: CargoTrip, plan: CargoFerryPlan, saturn: 
 				continue
 			var b: Vector3 = trip.bot_position(k, s)
 			if b.z <= plan.wall_z - WALL_M:
-				low_bot_hull = minf(low_bot_hull, hull.distance(b, 30.0))
-				low_bot_saturn = minf(low_bot_saturn, saturn.distance(b, 30.0))
+				for p: Vector3 in _craft_points(b, trip.bot_heading(k), trip.bot_up(s)):
+					low_bot_hull = minf(low_bot_hull, hull.distance(p, 30.0))
+					low_bot_saturn = minf(low_bot_saturn, saturn.distance(p, 30.0))
 		s += STEP_M
-	assert_gte(low_saturn, SATURN_CLEARANCE_M, "%s, carried, keeps %.1f m from the Saturn" % [label, low_saturn])
-	assert_gte(low_hull, HULL_CLEARANCE_M, "%s, carried, keeps %.1f m from the hull outside the bay" % [label, low_hull])
+	assert_gte(low_saturn, POD_SATURN_CLEARANCE_M, "%s, carried, keeps %.1f m from the Saturn" % [label, low_saturn])
+	assert_gte(low_hull, POD_HULL_CLEARANCE_M, "%s, carried, keeps %.1f m from the hull outside the bay" % [label, low_hull])
 	assert_gte(low_bay, POD_BAY_CLEARANCE_M, "%s, carried, keeps %.1f m from the bay's walls" % [label, low_bay])
-	assert_gte(low_bot_hull, HULL_CLEARANCE_M, "%s, its bots keep %.1f m from the hull" % [label, low_bot_hull])
-	assert_gte(low_bot_saturn, SATURN_CLEARANCE_M, "%s, its bots keep %.1f m from the Saturn" % [label, low_bot_saturn])
+	assert_gte(low_bot_hull, HULL_CLEARANCE_M, "%s, its pods keep %.1f m from the hull" % [label, low_bot_hull])
+	assert_gte(low_bot_saturn, SATURN_CLEARANCE_M, "%s, its pods keep %.1f m from the Saturn" % [label, low_bot_saturn])
+	_note("carrying craft hull", low_bot_hull)
+	_note("carrying craft saturn", low_bot_saturn)
 	_note("pod saturn", low_saturn)
 	_note("pod hull", low_hull)
 	_note("pod bay", low_bay)

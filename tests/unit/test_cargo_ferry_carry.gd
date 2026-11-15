@@ -1,7 +1,8 @@
 extends GutTest
-## `CargoFerryPlan.for_freighter` and `FreighterCargo`'s cargo chunks (M7-T30) for each of the five Saturns: which chunks are cargo,
-## the order they come off, one bot for a Saturn 3 pod and two for a long pod or a tank, the tanks turned onto their side before the
-## bay's mouth, every pod fitting the bay's opening, and each bot's route ending at its hold on the pod.
+## `CargoFerryPlan.for_freighter` and `FreighterCargo`'s cargo chunks (M7-T30, M7-T34) for each of the five Saturns: which chunks are
+## cargo, the order they come off, one cargo pod ("bot" below, as in T30) for a Saturn 3 block and two for a long block or a tank,
+## the tanks turned onto their side before the bay's mouth, every block fitting the bay's opening, each pod's route ending at its
+## hold, coming the last metres straight in, and its grip points on the end face's middle all the way.
 
 const BAY: Dictionary = {
 	"cargo_bay_hold": Vector3(0.0, 339.0, -4700.0), "cargo_bay_entry": Vector3(0.0, 339.0, -3534.0),
@@ -73,7 +74,15 @@ func test_a_trip_runs_from_the_hull_into_the_back_wall() -> void:
 						"%s bot %d ends at its hold" % [label, k])
 				assert_gt(route.point_at(0.0).z, plan.wall_z, "%s bot %d comes out of the back wall" % [label, k])
 				var standoff: float = absf(trip.offsets[k].z) - trip.size.z * 0.5
-				assert_almost_eq(standoff, CargoFerryPlan.STANDOFF_M, 0.01, "%s bot %d holds an end from the standoff" % [label, k])
+				assert_almost_eq(standoff, CargoFerryPlan.HOLD_REACH_M, 0.01, "%s pod %d holds an end at its reach" % [label, k])
+				# Its grip points (arms out, ahead of its nose and below its centre) lie on the end face's middle, all the way.
+				for s: float in [trip.grab_s[k], (trip.grab_s[k] + trip.carry.length_m) * 0.5, trip.carry.length_m]:
+					var grip: Vector3 = trip.bot_position(k, s) + trip.bot_heading(k) * CargoFerryPlan.GRIP_AHEAD_M \
+							- trip.bot_up(s) * CargoFerryPlan.GRIP_BELOW_M
+					var face: Vector3 = trip.pose_at(s).origin + trip.offsets[k].normalized() * (trip.size.z * 0.5 + CargoFerryPlan.GRIP_GAP_M)
+					assert_almost_eq(grip, face, Vector3.ONE * 0.01, "%s pod %d grips the face's middle at %.0f m" % [label, k, s])
+				var last: Vector3 = route.direction_at(route.length_m - 1.0)
+				assert_almost_eq(last, trip.bot_heading(k), Vector3.ONE * 0.01, "%s pod %d comes the last metres straight in" % [label, k])
 			assert_true(held_on_hull, "%s: a bot takes it on the hull" % label)
 			if trip.bot_count() == 2:
 				assert_gt(trip.offsets[0].z, 0.0, "%s: bot 0 at the end toward the bay" % label)

@@ -954,10 +954,37 @@ the aft band, so no bot rides those) and each section's work spot. They were fit
 at the bay's mouth, the drum's riding line 14 m over a full turn, the gate's arms 34 m) and `tests/unit/test_bot_routes_clear_of_hull.gd`
 holds it on every build of the station. Move a road or a spot only with that test.
 
-The cargo ferry (`bots cargo`, M7-T11) reuses the bot on the frame: `CargoFerryPlan` reads the station's `cargo_bay` hardpoints (hold, entry, clear box) and the
-Saturn 3's three cargo-pod boxes, and gives each bot an out route and a return route from just inside the bay's back wall (z -3 505, where the bot is hidden)
-through the throat and the slot to a point 8 m behind a pod's aft face; the Saturn backs in at the hold point, nose away (-Z in the station's frame), so the pods
-(at 11.8 m aft of its origin) are the end nearest the bay.
+## Cargo pods move the cargo (M7-T34)
+
+The freighters' cargo is carried by cargo pods (the 6 m craft of M7-T33, `cargo_pod_craft`), not maintenance bots; the bots are the
+station's repair crew only (M7-T35). `CargoPodFleet` (a child of the station beside `Bots`) holds the craft (`CargoPodCraft`: the
+skinned `CargoPodRig` on a node following its `CargoPodMotion`); they hang from the frame, launch from just inside the cargo bay's back
+wall (z -3 505, where a pod is hidden) and land there, and heed the crew's alarm log. T30's plan is unchanged in shape:
+`CargoFerryPlan.for_freighter` gives each block a `CargoTrip` (lift, slide aft, onto the bay's line, in past the back wall; tanks
+turned onto their side 120 m long, done 80 m short of the mouth), one pod a Saturn 3 block, two a long block or tank.
+
+What changed for the craft:
+
+- **The hold.** A pod holds an end face at its centre with both hands, nose to the block: its centre `HOLD_REACH_M` (3.85 m: the
+  grip points 3.7 m ahead of the craft's centre with the arms out, plus a 0.15 m gap) off the face and 0.40 m above its middle (the
+  hands hang below the craft's centre line), turning with a tank as it rolls. T30's bot hovered 8 m off. `test_cargo_pod_grip` holds
+  the constants to the drawn rig's `grip_point()`.
+- **The approach.** Each pod's way out ends with a straight 10 m leg in along the block's axis (`APPROACH_IN_M`), so it comes
+  nose first; backing off after letting go it keeps its nose to the block for those 10 m, then turns for home.
+- **The arms** (`CargoPodMotion`): stowed (the rest pose) in and out of the bay; over the last 20 m to its hold it reaches out
+  (extend 0 to 1 at 0.5 a second) with its jaws open; once it holds, the jaws close over 1.25 s (inside the block's 3 s wait before
+  it moves, so they are shut before it moves); held shut while carrying; letting go it stands still 1.25 s while they open, then
+  folds its arms flying off (all at once in a fight). Loading, a pod takes its block behind the wall already gripping.
+- **Hiding.** A pod carrying a block into the wall counts as hidden once its centre is 4 m past it (its nose and hands go last); a
+  two-pod block slides in until the far pod is past the wall too.
+- **Clearances** (`test_cargo_carry_clearance`, over the craft's body and hands, not a point): least 10.6 m from the hull and 3.0 m
+  from the Saturn on the way out (body against 5 m and 2.5 m), 6.5 m from its block until the last leg in; carrying, 12.2 m from the
+  hull and 14.0 m from the Saturn; a carried block 6.0 m from the Saturn and 5.1 m in the bay's mouth (T30's numbers).
+
+The cargo scene (`pods cargo`, `bots cargo` as before, M7-T11) uses the same pods: `CargoFerryPlan.build` reads the station's
+`cargo_bay` hardpoints and the Saturn 3's three cargo-pod boxes, and gives each pod an out route and a return route from the back wall
+through the throat and the slot to a point 8 m behind a block's aft face, where it reaches out and waits; the Saturn backs in at the
+hold point, nose away (-Z in the station's frame), so its cargo (at 11.8 m aft of its origin) is the end nearest the bay.
 
 ## The surfaces for fullscreen (M7-T24)
 

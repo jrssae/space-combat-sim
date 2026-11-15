@@ -1,10 +1,11 @@
 class_name FerryPod
 extends RefCounted
-## One cargo pod being carried by maintenance bots (M7-T30): where it is along its `CargoTrip`, and whether it waits for its bots,
-## moves, lies where they let it go, or is done. Unloading carries it from the hull into the bay's back wall, loading the other
-## way. It only moves while every bot it needs there holds it; its bots (`BotFerryMotion`) read it and step it.
+## One freighter's cargo block (a pod or a tank) being carried by the station's cargo pods (M7-T30, M7-T34): where it is along its
+## `CargoTrip`, and whether it waits for its pods, moves, lies where they let it go, or is done. Unloading carries it from the hull
+## into the bay's back wall, loading the other way. It only moves while every pod it needs there holds it; its pods
+## (`CargoPodMotion`) read it and step it. (The code's "bot k" is cargo pod k of its crew, as in T30.)
 ##
-## Fighting near: away from the bay its bots let go and it waits where it is; nearer the bay they carry on inside (unloading) or
+## Fighting near: away from the bay its pods let go and it waits where it is; nearer the bay they carry on inside (unloading) or
 ## back inside (loading), and the trip starts again after the quiet. Pure.
 
 enum State { WAITING, MOVING, DROPPED, DONE }

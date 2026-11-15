@@ -1,22 +1,22 @@
 class_name CargoFerryJob
 extends RefCounted
-## A freighter's cargo carried between it and the cargo bay by the station's maintenance bots (M7-T30): one pod at a time, in the
-## plan's order (loading in the reverse), by a crew of two bots that go on from pod to pod (a short pod takes one of them). Pure:
-## `FreighterCargo` draws the pods and `BotFleet` steps the bots.
+## A freighter's cargo carried between it and the cargo bay by the station's cargo pods (M7-T30, M7-T34): one block at a time, in
+## the plan's order (loading in the reverse), by a crew of two cargo pods that go on from block to block (a short block takes one of
+## them). Pure: `FreighterCargo` draws the blocks and `CargoPodFleet` steps the pods.
 
 const CREW: int = 2
-## The second bot of a crew leaves the wall this long after the first, s.
+## The second pod of a crew leaves the wall this long after the first, s.
 const STAGGER_S: float = 3.0
 
 var plan: CargoFerryPlan = null
 var loading: bool = false
 var pods: Array[FerryPod] = []
-var crew: Array[BotFerryMotion] = []
+var crew: Array[CargoPodMotion] = []
 ## The pod being carried now (`pods.size()` once all are done).
 var index: int = 0
 
 
-## The job for `p_plan` (valid), unloading or loading; its crew starts on the first pod, hidden in the wall.
+## The job for `p_plan` (valid), unloading or loading; its crew starts on the first block, hidden in the wall.
 static func create(p_plan: CargoFerryPlan, p_loading: bool) -> CargoFerryJob:
 	var job := CargoFerryJob.new()
 	job.plan = p_plan
@@ -28,7 +28,7 @@ static func create(p_plan: CargoFerryPlan, p_loading: bool) -> CargoFerryJob:
 		job.pods.append(FerryPod.new(trip, p_loading))
 	var first: CargoTrip = order[0]
 	for k: int in CREW:
-		var m := BotFerryMotion.new()
+		var m := CargoPodMotion.new()
 		m.setup(first.out_routes[0], first.out_routes[0], Vector3.UP, 0.0)
 		job.crew.append(m)
 	job._assign()
@@ -60,7 +60,7 @@ func update() -> bool:
 		return false
 	index += 1
 	if done():
-		for m: BotFerryMotion in crew:
+		for m: CargoPodMotion in crew:
 			m.carry(null, 0)
 		return true
 	_assign()
@@ -72,7 +72,7 @@ func untouched() -> bool:
 	return index == 0 and pods[0].state == FerryPod.State.WAITING and (pods[0].s == 0.0 or loading)
 
 
-## Plans the job again from `p_plan` (the freighter where it stopped) while no pod has moved; the bots on their way switch to the
+## Plans the job again from `p_plan` (the freighter where it stopped) while no pod has moved; the pods on their way switch to the
 ## new routes where they are (the lanes out of the bay are the same). False when too late.
 func replan(p_plan: CargoFerryPlan) -> bool:
 	if not untouched() or p_plan.trips.size() != pods.size():
@@ -99,8 +99,8 @@ func berth() -> void:
 
 
 func crew_inside() -> bool:
-	for m: BotFerryMotion in crew:
-		if m.phase != BotFerryMotion.Phase.HIDDEN:
+	for m: CargoPodMotion in crew:
+		if m.phase != CargoPodMotion.Phase.HIDDEN:
 			return false
 	return true
 

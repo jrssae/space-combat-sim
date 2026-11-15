@@ -2,7 +2,7 @@ extends GutTest
 ## Traffic at the station on the real main scene (M7-T10, AC9, Q8 as refined): a civilian flies into the main docking bay
 ## with the drum's roll matched, the inner doors open ahead of it, it flies wholly into the black void behind them, they shut and
 ## it leaves the world (M7-T25); one comes out of the void through the opened doors, which shut behind it, and leaves; a Saturn backs in at the
-## cargo bay's hold point and the station's maintenance bots start carrying its pods into the bay (M7-T30; the whole cycle of
+## cargo bay's hold point and the station's cargo pods start carrying its cargo into the bay (M7-T30, M7-T34; the whole cycle of
 ## each hull is in `test_freighter_cargo`), and it leaves nose first; a wing scrambled from its Cobra
 ## arm is a wing with a leader and orders, and it engages a raid sent at the station. Flown with the physics rate and the
 ## time scale raised together.
@@ -186,7 +186,7 @@ func test_a_civilian_waits_in_the_void_comes_out_through_the_opened_doors_and_de
 	assert_eq(main.traffic.alive_of(&"undock"), 1, "and flies on to where it leaves")
 
 
-func test_a_freighter_backs_in_and_the_bots_carry_its_first_pod_into_the_cargo_bay() -> void:
+func test_a_freighter_backs_in_and_the_cargo_pods_carry_its_first_block_into_the_cargo_bay() -> void:
 	if not await _start():
 		pending("the babylon5_station asset is not generated")
 		return
@@ -216,7 +216,7 @@ func test_a_freighter_backs_in_and_the_bots_carry_its_first_pod_into_the_cargo_b
 	var cargo := ship.get_node_or_null(NodePath(FreighterCargo.NODE_NAME)) as FreighterCargo
 	assert_not_null(cargo)
 	assert_eq(cargo.pod_count(), 3)
-	assert_eq(cargo.crew_bots.size(), CargoFerryJob.CREW, "a crew of bots for it in the station's fleet")
+	assert_eq(cargo.crew_pods.size(), CargoFerryJob.CREW, "a crew of cargo pods for it in the station's fleet")
 	var moved_alone: Array[int] = [0]
 	var last: Array = [null, 0.0]
 	var carried: bool = await _until(func() -> bool:
@@ -226,13 +226,13 @@ func test_a_freighter_backs_in_and_the_bots_carry_its_first_pod_into_the_cargo_b
 		last[0] = pod
 		last[1] = pod.s if pod != null else 0.0
 		return main.traffic.pods_in >= 1, 240.0)
-	assert_true(carried, "a bot carried the first pod into the cargo bay")
+	assert_true(carried, "a cargo pod carried the first block into the cargo bay")
 	assert_eq(moved_alone[0], 0, "no pod moved by itself")
 	assert_eq(main.traffic.alive_of(&"freighter"), 1, "the freighter never went in")
 	assert_eq(rams, 0, "and touched nothing")
-	var bots_before: int = station.bots.ferry_bots.size()
+	var pods_before: int = station.cargo_pods.pods.size()
 	_run("traffic clear")
-	assert_eq(station.bots.ferry_bots.size(), bots_before - CargoFerryJob.CREW, "its crew went with it")
+	assert_eq(station.cargo_pods.pods.size(), pods_before - CargoFerryJob.CREW, "its crew went with it")
 	assert_true(ship.hull.visible or ship.is_far_dot(), "back in its pool whole")
 
 

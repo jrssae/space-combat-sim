@@ -18,7 +18,7 @@ func before_each() -> void:
 	fleet = BotFleet.new()
 	fleet.frames.pivot = Vector3(0.0, 0.0, -1000.0)
 	var data: BotData = BotData.load_file()
-	assert_true(fleet.build_on(origin, frame_parent, origin, data, BoxMesh.new()), data.error)
+	assert_true(fleet.build_on(origin, origin, data, BoxMesh.new()), data.error)
 	fleet.set_physics_process(false)  # stepped by hand below
 	origin.add_child(fleet)
 

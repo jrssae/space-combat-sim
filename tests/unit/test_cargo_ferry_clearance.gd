@@ -18,7 +18,7 @@ func before_all() -> void:
 	var manifest: Dictionary = MeshAssets.read_manifest(Station.ASSET_ID)
 	var hp: StationHardpoints = StationHardpoints.from_manifest(manifest)
 	assert_true(hp.valid, hp.error)
-	var shapes: Array[Dictionary] = Hardpoints.load_collision_only(BotCargoScene.HARDPOINTS)
+	var shapes: Array[Dictionary] = Hardpoints.load_collision_only(CargoPodScene.HARDPOINTS)
 	plan = CargoFerryPlan.build(hp.cargo_bay, shapes)
 	assert_true(plan.valid, plan.error)
 	hull = BotMeshField.of_faces(BotMeshField.faces_of_glb(DIR + "babylon5_station_frame.glb"))

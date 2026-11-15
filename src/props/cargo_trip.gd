@@ -1,12 +1,14 @@
 class_name CargoTrip
 extends RefCounted
-## One cargo pod's way between a Saturn at the cargo bay's hold point and the bay's back wall (M7-T30), in the station's frame:
-## the path the pod's centre takes, where each of its bots holds it, and the routes the bots fly empty. Built by
-## `CargoFerryPlan.for_freighter`; pure.
+## One cargo block's way between a Saturn at the cargo bay's hold point and the bay's back wall (M7-T30, M7-T34), in the station's
+## frame: the path the block's centre takes, where each of its cargo pods holds it, and the routes the pods fly empty. Built by
+## `CargoFerryPlan.for_freighter`; pure. ("Pod" in the code below is the freighter's block, as in `FerryPod`; the craft carrying it
+## is the cargo pod, `CargoPodCraft`.)
 ##
-## The pod lifts straight off the hull (outboard), slides aft past the stern, eases onto the bay's centre line and goes in through
-## the back wall. A tank turns onto its side on the way, before the bay's mouth, so it fits the opening. A long pod has two bots
-## (front and back), a short one one; a bot whose end of the pod is boxed in on the hull takes hold after the lift instead.
+## The block lifts straight off the hull (outboard), slides aft past the stern, eases onto the bay's centre line and goes in through
+## the back wall. A tank turns onto its side on the way, before the bay's mouth, so it fits the opening. A long block has two pods
+## (front and back), a short one one; a pod whose end of the block is boxed in on the hull takes hold after the lift instead. A pod
+## holds an end face at its centre, its hands on the face and its nose toward the block, turning with a tank as it rolls.
 
 ## Pod centre path, metres along it: 0 on the hull, `carry.length_m` behind the bay's back wall.
 var carry: BotRoute = null
@@ -23,8 +25,8 @@ var unberth_s: float = 0.0
 var commit_s: float = 0.0
 ## The corners of its way off the hull, where it stops before going on.
 var stops := PackedFloat64Array()
-## Each bot's place relative to the pod's centre (0 at the end toward the bay, 1 at the far end), where along the path it takes
-## hold, and its route from the bay's back wall to that place.
+## Each pod's place relative to the block's centre before any roll (0 at the end toward the bay, 1 at the far end), where along
+## the path it takes hold, and its route from the bay's back wall to that place.
 var offsets: Array[Vector3] = []
 var grab_s := PackedFloat64Array()
 var out_routes: Array[BotRoute] = []
@@ -55,9 +57,20 @@ func roll_angle(z: float) -> float:
 	return PI * 0.5 * t * t * (3.0 - 2.0 * t)
 
 
-## Where bot `k` holds the pod with the pod at `s`.
+## Where cargo pod `k` is while it holds the block at `s`: its grip points on the end face's centre, so the craft sits a little
+## above the face's middle (its hands hang below its centre line), on the block's up as it rolls.
 func bot_position(k: int, s: float) -> Vector3:
-	return carry.point_at(s) + offsets[k]
+	var pose: Transform3D = pose_at(s)
+	return pose.origin + offsets[k] + pose.basis.y * CargoFerryPlan.GRIP_BELOW_M
+
+
+## Which way cargo pod `k` faces while it holds the block (toward it), and its up (the block's, as it rolls).
+func bot_heading(k: int) -> Vector3:
+	return -offsets[k].normalized()
+
+
+func bot_up(s: float) -> Vector3:
+	return pose_at(s).basis.y
 
 
 ## The pod's half height (station up) at `s`, as it turns.

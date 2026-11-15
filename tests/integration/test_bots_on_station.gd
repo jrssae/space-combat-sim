@@ -174,13 +174,14 @@ func _peace_index(fleet: BotFleet, area_name: String) -> int:
 	return -1
 
 
-func test_bots_cargo_backs_a_saturn_3_in_at_the_hold_point_and_starts_the_ferry() -> void:
+func test_pods_cargo_backs_a_saturn_3_in_at_the_hold_point_and_starts_the_cargo_pods() -> void:
 	await _start()
-	var fleet: BotFleet = station.bots
+	var fleet: CargoPodFleet = station.cargo_pods
+	assert_not_null(fleet, "the station has its cargo pods (M7-T34)")
 	var bay: Dictionary = station.hardpoints.cargo_bay
-	var results: Array[ConsoleResult] = DebugConsole.registry.execute("bots cargo")
+	var results: Array[ConsoleResult] = DebugConsole.registry.execute("pods cargo")
 	assert_true(results[0].ok, "; ".join(results[0].lines))
-	assert_eq(fleet.ferry_bots.size(), BotCargoScene.DEFAULT_BOTS, "five ferry bots by default")
+	assert_eq(fleet.pods.size(), CargoPodScene.DEFAULT_PODS, "five cargo pods by default")
 	var freighter: Combatant = fleet.cargo.freighter
 	assert_not_null(freighter, "the Saturn is out of the pool")
 	assert_eq(main.ships.type_of(freighter), &"saturn_3_freighter")
@@ -192,25 +193,27 @@ func test_bots_cargo_backs_a_saturn_3_in_at_the_hold_point_and_starts_the_ferry(
 	assert_lt(nose.normalized().dot(to_bay.normalized()), -0.99, "its forward points away from cargo_bay_entry: it backs in, stern to the bay")
 	var rest: Vector3 = main.world.rest_velocity()
 	assert_lt((freighter.ship.linear_velocity - rest).length(), 0.5, "at rest against the station")
-	for bot: MaintenanceBot in fleet.ferry_bots:
-		assert_eq(bot.get_parent(), station.frame_piece, "on the frame")
+	for craft: CargoPodCraft in fleet.pods:
+		assert_eq(craft.get_parent(), station.frame_piece, "on the frame")
+		assert_not_null(craft.rig.skeleton(), "the cargo pod's model with its arms")
+	assert_eq(station.bots.bots.size(), BotData.load_file().pool, "the maintenance crew is untouched")
 	var seen := {}
-	for bot: MaintenanceBot in fleet.ferry_bots:
-		seen[(bot.motion as BotFerryMotion).phase] = true
-	assert_gte(seen.size(), 3, "staggered: the bots are in different phases at once")
+	for craft: CargoPodCraft in fleet.pods:
+		seen[craft.motion.phase] = true
+	assert_gte(seen.size(), 3, "staggered: the pods are in different phases at once")
 	DebugConsole.registry.execute("bots cargo 3")
-	assert_eq(fleet.ferry_bots.size(), 3, "loading again replaces the scene")
+	assert_eq(fleet.pods.size(), 3, "bots cargo still works, and loading again replaces the scene")
 	assert_not_null(fleet.cargo.freighter)
-	var off: Array[ConsoleResult] = DebugConsole.registry.execute("bots cargo off")
+	var off: Array[ConsoleResult] = DebugConsole.registry.execute("pods cargo off")
 	assert_true(off[0].ok)
-	assert_eq(fleet.ferry_bots.size(), 0)
+	assert_eq(fleet.pods.size(), 0)
 	assert_null(fleet.cargo.freighter)
 	assert_gte(main.ships.free_count(&"saturn_3_freighter"), 1, "the Saturn went back to the pool")
 
 
-func test_bots_cargo_view_puts_the_player_toward_the_bay_from_the_saturn() -> void:
+func test_pods_cargo_view_puts_the_player_toward_the_bay_from_the_saturn() -> void:
 	await _start()
-	var results: Array[ConsoleResult] = DebugConsole.registry.execute("bots cargo view")
+	var results: Array[ConsoleResult] = DebugConsole.registry.execute("pods cargo view")
 	assert_true(results[0].ok, "; ".join(results[0].lines))
 	var hold: Vector3 = station.to_world(station.hardpoints.cargo_bay["cargo_bay_hold"], StationHardpoints.FRAME)
 	assert_between(main.ship.global_position.distance_to(hold), 200.0, 300.0)

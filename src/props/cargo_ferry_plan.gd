@@ -1,39 +1,51 @@
 class_name CargoFerryPlan
 extends RefCounted
-## Where the cargo ferry bots go (M7-T11, Q11 as the maintainer extended it): between the cargo bay between the bow's forks and a
-## Saturn 3 holding at the bay's hold point, **stern toward the bay** (maintainer: it backs in, its nose away from the station, its
-## cargo pods nearest the bay; T10's freighters will do the same). Read from the station's `cargo_bay` hardpoints and the
-## freighter's cargo-pod boxes; no number of the bay is written here. Pure, in the station's frame.
+## Where the cargo pods go (M7-T11, Q11 as the maintainer extended it; M7-T34: the craft are cargo pods, T30 had maintenance bots):
+## between the cargo bay between the bow's forks and a Saturn holding at the bay's hold point, **stern toward the bay** (maintainer:
+## it backs in, its nose away from the station, its cargo nearest the bay). Read from the station's `cargo_bay` hardpoints and the
+## freighter's boxes; no number of the bay is written here. Pure, in the station's frame.
 ##
-## A route runs from inside the bay's back wall (where a bot vanishes and appears), out along its own lane through the throat and
-## the slot between the forks, and ends a few metres behind one of the freighter's pods; the return lane is the other side of
-## the bay's line, so bots going and coming never share a lane.
+## A route runs from inside the bay's back wall (where a pod launches and lands, hidden by the wall), out along its own lane through
+## the throat and the slot between the forks, and ends a few metres behind one of the freighter's blocks; the return lane is the other
+## side of the bay's line, so pods going and coming never share a lane.
 ##
-## `for_freighter` (M7-T30) plans the bots carrying any Saturn's cargo from its break-up chunks' boxes: one `CargoTrip` a pod, in
-## the order they come off (the end nearest the bay first), each keeping clear of the hull and of the pods still on it.
+## `for_freighter` (M7-T30) plans the pods carrying any Saturn's cargo from its break-up chunks' boxes: one `CargoTrip` a block, in
+## the order they come off (the end nearest the bay first), each keeping clear of the hull and of the blocks still on it. A pod holds
+## a block's end face with both hands, so it waits a little more than its reach off the face and comes the last metres straight in.
 
 ## The freighter's three cargo pods, as its collision boxes name them.
 const POD_NAMES: Array[String] = ["top_pod", "low_pod_r", "low_pod_l"]
-## How far behind a pod's aft face a bot hovers, metres.
+## How far behind a block's aft face a cargo pod of the T11 shuttle hovers (`build`), metres.
 const STANDOFF_M: float = 8.0
+## The cargo pod's hands (M7-T33, its `grips` with the arms out, `CargoPodPose`): how far ahead of the craft's centre the grip points
+## are and how far below it; the gap it leaves to the face it holds; its half length behind its centre. Checked against the asset by
+## `test_cargo_pod_grip`.
+const GRIP_AHEAD_M: float = 3.7
+const GRIP_BELOW_M: float = 0.3975
+const GRIP_GAP_M: float = 0.15
+const HOLD_REACH_M: float = GRIP_AHEAD_M + GRIP_GAP_M
+const CRAFT_HALF_M: float = 3.0
+## The last straight leg of a pod's way to its hold, toward the face it takes, m.
+const APPROACH_IN_M: float = 10.0
 ## The lanes' offsets from the bay's line: out one side, back the other, and how high each flies (m).
 const LANE_X_M: float = 9.0
 const LANE_Y_M: float = 4.0
 ## Metres between control points along the straight, and the length over which a route moves from its lane to its pod's place.
 const SPACING_M: float = 300.0
 const BLEND_M: float = 160.0
-## How far inside the bay's back wall a route starts and ends (a bot is hidden by the wall there), metres.
+## How far inside the bay's back wall a route starts and ends (a cargo pod is hidden by the wall there), metres.
 const SINK_M: float = 5.0
-## Carrying (M7-T30). A pod longer than this has two bots, front and back, m.
+## Carrying (M7-T30). A block longer than this has two cargo pods, front and back, m.
 const LONG_POD_M: float = 60.0
-## The lifts tried off the hull, m; the gap a lifted pod keeps from the Saturn's boxes as it slides aft, and a bot's place from them.
+## The lifts tried off the hull, m; the gap a lifted block keeps from the Saturn's boxes as it slides aft, and a cargo pod's
+## centre from them.
 const LIFTS_M: Array[float] = [6.0, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0, 45.0, 50.0, 60.0]
 const SWEEP_CLEAR_M: float = 6.0
 const GRAB_CLEAR_M: float = 5.0
-## How far an empty bot's approach keeps from the Saturn's boxes, and the sideways steps tried to find it, m.
+## How far an empty cargo pod's approach keeps (its centre) from the Saturn's boxes, and the sideways steps tried to find it, m.
 const BOT_CLEAR_M: float = 7.0
 const SIDESTEPS_M: Array[float] = [0.0, 6.0, 12.0, 18.0, 24.0, 30.0, 40.0, 50.0, 60.0, 80.0]
-## How round an empty bot's turns near the Saturn are, m.
+## How round an empty cargo pod's turns near the Saturn are, m.
 const CORNER_M: float = 12.0
 ## A pod clears the stern by this before it turns for the bay, m, and eases onto the bay's line over this length.
 const STERN_MARGIN_M: float = 40.0
@@ -41,7 +53,7 @@ const CARRY_BLEND_M: float = 200.0
 ## A tank's turn onto its side ends this far short of the bay's mouth (its leading face) and takes this long, m.
 const ROLL_DONE_M: float = 80.0
 const ROLL_LENGTH_M: float = 120.0
-## Its bots may let a pod go only while its leading face is this far short of the bay's mouth, m.
+## Its cargo pods may let a block go only while its leading face is this far short of the bay's mouth, m.
 const DROP_SHORT_M: float = 60.0
 
 var valid: bool = false
@@ -57,7 +69,7 @@ var freighter_basis: Basis = Basis.IDENTITY
 var wall_z: float = 0.0
 var throat_z: float = 0.0
 var lane_y: float = 0.0
-## Where a bot waits behind each pod (`POD_NAMES` order, those found), and each pod's box in the station's frame.
+## Where a shuttling cargo pod waits behind each block (`POD_NAMES` order, those found), and each pod's box in the station's frame.
 var pod_stops: Array[Vector3] = []
 var pod_boxes: Array[AABB] = []
 ## `for_freighter`: the pods' trips in unloading order (loading is the reverse), and the bay's middle the pods fly through.
@@ -107,7 +119,7 @@ func freighter_transform() -> Transform3D:
 	return Transform3D(freighter_basis, hold)
 
 
-## Where a bot of `lane` (any whole number) goes and comes back: `[out, back]` routes to the pod behind which it waits (`lane` picks
+## Where a shuttling cargo pod of `lane` (any whole number) goes and comes back: `[out, back]` routes to the pod behind which it waits (`lane` picks
 ## the pod, round and round) and the side of the bay's line it goes out on (the return is the other side, a little lower).
 func routes_for(lane: int) -> Array[BotRoute]:
 	var stop: Vector3 = pod_stops[lane % pod_stops.size()]
@@ -138,7 +150,7 @@ func _points(lane: Vector2, stop: Vector3) -> PackedVector3Array:
 	return points
 
 
-## The bots' plan for the Saturn whose break-up chunks are `chunks` (`{name, box}`, its own frame; the cargo ones carried) and whose
+## The cargo pods' plan for the Saturn whose break-up chunks are `chunks` (`{name, box}`, its own frame; the cargo ones carried) and whose
 ## collision shapes are `collision` (`Hardpoints.load_collision_only`; what stays on the ship), held at `bay`'s hold point (or at
 ## `at`, its origin in the station's frame, when given).
 static func for_freighter(bay: Dictionary, chunks: Array[Dictionary], collision: Array[Dictionary], at: Variant = null) -> CargoFerryPlan:
@@ -219,7 +231,7 @@ func _trip(pod: Dictionary, obstacles: Array[AABB], stern_z: float) -> CargoTrip
 	across.z = 0.0
 	var outboard: Vector3 = across.normalized() if across.length() > 1.0 else Vector3.UP
 	var two: bool = local.size.z > LONG_POD_M
-	var reach: float = half.z + STANDOFF_M
+	var reach: float = half.z + HOLD_REACH_M
 	trip.offsets = [axis * reach] as Array[Vector3]
 	if two:
 		trip.offsets.append(-axis * reach)
@@ -278,7 +290,7 @@ func _trip(pod: Dictionary, obstacles: Array[AABB], stern_z: float) -> CargoTrip
 		z += SPACING_M
 	points.append(Vector3(lane.x, lane.y, throat_z - 20.0))
 	points.append(Vector3(lane.x, lane.y, wall_z - 8.0))
-	points.append(Vector3(lane.x, lane.y, wall_z + SINK_M + half.z + (STANDOFF_M + 2.0 if two else 0.0)))
+	points.append(Vector3(lane.x, lane.y, wall_z + SINK_M + half.z + (HOLD_REACH_M + CRAFT_HALF_M + 2.0 if two else 0.0)))
 	trip.carry = BotRoute.joined([BotRoute.from_corners(off, 0.0), BotRoute.from_points(points)] as Array[BotRoute])
 	trip.unberth_s = _s_nearest(trip.carry, p1)
 	if slide > 0.0:
@@ -289,35 +301,40 @@ func _trip(pod: Dictionary, obstacles: Array[AABB], stern_z: float) -> CargoTrip
 	trip.roll_from_z = trip.roll_to_z - ROLL_LENGTH_M
 	for k: int in trip.offsets.size():
 		trip.grab_s.append(0.0 if at_hull[k] else trip.unberth_s)
-		var around: Array[AABB] = obstacles.duplicate()
-		around.append(box)
-		var route: BotRoute = _approach(k, trip.bot_position(k, trip.grab_s[k]), outboard, around, stern_z)
+		var route: BotRoute = _approach(k, trip.bot_position(k, trip.grab_s[k]), trip.offsets[k].normalized(), outboard, obstacles,
+				trip.pose_at(trip.grab_s[k]) * AABB(-local.size * 0.5, local.size), stern_z)
 		if route == null:
-			error = "%s: bot %d finds no clear way to its hold" % [trip.pod_name, k]
+			error = "%s: cargo pod %d finds no clear way to its hold" % [trip.pod_name, k]
 			return null
 		trip.out_routes.append(route)
 	return trip
 
 
-# A bot's route from the bay's back wall to `grab` (on lane `k`): down the lane, round behind the stern, and in from the side
-# (stepping outboard until the approach clears `obstacles`).
-func _approach(k: int, grab: Vector3, outboard: Vector3, obstacles: Array[AABB], stern_z: float) -> BotRoute:
-	var gate_z: float = maxf(stern_z + STERN_MARGIN_M, grab.z + 30.0)
+# A pod's route from the bay's back wall to its hold `grab` (on lane `k`): down the lane, round behind the stern, in from the side
+# to `APPROACH_IN_M` off the hold along `out` (from the block toward the hold) and straight in, nose first. It steps outboard until
+# the way clears `obstacles` and the block `own` (only the last leg comes closer to `own` than a hold's clearance).
+func _approach(k: int, grab: Vector3, out: Vector3, outboard: Vector3, obstacles: Array[AABB], own: AABB, stern_z: float) -> BotRoute:
+	var pre: Vector3 = grab + out * APPROACH_IN_M
+	var gate_z: float = maxf(stern_z + STERN_MARGIN_M, maxf(grab.z, pre.z) + 30.0)
+	var around: Array[AABB] = obstacles.duplicate()
+	around.append(own)
 	for w: float in SIDESTEPS_M:
-		var side: Vector3 = grab + outboard * w
+		var side: Vector3 = pre + outboard * w
 		var gate := Vector3(side.x, side.y, gate_z)
 		# The way in from the side need only be as clear as the hold itself.
 		var ok: bool = true
 		for i: int in 41:
 			var t: float = float(i) / 40.0
-			ok = ok and _clearance(gate.lerp(side, t), obstacles) >= BOT_CLEAR_M
-			ok = ok and _clearance(side.lerp(grab, t), obstacles) >= GRAB_CLEAR_M
+			ok = ok and _clearance(gate.lerp(side, t), around) >= BOT_CLEAR_M
+			ok = ok and _clearance(side.lerp(pre, t), around) >= GRAB_CLEAR_M
+			ok = ok and _clearance(pre.lerp(grab, t), obstacles) >= GRAB_CLEAR_M
 		if not ok:
 			continue
 		var lane := _points(Vector2((-1.0 if k == 0 else 1.0) * LANE_X_M, lane_y + LANE_Y_M), gate)
 		var near := PackedVector3Array([gate])
 		if w > 0.0:
 			near.append(side)
+		near.append(pre)
 		near.append(grab)
 		return BotRoute.joined([BotRoute.from_points(lane), BotRoute.from_corners(near, CORNER_M)] as Array[BotRoute])
 	return null

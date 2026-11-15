@@ -807,14 +807,14 @@ func _spawn_props(props: Array) -> void:
 		director.watch_buoy(buoy)
 
 
-# The station's traffic the scenario asks for at the start (M7-T12): the maintenance bots are always there; the cargo ferry, a Saturn
-# backed in at the cargo bay with its bots, is what `station.cargo_ferry` adds.
+# The station's traffic the scenario asks for at the start (M7-T12): the maintenance bots are always there; the cargo scene, a Saturn
+# backed in at the cargo bay with its cargo pods (M7-T34), is what `station.cargo_ferry` adds.
 func _start_station_traffic(wanted: Dictionary) -> void:
 	var ferry: int = int(wanted.get("cargo_ferry", 0))
 	var station: Station = far_props.station if far_props != null else null
-	if ferry <= 0 or station == null or station.bots == null or station.bots.cargo == null:
+	if ferry <= 0 or station == null or station.cargo_pods == null or station.cargo_pods.cargo == null:
 		return
-	var made: ConsoleResult = station.bots.cargo.load_scene(ferry)
+	var made: ConsoleResult = station.cargo_pods.cargo.load_scene(ferry)
 	if not made.ok:
 		push_warning("Main: the cargo ferry did not start: %s" % made.error)
 

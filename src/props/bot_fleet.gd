@@ -1,9 +1,10 @@
 class_name BotFleet
 extends Node
-## The station's maintenance bots (M7-T11, M7-T35, Q11, D78): the crew of `BotCrew` (a pool of bots living in the cargo bay) and
-## the cargo ferry's bots (T30). The crew patrols in peace, one bot an area at a time and irregularly: along the spine, the fins,
-## the drum (riding its turn, so nothing strikes them) and out to the jumpgate and along its arm. In a fight it goes out to repair:
-## one bot a damaged section or grid mount, each adding health at a fixed rate (`data/station/bot_points.json`).
+## The station's maintenance bots (M7-T11, M7-T35, Q11, D78): the crew of `BotCrew`, a pool of bots living in the cargo bay (the
+## freighters' cargo is the cargo pods' work since M7-T34, `CargoPodFleet`, which heed this fleet's alarm log). The crew patrols
+## in peace, one bot an area at a time and irregularly: along the spine, the fins, the drum (riding its turn, so nothing strikes
+## them) and out to the jumpgate and along its arm. In a fight it goes out to repair: one bot a damaged section or grid mount, each
+## adding health at a fixed rate (`data/station/bot_points.json`).
 ##
 ## Crew bots hang from the station's node itself, never from its visuals (the far drawing shrinks those), so they ride rebases and
 ## drifts and stay true out at the gate; their motion is in the station's frame, with the drum and the gate placed each tick
@@ -11,7 +12,7 @@ extends Node
 ##
 ## **Fighting near them** (any hit near the station, any shot of its grid, the grid going weapons free) sends peace bots home
 ## and stops new patrols until the quiet has held (`BotAlert`, T11's habit); a repair bot backs off its spot while hits land close.
-## The ferry bots hide in the cargo bay's wall as before.
+## The cargo pods read the same log (`alert`, `now_s`).
 ##
 ## Cost (D78): a dozen kinematic bots a tick in GDScript; `tick_us` reads the last tick's cost.
 ##
@@ -31,10 +32,6 @@ const BATTLE_AREAS: Array[String] = ["L10", "green_zone", "L3", "vanes", "comman
 const BATTLE_HP: float = 600.0
 
 var bots: Array[MaintenanceBot] = []
-## The cargo ferry's bots (`bots cargo`): between the cargo bay and a freighter, on the frame; none until the scene is loaded.
-var ferry_bots: Array[MaintenanceBot] = []
-## The cargo scene (the freighter and its ferry), null in a bare fleet.
-var cargo: BotCargoScene = null
 var crew: BotCrew = null
 var frames := BotFrames.new()
 var alert := BotAlert.new()
@@ -55,8 +52,6 @@ var _alarmed := PackedByteArray()
 var _ducked := PackedByteArray()
 var _free_seen: int = 0
 var _hooked: bool = false
-var _frame_parent: Node3D = null
-var _mesh: Mesh = null
 var _followed: MaintenanceBot = null
 ## The drum's turn run ahead during `bots skip`, rad (the station's own angle stands still meanwhile).
 var _skip_turn: float = 0.0
@@ -66,29 +61,20 @@ var _follow_pose: Transform3D = Transform3D.IDENTITY
 ## Builds the crew for `p_station` (its visuals, grid and sections built). False when the crew's file is broken.
 func build(p_station: Station) -> bool:
 	station = p_station
-	cargo = BotCargoScene.new()
-	cargo.name = "Cargo"
-	cargo.fleet = self
-	cargo.station = p_station
-	add_child(cargo)
 	var areas: BotRepairAreas = null
 	if p_station.sections != null and p_station.grid != null:
 		areas = BotRepairAreas.make(p_station.sections, p_station.grid.health, p_station.hardpoints.grid_mounts)
 		areas.repair_section = p_station.repair_section
 		areas.repair_mount = p_station.grid.repair_some
 	frames.pivot = p_station.drum_origin
-	return build_on(p_station, p_station.frame_piece, p_station, BotData.load_file(),
-			MeshAssets.for_asset(MaintenanceBot.ASSET_ID), areas)
+	return build_on(p_station, p_station, BotData.load_file(), MeshAssets.for_asset(MaintenanceBot.ASSET_ID), areas)
 
 
-## Builds the crew from `data` under `crew_parent` (its frame is the station's), the ferry under `frame_parent`; alerts are in
-## `p_origin`'s frame and `areas` are what the crew repairs (none in a bare fleet). For tests and `build`.
-func build_on(p_origin: Node3D, frame_parent: Node3D, crew_parent: Node3D, data: BotData, mesh: Mesh,
-		areas: BotRepairAreas = null) -> bool:
+## Builds the crew from `data` under `crew_parent` (its frame is the station's); alerts are in `p_origin`'s frame and `areas` are
+## what the crew repairs (none in a bare fleet). For tests and `build`.
+func build_on(p_origin: Node3D, crew_parent: Node3D, data: BotData, mesh: Mesh, areas: BotRepairAreas = null) -> bool:
 	name = "Bots"
 	origin = p_origin
-	_frame_parent = frame_parent
-	_mesh = mesh
 	if not data.valid:
 		push_warning("BotFleet: %s; the station has no maintenance bots" % data.error)
 		return false
@@ -127,8 +113,6 @@ func _physics_process(delta: float) -> void:
 	for i: int in bots.size():
 		bots[i].advance(delta, false)
 	crew.work(delta, _ducked)
-	for j: int in ferry_bots.size():
-		ferry_bots[j].advance(delta, held_in or _alarmed[bots.size() + j] != 0)
 	tick_us = Time.get_ticks_usec() - started
 	tick_us_avg += (float(tick_us) - tick_us_avg) * 0.02
 
@@ -165,52 +149,8 @@ func hidden_count() -> int:
 	return bots.size() - out_count()
 
 
-## Ferry bots inside the cargo bay's wall now.
-func ferry_hidden_count() -> int:
-	var count: int = 0
-	for bot: MaintenanceBot in ferry_bots:
-		count += 0 if bot.motion.is_visible() else 1
-	return count
-
-
-## Adds a ferry bot flying `motion` (a `BotFerryMotion`) on the frame; the bot.
-func add_ferry_bot(motion: BotMover) -> MaintenanceBot:
-	var bot := MaintenanceBot.new()
-	bot.setup("Ferry%d" % (ferry_bots.size() + 1), "cargo_ferry", StationHardpoints.FRAME, motion, _mesh)
-	_frame_parent.add_child(bot)
-	ferry_bots.append(bot)
-	_resize_alarms()
-	return bot
-
-
-## Takes one ferry bot away (a freighter's crew when its cargo is done).
-func remove_ferry_bot(bot: MaintenanceBot) -> void:
-	var i: int = ferry_bots.find(bot)
-	if i < 0:
-		return
-	ferry_bots.remove_at(i)
-	if is_instance_valid(bot):
-		bot.get_parent().remove_child(bot)
-		bot.free()
-	_resize_alarms()
-
-
-## The node the ferry bots (and the pods they carry) hang from: the station's frame.
-func frame_parent() -> Node3D:
-	return _frame_parent
-
-
-## Takes every ferry bot away.
-func clear_ferry() -> void:
-	for bot: MaintenanceBot in ferry_bots:
-		bot.get_parent().remove_child(bot)
-		bot.free()
-	ferry_bots.clear()
-	_resize_alarms()
-
-
 func _resize_alarms() -> void:
-	_alarmed.resize(bots.size() + ferry_bots.size())
+	_alarmed.resize(bots.size())
 	_ducked.resize(bots.size())
 
 
@@ -249,12 +189,11 @@ func _refresh_alarms() -> void:
 		if free > _free_seen:
 			alert.note_everywhere(_now_s)
 		_free_seen = free
-	for i: int in bots.size() + ferry_bots.size():
-		var bot: MaintenanceBot = bots[i] if i < bots.size() else ferry_bots[i - bots.size()]
+	for i: int in bots.size():
+		var bot: MaintenanceBot = bots[i]
 		var here: Vector3 = origin.to_local(bot.global_position) if bot.is_inside_tree() else Vector3.ZERO
 		_alarmed[i] = 1 if alert.is_alarmed(here, _now_s) else 0
-		if i < bots.size():
-			_ducked[i] = 1 if near_hits.is_alarmed(here, _now_s) else 0
+		_ducked[i] = 1 if near_hits.is_alarmed(here, _now_s) else 0
 
 
 # Hits anywhere (the hit resolver's) and the grid's shots are the combat the bots hear.
@@ -290,15 +229,12 @@ func _register_console() -> void:
 		&"jobs": {"get": _jobs_text, "doc": "Each crew bot out: its job (peace area or repair area) and what it is doing"},
 		&"areas": {"get": _areas_text, "doc": "Peace areas with their bot (or the seconds until the next trip), and the damaged repair areas with theirs"},
 		&"hidden": {"get": hidden_count, "type": TYPE_INT, "doc": "Crew bots in the cargo bay"},
-		&"ferry": {"get": func() -> String: return "%d ferry bots (%d inside the bay's wall)%s" % [ferry_bots.size(), ferry_hidden_count(),
-				", %s at its hold point" % BotCargoScene.FREIGHTER_NAME if cargo != null and cargo.freighter != null else ""],
-				"doc": "The cargo ferry (bots cargo): its bots, how many are inside the cargo bay's wall, and whether the Saturn 3 is at the hold point"},
 		&"held": {"get": func() -> bool: return held_in, "type": TYPE_BOOL, "doc": "bots hide holds them inside until bots show"},
 		&"tick_us": {"get": func() -> int: return tick_us, "type": TYPE_INT, "doc": "Wall-clock microseconds of the last physics tick's bot work"},
 		&"tick_us_avg": {"get": func() -> float: return tick_us_avg, "type": TYPE_FLOAT, "doc": "Running average of that, microseconds"},
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(PROVIDER,
-			"The station's maintenance bots (M7-T11, M7-T35): info (each bot's job), hide (every bot goes home and stays), show (they go out again), send <area> (a peace patrol now: spine, fins_port, fins_starboard, drum_fore, drum_aft, gate), peace on|off (peace patrols), battle [n] [hp] (damage n of the station's sections and grid mounts, default 6 by 600 hp, and sound the alarm: the crew goes out to repair), follow <n|area|off> [metres] (a camera on bot n, or on the bot of a peace area or a repair area such as spine or L10, sending one to a peace area that has none), skip [seconds] (run the crew that far ahead at once, default 60, for viewing), goto <n> [metres] (put the player that far from bot n), cargo [n|off|view|bayview] (a Saturn 3 backed in at the cargo bay's hold point and n ferry bots, default 5, shuttling between its pods and the bay; off removes them; view and bayview put the player where the bots can be seen)",
+			"The station's maintenance bots (M7-T11, M7-T35): info (each bot's job), hide (every bot goes home and stays), show (they go out again), send <area> (a peace patrol now: spine, fins_port, fins_starboard, drum_fore, drum_aft, gate), peace on|off (peace patrols), battle [n] [hp] (damage n of the station's sections and grid mounts, default 6 by 600 hp, and sound the alarm: the crew goes out to repair), follow <n|area|off> [metres] (a camera on bot n, or on the bot of a peace area or a repair area such as spine or L10, sending one to a peace area that has none), skip [seconds] (run the crew that far ahead at once, default 60, for viewing), goto <n> [metres] (put the player that far from bot n), cargo [n|off|view|bayview] (the same as pods cargo: the cargo scene with its cargo pods, M7-T34)",
 			[ConsoleArg.enum_optional(&"action", ACTIONS, &"info"), ConsoleArg.string_optional(&"a"),
 					ConsoleArg.float_optional(&"metres", null, 3.0)]), _cmd_bots, self)
 
@@ -356,15 +292,13 @@ func _cmd_bots(args: Dictionary) -> ConsoleResult:
 		&"battle":
 			return _battle(int(a) if a.is_valid_int() else 6, float(args[&"metres"]) if args[&"metres"] != null else BATTLE_HP)
 		&"cargo":
-			if cargo == null:
+			if station == null or station.cargo_pods == null or station.cargo_pods.cargo == null:
 				return ConsoleResult.failure("bots cargo: no station in play")
-			return cargo.command(a)
+			return station.cargo_pods.cargo.command(a)
 	var lines := PackedStringArray()
 	for i: int in bots.size():
 		var m: BotCrewMotion = crew.motions[i]
 		lines.append("%s %s %.1f m/s at %s" % [bots[i].name, m.phase_name(), m.speed_mps, m.position.round()])
-	for bot: MaintenanceBot in ferry_bots:
-		lines.append("%s %s" % [bot.name, bot.motion.phase_name()])
 	return ConsoleResult.line("%d bots, %s; areas: %s; %.0f us a tick (average %.0f); %s" % [bots.size(), _jobs_text(), _areas_text(),
 			float(tick_us), tick_us_avg, "; ".join(lines)])
 

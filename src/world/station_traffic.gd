@@ -9,8 +9,8 @@ extends Node
 ##   flies through into the black void behind them, they shut, and it goes back to its pool (it left the world; M7-T25).
 ##   **Undocking** is the same backwards: it waits in the void, the doors open, it comes out turning with the drum and they shut.
 ## - **Freighter cycle**: any of the five Saturns flies to the cargo bay's lane, turns short of the hold point, backs in (stern and
-##   pods to the bay), waits while the station's maintenance bots carry its pods or tanks into the bay one by one (or, loading,
-##   out of the bay onto it; `FreighterCargo`, M7-T30), and leaves nose first when they are done.
+##   pods to the bay), waits while the station's cargo pods carry its cargo blocks or tanks into the bay one by one (or, loading,
+##   out of the bay onto it; `FreighterCargo`, M7-T30, M7-T34), and leaves nose first when they are done.
 ## - **Raid**: raiders with the station as their objective (they aim at the grid's mounts, native), and the wings named in
 ##   the data scrambled against them.
 ## - Arrivals come out of the scene's jumpgate when it has one, and departures leave through it; without one they start
@@ -69,7 +69,7 @@ var events: int = 0
 var docked_count: int = 0
 var undocked_count: int = 0
 var freighters_done: int = 0
-## Cargo pods the bots carried into the cargo bay, and onto freighters.
+## Freighters' cargo blocks the cargo pods carried into the cargo bay, and onto freighters.
 var pods_in: int = 0
 var pods_out: int = 0
 var raids: int = 0
@@ -163,7 +163,7 @@ func undock(type: StringName = &"") -> String:
 
 ## A Saturn of `type` (any of `DockingPlan.FREIGHTER_TYPES`; "" picks one) flies the cargo bay's cycle, unloading or `loading`.
 ## `start`: "" out of the gate (or far out), `near` on the lane's first point, `hold` already holding at the bay, `show` backing in
-## its last `SHOW_BACK_M` with the bots already on their way and the player put beside the lane to watch. Returns "" or why not.
+## its last `SHOW_BACK_M` with the cargo pods already on their way and the player put beside the lane to watch. Returns "" or why not.
 func freighter(type: StringName = &"", loading: bool = false, start: StringName = &"") -> String:
 	var why: String = _ready_plan()
 	if not why.is_empty():
@@ -192,7 +192,7 @@ func freighter(type: StringName = &"", loading: bool = false, start: StringName 
 	return _arrive(hull, &"freighter", plan.freighter, start == &"near", {"loading": loading})
 
 
-## Puts the player beside the freighters' lane, toward the bay from the hold point, looking at a held Saturn's pods: the bots come
+## Puts the player beside the freighters' lane, toward the bay from the hold point, looking at a held Saturn's cargo: the cargo pods come
 ## past on their way out and back. "" or why not.
 func view_cargo_bay() -> String:
 	var s: Station = station()
@@ -420,7 +420,7 @@ func _draw_kind(index: int) -> StringName:
 
 
 # One of the traffic's ships this tick: a transit that reached the lane takes the lane, a freighter at the hold point
-# has its cargo carried and leaves when the bots are done, a ship at its lane's end docks or leaves, and one that left is let go.
+# has its cargo carried and leaves when the cargo pods are done, a ship at its lane's end docks or leaves, and one that left is let go.
 func _step(i: int) -> void:
 	var entry: Dictionary = _own[i]
 	if not _still_ours(entry):
@@ -467,8 +467,8 @@ func _step(i: int) -> void:
 				_finish(i)
 
 
-# The bots come for a freighter's cargo now it holds at the bay (or, `early`, while it backs in: they wait for it to stop); with
-# no bots (or no plan) it just goes on.
+# The cargo pods come for a freighter's cargo now it holds at the bay (or, `early`, while it backs in: they wait for it to stop); with
+# no cargo pods (or no plan) it just goes on.
 func _start_cargo(entry: Dictionary, early: bool = false) -> void:
 	var c: Combatant = entry["combatant"]
 	var loading: bool = entry["loading"]
@@ -495,7 +495,7 @@ func _start_cargo(entry: Dictionary, early: bool = false) -> void:
 		freighter_unloading.emit(c.display_name)
 
 
-# The bots are done: the freighter leaves its hold point now, out along its lane.
+# The cargo pods are done: the freighter leaves its hold point now, out along its lane.
 func _depart(entry: Dictionary) -> void:
 	entry["cargo_state"] = &"gone"
 	var lane: Array[Dictionary] = [plan.freighter[plan.freighter.size() - 1]]
@@ -673,14 +673,14 @@ func _register_console() -> void:
 		&"docked": {"get": func() -> int: return docked_count, "doc": "Ships that docked: flew into the void behind the inner doors, which shut behind them"},
 		&"undocked": {"get": func() -> int: return undocked_count, "doc": "Ships that came out of the bay and left"},
 		&"freighters_done": {"get": func() -> int: return freighters_done, "doc": "Freighter cycles finished"},
-		&"pods_in": {"get": func() -> int: return pods_in, "doc": "Cargo pods the maintenance bots carried into the cargo bay"},
-		&"pods_out": {"get": func() -> int: return pods_out, "doc": "Cargo pods the maintenance bots carried onto freighters"},
+		&"pods_in": {"get": func() -> int: return pods_in, "doc": "Freighters' cargo blocks the cargo pods carried into the cargo bay"},
+		&"pods_out": {"get": func() -> int: return pods_out, "doc": "Freighters' cargo blocks the cargo pods carried onto freighters"},
 		&"cargo": {"get": _cargo_text, "doc": "Each freighter at the cargo bay: its hull, unloading or loading, and pods carried"},
 		&"raids": {"get": func() -> int: return raids, "doc": "Raids sent at the station"},
 		&"last_event": {"get": func() -> String: return last_event, "doc": "The last thing the traffic started"},
 	}), self)
 	registry.register_command(ConsoleCommand.new(&"traffic",
-			"Station traffic: status, dock [near] (a civilian into the main docking bay), undock (one out of it), freighter [type] [near|hold|show] [load] (a Saturn's cargo cycle: the station's bots carry its pods or tanks into the cargo bay, or with load onto it; near starts it on the lane, hold already at the bay, show backing in its last 300 m with the bots on their way and you beside the lane to watch; type is one of %s, default each in turn), raid [n] (raiders at the station, its wings scrambled), scramble <wing>, auto <on|off>, clear" % ", ".join(DockingPlan.FREIGHTER_TYPES),
+			"Station traffic: status, dock [near] (a civilian into the main docking bay), undock (one out of it), freighter [type] [near|hold|show] [load] (a Saturn's cargo cycle: the station's cargo pods carry its cargo blocks or tanks into the cargo bay, or with load onto it; near starts it on the lane, hold already at the bay, show backing in its last 300 m with the cargo pods on their way and you beside the lane to watch; type is one of %s, default each in turn), raid [n] (raiders at the station, its wings scrambled), scramble <wing>, auto <on|off>, clear" % ", ".join(DockingPlan.FREIGHTER_TYPES),
 			[ConsoleArg.enum_optional(&"action", ACTIONS, &"status"), _rest_arg()] as Array[ConsoleArg]),
 			_cmd_traffic, self)
 

@@ -1,6 +1,6 @@
 extends GutTest
 ## The station sandbox and its exterior tour on the real main scene (M7-T12): `station_showcase` starts the player in a Cobra bay with
-## the station's traffic on (the maintenance bots, the cargo ferry with its Saturn); the `tour` command plays the seven stops end to
+## the station's traffic on (the maintenance bots, the cargo pods with their Saturn); the `tour` command plays the seven stops end to
 ## end on the cinematic camera, every shot at least a second, each stop's subject on screen; A or Start skips it; a stop plays alone;
 ## the camera goes back to the player's view afterwards.
 
@@ -65,8 +65,8 @@ func test_the_sandbox_starts_in_a_bay_with_the_stations_traffic() -> void:
 	assert_true(main.controls_locked(), "the controls are held on the rack")
 	assert_not_null(station.bots, "the maintenance bots")
 	assert_eq(station.bots.bots.size(), BotData.load_file().pool, "the maintenance crew in the cargo bay")
-	assert_eq(station.bots.ferry_bots.size(), 5, "the cargo ferry's bots")
-	assert_not_null(station.bots.cargo.freighter, "the Saturn backed in at the cargo bay")
+	assert_eq(station.cargo_pods.pods.size(), 5, "the cargo scene's cargo pods (M7-T34)")
+	assert_not_null(station.cargo_pods.cargo.freighter, "the Saturn backed in at the cargo bay")
 	assert_not_null(main.tours.book, "the tour is loaded")
 
 

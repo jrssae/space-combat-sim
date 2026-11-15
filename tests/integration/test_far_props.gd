@@ -44,7 +44,6 @@ func _view(far: FarProp, prop: Node3D, distance_m: float, bearing: Vector3 = Vec
 	var centre: Vector3 = prop.global_transform * far.math.centre
 	var eye: Vector3 = centre + prop.global_basis * bearing.normalized() * distance_m
 	camera.global_transform = Transform3D(Basis.looking_at(centre - eye, Vector3.UP), eye)
-	camera.reset_physics_interpolation()  # a cut, not a move: the far prop reads the camera's interpolated pose
 	for i: int in frames:
 		far.update(camera, FRAME_S)
 

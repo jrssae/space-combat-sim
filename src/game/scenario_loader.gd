@@ -14,7 +14,7 @@ extends RefCounted
 ##                 "launch_bay": String},           # (M7-T08) `player.launch_bay` or `player.launch` {wing, door}: the start on
 ##                                                  #       that Cobra bay's rack ("cobra_bay_alpha_3"); "" in flight
 ##      "station": Dictionary,                      # (M7-T12) the station's traffic at the start: {"cargo_ferry": int} (the Saturn 3 backed
-##                                                  #       in at the cargo bay and that many ferry bots, 0 for none); {} for none
+##                                                  #       in at the cargo bay and that many cargo pods, 0 for none); {} for none
 ##      "props": Array[Dictionary],                 # each {"type": StringName, "name": String,
 ##                                                  #       "position": UniversePos, "velocity": Vector3}
 ##      "jumpgates": Array[Dictionary],             # (M6-T14) `jumpgates[]`, each {"type": &"jumpgate", "name", "position"
@@ -316,7 +316,7 @@ static func _civilian_names(raw: Variant, source: String) -> Variant:
 	return out
 
 
-## `station` (M7-T12): the station's traffic at the start, `{"cargo_ferry": n}` with n from 0 to 12 (the cargo ferry's bots); or an error string.
+## `station` (M7-T12): the station's traffic at the start, `{"cargo_ferry": n}` with n from 0 to 12 (the cargo scene's cargo pods); or an error string.
 static func _station(raw: Variant, source: String) -> Variant:
 	if not raw is Dictionary:
 		return "%s: station must be an object" % source
@@ -325,8 +325,8 @@ static func _station(raw: Variant, source: String) -> Variant:
 		if key != "cargo_ferry":
 			return "%s: station.%s is not a known key (cargo_ferry)" % [source, key]
 		var n: Variant = (raw as Dictionary)[key]
-		if typeof(n) != TYPE_INT and typeof(n) != TYPE_FLOAT or float(n) != floorf(float(n)) or int(n) < 0 or int(n) > BotCargoScene.MAX_BOTS:
-			return "%s: station.cargo_ferry must be a whole number from 0 to %d" % [source, BotCargoScene.MAX_BOTS]
+		if typeof(n) != TYPE_INT and typeof(n) != TYPE_FLOAT or float(n) != floorf(float(n)) or int(n) < 0 or int(n) > CargoPodScene.MAX_PODS:
+			return "%s: station.cargo_ferry must be a whole number from 0 to %d" % [source, CargoPodScene.MAX_PODS]
 		out["cargo_ferry"] = int(n)
 	return out
 

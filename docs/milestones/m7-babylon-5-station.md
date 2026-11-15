@@ -287,7 +287,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T31 | C | The pause menu gets Quit (exit the game); the start and pause menus' boxes shrink to their content (Settings keeps its layout) (maintainer, 2026-11-14) | - | Sonnet | Front-end layout | done |
 | T32 | A | The cargo bay gets the main docking bay's look: metallic grey walls and doors with the Earth Alliance mosaic, lit red by lamps through the light slots, no self-lit rings or bands (maintainer, 2026-11-14) | T25 | Opus | Same surfaces and lamps as T25 on the spine's cargo bay; (H) | done |
 | T33 | A | The cargo pod: a new 6 m Earth Alliance cargo-handling craft built from `references/EA_cargo_pod.stl` at the 90% rule (maintainer, 2026-11-14) | - | Opus | A new STL asset and its look sheet; (H) | done |
-| T34 | D | Cargo pods take over T30's cargo work: they move every freighter's cargo between the ship and the cargo bay with T30's plan and carrying logic, launched from the cargo bay; the maintenance bots stop carrying cargo (maintainer, 2026-11-14) | T30, T33 | Opus | Retargets T30's ferry from bots to pods | in progress |
+| T34 | D | Cargo pods take over T30's cargo work: they move every freighter's cargo between the ship and the cargo bay with T30's plan and carrying logic, launched from the cargo bay; the maintenance bots stop carrying cargo (maintainer, 2026-11-14) | T30, T33 | Opus | Retargets T30's ferry from bots to pods | done |
 | T35 | D | Maintenance bots roam and repair: one per area at a time and irregularly, along the spine, the fins (vanes), the drum (turning with it, so they take no damage) and out to the jumpgate and along its arm; in battle the cargo bay launches one per damaged area and each repairs 10 HP/s on damage sections and grid turrets (maintainer, 2026-11-14) | T11, T07 | Opus | New bot routes, a co-rotating frame and a repair rule over T06/T07's health | done |
 | T36 | A | The maintenance bot rebuilt to its reference sheet: top, side and front views from `references/maintenance bot.webp` at 90% silhouette overlap (maintainer, 2026-11-14) | T11 | Opus | T11's bot does not match the reference's top view; (H) | done |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
@@ -1836,6 +1836,34 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   move to the pods; keep the console commands working under the pods' names and update `info.md`). T30's tests carry over to the pods.
 - **Done when:** the `traffic freighter ... show` runs work on all five Saturns with pods (maintainer's live check, H); the cargo
   tests pass in a `--staged` copy; committed.
+- **Done (2026-11-14; accepted live by the maintainer, "t30 and t34 accepted", after the Saturn 4 transport and Saturn 8 tanker
+  `show` runs with the crew bots out):**
+  - **Where the ferry lives.** It left `BotFleet`: `CargoPodFleet` (a child of the station beside `Bots`) holds the `CargoPodCraft`s
+    (T33's `CargoPodRig` on a node following its motion, arms posed each frame) on the frame, launched from and landing in the cargo
+    bay's back wall. It reads the crew's alarm log and clock (`BotFleet.alert`, `now_s`), so hits, grid shots and weapons free stop
+    pods and crew alike; a bare fleet keeps its own. `BotFleet` is the crew only (`ferry_bots`, `cargo` and the ferry's alarm slots
+    gone; `build_on` lost its frame parent). `BotFerryMotion` is `CargoPodMotion` and `BotCargoScene` is `CargoPodScene`; T30's plan,
+    routes, crew counts, tank turning, loading, combat pause and timing are as they were.
+  - **The hold.** A pod holds an end face at its centre, hands on it and nose to the block: its centre 3.85 m off the face (grips 3.7
+    m ahead with the arms out, a 0.15 m gap) and 0.40 m above the face's middle, turning with a tank as it rolls (T30's bot: 8 m).
+    Its way out ends with a straight 10 m leg in along the block's axis; backing off it keeps its nose to the block for those 10 m.
+    A two-pod block slides in until the far pod is past the wall; a carrying pod counts as hidden 4 m past it.
+  - **The arms** (in the motion, pure): reach out (0.5 a second) with the jaws open over the last 20 m; the jaws shut over 1.25 s once
+    it holds (inside the block's 3 s wait, so they are shut before it moves); held while carrying; letting go it stands still
+    1.25 s while they open, then folds flying off (at once in a fight); loading starts already gripping; the T11 shuttle reaches out
+    at the Saturn and folds going home.
+  - **Console:** `pods [info|hide|show|cargo [n|off|view|bayview]]` and the `pods` provider (count, hidden, held, scene, jobs with each
+    pod's phase and arms); `bots cargo` stays as an alias; `traffic freighter ...` unchanged; `info.md`, `docs/assets-station.md`.
+  - **Tests** (from a `--staged` copy): `test_cargo_pod_motion` 7/7 (T30's `test_bot_ferry_motion` with the shuttle's arms),
+    `test_cargo_pod_fleet` 5/5 (was `test_bot_ferry_fleet`; the crew's alarm), `test_ferry_pod` 10/10 (every tick a block moves, the
+    pods holding it through the move have their jaws shut and arms out; the arms through a trip; loading starts gripping),
+    `test_cargo_ferry_carry` 6/6 (hold at the reach, grips on the face's middle all the way, the last leg straight in),
+    `test_cargo_pod_grip` 2/2 (the drawn rig's grip points are the plan's; both pods' hands stay on a rolling tank's faces within
+    2 cm), `test_cargo_carry_clearance` 5/5 over the craft's body and hands (least: 10.6 m hull and 3.0 m Saturn on the way out,
+    6.5 m from its block before the last leg; carrying 12.2 m hull, 14.0 m Saturn; blocks 6.0 m Saturn, 5.1 m in the bay's mouth),
+    `test_cargo_ferry_clearance` 3/3, `test_cargo_ferry_plan` 5/5, `test_bot_fleet` 8/8, `test_station_traffic` 5/5,
+    `test_bots_on_station` 10/10 (`pods cargo` and the `bots cargo` alias), `test_station_tour` 8/8, slow `test_freighter_cargo`
+    3/3 (all five hulls unloaded by pods, loading, the combat pause with the drawn hands on the block's faces).
 
 ### M7-T35 Maintenance bots roam and repair
 

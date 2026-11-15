@@ -11,7 +11,7 @@ var plan: CargoFerryPlan
 
 
 func before_each() -> void:
-	plan = CargoFerryPlan.build(BAY, Hardpoints.load_collision_only(BotCargoScene.HARDPOINTS))
+	plan = CargoFerryPlan.build(BAY, Hardpoints.load_collision_only(CargoPodScene.HARDPOINTS))
 	assert_true(plan.valid, plan.error)
 
 
@@ -65,4 +65,4 @@ func test_a_bad_bay_or_freighter_is_said() -> void:
 	assert_false(CargoFerryPlan.build(BAY, [] as Array[Dictionary]).valid, "no pods, no plan")
 	var sideways: Dictionary = BAY.duplicate()
 	sideways["cargo_bay_entry"] = Vector3(500.0, 339.0, -4600.0)
-	assert_string_contains(CargoFerryPlan.build(sideways, Hardpoints.load_collision_only(BotCargoScene.HARDPOINTS)).error, "+Z")
+	assert_string_contains(CargoFerryPlan.build(sideways, Hardpoints.load_collision_only(CargoPodScene.HARDPOINTS)).error, "+Z")

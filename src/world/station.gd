@@ -63,6 +63,8 @@ var airlock: StationAirlock = null
 var bay_lights: BayLights = null
 ## The maintenance bots (M7-T11, Q11): ambient drones on loops round the hull, in the frame's and the drum's visuals.
 var bots: BotFleet = null
+## The cargo pods (M7-T34): every freighter's cargo carried between it and the cargo bay, on the frame.
+var cargo_pods: CargoPodFleet = null
 ## The pieces' visuals; the drum's turns on `drum_pivot`.
 var frame_piece: RenderPiece = null
 var drum_piece: RenderPiece = null
@@ -129,6 +131,9 @@ func build() -> bool:
 	else:
 		bots.free()
 		bots = null
+	cargo_pods = CargoPodFleet.new()
+	cargo_pods.build(self)
+	add_child(cargo_pods)
 	return true
 
 
