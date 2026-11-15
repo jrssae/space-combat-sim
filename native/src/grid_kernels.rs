@@ -154,7 +154,7 @@ pub fn pick<F: Fn(i64) -> i64>(rows: &Rows, row_of: &F, m: &PickMount, ctx: &mut
     let basis = &rows.bases[own];
     let pivot = add(xform(basis, m.local), rows.positions[own]);
     let up = normalized(xform(basis, m.up));
-    let from = add(pivot, scale(up, tk::LINE_LIFT_M as f32));
+    let from = add(pivot, scale(up, m.line_lift_m as f32));
     let view = View {
         body_ids: &rows.body_ids,
         positions: &rows.positions,

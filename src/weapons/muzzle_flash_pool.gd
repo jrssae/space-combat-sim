@@ -33,6 +33,7 @@ var _ships: Array[Node3D] = []
 var _muzzles: Array[Transform3D] = []
 var _births: PackedFloat64Array = PackedFloat64Array()
 var _tints: PackedColorArray = PackedColorArray()  # per slot, times the flash material's colour (M7-T41)
+var _sizes: PackedFloat32Array = PackedFloat32Array()  # per slot, times the flash's size (M7-T43: the heavy cannon's big flash)
 var _live := PackedByteArray()
 var _emitters: Array[LightEmitter] = []  # per slot, null when the flash has no light
 var _head: int = 0
@@ -72,6 +73,7 @@ func _ready() -> void:
 	_muzzles.resize(CAPACITY)
 	_births.resize(CAPACITY)
 	_tints.resize(CAPACITY)
+	_sizes.resize(CAPACITY)
 	_live.resize(CAPACITY)
 	_emitters.resize(CAPACITY)
 
@@ -105,8 +107,9 @@ static func attach(world: Node) -> MuzzleFlashPool:
 
 
 ## Starts a flash at `muzzle` (in `ship`'s frame) riding with `ship`, unless the camera is too far to see it. `tint` scales the
-## flash's own warm colour (M7-T41: the interceptor batteries' blue-white). Returns whether it started.
-func trigger(ship: Node3D, muzzle: Transform3D, tint: Color = Color.WHITE) -> bool:
+## flash's own warm colour (M7-T41: the interceptor batteries' blue-white) and `size_scale` its size (M7-T43: the heavy cannons'
+## big green flash). Returns whether it started.
+func trigger(ship: Node3D, muzzle: Transform3D, tint: Color = Color.WHITE, size_scale: float = 1.0) -> bool:
 	var from: Variant = ShotCull.listener(self)
 	if from != null and not ShotCull.within(from as Vector3, ship.global_position, ShotCull.FLASH_RANGE_M):
 		culled += 1
@@ -121,6 +124,7 @@ func trigger(ship: Node3D, muzzle: Transform3D, tint: Color = Color.WHITE) -> bo
 	_muzzles[slot] = muzzle
 	_births[slot] = _clock
 	_tints[slot] = tint
+	_sizes[slot] = size_scale
 	var emitter: LightEmitter = _start_light(ship, muzzle, tint)
 	_emitters[slot] = emitter
 	_lit += 1 if emitter != null else 0
@@ -177,7 +181,7 @@ func advance(delta: float) -> void:
 		if age >= MuzzleFlash.DURATION_S:
 			continue  # the light outlasts the quad by 10 ms
 		var t: float = age / MuzzleFlash.DURATION_S
-		var size: float = MuzzleFlash.SIZE_M * lerpf(MuzzleFlash.START_SCALE, 1.0, t)
+		var size: float = MuzzleFlash.SIZE_M * lerpf(MuzzleFlash.START_SCALE, 1.0, t) * _sizes[slot]
 		var at: Vector3 = ship.get_global_transform_interpolated() * _muzzles[slot].origin
 		var base: int = drawn * 16
 		_buffer[base] = size

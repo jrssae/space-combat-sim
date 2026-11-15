@@ -64,6 +64,7 @@ fn mount(body: i64) -> PickMount {
         min_elevation: (-10_f64).to_radians(),
         reach_m: 1500.0 * PICK_REACH,
         kind: MOUNT_TURRET,
+        line_lift_m: LINE_LIFT_M,
     }
 }
 
@@ -429,4 +430,56 @@ fn a_friend_that_fired_on_a_civilian_it_had_selected_is_answered_by_that_civilia
     memory.prune(2.0 + MEMORY_S + 1.0);
     assert_eq!(memory.provoked_count(), 0, "forgotten with the memory");
     assert_eq!(pick(&rows, &find, &mount(1), &memory, &t, 3, 40.0, &[]), 0);
+}
+
+#[test]
+fn a_one_shot_gun_fires_every_interval() {
+    let (mut fired, mut started) = (0, 0.0);
+    assert_eq!(next_ready(12.0, 1, 0.0, &mut fired, &mut started, 5.0), 17.0);
+    assert_eq!((fired, started), (0, 0.0), "no burst kept");
+}
+
+#[test]
+fn a_burst_fires_its_shots_apart_then_waits_out_the_cycle() {
+    // M7-T43's heavy cannon: three shots 0.35 s apart, a new burst 12 s after the last began.
+    let (mut fired, mut started) = (0, 0.0);
+    let mut now = 100.0;
+    let mut times = vec![];
+    for _ in 0..6 {
+        times.push(now);
+        now = next_ready(12.0, 3, 0.35, &mut fired, &mut started, now);
+    }
+    let expected = [100.0, 100.35, 100.7, 112.0, 112.35, 112.7];
+    for (t, e) in times.iter().zip(expected) {
+        assert!((t - e).abs() < 1e-9, "{times:?}");
+    }
+    assert!((now - 124.0).abs() < 1e-9, "the third burst {now}");
+    // A burst held up (no target in the gate) resumes its count; the cycle runs from when the burst began.
+    let (mut fired, mut started) = (0, 0.0);
+    next_ready(12.0, 3, 0.35, &mut fired, &mut started, 0.0);
+    let late = next_ready(12.0, 3, 0.35, &mut fired, &mut started, 5.0);
+    assert!((late - 5.35).abs() < 1e-9);
+    assert!((next_ready(12.0, 3, 0.35, &mut fired, &mut started, 5.35) - 12.0).abs() < 1e-9);
+    // Held past its cycle, the next burst still waits its spacing.
+    let (mut fired, mut started) = (0, 0.0);
+    next_ready(1.0, 2, 0.35, &mut fired, &mut started, 0.0);
+    assert!((next_ready(1.0, 2, 0.35, &mut fired, &mut started, 3.0) - 3.35).abs() < 1e-9);
+}
+
+#[test]
+fn a_gun_on_a_raised_trunnion_fires_from_it() {
+    let mut m = Mounts::default();
+    let s = m.add(1, 1, 10, 0, Vector3::ZERO, Vector3::new(0.0, 1.0, 0.0), 200.0, 22.5, gun());
+    assert_eq!(m.line_lift(s), LINE_LIFT_M, "a turret's line starts just over its base");
+    m.lift_m[s] = 9.5;
+    assert_eq!(m.line_lift(s), 9.5, "a raised trunnion's line starts at it");
+    m.burst_shots[s] = 3;
+    m.burst_spacing_s[s] = 0.35;
+    let first = m.fired(s, 0.0);
+    assert!((first - 0.35).abs() < 1e-9);
+    let t = m.add(2, 1, 11, 0, Vector3::ZERO, Vector3::new(0.0, 1.0, 0.0), 200.0, 3.0, gun());
+    m.remove(t);
+    let again = m.add(3, 1, 12, 0, Vector3::ZERO, Vector3::new(0.0, 1.0, 0.0), 200.0, 3.0, gun());
+    assert_eq!(again, t);
+    assert_eq!((m.lift_m[again], m.burst_shots[again]), (0.0, 1), "a reused slot starts plain");
 }

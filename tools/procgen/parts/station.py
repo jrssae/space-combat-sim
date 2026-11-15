@@ -102,13 +102,13 @@ DRUM_FRONT_R = 103.4  # nothing of the drum's ahead of the ring's back face reac
 RING_TEETH = (30, 469.0, 486.0, 118.0, 127.7, 0.2, 0.0)  # count, z from, z to, inner and outer radius, share of the girth, phase
 PYLON = ((-4.25, 135.0, 506.0), (4.25, 330.0, 515.0))  # the slim fin holding the ring from the spine (the STL's)
 # The spine's front round the cargo bay (T21) and over the aperture's ring, to where the command section splits (z 595): rows of
-# z, half width, underside, top. H1 and H2 stand on its flat top at z 515. The rest of the spine, the command section and the bow's
+# z, half width, underside, top. H1 and H2 stand in recesses sunk into its flat top (M7-T43, ``station_recess``). The rest of the spine, the command section and the bow's
 # prongs are lofted through the STL's sections (``station_spine.py``, M7-T22).
 SPINE: list[tuple[float, float, float, float]] = [
     (420.0, 172.0, 313.0, 363.0), (500.0, 185.0, 316.0, 375.0), (530.0, 172.0, 320.0, 375.0), (560.0, 160.0, 315.0, 382.0),
     (597.0, 134.0, 319.0, 387.0),
 ]
-BOW_TOWER_TOP = 436.0  # the tower on the bow spine (D75's interceptor I5 stands on it, the heavy cannons beside it)
+BOW_TOWER_TOP = 436.0  # the tower on the bow spine (D75's interceptor I5 stands on it, the heavy cannons beside it; ``station_tower``)
 CARGO_Z = ssp.CARGO_Z
 FLANK_LAMPS_Z = (1180.0, 1230.0)  # the lamps on the beam's outer edges
 HUB_PROFILE = [(5508.0, 0.0), (5508.0, 292.0), (5560.0, 292.0), (5562.0, 347.0), (5788.0, 347.0), (5792.0, 335.0), (5830.0, 300.0),
@@ -165,8 +165,9 @@ def quads(corners: Sequence[np.ndarray], insides: Sequence[np.ndarray], material
     return Mesh(np.concatenate(verts), np.array(faces), np.zeros(n, dtype=np.int64), (material,), charts, np.array(uvs))
 
 
-def slab(sections: Sequence[Section], material: Material) -> Mesh:
-    """A solid of axis-aligned rectangular sections along z (``z, x0, x1, y0, y1`` each), flat sided and closed at both ends."""
+def slab(sections: Sequence[Section], material: Material, top: bool = True) -> Mesh:
+    """A solid of axis-aligned rectangular sections along z (``z, x0, x1, y0, y1`` each), flat sided and closed at both ends; without
+    ``top`` its top is left open for a caller that builds its own (the bow spine's gun recesses, M7-T43)."""
     secs = [tuple(float(v) for v in s) for s in sections]
     corners, insides = [], []
 
@@ -178,6 +179,8 @@ def slab(sections: Sequence[Section], material: Material) -> Mesh:
         ra, rb = ring(a), ring(b)
         inside = 0.5 * (ra.mean(axis=0) + rb.mean(axis=0))
         for i in range(4):
+            if i == 2 and not top:
+                continue
             j = (i + 1) % 4
             corners.append(np.array([ra[i], ra[j], rb[j], rb[i]]))
             insides.append(inside)
@@ -203,9 +206,9 @@ def spine_rows_from(z: float) -> list[tuple[float, float, float, float]]:
     return [spine_row_at(z)] + [r for r in SPINE if r[0] > z + 1e-6]
 
 
-def spine_slab(rows: Sequence[tuple[float, float, float, float]], material: Material) -> Mesh:
+def spine_slab(rows: Sequence[tuple[float, float, float, float]], material: Material, top: bool = True) -> Mesh:
     """A slab symmetric about x = 0 from ``(z, half width, underside, top)`` rows."""
-    return slab([(z, -w, w, y0, y1) for z, w, y0, y1 in rows], material)
+    return slab([(z, -w, w, y0, y1) for z, w, y0, y1 in rows], material, top)
 
 
 def around(mesh: Mesh, angles_deg: Sequence[float]) -> Mesh:
@@ -424,7 +427,8 @@ def mount_plinths(m: Material, body: str) -> Mesh:
     from . import station_detail as sd  # noqa: PLC0415 - it builds on this module's shapes
     from . import station_hardpoints as sh  # noqa: PLC0415
 
-    return Mesh.concatenate(sd.plinth(p, u, sd.PLINTH_R[k], m) for _, k, b, p, u in sh.GRID_MOUNTS if b == body)
+    # The heavy cannons stand in their recesses instead (M7-T43, ``station_recess``).
+    return Mesh.concatenate(sd.plinth(p, u, sd.PLINTH_R[k], m) for _, k, b, p, u in sh.GRID_MOUNTS if b == body and k != sh.HEAVY)
 
 
 def sealed_profile(profile: Sequence[tuple[float, float]], before: Sequence[tuple[float, float]] | None = None,
@@ -566,13 +570,15 @@ def truss_mesh(core_m: Material, bar_m: Material) -> Mesh:
 def frame_shapes(mats: dict[str, Material]) -> list[Shape]:
     """What stands still, in the station frame."""
     from . import station_detail as sd  # noqa: PLC0415 - it builds on this module's shapes
+    from . import station_recess as sr  # noqa: PLC0415
+    from . import station_tower as stw  # noqa: PLC0415
 
     spine, grey, recess, machinery = mats["spine"], mats["drum_grey"], mats["recess"], mats["machinery"]
     ring = lathe(RING_PROFILE, 96, grey, creases=(1, 2, 3, 4, 5, 6))
     count, tz0, tz1, tr0, tr1, fill, phase = RING_TEETH
     ring_teeth = teeth(count, tz0, tz1, tr0, tr1, fill, recess, phase)
     pylon = block(PYLON[0], PYLON[1], spine)
-    tower = block((-20.0, 370.0, 495.0), (20.0, BOW_TOWER_TOP, 545.0), spine)
+    tower = stw.tower_mesh(spine)  # the rook between the heavy cannons (M7-T43)
     lofted = ssp.shapes(mats)
     ex, ey = ssp.BEAM_EDGE
     flank_lamps = [block((sx * ex - 1.5, ey - 1.0, z - 12.0), (sx * ex + 1.5, ey + 2.0, z + 12.0), mats["lamp"])
@@ -580,7 +586,7 @@ def frame_shapes(mats: dict[str, Material]) -> list[Shape]:
     return [
         Shape("bow", Mesh.concatenate([lofted["bow"], ring, ring_teeth, pylon, tower])),
         # The cargo bay inside in the docking bay's grey metal (M7-T32).
-        Shape("spine", sd.lined(Mesh.concatenate([spine_slab(spine_rows_from(sd.ZG_BACK_Z), spine), sd.cargo_bay_walls(spine),
+        Shape("spine", sd.lined(Mesh.concatenate([sr.spine_with_recesses(spine_rows_from(sd.ZG_BACK_Z), mats), sd.cargo_bay_walls(spine),
                                                   lofted["spine"]]), mats["bay_tunnel"])),
         Shape("radiators", lofted["radiators"]),
         Shape("cargo", lofted["cargo"]),
