@@ -290,6 +290,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T34 | D | Cargo pods take over T30's cargo work: they move every freighter's cargo between the ship and the cargo bay with T30's plan and carrying logic, launched from the cargo bay; the maintenance bots stop carrying cargo (maintainer, 2026-11-14) | T30, T33 | Opus | Retargets T30's ferry from bots to pods | done |
 | T35 | D | Maintenance bots roam and repair: one per area at a time and irregularly, along the spine, the fins (vanes), the drum (turning with it, so they take no damage) and out to the jumpgate and along its arm; in battle the cargo bay launches one per damaged area and each repairs 10 HP/s on damage sections and grid turrets (maintainer, 2026-11-14) | T11, T07 | Opus | New bot routes, a co-rotating frame and a repair rule over T06/T07's health | done |
 | T36 | A | The maintenance bot rebuilt to its reference sheet: top, side and front views from `references/maintenance bot.webp` at 90% silhouette overlap (maintainer, 2026-11-14) | T11 | Opus | T11's bot does not match the reference's top view; (H) | done |
+| T37 | C | Radial menus are steered with the left stick while they show (the target menu and the comms menu), not the right; the ship takes no left-stick flight input meanwhile (maintainer, 2026-11-15) | T27 | Sonnet | Input routing while a menu is open; keyboard parity kept | not started |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M7-T01 Station references and measurements
@@ -1947,3 +1948,16 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     compile check is clean; the bot GUT files pass (bots_on_station 8, alert 5, data 2, ferry_fleet 4, ferry_motion 6, fleet 13,
     loop 9, loops_clear_of_hull 3, motion 8). T35's uncommitted crew tests passed with the new mesh in a working-copy scratch
     (crew 18, crew_motion 8, routes_clear_of_hull 3, trip 3).
+
+### M7-T37 Radial menus on the left stick
+
+- **Why (maintainer, 2026-11-15, after flying T27):** "change the radial button menu behavior to use the left controller stick when a
+  radial menu is showing rather than the right controller stick."
+- **What:** while a radial menu is open (the target menu held on B, and the comms menu), the **left stick** points at its entries
+  instead of the right; the right stick goes back to what it does in flight (or nothing, if the menu locks it today). The left stick's
+  flight input is held at neutral while the menu shows, so the ship does not turn or thrust from the same stick, and resumes cleanly
+  when the menu closes (no jump from a stick still held). Deadzone, selection threshold and the existing confirm/cancel buttons stay
+  as they are. Keyboard and mouse paths are unchanged (keyboard parity, the T27 rule). The controls screen and the pause menu's pad
+  diagram, `docs/playtest.md` and the architecture input table say left stick for the menus.
+- **Done when:** tests (the left stick picks entries in both menus, the right stick does not, the ship gets no left-stick input while
+  a menu shows and none jumps in on close, keyboard and mouse unchanged); the maintainer's live run (H); committed.
