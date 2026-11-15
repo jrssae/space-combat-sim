@@ -1136,11 +1136,11 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 - **Done (as built; the final sheet awaits the maintainer):** the layout the maintainer approved round by round (sheets in
   `references/screenshots/T18 station lighting/`), built from the generator's light hardpoints; details in `docs/assets-station.md`
   "Exterior lights".
-  - **Points:** 15 red beacons (the bow spike's tips, the 12 vane tips, the reactor's aft tip) blinking 0.8 s in every 3 s of sim
-    time; the pink-red navigation ring (28 round the forward body's flare, between the arms); 32 red-pink navigation lights on the
+  - **Points:** 15 red beacons (the bow spike's tips, the 12 vane tips, the reactor's aft tip) fading together over a 4 s cycle of sim
+    time (1 s dark, 1 s up, 1 s full, 1 s down); the pink-red navigation ring (28 round the forward body's flare, between the arms); 32 red-pink navigation lights on the
     Cobra arms' aft parts (four a flank, as the arms capture); the bays' 10 lamps. No running lights, no dashed rings, no lit
-    markings, no red glow in the docking bay (the maintainer). The beacons' beat slowed to 3 s (lit 0.8 s) after the maintainer
-    flew it live (2026-11-15).
+    markings, no red glow in the docking bay (the maintainer). The beacons' beat slowed to 3 s (lit 0.8 s), then to the 4 s fade, after
+    the maintainer flew them live (2026-11-15).
   - **Floods (74):** the docking ring's eight narrow pools; the Cobra arms (from the forward body's flare, from the core onto their
     aft parts, the same mirrored onto their fore parts and heads, the sphere's rear face kept dark); the spine; the ring in front of
     the vanes; the biggest band's forward face and the hull ahead of it. In the hull shader, each section holding only the floods

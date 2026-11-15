@@ -13,7 +13,8 @@ func _hardpoints() -> StationHardpoints:
 		"main_docking_bay": {"name": "main_docking_bay", "body": "drum"}, "cargo_bay": {"name": "cargo_bay", "body": "frame"},
 		"lights": [
 			{"name": "beacon_a", "kind": "beacon", "body": "frame", "position": [0.0, 300.0, -4000.0], "colour": "#FF2A1A",
-					"blink": true, "blink_period_s": 3.0, "blink_on_s": 0.8, "marker": red},
+					"blink": true, "blink_period_s": 4.0, "blink_off_s": 1.0, "blink_ramp_s": 1.0, "blink_full_s": 1.0,
+					"marker": red},
 			{"name": "nav_a", "kind": "nav", "body": "drum", "position": [305.0, 0.0, -1600.0], "colour": "#FF6A8A",
 					"marker": {"radius_m": 3.6, "rgb": [1.0, 0.416, 0.541]}},
 			{"name": "bay_light_alpha_1", "kind": "bay", "body": "drum", "position": [0.0, 230.0, -1900.0], "colour": "#FFA860"},
@@ -37,8 +38,10 @@ func test_the_points_are_grouped_by_piece_and_blink() -> void:
 	var nav: Dictionary = (plan.points[StationLightPlan.DRUM_STEADY] as Array)[0]
 	assert_almost_eq(float(nav["radius_m"]), 3.6, 1e-6)
 	assert_true((nav["colour"] as Color).is_equal_approx(Color(1.0, 0.416, 0.541)))
-	assert_almost_eq(plan.blink_period_s, 3.0, 1e-6)
-	assert_almost_eq(plan.blink_on_s, 0.8, 1e-6)
+	assert_almost_eq(plan.blink_period_s, 4.0, 1e-6)
+	assert_almost_eq(plan.blink_off_s, 1.0, 1e-6)
+	assert_almost_eq(plan.blink_ramp_s, 1.0, 1e-6)
+	assert_almost_eq(plan.blink_full_s, 1.0, 1e-6)
 
 
 func test_the_floods_are_read_with_their_cone_and_light() -> void:
@@ -51,16 +54,35 @@ func test_the_floods_are_read_with_their_cone_and_light() -> void:
 	assert_true((f["light"] as Color).is_equal_approx(Color(2.0, 1.0, 0.5)), "colour times energy")
 
 
-func test_beacons_blink_by_sim_time() -> void:
-	assert_true(StationLightPlan.blink_on(0.0, 3.0, 0.8), "lit at the start of a cycle")
-	assert_true(StationLightPlan.blink_on(0.79, 3.0, 0.8))
-	assert_false(StationLightPlan.blink_on(0.81, 3.0, 0.8), "dark after the lit part")
-	assert_false(StationLightPlan.blink_on(2.99, 3.0, 0.8))
-	assert_true(StationLightPlan.blink_on(3.0, 3.0, 0.8), "lit again a period later")
-	assert_true(StationLightPlan.blink_on(-2.5, 3.0, 0.8), "before the epoch it keeps the same rhythm")
-	assert_true(StationLightPlan.blink_on(3.0e8 + 0.2, 3.0, 0.8), "a system time far from zero keeps its phase")
-	assert_false(StationLightPlan.blink_on(3.0e8 + 1.9, 3.0, 0.8))
-	assert_true(StationLightPlan.blink_on(12.34, 0.0, 0.0), "no period: steady")
+func test_beacons_fade_over_a_4_s_cycle_of_sim_time() -> void:
+	var level: Callable = func(t: float) -> float: return StationLightPlan.blink_level(t, 4.0, 1.0, 1.0, 1.0)
+	# 0-1 s dark.
+	assert_eq(level.call(0.0), 0.0, "dark at the start of a cycle")
+	assert_eq(level.call(0.5), 0.0)
+	assert_eq(level.call(0.999), 0.0)
+	# 1-2 s a linear fade up.
+	assert_almost_eq(level.call(1.0), 0.0, 1e-6, "the fade up starts from dark")
+	assert_almost_eq(level.call(1.25), 0.25, 1e-6)
+	assert_almost_eq(level.call(1.5), 0.5, 1e-6, "half way up at 1.5 s")
+	assert_almost_eq(level.call(1.75), 0.75, 1e-6)
+	# 2-3 s full.
+	assert_almost_eq(level.call(2.0), 1.0, 1e-6)
+	assert_almost_eq(level.call(2.5), 1.0, 1e-6)
+	assert_almost_eq(level.call(2.999), 1.0, 1e-6)
+	# 3-4 s a linear fade down.
+	assert_almost_eq(level.call(3.0), 1.0, 1e-6, "the fade down starts from full")
+	assert_almost_eq(level.call(3.25), 0.75, 1e-6)
+	assert_almost_eq(level.call(3.5), 0.5, 1e-6, "half way down at 3.5 s")
+	assert_almost_eq(level.call(3.9), 0.1, 1e-6)
+	# The next cycle, before the epoch and far from it keep the same beat.
+	assert_eq(level.call(4.0), 0.0, "dark again a cycle later")
+	assert_almost_eq(level.call(5.5), 0.5, 1e-6)
+	assert_almost_eq(level.call(-2.5), 0.5, 1e-6, "before the epoch: -2.5 s is 1.5 s into a cycle")
+	assert_almost_eq(level.call(3.0e8 + 1.5), 0.5, 1e-4, "a system time far from zero keeps its phase")
+	assert_eq(StationLightPlan.blink_level(12.34, 0.0, 0.0, 0.0, 0.0), 1.0, "no period: steady and full")
+	var plan := StationLightPlan.from_hardpoints(_hardpoints())
+	assert_almost_eq(plan.beacon_level(2.5), 1.0, 1e-6, "the plan's beacons follow their hardpoints' beat")
+	assert_almost_eq(plan.beacon_level(3.5), 0.5, 1e-6)
 
 
 func test_a_flood_reaches_only_what_its_cone_and_throw_cover() -> void:

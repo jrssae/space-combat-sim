@@ -384,7 +384,8 @@ class HardpointTests(unittest.TestCase):
                 self.assertTrue(sd.ZG_FRONT_Z < p[2] < sd.ZG_BACK_Z and abs(p[0]) < sd.ZG_HALF_X, light["name"])
             if light["kind"] == "beacon":
                 self.assertTrue(light.get("blink"))
-                self.assertEqual((light["blink_period_s"], light["blink_on_s"]), (3.0, 0.8), "a 3 s beat, lit 0.8 s")
+                beat = (light["blink_period_s"], light["blink_off_s"], light["blink_ramp_s"], light["blink_full_s"])
+                self.assertEqual(beat, (4.0, 1.0, 1.0, 1.0), "4 s: dark, fade up, full, fade down, 1 s each")
             if "marker" in light:
                 self.assertGreater(light["marker"]["radius_m"], 0.0)
                 self.assertEqual(len(light["marker"]["rgb"]), 3)

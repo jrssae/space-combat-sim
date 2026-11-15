@@ -305,7 +305,9 @@ def _light(name: str, kind: str, body: str, p: Sequence[float], colour: str, f: 
 # red lamps, and the floods that light the hull in pools from fixed fixtures (the bow and arms captures). A drawn light carries a
 # `marker`: its radius on the hull and its colour as the marker shader takes it (linear, before its gain); a flood its fixture
 # (`position`), `direction`, cone, throw and colour times `energy`.
-BLINK_PERIOD_S, BLINK_ON_S = 3.0, 0.8  # a slow beat, as the maintainer flew it (2026-11-15)
+# The beacons' beat (the maintainer, 2026-11-15): a 4 s cycle on sim time, 1 s dark, 1 s fading up, 1 s full, 1 s fading down; all
+# beacons together.
+BLINK_PERIOD_S, BLINK_OFF_S, BLINK_RAMP_S, BLINK_FULL_S = 4.0, 1.0, 1.0, 1.0
 FLOOD_WARM, FLOOD_PINK = "#FFE2C2", "#FF9A88"
 NAV_RED = (0.42, 0.012, 0.040)  # red-pink (hue about 350) that the bloom and the tone mapper leave red-pink
 E_DOCK, E_ARMS, E_ARMS_AFT, E_SPINE, E_RING, E_FACE = 11.0, 4.5, 3.0, 2.0, 4.5, 4.5
@@ -398,7 +400,8 @@ def lights(f: Frames) -> list[dict]:
     navigation lights (the ring round the flare, eight on each Cobra arm's aft part); a light in each Cobra bay; the main docking
     bay's red lamps down its mouth and round it; the cargo bay's red lamps in it and at its mouth; and the floods (``floods``)."""
     out = []
-    beacon = {"blink": True, "blink_period_s": BLINK_PERIOD_S, "blink_on_s": BLINK_ON_S, "marker": _marker(4.5, RED)}
+    beacon = {"blink": True, "blink_period_s": BLINK_PERIOD_S, "blink_off_s": BLINK_OFF_S, "blink_ramp_s": BLINK_RAMP_S,
+              "blink_full_s": BLINK_FULL_S, "marker": _marker(4.5, RED)}
     for sx, side in ((-1.0, "port"), (1.0, "starboard")):
         out.append(_light(f"beacon_bow_{side}", "beacon", FRAME, (sx * 51.0, 322.0, 0.5), RED, f, **beacon))
     for sx, side in ((-1.0, "port"), (1.0, "starboard")):

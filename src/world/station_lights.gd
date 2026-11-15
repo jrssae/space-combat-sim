@@ -1,7 +1,7 @@
 class_name StationLights
 extends Node
 ## Babylon 5's exterior lights (M7-T18), from its light hardpoints (`StationLightPlan`): the beacons, navigation lights and bay lamps
-## as soft points on the hull (instanced, one draw call a group), the beacons blinking by the system's sim time, and the floods that
+## as soft points on the hull (instanced, one draw call a group), the beacons fading in and out by the system's sim time, and the floods that
 ## light the hull in pools, summed in the hull shader. Each hull section gets its own copy of its material holding only the floods
 ## that can reach it; those on the other piece (a drum flood over the frame, a frame flood over the drum) follow the drum's turn every
 ## frame. No light node and no light slot: the bays' real lamps stay `BayLights`'. Console: provider and command `station_lights`.
@@ -9,6 +9,8 @@ extends Node
 const PROVIDER: StringName = &"station_lights"
 const MARKER_SHADER: Shader = preload("res://assets/shaders/station_light_marker.gdshader")
 const ACTIONS: Array[StringName] = [&"status", &"on", &"off"]
+## The marker shader's gain at full brightness (`station_light_marker.gdshader`).
+const MARKER_GAIN: float = 4.0
 
 var plan: StationLightPlan = null
 ## The point groups' nodes, by `StationLightPlan` group.
@@ -43,7 +45,8 @@ func _ready() -> void:
 		&"lit_sections": {"get": func() -> int: return sections.size(), "doc": "Hull sections with floods of their own"},
 		&"max_section_floods": {"get": max_section_floods, "doc": "The most floods any one section sums (the shader holds 64)"},
 		&"turning_floods": {"get": turning_count, "doc": "Floods carried round by the drum's turn over the other piece, all sections"},
-		&"beacons_lit": {"get": beacons_lit, "doc": "The beacons are in the lit part of their blink now (sim time)"},
+		&"beacons_lit": {"get": beacons_lit, "doc": "The beacons show now (any part of their fade, sim time)"},
+		&"beacon_level": {"get": beacon_level, "doc": "The beacons' brightness now, 0 to 1 (4 s: dark, fade up, full, fade down)"},
 		&"shown": {"get": func() -> bool: return shown, "doc": "The lights are drawn (station_lights on|off)"},
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"station_lights",
@@ -58,12 +61,13 @@ func _exit_tree() -> void:
 func _process(_delta: float) -> void:
 	if _station == null or _station.drum_pivot == null:
 		return
-	var blink: Node3D = groups.get(StationLightPlan.FRAME_BLINK) as Node3D
-	if blink != null:
-		blink.visible = shown and beacons_lit()
-	var drum_blink: Node3D = groups.get(StationLightPlan.DRUM_BLINK) as Node3D
-	if drum_blink != null:
-		drum_blink.visible = shown and beacons_lit()
+	var level: float = beacon_level()
+	for group: StringName in [StationLightPlan.FRAME_BLINK, StationLightPlan.DRUM_BLINK]:
+		var node := groups.get(group) as MultiMeshInstance3D
+		if node == null:
+			continue
+		node.visible = shown and level > 0.0
+		((node.multimesh.mesh as QuadMesh).material as ShaderMaterial).set_shader_parameter(&"gain", MARKER_GAIN * level)
 	var basis: Basis = _station.drum_pivot.transform.basis
 	if not shown or (not _first_frame and basis.is_equal_approx(_drum_basis)):
 		return
@@ -90,7 +94,12 @@ func set_shown(on: bool) -> void:
 
 
 func beacons_lit() -> bool:
-	return StationLightPlan.blink_on(_system_time(), plan.blink_period_s, plan.blink_on_s)
+	return beacon_level() > 0.0
+
+
+## The beacons' brightness now, 0 to 1.
+func beacon_level() -> float:
+	return plan.beacon_level(_system_time())
 
 
 func max_section_floods() -> int:

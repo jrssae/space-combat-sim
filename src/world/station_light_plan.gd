@@ -20,9 +20,12 @@ var points: Dictionary = {FRAME_STEADY: [], FRAME_BLINK: [], DRUM_STEADY: [], DR
 ## The floods: `name`, `body`, Vector3 `position` (the fixture) and `direction` (unit), `cos_outer`, `cos_inner`, `range_m`, and
 ## Color `light` (the colour times its energy).
 var floods: Array[Dictionary] = []
-## The beacons' blink: one cycle and the lit part of it, seconds (all beacons blink together).
+## The beacons' beat, seconds (all beacons together): one cycle, dark at its start, then a linear fade up, full, and a fade down as
+## long as the fade up.
 var blink_period_s: float = 0.0
-var blink_on_s: float = 0.0
+var blink_off_s: float = 0.0
+var blink_ramp_s: float = 0.0
+var blink_full_s: float = 0.0
 
 
 ## The plan of a station's hardpoints (every light with a `marker` is drawn; every `flood` lights the hull).
@@ -47,7 +50,9 @@ static func from_hardpoints(hp: StationHardpoints) -> StationLightPlan:
 		var blinks: bool = bool(light.get("blink", false))
 		if blinks:
 			plan.blink_period_s = float(light.get("blink_period_s", 0.0))
-			plan.blink_on_s = float(light.get("blink_on_s", 0.0))
+			plan.blink_off_s = float(light.get("blink_off_s", 0.0))
+			plan.blink_ramp_s = float(light.get("blink_ramp_s", 0.0))
+			plan.blink_full_s = float(light.get("blink_full_s", 0.0))
 		var group: StringName
 		if body == StationHardpoints.DRUM:
 			group = DRUM_BLINK if blinks else DRUM_STEADY
@@ -59,12 +64,28 @@ static func from_hardpoints(hp: StationHardpoints) -> StationLightPlan:
 	return plan
 
 
-## Whether a blinking light is lit at `time_s` (the system's sim time): lit for the first `on_s` of every `period_s`. A period of 0
-## is always lit.
-static func blink_on(time_s: float, period_s: float, on_s: float) -> bool:
+## How bright a beacon is at `time_s` (the system's sim time), 0 to 1: dark for the first `off_s` of every `period_s`, then rising
+## linearly over `ramp_s`, full for `full_s`, falling over `ramp_s`, dark for the rest. A period of 0 is always full.
+static func blink_level(time_s: float, period_s: float, off_s: float, ramp_s: float, full_s: float) -> float:
 	if period_s <= 0.0:
-		return true
-	return fposmod(time_s, period_s) < on_s
+		return 1.0
+	var u: float = fposmod(time_s, period_s) - off_s
+	if u < 0.0:
+		return 0.0
+	if u < ramp_s:
+		return u / ramp_s
+	u -= ramp_s
+	if u < full_s:
+		return 1.0
+	u -= full_s
+	if u < ramp_s:
+		return 1.0 - u / ramp_s
+	return 0.0
+
+
+## This plan's beacons' brightness at `time_s`.
+func beacon_level(time_s: float) -> float:
+	return blink_level(time_s, blink_period_s, blink_off_s, blink_ramp_s, blink_full_s)
 
 
 func point_count() -> int:

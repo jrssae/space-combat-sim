@@ -30,8 +30,10 @@ func test_the_lights_follow_the_hardpoints_and_stay_on_the_shared_budget() -> vo
 	assert_not_null(lights, "the station has its lights")
 	assert_eq(lights.plan.point_count(), 85, "15 beacons, 60 navigation lights, 10 bay lamps")
 	assert_eq((lights.plan.points[StationLightPlan.FRAME_BLINK] as Array).size(), 15, "the beacons blink, on the frame")
-	assert_almost_eq(lights.plan.blink_period_s, 3.0, 1e-6, "a 3 s beat (the maintainer, 2026-11-15)")
-	assert_almost_eq(lights.plan.blink_on_s, 0.8, 1e-6)
+	assert_almost_eq(lights.plan.blink_period_s, 4.0, 1e-6, "a 4 s beat (the maintainer, 2026-11-15)")
+	assert_almost_eq(lights.plan.blink_off_s, 1.0, 1e-6)
+	assert_almost_eq(lights.plan.blink_ramp_s, 1.0, 1e-6)
+	assert_almost_eq(lights.plan.blink_full_s, 1.0, 1e-6)
 	assert_eq(lights.plan.floods.size(), 74)
 	assert_gt(lights.sections.size(), 0)
 	assert_lte(lights.max_section_floods(), StationLightPlan.MAX_FLOODS, "every section fits the shader's list")
@@ -96,10 +98,16 @@ func test_beacons_blink_on_sim_time_and_the_bays_lamps_yield_to_muzzle_flashes()
 	var lights: StationLights = station.station_lights
 	var world: WorldFrame = WorldFrame.of(station)
 	var now: float = world.system_time() if world != null else SimClock.now()
-	assert_eq(lights.beacons_lit(), StationLightPlan.blink_on(now, lights.plan.blink_period_s, lights.plan.blink_on_s))
+	var level: float = lights.beacon_level()
+	assert_almost_eq(level, lights.plan.beacon_level(now), 0.05, "the beacons follow the system's sim time")
 	lights._process(0.0)
-	var blink: Node3D = lights.groups[StationLightPlan.FRAME_BLINK]
-	assert_eq(blink.visible, lights.beacons_lit(), "the beacons' points show only in the lit part")
+	var blink: MultiMeshInstance3D = lights.groups[StationLightPlan.FRAME_BLINK]
+	assert_eq(blink.visible, lights.beacon_level() > 0.0, "the beacons' points show unless dark")
+	var gain: float = float(((blink.multimesh.mesh as QuadMesh).material as ShaderMaterial).get_shader_parameter(&"gain"))
+	assert_almost_eq(gain, StationLights.MARKER_GAIN * lights.beacon_level(), 0.25, "their brightness follows the fade")
+	var steady: MultiMeshInstance3D = lights.groups[StationLightPlan.DRUM_STEADY]
+	var steady_gain: Variant = ((steady.multimesh.mesh as QuadMesh).material as ShaderMaterial).get_shader_parameter(&"gain")
+	assert_true(steady_gain == null or is_equal_approx(float(steady_gain), StationLights.MARKER_GAIN), "the nav points stay steady")
 	# The station's only rig emitters are the bays' four lamps, at the lowest priority.
 	var rig: LightRig = LightRig.of(station)
 	var owned: int = 0

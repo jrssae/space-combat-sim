@@ -1064,8 +1064,9 @@ part `StationLightPlan`).
 **Points** (a `marker`: radius on the hull, colour as linear light before the marker's gain; `station_light_marker.gdshader`: a soft
 additive point facing the camera, its real size up close and a 3 px floor at 1080p beyond, fading only a little, so the pattern reads at
 10 km; the hull hides it by depth; one instanced draw a group):
-- **Beacons:** red, radius 4.5 m, on the bow spike's two tips, the 12 vane tips and the reactor's aft tip; they blink together, lit
-  0.8 s of every 3 s of the system's sim time (never the wall clock; slowed from 0.4 s in 1.5 s after the maintainer flew it).
+- **Beacons:** red, radius 4.5 m, on the bow spike's two tips, the 12 vane tips and the reactor's aft tip; all together (never
+  staggered), they fade over a 4 s cycle of the system's sim time (never the wall clock): 1 s dark, 1 s fading up linearly, 1 s full,
+  1 s fading down (the marker's gain follows; the maintainer, 2026-11-15, after flying 0.4 s in 1.5 s and then 0.8 s in 3 s).
 - **Navigation ring:** 28 pink-red points (#FF6A8A, radius 3.6 m) round the forward body's flare at z 1400 (r 305), every 10 degrees
   between the arms (the arms capture's ring round the band's edge).
 - **The Cobra arms' navigation lights:** 32 red-pink points (hue about 350, saturated so the bloom keeps them red-pink; radius 4.2 m),
