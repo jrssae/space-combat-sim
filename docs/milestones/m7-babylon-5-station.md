@@ -291,6 +291,8 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T35 | D | Maintenance bots roam and repair: one per area at a time and irregularly, along the spine, the fins (vanes), the drum (turning with it, so they take no damage) and out to the jumpgate and along its arm; in battle the cargo bay launches one per damaged area and each repairs 10 HP/s on damage sections and grid turrets (maintainer, 2026-11-14) | T11, T07 | Opus | New bot routes, a co-rotating frame and a repair rule over T06/T07's health | done |
 | T36 | A | The maintenance bot rebuilt to its reference sheet: top, side and front views from `references/maintenance bot.webp` at 90% silhouette overlap (maintainer, 2026-11-14) | T11 | Opus | T11's bot does not match the reference's top view; (H) | done |
 | T37 | C | Radial menus are steered with the left stick while they show (the target menu and the comms menu), not the right; the ship takes no left-stick flight input meanwhile (maintainer, 2026-11-15) | T27 | Sonnet | Input routing while a menu is open; keyboard parity kept | not started |
+| T38 | D | AI ships avoid the station and other large bodies: wingmen and allies flying near Babylon 5 never collide with it when a collision could be avoided (maintainer, 2026-11-15) | T10 | Opus | Native avoidance against an 8 km rotating body; parity kept | not started |
+| T39 | C | Fix: the backtick key no longer opens the debug console in play (maintainer, 2026-11-15) | - | Sonnet | An input regression | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M7-T01 Station references and measurements
@@ -2009,3 +2011,26 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   diagram, `docs/playtest.md` and the architecture input table say left stick for the menus.
 - **Done when:** tests (the left stick picks entries in both menus, the right stick does not, the ship gets no left-stick input while
   a menu shows and none jumps in on close, keyboard and mouse unchanged); the maintainer's live run (H); committed.
+
+### M7-T38 AI ships avoid the station
+
+- **Why (maintainer, 2026-11-15, flying the station showcase):** "i lost all 3 ally wingmen to the B5 station in a collision that
+  could have been avoided."
+- **What:** find why the wing flew into the station (T10's native avoidance against the station's surface: its range and look-ahead
+  at the wing's speeds, the drum's rotation, the arms and fins as thin parts, formation-keeping overriding avoidance, following the
+  player close past the hull) and make AI ships keep clear of the station and other large bodies whenever a collision is avoidable:
+  enough look-ahead for their speed and turn rate, avoidance taking priority over formation and pursuit, a margin round thin parts,
+  the rotating drum's surface speed. Native, per tick, 1 and 6 threads identical, parity recordings kept green (new recordings only
+  with the reason stated).
+- **Done when:** a test that reproduces the wing's loss (the showcase's wing following the player past the station) and passes;
+  tests over the station's parts and the drum; the battle bench inside budget; the maintainer's live run (H); committed.
+
+### M7-T39 Fix: the console key
+
+- **Why (maintainer, 2026-11-15):** "` doesn't activate the console anymore which must be fixed" (seen in the station showcase from a
+  copy of HEAD plus T18's lights).
+- **What:** find what stops `DebugConsole._input` from opening on the console key (physical KEY_QUOTELEFT): an earlier `_input`
+  handler or focused Control consuming the event, the `console_enabled` setting, the window/display driver's key codes after the
+  maintainer's OS upgrade, or a scenario that drops the console. Fix it at the cause; a test that a real console-key event opens the
+  console in the main scene and in the station showcase.
+- **Done when:** the key opens the console live (H); the test; committed.
