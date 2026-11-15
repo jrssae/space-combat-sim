@@ -318,6 +318,18 @@ class Shape:
         out["bound_radius"] = round(self.bound_radius(), digits)
         return out
 
+    @staticmethod
+    def from_json(entry: Mapping[str, Any]) -> Shape:
+        """The shape a manifest entry describes, in the entry's frame (what the game builds; tests measure against it)."""
+        kind, name, centre = entry["type"], str(entry.get("name", "")), np.asarray(entry["position"], dtype=float)
+        if kind == HULL:
+            pts = np.asarray(entry["points"], dtype=float)
+            return Shape(HULL, name, pts.mean(axis=0), np.eye(3), points=pts)
+        basis = np.stack([np.asarray(entry["basis"][k], dtype=float) for k in "xyz"], axis=1)
+        if kind == BOX:
+            return Shape(BOX, name, centre, basis, size=np.asarray(entry["size"], dtype=float))
+        return Shape(CAPSULE, name, centre, basis, radius=float(entry["radius"]), height=float(entry["height"]))
+
 
 def _r(v: Any, digits: int = JSON_DIGITS) -> list[float]:
     return [round(float(x), digits) + 0.0 for x in np.asarray(v, dtype=float).reshape(-1)]
@@ -557,6 +569,11 @@ class Compound:
         return out
 
 
+def shapes_of(section: Mapping[str, Any]) -> list[Shape]:
+    """Every shape of a manifest's ``collision`` section, piece by piece."""
+    return [Shape.from_json(entry) for piece in section["pieces"] for entry in piece["shapes"]]
+
+
 def build(parts: Mapping[str, Sequence[Shape]], budget: Budget | None = None) -> Compound:
     """The asset's compound: every piece's shapes merged down to the budget and checked against it. Shape names must be
     unique in a piece, so a hit can name what it struck."""
@@ -619,6 +636,7 @@ __all__ = [
     "prism_points",
     "reduce_points",
     "ring_sectors",
+    "shapes_of",
     "support_directions",
     "validate_section",
 ]

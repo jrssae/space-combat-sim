@@ -222,6 +222,15 @@ class SectionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "non-empty 'pieces'"):
             col.validate_section({"budget": {"max_pieces": 1, "max_hull_points": 8}, "pieces": []})
 
+    def test_the_section_reads_back_as_the_same_shapes(self) -> None:
+        offset = np.array([0.0, 0.5, 1.0])
+        compound = col.build(self.parts())
+        back = col.shapes_of(compound.to_json(offset))
+        probe = np.random.default_rng(3).uniform(-10.0, 10.0, (400, 3))
+        self.assertEqual([s.name for s in back], [s.name for s in compound.shapes])
+        for was, now in zip(compound.shapes, back, strict=True):
+            np.testing.assert_allclose(now.distance(probe - offset), was.distance(probe), atol=1e-4, err_msg=was.name)
+
     def test_the_same_parts_give_the_same_section(self) -> None:
         def text() -> str:
             compound = col.build(self.parts(), col.Budget(max_pieces=6))

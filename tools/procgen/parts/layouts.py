@@ -9,6 +9,7 @@ named stay plain: trusses, arms, struts, antennas, nozzles, turrets.
 from __future__ import annotations
 
 from collections.abc import Iterable
+from typing import Any
 
 from ..core.seams import EMPTY, Cut, Feature, Hatch, Hoop, Path, Plates, SeamLayout, every, rings, spokes
 from . import Part
@@ -340,4 +341,41 @@ def brakiri_pod() -> SeamLayout:
     ])
 
 
-__all__ = ["brakiri", "brakiri_pod", "centauri", "dress", "narn", "saturn", "saturn_engine", "skylark"]
+# --- Raiders: the strike carrier ------------------------------------------------------------------------------------------
+def raider_carrier(u: float, surface: Any) -> dict[str, SeamLayout]:
+    """The strike carrier's parts in the ship's authored frame (``u`` metres per percent of its length; ``parts/raider_carrier.py``).
+    ``surface`` is one of ``styles/raider_capital.SURFACES``: its plate field, splits, tone, grime, sheen, hatch share and frame pitch.
+    Low: the boxes' slope breaks and belt, the drum's and the rings' quarter joints. Full: frame lines and plating, then its tone."""
+    s = surface
+    skin = dict(wrap="sides", long_axis=2, splits=s.splits, min_m=1.2, keep=0.3, sheen=s.sheen, grime=s.grime, grime_m=0.5)
+    small = (0.6 * s.plate_m[0], 0.6 * s.plate_m[1])
+    z0, z1 = 48.61 * u, 79.67 * u
+    box: list[Feature] = [
+        Cut(axis=2, at=z0, level=1), Cut(axis=2, at=z1, level=1), Cut(axis=1, at=0.0, level=1, lo=(36.0 * u, -INF, -INF)),
+        *rings(2, every(z0, z1, s.frames_m)[1:-1], level=2, width=0.8),
+        *_plating(2, s.tone, cell=s.plate_m, seed=131, **skin),
+        _hatches((2.4, 1.5), s.hatches, 133, wrap="sides", long_axis=2),
+    ]
+    drum: list[Feature] = [
+        *spokes(2, (0.0, 0.0, 0.0), (0, 90, 180, 270), level=1, reach=(13.0 * u, INF)),
+        *spokes(2, (0.0, 0.0, 0.0), (45, 135, 225, 315), level=2, reach=(13.0 * u, INF), width=0.8),
+        *_plating(2, s.tone, wrap="barrel", axis=2, radius=13.3 * u, around=10, cell=(small[0], small[1]), splits=s.splits, min_m=1.2,
+                  keep=0.3, sheen=s.sheen, grime=s.grime, grime_m=0.5, seed=135),
+        _hatches((2.0, 1.3), s.hatches, 137, wrap="sides", long_axis=2),
+    ]
+
+    def hoop(radius: float, seed: int) -> list[Feature]:
+        return [
+            *spokes(2, (0.0, 0.0, 0.0), range(0, 360, 45), level=1, reach=(radius - 3.0 * u, INF)),
+            *spokes(2, (0.0, 0.0, 0.0), [a for a in range(0, 360, 9) if a % 45], level=2, reach=(radius - 3.0 * u, INF), width=0.8),
+            *_plating(3, s.tone, wrap="barrel", axis=2, radius=radius, around=40, cell=(2.6 * u, 4.0), splits=1, min_m=1.2, keep=0.5,
+                      sheen=s.sheen, grime=s.grime, grime_m=0.5, seed=seed),
+        ]
+
+    plain = [*_plating(2, s.tone, cell=small, seed=143, **skin), _hatches((2.0, 1.3), s.hatches, 145, wrap="sides", long_axis=2)]
+    return {"box_r": SeamLayout.of(box), "drum": SeamLayout.of(drum), "ring_mid": SeamLayout.of(hoop(20.5 * u, 139)),
+            "ring_outer": SeamLayout.of(hoop(27.6 * u, 141)), "slab": SeamLayout.of(plain), "beams": SeamLayout.of(plain),
+            "bar_top_r": SeamLayout.of(plain), "bar_bottom_r": SeamLayout.of(plain), "box_plate_r": SeamLayout.of(plain)}
+
+
+__all__ = ["brakiri", "brakiri_pod", "centauri", "dress", "narn", "raider_carrier", "saturn", "saturn_engine", "skylark"]

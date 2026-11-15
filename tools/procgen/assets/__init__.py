@@ -11,7 +11,7 @@ from collections.abc import Callable
 from ..core.context import AssetOutputs, BuildContext
 from . import asteroids, b5_station, brakiri_bokmai, capital_hulls, centauri_brezebel
 from . import jumpgate, planet, saturn_family, skylark_transport
-from . import narn_transport, nav_buoy, raider_fighter, sfx_combat, sfx_ui, sfx_world, sky_default, starfury_aurora
+from . import narn_transport, nav_buoy, raider_fighter, raider_strike_carrier, sfx_combat, sfx_ui, sfx_world, sky_default, starfury_aurora
 
 ASSETS: dict[str, Callable[[BuildContext], AssetOutputs]] = {
     "asteroids": asteroids.build,
@@ -23,6 +23,7 @@ ASSETS: dict[str, Callable[[BuildContext], AssetOutputs]] = {
     "narn_transport": narn_transport.build,
     "nav_buoy": nav_buoy.build,
     "raider_fighter": raider_fighter.build,
+    "raider_strike_carrier": raider_strike_carrier.build,
     "sfx_combat": sfx_combat.build,
     "sfx_ui": sfx_ui.build,
     "sfx_world": sfx_world.build,
