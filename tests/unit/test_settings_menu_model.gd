@@ -163,3 +163,8 @@ func test_task_ids_are_not_shown_to_the_player() -> void:
 		var text: String = model.help_text(key)
 		var tag := RegEx.create_from_string("M\\d+-T\\d+")
 		assert_null(tag.search(text), "%s: '%s' has no task id" % [key, text])
+
+
+func test_a_list_of_task_ids_in_brackets_goes_with_its_brackets() -> void:
+	assert_eq(SettingsMenuModel._without_task_ids("The set (M5-T40, M7-T24): high"), "The set: high")
+	assert_eq(SettingsMenuModel._without_task_ids("Live (M4-T30a, live)."), "Live (live).")
