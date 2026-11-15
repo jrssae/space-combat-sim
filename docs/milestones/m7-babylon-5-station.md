@@ -264,7 +264,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T07 | B | The defence grid in the game, as T02 settled it, on the native turret rows | T06, T02 | Opus | Native turret kinds and interceptor behaviour with parity | done |
 | T08 | C | Launch bays and the launch sequence: the rail, the cinematic launch camera, the hand-off, `launch_from` | T06 | Opus | Rebase-safe scripted motion and the mission API | done |
 | T09 | C | The station interior for the front end: the `b5_interior` generator and the backdrop | T01, Q7 | Opus | A new interior asset and its lighting | done |
-| T10 | D | AI and traffic around the station: raids at it, avoidance of its surface, allies from the bays, civilians through the aperture | T07, T08, Q8 | Opus | Native AI at a body far larger than any hull so far | in progress |
+| T10 | D | AI and traffic around the station: raids at it, avoidance of its surface, allies from the bays, civilians through the aperture | T07, T08, Q8 | Opus | Native AI at a body far larger than any hull so far | done |
 | T11 | D | Maintenance bots: the generator and their loops | T06, Q11 | Sonnet | A small asset and a simple mover | done |
 | T12 | D | Tour points and a station sandbox scenario (the base of M8's exterior tour) | T05, T08 | Sonnet | Data and `CINEMATIC` shots on existing seams | done |
 | T13 | B | Performance and the GPU check: the station in view at every range, three squadrons, the grid and a raid | T07, T10 | Opus | Measurement on the maintainer's machine; the budget call | not started |
@@ -283,7 +283,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T27 | C | Navigation targets and a hold-X interaction: the main docking bay, cargo bay and jumpgate as navigation targets; hold X for 2 s with a progress bar to act on them (maintainer, 2026-11-14) | T10 | Opus | A new input mechanic over targeting, HUD and the gate jump | in progress |
 | T28 | D | Fix: entering the jumpgate a second time opens the vortex twice and the camera stops tracking the ship (maintainer, 2026-11-14) | - | Fable | A state bug in M6's gate jump | in progress |
 | T29 | D | Fix: a civilian attacked in free flight does not flee (no change of speed or heading) (maintainer, 2026-11-14) | T10 | Fable | AI regression or a free-flight wiring gap | done |
-| T30 | D | Maintenance bots carry the freighters' cargo pods (Saturn 3, 4 and 8; cargo and tankers) between the ship and the cargo bay (maintainer, 2026-11-14) | T10, T11 | Opus | Replaces the pods flying by themselves | in progress |
+| T30 | D | Maintenance bots carry the freighters' cargo pods (Saturn 3, 4 and 8; cargo and tankers) between the ship and the cargo bay (maintainer, 2026-11-14) | T10, T11 | Opus | Replaces the pods flying by themselves | done |
 | T31 | C | The pause menu gets Quit (exit the game); the start and pause menus' boxes shrink to their content (Settings keeps its layout) (maintainer, 2026-11-14) | - | Sonnet | Front-end layout | done |
 | T32 | A | The cargo bay gets the main docking bay's look: metallic grey walls and doors with the Earth Alliance mosaic, lit red by lamps through the light slots, no self-lit rings or bands (maintainer, 2026-11-14) | T25 | Opus | Same surfaces and lamps as T25 on the spine's cargo bay; (H) | done |
 | T33 | A | The cargo pod: a new 6 m Earth Alliance cargo-handling craft built from `references/EA_cargo_pod.stl` at the 90% rule (maintainer, 2026-11-14) | - | Opus | A new STL asset and its look sheet; (H) | done |
@@ -773,6 +773,8 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   card VRAM +234 MB.
 
 ### M7-T10 AI and traffic around the station
+
+- **Accepted (maintainer, 2026-11-14):** the docking doors moved into T25 (accepted) and the freighter scene into T30 (accepted with T34's pods).
 
 - **Goal:** AC9 apart from the bots.
 - **Files:** the native avoidance and pursuit against the station's surface, the encounter director's raids at the station and
@@ -1678,6 +1680,8 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     then takes its lane up again.
 
 ### M7-T30 Maintenance bots carry the freighters' cargo pods
+
+- **Accepted (maintainer, 2026-11-14):** watched live with T34's cargo pods doing the carrying (T34 replaces the bots as carriers; T30's plan, routes and timing are what the pods fly).
 
 - **Why (maintainer, 2026-11-14):** "maintenance pods should be grabbing and moving the Saturn 3's cargo pods. Same with a Saturn 4
   or 8, for either cargo or tankers." This replaces T10's pods flying into the cargo bay by themselves.
