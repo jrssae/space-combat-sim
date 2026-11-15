@@ -100,6 +100,18 @@ class RingTests(unittest.TestCase):
         self.assertTrue(cover.ok, cover)
         self.assertLess(cover.worst_excess_m, 9.0 * (1.0 - math.cos(math.pi / 12.0)) + 0.05)
 
+    def test_a_sectors_box_lies_along_its_chord_and_holds_it(self) -> None:
+        sectors = col.ring_sectors("ring", (0.0, 0.0, 0.0), (0.0, 0.0, 1.0), 4.0, 5.0, -0.5, 0.5, 12, phase=0.2)
+        for sector in sectors:
+            box = sector.bounding_box()
+            self.assertLessEqual(float(box.distance(sector.points).max()), 1e-9, sector.name)
+            self.assertLess(box.volume(), 1.9 * sector.volume(), "tighter than a box along the frame's axes")
+            entry = sector.to_json()
+            self.assertEqual(entry["box"]["size"], [round(float(v), 5) for v in box.size])
+        whole = col.Shape.box("b", (0, 0, 0), (1, 2, 3))
+        self.assertIs(whole.bounding_box(), whole)
+        self.assertNotIn("box", whole.to_json())
+
     def test_one_hull_round_a_ring_fails_the_reach_check(self) -> None:
         surface = surface_of(ring_mesh(9.0, 10.0, 0.0, 2.0))
         plug = [col.Shape.hull("plug", col.prism_points((0.0, 0.0, 0.0), (0.0, 0.0, 1.0), [(0.0, 10.0), (2.0, 10.0)], 16))]

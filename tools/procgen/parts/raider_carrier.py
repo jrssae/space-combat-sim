@@ -101,6 +101,8 @@ GADGET = ((5.0, 3.4, 4.6), (33.4, -15.6, 44.6))  # the fitting under the bow slo
 FIN_X = ((11.09, 14.79), (18.48, 22.18), (25.88, 29.57), (33.27, 36.97))
 FIN_PROFILE = ((79.6, -24.8), (86.9, -28.68), (89.28, -16.2), (86.7, -15.15))  # (z, y): the skirt under the stern slope
 
+DOCK_AHEAD_M = 1.0  # a docked fighter's box centre, forward of the pad's centre: its tail stays clear of the next ring's arm
+
 AREAL_DENSITY = 260.0  # kg per square metre of skin: the informational mass
 
 
@@ -108,7 +110,7 @@ AREAL_DENSITY = 260.0  # kg per square metre of skin: the informational mass
 class CarrierSpec:
     """The one free number: the length (docs/assets-capital.md, "Length")."""
 
-    length_m: float = 144.0
+    length_m: float = 112.0
 
     @property
     def u(self) -> float:
@@ -141,6 +143,11 @@ class Cradle:
     @property
     def basis(self) -> np.ndarray:
         return np.stack([self.across, self.out, np.array([0.0, 0.0, 1.0])], axis=1)
+
+    @property
+    def dock(self) -> np.ndarray:
+        """Where a docked fighter's box is centred, on the pad's outer face."""
+        return self.pad_centre - np.array([0.0, 0.0, DOCK_AHEAD_M])
 
 
 # --- helpers -----------------------------------------------------------------------------------------------------------

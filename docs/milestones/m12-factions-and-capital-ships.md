@@ -61,7 +61,7 @@ weapons, and the Shadows and Vorlons bring the show's mechanics. M4's benchmark 
 | Q23 | Where the fleets are seen | A fleet sandbox scenario (sides and hulls from data), capital ships in free-flight encounters (raider carriers launching Delta-Vs, patrols by data), minefields by data; no story missions (M14) | Maintainer, 2026-11-13: the proposed answer |
 | Q24 | Sound | Generated sounds for each beam kind, interceptor fire, a capital's engines close by, the break-up and a reactor's blast, from the written references as M5's sound pass did | Maintainer, 2026-11-13: the proposed answer, **plus the ancients' voices**: the Shadows' scream and the Vorlon ships' tones, synthesised |
 | Q25 | (maintainer, 2026-11-13) An early sub-task for the raider capitals | - | Maintainer, 2026-11-13: **get one working capital ship that can merge to `main` early**: the raider strike carrier first. It has **no weapons** (its fighters are its weapons), **launches and retrieves fighters** and **opens its own jump points**. Work on `m12`, and `m12` merges into `main` when the carrier is accepted ("Early delivery" below, T19) |
-| Q26 | The strike carrier's length | A published figure (Q4) | Maintainer, 2026-11-13: none is published (the B5 wiki gives none); **fit the cradles: about 140 m**, the exact figure pinned so a 17 m Delta-V sits in its docking cradle as in `raider ships docked to strike carrier.jpg` |
+| Q26 | The strike carrier's length | A published figure (Q4) | Maintainer, 2026-11-13: none is published (the B5 wiki gives none); **fit the cradles: about 140 m**, the exact figure pinned so a 17 m Delta-V sits in its docking cradle as in `raider ships docked to strike carrier.jpg`. **Maintainer, 2026-11-15: about 110 m, following the painted print**: docked fighters overhang the pads out to the line of the clamp pins. Pinned at **112 m** (the pins' tips are 15.24 % of the length apart; 17 / 0.1524 = 111.5). Surface: **option A, show green** |
 | Q27 | How the strike carrier retrieves fighters | Fighters fly back and latch onto a free cradle, shown docked; they return when the raid is over, when badly damaged, or when the carrier is about to jump; it waits for them, with a time limit | Maintainer, 2026-11-13: the proposed answer |
 | Q28 | Can the early strike carrier be destroyed? | Hull points; today's capital explosion and far flash; docked fighters die with it; a jump point it holds collapses (M6-T23) | Maintainer, 2026-11-13: the proposed answer; M12's sections and staged break-up come later |
 | Q29 | How a raid's fighters come in with the strike carrier | Docked on its cradles, launched once it is clear of its point | Maintainer, 2026-11-13: **both, chosen by data per raid**: docked then launched, or out of the carrier's point beside it as M6-T23 does today |
@@ -137,9 +137,9 @@ two hulls move onto them like every other.
   cradle arms.
 - **The collision builder:** M7-T03's compound collision builder (D73) has no code yet; T19 builds it to D73's plan in
   `tools/procgen/core/collision.py`, general and tested, so M7 and every later hull reuse it.
-- **T19 stage 1, as built (2026-11-15):** the asset only. `raider_strike_carrier` at 144 m with 18 cradles, up +z, the compare at
+- **T19 stage 1, as built (2026-11-15):** the asset only. `raider_strike_carrier` with 18 cradles, up +z, the compare at
   0.979 / 0.969 / 0.981 (top, side, front), 162 collision shapes in six pieces, the look sheet and the A/B/C surface sheet
-  (`docs/assets-capital.md`). Open: the maintainer's surface choice. Stage 2 is the game side (body, flight, docking, launch and
+  (`docs/assets-capital.md`). First built at 144 m; the maintainer then chose option A and about 110 m, pinned at 112 m (Q26). Stage 2 is the game side (body, flight, docking, launch and
   retrieval, `CarrierJumps`, behaviour); T19 stays `in progress`.
 - **T20, the Battle Wagon:** after T19 merges, with weapons (Q31; which ones, settled with the maintainer first) and its four
   launch tubes.

@@ -258,9 +258,10 @@ show's still `radier strike carrier.jpg`, and a painted print of the model with 
   cluster. Up is +z: the sensor housing sits over the hangar mouth, the cradles stack three deep at twelve o'clock, and
   the skirt fins hang under the boxes' stern, which is how the print stands on its base. (`refview`'s default mapping
   has the stern as its front and a flank as its top.)
-- **Length.** None is published. **144 m**, pinned by the cradles (Q26): a cradle's pad is 11.83 % of the length across
-  its wide edge, and a Delta-V's 17 m span covers it edge to edge (17 / 0.1183 = 143.7), which leaves its wing tips
-  1.7 m inside the clamp pins on each side. At 144 m the model's box is 110.1 m wide and 108.6 m high.
+- **Length.** None is published. **112 m**, pinned by the cradles as the painted print shows them (Q26, the maintainer,
+  2026-11-15: about 110 m): a docked Delta-V overhangs its pad out to the line of the clamp pins. The pins' tips are
+  15.24 % of the length apart and the Delta-V's span is 17 m (17 / 0.1524 = 111.5). At 112 m the model's box is 85.6 m
+  wide and 84.5 m high. (The first reading, 144 m, fitted the span to the pad's own wide edge, inside the pins.)
 - **Bow drum** (stations in percent of the length from the spike tips). A drum of radius 13.3 from 10.5 to 32.8, with
   three raised collars (radius 14.3) and an open rim at its bow (6.8 to 10.5, radius 14.8). In the rim's mouth, the
   recessed face holds the **hangar mouth** in an eight-sided frame (17 across, 12.6 high) and a sensor housing above it.
@@ -276,8 +277,8 @@ show's still `radier strike carrier.jpg`, and a painted print of the model with 
   first collar** at 0 and at 120 on both sides. The arms stand at stations 12.7, 21.4 and 29.8; the pads' centres are
   at 17.1, 25.8 and 34.3, with their outer faces 23.5, 30.6 and 37.7 from the axis.
 - **Docked fighters.** The gold triangular "launch pods" of the show's still and of the print are **Delta-Vs docked on
-  the cradles**: belly on the pad, back outward, nose towards the carrier's bow, the span along the pad. The model has
-  the cradles and no fighters.
+  the cradles**: belly on the pad, back outward, nose towards the carrier's bow, the span along the pad and out over
+  the clamp pins (which lie below the pad's face) to their tips. The model has the cradles and no fighters.
 - **Spine.** A tube of radius 2.6 from the drum's aft cap (32.8) to the centre section (44.9).
 - **Centre section** (44.9 to 79.7). A slab on the axis between a cross beam at each end, a long bar above and below
   it on each side, and four pipe elbows above and four below on each side from the bars into the boxes.
@@ -289,10 +290,10 @@ show's still `radier strike carrier.jpg`, and a painted print of the model with 
   bow slope, and four skirt fins hang under the stern slope down to 28.7 below the axis.
 - **Engine cluster.** A mount disc (radius 4.7) on the aft beam, four tanks (radius 1.85, 81.5 to 90.4) round the axis,
   and one main engine through them whose bell (radius 2.25) ends at 97, with four petals to the stern (100).
-- **Colours and surface.** The show's still: dark green flanks with paler grey plated decks in a brick pattern of big
+- **Colours and surface.** The show's still: dark green flanks with grey plated decks in a brick pattern of big
   plates, pale lit slats, dark structure, and gold-ochre fighters. The Delta-V and the raider base scene give the
-  raiders' worn grey-brown, ochre accents and yellow-white engine glow. The surface options built from these are in
-  `docs/assets-capital.md`.
+  raiders' ochre accents and yellow-white engine glow. The maintainer chose this "show green" surface (option A of
+  three, 2026-11-15); its numbers are in `docs/assets-capital.md`.
 
 ## Raider Battle Wagon (second raider carrier type, M12)
 

@@ -344,7 +344,7 @@ def brakiri_pod() -> SeamLayout:
 # --- Raiders: the strike carrier ------------------------------------------------------------------------------------------
 def raider_carrier(u: float, surface: Any) -> dict[str, SeamLayout]:
     """The strike carrier's parts in the ship's authored frame (``u`` metres per percent of its length; ``parts/raider_carrier.py``).
-    ``surface`` is one of ``styles/raider_capital.SURFACES``: its plate field, splits, tone, grime, sheen, hatch share and frame pitch.
+    ``surface`` is ``styles/raider_capital.SURFACE``: its plate field, splits, tone, grime, sheen, hatch share and frame pitch.
     Low: the boxes' slope breaks and belt, the drum's and the rings' quarter joints. Full: frame lines and plating, then its tone."""
     s = surface
     skin = dict(wrap="sides", long_axis=2, splits=s.splits, min_m=1.2, keep=0.3, sheen=s.sheen, grime=s.grime, grime_m=0.5)

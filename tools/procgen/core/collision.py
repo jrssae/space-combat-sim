@@ -302,13 +302,40 @@ class Shape:
         local = np.array([[self.radius * k * math.cos(t), self.radius * k * math.sin(t), z] for z, k in rows for t in turn])
         return self.center + local @ self.basis.T
 
+    def bounding_box(self) -> Shape:
+        """The tightest box round a hull among a few framings: the frame's own axes, and each axis with the other two turned to
+        face the hull's centre (a ring's sector lies along its chord). What a hit sweep that knows only boxes uses for the hull."""
+        if self.kind != HULL:
+            return self
+        best: Shape | None = None
+        candidates = [np.eye(3)]
+        centre = self.points.mean(axis=0)
+        for axis in range(3):
+            a, b = (axis + 1) % 3, (axis + 2) % 3
+            if math.hypot(centre[a], centre[b]) > 1e-6:
+                turn = math.atan2(centre[b], centre[a])
+                basis = np.zeros((3, 3))
+                basis[axis, axis] = 1.0
+                basis[a, a], basis[b, a] = math.cos(turn), math.sin(turn)
+                basis[a, b], basis[b, b] = -math.sin(turn), math.cos(turn)
+                candidates.append(basis)
+        for basis in candidates:
+            box = Shape.box_around(self.name, self.points, basis)
+            if best is None or box.volume() < best.volume() - 1e-9:
+                best = box
+        return best
+
     def to_json(self, offset: Sequence[float] = (0.0, 0.0, 0.0), digits: int = JSON_DIGITS) -> dict[str, Any]:
         """The shape for the manifest, moved by ``-offset`` into the body frame. Boxes and capsules as ``hardpoints.collision``
-        writes them; a hull lists its corners. ``bound_radius`` is the sphere round ``position`` that holds it."""
+        writes them; a hull lists its corners and its bounding ``box`` (for hit sweeps, which know boxes and capsules only).
+        ``bound_radius`` is the sphere round ``position`` that holds it."""
         off = np.asarray(offset, dtype=float)
         out: dict[str, Any] = {"name": self.name, "type": self.kind, "position": _r(self.center - off, digits)}
         if self.kind == HULL:
             out["points"] = [_r(p - off, digits) for p in self.points]
+            box = self.bounding_box()
+            out["box"] = {"position": _r(box.center - off, digits), "size": _r(box.size, digits),
+                          "basis": {k: _r(box.basis[:, i], digits) for i, k in enumerate("xyz")}}
         else:
             if self.kind == BOX:
                 out["size"] = _r(self.size, digits)

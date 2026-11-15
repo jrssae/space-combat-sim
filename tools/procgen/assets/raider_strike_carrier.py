@@ -1,7 +1,7 @@
-"""``raider_strike_carrier``: the raiders' strike carrier, 144 m, the first capital hull (M12-T19, Q25 to Q30; docs/assets-capital.md
+"""``raider_strike_carrier``: the raiders' strike carrier, 112 m, the first capital hull (M12-T19, Q25 to Q30; docs/assets-capital.md
 and docs/design-references.md, "Raider strike carrier").
 
-Composition only: the pieces of ``parts/raider_carrier.py`` in one of the ``raider_capital`` surfaces, through the shared hull
+Composition only: the pieces of ``parts/raider_carrier.py`` in the ``raider_capital`` surface, through the shared hull
 pipeline (``core/civilian.py``), with compound collision from ``core/collision.py`` (M7's D73).
 
 Layout (authored frame, metres, before re-centring; -Z is forward, the bow spikes' tips at z = 0, x and y on the ship's axis):
@@ -12,8 +12,7 @@ the centre section with a box hull on each side, and the engine cluster behind i
 forward and up, and the directions it comes in and leaves along) and ``jump_point`` (where the carrier opens its own point,
 ahead of the bow). The manifest's ``collision`` section holds the convex shapes per break-up chunk and their coverage.
 
-Options: ``surface`` (``a``, ``b`` or ``c``: the candidates of ``styles/raider_capital.py``, for the maintainer's option sheet),
-``spacing`` (m, the surface samples'), ``atlas_px`` (the hull's atlas).
+Options: ``spacing`` (m, the surface samples'), ``atlas_px`` (the hull's atlas).
 """
 
 from __future__ import annotations
@@ -32,7 +31,7 @@ from ..core.geometry import Mesh
 from ..core.manifest import build_manifest, write_manifest
 from ..parts import layouts, mass_centroid, total_mass
 from ..parts import raider_carrier as rc
-from ..styles.raider_capital import DEFAULT_SURFACE, SURFACES, Surface
+from ..styles.raider_capital import SURFACE
 
 ASSET_ID = "raider_strike_carrier"
 GENERATOR_VERSION = 1
@@ -41,7 +40,7 @@ HARDPOINTS_NAME = "hardpoints.json"
 SPEC = rc.CarrierSpec()
 
 DEFAULT_SPACING_M = 0.5  # the surface samples' spacing: the body origin, the chunks' offsets, the collision's coverage
-DEFAULT_ATLAS_PX = 4096  # about 8 cm a texel on 144 m
+DEFAULT_ATLAS_PX = 4096  # about 7 cm a texel on 112 m
 CHUNK_ORDER = ("drum", "ring_mid", "ring_outer", "core", "box_l", "box_r")
 
 # Collision (docs/assets-capital.md, "Collision"): what one body may carry, and how close the shapes must sit to the hull.
@@ -51,9 +50,9 @@ COVER_REACH_M = 2.5  # no shape stands further than this from the hull (a ring's
 
 # Docking: a fighter comes in along a cradle's ``approach`` from this far out, and leaves along ``release``.
 APPROACH_M = 60.0
-# The carrier's own jump point: its mouth clears the hull's 77 m half diagonal, and opens this far ahead of the bow.
-JUMP_MOUTH_RADIUS_M = 120.0
-JUMP_AHEAD_M = 300.0
+# The carrier's own jump point: its mouth clears the hull's 60 m half diagonal, and opens this far ahead of the bow.
+JUMP_MOUTH_RADIUS_M = 100.0
+JUMP_AHEAD_M = 250.0
 
 CHASE_ANCHOR_SHARE = (0.3, 1.2)
 NAV_CLEARANCE_M = 0.15
@@ -62,22 +61,15 @@ NAV_CABIN_RANGE_SHARE = 0.08
 FLIP = np.array([-1.0, 1.0, 1.0])
 
 
-def surface_of(ctx: BuildContext) -> Surface:
-    key = str(ctx.option("surface", DEFAULT_SURFACE)).lower()
-    if key not in SURFACES:
-        raise ValueError(f"surface must be one of {sorted(SURFACES)}, not {key!r}")
-    return SURFACES[key]
-
-
-def built_pieces(surface: Surface) -> list[rc.Built]:
+def built_pieces() -> list[rc.Built]:
     """Every piece with its collision shapes, dressed in the surface's plating (centre pieces and the starboard of each pair)."""
-    built = rc.assemble(SPEC, surface.style)
-    layouts.dress((b.piece.part for b in built), layouts.raider_carrier(SPEC.u, surface))
+    built = rc.assemble(SPEC, SURFACE.style)
+    layouts.dress((b.piece.part for b in built), layouts.raider_carrier(SPEC.u, SURFACE))
     return built
 
 
-def hull_pieces(surface: Surface | None = None) -> list[cv.Piece]:
-    return [b.piece for b in built_pieces(surface or SURFACES[DEFAULT_SURFACE])]
+def hull_pieces() -> list[cv.Piece]:
+    return [b.piece for b in built_pieces()]
 
 
 def collision_shapes(built: list[rc.Built]) -> dict[str, list[col.Shape]]:
@@ -96,7 +88,7 @@ def compound(built: list[rc.Built]) -> col.Compound:
 
 # --- hardpoints --------------------------------------------------------------------------------------------------------
 def cradle_entries(offset: np.ndarray) -> list[dict[str, Any]]:
-    """Each cradle as a docking hardpoint (body frame): the docked fighter rests its belly on ``position`` with its nose along
+    """Each cradle as a docking hardpoint (body frame): the docked fighter rests its belly on ``position`` (on the pad, a little forward of its centre) with its nose along
     ``forward`` and its back along ``up``; it comes in from ``approach_from`` along ``approach`` and leaves along ``release``."""
     out = []
     for c in rc.cradles(SPEC):
@@ -104,10 +96,10 @@ def cradle_entries(offset: np.ndarray) -> list[dict[str, Any]]:
             "name": c.name,
             "ring": c.ring,
             "clock_deg": c.clock_deg,
-            "position": cv.r(c.pad_centre - offset),
+            "position": cv.r(c.dock - offset),
             "forward": [0.0, 0.0, -1.0],
             "up": cv.r(c.out),
-            "approach_from": cv.r(c.pad_centre + APPROACH_M * c.out - offset),
+            "approach_from": cv.r(c.dock + APPROACH_M * c.out - offset),
             "approach": cv.r(-c.out),
             "release": cv.r(c.out),
         })  # fmt: skip
@@ -194,17 +186,16 @@ def build(ctx: BuildContext) -> AssetOutputs:
     spacing = float(ctx.option("spacing", DEFAULT_SPACING_M))
     if spacing <= 0.0:
         raise ValueError("spacing must be positive")
-    surface = surface_of(ctx)
     out_dir = ctx.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
     comments = (f"{ASSET_ID} generator v{GENERATOR_VERSION} seed {ctx.seed}",)
-    built = built_pieces(surface)
+    built = built_pieces()
     pieces = [b.piece for b in built]
 
     sampled = cv.sample_pieces(pieces, ctx, spacing)
     offset = cv.centroid(sampled)
     hull_ctx = dataclasses.replace(ctx, options={"atlas_px": DEFAULT_ATLAS_PX, **ctx.options})
-    hull = cv.write_hull(out_dir, ASSET_ID, cv.hull_parts(sampled, offset), CHUNK_ORDER, surface.style, hull_ctx, comments)
+    hull = cv.write_hull(out_dir, ASSET_ID, cv.hull_parts(sampled, offset), CHUNK_ORDER, SURFACE.style, hull_ctx, comments)
     files: list[Path] = list(hull.files)
 
     shapes = compound(built)
@@ -229,7 +220,6 @@ def build(ctx: BuildContext) -> AssetOutputs:
             "chunks": [c["name"] for c in hull.chunks],
             "surface_spacing_m": spacing,
             "dimensions_m": {"length": hp["length_m"], "span": hp["span_m"], "height": hp["height_m"]},
-            "surface": surface.key,
             "cradle_count": len(hp["cradles"]),
             "collision": shapes.to_json(offset, cover),
         },

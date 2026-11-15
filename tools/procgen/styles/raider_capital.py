@@ -1,16 +1,9 @@
-"""The raider capitals' paint (M12-T19; docs/assets-capital.md, "Surface options"): three candidate surfaces for the strike
-carrier, each a style and the numbers its plating is drawn with. The maintainer picks one from the option sheet; until then
-``DEFAULT_SURFACE`` is only what a plain build shows.
+"""The raider capitals' paint (M12-T19; docs/assets-capital.md, "Surface"): the strike carrier's surface, a style and the numbers
+its plating is drawn with. The maintainer chose it from three candidates on 2026-11-15 ("show green").
 
 Read off the show's still of the strike carrier, the raiders' Delta-V and the fan render of the raider base (all in the
-untracked ``references/``; nothing of them is copied):
-
-* **A, show green**: the still's dark green flanks under pale grey plated decks, lit pale slats, dark olive structure. Big
-  plates, clean paint, light wear.
-* **B, raider brown**: the Delta-V's worn grey-brown all over (``styles/raider.py``), ochre pads, small busy plating, hard wear:
-  the carrier as one of the raiders' own patched machines.
-* **C, salvaged**: a paler grey-green hull with grey-brown structure and ochre trim, plates of clearly different value (a hull
-  repaired from scrap), medium wear.
+untracked ``references/``; nothing of them is copied): the still's dark green flanks under grey plated decks, lit pale slats,
+dark olive structure, the raiders' ochre on the cradle pads. Big plates, clean paint, light wear.
 
 Albedos are linear RGB from sRGB values, kept in the Starfury's and the Delta-V's range: the raider's first paint read black on
 the GPU (docs/assets-raider.md).
@@ -36,7 +29,7 @@ def _lin(hex_rgb: int) -> tuple[float, float, float]:
 
 @dataclass(frozen=True)
 class Surface:
-    """One surface option: its paint and how its plating is drawn (``parts/layouts.py``, ``raider_carrier``). ``plate_m`` is the
+    """A surface: its paint and how its plating is drawn (``parts/layouts.py``, ``raider_carrier``). ``plate_m`` is the
     field the plates are cut from, ``splits`` how often it is cut, ``tone`` the plate to plate value change, ``frames_m`` the
     pitch of the full set's frame lines."""
 
@@ -82,29 +75,14 @@ def _style(name: str, hull: int, deck: int, dark: int, pad: int, clamp: int, sla
     )
 
 
-SURFACES: dict[str, Surface] = {
-    "a": Surface(
-        "a", "A: show green",
-        _style("a", hull=0x3E5647, deck=0x858A84, dark=0x3B4239, pad=0x8C6A32, clamp=0x4E4B45, slat=0xDDE6D4, slat_glow=1.6,
-               wear={"bare_metal": 0.25, "smudge": 0.15, "smudge_scale_m": 0.6, "speckle": 0.04, "paint_roughness": 0.72, "streak_length_m": 0.35},
-               panel_line_darkness=0.6, panel_tint_jitter=0.06, edge_wear=0.3, streaks=0.14, grime=0.06),
-        plate_m=(9.0, 6.0), splits=2, tone=0.07, grime=0.05, sheen=0.06, hatches=0.06, frames_m=7.5,
-    ),
-    "b": Surface(
-        "b", "B: raider brown",
-        _style("b", hull=0x6B635A, deck=0x5A534B, dark=0x3D3833, pad=0x8C6A32, clamp=0x524D48, slat=0xE2D2A8, slat_glow=1.2,
-               wear={"bare_metal": 0.8, "smudge": 0.3, "smudge_scale_m": 0.6, "speckle": 0.08, "paint_roughness": 0.82, "streak_length_m": 0.4},
-               panel_line_darkness=0.5, panel_tint_jitter=0.12, edge_wear=0.6, streaks=0.3, grime=0.14),
-        plate_m=(5.0, 3.2), splits=3, tone=0.10, grime=0.10, sheen=0.05, hatches=0.12, frames_m=4.5,
-    ),
-    "c": Surface(
-        "c", "C: salvaged",
-        _style("c", hull=0x5C6A5A, deck=0x6E6A62, dark=0x464039, pad=0x9A7636, clamp=0x524D48, slat=0xD9DEC6, slat_glow=1.4,
-               wear={"bare_metal": 0.55, "smudge": 0.25, "smudge_scale_m": 0.6, "speckle": 0.06, "paint_roughness": 0.78, "streak_length_m": 0.4},
-               panel_line_darkness=0.55, panel_tint_jitter=0.1, edge_wear=0.45, streaks=0.22, grime=0.1),
-        plate_m=(7.0, 4.5), splits=2, tone=0.17, grime=0.08, sheen=0.08, hatches=0.09, frames_m=6.0,
-    ),
-}
-DEFAULT_SURFACE = "a"  # not a choice: the maintainer picks from the option sheet (docs/assets-capital.md)
+# The lit slats are a soft pale green, weak enough that the bloom keeps their posts visible; the decks are a dark grey so a
+# square-on sun does not wash them out (both tuned on the first look sheet, docs/assets-capital.md).
+SURFACE = Surface(
+    "a", "show green",
+    _style("a", hull=0x3E5647, deck=0x4A504B, dark=0x3B4239, pad=0x8C6A32, clamp=0x4E4B45, slat=0x9CA894, slat_glow=0.35,
+           wear={"bare_metal": 0.25, "smudge": 0.15, "smudge_scale_m": 0.6, "speckle": 0.04, "paint_roughness": 0.72, "streak_length_m": 0.35},
+           panel_line_darkness=0.6, panel_tint_jitter=0.06, edge_wear=0.3, streaks=0.14, grime=0.06),
+    plate_m=(9.0, 6.0), splits=2, tone=0.07, grime=0.05, sheen=0.06, hatches=0.06, frames_m=7.5,
+)
 
-__all__ = ["DEFAULT_SURFACE", "SURFACES", "Surface"]
+__all__ = ["SURFACE", "Surface"]

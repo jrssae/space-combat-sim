@@ -1,6 +1,6 @@
 """``raider_strike_carrier`` (M12-T19, Q25 to Q30; D12.1, M7's D73): files, the mesh contract, frames, symmetry, chunk cuts, the
 hardpoint contract with its eighteen cradles, engine and jump point, the compound collision (budget, coverage, open rings, a
-Delta-V's way to every cradle), the surface options and determinism.
+Delta-V's way to every cradle), the surface and determinism.
 
 The expected numbers are typed in from docs/assets-capital.md and docs/design-references.md ("Raider strike carrier"), not read
 from the generator.
@@ -18,20 +18,19 @@ import numpy as np
 
 from tools.procgen.assets import ASSETS
 from tools.procgen.assets import raider_strike_carrier as rsc
-from tools.procgen.core import civilian as cv
 from tools.procgen.core import collision as col
 from tools.procgen.core import manifest as manifest_io
 from tools.procgen.core.context import BuildContext
 from tools.procgen.core.obj import read_obj
-from tools.procgen.styles.raider_capital import SURFACES
+from tools.procgen.styles.raider_capital import SURFACE
 from tools.procgen.tests.mesh_checks import MAP_KEYS, assert_chunks_cut_the_hull, assert_hull_mesh, assert_mirror_symmetric
 
 TEST_OPTIONS = {"atlas_px": 512, "spacing": 1.0}
 CHUNKS = ("drum", "ring_mid", "ring_outer", "core", "box_l", "box_r")
 TRIANGLE_BUDGET = 20_000  # 10 440 as built; the importer adds the levels of detail
-LENGTH, SPAN, HEIGHT = 144.0, 110.1, 108.6  # Q26 and the reference's box at 144 m
-# The cradles: ring, how many, the pad's distance from the axis and its centre's station (m).
-RINGS = {"outer": (9, 54.30, 49.34), "mid": (6, 44.07, 37.20), "drum": (3, 33.85, 24.67)}
+LENGTH, SPAN, HEIGHT = 112.0, 85.63, 84.47  # Q26 and the reference's box at 112 m
+# The cradles: ring, how many, the pad's distance from the axis and the dock point's station (m; 1 m forward of the pad's centre).
+RINGS = {"outer": (9, 42.23, 37.37), "mid": (6, 34.28, 27.93), "drum": (3, 26.33, 18.19)}
 CLOCKS = {"outer": (0, 40, 80, 120, 160), "mid": (0, 60, 120, 180), "drum": (0, 120)}
 DELTA_V = (17.0, 2.01, 7.2)  # the raider fighter's box: span, height, length (docs/assets-raider.md)
 DOCK_GAP_M = 0.05
@@ -109,9 +108,9 @@ class RaiderStrikeCarrierTests(unittest.TestCase):
     def test_the_bow_is_the_ring_end_and_the_boxes_are_aft(self) -> None:
         v = self.obj.vertices + self.offset
         self.assertAlmostEqual(float(v[:, 2].min()), 0.0, places=3)
-        wide = v[np.abs(v[:, 0]) > 45.0]  # only the boxes and the outer cradles reach this far out
+        wide = v[np.abs(v[:, 0]) > 35.0]  # only the boxes and the outer cradles reach this far out
         self.assertGreater(float(wide[:, 2].max()), 0.85 * LENGTH)
-        ring = v[(np.hypot(v[:, 0], v[:, 1]) > 38.0) & (np.abs(v[:, 1]) > 30.0) & (np.abs(v[:, 0]) < 14.0)]
+        ring = v[(np.hypot(v[:, 0], v[:, 1]) > 29.5) & (np.abs(v[:, 1]) > 23.3) & (np.abs(v[:, 0]) < 10.9)]
         self.assertLess(float(ring[:, 2].max()), 0.40 * LENGTH, "the rings stand in the bow third")
 
     def test_the_mesh_is_mirror_symmetric_in_x(self) -> None:
@@ -190,7 +189,7 @@ class RaiderStrikeCarrierTests(unittest.TestCase):
     def test_the_jump_point_opens_ahead_of_the_bow_and_clears_the_hull(self) -> None:
         jump = self.hp["jump_point"]
         at = self.authored(jump["position"])
-        np.testing.assert_allclose(at, [0.0, 0.0, -300.0], atol=1e-3)
+        np.testing.assert_allclose(at, [0.0, 0.0, -250.0], atol=1e-3)
         self.assertEqual(jump["forward"], [0.0, 0.0, -1.0])
         v = self.obj.vertices + self.offset
         self.assertGreater(jump["mouth_radius_m"], 1.5 * float(np.hypot(v[:, 0], v[:, 1]).max()))
@@ -198,7 +197,7 @@ class RaiderStrikeCarrierTests(unittest.TestCase):
     def test_lights_and_the_bridge(self) -> None:
         lights = self.hp["nav_lights"]
         self.assertAlmostEqual(lights["port"][0], -lights["starboard"][0], places=4)
-        self.assertGreater(lights["starboard"][0], 53.0, "on the box's outer flank")
+        self.assertGreater(lights["starboard"][0], 41.0, "on the box's outer flank")
         self.assertLess(self.authored(self.hp["cockpit_camera"]["position"])[2], 0.12 * LENGTH)
         self.assertEqual(self.hp["cockpit_camera"]["forward"], [0.0, 0.0, -1.0])
 
@@ -242,20 +241,15 @@ class RaiderStrikeCarrierTests(unittest.TestCase):
         for path in self.out_a.files:
             self.assertEqual(sha256(path), sha256(self.dir_b / path.name), path.name)
 
-    def test_every_surface_option_paints_the_same_shape(self) -> None:
-        self.assertEqual(sorted(SURFACES), ["a", "b", "c"])
-        base = cv.with_twins(rsc.hull_pieces(SURFACES["a"]))
-        for key in ("b", "c"):
-            other = cv.with_twins(rsc.hull_pieces(SURFACES[key]))
-            self.assertEqual([p.name for p in other], [p.name for p in base])
-            for a, b in zip(base, other, strict=True):
-                np.testing.assert_array_equal(a.part.mesh.vertices, b.part.mesh.vertices, err_msg=a.name)
-            self.assertNotEqual(SURFACES[key].style.material("hull").albedo, SURFACES["a"].style.material("hull").albedo)
+    def test_the_surface_is_the_show_green(self) -> None:
+        hull = np.array(SURFACE.style.material("hull").albedo)
+        self.assertGreater(hull[1], hull[0], "green flanks")
+        self.assertGreater(hull[1], hull[2])
+        self.assertLess(SURFACE.style.material("hazard").emissive_strength, 0.5, "the lit slats do not bloom to white")
+        self.assertNotIn("surface", self.manifest)
 
     def test_invalid_options_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaisesRegex(ValueError, "surface must be one of"):
-                rsc.build(BuildContext(Path(tmp), seed=1, options={"surface": "z"}))
             with self.assertRaisesRegex(ValueError, "spacing must be positive"):
                 rsc.build(BuildContext(Path(tmp), seed=1, options={"spacing": 0.0}))
 
