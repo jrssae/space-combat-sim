@@ -74,3 +74,7 @@ mod static_rows;
 
 // M6-T21: which rocks live as Jolt bodies, an engine-free kernel and its shell over the core's rows.
 mod rock_stream;
+
+// M12-T19: a carrier's docking, an engine-free kernel and its rows for GDScript.
+mod dock_kernels;
+mod dock_rows;
