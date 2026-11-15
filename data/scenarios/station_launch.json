@@ -1,6 +1,7 @@
 {"scenario_id": "station_launch", "description": "Launch from Babylon 5's Cobra bay Alpha 3 with your wing (M7-T08).", "system_id": "local",
  "anchor": {"place": "babylon5", "at": [5500, -1200, -6000]}, "epoch": 7482650,
  "player": {"launch_bay": "cobra_bay_alpha_3", "position": [0, 0, 0], "forward": [0, 0, -1]},
+ "station": {"reserve_traffic": true},
  "pools": {"starfury_ally": 3},
  "wings": [
    {"name": "ALPHA", "faction": "earth_alliance", "leader": "player", "order": "cover", "formation": "finger_four",

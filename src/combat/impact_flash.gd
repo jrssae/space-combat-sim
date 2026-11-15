@@ -19,6 +19,8 @@ const GLOW_MATERIAL: StandardMaterial3D = preload("res://assets/materials/thrust
 const MAX_SHARED_COLOURS: int = 64
 ## Spare flashes the pool keeps; past this a finished one is freed.
 const POOL_MAX: int = 256
+## Finished flashes `warm` leaves in the pool: a volley of hits at once finds them built.
+const SPARE_AT_LOAD: int = 16
 
 # Colour -> the flash quad with its glow material.
 static var _shared: Dictionary = {}
@@ -43,6 +45,38 @@ static func create(color: Color, _seed_value: int = 0) -> ImpactFlash:
 	flash.scale = Vector3.ONE * (FLASH_SIZE_M * 0.6)
 	flash.transparency = 0.0
 	return flash
+
+
+## Makes the quad of every colour in `colors` and keeps `SPARE_AT_LOAD` finished flashes in the pool, so the first hit of a
+## session builds nothing (its first flash cost 17.5 ms, 9.4 of them building the quad). Returns the colours now kept.
+static func warm(colors: Array[Color]) -> int:
+	for color: Color in colors:
+		_quad_for(color)
+	var passes: FramePasses = FramePasses.current()
+	if passes != null:
+		var wanted: int = SPARE_AT_LOAD - passes.impact_pool_size()
+		for i: int in maxi(wanted, 0):
+			var flash := ImpactFlash.new()
+			if not colors.is_empty():
+				flash.mesh = _quad_for(colors[i % colors.size()])  # the renderer's first use of the glow shader is paid here
+			flash.name = "ImpactFlash"
+			flash.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			flash.visible = false
+			flash._age_s = FLASH_S  # over: waiting in the pool
+			built_count += 1
+			passes.keep_impact(flash)
+	return _shared.size()
+
+
+## Forgets every made quad and the flashes' count (tests that look at what a first flash builds).
+static func reset_shared() -> void:
+	_shared.clear()
+	built_count = 0
+
+
+## Whether `color`'s quad is already made (tests).
+static func is_warm(color: Color) -> bool:
+	return _shared.has(color)
 
 
 func _notification(what: int) -> void:

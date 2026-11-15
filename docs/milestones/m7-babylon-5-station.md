@@ -232,7 +232,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | AC7 | Launch: a scenario starting in a bay plays the launch with its cinematic and hands the ship over with the bay's velocity (test on the hand-off state); skipping lands in the same state; wingmen launch from the next bays | A | |
 | AC8 | Front end: the generated interior behind the menu, pad-only navigation unchanged (M5's tests pass), GPU numbers recorded | A | |
 | AC9 | Traffic and ambience: raiders sent at the station attack it and the allies and the grid engage them; AI ships avoid the station's surface (test); civilians arrive and leave through the docking aperture (Q8); maintenance bots fly their loops and go inside when fighting starts (Q11) | A | |
-| AC10 | Cost: on the maintainer's GPU, with the station in view from a bay, from 10 km and from 1 000 km: `renderer = forward_plus`, FPS, draw calls and VRAM recorded; with three full squadrons (36 Starfuries), the grid and a raid of 12, the tick inside the 60 Hz budget (`bench` or a recorded run) | A | Numbers recorded (T13): `forward_plus` in every view; 1920x1080, vsync off: 453 to 830 fps, GPU 0.5 to 1.4 ms, 66 to 237 draw calls, 927 MB in the renderer; 3840x2160: 279 to 767 fps, GPU 1.0 to 3.4 ms, 1 314 MB; with 39 allied Starfuries, the grid firing and 12 raiders the tick ran p50 2.9, p99 6.8 ms (60 fps, GPU 0.7 ms). Open: one-off ticks of 27 to 115 ms when a raid or a wing launch grows the ship pools, and 17.5 ms at the first hit (T13 notes, options with the maintainer) |
+| AC10 | Cost: on the maintainer's GPU, with the station in view from a bay, from 10 km and from 1 000 km: `renderer = forward_plus`, FPS, draw calls and VRAM recorded; with three full squadrons (36 Starfuries), the grid and a raid of 12, the tick inside the 60 Hz budget (`bench` or a recorded run) | A | Numbers recorded (T13): `forward_plus` in every view; 1920x1080, vsync off: 453 to 830 fps, GPU 0.5 to 1.4 ms, 66 to 237 draw calls, 927 MB in the renderer; 3840x2160: 279 to 767 fps, GPU 1.0 to 3.4 ms, 1 314 MB; with 39 allied Starfuries, the grid firing and 12 raiders the tick ran p50 2.9, p99 6.8 ms (60 fps, GPU 0.7 ms). the one-off ticks of 27 to 115 ms (pools grown by a raid or a wing launch) and 17.5 ms at the first hit are fixed (T13 notes, Fix) |
 | AC11 | Docs and the suite: `docs/architecture.md` §20 as built, a `docs/playtest.md` M7 section, the roadmap row, `info.md`; `scripts/run_tests.sh` green once, at the end | A | |
 | AC12 | (H) The maintainer flies it: the station's look from the bays to 1 000 km, the drum's turn, the launch and its camera, the grid's fire and the interceptors, the interior behind the menu, the traffic and the bots | H | |
 
@@ -1063,6 +1063,26 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     0.5 s; a raid's raiders still need theirs at once); (d) leave console launches hitching as designed. Separately, whether a
     second raid should scramble another full alpha wing while the first is still out (T10), and whether `ImpactFlash` should build
     the bolt colours' quads at load (17.5 ms once).
+  - **Fix (maintainer's decisions 2026-11-15):** (1) **Pools built at load.** `StationTraffic.reserve_pools` (called by `Main` when the
+    scenario's `station` has `"reserve_traffic": true`: `station_showcase` and `station_launch`) builds the largest raid's raiders
+    (`MAX_RAID`, 12) and a full wing (`LaunchDirector.WING_SIZE` 12 per wing in `data/station/traffic.json`'s `scramble`) beside the
+    allies already in play (15 allied Starfuries in total in the two scenarios), so no raid, scramble or `launch wing` grows a pool; a pool size
+    the caller fixed (`raider_pool_size`, `ally_pool_size`, the benchmark's and the dry-pool tests') is left alone. Scenarios that only sit
+    at the station (sandbox, free flight, dogfight) keep their own pools and still prepare on demand. `launch wing` now goes through
+    `Main.ensure_free` (the grown ships are watched and heard, which `pool.prepare` skipped). (2) **Reuse the wing that is out.**
+    `StationTraffic.scramble_for_raid`: a scrambled wing launching or at least half strong (`LaunchDirector.wing_strength`, 6 of 12)
+    takes the raid at will and nothing launches; the next wing of the file's order goes only when the ones before it are gone or below
+    half; with every wing spent the first is refilled with the Starfuries it lacks (`launch_wing(wing, count)`). Allies stay at
+    15 over repeated raids (they were 39, 51, 63). (3) **Flashes warmed at load.** `ImpactFlash.warm` makes the quad of every colour in
+    `assets/weapons/*.tres` (`WeaponSpec.known_bolt_colors`: the Starfury, raider, light and interceptor grid pulses, T43's green heavy
+    bolt, both turrets) and keeps 16 spare flashes, each already holding a quad so the renderer's first use of the glow shader is paid at
+    load; `MuzzleFlashPool.warm` makes the 24 lights a volley takes (the tints and the 9x heavy size are per flash, nothing to build).
+    **Measured** (scratch copies of HEAD and of HEAD plus the fix, `station_showcase`, default pools; headless / windowed 960x540 on the
+    RX 6950 XT, noisy, other agents running): load +70 ms headless (`traffic.reserved_ms` 52 to 57 ms windowed; the whole load 350 to
+    420 ms headless, 715 to 750 ms windowed); first `traffic raid 12`: the command 30 ms to 3.2 ms headless (windowed 133 to 195 ms to 3.3 to
+    4.8 ms), the worst of the next ticks 33 to 6 ms (windowed 145 to 213 ms to 6 to 13 ms); `launch wing beta`: command 26 ms to 5.3 ms,
+    worst tick 29 to 8 ms (windowed 41 to 54 ms to 5 ms, tick 8 ms); first impact flash `create` 10 ms (windowed) to 0.04 ms. What is left: a
+    second raid while the first twelve raiders are still alive builds twelve more raiders (about 19 ms), as the pool holds one raid.
 
 ### M7-T15 Starfury and raider surfaces from show references (texture detail low and high)
 

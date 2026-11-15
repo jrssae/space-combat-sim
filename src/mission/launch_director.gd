@@ -30,6 +30,8 @@ const NODE_NAME: StringName = &"LaunchDirector"
 const PRIORITY: int = -45
 const PROVIDER: StringName = &"launch"
 const WINGS: PackedStringArray = ["alpha", "beta", "delta", "zeta"]
+## Starfuries in a full wing launch.
+const WING_SIZE: int = 12
 ## What a wing launch's Starfuries fly once away.
 const WING_PROFILE: String = "ally_starfury"
 
@@ -42,6 +44,10 @@ var launches: Array[Dictionary] = []
 var last_handoff: Dictionary = {}
 ## The scenario's start bay (`player.launch_bay`), relaunched on a respawn; empty for none.
 var start_bay: String = ""
+
+## Each wing launched (its name, lower case) -> the Starfuries it sent as `{combatant, name}`, so the station knows which wing is
+## still out and how strong it is (`wing_strength`).
+var _wing_ships: Dictionary = {}
 
 var _leaves: StationDoorLeaves = null
 var _carried: Dictionary = {}  # Ship instance id -> {layer, mask, exempt}
@@ -145,8 +151,33 @@ func launch_from_bay(bay_name: String, with_wingmen: bool = true) -> String:
 	return launch_player(str(bay["wing"]), int(bay["door_number"]), with_wingmen)
 
 
-## Twelve AI Starfuries launch from wing `wing`'s arm in two waves; "" or why not.
-func launch_wing(wing: String) -> String:
+## Whether wing `wing` was launched in this run (it may be gone since).
+func has_flown(wing: String) -> bool:
+	return _wing_ships.has(wing.to_lower())
+
+
+## Whether a launch of wing `wing` is running now.
+func is_launching(wing: String) -> bool:
+	for launch: Dictionary in launches:
+		if launch["wing"] == wing.to_lower():
+			return true
+	return false
+
+
+## How many of wing `wing`'s launched Starfuries still fly for it: in play, not shot down and not handed to someone else.
+func wing_strength(wing: String) -> int:
+	var n: int = 0
+	var in_play: Array[Combatant] = main.ships.alive(ShipPool.ALLY_TYPE)
+	for entry: Dictionary in _wing_ships.get(wing.to_lower(), []):
+		var c: Combatant = entry["combatant"]
+		if is_instance_valid(c) and is_instance_valid(c.ship) and c.display_name == entry["name"] and in_play.has(c) \
+				and WingDirector.is_in_play(c):
+			n += 1
+	return n
+
+
+## `count` AI Starfuries (a full wing of twelve by default) launch from wing `wing`'s arm in two waves; "" or why not.
+func launch_wing(wing: String, count: int = WING_SIZE) -> String:
 	var s: Station = station()
 	if s == null:
 		return "no station in this scenario"
@@ -156,15 +187,15 @@ func launch_wing(wing: String) -> String:
 		if launch["wing"] == wing.to_lower():
 			return "wing %s is launching already" % wing
 	var pool: ShipPool = main.ships
-	var short: int = 12 - pool.free_count(ShipPool.ALLY_TYPE)
-	if short > 0:
-		pool.prepare(ShipPool.ALLY_TYPE, short)  # a console launch may hitch; a mission sizes its pools
+	count = clampi(count, 1, WING_SIZE)
+	# A station scenario built these at load (`StationTraffic.reserve_pools`); a console launch elsewhere may hitch.
+	main.ensure_free(ShipPool.ALLY_TYPE, count)
 	var ships: Array[Combatant] = []
 	var prefix: String = wing.to_upper()
 	var at: UniversePos = main.world.to_universe(s.global_position)
 	var made_wing: bool = main.wings != null and main.wings.wing_named(prefix) == null
 	var squadron: Wing = _station_wing(prefix)
-	for i: int in 12:
+	for i: int in count:
 		var callsign: String = pool.next_name(prefix, 1)
 		var made: Dictionary = BrainFactory.from_behaviour({"type": "ai", "profile": WING_PROFILE}, at,
 				hash([callsign, main.scenario_seed]))
@@ -185,7 +216,14 @@ func launch_wing(wing: String) -> String:
 			pool.release(ally)
 		if made_wing and squadron != null and squadron.leader == null and squadron.members().is_empty():
 			main.wings.wings.erase(squadron)  # a retry starts from nothing, not from a wing of parked hulls
-	return why
+		return why
+	var in_play: Array[Combatant] = main.ships.alive(ShipPool.ALLY_TYPE)
+	var sent: Array = _wing_ships.get(wing.to_lower(), []).filter(func(e: Dictionary) -> bool:
+		return is_instance_valid(e["combatant"]) and in_play.has(e["combatant"]) and not ships.has(e["combatant"]))  # a hull sent again is one entry
+	for ally: Combatant in ships:
+		sent.append({"combatant": ally, "name": ally.display_name})
+	_wing_ships[wing.to_lower()] = sent
+	return ""
 
 
 # The station's wing called `wing_name`, twelve strong and engaging at will, made on its first launch (M7-T10): its members

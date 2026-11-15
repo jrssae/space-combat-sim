@@ -234,6 +234,9 @@ func _ready() -> void:
 	traffic = StationTraffic.new()
 	traffic.main = self
 	add_child(traffic)
+	if bool((scenario.get("station", {}) as Dictionary).get("reserve_traffic", false)):
+		traffic.reserve_pools()  # the raids' and wings' ships are built now, not in the middle of a fight
+	_warm_flashes()
 	var launch_bay: String = String((scenario.get("player", {}) as Dictionary).get("launch_bay", ""))
 	if not launch_bay.is_empty():
 		launches.start_bay = launch_bay
@@ -422,6 +425,14 @@ func _pool_count(scenario: Dictionary, type: StringName, override_count: int) ->
 	return int((scenario.get("pools", {}) as Dictionary).get(type, 0))
 
 
+# The first hit and the first volley of a session cost nothing to build: every weapon colour's impact flash is made now.
+func _warm_flashes() -> void:
+	ImpactFlash.warm(WeaponSpec.known_bolt_colors())
+	var flashes: MuzzleFlashPool = MuzzleFlashPool.attach(world)
+	if flashes != null:
+		flashes.warm()
+
+
 # The scenario's pools of every other type (the civilians, M5-T16) and their break-up chunks.
 func _prepare_other_pools(scenario: Dictionary) -> void:
 	var pools: Dictionary = scenario.get("pools", {})
@@ -442,6 +453,19 @@ func ensure_pool(type: StringName, count: int) -> int:
 	var built: int = ships.prepare(type, missing)
 	for pooled: Combatant in ships.all_ships().slice(known):
 		audio.watch_ship(pooled)
+	return built
+
+
+## Grows the pool of `type` until `count` of it are free, with its break-up chunks and its ships watched like the scenario's
+## own. Returns how many were built (0 when enough are free: a station scenario sizes its pools at load, so a raid never builds).
+func ensure_free(type: StringName, count: int) -> int:
+	var short: int = count - ships.free_count(type)
+	if short <= 0:
+		return 0
+	var built: int = ensure_pool(type, ships.pool_size(type) + short)
+	debris.prepare(type)
+	for pooled: Combatant in ships.all_ships():
+		director.watch(pooled)
 	return built
 
 

@@ -36,6 +36,10 @@ const RAID_FROM: Vector3 = Vector3(0.0, 2500.0, -11000.0)
 const RAID_SPEED_MPS: float = 120.0
 const RAID_SPREAD_M: float = 150.0
 const DEFAULT_RAID: int = 6
+## The most raiders one raid sends (the console's clamp); the pool is built for this many.
+const MAX_RAID: int = 12
+## A scrambled wing at or above this share of a full wing is still out and takes the next raid; below it the next wing goes.
+const WING_FIT_SHARE: float = 0.5
 ## An undocking ship waits in the void behind the inner doors at most this long for them to open, seconds.
 const UNDOCK_WAIT_S: float = 600.0
 ## `traffic freighter show`: the Saturn starts this far short of the hold point backing in at this speed (m, m/s), and the player
@@ -73,6 +77,8 @@ var freighters_done: int = 0
 var pods_in: int = 0
 var pods_out: int = 0
 var raids: int = 0
+## Milliseconds the load spent building the ships the raids and wings need (`reserve_pools`).
+var reserved_ms: float = 0.0
 var last_event: String = "none"
 # One entry a ship: {combatant, brain, kind, state, cargo, loading, cargo_state} (the last three for freighters).
 var _own: Array[Dictionary] = []
@@ -213,7 +219,7 @@ func raid(count: int = DEFAULT_RAID, scramble_defenders: bool = true) -> String:
 	var s: Station = station()
 	if s == null:
 		return "no station in this scenario"
-	count = clampi(count, 1, 12)
+	count = clampi(count, 1, MAX_RAID)
 	_ensure_free(ShipPool.DEFAULT_TYPE, count)
 	var behaviour: Dictionary = RAIDER_AI.duplicate()
 	behaviour["objective"] = Station.DISPLAY_NAME
@@ -247,16 +253,55 @@ func raid(count: int = DEFAULT_RAID, scramble_defenders: bool = true) -> String:
 		return "no raider is free in the ship pool"
 	raids += 1
 	if scramble_defenders:
-		for wing: String in scramble_wings:
-			scramble(wing)
+		scramble_for_raid()
 	return ""
 
 
+## Builds, at load, the ships the station's raids and wings take from the pools, so none is built in the middle of a fight: the
+## largest raid's raiders, and a full wing for each wing the data scrambles (on top of the allies already in play). Nothing
+## in a scenario without the station (a scenario asks for it: `station.reserve_traffic`), nor for a pool whose size the caller fixed (`Main.raider_pool_size`, `ally_pool_size`).
+func reserve_pools() -> void:
+	if station() == null:
+		return
+	var t0: int = Time.get_ticks_usec()
+	# A pool size asked for outright (the benchmark's layouts, tests of a dry pool) is the whole answer.
+	if main.raider_pool_size < 0:
+		_ensure_free(ShipPool.DEFAULT_TYPE, MAX_RAID)
+	if main.ally_pool_size < 0:
+		_ensure_free(ShipPool.ALLY_TYPE, LaunchDirector.WING_SIZE * maxi(scramble_wings.size(), 1))
+	reserved_ms = float(Time.get_ticks_usec() - t0) / 1000.0
+
+
+## Sends the defenders against a new raid (maintainer, 2026-11-15): a scrambled wing that is still out (launching, or at least
+## half strong) takes the raid at will and nothing launches; the next wing in the data's order goes only when the ones before it
+## are gone or weaker than half. When every wing has flown and is spent, the first is refilled to full. Returns "" or why not.
+func scramble_for_raid() -> String:
+	if main.launches == null or scramble_wings.is_empty():
+		return ""
+	var launches: LaunchDirector = main.launches
+	var floor_strength: int = ceili(float(LaunchDirector.WING_SIZE) * WING_FIT_SHARE)
+	for wing: String in scramble_wings:
+		if launches.is_launching(wing) or launches.wing_strength(wing) >= floor_strength:
+			_engage_at_will(wing)
+			return ""
+		if not launches.has_flown(wing):
+			return scramble(wing)
+	var first: String = scramble_wings[0]
+	return scramble(first, LaunchDirector.WING_SIZE - launches.wing_strength(first))
+
+
 ## The station's wing `wing` launches from its Cobra arm (T08's sequence: two waves of six). Returns "" or why not.
-func scramble(wing: String) -> String:
+func scramble(wing: String, count: int = LaunchDirector.WING_SIZE) -> String:
 	if main.launches == null:
 		return "no launch director"
-	return main.launches.launch_wing(wing)
+	return main.launches.launch_wing(wing, count)
+
+
+# A wing already out engages the raid at will (a wing the player leads keeps its own order).
+func _engage_at_will(wing_name: String) -> void:
+	var squadron: Wing = main.wings.wing_named(wing_name) if main.wings != null else null
+	if squadron != null and not (squadron.leader != null and squadron.leader.is_player):
+		squadron.order = AiContext.Order.ENGAGE_AT_WILL
 
 
 ## Every traffic ship back to its pool. Returns how many.
@@ -337,14 +382,9 @@ func _arrive(type: StringName, kind: StringName, lane: Array[Dictionary], near: 
 	return "" if c != null else "no %s is free in the ship pool" % type
 
 
-# Grows `type`'s pool until `count` of it are free (a hitch when it builds; a mission sizes its pools beforehand).
+# Grows `type`'s pool until `count` of it are free (a hitch when it builds: `reserve_pools` does it at load).
 func _ensure_free(type: StringName, count: int) -> void:
-	var short: int = count - main.ships.free_count(type)
-	if short > 0:
-		main.ensure_pool(type, main.ships.pool_size(type) + short)
-		main.debris.prepare(type)
-		for pooled: Combatant in main.ships.all_ships():
-			main.director.watch(pooled)
+	main.ensure_free(type, count)
 
 
 func _lane_route(kind: StringName, lane: Array[Dictionary]) -> Route:
@@ -677,10 +717,11 @@ func _register_console() -> void:
 		&"pods_out": {"get": func() -> int: return pods_out, "doc": "Freighters' cargo blocks the cargo pods carried onto freighters"},
 		&"cargo": {"get": _cargo_text, "doc": "Each freighter at the cargo bay: its hull, unloading or loading, and pods carried"},
 		&"raids": {"get": func() -> int: return raids, "doc": "Raids sent at the station"},
+		&"reserved_ms": {"get": func() -> float: return reserved_ms, "doc": "Milliseconds the load spent building the raids' and wings' ships"},
 		&"last_event": {"get": func() -> String: return last_event, "doc": "The last thing the traffic started"},
 	}), self)
 	registry.register_command(ConsoleCommand.new(&"traffic",
-			"Station traffic: status, dock [near] (a civilian into the main docking bay), undock (one out of it), freighter [type] [near|hold|show] [load] (a Saturn's cargo cycle: the station's cargo pods carry its cargo blocks or tanks into the cargo bay, or with load onto it; near starts it on the lane, hold already at the bay, show backing in its last 300 m with the cargo pods on their way and you beside the lane to watch; type is one of %s, default each in turn), raid [n] (raiders at the station, its wings scrambled), scramble <wing>, auto <on|off>, clear" % ", ".join(DockingPlan.FREIGHTER_TYPES),
+			"Station traffic: status, dock [near] (a civilian into the main docking bay), undock (one out of it), freighter [type] [near|hold|show] [load] (a Saturn's cargo cycle: the station's cargo pods carry its cargo blocks or tanks into the cargo bay, or with load onto it; near starts it on the lane, hold already at the bay, show backing in its last 300 m with the cargo pods on their way and you beside the lane to watch; type is one of %s, default each in turn), raid [n] (raiders at the station; a scrambled wing still out takes it, else the next wing launches), scramble <wing>, auto <on|off>, clear" % ", ".join(DockingPlan.FREIGHTER_TYPES),
 			[ConsoleArg.enum_optional(&"action", ACTIONS, &"status"), _rest_arg()] as Array[ConsoleArg]),
 			_cmd_traffic, self)
 
@@ -712,8 +753,8 @@ func _cmd_traffic(args: Dictionary) -> ConsoleResult:
 		&"raid":
 			var n: int = int(arg) if arg.is_valid_int() else DEFAULT_RAID
 			why = raid(n)
-			return _answer(why, "%d raiders sent at the station%s" % [clampi(n, 1, 12),
-					"" if scramble_wings.is_empty() else "; scrambling %s" % ", ".join(scramble_wings)])
+			return _answer(why, "%d raiders sent at the station%s" % [clampi(n, 1, MAX_RAID),
+					"" if scramble_wings.is_empty() else "; defenders: %s" % ", ".join(scramble_wings)])
 		&"scramble":
 			why = scramble(arg) if not arg.is_empty() else "traffic scramble <%s>" % "|".join(LaunchDirector.WINGS)
 			return _answer(why, "wing %s is launching" % arg)

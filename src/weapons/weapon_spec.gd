@@ -50,3 +50,19 @@ extends Resource
 ## A capacitor sized for this weapon, full.
 func make_capacitor() -> WeaponCapacitor:
 	return WeaponCapacitor.new(capacitor_capacity, capacitor_cost_per_shot, capacitor_recharge_per_s)
+
+
+const WEAPON_DIR: String = "res://assets/weapons"
+
+
+## The bolt colour of every weapon spec under `assets/weapons`, each once: what the impact flashes are warmed for at load.
+static func known_bolt_colors() -> Array[Color]:
+	var out: Array[Color] = []
+	for file: String in DirAccess.get_files_at(WEAPON_DIR):
+		var path: String = "%s/%s" % [WEAPON_DIR, file.trim_suffix(".remap")]
+		if not path.ends_with(".tres"):
+			continue
+		var spec := load(path) as WeaponSpec
+		if spec != null and not out.has(spec.bolt_color):
+			out.append(spec.bolt_color)
+	return out

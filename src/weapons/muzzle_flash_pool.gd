@@ -106,6 +106,19 @@ static func attach(world: Node) -> MuzzleFlashPool:
 	return made
 
 
+## Builds the lights a volley would make on its first shots, so none is made in the middle of a fight (the quad and its tints
+## need nothing built: the colour and the size are per flash).
+func warm() -> void:
+	while _spare.size() < LIGHTS:
+		_spare.append(LightEmitter.new("muzzle flash", LightEmitter.PRIORITY_MUZZLE_FLASH, Color(1.0, 0.85, 0.6), 0.0,
+				EmitterCurves.FLASH_RANGE_M))
+
+
+## Lights waiting for a flash (tests).
+func spare_count() -> int:
+	return _spare.size()
+
+
 ## Starts a flash at `muzzle` (in `ship`'s frame) riding with `ship`, unless the camera is too far to see it. `tint` scales the
 ## flash's own warm colour (M7-T41: the interceptor batteries' blue-white) and `size_scale` its size (M7-T43: the heavy cannons'
 ## big green flash). Returns whether it started.

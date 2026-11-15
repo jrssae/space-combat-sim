@@ -338,6 +338,11 @@ func leader_alive(wing: Wing) -> bool:
 	return leader != null and is_instance_valid(leader.ship) and _in_play(leader)
 
 
+## Whether a ship still counts for its wing (see `_in_play`).
+static func is_in_play(c: Combatant) -> bool:
+	return _in_play(c)
+
+
 # Whether a ship still counts for its wing: active, or flying as a low-attention tier row (M4-T21) and not destroyed.
 static func _in_play(c: Combatant) -> bool:
 	if c.damageable == null:
