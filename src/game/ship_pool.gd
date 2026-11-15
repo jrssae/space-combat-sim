@@ -66,6 +66,13 @@ func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
 
 
+## The transponder range a ship of `type` starts with: allies and civilians broadcast, raiders do not.
+static func default_broadcast_range_m(type: StringName) -> float:
+	if type == ALLY_TYPE:
+		return ALLY_BROADCAST_RANGE_M
+	return CIVILIAN_BROADCAST_RANGE_M if ShipCatalog.is_civilian(type) else 0.0
+
+
 ## Builds `count` more ships of `type` (with the faction `ShipCatalog` gives it) and parks them. Returns how many were built.
 func prepare(type: StringName, count: int) -> int:
 	assert(world != null and projectiles != null, "ShipPool.prepare: set world and projectiles first")
@@ -84,10 +91,7 @@ func prepare(type: StringName, count: int) -> int:
 			ShipAssembly.OPT_CIVILIAN: ShipCatalog.is_civilian(type),  # M5-T16: the role comes with the type
 		})
 		world.spawn(combatant.ship, _park_position(), Basis.IDENTITY, self)
-		if type == ALLY_TYPE:
-			combatant.targetable.broadcast_range_m = ALLY_BROADCAST_RANGE_M
-		elif ShipCatalog.is_civilian(type):
-			combatant.targetable.broadcast_range_m = CIVILIAN_BROADCAST_RANGE_M
+		combatant.targetable.broadcast_range_m = default_broadcast_range_m(type)
 		_park(combatant)
 		_all.append(combatant)
 		_free.append(combatant)
@@ -130,6 +134,7 @@ func acquire(display_name: String, at: UniversePos, basis: Basis = Basis.IDENTIT
 		combatant.cargo_pods.set_count(-1)  # every pod mounted (M5-T16); the spawn says otherwise after
 	combatant.display_name = display_name
 	combatant.targetable.display_name = display_name
+	combatant.targetable.broadcast_range_m = default_broadcast_range_m(type)  # a last user may have silenced it
 	# A Starfury of a wing wears its wing's livery and its number from its callsign (M4-T30b); every other ship that takes liveries
 	# the plain one; a hull without a livery table (a raider) is left alone.
 	var section: Dictionary = MeshAssets.livery_section(ship.spec.asset_id)

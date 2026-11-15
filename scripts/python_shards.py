@@ -60,6 +60,15 @@ def discover() -> list[str]:
     return sorted(p.stem for p in TESTS_DIR.glob("test*.py"))
 
 
+def on_disk() -> list[str]:
+    """Every test module under the tests folder, subfolders too, as a dotted name relative to it (the folder's own are bare)."""
+    out = []
+    for p in TESTS_DIR.rglob("test*.py"):
+        if "__pycache__" not in p.parts:
+            out.append(".".join(p.relative_to(TESTS_DIR).with_suffix("").parts))
+    return sorted(out)
+
+
 def assign(modules: list[str], shards: int) -> list[list[str]]:
     """Heaviest module first onto the lightest shard; ties break by name, so the split is deterministic."""
     ordered = sorted(modules, key=lambda m: (-WEIGHTS.get(m, DEFAULT_WEIGHT), m))
@@ -122,11 +131,13 @@ def main(argv: list[str]) -> int:
                 print(f"    {module}  ({WEIGHTS.get(module, DEFAULT_WEIGHT):.0f}s)")
         return 0
 
-    found = problems(modules, buckets)
+    # Checked against the folder itself, not the list the shards were made from, so a module `discover` misses (a subfolder's)
+    # is caught as running in no shard.
+    found = problems(on_disk(), buckets)
     for line in found:
         print(f"python_shards: {line}", file=sys.stderr)
     if not found:
-        print(f"python_shards: {len(modules)} modules, each in exactly one of {SHARDS} shards")
+        print(f"python_shards: {len(on_disk())} modules, each in exactly one of {SHARDS} shards")
     return 1 if found else 0
 
 

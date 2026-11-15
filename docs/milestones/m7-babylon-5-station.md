@@ -2162,5 +2162,18 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   8. P3: `ScenarioLoader._launch_bay` accepts a door outside 1 to 6; refuse it as its error text says.
   9. P3: `scripts/python_shards.py check` cannot fail (it checks its own assignment); make it fail when a test module under
      `tools/procgen/tests` (subfolders too) is in no shard.
+- **Done (GDScript/Python, items 5-9):** 5. `ShipPool.default_broadcast_range_m(type)` is the one source of a type's transponder range
+  (ally 100 km, civilian 15 km, raider none); `prepare` and `acquire` both use it, so a Saturn the traffic silenced is heard again
+  by its next taker (`test_ally_pool`). 6. `FreighterCargo` tells `finished` and removes its crew once per job (`_told_finished`,
+  reset by `start`; `test_freighter_cargo_finish`). 7. A failed `LaunchDirector.launch_wing` takes the hulls out of the wing again
+  (new `WingDirector.leave`, which also lifts a leader) and drops a wing that call made when it is left empty
+  (`test_launch_bay`). 8. `ScenarioLoader._launch_bay` accepts only a whole door number 1 to 6 (3.0 passes, JSON gives floats; 0, 7,
+  2.5 and "3" are refused with the existing text; `test_scenario_loader`). Wing names stay unchecked there: the loader would have to
+  read `LaunchDirector.WINGS`, a game-layer constant. 9. `python_shards.py check` compares the shards with an rglob of
+  `tools/procgen/tests` (new `on_disk`), so a module in a subfolder, or anything `discover` misses, fails it with exit 1
+  (`test_ci_shards`, on a temporary folder). Each new test fails with its fix removed. Counts from the staged scratch copy (HEAD plus
+  these changes, GUT_SLOW=1): 861 scripts compile; test_freighter_cargo_finish 1, test_scenario_loader 40, test_ally_pool 20
+  (2 scripts), test_ship_pool 21, test_launch_bay 12, test_station_traffic 5, test_freighter_cargo 4, test_launch_sequence 25,
+  test_launch_cut 7, test_wing* 57 all pass; test_ci_shards 7 pass (with PIL blocked).
 - **Done when:** a test per fix that fails without it; parity recordings and the balance tests green (new numbers stated with the
   reason); committed; a second council round.

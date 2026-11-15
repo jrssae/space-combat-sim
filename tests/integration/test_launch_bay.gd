@@ -310,6 +310,25 @@ func test_launch_wing_sends_twelve_starfuries_in_two_waves() -> void:
 			"the second row moves up once its rack is empty")
 
 
+func test_a_failed_wing_launch_leaves_no_hulls_in_the_wing() -> void:
+	await _start()
+	var wings_before: int = main.wings.wings.size()
+	var free_before: int = main.ships.free_count(ShipPool.ALLY_TYPE)
+	main.launches.profile = null  # `_start` refuses without a launch profile
+	for attempt: int in 2:
+		var why: String = main.launches.launch_wing("zeta")
+		assert_false(why.is_empty(), "the launch fails (try %d)" % attempt)
+		assert_null(main.wings.wing_named("ZETA"), "the wing this call made is gone again")
+		assert_eq(main.wings.wings.size(), wings_before)
+	assert_true(main.ships.free_count(ShipPool.ALLY_TYPE) >= free_before, "the hulls are back in the pool")
+	# A wing that was there before keeps its place but not the hulls of the failed launch.
+	var existing: Wing = main.wings.create_wing("ZETA", null)
+	assert_false(main.launches.launch_wing("zeta").is_empty())
+	assert_eq(main.wings.wing_named("ZETA"), existing, "a wing from before stays")
+	assert_null(existing.leader)
+	assert_eq(existing.members().size(), 0, "with nobody parked in it")
+
+
 func test_mission_api_launch_from_starts_the_players_launch() -> void:
 	await _start()
 	DebugConsole.registry.execute("launch skip")

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -39,6 +40,25 @@ class PythonShardTests(unittest.TestCase):
     def test_no_shard_is_empty(self) -> None:
         for bucket in self.shards.assign(self.modules, self.shards.SHARDS):
             self.assertTrue(bucket)
+
+    def test_the_check_fails_for_a_module_in_a_subfolder(self) -> None:
+        # `discover` only sees the folder's own files; the check must still notice a test that would run in no shard.
+        # A temporary folder stands in for the real one, so parallel test runs never see the extra file.
+        real = self.shards.TESTS_DIR
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "test_flat.py").write_text("", encoding="utf-8")
+            (Path(tmp) / "sub").mkdir()
+            (Path(tmp) / "sub" / "test_orphan.py").write_text("", encoding="utf-8")
+            self.shards.TESTS_DIR = Path(tmp)
+            try:
+                buckets = self.shards.assign(self.shards.discover(), self.shards.SHARDS)
+                self.assertEqual(self.shards.problems(self.shards.on_disk(), buckets), ["sub.test_orphan runs in no shard"])
+                self.assertEqual(self.shards.main(["check"]), 1)
+            finally:
+                self.shards.TESTS_DIR = real
+
+    def test_the_check_passes_on_the_real_folder(self) -> None:
+        self.assertEqual(self.shards.main(["check"]), 0)
 
     def test_the_workflow_runs_the_shards(self) -> None:
         text = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")

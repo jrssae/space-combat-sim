@@ -796,9 +796,14 @@ static func _launch_bay(player: Dictionary, source: String) -> Variant:
 		return named
 	if parts == null:
 		return ""
-	if not (parts is Dictionary) or not ((parts as Dictionary).get("wing") is String) or not _is_number((parts as Dictionary).get("door")):
+	if not (parts is Dictionary) or not ((parts as Dictionary).get("wing") is String) or not _is_door((parts as Dictionary).get("door")):
 		return _failure("%s: player.launch must be {\"wing\": \"alpha\", \"door\": 1 to 6}" % source)
 	return "%s%s_%d" % [LAUNCH_BAY_PREFIX, ((parts as Dictionary)["wing"] as String).to_lower(), int((parts as Dictionary)["door"])]
+
+
+# A launch door is a whole number from 1 to the arm's six (JSON numbers arrive as floats, so 3.0 is a 3).
+static func _is_door(value: Variant) -> bool:
+	return _is_number(value) and is_equal_approx(float(value), roundf(float(value))) and float(value) >= 1.0 and float(value) <= 6.0
 
 
 static func _empty() -> Dictionary:

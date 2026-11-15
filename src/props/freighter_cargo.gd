@@ -28,6 +28,8 @@ var _riding: Array[MeshInstance3D] = []
 # name -> {node, offset}
 var _pods: Dictionary = {}
 var _frame: Node3D = null
+# The job's end is told once; an unload stays on the hull's node until the traffic lets the freighter go.
+var _told_finished: bool = false
 
 
 ## Whether a break-up chunk is cargo the cargo pods carry.
@@ -102,6 +104,7 @@ func start(station: Station, early: bool = false) -> String:
 	if not plan.valid:
 		return plan.error
 	job = CargoFerryJob.create(plan, loading)
+	_told_finished = false
 	if early:
 		for pod: FerryPod in job.pods:
 			pod.berthed = false
@@ -148,7 +151,8 @@ func _physics_process(_delta: float) -> void:
 		if pod.done() and not bool(entry["told"]):
 			entry["told"] = true
 			pod_done.emit(pod.trip.pod_name)
-	if all_done:
+	if all_done and not _told_finished:
+		_told_finished = true
 		_remove_crew()
 		finished.emit()
 		if loading:

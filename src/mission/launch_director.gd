@@ -162,6 +162,7 @@ func launch_wing(wing: String) -> String:
 	var ships: Array[Combatant] = []
 	var prefix: String = wing.to_upper()
 	var at: UniversePos = main.world.to_universe(s.global_position)
+	var made_wing: bool = main.wings != null and main.wings.wing_named(prefix) == null
 	var squadron: Wing = _station_wing(prefix)
 	for i: int in 12:
 		var callsign: String = pool.next_name(prefix, 1)
@@ -179,7 +180,11 @@ func launch_wing(wing: String) -> String:
 	var why: String = _start(wing, 1, ships, "", hash([main.scenario_seed, wing.to_lower(), "wing", SimClock.now()]))
 	if not why.is_empty():
 		for ally: Combatant in ships:
+			if squadron != null:
+				main.wings.leave(squadron, ally)
 			pool.release(ally)
+		if made_wing and squadron != null and squadron.leader == null and squadron.members().is_empty():
+			main.wings.wings.erase(squadron)  # a retry starts from nothing, not from a wing of parked hulls
 	return why
 
 

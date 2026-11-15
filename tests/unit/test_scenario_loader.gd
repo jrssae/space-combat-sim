@@ -692,6 +692,12 @@ func test_a_launch_bay_start_is_read_either_way() -> void:
 	_assert_fails(data, "player takes launch_bay or launch, not both")
 	data["player"] = {"launch": {"wing": "alpha"}}
 	_assert_fails(data, "player.launch must be")
+	for door: Variant in [0, 7, 2.5, -1, "3"]:
+		data["player"] = {"launch": {"wing": "alpha", "door": door}}
+		_assert_fails(data, "player.launch must be")
+	for door: Variant in [1, 6, 3.0]:
+		data["player"] = {"launch": {"wing": "alpha", "door": door}}
+		assert_true(bool(ScenarioLoader.from_data(data, "case")["ok"]), "door %s is accepted" % str(door))
 	var file: Dictionary = ScenarioLoader.load("res://data/scenarios/station_launch.json")
 	assert_true(bool(file["ok"]), str(file.get("error", "")))
 	assert_eq(file["player"]["launch_bay"], "cobra_bay_alpha_3", "the station launch scenario starts in Alpha 3")

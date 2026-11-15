@@ -271,6 +271,19 @@ func remove_member(wing: Wing, member: Combatant) -> void:
 		pilot.context.clear_wing()
 
 
+## Takes `member` out of `wing` whether it flies a slot or leads it, so a launch that falls through leaves no ghosts behind.
+## A leaderless wing takes the next ship `join`s as its leader.
+func leave(wing: Wing, member: Combatant) -> void:
+	if wing == null:
+		return
+	if wing.leader == member:
+		wing.leader = null
+		var pilot: AiPilot = _pilot_of(member)
+		if pilot != null:
+			pilot.context.clear_wing()
+	remove_member(wing, member)
+
+
 ## Gives `wing` (default: the player's) a new order and posts one acknowledgement line. Returns `{"ok", "line"}`. ATTACK MY
 ## TARGET without a hostile selected is refused (`ok` false, order unchanged, the refusal is the line).
 func give_order(new_order: AiContext.Order, wing: Wing = null) -> Dictionary:
