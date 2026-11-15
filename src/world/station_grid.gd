@@ -41,6 +41,10 @@ const MODEL_ASSETS: Dictionary[Kind, String] = {Kind.LIGHT: "saturn_4_transport"
 const MODEL_SCALE: Dictionary[Kind, float] = {Kind.LIGHT: 2.0, Kind.HEAVY: 1.0, Kind.INTERCEPTOR: 1.0}
 ## A model's barrel reach when its manifest gives none (the Saturns' turret at scale 1), m.
 const MODEL_BARREL_M: float = 4.5
+## The heavy cannon's own trunnion height and barrel reach (`grid_heavy_cannon`'s manifest), m, so it fires from over its recess
+## even in a build without its model (M7-T43: without them it fired from inside the recess and the balance broke).
+const HEAVY_TRUNNION_M: float = 9.5
+const HEAVY_BARREL_M: float = 22.5
 ## An interceptor battery's barrels (M7-T41): each recharges this long after it fires, s; the battery's interval spaces them.
 const BARREL_RECHARGE_S: float = 1.0
 ## A battery's muzzle glow: the flash's warm colour scaled to the pulses' blue-white (M7-T41).
@@ -84,7 +88,8 @@ func build(p_station: Station) -> void:
 		var scale_k: float = MODEL_SCALE[kind]
 		var model_id: String = MODEL_ASSETS[kind]
 		var mount: TurretMount = TurretMount.create({"name": entry["name"], "position": entry["position"], "up": entry["up"],
-				"arc_deg": ARC_DEG, "barrel_m": TurretMount.barrel_reach(model_id, MODEL_BARREL_M) * scale_k},
+				"arc_deg": ARC_DEG, "barrel_m": TurretMount.barrel_reach(model_id,
+				HEAVY_BARREL_M if kind == Kind.HEAVY else MODEL_BARREL_M) * scale_k},
 				load(WEAPONS[kind]) as WeaponSpec, faction)
 		mount.grid_kind = kind
 		mount.host = station.drum_body if on_drum else station
@@ -95,6 +100,8 @@ func build(p_station: Station) -> void:
 			mount.trunnion_m = mount.pitch.position * scale_k
 			mount.barrel_recharge_s = BARREL_RECHARGE_S
 		elif kind == Kind.HEAVY:
+			if mount.pitch.position.is_zero_approx():
+				mount.pitch.position = Vector3(0.0, HEAVY_TRUNNION_M, 0.0)  # no model: the gun's own trunnion all the same
 			mount.trunnion_m = mount.pitch.position * scale_k  # it fires from its trunnion, over its recess
 		mount.shot_fired.connect(_on_fired.bind(mount))
 		mount.intercepted.connect(_on_intercepted.bind(mount))

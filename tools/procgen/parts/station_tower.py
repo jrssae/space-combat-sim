@@ -16,7 +16,7 @@ import numpy as np
 from ..core.geometry import Material, Mesh, lathe, rotation_x
 
 CENTRE_Z = 520.0  # under I5
-FOOT_Y = 370.0  # inside the spine, whose top is at 375 here
+FOOT_Y = 368.0  # inside the spine, whose top is at 375 here (under the ridge's foot at 370, so no faces share a plane)
 CROWN_Y = 436.0  # the top, under I5's plinth
 LEAN = 0.36  # m aft per metre below the top: the STL's neck runs from z 535 at y 400 to z 523 at y 430
 # The outline from the foot up, (y, radius): a stepped, flared base, the shaft, a corbel out to the cylindrical top.

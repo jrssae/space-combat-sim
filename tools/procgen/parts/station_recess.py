@@ -23,7 +23,7 @@ BEHIND_M = 10.0  # behind it
 STRIPE_BAND_M = 1.6  # the hazard band down the top of each wall
 STRIPE_M = 1.4  # each stripe's width along the wall
 STRIPE_LEAN_M = 1.0  # how far a stripe leans along the wall over the band's height
-LIP = (1.0, 0.35)  # the raised frame round the opening: width, height over the deck
+LIP = (1.0, 0.35, 0.3)  # the raised frame round the opening: width, height over the deck, overhang into the opening
 
 
 @dataclass(frozen=True)
@@ -157,16 +157,17 @@ def pit(p: Recess, mats: dict[str, Material]) -> Mesh:
     # Rails along the floor ahead of the turntable.
     for dx in (-3.0, 3.0):
         meshes.append(st.block((p.pivot[0] + dx - 0.4, p.floor, p.z0 + 1.0), (p.pivot[0] + dx + 0.4, p.floor + 0.4, p.pivot[2] - 7.0), steel))
-    # The raised frame round the opening, on the deck.
-    w, h = LIP
-    for z in (p.z0, p.z1):
+    # The raised frame round the opening, on the deck, its inner edge a little over the opening so no face lies in a wall's plane;
+    # the long sides fit between the ends.
+    w, h, over = LIP
+    for z, side in ((p.z0, -1.0), (p.z1, 1.0)):
         t = top_at(z)
-        z_out = z - w if z == p.z0 else z + w
-        meshes.append(st.block((p.x0 - w, t - 0.5, min(z, z_out)), (p.x1 + w, t + h, max(z, z_out)), steel))
-    for x in (p.x0, p.x1):
-        x_out = x - w if x == p.x0 else x + w
+        meshes.append(st.block((p.x0 - w, t - 0.5, min(z + side * w, z - side * over)), (p.x1 + w, t + h, max(z + side * w, z - side * over)),
+                               steel))
+    for x, side in ((p.x0, -1.0), (p.x1, 1.0)):
         t_lo, t_hi = min(top_at(p.z0), top_at(p.z1)), max(top_at(p.z0), top_at(p.z1))
-        meshes.append(st.block((min(x, x_out), t_lo - 0.5, p.z0), (max(x, x_out), t_hi + h, p.z1), steel))
+        meshes.append(st.block((min(x + side * w, x - side * over), t_lo - 0.5, p.z0 + over),
+                               (max(x + side * w, x - side * over), t_hi + h, p.z1 - over), steel))
     # A red warning lamp in each corner, under the band (the spine carries no white lights, M7-T24).
     for x in (p.x0 + 0.4, p.x1 - 0.4):
         for z in (p.z0 + 0.4, p.z1 - 0.4):

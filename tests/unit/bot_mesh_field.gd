@@ -1,9 +1,10 @@
 class_name BotMeshField
 extends RefCounted
 ## Test helper (M7-T11): how far a point is from a piece's drawn triangles. A grid of cells holds each triangle's index so a query
-## only measures the triangles near it (the station's pieces have 25 000 to 30 000).
+## only measures the triangles near it (the station's pieces have 25 000 to 30 000). Small cells keep a query to the triangles
+## round it (M7-T43: the bow's recesses and tower filled the 128 m cells the cargo lanes query); the answer is the same at any size.
 
-const CELL_M: float = 128.0
+const CELL_M: float = 32.0
 
 var _a := PackedVector3Array()
 var _b := PackedVector3Array()

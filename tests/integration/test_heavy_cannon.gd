@@ -102,6 +102,16 @@ func test_a_heavy_cannon_fires_bursts_of_three_then_waits_out_its_cycle() -> voi
 	assert_eq(int(station.grid.readouts()[1]), shot_times.size(), "counted as heavy shots")
 
 
+func test_the_grids_own_numbers_match_the_guns_manifest() -> void:
+	# StationGrid falls back on these when the asset is missing; they must be the model's.
+	var entry: Dictionary = MeshAssets.read_manifest("grid_heavy_cannon").get("turret", {})
+	if entry.is_empty():
+		pending("the grid_heavy_cannon asset is not generated")
+		return
+	assert_almost_eq(float((entry["trunnion"] as Array)[1]), StationGrid.HEAVY_TRUNNION_M, 1e-4, "the trunnion's height")
+	assert_almost_eq(float(entry["barrel_m"]), StationGrid.HEAVY_BARREL_M, 1e-4, "the barrel's reach")
+
+
 func test_a_cycle_does_what_the_old_shot_did() -> void:
 	# The maintainer: three shots of 300 every 12 s keep today's 900 every 12 s.
 	assert_eq(WEAPON.burst_shots, 3)
