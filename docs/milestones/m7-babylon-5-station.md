@@ -271,7 +271,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T15 | A | Starfury and raider surfaces from show references, with low and high texture sets for the texture detail setting (maintainer, 2026-11-12; numbered last because it was added after the others had numbers) | M5-T40 | Fable | Two hero hulls seen up close; the look is (H) and needs a sheet first | done |
 | T16 | A | Raider fighter rebuilt to its STL at 90% fidelity, the wing's leading-edge panels first (maintainer, 2026-11-13) | T15 | Opus | The raider was built without an STL; the maintainer finds its shape too far from the reference | done |
 | T17 | A | The Starfury looks metallic, not plastic: metallic, roughness and normal maps on both texture sets (maintainer, 2026-11-13; the raider's share is in T16, the station's in T04) | T15 | Opus | Material appearance on the hero hull; the look is (H) and needs a sheet first | done |
-| T18 | A | Station exterior lighting from the maintainer's references: dashed ring lights, nav and beacon lights, lit windows and markings, the aperture and bay glow (maintainer, 2026-11-13) | T05, T06 | Opus | Emissive patterns, blinking beacons and the 8 light slots on an 8 km hull; the look is (H) | not started |
+| T18 | A | Station exterior lighting from the maintainer's references: dashed ring lights, nav and beacon lights, lit windows and markings, the aperture and bay glow (maintainer, 2026-11-13) | T05, T06 | Opus | Emissive patterns, blinking beacons and the 8 light slots on an 8 km hull; the look is (H) | in progress |
 | T19 | A | Station sections: the frame and drum cut into linked sections, each with its own LOD and visibility range, and near-only detail props (maintainer, 2026-11-13) | T04 | Opus | One 8 km mesh gets one LOD and is never culled; T05's detail must be built on this | done |
 | T20 | C | The hangar behind the menu after the door resize: one Starfury per door (six), a narrower hall (maintainer, 2026-11-13) | T05, T09 | Opus | T09 sized the hall and racks to the old 64 m doors | done |
 | T21 | A | Follow-up to T05 from the STL: the Cobra arm's pentagonal cross-section, creases either side of the launch doors, and a roofed rectangular cargo bay (maintainer, 2026-11-13) | T05 | Opus | Shape read off the STL; the look is (H) | done |
@@ -1109,6 +1109,12 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   cross housing.png`, and the bow capture in `references/station lighting references/`). T18 lights it: emissive red on the
   tunnel's frames and walls, falling off with depth, and one or two real red lights inside the tunnel through `LightPicker` so a
   ship flying in is lit red. It turns with the drum.
+- **Since this was written (2026-11-14):** T25 and T32 lit both bays as red-lit grey metal from lamps through the light slots
+  (`BayLights`), with no self-lit rings, strips or bands; the maintainer approved that over the emissive tunnel described above, so
+  the bays are done and T18 leaves them as they are. T24 set the drum's windows (one straight row of evenly spaced lights on a dark
+  bar along each of the 8 stringers, no rings, no scattered dots), the sphere's collar ring of densely lit panels, a windowless grey
+  spine and command section, and the station's colours; all approved, and T18 keeps them. The maintainer rejected window rings round
+  the drum and polka-dot scatter, so any ring or dash light T18 proposes is shown on a first sheet before it is built out.
 - **What:** the station's emissive layer (dashed ring strips, window rows, markings, the aperture's red centre, the bay glow) in
   its maps with the hardpoints T05 gives the lights; blinking beacons (vane tips, the bow spike's tip) and running lights as cheap
   shader or emissive animation driven by sim time, not one light node each; a few real lights where a fighter flies close
