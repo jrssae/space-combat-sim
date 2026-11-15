@@ -286,7 +286,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T30 | D | Maintenance bots carry the freighters' cargo pods (Saturn 3, 4 and 8; cargo and tankers) between the ship and the cargo bay (maintainer, 2026-11-14) | T10, T11 | Opus | Replaces the pods flying by themselves | in progress |
 | T31 | C | The pause menu gets Quit (exit the game); the start and pause menus' boxes shrink to their content (Settings keeps its layout) (maintainer, 2026-11-14) | - | Sonnet | Front-end layout | done |
 | T32 | A | The cargo bay gets the main docking bay's look: metallic grey walls and doors with the Earth Alliance mosaic, lit red by lamps through the light slots, no self-lit rings or bands (maintainer, 2026-11-14) | T25 | Opus | Same surfaces and lamps as T25 on the spine's cargo bay; (H) | done |
-| T33 | A | The cargo pod: a new 6 m Earth Alliance cargo-handling craft built from `references/EA_cargo_pod.stl` at the 90% rule (maintainer, 2026-11-14) | - | Opus | A new STL asset and its look sheet; (H) | in progress |
+| T33 | A | The cargo pod: a new 6 m Earth Alliance cargo-handling craft built from `references/EA_cargo_pod.stl` at the 90% rule (maintainer, 2026-11-14) | - | Opus | A new STL asset and its look sheet; (H) | done |
 | T34 | D | Cargo pods take over T30's cargo work: they move every freighter's cargo between the ship and the cargo bay with T30's plan and carrying logic, launched from the cargo bay; the maintenance bots stop carrying cargo (maintainer, 2026-11-14) | T30, T33 | Opus | Retargets T30's ferry from bots to pods | not started |
 | T35 | D | Maintenance bots roam and repair: one per area at a time and irregularly, along the spine, the fins (vanes), the drum (turning with it, so they take no damage) and out to the jumpgate and along its arm; in battle the cargo bay launches one per damaged area and each repairs 10 HP/s on damage sections and grid turrets (maintainer, 2026-11-14) | T11, T07 | Opus | New bot routes, a co-rotating frame and a repair rule over T06/T07's health | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
@@ -1793,6 +1793,31 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   cargo is already called pods in code (`FreighterCargo`, `FerryPod`, `src/ship/cargo_pods.gd`); the new craft gets its own name
   in code (for example `CargoPodCraft`, asset `cargo_pod_craft`) and "cargo pod" in the UI and docs.
 - **Done when:** a GPU look sheet beside the STL views approved by the maintainer (H); the fidelity numbers; Python tests; committed.
+- **Done (as built; the maintainer approved the look sheet on 2026-11-14, keeping the arm bands and the engine face's four bars):**
+  - **The craft.** `tools/procgen/assets/cargo_pod_craft.py` and its style `styles/cargo_pod_craft.py`, described in
+    `docs/design-references.md` ("Cargo pod"): a faceted blue cab (a wedge ahead of a taller cabin, a black window across the
+    nose, two roof humps, the stern's ridge with the engine face between), two arms of stacked oval barrels, a wrist and a hand of
+    two jaws. Colours from the show's zero-g cargo bay capture, white-balanced on the cab's pale roof; painted and worn metal
+    (metallic 0.55 to 0.6, so the key light rather than the black sky shows it). 2 186 triangles, one 1 024 px atlas with the full
+    and low texture sets (`settings.texture_detail`), levels of detail from Godot's importer as every hull's.
+  - **Fidelity at 6 m, at rest:** top IoU 0.960, side 0.978, front 0.971; length 6.00/6.00 m, width 3.30/3.28 m, height
+    2.10/2.07 m (`.venv/bin/python3 -I tools/refview/compare.py references/EA_cargo_pod.stl cargo_pod_craft --length 6
+    --right=+y --up=+z --aft=+x`).
+  - **The arms move (maintainer's question).** The glb is skinned (`core/glb.py` writes an optional skin, `TexturedPart.joint`
+    binds a part whole to a joint): per arm the reach (the inner barrels, 1 m of travel, hidden inside the outer ones at rest), the
+    wrist on its pivot drum and each jaw on its root. One surface, one draw call, hull and arms together. The manifest's `rig`
+    lists the joints and their ranges; the rest pose is the STL's. `CargoPodPose` (pure maths: extend 0..1, wrist angle within
+    ±45°, jaw open 1..0, and where a point on a hand ends up) and `CargoPodRig` (the node that builds the model and poses its
+    skeleton; visuals only) are for T34.
+  - **Hardpoints for T34** (`hardpoints.json`, body frame, at rest): `grips` (one per hand, between the jaws, with the bone it
+    rides), `cargo_hold` (the jaws' tips, facing forward, 2.64 m across), `main_thruster` on the engine face, ten mirrored `rcs`
+    with pilot tags, `nav_lights`, `cockpit`, the collision's boxes and capsules. The manifest's `collision` is one piece of 15
+    convex shapes covering the mesh within 8 cm (the arms at rest).
+  - **Tests:** `tools/procgen/tests/test_cargo_pod_craft.py` (21: files and both texture sets, size and frame, outward faces,
+    metal, the skin and rig, hardpoints, collision cover, determinism, the glb skin round trip), `tests/unit/test_cargo_pod_pose.gd`
+    (6), `tests/integration/test_cargo_pod_rig.gd` (2: skinned with nine bones in one surface, posing moves bones and grips).
+  - **Captures:** `references/screenshots/T33 cargo pod/` (the look sheet beside the STL, and `T33 cargo pod poses.png`: rest,
+    reaching, gripping).
 
 ### M7-T34 Cargo pods move the cargo
 

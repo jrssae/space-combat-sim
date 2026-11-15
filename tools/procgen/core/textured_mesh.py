@@ -19,7 +19,7 @@ import numpy as np
 
 from ..styles import Style
 from .geometry import Material, Mesh
-from .glb import GlbPrimitive, write_glb
+from .glb import GlbJoint, GlbPrimitive, write_glb
 from .color import linear_to_srgb, srgb_to_linear
 from .image import write_png
 from .chunks import ChunkCut, chunk_mesh_name
@@ -64,6 +64,7 @@ class TexturedPart:
     name: str = ""
     zone: int = 0  # the livery zone its vertices carry (``core/livery.py``; 0: never painted)
     seams: SeamLayout = EMPTY  # its drawn surface layout, in the mesh's frame (M5-T40)
+    joint: int = 0  # the skin joint the whole part follows, when the mesh is skinned (M7-T33)
 
 
 @dataclass
@@ -112,11 +113,16 @@ def atlas_of(parts: Sequence[TexturedPart], atlas_px: int = DEFAULT_ATLAS_PX, te
 
 
 def _primitives(parts: Sequence[TexturedPart], packed: PackedParts, zones: bool = False, face_mask: np.ndarray | None = None,
-                offset: Sequence[float] = (0.0, 0.0, 0.0), suffix: str = "") -> tuple[GlbPrimitive, GlbPrimitive]:
+                offset: Sequence[float] = (0.0, 0.0, 0.0), suffix: str = "", skinned: bool = False) -> tuple[GlbPrimitive, GlbPrimitive]:
     """The opaque and glass primitives: a glb vertex per (mesh vertex, UV), normals the parts' smooth vertex normals; with ``zones``
     each vertex's livery zone in COLOR_0's red (zone / 255). ``face_mask`` keeps only some faces (a chunk's) and ``offset`` is
-    subtracted from the positions; ``suffix`` follows the surfaces' names (a tier of a big piece, M7-T24)."""
+    subtracted from the positions; ``suffix`` follows the surfaces' names (a tier of a big piece, M7-T24); ``skinned`` gives each
+    vertex its part's joint."""
     mesh = packed.mesh
+    vertex_joint = np.zeros(mesh.vertex_count, dtype=np.int64)
+    if skinned:
+        part_joint = np.array([p.joint for p in parts], dtype=np.int64)
+        vertex_joint[mesh.faces.reshape(-1)] = np.repeat(part_joint[packed.face_part], 3)
     normals = mesh.vertex_normals()
     transmittance = np.array([m.transmittance for m in mesh.materials], dtype=float)[mesh.face_material]
     glass_face = transmittance > 0.0
@@ -126,7 +132,7 @@ def _primitives(parts: Sequence[TexturedPart], packed: PackedParts, zones: bool 
         faces = np.flatnonzero((glass_face == glass) & keep)
         if len(faces) == 0:
             out.append(GlbPrimitive(np.zeros((0, 3)), np.zeros((0, 3)), np.zeros((0, 2)), [], (GLASS_SURFACE if glass else OPAQUE_SURFACE) + suffix,
-                                    (0.0, 0.0, 0.0, 0.3) if glass else (1.0, 1.0, 1.0, 1.0), glass))
+                                    (0.0, 0.0, 0.0, 0.3) if glass else (1.0, 1.0, 1.0, 1.0), glass, joints=np.zeros(0) if skinned else None))
             continue
         corner_vertex = mesh.faces[faces].reshape(-1)
         corner_uv = np.round(packed.face_uv01[faces].reshape(-1, 2).astype(np.float32), 7)
@@ -140,7 +146,8 @@ def _primitives(parts: Sequence[TexturedPart], packed: PackedParts, zones: bool 
             colors[:, 0] = packed.vertex_zone[source] / 255.0
             colors[:, 3] = 1.0
         out.append(GlbPrimitive(mesh.vertices[source] - np.asarray(offset, dtype=float), normals[source], unique[:, 1:3], inverse.reshape(-1),
-                                (GLASS_SURFACE if glass else OPAQUE_SURFACE) + suffix, base, glass, colors=colors))
+                                (GLASS_SURFACE if glass else OPAQUE_SURFACE) + suffix, base, glass, colors=colors,
+                                joints=vertex_joint[source] if skinned else None))
     return out[0], out[1]
 
 
@@ -221,7 +228,7 @@ def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPa
                         sections: Sequence[SectionCut] = (),
                         interior: Callable[[np.ndarray, np.ndarray], np.ndarray] | None = None,
                         surface_suffix: str = "", detail_shrink: Mapping[str, int] | None = None,
-                        high_quality_keys: Sequence[str] = ()) -> tuple[list[Path], dict[str, Any]]:
+                        high_quality_keys: Sequence[str] = (), joints: Sequence[GlbJoint] = ()) -> tuple[list[Path], dict[str, Any]]:
     """Write the textured mesh of ``parts`` into ``out_dir`` and return its files and the manifest's ``mesh`` section. With
     ``paintable`` material names the hull takes wing liveries (M4-T30b): the vertices carry their parts' zones, the albedo's alpha
     says where paint may go, and the digit atlas and the ``livery`` section are written too. With ``fine_mesh`` the parts are a
@@ -235,7 +242,9 @@ def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPa
     (face centroids, face normals -> a flag per face) says which faces lie inside a hall or a bay, written apart in each section
     so the game keeps the sun off them (no light casts shadows). ``surface_suffix`` follows the surfaces' names, so the tiers of one
     big piece (M7-T24, each its own atlas) draw with their own materials; ``detail_shrink`` writes a detail set's maps that many
-    times smaller (a lighter set); ``high_quality_keys`` are the maps imported with the better compression."""
+    times smaller (a lighter set); ``high_quality_keys`` are the maps imported with the better compression. With ``joints`` (M7-T33)
+    the hull's glb is skinned, each part following its ``joint``, so the game can move parts without another draw call; chunks and
+    sections stay unskinned."""
     out_dir = Path(out_dir)
     packed = pack_parts(parts, atlas_px, texel_m)
     mesh = packed.mesh
@@ -247,8 +256,10 @@ def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPa
                   packed.packed.texel_m, mesh, tuple(plating_for(p.name, p.mesh, style) for p in parts) if grid else (), fine_mesh,
                   tuple(p.seams for p in parts), grid)
     maps = bake_maps(atlas, style, seed, occlusion, paintable, normal_scale)
-    opaque, glass = _primitives(parts, packed, zones=bool(paintable), suffix=surface_suffix)
-    paths = [write_glb(out_dir / f"{asset_id}.glb", [opaque, glass], asset_id)]
+    if any(not 0 <= p.joint < max(len(joints), 1) for p in parts):
+        raise ValueError(f"{asset_id}: a part names a joint the skin does not have")
+    opaque, glass = _primitives(parts, packed, zones=bool(paintable), suffix=surface_suffix, skinned=bool(joints))
+    paths = [write_glb(out_dir / f"{asset_id}.glb", [opaque, glass], asset_id, joints)]
     names = [p.name for p in parts if p.mesh.face_count > 0]
     for cut in chunks:
         unknown = [name for name in cut.parts if name not in names]

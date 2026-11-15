@@ -356,6 +356,46 @@ A small craft a few metres across. Two large curved shell halves (blue-purple, w
 painted number) sit side by side like a split egg or clam, joined by a grey central truss body. Two jointed
 manipulator arms hang below with claw grippers. A sensor head with a green lens sits under the front centre.
 
+## Cargo pod (M7)
+
+The Earth Alliance cargo pod (M7-T33, asset `cargo_pod_craft`): the small work craft that moves the freighters' cargo
+between their holds and the station's cargo bay (M7-T34). `references/EA_cargo_pod.stl`, 0.0471 m per file unit at the
+maintainer's **6 m** length. File +x is aft (the jaws at -x), file y is starboard and file z up:
+`--right=+y --up=+z --aft=+x`. Length 6.0 m from the jaws' tips to the stern ridge, span 3.28 m across the arms' root blocks,
+height 2.07 m from the keel to the roof humps; x and y are centred on the box.
+
+In words: a faceted cab, hexagonal in section (a flat roof and keel, sloped flanks meeting at a chine a little below the
+middle), a wedge in front of a taller cabin; two arms alongside it, each a block on the cabin's flank, two barrels stacked one
+above the other telescoping forward, a wrist and a tapered forearm ending in a hand of two jaws that close top to bottom. Two
+hands 2.64 m apart reach 1 m ahead of the nose, so the craft carries its load in front of it, held at two points.
+
+| Part | Size and place |
+|---|---|
+| Nose | a bezel 0.84 m wide and 0.46 m tall at z 0.93 to 1.1, its face leaning back about 15 degrees, a window across it and a small sensor slot under it |
+| Wedge | z 1.02 to 3.6: the chine 0.86 m across at the nose widening to 2.12 m, the roof rising from y 0.12 to 0.80 (0.66 m wide at its front, 1.6 m at its back), the keel falling from y -0.50 to -0.97; the chine at y -0.21 to -0.15 |
+| Cabin | z 3.6 to 5.62: the chine 2.26 m across at y -0.20, the roof at y 0.95 (1.66 m wide), the keel at y -1.04 (1.70 m wide); two humps on the roof, 0.42 by 0.38 m and 0.1 m tall, at x ±0.4, z 4.06 |
+| Stern | outboard of x ±0.6 the roof and keel slope into a ridge on the chine at z 6.0 (y -0.22); between them they stop at a flat engine face 1.2 m wide at z 5.75 (y -0.77 to 0.55), which leaves a notch in the plan |
+| Root blocks | x 1.03 to 1.64, y -0.94 to 0.12, z 4.62 to 5.47, the outboard corners chamfered and the back raked inward |
+| Barrels | on axes at x ±1.32, y -0.19 and -0.61: the outer pair 0.38 by 0.43 m (a little oval), z 2.92 to 4.62; the inner pair 0.28 by 0.36 m, z 1.86 to 2.94 |
+| Wrist | a plate 0.3 by 0.98 m at z 1.85, a tapered block behind the pivot (z 1.57 to 1.82) and a pivot drum across it (0.24 m across, 0.46 m long, along x) |
+| Hand | a forearm tapering from 0.27 by 0.42 m at z 1.57 to 0.15 by 0.22 m at z 0.77; a crossbar 0.9 m tall at z 0.6 to 0.77; two jaws (z 0 to 0.6, 0.27 m square at the bar, 0.13 by 0.14 m at the tip) at y -0.17 and -0.63, five teeth on each inner face |
+
+The show's zero-g cargo bay (`references/zero g cargo bay references/1 SHOW zero g cargo bay with pod and arms.webp`) shows a
+pod holding a banded tank: a blue cab with a pale panel on its roof, a black window across the hexagonal nose, small white
+thruster cones at the nose corners, and beside it twin-barrelled arms in dark grey with yellow, orange and yellow bands and a
+black and white chequer. The bay's light is blue, so the colours are white-balanced on the cab's pale panel:
+
+| Where | sRGB | Read from |
+|---|---|---|
+| Cab | blue #1F4C9E, metallic paint | the cab's flanks (#083FAB under the bay's light) |
+| Roof panel | pale grey #C4C8CC | the cab's top (#A4AED8 under the bay's light) |
+| Barrels | worn grey metal #7A8189; bands yellow #D8BE38, orange #D2601E, a chequer of #1E1E1E and #E4E4E2 | the arms beside the pod |
+| Wrist, forearm, jaws | grey metal #6A717C | the arms' clamps |
+| Window | near black #0C1014 | the nose |
+| Thrusters | white #D8DADC, throats glowing blue-white | the nose corners |
+
+The arms in the capture may be the bay's own; the pod is given their paint until the maintainer says otherwise.
+
 ## Civilian ships (M5)
 
 Eight civilian hulls for free-flight traffic (Q5, Q8, Q11, Q16, D59). The maintainer supplied fan-made 3D-print models
