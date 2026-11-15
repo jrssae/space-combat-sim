@@ -281,7 +281,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T25 | A | The main docking bay rebuilt: shape and proportions from the STL (its section exemption lifted, IoU >= 0.90), the look from the show captures (maintainer, 2026-11-14) | T05, the flicker and light-leak fix | Opus | The bay reads wrong against the show in shape, mouth detail, tunnel and light; (H) | done |
 | T26 | B | All ships keep a low-polygon model at range instead of turning into a grey sphere; a dot only when a few pixels across (maintainer, 2026-11-14) | - | Opus | A Saturn 3 and a Narn transport became grey spheres while still clearly visible | in progress |
 | T27 | C | Navigation targets and a hold-X interaction: the main docking bay, cargo bay and jumpgate as navigation targets; hold X for 2 s with a progress bar to act on them (maintainer, 2026-11-14) | T10 | Opus | A new input mechanic over targeting, HUD and the gate jump | in progress |
-| T28 | D | Fix: entering the jumpgate a second time opens the vortex twice and the camera stops tracking the ship (maintainer, 2026-11-14) | - | Fable | A state bug in M6's gate jump | in progress |
+| T28 | D | Fix: entering the jumpgate a second time opens the vortex twice and the camera stops tracking the ship (maintainer, 2026-11-14) | - | Fable | A state bug in M6's gate jump | done |
 | T29 | D | Fix: a civilian attacked in free flight does not flee (no change of speed or heading) (maintainer, 2026-11-14) | T10 | Fable | AI regression or a free-flight wiring gap | done |
 | T30 | D | Maintenance bots carry the freighters' cargo pods (Saturn 3, 4 and 8; cargo and tankers) between the ship and the cargo bay (maintainer, 2026-11-14) | T10, T11 | Opus | Replaces the pods flying by themselves | done |
 | T31 | C | The pause menu gets Quit (exit the game); the start and pause menus' boxes shrink to their content (Settings keeps its layout) (maintainer, 2026-11-14) | - | Sonnet | Front-end layout | done |
@@ -1586,6 +1586,8 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   navigation targets), a live run for the maintainer (H), committed.
 
 ### M7-T28 Fix: the jumpgate's second entry
+
+- **Accepted (maintainer, 2026-11-14):** flown live: one vortex on a second entry, no roll, the camera tracking, no target square in the cinematic, the 2 km rule.
 
 - **Why (maintainer, 2026-11-14):** "when entering the jumpgate a second time, the jumpgate's vortex activated twice; the second
   time the camera didn't track the ship correctly."
