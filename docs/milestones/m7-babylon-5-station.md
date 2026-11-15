@@ -296,6 +296,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T40 | D | Council review fixes: the findings of the M7 code review (Opus, GPT-6 Luna, DeepSeek; 2026-11-15) that survived verification | - | Opus (native), Sonnet (GDScript, Python) | Small, separate fixes; the interceptors' line of fire may move the T07 balance | in progress |
 | T41 | D | Interceptor fire as the show has it: four barrels firing in turn (0.25 s apart, each recharging 1 s), visible blue-white pulses that fly out and can miss, a small flash and spark where one meets incoming fire; then bow batteries only if the capital fight still needs them, and a test that proves the batteries save the station damage (maintainer, 2026-11-15) | T40 | Opus | Native pulse-against-projectile hits, seeded spread, 1 and 6 threads identical; balance re-measured | in progress |
 | T42 | D | The interceptor battery model: an original procedural mesh after the maintainer's clip, a truss pedestal, a two-axis yoke and four barrels in a rectangle round a central body, about 15 m tall, on every battery (maintainer, 2026-11-15) | - | Opus | Look sheet approved first; four muzzles for T41 | in progress |
+| T43 | D | The heavy cannons as the show has them: an original single oval-barrel gun about 30 m long in a hazard-striped recess cut into the bow tower at H1 and H2, firing three-shot bursts of large green pulses at today's damage a second (maintainer, 2026-11-15) | T42 | Opus | Look sheet approved first; station generator change (STL fidelity); burst cadence in the native gun gate; balance unchanged | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M7-T01 Station references and measurements
@@ -2255,3 +2256,26 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   levels of detail. Every interceptor battery wears it (`StationGrid`); the light and heavy guns keep theirs.
 - **Done when:** a look sheet beside the clip's frames approved by the maintainer (H); the model on every battery; tests (parts,
   muzzles, scale, bound to the mounts); committed.
+
+### M7-T43 The heavy cannons
+
+- **Why (maintainer, 2026-11-15, two clips of the show's big guns; frames under `references/screenshots/M7-T43 heavy cannon reference clips/`):**
+  "rework the model for the station destroyer batteries ... the 'big gun' shape and fire rate, with a large green pulse. the pulse
+  is significantly larger and visibly different than the normal batteries. the model for the bigger guns must also better match
+  the screen capture with a single large oval cannon shape." The clips: one large barrel with an oval (racetrack) muzzle on a
+  boxy ribbed body; in the second it sits in a rectangular recess in the hull with a hazard-striped opening and swings out of it;
+  bright green elongated pulses with a large green muzzle flash, about 0.35 s apart.
+- **The maintainer's answers:** three-shot bursts 0.35 s apart, then a recharge, keeping today's damage a second (3 x 300 every
+  12 s for 900 every 12 s); a recess at H1 and H2; the gun about 30 m long, its oval muzzle about 9 x 4 m.
+- **What:**
+  1. An original procedural gun in `tools/procgen` (base, yaw, pitch parts as `TurretMount` turns them; one muzzle point in its
+     manifest; the station's grey metal; levels of detail), on both heavy cannons (`StationGrid`).
+  2. The recess: a hazard-striped emplacement bay cut into the bow tower at H1 and H2 that the gun sits in and traverses out of
+     (station generator; the STL fidelity rule's cross-sections kept; collision and the line-of-fire surface updated so the gun's
+     own recess does not block its shots).
+  3. The fire: the native gun gate fires bursts (three shots 0.35 s apart, recharge to the 12 s cycle), 300 a shot; the pulse is
+     a large green elongated bolt clearly bigger than the light pulse turrets', with a large green muzzle flash. 1 and 6 threads
+     identical, threaded and `delayed` identical, parity recordings kept (new ones only with the reason).
+  4. The balance re-run (raid and capital, three seeds): unchanged within its bands.
+- **Done when:** a look sheet (the gun and the recess beside the clips' frames, the STL's section beside the build) approved by the
+  maintainer (H); the burst and pulse tests; balance in its bands; committed; seen live with T41's raid window (H).
