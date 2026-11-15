@@ -124,18 +124,13 @@ if [[ -n "${GUT_SHARD:-}" ]]; then
     shard="${BASH_REMATCH[1]}"
     shards="${BASH_REMATCH[2]}"
     (( shard >= 1 && shard <= shards )) || fail "GUT_SHARD ${GUT_SHARD}: k must be 1..n."
-    # The scripts GUT finds with -gdir=res://tests -ginclude_subdirs, in a stable order.
-    mapfile -t all_scripts < <(find tests -name 'test_*.gd' | LC_ALL=C sort)
-    picked=()
-    for i in "${!all_scripts[@]}"; do
-        if (( i % shards == shard - 1 )); then
-            picked+=("res://${all_scripts[$i]}")
-        fi
-    done
-    (( ${#picked[@]} > 0 )) || fail "GUT_SHARD ${GUT_SHARD} picks no script."
-    gut_select=("-gtest=$(IFS=,; echo "${picked[*]}")")
+    # Weighted by measured time, every test file in exactly one shard (scripts/gut_shards.py); `n` is the shard count.
+    picked_list="$("$(python_bin)" scripts/gut_shards.py files "${shard}" "${shards}")" || fail "scripts/gut_shards.py failed for GUT_SHARD ${GUT_SHARD}."
+    [[ -n "${picked_list}" ]] || fail "GUT_SHARD ${GUT_SHARD} picks no script."
+    IFS=, read -r -a picked <<< "${picked_list}"
+    gut_select=("-gtest=${picked_list}")
     (( shard == 1 )) || run_extras=0
-    echo "run_tests.sh: GUT shard ${shard} of ${shards}: ${#picked[@]} of ${#all_scripts[@]} scripts."
+    echo "run_tests.sh: GUT shard ${shard} of ${shards}: ${#picked[@]} scripts."
 fi
 
 if (( run_extras )); then
