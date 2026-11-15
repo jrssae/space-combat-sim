@@ -95,7 +95,7 @@ func refresh(camera: Camera3D) -> void:
 	if system != _system:
 		_build(system)
 	var time_s: float = world.system_time() + epoch_offset_s
-	var view: Transform3D = camera.get_global_transform_interpolated()
+	var view: Transform3D = FarProp.drawn_pose(camera)
 	var eye: PackedFloat64Array = ScaledPlacement.camera_from_anchor(world.origin, view.origin)
 	var places: Dictionary = {}
 	for id: StringName in system.body_ids:

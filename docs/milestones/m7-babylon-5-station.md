@@ -1650,6 +1650,14 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     never counts fewer than 1 080 lines (`LodSwitcherMath.MIN_VIEW_LINES`, `view_k`), so a small window or a 960x540 capture
     keeps ships as meshes as far as a 1 080-line screen would. Tests: `test_tier_proxies` (the rebase), `test_ship_lod_at_range`
     (a small window counts as 1 080 lines; a 2 160-line window doubles the distance), `test_lod_switcher_math` (`view_k`).
+  - **Fix (a timing-dependent far-prop failure, full GUT run on 065ac150):** `test_the_station_shrinks_both_pieces_and_its_drum_keeps_turning`
+    measured the station 500 km off after the camera was cut to 1 500 km. `FarProp` read the camera's interpolated pose, and for a
+    node with interpolation off Godot can return the last frame's place, depending on whether a frame ran in between (reproduced
+    1 run in 4 after `test_every_world_core`, without load). `FarProp.drawn_pose` reads a node that is not interpolated at its
+    pose now (`ScaledSpace` too); the test's `reset_physics_interpolation` (75993ca2) did nothing and is gone. Test: the pair 8
+    runs green; `test_a_camera_cut_this_frame_is_read_where_it_is_now`. The sandbox rebase's cost is unchanged by the far hulls'
+    rebase handler (median 377 to 411 us before T26, 315 to 394 after, 332 to 430 with the handler off; the 525 us was the 3x
+    parallel run's load); the 500 us budget stays.
 
 ### M7-T27 Navigation targets and the hold-X interaction
 

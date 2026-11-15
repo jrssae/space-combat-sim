@@ -44,7 +44,6 @@ func _view(far: FarProp, prop: Node3D, distance_m: float, bearing: Vector3 = Vec
 	var centre: Vector3 = prop.global_transform * far.math.centre
 	var eye: Vector3 = centre + prop.global_basis * bearing.normalized() * distance_m
 	camera.global_transform = Transform3D(Basis.looking_at(centre - eye, Vector3.UP), eye)
-	camera.reset_physics_interpolation()  # a cut, not a move: the far prop reads the camera's interpolated pose
 	for i: int in frames:
 		far.update(camera, FRAME_S)
 
@@ -210,3 +209,16 @@ func test_the_console_lists_the_far_props() -> void:
 	var result: ConsoleResult = DebugConsole.registry.execute("far")[0]
 	assert_true(result.ok, "alone, it reports")
 	assert_false(DebugConsole.registry.execute("far view gate")[0].ok, "a view needs its distance")
+
+
+func test_a_camera_cut_this_frame_is_read_where_it_is_now() -> void:
+	# M7-T26 fix: a camera with interpolation off is read at its pose now; Godot's interpolated pose of it could still be the last
+	# frame's place, so a cut read as the old distance (the station's dot test failed that way after other tests' frames).
+	await wait_process_frames(2)
+	camera.global_position = Vector3(0.0, 0.0, 1.0e6)
+	assert_eq(FarProp.drawn_pose(camera), camera.global_transform, "where it is now, this frame")
+	var mover := Node3D.new()
+	mover.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_ON
+	world.add_child(mover)
+	assert_eq(FarProp.drawn_pose(mover), mover.get_global_transform_interpolated(), "an interpolated node is drawn between ticks")
+	mover.queue_free()

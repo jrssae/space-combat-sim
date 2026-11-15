@@ -145,9 +145,9 @@ func _process(delta: float) -> void:
 func update(camera: Camera3D, delta_s: float) -> void:
 	if look == null or math == null or _prop == null or not _prop.is_inside_tree():
 		return
-	var view: Transform3D = camera.get_global_transform_interpolated()
+	var view: Transform3D = drawn_pose(camera)
 	var eye: Vector3 = view.origin
-	var pose: Transform3D = _prop.get_global_transform_interpolated()
+	var pose: Transform3D = drawn_pose(_prop)
 	var centre: Vector3 = pose * math.centre
 	var offset: Vector3 = centre - eye
 	distance_m = offset.length()
@@ -253,6 +253,12 @@ func _paint(camera: Camera3D, offset: Vector3) -> Color:
 func _ambient(camera: Camera3D) -> float:
 	var env: Environment = camera.environment if camera.environment != null else camera.get_world_3d().environment
 	return env.ambient_light_energy if env != null else 0.0
+
+
+## Where `node` is drawn this frame: its interpolated pose when it is interpolated, else its pose now. Godot's interpolated pose of a
+## node with interpolation off can be a frame old (a camera cut this frame then read as the last frame's place, M7-T26 fix).
+static func drawn_pose(node: Node3D) -> Transform3D:
+	return node.get_global_transform_interpolated() if node.is_physics_interpolated_and_enabled() else node.global_transform
 
 
 ## Pixels per radian at the centre of `camera`'s picture.
