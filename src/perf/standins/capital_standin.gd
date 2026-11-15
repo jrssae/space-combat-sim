@@ -222,7 +222,7 @@ func helm_torque(delta: float) -> Vector3:
 	var rate_max: float = deg_to_rad(spec.rate_max.y)
 	var wanted: Vector3 = CarrierTactics.turn_rate(-global_basis.z, heading, rate_max)
 	var inverse: Basis = get_inverse_inertia_tensor()
-	if absf(inverse.determinant()) < 1e-30:
+	if inverse.x.length() * inverse.y.length() * inverse.z.length() == 0.0:
 		return Vector3.ZERO  # not in Jolt yet
 	var torque: Vector3 = inverse.inverse() * ((wanted - angular_velocity) / maxf(HELM_RESPONSE_S, delta))
 	return torque.limit_length(spec.rcs_torque_max.y)

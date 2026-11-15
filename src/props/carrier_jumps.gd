@@ -328,6 +328,9 @@ func _step_run(run: CarrierRun, delta: float) -> void:
 
 # A carrier with cradles, clear of its point (M12-T19): it launches the fighters it brought in docked, then stands off.
 func _hold_with_dock(run: CarrierRun, cap: CapitalStandin, now: float) -> void:
+	if is_instance_valid(run.arrival) and run.arrival.opener == cap and run.arrival.held:
+		run.arrival.held = false  # everything is through: it closes by its timing instead of collapsing when the carrier moves off
+		run.arrival.close()
 	if cap.dock.docked_count() > 0 and now - run.state_at_s < DEPART_AFTER_S:
 		return  # a moment clear of the mouth first
 	if cap.dock.docked_count() > 0:

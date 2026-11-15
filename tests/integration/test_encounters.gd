@@ -153,23 +153,35 @@ func test_a_raid_jumps_in_6_to_12_km_out_and_goes_for_the_player() -> void:
 
 
 func test_a_raid_comes_in_behind_a_carrier_that_then_jumps_back() -> void:
-	# M6-T23: raiders cannot open a jump point; a cruiser stand-in opens one, they come out with it, and it leaves through its own.
+	# M6-T23: raiders cannot open a jump point; their carrier opens one, they come out with it, and it leaves through its own.
+	# M12-T19: the carrier is the raiders' strike carrier; it stands off while the raid lasts, then calls its fighters back,
+	# waits, and jumps out.
 	main = await _make_main(true)
 	var carriers: CarrierJumps = CarrierJumps.attach(main.world)
-	assert_eq(carriers.size(), EncounterDirector.CARRIERS, "the carriers are built with the pools, not in play (D22)")
+	assert_eq(carriers.size(), 2 * EncounterDirector.CARRIERS,
+			"the carriers are built with the pools, not in play (D22): cruisers, and the raiders' strike carriers")
 	var e: EncounterEvent = _raid(false)
 	assert_true(_director().start(e))
 	assert_eq(carriers.runs().size(), 1, "one carrier brings the whole raid")
 	var run: CarrierRun = carriers.runs()[0]
+	assert_eq(run.carrier.ship_class, CapitalStandin.STRIKE_CARRIER, "the strike carrier, not the cruiser stand-in")
 	assert_eq(run.arrival.opener, run.carrier, "the carrier opened the point and holds it")
 	assert_almost_eq(run.arrival.hold_range_m, 2.0 * run.carrier.length_m(), 1e-3)
 	assert_eq(run.fighters.size(), e.count(), "every raider comes through it")
 	assert_eq(run.carrier.faction, Factions.RAIDERS)
+	assert_eq(run.carrier.dock.docked_count(), 0, "beside it out of its point, as the raid's data says by default (Q29)")
+	await _fly(60.0, func() -> bool: return run.state == CarrierRun.State.STANDOFF)
+	assert_eq(run.state, CarrierRun.State.STANDOFF, "its fighters out, it stands off instead of leaving at once (Q30)")
 	var departed: int = carriers.carriers_departed
-	await _fly(60.0, func() -> bool: return carriers.carriers_departed > departed)
-	assert_eq(carriers.carriers_departed, departed + 1, "the carrier jumped back through its own point")
+	await _fly(10.0)
+	assert_eq(carriers.carriers_departed, departed, "it stays while the raid lasts")
+	run.options["wait_s"] = 2.0
+	carriers.end_raid(run)
+	await _fly(90.0, func() -> bool: return carriers.carriers_departed > departed)
+	assert_eq(carriers.carriers_departed, departed + 1, "the raid over, the carrier jumped back through its own point")
 	assert_eq(_director().jumps.opened, 2, "its arrival point and its departure point")
 	assert_eq(carriers.free_count(), carriers.size(), "and is back in its pool")
+	assert_eq(run.left_behind + run.recovered, e.count(), "each raider either docked in time or was left behind (Q27)")
 	await _fly(JumpCapability.OWN_DEPARTURE_HOLD_S + 0.5)
 	assert_eq(_director().jumps.collapses, 1, "its departure point closed once the short hold was over")
 	assert_eq(_director().jumps.collapse_kills, 0, "with nothing in it")

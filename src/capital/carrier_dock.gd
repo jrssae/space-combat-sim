@@ -123,13 +123,15 @@ func dock_now(ship: Ship) -> bool:
 	return true
 
 
-## Launches every docked fighter, one after another. Returns how many will leave.
+## Launches every docked fighter, one after another. Returns how many this call sent on their way.
 func launch_all() -> int:
+	var added: int = 0
 	for i: int in cradles.count():
 		if cradles.states[i] == CarrierCradles.State.DOCKED and not _queue.has(i):
 			_queue.append(i)
+			added += 1
 	set_physics_process(not _queue.is_empty() or not _held.is_empty())
-	return _queue.size()
+	return added
 
 
 ## Calls `ship` back to a free cradle (the one nearest to it): its pilot is held and the dock flies it in. False when it
