@@ -37,8 +37,8 @@ func test_every_scenario_reads_its_hulls_from_the_core() -> void:
 
 
 func test_free_flight_rows_are_its_bodies() -> void:
-	# A world with no ship pools: the core's rows hold the player, the buoys, the jumpgate (M6-T14) and the station's frame and
-	# drum (M7-T06) as their nodes say.
+	# A world with no ship pools: the core's rows hold the player, the buoys, the jumpgate (M6-T14), the station's frame and drum
+	# (M7-T06) and its two bays' navigation markers (M7-T27) as their nodes say.
 	await _load(ScenarioLoader.FREE_FLIGHT_PATH)
 	var scan: ContactScan = ContactScan.shared(get_tree())
 	var bodies: Array[Node3D] = [main.ship]
@@ -50,6 +50,14 @@ func test_free_flight_rows_are_its_bodies() -> void:
 	if station != null:
 		bodies.append(station)
 		bodies.append(station.drum_body)
+		# The bays are places, not things (M7-T27): rows so the player can target them, marked for the core as navigation
+		# markers (ROLE_NAV) that avoidance flies through.
+		for bay: NavPoint in [station.docking_bay, station.cargo_bay]:
+			bodies.append(bay)
+			assert_eq(bay.targetable.role, Targetable.Role.BEACON, "%s: a navigation target" % bay.name)
+			assert_true(SimCore._nav_bodies.has(bay.get_instance_id()), "%s: the core knows it as a navigation marker" % bay.name)
+			var row: int = scan._body_ids.find(bay.get_instance_id())
+			assert_true(row >= 0 and scan._kinds[row] == BodyKind.PROP, "%s: a prop's row" % bay.name)
 	assert_eq(scan._body_ids.size(), bodies.size(), "one row per body, nothing else")
 	for body: Node3D in bodies:
 		var i: int = scan._body_ids.find(body.get_instance_id())
