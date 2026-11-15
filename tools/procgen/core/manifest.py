@@ -137,6 +137,8 @@ def validate_manifest(manifest: Mapping[str, Any]) -> None:
 
     if "mesh" in manifest:
         validate_mesh_section(manifest["mesh"])
+    if "collision" in manifest:
+        validate_collision_section(manifest["collision"])
 
     for key in ("aabb_min", "aabb_max", "centroid_offset"):
         _check_vec3(manifest, key)
@@ -148,6 +150,13 @@ def validate_manifest(manifest: Mapping[str, Any]) -> None:
         isinstance(k, str) and isinstance(v, str) for k, v in files.items()
     ):
         raise ValueError("manifest 'files' must map names to file names")
+
+
+def validate_collision_section(entry: Any) -> None:
+    """The compound collision contract (M7's D73, ``core/collision.py``): pieces of convex shapes inside the section's budget."""
+    from .collision import validate_section
+
+    validate_section(entry)
 
 
 MESH_SURFACE_KEYS = ("name", "blend", "albedo", "normal", "orm", "emissive", "transmittance")
