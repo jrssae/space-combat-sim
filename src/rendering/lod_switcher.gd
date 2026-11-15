@@ -50,9 +50,11 @@ func update() -> void:
 		decide(camera.global_position, dot_scale(camera))
 
 
-## The dot distance per metre of bounding radius for `camera`'s view (M7-T26): its pixels per radian over the dot size.
+## The dot distance per metre of bounding radius for `camera`'s view (M7-T26): its pixels per radian (at least 1 080 lines' worth)
+## over the dot size.
 static func dot_scale(camera: Camera3D) -> float:
-	return LodSwitcherMath.dot_distance_m(1.0, FarProp.k_of(camera), float(Settings.get_value(&"far_ship_dot_px")))
+	return LodSwitcherMath.dot_distance_m(1.0, LodSwitcherMath.view_k(FarProp.k_of(camera), camera.fov),
+			float(Settings.get_value(&"far_ship_dot_px")))
 
 
 ## Decides this frame's dot for a camera at `eye` and a dot distance of `m_per_m` per metre of the hull's radius, and applies it.

@@ -1643,6 +1643,13 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     `test_tier_proxies` (a tier freighter's hull at 15 km, a dot at 45 km, never both; the classes' bounds); Rust
     `tier::tests` (3 new: by size not distance, the hysteresis and a repeated view, no hull class or no view).
   - `sheet` parks a ship up to 50 km out (was 20 km) for the strips.
+  - **Fix (CI on 5886fd7d):** every demoted ship now makes a far-hull class, and those multimeshes sat in World space without
+    being `world_shiftable` (`test_rebase_in_play`): each class is shiftable now and on `rebased` goes back to the origin with its
+    instances and bounds moved instead, as `FarDots` does. And headless test windows are 64 px tall, so the pixel rule made a
+    raider a dot 180 m out and hid its nozzle lights and markers (`test_ship_lights`, `test_running_lights_in_play`): the rule
+    never counts fewer than 1 080 lines (`LodSwitcherMath.MIN_VIEW_LINES`, `view_k`), so a small window or a 960x540 capture
+    keeps ships as meshes as far as a 1 080-line screen would. Tests: `test_tier_proxies` (the rebase), `test_ship_lod_at_range`
+    (a small window counts as 1 080 lines; a 2 160-line window doubles the distance), `test_lod_switcher_math` (`view_k`).
 
 ### M7-T27 Navigation targets and the hold-X interaction
 

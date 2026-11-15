@@ -363,3 +363,25 @@ func test_a_tier_freighter_keeps_its_hull_until_a_few_pixels_across_then_is_a_do
 	hulls.refresh()
 	assert_eq(hulls.instance_count(saturn), 0, "45 km out: no hull")
 	assert_eq(dots.tier_shown, 1, "a dot instead, never both and never neither")
+
+
+func test_a_rebase_moves_the_far_hulls_with_the_world_at_once() -> void:
+	# M7-T26 fix: every class is world_shiftable (a rebase leaves nothing behind) and goes back to the origin with its instances
+	# moved instead, as the far dots do.
+	var cap: CapitalStandin = standins.add_capital(&"cruiser", Factions.RAIDERS, "CRUISER", world.to_universe(Vector3(2000.0, 0.0, -16000.0)),
+			Basis.IDENTITY, Vector3.ZERO)
+	cap.damageable.invulnerable = true
+	standins.active = true
+	await _ticks(4)
+	var hulls: FarHulls = FarHulls.of(world)
+	hulls.refresh()
+	var cruiser: int = hulls.class_of(cap.drawn_mesh())
+	var instance := hulls.get_child(cruiser) as MultiMeshInstance3D
+	assert_true(instance.is_in_group(WorldFrame.SHIFTABLE_GROUP), "the class moves with a rebase")
+	var before: Vector3 = instance.global_transform * hulls.instance_transform(cruiser, 0).origin
+	var box: AABB = instance.custom_aabb
+	world.rebase(Vector3(1000.0, 0.0, 0.0))
+	assert_almost_eq(instance.position, Vector3.ZERO, Vector3.ONE * 1e-3, "back at the origin")
+	var after: Vector3 = instance.global_transform * hulls.instance_transform(cruiser, 0).origin
+	assert_almost_eq(after, before - Vector3(1000.0, 0.0, 0.0), Vector3.ONE * 1e-2, "drawn where the world moved it, no frame behind")
+	assert_almost_eq(instance.custom_aabb.position, box.position - Vector3(1000.0, 0.0, 0.0), Vector3.ONE * 1e-2, "its bounds too")

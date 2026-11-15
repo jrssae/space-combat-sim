@@ -187,12 +187,29 @@ func test_the_switch_follows_the_screen_not_a_fixed_distance() -> void:
 	var c: Combatant = _acquire(&"saturn_3_freighter")
 	var switcher := c.ship.get_node(^"LodSwitcher") as LodSwitcher
 	var at_1080: float = c.ship.bounding_radius() * LodSwitcher.dot_scale(camera)
-	c.ship.global_position = Vector3(0.0, 0.0, -0.8 * at_1080)
+	c.ship.global_position = Vector3(0.0, 0.0, -1.5 * at_1080)
 	switcher.update()
-	assert_false(c.ship.is_far_dot(), "a mesh inside its dot distance on 1 080 lines")
-	get_tree().root.size = Vector2i(960, 540)
+	assert_true(c.ship.is_far_dot(), "a dot past its dot distance on 1 080 lines")
+	get_tree().root.size = Vector2i(3840, 2160)
 	switcher.update()
-	assert_true(c.ship.is_far_dot(), "half the lines: half the distance, so now a dot")
+	assert_false(c.ship.is_far_dot(), "twice the lines: twice the distance, so its mesh again")
+	get_tree().root.size = Vector2i(1920, 1080)
+	switcher.update()
+	assert_true(c.ship.is_far_dot())
 	camera.fov = 30.0
 	switcher.update()
 	assert_false(c.ship.is_far_dot(), "a narrow view magnifies it: its mesh again")
+
+
+func test_a_small_window_counts_as_1080_lines() -> void:
+	# A headless test window (64 px) or a 960x540 capture never turns a ship into a dot sooner than 1 080 lines would (the fix
+	# for the lights of a raider 300 m out going dark headless).
+	var c: Combatant = _acquire(&"raider_fighter")
+	var switcher := c.ship.get_node(^"LodSwitcher") as LodSwitcher
+	var at_1080: float = c.ship.bounding_radius() * LodSwitcher.dot_scale(camera)
+	for size: Vector2i in [Vector2i(960, 540), Vector2i(64, 64)] as Array[Vector2i]:
+		get_tree().root.size = size
+		assert_almost_eq(c.ship.bounding_radius() * LodSwitcher.dot_scale(camera), at_1080, 1e-3, "%s" % size)
+		c.ship.global_position = Vector3(0.0, 0.0, -0.8 * at_1080)
+		switcher.update()
+		assert_false(c.ship.is_far_dot(), "a mesh inside the 1 080-line distance at %s" % size)

@@ -9,7 +9,8 @@ extends Node3D
 ## thin it out by its nearest instance's distance (a world-sized box would keep every far hull at full detail).
 ##
 ## A child of `World` at its origin: the rows are World-local, so the instances need no offset, and a rebase moves the rows
-## in the core before the next frame writes them. A promotion takes the row in the tick its body shows, so a capital is drawn
+## in the core before the next frame writes them. Each class is shiftable, so a rebase moves what it drew with everything else at
+## once (no frame at the old place); it then goes back to the origin and moves its instances instead, as `FarDots` does. A promotion takes the row in the tick its body shows, so a capital is drawn
 ## by its body or its row, never both and never neither. Visual only.
 
 const NODE_NAME: String = "FarHulls"
@@ -47,6 +48,12 @@ func _init() -> void:
 	name = NODE_NAME
 
 
+func _ready() -> void:
+	var world := get_parent() as WorldFrame
+	if world != null and not world.rebased.is_connected(_on_rebased):
+		world.rebased.connect(_on_rebased)
+
+
 func _process(_delta: float) -> void:
 	refresh()
 
@@ -64,6 +71,7 @@ func class_of(mesh: Mesh) -> int:
 	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	instance.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 	instance.custom_aabb = AABB(Vector3.ONE * -1.0e6, Vector3.ONE * 2.0e6)  # spread over the whole world: never culled as one
+	instance.add_to_group(WorldFrame.SHIFTABLE_GROUP)
 	instance.multimesh = MultiMesh.new()
 	instance.multimesh.transform_format = MultiMesh.TRANSFORM_3D
 	instance.multimesh.mesh = mesh
@@ -132,3 +140,20 @@ func refresh() -> void:
 		_buffers[index] = buffer
 		shown += count
 	last_refresh_us = Time.get_ticks_usec() - started
+
+
+# The rebase moved every class with the world; back to the origin, with the instances and their bounds moved instead.
+func _on_rebased(offset: Vector3) -> void:
+	for index: int in _instances.size():
+		var instance: MultiMeshInstance3D = _instances[index]
+		instance.position += offset
+		var buffer: PackedFloat32Array = _buffers[index]
+		for k: int in buffer.size() / STRIDE:
+			var o: int = k * STRIDE
+			buffer[o + 3] -= offset.x
+			buffer[o + 7] -= offset.y
+			buffer[o + 11] -= offset.z
+		_buffers[index] = buffer
+		if buffer.size() > 0:
+			RenderingServer.multimesh_set_buffer(instance.multimesh.get_rid(), buffer)
+			instance.custom_aabb = AABB(instance.custom_aabb.position - offset, instance.custom_aabb.size)

@@ -22,3 +22,10 @@ func test_the_dot_distance_is_where_the_radius_covers_the_dot_size() -> void:
 			"in proportion to the hull's size")
 	assert_almost_eq(LodSwitcherMath.dot_distance_m(10.0, k, 4.0), 1759.5, 1.0, "a bigger dot size turns it nearer")
 	assert_almost_eq(LodSwitcherMath.dot_distance_m(10.0, 2.0 * k, 2.0), 7038.0, 1.0, "twice the lines, twice as far")
+
+
+func test_the_view_never_counts_fewer_than_1080_lines() -> void:
+	var k_1080: float = FarPropMath.px_per_rad(1080.0, 75.0)
+	assert_almost_eq(LodSwitcherMath.view_k(FarPropMath.px_per_rad(64.0, 75.0), 75.0), k_1080, 1e-3, "a headless window")
+	assert_almost_eq(LodSwitcherMath.view_k(FarPropMath.px_per_rad(540.0, 75.0), 75.0), k_1080, 1e-3, "a 960x540 capture")
+	assert_almost_eq(LodSwitcherMath.view_k(2.0 * k_1080, 75.0), 2.0 * k_1080, 1e-3, "a taller window counts in full")
