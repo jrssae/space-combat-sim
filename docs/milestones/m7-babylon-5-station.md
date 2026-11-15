@@ -232,7 +232,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | AC7 | Launch: a scenario starting in a bay plays the launch with its cinematic and hands the ship over with the bay's velocity (test on the hand-off state); skipping lands in the same state; wingmen launch from the next bays | A | |
 | AC8 | Front end: the generated interior behind the menu, pad-only navigation unchanged (M5's tests pass), GPU numbers recorded | A | |
 | AC9 | Traffic and ambience: raiders sent at the station attack it and the allies and the grid engage them; AI ships avoid the station's surface (test); civilians arrive and leave through the docking aperture (Q8); maintenance bots fly their loops and go inside when fighting starts (Q11) | A | |
-| AC10 | Cost: on the maintainer's GPU, with the station in view from a bay, from 10 km and from 1 000 km: `renderer = forward_plus`, FPS, draw calls and VRAM recorded; with three full squadrons (36 Starfuries), the grid and a raid of 12, the tick inside the 60 Hz budget (`bench` or a recorded run) | A | |
+| AC10 | Cost: on the maintainer's GPU, with the station in view from a bay, from 10 km and from 1 000 km: `renderer = forward_plus`, FPS, draw calls and VRAM recorded; with three full squadrons (36 Starfuries), the grid and a raid of 12, the tick inside the 60 Hz budget (`bench` or a recorded run) | A | Numbers recorded (T13): `forward_plus` in every view; 1920x1080, vsync off: 453 to 830 fps, GPU 0.5 to 1.4 ms, 66 to 237 draw calls, 927 MB in the renderer; 3840x2160: 279 to 767 fps, GPU 1.0 to 3.4 ms, 1 314 MB; with 39 allied Starfuries, the grid firing and 12 raiders the tick ran p50 2.9, p99 6.8 ms (60 fps, GPU 0.7 ms). Open: one-off ticks of 27 to 115 ms when a raid or a wing launch grows the ship pools, and 17.5 ms at the first hit (T13 notes, options with the maintainer) |
 | AC11 | Docs and the suite: `docs/architecture.md` §20 as built, a `docs/playtest.md` M7 section, the roadmap row, `info.md`; `scripts/run_tests.sh` green once, at the end | A | |
 | AC12 | (H) The maintainer flies it: the station's look from the bays to 1 000 km, the drum's turn, the launch and its camera, the grid's fire and the interceptors, the interior behind the menu, the traffic and the bots | H | |
 
@@ -979,6 +979,89 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   `state render`); the tick with three squadrons, the grid and a raid of 12; fixes for what does not fit, or a report to the
   maintainer with options.
 - **Done when:** AC10's numbers in the Done notes.
+- **Done (as measured, 2026-11-15; Status stays in progress while the open items below are with the maintainer):**
+  - **How.** HEAD 52d76310 in a staged scratch copy (native library built from it, station assets from HEAD with T43's
+    rebuild), RX 6950 XT, RADV, Forward+, `station_showcase`. Load 1.9 to 2.5 on 20 threads during the GPU runs, no other Godot
+    holding a lock; the desktop's own clients (browser, editors, 5.7 GB in swap) kept running. The monitors are 60 Hz 3840x2160,
+    so the compositor caps native Wayland at 60 fps even with `--disable-vsync`: the uncapped reads ran through XWayland
+    (`--display-driver x11`, a `window` of the stated size; XWayland's own fullscreen gave a 6144x3456 surface, not used). GPU
+    time is the renderer's `gpu_ms`. Views: **Cobra rack**, the player on Alpha 3's rack 0.7 s into `launch alpha 3` (the cut's
+    rack shot inside the bay, `launch seed 1`); **Cobra late**, 1.7 s in (the turn and the door); **main bay out**, on the drum's axis
+    50 m inside the main docking bay's mouth looking out along the frame; **main bay in**, 80 m in front of the mouth looking in at
+    the doors (both placed by a scratch-only `station goto` point, not committed); **10 km** and **1 000 km**, `far view station`.
+    Each read after 4 s in the view.
+  - **1920x1080, vsync off** (fps / frame ms / GPU ms / draw calls / triangles), high set; low set in brackets where it differs:
+
+    | View | fps | frame ms | GPU ms | draw calls | triangles |
+    |---|---|---|---|---|---|
+    | Cobra rack | 531 (500) | 1.9 | 0.82 (0.89) | 158 | 299 214 |
+    | Cobra late | 591 (599) | 1.7 | 0.83 (0.81) | 110 | 181 938 |
+    | main bay out | 528 (523) | 1.9 | 1.07 to 1.09 (1.06) | 93 | 129 310 |
+    | main bay in | 453 (501) | 2.2 (2.0) | 1.33 to 1.44 (1.29 to 1.41) | 237 | 365 964 |
+    | 10 km | 830 (817) | 1.2 | 0.58 to 0.59 (0.58 to 0.61) | 219 | 284 624 |
+    | 1 000 km | 823 (829) | 1.2 | 0.49 to 0.50 | 66 | 104 932 |
+
+  - **3840x2160, vsync off** (the display's resolution), high set; low in brackets:
+
+    | View | fps | GPU ms | draw calls | triangles |
+    |---|---|---|---|---|
+    | Cobra rack | 512 (485) | 2.43 | 157 | 325 316 |
+    | Cobra late | * | 2.29 (2.27) | 110 | 186 102 |
+    | main bay out | 350 (351) | 2.44 to 2.86 (2.44 to 2.48) | 93 | 132 164 |
+    | main bay in | 279 (278) | 3.30 to 3.40 (3.12 to 3.33) | 234 | 381 880 |
+    | 10 km | 604 (615) | 1.21 to 1.24 (1.17 to 1.23) | 227 | 347 690 |
+    | 1 000 km | 767 (745) | 0.98 (0.94 to 0.98) | 66 | 123 578 |
+
+    \* The 4K screenshot taken 54 frames earlier stalls the main thread for about half a second and pulls that view's one-second
+    average down (258 and 187 fps; 33 fps in the vsync run); a probe without screenshots held 60 fps at 4K through the whole launch.
+  - **Vsync on** (native Wayland fullscreen 3840x2160, high): 60 fps in every view (59 to 60), GPU 3.6 to 5.0 ms near, 1.7 to
+    2.1 ms at 10 and 1 000 km (more than the uncapped run's: the GPU clocks down while it waits), draw calls as above.
+  - **VRAM.** In the renderer (`render.vram_mb`): 927 MB at 1920x1080, 1 314 MB at 3840x2160, the same in every view and both sets
+    (switching live to low keeps the high maps loaded; a session started on low was not measured, since saving the setting would
+    change the shared user settings). sysfs `card1`: desktop baseline 4.3 to 4.7 GB before launch, peaks 5.6 to 5.7 GB at 1080
+    (+1.0 to 1.3 GB) and 5.9 to 6.3 GB at 4K (+1.5 to 1.9 GB).
+  - **The tick** (recorded run, 1920x1080 window, vsync on, the GPU; `perf on` and a scratch-only per-tick recorder of the perf
+    and core providers): `traffic raid 12` (which scrambles alpha), then `launch wing beta` and `launch wing delta` 2 s apart: 39
+    allied Starfuries (three wings of 12 and the player's three wingmen), the player, 12 raiders, the grid weapons free.
+    Heavy fighting 35 to 57 s (1 321 ticks; bolts in flight 102 on average, 192 at most; the grid fired 28 light and 6 heavy shots
+    and 75 interceptor pulses, 53 projectiles shot down; 53 ships down to 41):
+
+    | Stage | p50 ms | p95 ms | p99 ms | worst ms |
+    |---|---|---|---|---|
+    | tick | 2.94 | 5.09 | 6.80 | 17.50 |
+    | AI drivers (native think) | 0.50 | 1.52 | 2.06 | 2.58 |
+    | flight (ships, bolts, props, GDScript glue) | 1.04 | 1.73 | 2.19 | 3.49 |
+    | resolvers (hit, ram) | 0.20 | 0.49 | 0.64 | 13.97 |
+    | late (wings, waves) | 0.37 | 0.66 | 0.86 | 1.93 |
+    | physics (Jolt, sync) | 0.45 | 0.89 | 1.26 | 1.50 |
+    | core: AI job on its thread (`step_us`) | 0.40 | 0.95 | 1.27 | 2.27 |
+    | core: brain batch call (`batch_us`) | 0.34 | 0.56 | 0.70 | 1.23 |
+    | core: turret rows and interceptor sweeps (`turret_us`) | 0.03 | 0.18 | 0.26 | 0.39 |
+    | core: cannons (`cannon_us`) | 0.06 | 0.21 | 0.30 | 0.42 |
+
+    The join never waited (`step_wait_us` 0). Frames: 58 to 60 fps, GPU 0.71 ms median (1.13 p99), 77 draw calls. The 30 s
+    before the raiders arrive: tick p50 3.18, p99 6.33, worst 9.17 ms. One tick over 16.7 ms in the fight. Headless, the same
+    fight: p50 1.77, p99 3.67, worst 5.32 ms.
+  - **Over budget, one-off ticks** (found with timers in the scratch copy, not committed): the first `traffic raid 12` 115 ms
+    (the raider pool grown by 12 in `ShipPool.prepare`, 31 ms, plus the scrambled wing's 12 allies topped up in
+    `LaunchDirector`, plus first use); each `launch wing` 27 to 29 ms (12 allies prepared, about 2.3 ms a ship); a second and third
+    raid 38 and 48 ms (each scrambles a further 12 alpha allies while the first are still out: allies 39, 51, 63; raiders reused).
+    The first hit of the session 17.5 ms: `ImpactFlash` builds its quad for the bolt's colour (9.4 ms). `LaunchDirector` says a
+    console launch may hitch and a mission sizes its pools; the station scenarios ask for 3 allies and no raiders, so the station's
+    own traffic (raids of 4 to 6 with alpha scrambled) hitches too.
+  - **Determinism and comparison.** From the same copy: GUT (GUT_SLOW=1) `test_station_threads` 1/1, `test_station_grid_threads`
+    1/1, `test_turret_threads` 3/3, `test_core_threads` 7/7, `test_flight_parity_fight` 1/1, `test_station_jolt_cost` 1/1; Rust
+    `cargo test --release` 191 passed. `bench_quick.sh battle` 500 and 1 000 (load 3.3 and 4.0, T38's benches running beside it):
+    tick median 5.56 / 6.01 and 7.21 / 6.75 ms, p99 7.93 / 9.28 and 11.71 / 9.78 ms, every budget held; M6 measured 5.10 and 6.31,
+    p99 6.87 and 8.48 at load 0.6, so within what the load explains.
+  - **Screenshots:** `references/screenshots/M7-T13 performance/{high,low}_{1080,4k}_{cobra_rack,cobra_late,main_bay_out,main_bay_in,10km,1000km}.png`
+    and `high_full_wl_vsync_*.png`.
+  - **Open (maintainer):** the pool-growth hitches. Options: (a) the station scenarios ask for the pools their traffic needs
+    (`raider_fighter` 12, `starfury_ally` 15), moving the cost to the load; (b) `StationTraffic` prepares them at the start from
+    `traffic.json` (largest raid, scrambled wings); (c) prepare a few ships a tick ahead (the launch's door ripple gives 0.25 to
+    0.5 s; a raid's raiders still need theirs at once); (d) leave console launches hitching as designed. Separately, whether a
+    second raid should scramble another full alpha wing while the first is still out (T10), and whether `ImpactFlash` should build
+    the bolt colours' quads at load (17.5 ms once).
 
 ### M7-T15 Starfury and raider surfaces from show references (texture detail low and high)
 
