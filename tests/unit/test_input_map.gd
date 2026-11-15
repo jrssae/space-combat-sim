@@ -198,6 +198,7 @@ func test_console_key_is_never_bound() -> void:
 			if event is InputEventKey:
 				var key := event as InputEventKey
 				assert_ne(key.physical_keycode, KEY_QUOTELEFT, "` is the console key (%s)" % action)
+				assert_ne(key.physical_keycode, KEY_SECTION, "the ISO console key is not bindable (%s)" % action)
 				assert_ne(key.keycode, KEY_QUOTELEFT, "` is the console key (%s)" % action)
 
 

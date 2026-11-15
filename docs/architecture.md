@@ -652,7 +652,8 @@ single-user personal project, so usefulness wins over gating. With `console_enab
 but startup scripts (`--console-exec`, autoexec) still run, so headless automation keeps working.
 
 **Opening.** The physical ` key (`KEY_QUOTELEFT`, 96; physical so it stays the same key on non-US layouts) toggles
-the console. It is handled in `DebugConsole._input` before GUI and gameplay, marked handled (so the character never
+the console; so does the same position on an ISO board, which Wayland reports as `KEY_SECTION` (167) even when the layout types a
+backtick there (M7-T39). Neither can be bound to an action. It is handled in `DebugConsole._input` before GUI and gameplay, marked handled (so the character never
 reaches the prompt), and is never an `InputMap` action. Esc also closes it.
 
 ```

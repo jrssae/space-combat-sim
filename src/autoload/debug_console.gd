@@ -26,6 +26,9 @@ const SimClockScript := preload("res://src/autoload/sim_clock.gd")
 
 ## Physical key, so it is the same key on every layout. Never an InputMap action (tests/unit/test_input_map.gd).
 const CONSOLE_KEY: Key = KEY_QUOTELEFT
+## The same key position on an ISO keyboard, where it sits left of 1 and Wayland reports it as the section sign (167) even
+## when the layout types a backtick on it (M7-T39).
+const CONSOLE_KEY_ISO: Key = KEY_SECTION
 const DEFAULT_AUTOEXEC_PATH: String = "user://autoexec.cfg"
 const MAX_WATCHES: int = 8
 const TIMESCALE_MIN: float = 0.05
@@ -433,9 +436,14 @@ func _console_enabled() -> bool:
 	return settings == null or bool(settings.get_value(&"console_enabled"))
 
 
+## True for the console key at either keyboard shape (ANSI backquote, ISO section sign).
+static func is_console_physical(code: Key) -> bool:
+	return code == CONSOLE_KEY or code == CONSOLE_KEY_ISO
+
+
 static func _is_console_key(key: InputEventKey) -> bool:
 	# Synthetic events (tests, remapping tools) may carry only the logical keycode.
-	return key.physical_keycode == CONSOLE_KEY or (key.physical_keycode == KEY_NONE and key.keycode == CONSOLE_KEY)
+	return is_console_physical(key.physical_keycode) or (key.physical_keycode == KEY_NONE and key.keycode == CONSOLE_KEY)
 
 
 static func _is_key(key: InputEventKey, which: Key) -> bool:

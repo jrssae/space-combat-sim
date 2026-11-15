@@ -290,6 +290,7 @@ func test_bind_and_unbind_errors_leave_the_map_alone() -> void:
 		"bind fier key:K": "unknown action 'fier' (did you mean fire?)",
 		"bind fire key:NoSuchKey": "unknown key name",
 		"bind fire key:QuoteLeft": "console key",
+		"bind fire key:Section": "console key",  # the same key on an ISO board (M7-T39)
 		"bind fire pad:button:15": "outside the standard layout",
 		"bind fire pad:axis:5-": "trigger",
 		"bind fire joystick:1": "unknown binding",

@@ -292,7 +292,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T36 | A | The maintenance bot rebuilt to its reference sheet: top, side and front views from `references/maintenance bot.webp` at 90% silhouette overlap (maintainer, 2026-11-14) | T11 | Opus | T11's bot does not match the reference's top view; (H) | done |
 | T37 | C | Radial menus are steered with the left stick while they show (the target menu and the comms menu), not the right; the ship takes no left-stick flight input meanwhile (maintainer, 2026-11-15) | T27 | Sonnet | Input routing while a menu is open; keyboard parity kept | not started |
 | T38 | D | AI ships avoid the station and other large bodies: wingmen and allies flying near Babylon 5 never collide with it when a collision could be avoided (maintainer, 2026-11-15) | T10 | Opus | Native avoidance against an 8 km rotating body; parity kept | not started |
-| T39 | C | Fix: the backtick key no longer opens the debug console in play (maintainer, 2026-11-15) | - | Sonnet | An input regression | in progress |
+| T39 | C | Fix: the backtick key no longer opens the debug console in play (maintainer, 2026-11-15) | - | Sonnet | An input regression | done |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M7-T01 Station references and measurements
@@ -2034,3 +2034,8 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   maintainer's OS upgrade, or a scenario that drops the console. Fix it at the cause; a test that a real console-key event opens the
   console in the main scene and in the station showcase.
 - **Done when:** the key opens the console live (H); the test; committed.
+- **Done:** the cause was the key's physical code. Wayland reports the ISO key left of `1` as `KEY_SECTION` (167) while the layout types a
+  backtick on it (logical keycode 96); `DebugConsole._is_console_key` only knew `KEY_QUOTELEFT`. The maintainer's key press in a short
+  window gave `phys=167 key=96`; nothing else consumed the key. `DebugConsole.is_console_physical()` accepts both, and `bind` refuses
+  `key:Section` too. `test_console_key_in_play.gd` (4 tests: free flight and the showcase, ANSI and ISO key) plus a `bind` refusal and an
+  InputMap check; 2 of the 4 fail without the fix. The live recheck (H) comes with the maintainer's next window.
