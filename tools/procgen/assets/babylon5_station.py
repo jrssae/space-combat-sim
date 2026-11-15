@@ -42,7 +42,7 @@ from ..core.near_props import write_props
 from ..core.pieces import Tier, write_tiered_piece
 from ..core.sections import SectionCut, cuts_from_planes
 from ..core.seams import EMPTY, MAJOR
-from ..core.station_tiles import FINE_PX, FINE_TILE_M, PANEL_PX, PANEL_TILE_M, fine_tiles, panel_tiles
+from ..core.station_tiles import FINE_PX, FINE_TILE_M, PANEL_PX, PANEL_TILE_M, fine_tile_sets, panel_tiles
 from ..core.silhouette import far_section
 from ..core.textured_mesh import TexturedPart, import_sidecar, phase_steps
 from ..parts import station as st
@@ -172,8 +172,8 @@ def _write_detail(out_dir: Path, seed: int, px: int) -> tuple[list[Path], dict[s
 def _write_tiles(out_dir: Path, seed: int, fine_px: int, panel_px: int) -> tuple[list[Path], dict[str, object]]:
     """The station hull shader's detail tiles (M7-T24): the fine mosaic in both sets and the panel tile, and the entry every surface
     names them by (``low`` the low set's)."""
-    maps = {"fine": fine_tiles(fine_px, seed, maze=True), "fine_low": fine_tiles(fine_px, seed, maze=False),
-            "panel": panel_tiles(panel_px, seed)}
+    fine, fine_low = fine_tile_sets(fine_px, seed)
+    maps = {"fine": fine, "fine_low": fine_low, "panel": panel_tiles(panel_px, seed)}
     files, names = [], {}
     for tile, pair in maps.items():
         for key, image in pair.items():

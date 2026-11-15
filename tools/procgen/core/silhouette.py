@@ -8,6 +8,8 @@ The game reads the table from the manifest's ``far`` section and blends it by di
 from __future__ import annotations
 
 import math
+import os
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import numpy as np
@@ -105,7 +107,10 @@ def far_section(vertices: np.ndarray, faces: np.ndarray, spiral: int = DEFAULT_S
     centre = 0.5 * (v.min(axis=0) + v.max(axis=0))
     radius = float(np.linalg.norm(v - centre, axis=1).max())
     directions = view_directions(spiral)
-    areas = [silhouette_area(v, faces, d, res) for d in directions]
+    # The directions are independent and numpy lets go of the interpreter while it rasterises, so a few threads share them
+    # (M7-T24: the station's 227 views; the same areas in the same order).
+    with ThreadPoolExecutor(max_workers=min(4, os.cpu_count() or 1)) as pool:
+        areas = list(pool.map(lambda d: silhouette_area(v, faces, d, res), directions))
     return {
         "centre": [round(float(c), 4) for c in centre],
         "radius_m": round(radius, 3),

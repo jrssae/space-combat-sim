@@ -11,6 +11,7 @@ fine mesh's own shape; occlusion is a disk-to-point estimate against surface sam
 from __future__ import annotations
 
 import math
+import weakref
 import zlib
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -328,13 +329,56 @@ def value_noise(points: np.ndarray, scale_m: float, seed: int) -> np.ndarray:
     f = p - c
     f = f * f * (3.0 - 2.0 * f)
     out = np.zeros(len(p))
+    # Many points share a lattice cell: hash each cell's corners once and hand them out (M7-T24: the same values, far fewer hashes).
+    cells, inverse = _lattice_cells(c)
+    weights = [(1.0 - f[:, k], f[:, k]) for k in range(3)]  # each corner's weights along x, y and z, made once
     for dz in (0, 1):
         for dy in (0, 1):
             for dx in (0, 1):
-                h = _hash01(c[:, 0] + dx, c[:, 1] + dy, c[:, 2] + dz, np.full(len(p), seed, dtype=np.int64))
-                w = (f[:, 0] if dx else 1.0 - f[:, 0]) * (f[:, 1] if dy else 1.0 - f[:, 1]) * (f[:, 2] if dz else 1.0 - f[:, 2])
-                out += w * h
+                h = _hash01(cells[:, 0] + dx, cells[:, 1] + dy, cells[:, 2] + dz, np.full(len(cells), seed, dtype=np.int64))
+                w = weights[0][dx] * weights[1][dy] * weights[2][dz]
+                out += w * (h if inverse is None else h[inverse])
     return out
+
+
+def _lattice_cells(c: np.ndarray) -> tuple[np.ndarray, np.ndarray | None]:
+    """The distinct cells among the integer points ``c`` and each point's index among them; the points themselves (and no index)
+    when they are few or their box is too big to number."""
+    if len(c) < 4096:
+        return c, None
+    lo = c.min(axis=0)
+    span = c.max(axis=0) - lo + 1
+    if float(span[0]) * float(span[1]) * float(span[2]) >= 2.0 ** 62:
+        return c, None
+    key = ((c[:, 0] - lo[0]) * span[1] + (c[:, 1] - lo[1])) * span[2] + (c[:, 2] - lo[2])
+    unique, inverse = np.unique(key, return_inverse=True)
+    if len(unique) > 0.7 * len(c):
+        return c, None
+    z = unique % span[2]
+    y = (unique // span[2]) % span[1]
+    x = unique // (span[2] * span[1])
+    return np.stack([x + lo[0], y + lo[1], z + lo[2]], axis=1), inverse.reshape(-1)
+
+
+# --- what two bakes of one atlas share ---------------------------------------------------------
+# A hull's texture sets (M5-T40) are baked from the same atlas buffers and differ only in their drawn layouts, so the work that does
+# not depend on the layouts (noise, paint covers, window rows, the metal finish's steps) is kept for the next bake of those buffers
+# and dropped with them (M7-T24: the station bakes ten 4 096 px sets).
+_SHARED: dict[int, dict[Any, Any]] = {}
+
+
+def _shared(buffers: AtlasBuffers) -> dict[Any, Any]:
+    key = id(buffers)
+    if key not in _SHARED:
+        _SHARED[key] = {}
+        weakref.finalize(buffers, _SHARED.pop, key, None)
+    return _SHARED[key]
+
+
+def _kept(memo: dict[Any, Any], key: Any, make: Callable[[], Any]) -> Any:
+    if key not in memo:
+        memo[key] = make()
+    return memo[key]
 
 
 # --- the atlas and the maps -------------------------------------------------------------------
@@ -540,39 +584,47 @@ def _chart_normals(buffers: AtlasBuffers) -> np.ndarray:
     return out
 
 
-def _normal_map(atlas: Atlas, style: Style, platings: Sequence[Plating], scale: int = NORMAL_SCALE) -> np.ndarray:
+def _normal_map(atlas: Atlas, style: Style, platings: Sequence[Plating], scale: int = NORMAL_SCALE,
+                seam_height: np.ndarray | None = None) -> np.ndarray:
     """The tangent-space normal map at ``scale`` times the atlas: the plating's relief (grooves, hatches, rivets) from a
-    height field sampled at the finer texels, over the fine mesh's shape for a coarse render mesh."""
+    height field sampled at the finer texels, over the fine mesh's shape for a coarse render mesh. ``seam_height`` is that height
+    field already evaluated (at the atlas's own size, without the generic plating)."""
     b = atlas.buffers
     size = b.size
     big = size * scale
-    du, dv, step_u, step_v = _texel_metric(b.filled, b.position)
+    du, dv, step_u, step_v = _kept(_shared(b), ("texel_metric",), lambda: _texel_metric(b.filled, b.position))
     paneled_table = np.array([m.paneled for m in atlas.materials], dtype=bool)
-    chart_normal = _chart_normals(b)
+    chart_normal = _kept(_shared(b), ("chart_normals",), lambda: _chart_normals(b))
     # Where each fine texel falls in the atlas: its nearest atlas texel, and a bilinear position inside one chart.
     src = (np.arange(big) + 0.5) / scale - 0.5
     near = np.clip(np.rint(src).astype(np.int64), 0, size - 1)
     lo = np.clip(np.floor(src).astype(np.int64), 0, size - 1)
     hi = np.clip(lo + 1, 0, size - 1)
     t = np.clip(src - lo, 0.0, 1.0)
-    height = np.zeros((big, big))
-    filled_big = b.filled[np.ix_(near, near)]
+    height = np.zeros((big, big)) if seam_height is None else seam_height
+    # At the atlas's own size the fine grid is the atlas's: its arrays as they are, not gathered copies.
+    grid = (lambda a: a) if scale == 1 else (lambda a: a[np.ix_(near, near)])
+    filled_big = grid(b.filled)
     strip = 256
-    for r0 in range(0, big, strip):
+    for r0 in range(0, big if seam_height is None else 0, strip):
         rr = np.arange(r0, min(r0 + strip, big))
         rn, rl, rh, rt = near[rr], lo[rr], hi[rr], t[rr]
         f_near = b.filled[np.ix_(rn, near)]
         if not f_near.any():
             continue
         chart = b.chart[np.ix_(rn, near)]
-        same = np.ones_like(f_near)
-        corners = []
-        for rows_, cols_ in ((rl, lo), (rl, hi), (rh, lo), (rh, hi)):
-            same &= b.filled[np.ix_(rows_, cols_)] & (b.chart[np.ix_(rows_, cols_)] == chart)
-            corners.append(b.position[np.ix_(rows_, cols_)])
-        wr, wc = rt[:, None, None], t[None, :, None]
-        bilinear = (corners[0] * (1 - wr) * (1 - wc) + corners[1] * (1 - wr) * wc + corners[2] * wr * (1 - wc) + corners[3] * wr * wc)
-        position = np.where(same[..., None], bilinear, b.position[np.ix_(rn, near)])
+        if scale == 1:
+            # At the atlas's own size each fine texel is an atlas texel: the bilinear weights are 1 on it and 0 elsewhere.
+            position = b.position[rr]
+        else:
+            same = np.ones_like(f_near)
+            corners = []
+            for rows_, cols_ in ((rl, lo), (rl, hi), (rh, lo), (rh, hi)):
+                same &= b.filled[np.ix_(rows_, cols_)] & (b.chart[np.ix_(rows_, cols_)] == chart)
+                corners.append(b.position[np.ix_(rows_, cols_)])
+            wr, wc = rt[:, None, None], t[None, :, None]
+            bilinear = (corners[0] * (1 - wr) * (1 - wc) + corners[1] * (1 - wr) * wc + corners[2] * wr * (1 - wc) + corners[3] * wr * wc)
+            position = np.where(same[..., None], bilinear, b.position[np.ix_(rn, near)])
         normal = b.normal[np.ix_(rn, near)]
         part = b.part[np.ix_(rn, near)]
         material = b.material[np.ix_(rn, near)]
@@ -591,26 +643,31 @@ def _normal_map(atlas: Atlas, style: Style, platings: Sequence[Plating], scale: 
             strip_h[sel] += np.where(paneled_table[material[sel]], drawn.height, 0.0)
         height[rr] = strip_h
     hu, hv = _gradient(height, filled_big)
-    su = np.maximum(step_u[np.ix_(near, near)] / scale, 1e-6)
-    sv = np.maximum(step_v[np.ix_(near, near)] / scale, 1e-6)
+    su = np.maximum(grid(step_u) / scale, 1e-6)
+    sv = np.maximum(grid(step_v) / scale, 1e-6)
     relief = unit(np.stack([-hu / su, hv / sv, np.ones((big, big))], axis=-1))
     fine = _fine_normals(atlas, du, dv)
     if fine is not None:
-        shape = fine[np.ix_(near, near)]
+        shape = grid(fine)
         relief = unit(np.stack([relief[..., 0] + shape[..., 0], relief[..., 1] + shape[..., 1], relief[..., 2] * shape[..., 2]], axis=-1))
     relief[~filled_big] = (0.0, 0.0, 1.0)
     return relief
 
 
 def metal_finish(finish: dict[str, float], pos: np.ndarray, painted: np.ndarray, roughness: np.ndarray, metallic: np.ndarray,
-                 dirt: np.ndarray, seed: int) -> tuple[np.ndarray, np.ndarray]:
+                 dirt: np.ndarray, seed: int, memo: dict[Any, Any] | None = None) -> tuple[np.ndarray, np.ndarray]:
     """Painted metal, not plastic (M7-T16; a style opts in with ``extra["metal_finish"]``): the paint's roughness steps from panel to
     panel (``panel_m`` cells, +-``panel_rough``) and drifts within them (+-``noise_rough``), so a highlight breaks up across the plating;
     dirt (0..1) is rougher (``dirt_rough``) and duller (``dirt_metal``) than the metal under it."""
-    seeds = np.full(len(pos), seed + 911, dtype=np.int64)
-    cell = np.floor(pos / float(finish.get("panel_m", 1.0))).astype(np.int64)
-    step = 2.0 * _hash01(cell[:, 0], cell[:, 1], cell[:, 2], seeds) - 1.0
-    drift = 2.0 * value_noise(pos, float(finish.get("noise_m", 0.35)), seed + 913) - 1.0
+    def steps() -> tuple[np.ndarray, np.ndarray]:
+        cell = np.floor(pos / float(finish.get("panel_m", 1.0))).astype(np.int64)
+        cells, inverse = _lattice_cells(cell)  # each panel hashed once
+        hashed = _hash01(cells[:, 0], cells[:, 1], cells[:, 2], np.full(len(cells), seed + 911, dtype=np.int64))
+        return (2.0 * (hashed if inverse is None else hashed[inverse]) - 1.0,
+                2.0 * value_noise(pos, float(finish.get("noise_m", 0.35)), seed + 913) - 1.0)
+
+    key = ("metal_finish", seed, float(finish.get("panel_m", 1.0)), float(finish.get("noise_m", 0.35)))
+    step, drift = _kept(memo, key, steps) if memo is not None else steps()
     shift = float(finish.get("panel_rough", 0.0)) * step + float(finish.get("noise_rough", 0.0)) * drift
     roughness = roughness + np.where(painted, shift, 0.0) + float(finish.get("dirt_rough", 0.0)) * dirt
     metallic = metallic * (1.0 - float(finish.get("dirt_metal", 0.0)) * dirt)
@@ -625,10 +682,9 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
     b = atlas.buffers
     size = b.size
     filled = b.filled
-    idx = np.nonzero(filled)
-    pos, nrm = b.position[idx], b.normal[idx]
-    mat = b.material[idx]
-    part = b.part[idx]
+    memo = _shared(b)
+    idx, pos, nrm, mat, part = _kept(memo, ("texels",), lambda: (lambda i: (i, b.position[i], b.normal[i], b.material[i], b.part[i]))(
+        np.nonzero(filled)))
     n = len(mat)
     table = atlas.materials
     albedo = np.array([m.albedo for m in table], dtype=float)[mat]
@@ -647,7 +703,8 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
             continue
         sel = (np.ones(n, dtype=bool) if not marking.part else part == names.index(marking.part)) & ~glass
         if sel.any():
-            cover = np.clip(np.asarray(marking.params["cover"](pos[sel], nrm[sel]), dtype=float), 0.0, 1.0)
+            cover = _kept(memo, ("paint", id(marking)),
+                          lambda m=marking, sel=sel: np.clip(np.asarray(m.params["cover"](pos[sel], nrm[sel]), dtype=float), 0.0, 1.0))
             albedo[sel] = albedo[sel] * (1.0 - cover)[:, None] + np.asarray(marking.colour, dtype=float) * cover[:, None]
 
     # The paint: each part's plating (panel lines and tint) with the part's own phase.
@@ -655,7 +712,7 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
     lattice_aft = np.full(n, np.inf)
     lattice_cell = np.zeros((n, 3), dtype=np.int64)
     platings = atlas.part_platings or (tuple(plating_for(name, atlas.hull_mesh, style) for name in atlas.part_names) if atlas.grid else ())
-    chart_normal = _chart_normals(b)
+    chart_normal = _kept(_shared(b), ("chart_normals",), lambda: _chart_normals(b))
     for p_index, phase in enumerate(atlas.part_phases if atlas.grid else ()):
         sel = part == p_index
         if not sel.any():
@@ -671,12 +728,16 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
 
     # The drawn layouts (M5-T40): seam lines, and each plate's tone and sheen.
     plate_rough = np.zeros(n)
+    # The layouts' relief, kept for the normal map: at the atlas's own size it is these same texels (M7-T24: evaluated once).
+    seam_height = np.zeros((size, size)) if normal_scale == 1 and not atlas.grid else None
     for p_index, layout in enumerate(atlas.part_seams):
         sel = part == p_index
         if not layout or not sel.any():
             continue
         drawn = layout.evaluate(pos[sel], nrm[sel], *seam_size(atlas.texel_m))
         painted = paneled[sel]
+        if seam_height is not None:
+            seam_height[idx[0][sel], idx[1][sel]] = 0.0 + np.where(painted, drawn.height, 0.0)
         factor = drawn.tint * (1.0 - (1.0 - style.panel_line_darkness) * drawn.line)
         albedo[sel] *= np.where(painted, factor, 1.0)[:, None]
         on_line[sel] |= painted & (drawn.line > 0.5)
@@ -689,18 +750,31 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
     seeds = np.full(n, seed, dtype=np.int64)
     k = wear_scale(style)
     soft = 0.01 * k  # a marking's edge, a texel or so wide
-    noise_fine = value_noise(pos, 0.11 * k, seed + 1)
-    noise_coarse = value_noise(pos, style.grime_scale_m, seed + 2)
+    noise_fine = _kept(memo, ("noise", 0.11 * k, seed + 1), lambda: value_noise(pos, 0.11 * k, seed + 1))
+    noise_coarse = _kept(memo, ("noise", style.grime_scale_m, seed + 2), lambda: value_noise(pos, style.grime_scale_m, seed + 2))
     edge = np.clip(1.0 - b.edge_distance[idx] / style.edge_wear_width_m, 0.0, 1.0)
     chips = np.clip((edge * (0.35 + noise_fine) - (1.0 - style.edge_wear)) * 3.0, 0.0, 1.0) * ~glass
-    streak_seed = _hash01(lattice_cell[:, 0], lattice_cell[:, 1], lattice_cell[:, 2] + 17, seeds)
-    streak_on = np.clip((streak_seed - 0.45) / 0.55, 0.0, 1.0)
-    across = _hash01(lattice_cell[:, 0], lattice_cell[:, 1], np.floor(noise_fine * 7.0).astype(np.int64), seeds + 3)
-    fade = np.exp(-np.where(np.isfinite(lattice_aft), lattice_aft, 1e3) / (float(extra.get("streak_length_m", 0.2)) * k))
-    streak = style.streaks * streak_on * fade * (across > 0.45) * paneled
-    smudge_noise = value_noise(pos * np.array([1.0, 1.0, 0.35]), float(extra.get("smudge_scale_m", 0.45)) * k, seed + 5)  # long fore and aft
-    smudge = float(extra.get("smudge", 0.0)) * np.clip((smudge_noise - 0.55) / 0.25, 0.0, 1.0) ** 1.5 * paneled
-    speckle = float(extra.get("speckle", 0.0)) * (2.0 * value_noise(pos, 0.035 * k, seed + 6) - 1.0) * paneled
+    # A weathering term a style sets to nothing is left out (the same maps: it would add or multiply by zero).
+    if style.streaks:
+        streak_seed = _hash01(lattice_cell[:, 0], lattice_cell[:, 1], lattice_cell[:, 2] + 17, seeds)
+        streak_on = np.clip((streak_seed - 0.45) / 0.55, 0.0, 1.0)
+        across = _hash01(lattice_cell[:, 0], lattice_cell[:, 1], np.floor(noise_fine * 7.0).astype(np.int64), seeds + 3)
+        fade = np.exp(-np.where(np.isfinite(lattice_aft), lattice_aft, 1e3) / (float(extra.get("streak_length_m", 0.2)) * k))
+        streak = style.streaks * streak_on * fade * (across > 0.45) * paneled
+    else:
+        streak = np.zeros(n)
+    if float(extra.get("smudge", 0.0)):
+        smudge_scale = float(extra.get("smudge_scale_m", 0.45)) * k
+        smudge_noise = _kept(memo, ("smudge", smudge_scale, seed + 5),
+                             lambda: value_noise(pos * np.array([1.0, 1.0, 0.35]), smudge_scale, seed + 5))  # long fore and aft
+        smudge = float(extra.get("smudge", 0.0)) * np.clip((smudge_noise - 0.55) / 0.25, 0.0, 1.0) ** 1.5 * paneled
+    else:
+        smudge = np.zeros(n)
+    if float(extra.get("speckle", 0.0)):
+        speckle_noise = _kept(memo, ("noise", 0.035 * k, seed + 6), lambda: value_noise(pos, 0.035 * k, seed + 6))
+        speckle = float(extra.get("speckle", 0.0)) * (2.0 * speckle_noise - 1.0) * paneled
+    else:
+        speckle = np.zeros(n)
     grime = 1.0 + style.grime * (2.0 * noise_coarse - 1.0) + speckle
     albedo *= (grime * (1.0 - streak) * (1.0 - smudge))[:, None]
     if bare_metal > 0.0:
@@ -748,7 +822,8 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
                 inside = np.clip((half - np.abs(uv)) / soft + 0.5, 0.0, 1.0)
                 cover = inside[:, 0] * inside[:, 1] * face
         elif marking.kind == "windows":
-            cover, glow = _window_cover(q, p, nrm[sel], max(atlas.texel_m, soft), seed)
+            cover, glow = _kept(memo, ("windows", id(marking), seed),
+                                lambda q=q, p=p, sel=sel: _window_cover(q, p, nrm[sel], max(atlas.texel_m, soft), seed))
             rows = np.flatnonzero(sel)
             window_glow[rows] = np.maximum(window_glow[rows], glow[:, None] * colour)
             window_strength[rows] = np.where(glow > 0.0, q["strength"], window_strength[rows])
@@ -776,10 +851,10 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
                        + float(finish.get("chip_dirt", 0.0)) * chips + float(finish.get("seam_dirt", 0.0)) * on_line, 0.0, 1.0)
         # M7-T17: chipped edges and seams count as dirt too, and a style may keep the dirt off its bare metal (the paint only).
         dirty = (paneled & ~glass) if finish.get("dirt_on_paint_only") else ~glass
-        roughness, metallic = metal_finish(finish, pos, paneled & ~glass, roughness, metallic, dirt * dirty, seed)
+        roughness, metallic = metal_finish(finish, pos, paneled & ~glass, roughness, metallic, dirt * dirty, seed, memo)
 
     # The normal map: the plating's relief at twice the atlas's resolution, Godot's +Y up (Q34).
-    normal_ts = _normal_map(atlas, style, platings, normal_scale)
+    normal_ts = _normal_map(atlas, style, platings, normal_scale, seam_height)
 
     # Occlusion, roughness and metal; emissive scaled per surface so one map serves both.
     occ = _occlusion(atlas, seed) if occlusion else np.ones((size, size))
@@ -798,18 +873,21 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
     orm_metal = np.zeros((size, size))
     orm_metal[idx] = np.clip(metallic, 0.0, 1.0)
     orm[..., 2] = orm_metal
-    surface_strength = np.where(glass, surface_emissive_strength(table, True), surface_emissive_strength(table, False, atlas.markings))
-    scale = np.where(surface_strength > 0.0, strength / np.maximum(surface_strength, 1e-9), 0.0)
-    window_scale = np.where(surface_strength > 0.0, window_strength / np.maximum(surface_strength, 1e-9), 0.0)
-    glow = np.clip(np.maximum(emissive * scale[:, None], window_glow * window_scale[:, None]), 0.0, 1.0)
-    emissive_map = np.zeros((size, size, 3))
-    emissive_map[idx] = glow
 
-    albedo_map = np.zeros((size, size, 3))
-    albedo_map[idx] = np.clip(albedo, 0.0, 1.0)
+    def glow_map() -> np.ndarray:  # the same in every texture set
+        surface_strength = np.where(glass, surface_emissive_strength(table, True), surface_emissive_strength(table, False, atlas.markings))
+        scale = np.where(surface_strength > 0.0, strength / np.maximum(surface_strength, 1e-9), 0.0)
+        window_scale = np.where(surface_strength > 0.0, window_strength / np.maximum(surface_strength, 1e-9), 0.0)
+        glow = np.clip(np.maximum(emissive * scale[:, None], window_glow * window_scale[:, None]), 0.0, 1.0)
+        emissive_map = np.zeros((size, size, 3))
+        emissive_map[idx] = glow
+        return _to8(linear_to_srgb(emissive_map))
+
     mean = albedo[~glass].mean(axis=0) if (~glass).any() else albedo.mean(axis=0)
-    albedo_map[~filled] = np.clip(mean, 0.0, 1.0)
-    albedo8 = _to8(linear_to_srgb(albedo_map))
+    # Converted texel by texel, so only the filled texels and the one colour round them (the same bytes as the whole map's).
+    albedo8 = np.empty((size, size, 3), dtype=np.uint8)
+    albedo8[idx] = _to8(linear_to_srgb(np.clip(albedo, 0.0, 1.0)))
+    albedo8[~filled] = _to8(linear_to_srgb(np.clip(mean, 0.0, 1.0)[None, :]))[0]
     if paintable:
         may_paint = np.isin(np.array([m.name for m in table])[mat], list(paintable)) & ~glass
         paint = np.zeros((size, size))
@@ -819,7 +897,7 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
         "albedo": albedo8,
         "normal": _to8(normal_ts * 0.5 + 0.5),
         "orm": _to8(orm),
-        "emissive": _to8(linear_to_srgb(emissive_map)),
+        "emissive": _kept(memo, ("emissive", seed), glow_map),
         "mean_albedo": mean,
     }
 

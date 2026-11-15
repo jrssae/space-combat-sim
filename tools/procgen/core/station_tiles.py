@@ -74,10 +74,16 @@ def _box_distance(u: np.ndarray, v: np.ndarray, u0: np.ndarray, u1: np.ndarray, 
     return np.minimum(np.minimum(u - u0, u1 - u), np.minimum(v - v0, v1 - v))
 
 
-def fine_variant(px: int, seed: int, maze: bool) -> tuple[np.ndarray, np.ndarray]:
-    """One fine tile: the colour map (factor, roughness shift, cavity) and the normal, both float in 0..1."""
+def _fine_plates(px: int, seed: int) -> tuple[np.ndarray, ...]:
+    """A fine tile's grid and mosaic: the texel centres, the texel, and each texel's plate (key and bounds)."""
     u, v, texel = _grid(px, FINE_TILE_M)
-    key, u0, u1, v0, v1 = _plates(u, v, FINE_TILE_M, seed, FINE_MAX_M, FINE_MIN_M)
+    return (u, v, texel, *_plates(u, v, FINE_TILE_M, seed, FINE_MAX_M, FINE_MIN_M))
+
+
+def fine_variant(px: int, seed: int, maze: bool, plates: tuple[np.ndarray, ...] | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """One fine tile: the colour map (factor, roughness shift, cavity) and the normal, both float in 0..1. ``plates`` is the tile's
+    mosaic already cut (``_fine_plates``), shared by both sets."""
+    u, v, texel, key, u0, u1, v0, v1 = plates if plates is not None else _fine_plates(px, seed)
     s = np.full(u.shape, seed, dtype=np.int64)
     edge = _box_distance(u, v, u0, u1, v0, v1)
     line = _smooth(1.0 - edge / (0.5 * LINE_M))
@@ -162,6 +168,18 @@ def _grid_of(variants: list[tuple[np.ndarray, np.ndarray]]) -> dict[str, np.ndar
     return {"colour": _to8(colour), "normal": _to8(normal)}
 
 
+def fine_tile_sets(px: int = FINE_PX, seed: int = 0) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
+    """Both sets' fine tiles (with the relief, without), each variant's mosaic cut once for the two (the same maps as
+    ``fine_tiles`` gives each)."""
+    high, low = [], []
+    for k in range(VARIANTS):
+        variant_seed = seed * 31 + k * 977 + 5
+        plates = _fine_plates(px, variant_seed)
+        high.append(fine_variant(px, variant_seed, True, plates))
+        low.append(fine_variant(px, variant_seed, False, plates))
+    return _grid_of(high), _grid_of(low)
+
+
 def fine_tiles(px: int = FINE_PX, seed: int = 0, maze: bool = True) -> dict[str, np.ndarray]:
     """The fine tile's four variants: ``colour`` (RGB) and ``normal``, each ``2 px`` square."""
     return _grid_of([fine_variant(px, seed * 31 + k * 977 + 5, maze) for k in range(VARIANTS)])
@@ -172,4 +190,5 @@ def panel_tiles(px: int = PANEL_PX, seed: int = 0) -> dict[str, np.ndarray]:
     return _grid_of([panel_variant(px, seed * 37 + k * 1013 + 11) for k in range(VARIANTS)])
 
 
-__all__ = ["FINE_PX", "FINE_TILE_M", "PANEL_PX", "PANEL_TILE_M", "VARIANTS", "fine_tiles", "fine_variant", "panel_tiles", "panel_variant"]
+__all__ = ["FINE_PX", "FINE_TILE_M", "PANEL_PX", "PANEL_TILE_M", "VARIANTS", "fine_tile_sets", "fine_tiles", "fine_variant", "panel_tiles",
+           "panel_variant"]

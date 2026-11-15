@@ -174,8 +174,11 @@ def dilate(buffers: AtlasBuffers, passes: int) -> None:
             take = source & ~buffers.filled
             if not take.any():
                 continue
+            # Each new texel takes its neighbour's values: indexed straight, not by rolling the whole atlas (the same values).
+            ys, xs = np.nonzero(take)
+            ys_from, xs_from = ys - dy, xs - dx
             for array in arrays:
-                array[take] = np.roll(array, (dy, dx), axis=(0, 1))[take]
+                array[ys, xs] = array[ys_from, xs_from]
             buffers.filled |= take
 
 
