@@ -174,6 +174,7 @@ func enable() -> String:
 		for pooled: Combatant in main.ships.all_ships():
 			main.director.watch(pooled)
 		CarrierJumps.attach(main.world).prepare(CARRIERS)  # raids behind a carrier (M6-T23; a gate raid with the gate out of reach too)
+		CarrierJumps.attach(main.world).prepare(CARRIERS, CapitalStandin.STRIKE_CARRIER)  # the raiders' own (M12-T19)
 		build_ms = Time.get_ticks_msec() - t0
 		pools_built = true
 	if plan == null:

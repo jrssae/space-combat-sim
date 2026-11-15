@@ -10,13 +10,26 @@ extends Node3D
 ## carrier holds its points (`JumpPointPool`'s rule): destroyed, or out of its hold range, its point collapses and kills the
 ## fighters still in the funnel. Its engines hold its course; its guns stay silent (no battle steps them). Any ship may also leave
 ## through a capable ship's open departure point (`send_departure`), as through a gate. Console: provider `carriers`.
+##
+## M12-T19: a raiders' raid comes behind the strike carrier (`CapitalStandin.STRIKE_CARRIER`) instead of the cruiser stand-in.
+## Its fighters come in docked on its cradles and are launched once it is clear of its point, or out of its point beside it, by
+## the raid's data (`carrier.arrival`, Q29). It then stands off from the nearest enemy with its stern to it, calls its fighters
+## back when it is hurt or the raid is over, waits for them a while, and jumps out with those that docked (Q27, Q30;
+## `CarrierTactics`). Console: command `carrier`.
 
 const NODE_NAME: StringName = &"CarrierJumps"
 ## What a carrier does once its fighters are out.
 const THEN_DEPART: StringName = &"depart"
 const THEN_STAY: StringName = &"stay"
 const THENS: Array[StringName] = [THEN_DEPART, THEN_STAY]
+const CARRIER_ACTIONS: Array[StringName] = [&"status", &"launch", &"recall", &"hurt", &"kill"]
 const DEFAULT_CLASS: StringName = &"cruiser"
+## The class each faction's raids come behind when their data names none (M12-T19).
+const FACTION_CLASSES: Dictionary = {Factions.RAIDERS: CapitalStandin.STRIKE_CARRIER}
+## How often a carrier standing off looks for the nearest enemy and decides, s.
+const DECIDE_S: float = 0.5
+## Enemies further than this many stand-offs away do not concern it.
+const THREAT_REACH: float = 2.0
 ## A fighter this close to a run's first, within its first second, comes through the same carrier.
 const SHARE_M: float = 2000.0
 const SHARE_S: float = 1.0
@@ -40,6 +53,11 @@ var carriers_departed: int = 0
 var departures_watched: int = 0
 ## Runs refused because every carrier was out.
 var refused: int = 0
+
+## Fighters launched from cradles, docked again after a recall and left behind, so far (M12-T19).
+var fighters_launched: int = 0
+var fighters_recovered: int = 0
+var fighters_left_behind: int = 0
 
 var _runs: Array[CarrierRun] = []
 var _departures: Array[Dictionary] = []  # {body, point, on_through, z}
@@ -88,6 +106,22 @@ func prepare(count: int, cls: StringName = DEFAULT_CLASS) -> void:
 		_parked.append(cap)
 
 
+## The class `faction`'s raids come behind: the strike carrier for the raiders, a cruiser otherwise.
+static func class_for(faction: StringName) -> StringName:
+	return FACTION_CLASSES.get(faction, DEFAULT_CLASS)
+
+
+## Makes sure a carrier of `cls` is free, building one when none is (a hitch: for the console and tests, never in play).
+func ensure_free(cls: StringName) -> void:
+	for cap: CapitalStandin in _parked:
+		if is_instance_valid(cap) and cap.ship_class == cls:
+			return
+	var have: int = 0
+	for cap: CapitalStandin in _all:
+		have += 1 if cap.ship_class == cls else 0
+	prepare(have + 1, cls)
+
+
 ## Carriers built, and free now.
 func size() -> int:
 	return _all.size()
@@ -110,7 +144,7 @@ func run_for(pool: JumpPointPool, at: UniversePos, forward: Vector3, faction: St
 		if run.pool == pool and run.faction == faction and run.state == CarrierRun.State.ARRIVING \
 				and now - run.started_s < SHARE_S and run.first_place.distance_to(local) < SHARE_M:
 			return run
-	var cap: CapitalStandin = _take(StringName(str(options.get("class", DEFAULT_CLASS))))
+	var cap: CapitalStandin = _take(StringName(str(options.get("class", class_for(faction)))))
 	if cap == null:
 		refused += 1
 		push_warning("CarrierJumps: no free carrier (%d built); prepare more at load" % _all.size())
@@ -132,6 +166,7 @@ func run_for(pool: JumpPointPool, at: UniversePos, forward: Vector3, faction: St
 	run.then = StringName(str(options.get("then", THEN_DEPART)))
 	if not THENS.has(run.then):
 		run.then = THEN_DEPART
+	run.options = CarrierTactics.options(options)
 	run.first_place = local
 	run.started_s = now
 	run.state_at_s = now
@@ -148,6 +183,13 @@ func run_for(pool: JumpPointPool, at: UniversePos, forward: Vector3, faction: St
 ## facing the carrier's way, and comes out of the ring there, leaving the mouth at `exit_velocity` (World frame).
 func bring_through(run: CarrierRun, body: RigidBody3D, exit_velocity: Vector3) -> void:
 	if run == null or body == null or not is_instance_valid(run.arrival):
+		return
+	# Docked on a cradle when the raid says so and one is free (M12-T19, Q29): it rides the carrier out and is launched after.
+	var dock: CarrierDock = run.carrier.dock if is_instance_valid(run.carrier) else null
+	if dock != null and body is Ship and String(run.options["arrival"]) == String(CarrierTactics.ARRIVAL_DOCKED) \
+			and dock.dock_now(body as Ship):
+		run.fighters.append(body)
+		fighters_brought += 1
 		return
 	var xform: Transform3D = ride_transform(run.arrival, run.fighters.size(), body)
 	var exit_at: Vector3 = xform.origin
@@ -220,6 +262,20 @@ func runs() -> Array[CarrierRun]:
 	return _runs
 
 
+## Ends `run`'s raid (its script, the console): a carrier standing off calls its fighters back and leaves.
+func end_raid(run: CarrierRun) -> void:
+	if run != null:
+		run.raid_ended = true
+
+
+## The run `carrier` flies now, or null.
+func run_of(carrier: Node) -> CarrierRun:
+	for run: CarrierRun in _runs:
+		if run.carrier == carrier:
+			return run
+	return null
+
+
 func _physics_process(delta: float) -> void:
 	for i: int in range(_runs.size() - 1, -1, -1):
 		if i < _runs.size():
@@ -246,15 +302,95 @@ func _step_run(run: CarrierRun, delta: float) -> void:
 			run.state = CarrierRun.State.HOLDING
 			run.state_at_s = now
 		CarrierRun.State.HOLDING:
+			if cap.dock != null and run.then != THEN_STAY:
+				_hold_with_dock(run, cap, now)
+				return
 			if run.then == THEN_STAY:
 				run.state = CarrierRun.State.STAYING  # it stays in play, drifting on its course, until the scene ends
 				_runs.erase(run)
 				return
 			if now - run.state_at_s >= DEPART_AFTER_S:
 				_leave(run)
+		CarrierRun.State.STANDOFF:
+			_stand_off(run, cap, now)
+		CarrierRun.State.RECALLING:
+			cap.cruise_velocity = _rest()  # it holds still for its fighters
+			if CarrierTactics.should_leave(cap.dock.returning_count(), now - run.state_at_s, float(run.options["wait_s"])):
+				run.left_behind = cap.dock.abandon().size()
+				run.recovered = cap.dock.docked_count()
+				fighters_left_behind += run.left_behind
+				fighters_recovered += run.recovered
+				_leave(run)
 		CarrierRun.State.LEAVING:
 			if now - run.state_at_s > LEAVE_LIMIT_S:
 				_gone(run, cap)
+
+
+# A carrier with cradles, clear of its point (M12-T19): it launches the fighters it brought in docked, then stands off.
+func _hold_with_dock(run: CarrierRun, cap: CapitalStandin, now: float) -> void:
+	if cap.dock.docked_count() > 0 and now - run.state_at_s < DEPART_AFTER_S:
+		return  # a moment clear of the mouth first
+	if cap.dock.docked_count() > 0:
+		fighters_launched += cap.dock.launch_all()
+		return
+	if cap.dock.busy_count() > 0:
+		return  # the last launches are still leaving their cradles
+	run.state = CarrierRun.State.STANDOFF
+	run.state_at_s = now
+
+
+# One tick of a carrier standing off (Q30): every `DECIDE_S` it finds the nearest enemy, backs away from it inside its stand-off
+# with its stern to it, calls a badly hurt fighter back, and starts the recall when it is hurt itself or the raid is over.
+func _stand_off(run: CarrierRun, cap: CapitalStandin, now: float) -> void:
+	if now - run.decided_s < DECIDE_S:
+		return
+	run.decided_s = now
+	var standoff_m: float = float(run.options["standoff_m"])
+	var threat: Variant = _nearest_enemy(cap, run.faction, THREAT_REACH * standoff_m)
+	var to_threat: Vector3 = (threat as Vector3) - cap.global_position if threat != null else Vector3.ZERO
+	cap.cruise_velocity = _rest() + CarrierTactics.cruise(to_threat, threat != null, standoff_m, CARRIER_SPEED_MPS)
+	var heading: Vector3 = CarrierTactics.heading(to_threat, threat != null, standoff_m)
+	if heading != Vector3.ZERO:
+		cap.heading = heading
+	var flying: Array[Ship] = _flying(run)
+	for ship: Ship in flying:
+		var hull: Damageable = Damageable.of(ship)
+		if hull != null and hull.hull.fraction() < float(run.options["fighter_return_hull"]):
+			cap.dock.recall(ship)
+	var over: bool = CarrierTactics.raid_over(run.raid_ended, now - run.started_s, float(run.options["raid_s"]), run.fighters.size(),
+			flying.size())
+	if CarrierTactics.should_recall(cap.damageable.hull.fraction(), float(run.options["retreat_hull"]), over):
+		for ship: Ship in flying:
+			cap.dock.recall(ship)  # one with no free cradle is left behind
+		run.state = CarrierRun.State.RECALLING
+		run.state_at_s = now
+
+
+# The run's fighters flying on their own or on their way back: alive, in play, not on a cradle.
+func _flying(run: CarrierRun) -> Array[Ship]:
+	var out: Array[Ship] = []
+	var dock: CarrierDock = run.carrier.dock
+	for body: RigidBody3D in run.fighters:
+		if body is Ship and is_instance_valid(body) and body.is_inside_tree() and body.is_visible_in_tree() \
+				and not JumpCapability.is_destroyed(body) and (dock == null or not dock.is_docked(body as Ship)):
+			out.append(body as Ship)
+	return out
+
+
+# Where the nearest ship or capital hostile to `faction` within `reach_m` of `cap` is (World), or null.
+func _nearest_enemy(cap: CapitalStandin, faction: StringName, reach_m: float) -> Variant:
+	var best: Variant = null
+	var best_d: float = reach_m * reach_m
+	for node: Node in get_tree().get_nodes_in_group(Targetable.GROUP):
+		var target := node as Targetable
+		if target == null or (target.kind != Targetable.Kind.SHIP and target.kind != Targetable.Kind.CAPITAL) \
+				or not Factions.is_hostile(faction, target.faction) or not target.is_active():
+			continue
+		var d: float = target.global_position.distance_squared_to(cap.global_position)
+		if d < best_d:
+			best = target.global_position
+			best_d = d
+	return best
 
 
 # The carrier lets its arrival point close and opens a departure point ahead of its bow, then flies into it.
@@ -266,6 +402,11 @@ func _leave(run: CarrierRun) -> void:
 	var fwd: Vector3 = -cap.global_basis.z
 	var mouth: Vector3 = cap.global_position + fwd * (cap.length_m() * 0.5 + CARRIER_SPEED_MPS * DEPART_LEAD_S)
 	var r: float = maxf(VortexFit.POINT_RADII_PER_SHIP * cap.cross_radius_m(), VortexFit.MIN_POINT_RADIUS_M)
+	if not cap.jump_anchor.is_empty():  # a real hull says where it opens its point (M12-T19)
+		mouth = cap.global_transform * (cap.jump_anchor["position"] as Vector3)
+		r = maxf(r, float(cap.jump_anchor["mouth_radius_m"]))
+	cap.cruise_velocity = _rest() + fwd * CARRIER_SPEED_MPS  # under way again, into its point
+	cap.heading = Vector3.ZERO
 	var up: Vector3 = cap.global_basis.y
 	var xform := Transform3D(Basis.looking_at(-fwd, up), mouth)  # its way out faces the carrier: it flies in along +Z
 	run.departure = run.pool.open_with(xform, VortexFit.new(r, r * VortexFit.POINT_DEPTH_RATIO), JumpVortex.Direction.DEPARTURE,
@@ -314,6 +455,7 @@ func _unpark(cap: CapitalStandin, faction: StringName, xform: Transform3D, veloc
 	cap.linear_velocity = velocity
 	cap.angular_velocity = Vector3.ZERO
 	cap.cruise_velocity = velocity
+	cap.heading = Vector3.ZERO
 	cap.reset_physics_interpolation()
 	var destruction: DestructionDirector = DestructionDirector.current()
 	if destruction != null:
@@ -333,6 +475,12 @@ func _give_back(cap: CapitalStandin) -> void:
 	var transits: VortexTransits = VortexTransits.of(_world)
 	if transits != null:
 		transits.cancel(cap)
+	if cap.dock != null:  # the fighters on its cradles left with it: back to their pool (M12-T19)
+		var ships: ShipPool = ShipPool.for_tree(get_tree()) if is_inside_tree() else null
+		for ship: Ship in cap.dock.reset():
+			var combatant: Combatant = ships.combatant_of(ship) if ships != null else null
+			if combatant != null:
+				ships.release(combatant)
 	_park(cap)
 	_parked.append(cap)
 
@@ -386,5 +534,53 @@ func _register_console() -> void:
 		&"fighters": {"get": func() -> int: return fighters_brought, "doc": "Fighters brought through a carrier's point so far"},
 		&"departed": {"get": func() -> int: return carriers_departed, "doc": "Carriers gone back through their own point so far"},
 		&"state": {"get": func() -> String: return _runs[-1].state_name() if not _runs.is_empty() else "none",
-				"doc": "The newest carrier's state: arriving, holding or leaving (none with no carrier at work)"},
+				"doc": "The newest carrier's state: arriving, holding, standoff, recalling or leaving (none with no carrier at work)"},
+		&"docked": {"get": func() -> int: return _dock_count(&"docked_count"),
+				"doc": "Fighters sitting on the newest carrier's cradles (M12-T19)"},
+		&"returning": {"get": func() -> int: return _dock_count(&"returning_count"),
+				"doc": "Fighters called back to the newest carrier and not yet docked"},
+		&"launched": {"get": func() -> int: return fighters_launched, "doc": "Fighters launched from cradles so far"},
+		&"recovered": {"get": func() -> int: return fighters_recovered, "doc": "Fighters docked again when their carrier left, so far"},
+		&"left_behind": {"get": func() -> int: return fighters_left_behind,
+				"doc": "Fighters their carrier left without (not docked within its wait), so far"},
+		&"hull": {"get": func() -> float: return _runs[-1].carrier.damageable.hull.fraction() if not _runs.is_empty() else 0.0,
+				"doc": "The newest carrier's hull, 0..1"},
 	}), self)
+	DebugConsole.registry.register_command(ConsoleCommand.new(&"carrier",
+			"The newest raid carrier (M12-T19): `status`, `launch` its docked fighters, `recall` them (ends its raid: it waits, then jumps out), `hurt` it to just under its retreat threshold, or `kill` it",
+			[ConsoleArg.enum_optional(&"action", CARRIER_ACTIONS, &"status")]), _cmd_carrier, self)
+
+
+func _dock_count(method: StringName) -> int:
+	if _runs.is_empty() or not is_instance_valid(_runs[-1].carrier) or _runs[-1].carrier.dock == null:
+		return 0
+	return int(_runs[-1].carrier.dock.call(method))
+
+
+func _cmd_carrier(args: Dictionary) -> ConsoleResult:
+	if _runs.is_empty():
+		return ConsoleResult.failure("no carrier at work (bring one in: `transit carrier point fighter`)")
+	var run: CarrierRun = _runs[-1]
+	var cap: CapitalStandin = run.carrier
+	match StringName(args[&"action"]):
+		&"launch":
+			if cap.dock == null:
+				return ConsoleResult.failure("this carrier has no cradles")
+			var n: int = cap.dock.launch_all()
+			fighters_launched += n
+			return ConsoleResult.line("carrier: launching %d" % n)
+		&"recall":
+			end_raid(run)
+			return ConsoleResult.line("carrier: its raid is over; it calls its fighters back and leaves")
+		&"hurt":
+			var keep: float = maxf(float(run.options["retreat_hull"]) - 0.05, 0.01) * cap.damageable.hull.max_hp
+			cap.damageable.apply_hit(HitInfo.new(cap.get_instance_id(), 0, &"", maxf(cap.damageable.hull.hp - keep, 0.0),
+					cap.global_position, Vector3.ZERO, 0.0, HitInfo.CAUSE_CONSOLE))
+			return ConsoleResult.line("carrier: hull at %.0f %%" % (100.0 * cap.damageable.hull.fraction()))
+		&"kill":
+			cap.damageable.kill()
+			return ConsoleResult.line("carrier: destroyed")
+	var dock: CarrierDock = cap.dock
+	return ConsoleResult.line("carrier: %s, %s, hull %.0f %%, docked %d, returning %d, cradles free %d" % [cap.targetable.display_name,
+			run.state_name(), 100.0 * cap.damageable.hull.fraction(), dock.docked_count() if dock != null else 0,
+			dock.returning_count() if dock != null else 0, dock.free_count() if dock != null else 0])
