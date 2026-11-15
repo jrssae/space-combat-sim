@@ -2470,3 +2470,23 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   past the far plane). Fix it at the cause so one sun shows at every distance from the star, the planet's views unchanged.
 - **Done when:** a test of the sun's place and count at several distances (the star's true direction and the key light, flare and sky
   agree); screenshots from the four distances; the maintainer's look (H); committed.
+- **Done (fix, 2026-11-15; the maintainer's look (H) open):** the cause was the star's own shader, not a second element. Hiding the
+  scaled-space layer (`scaled hide`) left no sun at all, and the layer draws one sphere for the star. That sphere is `SunLook.GLOW_SCALE`
+  (10) disc radii, so closer than 10 star radii (5.11 million km) the camera sits inside it. `scaled_star.gdshader` measured a pixel's
+  distance from the disc's centre as the sine of its angle off the centre over the sine of the disc's angular radius, and the sine folds
+  back past 90 degrees: from inside the sphere its far side drew a second disc, exactly as large, straight opposite the star (seen at
+  10 000, 100 000 and 1 000 000 km; 10 000 000 km is outside the sphere, so one sun there). The sun's direction, the key light and the
+  flare's aim already agreed (all from `ScaledPlacement` via `sun_direction`). Fix: past 90 degrees the coordinate keeps growing
+  (2 - sine), so the far side reads as faint corona, never disc; `SunLook.disc_radii` holds the same law for the tests. From outside the
+  sphere no drawn pixel is more than 90 degrees off, so the planet's views and every far view are unchanged. Close in, the corona's haze
+  still tints the sky behind (as before the fix); its look is (H). Tests: `test_sun_look.gd` (the sine law on the near side; from 10 000
+  km to 0.6 AU the coordinate grows all the way round and only the true disc is under 1), `test_scaled_space.gd`
+  `test_one_sun_from_near_the_star_to_the_planet` (4 star distances, 400 and 1 000 km above Epsilon III and the station's rail: the
+  drawn star, the placement, the key light and the flare's aim agree, only the cap round the star reads as disc, one star sphere), and
+  `test_sun_gpu.gd` `test_close_to_the_star_there_is_no_second_sun_opposite_it` (GPU read-back 100 000 km up, the disc alone: white
+  toward the star, dark behind; fails on the old shader with 3.0 behind, passes after). Staged copy: compile check 864 scripts; GUT
+  (GUT_SLOW=1) test_sun_look 9/9, test_lens_flare_aim 6/6, test_scaled_placement 10/10, test_flash_flare 4/4, test_scaled_space 19/19,
+  test_world_frame 18/18, test_environment 19/19, test_post_effects 20/20; on the RX 6950 XT the new GPU test passes, while
+  `test_sun_gpu.gd`'s disc-height and colour asserts and all 3 of `test_scaled_space_gpu.gd` fail the same on HEAD (they sample the
+  middle column, under GUT's own panel). Screenshots before and after (6 views at 10 000, 100 000, 1 000 000 and 10 000 000 km above the
+  star and 400 and 1 000 km above Epsilon III): `references/screenshots/M7-T44 two suns/`.

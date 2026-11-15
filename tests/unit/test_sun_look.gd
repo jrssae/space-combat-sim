@@ -54,3 +54,26 @@ func test_the_uniforms_carry_the_whole_look() -> void:
 	for key: StringName in [&"colour", &"corona_colour", &"glow_scale", &"disc_brightness", &"corona_strength", &"limb_darkening"]:
 		assert_true(uniforms.has(key), String(key))
 	assert_eq(uniforms[&"glow_scale"], SunLook.GLOW_SCALE)
+
+
+func test_the_disc_coordinate_is_the_sine_law_on_the_near_side() -> void:
+	var radius: float = deg_to_rad(0.326)
+	for angle_deg: float in [0.0, 0.1, 0.3, 1.0, 3.0, 30.0, 89.0]:
+		var angle: float = deg_to_rad(angle_deg)
+		assert_almost_eq(SunLook.disc_radii(angle, radius), sin(angle) / sin(radius), 1.0e-6, "%s deg" % angle_deg)
+
+
+func test_no_second_disc_opposite_the_star_at_any_distance() -> void:
+	# M7-T44: from 10 000 km to 0.6 AU off the star (Epsilon, radius 511 000 km), only the true disc reads as disc, and the
+	# coordinate grows all the way round, so no part of the sky behind the camera is mistaken for the star.
+	for altitude_km: float in [10_000.0, 100_000.0, 1_000_000.0, 10_000_000.0, 9.0e7]:
+		var radius: float = asin(511_000.0 / (511_000.0 + altitude_km))
+		var last: float = -1.0
+		for step: int in 181:
+			var angle: float = deg_to_rad(float(step))
+			var x: float = SunLook.disc_radii(angle, radius)
+			assert_gt(x, last, "grows at %d deg, %s km up" % [step, altitude_km])
+			last = x
+			assert_eq(x < 1.0, angle < radius, "on the disc only inside its angular radius (%d deg, %s km up)" % [step,
+					altitude_km])
+		assert_gt(SunLook.disc_radii(PI, radius), 2.0, "straight away from the star is at least two radii out")

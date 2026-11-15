@@ -44,6 +44,16 @@ static func uniforms(temperature_k: float) -> Dictionary:
 	}
 
 
+## How far a view ray `angle_rad` off the star's centre is from it, in disc radii, for a disc of `angular_radius_rad`: the
+## shader's `x`, which `profile` takes. The sine law is the true limb on the disc; past 90 degrees the sine would fold back and
+## draw a second sun opposite the star whenever the camera is inside the glow sphere (M7-T44), so it keeps growing there.
+static func disc_radii(angle_rad: float, angular_radius_rad: float) -> float:
+	var s: float = sin(angle_rad)
+	if cos(angle_rad) < 0.0:
+		s = 2.0 - s
+	return s / maxf(sin(angular_radius_rad), 1.0e-9)
+
+
 ## The brightness of a disc of unit radius at `x` radii from its centre (limb darkening inside, the corona outside), in units
 ## of the disc's centre. The shader does the same sum; this keeps its law testable.
 static func profile(x: float) -> float:

@@ -21,8 +21,14 @@ void fragment() {
 	vec3 centre = (VIEW_MATRIX * MODEL_MATRIX[3]).xyz;
 	float distance_to_centre = length(centre);
 	vec3 ray = normalize(VERTEX);
-	// Distance from the centre in disc radii: the sine of the angle over the sine of the disc's angular radius.
-	float x = length(cross(ray, centre / distance_to_centre)) / (length(MODEL_MATRIX[0].xyz) / glow_scale / distance_to_centre);
+	// Distance from the centre in disc radii (SunLook.disc_radii): the sine of the angle over the sine of the disc's angular
+	// radius. Past 90 degrees it keeps growing, else the far side of the glow sphere shows a second sun when the camera is inside.
+	vec3 toward = centre / distance_to_centre;
+	float s = length(cross(ray, toward));
+	if (dot(ray, toward) < 0.0) {
+		s = 2.0 - s;
+	}
+	float x = s / (length(MODEL_MATRIX[0].xyz) / glow_scale / distance_to_centre);
 	if (x >= glow_scale * 0.95) {
 		discard;
 	}

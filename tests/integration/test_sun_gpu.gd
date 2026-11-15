@@ -103,3 +103,35 @@ func test_the_flare_shows_in_the_open_and_is_gone_in_the_shadow() -> void:
 	assert_eq(env.post_effects.flare_strength(), 0.0)
 	var dark_streak: Color = dark.get_pixel(x, row)
 	assert_lt(dark_streak.r + dark_streak.g + dark_streak.b, 0.03, "no flare in the planet's shadow")
+
+
+func test_close_to_the_star_there_is_no_second_sun_opposite_it() -> void:
+	# M7-T44: inside the corona's sphere (closer than GLOW_SCALE star radii) its far side once showed a second disc straight
+	# away from the star. 100 000 km up, the disc alone (no corona, flare or nebula): white ahead, dark behind. The samples
+	# stay in the left half, clear of GUT's panel.
+	if not _gpu():
+		return
+	Settings.set_value(&"lens_flare", false)
+	env.show_sky_part(&"nebula", false)
+	var system: StarSystem = StarSystem.load_system(&"local")
+	var radius: float = float(system.info(STAR)["radius_m"]) + 1.0e8
+	assert_true(world.anchor_in_orbit(system, STAR, PackedFloat64Array([radius, 0.0, 0.0, 0.0, 0.0,
+			-sqrt(float(system.info(STAR)["gm"]) / radius)])))
+	env.scaled_space.refresh(camera)
+	var material: ShaderMaterial = env.scaled_space.sphere_of(STAR).material_override as ShaderMaterial
+	material.set_shader_parameter(&"corona_strength", 0.0)
+	var ahead: Image = await _look_at_sun(0.0)
+	var centre: Color = ahead.get_pixel(ahead.get_width() / 4, ahead.get_height() / 2)
+	assert_gt(centre.r + centre.g + centre.b, 2.0, "the star's disc fills the view toward it")
+	camera.global_basis = Basis.looking_at(-env.scaled_space.sun_direction(), Vector3.UP)
+	for i: int in 6:
+		await RenderingServer.frame_post_draw
+	var behind: Image = get_viewport().get_texture().get_image()
+	var w: int = behind.get_width()
+	var h: int = behind.get_height()
+	for point: Vector2i in [Vector2i(w / 4, h / 2), Vector2i(w / 8, h / 4), Vector2i(w * 3 / 8, h * 3 / 4)]:
+		var pixel: Color = behind.get_pixel(point.x, point.y)
+		assert_lt(pixel.r + pixel.g + pixel.b, 0.6, "no disc opposite the star at %s" % point)
+	material.set_shader_parameter(&"corona_strength", SunLook.CORONA_STRENGTH)
+	env.show_sky_part(&"nebula", true)
+	Settings.set_value(&"lens_flare", true)
