@@ -7,6 +7,8 @@ extends Node3D
 
 ## The marker it holds.
 var targetable: Targetable = null
+## What it is, for the target menu's preview ("Docking bay"): it has no hull to name it.
+var class_text: String = ""
 
 
 ## A nav point named `display_name` that offers `interaction`, heard `broadcast_range_m` out (its carrier's beacon).

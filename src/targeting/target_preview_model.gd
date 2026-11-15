@@ -28,6 +28,7 @@ const CLASS_NAMES: Dictionary = {
 	"centauri_brezebel": "Brezebel transport",
 	"brakiri_bokmai": "Bokmai hauler",
 	"nav_buoy": "Nav buoy",
+	"jumpgate": "Jumpgate",
 }
 const FLAG_ATTACKING: String = "ATTACKING YOU"
 ## The pilot behaviours (`PilotBrain.describe`) that are an attack on their target.
@@ -77,8 +78,9 @@ static func none(p_title: String = "", p_subtitle: String = "") -> TargetPreview
 
 
 ## A ship or a beacon from the menu's list, seen by a pilot of `own_faction` at `own_position` moving at `own_velocity`.
-## `facts` is what the list does not carry: `asset_id` (the hull), `cargo_pods` and `cargo_mounts` (a hull with pod mounts),
-## `attacking_you`. A contact too far to identify shows none of them.
+## `facts` is what the list does not carry: `asset_id` (the hull), `class` (what it is when it has no hull of its own: a station's
+## bay, M7-T27), `cargo_pods` and `cargo_mounts` (a hull with pod mounts), `attacking_you`. A contact too far to identify shows
+## none of them.
 static func contact(info: TargetInfo, own_position: Vector3, own_velocity: Vector3, own_faction: StringName,
 		facts: Dictionary = {}) -> TargetPreviewModel:
 	var out := TargetPreviewModel.new()
@@ -96,8 +98,9 @@ static func contact(info: TargetInfo, own_position: Vector3, own_velocity: Vecto
 		out.kind = Kind.BEACON if category == TargetCategories.Category.NAVIGATION else Kind.SHIP
 		out.title = info.display_name.to_upper()
 		out.title_color = Factions.hud_color(Factions.relation(own_faction, info.faction))
-		out.subtitle = " · ".join(PackedStringArray([class_text(asset_id), Factions.table().display_name(info.faction)])) \
-				if not asset_id.is_empty() else Factions.table().display_name(info.faction)
+		var what: String = class_text(asset_id) if not asset_id.is_empty() else String(facts.get("class", ""))
+		out.subtitle = " · ".join(PackedStringArray([what, Factions.table().display_name(info.faction)])) \
+				if not what.is_empty() else Factions.table().display_name(info.faction)
 		out.hull_id = asset_id
 		if out.kind == Kind.SHIP and bool(facts.get("attacking_you", false)):
 			out.flag = FLAG_ATTACKING

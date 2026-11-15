@@ -385,10 +385,12 @@ func _build_nav_points() -> void:
 	docking_bay = NavPoint.make(DOCKING_BAY_NAME, TargetInteraction.new(&"dock", "DOCK", Callable(), Callable(), BAY_REACH_M),
 			BROADCAST_RANGE_M)
 	docking_bay.position = (dock.get("main_docking_bay_mouth", Vector3.ZERO) as Vector3) + drum_origin
+	docking_bay.class_text = "Docking bay"
 	add_child(docking_bay)
 	cargo_bay = NavPoint.make(CARGO_BAY_NAME, TargetInteraction.new(&"cargo", "CARGO", Callable(), Callable(), BAY_REACH_M),
 			BROADCAST_RANGE_M)
 	cargo_bay.position = cargo.get("cargo_bay_entry", Vector3.ZERO) as Vector3
+	cargo_bay.class_text = "Cargo bay"
 	add_child(cargo_bay)
 
 

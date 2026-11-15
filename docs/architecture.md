@@ -5792,6 +5792,8 @@ data/station/traffic.json        the interval, the kinds' weights, the raid's si
   lists the places that offer an interaction first, then the nearest buoys (`TargetCategories._priority`), so a crowd of
   buoys never pushes the gate 50 km out off its five slices. The wheel, target ahead and the console reach them as any target;
   the target button's tap stays the nearest enemy.
+  The menu's preview names what each is: the gate reads `Jumpgate` and draws its own wireframe, a bay reads `Docking bay` or
+  `Cargo bay` (`NavPoint.class_text`, the `class` fact) with no hull of its own to draw.
 - **Tap and hold.** `HoldInteract` (pure) splits X: a press that starts while nothing is offered toggles auto-track at once,
   as before; a press that starts while the selected target offers its interaction taps on a release within
   `settings.target_hold_s` (0.35 s, the target button's split, so both tap-or-hold buttons feel alike), fires

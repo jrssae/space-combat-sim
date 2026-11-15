@@ -225,6 +225,10 @@ func _facts(id: int) -> Dictionary:
 		return facts
 	if body is NavBuoy:
 		return {"asset_id": NavBuoy.ASSET_ID}
+	if body is Jumpgate:
+		return {"asset_id": Jumpgate.ASSET_ID}
+	if body is NavPoint:
+		return {"class": (body as NavPoint).class_text}  # a bay: a place on the station, no hull of its own (M7-T27)
 	return {}
 
 
@@ -251,8 +255,8 @@ func _parts(id: int) -> Array[Dictionary]:
 			var pods: CargoPods = CargoPods.of(ship)
 			if pods != null:
 				out.append_array(pods.mounted_parts())
-	elif body is NavBuoy:
-		var mesh: Mesh = MeshAssets.for_asset(NavBuoy.ASSET_ID)
+	elif body is NavBuoy or body is Jumpgate:
+		var mesh: Mesh = MeshAssets.for_asset(NavBuoy.ASSET_ID if body is NavBuoy else Jumpgate.ASSET_ID)
 		if mesh != null:
 			out.append({"mesh": mesh, "transform": Transform3D.IDENTITY})
 	return out

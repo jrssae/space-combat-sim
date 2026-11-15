@@ -217,6 +217,8 @@ func test_a_buoy_shows_its_wireframe_and_no_hull_bar() -> void:
 	await _ticks(3)
 	_run("targetmenu open")
 	_run("targetmenu pick navigation")
+	# The places that offer an action lead the ring (M7-T27); the buoy is picked by name.
+	assert_true(_run("targetmenu highlight \"nav alpha\"").ok)
 	var preview: TargetPreview = main.target_menu.preview
 	assert_eq(preview.model.kind, TargetPreviewModel.Kind.BEACON)
 	assert_true(preview.model.subtitle.begins_with("Nav buoy"))
@@ -225,6 +227,29 @@ func test_a_buoy_shows_its_wireframe_and_no_hull_bar() -> void:
 	assert_not_null(preview.model.row(&"range"))
 	_run("targetmenu highlight none")
 	assert_eq(preview.model.subtitle, TargetMenuDirector.NONE_CLEARS_WAYPOINT)
+
+
+# M7-T27: the station's bays and the gate are navigation targets the pilot targets; the preview names what each is, and draws
+# the gate's own wireframe (a bay is a place on the station, with no hull of its own to draw).
+func test_a_bay_and_the_gate_show_what_they_are() -> void:
+	await _ticks(3)
+	_run("targetmenu open")
+	_run("targetmenu pick navigation")
+	var preview: TargetPreview = main.target_menu.preview
+	if main.far_props.station != null:
+		assert_true(_run("targetmenu highlight \"babylon 5 docking bay\"").ok)
+		assert_eq(preview.model.kind, TargetPreviewModel.Kind.BEACON)
+		assert_eq(preview.model.title, "BABYLON 5 DOCKING BAY")
+		assert_true(preview.model.subtitle.begins_with("Docking bay"), preview.model.subtitle)
+		assert_eq(_read("target_preview.hull"), "none", "no hull of its own")
+		assert_not_null(preview.model.row(&"range"))
+		assert_true(_run("targetmenu highlight \"babylon 5 cargo bay\"").ok)
+		assert_true(preview.model.subtitle.begins_with("Cargo bay"), preview.model.subtitle)
+	assert_true(_run("targetmenu highlight jumpgate").ok)
+	assert_eq(preview.model.kind, TargetPreviewModel.Kind.BEACON)
+	assert_true(preview.model.subtitle.begins_with("Jumpgate"), preview.model.subtitle)
+	assert_eq(_read("target_preview.hull"), "jumpgate", "the gate's own wireframe")
+	assert_null(preview.model.row(&"hull"), "no hull bar")
 
 
 func test_an_objective_shows_its_text_and_its_actors_wireframe() -> void:

@@ -1712,6 +1712,10 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     reads `JUMPGATE: 3.4 km — CLOSE TO 2.0 km TO JUMP`. Within reach: `HOLD X / SHIFT / MOUSE 4: JUMP` (the gate's label is now
     JUMP). `test_nav_targets`: the gate at 3 km and 1.8 km, a bay at 5 km and 1.5 km (status, no bar, nothing runs; then the
     buttons, the bar, one run); `test_nav_interaction`: reach and status text.
+  - **Fix (found by CI, 2026-11-15):** with the places leading the NAVIGATION ring, `test_target_preview`'s buoy check
+    highlighted a bay (the ring's first slice). The test now picks the buoy by name, and the preview names a bay (`Docking bay`,
+    `Cargo bay`, no hull of its own) and the gate (`Jumpgate`, its own wireframe) instead of a bare faction; new checks in
+    `test_target_preview` and `test_target_preview_model`. No other test reads the ring's order.
 
 ### M7-T28 Fix: the jumpgate's second entry
 
