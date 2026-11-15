@@ -29,6 +29,15 @@ uniform float panel_relief = 1.0;
 uniform float panel_rough = 0.12;
 uniform float triplanar_sharpness = 4.0;
 
+// The station's floodlights (M7-T18): lit pools on the hull from fixed fixtures, in this piece's space, so they take no light slot
+// and still show on the night side. Each section's own list (StationLights): the fixture and its throw, the beam's direction and
+// the cone's outer cosine, the colour times its energy and the cone's inner cosine.
+const int MAX_FLOODS = 64;
+uniform int flood_count = 0;
+uniform vec4 flood_pos[MAX_FLOODS];
+uniform vec4 flood_dir[MAX_FLOODS];
+uniform vec4 flood_col[MAX_FLOODS];
+
 // Where this mesh's origin lies in its piece (a section's origin), so the tiles run on unbroken across the section joints.
 instance uniform vec3 piece_offset = vec3(0.0);
 
@@ -138,4 +147,23 @@ void fragment() {
 	CLEARCOAT = sheen * on_paint;
 	CLEARCOAT_ROUGHNESS = clamp(sheen_roughness + (orm.g - 0.5), 0.1, 1.0);
 	EMISSION = texture(emissive_map, UV).rgb * emission_energy;
+	if (flood_count > 0) {
+		// A flood lights the paint as a lamp would: its cone with a soft edge, even over most of its throw, the surface turned to it.
+		vec3 np = normalize(v_nrm + tilt * 0.5);
+		vec3 flood = vec3(0.0);
+		for (int i = 0; i < flood_count; i++) {
+			vec3 to_light = flood_pos[i].xyz - p;
+			float d = length(to_light);
+			if (d >= flood_pos[i].w) {
+				continue;
+			}
+			vec3 l = to_light / max(d, 1e-3);
+			float cone = smoothstep(flood_dir[i].w, flood_col[i].w, dot(-l, flood_dir[i].xyz));
+			float r2 = d / flood_pos[i].w;
+			r2 *= r2;
+			float fall = 1.0 - r2 * r2;
+			flood += flood_col[i].rgb * cone * fall * fall * max(dot(np, l), 0.0);
+		}
+		EMISSION += ALBEDO * flood;
+	}
 }

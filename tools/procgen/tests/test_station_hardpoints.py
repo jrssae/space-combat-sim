@@ -119,7 +119,8 @@ class HardpointTests(unittest.TestCase):
         kinds: dict[str, int] = {}
         for light in self.hp["lights"]:
             kinds[light["kind"]] = kinds.get(light["kind"], 0) + 1
-        self.assertEqual(kinds, {"beacon": 14, "running": 8, "ring": 7, "bay": 24, "main_docking_bay": 8, "cargo_bay": 2})
+        self.assertEqual(kinds, {"beacon": 15, "nav": 60, "bay": 24, "main_docking_bay": 8, "cargo_bay": 6, "flood": 74})
+        self.assertEqual(sum(1 for light in self.hp["lights"] if "marker" in light), 85, "beacons, nav lights, ten bay lamps drawn")
         names = {t["name"] for t in self.hp["tour_points"]}
         self.assertTrue({"bow", "main_docking_bay", "cargo_bay", "cobra_arm", "grid_tower", "drum", "vanes", "reactor"} <= names)
         for key in ("cobra_bays", "grid_mounts", "lights", "tour_points", "damage_sections"):
@@ -352,9 +353,19 @@ class HardpointTests(unittest.TestCase):
         for light in self.hp["lights"]:
             p, body = self.at(light), light["body"]
             other = "frame" if body == "drum" else "drum"
-            if light["kind"] in ("beacon", "running", "ring"):
+            if light["kind"] in ("beacon", "nav"):
                 self.assertLess(distance_to(self.tris[body], p), 3.0, f"{light['name']} on the hull")
                 self.assertGreater(distance_to(self.tris[other], p), 5.0, f"{light['name']} on the right piece")
+            elif light["kind"] == "flood":
+                # A flood's fixture is not drawn; what matters is that its beam lands on the station within its throw.
+                d = np.asarray(light["direction"], dtype=float)
+                side = np.cross(d, [0.0, 0.0, 1.0] if abs(d[2]) < 0.9 else [1.0, 0.0, 0.0])
+                side /= np.linalg.norm(side)
+                up = np.cross(d, side)
+                spread = math.tan(math.radians(light["inner_deg"]))
+                rays = [d] + [d + spread * (math.cos(a) * side + math.sin(a) * up) for a in np.linspace(0.0, 2.0 * math.pi, 8, endpoint=False)]
+                hit = min(ray_hit(self.tris[b], p, r / np.linalg.norm(r)) for b in ("drum", "frame") for r in rays)
+                self.assertLess(hit, light["range_m"], f"{light['name']}'s beam lands on the station")
             elif light["kind"] == "bay":
                 r = float(np.hypot(p[0], p[1]))
                 self.assertTrue(st.ARM_HATCH[3] < r < st.ARM_HATCH[4] - st.DOOR_DEPTH, f"{light['name']} inside its bay")
@@ -365,18 +376,74 @@ class HardpointTests(unittest.TestCase):
             elif light["kind"] == "main_docking_bay":
                 self.assertTrue(sd.FACE_Z < p[2] < sd.DOORS_Z, f"{light['name']} down the mouth, not in the black void")
                 self.assertAlmostEqual(float(np.hypot(p[0], p[1])), 0.0)
+            elif light["name"].startswith("cargo_bay_mouth"):
+                self.assertLess(abs(float(p[2]) - sd.ZG_FRONT_Z), 2.0, f"{light['name']} at the mouth")
+                self.assertLess(distance_to(self.tris["frame"], p), 3.0, f"{light['name']} on the mouth's frame")
             else:
                 self.assertEqual(light["kind"], "cargo_bay")
                 self.assertTrue(sd.ZG_FRONT_Z < p[2] < sd.ZG_BACK_Z and abs(p[0]) < sd.ZG_HALF_X, light["name"])
             if light["kind"] == "beacon":
                 self.assertTrue(light.get("blink"))
-            if light["kind"] == "ring":
-                self.assertAlmostEqual(float(np.hypot(p[0], p[1])), light["radius"], delta=0.01)
-                self.assertEqual(light["axis"], [0.0, 0.0, 1.0])
+                self.assertEqual((light["blink_period_s"], light["blink_on_s"]), (3.0, 0.8), "a 3 s beat, lit 0.8 s")
+            if "marker" in light:
+                self.assertGreater(light["marker"]["radius_m"], 0.0)
+                self.assertEqual(len(light["marker"]["rgb"]), 3)
         tips = [light for light in self.hp["lights"] if light["name"].startswith("beacon_vane")]
         self.assertEqual(len(tips), 12)
         for light in tips:
             self.assertAlmostEqual(abs(self.at(light)[1]), st.VANE_TIP_Y, delta=0.01)
+
+    def test_the_arms_nav_lights_are_red_pink(self) -> None:
+        arms = [light for light in self.hp["lights"] if light["name"].startswith("nav_arm")]
+        self.assertEqual(len(arms), 32, "four on each flank of each arm")
+        for light in arms:
+            r, g, b = light["marker"]["rgb"]
+            hue = (360.0 - 60.0 * (b - g) / (r - g)) if r >= max(g, b) and b >= g else -1.0
+            self.assertTrue(340.0 <= hue <= 360.0, f"{light['name']}: hue {hue:.0f}, red-pink")
+            self.assertLess(max(g, b) / r, 0.15, "saturated, so the bloom keeps it red-pink")
+
+    def flood_at(self, p, n) -> float:
+        """The flood light (red channel) the hull shader sums at a station-frame point with normal ``n``."""
+        p, n = np.asarray(p, dtype=float), np.asarray(n, dtype=float) / np.linalg.norm(n)
+        total = 0.0
+        for f in (light for light in self.hp["lights"] if light["kind"] == "flood"):
+            to_light = self.at(f) - p
+            d = float(np.linalg.norm(to_light))
+            if d >= f["range_m"]:
+                continue
+            l = to_light / d
+            lo, hi = math.cos(math.radians(f["outer_deg"])), math.cos(math.radians(f["inner_deg"]))
+            x = min(max((float(np.dot(-l, f["direction"])) - lo) / (hi - lo), 0.0), 1.0)
+            cone = x * x * (3.0 - 2.0 * x)
+            fall = (1.0 - (d / f["range_m"]) ** 4) ** 2
+            total += f["rgb"][0] * f["energy"] * cone * fall * max(float(np.dot(n, l)), 0.0)
+        return total
+
+    def test_the_floods_light_the_arms_and_keep_the_spheres_rear_face_dark(self) -> None:
+        floods = [light for light in self.hp["lights"] if light["kind"] == "flood"]
+        for f in floods:
+            self.assertAlmostEqual(float(np.linalg.norm(f["direction"])), 1.0, places=3)
+            self.assertLess(f["inner_deg"], f["outer_deg"], f["name"])
+            self.assertTrue(all(0.0 <= c <= 1.0 for c in f["rgb"]) and f["energy"] > 0.0 and f["range_m"] > 0.0, f["name"])
+        z = np.array([0.0, 0.0, 1.0])
+        rear = max(self.flood_at([r * math.cos(a), r * math.sin(a), 941.0], z) for a in np.radians(np.arange(0, 360, 5))
+                   for r in (200.0, 215.0, 230.0, 245.0))
+        self.assertLess(rear, 0.05, "the arms capture shows the sphere's rear face dark")
+        u, t = np.array([0.0, 1.0, 0.0]), np.array([-1.0, 0.0, 0.0])  # the top arm: out, across
+        for zz in (1200.0, 1240.0, 1290.0):
+            self.assertGreater(self.flood_at(u * 208.0 + t * 47.2 + [0.0, 0.0, zz], t), 1.0, f"the aft flank at z {zz:.0f}")
+        for zz in (750.0, 800.0, 840.0):
+            self.assertGreater(self.flood_at(u * 265.0 + t * 60.0 + [0.0, 0.0, zz], t), 1.0, f"the fore flank at z {zz:.0f}")
+
+    def test_the_docking_ring_is_lit_in_pools_with_dark_gaps(self) -> None:
+        lit = []
+        for a in np.radians(np.arange(0.0, 360.0, 2.0)):
+            radial = np.array([math.cos(a), math.sin(a), 0.0])
+            lit.append(self.flood_at(radial * 118.0 + [0.0, 0.0, 474.5], [0.0, 0.0, -1.0]) > 0.3)  # the ring's face
+        share = sum(lit) / len(lit)
+        self.assertTrue(0.2 < share < 0.75, f"pools on the ring, not a wash: {share:.2f} of its face lit")
+        runs = sum(1 for k in range(len(lit)) if lit[k] and not lit[k - 1])
+        self.assertGreaterEqual(runs, 4, "separate pools round the ring")
 
     def test_the_tour_points_stand_clear_and_look_at_the_station(self) -> None:
         for tour in self.hp["tour_points"]:

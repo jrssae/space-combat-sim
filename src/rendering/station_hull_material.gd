@@ -37,6 +37,17 @@ static func make(dir: String, surface: Dictionary) -> ShaderMaterial:
 	return material
 
 
+## A copy of one of these materials for one hull section (M7-T18: each section carries its own floods), kept on the texture set in
+## use as the original is. A material that is not one of these is returned as it is.
+static func copy_of(material: ShaderMaterial) -> ShaderMaterial:
+	for entry: Dictionary in _made:
+		if entry["material"] == material:
+			var copy := material.duplicate() as ShaderMaterial
+			_made.append({"material": copy, "dir": entry["dir"], "surface": entry["surface"]})
+			return copy
+	return material
+
+
 ## The file of one of the material's maps in the set `settings.texture_detail` picks: the atlas's from the surface's `detail`, the
 ## tiles' from its `world_detail` (`low` naming the low set's), else the surface's own.
 static func map_file(surface: Dictionary, key: String) -> String:

@@ -195,6 +195,8 @@ Everything else holds from about 200 m.
 
 ## Lights (Q10): where the references show them
 
+(M7-T01's survey. As built: "Exterior lights (M7-T18)" at the end of this file.)
+
 - A **red lamp or lit dome** on the spine's top at the observation dome, about z 1 100 (side front.jpg).
 - **Red lit panels** on the bow spine's flanks near its aft end (Mallacore).
 - **Yellow strip lights** along the lower face of an arm (Passaro).
@@ -641,7 +643,7 @@ its `body`'s frame: `drum` (the drum node, on its axis at the pivot, turning wit
 | `cargo_bay` | 1 (frame) | `cargo_bay_approach` (to the hold), `_hold` (z -700, y 346: on the slot's line, 346 m off the main bay's axis), `_hold_forward`, `_release` (z -640), `_path` (down the slot into the bay), `_entry` (45 m in), `_clear_min`, `_clear_max` |
 | `grid_mounts` | 23 (L1 to L12, H1, H2, I1 to I9) | `kind`, `position` (pivot), `up` (D75's, normalised) |
 | `launch_clearance` | 1 | `blocked_sectors_deg` [[56.5, 124]], `clear_distance_m` 240 (M7-T22), `margin_deg` 10, `ship_clearance_m` 2, `angle` (how an arm's angle and the drum's turn give a door's angle) |
-| `lights` | 63: 14 `beacon` (`blink`), 8 `running`, 7 `ring` (`radius`, `axis`, `dashes`), 24 `bay`, 8 `main_docking_bay` (2 down the mouth, lit in the game by `BayLights`; 6 entrance lamps round it on the block's face, M7-T25), 2 `cargo_bay` | `position`, `colour` |
+| `lights` | 187 (M7-T18): 15 `beacon` (`blink`, `blink_period_s`, `blink_on_s`), 60 `nav`, 24 `bay`, 8 `main_docking_bay` (2 down the mouth, lit in the game by `BayLights`; 6 entrance lamps round it on the block's face, M7-T25), 6 `cargo_bay` (2 in the compartment, 4 at its mouth), 74 `flood` | `position`, `colour`; a drawn light `marker` (`radius_m`, `rgb`); a flood `direction`, `outer_deg`, `inner_deg`, `range_m`, `rgb`, `energy` |
 | `tour_points` | 8: bow, main_docking_bay, cargo_bay, cobra_arm (drum), grid_tower, drum, vanes, reactor | `position`, `look_at`, `direction` |
 | `damage_sections` | 11 | `sections` (T19's render sections, each once), `aabb_min`, `aabb_max` |
 
@@ -1050,3 +1052,67 @@ ramp's tips, the deck under the beam's groove, the bow prongs' trims) stop 0.3 t
 
 **Cost** (RX 6950 XT, Forward+, X11 fullscreen 6 144 x 3 456, `SHEET_VIEWS=t24final`): see the T24 Done notes in the milestone.
 Sheets: `references/screenshots/T24 station surfaces/` (gitignored): the checkpoints and `T24_final_sheet.png`.
+
+## Exterior lights (M7-T18)
+
+The maintainer's references: `references/station lighting references/` (the show's bow and Cobra-arms captures, a fan render for its
+look only) and `references/T24 station references/B5 - Station from below.jpg` (inspiration only, nothing traced). Approved round by
+round on sheets in `references/screenshots/T18 station lighting/` (2026-11-14). Everything comes from the light hardpoints
+(`parts/station_hardpoints.py` `lights`, `floods`); the game draws them with `StationLights` (`src/world/station_lights.gd`, the pure
+part `StationLightPlan`).
+
+**Points** (a `marker`: radius on the hull, colour as linear light before the marker's gain; `station_light_marker.gdshader`: a soft
+additive point facing the camera, its real size up close and a 3 px floor at 1080p beyond, fading only a little, so the pattern reads at
+10 km; the hull hides it by depth; one instanced draw a group):
+- **Beacons:** red, radius 4.5 m, on the bow spike's two tips, the 12 vane tips and the reactor's aft tip; they blink together, lit
+  0.8 s of every 3 s of the system's sim time (never the wall clock; slowed from 0.4 s in 1.5 s after the maintainer flew it).
+- **Navigation ring:** 28 pink-red points (#FF6A8A, radius 3.6 m) round the forward body's flare at z 1400 (r 305), every 10 degrees
+  between the arms (the arms capture's ring round the band's edge).
+- **The Cobra arms' navigation lights:** 32 red-pink points (hue about 350, saturated so the bloom keeps them red-pink; radius 4.2 m),
+  four on each flank of each arm's aft part: at z 1150 and 1290, on the crease and on the lower edge (the capture shows four on each
+  arm's visible flank).
+- **Bay lamps:** the docking bay's six entrance lamps round the mouth and four red lamps at the cargo bay's mouth corners (radius
+  2.4 m). The bays' real lamps stay `BayLights`'. No red glow in the docking bay's mouth, no running lights, no dashed rings, no lit
+  markings, no fixture points (the maintainer).
+
+**Floods** (74; each a fixture, a beam, a cone with a soft edge, a throw, a colour and an energy): summed per pixel in the hull shader
+(`station_hull.gdshader`, §20.6 of the architecture), lighting the paint by the surface's turn to the fixture, added as emission so
+they show on the night side. A flood casts no shadow, so each is aimed to end on the hull it lights.
+- **The docking ring** (frame): eight narrow beams (3.6 degrees, energy 11, warm white #FFE2C2) from under the bow's prongs, well
+  ahead of the ring, onto its rim at r 113, unevenly spaced: pools with dark gaps, as the bow capture.
+- **The Cobra arms** (drum, pinkish #FF9A88): from the forward body's flare either side of each arm (thrown 380 m, no further than the
+  arms); onto each arm's aft part and the hull round its root from the core between the arms (off the waist's aft step forward onto
+  the flank, underside and crease; off the core's front aft onto the taper and the step); the same set mirrored about the arms' middle
+  (z 1020) onto their fore parts, from the sphere's surface beside the heads, its core pair turned outward onto the necks and narrowed
+  so no beam crosses the sphere's rear face, which the arms capture shows dark; and onto each head's nose and flanks from the sphere
+  just ahead of it.
+- **The spine** (frame): from the beam's edges at z 1300, 2700 and 4100, aft and up across its flanks and the modules.
+- **The ring in front of the vanes** (drum): from the green zone onto the aft band's fore slope, between the vanes.
+- **The biggest band's forward face and the hull ahead of it** (drum): from the forward body aft onto the face, and from the face
+  forward.
+
+**Sections.** A hull section that some flood reaches gets its own copy of its material holding only those floods (by cone and throw
+for floods on its piece; by the band of radius and depth the drum's turn sweeps for floods on the other piece, which follow the drum
+every frame): 64 a section at most, 54 the most any section sums (the waist with all four arms). The shared materials carry none, so the
+halls' and bays' inner faces stay as approved.
+
+**Cost** (RX 6950 XT, Forward+, 3840 x 2160, `SHEET_VIEWS=t18final`; today = `station_lights off`):
+
+| View | Draw calls | GPU ms today | GPU ms with the lights |
+|---|---|---|---|
+| From a Cobra bay, 50 m | 244 -> 246 | 3.26 | 4.39 |
+| The docking ring | 234 -> 237 | 3.01 | 3.94 |
+| The Cobra arms | 221 -> 223 | 3.73 | 5.07 (the prototype with every flood on every pixel: 3.59 -> 5.50) |
+| 1 km | 235 -> 237 | 3.30 | 4.49 |
+| 10 km | 148 -> 151 | 1.72 | 1.61 |
+| Night side, the arms | 39 -> 41 | 3.27 | 4.38 |
+| Night side, 1 km | 58 -> 60 | 2.85 | 3.68 |
+
+Light slots in use are unchanged with the lights on: the key star and the bays' lamps. Sheet:
+`references/screenshots/T18 station lighting/T18_final_sheet.png`.
+
+**Accuracy record** (not a gate): our camera fitted to the bow and arms captures matches their silhouettes at IoU 0.810 and 0.881, and
+the lit regions (blurred brightness inside the silhouette, the same percentile cut-offs) overlap at 0.22 and 0.24. 0.90 is out of
+reach: the show's model differs from ours, built to the STL; the captures' bright areas are mostly sunlight; the approved paint and
+texture differ. Masks, the fitted poses and the overlays: `references/screenshots/T18 station lighting/measure/`.
+

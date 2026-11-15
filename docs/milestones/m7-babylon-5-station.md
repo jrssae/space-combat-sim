@@ -271,7 +271,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T15 | A | Starfury and raider surfaces from show references, with low and high texture sets for the texture detail setting (maintainer, 2026-11-12; numbered last because it was added after the others had numbers) | M5-T40 | Fable | Two hero hulls seen up close; the look is (H) and needs a sheet first | done |
 | T16 | A | Raider fighter rebuilt to its STL at 90% fidelity, the wing's leading-edge panels first (maintainer, 2026-11-13) | T15 | Opus | The raider was built without an STL; the maintainer finds its shape too far from the reference | done |
 | T17 | A | The Starfury looks metallic, not plastic: metallic, roughness and normal maps on both texture sets (maintainer, 2026-11-13; the raider's share is in T16, the station's in T04) | T15 | Opus | Material appearance on the hero hull; the look is (H) and needs a sheet first | done |
-| T18 | A | Station exterior lighting from the maintainer's references: dashed ring lights, nav and beacon lights, lit windows and markings, the aperture and bay glow (maintainer, 2026-11-13) | T05, T06 | Opus | Emissive patterns, blinking beacons and the 8 light slots on an 8 km hull; the look is (H) | in progress |
+| T18 | A | Station exterior lighting from the maintainer's references: beacons, navigation lights, bay lamps and floodlit pools on the hull (maintainer, 2026-11-13; layout approved 2026-11-14) | T05, T06 | Opus | Floods in the hull shader with no light slot, blinking beacons by sim time; the look is (H) | in progress |
 | T19 | A | Station sections: the frame and drum cut into linked sections, each with its own LOD and visibility range, and near-only detail props (maintainer, 2026-11-13) | T04 | Opus | One 8 km mesh gets one LOD and is never culled; T05's detail must be built on this | done |
 | T20 | C | The hangar behind the menu after the door resize: one Starfury per door (six), a narrower hall (maintainer, 2026-11-13) | T05, T09 | Opus | T09 sized the hall and racks to the old 64 m doors | done |
 | T21 | A | Follow-up to T05 from the STL: the Cobra arm's pentagonal cross-section, creases either side of the launch doors, and a roofed rectangular cargo bay (maintainer, 2026-11-13) | T05 | Opus | Shape read off the STL; the look is (H) | done |
@@ -1133,6 +1133,31 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 - **Done when:** an A/B lighting sheet against the references on the GPU (from a bay, 1 km, 10 km, the night side) approved by the
   maintainer (H); `state render` numbers (fps, draw calls, light slots used) recorded; tests for the light hardpoints, the blink
   timing from sim time and the slot budget.
+- **Done (as built; the final sheet awaits the maintainer):** the layout the maintainer approved round by round (sheets in
+  `references/screenshots/T18 station lighting/`), built from the generator's light hardpoints; details in `docs/assets-station.md`
+  "Exterior lights".
+  - **Points:** 15 red beacons (the bow spike's tips, the 12 vane tips, the reactor's aft tip) blinking 0.8 s in every 3 s of sim
+    time; the pink-red navigation ring (28 round the forward body's flare, between the arms); 32 red-pink navigation lights on the
+    Cobra arms' aft parts (four a flank, as the arms capture); the bays' 10 lamps. No running lights, no dashed rings, no lit
+    markings, no red glow in the docking bay (the maintainer). The beacons' beat slowed to 3 s (lit 0.8 s) after the maintainer
+    flew it live (2026-11-15).
+  - **Floods (74):** the docking ring's eight narrow pools; the Cobra arms (from the forward body's flare, from the core onto their
+    aft parts, the same mirrored onto their fore parts and heads, the sphere's rear face kept dark); the spine; the ring in front of
+    the vanes; the biggest band's forward face and the hull ahead of it. In the hull shader, each section holding only the floods
+    that reach it (at most 54 of the 64 it can hold); no light node, no light slot.
+  - **Cost** (RX 6950 XT, Forward+, 3840 x 2160, `SHEET_VIEWS=t18final`, today = `station_lights off`): GPU from a Cobra bay 3.26 to
+    4.39 ms, the docking ring 3.01 to 3.94, the arms 3.73 to 5.07 (the prototype, every flood on every pixel: +1.91), 1 km 3.30 to
+    4.49, 10 km 1.72 to 1.61, the night side 3.27 to 4.38 and 2.85 to 3.68; draw calls +2 or +3; light slots in use unchanged (the
+    key star and the bays' lamps). Sheet: `references/screenshots/T18 station lighting/T18_final_sheet.png`.
+  - **Accuracy record** (not a gate; the maintainer judges by eye): the camera fitted to the two show captures matches their
+    silhouettes at IoU 0.810 (bow) and 0.881 (arms); the lit regions overlap at 0.22 and 0.24. 0.90 cannot be reached: the show's
+    model differs from ours (built to the STL), the captures' bright areas are mostly sunlight, and the approved paint and texture
+    differ. Files: `references/screenshots/T18 station lighting/measure/`.
+  - **Tests:** `test_station_hardpoints.py` (the counts, every light on its piece and every flood's beam on the station, the arms'
+    nav lights red-pink, the sphere's rear face dark and the arms lit, the ring in pools with gaps), GUT `test_station_light_plan`
+    (groups, floods, the blink from sim time, which floods reach a section, floods turning with the drum) and `test_station_lights`
+    (the real station: counts, the shader's budget, inner faces without floods, the drum's floods carried round, no light node, the
+    bays' lamps the only rig emitters, yielding every slot to muzzle flashes).
 
 - **Fix (maintainer, 2026-11-13, before this task is built): flicker, the sun through the station, glints along the core.** Seen in
   the launch shots and from outside as the drum turned; approved live. Causes and fixes (details in `docs/assets-station.md`

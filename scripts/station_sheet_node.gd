@@ -39,6 +39,28 @@ const VIEWS: Array[Dictionary] = [
 ## as a ball); M7-T21's `t21` (the creased arm and the roofed cargo bay); M7-T22's `t22` (the spine and command section). The
 ## default set is T04's look sheet.
 const VIEW_SETS: Dictionary = {
+	# M7-T18's final A/B sheet: today (the lights off) and the lights as approved, from a Cobra bay, the bow's docking ring, the Cobra
+	# arms, 1 km and 10 km, and the night side (the key star off).
+	"t18final": [
+		{"name": "bay_50m_today", "at": Vector3(300.0, -55.0, 1085.0), "aim": Vector3(243.0, 0.0, 1150.0), "fov": 62.0, "lights": "off"},
+		{"name": "bay_50m_new", "at": Vector3(300.0, -55.0, 1085.0), "aim": Vector3(243.0, 0.0, 1150.0), "fov": 62.0, "lights": "on"},
+		{"name": "bow_today", "at": Vector3(330.0, 70.0, 130.0), "aim": Vector3(0.0, 10.0, 500.0), "fov": 45.0, "lights": "off"},
+		{"name": "bow_new", "at": Vector3(330.0, 70.0, 130.0), "aim": Vector3(0.0, 10.0, 500.0), "fov": 45.0, "lights": "on"},
+		{"name": "arms_today", "at": Vector3(640.0, -120.0, 1180.0), "aim": Vector3(0.0, 0.0, 1060.0), "fov": 62.0, "lights": "off"},
+		{"name": "arms_new", "at": Vector3(640.0, -120.0, 1180.0), "aim": Vector3(0.0, 0.0, 1060.0), "fov": 62.0, "lights": "on"},
+		{"name": "1km_today", "at": Vector3(700.0, 380.0, 700.0), "aim": Vector3(0.0, 0.0, 1500.0), "fov": 55.0, "lights": "off"},
+		{"name": "1km_new", "at": Vector3(700.0, 380.0, 700.0), "aim": Vector3(0.0, 0.0, 1500.0), "fov": 55.0, "lights": "on"},
+		{"name": "10km_today", "far": 10.0, "lights": "off"},
+		{"name": "10km_new", "far": 10.0, "lights": "on"},
+		{"name": "night_arms_today", "at": Vector3(640.0, -120.0, 1180.0), "aim": Vector3(0.0, 0.0, 1060.0), "fov": 62.0, "lights": "off",
+				"night": true},
+		{"name": "night_arms_new", "at": Vector3(640.0, -120.0, 1180.0), "aim": Vector3(0.0, 0.0, 1060.0), "fov": 62.0, "lights": "on",
+				"night": true},
+		{"name": "night_1km_today", "at": Vector3(700.0, 380.0, 700.0), "aim": Vector3(0.0, 0.0, 1500.0), "fov": 55.0, "lights": "off",
+				"night": true},
+		{"name": "night_1km_new", "at": Vector3(700.0, 380.0, 700.0), "aim": Vector3(0.0, 0.0, 1500.0), "fov": 55.0, "lights": "on",
+				"night": true},
+	],
 	"t19": [
 		{"name": "bay_50m", "at": Vector3(300.0, -55.0, 1085.0), "aim": Vector3(243.0, 0.0, 1150.0), "fov": 62.0},
 		{"name": "aperture_50m", "at": Vector3(40.0, -45.0, 420.0), "aim": Vector3(0.0, 0.0, 495.0), "fov": 62.0},
@@ -365,6 +387,8 @@ func _next() -> void:
 	var view: Dictionary = _views[_index]
 	for marker: Dictionary in _markers:
 		(marker["node"] as Node3D).scale = Vector3.ONE * float(marker["size"]) * float(view.get("markers", 1.0))
+	if view.has("lights"):  # M7-T18's A/B: the station's exterior lights off (today) or on
+		_run("station_lights %s" % view["lights"])
 	_open_door(int(view.get("open_door", 0)))
 	_set_airlock(String(view.get("airlock", "")))
 	if bool(view.get("live", false)):
@@ -447,6 +471,7 @@ func _light_from_camera() -> void:
 		return
 	var direction: Vector3 = (camera.global_basis * LIT_LIGHT).normalized()
 	var view: Dictionary = _views[_index]
+	star.visible = not bool(view.get("night", false))  # the night side: no sun, the station's own lights only
 	if view.get("sun", "") == "aft":
 		# Sunlight from astern grazes the bay's walls and misses its frames, so the red they give off is what shows (no light here
 		# casts shadows, so a sun ahead would light the tunnel's depths).
@@ -494,6 +519,7 @@ func _capture(name: String, steady_fps: float) -> void:
 	var stats: Array[String] = []
 	for key: String in ["renderer", "fps", "draw_calls", "triangles", "vram_mb", "gpu_ms"]:
 		stats.append("%s=%s" % [key, str(DebugConsole.registry.read("render.%s" % key).get("value", "?"))])
+	stats.append("light_slots=%s" % str(DebugConsole.registry.read("lights.active").get("value", "?")))
 	print("[station_sheet] %s: %s steady_fps=%.0f card_vram_mb=%.0f station_meshes_shown=%d -> %s" % [name, " ".join(stats), steady_fps,
 			_vram_bytes() / 1048576.0, _shown(_station), path])
 

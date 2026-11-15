@@ -300,35 +300,128 @@ def _light(name: str, kind: str, body: str, p: Sequence[float], colour: str, f: 
     return {"name": name, "kind": kind, "body": body, "position": f.to(body, p), "colour": colour, **extra}
 
 
-# The dashed ring lights (T18's references): z, radius and the colour of each ring round the drum, on the band edges and sphere rims.
-RINGS = (("sphere_fore_rim", 586.0, 178.0, WHITE), ("sphere_aft_rim", 935.0, 248.0, WHITE), ("arms_nav_ring", 1400.0, 303.0, PINK),
-         ("fwd_band_fore", 1800.0, st.BAND_R, WHITE), ("fwd_band_aft", 2290.0, st.BAND_R, WHITE),
-         ("aft_band_fore", 4840.0, st.BAND_R, WHITE), ("aft_band_aft", 5400.0, st.BAND_R, WHITE))
-RING_DASHES = 48
+# The station's lights as the maintainer approved them (M7-T18): blinking red beacons on the extremities, the pink-red navigation ring
+# round the forward body's flare and the red-pink navigation lights on the Cobra arms' aft parts (the Cobra arms capture), the bays'
+# red lamps, and the floods that light the hull in pools from fixed fixtures (the bow and arms captures). A drawn light carries a
+# `marker`: its radius on the hull and its colour as the marker shader takes it (linear, before its gain); a flood its fixture
+# (`position`), `direction`, cone, throw and colour times `energy`.
+BLINK_PERIOD_S, BLINK_ON_S = 3.0, 0.8  # a slow beat, as the maintainer flew it (2026-11-15)
+FLOOD_WARM, FLOOD_PINK = "#FFE2C2", "#FF9A88"
+NAV_RED = (0.42, 0.012, 0.040)  # red-pink (hue about 350) that the bloom and the tone mapper leave red-pink
+E_DOCK, E_ARMS, E_ARMS_AFT, E_SPINE, E_RING, E_FACE = 11.0, 4.5, 3.0, 2.0, 4.5, 4.5
+ARM_DEG = (90.0, 0.0, 270.0, 180.0)
+
+
+def _rgb(colour: str | Sequence[float]) -> list[float]:
+    if isinstance(colour, str):
+        return [round(int(colour[i:i + 2], 16) / 255.0, 4) for i in (1, 3, 5)]
+    return [round(float(c), 4) for c in colour]
+
+
+def _marker(radius_m: float, colour: str | Sequence[float]) -> dict:
+    return {"radius_m": radius_m, "rgb": _rgb(colour)}
+
+
+def _ring(r: float, deg: float, z: float) -> np.ndarray:
+    a = math.radians(deg)
+    return np.array([r * math.cos(a), r * math.sin(a), z])
+
+
+def _arm_axes(deg: float) -> tuple[np.ndarray, np.ndarray]:
+    """An arm's outward and across directions (its flank normals are +-across)."""
+    a = math.radians(deg)
+    return np.array([math.cos(a), math.sin(a), 0.0]), np.array([-math.sin(a), math.cos(a), 0.0])
+
+
+def floods(f: Frames) -> list[dict]:
+    """The floods, built in the station frame and written in their body's frame. A flood casts no shadow, so each is aimed to end on
+    the hull it lights: the docking ring's from well ahead of it, the arms' sideways or along them, and none forward across the
+    sphere's rear face, which the arms capture shows dark."""
+    out: list[dict] = []
+
+    def flood(name: str, body: str, at, aim, outer_deg: float, inner_deg: float, range_m: float, colour: str, energy: float) -> None:
+        at, aim = np.asarray(at, dtype=float), np.asarray(aim, dtype=float)
+        d = (aim - at) / np.linalg.norm(aim - at)
+        out.append({"name": name, "kind": "flood", "body": body, "position": f.to(body, at), "direction": _r(d),
+                    "outer_deg": outer_deg, "inner_deg": inner_deg, "range_m": range_m, "rgb": _rgb(colour), "energy": energy})
+
+    # The docking ring: eight narrow pools on its rim with dark gaps between, unevenly spaced as the bow capture's are, from under the
+    # bow's prongs well ahead of the ring, each fixture and its pool set the same way toward the mouth.
+    for k in range(8):
+        deg = 22.5 + 45.0 * k + (8.0 if k % 2 == 0 else -8.0)
+        sx = 1.0 if math.cos(math.radians(deg)) >= 0.0 else -1.0
+        at = np.array([sx * 51.0, 312.0, 150.0 + 25.0 * k]) - _ring(10.0, deg, 0.0)
+        flood(f"flood_ring_{k + 1}", FRAME, at, _ring(113.0, deg, 484.0), 3.6, 2.2, 620.0, FLOOD_WARM, E_DOCK)
+    for deg in ARM_DEG:
+        u, t = _arm_axes(deg)
+        arm = int(deg)
+        for side, sign in (("a", -1.0), ("b", 1.0)):
+            # The arms from the forward body's flare, either side of each arm, thrown no further than the arms.
+            flood(f"flood_arm_{arm}_flare_{side}", DRUM, _ring(282.0, deg + sign * 16.0, 1350.0), _ring(236.0, deg, 1080.0), 26.0, 12.0,
+                  380.0, FLOOD_PINK, E_ARMS)
+            # The aft part and the hull round its root, from the core between the arms: off the waist's aft step forward onto the flank,
+            # underside and crease; off the core's front aft onto the taper and the step where it leaves the body.
+            flood(f"flood_arm_{arm}_aft_step_{side}", DRUM, _ring(190.0, deg + sign * 45.0, 1318.0), u * 212.0 + t * sign * 44.0
+                  + [0.0, 0.0, 1290.0], 44.0, 24.0, 380.0, FLOOD_PINK, E_ARMS_AFT)
+            flood(f"flood_arm_{arm}_aft_core_{side}", DRUM, _ring(137.0, deg + sign * 45.0, 1030.0), u * 214.0 + t * sign * 44.0
+                  + [0.0, 0.0, 1200.0], 32.0, 16.0, 480.0, FLOOD_PINK, E_ARMS_AFT)
+            # The fore part, lit as the aft: that set mirrored about the arms' middle (z 1020), each fixture on the hull at its new place;
+            # the core pair's mirror turned outward onto the neck and narrowed, clear of the sphere's rear face.
+            flood(f"flood_arm_{arm}_fore_sphere_{side}", DRUM, _ring(269.0, deg + sign * 45.0, 722.0), u * 265.0 + t * sign * 50.0
+                  + [0.0, 0.0, 750.0], 44.0, 24.0, 380.0, FLOOD_PINK, E_ARMS_AFT)
+            flood(f"flood_arm_{arm}_fore_core_{side}", DRUM, _ring(163.0, deg + sign * 45.0, 1010.0), u * 250.0 + t * sign * 50.0
+                  + [0.0, 0.0, 985.0], 16.0, 9.0, 480.0, FLOOD_PINK, E_ARMS_AFT)
+            # The head where it meets the sphere: from the sphere just ahead of it, aft onto its nose and flanks.
+            flood(f"flood_arm_{arm}_head_{side}", DRUM, _ring(247.0, deg + sign * 28.0, 660.0), u * 280.0 + t * sign * 45.0
+                  + [0.0, 0.0, 770.0], 36.0, 20.0, 260.0, FLOOD_PINK, E_ARMS_AFT * 0.8)
+    # Along the spine, from the beam's edges aft and up across its flanks and the modules.
+    for z in (1300.0, 2700.0, 4100.0):
+        for sx, side in ((-1.0, "port"), (1.0, "starboard")):
+            flood(f"flood_spine_{int(z)}_{side}", FRAME, (sx * 174.0, 396.0, z), (sx * 110.0, 480.0, z + 420.0), 32.0, 16.0, 900.0,
+                  FLOOD_WARM, E_SPINE)
+    # The ring in front of the vanes (the aft band's fore slope), from the green zone ahead of it.
+    for deg in (45.0, 135.0, 225.0, 315.0):
+        flood(f"flood_aft_band_{int(deg)}", DRUM, _ring(338.0, deg, 4560.0), _ring(400.0, deg, 4830.0), 35.0, 18.0, 420.0, FLOOD_WARM,
+              E_RING)
+    # The biggest band's forward face and the hull ahead of it: from the forward body aft onto the face, and from the face forward.
+    for k in range(4):
+        deg = 45.0 + 90.0 * k
+        flood(f"flood_band_face_{k + 1}", DRUM, _ring(332.0, deg, 1560.0), _ring(392.0, deg, 1795.0), 40.0, 20.0, 380.0, FLOOD_WARM,
+              E_FACE)
+        flood(f"flood_band_ahead_{k + 1}", DRUM, _ring(405.0, deg + 45.0, 1794.0), _ring(318.0, deg + 45.0, 1560.0), 40.0, 20.0, 380.0,
+              FLOOD_WARM, E_FACE)
+    return out
 
 
 def lights(f: Frames) -> list[dict]:
-    """The light hardpoints T18 lights: beacons (blinking, red) on the bow spike's two tips and every vane's tip; running lights on
-    the fins' tips, the booms' fore ends and the reactor's aft face; the dashed rings round the drum (``radius``, ``axis``,
-    ``dashes``); a light in each Cobra bay; the main docking bay's red lights down its tunnel; the cargo bay's red lights."""
+    """The light hardpoints: beacons (blinking red) on the bow spike's two tips, every vane's tip and the reactor's aft tip; the
+    navigation lights (the ring round the flare, eight on each Cobra arm's aft part); a light in each Cobra bay; the main docking
+    bay's red lamps down its mouth and round it; the cargo bay's red lamps in it and at its mouth; and the floods (``floods``)."""
     out = []
+    beacon = {"blink": True, "blink_period_s": BLINK_PERIOD_S, "blink_on_s": BLINK_ON_S, "marker": _marker(4.5, RED)}
     for sx, side in ((-1.0, "port"), (1.0, "starboard")):
-        out.append(_light(f"beacon_bow_{side}", "beacon", FRAME, (sx * 51.0, 322.0, 0.5), RED, f, blink=True))
+        out.append(_light(f"beacon_bow_{side}", "beacon", FRAME, (sx * 51.0, 322.0, 0.5), RED, f, **beacon))
     for sx, side in ((-1.0, "port"), (1.0, "starboard")):
         for k, zc in enumerate(st.VANE_Z):
             for up, end in ((1.0, "top"), (-1.0, "bottom")):
                 tip = (sx * st.VANE_X, up * st.VANE_TIP_Y, zc - 0.5 * (st.VANE_NOTCH[0] + st.VANE_CHORD[-1][1]))
-                out.append(_light(f"beacon_vane_{side}_{k + 1}_{end}", "beacon", FRAME, tip, RED, f, blink=True))
-    (tip_x, tip_z0), (_, tip_z1) = st.FIN[0][1], st.FIN[0][2]  # the fin's tip edge
-    for sx, side, colour in ((-1.0, "port", RED), (1.0, "starboard", GREEN)):
-        out.append(_light(f"running_fin_{side}", "running", FRAME, (sx * (tip_x + 1.0), 0.0, 0.5 * (tip_z0 + tip_z1)), colour, f))
-        out.append(_light(f"running_boom_{side}", "running", FRAME, (sx * 485.0, 0.0, st.BOOM[0][0] - 1.0), colour, f))
-    for k in range(4):
-        a = math.radians(45.0 + 90.0 * k)
-        out.append(_light(f"running_reactor_{k + 1}", "running", FRAME, (80.0 * math.cos(a), 80.0 * math.sin(a), 8000.5), WHITE, f))
-    for name, z, r, colour in RINGS:
-        out.append(_light(f"ring_{name}", "ring", DRUM, (0.0, r + 0.5, z), colour, f, radius=r + 0.5, axis=[0.0, 0.0, 1.0],
-                          dashes=RING_DASHES))
+                out.append(_light(f"beacon_vane_{side}_{k + 1}_{end}", "beacon", FRAME, tip, RED, f, **beacon))
+    out.append(_light("beacon_reactor", "beacon", FRAME, (0.0, 0.0, 8001.0), RED, f, **beacon))
+    # The navigation ring on the forward body's flare beside the arms, between them (the arms capture's pink ring round the band's edge).
+    for k in range(36):
+        deg = 5.0 + 10.0 * k
+        if math.fmod(deg + 10.0, 90.0) < 20.0:
+            continue
+        out.append(_light(f"nav_ring_{int(deg)}", "nav", DRUM, _ring(305.0, deg, 1400.0), PINK, f, marker=_marker(3.6, PINK)))
+    # Each arm's aft part: two along it at its crease and its lower edge, on both flanks (four a flank, as the capture); the aft pair at
+    # the root section's end (z 1290), where its edges still stand (aft of z 1300 the arm tapers into the flare).
+    for deg in ARM_DEG:
+        u, t = _arm_axes(deg)
+        for sign, side in ((-1.0, "a"), (1.0, "b")):
+            for z in (1150.0, 1290.0):
+                for p, edge in ((u * 241.6 + t * sign * 24.8, "crease"), (u * 202.2 + t * sign * 47.9, "lower")):
+                    out.append(_light(f"nav_arm_{int(deg)}_{side}_{edge}_{int(z)}", "nav", DRUM, p + [0.0, 0.0, z], "#FF2A4A", f,
+                                      marker=_marker(4.2, NAV_RED)))
     for bay in cobra_bays(f):
         inside = 0.5 * (np.asarray(bay["rail_start"]) + np.asarray(bay["rail_end"])) + f.drum
         out.append(_light(f"bay_light_{bay['wing']}_{bay['door_number']}", "bay", DRUM, inside, AMBER, f))
@@ -336,10 +429,13 @@ def lights(f: Frames) -> list[dict]:
     for k, z in enumerate((sd.FRAME_Z[0] + sd.FRAME_M + 5.0, sd.FRAME_Z[3] + sd.FRAME_M + 5.0)):
         out.append(_light(f"main_docking_bay_red_{k + 1}", "main_docking_bay", DRUM, (0.0, 0.0, z), "#E0281A", f))
     for k, (x, y) in enumerate(sd.entrance_lamps()):  # the red lamps round the mouth on the block's face
-        out.append(_light(f"main_docking_bay_entrance_{k + 1}", "main_docking_bay", DRUM, (x, y, sd.FACE_Z - 1.5), "#E0281A", f))
+        out.append(_light(f"main_docking_bay_entrance_{k + 1}", "main_docking_bay", DRUM, (x, y, sd.FACE_Z - 1.5), "#E0281A", f,
+                          marker=_marker(2.4, RED)))
     for k, z in enumerate((452.0, 478.0)):
         out.append(_light(f"cargo_bay_red_{k + 1}", "cargo_bay", FRAME, (0.0, sd.ZG_CENTRE_Y, z), "#E0281A", f))  # in the compartment
-    return out
+    for k, (sx, y) in enumerate((sx, y) for sx in (-1.0, 1.0) for y in (325.8, 352.2)):  # a lamp at each corner of its mouth
+        out.append(_light(f"cargo_bay_mouth_{k + 1}", "cargo_bay", FRAME, (sx * 31.5, y, 418.8), RED, f, marker=_marker(2.4, RED)))
+    return out + floods(f)
 
 
 def tour_points(f: Frames) -> list[dict]:
@@ -407,5 +503,5 @@ def section(f: Frames, section_boxes: dict[str, dict[str, tuple[list[float], lis
     }
 
 
-__all__ = ["GRID_MOUNTS", "WINGS", "Frames", "cobra_arm_layout", "launch_clearance", "cobra_bays", "cargo_bay", "damage_sections", "main_docking_bay", "grid_mounts", "lights", "section",
+__all__ = ["GRID_MOUNTS", "WINGS", "Frames", "cobra_arm_layout", "launch_clearance", "cobra_bays", "cargo_bay", "damage_sections", "main_docking_bay", "grid_mounts", "lights", "floods", "section",
            "tour_points"]

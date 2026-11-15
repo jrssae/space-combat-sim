@@ -5457,6 +5457,8 @@ the parts below are contracts other tasks build on.
 src/world/station.gd             Station: the frame and drum bodies, hulls, marker, visuals, the drum's turn; provider and command `station`
 src/world/station_spin.gd        StationSpin (pure): the drum's angle from the system's clock
 src/world/station_sections.gd    StationSections (pure): the damage sections' health, a hit's section, a loss said once
+src/world/station_lights.gd      StationLights: the exterior lights (points and floods, M7-T18, §20.6); provider and command `station_lights`
+src/world/station_light_plan.gd  StationLightPlan (pure): the lights from the hardpoints, the floods a section can reach, the blink
 native/src/surface.rs            big hulls' surfaces: packed volumes and hull planes, nearest points, the segment sweep, a turning skin's speed
 native/src/surface_rows.rs       ScsSimCore.set_surface / clear_surface / surface_count / surface_volume_count / surface_distance
 ```
@@ -5474,7 +5476,7 @@ native/src/surface_rows.rs       ScsSimCore.set_surface / clear_surface / surfac
   in Jolt (`Station._teleport_bodies` on `WorldFrame.rebased`: static for the moment they are placed where their last step left
   them, shifted, then kinematic with their node's pose as the target), so the shift never becomes a one-step velocity (240 km/s at
   4 km) that rams whatever touches them. The visual drum turns each frame to the
-  same clock between ticks. No lights (M7-T18).
+  same clock between ticks. Its lights are `StationLights` (M7-T18, §20.6): no light node, no light slot of its own.
 - **Big hulls in the core (`ROLE_SURFACE`).** Each piece carries a `Damageable` (the frame's on the `Station` node beside the
   `Targetable`) whose row the core marks with the role `ROLE_SURFACE` once `set_surface` gave its body the hit volumes (16 numbers
   a box or capsule) and the convex hulls they were fitted to (by volume index). `Rows::surface(r)` gives a row's surface. With it:
@@ -5835,5 +5837,12 @@ manifest pieces.<p>.mesh.tiers[]      name, sections, texel_m, atlas_px, area_m2
   fine tile (`world_detail.low`, the mosaic without relief); the panel tile is shared. Both sets keep full resolution (the
   maintainer: no blur at low). Only the set in use is loaded: its maps take 308.7 MB as imported, against a budget of 320 MB
   (`babylon5_station.MAP_BUDGET_MB`, tested); the props' atlases come on top.
+- **Floods (M7-T18).** The hull shader also sums the station's floodlights: up to 64 a section (`flood_count`, and
+  `flood_pos`/`flood_dir`/`flood_col`: the fixture and throw, the beam and the cone's outer cosine, the colour times energy and the
+  inner cosine), each a cone with a soft edge, even over most of its throw, lighting the paint by the surface's turn to it, added as
+  emission so the night side shows it. `StationLights` gives each section that some flood reaches its own copy of its material
+  (`StationHullMaterial.copy_of`, kept on the texture set in use) holding only those floods; a flood on the other piece follows the
+  drum's turn each frame. The shared materials carry none, so the halls' and bays' inner faces (separate meshes on them) stay unlit.
+  The small lights (beacons, navigation lights, bay lamps) are `station_light_marker.gdshader` points, instanced per piece.
 - **Tests.** `test_babylon5_station` (tiers, both sets, the budget, the light rows), `test_station_tiles`, `test_station_sections`
   (joints across tiers meet on points), GUT `test_station_hull_material`.
