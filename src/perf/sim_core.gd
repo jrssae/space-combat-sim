@@ -68,6 +68,8 @@ const KIND_STATIC: int = 5
 const KIND_PROP: int = 6
 const KIND_BOLT: int = 7
 const KIND_BEAM: int = 8
+## An interceptor battery's pulse (M7-T41): it meets hostile missiles and bolts, never a hull.
+const KIND_INTERCEPT: int = 9
 ## Row flags (`ScsSimCore`) GDScript reads: a rigid body, a hull, an active hull, a low-attention tier row (M4-T21).
 const FLAG_RIGID: int = 1
 const FLAG_HULL: int = 2

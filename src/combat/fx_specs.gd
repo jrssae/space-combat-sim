@@ -10,18 +10,22 @@ const EXPLOSION_SPARKS: int = 2
 const EXPLOSION_FRAGMENTS: int = 3
 const EXPLOSION_GAS: int = 4
 const DEBRIS: int = 5
-const COUNT: int = 6
+## An interceptor pulse meeting a projectile (M7-T41): a small scatter of sparks in the projectile's colour (`FxPool.tint`).
+const INTERCEPT: int = 6
+const COUNT: int = 7
 
 ## A chunk vents for this long (2-4 s), always well inside its own 8 s life.
 const DEBRIS_MIN_S: float = 2.0
 const DEBRIS_MAX_S: float = 4.0
 
 const _STREAK_MESH: String = "res://assets/fx/fx_streak_mesh.tres"
+const _SPARK_MESH: String = "res://assets/fx/fx_spark_mesh.tres"
 const _FRAGMENT_MESH: String = "res://assets/fx/fx_fragment_mesh.tres"
 const _GAS_MESH: String = "res://assets/fx/fx_gas_mesh.tres"
 
 # Per effect: pool size, particles per full burst, particle lifetime (the longest), launch speed range relative to the source,
-# cone half-angle around the burst direction, whether it keeps emitting until stopped (a vent), and its resources.
+# cone half-angle around the burst direction, whether it keeps emitting until stopped (a vent), and its resources. A `tinted`
+# effect's emitters each own their process material, so a burst can take its own colour.
 const _SPECS: Array[Dictionary] = [
 	{"name": "hit", "emitters": 12, "amount": 24, "lifetime_s": 0.45, "speed_mps": Vector2(20.0, 70.0), "spread_deg": 28.0,
 			"continuous": false, "material": "res://assets/fx/fx_hit.tres", "mesh": _STREAK_MESH},
@@ -35,10 +39,12 @@ const _SPECS: Array[Dictionary] = [
 			"continuous": false, "material": "res://assets/fx/fx_explosion_gas.tres", "mesh": _GAS_MESH},
 	{"name": "debris", "emitters": 16, "amount": 36, "lifetime_s": 0.8, "speed_mps": Vector2(1.0, 6.0), "spread_deg": 180.0,
 			"continuous": true, "material": "res://assets/fx/fx_debris.tres", "mesh": _STREAK_MESH},
+	{"name": "intercept", "emitters": 24, "amount": 12, "lifetime_s": 0.3, "speed_mps": Vector2(15.0, 45.0), "spread_deg": 180.0,
+			"continuous": false, "material": "res://assets/fx/fx_intercept.tres", "mesh": _SPARK_MESH, "tinted": true},
 ]
 
 
-## The numbers of `effect` (`HIT` ... `DEBRIS`).
+## The numbers of `effect` (`HIT` ... `INTERCEPT`).
 static func spec(effect: int) -> Dictionary:
 	return _SPECS[effect]
 

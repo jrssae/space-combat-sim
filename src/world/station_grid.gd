@@ -8,8 +8,9 @@ extends Node
 ##
 ## - **The station never fires first** (maintainer): the guns hold fire until a hostile fires on the station or on a friendly
 ##   near it; from then on the grid is weapons free against that side for the rest of the fight (the core's latch).
-## - **Interceptors are always on**: they stop hostile missiles and pulse bolts whose path meets the hull, never beams, one per
-##   battery per interval.
+## - **Interceptors are always on**: each battery fires blue-white pulses from its four barrels in turn at hostile missiles and
+##   pulse bolts whose path meets the hull (never beams); a pulse flies, can miss, and takes the first such projectile it meets
+##   (M7-T41).
 ## - **The drum's mounts turn with the drum**: they bind to the drum's body and hang from its visual pivot; the frame's stay
 ##   fixed. The station's own frame and drum block every gun's line of fire.
 ## - **Mounts can be knocked out** (maintainer, after T07): each has its own health (`GridMountHealth`); a hit on the station near
@@ -38,6 +39,12 @@ const MODEL_ASSETS: Dictionary[Kind, String] = {Kind.LIGHT: "saturn_4_transport"
 const MODEL_SCALE: Dictionary[Kind, float] = {Kind.LIGHT: 2.0, Kind.HEAVY: 4.0, Kind.INTERCEPTOR: 1.0}
 ## A model's barrel reach when its manifest gives none (the Saturns' turret at scale 1), m.
 const MODEL_BARREL_M: float = 4.5
+## An interceptor battery's barrels (M7-T41): each recharges this long after it fires, s; the battery's interval spaces them.
+const BARREL_RECHARGE_S: float = 1.0
+## A battery's muzzle glow: the flash's warm colour scaled to the pulses' blue-white (M7-T41).
+const PULSE_GLOW: Color = Color(0.53, 1.0, 2.0)
+## A pulse meeting a projectile shows a smaller flash than a hit on a hull (M7-T41).
+const MEET_FLASH_SCALE: float = 0.6
 ## Each mount's cone round its base's up, degrees (a hemisphere and a little below it).
 const ARC_DEG: float = 200.0
 ## How the turret shot sounds per kind: pitch and level (dB).
@@ -58,6 +65,7 @@ var faction: StringName = Factions.EARTH_ALLIANCE
 var health: GridMountHealth = null
 
 var _pool: MuzzleFlashPool = null
+var _fx: FxPool = null
 
 
 ## The grid's mounts for `p_station` (built, its hardpoints read), each under the station's visuals and bound to its frame or
@@ -77,12 +85,27 @@ func build(p_station: Station) -> void:
 		mount.host = station.drum_body if on_drum else station
 		mount.transform.basis = TurretMount.base_basis(mount.up).scaled(Vector3.ONE * scale_k)
 		mount.use_model(TurretMount.model_for(model_id))
+		if kind == Kind.INTERCEPTOR:
+			mount.muzzles_m = muzzles_for(kind)
+			mount.trunnion_m = mount.pitch.position * scale_k
+			mount.barrel_recharge_s = BARREL_RECHARGE_S
 		mount.shot_fired.connect(_on_fired.bind(mount))
 		mount.intercepted.connect(_on_intercepted.bind(mount))
 		(station.drum_pivot if on_drum else station.frame_piece).add_child(mount)
 		mounts.append(mount)
 	health = GridMountHealth.from_mounts(station.hardpoints.grid_mounts,
 			func(kind_name: String) -> int: return KIND_OF.get(kind_name, Kind.LIGHT))
+
+
+## The barrels a mount of `kind` fires from in turn, in its pitch frame (origin at the trunnion), m, in firing order (M7-T41):
+## the interceptor battery model's four muzzles (M7-T42); none for the guns, which fire down their axis.
+static func muzzles_for(kind: Kind) -> Array[Vector3]:
+	if kind != Kind.INTERCEPTOR:
+		return [] as Array[Vector3]
+	var out: Array[Vector3] = []
+	for m: Vector3 in TurretMount.pitch_muzzles(MODEL_ASSETS[kind]):
+		out.append(m * MODEL_SCALE[kind])
+	return out
 
 
 ## A hit of `amount` on the station at `point` in `body`'s frame (`Station`, beside its section's share): the mounts near it wear
@@ -190,10 +213,11 @@ func set_free(side: StringName, on: bool) -> void:
 		sim.core.set_grid_free(faction, side, on)
 
 
-## `[light pulse shots, heavy cannon shots, projectiles shot down, of them missiles, shots the hull blocked]`.
+## `[light pulse shots, heavy cannon shots, projectiles shot down, of them missiles, shots the hull blocked, interceptor pulses
+## fired]`.
 func readouts() -> PackedInt64Array:
 	var sim: SimCore = _sim()
-	return sim.core.grid_readouts() if sim != null else PackedInt64Array([0, 0, 0, 0, 0])
+	return sim.core.grid_readouts() if sim != null else PackedInt64Array([0, 0, 0, 0, 0, 0])
 
 
 ## How many mounts the core holds for the grid now.
@@ -208,27 +232,37 @@ func _sim() -> SimCore:
 	return SimCore.for_tree(get_tree()) if is_inside_tree() else null
 
 
-# A gun's shot: the flash at its muzzle (the pitch holder turns with the barrel).
+# A shot: the flash at its muzzle (the pitch holder turns with the barrel); a battery's glows blue-white at the barrel that
+# fired (M7-T41).
 func _on_fired(_at: Vector3, m: TurretMount) -> void:
-	_flash(m)
+	if m.grid_kind == Kind.INTERCEPTOR and m.last_barrel >= 0 and m.last_barrel < m.muzzles_m.size():
+		_flash(m, m.muzzles_m[m.last_barrel] / MODEL_SCALE[Kind.INTERCEPTOR], PULSE_GLOW)
+	else:
+		_flash(m, Vector3(0.0, 0.0, -MODEL_BARREL_M))
 
 
-# A battery's kill: its muzzle flashes and the projectile goes up in a spark of the battery's colour.
-func _on_intercepted(point: Vector3, m: TurretMount) -> void:
-	_flash(m)
+# A battery's pulse met a projectile (M7-T41): a small flash and a scatter of sparks, both in the projectile's own colour.
+func _on_intercepted(point: Vector3, color: Color, _m: TurretMount) -> void:
 	var world: Node3D = WorldFrame.of(self)
-	if world != null:
-		var spark := ImpactFlash.create(m.weapon.bolt_color)
-		world.add_child(spark)
-		spark.global_position = point
-		spark.reset_physics_interpolation()
+	if world == null:
+		return
+	var flash := ImpactFlash.create(color)
+	world.add_child(flash)
+	flash.global_position = point
+	flash.scale *= MEET_FLASH_SCALE
+	flash.reset_physics_interpolation()
+	if _fx == null or not is_instance_valid(_fx):
+		_fx = world.get_node_or_null(^"Fx") as FxPool
+	if _fx != null:
+		_fx.tint(_fx.burst(FxSpecs.INTERCEPT, point, Vector3.UP, Vector3.ZERO), color)
 
 
-func _flash(m: TurretMount) -> void:
+# A muzzle flash at `local` in the mount's pitch frame, its warm colour scaled by `tint`.
+func _flash(m: TurretMount, local: Vector3, tint: Color = Color.WHITE) -> void:
 	if _pool == null or not is_instance_valid(_pool):
 		_pool = MuzzleFlashPool.attach(WorldFrame.of(self))
 	if _pool != null:
-		_pool.trigger(m.pitch, Transform3D(Basis.IDENTITY, Vector3(0.0, 0.0, -MODEL_BARREL_M)))
+		_pool.trigger(m.pitch, Transform3D(Basis.IDENTITY, local), tint)
 
 
 # --- console -----------------------------------------------------------------------------------------------------
@@ -243,7 +277,7 @@ func _register_console() -> void:
 		&"knocked_out": {"get": func() -> String: return _knocked_out_text(),
 				"doc": "The mounts knocked out (dark and silent until grid repair), and each damaged one's health"},
 		&"shots": {"get": func() -> String: return _shots_text(),
-				"doc": "Shots by the light and heavy guns, projectiles shot down (missiles), shots the station's hull blocked"},
+				"doc": "Shots by the light and heavy guns, interceptor pulses fired, projectiles shot down (missiles), shots the station's hull blocked"},
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(PROVIDER,
 			"The station's defence grid (M7-T07): info, free <side>, hold [side], repair <mount|all>",
@@ -266,7 +300,8 @@ func _knocked_out_text() -> String:
 
 func _shots_text() -> String:
 	var r: PackedInt64Array = readouts()
-	return "light %d, heavy %d, shot down %d (missiles %d), blocked by the hull %d" % [r[0], r[1], r[2], r[3], r[4]]
+	return "light %d, heavy %d, interceptor pulses %d, shot down %d (missiles %d), blocked by the hull %d" % [r[0], r[1], r[5],
+			r[2], r[3], r[4]]
 
 
 func _cmd_grid(args: Dictionary) -> ConsoleResult:

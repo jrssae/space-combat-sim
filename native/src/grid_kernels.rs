@@ -11,6 +11,9 @@
 //! - **Interceptors** (main thread: a shot down projectile is gone the same tick) take hostile missiles and pulse bolts whose
 //!   path meets the station's hull: missiles first, then the bolt that hits soonest, one per battery per interval, and only
 //!   one inside the battery's arc that the station's hull does not hide from it. Beams are never candidates.
+//! - **Interceptor pulses** (M7-T41): a battery's shot is a pulse in the projectile pool, fired from its next ready barrel on a
+//!   lead course with a seeded spread; each tick every pulse sweeps against the hostile missiles and bolts near it (found through
+//!   the hit broad phase's cells) and takes the first it meets. A pulse can miss; it never harms a ship or a hull.
 //! - **Line of fire.** Every big hull's surface (the station's frame and drum) blocks a grid gun's line.
 #![allow(clippy::too_many_arguments)]
 
@@ -19,8 +22,9 @@ use godot::builtin::{Basis, Vector3};
 use crate::kernels::contact::{self, Grid, Query, View};
 use crate::rows::{Bolts, Rows};
 use crate::surface;
+use crate::sweep_cells::CellGrid;
 use crate::turret_kernels::{self as tk, PickMount, REL_FRIENDLY, REL_HOSTILE, relation};
-use crate::v3::{add, dist_sq, dot, normalized, scale, sub, xform};
+use crate::v3::{add, dist_sq, dot, length, normalized, scale, sub, xform};
 
 /// A mount's kind: a ship's defensive turret (M5-T21's remembered-attacker pick) or one of the grid's three.
 pub const MOUNT_TURRET: u8 = 0;
@@ -34,6 +38,14 @@ pub const FIGHTER_RADIUS_MAX_M: f64 = 50.0;
 pub const KIND_CAPITAL: u8 = 1;
 pub const KIND_MISSILE: u8 = 3;
 pub const KIND_BOLT: u8 = 7;
+/// An interceptor battery's pulse (M7-T41): it flies like a bolt but meets only hostile missiles and bolts, never a hull.
+pub const KIND_INTERCEPT: u8 = 9;
+/// The most barrels a battery has.
+pub const MAX_BARRELS: usize = 4;
+/// A pulse still in flight covers its target until this long after the meeting its lead predicted, s; past it the pulse missed
+/// and the target may be shot at again.
+pub const COVER_SLACK_S: f64 = 0.1;
+const TIME_EPSILON_S: f64 = 1e-6;
 /// How far ahead an interceptor follows a projectile's straight path to the hull, s (its own life when shorter).
 pub const INTERCEPT_HORIZON_S: f64 = 6.0;
 // Score offsets that rank the pick's classes ahead of distance: out of the arc, then the heavy cannon's fighters.
@@ -319,6 +331,7 @@ pub fn choose(candidates: &[Incoming], taken: &[bool]) -> Option<Incoming> {
 
 /// `choose` among the candidates a battery at `f` can shoot (M7-T40): inside its arc (`min_elevation` up) and with its line
 /// clear of every big hull, as a grid gun's. Only a candidate that would win is tested, to keep the hull sweeps rare.
+#[cfg(test)]
 pub fn choose_in_reach(
     rows: &Rows,
     surface_rows: &[usize],
@@ -328,11 +341,26 @@ pub fn choose_in_reach(
     candidates: &[Incoming],
     taken: &[bool],
 ) -> Option<Incoming> {
+    choose_in_reach_if(rows, surface_rows, bolts, f, min_elevation, candidates, taken, |_| true)
+}
+
+/// `choose_in_reach` among the candidates `also` accepts too (M7-T41: not covered by a pulse already on its way, and one the
+/// battery's pulse can reach); `also` is asked before the hull line, which costs most.
+pub fn choose_in_reach_if<A: FnMut(&Incoming) -> bool>(
+    rows: &Rows,
+    surface_rows: &[usize],
+    bolts: &Bolts,
+    f: &tk::Frame,
+    min_elevation: f64,
+    candidates: &[Incoming],
+    taken: &[bool],
+    mut also: A,
+) -> Option<Incoming> {
     let from = tk::line_start(f);
     choose_where(candidates, taken, |c| {
         let at = bolts.positions[c.bolt as usize];
         let (_, elevation) = tk::angles_of(f, normalized(sub(at, f.pivot)));
-        elevation >= min_elevation && !line_blocked(rows, surface_rows, from, at)
+        elevation >= min_elevation && also(c) && !line_blocked(rows, surface_rows, from, at)
     })
 }
 
@@ -372,6 +400,177 @@ pub fn hit_frees<N: Fn(Vector3) -> bool>(
         return false;
     }
     rows.surface(victim).is_some() || near(rows.positions[victim])
+}
+
+/// An interceptor battery's barrels (M7-T41): the trunnion in the yaw frame and each muzzle in the pitch frame (metres, as
+/// `TurretMount`'s Yaw and Pitch nodes hold them), each barrel's recharge, when each is ready and which fires next. They fire
+/// in turn: the battery's own interval spaces the shots, and a barrel fires again only once recharged.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Battery {
+    pub trunnion: Vector3,
+    pub muzzles: [Vector3; MAX_BARRELS],
+    pub count: usize,
+    pub recharge_s: f64,
+    pub ready_at: [f64; MAX_BARRELS],
+    pub next: usize,
+}
+
+impl Battery {
+    /// One barrel `barrel_m` down the axis from the pivot, recharging as the gun's interval: a battery with no model data.
+    pub fn single(barrel_m: f64, recharge_s: f64) -> Self {
+        Self::with(Vector3::ZERO, &[Vector3::new(0.0, 0.0, -barrel_m as f32)], recharge_s)
+    }
+
+    /// Barrels at `muzzles` (at most `MAX_BARRELS`; none gives one at the trunnion), every one ready.
+    pub fn with(trunnion: Vector3, muzzles: &[Vector3], recharge_s: f64) -> Self {
+        let mut at = [Vector3::ZERO; MAX_BARRELS];
+        let count = muzzles.len().clamp(1, MAX_BARRELS);
+        for (k, m) in muzzles.iter().take(MAX_BARRELS).enumerate() {
+            at[k] = *m;
+        }
+        Self {
+            trunnion,
+            muzzles: at,
+            count,
+            recharge_s: recharge_s.max(0.0),
+            ready_at: [f64::NEG_INFINITY; MAX_BARRELS],
+            next: 0,
+        }
+    }
+
+    /// Whether the barrel next in turn has recharged at `now_s`.
+    pub fn barrel_ready(&self, now_s: f64) -> bool {
+        now_s + TIME_EPSILON_S >= self.ready_at[self.next]
+    }
+
+    /// Fires the barrel next in turn at `now_s` and returns it.
+    pub fn fire(&mut self, now_s: f64) -> usize {
+        let b = self.next;
+        self.ready_at[b] = now_s + self.recharge_s;
+        self.next = (b + 1) % self.count;
+        b
+    }
+}
+
+/// Where a muzzle is in the World: the mount turned to `azimuth` round its up and lifted to `elevation`, as `TurretMount` turns
+/// its Yaw and Pitch nodes, `trunnion` in the yaw frame and `muzzle` in the pitch frame (Godot axes: -z down the barrel).
+pub fn muzzle_point(f: &tk::Frame, azimuth: f64, elevation: f64, trunnion: Vector3, muzzle: Vector3) -> Vector3 {
+    let (se, ce) = elevation.sin_cos();
+    let (sa, ca) = azimuth.sin_cos();
+    let (mx, my, mz) = (f64::from(muzzle.x), f64::from(muzzle.y), f64::from(muzzle.z));
+    let (px, py, pz) = (mx, my * ce - mz * se, my * se + mz * ce);
+    let (lx, ly, lz) = (f64::from(trunnion.x) + px, f64::from(trunnion.y) + py, f64::from(trunnion.z) + pz);
+    let (yx, yy, yz) = (lx * ca + lz * sa, ly, -lx * sa + lz * ca);
+    // The mount's Godot basis: x opposite the frame's side, y its up, z opposite its forward.
+    let along = add(scale(f.side, -yx as f32), add(scale(f.up, yy as f32), scale(f.forward, -yz as f32)));
+    add(f.pivot, along)
+}
+
+/// When along the tick two spheres moving in straight lines first touch, as a share of the tick (0 to 1): `a` from `a_start`
+/// by `a_step`, `b` likewise, their radii summed `reach`; none when they stay apart.
+pub fn first_touch(a_start: Vector3, a_step: Vector3, b_start: Vector3, b_step: Vector3, reach: f64) -> Option<f64> {
+    let d = sub(a_start, b_start);
+    let v = sub(a_step, b_step);
+    let (dx, dy, dz) = (f64::from(d.x), f64::from(d.y), f64::from(d.z));
+    let (vx, vy, vz) = (f64::from(v.x), f64::from(v.y), f64::from(v.z));
+    let c = dx * dx + dy * dy + dz * dz - reach * reach;
+    if c <= 0.0 {
+        return Some(0.0);
+    }
+    let a = vx * vx + vy * vy + vz * vz;
+    let b = dx * vx + dy * vy + dz * vz;
+    if a <= 0.0 || b >= 0.0 {
+        return None;
+    }
+    let disc = b * b - a * c;
+    if disc < 0.0 {
+        return None;
+    }
+    let t = (-b - disc.sqrt()) / a;
+    (t <= 1.0).then_some(t.max(0.0))
+}
+
+/// A pulse that met a projectile this tick: both bolt rows and where along the tick (0 to 1).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PulseHit {
+    pub pulse: u32,
+    pub target: u32,
+    pub t: f64,
+}
+
+/// The pulse sweep's reused buffers.
+#[derive(Default)]
+pub struct PulseScratch {
+    targets: Vec<u32>,
+    mids: Vec<Vector3>,
+    reach: Vec<f64>,
+    candidates: Vec<u32>,
+    gone: Vec<bool>,
+    pub cells: CellGrid,
+}
+
+/// This tick's pulse hits (M7-T41), in pulse row order: each live pulse takes the first live missile or pulse bolt of a side
+/// hostile to it that its swept sphere touches along the bolts' last move (the earliest touch; among equals the lower row), and
+/// a projectile is taken once. The projectiles are placed in the hit broad phase's cells, so a pulse tests only those near it.
+pub fn pulse_hits(bolts: &Bolts, relations: &[u8], stride: usize, scratch: &mut PulseScratch, out: &mut Vec<PulseHit>) {
+    out.clear();
+    let n = bolts.ids.len();
+    if !(0..n).any(|p| bolts.kinds[p] == KIND_INTERCEPT && !bolts.spent[p]) {
+        return;
+    }
+    let s = scratch;
+    s.targets.clear();
+    s.mids.clear();
+    s.reach.clear();
+    for p in 0..n {
+        let kind = bolts.kinds[p];
+        if (kind != KIND_MISSILE && kind != KIND_BOLT) || bolts.spent[p] {
+            continue;
+        }
+        let step = bolts.last_steps[p];
+        s.targets.push(p as u32);
+        s.mids.push(sub(bolts.positions[p], scale(step, 0.5)));
+        s.reach.push(f64::from(length(step)) * 0.5 + bolts.radii[p]);
+    }
+    if s.targets.is_empty() {
+        return;
+    }
+    s.cells.place(&s.mids, &s.reach);
+    s.gone.clear();
+    s.gone.resize(s.targets.len(), false);
+    for p in 0..n {
+        if bolts.kinds[p] != KIND_INTERCEPT || bolts.spent[p] {
+            continue;
+        }
+        let step = bolts.last_steps[p];
+        let start = sub(bolts.positions[p], step);
+        let mid = sub(bolts.positions[p], scale(step, 0.5));
+        s.cells.look(mid, f64::from(length(step)) * 0.5 + bolts.radii[p], &mut s.candidates);
+        let mut best: Option<(f64, usize)> = None;
+        for &j in &s.candidates {
+            let j = j as usize;
+            let q = s.targets[j] as usize;
+            if s.gone[j] || relation(relations, stride, bolts.faction_ix[p], bolts.faction_ix[q]) != REL_HOSTILE {
+                continue;
+            }
+            let q_step = bolts.last_steps[q];
+            let q_start = sub(bolts.positions[q], q_step);
+            let Some(t) = first_touch(start, step, q_start, q_step, bolts.radii[p] + bolts.radii[q]) else {
+                continue;
+            };
+            if best.is_none_or(|(bt, bj)| t < bt || (t == bt && j < bj)) {
+                best = Some((t, j));
+            }
+        }
+        if let Some((t, j)) = best {
+            s.gone[j] = true;
+            out.push(PulseHit {
+                pulse: p as u32,
+                target: s.targets[j],
+                t,
+            });
+        }
+    }
 }
 
 #[cfg(test)]

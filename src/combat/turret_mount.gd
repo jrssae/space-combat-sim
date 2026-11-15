@@ -13,8 +13,8 @@ extends Node3D
 
 ## A shot left the barrel at `at` (World frame): the sound and anything else that follows a shot.
 signal shot_fired(at: Vector3)
-## An interceptor battery shot down a projectile at `point` (World frame), M7-T07.
-signal intercepted(point: Vector3)
+## An interceptor battery's pulse met a projectile at `point` (World frame), M7-T07 and M7-T41; `color` is the projectile's.
+signal intercepted(point: Vector3, color: Color)
 
 ## The entry's name in `hardpoints.json`.
 var mount_name: String = ""
@@ -37,6 +37,13 @@ var host: Node3D = null
 ## 0 a ship's turret (M5-T21); 1, 2 or 3 one of the station grid's light pulse turrets, heavy cannons or interceptor batteries
 ## (`StationGrid.Kind`, the core's `grid_kernels::MOUNT_*`).
 var grid_kind: int = 0
+## An interceptor battery's barrels (M7-T41): the trunnion in the yaw frame and each muzzle in the pitch frame, metres, fired in
+## turn, each recharging `barrel_recharge_s`. Empty: one barrel `barrel_m` down the axis.
+var trunnion_m: Vector3 = Vector3.ZERO
+var muzzles_m: Array[Vector3] = []
+var barrel_recharge_s: float = 0.0
+## The barrel of `muzzles_m` the latest shot left (-1 for a gun's), set before `shot_fired`.
+var last_barrel: int = -1
 ## Knocked out (a grid mount whose health is gone, M7-T07): the core neither picks nor fires for it, and its model goes dark.
 var knocked_out: bool = false:
 	set(value):
@@ -315,16 +322,16 @@ func bound_sim() -> SimCore:
 	return _sim if _slot >= 0 and is_instance_valid(_sim) else null
 
 
-## The core fired a shot from this mount (`TurretRows.step`).
-func on_fired(at: Vector3) -> void:
+## The core fired a shot from this mount (`TurretRows.step`): from `barrel` of a battery's `muzzles_m`, -1 for a gun.
+func on_fired(at: Vector3, barrel: int = -1) -> void:
 	shots += 1
+	last_barrel = barrel
 	shot_fired.emit(at)
 
 
-## The core's interceptor battery on this mount shot down a projectile at `point` (`TurretRows.step`).
-func on_intercepted(point: Vector3) -> void:
-	shots += 1
-	intercepted.emit(point)
+## A pulse of this mount's battery met a projectile of colour `color` at `point` (`TurretRows.step`).
+func on_intercepted(point: Vector3, color: Color) -> void:
+	intercepted.emit(point, color)
 
 
 ## Binds every mount to the core, as the core stands now (it came or went).

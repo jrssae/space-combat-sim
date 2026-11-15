@@ -1,9 +1,10 @@
 extends GutTest
 ## The station's defence grid (M7-T07, D75, AC6) through the native core: D75's 23 mounts bind to the turret rows with their
 ## kinds; the drum's mounts turn with the drum; the guns never fire first and open on the side that fired on the station or on
-## a friend near it; the station's own hull hides a target from a gun; the interceptors take hostile bolts and missiles aimed
-## at the hull at a capped rate and never a beam; a bolt of the station's own side stops on its hull without harm. Places come
-## from the station's hardpoints.
+## a friend near it; the station's own hull hides a target from a gun; the interceptor batteries fire pulses from their four
+## barrels in turn (M7-T41) that meet hostile bolts and missiles aimed at the hull, at a capped rate, never a beam, and that can
+## miss and never harm a hull or a ship; a bolt of the station's own side stops on its hull without harm. Places come from the
+## station's hardpoints.
 
 const RAIDER: StringName = &"raider_fighter"
 const ALLY: StringName = &"starfury_ally"
@@ -193,7 +194,7 @@ func test_a_bolt_of_the_stations_side_stops_on_its_hull_without_harm() -> void:
 	assert_lt(_health_total(), whole, "a raider's bolt there harms a section")
 
 
-func test_interceptors_take_bolts_and_missiles_at_the_hull_at_a_capped_rate_and_never_a_beam() -> void:
+func test_interceptor_pulses_meet_bolts_and_missiles_at_the_hull_at_a_capped_rate_and_never_a_beam() -> void:
 	if not await _start():
 		return
 	scene.attach()
@@ -204,11 +205,14 @@ func test_interceptors_take_bolts_and_missiles_at_the_hull_at_a_capped_rate_and_
 	_bolt(over, down, Factions.RAIDERS)
 	_bolt(over + Vector3(15.0, 0.0, 0.0), down, Factions.RAIDERS, Projectile.KIND_MISSILE)
 	await _ticks(3)
-	assert_eq(_shots()[2], 2, "the bolt and the missile shot down")
-	assert_eq(_shots()[3], 1, "one of them the missile")
 	assert_eq(station.grid.free_sides(), PackedStringArray([String(Factions.RAIDERS)]),
 			"a shot at the station frees the grid against its side before it lands")
-	# A volley once every battery is ready again: none takes more than one in its interval.
+	assert_gt(_shots()[5], 0, "the batteries fired pulses at once")
+	assert_eq(_shots()[2], 0, "a pulse takes time to fly out")
+	await _ticks(150)
+	assert_eq(_shots()[2], 2, "the pulses met the bolt and the missile before they reached the hull")
+	assert_eq(_shots()[3], 1, "one of them the missile")
+	# A volley once every barrel has recharged: no battery fires faster than a pulse each quarter second.
 	await _ticks(60)
 	for i: int in 30:
 		_bolt(over + Vector3(-60.0 + 4.0 * i, 0.0, 0.0), down, Factions.RAIDERS)
@@ -218,12 +222,13 @@ func test_interceptors_take_bolts_and_missiles_at_the_hull_at_a_capped_rate_and_
 		shots_before.append(int(scene.state(m)["shots"]))
 	var before: int = _shots()[2]
 	await _ticks(20)
-	assert_gt(_shots()[2] - before, 0, "the volley is engaged")
 	for k: int in batteries.size():
-		assert_lte(int(scene.state(batteries[k])["shots"]) - shots_before[k], 1,
-				"%s takes at most one in its half second" % batteries[k].mount_name)
+		assert_lte(int(scene.state(batteries[k])["shots"]) - shots_before[k], 2,
+				"%s fires at most two pulses in a third of a second" % batteries[k].mount_name)
+	await _ticks(100)
+	assert_gt(_shots()[2] - before, 0, "the volley is engaged")
 	# A beam gets through: the batteries never take one.
-	await _ticks(120)
+	await _ticks(240)
 	var whole: float = _health_total()
 	var taken: int = _shots()[2]
 	var beam := (load(Projectile.SCENE_PATH) as PackedScene).instantiate() as Projectile
@@ -235,6 +240,66 @@ func test_interceptors_take_bolts_and_missiles_at_the_hull_at_a_capped_rate_and_
 	await _ticks(3)
 	assert_eq(_shots()[2], taken, "no beam shot down")
 	assert_lt(_health_total(), whole, "the beam reached the hull")
+
+
+func test_a_battery_fires_its_four_barrels_in_turn_and_its_pulses_can_miss() -> void:
+	if not await _start():
+		return
+	scene.attach()
+	TurretMount.rebind_all()
+	await _ticks(2)
+	var i5: TurretMount = station.grid.mount("I5")
+	var barrels: Array = scene.sim.core.battery_state(i5.slot())
+	var muzzles: Array[Vector3] = StationGrid.muzzles_for(StationGrid.Kind.INTERCEPTOR)
+	assert_eq(muzzles.size(), 4, "the battery model's four muzzles")
+	assert_eq((barrels[0] as PackedVector3Array).size(), 1 + muzzles.size(), "the trunnion and the muzzles reach the core")
+	assert_almost_eq((barrels[0] as PackedVector3Array)[0], i5.pitch.position, Vector3.ONE * 1e-4, "the trunnion is the model's")
+	for k: int in muzzles.size():
+		assert_almost_eq((barrels[0] as PackedVector3Array)[k + 1], muzzles[k], Vector3.ONE * 1e-4)
+	assert_eq(float((barrels[1] as PackedFloat64Array)[0]), StationGrid.BARREL_RECHARGE_S)
+	# A long column of bolts falling on I5: its barrels take turns, a pulse every quarter second.
+	var over: Vector3 = _at_mount("I5", 900.0)
+	for i: int in 40:
+		_bolt(over + Vector3(0.0, 40.0 * i, 0.0), Vector3(0.0, -350.0, 0.0), Factions.RAIDERS)
+	var order: Array[int] = []
+	var fired_at: Array[float] = []
+	var starts: Array[Vector3] = []
+	var note := func(at: Vector3) -> void:
+		order.append(int((scene.sim.core.battery_state(i5.slot())[1] as PackedFloat64Array)[1]))
+		fired_at.append(SimClock.now())
+		starts.append(at)
+	i5.shot_fired.connect(note)
+	await _ticks(130)
+	i5.shot_fired.disconnect(note)
+	assert_gte(order.size(), 6, "I5 kept firing")
+	for k: int in order.size():
+		assert_eq(order[k], (k + order[0]) % 4 if k > 0 else order[0], "the barrels fire in turn")
+		if k > 0:
+			assert_gte(fired_at[k] - fired_at[k - 1], 0.25 - 1e-4, "a quarter second between pulses")
+			assert_gt(starts[k].distance_to(starts[k - 1]), 2.0, "from the next barrel's muzzle")
+		if k >= 4:
+			assert_gte(fired_at[k] - fired_at[k - 4], StationGrid.BARREL_RECHARGE_S - 1e-4, "a barrel waits for its recharge")
+	var r: PackedInt64Array = _shots()
+	assert_gt(r[5], r[2], "%d pulses for %d met: some missed and flew on" % [r[5], r[2]])
+
+
+func test_a_pulse_harms_no_ship_and_no_hull() -> void:
+	if not await _start():
+		return
+	var raider: Combatant = _raider(_at_mount("I5", 600.0))
+	scene.attach()
+	await _ticks(2)
+	var whole: float = _health_total()
+	var hull_hp: float = raider.damageable.hull.hp
+	var from: Vector3 = raider.ship.global_position + Vector3(0.0, 300.0, 0.0)
+	# A pulse of the station's side straight down through the raider and on into the station's hull.
+	var weapon: WeaponSpec = load(StationGrid.WEAPONS[StationGrid.Kind.INTERCEPTOR]) as WeaponSpec
+	scene.sim.core.add_bolt(from, Vector3(0.0, -2000.0, 0.0), Factions.EARTH_ALLIANCE, station.get_instance_id(),
+			SimCore.KIND_INTERCEPT, 2.5, 50.0, weapon.bolt_color, BoltMesh.look_for(weapon), 1.0, SimClock.now())
+	await _ticks(40)
+	assert_eq(raider.damageable.hull.hp, hull_hp, "the raider it flew through is unharmed")
+	assert_eq(_health_total(), whole, "the station's hull is unharmed")
+	assert_eq(scene.resolver.friendly_stops, 0, "nor is the pulse stopped on the hull as a friendly bolt")
 
 
 func test_a_mount_worn_down_by_hits_near_it_is_knocked_out_until_repaired() -> void:

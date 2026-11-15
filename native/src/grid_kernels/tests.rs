@@ -360,3 +360,129 @@ fn a_capital_is_a_capital_kind_or_a_hull_bigger_than_a_fighter() {
     let rows = rows_with(&[(1, 1, Vector3::ZERO, true), (2, 1, Vector3::ZERO, false)], 0.0);
     assert!(is_capital(&rows, 1) && !is_capital(&rows, 2));
 }
+
+// --- M7-T41: the batteries' pulses ---------------------------------------------------------------------------------
+
+// Bolts by `(kind, faction, at, last step, radius)`: where each is now and how it moved in the last tick.
+fn moving_bolts(list: &[(u8, u32, Vector3, Vector3, f64)]) -> Bolts {
+    let mut b = bolts_of(&list.iter().map(|&(k, f, at, step, _)| (k, f, at, scale(step, 60.0))).collect::<Vec<_>>());
+    for (i, &(_, _, _, step, r)) in list.iter().enumerate() {
+        b.last_steps[i] = step;
+        b.radii[i] = r;
+    }
+    b
+}
+
+#[test]
+fn two_spheres_touch_at_the_first_moment_they_come_within_reach() {
+    let v = |x: f32, y: f32, z: f32| Vector3::new(x, y, z);
+    // Head on, 40 m apart, each moving 30 m: they meet a third of the way (reach 2 m: 38 m closed of 60).
+    let t = first_touch(v(0.0, 0.0, 0.0), v(30.0, 0.0, 0.0), v(40.0, 0.0, 0.0), v(-30.0, 0.0, 0.0), 2.0).unwrap();
+    assert!((t - 38.0 / 60.0).abs() < 1e-9, "{t}");
+    assert_eq!(first_touch(v(0.0, 0.0, 0.0), v(10.0, 0.0, 0.0), v(0.0, 1.0, 0.0), v(10.0, 0.0, 0.0), 2.0), Some(0.0), "already touching");
+    assert_eq!(first_touch(v(0.0, 0.0, 0.0), v(30.0, 0.0, 0.0), v(40.0, 5.0, 0.0), v(-30.0, 0.0, 0.0), 2.0), None, "they pass 5 m apart");
+    assert_eq!(first_touch(v(0.0, 0.0, 0.0), v(10.0, 0.0, 0.0), v(40.0, 0.0, 0.0), v(-10.0, 0.0, 0.0), 2.0), None, "not yet this tick");
+    assert_eq!(first_touch(v(0.0, 0.0, 0.0), v(-10.0, 0.0, 0.0), v(40.0, 0.0, 0.0), v(10.0, 0.0, 0.0), 2.0), None, "moving apart");
+}
+
+#[test]
+fn a_battery_fires_its_barrels_in_turn_each_after_its_recharge() {
+    let m = [Vector3::new(-2.2, 1.4, -9.0), Vector3::new(2.2, 1.4, -9.0), Vector3::new(2.2, -1.4, -9.0), Vector3::new(-2.2, -1.4, -9.0)];
+    let mut b = Battery::with(Vector3::ZERO, &m, 1.0);
+    let mut fired = Vec::new();
+    // The battery's own 0.25 s interval offers a shot every quarter second; a barrel fires only once recharged.
+    for k in 0..12 {
+        let now = 0.25 * f64::from(k);
+        if b.barrel_ready(now) {
+            fired.push((k, b.fire(now)));
+        }
+    }
+    assert_eq!(fired.iter().map(|f| f.1).collect::<Vec<_>>(), vec![0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3], "four shots a second, in turn");
+    let mut slow = Battery::with(Vector3::ZERO, &m, 2.0);
+    let shots = (0..12).filter(|&k| {
+        let now = 0.25 * f64::from(k);
+        slow.barrel_ready(now) && {
+            slow.fire(now);
+            true
+        }
+    });
+    assert_eq!(shots.count(), 8, "a 2 s recharge leaves the fifth quarter-second waiting for its barrel");
+    let one = Battery::single(5.4, 1.0);
+    assert_eq!((one.count, one.muzzles[0]), (1, Vector3::new(0.0, 0.0, -5.4)), "no model data: one barrel down the axis");
+}
+
+#[test]
+fn a_muzzle_turns_with_the_yaw_and_the_pitch_as_the_mounts_nodes_do() {
+    let up = Vector3::UP;
+    let f = tk::frame(&Basis::IDENTITY, Vector3::new(10.0, 0.0, 0.0), Vector3::ZERO, up, Vector3::FORWARD);
+    let m = Vector3::new(2.2, 1.4, -9.0);
+    let near = |a: Vector3, b: Vector3| f64::from(dist_sq(a, b)) < 1e-6;
+    assert!(near(muzzle_point(&f, 0.0, 0.0, Vector3::ZERO, m), Vector3::new(12.2, 1.4, -9.0)), "at rest: as placed");
+    assert!(near(muzzle_point(&f, FRAC_PI_2, 0.0, Vector3::ZERO, m), Vector3::new(1.0, 1.4, -2.2)), "a quarter turn left");
+    assert!(near(muzzle_point(&f, 0.0, FRAC_PI_2, Vector3::ZERO, m), Vector3::new(12.2, 9.0, 1.4)), "straight up");
+    assert!(
+        near(muzzle_point(&f, 0.0, 0.0, Vector3::new(0.0, 3.0, 0.0), Vector3::ZERO), Vector3::new(10.0, 3.0, 0.0)),
+        "the trunnion over the base"
+    );
+    // The barrel's line runs from the trunnion along the core's own aim direction.
+    let (az, el) = (0.7, 0.4);
+    let tip = muzzle_point(&f, az, el, Vector3::ZERO, Vector3::new(0.0, 0.0, -9.0));
+    assert!(near(tip, add(f.pivot, scale(tk::direction_of(&f, az, el), 9.0))), "the muzzle lies down the aimed barrel");
+}
+
+#[test]
+fn a_pulse_takes_the_first_hostile_projectile_it_meets_and_only_that() {
+    let v = |x: f32, y: f32, z: f32| Vector3::new(x, y, z);
+    // Row 0 a pulse of the station (faction 0) that moved 33 m along +x; rows 1-5 projectiles near its path.
+    let bolts = moving_bolts(&[
+        (KIND_INTERCEPT, 0, v(33.0, 0.0, 0.0), v(33.0, 0.0, 0.0), 2.5),
+        (KIND_BOLT, 0, v(10.0, 0.0, 0.0), v(-16.0, 0.0, 0.0), 0.3), // a friend's bolt across its path
+        (KIND_BEAM, 1, v(12.0, 0.0, 0.0), v(-16.0, 0.0, 0.0), 0.5), // a beam: never
+        (KIND_BOLT, 1, v(20.0, 0.0, 0.0), v(-16.0, 0.0, 0.0), 0.3), // hostile, met second
+        (KIND_MISSILE, 1, v(14.0, 1.0, 0.0), v(-5.0, 0.0, 0.0), 2.0), // hostile, met first
+        (KIND_BOLT, 1, v(20.0, 30.0, 0.0), v(-16.0, 0.0, 0.0), 0.3), // hostile, 30 m off: missed
+    ]);
+    let mut scratch = PulseScratch::default();
+    let mut hits = Vec::new();
+    pulse_hits(&bolts, &table(), STRIDE, &mut scratch, &mut hits);
+    assert_eq!(hits.len(), 1, "{hits:?}");
+    assert_eq!((hits[0].pulse, hits[0].target), (0, 4), "the missile it reached first");
+    // A second pulse on the same path the same tick takes the next one; a spent pulse takes nothing.
+    let mut two = moving_bolts(&[
+        (KIND_INTERCEPT, 0, v(33.0, 0.0, 0.0), v(33.0, 0.0, 0.0), 2.5),
+        (KIND_INTERCEPT, 0, v(33.0, 0.5, 0.0), v(33.0, 0.0, 0.0), 2.5),
+        (KIND_BOLT, 1, v(20.0, 0.0, 0.0), v(-16.0, 0.0, 0.0), 0.3),
+        (KIND_MISSILE, 1, v(14.0, 1.0, 0.0), v(-5.0, 0.0, 0.0), 2.0),
+    ]);
+    pulse_hits(&two, &table(), STRIDE, &mut scratch, &mut hits);
+    assert_eq!(hits.iter().map(|h| (h.pulse, h.target)).collect::<Vec<_>>(), vec![(0, 3), (1, 2)], "one projectile, one pulse");
+    two.spent[0] = true;
+    pulse_hits(&two, &table(), STRIDE, &mut scratch, &mut hits);
+    assert_eq!(hits.iter().map(|h| (h.pulse, h.target)).collect::<Vec<_>>(), vec![(1, 3)], "a spent pulse is gone");
+    // No pulse in flight: nothing to do.
+    let none = moving_bolts(&[(KIND_BOLT, 1, v(0.0, 0.0, 0.0), v(1.0, 0.0, 0.0), 0.3)]);
+    pulse_hits(&none, &table(), STRIDE, &mut scratch, &mut hits);
+    assert!(hits.is_empty());
+}
+
+#[test]
+fn a_pulse_does_not_meet_another_pulse_or_its_own_side() {
+    let v = |x: f32, y: f32, z: f32| Vector3::new(x, y, z);
+    // A raider-side pulse (faction 1) crossing the station's pulse and the station's own missile: pulses are never targets,
+    // and the station's pulse leaves its own side's missile alone, which the raiders' pulse takes.
+    let bolts = moving_bolts(&[
+        (KIND_INTERCEPT, 0, v(33.0, 0.0, 0.0), v(33.0, 0.0, 0.0), 2.5),
+        (KIND_INTERCEPT, 1, v(10.0, 0.0, 0.0), v(-20.0, 0.0, 0.0), 2.5),
+        (KIND_MISSILE, 0, v(15.0, 0.0, 0.0), v(-5.0, 0.0, 0.0), 2.0),
+    ]);
+    let mut scratch = PulseScratch::default();
+    let mut hits = Vec::new();
+    pulse_hits(&bolts, &table(), STRIDE, &mut scratch, &mut hits);
+    assert_eq!(hits.iter().map(|h| (h.pulse, h.target)).collect::<Vec<_>>(), vec![(1, 2)], "{hits:?}");
+    // The capitals' stand-in interceptors (M4) leave the pulses alone too.
+    assert_eq!(crate::weapon_kernels::KIND_INTERCEPT, KIND_INTERCEPT);
+    let mut seen = Vec::new();
+    crate::weapon_kernels::intercept_candidates(&bolts, &[true, true, true, true], v(20.0, 0.0, 0.0), &mut seen);
+    assert_eq!(seen.iter().map(|c| c.bolt).collect::<Vec<_>>(), vec![2], "only the missile");
+    assert_eq!(crate::weapon_kernels::shots_in_flight(&bolts), 1);
+}

@@ -350,8 +350,8 @@ func _on_turret_fired(at: Vector3, volume_db: float) -> void:
 	play_shot(&"turret_fire", at, volume_db, randf_range(0.97, 1.03))
 
 
-## Gives the station's defence grid its sounds (M7-T07): the turret shot pitched and levelled per kind, at the muzzle for a
-## gun and at the kill for an interceptor battery.
+## Gives the station's defence grid its sounds (M7-T07): the turret shot pitched and levelled per kind, at the muzzle for every
+## shot (a battery's pulse too, M7-T41) and at the meeting when a pulse takes a projectile.
 func watch_grid(grid: StationGrid) -> void:
 	if grid == null:
 		return
@@ -360,11 +360,15 @@ func watch_grid(grid: StationGrid) -> void:
 		var sound: Callable = _on_grid_sound.bind(StationGrid.SOUND_DB[kind], StationGrid.SOUND_PITCH[kind])
 		if not mount.shot_fired.is_connected(sound):
 			mount.shot_fired.connect(sound)
-			mount.intercepted.connect(sound)
+			mount.intercepted.connect(_on_grid_intercept.bind(StationGrid.SOUND_DB[kind], StationGrid.SOUND_PITCH[kind]))
 
 
 func _on_grid_sound(at: Vector3, volume_db: float, pitch: float) -> void:
 	play_shot(&"turret_fire", at, volume_db, pitch * randf_range(0.97, 1.03))
+
+
+func _on_grid_intercept(at: Vector3, _color: Color, volume_db: float, pitch: float) -> void:
+	_on_grid_sound(at, volume_db, pitch)
 
 
 ## Engine voices granted now.

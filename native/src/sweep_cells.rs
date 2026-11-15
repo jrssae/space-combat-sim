@@ -181,7 +181,7 @@ impl CellGrid {
     // sweep sorts the few that pass its sphere test: a capital's look lists hundreds). Returns how many
     // more hulls the look stands for without listing them: a level too sparse for its cells hands over every hull it
     // holds, and far from all of them none can pass the sphere test, so they are counted as work and left out.
-    fn look(&self, at: Vector3, own: f64, candidates: &mut Vec<u32>) -> usize {
+    pub fn look(&self, at: Vector3, own: f64, candidates: &mut Vec<u32>) -> usize {
         candidates.clear();
         let mut unlisted = 0;
         for level in 0..LEVELS {

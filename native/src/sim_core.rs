@@ -27,14 +27,16 @@ trait RowsSnapshot {
 }
 
 // `BodyKind` (src/ai/body_kind.gd) in value order, then the projectile kinds the core adds (`SimCore.KIND_*`).
-const KIND_NAMES: [&str; 9] = [
-    "ship", "capital", "turret", "missile", "mine", "static", "prop", "bolt", "beam",
+const KIND_NAMES: [&str; 10] = [
+    "ship", "capital", "turret", "missile", "mine", "static", "prop", "bolt", "beam", "intercept",
 ];
 pub const KIND_SHIP: u8 = 0;
 pub const KIND_MINE: u8 = 4;
 pub const KIND_STATIC: u8 = 5;
 pub const KIND_BOLT: u8 = 7;
 pub const KIND_BEAM: u8 = 8;
+/// An interceptor battery's pulse (M7-T41, `grid_kernels::KIND_INTERCEPT`): it never lands on a hull.
+pub const KIND_INTERCEPT: u8 = crate::grid_kernels::KIND_INTERCEPT;
 
 // The script properties the core reads, as StringNames made once: a name built per read costs as much as the read.
 struct Names {
@@ -1169,7 +1171,7 @@ impl ScsSimCore {
         for &key in hull_keys.as_slice() {
             let i = (key / hulls) as usize;
             let j = (key - i as i64 * hulls) as usize;
-            if i >= n || b.spent[i] {
+            if i >= n || b.spent[i] || b.kinds[i] == KIND_INTERCEPT {
                 continue;
             }
             let body = self
@@ -1202,7 +1204,7 @@ impl ScsSimCore {
         let mut rock_range = vec![(0i32, 0i32); n];
         for &key in rock_keys.as_slice() {
             let i = (key / rocks) as usize;
-            if i >= n || b.spent[i] {
+            if i >= n || b.spent[i] || b.kinds[i] == KIND_INTERCEPT {
                 continue;
             }
             if rock_range[i].1 == rock_range[i].0 {

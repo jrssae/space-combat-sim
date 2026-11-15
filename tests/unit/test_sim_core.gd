@@ -638,7 +638,7 @@ const TURRET_KERNEL_USE_ALLOWED: Array[String] = ["use std::", "use godot::built
 ## The station grid's kinds (M7-T07): the guns' pick, the latch and the interceptors, held to the kernels' rules.
 const GRID_KERNEL_FILE: String = "res://native/src/grid_kernels.rs"
 const GRID_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::{Basis, Vector3};", "use crate::kernels::contact::",
-		"use crate::rows::", "use crate::surface;", "use crate::turret_kernels::", "use crate::v3::"]
+		"use crate::rows::", "use crate::surface;", "use crate::sweep_cells::", "use crate::turret_kernels::", "use crate::v3::"]
 ## The engine voices' ship query (M5-T28): the ships near the listener from the rows, held to the kernels' rules; it imports
 ## the row tables and the vector maths only. The shell (`voice_rows.rs`) is what reaches it.
 const VOICE_KERNEL_FILE: String = "res://native/src/voice_kernels.rs"

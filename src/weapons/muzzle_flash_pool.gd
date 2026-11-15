@@ -32,6 +32,7 @@ var _instance: MultiMeshInstance3D = null
 var _ships: Array[Node3D] = []
 var _muzzles: Array[Transform3D] = []
 var _births: PackedFloat64Array = PackedFloat64Array()
+var _tints: PackedColorArray = PackedColorArray()  # per slot, times the flash material's colour (M7-T41)
 var _live := PackedByteArray()
 var _emitters: Array[LightEmitter] = []  # per slot, null when the flash has no light
 var _head: int = 0
@@ -70,6 +71,7 @@ func _ready() -> void:
 	_ships.resize(CAPACITY)
 	_muzzles.resize(CAPACITY)
 	_births.resize(CAPACITY)
+	_tints.resize(CAPACITY)
 	_live.resize(CAPACITY)
 	_emitters.resize(CAPACITY)
 
@@ -102,9 +104,9 @@ static func attach(world: Node) -> MuzzleFlashPool:
 	return made
 
 
-## Starts a flash at `muzzle` (in `ship`'s frame) riding with `ship`, unless the camera is too far to see it. Returns whether
-## it started.
-func trigger(ship: Node3D, muzzle: Transform3D) -> bool:
+## Starts a flash at `muzzle` (in `ship`'s frame) riding with `ship`, unless the camera is too far to see it. `tint` scales the
+## flash's own warm colour (M7-T41: the interceptor batteries' blue-white). Returns whether it started.
+func trigger(ship: Node3D, muzzle: Transform3D, tint: Color = Color.WHITE) -> bool:
 	var from: Variant = ShotCull.listener(self)
 	if from != null and not ShotCull.within(from as Vector3, ship.global_position, ShotCull.FLASH_RANGE_M):
 		culled += 1
@@ -118,7 +120,8 @@ func trigger(ship: Node3D, muzzle: Transform3D) -> bool:
 	_ships[slot] = ship
 	_muzzles[slot] = muzzle
 	_births[slot] = _clock
-	var emitter: LightEmitter = _start_light(ship, muzzle)
+	_tints[slot] = tint
+	var emitter: LightEmitter = _start_light(ship, muzzle, tint)
 	_emitters[slot] = emitter
 	_lit += 1 if emitter != null else 0
 	started += 1
@@ -189,9 +192,9 @@ func advance(delta: float) -> void:
 		_buffer[base + 9] = 0.0
 		_buffer[base + 10] = size
 		_buffer[base + 11] = at.z
-		_buffer[base + 12] = 1.0
-		_buffer[base + 13] = 1.0
-		_buffer[base + 14] = 1.0
+		_buffer[base + 12] = _tints[slot].r
+		_buffer[base + 13] = _tints[slot].g
+		_buffer[base + 14] = _tints[slot].b
 		_buffer[base + 15] = 1.0 - t
 		drawn += 1
 	_trim()
@@ -227,7 +230,7 @@ func _drop_head() -> void:
 
 
 # A light for a new flash on `ship` at `muzzle`, or null when the pool's lights are all alight.
-func _start_light(ship: Node3D, muzzle: Transform3D) -> LightEmitter:
+func _start_light(ship: Node3D, muzzle: Transform3D, tint: Color = Color.WHITE) -> LightEmitter:
 	if _rig == null or not is_instance_valid(_rig):
 		_rig = LightRig.of(self)
 	if _rig == null:
@@ -241,6 +244,8 @@ func _start_light(ship: Node3D, muzzle: Transform3D) -> LightEmitter:
 	else:
 		emitter = _spare.pop_back()
 	emitter.anchor = ship
+	var light := Color(1.0 * tint.r, 0.85 * tint.g, 0.6 * tint.b)
+	emitter.color = light / maxf(maxf(light.r, light.g), maxf(light.b, 1e-6))
 	emitter.offset = muzzle * Vector3(0.0, 0.0, -EmitterCurves.FLASH_OFFSET_M)  # the muzzle's -Z is down the barrel
 	emitter.energy = EmitterCurves.flash_energy(0.0)
 	_rig.add_emitter(emitter)

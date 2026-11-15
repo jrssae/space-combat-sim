@@ -50,6 +50,8 @@ const PAD_M: f64 = 1.0;
 // The core's `KIND_*` values the kernels tell apart.
 const KIND_MISSILE: u8 = 3;
 const KIND_BEAM: u8 = 8;
+// A station battery's pulse (M7-T41, `grid_kernels::KIND_INTERCEPT`): no interceptor shoots at one.
+pub(crate) const KIND_INTERCEPT: u8 = 9;
 
 /// A turret's role: a gun, an interceptor, or a beam emitter.
 pub const ROLE_GUN: u8 = 0;
@@ -211,9 +213,9 @@ pub fn muzzle(at: Vector3, capital_velocity: Vector3, axis: Vector3) -> (Vector3
     )
 }
 
-/// How many projectiles fly that an interceptor could take (every kind but beams).
+/// How many projectiles fly that an interceptor could take (every kind but beams and the station's pulses).
 pub fn shots_in_flight(bolts: &Bolts) -> usize {
-    bolts.kinds.iter().filter(|&&k| k != KIND_BEAM).count()
+    bolts.kinds.iter().filter(|&&k| k != KIND_BEAM && k != KIND_INTERCEPT).count()
 }
 
 /// How many guided missiles fly.
@@ -232,7 +234,7 @@ pub fn intercept_candidates(
     out.clear();
     let reach_sq = INTERCEPT_RANGE_M * INTERCEPT_RANGE_M;
     for p in 0..bolts.ids.len() {
-        if bolts.kinds[p] == KIND_BEAM || !flagged(hostile, bolts.faction_ix[p]) {
+        if bolts.kinds[p] == KIND_BEAM || bolts.kinds[p] == KIND_INTERCEPT || !flagged(hostile, bolts.faction_ix[p]) {
             continue;
         }
         let d_sq = f64::from(dist_sq(bolts.positions[p], at));

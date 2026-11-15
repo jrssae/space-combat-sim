@@ -5584,7 +5584,8 @@ data/scenarios/station_launch.json  the player on Alpha 3 with three wingmen
 
 ```
 native/src/grid_kernels.rs       the grid's kinds on the turret rows: the latch, the guns' pick through the brains' broad phase,
-                                 the interceptors' incoming fire and choice, the big hulls' line of fire; engine-free (guard test)
+                                 the interceptors' incoming fire and choice, the batteries' barrels and muzzles, the pulses'
+                                 sweep (M7-T41), the big hulls' line of fire; engine-free (guard test)
 native/src/turret_rows.rs        + add_grid_mount, set_grid_free, grid_free_sides, grid_readouts, turret_kind, set_turret_out,
                                  the batteries; note_attackers sets the latch
 native/src/surface.rs            + enters_from_outside: a line entering a volume its start is not inside
@@ -5614,18 +5615,43 @@ assets/weapons/grid_*.tres       the light pulse turret, the heavy cannon and th
 - **The batteries** (main thread, in `step_turrets` after the guns): per battery, the core's bolt rows that are missiles or
   pulse bolts (never beams or mines), not spent, of a side hostile to it, within its reach, whose straight path over their life
   (at most 6 s), relative to each big hull, meets a surface (`time_to_hull`, swept once per bolt a tick and shared by the
-  batteries). Each sets the latch, shootable or not; a ready battery takes one it can shoot (inside its arc, its line from the trunnion
-  clear of every big hull, tested only for the would-be winner; M7-T40): a missile before any bolt, then the soonest to hit,
-  among equals the earlier row, one a tick per battery and none taken twice.
-  `step_turrets` returns three more arrays (battery slots, the bolt ids taken, where they were); `TurretRows.step` spends each
-  (`SimCore.spend_bolt` for an owned row, `Projectile.spend` for a node) and calls `TurretMount.on_intercepted`.
+  batteries). Each sets the latch, shootable or not; a ready battery picks one it can shoot (inside its arc, its line from the
+  trunnion clear of every big hull, tested only for the would-be winner; M7-T40): a missile before any bolt, then the soonest
+  to hit, among equals the earlier row, one a tick per battery and none picked twice.
+- **Pulses, not kills at the trigger** (M7-T41, the maintainer after the show's clip). A battery's shot is a pulse: an owned
+  bolt row of kind `KIND_INTERCEPT` (9), drawn by `BoltMesh` with the interceptor's look, damage 0. `grid_kernels::Battery` (one
+  per battery slot, `set_battery_barrels` from `StationGrid.muzzles_for`, the model's `turret.pitch_muzzles`) holds the
+  trunnion, up to four muzzles in the pitch frame and each barrel's recharge (1 s): the barrels fire in turn, the gun's interval
+  (0.25 s) apart, so four pulses a second at most. A battery with no barrels set fires one down its axis, recharging as its
+  interval. The pulse leaves the firing barrel's muzzle (`muzzle_point`: the mount turned as `TurretMount`'s Yaw and Pitch
+  nodes) on the brains' lead (`solve`), led to where the target will be when the pulse starts to move (a row does not move on
+  its launch tick), thrown off by `tk::spread` hashed from the battery's id, its shot count and the tick (no shared RNG).
+  Pick filter beside the arc and the hull line: a target already covered by a pulse that meets it before it reaches the hull is
+  skipped until that pulse's lead time plus `COVER_SLACK_S` (0.1 s) passes (then it missed); a target the pulse cannot catch
+  within its life is skipped. Numbers (`grid_interceptor.tres`): 2 000 m/s, 1 s life (2 km: the 1.5 km reach plus the target's
+  own approach), hit radius 2.5 m, spread 0.22 degrees (a pulse at 1 km scatters over 3.8 m, so it misses a bolt about half the
+  time there and seldom inside 600 m).
+- **The pulse sweep** (`grid_kernels::pulse_hits`, first thing in the batteries' tick): the live missiles and pulse bolts are
+  placed in the hit broad phase's cells (`sweep_cells::CellGrid`, each the sphere round its last move), and each live pulse in
+  row order looks up only those near its own last move and takes the first of a side hostile to it that its swept sphere
+  touches (`first_touch`, both moving over the tick; among equals the lower row), each projectile once. Both are spent; a pulse
+  never meets a pulse, a beam or a mine. `hit_bolts` drops every pulse, so a pulse never lands on a hull or a ship (nor stops on
+  the station as a friendly bolt), and the capitals' stand-in interceptors (M4) never shoot at one. The sweep uses the moves of
+  the tick before, so a projectile that reached the hull on that move is already spent. `step_turrets` returns the pulses with
+  the guns' shots (slots, muzzles, ids, and each shot's barrel, -1 for a gun) and four more arrays (the battery whose pulse met a
+  projectile, the projectile's id, where they met, its colour); `TurretRows.step` spends each (`SimCore.spend_bolt` for an
+  owned row, `Projectile.spend` for a node) and calls `TurretMount.on_intercepted(point, colour)`. `grid_readouts` gains the
+  pulses fired. `turret_digest` hashes each battery's barrels (a battery adds words, other mounts none).
 - **Friendly bolts stop on the station.** `Damageable.stops_friendly_bolts` (the station's two hulls): `HitResolver` keeps a
   big hull's surface pair for a bolt that cannot hurt it, and such a bolt is spent with its flash and nothing else (no damage,
   no attacker note, no `hit_resolved`; `HitResolver.friendly_stops` counts them). Other friendly hulls still let bolts through.
 - **Visuals and sound.** Every mount wears the Saturns' turret model (T27) scaled per kind (light 2, heavy 4, interceptor 1.2),
   hung from the frame's visual piece or the drum's visual pivot (so the far dress shrinks them with the station and the drum's
-  turn carries them); a shot or a kill flashes the barrel through the World's `MuzzleFlashPool`, and a kill adds an
-  `ImpactFlash` where the projectile was. `AudioDirector.watch_grid` plays `turret_fire` pitched and levelled per kind.
+  turn carries them); a gun's shot flashes its barrel through the World's `MuzzleFlashPool`. A battery's pulse glows blue-white
+  at the muzzle of the barrel that fired (`TurretMount.last_barrel`, the flash pool's per-flash tint), and where a pulse meets a
+  projectile a small `ImpactFlash` and a scatter of sparks (`FxSpecs.INTERCEPT`, whose emitters own their process material,
+  coloured by `FxPool.tint`) both take the projectile's own colour (M7-T41). `AudioDirector.watch_grid` plays `turret_fire`
+  pitched and levelled per kind, for every shot and every meeting.
 - **Knocked-out mounts** (maintainer, after T07). Each of the 23 mounts has its own health (`GridMountHealth`: light 300,
   heavy 4 000, interceptor 200). `Station._on_hit` passes every hit to `StationGrid.take_hit` beside the section's share: a
   mount on the hit body within its radius of the hit (30, 45, 25 m) loses the hit's damage. At zero `TurretMount.knocked_out`
