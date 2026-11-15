@@ -289,6 +289,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T33 | A | The cargo pod: a new 6 m Earth Alliance cargo-handling craft built from `references/EA_cargo_pod.stl` at the 90% rule (maintainer, 2026-11-14) | - | Opus | A new STL asset and its look sheet; (H) | done |
 | T34 | D | Cargo pods take over T30's cargo work: they move every freighter's cargo between the ship and the cargo bay with T30's plan and carrying logic, launched from the cargo bay; the maintenance bots stop carrying cargo (maintainer, 2026-11-14) | T30, T33 | Opus | Retargets T30's ferry from bots to pods | not started |
 | T35 | D | Maintenance bots roam and repair: one per area at a time and irregularly, along the spine, the fins (vanes), the drum (turning with it, so they take no damage) and out to the jumpgate and along its arm; in battle the cargo bay launches one per damaged area and each repairs 10 HP/s on damage sections and grid turrets (maintainer, 2026-11-14) | T11, T07 | Opus | New bot routes, a co-rotating frame and a repair rule over T06/T07's health | in progress |
+| T36 | A | The maintenance bot rebuilt to its reference sheet: top, side and front views from `references/maintenance bot.webp` at 90% silhouette overlap (maintainer, 2026-11-14) | T11 | Opus | T11's bot does not match the reference's top view; (H) | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M7-T01 Station references and measurements
@@ -1843,3 +1844,14 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   tick with entity count (then native, CLAUDE.md); console commands and a state provider for the bots' jobs, listed in `info.md`.
 - **Done when:** a live run shows the peace patrols (spine, fins, drum, gate) and a battle with bots repairing (maintainer, H);
   tests for the routes, the co-rotating drum frame, the one-per-area rule, the repair rate and the turret coming back; committed.
+
+### M7-T36 The maintenance bot rebuilt to its reference
+
+- **Why (maintainer, 2026-11-14):** "the top view of the maintenance bot in the game doesn't match the view" of
+  `references/maintenance bot.webp` (gitignored; a four-view sheet: top, side, front and a three-quarter view).
+- **What:** rebuild `tools/procgen/assets/maintenance_bot.py` from the sheet's orthographic views. There is no STL, so the views stand
+  in for it: top, side and front silhouette IoU >= 0.90 against masks cut from the sheet at the same scale, and the proportions within
+  10%. Keep the bot's size, its hardpoints and anything T35's crew and T11's alert use (thrusters, the arms' grip points, the light),
+  and both texture-detail sets. The shells' blue, the gold bands and the painted numbers follow the sheet.
+- **Done when:** a GPU look sheet with the reference views beside ours and the overlap numbers is approved by the maintainer (H);
+  the bot's tests and T35's crew tests pass in a `--staged` copy; committed.
