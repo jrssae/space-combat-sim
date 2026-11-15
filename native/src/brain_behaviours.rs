@@ -3300,6 +3300,13 @@ struct FormationState {
     far_closure_mps: f64,
     slot_error_m: f64,
     on_link: bool,
+    // The leader's way near a big hull (M7-T38), newest last: points relative to that hull's place, so a rebase leaves them.
+    crumbs: [Vector3; FormationState::CRUMBS],
+    crumb_count: usize,
+    crumb_head: usize,
+    crumb_hull: i64,
+    last_crumb_s: f64,
+    trailing: bool,
     last_leader_id: i64,
     last_leader_velocity: Vector3,
     last_s: f64,
@@ -3321,12 +3328,28 @@ impl FormationState {
     const MAX_LEAN_DEG: f64 = 40.0;
     const MAX_PATH_RATE_RAD_S: f32 = 0.35;
     const FEED_FORWARD_FULL_MPS: f64 = 30.0;
+    // The trail (M7-T38): how many of the leader's points are kept, how often one is laid, the least a wingman trails it by,
+    // and how many points are tried for a clear way.
+    const CRUMBS: usize = 64;
+    const CRUMB_S: f64 = 0.25;
+    const TRAIL_S: f64 = 0.5;
+    const TRAIL_TRIES: usize = 16;
+    // Near a big hull a friendly ship nearer than this is pushed off, m, at up to this speed, m/s (twice a Starfury's
+    // keep-off: slots 56 m apart are left alone).
+    const SEPARATION_M: f64 = 50.0;
+    const SEPARATION_MPS: f64 = 40.0;
 
     fn new(profile: &Profile) -> Self {
         FormationState {
             far_closure_mps: profile.cruise_mps + Self::FAR_EXTRA_MPS,
             slot_error_m: -1.0,
             on_link: false,
+            crumbs: [Vector3::ZERO; Self::CRUMBS],
+            crumb_count: 0,
+            crumb_head: 0,
+            crumb_hull: 0,
+            last_crumb_s: f64::NEG_INFINITY,
+            trailing: false,
             last_leader_id: 0,
             last_leader_velocity: Vector3::ZERO,
             last_s: f64::NEG_INFINITY,
@@ -3340,6 +3363,10 @@ impl FormationState {
         self.on_link = false;
         self.last_leader_id = 0;
         self.last_s = f64::NEG_INFINITY;
+        self.crumb_count = 0;
+        self.crumb_hull = 0;
+        self.last_crumb_s = f64::NEG_INFINITY;
+        self.trailing = false;
     }
 
     fn enter(&mut self) {
@@ -3408,19 +3435,39 @@ impl FormationState {
         }
         let to_slot = sub(slot, p.position);
         self.slot_error_m = f64::from(length(to_slot));
+        // Near a big hull a slot inside or beside the skin, or across the hull, is left for the leader's own way (M7-T38).
+        self.trailing = false;
+        if leader >= 0 {
+            let l = leader as usize;
+            self.lay_crumb(tick, tick.rows.positions[l], p.now_s);
+            if let Some(v_des) = self.trail(tick, ship, slot, l) {
+                self.trailing = true;
+                cmd.rot = brain_maths::face(
+                    &p.basis,
+                    self.heading(p.velocity, v_des, None),
+                    ship.capability.rate_max,
+                    brain_maths::K_FACE,
+                );
+                seek_velocity(cmd, p, &ship.capability, v_des, false, wish);
+                return;
+            }
+        }
         let error = add(to_slot, scale(sub(slot_velocity, p.velocity), Self::LEAD_S));
         let cap = if self.slot_error_m <= Self::FAR_RANGE_M {
             Self::NEAR_CLOSURE_MPS
         } else {
             self.far_closure_mps
         };
-        let v_des = add(
+        let mut v_des = add(
             add(
                 slot_velocity,
                 limit_length(scale(error, Self::K_PER_S), cap as f32),
             ),
             scale(slot_accel, brain_maths::HORIZON_S as f32),
         );
+        if Self::hull_in_sight(tick) {
+            v_des = Self::kept_apart(tick, ship, v_des);
+        }
         let rate = ship.capability.rate_max;
         if leader >= 0 && self.slot_error_m <= Self::ALIGN_RANGE_M {
             let l = leader as usize;
@@ -3450,6 +3497,127 @@ impl FormationState {
             );
             seek_velocity(cmd, p, &ship.capability, v_des, false, wish);
         }
+    }
+
+    // Lays the leader's point at `at` every `CRUMB_S` while a big hull is in sight, relative to the first resting one (the
+    // turning drum's place is its axis, which does not turn). The trail is dropped when no hull is in sight or it changes.
+    fn lay_crumb(&mut self, tick: &Tick, at: Vector3, now_s: f64) {
+        let hull = tick
+            .contacts
+            .iter()
+            .map(|&r| r as usize)
+            .find(|&j| tick.rows.surface(j).is_some_and(|s| s.spin_rad_s == 0.0))
+            .or_else(|| tick.contacts.iter().map(|&r| r as usize).find(|&j| tick.rows.surface(j).is_some()));
+        let Some(h) = hull else {
+            self.crumb_count = 0;
+            self.crumb_hull = 0;
+            return;
+        };
+        if tick.rows.body_ids[h] != self.crumb_hull {
+            self.crumb_count = 0;
+            self.crumb_hull = tick.rows.body_ids[h];
+            self.last_crumb_s = f64::NEG_INFINITY;
+        }
+        if now_s - self.last_crumb_s < Self::CRUMB_S {
+            return;
+        }
+        self.last_crumb_s = now_s;
+        self.crumbs[self.crumb_head] = sub(at, tick.rows.positions[h]);
+        self.crumb_head = (self.crumb_head + 1) % Self::CRUMBS;
+        self.crumb_count = (self.crumb_count + 1).min(Self::CRUMBS);
+    }
+
+    // The velocity that takes the ship along the leader's way instead of to `slot` (M7-T38), or none while the slot is
+    // clear of every big hull in sight and so is the straight way to it. On the trail the ship flies to the newest point of
+    // the leader's way it reaches in a straight line that is old enough to keep it behind (its place in the formation sets
+    // how far, so the wing goes through in file); with none, round the hull.
+    fn trail(&self, tick: &Tick, ship: &Ship, slot: Vector3, l: usize) -> Option<Vector3> {
+        let p = &tick.p;
+        let keep = ship.radius + pilot::MARGIN_M;
+        let clear_of = |a: Vector3, b: Vector3| {
+            tick.contacts.iter().all(|&r| {
+                let j = r as usize;
+                tick.rows.surface(j).is_none() || !surface::segment_enters(tick.rows, j, a, b, keep)
+            })
+        };
+        let near_skin = tick.contacts.iter().any(|&r| {
+            let j = r as usize;
+            tick.rows.surface(j).is_some()
+                && surface::nearest_of_row(tick.rows, j, slot)
+                    .is_some_and(|(_, d)| d < keep + 0.5 * pilot::SLIDE_BAND_M)
+        });
+        if !near_skin && clear_of(p.position, slot) {
+            return None;
+        }
+        let leader_v = tick.rows.velocities[l];
+        let speed = maxf(f64::from(length(leader_v)), 30.0);
+        if self.crumb_count > 0 {
+            let hull_at = tick
+                .contacts
+                .iter()
+                .map(|&r| r as usize)
+                .find(|&j| tick.rows.body_ids[j] == self.crumb_hull)
+                .map(|j| tick.rows.positions[j]);
+            if let Some(origin) = hull_at {
+                let offset = tick.ctx_slot_offset;
+                let behind_m = 1.5 * (f64::from(length(offset)) + maxf(f64::from(offset.x), 0.0));
+                let skip = ((Self::TRAIL_S + behind_m / speed) / Self::CRUMB_S).ceil() as usize;
+                for k in (skip..self.crumb_count).take(Self::TRAIL_TRIES) {
+                    let at = (self.crumb_head + Self::CRUMBS - 1 - k) % Self::CRUMBS;
+                    let point = add(origin, self.crumbs[at]);
+                    if clear_of(p.position, point) {
+                        let error = sub(point, p.position);
+                        let closure = limit_length(scale(error, Self::K_PER_S), Self::NEAR_CLOSURE_MPS as f32);
+                        return Some(Self::kept_apart(tick, ship, add(scale(normalized(error), speed as f32), closure)));
+                    }
+                }
+            }
+        }
+        detour(tick, ship, slot, self.far_closure_mps)
+    }
+
+    // `v_des` kept off every friendly ship (M7-T38): one the ship is closing on within the room it needs to stop is a wall
+    // the wish may not close on, and one nearer than `SEPARATION_M` is pushed off. Near a big hull a wing pushed off its
+    // slots comes back fast, and must not come back through its leader or a wingmate.
+    fn kept_apart(tick: &Tick, ship: &Ship, v_des: Vector3) -> Vector3 {
+        let p = &tick.p;
+        // The worst stop: across the nose on the side thrusters, after avoidance's urgent turn.
+        let a_stop = maxf(minf(ship.capability.a_rcs_x, ship.capability.a_rcs_y), 0.01);
+        let rate = f64::from(ship.capability.rate_max.x.min(ship.capability.rate_max.y));
+        let turn_s = 0.5 * std::f64::consts::PI / maxf(rate, 0.01) + 1.0;
+        let mut out = v_des;
+        for &r in tick.contacts {
+            let j = r as usize;
+            if j == tick.own_row || !tick.rows.rigid[j] || tick.relation(j) != pilot::FRIENDLY {
+                continue;
+            }
+            let off = sub(p.position, tick.rows.positions[j]);
+            let d = f64::from(length(off));
+            if d < 1e-3 {
+                continue;
+            }
+            let away = div_s(off, d as f32);
+            let c_velocity = tick.rows.velocities[j];
+            let closing_now = maxf(-f64::from(dot(sub(p.velocity, c_velocity), away)), 0.0);
+            let look = Self::SEPARATION_M + closing_now * turn_s + closing_now * closing_now / (2.0 * a_stop);
+            if d >= look {
+                continue;
+            }
+            let into = -f64::from(dot(sub(out, c_velocity), away));
+            if into > 0.0 {
+                out = add(out, scale(away, into as f32));
+            }
+            if d < Self::SEPARATION_M {
+                let push = (Self::SEPARATION_M - d) / Self::SEPARATION_M * Self::SEPARATION_MPS;
+                out = add(out, scale(away, push as f32));
+            }
+        }
+        out
+    }
+
+    // Whether a big hull is among the contacts.
+    fn hull_in_sight(tick: &Tick) -> bool {
+        tick.contacts.iter().any(|&r| tick.rows.surface(r as usize).is_some())
     }
 
     // `BehaviourFormation._heading`.
@@ -3483,6 +3651,9 @@ impl FormationState {
         }
         if self.on_link {
             state = "joining (link)";
+        }
+        if self.trailing {
+            state = "trailing";
         }
         d.state = state.to_string();
         d.numbers

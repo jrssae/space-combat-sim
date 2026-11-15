@@ -427,10 +427,11 @@ fn a_ship_falling_at_the_skin_too_fast_for_its_side_thrusters_pulls_out() {
     let out = avoid(&rows, &falling, &[0], &[], 0, along);
     assert!(out.pull_out && out.urgent, "it must burn now");
     assert!(out.v_des.x >= 0.0, "no way in is asked for: {:?}", out.v_des);
-    // Wanting to go in as well, the wish is turned along the skin at once, far outside the slide's band.
+    // Wanting to go in as well, the way in is dropped at once, far outside the slide's band, and the wish's way along the
+    // wall kept (M7-T38: the stop comes first, so it is not turned along at the wish's whole speed).
     let inward = Vector3::new(-60.0, 0.0, 40.0);
     let out = avoid(&rows, &falling, &[0], &[], 0, inward);
-    assert!(out.pull_out && out.v_des.x >= -1.0 && out.v_des.z > 50.0, "turned along the wall: {:?}", out.v_des);
+    assert!(out.pull_out && out.v_des.x >= -1.0 && (out.v_des.z - 40.0).abs() < 1e-3, "along the wall: {:?}", out.v_des);
     // The same fall from 600 m out leaves room: no pull-out yet. Nor for a ship moving along the wall or away.
     let high = fighter(Vector3::new(57.0 + 600.0, 0.0, 0.0), Vector3::new(-60.0, 0.0, 0.0));
     assert!(!avoid(&rows, &high, &[0], &[], 0, along).pull_out);
@@ -451,9 +452,167 @@ fn a_turning_hull_is_kept_off_where_its_parts_sweep() {
     assert!((capsule[0] - 96.0).abs() < 1e-9 && (capsule[1] - (100.0_f64.hypot(30.0) + 4.0)).abs() < 1e-9, "{capsule:?}");
     // Opposite the arm (at -x, where it is not this tick) the swept disc is as near as beside it.
     let rows = row_with(arm, Vector3::ZERO, Basis::IDENTITY);
-    let (at, d) = nearest_to_avoid(&rows, 0, Vector3::new(-200.0, 0.0, 60.0)).unwrap();
+    let (at, d) = nearest_to_avoid(&rows, 0, Vector3::new(-200.0, 0.0, 60.0), 0.0).unwrap();
     assert!((d - 50.0).abs() < 1e-3 && (at.z - 10.0).abs() < 1e-3 && (at.x + 200.0).abs() < 1e-3, "{at:?} {d}");
     // Past the tip: the rim.
-    let (at, d) = nearest_to_avoid(&rows, 0, Vector3::new(0.0, -400.0, 0.0)).unwrap();
+    let (at, d) = nearest_to_avoid(&rows, 0, Vector3::new(0.0, -400.0, 0.0), 0.0).unwrap();
     assert!((d - 99.83).abs() < 0.01 && at.y < -300.0, "{at:?} {d}");
+}
+
+
+// The drum's waist as the Cobra arms make it (M7-T38): a core out to 189.5 m and four arms standing on it from 196 to 246.5 m
+// out, 300 m long, turning at 0.148 rad/s.
+fn waist() -> Surface {
+    let mut p = packed_box([0.0, 0.0, 0.0], [134.0, 134.0, 150.0]);
+    for k in 0..4 {
+        let (s, c) = (std::f64::consts::FRAC_PI_2 * f64::from(k)).sin_cos();
+        p.extend([0.0, c, s, 0.0, -s, c, 0.0, 0.0, 0.0, 1.0, 219.0 * c, 219.0 * s, 0.0, 23.0, 47.0, 150.0]);
+    }
+    from_packed(&p, 0.148)
+}
+
+#[test]
+fn among_the_cobra_arms_a_ship_is_pushed_out_past_their_tips_never_in_toward_the_drum() {
+    use crate::kernels::pilot::avoid;
+    use crate::v3::dot;
+    let rows = row_with(waist(), Vector3::ZERO, Basis::IDENTITY);
+    let radial = Vector3::new(0.7071, 0.7071, 0.0);
+    // Between two arms at every depth of their ring (nearer its floor than its tips too), and in the 6.5 m between the core
+    // and the arms' floor where no ship fits: wanting in, at rest or along the axis, the way given is out.
+    for r in [193.0_f32, 200.0, 215.0, 235.0] {
+        let ship = fighter(radial * r, radial * -20.0);
+        for wish in [radial * -60.0, Vector3::ZERO, Vector3::new(0.0, 0.0, 100.0)] {
+            let out = avoid(&rows, &ship, &[0], &[], 0, wish);
+            assert!(dot(out.v_des, radial) > 5.0, "{r} m out wanting {wish:?}: {:?}", out.v_des);
+        }
+    }
+    // One point, out past the tips, whatever ring the ship is in.
+    let (at, d) = nearest_to_avoid(&rows, 0, radial * 205.0, 2.0 * 23.0).unwrap();
+    assert!(d == 0.0 && dot(sub(radial * 205.0, at), radial) > 0.0, "{at:?} {d}");
+}
+
+#[test]
+fn a_hole_round_the_axis_wide_enough_to_fly_is_still_a_way_out() {
+    // The tunnel turning with the drum: a ship in a wall's ring near the hole is led into the tunnel when that is nearer;
+    // where the hole is narrower than a ship needs it is no way out, and nothing leads across the axis.
+    let mut tunnel = tunnel();
+    tunnel.spin_rad_s = 0.148;
+    let rows = row_with(tunnel, Vector3::ZERO, Basis::IDENTITY);
+    let p = Vector3::new(0.0, 19.0, 0.0); // in the roof, 2 m above its underside
+    let (at, d) = nearest_to_avoid(&rows, 0, p, 2.0).unwrap();
+    assert!(d == 0.0 && at.y > p.y, "down into the tunnel: {at:?}");
+    let (at, _) = nearest_to_avoid(&rows, 0, p, 40.0).unwrap();
+    assert!(at.y < p.y || (at.z - p.z).abs() > 0.1, "a 34 m tunnel is too narrow for a 40 m ship: not down: {at:?}");
+}
+
+#[test]
+fn a_ship_sliding_along_one_face_is_stopped_short_of_a_part_it_falls_at_beyond_it() {
+    use crate::kernels::pilot::avoid;
+    // A long low deck along z at 0..20 m up and a tower beyond it to +x: the ship skims the deck 60 m up while flying at the
+    // tower at 80 m/s. The deck is nearer, but the tower is where it would strike: it pulls out from the tower.
+    let mut p = packed_box([0.0, 10.0, 0.0], [600.0, 10.0, 600.0]);
+    p.extend(packed_box([300.0, 200.0, 0.0], [20.0, 200.0, 600.0]));
+    let rows = row_with(from_packed(&p, 0.0), Vector3::ZERO, Basis::IDENTITY);
+    let ship = fighter(Vector3::new(100.0, 80.0, 0.0), Vector3::new(80.0, 0.0, 0.0));
+    let out = avoid(&rows, &ship, &[0], &[], 0, Vector3::new(80.0, 0.0, 0.0));
+    assert!(out.pull_out, "it must stop short of the tower");
+    assert!(out.v_des.x <= 0.0, "no more way toward it: {:?}", out.v_des);
+    // Flying along the tower instead, the nearer deck makes no pull-out.
+    let wide = fighter(Vector3::new(100.0, 80.0, 0.0), Vector3::new(0.0, 0.0, 80.0));
+    assert!(!avoid(&rows, &wide, &[0], &[], 0, Vector3::new(0.0, 0.0, 80.0)).pull_out, "along the tower, not at it");
+}
+
+#[test]
+fn a_ship_passing_wide_of_a_corner_is_not_falling_at_it() {
+    use crate::kernels::pilot::avoid;
+    // A step in the turning drum: a body 200 m across, then from z = 0 a band 300 m across (its corners 424 m out). A ship
+    // 75 m outside the band's swept ring flies along the axis at 120 m/s toward the step: its way passes over the corner,
+    // so no pull-out.
+    let mut p = packed_box([0.0, 0.0, 300.0], [300.0, 300.0, 300.0]);
+    p.extend(packed_box([0.0, 0.0, -300.0], [200.0, 200.0, 300.0]));
+    let rows = row_with(from_packed(&p, 0.148), Vector3::ZERO, Basis::IDENTITY);
+    let ship = fighter(Vector3::new(500.0, 0.0, -400.0), Vector3::new(0.0, 0.0, 120.0));
+    let wish = Vector3::new(0.0, 0.0, 120.0);
+    let out = avoid(&rows, &ship, &[0], &[], 0, wish);
+    assert!(!out.pull_out, "passing 75 m over the corner is no fall");
+    // Flying at the step's face itself, inside the band's ring, is.
+    let at_face = fighter(Vector3::new(300.0, 0.0, -400.0), Vector3::new(0.0, 0.0, 120.0));
+    assert!(avoid(&rows, &at_face, &[0], &[], 0, wish).pull_out, "straight at the step's face");
+}
+
+#[test]
+fn pulling_out_the_wish_along_the_skin_changes_the_way_by_no_more_than_the_fall() {
+    use crate::kernels::pilot::avoid;
+    // Falling at the tunnel's wall at 60 m/s while the wish asks for 150 m/s along it: the stop comes first, so the wish
+    // keeps the ship's way along the wall and adds no more than 60 m/s to it.
+    let rows = row_with(tunnel(), Vector3::ZERO, Basis::IDENTITY);
+    let falling = fighter(Vector3::new(57.0 + 180.0, 0.0, 0.0), Vector3::new(-60.0, 0.0, 10.0));
+    let out = avoid(&rows, &falling, &[0], &[], 0, Vector3::new(0.0, 0.0, 150.0));
+    assert!(out.pull_out);
+    assert!(out.v_des.x >= -1e-3 && out.v_des.z <= 10.0 + 60.0 + 1e-3 && out.v_des.z > 10.0, "{:?}", out.v_des);
+}
+
+
+// A fin: a plate 4 m thick across x, 3 km tall and 250 m along z, at x = -535 (M7-T38).
+fn fin() -> Surface {
+    from_packed(&packed_box([-535.0, 0.0, 365.0], [2.0, 1500.0, 125.0]), 0.0)
+}
+
+#[test]
+fn a_way_that_meets_a_thin_plates_face_is_found_though_its_nearest_point_is_an_edge() {
+    use crate::v3::dot;
+    let rows = row_with(fin(), Vector3::ZERO, Basis::IDENTITY);
+    // 330 m out, 30 m past the plate's edge in z, flying at it at 150 m/s with a little drift onto it: its nearest point
+    // is the edge, which its way passes wide of, but the way meets the face 2 s on.
+    let p = Vector3::new(-865.0, 700.0, 520.0);
+    let v = Vector3::new(150.0, 0.0, -20.0);
+    let (t, n) = path_entry(&rows, 0, p, v, 8.0, 25.0).expect("the face is met");
+    assert!((t - (330.0 - 2.0 - 25.0) / 150.0).abs() < 0.05, "{t}");
+    assert!(dot(n, Vector3::new(-1.0, 0.0, 0.0)) > 0.99, "the face's normal: {n:?}");
+    // Through the gap beside it, or too slow to get there in the time given, nothing.
+    assert!(path_entry(&rows, 0, Vector3::new(-865.0, 700.0, 585.0), Vector3::new(150.0, 0.0, 0.0), 8.0, 25.0).is_none());
+    assert!(path_entry(&rows, 0, p, v, 1.0, 25.0).is_none());
+}
+
+#[test]
+fn a_way_through_a_turning_hulls_ring_meets_its_rim_its_end_or_its_holes_wall() {
+    use crate::v3::dot;
+    let rows = row_with(waist(), Vector3::ZERO, Basis::IDENTITY);
+    // Falling at the arms' ring from 400 m out: its rim, 400 - 246.5 - 25 m on.
+    let (t, n) = path_entry(&rows, 0, Vector3::new(400.0, 0.0, 0.0), Vector3::new(-100.0, 0.0, 0.0), 5.0, 25.0).unwrap();
+    assert!((t - (400.0 - 246.5 - 25.0) / 100.0).abs() < 0.01 && n.x > 0.99, "{t} {n:?}");
+    // Along the axis at 220 m out, from 300 m fore of it: its fore end.
+    let (t, n) = path_entry(&rows, 0, Vector3::new(220.0, 0.0, -450.0), Vector3::new(0.0, 0.0, 100.0), 5.0, 25.0).unwrap();
+    assert!((t - (450.0 - 150.0 - 25.0) / 100.0).abs() < 0.01 && dot(n, Vector3::new(0.0, 0.0, -1.0)) > 0.99, "{t} {n:?}");
+    // A chord 300 m from the axis passes outside it all.
+    assert!(path_entry(&rows, 0, Vector3::new(300.0, -500.0, 0.0), Vector3::new(0.0, 100.0, 0.0), 10.0, 25.0).is_none());
+}
+
+#[test]
+fn a_ship_falling_at_a_thin_plates_face_pulls_out_and_one_passing_its_edge_does_not() {
+    use crate::kernels::pilot::avoid;
+    let rows = row_with(fin(), Vector3::ZERO, Basis::IDENTITY);
+    // At the face from 330 m at 150 m/s: a quarter turn and the retros need more, so it pulls out, wanting no way in.
+    let falling = fighter(Vector3::new(-865.0, 700.0, 520.0), Vector3::new(150.0, 0.0, -20.0));
+    let out = avoid(&rows, &falling, &[0], &[], 0, Vector3::new(150.0, 0.0, 0.0));
+    assert!(out.pull_out, "it must stop short of the face");
+    assert!(out.v_des.x <= 150.0 - 1.0, "less way toward it than it has: {:?}", out.v_des);
+    // Through the gap beside the plate, 60 m clear of its edge: its way passes wide, so it keeps its wish.
+    let through = fighter(Vector3::new(-865.0, 700.0, 550.0), Vector3::new(150.0, 0.0, 0.0));
+    let out = avoid(&rows, &through, &[0], &[], 0, Vector3::new(150.0, 0.0, 0.0));
+    assert!(!out.pull_out && out.v_des == Vector3::new(150.0, 0.0, 0.0), "{:?}", out.v_des);
+}
+
+#[test]
+fn a_wish_at_a_face_it_could_not_stop_short_of_is_turned_off_it_early() {
+    use crate::kernels::pilot::avoid;
+    let rows = row_with(fin(), Vector3::ZERO, Basis::IDENTITY);
+    // Flying along the plate 300 m out, the wish swings straight at its face at 150 m/s: too late to stop for once the ship
+    // turns, so the wish loses its way at the face now, though the ship is not yet falling at it.
+    let ship = fighter(Vector3::new(-835.0, 700.0, 365.0), Vector3::new(0.0, 0.0, 120.0));
+    let out = avoid(&rows, &ship, &[0], &[], 0, Vector3::new(150.0, 0.0, 0.0));
+    assert!(out.v_des.x <= 1e-3, "no way at the face: {:?}", out.v_des);
+    // The same wish from 2 km out has room: it stands.
+    let far = fighter(Vector3::new(-2535.0, 700.0, 365.0), Vector3::new(0.0, 0.0, 120.0));
+    assert_eq!(avoid(&rows, &far, &[0], &[], 0, Vector3::new(150.0, 0.0, 0.0)).v_des, Vector3::new(150.0, 0.0, 0.0));
 }

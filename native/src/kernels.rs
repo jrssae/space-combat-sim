@@ -1407,8 +1407,8 @@ pub mod pilot {
     use crate::rows::Rows;
     use crate::surface;
     use crate::v3::{
-        FORWARD, RIGHT, UP, add, clampf, cross, div_s, dot, length, length_squared, maxf, minf,
-        normalized, rotated, scale, sub,
+        FORWARD, RIGHT, UP, add, clampf, cross, div_s, dot, length, length_squared, limit_length, maxf,
+        minf, normalized, rotated, scale, sub,
     };
 
     // `AvoidanceMath`'s constants.
@@ -1478,7 +1478,7 @@ pub mod pilot {
         let mut pull_out = false;
         // The big hulls near enough to shape the wish: each one's outward normal here, how much of a way in it forbids
         // (0..1), its velocity and how far it is. A handful at most (the station's frame and drum).
-        let mut walls: [(Vector3, f32, Vector3, f32); 4] = [(Vector3::ZERO, 0.0, Vector3::ZERO, 0.0); 4];
+        let mut walls: [(Vector3, f32, Vector3, f32); 6] = [(Vector3::ZERO, 0.0, Vector3::ZERO, 0.0); 6];
         let mut wall_count = 0;
         let a_stop = maxf(ship.a_retro, 0.01);
         let turn_rate = maxf(minf(ship.rate_max_x, ship.rate_max_y), 0.01);
@@ -1496,11 +1496,22 @@ pub mod pilot {
                 // ship goes round the station's skin, not its 4 km bounding sphere, and keeps off a tunnel's walls.
                 let reach = ship.radius + MARGIN_M;
                 // Near the skin a wish that heads into it is turned along it (M7-T10), so a ship whose way is through
-                // the hull goes round instead of hanging beside it with its wish cancelled.
-                let (slid, pull, wall) = slide_along(rows, j, ship, v_des, reach, a_stop, urgent_s);
-                if wall.1 > 0.0 && wall_count < walls.len() {
-                    walls[wall_count] = (wall.0, 1.0, c_velocity, wall.2);
-                    wall_count += 1;
+                // the hull goes round instead of hanging beside it. The part used is the one the ship has least room to
+                // stop short of (M7-T38), not always the nearest: sliding along the drum, it may be falling at an arm.
+                let (urgent_skin, nearest_skin) = skin_points(rows, j, ship, c_velocity, reach, a_stop, urgent_s);
+                let (slid, pull, wall) = match urgent_skin {
+                    Some((near, d, falling)) => {
+                        slide_along(ship, c_velocity, near, d, falling, v_des, reach, a_stop, urgent_s)
+                    }
+                    None => (v_des, false, (Vector3::ZERO, 0.0, 0.0)),
+                };
+                let near_wall = nearest_skin.map_or((Vector3::ZERO, 0.0, 0.0), |(near, d)| wall_of(ship, near, d, reach));
+                let ahead = wish_wall(rows, j, ship, c_velocity, v_des, reach, a_stop, urgent_s);
+                for (n, share, d) in [wall, near_wall, ahead] {
+                    if share > 0.0 && wall_count < walls.len() && (wall_count == 0 || walls[wall_count - 1].0 != n) {
+                        walls[wall_count] = (n, 1.0, c_velocity, d);
+                        wall_count += 1;
+                    }
                 }
                 pull_out = pull_out || pull;
                 urgent = urgent || pull;
@@ -1524,7 +1535,7 @@ pub mod pilot {
                     }
                 };
                 if surface.spin_rad_s != 0.0 {
-                    surface::near_swept(rows, j, ship.position, within, &mut meet);
+                    surface::near_swept(rows, j, ship.position, within, 2.0 * reach, &mut meet);
                 } else {
                     surface::near_volumes(rows, j, ship.position, within, &mut meet);
                 }
@@ -1571,31 +1582,130 @@ pub mod pilot {
     // A wish this much along the skin already is kept; under it (head on) the ship's seeded side picks the way round.
     const SLIDE_HEAD_ON: f64 = 0.25;
 
-    // The wish `v_des` as big hull `j` lets it stand (M7-T10), and whether the ship must pull out. Within `SLIDE_BAND_M` of
-    // its keep-off distance `reach`, the part of the wish that heads into the nearest skin is turned along it, wholly at
-    // `reach`, at the wish's own speed. A ship already falling at the skin faster than it can be stopped in the room
-    // left (a turn of `turn_s`, then `a_stop`) pulls out: its wish loses all of its way in, wherever it is.
-    // A wish that does not close on the skin, and a ship farther out, keep theirs.
-    fn slide_along(
+    // Big hull `j`'s skin seen from `ship` (M7-T38): the point it has least room to stop short of at its speed (a turn of
+    // `turn_s` and a burn at `a_stop` included; a face its way meets counts as well as nearest points), and the nearest
+    // point, each with its distance. Only points within the room its speed needs are looked at; ties go to the earlier.
+    fn skin_points(
         rows: &Rows,
         j: usize,
         ship: &Ship,
+        c_velocity: Vector3,
+        reach: f64,
+        a_stop: f64,
+        turn_s: f64,
+    ) -> (Option<(Vector3, f64, f64)>, Option<(Vector3, f64)>) {
+        let relative = f64::from(length(sub(ship.velocity, c_velocity)));
+        let look = reach + SLIDE_BAND_M + relative * turn_s + relative * relative / (2.0 * a_stop);
+        let mut urgent: Option<(Vector3, f64, f64, f64)> = None;
+        let mut nearest: Option<(Vector3, f64)> = None;
+        let v = sub(ship.velocity, c_velocity);
+        let v_sq = f64::from(length_squared(v));
+        let mut consider = |near: Vector3, d: f64| {
+            let off = sub(ship.position, near);
+            // A part the ship's way passes wide of is no fall.
+            let t = if v_sq > 1e-9 { maxf(0.0, -f64::from(dot(off, v)) / v_sq) } else { 0.0 };
+            let passes_wide = f64::from(length(add(off, scale(v, t as f32)))) >= reach;
+            let falling = if f64::from(length(off)) < 1e-3 || (passes_wide && d > reach) {
+                0.0
+            } else {
+                -f64::from(dot(v, normalized(off)))
+            };
+            let mut room = d - reach;
+            if falling > MATCHED_MPS {
+                room -= falling * turn_s + falling * falling / (2.0 * a_stop);
+            }
+            if urgent.is_none_or(|(_, _, _, r)| room < r) {
+                urgent = Some((near, d, falling, room));
+            }
+            if nearest.is_none_or(|(_, b)| d < b) {
+                nearest = Some((near, d));
+            }
+        };
+        if rows.surface(j).is_some_and(|s| s.spin_rad_s != 0.0) {
+            surface::near_swept(rows, j, ship.position, look, 2.0 * reach, &mut consider);
+        } else {
+            surface::near_volumes(rows, j, ship.position, look, &mut consider);
+        }
+        // The face the ship's way meets inside the time it needs to turn and stop: a thin plate met face on, whose nearest
+        // point is an edge the way passes wide of.
+        let stop_s = turn_s + v_sq.sqrt() / a_stop;
+        if let Some((t, n)) = surface::path_entry(rows, j, ship.position, v, stop_s, reach) {
+            let falling = -f64::from(dot(v, n));
+            if falling > MATCHED_MPS {
+                let to_face = falling * t + reach;
+                let room = falling * t - (falling * turn_s + falling * falling / (2.0 * a_stop));
+                if urgent.is_none_or(|(_, _, _, r)| room < r) {
+                    urgent = Some((sub(ship.position, scale(n, to_face as f32)), to_face, falling, room));
+                }
+            }
+        }
+        (urgent.map(|(near, d, falling, _)| (near, d, falling)), nearest)
+    }
+
+    // The face of big hull `j` the wish `v_des` leads to with too little room to stop short of it at the wish's speed
+    // (M7-T38), as a wall: so a wish is turned off the skin before the ship is falling at it, not after. No wall (share 0)
+    // for a wish with room, or one that meets no face in the time a stop takes.
+    #[allow(clippy::too_many_arguments)]
+    fn wish_wall(
+        rows: &Rows,
+        j: usize,
+        ship: &Ship,
+        c_velocity: Vector3,
+        v_des: Vector3,
+        reach: f64,
+        a_stop: f64,
+        turn_s: f64,
+    ) -> (Vector3, f32, f32) {
+        let w = sub(v_des, c_velocity);
+        let speed = f64::from(length(w));
+        if speed <= MATCHED_MPS {
+            return (Vector3::ZERO, 0.0, 0.0);
+        }
+        let stop_s = turn_s + speed / a_stop;
+        let Some((t, n)) = surface::path_entry(rows, j, ship.position, w, stop_s, reach) else {
+            return (Vector3::ZERO, 0.0, 0.0);
+        };
+        let falling = -f64::from(dot(w, n));
+        let room = falling * t - (falling * turn_s + falling * falling / (2.0 * a_stop));
+        if falling <= MATCHED_MPS || room > 0.0 {
+            return (Vector3::ZERO, 0.0, 0.0);
+        }
+        (n, 1.0, (falling * t + reach) as f32)
+    }
+
+    // The wall skin point `near` at `d` makes for `ship`: its outward normal, how much of a way in it forbids (0..1) and
+    // its distance.
+    fn wall_of(ship: &Ship, near: Vector3, d: f64, reach: f64) -> (Vector3, f32, f32) {
+        let off = sub(ship.position, near);
+        if f64::from(length(off)) < 1e-3 {
+            return (Vector3::ZERO, 0.0, 0.0);
+        }
+        let share = clampf((reach + SLIDE_BAND_M - d) / SLIDE_BAND_M, 0.0, 1.0) as f32;
+        (normalized(off), share, d as f32)
+    }
+
+    // The wish `v_des` as skin point `near` at `d`, closing at `falling` (`skin_points`: none when the ship's way passes
+    // wide of it), lets it stand (M7-T10), and whether the ship must pull out. Within
+    // `SLIDE_BAND_M` of the keep-off distance `reach`, the part of the wish heading into the skin is turned along it. A ship
+    // falling at the skin faster than it can stop in the room left (a turn of `turn_s`, then `a_stop`) pulls out.
+    #[allow(clippy::too_many_arguments)]
+    fn slide_along(
+        ship: &Ship,
+        c_velocity: Vector3,
+        near: Vector3,
+        d: f64,
+        falling: f64,
         v_des: Vector3,
         reach: f64,
         a_stop: f64,
         turn_s: f64,
     ) -> (Vector3, bool, (Vector3, f32, f32)) {
-        let Some((near, d)) = surface::nearest_to_avoid(rows, j, ship.position) else {
-            return (v_des, false, (Vector3::ZERO, 0.0, 0.0));
-        };
         // Inside a turning hull's swept ring the point given marks the way out; inside a volume at rest there is none.
         let off = sub(ship.position, near);
         if f64::from(length(off)) < 1e-3 {
             return (v_des, false, (Vector3::ZERO, 0.0, 0.0));
         }
-        let c_velocity = rows.velocities[j];
         let n = normalized(off);
-        let falling = -f64::from(dot(sub(ship.velocity, c_velocity), n));
         let pull = falling > MATCHED_MPS
             && d - reach <= falling * turn_s + falling * falling / (2.0 * a_stop);
         let soft = reach + SLIDE_BAND_M;
@@ -1605,9 +1715,19 @@ pub mod pilot {
             clampf((soft - d) / SLIDE_BAND_M, 0.0, 1.0) as f32
         };
         let wall = (n, share, d as f32);
+        // Pulling out, the stop comes first (M7-T38): the wish may change the ship's way along the skin by no more than
+        // the fall, so most of the thrust goes into stopping.
+        if pull {
+            let v = sub(ship.velocity, c_velocity);
+            let v_along = add(v, scale(n, falling as f32));
+            let w = sub(v_des, c_velocity);
+            let w_along = sub(w, scale(n, dot(w, n)));
+            let change = limit_length(sub(w_along, v_along), falling as f32);
+            return (add(c_velocity, add(v_along, change)), true, wall);
+        }
         let w = sub(v_des, c_velocity);
         let into = -f64::from(dot(w, n));
-        if into <= MATCHED_MPS || (d >= soft && !pull) {
+        if into <= MATCHED_MPS || d >= soft {
             return (v_des, pull, wall);
         }
         let speed = f64::from(length(w));

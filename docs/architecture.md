@@ -5680,10 +5680,12 @@ assets/weapons/grid_*.tres       the light pulse turret, the heavy cannon and th
 
 ```
 native/src/kernels.rs            pilot::avoid at a big hull: slide_along (the wish turned along the skin), the pull-out, swept rings
-                                 for a turning hull, two hulls' limits together
-native/src/surface.rs            + SurfaceVolume.swept and Surface.girth, near_swept, nearest_to_avoid
+                                 for a turning hull, two hulls' limits together; T38: skin_points, wall_of, wish_wall
+native/src/surface.rs            + SurfaceVolume.swept and Surface.girth, near_swept, nearest_to_avoid; T38: way_out (the rings
+                                 as one solid), path_entry (a stopping path's face: volume_entry, ring_entry)
 native/src/brain_behaviours.rs   + big hulls always contacts (SURFACE_SIGHT_M), the attacker first at a hostile hull, the station
-                                 as a target, its mounts as aim points (Field.sub_points), detour, docking lanes (Route.precise)
+                                 as a target, its mounts as aim points (Field.sub_points), detour, docking lanes (Route.precise);
+                                 T38: FormationState's trail (lay_crumb, trail) and kept_apart
 native/src/turret_kernels.rs     + PickJob.points: every working grid mount, for the brains
 native/src/brain.rs              + ScsBrains.set_route_lane, restart_route
 src/ai/route.gd                  + lane, lane_arrival_m, a waypoint's face and spin (add_lane)
@@ -5704,16 +5706,24 @@ data/station/traffic.json        the interval, the kinds' weights, the raid's si
   `SURFACE_SIGHT_M` (2 km) of the ship (`Field.surface_rows`, listed once per rows version), in row order. So the station
   reaches avoidance, the fire lane and the attack in any crowd, and from beyond 5 km of its centre.
 - **Avoidance at a big hull** (`pilot::avoid`; every other row's arithmetic is unchanged). For each hull among the contacts:
-  - its nearest point to keep off (`surface::nearest_to_avoid`): the volumes as they stand, or for a turning hull the **ring
-    each volume sweeps** about the hull's +z (`SurfaceVolume.swept`: from the hull's points where the volume has one, else
-    its box or capsule), so a ship never waits where an arm comes round; inside a ring the point marks the nearest way out
-    (inward only where the ring has a hole: a tunnel);
+  - its points to keep off: the volumes as they stand, or for a turning hull the **ring each volume sweeps** about the hull's
+    +z (`SurfaceVolume.swept`: from the hull's points where the volume has one, else its box or capsule), so a ship never
+    waits where an arm comes round. **The rings are one solid** (T38, `surface::way_out`), each grown by the keep-off so the
+    gaps no ship fits are filled: a ship among them is pushed one way only, the shortest way out of the whole (inward only
+    into a hole round the axis wide enough to fly, never across the axis), and a ring that would push it back in is left out;
+  - **the skin point used** (T38, `skin_points`): of the near points and the face the ship's **stopping path** meets
+    (`surface::path_entry`: the path over a quarter turn, a second and the stop, swept against each volume or ring grown by
+    the keep-off; a thin plate met face on, whose nearest point is an edge), the one the ship has least room to stop short of
+    at its speed; a point its way passes wide of is no fall. The nearest point is a wall as well;
   - **slide**: within `SLIDE_BAND_M` (60 m) of the keep-off distance (radius + 15 m) the part of the wish that heads into
     the skin is turned along it, wholly at the keep-off distance, at the wish's speed; head on, the ship's seeded side
     picks the way;
-  - **pull-out** (`Avoided.pull_out`): closing on the skin at `c` with less room than `c * turn_s + c^2 / (2 a_retro)`
-    (a quarter turn and a second, then the retros), the wish loses all of its way in and the brain re-seeks it on every
+  - **pull-out** (`Avoided.pull_out`): closing on that point at `c` (the fall `skin_points` found) with less room than
+    `c * turn_s + c^2 / (2 a_retro)` (a quarter turn and a second, then the retros), the wish loses all of its way in, may
+    change the ship's way along the skin by no more than `c` (T38: the stop comes first), and the brain re-seeks it on every
     thruster with the nose turned to the burn and the trigger off;
+  - **the wish's face** (T38, `wish_wall`): a wish whose own path leads at a face with too little room to stop short of it at
+    the wish's speed makes that face a wall, so the wish is turned off the skin before the ship falls at it;
   - each near volume (or ring) is a threat at its nearest point, as T06 built;
   - at the end what is left of a way in to any hull within the band is taken out of the sum, the nearest hull last.
 - **The detour** (`brain_behaviours::detour`, attacks only). When the straight way to the run's goal, tested to 83 m short
@@ -5721,6 +5731,15 @@ data/station/traffic.json        the interval, the kinds' weights, the raid's si
   volume reaches from the axis) of every hull in sight plus 83 m, then round the blocking hull's +z the shorter way to the
   goal's side, drifting along the axis toward it. It counts as avoiding. A goal on the hull (a mount) is so reached from
   its own side, and the slot between the spine and the drum is never a way through.
+- **The wing at a big hull (T38).** With a big hull among the contacts `FormationState` lays the leader's point every 0.25 s
+  (64 kept, relative to the first resting hull's place, so a rebase leaves them; dropped when no hull is in sight). A wingman
+  whose slot lies inside or within 55 m of a hull's skin, or whose straight way to it enters a hull grown by its keep-off,
+  **trails**: it flies (nose to the way, at the leader's speed plus a closing of 0.4 /s on the error, at most 60 m/s) to the
+  newest point it reaches in a straight line that is at least 0.5 s plus `1.5 * (|slot| + max(slot.x, 0)) / speed` old, so the
+  wing goes in file; with none, the detour toward the slot; back on the slot once it and the way to it are clear (`describe`:
+  `trailing`). Near a big hull, trailing or in formation, a friendly ship it is closing on within the room a stop across the
+  nose takes (the urgent turn, then the side thrusters) is a wall its wish may not close on, and one within 50 m is pushed off
+  at up to 40 m/s (`kept_apart`). Away from big hulls the formation is as it was, bit for bit.
 - **Raid targeting (maintainer).** `AttackState.score`: with a hostile big hull among the contacts, the last attacker
   inside `KEEP_ATTACKER_S` gets `ATTACK_W_ANSWER` (1.0, above every other term); when that attacker is the hull itself (the
   grid's guns; the drum's shots name the station through `Targetable.SPEAKS_FOR`) the hull is the target though no rigid
@@ -5801,8 +5820,8 @@ data/station/traffic.json        the interval, the kinds' weights, the raid's si
   craft's body and hands (5 m from the hull, 2.5 m from the Saturn; least 10.6 m and 3.0 m).
   any wing.
 - **Threads.** All of the above per tick is in the AI job on the frozen rows; `Field.sub_points` is filled in the job
-  before the pass. Threaded equals delayed and one thread equals six (`test_station_threads`, `test_station_grid_threads`).
-  No recording in `tests/fixtures/` moved.
+  before the pass. Threaded equals delayed and one thread equals six (`test_station_threads`, `test_station_grid_threads`,
+  and T38's dive among the arms in `test_station_wing_follow`). No recording in `tests/fixtures/` moved.
 
 ### 20.5 Navigation targets and the hold-X interaction (T27)
 

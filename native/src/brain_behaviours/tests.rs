@@ -525,3 +525,105 @@ fn fire_from_a_ship_that_has_the_civilian_selected_is_a_provocation_and_a_wide_m
     civilian_think(&mut bench, &mut brain, 1.0);
     assert_ne!(brain.current_kind(), i32::from(KIND_RETREAT));
 }
+
+// --- the wing at a big hull (M7-T38) ----------------------------------------------------------------------------------
+
+const LEADER: i64 = 300;
+const MATE: i64 = 400;
+
+// A wingman (the brain's row, id `RAIDER`, faction 1) on `slot` behind `LEADER`, both flying -z at 100 m/s, the leader
+// at `leader_at` and the wingman `behind` m astern of it; `MATE` (another wingman) at `mate_at` when given.
+fn wing_bench(leader_at: Vector3, behind: f64, mate_at: Option<Vector3>) -> Bench {
+    let mut ships = vec![(LEADER, 1, leader_at), (RAIDER, 1, leader_at + Vector3::new(0.0, 0.0, behind as f32))];
+    if let Some(at) = mate_at {
+        ships.push((MATE, 1, at));
+    }
+    let mut rows = rows_with(&ships, 1000.0, 0.0);
+    for v in rows.velocities.iter_mut().skip(1) {
+        *v = Vector3::new(0.0, 0.0, -100.0);
+    }
+    Bench::new(rows)
+}
+
+fn wingman(slot: Vector3) -> Brain {
+    let mut brain = raider_brain(&[KIND_FORMATION, KIND_IDLE]);
+    brain.ctx.order = ORDER_FORM_ON_ME;
+    brain.ctx.leader_id = LEADER;
+    brain.ctx.has_slot = true;
+    brain.ctx.slot_offset = slot;
+    brain.ctx.wing_ids = vec![LEADER, MATE];
+    brain
+}
+
+// Flies the bench's leader and wingman 0.25 s on along -z, thinking at each step for `steps` steps.
+fn fly_on(bench: &mut Bench, brain: &mut Brain, steps: usize) {
+    for k in 0..steps {
+        for r in 1..3 {
+            let v = bench.rows.velocities[r];
+            bench.rows.positions[r] += v * 0.25;
+        }
+        bench.think(brain, 0.25 * k as f64, 0, NEVER, 12);
+    }
+}
+
+#[test]
+fn a_wingman_whose_slot_lies_inside_the_hull_follows_the_leaders_own_way() {
+    // The leader skims the 100 m box 30 m above its top; the slot 80 m below it lies inside the hull. The wingman leaves
+    // the slot and flies the leader's way (its height), never down into the hull.
+    let mut bench = wing_bench(Vector3::new(0.0, 80.0, 600.0), 100.0, None);
+    let mut brain = wingman(Vector3::new(0.0, -80.0, 40.0));
+    fly_on(&mut bench, &mut brain, 16);
+    assert!(brain.formation.trailing, "on the trail");
+    assert!(brain.desired_velocity.y > -5.0, "not down to the slot: {:?}", brain.desired_velocity);
+    // The same slot 80 m above the leader is clear: formation as before.
+    let mut bench = wing_bench(Vector3::new(0.0, 80.0, 600.0), 100.0, None);
+    let mut brain = wingman(Vector3::new(0.0, 80.0, 40.0));
+    fly_on(&mut bench, &mut brain, 16);
+    assert!(!brain.formation.trailing, "in formation");
+}
+
+#[test]
+fn the_trail_is_kept_relative_to_the_hull_so_a_rebase_leaves_it() {
+    let mut bench = wing_bench(Vector3::new(0.0, 80.0, 600.0), 100.0, None);
+    let mut brain = wingman(Vector3::new(0.0, -80.0, 40.0));
+    fly_on(&mut bench, &mut brain, 16);
+    let before = brain.desired_velocity;
+    // Every row moved 3 km, as a rebase moves them: the same wish.
+    let mut moved = wing_bench(Vector3::new(0.0, 80.0, 600.0), 100.0, None);
+    let mut twin = wingman(Vector3::new(0.0, -80.0, 40.0));
+    fly_on(&mut moved, &mut twin, 15);
+    for p in moved.rows.positions.iter_mut() {
+        *p += Vector3::new(3000.0, 0.0, 0.0);
+    }
+    moved = Bench::new(moved.rows.clone());
+    fly_on_from(&mut moved, &mut twin, 15);
+    assert!((twin.desired_velocity - before).length() < 1e-3, "{:?} {before:?}", twin.desired_velocity);
+}
+
+// One more step of `fly_on`, as its step `k`.
+fn fly_on_from(bench: &mut Bench, brain: &mut Brain, k: usize) {
+    for r in 1..3 {
+        let v = bench.rows.velocities[r];
+        bench.rows.positions[r] += v * 0.25;
+    }
+    bench.think(brain, 0.25 * k as f64, 0, NEVER, 12);
+}
+
+#[test]
+fn near_a_hull_a_wingman_does_not_close_on_a_wingmate_it_could_not_stop_short_of() {
+    // A wingmate 60 m to the side flying with it, the wingman already drifting at it at 40 m/s, both near the hull: its
+    // slot lies beyond the wingmate, but the wish has no way toward it.
+    let mut bench = wing_bench(Vector3::new(0.0, 300.0, 600.0), 0.0, Some(Vector3::new(60.0, 300.0, 600.0)));
+    bench.rows.velocities[2] = Vector3::new(40.0, 0.0, -100.0);
+    bench.rows.velocities[3] = Vector3::new(0.0, 0.0, -100.0);
+    let mut brain = wingman(Vector3::new(150.0, 0.0, 0.0));
+    bench.think(&mut brain, 0.0, 0, NEVER, 12);
+    assert!(brain.desired_velocity.x <= 1e-3, "no closing on the wingmate: {:?}", brain.desired_velocity);
+    // Far from any hull the formation is as it was: the wish goes for the slot.
+    let mut far = wing_bench(Vector3::new(0.0, 300.0, 9000.0), 0.0, Some(Vector3::new(60.0, 300.0, 9000.0)));
+    far.rows.velocities[2] = Vector3::new(40.0, 0.0, -100.0);
+    far.rows.velocities[3] = Vector3::new(0.0, 0.0, -100.0);
+    let mut brain = wingman(Vector3::new(150.0, 0.0, 0.0));
+    far.think(&mut brain, 0.0, 0, NEVER, 12);
+    assert!(brain.desired_velocity.x > 1.0, "for the slot: {:?}", brain.desired_velocity);
+}

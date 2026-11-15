@@ -156,9 +156,18 @@ fn swept_ring_of_hull(points: &[V], planes: &[[f64; 4]]) -> [f64; 4] {
 }
 
 /// For each volume of spinning row `j` whose swept ring is within `within` m of World point `p`: the ring's nearest point
-/// to `p` (World) and the distance. Inside a ring the point given lies a hand's breadth from `p`, opposite the nearest way
-/// out, so a push "away from it" leads out. Nothing for a row without a surface.
-pub fn near_swept(rows: &Rows, j: usize, p: Vector3, within: f64, mut each: impl FnMut(Vector3, f64)) {
+/// to `p` (World) and the distance. The rings act as one solid with the gaps narrower than `gap` filled, so a ship among
+/// them is pushed one way only, the shortest way out (M7-T38: between the drum and the Cobra arms each ring pushed its own
+/// way and the pushes cancelled). Inside, the point given lies a hand's breadth from `p`, opposite that way. Nothing for a
+/// row without a surface.
+pub fn near_swept(
+    rows: &Rows,
+    j: usize,
+    p: Vector3,
+    within: f64,
+    gap: f64,
+    mut each: impl FnMut(Vector3, f64),
+) {
     let Some(s) = rows.surface(j) else {
         return;
     };
@@ -166,42 +175,98 @@ pub fn near_swept(rows: &Rows, j: usize, p: Vector3, within: f64, mut each: impl
     let q = into_body(basis, origin, p);
     let r = q[0].hypot(q[1]);
     let radial = if r > 1e-6 { [q[0] / r, q[1] / r] } else { [1.0, 0.0] };
+    let out = way_out(&s.volumes, r, q[2], 0.5 * gap.max(0.0)).map(|w| match w {
+        Way::Out => [radial[0], radial[1], 0.0],
+        Way::In => [-radial[0], -radial[1], 0.0],
+        Way::Aft => [0.0, 0.0, 1.0],
+        Way::Fore => [0.0, 0.0, -1.0],
+    });
+    const INSIDE_M: f64 = 0.2;
+    if let Some(dir) = out
+        && s.volumes.iter().any(|v| ring_distance(v.swept, r, q[2]) == 0.0)
+    {
+        each(from_body(basis, origin, sub3(q, scale3(dir, INSIDE_M))), 0.0);
+    }
     for v in &s.volumes {
         let [r_lo, r_hi, z_lo, z_hi] = v.swept;
         let (rc, zc) = (r.clamp(r_lo, r_hi), q[2].clamp(z_lo, z_hi));
         let d = (r - rc).hypot(q[2] - zc);
-        if d > within {
+        if d > within || d == 0.0 {
             continue;
         }
-        if d > 0.0 {
-            each(from_body(basis, origin, [radial[0] * rc, radial[1] * rc, zc]), d);
+        let near = [radial[0] * rc, radial[1] * rc, zc];
+        // A ring that would push the ship back into the solid (across a gap too narrow to use) is left out.
+        if out.is_some_and(|dir| dot3(sub3(q, near), dir) < 0.0) {
             continue;
         }
-        // Inside: out by the nearest face of the ring (inward only when the ring has a hole there).
-        const INSIDE_M: f64 = 0.2;
-        let mut out = ([radial[0], radial[1], 0.0], r_hi - r);
-        if r_lo > 0.0 && r - r_lo < out.1 {
-            out = ([-radial[0], -radial[1], 0.0], r - r_lo);
-        }
-        if q[2] - z_lo < out.1 {
-            out = ([0.0, 0.0, -1.0], q[2] - z_lo);
-        }
-        if z_hi - q[2] < out.1 {
-            out = ([0.0, 0.0, 1.0], z_hi - q[2]);
-        }
-        each(from_body(basis, origin, sub3(q, scale3(out.0, INSIDE_M))), 0.0);
+        each(from_body(basis, origin, near), d);
     }
 }
 
-/// Row `j`'s nearest point to World point `p` as avoidance keeps off it, and how far it is: a turning hull's swept rings,
-/// any other hull's volumes as they stand. None for a row without a surface.
-pub fn nearest_to_avoid(rows: &Rows, j: usize, p: Vector3) -> Option<(Vector3, f64)> {
+// The ways out of the turning hull's rings, in the order a tie is settled.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Way {
+    Out,
+    Aft,
+    Fore,
+    In,
+}
+
+// How far the point `r` off the axis, `z` along it, is from the ring `swept` (0 inside it).
+fn ring_distance(swept: [f64; 4], r: f64, z: f64) -> f64 {
+    let [r_lo, r_hi, z_lo, z_hi] = swept;
+    (r - r.clamp(r_lo, r_hi)).hypot(z - z.clamp(z_lo, z_hi))
+}
+
+// The shortest way out of the volumes' rings, each grown by `grow` to close the gaps no ship fits, from the point `r` off
+// the axis, `z` along it; none when it is outside them. Inward only into a hole round the axis wide enough to use.
+fn way_out(volumes: &[SurfaceVolume], r: f64, z: f64, grow: f64) -> Option<Way> {
+    let grown = |v: &SurfaceVolume| {
+        let [r_lo, r_hi, z_lo, z_hi] = v.swept;
+        let lo = if r_lo - grow <= 0.0 { f64::NEG_INFINITY } else { r_lo - grow };
+        [lo, r_hi + grow, z_lo - grow, z_hi + grow]
+    };
+    let inside = |g: [f64; 4], r: f64, z: f64| r >= g[0] && r <= g[1] && z >= g[2] && z <= g[3];
+    if !volumes.iter().any(|v| inside(grown(v), r, z)) {
+        return None;
+    }
+    // Each way: step to the far side of every grown ring the point is in, until it is in none.
+    let walk = |start: f64, step: &dyn Fn([f64; 4], f64) -> Option<f64>| {
+        let mut t = start;
+        loop {
+            let next = volumes
+                .iter()
+                .filter_map(|v| step(grown(v), t))
+                .fold(t, |a, b| if (b - start).abs() > (a - start).abs() { b } else { a });
+            if next == t {
+                return (t - start).abs();
+            }
+            t = next;
+        }
+    };
+    let out = walk(r, &|g, t| (t >= g[0] && t < g[1] && z >= g[2] && z <= g[3]).then_some(g[1]));
+    let aft = walk(z, &|g, t| (t >= g[2] && t < g[3] && r >= g[0] && r <= g[1]).then_some(g[3]));
+    let fore = walk(z, &|g, t| (t > g[2] && t <= g[3] && r >= g[0] && r <= g[1]).then_some(g[2]));
+    let inward = walk(r, &|g, t| (t > g[0] && t <= g[1] && z >= g[2] && z <= g[3]).then_some(g[0]));
+    let mut best = (Way::Out, out);
+    for way in [(Way::Aft, aft), (Way::Fore, fore), (Way::In, inward)] {
+        if way.1 < best.1 {
+            best = way;
+        }
+    }
+    Some(best.0)
+}
+
+/// Row `j`'s nearest point to World point `p` as avoidance keeps off it, and how far it is: a turning hull's swept rings
+/// (gaps narrower than `gap` filled), any other hull's volumes as they stand. None for a row without a surface.
+#[cfg(test)]
+pub fn nearest_to_avoid(rows: &Rows, j: usize, p: Vector3, gap: f64) -> Option<(Vector3, f64)> {
     let s = rows.surface(j)?;
     if s.spin_rad_s == 0.0 {
         return nearest_of_row(rows, j, p);
     }
     let mut best: Option<(Vector3, f64)> = None;
-    near_swept(rows, j, p, f64::INFINITY, |at, d| {
+    near_swept(rows, j, p, f64::INFINITY, gap, |at, d| {
         if best.is_none_or(|(_, b)| d < b) {
             best = Some((at, d));
         }
@@ -605,6 +670,116 @@ pub fn near_volumes(
             each(from_body(basis, origin, near), d);
         }
     }
+}
+
+/// Where a ship at World point `p` moving at `v` (against the hull) first comes within `inflate` of row `j`'s surface in the
+/// next `horizon_s` (M7-T38): the time and the outward normal (World) of the face it meets; none when it does not, or is
+/// within it already. A turning hull is met where its parts sweep. The face, not the nearest point, is what a ship falling
+/// at a thin plate must stop short of: the plate's nearest point may be an edge its way passes wide of.
+pub fn path_entry(rows: &Rows, j: usize, p: Vector3, v: Vector3, horizon_s: f64, inflate: f64) -> Option<(f64, Vector3)> {
+    let s = rows.surface(j)?;
+    let (basis, origin) = (&rows.bases[j], rows.positions[j]);
+    let a = into_body(basis, origin, p);
+    let d = scale3(into_body(basis, Vector3::ZERO, v), horizon_s);
+    let mut best: Option<(f64, V)> = None;
+    for v in &s.volumes {
+        let hit = if s.spin_rad_s != 0.0 {
+            ring_entry(v.swept, a, d, inflate)
+        } else if segment_point_distance(a, add3(a, d), v.centre) > v.reach + inflate * 1.8 {
+            None
+        } else {
+            volume_entry(v, a, d, inflate)
+        };
+        if let Some((t, n)) = hit
+            && best.is_none_or(|(b, _)| t < b)
+        {
+            best = Some((t, n));
+        }
+    }
+    best.map(|(t, n)| (t * horizon_s, from_body(basis, Vector3::ZERO, unit3(n))))
+}
+
+// Where the body-frame segment `a` to `a + d` first enters volume `v` grown by `inflate` (0..1, never at 0: already within)
+// and the face's outward normal (body frame).
+fn volume_entry(v: &SurfaceVolume, a: V, d: V, inflate: f64) -> Option<(f64, V)> {
+    let (la, lb) = (local(v, a), local(v, add3(a, d)));
+    let along = |t: f64| add3(la, scale3(sub3(lb, la), t));
+    let (t, n) = if v.capsule {
+        let (h, r) = (v.half[0], v.half[1] + inflate);
+        let t = capsule_entry(la, lb, h, r)?;
+        let q = along(t);
+        (t, [q[0], q[1] - q[1].clamp(-h, h), q[2]])
+    } else {
+        let half = [v.half[0] + inflate, v.half[1] + inflate, v.half[2] + inflate];
+        let t = box_entry(la, lb, half)?;
+        let q = along(t);
+        let k = (0..3).max_by(|&x, &y| (q[x].abs() / half[x]).total_cmp(&(q[y].abs() / half[y]))).unwrap_or(0);
+        let mut n = [0.0; 3];
+        n[k] = q[k].signum();
+        (t, n)
+    };
+    if t <= 0.0 {
+        return None;
+    }
+    Some((t, add3(add3(scale3(v.axes[0], n[0]), scale3(v.axes[1], n[1])), scale3(v.axes[2], n[2]))))
+}
+
+// Where the body-frame segment `a` to `a + d` first enters the ring `swept` grown by `grow` (0..1, never at 0) and the
+// outward normal of the face it comes through: the rim, an end, or the hole's wall.
+fn ring_entry(swept: [f64; 4], a: V, d: V, grow: f64) -> Option<(f64, V)> {
+    let [r_lo, r_hi, z_lo, z_hi] = swept;
+    let (lo, hi, zl, zh) = (r_lo - grow, r_hi + grow, z_lo - grow, z_hi + grow);
+    // Along z.
+    let (mut t0, mut t1) = (0.0_f64, 1.0_f64);
+    let mut face = 0; // 0 none yet, 1 an end, 2 the rim, 3 the hole's wall
+    if d[2].abs() < 1e-12 {
+        if a[2] < zl || a[2] > zh {
+            return None;
+        }
+    } else {
+        let (ta, tb) = ((zl - a[2]) / d[2], (zh - a[2]) / d[2]);
+        let (near, far) = if ta < tb { (ta, tb) } else { (tb, ta) };
+        if near > t0 {
+            t0 = near;
+            face = 1;
+        }
+        t1 = t1.min(far);
+    }
+    // Inside the rim: r^2 = qa t^2 + qb t + qc <= hi^2.
+    let (qa, qb, qc) = (d[0] * d[0] + d[1] * d[1], 2.0 * (a[0] * d[0] + a[1] * d[1]), a[0] * a[0] + a[1] * a[1]);
+    let roots = |r: f64| {
+        if qa < 1e-12 {
+            return if qc <= r * r { Some((f64::NEG_INFINITY, f64::INFINITY)) } else { None };
+        }
+        let disc = qb * qb - 4.0 * qa * (qc - r * r);
+        (disc >= 0.0).then(|| ((-qb - disc.sqrt()) / (2.0 * qa), (-qb + disc.sqrt()) / (2.0 * qa)))
+    };
+    let (rim0, rim1) = roots(hi)?;
+    if rim0 > t0 {
+        t0 = rim0;
+        face = 2;
+    }
+    t1 = t1.min(rim1);
+    // Out of the hole, when there is one.
+    if lo > 0.0
+        && let Some((h0, h1)) = roots(lo)
+        && h0 < t0
+        && t0 < h1
+    {
+        t0 = h1;
+        face = 3;
+    }
+    if t0 > t1 || t0 <= 0.0 || face == 0 {
+        return None;
+    }
+    let q = add3(a, scale3(d, t0));
+    let r = q[0].hypot(q[1]).max(1e-9);
+    let n = match face {
+        1 => [0.0, 0.0, -d[2].signum()],
+        2 => [q[0] / r, q[1] / r, 0.0],
+        _ => [-q[0] / r, -q[1] / r, 0.0],
+    };
+    Some((t0, n))
 }
 
 /// Whether the World segment from `a` to `b` enters row `j`'s surface grown by `inflate`; false without a surface.

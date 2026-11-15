@@ -2237,6 +2237,50 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   with the reason stated).
 - **Done when:** a test that reproduces the wing's loss (the showcase's wing following the player past the station) and passes;
   tests over the station's parts and the drum; the battle bench inside budget; the maintainer's live run (H); committed.
+- **Done (as built, two rounds; contracts in `docs/architecture.md` §20.4; accepted live by the maintainer, 2026-11-15: "t38
+  passes"):**
+  - **Round 1 (all three wingmen lost).** Reproduced: a leader diving between the Cobra arms with ALPHA 2 to 4 on their
+    finger-four slots lost all three on HEAD (rams at 43 to 66 m/s). Causes: (1) inside a turning hull's swept rings each ring
+    pushed its own way out, so an arm's ring (196 to 246 m out) pushed a ship inward toward the arm's floor, into the 6.5 m above
+    the drum's core; the pushes cancelled and the next arm struck it; (2) the slide and the pull-out looked only at the nearest
+    skin point, so a ship sliding along the drum's forward face fell at an arm's ring beyond it at 70 to 95 m/s with only a
+    sideways dodge against it; (3) pulling out, the wish still asked for the formation's whole speed along the skin. Fixes: the
+    rings are one solid with the gaps narrower than two keep-off distances filled, and a ship among them has one way out, the
+    shortest (inward only into a hole wide enough to fly); the slide and the pull-out use the skin point the ship has least room
+    to stop short of (a turn and the burn at its speed), the nearest kept as a wall, and a part its way passes wide of is no
+    fall; pulling out, the wish may change the ship's way along the skin by no more than the fall.
+  - **Round 2 (maintainer: "3 passes between the cobra arms and 2 through both sets of fins ended up causing 2 of the 3 allies
+    to be destroyed").** Reproduced on a pilot's tracks (turns of at most 24 m/s^2, the leader flying on while the wing
+    rejoins): on round 1's build the fin passes lost two (ALPHA 2 and 3 rammed each other by the gap) and threading the arms
+    against their turn lost one. Causes: (1) the slide worked out a fall again against a vane's edge the ship's way passes wide
+    of: both wingmen braked 300 m short and slid to the gap's middle together (on HEAD too); (2) a thin plate met face on was
+    missed, its nearest point being an edge; (3) a wish bent at 130 m/s toward the slot between the spine and the drum was
+    limited only once the velocity followed it; (4) wingmen left behind rejoin at 200 m/s and cut through the leader's turn.
+    Fixes: the ship's stopping path is swept against every volume (a turning hull's rings) grown by the keep-off, and the face it
+    meets is a candidate (`surface::path_entry`); the slide takes the fall `skin_points` found; a wish leading at a face it could
+    not stop short of makes that face a wall (`wish_wall`); a wingman whose slot lies inside or within 55 m of a big hull's skin,
+    or across one, **trails**: it flies the leader's way (a point every 0.25 s for 16 s, kept relative to the hull), to the newest
+    point it reaches in a straight line that is at least 0.5 s plus its place in the formation behind (so the wing goes in
+    file), else the attack's detour, and rejoins when the slot is clear; near a big hull a friendly ship it could not stop short
+    of is a wall to its wish, and one within 50 m is pushed off (`kept_apart`). Away from big hulls the formation is as it was.
+  - **Tests.** GUT `test_station_wing_follow` (9, a slow file, about 2 min): down the drum, over the bow and the spine, round the
+    arms, along the fins, the dive between the arms, three laps threading the arms with and against their turn, both fin sets
+    twice, and the dive threaded against delayed and one thread against six (rows and commands the same bits every tick).
+    Wingmen lost, HEAD / round 1 / round 2: the dive 3 / 0 / 0; the arms with their turn 1 / 0 / 0 (nearest 55 m); against it
+    1 / 1 / 0 (39 m); the fins 3 / 2 / 0 (50 m); the other four 0 / 0 / 0 (36 m or more). Clean too at 100 and 140 m/s round
+    the arms and 85 and 115 m/s through the fins; 200 m/s straight into the waist is beyond a Starfury's stop (1.2 km needed,
+    650 m given). Rust 203 (+12): the arms' ring pushes out, a tunnel's hole is still a way out, the urgent part beyond a
+    nearer face, a corner passed wide, the pull-out's capped change, a plate's face found past its edge, a ring's rim, end and
+    hole, the face-on pull-out, the wish wall, a slot inside the hull trails, the trail kept through a rebase, no closing on a
+    wingmate near a hull. The station, traffic, launch, parity and formation GUT files pass unchanged; **no recording moved**
+    (none holds a big hull).
+  - **Bench** (`bench_quick.sh battle`, back to back in one copy): 500 ships tick median 5.34 to 5.54 ms, p99 8.24 to 8.81 ms,
+    AI 0.23 to 0.24 ms; every count inside budget (the layout has no big hull). Near a big hull an avoidance call costs more
+    (round 1: 3.0 against 2.9 us off the skin, 9.8 against 3.1 us within the keep-off).
+  - **Open (maintainer):** the station's raid balance is out of band on HEAD after T41 and T43 (raid mean 77.9 s against 90 to
+    120, the capital lost on seed 1); with T38 the raid mean is 71.9 s and the capital unchanged; T43 is reconciling it.
+    Ship-to-ship dodging in plain formation away from big hulls stays weak (a wingman rejoining fast can ram a stopped leader);
+    left as it is for now.
 
 ### M7-T39 Fix: the console key
 
