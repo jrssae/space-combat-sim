@@ -310,6 +310,7 @@ func _settle(ship: Ship, index: int) -> void:
 	ship.visible = false
 	ship.process_mode = Node.PROCESS_MODE_DISABLED
 	ShiftableRegistry.set_out(ship, WorldFrame.PARKED_META, true)
+	ship.global_position = carrier().global_position  # where it is, for whoever asks how far away it is
 	ship.linear_velocity = Vector3.ZERO
 	ship.angular_velocity = Vector3.ZERO
 	_show(index, true)

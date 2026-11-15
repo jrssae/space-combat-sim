@@ -221,7 +221,7 @@ func cinematic(shot_id: StringName) -> void:
 
 
 ## Takes a ship from its pool: a scenario spawn (`type`, `name`, `anchor`, `offset`, `velocity`, `behaviour`, `wing`) plus
-## `arrival` ("none", "jump" or "gate"), `via` ("gate" or "carrier", M6-T23), `carrier` ({"class", "then"}) and `invulnerable`. Returns the ship, or null (with an error when the pool is spent); a
+## `arrival` ("none", "jump" or "gate"), `via` ("gate" or "carrier", M6-T23), `carrier` ({"class", "then"}, and for the raiders' strike carrier, M12-T19, `"arrival"`: "docked" on its cradles or "beside" it, `"standoff_m"`, `"retreat_hull"`, `"wait_s"`, `"raid_s"`, `"fighter_return_hull"`; `CarrierTactics.DEFAULTS`) and `invulnerable`. Returns the ship, or null (with an error when the pool is spent); a
 ## gate arrival returns null with no error, as the ship comes through once the vortex has opened.
 func spawn(entry: Dictionary) -> Combatant:
 	if has_ended():

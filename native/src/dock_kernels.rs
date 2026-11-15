@@ -1,4 +1,4 @@
-// A carrier's docking (M12-T19, docs/architecture.md 19.20): how its fighters leave a cradle, fly back to one and are drawn
+// A carrier's docking (M12-T19, docs/architecture.md 19.18): how its fighters leave a cradle, fly back to one and are drawn
 // in onto it. Engine-free (test_sim_core reads this file): plain numbers in, plain numbers out, no statics, and a row's
 // result depends on that row alone, so any split across threads gives the same answer. The shell (`dock_rows.rs`) keeps
 // the rows for GDScript, which owns the ships.

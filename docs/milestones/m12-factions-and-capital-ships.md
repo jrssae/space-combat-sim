@@ -141,6 +141,10 @@ two hulls move onto them like every other.
   0.979 / 0.969 / 0.981 (top, side, front), 162 collision shapes in six pieces, the look sheet and the A/B/C surface sheet
   (`docs/assets-capital.md`). First built at 144 m; the maintainer then chose option A and about 110 m, pinned at 112 m (Q26). Stage 2 is the game side (body, flight, docking, launch and
   retrieval, `CarrierJumps`, behaviour); T19 stays `in progress`.
+- **T19 stage 2, as built (2026-11-15):** the game side, `docs/architecture.md` §19.18: the capital body from the hull's compound
+  collision with a `ShipSpec`, `CarrierDock` and the native docking kernel, the raid in `CarrierJumps` (docked or beside by
+  data, stand-off, recall, wait, jump out), the `carrier` console command, and headless tests. Waiting for the maintainer to
+  fly it (`docs/playtest.md`); T19 stays `in progress` until then.
 - **T20, the Battle Wagon:** after T19 merges, with weapons (Q31; which ones, settled with the maintainer first) and its four
   launch tubes.
 - **Merge:** when the maintainer accepts T19, the full suite passes on `m12` and `m12` merges into `main` (Q25).

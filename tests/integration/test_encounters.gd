@@ -189,6 +189,28 @@ func test_a_raid_comes_in_behind_a_carrier_that_then_jumps_back() -> void:
 		assert_false(c.damageable.hull.destroyed, "%s flies on" % c.display_name)
 
 
+func test_a_raid_can_come_in_docked_on_its_carrier_and_is_launched_at_its_target() -> void:
+	# M12-T19, Q29: by the raid's data its fighters ride in on the carrier's cradles; launched, each pilot flies its raid.
+	main = await _make_main(true)
+	var carriers: CarrierJumps = CarrierJumps.attach(main.world)
+	_director().carrier_options = {"arrival": "docked"}
+	var e: EncounterEvent = _raid(false)
+	assert_true(_director().start(e))
+	var run: CarrierRun = carriers.runs()[0]
+	assert_eq(run.carrier.dock.docked_count(), e.count(), "every raider is on a cradle")
+	assert_eq(_director().alive().size(), e.count(), "and still the encounter's own")
+	await _fly(60.0, func() -> bool: return run.state == CarrierRun.State.STANDOFF)
+	assert_eq(run.state, CarrierRun.State.STANDOFF)
+	assert_eq(run.carrier.dock.docked_count(), 0, "all launched")
+	await _fly(8.0)
+	for c: Combatant in _director().alive():
+		assert_true(c.ship.is_visible_in_tree(), "%s is in play" % c.display_name)
+		assert_false(c.driver.in_passage, "%s's pilot flies it again" % c.display_name)
+		assert_gt(c.ship.linear_velocity.dot((main.ship.global_position - c.ship.global_position).normalized()), 50.0,
+				"%s is on its way to its target" % c.display_name)
+	assert_eq(run.carrier.damageable.hull.fraction(), 1.0, "nobody scraped the carrier")
+
+
 func test_patrols_and_traffic_cruise_in_from_26_to_30_km_on_their_routes() -> void:
 	main = await _make_main(true)
 	assert_true(_director().start(_director().take_forced(&"patrol")))
