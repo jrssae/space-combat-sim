@@ -293,6 +293,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T37 | C | Radial menus are steered with the left stick while they show (the target menu and the comms menu), not the right; the ship takes no left-stick flight input meanwhile (maintainer, 2026-11-15) | T27 | Sonnet | Input routing while a menu is open; keyboard parity kept | done |
 | T38 | D | AI ships avoid the station and other large bodies: wingmen and allies flying near Babylon 5 never collide with it when a collision could be avoided (maintainer, 2026-11-15) | T10 | Opus | Native avoidance against an 8 km rotating body; parity kept | in progress |
 | T39 | C | Fix: the backtick key no longer opens the debug console in play (maintainer, 2026-11-15) | - | Sonnet | An input regression | done |
+| T40 | D | Council review fixes: the findings of the M7 code review (Opus, GPT-6 Luna, DeepSeek; 2026-11-15) that survived verification | - | Opus (native), Sonnet (GDScript, Python) | Small, separate fixes; the interceptors' line of fire may move the T07 balance | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M7-T01 Station references and measurements
@@ -2139,3 +2140,27 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   window gave `phys=167 key=96`; nothing else consumed the key. `DebugConsole.is_console_physical()` accepts both, and `bind` refuses
   `key:Section` too. `test_console_key_in_play.gd` (4 tests: free flight and the showcase, ANSI and ISO key) plus a `bind` refusal and an
   InputMap check; 2 of the 4 fail without the fix. The live recheck (H) comes with the maintainer's next window.
+
+### M7-T40 Council review fixes
+
+- **Why (maintainer, 2026-11-15: "use council to do a full code review of m7"):** three reviewers read `2b607df4..90fa7f7a`; the
+  controller checked every finding against the code and all nine below hold. Scores, round 1: Opus 8/10, GPT-6 Luna 6/10 (no
+  findings), DeepSeek V4.1 Flash 8/10.
+- **What (native, Opus):**
+  1. P2: the interceptor batteries shoot through the station's own hull and below their arc (`turret_rows.rs` `step_interceptors`,
+     `grid_kernels.rs` `incoming`): a battery takes only a projectile its line reaches unblocked (`line_blocked`) and inside its
+     elevation limits, as the guns do (AC6, "the station's hull blocks its fire").
+  2. P3: a civilian near the station is scared by the station's own grid fire (`brain_behaviours.rs`, the M7-T29 close-fire check):
+     a big hull's (a row with a surface) fire does not scare.
+  3. P3: `time_to_hull` is swept once per battery for every bolt; once per bolt per tick is enough.
+  4. P3: `turret_snapshot_into` allocates and sorts the surfaces' keys every tick; reuse a scratch buffer as `grid_surface_rows` does.
+- **What (GDScript and Python, Sonnet):**
+  5. P3: `StationTraffic._release` zeroes a pooled civilian's transponder and nothing restores it; `ShipPool.acquire` gives each
+     type its own range back.
+  6. P3: `FreighterCargo` emits `finished` (and removes the crew) every tick after an unload ends; once only.
+  7. P3: a failed `LaunchDirector.launch_wing` leaves the twelve parked hulls in the wing (and a new empty wing); roll both back.
+  8. P3: `ScenarioLoader._launch_bay` accepts a door outside 1 to 6; refuse it as its error text says.
+  9. P3: `scripts/python_shards.py check` cannot fail (it checks its own assignment); make it fail when a test module under
+     `tools/procgen/tests` (subfolders too) is in no shard.
+- **Done when:** a test per fix that fails without it; parity recordings and the balance tests green (new numbers stated with the
+  reason); committed; a second council round.
