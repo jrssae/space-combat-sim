@@ -294,7 +294,8 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T38 | D | AI ships avoid the station and other large bodies: wingmen and allies flying near Babylon 5 never collide with it when a collision could be avoided (maintainer, 2026-11-15) | T10 | Opus | Native avoidance against an 8 km rotating body; parity kept | in progress |
 | T39 | C | Fix: the backtick key no longer opens the debug console in play (maintainer, 2026-11-15) | - | Sonnet | An input regression | done |
 | T40 | D | Council review fixes: the findings of the M7 code review (Opus, GPT-6 Luna, DeepSeek; 2026-11-15) that survived verification | - | Opus (native), Sonnet (GDScript, Python) | Small, separate fixes; the interceptors' line of fire may move the T07 balance | in progress |
-| T41 | D | Bow interceptor batteries, so a capital firing down on the bow is met by honest intercepts, and a test that proves the batteries save the station damage (maintainer, 2026-11-15) | T40 | Opus | Grid layout change (D75): placement sheet approved first, station asset rebuild, the balance rerun | in progress |
+| T41 | D | Interceptor fire as the show has it: four barrels firing in turn (0.25 s apart, each recharging 1 s), visible blue-white pulses that fly out and can miss, a small flash and spark where one meets incoming fire; then bow batteries only if the capital fight still needs them, and a test that proves the batteries save the station damage (maintainer, 2026-11-15) | T40 | Opus | Native pulse-against-projectile hits, seeded spread, 1 and 6 threads identical; balance re-measured | in progress |
+| T42 | D | The interceptor battery model: an original procedural mesh after the maintainer's clip, a truss pedestal, a two-axis yoke and four barrels in a rectangle round a central body, about 15 m tall, on every battery (maintainer, 2026-11-15) | - | Opus | Look sheet approved first; four muzzles for T41 | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M7-T01 Station references and measurements
@@ -2206,7 +2207,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 - **Done when:** a test per fix that fails without it; parity recordings and the balance tests green (new numbers stated with the
   reason); committed; a second council round.
 
-### M7-T41 Bow interceptor batteries
+### M7-T41 Interceptor fire and bow batteries
 
 - **Why (maintainer, 2026-11-15):** T40 made the batteries honest (no shots through the hull or below their arc). The cruiser
   stand-in firing down on the bow from 300 to 700 m up and 2.2 to 2.7 km ahead then has 334 to 369 of its bolts shot down (852
@@ -2225,3 +2226,32 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   6. A live window of a raid on the bow for the maintainer (H).
 - **Done when:** the sheet approved; the balance tests pass; the proof test fails with the batteries parked; parity kept;
   the live window seen (H); committed.
+- **Changed (maintainer, 2026-11-15, after phase 1's sheet; a clip of the show's interceptors):** pause the bow batteries. The
+  show's battery is a truss pedestal with a two-axis yoke and four barrels in a rectangle round a central swivel; the barrels fire
+  in turn at a fairly rapid pace, each with a recharge; its blue-white pulses fly out and meet incoming pulse fire, which vanishes
+  in a small flash and spark. The maintainer's answers: pulses are visible and **can miss** (real projectiles with spread, not a
+  kill decided at the trigger); four shots a second a battery (barrels 0.25 s apart, each recharging 1 s); the bow batteries are
+  re-measured after the new fire and proposed again (fewer if they do the job) with a new sheet. Phase 1's proposal (I10 to I13 on
+  the prongs, 877 to 913 shot down with the old instant kills) stands as the record.
+- **What, now:**
+  1. Native: a battery's shot is an interceptor pulse in the projectile pool, fired from its next ready barrel (T42's four muzzles)
+     on a lead course with a seeded spread (a per-shot hash, never a shared RNG); the pulse sweeps against hostile bolts and missiles
+     (never beams or mines) and destroys the first it meets; it harms no ship or hull. Barrel cadence 0.25 s, each barrel's
+     recharge 1 s. 1 and 6 threads identical, threaded and `delayed` identical; parity recordings kept (new ones only with the reason).
+  2. A small flash and spark in the incoming projectile's colour where a pulse meets it; the pulse's muzzle glow per barrel.
+  3. The balance re-measured (raid and capital, three seeds); bow batteries proposed only if the capital fight still loses a
+     section, with a marker sheet for the maintainer before any generator change.
+  4. The proof test (the raid with the batteries parked does clearly more station damage; interceptions asserted).
+  5. A live window of a raid on the bow (H).
+
+### M7-T42 The interceptor battery model
+
+- **Why (maintainer, 2026-11-15):** the batteries wear the Saturns' single-barrel turret at 1.2 times; the show's battery (the
+  maintainer's clip, frames under `references/screenshots/M7-T41 interceptor reference clip/`) is a truss pedestal, a two-axis yoke
+  and four large barrels in a rectangle round a central body.
+- **What:** an original procedural mesh in `tools/procgen` (no franchise asset), about 15 m tall: pedestal about 8 m (truss with
+  diagonal braces), yoke and body about 10 m wide, barrels about 9 m long with ribbed shrouds; base, yaw and pitch parts separate
+  so `TurretMount` turns them; four muzzle points in the manifest for T41's barrel cadence; the station's grey metal and its
+  levels of detail. Every interceptor battery wears it (`StationGrid`); the light and heavy guns keep theirs.
+- **Done when:** a look sheet beside the clip's frames approved by the maintainer (H); the model on every battery; tests (parts,
+  muzzles, scale, bound to the mounts); committed.
