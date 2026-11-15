@@ -75,6 +75,14 @@ class MaintenanceBotTests(unittest.TestCase):
         self.assertLessEqual(self.out_a.triangle_count, TRIANGLE_BUDGET)
         self.assertGreater(self.out_a.triangle_count, 500)
 
+    def test_the_proportions_follow_the_reference_sheet(self) -> None:
+        # M7-T36: the sheet's length, width across the arms and height to the claws (docs/design-references.md), within 10%.
+        dims = self.manifest["dimensions_m"]
+        for key, sheet in (("length", 4.648), ("width", 3.48), ("height", 2.92)):
+            self.assertAlmostEqual(dims[key] / sheet, 1.0, delta=0.1, msg=key)
+        # The arms hang outboard of the shells, so the bot is widest across them, not across the shells (x +-1.39 m).
+        self.assertGreater(dims["width"], 2.0 * 1.5)
+
     def test_the_manifest_box_bounds_the_obj(self) -> None:
         np.testing.assert_allclose(self.obj.vertices.min(axis=0), self.manifest["aabb_min"], atol=1e-4)
         np.testing.assert_allclose(self.obj.vertices.max(axis=0), self.manifest["aabb_max"], atol=1e-4)

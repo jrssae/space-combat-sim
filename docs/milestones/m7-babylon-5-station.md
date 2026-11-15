@@ -289,7 +289,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T33 | A | The cargo pod: a new 6 m Earth Alliance cargo-handling craft built from `references/EA_cargo_pod.stl` at the 90% rule (maintainer, 2026-11-14) | - | Opus | A new STL asset and its look sheet; (H) | done |
 | T34 | D | Cargo pods take over T30's cargo work: they move every freighter's cargo between the ship and the cargo bay with T30's plan and carrying logic, launched from the cargo bay; the maintenance bots stop carrying cargo (maintainer, 2026-11-14) | T30, T33 | Opus | Retargets T30's ferry from bots to pods | not started |
 | T35 | D | Maintenance bots roam and repair: one per area at a time and irregularly, along the spine, the fins (vanes), the drum (turning with it, so they take no damage) and out to the jumpgate and along its arm; in battle the cargo bay launches one per damaged area and each repairs 10 HP/s on damage sections and grid turrets (maintainer, 2026-11-14) | T11, T07 | Opus | New bot routes, a co-rotating frame and a repair rule over T06/T07's health | in progress |
-| T36 | A | The maintenance bot rebuilt to its reference sheet: top, side and front views from `references/maintenance bot.webp` at 90% silhouette overlap (maintainer, 2026-11-14) | T11 | Opus | T11's bot does not match the reference's top view; (H) | in progress |
+| T36 | A | The maintenance bot rebuilt to its reference sheet: top, side and front views from `references/maintenance bot.webp` at 90% silhouette overlap (maintainer, 2026-11-14) | T11 | Opus | T11's bot does not match the reference's top view; (H) | done |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M7-T01 Station references and measurements
@@ -1855,3 +1855,26 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   and both texture-detail sets. The shells' blue, the gold bands and the painted numbers follow the sheet.
 - **Done when:** a GPU look sheet with the reference views beside ours and the overlap numbers is approved by the maintainer (H);
   the bot's tests and T35's crew tests pass in a `--staged` copy; committed.
+- **Done (as built; the maintainer approved the look sheet on 2026-11-14, accepting the symmetrised-mask bar):**
+  - **Generator v2.** The shells are quarter eggs lofted from the plan and crest profiles measured off the sheet: flat inside and
+    underneath, pointed at the nose, a 1.17 m gap down the middle. Between and under them: a truss deck, a beam with a dark slot under
+    the shells, a tail block and a T-shaped mast. The arms hang outboard of the shells at x ±1.62 m and fold aft to the elbow, then
+    forward to a two-prong claw. Under the middle: a sensor stalk with a lens box. All sizes are in `docs/design-references.md`
+    "Maintenance bot".
+  - **Kept.** The size: 4.65 m long; width 3.50 m against the sheet's 3.48, height 2.91 against 2.92 (ratios 1.000, 1.006, 0.997).
+    The hardpoints are unchanged (bound, 3 lamps, no collision), there are 8 thrusters and 3 136 triangles. The game reads only the
+    mesh. The lens is dimmed so it reads green on the GPU. The numbers are in the bands' gold, "9" and "6" seen from above as on the
+    sheet. The bot never wrote texture-detail sets (only seamed parts do), so both settings use the full maps, as before.
+  - **Overlap** (generator v1 in brackets): top 0.905 against the symmetrised mask, 0.844 raw (0.658); side 0.908 (0.443); front
+    0.857 symmetrised, 0.801 raw (0.388).
+  - **Why this bar.** The sheet is not left-right symmetric: the front is a perspective render and some truss details are one-sided.
+    Against the raw masks a symmetric bot can reach at most 0.896 in the top view and 0.888 in the front (the mask scored against
+    itself joined with its mirror image), so 0.90 raw cannot be met. Top and front are scored against that symmetrised mask, the
+    best target for a symmetric shape, and the maintainer accepted the front at 0.857 against its 0.888 ceiling. The rule is written
+    in `docs/design-references.md`.
+  - **Look sheet** (GPU, Forward+): `references/screenshots/T36 maintenance bot/T36 look sheet.png` (gitignored), with the mask and
+    scoring scripts beside it.
+  - **Tests.** `test_maintenance_bot` gains the sheet's proportions. In the `--staged` copy: Python with PIL blocked 13 pass; the
+    compile check is clean; the bot GUT files pass (bots_on_station 8, alert 5, data 2, ferry_fleet 4, ferry_motion 6, fleet 13,
+    loop 9, loops_clear_of_hull 3, motion 8). T35's uncommitted crew tests passed with the new mesh in a working-copy scratch
+    (crew 18, crew_motion 8, routes_clear_of_hull 3, trip 3).

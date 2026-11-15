@@ -356,6 +356,27 @@ A small craft a few metres across. Two large curved shell halves (blue-purple, w
 painted number) sit side by side like a split egg or clam, joined by a grey central truss body. Two jointed
 manipulator arms hang below with claw grippers. A sensor head with a green lens sits under the front centre.
 
+The reference is the maintainer's four-view sheet `references/maintenance bot.webp` (gitignored; top, side, front and a
+three-quarter view), measured in M7-T36 at the bot's 4.65 m length (one sheet pixel is 0.0216 m). Below, z runs aft from the
+shells' tips and y up from the shells' flat undersides:
+
+| Part | Size and place |
+|---|---|
+| Overall | 4.65 m long, 3.48 m across the arms, 2.92 m from the shells' crest to the claws |
+| Shells | each a quarter of a long egg, flat inside and underneath: the inner walls at x ±0.585 m (a 1.17 m gap down the middle), the outer edge out to x ±1.37 m at z 2.8; the pointed tip (z 0) and the rounded tail (z 4.58) both on the inner wall; the crest along the inner wall rising from the tip to 0.45 m at z 1.75 and 0.62 to 0.65 m from z 2.5 to 4.1; the section a little flatter than a quarter ellipse; gold bands at z 1.6 to 1.9 and 3.04 to 3.47 with a gold "9" 0.48 m tall between them, upright read from outboard (a "9" and a "6" seen from above) |
+| Truss | a deck between the shells (top at y 0.09) from z 0.88, 0.68 m wide ahead of z 1.66; under the shells a beam 0.84 m wide at y -0.13 to -0.43 from z 1.05, with a dark slot between it and the shells; the tail block's underside rising from y -0.63 at z 3.44 to -0.06 at z 4.22; a T-shaped mast on the deck aft, up to the crest |
+| Arms | outboard of the shells at x ±1.62 m, folding fore and aft: the shoulder at y -0.31, z 1.83 (a post up to the shell's underside, a beam across toward the truss at z 1.1 to 1.65); the elbow at y -0.89, z 3.73; the wrist at y -1.8, z 2.49; a two-prong claw down to y -2.23 |
+| Sensor | a stalk 0.4 m wide at z 2.33 to 2.59 down to y -1.23; a lens box 0.8 m wide down to y -1.78, its green lens looking forward |
+| Colours (lit, sRGB) | shells #5F5AA8, bands and numbers #B79F62, truss #969391 |
+
+Fidelity (maintainer, 2026-11-14, M7-T36): there is no STL, so the sheet's views stand in for it. Masks are cut from the sheet by a
+threshold on its dark background (dark paint on solid parts, the lens box's face and the bow frame's ring, is filled in), the bot's
+silhouettes are drawn at the same scale (its length is the sheet's length), and each view must overlap by IoU >= 0.90 with L/W/H
+within 10%. The sheet is not left-right symmetric (the front is a perspective render, some truss details are one-sided), so a
+symmetric bot can reach at most 0.896 in the top view and 0.888 in the front against the raw masks. Top and front are therefore
+scored against the **symmetrised mask**: the mask joined with its mirror image, the best target for a symmetric shape. As built:
+top 0.905 (raw 0.844), side 0.908, front 0.857 (raw 0.801); the maintainer accepted the front below 0.90, against its 0.888 ceiling.
+
 ## Cargo pod (M7)
 
 The Earth Alliance cargo pod (M7-T33, asset `cargo_pod_craft`): the small work craft that moves the freighters' cargo
