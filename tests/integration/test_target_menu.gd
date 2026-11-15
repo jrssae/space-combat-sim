@@ -160,9 +160,9 @@ func test_the_stick_points_a_selects_and_the_game_resumes_with_nothing_fired() -
 	assert_eq(_read("target_menu.highlight"), "RAIDER 2")
 	await _point(120.0)
 	assert_eq(_read("target_menu.highlight"), "RAIDER 2", "a blank slice keeps the last highlight")
-	# A is also fire, and the stick that points also steers: both stay held through the pick.
+	# A is also fire, and the left stick that points also strafes: both stay held through the pick (M7-T37).
 	var bolts: int = main.projectiles.get_child_count()
-	source.hold(InputAdapter.YAW_RIGHT, 1.0)
+	source.hold(InputAdapter.STRAFE_RIGHT, 1.0)
 	source.hold(InputAdapter.FIRE)
 	source.hold(InputAdapter.RADIAL_SELECT)
 	await _ticks(4)
@@ -172,14 +172,14 @@ func test_the_stick_points_a_selects_and_the_game_resumes_with_nothing_fired() -
 	assert_eq(_read("target_menu.closed_by"), "pick")
 	assert_eq(main.projectiles.get_child_count(), bolts, "the A that selected does not fire")
 	assert_false(main.adapter.last.combat.fire)
-	assert_eq(main.adapter.last.flight.rot, Vector3.ZERO, "the stick that pointed does not steer until it centres")
+	assert_eq(main.adapter.last.flight.strafe, Vector2.ZERO, "the left stick that pointed does not strafe until it centres")
 	source.release_all()
 	await _ticks(2)
-	source.hold(InputAdapter.YAW_RIGHT, 1.0)
+	source.hold(InputAdapter.STRAFE_RIGHT, 1.0)
 	source.hold(InputAdapter.FIRE)
 	await _ticks(3)
 	assert_true(main.adapter.last.combat.fire, "let go and pressed again, A fires")
-	assert_gt(main.adapter.last.flight.rot.y, 0.5, "and the stick steers")
+	assert_gt(main.adapter.last.flight.strafe.x, 0.5, "and the stick strafes")
 
 
 func test_b_goes_back_a_ring_then_closes_and_resumes() -> void:

@@ -19,6 +19,13 @@ func get_vector(_neg_x: StringName, _pos_x: StringName, _neg_y: StringName, _pos
 	return Vector2.ZERO
 
 
+## Like `get_vector`, but reads only the pad's stick axes bound to the four actions: a key or mouse button bound to the same
+## actions does not count. For asking "is a stick still held" without mistaking a held key for it (M7-T37).
+func get_stick_vector(_neg_x: StringName, _pos_x: StringName, _neg_y: StringName, _pos_y: StringName,
+		_deadzone: float) -> Vector2:
+	return Vector2.ZERO
+
+
 ## Analog 0..1 for a trigger action, after rest calibration and the trigger deadzone.
 func get_trigger(_action: StringName) -> float:
 	return 0.0

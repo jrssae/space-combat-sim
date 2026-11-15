@@ -36,7 +36,8 @@ second.
 
 ```
 RT / LT       right / left main pods (analog)        RB / LB     right / left retros
-Right stick   up/down: pitch (stick back = nose up)   Left stick  strafe left/right, up/down
+Right stick   up/down: pitch (stick back = nose up)   Left stick  strafe left/right, up/down;
+              with a radial menu open (target menu, comms menu) it points at the entries instead (M7-T37)
               left/right: yaw;  the four diagonals: roll toward the side you lean (up-right or down-right = roll right)
 D-pad Up      flight assist on/off                   D-pad Down  fire mode
 D-pad Left    running lights on/off (key 5; the HUD says LIGHTS ON or OFF, and your wingmen follow)     D-pad Right  comms menu (M5)
@@ -344,10 +345,11 @@ Keys 1 to 4, or `wing order <attack|form|engage|cover>` in the console. The HUD 
 `ALPHA 2: COPY, FORMING UP`.
 
 The comms menu (D-pad Right, or Ctrl) is a radial menu like the target menu: the same ring at the left, the game paused and the view
-blurred behind it. Point the right stick (or the arrow keys, or the mouse) at WING ORDERS' slices, up to down going clockwise: ATTACK
+blurred behind it. Point the left stick (M7-T37; or the arrow keys, or the mouse) at WING ORDERS' slices, up to down going clockwise: ATTACK
 (my target), FORM ON ME, ENGAGE (at will), COVER ME. A sends the order and the game resumes; B closes the menu (from a sub-page it
 goes back a page); D-pad Right again also closes it; Start hands over to the pause menu. There is no timeout. Nothing held (fire, the
-aim stick, a D-pad press) acts when it closes. Console: `commsmenu open`, `commsmenu pick "form on me"`, `state comms_menu`.
+left stick, a D-pad press) acts when it closes; the left stick strafes again only once it has been back near centre. The right
+stick is not read by the menu and flies as soon as it closes. Console: `commsmenu open`, `commsmenu pick "form on me"`, `state comms_menu`.
 
 - **1, attack my target:** every wingman goes for your selected hostile, and only that one. With no hostile selected it is refused
   (`ALPHA 2: UNABLE, NO HOSTILE SELECTED`) and the old order stands. In a console script under `--console-strict`, a refusal stops the
@@ -660,7 +662,7 @@ Fly the dogfight (`play dogfight`, or **New game**, **Dogfight**) and a big batt
 ```
 B / Mouse 2 (tap)    the nearest enemy; tap again for the 2nd nearest; again for the nearest
 B / Mouse 2 (hold)   the game pauses and the target menu opens at the left; it stays open when you let go
-Right stick          points at a slice (centred, the highlight stays); arrow keys and moving the mouse do the same
+Left stick           points at a slice (centred, the highlight stays; M7-T37); arrow keys and moving the mouse do the same
 A / Enter / Mouse 1  open the category, or pick the entry
 B / Backspace / Mouse 2   back to the categories; from the categories, close and resume
 Start / Esc          close it and open the pause menu
@@ -688,7 +690,7 @@ From the console: `targetmenu open`, `targetmenu pick enemies`, `targetmenu pick
 ## Comms menu (M5-T46)
 
 D-pad Right (or Ctrl) opens a ring like the target menu's: the game pauses and the view blurs behind it. WING ORDERS has ATTACK
-(my target) up, FORM ON ME right, ENGAGE (at will) down and COVER ME left. The right stick (arrow keys, mouse) points, A sends
+(my target) up, FORM ON ME right, ENGAGE (at will) down and COVER ME left. The left stick (arrow keys, mouse) points, A sends
 the order and the game resumes, B or D-pad Right closes it, Start hands over to the pause menu. There is no timeout. Keys 1 to
 4 still give the orders directly. Console: `commsmenu open`, `commsmenu pick "form on me"`, `state comms_menu`.
 

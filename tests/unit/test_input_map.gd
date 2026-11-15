@@ -245,11 +245,12 @@ func test_pad_b_cycles_targets_and_dpad_up_toggles_assist() -> void:
 
 
 func test_the_radial_menus_actions_are_fixed_and_outside_the_profiles() -> void:
-	# M5-T25: the right stick or the arrow keys point, A, Enter or Mouse 1 select, B, Backspace or Mouse 2 go back. They are
+	# M5-T25 (the stick moved from the right to the left in M7-T37): the left stick or the arrow keys point, A, Enter or Mouse 1
+	# select, B, Backspace or Mouse 2 go back. They are
 	# read only while a radial menu is open, so sharing A with fire and B with the target button is the point.
 	var expected: Dictionary = {
-		&"radial_up": [JOY_AXIS_RIGHT_Y, -1.0, KEY_UP], &"radial_down": [JOY_AXIS_RIGHT_Y, 1.0, KEY_DOWN],
-		&"radial_left": [JOY_AXIS_RIGHT_X, -1.0, KEY_LEFT], &"radial_right": [JOY_AXIS_RIGHT_X, 1.0, KEY_RIGHT],
+		&"radial_up": [JOY_AXIS_LEFT_Y, -1.0, KEY_UP], &"radial_down": [JOY_AXIS_LEFT_Y, 1.0, KEY_DOWN],
+		&"radial_left": [JOY_AXIS_LEFT_X, -1.0, KEY_LEFT], &"radial_right": [JOY_AXIS_LEFT_X, 1.0, KEY_RIGHT],
 	}
 	assert_eq(InputAdapter.RADIAL_ACTIONS.size(), 6)
 	for action: StringName in InputAdapter.RADIAL_ACTIONS:
@@ -259,7 +260,7 @@ func test_the_radial_menus_actions_are_fixed_and_outside_the_profiles() -> void:
 		var events: Array[InputEvent] = InputMap.action_get_events(action)
 		assert_eq(events.size(), 2, String(action))
 		var motion := events[0] as InputEventJoypadMotion
-		assert_eq(motion.axis, expected[action][0], "%s: the right stick" % action)
+		assert_eq(motion.axis, expected[action][0], "%s: the left stick, not the right (M7-T37)" % action)
 		assert_eq(motion.axis_value, expected[action][1], String(action))
 		assert_eq((events[1] as InputEventKey).physical_keycode, expected[action][2], "%s: its arrow key" % action)
 		assert_almost_eq(InputMap.action_get_deadzone(action), 0.15, 1e-6)

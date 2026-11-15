@@ -290,7 +290,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T34 | D | Cargo pods take over T30's cargo work: they move every freighter's cargo between the ship and the cargo bay with T30's plan and carrying logic, launched from the cargo bay; the maintenance bots stop carrying cargo (maintainer, 2026-11-14) | T30, T33 | Opus | Retargets T30's ferry from bots to pods | done |
 | T35 | D | Maintenance bots roam and repair: one per area at a time and irregularly, along the spine, the fins (vanes), the drum (turning with it, so they take no damage) and out to the jumpgate and along its arm; in battle the cargo bay launches one per damaged area and each repairs 10 HP/s on damage sections and grid turrets (maintainer, 2026-11-14) | T11, T07 | Opus | New bot routes, a co-rotating frame and a repair rule over T06/T07's health | done |
 | T36 | A | The maintenance bot rebuilt to its reference sheet: top, side and front views from `references/maintenance bot.webp` at 90% silhouette overlap (maintainer, 2026-11-14) | T11 | Opus | T11's bot does not match the reference's top view; (H) | done |
-| T37 | C | Radial menus are steered with the left stick while they show (the target menu and the comms menu), not the right; the ship takes no left-stick flight input meanwhile (maintainer, 2026-11-15) | T27 | Sonnet | Input routing while a menu is open; keyboard parity kept | in progress |
+| T37 | C | Radial menus are steered with the left stick while they show (the target menu and the comms menu), not the right; the ship takes no left-stick flight input meanwhile (maintainer, 2026-11-15) | T27 | Sonnet | Input routing while a menu is open; keyboard parity kept | done |
 | T38 | D | AI ships avoid the station and other large bodies: wingmen and allies flying near Babylon 5 never collide with it when a collision could be avoided (maintainer, 2026-11-15) | T10 | Opus | Native avoidance against an 8 km rotating body; parity kept | not started |
 | T39 | C | Fix: the backtick key no longer opens the debug console in play (maintainer, 2026-11-15) | - | Sonnet | An input regression | done |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
@@ -2081,6 +2081,17 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   diagram, `docs/playtest.md` and the architecture input table say left stick for the menus.
 - **Done when:** tests (the left stick picks entries in both menus, the right stick does not, the ship gets no left-stick input while
   a menu shows and none jumps in on close, keyboard and mouse unchanged); the maintainer's live run (H); committed.
+- **Done (accepted live by the maintainer, 2026-11-15: "T37 passes"):** the six `radial_*` actions in `project.godot` moved from the right stick's axes (2, 3)
+  to the left stick's (0, 1); the arrow keys, A/B and the mouse are as before. The game is paused behind both menus, so the right stick
+  is simply not read and flies again the tick the menu closes (`InputAdapter.end_radial` no longer holds it over). The left stick's
+  strafe is zero while a menu shows (`sample_radial` produces no flight command) and `end_radial` holds it over: `sample` strafes
+  only after the **pad's** stick has been back inside the deadzone (`InputSource.get_stick_vector`, a pad-axes-only read, so a held
+  strafe key Z/C/F/R is never held over). The pad diagram's left-stick row reads `L stick  Strafe / Menu pointer`. Tests: input map,
+  adapter (left stick held over, near-centre not, right stick flies at once, keys not held over), the real `GodotInputSource` (left
+  stick points a menu and the right does not; `get_stick_vector` ignores keys), pad diagram, and the target menu integration test now
+  holds the left stick through a pick. Known: `test_target_preview.test_a_buoy_shows_its_wireframe_and_no_hull_bar` fails the same
+  way at HEAD (not from this task). Left unguarded: a menu that opens while the left stick is already deflected (strafing while B is
+  held) points at that direction at once; the maintainer flew it and did not object.
 
 ### M7-T38 AI ships avoid the station
 

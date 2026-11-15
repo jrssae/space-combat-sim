@@ -44,6 +44,12 @@ func get_vector(neg_x: StringName, pos_x: StringName, neg_y: StringName, pos_y: 
 	return InputSource.radial_deadzone(v, deadzone)
 
 
+func get_stick_vector(neg_x: StringName, pos_x: StringName, neg_y: StringName, pos_y: StringName,
+		deadzone: float) -> Vector2:
+	var v := Vector2(_stick_strength(pos_x) - _stick_strength(neg_x), _stick_strength(pos_y) - _stick_strength(neg_y))
+	return InputSource.radial_deadzone(v, deadzone)
+
+
 func get_trigger(action: StringName) -> float:
 	var best: float = 0.0
 	for event: InputEvent in _events(action):
@@ -136,6 +142,15 @@ func _strength(action: StringName) -> float:
 	var best: float = 0.0
 	for event: InputEvent in _events(action):
 		best = maxf(best, _event_strength(event))
+	return best
+
+
+## Strongest raw 0..1 reading over the stick axes bound to an action; keys, buttons and the mouse read as 0.
+func _stick_strength(action: StringName) -> float:
+	var best: float = 0.0
+	for event: InputEvent in _events(action):
+		if event is InputEventJoypadMotion and not _is_trigger_axis((event as InputEventJoypadMotion).axis):
+			best = maxf(best, _event_strength(event))
 	return best
 
 

@@ -141,6 +141,32 @@ func test_stick_vector_and_buttons() -> void:
 	assert_false(source.is_pressed(&"retro_left"))
 
 
+func test_the_left_stick_points_a_radial_menu_and_the_right_stick_does_not() -> void:
+	# M7-T37: the radial actions are on the left stick's axes, through the real InputMap bindings.
+	var adapter := InputAdapter.new()
+	_axis(JOY_AXIS_RIGHT_X, 1.0)
+	_axis(JOY_AXIS_RIGHT_Y, -1.0)
+	assert_eq(adapter.sample_radial(source, 1.0 / 60.0).radial_point, Vector2.ZERO, "the right stick points at nothing")
+	_axis(JOY_AXIS_RIGHT_X, 0.0)
+	_axis(JOY_AXIS_RIGHT_Y, 0.0)
+	_axis(JOY_AXIS_LEFT_X, 1.0)
+	assert_almost_eq(adapter.sample_radial(source, 1.0 / 60.0).radial_point, Vector2(1.0, 0.0), Vector2(1e-5, 1e-5), "left stick right")
+	_axis(JOY_AXIS_LEFT_X, 0.0)
+	_axis(JOY_AXIS_LEFT_Y, -1.0)  # stick up is a negative Y
+	assert_almost_eq(adapter.sample_radial(source, 1.0 / 60.0).radial_point, Vector2(0.0, 1.0), Vector2(1e-5, 1e-5), "left stick up")
+
+
+func test_the_stick_vector_ignores_keys() -> void:
+	_key(KEY_Z, true)  # strafe left, by key
+	var by_key: Vector2 = source.get_vector(&"strafe_left", &"strafe_right", &"strafe_down", &"strafe_up", 0.15)
+	assert_lt(by_key.x, -0.5, "get_vector reads the key")
+	assert_eq(source.get_stick_vector(&"strafe_left", &"strafe_right", &"strafe_down", &"strafe_up", 0.15), Vector2.ZERO,
+			"get_stick_vector does not")
+	_axis(JOY_AXIS_LEFT_X, 1.0)
+	assert_gt(source.get_stick_vector(&"strafe_left", &"strafe_right", &"strafe_down", &"strafe_up", 0.15).x, 0.5, "the stick is read")
+	_key(KEY_Z, false)
+
+
 func test_pad_info() -> void:
 	_axis(JOY_AXIS_LEFT_X, 0.25)
 	var info: Array[Dictionary] = source.pad_info()
@@ -181,7 +207,7 @@ func _release_everything() -> void:
 		_axis(axis as JoyAxis, 0.0)
 	for button: int in 15:
 		_button(button as JoyButton, false)
-	for key: Key in [KEY_E, KEY_W, KEY_Q, KEY_S, KEY_A, KEY_D, KEY_B, KEY_G, KEY_CAPSLOCK]:
+	for key: Key in [KEY_E, KEY_W, KEY_Q, KEY_S, KEY_A, KEY_D, KEY_B, KEY_G, KEY_CAPSLOCK, KEY_Z]:
 		_key(key, false)
 	Input.flush_buffered_events()
 

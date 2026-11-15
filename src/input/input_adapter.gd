@@ -19,7 +19,7 @@ extends RefCounted
 ## The mouse side buttons are bound like any other (Mouse 4 `autotrack`, Mouse 5 `weapon_next`). Keys 1-4 are the wing orders
 ## (attack my target, form on me, engage at will, cover me; M3-T07), press edges in `UiCommand` for `Main` to pass on. D-pad Left
 ## and key 5 switch the running lights (M3-T27). D-pad Right and Ctrl open the comms menu (M5-T07), a radial menu (T46) that
-## pauses the game: while it is open the sticks, A and B belong to the menu (below), so no flight action fires. X (auto-track) is
+## pauses the game: while it is open the left stick, A and B belong to the menu (below), so no flight action fires. X (auto-track) is
 ## also the interaction button (M7-T27, `HoldInteract`): while the selected target offers an interaction (`interaction_offered`, set
 ## by `Main`: a gate's jump, a bay's placeholder) a tap still toggles auto-track and a 2 s hold gives `UiCommand.interact`, with
 ## the hold's progress in `UiCommand.interact_progress`; everywhere else a press toggles auto-track at once, as before.
@@ -27,7 +27,8 @@ extends RefCounted
 ## A radial menu (M5-T25 the target menu, T46 the comms menu) pauses the game and owns the pad: `sample_radial` reads only the
 ## menu's stick, select and back (and Start), `begin_radial` and `end_radial` bracket it so that nothing fires, steers or
 ## targets on the tick the game resumes. The menu's own actions (`RADIAL_ACTIONS`) are fixed like the menu kit's `ui_*`
-## ones, not part of a control profile: the right stick or the arrow keys point, A or Enter selects, B or Backspace backs.
+## ones, not part of a control profile: the LEFT stick or the arrow keys point (M7-T37; the right stick is not read, and the game is
+## paused, so it flies again as the menu closes), A or Enter selects, B or Backspace backs.
 
 const MAIN_RIGHT := &"main_right"
 const MAIN_LEFT := &"main_left"
@@ -150,9 +151,9 @@ var _held_s: Dictionary = {TARGET_NEXT: 0.0, TARGET_CYCLE: 0.0}
 var _armed: Dictionary = {TARGET_NEXT: false, TARGET_CYCLE: false}
 # Where the mouse has pointed a radial menu since it opened (x right, y up, pixels, at most `RADIAL_MOUSE_REACH_PX`).
 var _radial_pointer: Vector2 = Vector2.ZERO
-# Held over from a radial menu until let go: the button that selected is also fire, and the stick that pointed also steers.
+# Held over from a radial menu until let go: the button that selected is also fire, and the left stick that pointed is also strafe.
 var _fire_held_over: bool = false
-var _aim_held_over: bool = false
+var _strafe_held_over: bool = false
 
 
 static func expo_curve(x: float, exponent: float) -> float:
@@ -186,11 +187,12 @@ func sample(source: InputSource, dt: float) -> PilotCommand:
 	flight.retro_right = 1.0 if source.is_pressed(RETRO_RIGHT) else 0.0
 	flight.retro_left = 1.0 if source.is_pressed(RETRO_LEFT) else 0.0
 	flight.strafe = source.get_vector(STRAFE_LEFT, STRAFE_RIGHT, STRAFE_DOWN, STRAFE_UP, stick_deadzone)
+	if _strafe_held_over:
+		# The left stick pointed the menu that just closed: it must come back to centre before it strafes (keys never arm this).
+		_strafe_held_over = not _left_stick_of(source).is_zero_approx()
+		flight.strafe = Vector2.ZERO
 	# Right stick: x yaw, y pitch, one radial deadzone over the pair, then split by direction (pitch, yaw or roll).
 	var aim: Vector2 = source.get_vector(YAW_LEFT, YAW_RIGHT, PITCH_DOWN, PITCH_UP, stick_deadzone)
-	if _aim_held_over:
-		_aim_held_over = not aim.is_zero_approx()
-		aim = Vector2.ZERO
 	var mouse_px: Vector2 = source.take_mouse_delta()
 	var looking: bool = source.is_pressed(CAMERA_LOOK)
 	var mouse_turn: Vector2 = _step_mouse(mouse_px, dt, looking)
@@ -320,12 +322,13 @@ func sample_radial(source: InputSource, dt: float) -> UiCommand:
 	return ui
 
 
-## The radial menu closed: every edge is re-seeded, the button that selected does not fire and the stick that pointed does
-## not steer until each is let go, and the mouse's travel over the menu is dropped.
+## The radial menu closed: every edge is re-seeded, the button that selected does not fire and the left stick that pointed does
+## not strafe until each is let go, and the mouse's travel over the menu is dropped. The right stick was never the menu's, so it
+## flies at once.
 func end_radial(source: InputSource) -> void:
 	resync_edges(source)
 	_fire_held_over = source.is_pressed(FIRE)
-	_aim_held_over = not source.get_vector(YAW_LEFT, YAW_RIGHT, PITCH_DOWN, PITCH_UP, stick_deadzone).is_zero_approx()
+	_strafe_held_over = not _left_stick_of(source).is_zero_approx()
 	source.take_mouse_delta()
 	source.take_wheel_steps()
 	_mouse_rate = Vector2.ZERO
@@ -337,11 +340,16 @@ func reset() -> void:
 	_mouse_rate = Vector2.ZERO
 	autotrack_on = false
 	_fire_held_over = false
-	_aim_held_over = false
+	_strafe_held_over = false
 	for button: StringName in TAP_HOLD:
 		_disarm(button)
 	hold.reset()
 	console_hold_s = 0.0
+
+
+# The left stick alone (no strafe keys), past the deadzone: what the radial menus point with.
+func _left_stick_of(source: InputSource) -> Vector2:
+	return source.get_stick_vector(STRAFE_LEFT, STRAFE_RIGHT, STRAFE_DOWN, STRAFE_UP, stick_deadzone)
 
 
 func _sample_edges(source: InputSource) -> Dictionary:

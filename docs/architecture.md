@@ -432,7 +432,7 @@ Expected test behaviour (verified headless): with F applied for n ticks from res
 ```
 RT  right main pods (analog)      LT  left main pods (analog)
 RB  right retros (hold)           LB  left retros (hold)
-R-stick  up/down pitch, left/right yaw, diagonals roll       L-stick  strafe L/R + up/down
+R-stick  up/down pitch, left/right yaw, diagonals roll       L-stick  strafe L/R + up/down; points the radial menus while one is open (M7-T37)
 D-pad Up  flight assist           D-pad Down  next weapon           D-pad Left  running lights        D-pad Right  comms menu (radial)
 A  fire       B  tap: next target, hold (0.35 s): previous target
 Comms menu open (D-pad Right, 4 s): D-pad Up/Right/Down/Left pick entries 1-4 (attack my target, form on me, engage at will,
@@ -495,6 +495,7 @@ use for the standard layout; any pad SDL3 recognises, generic XInput clones incl
 | `roll_left` / `roll_right` | none (the right stick's diagonals) | Caps Lock / G | hold, full roll, added to the stick's | - | - |
 | `strafe_left` / `strafe_right` | Left stick X `JOY_AXIS_LEFT_X` (axis 0, -/+) | Z / C | analog pair | radial 0.15 | linear |
 | `strafe_down` / `strafe_up` | Left stick Y `JOY_AXIS_LEFT_Y` (axis 1, +/-) | F / R | analog pair | radial 0.15 | linear |
+| `radial_up` / `radial_down` / `radial_left` / `radial_right` | **Left** stick `JOY_AXIS_LEFT_Y` / `JOY_AXIS_LEFT_X` (axes 1 and 0, M7-T37; the right stick is not read) | arrow keys | analog, a radial menu's pointer; read only while one is open, outside the control profiles | radial 0.15 | linear |
 | `target_cycle` | B `JOY_BUTTON_B` (1) | none | tap or hold: a tap gives `target_next` on release; a hold of 0.35 s gives `target_prev` once | - | - |
 | `target_next` | none (pad B, `target_cycle`) | B, mouse 2 | tap or hold: a tap gives `target_next` on release; a hold of 0.35 s gives `target_ahead` once | - | - |
 | `target_prev` | none (the wheel steps both ways) | none | edge | - | - |
@@ -4601,8 +4602,9 @@ while it is open, with `InputAdapter.sample_radial`'s command.
 
 **Input while a radial menu is open.** `begin_radial` seeds the menu's select and back from what is held;
 `sample_radial` reads the direction pointed (the `radial_*` actions, else the mouse's travel), select, back and Start, and
-re-seeds every other edge each tick; `end_radial` re-seeds them once more and holds fire and the aim stick over until each
-is let go. The `radial_*` actions are in `project.godot` and outside the control profiles, as the menu kit's `ui_*` are.
+re-seeds every other edge each tick; `end_radial` re-seeds them once more and holds fire and the left stick (the menu's pointer, M7-T37) over until each
+is let go (the stick must be back inside the deadzone; strafe keys are never held over). The right stick is not the menu's: flight is
+paused behind it and the stick flies again the tick the menu closes. The `radial_*` actions are in `project.godot` and outside the control profiles, as the menu kit's `ui_*` are.
 
 **Identification.** `TargetCategories.is_identified`: within 5 km, or a broadcast range above 0. An unidentified contact is
 grey on the radar (`radar_kernel::plot` flags it from `ident_range_m`; `known_id` exempts a selection already identified),
