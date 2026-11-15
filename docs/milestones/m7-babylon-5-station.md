@@ -288,7 +288,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T32 | A | The cargo bay gets the main docking bay's look: metallic grey walls and doors with the Earth Alliance mosaic, lit red by lamps through the light slots, no self-lit rings or bands (maintainer, 2026-11-14) | T25 | Opus | Same surfaces and lamps as T25 on the spine's cargo bay; (H) | done |
 | T33 | A | The cargo pod: a new 6 m Earth Alliance cargo-handling craft built from `references/EA_cargo_pod.stl` at the 90% rule (maintainer, 2026-11-14) | - | Opus | A new STL asset and its look sheet; (H) | done |
 | T34 | D | Cargo pods take over T30's cargo work: they move every freighter's cargo between the ship and the cargo bay with T30's plan and carrying logic, launched from the cargo bay; the maintenance bots stop carrying cargo (maintainer, 2026-11-14) | T30, T33 | Opus | Retargets T30's ferry from bots to pods | not started |
-| T35 | D | Maintenance bots roam and repair: one per area at a time and irregularly, along the spine, the fins (vanes), the drum (turning with it, so they take no damage) and out to the jumpgate and along its arm; in battle the cargo bay launches one per damaged area and each repairs 10 HP/s on damage sections and grid turrets (maintainer, 2026-11-14) | T11, T07 | Opus | New bot routes, a co-rotating frame and a repair rule over T06/T07's health | in progress |
+| T35 | D | Maintenance bots roam and repair: one per area at a time and irregularly, along the spine, the fins (vanes), the drum (turning with it, so they take no damage) and out to the jumpgate and along its arm; in battle the cargo bay launches one per damaged area and each repairs 10 HP/s on damage sections and grid turrets (maintainer, 2026-11-14) | T11, T07 | Opus | New bot routes, a co-rotating frame and a repair rule over T06/T07's health | done |
 | T36 | A | The maintenance bot rebuilt to its reference sheet: top, side and front views from `references/maintenance bot.webp` at 90% silhouette overlap (maintainer, 2026-11-14) | T11 | Opus | T11's bot does not match the reference's top view; (H) | done |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
@@ -1844,6 +1844,41 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   tick with entity count (then native, CLAUDE.md); console commands and a state provider for the bots' jobs, listed in `info.md`.
 - **Done when:** a live run shows the peace patrols (spine, fins, drum, gate) and a battle with bots repairing (maintainer, H);
   tests for the routes, the co-rotating drum frame, the one-per-area rule, the repair rate and the turret coming back; committed.
+- **Done (as built; approved by the maintainer 2026-11-14 after a live run of the patrols and a battle):**
+  - **The crew** (`src/props/`): `BotCrew` (who goes out, where and when; pure), `BotTripPlanner` (the trips from the roads),
+    `BotTrip` (a trip's steps, the way back mirroring the way out, so a bot called home turns round where it is), `BotCrewMotion`
+    (flies a trip: trapezoid speeds, the drum boarded from under it by ramping the bot's turn rate to the drum's and landing at a
+    given drum angle, a transit that meets the moving jumpgate, all in the station's frame), `BotFrames` (the drum's angle and the
+    gate's place, refreshed each tick), `BotRepairAreas` (the 11 damage sections and 23 grid mounts as repair areas, the most urgent
+    first). `BotFleet` holds the pool of 12 (hidden in the cargo bay), the alarms and the console; T11's eight fixed loop bots and
+    `BotMotion` are gone (they could not keep 3 to 6 out). Crew bots hang from the station's node, never its far-drawn pieces, and are
+    not drawn past 20 km.
+  - **Routes** (`data/station/bot_points.json`, the tunables too): the trunk out of the cargo bay past the bow, the high road at
+    y 640 over the spine, the low road at y -500 under the drum; patrols along the spine, up or down a vane's outer face at x +-580
+    (port and starboard, one of three vanes), along the drum's green zone (station z -1400..-750 and -100..550, riding at 355-360 m
+    between the drum and the spine's underside) and out to the jumpgate (50 km at 250 m/s) and along an arm's outer face 75 m out.
+    Work spots per section; a mount's along its up (22 m, interceptors 19 m; I6 from the side).
+  - **Peace:** 6 areas, one bot each at a time; waits 60 to 400 s from a hash of the area and its trip number (no shared RNG);
+    3 to 6 out (4 to 5 in a 4-minute headless run); no patrol starts while fighting is near the bay and a patrol near a fight turns
+    home (T11's habit).
+  - **Battle:** one bot per damaged area, knocked-out mounts and lost sections first, up to 12; a short pool calls patrols home;
+    10 HP/s at the spot until whole (`StationSections.repair`, `Station.repair_section` with `section_repaired`,
+    `GridMountHealth.heal`, `StationGrid.repair_some`); a mount comes back above zero, a lost section too and can be lost again (the
+    `lost` signal fires again); a repair bot backs off 40 m while hits land within 100 m in the last 4 s.
+  - **Cost (D78):** about 170 us a physics tick for the crew with six out (headless), so it stays in GDScript.
+  - **Console:** `bots info|hide|show|send|peace|battle|follow|skip|goto|cargo` and the `bots` provider (`info.md`).
+  - **Tests:** GUT `test_bot_trip` (3), `test_bot_crew_motion` (8: smooth flight, staying put on the turning drum, landing at a drum
+    angle with no jump, getting off at the hold point, the drum held still, meeting the moving gate, turning home), `test_bot_crew`
+    (10: 3 to 6 out one an area, seeded waits, fighting sends patrols home, battle counts up to 12, one bot an area, 10 HP/s, a turret
+    back, a lost section repaired and lost again, a short pool, the duck), `test_bot_data` (3), `test_bot_fleet` (8),
+    `test_bot_routes_clear_of_hull` (3: every patrol and repair trip 8 m from the drawn hull, the drum's riding line over a whole turn,
+    the gate's arms; least 12.3 m at the bay's mouth), integration `test_bots_on_station` (10: the crew in the bay, patrols and the gate
+    run, a bot staying put on the turning drum, rebases, a battle with L10 coming back, a lost section repaired and lost again, weapons
+    free, ambient; the cargo scene's two tests unchanged).
+  - **Sheet (H):** `references/screenshots/T35 bot patrols/` (spine, fins, drum, gate, a bot over L10, a bot under the drum).
+  - **For T34:** the ferry is untouched (`ferry_bots`, `add_ferry_bot`, `remove_ferry_bot`, `clear_ferry`, `frame_parent`,
+    `ferry_hidden_count`, the ferry's alarm and `bots cargo`); `test_bot_ferry_fleet` changed one assertion (the crew no longer hangs
+    from the frame).
 
 ### M7-T36 The maintenance bot rebuilt to its reference
 

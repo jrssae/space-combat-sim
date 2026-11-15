@@ -102,6 +102,20 @@ func repair(mount_name: String) -> bool:
 	return true
 
 
+## Adds `amount` to mount `i`'s health (a maintenance bot's work, M7-T35); a knocked-out mount comes back once above zero.
+func repair_some(i: int, amount: float) -> void:
+	if health != null and health.heal(i, amount):
+		mounts[i].knocked_out = false
+		mount_repaired.emit(mounts[i].mount_name)
+
+
+## Takes `amount` off mount `i` alone (the console's staged damage, M7-T35).
+func damage_mount(i: int, amount: float) -> void:
+	if health != null and health.wear(i, amount):
+		mounts[i].knocked_out = true
+		mount_knocked_out.emit(mounts[i].mount_name)
+
+
 func _repair_at(i: int) -> void:
 	if health.repair(i):
 		mounts[i].knocked_out = false

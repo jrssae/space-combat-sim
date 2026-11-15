@@ -9,6 +9,10 @@ const RADIUS_M: float = 1500.0
 const QUIET_S: float = 60.0
 const MAX_EVENTS: int = 32
 
+## This log's own reach and memory (the defaults are T11's; the crew's duck uses a short, close one, M7-T35).
+var radius_m: float = RADIUS_M
+var quiet_s: float = QUIET_S
+
 var _points := PackedVector3Array()
 var _times := PackedFloat64Array()
 var _next: int = 0
@@ -31,7 +35,7 @@ func note(point: Vector3, now_s: float) -> void:
 
 ## Fighting somewhere on the station, which is every bot's concern.
 func note_everywhere(now_s: float) -> void:
-	_everywhere_until_s = now_s + QUIET_S
+	_everywhere_until_s = now_s + quiet_s
 
 
 ## Whether fighting is recent and near enough that a bot at `point` stays out of it.
@@ -39,7 +43,7 @@ func is_alarmed(point: Vector3, now_s: float) -> bool:
 	if now_s < _everywhere_until_s:
 		return true
 	for i: int in MAX_EVENTS:
-		if now_s - _times[i] < QUIET_S and _points[i].distance_squared_to(point) <= RADIUS_M * RADIUS_M:
+		if now_s - _times[i] < quiet_s and _points[i].distance_squared_to(point) <= radius_m * radius_m:
 			return true
 	return false
 

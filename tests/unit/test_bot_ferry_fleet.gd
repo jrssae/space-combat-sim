@@ -48,7 +48,7 @@ func test_the_ferry_bots_hang_from_the_frame_and_are_ambient() -> void:
 		assert_eq(bot.home_body, StationHardpoints.FRAME)
 		assert_eq(bot.find_children("*", "Targetable", true, false).size(), 0)
 		assert_eq(bot.find_children("*", "CollisionObject3D", true, false).size(), 0)
-	assert_eq(fleet.bots.size(), BotData.load_file().bot_count(), "the loop bots are untouched")
+	assert_eq(fleet.bots.size(), BotData.load_file().bot_count(), "the crew's bots are untouched")
 
 
 func test_they_fly_the_route_in_the_stations_frame() -> void:
@@ -83,11 +83,4 @@ func test_bots_hide_holds_the_ferry_in_too_and_clear_removes_it() -> void:
 	assert_eq(fleet.ferry_hidden_count(), 5)
 	fleet.clear_ferry()
 	assert_eq(fleet.ferry_bots.size(), 0)
-	assert_eq(frame_parent.get_child_count(), fleet.bots.size() - drum_count(), "the ferry bots are gone from the frame")
-
-
-func drum_count() -> int:
-	var n: int = 0
-	for bot: MaintenanceBot in fleet.bots:
-		n += 1 if bot.home_body == StationHardpoints.DRUM else 0
-	return n
+	assert_eq(frame_parent.get_child_count(), 0, "the ferry bots are gone from the frame (the crew hangs elsewhere, M7-T35)")

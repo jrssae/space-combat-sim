@@ -10,7 +10,7 @@ const SECTION_HEALTH: float = 5000.0
 ## A point this far outside every section's box of its body still lands in the nearest one (a hit on a hull plate's skin).
 const SNAP_M: float = 50.0
 
-## A section reached zero (its index); once per loss.
+## A section reached zero (its index); once per loss. A section repaired above zero can be lost again (M7-T35).
 signal lost(section: int)
 
 ## Per section: `name`, `body` (`drum` or `frame`) and `aabb` (in that body's frame), in the manifest's order.
@@ -68,6 +68,19 @@ func damage(index: int, amount: float) -> bool:
 		return false
 	lost.emit(index)
 	return true
+
+
+## Adds `amount` to section `index` (never above its full health); true when this brought a lost section back (M7-T35).
+func repair(index: int, amount: float) -> bool:
+	if index < 0 or index >= health.size() or amount <= 0.0:
+		return false
+	var was_lost: bool = health[index] <= 0.0
+	health[index] = minf(health[index] + amount, max_health[index])
+	return was_lost and health[index] > 0.0
+
+
+func is_whole(index: int) -> bool:
+	return index >= 0 and index < health.size() and health[index] >= max_health[index]
 
 
 ## 0..1 health of section `index`.

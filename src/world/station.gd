@@ -30,6 +30,8 @@ extends Node3D
 signal section_damaged(index: int, section_name: String, health: float)
 ## A damage section reached zero (once per loss): a mission can fail on it (Q5). The station goes on.
 signal section_lost(index: int, section_name: String)
+## A lost section repaired above zero, or a damaged one made whole, by the maintenance bots (M7-T35).
+signal section_repaired(index: int, section_name: String, health: float)
 
 const ASSET_ID: String = "babylon5_station"
 const DISPLAY_NAME: String = "BABYLON 5"
@@ -254,6 +256,18 @@ func damage_section(index: int, amount: float) -> bool:
 		frame_hull.zones.record_zone(index, amount)
 	section_damaged.emit(index, String(sections.sections[index]["name"]), sections.health[index])
 	return lost_now
+
+
+## Adds `amount` to damage section `index` (a maintenance bot's work, M7-T35); a lost section comes back above zero and can be
+## lost again.
+func repair_section(index: int, amount: float) -> void:
+	if sections == null or index < 0 or index >= sections.count() or sections.is_whole(index):
+		return
+	var came_back: bool = sections.repair(index, amount)
+	if frame_hull != null and index < frame_hull.zones.totals.size():
+		frame_hull.zones.totals[index] = minf(frame_hull.zones.totals[index], sections.max_health[index] - sections.health[index])
+	if came_back or sections.is_whole(index):
+		section_repaired.emit(index, String(sections.sections[index]["name"]), sections.health[index])
 
 
 ## Every section whole again.

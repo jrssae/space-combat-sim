@@ -69,6 +69,27 @@ func repair(index: int) -> bool:
 	return was_out
 
 
+## Adds `amount` to mount `index` (never above its full health); true when this brought a knocked-out mount back (M7-T35).
+func heal(index: int, amount: float) -> bool:
+	if index < 0 or index >= health.size() or amount <= 0.0:
+		return false
+	var was_out: bool = is_out(index)
+	health[index] = minf(health[index] + amount, max_health[index])
+	return was_out and health[index] > 0.0
+
+
+## Takes `amount` off mount `index` alone; true when that knocked it out (the console's staged damage, M7-T35).
+func wear(index: int, amount: float) -> bool:
+	if index < 0 or index >= health.size() or amount <= 0.0 or is_out(index):
+		return false
+	health[index] = maxf(health[index] - amount, 0.0)
+	return is_out(index)
+
+
+func is_whole(index: int) -> bool:
+	return health[index] >= max_health[index]
+
+
 ## How many mounts are knocked out.
 func out_count() -> int:
 	var n: int = 0

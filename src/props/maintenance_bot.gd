@@ -1,18 +1,21 @@
 class_name MaintenanceBot
 extends Node3D
-## One maintenance bot (M7-T11, Q11, D78): the generated `maintenance_bot` mesh on a node that follows its `BotMotion`. Ambient
+## One maintenance bot (M7-T11, Q11, D78): the generated `maintenance_bot` mesh on a node that follows its `BotMover`. Ambient
 ## only: no `Targetable`, no `Damageable`, no body and no row in the native core, so nothing targets it, shoots it, rams it or
 ## sees it as a contact. A hidden bot stays in the tree (the fleet is its pool) and is only not drawn.
 ##
-## It is a child of the station's frame or of the drum's pivot, so it rides the station through rebases and turns with the drum
-## with no work of its own. `BotFleet` drives it each physics tick.
+## A crew bot (M7-T35) is a child of the station's node and a ferry bot of its frame, so it rides the station through rebases with
+## no work of its own; its motion places it on the turning drum itself. `BotFleet` drives it each physics tick.
 
 const ASSET_ID: String = "maintenance_bot"
 ## How quickly the nose follows the heading, 1/s: a bot swings round a hatch's corner over a second or so, never snaps.
 const TURN_RATE: float = 2.0
+## Past this a 4.6 m bot is far under a pixel; it is not drawn (the crew hangs from the station's node, which is never shrunk for
+## the far field, M7-T35).
+const DRAW_RANGE_M: float = 20000.0
 
 var motion: BotMover = null
-## The body whose frame the loop is in: `StationHardpoints.FRAME` or `DRUM`.
+## The body whose frame its motion is in: `StationHardpoints.FRAME` (the drum's turn is in the motion).
 var home_body: String = ""
 var loop_name: String = ""
 
@@ -32,6 +35,7 @@ func setup(p_name: String, p_loop_name: String, p_body: String, p_motion: BotMov
 	_mesh_node.name = "Body"
 	_mesh_node.mesh = mesh
 	_mesh_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_mesh_node.visibility_range_end = DRAW_RANGE_M
 	add_child(_mesh_node)
 	transform = Transform3D(motion.target_basis(), motion.position)
 	visible = motion.is_visible()

@@ -1,7 +1,7 @@
 class_name BotMover
 extends RefCounted
 ## What a maintenance bot's node reads from whatever moves it (M7-T11): where it is, which way it faces, whether it is drawn.
-## `BotMotion` flies a loop round the hull and `BotFerryMotion` shuttles between the cargo bay and a freighter; both are pure.
+## `BotCrewMotion` flies the crew's trips (M7-T35) and `BotFerryMotion` shuttles between the cargo bay and a freighter; both are pure.
 
 var position: Vector3 = Vector3.ZERO
 var heading: Vector3 = Vector3.FORWARD

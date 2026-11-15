@@ -1,7 +1,7 @@
 extends GutTest
-## The maintenance bots on the real station in the real main scene (M7-T11, Q11, D78, AC9): a handful of ambient drones hang from
-## the station's frame and the drum's pivot, ride the drum, stay put on the station across rebases, go in when the hit resolver
-## reports a hit or the grid goes weapons free near them, and come out again after a quiet; none is a target or a contact.
+## The maintenance bots on the real station in the real main scene (M7-T11, M7-T35, Q11, D78, AC9): the crew waits in the cargo
+## bay, patrols in peace (out to the jumpgate too), rides the drum, stays put on the station across rebases, goes home when the grid
+## goes weapons free, and in a fight repairs: a knocked-out turret comes back, a lost section is repaired; none is a target.
 
 const DT: float = 1.0 / 60.0
 
@@ -42,38 +42,60 @@ func _run_fleet(seconds: float) -> void:
 		station.bots._physics_process(DT)
 
 
-func test_the_station_has_its_bots_on_the_frame_and_the_drum() -> void:
+func test_the_station_has_its_crew_hidden_in_the_cargo_bay() -> void:
 	await _start()
 	assert_not_null(station.bots, "the station builds its bots")
 	var fleet: BotFleet = station.bots
-	assert_between(fleet.bots.size(), 6, 10)
+	assert_eq(fleet.bots.size(), BotData.load_file().pool)
 	for bot: MaintenanceBot in fleet.bots:
-		assert_eq(bot.get_parent(), station.drum_pivot if bot.home_body == StationHardpoints.DRUM else station.frame_piece)
+		assert_eq(bot.get_parent(), station, "on the station's own node, never its far-drawn pieces")
 		assert_not_null((bot.get_node(^"Body") as MeshInstance3D).mesh, "the generated bot mesh is on it")
-		assert_true(bot.visible)
 
 
-func test_a_bot_on_the_drum_turns_with_it_and_one_on_the_frame_does_not() -> void:
+func test_in_peace_the_patrols_go_out_and_one_reaches_for_the_gate() -> void:
 	await _start()
-	station.set_spinning(false)
-	var drum_bot: MaintenanceBot = null
-	var frame_bot: MaintenanceBot = null
-	for bot: MaintenanceBot in station.bots.bots:
-		drum_bot = bot if bot.home_body == StationHardpoints.DRUM and drum_bot == null else drum_bot
-		frame_bot = bot if bot.home_body == StationHardpoints.FRAME and frame_bot == null else frame_bot
-	station.set_drum_angle(0.4)
-	var frame_before: Vector3 = frame_bot.global_position
-	var radius_before: float = Vector2(drum_bot.position.x, drum_bot.position.y).length()
+	var fleet: BotFleet = station.bots
+	fleet.set_physics_process(false)
+	_run_fleet(40.0)
+	assert_between(fleet.out_count(), 3, 6, "3 to 6 out in peace")
+	assert_true(fleet.frames.has_gate, "the scene's jumpgate is placed for the crew")
+	var gate_bot: int = fleet.crew.peace_bot[_peace_index(fleet, "gate")]
+	if gate_bot < 0:
+		var sent: Array[ConsoleResult] = DebugConsole.registry.execute("bots send gate")
+		assert_true(sent[0].ok, "; ".join(sent[0].lines))
+		gate_bot = fleet.crew.peace_bot[_peace_index(fleet, "gate")]
+	var gate: Jumpgate = main.gates.gate()
+	var before: float = fleet.bots[gate_bot].global_position.distance_to(gate.global_position)
+	_run_fleet(120.0)
+	assert_lt(fleet.bots[gate_bot].global_position.distance_to(gate.global_position), before - 5000.0, "on its way out to the gate")
+
+
+func test_a_bot_on_the_drum_stays_put_on_the_hull_as_it_turns() -> void:
+	await _start()
+	var fleet: BotFleet = station.bots
+	fleet.set_physics_process(false)
+	DebugConsole.registry.execute("bots peace off")
+	var sent: Array[ConsoleResult] = DebugConsole.registry.execute("bots send drum_fore")
+	assert_true(sent[0].ok, "; ".join(sent[0].lines))
+	var bot: MaintenanceBot = fleet.bots[fleet.crew.peace_bot[_peace_index(fleet, "drum_fore")]]
+	var m: BotCrewMotion = bot.motion
+	for i: int in int(400.0 / DT):
+		station.bots._physics_process(DT)
+		if int(m.current().get("kind", -1)) == BotTrip.Kind.HOLD:
+			break
+	assert_eq(int(m.current().get("kind", -1)), BotTrip.Kind.HOLD, "it got on the drum and stopped there")
+	var on_hull: Vector3 = station.drum_pivot.to_local(bot.global_position)
 	for angle: float in [0.4, 1.9, 3.5, 5.6]:
 		station.set_drum_angle(angle)
-		assert_almost_eq(drum_bot.global_position, station.to_world(drum_bot.position, StationHardpoints.DRUM), Vector3.ONE * 1e-2,
-				"on the drum at %.1f rad (the hardpoints' own rule)" % angle)
-		assert_almost_eq(Vector2(drum_bot.position.x, drum_bot.position.y).length(), radius_before, 2.0, "its own place unchanged")
-	assert_eq(frame_bot.global_position, frame_before, "the frame's bot stands still while the drum turns")
+		station.bots._physics_process(DT)
+		assert_almost_eq(station.drum_pivot.to_local(bot.global_position), on_hull, Vector3.ONE * 0.05,
+				"the same spot on the drum at %.1f rad" % angle)
 
 
 func test_a_rebase_changes_nothing_on_screen() -> void:
 	await _start()
+	station.bots.set_physics_process(false)
+	_run_fleet(40.0)
 	var before := {}
 	var local := {}
 	for bot: MaintenanceBot in station.bots.bots:
@@ -86,35 +108,51 @@ func test_a_rebase_changes_nothing_on_screen() -> void:
 			var was: UniversePos = before[bot]
 			assert_almost_eq(Vector3(u.x, u.y, u.z), Vector3(was.x, was.y, was.z), Vector3.ONE * 1e-2, "%s is where it was in the universe" % bot.name)
 			assert_almost_eq(station.to_local(bot.global_position), local[bot], Vector3.ONE * 1e-2, "and where it was on the station")
-	await _ticks(3)
-	for bot: MaintenanceBot in station.bots.bots:
-		assert_lt(bot.position.distance_to(bot.motion.position), 1e-4)
 
 
-func test_a_hit_near_a_bot_sends_it_in_and_it_comes_out_after_the_quiet() -> void:
+func test_battle_sends_a_bot_to_each_damaged_area_and_a_turret_comes_back() -> void:
 	await _start()
 	var fleet: BotFleet = station.bots
 	fleet.set_physics_process(false)
-	var resolver := main.get_node(^"Combat/HitResolver") as HitResolver
-	var target: MaintenanceBot = fleet.bots[0]
-	for i: int in 8:
-		resolver.hit_resolved.emit(HitInfo.new(0, 0, Factions.RAIDERS, 5.0, target.global_position + Vector3(0.0, 40.0, 0.0)))
-		_run_fleet(10.0)
-	assert_eq(target.motion.phase, BotMotion.Phase.HIDDEN, "the hit near it sent it in")
-	assert_false(target.visible)
-	assert_gt(fleet.hidden_count(), 0)
-	_run_fleet(BotAlert.QUIET_S + BotMotion.MIN_HIDDEN_S + BotFleet.EMERGE_SPREAD_S * float(fleet.bots.size()) + 30.0)
-	assert_eq(fleet.hidden_count(), 0, "all out again after the quiet")
-	assert_true(target.visible)
+	var repaired: Array[String] = []
+	station.grid.mount_repaired.connect(func(mount_name: String) -> void: repaired.append(mount_name))
+	var results: Array[ConsoleResult] = DebugConsole.registry.execute("bots battle 6")
+	assert_true(results[0].ok, "; ".join(results[0].lines))
+	var l10: int = station.grid.health.index_of("L10")
+	assert_true(station.grid.mounts[l10].knocked_out, "the battle knocked L10 out")
+	_run_fleet(1.0)
+	assert_eq(fleet.crew.repair_out(), 6, "one bot for each of the six damaged areas")
+	_run_fleet(300.0)
+	assert_false(station.grid.mounts[l10].knocked_out, "repaired above zero, L10 works again")
+	assert_has(repaired, "L10")
+	assert_gt(fleet.crew.repaired_hp, 0.0)
 
 
-func test_the_grid_going_weapons_free_sends_every_bot_in() -> void:
+func test_a_lost_section_is_repaired_and_can_be_lost_again() -> void:
 	await _start()
 	var fleet: BotFleet = station.bots
 	fleet.set_physics_process(false)
+	var lost: Array[String] = []
+	station.section_lost.connect(func(_i: int, n: String) -> void: lost.append(n))
+	var green: int = station.sections.index_of("green_zone")
+	station.damage_section(green, StationSections.SECTION_HEALTH)
+	assert_true(station.sections.is_lost(green))
+	_run_fleet(400.0)
+	assert_false(station.sections.is_lost(green), "a bot repaired it above zero")
+	station.damage_section(green, StationSections.SECTION_HEALTH)
+	assert_eq(lost.size(), 2, "and it was lost again")
+
+
+func test_the_grid_going_weapons_free_sends_the_patrols_home() -> void:
+	await _start()
+	var fleet: BotFleet = station.bots
+	fleet.set_physics_process(false)
+	_run_fleet(40.0)
+	assert_gt(fleet.out_count(), 0)
 	station.grid.set_free(Factions.RAIDERS, true)
-	_run_fleet(56.0)
-	assert_eq(fleet.hidden_count(), fleet.bots.size(), "a hostile shot at the station: every bot goes in")
+	_run_fleet(1.0)
+	for m: BotCrewMotion in fleet.crew.motions:
+		assert_true(m.is_docked() or m.homeward(), "a hostile shot at the station: every patrol turns home")
 	station.grid.set_free(Factions.RAIDERS, false)
 
 
@@ -127,6 +165,13 @@ func test_no_bot_is_a_target_a_contact_or_a_body() -> void:
 		assert_eq(bot.find_children("*", "CollisionObject3D", true, false).size(), 0)
 		assert_eq(bot.find_children("*", "Damageable", true, false).size(), 0)
 	assert_eq(station.bots.get_parent(), station)
+
+
+func _peace_index(fleet: BotFleet, area_name: String) -> int:
+	for a: int in fleet.crew.data.peace.size():
+		if fleet.crew.data.peace[a]["name"] == area_name:
+			return a
+	return -1
 
 
 func test_bots_cargo_backs_a_saturn_3_in_at_the_hold_point_and_starts_the_ferry() -> void:

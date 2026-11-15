@@ -946,13 +946,13 @@ three-segment arms with claws (one reaching fore, one aft) and six little thrust
 duller). No collision: the bot is ambient. Colours are the sheet's lit values (shell #6662B5, band #C0A866, truss #83807D, joints
 #33312F). Reference, as for the station: inspiration only, nothing traced.
 
-The loops are data, `data/station/bot_points.json` (read by `BotData`): per loop its body (`frame`, or `drum` in the drum's own frame,
-so the bot turns with it), the control points of a closed Catmull-Rom curve, the speed (3 to 4 m/s), the number of bots, an up vector
-(away from the hull) and two hatches (a control point `at` and an `inside` point sunk 5.5 m below the hull surface). Eight loops, one
-bot each: the four Cobra arms (an oval over each arm's shoulder, 254 m from the axis, 20 m off the door lane), the spine over the cargo
-modules, the bow prong, the drum's green zone and the reactor's top. They were fitted against the drawn triangles (least distance
-over a full turn of the drum: arms 13.2 m, spine 24.8, bow 21.9, band 13.8, reactor 17.7; the file states 8 m, the bot's own radius
-is 2.9 m) and `tests/unit/test_bot_loops_clear_of_hull.gd` holds it on every build of the station. Move a loop only with that test.
+The crew's ways round the station are data, `data/station/bot_points.json` (read by `BotData`, M7-T35; T11's eight loops are gone):
+the tunables (a pool of 12, 3 to 6 on patrol, up to 12 repairing at 10 hp/s, speeds and waits), the roads (the trunk out of the cargo
+bay past the bow, the high road at y 640 over the spine, the low road at y -500 under the drum), the six patrol areas, the drum's
+riding radius along its green zone (355 to 360 m: the spine's underside leaves 20 to 38 m there and only 9 m over the forward drum and
+the aft band, so no bot rides those) and each section's work spot. They were fitted against the drawn triangles (least distance 12.3 m
+at the bay's mouth, the drum's riding line 14 m over a full turn, the gate's arms 34 m) and `tests/unit/test_bot_routes_clear_of_hull.gd`
+holds it on every build of the station. Move a road or a spot only with that test.
 
 The cargo ferry (`bots cargo`, M7-T11) reuses the bot on the frame: `CargoFerryPlan` reads the station's `cargo_bay` hardpoints (hold, entry, clear box) and the
 Saturn 3's three cargo-pod boxes, and gives each bot an out route and a return route from just inside the bay's back wall (z -3 505, where the bot is hidden)

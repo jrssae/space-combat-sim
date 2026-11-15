@@ -64,7 +64,7 @@ func test_the_sandbox_starts_in_a_bay_with_the_stations_traffic() -> void:
 	assert_eq(main.launches.start_bay, "cobra_bay_alpha_3", "the launch plays at the start")
 	assert_true(main.controls_locked(), "the controls are held on the rack")
 	assert_not_null(station.bots, "the maintenance bots")
-	assert_eq(station.bots.bots.size(), 8, "eight loop bots")
+	assert_eq(station.bots.bots.size(), BotData.load_file().pool, "the maintenance crew in the cargo bay")
 	assert_eq(station.bots.ferry_bots.size(), 5, "the cargo ferry's bots")
 	assert_not_null(station.bots.cargo.freighter, "the Saturn backed in at the cargo bay")
 	assert_not_null(main.tours.book, "the tour is loaded")
