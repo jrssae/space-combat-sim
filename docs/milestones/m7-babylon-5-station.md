@@ -286,6 +286,9 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T30 | D | Maintenance bots carry the freighters' cargo pods (Saturn 3, 4 and 8; cargo and tankers) between the ship and the cargo bay (maintainer, 2026-11-14) | T10, T11 | Opus | Replaces the pods flying by themselves | in progress |
 | T31 | C | The pause menu gets Quit (exit the game); the start and pause menus' boxes shrink to their content (Settings keeps its layout) (maintainer, 2026-11-14) | - | Sonnet | Front-end layout | done |
 | T32 | A | The cargo bay gets the main docking bay's look: metallic grey walls and doors with the Earth Alliance mosaic, lit red by lamps through the light slots, no self-lit rings or bands (maintainer, 2026-11-14) | T25 | Opus | Same surfaces and lamps as T25 on the spine's cargo bay; (H) | done |
+| T33 | A | The cargo pod: a new 6 m Earth Alliance cargo-handling craft built from `references/EA_cargo_pod.stl` at the 90% rule (maintainer, 2026-11-14) | - | Opus | A new STL asset and its look sheet; (H) | in progress |
+| T34 | D | Cargo pods take over T30's cargo work: they move every freighter's cargo between the ship and the cargo bay with T30's plan and carrying logic, launched from the cargo bay; the maintenance bots stop carrying cargo (maintainer, 2026-11-14) | T30, T33 | Opus | Retargets T30's ferry from bots to pods | not started |
+| T35 | D | Maintenance bots roam and repair: one per area at a time and irregularly, along the spine, the fins (vanes), the drum (turning with it, so they take no damage) and out to the jumpgate and along its arm; in battle the cargo bay launches one per damaged area and each repairs 10 HP/s on damage sections and grid turrets (maintainer, 2026-11-14) | T11, T07 | Opus | New bot routes, a co-rotating frame and a repair rule over T06/T07's health | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M7-T01 Station references and measurements
@@ -1779,3 +1782,39 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     station modules, GUT 61/61 (with T30's `test_cargo_carry_clearance`, `test_cargo_ferry_clearance`, `test_freighter_cargo`, T27's
     `test_nav_targets`).
   - **Sheet (H):** `references/screenshots/T32 cargo bay red-lit/T32_cargo_bay_red_lit_sheet.png`.
+
+### M7-T33 The cargo pod
+
+- **Why (maintainer, 2026-11-14):** the freighters' cargo is moved by cargo pods, not maintenance bots (T34); the pod is a new craft.
+- **Reference:** `references/EA_cargo_pod.stl` (gitignored, never committed). **Length 6 m** (maintainer). The 90% rule applies:
+  top, side and front silhouette IoU >= 0.90 against the STL at 6 m and L/W/H within 10% (`tools/refview` compare).
+- **What:** a generator in `tools/procgen` (both texture-detail sets, Earth Alliance colours read off the references, metallic not
+  plastic), collision, LODs and the hardpoints T34 needs (where it grips a cargo block, its thrusters). Naming: the freighters' own
+  cargo is already called pods in code (`FreighterCargo`, `FerryPod`, `src/ship/cargo_pods.gd`); the new craft gets its own name
+  in code (for example `CargoPodCraft`, asset `cargo_pod_craft`) and "cargo pod" in the UI and docs.
+- **Done when:** a GPU look sheet beside the STL views approved by the maintainer (H); the fidelity numbers; Python tests; committed.
+
+### M7-T34 Cargo pods move the cargo
+
+- **Why (maintainer, 2026-11-14):** "replace the maintenance bots for cargo transport with the cargo pods ... the cargo pods handle
+  all movement of cargo from ships to the cargo bay using the same logic as was created for the maintenance bots."
+- **What:** T30's `CargoFerryPlan`, `CargoTrip`, `CargoFerryJob`, `FerryPod` and the carrying motion drive cargo pods (T33) instead
+  of bots: the same crew counts (one per pod, two per block or tank), the same routes, clearances, tank turning, loading and the
+  combat pause. Pods launch from and return to the cargo bay. The bots no longer carry cargo (`bots cargo` and the bot ferry go or
+  move to the pods; keep the console commands working under the pods' names and update `info.md`). T30's tests carry over to the pods.
+- **Done when:** the `traffic freighter ... show` runs work on all five Saturns with pods (maintainer's live check, H); the cargo
+  tests pass in a `--staged` copy; committed.
+
+### M7-T35 Maintenance bots roam and repair
+
+- **Why (maintainer, 2026-11-14):** the bots become the station's maintenance crew, not cargo carriers.
+- **Peace:** 3 to 6 bots out at a time, launched from the cargo bay and back to it, **one per area at a time and irregularly**
+  (seeded per bot, never a shared RNG). Areas: along the spine, along the fins (vanes), along the drum (in the drum's turning frame,
+  moving with it, so they are never struck), and out to the jumpgate and along its arm, and back.
+- **Battle:** the cargo bay launches one bot per damaged area (damage sections, T06, and grid turrets, T07) up to about 12; each
+  bot repairs **10 HP/s** on the area it works on; a knocked-out turret returns once repaired above zero; a lost section can be
+  repaired back. Bots keep T11's alert behaviour where it still fits (getting clear of fire); repair rates and counts are tunables.
+- **Rules:** sim time only; deterministic with 1 and 6 threads; the repair is per-event logic in GDScript unless it scales per
+  tick with entity count (then native, CLAUDE.md); console commands and a state provider for the bots' jobs, listed in `info.md`.
+- **Done when:** a live run shows the peace patrols (spine, fins, drum, gate) and a battle with bots repairing (maintainer, H);
+  tests for the routes, the co-rotating drum frame, the one-per-area rule, the repair rate and the turret coming back; committed.
