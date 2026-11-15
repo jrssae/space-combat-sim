@@ -137,6 +137,10 @@ two hulls move onto them like every other.
   cradle arms.
 - **The collision builder:** M7-T03's compound collision builder (D73) has no code yet; T19 builds it to D73's plan in
   `tools/procgen/core/collision.py`, general and tested, so M7 and every later hull reuse it.
+- **T19 stage 1, as built (2026-11-15):** the asset only. `raider_strike_carrier` at 144 m with 18 cradles, up +z, the compare at
+  0.979 / 0.969 / 0.981 (top, side, front), 162 collision shapes in six pieces, the look sheet and the A/B/C surface sheet
+  (`docs/assets-capital.md`). Open: the maintainer's surface choice. Stage 2 is the game side (body, flight, docking, launch and
+  retrieval, `CarrierJumps`, behaviour); T19 stays `in progress`.
 - **T20, the Battle Wagon:** after T19 merges, with weapons (Q31; which ones, settled with the maintainer first) and its four
   launch tubes.
 - **Merge:** when the maintainer accepts T19, the full suite passes on `m12` and `m12` merges into `main` (Q25).

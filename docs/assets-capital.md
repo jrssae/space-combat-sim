@@ -65,6 +65,7 @@ No weapons (Q25): its fighters are its weapons.
 | Cradles | **18**: 9 on the outer ring, 6 on the mid ring, 3 on the drum's first collar |
 | Triangles | 10 440 (budget 20 000); Godot's importer adds the levels of detail |
 | Atlas | 4 096 px, 9.2 cm a texel; low and high texture sets |
+| Video memory | 54 MB for the hull with its maps (447 to 501 MB in the look scene), measured on oscar's R9 280X, not the target GPU |
 | Mass (informational) | from the skin's area at 260 kg/m2; the game's `ShipSpec` rules (stage 2) |
 
 Every proportion in `parts/raider_carrier.py` is a percentage of the length read off the reference, so the length is
@@ -159,7 +160,10 @@ spikes and engine, yellow-white engine glow.
 Sheets (gitignored, `references/screenshots/M12-T19 raider strike carrier/`): `look_sheet.png` (three quarters on from
 50 m, 500 m and 5 km, then port, top and front, a Delta-V docked on the top outer cradle for scale) and
 `option_sheet.png` (a row per option: low and high set close on the flank, low and high set whole). Made with
-`scripts/hull_sheet.sh raider_strike_carrier "<folder>" "b c"`.
+`scripts/hull_sheet.sh raider_strike_carrier "<folder>" "b c"`. The options are built beside the asset first:
+`python3 -m tools.procgen build raider_strike_carrier --out assets/generated/raider_strike_carrier_options/b --option surface='"b"'`
+(and `c`), then a headless import. On the first sheets (oscar, 2026-11-15) the lit slats bloom to plain white and the
+pale decks of A wash out under a square-on sun; both are paint strengths to settle with the chosen option.
 
 ### Open for the human tester `(H)`
 

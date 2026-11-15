@@ -107,7 +107,7 @@ Arguments in `<angle brackets>` are required, `[square brackets]` optional, `a|b
 | `far` | `[status\|station\|view\|off] [gate\|station] [km]` | Far props (M6-T15): each big prop's draw path (near, shrunk toward the eye past the far plane, fading, far dot), distance and size on screen; `station` takes the station's stand-in away or puts it back at the station's place (a scenario that names the station's rail places it for good, M6-T09); `view gate\|station <km>` holds the camera that far from it for captures; `off` ends the view | in flight |
 | `aa` | `[off\|fxaa\|smaa\|msaa_2x\|msaa_4x\|taa]` | Show or set the 3D view's anti-aliasing, live (`settings.anti_aliasing`) | front end, flight |
 | `upscale` | `[native\|bilinear\|fsr1\|fsr2] [preset\|<scale>]` | Show or set how the 3D view is rendered and enlarged to the window, live | front end, flight |
-| `sheet` | `<asset_id> [distance_m] [lit\|dark\|off] [wing:number\|-] [view]` | Park one idle ship of an asset ahead of the camera for a look sheet | in flight |
+| `sheet` | `<asset_id> [distance_m] [lit\|dark\|off] [wing:number\|-] [view]` | Park one idle ship of an asset ahead of the camera for a look sheet; `view` is `three_quarter\|top\|side\|front`; a capital hull (`raider_strike_carrier`, M12-T19) is parked as its bare mesh with its nearest corner `distance_m` away and a Delta-V on one cradle, and `<asset>:<option>` shows a surface option built under `<asset>_options/<option>/` | in flight |
 | `livery` | `<wing\|plain> [number] [ship]` | Paint a ship in a wing's livery with its number, to look at it | in flight |
 | `fxburst` | `[hit\|ram\|explosion_sparks\|explosion_fragments\|explosion_gas\|debris]` | Throw one burst of an effect 40 m in front of the camera | in flight |
 
