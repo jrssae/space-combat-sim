@@ -1,6 +1,6 @@
 extends GutTest
-## The player's gate jump (M6-T14): the prompt's rule (range and target), X as a jump request only while it is offered, the jump's
-## state machine and its flash and fade, and the autopilot's line-up and run-in.
+## The player's gate jump (M6-T14): the prompt's rule (range and target), a hold of X as a jump request only while it is offered
+## (M7-T27), the jump's state machine and its flash and fade, and the autopilot's line-up and run-in.
 
 const DT: float = 1.0 / 60.0
 const DEPARTURE: Vector3 = Vector3(0.0, 0.0, -1440.0)
@@ -17,33 +17,36 @@ func test_prompt_needs_the_gate_targeted_within_ten_km() -> void:
 	assert_false(GateJumpPrompt.offered(500.0, true, false, true, true), "the ship is lost")
 	assert_false(GateJumpPrompt.offered(500.0, true, true, false, true), "a mission or a shot holds the controls")
 	assert_false(GateJumpPrompt.offered(500.0, true, true, true, false), "a jump is already under way")
-	assert_eq(GateJumpPrompt.line(500.0, true, true, true, true), "X: REQUEST JUMP")
+	assert_eq(GateJumpPrompt.line(500.0, true, true, true, true), "HOLD X: JUMP")
 	assert_eq(GateJumpPrompt.line(50000.0, true, true, true, true), "")
 
 
-func test_x_requests_a_jump_only_while_offered() -> void:
+func test_a_hold_of_x_requests_a_jump_only_while_offered() -> void:
 	var adapter := InputAdapter.new()
 	var source := FakeInputSource.new()
-	adapter.jump_offered = true
+	adapter.interaction_offered = true
 	source.hold(InputAdapter.AUTOTRACK)
-	var cmd: PilotCommand = adapter.sample(source, DT)
-	assert_true(cmd.ui.request_jump, "X beside the targeted gate asks for the jump")
+	var asked: int = 0
+	for i: int in 120:
+		asked += int(adapter.sample(source, DT).ui.interact)
+	assert_eq(asked, 1, "a 2 s hold of X beside the targeted gate asks for the jump, once")
 	assert_false(adapter.autotrack_on, "and leaves auto-track off")
-	assert_false(cmd.flight.autotrack)
 	source.release(InputAdapter.AUTOTRACK)
 	adapter.sample(source, DT)
-	adapter.jump_offered = false
+	adapter.interaction_offered = false
 	source.hold(InputAdapter.AUTOTRACK)
-	cmd = adapter.sample(source, DT)
-	assert_false(cmd.ui.request_jump, "anywhere else X is auto-track")
+	var cmd: PilotCommand = adapter.sample(source, DT)
+	assert_false(cmd.ui.interact, "anywhere else X is auto-track")
 	assert_true(adapter.autotrack_on)
 
 
 func test_a_control_lock_drops_the_request() -> void:
 	var pc := PilotCommand.new()
-	pc.ui.request_jump = true
+	pc.ui.interact = true
+	pc.ui.interact_progress = 0.5
 	ControlLock.new().apply(pc, true, false)
-	assert_false(pc.ui.request_jump)
+	assert_false(pc.ui.interact)
+	assert_eq(pc.ui.interact_progress, 0.0, "no bar while the controls are held")
 
 
 func test_hud_shows_the_prompt_on_the_acknowledgement_line() -> void:

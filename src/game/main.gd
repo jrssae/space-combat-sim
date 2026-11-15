@@ -80,6 +80,8 @@ var target_menu: TargetMenuDirector = null
 var encounter_director: EncounterDirector = null
 ## The scenario's jumpgates and the player's jump through one (M6-T14); always present, with no gate in most scenarios.
 var gates: JumpgateHost = null
+## The long hold of X on a target that offers an interaction (M7-T27): a gate's jump, the station bays' placeholders.
+var interactions: InteractionHost = null
 ## The far props' console and the station's stand-in for captures (M6-T15).
 var far_props: FarPropHost = null
 ## The star system the scene flies in (M6-T03).
@@ -209,6 +211,10 @@ func _ready() -> void:
 	gates.name = JumpgateHost.NODE_NAME
 	gates.main = self
 	add_child(gates)
+	interactions = InteractionHost.new()
+	interactions.name = InteractionHost.NODE_NAME
+	interactions.main = self
+	add_child(interactions)
 	far_props = FarPropHost.new()
 	far_props.name = FarPropHost.NODE_NAME
 	far_props.main = self
@@ -219,7 +225,7 @@ func _ready() -> void:
 	if bool(scenario.get("ok", false)):
 		_spawn_props(scenario["props"])
 		for entry: Dictionary in scenario["jumpgates"]:
-			gates.place(entry, star_system.system, frame)
+			_offer_jump(gates.place(entry, star_system.system, frame))
 		_spawn_belts(scenario["belts"])
 	_spawn_scenario_ships()
 	launches = LaunchDirector.new()
@@ -294,14 +300,14 @@ func _physics_process(delta: float) -> void:
 	if comms.is_open():
 		comms.step(adapter.sample_radial(input_source, delta))
 		return
-	# Beside a targeted gate X asks for a jump instead of switching auto-track (M6-T14).
-	adapter.jump_offered = gates.jump_offered()
+	# On a target that offers an interaction (a gate within reach, a station bay) a long hold of X runs it (M7-T27).
+	adapter.interaction_offered = interactions.offer() != null
 	var pc: PilotCommand = adapter.sample(input_source, delta)
 	if control_lock.apply(pc, controls_locked(), camera_rig.is_playing_shot()):
 		camera_rig.stop_shot()
 		launches.skip()  # a launch's shot skipped jumps the player to the hand-off (M7-T08)
-	if pc.ui.request_jump:
-		gates.start_jump()
+	if pc.ui.interact:
+		interactions.run_offered()
 	var autopilot: FlightCommand = gates.step_player(delta) if not get_tree().paused else null
 	if autopilot == null and not get_tree().paused:
 		autopilot = launches.step_player(delta)  # a launched fighter's engines light as it clears the arm (M7-T08)
@@ -322,6 +328,16 @@ func _physics_process(delta: float) -> void:
 		comms.open()  # says nothing when it cannot (the player is down, a cinematic): the press is simply lost
 	if pc.ui.target_menu_open:
 		target_menu.open()  # it says nothing when it cannot (the player is down, a cinematic): the hold is simply lost
+
+
+# A gate's interaction is the player's jump through it (M6-T14): offered while it is targeted and no jump runs, within the gate's
+# request range (2 km, M7-T28); farther out the HUD says how close to come and the hold does nothing.
+func _offer_jump(gate: Jumpgate) -> void:
+	if gate == null:
+		return
+	gate.targetable.interaction = TargetInteraction.new(&"jump", GateJumpPrompt.LABEL,
+			func() -> String: return gates.start_jump(gate),
+			func() -> bool: return gates.targeted_gate() == gate and not gates.jump.is_active(), GateJumpRequest.range_m())
 
 
 # Auto-track needs a target: with none selected the nearest hostile is taken; with none in range it switches itself off.
@@ -641,7 +657,8 @@ func _build_hud_input() -> HudInput:
 	input.roster = wings.hud_roster()
 	input.roster_color = Factions.FRIENDLY_COLOR
 	input.ack_line = wings.ack_text()
-	input.prompt_line = gates.prompt_line()
+	input.prompt_line = interactions.prompt_line()
+	input.interact_progress = adapter.last.ui.interact_progress
 	if route_active():
 		input.status_line = instructor_path.status_line(instructor.display_name)
 		var waypoint: UniversePos = instructor_path.waypoint_position()
@@ -772,6 +789,7 @@ func _apply_input_settings() -> void:
 	adapter.stick_deadzone = float(Settings.get_value(&"stick_deadzone"))
 	adapter.invert_y = bool(Settings.get_value(&"invert_y"))
 	adapter.target_hold_s = float(Settings.get_value(&"target_hold_s"))
+	adapter.interact_hold_s = float(Settings.get_value(&"interact_hold_s"))
 	adapter.mouse_full_rate_px_s = float(Settings.get_value(&"mouse_full_rate_px_s"))
 	Engine.physics_jitter_fix = float(Settings.get_value(&"physics_jitter_fix"))
 	Engine.max_physics_steps_per_frame = int(Settings.get_value(&"physics_max_steps_per_frame"))  # M4-T24
@@ -1008,6 +1026,6 @@ func _cmd_pausemenu(args: Dictionary) -> ConsoleResult:
 
 
 func _on_setting_changed(key: StringName, _value: Variant) -> void:
-	if key in [&"stick_deadzone", &"invert_y", &"target_hold_s", &"trigger_deadzone", &"mouse_full_rate_px_s", &"physics_jitter_fix",
+	if key in [&"stick_deadzone", &"invert_y", &"target_hold_s", &"interact_hold_s", &"trigger_deadzone", &"mouse_full_rate_px_s", &"physics_jitter_fix",
 			&"physics_max_steps_per_frame"]:
 		_apply_input_settings()

@@ -4,7 +4,7 @@ use godot::builtin::Basis;
 
 use super::*;
 use crate::kernels::pilot;
-use crate::rows::{FLAG_HULL_ACTIVE, FLAG_RIGID, ROLE_CIVILIAN, ROLE_COMBAT};
+use crate::rows::{FLAG_HULL_ACTIVE, FLAG_RIGID, ROLE_CIVILIAN, ROLE_COMBAT, ROLE_NAV};
 use crate::tier::{self, TierRows};
 use crate::turret_kernels::{self, Memory, PICK_REACH, PickMount, REL_FRIENDLY, REL_HOSTILE, REL_NEUTRAL};
 
@@ -237,6 +237,29 @@ fn avoidance_sees_a_big_civilian_hull_early() {
     let wish = v(0.0, 0.0, -150.0);
     for (role, dodges) in [(ROLE_COMBAT, false), (ROLE_CIVILIAN, true)] {
         let rows = rows_of(&[(9, EA, role, 130.0, freighter, STILL)]);
+        let avoided = pilot::avoid(&rows, &ship, &[0], &[], 0, wish);
+        assert_eq!(avoided.v_des != wish, dodges, "role {role}: {:?}", avoided.v_des);
+    }
+}
+
+#[test]
+fn avoidance_flies_through_a_navigation_marker() {
+    // M7-T27: a station bay's marker sits on the docking lane at the tunnel's mouth. A ship on the lane flies through it; the
+    // same point as a body is dodged.
+    let ship = pilot::Ship {
+        position: STILL,
+        velocity: v(0.0, 0.0, -45.0),
+        radius: 20.0,
+        a_retro: 20.0,
+        rate_max_x: 1.0,
+        rate_max_y: 1.0,
+        a_rcs_x: 2.0,
+        a_rcs_y: 2.0,
+        tie_hash: 3,
+    };
+    let wish = v(0.0, 0.0, -45.0);
+    for (role, dodges) in [(ROLE_COMBAT, true), (ROLE_NAV, false)] {
+        let rows = rows_of(&[(5, EA, role, 0.0, v(0.0, 0.0, -150.0), STILL)]);
         let avoided = pilot::avoid(&rows, &ship, &[0], &[], 0, wish);
         assert_eq!(avoided.v_des != wish, dodges, "role {role}: {:?}", avoided.v_des);
     }

@@ -1487,7 +1487,7 @@ pub mod pilot {
         let listed = contacts
             .iter()
             .filter_map(|&r| row(rows, r))
-            .filter(|&j| exempt_id == 0 || rows.ids[j] != exempt_id)
+            .filter(|&j| (exempt_id == 0 || rows.ids[j] != exempt_id) && !rows.is_nav(j))
             .chain(statics.iter().filter_map(|&r| row(rows, r)));
         for j in listed {
             let c_velocity = rows.velocities[j];

@@ -19,9 +19,10 @@ extends RefCounted
 ## The mouse side buttons are bound like any other (Mouse 4 `autotrack`, Mouse 5 `weapon_next`). Keys 1-4 are the wing orders
 ## (attack my target, form on me, engage at will, cover me; M3-T07), press edges in `UiCommand` for `Main` to pass on. D-pad Left
 ## and key 5 switch the running lights (M3-T27). D-pad Right and Ctrl open the comms menu (M5-T07), a radial menu (T46) that
-## pauses the game: while it is open the sticks, A and B belong to the menu (below), so no flight action fires. While a gate
-## offers a jump (`jump_offered`, set by `Main`, M6-T14) X gives `UiCommand.request_jump` instead of switching auto-track;
-## everywhere else it stays auto-track.
+## pauses the game: while it is open the sticks, A and B belong to the menu (below), so no flight action fires. X (auto-track) is
+## also the interaction button (M7-T27, `HoldInteract`): while the selected target offers an interaction (`interaction_offered`, set
+## by `Main`: a gate's jump, a bay's placeholder) a tap still toggles auto-track and a 2 s hold gives `UiCommand.interact`, with
+## the hold's progress in `UiCommand.interact_progress`; everywhere else a press toggles auto-track at once, as before.
 ##
 ## A radial menu (M5-T25 the target menu, T46 the comms menu) pauses the game and owns the pad: `sample_radial` reads only the
 ## menu's stick, select and back (and Start), `begin_radial` and `end_radial` bracket it so that nothing fires, steers or
@@ -84,7 +85,8 @@ const ACTIONS: Array[StringName] = [
 const RADIAL_ACTIONS: Array[StringName] = [RADIAL_UP, RADIAL_DOWN, RADIAL_LEFT, RADIAL_RIGHT, RADIAL_SELECT, RADIAL_BACK]
 
 ## Actions reported as one-tick edges on press rather than held state. `TARGET_NEXT` and `TARGET_CYCLE` are not among
-## them: they are the tap-or-hold buttons (see `target_hold_s`).
+## them: they are the tap-or-hold buttons (see `target_hold_s`). `AUTOTRACK`'s edge is kept for the resync but it acts
+## through `hold` (M7-T27).
 const EDGE_ACTIONS: Array[StringName] = [
 	TOGGLE_ASSIST, WEAPON_NEXT, TARGET_AHEAD, TOGGLE_CAMERA, RESET_SHIP, PAUSE, TOGGLE_OVERLAY,
 	TARGET_PREV, SCREENSHOT, AUTOTRACK, WING_ATTACK, WING_FORM, WING_ENGAGE, WING_COVER, TOGGLE_RUNNING_LIGHTS,
@@ -113,7 +115,15 @@ var invert_y: bool = false
 ## `target_next` (keyboard B, Mouse 2) and `target_cycle` (pad B) are tap-or-hold buttons, on separate timers: released
 ## sooner than this they give the tap on the release; held this long they give the hold once, as the threshold is crossed,
 ## and the release then gives nothing, so a hold never also taps and never repeats (`Settings.target_hold_s`).
-var target_hold_s: float = TARGET_HOLD_S
+var target_hold_s: float = TARGET_HOLD_S:
+	set(value):
+		target_hold_s = value
+		hold.tap_s = value  # the interaction button's tap splits at the same time (M7-T27)
+## How long X is held to run the selected target's interaction, s (`Settings.interact_hold_s`, M7-T27).
+var interact_hold_s: float = HoldInteract.HOLD_S:
+	set(value):
+		interact_hold_s = value
+		hold.hold_s = value
 ## Mouse speed, pixels per second, that commands the full turn rate (`Settings.mouse_full_rate_px_s`).
 var mouse_full_rate_px_s: float = MOUSE_FULL_RATE_PX_S
 
@@ -123,9 +133,13 @@ var last: PilotCommand = PilotCommand.new()
 ## Auto-track is switched on (toggled by the `autotrack` action). Main clears it when the target is gone.
 var autotrack_on: bool = false
 
-## A targeted gate within reach offers the player a jump (set by `Main` each tick, `GateJumpPrompt`): the auto-track press then
-## asks for the jump and leaves auto-track as it was.
-var jump_offered: bool = false
+## The selected target offers an interaction now (set by `Main` each tick, `InteractionHost`, M7-T27): X then splits into a tap
+## (auto-track) and a hold (the interaction).
+var interaction_offered: bool = false
+## X's tap and hold (M7-T27).
+var hold: HoldInteract = HoldInteract.new()
+## The console holds X this much longer, s (`interact hold`, for scripts and captures): as if the button were down.
+var console_hold_s: float = 0.0
 
 var _prev_pressed: Dictionary = {}
 ## The mouse's turn command, -1..1 per axis (x yaw right, y pitch up), after smoothing.
@@ -193,12 +207,16 @@ func sample(source: InputSource, dt: float) -> PilotCommand:
 
 	var edges: Dictionary = _sample_edges(source)
 	flight.toggle_assist = edges[TOGGLE_ASSIST]
-	# Auto-track is a toggle: one press switches it on, the next switches it off. Beside a gate the same press asks for a jump.
-	if edges[AUTOTRACK] and jump_offered:
-		cmd.ui.request_jump = true
-	elif edges[AUTOTRACK]:
+	# Auto-track is a toggle: a tap switches it on, the next switches it off. A long hold on a target that offers an interaction
+	# runs that instead.
+	var x_down: bool = source.is_pressed(AUTOTRACK) or console_hold_s > 0.0
+	console_hold_s = maxf(console_hold_s - dt, 0.0)
+	hold.step(x_down, interaction_offered, dt)
+	if hold.tapped:
 		autotrack_on = not autotrack_on
 	flight.autotrack = autotrack_on
+	cmd.ui.interact = hold.fired
+	cmd.ui.interact_progress = hold.progress()
 
 	cmd.combat.fire = source.is_pressed(FIRE)
 	if _fire_held_over:
@@ -244,6 +262,7 @@ func resync_edges(source: InputSource) -> void:
 	for button: StringName in TAP_HOLD:
 		_prev_pressed[button] = source.is_pressed(button)
 		_disarm(button)
+	hold.resync(source.is_pressed(AUTOTRACK))
 
 
 ## One tick while a menu has the pad (the pause menu): only the pause edge is read, so Start or Esc can close the menu. Every other
@@ -321,6 +340,8 @@ func reset() -> void:
 	_aim_held_over = false
 	for button: StringName in TAP_HOLD:
 		_disarm(button)
+	hold.reset()
+	console_hold_s = 0.0
 
 
 func _sample_edges(source: InputSource) -> Dictionary:

@@ -280,7 +280,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T24 | A | The station's surfaces refined for fullscreen, in both texture-detail sets (low and high): resolution, detail, colour and material, no visible tiling (maintainer, 2026-11-13) | T22 | Opus | A look task on an 8 km hull at 6K within a VRAM budget; (H) | done |
 | T25 | A | The main docking bay rebuilt: shape and proportions from the STL (its section exemption lifted, IoU >= 0.90), the look from the show captures (maintainer, 2026-11-14) | T05, the flicker and light-leak fix | Opus | The bay reads wrong against the show in shape, mouth detail, tunnel and light; (H) | done |
 | T26 | B | All ships keep a low-polygon model at range instead of turning into a grey sphere; a dot only when a few pixels across (maintainer, 2026-11-14) | - | Opus | A Saturn 3 and a Narn transport became grey spheres while still clearly visible | done |
-| T27 | C | Navigation targets and a hold-X interaction: the main docking bay, cargo bay and jumpgate as navigation targets; hold X for 2 s with a progress bar to act on them (maintainer, 2026-11-14) | T10 | Opus | A new input mechanic over targeting, HUD and the gate jump | in progress |
+| T27 | C | Navigation targets and a hold-X interaction: the main docking bay, cargo bay and jumpgate as navigation targets; hold X for 2 s with a progress bar to act on them (maintainer, 2026-11-14) | T10 | Opus | A new input mechanic over targeting, HUD and the gate jump | done |
 | T28 | D | Fix: entering the jumpgate a second time opens the vortex twice and the camera stops tracking the ship (maintainer, 2026-11-14) | - | Fable | A state bug in M6's gate jump | done |
 | T29 | D | Fix: a civilian attacked in free flight does not flee (no change of speed or heading) (maintainer, 2026-11-14) | T10 | Fable | AI regression or a free-flight wiring gap | done |
 | T30 | D | Maintenance bots carry the freighters' cargo pods (Saturn 3, 4 and 8; cargo and tankers) between the ship and the cargo bay (maintainer, 2026-11-14) | T10, T11 | Opus | Replaces the pods flying by themselves | done |
@@ -1635,6 +1635,51 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   Pad and keyboard both (the keyboard's auto-track key held the same way); the hold time and the bar are data and settings.
 - **Done when:** tests (tap toggles auto-track, hold 2 s runs the action, release cancels, the bar's progress, the three targets are
   navigation targets), a live run for the maintainer (H), committed.
+- **Done (as built; contracts in `docs/architecture.md` §20.5; accepted live by the maintainer, 2026-11-15):**
+  - **Navigation targets.** `Targetable.Role.BEACON` is every navigation target: the nav buoys, the jumpgate (it was a neutral
+    ship-like target, so it fell under CIVILIAN) and the station's bays, `NavPoint`s at the main docking bay's mouth and the cargo
+    bay's entry (`BABYLON 5 DOCKING BAY`, `BABYLON 5 CARGO BAY`; neutral props, heard as far as the station). The station itself is
+    unchanged. The HUD draws a navigation target as a cyan diamond (the target menu's NAVIGATION colour) with no lead; ships keep
+    their brackets. A bay is a place, not a thing: the core knows it as a navigation marker (native `ROLE_NAV`) and avoidance
+    flies through it (found by `test_station_traffic`: a docking Skylark dodged the marker on its lane into the tunnel wall).
+  - **The interaction seam.** A `Targetable` may carry a `TargetInteraction` (kind, label, offer, action). The bays carry `dock`
+    and `cargo` placeholders that answer "not available"; the gate's is the player's jump (`JumpgateHost.start_jump`), offered as
+    before. `InteractionHost` (Main's child) offers the selected target's interaction, runs it at the end of the hold and shows
+    `HOLD X: <label>` or the answer (`BABYLON 5 DOCKING BAY: NOT AVAILABLE`, 3 s) on the acknowledgement line.
+  - **Tap and hold.** `HoldInteract`: with nothing offered X toggles auto-track on the press, as before. With an interaction
+    offered, a release within 0.35 s is the tap (auto-track), a 2 s hold fires the interaction once, and a release in between
+    cancels it. The tap threshold is the target button's (`settings.target_hold_s`), so both tap-or-hold buttons split at the same
+    time and one setting tunes both; the bar shows only after it, so a tap never flashes it. The hold time is
+    `settings.interact_hold_s` (2.0, 0.5 to 5). The bar runs across the top of the window (60 % wide, above the status line), in
+    the chase and cockpit views. Keyboard (Shift, Mouse 4) and pad (X) alike, through `InputAdapter`.
+  - **Console:** provider and command `interact` (`status`, `run`, `hold [s]`), in `info.md`.
+  - **Tests:** `test_hold_interact` (8), `test_nav_interaction` (11), `test_nav_targets` (3: the three are navigation targets and
+    not civilian, a bay's 2 s hold answers not available, a tap still tracks, the console), `test_gate_jump` and
+    `test_jumpgate_in_play` (the jump now takes a 2 s hold), `test_hud` and `test_target_menu` (two more broadcasters, the buoy's
+    navigation look), Rust `avoidance_flies_through_a_navigation_marker`.
+  - **Capture:** `references/screenshots/M7-T27 hold-X/` (each bay's and the gate's marker, the bar mid-hold in the chase and
+    cockpit views, the bay's answer).
+  - **Fix round (maintainer's flight, 2026-11-14: "wouldn't allow the target to change from the docking bay to the cargo bay or
+    to the jumpgate").** Two causes, both in the target menu (B held). Its NAVIGATION ring made every pick the waypoint, never
+    the target (M5-T25's rule for beacons), so picking the cargo bay or the gate moved the waypoint and left the docking bay
+    selected; and the ring holds the nearest five, so beside the station the buoys pushed the gate (50 km out) off it. Now a
+    navigation target that offers an interaction is a target pick and leads the ring (buoys are still waypoints). The console,
+    the wheel and target ahead already worked; the target button's tap is the nearest enemy by design (now tested from a bay);
+    auto-track picks only when nothing is selected. The gate's hold is offered whenever it is targeted; beyond 2 km the gate's
+    refusal (M7-T28) shows as `JUMPGATE: OUT OF RANGE`. Tests: `test_nav_targets` (+4: the menu, the console, the wheel and
+    target ahead each move the selection between the bays and the gate; the tap takes an enemy from a bay; the gate's hold at
+    3 km and at 1.8 km), `test_target_menu` and `test_target_categories` (+1 each).
+  - **Keyboard parity (maintainer's flight on keyboard and mouse: "no keyboard equivalent of holding X").** The audit of the input
+    map, the input source and the menus found no pad-only action: the hold is the `autotrack` action, so Shift and Mouse 4 already
+    tapped and held as pad X does, but the HUD said `HOLD X`, and the keyboard's X is the brake. The prompt now names the live
+    bindings (`HOLD X / SHIFT / MOUSE 4: DOCK`, `BindingNames`). `test_keyboard_parity`: every action on the pad has a key or
+    mouse button in each built-in layout (pitch and yaw are the mouse's motion), the radial menus have keys, and a real Shift
+    through `GodotInputSource` taps (auto-track), holds 2 s (the interaction, once, the bar full) and cancels when let go early.
+  - **Reach (maintainer: "don't prompt to press X unless the player is within range").** Every interaction has a reach (the gate
+    its 2 km request range, each bay 2 km). Out of reach: no button prompt, no bar, no progress, X is auto-track alone; the line
+    reads `JUMPGATE: 3.4 km — CLOSE TO 2.0 km TO JUMP`. Within reach: `HOLD X / SHIFT / MOUSE 4: JUMP` (the gate's label is now
+    JUMP). `test_nav_targets`: the gate at 3 km and 1.8 km, a bay at 5 km and 1.5 km (status, no bar, nothing runs; then the
+    buttons, the bar, one run); `test_nav_interaction`: reach and status text.
 
 ### M7-T28 Fix: the jumpgate's second entry
 

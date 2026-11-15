@@ -15,7 +15,8 @@ const SPEAKS_FOR: StringName = &"speaks_for"
 ## fighter's contacts. Ships are the default; the battle's stand-ins set their own.
 enum Kind { SHIP, CAPITAL, TURRET, MISSILE, MINE, STATIC, PROP }
 
-## What it is to a pilot picking from the target menu (M5-T25): civilians and nav beacons get their own categories.
+## What it is to a pilot picking from the target menu (M5-T25): civilians and navigation targets get their own categories.
+## BEACON is every navigation target: nav buoys, jumpgates and the station's bays (M7-T27), drawn in the HUD's navigation look.
 enum Role { SHIP, CIVILIAN, BEACON }
 
 ## What the pilot reads ("NAV ALPHA"); the console selects targets by it.
@@ -26,6 +27,8 @@ enum Role { SHIP, CIVILIAN, BEACON }
 @export var kind: Kind = Kind.SHIP
 ## Its `Role` (M5-T25).
 var role: Role = Role.SHIP
+## What a long hold of the auto-track button does to it while selected (M7-T27): a gate's jump, a bay's placeholder; null = nothing.
+var interaction: TargetInteraction = null
 ## How far this target is heard beyond the sensors (M3-T17, Q21), m: 0 = not at all, `INF` = everywhere. Nav buoys use
 ## 1 000 km, allied ships 100 km. Broadcasters are kept in one list (`broadcasters`) so the AI's
 ## `ContactScan.shared_broadcasts` need not sweep every body.
@@ -126,6 +129,7 @@ func to_target_info() -> TargetInfo:
 			damageable.bounding_radius if damageable != null else 0.0)
 	info.broadcast_range_m = broadcast_range_m
 	info.role = role
+	info.interaction_kind = interaction.kind if interaction != null else &""
 	if damageable != null:
 		info.damage_layout = damageable.zones.layout
 		info.damage_zones = damageable.zone_severities()

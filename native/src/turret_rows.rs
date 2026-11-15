@@ -323,6 +323,17 @@ impl ScsSimCore {
         self.touch(body_id);
     }
 
+    /// Marks a body as a navigation marker (or not, M7-T27): a place the player targets that avoidance flies through.
+    #[func]
+    fn set_navigation(&mut self, body_id: i64, on: bool) {
+        if on {
+            self.nav_bodies.insert(body_id);
+        } else {
+            self.nav_bodies.remove(&body_id);
+        }
+        self.touch(body_id);
+    }
+
     /// The relations the pick reads: `matrix[a * count + b]` is how the core's faction `a` regards `b` (`Factions.Relation`:
     /// 0 friendly, 1 neutral, 2 hostile).
     #[func]

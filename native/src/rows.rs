@@ -23,6 +23,9 @@ pub const ROLE_CIVILIAN: u8 = 1;
 /// A big hull with a surface of its own (M7-T06: the station's frame and drum): the hit sweep, the rams, avoidance, the
 /// fire lane and the brains' ranges read its volumes (`Rows::surface`) instead of its bounding sphere.
 pub const ROLE_SURFACE: u8 = 2;
+/// A navigation marker with no body of its own (M7-T27: a station bay's mouth): the player targets it, but it is a place,
+/// not a thing, so avoidance flies through it.
+pub const ROLE_NAV: u8 = 3;
 
 /// One box or capsule of a big hull in its body's frame, in 64 bits: the volume's own x, y and z axes (unit, as columns),
 /// its centre, and its size (a box's half extents; a capsule along its own y: half segment, radius, 0). `reach` bounds it
@@ -396,6 +399,11 @@ impl Rows {
     /// Whether row `r` is a civilian hull.
     pub fn is_civilian(&self, r: usize) -> bool {
         self.role(r) == ROLE_CIVILIAN
+    }
+
+    /// Whether row `r` is a navigation marker (M7-T27).
+    pub fn is_nav(&self, r: usize) -> bool {
+        self.role(r) == ROLE_NAV
     }
 
     /// Row `r`'s surface when it is a big hull with one (M7-T06), else none.

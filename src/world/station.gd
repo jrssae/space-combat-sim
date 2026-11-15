@@ -45,6 +45,11 @@ const COLLISION_KIND: StringName = &"rock"
 const HULL_MAX: float = 1.0e9
 const PROVIDER: StringName = &"station"
 const ACTIONS: Array[StringName] = [&"info", &"section", &"spin", &"goto", &"heal"]
+## The bays as navigation targets (M7-T27): what the pilot reads, and what a hold of X will do there once missions fill it in.
+const DOCKING_BAY_NAME: String = "BABYLON 5 DOCKING BAY"
+const CARGO_BAY_NAME: String = "BABYLON 5 CARGO BAY"
+## How close to a bay's mouth the hold is offered, m: the gate's 2 km request range, so every interaction reads alike.
+const BAY_REACH_M: float = 2000.0
 
 var hardpoints: StationHardpoints = null
 var sections: StationSections = null
@@ -56,6 +61,10 @@ var drum_body: AnimatableBody3D = null
 var frame_hull: Damageable = null
 var drum_hull: Damageable = null
 var targetable: Targetable = null
+## The main docking bay's and the cargo bay's navigation targets (M7-T27), at the bay mouths; placeholders until missions fill
+## their interactions (docking, loading, unloading).
+var docking_bay: NavPoint = null
+var cargo_bay: NavPoint = null
 ## The defence grid (M7-T07).
 var grid: StationGrid = null
 ## The main docking bay's inner doors, and its red lamps (M7-T25).
@@ -116,6 +125,7 @@ func build() -> bool:
 	_build_visuals(pieces)
 	_build_bodies(collision)
 	_build_hulls(collision)
+	_build_nav_points()
 	grid = StationGrid.new()
 	grid.build(self)
 	add_child(grid)
@@ -361,6 +371,20 @@ func _build_hulls(collision: CollisionPieces) -> void:
 			box.position += drum_origin
 		drawn.append({"zone": i, "aabb": box})
 	Silhouette.set_station_sections(drawn)
+
+
+# The bays' navigation targets, at their mouths: the docking bay's on the drum's axis, so the drum's turn never moves it.
+func _build_nav_points() -> void:
+	var dock: Dictionary = hardpoints.main_docking_bay
+	var cargo: Dictionary = hardpoints.cargo_bay
+	docking_bay = NavPoint.make(DOCKING_BAY_NAME, TargetInteraction.new(&"dock", "DOCK", Callable(), Callable(), BAY_REACH_M),
+			BROADCAST_RANGE_M)
+	docking_bay.position = (dock.get("main_docking_bay_mouth", Vector3.ZERO) as Vector3) + drum_origin
+	add_child(docking_bay)
+	cargo_bay = NavPoint.make(CARGO_BAY_NAME, TargetInteraction.new(&"cargo", "CARGO", Callable(), Callable(), BAY_REACH_M),
+			BROADCAST_RANGE_M)
+	cargo_bay.position = cargo.get("cargo_bay_entry", Vector3.ZERO) as Vector3
+	add_child(cargo_bay)
 
 
 # A piece's hull: its hit volumes, the station's faction, never falling (hits go to the sections).

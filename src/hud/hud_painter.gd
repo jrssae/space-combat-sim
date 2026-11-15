@@ -104,6 +104,8 @@ func paint(f: HudFrame, surface: HudSurface) -> void:
 		_draw_roster(surface, s, w)
 	if items.has(HudSurface.OBJECTIVES):
 		_draw_objectives(f, s)
+	if items.has(HudSurface.INTERACT):
+		_bar(f.interact_rect, f.interact_progress, LINE_COLOR, w)
 
 
 # The wing roster (M3-T11): per wingman a hull bar in the wing's colour, the callsign and what it is doing.
@@ -185,6 +187,16 @@ func _brackets(rect: Rect2, color: Color, w: float, arm: float) -> void:
 		_canvas.draw_line(corner[0], corner[0] + corner[2], color, w)
 
 
+# A navigation target's mark (M7-T27): a diamond round its box, so a gate or a bay never reads as a ship. Returns its lowest point.
+func _nav_diamond(rect: Rect2, color: Color, w: float) -> float:
+	var c: Vector2 = rect.get_center()
+	var r: float = rect.size.x * 0.5 * 1.3
+	_canvas.draw_polyline(PackedVector2Array([c + Vector2(0.0, -r), c + Vector2(r, 0.0), c + Vector2(0.0, r), c + Vector2(-r, 0.0),
+			c + Vector2(0.0, -r)]), color, w)
+	_canvas.draw_line(c + Vector2(-r * 0.2, 0.0), c + Vector2(r * 0.2, 0.0), color, w * 0.75)
+	return c.y + r
+
+
 # --- boresight, velocity marker -----------------------------------------------------------------------------
 
 
@@ -225,11 +237,15 @@ func _draw_target_marks(f: HudFrame, s: float, w: float, labelled: bool) -> void
 	var label: String = _target_line(f)
 	if f.target_on_screen:
 		var box: Rect2 = f.target_box
-		_brackets(box, color, w, maxf(8.0 * s, box.size.x * 0.28))
+		var bottom: float = box.end.y
+		if f.target_nav:
+			bottom = _nav_diamond(box, color, w)
+		else:
+			_brackets(box, color, w, maxf(8.0 * s, box.size.x * 0.28))
 		if labelled:
-			_text(label, Vector2(box.position.x, box.end.y + 18.0 * s), 15.0 * s, color)
+			_text(label, Vector2(box.position.x, bottom + 18.0 * s), 15.0 * s, color)
 			if f.target_hull >= 0.0:
-				_bar(Rect2(Vector2(box.position.x, box.end.y + 24.0 * s), Vector2(maxf(box.size.x, 60.0 * s), 6.0 * s)), f.target_hull, color, w)
+				_bar(Rect2(Vector2(box.position.x, bottom + 24.0 * s), Vector2(maxf(box.size.x, 60.0 * s), 6.0 * s)), f.target_hull, color, w)
 	elif f.edge_arrow_visible:
 		var p: Vector2 = f.edge_arrow_pos
 		var a: float = f.edge_arrow_angle

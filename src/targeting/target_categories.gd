@@ -50,24 +50,29 @@ static func sort_all(candidates: Array[TargetInfo], own_position: Vector3, own_f
 		(out[_category(info, r, own_faction, ident_range_m)] as Array[TargetInfo]).append(info)
 	for category: Category in ORDER:
 		(out[category] as Array[TargetInfo]).sort_custom(func(a: TargetInfo, b: TargetInfo) -> bool:
+			var pa: int = _priority(a, category)
+			var pb: int = _priority(b, category)
 			var ra: float = ranges[a.id]
 			var rb: float = ranges[b.id]
-			return ra < rb or (ra == rb and a.id < b.id))
+			return pa < pb or (pa == pb and (ra < rb or (ra == rb and a.id < b.id))))
 	return out
 
 
-## The count of every category and its nearest `limit` candidates, nearest first (ties by id), in one pass with no full sort:
+## The count of every category and its nearest `limit` candidates, nearest first (ties by id; in NAVIGATION the places that offer an
+## interaction before the rest), in one pass with no full sort:
 ## `{"counts": {Category: int}, "nearest": {Category: Array[TargetInfo]}}`. What the menu and the tap read.
 static func summarise(candidates: Array[TargetInfo], own_position: Vector3, own_faction: StringName, limit: int = RING_SIZE,
 		ident_range_m: float = IDENT_RANGE_M) -> Dictionary:
 	var counts: Dictionary = {}
 	var nearest_of: Dictionary = {}
 	var ranges_of: Dictionary = {}
+	var priorities_of: Dictionary = {}
 	for category: Category in ORDER:
 		var empty: Array[TargetInfo] = []
 		counts[category] = 0
 		nearest_of[category] = empty
 		ranges_of[category] = PackedFloat64Array()
+		priorities_of[category] = PackedInt32Array()
 	var hostile: Dictionary = {}  # faction -> relation to `own_faction`, looked up once per faction
 	for info: TargetInfo in candidates:
 		var r: float = TargetingSystem.range_between(own_position, info.position)
@@ -77,18 +82,24 @@ static func summarise(candidates: Array[TargetInfo], own_position: Vector3, own_
 		counts[category] += 1
 		var kept: Array[TargetInfo] = nearest_of[category]
 		var ranges: PackedFloat64Array = ranges_of[category]
+		var priorities: PackedInt32Array = priorities_of[category]
+		var p: int = _priority(info, category)
 		# Its place among the nearest kept so far; beyond the last of a full list it is dropped.
 		var at: int = kept.size()
-		while at > 0 and (r < ranges[at - 1] or (r == ranges[at - 1] and info.id < kept[at - 1].id)):
+		while at > 0 and (p < priorities[at - 1] or (p == priorities[at - 1]
+				and (r < ranges[at - 1] or (r == ranges[at - 1] and info.id < kept[at - 1].id)))):
 			at -= 1
 		if at >= limit:
 			continue
 		kept.insert(at, info)
 		ranges.insert(at, r)
+		priorities.insert(at, p)
 		if kept.size() > limit:
 			kept.pop_back()
 			ranges.remove_at(limit)
+			priorities.remove_at(limit)
 		ranges_of[category] = ranges
+		priorities_of[category] = priorities
 	return {"counts": counts, "nearest": nearest_of}
 
 
@@ -112,6 +123,12 @@ static func tap_pick(candidates: Array[TargetInfo], own_position: Vector3, own_f
 	if pool.size() > 1 and pool[0].id == selected_id:
 		return pool[1].id
 	return pool[0].id
+
+
+# Places the pilot can act on (a bay, the gate; M7-T27) come first among the navigation targets, so a crowd of nearer buoys
+# never pushes them off the ring; everything else is by range alone.
+static func _priority(info: TargetInfo, category: Category) -> int:
+	return 0 if category == Category.NAVIGATION and info.interaction_kind != &"" else 1
 
 
 static func _category(info: TargetInfo, range_m: float, own_faction: StringName, ident_range_m: float) -> Category:

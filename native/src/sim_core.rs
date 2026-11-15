@@ -276,6 +276,8 @@ pub struct ScsSimCore {
     pub(crate) bolt_pull_us: i64,
     // The big hulls' surfaces by body id (M7-T06, `surface_rows.rs`), shared with the rows and the AI job's copy.
     pub(crate) surfaces: Arc<crate::rows::Surfaces>,
+    // The navigation markers' bodies by id (M7-T27, `set_navigation`): their rows take `ROLE_NAV`.
+    pub(crate) nav_bodies: std::collections::HashSet<i64>,
 }
 
 #[godot_api]
@@ -1856,6 +1858,8 @@ impl ScsSimCore {
             crate::rows::ROLE_SURFACE
         } else if self.turrets.civilians.contains(&m.body_id) {
             crate::rows::ROLE_CIVILIAN
+        } else if self.nav_bodies.contains(&m.body_id) {
+            crate::rows::ROLE_NAV
         } else {
             crate::rows::ROLE_COMBAT
         };

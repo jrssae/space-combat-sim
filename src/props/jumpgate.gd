@@ -311,6 +311,7 @@ func _sync_targetable() -> void:
 		return
 	marker.display_name = display_name
 	marker.kind = Targetable.Kind.PROP
+	marker.role = Targetable.Role.BEACON  # a navigation target, not a civilian ship (M7-T27)
 	marker.velocity = Vector3.ZERO
 	marker.broadcast_range_m = BROADCAST_RANGE_M
 

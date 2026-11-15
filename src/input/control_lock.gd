@@ -45,5 +45,6 @@ func apply(pc: PilotCommand, held: bool, shot_playing: bool) -> bool:
 		pc.ui.wing_form = false
 		pc.ui.wing_engage = false
 		pc.ui.wing_cover = false
-		pc.ui.request_jump = false  # no gate jump asked for while the controls are held (M6-T14)
+		pc.ui.interact = false  # no gate jump or other interaction while the controls are held (M6-T14, M7-T27)
+		pc.ui.interact_progress = 0.0
 	return skip

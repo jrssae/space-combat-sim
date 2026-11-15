@@ -32,6 +32,11 @@ const CHARGE_BAR_WIDTH_SHARE: float = 40.0 / 640.0
 const ROSTER_ORIGIN: Vector2 = Vector2(48.0, 48.0)
 const ROSTER_ROW_PX: float = 24.0
 const ROSTER_BAR: Vector2 = Vector2(64.0, 8.0)
+## The interaction hold's bar across the top (M7-T27): its share of the window's width, and its top and height (at 1080 px; scaled),
+## above the status line.
+const INTERACT_BAR_WIDTH_SHARE: float = 0.6
+const INTERACT_BAR_TOP_PX: float = 6.0
+const INTERACT_BAR_HEIGHT_PX: float = 10.0
 ## The acknowledgement line's baseline below the status line's (under AUTO-TRACK's, 26 px below it).
 const ACK_BELOW_STATUS_PX: float = 50.0
 const STATUS_Y_PX: float = 36.0
@@ -77,6 +82,7 @@ static func compute(input: HudInput) -> HudFrame:
 		_split_onto_screens(input, f)
 	if not f.objective_lines.is_empty():
 		f.items.append(HudSurface.OBJECTIVES)  # on the window in both views
+	_interact(input, f)
 	return f
 
 
@@ -198,12 +204,16 @@ static func _target(input: HudInput, f: HudFrame) -> void:
 	f.target_hull = t.hull_fraction
 	f.target_relation = Factions.relation(input.faction, t.faction)
 	f.target_color = Factions.hud_color(f.target_relation)
+	if t.role == Targetable.Role.BEACON:
+		f.target_nav = true
+		f.target_color = TargetCategories.COLORS[TargetCategories.Category.NAVIGATION]
 	if input.target_unknown:
 		# Too far to tell what it is (M5-T25): no name, no hull, no faction colour.
 		f.target_name = TargetMenu.UNKNOWN_LABEL
 		f.target_hull = -1.0
 		f.target_relation = Factions.Relation.NEUTRAL
 		f.target_color = Factions.UNIDENTIFIED_COLOR
+		f.target_nav = false
 	var shown: Dictionary = project(input, t.position)
 	if bool(shown["in_front"]) and on_screen(input, shown["pos"]):
 		f.target_on_screen = true
@@ -213,6 +223,8 @@ static func _target(input: HudInput, f: HudFrame) -> void:
 		f.edge_arrow_pos = edge["pos"]
 		f.edge_arrow_angle = edge["angle"]
 		f.edge_arrow_visible = true
+	if f.target_nav:
+		return  # a place to fly to, not to shoot at: no lead (M7-T27)
 	# The lead: where the bolt meets the target, from the mean muzzle position, hidden when there is no solution in range.
 	var lead: Dictionary = InterceptMath.solve(input.muzzle_position, input.own_velocity, t.position, t.velocity,
 			input.weapon_speed_mps, input.weapon_lifetime_s)
@@ -409,6 +421,21 @@ static func _roster_rows(input: HudInput, origin: Vector2, s: float, pitch: floa
 		row.text_pos = Vector2(origin.x + (ROSTER_BAR.x + 10.0) * s, top + 16.0 * s)
 		rows.append(row)
 	return rows
+
+
+# --- the interaction hold (M7-T27) ----------------------------------------------------------------------------------------
+
+
+# The hold's bar, centred across the top of the window in both views, while a hold runs.
+static func _interact(input: HudInput, f: HudFrame) -> void:
+	f.interact_progress = clampf(input.interact_progress, 0.0, 1.0)
+	if f.interact_progress <= 0.0:
+		return
+	var s: float = f.scale
+	var width: float = input.viewport_size.x * INTERACT_BAR_WIDTH_SHARE
+	f.interact_rect = Rect2(Vector2((input.viewport_size.x - width) * 0.5, INTERACT_BAR_TOP_PX * s),
+			Vector2(width, INTERACT_BAR_HEIGHT_PX * s))
+	f.items.append(HudSurface.INTERACT)
 
 
 # --- mission objectives (M5-T05) ------------------------------------------------------------------------------------------

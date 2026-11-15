@@ -1,13 +1,15 @@
 class_name GateJumpPrompt
 extends RefCounted
 ## When the player may ask a gate for a jump (M6-T14, the maintainer's "The player's jump"): within about 10 km of the gate,
-## with the gate targeted, alive, with the controls in hand and no jump under way. Only then does the HUD show the prompt and
-## X (the auto-track action) mean "request jump"; everywhere else X stays auto-track. Pure.
+## with the gate targeted, alive, with the controls in hand and no jump under way. Only then does the HUD show the prompt and a
+## long hold of X (the auto-track action, M7-T27) request the jump; a tap of X stays auto-track. Pure.
 
 ## "Within about 10 km" (maintainer, 2026-11-11): close enough that the run-in is a short flight, far enough to ask from a
 ## patrol.
 const RANGE_M: float = 10000.0
-const TEXT: String = "X: REQUEST JUMP"
+## What the gate's interaction is called (`TargetInteraction.label`), and the HUD's prompt for it.
+const LABEL: String = "JUMP"
+const TEXT: String = "HOLD X: " + LABEL
 
 
 ## Whether the prompt shows and X requests the jump.

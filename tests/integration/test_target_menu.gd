@@ -273,8 +273,13 @@ func test_a_picked_beacon_is_the_hud_waypoint_and_never_the_target() -> void:
 	assert_eq(_read("target_menu.highlight"), "NAVIGATION")
 	await _press(InputAdapter.RADIAL_SELECT)
 	var entries: PackedStringArray = _read("target_menu.entries")
-	assert_eq(entries[0], "nav alpha", "the nearest beacon first")
+	# The places to act on lead the ring (M7-T27: the station's bays and the gate), then the nearest beacon.
+	var station_placed: bool = main.far_props.station != null
+	var places: Array[String] = ["babylon 5 docking bay", "babylon 5 cargo bay", "jumpgate"]
+	assert_true(places.has(entries[0]) if station_placed else entries[0] == "nav alpha", "a place first: %s" % [entries])
+	assert_true(entries.has("nav alpha"), "the nearest beacon is listed: %s" % [entries])
 	assert_eq(entries[3], "none")
+	assert_true(_run("targetmenu highlight \"nav alpha\"").ok)
 	await _press(InputAdapter.RADIAL_SELECT)
 	assert_false(main.target_menu.is_open())
 	assert_eq(main.ship.targeting.selected_name(), "RAIDER 1", "the ship keeps its target: a beacon is never the facing target")
@@ -303,7 +308,7 @@ func test_a_picked_beacon_is_the_hud_waypoint_and_never_the_target() -> void:
 func test_a_picked_waypoint_is_dropped_when_its_beacon_is_destroyed() -> void:
 	_run("targetmenu open")
 	_run("targetmenu pick navigation")
-	_run("targetmenu pick 0")
+	_run("targetmenu pick \"nav alpha\"")
 	assert_true(_frame().waypoint_present)
 	main.buoys[0].set_destroyed(true)
 	assert_false(_frame().waypoint_present)
@@ -413,9 +418,9 @@ func test_closed_it_costs_nothing_per_tick() -> void:
 	assert_eq(main.target_menu.view.draws, draws, "nothing is drawn")
 	_run("targetmenu open")
 	assert_eq(TargetInfo.built_count - built, int(_read("target_menu.last_candidates")), "opening reads the list once")
-	# The buoys, the jumpgate (M6-T14) and the station (M7-T06) are the scene's broadcasters.
+	# The buoys, the jumpgate (M6-T14), the station (M7-T06) and its two bays (M7-T27) are the scene's broadcasters.
 	assert_eq(int(_read("target_menu.last_candidates")), main.buoys.size() + main.gates.gates.size()
-			+ (1 if main.far_props.station != null else 0))
+			+ (3 if main.far_props.station != null else 0))
 	built = TargetInfo.built_count
 	await _ticks(10)
 	_run("targetmenu pick navigation")

@@ -437,7 +437,8 @@ D-pad Up  flight assist           D-pad Down  next weapon           D-pad Left  
 A  fire       B  tap: next target, hold (0.35 s): previous target
 Comms menu open (D-pad Right, 4 s): D-pad Up/Right/Down/Left pick entries 1-4 (attack my target, form on me, engage at will,
   cover me); B closes it; assist, next weapon, lights and the target button do nothing meanwhile
-X  auto-track (toggle): the nose follows the lead point of the selected target
+X  auto-track (toggle): the nose follows the lead point of the selected target; hold 2 s on a target that offers an
+   interaction (a gate's jump, a station bay; M7-T27, §20.5) to run it instead
 Y  camera 1st/3rd
 R3  brake (hold): all stop; faces the target if one is selected
 L3  free look (hold): the right stick turns the camera, not the ship; the view stays where it is left until L3 is released
@@ -504,7 +505,7 @@ use for the standard layout; any pad SDL3 recognises, generic XInput clones incl
 | `toggle_running_lights` | D-pad `JOY_BUTTON_DPAD_LEFT` (13) | 5 | edge (M3-T27) | - | - |
 | `comms_menu` | D-pad `JOY_BUTTON_DPAD_RIGHT` (14) | Ctrl | edge (opens the comms menu, M5-T07; while it is open the same press closes it, M5-T46) | - | - |
 | `brake` | R3 `JOY_BUTTON_RIGHT_STICK` (8) | X | hold | - | - |
-| `autotrack` | X `JOY_BUTTON_X` (2) | Shift, mouse 4 | edge (toggles auto-track; `InputAdapter.autotrack_on`) | - | - |
+| `autotrack` | X `JOY_BUTTON_X` (2) | Shift, mouse 4 | edge (toggles auto-track; `InputAdapter.autotrack_on`); on a target that offers an interaction, tap (on release, under `target_hold_s`) or hold `interact_hold_s` (M7-T27, `HoldInteract`), the same on every binding; the HUD prompt names them all | - | - |
 | `camera_look` | L3 `JOY_BUTTON_LEFT_STICK` (7) | mouse 3 (middle) | hold | - | - |
 | `toggle_camera` | Y `JOY_BUTTON_Y` (3) | Tab | edge | - | - |
 | `reset_ship` | Back `JOY_BUTTON_BACK` (4) | Backspace | edge | - | - |
@@ -744,6 +745,7 @@ unsaved, emits `changed(key, value)`), `reset(key)`, `save()`, `revert()`. Nothi
 | `stick_deadzone` | float | 0.15 | 0.0-0.30 |
 | `trigger_deadzone` | float | 0.05 | 0.0-0.20 |
 | `target_hold_s` | float | 0.35 | 0.15-1.0 |
+| `interact_hold_s` | float | 2.0 | 0.5-5.0 | M7-T27: how long X is held to run the selected target's interaction (§20.5) |
 | `target_menu_blur` | float | 0.35 | 0.0-1.0 | M5-T44: focus pull strength while a radial menu is open; 0 is off |
 | `assist_default` | bool | true | |
 | `fuel_unlimited` | bool | true | M2-T14: reaction mass is never drawn down and the fuel gauge stays full; off = finite tank |
@@ -1722,7 +1724,7 @@ speed, target box (at least 24 px, faction colour) with name, range, closing spe
 the target is off-screen or behind, lead reticle (`InterceptMath`, hidden without a solution or beyond bolt
 range), own hull bar with a `GOD` tag, and one status line (wave, raiders left, kills). `Hud` only draws it.
 Radar (`RadarModel`): inside 25 km as before; a broadcast contact beyond it (M3-T17) sits on the rim in its true direction
-as a hollow dot (`Dot.rim`).
+as a hollow dot (`Dot.rim`). Navigation targets' diamond and the hold-X bar across the top: §20.5 (M7-T27).
 `settings.show_hud` toggles it; while it shows, the debug overlay hides its own bracket. While the overlay shows, the wing roster sits below its text (M3-T29).
 
 Console screens (M3-T29, Q29). In the cockpit camera of a ship with `screens` hardpoints the instruments leave the window. `HudSurface` is one surface the HUD draws on: what it lists (`items`) and
@@ -5276,7 +5278,7 @@ At 1 000 km (GPU): the gate 23 draw calls, 145 fps (the display's cap), 379 MB; 
   open point) or `arrival: "gate"` (through the gate) and `m.depart(name)`; an encounter pool's `gate` table sends a share of arrivals
   or departures through the gate while the player is within 25 km (free flight has one).
 - **The player's jump** (`GateJumpPrompt`, `GateJump`, `GateAutopilot`, `JumpgateHost`): within 10 km with the gate targeted the HUD
-  shows `X: REQUEST JUMP` (X is auto-track everywhere else); the controls lock, the autopilot lines up 1 440 m out (around the arms
+  shows `HOLD X / SHIFT / MOUSE 4: JUMP` within 2 km (a 2 s hold since M7-T27, §20.5; a tap is auto-track); the controls lock, the autopilot lines up 1 440 m out (around the arms
   if behind) and runs in at 250 m/s under a `CinematicShot`, a flash, a fade and 2 s of black, then the ship comes **back out through
   the blue vortex** at 200 m/s and control returns after 3 s or 500 m. In M6 the trip is a round trip; hyperspace (M11) replaces it.
   The run-in (and with it the vortex and the shot) starts only once the ship is at the departure point and no longer flying away
@@ -5759,6 +5761,50 @@ data/station/traffic.json        the interval, the kinds' weights, the raid's si
 - **Threads.** All of the above per tick is in the AI job on the frozen rows; `Field.sub_points` is filled in the job
   before the pass. Threaded equals delayed and one thread equals six (`test_station_threads`, `test_station_grid_threads`).
   No recording in `tests/fixtures/` moved.
+
+### 20.5 Navigation targets and the hold-X interaction (T27)
+
+- **Navigation targets.** `Targetable.Role.BEACON` is every navigation target: the nav buoys, the jumpgate (`Jumpgate`
+  sets it) and the station's two bays. `TargetCategories` puts them under NAVIGATION before any faction rule, so a gate or a
+  bay is never CIVILIAN or ALLIES. The bays are `NavPoint`s (a `Node3D` with a navigation `Targetable`: neutral, kind PROP,
+  heard as far as the station's beacon, the anchor's rest velocity as its own) that `Station` puts at the main docking bay's
+  mouth (on the drum's axis, plus its pivot, so the turn never moves it) and the cargo bay's entry: `BABYLON 5 DOCKING BAY`,
+  `BABYLON 5 CARGO BAY`. A bay is a place, not a thing: `NavPoint` tells the core (`SimCore.set_navigation`, native
+  `ROLE_NAV`), and avoidance skips those rows, so a docking ship flies its lane through the mouth (the radar, targeting and
+  the brains' other reads still see the row; no existing body takes the role, so no recording moved). The station's own
+  marker is unchanged. `TargetReadout.role` carries the role to the HUD: a
+  navigation target is drawn as a diamond round its box in the NAVIGATION colour (`HudFrame.target_nav`), not corner brackets;
+  the radar's dots keep their faction colours.
+- **The interaction.** `Targetable.interaction` holds a `TargetInteraction` (`kind`, `label`, an `offered` and an `action`
+  Callable); with no action it is a placeholder whose `run()` answers `not available`. The bays carry `dock` and `cargo`
+  placeholders for the missions to fill (docking, loading, unloading). The gate's is the player's jump: `Main` gives each
+  placed gate one offered while it is targeted and no jump runs, whose action is `JumpgateHost.start_jump(gate)`.
+- **Reach (maintainer: no button prompt out of range).** Each interaction has a reach (`TargetInteraction.range_m`): the gate's
+  request range (`GateJumpRequest.range_m()`, 2 km, M7-T28), each bay `Station.BAY_REACH_M` (2 km). Out of reach nothing is
+  offered: no button prompt, no bar, and X is auto-track alone; the prompt line is a plain status (`JUMPGATE: 3.4 km — CLOSE TO
+  2.0 km TO JUMP`, `InteractionHost.status_text`). Within reach it is `HOLD X / SHIFT / MOUSE 4: JUMP`.
+- **Picking one.** `TargetInfo.interaction_kind` carries the interaction's kind. In the target menu's NAVIGATION ring an entry
+  that offers an interaction is a target pick (`ACTION_TARGET`), a plain nav buoy still the waypoint (M5-T25), and the ring
+  lists the places that offer an interaction first, then the nearest buoys (`TargetCategories._priority`), so a crowd of
+  buoys never pushes the gate 50 km out off its five slices. The wheel, target ahead and the console reach them as any target;
+  the target button's tap stays the nearest enemy.
+- **Tap and hold.** `HoldInteract` (pure) splits X: a press that starts while nothing is offered toggles auto-track at once,
+  as before; a press that starts while the selected target offers its interaction taps on a release within
+  `settings.target_hold_s` (0.35 s, the target button's split, so both tap-or-hold buttons feel alike), fires
+  `UiCommand.interact` once at `settings.interact_hold_s` (2 s), and is cancelled by a release in between or by the offer going
+  away. `UiCommand.interact_progress` (0 inside the tap window, so a tap never flashes the bar) is the bar.
+  `InputAdapter.interaction_offered` is set each tick by `Main` from `InteractionHost.offer()`; `ControlLock` drops both.
+- **`InteractionHost`** (Main's child): the offer (the selected marker's interaction while it is offered, the player alive and
+  the controls free), `run_offered()` on the hold, and the prompt line: `HOLD <buttons>: <label>`, the buttons named from the
+  live bindings (`BindingNames.of_action(autotrack)`: `HOLD X / SHIFT / MOUSE 4`, keyboard parity), or for 3 s the answer of one that
+  did not run (`BABYLON 5 DOCKING BAY: NOT AVAILABLE`), on the acknowledgement's line. The bar (`HudSurface.INTERACT`) runs
+  across the top of the window, 60 % of its width, above the status line, in both views.
+- **Keyboard parity (maintainer).** Every action the pad has, the keyboard and mouse have: the hold is the `autotrack` action, so
+  Shift and Mouse 4 tap and hold exactly as pad X does. `test_keyboard_parity` checks every built-in layout (an action on the pad
+  has a key or mouse button; pitch and yaw are the mouse's motion) and drives Shift through `GodotInputSource`.
+- **Console.** Provider and command `interact` (`status`, `run` as a completed hold, `hold [s]`: X held that long through
+  `InputAdapter.console_hold_s`, for scripts and captures). Tests: `test_hold_interact`, `test_nav_interaction`,
+  `test_nav_targets`, `test_gate_jump`, `test_jumpgate_in_play` (the jump now takes a 2 s hold).
 
 ### 20.6 The station's surfaces: texel tiers, the hull material and the two texture sets (T24)
 

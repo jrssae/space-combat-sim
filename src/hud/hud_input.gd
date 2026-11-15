@@ -77,6 +77,8 @@ var ack_line: String = ""
 ## A prompt for the player (M6-T14: `X: REQUEST JUMP` beside a targeted gate), "" for none. It shows on the acknowledgement's line
 ## while no acknowledgement does.
 var prompt_line: String = ""
+## How far the auto-track button's hold has run toward the targeted object's interaction (M7-T27), 0..1; 0 = no hold, no bar.
+var interact_progress: float = 0.0
 ## The route waypoint to mark (M3-T09: the instructor's next waypoint), World frame, and its label (`NAV 2`).
 var has_waypoint: bool = false
 var waypoint_position: Vector3 = Vector3.ZERO

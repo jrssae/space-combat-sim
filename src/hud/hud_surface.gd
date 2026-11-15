@@ -29,6 +29,9 @@ const ACK: StringName = &"ack"
 const ROSTER: StringName = &"roster"
 ## The mission's active objectives (M5-T05): on the window in both views, only while there are any, so it is not in `ALL_ITEMS`.
 const OBJECTIVES: StringName = &"objectives"
+## The interaction hold's progress bar across the top (M7-T27): on the window in both views, only while a hold runs, so it is not in
+## `ALL_ITEMS`.
+const INTERACT: StringName = &"interact"
 ## The whole HUD in one place, as the chase view draws it, in drawing order.
 const ALL_ITEMS: Array[StringName] = [BORESIGHT, VELOCITY, TARGET_MARKS, TARGET_LABEL, WAYPOINT, GRID, SPEED, HULL_BAR, FUEL_BAR, CHARGE_BAR,
 		RUNNING_LIGHTS, RADAR, DRIFT, OWN_SILHOUETTE, TARGET_SILHOUETTE, TRACKING, STATUS, ACK, ROSTER]

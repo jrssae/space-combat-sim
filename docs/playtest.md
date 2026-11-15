@@ -44,6 +44,9 @@ B             tap: nearest enemy (again: the 2nd nearest)   hold (about 0.35 s):
 X (toggle)    auto-track on/off: the nose swings onto the lead reticle of the selected target and follows it as it moves
               (with none selected it takes the nearest hostile; it switches itself off when none is left); your speed and
               direction are untouched, so you can keep thrusting and strafing while you aim. AUTO-TRACK shows on the HUD
+X (hold 2 s)  within 2 km of a target that offers an action (the jumpgate, a Babylon 5 bay; the HUD reads HOLD X / SHIFT /
+              MOUSE 4: ...): a bar fills across the top and the action runs (M7-T27); a tap is still auto-track. Farther out
+              the HUD only says how close to come (JUMPGATE: 3.4 km — CLOSE TO 2.0 km TO JUMP) and the hold does nothing
 R3            brake (hold): all stop; with a target selected the nose also swings onto it
 L3 (hold)     free look: the right stick turns the view instead of flying (cockpit: your head turns; chase: the camera
               pans around the ship), faster the further you push it; centre the stick and the view stays where it is.
@@ -66,6 +69,8 @@ Alt (hold)    frees the mouse: the cursor appears, the ship ignores it and click
 Mouse 1       fire                                    Mouse 2     tap: nearest enemy, hold: the target menu
 Wheel         previous / next target                  Middle button (hold)  free look, as L3
 Mouse 4       auto-track (toggle)                     Mouse 5     fire mode (the side buttons, if your mouse has them)
+Shift or Mouse 4 held 2 s   the pad's X hold (M7-T27): acts on the targeted gate or bay, the bar across the top; a tap toggles auto-track
+Arrows / Enter / Backspace  point, pick and back in the target and comms menus (the mouse points and clicks too)
 N or Print    screenshot (saved to user://screenshots/, path printed)
 Backspace     respawn                                 Esc         pause (also frees the mouse)       F3  debug overlay
 ```
@@ -857,7 +862,7 @@ a look-only stand-in with no collision until M7. The jumpgate stands 50 km from 
   Hit the planet or drop below the top of its atmosphere (100 km) and the ship is destroyed, `god` or not.
 - **Speed.** The velocity rebase is on: past 2 000 m/s against the frame the world is re-based under you with no visible change;
   `state world` shows `boosts`, `origin_velocity` and `riding`.
-- **The gate.** Fly within 10 km of it, target it (`gate target`), and the HUD offers `X: REQUEST JUMP`; X flies the jump (a short
+- **The gate.** Fly within 10 km of it, target it (`gate target`), and within 2 km the HUD offers `HOLD X / SHIFT / MOUSE 4: JUMP`; holding it for 2 s flies the jump (M7-T27; a short
   cinematic out through the orange vortex and back through the blue one).
 
 ## Console for M6 (all in `info.md`)
@@ -939,7 +944,7 @@ want a window you can see.
       (`gate open departure 1`, then `gate open arrival 1`); the swirl turns clockwise and inward for a departure, counter-clockwise
       and outward for an arrival.
 - [ ] **From the side and the tip:** the base glows white from behind and the side; from the tip the near wall covers the dark base.
-- [ ] **The player's jump:** `X: REQUEST JUMP` within 10 km of the gate; the autopilot, the shots, the flash and fade, back out
+- [ ] **The player's jump:** `HOLD X / SHIFT / MOUSE 4: JUMP` within 10 km of the gate; the autopilot, the shots, the flash and fade, back out
       through the blue vortex with control returned after 3 s or 500 m.
 - [ ] **Raiders and open points:** an encounter raid (`encounters force raid`) comes out of a vortex sized to the ship, not a flash.
 - [ ] **Frame rates** (visible window): the vortex open from close up and from the reference pose at the display's rate; free flight
@@ -959,7 +964,7 @@ want a window you can see.
       ship-made points): the ship flies down the funnel shrinking into the black ring and vanishes in a white flash; an arrival comes
       out of the ring in a flash, small, and grows to full size by the mouth. A capital shrinks more than a fighter. It stays
       targetable and can be hit while scaled.
-- [ ] **T22, the player's jump:** `X: REQUEST JUMP` from any view (chase, cockpit): the camera cuts to an outside shot that follows
+- [ ] **T22, the player's jump:** `HOLD X / SHIFT / MOUSE 4: JUMP` from any view (chase, cockpit): the camera cuts to an outside shot that follows
       the ship down the funnel to the ring's flash, fades, and on the way back shows it come out and grow before handing control
       back. Say if the flash is too bright close up.
 - [ ] **T23, a fighter cannot open a point:** `transit arrive point fighter` is a debug point held by nothing; in play no fighter
