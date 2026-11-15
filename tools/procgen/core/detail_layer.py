@@ -41,21 +41,22 @@ def _smooth(t: np.ndarray) -> np.ndarray:
     return t * t * (3.0 - 2.0 * t)
 
 
-def _plates(u: np.ndarray, v: np.ndarray, tile_m: float, seed: int
-            ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Each point's plate in the mosaic (``u``, ``v`` inside the tile): its key and its bounds."""
+def _plates(u: np.ndarray, v: np.ndarray, tile_m: float, seed: int, max_plate_m: float = MAX_PLATE_M, min_plate_m: float = MIN_PLATE_M,
+            levels: int = LEVELS) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Each point's plate in the mosaic (``u``, ``v`` inside the tile): its key and its bounds. The plate sizes default to the fine
+    mosaic's; the station's panel tile cuts the same way at a larger scale."""
     s = np.full(u.shape, seed, dtype=np.int64)
     u0, v0 = np.zeros(u.shape), np.zeros(u.shape)
     u1, v1 = np.full(u.shape, tile_m), np.full(u.shape, tile_m)
     key = (_hash01(s) * 0xFFFFFF).astype(np.int64)
-    for k in range(LEVELS):
+    for k in range(levels):
         w, h = u1 - u0, v1 - v0
         at = 0.3 + 0.4 * _hash01(key, s + 307 + k)
         # Across the longer side, or either way when the piece is near square.
         along_u = np.where(w > 1.3 * h, True, np.where(h > 1.3 * w, False, _hash01(key, s + 211 + k) < 0.5))
         size = np.where(along_u, w, h)
-        wanted = (np.maximum(w, h) > MAX_PLATE_M) | (_hash01(key, s + 101 + k) >= STOP_SHARE)
-        split = wanted & (size * np.minimum(at, 1.0 - at) >= MIN_PLATE_M)
+        wanted = (np.maximum(w, h) > max_plate_m) | (_hash01(key, s + 101 + k) >= STOP_SHARE)
+        split = wanted & (size * np.minimum(at, 1.0 - at) >= min_plate_m)
         cu, cv = u0 + at * w, v0 + at * h
         first = np.where(along_u, u < cu, v < cv)
         su, sv = split & along_u, split & ~along_u

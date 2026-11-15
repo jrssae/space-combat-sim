@@ -25,8 +25,7 @@ from ..core.geometry import Material, Mesh, rotation_z
 from ..core.near_props import PropGroup, PropKind
 from ..core.textures import text_coverage
 from ..styles import _hash01
-from ..styles.earth_alliance_station import (BAY_GLOW, BAY_RED, BAY_STRENGTH, BAY_TUNNEL, BAY_TUNNEL_STRENGTH, SCHEME, WINDOW_GLOW,
-                                             WINDOW_STRENGTH, colour, lin)
+from ..styles.earth_alliance_station import BAY_GLOW, BAY_RED, BAY_STRENGTH, BAY_TUNNEL, BAY_TUNNEL_STRENGTH, SCHEME, colour, lin
 from . import station as st
 
 NEAR_M = 1500.0  # where the hull atlas's texel (1.39 m) reaches a pixel at 1080 rows and a 62 degree view (docs/assets-station.md)
@@ -406,95 +405,5 @@ def groups(section: str, shift: np.ndarray) -> list[PropGroup]:
     return out
 
 
-# --- the frame's props: the command section's windows ------------------------------------------------------------------
-FRAME_ATLAS_H = 2 * CELL_H
-WINDOW_PANEL = (64.0, 32.0)  # along the flank, up it: one window cell at the doors' texel
-WINDOW_GRID = (6, 4)  # windows along and up a panel
-WINDOW_PANE = (5.6, 3.0)
-WINDOW_LIFT_M = 0.3
-# The panels lie on the command section's beam, on its sloped flanks (M7-T22: the STL's pointed beam): two rows up each flank (their
-# middles this far down the slope from the top's edge) of whole panels along it (z from, z to, how many).
-WINDOW_SLOPE_M = (28.5, 66.5)
-WINDOW_RUNS = ((1012.0, 1268.0, 4),)
-FRAME_SECTION = "spine_sphere"
-
-
-def _window_cell(seed: int) -> dict[str, np.ndarray]:
-    """A panel of windows: dark plating, each pane in a frame with a mullion, most lit warm, some dark (Q10)."""
-    cols, rows = np.meshgrid(np.arange(ATLAS_W), np.arange(CELL_H))
-    u = (cols + 0.5) / PX_PER_M  # along the panel
-    v = (rows + 0.5) / PX_PER_M  # up it
-    pu, pv = WINDOW_PANEL[0] / WINDOW_GRID[0], WINDOW_PANEL[1] / WINDOW_GRID[1]
-    i, j = np.floor(u / pu).astype(np.int64), np.floor(v / pv).astype(np.int64)
-    fu, fv = np.mod(u, pu) - 0.5 * pu, np.mod(v, pv) - 0.5 * pv
-    w, h = WINDOW_PANE
-    pane = (np.abs(fu) < 0.5 * w) & (np.abs(fv) < 0.5 * h)
-    frame = (np.abs(fu) < 0.5 * w + 0.35) & (np.abs(fv) < 0.5 * h + 0.35) & ~pane
-    mullion = pane & (np.abs(fu) < 0.08)
-    s = np.full(u.shape, seed + 77, dtype=np.int64)
-    lit = (_hash01(i, j, s) < 0.62) & pane & ~mullion
-    plate = _hash01(np.floor(u / 8.0).astype(np.int64), np.floor(v / 4.0).astype(np.int64), s + 3)
-    hull = np.asarray(colour("spine")) * (0.92 + 0.08 * plate)[..., None]
-    albedo = np.where(pane[..., None], np.where(lit[..., None], 0.55, 0.02) * np.ones(3), hull)
-    albedo = np.where(frame[..., None], np.asarray(colour("machinery")) * 0.6, albedo)
-    albedo = np.where(mullion[..., None], np.asarray(colour("machinery")) * 0.5, albedo)
-    seam = (np.mod(u, 8.0) < 0.1) | (np.mod(v, 4.0) < 0.1)
-    height = np.where(pane, -0.25, 0.0) + np.where(frame, 0.08, 0.0) - 0.05 * seam
-    rough = np.where(pane, 0.12, SCHEME["spine"][3] + 0.08 * (plate - 0.5))
-    metal = np.where(pane, 0.0, SCHEME["spine"][2])
-    ao = np.where(seam, 0.75, 1.0)
-    glow = np.where(lit, 1.0, 0.0) * (0.85 + 0.15 * _hash01(i, j, s + 9))
-    return {"albedo": albedo, "height": height, "rough": rough, "metal": metal, "ao": ao, "glow": glow}
-
-
-def frame_maps(seed: int) -> dict[str, np.ndarray]:
-    """The frame's prop atlas: the window panel's cell, then the swatches."""
-    return _maps([_window_cell(seed), _swatch_cell([_station_swatch(r) for r in STATION_SWATCHES])], np.asarray(lin(WINDOW_GLOW)))
-
-
-FRAME_EMISSIVE_STRENGTH = WINDOW_STRENGTH
-
-
-def window_panel() -> Mesh:
-    """One panel of windows, facing +x, its middle at the origin, along z and up y."""
-    hu, hv = 0.5 * WINDOW_PANEL[0], 0.5 * WINDOW_PANEL[1]
-    verts = [[0.0, -hv, -hu], [0.0, -hv, hu], [0.0, hv, hu], [0.0, hv, -hu]]
-    v1 = CELL_H / FRAME_ATLAS_H
-    uvs = [[[0.0, 0.0], [1.0, 0.0], [1.0, v1]], [[0.0, 0.0], [1.0, v1], [0.0, v1]]]
-    return _prop_mesh(verts, [[0, 1, 2], [0, 2, 3]], uvs)
-
-
-def frame_kinds() -> list[PropKind]:
-    return [PropKind("window_panel", window_panel())]
-
-
-def window_placements() -> list[tuple[np.ndarray, np.ndarray]]:
-    """Each panel's basis (columns: out of the flank, up, along) and middle, station frame, on both flanks of the beam."""
-    from . import station_spine as ssp  # noqa: PLC0415
-
-    (xt, yt), (xe, ye) = (ssp.BEAM_TOP_X, ssp.BEAM_TOP), ssp.BEAM_EDGE
-    down = np.array([xe - xt, ye - yt])
-    down /= np.linalg.norm(down)
-    out = []
-    for z0, z1, count in WINDOW_RUNS:
-        length = (z1 - z0) / count
-        for k in range(count):
-            zm = z0 + length * (k + 0.5)
-            for s in WINDOW_SLOPE_M:
-                for sx in (-1.0, 1.0):
-                    up = np.array([-sx * down[0], -down[1], 0.0])
-                    along = np.array([0.0, 0.0, sx])
-                    out_n = np.cross(up, along)
-                    basis = np.column_stack([out_n, up, along])
-                    at = np.array([sx * (xt + s * down[0]), yt + s * down[1], zm]) + WINDOW_LIFT_M * out_n
-                    out.append((basis, at))
-    return out
-
-
-def frame_groups(section: str, shift: np.ndarray) -> list[PropGroup]:
-    """The window panels in the frame of ``section`` (the station frame moved by ``shift``)."""
-    return [PropGroup("window_panel", section, tuple(np.column_stack([b, at - shift]) for b, at in window_placements()))]
-
-
-__all__ = ["EMISSIVE_STRENGTH", "FRAME_EMISSIVE_STRENGTH", "HANG_DEPTH_M", "MARGIN_M", "NEAR_M", "RELEASE_M", "clamp", "door_leaf",
-           "frame_groups", "frame_kinds", "frame_maps", "gantry", "groups", "kinds", "prop_maps", "window_placements"]
+__all__ = ["EMISSIVE_STRENGTH", "HANG_DEPTH_M", "MARGIN_M", "NEAR_M", "RELEASE_M", "clamp", "door_leaf", "gantry", "groups", "kinds",
+           "prop_maps"]

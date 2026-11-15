@@ -137,6 +137,59 @@ const VIEW_SETS: Dictionary = {
 		{"name": "cargo_inside_looking_in", "at": Vector3(18.0, 346.0, 446.0), "aim": Vector3(-40.0, 333.0, 489.0), "fov": 80.0},
 		{"name": "cargo_inside_looking_out", "at": Vector3(-30.0, 347.0, 486.0), "aim": Vector3(8.0, 338.0, 410.0), "fov": 80.0},
 	],
+	# M7-T24: the station's surfaces at the views a player sees them fullscreen: the launch cinematics' outside shots (up the arm
+	# toward the sphere, out across the drum), the Cobra bay and its arm's head, the docking sphere and its bay, a band, the spine over
+	# the sphere, 1 km (and grazing), 10 km. Shot once per texture set (`detail=low|high`).
+	"t24": [
+		{"name": "launch_up_the_arm", "at": Vector3(268.0, -24.0, 1190.0), "aim": Vector3(236.0, 40.0, 760.0), "fov": 60.0},
+		{"name": "launch_across_drum", "at": Vector3(300.0, 40.0, 1150.0), "aim": Vector3(120.0, 250.0, 1600.0), "fov": 60.0},
+		{"name": "bay_50m", "at": Vector3(300.0, -55.0, 1085.0), "aim": Vector3(243.0, 0.0, 1150.0), "fov": 62.0},
+		{"name": "bay_head_60m", "at": Vector3(345.0, 45.0, 615.0), "aim": Vector3(300.0, 0.0, 720.0), "fov": 62.0},
+		{"name": "sphere_80m", "at": Vector3(150.0, -300.0, 640.0), "aim": Vector3(60.0, -240.0, 760.0), "fov": 62.0},
+		{"name": "aperture_150m", "at": Vector3(150.0, -110.0, 340.0), "aim": Vector3(0.0, 0.0, 500.0), "fov": 60.0},
+		{"name": "band_200m", "at": Vector3(560.0, -300.0, 1860.0), "aim": Vector3(0.0, 0.0, 2150.0), "fov": 60.0},
+		{"name": "spine_100m", "at": Vector3(150.0, 520.0, 900.0), "aim": Vector3(0.0, 420.0, 1100.0), "fov": 60.0},
+		{"name": "grazing_1km", "at": Vector3(760.0, 330.0, 600.0), "aim": Vector3(0.0, 120.0, 3200.0), "fov": 50.0},
+		{"name": "1km", "at": Vector3(700.0, 380.0, 700.0), "aim": Vector3(0.0, 0.0, 1500.0), "fov": 55.0},
+		{"name": "10km", "far": 10.0},
+	],
+	# M7-T24's final A/B sheet: the launch cinematics' outside views, a Cobra bay, the main docking bay, the cargo bay, the main body's
+	# windows from below, 1 km and 10 km.
+	"t24final": [
+		{"name": "launch_up_the_arm", "at": Vector3(300.0, -70.0, 1240.0), "aim": Vector3(250.0, 50.0, 820.0), "fov": 60.0},
+		{"name": "launch_across_drum", "at": Vector3(300.0, 40.0, 1150.0), "aim": Vector3(120.0, 250.0, 1600.0), "fov": 60.0},
+		{"name": "bay_50m", "at": Vector3(300.0, -55.0, 1085.0), "aim": Vector3(243.0, 0.0, 1150.0), "fov": 62.0},
+		{"name": "docking_bay_150m", "at": Vector3(150.0, -110.0, 340.0), "aim": Vector3(0.0, 0.0, 500.0), "fov": 60.0},
+		{"name": "cargo_outside_mouth", "at": Vector3(22.0, 356.0, 300.0), "aim": Vector3(0.0, 340.0, 470.0), "fov": 55.0},
+		{"name": "drum_below_behind", "at": Vector3(-1100.0, -1250.0, 4600.0), "aim": Vector3(0.0, 0.0, 2300.0), "fov": 50.0,
+				"up": Vector3(0.0, -1.0, 0.0)},
+		{"name": "1km", "at": Vector3(700.0, 380.0, 700.0), "aim": Vector3(0.0, 0.0, 1500.0), "fov": 55.0},
+		{"name": "10km", "far": 10.0},
+	],
+	# M7-T24's drum pattern: its full length from below and behind looking forward (the angle of the maintainer's "station from
+	# below"), the same from about 2 km three-quarter, and the green zone close from below.
+	"t24drum": [
+		{"name": "drum_below_behind", "at": Vector3(-1100.0, -1250.0, 4600.0), "aim": Vector3(0.0, 0.0, 2300.0), "fov": 50.0,
+				"up": Vector3(0.0, -1.0, 0.0)},
+		{"name": "drum_2km", "at": Vector3(300.0, -1800.0, 1800.0), "aim": Vector3(0.0, 0.0, 3200.0), "fov": 65.0},
+		{"name": "drum_below_close", "at": Vector3(-260.0, -700.0, 4350.0), "aim": Vector3(0.0, -200.0, 3400.0), "fov": 50.0},
+		{"name": "green_150m", "at": Vector3(150.0, -470.0, 2950.0), "aim": Vector3(0.0, -334.0, 3150.0), "fov": 60.0},
+		{"name": "green_1km", "at": Vector3(950.0, -520.0, 3300.0), "aim": Vector3(0.0, -60.0, 3600.0), "fov": 50.0},
+		{"name": "green_3km", "at": Vector3(2700.0, -1300.0, 3000.0), "aim": Vector3(0.0, 0.0, 3500.0), "fov": 40.0},
+		{"name": "vane_400m", "at": Vector3(950.0, -700.0, 4500.0), "aim": Vector3(535.0, -800.0, 4805.0), "fov": 55.0},
+		{"name": "aft_1km", "at": Vector3(900.0, -500.0, 6700.0), "aim": Vector3(0.0, 0.0, 6200.0), "fov": 60.0},
+	],
+	# M7-T24's second checkpoint: the drum, sphere and spine from the side at the angle of the maintainer's "station side, purple and
+	# grey", the sphere from its side and close, the spine from above.
+	"t24side": [
+		{"name": "side_main", "at": Vector3(2100.0, 650.0, 500.0), "aim": Vector3(0.0, 60.0, 2300.0), "fov": 45.0},
+		{"name": "sphere_side", "at": Vector3(950.0, 260.0, 380.0), "aim": Vector3(0.0, 0.0, 760.0), "fov": 50.0},
+		{"name": "spine_600m", "at": Vector3(650.0, 800.0, 700.0), "aim": Vector3(0.0, 420.0, 1350.0), "fov": 55.0},
+		{"name": "grid_arm_head", "at": Vector3(430.0, 130.0, 610.0), "aim": Vector3(300.0, 0.0, 745.0), "fov": 50.0},
+		{"name": "sphere_below_ahead", "at": Vector3(560.0, -640.0, 180.0), "aim": Vector3(0.0, -80.0, 660.0), "fov": 45.0},
+		{"name": "collar_panel_close", "at": Vector3(-58.0, -282.0, 552.0), "aim": Vector3(-41.4, -208.0, 606.0), "fov": 50.0},
+		{"name": "grid_bow_quarter", "at": Vector3(-420.0, 330.0, 250.0), "aim": Vector3(0.0, 60.0, 760.0), "fov": 60.0},
+	],
 	# Live (the drum turning, the traffic flying): a civilian docks and one undocks, seen from beside the lane outside the mouth.
 	"t25seq": [
 		{"name": "seq_1_approach", "live": true, "run": "traffic dock near", "depth_ge": -260.0},
@@ -182,7 +235,7 @@ const MARKER_COLOURS: Dictionary = {
 }
 
 var main: Main
-var options: Dictionary = {"out": "user://", "settle": "90", "views": ""}
+var options: Dictionary = {"out": "user://", "settle": "90", "views": "", "detail": ""}
 var _views: Array = VIEWS
 var _index: int = -1
 var _frame: int = 0
@@ -204,6 +257,8 @@ func _ready() -> void:
 		if pair.size() == 2:
 			options[pair[0]] = pair[1]
 	_views = VIEW_SETS.get(String(options["views"]), VIEWS)
+	if not String(options["detail"]).is_empty():  # the texture set to shoot (M7-T24), before any map loads
+		Settings.set_value(&"texture_detail", StringName(options["detail"]))
 	await _measure_maps()
 	main = (load("res://src/game/main.tscn") as PackedScene).instantiate() as Main
 	main.waves_auto_start = false
@@ -222,13 +277,22 @@ func _measure_maps() -> void:
 	var held: Array[Mesh] = []
 	var bytes: int = 0
 	var seen: Dictionary = {}
+	# Loaded by path, so the sheet also runs on a build from before the station hull material (a before-and-after copy).
+	var hull_path: String = "res://src/rendering/station_hull_material.gd"
+	var hull: GDScript = load(hull_path) as GDScript if ResourceLoader.exists(hull_path) else null
 	for piece: String in ["drum", "frame"]:
 		var entry: Dictionary = (manifest.get("pieces", {}) as Dictionary).get(piece, {})
 		held.append(MeshAssets.load_textured(dir, entry.get("mesh", {})))
 		for surface: Dictionary in (entry.get("mesh", {}) as Dictionary).get("surfaces", []):
 			var files: Array = [surface.get("albedo"), surface.get("normal"), surface.get("orm"), surface.get("emissive")]
 			var detail: Dictionary = surface.get("world_detail", {})
-			files += [detail.get("albedo"), detail.get("normal")]
+			if hull != null and hull.wants(surface):  # the station hull's maps in the set in use (M7-T24)
+				files = []
+				for key: String in hull.ATLAS_KEYS + hull.TILE_KEYS:
+					files.append(hull.map_file(surface, key))
+				files.append(surface.get("emissive"))
+			else:
+				files += [detail.get("albedo"), detail.get("normal")]
 			for file: Variant in files:
 				if file == null or seen.has(file):
 					continue
@@ -311,6 +375,9 @@ func _next() -> void:
 		return
 	var key: Dictionary = {"position": {"actor": "station", "offset": _local(view["at"])},
 			"look_at": {"actor": "station", "offset": _local(view["aim"])}, "fov": view["fov"]}
+	if view.has("up"):  # a view rolled to match a reference's framing (M7-T24)
+		var up: Vector3 = view["up"]
+		key["up"] = {"actor": "station", "direction": [up.x, up.y, up.z]}
 	var made: Dictionary = CinematicShot.from_dict(StringName(view["name"]), {"keys": [key.merged({"t": 0.0}), key.merged({"t": 3600.0})]})
 	main.camera_rig.play_shot(made["shot"], _pose, _origin_to_local)
 

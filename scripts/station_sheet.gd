@@ -3,5 +3,10 @@ extends SceneTree
 
 
 func _initialize() -> void:
-	var node: Node = (load("res://scripts/station_sheet_node.gd") as GDScript).new() as Node
-	root.add_child.call_deferred(node)
+	# A script that fails to load must end the run at once, not leave a fullscreen window open until the timeout (M7-T24).
+	var script: GDScript = load("res://scripts/station_sheet_node.gd") as GDScript
+	if script == null or not script.can_instantiate():
+		push_error("station_sheet: scripts/station_sheet_node.gd failed to load")
+		quit(1)
+		return
+	root.add_child.call_deferred(script.new() as Node)

@@ -7,6 +7,8 @@ extends RefCounted
 
 const LIVERY_SHADER: Shader = preload("res://assets/shaders/hull_livery.gdshader")
 const HULL_GLASS_SHADER: Shader = preload("res://assets/shaders/hull_glass.gdshader")
+## The station hull's material (M7-T24), by path so an import cache without its class still loads.
+const STATION_HULL := preload("res://src/rendering/station_hull_material.gd")
 ## The shader's table sizes (`hull_livery.gdshader`).
 const MAX_STRIPES: int = 48
 const MAX_PATTERNS: int = 12
@@ -100,7 +102,9 @@ static func piece_materials(dir: String, entry: Dictionary) -> Dictionary:
 		return _cache[key]
 	var out: Dictionary = {}
 	for surface: Dictionary in entry.get("surfaces", []):
-		var material: StandardMaterial3D = textured_material(dir, surface)
+		# The station's tiers draw with its own hull material (M7-T24); other pieces with the standard one.
+		var material: Material = STATION_HULL.make(dir, surface) if STATION_HULL.wants(surface) \
+				else textured_material(dir, surface)
 		out[String(surface.get("name", ""))] = _with_sheen(material, not bool(surface.get("blend", false)))
 	_cache[key] = out
 	return out

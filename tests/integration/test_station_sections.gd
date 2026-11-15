@@ -47,7 +47,9 @@ func test_each_piece_draws_one_mesh_per_section_at_its_origin() -> void:
 			assert_eq(node.layers, 1 | LightRig.SHADOW_CASTER_LAYER)
 			assert_eq(node.visibility_range_end, 0.0, "the hull is drawn at every distance")
 			materials[node.mesh.surface_get_material(0)] = true
-		assert_eq(materials.size(), 1, "%s: every section draws with the piece's one material" % name)
+		# One material per texel tier (M7-T24): every section of a tier draws with that tier's.
+		var tiers: Array = (_pieces()[name]["mesh"] as Dictionary).get("tiers", [])
+		assert_eq(materials.size(), maxi(tiers.size(), 1), "%s: every section draws with its tier's one material" % name)
 
 
 func test_the_big_sections_have_levels_of_detail_of_their_own() -> void:

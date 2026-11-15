@@ -22,8 +22,8 @@ Sections (M7-T19, D72): each piece is also written cut across its length into se
 rings, the gaps between cargo modules and vanes), each a glb with its own origin, so the game picks a level of detail per section
 and culls the ones out of view; the collision shapes (D73) follow the same sections. Props (``station_props.py``), instanced with
 small atlases of their own: on the drum's waist section the Cobra-bay doors' leaves (drawn far: they are the doors), their clamps
-and the launch hall seen through an open door (near only); on the frame's spine over the docking sphere the command section's
-windows (near only).
+and the launch hall seen through an open door (near only). The frame has none: its spine and command section are grey metal without
+windows (M7-T24).
 """
 
 from __future__ import annotations
@@ -39,9 +39,10 @@ from ..core.geometry import Mesh
 from ..core.image import write_png
 from ..core.manifest import build_manifest, write_manifest
 from ..core.near_props import write_props
-from ..core.pieces import PieceTexture, write_piece
+from ..core.pieces import Tier, write_tiered_piece
 from ..core.sections import SectionCut, cuts_from_planes
-from ..core.seams import EMPTY
+from ..core.seams import EMPTY, MAJOR
+from ..core.station_tiles import FINE_PX, FINE_TILE_M, PANEL_PX, PANEL_TILE_M, fine_tiles, panel_tiles
 from ..core.silhouette import far_section
 from ..core.textured_mesh import TexturedPart, import_sidecar, phase_steps
 from ..parts import station as st
@@ -52,7 +53,7 @@ from ..parts import station_props as sp
 from ..styles.earth_alliance_station import EARTH_ALLIANCE_STATION as STYLE
 
 ASSET_ID = "babylon5_station"
-GENERATOR_VERSION = 4
+GENERATOR_VERSION = 5
 LENGTH_M = 8000.0
 # The asset's origin in the station frame: on the drum's axis, half way along. The drum's own frame sits on the axis at its middle.
 ORIGIN = np.array([0.0, 0.0, 0.5 * LENGTH_M])
@@ -64,6 +65,8 @@ FRAME_ATLAS_PX = 4096
 START_TEXEL_M = 0.8
 DETAIL_PX = 1024
 DETAIL_KEYS = ("albedo", "normal")
+# The two texture sets (M7-T24), switched by `settings.texture_detail`: high the full layouts, low the major seams alone.
+DETAIL_LEVELS = {"low": MAJOR}
 # The sections (M7-T19): names and the cut planes between them, z in the station frame (aft from the bow tip). Cuts sit on the hull's
 # own joints (band edges and rings, the sphere's widest ring, the gaps between cargo modules and between vanes) and split the long
 # green zone at its blue blocks' joints; none cuts a small part.
@@ -73,9 +76,20 @@ DRUM_PLANES = (560.0, 750.0, 945.0, 1340.0, 1692.0, 2348.0, 2840.0, 3340.0, 3800
 FRAME_SECTIONS = ("bow", "bow_ring", "spine_sphere", "ramp", "radiators", "cargo_1", "cargo_2", "cargo_3", "vanes_1", "vanes_2", "vanes_3",
                   "hub", "cone", "truss", "torus_shaft", "reactor")
 FRAME_PLANES = (420.0, 700.0, 1300.0, 1725.0, 2340.0, 3068.0, 3577.0, 4087.0, 4585.0, 5030.0, 5460.0, 5735.0, 6360.0, 7110.0, 7704.0)
+# Texel tiers (M7-T24): each a run of sections with an atlas of its own, so the places seen up close (the docking sphere and its bay,
+# the Cobra arms, the bow and the command section; Q2) get a finer texel than the long bands and the aft end. The low set keeps the full
+# resolution and differs in detail only, as the ships' does (the maintainer, M7-T24: no blur at low). The near tiers' colour maps take the
+# better compression: the usual one's colour noise showed as green and purple blotches up close.
+NEAR_TEXEL_M = 0.25
+# What one texture set's maps may take as imported, MB (M7-T24); only the set in use is loaded. The props' atlases come on top.
+MAP_BUDGET_MB = 320.0
+DRUM_TIERS = (Tier("near_a", ("aperture", "sphere_fore", "sphere_aft"), DRUM_ATLAS_PX, 1, NEAR_TEXEL_M, True),
+              Tier("near_b", ("waist", "fwd_body"), DRUM_ATLAS_PX, 1, NEAR_TEXEL_M, True),
+              Tier("far", DRUM_SECTIONS[5:], DRUM_ATLAS_PX, 1))
+FRAME_TIERS = (Tier("near", ("bow", "bow_ring", "spine_sphere"), FRAME_ATLAS_PX, 1, NEAR_TEXEL_M, True),
+               Tier("far", FRAME_SECTIONS[3:], FRAME_ATLAS_PX, 1))
 PROP_SECTION = "waist"  # the drum section the Cobra doors lie in
 DOOR_SECTION = "aperture"  # and the main docking bay's inner doors (M7-T25)
-FRAME_PROP_SECTION = "spine_sphere"  # the frame section the command section's windows lie in
 # Shapes a piece may have (T03's default is 128): the open bays (the docking tunnel, 28 launch doors over their halls, the zero-g
 # bay) take pieces round each opening that a merge would close.
 COLLISION_SHAPES = 192
@@ -155,9 +169,33 @@ def _write_detail(out_dir: Path, seed: int, px: int) -> tuple[list[Path], dict[s
     return files, {**names, "tile_m": DEFAULT_TILE_M, "px": px}
 
 
+def _write_tiles(out_dir: Path, seed: int, fine_px: int, panel_px: int) -> tuple[list[Path], dict[str, object]]:
+    """The station hull shader's detail tiles (M7-T24): the fine mosaic in both sets and the panel tile, and the entry every surface
+    names them by (``low`` the low set's)."""
+    maps = {"fine": fine_tiles(fine_px, seed, maze=True), "fine_low": fine_tiles(fine_px, seed, maze=False),
+            "panel": panel_tiles(panel_px, seed)}
+    files, names = [], {}
+    for tile, pair in maps.items():
+        for key, image in pair.items():
+            name = f"{ASSET_ID}_{tile}_{key}.png"
+            png = write_png(out_dir / name, image)
+            sidecar = Path(str(png) + ".import")
+            sidecar.write_text(import_sidecar("normal" if key == "normal" else "orm"), encoding="utf-8", newline="\n")
+            files += [png, sidecar]
+            names[f"{tile}_{key}"] = name
+    entry = {"shader": "station", "fine_colour": names["fine_colour"], "fine_normal": names["fine_normal"], "fine_tile_m": FINE_TILE_M,
+             "panel_colour": names["panel_colour"], "panel_normal": names["panel_normal"], "panel_tile_m": PANEL_TILE_M,
+             "low": {"fine_colour": names["fine_low_colour"], "fine_normal": names["fine_low_normal"]}}
+    return files, entry
+
+
 def build(ctx: BuildContext) -> AssetOutputs:
-    """Generate both pieces and the detail tile into ``ctx.out_dir``."""
+    """Generate both pieces and the detail tiles into ``ctx.out_dir``."""
     return build_at(ctx, DRUM_ATLAS_PX, FRAME_ATLAS_PX, DETAIL_PX)
+
+
+def _scaled(tiers: tuple[Tier, ...], px: int, full: int) -> tuple[Tier, ...]:
+    return tuple(Tier(t.name, t.sections, max(64, t.atlas_px * px // full), t.low_shrink, t.texel_m, t.high_quality_albedo) for t in tiers)
 
 
 def build_at(ctx: BuildContext, drum_px: int, frame_px: int, detail_px: int) -> AssetOutputs:
@@ -165,15 +203,17 @@ def build_at(ctx: BuildContext, drum_px: int, frame_px: int, detail_px: int) -> 
     out_dir: Path = ctx.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
     files, detail = _write_detail(out_dir, ctx.seed, detail_px)
-    drum_files, drum = write_piece(out_dir, f"{ASSET_ID}_drum", drum_parts(), STYLE,
-                                   PieceTexture(drum_px, START_TEXEL_M, ctx.seed, grid=False), section_cuts("drum"),
-                                   interior=lambda p, n: sl.drum_interior(p + DRUM_CENTRE, n))
+    tile_files, station_detail = _write_tiles(out_dir, ctx.seed, FINE_PX * detail_px // DETAIL_PX, PANEL_PX * detail_px // DETAIL_PX)
+    files += tile_files
+    drum_files, drum = write_tiered_piece(out_dir, f"{ASSET_ID}_drum", drum_parts(), STYLE, _scaled(DRUM_TIERS, drum_px, DRUM_ATLAS_PX),
+                                          section_cuts("drum"), START_TEXEL_M, ctx.seed, DETAIL_LEVELS,
+                                          interior=lambda p, n: sl.drum_interior(p + DRUM_CENTRE, n))
     drum["pivot"] = drum_pivot()
     drum["axis"] = [0.0, 0.0, 1.0]
     drum["spin_rad_s"] = DRUM_SPIN_RAD_S
-    frame_files, frame = write_piece(out_dir, f"{ASSET_ID}_frame", frame_parts(), STYLE,
-                                     PieceTexture(frame_px, START_TEXEL_M, ctx.seed, grid=False), section_cuts("frame"),
-                                     interior=lambda p, n: sl.frame_interior(p + ORIGIN, n))
+    frame_files, frame = write_tiered_piece(out_dir, f"{ASSET_ID}_frame", frame_parts(), STYLE,
+                                            _scaled(FRAME_TIERS, frame_px, FRAME_ATLAS_PX), section_cuts("frame"), START_TEXEL_M,
+                                            ctx.seed, DETAIL_LEVELS, interior=lambda p, n: sl.frame_interior(p + ORIGIN, n))
     files += drum_files + frame_files
     home = next(e for e in drum["mesh"]["sections"] if e["name"] == PROP_SECTION)
     door = next(e for e in drum["mesh"]["sections"] if e["name"] == DOOR_SECTION)
@@ -181,15 +221,11 @@ def build_at(ctx: BuildContext, drum_px: int, frame_px: int, detail_px: int) -> 
     prop_files, drum["props"] = write_props(out_dir, ASSET_ID, sp.kinds(), groups,
                                             sp.prop_maps(ctx.seed), sp.EMISSIVE_STRENGTH, sp.NEAR_M, sp.MARGIN_M)
     files += prop_files
-    home = next(e for e in frame["mesh"]["sections"] if e["name"] == FRAME_PROP_SECTION)
-    prop_files, frame["props"] = write_props(out_dir, f"{ASSET_ID}_frame", sp.frame_kinds(),
-                                             sp.frame_groups(FRAME_PROP_SECTION, ORIGIN + home["origin"]), sp.frame_maps(ctx.seed),
-                                             sp.FRAME_EMISSIVE_STRENGTH, sp.NEAR_M, sp.MARGIN_M)
-    files += prop_files
     for entry in (drum, frame):
         for surface in entry["mesh"]["surfaces"]:
-            surface["world_detail"] = dict(detail)
-        entry["props"]["world_detail"] = dict(detail)  # for the prop kinds that lie among the plating (the bay's inner doors)
+            surface["world_detail"] = dict(station_detail)
+        if "props" in entry:
+            entry["props"]["world_detail"] = dict(detail)  # for the prop kinds that lie among the plating (the bay's inner doors)
     lo = np.minimum(np.array(frame["aabb_min"]), np.array(drum["aabb_min"]) + drum["pivot"])
     hi = np.maximum(np.array(frame["aabb_max"]), np.array(drum["aabb_max"]) + drum["pivot"])
     whole = whole_station()

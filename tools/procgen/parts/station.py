@@ -52,9 +52,9 @@ ARM_ANGLES_DEG = (90.0, 0.0, 270.0, 180.0)  # top, starboard, bottom, port: the 
 # The Cobra arm's head as it stands on top of the drum: z, half width, inner and outer radius.
 # The head is a box with a flat top (the circular clamped hatch on it), then a ribbed neck tapering to the hatch section
 # (references/cobra bay references/cobra arm untextured model.jpg).
-# The head and neck (M7-T21, off the STL's sections): one chamfered loft from behind the fork's posts to the root, its flat top
-# peaking where the circular hatch sits; each row (z, half width, underside, top, chamfer across, chamfer down). The underside lies
-# inside the docking sphere. D75's light turrets keep the posts' tops, its interceptors stand on the hatch's cap at r 324.
+# The head and neck (M7-T21, off the STL's sections): one chamfered loft from the head's nose at the docking sphere to the root, its
+# flat top peaking where the circular hatch sits; each row (z, half width, underside, top, chamfer across, chamfer down). The underside
+# lies inside the docking sphere. D75's light turrets stand on the nose's side facets (M7-T24), its interceptors on the hatch's cap.
 ARM_NECK = ((735.0, 60.0, 232.0, 298.0, 30.0, 16.0), (760.0, 72.0, 235.0, 311.0, 35.0, 27.0), (800.0, 80.0, 235.0, 314.0, 50.0, 25.0),
             (840.0, 80.0, 235.0, 314.0, 49.0, 25.5), (880.0, 75.0, 240.0, 304.0, 50.0, 26.0), (900.0, 62.0, 246.0, 290.0, 34.0, 36.0),
             (960.0, 58.8, 220.0, 268.0, 32.4, 27.7), (1000.0, 47.2, 202.8, 240.5, 23.1, 24.5))
@@ -89,10 +89,8 @@ HALL_CEILING_R = 206.5  # the lower hall's ceiling, toward the axis: the root's 
 # wave has dropped.
 STAGING_OFFSET_X = -28.0
 STAGING_R = 214.0
-ARM_PRONGS_X = (-41.5, 41.5)  # the fork's two posts' middles (D75's light turrets stand on them)
-ARM_PRONG = (620.0, 705.0, 2.5, 255.0, 288.5)  # z from, z to, half width, underside and top: posts, as the STL's (M7-T21)
 ARM_KNOB = (1380.0, 269.0, (45.0, 29.0, 40.0))  # z, radius, semi-axes across, radial, along
-STRINGER_ANGLES_DEG = tuple(270.0 + 36.0 * k for k in range(10))  # from the bottom, every 36 degrees
+STRINGER_ANGLES_DEG = tuple(45.0 * k for k in range(8))  # every 45 degrees from the side, as the STL and the schematic have them (M7-T24)
 STRINGER = (14.0, 331.0, 341.0)  # width, inner and outer radius
 # --- the frame -------------------------------------------------------------------------------------------------------
 # The toothed ring round the main docking bay (the STL's, M7-T25): its section (z, r) from the back's inner corner round, and its
@@ -393,13 +391,11 @@ def door_glow(m: Material) -> Mesh:
 
 
 def arm_mesh(m: Material) -> Mesh:
-    """One Cobra arm standing on top of the drum (+y): the forked head with its circular clamped hatch, the ribbed neck and the
+    """One Cobra arm standing on top of the drum (+y): the head with its circular clamped hatch, the ribbed neck and the
     root section with their creased, chamfered section (M7-T21), the launch doors and halls in the root, the knob."""
     neck = hex_slab(ARM_NECK, m)
     z0, z1, w, r0, r1 = ARM_HATCH
     hatch = Mesh.concatenate([*launch_deck(m), hex_slab([(z1, w, r0, r1), (z1 + 40.0, 0.8 * w, r0 + 10.0, r1 - 5.0)], m)])
-    pz0, pz1, half, under, top = ARM_PRONG
-    prongs = [block((x - half, under, pz0), (x + half, top, pz1), m) for x in ARM_PRONGS_X]
     hz, ri, ro = ARM_TOP_HATCH
     head_top = max(r[3] for r in ARM_NECK)  # the peak the hatch sits on
     cap = lathe([(head_top - 1.0, 0.0), (head_top - 1.0, HATCH_CAP[0]), (HATCH_CAP[1], HATCH_CAP[0]), (HATCH_CAP[1], 0.0)], 24, m,
@@ -420,7 +416,7 @@ def arm_mesh(m: Material) -> Mesh:
             ribs.append(block((sx * hw - 1.0 if sx > 0 else -hw - 4.0, r_bottom + 2.0, z - 2.0), (hw + 4.0 if sx > 0 else -hw + 1.0, r_top - 2.0, z + 2.0), m))
     kz, kr, semi = ARM_KNOB
     knob = ellipsoid((0.0, kr, kz), semi, m)
-    return Mesh.concatenate([neck, hatch, *prongs, cap, rim, *clamps, *ribs, knob])
+    return Mesh.concatenate([neck, hatch, cap, rim, *clamps, *ribs, knob])
 
 
 def mount_plinths(m: Material, body: str) -> Mesh:
@@ -527,7 +523,7 @@ def vanes_mesh(m: Material) -> Mesh:
                 basis = np.array([[0.0, 0.0, 1.0], [0.0, up, 0.0], [1.0, 0.0, 0.0]]).T
                 blades.append(flat_plate(rim, pieces, VANE_THICK_M, basis, (side * VANE_X, 0.0, zc), m))
                 x0, x1, y0, y1 = VANE_TIP_BAR
-                c = VANE_CHORD[-1][1]
+                c = VANE_CHORD[-1][1] + 0.5  # proud of the blade's edges, so the bar's ends never lie in its rim
                 lo, hi = sorted((up * y0, up * y1))
                 blades.append(block((min(side * x0, side * x1), lo, zc - c), (max(side * x0, side * x1), hi, zc + c), m))
     return Mesh.concatenate(blades)
@@ -562,8 +558,8 @@ def truss_mesh(core_m: Material, bar_m: Material) -> Mesh:
         for k in range(4):
             bar = block((-core, core, z - 4.0), (core, outer - 4.0, z + 4.0), bar_m)
             parts.append(bar.transformed(rotation_z(0.5 * math.pi * k)))
-    for z in np.linspace(z0 + 40.0, z1 - 40.0, 6):  # the clamps
-        parts.append(block((-outer - 14.0, -outer - 14.0, z - 9.0), (outer + 14.0, outer + 14.0, z + 9.0), bar_m))
+    for z in np.linspace(z0 + 40.0, z1 - 40.0, 6):  # the clamps, a little longer than 18 m so no cross bar ends in their faces
+        parts.append(block((-outer - 14.0, -outer - 14.0, z - 9.5), (outer + 14.0, outer + 14.0, z + 9.5), bar_m))
     return Mesh.concatenate(parts)
 
 

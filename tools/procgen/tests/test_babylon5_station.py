@@ -22,14 +22,16 @@ from tools.procgen.core.image import read_png
 from tools.procgen.core.sampling import sample_mesh
 from tools.procgen.parts import station as st
 from tools.procgen.parts import station_detail as sd
+from tools.procgen.parts import station_layouts as sl
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 STL = REPO_ROOT / "references" / "EA Babylon 5 Station.stl"
 SMALL = (1024, 1024, 64)  # drum, frame and detail tile in px: the tests' bake (the doors' small parts need room for their charts)
 # The defence grid's mounts (D75, approved 2026-11-13), station frame: name, piece, position.
 MOUNTS = [
-    ("L1", "drum", (-41, 292, 690)), ("L2", "drum", (41, 292, 690)), ("L3", "drum", (292, 41, 690)), ("L4", "drum", (292, -41, 690)),
-    ("L5", "drum", (41, -292, 690)), ("L6", "drum", (-41, -292, 690)), ("L7", "drum", (-292, -41, 690)), ("L8", "drum", (-292, 41, 690)),
+    ("L1", "drum", (-40.4, 300.8, 745.5)), ("L2", "drum", (40.4, 300.8, 745.5)), ("L3", "drum", (300.8, 40.4, 745.5)),
+    ("L4", "drum", (300.8, -40.4, 745.5)), ("L5", "drum", (40.4, -300.8, 745.5)), ("L6", "drum", (-40.4, -300.8, 745.5)),
+    ("L7", "drum", (-300.8, -40.4, 745.5)), ("L8", "drum", (-300.8, 40.4, 745.5)),
     ("L9", "frame", (0, 507, 1500)), ("L10", "frame", (0, 537, 2650)), ("L11", "frame", (0, 537, 4500)), ("L12", "frame", (0, 472, 5650)),
     ("H1", "frame", (-45, 375, 515)), ("H2", "frame", (45, 375, 515)),
     ("I1", "drum", (0, 324, 800)), ("I2", "drum", (324, 0, 800)), ("I3", "drum", (0, -324, 800)), ("I4", "drum", (-324, 0, 800)),
@@ -252,7 +254,8 @@ def _blue(a: np.ndarray, margin: float) -> np.ndarray:
 
 class PaintTests(unittest.TestCase):
     def test_the_bands_and_green_zone_wear_blue_violet_blocks_on_grey(self) -> None:
-        for name, lo, hi in (("fwd_band", 0.25, 0.6), ("green", 0.25, 0.6), ("sphere", 0.3, 0.6)):
+        # The sphere is mostly lavender panels between its grey strips (M7-T24, the side and from-below references).
+        for name, lo, hi in (("fwd_band", 0.25, 0.6), ("green", 0.25, 0.6), ("sphere", 0.5, 0.8)):
             albedo, _ = _bake(name)
             share = float(_blue(albedo, 12.0).mean())
             self.assertTrue(lo < share < hi, f"{name}: blue-violet on {share:.0%} of it")
@@ -260,7 +263,7 @@ class PaintTests(unittest.TestCase):
     def test_the_vanes_are_deep_blue_in_a_grey_frame_and_the_cargo_red(self) -> None:
         vanes, _ = _bake("vanes", 2048)
         self.assertGreater(float(_blue(vanes, 20.0).mean()), 0.5)
-        grey = np.abs(vanes[:, 0] - vanes[:, 2]) < 6.0
+        grey = (vanes.mean(axis=1) > 120.0) & (vanes[:, 2] - vanes[:, 0] < 35.0)  # light and only cool (M7-T24), the blade dark and far bluer
         self.assertGreater(float(grey.mean()), 0.1, "the frame round each blade")
         cargo, _ = _bake("cargo")  # the six-sided modules and their end frames (M7-T22) need the full texel: worn edges fill a coarser one
         red = (cargo[:, 0] > cargo[:, 1] + 20.0) & (cargo[:, 0] > cargo[:, 2] + 20.0)
@@ -309,12 +312,33 @@ class MetalTests(unittest.TestCase):
 
 
 class WindowTests(unittest.TestCase):
-    def test_the_bands_and_the_command_section_have_rows_of_lit_windows(self) -> None:
-        # Baked part by part at about a metre a texel (the full build's), since the tests' small bake has no room for a window.
-        for name in ("fwd_band", "spine"):
+    def test_the_lights_run_in_rows_on_the_bars_and_nowhere_at_random(self) -> None:
+        # M7-T24: the lit windows are rows down the stringers' bars and the sphere's short bars; the bands, the green zone's panels
+        # and the spine carry none (no scattered lights, no window rings). Baked part by part at about a metre a texel.
+        for name in ("stringers", "sphere"):
             lit = _bake(name)[1]["emissive"].max(axis=2) > 60
             self.assertGreater(int(lit.sum()), 200, f"{name}: windows glow")
             self.assertLess(float(lit.mean()), 0.05, f"{name}: in rows, not all over")
+        for name in ("fwd_band", "green", "spine"):
+            glow = _bake(name)[1]["emissive"].astype(float)
+            window = (glow.max(axis=2) > 60) & (glow[..., 1] > 0.6 * glow[..., 0])  # white, not a red lamp's glow
+            self.assertEqual(int(window.sum()), 0, f"{name}: no lit windows")
+
+    def test_each_bar_carries_one_evenly_spaced_unbroken_row(self) -> None:
+        from tools.procgen.core.textures import _window_cover  # noqa: PLC0415
+
+        for marking, (_, z0, z1) in zip(sl._lengthwise_windows("stringers", station.DRUM_CENTRE, (1.0, 1.0, 1.0)), sl.stringer_bars(),
+                                        strict=True):
+            self.assertEqual(marking.params["lit"], 1.0)
+            along = np.asarray(marking.params["right"])
+            centre = np.asarray(marking.params["centre"])
+            zs = np.linspace(-0.5 * (z1 - z0) + 5.0, 0.5 * (z1 - z0) - 5.0, 4000)
+            points = centre + zs[:, None] * along
+            normals = np.tile(marking.params["facing"], (len(zs), 1))
+            glow = _window_cover(marking.params, points, normals, 1.3, 0)[1] > 0.5
+            starts = zs[1:][np.diff(glow.astype(int)) == 1]
+            self.assertGreater(len(starts), 20)
+            np.testing.assert_allclose(np.diff(starts), sl.BAR_LIGHT[1][0], atol=1.0, err_msg="evenly spaced")
 
 
 class StationBuildTests(unittest.TestCase):
@@ -349,10 +373,12 @@ class StationBuildTests(unittest.TestCase):
                 for key in ("albedo", "normal", "orm", "emissive"):
                     self.assertTrue((self.dir_a / surface[key]).is_file(), surface[key])
                 detail = surface["world_detail"]
-                self.assertEqual(detail["tile_m"], 16.0)
-                for key in ("albedo", "normal"):
-                    self.assertTrue((self.dir_a / detail[key]).is_file())
-                    self.assertTrue((self.dir_a / (detail[key] + ".import")).is_file())
+                self.assertEqual(detail["shader"], "station")
+                self.assertEqual((detail["fine_tile_m"], detail["panel_tile_m"]), (16.0, 128.0))
+                for key in ("fine_colour", "fine_normal", "panel_colour", "panel_normal"):
+                    for file in (detail[key], detail.get("low", {}).get(key, detail[key])):
+                        self.assertTrue((self.dir_a / file).is_file(), file)
+                        self.assertTrue((self.dir_a / (file + ".import")).is_file(), file)
         drum = pieces["drum"]
         self.assertEqual(drum["axis"], [0.0, 0.0, 1.0])
         self.assertEqual(drum["pivot"], station.drum_pivot())
@@ -383,6 +409,41 @@ class StationBuildTests(unittest.TestCase):
         self.assertLess(float(np.hypot(reactor[:, 0], reactor[:, 1]).max()), 175.0, "the reactor, not a docking ring")
         ring = frame[(frame[:, 2] > st.RING_FRONT_Z - origin - 1.0) & (frame[:, 2] < st.RING_BACK_Z - origin + 1.0)]
         self.assertGreater(len(ring), 0, "the aperture's ring stands at the bow end of the frame")
+
+    def test_each_piece_is_written_in_texel_tiers_along_its_sections(self) -> None:
+        # M7-T24: the places seen up close (the sphere and its bay, the Cobra arms, the bow and command section) on atlases of their
+        # own, finer than the long runs; every section in exactly one tier, drawn with that tier's surfaces.
+        for name, tiers in (("drum", station.DRUM_TIERS), ("frame", station.FRAME_TIERS)):
+            section = self.manifest["pieces"][name]["mesh"]
+            listed = section["tiers"]
+            self.assertEqual([t["name"] for t in listed], [t.name for t in tiers])
+            self.assertEqual([s for t in listed for s in t["sections"]], [s["name"] for s in section["sections"]])
+            self.assertEqual({s["name"] for s in section["surfaces"]} - {f"glass_{t.name}" for t in tiers},
+                             {f"hull_{t.name}" for t in tiers})
+            far = next(t for t in listed if t["name"] == "far")
+            for tier in listed:
+                if tier["name"] != "far":
+                    self.assertLess(tier["texel_m"], far["texel_m"], f"{name} {tier['name']} is finer than its far tier")
+
+    def test_both_texture_sets_are_written_at_full_resolution(self) -> None:
+        # The low set differs in detail only (the maintainer, M7-T24: no blur at low), as the ships' does.
+        for piece in self.manifest["pieces"].values():
+            for surface in piece["mesh"]["surfaces"]:
+                low = surface["detail"]["low"]
+                for key in ("albedo", "normal", "orm"):
+                    self.assertNotEqual(low[key], surface[key])
+                    self.assertEqual(read_png(self.dir_a / low[key]).shape, read_png(self.dir_a / surface[key]).shape, low[key])
+
+    def test_the_map_budget_per_set(self) -> None:
+        # What a set's maps take as imported (BC1 colour, ORM and glow, BC7 colour on the near tiers, BC5 normal, a third more for the
+        # mipmaps), against the budget stated for M7-T24; only the set in use is loaded.
+        from tools.procgen.core import station_tiles as tiles  # noqa: PLC0415
+
+        mips = 4.0 / 3.0
+        atlas = sum(t.atlas_px ** 2 * ((1.0 if t.high_quality_albedo else 0.5) + 2 * 0.5 + 1.0) * mips
+                    for t in station.DRUM_TIERS + station.FRAME_TIERS)
+        tile = sum((2 * px) ** 2 * (0.5 + 1.0) * mips for px in (tiles.FINE_PX, tiles.PANEL_PX))
+        self.assertLessEqual((atlas + tile) / 2 ** 20, station.MAP_BUDGET_MB)
 
     def test_deterministic(self) -> None:
         names = sorted(p.name for p in self.dir_a.iterdir())

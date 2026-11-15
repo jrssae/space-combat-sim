@@ -4875,8 +4875,8 @@ manifest mesh.surfaces[].detail.low = { albedo, normal, orm }      settings.text
   hull is baked twice from the same atlas: the full set (`<id>_albedo.png` ...) with every level, and the low set
   (`<id>_albedo_low.png`, `_normal_low`, `_orm_low`) with the major features alone. The emissive map and the mesh are shared.
   A model without layouts (the turrets) has one set.
-- **The setting.** `settings.texture_detail` ("Ship texture detail", `high` by default, in the Video group) picks the set
-  for every ship. The loading is general: `MeshAssets.map_file` reads a surface's `detail` entry, a hull written with one
+- **The setting.** `settings.texture_detail` ("Texture detail" since M7-T24, `high` by default, in the Video group) picks the set
+  for every ship, and for the station's hull (M7-T24, §20.6). The loading is general: `MeshAssets.map_file` reads a surface's `detail` entry, a hull written with one
   set ignores the setting, and the paint, livery and glass materials all take their maps through it. Only the civilians
   have both sets so far; the Starfury, the raider and later hulls join when their generator passes `detail_levels`.
   Materials with a second set are remembered and take the other set's maps when the setting changes, so it is live and
@@ -5738,3 +5738,35 @@ data/station/traffic.json        the interval, the kinds' weights, the raid's si
 - **Threads.** All of the above per tick is in the AI job on the frozen rows; `Field.sub_points` is filled in the job
   before the pass. Threaded equals delayed and one thread equals six (`test_station_threads`, `test_station_grid_threads`).
   No recording in `tests/fixtures/` moved.
+
+### 20.6 The station's surfaces: texel tiers, the hull material and the two texture sets (T24)
+
+```
+tools/procgen/core/pieces.py          Tier, write_tiered_piece, clip_mesh: a piece written as runs of its sections, an atlas each
+tools/procgen/core/station_tiles.py   fine_tiles (16 m mosaic, high with relief, low without), panel_tiles (128 m): 2 x 2 variants each
+assets/shaders/station_hull.gdshader  atlas + both tiles in the piece's space; a hashed variant and orientation per tile cell
+src/rendering/station_hull_material.gd StationHullMaterial: a surface whose world_detail says shader: station; swaps both sets
+manifest pieces.<p>.mesh.tiers[]      name, sections, texel_m, atlas_px, area_m2; surfaces hull_<tier>; sections in the tier's files
+```
+
+- **Tiers.** Each piece's sections run in texel tiers, each a 4 096 px atlas: drum `near_a` (the aperture and the sphere,
+  0.43 m a texel), `near_b` (the waist and forward body with the Cobra arms, 0.53 m), `far` (1.28 m); frame `near` (the bow, its
+  ring and the spine over the sphere, 0.42 m), `far` (1.62 m). The parts are clipped at a tier's end planes before packing, so a
+  section lies in one tier and draws with that tier's surfaces (`hull_<tier>`); `RenderPiece` needs no change. The whole-piece
+  glb is written untextured for the tools. The near tiers' colour maps take the better compression (BC7): BC1's colour noise
+  showed as green and purple blotches up close.
+- **The hull material.** `station_hull.gdshader` draws the atlas and lays two tiles over it, triplanar in the piece's space
+  (`instance uniform piece_offset`, set per section by `RenderPiece`, so the tiles run on across section joints): the fine Earth
+  Alliance mosaic (16 m: plates, seams, the high set's raised and sunk panels and vents) and the panel tile (128 m: tone, sheen
+  and grime per 6 to 32 m panel). Their colour maps are data (red the albedo factor, green the roughness shift, blue the
+  cavity). Each tile cell takes one of four variants and one of eight orientations from a hash of the cell, and every variant's
+  border is a seam, so nothing repeats visibly and neighbours meet on a seam; `textureGrad` keeps the mip level continuous.
+  Texels the bake marks in the ORM map's unused occlusion channel (the Cobra arms' slanted facets, `planar_detail` in the
+  style) take the tiles flat in their own facet instead, so the plating is not sheared. The clear coat follows the atlas's
+  roughness only, so the sun's glint stays one sheen.
+- **Two sets at full resolution.** `settings.texture_detail` swaps the atlas (`detail.low`, the layouts' major seams only) and the
+  fine tile (`world_detail.low`, the mosaic without relief); the panel tile is shared. Both sets keep full resolution (the
+  maintainer: no blur at low). Only the set in use is loaded: its maps take 308.7 MB as imported, against a budget of 320 MB
+  (`babylon5_station.MAP_BUDGET_MB`, tested); the props' atlases come on top.
+- **Tests.** `test_babylon5_station` (tiers, both sets, the budget, the light rows), `test_station_tiles`, `test_station_sections`
+  (joints across tiers meet on points), GUT `test_station_hull_material`.

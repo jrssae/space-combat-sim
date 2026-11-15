@@ -158,20 +158,24 @@ class StationSectionTests(unittest.TestCase):
             np.testing.assert_allclose(hi, whole.reshape(-1, 3).max(axis=0), atol=1e-2)
 
     def test_neighbours_meet_on_the_same_points_and_uvs(self) -> None:
-        # Where the cut split a triangle, the point it made is on both sides with the same UV; any other point on the plane is a
-        # corner the whole piece already had (two shapes that merely meet there).
-        def near(points: np.ndarray, others: np.ndarray) -> np.ndarray:
+        # Where the cut split a triangle, the point it made is on both sides, with the same UV when both sections share a texel tier
+        # (M7-T24: across a tier's end each side has its own atlas); any other point on the plane is a corner the whole piece already
+        # had (two shapes that merely meet there; the whole piece is written untextured, so only its points count).
+        def near(points: np.ndarray, others: np.ndarray, uv: bool = True) -> np.ndarray:
             if len(others) == 0:
                 return np.zeros(len(points), dtype=bool)
             d = np.abs(points[:, None, :] - others[None, :, :])
-            return np.any(np.all(d[:, :, :3] < 2e-3, axis=2) & np.all(d[:, :, 3:] < 1e-5, axis=2), axis=1)
+            same = np.all(d[:, :, :3] < 2e-3, axis=2)
+            return np.any(same & np.all(d[:, :, 3:] < 1e-5, axis=2) if uv else same, axis=1)
 
         for piece in ("drum", "frame"):
             entry = self.manifest["pieces"][piece]["mesh"]
             whole, whole_uv = self._glb(entry["file"])
             whole_keys = np.concatenate([whole.reshape(-1, 3), whole_uv.reshape(-1, 2)], axis=1)
             sections = entry["sections"]
+            tier_of = {name: t["name"] for t in entry["tiers"] for name in t["sections"]}
             for a, b in zip(sections[:-1], sections[1:], strict=True):
+                same_tier = tier_of[a["name"]] == tier_of[b["name"]]
                 c = a["z1"]
                 sides = []
                 for s in (a, b):
@@ -181,8 +185,8 @@ class StationSectionTests(unittest.TestCase):
                     sides.append(np.unique(keys[np.abs(keys[:, 2] - c) < 1e-3], axis=0))
                 known = whole_keys[np.abs(whole_keys[:, 2] - c) < 1e-3]
                 for mine, other in ((sides[0], sides[1]), (sides[1], sides[0])):
-                    made = mine[~near(mine, known)]
-                    lost = made[~near(made, other)]
+                    made = mine[~near(mine, known, uv=False)]
+                    lost = made[~near(made, other, uv=same_tier)]
                     self.assertEqual(len(lost), 0, f"{a['name']} | {b['name']}: {lost[:3]}")
 
     def test_the_props_are_near_only_with_their_own_atlas_and_sit_on_the_doors(self) -> None:
@@ -225,9 +229,7 @@ class StationSectionTests(unittest.TestCase):
             mesh = read_glb(self.dir / props["kinds"][kind]["file"])
             uv = np.concatenate([p.uv for p in mesh.primitives])
             self.assertTrue(np.all((uv >= 0.0) & (uv <= 1.0)), kind)
-        frame = self.manifest["pieces"]["frame"]["props"]
-        self.assertEqual(set(frame["kinds"]), {"window_panel"})
-        self.assertEqual(next(g for g in frame["groups"] if g["kind"] == "window_panel")["section"], "spine_sphere")
+        self.assertNotIn("props", self.manifest["pieces"]["frame"], "the command section has no window panels (M7-T24: grey metal)")
 
     def test_the_faces_inside_the_halls_and_bays_are_written_apart(self) -> None:
         """M7: each section's faces inside a hall or a bay in a glb of their own, for the game to keep the sun off them."""

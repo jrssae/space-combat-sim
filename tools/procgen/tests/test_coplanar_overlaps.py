@@ -16,8 +16,8 @@ from tools.procgen.parts.station import block
 from tools.procgen.tests.coplanar_checks import coplanar_overlaps, describe, mesh_triangles
 
 GREY = Material("grey", (0.5, 0.5, 0.5))
-# The frame's hull parts that still overlap themselves in one paint (no lamp among them): to be rebuilt with the hull, not here.
-HULL_SELF_OVERLAPS = {"radiators", "spine", "truss", "vanes", "bow"}
+# The frame's hull parts that still overlap themselves in one paint (no lamp among them): none since M7-T24 took them apart.
+HULL_SELF_OVERLAPS: set[str] = set()
 
 
 def boxes(*spans: tuple[tuple[float, float, float], tuple[float, float, float]]) -> np.ndarray:

@@ -85,6 +85,14 @@ def flange_rows() -> tuple[Row, ...]:
                    for z, x0, yf in PRONG_FLANGE))
 
 
+TRIM_END_Z = 429.5  # the prongs' trims stop just short of the prongs' back face (z 430)
+
+
+def _short_of(rows: tuple[Row, ...], z_end: float) -> tuple[Row, ...]:
+    """The rows with any that reach past ``z_end`` brought back to it."""
+    return tuple((min(z, z_end), section) for z, section in rows)
+
+
 def lip_rows() -> tuple[Row, ...]:
     return _rows(*((z, _rect(42.5, 52.0, y0, y1)) for z, y0, y1 in PRONG_LIP))
 
@@ -117,7 +125,7 @@ RECESS_FLOOR = 426.0
 GROOVE = (37.0, 435.0)  # half width, floor
 KEEL = ((997.0, 1131.0, 329.0), (1131.0, 1237.0, 352.0), (1237.0, 1290.0, 310.0))  # z from, z to, underside: x +-88 from y 361
 KEEL_HALF, KEEL_TOP = 88.0, 361.0
-STRUT = (14.0, 310.0, 352.0, 997.0, 1237.0)  # half width, underside, top, z from, z to
+STRUT = (14.0, 310.0, 352.0, 997.5, 1237.0)  # half width, underside, top, z from, z to
 BEAM_RIB = ((0.0, 403.5), (166.5, 403.0), (153.0, 398.0), (0.0, 398.0))  # the ribs under the beam (the STL's): their section
 BEAM_RIBS = (1012.0, 23.18, 12, 9.5)  # the first's front, the pitch, how many, how thick
 # z 1284 to 1405: the beam's tail closing down onto the deck (the STL's): z, the top's half width at the groove's floor, the side's
@@ -133,7 +141,7 @@ DOME_DISC = (32.0, 452.0, 464.0)  # the disc on the dome's top: radius, undersid
 
 # --- the dorsal spine aft of the command section ---------------------------------------------------------------------------
 # The deck over the waist (z 1395 to 1797), a five-sided section: top, its chamfered corner, the side, the underside.
-DECK = ((1395.0, 458.0, 88.0, 97.0, 444.0, 411.5), (1420.0, 458.0, 96.5, 106.0, 444.0, 412.0), (1450.0, 458.0, 110.0, 120.5, 445.0, 412.0),
+DECK = ((1395.0, 457.7, 88.0, 97.0, 444.0, 411.5), (1420.0, 458.0, 96.5, 106.0, 444.0, 412.0), (1450.0, 458.0, 110.0, 120.5, 445.0, 412.0),
         (1500.0, 458.8, 128.0, 140.5, 444.8, 412.8), (1550.0, 461.0, 120.5, 132.0, 447.0, 415.0), (1600.0, 463.2, 112.5, 123.5, 450.0, 417.5),
         (1700.0, 468.2, 97.0, 106.5, 454.2, 422.0), (1750.0, 471.0, 89.0, 98.0, 456.8, 424.5), (1797.0, 472.2, 84.5, 92.5, 458.8, 426.0))
 BASE = (472.2, 84.5, 92.5, 458.8, 426.0)  # the spine over the bands: top, its half width, the side's half width, chamfer foot, underside
@@ -141,14 +149,15 @@ BASE = (472.2, 84.5, 92.5, 458.8, 426.0)  # the spine over the bands: top, its h
 # tip behind it.
 RAMP_HALF = 33.0
 RAMP = ((1405.0, 487.0), (1738.0, 557.8))
-RAMP_TIP = ((1738.0, 1772.0, 33.0, 518.0), (1738.0, 1765.0, 23.0, 542.0), (1740.0, 1752.0, 9.0, 569.0))  # z from, z to, half width, top
+RAMP_TIP = ((1738.5, 1772.0, 33.0, 518.0), (1739.0, 1765.0, 23.0, 542.0), (1740.0, 1752.0, 9.0, 569.0))  # z from, z to, half width, top
 RAIL = (55.5, 83.5, 472.0, 500.0)  # the short rails on the spine's top: x from, x to, underside, top
 RAILS_Z = ((1782.0, 1800.0), (5354.0, 5372.0), (5405.0, 5425.0), (5450.0, 5470.0), (5495.0, 5515.0), (5545.0, 5560.0))
 # The radiators: a core +-92.5 to y 542 with a diamond wing each side; fins every FIN_PITCH_M.
 RADIATOR_Z = ((1814.0, 2091.0), (5063.0, 5340.0))
 RADIATOR = ((0.0, 542.2), (92.5, 542.2), (122.5, 472.0), (125.0, 465.0), (98.0, 447.0), (92.5, 446.0), (92.5, 470.0), (0.0, 470.0))
-FIN = ((0.0, 553.0), (97.5, 553.0), (132.0, 472.0), (135.5, 463.0), (128.0, 458.0), (101.0, 439.5), (92.5, 439.0), (92.5, 470.0),
-       (0.0, 470.0))
+# Each fin's inner foot ends inside the radiator body (M7-T24: it shared the body's underside and notch, one plane, one paint).
+FIN = ((0.0, 553.0), (97.5, 553.0), (132.0, 472.0), (135.5, 463.0), (128.0, 458.0), (101.0, 439.5), (93.5, 439.0), (93.5, 476.0),
+       (0.0, 476.0))
 FIN_PITCH_M = 23.2
 FINS = 12
 FIN_THICK_M = 9.5
@@ -175,10 +184,10 @@ LOWER = ((2342.0, 450.0, 105.5, (115.5, 421.5), 115.5, 115.0, 114.5, 421.5),
          (2834.0, 417.0, 81.0, (90.0, 380.0), 95.5, 94.5, 56.5, 379.5))
 # The lower slab's end aft, clear of the aft band's rim (its teeth reach r 414 from z 4792): z, top, top's half width, bottom.
 LOWER_AFT_END = ((4740.0, 431.0, 124.0, (136.0, 384.0)), (4770.0, 445.0, 110.0, (121.0, 405.0)), (4784.0, 450.0, 105.5, (115.5, 419.5)))
-TOWER = (60.0, ((2342.0, 482.0, 448.0), (2400.0, 494.0, 433.0), (2450.0, 504.0, 415.0), (2566.0, 527.0, 415.0)))  # half width, (z, top, bottom)
-FWD_BLOCK = (92.5, 430.0, 479.0, 2350.0, 2422.0)  # half width, underside, top, z from, z to
+TOWER = (60.0, ((2342.5, 482.0, 448.0), (2400.0, 494.0, 433.0), (2450.0, 504.0, 415.0), (2566.0, 527.0, 415.0)))  # half width, (z, top, bottom)
+FWD_BLOCK = (92.0, 430.0, 479.0, 2350.0, 2421.5)  # (M7-T24: inside the base's sides and end, not in their planes)  # half width, underside, top, z from, z to
 GZ_FINS = ((2432.0, 2444.0, 494.0), (2468.0, 2480.0, 496.0), (2506.0, 2516.0, 503.0), (2542.0, 2552.0, 511.0))  # z from, z to, top (x +-92.5)
-CAP = (46.5, 536.8, (2566.0, 2686.0))  # half width, top, z from, z to (D75's L10 and I7 on it)
+CAP = (46.5, 536.8, (2566.0, 2685.5))  # half width, top, z from, z to (D75's L10 and I7 on it)
 BODY = ((0.0, 528.0), (103.0, 528.0), (115.5, 417.0), (0.0, 417.0))  # the turret block under the cap, z 2560 to 2686
 BODY_Z = (2560.0, 2686.0)
 AFT_TOWER = (60.0, 415.0, ((2686.0, 550.8), (2786.0, 550.8), (2796.0, 418.0)))  # half width, underside, (z, top)
@@ -191,7 +200,7 @@ CARGO_END = ((0.0, 565.0), (94.5, 565.0), (110.0, 551.0), (117.5, 538.0), (161.5
              (136.0, 380.0), (110.0, 356.0), (88.5, 356.0), (88.5, 361.0), (77.0, 431.5), (0.0, 431.5))
 # The hub end: the spine's last stretch drops onto the hub (z 5400 to 5562), a body slopes into it (5562 to 5788), rails on top, a
 # narrow tail down the cone.
-HUB_LOWER = (83.5, ((5410.0, 419.5), (5480.0, 403.5), (5530.0, 391.5), (5562.0, 389.0)))  # half width, (z, underside); top 430
+HUB_LOWER = (83.5, ((5410.0, 419.5), (5480.0, 403.5), (5530.0, 391.5), (5561.5, 389.0)))  # half width, (z, underside); top 430
 HUB_BODY = ((5562.0, 92.5, (110.0, 389.0), (124.0, 347.0)), (5600.0, 106.5, (128.0, 392.0), (151.0, 312.0)),
             (5650.0, 106.5, (120.0, 410.0), (136.0, 330.0)), (5700.0, 107.0, (117.0, 400.0), (127.5, 322.0)),
             (5788.0, 107.0, (117.0, 400.0), (127.5, 322.0)))  # z, top's half width (y 472), a side point, the foot
@@ -241,7 +250,7 @@ def _green_zone_front() -> list[Member]:
     a = np.linspace(0.0, 2.0 * np.pi, PIPE_SIDES, endpoint=False)
     ring = tuple((float(x + r * np.cos(t)), float(y + r * np.sin(t))) for t in a)
     out.append(Member("pipe", "spine", _rows((z0, ring), (z1, ring)), side=True))
-    for zs in ((z0, z0 + 8.0), (z1 - 8.0, z1)):  # the pipes' saddles
+    for zs in ((z0 + 0.5, z0 + 8.0), (z1 - 8.0, z1 - 0.5)):  # the pipes' saddles, their ends just inside the pipe's
         saddle = _rect(x - 22.0, x + 22.0, BASE[0] - 1.0, y - 0.6 * r)
         out.append(Member("pipe_saddle", "spine", _rows((zs[0], saddle), (zs[1], saddle)), side=True, collide=False))
     return out
@@ -250,10 +259,13 @@ def _green_zone_front() -> list[Member]:
 def members() -> list[Member]:
     """Every lofted solid of the bow, the command section and the dorsal spine."""
     x0, x1, yk = PRONG_KEEL
-    out = [Member("prong", "bow", prong_rows(), side=True), Member("prong_trim", "bow", flange_rows(), side=True, collide=False),
-           Member("prong_trim", "bow", lip_rows(), side=True, collide=False),
-           Member("prong_trim", "bow", _rows((100.0, _rect(x0, x1, yk, 315.5)), (430.0, _rect(x0, x1, yk, 315.5))), side=True,
-                  collide=False),
+    # The prongs' trims end just short of the prongs' back face, and the keel strip stands a little proud of the prong's inner side,
+    # so none lies in a prong's plane (M7-T24).
+    out = [Member("prong", "bow", prong_rows(), side=True),
+           Member("prong_trim", "bow", _short_of(flange_rows(), TRIM_END_Z), side=True, collide=False),
+           Member("prong_trim", "bow", _short_of(lip_rows(), TRIM_END_Z), side=True, collide=False),
+           Member("prong_trim", "bow", _rows((100.0, _rect(x0 - 0.5, x1, yk, 315.5)), (TRIM_END_Z, _rect(x0 - 0.5, x1, yk, 315.5))),
+                  side=True, collide=False),
            Member("cmd_beam", "spine", CMD_BEAM, side=True)]
     box = [(z, w, b0, b1, t0, t1) for z, w, b0, b1, t0, t1 in CMD_BOX]
     out += [Member("cmd_box", "spine", _rows(*((z, _box(w, t0, t1)) for z, w, _, _, t0, t1 in box)), collide=False),
@@ -294,7 +306,9 @@ def members() -> list[Member]:
     out.append(Member("base", "spine", _rows((DECK[-1][0], base), (2422.0, base))))
     out.append(Member("base", "spine", _rows((2.0 * MIRROR_Z - 2422.0, base), (HUB_BODY[0][0], base))))
     out.append(Member("ramp", "spine", _rows(*((z, _box(RAMP_HALF, 455.0, t)) for z, t in RAMP))))
-    out += [Member("ramp", "spine", _rows((z0, _box(w, 455.0, t)), (z1, _box(w, 455.0, t)))) for z0, z1, w, t in RAMP_TIP]
+    # Each tip's foot a little higher than the last, inside it (M7-T24: they shared the ramp's underside).
+    out += [Member("ramp", "spine", _rows((z0, _box(w, 455.5 + 0.5 * k, t)), (z1, _box(w, 455.5 + 0.5 * k, t))))
+            for k, (z0, z1, w, t) in enumerate(RAMP_TIP)]
     x0, x1, y0, y1 = RAIL
     out += [Member("rail", "spine", _rows((z0, _rect(x0, x1, y0, y1)), (z1, _rect(x0, x1, y0, y1))), side=True, collide=False)
             for z0, z1 in RAILS_Z]

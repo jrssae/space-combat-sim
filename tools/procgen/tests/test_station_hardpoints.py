@@ -26,10 +26,15 @@ from tools.procgen.parts import station_layouts as sl
 SMALL = (1024, 1024, 64)
 # D75 as approved (docs/milestones/m7-babylon-5-station.md), station frame: name, kind, body, position, up.
 D75 = [
-    ("L1", "light_pulse", "drum", (-41, 292, 690), (0, 1, 0)), ("L2", "light_pulse", "drum", (41, 292, 690), (0, 1, 0)),
-    ("L3", "light_pulse", "drum", (292, 41, 690), (1, 0, 0)), ("L4", "light_pulse", "drum", (292, -41, 690), (1, 0, 0)),
-    ("L5", "light_pulse", "drum", (41, -292, 690), (0, -1, 0)), ("L6", "light_pulse", "drum", (-41, -292, 690), (0, -1, 0)),
-    ("L7", "light_pulse", "drum", (-292, -41, 690), (-1, 0, 0)), ("L8", "light_pulse", "drum", (-292, 41, 690), (-1, 0, 0)),
+    # L1 to L8 on the side facets of each Cobra arm's forward head (M7-T24), facing out and toward the bow.
+    ("L1", "light_pulse", "drum", (-40.4, 300.8, 745.5), (-0.451, 0.846, -0.283)),
+    ("L2", "light_pulse", "drum", (40.4, 300.8, 745.5), (0.451, 0.846, -0.283)),
+    ("L3", "light_pulse", "drum", (300.8, 40.4, 745.5), (0.846, 0.451, -0.283)),
+    ("L4", "light_pulse", "drum", (300.8, -40.4, 745.5), (0.846, -0.451, -0.283)),
+    ("L5", "light_pulse", "drum", (40.4, -300.8, 745.5), (0.451, -0.846, -0.283)),
+    ("L6", "light_pulse", "drum", (-40.4, -300.8, 745.5), (-0.451, -0.846, -0.283)),
+    ("L7", "light_pulse", "drum", (-300.8, -40.4, 745.5), (-0.846, -0.451, -0.283)),
+    ("L8", "light_pulse", "drum", (-300.8, 40.4, 745.5), (-0.846, 0.451, -0.283)),
     ("L9", "light_pulse", "frame", (0, 507, 1500), (0, 0.98, -0.21)), ("L10", "light_pulse", "frame", (0, 537, 2650), (0, 1, 0)),
     ("L11", "light_pulse", "frame", (0, 537, 4500), (0, 1, 0)), ("L12", "light_pulse", "frame", (0, 472, 5650), (0, 1, 0)),
     ("H1", "heavy_cannon", "frame", (-45, 375, 515), (0, 0.99, -0.13)), ("H2", "heavy_cannon", "frame", (45, 375, 515), (0, 0.99, -0.13)),

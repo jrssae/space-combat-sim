@@ -91,6 +91,8 @@ func _build_sections(dir: String, mesh_entry: Dictionary) -> void:
 		node.name = "Sec_%s" % String(s["name"]).to_pascal_case()
 		node.position = s["origin"]
 		node.mesh = MeshAssets.section_mesh(dir, mesh_entry, String(s["file"]))
+		# The station hull's tiles run in the piece's space (M7-T24), unbroken across the section joints.
+		node.set_instance_shader_parameter(&"piece_offset", s["origin"])
 		node.cast_shadow = PieceSections.CAST_SHADOW
 		node.layers = 1 | LightRig.SHADOW_CASTER_LAYER
 		node.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
@@ -107,6 +109,7 @@ func _add_interior(dir: String, mesh_entry: Dictionary, section: MeshInstance3D,
 	var node := MeshInstance3D.new()
 	node.name = "Interior"
 	node.mesh = MeshAssets.section_mesh(dir, mesh_entry, String(s["interior_file"]))
+	node.set_instance_shader_parameter(&"piece_offset", s["origin"])
 	node.layers = LightRig.INTERIOR_LAYER | LightRig.SHADOW_CASTER_LAYER
 	node.cast_shadow = PieceSections.CAST_SHADOW
 	node.gi_mode = GeometryInstance3D.GI_MODE_DISABLED

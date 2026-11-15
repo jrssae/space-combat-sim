@@ -142,9 +142,6 @@ def drum_pieces(planes: Sequence[float]) -> list[tuple[str, np.ndarray]]:
     out += main_docking_bay(planes)
     arm = slab_pieces("arm_neck", list(st.ARM_NECK), planes, _hex)
     arm += cobra_hall(planes)
-    pz0, pz1, half, under, top = st.ARM_PRONG
-    for x in st.ARM_PRONGS_X:
-        arm += _blocks("arm_prong", (x - half, under, pz0), (x + half, top, pz1), planes)
     kz, kr, semi = st.ARM_KNOB
     arm.append(("arm_knob", _knob_points(kz, kr, semi)))
     out += _turned(arm, st.ARM_ANGLES_DEG)

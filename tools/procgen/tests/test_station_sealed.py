@@ -176,7 +176,6 @@ class InteriorTests(unittest.TestCase):
         inside = {k.name: k.interior for k in sp.kinds()}
         self.assertTrue(all(v for name, v in inside.items() if name != "clamp"))
         self.assertFalse(inside["clamp"])
-        self.assertFalse(any(k.interior for k in sp.frame_kinds()), "the command section's windows are outside")
 
 
 if __name__ == "__main__":

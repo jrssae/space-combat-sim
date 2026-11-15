@@ -958,3 +958,68 @@ The cargo ferry (`bots cargo`, M7-T11) reuses the bot on the frame: `CargoFerryP
 Saturn 3's three cargo-pod boxes, and gives each bot an out route and a return route from just inside the bay's back wall (z -3 505, where the bot is hidden)
 through the throat and the slot to a point 8 m behind a pod's aft face; the Saturn backs in at the hold point, nose away (-Z in the station's frame), so the pods
 (at 11.8 m aft of its origin) are the end nearest the bay.
+
+## The surfaces for fullscreen (M7-T24)
+
+The maintainer, watching the launch cinematics fullscreen: blurry, plain, wrong in colour and tiled, "even at the low texture level".
+Read again off the references, the primary ones the maintainer added for this task: `references/T24 station references/B5 - Station
+from below.jpg` and `B5 - station side, purple and grey.png` (both gitignored, inspiration only).
+
+**Resolution: texel tiers.** Each piece is written as runs of its T19 sections, each run (tier) with its own 4 096 px atlas
+(`babylon5_station.DRUM_TIERS`, `FRAME_TIERS`; `core/pieces.write_tiered_piece`):
+
+| Piece | Tier | Sections | Texel | Area |
+|---|---|---|---|---|
+| drum | near_a | aperture, sphere_fore, sphere_aft | 0.43 m | 1.45 km² |
+| drum | near_b | waist, fwd_body (the Cobra arms) | 0.53 m | 2.93 km² |
+| drum | far | the bands and the green zone | 1.28 m | 12.38 km² |
+| frame | near | bow, bow_ring, spine_sphere (the command section) | 0.42 m | 1.92 km² |
+| frame | far | the rest | 1.62 m | 22.98 km² |
+
+Today's were 1.39 m (drum) and 1.50 m (frame) for everything. The near tiers' colour maps are imported with the better compression
+(BC7): BC1's colour noise read as green and purple blotches up close.
+
+**Detail: two tiles** (`core/station_tiles.py`, `assets/shaders/station_hull.gdshader`), laid in the piece's own space over every
+tier: the **fine** Earth Alliance mosaic (16 m, plates 0.8 to 3.2 m; the high set adds raised inner panels, split panels and vent
+slots, the low set is the mosaic alone) and the **panel** tile (128 m, 6 to 32 m panels with their own tone, sheen and edge grime,
+no lines). Each map holds four variants in a 2 x 2 grid; each tile cell takes a variant and one of eight orientations from a hash,
+and every variant's border is a seam, so no repeat shows at any range and neighbours meet on a seam. The Cobra arms' slanted facets
+take the tiles flat in their own plane (`planar_detail` in the style), not sheared across two projections.
+
+**Two sets, both at full resolution** (`settings.texture_detail`): high = the layouts' full plating and the fine tile's relief; low =
+the major seams and the plain mosaic. Only the set in use is loaded: 308.7 MB of maps as imported (budget 320 MB a set, tested;
+today's station 109 MB).
+
+**Paint and colour** (`styles/earth_alliance_station.py`, `parts/station_layouts.py`): the drum's blue a lavender-violet (#8075BE,
+lighter and greyer in sunlight, the side reference), its grey neutral to cool (#A2A5AE), the Cobra arms a darker grey (#8C8F97), the
+spine and command section dark neutral grey (#6C6E74, no brown), the vanes a deep blue leaning violet (#2A3A7E), the bare metals
+cooler; every paint balanced part of the way (`STAR_BALANCE`) against Epsilon Eridani's warm light (about 5 100 K), which had turned
+neutral paint brown. No long streaks or smudges (they read as smears up close). The vanes are plain blue in a grey frame (their dark
+rectangles removed).
+
+- **Main body:** the narrow stretches (the forward body, the green zone either side of its middle band) deep blue with large grey
+  plates in staggered columns along the axis (16 columns, plates 100 to 210 m, 24 m gaps, some with a thin blue dashed line); the
+  wide bands grey rims (a quarter of the band each end, stepped inner edges, a blue line round each) with a blue middle carrying
+  short rows of dark windows along the axis; plates and seams run along the axis in 32 columns.
+- **Window lines:** the green zone's 8 stringers (every 45 degrees from the side, as the STL; 10 at 36 degrees before) each carry a
+  dark bar the length of each run with one unbroken row of 4 m white lights every 26 m on its centreline; the bar's dark paint
+  reaches 12 m onto the hull each side.
+- **Docking sphere:** blue-violet panels between 8 grey strips from pole to pole and 2 round its girth, a band of small grey and
+  blue checker toward its aft end; one broken ring of 16 dark window panels just aft of the grey collar (z 594), each 44 m round the
+  girth by 9 m with two rows of 0.8 m lights every 2.6 m; between them 8 unlit tech strips (dark, small grey marks) run 110 m aft
+  along the meridians. No window rings.
+- **Spine and command section:** grey panelled metal; the window rows and the command section's window panels (frame props) are gone.
+
+**The Cobra arms' fork posts removed** (`ARM_PRONG`, z 620 to 705): in neither the references nor the STL (what looked like posts in
+the STL is the head's nose). D75's L1 to L8 now sit on the side facets of each arm's nose where it meets the sphere (z 745.5, 40.4 m
+off the arm's middle, pivot 1 m off the skin), facing out and about 17 degrees toward the bow (the facet's own tilt halved, for the
+raids that form over the spine). Grid balance, three seeds: raid 92.0 / 98.8 / 108.3 s (mean 99.7 s; before 97.5 / 110.2 / 113.1),
+capital about 124 s (before 134.5). The arms' sections against the STL: 0.920 to 0.983.
+
+**No coplanar faces left in the frame's hull** (`HULL_SELF_OVERLAPS` empty): the radiator fins' feet end inside the radiator body,
+the truss's clamps are 0.5 m longer than the cross bars they meet, the vanes' tip bars stand 0.5 m proud of the blades' edges, and
+the spine's members that ended in a neighbour's plane (the forward blocks, the caps, the strut, the tower, the pipe saddles, the
+ramp's tips, the deck under the beam's groove, the bow prongs' trims) stop 0.3 to 0.5 m inside it or stand proud.
+
+**Cost** (RX 6950 XT, Forward+, X11 fullscreen 6 144 x 3 456, `SHEET_VIEWS=t24final`): see the T24 Done notes in the milestone.
+Sheets: `references/screenshots/T24 station surfaces/` (gitignored): the checkpoints and `T24_final_sheet.png`.

@@ -23,16 +23,17 @@ PREFIX = "eas"
 
 # role: (lit capture sRGB, paneled, metallic, roughness)
 SCHEME: dict[str, tuple[int, bool, float, float]] = {
-    "drum_grey": (0xAEAEAD, True, 0.45, 0.42),
-    "drum_blue": (0x9191CB, True, 0.45, 0.46),
-    "recess": (0x353432, True, 0.50, 0.66),
-    "spine": (0x736B63, True, 0.50, 0.48),
-    "spine_top": (0x4A4440, True, 0.50, 0.56),
+    "drum_grey": (0xA2A5AE, True, 0.45, 0.42),  # M7-T24: neutral to cool, as the station from below
+    "drum_blue": (0x8075BE, True, 0.45, 0.46),  # M7-T24: a lavender-violet, lighter and greyer in sunlight (the side reference)
+    "arm_grey": (0x8C8F97, True, 0.45, 0.44),  # M7-T24: the Cobra arms a darker grey than the drum (Passaro, the station from below)
+    "recess": (0x333438, True, 0.50, 0.66),
+    "spine": (0x6C6E74, True, 0.50, 0.48),  # M7-T24: dark neutral grey, no brown cast (the station from below)
+    "spine_top": (0x45474D, True, 0.50, 0.56),
     "cargo": (0x974C4C, True, 0.40, 0.50),
-    "vane": (0x20487A, True, 0.55, 0.34),
+    "vane": (0x2A3A7E, True, 0.55, 0.34),  # M7-T24: a deep blue leaning violet, as the drum's
     "vane_dark": (0x10244C, True, 0.55, 0.55),
-    "vane_frame": (0x8C8C8B, True, 0.75, 0.32),
-    "reactor": (0x4A433C, True, 0.75, 0.38),
+    "vane_frame": (0x8C8E93, True, 0.75, 0.32),
+    "reactor": (0x4A4746, True, 0.75, 0.38),
     "trim": (0x915555, True, 0.45, 0.46),
     "hatch": (0xCAA75F, True, 0.45, 0.50),
     "door": (0x7A4A3A, True, 0.55, 0.44),
@@ -42,7 +43,10 @@ SCHEME: dict[str, tuple[int, bool, float, float]] = {
     "bay_frame": (0x8A8770, True, 0.45, 0.50),
 }
 # The bare metals' reflectance (sRGB), in place of a painted colour: steel for the trim and machinery, a bronze cast for the reactor.
-BARE_METAL: dict[str, int] = {"vane_frame": 0x9C9B99, "reactor": 0x7A6E62, "machinery": 0x8E8B87, "dome": 0x6E7078}
+BARE_METAL: dict[str, int] = {"vane_frame": 0x9A9DA4, "reactor": 0x65625F, "machinery": 0x8A8D93, "dome": 0x6E7078}
+# Epsilon Eridani's light is warm (about 5 100 K), which turns a neutral grey brown: the station's paints are balanced against it
+# (M7-T24), part of the way, so its greys read neutral to cool in the star's light and its blues stay blue-violet.
+STAR_BALANCE = (0.92, 1.0, 1.13)
 # How much of a metallic paint's lost diffuse light its albedo makes up (1: all of it).
 DIFFUSE_KEEP = 0.7
 # Where each required role of a style points: the shared parts code asks for these names.
@@ -82,9 +86,10 @@ def colour(role: str) -> tuple[float, float, float]:
     else the capture's colour raised for what the paint's metal takes from its diffuse light."""
     hex_rgb, _, metallic, _ = SCHEME[role]
     if role in BARE_METAL:
-        return lin(BARE_METAL[role])
+        r, g, b = (min(0.95, c * k) for c, k in zip(lin(BARE_METAL[role]), STAR_BALANCE, strict=True))
+        return (r, g, b)
     gain = 1.0 / (1.0 - DIFFUSE_KEEP * metallic)
-    r, g, b = (min(0.85, c * gain) for c in capture_albedo(hex_rgb))
+    r, g, b = (min(0.85, c * gain * k) for c, k in zip(capture_albedo(hex_rgb), STAR_BALANCE, strict=True))
     return (r, g, b)
 
 
@@ -124,9 +129,11 @@ EARTH_ALLIANCE_STATION = Style(
     edge_wear=0.35,
     edge_wear_width_m=3.0,
     grime_scale_m=160.0,
-    streaks=0.12,
+    streaks=0.0,  # M7-T24: no long streaks or smudges (they read as smears up close); the detail tile carries the joints' grime
     grime=0.07,
-    extra={"wear_scale": 100.0, "rivets": 0.0, "bare_metal": 0.35, "smudge": 0.04, "smudge_scale_m": 1.2, "speckle": 0.03,
+    extra={"wear_scale": 100.0, "rivets": 0.0, "bare_metal": 0.35, "smudge": 0.0, "smudge_scale_m": 1.2, "speckle": 0.03,
+           # The Cobra arms' slanted facets take the detail tile flat in their own plane (M7-T24), not sheared across two axes.
+           "planar_detail": {"parts": ["arms"], "max_axis": 0.9},
            "streak_length_m": 0.3,
            # Roughness steps from panel to panel (40 m cells) and drifts within them; dirt is rougher and duller.
            "metal_finish": {"panel_m": 40.0, "panel_rough": 0.08, "noise_m": 30.0, "noise_rough": 0.05, "dirt_rough": 0.28,

@@ -114,13 +114,13 @@
       "templates": ["push_in", "drift_right", "drift_left"]
     },
     "defence_grid": {
-      "caption": "DEFENCE GRID: LIGHT TURRETS ON THE PRONG OF WING {wing}",
+      "caption": "DEFENCE GRID: LIGHT TURRETS ON THE ARM OF WING {wing}",
       "scale": 0.5,
       "arm": true,
       "hardpoint": "",
       "body": "drum",
-      "camera": [0.0, 385.0, -2110.0],
-      "subject": [0.0, 292.0, -2310.0],
+      "camera": [0.0, 395.0, -2100.0],
+      "subject": [0.0, 300.0, -2255.0],
       "shows": ["L1", "L2"],
       "templates": ["push_in", "drift_right", "drift_left"]
     },

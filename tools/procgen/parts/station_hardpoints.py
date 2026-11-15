@@ -22,16 +22,18 @@ from . import station_props as sp
 DRUM, FRAME = "drum", "frame"
 LIGHT, HEAVY, INTERCEPTOR = "light_pulse", "heavy_cannon", "interceptor"
 # D75's mounts as the maintainer approved them on the marker sheet (2026-11-13): name, kind, body, position, up (station frame).
-# The drum's are at the arms' angles as modelled.
+# The drum's are at the arms' angles as modelled. L1 to L8 sit on the side facets of each Cobra arm's forward head, where it reaches the
+# docking sphere, flush on the skin, facing out and about 17 degrees toward the bow (M7-T24: the fork's posts they stood on were neither in
+# the references nor the STL as built; half the facet's own tilt, so they still cover the raids that form over the spine).
 GRID_MOUNTS: tuple[tuple[str, str, str, tuple[float, float, float], tuple[float, float, float]], ...] = (
-    ("L1", LIGHT, DRUM, (-41.0, 292.0, 690.0), (0.0, 1.0, 0.0)),
-    ("L2", LIGHT, DRUM, (41.0, 292.0, 690.0), (0.0, 1.0, 0.0)),
-    ("L3", LIGHT, DRUM, (292.0, 41.0, 690.0), (1.0, 0.0, 0.0)),
-    ("L4", LIGHT, DRUM, (292.0, -41.0, 690.0), (1.0, 0.0, 0.0)),
-    ("L5", LIGHT, DRUM, (41.0, -292.0, 690.0), (0.0, -1.0, 0.0)),
-    ("L6", LIGHT, DRUM, (-41.0, -292.0, 690.0), (0.0, -1.0, 0.0)),
-    ("L7", LIGHT, DRUM, (-292.0, -41.0, 690.0), (-1.0, 0.0, 0.0)),
-    ("L8", LIGHT, DRUM, (-292.0, 41.0, 690.0), (-1.0, 0.0, 0.0)),
+    ("L1", LIGHT, DRUM, (-40.4, 300.8, 745.5), (-0.451, 0.846, -0.283)),
+    ("L2", LIGHT, DRUM, (40.4, 300.8, 745.5), (0.451, 0.846, -0.283)),
+    ("L3", LIGHT, DRUM, (300.8, 40.4, 745.5), (0.846, 0.451, -0.283)),
+    ("L4", LIGHT, DRUM, (300.8, -40.4, 745.5), (0.846, -0.451, -0.283)),
+    ("L5", LIGHT, DRUM, (40.4, -300.8, 745.5), (0.451, -0.846, -0.283)),
+    ("L6", LIGHT, DRUM, (-40.4, -300.8, 745.5), (-0.451, -0.846, -0.283)),
+    ("L7", LIGHT, DRUM, (-300.8, -40.4, 745.5), (-0.846, -0.451, -0.283)),
+    ("L8", LIGHT, DRUM, (-300.8, 40.4, 745.5), (-0.846, 0.451, -0.283)),
     ("L9", LIGHT, FRAME, (0.0, 507.0, 1500.0), (0.0, 0.98, -0.21)),
     ("L10", LIGHT, FRAME, (0.0, 537.0, 2650.0), (0.0, 1.0, 0.0)),
     ("L11", LIGHT, FRAME, (0.0, 537.0, 4500.0), (0.0, 1.0, 0.0)),

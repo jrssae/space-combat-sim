@@ -146,13 +146,14 @@ func test_every_hull_takes_the_sheen_and_rocks_do_not() -> void:
 
 
 func test_a_big_hulls_detail_tile_is_laid_in_its_own_space() -> void:
-	# M7-T04 (D72): the station's surfaces name a shared detail tile; the material multiplies it in, triplanar in the mesh's space.
+	# M7-T04 (D72): a big hull's shared detail tile, multiplied in triplanar in the mesh's space. The station's hull draws with its own
+	# material now (M7-T24, test_station_hull_material.gd); its props among the plating still take this tile.
 	var entry: Dictionary = (_manifest("babylon5_station").get("pieces", {}) as Dictionary).get("drum", {})
 	if entry.is_empty():
 		fail_test(GEN_ASSETS_HINT)
 		return
 	var dir: String = _dir("babylon5_station")
-	var surface: Dictionary = entry["mesh"]["surfaces"][0]
+	var surface: Dictionary = (entry["props"]["surface"] as Dictionary).merged({"world_detail": entry["props"]["world_detail"]}, true)
 	var material: StandardMaterial3D = MeshAssets.textured_material(dir, surface)
 	assert_true(material.detail_enabled)
 	assert_eq(material.detail_blend_mode, BaseMaterial3D.BLEND_MODE_MUL)

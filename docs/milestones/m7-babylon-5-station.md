@@ -123,7 +123,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 
   | Where | Body | Light pulse turrets | Heavy cannons | Interceptor batteries |
   |---|---|---|---|---|
-  | Cobra-arm prongs (z 620 to 700, two posts on each of the four arms) | drum | 8 (one per post) | | |
+  | Cobra-arm heads (two on each arm's nose where it meets the sphere; on the fork's posts until M7-T24 removed them) | drum | 8 | | |
   | The Cobra arms (one battery on each arm) | drum | | | 4 |
   | The bow spine's tower (about mid-length of the bow spike) | frame | | 2 | 1 |
   | The dorsal spine, stations S1 to S4 (below) | frame | 4 (one per station) | | 4 (one per station) |
@@ -137,14 +137,14 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 
   | Mount | Kind | Body | x | y | z | Up |
   |---|---|---|---|---|---|---|
-  | L1 | light pulse | drum | -41 | 292 | 690 | up |
-  | L2 | light pulse | drum | 41 | 292 | 690 | up |
-  | L3 | light pulse | drum | 292 | 41 | 690 | (1.00, 0.00, 0.00) |
-  | L4 | light pulse | drum | 292 | -41 | 690 | (1.00, 0.00, 0.00) |
-  | L5 | light pulse | drum | 41 | -292 | 690 | (0.00, -1.00, 0.00) |
-  | L6 | light pulse | drum | -41 | -292 | 690 | (0.00, -1.00, 0.00) |
-  | L7 | light pulse | drum | -292 | -41 | 690 | (-1.00, 0.00, 0.00) |
-  | L8 | light pulse | drum | -292 | 41 | 690 | (-1.00, 0.00, 0.00) |
+  | L1 | light pulse | drum | -40.4 | 300.8 | 745.5 | (-0.45, 0.85, -0.28) |
+  | L2 | light pulse | drum | 40.4 | 300.8 | 745.5 | (0.45, 0.85, -0.28) |
+  | L3 | light pulse | drum | 300.8 | 40.4 | 745.5 | (0.85, 0.45, -0.28) |
+  | L4 | light pulse | drum | 300.8 | -40.4 | 745.5 | (0.85, -0.45, -0.28) |
+  | L5 | light pulse | drum | 40.4 | -300.8 | 745.5 | (0.45, -0.85, -0.28) |
+  | L6 | light pulse | drum | -40.4 | -300.8 | 745.5 | (-0.45, -0.85, -0.28) |
+  | L7 | light pulse | drum | -300.8 | -40.4 | 745.5 | (-0.85, -0.45, -0.28) |
+  | L8 | light pulse | drum | -300.8 | 40.4 | 745.5 | (-0.85, 0.45, -0.28) |
   | L9 | light pulse | frame | 0 | 507 | 1500 | (0.00, 0.98, -0.21) |
   | L10 | light pulse | frame | 0 | 537 | 2650 | up |
   | L11 | light pulse | frame | 0 | 537 | 4500 | up |
@@ -161,6 +161,8 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   | I8 | interceptor | frame | 40 | 537 | 4500 | up |
   | I9 | interceptor | frame | -40 | 472 | 5650 | up |
 
+  L1 to L8 moved in M7-T24 (the maintainer): the fork's posts they stood on (z 620 to 705) were in neither the references nor the STL,
+  so the posts are gone and each pair sits on the side facets of its arm's nose, flush, facing out and about 17 degrees to the bow.
   No other surface carries grid weapons: the aft
   (green zone, hub, fins, reactor) has no cover beyond the dorsal spine's reach, by design, so raids that swing aft meet only
   the fighters.
@@ -275,7 +277,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T21 | A | Follow-up to T05 from the STL: the Cobra arm's pentagonal cross-section, creases either side of the launch doors, and a roofed rectangular cargo bay (maintainer, 2026-11-13) | T05 | Opus | Shape read off the STL; the look is (H) | done |
 | T22 | A | The dorsal spine and the command section rebuilt to the STL (per-part sections IoU >= 0.90; maintainer, 2026-11-13) | T21 | Opus | T04 built them to the overall silhouette; the per-part check scores them 0.38 to 0.72 | done |
 | T23 | D | The jumpgate and jump points refined from the maintainer's GIF: gate opening, the blue vortex, a ship's jump point (maintainer, 2026-11-13) | - | Opus | Shader and asset look against a show reference; (H) | done |
-| T24 | A | The station's surfaces refined for fullscreen, in both texture-detail sets (low and high): resolution, detail, colour and material, no visible tiling (maintainer, 2026-11-13) | T22 | Opus | A look task on an 8 km hull at 6K within a VRAM budget; (H) | in progress |
+| T24 | A | The station's surfaces refined for fullscreen, in both texture-detail sets (low and high): resolution, detail, colour and material, no visible tiling (maintainer, 2026-11-13) | T22 | Opus | A look task on an 8 km hull at 6K within a VRAM budget; (H) | done |
 | T25 | A | The main docking bay rebuilt: shape and proportions from the STL (its section exemption lifted, IoU >= 0.90), the look from the show captures (maintainer, 2026-11-14) | T05, the flicker and light-leak fix | Opus | The bay reads wrong against the show in shape, mouth detail, tunnel and light; (H) | done |
 | T26 | B | All ships keep a low-polygon model at range instead of turning into a grey sphere; a dot only when a few pixels across (maintainer, 2026-11-14) | - | Opus | A Saturn 3 and a Narn transport became grey spheres while still clearly visible | in progress |
 | T27 | C | Navigation targets and a hold-X interaction: the main docking bay, cargo bay and jumpgate as navigation targets; hold X for 2 s with a progress bar to act on them (maintainer, 2026-11-14) | T10 | Opus | A new input mechanic over targeting, HUD and the gate jump | in progress |
@@ -1383,6 +1385,50 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 - **Done when:** a fullscreen (6144 × 3456) A/B sheet of the low and high sets from the launch-cinematic views, the bays, 1 km and
   10 km, beside the references, approved by the maintainer (H); VRAM and fps recorded; tests (both sets present, the switch, budgets,
   determinism); committed.
+- **Done (as built, 2026-11-14; the final sheet approved by the maintainer):** checkpoints approved by the maintainer along the way (the
+  fins, the colours and the star's colour left as is, the spine, the main body's window lines, the sphere, the posts' removal and
+  L1 to L8 on the arms' heads). New references: `references/T24 station references/B5 - Station from below.jpg` and `B5 - station side,
+  purple and grey.png`. Numbers in `docs/assets-station.md` ("The surfaces for fullscreen (M7-T24)"); architecture §20.6.
+  - **Resolution:** each piece written in texel tiers along its T19 sections, a 4 096 px atlas each (`core/pieces.write_tiered_piece`,
+    `Tier`, `clip_mesh`): drum near_a 0.43 m, near_b 0.53 m, far 1.28 m; frame near 0.42 m, far 1.62 m (1.39 / 1.50 m before). Near
+    tiers' colour maps BC7 (BC1's colour noise read as green and purple blotches). Generator 5.
+  - **Detail and tiling:** the station hull shader (`assets/shaders/station_hull.gdshader`, `StationHullMaterial`) lays the fine
+    mosaic (16 m; raised and sunk panels and vents in high) and a panel tile (128 m; tone, sheen, grime) in the piece's space, each
+    cell a hashed variant (4) and orientation (8), every variant's border a seam; the Cobra arms' slanted facets take the tiles flat
+    in their plane; the clear coat follows the atlas, so the sun's glint stays whole. No streaks or smudges.
+  - **Two sets at full resolution** (`settings.texture_detail`, now "Texture detail"): high the full layouts and the mosaic's relief,
+    low the major seams and the plain mosaic. 308.7 MB of maps a set as imported (budget 320 MB, tested; 109.3 MB before).
+  - **Paint:** lavender-violet #8075BE, neutral to cool greys, darker arms, no brown on the spine, deeper vanes, cooler bare metals,
+    balanced against Epsilon Eridani's light; the vanes' dark marks removed; the main body's narrow stretches blue with staggered grey
+    plates, the wide bands grey rims and a blue middle; 8 stringers (every 45 degrees, the STL's) each with a dark bar and one unbroken
+    row of lights down each green-zone run; the sphere's ring of densely lit panels round its collar and unlit tech strips; the spine
+    and command section without windows (the window props removed).
+  - **The Cobra arms' fork posts removed** (in neither the references nor the STL); L1 to L8 on the side facets of each arm's nose
+    (z 745.5), about 17 degrees to the bow. Balance (clean copy): raid 104.4 / 98.8 / 123.0 s (mean 108.7), capital about 124 s.
+    The arms' sections 0.920 to 0.983.
+  - **No coplanar faces in the frame's hull:** `HULL_SELF_OVERLAPS` empty (the radiator fins' feet, the truss's clamps, the vanes'
+    tip bars and the spine's abutting members taken apart).
+  - **Cost** (RX 6950 XT, Forward+, X11 fullscreen 6 144 x 3 456, `SHEET_VIEWS=t24final`; today = HEAD built clean; GPU ms today /
+    low / high; draw calls today / new):
+
+    | View | GPU ms | Draw calls |
+    |---|---|---|
+    | Launch, up the arm | 5.53 / 6.48 / 6.21 | 231 / 227 |
+    | Launch, across the drum | 6.24 / 6.96 / 7.11 | 234 / 229 |
+    | Cobra bay, 50 m | 6.72 / 7.65 / 7.71 | 249 / 244 |
+    | Docking bay, 150 m | 6.30 / 7.16 / 7.18 | 250 / 245 |
+    | Cargo bay's mouth | 6.66 / 8.01 / 8.08 | 233 / 228 |
+    | Main body from below | 4.89 / 5.27 / 5.39 | 183 / 183 |
+    | 1 km | 6.65 / 7.69 / 7.70 | 240 / 235 |
+    | 10 km | 3.41 / 3.77 / 3.47 | 148 / 148 |
+
+    Godot's VRAM 1 888 MB to 2 098 MB with either set; fps capped by the display (60 to 120) in every view.
+  - **Tests:** Python `test_babylon5_station` (tiers, both sets at full resolution, the budget, the light rows even and unbroken, no
+    lit windows on the bands, panels or spine), `test_station_tiles` (new), `test_station_sections` (joints across tiers),
+    `test_station_hardpoints`, `test_station_sealed`, `test_coplanar_overlaps` (the list empty), `test_station_fidelity`; GUT
+    `test_station_hull_material` (new), `test_mesh_assets`, `test_station_sections` (one material a tier), the grid tests and balance.
+  - **Sheets (H):** `references/screenshots/T24 station surfaces/T24_final_sheet.png` (gitignored), the checkpoints beside it;
+    `SHEET_VIEWS=t24final`, `t24drum`, `t24side` (`scripts/station_sheet_node.gd`; `SHEET_DETAIL=low|high`, `SHEET_TIMEOUT`).
 
 ### M7-T25 The main docking bay rebuilt to the STL and the show
 

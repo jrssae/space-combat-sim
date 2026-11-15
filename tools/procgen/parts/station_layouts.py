@@ -41,7 +41,6 @@ def _radial(p: np.ndarray, n: np.ndarray) -> np.ndarray:
     return (n[:, 0] * p[:, 0] + n[:, 1] * p[:, 1]) / r
 
 
-GREEN_JOINTS = tuple(every(2348.0, 4782.0, 304.0))  # the green zone's section joints (the wide band's edges fall near two)
 
 
 PLATE_SHEEN = 0.14  # each plate's roughness off its paint's, +-: the highlight breaks up plate by plate (metal, not plastic)
@@ -76,13 +75,13 @@ def layouts() -> dict[str, SeamLayout]:
     """Each shape's seams by name, in the station frame."""
     band_joints = tuple(every(1800.0, 2290.0, 122.5))
     aft_joints = tuple(every(4840.0, 5400.0, 140.0))
-    green_joints = GREEN_JOINTS
     return {
         "sphere": SeamLayout.of([*_barrel(560.0, 945.0, 270.0, 46.0, 36, 3, (700.0, 800.0, 900.0)),
                                  Cut(axis=2, at=540.0, level=1, width=1.4)]),
-        "fwd_body": SeamLayout.of(_barrel(1330.0, 1692.0, 320.0, 60.0, 40, 5, (1400.0, 1540.0, 1640.0))),
+        # The narrow stretches' plates run along the axis in columns lined up with the paint's (M7-T24: the station from below).
+        "fwd_body": SeamLayout.of(_barrel(1330.0, 1692.0, 320.0, 120.0, 32, 5)),
         "fwd_band": SeamLayout.of(_barrel(1790.0, 2340.0, st.BAND_R, 61.25, 48, 7, band_joints)),
-        "green": SeamLayout.of(_barrel(2348.0, 4782.0, st.GREEN_R, 76.0, 40, 11, green_joints)),
+        "green": SeamLayout.of(_barrel(2348.0, 4782.0, st.GREEN_R, 160.0, 32, 11, (st.GREEN_BAND[0], st.GREEN_BAND[1]))),
         "aft_band": SeamLayout.of(_barrel(4782.0, 5500.0, st.BAND_R, 70.0, 48, 13, aft_joints)),
         "arms": SeamLayout.of(_faceted((30.0, 16.0), 17)),
         "aperture": SeamLayout.of([Plates(level=2, wrap="polar", axis=2, radius=105.0, around=32, cell=(19.0, 0.0), offset=(88.0, 0.0),
@@ -111,64 +110,236 @@ def layouts() -> dict[str, SeamLayout]:
 STEPS = (0.0, 1.0, 2.0, 1.0)  # a block edge's notches, in panels: a stair out and back, so neighbouring blocks interlock
 
 
-def band_blocks(z0: float, z1: float, radius: float, around: int, rows: int, notch_m: float, margin_m: float, seed: int) -> Cover:
-    """The wide bands' blue-violet blocks: a checker of blocks round the band whose edges step out and back in panel-sized
-    notches, so the blocks interlock; a grey frame inside each, and a few cells turned to the other colour."""
-    block_s = 2.0 * math.pi * radius / around
-    block_z = (z1 - z0) / rows
-    steps = np.asarray(STEPS) * notch_m
+SPHERE_STRIPS = (8, 9.0)  # grey strips from pole to pole: how many, how wide
+SPHERE_GIRTHS = ((700.0, 10.0), (830.0, 10.0))  # grey strips round the sphere: where along the axis, how wide
+SPHERE_CHECKER = (870.0, 940.0, 48, 23.0)  # the small grey and blue checker toward its aft end: from z, to z, cells round, cell along
+
+
+def sphere_blue(min_r: float) -> Cover:
+    """The docking sphere (M7-T24, the side reference): blue panels between grey strips from pole to pole and round its girth, and a
+    band of small grey and blue checker toward the aft end."""
+    count, strip = SPHERE_STRIPS
+    z0, z1, around, cell = SPHERE_CHECKER
 
     def cover(p: np.ndarray, n: np.ndarray) -> np.ndarray:
-        s = _turn(p) * radius
-        z = p[:, 2] - z0
-        row, col = np.floor(z / notch_m).astype(np.int64), np.floor(s / notch_m).astype(np.int64)
-        ds, dz = steps[np.mod(row, len(steps))], steps[np.mod(col, len(steps))]
-        bs = np.mod(np.floor((s + ds) / block_s), around).astype(np.int64)
-        bz = np.floor((z + dz) / block_z).astype(np.int64)
-        blue = ((bs + bz) % 2 == 0) ^ (_hash01(bs, bz, np.full(len(p), seed, dtype=np.int64)) < 0.12)
-        fs, fz = np.mod(s + ds, block_s), np.mod(z + dz, block_z)
-        inside = (fs > margin_m) & (fs < block_s - margin_m) & (fz > margin_m) & (fz < block_z - margin_m)
-        on = (z >= 0.0) & (z <= z1 - z0) & (_radial(p, n) > 0.6)
-        return (blue & inside & on).astype(float)
+        r = np.hypot(p[:, 0], p[:, 1])
+        turn = _turn(p)
+        meridian = np.abs(np.mod(turn * r, 2.0 * math.pi * r / count) - 0.5 * 2.0 * math.pi * r / count) > 0.5 * 2.0 * math.pi * r / count - 0.5 * strip
+        girth = np.zeros(len(p), dtype=bool)
+        for at, width in SPHERE_GIRTHS:
+            girth |= np.abs(p[:, 2] - at) < 0.5 * width
+        band = (p[:, 2] > z0) & (p[:, 2] < z1)
+        a = np.floor(turn / (2.0 * math.pi / around)).astype(np.int64)
+        b = np.floor((p[:, 2] - z0) / cell).astype(np.int64)
+        checker_grey = band & ((a + b) % 2 == 1)
+        on = (r > min_r) & (_radial(p, n) > -0.2)
+        return (on & ~meridian & ~girth & ~checker_grey).astype(float)
 
     return cover
 
 
-def checker(z0: float, z1: float, around: int, cell_z: float, min_r: float) -> Cover:
-    """The docking sphere's and forward body's finer blue and grey checkerboard, square-ish cells round the axis."""
 
-    def cover(p: np.ndarray, n: np.ndarray) -> np.ndarray:
-        a = np.floor(_turn(p) / (2.0 * math.pi / around)).astype(np.int64)
-        b = np.floor((p[:, 2] - z0) / cell_z).astype(np.int64)
-        on = (p[:, 2] >= z0) & (p[:, 2] <= z1) & (np.hypot(p[:, 0], p[:, 1]) > min_r)
-        return (((a + b) % 2 == 0) & on).astype(float)
+def _collar_place(angle: float, z: float) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """A point on the sphere's skin at ``angle`` round the axis and ``z`` along it: the point, the girth's direction, the meridian's
+    (aft along the skin) and the outward normal (station frame)."""
+    zs = np.array([z_ for z_, _ in st.SPHERE_PROFILE if z_ >= 560.0])
+    rs = np.array([r for z_, r in st.SPHERE_PROFILE if z_ >= 560.0])
+    r = float(np.interp(z, zs, rs))
+    slope = float(np.interp(z + 5.0, zs, rs) - np.interp(z - 5.0, zs, rs)) / 10.0
+    radial = np.array([math.cos(angle), math.sin(angle), 0.0])
+    along = radial * slope + np.array([0.0, 0.0, 1.0])
+    normal = radial - slope * np.array([0.0, 0.0, 1.0])
+    return (radial * r + np.array([0.0, 0.0, z]), np.array([-math.sin(angle), math.cos(angle), 0.0]), along / np.linalg.norm(along),
+            normal / np.linalg.norm(normal))
 
-    return cover
+
+def collar_panels() -> list[tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
+    """The sphere's window panels (M7-T24, the from-below reference): one broken ring just aft of the grey collar, each panel long
+    round the girth: (middle, girth, meridian, normal)."""
+    count, z = COLLAR_RING
+    return [_collar_place(2.0 * math.pi * (k + 0.5) / count, z) for k in range(count)]
 
 
-def green_blocks(joints: tuple[float, ...], radius: float, around: int, seed: int) -> Cover:
-    """The green zone: grey strips along the axis with blue blocks between them, two blocks to each section between the seam
-    rings, lined up round the girth so they read as rings of panels; a few left grey."""
-    sector = 2.0 * math.pi * radius / around
-    half_across = 0.33 * sector
-    edges = np.asarray(joints, dtype=float)
-    gap = 12.0
+def collar_strips() -> list[tuple[float, float]]:
+    """The unlit tech strips out from the collar along the meridians, in the gaps between panels that hold no grey strip: (angle,
+    z from)."""
+    count, z = COLLAR_RING
+    meridian = 2.0 * math.pi / SPHERE_STRIPS[0]
+    out = []
+    for k in range(count):
+        a = 2.0 * math.pi * k / count
+        if abs((a + 0.5 * meridian) % meridian - 0.5 * meridian) > 1e-6:
+            out.append((a, z))
+    return out
+
+
+def collar_dark(p: np.ndarray, n: np.ndarray) -> np.ndarray:
+    """The panels' and the tech strips' dark paint."""
+    length, width = COLLAR_PANEL
+    out = np.zeros(len(p), dtype=bool)
+    for centre, girth, along, normal in collar_panels():
+        d = p - centre
+        out |= (np.abs(d @ girth) < 0.5 * length) & (np.abs(d @ along) < 0.5 * width) & (n @ normal > 0.5) & (np.abs(d @ normal) < 6.0)
+    r = np.hypot(p[:, 0], p[:, 1])
+    turn = _turn(p)
+    for a, z0 in collar_strips():
+        across = np.abs((turn - a + math.pi) % (2.0 * math.pi) - math.pi) * r
+        out |= (across < 0.5 * STRIP_W_M) & (p[:, 2] > z0 - 2.0) & (p[:, 2] < z0 + STRIP_LEN_Z) & (_radial(p, n) > -0.2) & (r > 160.0)
+    return out.astype(float)
+
+
+def collar_greebles(p: np.ndarray, n: np.ndarray) -> np.ndarray:
+    """The small grey marks along the tech strips."""
+    r = np.hypot(p[:, 0], p[:, 1])
+    turn = _turn(p)
+    out = np.zeros(len(p), dtype=bool)
+    for a, z0 in collar_strips():
+        across = (turn - a + math.pi) % (2.0 * math.pi) - math.pi
+        along = p[:, 2] - z0
+        beat = np.mod(along, GREEBLE_PITCH_M) < GREEBLE_PITCH_M * 0.45
+        side = np.abs(across * r - np.where(np.mod(np.floor(along / GREEBLE_PITCH_M), 2) == 0, -1.0, 1.0)) < 1.0
+        out |= side & beat & (along > 4.0) & (along < STRIP_LEN_Z - 4.0) & (np.abs(across * r) < 0.5 * STRIP_W_M) & (r > 160.0)
+    return out.astype(float)
+
+
+# --- the drum's main body (M7-T24, read off "B5 - Station from below", the schematic and the STL) ----------------------------
+# The narrow stretches (the forward body, the green zone either side of its middle band) are deep blue with large grey plates in
+# staggered columns along the axis; dark bars carrying a row of lights run lengthwise on the eight stringers, in staggered segments.
+# The wide bands are grey rims panelled round the girth with a blue middle; small white lights are scattered sparsely over all.
+NARROW_SECTORS = 8  # the stringers' sectors (every 45 degrees, from the side)
+NARROW_COLUMNS = 2  # columns of grey plates in a sector
+PLATE_LEN_M = (100.0, 210.0)
+PLATE_GAP_M = 24.0
+PLATE_MARGIN_M = 16.0  # blue each side of a plate, across its column
+PLATE_SKIP = 0.28  # the share of plates left blue
+DASH_SHARE = 0.25  # plates with a thin blue dashed line down their middle
+DASH_M = (12.0, 8.0, 2.5)  # a dash, the gap, the line's width
+NARROW_STRETCHES = ((1350.0, 1688.0), (2352.0, st.GREEN_BAND[0]), (st.GREEN_BAND[1], 4778.0))
+MIDDLE_RIM_M = 32.0  # the grey rims at the ends of the green zone's middle band
+BAND_RIM_SHARE = 0.24  # how much of a wide band each grey rim takes
+BAND_NOTCH_M = (52.0, 13.0)  # the rim's inner edge steps: across, along
+BAND_LINE_M = (30.0, 8.0)  # the blue line round each rim: in from the band's edge, wide
+
+
+def _plate_runs(z0: float, z1: float, column: int, seed: int) -> tuple[np.ndarray, np.ndarray]:
+    """One column's grey plates along a stretch, staggered against its neighbours: their starts and ends."""
+    starts, ends = [], []
+    z = z0 + PLATE_GAP_M + 0.5 * PLATE_LEN_M[0] * float(_hash01(np.array([column]), np.array([seed]))[0])
+    k = 0
+    while z < z1 - PLATE_GAP_M - 30.0:
+        h = float(_hash01(np.array([column]), np.array([k]), np.array([seed + 3]))[0])
+        length = PLATE_LEN_M[0] + (PLATE_LEN_M[1] - PLATE_LEN_M[0]) * h
+        end = min(z + length, z1 - PLATE_GAP_M)
+        if float(_hash01(np.array([column]), np.array([k]), np.array([seed + 5]))[0]) >= PLATE_SKIP:
+            starts.append(z)
+            ends.append(end)
+        z = end + PLATE_GAP_M
+        k += 1
+    return np.array(starts), np.array(ends)
+
+
+def narrow_blue(radius: float, seed: int, stretches: tuple[tuple[float, float], ...] = NARROW_STRETCHES) -> Cover:
+    """A narrow stretch's blue: all of it but its grey plates, with a thin blue dashed line down some plates."""
+    columns = NARROW_SECTORS * NARROW_COLUMNS
+    width = 2.0 * math.pi * radius / columns
+    runs = {(i, c): _plate_runs(z0, z1, c, seed + 17 * i) for i, (z0, z1) in enumerate(stretches) for c in range(columns)}
 
     def cover(p: np.ndarray, n: np.ndarray) -> np.ndarray:
         s = _turn(p) * radius
-        k = np.floor(s / sector).astype(np.int64)
-        across = np.abs(np.mod(s, sector) - 0.5 * sector)
+        col = np.mod(np.floor(s / width).astype(np.int64), columns)
+        across = np.mod(s, width)
         z = p[:, 2]
-        j = np.clip(np.searchsorted(edges, z) - 1, 0, len(edges) - 2)
-        z0, z1 = edges[j], edges[j + 1]
-        mid = 0.5 * (z0 + z1)
-        half = np.where(z < mid, 0, 1)
-        in_block = ((z > z0 + gap) & (z < mid - 0.5 * gap)) | ((z > mid + 0.5 * gap) & (z < z1 - gap))
-        keep = _hash01(np.mod(k, around), 2 * j + half, np.full(len(p), seed, dtype=np.int64)) < 0.85
-        on = (z > edges[0]) & (z < edges[-1]) & (_radial(p, n) > 0.6) & (np.hypot(p[:, 0], p[:, 1]) < radius + 4.0)
-        return ((across < half_across) & in_block & keep & on).astype(float)
+        plate = np.zeros(len(p), dtype=bool)
+        dash = np.zeros(len(p), dtype=bool)
+        on = np.zeros(len(p), dtype=bool)
+        for i, (z0, z1) in enumerate(stretches):
+            inside = (z >= z0) & (z <= z1)
+            on |= inside
+            for c in range(columns):
+                sel = np.flatnonzero(inside & (col == c))
+                if len(sel) == 0:
+                    continue
+                starts, ends = runs[(i, c)]
+                if len(starts) == 0:  # a column left all blue
+                    continue
+                k = np.searchsorted(starts, z[sel], side="right") - 1
+                ok = (k >= 0) & (z[sel] <= ends[np.maximum(k, 0)])
+                plate[sel] = ok & (across[sel] > PLATE_MARGIN_M) & (across[sel] < width - PLATE_MARGIN_M)
+                dashed = _hash01(np.full(len(sel), c), np.maximum(k, 0), np.full(len(sel), seed + 29 * i)) < DASH_SHARE
+                line = np.abs(across[sel] - 0.5 * width) < 0.5 * DASH_M[2]
+                beat = np.mod(z[sel] - starts[np.maximum(k, 0)], DASH_M[0] + DASH_M[1]) < DASH_M[0]
+                dash[sel] = plate[sel] & dashed & line & beat
+        outward = (_radial(p, n) > 0.6) & (np.hypot(p[:, 0], p[:, 1]) < radius + 4.0)
+        return (on & outward & (~plate | dash)).astype(float)
 
     return cover
+
+
+def middle_band_blue(z0: float, z1: float, radius: float) -> Cover:
+    """The green zone's middle band: blue between two grey rims."""
+    def cover(p: np.ndarray, n: np.ndarray) -> np.ndarray:
+        z = p[:, 2]
+        on = (z > z0 + MIDDLE_RIM_M) & (z < z1 - MIDDLE_RIM_M) & (np.hypot(p[:, 0], p[:, 1]) > radius - 4.0)
+        return (on & (_radial(p, n) > 0.6)).astype(float)
+
+    return cover
+
+
+def wide_band_blue(z0: float, z1: float, radius: float) -> Cover:
+    """A wide band's blue middle between its grey rims, the rims' inner edges stepping in and out so they interlock with it, and a
+    blue line round each rim."""
+    rim = BAND_RIM_SHARE * (z1 - z0)
+    steps = np.asarray(STEPS) * BAND_NOTCH_M[1]
+
+    def cover(p: np.ndarray, n: np.ndarray) -> np.ndarray:
+        s = _turn(p) * radius
+        z = p[:, 2]
+        step = steps[np.mod(np.floor(s / BAND_NOTCH_M[0]).astype(np.int64), len(steps))]
+        middle = (z > z0 + rim + step) & (z < z1 - rim - step)
+        edge = np.minimum(z - z0, z1 - z)
+        line = np.abs(edge - BAND_LINE_M[0]) < 0.5 * BAND_LINE_M[1]
+        on = (z >= z0) & (z <= z1) & (_radial(p, n) > 0.6) & (np.hypot(p[:, 0], p[:, 1]) > radius - 6.0)
+        return (on & (middle | line)).astype(float)
+
+    return cover
+
+
+BAR_END_M = 6.0  # where a bar stops short of its stringer's ends
+# A light (along, across) and its pitch along and across the bar: about one every 1.7 stringer widths, as the references. Across, the
+# cells are narrower than a light, so one unbroken row lies on the bar's centreline whatever the cells' phase; the bar's region (4 m
+# across) sets the row's width.
+BAR_LIGHT = ((4.0, 8.0), (26.0, 4.0))
+BAR_ROW_M = 4.0
+
+
+def stringer_bars() -> list[tuple[float, float, float]]:
+    """The dark lit bars on the stringers: (angle in degrees, from z, to z), one unbroken straight line of windows down each
+    stringer the length of each green-zone run (the maintainer, M7-T24: the side and from-below references)."""
+    runs = ((2360.0, st.GREEN_BAND[0] - 12.0), (st.GREEN_BAND[1] + 12.0, 4770.0))
+    return [(angle, z0 + BAR_END_M, z1 - BAR_END_M) for angle in st.STRINGER_ANGLES_DEG for z0, z1 in runs]
+
+def stringer_dark(p: np.ndarray, n: np.ndarray) -> np.ndarray:
+    """The bars' dark paint on the stringers."""
+    angle = np.degrees(np.arctan2(p[:, 1], p[:, 0])) % 360.0
+    out = np.zeros(len(p), dtype=bool)
+    for a, z0, z1 in stringer_bars():
+        near = np.abs((angle - a + 180.0) % 360.0 - 180.0) < 4.0
+        out |= near & (p[:, 2] >= z0) & (p[:, 2] <= z1)
+    return out.astype(float)
+
+
+BAR_HULL_HALF_M = 12.0  # each bar's dark band on the hull beside its stringer, half across
+
+
+def bar_band(p: np.ndarray, n: np.ndarray) -> np.ndarray:
+    """The dark band each lit bar lays on the green zone's hull either side of its stringer, so the bars read from afar."""
+    angle = np.arctan2(p[:, 1], p[:, 0])
+    r = np.hypot(p[:, 0], p[:, 1])
+    out = np.zeros(len(p), dtype=bool)
+    for a, z0, z1 in stringer_bars():
+        arc = np.abs((angle - math.radians(a) + math.pi) % (2.0 * math.pi) - math.pi) * r
+        out |= (arc < BAR_HULL_HALF_M) & (p[:, 2] >= z0) & (p[:, 2] <= z1)
+    return (out & (_radial(p, n) > 0.6)).astype(float)
 
 
 def _arm_local(p: np.ndarray, n: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -188,6 +359,11 @@ def _arm_half_width(z: np.ndarray) -> np.ndarray:
 
 
 ARM_TRIM_M = 9.0
+
+
+def arm_outside(p: np.ndarray, n: np.ndarray) -> np.ndarray:
+    """All of a Cobra arm: its own darker grey (the halls, strips and trim are painted over it)."""
+    return np.ones(len(p))
 
 
 def arm_trim(p: np.ndarray, n: np.ndarray) -> np.ndarray:
@@ -343,32 +519,23 @@ def vane_frame(p: np.ndarray, n: np.ndarray) -> np.ndarray:
     return ((np.abs(u) > half - VANE_FRAME_M) | (v > st.VANE_TIP_Y - st.VANE_NOTCH[1] - VANE_FRAME_M) | (v < 160.0)).astype(float)
 
 
-def vane_recesses(p: np.ndarray, n: np.ndarray) -> np.ndarray:
-    """The pattern of small dark rectangles over the blades' blue."""
-    u, v = _vane_local(p)
-    cu, cv = 26.0, 18.0
-    i, j = np.floor(u / cu).astype(np.int64), np.floor(v / cv).astype(np.int64)
-    side = np.full(len(p), 61, dtype=np.int64) + (p[:, 0] > 0).astype(np.int64)
-    pick = _hash01(i, j, side) < 0.45
-    fu, fv = np.mod(u, cu) - 0.5 * cu, np.mod(v, cv) - 0.5 * cv
-    w = 6.0 + 8.0 * _hash01(i, j, side + 5)
-    return (pick & (np.abs(fu) < 0.5 * w) & (np.abs(fv) < 4.0)).astype(float)
-
-
 def paint() -> dict[str, list[tuple[str, Cover]]]:
     """Each shape's base coats by name: (the colour's role, where it covers)."""
     return {
-        "sphere": [("drum_blue", checker(575.0, 935.0, 32, 52.0, 160.0))],
-        "fwd_body": [("drum_blue", checker(1340.0, 1680.0, 36, 56.0, 250.0))],
-        "fwd_band": [("drum_blue", band_blocks(1800.0, 2290.0, st.BAND_R, 12, 3, 26.0, 7.0, 71))],
-        "green": [("drum_blue", green_blocks(GREEN_JOINTS, st.GREEN_R, 20, 73))],
-        "aft_band": [("drum_blue", band_blocks(4840.0, 5400.0, st.BAND_R, 12, 3, 26.0, 7.0, 79))],
-        "arms": [("trim", arm_trim), ("recess", hall_dark), ("recess", door_strip), ("trim", door_frame_red), ("trim", clamp_caps), ("recess", cross_frame), ("trim", red_cross)],
+        "sphere": [("drum_blue", sphere_blue(160.0)), ("recess", collar_dark), ("drum_grey", collar_greebles)],
+        "fwd_body": [("drum_blue", narrow_blue(320.0, 61, NARROW_STRETCHES[:1]))],
+        "fwd_band": [("drum_blue", wide_band_blue(1800.0, 2290.0, st.BAND_R))],
+        "green": [("drum_blue", narrow_blue(st.GREEN_R, 73, NARROW_STRETCHES[1:])),
+                  ("drum_blue", middle_band_blue(st.GREEN_BAND[0], st.GREEN_BAND[1], st.GREEN_BAND[2])), ("recess", bar_band)],
+        "aft_band": [("drum_blue", wide_band_blue(4840.0, 5400.0, st.BAND_R))],
+        "stringers": [("recess", stringer_dark)],
+        "arms": [("arm_grey", arm_outside), ("trim", arm_trim), ("recess", hall_dark), ("recess", door_strip), ("trim", door_frame_red), ("trim", clamp_caps), ("recess", cross_frame), ("trim", red_cross)],
         "bow": [("spine_top", top_faces)],
         "spine": [("spine_top", top_faces)],
         "hub": [("spine_top", top_faces)],
         "fins": [("spine_top", top_faces)],
-        "vanes": [("vane_frame", vane_frame), ("vane_dark", vane_recesses)],
+        # The blades are plain blue in a grey frame: no dark marks (the maintainer, M7-T24: the show has none).
+        "vanes": [("vane_frame", vane_frame)],
     }
 
 
@@ -383,32 +550,68 @@ def paint_markings(part: str, shift: np.ndarray) -> tuple[Marking, ...]:
 # --- windows (Q10) ---------------------------------------------------------------------------------------------------
 WINDOW = (7.0, 3.5)  # round, along
 WINDOW_PITCH = (14.0, 9.0)
-WINDOW_ROWS: dict[str, tuple[tuple[float, float], ...]] = {  # part: (centre along the axis, row height) of each ring of windows
-    "sphere": ((660.0, 9.0), (735.0, 9.0), (860.0, 9.0)),
-    "fwd_body": ((1440.0, 9.0), (1600.0, 9.0)),
-    "fwd_band": ((1860.0, 18.0), (2045.0, 18.0), (2230.0, 18.0)),
-    "green": tuple((z, 9.0) for z in every(2420.0, 4700.0, 380.0)),
-    "aft_band": ((4900.0, 18.0), (5120.0, 18.0), (5340.0, 18.0)),
-}
+WINDOW_ROWS: dict[str, tuple[tuple[float, float], ...]] = {}  # part: (centre along the axis, row height) of each ring of windows
+# The sphere's windows (M7-T24, the from-below reference): one broken ring of dark panels just aft of the grey collar, each long round
+# the girth and densely studded with small lights in two rows; between them, unlit tech strips run aft along the meridians.
+COLLAR_RING = (16, 594.0)  # panels round, z of their middles (just aft of the collar's edge)
+COLLAR_PANEL = (44.0, 9.0)  # a panel's length round the girth, its width
+COLLAR_LIGHT = ((0.8, 0.8), (2.6, 2.6), 5.2)  # a light, its pitch (round, across) and the rows' band: two rows of small points
+COLLAR_STRENGTH = 0.8  # of the bars' glow: many small points, not a lit strip
+STRIP_W_M = 6.0
+STRIP_LEN_Z = 110.0  # how far aft a tech strip runs from the collar
+GREEBLE_PITCH_M = 8.0
+# The main body has no window rings (M7-T24): its lights run along the axis, one regular row down each stringer's bar, and the wide
+# bands' blue carries short rows of dark windows. Nothing is scattered at random (the maintainer: it read as polka dots).
+POINT_GLOW = 0xF4F6FF
+BODY_SPANS = {"sphere": (575.0, 935.0), "fwd_body": (1350.0, 1688.0), "fwd_band": (1800.0, 2290.0), "green": (2352.0, 4778.0),
+              "aft_band": (4840.0, 5400.0)}
+BAND_DASHES = (24, 0.5, (6.0, 2.5), (10.0, 9.0), (4, 7), 0.0)  # places round, share used, a window, the pitch, windows a row, lit (dark)
+BAR_STRENGTH = 1.4
+
+
+def _lengthwise_windows(part: str, shift: np.ndarray, glow: tuple[float, float, float]) -> list[Marking]:
+    """The main body's lights along the axis: an unbroken, evenly spaced row down each stringer's bar, short rows of dark windows on
+    the wide bands' blue, and the sphere's ring of densely lit panels round its collar."""
+    out: list[Marking] = []
+    if part == "stringers":
+        r = st.STRINGER[2]
+        (lw, pitch) = BAR_LIGHT
+        for a, z0, z1 in stringer_bars():
+            c, s_ = math.cos(math.radians(a)), math.sin(math.radians(a))
+            centre = np.array([r * c, r * s_, 0.5 * (z0 + z1)]) - shift
+            out.append(Marking.windows(part, tuple(centre), (0.0, 0.0, 1.0), (-s_, c, 0.0), (c, s_, 0.0), (z1 - z0 - 6.0, BAR_ROW_M), pitch, lw,
+                                       lin(POINT_GLOW), BAR_STRENGTH * WINDOW_STRENGTH, lit=1.0))
+    if part in ("fwd_band", "aft_band"):
+        z0, z1 = BODY_SPANS[part]
+        places, used, window, pitch, (lo, hi), lit = BAND_DASHES
+        rim = BAND_RIM_SHARE * (z1 - z0)
+        for k in range(places):
+            h = _hash01(np.array([k]), np.array([len(part)]), np.array([211]))
+            if float(h[0]) >= used:
+                continue
+            a = 2.0 * math.pi * (k + 0.5) / places
+            count = lo + int(float(_hash01(np.array([k]), np.array([223]))[0]) * (hi - lo + 1))
+            length = count * pitch[0]
+            zc = z0 + rim + 30.0 + 0.5 * length + float(_hash01(np.array([k]), np.array([227]))[0]) * max(z1 - z0 - 2.0 * rim - 60.0 - length, 0.0)
+            c, s_ = math.cos(a), math.sin(a)
+            centre = np.array([st.BAND_R * c, st.BAND_R * s_, zc]) - shift
+            out.append(Marking.windows(part, tuple(centre), (0.0, 0.0, 1.0), (-s_, c, 0.0), (c, s_, 0.0), (length, 3.0), pitch, window,
+                                       glow, WINDOW_STRENGTH, lit=lit))
+    if part == "sphere":
+        light, pitch, band = COLLAR_LIGHT
+        for centre, girth, along, normal in collar_panels():
+            out.append(Marking.windows(part, tuple(centre - shift), tuple(girth), tuple(along), tuple(normal), (COLLAR_PANEL[0] - 3.0, band),
+                                       pitch, light, lin(POINT_GLOW), COLLAR_STRENGTH * BAR_STRENGTH * WINDOW_STRENGTH, lit=1.0))
+    return out
 
 
 def window_markings(part: str, shift: np.ndarray) -> tuple[Marking, ...]:
-    """The shape's lit windows, in its piece's frame (the doors' numbers are on their leaves, near-field props)."""
+    """The shape's lit windows, in its piece's frame (the doors' numbers are on their leaves, near-field props). The spine and the
+    command section have none: grey metal (the maintainer, M7-T24)."""
     glow = lin(WINDOW_GLOW)
     out = [Marking.window_rings(part, tuple(-shift), (0.0, 0.0, 1.0), z, h, WINDOW_PITCH, WINDOW, glow, WINDOW_STRENGTH, lit=0.55)
            for z, h in WINDOW_ROWS.get(part, ())]
-    if part == "spine":  # the command section's windows: on both sloped flanks of its beam and along the body's sides before it
-        from . import station_spine as ssp  # noqa: PLC0415
-
-        (xt, yt), (xe, ye) = (ssp.BEAM_TOP_X, ssp.BEAM_TOP), ssp.BEAM_EDGE
-        for sx in (-1.0, 1.0):
-            centre = np.array([sx * 0.5 * (xt + xe), 0.5 * (yt + ye), 1140.0]) - shift
-            up, facing = (sx * (xt - xe), yt - ye, 0.0), (sx * (yt - ye), xe - xt, 0.0)
-            out.append(Marking.windows(part, tuple(centre), (0.0, 0.0, 1.0), up, facing, (280.0, 80.0), (11.0, 9.0), (6.0, 3.0), glow,
-                                       WINDOW_STRENGTH, lit=0.6))
-            centre = np.array([sx * 97.0, 382.0, 790.0]) - shift
-            out.append(Marking.windows(part, tuple(centre), (0.0, 0.0, 1.0), (0.0, 1.0, 0.0), (sx, 0.0, 0.0), (180.0, 20.0),
-                                       (11.0, 9.0), (6.0, 3.0), glow, WINDOW_STRENGTH, lit=0.6))
+    out += _lengthwise_windows(part, shift, glow)
     return tuple(out)
 
 

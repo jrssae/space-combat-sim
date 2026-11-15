@@ -785,6 +785,13 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
     occ = _occlusion(atlas, seed) if occlusion else np.ones((size, size))
     orm = np.zeros((size, size, 3))
     orm[..., 0] = np.where(filled, occ, 1.0)
+    planar = dict(style.extra).get("planar_detail")
+    if planar and not occlusion:
+        # Texels whose detail tile is laid flat in their own facet (M7-T24, the station hull shader): the slanted facets of the named
+        # parts, marked in the occlusion channel, which a hull baked without occlusion does not use.
+        wanted = np.isin(part, [names.index(p) for p in planar["parts"] if p in names])
+        slanted = np.abs(nrm).max(axis=1) < float(planar["max_axis"])
+        orm[idx[0][wanted & slanted], idx[1][wanted & slanted], 0] = 0.0
     orm_rough = np.full((size, size), 0.7)
     orm_rough[idx] = np.clip(roughness, 0.02, 1.0)
     orm[..., 1] = orm_rough
