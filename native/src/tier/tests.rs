@@ -71,3 +71,63 @@ fn the_speed_ceiling_reads_the_speed_against_the_rest() {
     let against = sub(fast.velocities[0], slow.velocity);
     assert!((f64::from(length(against)) - 100.0).abs() < 1e-3, "cut to the ceiling on top of the rest");
 }
+
+// M7-T26: a row with a far hull keeps it until its radius is under the dot size on screen, then is a dot; back a tenth inside.
+fn hulled(radius: f64, distance: f32) -> TierRows {
+    let mut t = TierRows::default();
+    t.add(KIND_FIGHTER, 7, 0, -7, 0, Vector3::new(0.0, 0.0, -distance), Vector3::ZERO, Basis::IDENTITY, Vector3::ZERO, 0);
+    t.radii[0] = radius;
+    t.proxy[0] = 0;
+    t
+}
+
+fn hull_count(t: &TierRows) -> usize {
+    let mut out = Vec::new();
+    fill_hulls(t, 0, Vector3::ZERO, &mut out)
+}
+
+#[test]
+fn a_far_hull_turns_into_a_dot_by_its_size_on_screen_not_its_distance() {
+    // 352 px per radian over a 2 px dot: a 70 m freighter is a dot past 24.6 km, a 10 m fighter past 3.5 km.
+    let m_per_m = 704.0 / 2.0;
+    let mut freighter = hulled(70.0, 20_000.0);
+    let mut fighter = hulled(10.0, 20_000.0);
+    update_view(&mut freighter, Vector3::ZERO, m_per_m);
+    update_view(&mut fighter, Vector3::ZERO, m_per_m);
+    assert_eq!((hull_count(&freighter), dot_count(&freighter)), (1, 0), "the freighter is still a hull at 20 km");
+    assert_eq!((hull_count(&fighter), dot_count(&fighter)), (0, 1), "the fighter is a dot at 20 km");
+    freighter.positions[0] = Vector3::new(0.0, 0.0, -25_000.0);
+    update_view(&mut freighter, Vector3::ZERO, m_per_m);
+    assert_eq!((hull_count(&freighter), dot_count(&freighter)), (0, 1), "a dot once under the size");
+    let mut buf = vec![0.0; DOT_STRIDE];
+    assert_eq!(fill_dots(&freighter, Vector3::ZERO, &mut buf, 0), 1);
+}
+
+#[test]
+fn a_dotted_row_shows_its_hull_again_a_tenth_inside_and_repeating_the_view_changes_nothing() {
+    let m_per_m = 352.0;
+    let mut t = hulled(70.0, 25_000.0);
+    update_view(&mut t, Vector3::ZERO, m_per_m);
+    assert!(t.dotted[0]);
+    t.positions[0] = Vector3::new(0.0, 0.0, -23_000.0);
+    update_view(&mut t, Vector3::ZERO, m_per_m);
+    update_view(&mut t, Vector3::ZERO, m_per_m);
+    assert!(t.dotted[0], "still a dot inside the line until a tenth in");
+    t.positions[0] = Vector3::new(0.0, 0.0, -22_000.0);
+    update_view(&mut t, Vector3::ZERO, m_per_m);
+    assert!(!t.dotted[0], "its hull again 10 % inside");
+    update_view(&mut t, Vector3::ZERO, m_per_m);
+    assert!(!t.dotted[0], "the same view twice decides the same");
+}
+
+#[test]
+fn a_row_with_no_far_hull_is_always_a_dot_and_no_view_keeps_every_hull() {
+    let mut t = hulled(70.0, 1.0e6);
+    update_view(&mut t, Vector3::ZERO, 0.0);
+    assert_eq!((hull_count(&t), dot_count(&t)), (1, 0), "no view set: the hull is kept");
+    t.proxy[0] = -1;
+    update_view(&mut t, Vector3::ZERO, 352.0);
+    assert_eq!((hull_count(&t), dot_count(&t)), (0, 1));
+    t.remove(7);
+    assert!(t.dotted.is_empty(), "the column follows the rows");
+}

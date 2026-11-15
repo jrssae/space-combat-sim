@@ -42,9 +42,9 @@ extends RigidBody3D
 ## GDScript (`set_flight_command`) takes the ship back; a ship on its own model reads the row's command into `_flight`.
 ##
 ## AI ships are built lean (M4-T11, architecture §17.10, `lean`): no cockpit interior and no cockpit anchor, their collision shapes as
-## shape owners of the body instead of a node each, and their plumes and markers as one multimesh each. Past
-## `settings.far_ship_dot_m` from the camera an AI ship is a far dot (`set_far_dot`): its hull, plumes, markers and guns are hidden and
-## the world's `FarDots` draws it. The player's ship is built as before.
+## shape owners of the body instead of a node each, and their plumes and markers as one multimesh each. Once its bounding radius is
+## under `settings.far_ship_dot_px` on screen an AI ship is a far dot (`set_far_dot`, M7-T26): its hull, plumes, markers and guns are
+## hidden and the world's `FarDots` draws it. The player's ship is built as before.
 ##
 ## Rebase-safe: nothing here caches a World position between ticks. Console (§6.4, §15.1 D27): only the player's ship
 ## registers (`console_owner`, set before the ship enters the tree, `ShipAssembly` does it): provider `ship` and commands

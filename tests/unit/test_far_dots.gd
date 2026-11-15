@@ -1,6 +1,6 @@
 extends GutTest
-## Far-ship dots (M4-T11, architecture §17.10): past `settings.far_ship_dot_m` from the camera an AI ship draws no hull, plume or
-## marker, only a point in the world's one `FarDots` multimesh; back inside it shows its hull again. The dot follows the ship every
+## Far-ship dots (M4-T11, architecture §17.10): once its bounding radius is under `settings.far_ship_dot_px` on screen (M7-T26) an AI
+## ship draws no hull, plume or marker, only a point in the world's one `FarDots` multimesh; back inside it shows its hull again. The dot follows the ship every
 ## frame and a rebase at once; a parked ship leaves none; the player's ship is never a dot; the `render.far_dots` count follows.
 
 var world: WorldFrame
@@ -8,14 +8,16 @@ var projectiles: Node3D
 var pool: ShipPool
 var camera: Camera3D
 var _size_backup: Vector2i = Vector2i.ZERO
-var _far_backup: Variant = null
+var _px_backup: Variant = null
+# The raider's dot distance for this camera, m: set by the first `_acquire_far`.
+var _raider_far_m: float = 0.0
 
 
 func before_each() -> void:
 	# Headless windows are 64 x 64 px; the dots are about a real screen.
 	_size_backup = get_tree().root.size
 	get_tree().root.size = Vector2i(1920, 1080)
-	_far_backup = Settings.get_value(&"far_ship_dot_m")
+	_px_backup = Settings.get_value(&"far_ship_dot_px")
 	world = WorldFrame.new()
 	world.name = "World"
 	add_child_autofree(world)
@@ -37,11 +39,20 @@ func before_each() -> void:
 
 func after_each() -> void:
 	get_tree().root.size = _size_backup
-	Settings.set_value(&"far_ship_dot_m", _far_backup)
+	Settings.set_value(&"far_ship_dot_px", _px_backup)
 
 
+# Where a raider turns into a dot for this camera.
 func _far_m() -> float:
-	return float(Settings.get_value(&"far_ship_dot_m"))
+	return _raider_far_m
+
+
+# A raider `extra` metres past its dot distance, `side` metres off the line of sight.
+func _acquire_far(extra: float, side: float = 0.0) -> Combatant:
+	var made: Combatant = _acquire(Vector3(side, 0.0, -100.0))
+	_raider_far_m = made.ship.bounding_radius() * LodSwitcher.dot_scale(camera)
+	_move(made.ship, Vector3(side, 0.0, -(_raider_far_m + extra)))
+	return made
 
 
 func _acquire(at: Vector3) -> Combatant:
@@ -68,7 +79,7 @@ func _move(ship: Ship, at: Vector3) -> void:
 
 
 func test_a_ship_past_the_dot_distance_shows_no_hull_and_one_dot() -> void:
-	var raider: Combatant = _acquire(Vector3(0.0, 0.0, -(_far_m() + 500.0)))
+	var raider: Combatant = _acquire_far(500.0)
 	await _frames()
 	assert_true(raider.ship.is_far_dot())
 	assert_false(raider.ship.hull.is_visible_in_tree(), "no hull")
@@ -81,7 +92,7 @@ func test_a_ship_past_the_dot_distance_shows_no_hull_and_one_dot() -> void:
 
 
 func test_back_inside_it_shows_its_hull_and_the_dot_goes() -> void:
-	var raider: Combatant = _acquire(Vector3(0.0, 0.0, -(_far_m() + 500.0)))
+	var raider: Combatant = _acquire_far(500.0)
 	await _frames()
 	assert_eq(_dots().dot_count(), 1)
 	_move(raider.ship, Vector3(0.0, 0.0, -1000.0))
@@ -92,7 +103,7 @@ func test_back_inside_it_shows_its_hull_and_the_dot_goes() -> void:
 
 
 func test_the_dot_holds_until_the_ship_is_a_tenth_inside() -> void:
-	var raider: Combatant = _acquire(Vector3(0.0, 0.0, -(_far_m() + 500.0)))
+	var raider: Combatant = _acquire_far(500.0)
 	await _frames()
 	_move(raider.ship, Vector3(0.0, 0.0, -0.95 * _far_m()))
 	await _frames()
@@ -106,7 +117,7 @@ func test_the_dot_holds_until_the_ship_is_a_tenth_inside() -> void:
 
 
 func test_the_dot_tracks_the_ship_each_frame() -> void:
-	var raider: Combatant = _acquire(Vector3(0.0, 0.0, -(_far_m() + 500.0)))
+	var raider: Combatant = _acquire_far(500.0)
 	await _frames()
 	for step: int in 3:
 		var at := Vector3(100.0 * step, 50.0, -(_far_m() + 800.0 + 200.0 * step))
@@ -117,7 +128,7 @@ func test_the_dot_tracks_the_ship_each_frame() -> void:
 
 
 func test_the_rebase_shifts_the_dots_at_once() -> void:
-	var raider: Combatant = _acquire(Vector3(0.0, 0.0, -(_far_m() + 500.0)))
+	var raider: Combatant = _acquire_far(500.0)
 	await _frames()
 	var before: Vector3 = _dots().dot_position(0)
 	world.rebase(Vector3(1000.0, 0.0, 0.0))
@@ -126,7 +137,7 @@ func test_the_rebase_shifts_the_dots_at_once() -> void:
 
 
 func test_a_parked_ship_leaves_no_dot() -> void:
-	var raider: Combatant = _acquire(Vector3(0.0, 0.0, -(_far_m() + 500.0)))
+	var raider: Combatant = _acquire_far(500.0)
 	await _frames()
 	assert_eq(_dots().dot_count(), 1)
 	pool.release(raider)
@@ -135,8 +146,8 @@ func test_a_parked_ship_leaves_no_dot() -> void:
 
 
 func test_two_far_ships_are_two_dots_in_one_multimesh() -> void:
-	_acquire(Vector3(0.0, 0.0, -(_far_m() + 500.0)))
-	_acquire(Vector3(300.0, 0.0, -(_far_m() + 900.0)))
+	_acquire_far(500.0)
+	_acquire_far(900.0, 300.0)
 	await _frames()
 	assert_eq(_dots().dot_count(), 2)
 	assert_eq(_dots().multimesh.visible_instance_count, 2)
@@ -151,23 +162,24 @@ func test_the_players_ship_is_never_a_dot() -> void:
 		ShipAssembly.OPT_FACTION: Factions.EARTH_ALLIANCE,
 		ShipAssembly.OPT_CONSOLE_OWNER: true,
 	})
-	world.spawn(player.ship, world.to_universe(Vector3(0.0, 0.0, -(_far_m() + 2000.0))))
+	world.spawn(player.ship, world.to_universe(Vector3(0.0, 0.0, -1000.0)))
+	_move(player.ship, Vector3(0.0, 0.0, -10.0 * player.ship.bounding_radius() * LodSwitcher.dot_scale(camera)))
 	await _frames()
 	assert_false(player.ship.is_far_dot())
 	assert_true(player.ship.hull.is_visible_in_tree(), "drawn in full")
 
 
 func test_the_setting_moves_the_distance() -> void:
-	var raider: Combatant = _acquire(Vector3(0.0, 0.0, -(_far_m() + 500.0)))
+	var raider: Combatant = _acquire_far(500.0)
 	await _frames()
 	assert_true(raider.ship.is_far_dot())
-	Settings.set_value(&"far_ship_dot_m", _far_m() + 5000.0)
+	Settings.set_value(&"far_ship_dot_px", float(Settings.get_value(&"far_ship_dot_px")) * 0.5)
 	await _frames()
-	assert_false(raider.ship.is_far_dot(), "inside the new distance")
+	assert_false(raider.ship.is_far_dot(), "a smaller dot size: twice as far out before it turns")
 
 
 func test_the_dots_are_a_plain_multimesh_and_are_counted() -> void:
-	_acquire(Vector3(0.0, 0.0, -(_far_m() + 500.0)))
+	_acquire_far(500.0)
 	await _frames()
 	assert_true(_dots() is MultiMeshInstance3D, "a plain multimesh, not a viewport")
 	assert_eq(LodSwitcher.far_dot_count(), 1, "render.far_dots counts it")

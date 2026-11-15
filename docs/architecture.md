@@ -797,7 +797,7 @@ ring buffer; engine errors in red and warnings in yellow from `ConsoleLogger`.
 | Cockpit interior (V struts, bar, sills, lamps, the console around its screens, a closed shell; M3-T29) | Mesh (`cockpit_interior.obj`), with 2D-only `SubViewport`s on screen meshes the hardpoints place (`CockpitScreens`, §15.9) | Hard edges at the near plane; visible only in first person. From inside, the `Hull` node draws the hull's OBJ with its canopy glass and window frames cleared, the view the cockpit was built around. |
 | Thruster plumes, buoy beacons | Meshes, unshaded emissive, additive, animated per frame. A plume is a cone from the nozzle position along its `exhaust` axis (length, radius, alpha follow the level) plus a small core disc at the exit; no billboards | Per-frame intensity animation. Tied to the nozzle axis, so the plume reads as coming out of the nozzle from every camera. |
 | Projectiles, muzzle flash | Meshes, unshaded emissive | Tiny, fast-moving, short-lived. |
-| Far AI ships | One point each in the world's `FarDots` multimesh past `settings.far_ship_dot_m` (§17.10) | Every far ship together is one draw call. |
+| Far AI ships | Their mesh (the importer's levels of detail) until a few pixels across, then one point each in the world's `FarDots` multimesh under `settings.far_ship_dot_px` (§14.4, §17.10, M7-T26) | Every far ship together is one draw call. |
 | Target bracket | 2D `Control` in the debug overlay | Screen-space UI. |
 | Collision | `CollisionShape3D` primitives from hardpoints JSON | A handful of boxes and capsules, never the render mesh. |
 
@@ -1371,9 +1371,15 @@ Decisions (M4-T31: the hulls are textured meshes, §7):
 - Every hull mesh gets its levels of detail from Godot's scene importer (the manifest's `mesh.lods` stays empty; M4-T30d measured
   that a generated far level has nothing to win at the 500 battle). The importer's levels switch by screen size inside the renderer,
   with no node of ours.
-- Past `settings.far_ship_dot_m` (3 km) an AI ship is a **far dot** (§17.10): its hull, plumes and markers hidden and one point in
-  the world's `FarDots` multimesh drawn instead, sized by its angular size with a 1-px floor, so ships stay visible as dots (the
-  user's model blurring). A `LodSwitcher` per ship decides with hysteresis (back a tenth inside).
+- An AI ship keeps its mesh until it is **a few pixels across** (M7-T26): the importer's levels of detail, picked by the renderer
+  so their error stays under a pixel, thin it out as it shrinks (a Saturn 3's 41 902 triangles fall to 834, a Starfury's 34 352 to
+  1 650), so its shape holds all the way. Once its bounding radius covers fewer than `settings.far_ship_dot_px` (2 px) it is a
+  **far dot** (§17.10): its hull, plumes and markers hidden and one point in the world's `FarDots` multimesh drawn instead, sized
+  by its angular size with a 1-px floor (the user's model blurring). The switch is by size on screen, not distance: at 1 080 lines
+  and 75 degrees a Starfury turns at 3.5 km, a Narn transport at 15 km, a Saturn 3 at 25 km and a Saturn 8 at 49 km, farther on a
+  taller window. A `LodSwitcher` per ship decides with hysteresis (back a tenth inside). Before T26 the switch was a fixed 3 km,
+  so a freighter turned into a dot 20 px across: the grey sphere the maintainer saw. A tier row (§17.14) follows the same rule: its
+  far hull (`FarHulls`) until a few pixels across, then a far dot.
 - Objects beyond the near field need not be resident at all, only their far representation; paging them in and out is later
   (the low-attention tier, §17.14, is the first step).
 - **Scaled space** for the sun, Epsilon III, moons and anything beyond ~50 km: **as built (M6-T10, D68, §19.8)** not a separate
@@ -2408,7 +2414,7 @@ src/ship/thruster_visuals.gd     `instanced`: every plume of a ship is an instan
 src/ship/running_lights.gd       `instanced`: the three markers are instances of one multimesh (the colour in the custom data)
 src/ship/hull_depth_proxy.gd     (removed with the splats, T31) the proxy draws the fallback mesh merged into one surface; on a lean ship it also draws the
                                  fallback mesh itself
-src/rendering/lod_switcher.gd    the far level: past settings.far_ship_dot_m from the camera an AI ship is a dot
+src/rendering/lod_switcher.gd    the far level: under settings.far_ship_dot_px on screen an AI ship is a dot (M7-T26)
 src/rendering/far_dots.gd        FarDots: one MultiMeshInstance3D under World, a point per far ship, updated each frame
 assets/shaders/far_ship_dot.gdshader   the dot: the hull's angular size with a 1 px floor, dimmed by the inverse square under it
 ```
@@ -2432,8 +2438,8 @@ assets/shaders/far_ship_dot.gdshader   the dot: the hull's angular size with a 1
   `transparency`). The markers share the quad and the shader of §7.3, the colour read from the instance's custom data
   (`use_instance_tint`). So a near AI ship draws three surfaces; measured on the GPU, 20 idle raiders in view add 45 draw calls
   (the probe counted 2.25 a ship, but it does not count the markers' multimesh, so the real figure is higher; with splats a near AI ship measured about 5 draw calls), against about 15 a ship before. The plan's target of under 3 was not met: each visible splat node adds about 2 calls (T27 looks at it).
-- **Far dots** (§14.4's last level). Each frame the `LodSwitcher` measures the camera's distance; past
-  `settings.far_ship_dot_m` (3 000 m) an AI ship is a dot: `Ship.set_far_dot` hides its splat levels, proxy, plumes, markers
+- **Far dots** (§14.4's last level). Each frame the `LodSwitcher` measures the ship's size on screen; once its bounding radius
+  is under `settings.far_ship_dot_px` (2 px; a fixed 3 000 m before M7-T26) an AI ship is a dot: `Ship.set_far_dot` hides its splat levels, proxy, plumes, markers
   and guns, and `FarDots` (one `MultiMeshInstance3D` under `World`, never culled) draws it as one instance, so every
   far ship together is one draw call. It shows its level again at 90 % of the distance (`LodSwitcherMath.far_dot`), never
   flapping on the line. The dot is the hull's opacity-weighted mean paint from its coarsest level's splats, lit as §7.3's
@@ -2446,7 +2452,7 @@ assets/shaders/far_ship_dot.gdshader   the dot: the hull's angular size with a 1
 - **What it does not change.** Ships, physics, contacts and the gameplay components are the same; the player's ship keeps
   every node. The plumes' lights stay emitters on the plume positions (the ship's `ThrusterVisuals` is their anchor), and a
   hidden instanced ship's lights go dark. The look of the plumes, markers and dots is the maintainer's (H).
-- **Console**: the `lod` provider's `far_dots` counts the ships drawn as dots; setting `far_ship_dot_m`.
+- **Console**: the `lod` provider's `far_dots` counts the ships drawn as dots; setting `far_ship_dot_px` (M7-T26; was `far_ship_dot_m`).
 
 ### 17.11 Missile, beam, interceptor and mine stand-ins (T12)
 
@@ -3455,15 +3461,19 @@ native/src/sim_core.rs           radar_contacts (the radar's contacts from the r
 native/src/radar_kernel.rs       the radar sphere's plot (RadarModel.plot's maths), engine-free; radar_plot.rs is its shell
                                  (ScsRadarPlot)
 native/src/weapon_kernels.rs     a mine's trigger and blast over the sweep's rows, tier rows among them (mine_can_hurt)
-src/rendering/far_dots.gd        FarDots: the tier fighters as a second source in the same buffer
-src/rendering/far_hulls.gd       FarHulls: the tier capitals, one MultiMesh per mesh their bodies draw
+src/rendering/far_dots.gd        FarDots: the tier rows a few pixels across as a second source in the same buffer
+src/rendering/far_hulls.gd       FarHulls: the tier rows' hulls, one MultiMesh per mesh their bodies draw
 src/rendering/far_flashes.gd     FarFlashes: far deaths as point flashes in one MultiMesh (far_flash.gdshader)
 src/combat/explosion_lod.gd      ExplosionLod: the level from the distance and the hull's size; the flash's maths
 src/targeting/tier_targets.gd    TierTargets: tier ships as targets, by marker id, from their rows
 ```
 
-- **Drawn.** At demotion the director gives a fighter's row its hull's paint (`FarDots.asset_paint`) and a capital's row the
-  class of the mesh its body draws (`FarHulls.class_of(CapitalStandin.drawn_mesh())`; the box look shares one mesh per class).
+- **Drawn.** At demotion the director gives a row the class of the mesh its body draws (`FarHulls.class_of`: a ship's textured
+  hull, a capital's `CapitalStandin.drawn_mesh()`; the box look shares one mesh per class) and its paint (`FarDots.asset_paint`).
+  Since M7-T26 each frame `FarDots.view_rows` tells the core the camera (`tier_set_view`), and a row whose radius covers fewer than
+  `settings.far_ship_dot_px` is a dot instead of its hull (back a tenth inside, a visual-only column `dotted`): a fighter beyond
+  the tier radius is a dot, a freighter keeps its shape. Each class's bounds follow its instances, so the importer's levels work
+  on the far hulls too.
   Each frame `FarDots` writes its near ships' dots and then asks the core to write the tier dots after them into the same
   buffer (one draw call), and `FarHulls` asks the core for each class's transforms. A promotion takes the row and shows the body
   in the same tick, and a demotion parks the body and adds the row in the same tick, so a ship is drawn by one of the two in
@@ -3933,7 +3943,7 @@ flashes 0.45, the hit flashes 0.15). Each subsystem is now one pass over its shi
   frame's levels. It walks four lists: the plumes of ships in play and shown (`ThrusterVisuals.frame_update`; an instanced ship leaves the list while
   hidden, and once every level is within `SETTLE_LEVEL` of its target the levels are set to the targets and the plumes are left
   alone until the flight output changes), the muzzle flashes that are showing (`trigger` adds one, it leaves when idle), the hit
-  flashes that are showing, and every `LodSwitcher` with the camera and `far_ship_dot_m` read once (`decide`). A node takes part
+  flashes that are showing, and every `LodSwitcher` with the camera and the view's scale read once (`decide`). A node takes part
   only while `can_process()`, as its own `_process` did. No node of a lean ship processes each frame (`test_frame_passes`).
   Console provider `frame` (`plumes_us`, `flashes_us`, `impacts_us`, `lod_us` and the lists' sizes).
 - **Hit flashes** (`ImpactFlash`): one `MeshInstance3D` per hit, the flash quad (the 6 to 10 mesh sparks are gone; the `FxPool` hit

@@ -279,7 +279,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T23 | D | The jumpgate and jump points refined from the maintainer's GIF: gate opening, the blue vortex, a ship's jump point (maintainer, 2026-11-13) | - | Opus | Shader and asset look against a show reference; (H) | done |
 | T24 | A | The station's surfaces refined for fullscreen, in both texture-detail sets (low and high): resolution, detail, colour and material, no visible tiling (maintainer, 2026-11-13) | T22 | Opus | A look task on an 8 km hull at 6K within a VRAM budget; (H) | done |
 | T25 | A | The main docking bay rebuilt: shape and proportions from the STL (its section exemption lifted, IoU >= 0.90), the look from the show captures (maintainer, 2026-11-14) | T05, the flicker and light-leak fix | Opus | The bay reads wrong against the show in shape, mouth detail, tunnel and light; (H) | done |
-| T26 | B | All ships keep a low-polygon model at range instead of turning into a grey sphere; a dot only when a few pixels across (maintainer, 2026-11-14) | - | Opus | A Saturn 3 and a Narn transport became grey spheres while still clearly visible | in progress |
+| T26 | B | All ships keep a low-polygon model at range instead of turning into a grey sphere; a dot only when a few pixels across (maintainer, 2026-11-14) | - | Opus | A Saturn 3 and a Narn transport became grey spheres while still clearly visible | done |
 | T27 | C | Navigation targets and a hold-X interaction: the main docking bay, cargo bay and jumpgate as navigation targets; hold X for 2 s with a progress bar to act on them (maintainer, 2026-11-14) | T10 | Opus | A new input mechanic over targeting, HUD and the gate jump | in progress |
 | T28 | D | Fix: entering the jumpgate a second time opens the vortex twice and the camera stops tracking the ship (maintainer, 2026-11-14) | - | Fable | A state bug in M6's gate jump | done |
 | T29 | D | Fix: a civilian attacked in free flight does not flee (no change of speed or heading) (maintainer, 2026-11-14) | T10 | Fable | AI regression or a free-flight wiring gap | done |
@@ -1568,6 +1568,54 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   Within the battle budget (M4's 1 000-ship bench, M6's battle test).
 - **Agent:** Opus. **Done when:** a strip of a Saturn 3 and a Starfury from 500 m to 50 km showing the shape held, then a dot; the
   bench inside budget; tests (switch by screen size); the maintainer has seen it (H).
+- **Done (2026-11-14, accepted live by the maintainer flying the station showcase: "t26 appears to be correct and approved"):**
+  - **The grey sphere:** M4's far dot. `LodSwitcher` turned every AI ship into a `FarDots` point at a fixed 3 km
+    (`far_ship_dot_m`), and the dot is drawn at the hull's true angular size: a 70 m Saturn 3 at 3 km is a soft grey disc 35 px
+    across on 1 080 lines, a Narn transport 20 px. Tier rows (beyond 10 km) other than capitals were dots too.
+  - **Approach:** the importer's levels of detail (already on every hull, `generate_lods`), not a generated chain: the renderer
+    picks them by size on screen with under a pixel of error, so the shape holds by construction, and they cost no asset, no
+    VRAM and no node (M4-T30d measured a generated far level had nothing to win). What changed is when the mesh gives way to
+    the dot: by size on screen, `settings.far_ship_dot_px` (2 px of bounding radius, about 3 px across the hull; replaces
+    `far_ship_dot_m`), with M4's tenth of hysteresis. `LodSwitcherMath.dot_distance_m`, `LodSwitcher.dot_scale` (the view's
+    pixels per radian, `FarProp.k_of`).
+  - **Tier rows:** a demoted ship's row now carries its hull's far class (`FarHulls`) and its paint; the core decides each frame
+    which rows are a few pixels across (`tier_set_view`, a visual-only `dotted` column with the same hysteresis) and draws those
+    as dots, the rest as hulls. Each far-hull class's bounds follow its instances, so the importer's levels work there too (a
+    world-sized box held every far hull at full detail). Capitals follow the same rule (a carrier never gets that small).
+  - **Switch distances** at 1 080 lines and 75 degrees (farther on a taller window; 2400x1350 on the maintainer's Wayland
+    desktop is 1.25 times these):
+
+    | hull | radius m | dot past | triangles, full to coarsest level |
+    |---|---|---|---|
+    | Starfury | 9.9 | 3.5 km | 34 352, 17 176, 8 588, 4 294, 1 650 |
+    | raider | 8.8 | 3.1 km | 10 540, 7 086 |
+    | Saturn 3 | 70 | 25 km | 41 902, 20 950, 10 474, 5 088, 834 |
+    | Saturn 4 transport / tanker | 96 / 85 | 34 / 30 km | 45 586 to 224 / 44 082 to 332 |
+    | Saturn 8 transport / tanker | 140 / 133 | 49 / 47 km | 55 382 to 192 / 52 890 to 98 |
+    | Narn transport | 43 | 15 km | 5 692, 2 846, 990 |
+    | Brezebel / Bok'Mai / Skylark | 38 / 46 / 37 | 13 / 16 / 13 km | 16 810 to 314 / 9 284 to 226 / 26 052 to 1 000 |
+
+    Budget per hull: at most 8 000 triangles at the coarsest level, under 70 % of the full mesh (tested). The raider is the
+    weak one (7 086, 67 %): its thin open panels leave the importer little to fold; it was drawn that way to 3 km before, so
+    nothing got worse, and a generated far level for it is a follow-up if a bench ever shows it. The freighters' riding pods
+    follow their ship's dot (`FreighterCargo`); the 6 m cargo pod craft (M7-T33, T34) is not a ship and keeps its own 20 km
+    draw range.
+  - **GPU** (RX 6950 XT, RADV, Forward+, Wayland, window 2400x1350), before and after: the station's bow with traffic (two
+    freighters, two dockings, an undocking, eight raiders): 280 to 290 draw calls and 281 to 291, 512k to 532k triangles and
+    521k to 542k, 145 fps (the display's cap) and 1.0 to 1.4 ms GPU both. `bench battle 1000 10 seed=1` (measured window):
+    draw calls median 95 and 127, triangles 485k and 606k, GPU median 1.20 and 1.22 ms (p95 1.54 and 1.58), Godot's VRAM
+    787 MB both, sysfs `card1` peak 4.67 GB both. **Budget:** at `battle 1000` GPU median under 2 ms and p95 under 2.5 ms,
+    draw calls under 200, no VRAM growth: held.
+  - **Strip (H, approved):** `references/screenshots/M7-T26 ships at range/M7-T26_ships_at_range_strip.png`: the Saturn 3, the
+    Starfury and the Narn transport from 0.5 to 49 km, before and after, each tile cropped round the ship and enlarged. Before,
+    the Saturn and the Narn are grey blobs from 3.5 km; after, both hold their shape to 10 and 20 km, then a dot.
+  - **Tests:** `test_ship_lod_at_range` (new: every hull's levels and its budget, the same levels on every load, every AI hull
+    from 500 m to 50 km and back a mesh until under the dot size and never a dot bigger than it, a Saturn 3 and a Narn
+    transport meshes at 5 km where a Starfury is a dot, the switch following the window and the field of view);
+    `test_lod_switcher_math` (the dot distance); `test_far_dots`, `test_frame_passes`, `test_textured_hull` on the pixel rule;
+    `test_tier_proxies` (a tier freighter's hull at 15 km, a dot at 45 km, never both; the classes' bounds); Rust
+    `tier::tests` (3 new: by size not distance, the hysteresis and a repeated view, no hull class or no view).
+  - `sheet` parks a ship up to 50 km out (was 20 km) for the strips.
 
 ### M7-T27 Navigation targets and the hold-X interaction
 

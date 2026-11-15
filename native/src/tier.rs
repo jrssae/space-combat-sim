@@ -65,8 +65,10 @@ pub struct TierRows {
     pub accel: Vec<Vector3>,
     pub alpha: Vec<Vector3>,
     pub speed_limit: Vec<f64>,
-    /// What the row draws as (M4-T23): -1 a far dot, else the far hull class of its capital's mesh.
+    /// What the row draws as (M4-T23): -1 a far dot, else the far hull class of its mesh.
     pub proxy: Vec<i32>,
+    /// A row with a far hull that is a dot for now (M7-T26): only a few pixels across from the camera (`update_view`).
+    pub dotted: Vec<bool>,
     /// A far dot's paint, linear rgb.
     pub paint: Vec<[f32; 3]>,
     /// A capital's hull box (half extents in its own frame, fix round 1); zero for a fighter, held as a sphere.
@@ -135,6 +137,7 @@ impl TierRows {
         self.alpha.push(Vector3::ZERO);
         self.speed_limit.push(0.0);
         self.proxy.push(-1);
+        self.dotted.push(false);
         self.paint.push([0.5, 0.5, 0.5]);
         self.half_extents.push(Vector3::ZERO);
         self.by_body.insert(body_id, at);
@@ -173,6 +176,7 @@ impl TierRows {
         self.alpha.swap_remove(at);
         self.speed_limit.swap_remove(at);
         self.proxy.swap_remove(at);
+        self.dotted.swap_remove(at);
         self.paint.swap_remove(at);
         self.half_extents.swap_remove(at);
         if at != last {
@@ -582,9 +586,32 @@ const CLEAR_PASSES: usize = 8;
 // A hair past the exit, so 32-bit rounding never leaves the row just inside.
 const EXIT_SLACK_M: f64 = 0.01;
 
+/// A dot that turns back into its hull only this far inside its dot distance, so a row on the line never flaps
+/// (`LodSwitcherMath.FAR_RETURN`).
+pub const DOT_RETURN: f64 = 0.9;
+
+/// Whether row `i` is drawn as a far dot: it has no far hull, or it is too small on screen for one.
+fn is_dot(t: &TierRows, i: usize) -> bool {
+    t.proxy[i] < 0 || t.dotted[i]
+}
+
+/// Decides which rows with a far hull are dots for a camera at `eye` (the rows' frame), M7-T26: a row is a dot once its
+/// bounding radius covers fewer pixels than the dot size, so a big hull keeps its shape far longer than a fighter.
+/// `m_per_m` is the dot distance per metre of radius (pixels per radian over the dot size); 0 keeps every hull.
+pub fn update_view(t: &mut TierRows, eye: Vector3, m_per_m: f64) {
+    for i in 0..t.len() {
+        if t.proxy[i] < 0 {
+            continue;
+        }
+        let far_m = t.radii[i] * m_per_m;
+        let d = range(t.positions[i], eye);
+        t.dotted[i] = m_per_m > 0.0 && if t.dotted[i] { d >= far_m * DOT_RETURN } else { d > far_m };
+    }
+}
+
 /// Rows drawn as far dots.
 pub fn dot_count(t: &TierRows) -> usize {
-    t.proxy.iter().filter(|&&p| p < 0).count()
+    (0..t.len()).filter(|&i| is_dot(t, i)).count()
 }
 
 /// Writes every row drawn as a dot into `out` from instance `start` on: its position plus `offset` (the dots' node
@@ -592,7 +619,7 @@ pub fn dot_count(t: &TierRows) -> usize {
 pub fn fill_dots(t: &TierRows, offset: Vector3, out: &mut [f32], start: usize) -> usize {
     let mut n = 0;
     for i in 0..t.len() {
-        if t.proxy[i] >= 0 {
+        if !is_dot(t, i) {
             continue;
         }
         let b = (start + n) * DOT_STRIDE;
@@ -625,7 +652,7 @@ pub fn fill_dots(t: &TierRows, offset: Vector3, out: &mut [f32], start: usize) -
 pub fn fill_hulls(t: &TierRows, class: i32, offset: Vector3, out: &mut Vec<f32>) -> usize {
     let mut n = 0;
     for i in 0..t.len() {
-        if t.proxy[i] != class {
+        if t.proxy[i] != class || t.dotted[i] {
             continue;
         }
         let r = &t.bases[i].rows;

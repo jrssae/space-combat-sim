@@ -37,7 +37,6 @@ func before_each() -> void:
 
 func after_each() -> void:
 	Settings.set_value(&"ambient_level", 0.3)
-	Settings.set_value(&"far_ship_dot_m", 3000.0)
 
 
 func test_the_player_and_a_lean_ally_draw_the_textured_mesh() -> void:
@@ -55,9 +54,8 @@ func test_the_player_and_a_lean_ally_draw_the_textured_mesh() -> void:
 	assert_not_null(hull, "a lean ship draws through its one hull node")
 	assert_same(hull.mesh, textured)
 	assert_true(hull.visible)
-	# Far away it is a dot and the mesh is hidden.
-	Settings.set_value(&"far_ship_dot_m", 500.0)
-	camera.global_position = Vector3(0.0, 0.0, 5000.0)
+	# Far away (a fraction of a pixel across) it is a dot and the mesh is hidden.
+	camera.global_position = Vector3(0.0, 0.0, 49000.0)
 	(ally.ship.get_node(^"LodSwitcher") as LodSwitcher).update()
 	assert_true(ally.ship.is_far_dot())
 	assert_false(hull.visible)

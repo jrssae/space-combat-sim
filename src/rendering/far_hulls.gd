@@ -1,10 +1,12 @@
 class_name FarHulls
 extends Node3D
-## Capitals in the low-attention tier, drawn (M4-T23, architecture §17.14). A far capital is not a dot: a 1 200 m carrier at
-## 10 km is about 130 px tall at 1 080 lines. A tier capital has no node to draw (its body is parked), so its row in the native
-## core is drawn as an instance of the mesh its body draws, in one `MultiMesh` per mesh (a class's box or its textured hull),
-## so every far capital of a class is one draw call. The mesh is registered when the capital is demoted (`class_of`); each
-## frame the core writes every class's instances from the rows.
+## Ships and capitals in the low-attention tier, drawn (M4-T23, architecture §17.14). A far capital is not a dot: a 1 200 m carrier
+## at 10 km is about 130 px tall at 1 080 lines, and a 190 m Saturn 8 is still 13 px (M7-T26). A tier row has no node to draw (its
+## body is parked), so it is drawn as an instance of the mesh its body draws, in one `MultiMesh` per mesh (a class's box or its
+## textured hull), so every far hull of a class is one draw call. The mesh is registered when the ship is demoted (`class_of`);
+## each frame the core writes every class's instances from the rows, leaving out the rows only a few pixels across, which
+## `FarDots` draws instead (`FarDots.view_rows`). Each class's bounds follow its instances, so the mesh's own levels of detail
+## thin it out by its nearest instance's distance (a world-sized box would keep every far hull at full detail).
 ##
 ## A child of `World` at its origin: the rows are World-local, so the instances need no offset, and a rebase moves the rows
 ## in the core before the next frame writes them. A promotion takes the row in the tick its body shows, so a capital is drawn
@@ -72,6 +74,18 @@ func class_of(mesh: Mesh) -> int:
 	return _meshes.size() - 1
 
 
+## The box holding every instance in `buffer` (MultiMesh transforms) of a mesh bounded by `mesh_box`, in this node's frame.
+static func instances_aabb(buffer: PackedFloat32Array, mesh_box: AABB) -> AABB:
+	var reach: float = maxf(mesh_box.position.length(), mesh_box.end.length())  # any rotation stays inside this
+	var box := AABB()
+	for k: int in buffer.size() / STRIDE:
+		var o: int = k * STRIDE
+		var at := Vector3(buffer[o + 3], buffer[o + 7], buffer[o + 11])
+		var one := AABB(at - Vector3.ONE * reach, Vector3.ONE * 2.0 * reach)
+		box = one if k == 0 else box.merge(one)
+	return box
+
+
 ## Classes made so far.
 func class_count() -> int:
 	return _meshes.size()
@@ -100,18 +114,21 @@ func refresh() -> void:
 	var started: int = Time.get_ticks_usec()  # a readout, never gameplay time
 	var sim: SimCore = SimCore.for_tree(get_tree()) if is_inside_tree() else null
 	var core: Object = sim.core if sim != null else null
-	var capitals: int = int(core.tier_capitals()) if core != null else 0
+	var rows: int = int(core.tier_count()) if core != null else 0
+	if rows > 0:
+		FarDots.view_rows(self, core)
 	shown = 0
 	for index: int in _instances.size():
 		var multimesh: MultiMesh = _instances[index].multimesh
 		var buffer := PackedFloat32Array()
-		if capitals > 0:
+		if rows > 0:
 			buffer = core.tier_fill_hulls(index, -position)  # rows are World-local
 		var count: int = buffer.size() / STRIDE
 		if multimesh.instance_count != count:
 			multimesh.instance_count = count
 		if count > 0:
 			RenderingServer.multimesh_set_buffer(multimesh.get_rid(), buffer)
+			_instances[index].custom_aabb = instances_aabb(buffer, _meshes[index].get_aabb())
 		_buffers[index] = buffer
 		shown += count
 	last_refresh_us = Time.get_ticks_usec() - started

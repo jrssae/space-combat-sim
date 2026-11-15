@@ -627,7 +627,8 @@ impl ScsSimCore {
         self.tier_cleared
     }
 
-    /// How body `body_id`'s row is drawn (M4-T23): `class` -1 a far dot in `paint` (linear), else that far hull class.
+    /// How body `body_id`'s row is drawn (M4-T23): `class` -1 a far dot in `paint` (linear), else that far hull class while it
+    /// is more than a few pixels across and a dot in `paint` beyond (M7-T26, `tier_set_view`).
     #[func]
     fn tier_set_proxy(&mut self, body_id: i64, class: i64, paint: Color) -> bool {
         let Some(i) = self.tier.index_of(body_id) else {
@@ -636,6 +637,13 @@ impl ScsSimCore {
         self.tier.proxy[i] = class.clamp(-1, i64::from(i32::MAX)) as i32;
         self.tier.paint[i] = [paint.r, paint.g, paint.b];
         true
+    }
+
+    /// Picks the rows drawn as dots instead of their far hulls for a camera at `eye` (World-local), M7-T26: `m_per_m` is the
+    /// dot distance per metre of a row's radius (the view's pixels per radian over the dot size). Visual only.
+    #[func]
+    fn tier_set_view(&mut self, eye: Vector3, m_per_m: f64) {
+        tier::update_view(&mut self.tier, eye, m_per_m);
     }
 
     /// Rows drawn as far dots.

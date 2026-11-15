@@ -50,7 +50,7 @@ var _player_was_visible: bool = true
 func _ready() -> void:
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"sheet",
 			"Park one idle ship of an asset ahead of the camera for a look sheet, lit from behind the camera or from behind the ship; `sheet off` clears it",
-			[ConsoleArg.string_required(&"asset_id"), ConsoleArg.float_optional(&"distance_m", 30.0, 0.0, 20000.0),
+			[ConsoleArg.string_required(&"asset_id"), ConsoleArg.float_optional(&"distance_m", 30.0, 0.0, 50000.0),
 			ConsoleArg.enum_optional(&"light", LIGHTS, &"lit"), ConsoleArg.string_optional(&"livery", "-"), ConsoleArg.enum_optional(&"view", VIEWS, &"three_quarter")]), _cmd_sheet, self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"livery",
 			"Paint a ship in a wing's livery with a number (plain for none), for looking at it: the player's ship, `sheet` for the parked one, or a ship by name",

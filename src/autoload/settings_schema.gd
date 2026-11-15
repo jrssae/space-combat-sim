@@ -189,10 +189,10 @@ const ENTRIES: Dictionary = {
 	&"ai_nearest_static_k": {"type": TYPE_INT, "default": 4, "min": 0, "max": 32,
 		"category": &"game", "label": "AI nearest rocks", "menu": false, "step": 1,
 		"doc": "An AI ship avoids its nearest this many rocks and mines within 5 km (M4-T09); they are never among its contacts; 0 = none"},
-	# M4-T11
-	&"far_ship_dot_m": {"type": TYPE_FLOAT, "default": 3000.0, "min": 500.0, "max": 50000.0,
-		"category": &"graphics", "label": "Far ship dot distance", "menu": false, "step": 500,
-		"doc": "Past this distance from the camera an AI ship is drawn as a dot: no hull, plumes or markers (M4-T11); it shows its detail again a tenth inside"},
+	# M4-T11, by size on screen since M7-T26
+	&"far_ship_dot_px": {"type": TYPE_FLOAT, "default": 2.0, "min": 0.5, "max": 16.0,
+		"category": &"graphics", "label": "Far ship dot size", "menu": false, "step": 0.5,
+		"doc": "An AI ship whose bounding radius covers fewer pixels than this is drawn as a dot: no hull, plumes or markers (M4-T11, M7-T26); nearer it keeps its mesh, whose own levels of detail thin it out; it shows its mesh again a tenth inside"},
 	# M4-T18
 	&"perf_threads": {"type": TYPE_INT, "default": 0, "min": 0, "max": 64,
 		"category": &"game", "label": "Native threads", "menu": false, "step": 1,
