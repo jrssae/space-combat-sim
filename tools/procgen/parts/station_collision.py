@@ -20,9 +20,7 @@ from ..core.geometry import rotation_z
 from ..core.sections import SectionCut
 from . import station as st
 from . import station_detail as sd
-from . import station_recess as sr
 from . import station_spine as ssp
-from . import station_tower
 
 RING_SIDES = 16
 RING_SECTORS = 8  # the aperture's ring
@@ -290,7 +288,7 @@ def cargo_bay(planes: Sequence[float]) -> list[tuple[str, np.ndarray]]:
                          [(z, -w, -half, lo, hi) for z, w, _, _ in rows], [(z, half, w, lo, hi) for z, w, _, _ in rows]):
             out += slab_pieces("cargo_wall", sections, planes, _sec)
     out += _blocks("cargo_keel", (-10.0, 290.0, sd.ZG_COMPARTMENT_Z + 6.0), (10.0, 316.0, 494.0), planes)
-    out += slab_pieces("cargo_ridge", sd.ridge_rows(), planes, _sec)
+    out += slab_pieces("cargo_ridge", [(445.0, -10.0, 10.0, 360.0, 372.0), (495.0, -10.0, 10.0, 370.0, 386.0)], planes, _sec)
     return out
 
 
@@ -305,35 +303,6 @@ def _knob_points(kz: float, kr: float, semi: Sequence[float]) -> np.ndarray:
     return np.array(pts)
 
 
-def spine_pieces(planes: Sequence[float]) -> list[tuple[str, np.ndarray]]:
-    """The spine's front behind the cargo bay, with the heavy cannons' recesses left open (M7-T43): under the recesses' floor one
-    slab; over it, the stretch the recesses span as strips between them, so a gun's line of fire from its trunnion leaves its own
-    recess unblocked while the hull round it still stops shots aimed through the deck. Each run is one piece where it stays
-    straight, so the frame keeps inside its shape budget without merging others."""
-    rows = st.spine_rows_from(sd.ZG_BACK_Z)
-    pits = sr.recesses()
-    if not pits:
-        return slab_pieces("spine", rows, planes, _sym, tol=10.0)
-    floor = min(p.floor for p in pits)
-    za, zb = min(p.z0 for p in pits), max(p.z1 for p in pits)
-    out = slab_pieces("spine", [(z, -w, w, y0, floor) for z, w, y0, _ in rows], planes, _sec, tol=10.0)
-    zs = sorted({r[0] for r in rows} | {za, zb})
-    upper = [st.spine_row_at(z) for z in zs]
-    before = [r for r in upper if r[0] <= za + 1e-6]
-    after = [r for r in upper if r[0] >= zb - 1e-6]
-    beside = [r for r in upper if za - 1e-6 <= r[0] <= zb + 1e-6]
-    for part in (before, after):
-        if len(part) > 1:
-            out += slab_pieces("spine", [(z, -w, w, floor, top) for z, w, _, top in part], planes, _sec, tol=10.0)
-    edges = sorted(x for p in pits for x in (p.x0, p.x1))
-    for k in range(0, len(edges) + 1, 2):  # the strips outside and between the recesses
-        lo = edges[k - 1] if k > 0 else None
-        hi = edges[k] if k < len(edges) else None
-        out += slab_pieces("spine", [(z, -w if lo is None else lo, w if hi is None else hi, floor, top) for z, w, _, top in beside],
-                           planes, _sec, tol=10.0)
-    return out
-
-
 def frame_pieces(planes: Sequence[float]) -> list[tuple[str, np.ndarray]]:
     """What stands still, in the station frame."""
     out: list[tuple[str, np.ndarray]] = []
@@ -342,8 +311,8 @@ def frame_pieces(planes: Sequence[float]) -> list[tuple[str, np.ndarray]]:
         pts = np.concatenate([_ring(z, r, 3, a0, a1) for z, r in st.RING_PROFILE[:-1]])
         out.append(("ring", pts))
     out += _blocks("pylon", st.PYLON[0], st.PYLON[1], planes)
-    out += station_tower.collision_pieces()  # the rook between the heavy cannons (M7-T43)
-    out += spine_pieces(planes)
+    out += _blocks("tower", (-20.0, 370.0, 495.0), (20.0, st.BOW_TOWER_TOP, 545.0), planes)
+    out += slab_pieces("spine", st.spine_rows_from(sd.ZG_BACK_Z), planes, _sym, tol=10.0)
     out += cargo_bay(planes)
     out += ssp.collision_pieces(planes)  # the prongs, the command section, the spine, its radiators and cargo modules (M7-T22)
     out += _split_points("dome", ssp.dome_collision(), planes)

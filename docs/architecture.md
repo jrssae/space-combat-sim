@@ -5642,20 +5642,10 @@ assets/weapons/grid_*.tres       the light pulse turret, the heavy cannon and th
   projectile, the projectile's id, where they met, its colour); `TurretRows.step` spends each (`SimCore.spend_bolt` for an
   owned row, `Projectile.spend` for a node) and calls `TurretMount.on_intercepted(point, colour)`. `grid_readouts` gains the
   pulses fired. `turret_digest` hashes each battery's barrels (a battery adds words, other mounts none).
-- **Heavy cannons** (M7-T43). Two optional settings on any gun's slot, each a no-op at its default so every other mount is as
-  it was: `set_turret_lift(slot, m)` (`Mounts.lift_m`): the trunnion stands that far up the base's axis, and the line of fire
-  (the pick's and the gate's, `Mounts::line_lift`, never under `LINE_LIFT_M`) and the shot start there (the heavy cannon's
-  9.5 m over its recess floor, so the recess never stops its fire while the deck round it still does: the spine's collision
-  leaves the recesses open); and `set_turret_burst(slot, shots, spacing_s)` (`burst_shots`, `burst_spacing_s`, with the burst
-  in progress): `turret_kernels::next_ready` spaces a burst's shots `spacing_s` apart and starts the next `interval_s` after the
-  last began. `WeaponSpec.burst_shots` and `burst_spacing_s` carry them (`TurretRows.register_grid`); `turret_digest` hashes
-  a burst in progress only. `grid_heavy_cannon.tres`: 3 shots 0.35 s apart, a 12 s cycle, 300 a shot; a 40 m by 1.6 m green
-  bolt (`heavy_pulse.tres`) and a green flash nine times the usual size (the flash pool's per-flash size).
 - **Friendly bolts stop on the station.** `Damageable.stops_friendly_bolts` (the station's two hulls): `HitResolver` keeps a
   big hull's surface pair for a bolt that cannot hurt it, and such a bolt is spent with its flash and nothing else (no damage,
   no attacker note, no `hit_resolved`; `HitResolver.friendly_stops` counts them). Other friendly hulls still let bolts through.
-- **Visuals and sound.** The light guns wear the Saturns' turret model (T27) at 2, the heavy cannons their oval gun
-  (`grid_heavy_cannon`, M7-T43) and the batteries their own (M7-T42), each from `StationGrid.MODEL_ASSETS`,
+- **Visuals and sound.** Every mount wears the Saturns' turret model (T27) scaled per kind (light 2, heavy 4, interceptor 1.2),
   hung from the frame's visual piece or the drum's visual pivot (so the far dress shrinks them with the station and the drum's
   turn carries them); a gun's shot flashes its barrel through the World's `MuzzleFlashPool`. A battery's pulse glows blue-white
   at the muzzle of the barrel that fired (`TurretMount.last_barrel`, the flash pool's per-flash tint), and where a pulse meets a

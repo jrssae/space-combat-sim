@@ -10,7 +10,6 @@ from collections.abc import Callable
 
 from ..core.context import AssetOutputs, BuildContext
 from . import asteroids, b5_interior, babylon5_station, brakiri_bokmai, capital_hulls, cargo_pod_craft, centauri_brezebel
-from . import grid_heavy_cannon
 from . import grid_interceptor_battery, jumpgate, planet, saturn_family, skylark_transport
 from . import maintenance_bot, narn_transport, nav_buoy, raider_fighter, sfx_combat, sfx_ui, sfx_world, sky_default, starfury_aurora
 
@@ -22,7 +21,6 @@ ASSETS: dict[str, Callable[[BuildContext], AssetOutputs]] = {
     "capital_hulls": capital_hulls.build,
     "cargo_pod_craft": cargo_pod_craft.build,
     "centauri_brezebel": centauri_brezebel.build,
-    "grid_heavy_cannon": grid_heavy_cannon.build,
     "grid_interceptor_battery": grid_interceptor_battery.build,
     "jumpgate": jumpgate.build,
     "maintenance_bot": maintenance_bot.build,

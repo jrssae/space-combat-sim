@@ -22,7 +22,7 @@ var mount_name: String = ""
 ## degrees below the base).
 var up: Vector3 = Vector3.UP
 var arc_deg: float = 200.0
-## m from the pivot to the barrel's tip, where a shot leaves; from the trunnion for a gun raised on one (M7-T43, `trunnion_m`).
+## m from the pivot to the barrel's tip, where a shot leaves.
 var barrel_m: float = 3.0
 var weapon: WeaponSpec = null
 var faction: StringName = Factions.NEUTRAL:
@@ -38,8 +38,7 @@ var host: Node3D = null
 ## (`StationGrid.Kind`, the core's `grid_kernels::MOUNT_*`).
 var grid_kind: int = 0
 ## An interceptor battery's barrels (M7-T41): the trunnion in the yaw frame and each muzzle in the pitch frame, metres, fired in
-## turn, each recharging `barrel_recharge_s`. Empty: one barrel `barrel_m` down the axis, from the trunnion when it stands up the
-## axis (M7-T43: the heavy cannon's line of fire and shots start there).
+## turn, each recharging `barrel_recharge_s`. Empty: one barrel `barrel_m` down the axis.
 var trunnion_m: Vector3 = Vector3.ZERO
 var muzzles_m: Array[Vector3] = []
 var barrel_recharge_s: float = 0.0

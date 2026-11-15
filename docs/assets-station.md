@@ -729,20 +729,6 @@ frame (turned onto the top). Tested in `tools/procgen/tests/test_station_fidelit
 **Sheet (H):** `references/screenshots/M7-T21 arm and cargo bay/M7-T21_arm_and_cargo_bay_sheet.png` (the section overlays before
 and after with their IoU, the door strip at 50 m beside the model, a door open, the cargo bay; `SHEET_VIEWS=t21`).
 
-**M7-T43, the heavy cannons' recesses and the bow tower** (`parts/station_recess.py`, `parts/station_tower.py`):
-
-| Part | Planes | Before | After |
-|---|---|---|---|
-| Bow recesses (H1, H2: 18 x 36 m, 6.8 m deep) | z 505, 515, 525 each side, the tower left out (window x 22 to 110, y 330 to 400) | 0.960, 0.971, 0.941 | **0.942, 0.941, 0.911** (port; starboard alike) |
-| Bow tower | across z 520, side x 0, top y 400 (window round the tower) | 0.373, 0.544, 0.264 (the 40 x 50 m block) | 0.340, 0.389, 0.446, **exempt**: rook shape by the maintainer's request 2026-11-15, leaned aft like the STL |
-
-The STL's tower is a slim neck (about 12 m wide) leaning aft from a broad mound, with a head; neither the old block nor the rook
-reaches 0.90 there. The rook (an 18 m round shaft on a flared base, a smooth round top 25 m across for I5) is narrow so the heavy
-cannons cover each other round it, and leans 0.36 m aft a metre below its top as the STL's neck does (upright it scored 0.360,
-0.345, 0.104). The ridge on the cargo bay's roof keeps the STL's slope to 386 m and runs level into the tower's base. Each cannon's
-free arc (the line-of-fire surface, from its trunnion) 66.8 % before, 75.5 % after; the sky both can fire into 44.8 % before, 66.1 %
-after. Sheet (H): `references/screenshots/M7-T43 heavy cannons/t43_look_sheet.png`; the leaned tower in `.../leaned/`.
-
 ## The dorsal spine, command section and bow to the STL (M7-T22)
 
 T04 built the spine to the silhouettes; T21's section check scored it 0.38 to 0.72. Rebuilt in `parts/station_spine.py`: every part

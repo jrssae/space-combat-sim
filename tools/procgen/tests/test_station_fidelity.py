@@ -117,12 +117,6 @@ class StationSectionTests(unittest.TestCase):
     def test_the_command_section(self) -> None:
         self._part("command_section")
 
-    def test_the_bow_recesses(self) -> None:
-        self._part("bow_recesses")
-
-    def test_the_bow_tower(self) -> None:
-        self._part("bow_tower")
-
     def test_every_exemption_names_a_plane_and_a_reason(self) -> None:
         names = {p.name for p in sf.all_planes()}
         for name, reason in sf.EXEMPTIONS.items():

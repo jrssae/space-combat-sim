@@ -299,8 +299,8 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T38 | D | AI ships avoid the station and other large bodies: wingmen and allies flying near Babylon 5 never collide with it when a collision could be avoided (maintainer, 2026-11-15) | T10 | Opus | Native avoidance against an 8 km rotating body; parity kept | in progress |
 | T39 | C | Fix: the backtick key no longer opens the debug console in play (maintainer, 2026-11-15) | - | Sonnet | An input regression | done |
 | T40 | D | Council review fixes: the findings of the M7 code review (Opus, GPT-6 Luna, DeepSeek; 2026-11-15) that survived verification | - | Opus (native), Sonnet (GDScript, Python) | Small, separate fixes; the interceptors' line of fire may move the T07 balance | in progress |
-| T41 | D | Interceptor fire as the show has it: four barrels firing in turn (0.25 s apart, each recharging 1 s), visible blue-white pulses that fly out and can miss, a small flash and spark where one meets incoming fire; then bow batteries only if the capital fight still needs them, and a test that proves the batteries save the station damage (maintainer, 2026-11-15) | T40 | Opus | Native pulse-against-projectile hits, seeded spread, 1 and 6 threads identical; balance re-measured | in progress |
-| T42 | D | The interceptor battery model: an original procedural mesh after the maintainer's clip, a truss pedestal, a two-axis yoke and four barrels in a rectangle round a central body, about 15 m tall, on every battery (maintainer, 2026-11-15) | - | Opus | Look sheet approved first; four muzzles for T41 | in progress |
+| T41 | D | Interceptor fire as the show has it: four barrels firing in turn (0.25 s apart, each recharging 1 s), visible blue-white pulses that fly out and can miss, a small flash and spark where one meets incoming fire; then bow batteries only if the capital fight still needs them, and a test that proves the batteries save the station damage (maintainer, 2026-11-15) | T40 | Opus | Native pulse-against-projectile hits, seeded spread, 1 and 6 threads identical; balance re-measured | done |
+| T42 | D | The interceptor battery model: an original procedural mesh after the maintainer's clip, a truss pedestal, a two-axis yoke and four barrels in a rectangle round a central body, about 15 m tall, on every battery (maintainer, 2026-11-15) | - | Opus | Look sheet approved first; four muzzles for T41 | done |
 | T43 | D | The heavy cannons as the show has them: an original single oval-barrel gun about 30 m long in a hazard-striped recess cut into the bow tower at H1 and H2, firing three-shot bursts of large green pulses at today's damage a second (maintainer, 2026-11-15) | T42 | Opus | Look sheet approved first; station generator change (STL fidelity); burst cadence in the native gun gate; balance unchanged | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
@@ -2277,6 +2277,8 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   way, phase 1 saw it). With the batteries parked in the "with" run it fails (no interceptions, ratio 1.0).
   So no bow batteries are proposed. Open: the live window (H).
 
+- **Accepted (maintainer, 2026-11-15, live raid window from bcd68212):** "yes, approved". Pushed bb0a7855..bcd68212, CI green (run 43752099118).
+
 ### M7-T42 The interceptor battery model
 
 - **Why (maintainer, 2026-11-15):** the batteries wear the Saturns' single-barrel turret at 1.2 times; the show's battery (the
@@ -2300,6 +2302,8 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   `references/screenshots/M7-T42 interceptor model/t42_interceptor_look_sheet.png`, approved by the maintainer 2026-11-15. Tests:
   `test_grid_interceptor_battery` (parts, sizes, muzzles, symmetry, clearance) and `test_interceptor_battery_model` (parts, muzzles,
   turning, all nine batteries).
+
+- **Accepted:** the model approved on the round 2 sheet, seen live on every battery with T41's raid window (2026-11-15). Pushed with T41, CI green.
 
 ### M7-T43 The heavy cannons
 

@@ -242,37 +242,6 @@ impl ScsSimCore {
         true
     }
 
-    /// How far up its base's axis a gun's trunnion stands, m (M7-T43: the heavy cannon's, 9.5 m over its recess floor): its line of
-    /// fire and its shots start there. False for no gun in the slot.
-    #[func]
-    fn set_turret_lift(&mut self, slot: i64, lift_m: f64) -> bool {
-        let Some(s) = self.mount_slot(slot) else {
-            return false;
-        };
-        if self.turrets.mounts.kind[s] == MOUNT_INTERCEPTOR {
-            return false;
-        }
-        self.turrets.mounts.lift_m[s] = lift_m.max(0.0);
-        true
-    }
-
-    /// A gun's bursts (M7-T43): `shots` a burst, `spacing_s` apart, a new burst its interval after the last began. One shot a burst
-    /// is a plain gun. False for no gun in the slot.
-    #[func]
-    fn set_turret_burst(&mut self, slot: i64, shots: i64, spacing_s: f64) -> bool {
-        let Some(s) = self.mount_slot(slot) else {
-            return false;
-        };
-        if self.turrets.mounts.kind[s] == MOUNT_INTERCEPTOR {
-            return false;
-        }
-        let m = &mut self.turrets.mounts;
-        m.burst_shots[s] = u32::try_from(shots.max(1)).unwrap_or(1);
-        m.burst_spacing_s[s] = spacing_s.max(0.0);
-        m.burst_fired[s] = 0;
-        true
-    }
-
     /// A battery's barrels as set: `[trunnion, muzzles...]` and `[recharge, next barrel, each barrel's ready time...]`; empty for
     /// no battery.
     #[func]
@@ -505,9 +474,6 @@ impl ScsSimCore {
         out.set("stamp", i64::from(m.stamp[s]));
         out.set("live", m.live[s]);
         out.set("min_elevation", m.min_elevation[s]);
-        out.set("lift_m", m.lift_m[s]);
-        out.set("burst_shots", i64::from(m.burst_shots[s]));
-        out.set("burst_fired", i64::from(m.burst_fired[s]));
         out
     }
 
@@ -589,7 +555,7 @@ impl ScsSimCore {
             }
             // Q33: the ship's own hull stops the shot; the line runs from the trunnion to the lead point. A grid gun's is
             // the station's frame and drum (every big hull).
-            let from = add(f.pivot, scale(f.up, m.line_lift(s) as f32));
+            let from = tk::line_start(&f);
             let blocked = if grid {
                 gk::line_blocked(&self.rows, &surface_rows, from, a.lead_point)
             } else {
@@ -603,7 +569,7 @@ impl ScsSimCore {
                 }
                 continue;
             }
-            m.ready_at[s] = m.fired(s, now_s);
+            m.ready_at[s] = now_s + gun.interval_s;
             m.shots[s] += 1;
             match m.kind[s] {
                 MOUNT_LIGHT => self.turrets.grid_light_shots += 1,
@@ -612,7 +578,7 @@ impl ScsSimCore {
             }
             let direction = tk::spread(a.axis, gun.spread_rad, m.id[s], tick);
             let (at, velocity) = tk::shot(
-                add(f.pivot, scale(f.up, m.lift_m[s] as f32)),
+                f.pivot,
                 a.axis,
                 direction,
                 m.barrel_m[s],
@@ -753,11 +719,6 @@ impl ScsSimCore {
             word(m.ready_at[s].to_bits());
             word(m.shots[s] as u64);
             word(u64::from(m.out[s]));
-            // Only a burst in progress adds words (M7-T43), so every digest without one is as it was.
-            if m.burst_fired[s] > 0 {
-                word(u64::from(m.burst_fired[s]));
-                word(m.burst_started_s[s].to_bits());
-            }
             // Only a battery adds words (M7-T41), so every digest without one is as it was.
             if let Some(Some(b)) = self.turrets.batteries.get(s) {
                 word(b.next as u64);
