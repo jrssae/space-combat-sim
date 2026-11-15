@@ -294,6 +294,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T38 | D | AI ships avoid the station and other large bodies: wingmen and allies flying near Babylon 5 never collide with it when a collision could be avoided (maintainer, 2026-11-15) | T10 | Opus | Native avoidance against an 8 km rotating body; parity kept | in progress |
 | T39 | C | Fix: the backtick key no longer opens the debug console in play (maintainer, 2026-11-15) | - | Sonnet | An input regression | done |
 | T40 | D | Council review fixes: the findings of the M7 code review (Opus, GPT-6 Luna, DeepSeek; 2026-11-15) that survived verification | - | Opus (native), Sonnet (GDScript, Python) | Small, separate fixes; the interceptors' line of fire may move the T07 balance | in progress |
+| T41 | D | Bow interceptor batteries, so a capital firing down on the bow is met by honest intercepts, and a test that proves the batteries save the station damage (maintainer, 2026-11-15) | T40 | Opus | Grid layout change (D75): placement sheet approved first, station asset rebuild, the balance rerun | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M7-T01 Station references and measurements
@@ -2204,3 +2205,23 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     batteries, widen their arc, or lower the test's bar. `test_turret_balance` (no station) 2/2 pass.
 - **Done when:** a test per fix that fails without it; parity recordings and the balance tests green (new numbers stated with the
   reason); committed; a second council round.
+
+### M7-T41 Bow interceptor batteries
+
+- **Why (maintainer, 2026-11-15):** T40 made the batteries honest (no shots through the hull or below their arc). The cruiser
+  stand-in firing down on the bow from 300 to 700 m up and 2.2 to 2.7 km ahead then has 334 to 369 of its bolts shot down (852
+  to 858 before) and destroys a bow section on every seed; halving the battery interval still left 94 to 100 %. The maintainer
+  chose "Add bow batteries" over accepting the loss or widening the arcs, and asked for a test proving the interceptors work.
+- **What:**
+  1. Measure where the capital's fire meets the bow (which sections, from which directions) and which batteries can see it now.
+  2. Propose new interceptor batteries on the bow (count, D75-table positions in the STL frame, up vectors, body) placed on hull
+     the STL has, seeing fire from above and ahead; a marker sheet with the STL beside the build for the maintainer's approval
+     **before** the generator changes (as D75's mounts were approved).
+  3. After approval: the D75 table, `docs/assets-station.md`, the hardpoints generator and manifest, the station asset rebuilt;
+     mounts bind as the nine do (`StationGrid`, `TurretRows`), health and knock-out as the others.
+  4. The balance rerun: the capital fight passes "no section lost" on all three seeds; the raid stays in its bands.
+  5. Proof test: the raid and the capital fights assert interceptions happen, and the same raid with the batteries parked does
+     clearly more damage to the station (a stated margin).
+  6. A live window of a raid on the bow for the maintainer (H).
+- **Done when:** the sheet approved; the balance tests pass; the proof test fails with the batteries parked; parity kept;
+  the live window seen (H); committed.
