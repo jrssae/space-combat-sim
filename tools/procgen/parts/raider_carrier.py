@@ -231,9 +231,9 @@ def mirrored_y(mesh: Mesh) -> Mesh:
 def drum(spec: CarrierSpec, style: Style) -> Built:
     """The bow drum: the open rim, the recessed face, the body with its three collars, the aft cap."""
     u = spec.u
-    hull, dark, deck = style.material("hull"), style.material("hull_dark"), style.material("hull_panel")
+    hull, dark = style.material("hull"), style.material("hull_dark")
     profile = [(RIM_Z[1], 0.0), (RIM_Z[1], RIM_R[0]), (RIM_Z[0], RIM_R[0]), (RIM_Z[0], RIM_R[1]), (RIM_Z[1], RIM_R[2]), (RIM_Z[1], COLLAR_R)]
-    mats = [deck, dark, dark, dark, dark]
+    mats = [dark, dark, dark, dark, dark]  # the recessed face is dark, as the show's still has it
     z = COLLARS_Z[0][1]
     profile.append((z, COLLAR_R))
     mats.append(dark)
@@ -320,7 +320,7 @@ def cradle(spec: CarrierSpec, style: Style, c: Cradle, group: str) -> Built:
     """One cradle: the arm standing out from its ring, the beam from its top aft to the pad, the pad a fighter sits on (its
     forward edge the wide one) and the two clamp pins at the pad's ends."""
     u = spec.u
-    metal, pad_paint, clamp = style.material("hull_dark"), style.material("hull_panel"), style.material("rcs")
+    metal, pad_paint, clamp = style.material("hull_dark"), style.material("stripe"), style.material("rcs")
     basis = c.basis
     arm_len = ARM_LENGTH * u
     root = c.root_r * c.out + np.array([0.0, 0.0, c.arm_z])
