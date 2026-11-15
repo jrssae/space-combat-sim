@@ -10,7 +10,9 @@ extends GutTest
 ##   T07) so the grid takes 90 to 120 s on the three seeds' mean, each seed 75 to 140 s, and the hull shows damage.
 ## - **The capital**: a cruiser stand-in holding station 2.2 to 2.7 km off the bow tower (placed by the seed). The stand-in's own director picks fighters
 ##   only, so this file fires its weapons at the bow (its eight guns' bolts once a second each, its two beams every 2 s, a
-##   missile every 3 s): the interceptors take its bolts and missiles, its beams get through (D75).
+##   missile every 3 s): the interceptors' pulses take its bolts and missiles, its beams get through (D75).
+## - **The interceptors' proof** (M7-T41): the same raid with the batteries parked does clearly more damage to the station, over
+##   the three seeds together (one seed alone may not: the raid is chaotic).
 
 const RAID_SIZE: int = 12
 const RAID_LIMIT_S: float = 180.0
@@ -36,6 +38,12 @@ const GUN_INTERVAL_S: float = TurretStandin.SHOT_INTERVAL_S
 const MISSILE_INTERVAL_S: float = 3.0
 ## Ticks per real tick: the physics rate and the time scale raised together, so each step is still 1/60 s of sim time.
 const SPEED_UP: float = 8.0
+## The parked raid's station damage over the three seeds, at least this many times the raid's with the batteries (M7-T41).
+const PROOF_MARGIN: float = 1.5
+
+# The raid's fights by seed, and with the batteries parked: the balance and the proof tests share them.
+static var _raids: Dictionary = {}
+static var _parked_raids: Dictionary = {}
 
 var _rate_backup: int = 60
 var _scale_backup: float = 1.0
@@ -61,12 +69,13 @@ func test_the_grid_alone_beats_twelve_raiders() -> void:
 	var lines := PackedStringArray()
 	var total_s: float = 0.0
 	for seed_value: int in SEEDS:
-		var f: Dictionary = await _fight(seed_value, false)
+		var f: Dictionary = await _raid(seed_value, false)
 		if f.is_empty():
 			pending("the babylon5_station asset is not generated")
 			return
 		lines.append("seed %d %s" % [seed_value, _line(f)])
 		assert_true(bool(f["won"]), "seed %d: every raider destroyed inside %.0f s (%s)" % [seed_value, RAID_LIMIT_S, _line(f)])
+		assert_gt(int(f["intercepts"]), 0, "seed %d: the batteries' pulses met the raiders' bolts" % seed_value)
 		assert_between(float(f["time_s"]), RAID_SEED_BAND_S.x, RAID_SEED_BAND_S.y, "seed %d: the raid lasts %.0f to %.0f s" % [
 				seed_value, RAID_SEED_BAND_S.x, RAID_SEED_BAND_S.y])
 		total_s += float(f["time_s"])
@@ -94,8 +103,44 @@ func test_the_grid_alone_beats_one_capital() -> void:
 	gut.p("BALANCE grid vs one %s stand-in:\n    %s" % [CAPITAL_CLASS, "\n    ".join(lines)])
 
 
+func test_the_interceptors_save_the_station_damage() -> void:
+	var lines := PackedStringArray()
+	var with_total: float = 0.0
+	var parked_total: float = 0.0
+	var intercepts: int = 0
+	for seed_value: int in SEEDS:
+		var on: Dictionary = await _raid(seed_value, false)
+		var off: Dictionary = await _raid(seed_value, true)
+		if on.is_empty() or off.is_empty():
+			pending("the babylon5_station asset is not generated")
+			return
+		with_total += float(on["station_lost"])
+		parked_total += float(off["station_lost"])
+		intercepts += int(on["intercepts"])
+		assert_eq(int(off["pulses"]), 0, "seed %d: parked batteries fire nothing" % seed_value)
+		lines.append("seed %d: station lost %.0f with the batteries (%d pulses, %d met), %.0f parked" % [seed_value,
+				float(on["station_lost"]), int(on["pulses"]), int(on["intercepts"]), float(off["station_lost"])])
+	assert_gt(intercepts, 0, "the batteries' pulses met the raiders' bolts")
+	assert_gte(parked_total, PROOF_MARGIN * with_total, "parked, the batteries let the station take at least %.1f times the damage (%.0f against %.0f)" % [
+			PROOF_MARGIN, parked_total, with_total])
+	gut.p("PROOF interceptors: station lost %.0f with the batteries, %.0f parked (%.2f times):\n    %s" % [with_total, parked_total,
+			parked_total / maxf(with_total, 1.0), "\n    ".join(lines)])
+
+
+# The raid on `seed_value`, with the batteries parked or not, flown once per run of the file.
+func _raid(seed_value: int, parked: bool) -> Dictionary:
+	var cache: Dictionary = _parked_raids if parked else _raids
+	if not cache.has(seed_value):
+		var f: Dictionary = await _fight(seed_value, false, parked)
+		if f.is_empty():
+			return f
+		cache[seed_value] = f
+	return cache[seed_value]
+
+
 # One fight: the station at the origin and the raid or the capital off its bow, flown until the enemy is destroyed or the limit.
-func _fight(seed_value: int, capital: bool) -> Dictionary:
+# `parked`: the interceptor batteries hold still (out of play), for the proof.
+func _fight(seed_value: int, capital: bool, parked: bool = false) -> Dictionary:
 	await get_tree().process_frame
 	await get_tree().physics_frame
 	var scene: TurretScene = TurretScene.build(self, &"threaded", 1)
@@ -154,6 +199,9 @@ func _fight(seed_value: int, capital: bool) -> Dictionary:
 			grid_hits[1] += 1 if info.damage == heavy_damage else 0)
 	scene.attach()
 	TurretMount.rebind_all()
+	if parked:
+		for m: TurretMount in station.grid.of_kind(StationGrid.Kind.INTERCEPTOR):
+			m.process_mode = Node.PROCESS_MODE_DISABLED
 	await get_tree().physics_frame
 	var t0: float = SimClock.now()
 	var limit: float = CAPITAL_LIMIT_S if capital else RAID_LIMIT_S
@@ -205,7 +253,7 @@ func _fight(seed_value: int, capital: bool) -> Dictionary:
 	var r: PackedInt64Array = station.grid.readouts()
 	var left: int = hulls.filter(func(h: Damageable) -> bool: return not h.hull.destroyed).size()
 	var f: Dictionary = {"won": won, "time_s": SimClock.now() - t0, "left": left, "light": r[0], "heavy": r[1],
-			"intercepts": r[2], "missiles": r[3], "blocked": r[4], "station_lost": health_before - _health(station),
+			"intercepts": r[2], "missiles": r[3], "blocked": r[4], "pulses": r[5], "station_lost": health_before - _health(station),
 			"beam_hits": beam_hits[0], "in_fire": float(in_fire_ticks) / float(maxi(ticks, 1)),
 			"capital_hull": cap.damageable.hull.fraction() if cap != null else -1.0,
 			"knocked_out": station.grid.knocked_out().size(), "worst_section": _worst_section(station),
@@ -282,7 +330,7 @@ func _restore_speed() -> void:
 
 
 static func _line(f: Dictionary) -> String:
-	return "%s at %.1f s, %d left, in fire %.0f %%, light %d (%d hits), heavy %d (%d hits) shots, kills at %s s, shot down %d (missiles %d), blocked %d, beams through %d, station lost %.0f (worst section %.0f %%), mounts knocked out %d, capital hull %.0f %%, rammed %d, hanging %.1f %%, nearest %.0f m" % [
+	return "%s at %.1f s, %d left, in fire %.0f %%, light %d (%d hits), heavy %d (%d hits) shots, kills at %s s, pulses %d, shot down %d (missiles %d), blocked %d, beams through %d, station lost %.0f (worst section %.0f %%), mounts knocked out %d, capital hull %.0f %%, rammed %d, hanging %.1f %%, nearest %.0f m" % [
 		"WIN" if bool(f["won"]) else "LOSS", float(f["time_s"]), int(f["left"]), 100.0 * float(f["in_fire"]), int(f["light"]),
-		int(f["light_hits"]), int(f["heavy"]), int(f["heavy_hits"]), f["kills_at"], int(f["intercepts"]), int(f["missiles"]), int(f["blocked"]), int(f["beam_hits"]),
+		int(f["light_hits"]), int(f["heavy"]), int(f["heavy_hits"]), f["kills_at"], int(f["pulses"]), int(f["intercepts"]), int(f["missiles"]), int(f["blocked"]), int(f["beam_hits"]),
 		float(f["station_lost"]), 100.0 * float(f["worst_section"]), int(f["knocked_out"]), 100.0 * float(f["capital_hull"]), int(f["rammed"]), 100.0 * float(f["hanging"]), float(f["nearest_m"])]

@@ -2244,6 +2244,33 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
      section, with a marker sheet for the maintainer before any generator change.
   4. The proof test (the raid with the batteries parked does clearly more station damage; interceptions asserted).
   5. A live window of a raid on the bow (H).
+- **Done (phase 1, the record; bow batteries paused):** at f283e8b4 the capital fight lost the command section on every seed:
+  the cruiser fires from 1.8 to 1.9 km ahead of the bow tip and 790 to 960 m up, at 10 to 17 degrees down, onto the bow
+  tower's front under H1 and H2 (475 to 502 bolts, about 4 900 damage, plus 3 100 of beams, which alone take 63 % of the
+  section) and the spine at L9 (141 to 195 bolts, no loss). Per battery: I5 saw everything but was knocked out about 57 s a
+  fight (the test aims 4 m under it); I1 to I4 had no shot on about 97 % of their ready ticks (arc or hull line); I6 near its
+  full rate; I7's line always blocked; I8 and I9 saw nothing. Proposed I10 to I13 on the bow prongs' flat tops (x -+68, y 335.5,
+  z 150 and x -+85, y 354.8, z 350, up (0, 0.995, -0.10), frame), checked against the STL's sections; with the old instant kills
+  they took 877 to 913 shot down and worst section 72 to 75 % (two: 100 %, three: 99 to 100 %); raid mean 102.0 s. Sheet:
+  `references/screenshots/M7-T41 bow batteries/`. The maintainer paused them for the show's fire below.
+- **Done (pulses, a01b4566):** `KIND_INTERCEPT` rows from the next ready barrel (T42's `turret.pitch_muzzles` through
+  `StationGrid.muzzles_for`, trunnion from the model), 0.25 s apart, each barrel recharging 1 s; the brains' lead from the
+  muzzle, led one tick ahead (a row does not move on its launch tick: without it 12 to 34 % of the capital's bolts were hit);
+  spread hashed from the battery's id, its shot count and the tick. Each tick the pulses sweep their last move against the
+  hostile missiles and bolts placed in the hit broad phase's cells and take the first they touch; `hit_bolts` drops pulses, the
+  stand-in interceptors ignore them. A second pulse at a target only once the first's lead time plus 0.1 s has passed (it
+  missed) or when the first would arrive after the target reaches the hull. Numbers: 2 000 m/s, 1 s life, 2.5 m hit radius,
+  spread 0.22 degrees (0.15: raid shows no station damage, 0.2: raid seed 1 at 0.8 %, 0.25: capital seed 1 at 98 %). Visuals:
+  blue-white glow at the firing barrel (`MuzzleFlashPool` tint), a small flash and a spark burst (`FxSpecs.INTERCEPT`) in the
+  incoming projectile's colour. Rust 188 pass; 862 scripts compile; GUT 31 files pass (test_station_grid 9 with three new:
+  pulses meet bolts and missiles at the hull, barrels in turn and misses, no harm to ships or hulls; the threads, parity and
+  guard files unchanged). No recording changed.
+- **Done (balance and proof):** the capital passes without bow batteries: shot down 732, 962, 934 (40, 41, 41 missiles) of
+  1 073, 1 274, 1 261 pulses, worst section 89, 68, 73 %. Raid mean 111.7 s (119.7, 107.8, 107.7), station damage 6 to 8 %,
+  106 to 148 met. `test_the_interceptors_save_the_station_damage`: the same three raids with the batteries parked lost 3 248
+  against 1 200 (2.71 times; per seed 698/409, 1 344/482, 1 206/309), bar 1.5 times on the total (one seed alone can go either
+  way, phase 1 saw it). With the batteries parked in the "with" run it fails (no interceptions, ratio 1.0).
+  So no bow batteries are proposed. Open: the live window (H).
 
 ### M7-T42 The interceptor battery model
 
