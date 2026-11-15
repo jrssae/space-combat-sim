@@ -2175,5 +2175,32 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   these changes, GUT_SLOW=1): 861 scripts compile; test_freighter_cargo_finish 1, test_scenario_loader 40, test_ally_pool 20
   (2 scripts), test_ship_pool 21, test_launch_bay 12, test_station_traffic 5, test_freighter_cargo 4, test_launch_sequence 25,
   test_launch_cut 7, test_wing* 57 all pass; test_ci_shards 7 pass (with PIL blocked).
+- **Done (native, items 1-4):** 1. A battery shoots only what it can reach: `grid_kernels::choose_in_reach` keeps `choose`'s
+  order and asks the would-be winner only (as the guns' pick does) to lie inside the battery's arc (elevation from its pivot at
+  least `min_elevation`) with its line from `tk::line_start` entering no big hull (`line_blocked`). Fire it cannot shoot still sets
+  the latch (§20.3: it was fired at the station). `choose` stays for the order's own test only. Test
+  `a_battery_takes_only_a_projectile_inside_its_arc_that_the_hull_does_not_hide` (a hidden bolt and a low one refused, one above
+  taken; the old `choose` takes the hidden one). 2. The M7-T29 close-fire check skips a shooter with a surface: the station's grid
+  fire neither scares nor provokes (`the_stations_own_grid_fire_does_not_frighten_its_traffic`, fails with the fix removed; a
+  friendly fighter's bolt on the same pass still frightens). Limit: `close_fire_from` gives the earliest bolt row's shooter, so a
+  grid bolt earlier in row order hides a non-hostile ship's close bolt for that think; filtering inside it belongs to `kernels.rs`
+  (held by T38). 3. `incoming` takes `hull_times`, one per bolt (turret scratch, `NOT_SWEPT` each tick): a bolt is swept against
+  the hull once a tick for all nine batteries, same values (`the_batteries_sweep_each_bolt_against_the_hull_once_a_tick`).
+  4. `sorted_surface_bodies` reuses the turrets' `surface_bodies` buffer for both the job's copy and `grid_surface_rows`
+  (`turret_snapshot_into` now takes `&mut self`). Architecture §20.3 (the batteries) and the M7-T29 civilian bullet say so.
+  Counts from the staged scratch copy (70ff64b3 plus these changes; items 5-9 touch no native or grid file): Rust 183 pass;
+  860 scripts compile; GUT_SLOW=1, 16 files, 81/81 pass (test_station_grid, _grid_threads, _ai, _traffic, _threads,
+  test_grid_mount_health, test_turret_kernel, the parity files test_parity_fixture, test_flight_parity_fight,
+  test_weapon_rows_battle, test_pilot_kernels_in_play, test_brain_tolerance, test_targeting_on_read, test_hit_scale, test_sim_core,
+  test_core_state). No recording changed. Balance (`test_station_grid_balance`, before = 70ff64b3, after = the fix):
+  - raid: before mean 108.1 s (102.5, 98.8, 123.0), shot down 120, 108, 124; after mean 109.4 s (122.1, 102.1, 104.1), shot down
+    109, 103, 81. Pass.
+  - capital: before shot down 852, 858, 858 (41 missiles each), station lost 4373, 4426, 4425, worst section 64, 65, 65 %; after
+    shot down 334, 364, 369 (34, 37, 37 missiles), lost 6950, 6548, 6409, worst section 100 % on every seed. **Fails** "no section
+    lost". The cruiser fires at the bow from 300 to 700 m up and 2.2 to 2.7 km ahead; most batteries had been taking those bolts
+    below their 10-degree-down arc or through the frame. Arc check alone: 556 to 560 shot down; line check alone: 391 to 423; both
+    at a 0.5 s interval instead of 1 s: 605, 754, 806, worst section 100, 100, 94 % (raid mean 105.0 s), still failing. So the
+    D75 layout cannot hold the bow against the capital once the shots are honest. **Open, for the maintainer:** move or add bow
+    batteries, widen their arc, or lower the test's bar. `test_turret_balance` (no station) 2/2 pass.
 - **Done when:** a test per fix that fails without it; parity recordings and the balance tests green (new numbers stated with the
   reason); committed; a second council round.

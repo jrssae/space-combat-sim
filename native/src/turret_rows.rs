@@ -46,9 +46,11 @@ pub struct TurretState {
     grid_intercepts: i64,
     grid_missile_intercepts: i64,
     grid_blocked: i64,
-    // The interceptors' scratch: candidates, the bolts taken this tick, the big hulls' rows and their bodies.
+    // The interceptors' scratch: candidates, the bolts taken this tick, each bolt's time to the hull this tick, the big
+    // hulls' rows and their bodies.
     incoming: Vec<Incoming>,
     taken: Vec<bool>,
+    hull_times: Vec<f64>,
     surface_rows: Vec<usize>,
     surface_bodies: Vec<i64>,
 }
@@ -62,11 +64,11 @@ impl TurretState {
 
 impl ScsSimCore {
     /// The launch's copy for the AI job: the live mounts, the memory and the relations as they stand.
-    pub(crate) fn turret_snapshot_into(&self, job: &mut PickJob) {
+    pub(crate) fn turret_snapshot_into(&mut self, job: &mut PickJob) {
+        let bodies = self.sorted_surface_bodies();
         let t = &self.turrets;
-        let mut bodies: Vec<i64> = self.surfaces.keys().copied().collect();
-        bodies.sort_unstable();
         job.take_from(&t.mounts, &t.memory, &t.relations, t.stride, &t.hulls, &t.latch, &bodies);
+        self.turrets.surface_bodies = bodies;
     }
 
     /// A joined job's picks: each lands on its mount when the mount's binding is still the one it was picked for.
@@ -660,10 +662,7 @@ impl ScsSimCore {
 impl ScsSimCore {
     // The rows of every big hull (the station's frame and drum): what blocks a grid gun and what an interceptor guards.
     fn grid_surface_rows(&mut self, out: &mut Vec<usize>) {
-        let mut bodies = std::mem::take(&mut self.turrets.surface_bodies);
-        bodies.clear();
-        bodies.extend(self.surfaces.keys().copied());
-        bodies.sort_unstable();
+        let bodies = self.sorted_surface_bodies();
         out.clear();
         for &b in &bodies {
             if let Ok(r) = usize::try_from(self.row_for_kernel(b))
@@ -675,9 +674,19 @@ impl ScsSimCore {
         self.turrets.surface_bodies = bodies;
     }
 
+    // The big hulls' body ids in order, in the turrets' reused buffer (the caller hands it back): no allocation a tick.
+    fn sorted_surface_bodies(&mut self) -> Vec<i64> {
+        let mut bodies = std::mem::take(&mut self.turrets.surface_bodies);
+        bodies.clear();
+        bodies.extend(self.surfaces.keys().copied());
+        bodies.sort_unstable();
+        bodies
+    }
+
     // The interceptor batteries' tick (D75): each looks at the hostile missiles and pulse bolts within its reach whose path
     // meets the hull (any such shot sets the grid weapons free against its side: it was fired at the station), and when its
-    // gun is ready shoots down one: a missile first, then the one that hits soonest. Returns the batteries that fired,
+    // gun is ready shoots down one it can reach (inside its arc, not behind the hull): a missile first, then the one that
+    // hits soonest. Returns the batteries that fired,
     // the bolt ids they took (the caller spends them) and where those were.
     fn step_interceptors(
         &mut self,
@@ -693,6 +702,9 @@ impl ScsSimCore {
         let mut taken = std::mem::take(&mut self.turrets.taken);
         taken.clear();
         taken.resize(self.bolts.ids.len(), false);
+        let mut hull_times = std::mem::take(&mut self.turrets.hull_times);
+        hull_times.clear();
+        hull_times.resize(self.bolts.ids.len(), gk::NOT_SWEPT);
         let relations = std::mem::take(&mut self.turrets.relations);
         let stride = self.turrets.stride;
         for s in 0..m.taken.len() {
@@ -714,6 +726,7 @@ impl ScsSimCore {
                 f.pivot,
                 m.gun[s].range_m,
                 now_s,
+                &mut hull_times,
                 &mut incoming,
             );
             for c in &incoming {
@@ -722,7 +735,8 @@ impl ScsSimCore {
             if now_s + 1e-6 < m.ready_at[s] {
                 continue;
             }
-            let Some(pick) = gk::choose(&incoming, &taken) else {
+            let pick = gk::choose_in_reach(&self.rows, surface_rows, &self.bolts, &f, m.min_elevation[s], &incoming, &taken);
+            let Some(pick) = pick else {
                 continue;
             };
             let p = pick.bolt as usize;
@@ -742,6 +756,7 @@ impl ScsSimCore {
         self.turrets.relations = relations;
         self.turrets.incoming = incoming;
         self.turrets.taken = taken;
+        self.turrets.hull_times = hull_times;
         (slots, ids, points)
     }
 

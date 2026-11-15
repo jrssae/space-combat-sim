@@ -9,8 +9,8 @@
 //!   none of its own is in reach; inside the arc before outside it, nearest first. A knocked-out mount neither picks nor fires.
 //! - **Sub-points.** Each grid mount's place and whether it still works (`mount_points`), for the AI to aim at (T10).
 //! - **Interceptors** (main thread: a shot down projectile is gone the same tick) take hostile missiles and pulse bolts whose
-//!   path meets the station's hull: missiles first, then the bolt that hits soonest, one per battery per interval. Beams
-//!   are never candidates.
+//!   path meets the station's hull: missiles first, then the bolt that hits soonest, one per battery per interval, and only
+//!   one inside the battery's arc that the station's hull does not hide from it. Beams are never candidates.
 //! - **Line of fire.** Every big hull's surface (the station's frame and drum) blocks a grid gun's line.
 #![allow(clippy::too_many_arguments)]
 
@@ -271,8 +271,12 @@ pub fn interceptable(bolts: &Bolts, p: usize, grid: u32, relations: &[u8], strid
         && relation(relations, stride, grid, bolts.faction_ix[p]) == REL_HOSTILE
 }
 
+/// A bolt not yet swept against the hull this tick, in `incoming`'s cache of hull times.
+pub const NOT_SWEPT: f64 = f64::NAN;
+
 /// An interceptor battery's incoming fire at `pivot` within `reach_m`: each hostile missile or bolt (`interceptable`) whose
-/// path meets the hull, in bolt order.
+/// path meets the hull, in bolt order. `hull_times` (one per bolt, `NOT_SWEPT` at the tick's start, shared by the batteries)
+/// keeps each bolt's `time_to_hull` so it is swept once a tick, not once per battery.
 pub fn incoming(
     rows: &Rows,
     surface_rows: &[usize],
@@ -283,6 +287,7 @@ pub fn incoming(
     pivot: Vector3,
     reach_m: f64,
     now_s: f64,
+    hull_times: &mut [f64],
     out: &mut Vec<Incoming>,
 ) {
     out.clear();
@@ -291,19 +296,48 @@ pub fn incoming(
         if !interceptable(bolts, p, grid, relations, stride) || f64::from(dist_sq(bolts.positions[p], pivot)) > reach_sq {
             continue;
         }
-        if let Some(hit_in_s) = time_to_hull(rows, surface_rows, bolts, p, now_s) {
+        let when = &mut hull_times[p];
+        if when.is_nan() {
+            *when = time_to_hull(rows, surface_rows, bolts, p, now_s).unwrap_or(f64::INFINITY);
+        }
+        if when.is_finite() {
             out.push(Incoming {
                 bolt: p as u32,
                 missile: bolts.kinds[p] == KIND_MISSILE,
-                hit_in_s,
+                hit_in_s: *when,
             });
         }
     }
 }
 
-/// The battery's choice among `candidates` not yet `taken` this tick: a missile before any bolt, then the one that hits the
-/// hull soonest; among equals the earlier bolt row.
+/// The battery's order among `candidates` not yet `taken` this tick, reach aside: a missile before any bolt, then the one that
+/// hits the hull soonest; among equals the earlier bolt row. Play uses `choose_in_reach`.
+#[cfg(test)]
 pub fn choose(candidates: &[Incoming], taken: &[bool]) -> Option<Incoming> {
+    choose_where(candidates, taken, |_| true)
+}
+
+/// `choose` among the candidates a battery at `f` can shoot (M7-T40): inside its arc (`min_elevation` up) and with its line
+/// clear of every big hull, as a grid gun's. Only a candidate that would win is tested, to keep the hull sweeps rare.
+pub fn choose_in_reach(
+    rows: &Rows,
+    surface_rows: &[usize],
+    bolts: &Bolts,
+    f: &tk::Frame,
+    min_elevation: f64,
+    candidates: &[Incoming],
+    taken: &[bool],
+) -> Option<Incoming> {
+    let from = tk::line_start(f);
+    choose_where(candidates, taken, |c| {
+        let at = bolts.positions[c.bolt as usize];
+        let (_, elevation) = tk::angles_of(f, normalized(sub(at, f.pivot)));
+        elevation >= min_elevation && !line_blocked(rows, surface_rows, from, at)
+    })
+}
+
+// The best untaken candidate that `ok` accepts; `ok` is asked only of one that would beat the best so far.
+fn choose_where<F: FnMut(&Incoming) -> bool>(candidates: &[Incoming], taken: &[bool], mut ok: F) -> Option<Incoming> {
     let mut best: Option<Incoming> = None;
     for c in candidates {
         if taken.get(c.bolt as usize).copied().unwrap_or(false) {
@@ -313,7 +347,7 @@ pub fn choose(candidates: &[Incoming], taken: &[bool]) -> Option<Incoming> {
             None => true,
             Some(b) => (c.missile && !b.missile) || (c.missile == b.missile && c.hit_in_s < b.hit_in_s),
         };
-        if better {
+        if better && ok(c) {
             best = Some(*c);
         }
     }

@@ -1,6 +1,7 @@
 // The station grid's kernels (M7-T07, D75): each gun kind's pick, the latch, the interceptor's choice and reach, beams
 // immune, the station's hull blocking its guns, the drum's skin speed in a shot.
 use std::collections::HashMap;
+use std::f64::consts::FRAC_PI_2;
 use std::sync::Arc;
 
 use super::*;
@@ -268,11 +269,64 @@ fn an_interceptor_sees_only_hostile_shots_whose_path_meets_the_hull() {
     ]);
     let mut out = Vec::new();
     let pivot = Vector3::new(0.0, 52.0, 0.0);
-    incoming(&rows, &[0], &bolts, 0, &table(), STRIDE, pivot, 1500.0, 0.0, &mut out);
+    let mut times = vec![NOT_SWEPT; bolts.ids.len()];
+    incoming(&rows, &[0], &bolts, 0, &table(), STRIDE, pivot, 1500.0, 0.0, &mut times, &mut out);
     let seen: Vec<u32> = out.iter().map(|c| c.bolt).collect();
     assert_eq!(seen, vec![0, 6]);
     assert!((out[0].hit_in_s - 750.0 / 350.0).abs() < 1e-3, "it meets the roof at y 50 ({})", out[0].hit_in_s);
     assert!(out[1].missile);
+}
+
+#[test]
+fn the_batteries_sweep_each_bolt_against_the_hull_once_a_tick() {
+    let rows = rows_with(&[], 0.0);
+    let down = Vector3::new(0.0, -350.0, 0.0);
+    let bolts = bolts_of(&[
+        (KIND_BOLT, 1, Vector3::new(0.0, 800.0, 0.0), down),
+        (KIND_BOLT, 0, Vector3::new(0.0, 800.0, 0.0), down), // friendly: never swept
+        (KIND_BOLT, 1, Vector3::new(0.0, 800.0, 0.0), Vector3::new(0.0, 350.0, 0.0)), // away: swept, no hit
+    ]);
+    let mut times = vec![NOT_SWEPT; bolts.ids.len()];
+    let (mut first, mut second) = (Vec::new(), Vec::new());
+    let (top, side) = (Vector3::new(0.0, 52.0, 0.0), Vector3::new(52.0, 0.0, 0.0));
+    incoming(&rows, &[0], &bolts, 0, &table(), STRIDE, top, 1500.0, 0.0, &mut times, &mut first);
+    assert_eq!(times[0], time_to_hull(&rows, &[0], &bolts, 0, 0.0).unwrap(), "kept as swept");
+    assert!(times[1].is_nan() && times[2] == f64::INFINITY, "{times:?}");
+    // A second battery reads the kept times: the same list as a fresh sweep gives.
+    incoming(&rows, &[0], &bolts, 0, &table(), STRIDE, side, 1500.0, 0.0, &mut times, &mut second);
+    let mut fresh = Vec::new();
+    incoming(&rows, &[0], &bolts, 0, &table(), STRIDE, side, 1500.0, 0.0, &mut vec![NOT_SWEPT; 3], &mut fresh);
+    assert_eq!(second, fresh);
+    assert_eq!(first, second);
+}
+
+#[test]
+fn a_battery_takes_only_a_projectile_inside_its_arc_that_the_hull_does_not_hide() {
+    // A battery near the roof's edge, base up, its arc down to 10 degrees below the base.
+    let rows = rows_with(&[], 0.0);
+    let f = tk::frame(&Basis::IDENTITY, Vector3::ZERO, Vector3::new(48.0, 52.0, 0.0), Vector3::UP, Vector3::BACK);
+    let low = (-10_f64).to_radians();
+    let bolts = bolts_of(&[
+        // Under the station, rising into its floor: the soonest to hit, but the hull lies between.
+        (KIND_BOLT, 1, Vector3::new(0.0, -300.0, 0.0), Vector3::new(0.0, 350.0, 0.0)),
+        // Off the flank, 19 degrees below the base, climbing into the side: a clear line but out of the arc.
+        (KIND_BOLT, 1, Vector3::new(500.0, -100.0, 0.0), Vector3::new(-315.0, 70.0, 0.0)),
+        // Above, falling on the roof: in reach.
+        (KIND_BOLT, 1, Vector3::new(0.0, 800.0, 0.0), Vector3::new(0.0, -350.0, 0.0)),
+    ]);
+    let mut times = vec![NOT_SWEPT; bolts.ids.len()];
+    let mut list = Vec::new();
+    incoming(&rows, &[0], &bolts, 0, &table(), STRIDE, f.pivot, 1500.0, 0.0, &mut times, &mut list);
+    assert_eq!(list.iter().map(|c| c.bolt).collect::<Vec<_>>(), vec![0, 1, 2], "all three come at the hull");
+    assert!(list[0].hit_in_s < list[1].hit_in_s && list[1].hit_in_s < list[2].hit_in_s, "{list:?}");
+    let from = tk::line_start(&f);
+    assert!(line_blocked(&rows, &[0], from, bolts.positions[0]));
+    assert!(!line_blocked(&rows, &[0], from, bolts.positions[1]));
+    assert_eq!(choose(&list, &[false; 3]).unwrap().bolt, 0, "unfiltered, the soonest");
+    let pick = |taken: &[bool]| choose_in_reach(&rows, &[0], &bolts, &f, low, &list, taken).map(|c| c.bolt);
+    assert_eq!(pick(&[false; 3]), Some(2), "the one above, past the hidden and the low");
+    assert_eq!(pick(&[false, false, true]), None, "the other two it cannot shoot");
+    assert_eq!(choose_in_reach(&rows, &[0], &bolts, &f, -FRAC_PI_2, &list, &[false, false, true]).map(|c| c.bolt), Some(1), "a full arc reaches the low one");
 }
 
 #[test]

@@ -1004,8 +1004,9 @@ impl Brain {
             if let Some(&r) = scratch.contacts.iter().find(|&&r| rows.body_ids[r as usize] == shooter && shooter != 0) {
                 let j = r as usize;
                 let relation = inputs.relations.get(rows.faction_ix[j] as usize).copied().unwrap_or(pilot::NEUTRAL);
-                // A hostile's fire is M5's business (the threat list); this is for everyone else's.
-                if relation != pilot::HOSTILE {
+                // A hostile's fire is M5's business (the threat list); this is for everyone else's. A big hull's (the
+                // station's grid) is aimed past its traffic, not at it (M7-T40).
+                if relation != pilot::HOSTILE && rows.surface(j).is_none() {
                     self.retreat.scare(shooter, p.now_s);
                     if rows.target_ids[j] == rows.ids[own_row] {
                         self.provoked_by = shooter;

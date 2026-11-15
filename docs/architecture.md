@@ -4405,8 +4405,8 @@ tests/integration/test_civilian_flight.gd, test_civilian_ships.gd, test_turret_b
   inside the job, so one thread and six, `threaded` and `delayed`, give the same bits (`test_civilian_flight`).
 - **Fire from a ship that is not an enemy (M7-T29).** A bolt cannot land on a friendly or neutral hull (D31), so a civilian
   hears no hit from the player. Its think therefore also takes any side's bolt but its own that passes within its radius
-  plus `CLOSE_FIRE_M` (15 m) in the incoming-fire horizon (`contact::close_fire_from`): the shooter, when among the contacts
-  and not hostile, is kept `PANIC_HOLD_S` as a threat (`RetreatState.scare`) and fled from by the rules above, never run to
+  plus `CLOSE_FIRE_M` (15 m) in the incoming-fire horizon (`contact::close_fire_from`): the shooter, when among the contacts,
+  not hostile and not a big hull (the station's grid fire is aimed past its traffic; M7-T40), is kept `PANIC_HOLD_S` as a threat (`RetreatState.scare`) and fled from by the rules above, never run to
   (`civilian::View.shun`); the civilian counts as alarmed. If the shooter had the civilian selected, the job reports the
   pair (`PickJob.provoked`) and the main thread notes it at the join (`Memory.note_provoked`): that civilian's own turrets
   may then pick the shooter though it is a friend, and `HitResolver` lets that civilian's bolts land on that shooter alone
@@ -5613,8 +5613,10 @@ assets/weapons/grid_*.tres       the light pulse turret, the heavy cannon and th
   improving candidate. Interceptors are not in the job.
 - **The batteries** (main thread, in `step_turrets` after the guns): per battery, the core's bolt rows that are missiles or
   pulse bolts (never beams or mines), not spent, of a side hostile to it, within its reach, whose straight path over their life
-  (at most 6 s), relative to each big hull, meets a surface (`time_to_hull`). Each sets the latch; a ready battery takes one: a
-  missile before any bolt, then the soonest to hit, among equals the earlier row, one a tick per battery and none taken twice.
+  (at most 6 s), relative to each big hull, meets a surface (`time_to_hull`, swept once per bolt a tick and shared by the
+  batteries). Each sets the latch, shootable or not; a ready battery takes one it can shoot (inside its arc, its line from the trunnion
+  clear of every big hull, tested only for the would-be winner; M7-T40): a missile before any bolt, then the soonest to hit,
+  among equals the earlier row, one a tick per battery and none taken twice.
   `step_turrets` returns three more arrays (battery slots, the bolt ids taken, where they were); `TurretRows.step` spends each
   (`SimCore.spend_bolt` for an owned row, `Projectile.spend` for a node) and calls `TurretMount.on_intercepted`.
 - **Friendly bolts stop on the station.** `Damageable.stops_friendly_bolts` (the station's two hulls): `HitResolver` keeps a

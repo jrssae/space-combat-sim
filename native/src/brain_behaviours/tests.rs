@@ -466,6 +466,40 @@ fn a_civilian_flees_from_a_friends_fire_that_comes_close_and_toward_its_kin() {
     assert_ne!(brain.current_kind(), i32::from(KIND_RETREAT), "calm again");
 }
 
+// `civilian_bench` moved to hold 300 m off the station's flank, where the station is among its contacts.
+fn station_side_bench() -> Bench {
+    let at = Vector3::new(0.0, 300.0, 0.0);
+    let ships = [
+        (RAIDER, 0, at),
+        (400, 0, at + Vector3::new(600.0, 0.0, 0.0)),
+        (401, 0, at + Vector3::new(0.0, 0.0, -3000.0)),
+    ];
+    let mut rows = rows_with(&ships, 500.0, 0.0);
+    rows.roles[1] = crate::rows::ROLE_CIVILIAN;
+    rows.roles[3] = crate::rows::ROLE_CIVILIAN;
+    Bench::new(rows)
+}
+
+#[test]
+fn the_stations_own_grid_fire_does_not_frighten_its_traffic() {
+    // A grid bolt (its shooter the station's body) passes 30 m from the civilian, the station having it selected.
+    let mut bench = station_side_bench();
+    bench.rows.target_ids[0] = RAIDER;
+    let at = bench.rows.positions[1];
+    let mut brain = civilian_brain();
+    bolt(&mut bench, STATION, 0, at + Vector3::new(500.0, 30.0, 0.0), Vector3::new(-900.0, 0.0, 0.0));
+    civilian_think(&mut bench, &mut brain, 1.0);
+    assert!(bench.scratch.contacts.contains(&0), "the station is a contact");
+    assert_ne!(brain.current_kind(), i32::from(KIND_RETREAT), "the station's fire is not aimed at its traffic");
+    assert_eq!(brain.provoked_by, 0, "nor a provocation");
+    // The same pass by a friendly fighter's bolt still frightens it.
+    let mut bench = station_side_bench();
+    let mut brain = civilian_brain();
+    bolt(&mut bench, 400, 0, at + Vector3::new(500.0, 30.0, 0.0), Vector3::new(-900.0, 0.0, 0.0));
+    civilian_think(&mut bench, &mut brain, 1.0);
+    assert_eq!(brain.current_kind(), i32::from(KIND_RETREAT));
+}
+
 #[test]
 fn fire_from_a_ship_that_has_the_civilian_selected_is_a_provocation_and_a_wide_miss_is_nothing() {
     let mut bench = civilian_bench();
