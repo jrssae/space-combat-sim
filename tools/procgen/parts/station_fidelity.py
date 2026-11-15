@@ -65,6 +65,17 @@ PLANES: dict[str, list[SectionPlane]] = {
         SectionPlane("spine_z4520", 2, 4520.0, (-145.0, 145.0, 340.0, 600.0)),
         SectionPlane("spine_z5650", 2, 5650.0, (-200.0, 200.0, 350.0, 600.0)),
     ],
+    # The heavy cannons' recesses beside the bow tower (M7-T43): across each pit, the spine round it, the tower left out (the STL
+    # has none).
+    "bow_recesses": [SectionPlane(f"recess_{side}_z{z:.0f}", 2, z, window) for side, window in (("port", (-110.0, -22.0, 330.0, 400.0)),
+                                                                                              ("starboard", (22.0, 110.0, 330.0, 400.0)))
+                     for z in (505.0, 515.0, 525.0)],
+    # The rook tower between the heavy cannons (M7-T43), round its leaning axis; the STL's neck is narrower and lies aft.
+    "bow_tower": [
+        SectionPlane("tower_z520", 2, 520.0, (-40.0, 40.0, 370.0, 445.0)),
+        SectionPlane("tower_x0", 0, 0.0, (480.0, 560.0, 370.0, 445.0)),
+        SectionPlane("tower_y400", 1, 400.0, (-40.0, 40.0, 480.0, 560.0)),
+    ],
     "command_section": [
         SectionPlane("bow_z200", 2, 200.0, (-200.0, 200.0, 290.0, 400.0)),
         SectionPlane("bow_z400", 2, 400.0, (-200.0, 200.0, 290.0, 400.0)),
@@ -76,7 +87,12 @@ PLANES: dict[str, list[SectionPlane]] = {
 }
 
 # Plane name -> the accepted reason it may score under 0.90.
+_ROOK = ("rook shape by the maintainer's request 2026-11-15, leaned aft like the STL: an 18 m round shaft on a flared base with a "
+         "round top for I5, narrow so the heavy cannons cover each other; the STL's neck is about 12 m wide with a head")
 EXEMPTIONS: dict[str, str] = {
+    "tower_z520": f"{_ROOK} (0.340; the 40 x 50 m block it replaced 0.373)",
+    "tower_x0": f"{_ROOK} (0.389; the block 0.544)",
+    "tower_y400": f"{_ROOK} (0.446; the block 0.264)",
     "cargo_bay_side": "the throat and compartment are open for the pods (Q8 as refined; the maintainer: 'open only where the pods "
                       "enter'); the STL shuts the throat with a door plate",
 }

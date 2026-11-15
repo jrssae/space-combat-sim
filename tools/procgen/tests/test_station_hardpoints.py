@@ -37,7 +37,7 @@ D75 = [
     ("L8", "light_pulse", "drum", (-300.8, 40.4, 745.5), (-0.846, 0.451, -0.283)),
     ("L9", "light_pulse", "frame", (0, 507, 1500), (0, 0.98, -0.21)), ("L10", "light_pulse", "frame", (0, 537, 2650), (0, 1, 0)),
     ("L11", "light_pulse", "frame", (0, 537, 4500), (0, 1, 0)), ("L12", "light_pulse", "frame", (0, 472, 5650), (0, 1, 0)),
-    ("H1", "heavy_cannon", "frame", (-45, 375, 515), (0, 0.99, -0.13)), ("H2", "heavy_cannon", "frame", (45, 375, 515), (0, 0.99, -0.13)),
+    ("H1", "heavy_cannon", "frame", (-45, 368.2, 522), (0, 1, 0)), ("H2", "heavy_cannon", "frame", (45, 368.2, 522), (0, 1, 0)),
     ("I1", "interceptor", "drum", (0, 324, 800), (0, 1, 0)), ("I2", "interceptor", "drum", (324, 0, 800), (1, 0, 0)),
     ("I3", "interceptor", "drum", (0, -324, 800), (0, -1, 0)), ("I4", "interceptor", "drum", (-324, 0, 800), (-1, 0, 0)),
     ("I5", "interceptor", "frame", (0, 438, 520), (0, 1, -0.02)), ("I6", "interceptor", "frame", (40, 459, 1500), (0, 1, -0.05)),
@@ -139,10 +139,12 @@ class HardpointTests(unittest.TestCase):
             self.assertEqual((m["kind"], m["body"]), (kind, body), name)
             np.testing.assert_allclose(self.at(m), pos, atol=0.01, err_msg=name)
             np.testing.assert_allclose(m["up"], np.asarray(up) / np.linalg.norm(up), atol=0.01, err_msg=name)
-            # Looking down its up from above, the first surface is its plinth's face just over the pivot, on its own piece.
+            # Looking down its up from above, the first surface is its plinth's face just over the pivot, on its own piece; a heavy
+            # cannon stands on its recess's floor instead (M7-T43).
             n = np.asarray(m["up"])
             down = ray_hit(self.tris[body], self.at(m) + 20.0 * n, -n)
-            self.assertAlmostEqual(20.0 - down, sd.PLINTH_TOP_M, delta=0.05, msg=f"{name} sits on its plinth")
+            face = 0.0 if kind == "heavy_cannon" else sd.PLINTH_TOP_M
+            self.assertAlmostEqual(20.0 - down, face, delta=0.05, msg=f"{name} sits on its plinth or its recess's floor")
             other = "frame" if body == "drum" else "drum"
             self.assertGreater(distance_to(self.tris[other], self.at(m)), 5.0, f"{name} is clear of the other piece")
 

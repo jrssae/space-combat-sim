@@ -536,6 +536,21 @@ def throat_outline(grow: float = 0.0) -> list[tuple[float, float]]:
             (-hx, y0 + cut)]
 
 
+RIDGE_TOP_Y = 386.0  # the ridge's level top (the STL's, at z 495), where it runs into the tower
+
+
+def ridge_rows() -> list[tuple[float, float, float, float, float]]:
+    """The ridge along the bay's roof (the STL's, x +-10), rows of (z, x0, x1, y0, y1), run on into the rook tower's front (M7-T43,
+    the maintainer: the ramp meets the tower, no gap): it climbs as the STL's does to 386 m, then runs level into the tower's
+    flared base, narrowing to the shaft's width at its axis. Kept that low so the heavy cannons' cross-fire passes over it."""
+    from . import station_tower as stw  # noqa: PLC0415
+
+    slope = (386.0 - 372.0) / (495.0 - 445.0)
+    z_level = 445.0 + (RIDGE_TOP_Y - 372.0) / slope
+    return [(445.0, -10.0, 10.0, 360.0, 372.0), (z_level, -10.0, 10.0, 370.0, RIDGE_TOP_Y),
+            (float(stw.axis_z(RIDGE_TOP_Y)), -9.0, 9.0, 370.0, RIDGE_TOP_Y)]
+
+
 def cargo_bay_walls(m: Material) -> Mesh:
     """The spine's front from the slot's end to the bay's back round the throat and the compartment (the spine itself starts at
     the compartment's back): roof, floor and sides of each, and the throat's four cut corners."""
@@ -554,7 +569,7 @@ def cargo_bay_walls(m: Material) -> Mesh:
         ]
     # The keel under the bay down to the bow's pylon, and the ridge along its roof (the STL's, x +-10).
     parts.append(st_.block((-10.0, 290.0, ZG_COMPARTMENT_Z + 6.0), (10.0, 316.0, 494.0), m))
-    parts.append(st_.slab([(445.0, -10.0, 10.0, 360.0, 372.0), (495.0, -10.0, 10.0, 370.0, 386.0)], m))
+    parts.append(st_.slab(ridge_rows(), m))
     cut = ZG_THROAT[1]
     lo, hi = ZG_THROAT_Y
     for sx in (-1.0, 1.0):
@@ -699,4 +714,4 @@ def plinth(position: Sequence[float], up: Sequence[float], radius: float, m: Mat
 
 
 __all__ = ["BAY_SCALE", "DOORS_Z", "FACE_Z", "VOID_BACK_Z", "VOID_HALF", "ZG_HALF_X", "cargo_bay", "cargo_bay_walls", "command_detail",
-           "door_leaf_outline", "entrance_lamps", "main_docking_bay", "octagon", "offset", "opening", "opening_half", "plinth", "saw_edge"]
+           "door_leaf_outline", "entrance_lamps", "main_docking_bay", "octagon", "offset", "opening", "opening_half", "plinth", "ridge_rows", "saw_edge"]
