@@ -329,11 +329,12 @@ reject_text "${log}" "[console] > quit 0" || smoke_status=1
 
 echo "== Console smoke run: faction relations and friendly fire on the real main scene"
 # M3-T02 / AC2, AC3: `relation` prints and sets a pair for the session (it never writes data/factions.json), `reset`
-# reloads the file, an unknown faction is an error under --console-strict, and settings.friendly_fire is the switch.
+# reloads the file, an unknown faction is an error under --console-strict, and settings.friendly_fire is the switch (on by
+# default since M7-T47, so the smoke turns it off and on again).
 log="${REPORTS}/console_factions.log"
 factions_file_before="$(sha256sum data/factions.json | cut -d' ' -f1)"
 main_run "${log}" 180 0 "factions" -- --console-strict \
-    --console-exec="wait 30; relation earth_alliance raiders; relation earth_alliance raiders neutral; get factions.relations; relation reset; get factions.relations; get factions.friendly_fire; set settings.friendly_fire on; get factions.friendly_fire; quit" \
+    --console-exec="wait 30; relation earth_alliance raiders; relation earth_alliance raiders neutral; get factions.relations; relation reset; get factions.relations; get factions.friendly_fire; set settings.friendly_fire off; get factions.friendly_fire; set settings.friendly_fire on; get factions.friendly_fire; quit" \
     || smoke_status=1
 expect_line "${log}" "[console] earth_alliance vs raiders: hostile" || smoke_status=1
 expect_line "${log}" "[console] earth_alliance vs raiders: hostile -> neutral (this session)" || smoke_status=1
