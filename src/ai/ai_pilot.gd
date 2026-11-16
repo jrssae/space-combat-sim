@@ -853,8 +853,9 @@ func _sync_context(host: Object) -> void:
 	if route != _pushed_route or count != _pushed_route_count or (route != null and (route.pace_id != _pushed_route_pace \
 			or route.cruise_mps != _pushed_route_cruise or route.loop != _pushed_route_loop \
 			or route.yield_to_attack != _pushed_route_yield)):
-		# A docking lane given in place of another route starts at its first waypoint (M7-T10).
-		if route != null and route.lane and route != _pushed_route:
+		# A new route starts at its first waypoint (M7-T10's lanes; M7-T56: any route given in place of another, so a ship sent
+		# on to the gate after its lane flies there instead of counting the old route's end as the new one's).
+		if route != null and route != _pushed_route and (route.lane or _pushed_route != null):
 			host.restart_route(_slot)
 			var follow := behaviour(&"follow_path") as BehaviourFollowPath
 			if follow != null:

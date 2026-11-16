@@ -1,12 +1,13 @@
 class_name EncounterPlan
 extends RefCounted
 ## When free-flight encounters come and what each one is (architecture §18 D58, Q3, Q12): pure and seeded. Event `i` comes
-## at `time_of(i)` of encounter time (an interval apart, within a quarter interval of its slot), and `event(i)` draws its
-## kind by weight and its ships. Every draw is a hash of the seed, the event index and what is drawn, never a stepped
-## generator, so an event is the same whatever was asked before it (`CLAUDE.md`).
+## `gap_of(i)` after the one before it started (half to one and a half intervals; M7-T56: counted from the last start, so a
+## held event never bunches the next ones up), and `event(i)` draws its kind by weight and its ships. Every draw is a hash
+## of the seed, the event index and what is drawn, never a stepped generator, so an event is the same whatever was asked
+## before it (`CLAUDE.md`).
 ##
 ## - Raid: 2-6 raiders jumping in 6-12 km from their target (beyond the AI's 5 km sensors), flying at it; half the raids
-##   go for a civilian near the player when there is one.
+##   go for a civilian near the player when there is one, and a share (`station_raid_share`) for the station (M7-T56).
 ## - Patrol: 2, 4 or 6 allied Starfuries abreast on a straight route through the area, from 26-30 km out (past the
 ##   player's 25 km radar) to as far out on the other side.
 ## - Traffic: 1-3 civilian hulls of any of the nine on a straight route passing 2-10 km from the player, from 26-30 km out.
@@ -14,7 +15,7 @@ extends RefCounted
 const KINDS: Array[StringName] = [&"raid", &"patrol", &"traffic"]
 const DEFAULT_WEIGHTS: Dictionary = {&"raid": 0.4, &"patrol": 0.25, &"traffic": 0.35}
 const DEFAULT_INTERVAL_S: float = 120.0
-## How far an event may stray from its slot, as a share of the interval: gaps of half to one and a half intervals.
+## How far a gap may stray from the interval, as a share of it: gaps of half to one and a half intervals.
 const JITTER: float = 0.25
 
 const RAID_MIN: int = 2
@@ -42,7 +43,8 @@ const BOKMAI: StringName = &"brakiri_bokmai"
 const MAX_PODS: int = 3
 
 # What each hash draws, so no two draws of one event share a value.
-enum Salt { TIME, KIND, COUNT, RANGE, AZIMUTH, ELEVATION, ROLL, PASS, AT_CIVILIAN, PICK, TYPE = 100, PODS = 200, GATE = 300 }
+enum Salt { TIME, KIND, COUNT, RANGE, AZIMUTH, ELEVATION, ROLL, PASS, AT_CIVILIAN, PICK, TYPE = 100, PODS = 200, GATE = 300,
+		AT_STATION = 400 }
 ## Ways an event may use the jumpgate (M6-T14): its ships come out of it, or fly out through it.
 const GATE_ARRIVE: StringName = &"arrive"
 const GATE_DEPART: StringName = &"depart"
@@ -53,6 +55,8 @@ var weights: Dictionary = DEFAULT_WEIGHTS
 ## The pools file's `gate` table (M6-T14): {"arrive": {kind: share 0..1}, "depart": {kind: share}}. Empty: no event uses the gate,
 ## so a file without it plans exactly as before (the gate's draw has its own salt).
 var gate_shares: Dictionary = {}
+## Share of raids sent at the station instead (the pools file's `station_raid_share`); the director honours it only near one.
+var station_raid_share: float = 0.0
 
 
 func _init(p_seed: int = 0, p_interval_s: float = DEFAULT_INTERVAL_S, p_weights: Dictionary = DEFAULT_WEIGHTS) -> void:
@@ -61,25 +65,25 @@ func _init(p_seed: int = 0, p_interval_s: float = DEFAULT_INTERVAL_S, p_weights:
 	weights = p_weights
 
 
-## Encounter time (s since encounters started) at which event `index` is due.
-func time_of(index: int) -> float:
-	return interval_s * (float(index) + 1.0 + JITTER * (2.0 * _unit(index, Salt.TIME) - 1.0))
+## Seconds from the start of event `index - 1` (or from encounters turning on, for event 0) until event `index` is due.
+func gap_of(index: int) -> float:
+	return interval_s * (1.0 + 2.0 * JITTER * (2.0 * _unit(index, Salt.TIME) - 1.0))
 
 
-## How many events are due by `now_s`: the first index not yet due.
-func count_due(now_s: float) -> int:
-	# Every event before this one is due for certain, so only a few are tested.
-	var k: int = maxi(0, floori(now_s / interval_s - 1.0 - JITTER))
-	while time_of(k) <= now_s:
-		k += 1
-	return k
+## The kinds tried in place of `kind` when its event cannot start now (its pool spent, or the cap): the gentlest first, so
+## the schedule keeps its pace without piling up fights.
+static func substitutes(kind: StringName) -> Array[StringName]:
+	var out: Array[StringName] = []
+	for k: StringName in [&"traffic", &"patrol", &"raid"]:
+		if k != kind:
+			out.append(k)
+	return out
 
 
 ## Event `index`, of the kind its weights draw or of `kind` when given (the console's `force`).
 func event(index: int, kind: StringName = &"") -> EncounterEvent:
 	var e := EncounterEvent.new()
 	e.index = index
-	e.time_s = time_of(index)
 	e.kind = kind if KINDS.has(kind) else _draw_kind(index)
 	match e.kind:
 		&"raid":
@@ -133,6 +137,7 @@ func _plan_raid(e: EncounterEvent) -> void:
 	e.jumps = true
 	e.anchor = EncounterEvent.ANCHOR_TARGET
 	e.at_civilian = _unit(i, Salt.AT_CIVILIAN) < RAID_AT_CIVILIAN_SHARE
+	e.at_station = _unit(i, Salt.AT_STATION) < station_raid_share
 	e.target_pick = _unit(i, Salt.PICK)
 	e.cruise_mps = RAID_SPEED_MPS
 	for k: int in n:

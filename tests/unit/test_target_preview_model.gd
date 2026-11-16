@@ -83,7 +83,7 @@ func test_a_civilian_with_pod_mounts_adds_its_cargo_pods() -> void:
 			{"asset_id": "brakiri_bokmai", "cargo_pods": 2, "cargo_mounts": 3})
 	assert_eq(model.kind, TargetPreviewModel.Kind.SHIP, "its transponder identifies it beyond 5 km")
 	assert_eq(model.subtitle, "Bokmai hauler · Brakiri Syndicracy")
-	assert_eq(model.title_color, Factions.NEUTRAL_COLOR)
+	assert_eq(model.title_color, Factions.CIVILIAN_COLOR, "a civilian in the civilian colour (M7-T56)")
 	assert_eq(_fields(model), [&"hull", &"range", &"closing", &"cargo"])
 	assert_eq(model.row(&"cargo")["value"], "2 of 3")
 	var tanker: TargetInfo = _info("Tanker 1", EA, Vector3(0, 0, -3000), Vector3.ZERO, 1.0, Targetable.Role.CIVILIAN, 15000.0)

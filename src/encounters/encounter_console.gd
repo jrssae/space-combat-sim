@@ -9,7 +9,7 @@ const ACTIONS: Array[StringName] = [&"status", &"on", &"off", &"next", &"force",
 static func register(director: EncounterDirector) -> void:
 	var registry: ConsoleRegistry = DebugConsole.registry
 	registry.register_command(ConsoleCommand.new(&"encounters",
-			"Free-flight encounters: status, on (builds the pools), off, next (start the next one now), force <raid|patrol|traffic>, clear (every encounter ship back to its pool)",
+			"Free-flight encounters: status, on (builds the pools), off, next (start the next one now; the one after comes its gap later), force <raid|patrol|traffic>, clear (every encounter ship back to its pool)",
 			[ConsoleArg.enum_optional(&"action", ACTIONS, &"status"),
 			ConsoleArg.enum_optional(&"kind", EncounterPlan.KINDS, null)] as Array[ConsoleArg]),
 			func(args: Dictionary) -> ConsoleResult: return _run(director, args), director)
@@ -26,7 +26,7 @@ static func register(director: EncounterDirector) -> void:
 		&"traffic": {"get": func() -> int: return director.alive_of(&"traffic"), "doc": "Of them, civilian traffic"},
 		&"next_index": {"get": func() -> int: return director.next_index, "doc": "The next event the plan hands out"},
 		&"next_in_s": {"get": director.next_in_s, "unit": "s",
-				"doc": "Encounter time to the next event (0 while one waits, -1 before they first turn on)"},
+				"doc": "Encounter time to the next event, due its gap after the last one started (0 while one waits, -1 before they first turn on)"},
 		&"waiting": {"get": func() -> String: return director.waiting.summary() if director.waiting != null else "none",
 				"doc": "An event held by the cap or the pools"},
 		&"started": {"get": func() -> int: return director.events_started, "doc": "Events started so far"},
@@ -61,20 +61,21 @@ static func _run(director: EncounterDirector, args: Dictionary) -> ConsoleResult
 				return ConsoleResult.failure("encounters force <%s>" % "|".join(PackedStringArray(EncounterPlan.KINDS)))
 			if action == &"next" and director.waiting != null:
 				var held: EncounterEvent = director.waiting
-				if not director.start(held):
+				if not director.start_scheduled(held):
 					return ConsoleResult.failure("%s still waits (%d of %d ships in play)" % [held.summary(),
 							director.alive_count(), director.cap()])
 				director.waiting = null
-				return ConsoleResult.line("started %s" % held.summary())
+				return ConsoleResult.line("started %s" % director.last_event.summary())
 			var e: EncounterEvent = director.take_forced(StringName(kind)) if action == &"force" else director.take_next()
-			if not director.start(e):
+			# `next` keeps the schedule's pace from now (another kind may stand in); `force` leaves the schedule alone.
+			if not (director.start_scheduled(e) if action == &"next" else director.start(e)):
 				if action == &"next":
 					director.waiting = e  # a scheduled event is not lost: it waits like one that came on time
 					return ConsoleResult.line("%s waits: %d of %d ships in play, or its pools are spent" % [e.summary(),
 							director.alive_count(), director.cap()])
 				return ConsoleResult.failure("%s does not fit: %d of %d ships in play, or its pools are spent" % [e.summary(),
 						director.alive_count(), director.cap()])
-			return ConsoleResult.line("started %s" % e.summary())
+			return ConsoleResult.line("started %s" % director.last_event.summary())
 	return ConsoleResult.line(_status(director))
 
 

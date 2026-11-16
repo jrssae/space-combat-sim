@@ -28,6 +28,9 @@ const TABLE_PATH: String = "res://data/factions.json"
 const HOSTILE_COLOR: Color = Color(1.0, 0.35, 0.25)
 const NEUTRAL_COLOR: Color = Color(1.0, 0.85, 0.25)
 const FRIENDLY_COLOR: Color = Color(0.45, 0.7, 1.0)
+## A civilian hull that is not hostile (M7-T56): the role, not the faction, says what it is, so an Earth Alliance freighter is not
+## drawn as an ally. The target menu's CIVILIAN category uses it too.
+const CIVILIAN_COLOR: Color = Color(1.0, 0.72, 0.3)
 ## A contact too far to identify (M5-T25): no faction colour until it is within `TargetCategories.IDENT_RANGE_M` or broadcasts.
 const UNIDENTIFIED_COLOR: Color = Color(0.73, 0.73, 0.73)
 ## The HUD's own line work (boresight, gauges, radar sphere): green, independent of any faction.
@@ -81,6 +84,11 @@ static func load_table(path: String = TABLE_PATH) -> String:
 		return String(result["error"])
 	_table = result["table"]
 	return ""
+
+
+## The HUD colour for a contact: its relation's, but a civilian hull's own unless it is hostile.
+static func contact_color(rel: Relation, civilian: bool) -> Color:
+	return CIVILIAN_COLOR if civilian and rel != Relation.HOSTILE else hud_color(rel)
 
 
 ## The HUD colour for a relation. Anything that is not FRIENDLY or HOSTILE reads as neutral/unknown yellow.

@@ -2999,6 +2999,50 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   running between Babylon 5 and the jumpgate (arrivals through the gate to the station, departures back); the Saturn 3 freighter's
   faction (civilian, never an ally); keep raids and patrols in the mix.
 - **Done when:** tests for the spacing, the routes and the factions; the maintainer flies free flight (H); committed.
+- **Done (code part, 2026-11-16):**
+  - **Measured (free flight, shipped pools, player invulnerable, raiders shot down 90 s after they arrive, sim time).** Before, seed 5:
+    the first event (a 6-Starfury patrol) at 104 s, then nothing for 11 minutes: the next patrol waited for allies that the
+    station's Alpha wing (scrambled against the station traffic's own raid at 150 s) shared out of the same 12-ship pool, and every
+    later event queued behind it (each event had a fixed slot, so a held one held all). The station traffic's own clock (every
+    150 s) ran beside it, so the two sources were never spaced together. After, seeds 5, 11, 23 over 16 minutes: first events at
+    88, 165 and 129 s, then gaps 87, 78, 132, 162, 116, 100, 155 s; 90, 92, 90, 174, 140, 62, 135 s; 82, 167, 152, 164, 119 s (all
+    within 60-180 s); raids (at the player, at a civilian and at the station), patrols and traffic mixed (seed 23 drew no raid
+    in its 16 minutes). No civilian was lost to anything but raiders; 2-3 docked and 2-3 undocked and left through the gate per run.
+  - **Pacing.** `EncounterPlan.gap_of(i)`: each event is due half to one and a half intervals after the last one started (1 to 3
+    minutes at the default 120 s), not at an absolute slot. One that cannot start (the cap, or its pool spent) gives way to the
+    same index drawn as another kind, gentlest first (`substitutes`: traffic, patrol, raid), and waits only when none fits. The
+    shipped pools now come on top of what the station keeps for its raids and wings (12 raiders and 12 Starfuries each; 75 pooled
+    ships, was 42). Station raids moved from the station traffic's own clock into the encounters: `station_raid_share` (0.3) sends
+    a raid at Babylon 5 when the player is within 25 km of it, 11-17 km out of its centre, its wing scrambled.
+  - **Civilian traffic on the run (the "strange places").** The jumpgate is 50 km from the station and the player starts 8 km from
+    it, so the director never used the gate (25 km reach) and sent all its traffic on straight lines past the player from 26-30 km
+    out, in any direction; the station's own docking traffic came every 150 s at best. Every ship that came from the gate to
+    dock rammed the drum beside the mouth (it crossed the lane's axis at 120 m/s, overshot the first point and came back at an
+    angle); and every departure vanished 5 km out: a
+    route given in place of another kept the old one's end (`BehaviourFollowPath` progress, the native slot not restarted), so a ship
+    sent to the gate after its lane was released at once. Now: `BehaviourFollowPath.attach` and `AiPilot` restart any new route; an
+    arrival flies a lane-style route that slows into a point 3 km out on its lane's axis before taking the lane (the Brezebel, the
+    Skylark and the Narn transport dock from 10 km out with no contact); arrivals keep 600 m to one side of the run and departures
+    to the other, turning out of and into the gate 3 km off it on their own side, so they never meet head on; the docking bay
+    takes one ship at a time (arrivals wait at their own points along its axis, 700 m apart; no undocking while one is on the
+    lane), as two arrivals met at one entry point and an undocking ship met a docking one in the tunnel in the first runs; the
+    station keeps **5 civilians** on the run between the gate and Babylon 5 (`data/station/traffic.json`: `lane_ships`, at least 40 s
+    between its own starts), placed along it when free flight starts (arriving and leaving by turns), one more through the gate or
+    undocking whenever one has docked or left; the encounters' traffic events join the run as arriving convoys (1-3 ships, 800 m
+    apart, past the player's radar): civilians on the run 5-13 in the measured runs, 8 the median (5 of the run plus the convoys).
+  - **The Saturn 3 "ally".** Its faction is right (Earth Alliance, the civilian role; Q24, the flee-to-own-faction rule needs it):
+    the radar dot, the target box and the target preview coloured by faction relation, so an Earth Alliance civilian was drawn
+    blue like a Starfury. They now take the civilian colour (`Factions.CIVILIAN_COLOR`, the target menu's) for any non-hostile
+    civilian hull; the core's `radar_contacts` gives each contact's civilian flag.
+  - **Found, left for its own fix:** an undocking Narn transport rams the doorway (the drum, 24 m off the axis, 25 m inside the
+    inner doors) 3 s after they open and is destroyed, already on HEAD; the Skylark and the Brezebel come out clean. The run undocks only
+    those two; the console's `traffic undock` still picks the Narn in its turn.
+  - Tests: `test_encounter_plan` (gaps, substitutes, station share), `test_encounters` (the pace with a spent pool and with the
+    shipped pools, the 75 pooled ships), `test_station_run` (the run full from the start and on the gate-station line, a departure
+    flying on to the gate, a new route from its first waypoint, one refill at a time, a convoy past the radar, a station raid),
+    `test_civilian_colours`, and two arrivals queueing and docking without contact. Screenshots:
+    `references/screenshots/M7-T56 traffic lane/` (GPU, Forward+ at 60 fps: the run's line of civilian dots on the radar, a
+    Brezebel and a Saturn targeted in the civilian colour).
 
 ### M7-T57 The station tour: "Defense" and the grid stop
 

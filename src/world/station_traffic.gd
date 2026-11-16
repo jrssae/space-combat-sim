@@ -15,8 +15,10 @@ extends Node
 ##   the data scrambled against them.
 ## - Arrivals come out of the scene's jumpgate when it has one, and departures leave through it; without one they start
 ##   and end a few kilometres out.
-## - **Light traffic by itself** while free-flight encounters are on (`data/station/traffic.json`: the interval, the kinds'
-##   weights; each event a hash of the session seed and its index).
+## - **The run** (M7-T56) while free-flight encounters are on with a pools file that asks for it (`station_run`;
+##   `data/station/traffic.json`): `lane_ships` civilians on their way between the gate and the station at all times, the run
+##   filled when traffic starts and one more started whenever one has docked or left (arriving through the gate, or undocking), each a hash of the session seed and its index. The encounters'
+##   traffic events join the run as arriving convoys (`lane_event`), and their raids on the station scramble the wings.
 ##
 ## Console: command and provider `traffic`.
 
@@ -24,13 +26,36 @@ const NODE_NAME: StringName = &"StationTraffic"
 const DATA_PATH: String = "res://data/station/traffic.json"
 const PROVIDER: StringName = &"traffic"
 const ACTIONS: Array[StringName] = [&"status", &"dock", &"undock", &"freighter", &"raid", &"scramble", &"auto", &"clear"]
-const KINDS: Array[StringName] = [&"dock", &"undock", &"freighter", &"raid"]
+## What the run's own starts may be (raids at the station come with the encounters).
+const KINDS: Array[StringName] = [&"dock", &"undock", &"freighter"]
 const CIVILIAN_AI: Dictionary = {"type": "ai", "profile": "civilian"}
 const RAIDER_AI: Dictionary = {"type": "ai", "profile": "raider", "orders": "attack"}
 const TRANSIT_CRUISE_MPS: float = 120.0
 ## Without a gate: how far beyond a lane's first point a ship starts, and how far out a leaving ship is let go, metres.
 const START_OUT_M: float = 2500.0
 const LEAVE_OUT_M: float = 12000.0
+## The run's ends kept clear when ships are put on it (the gate's vortex, the station's lanes), metres.
+const RUN_END_M: float = 3000.0
+## Arrivals keep this far to one side of the run's line and departures to the other, so they never meet head on (metres).
+const RUN_SIDE_M: float = 600.0
+## An arrival from the gate's side slows into a point this far out on its lane's axis before it takes the lane, so it comes
+## onto the lane straight and slow (M7-T56: at 120 m/s across the axis it overshot and rammed the drum beside the mouth).
+const ENTRY_OUT_M: float = 3000.0
+const ENTRY_HOLD_S: float = 1.0
+## Arrivals for the docking bay queue at their own points along its axis, this far apart, and take the lane one at a time.
+const QUEUE_SPACING_M: float = 700.0
+## Arrivals turn off, and departures turn in, this far out from the gate on their own side.
+const GATE_CLEAR_M: float = 3000.0
+## An encounter's convoy joins the run this far from the station, pushed toward the gate until it is past the player's radar.
+const JOIN_RUN_M: Vector2 = Vector2(22000.0, 40000.0)
+const JOIN_CLEAR_OF_PLAYER_M: float = 26000.0
+const JOIN_STEP_M: float = 2000.0
+const CONVOY_SPACING_M: float = 800.0
+## Hulls the run undocks: the Narn transport is left out, as it rams the doorway (the drum, 24 m off the axis) 3 s after the
+## doors open on its way out (found in M7-T56, left for its own fix).
+const UNDOCK_TYPES: Array[StringName] = [&"skylark_transport", &"centauri_brezebel"]
+## Share of the run's arrivals that are a Saturn for the cargo bay, when no freighter is there or on its way.
+const FREIGHTER_SHARE: float = 0.5
 ## Without a gate a raid starts this far off the bow, above it (station frame).
 const RAID_FROM: Vector3 = Vector3(0.0, 2500.0, -11000.0)
 const RAID_SPEED_MPS: float = 120.0
@@ -60,14 +85,14 @@ signal freighter_left(ship_name: String)
 
 var main: Main = null
 var plan: DockingPlan = null
-## Whether light traffic starts by itself (set when encounters are on; the console's `traffic auto on|off` overrides).
+## Whether the run keeps itself going (set when encounters are on; the console's `traffic auto on|off` overrides).
 var auto: bool = false
 var auto_forced: bool = false
-var interval_s: float = 150.0
+## Civilians the run keeps on their way at once, and the least time between two of its own starts.
+var lane_ships: int = 5
+var lane_spacing_s: float = 40.0
 var weights: Dictionary = {}
-var raid_size: Vector2i = Vector2i(4, 6)
 var scramble_wings: PackedStringArray = PackedStringArray()
-var max_ships: int = 8
 var elapsed_s: float = 0.0
 var events: int = 0
 var docked_count: int = 0
@@ -83,6 +108,10 @@ var last_event: String = "none"
 # One entry a ship: {combatant, brain, kind, state, cargo, loading, cargo_state} (the last three for freighters).
 var _own: Array[Dictionary] = []
 var _spawned: int = 0
+var _seeded: bool = false
+var _last_flow_s: float = -INF
+# The run's arrivals asked of the gate and not out of its vortex yet.
+var _pending_flow: int = 0
 
 
 func _init() -> void:
@@ -133,18 +162,18 @@ func last_ship() -> Combatant:
 
 ## A civilian flies into the main docking bay. `near` starts it on the lane's first point instead of far out or at the
 ## gate. Returns "" or why not.
-func dock(type: StringName = &"", near: bool = false) -> String:
+func dock(type: StringName = &"", near: bool = false, extra: Dictionary = {}) -> String:
 	var why: String = _ready_plan()
 	if not why.is_empty():
 		return why
 	var hull: StringName = _tunnel_type(type)
 	if hull == &"":
 		return "%s does not fit the docking tunnel (%s do)" % [type, ", ".join(DockingPlan.TUNNEL_TYPES)]
-	return _arrive(hull, &"dock", plan.dock_in, near)
+	return _arrive(hull, &"dock", plan.dock_in, near, extra)
 
 
 ## A civilian comes out of the main docking bay and leaves. Returns "" or why not.
-func undock(type: StringName = &"") -> String:
+func undock(type: StringName = &"", extra: Dictionary = {}) -> String:
 	var why: String = _ready_plan()
 	if not why.is_empty():
 		return why
@@ -159,7 +188,7 @@ func undock(type: StringName = &"") -> String:
 	var basis: Basis = Basis.looking_at(xform.basis * out_dir, s.drum_body.global_basis.y)
 	var wait: Array[Dictionary] = [{"at": airlock, "hold_s": UNDOCK_WAIT_S, "face": Vector3.ZERO, "spin": plan.spin}]
 	var route: Route = DockingPlan.route_of(wait, xform, main.world, DockingPlan.DOCK_CRUISE_MPS, "UNDOCKING")
-	var c: Combatant = _take(hull, route, xform * airlock, basis, main.world.rest_velocity(), &"undock", &"airlock")
+	var c: Combatant = _take(hull, route, xform * airlock, basis, main.world.rest_velocity(), &"undock", &"airlock", extra)
 	if c == null:
 		return "no %s is free in the ship pool" % hull
 	c.ship.angular_velocity = xform.basis * plan.spin  # it comes out turning with the drum
@@ -170,7 +199,7 @@ func undock(type: StringName = &"") -> String:
 ## A Saturn of `type` (any of `DockingPlan.FREIGHTER_TYPES`; "" picks one) flies the cargo bay's cycle, unloading or `loading`.
 ## `start`: "" out of the gate (or far out), `near` on the lane's first point, `hold` already holding at the bay, `show` backing in
 ## its last `SHOW_BACK_M` with the cargo pods already on their way and the player put beside the lane to watch. Returns "" or why not.
-func freighter(type: StringName = &"", loading: bool = false, start: StringName = &"") -> String:
+func freighter(type: StringName = &"", loading: bool = false, start: StringName = &"", extra: Dictionary = {}) -> String:
 	var why: String = _ready_plan()
 	if not why.is_empty():
 		return why
@@ -195,7 +224,9 @@ func freighter(type: StringName = &"", loading: bool = false, start: StringName 
 			_start_cargo(_own[_own.size() - 1], true)
 			return view_cargo_bay()
 		return ""
-	return _arrive(hull, &"freighter", plan.freighter, start == &"near", {"loading": loading})
+	var more: Dictionary = extra.duplicate()
+	more["loading"] = loading
+	return _arrive(hull, &"freighter", plan.freighter, start == &"near", more)
 
 
 ## Puts the player beside the freighters' lane, toward the bay from the hold point, looking at a held Saturn's cargo: the cargo pods come
@@ -272,6 +303,71 @@ func reserve_pools() -> void:
 	reserved_ms = float(Time.get_ticks_usec() - t0) / 1000.0
 
 
+## Ships of `type` that `reserve_pools` keeps for the station's raids and wings: none without the station, nor for a pool size
+## the caller fixed. The encounters build their own on top (M7-T56).
+func reserved_count(type: StringName) -> int:
+	if station() == null:
+		return 0
+	if type == ShipPool.DEFAULT_TYPE and main.raider_pool_size < 0:
+		return MAX_RAID
+	if type == ShipPool.ALLY_TYPE and main.ally_pool_size < 0:
+		return LaunchDirector.WING_SIZE * maxi(scramble_wings.size(), 1)
+	return 0
+
+
+## Whether the station and its lanes are there for traffic.
+func lanes_ready() -> bool:
+	return _ready_plan().is_empty()
+
+
+## The traffic's ships in play, in the order they started; with `flow_only`, the run's own (those still to come out of the
+## gate are not in play yet).
+func ships(flow_only: bool = false) -> Array[Combatant]:
+	var out: Array[Combatant] = []
+	for entry: Dictionary in _own:
+		if not flow_only or bool(entry.get("flow", false)):
+			out.append(entry["combatant"])
+	return out
+
+
+## The traffic state of `c` (`transit`, `lane`, `airlock`, `leave`; &"" for a ship that is not traffic's).
+func state_of(c: Combatant) -> StringName:
+	for entry: Dictionary in _own:
+		if entry["combatant"] == c:
+			return entry["state"]
+	return &""
+
+
+## The run's own civilians on their way, and those asked of the gate.
+func flow_count() -> int:
+	var n: int = _pending_flow
+	for entry: Dictionary in _own:
+		n += 1 if bool(entry.get("flow", false)) else 0
+	return n
+
+
+## Starts an encounter's traffic event on the run: its ships come in one behind the other toward the station, joining the run
+## past the player's radar where it can. A Saturn goes to the cargo bay when no freighter is there or on its way; every other hull,
+## and any Saturn after that, flies to the docking bay in a hull that fits its tunnel. Whether any ship started.
+func lane_event(e: EncounterEvent, seed_value: int) -> bool:
+	if not lanes_ready() or _gate() == null:
+		return false
+	var along: float = _join_along(hash([seed_value, "traffic join", e.index]))
+	var step: float = CONVOY_SPACING_M / maxf(_run_length(plan.dock_in), 1.0)
+	var freighter_taken: bool = alive_of(&"freighter") > 0
+	var placed: int = 0
+	for k: int in e.count():
+		var type: StringName = e.types[k]
+		if DockingPlan.FREIGHTER_TYPES.has(type) and not freighter_taken:
+			freighter_taken = true
+			type = _free_hull(DockingPlan.FREIGHTER_TYPES, DockingPlan.FREIGHTER_TYPES.find(type))
+		else:
+			type = _free_hull(DockingPlan.TUNNEL_TYPES, DockingPlan.TUNNEL_TYPES.find(type) if DockingPlan.TUNNEL_TYPES.has(type) else e.index + k)
+		if _join_inbound(type, along + step * float(k), {"loading": _unit("load", e.index * 4 + k) < 0.5}) != null:
+			placed += 1
+	return placed > 0
+
+
 ## Sends the defenders against a new raid (maintainer, 2026-11-15): a scrambled wing that is still out (launching, or at least
 ## half strong) takes the raid at will and nothing launches; the next wing in the data's order goes only when the ones before it
 ## are gone or weaker than half. When every wing has flown and is spent, the first is refilled to full. Returns "" or why not.
@@ -319,11 +415,10 @@ func clear() -> int:
 func _physics_process(delta: float) -> void:
 	var director: EncounterDirector = main.encounter_director if main != null else null
 	if not auto_forced:
-		auto = director != null and director.on and station() != null
+		auto = director != null and director.on and director.station_run and station() != null
 	if auto:
 		elapsed_s += delta
-		if elapsed_s >= interval_s * float(events + 1):
-			_start_auto()
+		_keep_flow()
 	for i: int in range(_own.size() - 1, -1, -1):
 		_step(i)
 
@@ -361,12 +456,11 @@ func _arrive(type: StringName, kind: StringName, lane: Array[Dictionary], near: 
 	var first: Vector3 = xform * (lane[0]["at"] as Vector3)
 	var gate: Jumpgate = null if near else _gate()
 	if gate != null:
-		var transit := Route.new()
-		transit.name = "TO THE STATION"
-		transit.pace = Route.PACE_NONE
-		transit.cruise_mps = TRANSIT_CRUISE_MPS
-		transit.add(main.world.to_universe(first))
+		var transit: Route = _transit_route(lane, true)
+		var flow: bool = bool(extra.get("flow", false))
+		_pending_flow += 1 if flow else 0
 		gate.request_arrival(func() -> void:
+			_pending_flow -= 1 if flow else 0
 			var at: Transform3D = gate.arrival_transform()
 			var c: Combatant = _take(type, transit, at.origin, at.basis, gate.arrival_velocity() + main.world.rest_velocity(),
 					kind, &"transit", extra)
@@ -380,6 +474,168 @@ func _arrive(type: StringName, kind: StringName, lane: Array[Dictionary], near: 
 	var c: Combatant = _take(type, route, start, Basis.looking_at(heading, xform.basis.y),
 			main.world.rest_velocity() + heading * route.cruise_mps, kind, &"lane", extra)
 	return "" if c != null else "no %s is free in the ship pool" % type
+
+
+# The way in from the gate's side, kept to its legs: out of the gate onto the arrivals' side when `from_gate`, then slowing into
+# the entry point on `lane`'s axis, where the lane takes over.
+func _transit_route(lane: Array[Dictionary], from_gate: bool) -> Route:
+	var xform: Transform3D = station().global_transform
+	var out_m: float = ENTRY_OUT_M + QUEUE_SPACING_M * float(_queue_slot() if lane == plan.dock_in else 0)
+	var inward: Vector3 = ((lane[1]["at"] as Vector3) - (lane[0]["at"] as Vector3)).normalized()
+	var transit := Route.new()
+	transit.name = "TO THE STATION"
+	transit.pace = Route.PACE_NONE
+	transit.lane = true
+	transit.cruise_mps = TRANSIT_CRUISE_MPS
+	var gate: Jumpgate = _gate()
+	if from_gate and gate != null:
+		transit.add_lane(main.world.to_universe(_gate_side(gate, 1.0)))
+	transit.add_lane(main.world.to_universe(xform * ((lane[0]["at"] as Vector3) - inward * out_m)), ENTRY_HOLD_S)
+	return transit
+
+
+# The way out through the gate, turning in from the departures' side.
+func _departure_route(gate: Jumpgate) -> Route:
+	var through: Route = gate.departure_route(main.world, TRANSIT_CRUISE_MPS)
+	var route := Route.new()
+	route.name = through.name
+	route.pace = Route.PACE_NONE
+	route.cruise_mps = TRANSIT_CRUISE_MPS
+	route.add(main.world.to_universe(_gate_side(gate, -1.0)))
+	for i: int in through.count():
+		route.add(through.waypoint(i).position)
+	return route
+
+
+# A point `GATE_CLEAR_M` from the gate toward the station, on the arrivals' (`side` 1) or the departures' (-1) side of the run.
+func _gate_side(gate: Jumpgate, side: float) -> Vector3:
+	var toward: Vector3 = (station().global_position - gate.global_position).normalized()
+	return gate.global_position + toward * GATE_CLEAR_M + _run_side() * side
+
+
+# The arrivals' offset from the run's line (the departures take its opposite).
+func _run_side() -> Vector3:
+	var along: Vector3 = (_gate().global_position - station().global_position).normalized()
+	var side: Vector3 = along.cross(Vector3.UP)
+	if side.length_squared() < 1e-6:
+		side = along.cross(Vector3.RIGHT)
+	return side.normalized() * RUN_SIDE_M
+
+
+# --- the run ----------------------------------------------------------------------------------------------------
+
+
+# Keeps `lane_ships` of the run's civilians on their way: the run filled once when traffic starts, then one more whenever one has
+# docked or left, never two within `lane_spacing_s`.
+func _keep_flow() -> void:
+	if not lanes_ready():
+		return
+	if not _seeded:
+		_seeded = true
+		_seed_run()
+	if flow_count() < lane_ships and elapsed_s - _last_flow_s >= lane_spacing_s:
+		_start_auto()
+
+
+# The run as the player finds it: civilians already on their way, spread from the station to the gate, arriving and leaving by
+# turns, so the traffic is there from the start.
+func _seed_run() -> void:
+	if _gate() == null:
+		return
+	for k: int in lane_ships:
+		var along: float = (float(k) + 0.25 + 0.5 * _unit("seed", k)) / float(maxi(lane_ships, 1))
+		if k % 2 == 0:
+			_join_inbound(_arrival_hull(k), along, {"flow": true, "loading": _unit("load", k) < 0.5})
+		else:
+			_join_outbound(_free_hull(ShipCatalog.CIVILIAN_TYPES, hash([main.scenario_seed, "traffic out", k])), along, {"flow": true})
+	_last_flow_s = elapsed_s
+
+
+# A point of the run from `lane`'s first point to the gate, `along` 0 at the station's end and 1 at the gate's, its ends kept clear,
+# on the arrivals' (`side` 1) or the departures' (-1) side.
+func _run_point(lane: Array[Dictionary], along: float, side: float) -> Vector3:
+	var a: Vector3 = station().global_transform * (lane[0]["at"] as Vector3)
+	var b: Vector3 = _gate().global_position
+	var length: float = a.distance_to(b)
+	var d: float = lerpf(minf(RUN_END_M, length * 0.5), maxf(length - RUN_END_M, length * 0.5), clampf(along, 0.0, 1.0))
+	return a + (b - a).normalized() * d + _run_side() * side
+
+
+func _run_length(lane: Array[Dictionary]) -> float:
+	return (station().global_transform * (lane[0]["at"] as Vector3)).distance_to(_gate().global_position)
+
+
+# Where on the run (0..1) a convoy joins: `JOIN_RUN_M` from the station by its draw, moved toward the gate until it is past the
+# player's radar or the run ends.
+func _join_along(draw: int) -> float:
+	var length: float = maxf(_run_length(plan.dock_in), 1.0)
+	var d: float = lerpf(JOIN_RUN_M.x, JOIN_RUN_M.y, float(draw) / 4294967296.0)
+	while d < length - RUN_END_M and _run_point(plan.dock_in, d / length, 1.0).distance_to(main.ship.global_position) < JOIN_CLEAR_OF_PLAYER_M:
+		d += JOIN_STEP_M
+	return clampf(d / length, 0.0, 1.0)
+
+
+# A ship of `type` already on the run at `along`, flying in to its lane: a Saturn to the cargo bay, any other hull to the docking bay.
+func _join_inbound(type: StringName, along: float, extra: Dictionary) -> Combatant:
+	var freighter_hull: bool = DockingPlan.FREIGHTER_TYPES.has(type)
+	var lane: Array[Dictionary] = plan.freighter if freighter_hull else plan.dock_in
+	var transit: Route = _transit_route(lane, false)
+	var at: Vector3 = _run_point(lane, along, 1.0)
+	var heading: Vector3 = (main.world.universe_to_local(transit.waypoint(0).position) - at).normalized()
+	return _take(type, transit, at, Basis.looking_at(heading, Vector3.UP),
+			main.world.rest_velocity() + heading * TRANSIT_CRUISE_MPS, &"freighter" if freighter_hull else &"dock", &"transit", extra)
+
+
+# A ship of `type` already on the run at `along`, on its way out through the gate.
+func _join_outbound(type: StringName, along: float, extra: Dictionary) -> Combatant:
+	var gate: Jumpgate = _gate()
+	var route: Route = _departure_route(gate)
+	var at: Vector3 = _run_point(plan.dock_in, along, -1.0)
+	var heading: Vector3 = (main.world.universe_to_local(route.waypoint(0).position) - at).normalized()
+	var c: Combatant = _take(type, route, at, Basis.looking_at(heading, Vector3.UP),
+			main.world.rest_velocity() + heading * TRANSIT_CRUISE_MPS, &"undock", &"leave", extra)
+	if c != null:
+		_watch_departure(_own[_own.size() - 1], gate)
+	return c
+
+
+# The run's next arrival: a Saturn for the cargo bay by its share while none is there or on its way, else a hull for the tunnel.
+func _arrival_hull(index: int) -> StringName:
+	if alive_of(&"freighter") == 0 and _pending_flow == 0 and _unit("freighter", index) < FREIGHTER_SHARE:
+		return _free_hull(DockingPlan.FREIGHTER_TYPES, hash([main.scenario_seed, "traffic freighter", index]))
+	return _free_hull(DockingPlan.TUNNEL_TYPES, hash([main.scenario_seed, "traffic hull", index]))
+
+
+# The first of `types` from `start` on with a ship free in its pool (so a start never builds one mid-flight); `start`'s own when none is.
+func _free_hull(types: Array[StringName], start: int) -> StringName:
+	var first: int = absi(start) % types.size()
+	for step: int in types.size():
+		var type: StringName = types[(first + step) % types.size()]
+		if main.ships.free_count(type) > 0:
+			return type
+	return types[first]
+
+
+# Whether a ship is on the docking bay's lane, in its tunnel or its void (docking or undocking): the bay takes one at a time.
+func _bay_busy() -> bool:
+	for entry: Dictionary in _own:
+		if (entry["kind"] == &"dock" and entry["state"] == &"lane") \
+				or (entry["kind"] == &"undock" and (entry["state"] == &"airlock" or entry["state"] == &"lane")):
+			return true
+	return false
+
+
+# The next free waiting place for an arrival bound for the docking bay: one past every docking ship still on its way in.
+func _queue_slot() -> int:
+	var n: int = 0
+	for entry: Dictionary in _own:
+		n += 1 if entry["kind"] == &"dock" and entry["state"] == &"transit" else 0
+	return n
+
+
+# 0..1 from the session seed, what is drawn and its index.
+func _unit(what: String, index: int) -> float:
+	return float(hash([main.scenario_seed, "traffic " + what, index])) / 4294967296.0
 
 
 # Grows `type`'s pool until `count` of it are free (a hitch when it builds: `reserve_pools` does it at load).
@@ -420,26 +676,26 @@ func _take(type: StringName, route: Route, at: Vector3, basis: Basis, velocity: 
 	return c
 
 
+# One more of the run's civilians: arriving through the gate (to the docking bay, or a Saturn to the cargo bay) or undocking.
 func _start_auto() -> void:
 	var index: int = events
 	events += 1
-	if alive_count() >= max_ships:
-		return
+	_last_flow_s = elapsed_s
 	var kind: StringName = _draw_kind(index)
+	if kind == &"freighter" and (alive_of(&"freighter") > 0 or _pending_flow > 0):
+		kind = &"dock"  # one freighter at the cargo bay at a time
+	if kind == &"undock" and _bay_busy():
+		kind = &"dock"
+	var flow: Dictionary = {"flow": true}
 	var why: String = ""
 	match kind:
 		&"dock":
-			why = dock()
+			why = dock(_free_hull(DockingPlan.TUNNEL_TYPES, hash([main.scenario_seed, "traffic hull", index])), false, flow)
 		&"undock":
-			why = undock()
+			why = undock(_free_hull(UNDOCK_TYPES, hash([main.scenario_seed, "traffic hull", index])), flow)
 		&"freighter":
-			var pick: int = hash([main.scenario_seed, "traffic freighter", index])
-			var hull: StringName = DockingPlan.FREIGHTER_TYPES[absi(pick) % DockingPlan.FREIGHTER_TYPES.size()]
-			why = freighter(hull, (absi(pick) >> 8) % 2 == 1) if alive_of(&"freighter") == 0 \
-					else "a freighter is at the cargo bay already"
-		&"raid":
-			var u: float = float(hash([main.scenario_seed, "traffic size", index])) / 4294967296.0
-			why = raid(raid_size.x + mini(floori(u * float(raid_size.y - raid_size.x + 1)), raid_size.y - raid_size.x))
+			var hull: StringName = _free_hull(DockingPlan.FREIGHTER_TYPES, hash([main.scenario_seed, "traffic freighter", index]))
+			why = freighter(hull, _unit("load", index) < 0.5, &"", flow)
 	last_event = "%s (auto)%s" % [kind, "" if why.is_empty() else ": " + why]
 
 
@@ -447,7 +703,7 @@ func _draw_kind(index: int) -> StringName:
 	var total: float = 0.0
 	for kind: StringName in KINDS:
 		total += maxf(float(weights.get(kind, 0.0)), 0.0)
-	var pick: float = float(hash([main.scenario_seed, "traffic kind", index])) / 4294967296.0 * total
+	var pick: float = _unit("kind", index) * total
 	for kind: StringName in KINDS:
 		var w: float = maxf(float(weights.get(kind, 0.0)), 0.0)
 		if pick < w:
@@ -476,7 +732,7 @@ func _step(i: int) -> void:
 	var done: bool = path != null and path.phase == BehaviourFollowPath.Phase.DONE
 	match entry["state"]:
 		&"transit":
-			if done:
+			if done and not (kind == &"dock" and _bay_busy()):  # a docking ship waits its turn at its entry point
 				BehaviourFollowPath.attach(entry["brain"] as AiPilot, _lane_route(kind, plan.freighter if kind == &"freighter" else plan.dock_in))
 				entry["state"] = &"lane"
 		&"airlock":  # an undocking ship waits in the void until the inner doors stand open
@@ -549,12 +805,8 @@ func _leave(entry: Dictionary) -> void:
 	entry["state"] = &"leave"
 	var gate: Jumpgate = _gate()
 	if gate != null:
-		BehaviourFollowPath.attach(brain as AiPilot, gate.departure_route(main.world, TRANSIT_CRUISE_MPS))
-		gate.send_departure(c.ship, func(_ship: Node3D) -> void:
-			for k: int in _own.size():
-				if _own[k]["combatant"] == c and _own[k]["brain"] == brain:
-					_finish(k)
-					return)
+		BehaviourFollowPath.attach(brain as AiPilot, _departure_route(gate))
+		_watch_departure(entry, gate)
 		return
 	var route := Route.new()
 	route.name = "LEAVING"
@@ -563,6 +815,17 @@ func _leave(entry: Dictionary) -> void:
 	var heading: Vector3 = -c.ship.global_basis.z
 	route.add(main.world.to_universe(c.ship.global_position + heading * LEAVE_OUT_M))
 	BehaviourFollowPath.attach(brain as AiPilot, route)
+
+
+# The gate lets the entry's ship go once it has flown through its departure vortex.
+func _watch_departure(entry: Dictionary, gate: Jumpgate) -> void:
+	var c: Combatant = entry["combatant"]
+	var brain: PilotBrain = entry["brain"]
+	gate.send_departure(c.ship, func(_ship: Node3D) -> void:
+		for k: int in _own.size():
+			if _own[k]["combatant"] == c and _own[k]["brain"] == brain:
+				_finish(k)
+				return)
 
 
 func _finish(i: int) -> void:
@@ -682,15 +945,12 @@ func _load_data() -> void:
 		push_warning("StationTraffic: %s is missing or not a JSON object; no traffic by itself" % DATA_PATH)
 		return
 	var data: Dictionary = parsed
-	interval_s = maxf(float(data.get("interval_s", interval_s)), 10.0)
-	max_ships = maxi(int(data.get("max_ships", max_ships)), 0)
+	lane_ships = maxi(int(data.get("lane_ships", lane_ships)), 0)
+	lane_spacing_s = maxf(float(data.get("lane_spacing_s", lane_spacing_s)), 1.0)
 	var raw_weights: Variant = data.get("weights", {})
 	if raw_weights is Dictionary:
 		for kind: StringName in KINDS:
 			weights[kind] = float((raw_weights as Dictionary).get(String(kind), 0.0))
-	var size: Variant = data.get("raid_size", [])
-	if size is Array and (size as Array).size() == 2:
-		raid_size = Vector2i(maxi(int(size[0]), 1), maxi(int(size[1]), int(size[0])))
 	var wings: Variant = data.get("scramble", [])
 	if wings is Array:
 		for wing: Variant in wings:
@@ -703,8 +963,10 @@ func _load_data() -> void:
 func _register_console() -> void:
 	var registry: ConsoleRegistry = DebugConsole.registry
 	registry.register_provider(PROVIDER, ConsoleVars.new({
-		&"auto": {"get": func() -> bool: return auto, "doc": "Whether light traffic starts by itself (free-flight encounters on, or traffic auto on)"},
-		&"interval_s": {"get": func() -> float: return interval_s, "unit": "s", "doc": "Time between the traffic's own events"},
+		&"auto": {"get": func() -> bool: return auto, "doc": "Whether the run between the gate and the station keeps itself going (free-flight encounters on, or traffic auto on)"},
+		&"lane_ships": {"get": func() -> int: return lane_ships, "doc": "Civilians the run keeps on their way between the gate and the station at once"},
+		&"lane_spacing_s": {"get": func() -> float: return lane_spacing_s, "unit": "s", "doc": "Least time between two of the run's own starts"},
+		&"flow": {"get": flow_count, "doc": "The run's own civilians on their way now (with those still to come out of the gate)"},
 		&"alive": {"get": alive_count, "doc": "Traffic ships in play"},
 		&"docking": {"get": func() -> int: return alive_of(&"dock"), "doc": "Of them, flying into the main docking bay"},
 		&"undocking": {"get": func() -> int: return alive_of(&"undock"), "doc": "Of them, leaving the main docking bay"},
@@ -763,7 +1025,7 @@ func _cmd_traffic(args: Dictionary) -> ConsoleResult:
 				return ConsoleResult.failure("traffic auto <on|off>")
 			auto_forced = true
 			auto = arg == "on"
-			return ConsoleResult.line("traffic by itself %s (every %.0f s)" % [arg, interval_s])
+			return ConsoleResult.line("traffic by itself %s (%d civilians on the run between the gate and the station)" % [arg, lane_ships])
 		&"clear":
 			return ConsoleResult.line("returned %d traffic ship(s) to their pools" % clear())
 	return ConsoleResult.line("traffic: %d in play (%d docking, %d undocking, %d freighters, %d raiders); docked %d, undocked %d, freighter cycles %d, pods in %d, pods out %d, raids %d; auto %s; cargo: %s; last: %s" % [

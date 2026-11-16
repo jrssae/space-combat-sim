@@ -213,7 +213,7 @@ static func _target(input: HudInput, f: HudFrame) -> void:
 	f.target_closing_mps = t.closing_mps
 	f.target_hull = t.hull_fraction
 	f.target_relation = Factions.relation(input.faction, t.faction)
-	f.target_color = Factions.hud_color(f.target_relation)
+	f.target_color = Factions.contact_color(f.target_relation, t.role == Targetable.Role.CIVILIAN)  # a civilian is not an ally (M7-T56)
 	if t.role == Targetable.Role.BEACON:
 		f.target_nav = true
 		f.target_color = TargetCategories.COLORS[TargetCategories.Category.NAVIGATION]

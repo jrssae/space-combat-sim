@@ -57,7 +57,12 @@ static func plot(contacts: RadarContacts, selected_id: int, own_position: Vector
 	var palette := PackedColorArray()
 	for faction: StringName in contacts.faction_names:
 		palette.append(Factions.hud_color(Factions.relation(viewer_faction, faction)))
-	var r: Array = _native.plot(contacts.ids, contacts.positions, contacts.reach, contacts.faction_ix, palette, own_position,
+	var colour_ix: PackedInt32Array = contacts.faction_ix
+	if contacts.civilian.has(1):
+		var civilian: Array = _civilian_colours(contacts, palette, viewer_faction)
+		colour_ix = civilian[0]
+		palette = civilian[1]
+	var r: Array = _native.plot(contacts.ids, contacts.positions, contacts.reach, colour_ix, palette, own_position,
 			own_basis, selected_id, ident_range_m, Factions.UNIDENTIFIED_COLOR, known_id)
 	var out := RadarPlot.new()
 	var order: PackedInt32Array = r[0]
@@ -72,6 +77,24 @@ static func plot(contacts: RadarContacts, selected_id: int, own_position: Vector
 	out.selected_index = int(r[9])
 	out.bind_factions(order, contacts.faction_ix, contacts.faction_names)
 	return out
+
+
+# `[palette index of each contact, palette]`: a civilian hull takes its own colour unless its people are hostile (M7-T56: a
+# civilian of the player's own people is not an ally), one palette entry added per faction with civilians in sight.
+static func _civilian_colours(contacts: RadarContacts, faction_palette: PackedColorArray, viewer_faction: StringName) -> Array:
+	var palette: PackedColorArray = faction_palette.duplicate()
+	var out: PackedInt32Array = contacts.faction_ix.duplicate()
+	var slot_of: Dictionary = {}
+	var k: int = contacts.civilian.find(1)
+	while k >= 0:
+		var faction_index: int = out[k]
+		var colour: Color = Factions.contact_color(Factions.relation(viewer_faction, contacts.faction_names[faction_index]), true)
+		if not slot_of.has(faction_index):
+			slot_of[faction_index] = palette.size()
+			palette.append(colour)
+		out[k] = slot_of[faction_index]
+		k = contacts.civilian.find(1, k + 1)
+	return [out, palette]
 
 
 ## The dots of `plot` on a screen radar of `radius_px` centred at `centre`, as the multimeshes' buffers, built natively

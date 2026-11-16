@@ -1,5 +1,4 @@
-{"interval_s": 150.0,
- "weights": {"dock": 0.35, "undock": 0.25, "freighter": 0.25, "raid": 0.15},
- "raid_size": [4, 6],
- "scramble": ["alpha"],
- "max_ships": 8}
+{"lane_ships": 5,
+ "lane_spacing_s": 40.0,
+ "weights": {"dock": 0.4, "undock": 0.4, "freighter": 0.2},
+ "scramble": ["alpha"]}

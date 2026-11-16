@@ -10,6 +10,7 @@ const ANCHOR_PLAYER: StringName = &"player"
 const ANCHOR_TARGET: StringName = &"target"
 
 var index: int = 0
+## Encounter time it started at (the director sets it), 0 until then.
 var time_s: float = 0.0
 ## `EncounterPlan.KINDS`: raid, patrol or traffic.
 var kind: StringName = &""
@@ -28,6 +29,8 @@ var anchor: StringName = ANCHOR_PLAYER
 ## A raid that goes for a civilian near the player when there is one, and which one (0..1 into the candidates).
 var at_civilian: bool = false
 var target_pick: float = 0.0
+## A raid that goes for the station instead, when the player is near one (M7-T56).
+var at_station: bool = false
 
 
 func count() -> int:
@@ -51,7 +54,7 @@ func describe() -> Dictionary:
 		type_names.append(String(type))
 	return {"index": index, "time_s": time_s, "kind": String(kind), "types": type_names, "cargo_pods": cargo_pods,
 			"positions": positions, "velocities": velocities, "routes": routes, "cruise_mps": cruise_mps, "jumps": jumps,
-			"anchor": String(anchor), "at_civilian": at_civilian, "target_pick": target_pick}
+			"anchor": String(anchor), "at_civilian": at_civilian, "target_pick": target_pick, "at_station": at_station}
 
 
 ## One line for the console: `#3 raid: 4 raider_fighter, at a civilian`.
@@ -64,5 +67,5 @@ func summary() -> String:
 		parts.append("%d %s" % [counts[type], type])
 	var aim: String = ""
 	if kind == &"raid":
-		aim = ", at a civilian" if at_civilian else ", at the player"
+		aim = ", at the station" if at_station else (", at a civilian" if at_civilian else ", at the player")
 	return "#%d %s: %s%s" % [index, kind, ", ".join(parts), aim]

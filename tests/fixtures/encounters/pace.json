@@ -1,0 +1,3 @@
+{"pools": {"raider_fighter": 12, "starfury_ally": 2, "saturn_4_transport": 2, "skylark_transport": 2,
+           "narn_transport": 2},
+ "weights": {"raid": 0.4, "patrol": 0.25, "traffic": 0.35}}

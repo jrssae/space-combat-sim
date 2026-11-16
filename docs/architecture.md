@@ -4474,8 +4474,9 @@ data/encounters/free_flight.json       the pools built when encounters turn on, 
 tests/unit/test_encounter_plan.gd, tests/integration/test_encounters.gd, tests/fixtures/encounters/small.json
 ```
 
-- **Plan.** Event `i` is due at `interval * (i + 1 + 0.25 * (2u - 1))` of encounter time (sim seconds with encounters on), so gaps
-  run from half to one and a half intervals (60-180 s at the default 120). Its kind (weights raid 0.4, patrol 0.25, traffic 0.35
+- **Plan.** Event `i` is due `interval * (1 + 0.5 * (2u - 1))` of encounter time (sim seconds with encounters on) after event
+  `i - 1` started (event 0: after encounters turn on), so gaps run from half to one and a half intervals (60-180 s at the default
+  120) whatever held an event back (M7-T56: an absolute slot let one held event bunch the next ones up behind it). Its kind (weights raid 0.4, patrol 0.25, traffic 0.35
   from the pools file), sizes, directions (within 30 degrees of the horizontal plane), ranges and hulls are each `hash([seed, i,
   salt])`: an event never depends on what was drawn before it. Raids: 2-6 raiders around one jump point 6-12 km from their target,
   flying at it at 120 m/s plus the target's velocity; half of them go for an encounter civilian within 20 km of the player when
@@ -4490,15 +4491,26 @@ tests/unit/test_encounter_plan.gd, tests/integration/test_encounters.gd, tests/f
   objective; `ally_starfury` engaging; `civilian`), a `Route` (`pace` none, no loop; a patrol's yields to attacks) through
   `BehaviourFollowPath`, raiders through the director's own `JumpPointPool` (4 points, built with the director; M6-T19 replaced `JumpArrivalPool`). Encounter
   civilians broadcast 15 km (a transponder) so a raid sent from 6-12 km finds them; the range is cleared when they leave.
-- **Cap.** `encounter_max_ships` (24, live) counts the director's ships in play. A due event that would pass it waits (one at a
-  time; later events queue behind it); one bigger than the whole cap is trimmed to it once nothing else is in play. Raids and
-  patrols wait for their pool; a traffic hull whose pool is spent gives way to the next civilian hull with a free ship.
+- **Cap.** `encounter_max_ships` (24, live) counts the director's ships in play. A due event that would pass it, or whose pool
+  is spent (raids and patrols need their own type free), gives way to the same index drawn as another kind, gentlest first
+  (`EncounterPlan.substitutes`: traffic, then patrol, then raid), and waits only when none fits; one bigger than the whole cap is
+  trimmed to it once nothing else is in play. A traffic hull whose pool is spent gives way to the next civilian hull with a free ship.
+- **The station's run (M7-T56, m5-056).** A pools file with `station_run` (free flight) sends traffic events along the run
+  between the jumpgate and Babylon 5 (`StationTraffic.lane_event`: an arriving convoy, 800 m apart, joining the run 22-40 km
+  from the station and moved toward the gate until it is past the player's radar; a Saturn to the cargo bay when it is free,
+  every other hull in one that fits the docking tunnel), keeps `StationTraffic`'s own run going while encounters are on, and
+  builds its pools on top of what the station keeps for its raids and wings (`StationTraffic.reserved_count`; the shipped file:
+  12 raiders and 12 Starfuries beside the station's 12 of each, five of each tunnel hull, two of every other civilian hull, 75
+  ships). `station_raid_share` (0.3 shipped) draws that share of raids for the station (`EncounterEvent.at_station`), honoured
+  while the player is within 25 km of it: the raiders come out 11-17 km from its centre with it as their objective and its
+  wings are scrambled (`scramble_for_raid`).
 - **Releases.** Once a second, over its own ships only (`check_work` = their number, whatever else is in play): a ship 40 km
   from the player (its tier row's position when tiered) or at its route's end goes back to its pool, then the engine voices are
   re-ranked once. A destroyed ship leaves the count at once (`ship_destroyed`). Encounter ships are pooled, never freed, so
   `AudioDirector.unwatch_ship` is not needed; a parked ship drops out of the core's rows by itself (T28).
 - **Console.** `encounters [status|on|off|next|force|clear] [raid|patrol|traffic]`: `force` draws from indices from 1 000 000 up,
-  so the schedule is untouched; `next` takes the next scheduled event now (it waits if it does not fit).
+  so the schedule is untouched; `next` takes the next scheduled event now (another kind standing in, or waiting when none
+  fits) and times the one after from it.
 - **Settings.** `encounters` (bool, true: the Free flight page starts from it and keeps the player's toggle there for the
   session), `encounter_interval_s` (120, read when encounters first turn on), `encounter_max_ships` (24). The front end gives each
   free flight it starts a fresh seed (`FrontEnd.session_seed`); Restart keeps it.
@@ -5711,7 +5723,7 @@ native/src/brain.rs              + ScsBrains.set_route_lane, restart_route
 src/ai/route.gd                  + lane, lane_arrival_m, a waypoint's face and spin (add_lane)
 src/targeting/targetable.gd      + SPEAKS_FOR: a body whose shots are answered at another's marker (the drum, for the station)
 src/world/docking_plan.gd        DockingPlan (pure): the main docking bay's lane in and out, the freighter's lane
-src/world/station_traffic.gd     StationTraffic (Main's child): dock, undock, freighter, raid, scramble, light traffic by itself;
+src/world/station_traffic.gd     StationTraffic (Main's child): dock, undock, freighter, raid, scramble, the run (M7-T56);
                                  command and provider `traffic`
 src/props/freighter_cargo.gd     FreighterCargo (T30): a Saturn's cargo off its hull for the bots, its hull shown as its other chunks
 src/props/cargo_ferry_plan.gd    + CargoFerryPlan.for_freighter (T30, pure): one CargoTrip a pod, from the chunks' boxes
@@ -5719,7 +5731,7 @@ src/props/cargo_trip.gd          CargoTrip (pure): a pod's path, its bots' holds
 src/props/ferry_pod.gd           FerryPod (pure): a carried pod's place along its trip; waits, moves, dropped, done
 src/props/cargo_ferry_job.gd     CargoFerryJob (pure): pod by pod with a crew of two bots
 src/props/bot_ferry_motion.gd    + carrying: a crew bot flies out, holds the pod, lets go in a fight and comes back for it
-data/station/traffic.json        the interval, the kinds' weights, the raid's size, the wings scrambled, the ship cap
+data/station/traffic.json        the run's ships and spacing, its kinds' weights, the wings scrambled
 ```
 
 - **A big hull is always a contact.** After the nearest-k pick a think adds every row with a surface whose skin is within
@@ -5794,9 +5806,19 @@ data/station/traffic.json        the interval, the kinds' weights, the raid's si
   `freighter_loading`) and, when the bots are done, flies its lane's last leg (a new lane from where it holds); a lane that
   ended leaves through the gate (`Jumpgate.departure_route`, `send_departure`) or 12 km straight on, then the ship is
   released (`undocked`, `freighter_left`). `raid(n, scramble)` acquires raiders with the station as objective, out of the
-  gate when there is one. Light traffic runs while the `EncounterDirector` is on (or `traffic auto on`).
-- **Station wings.** `LaunchDirector.launch_wing` makes (once) a `Wing` of the arm's name with eleven slots, engage at
-  will, and joins each of the twelve as it is taken from the pool: the first leads. `WingDirector.refresh` briefs them as
+  gate when there is one. **The run (M7-T56)** runs while the `EncounterDirector` is on with `station_run` (or `traffic auto
+  on`): `lane_ships` (5) civilians on their way between the gate and the station, placed along the line from a lane's first
+  point to the gate when it starts (arriving and leaving by turns), then one more (through the gate to the docking bay or a
+  Saturn to the cargo bay, or undocking) whenever one has docked or left, at least `lane_spacing_s` (40 s) apart, one freighter
+  at the bay at a time, no undocking while a ship is in the bay's void or tunnel. Arrivals keep 600 m to one side of the run's
+  line and departures to the other (`RUN_SIDE_M`; out of and into the gate 3 km off it on their own side), so they never meet
+  head on; an arrival flies in on a lane-style route (kept to its legs) that slows into an entry point 3 km out on its lane's
+  axis before the lane takes over (before M7-T56 a ship from the gate crossed the axis at 120 m/s, overshot the lane's first
+  point and rammed the drum beside the mouth, every time). The docking bay takes one ship at a time: arrivals wait at their own
+  points along its axis (700 m apart, one past every docking ship still on its way in) and take the lane only when no ship is on
+  it, in the tunnel or in the void, docking or undocking. A ship sent on after a lane gets a new route
+  that starts at its first waypoint (`BehaviourFollowPath.attach` resets on a different route, `AiPilot` restarts the native
+  slot): before M7-T56 a departing ship took its lane's end for its departure route's and was let go 5 km out.
 - **Cargo carried by the maintenance bots (T30, maintainer 2026-11-14).** Any of the five Saturns (`DockingPlan.FREIGHTER_TYPES`;
   the traffic draws hull and unloading or loading from the session seed) holds at the cargo bay while the station's bots carry its
   cargo between it and the bay's back wall; nothing flies by itself.

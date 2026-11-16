@@ -44,13 +44,16 @@ func _init() -> void:
 	id = &"follow_path"
 
 
-## Gives `pilot` the route to lead: sets `context.route` and adds this behaviour (once). Returns the behaviour.
+## Gives `pilot` the route to lead: sets `context.route` and adds this behaviour (once). A route given in place of another
+## starts at its first waypoint (the native slot restarts with it, `AiPilot._sync_context`). Returns the behaviour.
 static func attach(pilot: AiPilot, route: Route) -> BehaviourFollowPath:
 	pilot.context.route = route
 	var b := pilot.behaviour(&"follow_path") as BehaviourFollowPath
 	if b == null:
 		b = BehaviourFollowPath.new()
 		pilot.add_behaviour(b)
+	elif b._route != null and b._route != route:
+		b.reset()  # so its callers never read the old route's end as the new one's
 	b._route = route  # readable (HUD, console) before its first tick
 	return b
 

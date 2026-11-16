@@ -97,7 +97,7 @@ static func contact(info: TargetInfo, own_position: Vector3, own_velocity: Vecto
 	else:
 		out.kind = Kind.BEACON if category == TargetCategories.Category.NAVIGATION else Kind.SHIP
 		out.title = info.display_name.to_upper()
-		out.title_color = Factions.hud_color(Factions.relation(own_faction, info.faction))
+		out.title_color = Factions.contact_color(Factions.relation(own_faction, info.faction), info.role == Targetable.Role.CIVILIAN)
 		var what: String = class_text(asset_id) if not asset_id.is_empty() else String(facts.get("class", ""))
 		out.subtitle = " · ".join(PackedStringArray([what, Factions.table().display_name(info.faction)])) \
 				if not what.is_empty() else Factions.table().display_name(info.faction)

@@ -2172,8 +2172,8 @@ impl ScsSimCore {
 
     /// What the player's radar shows (M4-T23): every row with a marker (a targetable in play, not parked since the sync) or
     /// in the low-attention tier, not body `own_body`, within `sensor_range` of `own_position` or its own broadcast reach, as `[marker ids,
-    /// positions, faction indices (into `factions`), reach]` in row order. One pass over the rows, near and tier alike, instead of a walk of the
-    /// targetable nodes each frame; the positions are the tick's rows.
+    /// positions, faction indices (into `factions`), reach, civilian (1 for a civilian hull, M7-T56)]` in row order. One pass over the rows,
+    /// near and tier alike, instead of a walk of the targetable nodes each frame; the positions are the tick's rows.
     #[func]
     fn radar_contacts(&self, own_position: Vector3, own_body: i64, sensor_range: f64) -> VarArray {
         let r = &self.rows;
@@ -2181,6 +2181,7 @@ impl ScsSimCore {
         let mut positions: Vec<Vector3> = Vec::new();
         let mut faction_ix: Vec<i32> = Vec::new();
         let mut reach: Vec<f64> = Vec::new();
+        let mut civilian: Vec<u8> = Vec::new();
         for i in 0..r.body_ids.len() {
             let marked =
                 r.flags[i] & FLAG_TIER != 0 || (r.ids[i] != r.body_ids[i] && !r.is_static[i]);
@@ -2201,12 +2202,14 @@ impl ScsSimCore {
             positions.push(p);
             faction_ix.push(r.faction_ix[i] as i32);
             reach.push(r.reach[i]);
+            civilian.push(u8::from(r.is_civilian(i)));
         }
         let mut out = VarArray::new();
         out.push(&PackedInt64Array::from(ids.as_slice()).to_variant());
         out.push(&PackedVector3Array::from(positions.as_slice()).to_variant());
         out.push(&PackedInt32Array::from(faction_ix.as_slice()).to_variant());
         out.push(&PackedFloat64Array::from(reach.as_slice()).to_variant());
+        out.push(&PackedByteArray::from(civilian.as_slice()).to_variant());
         out
     }
 

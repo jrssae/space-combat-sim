@@ -8,6 +8,8 @@ extends GutTest
 ## pools is printed (M5-T17's record).
 
 const SMALL: String = "res://tests/fixtures/encounters/small.json"
+## Two allies only, so most patrols cannot start and another kind stands in (M7-T56).
+const PACE: String = "res://tests/fixtures/encounters/pace.json"
 const SEED: int = 5
 ## Ticks per real tick: the physics rate and the time scale raised together, so each step is still 1/60 s of sim time.
 const SPEED_UP: float = 4.0
@@ -293,7 +295,7 @@ func test_events_come_on_sim_time() -> void:
 	main = await _make_main(true)
 	var plan: EncounterPlan = _director().plan
 	assert_eq(plan.interval_s, 20.0, "the setting, read when they turn on")
-	_director().elapsed_s = plan.time_of(0) - 0.5
+	_director().elapsed_s = _director().next_due_s - 0.5
 	await wait_physics_frames(3)
 	assert_eq(_director().events_started, 0, "not yet")
 	main.set_paused(true)
@@ -304,6 +306,52 @@ func test_events_come_on_sim_time() -> void:
 	assert_eq(_director().next_index, 1, "event 0 taken at its time")
 	assert_true(_director().events_started == 1 or _director().waiting != null,
 			"and started, or waiting for the small pools (a patrol of 4 or 6)")
+
+
+func test_events_keep_their_pace_another_kind_standing_in_when_one_cannot_start() -> void:
+	# M7-T56 (m5-056): each event its gap after the last start (half to one and a half intervals), never held behind a spent pool.
+	var stood_in: int = await _pace(PACE)
+	assert_gt(stood_in, 0, "a patrol the two allies could not fly gave way to another kind")
+
+
+func test_free_flight_keeps_the_pace_with_the_station_run() -> void:
+	# The shipped pools: traffic on the station's run, raids for the station, the station's wing beside the patrols.
+	await _pace(EncounterDirector.pools_file(&"free_flight"))
+	assert_gt(main.traffic.alive_count(), 0, "the run is going")
+
+
+# Flies a fifth of the default interval until 11 events have started (the player shooting down raiders older than 15 s) and
+# checks every gap; returns how many events another kind stood in for.
+func _pace(pools_path: String) -> int:
+	DebugConsole.flags.invulnerable = true
+	Settings.set_value(&"encounter_interval_s", 20.0)
+	main = await _make_main(true, pools_path)
+	var director: EncounterDirector = _director()
+	var starts: Array[float] = []
+	var stood_in: Array[int] = [0]
+	director.event_started.connect(func(e: EncounterEvent) -> void:
+		starts.append(e.time_s)
+		if e.kind != director.plan.event(e.index).kind:
+			stood_in[0] += 1)
+	var born: Dictionary = {}
+	await _fly(260.0, func() -> bool:
+		for c: Combatant in director.alive():
+			if main.ships.type_of(c) == ShipPool.DEFAULT_TYPE:
+				if not born.has(c):
+					born[c] = director.elapsed_s
+				elif director.elapsed_s - float(born[c]) > 15.0 and not c.damageable.hull.destroyed:
+					c.damageable.kill()
+					born.erase(c)
+		return starts.size() >= 11)
+	assert_gte(starts.size(), 11, "an event every 10 to 30 s")
+	var tick: float = 1.0 / 60.0
+	if starts.is_empty():
+		return stood_in[0]
+	assert_between(starts[0], 10.0 - tick, 30.0 + tick, "the first comes its gap after encounters turn on")
+	for i: int in range(1, starts.size()):
+		assert_between(starts[i] - starts[i - 1], 10.0 - tick, 30.0 + tick, "the gap before event %d" % i)
+	assert_null(director.waiting, "nothing held")
+	return stood_in[0]
 
 
 # --- the fight (Q9) ---------------------------------------------------------------------------------------------
@@ -421,7 +469,8 @@ func test_the_free_flight_load_time_with_encounters_on_is_recorded() -> void:
 	var off_ms: int = await _load_ms(false)
 	var on_ms: int = await _load_ms(true)
 	gut.p("free flight load: encounters off %d ms, on %d ms (the pools: %d ms)" % [off_ms, on_ms, _director().build_ms])
-	assert_eq(main.ships.pool_size(), 42, "the shipped pools: 12 raiders, 12 Starfuries, two of each civilian hull")
+	assert_eq(main.ships.pool_size(), 75, "the shipped pools: 12 raiders and 12 Starfuries on top of the station's raid and wing "
+			+ "(12 of each), five of each hull that fits the docking tunnel and two of every other civilian hull (M7-T56)")
 	assert_gt(_director().build_ms, 0)
 
 

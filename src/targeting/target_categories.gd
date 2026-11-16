@@ -21,7 +21,7 @@ const ORDER: Array[Category] = [Category.ENEMIES, Category.ALLIES, Category.CIVI
 const NAMES: Dictionary = {Category.ENEMIES: "ENEMIES", Category.ALLIES: "ALLIES", Category.CIVILIAN: "CIVILIAN",
 		Category.UNKNOWN: "UNKNOWN", Category.NAVIGATION: "NAVIGATION", Category.OBJECTIVES: "OBJECTIVES"}
 const COLORS: Dictionary = {Category.ENEMIES: Factions.HOSTILE_COLOR, Category.ALLIES: Factions.FRIENDLY_COLOR,
-		Category.CIVILIAN: Color(1.0, 0.72, 0.3), Category.UNKNOWN: Factions.UNIDENTIFIED_COLOR,
+		Category.CIVILIAN: Factions.CIVILIAN_COLOR, Category.UNKNOWN: Factions.UNIDENTIFIED_COLOR,
 		Category.NAVIGATION: Color(0.33, 0.9, 0.9), Category.OBJECTIVES: Color(1.0, 0.85, 0.29)}
 
 
