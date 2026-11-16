@@ -550,7 +550,7 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
       (`state tier`: `flashes`) that starts as big and as bright as the fireball it replaces and then fades out with distance. At
       1 080 lines (the default 3D at 0.5 on the 4K panel): a fighter's death is full to about 1.1 km, reduced to 4.3 km, and its
       flash reads to about 17 km; a destroyer's 36 km, 142 km and 570 km; a carrier's 71 km, 284 km and 1 140 km (twice as far at
-      2 160 lines). In a battle run watch fighters die beyond 4 km (a bright point that flares and fades in about half a second)
+      2 160 lines). After a battle run's `[bench]` line fly toward a fight and watch fighters die beyond 4 km (a bright point that flares and fades in about half a second)
       and kill a capital (`set targeting.selected "CRUISER 1"` then `kill`, typed after the run's `[bench]` line, M7-T59): within
       tens of km it is still the full explosion.
       Say whether the switches pop (a full or reduced blast handing over to the point) and how bright and how long the point
@@ -645,13 +645,20 @@ the list while it is focused. Each start from the menu draws a new seed, and wit
 
 - **The intro.** The mission opens on the civilian beside NAV ALPHA with the belt somewhere ahead, then cuts to you and ALPHA 2
   coasting past the camera. The civilian's master hails over the fly-past; Control briefs once the camera is back, with your
-  controls held until "the flight is yours". **A** or **Start** skips one shot.
+  controls held until "the flight is yours". **A** or **Start** skips one shot; holding **X** (keyboard Shift or Mouse 4) for 2 s
+  skips the whole opening, intro and briefing, to the hand-over (M7-T54; `HOLD X / SHIFT / MOUSE 4: SKIP` and its bar show while
+  it can).
 - **The crossing.** The civilian flies to NAV BETA, 30 km out, at up to 120 m/s, threading the asteroid belt (24 km across, 8 km
   deep) in the middle of the route. The waypoint marks the civilian. Three raider waves jump in 6 to 12 km off it as it passes
-  25 % (3 raiders, before the belt), 50 % (4, inside it) and 75 % (6, past it). Attacked, it runs (an Earth Alliance ship towards
+  25 % (3 raiders, before the belt), 50 % (4, inside it) and 75 % (6, past it); a later wave also waits until the one before is
+  down and 30 s have passed (M7-T54), so a fought run takes 6 to 8 minutes. The first wave comes out of a raider carrier: its
+  arrival jump point opens, the fighters come through, then the carrier opens a departure point and leaves (M6-T23; the carrier
+  is still a box stand-in, kept by the maintainer). Attacked, it runs (an Earth Alliance ship towards
   you or ALPHA 2, others straight away) and turns back onto its route a few seconds after the raiders are gone or dead.
 - **Objectives.** Escort the civilian to NAV BETA (done when it is within 1.5 km of the buoy and every raider is down; failed if
-  it is destroyed) and, optional, bring ALPHA 2 home. Losing yourself also ends it. A last line, then the debrief.
+  it is destroyed) and, optional, bring ALPHA 2 home. Losing yourself also ends it. A last line, then the debrief. From the
+  hand-over the civilian's name and hull show top right under the objectives, as a bar that turns amber then red as it drops and
+  reads `LOST` when it is destroyed (M7-T54; `get mission.hull_bars`).
 - **Console shortcuts.** `mission goto wave_one` (or `wave_two`, `wave_three`) skips ahead: the civilian is placed at the step's
   point and skipped waves leave no raider; `kill all` destroys every raider in play; `kill player` loses you; `mission skip`
   fast-forwards the step; `mission journal` lists what happened. `ai "<civilian name>"` shows whether it flies its route
@@ -767,9 +774,12 @@ T20's own, taken at the end on the RX 6950 XT, are in `references/screenshots/T2
 **Civilian escort** (`T30 civilian escort/`)
 
 - [ ] **The intro** reads well: the civilian at the buoy, the wing passing close, the lines readable in their time on screen;
-      A or Start skips a shot.
-- [ ] **The pacing:** the whole mission takes about 6 to 8 minutes when you fight each wave (Q40; not yet timed by a person);
-      the waves come neither too soon nor too late.
+      A or Start skips a shot; holding X (Shift, Mouse 4) skips the whole opening to the hand-over, with the prompt and its bar
+      readable over the letterbox (M7-T54).
+- [ ] **The pacing:** the whole mission takes about 6 to 8 minutes when you fight each wave (Q40, M7-T54: about 7 min with seed
+      3 in the test); the last wave no longer comes too soon, and no wave comes too late.
+- [ ] **The civilian's hull bar** (M7-T54) reads top right under the objectives in the chase view and the cockpit, its name and
+      hull %, amber and red as it drops, `LOST` when destroyed.
 - [ ] **The civilian** runs when attacked and comes back to its route; a Saturn 8 gets through the belt without hitting rocks;
       a fragile hull (the Skylark, `play civilian_escort 5`) can survive three waves with a fair escort.
 - [ ] **The lines** read as people, with the civilian's name filled in; the last line before the debrief is heard out.

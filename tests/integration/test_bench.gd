@@ -97,7 +97,7 @@ func test_a_short_furball_bench_writes_its_report() -> void:
 	_assert_stages_are_consistent(main.perf_probe.series)
 	assert_eq(main.ships.alive().size(), 12)
 	for c: Combatant in main.ships.alive():
-		assert_true(c.damageable.invulnerable, "%s holds the count steady" % c.display_name)
+		assert_false(c.damageable.invulnerable, "%s is mortal once the run is over (M7-T59)" % c.display_name)
 		assert_true(c.driver.brain is AiPilot, "%s flies an AiPilot" % c.display_name)
 	assert_eq(main.world.auto_rebase_distance_m, 5000.0, "the rebase threshold is back")
 	assert_false(bool(_read("perf.enabled")), "the probe is off again")
@@ -296,11 +296,22 @@ func test_a_short_battle_writes_every_entity_count_and_puts_the_factions_back() 
 	assert_false(standins.launcher.is_valid(), "but the carriers no longer swap the run's fighters")
 	await _ticks(30)
 	assert_eq(standins.weapons_path(), &"native", "the weapons step on the native rows over the game's sides")
+	# M7-T59: the fighters are mortal too, near or far, so far deaths can be watched.
+	var fighters: Array[Combatant] = main.ships.alive()
+	assert_gt(fighters.size(), 0, "fighters are still flying")
+	for c: Combatant in fighters:
+		assert_false(c.damageable.invulnerable, "%s is mortal once the run is over" % c.display_name)
+	var victim: Combatant = fighters[0]
+	var shot := HitInfo.new(victim.ship.get_instance_id(), 0, Factions.RAIDERS, victim.damageable.hull.max_hp * 10.0,
+			victim.ship.global_position, Vector3.ZERO, 0.0, HitInfo.CAUSE_BOLT)
+	victim.damageable.apply_hit(shot)
+	assert_true(victim.damageable.hull.destroyed, "a hit now kills a fighter")
 	# The next run starts clean: nothing of this one flies in it.
 	await _run("bench furball 10 1 warmup=0 seed=1 label=after_battle_test")
 	assert_eq(standins.capitals().size(), 0, "the next run takes the capitals away")
 	assert_eq(standins.asteroid_count(), 0, "and the rocks")
 	assert_null(standins.mines(), "and the mines")
+	assert_false(victim.damageable.hull.destroyed, "the new run starts its fighters whole")
 
 
 func test_a_short_typical_run_writes_its_summary() -> void:

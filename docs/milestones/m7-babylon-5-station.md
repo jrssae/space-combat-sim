@@ -3030,7 +3030,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 - **Done (code part, 2026-11-16):**
   - Mortal capitals: `StandinDirector.keep_after_run` (called by `BenchRunner._put_back`) sets every capital's
     `damageable.invulnerable = false` when the window ends; during the run they stay invulnerable. Test: `test_bench` battle test
-    asserts every capital is mortal after the run. Fighters stay invulnerable as before (not asked).
+    asserts every capital is mortal after the run. Fighters too (fix, 2026-11-16): `_put_back` clears `invulnerable` on every pooled ship (tier hits land through `Damageable.apply_hit`, so tier rows follow; native rows hold no flag), so far fighters fight on and die as T23's flashes; the next run's `acquire` and placement set it again.
   - m4-016/017 recipe (after the `[bench]` line): `set targeting.selected "CRUISER 1"; kill` works (live headless: "CRUISER 1 destroyed").
   - m6-094: the checklist's `transit carrier point follow` was refused (`follow` is the 4th word: `transit carrier point fighter
     follow`); the recipe in `docs/playtest.md` is corrected: `transit carrier point fighter follow; wait 120; vortex collapse; wait

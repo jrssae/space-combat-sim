@@ -757,6 +757,7 @@ func _put_back() -> void:
 	_restore_frame()
 	if main != null and is_instance_valid(main.ships):
 		for c: Combatant in main.ships.all_ships():
+			c.damageable.invulnerable = false  # the bench's invulnerability only held the count steady for the window (M7-T59)
 			var own: StringName = ShipCatalog.faction_for(main.ships.type_of(c))
 			if c.faction != own:
 				set_faction(c, own)
