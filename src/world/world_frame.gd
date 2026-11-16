@@ -77,8 +77,8 @@ const PARKED_META := &"_scs_pool_parked"
 const BOOST_METHOD := &"frame_boost"
 ## The frame boosts back onto its anchor when the focus is under this part of the threshold against the anchor (Q8).
 const RETURN_PART: float = 0.5
-const FRAME_ACTIONS: PackedStringArray = ["status", "orbit", "rail", "off"]
-## The body `frame orbit` circles when none is named.
+const FRAME_ACTIONS: PackedStringArray = ["status", "orbit", "drop", "rail", "off"]
+## The body `frame orbit` circles and `frame drop` falls toward when none is named.
 const DEFAULT_ORBIT_BODY: StringName = &"epsilon_iii"
 ## Physics priority of the end-of-tick interpolation reset after a rebase: after every other node of the tick.
 const SETTLE_PRIORITY: int = 1_000_000
@@ -225,7 +225,7 @@ func _ready() -> void:
 				"doc": "Rocks that live as Jolt bodies now, near a ship; the rest are static rows only (M6-T21)"},
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"frame",
-			"The free-falling frame's anchor: status, orbit <altitude km> [body] (a free-falling anchor on a circular orbit, prograde along -Z; default body epsilon_iii), rail <place> (ride a place's orbit, such as babylon5), off (no pull)",
+			"The free-falling frame's anchor: status, orbit <altitude km> [body] (a free-falling anchor on a circular orbit, prograde along -Z; default body epsilon_iii), drop <altitude km> [body] (the player at rest that high over the body, epsilon_iii or the star epsilon, riding its rail, so it falls straight in; refused outside the body's zone), rail <place> (ride a place's orbit, such as babylon5), off (no pull)",
 			[ConsoleArg.enum_optional(&"action", FRAME_ACTIONS, &"status"),
 			ConsoleArg.string_optional(&"value", null),
 			ConsoleArg.string_optional(&"body", null)] as Array[ConsoleArg]), _cmd_frame, self)
@@ -589,6 +589,36 @@ func anchor_in_orbit(system: StarSystem, body: StringName, state: PackedFloat64A
 	return _anchored(system, body)
 
 
+## Puts the focus (with none, the scenario's origin) at rest `altitude_m` over `body`, the frame riding the body's own rail,
+## so the ship falls straight in under the body's whole pull (M7-T14). Returns "" or why it was refused: no such body, a
+## negative altitude, or a place outside the body's zone, where under D66 its pull does not reach or another body's wins.
+func drop_toward(system: StarSystem, body: StringName, altitude_m: float) -> String:
+	if system == null or not system.is_valid() or system.info(body).is_empty():
+		return "no body %s in the star system" % body
+	if is_nan(altitude_m) or altitude_m < 0.0:
+		return "give an altitude in km of at least 0"
+	var radius_m: float = float(system.info(body)["radius_m"])
+	var from_centre_m: float = radius_m + altitude_m
+	var zone_m: float = system.zone_radius_m(body)
+	if from_centre_m >= zone_m:
+		return "%s km over %s is outside its zone, where its pull ends (%s km over it)" % [
+				ConsoleFormat.value(altitude_m / 1000.0), body, ConsoleFormat.value(roundf((zone_m - radius_m) / 1000.0))]
+	# Out along +X from the centre (the game's +X is the ephemeris's too).
+	var winner: StringName = system.dominant_body(PackedFloat64Array([from_centre_m, 0.0, 0.0]), body, system_time())
+	if winner != body:
+		return "%s km over %s is inside %s's zone, which pulls there instead" % [
+				ConsoleFormat.value(altitude_m / 1000.0), body, winner]
+	var ship: Node3D = focus if focus != null and is_instance_valid(focus) else null
+	var here: Vector3 = ship.global_position if ship != null else Vector3.ZERO
+	var offset := PackedFloat64Array([from_centre_m - origin.x - here.x, -origin.y - here.y, -origin.z - here.z])
+	if not anchor_on_rail(system, body, offset):
+		return "refused (see the log)"
+	var moving := ship as RigidBody3D
+	if moving != null:
+		moving.linear_velocity = rest_velocity()
+	return ""
+
+
 ## No star system: nothing pulls (a bare World's state).
 func clear_anchor() -> void:
 	star_system = null
@@ -712,6 +742,16 @@ func _cmd_frame(args: Dictionary) -> ConsoleResult:
 			var speed: float = sqrt(float(system.info(body)["gm"]) / radius_m)
 			if not anchor_in_orbit(system, body, PackedFloat64Array([radius_m, 0.0, 0.0, 0.0, 0.0, -speed])):
 				return ConsoleResult.failure("frame orbit: refused (see the log)")
+		&"drop":
+			var altitude_km: float = float(value) if value != null and String(value).is_valid_float() else NAN
+			var body: StringName = StringName(args[&"body"]) if args[&"body"] != null else DEFAULT_ORBIT_BODY
+			var system: StarSystem = star_system if star_system != null else StarSystem.load_system(StarSystemHost.DEFAULT_SYSTEM)
+			var refused: String = drop_toward(system, body, altitude_km * 1000.0)
+			if not refused.is_empty():
+				return ConsoleResult.failure("frame drop: " + refused)
+			var here: Vector3 = focus.global_position if focus != null and is_instance_valid(focus) else Vector3.ZERO
+			return ConsoleResult.line("world.anchor = %s; at rest %s km over %s, falling in at %s m/s^2" % [anchor_text(),
+					ConsoleFormat.value(altitude_km), body, ConsoleFormat.value(gravity_residual(here).length())])
 		&"rail":
 			var system: StarSystem = star_system if star_system != null else StarSystem.load_system(StarSystemHost.DEFAULT_SYSTEM)
 			if value == null or not anchor_on_rail(system, StringName(value)):
