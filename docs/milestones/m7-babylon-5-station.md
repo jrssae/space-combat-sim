@@ -310,6 +310,8 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T48 | B | The benchmarks (the 1 000-ship battle and the other layouts) and the tests use the generated asteroids (M5-T29's shapes) instead of M4's sphere stand-ins (maintainer, 2026-11-15) | - | Opus | The bench's rock field and its cost; tests and any recording that holds rocks | in progress |
 | T49 | C | Fix: `draw_list_bind_uniform_set: Parameter "uniform_set" is null` printed about 55 times a second in a big bench fight once TAA or FSR 2.2 has been switched on, and on after switching back (maintainer, 2026-11-15; reproduced by T46) | - | Opus | A render resource freed or never built under motion vectors | in progress |
 | T50 | C | Fix: in a bench fight every asteroid and every far capital vanish from the view after a brief stutter, while the radar still shows them (maintainer, 2026-11-16) | T48 | Opus | Likely the batched draws not following a world rebase (bounds or positions) | in progress |
+| T51 | C | Fix: the heavy cannons' pulses leave from outside the barrel and do not visibly reach their targets (maintainer, 2026-11-16, `bench battle 1000`) | - | Opus | The muzzle point from the yoke's angles against the drawn barrel (as M7-2 for the interceptors); hits, misses or a missing impact flash | in progress |
+| T52 | C | Every bolt drawn as a teardrop (a round bright head, a tail tapering behind it along its flight) instead of a straight line (maintainer, 2026-11-16) | - | Opus | The bolts' capsule mesh and materials, which draw opaque whenever motion vectors are on (now always, with blur on by default) | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress |
 
 ### M7-T01 Station references and measurements
@@ -2816,3 +2818,28 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   0 of 1 000 rocks). Captures (`references/screenshots/M7-T50 vanish/`): `b_52s`/`b_56s` (HEAD, before and after the end),
   `c_grid` (HEAD, rebase, boost, FSR 2.2, TAA, all drawn), `before_after_grid` (with the fix: drawn 10 and 20 s after the end, after
   a rebase, a boost and FSR 2.2). After the run the player is mortal again (the bench's GOD is put back) inside a fight that goes on.
+- **Maintainer's decision (2026-11-16):** keep it: the battle flies on after the run, the player mortal (the reversal of M4-T07's
+  clean-up is his choice).
+
+### M7-T51 Fix: the heavy cannons' pulses leave outside the barrel and do not reach their targets
+
+- **Why (maintainer, 2026-11-16, `bench battle 1000`):** "watching the big cannons fire, the bolts appear to launch from outside the
+  cannon, and the bolts do not appear to make contact with the targets."
+- **What:** measure on the GPU where a heavy cannon's pulse is born against its drawn barrel's muzzle at each yoke angle, and fix the
+  muzzle point so the pulse leaves the barrel's mouth (M7-2, the interceptors' 1.3 m gap at close range, may share the cause: if so,
+  fix both and close M7-2 in `docs/roadmap.md`). Then find why the pulses do not seem to reach their targets: true misses (lead,
+  traverse T40's 6/5 deg/s, spread), hits without a visible impact flash, or pulses that end (range, lifetime) short of the target.
+  Fix the cause; keep the raid balance in its band (`test_station_grid_balance`) or report the change.
+- **Done when:** a test that the pulse is born within the muzzle at several yoke angles, a test for the contact cause; the
+  maintainer sees the pulses leave the barrel and strike (H); committed.
+
+### M7-T52 Bolts drawn as teardrops
+
+- **Why (maintainer, 2026-11-16):** "a larger problem with all bolts is that they appear to be straight lines. expected appearance is
+  more of a teardrop, with the tail facing behind as it moves."
+- **What:** every bolt look (`BoltMesh`'s capsule per weapon, the heavy cannons' large green pulse, the interceptors' pulses, the
+  stand-ins' bolts) drawn as a teardrop: a round bright head at the front, a tail tapering to a point behind it along the flight,
+  its glow fading toward the tail. Check why they read as lines now: the capsule's proportions, motion blur stretching them, and the
+  opaque draw under motion vectors (always on since T47 turned blur on by default). Keep one draw per look and T38's motion vectors
+  and slot quarantine. A look sheet (close, mid and far, still and moving, blur on and off) goes to the maintainer before commit.
+- **Done when:** the maintainer approves the sheet; a test of the shape (head wider than tail, tail behind the motion); committed.
