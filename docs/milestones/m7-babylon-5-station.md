@@ -2664,6 +2664,23 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   at 4K) against Godot's expected setup, find why it is far blurrier than its preset should be, fix it at the cause; GPU captures of
   `native` against `fsr2 quality` still and in motion.
 - **Done when:** captures that show the fix; the maintainer's look (H); committed.
+- **Done (code; 2026-11-16, the look is (H)):** the blur was the motion blur, not FSR 2.2's setup. Scale, internal size (2 560x1 440
+  of a 3 840x2 160 fullscreen window at Quality, 1 600x900 of a 2 400x1 350 window), sharpness and the AA hold were all as M4-T40
+  meant, and FSR 2.2 alone was as sharp as native in still and moving captures. The maintainer plays with `motion_blur` on, and
+  under FSR 2.2 Godot 4.7 runs a separate motion pass: only what moved this frame writes a motion vector, and everything still is
+  cleared to a (-1, -1) mark that FSR 2.2 works out from depth (`render_forward_clustered.cpp`, `ffx_fsr2_callbacks_glsl.h`). TAA,
+  FSR 1.0 and native write every vector, so the mark appears only under FSR 2.2. `MotionBlurEffect` read the mark as a real vector
+  and smeared every still hull (the player's ship at rest, the station, rocks) diagonally by the full 6 % cap (86 internal pixels at 4K Quality), even with
+  the camera still. A read-back probe found (-1, -1) at every still hull pixel under `fsr2` at every preset and zero under native,
+  TAA and FSR 1.0. Fix: `motion_blur.glsl` treats the mark as Godot's FSR 2.2 does and works the still pixel's vector out from its
+  depth and the camera's move since the last frame. Moving things and the sky are unchanged, and native and FSR 1.0 never see the
+  mark. New GPU test `test_motion_blur_upscaled_gpu` (2 tests: a still box keeps its rims under FSR 2.2 with the blur at full
+  strength, and a camera slide blurs it as native does; both fail on the old shader, with rims 0.82 against 0.92 or more). Captures
+  in `references/screenshots/M7-T46 FSR2/`: before `sbs_blur_on_still.png`, `before_w1080_fsr2_quality_still.png`; after
+  `after_sb_*`, `after_w1080_*`; side by side `compare_still_native_before_after.png`, `compare_w1080_still_before_after.png`,
+  `compare_turn_native_after.png`. Found on the way, not fixed: in `bench battle 300`, every frame after TAA or FSR 2.2 has been on
+  prints Godot's `draw_list_bind_uniform_set: Parameter "uniform_set" is null` (about 55 a second, and it goes on after switching
+  back to native or SMAA). It is not in the sandbox, and it is not this blur.
 
 ### M7-T47 Friendly fire and motion blur on by default
 

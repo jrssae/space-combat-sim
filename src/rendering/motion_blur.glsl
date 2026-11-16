@@ -2,6 +2,8 @@
 #version 450
 // Motion blur for fast turns. Hulls write depth and blur by the velocity buffer; the sky, the star points and anything else
 // that writes no depth (depth 0) blur by how far the camera turned since the last frame, which the buffer does not hold for them.
+// Under FSR 2.2 Godot writes vectors only for what moved and marks the rest (-1, -1) for the upscaler to work out from depth
+// (M7-T46); those pixels blur by the camera's own motion, worked out the same way.
 
 layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
@@ -51,6 +53,24 @@ vec2 camera_turn_velocity(vec2 ndc) {
 	return (prev_ndc - (ndc - scene.data.taa_jitter)) * 0.5;
 }
 
+// Godot's mark for "this did not move, work its vector out from depth" (a temporal upscaler's motion pass, M7-T46).
+bool is_derived_mark(vec2 velocity) {
+	return all(lessThanEqual(velocity, vec2(-1.0)));
+}
+
+// The motion vector of a still point at this pixel and depth, from the camera's move since the last frame, in the velocity
+// buffer's convention (uv units, last frame's place minus this one's, without the jitter).
+vec2 still_point_velocity(vec2 ndc, float depth) {
+	vec4 view = scene.data.inv_projection_matrix * vec4(ndc, depth, 1.0);
+	vec4 world = to_mat4(scene.data.inv_view_matrix) * vec4(view.xyz / view.w, 1.0);
+	vec4 prev_clip = scene.prev_data.projection_matrix * (to_mat4(scene.prev_data.view_matrix) * world);
+	if (prev_clip.w <= 0.0) {
+		return vec2(0.0);
+	}
+	vec2 prev_ndc = prev_clip.xy / prev_clip.w - scene.prev_data.taa_jitter;
+	return (prev_ndc - (ndc - scene.data.taa_jitter)) * 0.5;
+}
+
 void main() {
 	ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
 	if (any(greaterThanEqual(vec2(pos), params.size))) {
@@ -59,8 +79,12 @@ void main() {
 	vec2 uv = (vec2(pos) + 0.5) / params.size;
 	vec4 centre = texelFetch(color_tex, pos, 0);
 
-	bool is_sky = texelFetch(depth_tex, pos, 0).r <= 0.0;
+	float depth = texelFetch(depth_tex, pos, 0).r;
+	bool is_sky = depth <= 0.0;
 	vec2 velocity = is_sky ? camera_turn_velocity(uv * 2.0 - 1.0) : texelFetch(velocity_tex, pos, 0).rg;
+	if (!is_sky && is_derived_mark(velocity)) {
+		velocity = still_point_velocity(uv * 2.0 - 1.0, depth);
+	}
 
 	// Velocity is where the pixel was last frame; the smear runs both ways round now (a half-open shutter).
 	vec2 smear_px = velocity * params.size * params.strength;
