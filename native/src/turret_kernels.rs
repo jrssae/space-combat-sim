@@ -606,6 +606,18 @@ pub fn frame(basis: &Basis, origin: Vector3, local: Vector3, up: Vector3, forwar
     }
 }
 
+/// The frame a gun aims and fires from: its trunnion `lift_m` up its axis (M7-T43's heavy cannon), so the lead, the gate and
+/// the shot share one point. An unlifted mount keeps its own frame as it is.
+pub fn raised(f: &Frame, lift_m: f64) -> Frame {
+    let pivot = if lift_m > 0.0 { add(f.pivot, scale(f.up, lift_m as f32)) } else { f.pivot };
+    Frame {
+        pivot,
+        up: f.up,
+        forward: f.forward,
+        side: f.side,
+    }
+}
+
 /// A direction as the mount's azimuth (round `up`, from `forward` toward `side`) and elevation (above its base), rad.
 pub fn angles_of(f: &Frame, direction: Vector3) -> (f64, f64) {
     let along = f64::from(dot(direction, f.forward));

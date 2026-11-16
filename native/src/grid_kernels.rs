@@ -466,6 +466,40 @@ pub fn muzzle_point(f: &tk::Frame, azimuth: f64, elevation: f64, trunnion: Vecto
     add(f.pivot, along)
 }
 
+/// A battery's shot (M7-T41): where the pulse leaves, its line, its flight time to the meeting, and the angles the mount shows.
+pub struct BatteryShot {
+    pub muzzle: Vector3,
+    pub aim: Vector3,
+    pub flight_s: f64,
+    pub azimuth: f64,
+    pub elevation: f64,
+}
+
+/// A battery's shot at a projectile: the barrels laid on the trunnion's lead, the pulse led again from the barrel that fires,
+/// and the mount shown along the pulse's line so up close the pulse never leaves sideways. A lead is its line and flight time;
+/// `lead_from` leads from a point (none without a solution).
+pub fn battery_shot(
+    f: &tk::Frame,
+    min_elevation: f64,
+    trunnion: Vector3,
+    muzzle: Vector3,
+    trunnion_lead: (Vector3, f64),
+    lead_from: impl Fn(Vector3) -> Option<(Vector3, f64)>,
+) -> BatteryShot {
+    let in_arc = |el: f64| el.clamp(min_elevation, std::f64::consts::FRAC_PI_2);
+    let (az, el) = tk::angles_of(f, trunnion_lead.0);
+    let at = muzzle_point(f, az, in_arc(el), trunnion, muzzle);
+    let (aim, flight_s) = lead_from(at).unwrap_or(trunnion_lead);
+    let (shown_az, shown_el) = tk::angles_of(f, aim);
+    BatteryShot {
+        muzzle: at,
+        aim,
+        flight_s,
+        azimuth: shown_az,
+        elevation: in_arc(shown_el),
+    }
+}
+
 /// When along the tick two spheres moving in straight lines first touch, as a share of the tick (0 to 1): `a` from `a_start`
 /// by `a_step`, `b` likewise, their radii summed `reach`; none when they stay apart.
 pub fn first_touch(a_start: Vector3, a_step: Vector3, b_start: Vector3, b_step: Vector3, reach: f64) -> Option<f64> {

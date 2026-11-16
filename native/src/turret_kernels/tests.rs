@@ -483,3 +483,57 @@ fn a_gun_on_a_raised_trunnion_fires_from_it() {
     assert_eq!(again, t);
     assert_eq!((m.lift_m[again], m.burst_shots[again]), (0.0, 1), "a reused slot starts plain");
 }
+
+// The heavy cannon (M7-T43): a 2 km/s bolt, 1 m hit radius, from a trunnion 9.5 m over its base.
+fn heavy_gun() -> Gun {
+    Gun {
+        muzzle_speed: 2000.0,
+        interval_s: 12.0,
+        lifetime_s: 3.5,
+        damage: 300.0,
+        hit_radius: 1.0,
+        range_m: 6000.0,
+        spread_rad: 0.0,
+        traverse_rad_s: 15_f64.to_radians(),
+        elevation_rad_s: 12_f64.to_radians(),
+        color: [1.0; 4],
+        look: 0,
+    }
+}
+
+// How close a shot from `aim_from`'s settled aim, leaving `fire_from`, passes a fighter crossing at 2 km and `elevation_deg`.
+fn heavy_miss(aim_from: &Frame, fire_from: Vector3, elevation_deg: f64) -> f64 {
+    let g = heavy_gun();
+    let (se, ce) = elevation_deg.to_radians().sin_cos();
+    let target = Vector3::new(0.0, (2000.0 * se) as f32, (-2000.0 * ce) as f32);
+    let velocity = Vector3::new(90.0, 0.0, 0.0);
+    let (mut az, mut el) = (0.0, elevation_deg.to_radians());
+    let mut a = aim(aim_from, Vector3::ZERO, az, el, 0.0, &g, target, velocity, DT);
+    for _ in 0..600 {
+        a = aim(aim_from, Vector3::ZERO, az, el, 0.0, &g, target, velocity, DT);
+        (az, el) = (a.azimuth, a.elevation);
+    }
+    let (start, shot_velocity) = shot(fire_from, a.axis, a.axis, 0.0, Vector3::ZERO, g.muzzle_speed);
+    // The closest the bolt comes to the fighter over its flight (relative motion in a straight line).
+    let d = sub(start, target);
+    let v = sub(shot_velocity, velocity);
+    let t = (-f64::from(dot(d, v)) / f64::from(dot(v, v))).clamp(0.0, g.lifetime_s);
+    f64::from(crate::v3::length(add(d, scale(v, t as f32))))
+}
+
+#[test]
+fn a_raised_gun_aims_from_the_trunnion_it_fires_from() {
+    let base = level_frame();
+    let lifted = raised(&base, 9.5);
+    assert!((f64::from(lifted.pivot.y) - 9.5).abs() < 1e-6, "the trunnion 9.5 m up the base's axis");
+    let same = raised(&base, 0.0);
+    assert_eq!((same.pivot, same.up, same.forward, same.side), (base.pivot, base.up, base.forward, base.side), "unlifted: as is");
+    let r = heavy_gun().hit_radius;
+    for elevation in [10.0, 20.0, 30.0] {
+        let miss = heavy_miss(&lifted, lifted.pivot, elevation);
+        assert!(miss <= r, "{elevation} degrees up: the shot passes {miss:.2} m from the fighter");
+        // The old shot: aimed from the base, fired from the trunnion, parallel to the aimed line and about 9.5 m off it.
+        let old = heavy_miss(&base, lifted.pivot, elevation);
+        assert!(old > 5.0 * r, "{elevation} degrees up: aimed from the base it passes {old:.2} m off");
+    }
+}

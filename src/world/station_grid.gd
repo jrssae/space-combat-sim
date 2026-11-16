@@ -262,10 +262,9 @@ func _on_intercepted(point: Vector3, color: Color, _m: TurretMount) -> void:
 	var world: Node3D = WorldFrame.of(self)
 	if world == null:
 		return
-	var flash := ImpactFlash.create(color)
+	var flash := ImpactFlash.create(color, 0, MEET_FLASH_SCALE)
 	world.add_child(flash)
 	flash.global_position = point
-	flash.scale *= MEET_FLASH_SCALE
 	flash.reset_physics_interpolation()
 	if _fx == null or not is_instance_valid(_fx):
 		_fx = world.get_node_or_null(^"Fx") as FxPool

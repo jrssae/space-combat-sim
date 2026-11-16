@@ -487,3 +487,29 @@ fn a_pulse_does_not_meet_another_pulse_or_its_own_side() {
     assert_eq!(seen.iter().map(|c| c.bolt).collect::<Vec<_>>(), vec![2], "only the missile");
     assert_eq!(crate::weapon_kernels::shots_in_flight(&bolts), 1);
 }
+
+#[test]
+fn a_battery_shows_its_barrels_along_the_pulse_it_fires() {
+    let f = tk::frame(&Basis::IDENTITY, Vector3::ZERO, Vector3::ZERO, Vector3::UP, Vector3::FORWARD);
+    let trunnion = Vector3::new(0.0, 2.0, 0.0);
+    let corner = Vector3::new(2.2, 1.4, -4.0);
+    let (speed, life) = (1500.0, 2.0);
+    let min_el = (-10_f64).to_radians();
+    // A bolt 20 m off and crossing: up close a corner muzzle's own lead differs from the trunnion's by degrees.
+    let target = Vector3::new(-6.0, 9.0, -18.0);
+    let velocity = Vector3::new(60.0, 0.0, 20.0);
+    let lead = |from: Vector3| {
+        let l = crate::brain_maths::solve(from, Vector3::ZERO, target, velocity, speed, life);
+        l.ok.then_some((l.aim_dir, l.t))
+    };
+    let at = muzzle_point(&f, 0.0, 0.0, trunnion, Vector3::ZERO);
+    let from_trunnion = lead(at).expect("the trunnion leads it");
+    let s = battery_shot(&f, min_el, trunnion, corner, from_trunnion, lead);
+    let angle = |a: Vector3, b: Vector3| f64::from(dot(a, b)).clamp(-1.0, 1.0).acos().to_degrees();
+    let shown = tk::direction_of(&f, s.azimuth, s.elevation);
+    assert!(angle(shown, s.aim) < 0.01, "the barrels point down the pulse's line: {:.3} degrees off", angle(shown, s.aim));
+    let laid = tk::angles_of(&f, from_trunnion.0);
+    let old = tk::direction_of(&f, laid.0, laid.1);
+    assert!(angle(old, s.aim) > 1.0, "laid on the trunnion's lead they were {:.2} degrees off", angle(old, s.aim));
+    assert!(f64::from(dist_sq(s.muzzle, muzzle_point(&f, laid.0, laid.1, trunnion, corner))) < 1e-9, "the pulse leaves as before");
+}

@@ -564,15 +564,17 @@ impl ScsSimCore {
                 m.up[s],
                 m.forward[s],
             );
+            // A raised gun leads, gates and fires from its trunnion, so its shot runs down the line it aimed.
+            let at = tk::raised(&f, m.lift_m[s]);
             // A drum's gun moves with the skin under it: its bolts and its lead take that speed.
             let ship_velocity = if grid {
-                gk::mount_velocity(&self.rows, own, f.pivot)
+                gk::mount_velocity(&self.rows, own, at.pivot)
             } else {
                 self.rows.velocities[own]
             };
             let gun = m.gun[s];
             let a = tk::aim(
-                &f,
+                &at,
                 ship_velocity,
                 m.azimuth[s],
                 m.elevation[s],
@@ -611,8 +613,8 @@ impl ScsSimCore {
                 _ => {}
             }
             let direction = tk::spread(a.axis, gun.spread_rad, m.id[s], tick);
-            let (at, velocity) = tk::shot(
-                add(f.pivot, scale(f.up, m.lift_m[s] as f32)),
+            let (start, velocity) = tk::shot(
+                at.pivot,
                 a.axis,
                 direction,
                 m.barrel_m[s],
@@ -620,7 +622,7 @@ impl ScsSimCore {
                 gun.muzzle_speed,
             );
             let id = self.add_owned_bolt(
-                at,
+                start,
                 velocity,
                 m.faction_ix[s],
                 body,
@@ -632,7 +634,7 @@ impl ScsSimCore {
                 now_s + gun.lifetime_s,
             );
             slots.push(s as i32);
-            starts.push(at);
+            starts.push(start);
             ids.push(id);
         }
         let i = self.step_interceptors(&mut m, &surface_rows, now_s, delta, tick);
@@ -917,14 +919,21 @@ impl ScsSimCore {
             };
             let p = pick.bolt as usize;
             taken[p] = true;
-            let lead = lead_from(trunnion, p);
-            let (az, el) = tk::angles_of(&f, lead.aim_dir);
-            let el = el.clamp(m.min_elevation[s], std::f64::consts::FRAC_PI_2);
             let barrel = battery.fire(now_s);
-            let muzzle = gk::muzzle_point(&f, az, el, battery.trunnion, battery.muzzles[barrel]);
-            let from_muzzle = lead_from(muzzle, p);
-            let (aim, flight_s) = if from_muzzle.ok { (from_muzzle.aim_dir, from_muzzle.t) } else { (lead.aim_dir, lead.t) };
-            let direction = tk::spread(aim, gun.spread_rad, m.id[s].wrapping_mul(1 << 20).wrapping_add(m.shots[s]), tick);
+            let shot = gk::battery_shot(
+                &f,
+                m.min_elevation[s],
+                battery.trunnion,
+                battery.muzzles[barrel],
+                {
+                    let lead = lead_from(trunnion, p);
+                    (lead.aim_dir, lead.t)
+                },
+                |from| Some(lead_from(from, p)).filter(|l| l.ok).map(|l| (l.aim_dir, l.t)),
+            );
+            let (muzzle, flight_s) = (shot.muzzle, shot.flight_s);
+            let direction =
+                tk::spread(shot.aim, gun.spread_rad, m.id[s].wrapping_mul(1 << 20).wrapping_add(m.shots[s]), tick);
             let velocity = add(mount_velocity, scale(direction, gun.muzzle_speed as f32));
             let meet_at = now_s + delta + flight_s;
             let target = bolts.ids[p];
@@ -933,8 +942,8 @@ impl ScsSimCore {
             self.turrets.batteries[s] = Some(battery);
             m.ready_at[s] = now_s + gun.interval_s;
             m.shots[s] += 1;
-            m.azimuth[s] = az;
-            m.elevation[s] = el;
+            m.azimuth[s] = shot.azimuth;
+            m.elevation[s] = shot.elevation;
             fired.push((s, barrel, muzzle, velocity, target, meet_at));
         }
         for (s, barrel, muzzle, velocity, target, meet_at) in fired {

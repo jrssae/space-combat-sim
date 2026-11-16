@@ -28,11 +28,13 @@ static var _shared: Dictionary = {}
 static var built_count: int = 0
 
 var _age_s: float = 0.0
+var _size_scale: float = 1.0
 
 
-## A flash for a hit tinted `color`, from the pool when it has one. `seed_value` is kept for the callers' signature (the sparks it
-## seeded are the particle burst's now).
-static func create(color: Color, _seed_value: int = 0) -> ImpactFlash:
+## A flash for a hit tinted `color`, from the pool when it has one, `size_scale` times a hit's size for its whole life (M7-T41:
+## the batteries' smaller meeting flash). `seed_value` is kept for the callers' signature (the sparks it seeded are the particle
+## burst's now).
+static func create(color: Color, _seed_value: int = 0, size_scale: float = 1.0) -> ImpactFlash:
 	var flash: ImpactFlash = _from_pool()
 	if flash == null:
 		flash = ImpactFlash.new()
@@ -41,8 +43,9 @@ static func create(color: Color, _seed_value: int = 0) -> ImpactFlash:
 		built_count += 1
 	flash.mesh = _quad_for(color)
 	flash._age_s = 0.0
+	flash._size_scale = size_scale
 	flash.visible = true
-	flash.scale = Vector3.ONE * (FLASH_SIZE_M * 0.6)
+	flash.scale = Vector3.ONE * (FLASH_SIZE_M * size_scale * 0.6)
 	flash.transparency = 0.0
 	return flash
 
@@ -93,7 +96,7 @@ func advance(delta: float) -> void:
 		_finish()
 		return
 	var life: float = _age_s / FLASH_S
-	scale = Vector3.ONE * (FLASH_SIZE_M * lerpf(0.6, 1.0, life))
+	scale = Vector3.ONE * (FLASH_SIZE_M * _size_scale * lerpf(0.6, 1.0, life))
 	transparency = life
 
 

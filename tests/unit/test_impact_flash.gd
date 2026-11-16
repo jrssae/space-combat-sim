@@ -59,3 +59,19 @@ func test_warming_makes_every_weapon_colour_and_a_first_flash_builds_nothing() -
 	for color: Color in from_files:
 		add_child_autofree(ImpactFlash.create(color))
 	assert_eq(ImpactFlash.built_count, built, "a first flash of any colour builds no node")
+
+
+func test_a_meeting_flash_keeps_its_smaller_size_as_it_grows() -> void:
+	var hit: ImpactFlash = ImpactFlash.create(Color(0.9, 1.5, 3.0), 1)
+	var meet: ImpactFlash = ImpactFlash.create(Color(0.9, 1.5, 3.0), 1, StationGrid.MEET_FLASH_SCALE)
+	add_child_autofree(hit)
+	add_child_autofree(meet)
+	for step: int in 3:
+		hit.advance(ImpactFlash.FLASH_S * 0.2)
+		meet.advance(ImpactFlash.FLASH_S * 0.2)
+		assert_almost_eq(meet.scale.x, hit.scale.x * StationGrid.MEET_FLASH_SCALE, 1e-5,
+				"step %d: the battery's meeting flash stays %.1f of a hit's size (M7-T41)" % [step, StationGrid.MEET_FLASH_SCALE])
+	var reused: ImpactFlash = ImpactFlash.create(Color(0.9, 1.5, 3.0), 1)
+	add_child_autofree(reused)
+	reused.advance(ImpactFlash.FLASH_S * 0.6)
+	assert_almost_eq(reused.scale.x, hit.scale.x, 1e-5, "a hull hit's flash is full size")

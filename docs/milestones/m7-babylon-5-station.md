@@ -179,7 +179,8 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 - **Heavy cannon (anti-capital).** Once weapons free, engages capital ships and big hulls first, fighters only when no capital is in range. Starting
   numbers: about 6 km range, a slow rate, hard hits; tuned in T07. M7-T43 (the maintainer, after the show's clips): three-shot bursts
   0.35 s apart, a new burst 12 s after the last began, 300 a shot (900 every 12 s, as before), a large green pulse with a large
-  green flash, from its trunnion over its recess.
+  green flash, from its trunnion over its recess. M7-T40 (maintainer, "slower big-gun traverse"): it turns at 6 degrees a second
+  and lifts at 5 (was 15 and 12), so it tracks agile fighters poorly and still pounds a slow capital.
 - **Interceptor battery.** Shoots down hostile **missiles and pulse bolts** whose path meets the station's hull, inside about
   1.5 km of the battery, missiles first, then the bolt that hits soonest. Each battery has a capped rate, so a dense raid
   saturates the grid. It never damages ships. **Beam weapons cannot be intercepted.** M4's stand-in (§17.11) is the start.
@@ -2281,6 +2282,9 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     (round 1: 3.0 against 2.9 us off the skin, 9.8 against 3.1 us within the keep-off).
   - **Open (maintainer):** the station's raid balance is out of band on HEAD after T41 and T43 (raid mean 77.9 s against 90 to
     120, the capital lost on seed 1); with T38 the raid mean is 71.9 s and the capital unchanged; T43 is reconciling it.
+    **Note (M7-T40 round 2, 2026-11-15):** those figures came from a copy missing the `grid_heavy_cannon` asset, so the heavy
+    cannons fired without their own trunnion and barrel; T43's fix round gave `StationGrid` the gun's own figures. HEAD 6472d504
+    with the asset: raid mean 88.9 s (80.8, 95.8, 89.9), the capital destroyed at 122 s on every seed. T40 round 2 settles it.
     Ship-to-ship dodging in plain formation away from big hulls stays weak (a wingman rejoining fast can ram a stopped leader);
     left as it is for now.
 
@@ -2362,6 +2366,41 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     at a 0.5 s interval instead of 1 s: 605, 754, 806, worst section 100, 100, 94 % (raid mean 105.0 s), still failing. So the
     D75 layout cannot hold the bow against the capital once the shots are honest. **Open, for the maintainer:** move or add bow
     batteries, widen their arc, or lower the test's bar. `test_turret_balance` (no station) 2/2 pass.
+- **Round 2 (council, 2026-11-15):** scores Opus 8/10, GPT-6 Luna 8/10, DeepSeek 9/10. The controller checked four findings
+  against 6472d504; all hold, all fixed:
+  1. P2 (Opus): a heavy cannon aimed from its pivot but fired from its trunnion 9.5 m up, so the bolt flew parallel to the aimed
+     line about 9 m off it and missed a fighter (hit radius 1 m). `turret_kernels::raised` gives a lifted gun's frame at its
+     trunnion: the lead, the gate and the shot all start there (and a drum gun's skin speed); an unlifted mount keeps its own
+     frame, so every other mount is bit-identical and no recording moved. Rust
+     `a_raised_gun_aims_from_the_trunnion_it_fires_from`: a 2 km crossing fighter at 10, 20 and 30 degrees up is now passed at
+     0.00 m; aimed from the base the same shot passed 9.36, 8.93 and 8.23 m off.
+  2. P3 (DeepSeek): a battery's barrels pointed along the trunnion's lead while the pulse left a corner muzzle on that muzzle's
+     own lead, visibly sideways up close. `grid_kernels::battery_shot` lays the barrels, leads again from the firing muzzle and
+     shows the mount along the pulse's line (clamped to its arc); the pulse's start, path and hits are unchanged (the battery's
+     trunnion sits on its yaw axis, so the shown azimuth moves no later shot). Rust
+     `a_battery_shows_its_barrels_along_the_pulse_it_fires` (20 m off: under 0.01 degrees; the old angles over 1 degree off).
+  3. P3 (Opus): the batteries' smaller meeting flash lasted one frame (`ImpactFlash.advance` reset its scale).
+     `ImpactFlash.create` takes a size for the flash's whole life; `StationGrid._on_intercepted` passes `MEET_FLASH_SCALE`; hull
+     hits unchanged. GUT `test_a_meeting_flash_keeps_its_smaller_size_as_it_grows` (`test_impact_flash`).
+  4. P3 (Opus): `traffic.reserved_ms` (M7-T13) added to info.md's `traffic` provider row.
+  - Left as is: `TurretRows._spend` re-spends pulse targets the core already marked spent (harmless).
+  - **Balance.** HEAD 6472d504 was already under the raid's 90 s mean (88.9 s: 80.8, 95.8, 89.9; heavy 27, 39, 33 shots on
+    fighters, 6, 8, 8 hits). Fix 1 made the heavy cannons hit fighters: 73.4 s (78.3, 70.0, 71.7; heavy 27, 27, 24 shots, 7, 10,
+    9 hits). The maintainer chose a slower big-gun traverse: `grid_heavy_cannon.tres` turns at 6 degrees a second and lifts at 5
+    (was 15 and 12). The sweep (`test_station_grid_balance`, GUT_BALANCE=1; raid seeds 1, 2, 3; heavy shots/hits on fighters):
+    - 10/8: mean 92.1 s (94.6, 89.0, 92.6), heavy 28/7, 27/9, 23/7; capital destroyed 122.6 to 123.1 s; proof 2.77 times. Pass.
+    - 8/6: mean 99.0 s (101.2, 106.2, 89.6), heavy 11/5, 18/6, 18/7; capital 122.9 to 123.5 s; proof 2.64 times. Pass.
+    - **6/5 (chosen):** mean 101.9 s (97.5, 106.2, 102.0), heavy 5/2, 13/5, 18/5; capital destroyed at 123.0, 123.5, 123.9 s
+      (heavy 66 shots, 61 hits; worst section 100, 70, 69 %, as before); proof 1.78 times (bar 1.5). Pass.
+    - 5/4: mean 133.4 s (114.6, 144.0, 141.6), seeds 2 and 3 over 140 s, too little hull damage. Fails.
+    - 4/3: mean 129.2 s (131.9, 138.7, 116.9), too little hull damage on seed 1. Fails.
+    The raid is chaotic (5/4 runs longer than 4/3), so 6/5 is the slowest round pair that holds every band; its ratio 1.2 keeps
+    near the old 1.25. The capital fight hardly moves at any of them: a cruiser is slow enough for any of these rates.
+  - Counts from the staged scratch copy (ab15c23e plus these changes): Rust 205 pass; 865 scripts compile; GUT_SLOW=1
+    test_parity_fixture 3, test_flight_parity_fight 1, test_weapon_rows_battle 1 (no recording moved), test_station_grid 9,
+    test_station_grid_threads 1, test_heavy_cannon 7, test_interceptor_battery_model 4, test_impact_flash 6, test_sim_core 21,
+    test_frame_passes 12, test_turret_kernel 12, all pass; GUT_BALANCE=1 test_station_grid_balance 3/3 (the 6/5 figures above,
+    reproduced exactly) and test_turret_balance 2/2.
 - **Done when:** a test per fix that fails without it; parity recordings and the balance tests green (new numbers stated with the
   reason); committed; a second council round.
 
