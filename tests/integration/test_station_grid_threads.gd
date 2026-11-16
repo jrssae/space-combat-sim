@@ -1,5 +1,5 @@
 extends GutTest
-## The station's defence grid under the threading rules (M7-T07, AC6, CLAUDE.md, architecture §17.13): the guns' pick runs in
+## The station's defense grid under the threading rules (M7-T07, AC6, CLAUDE.md, architecture §17.13): the guns' pick runs in
 ## the AI job one tick behind on the frozen rows and latch; the aim, gate, shots, interceptions and the latch's writes run on the
 ## main thread. Six raiders attack the station's bow; they fire first, the grid opens on them and the interceptors work. The
 ## rows, the commands and the turrets' digest must be the same bits every tick with the job threaded and delayed, and with one

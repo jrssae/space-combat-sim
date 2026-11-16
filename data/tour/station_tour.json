@@ -1,6 +1,6 @@
 {
   "min_shot_s": 1.0,
-  "order": ["bow", "main_docking_bay", "cobra_arm", "defence_grid", "heavy_cannons", "drum", "vanes", "cargo_bay"],
+  "order": ["bow", "main_docking_bay", "cobra_arm", "defense_grid", "heavy_cannons", "drum", "vanes", "cargo_bay"],
   "templates": {
     "push_in": {
       "keys": [
@@ -113,7 +113,7 @@
       "subject": [0.0, 240.0, -1887.0],
       "templates": ["push_in", "drift_right", "drift_left"]
     },
-    "defence_grid": {
+    "defense_grid": {
       "caption": "DEFENSE GRID: LIGHT TURRETS AND AN INTERCEPTOR BATTERY ON THE ARM OF WING {wing}",
       "scale": 0.5,
       "arm": true,

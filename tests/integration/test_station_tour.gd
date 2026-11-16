@@ -161,7 +161,7 @@ func test_one_stop_plays_alone_and_stop_ends_it() -> void:
 	await _fly_free()
 	var bad: ConsoleResult = _run("tour nowhere")
 	assert_false(bad.ok)
-	assert_string_contains(bad.error, "defence_grid")
+	assert_string_contains(bad.error, "defense_grid")
 	assert_true(_run("tour cobra_arm").ok)
 	assert_eq(main.tours.stops.size(), 1)
 	assert_eq(String(main.tours.current()["point"]), "cobra_arm")
@@ -214,7 +214,7 @@ func test_the_arm_filmed_is_clear_of_the_spine_and_named_in_the_caption() -> voi
 func test_the_grid_stops_have_their_mounts_on_screen() -> void:
 	await _start()
 	await _fly_free()
-	for stop_name: String in ["defence_grid", "heavy_cannons"]:
+	for stop_name: String in ["defense_grid", "heavy_cannons"]:
 		assert_true(_run("tour %s" % stop_name).ok)
 		var camera: Camera3D = main.camera_rig.cinematic_camera
 		var view: Vector2 = main.get_viewport().get_visible_rect().size

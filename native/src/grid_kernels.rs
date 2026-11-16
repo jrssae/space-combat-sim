@@ -1,4 +1,4 @@
-//! The station's defence grid (M7-T07, D75): its guns and interceptor batteries as kinds of the turret rows
+//! The station's defense grid (M7-T07, D75): its guns and interceptor batteries as kinds of the turret rows
 //! (`turret_kernels`), with no engine type in this file (`test_sim_core` reads it and fails on one).
 //!
 //! - **Never first.** The guns hold fire until a hostile fires on the station or on a friendly near it; from then on the grid

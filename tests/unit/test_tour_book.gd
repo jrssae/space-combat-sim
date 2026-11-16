@@ -14,7 +14,7 @@ const POINTS: Array[Dictionary] = [
 	{"name": "vanes", "body": "frame", "position": [1500.0, 700.0, -100.0], "look_at": [535.0, 600.0, 800.0], "direction": [-0.7292, -0.0756, 0.6801]},
 	{"name": "reactor", "body": "frame", "position": [420.0, 260.0, 4450.0], "look_at": [0.0, 0.0, 3700.0], "direction": [-0.4677, -0.2895, -0.8351]},
 ]
-# The two light turrets on Alpha's prong (the defence grid stop shows them) and the four Cobra arms with the launch-blocked sector.
+# The two light turrets on Alpha's prong (the defense grid stop shows them) and the four Cobra arms with the launch-blocked sector.
 const MOUNTS: Array[Dictionary] = [
 	{"name": "L1", "kind": "light_pulse", "body": "drum", "position": [-40.4, 300.8, -2254.5], "up": [-0.4512, 0.8463, -0.2831]},
 	{"name": "L2", "kind": "light_pulse", "body": "drum", "position": [40.4, 300.8, -2254.5], "up": [0.4512, 0.8463, -0.2831]},
@@ -73,7 +73,7 @@ func test_the_tour_file_reads() -> void:
 	var book: TourBook = _book()
 	assert_true(book.valid)
 	assert_eq(book.order.size(), 8, "eight stops")
-	for stop_name: String in ["bow", "main_docking_bay", "cobra_arm", "defence_grid", "heavy_cannons", "drum", "vanes", "cargo_bay"]:
+	for stop_name: String in ["bow", "main_docking_bay", "cobra_arm", "defense_grid", "heavy_cannons", "drum", "vanes", "cargo_bay"]:
 		assert_true(book.order.has(stop_name), stop_name)
 		assert_false(String(book.points[stop_name]["caption"]).is_empty(), "%s has a caption" % stop_name)
 	for dropped: String in ["reactor", "grid_tower"]:
@@ -95,7 +95,7 @@ func test_every_stop_is_a_tour_point_of_the_station() -> void:
 	var hp_no_mount: StationHardpoints = StationHardpoints.from_manifest({"hardpoints": {"spin_rad_s": SPIN, "cobra_bays": [],
 			"grid_mounts": [MOUNTS[0]], "lights": [], "tour_points": POINTS, "damage_sections": [],
 			"main_docking_bay": {"name": "main_docking_bay", "body": "drum"}, "cargo_bay": {"name": "cargo_bay", "body": "frame"}}})
-	assert_eq(book.missing_points(hp_no_mount), PackedStringArray(["defence_grid:L2", "defence_grid:I1", "heavy_cannons:H1", "heavy_cannons:H2", "heavy_cannons:I5"]),
+	assert_eq(book.missing_points(hp_no_mount), PackedStringArray(["defense_grid:L2", "defense_grid:I1", "heavy_cannons:H1", "heavy_cannons:H2", "heavy_cannons:I5"]),
 			"the mounts the grid stops show must exist")
 
 
@@ -139,9 +139,9 @@ func test_a_plan_is_the_stops_in_order_each_with_a_shot() -> void:
 		assert_eq(plan[i]["point"], book.order[i])
 		assert_not_null(plan[i]["shot"])
 		assert_almost_eq(float(plan[i]["duration_s"]), (plan[i]["shot"] as CinematicShot).duration_s, 1e-6)
-	var one: Array[Dictionary] = book.plan(_hardpoints(), 5, "defence_grid")
+	var one: Array[Dictionary] = book.plan(_hardpoints(), 5, "defense_grid")
 	assert_eq(one.size(), 1)
-	assert_eq(one[0]["point"], "defence_grid")
+	assert_eq(one[0]["point"], "defense_grid")
 	assert_true(book.plan(_hardpoints(), 5, "nowhere").is_empty())
 
 
@@ -223,26 +223,26 @@ func test_the_heavy_cannon_stop_shows_its_mounts_in_every_shot() -> void:
 				t += 0.5
 
 
-func test_the_defence_grid_stop_shows_its_mounts_in_every_shot() -> void:
+func test_the_defense_grid_stop_shows_its_mounts_in_every_shot() -> void:
 	var book: TourBook = _book()
 	var station_xf := Transform3D(Basis(Vector3.UP, 0.7), Vector3(-900.0, 300.0, 100.0))
-	assert_eq(book.points["defence_grid"]["shows"], PackedStringArray(["L1", "L2", "I1"]), "two light turrets and the arm's interceptors")
+	assert_eq(book.points["defense_grid"]["shows"], PackedStringArray(["L1", "L2", "I1"]), "two light turrets and the arm's interceptors")
 	var tour_point: Dictionary = {}
 	for hp: StationHardpoints in [_hardpoints(), _real_or_fixture()]:
-		tour_point = book.resolve("defence_grid", hp)
+		tour_point = book.resolve("defense_grid", hp)
 		for start_angle: float in [0.0, 1.9, 4.0]:
 			var turn: float = book.arm_turn(hp, tour_point, start_angle, SPIN, 0.0, 9.0, 4)["turn_rad"]
-			var turns: Dictionary = {"defence_grid": turn}
-			for variant: String in book.points["defence_grid"]["templates"]:
-				var shot: CinematicShot = book.shot_for("defence_grid", variant, tour_point)["shot"]
+			var turns: Dictionary = {"defense_grid": turn}
+			for variant: String in book.points["defense_grid"]["templates"]:
+				var shot: CinematicShot = book.shot_for("defense_grid", variant, tour_point)["shot"]
 				var t: float = 0.0
 				while t <= shot.duration_s + 0.001:
 					var drum: Transform3D = _drum_xf(start_angle + SPIN * t)
 					var pose: CinematicShot.Pose = shot.pose_at(minf(t, shot.duration_s), _poser(book, hp, station_xf, drum, turns), _no_origin)
-					for mount_name: String in book.points["defence_grid"]["shows"]:
-						var world: Variant = book.mount_point("defence_grid", mount_name, hp, station_xf, drum, turns)
+					for mount_name: String in book.points["defense_grid"]["shows"]:
+						var world: Variant = book.mount_point("defense_grid", mount_name, hp, station_xf, drum, turns)
 						assert_not_null(world, mount_name)
-						assert_true(_in_frame(pose, world as Vector3, 0.9), "defence_grid / %s at %.1f s (drum %.0f deg): mount %s is on screen" % [variant, t, rad_to_deg(start_angle), mount_name])
+						assert_true(_in_frame(pose, world as Vector3, 0.9), "defense_grid / %s at %.1f s (drum %.0f deg): mount %s is on screen" % [variant, t, rad_to_deg(start_angle), mount_name])
 					t += 0.5
 
 

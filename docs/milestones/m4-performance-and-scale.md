@@ -408,7 +408,7 @@ about 3.4; flight 3.6; hits 2.5; Jolt and the sync 1.9; targeting 1.0; rams 0.7)
 #### What the battle is (Q15, Q19 and Q21)
 
 Q19 and Q21 change what "500 ships" costs. The load is not 500 fighters: it is fighters, capital ships whose turrets each aim and
-fire, beam lasers, interceptor defences, guided missiles, proximity mines, carriers launching fighters, an asteroid field and a
+fire, beam lasers, interceptor defenses, guided missiles, proximity mines, carriers launching fighters, an asteroid field and a
 nearby moon's gravity, and in the grand battle several sides at once. None of those exist in the game yet (capital ships, turrets,
 missiles and mines are roadmap M12, asteroid fields M14, planets and gravity M6), so M4 does not build them. It makes the
 performance work ready for them (a native core whose rows carry an entity kind and a size, broad phases that take a 1 km hull
@@ -420,7 +420,7 @@ never by a scenario) and are replaced by the roadmap's real work:
 | stand-in (M4) | what it costs the tick | replaced by |
 |---|---|---|
 | `CapitalStandin`: a `RigidBody3D` with a `Damageable` and `Targetable`, a box hull 300 m (cruiser), 600 m (destroyer) or 1 200 m (carrier) long, cruising at 30 m/s on a fixed heading, hull points only | a large body in Jolt, the scan and every broad phase | M12's capital ships (generated hulls, subsystems, damage model) |
-| `TurretStandin`: a child of a capital that picks the nearest hostile fighter within 4 km from the contact scan, turns a gun axis at a limited rate and fires `PulseCannon` bolts through the fire gate; `interceptor` variant: targets missiles and bolts within 1.5 km and removes the nearest one at its rate (no bolt of its own) | an aiming and firing agent per turret; interceptors query bolts and missiles | M12's turrets, AI gunners and defence grid |
+| `TurretStandin`: a child of a capital that picks the nearest hostile fighter within 4 km from the contact scan, turns a gun axis at a limited rate and fires `PulseCannon` bolts through the fire gate; `interceptor` variant: targets missiles and bolts within 1.5 km and removes the nearest one at its rate (no bolt of its own) | an aiming and firing agent per turret; interceptors query bolts and missiles | M12's turrets, AI gunners and defense grid |
 | `BeamStandin`: a hitscan shot along a segment of 3 km, resolved by the hit sweep in the tick it fires, at 0.5 Hz per emitter | a long thin sweep per shot, no entity in flight | M12's lasers |
 | `MissileStandin`: a projectile row with a target, a turn rate and a lifetime, steered by proportional navigation in native code from phase 2 (GDScript before), launched by capitals at fighters | a guided agent in flight, swept like a bolt with a larger radius | M12's missiles |
 | `MineStandin` (Q21): a static row of kind `mine` with a trigger radius (50 m) and a blast radius (100 m), laid in belts between the sides; every third tick it asks the grid for a hostile inside the trigger and detonates on one (damage to every hull in the blast, the row removed); hundreds per battle | a static row queried on a cadence, a burst of damage, a removal | M12's weapons work (mines are not on the roadmap yet; the maintainer places them) |
@@ -928,7 +928,7 @@ proxies goes in `far_dots.gd`, since `splat_pose_sync.gd` is removed by T31.
 ##### M4-T12 Missile, beam, interceptor and mine stand-ins
 
 - **Track:** A and G. **Agent:** Opus. **Depends on:** T07, T08.
-- **Goal:** the battle carries guided missiles, beam shots, interceptor defences and proximity mines, so the hit sweep and the scan
+- **Goal:** the battle carries guided missiles, beam shots, interceptor defenses and proximity mines, so the hit sweep and the scan
   are measured with every weapon kind Q19 and Q21 name.
 - **Files:** `src/perf/standins/missile_standin.gd` (a `Projectile` of kind missile: a target, proportional navigation with a turn
   rate limit, a lifetime, launched by capitals to hold the mix's count in flight), `beam_standin.gd` (an emitter firing a 3 km

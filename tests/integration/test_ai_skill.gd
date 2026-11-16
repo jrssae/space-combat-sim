@@ -56,7 +56,7 @@ func _ticks_for(seconds: float) -> void:
 func test_an_ace_lands_more_hits_on_a_drone_than_a_rookie() -> void:
 	# Two runs at once, 9 km apart, mirrored: a raider 1.5 km behind a Starfury drone flying straight at 60 m/s. The lanes are
 	# above and below the player and off to port, clear of Babylon 5 in the default scene (M7-T06): a raider firing on a friend
-	# within its guns' range sets the defence grid on the raider (D75), and the ace's run is then no longer the pilot's alone.
+	# within its guns' range sets the defense grid on the raider (D75), and the ace's run is then no longer the pilot's alone.
 	var hits: Dictionary = {}
 	var resolver := main.get_node(^"Combat/HitResolver") as HitResolver
 	var drones: Dictionary = {}
@@ -84,7 +84,7 @@ func test_an_ace_lands_more_hits_on_a_drone_than_a_rookie() -> void:
 	# The comparison holds only while nobody else shoots: the station's grid must have stayed out of both runs.
 	var grid: Dictionary = DebugConsole.registry.read("grid.free")
 	if bool(grid.get("ok", false)):
-		assert_eq(String(grid["value"]), "holding", "the runs are out of the defence grid's reach")
+		assert_eq(String(grid["value"]), "holding", "the runs are out of the defense grid's reach")
 
 
 func test_a_cautious_ship_retreats_at_a_higher_hull_than_an_aggressive_one() -> void:

@@ -42,7 +42,7 @@ WEIGHTS: dict[str, float] = {
     "integration/test_rebase_in_play.gd": 153,
     "unit/test_tier_fire.gd": 129,
     "integration/test_station_wing_follow.gd": 113,
-    "integration/test_turret_defence.gd": 109,
+    "integration/test_turret_defense.gd": 109,
     "integration/test_ai_attack.gd": 90,
     "integration/test_station_tour.gd": 79,
     "integration/test_gravity_orbit.gd": 73,

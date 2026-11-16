@@ -27,7 +27,7 @@ from tools.procgen.parts import station_layouts as sl
 REPO_ROOT = Path(__file__).resolve().parents[3]
 STL = REPO_ROOT / "references" / "EA Babylon 5 Station.stl"
 SMALL = (1024, 1024, 64)  # drum, frame and detail tile in px: the tests' bake (the doors' small parts need room for their charts)
-# The defence grid's mounts (D75, approved 2026-11-13), station frame: name, piece, position.
+# The defense grid's mounts (D75, approved 2026-11-13), station frame: name, piece, position.
 MOUNTS = [
     ("L1", "drum", (-40.4, 300.8, 745.5)), ("L2", "drum", (40.4, 300.8, 745.5)), ("L3", "drum", (300.8, 40.4, 745.5)),
     ("L4", "drum", (300.8, -40.4, 745.5)), ("L5", "drum", (40.4, -300.8, 745.5)), ("L6", "drum", (-40.4, -300.8, 745.5)),

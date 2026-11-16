@@ -21,7 +21,7 @@ extends Node3D
 ## - **Visuals** are the pieces' `RenderPiece`s, with the drum's on a pivot turned each frame to the body's angle.
 ## - Lights: the bays' red lamps (two down the main docking bay's mouth, two in the cargo bay) take `LightPicker` slots
 ##   (`BayLights`, M7-T25, M7-T32); M7-T18 lights the rest of the station.
-## - **The defence grid** (M7-T07, D75) is a `StationGrid` child: its mounts hang from the visuals and bind to the frame and drum
+## - **The defense grid** (M7-T07, D75) is a `StationGrid` child: its mounts hang from the visuals and bind to the frame and drum
 ##   bodies in the core. A bolt of the station's own side stops on its hull without harm (maintainer).
 ##
 ## Console: provider and command `station`.
@@ -65,7 +65,7 @@ var targetable: Targetable = null
 ## their interactions (docking, loading, unloading).
 var docking_bay: NavPoint = null
 var cargo_bay: NavPoint = null
-## The defence grid (M7-T07).
+## The defense grid (M7-T07).
 var grid: StationGrid = null
 ## The main docking bay's inner doors, and its red lamps (M7-T25).
 var airlock: StationAirlock = null

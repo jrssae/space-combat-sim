@@ -350,7 +350,7 @@ func _on_turret_fired(at: Vector3, volume_db: float) -> void:
 	play_shot(&"turret_fire", at, volume_db, randf_range(0.97, 1.03))
 
 
-## Gives the station's defence grid its sounds (M7-T07): the turret shot pitched and levelled per kind, at the muzzle for every
+## Gives the station's defense grid its sounds (M7-T07): the turret shot pitched and levelled per kind, at the muzzle for every
 ## shot (a battery's pulse too, M7-T41) and at the meeting when a pulse takes a projectile.
 func watch_grid(grid: StationGrid) -> void:
 	if grid == null:

@@ -131,7 +131,7 @@ rotation, elevators from the Blue section to the Green zone; the support spine t
 from) put the docking sphere, the Cobra arms and the whole drum on the turning part. That moves the Cobra bays from the
 stationary command section, as this page read before T01, onto the drum. The maintainer confirms it (Q3).
 
-**Defence grid.** Its emplacements are settled with the maintainer in T02; `docs/assets-station.md` lists where the
+**Defense grid.** Its emplacements are settled with the maintainer in T02; `docs/assets-station.md` lists where the
 references show turret-like features.
 
 **Colours.** The drum light grey with large blue-violet panels in stepped blocks; the vanes deep blue; the spine, the bow

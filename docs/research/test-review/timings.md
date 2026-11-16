@@ -23,7 +23,7 @@ How measured, and its limits:
 | 150 | integration/test_m3_sandbox.gd |
 | 130 | integration/test_rebase_in_play.gd |
 | 113 | integration/test_ai_ram.gd |
-| 73 | integration/test_turret_defence.gd |
+| 73 | integration/test_turret_defense.gd |
 | 64 | integration/test_speed_and_autotrack.gd |
 | 56 | integration/test_flight_parity_fight.gd |
 | 48 | integration/test_ship_physics.gd |

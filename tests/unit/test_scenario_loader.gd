@@ -514,14 +514,14 @@ func test_a_scenario_without_a_mission_block_has_an_empty_one() -> void:
 
 func test_the_mission_block_and_cinematics_are_passed_through() -> void:
 	var data: Dictionary = _minimal()
-	data["mission"] = {"title": " Buoy defence ", "briefing": "Hold the relay.\n", "script": "res://data/missions/x.gd",
+	data["mission"] = {"title": " Buoy defense ", "briefing": "Hold the relay.\n", "script": "res://data/missions/x.gd",
 			"dialog": "res://data/dialog/x.json",
 			"objectives": [{"id": "protect", "text": "Protect NAV ALPHA", "fail": {"kind": "destroyed", "name": "NAV ALPHA"}}]}
 	data["cinematics"] = {"intro": {"keys": []}}
 	var result: Dictionary = ScenarioLoader.from_data(data, "case")
 	assert_true(result["ok"], str(result["error"]))
 	var mission: Dictionary = result["mission"]
-	assert_eq(mission["title"], "Buoy defence", "trimmed")
+	assert_eq(mission["title"], "Buoy defense", "trimmed")
 	assert_eq(mission["briefing"], "Hold the relay.\n", "kept as written")
 	assert_eq(mission["script"], "res://data/missions/x.gd")
 	assert_eq(mission["dialog"], "res://data/dialog/x.json")

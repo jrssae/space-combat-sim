@@ -14,7 +14,7 @@ both share one detail tile laid in their own space by the renderer (``core/detai
 plating a few metres across.
 
 Near field and hardpoints (M7-T05): the docking bay at the bow (``station_detail.py``: the cross housing, the stepped mouth, the
-red-lit tunnel and the inner airlock, turning with the drum), plinths under the defence grid's mounts, and the manifest's
+red-lit tunnel and the inner airlock, turning with the drum), plinths under the defense grid's mounts, and the manifest's
 ``hardpoints`` (``station_hardpoints.py``): the 28 Cobra-bay launch positions, the docking approach, D75's mounts, the lights for
 T18, the tour points and the damage sections, each in the frame of the piece that carries it.
 

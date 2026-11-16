@@ -1,6 +1,6 @@
 class_name StationGrid
 extends Node
-## The station's defence grid (M7-T07, D75, AC6): D75's 23 mounts from the station's hardpoints (M7-T05) bound to the native
+## The station's defense grid (M7-T07, D75, AC6): D75's 23 mounts from the station's hardpoints (M7-T05) bound to the native
 ## turret rows as the grid's kinds: 12 light pulse turrets (anti-fighter), 2 heavy cannons (capitals first) and 9 interceptor
 ## batteries. Everything a mount decides runs in the core (`grid_kernels`): the guns' pick in the AI job one tick behind, the
 ## aim, gate and shot, and the interceptors' choice, on the main thread. This node builds the mounts, says what they did and

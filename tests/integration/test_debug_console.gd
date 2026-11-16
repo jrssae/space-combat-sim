@@ -288,6 +288,18 @@ func test_fps_follows_show_fps() -> void:
 	assert_true(console.fps_counter.visible, "the counter follows the setting, however it is changed")
 
 
+func test_overlay_sets_and_toggles_show_overlay() -> void:
+	var console: DebugConsoleScript = _make_console()
+	console.submit("overlay off")
+	assert_eq(settings.get_value(&"show_overlay"), false)
+	console.submit("overlay on")
+	assert_eq(settings.get_value(&"show_overlay"), true)
+	console.submit("overlay")
+	assert_eq(settings.get_value(&"show_overlay"), false, "no argument toggles")
+	console.submit("overlay")
+	assert_eq(settings.get_value(&"show_overlay"), true)
+
+
 func test_watch_and_unwatch() -> void:
 	var console: DebugConsoleScript = _make_console()
 	console.submit("watch settings.invert_y")

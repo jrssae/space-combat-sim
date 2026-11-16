@@ -205,7 +205,7 @@ Everything else holds from about 200 m.
 - **Beacons**: none visible in the captures. Q10's extremities are the bow spike's tip (z 0), the vane tips (y ±1 503 at three z
   stations per boom), the delta fins' tips (x ±522) and the reactor's aft face.
 
-## Candidate surfaces for the defence grid (observations only)
+## Candidate surfaces for the defense grid (observations only)
 
 Where turret-like or weapon-like features appear. T02 decides the grid with the maintainer; this list decides nothing.
 
@@ -623,7 +623,7 @@ The maintainer's untextured arm model: six doors in a framed strip on the root s
   a coil housing, a red lamp.
 - **Serrated forks:** sawtooth teeth (5 m) every 14 m along each fork's outer lower edge.
 
-### The defence grid's plinths
+### The defense grid's plinths
 
 D75's 23 positions exactly. Each gets a 16-sided plinth along its up (light turret r 5 m, heavy cannon 9, interceptor 6.5), its face
 0.4 m over the pivot, reaching 6 m below. Where the T04 hull buried a mount it was flattened under it (kept, the maintainer): the

@@ -1,5 +1,5 @@
 extends GutTest
-## The defence grid's balance (M7-T07, D75, AC6): the grid alone beats 12 raiders, or one capital ship (M4's capital stand-in in
+## The defense grid's balance (M7-T07, D75, AC6): the grid alone beats 12 raiders, or one capital ship (M4's capital stand-in in
 ## M7), as long as the enemy stays in its fire. "Beats" means the whole enemy force destroyed within the fight's limit; the
 ## station is never destroyed (Q5). Seeded and headless through the native core, three seeds each, as Q31 pinned the Saturns.
 ## A balance file, so behind `GUT_BALANCE`.

@@ -128,7 +128,7 @@ func test_the_front_end_lists_the_escort_with_its_briefing_and_starts_it_on_a_fr
 	var page: NewGameSelect = front.frame().current_page() as NewGameSelect
 	assert_not_null(page)
 	assert_has(page.option_ids(), SCENARIO_ID)
-	assert_does_not_have(page.option_ids(), &"buoy_defence", "Buoy defence is gone (Q36)")
+	assert_does_not_have(page.option_ids(), &"buoy_defense", "Buoy defense is gone (Q36)")
 	page.button_of(SCENARIO_ID).grab_focus()
 	await wait_process_frames(2)
 	var shown: String = front.frame().detail_text()

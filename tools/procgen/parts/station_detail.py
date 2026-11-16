@@ -1,5 +1,5 @@
 """The station's near-field detail (M7-T05): the main docking bay at the bow, the cargo bay (zero-gravity) between the bow's forks and the
-defence grid's mount plinths.
+defense grid's mount plinths.
 
 The main docking bay (M7-T25) is the STL's (``references/EA Babylon 5 Station.stl``, docs/assets-station.md) with its frame block and
 mouth scaled up so the mouth is 80 m wide (the maintainer's estimate, so T10's civilians fit), and the show's look
@@ -698,7 +698,7 @@ def command_detail(mats: dict[str, Material]) -> Mesh:
     return polys(faces + _fork_teeth(mats["spine"]))
 
 
-# --- the defence grid's plinths ---------------------------------------------------------------------------------------
+# --- the defense grid's plinths ---------------------------------------------------------------------------------------
 PLINTH_R = {"light_pulse": 5.0, "heavy_cannon": 9.0, "interceptor": 6.5}
 PLINTH_TOP_M = 0.4  # the plinth's face stands this far over the pivot, so it never shares the hull's plane
 PLINTH_DEPTH_M = 6.0  # and reaches this far below the pivot, into the hull under a mount raised off it

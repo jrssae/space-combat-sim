@@ -502,6 +502,8 @@ func _register_core_commands() -> void:
 				_cmd_unwatch],
 		[ConsoleCommand.new(&"fps", "Show or hide the FPS counter (toggle settings.show_fps)",
 				[ConsoleArg.bool_optional(&"state")]), _cmd_fps],
+		[ConsoleCommand.new(&"overlay", "Show or hide the debug overlay (toggle settings.show_overlay, as F3 does)",
+				[ConsoleArg.bool_optional(&"state")]), _cmd_overlay],
 		[ConsoleCommand.new(&"god", "Toggle invulnerability (debug.invulnerable); session only, never saved",
 				[ConsoleArg.bool_optional(&"state")]), _cmd_god],
 		[ConsoleCommand.new(&"timescale", "Debug slow motion via Engine.time_scale, clamped to " + TIMESCALE_RANGE,
@@ -607,6 +609,10 @@ func _cmd_unwatch(args: Dictionary) -> ConsoleResult:
 
 func _cmd_fps(args: Dictionary) -> ConsoleResult:
 	return registry.toggle("settings.show_fps", args[&"state"])
+
+
+func _cmd_overlay(args: Dictionary) -> ConsoleResult:
+	return registry.toggle("settings.show_overlay", args[&"state"])
 
 
 func _cmd_god(args: Dictionary) -> ConsoleResult:

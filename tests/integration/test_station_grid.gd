@@ -1,5 +1,5 @@
 extends GutTest
-## The station's defence grid (M7-T07, D75, AC6) through the native core: D75's 23 mounts bind to the turret rows with their
+## The station's defense grid (M7-T07, D75, AC6) through the native core: D75's 23 mounts bind to the turret rows with their
 ## kinds; the drum's mounts turn with the drum; the guns never fire first and open on the side that fired on the station or on
 ## a friend near it; the station's own hull hides a target from a gun; the interceptor batteries fire pulses from their four
 ## barrels in turn (M7-T41) that meet hostile bolts and missiles aimed at the hull, at a capped rate, never a beam, and that can

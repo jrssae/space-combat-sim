@@ -1,7 +1,7 @@
 class_name StationHardpoints
 extends RefCounted
 ## The station's hardpoints as its generator writes them (M7-T05, D72; `tools/procgen/parts/station_hardpoints.py`): the Cobra bays'
-## launch positions, the main docking bay (in the drum) and the cargo bay (zero-gravity, on the spine between the bow's forks), the defence
+## launch positions, the main docking bay (in the drum) and the cargo bay (zero-gravity, on the spine between the bow's forks), the defense
 ## grid's mounts (D75), the lights, the tour points and the damage sections.
 ## Each sits in the frame of the piece that carries it (`body`): `drum` (the drum node's frame, turning with it) or `frame` (the
 ## station node's). Pure: T06 places them, T07 binds the mounts, T08 launches from the bays, T12 tours the points, T18 lights them.

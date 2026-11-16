@@ -4030,7 +4030,7 @@ The subsections were written task by task, so here is where each part of M5 is d
 | Comms menu | §18.22 | D54's D-pad picking, plate and timer are gone |
 | Cinematics and locked controls | D55, §18.8 | - |
 | Debrief | D56, §18.7 | - |
-| The demo mission | §18.15 (Civilian escort) | §18.9 (Buoy defence) is removed from the game |
+| The demo mission | §18.15 (Civilian escort) | §18.9 (Buoy defense) is removed from the game |
 | Civilian ships, turrets, colours, surfaces | §18.10, §18.11, §18.14, §18.30 | the turret's first strength in §18.10: §18.11 |
 | Encounters | §18.12 | - |
 | Asteroids, belts, rock rams | §18.13, §18.16 | - |
@@ -4093,7 +4093,7 @@ src/mission/dialog_book.gd, dialog_queue.gd, src/hud/comms_panel.gd, comms_layou
                                  data, the one-line queue (pure), the subtitle panel (T06)
 tests/unit/test_dialog_book.gd, test_dialog_queue.gd, test_dialog_ids.gd, test_comms_layout.gd, tests/integration/test_comms_panel.gd   (T06)
 data/scenarios/civilian_escort.json, data/missions/civilian_escort.gd, data/dialog/civilian_escort.json   the Civilian escort
-                                 mission (T30; it replaced T10's Buoy defence, whose files and the buoy ring are gone)
+                                 mission (T30; it replaced T10's Buoy defense, whose files and the buoy ring are gone)
 tests/integration/test_civilian_escort.gd   (T30)
 tools/procgen/assets/asteroids.py, tools/procgen/tests/test_asteroids.py   the rock shapes and their spheres (T29)
 src/world/belt_layout.gd   a belt's rocks in its box, pure (T29)
@@ -4281,7 +4281,7 @@ as the menu does; seed 0 by default, encounters off). Setting: `skip_front_end` 
 - **Console.** `camera.shot`, `camera.shot_time_s`; `camera <mode>` during a shot picks the view after it. No new command: a shot is
   played by a mission script, and `mission skip` cuts it.
 
-### 18.9 Buoy defence as built (T10)
+### 18.9 Buoy defense as built (T10)
 
 *Superseded by §18.15 (T30, Q36, Q41): the mission, `BuoyRing`, the `buoy_rings` field and their tests are removed, and
 `NavBuoy.BROADCAST_RANGE_M` is back at 1 000 km. Kept for the framework pieces it added: `player.velocity`, closing lines and the
@@ -4290,7 +4290,7 @@ fly-past shot.*
 - **The ring (Q21).** A scenario may declare `buoy_rings: [{centre, radius_m, count, normal, first, prefix}]`; `ScenarioLoader`
   turns each into nav buoy props (after the hand-placed ones, names checked for duplicates) from `BuoyRing` (pure): the ring in the
   plane square to `normal`, the first buoy along `first` from the centre, the rest at equal angles, named `prefix` + ALPHA, BRAVO,
-  ... (3 to 26 buoys), sums in 64 bits. Buoy defence has 16 on a ring of 20 000 km radius centred 20 000 km behind the scenario
+  ... (3 to 26 buoys), sums in 64 bits. Buoy defense has 16 on a ring of 20 000 km radius centred 20 000 km behind the scenario
   origin, so NAV ALPHA sits at the origin and its neighbours are 7 804 km away (7 854 km along the arc). No planet there (M6 put Epsilon III in the system, but this scenario's ring is gone, §18.15).
 - **Broadcast range: 10 000 km (changes M3's Q21).** `NavBuoy.BROADCAST_RANGE_M` is 1.0e7 m for every buoy in the game (M3-T17 had
   1.0e6 m, 1 000 km). On the ring every point hears at least two buoys. Off it the rule holds in every direction to about 4 900 km
@@ -4306,10 +4306,10 @@ fly-past shot.*
   replaces the buoy's splats with a mesh, so T10 adds no splat hiding; whether 15 far meshes cost anything to cull is checked after
   the rebase (T20).
 - **Starting in flight.** A scenario's `player` may carry `velocity` (m/s, zero by default); Main gives it to the ship at the first
-  spawn only (a respawn still starts at rest). Buoy defence starts the wing coasting at 40 m/s toward the buoy, the wingmen spawned
+  spawn only (a respawn still starts at rest). Buoy defense starts the wing coasting at 40 m/s toward the buoy, the wingmen spawned
   on their finger-four slots at the same velocity, on a line that passes the buoy 110 m or more to one side, so a hands-off
   player does not ram it.
-- **The intro.** Two shots, every actor in play from load (the player and NAV ALPHA; `test_buoy_defence.gd` checks): `relay`
+- **The intro.** Two shots, every actor in play from load (the player and NAV ALPHA; `test_buoy_defense.gd` checks): `relay`
   (6 s, origin points round the buoy on the far side from the key star, so it stands against the star and its flare) and `wing`
   (7 s, points in the player's frame moving back at 40 m/s, so the camera holds still in space while the finger-four flies past it
   on its left). Control's hail is said, not awaited, as the second shot starts and plays over it. The controls stay locked
@@ -4366,7 +4366,7 @@ M4-T20's capital stand-ins rather than into `weapon_kernels.rs` and `weapon_rows
 - **Strength (Q14; retuned by Q31 to Q33 in T16, §18.11: 6 damage every 2.4 s, 0.5 degree spread, the Saturns'
   hulls per variant; M7-T16: 0.4 degree spread for the raider's new hull).** As T21 built it: the light turret: 900 m/s, one shot every 3.0 s, 4.5 damage, 2 s life, 1.5 km range, 0.8 degree spread,
   50 and 40 degrees a second. Few, harder shots: two hits finish a raider at 15 %, but a full raider takes fourteen, so two
-  raiders still win. Pinned by `test_turret_defence` against a Saturn 4 of 1000 hull flown by the `civilian` profile: the
+  raiders still win. Pinned by `test_turret_defense` against a Saturn 4 of 1000 hull flown by the `civilian` profile: the
   raid wins in all three seeds (52, 91 and 88 s), the turrets finish a 15 % raider in all three (70, 43 and 34 s). The first
   numbers (2.5 damage every 1.2 s) killed both raiders in every seed.
 - **Visuals and sound.** The mount shows its hull's turret model (the manifest's `turret` entry, T27): `TurretMount.model_for`
@@ -4388,7 +4388,7 @@ M4-T20's capital stand-ins rather than into `weapon_kernels.rs` and `weapon_rows
 - **No fallback.** Turrets need the core and its bolt rows; without them a mount stays unbound and holds fire.
 - **Tests.** Rust: `turret_kernels/tests.rs` (13). GUT: `test_turret_kernel` (aim, arc, gate, pick, memory and stamps through
   the core; the Saturn 4's model split and turned), `test_turret_threads` (threaded against delayed, one thread against six,
-  byte for byte), `test_turret_defence` (the balance fight, three seeds), `test_sim_core`'s guard. The mechanics tests fire a
+  byte for byte), `test_turret_defense` (the balance fight, three seeds), `test_sim_core`'s guard. The mechanics tests fire a
   copy of the light turret at 1.2 s (`TurretScene.MECHANICS_INTERVAL_S`), so a few seconds carry several shots whatever the
   balance sets.
 
@@ -4461,7 +4461,7 @@ tests/integration/test_civilian_flight.gd, test_civilian_ships.gd, test_turret_b
   to 2 wins and the Saturn 4 tanker to 3; the Saturn 8 tanker needs 380 (330: 0 wins); the Saturn 8 transport sits in a
   narrow window, 715 (1150 before): its one win against two raiders (seed 8) ends with about 700 points taken, and its
   three-raider seed 3 kills them all after about 725 taken, so 700 and below wins none against two and 725 and above wins one
-  against three. The turrets finish a 15 % raider in every seed of `test_turret_defence`.
+  against three. The turrets finish a 15 % raider in every seed of `test_turret_defense`.
 
 ### 18.12 Free-flight encounters as built (T17, D58, Q3, Q9, Q12)
 
@@ -5612,7 +5612,7 @@ data/scenarios/station_launch.json  the player on Alpha 3 with three wingmen
 - **For M8.** A squadron launch is one `LaunchSequence` per wing (or several in turn) with the same profile, its cuts drawn from the
   same pools.
 
-### 20.3 The defence grid (D75, T07)
+### 20.3 The defense grid (D75, T07)
 
 ```
 native/src/grid_kernels.rs       the grid's kinds on the turret rows: the latch, the guns' pick through the brains' broad phase,

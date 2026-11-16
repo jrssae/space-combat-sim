@@ -637,7 +637,7 @@ How to start and what is new come first; everything for you to judge is in one l
 - **Debrief:** after a mission, the result with why, the objectives, time, kills and assists, wing losses, shots and hits.
   Retry flies the same mission and seed again; Front end goes back to the start screen.
 
-## Civilian escort (M5-T30; replaced Buoy defence)
+## Civilian escort (M5-T30; replaced Buoy defense)
 
 Start the game windowed (`.tools/godot/godot --path .`), choose **New game**, then **Civilian escort**. The briefing shows under
 the list while it is focused. Each start from the menu draws a new seed, and with it a different civilian ship (any of the nine hulls;

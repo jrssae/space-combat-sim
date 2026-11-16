@@ -423,7 +423,7 @@ def arm_mesh(m: Material) -> Mesh:
 
 
 def mount_plinths(m: Material, body: str) -> Mesh:
-    """The plinths under the defence grid's mounts on one piece (D75, M7-T05)."""
+    """The plinths under the defense grid's mounts on one piece (D75, M7-T05)."""
     from . import station_detail as sd  # noqa: PLC0415 - it builds on this module's shapes
     from . import station_hardpoints as sh  # noqa: PLC0415
 

@@ -74,7 +74,7 @@ func missing_points(hardpoints: StationHardpoints) -> PackedStringArray:
 ## Where a stop's camera stands and what it looks at, as a tour hardpoint reads (`name`, `body`, `position`, `look_at`, `direction`),
 ## or {} when it cannot be placed. The stop's own `camera` and `subject` take the place of its hardpoint's `position` and `look_at`
 ## (the tour frames what it points out, while the hardpoint stays the station's default view); a stop with no hardpoint (the
-## defence grid along the spine) brings both and its `body`.
+## defense grid along the spine) brings both and its `body`.
 func resolve(point_name: String, hardpoints: StationHardpoints) -> Dictionary:
 	if not points.has(point_name):
 		return {}

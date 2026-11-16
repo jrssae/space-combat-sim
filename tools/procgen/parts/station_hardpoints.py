@@ -1,4 +1,4 @@
-"""The station's hardpoints (M7-T05, D72): where the game launches fighters, sends traffic in, mounts the defence grid, hangs its
+"""The station's hardpoints (M7-T05, D72): where the game launches fighters, sends traffic in, mounts the defense grid, hangs its
 lights, points the tour's camera and counts damage. Data only, from the shapes' own numbers (``station.py``, ``station_detail.py``)
 and D75's approved mount table; written into the manifest's ``hardpoints``.
 
