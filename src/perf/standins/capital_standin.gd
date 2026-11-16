@@ -131,9 +131,10 @@ func can_open_jump_point() -> bool:
 
 ## How far from its point's mouth it holds the point open, m.
 func jump_hold_range_m() -> float:
+	var anchor_m: float = (jump_anchor["position"] as Vector3).length() if not jump_anchor.is_empty() else 0.0
 	if spec != null:
-		return JumpCapability.hold_range_m(length_m(), spec.jump_hold_range_m)
-	return JumpCapability.hold_range_m(length_m(), float((CLASSES[ship_class] as Dictionary).get("jump_hold_range_m", 0.0)))
+		return JumpCapability.hold_range_m(length_m(), spec.jump_hold_range_m, anchor_m)
+	return JumpCapability.hold_range_m(length_m(), float((CLASSES[ship_class] as Dictionary).get("jump_hold_range_m", 0.0)), anchor_m)
 
 
 ## The radius across its nose, m: what its own jump point is sized for (it comes out nose first).

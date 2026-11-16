@@ -22,9 +22,12 @@ const OUT_OF_RANGE: StringName = &"out_of_range"
 const OPENER_THROUGH: StringName = &"opener_through"
 
 
-## The hold range for a ship of `length_m`, or `override_m` when its type sets one.
-static func hold_range_m(length_m: float, override_m: float = 0.0) -> float:
-	return override_m if override_m > 0.0 else HOLD_LENGTHS * maxf(length_m, 0.0)
+## The hold range for a ship of `length_m`, or `override_m` when its type sets one. A hull that opens its point at its own anchor,
+## `anchor_m` from its centre (M12-T19), holds it at least a length beyond that, or its point would collapse as it opens.
+static func hold_range_m(length_m: float, override_m: float = 0.0, anchor_m: float = 0.0) -> float:
+	var length: float = maxf(length_m, 0.0)
+	var range_m: float = override_m if override_m > 0.0 else HOLD_LENGTHS * length
+	return maxf(range_m, anchor_m + length) if anchor_m > 0.0 else range_m
 
 
 ## Whether a point still holds, and if not, why. `through_s` is how long ago the opener touched its own ring (negative: it has

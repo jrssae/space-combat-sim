@@ -5377,7 +5377,8 @@ The first real capital hull, built ahead of M12's framework (T05, T07) and moved
   contact scan, `ContactScan.contacts_for`, a native query, for the nearest enemy ship or capital; inside its stand-off it backs
   away with its stern to it; a fighter under its hull share is called back), `recalling` (its hull under the threshold, or the raid over: ended by its
   script or the console, past its time limit, or no fighter left flying; it holds still and waits up to `wait_s`), then
-  leaving through a point it opens at its hull's `jump_point` anchor. Fighters not docked by then are let go and left behind;
+  leaving through a point it opens at its hull's `jump_point` anchor (it holds that point to a length past the anchor, since
+  the anchor is beyond the usual two lengths). Fighters not docked by then are let go and left behind;
   the docked ones leave with it and go back to their pool. Destroyed, its docked fighters are destroyed with it
   (`HitInfo.CAUSE_CARRIER_LOST`, no credit) and the points it holds collapse (§19.16).
 - **Per tick and per event.** Native: the docking paths. GDScript per tick: the carrier's engine and helm forces (as every

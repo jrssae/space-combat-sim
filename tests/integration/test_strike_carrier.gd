@@ -158,6 +158,7 @@ func test_it_calls_its_fighters_back_and_jumps_out_with_them() -> void:
 	var departed: int = carriers.carriers_departed
 	await _fly(70.0, func() -> bool: return carriers.carriers_departed > departed)
 	assert_eq(carriers.carriers_departed, departed + 1, "it went through its point")
+	assert_lt(SimClock.now() - run.state_at_s, CarrierJumps.LEAVE_LIMIT_S, "flying through it, not giving up on a point that collapsed")
 	assert_eq(carriers.free_count(), carriers.size(), "and is back in its pool")
 	assert_eq(main.ships.free_count(ShipPool.DEFAULT_TYPE), free_before + 6, "its docked fighters went back to theirs")
 	assert_eq(cap.dock.docked_count(), 0)

@@ -166,7 +166,9 @@ func test_a_raid_comes_in_behind_a_carrier_that_then_jumps_back() -> void:
 	var run: CarrierRun = carriers.runs()[0]
 	assert_eq(run.carrier.ship_class, CapitalStandin.STRIKE_CARRIER, "the strike carrier, not the cruiser stand-in")
 	assert_eq(run.arrival.opener, run.carrier, "the carrier opened the point and holds it")
-	assert_almost_eq(run.arrival.hold_range_m, 2.0 * run.carrier.length_m(), 1e-3)
+	assert_almost_eq(run.arrival.hold_range_m, run.carrier.jump_hold_range_m(), 1e-3, "held within its hull's own range")
+	assert_gt(run.carrier.jump_hold_range_m(), (run.carrier.jump_anchor["position"] as Vector3).length(),
+			"its range reaches the anchor it opens its departure at")
 	assert_eq(run.fighters.size(), e.count(), "every raider comes through it")
 	assert_eq(run.carrier.faction, Factions.RAIDERS)
 	assert_eq(run.carrier.dock.docked_count(), 0, "beside it out of its point, as the raid's data says by default (Q29)")
