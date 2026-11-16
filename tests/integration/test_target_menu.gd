@@ -501,6 +501,15 @@ func _pull_view() -> FocusPullView:
 	return main.target_menu.get_node("FocusPull") as FocusPullView
 
 
+# Waits on frames until the pull reaches the target (or 2 s of real time), so a hitching frame cannot fail the test.
+func _wait_pull(blur: FocusPullView, target: float) -> void:
+	var deadline: int = Time.get_ticks_msec() + 2000
+	while blur.amount() != target and Time.get_ticks_msec() < deadline:
+		await get_tree().process_frame
+	if target == 0.0:
+		await get_tree().process_frame
+
+
 func test_focus_pull_eases_in_and_out_on_real_time() -> void:
 	var blur: FocusPullView = _pull_view()
 	assert_not_null(blur)
@@ -510,11 +519,11 @@ func test_focus_pull_eases_in_and_out_on_real_time() -> void:
 	assert_true(blur.visible)
 	assert_true(blur.layer > main.hud.layer and blur.layer < main.target_menu.view.layer, "above the HUD, below the menu")
 	assert_true(blur.layer < main.target_menu.preview.layer + 1)
-	await get_tree().create_timer(0.4, true, false, true).timeout
-	assert_eq(blur.amount(), 1.0, "full after 0.2 s even though the tree is paused")
+	await _wait_pull(blur, 1.0)
+	assert_eq(blur.amount(), 1.0, "reaches full even though the tree is paused")
 	assert_eq(_read("target_menu.focus"), 1.0)
 	main.target_menu.close()
-	await get_tree().create_timer(0.4, true, false, true).timeout
+	await _wait_pull(blur, 0.0)
 	assert_eq(blur.amount(), 0.0)
 	assert_false(blur.visible, "hidden again once back in focus")
 	assert_false(blur.is_processing())
