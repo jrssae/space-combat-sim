@@ -307,6 +307,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T45 | C | Fix: the radar's dots vanish after several raider waves in the combat sandbox, leaving only the stalks (maintainer's M4 check, 2026-11-15) | - | Opus | A long-run bug in M4-T36's batched radar draw | in progress |
 | T46 | C | Fix: FSR 2.2 is very blurry (`upscale fsr2 quality`; maintainer's M4 check, 2026-11-15) | - | Opus | The upscaler's setup: scale, sharpness, motion vectors, jitter | in progress |
 | T47 | C | Friendly fire and motion blur on by default, and the test suite independent of the player's saved settings (maintainer, 2026-11-15) | - | Opus | A default that changes fights: recorded fights pin the old value, balance re-run | in progress |
+| T48 | B | The benchmarks (the 1 000-ship battle and the other layouts) and the tests use the generated asteroids (M5-T29's shapes) instead of M4's sphere stand-ins (maintainer, 2026-11-15) | - | Opus | The bench's rock field and its cost; tests and any recording that holds rocks | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress |
 
 ### M7-T01 Station references and measurements
@@ -2680,3 +2681,18 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
      is reported to the maintainer with the numbers, not retuned silently.
 - **Done when:** the defaults changed; the suite green locally with the maintainer's own settings file in place and on CI; the balance
   numbers recorded; committed.
+
+### M7-T48 The benchmarks and tests use the generated asteroids
+
+- **Why (maintainer, 2026-11-15):** "update the 1000 ship and other tests to use the accurate asteroids rather than the spherical stand
+  ins." The bench layouts' asteroid slab (`BenchLayout.rocks`, `StandinDirector.add_asteroids`) builds M4's `AsteroidField` stand-in:
+  grey spheres in one multimesh, one collision sphere per rock. M5-T29's `AsteroidBelt` draws the generated `asteroids` shapes (one
+  multimesh per shape) and collides each rock as its shape's one to three spheres, through the same `StaticRows` and `RockBodies`.
+- **What:** the bench's rocks become generated asteroids (the layout's sizes and places kept, a shape and orientation per rock from
+  the bench's seed), drawn and collided as `AsteroidBelt` does; the tests that build stand-in fields (`test_rocks_and_mines`,
+  `test_standins`, `test_rock_bodies`, `test_collision_layers`, `test_velocity_rebase`) use the generated rocks where they test rock
+  behaviour; the stand-in `AsteroidField` removed when nothing needs it (CLAUDE.md: no fallback kept). Any parity recording that holds
+  rocks is re-recorded only with the reason stated. The bench's cost before/after (`bench battle 1000`, `bench typical`, the
+  `scripts/bench_quick.sh` sweep) inside the M4 budgets.
+- **Done when:** no bench or test builds sphere stand-in rocks; the suite green; the bench numbers recorded; the maintainer's look at a
+  `bench battle 1000` (H); committed.
