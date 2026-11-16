@@ -306,6 +306,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T44 | C | Fix: two suns seen from 100 000 km above the star (`frame orbit 100000 epsilon`); one sun at every distance (maintainer, 2026-11-15) | - | Opus | A rendering bug near the star (scaled space, the sky's sun, the flare, the key light) | done |
 | T45 | C | Fix: the radar's dots vanish after several raider waves in the combat sandbox, leaving only the stalks (maintainer's M4 check, 2026-11-15) | - | Opus | A long-run bug in M4-T36's batched radar draw | in progress |
 | T46 | C | Fix: FSR 2.2 is very blurry (`upscale fsr2 quality`; maintainer's M4 check, 2026-11-15) | - | Opus | The upscaler's setup: scale, sharpness, motion vectors, jitter | in progress |
+| T47 | C | Friendly fire and motion blur on by default, and the test suite independent of the player's saved settings (maintainer, 2026-11-15) | - | Opus | A default that changes fights: recorded fights pin the old value, balance re-run | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress |
 
 ### M7-T01 Station references and measurements
@@ -2662,3 +2663,20 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   at 4K) against Godot's expected setup, find why it is far blurrier than its preset should be, fix it at the cause; GPU captures of
   `native` against `fsr2 quality` still and in motion.
 - **Done when:** captures that show the fix; the maintainer's look (H); committed.
+
+### M7-T47 Friendly fire and motion blur on by default
+
+- **Why (maintainer, 2026-11-15):** "i did want friendly fire and motion blur on. these should be defaults." Found when the controller's
+  local full run failed in eight files: the maintainer's saved `settings.cfg` (`friendly_fire=true`, `motion_blur=true`) leaked into the
+  tests, which read the player's saved settings; with an empty settings folder all 82 tests in those files pass.
+- **What:**
+  1. `SettingsSchema`: `friendly_fire` and `motion_blur` default to true (the settings menu, `docs/playtest.md` and info.md say so).
+  2. The test suite never reads or writes the player's saved settings: GUT runs start from the schema's defaults in memory (or a
+     settings file of their own), whatever `user://settings.cfg` holds; a test proving it.
+  3. Tests that relied on the old defaults set what they need explicitly: the parity recordings in `tests/fixtures/` were recorded with
+     friendly fire off, so their tests pin it off and stay bit-identical (no re-recording); the friendly-bolt tests (`test_hit_resolver`,
+     `test_station_grid`, `test_civilian_attacked`, the post-effects and anti-aliasing tests, `test_settings_schema`) state their setting.
+  4. The balance tests (`tests/balance_suite.txt`) run with the new defaults: report before/after; a balance band that no longer holds
+     is reported to the maintainer with the numbers, not retuned silently.
+- **Done when:** the defaults changed; the suite green locally with the maintainer's own settings file in place and on CI; the balance
+  numbers recorded; committed.
