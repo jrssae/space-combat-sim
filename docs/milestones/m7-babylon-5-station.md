@@ -309,6 +309,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T47 | C | Friendly fire and motion blur on by default, and the test suite independent of the player's saved settings (maintainer, 2026-11-15) | - | Opus | A default that changes fights: recorded fights pin the old value, balance re-run | in progress |
 | T48 | B | The benchmarks (the 1 000-ship battle and the other layouts) and the tests use the generated asteroids (M5-T29's shapes) instead of M4's sphere stand-ins (maintainer, 2026-11-15) | - | Opus | The bench's rock field and its cost; tests and any recording that holds rocks | in progress |
 | T49 | C | Fix: `draw_list_bind_uniform_set: Parameter "uniform_set" is null` printed about 55 times a second in a big bench fight once TAA or FSR 2.2 has been switched on, and on after switching back (maintainer, 2026-11-15; reproduced by T46) | - | Opus | A render resource freed or never built under motion vectors | in progress |
+| T50 | C | Fix: in a bench fight every asteroid and every far capital vanish from the view after a brief stutter, while the radar still shows them (maintainer, 2026-11-16) | T48 | Opus | Likely the batched draws not following a world rebase (bounds or positions) | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress |
 
 ### M7-T01 Station references and measurements
@@ -2741,3 +2742,20 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   vectors, the motion-blur pass, a shader whose texture was freed when the 3D buffers were rebuilt for the new mode) and fix it at the
   cause; a test that switches TAA and FSR 2.2 on and back in a bench-sized fight and finds no such error.
 - **Done when:** the test; the maintainer sees no spam (H); committed.
+
+- **Resolved by M7-T45 (3892c82d, controller's check 2026-11-16):** the same Godot bug (a multimesh's 2D uniform set left pointing at a
+  freed buffer once motion vectors come on) made the radar's dots vanish and printed this error every frame. On HEAD with the T45 fix,
+  T46's repro (`bench battle 300 120 arrive=placed`, then `aa taa`, `upscale fsr2 quality`, back to `aa smaa` and `upscale native`,
+  `blur on`, `blur off`) printed no `uniform_set` error and no other error. No separate change.
+
+### M7-T50 Fix: asteroids and far capitals vanish after a stutter
+
+- **Why (maintainer, 2026-11-16, a bench fight):** "the run started with many asteroids and capital ship stand ins. but then there was a
+  brief stutter and all of the asteroids and capital ships vanished from the main view, but appears to still be present in the radar
+  ring. i think it happens when i reach the edge of the asteroid field but i'm not sure."
+- **What:** reproduce in `bench battle 300`/`1000` and `bench typical` by flying out of the asteroid slab and past the rebase distance
+  (and past 2 000 m/s for a velocity rebase, `boost`); find why the batched draws (the rock field's multimeshes, after T48 the generated
+  asteroids; the far capitals' proxy hulls, M4-T23) stop drawing while their rows live on: bounds or custom AABBs not following a rebase,
+  instance transforms not shifted, a visibility range, the multimesh motion-vector buffer swap (as T45 found for 2D), or the tier's
+  promotion. Fix at the cause; a test that rebases (position and velocity) with rocks and far capitals in view and checks they still draw.
+- **Done when:** the test; the maintainer flies out of the field without losing them (H); committed.
