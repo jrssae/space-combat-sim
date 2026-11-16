@@ -321,6 +321,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T59 | C | Bench capitals mortal after the run, and the M4/M6 checks made testable (m4-016, m4-017, m6-094, m6-095; m6-096 by a code check) (maintainer's checklist, 2026-11-16) | T50 | Sonnet | The bench's capital invulnerability, console paths for the vortex checks | in progress |
 | T60 | C | "Defense" everywhere: code names, file names, data ids, tests and docs renamed from the British spelling (maintainer, 2026-11-16: "no one will understand the misspelling"); plus an `overlay [on\|off]` console command for the debug overlay | T54, T56, T57 | Sonnet | A wide rename while other agents edit the same files | in progress |
 | T61 | C | Fix: an undocking Narn transport rams the bay doorway's edge about 3 s after the doors open and is destroyed (found by T56; also on earlier HEADs) | T56 | Opus | The undock path's clearance for the widest hull | in progress |
+| T62 | C | A ship inside the docking bay's black box (docked, or undocking before it comes out) is inside the station: not targetable, off the radar and the AI's target lists, not hit (maintainer, 2026-11-16) | T61 | Opus | Targeting, radar and AI perception filters; the bay's interior boundary | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress |
 
 ### M7-T01 Station references and measurements
@@ -3160,3 +3161,14 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   - Seen on the way, not this task's: the same brake ignores a hold's `face` (the freighter's nose at the cargo bay is held by
     nothing while it waits); and in a console run of `play station_launch` with `station goto main_docking_bay` the player was
     rammed to death by the drum body (34 m/s) soon after, which ends the traffic's ships with it.
+
+### M7-T62 Ships inside the bay's black box are inside the station
+
+- **Why (maintainer, 2026-11-16):** "once a ship has entered the black box inside the main docking bay, it must no longer be targetable. In
+  the game, mechanic, it is inside the station and unavailable."
+- **What:** a ship that has crossed into the docking bay's black interior (the void past the bay's inner plane, where it holds
+  `DOCKED_HOLD_S` before it leaves the world) drops out of targeting (the player's target cycling and selection, the target box), the
+  radar, the AI's perception and target lists, the far dots and the hit sweep; an undocking ship comes back once it crosses out past the
+  plane. Same for any other bay with a black interior (cargo bay, if it has one).
+- **Done when:** tests (a docking ship is targetable outside, untargetable and off the radar inside, targetable again after it undocks);
+  the maintainer checks it (H); committed.
