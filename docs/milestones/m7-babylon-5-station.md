@@ -305,13 +305,20 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T43 | D | The heavy cannons as the show has them: an original single oval-barrel gun about 30 m long in a hazard-striped recess cut into the bow tower at H1 and H2, firing three-shot bursts of large green pulses at today's damage a second (maintainer, 2026-11-15) | T42 | Opus | Look sheet approved first; station generator change (STL fidelity); burst cadence in the native gun gate; balance unchanged | done |
 | T44 | C | Fix: two suns seen from 100 000 km above the star (`frame orbit 100000 epsilon`); one sun at every distance (maintainer, 2026-11-15) | - | Opus | A rendering bug near the star (scaled space, the sky's sun, the flare, the key light) | done |
 | T45 | C | Fix: the radar's dots vanish after several raider waves in the combat sandbox, leaving only the stalks (maintainer's M4 check, 2026-11-15) | - | Opus | A long-run bug in M4-T36's batched radar draw | done |
-| T46 | C | Fix: FSR 2.2 is very blurry (`upscale fsr2 quality`; maintainer's M4 check, 2026-11-15) | - | Opus | The upscaler's setup: scale, sharpness, motion vectors, jitter | in progress |
+| T46 | C | Fix: FSR 2.2 is very blurry (`upscale fsr2 quality`; maintainer's M4 check, 2026-11-15) | - | Opus | The upscaler's setup: scale, sharpness, motion vectors, jitter | done |
 | T47 | C | Friendly fire and motion blur on by default, and the test suite independent of the player's saved settings (maintainer, 2026-11-15) | - | Opus | A default that changes fights: recorded fights pin the old value, balance re-run | done |
 | T48 | B | The benchmarks (the 1 000-ship battle and the other layouts) and the tests use the generated asteroids (M5-T29's shapes) instead of M4's sphere stand-ins (maintainer, 2026-11-15) | - | Opus | The bench's rock field and its cost; tests and any recording that holds rocks | done |
 | T49 | C | Fix: `draw_list_bind_uniform_set: Parameter "uniform_set" is null` printed about 55 times a second in a big bench fight once TAA or FSR 2.2 has been switched on, and on after switching back (maintainer, 2026-11-15; reproduced by T46) | - | Opus | A render resource freed or never built under motion vectors | done |
 | T50 | C | Fix: in a bench fight every asteroid and every far capital vanish from the view after a brief stutter, while the radar still shows them (maintainer, 2026-11-16) | T48 | Opus | Likely the batched draws not following a world rebase (bounds or positions) | in progress |
 | T51 | C | Fix: the heavy cannons' pulses leave from outside the barrel and do not visibly reach their targets (maintainer, 2026-11-16, `bench battle 1000`) | - | Opus | The muzzle point from the yoke's angles against the drawn barrel (as M7-2 for the interceptors); hits, misses or a missing impact flash | done |
 | T52 | C | Every bolt drawn as a teardrop (a round bright head, a tail tapering behind it along its flight) instead of a straight line (maintainer, 2026-11-16) | - | Opus | The bolts' capsule mesh and materials, which draw opaque whenever motion vectors are on (now always, with blur on by default) | done |
+| T53 | C | Fix: Godot's `MultiMesh interpolation is being triggered from outside physics process` warning from `bolt_mesh.gd` and `thruster_visuals.gd` in bench fights, the civilian escort and free flight (maintainer's checklist, 2026-11-16) | - | Sonnet | The batched draws fill interpolated multimeshes from `_process` | in progress |
+| T54 | C | Civilian escort fixes (M5 check m5-035): the last raider wave comes too soon; hold X to skip the opening sequence; the escorted civilian's health bar on the HUD; explain the first raiders' arrival and departure points (maintainer's checklist, 2026-11-16) | - | Opus | Mission pacing, the cinematic skip, a HUD panel | in progress |
+| T55 | C | Civilians flee a fight instead of fighting it out (M5 check m5-054: none fled, they fought the raiders) (maintainer's checklist, 2026-11-16) | T56 | Opus | The civilian brain's flee rule (M5 Q24) against its turrets' self-defence | in progress |
+| T56 | C | Encounters pacing and civilian traffic (M5 check m5-056): an event every 1 to 3 minutes; busier civilian traffic running between Babylon 5 and the jumpgate; a Saturn 3 freighter spawned as an ally instead of a civilian (maintainer's checklist, 2026-11-16) | - | Opus | The encounter director's timers and mix, traffic routes, the spawn faction | in progress |
+| T57 | C | The station tour (M7 check m7-002): "Defense" spelled with an s in player-visible text; the defence grid stop mirrored to show the turrets and interceptors from in front (maintainer's checklist, 2026-11-16) | - | Sonnet | Tour stop placement and labels | in progress |
+| T58 | C | Wing launch (M7 check m7-008): `launch wing all`; a launched Alpha wing takes the player as Alpha leader and answers the comms commands (maintainer's checklist, 2026-11-16) | - | Opus | Launch command, wing membership and leader | in progress |
+| T59 | C | Bench capitals mortal after the run, and the M4/M6 checks made testable (m4-016, m4-017, m6-094, m6-095; m6-096 by a code check) (maintainer's checklist, 2026-11-16) | T50 | Sonnet | The bench's capital invulnerability, console paths for the vortex checks | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress |
 
 ### M7-T01 Station references and measurements
@@ -2701,6 +2708,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   `compare_turn_native_after.png`. Found on the way, not fixed: in `bench battle 300`, every frame after TAA or FSR 2.2 has been on
   prints Godot's `draw_list_bind_uniform_set: Parameter "uniform_set" is null` (about 55 a second, and it goes on after switching
   back to native or SMAA). It is not in the sandbox, and it is not this blur.
+- **Accepted (maintainer, 2026-11-16):** "Works now" (m4-025, `upscale fsr2 quality` in `bench battle 500` on 2ae6876d).
 
 ### M7-T47 Friendly fire and motion blur on by default
 
@@ -2923,3 +2931,72 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     world point of the shot, so a ship flying fast forward sees it up to its own speed's share of the tail behind its moving muzzle
     for the part of the first tick before the tail is full (a fighter at 300 m/s: about 2 m for about 7 ms).
 - **Accepted (maintainer, 2026-11-16):** style C teardrops, orange station bolts, tails from the muzzle, live on fd45acba.
+
+### M7-T53 Fix: the multimesh interpolation warning
+
+- **Why (maintainer, 2026-11-16):** `WARNING: [Physics interpolation] MultiMesh interpolation is being triggered from outside physics
+  process, this might lead to issues (possibly benign).` from `src/weapons/bolt_mesh.gd` (the buffer upload) and
+  `src/ship/thruster_visuals.gd` (`_upload`), seen in bench fights, the civilian escort and free flight.
+- **What:** the batched draws interpolate their own instances between ticks (`Engine.get_physics_interpolation_fraction`), so
+  Godot's own multimesh interpolation should be off on those nodes (or the upload moved where Godot expects it); find every
+  multimesh filled from `_process` and fix them all, without losing T38's motion vectors or the bolts' slot quarantine.
+- **Done when:** a test (a live run of the affected paths prints no such warning); committed.
+
+### M7-T54 Civilian escort fixes
+
+- **Why (maintainer's M5 check m5-035, 2026-11-16):** "the first round of raiders shows up with an arrival jump point and then a
+  departure jump point. is that supposed to be a carrier ship of some kind? Issues: Last round of raiders comes too soon. no "hold x
+  to skip" option during the opening sequence. no health bar displayed in the hud for the civilian. All must be addressed."
+- **What:** answer the jump-point question from the code (what opens the departure point and why); space the last wave (the mission
+  takes 6 to 8 minutes when each wave is fought, Q40); hold X (and its keyboard twin) to skip the opening sequence, as the other
+  cinematics do; the escorted civilian's hull on the HUD (a bar with its name). Keyboard parity for the skip.
+- **Done when:** tests for the wave spacing, the skip and the HUD bar; the maintainer flies it (H); committed.
+
+### M7-T55 Civilians flee a fight
+
+- **Why (maintainer's M5 check m5-054, 2026-11-16):** "I didn't see the civilians flee at all, but i did see them attempt to fight off
+  raiders."
+- **What:** under attack a civilian flees toward its own faction and shelter, in groups, the panic spreading (M5 Q24, M5-T16); its
+  turrets still fire in self-defence while it runs. Find why they hold and fight instead (the brain's state, the threat test, the
+  shelter target) and fix it; keep T16's balance band.
+- **Done when:** a test that attacked civilians move away toward their faction's shelter; the maintainer sees them flee (H); committed.
+
+### M7-T56 Encounters pacing and civilian traffic
+
+- **Why (maintainer's M5 check m5-056, 2026-11-16):** "Less civilian traffic in the mix than expected. didn't feel like 1-3 minutes.
+  first arrival was quick but then the next raid felt more like 5+ minutes. A Saturn 3 freighter showed up as an ally rather than as a
+  civilian. Civilian traffic did not appear to go from Bayblon 5 to the jumpgate and back. it instead was in strange places. needs to
+  be a bit busier with civilian traffic."
+- **What:** measure the encounter director's event spacing in free flight and hold it to 1 to 3 minutes; more civilian traffic,
+  running between Babylon 5 and the jumpgate (arrivals through the gate to the station, departures back); the Saturn 3 freighter's
+  faction (civilian, never an ally); keep raids and patrols in the mix.
+- **Done when:** tests for the spacing, the routes and the factions; the maintainer flies free flight (H); committed.
+
+### M7-T57 The station tour: "Defense" and the grid stop
+
+- **Why (maintainer's M7 check m7-002, 2026-11-16):** "Defense is spelled with an s. not Defence. Defence grid tour stop needs to
+  mirror the position so it shows the turrets and interceptors from in front rather than from behind."
+- **What:** every player-visible "Defence" (tour labels, HUD, menus, console help) becomes "Defense"; code identifiers and docs may
+  stay. The grid tour stop's camera moves to the guns' front side.
+- **Done when:** a test (no player-visible "Defence"; the stop's camera on the guns' front side); the maintainer tours it (H); committed.
+
+### M7-T58 Wing launch: `launch wing all` and Alpha leader
+
+- **Why (maintainer's M7 check m7-008, 2026-11-16):** "Missing command launch wing all. second issue, launching alpha wing does not have
+  them respond as wingmen. expected behavior is that the rest of alpha wing treats the player as the alpha leader and responds to
+  communication commands."
+- **What:** `launch wing all` launches every wing; a launched Alpha wing joins the player's wing with the player as Alpha leader and
+  takes the comms commands (wing orders, radial menus) as the sandbox's wingmen do. Console list and info.md updated.
+- **Done when:** tests for the command and for Alpha answering a wing order after a launch; the maintainer launches and orders them
+  (H); committed.
+
+### M7-T59 Bench capitals mortal after the run; the M4 and M6 checks made testable
+
+- **Why (maintainer's checklist, 2026-11-16):** m4-016/017: "I haven't been able to see this occur", "Even targetting destroyer 19, i
+  couldn't do any damage" (the bench's capitals are invulnerable by design); m6-094/095: "could not test this case"; m6-096: "requires
+  a code check not a user check".
+- **What:** once a bench run ends (T50: the battle flies on), its capitals become mortal, so a capital can be shot down and far deaths
+  watched in play; check the vortex commands of m6-094/095 work as the checklist states (fix them if not) and give the maintainer a
+  one-line recipe for each; verify m6-096 in code and a test (in `bench battle 1000` only capitals open points; fighters ride their
+  side's capital points or the battle's gate) and record the result.
+- **Done when:** tests; the m6-096 result written; the maintainer kills a capital after a run (H); committed.
