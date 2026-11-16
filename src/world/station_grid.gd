@@ -295,7 +295,7 @@ func _register_console() -> void:
 				"doc": "Shots by the light and heavy guns, interceptor pulses fired, projectiles shot down (missiles), shots the station's hull blocked"},
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(PROVIDER,
-			"The station's defence grid (M7-T07): info, free <side>, hold [side], repair <mount|all>",
+			"The station's defense grid (M7-T07): info, free <side>, hold [side], repair <mount|all>",
 			[ConsoleArg.enum_optional(&"action", ACTIONS, &"info"), ConsoleArg.string_optional(&"side")]), _cmd_grid, self)
 
 

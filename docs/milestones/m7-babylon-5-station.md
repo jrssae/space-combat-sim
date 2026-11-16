@@ -2979,6 +2979,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 - **What:** every player-visible "Defence" (tour labels, HUD, menus, console help) becomes "Defense"; code identifiers and docs may
   stay. The grid tour stop's camera moves to the guns' front side.
 - **Done when:** a test (no player-visible "Defence"; the stop's camera on the guns' front side); the maintainer tours it (H); committed.
+- **Done (code part, 2026-11-16):** the grid stop caption and the `station` grid console help say "Defense"; the stop id `defence_grid` and docs keep the old spelling. The stop's camera moved from z -2100 to the mirrored z -2410 (the bow side the heads' guns face), looking back at L1, L2 and the arm head (screenshots `references/screenshots/M7-T57 tour/before.png`, `after.png`). `tests/unit/test_tour_defense.gd` (3 tests). Left for the maintainer: tour it (H).
 
 ### M7-T58 Wing launch: `launch wing all` and Alpha leader
 
