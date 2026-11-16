@@ -1,6 +1,6 @@
 {
   "min_shot_s": 1.0,
-  "order": ["bow", "main_docking_bay", "cobra_arm", "defence_grid", "drum", "vanes", "cargo_bay"],
+  "order": ["bow", "main_docking_bay", "cobra_arm", "defence_grid", "heavy_cannons", "drum", "vanes", "cargo_bay"],
   "templates": {
     "push_in": {
       "keys": [
@@ -114,14 +114,24 @@
       "templates": ["push_in", "drift_right", "drift_left"]
     },
     "defence_grid": {
-      "caption": "DEFENSE GRID: LIGHT TURRETS ON THE ARM OF WING {wing}",
+      "caption": "DEFENSE GRID: LIGHT TURRETS AND AN INTERCEPTOR BATTERY ON THE ARM OF WING {wing}",
       "scale": 0.5,
       "arm": true,
       "hardpoint": "",
       "body": "drum",
-      "camera": [0.0, 395.0, -2410.0],
-      "subject": [0.0, 300.0, -2255.0],
-      "shows": ["L1", "L2"],
+      "camera": [0.0, 385.0, -2330.0],
+      "subject": [0.0, 310.0, -2245.0],
+      "shows": ["L1", "L2", "I1"],
+      "templates": ["push_in", "drift_right", "drift_left"]
+    },
+    "heavy_cannons": {
+      "caption": "DEFENSE GRID: HEAVY CANNONS AND THE BOW TOWER'S INTERCEPTORS",
+      "scale": 0.5,
+      "hardpoint": "",
+      "body": "frame",
+      "camera": [0.0, 515.0, -3630.0],
+      "subject": [0.0, 405.0, -3478.0],
+      "shows": ["H1", "H2", "I5"],
       "templates": ["push_in", "drift_right", "drift_left"]
     },
     "drum": {

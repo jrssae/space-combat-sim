@@ -1,6 +1,6 @@
 extends GutTest
 ## The station sandbox and its exterior tour on the real main scene (M7-T12): `station_showcase` starts the player in a Cobra bay with
-## the station's traffic on (the maintenance bots, the cargo pods with their Saturn); the `tour` command plays the seven stops end to
+## the station's traffic on (the maintenance bots, the cargo pods with their Saturn); the `tour` command plays the eight stops end to
 ## end on the cinematic camera, every shot at least a second, each stop's subject on screen; A or Start skips it; a stop plays alone;
 ## the camera goes back to the player's view afterwards.
 
@@ -115,13 +115,13 @@ func test_the_tour_plays_every_stop_end_to_end() -> void:
 				assert_true(Rect2(view * 0.2, view * 0.6).has_point(px), "%s at %.1f s: the subject is in the middle of the picture (%s of %s)" % [point_name, at, px, view])
 				checked += 1
 	assert_false(main.tours.playing, "the tour ended")
-	assert_eq(seen.size(), 7, "seven shots: %s" % [seen])
+	assert_eq(seen.size(), 8, "eight shots: %s" % [seen])
 	for i: int in book.order.size():
 		assert_true(seen[i].begins_with("tour_%s_" % book.order[i]), "stop %d is %s (%s)" % [i + 1, book.order[i], seen[i]])
-	assert_gte(checked, 7, "every shot was checked on screen")
+	assert_gte(checked, 8, "every shot was checked on screen")
 	# Each shot ran its whole length, and none was shorter than the second.
 	var played: Array[Dictionary] = main.tours.played
-	assert_eq(played.size(), 7)
+	assert_eq(played.size(), 8)
 	for i: int in range(1, played.size()):
 		var held: float = float(played[i]["start_s"]) - float(played[i - 1]["start_s"])
 		assert_almost_eq(held, float(main.tours.stops[i - 1]["duration_s"]), 0.1, "%s held its whole shot" % played[i - 1]["point"])
@@ -211,20 +211,21 @@ func test_the_arm_filmed_is_clear_of_the_spine_and_named_in_the_caption() -> voi
 	_run("tour stop")
 
 
-func test_the_defence_grid_stop_has_its_light_turrets_on_screen() -> void:
+func test_the_grid_stops_have_their_mounts_on_screen() -> void:
 	await _start()
 	await _fly_free()
-	assert_true(_run("tour defence_grid").ok)
-	var camera: Camera3D = main.camera_rig.cinematic_camera
-	var view: Vector2 = main.get_viewport().get_visible_rect().size
-	var shown: PackedStringArray = main.tours.book.points["defence_grid"]["shows"]
-	assert_gte(shown.size(), 2)
-	for step: int in 4:
-		await _ticks(120)
-		main.camera_rig.update_cinematic(1.0)
-		for mount_name: String in shown:
-			var drum := Transform3D(Basis(Vector3.BACK, station.visual_angle(1.0)), station.drum_origin)
-			var at: Vector3 = main.tours.book.mount_point("defence_grid", mount_name, station.hardpoints, station.global_transform, drum, main.tours._turns)
-			assert_false(camera.is_position_behind(at), "%s is ahead of the camera" % mount_name)
-			assert_true(Rect2(Vector2.ZERO, view).grow(-view.y * 0.05).has_point(camera.unproject_position(at)), "%s is on screen" % mount_name)
-	_run("tour stop")
+	for stop_name: String in ["defence_grid", "heavy_cannons"]:
+		assert_true(_run("tour %s" % stop_name).ok)
+		var camera: Camera3D = main.camera_rig.cinematic_camera
+		var view: Vector2 = main.get_viewport().get_visible_rect().size
+		var shown: PackedStringArray = main.tours.book.points[stop_name]["shows"]
+		assert_gte(shown.size(), 2)
+		for step: int in 4:
+			await _ticks(120)
+			main.camera_rig.update_cinematic(1.0)
+			for mount_name: String in shown:
+				var drum := Transform3D(Basis(Vector3.BACK, station.visual_angle(1.0)), station.drum_origin)
+				var at: Vector3 = main.tours.book.mount_point(stop_name, mount_name, station.hardpoints, station.global_transform, drum, main.tours._turns)
+				assert_false(camera.is_position_behind(at), "%s: %s is ahead of the camera" % [stop_name, mount_name])
+				assert_true(Rect2(Vector2.ZERO, view).grow(-view.y * 0.05).has_point(camera.unproject_position(at)), "%s: %s is on screen" % [stop_name, mount_name])
+		_run("tour stop")

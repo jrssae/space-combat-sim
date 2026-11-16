@@ -42,23 +42,50 @@ func test_the_grid_stop_caption_says_defense() -> void:
 	assert_string_contains(String(book.points["defence_grid"]["caption"]), "DEFENSE GRID")
 
 
-func test_the_grid_stop_camera_is_on_the_guns_front_side() -> void:
+# The grid stops, from the front: the arm head's light turrets and interceptor battery, then the bow tower's cannons and battery.
+const GRID_STOPS: Array[String] = ["defence_grid", "heavy_cannons"]
+# The widest field of view a stop's moves open with (station_tour.json's push_in) and the picture's aspect.
+const WIDEST_FOV_DEG: float = 62.0
+const ASPECT: float = 16.0 / 9.0
+
+
+func test_the_grid_stop_cameras_are_on_the_guns_front_side() -> void:
 	var made: Dictionary = TourBook.load_file()
 	var book: TourBook = made["book"]
-	var entry: Dictionary = book.points["defence_grid"]
-	var camera: Vector3 = entry["camera"]
-	var centre := Vector3.ZERO
-	var shown: PackedStringArray = entry["shows"]
 	var manifest: Dictionary = MeshAssets.read_manifest("babylon5_station")
 	var hp: StationHardpoints = StationHardpoints.from_manifest(manifest) if manifest.has("hardpoints") else null
 	if hp == null or not hp.valid:
 		pending("the station asset is not built here")
 		return
-	for mount_name: String in shown:
-		var mount: Dictionary = hp.mount(mount_name)
-		centre += mount["position"] as Vector3
-		assert_gt((mount["up"] as Vector3).dot(GUNS_FACING), 0.0, "mount %s tilts toward the bow" % mount_name)
-	centre /= float(shown.size())
-	assert_gt((camera - centre).dot(GUNS_FACING), 0.0, "the camera stands in front of the guns")
-	var look: Vector3 = (entry["subject"] as Vector3) - camera
-	assert_lt(look.dot(GUNS_FACING), 0.0, "and looks back at them")
+	for stop_name: String in GRID_STOPS:
+		var entry: Dictionary = book.points[stop_name]
+		var camera: Vector3 = entry["camera"]
+		var look: Vector3 = ((entry["subject"] as Vector3) - camera).normalized()
+		var half_v: float = tan(deg_to_rad(WIDEST_FOV_DEG) * 0.5)
+		var kinds := PackedStringArray()
+		for mount_name: String in entry["shows"]:
+			var mount: Dictionary = hp.mount(mount_name)
+			var at: Vector3 = mount["position"]
+			kinds.append(String(mount["kind"]))
+			# A light turret's facets tilt toward the bow, the side its guns face; the others stand level on the bow side of the head.
+			if String(mount["kind"]) == "light_pulse":
+				assert_gt((mount["up"] as Vector3).dot(GUNS_FACING), 0.0, "mount %s tilts toward the bow" % mount_name)
+			assert_gt((camera - at).dot(GUNS_FACING), 0.0, "%s: the camera stands in front of %s" % [stop_name, mount_name])
+			# The mount is inside the opening picture (90 percent of it, so the moves' drift keeps it).
+			var local: Vector3 = Basis.looking_at(look, Vector3.UP).inverse() * (at - camera)
+			assert_lt(local.z, 0.0, "%s: %s is ahead of the camera" % [stop_name, mount_name])
+			assert_lte(absf(local.y / local.z), half_v * 0.9, "%s: %s is inside the frustum vertically" % [stop_name, mount_name])
+			assert_lte(absf(local.x / local.z), half_v * ASPECT * 0.9, "%s: %s is inside the frustum sideways" % [stop_name, mount_name])
+		if stop_name == "defence_grid":
+			assert_true(kinds.has("light_pulse") and kinds.has("interceptor"), "the arm head's turrets and battery")
+		else:
+			assert_true(kinds.has("heavy_cannon") and kinds.has("interceptor"), "the heavy cannons and the tower's battery")
+		assert_lt(look.dot(GUNS_FACING), 0.0, "%s looks back at the guns" % stop_name)
+
+
+func test_the_grid_stop_captions_name_what_they_show() -> void:
+	var made: Dictionary = TourBook.load_file()
+	var book: TourBook = made["book"]
+	assert_string_contains(String(book.points["defence_grid"]["caption"]), "INTERCEPTOR")
+	assert_string_contains(String(book.points["heavy_cannons"]["caption"]), "HEAVY CANNONS")
+	assert_string_contains(String(book.points["heavy_cannons"]["caption"]), "DEFENSE GRID")
