@@ -299,12 +299,12 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T37 | C | Radial menus are steered with the left stick while they show (the target menu and the comms menu), not the right; the ship takes no left-stick flight input meanwhile (maintainer, 2026-11-15) | T27 | Sonnet | Input routing while a menu is open; keyboard parity kept | done |
 | T38 | D | AI ships avoid the station and other large bodies: wingmen and allies flying near Babylon 5 never collide with it when a collision could be avoided (maintainer, 2026-11-15) | T10 | Opus | Native avoidance against an 8 km rotating body; parity kept | done |
 | T39 | C | Fix: the backtick key no longer opens the debug console in play (maintainer, 2026-11-15) | - | Sonnet | An input regression | done |
-| T40 | D | Council review fixes: the findings of the M7 code review (Opus, GPT-6 Luna, DeepSeek; 2026-11-15) that survived verification | - | Opus (native), Sonnet (GDScript, Python) | Small, separate fixes; the interceptors' line of fire may move the T07 balance | in progress |
+| T40 | D | Council review fixes: the findings of the M7 code review (Opus, GPT-6 Luna, DeepSeek; 2026-11-15) that survived verification | - | Opus (native), Sonnet (GDScript, Python) | Small, separate fixes; the interceptors' line of fire may move the T07 balance | done |
 | T41 | D | Interceptor fire as the show has it: four barrels firing in turn (0.25 s apart, each recharging 1 s), visible blue-white pulses that fly out and can miss, a small flash and spark where one meets incoming fire; then bow batteries only if the capital fight still needs them, and a test that proves the batteries save the station damage (maintainer, 2026-11-15) | T40 | Opus | Native pulse-against-projectile hits, seeded spread, 1 and 6 threads identical; balance re-measured | done |
 | T42 | D | The interceptor battery model: an original procedural mesh after the maintainer's clip, a truss pedestal, a two-axis yoke and four barrels in a rectangle round a central body, about 15 m tall, on every battery (maintainer, 2026-11-15) | - | Opus | Look sheet approved first; four muzzles for T41 | done |
 | T43 | D | The heavy cannons as the show has them: an original single oval-barrel gun about 30 m long in a hazard-striped recess cut into the bow tower at H1 and H2, firing three-shot bursts of large green pulses at today's damage a second (maintainer, 2026-11-15) | T42 | Opus | Look sheet approved first; station generator change (STL fidelity); burst cadence in the native gun gate; balance unchanged | done |
 | T44 | C | Fix: two suns seen from 100 000 km above the star (`frame orbit 100000 epsilon`); one sun at every distance (maintainer, 2026-11-15) | - | Opus | A rendering bug near the star (scaled space, the sky's sun, the flare, the key light) | done |
-| T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
+| T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress |
 
 ### M7-T01 Station references and measurements
 
@@ -2011,6 +2011,25 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     at 105 s). The look and the feel stay (H): the maintainer's live run, one line a hull (`show` puts the player beside the lane on
     the side whose pods come off first; the bots are small at that distance).
 
+- **Scope added (2026-11-15):**
+  - The council's call-site tests: a heavy cannon in `TurretRows` (a lifted mount) hits a crossing fighter-sized target at 2 km,
+    10-30 degrees up, and an interceptor battery's stored azimuth and elevation follow the pulse it fires; each fails when its line in
+    `turret_rows.rs` is reverted.
+  - `frame drop <km> [body]` (maintainer, 2026-11-15): a console command that puts the player at rest against a body (the planet or
+    the star) at that altitude, not in orbit, so the ship visibly falls in (the HUD's ALT counting down; the atmosphere's impact as
+    M6 built it); `info.md` and a test.
+  - `tests/integration/test_gravity_orbit.gd`'s `test_a_ship_in_jolt_coasts_beside_the_station_as_the_64_bit_run_does` fails on the
+    maintainer's 20-thread machine (Jolt's "job system exceeded the maximum number of jobs", from 90fa7f7a on; CI passes): find the
+    cause and make it pass locally without hiding the error.
+  - The GPU tests that read the middle of the window where GUT's panel sits (`test_sun_gpu.gd`'s disc height and colour,
+    `test_scaled_space_gpu.gd`'s three; found by T44): sample clear of the panel or hide it.
+  - `scripts/gut_shards.py`: the weights of the files T43 sped up (`test_cargo_carry_clearance` 600 s -> its measured time) and the new
+    files' weights from the latest CI run.
+  - The stale "Done (as built, 2026-11-14 ...)" cargo notes under this section: they describe M7-T30/T34's work; move them to the
+    task they belong to.
+  - The M4 to M6 hands-on checks: the maintainer ticks them on the checklist page (https://claude.ai/artifact/FhZSkHy4ZckNQkm22Kn7PA);
+    the controller reads the ticks and notes back and updates `docs/playtest.md`.
+
 ### M7-T32 The cargo bay in red-lit grey metal
 
 - **Goal:** the maintainer approved T25's red-lit tunnel (sheet `references/screenshots/T25 red-lit tunnel/`) and wants the same
@@ -2403,6 +2422,14 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     reproduced exactly) and test_turret_balance 2/2.
 - **Done when:** a test per fix that fails without it; parity recordings and the balance tests green (new numbers stated with the
   reason); committed; a second council round.
+
+- **Round 3 (council, 2026-11-15, confirming e37d51d1):** Opus 9/10, GPT-6 Luna 9/10, DeepSeek 9/10; none of round 2's findings
+  remain. Scores over the rounds: Opus 8, 8, 9; GPT-6 Luna 6, 8, 9; DeepSeek 8, 9, 9. Shared P3: the round-2 fixes are tested at the
+  kernel level (`turret_kernels::raised`, `grid_kernels::battery_shot`), not at their two call sites in `turret_rows.rs`
+  (`step_turrets`' `aim(&at, ...)`, `step_interceptors`' displayed angles): T14 adds those tests. Known and left (cosmetic, controller
+  2026-11-15): within about 30 m of a battery a pulse starts about 1.3 m from the drawn barrel tip (the muzzle is placed from the
+  trunnion lead's angles); invisible past 100 m, and moving it would move pulse paths and the balance.
+- **Done:** e37d51d1 pushed, CI green (run 43790188947).
 
 ### M7-T41 Interceptor fire and bow batteries
 
