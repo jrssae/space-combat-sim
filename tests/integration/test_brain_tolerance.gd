@@ -23,7 +23,7 @@ const SAMPLE_EVERY: int = 5
 const HITS_TOLERANCE: float = 0.20
 const MIX_TOLERANCE: float = 0.05
 const FIXTURE: String = "brain_tolerance"
-const SETTINGS: Array[StringName] = [&"sim_step"]
+const SETTINGS: Array[StringName] = [&"sim_step", &"friendly_fire"]
 
 var _saved: Dictionary = {}
 
@@ -38,6 +38,7 @@ func before_each() -> void:
 	for key: StringName in SETTINGS:
 		_saved[key] = Settings.get_value(key)
 	Settings.set_value(&"sim_step", &"threaded")
+	Settings.set_value(&"friendly_fire", false)  # the recordings were made with it off (M7-T47 made it the default)
 	Factions.reset()
 	ContactScan.invalidate()
 

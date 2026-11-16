@@ -2715,6 +2715,29 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
      is reported to the maintainer with the numbers, not retuned silently.
 - **Done when:** the defaults changed; the suite green locally with the maintainer's own settings file in place and on CI; the balance
   numbers recorded; committed.
+- **Done (as built, 2026-11-16; CI and the maintainer's read pending):**
+  - **Defaults:** `friendly_fire` and `motion_blur` default to true in `SettingsSchema` (the settings menu reads the schema);
+    `docs/playtest.md` and architecture §7.5, §12, D31 and the M3 settings notes say so (info.md states no defaults).
+  - **Isolation:** `Settings.test_run` is on under GUT (`gut_cmdln.gd` on the command line) or with `SCS_TEST_SETTINGS=1`, which a
+    GUT run sets for the Godot processes it starts (`test_flight_parity_fight`'s fights) and `run_tests.sh` exports for its smokes.
+    Then `revert` and `save` leave the player's files (`player_config_path`, `user://settings.cfg`, and `user://gamecontrollerdb.txt`)
+    alone: the values start at the schema's defaults and `save` keeps them in memory. A test with a file of its own works as before.
+    `test_settings_isolation` saves odd values to a stand-in player file the way the game does, then shows a test run starts at the
+    defaults, ignores the file's pad calibration and never rewrites the file (the real file is never touched).
+  - **Tests:** the recorded-fight tests pin friendly fire off and stay bit-identical, nothing re-recorded (`test_brain_tolerance`,
+    `test_flight_parity_fight` in its child fights, `test_weapon_rows_battle`, `test_pilot_kernels_in_play`, `test_bolt_rows`,
+    `test_core_state`, `test_driver_step`, `test_row_commands`, `test_sim_core`; `test_hit_scale` already did). The friendly-bolt
+    tests state theirs (`test_hit_resolver`, `test_civilian_attacked`, `test_station_grid`'s own-side bolt: off); `test_post_effects`
+    checks blur on by default and off asking for nothing; `test_settings_schema` checks both defaults.
+  - **Suite** (whole GUT run, `GUT_SLOW=1`, four processes, HEAD plus the staged change): with the maintainer's real `settings.cfg`
+    in place, 4141 tests, 1 failure; with `XDG_DATA_HOME` on a copy of it, 4141 tests, 1 failure. Each failure was Jolt's "job system
+    exceeded the maximum number of jobs" warning under the load of four runs (`test_low_orbit_flight`, `test_gravity_orbit`); both
+    files pass when run alone (8 of 8). His file's SHA-256 is unchanged after both runs. Rebuilt on M7-T48's commit, the files
+    this task and M7-T48 touched pass with his settings in place: 237 of 237 (with the re-recorded `weapon_rows_battle`).
+  - **Balance** (`GUT_BALANCE=1`, friendly fire off, then on): every band reads the same. Turrets: Saturn vs 2 raiders 2/1/3/1/1
+    wins of 10 per hull, vs 3 raiders 0 of 10, both times. Grid vs 12 raiders: 3 of 3 wins at the same times, the station losing
+    258/508/384 hp against 252/497/378. Grid vs a capital: identical. Interceptor proof 1.76 times against 1.78. The dogfight
+    (seed 3 ends with 3 raiders left, not 5) and the M3 sandbox (identical) stay pending, as before: under the maintainer's review.
 
 ### M7-T48 The benchmarks and tests use the generated asteroids
 

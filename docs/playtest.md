@@ -402,13 +402,13 @@ state wing|ai|factions|ram|route|lights|post|screens|world     the new providers
 Set one with `set settings.<name> <value>`; add `save` to keep it. Every one is listed by `state settings`.
 
 ```
-friendly_fire false            bolts hit anything but their shooter when on
+friendly_fire true             bolts hit anything but their shooter when on (on by default since M7-T47)
 ram_damage true                collisions hurt
 ambient_level 0.3              how much light the dark side of a hull gets (M4-T30a)
 texture_detail high            the ships' texture set: high (seams, hatches, ribs, toned plating) or low (major seams only); only the civilian hulls have both sets for now; live (M5-T40)
 particle_density 1.0           how much of each spark and debris burst is thrown; 0 costs nothing per frame
 lens_flare true                the star's flare (flare on|off)
-motion_blur false              blur on fast turns (blur on|off)
+motion_blur true               blur on fast turns (blur on|off; on by default since M7-T47)
 motion_blur_strength 0.5       how strong the blur is
 cabin_glow_level 0.3           how much red the cockpit glow adds in the canopy, seen from outside
 cabin_glow_view_m 150          how far off the glow can be seen

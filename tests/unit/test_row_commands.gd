@@ -6,7 +6,7 @@ extends GutTest
 ## over from the row. One thread against six is `test_core_threads`' (M6-T18).
 
 const TICKS: int = 240
-const SETTINGS: Array[StringName] = [&"perf_threads", &"sim_step", &"ai_think_rate"]
+const SETTINGS: Array[StringName] = [&"perf_threads", &"sim_step", &"ai_think_rate", &"friendly_fire"]
 
 var _saved: Dictionary = {}
 # The battle's ships by their `Targetable` id, so selections compare across runs (each run has its own instance ids).
@@ -16,6 +16,7 @@ var _index_of: Dictionary = {}
 func before_each() -> void:
 	for key: StringName in SETTINGS:
 		_saved[key] = Settings.get_value(key)
+	Settings.set_value(&"friendly_fire", false)  # the parity recordings were made with it off (M7-T47 made it the default)
 	Factions.reset()
 	ContactScan.invalidate()
 

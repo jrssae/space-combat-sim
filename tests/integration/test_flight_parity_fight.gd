@@ -123,8 +123,9 @@ func test_the_seeded_fight_matches_its_recordings() -> void:
 	gut.p("the behaviour mix %.1f points from the M4 GDScript fight (printed, not gated since M7-T16)" % worst_points)
 
 
-const _THREADED: String = "set settings.sim_step threaded"
-const _DELAYED: String = "set settings.sim_step delayed"
+# Friendly fire off: the recordings were made with it off (M7-T47 made it the default).
+const _THREADED: String = "set settings.friendly_fire off; set settings.sim_step threaded"
+const _DELAYED: String = "set settings.friendly_fire off; set settings.sim_step delayed"
 
 
 # The lines a fight is held to, as recorded.

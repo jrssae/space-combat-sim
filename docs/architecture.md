@@ -904,7 +904,7 @@ Console: `state lights` (`picked`, `candidates`, `active`, `cost_us`).
 Two effects on the `WorldEnvironment`'s Compositor, in this order: `MotionBlurEffect`, then the lens flare (both
 `POST_TRANSPARENT`, so the blur smears the stars and hulls but never the flare). The HUD and the console
 are canvas layers drawn after the 3D scene and are never touched. `PostEffects` (a node of `SpaceEnvironment`) switches them from
-`settings.lens_flare` (default on), `settings.motion_blur` (default off) and `settings.motion_blur_strength` (0-1, default 0.5), live,
+`settings.lens_flare` (default on), `settings.motion_blur` (default on since M7-T47; off until then) and `settings.motion_blur_strength` (0-1, default 0.5), live,
 and feeds them each frame. Console: `flare [on|off]`, `blur [on|off]`, provider `post`.
 
 - **No haze (Q31).** The flare is a lens effect only: no veil, no broad lobes, no god rays, since space has nothing to scatter light (`SceneLensFlareEffect.SHADER_PATCHES`).
@@ -1198,6 +1198,11 @@ CI (M3-T12) runs GUT in three jobs (two until M4, when shard 1 reached the 45-mi
 order, and shard 1 also runs the Python tests and the console smoke runs; locally, unset, it runs everything. Wall-clock budgets (AI
 think time, resolver ticks, rebase cost) are asserted on the maintainer's machine and only recorded on CI (`CI=true`), through
 `WallClockBudget` (`tests/fixtures/wall_clock_budget.gd`): a shared runner's clock says nothing about the game.
+Tests never see the player's saved settings (M7-T47): under GUT (`gut_cmdln.gd` on the command line) or with `SCS_TEST_SETTINGS=1`
+(which a GUT run passes on to the Godot processes it starts, and `scripts/run_tests.sh` exports for its smokes), `Settings`
+neither reads nor writes `user://settings.cfg` or `user://gamecontrollerdb.txt`: it starts from the schema's defaults and `save`
+keeps the values in memory. A test that saves and loads points `config_path` at a file of its own; a test that depends on a
+setting sets it (the parity recordings were made with friendly fire off, so their tests pin it off).
 
 Commands (also in `scripts/run_tests.sh`):
 
@@ -1888,7 +1893,7 @@ below are M3 tasks.
 | # | Decision | Rationale (short) |
 |---|---|---|
 | D30 | Factions come from `data/factions.json` (ids, names, symmetric relation pairs, a default). `Factions.relation` / `is_hostile` keep their signatures; the table is loaded lazily and can be swapped for tests and the console | M2's fixed rule was the seam (D25); callers do not change, and M12's factions are data |
-| D31 | Friendly fire is `settings.friendly_fire` (default off, maintainer Q2). AI ships always check their fire lane for friends before firing | The forgiving default suits wingmen crossing the player's line; the check keeps AI behaviour right with the setting on |
+| D31 | Friendly fire is `settings.friendly_fire` (default off, maintainer Q2; on since M7-T47, the maintainer's wish). AI ships always check their fire lane for friends before firing | The forgiving default suits wingmen crossing the player's line; the check keeps AI behaviour right with the setting on |
 | D32 | Ram damage from the ship's own velocity change: `hull_max × clamp((Δv - safe) / (lethal - safe))²` (Δv per ship; a 30 m/s head-on between equals is about 15 m/s each). Jolt contacts give Δv at ordinary speeds; at tunnelling speeds and for props without bodies, a swept test of each hit volume against each of the other's (exact for boxes and capsules) finds the hit, with the momentum split for both sides (fatal once that Δv reaches lethal) | Physical (the lighter ship suffers more), tunable per `ShipSpec`. At tunnelling speed (and always for props), hit volumes that overlap by 0.3 m or more always ram and a pass 0.3 m clear never does; below it, and for a shallower clip between two ships, Jolt's contacts decide |
 | D33 | Collision avoidance is a filter in `AiPilotDriver` on every brain's desired velocity (closest-approach maths against `Perception.contacts`), not a behaviour | Every AI ship, M2 brains included, avoids collisions whatever it is doing |
 | D34 | `AiPilot extends PilotBrain`: scored behaviours (attack, evade, formation, follow path, guard, retreat, idle) × `AiProfile` weights, with stickiness, a minimum dwell and an emergency margin. Orders and wings gate scores through `AiContext` | Utility selection (§14.7) without a behaviour tree; profiles give allies, raiders and the instructor different characters from one brain |
@@ -1971,13 +1976,13 @@ Commands: `relation <a> <b> [friendly|neutral|hostile]` / `relation reset`; `win
 `ai <name> objective <target|none>` (M3-T17: an `AiPilot` flies to the named target from any broadcast range and attacks it);
 `ai <name> skill <rookie|regular|veteran|ace|0-1>`, `ai <name> aggression <passive|cautious|balanced|aggressive|reckless|0-1>`,
 `spawn raider|ally ai ... skill=<...> aggression=<...>` (M3-T13);
-`scenario [free_flight|combat_sandbox|instructor_route|dogfight]`. Settings: `friendly_fire` (bool, false), `ram_damage`
+`scenario [free_flight|combat_sandbox|instructor_route|dogfight]`. Settings: `friendly_fire` (bool, false; true since M7-T47), `ram_damage`
 (bool, true). Provider `render` gains `gpu_ms` (M3-T20).
 M3-T27: command `running_lights [on|off]`, key
 `ship.running_lights`, `spawn ... lights=on|off`, and settings `cabin_glow_level` (0-2, 0.3),
 `cabin_glow_view_m` (1-2000, 150), `running_light_min_px` (0.5-12, 1; 3 before M4-T28). `raiders.list` and `allies.list` mark a ship flying dark.
 M3-T21: provider `lights` (`picked`, `candidates`, `active`, `cost_us`). M3-T25: commands `flare [on|off]` and
-`blur [on|off]`, provider `post`, settings `lens_flare` (bool, true), `motion_blur` (bool, false), `motion_blur_strength` (0.5). M3-T29: provider `screens` (`shown`, `powered`, `paints`, `lamps`),
+`blur [on|off]`, provider `post`, settings `lens_flare` (bool, true), `motion_blur` (bool, false; true since M7-T47), `motion_blur_strength` (0.5). M3-T29: provider `screens` (`shown`, `powered`, `paints`, `lamps`),
 `hud.window_items`. M4-T31 removed the M3 renderer's commands (`lod`, `fallback`, `relight`), its settings and the `lod` provider;
 `render` is `RenderStatus`'s (§6.4). M3-T12: command `look <yaw> [pitch]` / `look off` holds the view off the nose from the console, for captures and for looking back at a formation.
 

@@ -4,6 +4,7 @@ extends GutTest
 ## heard; now any ship's fire that comes close frightens a civilian: it runs toward its own people and raises their alarm.
 ## Its turrets answer only a ship that had it selected (the maintainer: stray fire is fled from in silence), and then their
 ## bolts land on that ship alone. Flown through the native core; threaded against delayed and one thread against six.
+## Friendly fire is off here (M7-T47 states it): the cases are about a friend's bolts that pass through the civilian.
 
 const FREIGHTER: StringName = &"saturn_4_transport"
 const FIGHTER: StringName = &"starfury_ally"
@@ -14,16 +15,20 @@ const SPEED_UP: float = 4.0
 var bolts_seen: int = 0
 var _rate_backup: int = 60
 var _scale_backup: float = 1.0
+var _friendly_fire_backup: bool = true
 
 
 func before_each() -> void:
 	_rate_backup = Engine.physics_ticks_per_second
 	_scale_backup = Engine.time_scale
+	_friendly_fire_backup = bool(Settings.get_value(&"friendly_fire"))
+	Settings.set_value(&"friendly_fire", false)
 
 
 func after_each() -> void:
 	Engine.physics_ticks_per_second = _rate_backup
 	Engine.time_scale = _scale_backup
+	Settings.set_value(&"friendly_fire", _friendly_fire_backup)
 
 
 func _skipped() -> bool:

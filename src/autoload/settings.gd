@@ -2,6 +2,8 @@ extends Node
 ## Settings autoload: schema-driven typed values (architecture §6.4).
 ## `set_value` applies immediately and marks the key unsaved; only `save()` writes `config_path`.
 ## Pad calibration (`[pads]`, trigger rest per GUID) is data owned by the input layer, not a schema key.
+## A test run never reads or writes the player's saved file (M7-T47): it starts from the schema's defaults, so the
+## suite's results do not depend on what the player last saved.
 
 signal changed(key: StringName, value: Variant)
 
@@ -9,10 +11,17 @@ const DEFAULT_CONFIG_PATH := "user://settings.cfg"
 const DEFAULT_JOY_MAPPINGS_PATH := "user://gamecontrollerdb.txt"
 const _SECTION := "settings"
 const _PADS_SECTION := "pads"
+## Set by a test run so the Godot processes it starts keep the player's settings out too.
+const TEST_RUN_ENV := "SCS_TEST_SETTINGS"
 
 ## Overridable before `_ready` (tests point these at scratch files).
 var config_path: String = DEFAULT_CONFIG_PATH
 var joy_mappings_path: String = DEFAULT_JOY_MAPPINGS_PATH
+## The player's own files. While `test_run` is on they are never read or written, whatever `config_path` says.
+var player_config_path: String = DEFAULT_CONFIG_PATH
+var player_joy_mappings_path: String = DEFAULT_JOY_MAPPINGS_PATH
+## On under GUT and in the processes a test run starts; tests that use a file of their own point `config_path` at it.
+var test_run: bool = is_test_run(OS.get_cmdline_args(), OS.get_environment(TEST_RUN_ENV))
 
 var schema := SettingsSchema.new()
 
@@ -29,6 +38,18 @@ var _last_error: String = ""
 
 func _init() -> void:
 	_load_defaults()
+	if test_run:
+		OS.set_environment(TEST_RUN_ENV, "1")
+
+
+## Whether this process is a test run: GUT's command-line runner, or a process started with the test-run variable set.
+static func is_test_run(args: PackedStringArray, env_value: String) -> bool:
+	if env_value == "1":
+		return true
+	for arg: String in args:
+		if arg.ends_with("gut_cmdln.gd"):
+			return true
+	return false
 
 
 func _ready() -> void:
@@ -93,7 +114,11 @@ func keys() -> Array[StringName]:
 	return schema.keys()
 
 
+## Writes `config_path`; in a test run pointed at the player's file it keeps the values in memory and writes nothing.
 func save() -> Error:
+	if _is_player_file(config_path):
+		_unsaved.clear()
+		return OK
 	var cfg := ConfigFile.new()
 	for key: StringName in schema.keys():
 		cfg.set_value(_SECTION, String(key), _to_config(key, _values[key]))
@@ -115,7 +140,7 @@ func revert() -> Error:
 	var pads: Dictionary = {}
 	var cfg := ConfigFile.new()
 	var err: Error = OK
-	if FileAccess.file_exists(config_path):
+	if not _is_player_file(config_path) and FileAccess.file_exists(config_path):
 		err = cfg.load(config_path)
 		if err == OK:
 			for key: StringName in schema.keys():
@@ -150,6 +175,17 @@ func set_trigger_rest(guid: String, rest: float) -> void:
 
 func get_pad_calibration() -> Dictionary:
 	return _pad_trigger_rest.duplicate()
+
+
+# True when `path` is one of the player's files and this is a test run, which must leave them alone.
+func _is_player_file(path: String) -> bool:
+	if not test_run:
+		return false
+	var target: String = ProjectSettings.globalize_path(path).simplify_path()
+	for own: String in [player_config_path, player_joy_mappings_path]:
+		if target == ProjectSettings.globalize_path(own).simplify_path():
+			return true
+	return false
 
 
 func _load_defaults() -> void:
@@ -192,7 +228,7 @@ func _from_config(key: StringName, value: Variant) -> Variant:
 
 # SDL mapping lines for pads that land on the wrong JOY_* indices (architecture §6.1).
 func _apply_joy_mappings() -> void:
-	if not FileAccess.file_exists(joy_mappings_path):
+	if _is_player_file(joy_mappings_path) or not FileAccess.file_exists(joy_mappings_path):
 		return
 	var text: String = FileAccess.get_file_as_string(joy_mappings_path)
 	for raw_line: String in text.split("\n"):

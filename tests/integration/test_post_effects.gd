@@ -57,12 +57,19 @@ func test_the_flare_is_the_vendored_effect_through_our_thin_subclass() -> void:
 # --- settings, live -----------------------------------------------------------------------------------------------
 
 
-func test_defaults_flare_on_blur_off() -> void:
+func test_defaults_flare_on_blur_on() -> void:
+	# Both on by default (motion blur since M7-T47, the maintainer's wish).
 	assert_true(bool(Settings.get_value(&"lens_flare")))
-	assert_false(bool(Settings.get_value(&"motion_blur")))
+	assert_true(bool(Settings.get_value(&"motion_blur")))
 	assert_almost_eq(float(Settings.get_value(&"motion_blur_strength")), 0.5, 0.0001)
 	post.apply_settings()
 	assert_true(post.flare_effect().enabled)
+	assert_true(post.blur_effect().enabled)
+
+
+func test_an_off_blur_asks_the_renderer_for_nothing() -> void:
+	Settings.set_value(&"motion_blur", false)
+	post.apply_settings()
 	assert_false(post.blur_effect().enabled, "an off blur asks the renderer for no motion vectors")
 
 

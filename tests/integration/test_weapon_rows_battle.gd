@@ -18,6 +18,7 @@ const SECONDS: float = 30.0
 
 var main: Main
 var _tier_radius: Variant
+var _friendly_fire: bool = true
 var _hits: int = 0
 var _capital_hits: int = 0
 var _tier_rows: float = 0.0
@@ -32,12 +33,15 @@ func should_skip_script():
 func before_each() -> void:
 	_tier_radius = Settings.get_value(&"tier_radius_m")
 	Settings.set_value(&"tier_radius_m", 0.0)
+	_friendly_fire = bool(Settings.get_value(&"friendly_fire"))
+	Settings.set_value(&"friendly_fire", false)  # the parity recordings were made with it off (M7-T47 made it the default)
 	get_tree().paused = false
 	ContactScan.invalidate()
 
 
 func after_each() -> void:
 	Settings.set_value(&"tier_radius_m", _tier_radius)
+	Settings.set_value(&"friendly_fire", _friendly_fire)
 	DebugConsole.flags.invulnerable = false
 	ContactScan.invalidate()
 	Factions.reset()

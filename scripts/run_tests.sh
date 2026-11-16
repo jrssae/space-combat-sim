@@ -35,6 +35,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib_tests.sh"
 cd "${ROOT}"
 mkdir -p "${REPORTS}"
 require_godot
+# Every Godot process this script starts (GUT, the smokes) uses the settings' defaults, never the player's saved file (M7-T47).
+export SCS_TEST_SETTINGS=1
 
 # run_gut <log> <junit xml> <timeout s> <godot args...>: one GUT process; returns its exit code.
 run_gut() {

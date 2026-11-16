@@ -15,12 +15,15 @@ const SETTINGS: Array[StringName] = []
 var world: WorldFrame
 var projectiles: Node3D
 var _saved: Dictionary = {}
+var _friendly_fire_backup: bool = true
 
 
 func before_each() -> void:
 	for key: StringName in SETTINGS:
 		_saved[key] = Settings.get_value(key)
 		Settings.set_value(key, true)
+	_friendly_fire_backup = bool(Settings.get_value(&"friendly_fire"))
+	Settings.set_value(&"friendly_fire", false)  # the parity recordings were made with it off (M7-T47 made it the default)
 	Factions.reset()
 	ContactScan.invalidate()
 	ContactScan.clear_statics()
@@ -37,6 +40,7 @@ func after_each() -> void:
 	ContactScan.invalidate()
 	for key: StringName in SETTINGS:
 		Settings.set_value(key, _saved[key])
+	Settings.set_value(&"friendly_fire", _friendly_fire_backup)
 	Factions.reset()
 
 

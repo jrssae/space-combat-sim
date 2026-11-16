@@ -4,6 +4,7 @@ extends GutTest
 ## The tests step the world by hand, in the order of one game tick (§15.3): every bolt moves (`Projectile` physics step),
 ## the resolver runs, then the drones move on by their velocity (what Jolt does after the callbacks). That is fast,
 ## deterministic, and does not depend on Jolt. The drones are driven by setting their position, never by physics.
+## Friendly fire is off (M7-T47 states it): which hull a bolt may hit follows the factions; test_friendly_fire has it on.
 
 const DRONE_SCENE: String = "res://tests/fixtures/target_drone.tscn"
 const DT: float = 1.0 / 60.0
@@ -17,9 +18,12 @@ var drones: Array[TargetDrone] = []
 var hits: Array[HitInfo] = []
 var shooter: Node3D
 var shooter_node_id: int = 0
+var _friendly_fire_backup: bool = true
 
 
 func before_each() -> void:
+	_friendly_fire_backup = bool(Settings.get_value(&"friendly_fire"))
+	Settings.set_value(&"friendly_fire", false)
 	world = WorldFrame.new()
 	world.name = "World"
 	add_child_autofree(world)
@@ -36,6 +40,10 @@ func before_each() -> void:
 	hits.clear()
 	drones.clear()
 	resolver.hit_resolved.connect(func(info: HitInfo) -> void: hits.append(info))
+
+
+func after_each() -> void:
+	Settings.set_value(&"friendly_fire", _friendly_fire_backup)
 
 
 func _drone(at: Vector3, velocity: Vector3 = Vector3.ZERO, p_faction: StringName = Factions.RAIDERS) -> TargetDrone:

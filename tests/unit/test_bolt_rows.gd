@@ -8,7 +8,7 @@ extends GutTest
 const TICKS: int = 240
 const DELTA: float = 1.0 / 60.0
 const NO_NODES: Array[Node] = []
-const SETTINGS: Array[StringName] = [&"perf_threads"]
+const SETTINGS: Array[StringName] = [&"perf_threads", &"friendly_fire"]
 const SPEC_PATH: String = "res://assets/ships/starfury_aurora.tres"
 const FIXTURE: String = "bolt_rows"
 
@@ -22,6 +22,7 @@ var _dumps: Array[String] = []
 func before_each() -> void:
 	for key: StringName in SETTINGS:
 		_saved[key] = Settings.get_value(key)
+	Settings.set_value(&"friendly_fire", false)  # the parity recordings were made with it off (M7-T47 made it the default)
 	Factions.reset()
 	ContactScan.invalidate()
 

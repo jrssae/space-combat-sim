@@ -11,9 +11,13 @@ const ALLY: StringName = &"starfury_ally"
 
 var scene: TurretScene
 var station: Station
+var _friendly_fire_backup: Variant = null
 
 
 func after_each() -> void:
+	if _friendly_fire_backup != null:
+		Settings.set_value(&"friendly_fire", _friendly_fire_backup)
+		_friendly_fire_backup = null
 	if scene != null:
 		await scene.free_scene(get_tree())
 	scene = null
@@ -175,7 +179,9 @@ func test_the_stations_hull_hides_a_target_from_a_gun() -> void:
 	assert_true(below.damageable.hull.fraction() >= 0.0)
 
 
-func test_a_bolt_of_the_stations_side_stops_on_its_hull_without_harm() -> void:
+func test_a_bolt_of_the_stations_side_stops_on_its_hull_without_harm_with_friendly_fire_off() -> void:
+	_friendly_fire_backup = Settings.get_value(&"friendly_fire")
+	Settings.set_value(&"friendly_fire", false)  # on by default since M7-T47; then the station's side harms it too
 	if not await _start():
 		return
 	scene.attach()

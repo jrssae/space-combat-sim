@@ -13,7 +13,7 @@ const FIXTURE: String = "sim_core"
 const SPEC_PATH: String = "res://assets/ships/starfury_aurora.tres"
 const PROJECTILE_SCENE: PackedScene = preload("res://src/weapons/projectile.tscn")
 const SIDES: Array[StringName] = [Factions.RAIDERS, Factions.EARTH_ALLIANCE, Factions.NEUTRAL, &"drifters"]
-const SETTINGS: Array[StringName] = [&"fuel_unlimited"]
+const SETTINGS: Array[StringName] = [&"fuel_unlimited", &"friendly_fire"]
 
 var world: WorldFrame
 var projectiles: Node3D
@@ -24,6 +24,7 @@ func before_each() -> void:
 	for key: StringName in SETTINGS:
 		_saved[key] = Settings.get_value(key)
 	Settings.set_value(&"fuel_unlimited", true)
+	Settings.set_value(&"friendly_fire", false)  # the parity recordings were made with it off (M7-T47 made it the default)
 	Factions.reset()
 	ContactScan.invalidate()
 	ContactScan.clear_statics()
