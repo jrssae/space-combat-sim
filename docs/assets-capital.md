@@ -43,7 +43,8 @@ capital adds:
 - **The manifest.** `collision.pieces[].shapes[]` entries are `{name, type, position, bound_radius}` plus `size` and
   `basis` (box), `radius`, `height`, `axis` and `basis` (capsule, as `hardpoints.collision` wrote them) or `points`
   (hull), all in the body frame. `core/manifest.py` validates the section; `collision.shapes_of` reads it back. The game
-  builds one body per piece from it (M12-T19 stage 2, M7-T03).
+  reads it with `CompoundCollision` (M12-T19: every shape on the carrier's one body, named by piece; M7-T03 builds a body per
+  piece for the station).
 - **Tests** (`tools/procgen/tests/test_collision.py`): distances, hull corners and the point budget, moves and mirrors,
   a ring covered with its hole open, one hull round a ring failing the reach check, an exact fit, a gap, an oversized
   shape, the merge order, both budgets, the section and its validation, reading it back, determinism.
@@ -165,6 +166,14 @@ Sheets (gitignored, `references/screenshots/M12-T19 raider strike carrier/`): `l
 50 m, 500 m and 5 km, then port, top and front, a Delta-V docked on the top outer cradle for scale), made with
 `scripts/hull_sheet.sh raider_strike_carrier "<folder>"`. The first sheets (144 m, the three options) are in the
 subfolder `stage 1 (144 m, options)`.
+
+### In the game (M12-T19 stage 2)
+
+`docs/architecture.md` §19.18. The hull is the capital class `strike_carrier` with `assets/ships/raider_strike_carrier.tres`:
+13 500 t, 2 m/s2 of thrust, a 4 degree a second turn, 10 000 hull points, jump capable. Jolt collides with the 162 shapes
+(the hulls as convex polygons); bolts and rams meet the same shapes with each hull as its bounding box. The cradles drive
+`CarrierDock`: `position`, `forward` and `up` place a docked Delta-V, and `approach_from` is where a returning one is taken
+over by its cradle. The `jump_point` anchor is where it opens the point it leaves through.
 
 ### Open for the human tester `(H)`
 
