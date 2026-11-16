@@ -2832,6 +2832,36 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   Fix the cause; keep the raid balance in its band (`test_station_grid_balance`) or report the change.
 - **Done when:** a test that the pulse is born within the muzzle at several yoke angles, a test for the contact cause; the
   maintainer sees the pulses leave the barrel and strike (H); committed.
+- **Done (code part, 2026-11-16):** measured, then fixed where the pulse is drawn and how its hit shows; no sim change.
+  - **Muzzle.** Headless (H1 alone, a still raider at azimuth/elevation 0/10, 60/30, -120/55 and a crossing one) and on the GPU
+    (Forward+, RX 6950 XT, a camera beside H1), the pulse is born at the drawn muzzle: 0.00 to 0.04 m off it (the 0.04 is the drawn
+    yoke one frame behind the slew), flying 0.04 to 0.12 degrees off the drawn barrel (the 0.1 degree spread). So the muzzle point
+    was right. The cause was the chase view's bolt enlargement (`chase_bolt_scale`, the maintainer's 4.5) applied to the 40 m pulse
+    about its centre: drawn 180 m long and 14.4 m thick, wider than the 9 x 4 m muzzle and reaching 90 m back through the gun at the
+    shot. M7-2 (the interceptors' 1.3 m gap) has another cause (the muzzle placed from the lead's angles) and stays open.
+  - **Contact.** Same enlargement at the other end: in the last frame before each hit the drawn head was 57 to 60 m past the raider
+    (centre 30 m short), so the pulse ran on through its target and vanished. And every hit flashed 1.6 m for 0.08 s whatever
+    struck, lost against the pulse and against a capital's hull (the cannons' first choice). True misses are by design: still targets
+    are hit 4 to 5 of 6 (the burst's first shot leaves inside the gate before the barrel settles, about 10 m off at 1.5 km); a
+    crossing fighter 2 of 6 (T40's slow traverse).
+  - **Fix.** `BoltMesh.drawn_scale`: the chase enlargement never draws a bolt longer than 40 m (`MAX_ENLARGED_LENGTH_M`), so the
+    heavy pulse is drawn true size and every smaller bolt exactly as before (up to 4 m at the setting's 10). `ImpactFlash.size_for`:
+    a hit's flash grows with its damage past 40 (`GROW_FROM_DAMAGE`, at most 9 times), so a heavy hit flashes 7.5 times the usual
+    and every other bolt, beam and stand-in missile is unchanged; `HitResolver` passes the bolt's damage. GPU after: the pulse
+    leaves with its tail 20 m inside the 30 m gun and the last drawn head ends 6 to 12 m from the hit point.
+    Sheet: `references/screenshots/M7-T51 heavy pulses/before_after_grid.png` (frames under `before_az20_el15/`, `after_az20_el15/`).
+  - **Tests** (GUT `test_heavy_cannon`): `test_its_pulse_leaves_the_drawn_muzzle_at_every_yoke_angle` (three yoke angles: born
+    within 0.25 m of the drawn muzzle, along the drawn barrel; at chase scale 4.5 drawn no wider than the muzzle and no longer than
+    40 m; the size checks fail on HEAD at 14.4 m and 180 m, the born check holds on HEAD), `test_a_heavy_pulse_strikes_with_a_flash_that_can_be_seen`
+    (fails on HEAD: 1.07 m against 4.8), `test_the_chase_view_still_enlarges_small_bolts`. Staged scratch copy: 872 scripts compile;
+    GUT_SLOW=1 test_heavy_cannon 10, test_impact_flash 6, test_bolt_mesh_taa 7, test_bolt_rows 14, test_hit_resolver 17,
+    test_hit_scale 10, test_frame_passes 12, test_muzzle_flash_pool 5, test_station_grid 9, test_friendly_fire 18,
+    test_transit_scale 4, test_weapons 48, test_damage 17, test_fx_pool 22 + 2, test_standins 20, test_weapon_rows_battle 1,
+    test_destruction 11, all pass. No native change, no recording moved.
+  - **Balance** (GUT_BALANCE=1 `test_station_grid_balance` 3/3): raid mean 101.9 s (97.5, 106.2, 102.0; heavy 5/2, 13/5, 18/5),
+    capital destroyed at 123.0, 123.5, 123.9 s (heavy 66 shots, 61 hits), the interceptors' proof 1.76 times (1 149 lost with the
+    batteries, 2 028 parked; bar 1.5): T40's figures, as a drawing change should leave them.
+  - Touches `src/weapons/bolt_mesh.gd` (one constant, `drawn_scale` and its use), which T52 is reshaping: T52 keeps the cap.
 
 ### M7-T52 Bolts drawn as teardrops
 

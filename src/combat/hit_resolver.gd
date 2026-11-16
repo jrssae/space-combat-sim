@@ -481,12 +481,12 @@ func _land(i: int, delta: float) -> void:
 	hit_resolved.emit(info)
 
 
-# The bolt's flash where it struck, riding with the hull. A destroyed hull is hidden and the explosion replaces the flash; a
+# The bolt's flash where it struck, sized to its damage, riding with the hull. A destroyed hull is hidden and the explosion replaces the flash; a
 # flash on a parked ship would never be processed.
 func _flash_at(j: int, local_point: Vector3, i: int) -> void:
 	var body := instance_from_id(_body_ids[j]) as Node3D
 	if body != null and body.is_visible_in_tree():
-		var flash := ImpactFlash.create(_bolt_colors[i])
+		var flash := ImpactFlash.create(_bolt_colors[i], 0, ImpactFlash.size_for(_bolt_damage[i]))
 		flash.position = local_point
 		body.add_child(flash)
 		flash.reset_physics_interpolation()

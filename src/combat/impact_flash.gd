@@ -15,6 +15,11 @@ const FLASH_S: float = 0.08
 const FLASH_SIZE_M: float = 1.6
 const GLOW_MATERIAL: StandardMaterial3D = preload("res://assets/materials/thruster_glow.tres")
 
+## A hit's damage past which its flash grows with it (M7-T51): every small bolt keeps the usual flash, a heavy cannon's 300
+## shows one about as wide as a fighter, up to `MAX_SIZE_SCALE` times the usual.
+const GROW_FROM_DAMAGE: float = 40.0
+const MAX_SIZE_SCALE: float = 9.0
+
 ## Colours whose resources are kept; past this a flash makes its own (bolt colours come from a few weapon specs).
 const MAX_SHARED_COLOURS: int = 64
 ## Spare flashes the pool keeps; past this a finished one is freed.
@@ -48,6 +53,11 @@ static func create(color: Color, _seed_value: int = 0, size_scale: float = 1.0) 
 	flash.scale = Vector3.ONE * (FLASH_SIZE_M * size_scale * 0.6)
 	flash.transparency = 0.0
 	return flash
+
+
+## The flash's size for a hit of `damage`, as `create` takes it: a heavier shot strikes visibly harder.
+static func size_for(damage: float) -> float:
+	return clampf(damage / GROW_FROM_DAMAGE, 1.0, MAX_SIZE_SCALE)
 
 
 ## Makes the quad of every colour in `colors` and keeps `SPARE_AT_LOAD` finished flashes in the pool, so the first hit of a
