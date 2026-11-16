@@ -304,14 +304,14 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T42 | D | The interceptor battery model: an original procedural mesh after the maintainer's clip, a truss pedestal, a two-axis yoke and four barrels in a rectangle round a central body, about 15 m tall, on every battery (maintainer, 2026-11-15) | - | Opus | Look sheet approved first; four muzzles for T41 | done |
 | T43 | D | The heavy cannons as the show has them: an original single oval-barrel gun about 30 m long in a hazard-striped recess cut into the bow tower at H1 and H2, firing three-shot bursts of large green pulses at today's damage a second (maintainer, 2026-11-15) | T42 | Opus | Look sheet approved first; station generator change (STL fidelity); burst cadence in the native gun gate; balance unchanged | done |
 | T44 | C | Fix: two suns seen from 100 000 km above the star (`frame orbit 100000 epsilon`); one sun at every distance (maintainer, 2026-11-15) | - | Opus | A rendering bug near the star (scaled space, the sky's sun, the flare, the key light) | done |
-| T45 | C | Fix: the radar's dots vanish after several raider waves in the combat sandbox, leaving only the stalks (maintainer's M4 check, 2026-11-15) | - | Opus | A long-run bug in M4-T36's batched radar draw | in progress |
+| T45 | C | Fix: the radar's dots vanish after several raider waves in the combat sandbox, leaving only the stalks (maintainer's M4 check, 2026-11-15) | - | Opus | A long-run bug in M4-T36's batched radar draw | done |
 | T46 | C | Fix: FSR 2.2 is very blurry (`upscale fsr2 quality`; maintainer's M4 check, 2026-11-15) | - | Opus | The upscaler's setup: scale, sharpness, motion vectors, jitter | in progress |
-| T47 | C | Friendly fire and motion blur on by default, and the test suite independent of the player's saved settings (maintainer, 2026-11-15) | - | Opus | A default that changes fights: recorded fights pin the old value, balance re-run | in progress |
-| T48 | B | The benchmarks (the 1 000-ship battle and the other layouts) and the tests use the generated asteroids (M5-T29's shapes) instead of M4's sphere stand-ins (maintainer, 2026-11-15) | - | Opus | The bench's rock field and its cost; tests and any recording that holds rocks | in progress |
-| T49 | C | Fix: `draw_list_bind_uniform_set: Parameter "uniform_set" is null` printed about 55 times a second in a big bench fight once TAA or FSR 2.2 has been switched on, and on after switching back (maintainer, 2026-11-15; reproduced by T46) | - | Opus | A render resource freed or never built under motion vectors | in progress |
+| T47 | C | Friendly fire and motion blur on by default, and the test suite independent of the player's saved settings (maintainer, 2026-11-15) | - | Opus | A default that changes fights: recorded fights pin the old value, balance re-run | done |
+| T48 | B | The benchmarks (the 1 000-ship battle and the other layouts) and the tests use the generated asteroids (M5-T29's shapes) instead of M4's sphere stand-ins (maintainer, 2026-11-15) | - | Opus | The bench's rock field and its cost; tests and any recording that holds rocks | done |
+| T49 | C | Fix: `draw_list_bind_uniform_set: Parameter "uniform_set" is null` printed about 55 times a second in a big bench fight once TAA or FSR 2.2 has been switched on, and on after switching back (maintainer, 2026-11-15; reproduced by T46) | - | Opus | A render resource freed or never built under motion vectors | done |
 | T50 | C | Fix: in a bench fight every asteroid and every far capital vanish from the view after a brief stutter, while the radar still shows them (maintainer, 2026-11-16) | T48 | Opus | Likely the batched draws not following a world rebase (bounds or positions) | in progress |
-| T51 | C | Fix: the heavy cannons' pulses leave from outside the barrel and do not visibly reach their targets (maintainer, 2026-11-16, `bench battle 1000`) | - | Opus | The muzzle point from the yoke's angles against the drawn barrel (as M7-2 for the interceptors); hits, misses or a missing impact flash | in progress |
-| T52 | C | Every bolt drawn as a teardrop (a round bright head, a tail tapering behind it along its flight) instead of a straight line (maintainer, 2026-11-16) | - | Opus | The bolts' capsule mesh and materials, which draw opaque whenever motion vectors are on (now always, with blur on by default) | in progress |
+| T51 | C | Fix: the heavy cannons' pulses leave from outside the barrel and do not visibly reach their targets (maintainer, 2026-11-16, `bench battle 1000`) | - | Opus | The muzzle point from the yoke's angles against the drawn barrel (as M7-2 for the interceptors); hits, misses or a missing impact flash | done |
+| T52 | C | Every bolt drawn as a teardrop (a round bright head, a tail tapering behind it along its flight) instead of a straight line (maintainer, 2026-11-16) | - | Opus | The bolts' capsule mesh and materials, which draw opaque whenever motion vectors are on (now always, with blur on by default) | done |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress |
 
 ### M7-T01 Station references and measurements
@@ -2673,6 +2673,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   `tests/unit/test_radar_dot_batch.gd`. GPU runs with the fix: sandbox chase and cockpit octagon after blur on, two waves and FSR 2.2,
   and `bench battle 300` with blur switched on after the arrivals: dots drawn, no `uniform_set` error
   (`references/screenshots/M7-T45 radar dots/`). Likely the same cause as T49's error spam (the radar draws in every bench fight).
+- **Accepted (maintainer, 2026-11-16):** HUD and radar dots held through a `bench battle 1000` run on fd45acba.
 
 ### M7-T46 Fix: FSR 2.2 too blurry
 
@@ -2740,6 +2741,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     wins of 10 per hull, vs 3 raiders 0 of 10, both times. Grid vs 12 raiders: 3 of 3 wins at the same times, the station losing
     258/508/384 hp against 252/497/378. Grid vs a capital: identical. Interceptor proof 1.76 times against 1.78. The dogfight
     (seed 3 ends with 3 raiders left, not 5) and the M3 sandbox (identical) stay pending, as before: under the maintainer's review.
+- **Accepted (maintainer, 2026-11-16):** on fd45acba; CI's factions smoke fixed in 3f82d079.
 
 ### M7-T48 The benchmarks and tests use the generated asteroids
 
@@ -2774,6 +2776,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   300 (battle) and 400 (typical) ships before and after (one after run, typical 300, p99 15.8 ms under load; 5.4 ms repeated).
   Windowed `bench battle 300` (960x540, RX 6950 XT): draw calls median 277 both, max 303 → 314; GPU time 0.51 → 1.27 ms median;
   VRAM max 871 → 932 MB. All inside the M4 budgets (median 8 ms, p99 12 ms). Left: the maintainer's look at a `bench battle 1000` (H).
+- **Accepted (maintainer, 2026-11-16):** the generated asteroids in `bench battle 1000` on fd45acba.
 
 ### M7-T49 Fix: the `uniform_set` error spam
 
@@ -2791,6 +2794,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   freed buffer once motion vectors come on) made the radar's dots vanish and printed this error every frame. On HEAD with the T45 fix,
   T46's repro (`bench battle 300 120 arrive=placed`, then `aa taa`, `upscale fsr2 quality`, back to `aa smaa` and `upscale native`,
   `blur on`, `blur off`) printed no `uniform_set` error and no other error. No separate change.
+- **Accepted (maintainer, 2026-11-16):** no `uniform_set` error in the live `bench battle 1000` run on fd45acba (0 in its log).
 
 ### M7-T50 Fix: asteroids and far capitals vanish after a stutter
 
@@ -2862,6 +2866,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     capital destroyed at 123.0, 123.5, 123.9 s (heavy 66 shots, 61 hits), the interceptors' proof 1.76 times (1 149 lost with the
     batteries, 2 028 parked; bar 1.5): T40's figures, as a drawing change should leave them.
   - Touches `src/weapons/bolt_mesh.gd` (one constant, `drawn_scale` and its use), which T52 is reshaping: T52 keeps the cap.
+- **Accepted (maintainer, 2026-11-16):** heavy pulses leave the barrel and strike, live on fd45acba (with T52's tail from the muzzle).
 
 ### M7-T52 Bolts drawn as teardrops
 
@@ -2917,3 +2922,4 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     `references/screenshots/M7-T52 teardrop bolts/tail_from_muzzle.png` (frames under `tail_frames/`). The tail's tip stays at the
     world point of the shot, so a ship flying fast forward sees it up to its own speed's share of the tail behind its moving muzzle
     for the part of the first tick before the tail is full (a fighter at 300 m/s: about 2 m for about 7 ms).
+- **Accepted (maintainer, 2026-11-16):** style C teardrops, orange station bolts, tails from the muzzle, live on fd45acba.
