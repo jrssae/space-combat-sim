@@ -15,7 +15,7 @@ extends RefCounted
 ## - `lane` (M7-T10, a docking lane; flown by the native core only): the ship keeps to the legs between waypoints with every
 ##   thruster, slows into a waypoint that holds and arrives within `lane_arrival_m`. A waypoint's `face` (a World direction)
 ##   holds the nose there on the way to it and while it holds (a freighter backs in); its `spin` (a World turn rate, rad/s)
-##   is matched about the nose (a ship rolls with the drum before its tunnel).
+##   is matched about the nose, also while it holds there (a ship rolls with the drum before its tunnel and in its void).
 ## Scenarios describe routes as `routes[]` (`ScenarioLoader`); an `ai` behaviour's `patrol` builds one (`BrainFactory`).
 
 const DEFAULT_CRUISE_MPS: float = 60.0

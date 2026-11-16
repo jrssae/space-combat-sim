@@ -186,6 +186,41 @@ func test_a_civilian_waits_in_the_void_comes_out_through_the_opened_doors_and_de
 	assert_eq(main.traffic.alive_of(&"undock"), 1, "and flies on to where it leaves")
 
 
+func test_every_tunnel_hull_undocks_lying_square_without_touching_the_bay() -> void:
+	# M7-T61: a hull waiting in the void stopped turning with the drum, and the Narn transport's 46 m span, 25 degrees askew
+	# by the time the doors stood open, met the doorway's edge.
+	if not await _start():
+		pending("the babylon5_station asset is not generated")
+		return
+	var lock: StationAirlock = station.airlock
+	for type: StringName in DockingPlan.TUNNEL_TYPES:
+		assert_eq(main.traffic.undock(type), "", String(type))
+		var c: Combatant = main.traffic.last_ship()
+		if c == null:
+			continue
+		var far: Vector3 = main.traffic.plan.dock_in[0]["at"]
+		rams = 0
+		_watch_rams(c)
+		var ship: Ship = c.ship
+		var reach: Vector2 = StationAirlock.hull_reach(ship)
+		var askew: Array[float] = [0.0]
+		var out: bool = await _until(func() -> bool:
+			if not is_instance_valid(ship):
+				return false
+			var local: Vector3 = station.to_local(ship.global_position)
+			if lock.depth_of(local) + reach.y > -lock.clear_m:  # not yet wholly out of the doors
+				var drum: Basis = station.drum_body.global_basis
+				askew[0] = maxf(askew[0], absf(rad_to_deg(ship.global_basis.y.signed_angle_to(drum.y, drum.z))))
+			return local.z < far.z + 200.0, 120.0)
+		assert_true(out, "%s came out past the approach's far point" % type)
+		assert_eq(rams, 0, "%s without touching the bay or its doors" % type)
+		assert_eq(c.damageable.hull.hp, c.damageable.hull.max_hp, "%s undamaged" % type)
+		assert_lt(askew[0], 5.0, "%s lay square in the drum until it was out (%.1f degrees at most)" % [type, askew[0]])
+		gut.p("%s: at most %.1f degrees off the drum's roll inside the doors" % [type, askew[0]])
+		main.traffic.clear()
+		assert_true(await _until(func() -> bool: return lock.doors.is_shut(), 30.0), "the doors shut before the next one")
+
+
 func test_a_freighter_backs_in_and_the_cargo_pods_carry_its_first_block_into_the_cargo_bay() -> void:
 	if not await _start():
 		pending("the babylon5_station asset is not generated")

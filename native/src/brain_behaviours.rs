@@ -3869,8 +3869,14 @@ impl PathState {
                 }
             }
             Self::HOLD => {
-                cmd.brake = true;
                 self.hold_left_s -= dt;
+                // A hold in the turning drum keeps turning with it: the brake would stop the roll, and a wide hull
+                // left behind by the drum meets the doorway's edge on its way out (M7-T61).
+                if route.precise && Self::lane_spin(route, self.index).is_some() {
+                    self.hold_lane(tick, cmd, ship, route, wish);
+                    return;
+                }
+                cmd.brake = true;
                 // A docking lane's hold keeps the hull as the lane asked (a freighter stern to the bay).
                 if route.precise
                     && let Some(face) = route.faces.get(self.index)
@@ -4064,20 +4070,55 @@ impl PathState {
             v_des = scale(v_des, clampf(cos / ALIGNED_COS, 0.0, 1.0) as f32);
         }
         cmd.rot = brain_maths::face(&p.basis, nose, cap.rate_max, brain_maths::K_FACE);
-        let spin = route.spins.get(self.index).copied().unwrap_or(Vector3::ZERO);
-        if f64::from(length_squared(spin)) > 1e-12 {
-            let mut roll = brain_maths::match_roll(&p.basis, spin, cap.rate_max);
-            // Turning as fast as the tunnel is not yet lying square in it: the hull's top is also brought to the
-            // turning hull's own (a 40 m span does not pass a 34 m tunnel on its side).
-            if let Some(j) = tick
-                .contacts
-                .iter()
-                .map(|&r| r as usize)
-                .find(|&j| tick.rows.surface(j).is_some_and(|s| s.spin_rad_s != 0.0))
-            {
-                roll += brain_maths::align_roll(&p.basis, tick.up_of(j), cap.rate_max, brain_maths::K_FACE);
-            }
-            cmd.rot.z = clampf(roll, -1.0, 1.0) as f32;
+        if let Some(spin) = Self::lane_spin(route, self.index) {
+            cmd.rot.z = Self::lane_roll(tick, cap, spin) as f32;
+        }
+        seek_velocity(cmd, p, cap, v_des, true, wish);
+    }
+
+    // The turn rate a docking lane's waypoint asks to match about the nose, if any.
+    fn lane_spin(route: &Route, index: usize) -> Option<Vector3> {
+        route
+            .spins
+            .get(index)
+            .copied()
+            .filter(|s| f64::from(length_squared(*s)) > 1e-12)
+    }
+
+    // The roll that turns the hull with the lane's spin and lies it square in the turning hull nearby.
+    fn lane_roll(tick: &Tick, cap: &Capability, spin: Vector3) -> f64 {
+        let p = &tick.p;
+        let mut roll = brain_maths::match_roll(&p.basis, spin, cap.rate_max);
+        // Turning as fast as the tunnel is not yet lying square in it: the hull's top is also brought to the
+        // turning hull's own (a 40 m span does not pass a 34 m tunnel on its side).
+        if let Some(j) = tick
+            .contacts
+            .iter()
+            .map(|&r| r as usize)
+            .find(|&j| tick.rows.surface(j).is_some_and(|s| s.spin_rad_s != 0.0))
+        {
+            roll += brain_maths::align_roll(&p.basis, tick.up_of(j), cap.rate_max, brain_maths::K_FACE);
+        }
+        clampf(roll, -1.0, 1.0)
+    }
+
+    // Holding at a docking lane's waypoint that turns (the void behind the drum's doors): kept on the point by the
+    // thrusters, the nose where it was or where the lane asks, the hull turning square with the drum.
+    fn hold_lane(&mut self, tick: &Tick, cmd: &mut FlightCmd, ship: &Ship, route: &Route, wish: &mut Wish) {
+        const HOLD_GAIN: f64 = 0.3;
+        const HOLD_MPS: f64 = 2.0;
+        let p = &tick.p;
+        let cap = &ship.capability;
+        let to = sub(p.local_of(route.points[self.index]), p.position);
+        let mut v_des = scale(to, HOLD_GAIN as f32);
+        if f64::from(length(v_des)) > HOLD_MPS {
+            v_des = scale(normalized(v_des), HOLD_MPS as f32);
+        }
+        let face = route.faces.get(self.index).copied().unwrap_or(Vector3::ZERO);
+        let nose = if f64::from(length_squared(face)) > 1e-12 { face } else { p.forward };
+        cmd.rot = brain_maths::face(&p.basis, nose, cap.rate_max, brain_maths::K_FACE);
+        if let Some(spin) = Self::lane_spin(route, self.index) {
+            cmd.rot.z = Self::lane_roll(tick, cap, spin) as f32;
         }
         seek_velocity(cmd, p, cap, v_des, true, wish);
     }

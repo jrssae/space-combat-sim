@@ -51,9 +51,6 @@ const JOIN_RUN_M: Vector2 = Vector2(22000.0, 40000.0)
 const JOIN_CLEAR_OF_PLAYER_M: float = 26000.0
 const JOIN_STEP_M: float = 2000.0
 const CONVOY_SPACING_M: float = 800.0
-## Hulls the run undocks: the Narn transport is left out, as it rams the doorway (the drum, 24 m off the axis) 3 s after the
-## doors open on its way out (found in M7-T56, left for its own fix).
-const UNDOCK_TYPES: Array[StringName] = [&"skylark_transport", &"centauri_brezebel"]
 ## Share of the run's arrivals that are a Saturn for the cargo bay, when no freighter is there or on its way.
 const FREIGHTER_SHARE: float = 0.5
 ## Without a gate a raid starts this far off the bow, above it (station frame).
@@ -692,7 +689,7 @@ func _start_auto() -> void:
 		&"dock":
 			why = dock(_free_hull(DockingPlan.TUNNEL_TYPES, hash([main.scenario_seed, "traffic hull", index])), false, flow)
 		&"undock":
-			why = undock(_free_hull(UNDOCK_TYPES, hash([main.scenario_seed, "traffic hull", index])), flow)
+			why = undock(_free_hull(DockingPlan.TUNNEL_TYPES, hash([main.scenario_seed, "traffic hull", index])), flow)
 		&"freighter":
 			var hull: StringName = _free_hull(DockingPlan.FREIGHTER_TYPES, hash([main.scenario_seed, "traffic freighter", index]))
 			why = freighter(hull, _unit("load", index) < 0.5, &"", flow)

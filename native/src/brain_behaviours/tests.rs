@@ -375,6 +375,29 @@ fn a_docking_lane_backs_a_freighter_in_and_holds_it_stern_to_the_bay() {
     assert!(out.flight.rot.y.abs() > 0.05, "the hold turns the nose back: {:?}", out.flight.rot);
 }
 
+#[test]
+fn a_docking_lanes_hold_in_the_drum_keeps_turning_with_it() {
+    // Waiting in the void behind the doors (M7-T61): a hold that asks for the drum's turn is not the brake (which stops
+    // the roll and leaves a wide hull askew in the doorway) but the roll, kept on its point by the thrusters.
+    let at = Vector3::new(0.0, 0.0, 20_000.0);
+    let mut bench = Bench::new(rows_with(&[(RAIDER, 1, at)], 500.0, 0.0));
+    let spin = Vector3::new(0.0, 0.0, 0.148);
+    let mut brain = raider_brain(&[KIND_FOLLOW_PATH, KIND_IDLE]);
+    brain.ctx.route = Some(lane(&[[0.0, 0.0, 20_000.0]], &[600.0], &[Vector3::ZERO], &[spin]));
+    let out = bench.think(&mut brain, 1.0, 0, NEVER, 12);
+    assert!(!out.flight.brake, "no brake while it waits: {:?}", out.flight);
+    let want = brain_maths::match_roll(&bench.rows.bases[1], spin, capability().rate_max);
+    assert!(want.abs() > 0.05, "a roll worth commanding: {want}");
+    assert_eq!(f64::from(out.flight.rot.z), f64::from(want as f32), "turning with the drum");
+    assert!(f64::from(length(brain.desired_velocity)) < 1e-3, "on its point, it stays: {:?}", brain.desired_velocity);
+    // Drifted 10 m off its point: pulled gently back.
+    bench.rows.positions[1] = Vector3::new(10.0, 0.0, 20_000.0);
+    let out = bench.think(&mut brain, 1.1, 0, NEVER, 12);
+    assert!(!out.flight.brake);
+    let back = brain.desired_velocity;
+    assert!(back.x < -0.5 && f64::from(length(back)) <= 2.0 + 1e-4, "back toward its point, slowly: {back:?}");
+}
+
 // A bolt of faction `faction` from `shooter`, at `at` flying at `v`.
 fn bolt(bench: &mut Bench, shooter: i64, faction: u32, at: Vector3, v: Vector3) {
     let b = &mut bench.bolts;

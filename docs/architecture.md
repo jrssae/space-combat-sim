@@ -5801,8 +5801,9 @@ data/station/traffic.json        the run's ships and spacing, its kinds' weights
   steps its own few entries a tick: a transit that ended takes the lane; a docking ship asks the main docking bay's inner
   doors open (`StationAirlock`, M7-T25: `AirlockDoors` stepped each tick, the leaves slid each frame, timing in
   `data/station/airlock.json`) once its nose is 400 m from them, lets go once its tail is 3 m past their plane, and goes back
-  to its pool (`docked`) when they have shut; an undocking ship waits in the void until they stand open and lets go once wholly
-  out; a freighter in the hold at the bay has its cargo carried (`FreighterCargo`, `freighter_unloading` or
+  to its pool (`docked`) when they have shut; an undocking ship waits in the void until they stand open, turning with the drum
+  (M7-T61: a lane's hold that asks for a turn keeps the roll; the brake stopped it, and the Narn transport's 46 m span, left
+  25 degrees askew, met the doorway's edge), and lets go once wholly out; a freighter in the hold at the bay has its cargo carried (`FreighterCargo`, `freighter_unloading` or
   `freighter_loading`) and, when the bots are done, flies its lane's last leg (a new lane from where it holds); a lane that
   ended leaves through the gate (`Jumpgate.departure_route`, `send_departure`) or 12 km straight on, then the ship is
   released (`undocked`, `freighter_left`). `raid(n, scramble)` acquires raiders with the station as objective, out of the

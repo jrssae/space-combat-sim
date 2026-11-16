@@ -3131,3 +3131,27 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   collision shape against the door frame) and fix it so every civilian hull that docks can undock; let the automatic traffic undock the
   Narn again.
 - **Done when:** a test that undocks every civilian hull through the bay without contact; committed.
+- **Done (code part, 2026-11-16):**
+  - **Cause.** Not the exit line, the door timing or the shapes: the hull stopped turning with the drum while it waited in the
+    void. The undocking ship starts there lying square and turning at the drum's 0.148 rad/s, but its route's hold (the wait for
+    the doors) was flown as the brake, and the flight kernel's brake stops every turn. By the time the doors stood open (3 s) the
+    Narn transport lay 18 degrees askew, 25 degrees as it set off (its roll authority, 0.08 rad/s², is too weak to catch up in the
+    40 m to the doors). Its wings span 46 m; the opening is 45.5 m wide at the core and only the band (+-8.4 m) is wider, so a
+    tilted wing tip meets the band's step corner, 24 m off the axis: rams at 13.6, 9.1 and 8.6 m/s on the doors' plane, then it
+    stuck there. The Skylark and the Brezebel lag the same way but are narrow enough to fit the core askew (the Skylark also set off
+    early in T56's runs, the doors already open, 4.7 degrees off).
+  - **Fix (native, `BehaviourFollowPath` lane hold).** A lane waypoint's hold that asks for a turn (`spin`) is no longer the brake:
+    the ship is kept on its point by the thrusters (pull 0.3/s, at most 2 m/s), its nose held, its roll matched to the drum's and
+    brought square to the drum's up, the same roll the lane's legs fly (`lane_roll`, shared). A hold without a spin (the freighter
+    at the cargo bay) still brakes. The docking lane's end in the void turns with the drum too now. Measured after: the Narn lies at
+    most 1.9 degrees off the drum's roll until it is out of the doors (the Skylark and the Brezebel 0.2), no contact.
+  - **The run undocks every tunnel hull again** (`StationTraffic.UNDOCK_TYPES` removed; the run draws from
+    `DockingPlan.TUNNEL_TYPES`, as `traffic undock` always did).
+  - Tests: Rust `a_docking_lanes_hold_in_the_drum_keeps_turning_with_it`; GUT
+    `test_station_traffic.test_every_tunnel_hull_undocks_lying_square_without_touching_the_bay` (each of the three tunnel hulls:
+    no ram, hull whole, within 5 degrees of the drum's roll inside the doors). Docking of each hull without contact was already
+    covered (`test_every_tunnel_hull_docks_without_touching_the_bay`). Screenshots: `references/screenshots/M7-T61 Narn undock/`
+    (GPU, Forward+ at 60 fps: Skylark, Narn and Brezebel coming out of the void, `u2_*` the Narn lying square in the doorway).
+  - Seen on the way, not this task's: the same brake ignores a hold's `face` (the freighter's nose at the cargo bay is held by
+    nothing while it waits); and in a console run of `play station_launch` with `station goto main_docking_bay` the player was
+    rammed to death by the drum body (34 m/s) soon after, which ends the traffic's ships with it.
