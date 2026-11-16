@@ -12,10 +12,15 @@ var world: WorldFrame
 var camera: Camera3D
 var env: SpaceEnvironment
 var _clock_backup: float
+# GUT's own panel, hidden while a test reads the picture: it sits over the middle of the window.
+var _gut_panels: Array[Node] = []
 
 
 func before_each() -> void:
 	_clock_backup = SimClock.now()
+	_gut_panels = get_tree().root.find_children("GutLayer", "CanvasLayer", true, false)
+	for panel: Node in _gut_panels:
+		(panel as CanvasLayer).visible = false
 	world = WorldFrame.new()
 	world.name = "World"
 	add_child_autofree(world)
@@ -34,6 +39,9 @@ func before_each() -> void:
 
 func after_each() -> void:
 	SimClock.reset(_clock_backup)
+	for panel: Node in _gut_panels:
+		if is_instance_valid(panel):
+			(panel as CanvasLayer).visible = true
 
 
 func _gpu() -> bool:
