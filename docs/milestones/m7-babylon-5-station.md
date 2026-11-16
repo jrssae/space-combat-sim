@@ -322,6 +322,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T60 | C | "Defense" everywhere: code names, file names, data ids, tests and docs renamed from the British spelling (maintainer, 2026-11-16: "no one will understand the misspelling"); plus an `overlay [on\|off]` console command for the debug overlay | T54, T56, T57 | Sonnet | A wide rename while other agents edit the same files | in progress |
 | T61 | C | Fix: an undocking Narn transport rams the bay doorway's edge about 3 s after the doors open and is destroyed (found by T56; also on earlier HEADs) | T56 | Opus | The undock path's clearance for the widest hull | in progress |
 | T62 | C | A ship inside the docking bay's black box (docked, or undocking before it comes out) is inside the station: not targetable, off the radar and the AI's target lists, not hit (maintainer, 2026-11-16) | T61 | Opus | Targeting, radar and AI perception filters; the bay's interior boundary | in progress |
+| T63 | C | Fix: `station goto main_docking_bay` after `play station_launch` puts the player where the turning drum rams them at 34 m/s and kills them (found by T61, 2026-11-16) | - | Sonnet | The goto point's clearance from the drum's sweep, its velocity matched to the drum | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress |
 
 ### M7-T01 Station references and measurements
@@ -3172,3 +3173,13 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   plane. Same for any other bay with a black interior (cargo bay, if it has one).
 - **Done when:** tests (a docking ship is targetable outside, untargetable and off the radar inside, targetable again after it undocks);
   the maintainer checks it (H); committed.
+
+### M7-T63 Fix: `station goto main_docking_bay` gets the player rammed by the drum
+
+- **Why (T61's finding, 2026-11-16):** in a console run of `play station_launch` then `station goto main_docking_bay`, the drum rammed the
+  player at 34 m/s and killed them (`state ram`), and the traffic ship in flight vanished with it; not reproduced in a GUT run that parked
+  the player at the same tour point.
+- **What:** reproduce in a live build; find why the goto point (or the player's velocity there) meets the turning drum: a point inside
+  the drum's sweep, a velocity not matched to the drum's spin at that radius, the goto during the launch sequence; fix it so every
+  `station goto` point leaves the player clear and at rest relative to what is near it. Check every goto point, not just this one.
+- **Done when:** a test that each `station goto` point survives 30 s with no ram; committed.
