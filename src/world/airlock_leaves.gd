@@ -38,7 +38,7 @@ func set_offset(metres: float) -> void:
 	_offset = metres
 	for leaf: Dictionary in _leaves:
 		var base: Transform3D = leaf["base"]
-		(leaf["mm"] as MultiMesh).set_instance_transform(0, Transform3D(base.basis, base.origin + Vector3.UP * float(leaf["sign"]) * metres))
+		MultiMeshUpload.set_instance_transform(leaf["mm"] as MultiMesh, 0, Transform3D(base.basis, base.origin + Vector3.UP * float(leaf["sign"]) * metres))
 
 
 ## A leaf's place now (0 upper, 1 lower), in its section's frame: for tests.

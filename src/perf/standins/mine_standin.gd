@@ -206,7 +206,7 @@ func _retire(i: int, now_s: float) -> void:
 	_relay_at[i] = now_s + RELAY_S
 	_dead.append(i)
 	StaticRows.unregister(_row_ids[i])
-	_mesh.multimesh.set_instance_transform(i, Transform3D(Basis.from_scale(Vector3.ONE * 1e-4), _local[i]))
+	MultiMeshUpload.set_instance_transform(_mesh.multimesh, i, Transform3D(Basis.from_scale(Vector3.ONE * 1e-4), _local[i]))
 	if native_rows != null:
 		native_rows.set_mine_alive(i, false)
 
@@ -235,7 +235,7 @@ func _lay_again(now_s: float) -> void:
 		_alive[i] = 1
 		_alive_count += 1
 		_relay_at[i] = INF
-		_mesh.multimesh.set_instance_transform(i, Transform3D(Basis.IDENTITY, _local[i]))
+		MultiMeshUpload.set_instance_transform(_mesh.multimesh, i, Transform3D(Basis.IDENTITY, _local[i]))
 		_register(i)
 		if native_rows != null:
 			native_rows.set_mine_alive(i, true)

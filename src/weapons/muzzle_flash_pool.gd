@@ -217,7 +217,7 @@ func advance(delta: float) -> void:
 	_trim()
 	if _instance != null:
 		if drawn > 0:
-			RenderingServer.multimesh_set_buffer(_instance.multimesh.get_rid(), _buffer)
+			MultiMeshUpload.set_buffer(_instance.multimesh, _buffer)
 		_instance.multimesh.visible_instance_count = drawn
 
 

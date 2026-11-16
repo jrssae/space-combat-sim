@@ -2941,6 +2941,14 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   Godot's own multimesh interpolation should be off on those nodes (or the upload moved where Godot expects it); find every
   multimesh filled from `_process` and fix them all, without losing T38's motion vectors or the bolts' slot quarantine.
 - **Done when:** a test (a live run of the affected paths prints no such warning); committed.
+- **Done (code part, 2026-11-16):** cause: `MultiMeshInstance3D` switches Godot's multimesh interpolation on whenever it enters the tree
+  (the project interpolates physics), and any upload made outside the physics step then warns; the headless renderer has no
+  multimesh storage, so only a windowed run shows it. The batched draws (bolts, plumes, muzzle flashes, far dots, flashes and hulls,
+  door and airlock leaves, the mine stand-in) interpolate their own instances, so `MultiMeshUpload` (`src/rendering/multimesh_upload.gd`)
+  clears the server's flag before every `set_buffer` / `set_instance_transform` (the node's own transform interpolation is untouched, so
+  nothing moves differently). Windowed counts of the warning, `bench battle 300` before 3 and after 0; `play civilian_escort` and
+  `play free_flight` 0 before and after (they did not show it on baseline either). `tests/unit/test_multimesh_upload.gd` (2 tests: the helper
+  runs clean in the tree; no batched draw calls the server directly).
 
 ### M7-T54 Civilian escort fixes
 

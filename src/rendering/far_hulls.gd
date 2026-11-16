@@ -135,7 +135,7 @@ func refresh() -> void:
 		if multimesh.instance_count != count:
 			multimesh.instance_count = count
 		if count > 0:
-			RenderingServer.multimesh_set_buffer(multimesh.get_rid(), buffer)
+			MultiMeshUpload.set_buffer(multimesh, buffer)
 			_instances[index].custom_aabb = instances_aabb(buffer, _meshes[index].get_aabb())
 		_buffers[index] = buffer
 		shown += count
@@ -155,5 +155,5 @@ func _on_rebased(offset: Vector3) -> void:
 			buffer[o + 11] -= offset.z
 		_buffers[index] = buffer
 		if buffer.size() > 0:
-			RenderingServer.multimesh_set_buffer(instance.multimesh.get_rid(), buffer)
+			MultiMeshUpload.set_buffer(instance.multimesh, buffer)
 			instance.custom_aabb = AABB(instance.custom_aabb.position - offset, instance.custom_aabb.size)

@@ -179,7 +179,7 @@ func update_from(source: Object, rows_on: bool) -> void:
 		if _motion_vectors:
 			buffer = _quarantined().filter(look, buffer)
 			collapsed += _quarantine.collapsed
-		RenderingServer.multimesh_set_buffer(instance.multimesh.get_rid(), buffer)
+		MultiMeshUpload.set_buffer(instance.multimesh, buffer)
 		instance.multimesh.visible_instance_count = count
 		_drawn[look] = buffer
 		instances_drawn += count

@@ -56,7 +56,7 @@ func set_open(bay_name: String, degrees: float) -> void:
 		var hinge: Vector3 = leaf["hinge"]
 		var swing := Basis(leaf["axis"] as Vector3, deg_to_rad(degrees) * float(leaf["sign"]))
 		var about := Transform3D(swing, hinge - swing * hinge)
-		(leaf["mm"] as MultiMesh).set_instance_transform(int(leaf["index"]), about * (leaf["base"] as Transform3D))
+		MultiMeshUpload.set_instance_transform(leaf["mm"] as MultiMesh, int(leaf["index"]), about * (leaf["base"] as Transform3D))
 
 
 ## Degrees bay `bay_name`'s leaves were last set open.

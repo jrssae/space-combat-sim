@@ -225,7 +225,7 @@ func _forget(at: int) -> void:
 
 func _upload() -> void:
 	if multimesh.instance_count > 0:
-		RenderingServer.multimesh_set_buffer(multimesh.get_rid(), _buffer)
+		MultiMeshUpload.set_buffer(multimesh, _buffer)
 	multimesh.visible_instance_count = _shown + tier_shown
 
 
