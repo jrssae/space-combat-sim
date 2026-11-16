@@ -268,10 +268,38 @@ func test_a_short_battle_writes_every_entity_count_and_puts_the_factions_back() 
 	assert_false(Factions.is_known(sides[2]), "the bench factions are gone")
 	for c: Combatant in main.ships.alive():
 		assert_true(c.faction == Factions.EARTH_ALLIANCE or c.faction == Factions.RAIDERS, "%s flies for a game faction again" % c.display_name)
-	assert_eq(main.bench.standins.capitals().size(), 0, "the stand-ins are gone")
-	assert_eq(main.bench.standins.asteroid_count(), 0)
 	assert_eq(main.world.anchor_text(), anchor_before, "the frame's anchor is back (%s)" % anchor_before)
 	assert_eq(main.world.environment_accel(Vector3(0.0, 0.0, -5000.0)), Vector3.ZERO, "and nothing pulls on the station's rail")
+	# M7-T50: the battle flies on after its window, so nothing the player was looking at vanishes when the run ends.
+	var standins: StandinDirector = main.bench.standins
+	assert_eq(standins.capitals().size(), int(mix["capitals"]), "the capitals stay in play")
+	for cap: CapitalStandin in standins.capitals():
+		assert_true(cap.is_inside_tree(), "%s is still in the world" % cap.name)
+		assert_true(Factions.is_known(cap.faction), "%s flies for a game faction (%s)" % [cap.name, cap.faction])
+		assert_eq(cap.targetable.faction, cap.faction)
+		assert_eq(cap.damageable.faction, cap.faction)
+	assert_eq(standins.asteroid_count(), int(mix["asteroids"]), "the rocks stay")
+	var drawn: int = 0
+	for rocks: Node in standins.get_node("Asteroids").get_children():
+		if rocks is MultiMeshInstance3D and (rocks as MultiMeshInstance3D).is_visible_in_tree():
+			drawn += (rocks as MultiMeshInstance3D).multimesh.instance_count
+	assert_eq(drawn, int(mix["asteroids"]), "and are drawn")
+	var mines: MineStandin = standins.mines()
+	assert_not_null(mines, "the mines stay")
+	if mines != null:
+		for i: int in mines.count():
+			assert_true(Factions.is_known(mines.faction_of(i)), "mine %d is a game faction's (%s)" % [i, mines.faction_of(i)])
+	for k: int in StaticRows.count():
+		assert_true(Factions.is_known(StaticRows.factions[k]), "static row %d is a game faction's" % k)
+	assert_true(standins.active, "their guns go on")
+	assert_false(standins.launcher.is_valid(), "but the carriers no longer swap the run's fighters")
+	await _ticks(30)
+	assert_eq(standins.weapons_path(), &"native", "the weapons step on the native rows over the game's sides")
+	# The next run starts clean: nothing of this one flies in it.
+	await _run("bench furball 10 1 warmup=0 seed=1 label=after_battle_test")
+	assert_eq(standins.capitals().size(), 0, "the next run takes the capitals away")
+	assert_eq(standins.asteroid_count(), 0, "and the rocks")
+	assert_null(standins.mines(), "and the mines")
 
 
 func test_a_short_typical_run_writes_its_summary() -> void:

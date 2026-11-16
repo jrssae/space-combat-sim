@@ -254,6 +254,8 @@ func _set_up_scene() -> void:
 	DebugConsole.flags.invulnerable = true
 	for c: Combatant in main.ships.alive():
 		main.ships.release(c)
+	if standins != null and is_instance_valid(standins):
+		standins.clear()  # a past run's capitals, rocks and mines go with its ships (M7-T50)
 	BenchLayout.capital_share = float(_options.get("capitals", -1.0))
 	var plan: Array[Dictionary] = BenchLayout.plan(_layout, _n, int(_options["seed"]))
 	if TierDirector.current() != null:
@@ -720,7 +722,18 @@ func _finish(now: int, aborted: String) -> void:
 	finished.emit(summary)
 
 
-# Everything the run changed, back as it was (the ships stay in play).
+## The game faction each of `layout`'s bench-only sides joins when the run ends (the side's pool type's own), by bench faction.
+static func game_factions(layout: StringName) -> Dictionary:
+	var out: Dictionary = {}
+	var list: Array[StringName] = BenchLayout.sides(layout)
+	for i: int in list.size():
+		var own: StringName = ShipCatalog.faction_for(BenchLayout.SIDE_TYPES[i])
+		if list[i] != own:
+			out[list[i]] = own
+	return out
+
+
+# Everything the run changed, back as it was; its ships, capitals, rocks and mines stay in play until the next run.
 func _put_back() -> void:
 	if _restore.is_empty():
 		return
@@ -739,7 +752,7 @@ func _put_back() -> void:
 	if jumps != null and is_instance_valid(jumps):
 		jumps.stop_all()  # before their capitals go: a point losing its opener would collapse on whatever is in it
 	if standins != null and is_instance_valid(standins):
-		standins.clear()
+		standins.keep_after_run(game_factions(_layout))  # the battle flies on, as its ships do (M7-T50)
 	_free_gate()
 	_restore_frame()
 	if main != null and is_instance_valid(main.ships):

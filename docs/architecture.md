@@ -2071,8 +2071,10 @@ scripts/bench_quick.sh      the quick check: ramps furball and spread until 30 F
   N counts those ships; the player flies too. The rebase budget is on the whole tick that held a rebase, not the shift alone.
   Windows are counted in ticks; real time kept is the recorded ticks' sim time against the wall time they took. The command
   holds the console queue until it ends (`DebugConsole.release_wait`); a run under a tenth of real time is cut short. Afterwards
-  everything it changed is put back, and its ships stay in play. A run that dies without a report leaves a failing
-  placeholder, so the sweep counts it as a failed run (one surviving pass cannot pass a count) and still sees the count.
+  everything it changed is put back, and its ships stay in play. So do its capitals, rocks and mines (M7-T50: the battle
+  flies on, the bench-only sides joining the game's factions as the fighters do); the next run takes them away. A run that
+  dies without a report leaves a failing placeholder, so the sweep counts it as a failed run (one surviving pass cannot pass
+  a count) and still sees the count.
 - **Tests** never assert milliseconds: `test_perf_stats`, `test_bench_layout` and `test_bench_report` are pure; `test_bench`
   checks per tick that the stages split the tick and that each inner stage fits in its own (scan and think in ai, hit and ram in
   resolvers, sync in physics, the rebase in flight and late), and that runs write their reports; `run_tests.sh` runs
@@ -2276,7 +2278,7 @@ scripts/fullscreen_check.sh         a layout fullscreen, the 3D at 1080p, under 
   every ship, the moon), `test_standins` (a gun fires only at hostiles within 4 km and only inside its gate at a limited turn
   rate, an interceptor removes only hostile bolts within 1.5 km, rocks are static rows that bolts hit, a rebase moves rocks and
   capitals, the moon bends a coasting path about 13.5 m in 30 s) and `test_bench` (battle and typical runs write every entity
-  count, the factions and stand-ins go afterwards).
+  count, the bench factions go afterwards while the stand-ins fly on, and the next run takes them away).
 
 ### 17.7 The hit broad phase and projectile kinds (T08)
 

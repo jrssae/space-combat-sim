@@ -121,6 +121,18 @@ func faction_of(i: int) -> StringName:
 	return _factions[i]
 
 
+## Moves every mine of a layer in `map` (old faction -> new) to its new side, its row in `StaticRows` with it (M7-T50: a
+## bench's own sides go when the run ends). Native rows bound before still hold the old sides: bind them again.
+func change_factions(map: Dictionary) -> void:
+	for i: int in _factions.size():
+		if not map.has(_factions[i]):
+			continue
+		_factions[i] = map[_factions[i]]
+		if _alive[i] == 1:
+			StaticRows.unregister(_row_ids[i])
+			_register(i)
+
+
 ## Hands the mines to the native rows (`rows`, an `ScsWeaponRows` on the core), or takes them back with null.
 func bind_native(rows: Object) -> void:
 	native_rows = rows

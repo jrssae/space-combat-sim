@@ -2778,3 +2778,18 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   instance transforms not shifted, a visibility range, the multimesh motion-vector buffer swap (as T45 found for 2D), or the tier's
   promotion. Fix at the cause; a test that rebases (position and velocity) with rocks and far capitals in view and checks they still draw.
 - **Done when:** the test; the maintainer flies out of the field without losing them (H); committed.
+- **Done (code part, 2026-11-16):** not a draw, a rebase or motion vectors: the end of the bench run. `bench battle 300` measures
+  for 30 s after a warm-up (about 53 s in all); at the end `BenchRunner._put_back` cleared the stand-ins, so every capital, rock and
+  mine was freed in one frame (the stutter: the report written, about 45 capitals with their 400-odd turrets and 1 000 rocks' bodies
+  freed), while the run's fighters stayed in play by design (the radar's contacts). Reproduced on the GPU in a scratch copy of HEAD:
+  rocks and capitals drawn at 52 s, gone at 56 s, right after the `[bench]` line, with GOD and the bench's frame going in the same
+  frame; with a 300 s window they stayed through `rebase 4000 0 0`, `boost 2500 0 0`, blur on, FSR 2.2, TAA, `ride` and a 35 km jump
+  (`gate approach 20`), so neither the rebase nor the multimesh buffer swap is involved. Fix: the battle flies on after its window.
+  `_put_back` keeps the capitals, rocks and mines (`StandinDirector.keep_after_run`): the bench-only sides' capitals and mines join
+  their side's game faction as the fighters do (`BenchRunner.game_factions`; the mines' `StaticRows` go with them, the native rows
+  are bound again), their guns go on, and the carriers stop swapping the run's fighters; the next run clears them as it releases the
+  last run's ships. Test: `test_bench` (the battle test: after the run the capitals, the 1 000 rocks drawn and the mines are still in
+  play under game factions, the weapons step natively, and the next run takes them away); on HEAD's code it fails (0 of 8 capitals,
+  0 of 1 000 rocks). Captures (`references/screenshots/M7-T50 vanish/`): `b_52s`/`b_56s` (HEAD, before and after the end),
+  `c_grid` (HEAD, rebase, boost, FSR 2.2, TAA, all drawn), `before_after_grid` (with the fix: drawn 10 and 20 s after the end, after
+  a rebase, a boost and FSR 2.2). After the run the player is mortal again (the bench's GOD is put back) inside a fight that goes on.
