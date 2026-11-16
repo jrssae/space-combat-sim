@@ -56,6 +56,12 @@ here (the maintainer, 2026-11-08). Details, evidence and suggested fixes: `docs/
 | L10 | an explosion builds meshes and materials per death | M12 (the staged capital break-up rewrites it) |
 | L11 | the stand-in counters walk every ship each tick | M12 (M12 replaces the stand-ins) |
 
+## Carried from M7 (2026-11-15)
+
+| item | what | milestone |
+|---|---|---|
+| M7-1 | Ship-to-ship avoidance in formation away from big hulls: wingmen rejoining fast can ram their leader or each other (M7-T38 found it; T38's separation wall and push-off act only while a big hull is in sight, so plain formation flying is unchanged). Give formation and rejoin flight the same stopping-path check against friendly ships everywhere, native, 1 and 6 threads identical, parity kept (maintainer, 2026-11-15) | M8 |
+
 ## Required: gravity
 
 Maintainer requirement (M2 play test): gravitational pull must be in the plan. It is, in three places: **M6** added gravity
