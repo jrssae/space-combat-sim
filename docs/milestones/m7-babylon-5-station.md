@@ -304,6 +304,8 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T42 | D | The interceptor battery model: an original procedural mesh after the maintainer's clip, a truss pedestal, a two-axis yoke and four barrels in a rectangle round a central body, about 15 m tall, on every battery (maintainer, 2026-11-15) | - | Opus | Look sheet approved first; four muzzles for T41 | done |
 | T43 | D | The heavy cannons as the show has them: an original single oval-barrel gun about 30 m long in a hazard-striped recess cut into the bow tower at H1 and H2, firing three-shot bursts of large green pulses at today's damage a second (maintainer, 2026-11-15) | T42 | Opus | Look sheet approved first; station generator change (STL fidelity); burst cadence in the native gun gate; balance unchanged | done |
 | T44 | C | Fix: two suns seen from 100 000 km above the star (`frame orbit 100000 epsilon`); one sun at every distance (maintainer, 2026-11-15) | - | Opus | A rendering bug near the star (scaled space, the sky's sun, the flare, the key light) | done |
+| T45 | C | Fix: the radar's dots vanish after several raider waves in the combat sandbox, leaving only the stalks (maintainer's M4 check, 2026-11-15) | - | Opus | A long-run bug in M4-T36's batched radar draw | in progress |
+| T46 | C | Fix: FSR 2.2 is very blurry (`upscale fsr2 quality`; maintainer's M4 check, 2026-11-15) | - | Opus | The upscaler's setup: scale, sharpness, motion vectors, jitter | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress |
 
 ### M7-T01 Station references and measurements
@@ -2640,3 +2642,23 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   star and 400 and 1 000 km above Epsilon III): `references/screenshots/M7-T44 two suns/`.
 
 - **Accepted (maintainer, 2026-11-15, live window from debb2669):** "just one as far as i could see". Pushed with 6472d504; CI green (run 43780325834).
+
+### M7-T45 Fix: the radar's dots vanish after several waves
+
+- **Why (maintainer, 2026-11-15, the M4 checklist's M4-T36 check):** "The radar turns into stalks only after several waves of raiders in
+  the combat sandbox. no more dots."
+- **What:** reproduce in the combat sandbox over several waves (`play sandbox`, `wave next` to hurry them), find why the dots stop
+  drawing while the stalks go on (M4-T36's batched draw: a buffer, count or index that grows, wraps or goes stale as ships die and
+  pooled ships come back; the native `ScsRadarPlot` columns), fix it at the cause; a test that runs many waves' worth of contacts
+  coming and going and checks every contact still gets its dot.
+- **Done when:** the test; the maintainer's look (H); committed.
+
+### M7-T46 Fix: FSR 2.2 too blurry
+
+- **Why (maintainer, 2026-11-15, the M4 checklist's M4-T40 check):** "FSR2 is showing very very blurry results" (`upscale fsr2
+  quality`, at the maintainer's 4K display).
+- **What:** measure what FSR 2.2 gets (the internal size against the window's, `upscale` state, the sharpness, the motion vectors
+  from the bolts, the sky and the hulls, the jitter, mip bias, TAA/AA interplay, `RenderScale` or the window's own scale on Wayland
+  at 4K) against Godot's expected setup, find why it is far blurrier than its preset should be, fix it at the cause; GPU captures of
+  `native` against `fsr2 quality` still and in motion.
+- **Done when:** captures that show the fix; the maintainer's look (H); committed.

@@ -63,6 +63,7 @@ here (the maintainer, 2026-11-08). Details, evidence and suggested fixes: `docs/
 | M7-1 | Ship-to-ship avoidance in formation away from big hulls: wingmen rejoining fast can ram their leader or each other (M7-T38 found it; T38's separation wall and push-off act only while a big hull is in sight, so plain formation flying is unchanged). Give formation and rejoin flight the same stopping-path check against friendly ships everywhere, native, 1 and 6 threads identical, parity kept (maintainer, 2026-11-15) | M8 |
 | M7-2 | Clean-up: an interceptor battery's pulse leaves about 1.3 m beside its drawn barrel tip when it fires at a projectile within about 30 m (the muzzle is placed from the trunnion lead's angles while the barrels are drawn along the pulse; M7-T40 council round 3). Place the muzzle from the shown angles, so the pulse and its muzzle flash start at the drawn barrel tip, and re-measure the grid balance (maintainer, 2026-11-15) | M8 |
 | M7-3 | Clean-up: the walls to the left and right of the cargo bay flicker (z-fighting or a shimmer seen in play): find the coplanar or overlapping faces, or the shading cause, and fix it in the station generator with a test (maintainer, 2026-11-15) | M8 |
+| M7-4 | Clean-up: the Cobra bays' launch doors become retracting sawtooth doors (toothed leaves that slide apart) instead of today's flat-edged doors that swing open (maintainer, 2026-11-15, the M7 checklist); the launch sequence's door ripple and its timing kept | M8 |
 
 ## Required: gravity
 

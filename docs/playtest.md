@@ -946,7 +946,7 @@ want a window you can see.
       (`gate open departure 1`, then `gate open arrival 1`); the swirl turns clockwise and inward for a departure, counter-clockwise
       and outward for an arrival.
 - [ ] **From the side and the tip:** the base glows white from behind and the side; from the tip the near wall covers the dark base.
-- [ ] **The player's jump:** `HOLD X / SHIFT / MOUSE 4: JUMP` within 10 km of the gate; the autopilot, the shots, the flash and fade, back out
+- [ ] **The player's jump:** `HOLD X / SHIFT / MOUSE 4: JUMP` within 2 km of the gate (M7-T28; it was 10 km in M6); the autopilot, the shots, the flash and fade, back out
       through the blue vortex with control returned after 3 s or 500 m.
 - [ ] **Raiders and open points:** an encounter raid (`encounters force raid`) comes out of a vortex sized to the ship, not a flash.
 - [ ] **Frame rates** (visible window): the vortex open from close up and from the reference pose at the display's rate; free flight
