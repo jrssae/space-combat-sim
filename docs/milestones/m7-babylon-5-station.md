@@ -2873,3 +2873,18 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   opaque draw under motion vectors (always on since T47 turned blur on by default). Keep one draw per look and T38's motion vectors
   and slot quarantine. A look sheet (close, mid and far, still and moving, blur on and off) goes to the maintainer before commit.
 - **Done when:** the maintainer approves the sheet; a test of the shape (head wider than tail, tail behind the motion); committed.
+- **Done (code part, 2026-11-16):** the maintainer picked candidate C (a dim envelope round a short bright core) for every look,
+  kept the blur exemption and gave the station's light batteries and turrets orange bolts. `BoltShape` builds each look's mesh (two
+  nested drops, 440 triangles, head at the bolt's place, the tail 1.4 times the look's bolt length behind it); `Projectile.bolt_mesh`
+  and `projectile.tscn`'s default use it; the bolt materials carry the vertex colour, the depth write, the draw order and the
+  culling (architecture §7.1, §7.5, §7.6). Under TAA the opaque envelope hid the core; the materials now draw the far walls, so the
+  core's is in front, and its vertex colour equals the additive sum, so the core shows in both draws, still one draw per look.
+  `grid_light_pulse` and `turret_light` have `light_battery_bolt.tres` and `turret_light_bolt.tres` in their `bolt_color`.
+  Tests: `test_bolt_shape` (head wider than tail, tail behind along the flight, darker tail, core brighter than the envelope in both
+  draws, the materials), `test_weapons` (the teardrop), `test_bolt_teardrop_gpu` (under TAA and SMAA the head's centre outshines
+  the envelope and the tail; with back faces culled it fails). Cost, `bench battle 300` at 1920x1080 on the RX 6950 XT, one run
+  each: tick median 4.26 then 4.31 ms (noise), 60 fps both; GPU 1.97 to 2.04 ms then 2.13 to 2.25 ms under SMAA, 2.20 to 2.23 ms
+  then 2.27 to 2.48 ms under TAA; triangles 0.49 to 0.53 M then 0.49 to 0.56 M. Sheet: `references/screenshots/M7-T52 teardrop
+  bolts/t52_final_sheet.png`. Open: the maintainer's look (H). The teardrop runs 1.4 times the look's length behind the bolt with a
+  head twice its radius, so the heavy pulse (T51's 40 m cap counts `bolt_length_m`) draws 56 m with a 3.2 m head; the
+  `turret_light_brakiri` bolt has no material yet and draws the Starfury's blue.

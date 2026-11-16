@@ -800,7 +800,8 @@ ring buffer; engine errors in red and warnings in yellow from `ConsoleLogger`.
 | Nebula | A generated equirectangular panorama on the environment's sky; its alpha dims the stars behind it (§17.19) | The gas is smooth: one texture, no per-frame work. |
 | Cockpit interior (V struts, bar, sills, lamps, the console around its screens, a closed shell; M3-T29) | Mesh (`cockpit_interior.obj`), with 2D-only `SubViewport`s on screen meshes the hardpoints place (`CockpitScreens`, §15.9) | Hard edges at the near plane; visible only in first person. From inside, the `Hull` node draws the hull's OBJ with its canopy glass and window frames cleared, the view the cockpit was built around. |
 | Thruster plumes, buoy beacons | Meshes, unshaded emissive, additive, animated per frame. A plume is a cone from the nozzle position along its `exhaust` axis (length, radius, alpha follow the level) plus a small core disc at the exit; no billboards | Per-frame intensity animation. Tied to the nozzle axis, so the plume reads as coming out of the nozzle from every camera. |
-| Projectiles, muzzle flash | Meshes, unshaded emissive | Tiny, fast-moving, short-lived. |
+| Projectiles (bolts) | A teardrop (`BoltShape`, M7-T52): a dim envelope round a short bright core, the head at the bolt's place and the tail tapering and fading behind it along the flight; unshaded, additive, one multimesh draw per look. Each weapon has its own bolt material in its `bolt_color`, the impact flash's: the Starfury's blue, the raider's red, the interceptors' pale blue, the heavy cannons' green, the station's light batteries and turrets orange (`light_battery_bolt.tres`, `turret_light_bolt.tres`) | A capsule 15 to 19 times longer than wide, its over-bright colour clipping to near-white, read as a line. |
+| Muzzle flash | Meshes, unshaded emissive | Tiny, short-lived. |
 | Far AI ships | Their mesh (the importer's levels of detail) until a few pixels across, then one point each in the world's `FarDots` multimesh under `settings.far_ship_dot_px` (§14.4, §17.10, M7-T26) | Every far ship together is one draw call. |
 | Target bracket | 2D `Control` in the debug overlay | Screen-space UI. |
 | Collision | `CollisionShape3D` primitives from hardpoints JSON | A handful of boxes and capsules, never the render mesh. |
@@ -923,6 +924,10 @@ and feeds them each frame. Console: `flare [on|off]`, `blur [on|off]`, provider 
   samples a hull pixel, so the hull's paint is not dragged across the stars. While `settings.motion_blur` is off the effect is disabled,
   so the renderer is not asked for motion vectors and nothing runs. **Rebase:** `World.rebased` calls `MotionBlurGate.note_rebase`;
   the next two frames get strength 0 (the previous-frame transforms the renderer holds are kilometres off), then the blur returns.
+- **Bolts stay sharp (M7-T52).** An additive bolt wrote no depth, so the blur took its pixels for sky and smeared them sideways with
+  the camera's turn, like the stars. The bolt materials now write depth (`DEPTH_DRAW_ALWAYS`) and no velocity, so the blur leaves a
+  bolt where it is drawn; its flight shows in its teardrop. They draw after the other see-through effects (`render_priority` 127),
+  so the depth a bolt writes never hides a flash or a plume behind it. Under TAA the bolts are opaque and blur by their own vectors.
 - Headless runs and the smoke runs have no `RenderingDevice`, so both effects do nothing there; `tests/integration/test_post_effects.gd`
   checks the wiring and the values the effects are given.
 
@@ -957,6 +962,11 @@ with glow off the gap is gone (a control run, the Cycle log).
   kept about 3 % of its light under TAA. So under TAA every bolt material draws opaque (`BoltMesh.set_motion_vectors`, also the
   player's node bolts through `Projectile.bolt_materials`), and a bolt writes its own vector. Over black space the opaque bolt looks
   the same as the additive one; over a hull it covers instead of adding.
+- **The teardrop's core under TAA (M7-T52).** An opaque envelope would hide the core inside it. The bolt materials cull front
+  faces, so a pixel shows the far walls, and inside the envelope the core's wall is the nearer one. The core's vertex colour is
+  what the additive draw sums there (the envelope plus the core weighted by its vertex alpha, which an opaque draw ignores), so
+  both draws show the same bright core, still one draw per look (`test_bolt_teardrop_gpu`). Vertex colours stop at 1, so a bolt
+  material's albedo is `BoltShape.PEAK` (1.4) times its emission, the bolt's colour.
 - A multimesh instance's previous transform is whatever its slot held in the last drawn frame. A bolt that takes a slot that was
   empty gets a vector from the world origin (NaN when the camera is there); one that takes a slot freed since the last frame gets
   the old bolt's place (a 70 px smear in the test). `BoltSlotQuarantine` draws a bolt new to its slot collapsed at its own place for
