@@ -301,7 +301,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T40 | D | Council review fixes: the findings of the M7 code review (Opus, GPT-6 Luna, DeepSeek; 2026-11-15) that survived verification | - | Opus (native), Sonnet (GDScript, Python) | Small, separate fixes; the interceptors' line of fire may move the T07 balance | in progress |
 | T41 | D | Interceptor fire as the show has it: four barrels firing in turn (0.25 s apart, each recharging 1 s), visible blue-white pulses that fly out and can miss, a small flash and spark where one meets incoming fire; then bow batteries only if the capital fight still needs them, and a test that proves the batteries save the station damage (maintainer, 2026-11-15) | T40 | Opus | Native pulse-against-projectile hits, seeded spread, 1 and 6 threads identical; balance re-measured | done |
 | T42 | D | The interceptor battery model: an original procedural mesh after the maintainer's clip, a truss pedestal, a two-axis yoke and four barrels in a rectangle round a central body, about 15 m tall, on every battery (maintainer, 2026-11-15) | - | Opus | Look sheet approved first; four muzzles for T41 | done |
-| T43 | D | The heavy cannons as the show has them: an original single oval-barrel gun about 30 m long in a hazard-striped recess cut into the bow tower at H1 and H2, firing three-shot bursts of large green pulses at today's damage a second (maintainer, 2026-11-15) | T42 | Opus | Look sheet approved first; station generator change (STL fidelity); burst cadence in the native gun gate; balance unchanged | in progress |
+| T43 | D | The heavy cannons as the show has them: an original single oval-barrel gun about 30 m long in a hazard-striped recess cut into the bow tower at H1 and H2, firing three-shot bursts of large green pulses at today's damage a second (maintainer, 2026-11-15) | T42 | Opus | Look sheet approved first; station generator change (STL fidelity); burst cadence in the native gun gate; balance unchanged | done |
 | T44 | C | Fix: two suns seen from 100 000 km above the star (`frame orbit 100000 epsilon`); one sun at every distance (maintainer, 2026-11-15) | - | Opus | A rendering bug near the star (scaled space, the sky's sun, the flare, the key light) | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
@@ -2502,6 +2502,8 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   (`next_ready`, the trunnion line, a reused slot plain), GUT `test_heavy_cannon` (the model, the core's lift and burst, burst
   timing, damage a cycle, the pulse's size and colour, a low shot over the recess, the deck still blocking), Python
   (`test_grid_heavy_cannon`, `test_station_tower`, the recesses and the tower in the fidelity and hardpoint tests).
+
+- **Accepted (maintainer, 2026-11-15, live window from 200235b7):** "yes things look right". Pushed 0cc18fc6..98b3cd91 with the fix round (coplanar faces, cargo clearance speed, the gun's figures without its asset) and the weighted GUT shards (5064cf29, four shards); CI green (run 43775255774).
 
 ### M7-T44 Fix: two suns near the star
 
