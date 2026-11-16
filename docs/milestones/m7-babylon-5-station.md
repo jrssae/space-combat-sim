@@ -319,6 +319,8 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T57 | C | The station tour (M7 check m7-002): "Defense" spelled with an s in player-visible text; the defence grid stop mirrored to show the turrets and interceptors from in front (maintainer's checklist, 2026-11-16) | - | Sonnet | Tour stop placement and labels | in progress |
 | T58 | C | Wing launch (M7 check m7-008): `launch wing all`; a launched Alpha wing takes the player as Alpha leader and answers the comms commands (maintainer's checklist, 2026-11-16) | - | Opus | Launch command, wing membership and leader | in progress |
 | T59 | C | Bench capitals mortal after the run, and the M4/M6 checks made testable (m4-016, m4-017, m6-094, m6-095; m6-096 by a code check) (maintainer's checklist, 2026-11-16) | T50 | Sonnet | The bench's capital invulnerability, console paths for the vortex checks | in progress |
+| T60 | C | "Defense" everywhere: code names, file names, data ids, tests and docs renamed from "defence" (maintainer, 2026-11-16: "no one will understand the misspelling"); plus an `overlay [on\|off]` console command for the debug overlay | T54, T56, T57 | Sonnet | A wide rename while other agents edit the same files | in progress |
+| T61 | C | Fix: an undocking Narn transport rams the bay doorway's edge about 3 s after the doors open and is destroyed (found by T56; also on earlier HEADs) | T56 | Opus | The undock path's clearance for the widest hull | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress |
 
 ### M7-T01 Station references and measurements
@@ -3108,3 +3110,23 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     its side in its wave within `CAPITAL_NEAR_M`, `_ride_out`) or `VIA_GATE` (`_through_gate`). Tests: `test_battle_arrivals`
     (`test_fighter_groups_ride_a_near_capital...`, `bench battle 1000` plan) and `test_bench` battle arrivals test now asserts for
     a whole run: pool `opened == capitals`, `refused == 0`, `fighters_via_capital + fighters_via_gate == fighters`.
+
+### M7-T60 "Defense" everywhere; the `overlay` command
+
+- **Why (maintainer, 2026-11-16):** after T57 changed only the player-visible text: "please update code names - no one will understand the
+  misspelling". And: "yes, please add the overlay on/off alternate" (the debug overlay is `settings.show_overlay` and F3 today).
+- **What:** rename every "defence"/"Defence" in the repository to "defense"/"Defense": identifiers, file names (`test_turret_defence.gd`),
+  data ids (the tour stop `defence_grid`), generator part names, comments, docs (the architecture, the milestone files, the roadmap, the
+  playtest doc, design references, info.md), not `README.md` (the maintainer's) or vendored addons; no alias for the old names. Rebuild
+  and check any asset whose manifest keys change. Add `overlay [on|off]` (no argument toggles) beside `fps`, with its info.md row.
+- **Done when:** `git grep -i defence` finds nothing outside README.md and addons; the full suite passes; committed.
+
+### M7-T61 Fix: the Narn transport rams the bay doorway when undocking
+
+- **Why (T56's finding, 2026-11-16):** an undocking Narn transport hits the edge of the bay doorway about 3 s after the doors open and is
+  destroyed; on HEAD before T56 too. T56's automatic traffic now undocks only Skylarks and Brezebels, but `traffic undock` still picks the
+  Narn in its turn.
+- **What:** find why the widest civilian hull clips the doorway on the way out (its exit line, its turn, the door's open timing, its
+  collision shape against the door frame) and fix it so every civilian hull that docks can undock; let the automatic traffic undock the
+  Narn again.
+- **Done when:** a test that undocks every civilian hull through the bay without contact; committed.
