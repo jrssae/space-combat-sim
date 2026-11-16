@@ -2078,6 +2078,11 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     `test_station_grid` 9, `test_station_grid_threads` 1, `test_turret_kernel` 12, `test_parity_fixture` 3,
     `test_flight_parity_fight` 1, `test_brain_think_parity` 5, `test_weapon_rows_battle` 1); the two GPU files windowed; Python
     `test_ci_shards` 20/20 with PIL blocked.
+  - Full check on 5fbd6cb4 (four GUT shards at once), three failures fixed (2026-11-16): the Jolt orbit run's "job system exceeded
+    the maximum number of jobs" under a loaded machine (each tick now waits for a marker task on Godot's worker pool, so Jolt's
+    spent jobs are freed first; 3/3 pass under load, were 1/3); the jump flash's flare pass (M7-T23) left on the scene's shared
+    Compositor, so later environments had 5 effects (PostEffects removes it on exit); the loading screen test took the load
+    before its check when it began mid-frame (it steps the screen's frames by hand).
 
 ### M7-T32 The cargo bay in red-lit grey metal
 

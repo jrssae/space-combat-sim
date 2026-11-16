@@ -24,7 +24,11 @@ func _screen() -> LoadingScreen:
 
 func test_leaving_mid_load_collects_the_request() -> void:
 	var screen: LoadingScreen = _screen()
-	await wait_process_frames(2)  # the second drawn frame starts the request
+	# Its frames are stepped by hand: the light scene loads within a frame, so on the tree's frames the screen could take
+	# the load before the check, depending on which phase of a frame the test started in.
+	screen.set_process(false)
+	for frame: int in LoadingScreen.FRAMES_BEFORE_LOADING:
+		screen._process(0.0)
 	assert_ne(ResourceLoader.load_threaded_get_status(STAND_IN), ResourceLoader.THREAD_LOAD_INVALID_RESOURCE, "a request is out")
 	remove_child(screen)
 	screen.free()
