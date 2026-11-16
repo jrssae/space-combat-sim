@@ -308,6 +308,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T46 | C | Fix: FSR 2.2 is very blurry (`upscale fsr2 quality`; maintainer's M4 check, 2026-11-15) | - | Opus | The upscaler's setup: scale, sharpness, motion vectors, jitter | in progress |
 | T47 | C | Friendly fire and motion blur on by default, and the test suite independent of the player's saved settings (maintainer, 2026-11-15) | - | Opus | A default that changes fights: recorded fights pin the old value, balance re-run | in progress |
 | T48 | B | The benchmarks (the 1 000-ship battle and the other layouts) and the tests use the generated asteroids (M5-T29's shapes) instead of M4's sphere stand-ins (maintainer, 2026-11-15) | - | Opus | The bench's rock field and its cost; tests and any recording that holds rocks | in progress |
+| T49 | C | Fix: `draw_list_bind_uniform_set: Parameter "uniform_set" is null` printed about 55 times a second in a big bench fight once TAA or FSR 2.2 has been switched on, and on after switching back (maintainer, 2026-11-15; reproduced by T46) | - | Opus | A render resource freed or never built under motion vectors | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress |
 
 ### M7-T01 Station references and measurements
@@ -2713,3 +2714,15 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   `scripts/bench_quick.sh` sweep) inside the M4 budgets.
 - **Done when:** no bench or test builds sphere stand-in rocks; the suite green; the bench numbers recorded; the maintainer's look at a
   `bench battle 1000` (H); committed.
+
+### M7-T49 Fix: the `uniform_set` error spam
+
+- **Why (maintainer, 2026-11-15):** "I'm seeing ERROR: Parameter "uniform_set" is null. (servers/rendering/rendering_device.cpp:5787)
+  spamming in the console while testing." The controller could not reproduce it in free flight, the showcase, TAA, FSR or blur toggles,
+  window resizes or a short `bench battle 300`; T46 did: in `bench battle 300`, once TAA or FSR 2.2 has been switched on,
+  `draw_list_bind_uniform_set: Parameter "uniform_set" is null` prints about 55 times a second and keeps going after switching back to
+  native or SMAA; not in the sandbox.
+- **What:** find which draw binds a null uniform set (a compute or compositor effect, the bolts' or the far dots' multimesh with motion
+  vectors, the motion-blur pass, a shader whose texture was freed when the 3D buffers were rebuilt for the new mode) and fix it at the
+  cause; a test that switches TAA and FSR 2.2 on and back in a bench-sized fight and finds no such error.
+- **Done when:** the test; the maintainer sees no spam (H); committed.
