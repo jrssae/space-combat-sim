@@ -62,6 +62,7 @@ func _exit_tree() -> void:
 		Settings.changed.disconnect(_on_setting_changed)
 	if _world != null and _world.rebased.is_connected(_on_rebased):
 		_world.rebased.disconnect(_on_rebased)
+	_remove_flash_flare()
 
 
 func _process(_delta: float) -> void:
@@ -182,6 +183,18 @@ func _add_flash_flare() -> LensFlareEffect:
 	effects.append(effect)
 	world_environment.compositor.compositor_effects = effects
 	return effect
+
+
+# The Compositor is the scene's shared resource, so the next environment would inherit this pass (and draw it stuck on).
+func _remove_flash_flare() -> void:
+	if _flash_flare == null:
+		return
+	var compositor: Compositor = world_environment.compositor if is_instance_valid(world_environment) else null
+	if compositor != null:
+		var effects: Array[CompositorEffect] = compositor.compositor_effects
+		effects.erase(_flash_flare)
+		compositor.compositor_effects = effects
+	_flash_flare = null
 
 
 ## The gate ages every frame, blur on or off, so a rebase's blank frames never outlast it.

@@ -245,3 +245,22 @@ func test_the_star_field_leaves_the_flare_open_on_the_sky_and_a_hull_still_hides
 	var lens_shader: String = FileAccess.get_file_as_string("res://addons/lens_effects/lens_flares.glsl")
 	assert_string_contains(lens_shader, "get_raw_depth(ivec2(sun_position)) <= 0.0", "the flare's open-sky rule is the clear depth")
 
+
+func test_the_jump_flash_pass_leaves_the_shared_compositor_with_its_environment() -> void:
+	# The Compositor belongs to the packed scene, so every later environment would inherit a pass left on it.
+	var compositor: Compositor = env.world_environment.compositor
+	var before: int = compositor.compositor_effects.size()
+	FlashFlare.clear()
+	FlashFlare.offer(Vector3(0.0, 0.0, -100.0), Color.WHITE, 1.0)
+	await _frame()
+	FlashFlare.offer(Vector3(0.0, 0.0, -100.0), Color.WHITE, 1.0)
+	await _frame()
+	assert_not_null(post.flash_flare_effect(), "a flash in view gets its flare pass")
+	assert_eq(compositor.compositor_effects.size(), before + 1)
+	remove_child(env)
+	env.free()
+	FlashFlare.clear()
+	assert_eq(compositor.compositor_effects.size(), before, "gone with the environment")
+	var next: SpaceEnvironment = (load(SCENE_PATH) as PackedScene).instantiate() as SpaceEnvironment
+	add_child_autofree(next)
+	assert_eq(next.world_environment.compositor.compositor_effects.size(), before, "the next environment starts clean")
