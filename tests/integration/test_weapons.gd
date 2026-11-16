@@ -242,7 +242,8 @@ func test_projectile_is_a_thin_teardrop_with_its_head_forward_and_its_tail_behin
 	assert_not_null(mesh_node)
 	assert_true(mesh_node.mesh is ArrayMesh)
 	assert_same(mesh_node.mesh, Projectile.bolt_mesh(1.5, 0.05), "the scene's default is the pulse cannon's teardrop")
-	var box: AABB = mesh_node.transform * mesh_node.get_aabb()
+	# The mesh's own shape: at the shot its tail is drawn shortened (M7-T52 fix round, the next test).
+	var box: AABB = Transform3D(mesh_node.transform.basis.orthonormalized(), mesh_node.position) * mesh_node.get_aabb()
 	var head: float = BoltShape.head_radius(0.05)
 	# Ten sides round, so across a flat it is a little under the head's diameter.
 	assert_between(box.size.x, 2.0 * head * cos(PI / BoltShape.SIDES) - 1e-4, 2.0 * head + 1e-4, "0.2 m across the head")
@@ -254,6 +255,30 @@ func test_projectile_is_a_thin_teardrop_with_its_head_forward_and_its_tail_behin
 	assert_not_null(material)
 	assert_eq(material.shading_mode, BaseMaterial3D.SHADING_MODE_UNSHADED)
 	assert_eq(material.blend_mode, BaseMaterial3D.BLEND_MODE_ADD)
+
+
+func test_a_bolts_drawn_tail_grows_out_of_the_muzzle() -> void:
+	# M7-T52 fix round: drawn whole at the shot, the teardrop's tail started behind the gun. It is drawn no longer than the bolt
+	# has flown, so no part of it is ever behind the muzzle, and it is all there once the bolt has flown its length.
+	cmd.fire = true
+	_tick()
+	var bolt: Projectile = _bolts()[0]
+	var mesh_node := bolt.get_node("Bolt") as MeshInstance3D
+	var muzzle: Vector3 = bolt.global_position
+	var ahead: Vector3 = bolt.velocity.normalized()
+	var tail_m: float = BoltShape.tail_length(1.5, 0.05)
+	var shares: Array[float] = []
+	for step: int in 8:
+		var tip: Vector3 = mesh_node.global_transform * Vector3(0.0, tail_m, 0.0)  # the mesh's +Y is its tail
+		var flown: float = bolt.global_position.distance_to(muzzle)
+		assert_gte((tip - muzzle).dot(ahead), -Projectile.MIN_TAIL_SHARE * tail_m - 1e-3, "step %d: the tail's tip is not behind the muzzle" % step)
+		assert_almost_eq(bolt.tail_share(), clampf(flown / tail_m, Projectile.MIN_TAIL_SHARE, 1.0), 1e-4, "as long as it has flown")
+		assert_almost_eq(mesh_node.scale.x, 1.0, 1e-6, "the head keeps its size")
+		shares.append(bolt.tail_share())
+		bolt._physics_process(0.0004)  # about half a metre a step
+	assert_lt(shares[0], 0.01, "no tail at the muzzle")
+	assert_gt(shares[2], 0.2, "it grows")
+	assert_eq(shares[-1], 1.0, "then shows all of it")
 
 
 func test_a_zero_velocity_launch_keeps_a_valid_orientation() -> void:

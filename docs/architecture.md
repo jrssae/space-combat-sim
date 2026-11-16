@@ -800,7 +800,7 @@ ring buffer; engine errors in red and warnings in yellow from `ConsoleLogger`.
 | Nebula | A generated equirectangular panorama on the environment's sky; its alpha dims the stars behind it (§17.19) | The gas is smooth: one texture, no per-frame work. |
 | Cockpit interior (V struts, bar, sills, lamps, the console around its screens, a closed shell; M3-T29) | Mesh (`cockpit_interior.obj`), with 2D-only `SubViewport`s on screen meshes the hardpoints place (`CockpitScreens`, §15.9) | Hard edges at the near plane; visible only in first person. From inside, the `Hull` node draws the hull's OBJ with its canopy glass and window frames cleared, the view the cockpit was built around. |
 | Thruster plumes, buoy beacons | Meshes, unshaded emissive, additive, animated per frame. A plume is a cone from the nozzle position along its `exhaust` axis (length, radius, alpha follow the level) plus a small core disc at the exit; no billboards | Per-frame intensity animation. Tied to the nozzle axis, so the plume reads as coming out of the nozzle from every camera. |
-| Projectiles (bolts) | A teardrop (`BoltShape`, M7-T52): a dim envelope round a short bright core, the head at the bolt's place and the tail tapering and fading behind it along the flight; unshaded, additive, one multimesh draw per look. Each weapon has its own bolt material in its `bolt_color`, the impact flash's: the Starfury's blue, the raider's red, the interceptors' pale blue, the heavy cannons' green, the station's light batteries and turrets orange (`light_battery_bolt.tres`, `turret_light_bolt.tres`) | A capsule 15 to 19 times longer than wide, its over-bright colour clipping to near-white, read as a line. |
+| Projectiles (bolts) | A teardrop (`BoltShape`, M7-T52): a dim envelope round a short bright core, the head at the bolt's place and the tail tapering and fading behind it along the flight, drawn no longer than the bolt has flown so it grows out of the muzzle (T52 fix round); unshaded, additive, one multimesh draw per look. Each weapon has its own bolt material in its `bolt_color`, the impact flash's: the Starfury's blue, the raider's red, the interceptors' pale blue, the heavy cannons' green, the station's light batteries and turrets orange (`light_battery_bolt.tres`, `turret_light_bolt.tres`), the Brakiri turret green (`turret_light_brakiri_bolt.tres`) | A capsule 15 to 19 times longer than wide, its over-bright colour clipping to near-white, read as a line. |
 | Muzzle flash | Meshes, unshaded emissive | Tiny, short-lived. |
 | Far AI ships | Their mesh (the importer's levels of detail) until a few pixels across, then one point each in the world's `FarDots` multimesh under `settings.far_ship_dot_px` (§14.4, §17.10, M7-T26) | Every far ship together is one draw call. |
 | Target bracket | 2D `Control` in the debug overlay | Screen-space UI. |
@@ -971,7 +971,8 @@ with glow off the gap is gone (a control run, the Cycle log).
   empty gets a vector from the world origin (NaN when the camera is there); one that takes a slot freed since the last frame gets
   the old bolt's place (a 70 px smear in the test). `BoltSlotQuarantine` draws a bolt new to its slot collapsed at its own place for
   that one frame, so the slot is drawn empty before its new occupant shows and the first real vector starts where the bolt is.
-  "New" means the basis changed or the bolt moved backwards along its flight (the same cannon's next shot). It costs one pass over
+  "New" means the basis's two side axes changed (a growing tail changes only its length along the flight, M7-T52) or the bolt
+  moved backwards along its flight (the same cannon's next shot). It costs one pass over
   the slots a frame, under TAA only. A World rebase, switching the bolt rows off and on, a grown buffer and a look drawn empty
   each start the slots afresh (every bolt drawn collapsed for one frame). A bolt material that is not a `BaseMaterial3D` stays as it
   is and warns once.
@@ -3053,7 +3054,8 @@ src/combat/hit_resolver.gd, src/combat/ram_resolver.gd, src/targeting/targeting_
   a same-tick kill goes to the bolt fired first whichever form it has. `BoltMesh` (an internal child of `SimCore`) draws
   the owned bolts with one `MultiMeshInstance3D` per look, its buffer filled once a frame (one of `FramePasses`' passes,
   §17.21) from `bolt_transforms`: each bolt between its last two ticks as an interpolated node would be, enlarged by
-  `Projectile.visual_scale`, under a custom AABB so nothing culls it. A bolt keeps its instance slot for life (a freed slot
+  `Projectile.visual_scale` and shortened along its flight until it has flown its look's tail (`BoltMesh.tail_m`, the
+  rows' `flown` column, M7-T52), under a custom AABB so nothing culls it. A bolt keeps its instance slot for life (a freed slot
   is drawn empty, an all-zero transform, until a new bolt takes it), so instance k follows one bolt from frame to frame, as
   T38's motion vectors need.
 - **The cannons as rows.** Every cannon but the player's registers with `ScsCannons` (its ship, its muzzles as origins in the

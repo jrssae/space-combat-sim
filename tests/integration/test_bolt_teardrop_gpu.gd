@@ -18,7 +18,8 @@ class OneBolt:
 	func bolt_instances(p_look: int) -> int:
 		return 1 if p_look == look else 0
 
-	func bolt_transforms(_look: int, _fraction: float, scale: float, child: Basis, min_instances: int) -> PackedFloat32Array:
+	func bolt_transforms(_look: int, _fraction: float, scale: float, child: Basis, min_instances: int,
+			_tail_m: float) -> PackedFloat32Array:
 		var b: Basis = Basis.looking_at(Vector3.RIGHT, Vector3.UP) * child * scale
 		var out := PackedFloat32Array([b.x.x, b.y.x, b.z.x, origin.x, b.x.y, b.y.y, b.z.y, origin.y, b.x.z, b.y.z, b.z.z, origin.z])
 		out.resize(maxi(min_instances, 1) * 12)

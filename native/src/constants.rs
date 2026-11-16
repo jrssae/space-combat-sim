@@ -15,6 +15,7 @@ pub fn numbers() -> Vec<(&'static str, f64)> {
         ("BoltSlotQuarantine.MAX_STEP_M", bolt::QUARANTINE_MAX_STEP_M),
         ("BoltSlotQuarantine.SIDE_SLACK_M", bolt::QUARANTINE_SIDE_SLACK_M),
         ("BoltSlotQuarantine.SIDE_SLACK_SHARE", bolt::QUARANTINE_SIDE_SLACK_SHARE),
+        ("Projectile.MIN_TAIL_SHARE", bolt::MIN_TAIL_SHARE),
         ("ContactScan.SENSOR_RANGE_M", brain::SENSOR_RANGE_M),
         ("AiPilot.TIE_ORDER#size", brain_behaviours::KINDS as f64),
         ("RamResolver.MARGIN_M", kernels::ram::MARGIN_M),

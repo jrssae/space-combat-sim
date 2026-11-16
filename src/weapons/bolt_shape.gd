@@ -8,6 +8,9 @@ extends RefCounted
 ## additive (SMAA), a core pixel adds the core, weighted by its vertex alpha, to the envelope; drawn opaque for TAA's motion vectors
 ## (`BoltMesh`), alpha is ignored and it shows the core alone. The core's colour is that sum, so the core shows in both draws.
 ## Vertex colours stop at 1, so the bolt materials' albedo is `PEAK` times the bolt's colour.
+##
+## A bolt is drawn shortened along its flight until it has flown its tail's length, so the tail never reaches back behind its
+## muzzle (M7-T52 fix round): the core scales the multimesh instances (`bolt_transforms`), `Projectile` its own node.
 
 ## Sides round the drop; a bolt is small on screen, so few are needed.
 const SIDES: int = 10
@@ -31,7 +34,7 @@ const ENVELOPE_BRIGHTNESS: float = 0.4
 ## The teardrop for a look of `length_m` and `radius_m` (a weapon's `bolt_length_m` and `bolt_radius_m`).
 static func mesh(length_m: float, radius_m: float) -> ArrayMesh:
 	var head: float = head_radius(radius_m)
-	var tail: float = total_length(length_m, radius_m) - head
+	var tail: float = tail_length(length_m, radius_m)
 	var arrays: Array = _empty()
 	_drop(arrays, head, tail, false)
 	_drop(arrays, head * CORE_RADIUS, tail * CORE_LENGTH, true)
@@ -49,6 +52,11 @@ static func head_radius(radius_m: float) -> float:
 ## The drop's length, nose to tail tip, for a look of `length_m` and `radius_m`.
 static func total_length(length_m: float, radius_m: float) -> float:
 	return maxf(length_m * LENGTH_SCALE, 2.0 * head_radius(radius_m))
+
+
+## How far the drop reaches behind the bolt's place (its head's centre) for a look of `length_m` and `radius_m`.
+static func tail_length(length_m: float, radius_m: float) -> float:
+	return total_length(length_m, radius_m) - head_radius(radius_m)
 
 
 ## The radius of a drop `y` along its axis (head centre at 0, tip at -`tail`): a sphere in front, a tapering tail behind.

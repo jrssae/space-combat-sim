@@ -2888,3 +2888,32 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   bolts/t52_final_sheet.png`. Open: the maintainer's look (H). The teardrop runs 1.4 times the look's length behind the bolt with a
   head twice its radius, so the heavy pulse (T51's 40 m cap counts `bolt_length_m`) draws 56 m with a 3.2 m head; the
   `turret_light_brakiri` bolt has no material yet and draws the Starfury's blue.
+- **Fix round (2026-11-16):** drawn whole at the shot, the teardrop's tail (1.4 times the look's length behind the head) reached back
+  through the gun: the heavy pulse's 53 m behind its muzzle, every fighter bolt's behind its own. T51's test checked only the
+  weapon's numbers, not the drawn mesh. Now a bolt's tail is drawn no longer than it has flown since it was fired, so it grows out
+  of the muzzle to its full length; the head stays the bolt's true place.
+  - **Core bolts:** the bolt rows carry `flown` (the distance flown since firing, summed in `bolt_kernels::advance`);
+    `instance_transforms` scales each instance along its flight by `tail_share(flown at the drawn moment, tail x enlargement)` (at
+    least `MIN_TAIL_SHARE`, 0.001: a thin disc at the muzzle). `bolt_transforms` takes the look's tail (`BoltMesh.tail_m`,
+    `BoltShape.tail_length`); one draw per look as before. `BoltSlotQuarantine`'s native test keeps a slot's occupant when the
+    basis's two side axes are unchanged (it compared the first row, which the growing tail changes), so T38's motion vectors keep a
+    growing bolt. **Node bolts** (the player's, the stand-ins' missiles): `Projectile` scales its mesh the same way per tick.
+    Drawing only: the parity recordings did not move.
+  - **Brakiri turret:** `turret_light_brakiri` has its own `turret_light_brakiri_bolt.tres` in its green `bolt_color`.
+  - **Tests:** `test_heavy_cannon` measures the drawn mesh (instance transform times the mesh bounds) over the first three frames
+    at three yoke angles: nothing behind the muzzle plane (fails on HEAD at 52.8 m); `test_bolt_rows`
+    `test_a_fighter_bolts_drawn_tail_grows_from_its_muzzle` (the tail as long as the bolt has flown, 0 to full, at five fractions a
+    tick) and `test_weapons` `test_a_bolts_drawn_tail_grows_out_of_the_muzzle` (the node path); `test_bolt_shape` (the Brakiri
+    material); Rust `bolt_kernels::tail_tests` (growth, enlargement, the quarantine keeping a growing bolt, a turned one new).
+    Staged scratch copy: 875 scripts compile; Rust 210 pass; GUT_SLOW=1 test_bolt_shape 9, test_bolt_rows 15, test_bolt_mesh_taa 7,
+    test_bolt_slot_quarantine 10, test_native_constants 2, test_weapons 49, test_heavy_cannon 10, test_bolt_sync 2,
+    test_sim_core 21, test_core_state 7, test_hit_scale 10, test_hit_broad_phase 8, test_weapon_rows_battle 1, test_turret_kernel 12,
+    test_mine_kernel 4, test_weapon_charge 10, test_anti_aliasing 6, test_muzzle_flash_pool 5, test_station_grid 9,
+    test_upscaler 10, test_parity_fixture 3, test_frame_passes 12, test_hit_resolver 17, test_standins 20, test_core_threads 7, all
+    pass; with a window on the RX 6950 XT test_bolt_teardrop_gpu 2 and test_motion_vectors_gpu 5 pass.
+  - **GPU (Forward+, RX 6950 XT), at 0.1 speed:** H1's pulse 3, 27, 53 and 80 m out: before, its head sits on the muzzle with the
+    tail back through the gun; after, a bright disc at the muzzle, then a short drop growing from it. The Starfury's first bolt
+    from the chase view: before, its tail shows below the hull behind the guns; after, nothing behind the muzzle. Sheet:
+    `references/screenshots/M7-T52 teardrop bolts/tail_from_muzzle.png` (frames under `tail_frames/`). The tail's tip stays at the
+    world point of the shot, so a ship flying fast forward sees it up to its own speed's share of the tail behind its moving muzzle
+    for the part of the first tick before the tail is full (a fighter at 300 m/s: about 2 m for about 7 ms).

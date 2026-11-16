@@ -3,7 +3,8 @@ extends Node3D
 ## Draws the core's owned bolts (M4-T35, architecture §17.13): one `MultiMeshInstance3D` per look (a weapon's capsule
 ## length, radius and material, `Projectile.bolt_mesh`), its buffer filled once a frame from the core (`bolt_transforms`:
 ## every live owned bolt of that look, drawn between its last two ticks as an interpolated node would be, enlarged by
-## `Projectile.visual_scale` up to `MAX_ENLARGED_LENGTH_M`). An internal child of `SimCore`, so it comes and goes with the core. Positions are World
+## `Projectile.visual_scale` up to `MAX_ENLARGED_LENGTH_M`, its tail no longer than it has flown). An internal child of
+## `SimCore`, so it comes and goes with the core. Positions are World
 ## local as the rows hold them, so a rebase moves the rows and the next frame draws them there; the node itself stays at
 ## the identity and is not shiftable. The frame's passes (`FramePasses`, M4-T36) call `update` once a frame. Each bolt keeps
 ## its instance slot for life (a freed slot is drawn empty until a new bolt takes it), so instance k follows one bolt tick to
@@ -55,6 +56,14 @@ static func drawn_scale(look: int, enlarge: float) -> float:
 	if look < 0 or look >= _looks.size():
 		return enlarge
 	return minf(enlarge, maxf(1.0, MAX_ENLARGED_LENGTH_M / maxf(float(_looks[look][0]), 1e-3)))
+
+
+## How far bolts of `look` reach behind their place at true size; the core draws a bolt shortened until it has flown that far
+## (M7-T52), so its tail never starts behind its muzzle.
+static func tail_m(look: int) -> float:
+	if look < 0 or look >= _looks.size():
+		return 0.0
+	return BoltShape.tail_length(float(_looks[look][0]), float(_looks[look][1]))
 
 
 ## The look index for bolts of `weapon` (made on first sight), what the kernel stamps on each bolt row.
@@ -166,7 +175,7 @@ func update_from(source: Object, rows_on: bool) -> void:
 		if grown and _motion_vectors:
 			_quarantined().filter(look, PackedFloat32Array())  # a new buffer has no last frame to pair with
 		var buffer: PackedFloat32Array = source.bolt_transforms(look, fraction, drawn_scale(look, Projectile.visual_scale), _child(),
-				_capacity[look])
+				_capacity[look], tail_m(look))
 		if _motion_vectors:
 			buffer = _quarantined().filter(look, buffer)
 			collapsed += _quarantine.collapsed

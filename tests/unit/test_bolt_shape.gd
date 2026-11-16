@@ -127,7 +127,8 @@ func test_its_faces_point_outward() -> void:
 func test_the_bolt_materials_draw_it_as_intended() -> void:
 	var specs: Array[String] = ["res://assets/weapons/pulse_cannon_ef.tres", "res://assets/weapons/raider_plasma.tres",
 			"res://assets/weapons/grid_light_pulse.tres", "res://assets/weapons/turret_light.tres",
-			"res://assets/weapons/grid_interceptor.tres", "res://assets/weapons/grid_heavy_cannon.tres"]
+			"res://assets/weapons/grid_interceptor.tres", "res://assets/weapons/grid_heavy_cannon.tres",
+			"res://assets/weapons/turret_light_brakiri.tres"]
 	for path: String in specs:
 		var spec := load(path) as WeaponSpec
 		var material := spec.bolt_material as StandardMaterial3D
@@ -150,3 +151,15 @@ func test_the_station_light_guns_fire_orange_bolts_in_their_flash_colour() -> vo
 		assert_ne(material, Projectile.DEFAULT_MATERIAL, "%s: not the Starfury's blue" % path)
 		assert_true(material.emission.is_equal_approx(spec.bolt_color), "%s: the impact flash's colour" % path)
 		assert_gt(material.emission.r, material.emission.b, "%s: orange" % path)
+
+
+func test_the_brakiri_turret_fires_bolts_in_its_own_green() -> void:
+	# M7-T52 fix round: it had no bolt material and drew the Starfury's blue.
+	var spec := load("res://assets/weapons/turret_light_brakiri.tres") as WeaponSpec
+	var material := spec.bolt_material as StandardMaterial3D
+	assert_not_null(material)
+	if material == null:
+		return
+	assert_ne(material, Projectile.DEFAULT_MATERIAL, "not the Starfury's blue")
+	assert_true(material.emission.is_equal_approx(spec.bolt_color), "the impact flash's colour")
+	assert_gt(material.emission.g, maxf(material.emission.r, material.emission.b), "green")

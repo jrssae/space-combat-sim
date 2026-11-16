@@ -17,7 +17,8 @@ class FakeBolts:
 		@warning_ignore("integer_division")
 		return buffer.size() / 12
 
-	func bolt_transforms(look: int, _fraction: float, _scale: float, _child: Basis, min_instances: int) -> PackedFloat32Array:
+	func bolt_transforms(look: int, _fraction: float, _scale: float, _child: Basis, min_instances: int,
+			_tail_m: float) -> PackedFloat32Array:
 		var out: PackedFloat32Array = (buffers.get(look, PackedFloat32Array()) as PackedFloat32Array).duplicate()
 		if out.size() < min_instances * 12:
 			out.resize(min_instances * 12)

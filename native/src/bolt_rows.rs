@@ -139,7 +139,8 @@ impl ScsSimCore {
     /// The multimesh buffer of the owned bolts drawn with `look`: `INSTANCE_FLOATS` per instance, the bolts drawn
     /// `fraction` of the way from their last tick's place to this one, the capsule mesh's own basis `child` under each,
     /// enlarged by `visual_scale`, padded with zeros to `min_instances` (a multimesh takes a buffer of exactly its
-    /// instance count). `bolt_instances` says how many are drawn.
+    /// instance count). `bolt_instances` says how many are drawn. `tail_m` is how far the look's mesh reaches behind
+    /// the bolt at true size: a bolt is drawn shortened until it has flown that far (enlarged), 0 never.
     #[func]
     fn bolt_transforms(
         &mut self,
@@ -148,6 +149,7 @@ impl ScsSimCore {
         visual_scale: f64,
         child: Basis,
         min_instances: i64,
+        tail_m: f64,
     ) -> PackedFloat32Array {
         let look = u8::try_from(look).unwrap_or(crate::rows::LOOK_NONE);
         let mut out: Vec<f32> = Vec::new();
@@ -156,6 +158,7 @@ impl ScsSimCore {
             look,
             fraction as f32,
             visual_scale as f32,
+            tail_m as f32,
             &child,
             self.frame_velocity(),
             &mut out,

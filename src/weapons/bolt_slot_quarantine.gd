@@ -7,9 +7,10 @@ extends RefCounted
 ## empty before its new occupant shows and the occupant's first vector starts where it is. Used only while the bolts write
 ## motion vectors (under TAA); it costs a pass over the slots each frame.
 ##
-## A slot keeps its occupant from one frame to the next when its basis's first row is unchanged (a bolt flies straight, so its
-## basis never changes) and the move runs forward along its flight, no further than `MAX_STEP_M` and with almost nothing to the
-## side. The same cannon's next shot (same basis, starting behind) and a wingman's bolt flying the same way (beside it) are new.
+## A slot keeps its occupant from one frame to the next when its basis's two side axes are unchanged (a bolt flies straight, so
+## only its length along the flight changes, while its tail grows: M7-T52) and the move runs forward along its flight, no
+## further than `MAX_STEP_M` and with almost nothing to the side. The same cannon's next shot (same basis, starting behind)
+## and a wingman's bolt flying the same way (beside it) are new.
 
 ## The furthest a bolt flies between two drawn frames: 1 000 m/s through a quarter-second frame.
 const MAX_STEP_M: float = 250.0
@@ -26,7 +27,7 @@ var _last: Dictionary[int, PackedFloat32Array] = {}
 var _kernel: Object = ClassDB.instantiate(SimCore.NATIVE_CLASS)
 
 
-## `forward` is the bolts' flight direction in an instance's own frame.
+## `forward` is the bolts' flight direction in an instance's own frame, one of its axes.
 func _init(forward: Vector3 = Vector3(0, 0, -1)) -> void:
 	_forward = forward
 

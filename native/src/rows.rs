@@ -124,6 +124,9 @@ pub struct Bolts {
     pub expires_at: Vec<f64>,
     pub launched: Vec<i64>,
     pub spent: Vec<bool>,
+    // How far each bolt has flown since it was fired (M7-T52): its drawn tail is never longer, so it never reaches back
+    // behind its muzzle.
+    pub flown: Vec<f32>,
     /// How many rows at the front the core owns.
     pub owned: usize,
     // The multimesh instance each owned bolt is drawn in (-1 for none): a bolt keeps its slot for life, so instance k
@@ -263,6 +266,7 @@ impl Clone for Bolts {
             expires_at,
             launched,
             spent,
+            flown,
             owned,
             draw_slots,
             slots_used,
@@ -282,6 +286,7 @@ impl Clone for Bolts {
         self.expires_at.clone_from(expires_at);
         self.launched.clone_from(launched);
         self.spent.clone_from(spent);
+        self.flown.clone_from(flown);
         self.owned = *owned;
         self.draw_slots.clone_from(draw_slots);
         self.slots_used.clone_from(slots_used);
@@ -440,6 +445,7 @@ impl Bolts {
         self.expires_at.clear();
         self.launched.clear();
         self.spent.clear();
+        self.flown.clear();
         self.draw_slots.clear();
         self.slots_used.clear();
         self.keep_scratch.clear();
@@ -504,6 +510,7 @@ impl Bolts {
         self.expires_at.truncate(n);
         self.launched.truncate(n);
         self.spent.truncate(n);
+        self.flown.truncate(n);
         self.draw_slots.truncate(n);
     }
 
@@ -541,6 +548,7 @@ impl Bolts {
         self.expires_at.insert(at, expires_at);
         self.launched.insert(at, launched);
         self.spent.insert(at, false);
+        self.flown.insert(at, 0.0);
         self.owned += 1;
         at
     }
@@ -573,6 +581,7 @@ impl Bolts {
         compact(&mut self.expires_at, owned, keep);
         compact(&mut self.launched, owned, keep);
         compact(&mut self.spent, owned, keep);
+        compact(&mut self.flown, owned, keep);
         self.owned = kept;
     }
 }

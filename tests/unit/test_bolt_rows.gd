@@ -187,20 +187,79 @@ func test_the_renderer_draws_each_live_bolt_between_its_ticks() -> void:
 	core.spend_bolt_row(1)
 	assert_eq(int(core.bolt_instances(0)), 2, "two slots of look 0: the spent bolt keeps its slot until the next sync drops it")
 	assert_eq(int(core.bolt_instances(2)), 1, "one of look 2")
-	var at_end: PackedFloat32Array = core.bolt_transforms(0, 1.0, 1.0, Basis.IDENTITY, 0)
+	var at_end: PackedFloat32Array = core.bolt_transforms(0, 1.0, 1.0, Basis.IDENTITY, 0, 0.0)
 	assert_eq(at_end.size(), 2 * SimCore.BOLT_INSTANCE_FLOATS, "twelve floats an instance")
 	assert_eq(at_end.slice(SimCore.BOLT_INSTANCE_FLOATS).count(0.0), SimCore.BOLT_INSTANCE_FLOATS, "the spent bolt's slot is all zero: nothing drawn")
 	assert_almost_eq(Vector3(at_end[3], at_end[7], at_end[11]), v * DELTA, Vector3.ONE * 1e-4, "at fraction 1 the bolt is drawn where its tick left it")
-	var at_start: PackedFloat32Array = core.bolt_transforms(0, 0.0, 1.0, Basis.IDENTITY, 0)
-	var padded: PackedFloat32Array = core.bolt_transforms(0, 0.0, 1.0, Basis.IDENTITY, 8)
+	var at_start: PackedFloat32Array = core.bolt_transforms(0, 0.0, 1.0, Basis.IDENTITY, 0, 0.0)
+	var padded: PackedFloat32Array = core.bolt_transforms(0, 0.0, 1.0, Basis.IDENTITY, 8, 0.0)
 	assert_eq(padded.size(), 8 * SimCore.BOLT_INSTANCE_FLOATS, "padded to the multimesh's instance count")
 	assert_almost_eq(Vector3(at_start[3], at_start[7], at_start[11]), Vector3.ZERO, Vector3.ONE * 1e-4,
 			"at fraction 0 where the last tick left it")
 
 
+func test_a_fighter_bolts_drawn_tail_grows_from_its_muzzle() -> void:
+	# M7-T52 fix round: the teardrop's tail trails 1.4 times the bolt's length behind it, so drawn whole at the shot it started
+	# behind the gun. It is drawn no longer than the bolt has flown, the head at the bolt's place, so it grows out of the muzzle.
+	var weapon: WeaponSpec = load("res://assets/weapons/pulse_cannon_ef.tres") as WeaponSpec
+	var look: int = BoltMesh.look_for(weapon)
+	var enlarge: float = BoltMesh.drawn_scale(look, 4.5)  # the chase view's bolt size
+	var tail_m: float = BoltMesh.tail_m(look)
+	assert_almost_eq(tail_m, BoltShape.tail_length(1.5, 0.05), 1e-6, "the look's tail is its teardrop's")
+	var full: float = tail_m * enlarge
+	var child: Basis = _bolt_child()
+	var core: Object = _core(5)
+	var muzzle := Vector3(10.0, 20.0, 30.0)
+	core.add_bolt(muzzle, Vector3(0.0, 0.0, -weapon.muzzle_speed_mps), Factions.RAIDERS, 7, null, 0.25, 10.0, Color.WHITE, look,
+			4.0, 0.0)
+	var reaches: Array[float] = []
+	for tick: int in range(5, 9):
+		if tick > 5:
+			core.sync_in(tick, DELTA)
+			core.step_bolts(tick * DELTA, DELTA)
+		for fraction: float in [0.0, 0.25, 0.5, 0.75, 1.0]:
+			var buffer: PackedFloat32Array = core.bolt_transforms(look, fraction, enlarge, child, 0, tail_m)
+			var origin := Vector3(buffer[3], buffer[7], buffer[11])
+			var basis := Basis(Vector3(buffer[0], buffer[4], buffer[8]), Vector3(buffer[1], buffer[5], buffer[9]),
+					Vector3(buffer[2], buffer[6], buffer[10]))
+			var tail: Vector3 = basis * Vector3(0.0, tail_m, 0.0)  # the mesh's +Y is its tail
+			var flown: float = origin.distance_to(muzzle)
+			assert_lte(origin.z + tail.z, muzzle.z + Projectile.MIN_TAIL_SHARE * full + 1e-3, "tick %d at %.2f: the tail reaches %.3f m behind the muzzle" % [
+					tick, fraction, origin.z + tail.z - muzzle.z])
+			assert_almost_eq(tail.length(), clampf(flown, Projectile.MIN_TAIL_SHARE * full, full), 1e-3,
+					"tick %d at %.2f: as long as the bolt has flown, %.2f m, up to %.2f m" % [tick, fraction, flown, full])
+			assert_almost_eq(basis.x.length(), enlarge, 1e-4, "the head keeps its drawn size")
+			reaches.append(tail.length())
+	assert_lt(reaches[0], 0.01 * full, "a bolt at its muzzle shows no tail")
+	assert_true(reaches.any(func(r: float) -> bool: return r > 0.2 * full and r < 0.8 * full), "it grows: %s" % [reaches])
+	assert_almost_eq(reaches[-1], full, 1e-4, "then shows all of it")
+	# BoltMesh hands the core each look's tail.
+	var saved: float = Projectile.visual_scale
+	Projectile.visual_scale = 4.5
+	var mesh := BoltMesh.new(null)
+	add_child_autofree(mesh)
+	var fresh: Object = _core(5)
+	fresh.add_bolt(muzzle, Vector3(0.0, 0.0, -weapon.muzzle_speed_mps), Factions.RAIDERS, 7, null, 0.25, 10.0, Color.WHITE, look,
+			4.0, 0.0)
+	mesh.update_from(fresh, true)
+	Projectile.visual_scale = saved
+	var drawn: PackedFloat32Array = mesh.drawn_buffer(look)
+	var drawn_tail: Vector3 = Basis(Vector3(drawn[0], drawn[4], drawn[8]), Vector3(drawn[1], drawn[5], drawn[9]),
+			Vector3(drawn[2], drawn[6], drawn[10])) * Vector3(0.0, tail_m, 0.0)
+	assert_lt(drawn_tail.length(), 0.01 * full, "drawn by BoltMesh at the muzzle with no tail, not %.2f m" % drawn_tail.length())
+
+
+# The bolt mesh's own basis under its node (`projectile.tscn`), as `BoltMesh` hands it to the core.
+func _bolt_child() -> Basis:
+	var sample := PulseCannon.PROJECTILE_SCENE.instantiate() as Node3D
+	var child: Basis = (sample.get_node(^"Bolt") as Node3D).transform.basis
+	sample.free()
+	return child
+
+
 # The y of the bolt drawn in each instance slot of look 0 at fraction 1 (-1.0 for an empty slot: an all-zero transform).
 func _slot_ys(core: Object) -> Array[float]:
-	var buffer: PackedFloat32Array = core.bolt_transforms(0, 1.0, 1.0, Basis.IDENTITY, 0)
+	var buffer: PackedFloat32Array = core.bolt_transforms(0, 1.0, 1.0, Basis.IDENTITY, 0, 0.0)
 	var out: Array[float] = []
 	@warning_ignore("integer_division")
 	for k: int in buffer.size() / SimCore.BOLT_INSTANCE_FLOATS:

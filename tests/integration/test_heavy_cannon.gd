@@ -220,6 +220,10 @@ func test_its_pulse_leaves_the_drawn_muzzle_at_every_yoke_angle() -> void:
 				2.0 * WEAPON.bolt_radius_m * size])
 		assert_lte(WEAPON.bolt_length_m * size, WEAPON.bolt_length_m + 1e-3, "and its true length, not %.0f m" % [
 				WEAPON.bolt_length_m * size])
+		# M7-T52 fix round: the drawn teardrop, not just its numbers, stays in front of the muzzle while it leaves.
+		var behind: float = await _deepest_behind_muzzle(look, drawn[2], born, barrel, 3)
+		assert_lte(behind, 0.25, "no part of the drawn pulse behind the muzzle in its first frames, not %.1f m (az %s, el %s)" % [
+				behind, angles.x, angles.y])
 		checked += 1
 	assert_eq(checked, 3, "every yoke angle checked")
 
@@ -253,7 +257,7 @@ func test_the_chase_view_still_enlarges_small_bolts() -> void:
 	assert_almost_eq(BoltMesh.drawn_scale(BoltMesh.look_for(LIGHT), 1.0), 1.0, 1e-6, "the cockpit view draws true size")
 
 
-# The drawn instance in `buffer` nearest `at`: `[origin, basis]`, or empty when none is within a tick's flight (40 m).
+# The drawn instance in `buffer` nearest `at`: `[origin, basis, slot]`, or empty when none is within a tick's flight (40 m).
 func _drawn_near(buffer: PackedFloat32Array, at: Vector3) -> Array:
 	var best: Array = []
 	var best_d: float = 40.0
@@ -264,5 +268,25 @@ func _drawn_near(buffer: PackedFloat32Array, at: Vector3) -> Array:
 		if basis.x.is_zero_approx() or origin.distance_to(at) >= best_d:
 			continue
 		best_d = origin.distance_to(at)
-		best = [origin, basis]
+		@warning_ignore("integer_division")
+		best = [origin, basis, b / 12]
 	return best
+
+
+# How far the drawn pulse in `slot` of `look` reaches behind the muzzle plane (`born`, facing `barrel`) over its first `frames`
+# frames: its instance transform times its mesh's bounds.
+func _deepest_behind_muzzle(look: int, slot: int, born: Vector3, barrel: Vector3, frames: int) -> float:
+	var box: AABB = Projectile.bolt_mesh(WEAPON.bolt_length_m, WEAPON.bolt_radius_m, WEAPON.bolt_material).get_aabb()
+	var deepest: float = -INF
+	for frame: int in frames:
+		if frame > 0:
+			await get_tree().physics_frame
+			scene.sim._bolt_mesh.update()
+		var buffer: PackedFloat32Array = scene.sim._bolt_mesh.drawn_buffer(look)
+		var b: int = slot * 12
+		var drawn := Transform3D(Basis(Vector3(buffer[b], buffer[b + 4], buffer[b + 8]),
+				Vector3(buffer[b + 1], buffer[b + 5], buffer[b + 9]), Vector3(buffer[b + 2], buffer[b + 6], buffer[b + 10])),
+				Vector3(buffer[b + 3], buffer[b + 7], buffer[b + 11]))
+		for corner: int in 8:
+			deepest = maxf(deepest, -((drawn * box.get_endpoint(corner)) - born).dot(barrel))
+	return deepest
