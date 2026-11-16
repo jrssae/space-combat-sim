@@ -39,10 +39,17 @@ const INTERACT_BAR_TOP_PX: float = 6.0
 const INTERACT_BAR_HEIGHT_PX: float = 10.0
 ## The acknowledgement line's baseline below the status line's (under AUTO-TRACK's, 26 px below it).
 const ACK_BELOW_STATUS_PX: float = 50.0
+## The skip prompt's text size (M7-T54): alone over a cinematic, it reads larger than an acknowledgement.
+const PROMPT_TEXT_PX: float = 24.0
 const STATUS_Y_PX: float = 36.0
 ## The objectives list (M5-T05), top right (at 1080 px; scaled): the caption's baseline below the FPS counter, and the line pitch.
 const OBJECTIVES_TOP_PX: float = 110.0
 const OBJECTIVE_ROW_PX: float = 22.0
+## The protected ships' block under the objectives (M7-T54, at 1080 px; scaled): the gap above its caption, a row's pitch, and
+## the hull bar under each name.
+const ESCORT_GAP_PX: float = 14.0
+const ESCORT_ROW_PX: float = 40.0
+const ESCORT_BAR: Vector2 = Vector2(240.0, 10.0)
 ## A roster row's short form of what a wingman is doing, by behaviour id.
 const ROSTER_TAGS: Dictionary = {"formation": "FORM", "attack": "ATK", "evade": "EVADE", "retreat": "RETREAT",
 		"follow_path": "NAV", "idle": "IDLE", "none": "-"}
@@ -73,6 +80,7 @@ static func compute(input: HudInput) -> HudFrame:
 	_waypoint(input, f)
 	_wing(input, f)
 	_objectives(input, f)
+	_escorts(input, f)
 	f.status_line = input.status_line
 	f.items = HudSurface.ALL_ITEMS.duplicate()
 	if not f.grid_visible:
@@ -82,6 +90,8 @@ static func compute(input: HudInput) -> HudFrame:
 		_split_onto_screens(input, f)
 	if not f.objective_lines.is_empty():
 		f.items.append(HudSurface.OBJECTIVES)  # on the window in both views
+	if not f.escort_rows.is_empty():
+		f.items.append(HudSurface.ESCORT)
 	_interact(input, f)
 	return f
 
@@ -438,6 +448,26 @@ static func _interact(input: HudInput, f: HudFrame) -> void:
 	f.items.append(HudSurface.INTERACT)
 
 
+## A prompt and its hold's bar alone (M7-T54: the opening's skip, on its own layer over a cinematic's letterbox): placed as the HUD
+## places an interaction's, so both read the same.
+static func prompt_frame(viewport: Vector2, prompt: String, progress: float) -> HudFrame:
+	var input := HudInput.new()
+	input.viewport_size = viewport
+	input.prompt_line = prompt
+	input.interact_progress = progress
+	var f := HudFrame.new()
+	f.viewport_size = viewport
+	f.size = viewport
+	f.scale = maxf(viewport.y / 1080.0, 0.25)
+	_wing(input, f)
+	f.ack_text_size = PROMPT_TEXT_PX
+	f.items = []
+	if not prompt.is_empty():
+		f.items.append(HudSurface.ACK)
+	_interact(input, f)
+	return f
+
+
 # --- mission objectives (M5-T05) ------------------------------------------------------------------------------------------
 
 
@@ -461,6 +491,35 @@ static func _objectives(input: HudInput, f: HudFrame) -> void:
 		f.objective_lines.append({"text": objective_text(objective),
 				"pos": Vector2(x, (OBJECTIVES_TOP_PX + OBJECTIVE_ROW_PX * float(i + 1)) * s),
 				"primary": bool(objective.get("primary", true))})
+
+
+## A protected ship's line over its bar: its name in capitals and its hull in percent (`LOST` at none).
+static func escort_text(escort: Dictionary) -> String:
+	var hull: float = clampf(float(escort.get("hull", 0.0)), 0.0, 1.0)
+	var state: String = "%d%%" % roundi(hull * 100.0) if hull > 0.0 else "LOST"
+	return "%s  %s" % [str(escort.get("name", "")).to_upper(), state]
+
+
+# The protected ships under the objectives, right-aligned: the name over a hull bar coloured by how hurt it is.
+static func _escorts(input: HudInput, f: HudFrame) -> void:
+	f.escort_rows = []
+	if input.escorts.is_empty():
+		return
+	var s: float = f.scale
+	var right: float = input.viewport_size.x - 48.0 * s
+	var top: float = OBJECTIVES_TOP_PX + OBJECTIVE_ROW_PX * float(input.objectives.size()) + ESCORT_GAP_PX
+	f.escort_caption_pos = Vector2(right, (top + 12.0) * s)
+	for i: int in input.escorts.size():
+		var escort: Dictionary = input.escorts[i]
+		var row := RosterRow.new()
+		var y: float = top + 12.0 + ESCORT_ROW_PX * float(i)
+		row.hull = clampf(float(escort.get("hull", 0.0)), 0.0, 1.0)
+		row.down = row.hull <= 0.0
+		row.color = hull_color(row.hull)
+		row.text = escort_text(escort)
+		row.text_pos = Vector2(right, (y + 20.0) * s)
+		row.bar_rect = Rect2(Vector2(right - ESCORT_BAR.x * s, (y + 27.0) * s), ESCORT_BAR * s)
+		f.escort_rows.append(row)
 
 
 # --- the console's screens (M3-T29) ---------------------------------------------------------------------------------------

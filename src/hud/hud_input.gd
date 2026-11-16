@@ -92,3 +92,6 @@ var waypoint_key: String = ""
 ## The running mission's active objectives (M5-T05), `ObjectiveBook.active()`: `{id, text, primary, state}`; empty outside a
 ## mission.
 var objectives: Array[Dictionary] = []
+## The ships the mission has the player protect (M7-T54: the escorted civilian), each `{name, hull}` (hull 0..1, 0 once lost):
+## a named hull bar under the objectives.
+var escorts: Array[Dictionary] = []

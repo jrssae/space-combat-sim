@@ -2,13 +2,15 @@ class_name TriggerProximity
 extends Trigger
 ## `proximity` (D52): `actor` is within `radius_m` of another actor (`other`), or of a fixed universe `point`.
 ## Forced, the actor is placed inside the radius: at the point itself, or half the radius from the other actor on the side it
-## came from (never inside its hull).
+## came from (never inside its hull), or at `place_at` when one is set (M7-T54: a progress mark on the way to the other actor).
 
 var actor: String = ""
 ## Another actor's name, or "" when the goal is `point`.
 var other: String = ""
 var point: UniversePos = null
 var radius_m: float = 100.0
+## Where forcing places the actor instead (inside the radius), or null.
+var place_at: UniversePos = null
 
 
 func _init(p_actor: String = "", p_other: String = "", p_point: UniversePos = null, p_radius_m: float = 100.0) -> void:
@@ -36,6 +38,9 @@ func test(world: MissionWorld) -> bool:
 func force(world: MissionWorld) -> void:
 	var goal: UniversePos = _goal(world)
 	if goal == null:
+		return
+	if place_at != null:
+		world.place(actor, place_at)
 		return
 	if other.is_empty():
 		world.place(actor, goal)

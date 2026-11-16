@@ -32,6 +32,8 @@ const OBJECTIVES: StringName = &"objectives"
 ## The interaction hold's progress bar across the top (M7-T27): on the window in both views, only while a hold runs, so it is not in
 ## `ALL_ITEMS`.
 const INTERACT: StringName = &"interact"
+## The protected ships' hull bars under the objectives (M7-T54): on the window in both views, only while a mission names one.
+const ESCORT: StringName = &"escort"
 ## The whole HUD in one place, as the chase view draws it, in drawing order.
 const ALL_ITEMS: Array[StringName] = [BORESIGHT, VELOCITY, TARGET_MARKS, TARGET_LABEL, WAYPOINT, GRID, SPEED, HULL_BAR, FUEL_BAR, CHARGE_BAR,
 		RUNNING_LIGHTS, RADAR, DRIFT, OWN_SILHOUETTE, TARGET_SILHOUETTE, TRACKING, STATUS, ACK, ROSTER]
@@ -92,6 +94,8 @@ var divider_y: float = 0.0
 var tracking_pos: Vector2 = Vector2.ZERO
 var status_pos: Vector2 = Vector2.ZERO
 var ack_pos: Vector2 = Vector2.ZERO
+## The acknowledgement line's text size at 1080 px (larger where it stands alone, as the opening's skip prompt does).
+var ack_text_size: float = 16.0
 var lines_centred: bool = true
 var lines_width: float = 0.0
 ## The wing roster: one row per slot, its text size, and where its `WING` caption goes (zero for none).

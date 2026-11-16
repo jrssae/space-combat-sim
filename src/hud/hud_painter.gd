@@ -104,11 +104,13 @@ func paint(f: HudFrame, surface: HudSurface) -> void:
 	if items.has(HudSurface.STATUS) and not f.status_line.is_empty():
 		_line(surface, f.status_line, surface.status_pos, 18.0 * s)
 	if items.has(HudSurface.ACK) and not f.ack_line.is_empty():
-		_line(surface, f.ack_line, surface.ack_pos, 16.0 * s)
+		_line(surface, f.ack_line, surface.ack_pos, surface.ack_text_size * s)
 	if items.has(HudSurface.ROSTER):
 		_draw_roster(surface, s, w)
 	if items.has(HudSurface.OBJECTIVES):
 		_draw_objectives(f, s)
+	if items.has(HudSurface.ESCORT):
+		_draw_escorts(f, s, w)
 	if items.has(HudSurface.INTERACT):
 		_bar(f.interact_rect, f.interact_progress, LINE_COLOR, w)
 
@@ -129,6 +131,14 @@ func _draw_objectives(f: HudFrame, s: float) -> void:
 	for line: Dictionary in f.objective_lines:
 		_text(String(line["text"]), line["pos"] as Vector2, 15.0 * s, LINE_COLOR if bool(line["primary"]) else faint,
 				HORIZONTAL_ALIGNMENT_RIGHT)
+
+
+# The protected ships (M7-T54) under the objectives: each name and hull over its bar, right-aligned.
+func _draw_escorts(f: HudFrame, s: float, w: float) -> void:
+	_text("ESCORT", f.escort_caption_pos, 12.0 * s, Color(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, 0.7), HORIZONTAL_ALIGNMENT_RIGHT)
+	for row: HudLayout.RosterRow in f.escort_rows:
+		_text(row.text, row.text_pos, 15.0 * s, row.color, HORIZONTAL_ALIGNMENT_RIGHT)
+		_bar(row.bar_rect, row.hull, row.color, w)
 
 
 # --- helpers --------------------------------------------------------------------------------------------------

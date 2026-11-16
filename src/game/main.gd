@@ -304,8 +304,12 @@ func _physics_process(delta: float) -> void:
 		comms.step(adapter.sample_radial(input_source, delta))
 		return
 	# On a target that offers an interaction (a gate within reach, a station bay) a long hold of X runs it (M7-T27).
-	adapter.interaction_offered = interactions.offer() != null
+	# A mission's opening is skipped the same way, with a hold of X (M7-T54).
+	var opening: bool = mission != null and mission.opening_skip_offered()
+	adapter.interaction_offered = opening or interactions.offer() != null
 	var pc: PilotCommand = adapter.sample(input_source, delta)
+	if opening:
+		mission.take_opening_hold(pc.ui)
 	if control_lock.apply(pc, controls_locked(), camera_rig.is_playing_shot()):
 		camera_rig.stop_shot()
 		launches.skip()  # a launch's shot skipped jumps the player to the hand-off (M7-T08)

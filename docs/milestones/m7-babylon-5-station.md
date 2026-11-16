@@ -2959,6 +2959,26 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   takes 6 to 8 minutes when each wave is fought, Q40); hold X (and its keyboard twin) to skip the opening sequence, as the other
   cinematics do; the escorted civilian's hull on the HUD (a bar with its name). Keyboard parity for the skip.
 - **Done when:** tests for the wave spacing, the skip and the HUD bar; the maintainer flies it (H); committed.
+- **Done (code part, 2026-11-16):**
+  - **The jump points:** intended. Wave one's raiders arrive `via: "carrier"` (`src/props/carrier_jumps.gd`, M6-T23): a raider
+    carrier opens the arrival point, its fighters come out, then it opens a departure point and jumps out. The maintainer decided to
+    keep the carrier's box stand-in look (no change).
+  - **Wave spacing:** a later wave waits for the one before it to be down, a 30 s breather after that, and the civilian's progress
+    mark, whichever comes last. The 50 % and 75 % marks are now "as close to NAV BETA as the point is", so a civilian back from
+    fleeing never turns back for them; the route keeps only its 7.5 km and 29 km waypoints. `TriggerProximity.place_at` (optional)
+    says where a forced skip puts the actor. Seed 3, each wave fought: waves jump in at 69, 179 and 304 s, are cleared at 149, 274
+    and 418 s, and the mission ends at 431 s (7.2 min; 626 s before).
+  - **Skip the opening:** holding X for 2 s (M7-T27's hold, keyboard twin Shift / Mouse 4 from the live bindings) skips the intro
+    and the briefing to the step the script names in `opening_until()` (escort: `depart`), with their world changes, as `goto`
+    does. A new `SkipPrompt` layer above the letterbox and the HUD shows `HOLD X / SHIFT / MOUSE 4: SKIP` (24 px at 1080p) and the
+    hold's bar.
+  - **The civilian's hull:** `m.show_hull(name)` puts a ship's name, hull % and a bar under the objectives, top right in the chase
+    view and the cockpit, amber then red as it drops, `LOST` when destroyed; the escort calls it at the hand-over. Console: the
+    `mission` provider's `opening_skip` and `hull_bars` (info.md).
+  - **Tests:** `test_civilian_escort.gd` (the skip on the pad and the keyboard, a tap skips nothing, the HUD bar, a wave waits
+    for the last one down and the breather, a detour still brings the next wave, a fought run takes 6 to 8 minutes),
+    `test_mission_sequencer.gd` (the opening's skip and its checks), `test_hud_layout.gd` (the bar, `LOST`, the prompt frame).
+    Screenshots `references/screenshots/M7-T54 escort HUD and skip/`. Left for the maintainer: fly it (H).
 
 ### M7-T55 Civilians flee a fight
 

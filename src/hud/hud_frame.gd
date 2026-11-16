@@ -114,6 +114,11 @@ var waypoint_radar_index: int = -1
 var objectives_caption_pos: Vector2 = Vector2.ZERO
 var objective_lines: Array[Dictionary] = []
 
+## The protected ships (M7-T54), right-aligned under the objectives: the `ESCORT` caption's baseline, then per ship its name and
+## hull number (`text`, right end of its baseline at `text_pos`) over a hull bar (`bar_rect`, filled to `hull`, in `color`).
+var escort_caption_pos: Vector2 = Vector2.ZERO
+var escort_rows: Array[HudLayout.RosterRow] = []
+
 ## The interaction hold (M7-T27): how far it has run, 0..1 (0 = no bar), and the bar across the top of the window.
 var interact_progress: float = 0.0
 var interact_rect: Rect2 = Rect2()

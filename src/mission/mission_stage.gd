@@ -368,6 +368,15 @@ func local_position(actor: String) -> Variant:
 	return node.global_position if node != null else null
 
 
+## The ship `actor`'s hull, 0..1, for the HUD's bar (M7-T54); 0 once it is lost or out of play.
+func hull_fraction(actor: String) -> float:
+	var k: String = MissionWorld.key(actor)
+	var c := _actors.get(k) as Combatant
+	if c == null or _node_of(k) == null:
+		return 0.0
+	return c.damageable.hull.fraction()
+
+
 ## The `Targetable` id of the actor `actor` (its radar contact), or 0 when it is not in play or has no marker (M5-T25).
 func target_id(actor: String) -> int:
 	var node: Node3D = _node_of(MissionWorld.key(actor))

@@ -195,6 +195,79 @@ func test_goto_skips_every_step_before_the_named_one() -> void:
 	assert_false(script.trace.has("finish done"), "it waits as usual")
 
 
+## An opening (two steps with the controls held) before the flight is handed over (M7-T54).
+class WithOpening extends MissionScript:
+	var trace: Array[String] = []
+
+	func steps() -> Array[StringName]:
+		return [&"intro", &"brief", &"fly"]
+
+	func opening_until() -> StringName:
+		return &"fly"
+
+	func step_intro(m: MissionApi) -> void:
+		m.lock_controls(true)
+		await m.wait(10.0)
+		trace.append("intro done")
+
+	func step_brief(m: MissionApi) -> void:
+		await m.say(&"brief")
+		m.objective_add(&"raider")
+		m.show_hull("CALLIOPE")
+		m.lock_controls(false)
+		trace.append("brief done")
+
+	func step_fly(m: MissionApi) -> void:
+		trace.append("fly")
+		await m.wait(30.0)
+
+
+func test_holding_through_the_opening_skips_to_its_end_with_its_world_changes() -> void:
+	var script := WithOpening.new()
+	_start(script)
+	assert_eq(api.opening_until, &"fly")
+	assert_true(api.opening_skippable(), "the intro runs with the controls held")
+	assert_eq(api.skip_opening(), "")
+	assert_eq(api.step_name(), &"fly")
+	assert_eq(script.trace, ["intro done", "brief done", "fly"] as Array[String])
+	assert_false(api.controls_locked, "the flight is handed over")
+	assert_eq(api.objective_state(&"raider"), ObjectiveBook.ACTIVE, "the briefing's objectives are set")
+	assert_eq(api.hull_bars, PackedStringArray(["CALLIOPE"]), "and its hull bar")
+	assert_false(api.opening_skippable(), "nothing left to skip")
+	assert_ne(api.skip_opening(), "")
+
+
+func test_the_opening_is_not_offered_once_the_controls_are_free() -> void:
+	var script := WithOpening.new()
+	_start(script)
+	_ticks(roundi(10.0 / DT) + 2)
+	assert_eq(api.step_name(), &"fly", "played out")
+	assert_false(api.opening_skippable())
+
+
+func test_a_script_without_an_opening_offers_no_skip() -> void:
+	_start(ThreeSteps.new())
+	api.lock_controls(true)
+	assert_false(api.opening_skippable())
+	assert_ne(api.skip_opening(), "")
+
+
+func test_an_opening_that_ends_on_no_step_is_refused() -> void:
+	var bad := BadOpening.new()
+	assert_string_contains(bad.check_steps(), "not a step")
+
+
+class BadOpening extends MissionScript:
+	func steps() -> Array[StringName]:
+		return [&"only"]
+
+	func opening_until() -> StringName:
+		return &"later"
+
+	func step_only(_m: MissionApi) -> void:
+		pass
+
+
 func test_goto_refuses_unknown_and_past_steps() -> void:
 	_start(ThreeSteps.new())
 	assert_string_contains(api.goto(&"nowhere"), "no step")

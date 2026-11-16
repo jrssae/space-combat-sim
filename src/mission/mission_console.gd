@@ -41,6 +41,10 @@ static func provider(runner: MissionRunner) -> ConsoleVars:
 		&"controls_locked": {"get": func() -> bool: return runner.api.controls_locked, "doc": "The script holds the player's controls"},
 		&"jump_points": {"get": func() -> int: return runner.jumps.opened if runner.jumps != null else 0,
 				"doc": "Jump points opened so far"},
+		&"opening_skip": {"get": func() -> bool: return runner.opening_skip_offered(),
+				"doc": "Holding X skips the opening now (M7-T54)"},
+		&"hull_bars": {"get": func() -> PackedStringArray: return _hull_bar_lines(runner),
+				"doc": "The ships the HUD shows a hull bar for, as the HUD reads them: NAME hull% or LOST (M7-T54)"},
 	})
 
 
@@ -79,6 +83,16 @@ static func run(runner: MissionRunner, args: Dictionary) -> ConsoleResult:
 				tail.append(api.journal[i])
 			return ConsoleResult.success(tail if not tail.is_empty() else PackedStringArray(["nothing yet"]))
 	return ConsoleResult.failure("unknown action %s" % action)
+
+
+# The HUD's hull-bar lines, one per ship the script named with `show_hull`.
+static func _hull_bar_lines(runner: MissionRunner) -> PackedStringArray:
+	var lines := PackedStringArray()
+	if runner.stage == null:
+		return lines
+	for ship_name: String in runner.api.hull_bars:
+		lines.append(HudLayout.escort_text({"name": ship_name, "hull": runner.stage.hull_fraction(ship_name)}))
+	return lines
 
 
 static func _step_names(runner: MissionRunner) -> PackedStringArray:

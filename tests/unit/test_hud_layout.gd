@@ -640,6 +640,57 @@ func test_the_cockpit_view_keeps_the_list_on_the_window() -> void:
 		assert_does_not_have((f.screens[id] as HudSurface).items, HudSurface.OBJECTIVES, "not on the %s screen" % id)
 
 
+# --- the escorted ship's hull bar and the skip prompt (M7-T54) ---------------------------------------------------------
+
+
+func test_a_protected_ship_gets_its_name_and_hull_as_a_bar_under_the_objectives() -> void:
+	var input: HudInput = _hud_input()
+	assert_does_not_have(HudLayout.compute(input).items, HudSurface.ESCORT, "none outside a mission")
+	assert_does_not_have(HudSurface.ALL_ITEMS, HudSurface.ESCORT)
+	input.objectives.append(_objective(&"escort", "Escort the Calliope"))
+	input.escorts.append({"name": "Calliope", "hull": 0.42})
+	var f: HudFrame = HudLayout.compute(input)
+	assert_has(f.items, HudSurface.ESCORT)
+	assert_eq(f.escort_rows.size(), 1)
+	var row: HudLayout.RosterRow = f.escort_rows[0]
+	assert_eq(row.text, "CALLIOPE  42%")
+	assert_almost_eq(row.hull, 0.42, 1e-6, "the bar fills to the hull")
+	assert_eq(row.color, HudLayout.AMBER, "coloured as the hull gauge is")
+	assert_almost_eq(row.bar_rect.end.x, VIEW.x - 48.0, TOL, "right-aligned at the objectives' margin")
+	assert_almost_eq(row.bar_rect.size.x, HudLayout.ESCORT_BAR.x, TOL)
+	var objective: Vector2 = f.objective_lines[0]["pos"]
+	assert_gt(f.escort_caption_pos.y, objective.y, "under the objectives")
+	assert_gt(row.bar_rect.position.y, row.text_pos.y, "the bar under its name")
+	assert_lt(row.bar_rect.end.y, VIEW.y * 0.3, "clear of the radar")
+
+
+func test_a_lost_ship_reads_lost_with_an_empty_red_bar_and_the_cockpit_keeps_it_on_the_window() -> void:
+	var input: HudInput = _hud_input()
+	input.escorts.append({"name": "Calliope", "hull": 0.0})
+	var row: HudLayout.RosterRow = HudLayout.compute(input).escort_rows[0]
+	assert_eq(row.text, "CALLIOPE  LOST")
+	assert_eq(row.hull, 0.0)
+	assert_eq(row.color, HudLayout.RED)
+	input.cockpit = true
+	input.screen_sizes = {&"octagon": Vector2(300.0, 300.0), &"left": Vector2(640.0, 250.0), &"right": Vector2(640.0, 250.0)}
+	assert_has(HudLayout.compute(input).items, HudSurface.ESCORT, "on the window in the cockpit view too")
+
+
+func test_the_skip_prompt_frame_places_the_prompt_and_bar_as_an_interactions() -> void:
+	var input: HudInput = _hud_input()
+	input.prompt_line = "HOLD X: SKIP"
+	input.interact_progress = 0.5
+	var hud: HudFrame = HudLayout.compute(input)
+	var f: HudFrame = HudLayout.prompt_frame(VIEW, "HOLD X: SKIP", 0.5)
+	assert_eq(f.items, [HudSurface.ACK, HudSurface.INTERACT] as Array[StringName], "the prompt and the bar alone")
+	assert_eq(f.ack_line, "HOLD X: SKIP")
+	assert_eq(f.ack_text_size, HudLayout.PROMPT_TEXT_PX, "larger than an acknowledgement, alone over a cinematic")
+	assert_eq(f.ack_pos, hud.ack_pos, "where the HUD shows an interaction's prompt")
+	assert_eq(f.interact_rect, hud.interact_rect, "and its bar")
+	assert_eq(HudLayout.prompt_frame(VIEW, "HOLD X: SKIP", 0.0).items, [HudSurface.ACK] as Array[StringName], "no bar before a hold")
+	assert_eq(HudLayout.prompt_frame(VIEW, "", 0.0).items.size(), 0)
+
+
 # --- unidentified target and the waypoint's radar entry (M5-T25) ------------------------------------------------------
 
 

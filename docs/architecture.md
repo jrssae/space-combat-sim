@@ -4143,7 +4143,7 @@ The turrets', civilians', encounters' and native files are listed in their own s
 | Provider | Owner (task) | Keys |
 |---|---|---|
 | `game` | Game (T01) | `state` (`front_end`, `loading`, `in_space`, `debrief`), `request` (`<scenario> (<kind>), encounters on\|off, seed <n>`, or `none`), `last_result` (`success`, `failure: <reason>`, or `none`) |
-| `mission` | MissionRunner (T05), only while a mission runs | `id`, `title`, `state` (`running`, `success`, `failure`, `error`), `result`, `step` (`<name> (n/N)`), `steps`, `time_s`, `objectives`, `live_triggers`, `tick_work`, `skipping`, `waypoint`, `controls_locked`, `jump_points` |
+| `mission` | MissionRunner (T05), only while a mission runs | `id`, `title`, `state` (`running`, `success`, `failure`, `error`), `result`, `step` (`<name> (n/N)`), `steps`, `time_s`, `objectives`, `live_triggers`, `tick_work`, `skipping`, `waypoint`, `controls_locked`, `jump_points`, `opening_skip`, `hull_bars` (M7-T54) |
 | `debrief` | Game (T09) | `result` (`success`, `failure`), `reason`, `time` (`m:ss`), `kills`, `assists`, `wing_losses`, `shots_fired`, `shots_hit`, `accuracy` (`45%` or `no shots fired`), `objectives` (`id state, ...`); every key `none` until a mission ends |
 | `camera` | CameraRig (M1; T08 adds) | `mode` now also reads `cinematic` while a shot plays (setting it then picks the view after the shot), `shot` (the shot's id or `none`), `shot_time_s` |
 | `encounters` | EncounterDirector (T17), free flight only | `on`, `pools_built`, `seed`, `interval_s`, `max_ships`, `alive`, `raiders`, `patrol`, `traffic`, `next_index`, `next_in_s`, `waiting`, `started`, `released`, `last_event`, `check_work`, `build_ms` |

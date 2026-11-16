@@ -20,6 +20,7 @@ extends RefCounted
 ##     m.transient(names)              ships that only matter while the step plays: a skipped step releases them (M5-T30)
 ##     m.objective_add(id [, text, primary]) / m.objective_complete(id) / m.objective_fail(id)
 ##     m.waypoint(name or null)        the HUD's waypoint marker on an actor
+##     m.show_hull(name)               the HUD shows that ship's name and hull as a bar while the mission runs (M7-T54)
 ##     m.lock_controls(on)             the player's flight and combat commands held at zero; the ship flies on (D55)
 ##     await m.launch_from(wing, door) the player launches from a Cobra bay (M7-T08, D76: "alpha" and 1 to 6), its wingmen from the
 ##                                     arm's other doors in the wave order; resolves at the player's hand-off
@@ -44,7 +45,10 @@ extends RefCounted
 ## (`SKIP_SPIN_LIMIT` returns in one skip) is reported and then waits a tick at a time instead of spinning.
 ##
 ## Runner side: `begin`, `tick` (once per physics tick, after the world moved), `skip`, `goto`, `is_skipping`,
-## `player_destroyed`, `release`.
+## `opening_skippable`, `skip_opening`, `player_destroyed`, `release`.
+##
+## The opening (M7-T54): a script that names where its opening ends (`MissionScript.opening_until`) lets the player hold X
+## through it while the controls are held; the hold skips every step before that one, as `goto` does.
 
 ## The mission is over: `result` holds how.
 signal ended(result: Dictionary)
@@ -84,6 +88,10 @@ var dialog: DialogQueue = DialogQueue.new()
 var closing_lines: Dictionary = {}  # String -> StringName
 ## The scenario's placeholders (`ScenarioLoader.resolve_random_civilian`): "{civilian}" -> the drawn civilian's name.
 var placeholders: Dictionary = {}  # String -> String
+## The ships whose hull the HUD shows as a bar (`show_hull`), in the order the script named them.
+var hull_bars: PackedStringArray = PackedStringArray()
+## The step the opening ends at (`MissionScript.opening_until`), or &"" for none.
+var opening_until: StringName = &""
 
 var _seq: MissionSequencer = MissionSequencer.new()
 # The shot `cinematic` is waiting on, or null.
@@ -375,6 +383,14 @@ func raid_station(count: int, scramble: bool = true) -> void:
 		push_error("Mission: raid_station: %s" % why)
 
 
+## Puts `ship_name`'s name and hull on the HUD as a bar while the mission runs (the ship being escorted).
+func show_hull(ship_name: String) -> void:
+	if has_ended() or ship_name.strip_edges().is_empty() or hull_bars.has(ship_name):
+		return
+	hull_bars.append(ship_name)
+	journal.append("show_hull %s" % ship_name)
+
+
 ## Holds or frees the player's controls: while held, `Main` zeroes their flight and combat commands and the ship flies on.
 func lock_controls(on: bool) -> void:
 	if has_ended():
@@ -458,6 +474,7 @@ func begin(script: MissionScript) -> String:
 	if script.steps().is_empty():
 		return "the mission script has no steps"
 	_started = true
+	opening_until = script.opening_until()
 	_seq.start(script, self)
 	return ""
 
@@ -509,6 +526,23 @@ func goto(step: StringName) -> String:
 	if has_ended():
 		return "the mission has ended"
 	return _seq.goto(step)
+
+
+## The player may skip the opening now: it runs, with the controls held, before the step it ends at, and no skip is under way.
+func opening_skippable() -> bool:
+	if opening_until == &"" or not controls_locked or not is_running() or _seq.skipping:
+		return false
+	var until: int = _seq.steps.find(opening_until)
+	return until > _seq.index
+
+
+## Skips the rest of the opening (the player's hold of X). Returns "" or why not.
+func skip_opening() -> String:
+	if not opening_skippable():
+		return "no opening to skip now"
+	journal.append("skip opening to %s" % opening_until)
+	print("[mission] opening skipped to %s" % opening_until)
+	return goto(opening_until)
 
 
 ## The player's ship was destroyed: the mission is lost (D51).
