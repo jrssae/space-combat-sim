@@ -70,6 +70,7 @@ var grid: StationGrid = null
 ## The main docking bay's inner doors, and its red lamps (M7-T25).
 var airlock: StationAirlock = null
 var bay_lights: BayLights = null
+var grid_lights: StationGridLights = null
 ## The exterior lights (M7-T18): beacons, navigation lights, bay lamps and the floods on the hull.
 var station_lights: StationLights = null
 ## The maintenance bots (M7-T11, Q11): ambient drones on loops round the hull, in the frame's and the drum's visuals.
@@ -137,6 +138,9 @@ func build() -> bool:
 	bay_lights = BayLights.make(self)
 	if bay_lights != null:
 		add_child(bay_lights)
+	grid_lights = StationGridLights.make(self)
+	if grid_lights != null:
+		add_child(grid_lights)
 	station_lights = StationLights.make(self)
 	if station_lights != null:
 		add_child(station_lights)

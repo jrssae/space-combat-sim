@@ -129,8 +129,8 @@
       "scale": 0.5,
       "hardpoint": "",
       "body": "frame",
-      "camera": [0.0, 515.0, -3630.0],
-      "subject": [0.0, 405.0, -3478.0],
+      "camera": [60.0, 455.0, -3600.0],
+      "subject": [0.0, 402.0, -3490.0],
       "shows": ["H1", "H2", "I5"],
       "templates": ["push_in", "drift_right", "drift_left"]
     },

@@ -108,15 +108,15 @@ func test_beacons_blink_on_sim_time_and_the_bays_lamps_yield_to_muzzle_flashes()
 	var steady: MultiMeshInstance3D = lights.groups[StationLightPlan.DRUM_STEADY]
 	var steady_gain: Variant = ((steady.multimesh.mesh as QuadMesh).material as ShaderMaterial).get_shader_parameter(&"gain")
 	assert_true(steady_gain == null or is_equal_approx(float(steady_gain), StationLights.MARKER_GAIN), "the nav points stay steady")
-	# The station's only rig emitters are the bays' four lamps, at the lowest priority.
+	# The station's only rig emitters are the bays' four lamps and the grid's three floods, at the lowest priority.
 	var rig: LightRig = LightRig.of(station)
 	var owned: int = 0
 	for emitter: LightEmitter in rig._emitters:
 		if emitter.anchor == station:
 			owned += 1
-			assert_true(station.bay_lights.emitters.has(emitter), "%s is a bay lamp" % emitter.label)
+			assert_true(station.bay_lights.emitters.has(emitter) or station.grid_lights.emitters.has(emitter), "%s is a bay lamp or a grid flood" % emitter.label)
 			assert_eq(emitter.priority, LightEmitter.PRIORITY_CABIN)
-	assert_eq(owned, station.bay_lights.emitters.size())
+	assert_eq(owned, station.bay_lights.emitters.size() + station.grid_lights.emitters.size())
 	# A fight at the docking bay's mouth: seven muzzle flashes take every slot from the bay's lamps.
 	var mouth: Vector3 = station.to_global((station.hardpoints.main_docking_bay["main_docking_bay_mouth"] as Vector3) + station.drum_origin
 			+ Vector3(0.0, 0.0, -20.0))
