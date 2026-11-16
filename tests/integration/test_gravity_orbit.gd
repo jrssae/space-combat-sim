@@ -11,12 +11,15 @@ const DT: float = 1.0 / 60.0
 const BUDGET_M: float = 0.5
 const CHECK_EVERY: int = 500
 ## The Jolt run's length in a focused run: a tenth of the orbit. With the slow files on (`GUT_SLOW=1`: the standard tier and
-## CI) it flies the whole orbit, about a minute at Jolt's pace here (6 000 ticks a second).
+## CI) it flies the whole orbit, about a minute at Jolt's pace here (5 000 ticks a second).
 const JOLT_TICKS: int = 30000
-## How much faster than the clock the Jolt run's ticks go, each still 1/60 s of sim time, and the most ticks one frame takes
-## (more overflow Jolt's job queue).
+## How much faster than the clock the Jolt run's ticks go, each still 1/60 s of sim time, and the most ticks one frame takes.
+## One a frame: Jolt's jobs a step grow with the worker threads, and a job the main thread ran itself is freed only when its
+## pool task comes round, so many steps back to back overflow Godot's 2 048 jobs on a 20-thread machine (32 a frame did).
+## The pace comes from frames instead: headless sleeps 6.9 ms a frame unless told not to.
 const JOLT_SPEED_UP: float = 100.0
-const JOLT_STEPS_PER_FRAME: int = 32
+const JOLT_STEPS_PER_FRAME: int = 1
+const JOLT_FRAME_SLEEP_US: int = 0
 
 var world: WorldFrame
 var system: StarSystem
@@ -24,6 +27,7 @@ var _fuel_backup: bool
 var _rate_backup: int
 var _scale_backup: float
 var _steps_backup: int
+var _sleep_backup: int
 
 
 func before_each() -> void:
@@ -32,6 +36,7 @@ func before_each() -> void:
 	_rate_backup = Engine.physics_ticks_per_second
 	_scale_backup = Engine.time_scale
 	_steps_backup = Engine.max_physics_steps_per_frame
+	_sleep_backup = OS.low_processor_usage_mode_sleep_usec
 	world = WorldFrame.new()
 	world.name = "World"
 	add_child_autofree(world)
@@ -43,6 +48,7 @@ func after_each() -> void:
 	Engine.physics_ticks_per_second = _rate_backup
 	Engine.time_scale = _scale_backup
 	Engine.max_physics_steps_per_frame = _steps_backup
+	OS.low_processor_usage_mode_sleep_usec = _sleep_backup
 
 
 # The station's orbit: radius, speed and mean motion.
@@ -153,6 +159,7 @@ func test_a_ship_in_jolt_coasts_beside_the_station_as_the_64_bit_run_does() -> v
 	world.add_child(ref)
 	var ticks: int = ceili(TAU / _orbit()[2] / DT) if SlowTests.enabled() else JOLT_TICKS
 	Engine.max_physics_steps_per_frame = JOLT_STEPS_PER_FRAME
+	OS.low_processor_usage_mode_sleep_usec = JOLT_FRAME_SLEEP_US
 	Engine.physics_ticks_per_second = roundi(60.0 * JOLT_SPEED_UP)
 	Engine.time_scale = JOLT_SPEED_UP
 	var wall_start: int = Time.get_ticks_msec()
