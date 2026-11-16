@@ -4509,7 +4509,8 @@ tests/unit/test_encounter_plan.gd, tests/integration/test_encounters.gd, tests/f
   were tried and measured: more draw calls, no fewer triangles), and makes each collision sphere a static body by RID registered in `StaticRows` (kind `STATIC`, neutral), as M4's
   `AsteroidField` does, so the scan, the hit sweep, rams and avoidance see the rocks with no node per rock and nothing walked
   per tick; it releases bodies and rows when it leaves the tree. Provider `belts` (count, rocks, spheres, draw_groups).
-  M4's `AsteroidField` stays the bench's stand-in.
+  Since M7-T48 the bench's rock slab is built by the same code (`build_rocks`, a shape and turn per rock from its own hash,
+  `seeded_look`); M4's `AsteroidField` is gone.
 
 ### 18.14 Civilian colours and hull sheen as built (T39)
 

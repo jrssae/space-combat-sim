@@ -368,6 +368,27 @@ func test_the_rock_slab_clears_every_ship() -> void:
 	assert_eq(BenchLayout.rocks(BenchLayout.FURBALL, 50, 1).size(), 0, "the other layouts have no rocks")
 
 
+func test_each_rock_is_a_generated_shape_turned_its_own_way_from_its_own_hash() -> void:
+	var a: Array[Dictionary] = BenchLayout.rocks(BenchLayout.BATTLE, 100, 4)
+	var b: Array[Dictionary] = BenchLayout.rocks(BenchLayout.BATTLE, 100, 4)
+	var c: Array[Dictionary] = BenchLayout.rocks(BenchLayout.BATTLE, 100, 5)
+	var shapes: Dictionary = {}
+	var turned: int = 0
+	for i: int in a.size():
+		var basis: Basis = a[i]["basis"]
+		assert_true(basis.is_equal_approx(basis.orthonormalized()), "rock %d: a turn, no stretch" % i)
+		assert_eq(int(a[i]["shape"]), int(b[i]["shape"]), "rock %d: the same shape for the same seed" % i)
+		assert_eq(basis, b[i]["basis"] as Basis, "rock %d: and the same turn" % i)
+		shapes[int(a[i]["shape"]) % 16] = true
+		turned += 1 if not basis.is_equal_approx(Basis.IDENTITY) else 0
+	assert_gt(shapes.size(), 8, "the rocks spread over the shapes")
+	assert_eq(turned, a.size(), "every rock turned")
+	var other: int = 0
+	for i: int in mini(a.size(), c.size()):
+		other += 1 if int(a[i]["shape"]) != int(c[i]["shape"]) else 0
+	assert_gt(other, a.size() / 2.0, "another seed, other shapes")
+
+
 func test_the_battle_is_flown_in_a_low_orbit_of_a_body_of_the_data() -> void:
 	var g: Dictionary = BenchLayout.gravity_orbit(BenchLayout.BATTLE)
 	assert_eq(g["body"], &"epsilon_iii")

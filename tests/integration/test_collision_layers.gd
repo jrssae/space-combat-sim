@@ -125,9 +125,11 @@ func test_each_kind_of_body_gets_its_layer_and_mask() -> void:
 	assert_eq(cap.collision_layer, CollisionLayers.layer_of(&"capital"))
 	assert_eq(cap.collision_mask, CollisionLayers.mask_of(&"capital"))
 	# A rock lives as a body only near a ship (M6-T21): the one 20 m off the fighter's centre, not the one 5.5 km out.
-	var field := AsteroidField.new()
+	if GeneratedRocks.missing(self):  # the rocks are the generated ones (M7-T48), rock i sphere i
+		return
+	var field := AsteroidBelt.new()
 	world.spawn(field, world.to_universe(Vector3(0.0, 0.0, -6000.0)))
-	field.build([{"offset": Vector3.ZERO, "radius": 50.0}, {"offset": Vector3(0.0, 0.0, 5430.0), "radius": 50.0}] \
+	field.build_rocks([GeneratedRocks.round_rock(Vector3.ZERO, 50.0), GeneratedRocks.round_rock(Vector3(0.0, 0.0, 5430.0), 50.0)] \
 			as Array[Dictionary], world.get_world_3d().space, world)
 	await _ticks(1)
 	var near: RID = field.body_rids()[1]
@@ -237,9 +239,12 @@ func test_a_fighter_meets_a_capital_in_jolt() -> void:
 
 
 func test_a_fighter_into_a_rock_is_stopped_and_rammed() -> void:
-	var field := AsteroidField.new()
+	if GeneratedRocks.missing(self):
+		return
+	var field := AsteroidBelt.new()
 	world.spawn(field, world.to_universe(Vector3.ZERO))
-	field.build([{"offset": Vector3(0.0, 0.0, -200.0), "radius": 40.0}] as Array[Dictionary], world.get_world_3d().space, world)
+	field.build_rocks([GeneratedRocks.round_rock(Vector3(0.0, 0.0, -200.0), 40.0)] as Array[Dictionary], world.get_world_3d().space,
+			world)
 	var ai: Combatant = _fighter("B", Factions.RAIDERS, Vector3(0.0, 0.0, 0.0))
 	await _ticks(2)
 	var counter := ContactCounter.new()

@@ -55,3 +55,9 @@ What moved (old → new): `weapon_rows_battle` 933, 420, 174, 151, 25, 1 → 779
 rate; the row, command, hit and pilot digests new); `brain_tolerance` native hits furball 264, 315, 256 → 268, 248, 285, spread
 355, 301, 298 → 330, 324, 293; `flight_parity_fight` 127 → 144 hits over 30 s, mix attack 18 evade 7 → attack 20 evade 5.
 
+
+**M7-T48 re-recorded `weapon_rows_battle` alone**: the bench's 1 000 rocks became the generated asteroids (a shape and turn per
+rock, one to three collision spheres each, in place of one sphere of the rock's radius), so the seeded battle flies among other
+obstacles. HEAD before the change still gave 780, 380, 144, 145, 25, 1 against the stored 779, 380, 144, 145, 25, 1; with the
+generated rocks the battle gives 704, 321, 132, 146, 25, 1 (capitals' hits 15 % down, outside the 10 % gate), the same on a
+second run. No other recording holds rocks: the other battles are fighters only (`SeededBattle`) or furballs.

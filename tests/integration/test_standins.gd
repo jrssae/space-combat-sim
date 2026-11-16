@@ -164,12 +164,14 @@ func test_an_interceptor_removes_only_hostile_bolts_within_one_and_a_half_km() -
 
 
 func test_the_asteroid_field_is_static_rows_in_the_scan_and_bolts_hit_it() -> void:
-	var rocks: Array[Dictionary] = [{"offset": Vector3(0.0, 0.0, -1000.0), "radius": 50.0},
-			{"offset": Vector3(400.0, 0.0, -2000.0), "radius": 120.0}]
-	var field: AsteroidField = standins.add_asteroids(rocks, world.to_universe(Vector3.ZERO))
-	assert_eq(field.count(), 2)
-	assert_eq(field.body_rids().size(), 2, "one static physics body per rock, by RID")
-	assert_eq(field.get_child_count(), 1, "one multimesh: no mesh, physics or marker node per rock (M4-T29)")
+	if GeneratedRocks.missing(self):
+		return
+	var rocks: Array[Dictionary] = [GeneratedRocks.round_rock(Vector3(0.0, 0.0, -1000.0), 50.0),
+			GeneratedRocks.round_rock(Vector3(400.0, 0.0, -2000.0), 120.0)]
+	var field: AsteroidBelt = standins.add_asteroids(rocks, world.to_universe(Vector3.ZERO))
+	assert_eq(standins.asteroid_count(), 2)
+	assert_eq(field.body_rids().size(), 2, "one static physics body per collision sphere, by RID")
+	assert_eq(field.get_child_count(), 1, "one multimesh for the one shape: no mesh, physics or marker node per rock (M4-T29)")
 	var scan := TreeRows.core_scan(get_tree())
 	assert_eq(scan.contacts_for(-1, Vector3.ZERO, Factions.RAIDERS).size(), 0, "a rock is never a contact (M4-T29)")
 	var seen: Array[Contact] = scan.statics_for(-1, Vector3.ZERO, Factions.RAIDERS, 4)
@@ -178,7 +180,7 @@ func test_the_asteroid_field_is_static_rows_in_the_scan_and_bolts_hit_it() -> vo
 		assert_false(c.is_ship, "a rock is a static row, not a ship")
 		assert_eq(c.kind, BodyKind.STATIC)
 		assert_eq(c.velocity, Vector3.ZERO)
-		assert_true(c.bounding_radius == 50.0 or c.bounding_radius == 120.0, "with its own size")
+		assert_true(absf(c.bounding_radius - 50.0) < 1e-6 or absf(c.bounding_radius - 120.0) < 1e-6, "with its own size")
 	var resolver := HitResolver.new()
 	add_child_autofree(resolver)
 	resolver.set_physics_process(false)
@@ -199,23 +201,33 @@ func test_the_asteroid_field_is_static_rows_in_the_scan_and_bolts_hit_it() -> vo
 
 
 func test_a_rebase_shifts_every_rock_and_the_capitals() -> void:
-	var rocks: Array[Dictionary] = [{"offset": Vector3(100.0, 0.0, -1000.0), "radius": 40.0},
-			{"offset": Vector3(-300.0, 50.0, -2000.0), "radius": 80.0}]
-	var field: AsteroidField = standins.add_asteroids(rocks, world.to_universe(Vector3.ZERO))
+	if GeneratedRocks.missing(self):
+		return
+	var rocks: Array[Dictionary] = [GeneratedRocks.mixed_rock(Vector3(100.0, 0.0, -1000.0), 40.0, 1),
+			GeneratedRocks.mixed_rock(Vector3(-300.0, 50.0, -2000.0), 80.0, 2)]
+	var field: AsteroidBelt = standins.add_asteroids(rocks, world.to_universe(Vector3.ZERO))
 	var cap: CapitalStandin = _capital(Vector3(0.0, 0.0, 3000.0))
 	var offset := Vector3(1000.0, -200.0, 500.0)
-	var row_before: Vector3 = StaticRows.position_of(field.row_id(1))
+	var last: int = field.sphere_count - 1
+	var row_before: Vector3 = StaticRows.position_of(field.row_id(last))
+	var bodies_before: Array[Vector3] = []
+	for i: int in field.sphere_count:
+		bodies_before.append(field.rock_bodies().placed(i, field.global_transform).origin)
 	var cap_before: Vector3 = cap.global_position
 	world.rebase(offset)
-	assert_almost_eq(StaticRows.position_of(field.row_id(1)).distance_to(row_before - offset), 0.0, 1e-3, "the row moved")
+	assert_almost_eq(StaticRows.position_of(field.row_id(last)).distance_to(row_before - offset), 0.0, 1e-3, "the row moved")
 	assert_almost_eq(cap.global_position.distance_to(cap_before - offset), 0.0, 1e-3, "the capital moved")
-	for i: int in rocks.size():  # no ship near, so rows only: each body comes to life where it belongs (M6-T21)
+	for i: int in field.sphere_count:  # no ship near, so rows only: each body comes to life where it belongs (M6-T21)
 		var xform: Transform3D = field.rock_bodies().placed(i, field.global_transform)
-		assert_almost_eq(xform.origin.distance_to((rocks[i]["offset"] as Vector3) - offset), 0.0, 1e-3, "rock %d's body moved" % i)
-	# Headless rendering keeps no instance data, so the drawing is checked by what carries it: one multimesh of every rock,
-	# inside the field node the rebase moved.
-	assert_eq(field.multimesh().instance_count, rocks.size(), "one multimesh draws every rock")
-	assert_true(field.is_ancestor_of(field.get_child(0)) and field.get_child(0) is MultiMeshInstance3D, "and it moves with the field")
+		assert_almost_eq(xform.origin.distance_to(bodies_before[i] - offset), 0.0, 1e-3, "sphere %d's body moved" % i)
+	# Headless rendering keeps no instance data, so the drawing is checked by what carries it: a multimesh per shape, every
+	# rock drawn once, inside the field node the rebase moved.
+	var drawn: int = 0
+	for child: Node in field.get_children():
+		assert_true(child is MultiMeshInstance3D, "only multimeshes under the field, and they move with it")
+		if child is MultiMeshInstance3D:
+			drawn += (child as MultiMeshInstance3D).multimesh.instance_count
+	assert_eq(drawn, rocks.size(), "every rock drawn once")
 
 
 func test_with_no_star_system_nothing_pulls() -> void:

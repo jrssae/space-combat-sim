@@ -1,5 +1,6 @@
 extends TestSteps
-## Rocks and mines as static rows (M4-T29, architecture §17.16, Q27). T07's asteroids and T12's mines are rows with no node:
+## Rocks and mines as static rows (M4-T29, architecture §17.16, Q27). The asteroids (the generated rocks since M7-T48, one to
+## three spheres a rock) and T12's mines are rows with no node:
 ## each is registered once (`StaticRows`), moved only by its own world's rebase, and no per-tick path walks them. Bolts still
 ## hit rocks and ships still ram them, through a kept grid in the hit and ram resolvers; a mine leaves the rows when it goes
 ## off and comes back when it is laid again. A side knows its own mines and steers clear of them; an enemy's are hidden from
@@ -108,12 +109,12 @@ func _resolvers() -> Array:
 	return [hits, rams]
 
 
-# A seeded slab of `count` rocks of 20 to 200 m (log-uniform), 20 by 5 by 20 km round the origin.
+# A seeded slab of `count` generated rocks of 20 to 200 m (log-uniform), any shape and turn, 20 by 5 by 20 km round the origin.
 static func _slab(rng: RandomNumberGenerator, count: int) -> Array[Dictionary]:
 	var rocks: Array[Dictionary] = []
 	for s: int in count:
-		rocks.append({"offset": Vector3(rng.randf_range(-10000.0, 10000.0), rng.randf_range(-2500.0, 2500.0),
-				rng.randf_range(-10000.0, 10000.0)), "radius": exp(rng.randf_range(log(20.0), log(200.0)))})
+		rocks.append(GeneratedRocks.mixed_rock(Vector3(rng.randf_range(-10000.0, 10000.0), rng.randf_range(-2500.0, 2500.0),
+				rng.randf_range(-10000.0, 10000.0)), exp(rng.randf_range(log(20.0), log(200.0))), s))
 	return rocks
 
 
@@ -121,14 +122,20 @@ static func _slab(rng: RandomNumberGenerator, count: int) -> Array[Dictionary]:
 
 
 func test_a_thousand_rocks_are_registered_once_and_no_tick_walks_them() -> void:
+	if GeneratedRocks.missing(self):
+		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 29
 	var registrations: int = StaticRows.registrations
 	var rocks: Array[Dictionary] = _slab(rng, 1000)
-	var field: AsteroidField = standins.add_asteroids(rocks, world.to_universe(Vector3.ZERO))
-	assert_eq(StaticRows.registrations - registrations, 1000, "each rock registered once, when the field is built")
-	assert_eq(StaticRows.solid().ids.size(), 1000, "every rock is a solid row")
-	assert_eq(field.get_child_count(), 1, "one multimesh and no node per rock")
+	var field: AsteroidBelt = standins.add_asteroids(rocks, world.to_universe(Vector3.ZERO))
+	var spheres: int = field.sphere_count
+	assert_eq(field.rock_count, 1000)
+	assert_between(spheres, 1000, 3000, "one to three collision spheres a rock")
+	assert_eq(StaticRows.registrations - registrations, spheres, "each sphere registered once, when the field is built")
+	assert_eq(StaticRows.solid().ids.size(), spheres, "every sphere is a solid row")
+	assert_eq(field.get_child_count(), field.draw_groups, "a multimesh per shape and no node per rock")
+	assert_lte(field.draw_groups, AsteroidBelt.shapes().size())
 	var drones: Array[TargetDrone] = []
 	for i: int in 6:
 		drones.append(_drone(Vector3(float(i) * 300.0, 4000.0, 0.0), Factions.RAIDERS, Vector3(0.0, -20.0, 0.0)))
@@ -151,16 +158,17 @@ func test_a_thousand_rocks_are_registered_once_and_no_tick_walks_them() -> void:
 		assert_eq(hits.hulls_last_tick, 6, "tick %d: the hit resolver gathered the drones' hulls, no rock" % tick)
 		assert_eq(rams.hulls_last_tick, 6, "tick %d: so did the ram resolver" % tick)
 		worst_static_pairs = maxi(worst_static_pairs, hits.static_pairs_visited)
-	assert_eq(StaticRows.registrations - registrations, 1000, "no rock registered again")
+	assert_eq(StaticRows.registrations - registrations, spheres, "no rock registered again")
 	assert_eq(StaticRows.solid_builds, builds, "the solid rows were not rebuilt tick by tick")
-	gut.p("worst rock pairs the hit resolver tested in a tick: %d (40 bolts, 1 000 rocks)" % worst_static_pairs)
+	gut.p("worst rock pairs the hit resolver tested in a tick: %d (40 bolts, 1 000 rocks, %d spheres)" % [
+			worst_static_pairs, spheres])
 	assert_gt(worst_static_pairs, 0, "bolts in the slab were put to the rocks near them")
 	assert_lt(worst_static_pairs, 40 * 20, "the kept grid hands a bolt its neighbouring rocks only")
 	for native: bool in _paths():
 		ContactScan.invalidate()
 		var scan: ContactScan = ContactScan.shared(get_tree())
 		assert_eq(scan._node_count, 6, "%s scan: the drones are its only node rows" % scan.path())
-		assert_eq(scan._body_ids.size(), 6 + 1000, "%s scan: then the rocks as rows" % scan.path())
+		assert_eq(scan._body_ids.size(), 6 + spheres, "%s scan: then the rocks' spheres as rows" % scan.path())
 		var contacts: Array[Contact] = scan.contacts_for(drones[0].get_instance_id(), drones[0].global_position,
 				Factions.RAIDERS, 1.0e6)
 		assert_eq(contacts.size(), 5, "%s scan: the other drones are the contacts, never a rock" % scan.path())
@@ -176,9 +184,11 @@ func _live_bolts() -> Array[Projectile]:
 
 
 func test_a_bolt_hits_a_rock() -> void:
-	var rocks: Array[Dictionary] = [{"offset": Vector3(0.0, 0.0, -1000.0), "radius": 50.0},
-			{"offset": Vector3(400.0, 0.0, -2000.0), "radius": 120.0}]
-	var field: AsteroidField = standins.add_asteroids(rocks, world.to_universe(Vector3.ZERO))
+	if GeneratedRocks.missing(self):
+		return
+	var rocks: Array[Dictionary] = [GeneratedRocks.round_rock(Vector3(0.0, 0.0, -1000.0), 50.0),
+			GeneratedRocks.round_rock(Vector3(400.0, 0.0, -2000.0), 120.0)]
+	var field: AsteroidBelt = standins.add_asteroids(rocks, world.to_universe(Vector3.ZERO))
 	for native: bool in _paths():
 		var hits: HitResolver = _resolvers()[0]
 		var infos: Array[HitInfo] = []
@@ -199,8 +209,10 @@ func test_a_bolt_hits_a_rock() -> void:
 
 
 func test_a_ship_flying_into_a_rock_is_rammed() -> void:
-	var rocks: Array[Dictionary] = [{"offset": Vector3(0.0, 0.0, -1000.0), "radius": 50.0}]
-	var field: AsteroidField = standins.add_asteroids(rocks, world.to_universe(Vector3.ZERO))
+	if GeneratedRocks.missing(self):
+		return
+	var rocks: Array[Dictionary] = [GeneratedRocks.round_rock(Vector3(0.0, 0.0, -1000.0), 50.0)]
+	var field: AsteroidBelt = standins.add_asteroids(rocks, world.to_universe(Vector3.ZERO))
 	for native: bool in _paths():
 		var rams: RamResolver = _resolvers()[1]
 		var infos: Array[HitInfo] = []
@@ -220,7 +232,9 @@ func test_a_ship_flying_into_a_rock_is_rammed() -> void:
 
 
 func test_a_ship_grazing_a_rock_is_hurt_by_its_closing_speed_only() -> void:
-	var rocks: Array[Dictionary] = [{"offset": Vector3(0.0, 0.0, -1000.0), "radius": 50.0}]
+	if GeneratedRocks.missing(self):
+		return
+	var rocks: Array[Dictionary] = [GeneratedRocks.round_rock(Vector3(0.0, 0.0, -1000.0), 50.0)]
 	standins.add_asteroids(rocks, world.to_universe(Vector3.ZERO))
 	var rams: RamResolver = _resolvers()[1]
 	var infos: Array[HitInfo] = []
@@ -248,9 +262,11 @@ func test_head_on_strips_the_motion_along_the_rock() -> void:
 
 
 func test_a_rebase_moves_rocks_and_mines_once() -> void:
-	var rocks: Array[Dictionary] = [{"offset": Vector3(100.0, 0.0, -1000.0), "radius": 40.0},
-			{"offset": Vector3(-300.0, 50.0, -2000.0), "radius": 80.0}]
-	var field: AsteroidField = standins.add_asteroids(rocks, world.to_universe(Vector3.ZERO))
+	if GeneratedRocks.missing(self):
+		return
+	var rocks: Array[Dictionary] = [GeneratedRocks.round_rock(Vector3(100.0, 0.0, -1000.0), 40.0),
+			GeneratedRocks.round_rock(Vector3(-300.0, 50.0, -2000.0), 80.0)]
+	var field: AsteroidBelt = standins.add_asteroids(rocks, world.to_universe(Vector3.ZERO))
 	var mines: MineStandin = standins.add_mines([{"offset": Vector3(500.0, 0.0, -1500.0), "faction": Factions.RAIDERS}],
 			world.to_universe(Vector3.ZERO))
 	var rock_before: Vector3 = StaticRows.position_of(field.row_id(1))
@@ -314,10 +330,12 @@ func test_a_mine_leaves_the_rows_when_it_fires_and_comes_back_when_laid_again() 
 
 
 func test_a_side_knows_its_own_mines_and_not_an_enemys_and_rocks_are_for_everyone() -> void:
+	if GeneratedRocks.missing(self):
+		return
 	standins.add_mines([{"offset": Vector3(0.0, 0.0, -300.0), "faction": Factions.RAIDERS},
 			{"offset": Vector3(0.0, 0.0, 300.0), "faction": Factions.EARTH_ALLIANCE}], world.to_universe(Vector3.ZERO))
-	var field: AsteroidField = standins.add_asteroids([{"offset": Vector3(300.0, 0.0, 0.0), "radius": 60.0}],
-			world.to_universe(Vector3.ZERO))
+	var rock: Dictionary = GeneratedRocks.round_rock(Vector3(300.0, 0.0, 0.0), 60.0)
+	var field: AsteroidBelt = standins.add_asteroids([rock] as Array[Dictionary], world.to_universe(Vector3.ZERO))
 	var raider: TargetDrone = _drone(Vector3.ZERO, Factions.RAIDERS)
 	var ally: TargetDrone = _drone(Vector3(0.0, 50.0, 0.0), Factions.EARTH_ALLIANCE)
 	var mines: MineStandin = standins.mines()

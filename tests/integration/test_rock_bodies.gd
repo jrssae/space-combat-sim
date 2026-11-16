@@ -31,28 +31,34 @@ func _fighter(at: Vector3) -> Combatant:
 	return combatant
 
 
-# A field at the local origin that follows the World's rebases and drift, as the stand-ins' field does.
-func _field(rocks: Array[Dictionary]) -> AsteroidField:
-	var field := AsteroidField.new()
+# A field of round generated rocks ([centre, sphere radius] each, so rock i is sphere i) at the local origin that follows the
+# World's rebases and drift, as the stand-ins' field does.
+func _field(rocks: Array) -> AsteroidBelt:
+	var entries: Array[Dictionary] = []
+	for r: Array in rocks:
+		entries.append(GeneratedRocks.round_rock(r[0], r[1]))
+	var field := AsteroidBelt.new()
 	world.spawn(field, world.to_universe(Vector3.ZERO))
 	field.add_to_group(WorldFrame.ANCHORED_GROUP)
-	field.build(rocks, world.get_world_3d().space, world)
+	field.build_rocks(entries, world.get_world_3d().space, world)
 	world.rebased.connect(field.on_rebased)
 	world.drifted.connect(field.on_rebased)
 	return field
 
 
-func _body_at(field: AsteroidField, i: int) -> Transform3D:
+func _body_at(field: AsteroidBelt, i: int) -> Transform3D:
 	return PhysicsServer3D.body_get_state(field.body_rids()[i], PhysicsServer3D.BODY_STATE_TRANSFORM)
 
 
-func _layer(field: AsteroidField, i: int) -> int:
+func _layer(field: AsteroidBelt, i: int) -> int:
 	return PhysicsServer3D.body_get_collision_layer(field.body_rids()[i])
 
 
 func test_only_the_rocks_near_a_rigid_hull_live_and_the_rest_are_rows_with_no_layer() -> void:
-	var field: AsteroidField = _field([{"offset": Vector3(0.0, 0.0, -60.0), "radius": 40.0},
-			{"offset": Vector3(0.0, 0.0, -3000.0), "radius": 40.0}, {"offset": Vector3(2000.0, 0.0, 0.0), "radius": 90.0}])
+	if GeneratedRocks.missing(self):
+		return
+	var field: AsteroidBelt = _field([[Vector3(0.0, 0.0, -60.0), 40.0],
+			[Vector3(0.0, 0.0, -3000.0), 40.0], [Vector3(2000.0, 0.0, 0.0), 90.0]])
 	_fighter(Vector3.ZERO)
 	await _ticks(2)
 	assert_eq(StaticRows.solid().ids.size(), 3, "every rock is a row for the hit sweep, the rams and the scan")
@@ -67,8 +73,10 @@ func test_only_the_rocks_near_a_rigid_hull_live_and_the_rest_are_rows_with_no_la
 
 
 func test_a_rock_that_comes_back_to_life_stands_exactly_where_it_would_had_it_lived_all_along() -> void:
-	var field: AsteroidField = _field([{"offset": Vector3(0.0, 0.0, -60.0), "radius": 40.0},
-			{"offset": Vector3(500.0, 0.0, -60.0), "radius": 40.0}])
+	if GeneratedRocks.missing(self):
+		return
+	var field: AsteroidBelt = _field([[Vector3(0.0, 0.0, -60.0), 40.0],
+			[Vector3(500.0, 0.0, -60.0), 40.0]])
 	var roamer: Combatant = _fighter(Vector3.ZERO)
 	_fighter(Vector3(500.0, 0.0, 0.0))  # keeps rock 1 alive all along: the control
 	await _ticks(2)
@@ -95,7 +103,9 @@ func test_a_rock_that_comes_back_to_life_stands_exactly_where_it_would_had_it_li
 
 
 func test_a_ship_resting_against_a_rock_keeps_it_live_and_in_contact() -> void:
-	var field: AsteroidField = _field([{"offset": Vector3(0.0, 0.0, -200.0), "radius": 40.0}])
+	if GeneratedRocks.missing(self):
+		return
+	var field: AsteroidBelt = _field([[Vector3(0.0, 0.0, -200.0), 40.0]])
 	var ship: Combatant = _fighter(Vector3.ZERO)
 	await _ticks(2)
 	assert_false(field.rock_bodies().is_live(0), "160 m from the ship's centre: a row only")
@@ -117,8 +127,10 @@ func test_a_ship_resting_against_a_rock_keeps_it_live_and_in_contact() -> void:
 
 
 func test_off_the_anchor_a_live_rock_follows_the_drift_and_a_dormant_one_does_not_move() -> void:
-	var field: AsteroidField = _field([{"offset": Vector3(0.0, 0.0, -60.0), "radius": 40.0},
-			{"offset": Vector3(3000.0, 0.0, 0.0), "radius": 40.0}])
+	if GeneratedRocks.missing(self):
+		return
+	var field: AsteroidBelt = _field([[Vector3(0.0, 0.0, -60.0), 40.0],
+			[Vector3(3000.0, 0.0, 0.0), 40.0]])
 	var ship: Combatant = _fighter(Vector3.ZERO)
 	await _ticks(2)
 	var far_body: Transform3D = _body_at(field, 1)

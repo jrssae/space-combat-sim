@@ -1,7 +1,8 @@
 class_name StandinDirector
 extends Node3D
 ## The battle's stand-ins in play (M4-T07, architecture §17.6): `World/Standins`, an identity container `Main` makes for the
-## bench runner. It holds the capitals, the asteroid field and the mine belts (the pull is the World frame's, M6-T07), steps
+## bench runner. It holds the capitals, the asteroids (the game's generated rocks, M7-T48) and the mine belts (the pull is
+## the World frame's, M6-T07), steps
 ## every capital's engines, guns, interceptors and beam lasers once per tick (priority -5: after the core's first sync and the AI drivers, before anything
 ## moves), keeps `missile_target` missiles in flight (M4-T12), steps the mines, runs the carriers' launch cycle through the
 ## runner's `launcher`, and counts the battle per entity type for the `perf` probe. Bench-only: no scenario spawns stand-ins.
@@ -67,7 +68,7 @@ var part_us: PackedInt64Array = PackedInt64Array()
 var ticks: int = 0
 
 var _capitals: Array[CapitalStandin] = []
-var _field: AsteroidField = null
+var _field: AsteroidBelt = null
 var _mines: MineStandin = null
 var _strike: Dictionary = {}  # capital -> [target body id, tick it was looked up]
 var _capital_turn: int = 0
@@ -301,14 +302,15 @@ func missile_target_of(missile: Projectile) -> int:
 	return guide.target_id if guide != null else 0
 
 
-## The asteroid field: `rocks` (`offset` m from `anchor`, `radius` m), built into this world's physics space.
-func add_asteroids(rocks: Array[Dictionary], anchor: UniversePos) -> AsteroidField:
+## The asteroids: `rocks` (`offset` m from `anchor`, `radius` m bounding, `shape`, `basis`), the generated rocks built as a belt
+## is, into this world's physics space.
+func add_asteroids(rocks: Array[Dictionary], anchor: UniversePos) -> AsteroidBelt:
 	remove_asteroids()
-	_field = AsteroidField.new()
+	_field = AsteroidBelt.new()
 	_field.name = "Asteroids"
 	world.spawn(_field, anchor, Basis.IDENTITY, self)
 	_field.add_to_group(WorldFrame.ANCHORED_GROUP)
-	_field.build(rocks, world.get_world_3d().space, world)
+	_field.build_rocks(rocks, world.get_world_3d().space, world)
 	world.rebased.connect(_field.on_rebased)
 	world.drifted.connect(_field.on_rebased)
 	return _field
@@ -370,8 +372,9 @@ static func _flying(cap: CapitalStandin) -> bool:
 	return is_instance_valid(cap) and cap.is_inside_tree() and cap.can_process()
 
 
+## Rocks in the field (each one to three collision spheres).
 func asteroid_count() -> int:
-	return _field.count() if _field != null and is_instance_valid(_field) else 0
+	return _field.rock_count if _field != null and is_instance_valid(_field) else 0
 
 
 func turret_count() -> int:

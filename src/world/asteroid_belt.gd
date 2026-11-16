@@ -8,6 +8,7 @@ extends Node3D
 ## Spawn it with `WorldFrame.spawn` (it is shiftable, so its meshes follow a rebase), call `build`, and connect the world's
 ## `rebased` to `on_rebased`: the RID bodies do not follow a node. Everything is released when it leaves the tree. Only the
 ## spheres near a ship live as Jolt bodies (`RockBodies`, M6-T21), stepped late in every tick; the rest are rows only.
+## The bench's asteroid slab is built the same way (`build_rocks`, M7-T48), so benches and tests fly among the game's rocks.
 
 const ASSET_DIR: String = "res://assets/generated/asteroids"
 
@@ -42,13 +43,30 @@ static func shapes() -> Array:
 	return (data as Dictionary).get("shapes", []) if data is Dictionary else []
 
 
+## A rock's shape and turn picked from `seed_value` alone (a per-rock hash, no shared generator): `{"shape", "basis"}`, to merge
+## into a rock that only has its place and size.
+static func seeded_look(seed_value: int) -> Dictionary:
+	var u: Array[float] = []
+	for k: int in 4:
+		u.append(float(hash([seed_value, k]) % 1000003) / 1000003.0)
+	var axis := Vector3(2.0 * u[0] - 1.0, 2.0 * u[1] - 1.0, 2.0 * u[2] - 1.0)
+	axis = axis.normalized() if axis.length_squared() > 1e-6 else Vector3.UP
+	return {"shape": hash([seed_value, 4]), "basis": Basis(axis, (2.0 * u[3] - 1.0) * PI)}
+
+
 ## Builds `layout`'s rocks into `space` and registers their spheres as rows of `world`. Call once, in the tree.
 func build(layout: BeltLayout, space: RID, world: Node, shape_list: Array = shapes()) -> void:
+	build_rocks(layout.rocks, space, world, shape_list)
+
+
+## Builds `rocks` (each `offset` m from this node, `radius` its bounding radius, `shape` any index, wrapped over the shapes, and
+## `basis`) into `space`, their spheres rows of `world`. Call once, in the tree.
+func build_rocks(rocks: Array[Dictionary], space: RID, world: Node, shape_list: Array = shapes()) -> void:
 	if shape_list.is_empty():
-		push_warning("AsteroidBelt: %s is not generated (scripts/gen_assets.sh); the belt is not built" % ASSET_DIR)
+		push_warning("AsteroidBelt: %s is not generated (scripts/gen_assets.sh); the rocks are not built" % ASSET_DIR)
 		return
 	var groups: Dictionary = {}  # shape index -> Array[Transform3D]
-	for rock: Dictionary in layout.rocks:
+	for rock: Dictionary in rocks:
 		var shape: Dictionary = shape_list[int(rock["shape"]) % shape_list.size()]
 		var scale: float = float(rock["radius"]) / float(shape["bounding_radius_m"])
 		var placed := Transform3D((rock["basis"] as Basis).scaled(Vector3.ONE * scale), rock["offset"])
@@ -69,6 +87,11 @@ func build(layout: BeltLayout, space: RID, world: Node, shape_list: Array = shap
 ## Puts every live sphere's body back under the belt after a rebase or a drift moved this node.
 func on_rebased(_offset: Vector3) -> void:
 	_rocks.place(global_transform)
+
+
+## Sphere `i`'s row id in `StaticRows` (its body's RID id); a rock's spheres follow each other in build order.
+func row_id(i: int) -> int:
+	return _row_ids[i]
 
 
 ## The spheres' bodies, and which of them live in Jolt now (M6-T21).

@@ -7,7 +7,7 @@ extends Node
 ## play.
 ##
 ## `battle` and `typical` (M4-T07, §17.6) also bring the battle's stand-ins through `standins` (`World/Standins`): the
-## capitals with their turrets and beam lasers, the asteroid field (`rocks=` overrides the mix's count; 0 for none), the mine
+## capitals with their turrets and beam lasers, the generated asteroids (`rocks=` overrides the mix's count; 0 for none), the mine
 ## belts and the missiles the mix holds in flight (M4-T12), a low orbit of a body of the star system's data for its gravity
 ## (M6-T07; the frame's anchor is put back after), the carriers' launch cycle, and for four sides a session
 ## faction table and the bench factions on the fighters of sides three and four.

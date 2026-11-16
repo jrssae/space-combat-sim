@@ -385,9 +385,9 @@ static func fights_in_slab(layout: StringName, n: int) -> int:
 	return inside
 
 
-## The rocks of `layout` for `seed`: `offset` (m, from the player) and `radius` (m), log-uniform in size, seeded, none within
-## `ROCK_CLEARANCE_M` of the player or a ship's hull; the mix's count, or `count_override` when 0 or more. Empty for a layout
-## without rocks.
+## The rocks of `layout` for `seed`: `offset` (m, from the player) and `radius` (m, bounding), log-uniform in size, seeded, none
+## within `ROCK_CLEARANCE_M` of the player or a ship's hull, each with a generated rock's `shape` and `basis` from its own hash
+## (M7-T48); the mix's count, or `count_override` when 0 or more. Empty for a layout without rocks.
 static func rocks(layout: StringName, n: int, seed_value: int, count_override: int = -1) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	var count: int = int(mix(layout, n).get("asteroids", 0)) if count_override < 0 else count_override
@@ -402,7 +402,9 @@ static func rocks(layout: StringName, n: int, seed_value: int, count_override: i
 			var radius: float = ROCK_RADIUS_MIN_M * pow(ROCK_RADIUS_MAX_M / ROCK_RADIUS_MIN_M, rng.randf())
 			var at: Vector3 = slab.position + Vector3(rng.randf(), rng.randf(), rng.randf()) * slab.size
 			if _rock_clear(at, radius, ships):
-				out.append({"offset": at, "radius": radius})
+				var rock: Dictionary = {"offset": at, "radius": radius}
+				rock.merge(AsteroidBelt.seeded_look(hash([String(layout), n, seed_value, "rock", i])))
+				out.append(rock)
 				break
 	return out
 

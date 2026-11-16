@@ -2730,6 +2730,25 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   `scripts/bench_quick.sh` sweep) inside the M4 budgets.
 - **Done when:** no bench or test builds sphere stand-in rocks; the suite green; the bench numbers recorded; the maintainer's look at a
   `bench battle 1000` (H); committed.
+- **Done (code part, 2026-11-16):** `AsteroidBelt.build_rocks` is the one builder: the belt's `build(layout)` and the bench's
+  `StandinDirector.add_asteroids` both call it, so the bench's rocks are drawn a multimesh per shape and collide as their shape's
+  spheres, registered in `StaticRows` and streamed by `RockBodies` exactly as the belt's are (scan, hit sweep, rams, avoidance,
+  rebases, drift). `BenchLayout.rocks` keeps every place and size and adds a shape and turn per rock from the rock's own hash
+  (`AsteroidBelt.seeded_look`, no shared generator). `AsteroidField` is removed. Tests: `GeneratedRocks` (tests/fixtures) gives
+  round rocks (a generated shape that collides as one sphere, sized so that sphere has the radius asked for: the hit and ram tests
+  that aim at a rock's face keep their numbers, rock i is sphere i) and mixed rocks (any shape and turn: the 1 000-rock, static-shift,
+  rebase and velocity-rebase tests, which now count spheres, about 2.1 a rock); `test_bench_layout` checks the seeded looks.
+- **Recording:** `weapon_rows_battle.json` re-recorded, the only recording with rocks (its 100-ship battle holds the bench's 1 000):
+  HEAD before the change gave 780, 380, 144, 145, 25, 1 against the stored 779, 380, 144, 145, 25, 1; with the generated rocks the
+  battle gives 704, 321, 132, 146, 25, 1 on two runs (capitals' hits 15 % down, outside its 10 % gate). The reason is in
+  `tests/fixtures/parity/README.md`.
+- **Cost** (headless, seed 1, pinned to 0-11, before = HEAD and after in scratch copies, run back to back; load averages 2 to 9 from
+  parallel agents): `bench battle 1000` 30 s: tick median 6.26 → 6.37 ms, p99 9.85 → 9.96 ms; the rams' stage 0.61 → 0.77 ms mean
+  (about two sphere rows a rock now), the hit sweep 0.64 → 0.63 ms. `bench typical 200`: 3.53 → 3.51 ms, p99 5.33 → 5.51 ms;
+  `typical 300`: 3.76 / 11.13 ms (load 8) → 3.33 / 5.29 ms. `scripts/bench_quick.sh <label> battle typical`: the budget held up to
+  300 (battle) and 400 (typical) ships before and after (one after run, typical 300, p99 15.8 ms under load; 5.4 ms repeated).
+  Windowed `bench battle 300` (960x540, RX 6950 XT): draw calls median 277 both, max 303 → 314; GPU time 0.51 → 1.27 ms median;
+  VRAM max 871 → 932 MB. All inside the M4 budgets (median 8 ms, p99 12 ms). Left: the maintainer's look at a `bench battle 1000` (H).
 
 ### M7-T49 Fix: the `uniform_set` error spam
 

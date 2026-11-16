@@ -21,7 +21,7 @@ var fx: FxPool
 var flashes: FarFlashes
 var rams: RamResolver
 var buoy: NavBuoy
-var field: AsteroidField
+var field: AsteroidBelt
 var near: Combatant
 var far: Combatant
 var cap: CapitalStandin
@@ -91,8 +91,8 @@ func _populate() -> void:
 	far_cap = w.cruiser(Factions.EARTH_ALLIANCE, "FAR CRUISER", Vector3(-3000.0, 0.0, -16000.0), Vector3(12.0, 0.0, -30.0))
 	buoy = NavBuoy.create("NAV TEST", Vector3(2.0, 0.0, 0.0))
 	world.spawn(buoy, world.to_universe(Vector3(900.0, -100.0, 300.0)))
-	field = w.standins.add_asteroids([{"offset": Vector3(0.0, 0.0, 0.0), "radius": 40.0},
-			{"offset": Vector3(500.0, 200.0, -100.0), "radius": 25.0}], world.to_universe(Vector3(3000.0, 500.0, -2500.0)))
+	field = w.standins.add_asteroids([GeneratedRocks.mixed_rock(Vector3(0.0, 0.0, 0.0), 40.0, 1),
+			GeneratedRocks.mixed_rock(Vector3(500.0, 200.0, -100.0), 25.0, 2)], world.to_universe(Vector3(3000.0, 500.0, -2500.0)))
 	await _ticks(6)  # the far ones become tier rows
 	var now_s: float = SimClock.now()
 	var weapon: WeaponSpec = w.player.cannon.weapon
@@ -154,7 +154,7 @@ func _anchored() -> Dictionary:
 	var out: Dictionary = {}
 	var rest: PackedFloat64Array = world.origin_velocity
 	_add(out, "buoy", world, buoy.global_position, buoy.velocity - Vector3(rest[0], rest[1], rest[2]))
-	for i: int in 2:
+	for i: int in 2:  # the first two of the rocks' collision spheres (M7-T48)
 		_add(out, "rock %d" % i, world, StaticRows.position_of(field.row_id(i)), -Vector3(rest[0], rest[1], rest[2]))
 	_add(out, "rock field", world, field.global_position, -Vector3(rest[0], rest[1], rest[2]))
 	return out
@@ -255,7 +255,7 @@ func test_off_the_anchor_everything_flies_on_and_the_anchored_things_stay_with_t
 	assert_lt(buoy.global_position.distance_to(Vector3(900.0, -100.0, 300.0) - DV * t), 5.0, "in local terms the buoy fell behind")
 
 
-# Where rock `i`'s body stands: the live body itself, or the place a dormant one comes to life at (M6-T21).
+# Where sphere `i`'s body stands: the live body itself, or the place a dormant one comes to life at (M6-T21).
 func _rock_body(i: int) -> Vector3:
 	if field.rock_bodies().is_live(i):
 		return (PhysicsServer3D.body_get_state(field.body_rids()[i], PhysicsServer3D.BODY_STATE_TRANSFORM) as Transform3D).origin
