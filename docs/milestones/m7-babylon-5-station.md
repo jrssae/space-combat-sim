@@ -272,7 +272,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T10 | D | AI and traffic around the station: raids at it, avoidance of its surface, allies from the bays, civilians through the aperture | T07, T08, Q8 | Opus | Native AI at a body far larger than any hull so far | done |
 | T11 | D | Maintenance bots: the generator and their loops | T06, Q11 | Sonnet | A small asset and a simple mover | done |
 | T12 | D | Tour points and a station sandbox scenario (the base of M8's exterior tour) | T05, T08 | Sonnet | Data and `CINEMATIC` shots on existing seams | done |
-| T13 | B | Performance and the GPU check: the station in view at every range, three squadrons, the grid and a raid | T07, T10 | Opus | Measurement on the maintainer's machine; the budget call | in progress |
+| T13 | B | Performance and the GPU check: the station in view at every range, three squadrons, the grid and a raid | T07, T10 | Opus | Measurement on the maintainer's machine; the budget call | done |
 | T15 | A | Starfury and raider surfaces from show references, with low and high texture sets for the texture detail setting (maintainer, 2026-11-12; numbered last because it was added after the others had numbers) | M5-T40 | Fable | Two hero hulls seen up close; the look is (H) and needs a sheet first | done |
 | T16 | A | Raider fighter rebuilt to its STL at 90% fidelity, the wing's leading-edge panels first (maintainer, 2026-11-13) | T15 | Opus | The raider was built without an STL; the maintainer finds its shape too far from the reference | done |
 | T17 | A | The Starfury looks metallic, not plastic: metallic, roughness and normal maps on both texture sets (maintainer, 2026-11-13; the raider's share is in T16, the station's in T04) | T15 | Opus | Material appearance on the hero hull; the look is (H) and needs a sheet first | done |
@@ -296,13 +296,13 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T35 | D | Maintenance bots roam and repair: one per area at a time and irregularly, along the spine, the fins (vanes), the drum (turning with it, so they take no damage) and out to the jumpgate and along its arm; in battle the cargo bay launches one per damaged area and each repairs 10 HP/s on damage sections and grid turrets (maintainer, 2026-11-14) | T11, T07 | Opus | New bot routes, a co-rotating frame and a repair rule over T06/T07's health | done |
 | T36 | A | The maintenance bot rebuilt to its reference sheet: top, side and front views from `references/maintenance bot.webp` at 90% silhouette overlap (maintainer, 2026-11-14) | T11 | Opus | T11's bot does not match the reference's top view; (H) | done |
 | T37 | C | Radial menus are steered with the left stick while they show (the target menu and the comms menu), not the right; the ship takes no left-stick flight input meanwhile (maintainer, 2026-11-15) | T27 | Sonnet | Input routing while a menu is open; keyboard parity kept | done |
-| T38 | D | AI ships avoid the station and other large bodies: wingmen and allies flying near Babylon 5 never collide with it when a collision could be avoided (maintainer, 2026-11-15) | T10 | Opus | Native avoidance against an 8 km rotating body; parity kept | in progress |
+| T38 | D | AI ships avoid the station and other large bodies: wingmen and allies flying near Babylon 5 never collide with it when a collision could be avoided (maintainer, 2026-11-15) | T10 | Opus | Native avoidance against an 8 km rotating body; parity kept | done |
 | T39 | C | Fix: the backtick key no longer opens the debug console in play (maintainer, 2026-11-15) | - | Sonnet | An input regression | done |
 | T40 | D | Council review fixes: the findings of the M7 code review (Opus, GPT-6 Luna, DeepSeek; 2026-11-15) that survived verification | - | Opus (native), Sonnet (GDScript, Python) | Small, separate fixes; the interceptors' line of fire may move the T07 balance | in progress |
 | T41 | D | Interceptor fire as the show has it: four barrels firing in turn (0.25 s apart, each recharging 1 s), visible blue-white pulses that fly out and can miss, a small flash and spark where one meets incoming fire; then bow batteries only if the capital fight still needs them, and a test that proves the batteries save the station damage (maintainer, 2026-11-15) | T40 | Opus | Native pulse-against-projectile hits, seeded spread, 1 and 6 threads identical; balance re-measured | done |
 | T42 | D | The interceptor battery model: an original procedural mesh after the maintainer's clip, a truss pedestal, a two-axis yoke and four barrels in a rectangle round a central body, about 15 m tall, on every battery (maintainer, 2026-11-15) | - | Opus | Look sheet approved first; four muzzles for T41 | done |
 | T43 | D | The heavy cannons as the show has them: an original single oval-barrel gun about 30 m long in a hazard-striped recess cut into the bow tower at H1 and H2, firing three-shot bursts of large green pulses at today's damage a second (maintainer, 2026-11-15) | T42 | Opus | Look sheet approved first; station generator change (STL fidelity); burst cadence in the native gun gate; balance unchanged | done |
-| T44 | C | Fix: two suns seen from 100 000 km above the star (`frame orbit 100000 epsilon`); one sun at every distance (maintainer, 2026-11-15) | - | Opus | A rendering bug near the star (scaled space, the sky's sun, the flare, the key light) | in progress |
+| T44 | C | Fix: two suns seen from 100 000 km above the star (`frame orbit 100000 epsilon`); one sun at every distance (maintainer, 2026-11-15) | - | Opus | A rendering bug near the star (scaled space, the sky's sun, the flare, the key light) | done |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M7-T01 Station references and measurements
@@ -1083,6 +1083,8 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     4.8 ms), the worst of the next ticks 33 to 6 ms (windowed 145 to 213 ms to 6 to 13 ms); `launch wing beta`: command 26 ms to 5.3 ms,
     worst tick 29 to 8 ms (windowed 41 to 54 ms to 5 ms, tick 8 ms); first impact flash `create` 10 ms (windowed) to 0.04 ms. What is left: a
     second raid while the first twelve raiders are still alive builds twelve more raiders (about 19 ms), as the pool holds one raid.
+
+- **Done (2026-11-15):** AC10 measured (4d7bac10) and the maintainer's three decisions on the spawn stalls built (b012ff5f: pools at load for the station scenarios, the wing out takes a new raid, flashes warmed). Pushed with 6472d504; CI green (run 43780325834).
 
 ### M7-T15 Starfury and raider surfaces from show references (texture detail low and high)
 
@@ -2282,6 +2284,8 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     Ship-to-ship dodging in plain formation away from big hulls stays weak (a wingman rejoining fast can ram a stopped leader);
     left as it is for now.
 
+- **Accepted (maintainer, 2026-11-15, round 2 live):** "t38 passes". Committed 1972e195, pushed with 6472d504; CI green (run 43780325834).
+
 ### M7-T39 Fix: the console key
 
 - **Why (maintainer, 2026-11-15):** "` doesn't activate the console anymore which must be fixed" (seen in the station showcase from a
@@ -2536,3 +2540,5 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   `test_sun_gpu.gd`'s disc-height and colour asserts and all 3 of `test_scaled_space_gpu.gd` fail the same on HEAD (they sample the
   middle column, under GUT's own panel). Screenshots before and after (6 views at 10 000, 100 000, 1 000 000 and 10 000 000 km above the
   star and 400 and 1 000 km above Epsilon III): `references/screenshots/M7-T44 two suns/`.
+
+- **Accepted (maintainer, 2026-11-15, live window from debb2669):** "just one as far as i could see". Pushed with 6472d504; CI green (run 43780325834).
