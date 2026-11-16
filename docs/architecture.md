@@ -5373,8 +5373,9 @@ The first real capital hull, built ahead of M12's framework (T05, T07) and moved
   (`CarrierJumps.class_for`); other factions keep the cruiser stand-in. The raid's `carrier` data picks how its fighters arrive
   (`arrival`: `docked` on its cradles, launched once it is clear of its point, or `beside` it out of its point as M6-T23 did)
   and tunes it (`standoff_m`, `retreat_hull`, `wait_s`, `raid_s`, `fighter_return_hull`). Its run goes arriving, holding (it
-  launches), `standoff` (every 0.5 s it finds the nearest enemy; inside its stand-off it backs away with its stern to it; a
-  fighter under its hull share is called back), `recalling` (its hull under the threshold, or the raid over: ended by its
+  launches; a raid whose `then` is `stay` launches too, then stays), `standoff` (every 0.5 s it asks the pilots' shared
+  contact scan, `ContactScan.contacts_for`, a native query, for the nearest enemy ship or capital; inside its stand-off it backs
+  away with its stern to it; a fighter under its hull share is called back), `recalling` (its hull under the threshold, or the raid over: ended by its
   script or the console, past its time limit, or no fighter left flying; it holds still and waits up to `wait_s`), then
   leaving through a point it opens at its hull's `jump_point` anchor. Fighters not docked by then are let go and left behind;
   the docked ones leave with it and go back to their pool. Destroyed, its docked fighters are destroyed with it
@@ -5386,7 +5387,8 @@ The first real capital hull, built ahead of M12's framework (T05, T07) and moved
   `returning`, `launched`, `recovered`, `left_behind`, `hull`. No new setting.
 - **Tests.** Rust: `dock_kernels` (8). GUT: `tests/unit/test_carrier_logic.gd` (collision, cradles, tactics, the native rows),
   `tests/integration/test_strike_carrier.gd` (the body, engines and helm, docked arrival and launch, recall and jump out, a
-  fighter left behind, the retreat threshold, death with docked fighters, the console), and M6-T23's raid test in
+  fighter left behind, the retreat threshold, backing away stern-on from an attacker, a badly hurt fighter called back alone, a
+  staying carrier launching, death with docked fighters, the console), and M6-T23's raid test in
   `tests/integration/test_encounters.gd`, now on the strike carrier, with a docked raid flown by AI pilots beside it.
 - **Known gaps.** The carrier is not in the low-attention tier (a raid carrier is exempt, as M6-T23's was). Its break-up
   chunks are generated but its death is the whole-hull explosion (M12's staged break-up comes later). A returning fighter is

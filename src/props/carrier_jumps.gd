@@ -302,9 +302,13 @@ func _step_run(run: CarrierRun, delta: float) -> void:
 			run.state = CarrierRun.State.HOLDING
 			run.state_at_s = now
 		CarrierRun.State.HOLDING:
-			if cap.dock != null and run.then != THEN_STAY:
-				_hold_with_dock(run, cap, now)
-				return
+			if cap.dock != null:
+				if _launching(run, cap, now):
+					return
+				if run.then != THEN_STAY:
+					run.state = CarrierRun.State.STANDOFF
+					run.state_at_s = now
+					return
 			if run.then == THEN_STAY:
 				run.state = CarrierRun.State.STAYING  # it stays in play, drifting on its course, until the scene ends
 				_runs.erase(run)
@@ -326,20 +330,18 @@ func _step_run(run: CarrierRun, delta: float) -> void:
 				_gone(run, cap)
 
 
-# A carrier with cradles, clear of its point (M12-T19): it launches the fighters it brought in docked, then stands off.
-func _hold_with_dock(run: CarrierRun, cap: CapitalStandin, now: float) -> void:
+# A carrier with cradles, clear of its point (M12-T19): it launches the fighters it brought in docked, whatever it does next.
+# True while it still is.
+func _launching(run: CarrierRun, cap: CapitalStandin, now: float) -> bool:
 	if is_instance_valid(run.arrival) and run.arrival.opener == cap and run.arrival.held:
 		run.arrival.held = false  # everything is through: it closes by its timing instead of collapsing when the carrier moves off
 		run.arrival.close()
 	if cap.dock.docked_count() > 0 and now - run.state_at_s < DEPART_AFTER_S:
-		return  # a moment clear of the mouth first
+		return true  # a moment clear of the mouth first
 	if cap.dock.docked_count() > 0:
 		fighters_launched += cap.dock.launch_all()
-		return
-	if cap.dock.busy_count() > 0:
-		return  # the last launches are still leaving their cradles
-	run.state = CarrierRun.State.STANDOFF
-	run.state_at_s = now
+		return true
+	return cap.dock.busy_count() > 0  # the last launches are still leaving their cradles
 
 
 # One tick of a carrier standing off (Q30): every `DECIDE_S` it finds the nearest enemy, backs away from it inside its stand-off
@@ -380,18 +382,18 @@ func _flying(run: CarrierRun) -> Array[Ship]:
 	return out
 
 
-# Where the nearest ship or capital hostile to `faction` within `reach_m` of `cap` is (World), or null.
+# Where the nearest ship or capital hostile to `faction` within `reach_m` of `cap` is (World), or null. It asks the pilots'
+# shared contact scan, so the search is the native field's, not a walk over every target.
 func _nearest_enemy(cap: CapitalStandin, faction: StringName, reach_m: float) -> Variant:
 	var best: Variant = null
 	var best_d: float = reach_m * reach_m
-	for node: Node in get_tree().get_nodes_in_group(Targetable.GROUP):
-		var target := node as Targetable
-		if target == null or (target.kind != Targetable.Kind.SHIP and target.kind != Targetable.Kind.CAPITAL) \
-				or not Factions.is_hostile(faction, target.faction) or not target.is_active():
+	var scan: ContactScan = ContactScan.shared(get_tree())
+	for contact: Contact in scan.contacts_for(cap.get_instance_id(), cap.global_position, faction, reach_m):
+		if contact.relation != Factions.Relation.HOSTILE or (contact.kind != BodyKind.SHIP and contact.kind != BodyKind.CAPITAL):
 			continue
-		var d: float = target.global_position.distance_squared_to(cap.global_position)
+		var d: float = contact.position.distance_squared_to(cap.global_position)
 		if d < best_d:
-			best = target.global_position
+			best = contact.position
 			best_d = d
 	return best
 

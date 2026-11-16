@@ -630,12 +630,12 @@ const TURRET_KERNEL_FILE: String = "res://native/src/turret_kernels.rs"
 const TURRET_KERNEL_USERS: Array[String] = ["res://native/src/turret_rows.rs", "res://native/src/brain_step.rs"]
 const TURRET_KERNEL_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::{Basis, Vector3};", "use crate::rows::",
 		"use crate::v3::", "use crate::brain_maths::"]
-## The engine voices' ship query (M5-T28): the ships near the listener from the rows, held to the kernels' rules; it imports
-## the row tables and the vector maths only. The shell (`voice_rows.rs`) is what reaches it.
 ## The docking kernel (M12-T19): held to the kernels' rules; its shell (`dock_rows.rs`) is what GDScript reaches.
 const DOCK_KERNEL_FILE: String = "res://native/src/dock_kernels.rs"
 const DOCK_KERNEL_USER: String = "res://native/src/dock_rows.rs"
 const DOCK_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::{Basis, Vector3};", "use crate::v3::"]
+## The engine voices' ship query (M5-T28): the ships near the listener from the rows, held to the kernels' rules; it imports
+## the row tables and the vector maths only. The shell (`voice_rows.rs`) is what reaches it.
 const VOICE_KERNEL_FILE: String = "res://native/src/voice_kernels.rs"
 const VOICE_KERNEL_USER: String = "res://native/src/voice_rows.rs"
 const VOICE_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::Vector3;", "use crate::rows::", "use crate::v3::"]

@@ -187,6 +187,48 @@ func test_hurt_past_its_threshold_it_recalls_on_its_own() -> void:
 	assert_eq(run.state, CarrierRun.State.RECALLING, "under its retreat threshold it calls its fighters back (Q30)")
 
 
+func test_it_backs_away_from_an_attacker_with_its_stern_to_it() -> void:
+	var run: CarrierRun = await _bring_in_docked()
+	var cap: CapitalStandin = run.carrier
+	var player: Ship = main.ship
+	var away: Vector3 = cap.global_basis.x  # the player comes in on its beam, well inside its stand-off
+	player.global_position = cap.global_position - away * 0.4 * float(run.options["standoff_m"])
+	player.linear_velocity = cap.linear_velocity
+	var v0: Vector3 = cap.linear_velocity
+	var bow0: float = (-cap.global_basis.z).dot(away)
+	await _fly(12.0)
+	assert_eq(run.state, CarrierRun.State.STANDOFF, "an attacker alone does not end its raid")
+	assert_gt(cap.heading.dot(away), 0.95, "its helm turns its stern to the attacker (Q30)")
+	assert_gt((-cap.global_basis.z).dot(away), bow0 + 0.1, "and the bow comes round")
+	assert_gt((cap.linear_velocity - v0).dot(away), 10.0, "it backs away")
+
+
+func test_a_badly_hurt_fighter_is_called_back_alone() -> void:
+	var run: CarrierRun = await _bring_in_docked()
+	var cap: CapitalStandin = run.carrier
+	var hurt: Ship = run.fighters[0] as Ship
+	var hull: Damageable = Damageable.of(hurt)
+	var keep: float = 0.5 * float(run.options["fighter_return_hull"]) * hull.hull.max_hp
+	hull.apply_hit(HitInfo.new(hurt.get_instance_id(), 0, &"", hull.hull.hp - keep, hurt.global_position, Vector3.ZERO, 0.0,
+			HitInfo.CAUSE_CONSOLE))
+	await _fly(2.0)
+	assert_true(cap.dock.is_handling(hurt), "under its share of hull it is called back (Q27)")
+	assert_eq(cap.dock.returning_count(), 1, "alone")
+	await _fly(90.0, func() -> bool: return cap.dock.is_docked(hurt))
+	assert_true(cap.dock.is_docked(hurt), "and docks")
+	assert_eq(run.state, CarrierRun.State.STANDOFF, "while the raid goes on")
+
+
+func test_a_carrier_that_stays_still_launches_its_fighters() -> void:
+	assert_true(_run("transit docked").ok)
+	var run: CarrierRun = carriers.runs()[0]
+	var cap: CapitalStandin = run.carrier
+	run.then = CarrierJumps.THEN_STAY
+	await _fly(60.0, func() -> bool: return run.state == CarrierRun.State.STAYING)
+	assert_eq(run.state, CarrierRun.State.STAYING, "it stays in play")
+	assert_eq(cap.dock.launches, 6, "with its fighters launched first (Q29)")
+
+
 func test_destroyed_it_takes_its_docked_fighters_with_it() -> void:
 	assert_true(_run("transit docked").ok)
 	var run: CarrierRun = carriers.runs()[0]
