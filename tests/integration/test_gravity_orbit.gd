@@ -16,7 +16,8 @@ const JOLT_TICKS: int = 30000
 ## How much faster than the clock the Jolt run's ticks go, each still 1/60 s of sim time, and the most ticks one frame takes.
 ## One a frame: Jolt's jobs a step grow with the worker threads, and a job the main thread ran itself is freed only when its
 ## pool task comes round, so many steps back to back overflow Godot's 2 048 jobs on a 20-thread machine (32 a frame did).
-## The pace comes from frames instead: headless sleeps 6.9 ms a frame unless told not to.
+## The pace comes from frames instead: headless sleeps 6.9 ms a frame unless told not to. Even one a frame outran a pool
+## starved by a loaded machine (four test shards at once), so each tick also waits for the pool to catch up (`_pace_pool`).
 const JOLT_SPEED_UP: float = 100.0
 const JOLT_STEPS_PER_FRAME: int = 1
 const JOLT_FRAME_SLEEP_US: int = 0
@@ -140,6 +141,17 @@ class Reference extends Node:
 		return Vector3(p[0], p[1], p[2])
 
 
+## Keeps the sped-up run from outrunning the engine's worker pool, so Jolt's spent jobs are freed before it needs new ones.
+## `previous` is the marker task queued a tick ago: the pool takes its tasks in order, so once that is done every Jolt task
+## queued before it has run. Returns the next marker (-1 when `again` is false).
+func _pace_pool(previous: int, again: bool = true) -> int:
+	if previous >= 0:
+		while not WorkerThreadPool.is_task_completed(previous):
+			OS.delay_usec(50)
+		WorkerThreadPool.wait_for_task_completion(previous)
+	return WorkerThreadPool.add_task(Callable(Time, &"get_ticks_usec"), true, "orbit run pace") if again else -1
+
+
 func test_a_ship_in_jolt_coasts_beside_the_station_as_the_64_bit_run_does() -> void:
 	assert_true(world.anchor_on_rail(system, &"post"))
 	FlightBatch.attach(world)
@@ -164,9 +176,12 @@ func test_a_ship_in_jolt_coasts_beside_the_station_as_the_64_bit_run_does() -> v
 	Engine.time_scale = JOLT_SPEED_UP
 	var wall_start: int = Time.get_ticks_msec()
 	var worst: float = 0.0
+	var marker: int = -1
 	while ref.ticks < ticks:
 		await get_tree().physics_frame
+		marker = _pace_pool(marker)
 		worst = maxf(worst, ship.global_position.distance_to(ref.position()))
+	_pace_pool(marker, false)
 	var wall_ms: int = Time.get_ticks_msec() - wall_start
 	Engine.physics_ticks_per_second = _rate_backup
 	Engine.time_scale = _scale_backup
