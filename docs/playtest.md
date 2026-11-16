@@ -551,14 +551,16 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
       1 080 lines (the default 3D at 0.5 on the 4K panel): a fighter's death is full to about 1.1 km, reduced to 4.3 km, and its
       flash reads to about 17 km; a destroyer's 36 km, 142 km and 570 km; a carrier's 71 km, 284 km and 1 140 km (twice as far at
       2 160 lines). In a battle run watch fighters die beyond 4 km (a bright point that flares and fades in about half a second)
-      and kill a capital (`set targeting.selected "CRUISER 1"` then `kill`): within tens of km it is still the full explosion.
+      and kill a capital (`set targeting.selected "CRUISER 1"` then `kill`, typed after the run's `[bench]` line, M7-T59): within
+      tens of km it is still the full explosion.
       Say whether the switches pop (a full or reduced blast handing over to the point) and how bright and how long the point
       should be. Screenshots: `reports/perf/M4-T23_far_fighter_death.png` and `M4-T23_far_capital_flash.png` (a raider at 7.5 km
       and a cruiser at 116 km, each past its switch, with an 8x crop around the flash, `*_crop8x.png`; distances in
       `M4-T23_far_flash_shots.txt`), and `M4-T23_far_capital_death.png` (a carrier at 16 km: the full explosion).
 - [ ] **M4-T23 Capitals can die.** In `battle` runs capitals can now be destroyed (before T23 a capital at zero hull stayed in
-      play): it explodes by the rule above and vanishes, its turrets with it. The bench's own capitals are invulnerable, so this
-      shows with `kill` or outside the bench; say whether a capital simply vanishing after its blast is acceptable until M12's
+      play): it explodes by the rule above and vanishes, its turrets with it. The bench's capitals are invulnerable during the
+      measured window only; once the run has ended (the `[bench]` line) they are mortal (M7-T59), so shoot one down (or
+      `set targeting.selected "CRUISER 1"; kill`); say whether a capital simply vanishing after its blast is acceptable until M12's
       break-up.
 - [ ] **M4-T23 A capital promoted near a rock.** A ship coming back from the tier inside a rock or a mine is moved out by the
       shortest way (a capital by its hull box): watch a carrier promoted at 10 km next to a rock field for a visible jump.
@@ -971,12 +973,15 @@ want a window you can see.
       back. Say if the flash is too bright close up.
 - [ ] **T23, a fighter cannot open a point:** `transit arrive point fighter` is a debug point held by nothing; in play no fighter
       opens one. A raid (`encounters force raid`) arrives through a capital's point or the gate, as its data says.
-- [ ] **T23, a capital's point collapses:** `transit carrier point follow`, then `vortex collapse` (destroys the opener), or fly a
-      carrier away beyond twice its length from its mouth: the point collapses at once with a flash. Check `state vortex`
-      (`last_collapse`: `opener_destroyed` or `out_of_range`).
-- [ ] **T23, ships caught inside die:** collapse a point while a ship is still in its funnel (`vortex collapse` right after
-      `transit arrive point capital`): the ship is destroyed with no kill credit (`collapse_kills` in `state vortex`).
-- [ ] **T23, the battle:** `bench battle 1000`: fighters ride their side's capital points or come through the battle's own gate;
-      only capitals open points.
+- [ ] **T23, a capital's point collapses:** paste `transit carrier point fighter follow; wait 120; vortex collapse; wait 30; state
+      vortex` (the destroyed opener; or fly a carrier away beyond twice its length from its mouth): the point collapses at once
+      with a flash and `state vortex` shows `collapses = 1`, `collapse_kills = 1` (the carrier, still in its own funnel), `last_collapse =
+      opener_destroyed` (`out_of_range` when flown away).
+      The fighters of the carrier are too small on screen at 2.5 km to fly the funnel, so they are placed at once.
+- [ ] **T23, ships caught inside die:** paste `transit arrive point capital; wait 5; vortex collapse; wait 30; state vortex`: the
+      capital is still in its own funnel when the point collapses, so it dies by the collapse (no kill credit): `collapse_kills
+      = 1`, `last_collapse = opener_destroyed` (M7-T59: the collapse now runs before the opener's death, so it counts).
+- [ ] **T23, the battle:** checked in code and a test (M7-T59, see its Done note): in `bench battle 1000` only capitals open
+      points and fighters ride their side's capital points or come through the battle's own gate. Nothing to do by hand.
 
 **Not for you yet:** Babylon 5 itself (M7), time warp (M9), other planets to fly to (M9).

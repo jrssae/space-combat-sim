@@ -278,6 +278,7 @@ func test_a_short_battle_writes_every_entity_count_and_puts_the_factions_back() 
 		assert_true(Factions.is_known(cap.faction), "%s flies for a game faction (%s)" % [cap.name, cap.faction])
 		assert_eq(cap.targetable.faction, cap.faction)
 		assert_eq(cap.damageable.faction, cap.faction)
+		assert_false(cap.damageable.invulnerable, "%s is mortal once the run is over (M7-T59)" % cap.name)
 	assert_eq(standins.asteroid_count(), int(mix["asteroids"]), "the rocks stay")
 	var drawn: int = 0
 	for rocks: Node in standins.get_node("Asteroids").get_children():
@@ -369,10 +370,17 @@ func test_a_battle_comes_in_through_jump_points_in_waves() -> void:
 		assert_true(_inside_a_point(c.ship.global_position), "%s came out of a capital's open point" % c.display_name)
 		if transits.is_passing(c.ship):
 			assert_lt(transits.scale_of(c.ship), 1.0, "%s comes out of the ring shrunk" % c.display_name)
+	var pool: JumpPointPool = main.bench.jumps
 	await wait_for_signal(main.bench.finished, 120.0, "the bench finishes")
 	assert_null(main.bench.gate, "the battle's gate goes with the run")
 	var s: Dictionary = _summary_of("arrivals_test")
 	var came: Dictionary = s.get("arrivals", {})
+	# M7-T59 (m6-096): over the whole run only the capitals opened points, and every fighter came by a capital's point or the gate.
+	assert_eq(int(came.get("capital_points", -1)), int(mix["capitals"]), "one point per capital")
+	assert_eq(pool.opened, int(mix["capitals"]), "the pool opened no point for a fighter")
+	assert_eq(pool.refused, 0, "and refused none")
+	assert_eq(int(came.get("fighters_via_capital", 0)) + int(came.get("fighters_via_gate", 0)), int(mix["fighters"]),
+			"every fighter rode a capital's point or came through the gate")
 	assert_eq(String(came.get("mode", "")), "jump")
 	assert_eq(int(came.get("points", 0)), arrivals.points.size())
 	assert_eq(int(came.get("opened", 0)), arrivals.points.size(), "every unit came in before the window")
@@ -413,3 +421,28 @@ func _inside_a_point(at: Vector3) -> bool:
 				and along < point.fit.mouth_radius_m:
 			return true
 	return false
+
+
+# M7-T59 (m6-094, m6-095): the console recipes the checklist gives.
+func test_a_carriers_point_collapses_when_its_opener_is_destroyed() -> void:
+	main.ships.prepare(ShipPool.DEFAULT_TYPE, 4)
+	await _ticks(30)
+	var result: ConsoleResult = _exec("transit carrier point fighter follow")
+	assert_true(result.ok, "the recipe's carrier: %s" % result.text())
+	await _ticks(10)
+	assert_eq(int(_read("vortex.open")), 1, "its point is open")
+	assert_true(_exec("vortex collapse").ok)
+	await _ticks(2)
+	assert_eq(int(_read("vortex.collapses")), 1)
+	assert_eq(String(_read("vortex.last_collapse")), "opener_destroyed")
+
+
+func test_a_capital_caught_in_its_own_funnel_dies_by_the_collapse() -> void:
+	await _ticks(30)
+	var result: ConsoleResult = _exec("transit arrive point capital")
+	assert_true(result.ok, "the recipe's capital: %s" % result.text())
+	await _ticks(5)
+	assert_true(_exec("vortex collapse").ok)
+	await _ticks(2)
+	assert_eq(int(_read("vortex.collapse_kills")), 1, "the ship in the funnel counts as a collapse kill")
+	assert_eq(String(_read("vortex.last_collapse")), "opener_destroyed")

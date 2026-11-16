@@ -557,10 +557,18 @@ func _cmd_vortex(args: Dictionary) -> ConsoleResult:
 			if held == null:
 				return ConsoleResult.failure("no open point is held by a ship")
 			var damageable: Damageable = Damageable.of(held.opener) if is_instance_valid(held.opener) else null
-			if damageable == null or not damageable.kill():
+			if damageable == null or damageable.hull.destroyed:
 				return ConsoleResult.failure("its opener cannot be destroyed")
-			return ConsoleResult.line("%s destroyed; its point collapses with %d ships in its funnel" % [held.opener.name,
-					VortexTransits.attach(main.world).bodies_in(held).size()])
+			var opener_name: String = held.opener.name
+			var inside: int = VortexTransits.attach(main.world).bodies_in(held).size()
+			# The collapse first, so a ship caught in the funnel (the opener too) dies by it and counts in `collapse_kills`.
+			var killed: int = 0
+			for pool: JumpPointPool in _pools():
+				if pool.points().has(held):
+					killed = pool.collapse(held, JumpCapability.DESTROYED)
+			damageable.kill()
+			return ConsoleResult.line("%s destroyed; its point collapses with %d ships in its funnel, %d killed by the collapse" % [
+					opener_name, inside, killed])
 		&"lod":
 			var level: String = str(args[&"option"])
 			if level == "auto" or level == "arrival":

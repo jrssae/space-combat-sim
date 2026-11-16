@@ -3001,3 +3001,20 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   one-line recipe for each; verify m6-096 in code and a test (in `bench battle 1000` only capitals open points; fighters ride their
   side's capital points or the battle's gate) and record the result.
 - **Done when:** tests; the m6-096 result written; the maintainer kills a capital after a run (H); committed.
+- **Done (code part, 2026-11-16):**
+  - Mortal capitals: `StandinDirector.keep_after_run` (called by `BenchRunner._put_back`) sets every capital's
+    `damageable.invulnerable = false` when the window ends; during the run they stay invulnerable. Test: `test_bench` battle test
+    asserts every capital is mortal after the run. Fighters stay invulnerable as before (not asked).
+  - m4-016/017 recipe (after the `[bench]` line): `set targeting.selected "CRUISER 1"; kill` works (live headless: "CRUISER 1 destroyed").
+  - m6-094: the checklist's `transit carrier point follow` was refused (`follow` is the 4th word: `transit carrier point fighter
+    follow`); the recipe in `docs/playtest.md` is corrected: `transit carrier point fighter follow; wait 120; vortex collapse; wait
+    30; state vortex` gives `collapses = 1`, `last_collapse = opener_destroyed`.
+  - m6-095: `vortex collapse` killed the opener first, so the collapse found it dead and `collapse_kills` stayed 0 and no ship was
+    ever "caught inside" (fighters at 2.5 km are too small on screen to fly the funnel). Fixed in `JumpgateHost` (`vortex collapse`
+    runs `JumpPointPool.collapse` first, then kills the opener): recipe `transit arrive point capital; wait 5; vortex collapse; wait
+    30; state vortex` now gives `collapse_kills = 1`. Tests: `test_bench` (the two recipes).
+  - m6-096 result (checked, nothing to do by hand): `BenchRunner._open_due` calls `jumps.open_for` only for units with
+    `via == VIA_OWN`, which `BattleArrivals.plan` gives only to capital units; a fighter group is `VIA_CAPITAL` (rides a capital of
+    its side in its wave within `CAPITAL_NEAR_M`, `_ride_out`) or `VIA_GATE` (`_through_gate`). Tests: `test_battle_arrivals`
+    (`test_fighter_groups_ride_a_near_capital...`, `bench battle 1000` plan) and `test_bench` battle arrivals test now asserts for
+    a whole run: pool `opened == capitals`, `refused == 0`, `fighters_via_capital + fighters_via_gate == fighters`.
