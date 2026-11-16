@@ -1947,37 +1947,6 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   on the tankers), carry it into the cargo bay and come back; the reverse for loading. Saturn 3, Saturn 4 (transport and tanker) and
   Saturn 8 (transport and tanker), each by its own pod layout from M5's modular Saturns. Bots and pods ambient as before; clearance
   tested; hide when fighting starts (pods wait). A live run for the maintainer (H).
-
-### M7-T31 The pause menu's Quit and compact menus
-
-- **Why (maintainer, 2026-11-14):** "in the pause menu, add a quit option that exits the game entirely"; "in the pause menu and start
-  menu, shrink each of the boxes to fit only as much as is being displayed for the main views. Settings can use its current
-  layout. But for everything else, it ends up being a lot of space taken up that just feels empty."
-- **What:** Quit in the pause menu (with a confirm, pad-reachable), leaving the game; the start menu's and pause menu's main views
-  (and their simple sub-pages, not Settings) sized to their content; M5's front-end tests and pad-only navigation unchanged; a sheet
-  (H).
-- **Done (2026-11-14, maintainer-approved from the sheet):**
-  - **Quit.** The pause list ends with Quit to desktop. It opens a "Quit to desktop?" page (`ConfirmScreen`) with No first and focused, so a
-    stray double A never quits; B and No step back, Yes leaves the game. Pad-reachable; `PauseMenu.quit_game` is injectable for tests.
-  - **Compact boxes.** The start screen, New game, Free flight, the pause list and the confirm page size each box to its content
-    (`MenuScreen.compact`, `MenuFrame` compact layout). Settings, Controls and the debrief keep the filled layout.
-  - **Pause menu.** The pad box is docked to the lower left corner (48 px from the left, 40 px from the bottom) and shrinks in a small
-    window instead of meeting the options box; the objectives box stays 440 px, top aligned right of the left column, narrowing in
-    a narrow window.
-  - **Descriptions.** New game's briefing and Free flight's note sit in a box on the right (`MenuScreen.wide_right`): top aligned beside
-    the options box, from the 24 px gap to the right margin, as tall as the text, capped at the window and scrolling when long (no
-    scroll indicator, by the maintainer's decision). It follows the focus and is hidden while Back has the focus.
-  - **Tests.** `test_menu_compact` (box heights, the pad dock, the description box at 1920x1080, 1920x1200, 3840x2160, 1100x700 and
-    800x600), `test_pause_quit` (confirm, cancel, Yes, pad only); `test_pause_menu` lists five entries and `test_front_end` expects the
-    description box on New game and Free flight, the only M5 assertions that changed. Sheet tooling: `scripts/menu_sheet.sh`.
-
-### M7-T14 Integration, full suite, docs and acceptance
-
-- **Goal:** AC11 and the (H) checklist for AC12.
-- **Steps:** §20 in `docs/architecture.md` as built; the M7 section of `docs/playtest.md` with the (H) checklist; the roadmap row;
-  `scripts/run_tests.sh` once, read from the suite's own totals; the GPU check; then ask the maintainer to confirm the milestone,
-  and once confirmed merge `m7` into `main`.
-- **Done when:** the maintainer confirms M7.
 - **Maintainer's choices (2026-11-14):** transport pods carried as whole blocks (no generator change); one bot a Saturn 3 pod, two
   (front and back) a transport block or a tank; tanks turned 90 degrees onto their side before the bay.
 - **Done (as built, 2026-11-14; awaiting the maintainer's live run):**
@@ -2011,6 +1980,37 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     at 105 s). The look and the feel stay (H): the maintainer's live run, one line a hull (`show` puts the player beside the lane on
     the side whose pods come off first; the bots are small at that distance).
 
+### M7-T31 The pause menu's Quit and compact menus
+
+- **Why (maintainer, 2026-11-14):** "in the pause menu, add a quit option that exits the game entirely"; "in the pause menu and start
+  menu, shrink each of the boxes to fit only as much as is being displayed for the main views. Settings can use its current
+  layout. But for everything else, it ends up being a lot of space taken up that just feels empty."
+- **What:** Quit in the pause menu (with a confirm, pad-reachable), leaving the game; the start menu's and pause menu's main views
+  (and their simple sub-pages, not Settings) sized to their content; M5's front-end tests and pad-only navigation unchanged; a sheet
+  (H).
+- **Done (2026-11-14, maintainer-approved from the sheet):**
+  - **Quit.** The pause list ends with Quit to desktop. It opens a "Quit to desktop?" page (`ConfirmScreen`) with No first and focused, so a
+    stray double A never quits; B and No step back, Yes leaves the game. Pad-reachable; `PauseMenu.quit_game` is injectable for tests.
+  - **Compact boxes.** The start screen, New game, Free flight, the pause list and the confirm page size each box to its content
+    (`MenuScreen.compact`, `MenuFrame` compact layout). Settings, Controls and the debrief keep the filled layout.
+  - **Pause menu.** The pad box is docked to the lower left corner (48 px from the left, 40 px from the bottom) and shrinks in a small
+    window instead of meeting the options box; the objectives box stays 440 px, top aligned right of the left column, narrowing in
+    a narrow window.
+  - **Descriptions.** New game's briefing and Free flight's note sit in a box on the right (`MenuScreen.wide_right`): top aligned beside
+    the options box, from the 24 px gap to the right margin, as tall as the text, capped at the window and scrolling when long (no
+    scroll indicator, by the maintainer's decision). It follows the focus and is hidden while Back has the focus.
+  - **Tests.** `test_menu_compact` (box heights, the pad dock, the description box at 1920x1080, 1920x1200, 3840x2160, 1100x700 and
+    800x600), `test_pause_quit` (confirm, cancel, Yes, pad only); `test_pause_menu` lists five entries and `test_front_end` expects the
+    description box on New game and Free flight, the only M5 assertions that changed. Sheet tooling: `scripts/menu_sheet.sh`.
+
+### M7-T14 Integration, full suite, docs and acceptance
+
+- **Goal:** AC11 and the (H) checklist for AC12.
+- **Steps:** §20 in `docs/architecture.md` as built; the M7 section of `docs/playtest.md` with the (H) checklist; the roadmap row;
+  `scripts/run_tests.sh` once, read from the suite's own totals; the GPU check; then ask the maintainer to confirm the milestone,
+  and once confirmed merge `m7` into `main`.
+- **Done when:** the maintainer confirms M7.
+
 - **Scope added (2026-11-15):**
   - The council's call-site tests: a heavy cannon in `TurretRows` (a lifted mount) hits a crossing fighter-sized target at 2 km,
     10-30 degrees up, and an interceptor battery's stored azimuth and elevation follow the pulse it fires; each fails when its line in
@@ -2029,6 +2029,38 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     task they belong to.
   - The M4 to M6 hands-on checks: the maintainer ticks them on the checklist page (https://claude.ai/artifact/FhZSkHy4ZckNQkm22Kn7PA);
     the controller reads the ticks and notes back and updates `docs/playtest.md`.
+- **Done (code part, 2026-11-15; the docs, the full `run_tests.sh`, the GPU check and the (H) checklist follow):**
+  - **Call-site tests** (`251a1cd8`): `test_grid_aim_call_sites` 2/2 through `step_turrets` and `step_interceptors` on a real
+    station. H1 (lifted 9.5 m) against a fighter crossing at 40 m/s, 2 km out, 11 degrees up: 6 hits of 9 shots; with `tk::aim(&at,
+    ...)` reverted to `&f` (scratch copy only) 1 of 9, and the test fails. I5 against four bolts from 45 degrees up: the barrels it
+    shows lie 0.04-0.15 degrees off each met pulse's line; with the stored angles reverted to the trunnion lead's 1.16-1.32, and it
+    fails.
+  - **`frame drop <km> [body]`** (`6832e781`): `WorldFrame.drop_toward` rides the body's own rail (`epsilon_iii`, or `epsilon` the
+    star) with the scenario's origin placed so the player stands that high over it, at the rest velocity: the residual is the
+    body's whole pull, the ship falls straight in, ALT counts down (live: 399 921 m 5 s after `frame drop 400`), the atmosphere's
+    impact rule takes it, and the velocity rebase and REF work as anywhere. Refused outside the body's zone (D66: about 13 550 km
+    over Epsilon III, 14.2 million km over the star) or where another body's zone wins, for a negative altitude and an unknown
+    body. `info.md`; `test_frame_drop` 3/3 (400 km over the planet: 12.42 m/s down after 2 s against 12.52 from its pull; the star
+    a million km up; the refusals).
+  - **Jolt's job pool** (`cc4ec81d`): Godot's `JoltJobSystem` holds 2 048 jobs; Jolt makes jobs a step in proportion to the worker
+    threads, and a job the main thread ran while waiting is freed only when its pool task comes round, so the test's 32 steps
+    back to back a frame overflowed it on 12 threads and more (a bare Godot probe, one body: within 20 000 to 40 000 ticks; never at
+    4 or 8 threads, or 1 to 16 steps a frame). `test_gravity_orbit`'s Jolt run takes one step a frame with headless's 6.9 ms frame
+    sleep off for the run: the whole orbit in 61 s (was 75), worst 0.0606 m as before, no warning; no project setting changed.
+  - **GPU tests** (`c6addeb3`): `test_sun_gpu` and `test_scaled_space_gpu` hide GUT's panel for each test; the planet's disc is
+    measured top to bottom lit pixel (dark ground inside it read 409 of 412 px). At 960x540 they were 2/4 and 0/3, now 4/4 and
+    3/3; 4/4 and 3/3 at the default window.
+  - **Shard weights** (`5406d51c`): every file of 5 s or more from CI run 43790188947 (`test_cargo_carry_clearance` 600 -> 187 s,
+    `test_station_wing_follow` 113, `test_station_pools` 10, `test_bot_crew` 5; files under 5 s dropped; `test_grid_aim_call_sites`
+    at its local 37 s). That run's shards took 1 070 (plus Rust and smokes), 838, 1 280 and 1 241 s against 1 311 estimated
+    each; the new plan estimates 1 234 s each. `check` green (416 files).
+  - **Cargo notes**: T14's "Maintainer's choices (2026-11-14)" and "Done (as built, 2026-11-14 ...)" moved verbatim to M7-T30.
+  - **Verified** in a `--staged --build-native` copy: compile check (867 scripts); GUT with `GUT_SLOW=1`, 17 files 101/101
+    (`test_grid_aim_call_sites` 2, `test_frame_drop` 3, `test_gravity_orbit` 3, `test_free_fall` 7, `test_gravity_movers` 5,
+    `test_flight_reference` 4, `test_frame_passes` 12, `test_scaled_space` 19, `test_console_command_list` 7, `test_heavy_cannon` 7,
+    `test_station_grid` 9, `test_station_grid_threads` 1, `test_turret_kernel` 12, `test_parity_fixture` 3,
+    `test_flight_parity_fight` 1, `test_brain_think_parity` 5, `test_weapon_rows_battle` 1); the two GPU files windowed; Python
+    `test_ci_shards` 20/20 with PIL blocked.
 
 ### M7-T32 The cargo bay in red-lit grey metal
 
