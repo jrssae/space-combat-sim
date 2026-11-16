@@ -2998,6 +2998,22 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   takes the comms commands (wing orders, radial menus) as the sandbox's wingmen do. Console list and info.md updated.
 - **Done when:** tests for the command and for Alpha answering a wing order after a launch; the maintainer launches and orders them
   (H); committed.
+- **Done (code part, 2026-11-16):**
+  - **Cause:** `LaunchDirector._station_wing` returned no wing when the player leads one of the launched wing's name ("left to the
+    player"), so `launch wing alpha` sent twelve `ally_starfury` pilots that joined no wing at all: no leader, no slot, and
+    `WingDirector.give_order` (keys 1-4, the comms menu, `wing order`) only reaches the player's wing's members. The player's wing
+    also had only three slots (`Wing.DEFAULT_SIZE`), so it had no room for them.
+  - **Fix:** a wing the player leads (Alpha in the station scenarios, the player its Alpha 1) grows to eleven slots
+    (`Wing.resize`, which never cuts a flown slot) and takes the launched Starfuries as its own members, one per empty slot
+    (eight beside the scenario's three wingmen), each named for its slot (`WingDirector.callsign_for`, now public) and briefed with
+    the wing's order; a launch that falls through gives the slots back. The same path serves `traffic scramble alpha` and a raid's
+    scramble. Beta, Delta and Zeta keep their own AI leader. `launch wing all` launches every wing, one line each (fails only if
+    none went). Console help and `info.md` updated. Note: the player's wing keeps its eleven slots afterwards, so `wing replenish`
+    (and a wave's replenish) can refill all eleven.
+  - **Tests:** `test_wing.gd` (+1: resize), `test_launch_bay.gd` (+2: `launch wing all` launches all four wings, Alpha 8 into the
+    player's wing and the others 12 under an AI leader; a launched Alpha wing sits in the player's wing with the player as leader,
+    obeys FORM ON ME from the comms menu, COVER ME from the keyboard's order key and `wing order`, and once out forms on the player;
+    a failed launch leaves the wing as it was).
 
 ### M7-T59 Bench capitals mortal after the run; the M4 and M6 checks made testable
 

@@ -54,6 +54,29 @@ func test_a_full_wing_a_taken_slot_a_bad_slot_and_a_second_add_are_refused() -> 
 	assert_eq(wing.slot_of(_member("nobody")), -1)
 
 
+func test_resize_grows_the_slots_and_never_cuts_a_flown_one() -> void:
+	var wing := Wing.new()
+	var a := _member("ALPHA 2")
+	var d := _member("ALPHA 4")
+	wing.add_member(a, 1)
+	wing.add_member(d, 3)
+	wing.mark_lost(2)
+	assert_true(wing.resize(11), "a station launch makes room for the rest of Alpha (M7-T58)")
+	assert_eq(wing.size, 11)
+	assert_eq(wing.slot_of(a), 1, "members keep their slots")
+	assert_eq(wing.slot_of(d), 3)
+	assert_true(wing.is_lost(2), "a lost slot stays lost")
+	assert_false(wing.is_lost(4), "a new slot is not")
+	assert_eq(wing.empty_slots(), PackedInt32Array([2, 4, 5, 6, 7, 8, 9, 10, 11]))
+	var e := _member("ALPHA 12")
+	assert_eq(wing.add_member(e, 11), 11)
+	assert_false(wing.resize(3), "slot 11 is flown")
+	assert_eq(wing.size, 11, "a refused resize changes nothing")
+	wing.remove_member(e)
+	assert_true(wing.resize(3), "back to the finger-four once the slots past it are empty")
+	assert_eq(wing.empty_slots(), PackedInt32Array([2]))
+
+
 func test_removing_a_member_frees_its_slot() -> void:
 	var wing := Wing.new()
 	var a := _member("ALPHA 2")

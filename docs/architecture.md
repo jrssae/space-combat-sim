@@ -5839,6 +5839,8 @@ data/station/traffic.json        the interval, the kinds' weights, the raid's si
   carrying, opened standing still 1.25 s on letting go, then folded flying off (at once in a fight). Clearance is measured over the
   craft's body and hands (5 m from the hull, 2.5 m from the Saturn; least 10.6 m and 3.0 m).
   any wing.
+  A wing the player leads (Alpha, the player its Alpha 1; M7-T58) is not made again: it grows to eleven slots (`Wing.resize`) and
+  the launch fills its empty slots, so the launched ships take the player's orders. `launch wing all` launches every arm's wing.
 - **Threads.** All of the above per tick is in the AI job on the frozen rows; `Field.sub_points` is filled in the job
   before the pass. Threaded equals delayed and one thread equals six (`test_station_threads`, `test_station_grid_threads`,
   and T38's dive among the arms in `test_station_wing_follow`). No recording in `tests/fixtures/` moved.

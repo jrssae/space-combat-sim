@@ -15,8 +15,9 @@ extends Node
 ##   After a played hand-off its engines light for `burn_s` (`step_player`, as the gate jump's autopilot), so it clears the arm
 ##   under thrust; a skip leaves the controls to the player at once.
 ##   Wingmen (the player's wing) take the other racks of the arm, in the wave order, and the second row behind them.
-## - **Wing launches** (`launch wing <wing>`): twelve AI Starfuries from the ally pool (topped up when short), named after the
-##   wing, launched in two waves.
+## - **Wing launches** (`launch wing <wing>`, `launch wing all`): twelve AI Starfuries from the ally pool (topped up when short),
+##   named after the wing, launched in two waves. A wing the player leads (Alpha, with the player as Alpha 1) takes the launched
+##   ships as its own wingmen, as many as its eleven slots have room for, so they answer the player's orders (M7-T58).
 ##
 ## Console: provider and command `launch`.
 
@@ -188,6 +189,16 @@ func launch_wing(wing: String, count: int = WING_SIZE) -> String:
 			return "wing %s is launching already" % wing
 	var pool: ShipPool = main.ships
 	count = clampi(count, 1, WING_SIZE)
+	var led: Wing = _player_led_wing(wing.to_upper())
+	var size_before: int = led.size if led != null else 0
+	var slots := PackedInt32Array()
+	if led != null:
+		main.wings.refresh(led)  # a wingman down a moment ago frees its slot
+		led.resize(maxi(led.size, WING_SIZE - 1))  # the player flies number 1, the rest of the wing the other eleven
+		slots = led.empty_slots()
+		count = mini(count, slots.size())
+		if count == 0:
+			return "wing %s is full: every slot of the player's wing is flown" % wing.to_upper()
 	# A station scenario built these at load (`StationTraffic.reserve_pools`); a console launch elsewhere may hitch.
 	main.ensure_free(ShipPool.ALLY_TYPE, count)
 	var ships: Array[Combatant] = []
@@ -196,24 +207,32 @@ func launch_wing(wing: String, count: int = WING_SIZE) -> String:
 	var made_wing: bool = main.wings != null and main.wings.wing_named(prefix) == null
 	var squadron: Wing = _station_wing(prefix)
 	for i: int in count:
-		var callsign: String = pool.next_name(prefix, 1)
-		var made: Dictionary = BrainFactory.from_behaviour({"type": "ai", "profile": WING_PROFILE}, at,
-				hash([callsign, main.scenario_seed]))
+		var callsign: String = main.wings.callsign_for(led, slots[i]) if led != null else pool.next_name(prefix, 1)
+		var behaviour: Dictionary = {"type": "ai", "profile": WING_PROFILE}
+		if led != null:
+			behaviour["orders"] = String(AiContext.order_word(led.order))
+		var made: Dictionary = BrainFactory.from_behaviour(behaviour, at, hash([callsign, main.scenario_seed]))
 		var ally: Combatant = pool.acquire(callsign, at, Basis.IDENTITY, main.world.rest_velocity(),
 				made["brain"] as PilotBrain if bool(made["ok"]) else null, ShipPool.ALLY_TYPE)
 		if ally == null:
 			break
+		if led != null and main.wings.add_member(led, ally, slots[i]) != slots[i]:
+			pool.release(ally)  # a ship the player's wing refuses would fly on deaf to its orders
+			break
 		ships.append(ally)
 		if squadron != null:
 			main.wings.join(squadron.name, ally)  # the first leads, the rest take its slots (M7-T10)
-	if ships.is_empty():
-		return "no allied Starfury free"
-	var why: String = _start(wing, 1, ships, "", hash([main.scenario_seed, wing.to_lower(), "wing", SimClock.now()]))
+	var why: String = "no allied Starfury free" if ships.is_empty() else \
+			_start(wing, 1, ships, "", hash([main.scenario_seed, wing.to_lower(), "wing", SimClock.now()]))
 	if not why.is_empty():
 		for ally: Combatant in ships:
 			if squadron != null:
 				main.wings.leave(squadron, ally)
+			if led != null:
+				main.wings.remove_member(led, ally)
 			pool.release(ally)
+		if led != null:
+			led.resize(size_before)  # the player's wing as it was, so a replenish does not fill slots it never had
 		if made_wing and squadron != null and squadron.leader == null and squadron.members().is_empty():
 			main.wings.wings.erase(squadron)  # a retry starts from nothing, not from a wing of parked hulls
 		return why
@@ -239,6 +258,33 @@ func _station_wing(wing_name: String) -> Wing:
 	wing.order = AiContext.Order.ENGAGE_AT_WILL
 	main.wings.wings.append(wing)
 	return wing
+
+
+# The wing called `wing_name` when the player leads it, or null: its launched ships fly as the player's wingmen.
+func _player_led_wing(wing_name: String) -> Wing:
+	var wing: Wing = main.wings.wing_named(wing_name) if main.wings != null else null
+	return wing if wing != null and wing.leader != null and wing.leader.is_player else null
+
+
+## Launches every wing the station has (`launch wing all`). Returns `{lines, launched}`: one line per wing (how many launched,
+## or why it did not) and how many wings went.
+func launch_all_wings() -> Dictionary:
+	var lines := PackedStringArray()
+	var launched: int = 0
+	for wing: String in WINGS:
+		var why: String = launch_wing(wing)
+		if why.is_empty():
+			launched += 1
+		lines.append("wing %s: %s" % [wing, why if not why.is_empty() else "%d launching" % _last_launch_size(wing)])
+	return {"lines": lines, "launched": launched}
+
+
+# How many fighters the running launch of `wing` carries.
+func _last_launch_size(wing: String) -> int:
+	for launch: Dictionary in launches:
+		if launch["wing"] == wing.to_lower():
+			return (launch["ships"] as Dictionary).size()
+	return 0
 
 
 # A scenario that starts in a bay starts there again after a respawn, without the wingmen (they flew on).
@@ -545,7 +591,7 @@ func _register_console() -> void:
 		&"launches": {"get": func() -> int: return launch_count, "type": TYPE_INT, "doc": "Player launches this scenario run (seeds the cuts)"},
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(PROVIDER,
-			"Cobra-bay launches (M7-T08): launch <wing> <door> (the player and its wingmen), launch wing <wing> (twelve AI Starfuries in two waves), launch skip, launch status, launch cut (the last camera cut), launch seed <n|off> (pin the cuts' seed), launch preview <variant> (play one shot variant now, for look sheets)",
+			"Cobra-bay launches (M7-T08): launch <wing> <door> (the player and its wingmen), launch wing <wing> (twelve AI Starfuries in two waves; a wing the player leads takes them as its wingmen), launch wing all (every wing), launch skip, launch status, launch cut (the last camera cut), launch seed <n|off> (pin the cuts' seed), launch preview <variant> (play one shot variant now, for look sheets)",
 			[ConsoleArg.string_optional(&"a", "status"), ConsoleArg.string_optional(&"b")]), _cmd_launch, self)
 
 
@@ -588,15 +634,22 @@ func _cmd_launch(args: Dictionary) -> ConsoleResult:
 			return ConsoleResult.failure("launch skip: the player is not launching")
 		skip()
 		return ConsoleResult.line("launch skipped")
+	if a == "wing" and b == "all":
+		var outcome: Dictionary = launch_all_wings()
+		var lines: PackedStringArray = outcome["lines"]
+		return ConsoleResult.success(lines) if int(outcome["launched"]) > 0 \
+				else ConsoleResult.failure("launch wing all: %s" % "; ".join(lines))
 	if a == "wing":
 		var why_wing: String = launch_wing(b)
-		return ConsoleResult.failure("launch wing: %s" % why_wing) if not why_wing.is_empty() \
-				else ConsoleResult.line("wing %s launching: twelve Starfuries in two waves" % b)
+		if not why_wing.is_empty():
+			return ConsoleResult.failure("launch wing: %s" % why_wing)
+		var joined: String = " as the player's wingmen" if _player_led_wing(b.to_upper()) != null else ""
+		return ConsoleResult.line("wing %s launching: %d Starfuries in two waves%s" % [b, _last_launch_size(b), joined])
 	if WINGS.has(a) and b.is_valid_int():
 		var why: String = launch_player(a, int(b))
 		return ConsoleResult.failure("launch: %s" % why) if not why.is_empty() \
 				else ConsoleResult.line("launching from cobra_bay_%s_%s" % [a, b])
-	return ConsoleResult.failure("launch <alpha|beta|delta|zeta> <1-6>, launch wing <wing>, launch skip, launch status, launch cut, launch seed <n|off>")
+	return ConsoleResult.failure("launch <alpha|beta|delta|zeta> <1-6>, launch wing <wing|all>, launch skip, launch status, launch cut, launch seed <n|off>")
 
 
 # Plays one variant of the profile's pools on the player's launch now, as its phase would (for look sheets).

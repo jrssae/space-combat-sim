@@ -236,7 +236,7 @@ func replenish(wing: Wing = null) -> Array[Combatant]:
 			break
 		var lane: Vector3 = wing.slot_offset(slot)
 		var at: UniversePos = anchor.plus_local(basis * Vector3(lane.x, lane.y, REPLENISH_DISTANCE_M))
-		var callsign: String = _callsign_for(wing, slot)
+		var callsign: String = callsign_for(wing, slot)
 		var made: Dictionary = BrainFactory.from_behaviour({"type": "ai", "profile": REPLENISH_PROFILE,
 				"orders": String(AiContext.order_word(wing.order))}, at, hash([callsign, _launched]))
 		if not bool(made["ok"]):
@@ -462,9 +462,9 @@ func _post(line: String) -> void:
 	acknowledged.emit(line)
 
 
-# The slot's callsign, unless a ship in play carries it (a console `spawn ally`): then the first free number after the
-# wing's own, so no two ships share a name.
-func _callsign_for(wing: Wing, slot: int) -> String:
+## The slot's callsign, unless a ship in play carries it (a console `spawn ally`): then the first free number after the
+## wing's own, so no two ships share a name.
+func callsign_for(wing: Wing, slot: int) -> String:
 	var callsign: String = wing.callsign(slot)
 	var taken: bool = wing.leader != null and wing.leader.display_name == callsign
 	for other: Combatant in pool.alive():

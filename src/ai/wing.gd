@@ -57,6 +57,22 @@ func add_member(member: Combatant, slot: int = -1) -> int:
 	return slot
 
 
+## Changes the number of member slots to `new_size`, keeping every member in its slot (a station wing launched for the
+## player's wing makes room for the rest of the wing, M7-T58). Returns false, changing nothing, when a slot it would cut is flown.
+func resize(new_size: int) -> bool:
+	new_size = maxi(new_size, 0)
+	for i: int in range(new_size, size):
+		if _by_slot[i] != null:
+			return false
+	_by_slot.resize(new_size)
+	var old: int = _lost.size()
+	_lost.resize(new_size)
+	for i: int in range(old, new_size):
+		_lost[i] = false
+	size = new_size
+	return true
+
+
 ## Takes `member` out of its slot. Returns whether it was a member.
 func remove_member(member: Combatant) -> bool:
 	var slot: int = slot_of(member)

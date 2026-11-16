@@ -3,7 +3,8 @@ extends GutTest
 ## with the controls held and the wingmen on the arm's other racks; the fighters ride the turning drum; the launch camera plays its
 ## shots; the player is handed over at the release point with the drum's surface velocity; a skip (Start) lands in the same state;
 ## the wingmen follow from the next doors in the wave order; a rebase mid-launch moves nothing on screen; a launch due under the
-## spine holds; `launch wing` launches twelve AI Starfuries. Every place comes from the station's hardpoints.
+## spine holds; `launch wing` launches twelve AI Starfuries, `launch wing all` every wing, and a launched Alpha wing flies as the
+## player's wingmen and takes the wing orders (M7-T58). Every place comes from the station's hardpoints.
 
 const DT: float = 1.0 / 60.0
 const SCENARIO: String = "res://data/scenarios/station_launch.json"
@@ -327,6 +328,91 @@ func test_a_failed_wing_launch_leaves_no_hulls_in_the_wing() -> void:
 	assert_eq(main.wings.wing_named("ZETA"), existing, "a wing from before stays")
 	assert_null(existing.leader)
 	assert_eq(existing.members().size(), 0, "with nobody parked in it")
+
+
+# The scenario started, the player skipped out and the Alpha arm's launch (the player's three wingmen) is over.
+func _start_with_alpha_clear() -> void:
+	await _start()
+	DebugConsole.registry.execute("launch skip")
+	assert_true(await _until(func() -> bool: return not main.launches.is_launching("alpha"), 3000), "the wingmen are out")
+
+
+func _order_of(c: Combatant) -> AiContext.Order:
+	return (c.driver.brain as AiPilot).context.order
+
+
+func test_launch_wing_all_launches_every_wing() -> void:
+	await _start_with_alpha_clear()
+	var result: ConsoleResult = DebugConsole.registry.execute("launch wing all")[0]
+	assert_true(result.ok, "\n".join(result.lines) + result.error)
+	assert_eq(result.lines.size(), LaunchDirector.WINGS.size(), "a line a wing")
+	for wing: String in LaunchDirector.WINGS:
+		assert_true(main.launches.is_launching(wing), "wing %s launches" % wing)
+	for launch: Dictionary in main.launches.launches:
+		var expected: int = 8 if launch["wing"] == "alpha" else LaunchDirector.WING_SIZE
+		assert_eq((launch["ships"] as Dictionary).size(), expected, "%s: Alpha fills the player's eight free slots" % launch["wing"])
+	for wing_name: String in ["BETA", "DELTA", "ZETA"]:
+		var wing: Wing = main.wings.wing_named(wing_name)
+		assert_not_null(wing)
+		assert_true(wing != null and wing.leader != null and not wing.leader.is_player, "%s keeps its own AI leader" % wing_name)
+		assert_eq(wing.members().size(), LaunchDirector.WING_SIZE - 1 if wing != null else -1)
+	var again: ConsoleResult = DebugConsole.registry.execute("launch wing all")[0]
+	assert_false(again.ok, "nothing more to launch while every wing is on its way")
+
+
+func test_a_launched_alpha_wing_flies_as_the_players_wingmen() -> void:
+	await _start_with_alpha_clear()
+	var own: Wing = main.wings.player_wing()
+	assert_eq(own.name, "ALPHA")
+	assert_eq(own.leader, main.combatant, "the player is Alpha 1")
+	var wings_before: int = main.wings.wings.size()
+	# A launch that falls through leaves the player's wing as it was.
+	var kept: LaunchProfile = main.launches.profile
+	main.launches.profile = null
+	assert_false(main.launches.launch_wing("alpha").is_empty())
+	assert_eq(own.size, Wing.DEFAULT_SIZE, "the slots it grew are gone again")
+	assert_eq(own.members().size(), 3, "with only the three wingmen in it")
+	main.launches.profile = kept
+	var result: ConsoleResult = DebugConsole.registry.execute("launch wing alpha")[0]
+	assert_true(result.ok, result.error)
+	var ships: Array = (main.launches.launches[-1]["ships"] as Dictionary).values()
+	assert_eq(ships.size(), 8, "the rest of Alpha: eleven slots less the three wingmen")
+	assert_eq(own.size, LaunchDirector.WING_SIZE - 1)
+	assert_eq(main.wings.wings.size(), wings_before, "no second Alpha wing")
+	for c: Combatant in ships:
+		var slot: int = own.slot_of(c)
+		assert_between(slot, 4, 11, "%s flies a slot of the player's wing" % c.display_name)
+		assert_eq(c.display_name, own.callsign(slot), "named for its slot")
+	await _ticks(1)
+	var leader_id: int = main.combatant.targetable.get_instance_id()
+	# The comms menu, as the radial menu sends it.
+	assert_true(DebugConsole.registry.execute("commsmenu open")[0].ok, "the menu opens")
+	assert_true(DebugConsole.registry.execute("commsmenu pick 1")[0].ok, "FORM ON ME")
+	await _ticks(1)
+	assert_eq(own.order, AiContext.Order.FORM_ON_ME)
+	assert_string_contains(main.wings.last_ack, "FORMING UP")
+	for c: Combatant in ships:
+		assert_eq(_order_of(c), AiContext.Order.FORM_ON_ME, "%s forms up" % c.display_name)
+		assert_eq((c.driver.brain as AiPilot).context.leader_id, leader_id, "on the player")
+	# The keyboard's order key (keys 1-4).
+	source.hold(InputAdapter.WING_COVER, 1.0, true)
+	await _ticks(2)
+	source.release(InputAdapter.WING_COVER)
+	await _ticks(1)
+	for c: Combatant in ships:
+		assert_eq(_order_of(c), AiContext.Order.COVER_ME, "%s covers the player" % c.display_name)
+	# The console's `wing order`.
+	assert_true(DebugConsole.registry.execute("wing order form")[0].ok)
+	await _ticks(1)
+	for c: Combatant in ships:
+		assert_eq(_order_of(c), AiContext.Order.FORM_ON_ME)
+	# Once out of its door, a launched wingman flies its slot on the player.
+	var first: Combatant = own.member_at(4)
+	var seq: LaunchSequence = main.launches.launches[-1]["seq"]
+	assert_true(await _until(func() -> bool: return seq.fighter(first.display_name)["phase"] == LaunchSequence.Phase.RELEASED, 1500),
+			"Alpha 5 is out")
+	await _ticks(60)
+	assert_eq(str((first.driver.brain as AiPilot).describe().get("behaviour", "")), "formation", "Alpha 5 forms on the player")
 
 
 func test_mission_api_launch_from_starts_the_players_launch() -> void:
