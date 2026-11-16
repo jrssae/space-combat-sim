@@ -2655,6 +2655,21 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   pooled ships come back; the native `ScsRadarPlot` columns), fix it at the cause; a test that runs many waves' worth of contacts
   coming and going and checks every contact still gets its dot.
 - **Done when:** the test; the maintainer's look (H); committed.
+- **Done (code part, 2026-11-16):** not a count, buffer or cull rect of ours, and not the roll: a Godot 4.7.2 bug. The first time a
+  multimesh is written with motion vectors on (motion blur, TAA, FSR 2.2), Godot swaps its GPU buffer for one twice the size and
+  frees the old one, but keeps the 2D renderer's cached binding (`uniform_set_2d`) to the freed buffer; from then on that multimesh
+  draws nothing and `draw_list_bind_uniform_set: Parameter "uniform_set" is null` prints every frame, until it is resized. The radar's
+  dot multimeshes grow early in a run (which healed them); once they stop growing, any later switch-on of motion vectors (the
+  maintainer's console history: `settings.motion_blur on`, `upscale fsr2 quality`) leaves only the stalks, which are not a multimesh.
+  Reproduced on the GPU in the sandbox (blur off, dots; `set settings.motion_blur true`, stalks only, the error each frame). Fix: the
+  dots go through `RadarDotBatch` (`src/hud/radar_dot_batch.gd`), which notes the GPU buffer each draw used and, when Godot moved it
+  under a multimesh it did not resize, resizes the multimesh once (to 0 and back), so the next draw binds the new buffer; the batched
+  draw and its cost are unchanged (one buffer-id read per multimesh a frame). Tests: `tests/integration/test_radar_dots_gpu.gd` (GPU;
+  pending headless): contacts come and go from 4 to 300 with the ship rolled through 0-360 degrees, then a motion-vector effect comes on
+  and the run goes on, every frame's dots read back from the GPU; worst share drawn 0.00 with the rebuild disabled, passes with it;
+  `tests/unit/test_radar_dot_batch.gd`. GPU runs with the fix: sandbox chase and cockpit octagon after blur on, two waves and FSR 2.2,
+  and `bench battle 300` with blur switched on after the arrivals: dots drawn, no `uniform_set` error
+  (`references/screenshots/M7-T45 radar dots/`). Likely the same cause as T49's error spam (the radar draws in every bench fight).
 
 ### M7-T46 Fix: FSR 2.2 too blurry
 
