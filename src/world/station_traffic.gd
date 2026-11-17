@@ -109,6 +109,8 @@ var _seeded: bool = false
 var _last_flow_s: float = -INF
 # The run's arrivals asked of the gate and not out of its vortex yet.
 var _pending_flow: int = 0
+# Every arrival asked of the gate (the run's and the console's) and not out of its vortex yet, for `status` and the replies.
+var _pending_gate: int = 0
 
 
 func _init() -> void:
@@ -130,6 +132,11 @@ func station() -> Station:
 		return null
 	var s: Station = main.far_props.station
 	return s if s != null and is_instance_valid(s) and s.hardpoints != null else null
+
+
+## Arrivals asked of the gate that wait for its vortex to open (a few seconds).
+func waiting_for_gate() -> int:
+	return _pending_gate
 
 
 ## The traffic's ships in play, and those of one kind.
@@ -474,8 +481,11 @@ func _arrive(type: StringName, kind: StringName, lane: Array[Dictionary], near: 
 		var transit: Route = _transit_route(lane, true)
 		var flow: bool = bool(extra.get("flow", false))
 		_pending_flow += 1 if flow else 0
+		_pending_gate += 1
+		last_event = "%s waiting for the gate" % kind
 		gate.request_arrival(func() -> void:
 			_pending_flow -= 1 if flow else 0
+			_pending_gate -= 1
 			var at: Transform3D = gate.arrival_transform()
 			var c: Combatant = _take(type, transit, at.origin, at.basis, gate.arrival_velocity() + main.world.rest_velocity(),
 					kind, &"transit", extra)
@@ -1019,7 +1029,7 @@ func _cmd_traffic(args: Dictionary) -> ConsoleResult:
 	match StringName(args[&"action"]):
 		&"dock":
 			why = dock(&"", arg == "near")
-			return _answer(why, "a civilian is on its way into the main docking bay")
+			return _answer(why, "a civilian is on its way into the main docking bay%s" % _gate_wait_note())
 		&"undock":
 			why = undock()
 			return _answer(why, "a civilian is coming out of the main docking bay")
@@ -1053,8 +1063,8 @@ func _cmd_traffic(args: Dictionary) -> ConsoleResult:
 			return ConsoleResult.line("traffic by itself %s (%d civilians on the run between the gate and the station)" % [arg, lane_ships])
 		&"clear":
 			return ConsoleResult.line("returned %d traffic ship(s) to their pools" % clear())
-	return ConsoleResult.line("traffic: %d in play (%d docking, %d undocking, %d inside, %d freighters, %d raiders); docked %d, undocked %d, freighter cycles %d, pods in %d, pods out %d, raids %d; auto %s; cargo: %s; last: %s" % [
-			alive_count(), alive_of(&"dock"), alive_of(&"undock"), inside_count(), alive_of(&"freighter"), alive_of(&"raid"), docked_count,
+	return ConsoleResult.line("traffic: %d in play%s (%d docking, %d undocking, %d inside, %d freighters, %d raiders); docked %d, undocked %d, freighter cycles %d, pods in %d, pods out %d, raids %d; auto %s; cargo: %s; last: %s" % [
+			alive_count(), "" if _pending_gate == 0 else " + %d waiting for the gate to open" % _pending_gate, alive_of(&"dock"), alive_of(&"undock"), inside_count(), alive_of(&"freighter"), alive_of(&"raid"), docked_count,
 			undocked_count, freighters_done, pods_in, pods_out, raids, "on" if auto else "off", _cargo_text(), last_event])
 
 
@@ -1071,6 +1081,11 @@ func _cargo_text() -> String:
 		parts.append("%s %s %s (%s%s)" % [c.display_name, main.ships.type_of(c), "loading" if bool(entry["loading"]) else "unloading",
 				entry["cargo_state"] if entry["cargo_state"] != &"" else "on its way", carried])
 	return "; ".join(parts) if not parts.is_empty() else "none"
+
+
+# Tells that a start is held until the gate's vortex is open, which takes a few seconds.
+func _gate_wait_note() -> String:
+	return "" if _pending_gate == 0 else " (it comes out of the gate once the vortex has opened, a few seconds; `traffic status` counts it then)"
 
 
 static func _rest_arg() -> ConsoleArg:

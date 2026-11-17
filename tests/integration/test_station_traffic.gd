@@ -303,3 +303,19 @@ func test_a_scrambled_wing_is_a_wing_with_orders_and_engages_a_raid_on_the_stati
 				return true
 		return main.ships.alive(ShipPool.DEFAULT_TYPE).size() < 4, 200.0)
 	assert_true(engaged, "the wing engaged the raid")
+
+
+func test_traffic_dock_far_start_is_counted_and_docks() -> void:
+	if not await _start():
+		pending("the babylon5_station asset is not generated")
+		return
+	var before: int = main.traffic.docked_count
+	var reply: ConsoleResult = _run("traffic dock")
+	assert_true(reply.ok, "\n".join(reply.lines))
+	var asked: String = _run("traffic status").lines[0]
+	# A gate holds the start until its vortex opens: status says so; without one the ship is in play at once.
+	assert_true(main.traffic.alive_count() == 1 or (main.traffic.waiting_for_gate() == 1 and asked.contains("waiting for the gate")), asked)
+	assert_true(await _until(func() -> bool: return main.traffic.alive_of(&"dock") == 1, 30.0), "one docking ship is in play")
+	assert_eq(main.traffic.waiting_for_gate(), 0, "nothing waits for the gate any more")
+	assert_true(_run("traffic status").lines[0].contains("last: dock"), "status names it")
+	assert_true(await _until(func() -> bool: return main.traffic.docked_count > before, 300.0), "it docked")
