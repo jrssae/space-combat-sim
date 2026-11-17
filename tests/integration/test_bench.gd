@@ -656,6 +656,29 @@ func test_a_carriers_point_collapses_when_its_opener_is_destroyed() -> void:
 	assert_eq(String(_read("vortex.last_collapse")), "opener_destroyed")
 
 
+# M7-T75 (m6-094): free flight with encounters off builds no raiders, so the tool grows the pool and registers them for death.
+func test_transit_carrier_grows_the_raider_pool_in_free_flight() -> void:
+	assert_true(_exec("encounters off").ok)
+	assert_eq(main.ships.pool_size(ShipPool.DEFAULT_TYPE), 0, "no raiders built")
+	await _ticks(120)
+	var result: ConsoleResult = _exec("transit carrier point fighter follow")
+	assert_true(result.ok, "the recipe's carrier: %s" % result.text())
+	assert_gte(main.ships.pool_size(ShipPool.DEFAULT_TYPE), 2, "the pool grew")
+	await _ticks(120)
+	assert_true(_exec("vortex collapse").ok)
+	await _ticks(30)
+	assert_eq(int(_read("vortex.collapses")), 1)
+	assert_eq(int(_read("vortex.collapse_kills")), 1)
+	assert_eq(String(_read("vortex.last_collapse")), "opener_destroyed")
+	var alive: Array[Combatant] = main.ships.alive()
+	assert_gt(alive.size(), 1, "the raiders it brought are alive")
+	var before: int = alive.size()
+	var victim: Combatant = alive[alive.size() - 1]
+	assert_true(victim.damageable.kill(), "a pooled raider the tool built can be killed")
+	await _ticks(10)
+	assert_lt(main.ships.alive().size(), before, "killing one removes it")
+
+
 func test_a_capital_caught_in_its_own_funnel_dies_by_the_collapse() -> void:
 	await _ticks(30)
 	var result: ConsoleResult = _exec("transit arrive point capital")
