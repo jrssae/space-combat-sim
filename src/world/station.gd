@@ -100,6 +100,7 @@ var _core: Object = null  # the native core the surfaces were given to
 var _held_angle: float = 0.0
 var _phase: float = 0.0  # added to the clock's angle, so a drum started again goes on from where it was held
 var _world: WorldFrame = null  # whose rebases teleport the bodies
+var _goto_after_launch: String = ""  # the tour point a `station goto` during a launch waits to place the player at
 
 
 func _init() -> void:
@@ -560,10 +561,29 @@ func _goto(point_name: String) -> ConsoleResult:
 	# A launch in progress still carries the player with the drum: end it first, then place the player once it lets go.
 	if main.launches != null and main.launches.locks_controls():
 		main.launches.skip()
-		main.launches.player_released.connect(_place_at_tour_point.bind(point_name), CONNECT_ONE_SHOT)
+		_goto_after_launch = point_name  # the last goto asked wins
+		if not main.launches.player_released.is_connected(_place_after_launch):
+			main.launches.player_released.connect(_place_after_launch)
+			main.player_died.connect(_forget_goto)
 		return ConsoleResult.line("launch skipped; at tour point %s once the player is away" % point_name)
 	_place_at_tour_point(point_name)
 	return ConsoleResult.line("at tour point %s" % point_name)
+
+
+# The launch let the player go: on to the tour point asked for during it.
+func _place_after_launch() -> void:
+	var point_name: String = _goto_after_launch
+	_forget_goto()
+	_place_at_tour_point(point_name)
+
+
+# A goto waiting on a launch is dropped once it is done, or when the player dies first, so no later launch carries it out.
+func _forget_goto() -> void:
+	_goto_after_launch = ""
+	if main.launches.player_released.is_connected(_place_after_launch):
+		main.launches.player_released.disconnect(_place_after_launch)
+	if main.player_died.is_connected(_forget_goto):
+		main.player_died.disconnect(_forget_goto)
 
 
 # Rests the player at the tour point against what is near it: on the drum, the drum's own motion there.

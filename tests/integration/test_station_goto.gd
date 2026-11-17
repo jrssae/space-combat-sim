@@ -106,3 +106,35 @@ func test_survives_vanes() -> void:
 
 func test_survives_reactor() -> void:
 	await _survives("reactor")
+
+
+# Council round 1 (O3): a second goto during the same launch takes the place of the first.
+func test_the_last_goto_asked_during_a_launch_wins() -> void:
+	await _start()
+	assert_true(main.launches.locks_controls(), "(a launch in progress)")
+	assert_true(_run("station goto bow").ok)
+	assert_true(_run("station goto cargo_bay").ok, "a second goto is accepted")
+	for i: int in 1600:
+		if not main.launches.locks_controls():
+			break
+		await get_tree().physics_frame
+	await get_tree().physics_frame
+	var station: Station = main.far_props.station
+	var point: Dictionary = station.hardpoints.tour("cargo_bay")
+	var there: Vector3 = station.to_world(point["position"], String(point["body"]))
+	assert_lt(main.ship.global_position.distance_to(there), 50.0, "at the second point")
+
+
+# Council round 1 (O3): a goto still waiting when the player dies is dropped: a later launch's release leaves the player be.
+func test_a_goto_waiting_on_a_launch_is_dropped_when_the_player_dies() -> void:
+	await _start()
+	assert_true(_run("station goto bow").ok)
+	Damageable.of(main.ship).invulnerable = false
+	Damageable.of(main.ship).kill()
+	await get_tree().physics_frame
+	assert_false(main.player_alive, "(the player died before the release)")
+	main.respawn()
+	await get_tree().physics_frame
+	var before: Vector3 = main.ship.global_position
+	main.launches.player_released.emit()  # as the next launch's release would
+	assert_lt(main.ship.global_position.distance_to(before), 1.0, "the dropped goto does not move the player")

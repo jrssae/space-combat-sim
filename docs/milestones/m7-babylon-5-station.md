@@ -3270,6 +3270,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   (`_place_at_tour_point`), and a point on a turning drum gets the drum's velocity there. `tests/integration/test_station_goto.gd` (slow):
   each of the eight points, after the real launch flow, 30 s with no ram, no hull damage, and (frame points) the player still within 20 m of the point;
   fails on the old code (4900 m away). The vanished traffic ship was not reproduced (none in my runs); T62 owns traffic in the bay.
+- **Council round 1 (2026-11-17):** O3: a `station goto` during a launch waits in one field on one connection: the last goto asked wins (a second one used to fail with "already connected" and keep the first), and it is dropped when the player dies before the release, so no later launch carries it out (two tests in `test_station_goto.gd`, both failing on the old code).
 
 ### M7-T64 Mines can be shot, and flying into one sets it off
 
