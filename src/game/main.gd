@@ -313,7 +313,7 @@ func _physics_process(delta: float) -> void:
 	if control_lock.apply(pc, controls_locked(), camera_rig.is_playing_shot()):
 		camera_rig.stop_shot()
 		launches.skip()  # a launch's shot skipped jumps the player to the hand-off (M7-T08)
-	if pc.ui.interact:
+	if pc.ui.interact and not opening:  # the hold that skips the opening is spent on it
 		interactions.run_offered()
 	var autopilot: FlightCommand = gates.step_player(delta) if not get_tree().paused else null
 	if autopilot == null and not get_tree().paused:

@@ -208,6 +208,26 @@ func test_holding_x_on_the_pad_skips_the_opening_and_a_tap_does_not() -> void:
 	assert_string_contains(DebugConsole.registry.execute("get mission.opening_skip")[0].lines[0], "false")
 
 
+# Council round 1 (O5): the hold that skips the opening runs no interaction of a target that offers one.
+func test_the_hold_that_skips_the_opening_runs_no_interaction() -> void:
+	await _fly()
+	await _wait_for("the first shot", func() -> bool: return _shot_id() == &"departure", 120)
+	var civilian: Combatant = _civilian()
+	var ran: Array[int] = [0]
+	civilian.targetable.interaction = TargetInteraction.new(&"dock", "DOCK", func() -> String:
+		ran[0] += 1
+		return "")
+	assert_true(main.ship.targeting.select_id(civilian.targetable.get_instance_id()), "(a target that offers an interaction)")
+	source.hold(InputAdapter.AUTOTRACK)
+	await _wait_for("the hand-over", func() -> bool: return not _api().controls_locked, 150)
+	await _ticks(2)
+	source.release(InputAdapter.AUTOTRACK)
+	await _ticks(2)
+	assert_eq(_api().step_name(), &"depart", "(the opening is skipped)")
+	assert_eq(ran[0], 0, "the same hold runs nothing")
+	assert_eq(main.interactions.runs, 0)
+
+
 func test_holding_the_keyboards_auto_track_key_skips_the_opening_too() -> void:
 	var keys := GodotInputSource.new()
 	keys.keyboard_mouse_enabled = true

@@ -2993,6 +2993,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     `test_mission_sequencer.gd` (the opening's skip and its checks), `test_hud_layout.gd` (the bar, `LOST`, the prompt frame).
     Screenshots `references/screenshots/M7-T54 escort HUD and skip/`. Left for the maintainer: fly it (H).
 - **Accepted (maintainer, 2026-11-17):** "all of m4 and m5 is fully accepted" (m5-035 passed); pushed and CI green on f5dd74fb.
+- **Council round 1 (2026-11-17):** O5: the hold of X that skips a mission's opening no longer also runs a selected target's interaction (`test_the_hold_that_skips_the_opening_runs_no_interaction`, failing on the old code).
 
 ### M7-T55 Civilians flee a fight
 
