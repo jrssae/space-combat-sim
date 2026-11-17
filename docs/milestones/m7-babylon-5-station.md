@@ -328,6 +328,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T66 | C | Fix: `frame orbit` brings the planet, the station and the jumpgate to the player instead of putting the player in orbit with everything else where it is (maintainer, 2026-11-17) | - | Opus | The frame's anchor moves the scenario's origin; world objects placed relative to it | in progress |
 | T67 | C | A `goto <nav point>` console command: puts the player near any nav point (Babylon 5 and its bays, the jumpgate, the scenario's NAV points, a body), clear of it and at rest relative to it, the frame on that place's rail; `goto` alone lists them (maintainer, 2026-11-17) | T66 | Sonnet | The frame and rail change T66 settles; a safe stand-off per kind of point | in progress |
 | T68 | C | `frame orbit` and `frame drop` take where around the body to put the player (`day`, `night`, `dawn`, `dusk` from the star, or an angle), default the day side; an orbit at or inside the atmosphere (Epsilon III's top is 100 km) is refused with the floor named (maintainer, 2026-11-17: always the dark side; `frame orbit 100` explodes the ship) | T66 | Opus | The orbit's phase against the star's direction at the scaled epoch | in progress |
+| T69 | C | Fix: Babylon 5's blinking navigation lights show at any distance, even from an orbit of the star; they must fade by the inverse square like running lights (maintainer, 2026-11-17) | T18 | Sonnet | The lights' far draw (a marker or emissive with no distance falloff) | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress |
 
 ### M7-T01 Station references and measurements
@@ -3408,3 +3409,15 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   or below the body's atmosphere top is refused with a message naming the floor. `goto <body>` (T67) uses the day side. info.md row.
 - **Done when:** tests (each keyword puts the player on the right side of the planet against the star, at any epoch; an angle moves the
   player round; an orbit inside the atmosphere is refused); the maintainer checks it (H); committed.
+
+### M7-T69 Fix: Babylon 5's navigation lights seen from any distance
+
+- **Why (maintainer, 2026-11-17):** "at any distance, including in orbit around the epsilon sun, the babylon 5 navigation blinking lights
+  are visible which violates the inverse square rule for lights".
+- **What:** the station's beacon and navigation lights (M7-T18) follow the same rule as ships' running lights (M3, Q26: point-sized past
+  about 70 m, dimmed by the inverse square, gone where the light falls below a pixel's worth; far ship dots, M4-T23): find which draw keeps
+  them visible far out (a billboard or emissive with a size floor and no falloff, the far prop's path, an always-on-top layer) and make
+  their brightness fall with the square of the distance, so they read at a few km to tens of km by their real intensity and vanish long
+  before 27 000 km. Keep their look up close (T18 was accepted).
+- **Done when:** a test of the lights' brightness against distance (inverse square, zero far out); a GPU capture near and far; the
+  maintainer checks it (H); committed.
