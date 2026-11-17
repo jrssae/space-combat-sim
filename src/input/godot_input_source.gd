@@ -107,8 +107,11 @@ func pad_info() -> Array[Dictionary]:
 	return out
 
 
-## Connected pads. Virtual (with the two lookups below) so tests can inject pads without hardware.
+## Connected pads; none in a test run, so a pad left on the desk cannot steer a test (CI has none either). Virtual (with
+## the two lookups below) so tests can inject pads without hardware.
 func _pad_ids() -> Array[int]:
+	if Settings.test_run:
+		return []
 	return Input.get_connected_joypads()
 
 

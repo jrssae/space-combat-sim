@@ -1,12 +1,15 @@
 extends GutTest
-## GodotInputSource against Input state injected with parse_input_event on a fake pad 0.
+## GodotInputSource against Input state injected with parse_input_event on a fake pad.
 
 
 class OnePadSource:
 	extends GodotInputSource
 
+	## Past any id a real pad gets (Godot numbers them from 0), so a pad on the desk cannot feed the test.
+	const DEVICE: int = 15
+
 	func _pad_ids() -> Array[int]:
-		var pads: Array[int] = [0]
+		var pads: Array[int] = [DEVICE]
 		return pads
 
 	func _pad_guid(_pad: int) -> String:
@@ -177,7 +180,7 @@ func test_pad_info() -> void:
 
 func _axis(axis: JoyAxis, value: float) -> void:
 	var e := InputEventJoypadMotion.new()
-	e.device = 0
+	e.device = OnePadSource.DEVICE
 	e.axis = axis
 	e.axis_value = value
 	Input.parse_input_event(e)
@@ -186,7 +189,7 @@ func _axis(axis: JoyAxis, value: float) -> void:
 
 func _button(button: JoyButton, pressed: bool) -> void:
 	var e := InputEventJoypadButton.new()
-	e.device = 0
+	e.device = OnePadSource.DEVICE
 	e.button_index = button
 	e.pressed = pressed
 	Input.parse_input_event(e)
