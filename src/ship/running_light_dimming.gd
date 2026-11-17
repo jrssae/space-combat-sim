@@ -28,3 +28,12 @@ static func footprint_radius_px(radius_m: float, focal_px: float, floor_px: floa
 static func brightness_factor(radius_m: float, focal_px: float, floor_px: float, distance_m: float) -> float:
 	var ratio: float = minf(real_radius_px(radius_m, focal_px, distance_m) / maxf(floor_px, 0.001), 1.0)
 	return ratio * ratio
+
+
+## Peak brightness (linear light) under which a point lights no pixel and is dropped; the station's marker shader mirrors it.
+const CULL_PEAK: float = 0.01
+
+
+## Whether a point of `peak` brightness at full size is too faint to draw at `distance_m`.
+static func is_culled(radius_m: float, focal_px: float, floor_px: float, distance_m: float, peak: float) -> bool:
+	return peak * brightness_factor(radius_m, focal_px, floor_px, distance_m) < CULL_PEAK

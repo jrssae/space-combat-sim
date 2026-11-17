@@ -3421,3 +3421,9 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   before 27 000 km. Keep their look up close (T18 was accepted).
 - **Done when:** a test of the lights' brightness against distance (inverse square, zero far out); a GPU capture near and far; the
   maintainer checks it (H); committed.
+- **Done (code part, 2026-11-17):** the cause was `station_light_marker.gdshader`'s `dim = max(ratio * ratio, far_dim)` with `far_dim = 0.85`:
+  past the crossover the points kept 85% brightness at any distance (and a 3 px floor, a 16 km cull margin never culled them). Now
+  `dim = ratio * ratio` (the running lights' inverse square, `RunningLightDimming.brightness_factor`), the floor is 2 px, and a point whose
+  peak (`dim * gain * colour`) is under `cull_peak` 0.01 (`RunningLightDimming.CULL_PEAK`) collapses and draws nothing. A 4.5 m beacon at a
+  75 degree, 1080p view: full up to 1.6 km, 1/d^2 beyond (0.1 peak at 10 km), culled past about 32 km (so gone at 100 km, 1 000 km, 27 000 km
+  and from the star). Test: `test_running_light_dimming.gd`. Captures: `references/screenshots/M7-T69 station lights/`.

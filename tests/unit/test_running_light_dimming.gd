@@ -40,3 +40,14 @@ func test_the_footprint_never_drops_under_the_floor() -> void:
 
 func test_a_larger_floor_moves_the_crossover_in() -> void:
 	assert_almost_eq(RunningLightDimming.crossover_distance_m(RADIUS_M, FOCAL_PX, 3.0), _crossover_m() / 3.0, 1e-3)
+
+
+# The station's beacons (M7-T69): 4.5 m, the marker's 2 px floor, peak 4 at full fade.
+func test_a_station_beacon_follows_the_inverse_square_and_is_gone_far_out() -> void:
+	var cross: float = RunningLightDimming.crossover_distance_m(4.5, FOCAL_PX, 2.0)
+	assert_almost_eq(RunningLightDimming.brightness_factor(4.5, FOCAL_PX, 2.0, cross * 4.0), 1.0 / 16.0, 1e-6, "4x out is 1/16")
+	assert_almost_eq(RunningLightDimming.brightness_factor(4.5, FOCAL_PX, 2.0, 10000.0) * 4.0, 4.0 * pow(cross / 10000.0, 2.0), 1e-6)
+	assert_false(RunningLightDimming.is_culled(4.5, FOCAL_PX, 2.0, 10000.0, 4.0), "a beacon still reads at 10 km")
+	assert_true(RunningLightDimming.is_culled(4.5, FOCAL_PX, 2.0, 100000.0, 4.0), "gone at 100 km")
+	assert_true(RunningLightDimming.is_culled(4.5, FOCAL_PX, 2.0, 1.0e6, 4.0), "gone at 1 000 km")
+	assert_true(RunningLightDimming.is_culled(4.5, FOCAL_PX, 2.0, 2.7e7, 4.0), "gone at 27 000 km")
