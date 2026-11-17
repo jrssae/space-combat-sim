@@ -2,7 +2,7 @@
 
 > "The real neighbourhood." (`docs/roadmap.md`)
 
-**Status:** planned 2026-11-10, ahead of time; **not started.** M5 is the current milestone until the maintainer accepts it.
+**Status:** **Accepted 2026-11-17** by the maintainer (every (H) check passed in the M7 play-test; the last fixes in M7-T59, T66-T68, T71-T73, T75). Merged into `main` as work in progress (tag `m6-wip`); the accepted docs reach `main` with M7's merge. Earlier: planned 2026-11-10, ahead of time (history below, kept as written).
 **2026-11-10 (maintainer):** branch `m6` was cut from `m5` at `5d81686`, with `main`'s M6 and M7 plans merged in, so the early
 start (below) runs on it; `m6` takes M5's later work by merging `m5` into it (merges, no rebase, as M5's Q27). The rest of M6 waits
 as the early-start section says. T01 is `in progress` (its audit and decisions are written and wait for the maintainer to
@@ -299,7 +299,7 @@ which changes the same native rows and rebase path:
 | T13 | D | Jumpgate references and the `jumpgate` generator (early start) | Q11 | Opus | Geometry read off references | done |
 | T14 | D | The jumpgate in the game: the prop, the vortex, 1 000 km broadcast, arrivals through the gate | T13, T09, Q12 | Opus | A new effect and the mission and encounter seams | done |
 | T15 | C | Far representations for the station's stand-in, the gate and the planets | T10, T14 | Opus | Hand-offs across three draw paths with no pop | done |
-| T16 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress (awaiting maintainer sign-off) |
+| T16 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | done (accepted by the maintainer 2026-11-17) |
 | T17 | E | Test tiers: quick, standard, balance and full, the quick list, its guard test, the Rust tests in the run | T01 | Sonnet | Scripts and one data file from a written plan (`docs/research/test-review/quick-test-suite.md`) | done |
 | T18 | E | The review's CONFIRMED test removals (sections A to D), each re-checked, the parity recordings still read | T17 | Opus | Proving two tests cover the same thing needs both read in full; rules on what must stay | done |
 | T19 | D | The vortex reworked and stand-alone: fitted to the gate, a shallow funnel, spiralling soft dark patches; open jump points use it too | T14 | Opus | Shader animation and a shared effect seam; the look is (H) | done (accepted by the maintainer, 2026-11-12) |
@@ -1242,7 +1242,8 @@ which changes the same native rows and rebase path:
 - **Steps:** §19 in `docs/architecture.md` as built (and §14.1, §14.2 updated); the M6 section of `docs/playtest.md` with the (H)
   checklist; the roadmap row; the full tier once (T17's runner), read from the suite's own totals; the GPU check on the maintainer's
   machine; then ask the maintainer to confirm the milestone, and once confirmed merge `m6` into `main`.
-- **Done when:** the maintainer confirms M6.
+- **Done when:** the maintainer confirms M6 (met 2026-11-17).
+- **Status:** done: the maintainer accepted M6 on 2026-11-17 after the M7 play-test (AC12 passed); the last fixes came in M7-T59, T66-T68, T71-T73 and T75. Merged into `main` as work in progress (tag `m6-wip`).
 - **Work note (2026-11-12):** docs drafted: `docs/architecture.md` §19 as built (with §14.1, §14.2, §14.4 and §14.6, §5.6's ceiling
   note and §18's D51 and §18.12 `JumpArrival` lines brought up to date; §19.14 is T20's placeholder), the M6 section and (H)
   checklist of `docs/playtest.md`, and the roadmap rows. Remaining: T20's subsection, the full tier from T17's runner, the GPU check on
