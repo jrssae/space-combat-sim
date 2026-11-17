@@ -313,12 +313,12 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T51 | C | Fix: the heavy cannons' pulses leave from outside the barrel and do not visibly reach their targets (maintainer, 2026-11-16, `bench battle 1000`) | - | Opus | The muzzle point from the yoke's angles against the drawn barrel (as M7-2 for the interceptors); hits, misses or a missing impact flash | done |
 | T52 | C | Every bolt drawn as a teardrop (a round bright head, a tail tapering behind it along its flight) instead of a straight line (maintainer, 2026-11-16) | - | Opus | The bolts' capsule mesh and materials, which draw opaque whenever motion vectors are on (now always, with blur on by default) | done |
 | T53 | C | Fix: Godot's `MultiMesh interpolation is being triggered from outside physics process` warning from `bolt_mesh.gd` and `thruster_visuals.gd` in bench fights, the civilian escort and free flight (maintainer's checklist, 2026-11-16) | - | Sonnet | The batched draws fill interpolated multimeshes from `_process` | in progress |
-| T54 | C | Civilian escort fixes (M5 check m5-035): the last raider wave comes too soon; hold X to skip the opening sequence; the escorted civilian's health bar on the HUD; explain the first raiders' arrival and departure points (maintainer's checklist, 2026-11-16) | - | Opus | Mission pacing, the cinematic skip, a HUD panel | in progress |
-| T55 | C | Civilians flee a fight instead of fighting it out (M5 check m5-054: none fled, they fought the raiders) (maintainer's checklist, 2026-11-16) | T56 | Opus | The civilian brain's flee rule (M5 Q24) against its turrets' self-defense | in progress |
-| T56 | C | Encounters pacing and civilian traffic (M5 check m5-056): an event every 1 to 3 minutes; busier civilian traffic running between Babylon 5 and the jumpgate; a Saturn 3 freighter spawned as an ally instead of a civilian (maintainer's checklist, 2026-11-16) | - | Opus | The encounter director's timers and mix, traffic routes, the spawn faction | in progress |
+| T54 | C | Civilian escort fixes (M5 check m5-035): the last raider wave comes too soon; hold X to skip the opening sequence; the escorted civilian's health bar on the HUD; explain the first raiders' arrival and departure points (maintainer's checklist, 2026-11-16) | - | Opus | Mission pacing, the cinematic skip, a HUD panel | done |
+| T55 | C | Civilians flee a fight instead of fighting it out (M5 check m5-054: none fled, they fought the raiders) (maintainer's checklist, 2026-11-16) | T56 | Opus | The civilian brain's flee rule (M5 Q24) against its turrets' self-defense | done |
+| T56 | C | Encounters pacing and civilian traffic (M5 check m5-056): an event every 1 to 3 minutes; busier civilian traffic running between Babylon 5 and the jumpgate; a Saturn 3 freighter spawned as an ally instead of a civilian (maintainer's checklist, 2026-11-16) | - | Opus | The encounter director's timers and mix, traffic routes, the spawn faction | done |
 | T57 | C | The station tour (M7 check m7-002): "Defense" spelled with an s in player-visible text; the defense grid stop mirrored to show the turrets and interceptors from in front (maintainer's checklist, 2026-11-16) | - | Sonnet | Tour stop placement and labels | in progress |
 | T58 | C | Wing launch (M7 check m7-008): `launch wing all`; a launched Alpha wing takes the player as Alpha leader and answers the comms commands (maintainer's checklist, 2026-11-16) | - | Opus | Launch command, wing membership and leader | in progress |
-| T59 | C | Bench capitals mortal after the run, and the M4/M6 checks made testable (m4-016, m4-017, m6-094, m6-095; m6-096 by a code check) (maintainer's checklist, 2026-11-16) | T50 | Sonnet | The bench's capital invulnerability, console paths for the vortex checks | in progress |
+| T59 | C | Bench capitals mortal after the run, and the M4/M6 checks made testable (m4-016, m4-017, m6-094, m6-095; m6-096 by a code check) (maintainer's checklist, 2026-11-16) | T50 | Sonnet | The bench's capital invulnerability, console paths for the vortex checks | done |
 | T60 | C | "Defense" everywhere: code names, file names, data ids, tests and docs renamed from the British spelling (maintainer, 2026-11-16: "no one will understand the misspelling"); plus an `overlay [on\|off]` console command for the debug overlay | T54, T56, T57 | Sonnet | A wide rename while other agents edit the same files | in progress |
 | T61 | C | Fix: an undocking Narn transport rams the bay doorway's edge about 3 s after the doors open and is destroyed (found by T56; also on earlier HEADs) | T56 | Opus | The undock path's clearance for the widest hull | in progress |
 | T62 | C | A ship inside the docking bay's black box (docked, or undocking before it comes out) is inside the station: not targetable, off the radar and the AI's target lists, not hit (maintainer, 2026-11-16) | T61 | Opus | Targeting, radar and AI perception filters; the bay's interior boundary | in progress |
@@ -2991,6 +2991,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     for the last one down and the breather, a detour still brings the next wave, a fought run takes 6 to 8 minutes),
     `test_mission_sequencer.gd` (the opening's skip and its checks), `test_hud_layout.gd` (the bar, `LOST`, the prompt frame).
     Screenshots `references/screenshots/M7-T54 escort HUD and skip/`. Left for the maintainer: fly it (H).
+- **Accepted (maintainer, 2026-11-17):** "all of m4 and m5 is fully accepted" (m5-035 passed); pushed and CI green on f5dd74fb.
 
 ### M7-T55 Civilians flee a fight
 
@@ -3058,6 +3059,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     the port mark it fails: `extend` and a blank goal). Staged copy: Rust 220, check_scripts 886 clean, GUT 164 tests in 27
     files (the civilian, station, brain parity, flight parity, AI retreat and skill, turret and encounter files) all passing;
     `test_turret_balance` under GUT_BALANCE=1 passes (two raiders: 0, 1, 1, 1, 1 of 10; three: none).
+- **Accepted (maintainer, 2026-11-17):** m5-054 passed, M5 accepted; pushed and CI green on f5dd74fb.
 
 ### M7-T56 Encounters pacing and civilian traffic
 
@@ -3113,6 +3115,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     `test_civilian_colours`, and two arrivals queueing and docking without contact. Screenshots:
     `references/screenshots/M7-T56 traffic lane/` (GPU, Forward+ at 60 fps: the run's line of civilian dots on the radar, a
     Brezebel and a Saturn targeted in the civilian colour).
+- **Accepted (maintainer, 2026-11-17):** m5-056 passed, M5 accepted; pushed and CI green on f5dd74fb.
 
 ### M7-T57 The station tour: "Defense" and the grid stop
 
@@ -3190,6 +3193,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   tier fighter `kill`ed by name both blow up, leave the ship list, the targets and the tier, the count drops by both and none
   comes back in 3 s; the same for a capital shot and one `kill`ed by name); red on HEAD (9 fighter assertions);
   `test_standins` (a spent mine stays gone once `relays` is off).
+- **Accepted (maintainer, 2026-11-17):** m4-016 "appears to be correct", m4-017 "confirmed"; pushed and CI green on f5dd74fb.
 
 ### M7-T60 "Defense" everywhere; the `overlay` command
 
