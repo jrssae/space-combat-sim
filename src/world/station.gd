@@ -554,12 +554,29 @@ func _goto(point_name: String) -> ConsoleResult:
 		return ConsoleResult.failure("station goto <%s>" % "|".join(names))
 	if main == null or not main.player_alive:
 		return ConsoleResult.failure("station goto: no player to move")
+	# A launch in progress still carries the player with the drum: end it first, then place the player once it lets go.
+	if main.launches != null and main.launches.locks_controls():
+		main.launches.skip()
+		main.launches.player_released.connect(_place_at_tour_point.bind(point_name), CONNECT_ONE_SHOT)
+		return ConsoleResult.line("launch skipped; at tour point %s once the player is away" % point_name)
+	_place_at_tour_point(point_name)
+	return ConsoleResult.line("at tour point %s" % point_name)
+
+
+# Rests the player at the tour point against what is near it: on the drum, the drum's own motion there.
+func _place_at_tour_point(point_name: String) -> void:
+	var point: Dictionary = hardpoints.tour(point_name)
+	if point.is_empty() or main == null or not main.player_alive:
+		return
 	var body: String = String(point["body"])
 	var at: Vector3 = to_world(point["position"], body)
 	var look: Vector3 = to_world(point["look_at"], body)
 	var up: Vector3 = Vector3.UP if absf((look - at).normalized().dot(Vector3.UP)) < 0.98 else Vector3.BACK
 	main.ship.reset_to(Transform3D(Basis.looking_at((look - at).normalized(), up), at))
 	var world: WorldFrame = WorldFrame.of(self)
-	main.ship.linear_velocity = world.rest_velocity() if world != null else Vector3.ZERO
+	var rest: Vector3 = world.rest_velocity() if world != null else Vector3.ZERO
+	if body == StationHardpoints.DRUM and spinning:
+		var radius: Vector3 = Vector3.BACK.cross(StationHardpoints.to_station(point["position"], body, drum_origin, drum_angle) - drum_origin)
+		rest += global_transform.basis * (radius * spin.rate_rad_s)
+	main.ship.linear_velocity = rest
 	main.ship.angular_velocity = Vector3.ZERO
-	return ConsoleResult.line("at tour point %s" % point_name)
