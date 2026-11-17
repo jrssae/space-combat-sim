@@ -1,7 +1,7 @@
 extends GutTest
 ## `frame orbit`, `frame drop` and `frame rail` carry the player, not the world (M7-T66, maintainer 2026-11-17): after them
 ## Babylon 5 still stands on its rail, the gate beside it and the planet where the ephemeris puts it, so the station ends up
-## some 27 000 km away; the player is on the orbit (or at rest over the planet) asked for, and `frame rail babylon5` brings
+## over 22 000 km away; the player is on the orbit (or at rest over the planet) asked for, and `frame rail babylon5` brings
 ## it back to the start with everything where the scenario put it.
 
 const SCENARIO: String = "res://data/scenarios/free_flight.json"
@@ -94,7 +94,9 @@ func test_an_orbit_carries_the_player_and_leaves_the_station_and_the_gate_on_the
 	assert_almost_eq(float(over[0]), 400_000.0, 5.0, "400 km over Epsilon III")
 	assert_almost_eq((over[1] as Vector3).length(), circular, 0.05, "at the circular orbit's speed")
 	assert_lt(_off_rail(), FAR_M, "the station stayed on its rail")
-	assert_gt(_station().global_position.distance_to(main.ship.global_position), 2.7e7, "so it is some 27 000 km away")
+	# The orbit starts on the day side (M7-T68): however the station stands, it is its orbit less the player's away or more.
+	var apart: float = 2.75e7 - r - 10_000.0
+	assert_gt(_station().global_position.distance_to(main.ship.global_position), apart, "so it is over 22 000 km away")
 	assert_almost_eq(_gate_from_station(), gate_before, Vector3.ONE * FAR_M, "the gate stayed beside it")
 	var rail: PackedFloat64Array = world.body_state(PLACE)
 	assert_almost_eq(world.anchored_velocity(), Vector3(rail[3], rail[4], rail[5]), Vector3.ONE * 0.01,

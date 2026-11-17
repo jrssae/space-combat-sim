@@ -897,6 +897,7 @@ a look-only stand-in with no collision until M7. The jumpgate stands 50 km from 
 
 ```
 frame orbit 400            anchor the world on a free-falling 400 km circular orbit of Epsilon III (frame orbit 400 epsilon_iii)
+frame orbit 400 dusk       the same, on the terminator heading into night (day, the default; night; dawn; or degrees from noon)
 frame rail babylon5        back onto the station's rail (no pull); frame status shows the anchor
 state reference            what you are reading speed against; reference auto | babylon5 | jumpgate | epsilon_iii sets it
 boost 2500 0 0 / ride      a velocity rebase by hand / back onto the anchor (nothing should move on screen)
@@ -951,7 +952,7 @@ want a window you can see.
 - [ ] **HUD layout:** the long `REF` line and the `ALT` line in the chase view's corner and the cockpit view are readable and do not
       cover anything.
 - [ ] **The station's reference range:** 1 000 km (`settings.reference_place_range_km`) is right for REF to stay on the station.
-- [ ] **Falling bolts:** a bolt fired near the planet visibly curves (fire horizontally from 100 km up); debris falls too.
+- [ ] **Falling bolts:** a bolt fired near the planet visibly curves (fire horizontally from 400 km up); debris falls too.
 - [ ] **Planet impact:** diving into the atmosphere destroys the ship even with `god on`; the death reads as intended.
 - [ ] **A dogfight across several velocity rebases** (`play dogfight`, then `boost 2500 0 0` or fly past 2 000 m/s): nothing is seen to
       jump, bolts stay beside the ship, the HUD marks stay on their targets.

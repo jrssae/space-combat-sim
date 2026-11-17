@@ -28,7 +28,7 @@ var _after_launch: String = ""  # the place a goto during a launch waits to take
 func _ready() -> void:
 	DebugConsole.registry.register_command(ConsoleCommand.new(COMMAND,
 			"Move the player to a nav point (M7-T67): no argument lists them; a name (or a unique prefix) puts the player clear of it, "
-			+ "at rest against it and facing it (a body: a circular orbit over its atmosphere)",
+			+ "at rest against it and facing it (a body: a circular orbit over its atmosphere, on its day side)",
 			[ConsoleArg.string_rest(&"place").make_optional("").with_suggestions(_names)]), _cmd_goto, self)
 
 

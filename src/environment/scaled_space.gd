@@ -33,6 +33,8 @@ const SPHERE_SEGMENTS: int = 128
 ## The planet surface's full sun (`scaled_planet.gdshader`'s `sun_strength`), which its far dot matches.
 const SUN_STRENGTH: float = 1.5
 const ACTIONS: PackedStringArray = ["status", "epoch", "show", "hide"]
+## The layer's group: `frame orbit` reads its epoch offset to place the player against the star as drawn (M7-T68).
+const GROUP: StringName = &"scaled_space"
 
 ## Added to the World's system time (its scenario's epoch and the sim clock, M6-T09) before the ephemeris is asked, s: zero
 ## but for captures (`scaled epoch`).
@@ -57,6 +59,7 @@ var _shader: Shader = null
 
 func _init() -> void:
 	top_level = true
+	add_to_group(GROUP)
 	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	process_priority = LATE_PRIORITY
 

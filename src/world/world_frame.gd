@@ -85,6 +85,9 @@ const RETURN_PART: float = 0.5
 const FRAME_ACTIONS: PackedStringArray = ["status", "orbit", "drop", "rail", "off"]
 ## The body `frame orbit` circles and `frame drop` falls toward when none is named.
 const DEFAULT_ORBIT_BODY: StringName = &"epsilon_iii"
+## Where round the body `frame orbit` and `frame drop` put the player (M7-T68): degrees from the sub-solar point in the
+## orbit's direction of travel. Dawn is where the orbit carries the player into daylight, dusk where it carries it into night.
+const POSITION_DEG: Dictionary = {&"day": 0.0, &"dusk": 90.0, &"night": 180.0, &"dawn": 270.0}
 ## Physics priority of the end-of-tick interpolation reset after a rebase: after every other node of the tick.
 const SETTLE_PRIORITY: int = 1_000_000
 ## The tick's gravity sample: before every mover, the low-attention tier's step (-12) included (M6-T04).
@@ -245,10 +248,11 @@ func _ready() -> void:
 				"doc": "Rocks that live as Jolt bodies now, near a ship; the rest are static rows only (M6-T21)"},
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"frame",
-			"The free-falling frame's anchor; orbit, drop and rail carry the player (and the frame) there while the station, the gate and every other world object stay where they are: status, orbit <altitude km> [body] (the player on a circular orbit, prograde along -Z, the frame on a free-falling anchor there; default body epsilon_iii), drop <altitude km> [body] (the player at rest that high over the body, epsilon_iii or the star epsilon, riding its rail, so it falls straight in; refused outside the body's zone), rail <place> (the player at rest beside a place, riding its rail: for babylon5, back at the start), off (no pull)",
+			"The free-falling frame's anchor; orbit, drop and rail carry the player (and the frame) there while the station, the gate and every other world object stay where they are: status, orbit <altitude km> [body] [position] (the player on a circular orbit, the frame on a free-falling anchor there; default body epsilon_iii), drop <altitude km> [body] [position] (the player at rest that high over the body, epsilon_iii or the star epsilon, riding its rail, so it falls straight in; refused outside the body's zone), rail <place> (the player at rest beside a place, riding its rail: for babylon5, back at the start), off (no pull). Orbit and drop refuse an altitude at or inside the body's atmosphere; position: day (the default), night, dawn (where the orbit carries you into daylight), dusk (where it carries you into night) or degrees round the orbit from the sub-solar point in its direction of travel, the star where the sky draws it (scaled epoch); round the star only degrees, from +X",
 			[ConsoleArg.enum_optional(&"action", FRAME_ACTIONS, &"status"),
 			ConsoleArg.string_optional(&"value", null),
-			ConsoleArg.string_optional(&"body", null)] as Array[ConsoleArg]), _cmd_frame, self)
+			ConsoleArg.string_optional(&"body", null),
+			ConsoleArg.string_optional(&"where", null)] as Array[ConsoleArg]), _cmd_frame, self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"rebase",
 			"Shift the local origin by an offset in metres (World.rebase); nothing moves in universe terms. With the automatic rebase on, the next one brings the player back",
 			[ConsoleArg.vec3_required(&"offset", PackedStringArray(["dx", "dy", "dz"]))]), _cmd_rebase, self)
@@ -618,42 +622,94 @@ func anchor_in_orbit(system: StarSystem, body: StringName, state: PackedFloat64A
 	return _orbit(system, body, state)
 
 
-## Puts the focus (with none, the local origin) on a circular orbit `altitude_m` over `body`, out along +X and prograde along
-## -Z, the frame riding a free-falling anchor there (M6-T04); every other object keeps its universe position and velocity
-## (M7-T66). Returns "" or why it was refused.
-func orbit_focus(system: StarSystem, body: StringName, altitude_m: float) -> String:
-	if system == null or not system.is_valid() or system.info(body).is_empty():
-		return "no body %s in the star system" % body
-	if is_nan(altitude_m) or altitude_m < 0.0:
-		return "give an altitude in km of at least 0"
+## Puts the focus (with none, the local origin) on a circular orbit `altitude_m` over `body`, in the game's XZ plane and
+## turning about +Y, `around_deg` round it from the sub-solar point (M7-T68), the frame riding a free-falling anchor there
+## (M6-T04); every other object keeps its universe position and velocity (M7-T66). Returns "" or why it was refused: no such
+## body, or an altitude at or inside its atmosphere, where the impact rule would destroy the ship.
+func orbit_focus(system: StarSystem, body: StringName, altitude_m: float, around_deg: float = 0.0) -> String:
+	var refused: String = _altitude_refusal(system, body, altitude_m)
+	if not refused.is_empty():
+		return refused
 	var radius_m: float = float(system.info(body)["radius_m"]) + altitude_m
-	var state := PackedFloat64Array([radius_m, 0.0, 0.0, 0.0, 0.0, -sqrt(float(system.info(body)["gm"]) / radius_m)])
+	var turn: float = deg_to_rad(sunward_deg(system, body) + around_deg)
+	var speed: float = sqrt(float(system.info(body)["gm"]) / radius_m)
+	# Out at `turn` round +Y from +X, prograde a quarter turn on (the 64-bit form of Basis(UP, turn) * X, then UP x out).
+	var state := PackedFloat64Array([cos(turn) * radius_m, 0.0, -sin(turn) * radius_m,
+			-sin(turn) * speed, 0.0, -cos(turn) * speed])
 	return _carry_focus(system, body, state, _orbit.bind(system, body, state))
 
 
-## Puts the focus (with none, the local origin) at rest `altitude_m` over `body`, the frame riding the body's own rail, so it
-## falls straight in under the body's whole pull (M7-T14); every other object keeps its universe position and velocity
-## (M7-T66). Returns "" or why it was refused: no such body, a negative altitude, or a place outside the body's zone, where
-## under D66 its pull does not reach or another body's wins.
-func drop_toward(system: StarSystem, body: StringName, altitude_m: float) -> String:
+## Where the sub-solar point of `body` stands round its orbit plane (XZ, turning about +Y, the way `frame orbit` travels),
+## degrees from +X, with the star where the scaled-space layer draws it (its epoch offset included). 0 for the star itself
+## or when it cannot be told.
+func sunward_deg(system: StarSystem, body: StringName) -> float:
+	if body == system.star_id():
+		return 0.0
+	var seen: PackedFloat64Array = system.relative_state(system.star_id(), body, system_time() + sky_offset_s())
+	if seen.size() < 3:
+		return 0.0
+	var game: PackedFloat64Array = ScaledPlacement.to_game(seen)
+	return rad_to_deg(atan2(-game[2], game[0]))
+
+
+## How far ahead of the system time the scaled-space layer draws the sky (`scaled epoch`), s; 0 with no layer.
+func sky_offset_s() -> float:
+	if not is_inside_tree():
+		return 0.0
+	var layer: ScaledSpace = get_tree().get_first_node_in_group(ScaledSpace.GROUP) as ScaledSpace
+	return layer.epoch_offset_s if layer != null else 0.0
+
+
+## Degrees round the orbit for a position word (`day`, `night`, `dawn`, `dusk` or a number of degrees), or NAN when it is
+## not one.
+static func position_deg(word: String) -> float:
+	var key := StringName(word.to_lower())
+	if POSITION_DEG.has(key):
+		return float(POSITION_DEG[key])
+	return float(word) if word.is_valid_float() else NAN
+
+
+# Why an altitude over `body` is refused, or "": no such body, no number, or at or inside the atmosphere's top (the surface
+# for a body without one), where the impact rule destroys the ship (M7-T68).
+func _altitude_refusal(system: StarSystem, body: StringName, altitude_m: float) -> String:
 	if system == null or not system.is_valid() or system.info(body).is_empty():
 		return "no body %s in the star system" % body
-	if is_nan(altitude_m) or altitude_m < 0.0:
-		return "give an altitude in km of at least 0"
+	if is_nan(altitude_m):
+		return "give an altitude in km"
+	var top_m: float = float(system.info(body).get("atmosphere_top_m", 0.0))
+	if altitude_m <= top_m:
+		var km: float = top_m / 1000.0
+		var floor_km: String = "%d" % roundi(km) if is_equal_approx(km, roundf(km)) else "%.1f" % km
+		var what: String = "atmosphere (%s km)" % floor_km if top_m > 0.0 else "surface"
+		return "at or below %s's %s: pick more than %s km" % [system.display_name(body), what, floor_km]
+	return ""
+
+
+## Puts the focus (with none, the local origin) at rest `altitude_m` over `body`, `around_deg` round it from the sub-solar
+## point as `orbit_focus` counts it, the frame riding the body's own rail, so it falls straight in under the body's whole pull
+## (M7-T14); every other object keeps its universe position and velocity (M7-T66). Returns "" or why it was refused: no such
+## body, a start at or inside its atmosphere (the fall may go on into it), or a place outside the body's zone, where under
+## D66 its pull does not reach or another body's wins.
+func drop_toward(system: StarSystem, body: StringName, altitude_m: float, around_deg: float = 0.0) -> String:
+	var refused: String = _altitude_refusal(system, body, altitude_m)
+	if not refused.is_empty():
+		return refused
 	var radius_m: float = float(system.info(body)["radius_m"])
 	var from_centre_m: float = radius_m + altitude_m
 	var zone_m: float = system.zone_radius_m(body)
 	if from_centre_m >= zone_m:
 		return "%s km over %s is outside its zone, where its pull ends (%s km over it)" % [
 				ConsoleFormat.value(altitude_m / 1000.0), body, ConsoleFormat.value(roundf((zone_m - radius_m) / 1000.0))]
-	# Out along +X from the centre (the game's +X is the ephemeris's too).
-	var winner: StringName = system.dominant_body(PackedFloat64Array([from_centre_m, 0.0, 0.0]), body, system_time())
+	var turn: float = deg_to_rad(sunward_deg(system, body) + around_deg)
+	var x: float = cos(turn) * from_centre_m
+	var z: float = -sin(turn) * from_centre_m
+	# The ephemeris's axes: game (x, y, z) is kernel (x, -z, y).
+	var winner: StringName = system.dominant_body(PackedFloat64Array([x, -z, 0.0]), body, system_time())
 	if winner != body:
 		return "%s km over %s is inside %s's zone, which pulls there instead" % [
 				ConsoleFormat.value(altitude_m / 1000.0), body, winner]
-	var offset := PackedFloat64Array([from_centre_m, 0.0, 0.0])
-	return _carry_focus(system, body, PackedFloat64Array([from_centre_m, 0.0, 0.0, 0.0, 0.0, 0.0]),
-			_rail.bind(system, body, offset))
+	return _carry_focus(system, body, PackedFloat64Array([x, 0.0, z, 0.0, 0.0, 0.0]),
+			_rail.bind(system, body, PackedFloat64Array([x, 0.0, z])))
 
 
 ## Puts the focus (with none, the local origin) at rest beside `place`, riding its rail, as far from it as the scenario's
@@ -925,28 +981,60 @@ func _anchor_state_km() -> PackedFloat64Array:
 	return s
 
 
+# Reads `frame orbit`/`drop`'s optional body and position (M7-T68): the third word is the position when it is a position
+# word or a number (no body is named either), else the body, with the position after it. Gives body, deg and word, or error.
+func _where_args(system: StarSystem, third: Variant, fourth: Variant) -> Dictionary:
+	var body: StringName = DEFAULT_ORBIT_BODY
+	var given: Variant = null
+	if third != null and not is_nan(position_deg(String(third))):
+		if fourth != null:
+			return {"error": "name the body before the position: <km> [body] [day|night|dawn|dusk|<deg>]"}
+		given = third
+	else:
+		if third != null:
+			body = StringName(String(third).to_lower())
+		given = fourth
+	var word: String = String(given).to_lower() if given != null else "day"
+	var deg: float = position_deg(word)
+	if is_nan(deg):
+		return {"error": "%s is not a position: day, night, dawn, dusk or an angle in degrees" % word}
+	var keyword: bool = POSITION_DEG.has(StringName(word))
+	if system != null and body == system.star_id():
+		if keyword and given != null:
+			return {"error": "the star has no day side: give an angle round it from +X"}
+		if keyword:
+			deg = 0.0
+	return {"body": body, "deg": deg, "word": word + ": " if keyword else ""}
+
+
 func _cmd_frame(args: Dictionary) -> ConsoleResult:
 	var action: StringName = args[&"action"]
 	var value: Variant = args[&"value"]
 	match action:
-		&"orbit":
+		&"orbit", &"drop":
 			var altitude_km: float = float(value) if value != null and String(value).is_valid_float() else NAN
-			var body: StringName = StringName(args[&"body"]) if args[&"body"] != null else DEFAULT_ORBIT_BODY
 			var system: StarSystem = star_system if star_system != null else StarSystem.load_system(StarSystemHost.DEFAULT_SYSTEM)
-			var refused: String = orbit_focus(system, body, altitude_km * 1000.0)
+			var place: Dictionary = _where_args(system, args[&"body"], args[&"where"])
+			if place.has("error"):
+				return ConsoleResult.failure("frame %s: %s" % [action, place["error"]])
+			var body: StringName = place["body"]
+			var around: float = place["deg"]
+			var refused: String
+			if action == &"orbit":
+				refused = orbit_focus(system, body, altitude_km * 1000.0, around)
+			else:
+				refused = drop_toward(system, body, altitude_km * 1000.0, around)
 			if not refused.is_empty():
-				return ConsoleResult.failure("frame orbit: " + refused)
-		&"drop":
-			var altitude_km: float = float(value) if value != null and String(value).is_valid_float() else NAN
-			var body: StringName = StringName(args[&"body"]) if args[&"body"] != null else DEFAULT_ORBIT_BODY
-			var system: StarSystem = star_system if star_system != null else StarSystem.load_system(StarSystemHost.DEFAULT_SYSTEM)
-			var refused: String = drop_toward(system, body, altitude_km * 1000.0)
-			if not refused.is_empty():
-				return ConsoleResult.failure("frame drop: " + refused)
+				return ConsoleResult.failure("frame %s: %s" % [action, refused])
+			var side: String = "%s%s deg round from the sub-solar point" % [place["word"], ConsoleFormat.value(around)] \
+					if body != system.star_id() else "%s deg round from +X" % ConsoleFormat.value(around)
+			if action == &"orbit":
+				return ConsoleResult.line("world.anchor = %s; circling %s km over %s (%s)" % [anchor_text(),
+						ConsoleFormat.value(altitude_km), body, side])
 			var here: Vector3 = focus.global_position if focus != null and is_instance_valid(focus) else Vector3.ZERO
 			var pull: Vector3 = reference_body(here).get("pull", Vector3.ZERO)
-			return ConsoleResult.line("world.anchor = %s; at rest %s km over %s, falling in at %s m/s^2" % [anchor_text(),
-					ConsoleFormat.value(altitude_km), body, ConsoleFormat.value(pull.length())])
+			return ConsoleResult.line("world.anchor = %s; at rest %s km over %s (%s), falling in at %s m/s^2" % [anchor_text(),
+					ConsoleFormat.value(altitude_km), body, side, ConsoleFormat.value(pull.length())])
 		&"rail":
 			var system: StarSystem = star_system if star_system != null else StarSystem.load_system(StarSystemHost.DEFAULT_SYSTEM)
 			var refused: String = rail_focus(system, StringName(value) if value != null else &"")

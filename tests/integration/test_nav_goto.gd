@@ -140,6 +140,9 @@ func test_goto_a_body_is_a_safe_orbit_and_the_station_stays() -> void:
 	var info: Dictionary = main.world.star_system.info(&"epsilon_iii")
 	assert_gt(d.length() - float(info["radius_m"]), float(info["atmosphere_top_m"]), "above the atmosphere")
 	assert_gt((-main.ship.global_basis.z).dot(d.normalized()), 0.99, "facing the planet")
+	var layer: ScaledSpace = main.space_environment.scaled_space
+	layer.refresh(get_viewport().get_camera_3d())
+	assert_gt((-d.normalized()).dot(layer.sun_direction()), 0.9, "on the day side (M7-T68)")
 	assert_lt(_off_rail(station, &"babylon5"), FAR_M, "the station kept its universe position")
 	assert_lt(_off_rail(main.gates.gate(), &"jumpgate"), 4.0 * FAR_M, "the gate kept its universe position")
 	for i: int in HOLD_TICKS:

@@ -3411,6 +3411,26 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   or below the body's atmosphere top is refused with a message naming the floor. `goto <body>` (T67) uses the day side. info.md row.
 - **Done when:** tests (each keyword puts the player on the right side of the planet against the star, at any epoch; an angle moves the
   player round; an orbit inside the atmosphere is refused); the maintainer checks it (H); committed.
+- **Done (code part, 2026-11-17):**
+  - **The explosion:** Epsilon III's `atmosphere_top_m` is 100 km and the impact rule (`StarSystem.impact_radii`, radius plus the
+    atmosphere's top) destroys a ship inside it, so a 100 km orbit sits on the kill line. `frame orbit` and `frame drop` now refuse an
+    altitude at or below the body's atmosphere top (the surface for a body without one): "at or below Epsilon III's atmosphere
+    (100 km): pick more than 100 km". A drop still falls into the atmosphere; only its start must be above it.
+  - **The night side:** the orbit always started out along the system's +X from the planet, never placed against the star, so the
+    side was wherever the planet stood in its 187-day year at the scenario's epoch: free flight's seeded epoch (seed 0) has the
+    sub-solar point 87 deg behind +X, so the player started on the dusk terminator flying into the night side. `scaled epoch` only
+    moves the drawn star (1.9 deg a day of the planet's year), never where the orbit starts, so no epoch value changed it.
+  - **Fix:** `frame orbit <km> [body] [day|night|dawn|dusk|<deg>]` and the same for `frame drop` (`WorldFrame.orbit_focus` and
+    `drop_toward` take `around_deg`). The position is counted round the orbit plane (XZ, the way the orbit travels, about +Y) from the
+    sub-solar point, with the star where the scaled-space layer draws it (`sunward_deg`, its `scaled epoch` offset read from the
+    layer's group): day 0 (the default), dusk 90 (the terminator where the orbit carries you into night), night 180, dawn 270 (where
+    it carries you into daylight, flying sunward). The third word is the position when it is a keyword or a number, else the body;
+    round the star only an angle, from +X. `goto <body>` lands on the day side. 64-bit placement (a drop over the star at 1 million
+    km lands to the metre).
+  - Tests: `test_frame_position.gd` (new, 4: each keyword against the drawn star at scaled epochs 0 and 1000 h, the day side
+    following it; an angle moves the player round and -90 is dawn; the atmosphere floor refused for orbit and drop, 101 km lives;
+    misplaced or unknown words refused); `test_nav_goto.gd` (goto Epsilon III on the day side); `test_frame_carry.gd` (the station
+    is now its orbit less the player's away, over 22 000 km, not 27 000). info.md `frame` and `goto` rows; playtest.md recipes.
 
 ### M7-T69 Fix: Babylon 5's navigation lights seen from any distance
 
