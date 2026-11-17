@@ -14,6 +14,8 @@ const LINE_COLOR: Color = HudLayout.LINE_COLOR
 const TEXT_SHADOW: Color = Color(0.0, 0.0, 0.0, 0.8)
 ## Sides of the radar's batched dots (M4-T36): round at their few pixels.
 const DOT_SEGMENTS: int = 16
+## The step between the REF and ALT lines under the speed, layout px.
+const READOUT_LINE_PX: float = 16.0
 
 ## What the last radar paint cost, us (a readout): the dot buffers and the draws.
 static var radar_paint_us: int = 0
@@ -336,6 +338,38 @@ static func altitude_text(f: HudFrame) -> String:
 	return "ALT %s" % _range_text(f.altitude_m)
 
 
+## The REF and ALT readout as lines no wider than `max_width` (0: unlimited): the REF text on one line when it fits, else
+## split into its name and its distance and speed, with a long name wrapped by words; then the ALT line.
+static func readout_lines(f: HudFrame, font: Font, size: float, max_width: float) -> PackedStringArray:
+	var lines := PackedStringArray()
+	if f.reference_valid:
+		var whole: String = reference_text(f)
+		if max_width <= 0.0 or font.get_string_size(whole, HORIZONTAL_ALIGNMENT_LEFT, -1.0, int(size)).x <= max_width:
+			lines.append(whole)
+		else:
+			if not f.reference_name.is_empty():
+				lines.append_array(_wrap("REF %s" % f.reference_name, font, size, max_width))
+			lines.append("%s%s  %+.0f m/s" % ["" if not f.reference_name.is_empty() else "REF ", _range_text(f.reference_range_m), f.reference_closing_mps])
+	if f.altitude_valid:
+		lines.append(altitude_text(f))
+	return lines
+
+
+static func _wrap(text: String, font: Font, size: float, max_width: float) -> PackedStringArray:
+	var lines := PackedStringArray()
+	var current: String = ""
+	for word: String in text.split(" ", false):
+		var tried: String = word if current.is_empty() else current + " " + word
+		if not current.is_empty() and font.get_string_size(tried, HORIZONTAL_ALIGNMENT_LEFT, -1.0, int(size)).x > max_width:
+			lines.append(current)
+			current = word
+		else:
+			current = tried
+	if not current.is_empty():
+		lines.append(current)
+	return lines
+
+
 static func _range_text(range_m: float) -> String:
 	return "%.2f km" % (range_m / 1000.0) if range_m >= 1000.0 else "%.0f m" % range_m
 
@@ -382,10 +416,11 @@ func _draw_speed(f: HudFrame, surface: HudSurface, s: float) -> void:
 	var at: Vector2 = surface.speed_pos
 	_text("%.0f m/s" % f.speed_mps, at + Vector2(0.0, -22.0 * s), surface.speed_size * s, LINE_COLOR, align)
 	_text(angles_text(f), at, 16.0 * s, LINE_COLOR, align)
-	if f.reference_valid:
-		_text(reference_text(f), at + Vector2(0.0, 20.0 * s), 14.0 * s, Color(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, 0.75), align)
-	if f.altitude_valid:
-		_text(altitude_text(f), at + Vector2(0.0, 36.0 * s), 14.0 * s, Color(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, 0.75), align)
+	var dim := Color(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, 0.75)
+	var y: float = 20.0
+	for line: String in readout_lines(f, _font, 14.0 * s, surface.speed_text_width):
+		_text(line, at + Vector2(0.0, y * s), 14.0 * s, dim, align)
+		y += READOUT_LINE_PX
 
 
 # --- drift sphere -------------------------------------------------------------------------------------------------

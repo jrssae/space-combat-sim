@@ -950,7 +950,7 @@ want a window you can see.
 - [ ] **Assist and brake feel:** prograde and retrograde burns, climbing, falling and the brake settling you into the circle feel
       right; the speed jump when REF changes (station to planet) is understood from the name.
 - [ ] **HUD layout:** the long `REF` line and the `ALT` line in the chase view's corner and the cockpit view are readable and do not
-      cover anything.
+      cover anything (the REF line wraps onto a second line, name above distance and speed, clear of the DRIFT sphere).
 - [ ] **The station's reference range:** 1 000 km (`settings.reference_place_range_km`) is right for REF to stay on the station.
 - [ ] **Falling bolts:** a bolt fired near the planet visibly curves (fire horizontally from 400 km up); debris falls too.
 - [ ] **Planet impact:** diving into the atmosphere destroys the ship even with `god on`; the death reads as intended.

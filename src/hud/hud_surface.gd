@@ -46,6 +46,8 @@ var scale: float = 1.0
 
 var speed_pos: Vector2 = Vector2.ZERO
 var speed_align_right: bool = false
+## The widest the REF and ALT lines may run, px (0: unlimited): they wrap to the room beside the drift sphere.
+var speed_text_width: float = 0.0
 ## The speed's size in pixels at this surface's scale.
 var speed_size: float = 22.0
 ## The drift sphere: a ship-frame sphere with an arrow along the direction of travel.

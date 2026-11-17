@@ -3570,6 +3570,12 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   (`EPSILON III` with its distance and speed, a bay's name). Keep the HUD's line style.
 - **Done when:** a layout test (the REF/ALT text rectangles never intersect the indicator's rectangle for the longest texts and each
   window size); a GPU capture in orbit; the maintainer checks it (H); committed.
+- **Done (code part, 2026-11-17):** cause: the right-aligned REF line ran about 280 px wide (at 1080p) while the drift sphere sits only
+  215 px left of the readout (chase) or 120 px (cockpit), so the line ran over it, and nothing wrapped. `HudPainter.readout_lines` now
+  splits a REF text that does not fit `speed_text_width` into its name (wrapped by words) and its distance and speed, then the ALT line,
+  16 layout px apart. The chase readout moved up 52 px and the cockpit's up 24 px (its radar 24 px) to leave room for the extra lines.
+  Test: `test_hud_readout_layout.gd` (four window sizes, both views, the longest names). Captures:
+  `references/screenshots/M7-T73 HUD ref line/` (before_* and after_*). The maintainer checks it (H).
 
 ### M7-T74 Fix: Alpha forms up on one side of the V
 

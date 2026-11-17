@@ -8,6 +8,9 @@ extends RefCounted
 ## yellow; the HUD's own line work is green).
 
 const BORESIGHT_RANGE_M: float = 1000.0
+## The room the REF and ALT lines have beside the drift sphere, layout px (the cockpit's is centred, so it is the full width).
+const CHASE_SPEED_TEXT_PX: float = 207.0
+const COCKPIT_SPEED_TEXT_PX: float = 224.0
 const MIN_SPEED_FOR_MARKER_MPS: float = 1.0
 const MIN_BOX_PX: float = 24.0
 const EDGE_MARGIN_PX: float = 48.0
@@ -310,11 +313,14 @@ static func _gauges(input: HudInput, f: HudFrame) -> void:
 	var s: float = f.scale
 	var bar := Vector2(260.0, 14.0) * s
 	var margin: float = 48.0 * s
-	f.speed_pos = Vector2(w * 0.5, h - 40.0 * s)
+	f.speed_pos = Vector2(w * 0.5, h - 64.0 * s)  # room for three lines under it
 	f.speed_align_right = not input.cockpit
+	f.speed_text_width = COCKPIT_SPEED_TEXT_PX * s
 	if not input.cockpit:
-		# Chase view: the ship fills the middle, so the readout sits above the radar in the bottom-right corner.
-		f.speed_pos = Vector2(w - margin, h - 56.0 * s - 30.0 * s - 2.0 * 78.0 * s - 28.0 * s)
+		# Chase view: the ship fills the middle, so the readout sits above the radar in the bottom-right corner,
+		# with room under it for the REF and ALT lines even when the name wraps.
+		f.speed_pos = Vector2(w - margin, h - 56.0 * s - 30.0 * s - 2.0 * 78.0 * s - 80.0 * s)
+		f.speed_text_width = CHASE_SPEED_TEXT_PX * s
 	f.hull_rect = Rect2(Vector2(margin, h - 90.0 * s), bar)
 	f.fuel_rect = Rect2(Vector2(margin, h - 56.0 * s), bar)
 	f.charge_rect = Rect2(Vector2(w - margin - bar.x, h - 56.0 * s), bar)
@@ -364,7 +370,7 @@ static func _fill_grid(input: HudInput, surface: HudSurface, rect: Rect2) -> voi
 
 static func _radar(input: HudInput, f: HudFrame) -> void:
 	f.radar_radius_px = RADAR_RADIUS_UNITS * f.scale
-	f.radar_centre = Vector2(input.viewport_size.x * 0.5, input.viewport_size.y - 176.0 * f.scale)
+	f.radar_centre = Vector2(input.viewport_size.x * 0.5, input.viewport_size.y - 200.0 * f.scale)
 	if not input.cockpit:
 		# Chase view: bottom-right corner, over the charge bar.
 		f.radar_centre = Vector2(input.viewport_size.x - 48.0 * f.scale - 130.0 * f.scale, input.viewport_size.y - 56.0 * f.scale - 30.0 * f.scale - f.radar_radius_px)
@@ -379,9 +385,9 @@ static func _radar(input: HudInput, f: HudFrame) -> void:
 	f.drift_radius_px = 58.0 * f.scale
 	# Beside the speed readout: to its left, on the same lines (the readout is right-aligned in the chase view, centred in the cockpit).
 	if input.cockpit:
-		f.drift_centre = f.speed_pos + Vector2(-120.0 * f.scale - f.drift_radius_px, -30.0 * f.scale)
+		f.drift_centre = f.speed_pos + Vector2(-COCKPIT_SPEED_TEXT_PX * 0.5 * f.scale - f.drift_radius_px - 8.0 * f.scale, -30.0 * f.scale)
 	else:
-		f.drift_centre = f.speed_pos + Vector2(-215.0 * f.scale - f.drift_radius_px, 0.0)
+		f.drift_centre = f.speed_pos + Vector2(-(CHASE_SPEED_TEXT_PX + 8.0) * f.scale - f.drift_radius_px, 0.0)
 	var contacts: RadarContacts = input.radar_contacts if input.radar_contacts != null else RadarContacts.from_infos(input.contacts)
 	var before_us: int = Time.get_ticks_usec()
 	f.radar_plot = RadarModel.plot(contacts, input.selected_id, input.own_position, input.own_basis, input.faction,
@@ -575,6 +581,7 @@ static func _left_screen(size: Vector2) -> HudSurface:
 	surface.drift_centre = Vector2(width - 8.0 - 42.0, 20.0 + 42.0) * s
 	surface.speed_pos = Vector2(width * 0.5, 158.0) * s
 	surface.speed_size = 30.0
+	surface.speed_text_width = (width - 16.0) * s
 	surface.running_lights_pos = Vector2(8.0, 126.0) * s  # above the speed block: the REF line can run wide
 	surface.fuel_rect = Rect2(Vector2(width - 8.0 - 74.0, 122.0) * s, Vector2(74.0, 5.0) * s)
 	surface.hull_rect = Rect2(Vector2(8.0, 212.0) * s, Vector2(width - 16.0, 30.0) * s)
