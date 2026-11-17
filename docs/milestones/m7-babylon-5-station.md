@@ -320,13 +320,13 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T58 | C | Wing launch (M7 check m7-008): `launch wing all`; a launched Alpha wing takes the player as Alpha leader and answers the comms commands (maintainer's checklist, 2026-11-16) | - | Opus | Launch command, wing membership and leader | in progress |
 | T59 | C | Bench capitals mortal after the run, and the M4/M6 checks made testable (m4-016, m4-017, m6-094, m6-095; m6-096 by a code check) (maintainer's checklist, 2026-11-16) | T50 | Sonnet | The bench's capital invulnerability, console paths for the vortex checks | done |
 | T60 | C | "Defense" everywhere: code names, file names, data ids, tests and docs renamed from the British spelling (maintainer, 2026-11-16: "no one will understand the misspelling"); plus an `overlay [on\|off]` console command for the debug overlay | T54, T56, T57 | Sonnet | A wide rename while other agents edit the same files | done |
-| T61 | C | Fix: an undocking Narn transport rams the bay doorway's edge about 3 s after the doors open and is destroyed (found by T56; also on earlier HEADs) | T56 | Opus | The undock path's clearance for the widest hull | in progress |
-| T62 | C | A ship inside the docking bay's black box (docked, or undocking before it comes out) is inside the station: not targetable, off the radar and the AI's target lists, not hit (maintainer, 2026-11-16) | T61 | Opus | Targeting, radar and AI perception filters; the bay's interior boundary | in progress |
-| T63 | C | Fix: `station goto main_docking_bay` after `play station_launch` puts the player where the turning drum rams them at 34 m/s and kills them (found by T61, 2026-11-16) | - | Sonnet | The goto point's clearance from the drum's sweep, its velocity matched to the drum | in progress |
-| T64 | C | Mines can be shot and explode when hit, whoever's they are, and a ship that flies into a mine sets it off (maintainer, 2026-11-16: none went off in a bench battle) | T59 | Opus | The hit sweep and the mines' rows (native), the trigger's faction test after a run | in progress |
-| T65 | C | The bench battles' mines laid as small chained groups (4 to 8, each side's) in the asteroid field where the fighting is, groups far enough apart that one blast never sets off the next (maintainer, 2026-11-16) | T64 | Opus | The bench layout's belts, the mix's mine count, the benchmark's figures | in progress |
-| T66 | C | Fix: `frame orbit` brings the planet, the station and the jumpgate to the player instead of putting the player in orbit with everything else where it is (maintainer, 2026-11-17) | - | Opus | The frame's anchor moves the scenario's origin; world objects placed relative to it | in progress |
-| T67 | C | A `goto <nav point>` console command: puts the player near any nav point (Babylon 5 and its bays, the jumpgate, the scenario's NAV points, a body), clear of it and at rest relative to it, the frame on that place's rail; `goto` alone lists them (maintainer, 2026-11-17) | T66 | Sonnet | The frame and rail change T66 settles; a safe stand-off per kind of point | in progress |
+| T61 | C | Fix: an undocking Narn transport rams the bay doorway's edge about 3 s after the doors open and is destroyed (found by T56; also on earlier HEADs) | T56 | Opus | The undock path's clearance for the widest hull | done |
+| T62 | C | A ship inside the docking bay's black box (docked, or undocking before it comes out) is inside the station: not targetable, off the radar and the AI's target lists, not hit (maintainer, 2026-11-16) | T61 | Opus | Targeting, radar and AI perception filters; the bay's interior boundary | done |
+| T63 | C | Fix: `station goto main_docking_bay` after `play station_launch` puts the player where the turning drum rams them at 34 m/s and kills them (found by T61, 2026-11-16) | - | Sonnet | The goto point's clearance from the drum's sweep, its velocity matched to the drum | done |
+| T64 | C | Mines can be shot and explode when hit, whoever's they are, and a ship that flies into a mine sets it off (maintainer, 2026-11-16: none went off in a bench battle) | T59 | Opus | The hit sweep and the mines' rows (native), the trigger's faction test after a run | done |
+| T65 | C | The bench battles' mines laid as small chained groups (4 to 8, each side's) in the asteroid field where the fighting is, groups far enough apart that one blast never sets off the next (maintainer, 2026-11-16) | T64 | Opus | The bench layout's belts, the mix's mine count, the benchmark's figures | done |
+| T66 | C | Fix: `frame orbit` brings the planet, the station and the jumpgate to the player instead of putting the player in orbit with everything else where it is (maintainer, 2026-11-17) | - | Opus | The frame's anchor moves the scenario's origin; world objects placed relative to it | done |
+| T67 | C | A `goto <nav point>` console command: puts the player near any nav point (Babylon 5 and its bays, the jumpgate, the scenario's NAV points, a body), clear of it and at rest relative to it, the frame on that place's rail; `goto` alone lists them (maintainer, 2026-11-17) | T66 | Sonnet | The frame and rail change T66 settles; a safe stand-off per kind of point | done |
 | T68 | C | `frame orbit` and `frame drop` take where around the body to put the player (`day`, `night`, `dawn`, `dusk` from the star, or an angle), default the day side; an orbit at or inside the atmosphere (Epsilon III's top is 100 km) is refused with the floor named (maintainer, 2026-11-17: always the dark side; `frame orbit 100` explodes the ship) | T66 | Opus | The orbit's phase against the star's direction at the scaled epoch | in progress |
 | T69 | C | Fix: Babylon 5's blinking navigation lights show at any distance, even from an orbit of the star; they must fade by the inverse square like running lights (maintainer, 2026-11-17) | T18 | Sonnet | The lights' far draw (a marker or emissive with no distance falloff) | in progress |
 | T70 | C | Fix: `traffic dock` (without `near`) answers "a civilian is on its way into the main docking bay" but starts no ship: `traffic status` stays at 0 in play, `last: none` (maintainer, 2026-11-17; `dock near` works) | T56 | Sonnet | T56's gate-station run rewrite of the far start | in progress |
@@ -3255,6 +3255,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   - Seen on the way, not this task's: the same brake ignores a hold's `face` (the freighter's nose at the cargo bay is held by
     nothing while it waits); and in a console run of `play station_launch` with `station goto main_docking_bay` the player was
     rammed to death by the drum body (34 m/s) soon after, which ends the traffic's ships with it.
+- **Accepted (maintainer, 2026-11-17):** m7-034, the Narn undocks cleanly; pushed with CI green.
 
 ### M7-T62 Ships inside the bay's black box are inside the station
 
@@ -3266,6 +3267,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   plane. Same for any other bay with a black interior (cargo bay, if it has one).
 - **Done when:** tests (a docking ship is targetable outside, untargetable and off the radar inside, targetable again after it undocks);
   the maintainer checks it (H); committed.
+- **Accepted (maintainer, 2026-11-17):** m7-035, ships inside the bay; pushed with CI green.
 
 ### M7-T63 Fix: `station goto main_docking_bay` gets the player rammed by the drum
 
@@ -3284,6 +3286,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   each of the eight points, after the real launch flow, 30 s with no ram, no hull damage, and (frame points) the player still within 20 m of the point;
   fails on the old code (4900 m away). The vanished traffic ship was not reproduced (none in my runs); T62 owns traffic in the bay.
 - **Council round 1 (2026-11-17):** O3: a `station goto` during a launch waits in one field on one connection: the last goto asked wins (a second one used to fail with "already connected" and keep the first), and it is dropped when the player dies before the release, so no later launch carries it out (two tests in `test_station_goto.gd`, both failing on the old code).
+- **Accepted (maintainer, 2026-11-17):** m7-036, station goto during a launch; pushed with CI green.
 
 ### M7-T64 Mines can be shot, and flying into one sets it off
 
@@ -3314,6 +3317,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   6.39; 175 and 959 mines set off in the window). Captures in `references/screenshots/M7-T64 mine blast/`. Open: (H) how the
   blasts look and sound.
 - **Council round 1 (2026-11-17):** O1: a hull's touch sweep is taken against the mines as they drift with the anchor (`weapon_kernels::touch_step`: its World velocity plus the frame's velocity off the anchor), so after a velocity rebase a ship at rest against them sweeps no phantom path and one a mine drifted across touches it (Rust `off_the_anchor_a_hulls_move_is_taken_against_the_drifting_mines`, GUT `test_off_the_anchor_a_touch_is_taken_against_the_drifting_mines`). G1 and O7 left: the big-hull check already uses the core row's pose for the body-frame hit volumes, and only the few mines inside a capital's sphere reach GDScript.
+- **Accepted (maintainer, 2026-11-17):** m7-030, mines shot and rammed, chains and blasts; pushed with CI green.
 
 ### M7-T65 Bench mines in small chained groups where the battle is
 
@@ -3337,6 +3341,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   unchanged (reason in `tests/fixtures/parity/README.md`). For the maintainer: a mine going off had no blast effect (fixed by the
   M7-T64 follow-up, a mine that goes off explodes); and since mines are no longer laid again after a run and now deal real damage,
   a group may hurt many fighters right after a run. Open: (H) see the mines affect the fight.
+- **Accepted (maintainer, 2026-11-17):** m7-031, mine groups in the battle; pushed with CI green.
 
 ### M7-T66 Fix: `frame orbit` moves the world, not the player
 
@@ -3375,6 +3380,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     52 draw calls (88 before), 59-60 fps (`references/screenshots/M7-T66 frame orbit/`).
   - Tests: `test_frame_carry.gd` (new: orbit 400 and drop 500 keep the station on its rail, the gate beside it, the player on the
     orbit; rail back to the start with the station and a static row exact).
+- **Accepted (maintainer, 2026-11-17):** m7-037, frame orbit moves only the player; pushed with CI green.
 
 ### M7-T67 `goto <nav point>`
 
@@ -3397,6 +3403,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   The player rests against the place and faces it; the player's wing is placed in its formation beside the player. Refused in a
   mission; during a launch the launch is skipped and the move waits for the player to be away, as `station goto` does.
   Tests: `test_nav_goto.gd` (10: a test per kind, the list, prefix matching, the body and back, refused in a mission).
+- **Accepted (maintainer, 2026-11-17):** m7-038, goto a nav point; pushed with CI green.
 
 ### M7-T68 Where around the body `frame orbit` puts you; no orbit inside the atmosphere
 
