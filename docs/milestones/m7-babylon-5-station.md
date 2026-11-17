@@ -2089,6 +2089,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     Compositor, so later environments had 5 effects (PostEffects removes it on exit); the loading screen test took the load
     before its check when it began mid-frame (it steps the screen's frames by hand).
 - **Council round 1 (2026-11-17):** O8: the `.uid` files of 12 scripts committed without them (`multimesh_upload.gd`, `jolt_pace.gd` and ten test files) are committed.
+- Council (2026-11-17, two rounds, max 2 by the maintainer): Opus 7 → 8, GPT-6 Luna 7 → 8; DeepSeek V4.1 Flash and GLM-5.3-Flash could not run (OpenCode free limit). Round-1 and round-2 fixes are tracked here: efe47723 (T64), b5a7f7e1 (T56), cd3ed514 (T55), a5f2f897 (T63), 2c89a785 (T54), 40abc738, and this N1 fix.
 
 ### M7-T32 The cargo bay in red-lit grey metal
 
@@ -3063,6 +3064,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     `test_turret_balance` under GUT_BALANCE=1 passes (two raiders: 0, 1, 1, 1, 1 of 10; three: none).
 - **Accepted (maintainer, 2026-11-17):** m5-054 passed, M5 accepted; pushed and CI green on f5dd74fb.
 - **Council round 1 (2026-11-17):** O2: a civilian already running to a station's far side keeps running when its way round the hull passes under the station's guns: the cover rule skips a retreat whose goal is a station shelter, and the shelter ends with the retreat, so a civilian back on its lane keeps its course again (Rust `a_civilian_running_round_to_a_stations_far_side_keeps_running_under_its_guns`; the brain parity recordings unchanged).
+- **Council round 2 (2026-11-17):** N1: that skip was wider than meant: it also held for a run to a warship of the civilian's people, and a civilian frightened on its lane by a friend's close fire (which still scares it under cover) set its shelter and then ran from a raider in range for the whole raid instead of for the fright's time. The cover rule is now skipped only for a run to a station's far side that began outside the cover (`RetreatState::ran_from_outside`, set when the station run starts, cleared when the run ends or its goal is no station). Rust `a_civilian_scared_under_a_stations_guns_goes_back_to_its_course_after_the_fright` and `a_civilian_running_to_a_warship_of_its_people_keeps_its_course_under_a_stations_guns` (both failed before), O2's test unchanged and passing.
 
 ### M7-T56 Encounters pacing and civilian traffic
 

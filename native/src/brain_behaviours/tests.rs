@@ -772,6 +772,56 @@ fn a_civilian_running_round_to_a_stations_far_side_keeps_running_under_its_guns(
     assert_ne!(brain.current_kind(), i32::from(KIND_RETREAT), "a new raider under the guns does not turn it");
 }
 
+#[test]
+fn a_civilian_scared_under_a_stations_guns_goes_back_to_its_course_after_the_fright() {
+    // Council round 2 (N1): a friend's bolt grazes it on the lane during a raid; it runs for the fright's time, then keeps
+    // its course again, the raider still in range.
+    let mut bench = station_side_bench();
+    bench.rows.faction_ix[3] = 1; // row 3 is now the raider, 1.5 km off its side
+    bench.rows.roles[3] = 0;
+    let at = bench.rows.positions[1];
+    move_row(&mut bench, 3, at + Vector3::new(0.0, 1500.0, 0.0));
+    let mut brain = attacked_brain();
+    civilian_think(&mut bench, &mut brain, 1.0);
+    assert_ne!(brain.current_kind(), i32::from(KIND_RETREAT), "(under the guns, the raider does not turn it)");
+    bolt(&mut bench, 400, 0, at + Vector3::new(500.0, 30.0, 0.0), Vector3::new(-900.0, 0.0, 0.0));
+    civilian_think(&mut bench, &mut brain, 2.0);
+    assert_eq!(brain.current_kind(), i32::from(KIND_RETREAT), "the friend's fire frightens it");
+    let seen = brain.describe();
+    assert_eq!(seen.state, "shelter", "(to the station's far side)");
+    assert!(seen.names.contains(&("goal", STATION)), "(the station): {:?}", seen.names);
+    bench.bolts = Bolts::default();
+    bench.field.build(&bench.rows, &bench.bolts, bench.grid.cell_m);
+    civilian_think(&mut bench, &mut brain, 2.0 + civilian::PANIC_HOLD_S + 1.0);
+    assert_ne!(brain.current_kind(), i32::from(KIND_RETREAT), "back to its course, the raider still 1.5 km off");
+}
+
+#[test]
+fn a_civilian_running_to_a_warship_of_its_people_keeps_its_course_under_a_stations_guns() {
+    // Council round 2 (N1): only a run to the station itself goes on under its guns.
+    let at = Vector3::new(5000.0, 0.0, 0.0);
+    let ships = [
+        (RAIDER, 0, at),
+        (ATTACKER, 1, at + Vector3::new(1500.0, 0.0, 1500.0)),
+        (400, 0, at + Vector3::new(-300.0, 0.0, 0.0)),
+    ];
+    let mut rows = rows_with(&ships, 500.0, 0.0);
+    rows.roles[1] = crate::rows::ROLE_CIVILIAN;
+    let mut bench = Bench::new(rows);
+    let mut brain = attacked_brain();
+    civilian_think(&mut bench, &mut brain, 1.0);
+    assert_eq!(brain.current_kind(), i32::from(KIND_RETREAT));
+    let seen = brain.describe();
+    assert_eq!(seen.state, "shelter", "(it shelters by the warship)");
+    assert!(seen.names.contains(&("goal", 400)), "(the warship, not the station): {:?}", seen.names);
+    let inside = Vector3::new(700.0, 0.0, 0.0); // 650 m off the hull's skin, inside the cover
+    move_row(&mut bench, 1, inside);
+    move_row(&mut bench, 2, inside + Vector3::new(1500.0, 0.0, 800.0));
+    move_row(&mut bench, 3, inside + Vector3::new(-100.0, 0.0, 0.0));
+    civilian_think(&mut bench, &mut brain, 2.0);
+    assert_ne!(brain.current_kind(), i32::from(KIND_RETREAT), "under the guns it keeps its course");
+}
+
 // --- the wing at a big hull (M7-T38) ----------------------------------------------------------------------------------
 
 const LEADER: i64 = 300;

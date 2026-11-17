@@ -1853,6 +1853,10 @@ struct RetreatState {
     alarm_row: i32,
     goal_id: i64,
     shelter: bool,
+    // Whether a run to a station's far side is under way, and whether it began outside the station's cover (council
+    // round 2, N1): only such a run goes on under the guns.
+    station_run: bool,
+    ran_from_outside: bool,
     // Fire that came close (M7-T29): the body that fired it, of any side, and until when it keeps a civilian running.
     scare_body: i64,
     scare_until_s: f64,
@@ -1879,6 +1883,8 @@ impl RetreatState {
             alarm_row: -1,
             goal_id: 0,
             shelter: false,
+            station_run: false,
+            ran_from_outside: false,
             scare_body: 0,
             scare_until_s: f64::NEG_INFINITY,
             threat_until_s: f64::NEG_INFINITY,
@@ -1897,6 +1903,8 @@ impl RetreatState {
         self.alarm_row = -1;
         self.goal_id = 0;
         self.shelter = false;
+        self.station_run = false;
+        self.ran_from_outside = false;
         self.scare_body = 0;
         self.scare_until_s = f64::NEG_INFINITY;
         self.threat_until_s = f64::NEG_INFINITY;
@@ -1907,6 +1915,8 @@ impl RetreatState {
         // A retreat that scores nothing ends, and its shelter with it.
         if score <= 0.0 {
             self.shelter = false;
+            self.station_run = false;
+            self.ran_from_outside = false;
         }
         score
     }
@@ -1921,9 +1931,9 @@ impl RetreatState {
         let panicked = civilian && (self.panicked(tick) | self.attacked(tick));
         let scared = civilian && self.scared_by(tick) >= 0;
         // Under the guns of a station that shelters it a civilian keeps its course against raiders (M7-T55): a docking lane
-        // is no place to turn. A friend's fire close by still frightens it: the guns do not answer that. One already running
-        // to the station's far side keeps running: its way round the hull passes under the guns.
-        if civilian && !self.shelter && civilian::under_cover(&tick.civilian_view(0.0, self.speed_mps, 0.0)) {
+        // is no place to turn. A friend's fire close by still frightens it: the guns do not answer that. One that began its
+        // run to the station's far side outside the cover keeps running: its way round the hull passes under the guns.
+        if civilian && !self.ran_from_outside && civilian::under_cover(&tick.civilian_view(0.0, self.speed_mps, 0.0)) {
             return if scared { Self::SCORE_MIN } else { 0.0 };
         }
         let panicked = panicked || scared;
@@ -2050,6 +2060,15 @@ impl RetreatState {
                 self.alarm_row,
             ))
         };
+        let station_run = flight
+            .as_ref()
+            .is_some_and(|f| f.shelter && usize::try_from(f.goal).is_ok_and(|g| tick.rows.surface(g).is_some()));
+        if station_run && !self.station_run {
+            self.ran_from_outside = !civilian::under_cover(&tick.civilian_view(0.0, self.speed_mps, 0.0));
+        } else if !station_run {
+            self.ran_from_outside = false;
+        }
+        self.station_run = station_run;
         let Some(flight) = flight else {
             if tick.own_civilian() {
                 Self::burn(cmd, p, ship, scale(dir, self.speed_mps as f32), dir, wish);
