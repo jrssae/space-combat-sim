@@ -332,6 +332,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T70 | C | Fix: `traffic dock` (without `near`) answers "a civilian is on its way into the main docking bay" but starts no ship: `traffic status` stays at 0 in play, `last: none` (maintainer, 2026-11-17; `dock near` works) | T56 | Sonnet | T56's gate-station run rewrite of the far start | in progress |
 | T71 | C | Fix: after `frame drop` (or `frame orbit`), `station goto` and the other player moves keep the planet's frame: the player goes on falling toward the planet near Babylon 5 and the speed readings point the wrong way; and the planet is not drawn after `frame drop 500` (maintainer, 2026-11-17) | T66, T68 | Opus | Every teleport of the player must put the frame back on the place's rail, as T67's `goto` does | in progress |
 | T72 | C | Fix: two suns, about 2.6 degrees apart on one streak, in `far view station` at 10 000 km and beyond (maintainer, 2026-11-17; seen in T69's captures) | T44 | Opus | The sky's sun and the scaled layer's star disagree when the camera is far from the World's origin (T44's fix near the star) | in progress |
+| T73 | C | Fix: in orbit (`frame orbit 400`) the HUD's REF line runs over the directional indicator instead of wrapping (maintainer, 2026-11-17, M6 check m6-075) | - | Sonnet | The REF and ALT lines' width against the drift indicator, every window size, chase and cockpit | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress |
 
 ### M7-T01 Station references and measurements
@@ -3558,3 +3559,13 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     the layer's sun, the drawn star, the key light and the flare's core within 0.05 degree; 6 asserts fail on the old aim, up to 39.6 degrees off);
     `test_lens_flare_aim.gd` (a camera 1 000 to 27 000 km out puts the star where one at the origin does; the probe test replaced);
     `test_post_effects.gd` `test_the_flare_reads_the_camera_and_the_key_star_of_the_frame_drawn` (fails a frame behind on the old order).
+
+### M7-T73 Fix: the REF line covers the directional indicator
+
+- **Why (maintainer, 2026-11-17, M6 check m6-075 "HUD layout" under `frame orbit 400`):** "the hud layout when testing frame orbit 400: ref
+  line covers the directional indicator, doesn't wrap".
+- **What:** the REF line (and the ALT line below it) wrap or shorten so they never overlap the directional (drift) indicator or any other
+  HUD element, in the chase view's corner and in the cockpit, at the usual window sizes (960x540 up to 4K) and with the longest REF texts
+  (`EPSILON III` with its distance and speed, a bay's name). Keep the HUD's line style.
+- **Done when:** a layout test (the REF/ALT text rectangles never intersect the indicator's rectangle for the longest texts and each
+  window size); a GPU capture in orbit; the maintainer checks it (H); committed.
