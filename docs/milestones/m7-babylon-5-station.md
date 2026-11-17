@@ -3538,3 +3538,23 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   `far view` at 10 000 and 27 000 km, `frame orbit 400`, near the star).
 - **Done when:** a test (the sky's sun direction and the scaled star's agree within a small angle for those camera placements); GPU
   captures; the maintainer sees one sun (H); committed.
+- **Done (code part, 2026-11-17; the maintainer's look (H) open):**
+  - **The cause:** the second sun was the lens flare's core, not a second star. The scaled layer's star, the key light and the
+    layer's sun direction agreed to 0.003 degree at every placement; the flare's aim did not. `LensFlareAim.sun_uv` added a probe point
+    1 m along the sun's direction to the camera's position and projected it. `far view station 10000` holds the camera 10 000 km from
+    the World's origin, where a float32 position steps in 0.25 to 1 m, so the probe's small component (the sun lies at (0.05, 0, 1.0))
+    rounded away and the core drew 2.8 degrees off the disc (GPU: `sun_uv` 0.72 at 10 000 km and 0.67 at 1 000 km for one view,
+    (0, 0) at 27 000 km, where the probe rounded onto the camera; the true place 0.68). The ghosts follow the core, as seen. A second,
+    smaller cause showed while checking near the station: `PostEffects` aimed the flare at priority 0, before the camera rig moved the
+    camera and before `SpaceEnvironment` turned the key star (1 001), so while the view turned the core lagged a frame beside the disc.
+  - **Fix:** `sun_uv` works from the camera's turn alone (the sun's direction in camera axes through the camera's projection), so the
+    camera's distance from the origin no longer matters; `PostEffects` runs at `ScaledSpace.LATE_PRIORITY + 2`, after both. T44's
+    shader fix is untouched.
+  - GPU (RX 6950 XT, Forward+, 1500x844): before, two discs on the streak at `far view station` 1 000 and 10 000 km, the core in the
+    corner at 27 000 km, and two while the chase view turned near the station; after, one at all of them and at `frame orbit 400` and
+    `frame orbit 100000 epsilon` (`references/screenshots/M7-T72 two suns/`, `before_*`, `after_*`, `sheet_near_before_after.png`).
+  - Tests: `test_scaled_space.gd` `test_one_sun_at_every_camera_distance_and_frame` (with the sun off every axis: at the station,
+    `far view` 1 000, 10 000 and 27 000 km, `frame orbit 400` and `frame orbit 100000 epsilon`, and 10 000 km out from both orbits,
+    the layer's sun, the drawn star, the key light and the flare's core within 0.05 degree; 6 asserts fail on the old aim, up to 39.6 degrees off);
+    `test_lens_flare_aim.gd` (a camera 1 000 to 27 000 km out puts the star where one at the origin does; the probe test replaced);
+    `test_post_effects.gd` `test_the_flare_reads_the_camera_and_the_key_star_of_the_frame_drawn` (fails a frame behind on the old order).

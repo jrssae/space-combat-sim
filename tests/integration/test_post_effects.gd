@@ -153,6 +153,22 @@ func test_the_flare_is_told_where_the_star_is() -> void:
 	assert_almost_eq(post.flare_effect().sun_dir_sign, 1.0, 0.001)
 
 
+func test_the_flare_reads_the_camera_and_the_key_star_of_the_frame_drawn() -> void:
+	# M7-T72: the camera rig turns the camera and the environment turns the key star in the same frame; a flare aimed before
+	# them lags a frame, a second sun beside the disc while the view turns.
+	camera.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	var turner := _CameraTurner.new()
+	turner.camera = camera
+	turner.key_star = env.key_star
+	add_child_autofree(turner)
+	assert_gt(post.process_priority, env.process_priority, "after the key star follows the sun")
+	camera.global_transform = Transform3D(Basis.looking_at(env.key_star.global_basis.z), Vector3.ZERO)
+	for i: int in 4:
+		await get_tree().process_frame
+		var wanted: Vector2 = LensFlareAim.sun_uv(camera, env.key_star.global_basis.z)
+		assert_almost_eq(post.flare_effect().sun_position, wanted, Vector2.ONE * 1.0e-5, "frame %d" % i)
+
+
 func test_looking_away_from_the_star_flips_the_facing_sign() -> void:
 	var to_sun: Vector3 = env.key_star.global_basis.z
 	camera.global_transform = Transform3D(Basis.looking_at(-to_sun), Vector3.ZERO)
@@ -264,3 +280,14 @@ func test_the_jump_flash_pass_leaves_the_shared_compositor_with_its_environment(
 	var next: SpaceEnvironment = (load(SCENE_PATH) as PackedScene).instantiate() as SpaceEnvironment
 	add_child_autofree(next)
 	assert_eq(next.world_environment.compositor.compositor_effects.size(), before, "the next environment starts clean")
+
+
+# Turns the camera and the key star a little every frame at the default priority, as the camera rig moves the view.
+class _CameraTurner:
+	extends Node
+	var camera: Camera3D
+	var key_star: DirectionalLight3D
+
+	func _process(_delta: float) -> void:
+		camera.rotate_y(0.02)
+		key_star.rotate_x(0.01)

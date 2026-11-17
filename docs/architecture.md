@@ -5299,6 +5299,8 @@ anchor is the reference, it is zero and every result is bit-identical to before 
   flare follows) and multiplies its energy by `ScaledSpace.key_light()`, the smallest lit part over the planets (`EclipseMath`, the
   overlap of the two discs). The planet's shadow is a key-light factor, not a shadow map. `hold_key_star(true)` gives the light to
   a look sheet. The flare fades with `ScaledSpace.flare_strength()` (`SunLook.flare_factor`: from 0.02 of the disc showing to all).
+  `PostEffects` aims the flare after the cameras have moved and the key star has turned, from the camera's turn alone
+  (`LensFlareAim.sun_uv`), so its core sits on the disc however far from the origin the camera is (M7-T72).
   One patch to the vendored flare's shader source (`SceneLensFlareEffect.SHADER_PATCHES`) reads a depth of 2e-8 or less as open sky,
   so the star's own disc does not hide the flare.
 - **The planet** (`scaled_planet.gdshader`, `PlanetLook`): the surface on a 64x32 sphere pushed out to enclose the true one, each

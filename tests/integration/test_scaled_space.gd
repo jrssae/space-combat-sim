@@ -429,3 +429,39 @@ func test_one_sun_from_near_the_star_to_the_planet() -> void:
 	_on_the_rail()
 	env.follow_sun()
 	_assert_one_sun("on the station's rail")
+
+
+# M7-T72: the star's place, its drawn sphere, the key light and the flare's core agree, the camera at `at` and the star
+# off to one side of the view (where two suns showed: the flare's core 2.6 degrees off the disc at 10 000 km out).
+func _assert_one_sun_seen_from(at: Vector3, where: String) -> void:
+	camera.global_position = at
+	layer.refresh(camera)
+	env.follow_sun()
+	var to_star: Vector3 = layer.placement_of(STAR).direction
+	camera.global_basis = Basis.looking_at(to_star.rotated(Vector3.UP, deg_to_rad(15.0)), Vector3.UP)
+	layer.refresh(camera)
+	env.follow_sun()
+	var tolerance_deg: float = 0.05
+	assert_lt(rad_to_deg(layer.sun_direction().angle_to(to_star)), tolerance_deg, "%s: the layer's sun" % where)
+	assert_lt(rad_to_deg(_drawn_direction(STAR).angle_to(to_star)), tolerance_deg, "%s: the drawn star" % where)
+	assert_lt(rad_to_deg(env.key_star.global_basis.z.angle_to(to_star)), tolerance_deg, "%s: the key light" % where)
+	var uv: Vector2 = LensFlareAim.sun_uv(camera, env.key_star.global_basis.z)
+	assert_true(uv.x > 0.0 and uv.x < 1.0 and uv.y > 0.0 and uv.y < 1.0, "%s: the star is in view (%s)" % [where, uv])
+	var flare: Vector3 = camera.project_ray_normal(uv * camera.get_viewport().get_visible_rect().size)
+	assert_lt(rad_to_deg(flare.angle_to(to_star)), tolerance_deg, "%s: the flare's core is on the disc" % where)
+
+
+func test_one_sun_at_every_camera_distance_and_frame() -> void:
+	# A season with the sun off every axis, as in the maintainer's view (rounding hides on an axis).
+	layer.epoch_offset_s = system.period_s(PLANET) * 0.11
+	_on_the_rail()
+	_assert_one_sun_seen_from(Vector3.ZERO, "at the station")
+	for km: float in [1000.0, 10_000.0, 27_000.0]:
+		# Where `far view station <km>` holds the camera.
+		_assert_one_sun_seen_from(FarPropHost.VIEW_BEARING.normalized() * km * 1000.0, "far view %s km" % km)
+	_in_orbit(PLANET, 400_000.0)
+	_assert_one_sun_seen_from(Vector3.ZERO, "frame orbit 400")
+	_assert_one_sun_seen_from(FarPropHost.VIEW_BEARING.normalized() * 1.0e7, "10 000 km out from frame orbit 400")
+	_in_orbit(STAR, 1.0e8)
+	_assert_one_sun_seen_from(Vector3.ZERO, "frame orbit 100000 epsilon")
+	_assert_one_sun_seen_from(FarPropHost.VIEW_BEARING.normalized() * 1.0e7, "10 000 km out from frame orbit 100000 epsilon")

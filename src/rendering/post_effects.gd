@@ -33,6 +33,12 @@ var _star_color: Color = Color.WHITE
 var _flare_strength: float = 1.0
 
 
+func _init() -> void:
+	# After the cameras have moved and the key star has turned to the sun this frame, so the flare's core sits on the drawn
+	# disc even while the view turns (M7-T72).
+	process_priority = ScaledSpace.LATE_PRIORITY + 2
+
+
 func _ready() -> void:
 	_find_effects()
 	apply_settings()
