@@ -330,6 +330,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T68 | C | `frame orbit` and `frame drop` take where around the body to put the player (`day`, `night`, `dawn`, `dusk` from the star, or an angle), default the day side; an orbit at or inside the atmosphere (Epsilon III's top is 100 km) is refused with the floor named (maintainer, 2026-11-17: always the dark side; `frame orbit 100` explodes the ship) | T66 | Opus | The orbit's phase against the star's direction at the scaled epoch | in progress |
 | T69 | C | Fix: Babylon 5's blinking navigation lights show at any distance, even from an orbit of the star; they must fade by the inverse square like running lights (maintainer, 2026-11-17) | T18 | Sonnet | The lights' far draw (a marker or emissive with no distance falloff) | in progress |
 | T70 | C | Fix: `traffic dock` (without `near`) answers "a civilian is on its way into the main docking bay" but starts no ship: `traffic status` stays at 0 in play, `last: none` (maintainer, 2026-11-17; `dock near` works) | T56 | Sonnet | T56's gate-station run rewrite of the far start | in progress |
+| T71 | C | Fix: after `frame drop` (or `frame orbit`), `station goto` and the other player moves keep the planet's frame: the player goes on falling toward the planet near Babylon 5 and the speed readings point the wrong way; and the planet is not drawn after `frame drop 500` (maintainer, 2026-11-17) | T66, T68 | Opus | Every teleport of the player must put the frame back on the place's rail, as T67's `goto` does | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress |
 
 ### M7-T01 Station references and measurements
@@ -3439,3 +3440,17 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   that `traffic status` counts and that docks; if the start must wait (the bay queue, the run's spacing), say so in the reply and in
   `status`.
 - **Done when:** a test (`traffic dock` puts one docking ship in play within a tick or reports why it waits, and it docks); committed.
+
+### M7-T71 Fix: player moves keep the planet's frame after `frame drop`
+
+- **Why (maintainer, 2026-11-17):** "using frame drop 500 moved the player but hid the plannet; it was not visible. after falling for a
+  bit, i entered `station goto main_docking_bay` and i continued "dropping" towards the planet even though i was no where near it, and my
+  direction of movement was reversed in the readings vs what i saw on screen (while facing babylon 5, it appeared to get smaller, but all
+  stop had me firing reverse thrusters to stop). neither gravity nor direction was recalcuated after the move".
+- **What:** every command that moves the player (`station goto`, `gate approach`, `respawn`, `launch`, `tour`, `mines view`, `far view`,
+  bench placements, `goto`) puts the frame back on the destination place's rail first when it is anchored elsewhere (T67's `goto` does
+  this through `WorldFrame.on_home_rail()`), so the pull, the reference (REF), the velocity readings and the assist all follow the new
+  place; one shared helper rather than each command on its own. And find why the planet is not drawn after `frame drop 500` (the night
+  side under T68's old start, the scaled layer not following the new anchor, a culled far prop) and fix it.
+- **Done when:** tests (after `frame drop 500`, `station goto main_docking_bay` leaves the player at rest beside the bay with no pull and
+  REF Babylon 5; the same for the other moves; the planet drawn after `frame drop 500`); the maintainer checks it (H); committed.
