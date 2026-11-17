@@ -1938,7 +1938,7 @@ src/rendering/lod_switcher{,_math}.gd    level of detail by size on screen (T19;
 src/combat/fx_specs.gd, fx_pool.gd       pure effect numbers; fixed GPUParticles3D pools, one per effect (T23)
 assets/fx/*.tres                         the effects' process materials and draw meshes (T23)
 src/rendering/{light_rig,light_picker,light_emitter}.gd   the 8 lights and who fills them (T21; the rig renamed in M4-T31)
-assets/ai/civilian.tres                  never attacks, flees within 3 km (T13)
+assets/ai/civilian.tres                  never attacks, flees within 3 km (T13), never jinks, brakes when idle (M7-T55)
 src/ai/route.gd, manoeuvre.gd, manoeuvres.gd   instructor route and demo moves (T09)
 src/game/wing_director.gd                Node (Combat, priority 290): wings, orders, acknowledgements, replenish (T07, T08)
 assets/ai/{ally_starfury,raider,instructor}.tres, starfury_tactics.tres
@@ -4422,6 +4422,30 @@ tests/integration/test_civilian_flight.gd, test_civilian_ships.gd, test_turret_b
   alarm it heard. The alarm is one hop (only a civilian that sees a threat raises it), so two panicked ships never keep
   each other running. Every query walks the ship's own contacts; the marks are one pass over the brains a tick, sequential
   inside the job, so one thread and six, `threaded` and `delayed`, give the same bits (`test_civilian_flight`).
+- **Fleeing that reads (M7-T55, m5-054: "I didn't see the civilians flee at all").** Four things held a civilian where it
+  was. (1) The retreat faced the velocity it wanted and burned only within the main engine's 12 degree cone, so a freighter
+  already moving (on its lane, at 100 m/s) turned its nose to the new heading and never lit its main engine: its thrusters
+  alone changed its velocity by a few m/s in half a minute. A civilian now turns its nose onto the change of velocity and
+  uses every thruster while it turns (`RetreatState::burn`). (2) It ran only while a hostile was within 3 km, so a raider
+  swinging out for its next pass sent it back onto its route; it now keeps running `PANIC_HOLD_S` after a hostile was last
+  within 3 km or a hostile bolt last hit it, while a hostile is in sight. (3) A hit forced a fighter's jink (the evade, its
+  weight 1 in the `civilian` profile), which held a 0.3 g hull in place while it was shot; the profile's evade is now 0, so a
+  hit makes it run, and its idle brakes (`idle_hold`) so a route-less civilian stops after a flight instead of drifting.
+  (4) Babylon 5 was no shelter (its rows are big hulls, not ships). A station of the civilian's own people within
+  `STATION_SIGHT_M` (20 km) of its skin is now a shelter beside its warships and freighters, nearest by skin: the civilian
+  runs (round the hull, `detour`) to a point `STATION_STANDOFF_M` (1.5 km) off the skin on the far side from the threat,
+  matching the station, slowing no faster than its retro can stop it (every shelter now); on an alarm it runs there from
+  the alarmed ship. A station comes before a fellow civilian, and no shelter or kin that lies beyond the threat (farther
+  than it, the straight way there closing on it to within `PASS_CLEAR_M`, 800 m) is run to, so a freighter never runs past
+  its attacker. Within `STATION_COVER_M` (1 km) of that skin it is under the guns and keeps its course against raiders
+  (a docking lane is no place to turn), a friend's close fire still frightening it. Turrets are unchanged: they fire in
+  self-defense while it runs. The showcase's hulls fly the `civilian` pilot (they had none), and an encounter raid drawn for
+  a civilian also finds the station run's traffic between the gate and the station. A lone Saturn now runs tail-on from
+  raiders it cannot outrun, so its turrets see less of them (the hull hides a chase from astern, Q33): two raiders won
+  0, 0, 1, 1, 1 of 10 (Saturn 3, 4 transport, 4 tanker, 8 transport, 8 tanker; 2, 1, 3, 1, 1 before), three none; the
+  Saturn 4 transport's hull 450 → 540 brings it back to 1 of 10 (three: none); the Saturn 3 stays at 0 (1000 hull still 0:
+  with two turrets and the chase astern, hull alone does not do it). Tests: `brain_behaviours/tests.rs`,
+  `civilian/tests.rs`, `test_civilian_flight`, `test_civilian_flee_station`, `test_civilian_ships`.
 - **Fire from a ship that is not an enemy (M7-T29).** A bolt cannot land on a friendly or neutral hull (D31), so a civilian
   hears no hit from the player. Its think therefore also takes any side's bolt but its own that passes within its radius
   plus `CLOSE_FIRE_M` (15 m) in the incoming-fire horizon (`contact::close_fire_from`): the shooter, when among the contacts,
@@ -4453,7 +4477,7 @@ tests/integration/test_civilian_flight.gd, test_civilian_ships.gd, test_turret_b
   spot lies near its axis astern and a little below (its wide flanks see past the narrow cargo hull elsewhere). Each
   Saturn alone beats two raiders in 1 to 3 of 10 seeds and three raiders in none (`test_turret_balance`, behind
   `GUT_SLOW`): the light turret 6 damage every 2.4 s with 0.4 degree spread, hulls per variant (Saturn 3 640, Saturn 4
-  transport 450, Saturn 4 tanker 440, Saturn 8 transport 715, Saturn 8 tanker 380); the counts are in M5's T16 Done block,
+  transport 540, Saturn 4 tanker 440, Saturn 8 transport 715, Saturn 8 tanker 380); the counts are in M5's T16 Done block,
   and M7-T16's (the raider rebuilt to its model) retune in M7's. **M7-T16 retune** (Q31's order: the turret first, then the
   hulls; never the raiders' specs or AI): with the raider's new hull the same fights came out within noise of before (turret
   hits 32 % of shots against 31 %, the same loss times and raider hull left), but three variants fell to 0 wins against two

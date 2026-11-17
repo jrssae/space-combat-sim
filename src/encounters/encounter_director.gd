@@ -437,7 +437,8 @@ func _raid_station(e: EncounterEvent) -> Station:
 
 
 # A raid for a civilian takes one of the encounters' civilians within reach of the player, by the event's pick; else (or
-# with none near) it goes for the player.
+# with none near) it goes for the player. On the station's run its traffic is the encounters' (M7-T55): their events join
+# it, so a raid finds the run's civilians between the gate and the station (never one on a docking lane).
 func _raid_target(e: EncounterEvent) -> Combatant:
 	if not e.at_civilian:
 		return null
@@ -448,6 +449,13 @@ func _raid_target(e: EncounterEvent) -> Combatant:
 		if entry["kind"] == &"traffic" and _still_ours(entry) and c.damageable.is_active() \
 				and _local_position(c).distance_to(player_at) <= CIVILIAN_REACH_M:
 			near.append(c)
+	var lane: StationTraffic = _lane()
+	if lane != null:
+		for c: Combatant in lane.ships():
+			var state: StringName = lane.state_of(c)
+			if (state == &"transit" or state == &"leave") and c.damageable.is_active() \
+					and _local_position(c).distance_to(player_at) <= CIVILIAN_REACH_M:
+				near.append(c)
 	if near.is_empty():
 		return null
 	return near[mini(floori(e.target_pick * float(near.size())), near.size() - 1)]

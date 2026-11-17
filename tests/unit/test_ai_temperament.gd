@@ -124,7 +124,8 @@ func test_profiles_carry_their_default_temperaments() -> void:
 	assert_eq(civilian.weight(&"attack"), 0.0)
 	assert_false(civilian.fires)
 	assert_eq(civilian.retreat_within_m, 3000.0)
-	assert_gt(civilian.weight(&"evade"), 0.0)
+	assert_eq(civilian.weight(&"evade"), 0.0, "a hit makes a freighter run, never jink (M7-T55)")
+	assert_true(civilian.idle_hold, "and it stops after a flight")
 
 
 func test_slashing_runs_awareness_and_close_passes_follow_the_dials() -> void:

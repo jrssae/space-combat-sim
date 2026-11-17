@@ -549,6 +549,176 @@ fn fire_from_a_ship_that_has_the_civilian_selected_is_a_provocation_and_a_wide_m
     assert_ne!(brain.current_kind(), i32::from(KIND_RETREAT));
 }
 
+// --- a civilian under attack (M7-T55) ---------------------------------------------------------------------------------
+
+const ATTACKER: i64 = 500;
+
+// Turned about its top to face +z.
+const FACING_BACK: Basis = Basis {
+    rows: [Vector3::new(-1.0, 0.0, 0.0), Vector3::new(0.0, 1.0, 0.0), Vector3::new(0.0, 0.0, -1.0)],
+};
+
+// The station, a civilian of its people (the thinking row) at `civilian_at` and a raider at `raider_at`.
+fn attacked_bench(civilian_at: Vector3, raider_at: Vector3) -> Bench {
+    let ships = [(RAIDER, 0, civilian_at), (ATTACKER, 1, raider_at)];
+    let mut rows = rows_with(&ships, 500.0, 0.0);
+    rows.roles[1] = crate::rows::ROLE_CIVILIAN;
+    Bench::new(rows)
+}
+
+// The civilian's brain with the `civilian` profile's flee range.
+fn attacked_brain() -> Brain {
+    let mut brain = civilian_brain();
+    brain.retreat.retreat_within_m = 3000.0;
+    brain
+}
+
+fn move_row(bench: &mut Bench, row: usize, at: Vector3) {
+    bench.rows.positions[row] = at;
+    bench.field.build(&bench.rows, &bench.bolts, bench.grid.cell_m);
+}
+
+#[test]
+fn an_attacked_civilian_keeps_running_while_its_attacker_swings_out_for_another_pass() {
+    // The m5-054 report: a raider pulling out beyond the flee range turned the civilian back onto its route at once.
+    let at = Vector3::new(0.0, 0.0, 30_000.0);
+    let mut bench = attacked_bench(at, at + Vector3::new(0.0, 0.0, -2000.0));
+    let mut brain = attacked_brain();
+    civilian_think(&mut bench, &mut brain, 1.0);
+    assert_eq!(brain.current_kind(), i32::from(KIND_RETREAT), "it runs from a raider 2 km off");
+    move_row(&mut bench, 2, at + Vector3::new(0.0, 0.0, -4000.0));
+    civilian_think(&mut bench, &mut brain, 6.0);
+    assert_eq!(brain.current_kind(), i32::from(KIND_RETREAT), "still running with the raider 4 km off, swinging round");
+    civilian_think(&mut bench, &mut brain, 1.0 + civilian::PANIC_HOLD_S + 1.0);
+    assert_ne!(brain.current_kind(), i32::from(KIND_RETREAT), "calm once it has kept off for the panic's time");
+    // The plain retreat for every other ship is unchanged: it runs only while the raider is near.
+    let mut bench = attacked_bench(at, at + Vector3::new(0.0, 0.0, -2000.0));
+    bench.rows.roles[1] = 0;
+    let mut brain = attacked_brain();
+    civilian_think(&mut bench, &mut brain, 1.0);
+    assert_eq!(brain.current_kind(), i32::from(KIND_RETREAT));
+    move_row(&mut bench, 2, at + Vector3::new(0.0, 0.0, -4000.0));
+    civilian_think(&mut bench, &mut brain, 6.0);
+    assert_ne!(brain.current_kind(), i32::from(KIND_RETREAT), "a fighter's retreat ends with the threat's range");
+}
+
+#[test]
+fn a_civilian_burns_its_main_engine_to_turn_its_run_around() {
+    // A freighter flying at the raider at 100 m/s: its nose goes onto the change of velocity, not the new heading, so the
+    // main engine (which fires only near the nose's line) can do the work its weak thrusters cannot.
+    let at = Vector3::new(0.0, 0.0, 30_000.0);
+    let mut bench = attacked_bench(at, at + Vector3::new(0.0, 0.0, -2500.0));
+    bench.rows.velocities[1] = Vector3::new(0.0, 0.0, -100.0);
+    let mut brain = attacked_brain();
+    // Nose already on the change of velocity (+z: away from the raider and against its run).
+    bench.rows.bases[1] = FACING_BACK;
+    let out = civilian_think(&mut bench, &mut brain, 1.0);
+    assert_eq!(brain.current_kind(), i32::from(KIND_RETREAT));
+    assert!(out.flight.main_left > 0.5, "the main engine burns: {}", out.flight.main_left);
+}
+
+#[test]
+fn an_attacked_civilian_runs_round_to_the_far_side_of_a_station_of_its_people() {
+    // The station (faction 0, the civilian's) 5 km off; the raider on the civilian's far side from it.
+    let at = Vector3::new(5000.0, 0.0, 0.0);
+    let mut bench = attacked_bench(at, Vector3::new(6500.0, 0.0, 1500.0));
+    let mut brain = attacked_brain();
+    civilian_think(&mut bench, &mut brain, 1.0);
+    assert_eq!(brain.current_kind(), i32::from(KIND_RETREAT));
+    let seen = brain.describe();
+    assert_eq!(seen.state, "shelter", "the station is a shelter");
+    assert!(seen.names.contains(&("goal", STATION)), "to the station: {:?}", seen.names);
+    // The far side lies through the hull from here: it flies round the hull, no nearer the raider.
+    let wish = normalized(brain.desired_velocity);
+    let to_raider = normalized(sub(bench.rows.positions[2], at));
+    assert!(dot(wish, to_raider) < 0.0, "no nearer the raider: {wish:?}");
+    assert!(dot(wish, normalized(neg(at))).abs() < 0.3, "round the hull, not into it: {wish:?}");
+    let civilian_seen = civilian::View {
+        rows: &bench.rows,
+        contacts: &[],
+        own_row: 1,
+        radius: 40.0,
+        speed_mps: 130.0,
+        fleeing: &[],
+        shun: -1,
+        hulls: &bench.field.surface_rows,
+        brake_mps2: 0.0,
+    };
+    let point = civilian::station_point(&civilian_seen, 0, bench.rows.positions[2]);
+    assert!(point.x < 0.0 && point.z < 0.0, "the point is on the station's far side from the raider: {point:?}");
+    let (_, skin) = surface::nearest_of_row(&bench.rows, 0, point).unwrap();
+    assert!((skin - civilian::STATION_STANDOFF_M - 40.0).abs() < 1.0, "off its skin by the standoff: {skin}");
+    // A fellow freighter nearer than the station's skin: the station is still the shelter.
+    let mut bench = attacked_bench(at, Vector3::new(6500.0, 0.0, 1500.0));
+    let kin = bench.rows.ids.len();
+    bench.rows.body_ids.push(401);
+    bench.rows.ids.push(401);
+    for col in [&mut bench.rows.positions, &mut bench.rows.velocities, &mut bench.rows.angular] {
+        col.push(Vector3::ZERO);
+    }
+    bench.rows.positions[kin] = at + Vector3::new(0.0, 0.0, -800.0);
+    bench.rows.bases.push(Basis::IDENTITY);
+    bench.rows.radii.push(40.0);
+    bench.rows.rigid.push(true);
+    bench.rows.is_static.push(false);
+    bench.rows.is_mine.push(false);
+    bench.rows.reach.push(0.0);
+    bench.rows.faction_ix.push(0);
+    bench.rows.flags.push(FLAG_RIGID | FLAG_HULL_ACTIVE);
+    bench.rows.kinds.push(0);
+    bench.rows.hull_fraction.push(1.0);
+    bench.rows.target_ids.push(-1);
+    bench.rows.name_ids.push(0);
+    bench.rows.roles.push(crate::rows::ROLE_CIVILIAN);
+    bench.rows.id_rows = bench.rows.ids.iter().enumerate().map(|(r, &id)| (id, r as u32)).collect();
+    bench.rows.id_rows.sort_unstable();
+    let bench_rows = std::mem::take(&mut bench.rows);
+    let mut bench = Bench::new(bench_rows);
+    let mut brain = attacked_brain();
+    civilian_think(&mut bench, &mut brain, 1.0);
+    assert!(brain.describe().names.contains(&("goal", STATION)), "the station before a fellow freighter");
+    // A station of another people is no shelter.
+    let mut bench = attacked_bench(at, Vector3::new(6500.0, 0.0, 1500.0));
+    bench.rows.faction_ix[0] = 2;
+    let mut brain = attacked_brain();
+    civilian_think(&mut bench, &mut brain, 1.0);
+    assert_eq!(brain.describe().state, "extend", "straight away instead");
+}
+
+#[test]
+fn panic_sends_a_civilian_to_a_station_of_its_people_away_from_the_alarm() {
+    // The alarmed kin (row 2) 3 km off toward +x; the station at the origin, 6 km off the panicked civilian (row 1).
+    let at = Vector3::new(6000.0, 0.0, 0.0);
+    let rows = rows_with(&[(RAIDER, 0, at), (401, 0, at + Vector3::new(3000.0, 0.0, 0.0))], 500.0, 0.0);
+    let hulls = [0_u32];
+    let seen = civilian::View {
+        rows: &rows,
+        contacts: &[2],
+        own_row: 1,
+        radius: 40.0,
+        speed_mps: 130.0,
+        fleeing: &[],
+        shun: -1,
+        hulls: &hulls,
+        brake_mps2: 0.0,
+    };
+    let flight = civilian::flee_alarm(&seen, 2);
+    assert_eq!(flight.goal, 0, "to the station");
+    assert!(flight.shelter);
+    assert!(flight.point.x < 0.0, "on its far side from the alarm: {:?}", flight.point);
+    assert!(flight.velocity.x < -100.0, "away from the alarm, toward the station: {:?}", flight.velocity);
+}
+
+#[test]
+fn a_civilian_under_a_stations_guns_keeps_its_course() {
+    // 300 m off the station's flank (its docking lane's place): a raider 1.5 km off does not turn it.
+    let at = Vector3::new(0.0, 300.0, 0.0);
+    let mut bench = attacked_bench(at, at + Vector3::new(0.0, 1500.0, 0.0));
+    let mut brain = attacked_brain();
+    civilian_think(&mut bench, &mut brain, 1.0);
+    assert_ne!(brain.current_kind(), i32::from(KIND_RETREAT), "under the guns");
+}
+
 // --- the wing at a big hull (M7-T38) ----------------------------------------------------------------------------------
 
 const LEADER: i64 = 300;

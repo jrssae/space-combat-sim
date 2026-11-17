@@ -1,8 +1,9 @@
 extends GutTest
 ## How civilians flee (M5-T16, Q24, Q25, AC13) through the native core on seeded scenes: a freighter under threat runs to the
 ## far side of a warship of its own people (not to a nearer ship of another people), panic spreads to its people's
-## civilians within about radar range and no farther, and two attacked freighters close up. The flight is the native brains'
-## (`native/src/civilian.rs` through the retreat), one tick behind on the frozen rows; the same fight gives the same bits
+## civilians within about radar range and no farther, and two attacked freighters close up; one on its route turns from a raider
+## and keeps running, and one under fire runs without jinking while its turrets answer (M7-T55). The flight is the native
+## brains' (`native/src/civilian.rs` through the retreat), one tick behind on the frozen rows; the same fight gives the same bits
 ## with the job on its thread and on the main thread, and with one thread and six. Skips, saying why, without the native
 ## library or the Saturn 4's generated asset.
 
@@ -101,6 +102,87 @@ func test_two_attacked_freighters_end_closer_together() -> void:
 	await scene.free_scene(get_tree())
 
 
+func test_a_freighter_on_its_route_turns_from_a_raider_ahead_toward_shelter() -> void:
+	# M7-T55 (m5-054): a civilian on its way kept flying its route at the raider; now it turns round and burns for the far
+	# side of a warship of its people, keeping at it while the raider is in sight.
+	if _skipped():
+		return
+	var scene: TurretScene = await _scene()
+	var freighter: Combatant = scene.ship(FREIGHTER, Factions.EARTH_ALLIANCE, "SATURN", Vector3.ZERO, CIVILIAN_AI, 1, true)
+	var route := Route.new()
+	route.pace = Route.PACE_NONE
+	route.cruise_mps = 40.0
+	route.add(scene.world.to_universe(Vector3(0.0, 0.0, -30000.0)))
+	BehaviourFollowPath.attach(freighter.driver.brain as AiPilot, route)
+	freighter.ship.linear_velocity = Vector3(0.0, 0.0, -40.0)
+	var raider_at := Vector3(0.0, 0.0, -3600.0)
+	scene.ship(&"raider_fighter", Factions.RAIDERS, "RAIDER", raider_at, IDLE, 2)
+	var starfury: Combatant = scene.ship(&"starfury_ally", Factions.EARTH_ALLIANCE, "ALPHA", Vector3(2500.0, 0.0, 1500.0), IDLE, 3)
+	scene.attach()
+	await _fly(scene, 3.0)
+	assert_eq(String(_describe(freighter).get("behaviour", "")), "follow_path", "on its way while the raider is far")
+	var onset: Array[float] = [-1.0]
+	await _fly_until(scene, 30.0, func() -> bool:
+		if String(_describe(freighter).get("behaviour", "")) == "retreat":
+			onset[0] = SimClock.now()
+		return onset[0] >= 0.0)
+	assert_gte(onset[0], 0.0, "it runs once the raider is within its flee range")
+	var point: Vector3 = starfury.ship.global_position + (starfury.ship.global_position - raider_at).normalized() \
+			* maxf(3.0 * freighter.damageable.bounding_radius, 150.0)
+	var from_raider: float = freighter.ship.global_position.distance_to(raider_at)
+	var from_point: float = freighter.ship.global_position.distance_to(point)
+	var kinds: Dictionary = {}
+	await _fly_until(scene, 60.0, func() -> bool:
+		kinds[String(_describe(freighter).get("behaviour", ""))] = true
+		return false)
+	var now_raider: float = freighter.ship.global_position.distance_to(raider_at)
+	var now_point: float = freighter.ship.global_position.distance_to(point)
+	gut.p("route flee: from the raider %.0f -> %.0f m, from the shelter %.0f -> %.0f m, behaviours %s" % [from_raider,
+			now_raider, from_point, now_point, kinds.keys()])
+	assert_eq(kinds.keys(), ["retreat"], "it kept running, never back onto its route")
+	assert_gt(now_raider, from_raider + 300.0, "away from the raider")
+	assert_lt(now_point, from_point - 300.0, "toward the shelter beyond the Starfury")
+	await scene.free_scene(get_tree())
+
+
+func test_fired_on_it_runs_without_jinking_while_its_turrets_answer() -> void:
+	# M7-T55: a hit no longer throws a freighter into a fighter's jink (which held it where it was); it keeps running, its
+	# turrets firing back.
+	if _skipped():
+		return
+	var scene: TurretScene = await _scene()
+	var freighter: Combatant = scene.ship(FREIGHTER, Factions.EARTH_ALLIANCE, "SATURN", Vector3.ZERO, CIVILIAN_AI, 1, true)
+	var starfury: Combatant = scene.ship(&"starfury_ally", Factions.EARTH_ALLIANCE, "ALPHA", Vector3(2000.0, 0.0, 1500.0), IDLE, 3)
+	var raiders: Array[Combatant] = []
+	for i: int in 2:
+		var at := Vector3(-300.0 + 600.0 * i, 100.0, -3500.0)
+		raiders.append(scene.ship(&"raider_fighter", Factions.RAIDERS, "RAIDER %d" % (i + 1), at,
+				{"type": "ai", "profile": "raider", "orders": "attack", "objective": "SATURN"}, 11 + i, false,
+				Basis.looking_at(-at.normalized(), Vector3.UP)))
+	scene.attach()
+	var hits: Array[int] = [0]
+	freighter.damageable.hit_taken.connect(func(_info: HitInfo) -> void: hits[0] += 1)
+	var kinds: Dictionary = {}
+	var start: Vector3 = freighter.ship.global_position
+	await _fly_until(scene, 45.0, func() -> bool:
+		if not freighter.damageable.is_active():
+			return true
+		var kind: String = String(_describe(freighter).get("behaviour", ""))
+		if not kinds.is_empty() or kind == "retreat":
+			kinds[kind] = true
+		return false)
+	var moved: Vector3 = freighter.ship.global_position - start
+	var to_shelter: Vector3 = (starfury.ship.global_position - start).normalized()
+	gut.p("fired on: %d hits, behaviours from the first flight %s, turret shots %d, moved %s" % [hits[0], kinds.keys(),
+			scene.shots_total(), moved.snappedf(1.0)])
+	assert_gt(hits[0], 0, "the raiders hit it")
+	assert_true(kinds.has("retreat"), "it ran")
+	assert_false(kinds.has("evade"), "and never jinked where it was: %s" % [kinds.keys()])
+	assert_gt(scene.shots_total(), 0, "its turrets fired back while it ran")
+	assert_gt(moved.dot(to_shelter), 100.0, "toward the Starfury's side")
+	await scene.free_scene(get_tree())
+
+
 func test_threaded_equals_delayed_tick_for_tick() -> void:
 	if _skipped():
 		return
@@ -135,6 +217,18 @@ func _fly(scene: TurretScene, seconds: float) -> void:
 	Engine.physics_ticks_per_second = roundi(60.0 * SPEED_UP)
 	Engine.time_scale = SPEED_UP
 	while SimClock.now() - t0 < seconds:
+		await get_tree().physics_frame
+	Engine.physics_ticks_per_second = _rate_backup
+	Engine.time_scale = _scale_backup
+	assert_not_null(scene.sim, "the core is attached")
+
+
+# Flies the scene until `done` says so or `seconds` of sim time pass, `SPEED_UP` ticks a real tick.
+func _fly_until(scene: TurretScene, seconds: float, done: Callable) -> void:
+	var t0: float = SimClock.now()
+	Engine.physics_ticks_per_second = roundi(60.0 * SPEED_UP)
+	Engine.time_scale = SPEED_UP
+	while SimClock.now() - t0 < seconds and not bool(done.call()):
 		await get_tree().physics_frame
 	Engine.physics_ticks_per_second = _rate_backup
 	Engine.time_scale = _scale_backup

@@ -2997,6 +2997,46 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   turrets still fire in self-defense while it runs. Find why they hold and fight instead (the brain's state, the threat test, the
   shelter target) and fix it; keep T16's balance band.
 - **Done when:** a test that attacked civilians move away toward their faction's shelter; the maintainer sees them flee (H); committed.
+- **Done (code part, 2026-11-16):**
+  - **Reproduced.** In `civilian_showcase` the hulls had no pilot (`idle` behaviour, no brain), so nothing could flee and only
+    their turrets answered. In free flight (a Saturn 4 on a route at 100 m/s, two raiders sent at it, headless probes reading `ai`
+    each second) it went to `retreat (shelter)` at 2.9 km but kept flying at the raiders at 90-100 m/s for 25 s, then a hit threw
+    it into the evade's jink until it died; the station run's Skylark went to `retreat (extend)` for a second and back to its
+    route as the raider passed.
+  - **Causes and fixes** (native, civilian rows only; every other row and every recording unchanged; architecture §18.11
+    "Fleeing that reads"): (1) the retreat faced the velocity it wanted, and the main engine fires only within 12 degrees of the
+    nose, so a freighter already moving never lit it and its thrusters changed its velocity by a few m/s: a civilian now turns
+    its nose onto the change of velocity with every thruster helping (`RetreatState::burn`; the probe's Saturn then turned in
+    10 s and burned at 0.3 g). (2) It ran only while a raider was within 3 km: it now keeps running 20 s after a hostile was last
+    within 3 km or a hostile bolt last hit it, while one is in sight. (3) A hit forced the evade's jink: the `civilian` profile's
+    evade weight is 0 (and its idle brakes, so a route-less civilian stops after a flight). (4) Babylon 5 was no shelter (a big
+    hull, not a ship): a station of the civilian's people within 20 km of its skin now is, before any fellow civilian, the
+    civilian running round the hull (`detour`) to 1.5 km off its far side from the threat, slowing no faster than its retro can
+    stop it; an alarmed civilian runs there too; within 1 km of the skin it keeps its course (a docking lane, M7-T61's path,
+    untouched). No shelter or kin whose way closes on the threat (to within 800 m) is run to. The showcase's hulls fly the
+    `civilian` pilot and the showcase pools 3 raiders for `spawn raider ai`; an encounter raid drawn for a civilian now finds the
+    station run's traffic (it only looked at the encounters' own ships, which join the run since M7-T56, so every such raid
+    went for the player).
+  - **Balance** (`test_turret_balance`, GUT_BALANCE=1, staged copy): a lone Saturn now runs tail-on and its hull hides a chase
+    from astern from its turrets (Q33). Two raiders, wins of 10 (Saturn 3, 4 transport, 4 tanker, 8 transport, 8 tanker): 2, 1,
+    3, 1, 1 before; 0, 0, 1, 1, 1 after; three raiders none either way. Saturn 4 transport hull 450 → 540: 1 of 10 against two,
+    none against three. The Saturn 3 stays at 0 against two (820 and 1000 hull also 0: two turrets and the chase astern). Tried and
+    dropped: tilting the nose 25 or 35 degrees to keep the raider off the tail (Saturn 3 still 0, the Saturn 8 transport 10 of 10).
+  - Tests: Rust `brain_behaviours/tests.rs` (keeps running while the raider swings out, a fighter's retreat unchanged; the main
+    engine burns to turn the run round; round to the far side of its people's station, the station before a fellow freighter, not
+    another people's; panic to the station; under the guns it keeps its course) and `civilian/tests.rs` (braking into a shelter;
+    no kin beyond the threat); GUT `test_civilian_flight` (a freighter on its route turns from a raider: 2991 → 3490 m from it,
+    3521 → 2464 m from the shelter, only `retreat` after; fired on by two raiders it never jinks and its turrets fire),
+    `test_civilian_flee_station` (free flight: a Skylark leaving for the gate with a raider 2 km off its beam runs back to Babylon
+    5, 2.0 → 9.0 km from the raider, 8.4 → 0.8 km from the station, and a Saturn 3 3.5 km off panics and runs for the station;
+    a raid for a civilian finds the run's traffic), `test_civilian_ships` (the showcase's ten all run from a raider), `test_ai_skill`
+    (a civilian never jinks when hit), `test_ai_temperament` (the profile's evade 0, its idle brakes). Staged copy: Rust 219,
+    check_scripts 886 clean, GUT 189 tests in 24 files (the touched ones and the AI, brain parity, encounter, station run and
+    traffic, escort, turret and civilian files) all passing after the temperament fix. GPU (RX 6950 XT, Forward+, 60 fps, 244-273 draw calls, 1.05 GB VRAM):
+    `references/screenshots/M7-T55 flee/` (the showcase's hulls turning and running from a raider over 25 s from the cockpit,
+    `sheet_zoomed.png` the frames enlarged). Left for the maintainer: the flight in play (H); the Saturn 3's balance (more turret
+    arc astern, a wider Q33 blind spot decision, or accept it); whether alien civilians should shelter at Babylon 5 too (now
+    only Earth Alliance ones do, by Q24's own-people rule).
 
 ### M7-T56 Encounters pacing and civilian traffic
 

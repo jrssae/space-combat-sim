@@ -436,6 +436,8 @@ struct Tick<'a> {
     own_row: usize,
     fleeing: &'a [bool],
     alarmed: &'a [bool],
+    // The big hulls' rows, for a civilian's shelter at a station of its people (M7-T55).
+    hulls: &'a [u32],
     points: &'a [SubPoint],
     relations: &'a [u8],
     contacts: &'a [i32],
@@ -477,8 +479,8 @@ impl Tick<'_> {
         self.rows.is_civilian(self.own_row)
     }
 
-    // The civilian flight's view of this think (M5-T16).
-    fn civilian_view(&self, radius: f64, speed_mps: f64) -> civilian::View<'_> {
+    // The civilian flight's view of this think (M5-T16); `brake_mps2` 0 where nothing is flown from it.
+    fn civilian_view(&self, radius: f64, speed_mps: f64, brake_mps2: f64) -> civilian::View<'_> {
         civilian::View {
             rows: self.rows,
             contacts: self.contacts,
@@ -487,6 +489,8 @@ impl Tick<'_> {
             speed_mps,
             fleeing: self.fleeing,
             shun: -1,
+            hulls: self.hulls,
+            brake_mps2,
         }
     }
 
@@ -565,6 +569,7 @@ impl<'a> Tick<'a> {
             own_row,
             fleeing: &field.fleeing,
             alarmed: &field.alarmed,
+            hulls: &field.surface_rows,
             points: &field.sub_points,
             relations,
             contacts,
@@ -1851,11 +1856,16 @@ struct RetreatState {
     // Fire that came close (M7-T29): the body that fired it, of any side, and until when it keeps a civilian running.
     scare_body: i64,
     scare_until_s: f64,
+    // Until when a civilian keeps running from hostiles in sight after one last came near or hit it (M7-T55), so an
+    // attacker swinging out for its next pass never turns it back onto its route.
+    threat_until_s: f64,
 }
 
 impl RetreatState {
     const EXTRA_MPS: f64 = 50.0;
     const SCORE_MIN: f64 = 0.85;
+    /// Below this much velocity left to change, a civilian's nose goes where it is heading rather than where it burns.
+    const BURN_FACE_MPS: f64 = 5.0;
 
     fn new(profile: &Profile) -> Self {
         RetreatState {
@@ -1871,6 +1881,7 @@ impl RetreatState {
             shelter: false,
             scare_body: 0,
             scare_until_s: f64::NEG_INFINITY,
+            threat_until_s: f64::NEG_INFINITY,
         }
     }
 
@@ -1888,15 +1899,24 @@ impl RetreatState {
         self.shelter = false;
         self.scare_body = 0;
         self.scare_until_s = f64::NEG_INFINITY;
+        self.threat_until_s = f64::NEG_INFINITY;
     }
 
     fn score(&mut self, tick: &Tick, ctx: &Context) -> f64 {
         if !may_retreat(ctx) {
             return 0.0;
         }
+        let civilian = tick.own_civilian();
         // A civilian runs on its people's alarm too (Q25), with no threat of its own in sight, and from whoever's fire
-        // came close, hostile or not (M7-T29).
-        let panicked = tick.own_civilian() && (self.panicked(tick) | (self.scared_by(tick) >= 0));
+        // came close, hostile or not (M7-T29); and keeps running while its attackers are in sight (M7-T55).
+        let panicked = civilian && (self.panicked(tick) | self.attacked(tick));
+        let scared = civilian && self.scared_by(tick) >= 0;
+        // Under the guns of a station of its people a civilian keeps its course against raiders (M7-T55): a docking lane
+        // is no place to turn. A friend's fire close by still frightens it: the guns do not answer that.
+        if civilian && civilian::under_cover(&tick.civilian_view(0.0, self.speed_mps, 0.0)) {
+            return if scared { Self::SCORE_MIN } else { 0.0 };
+        }
+        let panicked = panicked || scared;
         if tick.lists.hostiles.is_empty() {
             return if panicked { Self::SCORE_MIN } else { 0.0 };
         }
@@ -1916,6 +1936,33 @@ impl RetreatState {
             return Self::SCORE_MIN;
         }
         low
+    }
+
+    // Whether a civilian is still running from an attack (M7-T55): a hostile within its flee range, or a hit, holds it
+    // `PANIC_HOLD_S` on, as long as a hostile stays in sight.
+    fn attacked(&mut self, tick: &Tick) -> bool {
+        let p = &tick.p;
+        let mut until = p.last_bolt_hit_s + civilian::PANIC_HOLD_S;
+        if self.retreat_within_m > 0.0 && tick.lists.ranges.iter().any(|&d| d <= self.retreat_within_m) {
+            until = maxf(until, p.now_s + civilian::PANIC_HOLD_S);
+        }
+        self.threat_until_s = maxf(self.threat_until_s, until);
+        !tick.lists.hostiles.is_empty() && p.now_s < self.threat_until_s
+    }
+
+    // A civilian's burn toward `v_des` (M7-T55): its nose on the change of velocity, so the main engine does what a
+    // freighter's weak thrusters cannot, every thruster helping while it turns.
+    fn burn(cmd: &mut FlightCmd, p: &Percept, ship: &Ship, v_des: Vector3, fallback: Vector3, wish: &mut Wish) {
+        let dv = sub(v_des, p.velocity);
+        let nose = if f64::from(length(dv)) > Self::BURN_FACE_MPS {
+            dv
+        } else if f64::from(length(v_des)) > 1.0 {
+            v_des
+        } else {
+            fallback
+        };
+        cmd.rot = brain_maths::face(&p.basis, nose, ship.capability.rate_max, brain_maths::K_FACE);
+        seek_velocity(cmd, p, &ship.capability, v_des, true, wish);
     }
 
     // Notes fire that came close from `body` at `now_s`: the civilian runs from it for `PANIC_HOLD_S`.
@@ -1938,7 +1985,7 @@ impl RetreatState {
 
     // Whether an alarm keeps this civilian running: one heard now (it holds `PANIC_HOLD_S` on), or one heard lately.
     fn panicked(&mut self, tick: &Tick) -> bool {
-        self.alarm_row = civilian::nearest_alarm(&tick.civilian_view(0.0, self.speed_mps), tick.alarmed);
+        self.alarm_row = civilian::nearest_alarm(&tick.civilian_view(0.0, self.speed_mps, 0.0), tick.alarmed);
         if self.alarm_row >= 0 {
             self.panic_until_s = tick.p.now_s + civilian::PANIC_HOLD_S;
         }
@@ -1980,19 +2027,24 @@ impl RetreatState {
         }
         let dir = normalized(away);
         // A civilian runs to its people (Q24, Q25); every other ship, and a civilian with nobody to run to, straight away.
+        let brake = ship.capability.a_retro;
         let flight = if !tick.own_civilian() {
             None
         } else if let Ok(t) = usize::try_from(threat) {
-            let mut view = tick.civilian_view(ship.radius, self.speed_mps);
+            let mut view = tick.civilian_view(ship.radius, self.speed_mps, brake);
             view.shun = threat; // never to the ship it runs from, were it of its own people
             civilian::flee_from(&view, dir, tick.rows.positions[t])
         } else {
             Some(civilian::flee_alarm(
-                &tick.civilian_view(ship.radius, self.speed_mps),
+                &tick.civilian_view(ship.radius, self.speed_mps, brake),
                 self.alarm_row,
             ))
         };
         let Some(flight) = flight else {
+            if tick.own_civilian() {
+                Self::burn(cmd, p, ship, scale(dir, self.speed_mps as f32), dir, wish);
+                return;
+            }
             cmd.rot =
                 brain_maths::face(&p.basis, dir, ship.capability.rate_max, brain_maths::K_FACE);
             seek_velocity(
@@ -2005,17 +2057,18 @@ impl RetreatState {
             );
             return;
         };
+        let mut velocity = flight.velocity;
         if let Ok(g) = usize::try_from(flight.goal) {
             self.goal_id = tick.rows.ids[g];
             self.shelter = flight.shelter;
+            // A station's far side is reached round its hull, never through it.
+            if tick.rows.surface(g).is_some()
+                && let Some(round) = detour(tick, ship, flight.point, self.speed_mps)
+            {
+                velocity = round;
+            }
         }
-        let face_dir = if f64::from(length(flight.velocity)) > 1.0 {
-            normalized(flight.velocity)
-        } else {
-            dir
-        };
-        cmd.rot = brain_maths::face(&p.basis, face_dir, ship.capability.rate_max, brain_maths::K_FACE);
-        seek_velocity(cmd, p, &ship.capability, flight.velocity, false, wish);
+        Self::burn(cmd, p, ship, velocity, dir, wish);
     }
 
     fn describe(&self, d: &mut Describe) {

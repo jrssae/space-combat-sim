@@ -717,10 +717,12 @@ one; `state encounters` shows the schedule; `encounters clear` sends every encou
   one with none. `set settings.texture_detail low` and `high` switch every ship's surface detail live (Settings, Video, "Ship
   texture detail"); `set settings.hull_sheen 0` shows the old flat paint.
 - Civilians carry no guns of their own but have light turrets, which fire only at ships that attacked them or a civilian or
-  ally within 2 km. The showcase has no raiders (and its hulls sit 1.8 km ahead: fly up to them); to watch civilians run
-  and shoot back, start free flight and type `encounters force traffic`, then `encounters force raid` once they are near, or
-  fly the escort. An Earth Alliance civilian runs towards the nearest Earth Alliance ship (behind it when that is a
-  fighter); others run together.
+  ally within 2 km. The showcase starts with no raiders (its hulls sit 1.8 km ahead: fly up to them); `spawn raider ai
+  1500` sends one in and every hull runs (M7-T55), the Earth Alliance ones behind you or to Babylon 5. In free flight a raid drawn for a
+  civilian goes for one on the station's run (`encounters force raid` until one does, or fly the escort). An Earth Alliance
+  civilian runs towards the nearest Earth Alliance ship (behind it when that is a fighter) or round to Babylon 5's far side
+  when the station is nearer (within 20 km); under the station's guns (within 1 km of it) it keeps to its lane; others run
+  together, and a fleeing civilian sets its people within 5 km running. Its turrets keep firing while it runs.
 - `play belt_showcase`: the asteroid belt by itself. The rocks stop bolts and ships; a scrape costs little, a head-on hit a lot.
 
 ## Sounds (M5-T18, T19, T37)

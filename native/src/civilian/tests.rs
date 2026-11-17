@@ -55,6 +55,8 @@ fn view<'a>(rows: &'a Rows, contacts: &'a [i32], fleeing: &'a [bool]) -> View<'a
         speed_mps: 130.0,
         fleeing,
         shun: -1,
+        hulls: &[],
+        brake_mps2: 0.0,
     }
 }
 
@@ -86,6 +88,28 @@ fn the_nearest_kin_is_of_the_own_people_of_any_kind() {
 }
 
 #[test]
+fn no_kin_beyond_the_threat_is_run_to() {
+    // M7-T55: the Starfury 3 km ahead, past the raider 1.5 km ahead: running there would pass the raider.
+    let threat = v(0.0, 0.0, -1500.0);
+    let rows = rows_of(&[
+        (1, EA, ROLE_CIVILIAN, 80.0, STILL, STILL),
+        (3, EA, ROLE_COMBAT, 12.0, v(300.0, 0.0, -3000.0), STILL),
+        (4, EA, ROLE_CIVILIAN, 80.0, v(2500.0, 0.0, 2500.0), STILL),
+        (5, RAIDERS, ROLE_COMBAT, 10.0, threat, STILL),
+    ]);
+    let seen = view(&rows, &[1, 2], &[]);
+    assert_eq!(nearest_kin(&seen), 1, "the Starfury is the nearest kin");
+    assert_eq!(nearest_kin_from(&seen, Some(threat)), 2, "but the freighter behind is the one it runs to");
+    let flight = flee_from(&seen, v(0.0, 0.0, 1.0), threat).unwrap();
+    assert_eq!(flight.goal, 2);
+    assert!(flight.velocity.z > 0.0, "away from the raider: {:?}", flight.velocity);
+    // A raider already close beside it: a shelter on its side is still run to when the way only draws off from it.
+    let near = v(400.0, 0.0, -100.0);
+    let rows = rows_of(&[(1, EA, ROLE_CIVILIAN, 80.0, STILL, STILL), (3, EA, ROLE_COMBAT, 12.0, v(3000.0, 0.0, 6000.0), STILL)]);
+    assert_eq!(nearest_kin_from(&view(&rows, &[1], &[]), Some(near)), 1, "the way leaves the raider behind");
+}
+
+#[test]
 fn a_freighter_shelters_on_the_far_side_of_a_warship_of_its_people() {
     let threat = v(0.0, 0.0, -1500.0);
     let rows = rows_of(&[
@@ -107,6 +131,20 @@ fn a_freighter_shelters_on_the_far_side_of_a_warship_of_its_people() {
     assert!(dot(dir, normalized(point)) > 0.99, "it heads for that point: {dir:?}");
     let pace = minf(130.0, f64::from(length(point)) / ARRIVE_S);
     assert!((f64::from(length(flight.velocity)) - pace).abs() < 0.01, "slowing into it over ARRIVE_S, at most the run's speed");
+}
+
+#[test]
+fn a_freighter_slows_into_its_shelter_no_faster_than_it_can_brake() {
+    // M7-T55: 1.4 km out at the run's speed a Saturn could never stop there; it comes in at what its retro can stop.
+    let threat = v(0.0, 0.0, -1500.0);
+    let rows = rows_of(&[(1, EA, ROLE_CIVILIAN, 80.0, STILL, STILL), (3, EA, ROLE_COMBAT, 12.0, v(1200.0, 0.0, 0.0), STILL)]);
+    let mut seen = view(&rows, &[1], &[]);
+    seen.brake_mps2 = 0.5;
+    let flight = flee_from(&seen, v(0.0, 0.0, 1.0), threat).unwrap();
+    let point = shelter_point(rows.positions[1], threat, standoff_m(80.0, 12.0));
+    let stop = (2.0 * 0.5 * f64::from(length(point))).sqrt();
+    assert!((f64::from(length(flight.velocity)) - stop).abs() < 0.01, "{} m/s, its stopping speed {stop}", length(flight.velocity));
+    assert!(dot(normalized(flight.velocity), normalized(point)) > 0.99, "toward the point");
 }
 
 #[test]
