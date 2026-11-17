@@ -3283,6 +3283,15 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   rerecorded`, reason in `tests/fixtures/parity/README.md`): the differences come only from the two new rules, the trigger arithmetic is
   unchanged. For the maintainer: in a live `bench battle 300 20` the fighters never reach the belts (1.5 km out, away from the fights),
   a layout question, not changed. Open: (H) shoot and ram mines.
+- **Done (follow-up, a mine that goes off explodes, 2026-11-17):** a mine used to just vanish. `DestructionDirector.watch_mines`
+  (called by `StandinDirector.add_mines`) now draws every detonation, shot, touch, trigger or chain, once at the mine's place with
+  the ships' death effects and M4-T23's distance rule: the full `Explosion` near, the reduced one farther, a `FarFlashes` point far
+  away; its fireball grows to the 100 m blast. At most 12 mine explosions are alive at once (the rest are far flashes), so no
+  nodes pile up; a near one plays the ships' `explosion` sound, once a tick, so a chain sounds as one blast. New console command
+  `mines view|set_off [metres]` (look at the nearest mine, set it off as a shot would) for captures and play-tests. Tick medians
+  unchanged within noise (`bench battle 300`: 4.33 and 4.20 ms against 4.51 and 4.19 before; 1000: 6.31 and 6.43 against 6.19 and
+  6.39; 175 and 959 mines set off in the window). Captures in `references/screenshots/M7-T64 mine blast/`. Open: (H) how the
+  blasts look and sound.
 
 ### M7-T65 Bench mines in small chained groups where the battle is
 

@@ -4,7 +4,8 @@ extends Node3D
 ## `Targetable.Kind.MINE` in this one node (no node per mine), laid in belts by the bench layout. A mine goes off when a
 ## hull hostile to its layer comes inside its trigger (a third of the mines check each tick), when any hull of any side
 ## touches its body, when any shot hits it (the hit resolver calls `strike`) or when another mine's blast reaches it
-## (M7-T64). Going off, it hurts every hull within the blast radius through its `Damageable` (friend or foe) and is removed.
+## (M7-T64). Going off, it hurts every hull within the blast radius through its `Damageable` (friend or foe) and is removed;
+## `DestructionDirector.watch_mines` draws its explosion from `detonated`.
 ## During a bench run it is laid again in its place after `RELAY_S`, so a belt holds the mix's count over the run.
 ##
 ## Spawn it with `WorldFrame.spawn` (identity basis) after setting `world`: it is shiftable, so its mines follow a rebase with
@@ -16,7 +17,8 @@ extends Node3D
 ## run over the core's rows, and this node lays, retires and hurts. `triggers` and `blast` state the trigger and blast rules
 ## in GDScript for their tests. Mines are not in the target list: the player shoots at the drawn sphere (M7-T64).
 ##
-## Console: provider `mines` (what is in play, what set them off, the nearest to the player).
+## Console: provider `mines` (what is in play, what set them off, the nearest to the player) and command `mines view|set_off`
+## (look at the nearest mine, set it off as a shot would: for captures and play-tests of the blasts).
 
 ## A row went off (`index`) and is no longer in play.
 signal detonated(index: int)
@@ -28,11 +30,16 @@ const BLAST_RADIUS_M: float = 100.0
 ## Each mine checks once every this many ticks, a third of them each tick.
 const TRIGGER_TICKS: int = 3
 const DAMAGE: float = 200.0
+## A blast's energy, J (about a fighter's death): how long its far flash lasts.
+const BLAST_ENERGY_J: float = 1.0e9
 const RELAY_S: float = 10.0
 ## What a blast's `HitInfo.cause` says.
 const CAUSE: StringName = &"mine"
 ## What set a mine off.
 enum Cause { TRIGGER, TOUCH, SHOT, BLAST }
+const ACTIONS: Array[StringName] = [&"view", &"set_off"]
+## How far `mines view` puts the player from the nearest mine, m.
+const VIEW_M: float = 800.0
 ## Drawn this big, m; also its body, what a touch or a shot must reach (M7-T64).
 const DRAWN_RADIUS_M: float = 3.0
 const COLOR: Color = Color(0.7, 0.15, 0.1)
@@ -86,6 +93,10 @@ func _ready() -> void:
 		&"nearest_hostile": {"get": func() -> bool: return _nearest_to_player()[3],
 				"doc": "Whether that mine's side is hostile to the player (only then does its 50 m trigger go off on the player)"},
 	}), self)
+	DebugConsole.registry.register_command(ConsoleCommand.new(&"mines",
+			"Look at the nearest mine in play from [metres] away, or set it off as a shot would (its group goes with it)",
+			[ConsoleArg.enum_optional(&"action", ACTIONS, &"view"), ConsoleArg.float_optional(&"metres", VIEW_M, 50.0)]),
+			_cmd_mines, self)
 
 
 func _exit_tree() -> void:
@@ -330,14 +341,39 @@ func _count_cause(cause: int) -> void:
 			by_trigger += 1
 
 
-# The nearest mine in play to the player, for the console: [index or -1, distance or -1, side, hostile to the player].
-func _nearest_to_player() -> Array:
-	var player: Damageable = null
+func _cmd_mines(args: Dictionary) -> ConsoleResult:
+	var nearest: Array = _nearest_to_player()
+	var i: int = nearest[0]
+	if i < 0:
+		return ConsoleResult.failure("mines: no player or no mine in play")
+	if StringName(args[&"action"]) == &"set_off":
+		strike(i)
+		return ConsoleResult.line("mine %d (%s, %.0f m off) set off" % [i, nearest[2], nearest[1]])
+	var ship := _player().body() as Ship
+	if ship == null:
+		return ConsoleResult.failure("mines: no player ship to move")
+	var metres: float = float(args[&"metres"])
+	var look: Vector3 = position_of(i)
+	var at: Vector3 = look + Vector3(0.6, 0.35, 0.72).normalized() * metres
+	ship.reset_to(Transform3D(Basis.looking_at((look - at).normalized(), Vector3.UP), at))
+	var frame: WorldFrame = WorldFrame.of(self)
+	ship.linear_velocity = frame.rest_velocity() if frame != null else Vector3.ZERO
+	ship.angular_velocity = Vector3.ZERO
+	return ConsoleResult.line("%.0f m from mine %d (%s)" % [metres, i, nearest[2]])
+
+
+# The player's hull, or null.
+func _player() -> Damageable:
 	for node: Node in get_tree().get_nodes_in_group(Damageable.GROUP):
 		var d := node as Damageable
 		if d != null and d.respects_god_mode and d.body() != null:
-			player = d
-			break
+			return d
+	return null
+
+
+# The nearest mine in play to the player, for the console: [index or -1, distance or -1, side, hostile to the player].
+func _nearest_to_player() -> Array:
+	var player: Damageable = _player()
 	if player == null:
 		return [-1, -1.0, "", false]
 	var from: Vector3 = player.body().global_position

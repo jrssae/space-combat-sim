@@ -281,6 +281,9 @@ func add_mines(rows: Array[Dictionary], anchor: UniversePos) -> MineStandin:
 	world.spawn(_mines, anchor, Basis.IDENTITY, self)
 	_mines.add_to_group(WorldFrame.ANCHORED_GROUP)
 	_mines.build(rows)
+	var destruction: DestructionDirector = DestructionDirector.current()
+	if destruction != null:
+		destruction.watch_mines(_mines)  # a mine that goes off is drawn exploding (M7-T64)
 	return _mines
 
 

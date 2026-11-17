@@ -157,6 +157,7 @@ Arguments in `<angle brackets>` are required, `[square brackets]` optional, `a|b
 | `perf` | `[on\|off]` | Time every tick's stages (the `perf` provider); no argument toggles | in flight |
 | `native` | `[bench]` | Say whether the native library is loaded (it is required since M4-T37); `bench` times calls into it | in flight |
 | `bench` | `<furball\|spread\|transit\|battle\|typical> <n> [options]` | Fly a benchmark layout with n ships and write `reports/perf/<label>/` (`scripts/bench.sh`); in `battle` and `typical` every ship comes in out of a jump point, in waves of up to 100 points (M6-T20; the warm-up waits for the last wave): each capital opens its own and a fighter group comes through its side's capital point close by, or through the battle's own jumpgate 4 km below the first fight (M6-T23), or `arrive=placed` puts them in place at the start | in flight |
+| `mines` | `[view\|set_off] [metres]` | A battle's mines (M7-T64): `view` puts the player that far (default 800 m) from the nearest mine in play, at rest and looking at it; `set_off` sets that mine off as a shot would, so it explodes and takes its group with it (for captures and play-tests of the blasts) | benchmark (battle layouts) |
 | `station_scene` | `<near\|far\|off>` | Open the render comparison's station scene (M4-T27; `station` until M7-T06) | in flight |
 
 ### Missions
@@ -232,7 +233,7 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `flight` | The native flight batch: ships stepped and the gather and step costs | in flight |
 | `tier` | The low-attention tier: radius, rates, fighter and capital rows, hulks, promotions and demotions | in flight |
 | `perf` | The tick's stage timings and per-entity counts (on while `perf on` or a bench runs) | in flight |
-| `mines` | A battle's mine belts (M7-T64): mines laid and in play, set off so far and by what (`by_trigger`: a hull hostile to the mine's side within 50 m; `by_touch`: any hull touching its 3 m body; `by_shot`: any bolt, beam or missile; `by_blast`: another mine's blast), whether a spent mine is laid again (`relays`, only during a bench run), and the nearest mine in play to the player (`nearest_m`, `nearest_side`, `nearest_hostile`) | bench battle |
+| `mines` | A battle's mine belts (M7-T64): mines laid and in play, set off so far and by what (`by_trigger`: a hull hostile to the mine's side within 50 m; `by_touch`: any hull touching its 3 m body; `by_shot`: any bolt, beam or missile; `by_blast`: another mine's blast), whether a spent mine is laid again (`relays`, only during a bench run), and the nearest mine in play to the player (`nearest_m`, `nearest_side`, `nearest_hostile`) | benchmark (battle layouts) |
 | `fx` | The particle emitter pool: emitters, busy, bursts thrown and the density in use | in flight |
 | `debris` | The break-up chunk pool: sets, free sets, active chunks and held wrecks | in flight |
 | `audio` | Sounds loaded, voices playing, engine voices (granted, sounding, the frame's work and the re-rank's work, `engine_rank_work`), `shots_culled` (gun shots skipped beyond earshot) and the SFX volume (writable) | front end, flight |

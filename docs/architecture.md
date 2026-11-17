@@ -2530,6 +2530,13 @@ src/combat/hit_resolver.gd             + a beam is retired after the resolve tha
   enemy mines Q27 hides. Provider `mines`: `laid`, `in_play`, `set_off`, `by_trigger`, `by_touch`, `by_shot`, `by_blast`,
   `relays` and the nearest mine in play to the player (`nearest_m`, `nearest_side`, `nearest_hostile`); `combat` gains
   `mines_struck`.
+- **A mine that goes off explodes (M7-T64 follow-up).** `StandinDirector.add_mines` hands the belt to
+  `DestructionDirector.watch_mines`, which draws each `detonated` (shot, touch, trigger or chain, one per mine) at the mine's
+  place as a death is drawn (M4-T23's `ExplosionLod`): its fireball grows to the 100 m blast (radius `BLAST_RADIUS_M /
+  Explosion.FIREBALL_FINAL_SCALE`), the full `Explosion` near, the reduced one farther, a `FarFlashes` point past that (energy
+  `MineStandin.BLAST_ENERGY_J`). At most `MINE_BLASTS_MAX` (12) mine explosions are alive at once and the rest are far flashes,
+  so a battle's chains (about 960 per 30 s at 1000 ships) never pile up nodes. A full one plays the ships' `explosion` sound,
+  once a tick (`mine_exploded`), so a chain sounds as one blast. `mine_blasts` counts them by level.
 - **Counters**: `beams` (emitters), `missiles` (in flight) and `mines` (in play) per tick, beside T07's; a run's summary has
   `weapons` (launches, missiles shot down, beam shots, mines set off over the window) and the director's cost by part
   (`parts_us`: gather, engines and guns, interceptors, beams, missiles, mines, launches) with the missiles' steering, which runs
@@ -2549,6 +2556,8 @@ src/combat/hit_resolver.gd             + a beam is retired after the resolve tha
   it reaches), `test_bench` (after a run the player's side shoots and flies into a mine of its own and an enemy's, each taking its
   group with it (M7-T65), and an untouched own group 30 m off stays), the Rust tests in `native/src/weapon_kernels/tests.rs` (trigger, touch, swept touch,
   blast reach) and `test_mine_kernel` (a carrier's reach: the mines it reaches all go off, any other only by a blast).
+  `test_mine_blast` (a mine that goes off shows one explosion at its place, as big as the blast, and a sound; a chain one per
+  mine and one sound; the reduced effect between, a point flash and no node far away; past the cap a flash).
 
 ### 17.12 Jolt collision layers and far-ship interpolation (T14)
 

@@ -6,8 +6,8 @@ extends Node3D
 ##
 ## Hooks (`connect_combat`, `watch_ship`): cannon fire (`pulse_fire` for the Starfury's side, `raider_fire` for the others),
 ## a defensive turret's shot (`turret_fire`, M5-T21),
-## hits (`hit_hull`), destruction (`explosion`), the player's hull below 25 % (`warning_beep`, repeating) and a new selection
-## (`target_blip`).
+## hits (`hit_hull`), destruction (`explosion`, a mine's too, M7-T64), the player's hull below 25 % (`warning_beep`, repeating)
+## and a new selection (`target_blip`).
 ##
 ## Engines (M5-T19, D60): each ship gets a looping `main_burst` voice per pod and the player's ship an `rcs_burst` voice per
 ## RCS cluster, children of the ship at their nozzles, so they follow it and a rebase. `EngineVoices` decides which sound
@@ -315,6 +315,7 @@ func connect_combat(resolver: HitResolver, destruction: DestructionDirector, p_p
 		destruction.ship_destroyed.connect(func(_c: Combatant, _info: HitInfo) -> void: play(&"explosion", destruction.last_blast_position, 3.0))
 		destruction.buoy_destroyed.connect(func(buoy: NavBuoy, _info: HitInfo) -> void: play(&"explosion", buoy.global_position, 0.0, 1.15))
 		destruction.player_destroyed.connect(func(_info: HitInfo) -> void: play(&"explosion", destruction.last_blast_position, 3.0))
+		destruction.mine_exploded.connect(func(at: Vector3) -> void: play(&"explosion", at, 3.0, 0.85))
 	if player != null:
 		player.ship.targeting.target_changed.connect(func(id: int) -> void:
 			if id != TargetingSystem.NO_TARGET:
