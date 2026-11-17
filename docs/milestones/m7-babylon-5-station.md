@@ -331,6 +331,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T69 | C | Fix: Babylon 5's blinking navigation lights show at any distance, even from an orbit of the star; they must fade by the inverse square like running lights (maintainer, 2026-11-17) | T18 | Sonnet | The lights' far draw (a marker or emissive with no distance falloff) | in progress |
 | T70 | C | Fix: `traffic dock` (without `near`) answers "a civilian is on its way into the main docking bay" but starts no ship: `traffic status` stays at 0 in play, `last: none` (maintainer, 2026-11-17; `dock near` works) | T56 | Sonnet | T56's gate-station run rewrite of the far start | in progress |
 | T71 | C | Fix: after `frame drop` (or `frame orbit`), `station goto` and the other player moves keep the planet's frame: the player goes on falling toward the planet near Babylon 5 and the speed readings point the wrong way; and the planet is not drawn after `frame drop 500` (maintainer, 2026-11-17) | T66, T68 | Opus | Every teleport of the player must put the frame back on the place's rail, as T67's `goto` does | in progress |
+| T72 | C | Fix: two suns, about 2.6 degrees apart on one streak, in `far view station` at 10 000 km and beyond (maintainer, 2026-11-17; seen in T69's captures) | T44 | Opus | The sky's sun and the scaled layer's star disagree when the camera is far from the World's origin (T44's fix near the star) | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress |
 
 ### M7-T01 Station references and measurements
@@ -3507,3 +3508,16 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     point, on the station's rail with no pull, at rest, REF BABYLON 5, flying at the station closes 20 m a second and reads 20 m/s;
     `gate approach`, `respawn`, `goto babylon 5`, `tour <stop>`, `mines view`; the planet drawn at its true distance and direction,
     a disc inside the camera's range). All 6 fail on the old code. info.md `frame` row.
+
+### M7-T72 Fix: two suns in the far station view
+
+- **Why (maintainer, 2026-11-17, watching T69's captures):** "at extreme distances, i'm seeing 2 suns. is that a lens flare or a defect?"
+  `references/screenshots/M7-T69 station lights/probe_main_10000km_1.png`: two bright discs on one flare streak, about 2.6 degrees
+  apart; the flare's ghosts are separate. The star is about 150 million km off, so 10 000 km of camera offset moves it by about
+  0.004 degree: two draws of the sun disagree.
+- **What:** find which two draw the sun (the sky's sun disc, the scaled-space star, the flare's source, the key light's direction) and
+  why they part when the camera is far from the World's origin (`far view` moving the camera without the frame; T44's fix for two suns
+  near the star; T71's change to how the scaled layer reads a rail); make one sun at every camera distance and frame (near the station,
+  `far view` at 10 000 and 27 000 km, `frame orbit 400`, near the star).
+- **Done when:** a test (the sky's sun direction and the scaled star's agree within a small angle for those camera placements); GPU
+  captures; the maintainer sees one sun (H); committed.
