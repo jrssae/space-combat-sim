@@ -153,6 +153,14 @@ func inside_count() -> int:
 	return n
 
 
+## Of them, ships an encounter's traffic event sent onto the run: they count against the encounters' cap.
+func encounter_count() -> int:
+	var n: int = 0
+	for entry: Dictionary in _own:
+		n += 1 if bool(entry.get("encounter", false)) else 0
+	return n
+
+
 ## The traffic ship called `ship_name`, or null.
 func ship_named(ship_name: String) -> Combatant:
 	for entry: Dictionary in _own:
@@ -370,7 +378,7 @@ func lane_event(e: EncounterEvent, seed_value: int) -> bool:
 			type = _free_hull(DockingPlan.FREIGHTER_TYPES, DockingPlan.FREIGHTER_TYPES.find(type))
 		else:
 			type = _free_hull(DockingPlan.TUNNEL_TYPES, DockingPlan.TUNNEL_TYPES.find(type) if DockingPlan.TUNNEL_TYPES.has(type) else e.index + k)
-		if _join_inbound(type, along + step * float(k), {"loading": _unit("load", e.index * 4 + k) < 0.5}) != null:
+		if _join_inbound(type, along + step * float(k), {"loading": _unit("load", e.index * 4 + k) < 0.5, "encounter": true}) != null:
 			placed += 1
 	return placed > 0
 

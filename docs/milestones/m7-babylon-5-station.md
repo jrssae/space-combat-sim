@@ -3117,6 +3117,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     `references/screenshots/M7-T56 traffic lane/` (GPU, Forward+ at 60 fps: the run's line of civilian dots on the radar, a
     Brezebel and a Saturn targeted in the civilian colour).
 - **Accepted (maintainer, 2026-11-17):** m5-056 passed, M5 accepted; pushed and CI green on f5dd74fb.
+- **Council round 1 (2026-11-17):** O6: an encounter's convoy on the station's run counts against `encounter_max_ships` like the encounters' other ships (`StationTraffic.encounter_count`); a convoy that would pass the cap waits, as a raid does (`test_an_encounter_convoy_counts_against_the_cap`). G3 left: the run's refill one start per `lane_spacing_s` is the rule, and the seeded departures are spread along the run.
 
 ### M7-T57 The station tour: "Defense" and the grid stop
 

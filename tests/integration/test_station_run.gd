@@ -284,3 +284,33 @@ func test_an_encounter_raid_drawn_for_the_station_goes_for_it_and_scrambles_its_
 		assert_between(c.ship.global_position.distance_to(station.global_position), 11000.0, 17200.0,
 				"%s comes out clear of its hull" % c.display_name)
 	assert_true(main.launches.is_launching("alpha") or main.launches.has_flown("alpha"), "its wing scrambled")
+
+
+# Council round 1 (O6): an encounter's convoy on the run counts against the encounters' cap, as their other ships do: one
+# that would pass it waits, as a raid does.
+func test_an_encounter_convoy_counts_against_the_cap() -> void:
+	var cap_backup: Variant = Settings.get_value(&"encounter_max_ships")
+	Settings.set_value(&"encounter_max_ships", 4)
+	if not await _start(true):
+		Settings.set_value(&"encounter_max_ships", cap_backup)
+		pending("the babylon5_station asset is not generated")
+		return
+	var director: EncounterDirector = main.encounter_director
+	var traffic: StationTraffic = main.traffic
+	var first := EncounterEvent.new()
+	first.index = 3
+	first.kind = &"traffic"
+	first.types.assign([&"skylark_transport", &"brakiri_bokmai", &"skylark_transport"])
+	assert_true(director.start(first))
+	assert_eq(traffic.encounter_count(), 3, "three ships of the encounters on the run")
+	var second := EncounterEvent.new()
+	second.index = 4
+	second.kind = &"traffic"
+	second.types.assign([&"skylark_transport", &"brakiri_bokmai"])
+	assert_false(director.start(second), "two more would pass the cap: the convoy waits")
+	second.trim(1)
+	assert_true(director.start(second), "one fits")
+	assert_eq(traffic.encounter_count(), 4)
+	var raid: EncounterEvent = director.plan.event(EncounterDirector.FORCED_INDEX + 700, &"raid")
+	assert_false(director.start(raid), "a raid waits while the convoys fill the cap")
+	Settings.set_value(&"encounter_max_ships", cap_backup)

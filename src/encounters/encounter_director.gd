@@ -290,16 +290,16 @@ func take_forced(kind: StringName) -> EncounterEvent:
 
 ## Starts `e` now when the cap and the pools allow it; false (nothing placed) when it must wait.
 func start(e: EncounterEvent) -> bool:
+	var admitted: int = EncounterPlan.admit(_in_play(), e.count(), cap())
+	if admitted == 0:
+		return false
+	if admitted < e.count():
+		e.trim(admitted)
 	if e.kind == &"traffic" and _lane() != null:
 		if not _lane().lane_event(e, seed_value):
 			return false
 		_started(e)
 		return true
-	var admitted: int = EncounterPlan.admit(_own.size() + in_transit, e.count(), cap())
-	if admitted == 0:
-		return false
-	if admitted < e.count():
-		e.trim(admitted)
 	var types: Array[StringName] = _available_types(e)
 	if types.is_empty():
 		return false
@@ -421,6 +421,12 @@ func _free_civilian(wanted: StringName, taken: Dictionary) -> StringName:
 
 
 # The station's traffic, when the scene has the station and its lanes: traffic events fly its run (M7-T56).
+# The encounters' ships against the cap: their own, those asked of a gate, and the convoys they sent onto the station's run.
+func _in_play() -> int:
+	var traffic: StationTraffic = main.traffic if main != null else null
+	return _own.size() + in_transit + (traffic.encounter_count() if traffic != null else 0)
+
+
 func _lane() -> StationTraffic:
 	var traffic: StationTraffic = main.traffic
 	return traffic if station_run and traffic != null and traffic.lanes_ready() else null
