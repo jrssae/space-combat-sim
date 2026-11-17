@@ -335,6 +335,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T73 | C | Fix: in orbit (`frame orbit 400`) the HUD's REF line runs over the directional indicator instead of wrapping (maintainer, 2026-11-17, M6 check m6-075) | - | Sonnet | The REF and ALT lines' width against the drift indicator, every window size, chase and cockpit | in progress |
 | T74 | C | Fix: a launched Alpha wing forms up all on one side of the V; the V must balance its two arms, an odd ship taking a centre slot behind the leader so the wing makes a triangle (maintainer, 2026-11-17) | T58 | Opus | The formation's slot offsets for T58's eleven-slot wing | in progress |
 | T75 | C | Fix: `transit carrier point fighter follow` refuses in free flight with encounters off (`no two free raiders to bring in`): the raider pool is empty there; the debug tool grows the pool as the bench does (maintainer, 2026-11-17, M6 check m6-094) | - | Sonnet | `Main.ensure_pool` (M7-T59 made it register deaths) | in progress |
+| T76 | C | Wingmen avoid each other and big hulls while forming up: no rams between allies re-forming after the leader reverses at high speed, and no wingman follows the leader into the station (maintainer, 2026-11-17; roadmap M7-1 brought forward from M8) | T74 | Opus | The formation and rejoin flight's stopping-path check against friendly ships everywhere, and against big hulls on the way to a slot (native, 1 and 6 threads identical) | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress |
 
 ### M7-T01 Station references and measurements
@@ -3627,3 +3628,17 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   needs pooled ships does the same.
 - **Done when:** a test (`play free_flight` with encounters off, `transit carrier point fighter follow`, then `vortex collapse`:
   `collapses = 1`, `collapse_kills = 1`, `last_collapse = opener_destroyed`); committed.
+
+### M7-T76 Wingmen avoid each other and the station while forming up
+
+- **Why (maintainer, 2026-11-17, after T74's balanced V):** "the wingmen collision avoidance ai still needs work. multiple allies collided
+  with each other during the attempt to get into formation when i turned around and reversed my direction at high speed. also when i
+  accidently ran myself into the station, multiple wingmen did too". Brought forward from the roadmap's M7-1 (M7-T38 found it: T38's
+  separation wall and push-off act only while a big hull is in sight).
+- **What:** formation and rejoin flight check their stopping path against every friendly ship, not only near big hulls: a wingman whose
+  path to its slot crosses another's yields or swings round, so a wing re-forming after the leader reverses at speed never rams itself.
+  A wingman's way to its slot never runs through a big hull: when the leader (the player) flies into the station, the wingmen hold off,
+  break away or route round it instead of following. Native, engine-free, 1 and 6 threads identical, parity recordings kept (re-record
+  only with the reason stated).
+- **Done when:** tests (an eleven-ship Alpha re-forming after a high-speed reversal: no ally-ally contact; the leader flying into the
+  station: no wingman reaches the hull; formation flying otherwise unchanged); the maintainer checks it (H); committed.
