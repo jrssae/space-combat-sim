@@ -2088,6 +2088,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     spent jobs are freed first; 3/3 pass under load, were 1/3); the jump flash's flare pass (M7-T23) left on the scene's shared
     Compositor, so later environments had 5 effects (PostEffects removes it on exit); the loading screen test took the load
     before its check when it began mid-frame (it steps the screen's frames by hand).
+- **Council round 1 (2026-11-17):** O8: the `.uid` files of 12 scripts committed without them (`multimesh_upload.gd`, `jolt_pace.gd` and ten test files) are committed.
 
 ### M7-T32 The cargo bay in red-lit grey metal
 
