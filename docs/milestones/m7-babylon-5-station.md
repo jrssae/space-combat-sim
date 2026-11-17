@@ -326,6 +326,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T64 | C | Mines can be shot and explode when hit, whoever's they are, and a ship that flies into a mine sets it off (maintainer, 2026-11-16: none went off in a bench battle) | T59 | Opus | The hit sweep and the mines' rows (native), the trigger's faction test after a run | in progress |
 | T65 | C | The bench battles' mines laid as small chained groups (4 to 8, each side's) in the asteroid field where the fighting is, groups far enough apart that one blast never sets off the next (maintainer, 2026-11-16) | T64 | Opus | The bench layout's belts, the mix's mine count, the benchmark's figures | in progress |
 | T66 | C | Fix: `frame orbit` brings the planet, the station and the jumpgate to the player instead of putting the player in orbit with everything else where it is (maintainer, 2026-11-17) | - | Opus | The frame's anchor moves the scenario's origin; world objects placed relative to it | in progress |
+| T67 | C | A `goto <nav point>` console command: puts the player near any nav point (Babylon 5 and its bays, the jumpgate, the scenario's NAV points, a body), clear of it and at rest relative to it, the frame on that place's rail; `goto` alone lists them (maintainer, 2026-11-17) | T66 | Sonnet | The frame and rail change T66 settles; a safe stand-off per kind of point | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress |
 
 ### M7-T01 Station references and measurements
@@ -3343,3 +3344,16 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   that the anchor moves, or re-placed on the anchor change); check `frame drop` and `frame rail` the same way.
 - **Done when:** a test (after `frame orbit 400`, the station, the gate and the planet keep their universe positions and the player is
   400 km over Epsilon III); the maintainer checks it (H); committed.
+
+### M7-T67 `goto <nav point>`
+
+- **Why (maintainer, 2026-11-17):** "is there a way to move the player back to babylon 5 or other nav point? ... if not, let's create one".
+  Today there are only `station goto <tour point>` (Babylon 5's tour points), `gate approach` (6 km in front of the gate) and `respawn`
+  (the scenario's start).
+- **What:** `goto` lists the nav points in play (the target menu's: Babylon 5, its bays, the jumpgate, the scenario's NAV points, the
+  bodies); `goto <name>` (case-insensitive, unique prefix) puts the player at a stand-off clear of it (the bays and the gate in front of
+  their mouth, Babylon 5 off its bow, a body in a safe orbit or above its atmosphere), at rest relative to it, facing it, with the frame
+  on that place's rail (as `frame rail` does, after T66), the wing brought along if one flies with the player; refused in a mission, as
+  `respawn` is. info.md row; keyboard-free (console only).
+- **Done when:** a test per kind of nav point (placed clear, at rest relative to it, no ram over 10 s, the station and the gate keep
+  their universe positions); committed.
