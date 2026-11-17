@@ -1903,6 +1903,15 @@ impl RetreatState {
     }
 
     fn score(&mut self, tick: &Tick, ctx: &Context) -> f64 {
+        let score = self.score_now(tick, ctx);
+        // A retreat that scores nothing ends, and its shelter with it.
+        if score <= 0.0 {
+            self.shelter = false;
+        }
+        score
+    }
+
+    fn score_now(&mut self, tick: &Tick, ctx: &Context) -> f64 {
         if !may_retreat(ctx) {
             return 0.0;
         }
@@ -1912,8 +1921,9 @@ impl RetreatState {
         let panicked = civilian && (self.panicked(tick) | self.attacked(tick));
         let scared = civilian && self.scared_by(tick) >= 0;
         // Under the guns of a station that shelters it a civilian keeps its course against raiders (M7-T55): a docking lane
-        // is no place to turn. A friend's fire close by still frightens it: the guns do not answer that.
-        if civilian && civilian::under_cover(&tick.civilian_view(0.0, self.speed_mps, 0.0)) {
+        // is no place to turn. A friend's fire close by still frightens it: the guns do not answer that. One already running
+        // to the station's far side keeps running: its way round the hull passes under the guns.
+        if civilian && !self.shelter && civilian::under_cover(&tick.civilian_view(0.0, self.speed_mps, 0.0)) {
             return if scared { Self::SCORE_MIN } else { 0.0 };
         }
         let panicked = panicked || scared;

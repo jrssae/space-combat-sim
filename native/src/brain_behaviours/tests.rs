@@ -751,6 +751,27 @@ fn a_civilian_under_a_stations_guns_keeps_its_course() {
     assert_ne!(brain.current_kind(), i32::from(KIND_RETREAT), "under the guns");
 }
 
+#[test]
+fn a_civilian_running_round_to_a_stations_far_side_keeps_running_under_its_guns() {
+    // Council round 1 (O2): its way round the hull passes within the cover; it must not drop the run there.
+    let mut bench = attacked_bench(Vector3::new(5000.0, 0.0, 0.0), Vector3::new(6500.0, 0.0, 1500.0));
+    let mut brain = attacked_brain();
+    civilian_think(&mut bench, &mut brain, 1.0);
+    assert_eq!(brain.describe().state, "shelter", "(it runs to the station)");
+    let inside = Vector3::new(700.0, 0.0, 0.0); // 650 m off the hull's skin, inside the cover
+    move_row(&mut bench, 1, inside);
+    move_row(&mut bench, 2, inside + Vector3::new(1500.0, 0.0, 800.0));
+    civilian_think(&mut bench, &mut brain, 2.0);
+    assert_eq!(brain.current_kind(), i32::from(KIND_RETREAT), "still running round, under the guns");
+    // Once the run is over the shelter goes with it: back under the guns it keeps its course again.
+    move_row(&mut bench, 2, Vector3::new(0.0, 0.0, -60_000.0));
+    civilian_think(&mut bench, &mut brain, 3.0 + civilian::PANIC_HOLD_S);
+    assert_ne!(brain.current_kind(), i32::from(KIND_RETREAT), "(calm, the raider gone)");
+    move_row(&mut bench, 2, inside + Vector3::new(1500.0, 0.0, 800.0));
+    civilian_think(&mut bench, &mut brain, 4.0 + civilian::PANIC_HOLD_S);
+    assert_ne!(brain.current_kind(), i32::from(KIND_RETREAT), "a new raider under the guns does not turn it");
+}
+
 // --- the wing at a big hull (M7-T38) ----------------------------------------------------------------------------------
 
 const LEADER: i64 = 300;

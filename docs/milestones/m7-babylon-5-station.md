@@ -3061,6 +3061,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     files (the civilian, station, brain parity, flight parity, AI retreat and skill, turret and encounter files) all passing;
     `test_turret_balance` under GUT_BALANCE=1 passes (two raiders: 0, 1, 1, 1, 1 of 10; three: none).
 - **Accepted (maintainer, 2026-11-17):** m5-054 passed, M5 accepted; pushed and CI green on f5dd74fb.
+- **Council round 1 (2026-11-17):** O2: a civilian already running to a station's far side keeps running when its way round the hull passes under the station's guns: the cover rule skips a retreat whose goal is a station shelter, and the shelter ends with the retreat, so a civilian back on its lane keeps its course again (Rust `a_civilian_running_round_to_a_stations_far_side_keeps_running_under_its_guns`; the brain parity recordings unchanged).
 
 ### M7-T56 Encounters pacing and civilian traffic
 
