@@ -323,6 +323,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T61 | C | Fix: an undocking Narn transport rams the bay doorway's edge about 3 s after the doors open and is destroyed (found by T56; also on earlier HEADs) | T56 | Opus | The undock path's clearance for the widest hull | in progress |
 | T62 | C | A ship inside the docking bay's black box (docked, or undocking before it comes out) is inside the station: not targetable, off the radar and the AI's target lists, not hit (maintainer, 2026-11-16) | T61 | Opus | Targeting, radar and AI perception filters; the bay's interior boundary | in progress |
 | T63 | C | Fix: `station goto main_docking_bay` after `play station_launch` puts the player where the turning drum rams them at 34 m/s and kills them (found by T61, 2026-11-16) | - | Sonnet | The goto point's clearance from the drum's sweep, its velocity matched to the drum | in progress |
+| T64 | C | Mines can be shot and explode when hit, whoever's they are, and a ship that flies into a mine sets it off (maintainer, 2026-11-16: none went off in a bench battle) | T59 | Opus | The hit sweep and the mines' rows (native), the trigger's faction test after a run | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress |
 
 ### M7-T01 Station references and measurements
@@ -3260,3 +3261,15 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   (`_place_at_tour_point`), and a point on a turning drum gets the drum's velocity there. `tests/integration/test_station_goto.gd` (slow):
   each of the eight points, after the real launch flow, 30 s with no ram, no hull damage, and (frame points) the player still within 20 m of the point;
   fails on the old code (4900 m away). The vanished traffic ship was not reproduced (none in my runs); T62 owns traffic in the bay.
+
+### M7-T64 Mines can be shot, and flying into one sets it off
+
+- **Why (maintainer, 2026-11-16, `bench battle 300 30` after the run):** "i wasn't able to get any mines to explode either." "mines can be
+  shot. they must explode when shot, regardless of faction. i flew into a few and they did not explode."
+- **What:** mines are targets of the hit sweep: any bolt, beam, missile or blast that hits a mine sets it off (its 100 m blast as today),
+  whatever its side and the shooter's; a ship that touches a mine sets it off whatever its side; the 50 m proximity trigger stays for
+  ships hostile to the mine's layer. Find why none went off in the live run (the trigger after T50's faction switch, the player not in the
+  director's hull list, the rows' layer). Mines show on the HUD as targetable objects if that is how they are shot (decide with the
+  smallest change; say which). Native kernels: 1 vs 6 threads identical, parity recordings green.
+- **Done when:** tests (a shot mine explodes, a touched mine explodes, both whatever the faction; a hostile within 50 m sets one off; after
+  a bench run too); the maintainer shoots and rams mines (H); committed.
