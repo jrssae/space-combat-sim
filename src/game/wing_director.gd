@@ -197,7 +197,7 @@ func player_wing() -> Wing:
 	return wings[0] if not wings.is_empty() else null
 
 
-## Puts a ship in play into `slot` of `wing` (-1: the first empty one) and briefs its pilot. Returns the slot, or -1 when the
+## Puts a ship in play into `slot` of `wing` (-1: the one `Wing.fill_order` picks) and briefs its pilot. Returns the slot, or -1 when the
 ## wing refuses it, it does not fly an `AiPilot`, or it is not in play (`refresh` would drop it).
 func add_member(wing: Wing, member: Combatant, slot: int = -1) -> int:
 	var pilot: AiPilot = _pilot_of(member)
@@ -223,7 +223,7 @@ func replenish(wing: Wing = null) -> Array[Combatant]:
 	if wing == null or pool == null or world == null or not is_inside_tree() or get_tree().paused:
 		return launched
 	refresh(wing)  # a wingman shot down this very tick is an empty slot already
-	var empty: PackedInt32Array = wing.empty_slots()
+	var empty: PackedInt32Array = wing.fill_order()  # the arms stay even if the pool runs dry
 	if empty.is_empty() or not leader_alive(wing) or pool.pool_size(ShipPool.ALLY_TYPE) == 0:
 		return launched
 	var leader: Ship = wing.leader.ship

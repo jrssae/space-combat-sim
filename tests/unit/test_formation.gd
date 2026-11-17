@@ -68,6 +68,83 @@ func test_no_two_slots_are_closer_than_the_spacing() -> void:
 				assert_gte(f.offset(a).distance_to(f.offset(b)), S - TOL, "%s slots %d and %d" % [Formation.NAMES[shape], a, b])
 
 
+# --- Big wings (M7-T74: Alpha grown to eleven formed up on one side of the V) ---------------------------------------
+
+
+# Left and right counts among slots 1..`upto` of a wing of `size`.
+func _arms(f: Formation, size: int, upto: int) -> Vector2i:
+	var arms := Vector2i.ZERO
+	for slot: int in range(1, upto + 1):
+		var side: int = f.side(slot, size)
+		arms.x += 1 if side < 0 else 0
+		arms.y += 1 if side > 0 else 0
+	return arms
+
+
+func test_wings_of_two_to_twelve_keep_their_arms_within_one_ship_and_centre_the_odd_wingman() -> void:
+	for shape: int in Formation.NAMES.size():
+		var f := Formation.new(shape as Formation.Shape)
+		for size: int in range(1, 12):  # member slots: wings of 2 to 12 ships with the leader
+			var arms: Vector2i = _arms(f, size, size)
+			var what: String = "%s, %d wingmen" % [Formation.NAMES[shape], size]
+			assert_lte(absi(arms.x - arms.y), 1, "%s: arms %d left, %d right" % [what, arms.x, arms.y])
+			if size > Formation.FINGER_FOUR_SLOTS and size % 2 == 1:
+				var centre: Vector3 = f.offset(size, size)
+				assert_eq(Formation.centre_slot(size), size, what)
+				assert_eq(centre.x, 0.0, "%s: the odd one on the centreline" % what)
+				assert_gt(centre.z, 0.0, "%s: behind the leader" % what)
+				assert_eq(arms.x, arms.y, "%s: even arms beside it" % what)
+			elif size > Formation.FINGER_FOUR_SLOTS:
+				assert_eq(Formation.centre_slot(size), 0, what)
+				assert_eq(arms.x, arms.y, "%s: even arms" % what)
+
+
+func test_a_big_wings_arms_stay_within_one_ship_as_its_slots_fill_in_order() -> void:
+	for shape: int in Formation.NAMES.size():
+		var f := Formation.new(shape as Formation.Shape)
+		for upto: int in range(1, 11):
+			var arms: Vector2i = _arms(f, 11, upto)
+			assert_lte(absi(arms.x - arms.y), 1, "%s, slots 1..%d of 11" % [Formation.NAMES[shape], upto])
+
+
+func test_alpha_grown_to_eleven_flies_a_v_of_five_a_side_and_its_twelfth_between_the_second_pair() -> void:
+	var f := Formation.new()
+	var expected: Array[Vector3] = [Vector3(-1, 0, 1), Vector3(1, 0, 1), Vector3(2, 0, 2), Vector3(-2, 0, 2), Vector3(-3, 0, 3),
+			Vector3(3, 0, 3), Vector3(4, 0, 4), Vector3(-4, 0, 4), Vector3(-5, 0, 5), Vector3(5, 0, 5), Vector3(0, 0, 2)]
+	for slot: int in range(1, 12):
+		assert_eq(f.offset(slot, 11), expected[slot - 1] * S, "ALPHA %d" % (slot + 1))
+
+
+func test_the_finger_four_and_the_three_ship_wedge_keep_their_look() -> void:
+	assert_eq(Formation.centre_slot(3), 0, "no centre slot in a finger-four")
+	assert_eq(Formation.centre_slot(1), 0, "a lone wingman stays on the left")
+	var finger := Formation.new()
+	assert_eq(finger.offset(1, 1), Vector3(-S, 0.0, S))
+	assert_eq(finger.offset(3, 3), Vector3(2.0 * S, 0.0, 2.0 * S), "#4 right of #3")
+	assert_eq(Formation.new(Formation.Shape.WEDGE).offset(3, 3), Vector3(-2.0 * S, 0.0, 2.0 * S), "#4 left of #2")
+
+
+func test_a_wings_size_moves_no_arm_slot() -> void:
+	# A wing growing for a launch (three slots to eleven) or shrinking back moves nobody on an arm.
+	for shape: int in Formation.NAMES.size():
+		var f := Formation.new(shape as Formation.Shape)
+		for size: int in range(1, 12):
+			for slot: int in range(1, size + 1):
+				if slot != Formation.centre_slot(size):
+					assert_eq(f.offset(slot, size), f.offset(slot, 11 if slot < 11 else 12), "%s slot %d of %d" % [
+							Formation.NAMES[shape], slot, size])
+
+
+func test_no_two_slots_of_any_wing_up_to_twelve_are_closer_than_the_spacing() -> void:
+	for shape: int in Formation.NAMES.size():
+		var f := Formation.new(shape as Formation.Shape)
+		for size: int in range(1, 12):
+			for a: int in size + 1:
+				for b: int in range(a + 1, size + 1):
+					assert_gte(f.offset(a, size).distance_to(f.offset(b, size)), S - TOL, "%s, %d wingmen: slots %d and %d" % [
+							Formation.NAMES[shape], size, a, b])
+
+
 func test_names_round_trip_and_unknown_names_are_minus_one() -> void:
 	for shape: int in Formation.NAMES.size():
 		assert_eq(Formation.shape_from_name(String(Formation.NAMES[shape])), shape)

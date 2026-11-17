@@ -3591,6 +3591,28 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   the sandbox's three-ship wing keep their look. Check the formation offsets, the slot order and how a launched ship picks its slot.
 - **Done when:** tests (slot positions for wings of 2 to 12: arms balanced within one ship, the odd one centred behind; a launched Alpha
   settles balanced); a GPU capture of Alpha formed up; the maintainer checks it (H); committed.
+- **Done (code part, 2026-11-17):**
+  - **Cause:** `Formation.offset` only knew a finger-four: #2 left, then an echelon to the right for every further slot, so T58's
+    eleven-slot wing put ALPHA 2 on the left and ALPHA 3 to 12 on the right arm.
+  - **Fix:** the finger-four carries on as a V beyond its four ships: pairs one step further back and out, starting on alternate
+    arms (#5 #6 left, #7 #8 right, #9 #10 left, #11 right), so slots 1 to 3 are the finger-four's and filled in order the arms never
+    differ by more than one; a wing of more than three slots with an odd count puts its last slot on the centreline 80 m behind the
+    leader, between the second pair (closing the front triangle; one step behind abreast in `line_abreast`). The wedge gets the same
+    centre slot. Only the centre slot depends on the wing's size, so growing Alpha from three slots to eleven moves nobody.
+    Newcomers take the empty slot that keeps the arms even (`Wing.fill_order`: the shorter arm, nearest the leader, the centre
+    last), used by `add_member`, the replenish and the launch, so a refill never sends a ship across the V. Wings of up to three
+    slots (the sandbox's finger-four, raider wedges, the civilian escort's lone wingman) keep their slots exactly; the station's
+    Beta, Delta and Zeta (eleven slots under an AI leader) fly the same balanced V as Alpha. No native change
+    (the offsets are GDScript, pushed to the core as before).
+  - **Tests:** `test_formation.gd` (+6: wings of 2 to 12 balanced within one with the odd one centred behind, balanced as the
+    slots fill, Alpha's eleven slots, the finger-four kept, size moves no arm slot, no two slots under the spacing at any size),
+    `test_wing.gd` (+3: fill order, a newcomer evens the arms, a wing growing for a launch moves no one), `test_launch_bay.gd`
+    (+1, slow: `launch wing alpha`, FORM ON ME, all eleven within 20 m of their slots after some 70 s: five a side, ALPHA 12 on
+    the centreline behind).
+  - **GPU capture:** `references/screenshots/M7-T74 formation/look_180_10.png` and `look_180_30.png` (chase camera turned back
+    over the formed-up wing).
+  - **For the maintainer:** a three-wingman wing stays a finger-four (Q4, #4 right of #3) and a lone wingman stays on the left,
+    rather than centring the odd one; say if those should centre too.
 
 ### M7-T75 Fix: `transit carrier` needs raiders free flight has none of
 

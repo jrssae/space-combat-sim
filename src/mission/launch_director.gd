@@ -195,7 +195,7 @@ func launch_wing(wing: String, count: int = WING_SIZE) -> String:
 	if led != null:
 		main.wings.refresh(led)  # a wingman down a moment ago frees its slot
 		led.resize(maxi(led.size, WING_SIZE - 1))  # the player flies number 1, the rest of the wing the other eleven
-		slots = led.empty_slots()
+		slots = led.fill_order()  # the arms stay even if fewer launch
 		count = mini(count, slots.size())
 		if count == 0:
 			return "wing %s is full: every slot of the player's wing is flown" % wing.to_upper()

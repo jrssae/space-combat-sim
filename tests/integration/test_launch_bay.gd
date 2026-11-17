@@ -4,7 +4,8 @@ extends GutTest
 ## shots; the player is handed over at the release point with the drum's surface velocity; a skip (Start) lands in the same state;
 ## the wingmen follow from the next doors in the wave order; a rebase mid-launch moves nothing on screen; a launch due under the
 ## spine holds; `launch wing` launches twelve AI Starfuries, `launch wing all` every wing, and a launched Alpha wing flies as the
-## player's wingmen and takes the wing orders (M7-T58). Every place comes from the station's hardpoints.
+## player's wingmen, takes the wing orders (M7-T58) and forms up with its arms even (M7-T74).
+## Every place comes from the station's hardpoints.
 
 const DT: float = 1.0 / 60.0
 const SCENARIO: String = "res://data/scenarios/station_launch.json"
@@ -413,6 +414,49 @@ func test_a_launched_alpha_wing_flies_as_the_players_wingmen() -> void:
 			"Alpha 5 is out")
 	await _ticks(60)
 	assert_eq(str((first.driver.brain as AiPilot).describe().get("behaviour", "")), "formation", "Alpha 5 forms on the player")
+
+
+# The farthest any member of `wing` is from its slot on the player, m.
+func _worst_slot_error(wing: Wing) -> float:
+	var lead: Ship = main.ship
+	var worst: float = 0.0
+	for c: Combatant in wing.members():
+		var slot: Vector3 = Formation.slot_point(lead.global_position, -lead.global_basis.z, lead.global_basis.y,
+				wing.slot_offset(wing.slot_of(c)))
+		worst = maxf(worst, c.ship.global_position.distance_to(slot))
+	return worst
+
+
+func test_a_launched_alpha_wing_forms_up_with_its_arms_even() -> void:
+	# M7-T74: the grown wing formed up all on one side of the V; now five a side and ALPHA 12 on the centreline.
+	if not SlowTests.enabled():
+		pass_test("slow: some 70 s of flight (GUT_SLOW=1 runs it)")
+		return
+	await _start_with_alpha_clear()
+	var own: Wing = main.wings.player_wing()
+	assert_true(DebugConsole.registry.execute("launch wing alpha")[0].ok)
+	assert_true(DebugConsole.registry.execute("wing order form")[0].ok)
+	assert_true(await _until(func() -> bool: return not main.launches.is_launching("alpha"), 4000), "Alpha is out")
+	assert_eq(own.members().size(), 11, "the player's three wingmen and the eight launched")
+	# Within half a spacing of its slot, each wingman is surely on its slot's side.
+	var near_m: float = 0.5 * Formation.DEFAULT_SPACING_M
+	var settled: bool = await _until(func() -> bool: return _worst_slot_error(own) < near_m, 60 * 180)
+	assert_true(settled, "formed up: every wingman within %.0f m of its slot (worst %.0f m)" % [near_m, _worst_slot_error(own)])
+	var lead: Ship = main.ship
+	var left: int = 0
+	var right: int = 0
+	var centre := PackedStringArray()
+	for c: Combatant in own.members():
+		var rel: Vector3 = lead.global_basis.orthonormalized().inverse() * (c.ship.global_position - lead.global_position)
+		if absf(rel.x) < near_m:
+			centre.append(c.display_name)
+			assert_gt(rel.z, 0.0, "%s behind the player" % c.display_name)
+		elif rel.x < 0.0:
+			left += 1
+		else:
+			right += 1
+	assert_eq([left, right], [5, 5], "five a side")
+	assert_eq(centre, PackedStringArray(["ALPHA 12"]), "the odd one centred behind")
 
 
 func test_mission_api_launch_from_starts_the_players_launch() -> void:
