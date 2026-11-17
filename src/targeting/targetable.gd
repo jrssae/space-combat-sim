@@ -88,12 +88,13 @@ func _sync_broadcaster() -> void:
 		_broadcasters.erase(self)
 
 
-## True while the target can be selected: visible and its parent processing (parked and destroyed ships are neither).
+## True while the target can be selected: visible and its parent processing (parked and destroyed ships are neither), and not a
+## ship inside a station (M7-T62).
 func is_active() -> bool:
 	if not is_inside_tree() or not is_visible_in_tree():
 		return false
 	var parent: Node = get_parent()
-	return parent != null and parent.can_process()
+	return parent != null and parent.can_process() and not (parent is Ship and (parent as Ship).inside_station)
 
 
 ## Hull 0..1 of the owner (its `Damageable` sibling), or -1 when it has none (a buoy).

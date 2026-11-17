@@ -244,6 +244,7 @@ pub fn nearest_hostile_fighter(
         let flying = flags & FLAG_RIGID != 0 || (flags & FLAG_TIER != 0 && flags & FLAG_HULK == 0);
         if !flying
             || rows.is_static[i]
+            || rows.is_sheltered(i)
             || rows.radii[i] > FIGHTER_RADIUS_MAX_M
             || rows.body_ids[i] == own_body
             || !hostile

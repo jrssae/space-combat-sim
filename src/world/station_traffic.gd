@@ -144,6 +144,15 @@ func alive_of(kind: StringName) -> int:
 	return n
 
 
+## Of them, ships inside the station now (M7-T62: in the docking bay's black void, unavailable to everyone outside).
+func inside_count() -> int:
+	var n: int = 0
+	for entry: Dictionary in _own:
+		var c: Combatant = entry["combatant"]
+		n += 1 if is_instance_valid(c.ship) and c.ship.inside_station else 0
+	return n
+
+
 ## The traffic ship called `ship_name`, or null.
 func ship_named(ship_name: String) -> Combatant:
 	for entry: Dictionary in _own:
@@ -189,6 +198,7 @@ func undock(type: StringName = &"", extra: Dictionary = {}) -> String:
 	if c == null:
 		return "no %s is free in the ship pool" % hull
 	c.ship.angular_velocity = xform.basis * plan.spin  # it comes out turning with the drum
+	_shelter(_own[_own.size() - 1])  # inside the station from its first tick
 	_ask_doors(_own[_own.size() - 1])
 	return ""
 
@@ -725,6 +735,8 @@ func _step(i: int) -> void:
 	var kind: StringName = entry["kind"]
 	if kind == &"raid":
 		return
+	if kind == &"dock" or kind == &"undock":
+		_shelter(entry)
 	var path := (entry["brain"] as AiPilot).behaviour(&"follow_path") as BehaviourFollowPath
 	var done: bool = path != null and path.phase == BehaviourFollowPath.Phase.DONE
 	match entry["state"]:
@@ -872,6 +884,13 @@ func _undock_step(entry: Dictionary) -> void:
 		_let_doors_go(entry)
 
 
+# A ship is inside the station while its origin is in the docking bay's black void (M7-T62): unavailable to everyone outside.
+func _shelter(entry: Dictionary) -> void:
+	var lock: StationAirlock = _airlock()
+	var c: Combatant = entry["combatant"]
+	c.ship.inside_station = lock != null and lock.holds(station().global_transform.affine_inverse() * c.ship.global_position)
+
+
 func _docked(i: int) -> void:
 	docked_count += 1
 	docked.emit((_own[i]["combatant"] as Combatant).display_name)
@@ -967,6 +986,7 @@ func _register_console() -> void:
 		&"alive": {"get": alive_count, "doc": "Traffic ships in play"},
 		&"docking": {"get": func() -> int: return alive_of(&"dock"), "doc": "Of them, flying into the main docking bay"},
 		&"undocking": {"get": func() -> int: return alive_of(&"undock"), "doc": "Of them, leaving the main docking bay"},
+		&"inside": {"get": inside_count, "doc": "Of them, inside the station: in the docking bay's black void, off the radar and out of every target list and shot (M7-T62)"},
 		&"freighters": {"get": func() -> int: return alive_of(&"freighter"), "doc": "Of them, freighters at the cargo bay"},
 		&"raiders": {"get": func() -> int: return alive_of(&"raid"), "doc": "Of them, raiders sent at the station"},
 		&"docked": {"get": func() -> int: return docked_count, "doc": "Ships that docked: flew into the void behind the inner doors, which shut behind them"},
@@ -1025,8 +1045,8 @@ func _cmd_traffic(args: Dictionary) -> ConsoleResult:
 			return ConsoleResult.line("traffic by itself %s (%d civilians on the run between the gate and the station)" % [arg, lane_ships])
 		&"clear":
 			return ConsoleResult.line("returned %d traffic ship(s) to their pools" % clear())
-	return ConsoleResult.line("traffic: %d in play (%d docking, %d undocking, %d freighters, %d raiders); docked %d, undocked %d, freighter cycles %d, pods in %d, pods out %d, raids %d; auto %s; cargo: %s; last: %s" % [
-			alive_count(), alive_of(&"dock"), alive_of(&"undock"), alive_of(&"freighter"), alive_of(&"raid"), docked_count,
+	return ConsoleResult.line("traffic: %d in play (%d docking, %d undocking, %d inside, %d freighters, %d raiders); docked %d, undocked %d, freighter cycles %d, pods in %d, pods out %d, raids %d; auto %s; cargo: %s; last: %s" % [
+			alive_count(), alive_of(&"dock"), alive_of(&"undock"), inside_count(), alive_of(&"freighter"), alive_of(&"raid"), docked_count,
 			undocked_count, freighters_done, pods_in, pods_out, raids, "on" if auto else "off", _cargo_text(), last_event])
 
 

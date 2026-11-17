@@ -208,8 +208,11 @@ impl Field {
     pub fn build(&mut self, rows: &Rows, bolts: &Bolts, cell_m: f64) {
         contact::sorted_cells_into(&bolts.positions, cell_m, &mut self.bolt_cells);
         self.ship_rows.clear();
-        self.ship_rows
-            .extend((0..rows.positions.len() as u32).filter(|&i| !rows.is_static[i as usize]));
+        // A ship sheltered inside a station (M7-T62) is no one's contact.
+        self.ship_rows.extend(
+            (0..rows.positions.len() as u32)
+                .filter(|&i| !rows.is_static[i as usize] && !rows.is_sheltered(i as usize)),
+        );
         self.max_bolt_speed = bolts
             .velocities
             .iter()
@@ -218,7 +221,7 @@ impl Field {
         self.broadcasters.clear();
         self.broadcasters.extend(
             (0..rows.reach.len())
-                .filter(|&i| rows.reach[i] > 0.0)
+                .filter(|&i| rows.reach[i] > 0.0 && !rows.is_sheltered(i))
                 .map(|i| i as u32),
         );
         self.surface_rows.clear();
@@ -1572,6 +1575,7 @@ fn keep(rows: &Rows, chosen: &mut Vec<i32>, i: i32, own_body_id: i64, at: Vector
         && !chosen.contains(&i)
         && f64::from(dist_sq(rows.positions[j], at)) <= range_sq
         && !rows.is_static[j]
+        && !rows.is_sheltered(j)
     {
         chosen.push(i);
     }

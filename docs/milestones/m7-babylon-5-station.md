@@ -3173,6 +3173,27 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   plane. Same for any other bay with a black interior (cargo bay, if it has one).
 - **Done when:** tests (a docking ship is targetable outside, untargetable and off the radar inside, targetable again after it undocks);
   the maintainer checks it (H); committed.
+- **Done (code part, 2026-11-16):**
+  - **One flag, `Ship.inside_station`.** The traffic sets it each tick for its docking and undocking ships while the ship's origin is
+    in the bay's black void (`StationAirlock.holds`, the one boundary: past the inner doors' plane, short of the void's back wall
+    from the manifest's `main_docking_bay_airlock`, within the circle round the void's 84 x 44 m section, since the drum turns it);
+    an undocking ship has it from the tick it is taken out of the pool, and the pool clears it on parking. The ship flies on as
+    before (its row, brain and lane hold are untouched).
+  - **What respects it.** `Targetable.is_active()` (the player's candidate list, cycling, nearest and selection, the AI drivers'
+    target checks); the native core's rows (`set_sheltered`, the row takes `FLAG_SHELTERED` in place of `FLAG_HULL_ACTIVE`): out of
+    `radar_contacts` (the radar and the player's targeting snapshot, so a selected ship that docks is dropped), the brains' contact,
+    keep and broadcast lists (`Field.ship_rows`, `broadcasters`, `keep`), `selection_clears` (an AI's selection of it is dropped),
+    the hull rows (no bolt sweep, ram, mine blast or turret pick), the tier's guns and a guided missile's lock (it flies straight
+    on). The far-dot switch keeps its hull drawn (hidden by the station's walls) rather than a dot over the station. Readouts:
+    `traffic status` ("n inside") and `state traffic` `inside`.
+  - **Cargo bay:** no ship waits in a black interior there (the Saturns hold outside; only the cargo pods enter, and they are not
+    targets), so nothing to apply.
+  - Tests: GUT `test_station_sheltered` (a docking Skylark targetable, on the radar and a hull row outside, the player's selection
+    of it dropped and it unavailable, off the radar, not a hull row and never a far dot from the tick its origin crosses the doors'
+    plane; an undocking one unavailable in the void with a raider 4 km out never picking it, available to the player and the raider
+    again as it crosses out, the raider's AI then taking it); Rust `rows::tests::a_sheltered_row_is_out_of_the_brains_lists_and_the_tier_guns_pick`.
+  - Left as it is: a sheltered civilian's own brain still sees outside, so a raider within its 3 km flee range keeps it in the void
+    (M7-T55's cover rule is about this).
 
 ### M7-T63 Fix: `station goto main_docking_bay` gets the player rammed by the drum
 

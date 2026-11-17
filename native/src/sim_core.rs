@@ -13,7 +13,9 @@ use crate::rows::NameTable;
 use crate::threads::{self, Pass, Threads};
 use crate::v3::{add, col_b, col_c, neg, normalized, sub};
 
-pub use crate::rows::{Bolts, FLAG_HULL, FLAG_HULL_ACTIVE, FLAG_LATE, FLAG_RIGID, FLAG_TIER, Rows};
+pub use crate::rows::{
+    Bolts, FLAG_HULL, FLAG_HULL_ACTIVE, FLAG_LATE, FLAG_RIGID, FLAG_SHELTERED, FLAG_TIER, Rows,
+};
 
 // The snapshot the scan takes of the rows, built here (it crosses the boundary).
 trait RowsSnapshot {
@@ -96,6 +98,8 @@ struct Attrs {
     target_id: i64,
     // The role (M5-T16): civilian when `set_civilian` named the body, read with the other attributes.
     role: u8,
+    // Inside a station (M7-T62, `set_sheltered`): its row flies, but takes `FLAG_SHELTERED` in place of an active hull.
+    sheltered: bool,
 }
 
 // One `Targetable` (or, for a body without one, one `Damageable`) of the tree, with the body it marks.
@@ -280,6 +284,8 @@ pub struct ScsSimCore {
     pub(crate) surfaces: Arc<crate::rows::Surfaces>,
     // The navigation markers' bodies by id (M7-T27, `set_navigation`): their rows take `ROLE_NAV`.
     pub(crate) nav_bodies: std::collections::HashSet<i64>,
+    // The ships sheltered inside a station by id (M7-T62, `set_sheltered`): their rows take `FLAG_SHELTERED`.
+    pub(crate) sheltered: std::collections::HashSet<i64>,
 }
 
 #[godot_api]
@@ -443,6 +449,24 @@ impl ScsSimCore {
     #[func]
     pub fn touch(&mut self, body_id: i64) {
         self.touched.insert(body_id);
+    }
+
+    /// Marks a ship as sheltered inside a station (or out again, M7-T62): it keeps flying, but no other ship, turret,
+    /// radar or shot sees it from the next sync on.
+    #[func]
+    pub fn set_sheltered(&mut self, body_id: i64, on: bool) {
+        if on {
+            self.sheltered.insert(body_id);
+        } else {
+            self.sheltered.remove(&body_id);
+        }
+        self.touch(body_id);
+    }
+
+    /// Ships sheltered inside a station now.
+    #[func]
+    fn sheltered_count(&self) -> i64 {
+        self.sheltered.len() as i64
     }
 
     /// Forgets every body's faction, name, kind and radius, so the next sync reads them all again.
@@ -1401,7 +1425,10 @@ impl ScsSimCore {
         if has_hull {
             flags |= FLAG_HULL;
         }
-        if has_hull && !attrs.destroyed {
+        // A sheltered ship's hull is out of play: no sweep, ram, mine or turret sees it.
+        if attrs.sheltered {
+            flags |= FLAG_SHELTERED;
+        } else if has_hull && !attrs.destroyed {
             flags |= FLAG_HULL_ACTIVE;
         }
         // The brains' two live reads of a contact (M4-T17), `Damageable.hull.fraction()` and the ship's selection: the
@@ -1868,6 +1895,7 @@ impl ScsSimCore {
         let (name_id, key_id) = self.intern_name(&name);
         Attrs {
             role,
+            sheltered: self.sheltered.contains(&m.body_id),
             faction_ix: self.faction_index(faction),
             name_id,
             key_id,
@@ -2187,6 +2215,7 @@ impl ScsSimCore {
                 r.flags[i] & FLAG_TIER != 0 || (r.ids[i] != r.body_ids[i] && !r.is_static[i]);
             if !marked
                 || r.body_ids[i] == own_body
+                || r.is_sheltered(i)
                 || self.parked_since_sync.contains(&r.body_ids[i])
             {
                 continue;
@@ -2235,7 +2264,7 @@ impl ScsSimCore {
                 out.push(body_id);
                 continue;
             };
-            if self.rows.body_ids[t] == body_id {
+            if self.rows.body_ids[t] == body_id || self.rows.is_sheltered(t) {
                 out.push(body_id);
                 continue;
             }

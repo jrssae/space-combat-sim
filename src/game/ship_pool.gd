@@ -257,6 +257,7 @@ func _park(combatant: Combatant) -> void:
 	ship.process_mode = Node.PROCESS_MODE_DISABLED
 	ShiftableRegistry.set_out(ship, WorldFrame.PARKED_META, true)  # rebases leave it: `acquire` places it (M6-T06, M6-T21)
 	ship.tier_exempt = false
+	ship.inside_station = false
 	ship.linear_velocity = Vector3.ZERO
 	ship.angular_velocity = Vector3.ZERO
 	combatant.targetable.display_name = ""

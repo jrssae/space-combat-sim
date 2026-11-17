@@ -430,7 +430,9 @@ impl ScsCannons {
             usize::try_from(core.rows.row_of_id(rc.target))
                 .ok()
                 .filter(|&j| {
-                    core.rows.flags[j] & FLAG_HULL != 0 && core.rows.body_ids[j] != cannon.body_id
+                    core.rows.flags[j] & FLAG_HULL != 0
+                        && core.rows.body_ids[j] != cannon.body_id
+                        && !core.rows.is_sheltered(j)
                 })
         } else {
             None

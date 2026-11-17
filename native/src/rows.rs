@@ -8,13 +8,15 @@ use godot::builtin::{Basis, Vector3};
 /// Row flags: a rigid body in Jolt (the flight step's and the ram phase's), an active hull (`Damageable.is_active()`: the
 /// sweep and the rams see it), a hull at all, a row added after the tick's first sync (a ship back from the pool), a
 /// low-attention tier row with no body and no node (M4-T21: integrated by the tier, skipped by the kernels that write to
-/// a body or fire from one), and a hulk (a tier row that drifts with no brain and no force).
+/// a body or fire from one), a hulk (a tier row that drifts with no brain and no force), and a ship sheltered inside a
+/// station (M7-T62: in the docking bay's black void; it flies its own row, but nothing outside sees, targets or hits it).
 pub const FLAG_RIGID: u32 = 1;
 pub const FLAG_HULL: u32 = 2;
 pub const FLAG_HULL_ACTIVE: u32 = 4;
 pub const FLAG_LATE: u32 = 8;
 pub const FLAG_TIER: u32 = 16;
 pub const FLAG_HULK: u32 = 32;
+pub const FLAG_SHELTERED: u32 = 64;
 
 /// A row's role (M5-T16, Q24): what the ship is for, beside its faction and kind. A civilian is a big non-combat hull (a
 /// freighter up to 260 m) that the brains, the raiders' picks, the turrets, avoidance and the tier treat by its size.
@@ -404,6 +406,11 @@ impl Rows {
     /// Whether row `r` is a civilian hull.
     pub fn is_civilian(&self, r: usize) -> bool {
         self.role(r) == ROLE_CIVILIAN
+    }
+
+    /// Whether row `r` is a ship sheltered inside a station (M7-T62): out of every other ship's sight, aim and fire.
+    pub fn is_sheltered(&self, r: usize) -> bool {
+        self.flags.get(r).is_some_and(|f| f & FLAG_SHELTERED != 0)
     }
 
     /// Whether row `r` is a navigation marker (M7-T27).

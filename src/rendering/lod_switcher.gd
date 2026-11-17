@@ -62,7 +62,8 @@ func decide(eye: Vector3, m_per_m: float) -> void:
 	if not _shown():
 		return
 	var distance: float = eye.distance_to(_ship.global_position)
-	far = not _ship.console_owner and LodSwitcherMath.far_dot(distance, far, _ship.bounding_radius() * m_per_m)
+	far = not _ship.console_owner and not _ship.inside_station \
+			and LodSwitcherMath.far_dot(distance, far, _ship.bounding_radius() * m_per_m)
 	_ship.set_far_dot(far)
 
 

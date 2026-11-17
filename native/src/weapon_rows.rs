@@ -876,7 +876,11 @@ impl ScsWeaponRows {
         if guard.parked_since_sync(target_id) {
             return answer(velocity, 0.0);
         }
-        let Some(j) = usize::try_from(guard.row_of_id(target_id)).ok() else {
+        // A target sheltered inside a station is lost, as a parked one.
+        let Some(j) = usize::try_from(guard.row_of_id(target_id))
+            .ok()
+            .filter(|&j| !guard.rows.is_sheltered(j))
+        else {
             return answer(velocity, 0.0);
         };
         let rows = &guard.rows;

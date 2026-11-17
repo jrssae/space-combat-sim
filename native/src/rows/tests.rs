@@ -300,3 +300,31 @@ fn taking_positions_changes_only_the_positions_and_refuses_another_count() {
     assert!(!rows.take_positions(&moved[..2]), "two positions for three rows");
     assert_eq!(rows.positions, moved, "nothing changed by the refused call");
 }
+
+// M7-T62: a ship inside a station keeps its row (it flies on), but the brains' contact and broadcast lists and the tier's guns
+// pass it by.
+#[test]
+fn a_sheltered_row_is_out_of_the_brains_lists_and_the_tier_guns_pick() {
+    let mut rows = rows_with(&[1, 2, 3, 4]);
+    for at in 0..4 {
+        rows.is_static[at] = false;
+        rows.reach[at] = 100.0;
+        rows.radii[at] = 5.0;
+        rows.flags[at] = FLAG_RIGID | FLAG_HULL | FLAG_HULL_ACTIVE;
+    }
+    rows.flags[2] = FLAG_RIGID | FLAG_HULL | FLAG_SHELTERED;
+    assert!(rows.is_sheltered(2));
+    assert!(!rows.is_sheltered(1));
+    assert!(!rows.is_sheltered(9), "no row, not sheltered");
+    let mut field = crate::brain_behaviours::Field::default();
+    field.build(&rows, &Bolts::default(), 500.0);
+    assert_eq!(field.ship_rows, vec![0, 1, 3]);
+    assert_eq!(field.broadcasters, vec![0, 1, 3]);
+    let hostile = vec![true; 3];
+    let pick = crate::tier_fire::nearest_hostile_fighter(&rows, &hostile, rows.positions[2], 1.0e6, 0);
+    assert!(pick.is_some_and(|r| r != 2), "the nearest live fighter, not the sheltered one on the spot: {pick:?}");
+    rows.flags[2] = FLAG_RIGID | FLAG_HULL | FLAG_HULL_ACTIVE;
+    field.build(&rows, &Bolts::default(), 500.0);
+    assert_eq!(field.ship_rows, vec![0, 1, 2, 3], "out of the station, a contact again");
+    assert_eq!(crate::tier_fire::nearest_hostile_fighter(&rows, &hostile, rows.positions[2], 1.0e6, 0), Some(2));
+}

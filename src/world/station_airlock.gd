@@ -21,6 +21,10 @@ var clear_m: float = 3.0
 ## The doors' plane on the bay's axis, and the axis pointing into the bay, in the station's frame.
 var doors_at: Vector3 = Vector3.ZERO
 var axis: Vector3 = Vector3.BACK
+## The black void behind the doors (M7-T62): how deep it runs past their plane to its back wall, and the radius about the axis
+## that holds its cross-section (the drum turns it, so a circle, not its box), metres.
+var void_depth_m: float = 0.0
+var void_radius_m: float = 0.0
 
 
 ## The doors of `station`'s main docking bay, or null when its hardpoints have none.
@@ -34,6 +38,9 @@ static func make(station: Station) -> StationAirlock:
 	var mouth: Vector3 = (bay["main_docking_bay_mouth"] as Vector3) + station.drum_origin
 	made.axis = (made.doors_at - mouth).normalized()
 	made.open_m = float(bay.get("main_docking_bay_doors_open_m", made.open_m))
+	if bay.has("main_docking_bay_airlock"):
+		made.void_depth_m = made.depth_of((bay["main_docking_bay_airlock"] as Vector3) + station.drum_origin)
+	made.void_radius_m = (bay.get("main_docking_bay_void_half_m", Vector2.ZERO) as Vector2).length()
 	made.leaves = AirlockLeaves.find(station.drum_piece)
 	return made
 
@@ -41,6 +48,15 @@ static func make(station: Station) -> StationAirlock:
 ## How far a point in the station's frame lies past the doors' plane, into the bay (negative ahead of it).
 func depth_of(point: Vector3) -> float:
 	return (point - doors_at).dot(axis)
+
+
+## Whether a point in the station's frame lies in the black void behind the doors (M7-T62): a ship whose origin is there is inside
+## the station, unavailable to everyone outside. The one test of that boundary.
+func holds(point: Vector3) -> bool:
+	var depth: float = depth_of(point)
+	if depth <= 0.0 or depth > void_depth_m:
+		return false
+	return (point - doors_at - axis * depth).length() <= void_radius_m
 
 
 ## A hull's reach ahead of its origin (`x`) and behind it (`y`) along its nose, metres: from its collision shapes (nodes or, on a

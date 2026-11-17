@@ -167,6 +167,16 @@ var _clamped_output: FlightOutput = FlightOutput.new()
 ## A mission watches this ship (M5-T30): it stays out of the low-attention tier, so the mission sees where it is and that it
 ## lives. The pool clears it on parking.
 var tier_exempt: bool = false
+## Inside a station (M7-T62: in the docking bay's black void): it flies on, but is unavailable to everyone else, off the radar and
+## every target list, out of reach of shots and rams, and never a far dot. The station's traffic sets it; the pool clears it on parking.
+var inside_station: bool = false:
+	set(value):
+		if value == inside_station:
+			return
+		inside_station = value
+		SimCore.set_sheltered(get_instance_id(), value)
+		if value:
+			set_far_dot(false)  # its hull stays drawn, hidden by the station's walls
 # The flight batch flies this ship and owns its tick (M4-T35): this node's `_physics_process` is off until the batch gives it back.
 var _batch_owned: bool = false
 # What the ship's speed is read against when not the World's rest (M6-T08, D67): the player's reference, set each tick by its
