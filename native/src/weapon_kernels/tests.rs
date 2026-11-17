@@ -80,6 +80,23 @@ fn a_fast_hull_passing_through_between_ticks_touches_the_mine() {
     assert!(out.is_empty(), "a move that passes 10 m off a 3 m body with a 2 m hull does not touch");
 }
 
+// Council round 1 (O1): off the anchor the mines drift with it, so a hull's move is taken as the mines see it.
+#[test]
+fn off_the_anchor_a_hulls_move_is_taken_against_the_drifting_mines() {
+    let mines = belt(&[v(0.0, 0.0, 0.0)]);
+    let delta = 1.0 / 60.0;
+    let frame_velocity = v(0.0, 0.0, 3000.0); // the anchor moves at -3 000 m/s in the World frame
+    let at_rest = v(0.0, 0.0, -3000.0);
+    let end = v(0.0, 2.0, -20.0);
+    let mut out = Vec::new();
+    mine_touches(&mines, v(0.0, 0.0, 0.0), end, touch_step(at_rest, frame_velocity, delta), 2.0, &mut out);
+    assert!(out.is_empty(), "a hull at rest against the mines sweeps no phantom path through them");
+    let still = v(0.0, 2.0, 20.0);
+    mine_touches(&mines, v(0.0, 0.0, 0.0), still, touch_step(Vector3::ZERO, frame_velocity, delta), 2.0, &mut out);
+    assert_eq!(out, vec![0], "a hull still in the World frame crossed the drifting mine in that tick");
+    assert_eq!(touch_step(at_rest, Vector3::ZERO, delta), v(0.0, 0.0, -50.0), "on the anchor the World velocity alone");
+}
+
 #[test]
 fn a_blast_reaches_the_mines_round_it_and_no_further() {
     let origin = v(-250.0, 10.0, 75.0);

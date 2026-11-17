@@ -571,6 +571,23 @@ func test_a_touch_sets_off_a_mine_of_any_side() -> void:
 	assert_eq(friend.damageable.hull.hp, friend.damageable.hull.max_hp)
 
 
+# Council round 1 (O1): off its anchor the mines drift with it, so a ship at rest against them sweeps no phantom path through
+# one, and a ship still in the World frame that a mine drifted across touches it.
+func test_off_the_anchor_a_touch_is_taken_against_the_drifting_mines() -> void:
+	var mines: MineStandin = standins.add_mines([{"offset": Vector3(0.0, 0.0, -1000.0), "faction": Factions.EARTH_ALLIANCE},
+			{"offset": Vector3(500.0, 0.0, -1000.0), "faction": Factions.EARTH_ALLIANCE}], world.to_universe(Vector3.ZERO))
+	var at_rest: TargetDrone = _drone(Vector3(0.0, 1.0, -1030.0), Factions.EARTH_ALLIANCE)
+	var still: TargetDrone = _drone(Vector3(500.0, 1.0, -970.0), Factions.EARTH_ALLIANCE)
+	world.apply_boost(Vector3(0.0, 0.0, 3000.0))  # the anchor now moves at -3 000 m/s here: 50 m a tick
+	assert_false(world.riding(), "(the frame is off its anchor)")
+	at_rest.linear_velocity = world.rest_velocity()
+	still.linear_velocity = Vector3.ZERO
+	_step()
+	assert_true(mines.is_alive(0), "a friend 30 m off and at rest against the mine does not touch it")
+	assert_false(mines.is_alive(1), "a friend the mine drifted across since the last tick does")
+	assert_eq(mines.by_touch, 1)
+
+
 # M7-T64: a capital touches a mine with its hull, not its bounding sphere: its own side's mine off its flank goes off, one
 # inside the sphere but clear of the hull does not.
 func test_a_capital_touches_a_mine_with_its_hull_not_its_sphere() -> void:

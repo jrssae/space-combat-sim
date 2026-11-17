@@ -3297,6 +3297,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   unchanged within noise (`bench battle 300`: 4.33 and 4.20 ms against 4.51 and 4.19 before; 1000: 6.31 and 6.43 against 6.19 and
   6.39; 175 and 959 mines set off in the window). Captures in `references/screenshots/M7-T64 mine blast/`. Open: (H) how the
   blasts look and sound.
+- **Council round 1 (2026-11-17):** O1: a hull's touch sweep is taken against the mines as they drift with the anchor (`weapon_kernels::touch_step`: its World velocity plus the frame's velocity off the anchor), so after a velocity rebase a ship at rest against them sweeps no phantom path and one a mine drifted across touches it (Rust `off_the_anchor_a_hulls_move_is_taken_against_the_drifting_mines`, GUT `test_off_the_anchor_a_touch_is_taken_against_the_drifting_mines`). G1 and O7 left: the big-hull check already uses the core row's pose for the body-frame hit volumes, and only the few mines inside a capital's sphere reach GDScript.
 
 ### M7-T65 Bench mines in small chained groups where the battle is
 

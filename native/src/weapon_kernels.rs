@@ -418,6 +418,17 @@ pub fn mine_touches(
     });
 }
 
+/// A hull's move since the last tick as the mines see it: its World velocity `velocity` plus the frame's velocity off its
+/// anchor `frame_velocity`, since the mines drift with the anchor (M6-T08), over `delta` seconds.
+pub fn touch_step(velocity: Vector3, frame_velocity: Vector3, delta: f64) -> Vector3 {
+    let v = if frame_velocity == Vector3::ZERO { velocity } else { add(velocity, frame_velocity) };
+    Vector3::new(
+        (f64::from(v.x) * delta) as f32,
+        (f64::from(v.y) * delta) as f32,
+        (f64::from(v.z) * delta) as f32,
+    )
+}
+
 /// The mines in play whose body lies within the blast of a mine at `at` (M7-T64: a blast sets off the mines it reaches).
 /// Appends them to `out` in ascending order.
 pub fn mines_in_blast(mines: &Mines, origin: Vector3, at: Vector3, out: &mut Vec<u32>) {

@@ -806,6 +806,7 @@ impl ScsWeaponRows {
             let guard = core.bind();
             let rows = &guard.rows;
             let n = self.factions;
+            let frame_velocity = guard.frame_velocity();
             // Per mine: 0 untouched, 1 triggered, 2 touched.
             self.fired.clear();
             self.fired.resize(mines.local.len(), 0);
@@ -830,12 +831,7 @@ impl ScsWeaponRows {
                     self.fired[m as usize] = self.fired[m as usize].max(1);
                 }
                 self.hits.clear();
-                let v = rows.velocities[j];
-                let step = Vector3::new(
-                    (f64::from(v.x) * delta) as f32,
-                    (f64::from(v.y) * delta) as f32,
-                    (f64::from(v.z) * delta) as f32,
-                );
+                let step = wk::touch_step(rows.velocities[j], frame_velocity, delta);
                 wk::mine_touches(mines, origin, rows.positions[j], step, rows.radii[j], &mut self.hits);
                 if rows.radii[j] <= wk::FIGHTER_RADIUS_MAX_M {
                     for &m in &self.hits {
