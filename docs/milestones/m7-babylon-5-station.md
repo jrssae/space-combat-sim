@@ -333,6 +333,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T71 | C | Fix: after `frame drop` (or `frame orbit`), `station goto` and the other player moves keep the planet's frame: the player goes on falling toward the planet near Babylon 5 and the speed readings point the wrong way; and the planet is not drawn after `frame drop 500` (maintainer, 2026-11-17) | T66, T68 | Opus | Every teleport of the player must put the frame back on the place's rail, as T67's `goto` does | in progress |
 | T72 | C | Fix: two suns, about 2.6 degrees apart on one streak, in `far view station` at 10 000 km and beyond (maintainer, 2026-11-17; seen in T69's captures) | T44 | Opus | The sky's sun and the scaled layer's star disagree when the camera is far from the World's origin (T44's fix near the star) | in progress |
 | T73 | C | Fix: in orbit (`frame orbit 400`) the HUD's REF line runs over the directional indicator instead of wrapping (maintainer, 2026-11-17, M6 check m6-075) | - | Sonnet | The REF and ALT lines' width against the drift indicator, every window size, chase and cockpit | in progress |
+| T74 | C | Fix: a launched Alpha wing forms up all on one side of the V; the V must balance its two arms, an odd ship taking a centre slot behind the leader so the wing makes a triangle (maintainer, 2026-11-17) | T58 | Opus | The formation's slot offsets for T58's eleven-slot wing | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress |
 
 ### M7-T01 Station references and measurements
@@ -3569,3 +3570,14 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   (`EPSILON III` with its distance and speed, a bay's name). Keep the HUD's line style.
 - **Done when:** a layout test (the REF/ALT text rectangles never intersect the indicator's rectangle for the longest texts and each
   window size); a GPU capture in orbit; the maintainer checks it (H); committed.
+
+### M7-T74 Fix: Alpha forms up on one side of the V
+
+- **Why (maintainer, 2026-11-17):** "when it launches and forms up, the entire wing tries to take position on one side of the flying v
+  instead of trying to balance it (with any unbalanced fighter staying in a center formation spot to form a triangle)".
+- **What:** the formation's slots (T58 grew the player's wing to eleven) alternate between the V's two arms, each new pair one step
+  further back and out, so the arms stay balanced at any wing size; with an odd count of wingmen the last takes a centre slot behind the
+  leader, closing a triangle. Slots stay stable as ships join or leave (no reshuffle that sends ships across the V), and the other wings and
+  the sandbox's three-ship wing keep their look. Check the formation offsets, the slot order and how a launched ship picks its slot.
+- **Done when:** tests (slot positions for wings of 2 to 12: arms balanced within one ship, the odd one centred behind; a launched Alpha
+  settles balanced); a GPU capture of Alpha formed up; the maintainer checks it (H); committed.
