@@ -61,13 +61,11 @@ func _exit_tree() -> void:
 func _process(_delta: float) -> void:
 	if _station == null or _station.drum_pivot == null:
 		return
-	var level: float = beacon_level()
+	# Brightness only: the points' visibility belongs to the far prop, which hides them once the station is a dot (M7-T69).
+	var level: float = beacon_level() if shown else 0.0
 	for group: StringName in [StationLightPlan.FRAME_BLINK, StationLightPlan.DRUM_BLINK]:
-		var node := groups.get(group) as MultiMeshInstance3D
-		if node == null:
-			continue
-		node.visible = shown and level > 0.0
-		((node.multimesh.mesh as QuadMesh).material as ShaderMaterial).set_shader_parameter(&"gain", MARKER_GAIN * level)
+		if groups.has(group):
+			_set_gain(group, MARKER_GAIN * level)
 	var basis: Basis = _station.drum_pivot.transform.basis
 	if not shown or (not _first_frame and basis.is_equal_approx(_drum_basis)):
 		return
@@ -83,7 +81,7 @@ func _process(_delta: float) -> void:
 func set_shown(on: bool) -> void:
 	shown = on
 	for group: StringName in groups:
-		(groups[group] as Node3D).visible = on
+		_set_gain(group, MARKER_GAIN if on else 0.0)  # a dark point is not drawn (the marker shader's cull)
 	for section: Dictionary in sections:
 		if on:
 			_apply(section, _station.drum_pivot.transform)
@@ -91,6 +89,13 @@ func set_shown(on: bool) -> void:
 			for material: ShaderMaterial in section["materials"]:
 				material.set_shader_parameter(&"flood_count", 0)
 	_first_frame = true
+
+
+## A point group's brightness (`station_light_marker.gdshader`'s gain).
+func gain_of(group: StringName) -> float:
+	var node := groups.get(group) as MultiMeshInstance3D
+	var gain: Variant = _material_of(node).get_shader_parameter(&"gain") if node != null else 0.0
+	return float(gain) if gain != null else MARKER_GAIN
 
 
 func beacons_lit() -> bool:
@@ -114,6 +119,14 @@ func turning_count() -> int:
 	for section: Dictionary in sections:
 		n += (section["turning"] as PackedInt32Array).size()
 	return n
+
+
+func _set_gain(group: StringName, gain: float) -> void:
+	_material_of(groups[group] as MultiMeshInstance3D).set_shader_parameter(&"gain", gain)
+
+
+static func _material_of(node: MultiMeshInstance3D) -> ShaderMaterial:
+	return (node.multimesh.mesh as QuadMesh).material as ShaderMaterial
 
 
 # The system's sim time (as the drum's turn takes it), never the wall clock.

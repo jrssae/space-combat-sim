@@ -3457,6 +3457,23 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   peak (`dim * gain * colour`) is under `cull_peak` 0.01 (`RunningLightDimming.CULL_PEAK`) collapses and draws nothing. A 4.5 m beacon at a
   75 degree, 1080p view: full up to 1.6 km, 1/d^2 beyond (0.1 peak at 10 km), culled past about 32 km (so gone at 100 km, 1 000 km, 27 000 km
   and from the star). Test: `test_running_light_dimming.gd`. Captures: `references/screenshots/M7-T69 station lights/`.
+- **Fix round 2 (2026-11-17; the maintainer saw red lights past 10 000 km in the far view):** reproduced on the RX 6950 XT (HEAD,
+  default environment with glow, the maintainer's settings, 2400 x 1350, `far view station` 10 to 27 000 km, frames across the beacons'
+  4 s beat, and with `bench battle 300` first) and measured each frame against the same frame with the station taken away (`far
+  station`). From the station: at 10 km its lights (as T18 and T25 have them); at 100 km its flood pools and two reddish pixels of the
+  lit hull; at 1 000 km the shrunk mesh, one grey pixel (+93 levels); at 10 000 km the far dot, +6 levels over 12 pixels; at 27 000 km
+  nothing. No red point from the station past about 100 km. Every light kind checked: the markers (culled past about 32 km since round
+  1); the hull's emission (windows, the bays' red, the props' lamps: the hull shader with its emission zeroed is the same picture
+  within 2 levels from 400 km, its maps mipmapped so a far texel carries its area's mean); the floods (pools on the hull, grey, gone
+  into the dot's pixel by 1 000 km); the bays' lamps and T57's grid floods (real lights, no sprite, lighting 140 m round the true
+  station); the far dot (the mean albedo lit, grey, under a pixel past 10 000 km). The red points beside the station in every far
+  view are background stars: the view keeps one bearing, so the same orange stars sit next to it at every distance, and they stay
+  with the station taken away (`ab_10000km_crops.png`). One fault was found and fixed: `StationLights` set the beacons' visibility
+  every frame, overriding the far prop's hide, so under the dot the beacon points were drawn again (only the marker shader's cull
+  kept them dark). The lights now set brightness only (gain 0 when dark or `station_lights off`), and the far prop alone owns their
+  visibility. Test: `test_station_lights.gd` `test_no_point_is_drawn_once_the_station_is_a_dot` (fails on the old code). Captures
+  `references/screenshots/M7-T69 station lights/round2_*.png` (with and without the station at 10, 100, 1 000, 10 000, 27 000 km;
+  `round2_crops.png` enlarged). If the maintainer still sees red points, a game started before a628353e still runs round 1's shader.
 
 ### M7-T70 Fix: `traffic dock` starts no ship
 

@@ -102,12 +102,10 @@ func test_beacons_blink_on_sim_time_and_the_bays_lamps_yield_to_muzzle_flashes()
 	assert_almost_eq(level, lights.plan.beacon_level(now), 0.05, "the beacons follow the system's sim time")
 	lights._process(0.0)
 	var blink: MultiMeshInstance3D = lights.groups[StationLightPlan.FRAME_BLINK]
-	assert_eq(blink.visible, lights.beacon_level() > 0.0, "the beacons' points show unless dark")
-	var gain: float = float(((blink.multimesh.mesh as QuadMesh).material as ShaderMaterial).get_shader_parameter(&"gain"))
-	assert_almost_eq(gain, StationLights.MARKER_GAIN * lights.beacon_level(), 0.25, "their brightness follows the fade")
-	var steady: MultiMeshInstance3D = lights.groups[StationLightPlan.DRUM_STEADY]
-	var steady_gain: Variant = ((steady.multimesh.mesh as QuadMesh).material as ShaderMaterial).get_shader_parameter(&"gain")
-	assert_true(steady_gain == null or is_equal_approx(float(steady_gain), StationLights.MARKER_GAIN), "the nav points stay steady")
+	assert_true(blink.visible, "the beacons' points stay in the tree's draw; dark, their gain is 0 and the shader drops them")
+	assert_almost_eq(lights.gain_of(StationLightPlan.FRAME_BLINK), StationLights.MARKER_GAIN * lights.beacon_level(), 0.25,
+			"their brightness follows the fade")
+	assert_almost_eq(lights.gain_of(StationLightPlan.DRUM_STEADY), StationLights.MARKER_GAIN, 1e-6, "the nav points stay steady")
 	# The station's only rig emitters are the bays' four lamps and the grid's three floods, at the lowest priority.
 	var rig: LightRig = LightRig.of(station)
 	var owned: int = 0
@@ -131,3 +129,36 @@ func test_beacons_blink_on_sim_time_and_the_bays_lamps_yield_to_muzzle_flashes()
 		assert_true(emitter == null or flashes.has(emitter), "the flashes hold the slots, not %s" % (emitter.label if emitter else ""))
 	for flash: LightEmitter in flashes:
 		rig.remove_emitter(flash)
+
+
+# M7-T69: once the station is its far dot, none of its points is drawn, the beacons included, whatever their beat; `station_lights
+# off` darkens them by brightness and leaves their visibility to the far prop.
+func test_no_point_is_drawn_once_the_station_is_a_dot() -> void:
+	var station: Station = await _start()
+	if station == null:
+		pending("the babylon5_station asset is not generated")
+		return
+	var lights: StationLights = station.station_lights
+	var far: FarProp = FarProp.of(station)
+	assert_not_null(far, "the station is drawn far out by its far prop")
+	lights.plan.blink_period_s = 0.0  # the beacons held lit: the case that showed them under the dot
+	var camera: Camera3D = get_viewport().get_camera_3d()
+	assert_not_null(camera)
+	far.held_fade = 1.0
+	far.update(camera, 0.0)
+	assert_eq(far.path(), &"dot")
+	for frame: int in 3:
+		lights._process(0.0)
+	for group: StringName in lights.groups:
+		assert_false((lights.groups[group] as Node3D).is_visible_in_tree(), "%s is not drawn under the dot" % group)
+	assert_almost_eq(lights.gain_of(StationLightPlan.FRAME_BLINK), StationLights.MARKER_GAIN, 1e-6, "the beacons are lit all the same")
+	far.held_fade = 0.0
+	far.update(camera, 0.0)
+	lights.set_shown(false)
+	lights._process(0.0)
+	for group: StringName in lights.groups:
+		assert_true((lights.groups[group] as Node3D).visible, "%s is the far prop's to hide" % group)
+		assert_eq(lights.gain_of(group), 0.0, "%s is dark with the lights off" % group)
+	lights.set_shown(true)
+	lights._process(0.0)
+	assert_eq(lights.gain_of(StationLightPlan.DRUM_STEADY), StationLights.MARKER_GAIN, "on again")
