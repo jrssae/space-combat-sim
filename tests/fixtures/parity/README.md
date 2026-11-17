@@ -66,3 +66,8 @@ second run. No other recording holds rocks: the other battles are fighters only 
 **M7-T64 re-recorded `mine_kernel` (`edge_of_a_trigger`, `belt_seed_23`)**: a blast sets off neighbouring mines and a touch sets one
 off whoever's it is; trigger arithmetic unchanged. (`edge_of_a_trigger`: two mines go off from another's blast at tick 1;
 `belt_seed_23`: blasts carry on from tick 0 and a fighter touches a mine at tick 801.)
+
+
+**M7-T65 re-recorded `weapon_rows_battle` (`battle_100_seed_1`)**: the bench's mines are laid as groups in the fights, so the
+100-ship battle sets off 36 mines instead of 1; hits, beams and missiles unchanged (704, 321, 132, 146, 25, 1 → 704, 321, 132,
+146, 25, 36).

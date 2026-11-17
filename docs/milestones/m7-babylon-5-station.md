@@ -3296,3 +3296,13 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   rounding. Check the benchmark's tick figures stay inside the M4 budgets with mines now going off during the window.
 - **Done when:** tests (groups of 4 to 8, chains within a group, none between groups, in the field, each side's share); in a
   `bench battle 300` some mines go off by AI fighters; the maintainer sees them affect the fight (H); committed.
+- **Done (code part, 2026-11-17):** `BenchLayout.mines` lays each side's share as seeded groups of 4 to 8, only in the fights
+  inside the rock slab, where a measured run showed the fighters fighting: 2.5 to 4.4 km out from a fight's centre on the other
+  sides' approaches (the knot ahead of each side's capitals), 700 m either way across, 1 km below to 300 m above. Within a group each
+  mine lies 40 to 70 m from one laid before it, so a group goes off as a chain; the nearest mines of two groups are 250 m or more
+  apart; none inside a starting hull's trigger, near a rock or the slab's edge; the count stays `max(100, N)`. In `bench battle 300`'s
+  30 s window 175 mines went off (959 at 1000); tick medians held the M4 budgets (4.9 to 6.0 ms at 300 against 5.3 to 6.3 before,
+  about 7.6 ms at 1000). `weapon_rows_battle` (`battle_100_seed_1`) re-recorded: mines set off 1 → 36, hits, beams and missiles
+  unchanged (reason in `tests/fixtures/parity/README.md`). For the maintainer: a mine going off had no blast effect (fixed by the
+  M7-T64 follow-up, a mine that goes off explodes); and since mines are no longer laid again after a run and now deal real damage,
+  a group may hurt many fighters right after a run. Open: (H) see the mines affect the fight.

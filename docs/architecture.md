@@ -2505,12 +2505,17 @@ src/combat/hit_resolver.gd             + a beam is retired after the resolve tha
   beams and asks the grid which lie within 1.5 km of each interceptor due (the interceptors as hulls of 1.5 km reach, the
   projectiles as points), then each interceptor shoots down the nearest hostile missile in reach, else the nearest hostile bolt.
 - **Mines** are rows in one `MineStandin` node (no node per mine, one `MultiMeshInstance3D` draws them): 50 m trigger, 100 m blast,
-  200 hull points. The layout lays the mix's mines (`max(100, N)`) in belts, each fight's share split between its sides, each side's
-  on a 90 degree arc 1.5 km out toward its own direction (between its fighters' start and its capitals), 150 m deep and high either
-  way, none inside a trigger of a starting hull. Each tick a third of the mines (by index) ask the grid for a hull hostile to
+  200 hull points. The layout lays the mix's mines (`max(100, N)`, every one) as small groups (M7-T65): each side's share in seeded
+  groups of 4 to 8 (sizes adding up to the share), laid only in the fights inside the rock slab, where the fighters were measured
+  to fight: 2.5 to 4.4 km out from a fight's centre along a side's direction, 700 m either way across it and 1 km below to 300 m
+  above the centre (the knot ahead of each side's capitals, where its fighters come out of their jump points and the others meet
+  them). A side's groups lie on the other sides' approaches, in turn. Within a group each mine lies 40 to 70 m from one laid
+  before it and 30 m or more from the rest, so every mine is inside a neighbour's blast and a group goes off as a chain; the
+  nearest mines of two groups lie at least 250 m apart, so no chain crosses. None inside a starting hull's trigger (the player's
+  start too), within 10 m of a rock or within 100 m of the slab's edge. Each tick a third of the mines (by index) ask the grid for a hull hostile to
   their layer whose sphere comes inside the trigger; one that finds one goes off, applies a `HitInfo` with cause `mine` to every
   hull whose sphere lies within the blast (friend or foe) and is removed. During a bench run it is laid again in its place
-  after 10 s, so the belts hold the mix over the run (not after it, M7-T59). The hulls are the director's per-tick list of what
+  after 10 s, so the groups hold the mix over the run (not after it, M7-T59). The hulls are the director's per-tick list of what
   flies (the pool's fighters, the capitals, the player). Mines are not in today's contact scan: they have no `Targetable`, and
   T09's body registry takes them as rows of kind `Targetable.Kind.MINE` (`position_of`, `faction_of`, `kind`,
   `TRIGGER_RADIUS_M`, and the `laid` and `detonated` signals).
@@ -2535,12 +2540,14 @@ src/combat/hit_resolver.gd             + a beam is retired after the resolve tha
   behind it and is gone after its tick, beams at 0.5 Hz within 3 km, an interceptor takes a missile in reach first and never
   anything outside 1.5 km, a missile hits a crossing fighter through the resolver, the count in flight holds, a mine goes off on
   a hostile, never a friend, hurts every hull in its blast and is gone, checks every third tick and is laid again, a rebase moves
-  the mines), `test_bench_layout` (the belts hold the mix per side, on their arcs, clear of every ship, seeded) and `test_bench`
-  (a battle run counts beams, missiles and mines). M7-T64: `test_standins` (a bolt or missile of any side sets off a mine of
+  the mines), `test_bench_layout` (the mines hold the mix per side; M7-T65: groups of 4 to 8 of one side, each a chain, no blast
+  reaching another group, all in the rock slab on a fight's approach, clear of every ship and rock, seeded) and `test_bench`
+  (a battle run counts beams, missiles and mines; M7-T65, slow: in a battle of 300 AI fighters set mines off and their groups
+  follow). M7-T64: `test_standins` (a bolt or missile of any side sets off a mine of
   any side and one clear of the body flies on, a touch of any side sets one off on any tick and a fast pass-through too, a
   friend inside the trigger does not, a capital touches with its hull and not its sphere, a blast carries on through the mines
-  it reaches), `test_bench` (after a run the player's side shoots and flies into a mine of its own and an enemy's, and an
-  untouched own mine 30 m off stays), the Rust tests in `native/src/weapon_kernels/tests.rs` (trigger, touch, swept touch,
+  it reaches), `test_bench` (after a run the player's side shoots and flies into a mine of its own and an enemy's, each taking its
+  group with it (M7-T65), and an untouched own group 30 m off stays), the Rust tests in `native/src/weapon_kernels/tests.rs` (trigger, touch, swept touch,
   blast reach) and `test_mine_kernel` (a carrier's reach: the mines it reaches all go off, any other only by a blast).
 
 ### 17.12 Jolt collision layers and far-ship interpolation (T14)

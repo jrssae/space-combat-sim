@@ -16,7 +16,7 @@ extends RefCounted
 ## - `battle` (M4-T07, Q15, Q19, Q21): the grand multi-side battle, `BattleMix.GRAND`. Fights of 24 on an 8 km lattice, the
 ##   player's fight first, four sides every pair hostile, each side's fighters coming in from its own direction (+Z, -Z, +X,
 ##   -X) and its capitals 5 km behind its fights, cruising into them. An asteroid slab over the player's fight, the battle in a low orbit of Epsilon III.
-##   Mine belts (M4-T12) 1.5 km out from each fight, each side's toward its own direction (`mines`).
+##   Mines (M4-T12, M7-T65) in small chained groups where the fighters fight inside the slab (`mines`).
 ## - `typical` (M4-T07, Q21): most missions, `BattleMix.TYPICAL`: two fights of about 25 on two sides, the capitals behind.
 ##   N counts fighters and capitals; the mix fixes how many of each.
 ##
@@ -75,12 +75,33 @@ const ROCK_SLAB_M: Vector3 = Vector3(20000.0, 5000.0, 20000.0)
 const ROCK_RADIUS_MIN_M: float = 20.0
 const ROCK_RADIUS_MAX_M: float = 200.0
 const ROCK_CLEARANCE_M: float = 100.0
-## Mine belts (M4-T12): each side's share of a fight's mines on an arc 90 degrees wide toward its own direction, this far out
-## from the fight's centre (between its fighters' start and its capitals), this deep and this high either way, m.
-const MINE_BELT_RADIUS_M: float = 1500.0
-const MINE_BELT_DEPTH_M: float = 150.0
-const MINE_BELT_HEIGHT_M: float = 150.0
-const MINE_BELT_ARC_RAD: float = PI / 2.0
+## Mine groups (M7-T65): each side's share laid as seeded groups of 4 to 8 inside the rock slab, where the fighters were measured
+## to fight: ahead of each side's capitals, 2.5 to 4.4 km out along its direction from the fight's centre, where its fighters come out
+## of their jump points and the others' meet them. A side's groups lie on the other sides' approaches.
+const MINE_GROUP_MIN: int = 4
+const MINE_GROUP_MAX: int = 8
+const MINE_GROUP_MEAN: float = 6.0
+## Each mine of a group lies this far from one laid before it, inside its blast, so a group goes off as a chain.
+const MINE_STEP_MIN_M: float = 40.0
+const MINE_STEP_MAX_M: float = 70.0
+## No two mines of a group closer than this.
+const MINE_SPACING_M: float = 30.0
+## The nearest mines of two groups never closer than this (the blast and a margin), so no chain crosses.
+const MINE_GROUP_GAP_M: float = 250.0
+## Where a group's first mine lies on an approach: along it from the fight's centre, across it, and above the centre (the
+## measured fights sit lower than the centre), m.
+const MINE_ALONG_MIN_M: float = 2500.0
+const MINE_ALONG_MAX_M: float = 4400.0
+const MINE_ACROSS_M: float = 700.0
+const MINE_HEIGHT_MIN_M: float = -1000.0
+const MINE_HEIGHT_MAX_M: float = 300.0
+## A mine stays this far clear of a rock's bounding sphere and inside the slab by this much, m.
+const MINE_ROCK_CLEARANCE_M: float = 10.0
+const MINE_SLAB_MARGIN_M: float = 100.0
+## The player starts at the origin, about this big.
+const MINE_PLAYER_RADIUS_M: float = 20.0
+## The cell of the grids that keep the obstacles and the laid mines, m.
+const MINE_GRID_M: float = 250.0
 ## The battle's gravity (Q22, M6-T07): the battle is flown in a low orbit of this body of the star system's data, so the
 ## tide of a real body's pull reaches every mover (about 0.026 m/s^2 10 km from the battle's centre).
 const GRAVITY_BODY: StringName = &"epsilon_iii"
@@ -419,40 +440,141 @@ static func _rock_clear(at: Vector3, radius: float, ships: Array[Dictionary]) ->
 	return true
 
 
-## The mine belts of `layout` for `seed` (M4-T12): the mix's mines shared out over the fights and, in each, over the sides in
-## turn, each on its side's arc. Each: `offset` (m, from the player), `faction`, `side`, `fight_centre`. None inside a trigger
-## radius of a ship's starting hull. Empty for a layout without a mix.
-static func mines(layout: StringName, n: int, seed_value: int) -> Array[Dictionary]:
+## The mines of `layout` for `seed` (M7-T65): the mix's mines shared over the sides, each side's share in seeded groups of
+## `MINE_GROUP_MIN` to `MINE_GROUP_MAX`, laid in the fights inside the rock slab on the other sides' approaches. Each: `offset` (m,
+## from the player), `faction`, `side`, `group` (index over the layout), `fight_centre`. Within a group every mine lies inside a
+## blast of another, groups lie `MINE_GROUP_GAP_M` apart, and none lies inside a starting hull's trigger or a rock. `rock_list`
+## is the run's rocks (`rocks` for `seed` when null). Empty for a layout without a mix.
+static func mines(layout: StringName, n: int, seed_value: int, rock_list: Variant = null) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	var count: int = int(mix(layout, n).get("mines", 0))
-	var centres: Array[Vector3] = fight_centres(layout, n)
-	if count <= 0 or centres.is_empty():
+	var slab: AABB = rock_slab(layout, n)
+	var fights: Array[Vector3] = []
+	for c: Vector3 in fight_centres(layout, n):
+		if slab.has_point(c):
+			fights.append(c)
+	if count <= 0 or fights.is_empty():
 		return out
-	var ships: Array[Dictionary] = plan(layout, n, seed_value)
 	var side_list: Array[StringName] = sides(layout)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash([String(layout), n, seed_value, "mines"])
-	for g: int in centres.size():
-		var size: int = count / centres.size() + (1 if g < count % centres.size() else 0)
-		for k: int in size:
-			var side: int = k % side_list.size()
-			var heading: float = atan2(side_direction(side).x, side_direction(side).z)
-			var at: Vector3 = centres[g]
-			for attempt: int in 50:
-				var angle: float = heading + (rng.randf() - 0.5) * MINE_BELT_ARC_RAD
-				var radius: float = MINE_BELT_RADIUS_M + rng.randf_range(-MINE_BELT_DEPTH_M, MINE_BELT_DEPTH_M)
-				at = centres[g] + Vector3(sin(angle) * radius, rng.randf_range(-MINE_BELT_HEIGHT_M, MINE_BELT_HEIGHT_M),
-						cos(angle) * radius)
-				if _mine_clear(at, ships):
-					break
-			out.append({"offset": at, "faction": side_list[side], "side": side, "fight_centre": centres[g]})
+	var obstacles: Dictionary = {}
+	for e: Dictionary in plan(layout, n, seed_value):
+		_grid_add(obstacles, e["offset"] as Vector3, float(e["radius"]) + MineStandin.TRIGGER_RADIUS_M)
+	_grid_add(obstacles, Vector3.ZERO, MINE_PLAYER_RADIUS_M + MineStandin.TRIGGER_RADIUS_M)
+	var rock_rows: Array = rock_list if rock_list is Array else rocks(layout, n, seed_value)
+	for r: Dictionary in rock_rows:
+		_grid_add(obstacles, r["offset"] as Vector3, float(r["radius"]) + MineStandin.DRAWN_RADIUS_M + MINE_ROCK_CLEARANCE_M)
+	var inside := slab.grow(-MINE_SLAB_MARGIN_M)
+	var laid: Dictionary = {}  # every mine laid so far, to keep groups apart
+	var specs: Array[Vector2i] = mine_groups(count, side_list.size(), rng)
+	for g: int in specs.size():
+		var side: int = specs[g].x
+		var group: Array[Vector3] = []
+		var fight: Vector3 = fights[g % fights.size()]
+		for attempt: int in 200:
+			# The next fight only once this one has no room; the approach of another side, in turn over this side's groups.
+			fight = fights[(g + attempt / 50) % fights.size()]
+			var other: int = (side + 1 + (g / side_list.size() + attempt) % (side_list.size() - 1)) % side_list.size()
+			group = _mine_group(rng, fight, side_direction(other), specs[g].y, inside, obstacles, laid)
+			if not group.is_empty():
+				break
+		for at: Vector3 in group:
+			_grid_add(laid, at, MINE_GROUP_GAP_M)
+			out.append({"offset": at, "faction": side_list[side], "side": side, "group": g, "fight_centre": fight})
 	return out
 
 
-static func _mine_clear(at: Vector3, ships: Array[Dictionary]) -> bool:
-	for e: Dictionary in ships:
-		var reach: float = float(e["radius"]) + MineStandin.TRIGGER_RADIUS_M
-		if at.distance_squared_to(e["offset"] as Vector3) <= reach * reach:
+## The groups for `count` mines over `side_count` sides: `Vector2i(side, size)`, sides taken in turn, each side's sizes from
+## `MINE_GROUP_MIN` to `MINE_GROUP_MAX` and adding up to its share (the first sides take the remainder).
+static func mine_groups(count: int, side_count: int, rng: RandomNumberGenerator) -> Array[Vector2i]:
+	var per_side: Array = []
+	var most: int = 0
+	for side: int in side_count:
+		var share: int = count / side_count + (1 if side < count % side_count else 0)
+		var groups: int = clampi(roundi(float(share) / MINE_GROUP_MEAN), ceili(float(share) / MINE_GROUP_MAX),
+				maxi(1, share / MINE_GROUP_MIN))
+		var sizes := PackedInt32Array()
+		sizes.resize(groups)
+		sizes.fill(mini(MINE_GROUP_MIN, share / groups))
+		var left: int = share - sizes[0] * groups
+		while left > 0:
+			# The rest one at a time to a random group with room, so the sizes vary.
+			var k: int = rng.randi_range(0, groups - 1)
+			if sizes[k] < MINE_GROUP_MAX:
+				sizes[k] += 1
+				left -= 1
+		per_side.append(sizes)
+		most = maxi(most, groups)
+	var out: Array[Vector2i] = []
+	for k: int in most:
+		for side: int in side_count:
+			var sizes: PackedInt32Array = per_side[side]
+			if k < sizes.size():
+				out.append(Vector2i(side, sizes[k]))
+	return out
+
+
+# One group of `size` mines on the approach `direction` of the fight at `centre`: the first at a seeded place in the measured
+# fight volume, each next a step from one laid before. Empty when it cannot be laid clear of `obstacles`, of other groups
+# (`laid`) and inside `inside`.
+static func _mine_group(rng: RandomNumberGenerator, centre: Vector3, direction: Vector3, size: int, inside: AABB,
+		obstacles: Dictionary, laid: Dictionary) -> Array[Vector3]:
+	var across: Vector3 = direction.cross(Vector3.UP)
+	var first: Vector3 = centre + direction * rng.randf_range(MINE_ALONG_MIN_M, MINE_ALONG_MAX_M) \
+			+ across * rng.randf_range(-MINE_ACROSS_M, MINE_ACROSS_M) + Vector3.UP * rng.randf_range(MINE_HEIGHT_MIN_M, MINE_HEIGHT_MAX_M)
+	var group: Array[Vector3] = []
+	if not _mine_spot_clear(first, group, inside, obstacles, laid):
+		return group
+	group.append(first)
+	while group.size() < size:
+		var placed: bool = false
+		for attempt: int in 40:
+			var step := Vector3(rng.randfn(), rng.randfn(), rng.randfn())
+			if step.length_squared() < 1e-6:
+				continue
+			var at: Vector3 = group[rng.randi_range(0, group.size() - 1)] + step.normalized() * rng.randf_range(MINE_STEP_MIN_M, MINE_STEP_MAX_M)
+			if _mine_spot_clear(at, group, inside, obstacles, laid):
+				group.append(at)
+				placed = true
+				break
+		if not placed:
+			group.clear()
+			break
+	return group
+
+
+# Spheres (`at`, `reach`) kept in every `MINE_GRID_M` cell they overlap, so a point asks only its own cell.
+static func _grid_add(grid: Dictionary, at: Vector3, reach: float) -> void:
+	var lo: Vector3i = _grid_cell(at - Vector3.ONE * reach)
+	var hi: Vector3i = _grid_cell(at + Vector3.ONE * reach)
+	for x: int in range(lo.x, hi.x + 1):
+		for y: int in range(lo.y, hi.y + 1):
+			for z: int in range(lo.z, hi.z + 1):
+				var key := Vector3i(x, y, z)
+				if not grid.has(key):
+					grid[key] = []
+				(grid[key] as Array).append(Vector4(at.x, at.y, at.z, reach))
+
+
+# Whether `at` lies inside a sphere of `grid`.
+static func _grid_reaches(grid: Dictionary, at: Vector3) -> bool:
+	for s: Vector4 in grid.get(_grid_cell(at), []) as Array:
+		if at.distance_squared_to(Vector3(s.x, s.y, s.z)) < s.w * s.w:
+			return true
+	return false
+
+
+static func _grid_cell(at: Vector3) -> Vector3i:
+	return Vector3i(floori(at.x / MINE_GRID_M), floori(at.y / MINE_GRID_M), floori(at.z / MINE_GRID_M))
+
+
+static func _mine_spot_clear(at: Vector3, group: Array[Vector3], inside: AABB, obstacles: Dictionary,
+		laid: Dictionary) -> bool:
+	if not inside.has_point(at) or _grid_reaches(obstacles, at) or _grid_reaches(laid, at):
+		return false
+	for other: Vector3 in group:
+		if other.distance_squared_to(at) < MINE_SPACING_M * MINE_SPACING_M:
 			return false
 	return true
 

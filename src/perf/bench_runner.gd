@@ -332,7 +332,7 @@ func _set_up_standins(plan: Array[Dictionary], anchor: UniversePos) -> void:
 	if not rocks.is_empty():
 		standins.add_asteroids(rocks, anchor)
 	_rocks_placed = rocks.size()
-	var belts: Array[Dictionary] = BenchLayout.mines(_layout, _n, int(_options["seed"]))
+	var belts: Array[Dictionary] = BenchLayout.mines(_layout, _n, int(_options["seed"]), rocks)
 	if not belts.is_empty():
 		standins.add_mines(belts, anchor)
 	standins.missile_target = int(_mix.get("missiles", 0))

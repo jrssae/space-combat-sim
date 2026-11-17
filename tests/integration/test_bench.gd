@@ -315,62 +315,137 @@ func test_a_short_battle_writes_every_entity_count_and_puts_the_factions_back() 
 
 
 # M7-T64: after the run a mine of the player's own side and an enemy's each go off when the player's side shoots it and when the
-# player flies into it; a mine of its own side 30 m off, inside the trigger but not touched, stays. Read on the console.
+# player flies into it; a mine of its own side 30 m off, inside the trigger but not touched, stays. M7-T65: each takes its whole
+# group with it as a chain, and nothing beyond. Read on the console.
 func _assert_mines_go_off_after_the_run(mines: MineStandin) -> void:
 	if mines == null:
 		return
 	DebugConsole.flags.invulnerable = true  # the blasts would kill the player
 	var side: StringName = main.combatant.faction
-	var own: Array[int] = _lone_mines(mines, side, false, 3)
-	var foe: Array[int] = _lone_mines(mines, side, true, 2)
-	assert_eq([own.size(), foe.size()], [3, 2], "mines of each side clear of the others are left after the run")
+	var home: Vector3 = main.ship.global_position - mines.global_position  # the mines' node rides the rebases
+	var own: Array[PackedInt32Array] = _lone_groups(mines, side, false, 3)
+	var foe: Array[PackedInt32Array] = _lone_groups(mines, side, true, 2)
+	assert_eq([own.size(), foe.size()], [3, 2], "whole groups of each side clear of the others are left after the run")
 	if own.size() < 3 or foe.size() < 2:
 		return
 	var before: Dictionary = {}
-	for key: String in ["mines.by_shot", "mines.by_touch", "mines.by_trigger", "combat.mines_struck"]:
+	for key: String in ["mines.by_shot", "mines.by_touch", "mines.by_blast", "combat.mines_struck"]:
 		before[key] = int(_read(key))
-	for i: int in [own[0], foe[0]]:
+	var alive_before: int = mines.alive_count()
+	for group: PackedInt32Array in [own[0], foe[0]]:
+		# The group's mine furthest along +Z, so the bolt flying in along -Z meets it first.
+		var i: int = group[0]
+		for k: int in group:
+			i = k if mines.position_of(k).z > mines.position_of(i).z else i
 		var bolt := (load(Projectile.SCENE_PATH) as PackedScene).instantiate() as Projectile
 		main.projectiles.add_child(bolt)
 		bolt.configure(WeaponSpec.new())
 		bolt.faction = side
 		bolt.launch(mines.position_of(i) + Vector3(1.0, 0.0, 60.0), Vector3(0.0, 0.0, -600.0), SimClock.now())
 		await _ticks(12)
-		assert_false(mines.is_alive(i), "a %s mine goes off when the player's side shoots it" % mines.faction_of(i))
-	for i: int in [own[1], foe[1]]:
-		await _hold_player_at(mines.position_of(i) + Vector3(0.0, 2.0, 0.0), 4)
-		assert_false(mines.is_alive(i), "a %s mine goes off when the player flies into it" % mines.faction_of(i))
-	await _hold_player_at(mines.position_of(own[2]) + Vector3(0.0, 30.0, 0.0), 2 * MineStandin.TRIGGER_TICKS)
-	assert_true(mines.is_alive(own[2]), "the player's own mine 30 m off, untouched, stays")
-	assert_eq(int(_read("mines.by_shot")) - int(before["mines.by_shot"]), 2, "two by a shot")
-	assert_eq(int(_read("combat.mines_struck")) - int(before["combat.mines_struck"]), 2, "the bolts stopped on them")
-	assert_eq(int(_read("mines.by_touch")) - int(before["mines.by_touch"]), 2, "two by a touch")
-	assert_eq(int(_read("mines.by_trigger")) - int(before["mines.by_trigger"]), 0, "none by the trigger")
+		assert_eq(_alive_in(mines, group), 0, "a %s mine goes off when the player's side shoots it, its group with it" % mines.faction_of(i))
+	for group: PackedInt32Array in [own[1], foe[1]]:
+		await _hold_player_at(mines.position_of(group[0]) + Vector3(0.0, 2.0, 0.0), 4)
+		assert_eq(_alive_in(mines, group), 0, "a %s mine goes off when the player flies into it, its group with it" % mines.faction_of(group[0]))
+	# 30 m out from the group, beside its outermost mine.
+	var centre := Vector3.ZERO
+	for k: int in own[2]:
+		centre += mines.position_of(k) / float(own[2].size())
+	var outer: int = own[2][0]
+	for k: int in own[2]:
+		outer = k if mines.position_of(k).distance_to(centre) > mines.position_of(outer).distance_to(centre) else outer
+	var out: Vector3 = (mines.position_of(outer) - centre).normalized()
+	await _hold_player_at(mines.position_of(outer) + (out if out != Vector3.ZERO else Vector3.UP) * 30.0, 2 * MineStandin.TRIGGER_TICKS)
+	assert_eq(_alive_in(mines, own[2]), own[2].size(), "the player's own mines 30 m off, untouched, stay")
+	# The battle flies on around the mines, so the counts are at least these (its fighters may set off others meanwhile).
+	var gone: int = own[0].size() + own[1].size() + foe[0].size() + foe[1].size()
+	assert_gte(alive_before - mines.alive_count(), gone, "the four groups went off")
+	assert_gte(int(_read("mines.by_shot")) - int(before["mines.by_shot"]), 2, "two by a shot")
+	assert_gte(int(_read("combat.mines_struck")) - int(before["combat.mines_struck"]), 2, "the bolts stopped on them")
+	assert_gte(int(_read("mines.by_touch")) - int(before["mines.by_touch"]), 2, "two by a touch")
+	assert_gte(int(_read("mines.by_blast")) - int(before["mines.by_blast"]), gone - 4, "the rest of each group by the chain")
+	await _hold_player_at(mines.global_position + home, 30)  # back where the fighters and capitals fly near
 	DebugConsole.flags.invulnerable = false
 	main.combatant.damageable.restore()
 
 
-# Up to `n` mines in play of `side` (or hostile to it) with no other mine in play within a blast of them, and none of them
-# within reach of each other's blast or a ship's.
-func _lone_mines(mines: MineStandin, side: StringName, hostile: bool, n: int) -> Array[int]:
-	var out: Array[int] = []
+# Up to `n` whole groups of mines in play of `side` (or hostile to it), nearest the player first: mines linked by blasts, none
+# of another group or a ship within two blasts of them.
+func _lone_groups(mines: MineStandin, side: StringName, hostile: bool, n: int) -> Array[PackedInt32Array]:
+	var out: Array[PackedInt32Array] = []
+	var seen: Dictionary = {}
+	var link_m: float = MineStandin.BLAST_RADIUS_M + MineStandin.DRAWN_RADIUS_M
 	var clear_m: float = 2.0 * MineStandin.BLAST_RADIUS_M
+	var order: Array[int] = []
 	for i: int in mines.count():
+		order.append(i)
+	var player: Vector3 = main.ship.global_position
+	order.sort_custom(func(a: int, b: int) -> bool:
+		return mines.position_of(a).distance_squared_to(player) < mines.position_of(b).distance_squared_to(player))
+	for i: int in order:
 		if out.size() == n:
 			break
-		if not mines.is_alive(i) or Factions.is_hostile(mines.faction_of(i), side) != hostile:
+		if seen.has(i) or not mines.is_alive(i) or Factions.is_hostile(mines.faction_of(i), side) != hostile:
 			continue
-		var lone: bool = true
-		for j: int in mines.count():
-			if j != i and mines.is_alive(j) and mines.position_of(j).distance_to(mines.position_of(i)) < clear_m:
-				lone = false
-				break
-		for c: Combatant in main.ships.alive():
-			if lone and c.ship.global_position.distance_to(mines.position_of(i)) < clear_m:
-				lone = false
+		var group := PackedInt32Array([i])
+		seen[i] = true
+		var k: int = 0
+		while k < group.size():
+			for j: int in mines.count():
+				if not seen.has(j) and mines.is_alive(j) and mines.position_of(j).distance_to(mines.position_of(group[k])) <= link_m:
+					seen[j] = true
+					group.append(j)
+			k += 1
+		var lone: bool = group.size() >= BenchLayout.MINE_GROUP_MIN
+		for m: int in group:
+			for j: int in mines.count():
+				if lone and not group.has(j) and mines.is_alive(j) and mines.position_of(j).distance_to(mines.position_of(m)) < clear_m:
+					lone = false
+			for c: Combatant in main.ships.alive():
+				if lone and TierDirector.flying_position(c.ship).distance_to(mines.position_of(m)) < clear_m:
+					lone = false
 		if lone:
-			out.append(i)
+			out.append(group)
 	return out
+
+
+func _alive_in(mines: MineStandin, group: PackedInt32Array) -> int:
+	var alive: int = 0
+	for i: int in group:
+		alive += 1 if mines.is_alive(i) else 0
+	return alive
+
+
+# M7-T65: in a short battle of 300 the mines lie where the fighters fight, so AI fighters set some off (a hull's trigger or touch
+# with a fighter beside the mine) and a set-off group goes off as a chain. A slow test.
+func test_ai_fighters_set_off_mines_in_a_battle_of_300() -> void:
+	if not SlowTests.enabled():
+		pending("slow: a battle of 300 (GUT_SLOW=1)")
+		return
+	assert_true(_exec("bench battle 300 5 warmup=0 seed=1 label=battle_mines_test").ok)
+	await _ticks(2)
+	var mines: MineStandin = main.bench.standins.mines()
+	assert_not_null(mines, "the mines are laid")
+	if mines == null:
+		return
+	var by_fighters: Array[int] = [0]
+	var hulls_before: Array[int] = [mines.by_trigger + mines.by_touch]
+	var chained: Array[int] = [0]
+	mines.detonated.connect(func(i: int) -> void:
+		var hulls: int = mines.by_trigger + mines.by_touch
+		if hulls == hulls_before[0]:
+			chained[0] += 1
+			return
+		hulls_before[0] = hulls
+		var reach: float = MineStandin.TRIGGER_RADIUS_M + 30.0  # a fighter's hull and a tick's flight
+		for c: Combatant in main.ships.alive():
+			if c != main.combatant and TierDirector.flying_position(c.ship).distance_to(mines.position_of(i)) < reach:
+				by_fighters[0] += 1
+				return)
+	await wait_for_signal(main.bench.finished, 240.0, "the bench finishes")
+	gut.p("battle 300: %d mines set off by a hull beside an AI fighter, %d by a blast" % [by_fighters[0], chained[0]])
+	assert_gt(by_fighters[0], 0, "AI fighters set mines off")
+	assert_gt(chained[0], 0, "and their groups went off after them")
 
 
 # The player held still at `at` for `ticks` physics ticks.
