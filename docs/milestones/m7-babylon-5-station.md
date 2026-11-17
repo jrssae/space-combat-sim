@@ -3273,3 +3273,11 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   smallest change; say which). Native kernels: 1 vs 6 threads identical, parity recordings green.
 - **Done when:** tests (a shot mine explodes, a touched mine explodes, both whatever the faction; a hostile within 50 m sets one off; after
   a bench run too); the maintainer shoots and rams mines (H); committed.
+- **Done (code part, 2026-11-16):** cause of the live run: about half the belts are the player's own side after the run and the old trigger
+  was hostile-only; mines also had no body in the hit sweep, so nothing shot or rammed could reach them. Now mines stay out of the target
+  list (no HUD change) and are aimed at as the drawn red 3 m sphere; any bolt, beam, missile or blast that hits one sets it off whatever
+  its side; touches are checked along each hull's last move (capitals by their hit volumes); blasts chain to neighbouring mines; the 50 m
+  trigger stays hostile-only. `mine_kernel` parity recordings `edge_of_a_trigger` and `belt_seed_23` re-recorded (`ParityFixture.
+  rerecorded`, reason in `tests/fixtures/parity/README.md`): the differences come only from the two new rules, the trigger arithmetic is
+  unchanged. For the maintainer: in a live `bench battle 300 20` the fighters never reach the belts (1.5 km out, away from the fights),
+  a layout question, not changed. Open: (H) shoot and ram mines.

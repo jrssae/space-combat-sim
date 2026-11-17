@@ -191,7 +191,7 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `weapons` | Pulse cannon fire mode (writable), cooldown and capacitor charge | in flight |
 | `targeting` | The selected target (writable), its range and closing speed, and the targets in sensor range | in flight |
 | `interact` | The hold-X interaction (M7-T27): what a hold of X runs now (`offered`: jump, dock, cargo or none), whether it does anything yet (`available`), the hold's progress 0..1 (`progress`, the bar), the hold time (`hold_s`, `settings.interact_hold_s`), the HUD's prompt or answer line (`prompt`), interactions run (`runs`) and the last one with its answer (`last`) | in flight |
-| `combat` | Bolts swept, hits resolved, the last hit and the cost of resolving them | in flight |
+| `combat` | Bolts swept, hits resolved, mines a shot set off (`mines_struck`, M7-T64), the last hit and the cost of resolving them | in flight |
 | `ram` | Rams resolved, the last one and the cost of the ram checks | in flight |
 | `factions` | The faction ids, their listed relations and the friendly-fire mirror | in flight |
 | `raiders` | The raider pool: size, free, alive, a list with hull and range, and the selected one's brain | in flight |
@@ -232,6 +232,7 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `flight` | The native flight batch: ships stepped and the gather and step costs | in flight |
 | `tier` | The low-attention tier: radius, rates, fighter and capital rows, hulks, promotions and demotions | in flight |
 | `perf` | The tick's stage timings and per-entity counts (on while `perf on` or a bench runs) | in flight |
+| `mines` | A battle's mine belts (M7-T64): mines laid and in play, set off so far and by what (`by_trigger`: a hull hostile to the mine's side within 50 m; `by_touch`: any hull touching its 3 m body; `by_shot`: any bolt, beam or missile; `by_blast`: another mine's blast), whether a spent mine is laid again (`relays`, only during a bench run), and the nearest mine in play to the player (`nearest_m`, `nearest_side`, `nearest_hostile`) | bench battle |
 | `fx` | The particle emitter pool: emitters, busy, bursts thrown and the density in use | in flight |
 | `debris` | The break-up chunk pool: sets, free sets, active chunks and held wrecks | in flight |
 | `audio` | Sounds loaded, voices playing, engine voices (granted, sounding, the frame's work and the re-rank's work, `engine_rank_work`), `shots_culled` (gun shots skipped beyond earshot) and the SFX volume (writable) | front end, flight |

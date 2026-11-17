@@ -34,7 +34,7 @@ pub struct ScsWeaponRows {
     candidates: Vec<Candidate>,
     spent: Vec<bool>,
     hits: Vec<u32>,
-    fired: Vec<bool>,
+    fired: Vec<u8>,
     // The far capitals' fire (M4-T22): missiles resolved at launch and still flying to their targets, and the rolls run.
     tier_missiles: Vec<TierMissile>,
     tier_rolls: i64,
@@ -783,22 +783,32 @@ impl ScsWeaponRows {
         }
     }
 
-    /// One tick of the mines' triggers at tick `tick` with the belt's node at `origin`: `[mines that checked, mines set
-    /// off (ascending)]`.
+    /// One tick of the mines at tick `tick` with the belt's node at `origin`, `delta` the tick's length: `[mines that
+    /// checked, mines set off (ascending), whether each was touched (1) rather than triggered (0), then per mine a hull
+    /// bigger than a fighter may touch: the mine, the hull's id, its place and its basis's three columns]`. A hostile hull
+    /// inside a checking mine's trigger sets it off; so does a fighter-sized hull of any side whose sphere touched a mine's
+    /// body since the last tick (M7-T64). A bigger hull's sphere is far from its shape, so its mines go back to the caller
+    /// to test against its hit volumes.
     #[func]
-    fn mine_step(&mut self, tick: i64, origin: Vector3) -> VarArray {
+    fn mine_step(&mut self, tick: i64, origin: Vector3, delta: f64) -> VarArray {
         let phase = tick.rem_euclid(wk::TRIGGER_TICKS) as usize;
         let mines = &self.mines;
         let checked = (0..mines.local.len())
             .filter(|&i| i % wk::TRIGGER_TICKS as usize == phase && mines.alive[i])
             .count() as i64;
         let mut set_off: Vec<i32> = Vec::new();
+        let mut touched: Vec<u8> = Vec::new();
+        let mut near_mines: Vec<i32> = Vec::new();
+        let mut near_hulls: Vec<i64> = Vec::new();
+        let mut near_at: Vec<Vector3> = Vec::new();
+        let mut near_axes: Vec<Vector3> = Vec::new();
         if let Some(core) = self.core.as_ref() {
             let guard = core.bind();
             let rows = &guard.rows;
             let n = self.factions;
+            // Per mine: 0 untouched, 1 triggered, 2 touched.
             self.fired.clear();
-            self.fired.resize(mines.local.len(), false);
+            self.fired.resize(mines.local.len(), 0);
             // Each hull's column of the table, by mine faction (hostility is symmetric); tier rows set mines off too.
             for &h in &guard.sweep_rows {
                 let j = h as usize;
@@ -817,18 +827,56 @@ impl ScsWeaponRows {
                     &mut self.hits,
                 );
                 for &m in &self.hits {
-                    self.fired[m as usize] = true;
+                    self.fired[m as usize] = self.fired[m as usize].max(1);
+                }
+                self.hits.clear();
+                let v = rows.velocities[j];
+                let step = Vector3::new(
+                    (f64::from(v.x) * delta) as f32,
+                    (f64::from(v.y) * delta) as f32,
+                    (f64::from(v.z) * delta) as f32,
+                );
+                wk::mine_touches(mines, origin, rows.positions[j], step, rows.radii[j], &mut self.hits);
+                if rows.radii[j] <= wk::FIGHTER_RADIUS_MAX_M {
+                    for &m in &self.hits {
+                        self.fired[m as usize] = 2;
+                    }
+                } else {
+                    let basis = rows.bases[j];
+                    for &m in &self.hits {
+                        near_mines.push(m as i32);
+                        near_hulls.push(rows.hull_ids[j]);
+                        near_at.push(rows.positions[j]);
+                        near_axes.extend([basis.col_a(), basis.col_b(), basis.col_c()]);
+                    }
                 }
             }
-            set_off = (0..self.fired.len())
-                .filter(|&i| self.fired[i])
-                .map(|i| i as i32)
-                .collect();
+            for (i, &f) in self.fired.iter().enumerate() {
+                if f > 0 {
+                    set_off.push(i as i32);
+                    touched.push(u8::from(f == 2));
+                }
+            }
         }
         let mut out = VarArray::new();
         out.push(&checked.to_variant());
         out.push(&PackedInt32Array::from(set_off.as_slice()).to_variant());
+        out.push(&PackedByteArray::from(touched.as_slice()).to_variant());
+        out.push(&PackedInt32Array::from(near_mines.as_slice()).to_variant());
+        out.push(&PackedInt64Array::from(near_hulls.as_slice()).to_variant());
+        out.push(&PackedVector3Array::from(near_at.as_slice()).to_variant());
+        out.push(&PackedVector3Array::from(near_axes.as_slice()).to_variant());
         out
+    }
+
+    /// The mines in play whose body the blast of a mine at `at` reaches, with the belt's node at `origin`, ascending
+    /// (M7-T64: a blast sets them off).
+    #[func]
+    fn mines_in_blast(&mut self, origin: Vector3, at: Vector3) -> PackedInt32Array {
+        self.hits.clear();
+        wk::mines_in_blast(&self.mines, origin, at, &mut self.hits);
+        let out: Vec<i32> = self.hits.iter().map(|&m| m as i32).collect();
+        PackedInt32Array::from(out.as_slice())
     }
 
     /// The hulls in the blast of a mine at `at`, near and tier rows in the core's order (M4-T23): `[hull ids, their bodies' places]`.

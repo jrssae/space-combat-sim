@@ -197,7 +197,7 @@ func _step_native(native: NativeWeapons, delta: float, now_s: float, started_us:
 		tier_group_rolls = int(out[15])
 	mark_us = _mark(Part.MISSILES, mark_us)
 	if native.mines != null and is_instance_valid(native.mines):
-		detonations += native.mines.step_native(_tick, now_s)
+		detonations += native.mines.step_native(_tick, now_s, delta)
 	mark_us = _mark(Part.MINES, mark_us)
 	_finish(now_s, mark_us, started_us)
 

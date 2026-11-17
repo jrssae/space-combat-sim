@@ -18,15 +18,18 @@ extends Node
 ## Every projectile kind (bolt, beam, missile, mine) is swept alike, with its own hit radius; a beam (M4-T12) lives for one
 ## resolve, so its first hull along the segment takes the hit and it is retired whether it hit or not. Rocks (M4-T29, §17.16)
 ## are `StaticRows` with no node: they stay in a grid of their own between ticks, rebuilt only when a rock changes, and a bolt
-## that reaches one first is spent there (rocks never break; any bolt of another faction stops on one). The bolt is spent,
+## that reaches one first is spent there (rocks never break; any bolt of another faction stops on one). The mines' bodies
+## (M7-T64) share that grid, every belt's mines after the rocks: a shot of any side that reaches one first is spent there and
+## sets it off (`MineStandin.strike`). The bolt is spent,
 ## `Damageable.apply_hit` runs, an `ImpactFlash` is added and `hit_resolved` is emitted for the HUD and sound. Nothing is cached
 ## between ticks, so a `World.rebase()` changes nothing. The target's rotation during one
 ## tick is ignored. A big hull with a surface (the station's frame and drum, M7-T06) is swept by the core against its
 ## volumes: only a bolt that hits one reaches GDScript, with where it entered.
 ##
-## Console: provider `combat` (`projectiles`, `hits`, `last_hit`, `pairs_tested`, `pairs_visited`, `hit_path`, `resolve_us`)
-## and commands `damage <amount> [player|target]` and `heal [player|target|all]`. `resolve_us` is wall clock, a profiling
-## readout. It also registers the faction entries (`FactionConsole`), because `Factions` is static and has no node of its own.
+## Console: provider `combat` (`projectiles`, `hits`, `mines_struck`, `last_hit`, `pairs_tested`, `pairs_visited`, `hit_path`,
+## `resolve_us`) and commands `damage <amount> [player|target]` and `heal [player|target|all]`. `resolve_us` is wall clock, a
+## profiling readout. It also registers the faction entries (`FactionConsole`), because `Factions` is static and has no node
+## of its own.
 
 ## A bolt hit a ship; `info.applied` is set by then.
 signal hit_resolved(info: HitInfo)
@@ -41,6 +44,8 @@ var pairs_tested: int = 0
 var hits_total: int = 0
 ## Bolts that stopped on a big hull of their own side without harm (the station, M7-T07).
 var friendly_stops: int = 0
+## Mines a shot set off this session (M7-T64).
+var mines_struck: int = 0
 var last_hit: String:
 	get = _describe_last_hit
 # The last hit, described only when read (M5-T32: no string built per hit).
@@ -100,10 +105,19 @@ var _provoked_pairs: int = 0
 var _now_s: float = 0.0
 var _source: StringName = &"none"
 var _gather_frame: int = -1
-# The rocks (M4-T29): their grid, kept until a rock changes, and the earliest rock hit `_earliest_rock` found.
+# The rocks (M4-T29) and the mines' bodies (M7-T64): one grid, kept until a rock or a belt changes or moves, and the earliest
+# hit `_earliest_rock` found. Slots past `_rock_count` are mines: `_mine_belts` and `_mine_slots` name each one.
 var _rocks: HitBroadPhase = HitBroadPhase.new()
 var _solid: StaticRows.Solid = null
 var _solid_moves: int = -1
+var _rock_count: int = 0
+var _static_positions := PackedVector3Array()
+var _static_radii := PackedFloat64Array()
+var _mine_belts: Array[MineStandin] = []
+var _mine_slots := PackedInt32Array()
+var _kept_belts: Array[MineStandin] = []
+var _kept_origins := PackedVector3Array()
+var _belts_version: int = -1
 var _rock_t: float = INF
 var _rock_a := Vector3.ZERO
 var _rock_b := Vector3.ZERO
@@ -127,6 +141,7 @@ func _ready() -> void:
 	DebugConsole.registry.register_provider(&"combat", ConsoleVars.new({
 		&"projectiles": {"get": func() -> int: return projectiles_last_tick, "doc": "Bolts in flight at the last tick's resolve"},
 		&"hits": {"get": func() -> int: return hits_total, "doc": "Hits resolved this session"},
+		&"mines_struck": {"get": func() -> int: return mines_struck, "doc": "Mines a shot set off this session (M7-T64)"},
 		&"last_hit": {"get": func() -> String: return last_hit, "doc": "The last hit: shooter -> target, damage"},
 		&"pairs_tested": {"get": func() -> int: return pairs_tested, "doc": "Bolt and ship pairs swept on the last tick (past the distance cull)"},
 		&"pairs_visited": {"get": func() -> int: return pairs_visited,
@@ -176,7 +191,7 @@ func resolve(delta: float) -> void:
 	var keys: PackedInt64Array = broad_phase.pairs_core(sim.core, delta)
 	pairs_visited = broad_phase.visited
 	var rock_keys: PackedInt64Array = _rock_pairs(sim)
-	var rock_count: int = _solid.ids.size()
+	var rock_count: int = _static_positions.size()
 	var world: WorldFrame = sim.world
 	_rock_drift = world.rest_velocity() * delta if world != null and is_instance_valid(world) else Vector3.ZERO
 	_candidates(sim, keys, rock_keys, rock_count)
@@ -341,23 +356,60 @@ func _to_body_of(j: int) -> Basis:
 	return found
 
 
-# This tick's projectile and rock pairs that pass the sphere test, as `bolt * rocks + rock`, ascending; the rocks' grid is
-# built again only when a rock changed or the rocks moved.
+# This tick's projectile and rock (or mine) pairs that pass the sphere test, as `bolt * statics + static`, ascending; the
+# grid is built again only when a rock or a belt changed or moved.
 func _rock_pairs(sim: SimCore) -> PackedInt64Array:
 	var solid: StaticRows.Solid = StaticRows.solid()
-	if solid != _solid or solid.moves != _solid_moves:
+	if solid != _solid or solid.moves != _solid_moves or _belts_changed():
 		_solid = solid
 		_solid_moves = solid.moves  # shifted in place (M6-T06): the grid takes the new places
-		_rocks.keep(solid.positions, solid.radii)
+		_keep_statics()
 	static_pairs_visited = 0
-	if solid.ids.is_empty():
+	if _static_positions.is_empty():
 		return PackedInt64Array()
 	var keys: PackedInt64Array = _rocks.kept_pairs_core(sim.core)
 	static_pairs_visited = _rocks.visited
 	return keys
 
 
-# The earliest rock bolt `i` reaches among its pairs `keys[first..next)` (its index in `_solid`, with `_rock_*` set), or -1.
+# Whether a belt came, went or moved since the grid was kept.
+func _belts_changed() -> bool:
+	if MineStandin.belts_version != _belts_version:
+		return true
+	for k: int in _kept_belts.size():
+		var belt: MineStandin = _kept_belts[k]
+		if not is_instance_valid(belt) or belt.global_position != _kept_origins[k]:
+			return true
+	return false
+
+
+# The rocks, then every belt's mines (in play or not; a spent one is passed over when a bolt reaches it), into the grid.
+func _keep_statics() -> void:
+	_rock_count = _solid.ids.size()
+	_static_positions = _solid.positions.duplicate()
+	_static_radii = _solid.radii.duplicate()
+	_mine_belts.clear()
+	_mine_slots.clear()
+	_kept_belts.clear()
+	_kept_origins.clear()
+	for belt: MineStandin in MineStandin.belts:
+		if not is_instance_valid(belt) or not belt.is_inside_tree():
+			continue
+		var origin: Vector3 = belt.global_position
+		_kept_belts.append(belt)
+		_kept_origins.append(origin)
+		var offsets: PackedVector3Array = belt.offsets()
+		for i: int in offsets.size():
+			_static_positions.append(origin + offsets[i])
+			_static_radii.append(MineStandin.DRAWN_RADIUS_M)
+			_mine_belts.append(belt)
+			_mine_slots.append(i)
+	_belts_version = MineStandin.belts_version
+	_rocks.keep(_static_positions, _static_radii)
+
+
+# The earliest rock or mine bolt `i` reaches among its pairs `keys[first..next)` (its slot in the grid, with `_rock_*` set),
+# or -1. A rock lets its own side's bolts through; a mine stops any shot (M7-T64).
 func _earliest_rock(c: int, keys: PackedInt64Array, first: int, next: int, rock_count: int) -> int:
 	var best: int = -1
 	_rock_t = INF
@@ -371,12 +423,17 @@ func _earliest_rock(c: int, keys: PackedInt64Array, first: int, next: int, rock_
 	var base: int = _bolt_index[c] * rock_count
 	for k: int in range(first, next):
 		var s: int = keys[k] - base
-		if not friendly_fire and bolt_faction == _solid.factions[s]:
-			continue  # a rock's own faction passes it, as a buoy's does
-		var centre: Vector3 = _solid.positions[s]
+		if s < _rock_count:
+			if not friendly_fire and bolt_faction == _solid.factions[s]:
+				continue  # a rock's own faction passes it, as a buoy's does
+		else:
+			var belt: MineStandin = _mine_belts[s - _rock_count]
+			if not is_instance_valid(belt) or not belt.can_strike(_mine_slots[s - _rock_count]):
+				continue  # spent, or already hit this tick
+		var centre: Vector3 = _static_positions[s]
 		var a: Vector3 = start - centre
 		var b: Vector3 = p1 - centre
-		var t: float = SweepMath.segment_sphere(a, b, Vector3.ZERO, _solid.radii[s] + hit_radius)
+		var t: float = SweepMath.segment_sphere(a, b, Vector3.ZERO, _static_radii[s] + hit_radius)
 		if t >= 0.0 and t < _rock_t:
 			_rock_t = t
 			_rock_a = a
@@ -385,15 +442,21 @@ func _earliest_rock(c: int, keys: PackedInt64Array, first: int, next: int, rock_
 	return best
 
 
-# A bolt stopped by rock `s`: spent, sparks, and `hit_resolved` with the rock's row id as the target (nothing breaks).
+# A bolt stopped by rock or mine `s`: spent, sparks, and `hit_resolved` with the row's id as the target. A rock never breaks;
+# a mine goes off at the mines' next step (M7-T64).
 func _land_on_rock(i: int, s: int, delta: float) -> void:
-	var centre: Vector3 = _solid.positions[s]
+	var centre: Vector3 = _static_positions[s]
 	var local_point: Vector3 = _rock_a + _rock_t * (_rock_b - _rock_a)
 	var relative: Vector3 = _rock_b - _rock_a
-	var info := HitInfo.new(_solid.ids[s], _bolt_shooters[i], _bolt_factions[i], _bolt_damage[i], centre + local_point,
+	var mine: bool = s >= _rock_count
+	var row_id: int = _mine_belts[s - _rock_count].row_id(_mine_slots[s - _rock_count]) if mine else _solid.ids[s]
+	var info := HitInfo.new(row_id, _bolt_shooters[i], _bolt_factions[i], _bolt_damage[i], centre + local_point,
 			-relative.normalized() if relative.length_squared() > 1e-12 else Vector3.ZERO,
 			relative.length() / maxf(delta, 1e-6))
 	_spend(i)
+	if mine:
+		_mine_belts[s - _rock_count].strike(_mine_slots[s - _rock_count])
+		mines_struck += 1
 	hits_total += 1
 	_last_hit = info
 	_last_hit_rock = true

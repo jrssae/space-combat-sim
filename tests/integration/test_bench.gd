@@ -302,6 +302,7 @@ func test_a_short_battle_writes_every_entity_count_and_puts_the_factions_back() 
 	for c: Combatant in fighters:
 		assert_false(c.damageable.invulnerable, "%s is mortal once the run is over" % c.display_name)
 	assert_false(mines.relays if mines != null else true, "a mine that goes off now stays gone")
+	await _assert_mines_go_off_after_the_run(mines)
 	await _assert_killed_fighters_leave_play(fighters)
 	await _assert_killed_capitals_leave_play(standins)
 	# The next run starts clean: nothing of this one flies in it.
@@ -311,6 +312,74 @@ func test_a_short_battle_writes_every_entity_count_and_puts_the_factions_back() 
 	assert_null(standins.mines(), "and the mines")
 	for c: Combatant in main.ships.alive():
 		assert_false(c.damageable.hull.destroyed, "the new run starts %s whole" % c.display_name)
+
+
+# M7-T64: after the run a mine of the player's own side and an enemy's each go off when the player's side shoots it and when the
+# player flies into it; a mine of its own side 30 m off, inside the trigger but not touched, stays. Read on the console.
+func _assert_mines_go_off_after_the_run(mines: MineStandin) -> void:
+	if mines == null:
+		return
+	DebugConsole.flags.invulnerable = true  # the blasts would kill the player
+	var side: StringName = main.combatant.faction
+	var own: Array[int] = _lone_mines(mines, side, false, 3)
+	var foe: Array[int] = _lone_mines(mines, side, true, 2)
+	assert_eq([own.size(), foe.size()], [3, 2], "mines of each side clear of the others are left after the run")
+	if own.size() < 3 or foe.size() < 2:
+		return
+	var before: Dictionary = {}
+	for key: String in ["mines.by_shot", "mines.by_touch", "mines.by_trigger", "combat.mines_struck"]:
+		before[key] = int(_read(key))
+	for i: int in [own[0], foe[0]]:
+		var bolt := (load(Projectile.SCENE_PATH) as PackedScene).instantiate() as Projectile
+		main.projectiles.add_child(bolt)
+		bolt.configure(WeaponSpec.new())
+		bolt.faction = side
+		bolt.launch(mines.position_of(i) + Vector3(1.0, 0.0, 60.0), Vector3(0.0, 0.0, -600.0), SimClock.now())
+		await _ticks(12)
+		assert_false(mines.is_alive(i), "a %s mine goes off when the player's side shoots it" % mines.faction_of(i))
+	for i: int in [own[1], foe[1]]:
+		await _hold_player_at(mines.position_of(i) + Vector3(0.0, 2.0, 0.0), 4)
+		assert_false(mines.is_alive(i), "a %s mine goes off when the player flies into it" % mines.faction_of(i))
+	await _hold_player_at(mines.position_of(own[2]) + Vector3(0.0, 30.0, 0.0), 2 * MineStandin.TRIGGER_TICKS)
+	assert_true(mines.is_alive(own[2]), "the player's own mine 30 m off, untouched, stays")
+	assert_eq(int(_read("mines.by_shot")) - int(before["mines.by_shot"]), 2, "two by a shot")
+	assert_eq(int(_read("combat.mines_struck")) - int(before["combat.mines_struck"]), 2, "the bolts stopped on them")
+	assert_eq(int(_read("mines.by_touch")) - int(before["mines.by_touch"]), 2, "two by a touch")
+	assert_eq(int(_read("mines.by_trigger")) - int(before["mines.by_trigger"]), 0, "none by the trigger")
+	DebugConsole.flags.invulnerable = false
+	main.combatant.damageable.restore()
+
+
+# Up to `n` mines in play of `side` (or hostile to it) with no other mine in play within a blast of them, and none of them
+# within reach of each other's blast or a ship's.
+func _lone_mines(mines: MineStandin, side: StringName, hostile: bool, n: int) -> Array[int]:
+	var out: Array[int] = []
+	var clear_m: float = 2.0 * MineStandin.BLAST_RADIUS_M
+	for i: int in mines.count():
+		if out.size() == n:
+			break
+		if not mines.is_alive(i) or Factions.is_hostile(mines.faction_of(i), side) != hostile:
+			continue
+		var lone: bool = true
+		for j: int in mines.count():
+			if j != i and mines.is_alive(j) and mines.position_of(j).distance_to(mines.position_of(i)) < clear_m:
+				lone = false
+				break
+		for c: Combatant in main.ships.alive():
+			if lone and c.ship.global_position.distance_to(mines.position_of(i)) < clear_m:
+				lone = false
+		if lone:
+			out.append(i)
+	return out
+
+
+# The player held still at `at` for `ticks` physics ticks.
+func _hold_player_at(at: Vector3, ticks: int) -> void:
+	for t: int in ticks:
+		main.ship.global_position = at
+		main.ship.linear_velocity = Vector3.ZERO
+		main.ship.angular_velocity = Vector3.ZERO
+		await _ticks(1)
 
 
 # M7-T59 fix: after the run a fighter killed by a hit (near) or by the console (in the tier) explodes, leaves play and its row,

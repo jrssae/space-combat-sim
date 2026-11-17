@@ -84,8 +84,8 @@ func _edge_scene() -> Dictionary:
 
 
 func test_hulls_on_the_edge_of_a_trigger_set_off_the_recorded_mines() -> void:
-	var recorded: Variant = ParityFixture.stored(FIXTURE, "edge_of_a_trigger")  # the GDScript stand-ins' (M4-T37)
 	var entries: Array = _edge_run()
+	var recorded: Variant = ParityFixture.rerecorded(FIXTURE, "edge_of_a_trigger", _tick_digests(entries))  # re-recorded at M7-T64
 	assert_eq(_tick_digests(entries), recorded, "every tick: the mines alive, checked and hurting the hulls the GDScript stand-ins did (recorded)")
 	var gone: int = 0
 	for b: int in (entries[5] as Array)[0]:
@@ -125,11 +125,11 @@ static func _tick_digests(entries: Array) -> Array:
 
 
 func test_a_seeded_belt_goes_off_and_is_laid_again_on_the_recorded_ticks() -> void:
-	var recorded: Variant = ParityFixture.stored(FIXTURE, "belt_seed_23")  # the GDScript stand-ins' (M4-T37)
 	var native: WeaponRowsScene = WeaponRowsScene.build(self, 23)
 	native.run(840)
 	assert_eq(native.director.weapons_path(), &"native")
 	var got: Array = _belt_digests(native.log)
+	var recorded: Variant = ParityFixture.rerecorded(FIXTURE, "belt_seed_23", got)  # re-recorded at M7-T64
 	assert_not_null(recorded, "the GDScript stand-ins' belt was recorded")
 	if recorded == null:
 		return
@@ -194,7 +194,6 @@ func _free_world(scene: Dictionary) -> void:
 
 
 func test_a_carriers_reach_straddles_the_grids_slabs() -> void:
-	var logs: Array = []
 	# one run on the native rows (M4-T37: the GDScript stand-ins it was paired with are gone)
 	var scene: Dictionary = _world()
 	var director: StandinDirector = scene["director"]
@@ -216,19 +215,24 @@ func test_a_carriers_reach_straddles_the_grids_slabs() -> void:
 	var mines: MineStandin = director.add_mines(rows, world.to_universe(Vector3.ZERO))
 	scene["core"] = SimCore.attach(world)
 	_run(scene, 3)
-	var alive := PackedByteArray()
-	var inside: int = 0
-	for i: int in mines.count():
-		alive.append(1 if mines.is_alive(i) else 0)
-		var d_sq: float = carrier.global_position.distance_squared_to(mines.position_of(i))
-		inside += 1 if d_sq <= reach * reach else 0
-	assert_eq(director.weapons_path(), &"native")
-	logs.append([alive, inside])
-	_free_world(scene)
+	var inside_left: int = 0
+	var outside_gone: int = 0
 	var gone: int = 0
-	for b: int in logs[0][0]:
-		gone += 1 - b
-	assert_eq(gone, int(logs[0][1]), "every mine whose trigger the carrier's sphere reaches went off, and no other")
+	for i: int in mines.count():
+		var d_sq: float = carrier.global_position.distance_squared_to(mines.position_of(i))
+		var alive: bool = mines.is_alive(i)
+		gone += 0 if alive else 1
+		if d_sq <= reach * reach:
+			inside_left += 1 if alive else 0
+		else:
+			outside_gone += 0 if alive else 1
+	assert_eq(director.weapons_path(), &"native")
+	var by_blast: int = mines.by_blast
+	var by_touch: int = mines.by_touch
+	_free_world(scene)
+	assert_eq(inside_left, 0, "every mine whose trigger the carrier's sphere reaches went off")
+	assert_lte(outside_gone, by_blast, "any other only by a neighbour's blast (M7-T64)")
+	assert_eq(by_touch, 0, "none touched: the carrier's hull lies far inside its sphere")
 	assert_between(gone, 10, 38, "some on each side of the edge")
 
 

@@ -8,8 +8,9 @@ extends RefCounted
 ## natively, the solid rows with them, and `moves` counts it, so nothing kept by `version` is built again. Ids must be unique
 ## and not instance ids: a rock uses its body's RID id, a mine one from `new_id`.
 ##
-## Mines are obstacles, not hulls: bolts and rams pass them (the mine's own trigger is what sets it off), and only their own
-## side knows where they are (Q27, `ContactScan.statics_for`).
+## Mines are obstacles, not solid rows: rams pass them and their row is as big as their trigger, and only their own side knows
+## where they are (Q27, `ContactScan.statics_for`). What sets one off is its own step (a hostile in the trigger, a touch) or a
+## shot at its 3 m body, which the hit resolver keeps beside the rocks (M7-T64).
 
 ## Rocks do not move, so a ram is decided by the ship's own change of velocity.
 const SOLID_MASS_KG: float = 1.0e15

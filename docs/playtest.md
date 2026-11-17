@@ -562,6 +562,13 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
       measured window only; once the run has ended (the `[bench]` line) they are mortal (M7-T59), so shoot one down (or
       `set targeting.selected "CRUISER 1"; kill`); say whether a capital simply vanishing after its blast is acceptable until M12's
       break-up.
+- [ ] **M7-T64 Mines go off.** After a `battle` run's `[bench]` line (`bench battle 300 30`), `state mines` names the nearest
+      mine in play (`nearest_m`, its side, whether it is hostile to you; the belt nearest the start is usually your own side's).
+      Fly to it (a small dark red sphere, 3 m; it is not in the target list) and shoot it: it goes off whoever's it is
+      (`by_shot`). Fly into another (your hull touching it): it goes off, yours or the enemy's (`by_touch`; `god on` first, a
+      blast takes 200 of your 300 hull). Hover 30 m from one of your own side's without touching it: it stays; an enemy one goes
+      off on you within 50 m as before (`by_trigger`). A blast sets off the mines it reaches (`by_blast`). Say whether the mines
+      are easy enough to see and hit.
 - [ ] **M4-T23 A capital promoted near a rock.** A ship coming back from the tier inside a rock or a mine is moved out by the
       shortest way (a capital by its hull box): watch a carrier promoted at 10 km next to a rock field for a visible jump.
 - [ ] **M4-T23 The radar with the tier.** At `battle 1000` the radar holds about a thousand contacts again (the tier's ships

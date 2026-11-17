@@ -2509,10 +2509,22 @@ src/combat/hit_resolver.gd             + a beam is retired after the resolve tha
   on a 90 degree arc 1.5 km out toward its own direction (between its fighters' start and its capitals), 150 m deep and high either
   way, none inside a trigger of a starting hull. Each tick a third of the mines (by index) ask the grid for a hull hostile to
   their layer whose sphere comes inside the trigger; one that finds one goes off, applies a `HitInfo` with cause `mine` to every
-  hull whose sphere lies within the blast (friend or foe) and is removed. It is laid again in its place after 10 s, so the belts
-  hold the mix over a run. The hulls are the director's per-tick list of what flies (the pool's fighters, the capitals, the
-  player). Mines are not in today's contact scan: they have no `Targetable`, and T09's body registry takes them as rows of kind
-  `Targetable.Kind.MINE` (`position_of`, `faction_of`, `kind`, `TRIGGER_RADIUS_M`, and the `laid` and `detonated` signals).
+  hull whose sphere lies within the blast (friend or foe) and is removed. During a bench run it is laid again in its place
+  after 10 s, so the belts hold the mix over the run (not after it, M7-T59). The hulls are the director's per-tick list of what
+  flies (the pool's fighters, the capitals, the player). Mines are not in today's contact scan: they have no `Targetable`, and
+  T09's body registry takes them as rows of kind `Targetable.Kind.MINE` (`position_of`, `faction_of`, `kind`,
+  `TRIGGER_RADIUS_M`, and the `laid` and `detonated` signals).
+- **Mines go off whoever's they are (M7-T64).** Besides the hostile trigger, a mine goes off when anything touches or hits its
+  3 m body (`DRAWN_RADIUS_M`), whatever its side and the other's: a hull touching it (checked every tick for every mine, along
+  the hull's last move, so a fast ship cannot pass through between checks; a fighter-sized hull by its sphere, a bigger one by
+  its hit volumes, since a capital's sphere is far from its box), a bolt, beam or missile reaching it (the hit resolver keeps
+  every belt's mines beside the rocks and calls `MineStandin.strike`; it goes off at the mines' next step), or another mine's
+  blast reaching it (the same tick, so a dense belt can go off in a chain). Only the 50 m trigger still asks whether the hull
+  is hostile to the layer. Mines stay out of the target list: the player aims at the drawn sphere. Making them targets would
+  need the targeting system, the HUD, the radar and the target menu to take a row with no node, and would show a side the
+  enemy mines Q27 hides. Provider `mines`: `laid`, `in_play`, `set_off`, `by_trigger`, `by_touch`, `by_shot`, `by_blast`,
+  `relays` and the nearest mine in play to the player (`nearest_m`, `nearest_side`, `nearest_hostile`); `combat` gains
+  `mines_struck`.
 - **Counters**: `beams` (emitters), `missiles` (in flight) and `mines` (in play) per tick, beside T07's; a run's summary has
   `weapons` (launches, missiles shot down, beam shots, mines set off over the window) and the director's cost by part
   (`parts_us`: gather, engines and guns, interceptors, beams, missiles, mines, launches) with the missiles' steering, which runs
@@ -2524,7 +2536,12 @@ src/combat/hit_resolver.gd             + a beam is retired after the resolve tha
   anything outside 1.5 km, a missile hits a crossing fighter through the resolver, the count in flight holds, a mine goes off on
   a hostile, never a friend, hurts every hull in its blast and is gone, checks every third tick and is laid again, a rebase moves
   the mines), `test_bench_layout` (the belts hold the mix per side, on their arcs, clear of every ship, seeded) and `test_bench`
-  (a battle run counts beams, missiles and mines).
+  (a battle run counts beams, missiles and mines). M7-T64: `test_standins` (a bolt or missile of any side sets off a mine of
+  any side and one clear of the body flies on, a touch of any side sets one off on any tick and a fast pass-through too, a
+  friend inside the trigger does not, a capital touches with its hull and not its sphere, a blast carries on through the mines
+  it reaches), `test_bench` (after a run the player's side shoots and flies into a mine of its own and an enemy's, and an
+  untouched own mine 30 m off stays), the Rust tests in `native/src/weapon_kernels/tests.rs` (trigger, touch, swept touch,
+  blast reach) and `test_mine_kernel` (a carrier's reach: the mines it reaches all go off, any other only by a blast).
 
 ### 17.12 Jolt collision layers and far-ship interpolation (T14)
 
@@ -2722,7 +2739,8 @@ native/src/pilot_kernels.rs              ScsPilotKernels: binds the core's rows 
 native/src/weapon_kernels.rs      the kernels: a gun's pick, aim and gate, an interceptor's pick, a capital's strike target,
                                   a missile's guidance, a mine's trigger and blast; plain data in and out, no engine type
 native/src/weapon_rows.rs         ScsWeaponRows: the turrets, strike state and mines as rows with no node, stepped over the
-                                  core's rows once a tick (`step`, `mine_step`, `blast`) and per missile (`steer_missile`)
+                                  core's rows once a tick (`step`, `mine_step`, `blast`, `mines_in_blast`) and per missile
+                                  (`steer_missile`)
 src/perf/native_weapons.gd        NativeWeapons: binds the stand-ins to the rows, keeps the hostility table, hands state back
 src/perf/standins/                the director, turret, missile and mine stand-ins: the native path beside the reference
 ```
@@ -2738,7 +2756,9 @@ src/perf/standins/                the director, turret, missile and mine stand-i
   start and velocity), which projectiles the interceptors shoot down, which beams fire at what, and which capitals launch
   at whom. The director then does it: it spawns the bolts, beams and missiles with the stand-ins' own code, spends the
   projectiles, and steps the capitals' engines and the carriers' launches as before. `MineStandin.step_native` asks
-  `mine_step` for the mines set off and `blast` for each one's hulls, and still lays, retires and hurts. A missile's
+  `mine_step` for the mines set off (triggered, or touched by a fighter-sized hull; a bigger hull's candidates come back for
+  its hit volumes, M7-T64), `blast` for each one's hulls and `mines_in_blast` for the mines its blast sets off, and still
+  lays, retires and hurts. A missile's
   steering hook asks `steer_missile` for its velocity from its target's row. Every engine write stays in GDScript.
 - **When the rows step.** Every tick the core synced: a body touched since the sync (hidden, shown or destroyed, so its row
   is stale) is read again first (`resync_touched_now`); with no core nothing steps. A missile
@@ -2763,7 +2783,8 @@ src/perf/standins/                the director, turret, missile and mine stand-i
   distance; a target that leaves the tree (not hidden: removed) between the sync and the missile's step keeps its row for
   that tick.
 - **Thread-ready (for T18).** Each kernel is a pure function: `retarget`, `aim_gun`, `gate`, `intercept_candidates`,
-  `strike_target`, `steer`, `mine_hits` and `blast` read the frozen rows (or a turret's, mine's or missile's own inputs) and
+  `strike_target`, `steer`, `mine_hits`, `mine_touches`, `mines_in_blast` and `blast` read the frozen rows (or a turret's,
+  mine's or missile's own inputs) and
   return a value or fill the output their caller passes. No statics, no interior mutability, no caches written during a
   pass. Two steps are sequential by nature and stay in the shell: the interceptors' resolve (each takes the best candidate
   not yet shot down this tick, `intercept_pick` over a per-tick spent mask) and the launches' turn round the capitals; T18
@@ -3531,8 +3552,8 @@ src/targeting/tier_targets.gd    TierTargets: tier ships as targets, by marker i
   capital stand-in's death (`DestructionDirector.watch_capital`) is drawn the same way, takes the capital out of play and out
   of the tier, and emits `capital_destroyed`; the stand-ins' counts leave a dead capital and its weapons out. Every death's
   killing hit carries its blast's energy, radius and point (M12).
-- **Mines on the rows.** A mine's trigger and blast read the sweep's rows (the near hulls, then the tier rows), so a tier ship
-  sets a mine off and is hurt by it, in the core's order; `StandinDirector`'s GDScript walk of the hulls is gone (Q68).
+- **Mines on the rows.** A mine's trigger, touch (M7-T64) and blast read the sweep's rows (the near hulls, then the tier rows), so
+  a tier ship sets a mine off and is hurt by it, in the core's order; `StandinDirector`'s GDScript walk of the hulls is gone (Q68).
 - **The default.** `tier_radius_m` is 10 000 again. The far-ship tests read where a tier ship flies and whether it is in play
   (`TierDirector.flying_position`, `flying_velocity`, the pool's in-play list), not its parked node.
 - **Console.** Provider `tier` gains `proxy_dots`, `proxy_hulls`, `proxy_us`, `flashes`, `cleared`; `kill target` destroys any
@@ -3582,7 +3603,8 @@ native/src/contact_field.rs         + set_friendly_row; statics(..., faction, ..
 - **Mines.** `MineStandin` registers every mine in play (kind `MINE`, its layer's faction, the trigger's 50 m as its radius, the
   director's world) when the belts are laid; a mine that goes off is unregistered at once, and laid again 10 s later it is
   registered again with the same id at its place. Leaving the tree (`remove_mines`, the director's `clear`) unregisters the
-  rest. Mines are not solid: bolts and rams pass them, as before; the mine's own trigger is what sets it off.
+  rest. Mines are not solid rows: rams pass them, and the row (as big as the trigger) is not what a bolt hits. A touch, a shot
+  at the 3 m body (the hit resolver keeps the belts' mines in its rock grid, after the rocks, M7-T64) or a blast sets one off.
 - **The scan.** Both paths append the static rows whole after the node rows (`append_array` of `StaticRows`' columns and of
   constant columns cached per `version`), so the GDScript reference does not walk them either; the registry gets
   `set_statics` only when `version` changes. Rows of kind `STATIC` and `MINE` stay out of every contact list (T09); turrets'

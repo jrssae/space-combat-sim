@@ -61,3 +61,8 @@ rock, one to three collision spheres each, in place of one sphere of the rock's 
 obstacles. HEAD before the change still gave 780, 380, 144, 145, 25, 1 against the stored 779, 380, 144, 145, 25, 1; with the
 generated rocks the battle gives 704, 321, 132, 146, 25, 1 (capitals' hits 15 % down, outside the 10 % gate), the same on a
 second run. No other recording holds rocks: the other battles are fighters only (`SeededBattle`) or furballs.
+
+
+**M7-T64 re-recorded `mine_kernel` (`edge_of_a_trigger`, `belt_seed_23`)**: a blast sets off neighbouring mines and a touch sets one
+off whoever's it is; trigger arithmetic unchanged. (`edge_of_a_trigger`: two mines go off from another's blast at tick 1;
+`belt_seed_23`: blasts carry on from tick 0 and a fighter touches a mine at tick 801.)
