@@ -329,6 +329,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T67 | C | A `goto <nav point>` console command: puts the player near any nav point (Babylon 5 and its bays, the jumpgate, the scenario's NAV points, a body), clear of it and at rest relative to it, the frame on that place's rail; `goto` alone lists them (maintainer, 2026-11-17) | T66 | Sonnet | The frame and rail change T66 settles; a safe stand-off per kind of point | in progress |
 | T68 | C | `frame orbit` and `frame drop` take where around the body to put the player (`day`, `night`, `dawn`, `dusk` from the star, or an angle), default the day side; an orbit at or inside the atmosphere (Epsilon III's top is 100 km) is refused with the floor named (maintainer, 2026-11-17: always the dark side; `frame orbit 100` explodes the ship) | T66 | Opus | The orbit's phase against the star's direction at the scaled epoch | in progress |
 | T69 | C | Fix: Babylon 5's blinking navigation lights show at any distance, even from an orbit of the star; they must fade by the inverse square like running lights (maintainer, 2026-11-17) | T18 | Sonnet | The lights' far draw (a marker or emissive with no distance falloff) | in progress |
+| T70 | C | Fix: `traffic dock` (without `near`) answers "a civilian is on its way into the main docking bay" but starts no ship: `traffic status` stays at 0 in play, `last: none` (maintainer, 2026-11-17; `dock near` works) | T56 | Sonnet | T56's gate-station run rewrite of the far start | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress |
 
 ### M7-T01 Station references and measurements
@@ -3427,3 +3428,14 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   peak (`dim * gain * colour`) is under `cull_peak` 0.01 (`RunningLightDimming.CULL_PEAK`) collapses and draws nothing. A 4.5 m beacon at a
   75 degree, 1080p view: full up to 1.6 km, 1/d^2 beyond (0.1 peak at 10 km), culled past about 32 km (so gone at 100 km, 1 000 km, 27 000 km
   and from the star). Test: `test_running_light_dimming.gd`. Captures: `references/screenshots/M7-T69 station lights/`.
+
+### M7-T70 Fix: `traffic dock` starts no ship
+
+- **Why (maintainer, 2026-11-17):** "the command traffic dock doesn't seem to have an effect in the console". Reproduced headless on
+  925e9fcb: `play free_flight; traffic dock; wait 60; traffic status` prints "a civilian is on its way into the main docking bay", then
+  `0 in play (0 docking ...) ... last: none`; `traffic dock near` starts a Skylark on the lane (`1 docking`, `last: dock SKYLARK 1`).
+- **What:** find why the far start (at the jumpgate, or 2.5 km farther out, M7-T25) no longer puts a ship in play since T56's run rewrite
+  (pool, queue, the run's spacing rule, an encounter cap, a start deferred and dropped), fix it so `traffic dock` starts a ship at once
+  that `traffic status` counts and that docks; if the start must wait (the bay queue, the run's spacing), say so in the reply and in
+  `status`.
+- **Done when:** a test (`traffic dock` puts one docking ship in play within a tick or reports why it waits, and it docks); committed.
