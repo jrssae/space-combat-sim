@@ -327,6 +327,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T65 | C | The bench battles' mines laid as small chained groups (4 to 8, each side's) in the asteroid field where the fighting is, groups far enough apart that one blast never sets off the next (maintainer, 2026-11-16) | T64 | Opus | The bench layout's belts, the mix's mine count, the benchmark's figures | in progress |
 | T66 | C | Fix: `frame orbit` brings the planet, the station and the jumpgate to the player instead of putting the player in orbit with everything else where it is (maintainer, 2026-11-17) | - | Opus | The frame's anchor moves the scenario's origin; world objects placed relative to it | in progress |
 | T67 | C | A `goto <nav point>` console command: puts the player near any nav point (Babylon 5 and its bays, the jumpgate, the scenario's NAV points, a body), clear of it and at rest relative to it, the frame on that place's rail; `goto` alone lists them (maintainer, 2026-11-17) | T66 | Sonnet | The frame and rail change T66 settles; a safe stand-off per kind of point | in progress |
+| T68 | C | `frame orbit` and `frame drop` take where around the body to put the player (`day`, `night`, `dawn`, `dusk` from the star, or an angle), default the day side; an orbit at or inside the atmosphere (Epsilon III's top is 100 km) is refused with the floor named (maintainer, 2026-11-17: always the dark side; `frame orbit 100` explodes the ship) | T66 | Opus | The orbit's phase against the star's direction at the scaled epoch | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress |
 
 ### M7-T01 Station references and measurements
@@ -3393,3 +3394,17 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   The player rests against the place and faces it; the player's wing is placed in its formation beside the player. Refused in a
   mission; during a launch the launch is skipped and the move waits for the player to be away, as `station goto` does.
   Tests: `test_nav_goto.gd` (10: a test per kind, the list, prefix matching, the body and back, refused in a mission).
+
+### M7-T68 Where around the body `frame orbit` puts you; no orbit inside the atmosphere
+
+- **Why (maintainer, 2026-11-17, testing T66):** "the player ship explodes when frame orbit 100 is set. also, frame orbit is putting me on
+  the dark side of the planet, regardless of epoch value. expected is that the player moves around the planet with some kind of console
+  command. maybe a value after frame orbit <altitude> <position>?"
+- **Cause of the explosion:** Epsilon III's atmosphere top is 100 km (`data/star_systems.json`), so a 100 km orbit is inside it and the
+  planet-impact rule destroys the ship (the checklist's m6-077 recipe wrongly said 100 km; fixed there).
+- **What:** `frame orbit <km> [body] [day|night|dawn|dusk|<deg>]` and `frame drop <km> [body] [position]`: the position is taken against
+  the star's direction at the current scaled epoch (`day` the sub-solar side, `night` the far side, `dawn`/`dusk` the terminator either
+  way, or an angle in degrees round the orbit from the sub-solar point); with no position the player goes to the day side. An altitude at
+  or below the body's atmosphere top is refused with a message naming the floor. `goto <body>` (T67) uses the day side. info.md row.
+- **Done when:** tests (each keyword puts the player on the right side of the planet against the star, at any epoch; an angle moves the
+  player round; an orbit inside the atmosphere is refused); the maintainer checks it (H); committed.
