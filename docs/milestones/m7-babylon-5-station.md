@@ -332,9 +332,9 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T70 | C | Fix: `traffic dock` (without `near`) answers "a civilian is on its way into the main docking bay" but starts no ship: `traffic status` stays at 0 in play, `last: none` (maintainer, 2026-11-17; `dock near` works) | T56 | Sonnet | T56's gate-station run rewrite of the far start | done |
 | T71 | C | Fix: after `frame drop` (or `frame orbit`), `station goto` and the other player moves keep the planet's frame: the player goes on falling toward the planet near Babylon 5 and the speed readings point the wrong way; and the planet is not drawn after `frame drop 500` (maintainer, 2026-11-17) | T66, T68 | Opus | Every teleport of the player must put the frame back on the place's rail, as T67's `goto` does | done |
 | T72 | C | Fix: two suns, about 2.6 degrees apart on one streak, in `far view station` at 10 000 km and beyond (maintainer, 2026-11-17; seen in T69's captures) | T44 | Opus | The sky's sun and the scaled layer's star disagree when the camera is far from the World's origin (T44's fix near the star) | done |
-| T73 | C | Fix: in orbit (`frame orbit 400`) the HUD's REF line runs over the directional indicator instead of wrapping (maintainer, 2026-11-17, M6 check m6-075) | - | Sonnet | The REF and ALT lines' width against the drift indicator, every window size, chase and cockpit | in progress |
-| T74 | C | Fix: a launched Alpha wing forms up all on one side of the V; the V must balance its two arms, an odd ship taking a centre slot behind the leader so the wing makes a triangle (maintainer, 2026-11-17) | T58 | Opus | The formation's slot offsets for T58's eleven-slot wing | in progress |
-| T75 | C | Fix: `transit carrier point fighter follow` refuses in free flight with encounters off (`no two free raiders to bring in`): the raider pool is empty there; the debug tool grows the pool as the bench does (maintainer, 2026-11-17, M6 check m6-094) | - | Sonnet | `Main.ensure_pool` (M7-T59 made it register deaths) | in progress |
+| T73 | C | Fix: in orbit (`frame orbit 400`) the HUD's REF line runs over the directional indicator instead of wrapping (maintainer, 2026-11-17, M6 check m6-075) | - | Sonnet | The REF and ALT lines' width against the drift indicator, every window size, chase and cockpit | done |
+| T74 | C | Fix: a launched Alpha wing forms up all on one side of the V; the V must balance its two arms, an odd ship taking a centre slot behind the leader so the wing makes a triangle (maintainer, 2026-11-17) | T58 | Opus | The formation's slot offsets for T58's eleven-slot wing | done |
+| T75 | C | Fix: `transit carrier point fighter follow` refuses in free flight with encounters off (`no two free raiders to bring in`): the raider pool is empty there; the debug tool grows the pool as the bench does (maintainer, 2026-11-17, M6 check m6-094) | - | Sonnet | `Main.ensure_pool` (M7-T59 made it register deaths) | done |
 | T76 | C | Wingmen avoid each other and big hulls while forming up: no rams between allies re-forming after the leader reverses at high speed, and no wingman follows the leader into the station (maintainer, 2026-11-17; roadmap M7-1 brought forward from M8) | T74 | Opus | The formation and rejoin flight's stopping-path check against friendly ships everywhere, and against big hulls on the way to a slot (native, 1 and 6 threads identical) | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress |
 
@@ -3585,6 +3585,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   16 layout px apart. The chase readout moved up 52 px and the cockpit's up 24 px (its radar 24 px) to leave room for the extra lines.
   Test: `test_hud_readout_layout.gd` (four window sizes, both views, the longest names). Captures:
   `references/screenshots/M7-T73 HUD ref line/` (before_* and after_*). The maintainer checks it (H).
+- **Accepted (maintainer, 2026-11-17):** m6-075, the REF line wraps clear of the drift sphere; pushed with CI green (751a27f7).
 
 ### M7-T74 Fix: Alpha forms up on one side of the V
 
@@ -3618,6 +3619,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     over the formed-up wing).
   - **For the maintainer:** a three-wingman wing stays a finger-four (Q4, #4 right of #3) and a lone wingman stays on the left,
     rather than centring the odd one; say if those should centre too.
+- **Accepted (maintainer, 2026-11-17):** m7-044, Alpha's V balanced (small wings keep the finger-four, maintainer's choice); pushed with CI green (751a27f7).
 
 ### M7-T75 Fix: `transit carrier` needs raiders free flight has none of
 
@@ -3629,6 +3631,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   needs pooled ships does the same.
 - **Done when:** a test (`play free_flight` with encounters off, `transit carrier point fighter follow`, then `vortex collapse`:
   `collapses = 1`, `collapse_kills = 1`, `last_collapse = opener_destroyed`); committed.
+- **Accepted (maintainer, 2026-11-17):** m6-094, transit carrier in free flight; pushed with CI green (751a27f7).
 
 ### M7-T76 Wingmen avoid each other and the station while forming up
 
