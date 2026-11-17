@@ -352,7 +352,8 @@ func clear() -> void:
 
 ## The run is over and its battle flies on (M7-T50): every capital and mine of a side in `game_factions` (bench faction ->
 ## game faction) joins its game faction, as the run's fighters do, and the carriers stop launching (the run's churn).
-## Every capital turns mortal: the bench's invulnerability only held the count steady for the measured window (M7-T59).
+## Every capital turns mortal and a mine that goes off stays gone: the bench's invulnerability and re-laying only held the
+## count steady for the measured window (M7-T59).
 func keep_after_run(game_factions: Dictionary) -> void:
 	launcher = Callable()
 	for cap: CapitalStandin in _capitals:
@@ -362,6 +363,7 @@ func keep_after_run(game_factions: Dictionary) -> void:
 		if game_factions.has(cap.faction):
 			cap.set_faction(game_factions[cap.faction])
 	if _mines != null and is_instance_valid(_mines):
+		_mines.relays = false
 		_mines.change_factions(game_factions)
 	_native_dirty = true  # the native rows bound the old sides
 

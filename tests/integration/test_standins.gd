@@ -488,6 +488,17 @@ func test_a_mine_checks_every_third_tick_and_is_laid_again_after_a_while() -> vo
 		_step()
 	assert_true(mines.is_alive(0), "laid again in its place, so the belt holds the mix")
 	assert_eq(mines.alive_count(), 30)
+	# M7-T59 fix: once the bench run is over a spent mine stays gone.
+	mines.relays = false
+	var second: TargetDrone = _drone(Vector3(0.0, 0.0, -1010.0))
+	for i: int in MineStandin.TRIGGER_TICKS:
+		_step()
+	assert_false(mines.is_alive(0))
+	second.global_position = Vector3(0.0, 0.0, 5000.0)
+	for i: int in roundi(MineStandin.RELAY_S / DT) + MineStandin.TRIGGER_TICKS:
+		_step()
+	assert_false(mines.is_alive(0), "not laid again after the run")
+	assert_eq(mines.alive_count(), 29)
 
 
 func test_a_rebase_shifts_the_mines() -> void:

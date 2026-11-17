@@ -298,20 +298,84 @@ func test_a_short_battle_writes_every_entity_count_and_puts_the_factions_back() 
 	assert_eq(standins.weapons_path(), &"native", "the weapons step on the native rows over the game's sides")
 	# M7-T59: the fighters are mortal too, near or far, so far deaths can be watched.
 	var fighters: Array[Combatant] = main.ships.alive()
-	assert_gt(fighters.size(), 0, "fighters are still flying")
+	assert_gt(fighters.size(), 1, "fighters are still flying")
 	for c: Combatant in fighters:
 		assert_false(c.damageable.invulnerable, "%s is mortal once the run is over" % c.display_name)
-	var victim: Combatant = fighters[0]
-	var shot := HitInfo.new(victim.ship.get_instance_id(), 0, Factions.RAIDERS, victim.damageable.hull.max_hp * 10.0,
-			victim.ship.global_position, Vector3.ZERO, 0.0, HitInfo.CAUSE_BOLT)
-	victim.damageable.apply_hit(shot)
-	assert_true(victim.damageable.hull.destroyed, "a hit now kills a fighter")
+	assert_false(mines.relays if mines != null else true, "a mine that goes off now stays gone")
+	await _assert_killed_fighters_leave_play(fighters)
+	await _assert_killed_capitals_leave_play(standins)
 	# The next run starts clean: nothing of this one flies in it.
 	await _run("bench furball 10 1 warmup=0 seed=1 label=after_battle_test")
 	assert_eq(standins.capitals().size(), 0, "the next run takes the capitals away")
 	assert_eq(standins.asteroid_count(), 0, "and the rocks")
 	assert_null(standins.mines(), "and the mines")
-	assert_false(victim.damageable.hull.destroyed, "the new run starts its fighters whole")
+	for c: Combatant in main.ships.alive():
+		assert_false(c.damageable.hull.destroyed, "the new run starts %s whole" % c.display_name)
+
+
+# M7-T59 fix: after the run a fighter killed by a hit (near) or by the console (in the tier) explodes, leaves play and its row,
+# and nothing takes its place.
+func _assert_killed_fighters_leave_play(fighters: Array[Combatant]) -> void:
+	var tier: TierDirector = TierDirector.current()
+	var far: Combatant = null
+	var near: Combatant = null
+	for c: Combatant in fighters:
+		if c.ship.is_tier_parked():
+			far = c if far == null else far
+		elif near == null:
+			near = c
+	assert_not_null(far, "a fighter flies in the tier")
+	assert_not_null(near, "and one near")
+	if far == null or near == null:
+		return
+	var destroyed: Array[Combatant] = []
+	main.director.ship_destroyed.connect(func(c: Combatant, _info: HitInfo) -> void: destroyed.append(c))
+	var alive_before: int = main.ships.alive().size()
+	var tier_before: int = tier.tier_fighters()
+	near.damageable.apply_hit(HitInfo.new(near.ship.get_instance_id(), 0, Factions.RAIDERS, near.damageable.hull.max_hp * 10.0,
+			near.ship.global_position, Vector3.ZERO, 0.0, HitInfo.CAUSE_BOLT))
+	assert_true(_exec('set targeting.selected "%s"' % far.display_name).ok, "the far fighter can be selected")
+	var killed: ConsoleResult = _exec("kill")
+	assert_true(killed.ok, "kill: %s" % killed.text())
+	await _ticks(2)
+	for c: Combatant in [near, far]:
+		assert_true(destroyed.has(c), "%s blew up" % c.display_name)
+		assert_false(main.ships.alive().has(c), "%s left play" % c.display_name)
+		assert_false(c.targetable.is_active(), "%s cannot be targeted" % c.display_name)
+		assert_false(c.ship.is_tier_parked(), "%s has no tier row" % c.display_name)
+	assert_lte(main.ships.alive().size(), alive_before - 2, "the fighter count dropped by the two")
+	assert_lte(tier.tier_fighters(), tier_before - 1, "the tier lost the far one's row")
+	var alive_after: int = main.ships.alive().size()
+	await _ticks(180)
+	assert_false(main.ships.alive().has(near) or main.ships.alive().has(far), "they stay dead")
+	assert_lte(main.ships.alive().size(), alive_after, "and no fighter came to replace them")
+
+
+# M7-T59 fix: the same for capitals, one shot down and one killed on the console.
+func _assert_killed_capitals_leave_play(standins: StandinDirector) -> void:
+	var living: Array[CapitalStandin] = []
+	for cap: CapitalStandin in standins.capitals():
+		if is_instance_valid(cap) and not cap.damageable.hull.destroyed:
+			living.append(cap)
+	assert_gt(living.size(), 1, "capitals are still flying")
+	if living.size() < 2:
+		return
+	var in_play: int = standins.capitals_in_play()
+	var shot: CapitalStandin = living[0]
+	var named: CapitalStandin = living[1]
+	shot.damageable.apply_hit(HitInfo.new(shot.get_instance_id(), 0, Factions.RAIDERS, shot.damageable.hull.max_hp * 10.0,
+			shot.global_position, Vector3.ZERO, 0.0, HitInfo.CAUSE_BOLT))
+	assert_true(_exec('set targeting.selected "%s"' % named.targetable.display_name).ok, "the capital can be selected")
+	assert_true(_exec("kill").ok)
+	await _ticks(2)
+	for cap: CapitalStandin in [shot, named]:
+		assert_true(cap.damageable.hull.destroyed, "%s is destroyed" % cap.name)
+		assert_false(cap.targetable.is_active(), "%s cannot be targeted" % cap.name)
+		assert_false(cap.is_tier_parked(), "%s has no tier row" % cap.name)
+	assert_lte(standins.capitals_in_play(), in_play - 2, "the capital count dropped by the two")
+	var after: int = standins.capitals_in_play()
+	await _ticks(120)
+	assert_lte(standins.capitals_in_play(), after, "and none came back")
 
 
 func test_a_short_typical_run_writes_its_summary() -> void:

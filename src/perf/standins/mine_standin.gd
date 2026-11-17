@@ -36,6 +36,8 @@ const COLOR: Color = Color(0.7, 0.15, 0.1)
 var kind: Targetable.Kind = Targetable.Kind.MINE
 ## Mines that checked their trigger in the latest step.
 var checked_last_tick: int = 0
+## Whether a mine that went off is laid again; off once a bench run is over, so a spent mine stays gone (M7-T59 fix).
+var relays: bool = true
 ## The frame the mines' rows are in (the one that spawned this node); set before `build`.
 var world: Node = null
 ## The native weapon rows (`ScsWeaponRows`) holding these mines while they answer the triggers and blasts (M4-T20), or
@@ -225,7 +227,7 @@ func _hurt(i: int, at: Vector3, damageable: Damageable, hull_at: Vector3) -> voi
 
 
 func _lay_again(now_s: float) -> void:
-	if _dead.is_empty():
+	if _dead.is_empty() or not relays:
 		return
 	var still := PackedInt32Array()
 	for i: int in _dead:

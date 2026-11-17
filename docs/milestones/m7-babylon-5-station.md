@@ -3175,6 +3175,18 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     its side in its wave within `CAPITAL_NEAR_M`, `_ride_out`) or `VIA_GATE` (`_through_gate`). Tests: `test_battle_arrivals`
     (`test_fighter_groups_ride_a_near_capital...`, `bench battle 1000` plan) and `test_bench` battle arrivals test now asserts for
     a whole run: pool `opened == capitals`, `refused == 0`, `fighters_via_capital + fighters_via_gate == fighters`.
+- **Done (fix round, 2026-11-16, maintainer: "raiders in the battle 300 scenario stayed in game and active even after being killed,
+  both via shooting and kill in the console"):** the earlier test only checked `hull.destroyed`, never that the ship left play.
+  Cause: `free_flight` builds empty fighter pools, so every bench fighter comes from `Main.ensure_pool`, which grew the pool
+  without `DestructionDirector.watch`; their `destroyed` signal reached nobody, so a dead fighter kept flying at 0 % hull (live,
+  HEAD: `RAIDER 3` after `kill`, and `RAIDER 5`/`RAIDER 21` shot down, all still in `raiders.list` at 0 %). Capitals were
+  already watched (`StandinDirector.add_capital`). Fix: `Main.ensure_pool` prepares the type's debris and watches the new
+  ships, as the scenario's own pools are (this also covers the perf station scene's fighters; `ensure_free` now just calls
+  it). Mines cannot be shot or killed (no hull); after the run a mine that goes off is no longer laid again
+  (`MineStandin.relays`, cleared by `keep_after_run`). Tests: `test_bench` battle test (after the run, a near fighter hit and a
+  tier fighter `kill`ed by name both blow up, leave the ship list, the targets and the tier, the count drops by both and none
+  comes back in 3 s; the same for a capital shot and one `kill`ed by name); red on HEAD (9 fighter assertions);
+  `test_standins` (a spent mine stays gone once `relays` is off).
 
 ### M7-T60 "Defense" everywhere; the `overlay` command
 

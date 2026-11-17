@@ -447,30 +447,28 @@ func _prepare_other_pools(scenario: Dictionary) -> void:
 		debris.prepare(type)
 
 
-## Grows the pool of `type` to at least `count` ships, heard like the scenario's own (the benchmark's load, M4-T01). Returns
-## how many were built.
+## Grows the pool of `type` to at least `count` ships, heard, broken up and watched like the scenario's own (the benchmark's
+## load, M4-T01): a ship built here dies and leaves play like any other (M7-T59 fix). Returns how many were built.
 func ensure_pool(type: StringName, count: int) -> int:
 	var missing: int = count - ships.pool_size(type)
 	if missing <= 0:
 		return 0
 	var known: int = ships.pool_size()
 	var built: int = ships.prepare(type, missing)
+	debris.prepare(type)
 	for pooled: Combatant in ships.all_ships().slice(known):
 		audio.watch_ship(pooled)
+		director.watch(pooled)
 	return built
 
 
-## Grows the pool of `type` until `count` of it are free, with its break-up chunks and its ships watched like the scenario's
-## own. Returns how many were built (0 when enough are free: a station scenario sizes its pools at load, so a raid never builds).
+## Grows the pool of `type` until `count` of it are free. Returns how many were built (0 when enough are free: a station
+## scenario sizes its pools at load, so a raid never builds).
 func ensure_free(type: StringName, count: int) -> int:
 	var short: int = count - ships.free_count(type)
 	if short <= 0:
 		return 0
-	var built: int = ensure_pool(type, ships.pool_size(type) + short)
-	debris.prepare(type)
-	for pooled: Combatant in ships.all_ships():
-		director.watch(pooled)
-	return built
+	return ensure_pool(type, ships.pool_size(type) + short)
 
 
 # The World anchors where the scenario says (M6-T09): on a place's rail with the scenario's origin beside it, or on an orbit,
