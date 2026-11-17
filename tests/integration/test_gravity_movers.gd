@@ -163,9 +163,12 @@ func test_the_brake_holds_a_ship_on_a_point_under_the_pull() -> void:
 	Engine.max_physics_steps_per_frame = roundi(SPEED_UP)
 	Engine.physics_ticks_per_second = roundi(60.0 * SPEED_UP)
 	Engine.time_scale = SPEED_UP
+	var pace := JoltPace.new()  # many Jolt steps a frame: let the worker pool keep up
+	add_child_autofree(pace)
 	var t0: float = SimClock.now()
 	while SimClock.now() - t0 < 10.0:
 		await get_tree().physics_frame
+	remove_child(pace)
 	Engine.physics_ticks_per_second = _rate_backup
 	Engine.time_scale = _scale_backup
 	assert_eq(held[0].flight_path(), &"native")

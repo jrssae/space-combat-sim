@@ -19,6 +19,7 @@ var _rate_backup: int
 var _scale_backup: float
 var _steps_backup: int
 var _clock_backup: float
+var _pace: JoltPace
 
 
 func before_each() -> void:
@@ -52,6 +53,7 @@ func after_each() -> void:
 	Engine.physics_ticks_per_second = _rate_backup
 	Engine.time_scale = _scale_backup
 	Engine.max_physics_steps_per_frame = _steps_backup
+	_stop_pace()
 	SimClock.reset(_clock_backup)  # the fixture's tests after this one read the bodies at the clock they found
 
 
@@ -59,11 +61,21 @@ func _fast() -> void:
 	Engine.max_physics_steps_per_frame = STEPS_PER_FRAME
 	Engine.physics_ticks_per_second = roundi(60.0 * SPEED_UP)
 	Engine.time_scale = SPEED_UP
+	if _pace == null:
+		_pace = JoltPace.new()  # many Jolt steps a frame: let the worker pool keep up
+		add_child(_pace)
 
 
 func _slow() -> void:
 	Engine.physics_ticks_per_second = _rate_backup
 	Engine.time_scale = _scale_backup
+	_stop_pace()
+
+
+func _stop_pace() -> void:
+	if _pace != null:
+		_pace.free()
+		_pace = null
 
 
 # The anchor's point on its orbit, in the local frame.
