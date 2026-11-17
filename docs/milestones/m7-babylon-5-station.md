@@ -327,10 +327,10 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T65 | C | The bench battles' mines laid as small chained groups (4 to 8, each side's) in the asteroid field where the fighting is, groups far enough apart that one blast never sets off the next (maintainer, 2026-11-16) | T64 | Opus | The bench layout's belts, the mix's mine count, the benchmark's figures | done |
 | T66 | C | Fix: `frame orbit` brings the planet, the station and the jumpgate to the player instead of putting the player in orbit with everything else where it is (maintainer, 2026-11-17) | - | Opus | The frame's anchor moves the scenario's origin; world objects placed relative to it | done |
 | T67 | C | A `goto <nav point>` console command: puts the player near any nav point (Babylon 5 and its bays, the jumpgate, the scenario's NAV points, a body), clear of it and at rest relative to it, the frame on that place's rail; `goto` alone lists them (maintainer, 2026-11-17) | T66 | Sonnet | The frame and rail change T66 settles; a safe stand-off per kind of point | done |
-| T68 | C | `frame orbit` and `frame drop` take where around the body to put the player (`day`, `night`, `dawn`, `dusk` from the star, or an angle), default the day side; an orbit at or inside the atmosphere (Epsilon III's top is 100 km) is refused with the floor named (maintainer, 2026-11-17: always the dark side; `frame orbit 100` explodes the ship) | T66 | Opus | The orbit's phase against the star's direction at the scaled epoch | in progress |
+| T68 | C | `frame orbit` and `frame drop` take where around the body to put the player (`day`, `night`, `dawn`, `dusk` from the star, or an angle), default the day side; an orbit at or inside the atmosphere (Epsilon III's top is 100 km) is refused with the floor named (maintainer, 2026-11-17: always the dark side; `frame orbit 100` explodes the ship) | T66 | Opus | The orbit's phase against the star's direction at the scaled epoch | done |
 | T69 | C | Fix: Babylon 5's blinking navigation lights show at any distance, even from an orbit of the star; they must fade by the inverse square like running lights (maintainer, 2026-11-17) | T18 | Sonnet | The lights' far draw (a marker or emissive with no distance falloff) | done |
-| T70 | C | Fix: `traffic dock` (without `near`) answers "a civilian is on its way into the main docking bay" but starts no ship: `traffic status` stays at 0 in play, `last: none` (maintainer, 2026-11-17; `dock near` works) | T56 | Sonnet | T56's gate-station run rewrite of the far start | in progress |
-| T71 | C | Fix: after `frame drop` (or `frame orbit`), `station goto` and the other player moves keep the planet's frame: the player goes on falling toward the planet near Babylon 5 and the speed readings point the wrong way; and the planet is not drawn after `frame drop 500` (maintainer, 2026-11-17) | T66, T68 | Opus | Every teleport of the player must put the frame back on the place's rail, as T67's `goto` does | in progress |
+| T70 | C | Fix: `traffic dock` (without `near`) answers "a civilian is on its way into the main docking bay" but starts no ship: `traffic status` stays at 0 in play, `last: none` (maintainer, 2026-11-17; `dock near` works) | T56 | Sonnet | T56's gate-station run rewrite of the far start | done |
+| T71 | C | Fix: after `frame drop` (or `frame orbit`), `station goto` and the other player moves keep the planet's frame: the player goes on falling toward the planet near Babylon 5 and the speed readings point the wrong way; and the planet is not drawn after `frame drop 500` (maintainer, 2026-11-17) | T66, T68 | Opus | Every teleport of the player must put the frame back on the place's rail, as T67's `goto` does | done |
 | T72 | C | Fix: two suns, about 2.6 degrees apart on one streak, in `far view station` at 10 000 km and beyond (maintainer, 2026-11-17; seen in T69's captures) | T44 | Opus | The sky's sun and the scaled layer's star disagree when the camera is far from the World's origin (T44's fix near the star) | done |
 | T73 | C | Fix: in orbit (`frame orbit 400`) the HUD's REF line runs over the directional indicator instead of wrapping (maintainer, 2026-11-17, M6 check m6-075) | - | Sonnet | The REF and ALT lines' width against the drift indicator, every window size, chase and cockpit | in progress |
 | T74 | C | Fix: a launched Alpha wing forms up all on one side of the V; the V must balance its two arms, an odd ship taking a centre slot behind the leader so the wing makes a triangle (maintainer, 2026-11-17) | T58 | Opus | The formation's slot offsets for T58's eleven-slot wing | in progress |
@@ -3443,6 +3443,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     following it; an angle moves the player round and -90 is dawn; the atmosphere floor refused for orbit and drop, 101 km lives;
     misplaced or unknown words refused); `test_nav_goto.gd` (goto Epsilon III on the day side); `test_frame_carry.gd` (the station
     is now its orbit less the player's away, over 22 000 km, not 27 000). info.md `frame` and `goto` rows; playtest.md recipes.
+- **Accepted (maintainer, 2026-11-17):** m7-039, frame orbit's positions and the atmosphere floor; pushed with CI green.
 
 ### M7-T69 Fix: Babylon 5's navigation lights seen from any distance
 
@@ -3490,6 +3491,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   that `traffic status` counts and that docks; if the start must wait (the bay queue, the run's spacing), say so in the reply and in
   `status`.
 - **Done when:** a test (`traffic dock` puts one docking ship in play within a tick or reports why it waits, and it docks); committed.
+- **Accepted (maintainer, 2026-11-17):** m7-041, traffic dock; pushed with CI green.
 
 ### M7-T71 Fix: player moves keep the planet's frame after `frame drop`
 
@@ -3530,6 +3532,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     point, on the station's rail with no pull, at rest, REF BABYLON 5, flying at the station closes 20 m a second and reads 20 m/s;
     `gate approach`, `respawn`, `goto babylon 5`, `tour <stop>`, `mines view`; the planet drawn at its true distance and direction,
     a disc inside the camera's range). All 6 fail on the old code. info.md `frame` row.
+- **Accepted (maintainer, 2026-11-17):** m7-042, every move returns the frame home; the planet drawn after a drop; pushed with CI green.
 
 ### M7-T72 Fix: two suns in the far station view
 
