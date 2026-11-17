@@ -4431,8 +4431,12 @@ tests/integration/test_civilian_flight.gd, test_civilian_ships.gd, test_turret_b
   within 3 km or a hostile bolt last hit it, while a hostile is in sight. (3) A hit forced a fighter's jink (the evade, its
   weight 1 in the `civilian` profile), which held a 0.3 g hull in place while it was shot; the profile's evade is now 0, so a
   hit makes it run, and its idle brakes (`idle_hold`) so a route-less civilian stops after a flight instead of drifting.
-  (4) Babylon 5 was no shelter (its rows are big hulls, not ships). A station of the civilian's own people within
-  `STATION_SIGHT_M` (20 km) of its skin is now a shelter beside its warships and freighters, nearest by skin: the civilian
+  (4) Babylon 5 was no shelter (its rows are big hulls, not ships). A station of the civilian's own people, or a neutral
+  port, within `STATION_SIGHT_M` (20 km) of its skin is now a shelter beside its warships and freighters, nearest by skin
+  (Babylon 5 is a neutral port, the maintainer's decision of 2026-11-16: it shelters every civilian, Earth Alliance, Narn,
+  Centauri or Brakiri, its own people's ships and stations staying shelters too; `Station` marks both its surfaces with
+  `ScsSimCore.set_surface_owner`, which sets `Surface.port` and `Surface.named_by`, the drum going by the station's name in
+  the `ai` readout's `goal`): the civilian
   runs (round the hull, `detour`) to a point `STATION_STANDOFF_M` (1.5 km) off the skin on the far side from the threat,
   matching the station, slowing no faster than its retro can stop it (every shelter now); on an alarm it runs there from
   the alarmed ship. A station comes before a fellow civilian, and no shelter or kin that lies beyond the threat (farther
@@ -4444,8 +4448,10 @@ tests/integration/test_civilian_flight.gd, test_civilian_ships.gd, test_turret_b
   raiders it cannot outrun, so its turrets see less of them (the hull hides a chase from astern, Q33): two raiders won
   0, 0, 1, 1, 1 of 10 (Saturn 3, 4 transport, 4 tanker, 8 transport, 8 tanker; 2, 1, 3, 1, 1 before), three none; the
   Saturn 4 transport's hull 450 → 540 brings it back to 1 of 10 (three: none); the Saturn 3 stays at 0 (1000 hull still 0:
-  with two turrets and the chase astern, hull alone does not do it). Tests: `brain_behaviours/tests.rs`,
-  `civilian/tests.rs`, `test_civilian_flight`, `test_civilian_flee_station`, `test_civilian_ships`.
+  with two turrets and the chase astern, hull alone does not do it). The maintainer accepted that band (2026-11-16): a
+  lone fleeing Saturn rarely beats two raiders (0 to 2 of 10) and never three; it survives by reaching shelter. Tests:
+  `brain_behaviours/tests.rs`, `civilian/tests.rs`, `test_civilian_flight`, `test_civilian_flee_station`,
+  `test_civilian_ships`, `test_turret_balance`.
 - **Fire from a ship that is not an enemy (M7-T29).** A bolt cannot land on a friendly or neutral hull (D31), so a civilian
   hears no hit from the player. Its think therefore also takes any side's bolt but its own that passes within its radius
   plus `CLOSE_FIRE_M` (15 m) in the incoming-fire horizon (`contact::close_fire_from`): the shooter, when among the contacts,
@@ -4475,8 +4481,9 @@ tests/integration/test_civilian_flight.gd, test_civilian_ships.gd, test_turret_b
   posts at the rim's widest point, up ±x outboard, 200 degrees) instead of Q19's hub turret; the cargo sections keep their
   dorsal one, so a Saturn 3 has 2 and the others 3. The own hull blocks their fire (§18.10): a Saturn 4 transport's blind
   spot lies near its axis astern and a little below (its wide flanks see past the narrow cargo hull elsewhere). Each
-  Saturn alone beats two raiders in 1 to 3 of 10 seeds and three raiders in none (`test_turret_balance`, behind
-  `GUT_SLOW`): the light turret 6 damage every 2.4 s with 0.4 degree spread, hulls per variant (Saturn 3 640, Saturn 4
+  Saturn alone beat two raiders in 1 to 3 of 10 seeds and three raiders in none until M7-T55; since then it flees tail-on
+  and rarely beats two (0 to 2 of 10, the band the maintainer accepted) and never three (`test_turret_balance`, behind
+  `GUT_BALANCE`): the light turret 6 damage every 2.4 s with 0.4 degree spread, hulls per variant (Saturn 3 640, Saturn 4
   transport 540, Saturn 4 tanker 440, Saturn 8 transport 715, Saturn 8 tanker 380); the counts are in M5's T16 Done block,
   and M7-T16's (the raider rebuilt to its model) retune in M7's. **M7-T16 retune** (Q31's order: the turret first, then the
   hulls; never the raiders' specs or AI): with the raider's new hull the same fights came out within noise of before (turret
@@ -5518,7 +5525,8 @@ src/world/station_sections.gd    StationSections (pure): the damage sections' he
 src/world/station_lights.gd      StationLights: the exterior lights (points and floods, M7-T18, §20.6); provider and command `station_lights`
 src/world/station_light_plan.gd  StationLightPlan (pure): the lights from the hardpoints, the floods a section can reach, the blink
 native/src/surface.rs            big hulls' surfaces: packed volumes and hull planes, nearest points, the segment sweep, a turning skin's speed
-native/src/surface_rows.rs       ScsSimCore.set_surface / clear_surface / surface_count / surface_volume_count / surface_distance
+native/src/surface_rows.rs       ScsSimCore.set_surface / set_surface_owner / clear_surface / surface_count / surface_volume_count /
+                                 surface_distance
 ```
 
 - **Placement.** `FarPropHost.place_station` builds a `Station` where the scenario's anchor puts the station (M6-T09) and dresses

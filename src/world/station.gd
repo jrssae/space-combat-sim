@@ -463,6 +463,9 @@ func _register_surfaces() -> void:
 	_core = sim.core
 	_core.set_surface(get_instance_id(), _frame_volumes, _frame_hulls, 0.0)
 	_core.set_surface(drum_body.get_instance_id(), _drum_volumes, _drum_hulls, spin.rate_rad_s if spinning else 0.0)
+	# A neutral port: any people's fleeing civilians shelter here (M7-T55); the drum goes by the station's name.
+	_core.set_surface_owner(get_instance_id(), 0, true)
+	_core.set_surface_owner(drum_body.get_instance_id(), get_instance_id(), true)
 
 
 # A hit on one piece goes to the damage section it landed in.

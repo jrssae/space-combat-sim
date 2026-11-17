@@ -12,7 +12,8 @@ use crate::surface;
 impl ScsSimCore {
     /// Gives body `body_id` a surface: its volumes (`surface::VOLUME_LEN` numbers each, in its body frame), the convex hulls
     /// some of them are fitted to (`surface::add_hulls`: volume index, point count, points; empty for none) and its spin
-    /// (rad/s about its own +z). Its row reads the role at the next sync. Replaces what the body had.
+    /// (rad/s about its own +z). Its row reads the role at the next sync. Replaces what the body had, keeping its owner
+    /// (`set_surface_owner`).
     #[func]
     fn set_surface(
         &mut self,
@@ -23,8 +24,23 @@ impl ScsSimCore {
     ) {
         let mut made = surface::from_packed(packed.as_slice(), spin_rad_s);
         surface::add_hulls(&mut made, hulls.as_slice());
+        if let Some(had) = self.surfaces.get(&body_id) {
+            made.port = had.port;
+            made.named_by = had.named_by;
+        }
         Arc::make_mut(&mut self.surfaces).insert(body_id, Arc::new(made));
         self.touch(body_id);
+    }
+
+    /// Says whose hull body `body_id`'s surface is (M7-T55): `named_by` the body whose row's name it goes by (0: its own),
+    /// and whether it is a neutral port that shelters a fleeing civilian of any people. No-op without a surface.
+    #[func]
+    fn set_surface_owner(&mut self, body_id: i64, named_by: i64, port: bool) {
+        if let Some(held) = Arc::make_mut(&mut self.surfaces).get_mut(&body_id) {
+            let held = Arc::make_mut(held);
+            held.named_by = named_by;
+            held.port = port;
+        }
     }
 
     /// Takes body `body_id`'s surface away (its row is an ordinary hull again from the next sync).

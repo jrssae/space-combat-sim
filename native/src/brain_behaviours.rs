@@ -436,7 +436,7 @@ struct Tick<'a> {
     own_row: usize,
     fleeing: &'a [bool],
     alarmed: &'a [bool],
-    // The big hulls' rows, for a civilian's shelter at a station of its people (M7-T55).
+    // The big hulls' rows, for a civilian's shelter at a station of its people or a neutral port (M7-T55).
     hulls: &'a [u32],
     points: &'a [SubPoint],
     relations: &'a [u8],
@@ -1911,7 +1911,7 @@ impl RetreatState {
         // came close, hostile or not (M7-T29); and keeps running while its attackers are in sight (M7-T55).
         let panicked = civilian && (self.panicked(tick) | self.attacked(tick));
         let scared = civilian && self.scared_by(tick) >= 0;
-        // Under the guns of a station of its people a civilian keeps its course against raiders (M7-T55): a docking lane
+        // Under the guns of a station that shelters it a civilian keeps its course against raiders (M7-T55): a docking lane
         // is no place to turn. A friend's fire close by still frightens it: the guns do not answer that.
         if civilian && civilian::under_cover(&tick.civilian_view(0.0, self.speed_mps, 0.0)) {
             return if scared { Self::SCORE_MIN } else { 0.0 };

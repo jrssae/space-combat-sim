@@ -1,6 +1,8 @@
 extends GutTest
 ## The turrets' balance on every Saturn (M5-T16, Q31, AC19): a lone Saturn of any variant, with its own turrets and its
-## spec after Q30's shared engine, beats two raiders now and then (1 to 3 of 10 seeds) and three raiders never. A fight runs
+## spec after Q30's shared engine, rarely beats two raiders (0 to 2 of 10 seeds) and three raiders never. Since M7-T55 it
+## flees tail-on and a chaser sits in its turrets' blind spot astern (Q33), so it survives by reaching shelter, not by
+## fighting; the maintainer accepted that band (2026-11-16). A fight runs
 ## until the Saturn is destroyed or no raider is left fighting (each destroyed or more than 5 km off), capped at 600 s of
 ## sim time; the Saturn wins when it is alive at the end. Seeded and headless through the native core, as
 ## `test_turret_defense`; a balance file (about a hundred fights), so behind `GUT_BALANCE`. `TURRET_BALANCE_ONLY=<type>[:<raiders>]`
@@ -46,12 +48,12 @@ func _skipped() -> bool:
 	return false
 
 
-func test_a_saturn_sometimes_beats_two_raiders() -> void:
+func test_a_lone_fleeing_saturn_rarely_beats_two_raiders() -> void:
 	if _skipped():
 		return
 	for type: StringName in _variants(2):
 		var wins: int = await _sweep(type, 2)
-		assert_between(wins, 1, 3, "%s against two raiders wins 1 to 3 of %d (%d)" % [type, SEEDS, wins])
+		assert_between(wins, 0, 2, "%s against two raiders wins 0 to 2 of %d (%d)" % [type, SEEDS, wins])
 
 
 func test_a_saturn_never_beats_three_raiders() -> void:

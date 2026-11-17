@@ -718,11 +718,12 @@ one; `state encounters` shows the schedule; `encounters clear` sends every encou
   texture detail"); `set settings.hull_sheen 0` shows the old flat paint.
 - Civilians carry no guns of their own but have light turrets, which fire only at ships that attacked them or a civilian or
   ally within 2 km. The showcase starts with no raiders (its hulls sit 1.8 km ahead: fly up to them); `spawn raider ai
-  1500` sends one in and every hull runs (M7-T55), the Earth Alliance ones behind you or to Babylon 5. In free flight a raid drawn for a
-  civilian goes for one on the station's run (`encounters force raid` until one does, or fly the escort). An Earth Alliance
-  civilian runs towards the nearest Earth Alliance ship (behind it when that is a fighter) or round to Babylon 5's far side
-  when the station is nearer (within 20 km); under the station's guns (within 1 km of it) it keeps to its lane; others run
-  together, and a fleeing civilian sets its people within 5 km running. Its turrets keep firing while it runs.
+  1500` sends one in and every hull runs (M7-T55), to Babylon 5 or, for the Earth Alliance ones, behind you. In free flight a
+  raid drawn for a civilian goes for one on the station's run (`encounters force raid` until one does, or fly the escort).
+  Babylon 5 is a neutral port: any civilian (Earth Alliance, Narn, Centauri, Brakiri) within 20 km of it runs round to its
+  far side; an Earth Alliance civilian also runs towards the nearest Earth Alliance ship (behind it when that is a fighter)
+  when that is nearer. Under the station's guns (within 1 km of it) a civilian keeps to its lane; others run together, and a
+  fleeing civilian sets its people within 5 km running. Its turrets keep firing while it runs.
 - `play belt_showcase`: the asteroid belt by itself. The rocks stop bolts and ships; a scrape costs little, a head-on hit a lot.
 
 ## Sounds (M5-T18, T19, T37)
@@ -824,8 +825,8 @@ T20's own, taken at the end on the RX 6950 XT, are in `references/screenshots/T2
 - [ ] **T21 Turrets:** the turret model on every hull, its turn and lift, the Saturns' flank turrets on their posts at the
       disc rim; at high elevation the barrels' roots may show through the dome; `turret_fire`'s level and feel.
 - [ ] **T16 Civilians in a fight:** how the fleeing reads (to shelter, in groups, the panic spreading); the Saturn 8s' slow
-      turns (about 1 degree a second in pitch); the balance (a Saturn alone sometimes beats two raiders, never three; hulls
-      of 380 to 715, since M7-T16); the engine glows.
+      turns (about 1 degree a second in pitch); the balance (a lone fleeing Saturn rarely beats two raiders and never three;
+      it survives by reaching shelter, accepted 2026-11-16 in M7-T55; hulls of 380 to 715, since M7-T16); the engine glows.
 - [ ] **Q33 The blind spot:** only a narrow cone straight behind each Saturn is hidden from its turrets. Keep it, or widen it?
 
 **Encounters** (free flight, encounters on)

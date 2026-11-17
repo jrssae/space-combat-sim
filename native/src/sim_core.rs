@@ -1690,16 +1690,23 @@ impl ScsSimCore {
             .unwrap_or_default()
     }
 
-    /// The display name of the row whose marker id is `id` ("" for none), for the debug readouts.
+    /// The display name of the row whose marker id is `id` ("" for none), for the debug readouts. A big hull with no name
+    /// of its own goes by its owner's (M7-T55: the drum is BABYLON 5).
     pub fn name_of_marker(&self, id: i64) -> String {
         if id == 0 {
             return String::new();
         }
-        self.rows
-            .ids
-            .iter()
-            .position(|&r| r == id)
-            .and_then(|r| self.row_name_ids.get(r))
+        let Some(mut r) = self.rows.ids.iter().position(|&i| i == id) else {
+            return String::new();
+        };
+        if self.row_name_ids.get(r).is_none_or(|&n| n == 0)
+            && let Some(owner) = self.rows.surface(r).map(|s| s.named_by).filter(|&b| b != 0)
+            && let Some(o) = self.rows.body_ids.iter().position(|&b| b == owner)
+        {
+            r = o;
+        }
+        self.row_name_ids
+            .get(r)
             .map_or_else(String::new, |&name| self.display_name(name).to_string())
     }
 

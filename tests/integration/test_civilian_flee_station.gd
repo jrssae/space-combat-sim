@@ -3,8 +3,9 @@ extends GutTest
 ## i did see them attempt to fight off raiders"): a Skylark leaving Babylon 5 for the gate with a raider coming at it turns
 ## round and runs back to the station, its own people's shelter (Q24, Q25), the raider falling behind; an Earth Alliance
 ## freighter within radar range of it, which sees no threat itself, panics and runs for the station too; and a raid an
-## encounter draws for a civilian finds the run's traffic. Free flight on seed 5, the physics rate and the time scale raised
-## together.
+## encounter draws for a civilian finds the run's traffic. Babylon 5 is a neutral port (the maintainer, 2026-11-16): a Narn
+## transport attacked on the run runs to it too, its readout naming the station. Free flight on seed 5, the physics rate and
+## the time scale raised together.
 
 const SPEED_UP: float = 8.0
 const SHIPPED_POOLS: String = "res://data/encounters/free_flight.json"
@@ -102,11 +103,11 @@ func test_a_skylark_leaving_runs_back_to_babylon_5_and_the_panic_sends_a_freight
 	var seen: Dictionary = _describe(skylark)
 	assert_eq(String(seen.get("behaviour", "")), "retreat", "the Skylark runs: %s" % seen)
 	assert_eq(String(seen.get("state", "")), "shelter", "to its people's station: %s" % seen)
-	assert_has(["", Station.DISPLAY_NAME], String(seen.get("goal", "")), "the station (its drum carries no name), no ship: %s" % seen)
+	assert_eq(String(seen.get("goal", "")), Station.DISPLAY_NAME, "the station by name (the drum goes by it), no ship: %s" % seen)
 	var panicked: Dictionary = _describe(saturn)
 	assert_eq(String(panicked.get("behaviour", "")), "retreat", "the freighter panics with it: %s" % panicked)
 	assert_eq(String(panicked.get("state", "")), "shelter", "and runs for the station: %s" % panicked)
-	assert_has(["", Station.DISPLAY_NAME], String(panicked.get("goal", "")), "the station, not the Skylark: %s" % panicked)
+	assert_eq(String(panicked.get("goal", "")), Station.DISPLAY_NAME, "the station, not the Skylark: %s" % panicked)
 	var from_raider: float = skylark.ship.global_position.distance_to(raider.ship.global_position)
 	var from_station: float = skylark.ship.global_position.distance_to(station)
 	var held: bool = true
@@ -123,6 +124,59 @@ func test_a_skylark_leaving_runs_back_to_babylon_5_and_the_panic_sends_a_freight
 	assert_gt(now_raider, from_raider + 1000.0, "away from the raider")
 	assert_lt(now_station, from_station - 1000.0, "back toward Babylon 5")
 	assert_eq(traffic.state_of(skylark), &"leave", "still the run's ship, its route kept for after the fight")
+
+
+func test_a_narn_transport_attacked_near_babylon_5_runs_to_the_station() -> void:
+	if not await _start():
+		pending("the babylon5_station asset is not generated")
+		return
+	var traffic: StationTraffic = main.traffic
+	var length: float = traffic._run_length(traffic.plan.dock_in)
+	var station: Vector3 = main.far_props.station.global_position
+	var narn: Combatant = traffic._join_outbound(&"narn_transport", _along(9000.0, length), {})
+	assert_not_null(narn)
+	if narn == null:
+		return
+	assert_eq(narn.faction, &"narn", "a Narn ship: no people of its own near Babylon 5")
+	# A raider 2 km off its beam on the side away from the station, so the way back never passes it.
+	var run_dir: Vector3 = (main.gates.gate().global_position - station).normalized()
+	var beam: Vector3 = run_dir.cross(Vector3.UP).normalized()
+	if beam.dot(station - narn.ship.global_position) > 0.0:
+		beam = -beam
+	var raider: Combatant = _raider_at(narn.ship.global_position + beam * 2000.0)
+	_fast()
+	var t0: float = SimClock.now()
+	while SimClock.now() - t0 < 10.0 and _behaviour(narn) != "retreat":
+		await get_tree().physics_frame
+	var seen: Dictionary = _describe(narn)
+	assert_eq(String(seen.get("behaviour", "")), "retreat", "the Narn runs: %s" % seen)
+	assert_eq(String(seen.get("state", "")), "shelter", "to the neutral port: %s" % seen)
+	assert_eq(String(seen.get("goal", "")), Station.DISPLAY_NAME, "the readout names the station: %s" % seen)
+	# Outbound at its cruise, it first slows and turns (a heavy hull) and then closes on the station while it runs; the idle
+	# raider never chases, so the run ends `PANIC_HOLD_S` after it left the flee range.
+	var from_raider: float = narn.ship.global_position.distance_to(raider.ship.global_position)
+	var from_station: float = narn.ship.global_position.distance_to(station)
+	var last: float = from_station
+	var closing: float = 0.0  # the fastest it closed on the station while running, m/s
+	var goals: Dictionary = {}
+	t0 = SimClock.now()
+	var sample: float = t0
+	while SimClock.now() - t0 < 90.0 and _behaviour(narn) == "retreat":
+		await get_tree().physics_frame
+		var now_seen: Dictionary = _describe(narn)
+		if String(now_seen.get("behaviour", "")) == "retreat":
+			goals[String(now_seen.get("goal", ""))] = true
+		if SimClock.now() - sample >= 2.0:
+			var d: float = narn.ship.global_position.distance_to(station)
+			closing = maxf(closing, (last - d) / (SimClock.now() - sample))
+			last = d
+			sample = SimClock.now()
+	var now_raider: float = narn.ship.global_position.distance_to(raider.ship.global_position)
+	gut.p("narn: from the raider %.0f -> %.0f m, from the station %.0f -> %.0f m, closing on it at up to %.0f m/s; goals %s" % [
+			from_raider, now_raider, from_station, last, closing, goals.keys()])
+	assert_eq(goals.keys(), [Station.DISPLAY_NAME], "the station all the way")
+	assert_gt(now_raider, from_raider + 1000.0, "away from the raider")
+	assert_gt(closing, 20.0, "its run turned round onto Babylon 5")
 
 
 func test_a_raid_drawn_for_a_civilian_finds_the_runs_traffic() -> void:

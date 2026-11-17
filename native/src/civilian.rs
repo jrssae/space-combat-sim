@@ -1,8 +1,8 @@
 //! Civilian flight (M5-T16, Q24, Q25, docs/architecture.md 18.11): where a civilian under threat runs, how a fleeing group
 //! closes up and how far panic reaches, as pure functions of the frozen rows and one ship's contact list. The brains' retreat
 //! asks these for a ship with the civilian role; every answer costs work linear in that ship's contacts and the few big
-//! hulls (a station of its people shelters it, M7-T55), never a walk of every row. Engine-free (the guard in test_sim_core
-//! reads this file): plain rows and numbers in, plain numbers out.
+//! hulls (a station of its people or a neutral port shelters it, M7-T55), never a walk of every row. Engine-free (the
+//! guard in test_sim_core reads this file): plain rows and numbers in, plain numbers out.
 use godot::builtin::Vector3;
 
 use crate::rows::Rows;
@@ -22,9 +22,9 @@ pub const GROUP_GAP_M: f64 = 150.0;
 pub const ARRIVE_S: f64 = 10.0;
 /// The share of the run's speed a civilian spends closing up with its group.
 pub const COHESION_SHARE: f64 = 0.5;
-/// How far from its skin a station of its own people draws a fleeing civilian (M7-T55): the station's traffic control.
+/// How far from its skin a station that shelters it draws a fleeing civilian (M7-T55): the station's traffic control.
 pub const STATION_SIGHT_M: f64 = 20000.0;
-/// Within this of a station of its own people a civilian is under its guns and keeps its course (a docking lane) (M7-T55).
+/// Within this of a station that shelters it a civilian is under its guns and keeps its course (a docking lane) (M7-T55).
 pub const STATION_COVER_M: f64 = 1000.0;
 /// How far off a station's skin a fleeing civilian waits, beyond the cover so it never flickers in and out of it.
 pub const STATION_STANDOFF_M: f64 = 1500.0;
@@ -54,7 +54,8 @@ pub struct View<'a> {
     pub fleeing: &'a [bool],
     /// A row never run to though it is of the own people (M7-T29: the friend whose fire it flees); -1 for none.
     pub shun: i32,
-    /// The big hulls' rows (the station's frame and drum), wherever they are: a station of its people shelters it (M7-T55).
+    /// The big hulls' rows (the station's frame and drum), wherever they are: a station of its people or a neutral port
+    /// shelters it (M7-T55).
     pub hulls: &'a [u32],
     /// How hard the ship can brake without turning (its retro), so it slows into a shelter in time; 0 for no limit.
     pub brake_mps2: f64,
@@ -85,9 +86,9 @@ impl View<'_> {
     }
 }
 
-/// The nearest ship of the civilian's own people among its contacts, of any kind (Q24), or a station of its people within
-/// `STATION_SIGHT_M` of its skin (M7-T55: Babylon 5 for an Earth Alliance freighter); -1 for none. The station is a shelter
-/// before any fellow civilian; against a warship the nearer wins, the station by its skin, a ship by its centre.
+/// The nearest ship of the civilian's own people among its contacts, of any kind (Q24), or a station of its people or a
+/// neutral port within `STATION_SIGHT_M` of its skin (M7-T55: Babylon 5 for any civilian); -1 for none. The station is a
+/// shelter before any fellow civilian; against a warship the nearer wins, the station by its skin, a ship by its centre.
 pub fn nearest_kin(v: &View) -> i32 {
     nearest_kin_from(v, None)
 }
@@ -132,7 +133,8 @@ fn beyond(at: Vector3, goal: Vector3, threat: Vector3) -> bool {
     pass < PASS_CLEAR_M && pass < PASS_CLOSING * f64::from(length(to_threat))
 }
 
-/// The station of the civilian's own people nearest its skin within `within` m, and how far that skin is.
+/// The station nearest the civilian's skin within `within` m that shelters it, and how far that skin is: one of its own
+/// people's, or a neutral port (Babylon 5 shelters every civilian, M7-T55).
 pub fn nearest_station(v: &View, within: f64) -> Option<(usize, f64)> {
     let rows = v.rows;
     let at = rows.positions[v.own_row];
@@ -140,7 +142,10 @@ pub fn nearest_station(v: &View, within: f64) -> Option<(usize, f64)> {
     let mut best: Option<(usize, f64)> = None;
     for &r in v.hulls {
         let j = r as usize;
-        if j >= rows.ids.len() || j == v.own_row || rows.faction_ix[j] != own {
+        if j >= rows.ids.len() || j == v.own_row {
+            continue;
+        }
+        if rows.faction_ix[j] != own && !rows.surface(j).is_some_and(|s| s.port) {
             continue;
         }
         // A bound first: the skin is never nearer than the centre less the hull's radius.
@@ -157,7 +162,7 @@ pub fn nearest_station(v: &View, within: f64) -> Option<(usize, f64)> {
     best
 }
 
-/// Whether the civilian is under the guns of a station of its people (M7-T55): it keeps its course there rather than
+/// Whether the civilian is under the guns of a station that shelters it (M7-T55): it keeps its course there rather than
 /// turning in a docking lane.
 pub fn under_cover(v: &View) -> bool {
     nearest_station(v, STATION_COVER_M).is_some()
@@ -271,7 +276,7 @@ pub fn flee_from(v: &View, away: Vector3, threat_at: Vector3) -> Option<Flight> 
         let g = goal as usize;
         point = rows.positions[g];
         if rows.surface(g).is_some() {
-            // A station of its people: round to its far side from the threat, under its guns (M7-T55).
+            // A station that shelters it: round to its far side from the threat, under its guns (M7-T55).
             shelter = true;
             point = station_point(v, g, threat_at);
             velocity = add(rows.velocities[g], arrive(sub(point, at), 0.0, speed, v.brake_mps2));
@@ -304,7 +309,7 @@ pub fn flee_from(v: &View, away: Vector3, threat_at: Vector3) -> Option<Flight> 
     })
 }
 
-/// Where a civilian runs on an alarm with no threat of its own in sight (Q25): to a station of its people when one is in
+/// Where a civilian runs on an alarm with no threat of its own in sight (Q25): to a station that shelters it when one is in
 /// sight, round to its far side from the alarmed ship (M7-T55), else with the alarmed ship (along its velocity, or to it
 /// when it is still); closing up with the fleeing group either way.
 pub fn flee_alarm(v: &View, alarm_row: i32) -> Flight {

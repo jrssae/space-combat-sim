@@ -54,6 +54,10 @@ pub struct Surface {
     pub spin_rad_s: f64,
     /// How far from its own +z axis the hull reaches (M7-T10): a ship flying round it keeps outside this.
     pub girth: f64,
+    /// A neutral port (M7-T55): it shelters a fleeing civilian of any people, not only its own (Babylon 5).
+    pub port: bool,
+    /// The body whose row names this hull (M7-T55: the drum is Babylon 5's), 0 for its own row's name.
+    pub named_by: i64,
 }
 
 /// The big hulls by body id.

@@ -685,6 +685,38 @@ fn an_attacked_civilian_runs_round_to_the_far_side_of_a_station_of_its_people() 
     assert_eq!(brain.describe().state, "extend", "straight away instead");
 }
 
+// Makes the bench's station a neutral port (Babylon 5).
+fn make_port(rows: &mut Rows) {
+    let map = Arc::make_mut(rows.surfaces.as_mut().unwrap());
+    Arc::make_mut(map.get_mut(&STATION).unwrap()).port = true;
+}
+
+#[test]
+fn babylon_5_shelters_an_attacked_civilian_of_another_people() {
+    // The maintainer's decision (2026-11-16): Babylon 5 is a neutral port, so a Narn freighter runs to it as an Earth
+    // Alliance one does; the station is of another people (faction 2) and a port.
+    let at = Vector3::new(5000.0, 0.0, 0.0);
+    let mut bench = attacked_bench(at, Vector3::new(6500.0, 0.0, 1500.0));
+    bench.rows.faction_ix[0] = 2;
+    make_port(&mut bench.rows);
+    let mut brain = attacked_brain();
+    civilian_think(&mut bench, &mut brain, 1.0);
+    assert_eq!(brain.current_kind(), i32::from(KIND_RETREAT));
+    let seen = brain.describe();
+    assert_eq!(seen.state, "shelter", "the port is a shelter");
+    assert!(seen.names.contains(&("goal", STATION)), "to the station: {:?}", seen.names);
+    let wish = normalized(brain.desired_velocity);
+    assert!(dot(wish, normalized(sub(bench.rows.positions[2], at))) < 0.0, "no nearer the raider: {wish:?}");
+    // Under the port's guns it keeps its course too: the docking lanes stay untouched.
+    let near = Vector3::new(0.0, 300.0, 0.0);
+    let mut bench = attacked_bench(near, near + Vector3::new(0.0, 1500.0, 0.0));
+    bench.rows.faction_ix[0] = 2;
+    make_port(&mut bench.rows);
+    let mut brain = attacked_brain();
+    civilian_think(&mut bench, &mut brain, 1.0);
+    assert_ne!(brain.current_kind(), i32::from(KIND_RETREAT), "under the port's guns");
+}
+
 #[test]
 fn panic_sends_a_civilian_to_a_station_of_its_people_away_from_the_alarm() {
     // The alarmed kin (row 2) 3 km off toward +x; the station at the origin, 6 km off the panicked civilian (row 1).

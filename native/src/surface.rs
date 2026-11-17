@@ -73,6 +73,8 @@ pub fn from_packed(packed: &[f64], spin_rad_s: f64) -> Surface {
         .collect::<Vec<SurfaceVolume>>();
     Surface {
         girth: volumes.iter().map(|v| v.swept[1]).fold(0.0, f64::max),
+        port: false,
+        named_by: 0,
         volumes,
         hulls: Vec::new(),
         spin_rad_s: if spin_rad_s.is_finite() {

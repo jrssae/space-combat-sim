@@ -3037,6 +3037,24 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     `sheet_zoomed.png` the frames enlarged). Left for the maintainer: the flight in play (H); the Saturn 3's balance (more turret
     arc astern, a wider Q33 blind spot decision, or accept it); whether alien civilians should shelter at Babylon 5 too (now
     only Earth Alliance ones do, by Q24's own-people rule).
+- **Maintainer's decisions (2026-11-16) and follow-up (code part, 2026-11-16):**
+  - **Balance accepted.** A lone fleeing Saturn runs tail-on and a chaser sits in its turrets' blind spot astern (Q33): it
+    rarely beats two raiders and never three; it survives by reaching shelter. `test_turret_balance` (GUT_BALANCE=1) now
+    asks 0 to 2 wins of 10 against two raiders (`test_a_lone_fleeing_saturn_rarely_beats_two_raiders`), none against three;
+    the Saturn 4 transport keeps hull 540. Architecture §18.11 and `docs/playtest.md` (T16's line) state the new band.
+  - **Babylon 5 shelters every civilian.** It is a neutral port: any civilian within 20 km of it shelters there by T55's rules
+    (1.5 km off the far side, preferred over a fellow civilian, no way within 800 m of the threat, keeps course within 1 km);
+    its own people's ships and stations stay shelters. Native: `Surface.port` (a station of another people that is a port
+    shelters too, `civilian::nearest_station`), set with the station's name owner by the new `ScsSimCore.set_surface_owner`
+    (kept when `set_surface` replaces the volumes, as the spin toggle does); civilian rows only, so the recordings hold.
+  - **The `ai` readout's blank goal:** the drum's row has no marker, so no name; `Surface.named_by` lets `name_of_marker` give
+    a nameless big hull its owner's name (`BABYLON 5`).
+  - Tests: Rust `babylon_5_shelters_an_attacked_civilian_of_another_people` (shelter, goal the station, no nearer the raider;
+    under the port's guns it keeps its course); GUT `test_civilian_flee_station` (a Narn transport attacked on the run runs to
+    the station, its readout's goal `BABYLON 5`; the Skylark's and the panicked Saturn's goals now must be `BABYLON 5`; without
+    the port mark it fails: `extend` and a blank goal). Staged copy: Rust 220, check_scripts 886 clean, GUT 164 tests in 27
+    files (the civilian, station, brain parity, flight parity, AI retreat and skill, turret and encounter files) all passing;
+    `test_turret_balance` under GUT_BALANCE=1 passes (two raiders: 0, 1, 1, 1, 1 of 10; three: none).
 
 ### M7-T56 Encounters pacing and civilian traffic
 
