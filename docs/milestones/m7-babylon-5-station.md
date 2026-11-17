@@ -334,6 +334,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T72 | C | Fix: two suns, about 2.6 degrees apart on one streak, in `far view station` at 10 000 km and beyond (maintainer, 2026-11-17; seen in T69's captures) | T44 | Opus | The sky's sun and the scaled layer's star disagree when the camera is far from the World's origin (T44's fix near the star) | done |
 | T73 | C | Fix: in orbit (`frame orbit 400`) the HUD's REF line runs over the directional indicator instead of wrapping (maintainer, 2026-11-17, M6 check m6-075) | - | Sonnet | The REF and ALT lines' width against the drift indicator, every window size, chase and cockpit | in progress |
 | T74 | C | Fix: a launched Alpha wing forms up all on one side of the V; the V must balance its two arms, an odd ship taking a centre slot behind the leader so the wing makes a triangle (maintainer, 2026-11-17) | T58 | Opus | The formation's slot offsets for T58's eleven-slot wing | in progress |
+| T75 | C | Fix: `transit carrier point fighter follow` refuses in free flight with encounters off (`no two free raiders to bring in`): the raider pool is empty there; the debug tool grows the pool as the bench does (maintainer, 2026-11-17, M6 check m6-094) | - | Sonnet | `Main.ensure_pool` (M7-T59 made it register deaths) | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress |
 
 ### M7-T01 Station references and measurements
@@ -3590,3 +3591,14 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   the sandbox's three-ship wing keep their look. Check the formation offsets, the slot order and how a launched ship picks its slot.
 - **Done when:** tests (slot positions for wings of 2 to 12: arms balanced within one ship, the odd one centred behind; a launched Alpha
   settles balanced); a GPU capture of Alpha formed up; the maintainer checks it (H); committed.
+
+### M7-T75 Fix: `transit carrier` needs raiders free flight has none of
+
+- **Why (maintainer, 2026-11-17, M6 check m6-094):** "transit carrier point fighter follow seems to have no effect in free flight with
+  encounters off". Reproduced on 6efa9b3e: `error: no two free raiders to bring in`. The m6-095 recipe (`transit arrive point capital`,
+  `vortex collapse`) works there (`collapse_kills = 1`).
+- **What:** the `transit` debug tool grows the raider pool when it has too few free raiders (`Main.ensure_pool`, which since M7-T59
+  registers the new ships for death), as the bench does, so `transit carrier ...` works in any scenario; any other `transit` form that
+  needs pooled ships does the same.
+- **Done when:** a test (`play free_flight` with encounters off, `transit carrier point fighter follow`, then `vortex collapse`:
+  `collapses = 1`, `collapse_kills = 1`, `last_collapse = opener_destroyed`); committed.
