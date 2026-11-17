@@ -317,7 +317,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T55 | C | Civilians flee a fight instead of fighting it out (M5 check m5-054: none fled, they fought the raiders) (maintainer's checklist, 2026-11-16) | T56 | Opus | The civilian brain's flee rule (M5 Q24) against its turrets' self-defense | done |
 | T56 | C | Encounters pacing and civilian traffic (M5 check m5-056): an event every 1 to 3 minutes; busier civilian traffic running between Babylon 5 and the jumpgate; a Saturn 3 freighter spawned as an ally instead of a civilian (maintainer's checklist, 2026-11-16) | - | Opus | The encounter director's timers and mix, traffic routes, the spawn faction | done |
 | T57 | C | The station tour (M7 check m7-002): "Defense" spelled with an s in player-visible text; the defense grid stop mirrored to show the turrets and interceptors from in front (maintainer's checklist, 2026-11-16) | - | Sonnet | Tour stop placement and labels | done |
-| T58 | C | Wing launch (M7 check m7-008): `launch wing all`; a launched Alpha wing takes the player as Alpha leader and answers the comms commands (maintainer's checklist, 2026-11-16) | - | Opus | Launch command, wing membership and leader | in progress |
+| T58 | C | Wing launch (M7 check m7-008): `launch wing all`; a launched Alpha wing takes the player as Alpha leader and answers the comms commands (maintainer's checklist, 2026-11-16) | - | Opus | Launch command, wing membership and leader | done |
 | T59 | C | Bench capitals mortal after the run, and the M4/M6 checks made testable (m4-016, m4-017, m6-094, m6-095; m6-096 by a code check) (maintainer's checklist, 2026-11-16) | T50 | Sonnet | The bench's capital invulnerability, console paths for the vortex checks | done |
 | T60 | C | "Defense" everywhere: code names, file names, data ids, tests and docs renamed from the British spelling (maintainer, 2026-11-16: "no one will understand the misspelling"); plus an `overlay [on\|off]` console command for the debug overlay | T54, T56, T57 | Sonnet | A wide rename while other agents edit the same files | done |
 | T61 | C | Fix: an undocking Narn transport rams the bay doorway's edge about 3 s after the doors open and is destroyed (found by T56; also on earlier HEADs) | T56 | Opus | The undock path's clearance for the widest hull | done |
@@ -328,10 +328,10 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T66 | C | Fix: `frame orbit` brings the planet, the station and the jumpgate to the player instead of putting the player in orbit with everything else where it is (maintainer, 2026-11-17) | - | Opus | The frame's anchor moves the scenario's origin; world objects placed relative to it | done |
 | T67 | C | A `goto <nav point>` console command: puts the player near any nav point (Babylon 5 and its bays, the jumpgate, the scenario's NAV points, a body), clear of it and at rest relative to it, the frame on that place's rail; `goto` alone lists them (maintainer, 2026-11-17) | T66 | Sonnet | The frame and rail change T66 settles; a safe stand-off per kind of point | done |
 | T68 | C | `frame orbit` and `frame drop` take where around the body to put the player (`day`, `night`, `dawn`, `dusk` from the star, or an angle), default the day side; an orbit at or inside the atmosphere (Epsilon III's top is 100 km) is refused with the floor named (maintainer, 2026-11-17: always the dark side; `frame orbit 100` explodes the ship) | T66 | Opus | The orbit's phase against the star's direction at the scaled epoch | in progress |
-| T69 | C | Fix: Babylon 5's blinking navigation lights show at any distance, even from an orbit of the star; they must fade by the inverse square like running lights (maintainer, 2026-11-17) | T18 | Sonnet | The lights' far draw (a marker or emissive with no distance falloff) | in progress |
+| T69 | C | Fix: Babylon 5's blinking navigation lights show at any distance, even from an orbit of the star; they must fade by the inverse square like running lights (maintainer, 2026-11-17) | T18 | Sonnet | The lights' far draw (a marker or emissive with no distance falloff) | done |
 | T70 | C | Fix: `traffic dock` (without `near`) answers "a civilian is on its way into the main docking bay" but starts no ship: `traffic status` stays at 0 in play, `last: none` (maintainer, 2026-11-17; `dock near` works) | T56 | Sonnet | T56's gate-station run rewrite of the far start | in progress |
 | T71 | C | Fix: after `frame drop` (or `frame orbit`), `station goto` and the other player moves keep the planet's frame: the player goes on falling toward the planet near Babylon 5 and the speed readings point the wrong way; and the planet is not drawn after `frame drop 500` (maintainer, 2026-11-17) | T66, T68 | Opus | Every teleport of the player must put the frame back on the place's rail, as T67's `goto` does | in progress |
-| T72 | C | Fix: two suns, about 2.6 degrees apart on one streak, in `far view station` at 10 000 km and beyond (maintainer, 2026-11-17; seen in T69's captures) | T44 | Opus | The sky's sun and the scaled layer's star disagree when the camera is far from the World's origin (T44's fix near the star) | in progress |
+| T72 | C | Fix: two suns, about 2.6 degrees apart on one streak, in `far view station` at 10 000 km and beyond (maintainer, 2026-11-17; seen in T69's captures) | T44 | Opus | The sky's sun and the scaled layer's star disagree when the camera is far from the World's origin (T44's fix near the star) | done |
 | T73 | C | Fix: in orbit (`frame orbit 400`) the HUD's REF line runs over the directional indicator instead of wrapping (maintainer, 2026-11-17, M6 check m6-075) | - | Sonnet | The REF and ALT lines' width against the drift indicator, every window size, chase and cockpit | in progress |
 | T74 | C | Fix: a launched Alpha wing forms up all on one side of the V; the V must balance its two arms, an odd ship taking a centre slot behind the leader so the wing makes a triangle (maintainer, 2026-11-17) | T58 | Opus | The formation's slot offsets for T58's eleven-slot wing | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress |
@@ -3171,6 +3171,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     player's wing and the others 12 under an AI leader; a launched Alpha wing sits in the player's wing with the player as leader,
     obeys FORM ON ME from the comms menu, COVER ME from the keyboard's order key and `wing order`, and once out forms on the player;
     a failed launch leaves the wing as it was).
+- **Accepted (maintainer, 2026-11-17):** m7-008, launch wing all and Alpha taking the player's orders (the V's balance is M7-T74); pushed with CI green.
 
 ### M7-T59 Bench capitals mortal after the run; the M4 and M6 checks made testable
 
@@ -3476,6 +3477,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   visibility. Test: `test_station_lights.gd` `test_no_point_is_drawn_once_the_station_is_a_dot` (fails on the old code). Captures
   `references/screenshots/M7-T69 station lights/round2_*.png` (with and without the station at 10, 100, 1 000, 10 000, 27 000 km;
   `round2_crops.png` enlarged). If the maintainer still sees red points, a game started before a628353e still runs round 1's shader.
+- **Accepted (maintainer, 2026-11-17):** m7-040, the station's lights fade with distance; pushed with CI green.
 
 ### M7-T70 Fix: `traffic dock` starts no ship
 
@@ -3560,6 +3562,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     the layer's sun, the drawn star, the key light and the flare's core within 0.05 degree; 6 asserts fail on the old aim, up to 39.6 degrees off);
     `test_lens_flare_aim.gd` (a camera 1 000 to 27 000 km out puts the star where one at the origin does; the probe test replaced);
     `test_post_effects.gd` `test_the_flare_reads_the_camera_and_the_key_star_of_the_frame_drawn` (fails a frame behind on the old order).
+- **Accepted (maintainer, 2026-11-17):** m7-043, one sun at every distance; pushed with CI green.
 
 ### M7-T73 Fix: the REF line covers the directional indicator
 
