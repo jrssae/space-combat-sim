@@ -3384,3 +3384,12 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   `respawn` is. info.md row; keyboard-free (console only).
 - **Done when:** a test per kind of nav point (placed clear, at rest relative to it, no ram over 10 s, the station and the gate keep
   their universe positions); committed.
+- **Done (code part, 2026-11-17):** `NavGoto` (`src/world/nav_goto.gd`, a node `Main` adds; the command is `goto`, console only).
+  `goto` lists the nav points in play, one a line (Babylon 5, its two bays, the gate, the scenario's NAV buoys, the star system's
+  bodies); `goto <name>` takes any case and a unique prefix (an exact name beats longer ones; an ambiguous one lists its matches).
+  Stand-offs: Babylon 5 4 km off its bow, a bay 2 km in front of its mouth (along its approach), the gate 6 km in front, a NAV buoy
+  1 km off, a body on a circular orbit over its atmosphere (the larger of 300 km or a tenth of its radius, `frame orbit`'s path). A
+  place on the station's rail first puts the frame back on it (`WorldFrame.on_home_rail`, `rail_focus`) when the console moved it.
+  The player rests against the place and faces it; the player's wing is placed in its formation beside the player. Refused in a
+  mission; during a launch the launch is skipped and the move waits for the player to be away, as `station goto` does.
+  Tests: `test_nav_goto.gd` (10: a test per kind, the list, prefix matching, the body and back, refused in a mission).

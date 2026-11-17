@@ -667,6 +667,12 @@ func rail_focus(system: StarSystem, place: StringName) -> String:
 			_rail.bind(system, place, off.duplicate()))
 
 
+## Whether the frame is on the rail the world was laid out on, so the anchor-tied things stand where the scenario put them
+## (M7-T67): false after the console moved it to a body's orbit or another rail.
+func on_home_rail() -> bool:
+	return home_id != &"" and not _tracks_home and anchor_name == home_id
+
+
 ## The velocity in the local frame of what is tied to the anchor (a buoy, the gate, the station): the anchor's, or, while
 ## the frame falls with something else, that of the rail they ride (M7-T66).
 func anchored_velocity() -> Vector3:

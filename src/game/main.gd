@@ -286,6 +286,10 @@ func _ready() -> void:
 	target_menu.main = self
 	add_child(target_menu)
 	hud.final_input = target_menu.fill_hud_input
+	var nav_goto := NavGoto.new()
+	nav_goto.name = "NavGoto"
+	nav_goto.main = self
+	add_child(nav_goto)
 	_register_console()
 
 
