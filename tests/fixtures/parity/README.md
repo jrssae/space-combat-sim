@@ -71,3 +71,11 @@ off whoever's it is; trigger arithmetic unchanged. (`edge_of_a_trigger`: two min
 **M7-T65 re-recorded `weapon_rows_battle` (`battle_100_seed_1`)**: the bench's mines are laid as groups in the fights, so the
 100-ship battle sets off 36 mines instead of 1; hits, beams and missiles unchanged (704, 321, 132, 146, 25, 1 → 704, 321, 132,
 146, 25, 36).
+
+
+**M7-T64 also re-recorded `turret_kernel` (`seed_7`, `rebase_at_90`, `relation_changed_at_120`)**, found by the full check after
+the commit: the miniature battle flies through a mine belt, and a blast now sets off its neighbours, so a few mines go off a few
+ticks early. Only the mine fields of those ticks moved (mines set off, the mines' hits, the mines left to check: `seed_7` ticks
+26-38, `rebase_at_90` 3-18, `relation_changed_at_120` 18-24); every turret's pick, aim and shot, every projectile made, every
+kill and the end counts are byte for byte the old recording's (compared against the log of the commit before M7-T64, which still
+gave the stored digests).
