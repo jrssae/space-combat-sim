@@ -325,6 +325,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T63 | C | Fix: `station goto main_docking_bay` after `play station_launch` puts the player where the turning drum rams them at 34 m/s and kills them (found by T61, 2026-11-16) | - | Sonnet | The goto point's clearance from the drum's sweep, its velocity matched to the drum | in progress |
 | T64 | C | Mines can be shot and explode when hit, whoever's they are, and a ship that flies into a mine sets it off (maintainer, 2026-11-16: none went off in a bench battle) | T59 | Opus | The hit sweep and the mines' rows (native), the trigger's faction test after a run | in progress |
 | T65 | C | The bench battles' mines laid as small chained groups (4 to 8, each side's) in the asteroid field where the fighting is, groups far enough apart that one blast never sets off the next (maintainer, 2026-11-16) | T64 | Opus | The bench layout's belts, the mix's mine count, the benchmark's figures | in progress |
+| T66 | C | Fix: `frame orbit` brings the planet, the station and the jumpgate to the player instead of putting the player in orbit with everything else where it is (maintainer, 2026-11-17) | - | Opus | The frame's anchor moves the scenario's origin; world objects placed relative to it | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress |
 
 ### M7-T01 Station references and measurements
@@ -3331,3 +3332,14 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   unchanged (reason in `tests/fixtures/parity/README.md`). For the maintainer: a mine going off had no blast effect (fixed by the
   M7-T64 follow-up, a mine that goes off explodes); and since mines are no longer laid again after a run and now deal real damage,
   a group may hurt many fighters right after a run. Open: (H) see the mines affect the fight.
+
+### M7-T66 Fix: `frame orbit` moves the world, not the player
+
+- **Why (maintainer, 2026-11-17):** "issue with frame orbit - it seems to move the planet closer to the player, the station, and the
+  jumpgate, rather than moving the player closer to the planet without moving the other "stationary" items".
+- **What:** `frame orbit <km> [body]` (M6-T04's debug anchor) puts the player on a circular orbit at that altitude; Babylon 5, the
+  jumpgate, the belt and every other world object keep their universe positions (they are 27 500 km and more from Epsilon III, so they
+  end up far away, as in real space), and the planet does not move. Find why they come along (placed relative to the scenario's origin
+  that the anchor moves, or re-placed on the anchor change); check `frame drop` and `frame rail` the same way.
+- **Done when:** a test (after `frame orbit 400`, the station, the gate and the planet keep their universe positions and the player is
+  400 km over Epsilon III); the maintainer checks it (H); committed.
