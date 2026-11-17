@@ -324,6 +324,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T62 | C | A ship inside the docking bay's black box (docked, or undocking before it comes out) is inside the station: not targetable, off the radar and the AI's target lists, not hit (maintainer, 2026-11-16) | T61 | Opus | Targeting, radar and AI perception filters; the bay's interior boundary | in progress |
 | T63 | C | Fix: `station goto main_docking_bay` after `play station_launch` puts the player where the turning drum rams them at 34 m/s and kills them (found by T61, 2026-11-16) | - | Sonnet | The goto point's clearance from the drum's sweep, its velocity matched to the drum | in progress |
 | T64 | C | Mines can be shot and explode when hit, whoever's they are, and a ship that flies into a mine sets it off (maintainer, 2026-11-16: none went off in a bench battle) | T59 | Opus | The hit sweep and the mines' rows (native), the trigger's faction test after a run | in progress |
+| T65 | C | The bench battles' mines laid as small chained groups (4 to 8, each side's) in the asteroid field where the fighting is, groups far enough apart that one blast never sets off the next (maintainer, 2026-11-16) | T64 | Opus | The bench layout's belts, the mix's mine count, the benchmark's figures | in progress |
 | T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress |
 
 ### M7-T01 Station references and measurements
@@ -3281,3 +3282,16 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   rerecorded`, reason in `tests/fixtures/parity/README.md`): the differences come only from the two new rules, the trigger arithmetic is
   unchanged. For the maintainer: in a live `bench battle 300 20` the fighters never reach the belts (1.5 km out, away from the fights),
   a layout question, not changed. Open: (H) shoot and ram mines.
+
+### M7-T65 Bench mines in small chained groups where the battle is
+
+- **Why (maintainer, 2026-11-16):** after T64 found that no fighter ever reaches the belts (laid 1.5 km out on each side's own arc, away
+  from the fights): "put groups of mines from each side in the asteroid field as pre-seeded mines, in locations where they will affect
+  the battle. small groups of 4-8 that chain, but separated so one explosion won't set off all of them".
+- **What:** `BenchLayout` lays each side's mines as groups of 4 to 8 (seeded), inside the battle's asteroid field and where the fights
+  and the fighters' routes run (measure where fighters fly in a run and place groups there, clear of every starting hull's trigger);
+  within a group every mine is inside a neighbour's 100 m blast, so a group goes off as a chain; between groups the gap is wide enough
+  (more than the blast plus a margin) that no chain crosses. Keep the mix's mine count (`max(100, N)`) unless the groups need a
+  rounding. Check the benchmark's tick figures stay inside the M4 budgets with mines now going off during the window.
+- **Done when:** tests (groups of 4 to 8, chains within a group, none between groups, in the field, each side's share); in a
+  `bench battle 300` some mines go off by AI fighters; the maintainer sees them affect the fight (H); committed.
