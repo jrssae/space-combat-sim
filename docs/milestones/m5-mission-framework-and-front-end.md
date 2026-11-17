@@ -2,10 +2,7 @@
 
 > "Scripted play." (`docs/roadmap.md`)
 
-**Status:** **built, awaiting the maintainer's confirmation (2026-11-12).** Every task is done except T20, whose automated part is
-finished: AC1 to AC17 and AC19 to AC28 are met (the acceptance table's Done column), the full suite is green, the GPU check and
-the benchmark are in T20's notes. What is left is AC18, the maintainer's play-test (`docs/playtest.md`, "M5 acceptance
-checklist"), and the confirmation; then `m5` merges into `main`. History: planned 2026-11-02 on branch `m5`, cut from `main` at `b2f8ce1` (M3 merged) while M4 goes on separately on `m4`.
+**Status:** **Accepted 2026-11-17** by the maintainer (every (H) check passed in the M7 play-test; the last fixes were M7-T54 escort, M7-T55 civilians flee, M7-T56 encounters and traffic). Merged into `main` as work in progress on 2026-11-12 (tag `m5-wip`); the accepted docs reach `main` with M7's merge. Before that: built, awaiting the maintainer's confirmation (2026-11-12); AC18 was the maintainer's play-test (`docs/playtest.md`, "M5 acceptance checklist"). History: planned 2026-11-02 on branch `m5`, cut from `main` at `b2f8ce1` (M3 merged) while M4 goes on separately on `m4`.
 The maintainer asked for M5 to run beside M4 because most of it does not touch the performance work, and expects `m5` to
 be rebased onto `main` once M4 merges (see "Living beside M4"). The planning questions were answered the same day (below),
 including the civilian ships' lengths and a seventh civilian hull, the Centauri Brezebel (Q8, Q11). A ninth hull, the
@@ -624,7 +621,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T46 | A | Radial comms menu: the comms menu moves onto T25's radial framework, with the focus pull, the right stick to point, A to confirm, B to go back (maintainer, 2026-11-09) | T25, T44, T07 | Sonnet | One framework for both menus; the comms routing changes from the D-pad to the stick; it pauses the game | done |
 | T47 | - | Radar plot input checks and scratch reuse: the code review's two open radar items (maintainer, 2026-11-12; numbered last because it was added after the others had numbers) | T34 | controller | Two small native fixes found by the code review | done |
 | T48 | - | The full code review's three P3 findings (maintainer, 2026-11-12; numbered last because it was added after the others had numbers) | T47 | controller | Small fixes found by the review | done |
-| T20 | - | Integration, full suite, docs and acceptance | all | Fable (maintainer, 2026-11-11) | One full run, the GPU check, the (H) list | in progress — awaiting the maintainer's confirmation |
+| T20 | - | Integration, full suite, docs and acceptance | all | Fable (maintainer, 2026-11-11) | One full run, the GPU check, the (H) list | done (accepted by the maintainer 2026-11-17) |
 
 **Progress (2026-11-12).** Every task in the table is `done` except T20, which is `in progress` until the maintainer confirms
 the milestone (its notes are at the end of this file). The paragraphs below are the build's history, kept as written.
@@ -2721,8 +2718,8 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   checklist; update the roadmap row; run `scripts/run_tests.sh` once and read GUT's and Python's own totals; run the GPU
   check on the maintainer's machine; then ask the maintainer to confirm the milestone. `m5` already holds all of M4 (Q34);
   once confirmed it merges into `main` (no rebase).
-- **Done when:** the maintainer confirms M5.
-- **Status:** in progress — awaiting the maintainer's confirmation. Not merged into `main`.
+- **Done when:** the maintainer confirms M5 (met 2026-11-17).
+- **Status:** done: the maintainer accepted M5 on 2026-11-17 after the M7 play-test (AC18 passed). Merged into `main` as work in progress on 2026-11-12 (tag `m5-wip`).
 - **Notes (2026-11-12, the automated part):**
   - **Docs.** Architecture §18: a map of which subsection describes each part of M5 and what a later task replaced; the
     file list brought up to date (the buoy ring and T02's two select pages gone; the settings and controls menus, dialog,

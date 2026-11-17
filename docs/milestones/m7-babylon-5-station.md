@@ -2031,6 +2031,7 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   `scripts/run_tests.sh` once, read from the suite's own totals; the GPU check; then ask the maintainer to confirm the milestone,
   and once confirmed merge `m7` into `main`.
 - **Done when:** the maintainer confirms M7.
+- **M4 and M5 accepted by the maintainer 2026-11-17** (docs closed out in this commit).
 
 - **Scope added (2026-11-15):**
   - The council's call-site tests: a heavy cannon in `TurretRows` (a lifted mount) hits a crossing fighter-sized target at 2 km,
