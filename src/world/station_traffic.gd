@@ -257,6 +257,7 @@ func view_cargo_bay() -> String:
 	var s: Station = station()
 	if s == null or not main.player_alive:
 		return "no player to move"
+	main.world.return_home()  # the station's rail first (M7-T71)
 	var hold: Vector3 = s.hardpoints.cargo_bay["cargo_bay_hold"]
 	var toward: Vector3 = -plan.away
 	var at: Vector3 = s.to_global(hold + toward * VIEW_TOWARD_M + Vector3(VIEW_SIDE_M, VIEW_UP_M, 0.0))

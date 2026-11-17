@@ -343,6 +343,9 @@ func _goto(n: int, metres: float) -> ConsoleResult:
 		return ConsoleResult.failure("bots goto <1 to %d> [metres]" % bots.size())
 	if station == null or station.main == null or not station.main.player_alive:
 		return ConsoleResult.failure("bots goto: no player to move")
+	var world: WorldFrame = WorldFrame.of(station)
+	if world != null:
+		world.return_home()  # the station's rail first (M7-T71)
 	var bot: MaintenanceBot = bots[n - 1]
 	var look: Vector3 = bot.global_position
 	# On the side away from the hull, so the view is clear, a little ahead of the bot's side.
@@ -352,7 +355,6 @@ func _goto(n: int, metres: float) -> ConsoleResult:
 	var forward: Vector3 = (look - at).normalized()
 	var up: Vector3 = Vector3.UP if absf(forward.dot(Vector3.UP)) < 0.98 else Vector3.BACK
 	station.main.ship.reset_to(Transform3D(Basis.looking_at(forward, up), at))
-	var world: WorldFrame = WorldFrame.of(station)
 	station.main.ship.linear_velocity = world.rest_velocity() if world != null else Vector3.ZERO
 	station.main.ship.angular_velocity = Vector3.ZERO
 	return ConsoleResult.line("%.0f m from %s (%s)" % [metres, bot.name, bot.motion.phase_name()])

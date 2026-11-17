@@ -120,6 +120,7 @@ func _view(which: StringName, km: float) -> ConsoleResult:
 	var far: FarProp = FarProp.of(prop)
 	if prop == null or far == null:
 		return ConsoleResult.failure("far view: no %s drawn far out here (far station places the station)" % which)
+	main.world.return_home()  # the camera near the prop: the frame on its rail (M7-T71)
 	var centre: Vector3 = far.math.centre
 	var at: Vector3 = centre + VIEW_BEARING.normalized() * maxf(km * 1000.0, 0.1)
 	var frame: Dictionary = {"position": {"actor": "far", "offset": [at.x, at.y, at.z]},

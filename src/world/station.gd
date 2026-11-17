@@ -591,6 +591,7 @@ func _place_at_tour_point(point_name: String) -> void:
 	var point: Dictionary = hardpoints.tour(point_name)
 	if point.is_empty() or main == null or not main.player_alive:
 		return
+	main.world.return_home()  # the frame back on the station's rail first (M7-T71)
 	var body: String = String(point["body"])
 	var at: Vector3 = to_world(point["position"], body)
 	var look: Vector3 = to_world(point["look_at"], body)

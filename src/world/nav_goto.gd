@@ -156,10 +156,9 @@ func go(place_name: String) -> String:
 		return ""
 	# A place on the station's rail: the frame goes back onto it first when the console has moved it, then the nodes stand
 	# where the universe puts them.
-	if not world.on_home_rail():
-		var refused: String = world.rail_focus(system, world.home_id)
-		if not refused.is_empty():
-			return refused
+	var refused_home: String = world.return_home()
+	if not refused_home.is_empty():
+		return refused_home
 	var pose: Array = _stand_off(place)
 	_put(pose[0], pose[1], pose[2])
 	return ""

@@ -87,6 +87,7 @@ func close() -> void:
 func place_player(view: StringName) -> void:
 	if not is_open() or not main.player_alive or not VIEWS.has(view):
 		return
+	main.world.return_home()  # the scene's place is measured on the home rail (M7-T71)
 	var spec: Dictionary = VIEWS[view]
 	var at: Vector3 = main.world.universe_to_local(centre.plus_local(spec["at"]))
 	var target: Vector3 = main.world.universe_to_local(centre.plus_local(spec["look"]))

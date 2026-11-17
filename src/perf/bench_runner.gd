@@ -241,6 +241,7 @@ func start(layout: StringName, n: int, options: Dictionary) -> ConsoleResult:
 
 
 func _set_up_scene() -> void:
+	main.world.return_home()  # the layout is laid out round the player on the home rail (M7-T71)
 	_restore = {
 		"table": Factions.table(),
 		"threshold": main.world.auto_rebase_distance_m,

@@ -729,6 +729,20 @@ func on_home_rail() -> bool:
 	return home_id != &"" and not _tracks_home and anchor_name == home_id
 
 
+## Whether the frame rides a rail, a place's or a body's own (`frame drop`), rather than a free-falling particle.
+func on_rail() -> bool:
+	return star_system != null and _anchor_on_rail
+
+
+## Puts the frame back on the rail the world was laid out on when the console moved it elsewhere (M7-T71). Every command
+## that moves the player into the scenario's home region calls it first, so the pull, the reference and the velocities
+## follow the new place. "" (also with nothing to do) or why it could not.
+func return_home() -> String:
+	if star_system == null or home_id == &"" or on_home_rail():
+		return ""
+	return rail_focus(star_system, home_id)
+
+
 ## The velocity in the local frame of what is tied to the anchor (a buoy, the gate, the station): the anchor's, or, while
 ## the frame falls with something else, that of the rail they ride (M7-T66).
 func anchored_velocity() -> Vector3:

@@ -212,7 +212,7 @@ func launch_wing(wing: String, count: int = WING_SIZE) -> String:
 		if led != null:
 			behaviour["orders"] = String(AiContext.order_word(led.order))
 		var made: Dictionary = BrainFactory.from_behaviour(behaviour, at, hash([callsign, main.scenario_seed]))
-		var ally: Combatant = pool.acquire(callsign, at, Basis.IDENTITY, main.world.rest_velocity(),
+		var ally: Combatant = pool.acquire(callsign, at, Basis.IDENTITY, main.world.anchored_velocity(),
 				made["brain"] as PilotBrain if bool(made["ok"]) else null, ShipPool.ALLY_TYPE)
 		if ally == null:
 			break
@@ -447,7 +447,7 @@ func _free(ship: Ship) -> void:
 # The station frame's state in the World: the station's place and its velocity against the World added.
 func _world_state(state: Dictionary, s: Station) -> Dictionary:
 	var xform: Transform3D = s.global_transform
-	var rest: Vector3 = main.world.rest_velocity() if main != null else Vector3.ZERO
+	var rest: Vector3 = main.world.anchored_velocity() if main != null else Vector3.ZERO  # the station's, wherever the frame is
 	return {"transform": xform * (state["transform"] as Transform3D), "velocity": xform.basis * (state["velocity"] as Vector3) + rest,
 			"angular": xform.basis * (state["angular"] as Vector3)}
 
@@ -461,6 +461,8 @@ func _start(wing: String, door: int, ships: Array[Combatant], player_id: String,
 	for launch: Dictionary in launches:
 		if launch["wing"] == wing.to_lower():
 			return "wing %s is launching already" % wing
+	if not player_id.is_empty():
+		main.world.return_home()  # the player's launch: the station's rail first (M7-T71)
 	var ids := PackedStringArray()
 	var by_id: Dictionary = {}
 	for c: Combatant in ships:

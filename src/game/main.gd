@@ -560,6 +560,7 @@ func resolved_scenario_path() -> String:
 
 ## Back to the scenario start, at rest, with a full hull (Back / Backspace / `respawn`, and the respawn after a death).
 func respawn() -> void:
+	world.return_home()  # the start is measured on the home rail (M7-T71)
 	ship.process_mode = Node.PROCESS_MODE_INHERIT
 	ship.visible = true
 	ship.reset_to(Transform3D(_spawn_basis, world.universe_to_local(_spawn_position)))

@@ -108,6 +108,7 @@ func start(only: String = "") -> String:
 	if not only.is_empty() and not book.points.has(only):
 		return "no stop %s (%s)" % [only, ", ".join(book.order)]
 	stop()
+	main.world.return_home()  # films the station on its rail, the player beside it (M7-T71)
 	tour_count += 1
 	stops = book.plan(s.hardpoints, seed_value(), only, s.drum_angle, s.spin.rate_rad_s if s.spinning else 0.0)
 	if stops.is_empty():

@@ -486,6 +486,7 @@ func _view(g: Jumpgate, view: StringName) -> ConsoleResult:
 		return ConsoleResult.line("gate view off")
 	if not VIEWS.has(view):
 		return ConsoleResult.failure("gate view <%s>" % "|".join(VIEW_NAMES))
+	main.world.return_home()  # the camera near the gate: the frame on its rail (M7-T71)
 	var pose: Array = VIEWS[view]
 	var key: String = "gate:" + g.display_name
 	var at: Vector3 = pose[0]
@@ -695,6 +696,9 @@ func _cmd_gate(args: Dictionary) -> ConsoleResult:
 		&"approach":
 			var option: String = str(args.get(&"option", ""))
 			var approach_m: float = clampf(option.to_float() * 1000.0, 200.0, 100000.0) if option.is_valid_float() else APPROACH_M
+			var refused: String = main.world.return_home()  # the gate's rail first (M7-T71)
+			if not refused.is_empty():
+				return ConsoleResult.failure("gate approach: " + refused)
 			var at: Vector3 = g.global_transform * Vector3(0.0, 0.0, -approach_m)
 			main.ship.reset_to(Transform3D(Basis.looking_at(g.global_position - at, g.global_basis.y), at))
 			main.camera_rig.snap_chase()

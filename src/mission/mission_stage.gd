@@ -108,6 +108,8 @@ func place(actor: String, at: UniversePos) -> void:
 	var node: Node3D = _node_of(MissionWorld.key(actor))
 	if node == null:
 		return
+	if node == world.focus:
+		world.return_home()  # the player's mission places are measured on the home rail (M7-T71)
 	var local: Vector3 = world.universe_to_local(at)
 	var ship := node as Ship
 	if ship != null:

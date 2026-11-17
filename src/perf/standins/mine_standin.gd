@@ -352,11 +352,13 @@ func _cmd_mines(args: Dictionary) -> ConsoleResult:
 	var ship := _player().body() as Ship
 	if ship == null:
 		return ConsoleResult.failure("mines: no player ship to move")
+	var frame: WorldFrame = WorldFrame.of(self)
+	if frame != null:
+		frame.return_home()  # the frame back on the home rail first (M7-T71)
 	var metres: float = float(args[&"metres"])
 	var look: Vector3 = position_of(i)
 	var at: Vector3 = look + Vector3(0.6, 0.35, 0.72).normalized() * metres
 	ship.reset_to(Transform3D(Basis.looking_at((look - at).normalized(), Vector3.UP), at))
-	var frame: WorldFrame = WorldFrame.of(self)
 	ship.linear_velocity = frame.rest_velocity() if frame != null else Vector3.ZERO
 	ship.angular_velocity = Vector3.ZERO
 	return ConsoleResult.line("%.0f m from mine %d (%s)" % [metres, i, nearest[2]])

@@ -162,13 +162,14 @@ func refresh(camera: Camera3D) -> void:
 
 
 ## Where body `id` is from the World's anchor at `time_s`: three numbers, m, game axes; empty when it cannot be told.
-## A place on a rail sees the body straight from the ephemeris; a free-falling anchor is held against its home body.
+## A rail (a place's, or a body's own under `frame drop`, M7-T71) sees the body straight from the ephemeris; a free-falling
+## anchor is held against its home body.
 static func body_from_anchor(world: WorldFrame, id: StringName, time_s: float) -> PackedFloat64Array:
 	var system: StarSystem = world.star_system
 	if system == null or not system.has_id(id) or not system.has_id(world.anchor_name):
 		return PackedFloat64Array()
 	var off: PackedFloat64Array = world.anchor_offset
-	if system.place_ids.has(world.anchor_name):
+	if world.on_rail():
 		var seen: PackedFloat64Array = system.relative_state(id, world.anchor_name, time_s)
 		if seen.size() < 3:
 			return PackedFloat64Array()

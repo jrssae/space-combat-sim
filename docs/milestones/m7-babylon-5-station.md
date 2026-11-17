@@ -3474,3 +3474,29 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   side under T68's old start, the scaled layer not following the new anchor, a culled far prop) and fix it.
 - **Done when:** tests (after `frame drop 500`, `station goto main_docking_bay` leaves the player at rest beside the bay with no pull and
   REF Babylon 5; the same for the other moves; the planet drawn after `frame drop 500`); the maintainer checks it (H); committed.
+- **Done (code part, 2026-11-17):**
+  - **The moves (cause):** `frame drop` and `frame orbit` leave the frame on the planet's rail or orbit, and only T67's `goto` put it
+    back. `station goto main_docking_bay` placed the player beside the bay (which rides its own rail 27 500 km out) at the frame's
+    rest, so the planet still pulled (6 m/s^2 residual), the station moved away at its orbital speed against the player (2 472 m/s
+    after a drop, 3 225 m/s after an orbit) and REF went to the jumpgate reading that speed: the station shrank on screen while the
+    readings said the player was moving toward it. `respawn` measured the start against the planet's anchor and put the player
+    back at the drop point.
+  - **Fix:** `WorldFrame.return_home()`: when the frame is off the rail the world was laid out on, it puts it back
+    (`rail_focus`, T66), so the pull, REF, the readings and the assist follow the new place. Called before every move into the
+    station's region: `station goto` (both paths, in `_place_at_tour_point`), `gate approach`, `gate view`, `respawn` (also after a
+    death), the player's `launch` (and a scenario's bay start), `tour`, `goto` (its own call replaced), `mines view`, `far view`,
+    `bots goto`, `pods cargo view`, `traffic freighter show`'s view, the station scene's views, the bench's setup and a mission's
+    forced move of the player. `launch wing` (AI only, the player stays) hands its fighters the station's velocity
+    (`anchored_velocity`) instead of the frame's rest, so a wing launched while the frame is away does not fly off the drum.
+  - **The planet (cause):** the scaled-space layer read any anchor that is not a place as a free-falling particle, and a
+    `frame drop` anchor is the body's own rail: `anchor_state()` gave the planet against the star, so the planet was drawn
+    89.76 million km off behind the star, 0.006 deg across (the day side did not matter). **Fix:** the layer sees the bodies straight
+    from the ephemeris whenever the frame rides a rail (`WorldFrame.on_rail()`), a place's or a body's: now 5 280 km off, the true
+    distance, 130 deg across.
+  - GPU (RX 6950 XT, Forward+, 1200x675, 52-60 fps, 68-70 draw calls): before, no planet in any of four views after `frame drop
+    500`, and `station goto main_docking_bay` still on `rail epsilon_iii`; after, the planet fills the view toward it, the bay goto
+    on `rail babylon5` at 0.0 m/s (`references/screenshots/M7-T71 frame return/`, `before_*` and `after_*`).
+  - Tests: `test_frame_return.gd` (new, 6: after `frame drop 500` and `frame orbit 400`, `station goto main_docking_bay` at the
+    point, on the station's rail with no pull, at rest, REF BABYLON 5, flying at the station closes 20 m a second and reads 20 m/s;
+    `gate approach`, `respawn`, `goto babylon 5`, `tour <stop>`, `mines view`; the planet drawn at its true distance and direction,
+    a disc inside the camera's range). All 6 fail on the old code. info.md `frame` row.

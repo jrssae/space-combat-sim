@@ -109,6 +109,7 @@ func view(down_the_lane: bool) -> ConsoleResult:
 		plan = CargoFerryPlan.build(station.hardpoints.cargo_bay, Hardpoints.load_collision_only(HARDPOINTS))
 		if not plan.valid:
 			return ConsoleResult.failure("pods cargo view: %s" % plan.error)
+	main.world.return_home()  # the station's rail first (M7-T71)
 	var at: Vector3 = station.to_global(plan.hold + plan.axis * VIEW_BACK_M + Vector3(VIEW_SIDE_M, VIEW_UP_M, 0.0))
 	var look: Vector3 = station.to_global(plan.hold + plan.axis * VIEW_LOOK_M)
 	if down_the_lane:
