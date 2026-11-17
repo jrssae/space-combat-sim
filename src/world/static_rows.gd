@@ -117,6 +117,27 @@ static func shift(offset: Vector3, world: Node) -> void:
 			_solid.moves += 1
 
 
+## Puts rows of `world` at `places` (row id to position, in `world`'s frame), in place as a shift is: `moves` counts it.
+## For rows put back where they stood exactly, after a stay far from the local origin (M7-T66).
+static func place_rows(world: Node, places: Dictionary) -> void:
+	if places.is_empty() or world == null:
+		return
+	var owner: int = world.get_instance_id()
+	var moved: bool = false
+	for i: int in ids.size():
+		if worlds[i] == owner and places.has(ids[i]):
+			positions[i] = places[ids[i]]
+			moved = true
+	if not moved:
+		return
+	moves += 1
+	if _solid != null and _solid.version == solid_version:
+		for i: int in _solid.ids.size():
+			if _solid.worlds[i] == owner and places.has(_solid.ids[i]):
+				_solid.positions[i] = places[_solid.ids[i]]
+		_solid.moves += 1
+
+
 ## Removes every row.
 static func clear() -> void:
 	var solid_row: bool = kinds.has(BodyKind.STATIC)

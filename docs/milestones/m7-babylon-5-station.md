@@ -3344,6 +3344,33 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   that the anchor moves, or re-placed on the anchor change); check `frame drop` and `frame rail` the same way.
 - **Done when:** a test (after `frame orbit 400`, the station, the gate and the planet keep their universe positions and the player is
   400 km over Epsilon III); the maintainer checks it (H); committed.
+- **Done (code part, 2026-11-17):**
+  - **Cause:** `frame orbit` (and `drop`, `rail`) only swapped the frame's anchor. A `UniversePos` is measured from the anchor and
+    nothing moved in the local space, so the station, the gate and every other object kept their numbers against the new anchor:
+    headless after `play free_flight; frame orbit 400`, `station info` still read `UniversePos(local: 5500, -1200, -6000)` and
+    `gate status` 56 km, now 400 km over Epsilon III. The anchor-tied things (`world_anchored`: station, gate, buoys, belts) stand
+    still against whatever the anchor is.
+  - **Fix** (`WorldFrame._carry_focus`): the console carries the player (only the player, not its wing: the free-flight scenario has
+    none, and a wing is `goto`'s business, T67) onto the new anchor; the rest of the world takes a position rebase the player sits out
+    and a velocity rebase by the new anchor's velocity, so it keeps its universe positions and velocities. `anchor_on_rail` records
+    the home rail the world was laid out on, and while the anchor is anything else the anchor-tied things ride that rail
+    (`_follow_home`); `anchored_velocity()` gives targeting and rams their velocity. A native setter
+    (`ScsSimCore.frame_set_origin_velocity`, Rust test) puts the frame on the new anchor riding it. Float32 at 27 500 km steps in 2 m,
+    so anchor-tied nodes carry their own drift remainder, and leaving the home rail notes every anchor-tied node and static row in
+    64-bit: `frame rail babylon5` puts them back exactly (`StaticRows.place_rows`). `FlightReference` and the chase camera take the
+    new place at once (`focus_carried`); without that the player's speed ceiling read the old reference's rest (a 421 km/s orbit of
+    the star was clamped to 9 999 m/s) and the chase camera was left 27 000 km behind for a frame.
+  - Keeping the station's rail as the anchor and moving only the player was tried first and dropped: D66 treats the rail as unpulled,
+    so a player in low orbit measured against it misses the rail's own 0.22 m/s^2 Kepler fall (2.4 m/s off the circular orbit in
+    11 s).
+  - Live (headless): after `frame orbit 400`, the player 400 000.0 m over Epsilon III at 0.0005 m/s against the circular orbit,
+    Babylon 5 0.7 m off its rail and 27 881 km away, the gate 27 870 km, both still on the rail 10 s later; `frame drop 500` falls in;
+    `frame rail babylon5` after the star (`frame orbit 100000 epsilon`) and the planet: the station at (5 500, -1 200, -6 000) to the
+    millimetre, riding, speed 0. GPU captures (RX 6950 XT, Forward+, 1200x675): before, `TGT BABYLON 5 8227 m`, `REF JUMPGATE
+    55.95 km`, the station in view at 400 km over the planet; after, `TGT none`, `REF EPSILON III ... ALT 400.00 km`, no station,
+    52 draw calls (88 before), 59-60 fps (`references/screenshots/M7-T66 frame orbit/`).
+  - Tests: `test_frame_carry.gd` (new: orbit 400 and drop 500 keep the station on its rail, the gate beside it, the player on the
+    orbit; rail back to the start with the station and a static row exact).
 
 ### M7-T67 `goto <nav point>`
 

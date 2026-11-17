@@ -5148,6 +5148,18 @@ altitude)` and `clear_anchor()` set it; `anchor_offset` (T09) is the scenario's 
 is **quiet** (a residual of exactly zero, nothing read) when the anchor feels no pull and every zone stays more than 1 000 km
 (`QUIET_MARGIN_M`) from the local origin, which is the station's case and keeps the parity recordings' bits.
 
+**The console carries the player, not the world (M7-T66).** `frame orbit`, `drop` and `rail` (`WorldFrame.orbit_focus`,
+`drop_toward`, `rail_focus`) put the frame on a new anchor at the player's new place: a position rebase the focus sits out (the
+shift's float32 remainder goes onto the focus, so it lands to the millimetre), a velocity rebase by the new anchor's velocity taken
+at once (the focus never holds it: Jolt caps a body at 10 km/s), then the new anchor under the frame, riding it
+(`ScsSimCore.frame_set_origin_velocity`). Every other object keeps its universe position and velocity. `anchor_on_rail` records the
+**home rail** the world was laid out on; while the anchor is anything else, the anchor-tied things (`world_anchored`) ride the home
+rail instead (`_follow_home`, each sample) and `anchored_velocity()` gives their velocity to the targeting and the rams. Far from
+the origin a float32 place steps in metres (2 m at 27 500 km), so each anchor-tied node carries its own sub-step remainder per
+drift (`_scs_drift_owed`), and leaving the home rail notes every anchor-tied node and static row against it in 64-bit: back on it,
+they go back exactly. Babylon 5 is then 27 000 km from a player 400 km over Epsilon III, as in real space; D66 still holds there:
+the station's region feels no pull while the station follows its Kepler rail, a 0.22 m/s^2 mismatch nobody is near to see.
+
 **One sample, the step last.** The tick's slots, around the order of §15.3:
 
 | Priority | Who | What |
@@ -5249,7 +5261,7 @@ anchor is the reference, it is zero and every result is bit-identical to before 
   with a warning); `FarPropHost.place_station` builds and dresses the stand-in; the gate stands on its rail 50 km ahead on the
   station's orbit, facing the station (`JumpgateHost.place`). Encounters take planned velocities against the player's reference.
 - Console: `system` gains `epoch_h`, `time_h` and `anchor`; `scaled epoch <hours>` offsets the World's system time for captures;
-  `frame [status|orbit <km> [body]|rail <place>|off]`.
+  `frame [status|orbit <km> [body]|drop <km> [body]|rail <place>|off]` (orbit, drop and rail carry the player; M7-T14, T66).
 
 ### 19.7 The rebase's cost (L4, AC2; T06, T21)
 

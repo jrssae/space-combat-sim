@@ -259,6 +259,8 @@ func _ready() -> void:
 	add_child(flight_reference)
 	# The cockpit camera follows a RemoteTransform3D, so reset its interpolation on a rebase or the jump smears.
 	world.rebased.connect(func(_offset: Vector3) -> void: camera_rig.cockpit_pivot.reset_physics_interpolation())
+	# The console carried the player to a new frame and the world shifted round it: the chase camera follows at once (M7-T66).
+	world.focus_carried.connect(camera_rig.snap_chase)
 	letterbox = Letterbox.new()
 	add_child(letterbox)
 	camera_rig.mode_changed.connect(_on_camera_mode_changed)

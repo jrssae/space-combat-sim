@@ -118,7 +118,7 @@ func get_target_velocity() -> Vector3:
 	if owner_node != null and owner_node.is_in_group(WorldFrame.ANCHORED_GROUP):
 		var world: WorldFrame = WorldFrame.of(owner_node)
 		if world != null:
-			return velocity + world.rest_velocity()
+			return velocity + world.anchored_velocity()
 	return velocity
 
 

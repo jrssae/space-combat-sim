@@ -65,6 +65,7 @@ func _exit_tree() -> void:
 func _physics_process(_delta: float) -> void:
 	if world != null and is_instance_valid(world) and not world.boosted.is_connected(_on_boosted):
 		world.boosted.connect(_on_boosted)
+		world.focus_carried.connect(update)  # carried to a new frame: the reference there before the ship flies (M7-T66)
 	update()
 
 

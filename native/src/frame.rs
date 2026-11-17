@@ -127,6 +127,12 @@ impl Frame {
         self.origin = origin;
     }
 
+    /// The local frame's velocity against a new anchor (M7-T66), set after the movers have taken the change: zero rides it.
+    pub fn set_origin_velocity(&mut self, velocity: V3) {
+        self.origin_velocity = velocity;
+        self.riding = velocity == [0.0; 3];
+    }
+
     /// The tick's gravity sample: the bodies placed against the anchor at `time_s`, their zones, the anchor's own pull, and
     /// whether anything near the local space pulls at all. Returns that last answer.
     pub fn sample(&mut self, time_s: f64) -> bool {
