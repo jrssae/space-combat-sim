@@ -9,6 +9,10 @@ extends RefCounted
 ## `callsign(0)` is ALPHA 1 (the player), slot 1 ALPHA 2 and so on. The order (`AiContext.Order`, default COVER ME) holds
 ## for every member while the leader lives; while it is dead the wing engages at will (`effective_order`) and resumes
 ## the order when it is back.
+##
+## Gaps (M8-T13): a wing keeps the shape its count of ships would have built joining one by one. `close_gaps` moves the
+## members behind an empty slot up their arm and evens the arms after, so losses leave no hole; a pilot keeps its callsign
+## when it moves, and the callsign of the one that went down goes with the empty slot to the back (`lost_callsign`).
 
 const DEFAULT_NAME: String = "ALPHA"
 ## Members besides the leader: three wingmen in a finger-four (maintainer Q4).
@@ -27,8 +31,11 @@ var size: int = DEFAULT_SIZE
 
 # By slot - 1; null for an empty slot.
 var _by_slot: Array[Combatant] = []
-# By slot - 1: the slot's member went down and nobody has taken the slot since (the HUD roster's DOWN).
-var _lost: Array[bool] = []
+# By slot - 1: the callsign of the member that went down, while nobody has taken its place (the HUD roster's DOWN); "" otherwise.
+var _lost: Array[String] = []
+# Whether `close_gaps` has nothing to do: the members and the shape are as it last left them.
+var _closed: bool = false
+var _closed_shape: Formation.Shape = Formation.Shape.FINGER_FOUR
 
 
 func _init(p_name: String = DEFAULT_NAME, p_leader: Combatant = null, p_size: int = DEFAULT_SIZE) -> void:
@@ -37,7 +44,7 @@ func _init(p_name: String = DEFAULT_NAME, p_leader: Combatant = null, p_size: in
 	size = maxi(p_size, 0)
 	_by_slot.resize(size)
 	_lost.resize(size)
-	_lost.fill(false)
+	_lost.fill("")
 
 
 ## Puts `member` in `slot` (1..size), or for -1 in the empty slot that keeps the arms even (`fill_order`). Returns the slot, or -1 when the slot is taken or
@@ -53,7 +60,8 @@ func add_member(member: Combatant, slot: int = -1) -> int:
 	if slot < 1 or slot > size or _by_slot[slot - 1] != null:
 		return -1
 	_by_slot[slot - 1] = member
-	_lost[slot - 1] = false
+	_lost[slot - 1] = ""
+	_closed = false
 	return slot
 
 
@@ -65,11 +73,9 @@ func resize(new_size: int) -> bool:
 		if _by_slot[i] != null:
 			return false
 	_by_slot.resize(new_size)
-	var old: int = _lost.size()
-	_lost.resize(new_size)
-	for i: int in range(old, new_size):
-		_lost[i] = false
+	_lost.resize(new_size)  # new slots come as "": not lost
 	size = new_size
+	_closed = false  # the centre slot goes with the size
 	return true
 
 
@@ -79,19 +85,25 @@ func remove_member(member: Combatant) -> bool:
 	if slot < 1:
 		return false
 	_by_slot[slot - 1] = null
+	_closed = false
 	return true
 
 
-## Marks an empty `slot` lost: its member went down. `add_member` clears the mark. Ignored for a slot out of range or
-## flown.
-func mark_lost(slot: int) -> void:
+## Marks an empty `slot` lost: its member, called `lost_name` (default: the slot's callsign), went down. `add_member` clears
+## the mark. Ignored for a slot out of range or flown.
+func mark_lost(slot: int, lost_name: String = "") -> void:
 	if slot >= 1 and slot <= size and _by_slot[slot - 1] == null:
-		_lost[slot - 1] = true
+		_lost[slot - 1] = lost_name if not lost_name.is_empty() else callsign(slot)
 
 
-## Whether `slot`'s member went down and the slot is still empty.
+## Whether a member went down and `slot` is the empty place it left the wing with.
 func is_lost(slot: int) -> bool:
-	return slot >= 1 and slot <= size and _lost[slot - 1]
+	return slot >= 1 and slot <= size and not _lost[slot - 1].is_empty()
+
+
+## The callsign of the member whose loss left `slot` empty, or "" when the slot is not lost.
+func lost_callsign(slot: int) -> String:
+	return _lost[slot - 1] if slot >= 1 and slot <= size else ""
 
 
 ## `member`'s slot (1..size), or -1.
@@ -150,19 +162,103 @@ func fill_order() -> PackedInt32Array:
 # Whether empty slot `a` should be filled before `b` with the arms at `balance`: the centre last, then the one leaving the arms
 # more even, then the one nearer the leader, then the lower slot.
 func _fills_before(a: int, b: int, balance: int) -> bool:
+	var better: int = _better_place(a, b, balance)
+	return better > 0 if better != 0 else a < b
+
+
+# Which of slots `a` and `b` is the better place for one more ship with the arms at `balance`: 1 for `a`, -1 for `b`, 0 when
+# they are as good as each other (mirror slots of even arms).
+func _better_place(a: int, b: int, balance: int) -> int:
 	var a_side: int = formation.side(a, size)
 	var b_side: int = formation.side(b, size)
 	if (a_side == 0) != (b_side == 0):
-		return b_side == 0
+		return 1 if b_side == 0 else -1
 	var a_skew: int = absi(balance + a_side)
 	var b_skew: int = absi(balance + b_side)
 	if a_skew != b_skew:
-		return a_skew < b_skew
+		return 1 if a_skew < b_skew else -1
 	var a_depth: float = formation.offset(a, size).length_squared()
 	var b_depth: float = formation.offset(b, size).length_squared()
 	if a_depth != b_depth:
-		return a_depth < b_depth
-	return a < b
+		return 1 if a_depth < b_depth else -1
+	return 0
+
+
+## Closes the holes losses left (M8-T13), so the wing flies the shape its count would have built by `fill_order`. First the
+## members behind an empty slot move up their own arm, keeping their order, so nobody crosses the V for a hole on its side.
+## Then, while a ship would be better placed in the first slot a newcomer would take (an arm two longer than the other, the
+## centre slot flown beside an open arm slot), the worst placed one moves there. Mirror slots count as equal, so a wing that
+## is already even stays as it is. Returns the moves in order, each (from, to).
+func close_gaps() -> Array[Vector2i]:
+	var moves: Array[Vector2i] = []
+	if _closed and _closed_shape == formation.shape:
+		return moves
+	_closed = true
+	_closed_shape = formation.shape
+	for arm_side: int in [-1, 1]:
+		var arm: PackedInt32Array = _arm_slots(arm_side)
+		var next: int = 0
+		for slot: int in arm:
+			if _by_slot[slot - 1] == null:
+				continue
+			if arm[next] != slot:
+				_move(slot, arm[next], moves)
+			next += 1
+	for _i: int in size:  # every move puts a ship in a better place, so this many is the most there can be
+		var free: PackedInt32Array = fill_order()
+		var from: int = _worst_placed(free[0]) if not free.is_empty() else 0
+		if from == 0:
+			break
+		_move(from, free[0], moves)
+	return moves
+
+
+# The slots on one side of the leader (-1 left, 1 right), nearest the leader first.
+func _arm_slots(arm_side: int) -> PackedInt32Array:
+	var slots: Array[int] = []
+	for slot: int in range(1, size + 1):
+		if formation.side(slot, size) == arm_side:
+			slots.append(slot)
+	slots.sort_custom(func(a: int, b: int) -> bool:
+		var a_depth: float = formation.offset(a, size).length_squared()
+		var b_depth: float = formation.offset(b, size).length_squared()
+		return a_depth < b_depth if a_depth != b_depth else a < b)
+	return PackedInt32Array(slots)
+
+
+# The flown slot whose ship should move to empty slot `to`, or 0 when every ship is placed as well as it would be there: the
+# centre slot before an arm's, then the one furthest from the leader.
+func _worst_placed(to: int) -> int:
+	var balance: int = 0
+	for i: int in size:
+		if _by_slot[i] != null:
+			balance += formation.side(i + 1, size)
+	var worst: int = 0
+	for slot: int in range(1, size + 1):
+		if _by_slot[slot - 1] == null or _better_place(to, slot, balance - formation.side(slot, size)) <= 0:
+			continue
+		if worst == 0 or _moves_before(slot, worst):
+			worst = slot
+	return worst
+
+
+# Whether the ship in flown slot `a` should give up its place before the one in `b`.
+func _moves_before(a: int, b: int) -> bool:
+	var a_centre: bool = formation.side(a, size) == 0
+	if a_centre != (formation.side(b, size) == 0):
+		return a_centre
+	var a_depth: float = formation.offset(a, size).length_squared()
+	var b_depth: float = formation.offset(b, size).length_squared()
+	return a_depth > b_depth if a_depth != b_depth else a > b
+
+
+# Moves the member in `from` to empty slot `to`. The lost mark goes the other way: the hole is now where the ship came from.
+func _move(from: int, to: int, moves: Array[Vector2i]) -> void:
+	_by_slot[to - 1] = _by_slot[from - 1]
+	_by_slot[from - 1] = null
+	_lost[from - 1] = _lost[to - 1]
+	_lost[to - 1] = ""
+	moves.append(Vector2i(from, to))
 
 
 func is_full() -> bool:

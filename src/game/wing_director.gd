@@ -4,7 +4,8 @@ extends Node
 ## main scene, `process_physics_priority` 290: after the resolvers (a member destroyed this tick is already down), before the
 ## waves (300).
 ##
-## Each tick, for every wing (`refresh`): members that are down, left play or no longer fly an `AiPilot` leave their slot.
+## Each tick, for every wing (`refresh`): members that are down, left play or no longer fly an `AiPilot` leave their slot,
+## and the ones behind move up so the formation has no hole (`Wing.close_gaps`, M8-T13; they keep their callsigns and paint).
 ## Then each member's `AiContext` gets the wing's view: its order (`Wing.effective_order`: engage at will while the leader is
 ## dead), the leader's id and selected target, the engage radius, its slot offset, and the link to the leader that a member
 ## beyond sensor range flies on.
@@ -22,8 +23,9 @@ extends Node
 ## may be zero or anything), at the leader's velocity, on the `ally_starfury` profile and the wing's order. `Main` calls it
 ## on `WaveDirector.wave_started`. It refreshes first, so a wingman shot down this very tick counts as empty whatever the
 ## physics order. It launches nothing while the leader is down or the game is paused, fills what the pool can, and warns
-## once if it falls short (not when the scenario pools no allies). A callsign already carried by a ship in play is not given
-## twice: that slot takes the next free number.
+## once if it falls short (not when the scenario pools no allies). A replacement takes the callsign of the wingman whose loss
+## left its slot empty (`callsign_for`). A callsign already carried by a ship in play is not given twice: that slot takes the
+## next free number.
 ##
 ## Scenario wings (M3-T10): `declare` takes a scenario's `wings[]`; `join` puts a ship spawned into a named wing, after the
 ## ships that left play this tick give up their slots, and warns when the wing cannot take it. The wing is
@@ -175,8 +177,8 @@ func _lead(wing: Wing, ship: Combatant) -> void:
 		add_member(wing, old)
 
 
-# A Starfury that takes a place in a wing wears the wing's livery and the place's number (`Wing.callsign`'s: the leader 01, slot n
-# n + 1), whatever name the pool gave it (M4-T30b). Hulls without a livery table are left alone.
+# A Starfury that takes a place in a wing wears the wing's livery and `number` (the leader 01, a member its callsign's, or its
+# slot's when it has another name), whatever the pool gave it (M4-T30b). Hulls without a livery table are left alone.
 func _paint(wing: Wing, member: Combatant, number: int) -> void:
 	if member == null or member.ship == null or member.ship.spec == null:
 		return
@@ -208,7 +210,7 @@ func add_member(wing: Wing, member: Combatant, slot: int = -1) -> int:
 	var at: int = wing.add_member(member, slot)
 	if at < 0:
 		return -1
-	_paint(wing, member, at + 1)
+	_paint(wing, member, _wing_number(wing, member.display_name, at + 1))
 	if pilot.behaviour(&"formation") == null:
 		pilot.add_behaviour(BehaviourFormation.new(pilot.profile))
 	_give_rally(pilot)
@@ -375,25 +377,35 @@ func roster(wing: Wing = null) -> Array[Dictionary]:
 	return out
 
 
-## The HUD roster of `wing` (default: the player's), one row per slot (M3-T11): `callsign`, `hull`, `behaviour`, `target`
-## and `down`. A shot-down slot reads `down` until a replacement takes it; a slot never flown is left out.
+## The HUD roster of `wing` (default: the player's), one row per slot flown or lost (M3-T11): `callsign`, `hull`,
+## `behaviour`, `target` and `down`. A wingman shot down reads `down` under its own callsign until a replacement comes; a
+## slot never flown is left out. The rows go by callsign number, not by slot, so a row stays where it is when the wingmen
+## move up after a loss (M8-T13).
 func hud_roster(wing: Wing = null) -> Array[Dictionary]:
 	if wing == null:
 		wing = player_wing()
 	var out: Array[Dictionary] = []
 	if wing == null:
 		return out
+	var order: Array[Vector2i] = []  # (callsign number, row), sorted to place the rows
 	for slot: int in range(1, wing.size + 1):
 		var member: Combatant = wing.member_at(slot)
+		var callsign: String = member.display_name if member != null else wing.lost_callsign(slot)
+		if member == null and not wing.is_lost(slot):
+			continue
+		order.append(Vector2i(_wing_number(wing, callsign, wing.size + 1 + slot), out.size()))
 		if member == null:
-			if wing.is_lost(slot):
-				out.append({"callsign": wing.callsign(slot), "hull": 0.0, "behaviour": "", "target": "", "down": true})
+			out.append({"callsign": callsign, "hull": 0.0, "behaviour": "", "target": "", "down": true})
 			continue
 		var d: Dictionary = member.driver.brain.describe() if _pilot_of(member) != null else {}
-		out.append({"callsign": member.display_name,
+		out.append({"callsign": callsign,
 				"hull": member.damageable.hull.fraction() if member.damageable != null else 0.0,
 				"behaviour": str(d.get("behaviour", "none")), "target": str(d.get("target", "")), "down": false})
-	return out
+	order.sort()
+	var sorted: Array[Dictionary] = []
+	for entry: Vector2i in order:
+		sorted.append(out[entry.y])
+	return sorted
 
 
 func _physics_process(delta: float) -> void:
@@ -408,11 +420,12 @@ func refresh(wing: Wing) -> void:
 		if _pilot_of(member) == null or not _in_play(member):
 			var slot: int = wing.slot_of(member)
 			remove_member(wing, member)
-			wing.mark_lost(slot)
+			wing.mark_lost(slot, member.display_name)
 	var alive: bool = leader_alive(wing)
 	if not alive and (wing.leader == null or not wing.leader.is_player) and not wing.members().is_empty():
 		_lead(wing, wing.members()[0])  # the lowest slot leads on
 		alive = true
+	wing.close_gaps()  # the ones behind a hole move up; their new offsets go out below
 	var order: AiContext.Order = wing.effective_order(alive)
 	var leader_id: int = 0
 	var target_id: int = 0
@@ -466,14 +479,30 @@ func _post(line: String) -> void:
 	acknowledged.emit(line)
 
 
-## The slot's callsign, unless a ship in play carries it (a console `spawn ally`): then the first free number after the
-## wing's own, so no two ships share a name.
+## The callsign for a newcomer to `slot`: that of the wingman whose loss left it empty (M8-T13: the survivors moved up and
+## kept theirs), else the slot's own. If a ship in play carries it (a console `spawn ally`, a wingman that moved up): the
+## first free number after the wing's own, so no two ships share a name.
 func callsign_for(wing: Wing, slot: int) -> String:
+	var lost: String = wing.lost_callsign(slot)
+	if not lost.is_empty() and not _callsign_in_play(wing, lost):
+		return lost
 	var callsign: String = wing.callsign(slot)
-	var taken: bool = wing.leader != null and wing.leader.display_name == callsign
+	return pool.next_name(wing.name, wing.size + ShipPool.ALLY_FIRST_NUMBER) if _callsign_in_play(wing, callsign) else callsign
+
+
+func _callsign_in_play(wing: Wing, callsign: String) -> bool:
+	if wing.leader != null and wing.leader.display_name == callsign:
+		return true
 	for other: Combatant in pool.alive():
-		taken = taken or other.display_name == callsign
-	return pool.next_name(wing.name, wing.size + ShipPool.ALLY_FIRST_NUMBER) if taken else callsign
+		if other.display_name == callsign:
+			return true
+	return false
+
+
+# The number in `callsign` when it is one of `wing`'s own (`ALPHA 3` in ALPHA: 3), else `otherwise`.
+static func _wing_number(wing: Wing, callsign: String, otherwise: int) -> int:
+	var parsed: Array = Livery.parse_name(callsign)
+	return int(parsed[1]) if String(parsed[0]).to_lower() == wing.name.to_lower() and int(parsed[1]) > 0 else otherwise
 
 
 static func _pilot_of(member: Combatant) -> AiPilot:

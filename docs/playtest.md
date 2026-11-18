@@ -1149,6 +1149,17 @@ the choice was made from: `references/screenshots/M8-T02 sawtooth doors/`.
       well; they slide shut again with the teeth meshing. Along an arm the doors still open in a quick ripple.
 - [ ] **(H) The hangar behind the menu:** the doors in the hall's floor have the same toothed seam, with rails across each leaf.
 
+# Play-testing wingmen closing up after losses (M8-T13)
+
+`play station_launch`, `launch wing alpha`, FORM ON ME, then shoot wingmen down by selecting one and `kill target` (or let raiders
+do it: `spawn raider ai 1500`).
+
+- [ ] **(H) Closing up:** when a wingman goes down, the ones behind it on its arm each move up one place, and the V has no hole;
+      nobody rams anybody on the way. With one arm two ships longer than the other, the long arm's last ship crosses behind you
+      to the short one. Say if the centre ship (ALPHA 12) moving out to an arm that has room looks right, or if it should stay.
+- [ ] **(H) The roster:** the wingmen keep their callsigns when they move up; the downed one's row stays where it was and reads
+      DOWN; `wing replenish` brings a replacement under that callsign, at the back of the formation.
+
 # Play-testing the raider strike carrier (M12-T19, now M10-T19: the early delivery, merged into M8 by M8-T07)
 
 Flown in M8's play-test; M10-T19 stays open until the maintainer has flown it.

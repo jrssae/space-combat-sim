@@ -302,7 +302,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T10 | D | Interceptor muzzle at the drawn barrel tip, and the grid balance measured again (roadmap M7-2) | - | Fable | A placement fix in the turret rows with a balance check | done |
 | T11 | D | The walls beside the cargo bay stop flickering (roadmap M7-3) | - | Sonnet | Find the coplanar faces or shading cause in the station generator; a test | not started |
 | T12 | D | Audio rework of every sound effect and the Starfury engines' steady level (roadmap M7-5) | - | Opus | One loudness reference, the mix, and a smoothed engine gain; a listening checklist | not started |
-| T13 | D | Wingmen close the gaps losses leave in a formation (roadmap M7-6) | - | Fable | Native re-slotting with M7-T76's avoidance, 1 and 6 threads identical | in progress |
+| T13 | D | Wingmen close the gaps losses leave in a formation (roadmap M7-6) | - | Fable | Native re-slotting with M7-T76's avoidance, 1 and 6 threads identical | done |
 | T14 | D | The bench writes to `user://` in an exported build (roadmap L15) | - | Fable | A path fix with a test | done |
 | T15 | E | Linux x86_64 release build from the pinned export templates (Q9) | T14 | Sonnet | Templates by SHA-256, the native library and assets packed, an export smoke test | not started |
 | T16 | E | Performance and the GPU check: the squadron launch, the tour and the raid | T05, T09 | Opus | Measurement on the maintainer's machine; the budget call | not started |
@@ -522,6 +522,31 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 - **Goal:** roadmap M7-6: wingmen behind a lost Starfury move up into the empty slots in `Wing.fill_order`'s order, flown with
   M7-T76's avoidance, with no ally rams; native kept 1 and 6 threads identical, parity kept.
 - **Done when:** a seeded headless fight shows the formation without holes after losses, with no ally rams; parity green.
+- **Done (2026-11-18):** `Wing.close_gaps`, called by `WingDirector.refresh` every tick after it drops the members that are
+  down, so a wing the director runs never flies with a hole (`docs/architecture.md` §20.12, "Closing up after losses"). The
+  rule works for any wing size and all three shapes (T19's flights of three included): the members behind an empty slot move up
+  their own arm in order; then, while a ship would be better placed in the slot `fill_order` gives a newcomer (an arm two longer
+  than the other, the centre ship beside an open arm slot), the worst placed one moves there; mirror slots count as equal, so
+  an even wing sends nobody across. The result is the shape that many newcomers would have built, or its mirror.
+  - **No native change.** A slot is only the offset in the pilot's `AiContext`; the core flies the new one as any slot, with
+    T76's avoidance. Nothing in `native/` moved, so 1 and 6 threads and the `delayed` reference are as they were and no parity
+    recording changed (`test_flight_parity_fight`, `test_weapon_rows_battle`, `test_brain_think_parity` green).
+  - **Names (my choice, for the maintainer to confirm).** A pilot keeps its callsign and painted number when it moves up. The
+    downed pilot's callsign goes with the hole to the back (`Wing.lost_callsign`); the replacement that fills it takes that
+    callsign and its number (`WingDirector.callsign_for`). The HUD roster lists its rows by callsign number instead of by
+    slot, so no row moves when the wing closes up and the DOWN row reads the downed pilot's callsign.
+  - **Tests** (the staged copy, HEAD plus this change): `test_wing` 26 (+9: a finger-four's losses at the front, middle and
+    back; an arm of ten moving up; several at once; the centre ship; even arms; the lost callsign; a newcomer after a loss;
+    every size 1 to 12 in every shape with seeded random losses; a change of shape), 17 369 asserts. `test_wing_gaps` (new,
+    slow, the real main scene on six threads) 6: Alpha's eleven under FORM ON ME shot at from astern by six seeded raiders,
+    seeds 1 to 3 (4, 3 and 4 lost; 0 rams inside the wing; every survivor within 2.5 m of its slot 45 s after), and three
+    schedules (the first of the left arm; four down at once then two more; a finger-four's last ship crossing to the empty
+    arm): 0 rams, no two centres within 50 m, a shape without a hole on every tick. Four older tests asserted that a hole
+    stays where it is and now expect the wing closed up (`test_wing_orders`, `test_wing_replenish`, `test_respawn_in_play`,
+    `test_tier_fire`). In all: 34 files across the wing, formation, HUD, launch, station, mission, bench and parity tests,
+    GUT_SLOW=1, every test passing; 924 scripts compile.
+  - **For the maintainer (H), `docs/playtest.md`:** how closing up looks; whether the centre ship should move out to an arm
+    that has room (it does, as `fill_order` puts the centre last); the callsigns and the roster's order.
 
 ### M8-T14 The bench writes to `user://` in an exported build
 

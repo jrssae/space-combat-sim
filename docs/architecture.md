@@ -5908,7 +5908,7 @@ src/world/station_airlock.gd     StationAirlock (M7-T25): the docking bay's inne
 src/world/airlock_doors.gd       AirlockDoors (pure): how far open, opening while any ship asks; AirlockLeaves slides the props
 src/ship/ship.gd                 + inside_station (M7-T62): SimCore.set_sheltered, native FLAG_SHELTERED
 src/mission/launch_director.gd   + launch_wing's station wings and the player-led wing (M7-T58), launch_all_wings
-src/ai/wing.gd                   + resize, fill_order (M7-T58, T74)
+src/ai/wing.gd                   + resize, fill_order (M7-T58, T74); close_gaps, lost_callsign (M8-T13)
 src/props/freighter_cargo.gd     FreighterCargo (T30): a Saturn's cargo off its hull for the bots, its hull shown as its other chunks
 src/props/cargo_ferry_plan.gd    + CargoFerryPlan.for_freighter (T30, pure): one CargoTrip a pod, from the chunks' boxes
 src/props/cargo_trip.gd          CargoTrip (pure): a pod's path, its bots' holds and routes, the tank's turn, the way home
@@ -6070,7 +6070,8 @@ data/station/traffic.json        the run's ships and spacing, its kinds' weights
   any wing.
   A wing the player leads (Alpha, the player its Alpha 1; M7-T58) is not made again: it grows to eleven slots (`Wing.resize`, which
   never cuts a flown slot) and the launch fills its empty slots in `Wing.fill_order` (M7-T74: the shorter arm of the V first,
-  nearest the leader, the centre slot last), each named for its slot (`WingDirector.callsign_for`) and briefed with the wing's
+  nearest the leader, the centre slot last), each named for its slot, or for the wingman whose loss left it empty
+  (`WingDirector.callsign_for`), and briefed with the wing's
   order, so the launched ships take the player's orders (keys 1-4, the comms menu, `wing order`); a launch that fails gives the
   slots back. `traffic scramble` and a raid's scramble take the same path. `launch wing all` launches every arm's wing.
 - **Inside the station (M7-T62).** A ship whose origin lies in the docking bay's black void behind the inner doors
@@ -6334,6 +6335,23 @@ data/station/bot_points.json     the crew's tunables, roads, patrol areas and wo
   alternate arms (#5 #6 left, #7 #8 right, ...), and a wing of more than three slots with an odd count puts its last slot on the
   centreline 80 m behind the leader. Only that slot depends on the wing's size, so growing a wing moves nobody; wings of up to
   three slots keep their slots. Newcomers take `Wing.fill_order`'s first slot (`test_formation`, `test_wing`, `test_launch_bay`).
+- **Closing up after losses (M8-T13, roadmap M7-6).** A wing the director runs never flies with a hole: every tick
+  `WingDirector.refresh`, after dropping the members that are down, calls `Wing.close_gaps`, and the offsets it sends out are
+  the new slots'. The rule, for any wing size and shape: first the members behind an empty slot move up their own arm, in
+  order, so nobody crosses the V for a hole on its side; then, while a ship would be better placed in the slot `fill_order`
+  gives a newcomer (an arm two ships longer than the other, the centre slot flown beside an open arm slot), the worst placed
+  one (the centre ship, else the last of the longer arm) moves there. Mirror slots count as equal, so a wing that is even
+  stays as it is (a flight of three's last wingman keeps its side). The result is the shape that many newcomers would have
+  built, or its mirror. A member released or made leader leaves a hole that closes the same way. `close_gaps` remembers that
+  it is closed until a member, the size or the shape changes, so the tick costs nothing more.
+  - **Flying it.** No native change: a wingman's slot is only the offset in its `AiContext`, so the core flies the new one
+    as any slot, with T76's avoidance (`kept_apart`, coming round a slot across the leader). `test_wing_gaps`: Alpha's eleven
+    shot at by seeded raiders, and scheduled losses (the first of an arm, several at once, a finger-four's last ship crossing
+    to the empty arm): no ram inside the wing, no two centres within 50 m, every survivor on its slot after.
+  - **Names.** A pilot keeps its callsign and its painted number when it moves. The callsign of the one that went down goes
+    with the hole to the back (`Wing.lost_callsign`, `mark_lost(slot, name)`); the replacement that fills it takes that
+    callsign (`callsign_for`) and is painted with its number. The HUD roster (`hud_roster`) lists the rows by callsign number,
+    not by slot, so no row moves when the wing closes up, and a lost row reads the downed pilot's callsign.
 - **Transit (T75).** `transit carrier` and `transit arrive` grow the raider pool when too few are free (`Main.ensure_free`), so they
   work in free flight with encounters off (`test_bench`).
 

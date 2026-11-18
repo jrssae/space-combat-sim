@@ -198,20 +198,30 @@ func test_while_the_player_is_dead_the_wing_engages_at_will_and_resumes_on_respa
 func test_a_downed_member_leaves_its_slot_and_the_next_one_answers() -> void:
 	allies[0].damageable.kill()
 	await _ticks(2)
-	assert_eq(wing.empty_slots(), PackedInt32Array([1]), "ALPHA 2's slot is free for a replacement (M3-T08)")
+	# The wing closes up (M8-T13): ALPHA 4, the last of the right arm, takes the empty left arm's slot.
+	assert_eq(wing.empty_slots(), PackedInt32Array([3]), "the place at the back is free for a replacement (M3-T08)")
+	assert_eq(wing.member_at(1), allies[2], "ALPHA 4 moved up into ALPHA 2's slot")
+	assert_eq(wing.member_at(2), allies[1], "ALPHA 3 keeps its own")
+	assert_eq(allies[2].display_name, "ALPHA 4", "and keeps its callsign")
+	assert_eq((allies[2].driver.brain as AiPilot).context.slot_offset, wing.slot_offset(1), "briefed with its new slot")
 	assert_eq(wing.members().size(), 2)
 	assert_eq((_read("wing.members") as PackedStringArray).size(), 2)
 	var result: Dictionary = main.wings.give_order(AiContext.Order.FORM_ON_ME)
-	assert_eq(result["line"], "ALPHA 3: COPY, FORMING UP")
+	assert_eq(result["line"], "ALPHA 4: COPY, FORMING UP", "the lowest slot answers")
 	assert_eq(main.wings.add_member(wing, allies[0]), -1, "a ship out of play cannot join")
-	assert_eq(wing.empty_slots(), PackedInt32Array([1]))
-	# The HUD roster keeps the slot, as DOWN, until a replacement takes it (M3-T11).
+	assert_eq(wing.empty_slots(), PackedInt32Array([3]))
+	# The HUD roster keeps the downed wingman's row, as DOWN, until a replacement comes (M3-T11); the rows stay in callsign
+	# order whoever flies which slot.
 	var rows: Array[Dictionary] = main.wings.hud_roster()
 	assert_eq(rows.size(), 3)
 	assert_eq(rows[0]["callsign"], "ALPHA 2")
 	assert_true(bool(rows[0]["down"]))
+	assert_eq(rows[1]["callsign"], "ALPHA 3")
 	assert_false(bool(rows[1]["down"]))
 	assert_eq(rows[1]["behaviour"], "formation")
+	assert_eq(rows[2]["callsign"], "ALPHA 4")
+	assert_false(bool(rows[2]["down"]))
+	assert_eq(main.wings.callsign_for(wing, 3), "ALPHA 2", "the replacement takes the downed wingman's callsign")
 
 
 func test_a_member_parked_in_the_low_attention_tier_keeps_its_slot() -> void:
