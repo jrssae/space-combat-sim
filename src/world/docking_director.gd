@@ -10,8 +10,11 @@ extends Node
 ##   the end of the repair, to the hand-off.
 ## - **Wingmen** of the player's wing dock on the wing order (key 6, the comms menu's DOCK) and by themselves below the hull
 ##   threshold. A docking wingman flies a docking pilot (`assets/ai/docking.tres`) on routes the native brains fly: to a
-##   waiting point off the bow with avoidance on, then `DockingPlan`'s lane. Inside it is away (`Wing.set_away`: its slot is
+##   waiting point off the bow with avoidance on, then `DockingPlan`'s lane (the roster reads DOCKING). Inside it is away (`Wing.set_away`: its slot is
 ##   kept, it is not lost), then it launches from a Cobra bay, gets its own pilot back and rejoins.
+## - **Home docks** (maintainer, 2026-11-18): a fighter docks only at its own home (`Combatant.home`), found among the nav
+##   points that offer `dock`, and only with that dock's bay within `dock_range_m`. Otherwise it stays and fights, the bay
+##   offers the player nothing and the wing's order cannot be given (`order_available`).
 ## - **One at a time** through the tunnel, with the station's traffic: a fighter waits off the bow while a civilian or another
 ##   fighter has the lane, and the traffic starts nothing while a fighter is on it.
 ##
@@ -62,8 +65,9 @@ var clear_m: float = 35.0
 var via_m: float = 60.0
 var timeout_s: float = 240.0
 var wingman_auto: bool = true
-var wingman_hull_below: float = 0.4
-var wingman_range_m: float = 60000.0
+var wingman_hull_below: float = 0.25
+## A fighter docks only at its home dock (`Combatant.home`), and only with that dock's bay within this range of it, metres.
+var dock_range_m: float = 60000.0
 var wingman_cruise_mps: float = 120.0
 var entry_out_m: float = 500.0
 ## A wingman flying faster than `peel_above_mps` first swings `peel_out_m` out of its formation, `peel_ahead_s` on along its
@@ -167,7 +171,49 @@ func player_refusal() -> String:
 		return "the player is launching"
 	if main.gates != null and main.gates.jump.is_active():
 		return "a jump is under way"
-	return _ready_plan()
+	var plan_problem: String = _ready_plan()
+	return plan_problem if not plan_problem.is_empty() else dock_refusal(main.combatant)
+
+
+## The dock `c` belongs to (M8-T06): the nav point that offers `dock` under the id `c.home` names, wherever it is; null with
+## no home or when its home is gone. Any docking bay in `NavPoint.DOCKS_GROUP` counts, a later station's or a carrier's too.
+func home_dock(c: Combatant) -> NavPoint:
+	if c == null or c.home == &"" or not is_inside_tree():
+		return null
+	for node: Node in get_tree().get_nodes_in_group(NavPoint.DOCKS_GROUP):
+		var point := node as NavPoint
+		if point != null and point.home_id == c.home and point.is_inside_tree():
+			return point
+	return null
+
+
+## Why `c` cannot dock for repair now, or "": it needs a home dock, within `dock_range_m`, that this director flies ships into.
+func dock_refusal(c: Combatant) -> String:
+	if c == null or not is_instance_valid(c.ship):
+		return "no such ship"
+	if c.home == &"":
+		return "%s has no home dock" % c.display_name
+	var dock: NavPoint = home_dock(c)
+	if dock == null:
+		return "%s's home dock (%s) is not here" % [c.display_name, c.home]
+	if c.ship.global_position.distance_to(dock.global_position) > dock_range_m:
+		return "%s's home dock is out of range (%.0f km)" % [c.display_name, dock_range_m / 1000.0]
+	var s: Station = station()
+	if s == null or dock != s.docking_bay:
+		return "%s's home dock (%s) takes its ships in itself" % [c.display_name, c.home]
+	return ""
+
+
+## Whether the wing's DOCK order can be given (M8-T06; maintainer, 2026-11-18): a wingman of the player's wing has its home dock
+## in range. Otherwise the comms menu leaves the entry out and the key does nothing.
+func order_available() -> bool:
+	var wing: Wing = main.wings.player_wing() if main != null and main.wings != null else null
+	if wing == null or not _ready_plan().is_empty():
+		return false
+	for member: Combatant in wing.members():
+		if dock_refusal(member).is_empty():
+			return true
+	return false
 
 
 ## Starts the player's docking: the controls are held and the autopilot takes the ship in. Returns "" or why not.
@@ -202,6 +248,9 @@ func start_wingman(member: Combatant, why: StringName = DockVisit.WHY_ORDER) -> 
 		return "%s is not in play" % member.display_name
 	if visit_of(member.display_name) != null:
 		return "%s is docking already" % member.display_name
+	refused = dock_refusal(member)
+	if not refused.is_empty():
+		return refused
 	var profile: AiProfile = load(PROFILE_PATH) as AiProfile
 	if profile == null:
 		return "the docking pilot's profile is missing (%s)" % PROFILE_PATH
@@ -218,6 +267,9 @@ func start_wingman(member: Combatant, why: StringName = DockVisit.WHY_ORDER) -> 
 	BehaviourFollowPath.attach(docker, peel if peel != null else _transit_route(entry))
 	member.driver.brain = docker
 	member.ship.tier_exempt = true  # the lane is flown in full, wherever the player is
+	var wing: Wing = _wing_of(member)
+	if wing != null:
+		wing.set_docking(member, true)  # the roster reads DOCKING until it is inside
 	_entries.append(entry)
 	_started += 1
 	return ""
@@ -229,8 +281,8 @@ func order_wing() -> Dictionary:
 	if wing == null or wing.members().is_empty():
 		return _answer(false, "%s: NO WINGMEN" % (wing.name if wing != null else Wing.DEFAULT_NAME))
 	var speaker: String = wing.speaker()
-	if not _ready_plan().is_empty():
-		return _answer(false, "%s: UNABLE, NO STATION TO DOCK AT" % speaker)
+	if not order_available():
+		return _answer(false, "%s: NEGATIVE, NO DOCK IN RANGE" % speaker)  # the console's answer: the key and the menu never ask
 	var sent := PackedStringArray()
 	var busy: int = 0
 	for member: Combatant in wing.members():
@@ -355,7 +407,7 @@ func _wire(s: Station) -> void:
 	var interaction: TargetInteraction = s.docking_bay.targetable.interaction
 	if interaction != null:
 		interaction.action = func() -> String: return start_player(DockVisit.WHY_HOLD)
-		interaction.offered = func() -> bool: return _player_entry().is_empty()
+		interaction.offered = func() -> bool: return _player_entry().is_empty() and home_dock(main.combatant) == s.docking_bay
 
 
 func _step_player_visit(entry: Dictionary, s: Station, delta: float) -> void:
@@ -606,6 +658,7 @@ func _drop(entry: Dictionary) -> void:
 	var wing: Wing = _wing_of(c)
 	if wing != null:
 		wing.set_away(c, false)
+		wing.set_docking(c, false)
 	if c.driver != null and c.driver.brain == entry["docker"]:
 		c.driver.brain = entry["brain"]  # its own pilot again: the wing briefs it at the next refresh
 		c.ship.tier_exempt = bool(entry.get("exempt", false))
@@ -672,12 +725,11 @@ func _watch_wing() -> void:
 	var wing: Wing = main.wings.player_wing()
 	if wing == null or wing.leader == null or not wing.leader.is_player:
 		return
-	var s: Station = station()
 	for member: Combatant in wing.members():
 		if member.damageable == null or not member.damageable.is_active() or member.damageable.hull.fraction() >= wingman_hull_below:
 			continue
-		if visit_of(member.display_name) != null or member.ship.global_position.distance_to(s.global_position) > wingman_range_m:
-			continue
+		if visit_of(member.display_name) != null or not dock_refusal(member).is_empty():
+			continue  # no home dock in range: it stays and fights
 		if start_wingman(member, DockVisit.WHY_HULL).is_empty():
 			_say("%s: HULL CRITICAL, DOCKING FOR REPAIRS" % member.display_name)
 
@@ -690,7 +742,7 @@ func _watch_offer() -> void:
 	if hull >= offer_hull_below:
 		_offer_armed = true
 		return
-	if not _offer_armed or not _player_entry().is_empty():
+	if not _offer_armed or not _player_entry().is_empty() or not dock_refusal(main.combatant).is_empty():
 		return
 	_offer_armed = false
 	dock_offered.emit()
@@ -889,7 +941,7 @@ func _load_data() -> void:
 	var wingman: Dictionary = d.get("wingman", {})
 	wingman_auto = bool(wingman.get("auto", wingman_auto))
 	wingman_hull_below = clampf(float(wingman.get("hull_below", wingman_hull_below)), 0.0, 1.0)
-	wingman_range_m = maxf(float(wingman.get("max_range_m", wingman_range_m)), 0.0)
+	dock_range_m = maxf(float(d.get("dock_range_m", dock_range_m)), 0.0)
 	wingman_cruise_mps = maxf(float(wingman.get("cruise_mps", wingman_cruise_mps)), 10.0)
 	entry_out_m = maxf(float(wingman.get("entry_out_m", entry_out_m)), 0.0)
 	queue_spacing_m = maxf(float(wingman.get("queue_spacing_m", queue_spacing_m)), 50.0)
@@ -927,6 +979,11 @@ func _register_console() -> void:
 				"unit": "s", "doc": "Seconds of the player's repair left"},
 		&"docked": {"get": func() -> int: return docked_count, "type": TYPE_INT, "doc": "Ships taken into the bay so far"},
 		&"relaunched": {"get": func() -> int: return relaunched_count, "type": TYPE_INT, "doc": "Ships launched again after a repair"},
+		&"range_km": {"get": func() -> float: return dock_range_m / 1000.0, "unit": "km",
+				"doc": "A fighter docks only with its home dock's bay within this range (data/station/docking.json)"},
+		&"order": {"get": func() -> String: return "available" if order_available() else "no home dock in range",
+				"doc": "Whether the wing's DOCK order can be given: a wingman has its home dock in range"},
+		&"homes": {"get": _homes_text, "doc": "The player's and each wingman's home dock, and why it cannot dock now if it cannot"},
 		&"hull_threshold": {"get": func() -> float: return wingman_hull_below,
 				"doc": "A wingman below this hull share docks by itself (data/station/docking.json)"},
 		&"bay": {"get": func() -> String: return "taken" if holds_bay() or (main != null and main.traffic != null \
@@ -966,6 +1023,18 @@ func _cmd_dock(args: Dictionary) -> ConsoleResult:
 			skip()
 			return ConsoleResult.line("skipped: %s" % player_visit().describe())
 	return ConsoleResult.line(describe())
+
+
+func _homes_text() -> String:
+	var parts := PackedStringArray()
+	var ships: Array[Combatant] = [main.combatant] if main != null and main.combatant != null else ([] as Array[Combatant])
+	var wing: Wing = main.wings.player_wing() if main != null and main.wings != null else null
+	if wing != null:
+		ships.append_array(wing.members())
+	for c: Combatant in ships:
+		var why: String = dock_refusal(c)
+		parts.append("%s %s%s" % [c.display_name, c.home if c.home != &"" else &"none", "" if why.is_empty() else " (%s)" % why])
+	return ", ".join(parts)
 
 
 func _wingman_named(ship_name: String) -> Combatant:

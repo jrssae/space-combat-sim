@@ -24,6 +24,12 @@ var cargo_pods: CargoPods = null
 var faction: StringName = Factions.NEUTRAL
 var display_name: String = ""
 var is_player: bool = false
+## The dock this fighter belongs to (M8-T06): a station's id (`babylon5`) or its parent capital ship's name; &"" for none. It
+## goes home for repair and nowhere else; with no home, or its home gone or out of range, it stays and fights. Set by the
+## scenario (`home` on a spawn, a wing or the player), by a launch from a station's Cobra bay, or with the wing's on a
+## replenish. `home_assigned`: the scenario said so itself (even "none"), so no wing or launch changes it. The pool clears both.
+var home: StringName = &""
+var home_assigned: bool = false
 
 
 ## One tick of pilot input, for the player (from `InputAdapter`) and for an AI ship (from its brain) alike: the flight

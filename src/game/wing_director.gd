@@ -112,6 +112,8 @@ func declare(declarations: Array[Dictionary]) -> void:
 		if wing != null and String(d["leader"]) == "player":
 			wing.order = int(d["order"]) as AiContext.Order
 			wing.formation.shape = int(d["formation"]) as Formation.Shape
+			if not String(d.get("home", "")).is_empty():
+				wing.home = StringName(d["home"])
 
 
 ## The wing called `wing_name` (case-insensitive), or null.
@@ -138,8 +140,10 @@ func join(wing_name: String, ship: Combatant) -> Wing:
 		wing = create_wing(String(d.get("name", wing_name)), null)
 		wing.order = int(d.get("order", AiContext.Order.ENGAGE_AT_WILL)) as AiContext.Order
 		wing.formation.shape = int(d.get("formation", Formation.Shape.FINGER_FOUR)) as Formation.Shape
+		wing.home = StringName(d.get("home", ""))
 	else:
 		refresh(wing)
+	give_home(wing, ship)
 	var named_leader: String = String(d.get("leader", ""))
 	if wing.leader != null and wing.leader.is_player:
 		return _add_joining(wing, ship)
@@ -151,6 +155,13 @@ func join(wing_name: String, ship: Combatant) -> Wing:
 		_lead(wing, ship)
 		return wing
 	return _add_joining(wing, ship)
+
+
+## A ship that comes to `wing` through the scenario, a launch or a replenish takes the wing's home dock (M8-T06), unless the
+## scenario gave it one of its own (or none on purpose).
+static func give_home(wing: Wing, ship: Combatant) -> void:
+	if wing != null and ship != null and not ship.home_assigned and wing.home != &"":
+		ship.home = wing.home
 
 
 # A joining ship takes a slot; a refusal is a scenario that does not fit its wing, so it is reported.
@@ -250,6 +261,7 @@ func replenish(wing: Wing = null) -> Array[Combatant]:
 		var ally: Combatant = pool.acquire(callsign, at, basis, velocity, made["brain"] as PilotBrain, ShipPool.ALLY_TYPE)
 		if ally == null:
 			break
+		give_home(wing, ally)
 		if add_member(wing, ally, slot) != slot:
 			pool.release(ally)  # leave the slot for the next call
 			break
@@ -374,7 +386,7 @@ func roster(wing: Wing = null) -> Array[Dictionary]:
 		var d: Dictionary = member.driver.brain.describe() if _pilot_of(member) != null else {}
 		out.append({"callsign": member.display_name, "slot": wing.slot_of(member),
 				"hull": member.damageable.hull.fraction() if member.damageable != null else 0.0,
-				"behaviour": str(d.get("behaviour", "none")), "state": str(d.get("state", "none"))})
+				"behaviour": _activity(wing, member, d), "state": str(d.get("state", "none"))})
 	return out
 
 
@@ -396,8 +408,15 @@ func hud_roster(wing: Wing = null) -> Array[Dictionary]:
 		var d: Dictionary = member.driver.brain.describe() if _pilot_of(member) != null else {}
 		out.append({"callsign": member.display_name,
 				"hull": member.damageable.hull.fraction() if member.damageable != null else 0.0,
-				"behaviour": str(d.get("behaviour", "none")), "target": str(d.get("target", "")), "down": false})
+				"behaviour": _activity(wing, member, d), "target": str(d.get("target", "")), "down": false})
 	return out
+
+
+# What a roster row says a member is doing: its pilot's behaviour, or `docking` on its way to the docking bay and `docked`
+# while it is inside (M8-T06), whatever the docking pilot flies meanwhile.
+static func _activity(wing: Wing, member: Combatant, described: Dictionary) -> String:
+	var docking: String = wing.dock_status(member)
+	return docking if not docking.is_empty() else str(described.get("behaviour", "none"))
 
 
 func _physics_process(delta: float) -> void:

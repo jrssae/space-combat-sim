@@ -137,6 +137,8 @@ func acquire(display_name: String, at: UniversePos, basis: Basis = Basis.IDENTIT
 		combatant.cargo_pods.set_count(-1)  # every pod mounted (M5-T16); the spawn says otherwise after
 	combatant.display_name = display_name
 	combatant.targetable.display_name = display_name
+	combatant.home = &""  # a home dock is per flight (M8-T06): the spawn, the wing or the launch gives it
+	combatant.home_assigned = false
 	combatant.targetable.broadcast_range_m = default_broadcast_range_m(type)  # a last user may have silenced it
 	# A Starfury of a wing wears its wing's livery and its number from its callsign (M4-T30b); every other ship that takes liveries
 	# the plain one; a hull without a livery table (a raider) is left alone.

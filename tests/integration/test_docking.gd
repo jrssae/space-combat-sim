@@ -37,18 +37,18 @@ func after_each() -> void:
 	ContactScan.invalidate()
 
 
-func _start() -> bool:
+func _start(scenario: String = SCENARIO) -> bool:
 	main = (load("res://src/game/main.tscn") as PackedScene).instantiate() as Main
 	source = FakeInputSource.new()
 	main.input_source = source
-	main.scenario_path = SCENARIO
+	main.scenario_path = scenario
 	main.raider_pool_size = 0
 	main.waves_auto_start = false
 	add_child_autofree(main)
 	await _ticks(2)
 	station = main.far_props.station
 	if station == null:
-		return false
+		return scenario != SCENARIO  # a scenario without a station is what some tests want
 	main.combatant.damageable.hit_taken.connect(func(info: HitInfo) -> void:
 		rams += 1 if info != null and info.cause == HitInfo.CAUSE_RAM else 0)
 	return true
@@ -108,6 +108,19 @@ func _state() -> String:
 
 func _damage(c: Combatant, hull_left: float) -> void:
 	c.damageable.hull.apply(c.damageable.hull.max_hp * (1.0 - hull_left))
+
+
+# What the roster says `ship_name` is doing: the director's row and the HUD's line for it.
+func _roster(ship_name: String) -> Array[String]:
+	var behaviour: String = ""
+	for row: Dictionary in main.wings.hud_roster():
+		if row["callsign"] == ship_name:
+			behaviour = str(row["behaviour"])
+	var line: String = ""
+	for row: HudLayout.RosterRow in HudLayout.compute(main._build_hud_input()).roster_rows:
+		if row.text.begins_with(ship_name):
+			line = row.text
+	return [behaviour, line]
 
 
 func _select_bay() -> void:
@@ -379,9 +392,17 @@ func test_wingmen_dock_on_the_order_and_below_the_hull_threshold_and_rejoin() ->
 	assert_eq(main.docking.visit_of("ALPHA 2").why, DockVisit.WHY_ORDER)
 	assert_null(main.docking.visit_of("ALPHA 3"), "an undamaged wingman stays")
 	assert_ne(two.driver.brain, pilot_two, "a docking pilot flies it in")
-	# ALPHA 3 falls below the threshold: it goes by itself and says so.
-	_damage(three, main.docking.wingman_hull_below - 0.1)
+	assert_eq(_roster("ALPHA 2")[0], "docking", "the roster says so while it flies in")
+	assert_string_ends_with(_roster("ALPHA 2")[1], "DOCKING", "on the HUD too")
+	assert_ne(_roster("ALPHA 3")[0], "docking", "the others read as they did")
+	# ALPHA 3 falls below the threshold (a quarter of its hull: maintainer, 2026-11-18): it goes by itself and says so.
+	assert_almost_eq(main.docking.wingman_hull_below, 0.25, 1e-6, "the threshold is the data's")
+	_damage(three, 0.3)
 	await _ticks(2)
+	assert_null(main.docking.visit_of("ALPHA 3"), "at 30 % it fights on")
+	three.damageable.hull.apply(three.damageable.hull.max_hp * 0.15)
+	await _ticks(2)
+	assert_lt(three.damageable.hull.fraction(), 0.25)
 	assert_eq(main.docking.visit_of("ALPHA 3").why, DockVisit.WHY_HULL)
 	assert_eq(main.docking.last_notice, "ALPHA 3: HULL CRITICAL, DOCKING FOR REPAIRS")
 	_fast()
@@ -402,6 +423,8 @@ func test_wingmen_dock_on_the_order_and_below_the_hull_threshold_and_rejoin() ->
 			assert_true(wing.is_away(first), "inside, it is away")
 			assert_eq(wing.slot_of(first), slot_two if first == two else slot_three, "with its slot kept")
 			assert_false(wing.is_lost(wing.slot_of(first)), "not lost")
+			assert_eq(_roster(first.display_name)[0], "docked", "the roster says it is inside")
+			assert_string_ends_with(_roster(first.display_name)[1], "DOCKED")
 			var other: Combatant = three if first == two else two
 			assert_eq(wing.slot_of(other), slot_three if first == two else slot_two, "and the formation does not close over its place")
 			assert_false(first.ship.visible, "out of play")
@@ -420,6 +443,7 @@ func test_wingmen_dock_on_the_order_and_below_the_hull_threshold_and_rejoin() ->
 		assert_eq(c.driver.brain, pair[1], "%s has its own pilot back" % c.display_name)
 		assert_eq(wing.slot_of(c), pair[2], "%s flies its old slot" % c.display_name)
 		assert_false(wing.is_away(c))
+		assert_false(_roster(c.display_name)[0].begins_with("dock"), "%s reads as any wingman again" % c.display_name)
 		assert_true(c.ship.visible)
 		assert_false(c.ship.inside_station)
 		assert_ne(c.ship.collision_layer, 0)
@@ -433,3 +457,122 @@ func test_wingmen_dock_on_the_order_and_below_the_hull_threshold_and_rejoin() ->
 	assert_true(ok, "they rejoin the leader (ALPHA 2 from %.0f m, now %.0f m and %.0f m)" % [far,
 			two.ship.global_position.distance_to(leader.global_position), three.ship.global_position.distance_to(leader.global_position)])
 	assert_eq(wing_rams[0], 0)
+
+
+func _press_dock_key() -> void:
+	source.hold(InputAdapter.WING_DOCK, 1.0, true)
+	await _ticks(2)
+	source.release(InputAdapter.WING_DOCK)
+	await _ticks(1)
+
+
+func test_a_fighter_docks_only_at_its_own_home_dock() -> void:
+	# Maintainer, 2026-11-18: each fighter has a home (the scenario's `home`, or the station whose bays launched it).
+	if not await _start():
+		pending("the babylon5_station asset is not generated")
+		return
+	var two: Combatant = _ship("ALPHA 2")
+	var three: Combatant = _ship("ALPHA 3")
+	assert_eq(main.combatant.home, Station.HOME_ID, "the scenario's player.home")
+	assert_eq(two.home, Station.HOME_ID, "the wing's home goes to its members")
+	assert_eq(main.docking.home_dock(two), station.docking_bay, "found among the docks by its id")
+	assert_eq(main.docking.dock_refusal(two), "")
+	# A Starfury that belongs to a capital ship does not dock at Babylon 5, however hurt.
+	three.home = &"hyperion"
+	_damage(three, 0.1)
+	await _ticks(5)
+	assert_null(main.docking.visit_of("ALPHA 3"), "its home is elsewhere: it stays and fights")
+	var refused: ConsoleResult = _run("dock wing ALPHA 3")
+	assert_false(refused.ok)
+	assert_string_contains(refused.error, "home dock (hyperion) is not here")
+	assert_ne(_roster("ALPHA 3")[0], "docking")
+	# Nor one the scenario assigned to nothing.
+	three.home = &""
+	await _ticks(5)
+	assert_null(main.docking.visit_of("ALPHA 3"))
+	assert_string_contains(_run("dock wing ALPHA 3").error, "has no home dock")
+	# The player too: the bay offers DOCK only to its own.
+	await _select_bay()
+	assert_not_null(main.interactions.offer(), "Babylon 5's own pilot is offered the bay")
+	main.combatant.home = &"hyperion"
+	assert_null(main.interactions.offer(), "a visitor is not")
+	assert_false(_run("dock player").ok)
+	main.combatant.home = Station.HOME_ID
+	# Tied to Babylon 5 again, the hurt wingman goes by itself.
+	three.home = Station.HOME_ID
+	await _ticks(3)
+	assert_eq(main.docking.visit_of("ALPHA 3").why, DockVisit.WHY_HULL, "Babylon 5's own wingman near Babylon 5 docks")
+
+
+func test_with_the_home_dock_out_of_range_they_fight_on_and_the_order_cannot_be_given() -> void:
+	if not await _start():
+		pending("the babylon5_station asset is not generated")
+		return
+	var two: Combatant = _ship("ALPHA 2")
+	var pilot: PilotBrain = two.driver.brain
+	assert_almost_eq(main.docking.dock_range_m, 60000.0, 1.0, "the range is the data's: the station's space out to its jumpgate")
+	assert_true(main.docking.order_available(), "1.2 km from the bay the order can be given")
+	assert_true(_run("commsmenu open").ok)
+	assert_has(DebugConsole.registry.read("comms_menu.entries")["value"], "dock", "and DOCK is on the ring")
+	assert_true(_run("commsmenu close").ok)
+	main.docking.dock_range_m = 500.0  # the bay is 1.2 km off: out of range now
+	_damage(two, 0.1)
+	await _ticks(5)
+	assert_null(main.docking.visit_of("ALPHA 2"), "below 25 % with no dock in range it stays and fights")
+	assert_eq(two.driver.brain, pilot, "its own pilot flies on")
+	assert_false(main.docking.order_available())
+	var notice: String = main.docking.last_notice
+	await _press_dock_key()
+	assert_eq(main.docking.last_notice, notice, "key 6 does nothing: no order, no answer")
+	assert_eq(main.docking.visits().size(), 0)
+	assert_true(_run("commsmenu open").ok)
+	assert_does_not_have(DebugConsole.registry.read("comms_menu.entries")["value"], "dock", "the menu leaves DOCK out")
+	assert_eq(DebugConsole.registry.read("comms_menu.entries")["value"][5], "-", "its slice is blank")
+	assert_false(_run("commsmenu pick dock").ok, "so it cannot be picked")
+	assert_true(_run("commsmenu close").ok)
+	assert_false(_run("dock wing").ok, "the console is told why")
+	assert_eq(main.docking.last_notice, "ALPHA 2: NEGATIVE, NO DOCK IN RANGE")
+	# In range again: the same wingman goes.
+	main.docking.dock_range_m = 60000.0
+	await _ticks(3)
+	assert_not_null(main.docking.visit_of("ALPHA 2"), "with its home dock in range it docks")
+
+
+func test_without_a_station_a_hurt_wingman_keeps_fighting() -> void:
+	# The dock scenario with no station placed: the wing still names Babylon 5 as its home, but that dock is not here.
+	assert_true(await _start("res://tests/fixtures/docking/no_dock_wing.json"))
+	assert_null(main.docking.station(), "no station in this scenario")
+	var wing: Wing = main.wings.player_wing()
+	var member: Combatant = _ship("ALPHA 2")
+	assert_eq(member.home, Station.HOME_ID)
+	var pilot: PilotBrain = member.driver.brain
+	_damage(member, 0.1)
+	await _ticks(10)
+	assert_eq(main.docking.visits().size(), 0, "no dock, no docking")
+	assert_eq(member.driver.brain, pilot, "it flies on under its own pilot")
+	assert_eq(wing.slot_of(member), 1)
+	assert_string_contains(main.docking.dock_refusal(member), "is not here")
+	assert_false(main.docking.order_available())
+	await _press_dock_key()
+	assert_eq(main.docking.last_notice, "", "key 6 does nothing")
+	assert_true(_run("commsmenu open").ok)
+	assert_does_not_have(DebugConsole.registry.read("comms_menu.entries")["value"], "dock", "the menu leaves DOCK out")
+	assert_true(_run("commsmenu close").ok)
+	assert_false(_run("dock wing").ok)
+	assert_ne(_roster(member.display_name)[0], "docking")
+
+
+func test_ships_launched_from_the_cobra_bays_belong_to_the_station() -> void:
+	assert_true(await _start("res://data/scenarios/station_launch.json"))
+	if station == null:
+		pending("the babylon5_station asset is not generated")
+		return
+	assert_eq(main.combatant.home, Station.HOME_ID, "the player on Alpha 3's rack")
+	assert_eq(main.wings.player_wing().home, Station.HOME_ID, "and its wing")
+	for member: Combatant in main.wings.player_wing().members():
+		assert_eq(member.home, Station.HOME_ID, "%s on the next rack" % member.display_name)
+	assert_true(_run("launch wing beta").ok)
+	await _ticks(2)
+	var beta: Wing = main.wings.wing_named("BETA")
+	assert_eq(beta.home, Station.HOME_ID, "a station wing")
+	assert_eq(beta.leader.home, Station.HOME_ID)

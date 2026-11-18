@@ -1,9 +1,9 @@
 {"scenario_id": "station_dock", "description": "Off Babylon 5's bow with two wingmen, 1.2 km from the main docking bay: dock for repair and launch again from a Cobra bay (M8-T06).", "system_id": "local",
- "anchor": {"place": "babylon5", "at": [-200, 150, 3700]}, "epoch": 7482650,
- "player": {"position": [0, 0, 0], "forward": [0, 0, 1]},
+ "anchor": {"place": "babylon5", "at": [-200, 150, 4700]}, "epoch": 7482650,
+ "player": {"home": "babylon5", "position": [0, 0, 0], "forward": [0, 0, 1]},
  "pools": {"starfury_ally": 2},
  "wings": [
-   {"name": "ALPHA", "faction": "earth_alliance", "leader": "player", "order": "form", "formation": "finger_four",
+   {"name": "ALPHA", "faction": "earth_alliance", "leader": "player", "home": "babylon5", "order": "form", "formation": "finger_four",
     "members": [
       {"type": "starfury_ally", "name": "ALPHA 2", "anchor": "player", "offset": [-60, 0, 40],
        "behaviour": {"type": "ai", "profile": "ally_starfury"}},

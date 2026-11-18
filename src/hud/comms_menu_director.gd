@@ -62,6 +62,8 @@ func open() -> String:
 	var why: String = why_not()
 	if not why.is_empty():
 		return why
+	# DOCK is on the ring only while a wingman has its home dock in range (M8-T06).
+	menu.set_root_page("WING ORDERS", CommsMenu.wing_orders(main.docking != null and main.docking.order_available()))
 	menu.open()
 	if not menu.is_open():
 		return "the comms menu has no entries"

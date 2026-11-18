@@ -6421,14 +6421,15 @@ src/ship/stopping_distance.gd    StoppingDistance (pure): stopping distance and 
 assets/ai/docking.tres           the docking pilot's profile: a route and nothing else (no attack, evade or retreat)
 data/station/docking.json        speeds, the corridor, the keep-out boxes, the repair's times, the wingmen's hull threshold, the
                                  offer's threshold and line, the relaunch bay, the shots
-data/scenarios/station_dock.json the player 1.2 km off the bay with two wingmen
+data/scenarios/station_dock.json the player 1.2 km off the bay with two wingmen, all with `home: "babylon5"`
 ```
 
 - **The interaction.** `DockingDirector` fills the docking bay's `TargetInteraction` (§20.5): its action is `start_player`, offered
   while the player has no visit. The reach stays `Station.BAY_REACH_M` (2 km). The cargo bay's `cargo` is still a placeholder.
 - **The player's way in.** `Main.controls_locked()` holds while a visit runs, and `step_player` gives the tick's command (after the
   gate's, before the launch's). **Approach:** `DockKeepOut.next_target` in the station's frame: the goal is the lane's line
-  `join_out_m` (400 m) off the mouth; the boxes (the drum, the spine, the bow ring and its pylon) grown by `clear_m` block lines,
+  `join_out_m` (400 m) off the mouth; the boxes (the drum and the spine, in the station's frame: the drum's pivot is 1000 m forward of the
+  station's middle, so the mouth is at z -3519.6 and the ring round it lies inside the drum's box) grown by `clear_m` block lines,
   their corners grown by `via_m` are turning points with their shortest clear way to the goal worked out once (Dijkstra), and a ship
   inside a grown box is sent straight out of it. `DockAutopilot.approach` closes on the target no faster than `approach_mps` and
   than `StoppingDistance.speed_for_mps` on the mains allows, so a ship handed over at any speed is first braked (the nose turns
@@ -6449,15 +6450,29 @@ data/scenarios/station_dock.json the player 1.2 km off the bay with two wingmen
   then to the end of the repair, then the launch's own skip. A visit that has not reached the bay in `timeout_s` jumps there too.
 - **Cancel.** `dock cancel` (and a respawn, whatever the state) ends a visit; from the console only while the ship is outside
   the inner doors.
+- **Home docks (maintainer, 2026-11-18).** Every fighter docks only at its own home: `Combatant.home` is a dock's id, a
+  station's (`Station.home_id`, `babylon5`) or its parent capital ship's name, &"" for none. It comes from the scenario
+  (`home` on the player, on a wing for its members, or on a spawn, whose own word stands: `"none"` assigns it to nothing;
+  `ScenarioLoader`, `home_set`), from a launch out of a station's Cobra bays (`LaunchDirector._start`; a station wing's and the
+  launched player's wing get it too), or with the wing's on a replenish (`WingDirector.give_home`); the pool clears it. A dock
+  is any `NavPoint` whose interaction is `dock` (`NavPoint.DOCKS_GROUP`, its `home_id`), so later stations and carriers are
+  docks the same way; `DockingDirector.home_dock` finds a fighter's. `dock_refusal` is the one rule: a home, its dock in the
+  scene, the dock's bay within `dock_range_m` (60 km from the fighter: the station's space out to its jumpgate), and a dock
+  this director flies ships into (today the station's bay; a carrier's recall stays M8-T08's `CarrierDock`). Otherwise the
+  fighter stays and fights. The bay's DOCK is offered to the player only when the bay is its home.
 - **Wingmen.** `order_wing` (`UiCommand.wing_dock`, key 6; the comms menu's DOCK, down-left on the ring of eight whose compass
-  points keep the four orders) sends every damaged wingman of the player's wing; one below `wingman.hull_below` (0.4) goes by
-  itself. The wingman's own `AiPilot` is set aside and a docking pilot flies it natively (§17.13): faster than
+  points keep the four orders) sends every damaged wingman of the player's wing that may dock; the order exists only while
+  `order_available()` (a wingman has its home dock in range): otherwise the comms menu leaves DOCK's slice blank
+  (`CommsMenu.wing_orders(false)`, set at each opening) and the key does nothing. One below `wingman.hull_below` (0.25: maintainer,
+  2026-11-18; free flight included) goes by itself. The wingman's own `AiPilot` is set aside and a docking pilot flies it natively (§17.13): faster than
   `peel_above_mps` it first swings `peel_out_m` out of its formation, on along its course at the speed it has (braking where it
   flew put it in the way of the ships behind it: M8-T13's seeded fight lost a wingman to that), then a plain route with avoidance on
   to its waiting point off the bow (`entry_out_m` beyond the lane's first point, one `queue_spacing_m` farther per fighter
   waiting), a lane route that stops there, then `DockingPlan`'s lane as the civilians fly it. Inside, `Wing.set_away` marks it:
   `WingDirector.refresh` neither drops nor briefs an away member, so its slot is kept and it is not lost; `Wing.close_gaps` (M8-T13)
-  never moves an away member or puts a ship in its place (the ones behind it move up past it), so it comes back to the slot it left. After its launch its own pilot is put back and the wing briefs it at the next refresh.
+  never moves an away member or puts a ship in its place (the ones behind it move up past it), so it comes back to the slot it left. The rosters (`WingDirector.hud_roster`, `roster`) read `docking` while it flies in
+  (`Wing.set_docking`) and `docked` while it is inside or on the rack (`Wing.dock_status`; the HUD's DOCKING and DOCKED), then
+  its pilot's behaviour again. After its launch its own pilot is put back and the wing briefs it at the next refresh.
 - **One at a time.** A fighter takes the lane only when `StationTraffic.bay_busy()` is false and no other visit is on the lane or
   through the doors; the traffic's own check counts fighters (`holds_bay`).
 - **Control's offer (D79 beat 13).** A player whose hull falls below `offer.hull_below` gets `dock_offered` once per damage

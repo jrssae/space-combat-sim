@@ -86,6 +86,8 @@ func remove_member(member: Combatant) -> bool:
 	if slot < 1:
 		return false
 	_by_slot[slot - 1] = null
+	_away.erase(member)  # a hull that comes back from the pool starts with no docking marks
+	_docking.erase(member)
 	_closed = false
 	return true
 
@@ -120,8 +122,13 @@ func member_at(slot: int) -> Combatant:
 	return _by_slot[slot - 1] if slot >= 1 and slot <= size else null
 
 
-# Members out of play for a while with their slots kept (docked for repair, M8-T06).
+## The dock the wing belongs to (M8-T06; `Combatant.home`): the scenario's `wings[].home`, the player's own home for the wing
+## it leads, or the station whose Cobra bays launched it. Ships that join through the scenario, a launch or a replenish take it.
+var home: StringName = &""
+
+# Members out of play for a while with their slots kept (docked for repair, M8-T06), and those on their way there.
 var _away: Array[Combatant] = []
+var _docking: Array[Combatant] = []
 
 
 ## Marks `member` away or back (M8-T06: docked for repair). An away member keeps its slot: it is not lost, nobody briefs it,
@@ -130,12 +137,32 @@ func set_away(member: Combatant, away: bool) -> void:
 	_away.erase(member)
 	if away and slot_of(member) > 0:
 		_away.append(member)
+		_docking.erase(member)  # inside now: no longer on its way
 	_closed = false
 
 
 ## Whether `member` flies a slot of this wing but is out of play for now.
 func is_away(member: Combatant) -> bool:
 	return _away.has(member) and slot_of(member) > 0
+
+
+## Marks `member` on its way to the docking bay, or no longer (M8-T06): still in play and in its slot, flown by a docking pilot.
+func set_docking(member: Combatant, docking: bool) -> void:
+	_docking.erase(member)
+	if docking and slot_of(member) > 0 and not _away.has(member):
+		_docking.append(member)
+
+
+## Whether `member` is flying to the docking bay (not yet inside).
+func is_docking(member: Combatant) -> bool:
+	return _docking.has(member) and slot_of(member) > 0
+
+
+## What a docking member is doing, for the rosters: `docked` inside the station, `docking` on its way in, "" otherwise.
+func dock_status(member: Combatant) -> String:
+	if is_away(member):
+		return "docked"
+	return "docking" if is_docking(member) else ""
 
 
 ## The members, in slot order.

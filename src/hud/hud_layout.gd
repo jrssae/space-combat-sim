@@ -55,7 +55,7 @@ const ESCORT_ROW_PX: float = 40.0
 const ESCORT_BAR: Vector2 = Vector2(240.0, 10.0)
 ## A roster row's short form of what a wingman is doing, by behaviour id.
 const ROSTER_TAGS: Dictionary = {"formation": "FORM", "attack": "ATK", "evade": "EVADE", "retreat": "RETREAT",
-		"follow_path": "NAV", "idle": "IDLE", "none": "-"}
+		"follow_path": "NAV", "idle": "IDLE", "none": "-", "docking": "DOCKING", "docked": "DOCKED"}
 
 
 ## One wingman's line in the roster: the hull bar (outline `bar_rect`, filled to `hull`, in `color`), and the callsign and tag

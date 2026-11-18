@@ -36,8 +36,8 @@ func test_dpad_right_opens_the_menu_with_the_wing_orders_and_pauses_the_game() -
 	assert_true(get_tree().paused, "the game is paused while it is open")
 	assert_eq(main.comms.menu.page_title(), "WING ORDERS")
 	assert_true(_read("comms_menu.open"))
-	assert_eq(_read("comms_menu.entries"), PackedStringArray(["attack", "-", "form on me", "-", "engage", "dock", "cover me", "-"]),
-			"the four orders on the compass points, DOCK down-left (M8-T06)")
+	assert_eq(_read("comms_menu.entries"), PackedStringArray(["attack", "-", "form on me", "-", "engage", "-", "cover me", "-"]),
+			"the four orders on the compass points; DOCK (down-left, M8-T06) is left out with no home dock in range: test_docking")
 	assert_true(main.comms.view.visible)
 
 
@@ -185,7 +185,7 @@ func test_the_ring_is_the_target_menus_size_and_side_and_the_highlight_follows_t
 	var size: Vector2 = get_viewport().get_visible_rect().size
 	assert_gt(view.draws, 0)
 	assert_eq(view.layer, target_view.layer, "the same layer as the target menu")
-	assert_eq(view.drawn_labels, ["ATTACK", "", "FORM ON ME", "", "ENGAGE", "DOCK", "COVER ME", ""] as Array[String],
+	assert_eq(view.drawn_labels, ["ATTACK", "", "FORM ON ME", "", "ENGAGE", "", "COVER ME", ""] as Array[String],
 			"the entries sit on the ring, the orders on the compass points")
 	assert_eq(view.drawn_heading, "WING ORDERS")
 	assert_almost_eq(view.drawn_radius, RadialLayout.outer_radius(size), 0.5, "as big as the target menu")

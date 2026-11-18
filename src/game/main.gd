@@ -102,6 +102,8 @@ var _overlay_in_s: float = 0.0
 var _spawn_basis: Basis = Basis.IDENTITY
 # The player's velocity at the first spawn (a mission that opens in flight); a respawn starts at rest.
 var _start_velocity: Vector3 = Vector3.ZERO
+# The dock the scenario says the player belongs to (`player.home`, M8-T06); a launch from a Cobra bay gives one too.
+var _player_home: StringName = &""
 ## What the player's speed is read against (M6-T08): the HUD's REF, and the ship's brake, assist, fade and ceiling.
 var flight_reference: FlightReference = null
 var _system_id: StringName = &"local"
@@ -163,6 +165,7 @@ func _ready() -> void:
 		_spawn_position = player["position"]
 		_spawn_basis = player["basis"]
 		_start_velocity = player["velocity"]
+		_player_home = player.get("home", &"")
 		_system_id = scenario["system_id"]
 		_scenario_spawns = scenario["spawns"]
 		_scenario_routes = scenario["routes"]
@@ -171,7 +174,7 @@ func _ready() -> void:
 	# The player leads wing ALPHA (architecture §16 D36). Members join later (M3-T08, M3-T10).
 	wings.setup(world, ships)
 	if not _ai_leads_player_wing():
-		wings.create_wing(Wing.DEFAULT_NAME, combatant)
+		wings.create_wing(Wing.DEFAULT_NAME, combatant).home = combatant.home  # its wingmen belong where it does (M8-T06)
 	wings.declare(_scenario_wings)
 	ships.world = world
 	ships.projectiles = projectiles
@@ -781,6 +784,9 @@ func _place_spawn(entry: Dictionary) -> void:
 	if placed.cargo_pods != null:
 		placed.cargo_pods.set_count(int(entry.get("cargo_pods", -1)))  # M5-T16: the spawn's pods, all by default
 	placed.damageable.invulnerable = bool(entry["invulnerable"])
+	if bool(entry.get("home_set", false)):
+		placed.home = entry["home"]  # the scenario's own word, even "none": no wing or launch changes it (M8-T06)
+		placed.home_assigned = true
 	scenario_ships.append(placed)
 	_scenario_brains.append(brain)
 	_scenario_entries.append(entry)
@@ -854,6 +860,8 @@ func _spawn_ship() -> void:
 	combatant.ship.linear_velocity = _start_velocity + world.rest_velocity()  # the scenario's velocity is against the place
 	# The player is part of the wing the allies broadcast for (M3-T10): heard like an allied Starfury, to 100 km.
 	combatant.targetable.broadcast_range_m = ShipPool.ALLY_BROADCAST_RANGE_M
+	combatant.home = _player_home
+	combatant.home_assigned = _player_home != &""
 	ship = combatant.ship
 	thrusters = combatant.thrusters
 	cannon = combatant.cannon
@@ -927,7 +935,7 @@ func _give_wing_orders(ui: UiCommand) -> void:
 		wings.give_order(AiContext.Order.ENGAGE_AT_WILL)
 	if ui.wing_cover:
 		wings.give_order(AiContext.Order.COVER_ME)
-	if ui.wing_dock:
+	if ui.wing_dock and docking.order_available():  # with no home dock in range the key does nothing (maintainer, 2026-11-18)
 		docking.order_wing()
 
 

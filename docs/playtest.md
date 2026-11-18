@@ -1166,7 +1166,9 @@ do it: `spawn raider ai 1500`).
 
 # Play-testing docking for repair (M8-T06)
 
-`play station_dock` puts you 1.2 km off the main docking bay with two wingmen (or fly there in free flight). Hurt yourself first
+`play station_dock` puts you 1.2 km off the main docking bay with two wingmen (or fly there in free flight). Only fighters whose
+home is Babylon 5 dock here (the scenario's `home`, or a launch from its Cobra bays; `state dock` lists each ship's home), and only
+within 60 km of the bay. Hurt yourself first
 with `damage 50` (hull points; `state ship` shows the hull) so the repair has something to do.
 
 - [ ] **(H) Docking:** target `BABYLON 5 DOCKING BAY` (target menu, NAVIGATION), hold X (Shift, Mouse 4) for 2 s inside 2 km. The
@@ -1179,10 +1181,12 @@ with `damage 50` (hull points; `state ship` shows the hull) so the repair has so
       hand-off. Say if the wait (6 s plus up to 30 s for a wrecked hull) is too long or too short to watch.
 - [ ] **(H) Relaunch:** you come out of Cobra bay Alpha 1 with a whole hull and the controls back.
 - [ ] **(H) Wingmen:** select ALPHA 2 and `damage 30 target`, then key 6 (or the comms menu's DOCK, down-left): `ALPHA 2: COPY, DOCKING FOR
-      REPAIRS`, it flies off to the bay, is gone a while (its roster row stays), comes out of a Cobra bay and forms up again. Hurt
-      one below 40 % and it goes by itself (`HULL CRITICAL, DOCKING FOR REPAIRS`). Two at once go in one after the other.
+      REPAIRS`, it flies off to the bay (its roster row reads DOCKING), is gone a while (DOCKED), comes out of a Cobra bay and forms up
+      again (its usual readout). Hurt one below 25 % and it goes by itself (`HULL CRITICAL, DOCKING FOR REPAIRS`). Two at once go in one after the other.
 - [ ] **(H) The comms ring:** eight slices now, the four orders still up, right, down and left; say if the blank diagonals and
       DOCK between ENGAGE and COVER ME read well.
+- [ ] **(H) No dock, no order:** in a scenario far from the station, or with wingmen that have no home (`combat_sandbox`), the comms
+      ring has a blank slice where DOCK was and key 6 does nothing; a wingman below 25 % keeps fighting.
 - [ ] **(H) Control's offer:** below half hull the HUD's line offers the bay once (`BABYLON CONTROL: YOU ARE CLEARED TO DOCK ...`).
 
 # Play-testing the raider strike carrier (M12-T19, now M10-T19: the early delivery, merged into M8 by M8-T07)

@@ -2,7 +2,8 @@ extends GutTest
 ## DockKeepOut (M8-T06): the way round the station to the docking lane. From anywhere within the bay's reach the next target is
 ## reached in a straight line that meets no solid, and following the targets ends on the lane.
 
-const MOUTH := Vector3(0.0, 0.0, -2519.6)
+## The mouth in the station's frame: the drum's point (z -2519.6) plus the drum's pivot, 1000 m forward of the station's middle.
+const MOUTH := Vector3(0.0, 0.0, -3519.6)
 const STEP_M: float = 8.0
 
 
@@ -36,7 +37,7 @@ func _fly(keep: DockKeepOut, start: Vector3, boxes: Array[AABB]) -> int:
 
 func test_a_clear_line_goes_straight_to_the_goal() -> void:
 	var keep: DockKeepOut = _game()
-	var start := Vector3(60.0, -40.0, -3200.0)
+	var start := Vector3(60.0, -40.0, -4200.0)
 	assert_false(keep.blocked(start, keep.goal))
 	assert_eq(keep.next_target(start), keep.goal)
 	assert_almost_eq(keep.distance_left(start), start.distance_to(keep.goal), 1e-3)
@@ -44,7 +45,7 @@ func test_a_clear_line_goes_straight_to_the_goal() -> void:
 
 func test_a_ship_beside_the_drum_is_led_round_to_the_bow() -> void:
 	var keep: DockKeepOut = _game()
-	var start := Vector3(900.0, 0.0, -1500.0)
+	var start := Vector3(900.0, 0.0, -2500.0)
 	assert_true(keep.blocked(start, keep.goal), "the drum is in the way")
 	var first: Vector3 = keep.next_target(start)
 	assert_ne(first, keep.goal)
@@ -72,7 +73,7 @@ func test_every_start_within_the_bays_reach_arrives_without_touching_the_station
 
 func test_a_ship_inside_a_margin_is_sent_out_of_it_first() -> void:
 	var keep: DockKeepOut = _game()
-	var hugging := Vector3(450.0, 0.0, -1000.0)  # 20 m off the drum's box, inside its 35 m margin
+	var hugging := Vector3(450.0, 0.0, -2000.0)  # 20 m off the drum's box, inside its 35 m margin
 	assert_gte(keep.inside(hugging), 0)
 	var out: Vector3 = keep.next_target(hugging)
 	assert_gt(out.x, hugging.x, "straight out through the nearest face")

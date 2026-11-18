@@ -256,6 +256,7 @@ func _station_wing(wing_name: String) -> Wing:
 		return null if wing.leader != null and wing.leader.is_player else wing
 	wing = Wing.new(wing_name, null, 11)
 	wing.order = AiContext.Order.ENGAGE_AT_WILL
+	wing.home = station().home_id if station() != null else &""  # the station's own wing: it docks here (M8-T06)
 	main.wings.wings.append(wing)
 	return wing
 
@@ -498,6 +499,13 @@ func _start(wing: String, door: int, ships: Array[Combatant], player_id: String,
 	launches.append(launch)
 	if not player_id.is_empty():
 		_launch_shot = launch
+	# Launched from this station's bays, a fighter belongs here: it comes back to its docking bay for repair (M8-T06).
+	for c: Combatant in ships:
+		if not c.home_assigned:
+			c.home = s.home_id
+		var own: Wing = main.wings.player_wing() if c.is_player and main.wings != null else null
+		if own != null and own.leader == c and own.home == &"":
+			own.home = c.home
 	for id: String in ids:
 		_carry(launch, id, s)
 	return ""

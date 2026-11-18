@@ -48,6 +48,12 @@ func test_the_wing_orders_sit_up_right_down_left_in_the_order_of_keys_1_to_4() -
 	menu.radial.point(Vector2(-1, -1).normalized())
 	assert_eq(menu.radial.highlighted()["payload"], CommsMenu.PAYLOAD_DOCK)
 	assert_eq(menu.radial.highlighted()["label"], "DOCK")
+	# With no home dock in range the order cannot be given: its slice is blank and the ring is otherwise the same.
+	var without: Array[Dictionary] = CommsMenu.wing_orders(false)
+	assert_eq(without.size(), 8)
+	assert_true(without[5].is_empty(), "DOCK is left out")
+	assert_eq(without[4]["label"], "ENGAGE")
+	assert_eq(without[6]["label"], "COVER ME")
 
 
 func test_select_returns_the_lit_entry_and_closes() -> void:

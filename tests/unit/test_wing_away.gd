@@ -37,6 +37,41 @@ func test_only_a_member_can_be_away() -> void:
 	assert_false(wing.is_away(a), "out of the wing, it is nobody's away member")
 
 
+func test_a_member_on_its_way_to_the_bay_reads_docking_and_inside_it_reads_docked() -> void:
+	var wing := Wing.new()
+	var a := _member("ALPHA 2")
+	var b := _member("ALPHA 3")
+	wing.add_member(a, 1)
+	wing.add_member(b, 2)
+	assert_eq(wing.dock_status(a), "")
+	wing.set_docking(a, true)
+	assert_true(wing.is_docking(a))
+	assert_false(wing.is_away(a), "still in play, flying in")
+	assert_eq(wing.dock_status(a), "docking")
+	assert_eq(wing.dock_status(b), "", "the others read as they did")
+	wing.set_away(a, true)
+	assert_false(wing.is_docking(a), "inside, it is no longer on its way")
+	assert_eq(wing.dock_status(a), "docked")
+	wing.set_away(a, false)
+	assert_eq(wing.dock_status(a), "", "launched again: its own readout")
+
+
+func test_the_docking_marks_end_with_the_membership() -> void:
+	var wing := Wing.new()
+	var a := _member("ALPHA 2")
+	wing.set_docking(a, true)
+	assert_false(wing.is_docking(a), "only a member can be docking")
+	wing.add_member(a, 1)
+	wing.set_docking(a, true)
+	wing.remove_member(a)
+	wing.add_member(a, 1)
+	assert_eq(wing.dock_status(a), "", "shot down on its way in and back from the pool: no stale mark")
+	wing.set_away(a, true)
+	wing.remove_member(a)
+	wing.add_member(a, 2)
+	assert_eq(wing.dock_status(a), "")
+
+
 func _wing_with(size: int) -> Wing:
 	var wing := Wing.new(Wing.DEFAULT_NAME, _member("PLAYER"), size)
 	for slot: int in range(1, size + 1):
