@@ -11,7 +11,8 @@ func _initialize() -> void:
 		printerr("bench_sweep.gd: give the sweep's directory after --")
 		quit(2)
 		return
-	var dir: String = args[0]
+	# An exported build keeps its reports in the user's folder (M8-T14); the runs are read from where the bench wrote them.
+	var dir: String = (load("res://src/perf/bench_paths.gd") as GDScript).call("resolve", args[0])
 	var meta: Dictionary = {"label": dir.get_file()}
 	for i: int in range(1, args.size()):
 		var pair: PackedStringArray = args[i].split("=", true, 1)

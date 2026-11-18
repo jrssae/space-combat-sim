@@ -11,7 +11,8 @@
 #      exclude_filter="tests/*, docs/*, tools/*, scripts/*, addons/gut/*, reports/*", binary_format/embed_pck=true, and
 #      custom_template/release set to this script's linux_release.x86_64 as an absolute path.
 #   3. .tools/godot/godot --headless --path <snap> --export-release "Linux release" <build>/scs_release.x86_64
-#   4. A bench run writes to <build>/reports/perf/ (res:// is the pack), so link <build>/reports to <snap>/reports.
+#   4. An export's bench writes to user://reports/perf/ (res:// is the pack; BenchPaths, M8-T14), so link
+#      ~/.local/share/godot/app_userdata/space-combat-sim/reports to <snap>/reports for the scripts to find the runs.
 #   5. For scripts/bench_quick.sh, set GODOT_BIN to a wrapper that drops "--path <dir>" and execs the export with the rest:
 #        args=(); while (( $# )); do [[ $1 == --path ]] && { shift 2; continue; }; args+=("$1"); shift; done
 #        exec <build>/scs_release.x86_64 "${args[@]}"

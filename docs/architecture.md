@@ -2053,6 +2053,7 @@ src/perf/bench_layout.gd    RefCounted, pure: where furball, spread and transit 
 src/perf/perf_probe.gd      Node (Main/PerfProbe): times every tick's stages; provider `perf`, command `perf [on|off]`
 src/perf/bench_runner.gd    Node (Main/BenchRunner): command `bench`, runs a layout on the live scene, writes the report
 src/perf/bench_report.gd    RefCounted: a run's and a sweep's summary.json and summary.md, and the machine they ran on
+src/perf/bench_paths.gd     RefCounted: the reports folder, the project's `reports/` or `user://reports` in an exported build (M8-T14)
 scripts/bench.sh, bench_sweep.gd   the sweep: one headless process per run, pinned to the performance cores, then the summary
 scripts/bench_quick.sh      the quick check: ramps furball and spread until 30 FPS, one short run per count, under 10 minutes
 ```

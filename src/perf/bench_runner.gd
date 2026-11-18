@@ -64,7 +64,7 @@ var main: Main = null
 var probe: PerfProbe = null
 ## The battle's stand-ins (M4-T07); Main makes it.
 var standins: StandinDirector = null
-## Where reports go; a label is a path below it.
+## Where reports go; a label is a path below it. The default moves to `user://reports/perf` in an exported build (`BenchPaths`).
 var report_root: String = DEFAULT_ROOT
 var running: bool = false
 
@@ -112,7 +112,7 @@ func _init() -> void:
 
 func _ready() -> void:
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"bench",
-			"Fly a benchmark layout (%s) with n ships from the pools, measure [seconds] (30) after warmup=<s> (5), and write reports/perf/<label>/ (seed=<k> label=<name> probe=paired rebase_m=<m> rocks=<count> capitals=<share> boost=<m/s> arrive=jump|placed: battle and typical ships come in through jump points, in waves, or are placed)"
+			"Fly a benchmark layout (%s) with n ships from the pools, measure [seconds] (30) after warmup=<s> (5), and write reports/perf/<label>/ (under user:// in an exported build) (seed=<k> label=<name> probe=paired rebase_m=<m> rocks=<count> capitals=<share> boost=<m/s> arrive=jump|placed: battle and typical ships come in through jump points, in waves, or are placed)"
 			% ", ".join(PackedStringArray(BenchLayout.NAMES)),
 			[ConsoleArg.enum_required(&"layout", BenchLayout.NAMES), ConsoleArg.int_required(&"n", 1, 2000),
 			ConsoleArg.string_rest(&"options").make_optional("")]), _cmd_bench, self)
@@ -227,7 +227,7 @@ func start(layout: StringName, n: int, options: Dictionary) -> ConsoleResult:
 	running = true
 	var result := ConsoleResult.line("bench %s %d: %d ships in play after %.1f s of load; warm-up %.1f s, measuring %.1f s -> %s" % [
 			layout, n, main.ships.in_use_count(), _load_ms * 1e-3, float(_warmup_ticks) / tps, float(_options["seconds"]),
-			report_root.path_join(String(_options["label"]))])
+			_report_dir()])
 	if arrivals != null:
 		result.lines.append("bench %s %d arrivals: %d jump points in %d waves (%d open at most), the last at %.1f s" % [layout, n,
 				arrivals.points.size(), arrivals.waves, arrivals.max_open(), arrivals.last_at_s()])
@@ -710,7 +710,7 @@ func _finish(now: int, aborted: String) -> void:
 		for key: String in ["mix", "mix_line", "rocks_placed", "fights_in_slab", "intercepts", "weapons"]:
 			meta.erase(key)
 	var summary: Dictionary = BenchReport.run_summary(meta, series)
-	var dir: String = report_root.path_join(String(_options["label"]))
+	var dir: String = _report_dir()
 	var problem: String = BenchReport.write(dir, summary, BenchReport.run_markdown(summary))
 	var tick: Dictionary = (summary["stages"] as Dictionary)["tick"]
 	print("[bench] %s %d seed %d: tick median %.2f ms, p99 %.2f ms, %.2f %% behind real time, %d rebases (worst tick holding one %.2f ms), %s -> %s" % [
@@ -735,6 +735,11 @@ static func game_factions(layout: StringName) -> Dictionary:
 
 
 # Everything the run changed, back as it was; its ships, capitals, rocks and mines stay in play until the next run.
+# This run's report folder, in the user's folder when the project takes no files (an exported build).
+func _report_dir() -> String:
+	return BenchPaths.resolve(report_root.path_join(String(_options["label"])))
+
+
 func _put_back() -> void:
 	if _restore.is_empty():
 		return

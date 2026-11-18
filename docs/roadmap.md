@@ -72,7 +72,7 @@ here (the maintainer, 2026-11-08). Details, evidence and suggested fixes: `docs/
 | L7 | two `AudioStreamPlayer3D` per pooled ship, walked every frame | M5 (sound pass); done, M5-T37 (T19 and T28 had done it) |
 | L14 | test and script duplication; always-pending balance tests | M5 (with the balance retune, AC12); done, M5-T38 |
 | L4 | the rebase cascade (statics shifted natively, the cached solid shifted in place, hidden ships skipped) | M6; done, M6-T06 and T21 (AC2 restated) |
-| L15 | the bench reads and writes `res://reports`, which an exported build does not have | M8 |
+| L15 | the bench reads and writes `res://reports`, which an exported build does not have | M8; done, M8-T14 (`BenchPaths`: `user://reports` there) |
 | L10 | an explosion builds meshes and materials per death | M10 (the staged capital break-up rewrites it) |
 | L11 | the stand-in counters walk every ship each tick | M10 (M10 replaces the stand-ins) |
 

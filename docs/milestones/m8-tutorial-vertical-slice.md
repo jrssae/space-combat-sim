@@ -269,7 +269,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T11 | D | The walls beside the cargo bay stop flickering (roadmap M7-3) | - | Fable | Find the coplanar faces or shading cause in the station generator; a test | not started |
 | T12 | D | Audio rework of every sound effect and the Starfury engines' steady level (roadmap M7-5) | - | Fable | One loudness reference, the mix, and a smoothed engine gain; a listening checklist | not started |
 | T13 | D | Wingmen close the gaps losses leave in a formation (roadmap M7-6) | - | Fable | Native re-slotting with M7-T76's avoidance, 1 and 6 threads identical | not started |
-| T14 | D | The bench writes to `user://` in an exported build (roadmap L15) | - | Fable | A path fix with a test | in progress |
+| T14 | D | The bench writes to `user://` in an exported build (roadmap L15) | - | Fable | A path fix with a test | done |
 | T15 | E | Linux x86_64 release build from the pinned export templates (Q9) | T14 | Fable | Templates by SHA-256, the native library and assets packed, an export smoke test | not started |
 | T16 | E | Performance and the GPU check: the squadron launch, the tour and the raid | T05, T09 | Fable | Measurement on the maintainer's machine; the budget call | not started |
 | T18 | B | Approach cues for navigation targets with an interaction (brake, overshoot, adjust course), and the jumpgate's reach, autopilot and cinematic scaled to the player's speed (D84; maintainer, 2026-11-18; numbered last because it was added after the others had numbers) | - (shared with T06) | Fable | Relative-motion maths on the HUD, and a gate run-in that starts from any speed with its shot timed to match | not started |
@@ -410,6 +410,19 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 
 - **Goal:** roadmap L15 (`docs/research/m4-full-review.md`).
 - **Done when:** the bench reads and writes under `user://` when `res://reports` is not writable; a test covers both.
+- **Done (2026-11-18):** `BenchPaths` (`src/perf/bench_paths.gd`, pure but for its write probe): `resolve(path)` leaves a path
+  alone unless it lies in `res://reports` and the project takes no files, then gives its place under `user://reports`. An
+  export's `res://reports` globalises to the relative `reports` (no folder behind the pack), so "writable" is an absolute folder
+  that takes a probe file. `BenchRunner` (its default root), `BenchReport.write` (every report file) and
+  `scripts/bench_sweep.gd` (reading the runs, writing the sweep) go through it; no other runtime code in `src/` touches
+  `res://reports`. The editor-only capture and sheet scripts (`scripts/*_node.gd`, `bench.sh`, `bench_quick.sh`,
+  `aa_compare.sh`, `look_sheet.sh`, `render_compare.sh`, `fullscreen_check.sh`, `capture_m3.sh`, `measure_m3.sh`) keep their
+  `reports/` paths. `addons/scs_export` needs no change; T15's preset must keep `reports/*` out of the pack, and a release bench
+  links `user://reports` to the snapshot's `reports/` (`scripts/setup_export_templates.sh`, step 4). Checked from the staged
+  copy: `test_bench_paths` 10 tests, 30 asserts (both cases by an injected answer, the probe, a report written each way),
+  `test_bench_report` 8, `test_bench_layout` 28, `test_bench` 16 (GUT_SLOW), 905 scripts compile; a real `bench furball 10` and
+  the sweep wrote to the project's `reports/perf/`; the release template beside a pack of `BenchPaths` wrote to
+  `user://reports/perf/` and nothing beside the binary.
 
 ### M8-T15 Linux x86_64 release build
 

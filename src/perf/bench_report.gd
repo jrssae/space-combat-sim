@@ -369,9 +369,10 @@ static func machine() -> Dictionary:
 	}
 
 
-## Writes `summary.json` and `summary.md` into `dir_path` (made if missing). Returns "" or what went wrong.
-static func write(dir_path: String, summary: Dictionary, markdown: String) -> String:
-	var absolute: String = ProjectSettings.globalize_path(dir_path)
+## Writes `summary.json` and `summary.md` into `dir_path` (made if missing), or into its place in the user's folder when the
+## project takes no files (`BenchPaths`; `project_writable` is its test seam). Returns "" or what went wrong.
+static func write(dir_path: String, summary: Dictionary, markdown: String, project_writable: Callable = Callable()) -> String:
+	var absolute: String = ProjectSettings.globalize_path(BenchPaths.resolve(dir_path, project_writable))
 	var made: Error = DirAccess.make_dir_recursive_absolute(absolute)
 	if made != OK and not DirAccess.dir_exists_absolute(absolute):
 		return "cannot make %s (%s)" % [absolute, error_string(made)]
