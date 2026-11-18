@@ -2,7 +2,7 @@
 
 > "The station." (`docs/roadmap.md`)
 
-**Status:** **in progress** on branch `m7` (cut from `main` after M6 merged as WIP, tag `m6-wip`), started 2026-11-13. The maintainer answered Q1 to Q5 and Q7 to Q11 on 2026-11-13 (table below); Q6 is settled in T02 with the maintainer after T01. **The defense grid is not planned here**: where its emplacements sit and how its cannons and interceptors behave is a discussion between the maintainer and the controller (T02), and the plan's grid parts are filled in from it. This plan was written against `m5` at `5d81686` and assumes M6's plan (`m6-epsilon-space-at-true-scale.md`); tasks check M6 as built before relying on it.
+**Status:** **Accepted 2026-11-18** by the maintainer (every (H) check passed in the play-tests of 2026-11-16 to 11-18, M7-T76's included); merged into `main`. Earlier: in progress on branch `m7` (cut from `main` after M6 merged as WIP, tag `m6-wip`), started 2026-11-13. The maintainer answered Q1 to Q5 and Q7 to Q11 on 2026-11-13 (table below); Q6 is settled in T02 with the maintainer after T01. **The defense grid is not planned here**: where its emplacements sit and how its cannons and interceptors behave is a discussion between the maintainer and the controller (T02), and the plan's grid parts are filled in from it. This plan was written against `m5` at `5d81686` and assumes M6's plan (`m6-epsilon-space-at-true-scale.md`); tasks check M6 as built before relying on it.
 
 Read `docs/architecture.md` first, especially §14.6 (launch bays and the mission framework), §14.7 (capital ships and stations),
 §14.8 (the procedural asset framework), §17.11 (M4's interceptor stand-ins), §17.18 (the textured mesh pipeline), §18 (M5: the
@@ -335,8 +335,8 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 | T73 | C | Fix: in orbit (`frame orbit 400`) the HUD's REF line runs over the directional indicator instead of wrapping (maintainer, 2026-11-17, M6 check m6-075) | - | Sonnet | The REF and ALT lines' width against the drift indicator, every window size, chase and cockpit | done |
 | T74 | C | Fix: a launched Alpha wing forms up all on one side of the V; the V must balance its two arms, an odd ship taking a centre slot behind the leader so the wing makes a triangle (maintainer, 2026-11-17) | T58 | Opus | The formation's slot offsets for T58's eleven-slot wing | done |
 | T75 | C | Fix: `transit carrier point fighter follow` refuses in free flight with encounters off (`no two free raiders to bring in`): the raider pool is empty there; the debug tool grows the pool as the bench does (maintainer, 2026-11-17, M6 check m6-094) | - | Sonnet | `Main.ensure_pool` (M7-T59 made it register deaths) | done |
-| T76 | C | Wingmen avoid each other and big hulls while forming up: no rams between allies re-forming after the leader reverses at high speed, and no wingman follows the leader into the station (maintainer, 2026-11-17; roadmap M7-1 brought forward from M8) | T74 | Opus | The formation and rejoin flight's stopping-path check against friendly ships everywhere, and against big hulls on the way to a slot (native, 1 and 6 threads identical) | in progress |
-| T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress |
+| T76 | C | Wingmen avoid each other and big hulls while forming up: no rams between allies re-forming after the leader reverses at high speed, and no wingman follows the leader into the station (maintainer, 2026-11-17; roadmap M7-1 brought forward from M8) | T74 | Opus | The formation and rejoin flight's stopping-path check against friendly ships everywhere, and against big hulls on the way to a slot (native, 1 and 6 threads identical) | done |
+| T14 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | done |
 
 ### M7-T01 Station references and measurements
 
@@ -2044,6 +2044,10 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
 - **Done when:** the maintainer confirms M7.
 - **M4 and M5 accepted by the maintainer 2026-11-17** (docs closed out in this commit).
 - **M6 accepted by the maintainer 2026-11-17** (docs closed out in this commit).
+- **M7 accepted by the maintainer 2026-11-18** (T76's two checks passed; docs closed out in this commit). The full suite ran once on
+  421afcaf, the last code commit (Python, the native tests, assets, import, the compile check and GUT with `GUT_SLOW=1` in four
+  shards: 4 251 passed of 4 282, the other 31 pending or risky, no failures, every shard exit 0), and CI passed on 421afcaf and
+  7fcda0f7. The GPU check is T13's measurements (architecture §20.13). The gap-closing follow-up is roadmap M7-6 (M8).
 
 - **Scope added (2026-11-15):**
   - The council's call-site tests: a heavy cannon in `TurretRows` (a lifted mount) hits a crossing fighter-sized target at 2 km,
@@ -3701,3 +3705,6 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
     looking back, Alpha re-forming after the player turned about at 200 m/s).
   - **For the maintainer (H):** the wing coming round over and under the leader after a turnabout (a look check); re-forming
     after pitching over is some 10 s slower than before.
+- **Accepted by the maintainer 2026-11-18** (the turnaround and the drum checks). Follow-up: wingmen close the gaps that losses leave
+  in the formation (roadmap M7-6, M8).
+

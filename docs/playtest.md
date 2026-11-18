@@ -1059,8 +1059,7 @@ station_lights off|on      the station's exterior lights, for A/B looks
 
 ## M7 acceptance checklist (AC12, the (H) criteria)
 
-**Play-tested by the maintainer 2026-11-16 and 2026-11-17: every item passed except the two M7-T76 checks at the end.** Not yet
-accepted: the T76 checks, the full `scripts/run_tests.sh` and the maintainer's confirmation of M7 remain.
+**Accepted by the maintainer 2026-11-18** (every item below passed in the play-tests of 2026-11-16 to 11-18).
 
 Everything automated is recorded in the acceptance table of `docs/milestones/m7-babylon-5-station.md`. GPU numbers are the agents'
 (RX 6950 XT).
@@ -1129,8 +1128,8 @@ Everything automated is recorded in the acceptance table of `docs/milestones/m7-
       goto main_docking_bay`): placed clear and at rest, no ram; the orbit on the asked side, never inside the atmosphere; after a
       drop the station's rail and REF BABYLON 5 come back and the planet is drawn (T63, T66 to T68, T71).
 
-**Wingmen forming up (M7-T76, open)**
+**Wingmen forming up (M7-T76)**
 
-- [ ] **The turnaround:** `play station_launch`, `launch wing alpha`, FORM ON ME (key 1), fly past 200 m/s, turn sharply and burn
+- [x] **The turnaround:** `play station_launch`, `launch wing alpha`, FORM ON ME (key 1), fly past 200 m/s, turn sharply and burn
       back: the wing comes round over and under you and re-forms without ramming you or each other.
-- [ ] **The station:** `god on`, fly into Babylon 5's drum with the wing following: no wingman rams the station or another wingman.
+- [x] **The station:** `god on`, fly into Babylon 5's drum with the wing following: no wingman rams the station or another wingman.
