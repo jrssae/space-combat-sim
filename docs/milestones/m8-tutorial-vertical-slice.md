@@ -2,7 +2,7 @@
 
 > "The first mission." (`docs/roadmap.md`)
 
-**Status:** **planned, not started.** Branch `m8` was cut from `main` at `1e7064dc` (M7's merge) on 2026-11-18. The planning
+**Status:** **in progress** (started 2026-11-18 with T07). Branch `m8` was cut from `main` at `1e7064dc` (M7's merge) on 2026-11-18. The planning
 questions below were asked on 2026-11-18; the maintainer answered Q5 to Q8 the same day, and the proposed answers to the others
 stand until the maintainer answers. The tutorial's script is
 not planned here: its beats, lines and pacing are settled with the maintainer in T01, and T03 to T05 are filled in from it.
@@ -164,7 +164,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T04 | A | Control checks: `ControlCheck`, the runner and the binding hints (D80) | T01 | Opus | Pass conditions on measured state for every control, pad and keyboard | not started |
 | T05 | A | The tutorial mission: launch, checks, tour, raid, defense, debrief (D79) | T03, T04 | Opus | The mission script, dialog and pacing on M5's and M7's seams | not started |
 | T06 | B | Dock in the main docking bay to be repaired and relaunched, for the player and the AI wingmen (D82, Q7) | - | Opus | The `dock` interaction, the lane for fighters, repair and a Cobra-bay relaunch; wing orders | not started |
-| T07 | C | Bring M12-T19's raider strike carrier into `m8`: merge `origin/m12`, one collision builder, its tests green (Q5) | - | Opus | Two branches built a collision builder; docs, `native/src/lib.rs` and `info.md` conflict | not started |
+| T07 | C | Bring M12-T19's raider strike carrier into `m8`: merge `origin/m12`, one collision builder, its tests green (Q5) | - | Opus | Two branches built a collision builder; docs, `native/src/lib.rs` and `info.md` conflict | in progress |
 | T08 | C | The civilian escort's raids come with the strike carrier (D83, Q6) | T07 | Opus | Mission data and pacing on `CarrierJumps`; the escort's tests kept green | not started |
 | T09 | C | Raider Battle Wagon (moved from M12-T20): from images, with weapons (M10 Q31) and four launch tubes; the escort's last wave comes with it (Q8) | T08, the maintainer on its weapons | Fable | No STL; a new hull with weapons and tube launches | not started |
 | T10 | D | Interceptor muzzle at the drawn barrel tip, and the grid balance measured again (roadmap M7-2) | - | Sonnet | A placement fix in the turret rows with a balance check | not started |
