@@ -1157,8 +1157,9 @@ do it: `spawn raider ai 1500`).
 - [ ] **(H) Closing up:** when a wingman goes down, the ones behind it on its arm each move up one place, and the V has no hole;
       nobody rams anybody on the way. With one arm two ships longer than the other, the long arm's last ship crosses behind you
       to the short one. Say if the centre ship (ALPHA 12) moving out to an arm that has room looks right, or if it should stay.
-- [ ] **(H) The roster:** the wingmen keep their callsigns when they move up; the downed one's row stays where it was and reads
-      DOWN; `wing replenish` brings a replacement under that callsign, at the back of the formation.
+- [ ] **(H) The roster:** the wingmen keep their callsigns when they move up; the roster follows the formation's places, so
+      their rows move up too and the DOWN row, under the downed wingman's callsign, is the place at the back; `wing replenish`
+      brings a replacement under that callsign, at the back of the formation.
 
 # Play-testing the raider strike carrier (M12-T19, now M10-T19: the early delivery, merged into M8 by M8-T07)
 

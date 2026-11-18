@@ -4,8 +4,9 @@ extends Node
 ## main scene, `process_physics_priority` 290: after the resolvers (a member destroyed this tick is already down), before the
 ## waves (300).
 ##
-## Each tick, for every wing (`refresh`): members that are down, left play or no longer fly an `AiPilot` leave their slot,
-## and the ones behind move up so the formation has no hole (`Wing.close_gaps`, M8-T13; they keep their callsigns and paint).
+## Each tick, for every wing (`refresh`): members that are down, left play or no longer fly an `AiPilot` leave their slot.
+## When one was destroyed, the ones behind move up so the formation has no hole (`Wing.close_gaps`, M8-T13; they keep their
+## callsigns and paint); a member that only left (released, made leader) leaves its slot open.
 ## Then each member's `AiContext` gets the wing's view: its order (`Wing.effective_order`: engage at will while the leader is
 ## dead), the leader's id and selected target, the engage radius, its slot offset, and the link to the leader that a member
 ## beyond sensor range flies on.
@@ -377,35 +378,26 @@ func roster(wing: Wing = null) -> Array[Dictionary]:
 	return out
 
 
-## The HUD roster of `wing` (default: the player's), one row per slot flown or lost (M3-T11): `callsign`, `hull`,
-## `behaviour`, `target` and `down`. A wingman shot down reads `down` under its own callsign until a replacement comes; a
-## slot never flown is left out. The rows go by callsign number, not by slot, so a row stays where it is when the wingmen
-## move up after a loss (M8-T13).
+## The HUD roster of `wing` (default: the player's), one row per slot flown or lost, in slot order (M3-T11): `callsign`,
+## `hull`, `behaviour`, `target` and `down`. A lost slot reads `down` under the callsign of the wingman that went down
+## (M8-T13: the hole it left, at the back once the wing closed up) until a replacement takes it; a slot never flown is left out.
 func hud_roster(wing: Wing = null) -> Array[Dictionary]:
 	if wing == null:
 		wing = player_wing()
 	var out: Array[Dictionary] = []
 	if wing == null:
 		return out
-	var order: Array[Vector2i] = []  # (callsign number, row), sorted to place the rows
 	for slot: int in range(1, wing.size + 1):
 		var member: Combatant = wing.member_at(slot)
-		var callsign: String = member.display_name if member != null else wing.lost_callsign(slot)
-		if member == null and not wing.is_lost(slot):
-			continue
-		order.append(Vector2i(_wing_number(wing, callsign, wing.size + 1 + slot), out.size()))
 		if member == null:
-			out.append({"callsign": callsign, "hull": 0.0, "behaviour": "", "target": "", "down": true})
+			if wing.is_lost(slot):
+				out.append({"callsign": wing.lost_callsign(slot), "hull": 0.0, "behaviour": "", "target": "", "down": true})
 			continue
 		var d: Dictionary = member.driver.brain.describe() if _pilot_of(member) != null else {}
-		out.append({"callsign": callsign,
+		out.append({"callsign": member.display_name,
 				"hull": member.damageable.hull.fraction() if member.damageable != null else 0.0,
 				"behaviour": str(d.get("behaviour", "none")), "target": str(d.get("target", "")), "down": false})
-	order.sort()
-	var sorted: Array[Dictionary] = []
-	for entry: Vector2i in order:
-		sorted.append(out[entry.y])
-	return sorted
+	return out
 
 
 func _physics_process(delta: float) -> void:
@@ -416,16 +408,19 @@ func _physics_process(delta: float) -> void:
 
 ## Drops the members that are down and briefs the others (see the class notes). Runs every tick; public for the tests.
 func refresh(wing: Wing) -> void:
+	var shot_down: bool = false
 	for member: Combatant in wing.members():
 		if _pilot_of(member) == null or not _in_play(member):
 			var slot: int = wing.slot_of(member)
 			remove_member(wing, member)
 			wing.mark_lost(slot, member.display_name)
+			shot_down = shot_down or (member.damageable != null and member.damageable.hull.destroyed)
+	if shot_down:
+		wing.close_gaps()  # the ones behind the hole move up; their new offsets go out below
 	var alive: bool = leader_alive(wing)
 	if not alive and (wing.leader == null or not wing.leader.is_player) and not wing.members().is_empty():
 		_lead(wing, wing.members()[0])  # the lowest slot leads on
 		alive = true
-	wing.close_gaps()  # the ones behind a hole move up; their new offsets go out below
 	var order: AiContext.Order = wing.effective_order(alive)
 	var leader_id: int = 0
 	var target_id: int = 0

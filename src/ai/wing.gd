@@ -10,9 +10,10 @@ extends RefCounted
 ## for every member while the leader lives; while it is dead the wing engages at will (`effective_order`) and resumes
 ## the order when it is back.
 ##
-## Gaps (M8-T13): a wing keeps the shape its count of ships would have built joining one by one. `close_gaps` moves the
-## members behind an empty slot up their arm and evens the arms after, so losses leave no hole; a pilot keeps its callsign
-## when it moves, and the callsign of the one that went down goes with the empty slot to the back (`lost_callsign`).
+## Gaps (M8-T13): `close_gaps` gives the wing the shape its count of ships would have built joining one by one: the
+## members behind an empty slot move up their arm and the arms are evened after. The director calls it when a member is
+## destroyed, so losses leave no hole; a pilot keeps its callsign when it moves, and the callsign of the one that went down
+## goes with the empty slot to the back (`lost_callsign`).
 
 const DEFAULT_NAME: String = "ALPHA"
 ## Members besides the leader: three wingmen in a finger-four (maintainer Q4).

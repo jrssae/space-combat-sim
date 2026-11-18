@@ -210,18 +210,52 @@ func test_a_downed_member_leaves_its_slot_and_the_next_one_answers() -> void:
 	assert_eq(result["line"], "ALPHA 4: COPY, FORMING UP", "the lowest slot answers")
 	assert_eq(main.wings.add_member(wing, allies[0]), -1, "a ship out of play cannot join")
 	assert_eq(wing.empty_slots(), PackedInt32Array([3]))
-	# The HUD roster keeps the downed wingman's row, as DOWN, until a replacement comes (M3-T11); the rows stay in callsign
-	# order whoever flies which slot.
+	# The HUD roster goes by slot: the wingmen as they now fly, then the hole at the back, DOWN under the downed wingman's
+	# callsign until a replacement takes it (M3-T11).
 	var rows: Array[Dictionary] = main.wings.hud_roster()
 	assert_eq(rows.size(), 3)
-	assert_eq(rows[0]["callsign"], "ALPHA 2")
-	assert_true(bool(rows[0]["down"]))
+	assert_eq(rows[0]["callsign"], "ALPHA 4")
+	assert_false(bool(rows[0]["down"]))
+	assert_eq(rows[0]["behaviour"], "formation")
 	assert_eq(rows[1]["callsign"], "ALPHA 3")
 	assert_false(bool(rows[1]["down"]))
-	assert_eq(rows[1]["behaviour"], "formation")
-	assert_eq(rows[2]["callsign"], "ALPHA 4")
-	assert_false(bool(rows[2]["down"]))
+	assert_eq(rows[2]["callsign"], "ALPHA 2")
+	assert_true(bool(rows[2]["down"]))
 	assert_eq(main.wings.callsign_for(wing, 3), "ALPHA 2", "the replacement takes the downed wingman's callsign")
+
+
+func test_only_a_loss_closes_the_wing_up() -> void:
+	# A member that leaves without being shot down (released by a mission, taken out by the console) leaves its slot open.
+	main.wings.remove_member(wing, allies[0])
+	await _ticks(2)
+	assert_eq(wing.empty_slots(), PackedInt32Array([1]), "ALPHA 2's slot stays open")
+	assert_eq(wing.slot_of(allies[2]), 3, "nobody moved up")
+	assert_false(wing.is_lost(1), "and it is not lost")
+	assert_eq(main.wings.hud_roster().size(), 2, "the roster leaves an open slot out")
+	# So does a change of shape, whatever the new arms are.
+	main.wings.set_formation(Formation.Shape.WEDGE)
+	await _ticks(2)
+	assert_eq(wing.slot_of(allies[1]), 2)
+	assert_eq(wing.slot_of(allies[2]), 3)
+	main.wings.set_formation(Formation.Shape.FINGER_FOUR)
+	# An AI-led group whose leader goes down hands the lead to its lowest slot, and that slot stays open too.
+	var group: Wing = main.wings.create_wing("GROUP", _ai_ship("GROUP LEAD", Vector3(0.0, 300.0, 0.0), 9))
+	var followers: Array[Combatant] = []
+	for n: int in 3:
+		followers.append(_ai_ship("GROUP %d" % (n + 2), Vector3(60.0 * (n + 1), 300.0, 60.0), 20 + n))
+		assert_eq(main.wings.add_member(group, followers[n]), n + 1)
+	group.leader.damageable.kill()
+	await _ticks(2)
+	assert_eq(group.leader, followers[0], "the lowest slot leads on")
+	assert_eq(group.empty_slots(), PackedInt32Array([1]), "its old slot stays open")
+	assert_eq(group.slot_of(followers[2]), 3)
+	# A wingman shot down closes the wing up, the open slot with it.
+	allies[1].damageable.kill()
+	await _ticks(2)
+	assert_eq(wing.members(), [allies[2]] as Array[Combatant])
+	assert_eq(wing.slot_of(allies[2]), 2, "ALPHA 4 moved up its arm behind ALPHA 3")
+	assert_true(wing.is_lost(3), "the hole at the back is ALPHA 3's")
+	assert_eq(wing.lost_callsign(3), "ALPHA 3")
 
 
 func test_a_member_parked_in_the_low_attention_tier_keeps_its_slot() -> void:

@@ -6335,23 +6335,24 @@ data/station/bot_points.json     the crew's tunables, roads, patrol areas and wo
   alternate arms (#5 #6 left, #7 #8 right, ...), and a wing of more than three slots with an odd count puts its last slot on the
   centreline 80 m behind the leader. Only that slot depends on the wing's size, so growing a wing moves nobody; wings of up to
   three slots keep their slots. Newcomers take `Wing.fill_order`'s first slot (`test_formation`, `test_wing`, `test_launch_bay`).
-- **Closing up after losses (M8-T13, roadmap M7-6).** A wing the director runs never flies with a hole: every tick
-  `WingDirector.refresh`, after dropping the members that are down, calls `Wing.close_gaps`, and the offsets it sends out are
-  the new slots'. The rule, for any wing size and shape: first the members behind an empty slot move up their own arm, in
-  order, so nobody crosses the V for a hole on its side; then, while a ship would be better placed in the slot `fill_order`
-  gives a newcomer (an arm two ships longer than the other, the centre slot flown beside an open arm slot), the worst placed
-  one (the centre ship, else the last of the longer arm) moves there. Mirror slots count as equal, so a wing that is even
-  stays as it is (a flight of three's last wingman keeps its side). The result is the shape that many newcomers would have
-  built, or its mirror. A member released or made leader leaves a hole that closes the same way. `close_gaps` remembers that
-  it is closed until a member, the size or the shape changes, so the tick costs nothing more.
+- **Closing up after losses (M8-T13, roadmap M7-6).** When `WingDirector.refresh` drops a member that was destroyed, it calls
+  `Wing.close_gaps`, and the offsets it sends out that tick are the new slots'. Only a loss closes the wing up (maintainer,
+  2026-11-18): a member released, a slot whose ship took the lead of an AI wing and a change of shape leave the slots as they
+  are, and a wingman away docking keeps its own (M8-T06, `Wing.set_away`). The rule, for any wing size and shape: first the
+  members behind an empty slot move up their own arm, in order, so nobody crosses the V for a hole on its side; then, while a
+  ship would be better placed in the slot `fill_order` gives a newcomer (an arm two ships longer than the other, the centre
+  slot flown beside an open arm slot), the worst placed one (the centre ship, else the last of the longer arm) moves there.
+  Mirror slots count as equal, so a wing that is even stays as it is (a flight of three's last wingman keeps its side). The
+  result is the shape that many newcomers would have built, or its mirror. A hole left open earlier (a released member's)
+  closes with the next loss.
   - **Flying it.** No native change: a wingman's slot is only the offset in its `AiContext`, so the core flies the new one
     as any slot, with T76's avoidance (`kept_apart`, coming round a slot across the leader). `test_wing_gaps`: Alpha's eleven
     shot at by seeded raiders, and scheduled losses (the first of an arm, several at once, a finger-four's last ship crossing
     to the empty arm): no ram inside the wing, no two centres within 50 m, every survivor on its slot after.
   - **Names.** A pilot keeps its callsign and its painted number when it moves. The callsign of the one that went down goes
     with the hole to the back (`Wing.lost_callsign`, `mark_lost(slot, name)`); the replacement that fills it takes that
-    callsign (`callsign_for`) and is painted with its number. The HUD roster (`hud_roster`) lists the rows by callsign number,
-    not by slot, so no row moves when the wing closes up, and a lost row reads the downed pilot's callsign.
+    callsign (`callsign_for`) and is painted with its number. The HUD roster (`hud_roster`) stays in slot order (the
+    formation's places): the wingmen as they now fly, the lost slot at the back reading the downed pilot's callsign.
 - **Transit (T75).** `transit carrier` and `transit arrive` grow the raider pool when too few are free (`Main.ensure_free`), so they
   work in free flight with encounters off (`test_bench`).
 

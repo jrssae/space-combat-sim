@@ -311,7 +311,8 @@ func test_a_lost_callsign_goes_to_the_back_with_the_hole() -> void:
 	assert_eq(big.empty_slots(), PackedInt32Array([9, 10]))
 	assert_eq(big.lost_callsign(9), "ALPHA 6", "each hole keeps the callsign of one of the two that went down")
 	assert_eq(big.lost_callsign(10), "ALPHA 2")
-	# A member released, not shot down, leaves a hole that closes the same way and marks nothing lost.
+	# The hole of a member released, not shot down, closes the same way when the wing is asked to, and marks nothing lost
+	# (the director asks only when a member is destroyed).
 	var released: Wing = _wing_with(3, [1, 2, 3])
 	released.remove_member(released.member_at(2))
 	assert_eq(released.close_gaps(), [Vector2i(3, 2)] as Array[Vector2i])
