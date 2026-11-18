@@ -79,3 +79,6 @@ mod rock_stream;
 // M7-T06: big hulls with a surface of their own (the station), an engine-free kernel the core, the rams and the brains read.
 mod surface;
 mod surface_rows;
+// M12-T19: a carrier's docking, an engine-free kernel and its rows for GDScript.
+mod dock_kernels;
+mod dock_rows;

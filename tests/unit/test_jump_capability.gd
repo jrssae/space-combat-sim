@@ -1,12 +1,17 @@
 extends GutTest
-## Who may open a jump point (M6-T23, `JumpCapability`): no designed hull can, every capital stand-in can; a point holds within
-## twice its opener's length by default (or its type's own range), and collapses when its opener is gone, destroyed, disabled or
-## out of range, or a short hold after the opener went through its own ring. A collapse goes straight to the closing flash.
+## Who may open a jump point (M6-T23, `JumpCapability`): no designed fighter or civilian hull can (M12-T19's strike carrier can),
+## every capital stand-in can; a point holds within twice its opener's length by default (or its type's own range, or past its
+## hull's own anchor), and collapses when its opener is gone, destroyed, disabled or out of range, or a short hold after the
+## opener went through its own ring. A collapse goes straight to the closing flash.
 
 const SHIPS_DIR: String = "res://assets/ships/"
 
 
-func test_no_designed_hull_can_open_a_jump_point() -> void:
+## Designed capital hulls that may open points (M12-T19: the raiders' strike carrier, the maintainer's Q25).
+const JUMP_CAPABLE: PackedStringArray = ["raider_strike_carrier.tres"]
+
+
+func test_no_designed_fighter_or_civilian_hull_can_open_a_jump_point() -> void:
 	var specs: int = 0
 	for file: String in DirAccess.get_files_at(SHIPS_DIR):
 		if not file.ends_with(".tres"):
@@ -14,17 +19,22 @@ func test_no_designed_hull_can_open_a_jump_point() -> void:
 		var spec := load(SHIPS_DIR + file) as ShipSpec
 		if spec == null:
 			continue
+		if file in JUMP_CAPABLE:
+			assert_true(spec.can_open_jump_point, "%s opens its own points" % file)
+			continue
 		specs += 1
 		assert_false(spec.can_open_jump_point, "%s cannot open a jump point" % file)
 		assert_eq(spec.jump_hold_range_m, 0.0, "%s gives no hold range of its own" % file)
 	assert_gte(specs, 12, "the Starfuries, the raider and the nine civilian hulls")
 
 
-func test_every_capital_stand_in_can_and_holds_within_twice_its_length() -> void:
+func test_every_capital_stand_in_can_and_holds_within_twice_its_length_or_past_its_anchor() -> void:
 	for cls: StringName in CapitalStandin.CLASSES:
 		var cap: CapitalStandin = CapitalStandin.create(cls, Factions.RAIDERS, "TEST", Vector3.ZERO)
 		assert_true(JumpCapability.can_open(cap), "a %s stand-in opens points" % cls)
-		assert_almost_eq(JumpCapability.hold_range_of(cap), 2.0 * cap.length_m(), 1e-3, "%s: 2 x its length" % cls)
+		var anchor_m: float = (cap.jump_anchor["position"] as Vector3).length() if not cap.jump_anchor.is_empty() else 0.0
+		var wanted_m: float = maxf(2.0 * cap.length_m(), anchor_m + cap.length_m())
+		assert_almost_eq(JumpCapability.hold_range_of(cap), wanted_m, 1e-3, "%s: 2 x its length, or a length past its anchor" % cls)
 		assert_almost_eq(JumpCapability.length_of(cap), cap.length_m(), 1e-3)
 		cap.free()
 	assert_false(JumpCapability.can_open(null))
@@ -36,6 +46,8 @@ func test_the_hold_range_is_twice_the_length_unless_the_type_gives_one() -> void
 	assert_eq(JumpCapability.hold_range_m(1200.0), 2400.0)
 	assert_eq(JumpCapability.hold_range_m(300.0, 450.0), 450.0, "the type's own value wins")
 	assert_eq(JumpCapability.hold_range_m(-5.0), 0.0)
+	assert_eq(JumpCapability.hold_range_m(112.0, 0.0, 308.0), 420.0, "a hull's own anchor and a length beyond it (M12-T19)")
+	assert_eq(JumpCapability.hold_range_m(112.0, 0.0, 50.0), 224.0, "an anchor close in keeps the usual range")
 
 
 func test_a_point_holds_until_its_opener_is_lost() -> void:

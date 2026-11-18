@@ -1133,3 +1133,32 @@ Everything automated is recorded in the acceptance table of `docs/milestones/m7-
 - [x] **The turnaround:** `play station_launch`, `launch wing alpha`, FORM ON ME (key 1), fly past 200 m/s, turn sharply and burn
       back: the wing comes round over and under you and re-forms without ramming you or each other.
 - [x] **The station:** `god on`, fly into Babylon 5's drum with the wing following: no wingman rams the station or another wingman.
+
+# Play-testing the raider strike carrier (M12-T19, now M10-T19: the early delivery, merged into M8 by M8-T07)
+
+Flown in M8's play-test; M10-T19 stays open until the maintainer has flown it.
+
+The first real capital ship: 112 m, no weapons, eighteen cradles for Delta-Vs, its own jump points. Built ahead of the rest of
+M10 (`docs/architecture.md` §19.18, `docs/assets-capital.md`). Its look sheet is
+`references/screenshots/M12-T19 raider strike carrier/look_sheet.png`. Console: `carrier`, `transit docked`, `state carriers`
+(all in `info.md`). Free flight's raids now come behind it with their fighters docked (`data/encounters/free_flight.json`).
+
+- [ ] **The hull (H):** `sheet raider_strike_carrier 50 lit - three_quarter` (also `top`, `side`, `front`; 500 and 5000 m): the
+      show green surface, the lit slats pale but not blown out, the decks readable under a square-on sun, a Delta-V docked on
+      the top outer cradle reaching out to the clamp pins. Try `set settings.texture_detail low`.
+- [ ] **Docked arrival and launch (H):** `transit docked follow`: the carrier comes out of its own point with six Delta-Vs on
+      its cradles, and once clear of the mouth pushes them off one after another. Say if the launch reads well (2 s, 30 m).
+- [ ] **Beside arrival:** `transit carrier point follow`: two fighters come out of its point beside it, as before.
+- [ ] **Fly up to it (H):** fly round and through the rings and up to a cradle: the rings' openings are open, the arms and pads
+      stop you, nothing invisible does. Shoot it: bolts land on the hull (a ring is hit as its sectors' boxes).
+- [ ] **Recall and jump out (H):** with a carrier standing off (`state carriers.state` says `standoff`), `carrier recall`: its
+      fighters fly back, are drawn in onto free cradles, and it opens a point ahead of its bow and leaves with them. Say if the
+      last 60 m (the cradle drawing the fighter in over 4 s) looks right or too much like a tractor beam.
+- [ ] **Hurt, it runs:** `carrier hurt`: under half its hull it recalls on its own. A fighter too far to be home within 45 s is
+      left behind and fights on.
+- [ ] **It hangs back:** fly at a carrier that is standing off: inside 2.5 km it turns its stern to you and backs away at up to
+      30 m/s. Say if the stand-off, the speed and the turn rate (4 degrees a second) feel right.
+- [ ] **Its death (H):** `carrier kill` with fighters docked: the capital explosion, and each docked fighter blows up on its
+      cradle. Its hull points (10 000) are a first figure: say how long it should take a Starfury to kill it.
+- [ ] **A raid in free flight (H):** `encounters force raid`: the carrier arrives 6 to 12 km out, launches, stands off while its
+      fighters attack, and leaves when they are all gone or after five minutes.

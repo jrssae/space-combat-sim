@@ -76,6 +76,7 @@ func _ready() -> void:
 	main.effects.add_child(jumps)
 	jumps.prepare(JUMP_POINTS)
 	CarrierJumps.attach(main.world).prepare(CARRIERS)  # raids behind a carrier (M6-T23), built at load (D22)
+	CarrierJumps.attach(main.world).prepare(CARRIERS, CapitalStandin.STRIKE_CARRIER)  # the raiders' own (M12-T19)
 	stage = MissionStage.new()
 	stage.setup(main, jumps)
 	var world := MissionWorld.new()

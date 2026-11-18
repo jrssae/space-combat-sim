@@ -664,11 +664,13 @@ func test_transit_carrier_grows_the_raider_pool_in_free_flight() -> void:
 	var result: ConsoleResult = _exec("transit carrier point fighter follow")
 	assert_true(result.ok, "the recipe's carrier: %s" % result.text())
 	assert_gte(main.ships.pool_size(ShipPool.DEFAULT_TYPE), 2, "the pool grew")
-	await _ticks(120)
+	# The raiders' carrier is the strike carrier (M12-T19, merged by M8-T07): it holds its arrival point for about a second,
+	# then stands off instead of jumping straight back, so its point is collapsed while held and nobody is in its funnel.
+	await _ticks(30)
 	assert_true(_exec("vortex collapse").ok)
 	await _ticks(30)
 	assert_eq(int(_read("vortex.collapses")), 1)
-	assert_eq(int(_read("vortex.collapse_kills")), 1)
+	assert_eq(int(_read("vortex.collapse_kills")), 0, "its fighters are already out of the funnel")
 	assert_eq(String(_read("vortex.last_collapse")), "opener_destroyed")
 	var alive: Array[Combatant] = main.ships.alive()
 	assert_gt(alive.size(), 1, "the raiders it brought are alive")

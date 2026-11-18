@@ -5577,6 +5577,54 @@ velocity rebase is `World.auto_boost_speed_mps`, an export of `main.tscn`, not a
   under TAA and FSR 2 are not checked.
 - Doppler is out: voices stay in the local frame.
 
+### 19.18 The raider strike carrier, early delivery (M12-T19, now M10-T19; merged into M8 by M8-T07)
+
+The first real capital hull, built ahead of M10's framework (M10-T05, T07) and moved onto it when that lands. The asset is in
+`docs/assets-capital.md`; this is the game side.
+
+- **The body.** `CapitalStandin` gains the class `strike_carrier`: the same rigid body as the bench's capitals (zero damping,
+  `DAMP_MODE_REPLACE`, the engines' force re-applied every tick, `Targetable` of kind capital, hull points only, today's capital
+  explosion and far flash through `DestructionDirector.watch_capital`), but built from the generated hull. Its numbers are a
+  `ShipSpec` (`assets/ships/raider_strike_carrier.tres`: mass, thrust, turn rate and torque, hull points, `can_open_jump_point`).
+  `CompoundCollision` reads the manifest's `collision` section through M7's `CollisionPieces` (one format and one builder,
+  `core/collision.py`, for the station and the carrier since M8-T07, §20.7): every shape becomes a `CollisionShape3D` on the one
+  body, named by its piece (Jolt's compound), hulls as `ConvexPolygonShape3D`; the hit volumes are the section's `hit_volumes`,
+  each hull's fitted box, because the hit sweeps and the ram resolver know boxes and capsules only. It has no weapons. A helm turns it:
+  `heading` (World), a torque toward it limited by the spec, applied with the engines in `step_engines`.
+- **Docking** (`CarrierDock`, a child of the carrier; `CarrierCradles` is the bookkeeping). A docked fighter is a pooled ship
+  kept out of play (hidden, out of Jolt, its pilot held with `AiPilotDriver.in_passage`) and drawn on its cradle as one instance
+  of the dock's multimesh, so riding costs nothing per tick. A launch brings the ship back at its cradle and pushes it 30 m
+  straight out over 2 s before its pilot is let go. A fighter called back is flown round the hull to its cradle's approach
+  point 60 m out, then drawn in onto the pad over 4 s. While it is launched or drawn in it does not collide with the carrier.
+  The paths are native: `native/src/dock_kernels.rs` (engine-free, a row's result depends on that row alone, so 1 and 6 threads
+  agree; it runs on the main thread, since it writes poses the same tick) behind `ScsDockRows`; GDScript applies the poses and
+  turns a wanted velocity into a `FlightCommand` through `PilotSteering`, as the vortex passages do.
+- **The raid** (`CarrierJumps`, `CarrierTactics`). A raiders' raid `via: "carrier"` comes behind the strike carrier
+  (`CarrierJumps.class_for`); other factions keep the cruiser stand-in. The raid's `carrier` data picks how its fighters arrive
+  (`arrival`: `docked` on its cradles, launched once it is clear of its point, or `beside` it out of its point as M6-T23 did)
+  and tunes it (`standoff_m`, `retreat_hull`, `wait_s`, `raid_s`, `fighter_return_hull`). Its run goes arriving, holding (it
+  launches; a raid whose `then` is `stay` launches too, then stays), `standoff` (every 0.5 s it asks the pilots' shared
+  contact scan, `ContactScan.contacts_for`, a native query, for the nearest enemy ship or capital; inside its stand-off it backs
+  away with its stern to it; a fighter under its hull share is called back), `recalling` (its hull under the threshold, or the raid over: ended by its
+  script or the console, past its time limit, or no fighter left flying; it holds still and waits up to `wait_s`), then
+  leaving through a point it opens at its hull's `jump_point` anchor (it holds that point to a length past the anchor, since
+  the anchor is beyond the usual two lengths). Fighters not docked by then are let go and left behind;
+  the docked ones leave with it and go back to their pool. Destroyed, its docked fighters are destroyed with it
+  (`HitInfo.CAUSE_CARRIER_LOST`, no credit) and the points it holds collapse (§19.16).
+- **Per tick and per event.** Native: the docking paths. GDScript per tick: the carrier's engine and helm forces (as every
+  capital stand-in's), and applying the dock's poses. GDScript per event or at 2 Hz: the stand-off decision, recalls, the run's
+  state changes.
+- **Console.** Command `carrier [status|launch|recall|hurt|kill]`; `transit docked`; provider `carriers` gains `docked`,
+  `returning`, `launched`, `recovered`, `left_behind`, `hull`. No new setting.
+- **Tests.** Rust: `dock_kernels` (8). GUT: `tests/unit/test_carrier_logic.gd` (collision, cradles, tactics, the native rows),
+  `tests/integration/test_strike_carrier.gd` (the body, engines and helm, docked arrival and launch, recall and jump out, a
+  fighter left behind, the retreat threshold, backing away stern-on from an attacker, a badly hurt fighter called back alone, a
+  staying carrier launching, death with docked fighters, the console), and M6-T23's raid test in
+  `tests/integration/test_encounters.gd`, now on the strike carrier, with a docked raid flown by AI pilots beside it.
+- **Known gaps.** The carrier is not in the low-attention tier (a raid carrier is exempt, as M6-T23's was). Its break-up
+  chunks are generated but its death is the whole-hull explosion (M10's staged break-up comes later). A returning fighter is
+  steered by the dock, not by its own brain, and does not avoid other ships on the way.
+
 ## 20. The Babylon 5 station (M7)
 
 M7 as built (tasks T01 to T76 in `docs/milestones/m7-babylon-5-station.md`, decisions D72 to D78 there). Babylon 5 is an 8 km
@@ -6124,7 +6172,7 @@ tools/procgen/parts/station_layouts.py     seams, paint patterns and windows; st
 tools/procgen/parts/station_hardpoints.py  data only: Cobra bays, docking and cargo bays, 23 grid mounts, lights, tour points, sections
 tools/procgen/parts/station_props.py       door leaves and near-only props (core/near_props.py); station_collision.py shapes per section
 tools/procgen/parts/station_fidelity.py    the per-part section planes against the STL (tools/refview/sections.py)
-tools/procgen/core/collision.py            compound collision from parts (T03): Shape, Budget, merge_to_budget, coverage
+tools/procgen/core/collision.py            compound collision from parts (T03): Shape, Budget, merge_to_budget, coverage, skin_coverage
 tools/procgen/core/sections.py             a piece clipped into sections that tile it (T19); core/detail_layer.py the shared fine tile
 src/world/collision_pieces.gd              CollisionPieces (pure): the manifest's collision section; CollisionBodies.build: a piece's body
 src/world/station_hardpoints.gd            StationHardpoints: the hardpoints for the game
@@ -6145,6 +6193,9 @@ src/rendering/piece_sections.gd            PieceSections (pure): sections and pr
   against the render mesh (`coverage`: the largest gap and excess). The station's shapes are cut at the section planes, the bays'
   never merged, so the docking tunnel, the halls under the launch doors and the cargo bay stay open (tested with a Starfury's and a
   pod's boxes). The game builds one body per piece (`CollisionBodies`) and the core's surfaces from the same hulls (§20.1).
+  M8-T07 folded M12-T19's second builder into this one: the carrier's makers (`box_around`, `capsule_between`), moves and
+  mirrors, `ring_sectors`, `prism_points` and `skin_coverage` (coverage against sampled skin) are here, and the carrier writes
+  the same section (§19.18).
 - **Hardpoints.** 24 `cobra_bay_<wing>_<door>` (door, hinges, rail, release, pose, the second row's staging path), `cobra_arm`,
   `launch_clearance`, `main_docking_bay_*` (drum frame), `cargo_bay_*`, D75's 23 mounts, the lights, 8 tour points and 11 damage
   sections; `StationHardpoints` reads them and every M7 system places from it.

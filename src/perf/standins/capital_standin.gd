@@ -6,6 +6,10 @@ extends RigidBody3D
 ## `TurretStandin` children and its two beam lasers as `BeamStandin` children (M4-T12). It costs the tick what a big body costs Jolt, the scan and every broad phase; `StandinDirector`
 ## steps its engines and turrets.
 ##
+## M12-T19: the class `strike_carrier` is the first real hull: the raiders' strike carrier, drawn and collided from its generated
+## asset (`CompoundCollision`), with its numbers in a `ShipSpec`, no weapons, a `CarrierDock` for its fighters and a helm that
+## turns it (`heading`). It rides this class until M12-T07 gives capitals their own.
+##
 ## Newtonian like every body (§15.16): no damping; gravity pulls it like any mover (D66, M6-T07), and the engines hold the
 ## cruise velocity with a force each tick that also holds off that pull.
 
@@ -26,7 +30,13 @@ const CLASSES: Dictionary = {
 			"can_open_jump_point": true, "jump_hold_range_m": 0.0},
 	&"carrier": {"length": 1200.0, "width": 220.0, "height": 140.0, "mass": 8.0e7, "hull": 1.2e5, "turrets": 12,
 			"can_open_jump_point": true, "jump_hold_range_m": 0.0},
+	# The raiders' strike carrier (M12-T19): its box is the generated hull's, its other numbers its `ShipSpec`'s.
+	&"strike_carrier": {"length": 112.0, "width": 85.5, "height": 84.3, "mass": 1.35e7, "hull": 1.0e4, "turrets": 0,
+			"can_open_jump_point": true, "jump_hold_range_m": 0.0, "spec": "res://assets/ships/raider_strike_carrier.tres"},
 }
+const STRIKE_CARRIER: StringName = &"strike_carrier"
+## The helm brings the turn rate to what is asked within this long, s.
+const HELM_RESPONSE_S: float = 2.0
 const HULL_COLOR: Color = Color(0.42, 0.44, 0.47)
 ## The generated hulls (M4-T27) and the looks a capital can take: the bench's plain box or the class's textured hull (M4-T30d).
 const HULLS_ASSET: String = "capital_hulls"
@@ -41,6 +51,14 @@ var cruise_velocity: Vector3 = Vector3.ZERO
 var world: WorldFrame = null
 var targetable: Targetable = null
 var damageable: Damageable = null
+
+## A real hull's numbers (M12-T19), null for the bench's boxes; its docking cradles, null for a hull with none; and where it
+## opens its own jump point (`{position, mouth_radius_m}` in its frame), empty for a hull that gives none.
+var spec: ShipSpec = null
+var dock: CarrierDock = null
+var jump_anchor: Dictionary = {}
+## The way the helm turns the bow, World frame; zero: it holds no heading (the bench's capitals never turn).
+var heading: Vector3 = Vector3.ZERO
 
 ## Kept out of the low-attention tier (M6-T23): while it flies a jump vortex's funnel, as a pooled ship is (`VortexTransits`).
 var tier_exempt: bool = false
@@ -106,12 +124,17 @@ func set_faction(p_faction: StringName) -> void:
 
 ## Whether this class can open a jump point (M6-T23, `JumpCapability`).
 func can_open_jump_point() -> bool:
+	if spec != null:
+		return spec.can_open_jump_point
 	return bool((CLASSES[ship_class] as Dictionary).get("can_open_jump_point", false))
 
 
 ## How far from its point's mouth it holds the point open, m.
 func jump_hold_range_m() -> float:
-	return JumpCapability.hold_range_m(length_m(), float((CLASSES[ship_class] as Dictionary).get("jump_hold_range_m", 0.0)))
+	var anchor_m: float = (jump_anchor["position"] as Vector3).length() if not jump_anchor.is_empty() else 0.0
+	if spec != null:
+		return JumpCapability.hold_range_m(length_m(), spec.jump_hold_range_m, anchor_m)
+	return JumpCapability.hold_range_m(length_m(), float((CLASSES[ship_class] as Dictionary).get("jump_hold_range_m", 0.0)), anchor_m)
 
 
 ## The radius across its nose, m: what its own jump point is sized for (it comes out nose first).
@@ -184,7 +207,26 @@ func is_tier_parked() -> bool:
 func cruise_force(delta: float) -> Vector3:
 	var wanted: Vector3 = (cruise_velocity - linear_velocity) / maxf(CRUISE_RESPONSE_S, delta)
 	var pull: Vector3 = world.environment_accel(global_position) if world != null and is_instance_valid(world) else Vector3.ZERO
-	return mass * (wanted - pull).limit_length(MAX_ACCEL_MPS2)
+	return mass * (wanted - pull).limit_length(max_accel_mps2())
+
+
+## The most its engines push, m/s^2: its spec's thrust over its mass, or the bench's figure.
+func max_accel_mps2() -> float:
+	return spec.pod_main_thrust / maxf(mass, 1.0) if spec != null and spec.pod_main_thrust > 0.0 else MAX_ACCEL_MPS2
+
+
+## The torque the helm applies this tick, World frame: toward `heading` at up to its spec's turn rate, zero with no heading
+## to hold and no spin to stop.
+func helm_torque(delta: float) -> Vector3:
+	if spec == null:
+		return Vector3.ZERO
+	var rate_max: float = deg_to_rad(spec.rate_max.y)
+	var wanted: Vector3 = CarrierTactics.turn_rate(-global_basis.z, heading, rate_max)
+	var inverse: Basis = get_inverse_inertia_tensor()
+	if inverse.x.length() * inverse.y.length() * inverse.z.length() == 0.0:
+		return Vector3.ZERO  # not in Jolt yet
+	var torque: Vector3 = inverse.inverse() * ((wanted - angular_velocity) / maxf(HELM_RESPONSE_S, delta))
+	return torque.limit_length(spec.rcs_torque_max.y)
 
 
 ## One tick of the engines and of the pull they hold off (forces are re-applied every tick).
@@ -194,12 +236,16 @@ func step_engines(delta: float) -> void:
 	if pull != Vector3.ZERO:
 		force += mass * pull
 	apply_central_force(force)
+	if spec != null:
+		apply_torque(helm_torque(delta))
 
 
 func _build(display_name: String) -> void:
 	var spec: Dictionary = CLASSES[ship_class]
 	var size := Vector3(float(spec["width"]), float(spec["height"]), float(spec["length"]))
 	mass = float(spec["mass"])
+	if spec.has("spec") and _build_hull(display_name, String(spec["spec"])):
+		return
 	var box := BoxShape3D.new()
 	box.size = size
 	var shape := CollisionShape3D.new()
@@ -223,6 +269,61 @@ func _build(display_name: String) -> void:
 	var collision: Array[Dictionary] = [{"name": "hull", "shape": box, "transform": Transform3D.IDENTITY}]
 	damageable.setup(collision, float(spec["hull"]), faction)
 	_add_turrets(size, int(spec["turrets"]))
+
+
+# A real hull from its generated asset (M12-T19): its mesh, its compound collision, its hit volumes, its hull points and its
+# cradles; no weapons. False when the asset or its spec is missing (the class's plain box is built instead).
+func _build_hull(display_name: String, spec_path: String) -> bool:
+	var loaded: ShipSpec = load(spec_path) as ShipSpec if ResourceLoader.exists(spec_path) else null
+	if loaded == null:
+		return false
+	var manifest: Dictionary = MeshAssets.read_manifest(loaded.asset_id)
+	var section: Dictionary = manifest.get("collision", {}) if manifest.get("collision") is Dictionary else {}
+	var solids: Array[Dictionary] = CompoundCollision.solids(section)
+	var mesh: Mesh = MeshAssets.for_asset(loaded.asset_id) if not solids.is_empty() else null
+	if mesh == null:
+		push_warning("CapitalStandin: %s is not generated (run scripts/gen_assets.sh, then import); a plain box stands in" % loaded.asset_id)
+		return false
+	spec = loaded
+	mass = spec.mass
+	for solid: Dictionary in solids:
+		var shape := CollisionShape3D.new()
+		shape.name = "%s_%s" % [solid["piece"], solid["name"]]
+		shape.shape = solid["shape"]
+		shape.transform = solid["transform"]
+		add_child(shape)
+	var hull_mesh := MeshInstance3D.new()
+	hull_mesh.name = "HullMesh"
+	hull_mesh.mesh = mesh
+	add_child(hull_mesh)
+	_hull_mesh = hull_mesh
+	targetable = Targetable.new()
+	targetable.name = "Targetable"
+	targetable.display_name = display_name
+	targetable.faction = faction
+	targetable.kind = Targetable.Kind.CAPITAL
+	add_child(targetable)
+	damageable = Damageable.new()
+	damageable.name = "Damageable"
+	damageable.ram_safe_dv_mps = spec.ram_safe_dv_mps
+	damageable.ram_lethal_dv_mps = spec.ram_lethal_dv_mps
+	add_child(damageable)
+	damageable.setup(CompoundCollision.hit_volumes(section), spec.hull_max, faction)
+	var text: String = FileAccess.get_file_as_string(spec.hardpoints_path())
+	var hardpoints: Variant = JSON.parse_string(text) if not text.is_empty() else null
+	if hardpoints is Dictionary:
+		var anchor: Variant = (hardpoints as Dictionary).get("jump_point")
+		if anchor is Dictionary and (anchor as Dictionary).get("position") is Array and ((anchor as Dictionary)["position"] as Array).size() == 3:
+			var at: Array = (anchor as Dictionary)["position"]
+			jump_anchor = {"position": Vector3(float(at[0]), float(at[1]), float(at[2])),
+					"mouth_radius_m": float((anchor as Dictionary).get("mouth_radius_m", 0.0))}
+		var cradles: CarrierCradles = CarrierCradles.from_hardpoints((hardpoints as Dictionary).get("cradles", []))
+		if cradles.count() > 0:
+			dock = CarrierDock.new()
+			dock.name = "Dock"
+			dock.setup(cradles)
+			add_child(dock)
+	return true
 
 
 # Guns along the spine, alternately on top and underneath so the two halves cover the whole sphere; interceptors at the

@@ -39,6 +39,8 @@ const CIVILIAN_BROADCAST_RANGE_M: float = 15000.0
 ## Where parked ships wait: far below the play area (universe metres).
 const PARK_Y_M: float = -1.0e6
 
+const GROUP: StringName = &"ship_pool"
+
 var world: WorldFrame = null
 var projectiles: Node3D = null
 ## The player's ship: the console's `spawn` places ships relative to it and `despawn target` uses its selection.
@@ -51,6 +53,7 @@ var _in_use: Array[Combatant] = []
 
 
 func _ready() -> void:
+	add_to_group(GROUP)
 	_register_provider(&"raiders", DEFAULT_TYPE, "Raiders")
 	_register_provider(&"allies", ALLY_TYPE, "Allied ships")
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"spawn",
@@ -180,6 +183,19 @@ func return_from_tier(combatant: Combatant, state: Dictionary) -> void:
 			float(state["pod_yaw"]))
 
 
+## The pool of `tree` (M12-T19: a carrier hands its docked fighters back when it leaves), or null.
+static func for_tree(tree: SceneTree) -> ShipPool:
+	return tree.get_first_node_in_group(GROUP) as ShipPool if tree != null else null
+
+
+## The combatant in use whose ship is `ship`, or null.
+func combatant_of(ship: Node) -> Combatant:
+	for combatant: Combatant in _in_use:
+		if combatant.ship == ship:
+			return combatant
+	return null
+
+
 ## Ships currently in the world: every type, or only those of `type`.
 func alive(type: StringName = &"") -> Array[Combatant]:
 	if type == &"":
@@ -256,6 +272,8 @@ func _park(combatant: Combatant) -> void:
 	ship.visible = false
 	ship.process_mode = Node.PROCESS_MODE_DISABLED
 	ShiftableRegistry.set_out(ship, WorldFrame.PARKED_META, true)  # rebases leave it: `acquire` places it (M6-T06, M6-T21)
+	if ship.has_meta(CarrierDock.DOCKED_META):
+		ship.remove_meta(CarrierDock.DOCKED_META)  # no longer a carrier's docked fighter (M12-T19)
 	ship.tier_exempt = false
 	ship.inside_station = false
 	ship.linear_velocity = Vector3.ZERO
