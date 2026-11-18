@@ -62,6 +62,13 @@ func set_gone(actor: String) -> void:
 	_seen[k] = true
 
 
+## `actor` was in play and left it whole (a carrier that jumped out): no longer alive, and not destroyed either.
+func set_left(actor: String) -> void:
+	var k: String = key(actor)
+	_alive[k] = false
+	_seen.erase(k)
+
+
 ## The end of the route `actor` leads, and whether it has got there.
 func set_route(actor: String, end: UniversePos, done: bool) -> void:
 	var k: String = key(actor)

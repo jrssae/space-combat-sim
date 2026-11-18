@@ -1,0 +1,18 @@
+{
+ "jump_recharge_s": {
+  "cruiser": 60.0,
+  "destroyer": 90.0,
+  "carrier": 120.0,
+  "strike_carrier": 240.0
+ },
+ "carrier_doctrine": {
+  "raiders": {
+   "standoff_m": 2500.0,
+   "recall_left": 3,
+   "fighter_return_hull": 0.2,
+   "retreat_hull": 0.5,
+   "wait_s": 90.0,
+   "flee_mps": 60.0
+  }
+ }
+}

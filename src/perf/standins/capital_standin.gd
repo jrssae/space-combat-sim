@@ -59,6 +59,8 @@ var dock: CarrierDock = null
 var jump_anchor: Dictionary = {}
 ## The way the helm turns the bow, World frame; zero: it holds no heading (the bench's capitals never turn).
 var heading: Vector3 = Vector3.ZERO
+## Its jump drive (M8-T08): it needs its class's recharge after a jump before it opens another point.
+var jump_drive: JumpDrive = JumpDrive.new()
 
 ## Kept out of the low-attention tier (M6-T23): while it flies a jump vortex's funnel, as a pooled ship is (`VortexTransits`).
 var tier_exempt: bool = false
@@ -80,6 +82,7 @@ static var _materials: Dictionary = {}
 static func create(cls: StringName, p_faction: StringName, display_name: String, velocity: Vector3) -> CapitalStandin:
 	var cap := CapitalStandin.new()
 	cap.ship_class = cls if CLASSES.has(cls) else &"cruiser"
+	cap.jump_drive.recharge_s = CapitalData.jump_recharge_s(cap.ship_class)
 	cap.faction = p_faction
 	cap.cruise_velocity = velocity
 	cap.linear_velocity = velocity

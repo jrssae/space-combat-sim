@@ -274,6 +274,8 @@ func _park(combatant: Combatant) -> void:
 	ShiftableRegistry.set_out(ship, WorldFrame.PARKED_META, true)  # rebases leave it: `acquire` places it (M6-T06, M6-T21)
 	if ship.has_meta(CarrierDock.DOCKED_META):
 		ship.remove_meta(CarrierDock.DOCKED_META)  # no longer a carrier's docked fighter (M12-T19)
+	if ship.has_meta(CarrierJumps.RIDING_META):
+		ship.remove_meta(CarrierJumps.RIDING_META)
 	ship.tier_exempt = false
 	ship.inside_station = false
 	ship.linear_velocity = Vector3.ZERO

@@ -104,6 +104,30 @@ func test_a_point_collapses_when_its_opener_is_destroyed() -> void:
 	assert_eq(killer[0].shooter_id, 0, "no one is credited with the kill")
 
 
+func test_a_capital_opens_no_second_point_until_its_drive_has_recharged() -> void:
+	# M8-T08, D83: the jump in empties the drive; the pool refuses another point until the class's recharge has passed.
+	var first: JumpVortex = pool.open_for(world.to_universe(cap.global_position), Vector3.FORWARD, cap.cross_radius_m(),
+			JumpVortex.Direction.ARRIVAL, false, cap)
+	assert_not_null(first)
+	assert_false(JumpCapability.drive_ready(cap, SimClock.now()), "opening a point empties its drive")
+	assert_almost_eq(JumpCapability.recharge_left_s(cap, SimClock.now()), CapitalData.jump_recharge_s(&"cruiser"), 0.1)
+	var xform := Transform3D(Basis.looking_at(Vector3.BACK, Vector3.UP), Vector3(0.0, 0.0, -400.0))
+	var fit := VortexFit.new(60.0, 96.0)
+	assert_null(pool.open_with(xform, fit, JumpVortex.Direction.DEPARTURE, VortexTiming.DEFAULT_HOLD_S, cap),
+			"still recharging: no point out")
+	assert_null(pool.open_for(world.to_universe(Vector3(0.0, 900.0, 0.0)), Vector3.FORWARD, cap.cross_radius_m(),
+			JumpVortex.Direction.ARRIVAL, false, cap))
+	assert_eq(pool.refused_charging, 2)
+	assert_eq(pool.refused, 0, "not for want of a drive")
+	assert_eq(pool.open_count(), 1)
+	cap.jump_drive.fire(SimClock.now() - cap.jump_drive.recharge_s)  # as if its recharge had passed
+	assert_not_null(pool.open_with(xform, fit, JumpVortex.Direction.DEPARTURE, VortexTiming.DEFAULT_HOLD_S, cap),
+			"recharged, it opens its point out")
+	assert_false(JumpCapability.drive_ready(cap, SimClock.now()), "which empties it again")
+	assert_not_null(pool.open_with(Transform3D(Basis.IDENTITY, Vector3(0.0, -900.0, 0.0)), fit, JumpVortex.Direction.ARRIVAL),
+			"a point with no opener needs no drive")
+
+
 func test_an_opener_leaving_through_its_own_point_holds_it_briefly_then_it_collapses_on_whatever_is_inside() -> void:
 	# The cruiser flies into its own departure point 50 m ahead at 150 m/s; the raider follows far behind, slowly.
 	var r: float = maxf(VortexFit.POINT_RADII_PER_SHIP * cap.cross_radius_m(), VortexFit.MIN_POINT_RADIUS_M)

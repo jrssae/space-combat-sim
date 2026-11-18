@@ -274,6 +274,7 @@ func _launch(index: int) -> void:
 		cradles.set_state(index, CarrierCradles.State.FREE)  # its pool took it back meanwhile
 		return
 	var body: RigidBody3D = carrier()
+	var tier_exempt: bool = bool(ship.get_meta(DOCKED_META))  # as it was before it docked (a mission's ship stays exempt)
 	ship.remove_meta(DOCKED_META)
 	ShiftableRegistry.set_out(ship, WorldFrame.PARKED_META, false)
 	ship.process_mode = Node.PROCESS_MODE_INHERIT
@@ -283,7 +284,7 @@ func _launch(index: int) -> void:
 	ship.add_collision_exception_with(body)
 	cradles.set_state(index, CarrierCradles.State.BUSY)
 	_held[ship.get_instance_id()] = {"ship": ship, "cradle": index, "returning": false, "flying": false,
-			"capability": ShipCapability.from_spec(ship.spec, ship.get_layout()), "tier_exempt": false}
+			"capability": ShipCapability.from_spec(ship.spec, ship.get_layout()), "tier_exempt": tier_exempt}
 	_rows.add(ship.get_instance_id(), PHASE_LAUNCH, cradles.positions[index], cradles.bases[index], cradles.approach_m[index], _rest)
 
 
@@ -302,11 +303,12 @@ func _hold(ship: Ship, index: int, returning: bool) -> void:
 
 # `ship` sits on cradle `index` from now on: out of play, drawn by the dock.
 func _settle(ship: Ship, index: int) -> void:
+	var tier_exempt: bool = bool((_held.get(ship.get_instance_id(), {}) as Dictionary).get("tier_exempt", false))
 	_held.erase(ship.get_instance_id())
 	_rows.remove(ship.get_instance_id())
 	_on_cradle[index] = ship
 	cradles.set_state(index, CarrierCradles.State.DOCKED)
-	ship.set_meta(DOCKED_META, true)
+	ship.set_meta(DOCKED_META, tier_exempt)  # what its tier exemption was, for its next launch
 	ship.visible = false
 	ship.process_mode = Node.PROCESS_MODE_DISABLED
 	ShiftableRegistry.set_out(ship, WorldFrame.PARKED_META, true)

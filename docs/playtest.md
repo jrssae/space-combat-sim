@@ -665,9 +665,11 @@ the list while it is focused. Each start from the menu draws a new seed, and wit
 - **The crossing.** The civilian flies to NAV BETA, 30 km out, at up to 120 m/s, threading the asteroid belt (24 km across, 8 km
   deep) in the middle of the route. The waypoint marks the civilian. Three raider waves jump in 6 to 12 km off it as it passes
   25 % (3 raiders, before the belt), 50 % (4, inside it) and 75 % (6, past it); a later wave also waits until the one before is
-  down and 30 s have passed (M7-T54), so a fought run takes 6 to 8 minutes. The first wave comes out of a raider carrier: its
-  arrival jump point opens, the fighters come through, then the carrier opens a departure point and leaves (M6-T23; the carrier
-  is still a box stand-in, kept by the maintainer). Attacked, it runs (an Earth Alliance ship towards
+  down and 30 s have passed (M7-T54), so a fought run takes 6 to 8 minutes. Each wave rides in docked on a raider strike
+  carrier (`RAIDER CARRIER 1` to `3`, M8-T08): its jump point opens, it comes out with its raiders on its cradles, launches
+  them once clear and hangs back; raiders that go home to it (3 left of a wave, or one under 20 % hull) count as down, and
+  it then flees (its drive needs 240 s after the jump in, and there is no gate here, so it runs until then: it can be
+  caught). Attacked, the civilian runs (an Earth Alliance ship towards
   you or ALPHA 2, others straight away) and turns back onto its route a few seconds after the raiders are gone or dead.
 - **Objectives.** Escort the civilian to NAV BETA (done when it is within 1.5 km of the buoy and every raider is down; failed if
   it is destroyed) and, optional, bring ALPHA 2 home. Losing yourself also ends it. A last line, then the debrief. From the
@@ -1181,8 +1183,18 @@ M10 (`docs/architecture.md` §19.18, `docs/assets-capital.md`). Its look sheet i
 - [ ] **Recall and jump out (H):** with a carrier standing off (`state carriers.state` says `standoff`), `carrier recall`: its
       fighters fly back, are drawn in onto free cradles, and it opens a point ahead of its bow and leaves with them. Say if the
       last 60 m (the cradle drawing the fighter in over 4 s) looks right or too much like a tractor beam.
-- [ ] **Hurt, it runs:** `carrier hurt`: under half its hull it recalls on its own. A fighter too far to be home within 45 s is
-      left behind and fights on.
+- [ ] **Hurt, it runs (M8-T08):** `carrier hurt`: at half its hull it calls its fighters home and flees. `carrier status`
+      shows its drive (`recharging N s` for 240 s after its jump in) and what it does: with the drive ready it waits for its
+      fighters and jumps; while it recharges it runs for the jumpgate at 60 m/s (in free flight the gate is 50 km off, so
+      the drive is ready first), or with no gate away from you. `carrier charge` readies the drive at once. A fighter not
+      home within 90 s of the call is left behind and fights on.
+- [ ] **Its fighters go home (H, M8-T08):** shoot a raid down to three: the rest fly back and dock, and the carrier flees
+      once they are aboard. Shoot one raider to under a fifth of its hull: it goes home alone. Say if 3 left, 20 % hull, 50 %
+      carrier damage, the 90 s limit, the 240 s recharge and the 60 m/s run feel right (`data/capitals/capitals.json`).
+- [ ] **The escort with the carriers (H, M8-T08, AC7):** fly the civilian escort: each wave's carrier arrives, launches and
+      hangs back; Control offers the optional objective; destroy one carrier (`Destroy a raider carrier` goes done, Control
+      says so at the end) and let another get away. Waves one and two come with 3 and 4 raiders, so they break off at their
+      first loss (see the open question in the M8 plan, T08).
 - [ ] **It hangs back:** fly at a carrier that is standing off: inside 2.5 km it turns its stern to you and backs away at up to
       30 m/s. Say if the stand-off, the speed and the turn rate (4 degrees a second) feel right.
 - [ ] **Its death (H):** `carrier kill` with fighters docked: the capital explosion, and each docked fighter blows up on its

@@ -5559,6 +5559,13 @@ velocity rebase is `World.auto_boost_speed_mps`, an export of `main.tscn`, not a
   their point's opening flash. The warm-up waits `ARRIVAL_SETTLE_S` (14.5 s, the gate's lead-in included) past the last wave.
   Measured (after T23's follow-up): window tick median 4.55 and 5.76 ms at 500 and 1 000, p99 7.20 and 7.80; engine tick while
   the waves come in p99 14.4 to 15.1 ms (T22 14.9).
+- **The drive's recharge** (M8-T08, D83; `JumpDrive`, pure). Opening a point empties its opener's jump drive, and the ship
+  opens no other until its class's recharge has passed: `JumpPointPool.open_for` / `open_with` refuse it until then
+  (`refused_charging`). The recharge per class is data (`data/capitals/capitals.json`, `CapitalData.jump_recharge_s`: cruiser
+  60 s, destroyer 90 s, carrier 120 s, the raiders' strike carrier 240 s, the longest). A jumpgate is no pool's point and needs
+  no drive: a ship leaves through it whatever its drive's state. A pooled carrier comes into a raid charged (the jump in is
+  the one that empties it); one with no cradles (the cruiser stand-in) holds its course once its fighters are out, its
+  arrival point let go to close by its timing, and opens its point out when the drive is ready.
 - **Console.** `vortex collapse` (destroys the newest held point's opener), `transit carrier [-] [-] [none|follow]`; provider `vortex`
   gains `opener`, `hold_range_m`, `opener_distance_m`, `held`, `collapses`, `collapse_kills`, `last_collapse`; provider `carriers`.
 
@@ -5604,20 +5611,44 @@ The first real capital hull, built ahead of M10's framework (M10-T05, T07) and m
 - **The raid** (`CarrierJumps`, `CarrierTactics`). A raiders' raid `via: "carrier"` comes behind the strike carrier
   (`CarrierJumps.class_for`); other factions keep the cruiser stand-in. The raid's `carrier` data picks how its fighters arrive
   (`arrival`: `docked` on its cradles, launched once it is clear of its point, or `beside` it out of its point as M6-T23 did)
-  and tunes it (`standoff_m`, `retreat_hull`, `wait_s`, `raid_s`, `fighter_return_hull`). Its run goes arriving, holding (it
+  and tunes it (`standoff_m`, `recall_left`, `fighter_return_hull`, `retreat_hull`, `wait_s`, `raid_s`, `flee_mps`, `name`). Its run goes arriving, holding (it
   launches; a raid whose `then` is `stay` launches too, then stays), `standoff` (every 0.5 s it asks the pilots' shared
   contact scan, `ContactScan.contacts_for`, a native query, for the nearest enemy ship or capital; inside its stand-off it backs
-  away with its stern to it; a fighter under its hull share is called back), `recalling` (its hull under the threshold, or the raid over: ended by its
-  script or the console, past its time limit, or no fighter left flying; it holds still and waits up to `wait_s`), then
+  away with its stern to it; a fighter under its hull share is called back), `fleeing` (the retreat rules below), then
   leaving through a point it opens at its hull's `jump_point` anchor (it holds that point to a length past the anchor, since
   the anchor is beyond the usual two lengths). Fighters not docked by then are let go and left behind;
   the docked ones leave with it and go back to their pool. Destroyed, its docked fighters are destroyed with it
   (`HitInfo.CAUSE_CARRIER_LOST`, no credit) and the points it holds collapse (§19.16).
+- **The retreat rules** (M8-T08, D83, the maintainer 2026-11-18; they replace M10-T19's thresholds). The numbers are data:
+  `data/capitals/capitals.json` holds each faction's carrier doctrine (`CapitalData.doctrine`; the raiders': `recall_left` 3,
+  `fighter_return_hull` 0.2, `retreat_hull` 0.5, `wait_s` 90, `flee_mps` 60, `standoff_m` 2500), a raid's `carrier` options
+  lie over it and `CarrierTactics.DEFAULTS` under it. Standing off, every 0.5 s: a fighter under 20 % hull is called home
+  alone; when only 3 of the raid are left in the fight (flying on their own; a raid that came with 3 or fewer goes home at
+  its first loss) all are called home, and one not docked `wait_s` after that call is let go and is the carrier's no longer.
+  The carrier flees (`CarrierTactics.flee_reason`) when its hull is down to 50 % (`hurt`), its raid is over (`raid_over`: its
+  script, the console, `raid_s`) or every surviving fighter has docked (`all_docked`, also with none left alive); on `hurt`
+  and `raid_over` it calls everyone home first. Fleeing (`flee_move`, state `fleeing`): with its drive recharged (§19.16) it
+  holds still for the fighters on their way (`wait`), then slows onto its bow and jumps through its own point (`jump`); with
+  the drive still recharging it runs at `flee_mps` for the nearest jumpgate (`gate`: round the gate's side, onto its axis and
+  through the mouth, `CarrierTactics.gate_run_target`; the gate's departure vortex opens for it and it is gone at the ring,
+  `gate_departures`), or with no gate away from the nearest enemy (`run`) until the drive is ready. Fighters not aboard when
+  it enters the gate's funnel are left behind. So a carrier whose raid fails early cannot jump at once: it can be run down,
+  and gets away if the pursuit breaks off. Tests: `test_carrier_logic.gd` (the rules, the doctrine and the drives as data),
+  `test_jump_capability.gd` and `test_jump_holds.gd` (the drive, the pool's refusal), `test_strike_carrier.gd` (home at 3
+  left and under 20 %, flight at 50 % and with every survivor docked, the jump, the gate, the run, a cradle-less carrier).
+- **In a mission** (M8-T08). A spawn's `carrier.name` names the raid's carrier while the raid lasts and makes it a mission
+  actor (`MissionStage`): a `destroyed` trigger on it holds only when it was destroyed, not when it got away
+  (`MissionWorld.set_left`). A fighter riding in docked counts as in play (`CarrierJumps.RIDING_META`), one back on a cradle
+  after a recall as out of it, so a wave is down once every raider is dead or home. A mission's docked fighter keeps its
+  tier exemption through its launch (`CarrierDock` remembers it). The civilian escort's three waves ride in docked on
+  `RAIDER CARRIER 1` to `3` (`data/missions/civilian_escort.gd`, `WAVES`), and destroying any of them is its optional
+  objective `carrier`.
 - **Per tick and per event.** Native: the docking paths. GDScript per tick: the carrier's engine and helm forces (as every
   capital stand-in's), and applying the dock's poses. GDScript per event or at 2 Hz: the stand-off decision, recalls, the run's
   state changes.
-- **Console.** Command `carrier [status|launch|recall|hurt|kill]`; `transit docked`; provider `carriers` gains `docked`,
-  `returning`, `launched`, `recovered`, `left_behind`, `hull`. No new setting.
+- **Console.** Command `carrier [status|launch|recall|hurt|kill|charge]`; `transit docked`; provider `carriers` gains `docked`,
+  `returning`, `launched`, `recovered`, `left_behind`, `hull`, and with M8-T08 `flee`, `move`, `drive_left_s`,
+  `gate_departures` (`carrier charge` readies its drive). No new setting.
 - **Tests.** Rust: `dock_kernels` (8). GUT: `tests/unit/test_carrier_logic.gd` (collision, cradles, tactics, the native rows),
   `tests/integration/test_strike_carrier.gd` (the body, engines and helm, docked arrival and launch, recall and jump out, a
   fighter left behind, the retreat threshold, backing away stern-on from an attacker, a badly hurt fighter called back alone, a

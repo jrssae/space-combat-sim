@@ -2,12 +2,16 @@ extends MissionScript
 ## Civilian escort (M5-T30, D62): Alpha 1 and ALPHA 2 see a civilian ship, drawn from the nine hulls by the seed, from NAV
 ## ALPHA through the asteroid belt to NAV BETA, 30 km out. Three raider waves jump in as it passes 25, 50 and 75 % of the
 ## route; a later wave also waits until the one before it is down and a breather has passed (M7-T54), so a fought run takes
-## 6 to 8 minutes (Q40). `data/scenarios/civilian_escort.json` holds the buoys, the belt, the route, the wing, the objectives and the shots;
+## 6 to 8 minutes (Q40). Each wave rides in docked on a raider strike carrier and is launched once it is clear of its point
+## (M8-T08, Q6); the carrier hangs back, takes its survivors home and flees, and destroying one is an optional objective.
+## `data/scenarios/civilian_escort.json` holds the buoys, the belt, the route, the wing, the objectives and the shots;
 ## `data/dialog/civilian_escort.json` holds every line.
 
 const NAV_BETA: String = "NAV BETA"
 const RAIDER: Dictionary = {"type": "raider_fighter", "anchor": "origin", "behaviour": {"type": "ai", "profile": "raider"},
 		"arrival": "jump", "via": "carrier"}
+## The optional objective: any wave's carrier destroyed (the scenario's objective lists the carriers' names).
+const CARRIER_OBJECTIVE: StringName = &"carrier"
 ## The route's progress points (25, 50 and 75 %), metres from the scenario origin. The route flies through the first; the later
 ## two are marks on the way to NAV BETA (`_passed`), so a civilian back from fleeing never turns back for them (M7-T54).
 const POINT_25: Vector3 = Vector3(0.0, 0.0, -7500.0)
@@ -20,11 +24,13 @@ const ARRIVAL_M: float = 1500.0
 const BETA_AT: Vector3 = Vector3(0.0, 0.0, -30000.0)
 ## The quiet after a wave is down before the next may jump in, s (M7-T54: the last wave came too soon).
 const BREATHER_S: float = 30.0
-## Where each wave jumps in from the civilian: beyond the AI's 5 km sensors, each from its own bearing.
-const WAVE_ONE_FROM: Vector3 = Vector3(-8200.0, 900.0, -2500.0)
-const WAVE_TWO_FROM: Vector3 = Vector3(7000.0, -1200.0, 5200.0)
-const WAVE_THREE_FROM: Vector3 = Vector3(1500.0, 2000.0, -9000.0)
-const WAVE_SIZES: Array[int] = [3, 4, 6]
+## The waves: how many raiders, where they jump in from the civilian (beyond the AI's 5 km sensors, each from its own
+## bearing), and the capital that brings them (the spawn's `carrier` options: its fighters docked, its name as an actor).
+const WAVES: Array[Dictionary] = [
+	{"size": 3, "from": Vector3(-8200.0, 900.0, -2500.0), "carrier": {"arrival": "docked", "name": "RAIDER CARRIER 1"}},
+	{"size": 4, "from": Vector3(7000.0, -1200.0, 5200.0), "carrier": {"arrival": "docked", "name": "RAIDER CARRIER 2"}},
+	{"size": 6, "from": Vector3(1500.0, 2000.0, -9000.0), "carrier": {"arrival": "docked", "name": "RAIDER CARRIER 3"}},
+]
 ## Spacing between raiders of one wave, metres.
 const SPREAD_M: float = 150.0
 
@@ -65,24 +71,26 @@ func step_depart(m: MissionApi) -> void:
 
 
 func step_wave_one(m: MissionApi) -> void:
-	var names: PackedStringArray = _send_wave(m, 0, WAVE_ONE_FROM)
+	var names: PackedStringArray = _send_wave(m, 0)
+	m.objective_add(CARRIER_OBJECTIVE)
 	await m.say(&"control_wave_one")
 	await m.say(&"civilian_under_fire")
+	m.say(&"control_carrier")  # not awaited: the wave's timing does not wait for it
 	await _next_wave_due(m, names, POINT_50)
-	m.transient(names)
+	_wave_over(m, 0, names)
 
 
 func step_wave_two(m: MissionApi) -> void:
-	var names: PackedStringArray = _send_wave(m, 1, WAVE_TWO_FROM)
+	var names: PackedStringArray = _send_wave(m, 1)
 	await m.say(&"control_wave_two")
 	await m.say(&"raider_lead_taunt")
 	await m.say(&"alpha_2_tally")
 	await _next_wave_due(m, names, POINT_75)
-	m.transient(names)
+	_wave_over(m, 1, names)
 
 
 func step_wave_three(m: MissionApi) -> void:
-	_send_wave(m, 2, WAVE_THREE_FROM)
+	_send_wave(m, 2)
 	await m.say(&"control_wave_three")
 	await m.say(&"civilian_nearly_there")
 	await m.until(TriggerSpec.proximity(_civilian(m), NAV_BETA, ARRIVAL_M))
@@ -93,6 +101,8 @@ func step_arrive(m: MissionApi) -> void:
 	await m.until(TriggerSpec.destroyed(_raider_names(0, _total())))
 	if m.objective_state(&"home") == ObjectiveBook.ACTIVE:
 		m.objective_complete(&"home")
+	if m.objective_state(CARRIER_OBJECTIVE) == ObjectiveBook.DONE:
+		await m.say(&"control_carrier_down")
 	await m.say(&"control_success")
 	await m.say(&"civilian_thanks")
 	m.objective_complete(&"escort")
@@ -123,22 +133,32 @@ func _next_wave_due(m: MissionApi, names: PackedStringArray, point: Vector3) -> 
 		await m.wait(left_s)
 
 
-# Jumps wave `wave` in at `from` metres off the civilian and sends every raider at it. Returns their names.
-func _send_wave(m: MissionApi, wave: int, from: Vector3) -> PackedStringArray:
+# A skipped wave leaves nothing behind: its raiders and the carrier that brought them (played, the carrier flees by itself).
+func _wave_over(m: MissionApi, wave: int, names: PackedStringArray) -> void:
+	var gone: PackedStringArray = names.duplicate()
+	gone.append(String((WAVES[wave]["carrier"] as Dictionary)["name"]))
+	m.transient(gone)
+
+
+# Jumps wave `wave` in at its place off the civilian, behind its carrier, and sends every raider at the civilian. Returns
+# their names.
+func _send_wave(m: MissionApi, wave: int) -> PackedStringArray:
+	var from: Vector3 = WAVES[wave]["from"]
 	var civilian: String = _civilian(m)
 	var at: UniversePos = m.world.position_of(civilian)
 	var origin := UniversePos.new(0.0, 0.0, 0.0, m.world.system_id)
 	var centre: Vector3 = (origin.offset_to(at) if at != null else POINT_50) + from
 	var first: int = 0
 	for w: int in wave:
-		first += WAVE_SIZES[w]
-	var names: PackedStringArray = _raider_names(first, WAVE_SIZES[wave])
+		first += int(WAVES[w]["size"])
+	var names: PackedStringArray = _raider_names(first, int(WAVES[wave]["size"]))
 	var side: Vector3 = from.cross(Vector3.UP).normalized()
 	for i: int in names.size():
 		var spawn: Dictionary = RAIDER.duplicate(true)
 		var offset: Vector3 = centre + side * SPREAD_M * (i - (names.size() - 1) * 0.5)
 		spawn["name"] = names[i]
 		spawn["offset"] = [offset.x, offset.y, offset.z]
+		spawn["carrier"] = (WAVES[wave]["carrier"] as Dictionary).duplicate()
 		m.spawn(spawn)
 		m.send(names[i], civilian)
 	return names
@@ -146,8 +166,8 @@ func _send_wave(m: MissionApi, wave: int, from: Vector3) -> PackedStringArray:
 
 func _total() -> int:
 	var n: int = 0
-	for size: int in WAVE_SIZES:
-		n += size
+	for wave: Dictionary in WAVES:
+		n += int(wave["size"])
 	return n
 
 

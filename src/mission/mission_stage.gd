@@ -38,7 +38,8 @@ var system_id: StringName = &"local"
 ## Mixed into spawned pilots' brain seeds (the scenario's seed: the same seed flies the same mission).
 var seed_value: int = 0
 
-var _actors: Dictionary = {}  # MissionWorld.key -> Combatant or NavBuoy
+var _actors: Dictionary = {}  # MissionWorld.key -> Combatant, NavBuoy or a raid's named carrier (CapitalStandin)
+var _carrier_fates: Dictionary = {}  # a carrier's key -> true once it left play whole, false once destroyed
 
 
 ## Wires the stage to `main`'s nodes and learns the actors already in play.
@@ -68,6 +69,7 @@ func teardown() -> void:
 	if ships != null and is_instance_valid(ships) and ships.acquired.is_connected(register):
 		ships.acquired.disconnect(register)
 	_actors.clear()
+	_carrier_fates.clear()
 	camera_rig = null
 
 
@@ -88,7 +90,9 @@ func refresh(snapshot: MissionWorld, names: PackedStringArray) -> void:
 		var node: Node3D = _node_of(k)
 		if node == null:
 			# A name the stage knows was in play once (load, a pool hand-out): gone, not "not arrived yet".
-			if _actors.has(k):
+			if _carrier_left(k):
+				snapshot.set_left(k)
+			elif _actors.has(k):
 				snapshot.set_gone(k)
 			else:
 				snapshot.set_alive(k, false)
@@ -139,6 +143,9 @@ func release(actor: String) -> void:
 			wings.refresh(wing)  # the next member takes the lead from the parked ship
 	elif thing is NavBuoy:
 		(thing as NavBuoy).set_destroyed(true)
+	elif thing is CapitalStandin:
+		_carrier_fates[k] = true  # taken out whole: a skip earns no kill
+		CarrierJumps.attach(world).dismiss(thing as CapitalStandin)
 
 
 ## A forced `arrived` finished `actor`'s route: its follow-path behaviour is told it is at the end.
@@ -181,10 +188,10 @@ func spawn(entry: Dictionary) -> Combatant:
 	if placed == null:
 		push_error("Mission: spawn %s: the %s pool refused" % [ship_name, type])
 		return null
+	register(placed)  # before it may dock on its carrier: a mission's ship stays out of the tier after its launch
 	if StringName(entry.get("arrival", &"none")) == &"jump" and jumps != null:
 		_jump_in(placed, entry, at, basis)
 	placed.damageable.invulnerable = bool(entry.get("invulnerable", false))
-	register(placed)
 	if not String(entry.get("wing", "")).is_empty():
 		wings.join(String(entry["wing"]), placed)
 	return placed
@@ -200,6 +207,7 @@ func _jump_in(placed: Combatant, entry: Dictionary, at: UniversePos, basis: Basi
 				if carriers != null else null
 		if run != null:
 			carriers.bring_through(run, placed.ship, placed.ship.linear_velocity)
+			_register_carrier(run)
 		return
 	if not JumpCapability.can_open(placed.ship):
 		push_error("Mission: spawn %s: a %s cannot open a jump point; say via \"gate\" or via \"carrier\"" % [
@@ -386,15 +394,43 @@ func target_id(actor: String) -> int:
 	return marker.get_instance_id() if marker != null else 0
 
 
+# A raid's carrier is an actor under the name its raid gives it (M8-T08), so an objective can ask for it destroyed.
+func _register_carrier(run: CarrierRun) -> void:
+	var cap: CapitalStandin = run.carrier
+	var k: String = MissionWorld.key(cap.targetable.display_name) if is_instance_valid(cap) else ""
+	if k.is_empty() or str(run.options.get("name", "")).is_empty() or _actors.get(k) == cap:
+		return
+	_actors[k] = cap
+	_carrier_fates.erase(k)
+
+
+# Whether the carrier `k` left play whole (it jumped out, or went through a gate) instead of being destroyed. Its fate is
+# kept from the first look: its pool restores a destroyed hull for a later raid.
+func _carrier_left(k: String) -> bool:
+	var cap := _actors.get(k) as CapitalStandin
+	if cap == null or not is_instance_valid(cap):
+		return false
+	if not _carrier_fates.has(k):
+		_carrier_fates[k] = not cap.damageable.hull.destroyed
+	return bool(_carrier_fates[k])
+
+
 # The node of a live actor (the ship's body or the buoy), or null when it is unknown, parked, destroyed or flying another name.
+# A fighter riding in on its carrier's cradle is live, though it is out of play until its launch (M8-T08).
 func _node_of(k: String) -> Node3D:
 	var thing: Object = _actors.get(k)
 	if thing == null or not is_instance_valid(thing):
 		return null
+	if thing is CapitalStandin:
+		var cap := thing as CapitalStandin
+		var in_play: bool = cap.is_inside_tree() and cap.visible and cap.process_mode != Node.PROCESS_MODE_DISABLED \
+				and not cap.damageable.hull.destroyed and MissionWorld.key(cap.targetable.display_name) == k
+		return cap if in_play and not _carrier_fates.has(k) else null
 	if thing is Combatant:
 		var c := thing as Combatant
-		if c.ship == null or not c.ship.is_inside_tree() or not c.ship.visible or c.ship.process_mode == Node.PROCESS_MODE_DISABLED \
-				or c.damageable.hull.destroyed:
+		var hidden: bool = not c.ship.visible or c.ship.process_mode == Node.PROCESS_MODE_DISABLED if c.ship != null else true
+		if c.ship == null or not c.ship.is_inside_tree() or c.damageable.hull.destroyed \
+				or (hidden and not c.ship.has_meta(CarrierJumps.RIDING_META)):
 			return null
 		if c != player and MissionWorld.key(c.targetable.display_name) != k:
 			return null  # the pool gave this ship to someone else

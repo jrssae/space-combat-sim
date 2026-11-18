@@ -48,6 +48,8 @@ const DEPARTURE_KEEP_S: float = 1.5
 const THROUGH_RADIUS: float = 1.1
 ## Ships come out of an arrival at this speed along -Z: clear of the plane in well under the 4 s it stays open.
 const ARRIVAL_SPEED_MPS: float = 200.0
+## Every gate in the tree, for a ship that looks for one to leave by (M8-T08: a carrier whose drive is still recharging).
+const GROUP: StringName = &"jumpgates"
 
 ## Shown in the target readout; the console and missions find it by it.
 @export var display_name: String = "JUMPGATE":
@@ -109,6 +111,7 @@ static func create(p_display_name: String) -> Jumpgate:
 func _init() -> void:
 	add_to_group(WorldFrame.SHIFTABLE_GROUP)
 	add_to_group(WorldFrame.ANCHORED_GROUP)
+	add_to_group(GROUP)
 
 
 func _ready() -> void:

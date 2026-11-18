@@ -4,6 +4,8 @@ extends TestSteps
 ## each with its last line and then the debrief; the civilian flees when attacked and resumes its route; a skipped wave leaves
 ## no raider behind and the civilian at its point; the pools hold every ship the script spawns; buoys broadcast to 1 000 km.
 ## A whole run without skips (the civilian crosses the belt without hitting a rock) is under `GUT_SLOW`.
+## M8-T08 (Q6, AC7): each wave rides in docked on a raider strike carrier and is launched; the carrier hangs back, takes its
+## survivors home and flees; raiders gone home count as down; destroying a carrier is the optional objective.
 
 const SCENARIO_ID: StringName = &"civilian_escort"
 const MISSION_PATH: String = "res://data/scenarios/civilian_escort.json"
@@ -318,6 +320,113 @@ func test_every_actor_a_shot_names_is_in_play_from_the_start() -> void:
 					assert_not_null(main.mission.stage.actor_pose(point.actor), "%s names %s" % [shot_id, point.actor])
 
 
+# --- the waves' carriers (M8-T08) ----------------------------------------------------------------------------------------
+
+
+func _carriers() -> CarrierJumps:
+	return CarrierJumps.attach(main.world)
+
+
+# Runs the mission on at `speed` until `reached` holds (or `seconds` of sim time have passed). The physics rate rises with the
+# time scale, so each step is still 1/60 s of sim time (the docking paths are flown at the game's own step).
+func _run_on(seconds: float, reached: Callable, speed: float = 4.0) -> void:
+	var scale_backup: float = Engine.time_scale
+	var rate_backup: int = Engine.physics_ticks_per_second
+	Engine.time_scale = speed
+	Engine.physics_ticks_per_second = roundi(rate_backup * speed)
+	var until_s: float = SimClock.now() + seconds
+	while SimClock.now() < until_s and not bool(reached.call()):
+		await _ticks(1)
+	Engine.time_scale = scale_backup
+	Engine.physics_ticks_per_second = rate_backup
+
+
+func test_a_wave_rides_in_docked_on_a_strike_carrier_and_is_launched() -> void:
+	DebugConsole.flags.invulnerable = true
+	await _fly()
+	_civilian().damageable.invulnerable = true
+	assert_true(_run("mission goto wave_one").ok)
+	await _ticks(2)
+	assert_eq(_carriers().runs().size(), 1, "one carrier brings the wave")
+	var run: CarrierRun = _carriers().runs()[0]
+	var cap: CapitalStandin = run.carrier
+	assert_eq(cap.ship_class, CapitalStandin.STRIKE_CARRIER)
+	assert_eq(cap.targetable.display_name, "RAIDER CARRIER 1", "named by the wave's data")
+	assert_eq(cap.dock.docked_count(), 3, "its three raiders ride in on its cradles (Q6)")
+	assert_eq(_alive(WAVE_ONE), 3, "and count as in play while they do")
+	assert_true(_api().alive("RAIDER CARRIER 1"), "the carrier is an actor of the mission")
+	assert_eq(_api().objective_state(&"carrier"), ObjectiveBook.ACTIVE, "destroying a carrier is offered")
+	await _run_on(60.0, func() -> bool: return run.state == CarrierRun.State.STANDOFF)
+	assert_eq(run.state, CarrierRun.State.STANDOFF, "clear of its point it launches them and hangs back")
+	assert_eq(cap.dock.launches, 3)
+	for c: Combatant in main.ships.alive(ShipPool.DEFAULT_TYPE):
+		assert_true(c.ship.is_visible_in_tree(), "%s is launched" % c.display_name)
+		assert_false(c.ship.has_meta(CarrierJumps.RIDING_META))
+	assert_eq(_alive(WAVE_ONE), 3)
+	assert_gt(_at(_civilian()).distance_to(main.world.to_universe(cap.global_position)), 5000.0, "the carrier stays well back")
+	await _run_on(60.0, func() -> bool: return _journal_has("say control_carrier"))
+	assert_true(_journal_has("say control_carrier"), "Control's line for the carrier")
+
+
+func test_the_objectives_carriers_are_the_waves_carriers() -> void:
+	var listed: Array = []
+	for objective: Dictionary in (JSON.parse_string(FileAccess.get_file_as_string(MISSION_PATH)) as Dictionary)["mission"]["objectives"]:
+		if String(objective["id"]) == String(MissionScriptClass.CARRIER_OBJECTIVE):
+			listed = objective["success"]["names"]
+			assert_false(bool(objective["primary"]), "optional")
+			assert_false(bool(objective["success"]["all"]), "any one of them")
+	var named: Array = []
+	for wave: Dictionary in MissionScriptClass.WAVES:
+		named.append(wave["carrier"]["name"])
+		assert_eq(wave["carrier"]["arrival"], "docked", "every wave rides in docked (Q6)")
+	assert_eq(listed, named)
+
+
+func test_destroying_a_carrier_is_the_optional_objective() -> void:
+	DebugConsole.flags.invulnerable = true
+	await _fly()
+	_civilian().damageable.invulnerable = true
+	assert_true(_run("mission goto wave_one").ok)
+	await _ticks(2)
+	var run: CarrierRun = _carriers().runs()[0]
+	await _run_on(60.0, func() -> bool: return run.state == CarrierRun.State.STANDOFF)
+	assert_eq(_api().objective_state(&"carrier"), ObjectiveBook.ACTIVE)
+	assert_true(_run("carrier kill").ok)
+	await _ticks(4)
+	assert_eq(_api().objective_state(&"carrier"), ObjectiveBook.DONE, "a carrier destroyed")
+	assert_false(_api().has_ended(), "an optional objective ends nothing")
+	assert_eq(_alive(WAVE_ONE), 3, "its launched raiders fight on")
+
+
+func test_a_carrier_that_gets_away_is_not_a_kill_and_raiders_gone_home_are_down() -> void:
+	DebugConsole.flags.invulnerable = true
+	await _fly()
+	_civilian().damageable.invulnerable = true
+	assert_true(_run("mission goto wave_two").ok)
+	await _ticks(2)
+	var run: CarrierRun = _carriers().runs()[-1]
+	var cap: CapitalStandin = run.carrier
+	assert_eq(cap.targetable.display_name, "RAIDER CARRIER 2")
+	assert_eq(_carriers().runs().size(), 1, "the skipped first wave's carrier is gone with it")
+	await _run_on(60.0, func() -> bool: return run.state == CarrierRun.State.STANDOFF)
+	for c: Combatant in main.ships.alive(ShipPool.DEFAULT_TYPE):
+		if c.display_name == "RAIDER 4":
+			c.damageable.kill()  # just launched, the others are still beside their carrier
+	await _run_on(float(run.options["wait_s"]) + 5.0, func() -> bool: return run.state == CarrierRun.State.FLEEING)
+	assert_eq(run.flee_reason, CarrierTactics.FLEE_ALL_DOCKED, "three left: they went home, and their carrier flees (D83)")
+	assert_eq(cap.dock.docked_count(), 3)
+	await _ticks(2)
+	assert_eq(_alive(WAVE_TWO), 0, "raiders back on their cradles are out of the fight: the wave is down")
+	assert_eq(run.move, CarrierTactics.MOVE_RUN, "no gate here and its drive recharging: it runs")
+	assert_true(_run("carrier charge").ok)
+	await _run_on(120.0, func() -> bool: return _carriers().runs().is_empty())
+	assert_true(_carriers().runs().is_empty(), "recharged, it jumped out")
+	await _ticks(2)
+	assert_false(_api().alive("RAIDER CARRIER 2"))
+	assert_eq(_api().objective_state(&"carrier"), ObjectiveBook.ACTIVE, "a carrier that got away is no kill")
+	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 0, "its docked raiders left with it")
+
+
 # --- success and failure, driven by console commands ---------------------------------------------------------------------
 
 
@@ -348,7 +457,7 @@ func test_console_commands_drive_it_to_success_and_the_debrief() -> void:
 	assert_lt(_at(_civilian()).distance_to(_buoy_at("NAV BETA")), MissionScriptClass.ARRIVAL_M, "at NAV BETA")
 	await _wait_for("the debrief", func() -> bool: return _debrief() != null, 600)
 	assert_eq(Game.flow.state, GameFlow.State.DEBRIEF)
-	assert_eq_deep(_objective_states(), {"escort": "done", "home": "done"})
+	assert_eq_deep(_objective_states(), {"escort": "done", "home": "done", "carrier": "active"})
 
 
 func test_losing_the_civilian_fails_it_with_controls_last_line() -> void:

@@ -70,6 +70,39 @@ func test_an_opener_gone_through_its_own_point_holds_it_a_moment_more() -> void:
 			"its range no longer counts once it is through")
 
 
+func test_a_drive_needs_its_recharge_after_a_jump() -> void:
+	# M8-T08, D83: opening a point empties the drive; it opens no other until its class's recharge has passed.
+	var drive := JumpDrive.new(240.0)
+	assert_true(drive.is_ready(0.0), "charged until it jumps")
+	assert_eq(drive.level(0.0), 1.0)
+	drive.fire(100.0)
+	assert_false(drive.is_ready(100.0))
+	assert_almost_eq(drive.left_s(160.0), 180.0, 1e-6)
+	assert_almost_eq(drive.level(160.0), 0.25, 1e-6)
+	assert_false(drive.is_ready(339.9))
+	assert_true(drive.is_ready(340.0), "ready once the recharge has passed")
+	drive.fire(400.0)
+	drive.charge()
+	assert_true(drive.is_ready(400.0), "charged at once (a ship fresh from its pool, the console)")
+	assert_true(JumpDrive.new().is_ready(0.0) and JumpDrive.new(-5.0).recharge_s == 0.0, "no recharge: always ready")
+
+
+func test_every_capital_stand_in_has_its_classes_drive() -> void:
+	for cls: StringName in CapitalStandin.CLASSES:
+		var cap: CapitalStandin = CapitalStandin.create(cls, Factions.RAIDERS, "TEST", Vector3.ZERO)
+		assert_eq(JumpCapability.drive_of(cap), cap.jump_drive)
+		assert_almost_eq(cap.jump_drive.recharge_s, CapitalData.jump_recharge_s(cls), 1e-6, "%s: its class's recharge" % cls)
+		assert_true(JumpCapability.drive_ready(cap, 0.0), "%s: charged as built" % cls)
+		cap.jump_drive.fire(10.0)
+		assert_false(JumpCapability.drive_ready(cap, 11.0))
+		assert_almost_eq(JumpCapability.recharge_left_s(cap, 11.0), cap.jump_drive.recharge_s - 1.0, 1e-6)
+		cap.free()
+	var plain := autofree(Node3D.new()) as Node3D
+	assert_null(JumpCapability.drive_of(plain), "a ship with no drive")
+	assert_true(JumpCapability.drive_ready(plain, 0.0), "has nothing to wait on")
+	assert_eq(JumpCapability.recharge_left_s(null, 0.0), 0.0)
+
+
 func test_a_collapse_goes_straight_to_the_closing_flash() -> void:
 	var timing := VortexTiming.new()
 	var at: float = timing.open_at_s + 1.0

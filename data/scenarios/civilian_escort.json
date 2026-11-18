@@ -67,7 +67,10 @@
 			{"id": "escort", "text": "Escort the {civilian} to NAV BETA", "primary": true,
 				"fail": {"kind": "destroyed", "name": "{civilian}"}},
 			{"id": "home", "text": "Bring ALPHA 2 home", "primary": false,
-				"fail": {"kind": "destroyed", "names": ["ALPHA 2"], "all": false}}
+				"fail": {"kind": "destroyed", "names": ["ALPHA 2"], "all": false}},
+			{"id": "carrier", "text": "Destroy a raider carrier", "primary": false,
+				"success": {"kind": "destroyed", "names": ["RAIDER CARRIER 1", "RAIDER CARRIER 2", "RAIDER CARRIER 3"],
+					"all": false}}
 		]
 	}
 }

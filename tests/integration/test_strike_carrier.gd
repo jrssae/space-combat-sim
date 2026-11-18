@@ -3,6 +3,11 @@ extends GutTest
 ## its compound collision, comes out of its own jump point with its fighters docked, launches them, stands off, calls them back,
 ## waits, jumps out with those that docked and hands them to their pool; a fighter not home in time is left behind; destroyed,
 ## it takes its docked fighters with it.
+##
+## M8-T08 (D83): its fighters go home when three of the raid are left, or one alone under 20 % hull; it flees at 50 % damage or
+## when every survivor has docked; with its drive recharged it jumps through its own point, else it runs for the jumpgate (and
+## gets away through it), or with no gate from the enemy until the drive is ready. A carrier with no cradles holds its course
+## until its drive has recharged.
 
 const SEED: int = 5
 ## Ticks per real tick: the physics rate and the time scale raised together, so each step is still 1/60 s of sim time.
@@ -144,13 +149,27 @@ func test_it_jumps_in_with_its_fighters_docked_and_launches_them() -> void:
 	assert_eq(cap.damageable.hull.fraction(), 1.0, "nothing scraped the carrier")
 
 
+func _kill(body: RigidBody3D) -> void:
+	Damageable.of(body).kill()
+
+
+# Brings the carrier's hull down to `share` of its points.
+func _hull_to(cap: CapitalStandin, share: float) -> void:
+	var hull: HullHealth = cap.damageable.hull
+	cap.damageable.apply_hit(HitInfo.new(cap.get_instance_id(), 0, &"", hull.hp - share * hull.max_hp, cap.global_position,
+			Vector3.ZERO, 0.0, HitInfo.CAUSE_CONSOLE))
+
+
 func test_it_calls_its_fighters_back_and_jumps_out_with_them() -> void:
 	var run: CarrierRun = await _bring_in_docked()
 	var cap: CapitalStandin = run.carrier
 	var free_before: int = main.ships.free_count(ShipPool.DEFAULT_TYPE)
+	assert_true(_run("carrier charge").ok)  # as if its drive's recharge had passed
 	assert_true(_run("carrier recall").ok)
-	await _fly(5.0, func() -> bool: return run.state == CarrierRun.State.RECALLING)
-	assert_eq(run.state, CarrierRun.State.RECALLING)
+	await _fly(5.0, func() -> bool: return run.state == CarrierRun.State.FLEEING)
+	assert_eq(run.state, CarrierRun.State.FLEEING)
+	assert_eq(run.flee_reason, CarrierTactics.FLEE_RAID_OVER)
+	assert_eq(run.move, CarrierTactics.MOVE_WAIT, "its drive ready, it holds still for its fighters")
 	assert_eq(cap.dock.returning_count() + cap.dock.docked_count(), 6, "every fighter is called back to a cradle")
 	await _fly(float(run.options["wait_s"]) + 5.0, func() -> bool: return run.state == CarrierRun.State.LEAVING)
 	assert_eq(run.state, CarrierRun.State.LEAVING)
@@ -161,6 +180,8 @@ func test_it_calls_its_fighters_back_and_jumps_out_with_them() -> void:
 	var departed: int = carriers.carriers_departed
 	await _fly(70.0, func() -> bool: return carriers.carriers_departed > departed)
 	assert_eq(carriers.carriers_departed, departed + 1, "it went through its point")
+	assert_eq(run.left_via, CarrierRun.VIA_POINT)
+	assert_eq(carriers.gate_departures, 0)
 	assert_lt(SimClock.now() - run.state_at_s, CarrierJumps.LEAVE_LIMIT_S, "flying through it, not giving up on a point that collapsed")
 	assert_eq(carriers.free_count(), carriers.size(), "and is back in its pool")
 	assert_eq(main.ships.free_count(ShipPool.DEFAULT_TYPE), free_before + 6, "its docked fighters went back to theirs")
@@ -174,21 +195,145 @@ func test_a_fighter_not_home_in_time_is_left_behind() -> void:
 	run.options["wait_s"] = 0.5
 	var far: Ship = run.fighters[0] as Ship
 	far.global_position = cap.global_position + Vector3(0.0, 9000.0, 0.0)  # too far to be home in half a second
+	assert_true(_run("carrier charge").ok)
 	assert_true(_run("carrier recall").ok)
 	await _fly(20.0, func() -> bool: return run.state == CarrierRun.State.LEAVING)
 	assert_eq(run.state, CarrierRun.State.LEAVING)
 	assert_gt(run.left_behind, 0, "it did not wait")
 	assert_false(cap.dock.is_handling(far), "the fighter is let go")
 	assert_true(far.is_visible_in_tree(), "and flies on")
+	assert_false(run.fighters.has(far), "no longer its own")
 	assert_eq(cap.dock.returning_count(), 0)
 
 
-func test_hurt_past_its_threshold_it_recalls_on_its_own() -> void:
+func test_its_fighters_go_home_when_only_three_of_the_raid_are_left() -> void:
+	# D83: at three left they are all called home; every survivor docked, the carrier flees.
 	var run: CarrierRun = await _bring_in_docked()
+	var cap: CapitalStandin = run.carrier
+	var raid: Array[RigidBody3D] = run.fighters.duplicate()
+	_kill(raid[0])
+	_kill(raid[1])
+	await _fly(2.0)
+	assert_eq(cap.dock.returning_count(), 0, "four of six left: they fight on")
+	assert_lt(run.recalled_at_s, 0.0)
+	_kill(raid[2])
+	await _fly(2.0, func() -> bool: return run.recalled_at_s >= 0.0)
+	assert_gte(run.recalled_at_s, 0.0, "three left: called home")
+	assert_eq(cap.dock.returning_count(), 3, "all three of them")
+	assert_eq(run.state, CarrierRun.State.STANDOFF, "the carrier stands off while they come")
+	await _fly(float(run.options["wait_s"]) + 5.0, func() -> bool: return run.state == CarrierRun.State.FLEEING)
+	assert_eq(run.state, CarrierRun.State.FLEEING, "every survivor docked: it flees")
+	assert_eq(run.flee_reason, CarrierTactics.FLEE_ALL_DOCKED)
+	assert_eq(cap.dock.docked_count(), 3)
+	assert_eq(run.left_behind, 0)
+	assert_eq(cap.damageable.hull.fraction(), 1.0, "unhurt: it fled for its fighters' sake alone")
+
+
+func test_with_every_fighter_lost_it_flees() -> void:
+	var run: CarrierRun = await _bring_in_docked()
+	for body: RigidBody3D in run.fighters.duplicate():
+		_kill(body)
+	await _fly(3.0, func() -> bool: return run.state == CarrierRun.State.FLEEING)
+	assert_eq(run.state, CarrierRun.State.FLEEING)
+	assert_eq(run.flee_reason, CarrierTactics.FLEE_ALL_DOCKED, "no survivor is left to wait for")
+
+
+func test_it_flees_once_it_has_taken_half_its_hull_in_damage() -> void:
+	var run: CarrierRun = await _bring_in_docked()
+	var cap: CapitalStandin = run.carrier
+	_hull_to(cap, 0.55)
+	await _fly(2.0)
+	assert_eq(run.state, CarrierRun.State.STANDOFF, "45 % damage: it stays")
+	_hull_to(cap, 0.5)
+	await _fly(3.0, func() -> bool: return run.state == CarrierRun.State.FLEEING)
+	assert_eq(run.state, CarrierRun.State.FLEEING, "50 % damage: it flees (D83)")
+	assert_eq(run.flee_reason, CarrierTactics.FLEE_HURT)
+	assert_eq(cap.dock.returning_count() + cap.dock.docked_count(), 6, "and calls every fighter home")
 	assert_true(_run("carrier hurt").ok)
-	assert_lt(run.carrier.damageable.hull.fraction(), float(run.options["retreat_hull"]))
-	await _fly(3.0, func() -> bool: return run.state == CarrierRun.State.RECALLING)
-	assert_eq(run.state, CarrierRun.State.RECALLING, "under its retreat threshold it calls its fighters back (Q30)")
+	assert_lt(cap.damageable.hull.fraction(), float(run.options["retreat_hull"]), "the console's `hurt` takes it under the same share")
+
+
+func test_with_its_drive_recharging_it_runs_for_the_gate_and_gets_away() -> void:
+	# D83: the gate needs no drive. Put 2.5 km in front of the gate with its fighters far behind, it runs in and is gone.
+	var run: CarrierRun = await _bring_in_docked()
+	var cap: CapitalStandin = run.carrier
+	var gate: Jumpgate = main.gates.gate()
+	assert_not_null(gate, "free flight has its jumpgate")
+	cap.global_transform = Transform3D(Basis.looking_at(gate.global_basis.z, gate.global_basis.y),
+			gate.global_transform * Vector3(200.0, 0.0, -2500.0))
+	cap.linear_velocity = main.world.rest_velocity()
+	cap.reset_physics_interpolation()
+	run.options["wait_s"] = 5.0
+	assert_gt(JumpCapability.recharge_left_s(cap, SimClock.now()), 120.0, "its drive is far from recharged")
+	assert_true(_run("carrier recall").ok)
+	await _fly(5.0, func() -> bool: return run.move == CarrierTactics.MOVE_GATE)
+	assert_eq(run.state, CarrierRun.State.FLEEING)
+	assert_eq(run.move, CarrierTactics.MOVE_GATE, "still recharging: it runs for the gate")
+	assert_eq(run.gate, gate)
+	assert_null(run.departure, "it opens no point of its own")
+	var opened: int = main.gates.console_points.opened
+	await _fly(150.0, func() -> bool: return carriers.gate_departures > 0)
+	assert_eq(carriers.gate_departures, 1, "through the gate's vortex")
+	assert_eq(run.left_via, CarrierRun.VIA_GATE)
+	assert_eq(run.state, CarrierRun.State.DONE)
+	assert_eq(main.gates.console_points.opened, opened, "no jump point was opened for it")
+	assert_false(JumpCapability.drive_ready(cap, SimClock.now()), "its drive was still recharging")
+	assert_eq(run.left_behind, 6, "its fighters, 50 km behind, were not home in time (Q30)")
+	assert_eq(carriers.free_count(), carriers.size(), "it is back in its pool")
+	assert_false(cap.damageable.hull.destroyed)
+
+
+func test_with_no_gate_it_runs_until_its_drive_is_ready_then_jumps() -> void:
+	var run: CarrierRun = await _bring_in_docked()
+	var cap: CapitalStandin = run.carrier
+	main.gates.gate().remove_from_group(Jumpgate.GROUP)  # a place with no gate
+	run.options["wait_s"] = 1.0
+	assert_true(_run("carrier recall").ok)
+	await _fly(5.0, func() -> bool: return run.move == CarrierTactics.MOVE_RUN)
+	assert_eq(run.move, CarrierTactics.MOVE_RUN, "no gate and no drive: it runs")
+	var v0: Vector3 = cap.linear_velocity
+	var departed: int = carriers.carriers_departed
+	await _fly(25.0)
+	assert_eq(run.state, CarrierRun.State.FLEEING, "it cannot leave yet")
+	assert_null(run.departure)
+	assert_eq(carriers.carriers_departed, departed)
+	assert_gt((cap.linear_velocity - v0).length(), CarrierJumps.CARRIER_SPEED_MPS, "faster than its cruise")
+	var status: ConsoleResult = _run("carrier status")
+	assert_string_contains(status.lines[0], "recharging")
+	assert_string_contains(status.lines[0], "flees (raid_over: run)")
+	assert_gt(float(DebugConsole.registry.read("carriers.drive_left_s")["value"]), 0.0)
+	assert_true(_run("carrier charge").ok)
+	await _fly(60.0, func() -> bool: return run.state == CarrierRun.State.LEAVING)
+	assert_eq(run.state, CarrierRun.State.LEAVING, "its drive ready, it slows onto its bow and opens its own point")
+	assert_not_null(run.departure)
+	await _fly(70.0, func() -> bool: return carriers.carriers_departed > departed)
+	assert_eq(carriers.carriers_departed, departed + 1)
+	assert_eq(run.left_via, CarrierRun.VIA_POINT)
+	assert_lt(SimClock.now() - run.state_at_s, CarrierJumps.LEAVE_LIMIT_S, "through its point, not given up on")
+	assert_eq(carriers.gate_departures, 0)
+
+
+func test_a_carrier_with_no_cradles_holds_its_course_until_its_drive_has_recharged() -> void:
+	carriers.ensure_free(CarrierJumps.DEFAULT_CLASS)
+	var points: JumpPointPool = main.gates.console_points
+	var at: Vector3 = main.ship.global_position + Vector3(0.0, 0.0, -3000.0)
+	var run: CarrierRun = carriers.run_for(points, main.world.to_universe(at), Vector3.RIGHT, Factions.EARTH_ALLIANCE,
+			{"class": "cruiser"})
+	assert_not_null(run)
+	var cap: CapitalStandin = run.carrier
+	assert_eq(cap.ship_class, &"cruiser")
+	assert_false(JumpCapability.drive_ready(cap, SimClock.now()), "the jump in emptied its drive")
+	var departed: int = carriers.carriers_departed
+	await _fly(20.0)
+	assert_eq(run.state, CarrierRun.State.HOLDING, "its drive recharging, it holds its course")
+	assert_null(run.departure)
+	assert_false(run.arrival.held, "its arrival point let go to close by its timing")
+	assert_eq(points.collapses, 0, "not collapsed by its moving off")
+	cap.jump_drive.charge()
+	await _fly(3.0, func() -> bool: return run.state == CarrierRun.State.LEAVING)
+	assert_eq(run.state, CarrierRun.State.LEAVING, "recharged, it opens its point out")
+	await _fly(30.0, func() -> bool: return carriers.carriers_departed > departed)
+	assert_eq(carriers.carriers_departed, departed + 1)
 
 
 func test_it_backs_away_from_an_attacker_with_its_stern_to_it() -> void:
@@ -215,7 +360,13 @@ func test_a_badly_hurt_fighter_is_called_back_alone() -> void:
 	var keep: float = 0.5 * float(run.options["fighter_return_hull"]) * hull.hull.max_hp
 	hull.apply_hit(HitInfo.new(hurt.get_instance_id(), 0, &"", hull.hull.hp - keep, hurt.global_position, Vector3.ZERO, 0.0,
 			HitInfo.CAUSE_CONSOLE))
+	var scratched: Ship = run.fighters[1] as Ship
+	var other: Damageable = Damageable.of(scratched)
+	other.apply_hit(HitInfo.new(scratched.get_instance_id(), 0, &"", 0.75 * other.hull.max_hp, scratched.global_position,
+			Vector3.ZERO, 0.0, HitInfo.CAUSE_CONSOLE))
 	await _fly(2.0)
+	assert_almost_eq(float(run.options["fighter_return_hull"]), 0.2, 1e-6, "under 20 % of its hull (D83)")
+	assert_false(cap.dock.is_handling(scratched), "at 25 % it fights on")
 	assert_true(cap.dock.is_handling(hurt), "under its share of hull it is called back (Q27)")
 	assert_eq(cap.dock.returning_count(), 1, "alone")
 	await _fly(90.0, func() -> bool: return cap.dock.is_docked(hurt))
@@ -262,6 +413,8 @@ func test_the_console_reports_the_carrier() -> void:
 	var status: ConsoleResult = _run("carrier status")
 	assert_true(status.ok)
 	assert_string_contains(status.lines[0], "arriving")
+	assert_string_contains(status.lines[0], "drive recharging", "the jump in emptied its drive (M8-T08)")
+	assert_eq(String(DebugConsole.registry.read("carriers.flee")["value"]), "", "it is not fleeing")
 	assert_eq(int(DebugConsole.registry.read("carriers.docked")["value"]), 0)
 	assert_eq(String(DebugConsole.registry.read("carriers.state")["value"]), "arriving")
 	assert_almost_eq(float(DebugConsole.registry.read("carriers.hull")["value"]), 1.0, 1e-6)

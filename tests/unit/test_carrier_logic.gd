@@ -110,6 +110,33 @@ func test_options_fill_in_and_stay_in_range() -> void:
 	assert_eq(CarrierTactics.options({"arrival": "sideways"})["arrival"], "beside", "anything else is beside")
 
 
+func test_a_raids_options_lie_over_its_factions_doctrine_over_the_defaults() -> void:
+	var doctrine: Dictionary = {"recall_left": 5, "wait_s": 20.0}
+	var o: Dictionary = CarrierTactics.options({"wait_s": 8.0}, doctrine)
+	assert_eq(o["recall_left"], 5, "the doctrine's")
+	assert_eq(o["wait_s"], 8.0, "the raid's own wins")
+	assert_eq(o["retreat_hull"], 0.5, "the default where neither says")
+	assert_eq(CarrierTactics.options({"recall_left": -2})["recall_left"], 0, "kept in range")
+
+
+func test_the_raiders_doctrine_and_the_jump_drives_are_data() -> void:
+	# D83 (maintainer, 2026-11-18): home at 3 left or under 20 % hull, the carrier flees at 50 % damage.
+	var raiders: Dictionary = CarrierTactics.options({}, CapitalData.doctrine(Factions.RAIDERS))
+	assert_eq(raiders["recall_left"], 3)
+	assert_almost_eq(float(raiders["fighter_return_hull"]), 0.2, 1e-6)
+	assert_almost_eq(float(raiders["retreat_hull"]), 0.5, 1e-6)
+	assert_gt(float(raiders["wait_s"]), 0.0, "a time limit for the ones called home (Q30)")
+	assert_gt(float(raiders["flee_mps"]), CarrierJumps.CARRIER_SPEED_MPS, "it runs faster than it cruises")
+	assert_eq(CapitalData.doctrine(&"nobody"), {}, "a faction with no doctrine takes the defaults")
+	var longest: float = 0.0
+	for cls: StringName in CapitalStandin.CLASSES:
+		var recharge_s: float = CapitalData.jump_recharge_s(cls)
+		assert_gt(recharge_s, 0.0, "%s: its drive needs time after a jump" % cls)
+		longest = maxf(longest, recharge_s)
+	assert_eq(CapitalData.jump_recharge_s(CapitalStandin.STRIKE_CARRIER), longest, "the raiders' carrier has the longest")
+	assert_eq(CapitalData.jump_recharge_s(&"no_such_class"), CapitalData.DEFAULT_RECHARGE_S)
+
+
 func test_it_hangs_back_from_an_enemy_inside_its_stand_off() -> void:
 	assert_eq(CarrierTactics.cruise(Vector3(0.0, 0.0, -4000.0), true, 2500.0, 30.0), Vector3.ZERO, "outside: it holds")
 	assert_eq(CarrierTactics.cruise(Vector3.ZERO, false, 2500.0, 30.0), Vector3.ZERO, "no enemy: it holds")
@@ -129,18 +156,70 @@ func test_it_shows_an_attacker_its_stern() -> void:
 	assert_lt(CarrierTactics.turn_rate(Vector3.FORWARD, Vector3(0.01, 0.0, -1.0), 0.07).length(), 0.01, "nearly there: it eases")
 
 
-func test_when_it_recalls_and_when_it_leaves() -> void:
-	assert_false(CarrierTactics.should_recall(0.8, 0.5, false))
-	assert_true(CarrierTactics.should_recall(0.49, 0.5, false), "hurt past its threshold")
-	assert_true(CarrierTactics.should_recall(1.0, 0.5, true), "the raid is over")
-	assert_false(CarrierTactics.raid_over(false, 100.0, 0.0, 4, 2), "no time limit, fighters still out")
-	assert_true(CarrierTactics.raid_over(false, 100.0, 90.0, 4, 2), "past its time limit")
-	assert_true(CarrierTactics.raid_over(true, 1.0, 0.0, 4, 4), "ended by its script")
-	assert_true(CarrierTactics.raid_over(false, 1.0, 0.0, 4, 0), "no fighter left flying")
-	assert_false(CarrierTactics.raid_over(false, 1.0, 0.0, 0, 0), "it brought none: nothing to wait out")
+func test_its_fighters_go_home_when_three_are_left_or_one_is_badly_hurt() -> void:
+	assert_false(CarrierTactics.recall_all(6, 4, 3), "four of six still fight")
+	assert_true(CarrierTactics.recall_all(6, 3, 3), "only three of the raid are left (D83)")
+	assert_true(CarrierTactics.recall_all(6, 1, 3))
+	assert_false(CarrierTactics.recall_all(6, 0, 3), "nobody left to call")
+	assert_false(CarrierTactics.recall_all(3, 3, 3), "a raid of three is not called back as it arrives")
+	assert_true(CarrierTactics.recall_all(3, 2, 3), "it goes home at its first loss")
+	assert_false(CarrierTactics.recall_all(6, 3, 0), "a raid told never to")
+	assert_true(CarrierTactics.fighter_goes_home(0.19, 0.2), "under 20 % hull it goes home alone (D83)")
+	assert_false(CarrierTactics.fighter_goes_home(0.2, 0.2))
+	assert_false(CarrierTactics.fighter_goes_home(0.6, 0.2))
+
+
+func test_it_flees_at_half_damage_or_when_every_survivor_has_docked() -> void:
+	assert_eq(CarrierTactics.flee_reason(0.8, 0.5, false, 6, 4, 1), CarrierTactics.STAYS)
+	assert_eq(CarrierTactics.flee_reason(0.51, 0.5, false, 6, 4, 0), CarrierTactics.STAYS)
+	assert_eq(CarrierTactics.flee_reason(0.5, 0.5, false, 6, 4, 0), CarrierTactics.FLEE_HURT, "at least 50 % damage (D83)")
+	assert_eq(CarrierTactics.flee_reason(1.0, 0.5, false, 6, 0, 2), CarrierTactics.STAYS, "two are still on their way home")
+	assert_eq(CarrierTactics.flee_reason(1.0, 0.5, false, 6, 0, 0), CarrierTactics.FLEE_ALL_DOCKED, "every survivor has docked")
+	assert_eq(CarrierTactics.flee_reason(1.0, 0.5, false, 0, 0, 0), CarrierTactics.STAYS, "it brought none: nobody to wait for")
+	assert_eq(CarrierTactics.flee_reason(1.0, 0.5, true, 6, 4, 0), CarrierTactics.FLEE_RAID_OVER)
+	assert_false(CarrierTactics.raid_over(false, 100.0, 0.0), "no time limit")
+	assert_true(CarrierTactics.raid_over(false, 100.0, 90.0), "past its time limit")
+	assert_true(CarrierTactics.raid_over(true, 1.0, 0.0), "ended by its script")
+
+
+func test_fleeing_is_a_jump_once_recharged_and_a_run_for_the_gate_until_then() -> void:
+	assert_eq(CarrierTactics.flee_move(true, true, 0, 5.0, 45.0), CarrierTactics.MOVE_JUMP, "recharged, all aboard: its own point")
+	assert_eq(CarrierTactics.flee_move(true, false, 2, 5.0, 45.0), CarrierTactics.MOVE_WAIT, "recharged: it waits for its fighters")
+	assert_eq(CarrierTactics.flee_move(true, false, 2, 45.0, 45.0), CarrierTactics.MOVE_JUMP, "their time is up (Q30)")
+	assert_eq(CarrierTactics.flee_move(false, true, 0, 5.0, 45.0), CarrierTactics.MOVE_GATE, "still recharging: the gate needs no drive")
+	assert_eq(CarrierTactics.flee_move(false, true, 2, 5.0, 45.0), CarrierTactics.MOVE_GATE, "it runs early, its fighters catching up")
+	assert_eq(CarrierTactics.flee_move(false, false, 0, 5.0, 45.0), CarrierTactics.MOVE_RUN, "no gate: it runs until the drive is ready")
 	assert_false(CarrierTactics.should_leave(2, 10.0, 45.0), "it waits for its fighters")
 	assert_true(CarrierTactics.should_leave(0, 10.0, 45.0), "all home")
 	assert_true(CarrierTactics.should_leave(2, 45.0, 45.0), "it has waited long enough")
+
+
+func test_a_run_for_a_gate_goes_round_its_side_onto_the_axis_and_through() -> void:
+	var r: float = 750.0
+	var dep_z: float = -1500.0
+	assert_eq(CarrierTactics.gate_run_target(Vector3(100.0, 0.0, -5000.0), dep_z, r), Vector3(0.0, 0.0, r),
+			"on the run-in: through the mouth's centre")
+	assert_eq(CarrierTactics.gate_run_target(Vector3(4000.0, 0.0, -5000.0), dep_z, r), Vector3(0.0, 0.0, dep_z),
+			"in front, off the axis: to the departure point")
+	var behind: Vector3 = CarrierTactics.gate_run_target(Vector3(100.0, 0.0, 3000.0), dep_z, r)
+	assert_almost_eq(behind.x, CarrierTactics.GATE_CLEAR_RADII * r, 1e-3, "behind the mouth: out sideways first")
+	assert_eq(behind.z, 3000.0, "not through the gate's back")
+	var beside: Vector3 = CarrierTactics.gate_run_target(Vector3(0.0, 2000.0, 500.0), dep_z, r)
+	assert_almost_eq(beside.y, CarrierTactics.GATE_CLEAR_RADII * r, 1e-3, "clear of the arms")
+	assert_eq(beside.z, dep_z, "then forward to the front")
+	# Flown from dead astern it ends through the mouth from the front, never crossing the mouth's plane inside the arms.
+	var at := Vector3(0.0, 0.0, 4000.0)
+	var through: bool = false
+	for i: int in 4000:
+		var step: Vector3 = (CarrierTactics.gate_run_target(at, dep_z, r) - at).normalized() * 10.0
+		var next: Vector3 = at + step
+		if at.z < 0.0 and next.z >= 0.0:
+			through = Vector2(next.x, next.y).length() < r
+			break
+		if at.z > 0.0 and next.z <= 0.0:
+			assert_gt(Vector2(next.x, next.y).length(), 1240.0, "it passes the mouth's plane outside the gate's arms")
+		at = next
+	assert_true(through, "and goes through the mouth")
 
 
 # --- the native docking rows ------------------------------------------------------------------------------------------

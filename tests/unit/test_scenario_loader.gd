@@ -603,7 +603,7 @@ func test_the_civilian_escort_file_validates() -> void:
 	var ids: Array = []
 	for objective: Dictionary in mission["objectives"]:
 		ids.append(objective["id"])
-	assert_eq(ids, ["escort", "home"])
+	assert_eq(ids, ["escort", "home", "carrier"], "and, optional, a raider carrier destroyed (M8-T08)")
 
 
 func test_the_escort_belt_leaves_the_route_and_its_middle_point_clear() -> void:

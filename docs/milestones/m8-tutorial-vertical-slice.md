@@ -297,7 +297,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T05 | A | The tutorial mission: launch, checks, tour, raid, defense, debrief (D79) | T03, T04 | Fable | The mission script, dialog and pacing on M5's and M7's seams | not started |
 | T06 | B | Dock in the main docking bay to be repaired and relaunched, for the player and the AI wingmen (D82, Q7) | - | Fable | The `dock` interaction, the lane for fighters, repair and a Cobra-bay relaunch; wing orders | in progress |
 | T07 | C | Bring M10-T19's raider strike carrier into `m8`: merge `origin/m10`, one collision builder, its tests green (Q5) | - | Opus | Two branches built a collision builder; docs, `native/src/lib.rs` and `info.md` conflict | done |
-| T08 | C | The civilian escort's raids come with the strike carrier (D83, Q6) | T07 | Fable | Mission data and pacing on `CarrierJumps`; the escort's tests kept green | in progress |
+| T08 | C | The civilian escort's raids come with the strike carrier (D83, Q6) | T07 | Fable | Mission data and pacing on `CarrierJumps`; the escort's tests kept green | done |
 | T09 | C | Raider Battle Wagon (moved from M10-T20): from images, with weapons (M10 Q31) and four launch tubes; the escort's last wave comes with it (Q8) | T08, the maintainer on its weapons | Fable | No STL; a new hull with weapons and tube launches | not started |
 | T10 | D | Interceptor muzzle at the drawn barrel tip, and the grid balance measured again (roadmap M7-2) | - | Fable | A placement fix in the turret rows with a balance check | done |
 | T11 | D | The walls beside the cargo bay stop flickering (roadmap M7-3) | - | Sonnet | Find the coplanar faces or shading cause in the station generator; a test | not started |
@@ -456,6 +456,38 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 - **Files:** `data/missions/civilian_escort.gd` and its scenario (the waves' `via: "carrier"` with the docked option), the
   optional objective, the dialog for the carrier, `tests/integration/test_civilian_escort.gd`.
 - **Done when:** AC7.
+- **Done (2026-11-18):** the escort's three waves ride in docked on a raider strike carrier each (`RAIDER CARRIER 1` to `3`,
+  the wave data in `civilian_escort.gd`'s `WAVES`: size, bearing and the spawn's `carrier` options, so T09 changes data only),
+  are launched once it is clear of its point, and the carrier hangs back. Destroying any carrier is the optional objective
+  `carrier` (Control's lines `control_carrier` and, at the end, `control_carrier_down`); one that gets away is no kill. Raiders
+  back on a cradle count as down, raiders riding in as in play. Architecture §19.16 (the drive) and §19.18 (the retreat rules,
+  the mission side).
+  - **Jump-drive recharge** (`JumpDrive`, `JumpCapability`, `JumpPointPool`): opening a point empties the opener's drive and the
+    pool refuses it another until its class's recharge has passed; a jumpgate needs no drive. Proposed numbers, in
+    `data/capitals/capitals.json` (`CapitalData`): cruiser 60 s, destroyer 90 s, carrier 120 s, strike carrier 240 s (the
+    longest). A carrier with no cradles holds its course until its drive is ready.
+  - **Retreat rules** (`CarrierTactics`, `CarrierJumps`; the raiders' doctrine in the same file, a raid's `carrier` options
+    over it): all home at 3 left in the fight (`recall_left`), one alone under 20 % hull (`fighter_return_hull`); the carrier
+    flees at 50 % damage (`retreat_hull`), when its raid is over, or when every survivor has docked. Fleeing is a jump through
+    its own point once recharged (it waits for fighters on their way first), else a run at 60 m/s (`flee_mps`) for the nearest
+    jumpgate, or with no gate away from the enemy until the drive is ready. Not docked 90 s after the call (`wait_s`): left
+    behind. `wait_s` was 45 s in M10-T19; measured in the escort, a raider called home from 6.5 km docks after 55 s.
+  - **Found on the way:** a docked fighter lost its tier exemption at launch (`CarrierDock` hard-coded it), so a mission's
+    launched raiders were parked by the tier and read as destroyed; the dock now keeps what the ship had, and a mission
+    registers a ship before it docks.
+  - **Console:** `carrier status` shows the drive and why and how it flees; `carrier charge`; provider `carriers` gains `flee`,
+    `move`, `drive_left_s`, `gate_departures` (`info.md`).
+  - **Tests** (scratch copy of HEAD plus the staged change, `GUT_SLOW=1`): compile check 925 scripts; GUT 32 files, 497 of 497
+    passed, 0 failed, 0 pending: the carrier, jump, mission, escort, encounter, transit, bench and stand-in files, with
+    `test_civilian_escort` 23 of 23 (4 new; the fought run ends at 435 s, inside 6 to 8 minutes) and `test_strike_carrier`
+    16 of 16 (7 new or rewritten). No native or Python change. `bench_quick.sh` was not run (no per-tick work added: the
+    carrier decides at 2 Hz).
+  - **Open, for the maintainer:** (1) waves one and two come with 3 and 4 raiders, so under "home at 3 left" they break off at
+    their first loss (a raid of 3 or fewer is not called home on arrival; it goes home at its first loss): keep, give those
+    waves their own `recall_left`, or make them larger? (2) "It may run early if the player breaks off" is read as: it runs for
+    the gate at once while its drive recharges; nothing watches whether the player gave up. (3) The escort has no jumpgate, so
+    a fleeing carrier there runs from the enemy until 240 s after its jump in. (4) The numbers above are proposals. (H): fly
+    the escort and the carrier checks in `docs/playtest.md`.
 
 ### M8-T09 Raider Battle Wagon
 

@@ -66,9 +66,12 @@ func _explosions() -> int:
 
 
 # Waits until every raid carrier has left through its own point (M12-T19: the strike carrier stands off, recalls and only then
-# jumps out), so a played and a skipped run have opened the same points.
+# jumps out), so a played and a skipped run have opened the same points. Their drives are charged at once (M8-T08: else each
+# would run for minutes first).
 func _carriers_gone() -> void:
 	var carriers: CarrierJumps = CarrierJumps.attach(main.world)
+	for run: CarrierRun in carriers.runs():
+		run.carrier.jump_drive.charge()
 	await _wait_for("the raid's carrier to jump out through its own point", func() -> bool: return carriers.runs().is_empty(), 3600)
 
 

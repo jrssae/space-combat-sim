@@ -157,7 +157,7 @@ func test_a_raid_jumps_in_6_to_12_km_out_and_goes_for_the_player() -> void:
 func test_a_raid_comes_in_behind_a_carrier_that_then_jumps_back() -> void:
 	# M6-T23: raiders cannot open a jump point; their carrier opens one, they come out with it, and it leaves through its own.
 	# M12-T19: the carrier is the raiders' strike carrier; it stands off while the raid lasts, then calls its fighters back,
-	# waits, and jumps out.
+	# waits, and jumps out (M8-T08: once its drive has recharged).
 	main = await _make_main(true)
 	var carriers: CarrierJumps = CarrierJumps.attach(main.world)
 	assert_eq(carriers.size(), 2 * EncounterDirector.CARRIERS,
@@ -180,6 +180,7 @@ func test_a_raid_comes_in_behind_a_carrier_that_then_jumps_back() -> void:
 	await _fly(10.0)
 	assert_eq(carriers.carriers_departed, departed, "it stays while the raid lasts")
 	run.options["wait_s"] = 2.0
+	run.carrier.jump_drive.charge()  # as if its recharge had passed (M8-T08): it leaves by its own point, not the gate
 	carriers.end_raid(run)
 	await _fly(90.0, func() -> bool: return carriers.carriers_departed > departed)
 	assert_eq(carriers.carriers_departed, departed + 1, "the raid over, the carrier jumped back through its own point")
