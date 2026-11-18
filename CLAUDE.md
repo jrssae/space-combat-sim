@@ -38,7 +38,7 @@ site do not.
 ## Milestone documents
 
 Milestones were renumbered on 2026-11-18 (`docs/roadmap.md`, "After the tutorial", has the mapping): docs and code written
-before then use the old numbers, so an old "M12" means today's M10 (factions and capital ships), an old "M9" today's M22.
+before then use the old numbers, so an old "M12" means today's M10 (factions and capital ships), an old "M9" today's M26.
 
 Every milestone file in `docs/milestones/` has an ordered task table (`## Task breakdown (ordered)`) with a **Status**
 column: `done` (merged into the milestone branch, its "Done" notes written), `in progress`, `not started`, or `not

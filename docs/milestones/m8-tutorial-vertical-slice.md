@@ -56,7 +56,7 @@ In:
 - **The release build** for Linux x86_64 (Q9); the Windows build is M9, right after this milestone.
 
 Out:
-- Voiced dialog (M29; subtitles and the comms panel stay).
+- Voiced dialog (M33; subtitles and the comms panel stay).
 - Every other capital ship and the M10 framework (sections, beams, the staged break-up): M10 as planned.
 - Landing in a Cobra bay (the bays stay launch-only; docking goes through the main docking bay).
 - Story missions beyond the tutorial and the escort (M12 onward, one milestone per mission).
@@ -157,7 +157,7 @@ tubes launch Delta-Vs; when M10's framework lands (sections, turrets, beams), bo
 - **Goal:** AC1 (D79). Held by the controller with the maintainer; not dispatched to an agent.
 - **Inputs the controller brings:** the roadmap's beats, Q2's list of checks with each one's action and a proposed pass
   condition, the instructor's manoeuvres (D37), the tour points (M7-T12, T57), the station raid's knobs (M7-T10).
-- **Files:** D79 in this file, `data/dialog/tutorial.json` (lines as data with voice ids for M29).
+- **Files:** D79 in this file, `data/dialog/tutorial.json` (lines as data with voice ids for M33).
 - **Done when:** AC1.
 
 ### M8-T02 Sawtooth Cobra-bay doors
