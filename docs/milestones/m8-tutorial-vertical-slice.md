@@ -273,7 +273,9 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 - **The tutorial's script is the maintainer's call.** T01 is held with the maintainer by the controller; no agent writes beats
   or lines before it. A question about the script that comes up later goes back to the maintainer.
 - **The Battle Wagon's weapons are the maintainer's call** (M10's Q31): settled 2026-11-18, plasma turrets and missile racks (D83).
-- **Fable for task work** while its tokens last (maintainer, 2026-11-18): every agent task runs on Fable at high effort, never max.
+- **Fable where the task warrants it** (maintainer, 2026-11-18): Fable for the hardest work (new hulls from references, native AI,
+  the tutorial's integration), Opus and Sonnet for the rest as the Agent column says; Fable-suited tasks are started first while
+  its tokens last. High effort, never max.
 - **One working copy** on branch `m8` in the main checkout, no task branches.
 - **Locks**: every Godot or asset-building command goes through `scripts/godot_lock.sh` with `SCS_LOCK_LABEL=<task id>` set (`write`
   for `--import`, the native build and asset builds; `read` for tests and console runs; `--gpu` for windows). Commits stay under
@@ -290,7 +292,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 |---|---|---|---|---|---|---|
 | T01 | A | Tutorial script: beats, lines, checks and pacing (discussion with the maintainer) | Q1 to Q4 | controller | The maintainer's design call, held as a discussion, not delegated | done |
 | T02 | A | Sawtooth Cobra-bay doors (roadmap M7-4): toothed leaves that slide apart, the launch's door ripple and timing kept | - | Fable | Generator parts and an animated door the cinematic opens on | done |
-| T03 | A | The squadron-launch cinematic (D81) | T02, T01 | Fable | Scripted launches, camera shots and a skip that lands in the same state | not started |
+| T03 | A | The squadron-launch cinematic (D81) | T02, T01 | Opus | Scripted launches, camera shots and a skip that lands in the same state | not started |
 | T04 | A | Control checks: `ControlCheck`, the runner and the binding hints (D80) | T01 | Fable | Pass conditions on measured state for every control, pad and keyboard | done |
 | T05 | A | The tutorial mission: launch, checks, tour, raid, defense, debrief (D79) | T03, T04 | Fable | The mission script, dialog and pacing on M5's and M7's seams | not started |
 | T06 | B | Dock in the main docking bay to be repaired and relaunched, for the player and the AI wingmen (D82, Q7) | - | Fable | The `dock` interaction, the lane for fighters, repair and a Cobra-bay relaunch; wing orders | in progress |
@@ -298,13 +300,13 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T08 | C | The civilian escort's raids come with the strike carrier (D83, Q6) | T07 | Fable | Mission data and pacing on `CarrierJumps`; the escort's tests kept green | in progress |
 | T09 | C | Raider Battle Wagon (moved from M10-T20): from images, with weapons (M10 Q31) and four launch tubes; the escort's last wave comes with it (Q8) | T08, the maintainer on its weapons | Fable | No STL; a new hull with weapons and tube launches | not started |
 | T10 | D | Interceptor muzzle at the drawn barrel tip, and the grid balance measured again (roadmap M7-2) | - | Fable | A placement fix in the turret rows with a balance check | done |
-| T11 | D | The walls beside the cargo bay stop flickering (roadmap M7-3) | - | Fable | Find the coplanar faces or shading cause in the station generator; a test | not started |
-| T12 | D | Audio rework of every sound effect and the Starfury engines' steady level (roadmap M7-5) | - | Fable | One loudness reference, the mix, and a smoothed engine gain; a listening checklist | not started |
+| T11 | D | The walls beside the cargo bay stop flickering (roadmap M7-3) | - | Sonnet | Find the coplanar faces or shading cause in the station generator; a test | not started |
+| T12 | D | Audio rework of every sound effect and the Starfury engines' steady level (roadmap M7-5) | - | Opus | One loudness reference, the mix, and a smoothed engine gain; a listening checklist | not started |
 | T13 | D | Wingmen close the gaps losses leave in a formation (roadmap M7-6) | - | Fable | Native re-slotting with M7-T76's avoidance, 1 and 6 threads identical | in progress |
 | T14 | D | The bench writes to `user://` in an exported build (roadmap L15) | - | Fable | A path fix with a test | done |
-| T15 | E | Linux x86_64 release build from the pinned export templates (Q9) | T14 | Fable | Templates by SHA-256, the native library and assets packed, an export smoke test | not started |
-| T16 | E | Performance and the GPU check: the squadron launch, the tour and the raid | T05, T09 | Fable | Measurement on the maintainer's machine; the budget call | not started |
-| T18 | B | Approach cues for navigation targets with an interaction (brake, overshoot, adjust course), and the jumpgate's reach, autopilot and cinematic scaled to the player's speed (D84; maintainer, 2026-11-18; numbered last because it was added after the others had numbers) | - (shared with T06) | Fable | Relative-motion maths on the HUD, and a gate run-in that starts from any speed with its shot timed to match | not started |
+| T15 | E | Linux x86_64 release build from the pinned export templates (Q9) | T14 | Sonnet | Templates by SHA-256, the native library and assets packed, an export smoke test | not started |
+| T16 | E | Performance and the GPU check: the squadron launch, the tour and the raid | T05, T09 | Opus | Measurement on the maintainer's machine; the budget call | not started |
+| T18 | B | Approach cues for navigation targets with an interaction (brake, overshoot, adjust course), and the jumpgate's reach, autopilot and cinematic scaled to the player's speed (D84; maintainer, 2026-11-18; numbered last because it was added after the others had numbers) | - (shared with T06) | Opus | Relative-motion maths on the HUD, and a gate run-in that starts from any speed with its shot timed to match | not started |
 | T19 | D | Flights of three: the player commands two wingmen, AI flights of three cover each other and stay together, every ship in formation may fire, and two new orders (form up and hold fire; hold position and hold fire) (D85; maintainer, 2026-11-18; numbered last because it was added after the others had numbers) | T13 | Fable | Native flight cohesion and mutual cover, two orders through the comms menu and keys, parity | not started |
 | T20 | D | GPU memory in use on the debug overlay, in GB and as a percentage of the card (D86; maintainer 2026-11-18; numbered last because it was added after the others had numbers) | - | Fable | Driver sysfs reads off the frame path, a fallback, the overlay and `state render` | done |
 | T21 | D | The game's fonts: Babylon5 for titles and headlines, Babylon5Credits for body text and the HUD, on all UI text (D87; maintainer, 2026-11-18; numbered last) | - | Fable | A theme over every screen and the HUD's own drawing, a symbol-encoded cmap, a look sheet first | in progress |
