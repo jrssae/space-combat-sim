@@ -47,13 +47,46 @@ class HallTests(unittest.TestCase):
         eye = np.array([0.0, st.ARM_HATCH[4] - st.DOOR_DEPTH - 6.0, st.launch_door_centres()[2]])
         self.assertTrue(escapes(tris, eye, np.array([[0.0, 1.0, 0.0]]))[0], "straight out through the door's hole, its leaves away")
 
-    def test_the_leaves_meet_and_the_sills_reach_under_them(self) -> None:
+    def test_the_leaves_mesh_on_their_sawtooth_and_the_sills_reach_under_them(self) -> None:
         dx, dz = st.LAUNCH_DOOR_HALF
-        right, left = sp.door_leaf(1, 1.0).bounds(), sp.door_leaf(1, -1.0).bounds()
-        self.assertAlmostEqual(float(right[0][0]), 0.0)
-        self.assertAlmostEqual(float(left[1][0]), 0.0)
-        self.assertLess(dx - st.DOOR_SILL_M, float(right[1][0]) - 0.2, "the sill reaches in under the leaf's outer edge")
-        self.assertLess(dz - st.DOOR_SILL_M, float(right[1][2]) - 0.2)
+        right, left = sp.door_leaf(1, 1.0), sp.door_leaf(1, -1.0)
+        self.assertAlmostEqual(float(right.bounds()[0][0]), -0.5 * sp.TOOTH_DEPTH, msg="its teeth reach past the door's middle")
+        self.assertAlmostEqual(float(left.bounds()[1][0]), 0.5 * sp.TOOTH_DEPTH)
+        # Tooth into gap: every point of the door lies under one leaf's face, never both and never neither.
+        def covers(mesh, points: np.ndarray) -> np.ndarray:
+            tris = mesh_triangles(mesh)
+            top = tris[np.abs(tris[:, :, 1] - sp.LEAF_FACE[1]).max(axis=1) < 1e-9][:, :, [0, 2]]
+            a, b, c = top[:, 0][None], top[:, 1][None], top[:, 2][None]
+            q = points[:, None, :]
+            def edge(u: np.ndarray, v: np.ndarray) -> np.ndarray:
+                return (v[..., 0] - u[..., 0]) * (q[..., 1] - u[..., 1]) - (v[..., 1] - u[..., 1]) * (q[..., 0] - u[..., 0])
+            e = np.stack([edge(a, b), edge(b, c), edge(c, a)])
+            return ((e > 1e-9).all(axis=0) | (e < -1e-9).all(axis=0)).sum(axis=1)
+        rng = np.random.default_rng(3)
+        points = rng.uniform([-sp.LEAF_OUTER, -sp.LEAF_HALF], [sp.LEAF_OUTER, sp.LEAF_HALF], size=(4000, 2))
+        hits = covers(right, points) + covers(left, points)
+        self.assertEqual(int((hits != 1).sum()), 0, "a hole or an overlap between the leaves")
+        line = np.asarray(sp.seam_line())
+        self.assertEqual(len([1 for a, b in zip(line[:-1], line[1:], strict=True) if a[1] == b[1] == -0.5 * sp.TOOTH_DEPTH]), 3,
+                         "three flat-tipped teeth on the starboard leaf")
+        self.assertLess(dx - st.DOOR_SILL_M, float(right.bounds()[1][0]) - 0.2, "the sill reaches in under the leaf's outer edge")
+        self.assertLess(dz - st.DOOR_SILL_M, float(right.bounds()[1][2]) - 0.2)
+
+    def test_slid_open_the_leaves_are_out_of_the_well(self) -> None:
+        dx = st.LAUNCH_DOOR_HALF[0]
+        for side in (1.0, -1.0):
+            lo, hi = sp.door_leaf(3, side).bounds()
+            inner = (lo[0] if side > 0 else -hi[0]) + sp.LEAF_TRAVEL  # its tooth tips' distance from the door's middle, open
+            self.assertGreater(inner, dx, "nothing of an open leaf shows in the well")
+            self.assertLess(inner, dx + 0.5, "and it slides no farther than that takes")
+        # Slid back, the leaves leave the hall open to space through the door's hole, and closed they do not.
+        floor = st.ARM_HATCH[4] - st.DOOR_DEPTH
+        centre = st.launch_door_centres()[2]
+        arm = [mesh_triangles(st.arm_mesh(MATERIALS["drum_grey"])), mesh_triangles(st.door_glow(MATERIALS["bay_light"]))]
+        eye, out = np.array([3.0, floor - 6.0, centre + 2.0]), np.array([[0.0, 1.0, 0.0]])
+        for travel, open_ in ((0.0, False), (sp.LEAF_TRAVEL, True)):
+            leaves = [mesh_triangles(sp.door_leaf(3, side)) + np.array([st.LAUNCH_STRIP_X + side * travel, floor, centre]) for side in (1.0, -1.0)]
+            self.assertEqual(bool(escapes(np.concatenate(arm + leaves), eye, out)[0]), open_)
 
 
 class BayTests(unittest.TestCase):

@@ -72,24 +72,18 @@ func _timeline(wing: String, door: int, start_angle: float, seed_value: int) -> 
 	return {"wing": wing, "door": door, "start_deg": rad_to_deg(start_angle), "ticks": ticks, "graze_m": graze}
 
 
-# The door leaves of the player's arm as rectangles in the station's frame (their hinge, swung outward by the door's angle).
+# The door leaves of the player's arm as rectangles in the station's frame, each slid back as far as its door has opened.
 func _leaves(seq: LaunchSequence, drum: Transform3D) -> Array[PackedVector3Array]:
 	var out: Array[PackedVector3Array] = []
 	for k: int in seq.bays.size():
-		var open_deg: float = seq.door_angle_deg(k)
-		if open_deg < 1.0:
-			continue
 		var bay: Dictionary = seq.bays[k]
-		var normal: Vector3 = (bay["normal"] as Vector3).normalized()
+		var along: Vector3 = LaunchSequence.door_frame(bay).basis.z * LEAF_HALF_LENGTH_M
 		for leaf: Dictionary in bay["leaves"] as Array:
-			var hinge: Vector3 = leaf["point"]
-			var axis: Vector3 = (leaf["axis"] as Vector3).normalized()
-			var inward: Vector3 = ((bay["door"] as Vector3) - hinge)
-			inward = (inward - axis * inward.dot(axis)).normalized()
-			var sign: float = 1.0 if axis.cross(inward).dot(normal) > 0.0 else -1.0
-			var edge: Vector3 = Basis(axis, deg_to_rad(open_deg) * sign) * inward * LEAF_WIDTH_M
-			var half: Vector3 = axis * LEAF_HALF_LENGTH_M
-			out.append(PackedVector3Array([drum * (hinge - half), drum * (hinge + half), drum * (hinge + half + edge), drum * (hinge - half + edge)]))
+			var slide: Vector3 = (leaf["slide"] as Vector3).normalized()
+			var moved: float = seq.door_share(k) * float(leaf["travel_m"])
+			var inner: Vector3 = (bay["door"] as Vector3) + slide * (moved - float(leaf["reach_m"]))
+			var outer: Vector3 = (bay["door"] as Vector3) + slide * (moved + LEAF_WIDTH_M)
+			out.append(PackedVector3Array([drum * (inner - along), drum * (inner + along), drum * (outer + along), drum * (outer - along)]))
 	return out
 
 

@@ -31,8 +31,8 @@ func _hardpoints() -> StationHardpoints:
 				"door_half_m": [10.0, 7.0], "normal": [0.0, 1.0, 0.0], "across": [1.0, 0.0, 0.0], "rail_start": [0.0, 227.5, z],
 				"rail_end": [0.0, 236.5, z], "release": [0.0, 244.5, z], "release_direction": [0.0, 1.0, 0.0],
 				"surface_velocity": [-36.186, 0.0, 0.0], "forward": [0.0, 0.0, -1.0], "up": [0.0, -1.0, 0.0],
-				"leaves": [{"leaf": "r", "point": [9.6, 236.5, z], "axis": [0.0, 0.0, 1.0]},
-						{"leaf": "l", "point": [-9.6, 236.5, z], "axis": [0.0, 0.0, 1.0]}],
+				"leaves": [{"leaf": "r", "slide": [1.0, 0.0, 0.0], "travel_m": 11.3, "reach_m": 1.1},
+						{"leaf": "l", "slide": [-1.0, 0.0, 0.0], "travel_m": 11.3, "reach_m": 1.1}],
 				"staging": [-28.0, 214.0, z], "staging_path": [[-28.0, 214.0, z], [0.0, 214.0, z], [0.0, 227.5, z]]})
 	var hp := StationHardpoints.from_manifest({"hardpoints": {"spin_rad_s": SPIN, "cobra_bays": bays,
 			"cobra_arm": {"arms": [{"name": "top", "wing": "alpha", "angle_deg": ARM_DEG, "bays": names}], "door_floor_r": 236.5,
@@ -379,14 +379,16 @@ func test_the_second_row_moves_along_its_path_onto_the_rack() -> void:
 	assert_almost_eq(seen[seen.size() / 2], Vector3(-7.25, 214.0, -1944.5), Vector3(0.5, 0.01, 0.01), "halfway along the path")
 
 
-func test_a_door_swings_open_for_its_fighter_and_shuts_after() -> void:
+func test_a_door_slides_open_for_its_fighter_and_shuts_after() -> void:
 	var seq := LaunchSequence.create(_hardpoints(), "alpha", _ids(1), _profile(), 1, _drum_for(200.0), 0.0)
-	assert_eq(seq.door_angle_deg(0), 0.0, "shut")
+	assert_eq(seq.door_share(0), 0.0, "shut")
 	var log: Array[Dictionary] = _run(seq, 1.5, 0.0)
-	assert_gt(seq.door_angle_deg(0), 0.0, "opening")
-	assert_lt(seq.door_angle_deg(0), seq.profile.door_open_deg)
-	assert_eq(seq.door_angle_deg(1), 0.0, "a door with no fighter stays shut")
+	assert_almost_eq(seq.door_share(0), 0.5, 0.02, "half way back, half way through its 3 s (eased)")
+	assert_eq(seq.door_share(1), 0.0, "a door with no fighter stays shut")
+	log.append_array(_run(seq, 1.5 + DT, 0.0))
+	assert_eq(seq.door_share(0), 1.0, "fully back at door_open_s")
 	log.append_array(_run(seq, 20.0, 0.0, true))
+	assert_eq(seq.door_share(0), 0.0, "and shut again")
 	var closing: Dictionary = _first(log, "door_closing", "")
 	assert_almost_eq(float(closing["t"]), RELEASE_AT_S + 2.0 + DT, 1e-6, "closing door_close_after_s after the release (its first tick)")
 	assert_almost_eq(float(_first(log, "door_closed", "")["t"]), RELEASE_AT_S + 2.0 + 3.0, 1e-6)
@@ -602,9 +604,9 @@ func test_the_launch_follows_the_doors_briskly_and_clear_of_the_leaves() -> void
 				reach = maxf(reach, (to_door * STARFURY.get_endpoint(c)).y)
 			if f["phase"] == LaunchSequence.Phase.ROTATING:
 				worst_turn_y = maxf(worst_turn_y, reach)
-			# Any part of it at the doors' plane (the leaves' swing) while the leaves are not fully open would meet them.
+			# Any part of it at the doors' plane (where the leaves slide) while the leaves are not fully back would meet them.
 			if f["phase"] != LaunchSequence.Phase.RELEASED and reach > -0.5 \
-					and seq.door_angle_deg(int(f["bay"])) < profile.door_open_deg - 1e-3:
+					and seq.door_share(int(f["bay"])) < 1.0 - 1e-6:
 				nose_out_ajar += 1
 	for k: int in 6:
 		var id: String = "F%d" % (k + 1)
@@ -612,11 +614,12 @@ func test_the_launch_follows_the_doors_briskly_and_clear_of_the_leaves() -> void
 		var opened: float = events["door_open %s" % bay_name]
 		var dropped: float = events["drop %s" % id]
 		assert_between(dropped - opened, 0.25 - DT, 0.5 + DT, "%s ejected %.2f s after its door is open" % [id, dropped - opened])
-		assert_lt(float(events["rotate %s" % id]), opened, "%s turns while its leaves swing" % id)
+		assert_lt(float(events["rotate %s" % id]), opened, "%s turns while its leaves slide" % id)
 		assert_lte(float(events["turned %s" % id]), dropped + 1e-6, "and is nose-out before its ejection")
 	assert_lt(worst_turn_y, -1.0, "the turn stays inside the doors' plane (%.2f m)" % worst_turn_y)
 	assert_eq(nose_out_ajar, 0, "nothing reaches the doors' plane before the leaves are fully open")
-	assert_gt(LaunchSequence.leaf_clearance(STARFURY, seq.bays[0], profile.door_open_deg, profile), 1.0,
-			"the open leaves stand clear of its wings")
-	assert_lt(LaunchSequence.leaf_clearance(STARFURY, seq.bays[0], 45.0, profile), 0.0, "a half-open leaf would be in its way")
+	assert_almost_eq(LaunchSequence.leaf_clearance(STARFURY, seq.bays[0], 1.0, profile), 10.0 - 7.695, 1e-4,
+			"fully back the leaves are out of the well: the whole 20 m door, 2.3 m each side of its wings")
+	assert_lt(LaunchSequence.leaf_clearance(STARFURY, seq.bays[0], 0.5, profile), 0.0, "half-open leaves would be in its way")
+	assert_almost_eq(LaunchSequence.leaf_clearance(STARFURY, seq.bays[0], 0.0, profile), -1.1 - 7.695, 1e-4, "shut, their teeth mesh")
 	assert_almost_eq(profile.lead_s(), 2.3, 1e-6, "slot to ejection: door 2 s plus 0.3 s")

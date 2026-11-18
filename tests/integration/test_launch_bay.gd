@@ -2,7 +2,7 @@ extends GutTest
 ## Cobra-bay launches on the real main scene (M7-T08, D76, AC7): the `station_launch` scenario starts the player on Alpha 3's rack
 ## with the controls held and the wingmen on the arm's other racks; the fighters ride the turning drum; the launch camera plays its
 ## shots; the player is handed over at the release point with the drum's surface velocity; a skip (Start) lands in the same state;
-## the wingmen follow from the next doors in the wave order; a rebase mid-launch moves nothing on screen; a launch due under the
+## the wingmen follow from the next doors in the wave order; the doors' toothed leaves slide apart and shut again (M8-T02); a rebase mid-launch moves nothing on screen; a launch due under the
 ## spine holds; `launch wing` launches twelve AI Starfuries, `launch wing all` every wing, and a launched Alpha wing flies as the
 ## player's wingmen, takes the wing orders (M7-T58) and forms up with its arms even (M7-T74).
 ## Every place comes from the station's hardpoints.
@@ -178,8 +178,8 @@ func test_a_starfury_fits_the_real_arm_nose_first() -> void:
 	var seq: LaunchSequence = main.launches.launches[0]["seq"]
 	for bay: Dictionary in seq.bays:
 		assert_almost_eq(seq.stored_pose_offset_deg(bay), 0.0, 0.5, "%s: the station's rack pose is the stored pose" % bay["name"])
-		var leaf: float = LaunchSequence.leaf_clearance(box, bay, main.launches.profile.door_open_deg, main.launches.profile)
-		assert_gt(leaf, 1.0, "%s: its open leaves stand %.2f m clear of the wings" % [bay["name"], leaf])
+		var leaf: float = LaunchSequence.leaf_clearance(box, bay, 1.0, main.launches.profile)
+		assert_gt(leaf, 2.0, "%s: its leaves slid back leave %.2f m beside the wings" % [bay["name"], leaf])
 
 
 func test_skipping_lands_in_the_same_state() -> void:
@@ -225,6 +225,85 @@ func test_the_wingmen_launch_from_the_next_doors_in_the_wave_order() -> void:
 	assert_ne(wingman.collision_layer, 0, "the last wingman flies free")
 	assert_gt(wingman.global_position.distance_to(_on_drum(station.hardpoints.bay("cobra_bay_alpha_6")["rail_start"])), 15.0,
 			"and has left its rack")
+
+
+func test_the_doors_toothed_leaves_slide_apart_for_the_launch_and_shut_after() -> void:
+	# M8-T02: the player's door (Alpha 3) through its launch: shut, sliding, open for the ejection, sliding, shut; and the ripple.
+	await _start()
+	var seq: LaunchSequence = main.launches.launches[0]["seq"]
+	var bay_name: String = "cobra_bay_alpha_3"
+	var bay: Dictionary = station.hardpoints.bay(bay_name)
+	var index: int = -1
+	for k: int in seq.bays.size():
+		if seq.bays[k]["name"] == bay_name:
+			index = k
+	assert_gt(index, -1)
+	var leaves: StationDoorLeaves = main.launches.door_leaves()
+	assert_not_null(leaves, "the director found the drum's leaves")
+	assert_eq(leaves.count(), 24, "two leaves on each of the 24 doors")
+	assert_eq(leaves.leaf_count(bay_name), 2)
+	var normal: Vector3 = (bay["normal"] as Vector3).normalized()
+	var across: Vector3 = (bay["across"] as Vector3).normalized()
+	var travel: float = float((bay["leaves"] as Array)[0]["travel_m"])
+	var shut: Array[Transform3D] = []
+	for which: int in 2:
+		var now: Transform3D = leaves.leaf_transform(bay_name, which)
+		shut.append(Transform3D(now.basis, now.origin - leaves.slide_direction(bay_name, which) * leaves.slide_m(bay_name, which)))
+	assert_almost_eq(shut[0].origin, shut[1].origin, Vector3.ONE * 1e-4, "shut, the two leaves lie on one door (their teeth mesh)")
+	var states: Array[int] = [int(seq.doors[index]["state"])]
+	var first_tick: Dictionary = {}  # state -> the tick it was first seen
+	var last_share: float = leaves.open_share(bay_name)
+	var opened_at: Dictionary = {}  # bay index -> tick its door began to open
+	var dropped_ajar: bool = false
+	for tick: int in 900:
+		var state: int = int(seq.doors[index]["state"])
+		if state != states[-1]:
+			states.append(state)
+			first_tick[state] = tick
+		for k: int in seq.doors.size():
+			if int(seq.doors[k]["state"]) != LaunchSequence.DoorState.CLOSED and not opened_at.has(k):
+				opened_at[k] = tick
+		var share: float = leaves.open_share(bay_name)
+		assert_almost_eq(share, seq.door_share(index), 1e-6, "the drawn leaves follow the sequence")
+		if state == LaunchSequence.DoorState.OPENING:
+			assert_gte(share, last_share, "sliding back")
+		elif state == LaunchSequence.DoorState.CLOSING:
+			assert_lte(share, last_share, "sliding shut")
+		last_share = share
+		for which: int in 2:
+			var moved: Vector3 = leaves.leaf_transform(bay_name, which).origin - shut[which].origin
+			var side: float = 1.0 if which == 0 else -1.0
+			assert_almost_eq(moved, across * side * share * travel, Vector3.ONE * 1e-3, "each leaf slides across the arm, away from the other")
+			assert_almost_eq(moved.dot(normal), 0.0, 1e-3, "in the doors' plane: it never swings out")
+			assert_true(leaves.leaf_transform(bay_name, which).basis.is_equal_approx(shut[which].basis), "and never turns")
+		var player: Dictionary = seq.fighter(main.combatant.display_name)
+		if player["phase"] == LaunchSequence.Phase.DROPPING and share < 1.0:
+			dropped_ajar = true
+		if states.size() > 1 and state == LaunchSequence.DoorState.CLOSED:
+			break
+		await _ticks(1)
+	var names: Array[String] = []
+	for state: int in states:
+		names.append(LaunchSequence.DOOR_NAMES[state])
+	if names[0] == "closed":
+		names.remove_at(0)
+	assert_eq(names, ["opening", "open", "closing", "closed"] as Array[String], "shut, sliding, open, sliding, shut")
+	assert_false(dropped_ajar, "the fighter is ejected only through a fully open door")
+	assert_eq(leaves.open_share(bay_name), 0.0, "shut again")
+	for which: int in 2:
+		assert_almost_eq(leaves.leaf_transform(bay_name, which).origin, shut[which].origin, Vector3.ONE * 1e-5, "back on its door")
+	var profile: LaunchProfile = main.launches.profile
+	assert_almost_eq(float(int(first_tick[LaunchSequence.DoorState.CLOSED]) - int(first_tick[LaunchSequence.DoorState.CLOSING])) * DT, profile.door_close_s,
+			2.0 * DT, "the closing time kept")
+	assert_gt(travel - float((bay["leaves"] as Array)[0]["reach_m"]), (bay["door_half_m"] as Vector2).x, "open, the teeth are out of the well")
+	# The ripple kept: the wave's four doors (the player's, then the wingmen's aft of it) start a quarter to half a second apart.
+	var starts: Array[int] = []
+	for k: int in opened_at:
+		starts.append(int(opened_at[k]))
+	starts.sort()
+	assert_eq(starts.size(), 4, "a door for the player and each of the three wingmen")
+	for k: int in range(1, starts.size()):
+		assert_between(float(starts[k] - starts[k - 1]) * DT, profile.stagger_min_s - DT, profile.stagger_max_s + DT, "the doors ripple open")
 
 
 func test_a_rebase_mid_launch_moves_nothing_on_screen() -> void:

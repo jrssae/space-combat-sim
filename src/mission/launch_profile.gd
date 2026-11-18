@@ -16,9 +16,8 @@ const DEFAULT_PATH: String = "res://data/launch/cobra_launch.json"
 const STEPS: Array[StringName] = [&"door", &"rotate", &"hold", &"drop", &"release"]
 const MIN_SHOT_FLOOR_S: float = 1.0
 
-## Seconds for a door's leaves to swing open, and how far they swing (degrees, outward).
+## Seconds for a door's leaves to slide apart (how far is the station's: each bay's `leaves` hardpoints).
 var door_open_s: float = 2.0
-var door_open_deg: float = 95.0
 ## Seconds to close, and how long after its last fighter left a door starts closing.
 var door_close_s: float = 3.0
 var door_close_after_s: float = 2.0
@@ -32,7 +31,7 @@ var stagger_max_s: float = 0.5
 var wave_gap_s: float = 10.0
 ## Seconds for the second row to move from staging onto the racks.
 var row_move_s: float = 6.0
-## Seconds after its door starts opening that the clamp turns a fighter (so it turns while the leaves swing), and the turn's length.
+## Seconds after its door starts opening that the clamp turns a fighter (so it turns while the leaves slide), and the turn's length.
 var rotate_after_s: float = 0.8
 var rotate_s: float = 1.4
 ## Seconds from a door fully open to its fighter's ejection (maintainer: the launch follows the doors briskly).
@@ -78,7 +77,7 @@ static func from_dict(data: Variant, source: String = "launch profile") -> Dicti
 		return {"ok": false, "error": "%s: the root must be an object" % source}
 	var raw: Dictionary = data
 	var made := LaunchProfile.new()
-	for key: String in ["door_open_s", "door_open_deg", "door_close_s", "door_close_after_s", "drop_s", "stagger_min_s",
+	for key: String in ["door_open_s", "door_close_s", "door_close_after_s", "drop_s", "stagger_min_s",
 			"stagger_max_s", "wave_gap_s",
 			"row_move_s", "rotate_after_s", "rotate_s", "eject_after_open_s", "release_extra_m", "burn_s", "burn_throttle"]:
 		var v: Variant = raw.get(key, made.get(key))

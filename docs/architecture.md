@@ -5693,7 +5693,7 @@ src/mission/launch_profile.gd    LaunchProfile: timings, the stored and launch p
 src/mission/launch_cut.gd        LaunchCut (pure): one shot variant a phase per launch, seeded shuffle bags kept per scenario run
 src/mission/launch_shot_sequencer.gd LaunchShotSequencer (pure): when the cut cuts: 1 s least hold, row shots over three ejections
 src/mission/launch_director.gd   LaunchDirector (Main's child, priority -45): carries the fighters, hands them over, the camera, console `launch`
-src/world/station_door_leaves.gd StationDoorLeaves: the doors' leaf props swung outward on their hinges
+src/world/station_door_leaves.gd StationDoorLeaves: the doors' toothed leaf props slid apart across the arm (M8-T02)
 data/launch/cobra_launch.json    door 2 s, clamp turn 0.8 s into it for 1.4 s, ejection 0.3 s after the door is open and 0.75 s long,
                                  ripple 0.25 to 0.5 s, wave gap 10 s, second row 6 s
 data/scenarios/station_launch.json  the player on Alpha 3 with three wingmen
@@ -5708,7 +5708,7 @@ data/scenarios/station_launch.json  the player on Alpha 3 with three wingmen
   frame (x across the arm, y out of the drum, z aft) its nose points along -z (to the bow) and its top along -y (toward the drum's
   axis), the station's hardpoint `forward` and `up` exactly (`stored_pose_offset_deg` checks it; 0 on every bay). The clamp turns it
   `rotate_s` (an eased quarter pitch, nose down, starting `rotate_after_s` into its door's opening, so it turns while the leaves
-  swing) to the launch pose, nose along +y out through the door and top along -z; it is
+  slide) to the launch pose, nose along +y out through the door and top along -z; it is
   ejected nose first. Fit, from `LaunchSequence.clearances` on the Starfury's bounds and the arm as built: 2.3 m each side across the
   20 m door, 3.2 m along the 14 m door, the turn 1.9 m from the hall's ceiling and 3.3 m from the doors' plane, 11 m from the next rack's
   fighter; released `release_extra_m` (6 m) past the station's release point so its tail is 4.6 m past the arm's top.
@@ -5719,9 +5719,18 @@ data/scenarios/station_launch.json  the player on Alpha 3 with three wingmen
   slot, the clamp turns it `rotate_after_s` in, and it is ejected when its slot plus `lead_s()` comes (the door's opening plus
   `eject_after_open_s`, 0.3 s, or the turn's end if later; maintainer: the launch follows the doors briskly), its door is fully open
   and no fighter of its wave started less than `stagger_min_s` ago. The turn stays 3.3 m inside the doors' plane and nothing reaches
-  the plane before the leaves are fully open; open, they stand 1.5 m clear of a Starfury's wings (`leaf_clearance`). The ejection is from rest at a steady acceleration down `rail_start`, `rail_end` and
+  the plane before the leaves are fully back; open, they are out of the well and the whole 20 m door is free, 2.3 m each side of a
+  Starfury's wings (`leaf_clearance`). The ejection is from rest at a steady acceleration down `rail_start`, `rail_end` and
   the release point: 23 m in 0.75 s, 61.3 m/s at the release (about 8 g), its tail clear of the door's well 0.67 s in. The second row
   moves along `staging_path` once its rack is empty, turns on the rack and fires `wave_gap_s` after the first wave's last release.
+- **Sawtooth doors (M8-T02, roadmap M7-4; the maintainer's option B).** Each door is two leaves meeting on a sawtooth seam along
+  the arm (trapezoid teeth as on the main docking bay's inner doors, three a leaf: 4.4 m pitch, 2.2 m deep) that slide apart
+  across the arm and back under the deck; open, nothing of them shows in the well. The station says how: each bay's `leaves`
+  hardpoints give a leaf's `slide` direction, its `travel_m` (11.3) and how far its teeth reach past the door's middle shut
+  (`reach_m`, 1.1). `LaunchSequence.door_share(bay)` is how far a door is open (0 to 1, eased over `door_open_s`), and
+  `StationDoorLeaves.set_open(bay, share)` moves the two prop instances by that share of their travel, from the places the
+  manifest gives them (so it works headless). The door's states, its 2 s opening, 3 s closing and the ripple are M7's; the
+  profile's `door_open_deg` is gone (how far is the station's geometry, not a timing).
 - **Hold under the spine.** An ejection starts only when the arm (`cobra_arm.arms[].angle_deg` plus the drum's turn) stays out of every
   `launch_clearance` sector for the whole ejection, checked every 0.5 degrees of its sweep; otherwise the fighter holds, nose out, and
   the rest of the wave goes on in order (on one arm they come clear together and ripple out `stagger_min_s` apart). A skip under the
@@ -6206,7 +6215,7 @@ src/rendering/piece_sections.gd            PieceSections (pure): sections and pr
   M8-T07 folded M12-T19's second builder into this one: the carrier's makers (`box_around`, `capsule_between`), moves and
   mirrors, `ring_sectors`, `prism_points` and `skin_coverage` (coverage against sampled skin) are here, and the carrier writes
   the same section (§19.18).
-- **Hardpoints.** 24 `cobra_bay_<wing>_<door>` (door, hinges, rail, release, pose, the second row's staging path), `cobra_arm`,
+- **Hardpoints.** 24 `cobra_bay_<wing>_<door>` (door, its leaves' slide, rail, release, pose, the second row's staging path), `cobra_arm`,
   `launch_clearance`, `main_docking_bay_*` (drum frame), `cargo_bay_*`, D75's 23 mounts, the lights, 8 tour points and 11 damage
   sections; `StationHardpoints` reads them and every M7 system places from it.
 - **The bays.** The main docking bay is the STL's, its mouth scaled to 80 m: a stepped cross-shaped mouth, a red-lit tunnel of

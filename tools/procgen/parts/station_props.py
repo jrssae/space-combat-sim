@@ -1,10 +1,10 @@
 """The station's detail props (M7-T19, M7-T05), instanced under their sections with small atlases of their own
 (``core/near_props.py``).
 
-On the drum: the Cobra-bay launch doors' leaves (six doors an arm, M7-T05), two a door, each its own instance so a launch can swing
-it open (M7-T08); they are the doors, with no painted stand-in on the hull, so they are drawn as far as the hull is. Their faces
-carry what the hull atlas (about 1.4 m a texel) would blur at 50 m: the stencilled number, the slats with the bay's light between
-them, rivets and a hazard band where the leaves meet, at 3 cm a texel. Near only: the clamp beside each door (its red cap painted on
+On the drum: the Cobra-bay launch doors' leaves (six doors an arm, M7-T05), two a door meeting on a sawtooth seam (M8-T02), each
+its own instance so a launch can slide it back under the deck (M7-T08); they are the doors, with no painted stand-in on the hull, so
+they are drawn as far as the hull is. Their faces carry what the hull atlas (about 1.4 m a texel) would blur at 50 m: the
+stencilled number, the slats with the bay's light between them, rivets and a hazard band along the teeth, at 3 cm a texel. Near only: the clamp beside each door (its red cap painted on
 the deck as the far stand-in), and over each door in the launch hall the gantry that holds its Starfury, seen through an open door
 (T20 refits M7-T09's hangar to these doors).
 
@@ -33,8 +33,17 @@ MARGIN_M = 400.0
 ATLAS_W, ATLAS_H = 1024, 4096
 CELL_H = 512  # one door per cell down the atlas (16 m by 32 m), then the swatches
 PX_PER_M = 32.0  # 3.1 cm a texel on a door's face
-LEAF = (0.4, 9.6, 6.6)  # a leaf's inner and outer edge across its door, its half length along
+LEAF_OUTER, LEAF_HALF = 9.6, 6.6  # a leaf's outer edge across its door, its half length along
+# The sawtooth seam the two leaves meet on (M8-T02, the maintainer's option B): trapezoid teeth as on the main docking bay's inner
+# doors, three a leaf.
+TOOTH_PERIOD = 4.4  # a tooth and the gap beside it, along the seam
+TOOTH_DEPTH = 2.2  # tip to root, across the seam: half each side of the door's middle
+TOOTH_FLAT = 1.2  # a tooth's flat tip
+SEAM_GAP = 0.12  # the lit edge painted each side of the seam
+# How far a leaf slides to open: its teeth end 0.2 m inside the well's wall, so an open door shows none of it.
+LEAF_TRAVEL = st.LAUNCH_DOOR_HALF[0] + 0.5 * TOOTH_DEPTH + 0.2
 SLATS = 6
+GAP_W = 0.5  # a grated gap between two slats
 NUMBER = (7.0, 1.1, (0.42, 0.42, 0.40))  # height, stroke, colour (linear)
 GLOW_GAP = 0.1  # the bay light between the slats, of the surface's strength (a glow, not a lamp)
 GLOW_SEAM = 0.12  # and in the seam where the leaves meet
@@ -52,40 +61,65 @@ def _smooth(t: np.ndarray) -> np.ndarray:
     return t * t * (3.0 - 2.0 * t)
 
 
+def seam_line() -> list[tuple[float, float]]:
+    """The seam's corners (z along the arm, x across it), from the door's fore edge to its aft edge: the +x leaf's teeth are
+    centred on multiples of the period, the other leaf's half way between."""
+    amp, flank = 0.5 * TOOTH_DEPTH, 0.5 * (TOOTH_PERIOD - 2.0 * TOOTH_FLAT)
+    if flank <= 0.0:
+        raise ValueError("the teeth's flats leave no room for their flanks")
+    corners: list[tuple[float, float]] = []
+    count = int(math.ceil(LEAF_HALF / TOOTH_PERIOD)) + 1
+    for k in range(-count, count + 1):
+        c = k * TOOTH_PERIOD
+        corners += [(c - 0.5 * TOOTH_FLAT, -amp), (c + 0.5 * TOOTH_FLAT, -amp),
+                    (c + 0.5 * TOOTH_PERIOD - 0.5 * TOOTH_FLAT, amp), (c + 0.5 * TOOTH_PERIOD + 0.5 * TOOTH_FLAT, amp)]
+    zs, xs = [c[0] for c in corners], [c[1] for c in corners]
+    ends = [(z, float(np.interp(z, zs, xs))) for z in (-LEAF_HALF, LEAF_HALF)]
+    return [ends[0]] + [c for c in corners if -LEAF_HALF + 1e-9 < c[0] < LEAF_HALF - 1e-9] + [ends[1]]
+
+
 def _door_cell(number: int, seed: int) -> dict[str, np.ndarray]:
     """One door's face (``CELL_H`` rows by ``ATLAS_W``): linear albedo, height, roughness, metallic, occlusion and glow."""
     cols, rows = np.meshgrid(np.arange(ATLAS_W), np.arange(CELL_H))
     x = (cols + 0.5) / PX_PER_M - st.LAUNCH_DOOR_HALF[0]
     z = (rows + 0.5) / PX_PER_M - st.LAUNCH_DOOR_HALF[1]
-    inner, outer, half = LEAF
-    ax = np.abs(x)
-    leaf = (ax > inner) & (ax < outer) & (np.abs(z) < half)
-    # The slats run across each leaf; the gaps between them are grated and lit from the bay below.
+    outer, half = LEAF_OUTER, LEAF_HALF
+    line = np.asarray(seam_line())
+    right = x > np.interp(z, line[:, 0], line[:, 1])
+    # How far each texel is from the seam: the lit edge, the worn metal and the hazard band follow the teeth.
+    d = np.full(x.shape, np.inf)
+    for (z0, x0), (z1, x1) in zip(line[:-1], line[1:], strict=True):
+        t = np.clip(((z - z0) * (z1 - z0) + (x - x0) * (x1 - x0)) / ((z1 - z0) ** 2 + (x1 - x0) ** 2), 0.0, 1.0)
+        d = np.minimum(d, np.hypot(z - z0 - t * (z1 - z0), x - x0 - t * (x1 - x0)))
+    inside = (np.abs(x) < outer) & (np.abs(z) < half)
+    leaf = inside & (d > SEAM_GAP)
+    # The slats run across each leaf; the gaps between them are grated and lit from the bay below, and stop short of the teeth.
     pitch = 2.0 * half / SLATS
-    t = np.mod(z + half, pitch)
-    gap_w = 0.5
-    in_gap = leaf & (t > pitch - gap_w)
+    gaps = (np.arange(SLATS) - 0.5 * (SLATS - 1)) * pitch
+    dq = np.abs(z[..., None] - gaps[None, None, :]).min(axis=-1)  # to the nearest gap's middle
+    body = d > 1.0
+    in_gap = leaf & body & (dq < 0.5 * GAP_W)
     bar = in_gap & (np.mod(x, 0.5) < 0.12)  # the grating's bars across each gap
-    edge = np.minimum.reduce([ax - inner, outer - ax, half - np.abs(z)])
+    edge = np.minimum.reduce([d - SEAM_GAP, outer - np.abs(x), half - np.abs(z)])
     door, metal_d, rough_d = colour("door"), SCHEME["door"][2], SCHEME["door"][3]
     s = np.full(x.shape, seed + number, dtype=np.int64)
-    slat_key = np.floor((z + half) / pitch).astype(np.int64) * 2 + (x > 0)
+    slat_key = np.searchsorted(gaps, z).astype(np.int64) * 2 + right
     tone = 1.0 - 0.08 * _hash01(slat_key, s) - 0.05 * _hash01(np.floor(x / 3.0).astype(np.int64), slat_key, s + 3)
     albedo = np.tile(np.asarray(door) * 0.35, (CELL_H, ATLAS_W, 1))  # the dark well round and between the leaves
     albedo = np.where(leaf[..., None], np.asarray(door)[None, None, :] * tone[..., None], albedo)
     rough = np.where(leaf, rough_d + 0.06 * (_hash01(slat_key, s + 9) - 0.5), 0.7)
     metal = np.where(leaf, metal_d, 0.5)
     ao = np.where(leaf, 1.0, 0.45)
-    height = np.where(leaf, 0.0, -0.4) - 0.25 * _smooth(1.0 - (pitch - t) / 0.2) * leaf  # slats bevelled down to each gap
+    height = np.where(leaf, 0.0, -0.4) - 0.25 * _smooth(1.0 - (dq - 0.5 * GAP_W) / 0.2) * (leaf & body)  # slats bevelled down to each gap
     # Rivets along each slat's two edges, a metre apart; the leaves' edges worn to bare metal.
-    rivet = leaf & ~in_gap & (np.hypot(np.mod(x, 1.0) - 0.5, np.minimum(t - 0.25, pitch - gap_w - 0.25 - t)) < 0.09)
+    rivet = leaf & body & ~in_gap & (np.hypot(np.mod(x, 1.0) - 0.5, dq - 0.5 * GAP_W - 0.25) < 0.09)
     height = height + 0.05 * rivet
     worn = leaf & (edge < 0.25)
     albedo = np.where(worn[..., None], np.asarray(colour("machinery"))[None, None, :], albedo)
     metal = np.where(worn, 0.85, metal)
     rough = np.where(worn, 0.3, rough)
-    # A hazard band down the seam where the leaves meet.
-    hazard = leaf & (ax < inner + 0.8)
+    # A hazard band along the teeth where the leaves meet.
+    hazard = leaf & ~worn & (d < SEAM_GAP + 0.7)
     stripe = np.mod(x + z, 0.8) < 0.4
     albedo = np.where((hazard & stripe)[..., None], np.asarray(colour("hatch"))[None, None, :], albedo)
     albedo = np.where((hazard & ~stripe)[..., None], np.asarray([0.03, 0.03, 0.03])[None, None, :], albedo)
@@ -93,7 +127,7 @@ def _door_cell(number: int, seed: int) -> dict[str, np.ndarray]:
     albedo = np.where(in_gap[..., None], np.where(bar[..., None], 0.05, 0.02) * np.ones(3)[None, None, :], albedo)
     height = np.where(in_gap, np.where(bar, -0.3, -0.6), height)
     ao = np.where(in_gap, np.where(bar, 0.5, 0.3), ao)
-    glow = np.where(in_gap & ~bar, GLOW_GAP, 0.0) + np.where(~leaf & (ax < inner) & (np.abs(z) < half), GLOW_SEAM, 0.0)
+    glow = np.where(in_gap & ~bar, GLOW_GAP, 0.0) + np.where(inside & ~leaf, GLOW_SEAM, 0.0)
     # The number stencilled across both leaves, its top toward the bow (-z), over the grates and the seam too, so it reads from
     # a few hundred metres as the hull's painted one does.
     height_m, stroke, pale = NUMBER
@@ -261,24 +295,40 @@ LEAF_FACE = (-0.1, 0.4)  # a leaf's underside and face, about the doors' plane
 
 
 def door_leaf(number: int, side: float) -> Mesh:
-    """One leaf of door ``number`` (1 to 6 from the bow), ``side`` +1 (+x, starboard on the top arm) or -1, in the arm's frame as it
-    stands on top (+y), its origin on the doors' plane at the door's middle. Its face is its half of the door's cell (number,
+    """One toothed leaf of door ``number`` (1 to 6 from the bow), closed, ``side`` +1 (+x, starboard on the top arm) or -1, in the
+    arm's frame as it stands on top (+y), its origin on the doors' plane at the door's middle: from the sawtooth seam out to its
+    far edge. The game slides it ``LEAF_TRAVEL`` along +-x to open the door. Its face is its part of the door's cell (number,
     slats, hazard band); its edges and back a dark steel."""
-    _, outer, half = LEAF
-    # The two leaves meet at the door's middle, so a closed door is sealed; the seam's glow is painted on their inner edges.
-    lo = np.array([min(0.0, side * outer), LEAF_FACE[0], -half])
-    hi = np.array([max(0.0, side * outer), LEAF_FACE[1], half])
+    y0, y1 = LEAF_FACE
+    far = side * LEAF_OUTER
     edge = _flat_uv(STATION_SWATCHES.index("machinery"))
     cell = number - 1
-
-    def uv(axis: int, side_: int, p: np.ndarray) -> list[float]:
-        if axis == 1 and side_ == 1:  # the face
-            dx, dz = st.LAUNCH_DOOR_HALF
-            return [(p[0] + dx) * PX_PER_M / ATLAS_W, (cell * CELL_H + (p[2] + dz) * PX_PER_M) / ATLAS_H]
-        return edge(axis, side_, p)
-
+    dx, dz = st.LAUNCH_DOOR_HALF
     verts, faces, uvs = [], [], []
-    _box(lo, hi, uv, verts, faces, uvs)
+
+    def quad(pts: list[list[float]], normal: Sequence[float], face: bool = False) -> None:
+        p = np.asarray(pts, dtype=float)
+        n = np.asarray(normal, dtype=float)
+        if float(np.cross(p[1] - p[0], p[2] - p[0]) @ n) < 0.0:
+            p = p[::-1]
+        if face:
+            uv = [[(q[0] + dx) * PX_PER_M / ATLAS_W, (cell * CELL_H + (q[2] + dz) * PX_PER_M) / ATLAS_H] for q in p]
+        else:
+            uv = [edge(int(np.argmax(np.abs(n))), 0, q) for q in p]
+        base = len(verts)
+        verts.extend(p)
+        faces.extend([[base, base + 1, base + 2], [base, base + 2, base + 3]])
+        uvs.extend([[uv[0], uv[1], uv[2]], [uv[0], uv[2], uv[3]]])
+
+    # The two leaves share the seam's line, so a closed door is sealed; its lit edge is painted on their faces.
+    line = seam_line()
+    for (a, xa), (b, xb) in zip(line[:-1], line[1:], strict=True):
+        quad([[xa, y1, a], [xb, y1, b], [far, y1, b], [far, y1, a]], (0.0, 1.0, 0.0), face=True)
+        quad([[xa, y0, a], [xb, y0, b], [far, y0, b], [far, y0, a]], (0.0, -1.0, 0.0))
+        quad([[xa, y0, a], [xb, y0, b], [xb, y1, b], [xa, y1, a]], (-side * (b - a), 0.0, side * (xb - xa)))  # a tooth's edge
+    quad([[far, y0, -LEAF_HALF], [far, y0, LEAF_HALF], [far, y1, LEAF_HALF], [far, y1, -LEAF_HALF]], (side, 0.0, 0.0))
+    for (z, x), facing in ((line[0], -1.0), (line[-1], 1.0)):
+        quad([[x, y0, z], [far, y0, z], [far, y1, z], [x, y1, z]], (0.0, 0.0, facing))
     return _prop_mesh(verts, faces, uvs)
 
 
@@ -405,5 +455,5 @@ def groups(section: str, shift: np.ndarray) -> list[PropGroup]:
     return out
 
 
-__all__ = ["EMISSIVE_STRENGTH", "HANG_DEPTH_M", "MARGIN_M", "NEAR_M", "RELEASE_M", "clamp", "door_leaf", "gantry", "groups", "kinds",
-           "prop_maps"]
+__all__ = ["EMISSIVE_STRENGTH", "HANG_DEPTH_M", "LEAF_TRAVEL", "MARGIN_M", "NEAR_M", "RELEASE_M", "clamp", "door_leaf", "gantry", "groups",
+           "kinds", "prop_maps", "seam_line"]

@@ -1,73 +1,92 @@
 class_name StationDoorLeaves
 extends RefCounted
-## The Cobra bays' door leaves (M7-T05's props, two a door, one instance an arm) swung on their hinges for a launch (M7-T08). Each
-## leaf opens outward, away from the drum, about its hinge on the door's outer edge. Found from the drum's built props and the
-## manifest's hardpoints, so T21's reshaped arm moves nothing here.
+## The Cobra bays' door leaves (M7-T05's props, two a door, one instance an arm) slid apart for a launch (M7-T08, M8-T02): each
+## toothed leaf retracts across the arm under the deck, as far as its bay's hardpoint says. Found from the drum's props as the
+## manifest places them and the manifest's hardpoints, so a reshaped arm moves nothing here.
 
-# Each leaf by bay name: Array of {mm: MultiMesh, index, base: Transform3D, hinge: Vector3, axis: Vector3, sign: float}, all in its
-# section's frame.
+# Each leaf by bay name: Array of {mm: MultiMesh (null when its node is not drawn), index, base: Transform3D, slide: Vector3,
+# travel: float}, all in its section's frame.
 var _by_bay: Dictionary = {}
-var _angles: Dictionary = {}  # bay name -> degrees last set
+var _shares: Dictionary = {}  # bay name -> how far open it was last set (0 shut to 1 open)
 
 
 ## The leaves of every bay in `hardpoints`, found among `piece`'s props (the drum's `RenderPiece`, in the drum's frame).
 static func find(piece: RenderPiece, hardpoints: StationHardpoints) -> StationDoorLeaves:
 	var made := StationDoorLeaves.new()
-	if piece == null or hardpoints == null:
+	if piece == null or piece.sections == null or hardpoints == null:
 		return made
-	var nodes: Dictionary = {}
-	for node: MultiMeshInstance3D in piece.prop_nodes():
-		nodes[String(node.name)] = node
+	# The closed places come from the manifest, not the drawn instances: a headless run's rendering server keeps none.
+	var groups: Dictionary = {}
+	for group: Dictionary in piece.sections.prop_groups:
+		groups[String(group["kind"])] = group
 	for bay: Dictionary in hardpoints.cobra_bays:
 		var normal: Vector3 = (bay["normal"] as Vector3).normalized()
 		var list: Array[Dictionary] = []
 		for leaf: Dictionary in bay.get("leaves", []) as Array:
 			var kind: String = "door_leaf_%d_%s" % [int(bay["door_number"]), str(leaf["leaf"])]
-			var node := nodes.get("Props_%s" % kind.to_pascal_case()) as MultiMeshInstance3D
-			if node == null:
+			if not groups.has(kind) or not leaf.has("slide"):
 				continue
-			var origin: Vector3 = (node.get_parent() as Node3D).position  # the section's place in the drum's frame
-			var mm: MultiMesh = node.multimesh
-			for i: int in mm.instance_count:
-				var base: Transform3D = mm.get_instance_transform(i)
-				if (base.basis * Vector3.UP).normalized().dot(normal) < 0.99:
+			var group: Dictionary = groups[kind]
+			var section: Node = piece.section_node(String(group["section"]))
+			var node: MultiMeshInstance3D = null
+			if section != null:
+				node = section.get_node_or_null("Props_%s" % kind.to_pascal_case()) as MultiMeshInstance3D
+			var closed: Array[Transform3D] = group["transforms"]
+			for i: int in closed.size():
+				if (closed[i].basis * Vector3.UP).normalized().dot(normal) < 0.99:
 					continue  # another arm's leaf
-				var hinge: Vector3 = leaf["point"]
-				var axis: Vector3 = (leaf["axis"] as Vector3).normalized()
-				var inward: Vector3 = (bay["door"] as Vector3) - hinge
-				list.append({"mm": mm, "index": i, "base": base, "hinge": hinge - origin, "axis": axis,
-						"sign": 1.0 if axis.cross(inward).dot(normal) > 0.0 else -1.0})
+				list.append({"mm": node.multimesh if node != null else null, "index": i, "base": closed[i],
+						"slide": (leaf["slide"] as Vector3).normalized(), "travel": float(leaf.get("travel_m", 0.0))})
 		if not list.is_empty():
 			made._by_bay[String(bay["name"])] = list
 	return made
 
 
-## How many bays have leaves to swing.
+## How many bays have leaves to slide.
 func count() -> int:
 	return _by_bay.size()
 
 
-## Swings bay `bay_name`'s leaves `degrees` open (0 shut).
-func set_open(bay_name: String, degrees: float) -> void:
-	if float(_angles.get(bay_name, 0.0)) == degrees:
+## Slides bay `bay_name`'s leaves apart: `share` 0 shut, 1 fully back.
+func set_open(bay_name: String, share: float) -> void:
+	share = clampf(share, 0.0, 1.0)
+	if float(_shares.get(bay_name, 0.0)) == share:
 		return
-	_angles[bay_name] = degrees
-	for leaf: Dictionary in _by_bay.get(bay_name, []) as Array:
-		var hinge: Vector3 = leaf["hinge"]
-		var swing := Basis(leaf["axis"] as Vector3, deg_to_rad(degrees) * float(leaf["sign"]))
-		var about := Transform3D(swing, hinge - swing * hinge)
-		MultiMeshUpload.set_instance_transform(leaf["mm"] as MultiMesh, int(leaf["index"]), about * (leaf["base"] as Transform3D))
+	_shares[bay_name] = share
+	var list: Array = _by_bay.get(bay_name, [])
+	for which: int in list.size():
+		var leaf: Dictionary = list[which]
+		if leaf["mm"] != null:
+			MultiMeshUpload.set_instance_transform(leaf["mm"] as MultiMesh, int(leaf["index"]), leaf_transform(bay_name, which))
 
 
-## Degrees bay `bay_name`'s leaves were last set open.
-func open_deg(bay_name: String) -> float:
-	return float(_angles.get(bay_name, 0.0))
+## How far open bay `bay_name`'s leaves were last set (0 shut to 1 open).
+func open_share(bay_name: String) -> float:
+	return float(_shares.get(bay_name, 0.0))
 
 
-## Where a leaf's free edge is now (the first leaf of the bay), in its section's frame: for tests.
+## How many leaves bay `bay_name` has.
+func leaf_count(bay_name: String) -> int:
+	return (_by_bay.get(bay_name, []) as Array).size()
+
+
+## Metres leaf `which` of the bay has slid from its closed place.
+func slide_m(bay_name: String, which: int = 0) -> float:
+	var list: Array = _by_bay.get(bay_name, [])
+	return open_share(bay_name) * float((list[which] as Dictionary)["travel"]) if which < list.size() else 0.0
+
+
+## Where leaf `which` of the bay stands now, in its section's frame.
 func leaf_transform(bay_name: String, which: int = 0) -> Transform3D:
 	var list: Array = _by_bay.get(bay_name, [])
 	if which >= list.size():
 		return Transform3D.IDENTITY
 	var leaf: Dictionary = list[which]
-	return (leaf["mm"] as MultiMesh).get_instance_transform(int(leaf["index"]))
+	var base: Transform3D = leaf["base"]
+	return Transform3D(base.basis, base.origin + (leaf["slide"] as Vector3) * slide_m(bay_name, which))
+
+
+## Which way leaf `which` of the bay slides to open (unit, the drum's frame).
+func slide_direction(bay_name: String, which: int = 0) -> Vector3:
+	var list: Array = _by_bay.get(bay_name, [])
+	return (list[which] as Dictionary)["slide"] if which < list.size() else Vector3.ZERO

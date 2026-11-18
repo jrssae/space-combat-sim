@@ -3,8 +3,8 @@
 The hall frame (Godot, metres): +y up, toward the drum's axis (the spin's gravity pulls outward, so the floor is the arm's outer
 skin and the launch doors are in it); z along the arm, the arm's head (and the station's bow) toward -z; x across; the origin on
 the floor in the middle of the upper hall. Everything is read from the station's ``hardpoints.cobra_arm``
-(``station_hardpoints.cobra_arm_layout``, M7-T20): the six doors (about 20 by 14 m, one Starfury each, two leaves meeting along the
-arm) and their pitch; the upper hall over the doors (between the arm's creases) and the wider lower hall above it, toward the axis
+(``station_hardpoints.cobra_arm_layout``, M7-T20): the six doors (about 20 by 14 m, one Starfury each, two leaves meeting on a
+sawtooth seam along the arm and sliding apart across it, M8-T02) and their pitch; the upper hall over the doors (between the arm's creases) and the wider lower hall above it, toward the axis
 (without a ``lower_hall`` the hall is one level); where a fighter hangs and is released; where the second row is staged.
 
 What drives each choice (references in ``references/``, inspiration only):
@@ -60,7 +60,8 @@ if abs(0.5 * (float(_LOWER["x"][0]) + float(_LOWER["x"][1])) - ARM_X) > 1e-6:
 
 # --- the launch door, as T05 built it, seen from inside --------------------------------------------------------------------
 DOOR_X, DOOR_Z = (float(v) for v in ARM["door_half_m"])  # half across, half along
-LEAF_IN, LEAF_OUT, LEAF_HALF_Z = sp.LEAF  # the leaves' inner and outer edge across, half length along
+LEAF_OUT, LEAF_HALF_Z = sp.LEAF_OUTER, sp.LEAF_HALF  # the leaves' outer edge across, half length along
+SEAM_HALF = 0.15  # half the lit gap between the leaves, along their sawtooth seam (M8-T02)
 COAMING_M = 0.6  # the raised, striped lip round the door's well
 WELL_DEPTH = 1.2
 LEAF_TOP = -0.75
@@ -234,7 +235,8 @@ def _deck(m: Mapping[str, Material]) -> list[Shape]:
         mirror_x(block((LEAF_OUT, -WELL_DEPTH, -DOOR_Z), (DOOR_X, -WELL_DEPTH + 0.1, DOOR_Z), m["bay_light"])),
         block((-LEAF_OUT, -WELL_DEPTH, -DOOR_Z), (LEAF_OUT, -WELL_DEPTH + 0.1, -LEAF_HALF_Z), m["bay_light"]),
         block((-LEAF_OUT, -WELL_DEPTH, LEAF_HALF_Z), (LEAF_OUT, -WELL_DEPTH + 0.1, DOOR_Z), m["bay_light"]),
-        block((-0.15, -WELL_DEPTH, -LEAF_HALF_Z), (0.15, -WELL_DEPTH + 0.1, LEAF_HALF_Z), m["bay_light"]),
+        _plan([[(a, xa - SEAM_HALF), (b, xb - SEAM_HALF), (b, xb + SEAM_HALF), (a, xa + SEAM_HALF)]
+               for (a, xa), (b, xb) in zip(_seam()[:-1], _seam()[1:], strict=True)], -WELL_DEPTH, -WELL_DEPTH + 0.1, m["bay_light"]),
     ]))
     latches = _at_door(Mesh.concatenate(mirror_x(block((DOOR_X - 0.2, 0.25, z - 0.8), (DOOR_X + 0.5, 0.75, z + 0.8), m["trim"]))
                                         for z in (-4.0, 4.0)))
@@ -242,26 +244,44 @@ def _deck(m: Mapping[str, Material]) -> list[Shape]:
             Shape("well", well), Shape("door_glow", glow), Shape("latches", latches)]
 
 
+def _seam() -> list[tuple[float, float]]:
+    """The leaves' sawtooth seam (z, x) about the door's middle, as the hall sees it (the arm's x flipped)."""
+    return [(z, -x) for z, x in sp.seam_line()]
+
+
+def _plan(pieces: Sequence[Sequence[tuple[float, float]]], y0: float, y1: float, m: Material) -> Mesh:
+    """A flat slab from ``y0`` to ``y1`` whose plan is the convex ``pieces`` (z, x)."""
+    return Mesh.concatenate(st.flat_plate(piece, [piece], y1 - y0, np.array([[0.0, 1.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]]),
+                                          (0.0, 0.5 * (y0 + y1), 0.0), m) for piece in pieces)
+
+
 def _leaves(m: Mapping[str, Material]) -> list[Shape]:
-    # Seen from inside the leaves are bare structure: grey plating with the door's red-brown on the slats.
-    leaf = [block((LEAF_IN, LEAF_TOP - 0.35, -LEAF_HALF_Z), (LEAF_OUT, LEAF_TOP, LEAF_HALF_Z), m["deck"])]
+    # Seen from inside the leaves are bare structure: grey plating with the door's red-brown on the slats, toothed where they meet.
+    def plan(side: float) -> list[list[tuple[float, float]]]:
+        far, line = side * LEAF_OUT, _seam()
+        return [[(a, xa + side * SEAM_HALF), (b, xb + side * SEAM_HALF), (b, far), (a, far)]
+                for (a, xa), (b, xb) in zip(line[:-1], line[1:], strict=True)]
+
+    body = [_plan(plan(side), LEAF_TOP - 0.35, LEAF_TOP, m["deck"]) for side in (1.0, -1.0)]
     pitch = 2.0 * LEAF_HALF_Z / SLATS
-    leaf += [block((LEAF_IN + 0.3, LEAF_TOP, -LEAF_HALF_Z + k * pitch - 0.12), (LEAF_OUT - 0.6, LEAF_TOP + 0.12,
-                   -LEAF_HALF_Z + k * pitch + 0.12), m["door"]) for k in range(1, SLATS)]
-    hinge = pipe("z", (LEAF_OUT - 0.3, LEAF_TOP + 0.1), (-LEAF_HALF_Z + 0.4, LEAF_HALF_Z - 0.4), 0.3, m["machinery"])
-    # The rams that swing each leaf down: a cylinder and its rod from the well's side to the leaf.
-    rams = Mesh.concatenate(block((LEAF_OUT - 2.2, LEAF_TOP, z - 0.3), (LEAF_OUT - 0.5, LEAF_TOP + 0.45, z + 0.3), m["machinery"])
-                            for z in (-3.5, 3.5))
-    seam = block((-LEAF_IN, LEAF_TOP - 0.2, -LEAF_HALF_Z), (LEAF_IN, LEAF_TOP - 0.05, LEAF_HALF_Z), m["hatch"])
-    # A hazard band down the seam where the leaves meet, as the leaves' faces show outside.
+    clear = 0.5 * sp.TOOTH_DEPTH + 0.3  # the slats and rails stop short of the teeth
+    fittings = [block((clear, LEAF_TOP, -LEAF_HALF_Z + k * pitch - 0.12), (LEAF_OUT - 0.6, LEAF_TOP + 0.12,
+                      -LEAF_HALF_Z + k * pitch + 0.12), m["door"]) for k in range(1, SLATS)]
+    # What slides each leaf back under the deck: two rails across it and a drive where each runs into the well's side.
+    for z in (-3.5, 3.5):
+        fittings.append(block((clear + 0.2, LEAF_TOP, z - 0.2), (DOOR_X + 0.2, LEAF_TOP + 0.3, z + 0.2), m["machinery"]))
+        fittings.append(block((LEAF_OUT - 0.9, LEAF_TOP, z - 0.6), (DOOR_X + 0.4, LEAF_TOP + 0.55, z + 0.6), m["machinery"]))
+    line = np.asarray(_seam())
+
+    # A hazard band along the teeth where the leaves meet, as the leaves' faces show outside.
     def seam_band(p: np.ndarray, n: np.ndarray) -> np.ndarray:
-        return (np.abs(p[:, 0] - RACK_X) < LEAF_IN + 1.0).astype(float) * (n[:, 1] > 0.5)
+        return (np.abs(p[:, 0] - RACK_X - np.interp(p[:, 2], line[:, 0], line[:, 1])) < SEAM_HALF + 1.0).astype(float) * (n[:, 1] > 0.5)
 
     def seam_dark(p: np.ndarray, n: np.ndarray) -> np.ndarray:
         return seam_band(p, n) * stripes(1.2)(p, n)
 
-    return [Shape("leaves", _at_door(mirror_x(Mesh.concatenate(leaf + [hinge, rams]))), ((m["hatch"].albedo, seam_band), (DARK, seam_dark))),
-            Shape("seam", _at_door(seam), ((DARK, stripes(1.2)),))]
+    return [Shape("leaves", _at_door(Mesh.concatenate(body + [mirror_x(Mesh.concatenate(fittings))])),
+                  ((m["hatch"].albedo, seam_band), (DARK, seam_dark)))]
 
 
 def _wall_side(m: Mapping[str, Material]) -> dict[str, list[Mesh]]:

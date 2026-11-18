@@ -1139,6 +1139,16 @@ Everything automated is recorded in the acceptance table of `docs/milestones/m7-
       back: the wing comes round over and under you and re-forms without ramming you or each other.
 - [x] **The station:** `god on`, fly into Babylon 5's drum with the wing following: no wingman rams the station or another wingman.
 
+# Play-testing the sawtooth Cobra-bay doors (M8-T02)
+
+`play station_launch` (or `launch alpha 3` in any scenario with the station), then `launch wing all` for every arm. The look sheets
+the choice was made from: `references/screenshots/M8-T02 sawtooth doors/`.
+
+- [ ] **(H) The doors:** shut, each launch door shows a seam of three big flat-tipped teeth down its middle; for a launch its two
+      leaves slide apart sideways under the deck (nothing swings outward) and the fighter drops through; open, no leaf shows in the
+      well; they slide shut again with the teeth meshing. Along an arm the doors still open in a quick ripple.
+- [ ] **(H) The hangar behind the menu:** the doors in the hall's floor have the same toothed seam, with rails across each leaf.
+
 # Play-testing the raider strike carrier (M12-T19, now M10-T19: the early delivery, merged into M8 by M8-T07)
 
 Flown in M8's play-test; M10-T19 stays open until the maintainer has flown it.

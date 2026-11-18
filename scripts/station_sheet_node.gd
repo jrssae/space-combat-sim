@@ -85,7 +85,7 @@ const VIEW_SETS: Dictionary = {
 		{"name": "bay_lower_hatch", "at": Vector3(70.0, -190.0, 330.0), "aim": Vector3(0.0, -70.0, 468.0), "fov": 55.0},
 	],
 	# M7-T05 phase B: the cargo bay (zero-gravity) between the forks, and a strip at 50 m round the places Q2 asks to hold up close
-	# (a door swung open to show the launch hall, the doors closed, the command section's windows and compartments).
+	# (a door open to show the launch hall, the doors closed, the command section's windows and compartments).
 	"cargo": [
 		{"name": "cargo_bay_high", "at": Vector3(95.0, 470.0, 340.0), "aim": Vector3(0.0, 335.0, 455.0), "fov": 58.0},
 		{"name": "cargo_bay_slot", "at": Vector3(18.0, 372.0, 250.0), "aim": Vector3(0.0, 345.0, 460.0), "fov": 60.0, "sun": "aft"},
@@ -101,6 +101,17 @@ const VIEW_SETS: Dictionary = {
 		{"name": "strip_compartment_50m", "at": Vector3(45.0, 500.0, 735.0), "aim": Vector3(0.0, 452.0, 780.0), "fov": 62.0},
 		{"name": "strip_main_docking_bay_50m", "at": Vector3(30.0, 15.0, 400.0), "aim": Vector3(0.0, 0.0, 465.0), "fov": 62.0},
 		{"name": "strip_cargo_bay_50m", "at": Vector3(14.0, 350.0, 375.0), "aim": Vector3(0.0, 340.0, 460.0), "fov": 62.0},
+	],
+	# M8-T02: the sawtooth Cobra-bay doors from outside: door 3 shut, half open and open, then the row caught mid-ripple.
+	"t02": [
+		{"name": "door_closed", "at": Vector3(4.0, 259.0, 1110.0), "aim": Vector3(0.0, 236.5, 1101.5), "fov": 60.0, "up": Vector3(0.0, 0.0, -1.0),
+				"doors": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]},
+		{"name": "door_half", "at": Vector3(4.0, 259.0, 1110.0), "aim": Vector3(0.0, 236.5, 1101.5), "fov": 60.0, "up": Vector3(0.0, 0.0, -1.0),
+				"doors": [0.0, 0.0, 0.5, 0.0, 0.0, 0.0]},
+		{"name": "door_open", "at": Vector3(4.0, 259.0, 1110.0), "aim": Vector3(0.0, 236.5, 1101.5), "fov": 60.0, "up": Vector3(0.0, 0.0, -1.0),
+				"doors": [0.0, 0.0, 1.0, 0.0, 0.0, 0.0]},
+		{"name": "row_ripple", "at": Vector3(58.0, 298.0, 1113.0), "aim": Vector3(0.0, 236.5, 1113.0), "fov": 60.0,
+				"doors": [1.0, 0.8, 0.6, 0.4, 0.2, 0.0]},
 	],
 	# M7-T21: the Cobra arm's creased section and its door strip between the creases, a door open onto the halls, and the roofed
 	# cargo bay from outside and looking in down its throat.
@@ -262,6 +273,7 @@ var _views: Array = VIEWS
 var _index: int = -1
 var _frame: int = 0
 var _station: Station = null
+var _door_leaves: StationDoorLeaves = null
 var _origin_z: float = 4000.0
 var _timed_us: int = 0  # when the timed frames of this shot began
 var _markers: Array[Dictionary] = []  # each marker node and its size against the view's marker radius
@@ -389,7 +401,10 @@ func _next() -> void:
 		(marker["node"] as Node3D).scale = Vector3.ONE * float(marker["size"]) * float(view.get("markers", 1.0))
 	if view.has("lights"):  # M7-T18's A/B: the station's exterior lights off (today) or on
 		_run("station_lights %s" % view["lights"])
-	_open_door(int(view.get("open_door", 0)))
+	if view.has("doors"):
+		_set_doors(view["doors"] as Array)
+	else:
+		_open_door(int(view.get("open_door", 0)))
 	_set_airlock(String(view.get("airlock", "")))
 	if bool(view.get("live", false)):
 		_go_live(view)
@@ -524,27 +539,21 @@ func _capture(name: String, steady_fps: float) -> void:
 			_vram_bytes() / 1048576.0, _shown(_station), path])
 
 
-# Swings door `number`'s two leaves open on every arm (0 closes them all), each about its hinge on its outer edge, as a launch would.
+# Slides door `number`'s two leaves back on every arm (0 shuts them all), as a launch would.
 func _open_door(number: int) -> void:
-	const OPEN_RAD: float = 1.75
-	const HINGE_X: float = 9.6
-	for node: MultiMeshInstance3D in _station.drum_piece.prop_nodes():
-		var name: String = String(node.name)
-		if not name.begins_with("PropsDoorLeaf") and not name.begins_with("Props_DoorLeaf"):
-			continue
-		if not node.has_meta("closed"):
-			var closed: Array[Transform3D] = []
-			for k: int in node.multimesh.instance_count:
-				closed.append(node.multimesh.get_instance_transform(k))
-			node.set_meta("closed", closed)
-		var right: bool = name.ends_with("R")
-		var open: bool = name.trim_suffix("R").trim_suffix("L").ends_with(str(number))
-		var hinge := Vector3(HINGE_X if right else -HINGE_X, 0.0, 0.0)
-		var turn := Basis(Vector3.BACK, (-OPEN_RAD if right else OPEN_RAD) if open else 0.0)
-		var swing := Transform3D(turn, hinge - turn * hinge)
-		var closed_list: Array = node.get_meta("closed")
-		for k: int in node.multimesh.instance_count:
-			node.multimesh.set_instance_transform(k, (closed_list[k] as Transform3D) * swing)
+	var shares: Array = []
+	for n: int in range(1, 7):
+		shares.append(1.0 if n == number else 0.0)
+	_set_doors(shares)
+
+
+# Each door of every arm slid open by its share in `shares` (door 1 first; 0 shut to 1 open).
+func _set_doors(shares: Array) -> void:
+	if _door_leaves == null:
+		_door_leaves = StationDoorLeaves.find(_station.drum_piece, _station.hardpoints)
+	for bay: Dictionary in _station.hardpoints.cobra_bays:
+		var number: int = int(bay["door_number"])
+		_door_leaves.set_open(String(bay["name"]), smoothstep(0.0, 1.0, float(shares[number - 1])) if number <= shares.size() else 0.0)
 
 
 # Every hardpoint as a small unlit ball on the piece that carries it, coloured by kind (M7-T05's marker sheet).

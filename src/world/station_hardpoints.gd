@@ -18,7 +18,8 @@ var spin_rad_s: float = 0.0
 ## Each launch door (`cobra_bay_alpha_1` to `cobra_bay_zeta_6`: six an arm, one wing an arm), one Starfury each: `name`, `wing`,
 ## `arm`, `door_number`, `body`, and as Vector3 `door`, `normal`, `across`, `rail_start` (where the fighter hangs), `rail_end` (the
 ## door), `release`, `release_direction`, `surface_velocity`, `forward`, `up`, `staging` (where the second row's fighter waits) and
-## `staging_path` (Array[Vector3] onto the rack); `door_half_m` a Vector2; `leaves` (each `leaf`, `point`, `axis`: its hinge).
+## `staging_path` (Array[Vector3] onto the rack); `door_half_m` a Vector2; `leaves` (each `leaf`, `slide` the way it
+## retracts, `travel_m` how far, `reach_m` how far its teeth reach past the door's middle when shut; M8-T02).
 var cobra_bays: Array[Dictionary] = []
 ## The doors' layout on one arm and each arm's wing (`cobra_arm`, as the manifest writes it), for the hangar's refit (T20).
 var cobra_arm: Dictionary = {}

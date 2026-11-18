@@ -1,7 +1,7 @@
 class_name LaunchDirector
 extends Node
 ## Cobra-bay launches in the game (M7-T08, D76, AC7): the node side of `LaunchSequence`. Each tick it moves the launches on with
-## the drum's angle, carries every fighter still on its rack or rail with the drum, swings the doors' leaves, hands each fighter
+## the drum's angle, carries every fighter still on its rack or rail with the drum, slides the doors' leaves, hands each fighter
 ## over at its release point and, for the player, plays the launch camera's shots and holds the controls.
 ##
 ## - **Carried with the drum.** A fighter on the rack or the rail is put each tick where the drum carries it, with the drum's
@@ -341,6 +341,11 @@ func describe() -> String:
 	return " | ".join(lines) if not lines.is_empty() else "no launch"
 
 
+## The station's door leaves as the launches slide them; null until a launch has run.
+func door_leaves() -> StationDoorLeaves:
+	return _leaves
+
+
 func _physics_process(delta: float) -> void:
 	var s: Station = station()
 	if s == null:
@@ -376,7 +381,7 @@ func _step(launch: Dictionary, s: Station, delta: float, angle: float, rate: flo
 			_carry(launch, String(f["id"]), s)
 	if _leaves != null:
 		for i: int in seq.bays.size():
-			_leaves.set_open(String(seq.bays[i]["name"]), seq.door_angle_deg(i))
+			_leaves.set_open(String(seq.bays[i]["name"]), seq.door_share(i))
 	if is_same(launch, _launch_shot):
 		_direct_camera(launch)
 	if seq.finished():

@@ -53,7 +53,7 @@ from ..parts import station_props as sp
 from ..styles.earth_alliance_station import EARTH_ALLIANCE_STATION as STYLE
 
 ASSET_ID = "babylon5_station"
-GENERATOR_VERSION = 5
+GENERATOR_VERSION = 6
 LENGTH_M = 8000.0
 # The asset's origin in the station frame: on the drum's axis, half way along. The drum's own frame sits on the axis at its middle.
 ORIGIN = np.array([0.0, 0.0, 0.5 * LENGTH_M])

@@ -289,7 +289,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | Task | Track | Title | Depends on | Agent | Why | Status |
 |---|---|---|---|---|---|---|
 | T01 | A | Tutorial script: beats, lines, checks and pacing (discussion with the maintainer) | Q1 to Q4 | controller | The maintainer's design call, held as a discussion, not delegated | done |
-| T02 | A | Sawtooth Cobra-bay doors (roadmap M7-4): toothed leaves that slide apart, the launch's door ripple and timing kept | - | Fable | Generator parts and an animated door the cinematic opens on | in progress |
+| T02 | A | Sawtooth Cobra-bay doors (roadmap M7-4): toothed leaves that slide apart, the launch's door ripple and timing kept | - | Fable | Generator parts and an animated door the cinematic opens on | done |
 | T03 | A | The squadron-launch cinematic (D81) | T02, T01 | Fable | Scripted launches, camera shots and a skip that lands in the same state | not started |
 | T04 | A | Control checks: `ControlCheck`, the runner and the binding hints (D80) | T01 | Fable | Pass conditions on measured state for every control, pad and keyboard | done |
 | T05 | A | The tutorial mission: launch, checks, tour, raid, defense, debrief (D79) | T03, T04 | Fable | The mission script, dialog and pacing on M5's and M7's seams | not started |
@@ -330,6 +330,25 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   for the maintainer before the generator commits (the standing rule: the maintainer sees a sheet first).
 - **Done when:** the doors slide apart in a launch (headless test on their state through the sequence); the maintainer has seen
   the sheet (H).
+- **Done (2026-11-18):** the maintainer chose option B from the look sheet (`references/screenshots/M8-T02 sawtooth doors/`):
+  coarse trapezoid teeth as on the main docking bay's inner doors (three a leaf, 4.4 m pitch, 2.2 m deep, the seam along the arm),
+  the leaves sliding apart across the arm and fully back under the deck (11.3 m each; an open door shows no leaf, 2.3 m each side
+  of a Starfury), and the hangar refitted to match. Built: `station_props.seam_line` and the toothed `door_leaf` with its repainted
+  face (slats, lit edge and hazard band along the teeth); each bay's `leaves` hardpoints now `slide`, `travel_m`, `reach_m` (were a
+  hinge point and axis); `StationDoorLeaves` slides the prop instances from the manifest's places (so it works headless);
+  `LaunchSequence.door_share` and a `leaf_clearance` for sliding leaves; the profile's `door_open_deg` removed (the travel is the
+  station's geometry, a departure from the plan's "travel in the profile", to keep one source), the door's 2 s, 3 s and the
+  0.25 to 0.5 s ripple unchanged; `b5_interior`'s leaves on the same seam with a lit gap, slide rails and drives in place of the
+  hinge pipes and rams; the sheet tool's `t02` views. The leaves have no collision pieces (they never had). Generator versions:
+  station 6, interior 2. Tests from a staged copy with both assets rebuilt: Python 125 passed (`test_station_sealed`,
+  `test_coplanar_overlaps`, `test_b5_interior`, `test_station_hardpoints`, `test_station_sections`, `test_babylon5_station`,
+  `test_station_fidelity` against the STL); GUT unit 44 passed (`test_launch_sequence` 25, `test_station_hardpoints` 5,
+  `test_launch_shot_clearance` 2, `test_launch_cut` 7, `test_hangar_camera` 5) and integration 44 passed (`test_launch_bay` 16
+  with the new door test: shut, sliding, open for the ejection, sliding, shut, and the ripple; `test_station_sections` 6,
+  `test_bay_lights` 1, `test_hangar_backdrop` 6, `test_station_in_game` 10, `test_interior_ships` 3, `test_station_sheltered` 2);
+  923 scripts compile; a live `station_launch` and `launch wing all` run without errors. Final renders:
+  `references/screenshots/M8-T02 sawtooth doors/final/`. Open (H): the doors in a launch and the hangar's floor doors
+  (`docs/playtest.md`, "Play-testing the sawtooth Cobra-bay doors").
 
 ### M8-T03 The squadron-launch cinematic
 
