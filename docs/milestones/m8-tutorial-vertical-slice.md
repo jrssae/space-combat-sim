@@ -295,7 +295,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T03 | A | The squadron-launch cinematic (D81) | T02, T01 | Opus | Scripted launches, camera shots and a skip that lands in the same state | not started |
 | T04 | A | Control checks: `ControlCheck`, the runner and the binding hints (D80) | T01 | Fable | Pass conditions on measured state for every control, pad and keyboard | done |
 | T05 | A | The tutorial mission: launch, checks, tour, raid, defense, debrief (D79) | T03, T04 | Fable | The mission script, dialog and pacing on M5's and M7's seams | not started |
-| T06 | B | Dock in the main docking bay to be repaired and relaunched, for the player and the AI wingmen (D82, Q7) | - | Fable | The `dock` interaction, the lane for fighters, repair and a Cobra-bay relaunch; wing orders | done |
+| T06 | B | Dock in the main docking bay to be repaired and relaunched, for the player and the AI wingmen (D82, Q7) | - | Fable | The `dock` interaction, the lane for fighters, repair and a Cobra-bay relaunch; wing orders | in progress |
 | T07 | C | Bring M10-T19's raider strike carrier into `m8`: merge `origin/m10`, one collision builder, its tests green (Q5) | - | Opus | Two branches built a collision builder; docs, `native/src/lib.rs` and `info.md` conflict | done |
 | T08 | C | The civilian escort's raids come with the strike carrier (D83, Q6) | T07 | Fable | Mission data and pacing on `CarrierJumps`; the escort's tests kept green | in progress |
 | T09 | C | Raider Battle Wagon (moved from M10-T20): from images, with weapons (M10 Q31) and four launch tubes; the escort's last wave comes with it (Q8) | T08, the maintainer on its weapons | Fable | No STL; a new hull with weapons and tube launches | not started |
@@ -461,6 +461,9 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   key and the menu, Cobra-bay launches give a home, the roster's DOCKING and DOCKED), the new `test_scenario_homes` (6),
   `test_wing_away` (7), `test_dock_keep_out` (7), `test_hud_layout`, `test_comms_menu`, `test_scenario_loader`, `test_wing`,
   `test_wing_gaps`, `test_wing_orders`, `test_launch_bay`, `test_station_wing_follow`, `test_nav_targets`, `test_ship_pool`.
+- **Follow-up (maintainer, 2026-11-18, queued until after the T3 Code restart):** the AI wings whose home is Babylon 5 (Beta, Delta,
+  Zeta and the rest) self-dock for repair too, below the same 25 % hull, with their home in range; their formations keep the
+  docked members' slots as the player's wing does.
 
 ### M8-T07 Bring M10-T19's raider strike carrier into `m8`
 
