@@ -94,6 +94,29 @@ The strike carrier as M12-T19 built it (`docs/architecture.md` §19.18 on `m12`)
 fighters docked or beside by data. The escort's first two waves set `docked` (Q6); its last wave comes with the Battle Wagon (Q8). The Battle Wagon follows M10's Q31 rules and its four
 tubes launch Delta-Vs; when M10's framework lands (sections, turrets, beams), both hulls move onto it like every other.
 
+### D84 Approach cues and a speed-scaled gate reach
+
+Today a navigation target that offers an interaction (the jumpgate, the docking and cargo bays) shows only its distance and the
+`CLOSE TO 2.0 km` status line, so nothing tells the player when to brake, slow down or turn before they overshoot (maintainer,
+2026-11-18).
+
+- **The cue.** A pure `ApproachCue` reads the ship's position and velocity relative to the selected target (against the target's
+  own velocity: the gate's and the bays' rest velocity), the target's reach and the ship's braking (the retros' deceleration at its
+  mass, as the brake uses it) and answers: the closing speed, the time to reach, the stopping distance, the closest approach on the
+  present course, and one state: **ON COURSE**, **BRAKE** (the stopping distance has reached the distance left to the reach, with a
+  margin), **OVERSHOOT** (it can no longer stop inside the reach) or **ADJUST COURSE** (the closest approach misses the reach or the
+  bay's lane). The HUD draws it on the navigation target's box and the status line (a closing-speed readout and a bar with the brake
+  point marked), in both views, from the live bindings' names as the prompt does. HUD-only GDScript: one target a frame.
+- **The gate's reach follows the ship's speed.** `GateJumpRequest.range_m` takes the closing speed: the base 2 km, plus the distance
+  flown during the 2 s hold, plus what the autopilot needs to slow from that speed to its run-in, capped by data
+  (`data/jump/gate_request.json`). A ship closing fast is offered the jump farther out, so the request still lands in time.
+- **The autopilot and the cinematic take the ship as it comes.** `GateAutopilot` starts from the ship's velocity at the hold: it
+  brakes to the 250 m/s run-in on the way to the line-up point, or, when the ship is already lined up with the mouth, carries its
+  speed down to the run-in without the detour; the `CinematicShot` is timed from the predicted arrival at the mouth instead of fixed
+  offsets, so the shot frames the run-in at any approach speed. A ship that passes the gate while the hold runs is turned round as
+  M7-T28 already does.
+- **The bays** keep their 2 km reach; T06's docking autopilot slows the ship from whatever speed it has when docking starts.
+
 ## Acceptance criteria
 
 | # | Criterion | Kind | Done |
@@ -110,11 +133,12 @@ tubes launch Delta-Vs; when M10's framework lands (sections, turrets, beams), bo
 | AC10 | Release build: a script builds the Linux x86_64 export from the pinned templates; the exported game opens, runs the tutorial's opening and quits cleanly in a smoke test | A | |
 | AC11 | Cost: on the maintainer's GPU, the squadron launch, the tour and the raid: `renderer = forward_plus`, FPS, draw calls and VRAM recorded; the tick inside the 60 Hz budget during the raid | A | |
 | AC12 | Docs and the suite: `docs/architecture.md` §21 as built, a `docs/playtest.md` M8 section, the roadmap row, `info.md`; `scripts/run_tests.sh` green once, at the end | A | |
-| AC13 | (H) The maintainer plays it: the tutorial start to finish, the squadron launch, docking and relaunch, the escort with the strike carrier, the Battle Wagon, the audio, the release build | H | |
+| AC13 | (H) The maintainer plays it: the tutorial start to finish, the squadron launch, the approach cues and a fast gate jump, docking and relaunch, the escort with the strike carrier, the Battle Wagon, the audio, the release build | H | |
+| AC14 | Approach cues and the gate's reach (D84): `ApproachCue`'s states are unit-tested over approach speeds, offsets and brake strengths; the cue shows on the gate and both bays in both views; the gate offers the jump farther out at speed, and headless jumps requested at 200 m/s to several km/s all run the line-up, the run-in and the cinematic and arrive through the mouth (tests on the end state and the shot's timing) | A | |
 
 ## Working rules for M8
 
-- **Tracks.** A (the tutorial: T01 to T05), B (docking: T06), C (the raider capitals: T07 to T09), D (carried clean-ups: T10 to
+- **Tracks.** A (the tutorial: T01 to T05), B (docking and approach: T06, T18), C (the raider capitals: T07 to T09), D (carried clean-ups: T10 to
   T14), E (release and close-out: T15 to T17). Inside a track the order holds. If work goes one task at a time, the order is the
   table's.
 - **The tutorial's script is the maintainer's call.** T01 is held with the maintainer by the controller; no agent writes beats
@@ -150,6 +174,7 @@ tubes launch Delta-Vs; when M10's framework lands (sections, turrets, beams), bo
 | T14 | D | The bench writes to `user://` in an exported build (roadmap L15) | - | Sonnet | A path fix with a test | not started |
 | T15 | E | Linux x86_64 release build from the pinned export templates (Q9) | T14 | Sonnet | Templates by SHA-256, the native library and assets packed, an export smoke test | not started |
 | T16 | E | Performance and the GPU check: the squadron launch, the tour and the raid | T05, T09 | Opus | Measurement on the maintainer's machine; the budget call | not started |
+| T18 | B | Approach cues for navigation targets with an interaction (brake, overshoot, adjust course), and the jumpgate's reach, autopilot and cinematic scaled to the player's speed (D84; maintainer, 2026-11-18; numbered last because it was added after the others had numbers) | - (shared with T06) | Opus | Relative-motion maths on the HUD, and a gate run-in that starts from any speed with its shot timed to match | not started |
 | T17 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M8-T01 Tutorial script (discussion with the maintainer)
@@ -267,6 +292,17 @@ tubes launch Delta-Vs; when M10's framework lands (sections, turrets, beams), bo
 
 - **Goal:** AC11.
 - **Done when:** AC11's numbers recorded in this file and `docs/architecture.md` §21.
+
+### M8-T18 Approach cues and a speed-scaled gate reach
+
+- **Goal:** AC14 (D84).
+- **Files:** `src/hud/approach_cue.gd` (pure, test first) and its drawing on the navigation target's box and the status line,
+  `GateJumpRequest.range_m(closing_speed)` and `data/jump/gate_request.json`, `GateAutopilot` starting from the ship's velocity,
+  the gate's `CinematicShot` timed from the predicted arrival, `InteractionHost.status_text`, the `interact` and `gate` providers
+  (the cue's state and the live reach), `info.md`, unit tests for the cue and the reach, integration tests of jumps requested at
+  several speeds; `docs/playtest.md` gets the (H) checks (the cue reads in time to brake; a fast jump looks right).
+- **Notes:** docking's own approach (T06) uses the same cue; if T06 has landed first, this task adds the cue to the bays.
+- **Done when:** AC14.
 
 ### M8-T17 Integration, full suite, docs and acceptance
 
