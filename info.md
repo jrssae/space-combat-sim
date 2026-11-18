@@ -167,6 +167,7 @@ Arguments in `<angle brackets>` are required, `[square brackets]` optional, `a|b
 | Command | Arguments | Does | Where |
 |---|---|---|---|
 | `mission` | `[status\|skip\|goto\|objectives\|journal] [step]` | Show the running mission, fast-forward its step (`skip`), skip to a step (`goto <step>`), list its objectives or the world changes so far | mission |
+| `checks` | `[status\|list\|pass\|start\|stop] [id]` | The tutorial's control checks (M8-T04, `data/checks/controls.json`): `status` shows the open check, its hint with the live pad and keyboard bindings, what it has measured and what comes next; `list` every check with its hint; `pass [id]` passes the open check (for scripts; with an id only if that one is open); `start <id>` opens one check outside the mission's script, to try it; `stop` drops the open ones. A check never fails: its hint is said again after its delay, then the demo is asked for, then it waits | mission |
 
 ## State providers
 
@@ -242,4 +243,5 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `ai` | The AI ships and their behaviours, a count per behaviour and the AI's cost per tick | AI ships |
 | `mission` | The running mission: id, title, state, result, step, objectives, time, trigger counts, waypoint, controls locked, jump points, whether holding X skips the opening now (`opening_skip`) and the HUD's hull bars (`hull_bars`: name and hull %, M7-T54) | mission |
 | `dialog` | The comms panel: whether a line shows, its id, speaker callsign and text, lines queued, time left and lines shown | mission |
+| `checks` | The control checks (M8-T04): whether one is open (`active`), its id (`current`), the HUD's hint with the live bindings (`hint`), what it has measured (`measured`) and how far it is 0..1 (`progress`), what it waits for (`phase`: hint, repeat, demo, waiting or idle), delays run out (`misses`) and seconds since the last hint or demo (`waited_s`), the checks still to come (`remaining`) and passed (`passed`), hints said and demos asked for (`hints`, `demos`) and how many checks the data file holds (`count`) | mission |
 | `route` | The instructor's route: waypoint, count, lag, state and demo | route |

@@ -55,6 +55,8 @@ var pool: ShipPool = null
 var wings: Array[Wing] = []
 ## The latest acknowledgement or refusal line ("" before the first order).
 var last_ack: String = ""
+## Orders the player's wing took so far (a refused one is not counted): M8's control checks read it.
+var orders_given: int = 0
 
 var _ack_age_s: float = INF
 # Scenario `wings[]` declarations by lower-case name.
@@ -300,6 +302,8 @@ func give_order(new_order: AiContext.Order, wing: Wing = null) -> Dictionary:
 			return {"ok": false, "line": last_ack}
 		target_name = target.display_name
 	wing.order = new_order
+	if wing == player_wing():
+		orders_given += 1
 	refresh(wing)
 	_post(wing.ack_for(new_order, target_name))
 	return {"ok": true, "line": last_ack}

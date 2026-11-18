@@ -218,7 +218,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 |---|---|---|---|
 | AC1 | Tutorial script: T01's beats and checks written into D79 (the lines go into the dialog file in T05), approved by the maintainer | A | **Met** (T01, 2026-11-18) |
 | AC2 | Squadron launch: the cinematic plays from the hangar, the squadron launches and forms up, skipping lands in the same state (test on the end state), the player's launch hands over as M7-T08 does | A | |
-| AC3 | Control checks: each check passes on its actions and state in headless tests driven by injected commands, for pad and keyboard bindings; a rebind changes the hint; a missed check repeats and demonstrates, never fails | A | |
+| AC3 | Control checks: each check passes on its actions and state in headless tests driven by injected commands, for pad and keyboard bindings; a rebind changes the hint; a missed check repeats and demonstrates, never fails | A | **Met** (T04, 2026-11-18): the demo is asked for on `MissionApi.demo_requested`; the instructor flying it is T05's |
 | AC4 | Tutorial mission: starts from the menu and runs to the debrief in a headless test driven by console commands; the tour visits its points; the raid comes through the jumpgate vortex and the station's allies and grid fight it; losing the player ends in the debrief | A | |
 | AC5 | Docking: the player docks through the main docking bay, is repaired (hull, guns, missiles) and relaunched from a Cobra bay (headless test on the state before and after); a wingman docks on order and by threshold and rejoins its wing | A | |
 | AC6 | Strike carrier: M10-T19 merged into `m8` with its tests green next to M7's; one collision builder serves the station and the carrier | A | |
@@ -259,7 +259,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T01 | A | Tutorial script: beats, lines, checks and pacing (discussion with the maintainer) | Q1 to Q4 | controller | The maintainer's design call, held as a discussion, not delegated | done |
 | T02 | A | Sawtooth Cobra-bay doors (roadmap M7-4): toothed leaves that slide apart, the launch's door ripple and timing kept | - | Fable | Generator parts and an animated door the cinematic opens on | in progress |
 | T03 | A | The squadron-launch cinematic (D81) | T02, T01 | Fable | Scripted launches, camera shots and a skip that lands in the same state | not started |
-| T04 | A | Control checks: `ControlCheck`, the runner and the binding hints (D80) | T01 | Fable | Pass conditions on measured state for every control, pad and keyboard | in progress |
+| T04 | A | Control checks: `ControlCheck`, the runner and the binding hints (D80) | T01 | Fable | Pass conditions on measured state for every control, pad and keyboard | done |
 | T05 | A | The tutorial mission: launch, checks, tour, raid, defense, debrief (D79) | T03, T04 | Fable | The mission script, dialog and pacing on M5's and M7's seams | not started |
 | T06 | B | Dock in the main docking bay to be repaired and relaunched, for the player and the AI wingmen (D82, Q7) | - | Fable | The `dock` interaction, the lane for fighters, repair and a Cobra-bay relaunch; wing orders | not started |
 | T07 | C | Bring M10-T19's raider strike carrier into `m8`: merge `origin/m10`, one collision builder, its tests green (Q5) | - | Opus | Two branches built a collision builder; docs, `native/src/lib.rs` and `info.md` conflict | done |
@@ -310,6 +310,33 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 - **Files:** `src/mission/control_check.gd` and `control_check_runner.gd` (pure, test first), the `MissionApi` entry the mission
   awaits, the hint widget reading the live bindings, unit tests per check and for a rebind.
 - **Done when:** AC3.
+- **Done (2026-11-18):** `ControlCheck` (pure): four kinds of pass condition on measured state, `velocity` (speed gained along an
+  axis of the ship's own frame on ticks its events were held), `rotation` (degrees turned about pitch, yaw or roll, either way),
+  `brake` (held `hold_s` and slowed by `min_drop_mps` or to `stop_mps`) and `state` (conditions `equals`, `at_least`, `set`,
+  `changed`, `increased` on `ControlCheckSample`'s fields: assist, camera, look angle, lights, tracking, target, fire mode,
+  interactions run, the wing's order and order count, target menus opened), after its command events were seen. Events come
+  from the tick's `PilotCommand` (`ControlCheckSample.events_of`: `PlayerActions` plus the flight axes from 0.1 and X's and the
+  target button's holds), never `Input`. `ControlCheckRunner` (pure): the hint as a check opens, again after `repeat_s` (20 s),
+  the demo after a second miss (the hint a third time for a check without one), then it waits without limit; requests come back
+  from `take_requests`. `ControlCheckBook` reads `data/checks/controls.json`: 27 checks covering D79's beats 4 to 9, each with a
+  `hint_line` id `check_<id>` for T05's dialog file; demos on roll (`roll`), the four strafes (`strafe_box`) and the brake
+  (`all_stop`). `MissionApi`: `await m.check(id)` and `await m.run_checks([ids])`; a hint is said as its dialog line when the
+  book has it, a demo is announced on `demo_requested(check_id, demo)`, a skipped step passes its checks at once, and a check
+  none of whose actions is bound is left out with a journal note so it cannot hold the mission up. `ControlCheckProbe` measures
+  the real ship for `MissionRunner` while a check is open; `ControlHint` (HUD layer, under the status line) shows the label, the
+  buttons and a progress bar; `ControlHintText` builds the buttons from the live `InputMap` in the prompt line's naming
+  (`LT + RT / W`, `HOLD X / SHIFT / MOUSE 4`, `R STICK / MOUSE`), `BindingNames` now naming triggers and sticks too. Console:
+  provider and command `checks [status|list|pass|start|stop] [id]` (`info.md`). `WingDirector.orders_given` counts the orders
+  the player's wing took. Tests (staged copy): 57 tests in 7 new GUT files (`test_control_check` 21, `_runner` 6, `_book` 5, `_devices` 5: every check passed through
+  the real `GodotInputSource` and `InputAdapter` on the pad's bindings and on the keyboard's and mouse's, `test_control_hint_text`
+  8 with a rebind, `test_mission_checks` 7, `test_control_checks_live` 5 in the main scene) and one more in `test_wing_orders`
+  (10), 0 failing; `test_keyboard_parity` 4, `test_console_command_list` 7, `test_quick_suite` 3, the mission, HUD and input
+  neighbours (14 files) green; compile check 923 scripts clean.
+  **Left for T05:** the instructor flying a requested demo (the request and its `Manoeuvres` name are there; no behaviour flies
+  a move off a route yet), the dialog lines `check_<id>`, and the pause menu's skip of the training block (`mission goto`).
+  **For the maintainer:** the default layout binds nothing to `target_ahead` and only the mouse wheel to `target_prev`, so the
+  mission leaves `target_ahead` out and a pilot with only a pad cannot pass `target_prev` (its hint reads `MOUSE WHEEL UP`);
+  bind them in the default layout or drop them from the script. The hint's look and place on the HUD are (H): `checks start roll` in any mission shows it.
 
 ### M8-T05 The tutorial mission
 

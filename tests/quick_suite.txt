@@ -136,6 +136,10 @@ res://tests/unit/test_scenario_frame.gd
 res://tests/integration/test_scenario_anchor.gd
 res://tests/integration/test_true_scale_start.gd
 res://tests/unit/test_mission_sequencer.gd
+res://tests/unit/test_control_check.gd
+res://tests/unit/test_control_check_runner.gd
+res://tests/unit/test_control_hint_text.gd
+res://tests/unit/test_mission_checks.gd
 res://tests/unit/test_triggers.gd
 res://tests/unit/test_objective_book.gd
 res://tests/unit/test_dialog_queue.gd

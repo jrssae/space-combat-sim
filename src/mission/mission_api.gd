@@ -11,6 +11,9 @@ extends RefCounted
 ##     await m.until_objective(id)     until the objective is done or failed
 ##     await m.player_did(action)      an `input_performed` trigger (`PlayerActions.NAMES`), for M8's tutorial
 ##     await m.cinematic(shot_id)      a camera shot from the scenario's `cinematics` (D55): until it ends or the player skips it
+##     await m.check(check_id)         one control check (M8 D80): the instructor's hint, repeated and then demonstrated while the
+##                                     player misses it; it never fails
+##     await m.run_checks([ids])       several, one after the other
 ##     m.spawn(spawn)                  a ship from a pool, by the scenario's spawn rules; `arrival: "jump"` with `via: "carrier"`
 ##                                     brings it out of a carrier's jump point (M6-T23: only a jump-capable ship opens its own),
 ##                                     `arrival: "gate"` (or `via: "gate"`) out of the jumpgate's blue vortex (M6-T14; null now, in
@@ -38,6 +41,11 @@ extends RefCounted
 ## resolves when the shot ends, when the player skips it (A or Start), and at once in a skipped step. Without a stage a shot lasts
 ## its length of sim time. A mission that ends during a shot cuts it.
 ##
+## Control checks (M8 D80): `check_book` holds the checks (`data/checks/controls.json`) and `checks` runs them on the sample the
+## runner measures each tick (`check_sample`; tests set it). A hint is said as its dialog line when the book has it, without
+## holding the check up; a demo is announced on `demo_requested` for whoever flies the instructor. In a skipped step every check
+## passes at once. A check none of whose actions is bound is left out with a note, so it cannot hold the mission up.
+##
 ## Skipping (D51): in a skipped step every wait returns at once; `until` first makes its trigger true (`Trigger.make_true`),
 ## `until_objective` completes the objective through its forced success trigger, and the objectives are evaluated right after,
 ## so the world ends where the step would have left it. World changes still run. Nothing runs once the mission has ended: a
@@ -52,6 +60,8 @@ extends RefCounted
 
 ## The mission is over: `result` holds how.
 signal ended(result: Dictionary)
+## The player missed check `check_id` twice: the instructor should fly `demo` (a `Manoeuvres` name).
+signal demo_requested(check_id: StringName, demo: StringName)
 
 ## Slack when comparing summed tick times with a wait's end (120 ticks of 1/60 s must reach 2 s).
 const TIME_EPS_S: float = 1e-6
@@ -92,6 +102,11 @@ var placeholders: Dictionary = {}  # String -> String
 var hull_bars: PackedStringArray = PackedStringArray()
 ## The step the opening ends at (`MissionScript.opening_until`), or &"" for none.
 var opening_until: StringName = &""
+## The control checks a script may run, or null (the runner loads them), and the runner of the open ones.
+var check_book: ControlCheckBook = null
+var checks: ControlCheckRunner = ControlCheckRunner.new()
+## This tick's measured state for the open check: the runner fills it before `tick` while `checks.is_active()`.
+var check_sample: ControlCheckSample = null
 
 var _seq: MissionSequencer = MissionSequencer.new()
 # The shot `cinematic` is waiting on, or null.
@@ -223,6 +238,37 @@ func cinematic(shot_id: StringName) -> void:
 		await _seq.wake
 	stage.stop_cinematic(shot)  # a skip cuts it
 	_shot = null
+	while _seq.stopped:
+		await _seq.wake
+
+
+## Runs control check `check_id` and waits until the player has passed it.
+func check(check_id: StringName) -> void:
+	await run_checks([check_id])
+
+
+## Runs the control checks `ids` in order and waits until the last has passed. In a skipped step they pass at once.
+func run_checks(ids: Array) -> void:
+	if has_ended():
+		return
+	var list: Array[ControlCheck] = []
+	for raw: Variant in ids:
+		var made: ControlCheck = check_book.make(StringName(str(raw))) if check_book != null else null
+		if made == null:
+			push_error("Mission: run_checks: no control check '%s'" % raw)
+		elif not ControlHintText.is_bound(made):
+			journal.append("check %s left out: not bound" % made.id)
+			print("[mission] check %s left out: none of its actions is bound" % made.id)
+		else:
+			list.append(made)
+	if _seq.skipping and not _seq.stopped and _spinning():
+		await _seq.wake
+	checks.start(list)
+	while not _seq.stopped and not _seq.skipping and checks.is_active():
+		await _seq.wake
+	if not _seq.stopped and checks.is_active():  # skipped: the step ends where the player would have left it
+		checks.pass_all()
+		_serve_checks()
 	while _seq.stopped:
 		await _seq.wake
 
@@ -407,6 +453,7 @@ func end(success: bool, reason: String = "") -> void:
 			"objectives": book.snapshot(), "time_s": world.time_s}
 	_seq.stop()
 	_live.clear()
+	checks.stop()
 	dialog.clear()  # nothing keeps talking over the debrief but the closing line
 	if _shot != null and stage != null:
 		stage.stop_cinematic(_shot)  # the result shows on the HUD, not under a shot
@@ -494,6 +541,9 @@ func tick(delta: float, actions: Dictionary) -> void:
 	dialog.tick(delta)
 	_record_finished_lines()
 	settle()
+	if not has_ended() and checks.is_active():
+		checks.tick(delta, check_sample)
+		_serve_checks()
 	if not has_ended():
 		_seq.tick()
 	tick_work = world.work
@@ -614,6 +664,24 @@ func _say_closing_line() -> void:
 		return
 	journal.append("say %s" % line_id)
 	dialog.say(line)
+
+
+# Carries out what the open checks asked for: the hint's line, the demo, the journal.
+func _serve_checks() -> void:
+	for request: Dictionary in checks.take_requests():
+		var check_id: StringName = request["check"]
+		match request["kind"] as StringName:
+			ControlCheckRunner.HINT:
+				journal.append("check %s hint" % check_id)
+				var line: DialogBook.Line = dialog_book.line(request["line"]) if dialog_book != null else null
+				if line != null:
+					dialog.say(line)
+			ControlCheckRunner.DEMO:
+				journal.append("check %s demo %s" % [check_id, request["demo"]])
+				demo_requested.emit(check_id, request["demo"])
+			ControlCheckRunner.PASSED:
+				journal.append("check %s passed" % check_id)
+				print("[mission] check %s passed" % check_id)
 
 
 # The lines that ended since the last look are finished in the world, so `dialog_finished` triggers see them this tick.

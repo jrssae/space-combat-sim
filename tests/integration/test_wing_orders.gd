@@ -108,6 +108,19 @@ func test_a_buoy_is_no_hostile_to_attack() -> void:
 	_assert_orders(AiContext.Order.COVER_ME, "a neutral buoy selected")
 
 
+func test_an_order_taken_is_counted_and_passes_its_control_check_and_a_refusal_does_not() -> void:
+	var check: ControlCheck = (ControlCheckBook.load_file()["book"] as ControlCheckBook).make(&"wing_form")
+	check.observe(ControlCheckProbe.sample(main), 1.0 / 60.0)
+	var before: int = main.wings.orders_given
+	assert_true(main.ship.targeting.select_by_name("NAV ALPHA"))
+	main.wings.give_order(AiContext.Order.ATTACK_MY_TARGET)
+	assert_eq(main.wings.orders_given, before, "a refused order is not one the wing took")
+	assert_false(check.observe(ControlCheckProbe.sample(main), 1.0 / 60.0))
+	main.wings.give_order(AiContext.Order.FORM_ON_ME)
+	assert_eq(main.wings.orders_given, before + 1)
+	assert_true(check.observe(ControlCheckProbe.sample(main), 1.0 / 60.0), "M8's check reads the wing's order, however it was given")
+
+
 func test_the_console_orders_the_wing_and_changes_its_formation() -> void:
 	var form: ConsoleResult = _run("wing order form")
 	assert_true(form.ok, form.error)
