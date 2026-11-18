@@ -464,6 +464,10 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 - **Follow-up (maintainer, 2026-11-18, queued until after the T3 Code restart):** the AI wings whose home is Babylon 5 (Beta, Delta,
   Zeta and the rest) self-dock for repair too, below the same 25 % hull, with their home in range; their formations keep the
   docked members' slots as the player's wing does.
+- **Follow-up (maintainer, 2026-11-18, same queue): repair times.** An AI wingman that docks waits a fixed **30 s** for repair
+  before it relaunches from a Cobra bay. **The player does not wait**: the dock cinematic is followed straight by the external
+  launch cinematic (no repair stage or shot), repaired on the way through. Replaces the damage-scaled timer (6 s plus up to
+  30 s) in `data/station/docking.json`.
 
 ### M8-T07 Bring M10-T19's raider strike carrier into `m8`
 
