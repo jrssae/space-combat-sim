@@ -112,6 +112,7 @@ src/
   environment/star_field.gd   the stars as camera-facing points, one multimesh (§17.19)
   environment/sky_follower.gd pins the star field to the active camera position each frame
   rendering/render_status.gd  the `render` provider: renderer, FPS, frame time, draw calls, triangles, VRAM (§6.4)
+  rendering/vram_reading.gd   pure: the card's memory in use and its size from the driver's DRM sysfs files, and the overlay's VRAM line (M8-T20)
 assets/
   generated/                  gitignored; one directory per asset id (§9): starfury_aurora/, nav_buoy/, sky_default/
   ships/starfury_aurora.tres  ShipSpec for the player ship (asset_id = "starfury_aurora")
@@ -703,7 +704,7 @@ validates before calling. Values are formatted consistently (vectors to 2 decima
 | `camera` | CameraRig (T12) | `mode` (w), `fov` |
 | `weapons` | PulseCannon (T13) | `mode` (w), `cooldown_s`, `charge` (w, 0..1 capacitor; M2-T14) |
 | `targeting` | TargetingController (T14) | `selected` (w: display name or `none`), `range_m`, `closing_mps`, `candidates` |
-| `render` | RenderStatus (M4-T31) | `renderer` (`forward_plus`, or `headless`), `fps`, `frame_ms`, `draw_calls`, `triangles`, `vram_mb`, `far_dots`, `gpu`, `gpu_ms`, `display`, `window` (M4-T41) |
+| `render` | RenderStatus (M4-T31) | `renderer` (`forward_plus`, or `headless`), `fps`, `frame_ms`, `draw_calls`, `triangles`, `vram_mb` (the game's own), `vram_used_gb`, `vram_total_gb`, `vram_pct` (the whole card, from the driver's `mem_info_vram_*` files through `VramReading`, sampled at most every 0.5 s and only when asked; -1 where the driver reports none; M8-T20), `far_dots`, `gpu`, `gpu_ms`, `display`, `window` (M4-T41) |
 | `lights` | LightRig (M3-T21) | `picked`, `candidates`, `active`, `cost_us` (§7.3) |
 
 M1 commands:

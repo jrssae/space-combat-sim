@@ -47,6 +47,8 @@ static func format(s: Dictionary) -> String:
 		lines.append("   ".join(render))
 	if s.has("gpu"):
 		lines.append("GPU   " + String(s["gpu"]))
+	if s.has("vram"):
+		lines.append((s["vram"] as VramReading).line())
 	for pad: Dictionary in s.get("pads", []):
 		lines.append(pad_line(pad))
 	return "\n".join(lines)

@@ -4,10 +4,21 @@ extends Node
 ## renderer's status node with this one).
 ##
 ## Main (M1-T15) adds one RenderStatus outside `World`. Console: provider `render`: `renderer` (`forward_plus`, or `headless` when
-## there is no display: import, CI, GUT), `fps`, `frame_ms`, `draw_calls`, `triangles`, `vram_mb`, `far_dots` (ships drawn as
+## there is no display: import, CI, GUT), `fps`, `frame_ms`, `draw_calls`, `triangles`, `vram_mb` (the game's own), `vram_used_gb`,
+## `vram_total_gb` and `vram_pct` (the whole card, from the driver; -1 when it gives none: M8-T20), `far_dots` (ships drawn as
 ## dots, M4-T11), `gpu`, `gpu_ms`, `display` and `window` (M4-T41).
 
 const RENDERER_HEADLESS: StringName = &"headless"
+## The card's memory is sampled this far apart at most, about twice a second (D86): a file read is not per-frame work.
+const VRAM_INTERVAL_MS: int = 500
+
+## Where the driver's card files live; the tests point it at a fake tree.
+var drm_root: String = VramReading.DRM_ROOT
+## Times the driver's files were read (tests).
+var vram_reads: int = 0
+
+var _vram: VramReading = null
+var _vram_at_ms: int = 0
 
 
 ## The rendering method drawing the game, or `headless` when nothing is drawn.
@@ -40,6 +51,12 @@ func _ready() -> void:
 				"doc": "Triangles drawn in the last frame"},
 		&"vram_mb": {"get": func() -> float: return Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1e6,
 				"unit": "MB", "doc": "Video memory the renderer holds, MB"},
+		&"vram_used_gb": {"get": func() -> float: return vram().used_gb(), "unit": "GB",
+				"doc": "Video memory in use on the whole card, GB, from the driver; -1 when it reports none (M8-T20)"},
+		&"vram_total_gb": {"get": func() -> float: return vram().total_gb(), "unit": "GB",
+				"doc": "The card's video memory, GB, from the driver; -1 when it reports none (M8-T20)"},
+		&"vram_pct": {"get": func() -> float: return vram().pct(), "unit": "%",
+				"doc": "Video memory in use as a percentage of the card; -1 when the driver reports no total (M8-T20)"},
 		&"far_dots": {"get": LodSwitcher.far_dot_count, "doc": "Ships in play drawn as far dots, under settings.far_ship_dot_px on screen (M4-T11, M7-T26)"},
 		&"gpu": {"get": _gpu_name, "doc": "Video adapter name"},
 		&"gpu_ms": {"get": _gpu_ms, "doc": "Last frame's GPU time, ms (0 on the first read: measuring starts then)"},
@@ -51,6 +68,17 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
+
+
+## The card's memory and the game's share, at most `VRAM_INTERVAL_MS` old: the overlay asks ten times a second, the files are
+## read twice. Nothing is read while nobody asks.
+func vram(now_ms: int = Time.get_ticks_msec()) -> VramReading:
+	if _vram == null or now_ms - _vram_at_ms >= VRAM_INTERVAL_MS:
+		_vram = VramReading.read(int(Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED)),
+				RenderingServer.get_video_adapter_name(), drm_root)
+		_vram_at_ms = now_ms
+		vram_reads += 1
+	return _vram
 
 
 static func _frame_ms() -> float:

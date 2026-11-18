@@ -424,6 +424,7 @@ func snapshot() -> Dictionary:
 	s["renderer"] = String(RenderStatus.renderer())
 	s["fps"] = Engine.get_frames_per_second()
 	s["gpu"] = RenderingServer.get_video_adapter_name()
+	s["vram"] = render_status.vram()
 	s["pads"] = input_source.pad_info()
 	return s
 

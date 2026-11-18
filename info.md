@@ -53,7 +53,7 @@ Arguments in `<angle brackets>` are required, `[square brackets]` optional, `a|b
 | `watch` | `<path>` | Show a live value under the FPS counter (at most 8) | always |
 | `unwatch` | `<path\|all>` | Stop watching a path, or all of them | always |
 | `fps` | `[on\|off]` | Show or hide the FPS counter | always |
-| `overlay` | `[on\|off]` | Show or hide the debug overlay (`settings.show_overlay`, F3); no argument toggles | always |
+| `overlay` | `[on\|off]` | Show or hide the debug overlay (`settings.show_overlay`, F3); no argument toggles. Its `VRAM` line is the card's memory in use, in GB and per cent, and the game's share (M8-T20) | always |
 | `god` | `[on\|off]` | Toggle invulnerability for the player; session only | always |
 | `timescale` | `<0.05..1>` | Debug slow motion | always |
 | `exec` | `<file>` | Run commands from a `res://` or `user://` file | always |
@@ -209,7 +209,7 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `comms_menu` | The comms menu (D-pad Right): whether it is open, the page, the highlighted entry, the ring's entries, orders picked, the last order, why it last closed and the focus pull | in flight |
 | `target_menu` | The target menu: whether it is open, the ring and its entries, the highlight, the ship's target as the HUD names it, the HUD waypoint, the last pick, why it last closed, and what the last opening cost, and the focus pull's amount (`focus`) | in flight |
 | `target_preview` | The target menu's preview panel: whether it shows, the entry and its kind, the hull drawn as a wireframe and its line count, whether its edges are still being found and its viewport renders, the panel's rows and flag, the meshes whose edges are kept, what the last edge search cost (in all, its longest frame, frames) and the panel's CPU work per frame | in flight |
-| `render` | The renderer (`forward_plus` or `headless`), fps, frame time, draw calls, triangles, VRAM, far dots, GPU, display and window | in flight |
+| `render` | The renderer (`forward_plus` or `headless`), fps, frame time, draw calls, triangles, VRAM (`vram_mb`, the game's own; `vram_used_gb`, `vram_total_gb` and `vram_pct`, the whole card as the driver reports it, read at most twice a second, -1 where it reports none: M8-T20), far dots, GPU, display and window | in flight |
 | `lights` | Which emitters light the scene this frame and what that costs | front end, flight |
 | `sky` | The star points and the nebula panorama: loaded and shown | front end, flight |
 | `backdrop` | The menu's Cobra-bay hangar (M7-T09, M7-T20): `loaded` (else M5's sky), `fighters` in the hall (racked and the second row), work `lights` in the light rig, the camera's `view` and `time_s` into its move | front end |

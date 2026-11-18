@@ -46,4 +46,15 @@ func test_render_and_pads() -> void:
 	assert_string_contains(text, "100000000000.000")
 	assert_string_contains(text, "RENDER FORWARD_PLUS   FPS 60")
 	assert_string_contains(text, "GPU   Test GPU")
+	assert_false(text.contains("VRAM"), "no VRAM line without a reading")
 	assert_string_contains(text, "PAD   Generic Pad  abc  rest -1  axes +0.00 +0.50")
+
+
+func test_the_vram_line_follows_the_gpu() -> void:
+	var reading := VramReading.new()
+	reading.used_bytes = 4 * 1073741824
+	reading.total_bytes = 16 * 1073741824
+	reading.game_bytes = 1073741824
+	var text: String = OverlayText.format({"gpu": "Test GPU", "vram": reading})
+	assert_string_contains(text, "GPU   Test GPU\nVRAM  4.00 / 16.00 GB (25 %)   GAME 1.00 GB")
+	assert_string_contains(OverlayText.format({"vram": VramReading.new()}), "VRAM  GAME 0.00 GB   total unknown")

@@ -231,7 +231,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | AC13 | (H) The maintainer plays it: the tutorial start to finish, the squadron launch, the approach cues and a fast gate jump, docking and relaunch, the escort with the strike carrier, the Battle Wagon, the audio, the release build | H | |
 | AC14 | Approach cues and the gate's reach (D84): `ApproachCue`'s states are unit-tested over approach speeds, offsets and brake strengths; the cue shows on the gate and both bays in both views; the gate offers the jump farther out at speed, and headless jumps requested at 200 m/s to several km/s all run the line-up, the run-in and the cinematic and arrive through the mouth (tests on the end state and the shot's timing) | A | |
 | AC15 | Flights and orders (D85): the player commands only a flight of two wingmen where the mission says so; AI flights of three cover each other and stay within their cohesion distance through a seeded headless fight; ships in formation fire at targets in reach; the two hold-fire orders hold formation or position without firing and are lifted by any other order (tests for each, pad menu and keyboard), native kept 1 and 6 threads identical | A | |
-| AC16 | GPU memory (D86): the overlay shows VRAM used in GB and as a percentage of the card on the maintainer's GPU, matching `mem_info_vram_used` within a refresh; `state render` reports the three values; with no driver total it shows the game's share and `total unknown` (unit tests on fake sysfs files) | A | |
+| AC16 | GPU memory (D86): the overlay shows VRAM used in GB and as a percentage of the card on the maintainer's GPU, matching `mem_info_vram_used` within a refresh; `state render` reports the three values; with no driver total it shows the game's share and `total unknown` (unit tests on fake sysfs files) | A | **Met** (T20, 2026-11-18) |
 
 ## Working rules for M8
 
@@ -274,7 +274,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T16 | E | Performance and the GPU check: the squadron launch, the tour and the raid | T05, T09 | Fable | Measurement on the maintainer's machine; the budget call | not started |
 | T18 | B | Approach cues for navigation targets with an interaction (brake, overshoot, adjust course), and the jumpgate's reach, autopilot and cinematic scaled to the player's speed (D84; maintainer, 2026-11-18; numbered last because it was added after the others had numbers) | - (shared with T06) | Fable | Relative-motion maths on the HUD, and a gate run-in that starts from any speed with its shot timed to match | not started |
 | T19 | D | Flights of three: the player commands two wingmen, AI flights of three cover each other and stay together, every ship in formation may fire, and two new orders (form up and hold fire; hold position and hold fire) (D85; maintainer, 2026-11-18; numbered last because it was added after the others had numbers) | T13 | Fable | Native flight cohesion and mutual cover, two orders through the comms menu and keys, parity | not started |
-| T20 | D | GPU memory in use on the debug overlay, in GB and as a percentage of the card (D86; maintainer 2026-11-18; numbered last because it was added after the others had numbers) | - | Fable | Driver sysfs reads off the frame path, a fallback, the overlay and `state render` | in progress |
+| T20 | D | GPU memory in use on the debug overlay, in GB and as a percentage of the card (D86; maintainer 2026-11-18; numbered last because it was added after the others had numbers) | - | Fable | Driver sysfs reads off the frame path, a fallback, the overlay and `state render` | done |
 | T17 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M8-T01 Tutorial script (discussion with the maintainer)
@@ -460,6 +460,23 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 - **Files:** `src/rendering/vram_reading.gd` (pure, test first), `render_status.gd`, the debug overlay, `info.md`, unit tests; a GPU
   run on the maintainer's machine (`--console-exec="...; state render; screenshot references/screenshots/M8-T20 vram/x.png; quit"`).
 - **Done when:** AC16.
+- **Done (2026-11-18):** `VramReading` (`src/rendering/vram_reading.gd`, pure) reads `mem_info_vram_used` and `mem_info_vram_total`
+  under `/sys/class/drm/card<N>/device` (the root is a parameter), picks the card whose PCI vendor the adapter name carries (AMD,
+  NVIDIA, Intel words), else the lowest numbered card with both files, and formats the line; a GB is 1024^3 bytes.
+  `RenderStatus.vram()` keeps the sample for 0.5 s and reads only when asked (the overlay shown, or `state render`), so no file
+  is read per frame and none while the overlay is hidden. The overlay's line follows `GPU`:
+  `VRAM  4.08 / 15.98 GB (26 %)   GAME 0.81 GB`, or `VRAM  GAME 0.81 GB   total unknown` without a driver total. `state render`
+  has `vram_used_gb`, `vram_total_gb`, `vram_pct` (-1 when unknown); `vram_mb` is unchanged (the game's own, decimal MB).
+  - **Tests** (a `--staged` scratch copy, 908 scripts compile): `test_vram_reading` 8, `test_vram_overlay` 4 (two reads a second
+    over fake files, `state render`, the fallback, the main scene's overlay), `test_overlay_text` 7, `test_ship_scene` 24,
+    `test_main_scene` 14, `test_console_command_list` 7, `test_debug_console` 29, `test_display_driver` 3: 96 passed, 0 failed.
+  - **GPU (RX 6950 XT, RADV, Wayland, 1200x675 window, `forward_plus`, 60 fps):** `state render` gave `vram_used_gb` 4.08,
+    `vram_total_gb` 15.98, `vram_pct` 25.52, `vram_mb` 873; `mem_info_vram_used` sampled every 0.1 s beside it read
+    4 379 271 168 bytes (4.08 GB, 25.52 % of 17 163 091 968) at that moment. Screenshot and both logs in
+    `references/screenshots/M8-T20 vram/`.
+  - **Limits:** two cards of one vendor (an AMD APU beside an AMD card) cannot be told apart by the adapter name, so the lowest
+    numbered one is shown; NVIDIA's and Intel's drivers do not write these files, so they get `total unknown` until a source
+    is added for them (Windows gets its own in M9).
 
 ### M8-T17 Integration, full suite, docs and acceptance
 

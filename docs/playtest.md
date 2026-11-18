@@ -94,6 +94,11 @@ pods, then try `set settings.physics_jitter_fix 0` (no frame-time smoothing) whi
 are drawn in the chase view) and `set settings.hud_chase_opacity 0.7` (how solid the HUD is in the chase view; in the cockpit view the
 radar, speed and bars are on the console's screens) and `set settings.cockpit_light_energy 1.0` (the cabin lamp that lights the grey cockpit a dark red, 1.0 by default since M4-T30b; takes effect on the next spawn). Hull lighting: `set settings.ambient_level 0.3` (how much light the dark side of a hull gets) changes it live. Add `save` to keep a setting.
 
+GPU memory (M8-T20): the debug overlay (F3, or `overlay on`) has a line like `VRAM  4.08 / 15.98 GB (26 %)   GAME 0.81 GB`: what the
+whole card holds (every program, the desktop too) out of its size, as the driver reports it, then the game's own share. It
+updates about twice a second. Where the driver gives no total (not an AMD card on Linux) it reads `VRAM  GAME 0.81 GB   total
+unknown`. The same numbers: `state render` (`vram_used_gb`, `vram_total_gb`, `vram_pct`; -1 when unknown).
+
 Changed after the first play test: yaw and roll swapped (the right stick used to yaw and the D-pad to roll), and
 target-ahead moved to a D-pad Up hold because the pad had no stick clicks. Changed after the M2 play test: X is auto-track and
 R3 is the brake; L3 is free look (the debug overlay is F3 only); the keyboard moved to the layout above and the mouse flies.
