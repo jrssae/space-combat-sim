@@ -642,13 +642,19 @@ func _free_hull(types: Array[StringName], start: int) -> StringName:
 	return types[first]
 
 
-# Whether a ship is on the docking bay's lane, in its tunnel or its void (docking or undocking): the bay takes one at a time.
-func _bay_busy() -> bool:
+## Whether one of the traffic's ships has the docking bay (its lane, tunnel or void): a fighter docking for repair waits (M8-T06).
+func bay_busy() -> bool:
 	for entry: Dictionary in _own:
 		if (entry["kind"] == &"dock" and entry["state"] == &"lane") \
 				or (entry["kind"] == &"undock" and (entry["state"] == &"airlock" or entry["state"] == &"lane")):
 			return true
 	return false
+
+
+# Whether a ship is on the docking bay's lane, in its tunnel or its void (docking or undocking): the bay takes one at a time.
+# A fighter docking for repair counts (M8-T06).
+func _bay_busy() -> bool:
+	return bay_busy() or (main != null and main.docking != null and main.docking.holds_bay())
 
 
 # The next free waiting place for an arrival bound for the docking bay: one past every docking ship still on its way in.

@@ -120,6 +120,24 @@ func member_at(slot: int) -> Combatant:
 	return _by_slot[slot - 1] if slot >= 1 and slot <= size else null
 
 
+# Members out of play for a while with their slots kept (docked for repair, M8-T06).
+var _away: Array[Combatant] = []
+
+
+## Marks `member` away or back (M8-T06: docked for repair). An away member keeps its slot: it is not lost, nobody briefs it,
+## and `close_gaps` neither moves it nor closes the formation over its place, so it comes back to the slot it left.
+func set_away(member: Combatant, away: bool) -> void:
+	_away.erase(member)
+	if away and slot_of(member) > 0:
+		_away.append(member)
+	_closed = false
+
+
+## Whether `member` flies a slot of this wing but is out of play for now.
+func is_away(member: Combatant) -> bool:
+	return _away.has(member) and slot_of(member) > 0
+
+
 ## The members, in slot order.
 func members() -> Array[Combatant]:
 	var out: Array[Combatant] = []
@@ -200,8 +218,10 @@ func close_gaps() -> Array[Vector2i]:
 		var arm: PackedInt32Array = _arm_slots(arm_side)
 		var next: int = 0
 		for slot: int in arm:
-			if _by_slot[slot - 1] == null:
+			if _by_slot[slot - 1] == null or _held_for_away(slot):
 				continue
+			while _held_for_away(arm[next]):
+				next += 1  # an away member's place is kept for it (M8-T06): the ones behind move up past it
 			if arm[next] != slot:
 				_move(slot, arm[next], moves)
 			next += 1
@@ -236,11 +256,16 @@ func _worst_placed(to: int) -> int:
 			balance += formation.side(i + 1, size)
 	var worst: int = 0
 	for slot: int in range(1, size + 1):
-		if _by_slot[slot - 1] == null or _better_place(to, slot, balance - formation.side(slot, size)) <= 0:
+		if _by_slot[slot - 1] == null or _held_for_away(slot) or _better_place(to, slot, balance - formation.side(slot, size)) <= 0:
 			continue
 		if worst == 0 or _moves_before(slot, worst):
 			worst = slot
 	return worst
+
+
+# Whether `slot` is the place of a member that is away: it stays that member's until it is back.
+func _held_for_away(slot: int) -> bool:
+	return _by_slot[slot - 1] != null and _away.has(_by_slot[slot - 1])
 
 
 # Whether the ship in flown slot `a` should give up its place before the one in `b`.

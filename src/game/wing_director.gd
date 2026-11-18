@@ -410,6 +410,8 @@ func _physics_process(delta: float) -> void:
 func refresh(wing: Wing) -> void:
 	var shot_down: bool = false
 	for member: Combatant in wing.members():
+		if wing.is_away(member):
+			continue  # docked for repair (M8-T06): out of play with its slot kept, not lost
 		if _pilot_of(member) == null or not _in_play(member):
 			var slot: int = wing.slot_of(member)
 			remove_member(wing, member)
@@ -438,12 +440,14 @@ func refresh(wing: Wing) -> void:
 	if wing.leader != null and wing.leader.targetable != null and alive:
 		ids.append(wing.leader.targetable.get_instance_id())
 	for member: Combatant in wing.members():
-		if member.targetable != null:
+		if member.targetable != null and not wing.is_away(member):
 			ids.append(member.targetable.get_instance_id())
 	var leader_pilot: AiPilot = _pilot_of(wing.leader) if alive else null
 	if leader_pilot != null:
 		_set_wing_ids(leader_pilot.context, ids, wing.leader)
 	for member: Combatant in wing.members():
+		if wing.is_away(member):
+			continue
 		var ctx: AiContext = _pilot_of(member).context
 		_set_wing_ids(ctx, ids, member)
 		ctx.order = order

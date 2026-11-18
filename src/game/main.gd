@@ -90,6 +90,8 @@ var star_system: StarSystemHost = null
 var launches: LaunchDirector = null
 ## Traffic at the station (M7-T10): docking, freighters, raids at it; console `traffic`.
 var traffic: StationTraffic = null
+## Docking for repair in the main docking bay (M8-T06): the player's hold of X there, the wing's order; console `dock`.
+var docking: DockingDirector = null
 ## The station's exterior tour (M7-T12): console `tour`; the tour's shots play on the cinematic camera.
 var tours: TourDirector = null
 ## Where and when the scenario is in its star system (M6-T09): `ScenarioFrame.resolve`'s result, empty without a system.
@@ -234,6 +236,9 @@ func _ready() -> void:
 	traffic = StationTraffic.new()
 	traffic.main = self
 	add_child(traffic)
+	docking = DockingDirector.new()
+	docking.main = self
+	add_child(docking)
 	if bool((scenario.get("station", {}) as Dictionary).get("reserve_traffic", false)):
 		traffic.reserve_pools()  # the raids' and wings' ships are built now, not in the middle of a fight
 	_warm_flashes()
@@ -319,9 +324,12 @@ func _physics_process(delta: float) -> void:
 	if control_lock.apply(pc, controls_locked(), camera_rig.is_playing_shot()):
 		camera_rig.stop_shot()
 		launches.skip()  # a launch's shot skipped jumps the player to the hand-off (M7-T08)
+		docking.skip()  # a docking's shot skipped jumps to the bay, then to the end of the repair (M8-T06)
 	if pc.ui.interact and not opening:  # the hold that skips the opening is spent on it
 		interactions.run_offered()
 	var autopilot: FlightCommand = gates.step_player(delta) if not get_tree().paused else null
+	if autopilot == null and not get_tree().paused:
+		autopilot = docking.step_player(delta)  # the docking autopilot flies the ship into the bay (M8-T06)
 	if autopilot == null and not get_tree().paused:
 		autopilot = launches.step_player(delta)  # a launched fighter's engines light as it clears the arm (M7-T08)
 	if autopilot != null:
@@ -571,6 +579,7 @@ func respawn() -> void:
 		buoy.restore()
 	director.cancel_respawn()  # Back while dead: the death's own respawn must not follow
 	gates.cancel_jump("respawn")
+	docking.cancel_player("respawn")
 	_restart_lessons()
 	combatant.cannon.reset_gate()
 	combatant.cannon.reset_flashes()
@@ -607,10 +616,10 @@ func objectives() -> Array[Dictionary]:
 
 
 ## The running mission holds the player's controls (`MissionApi.lock_controls`), or a gate jump does (M6-T14), or the player is
-## on a Cobra bay's rack (M7-T08): the ship flies on without them.
+## on a Cobra bay's rack (M7-T08), or it is docking for repair (M8-T06): the ship flies on without them.
 func controls_locked() -> bool:
 	return (mission != null and mission.api != null and mission.api.controls_locked) or (gates != null and gates.locks_controls()) \
-			or (launches != null and launches.locks_controls())
+			or (launches != null and launches.locks_controls()) or (docking != null and docking.locks_controls())
 
 
 # A cinematic hides the HUD and brings the letterbox in; the comms panel keeps its subtitles (D55).
@@ -691,6 +700,8 @@ func _build_hud_input() -> HudInput:
 	input.roster = wings.hud_roster()
 	input.roster_color = Factions.FRIENDLY_COLOR
 	input.ack_line = wings.ack_text()
+	if not docking.notice_text().is_empty():
+		input.ack_line = docking.notice_text()  # a docking's line (Control's offer, a wingman's call) takes the same place
 	input.prompt_line = interactions.prompt_line()
 	input.interact_progress = adapter.last.ui.interact_progress
 	if route_active():
@@ -916,6 +927,8 @@ func _give_wing_orders(ui: UiCommand) -> void:
 		wings.give_order(AiContext.Order.ENGAGE_AT_WILL)
 	if ui.wing_cover:
 		wings.give_order(AiContext.Order.COVER_ME)
+	if ui.wing_dock:
+		docking.order_wing()
 
 
 # Captures the mouse while flying. Alt (window managers use Alt+drag to move a window), the console, the pause and a window without focus give it back, and the source

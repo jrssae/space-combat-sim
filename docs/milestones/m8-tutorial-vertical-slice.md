@@ -250,7 +250,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | AC2 | Squadron launch: the cinematic plays from the hangar, the squadron launches and forms up, skipping lands in the same state (test on the end state), the player's launch hands over as M7-T08 does | A | |
 | AC3 | Control checks: each check passes on its actions and state in headless tests driven by injected commands, for pad and keyboard bindings; a rebind changes the hint; a missed check repeats and demonstrates, never fails | A | **Met except the flown demo** (T04, 2026-11-18; the instructor flying it is checked in T05's AC4): the demo is asked for on `MissionApi.demo_requested`; the instructor flying it is T05's |
 | AC4 | Tutorial mission: starts from the menu and runs to the debrief in a headless test driven by console commands; the tour visits its points; the raid comes through the jumpgate vortex and the station's allies and grid fight it; losing the player ends in the debrief | A | |
-| AC5 | Docking: the player docks through the main docking bay, is repaired (hull, guns, missiles) and relaunched from a Cobra bay (headless test on the state before and after); a wingman docks on order and by threshold and rejoins its wing | A | |
+| AC5 | Docking: the player docks through the main docking bay, is repaired (hull, guns, missiles) and relaunched from a Cobra bay (headless test on the state before and after); a wingman docks on order and by threshold and rejoins its wing | A | **Met** (T06, 2026-11-18; no missiles exist yet, so hull, gun charge and reaction mass are what is restored) |
 | AC6 | Strike carrier: M10-T19 merged into `m8` with its tests green next to M7's; one collision builder serves the station and the carrier | A | |
 | AC7 | Civilian escort: the first two waves arrive docked on the strike carrier and launch; the carrier hangs back, recalls and jumps out; the escort's tests (success, both failures, flee and resume) pass with it | A | |
 | AC8 | Battle Wagon: meets the output contract with Python tests (budgets, frames, hardpoints, tubes, determinism), its look sheet seen by the maintainer (no STL: M10's Q10), in the game with its weapons and four launch tubes, in a sandbox scenario and free-flight raids; the civilian escort's last wave launches from its tubes and the escort's tests pass with it | A | |
@@ -295,7 +295,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T03 | A | The squadron-launch cinematic (D81) | T02, T01 | Opus | Scripted launches, camera shots and a skip that lands in the same state | not started |
 | T04 | A | Control checks: `ControlCheck`, the runner and the binding hints (D80) | T01 | Fable | Pass conditions on measured state for every control, pad and keyboard | done |
 | T05 | A | The tutorial mission: launch, checks, tour, raid, defense, debrief (D79) | T03, T04 | Fable | The mission script, dialog and pacing on M5's and M7's seams | not started |
-| T06 | B | Dock in the main docking bay to be repaired and relaunched, for the player and the AI wingmen (D82, Q7) | - | Fable | The `dock` interaction, the lane for fighters, repair and a Cobra-bay relaunch; wing orders | in progress |
+| T06 | B | Dock in the main docking bay to be repaired and relaunched, for the player and the AI wingmen (D82, Q7) | - | Fable | The `dock` interaction, the lane for fighters, repair and a Cobra-bay relaunch; wing orders | done |
 | T07 | C | Bring M10-T19's raider strike carrier into `m8`: merge `origin/m10`, one collision builder, its tests green (Q5) | - | Opus | Two branches built a collision builder; docs, `native/src/lib.rs` and `info.md` conflict | done |
 | T08 | C | The civilian escort's raids come with the strike carrier (D83, Q6) | T07 | Fable | Mission data and pacing on `CarrierJumps`; the escort's tests kept green | in progress |
 | T09 | C | Raider Battle Wagon (moved from M10-T20): from images, with weapons (M10 Q31) and four launch tubes; the escort's last wave comes with it (Q8) | T08, the maintainer on its weapons | Fable | No STL; a new hull with weapons and tube launches | not started |
@@ -411,6 +411,34 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   autopilot), the repair (hull, gun charge, missiles) and its timer, the relaunch through `launch_from`, the wing order and the hull
   threshold for wingmen, their slots held while away, a `dock` console command, `info.md`, tests.
 - **Done when:** AC5.
+- **Done (2026-11-18):** `DockingDirector` (Main's child; command and provider `dock`) fills the docking bay's `dock` interaction.
+  **The player:** a hold of X within 2 km locks the controls; `DockAutopilot` (pure) flies the ship round the station by
+  `DockKeepOut` (pure: the drum, the spine, the bow ring as boxes from `data/station/docking.json`, turning points with their
+  shortest clear way worked out once) to the lane 400 m off the mouth, braking first from whatever speed it had
+  (`StoppingDistance`, pure, for T18 to share), then down the lane through the mouth and the inner doors (asked and let go as the
+  traffic's ships do). Behind the shut doors it leaves play (hidden, sheltered, no layers), `DockRepair`'s clock runs from the
+  damage (6 s plus up to 30 s for the hull, data), hull, gun charge and tank are restored (no missiles exist yet), and it launches
+  from Cobra bay Alpha 1 through `LaunchDirector` (`launch_player`; the next free arm when Alpha launches). Three shots
+  (`dock_approach`, `dock_entry`, `dock_wait`); A or Start skips a stage each press. `dock cancel` and a respawn end a visit.
+  **Wingmen:** the new order (key 6, `UiCommand.wing_dock`; the comms menu's DOCK on a ring of eight whose compass points keep the
+  four orders) sends every damaged wingman; one below 40 % hull goes by itself. A docking pilot (`assets/ai/docking.tres`) flies
+  it natively: a peel-off out of the formation when it leaves at speed, a route with avoidance to a waiting point off the bow,
+  then `DockingPlan`'s lane, one ship at a time with the traffic (`StationTraffic.bay_busy`). Inside it is away (`Wing.set_away`:
+  slot kept, not lost, not briefed; `close_gaps` neither moves it nor fills its place), then `LaunchDirector.launch_ships`, its
+  own pilot back, and it rejoins. Control's offer below half hull is a signal (`dock_offered`) and a HUD line for T05 to replace
+  with its dialog (D79 beat 13). Scenario `station_dock`.
+  **Tests** (staged scratch copy, HEAD `a1050290` plus this task; the compile check, 939 scripts, and the docking files run again
+  on `7406990c`): the compile check clean; 32 GUT
+  files, 372 tests, 0 failures: the new `test_stopping_distance` (5), `test_dock_keep_out` (7, a grid of starts through the 2 km
+  sphere arrives without entering a solid), `test_dock_autopilot` (6), `test_dock_repair` (5), `test_dock_visit` (5),
+  `test_wing_away` (5) and `test_docking` (7: the reach, the hold to the relaunch with the state before and after, a 450 m/s
+  start, skip and cancel, respawn, rebase, wingmen by order and by threshold rejoining their slots), with `test_wing`,
+  `test_wing_gaps`, `test_wing_orders`, `test_wing_reform`, `test_wing_replenish`, `test_station_wing_follow`, `test_launch_bay`,
+  `test_station_traffic`, `test_station_sheltered`, `test_respawn_in_play`, `test_console_command_list` and the input, comms and
+  control-profile files. No native change.
+  **Changed in older tests:** `test_nav_targets` (the "not available" hold is the cargo bay's now), `test_comms_menu`,
+  `test_comms_menu_input` and `test_launch_bay` (slices of the ring of eight), `test_input_map` (key 6, outside the left block),
+  `test_input_adapter`. **(H):** `docs/playtest.md`, "Play-testing docking for repair".
 
 ### M8-T07 Bring M10-T19's raider strike carrier into `m8`
 

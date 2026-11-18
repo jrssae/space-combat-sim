@@ -1,6 +1,7 @@
 extends GutTest
 ## Navigation targets and the hold-X interaction in play (M7-T27), on the real main scene in free flight: Babylon 5's main docking
-## bay and cargo bay and the jumpgate are navigation targets (not civilian), the bays answer a 2 s hold of X with "not available",
+## bay and cargo bay and the jumpgate are navigation targets (not civilian), the cargo bay answers a 2 s hold of X with "not
+## available" (the docking bay's hold docks the ship since M8-T06: `test_docking`),
 ## a tap still toggles auto-track, and the HUD shows the navigation look, the prompt and the bar. The selection moves from a
 ## bay to the other bay and to the gate by every path a pilot has (the target menu, the console, the wheel, the nose; the
 ## target button's tap takes an enemy); the gate's hold beyond 2 km answers "out of range". The jump itself is flown in
@@ -69,15 +70,15 @@ func test_the_bays_and_the_gate_are_navigation_targets() -> void:
 			"main_docking_bay_mouth"] as Vector3 + station.drum_origin)), 1.0, "at the docking bay's mouth")
 
 
-func test_holding_x_on_a_bay_answers_not_available_and_a_tap_still_tracks() -> void:
+func test_holding_x_on_the_cargo_bay_answers_not_available_and_a_tap_still_tracks() -> void:
 	await _start()
-	await _target(station.docking_bay.targetable)
+	await _target(station.cargo_bay.targetable)
 	var offer: TargetInteraction = main.interactions.offer()
 	assert_not_null(offer, "the bay offers its interaction")
-	assert_eq(main.interactions.prompt_line(), "HOLD X / SHIFT / MOUSE 4: DOCK", "pad and keyboard both named")
+	assert_eq(main.interactions.prompt_line(), "HOLD X / SHIFT / MOUSE 4: CARGO", "pad and keyboard both named")
 	var hud: HudFrame = HudLayout.compute(main._build_hud_input())
 	assert_true(hud.target_nav, "the HUD draws it as a navigation target")
-	assert_eq(hud.ack_line, "HOLD X / SHIFT / MOUSE 4: DOCK", "the prompt on the acknowledgement line")
+	assert_eq(hud.ack_line, "HOLD X / SHIFT / MOUSE 4: CARGO", "the prompt on the acknowledgement line")
 	source.hold(InputAdapter.AUTOTRACK)
 	await _ticks(60)
 	hud = HudLayout.compute(main._build_hud_input())
@@ -88,7 +89,7 @@ func test_holding_x_on_a_bay_answers_not_available_and_a_tap_still_tracks() -> v
 	await _ticks(1)
 	assert_eq(main.interactions.runs, 1, "the hold ran the bay's interaction once")
 	assert_eq(main.interactions.last_result, TargetInteraction.NOT_AVAILABLE)
-	assert_eq(main.interactions.prompt_line(), "BABYLON 5 DOCKING BAY: NOT AVAILABLE", "the answer shows")
+	assert_eq(main.interactions.prompt_line(), "BABYLON 5 CARGO BAY: NOT AVAILABLE", "the answer shows")
 	assert_false(main.adapter.autotrack_on, "the hold left auto-track alone")
 	source.hold(InputAdapter.AUTOTRACK)
 	await _ticks(5)

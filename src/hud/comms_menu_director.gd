@@ -145,6 +145,8 @@ func _carry_out(picked: Dictionary) -> void:
 	last_pick = str(picked.get("label", ""))
 	if picked.get("payload") is int and main.player_alive:
 		main.wings.give_order(picked["payload"] as AiContext.Order)
+	elif picked.get("payload") is StringName and picked["payload"] == CommsMenu.PAYLOAD_DOCK and main.player_alive:
+		main.docking.order_wing()
 
 
 # --- console -----------------------------------------------------------------------------------------------------
@@ -163,8 +165,8 @@ func _register_console() -> void:
 		&"focus": {"get": func() -> float: return view.focus_amount(), "doc": "The focus pull on the view behind the menu, 0 sharp to 1 full"},
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"commsmenu",
-			"The comms menu: open (pauses the game), pick <entry> (a slice 0-3 clockwise from the top, or its label: attack, form on me, "
-			+ "engage, cover me), highlight <entry> (points at it without sending), back, close",
+			"The comms menu: open (pauses the game), pick <entry> (a slice 0-7 clockwise from the top, or its label: attack, form on me, "
+			+ "engage, cover me, dock), highlight <entry> (points at it without sending), back, close",
 			[ConsoleArg.enum_required(&"action", ACTIONS), ConsoleArg.string_optional(&"entry", "").with_suggestions(_console_entries)]),
 			_cmd_commsmenu, self)
 

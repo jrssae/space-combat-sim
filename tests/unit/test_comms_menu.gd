@@ -43,6 +43,11 @@ func test_the_wing_orders_sit_up_right_down_left_in_the_order_of_keys_1_to_4() -
 	for i: int in 4:
 		menu.radial.point(up_right_down_left[i])
 		assert_eq(menu.radial.highlighted()["payload"], expected[i], "slice %d" % i)
+	# Later orders take the diagonals, so the four above stay where the stick has always found them (M8-T06: DOCK, down-left).
+	assert_eq(menu.radial.slice_count(), 8)
+	menu.radial.point(Vector2(-1, -1).normalized())
+	assert_eq(menu.radial.highlighted()["payload"], CommsMenu.PAYLOAD_DOCK)
+	assert_eq(menu.radial.highlighted()["label"], "DOCK")
 
 
 func test_select_returns_the_lit_entry_and_closes() -> void:

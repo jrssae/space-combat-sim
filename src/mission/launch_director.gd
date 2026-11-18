@@ -266,6 +266,19 @@ func _player_led_wing(wing_name: String) -> Wing:
 	return wing if wing != null and wing.leader != null and wing.leader.is_player else null
 
 
+## Launches ships already in play from wing `wing`'s arm, from door `door` on: fighters repaired in the main docking bay go
+## out again this way (M8-T06). They keep their pilots and their wings. Returns "" or why not.
+func launch_ships(wing: String, door: int, ships: Array[Combatant]) -> String:
+	if ships.is_empty():
+		return "no ship to launch"
+	if not WINGS.has(wing.to_lower()):
+		return "no wing '%s' (%s)" % [wing, ", ".join(WINGS)]
+	for c: Combatant in ships:
+		if not _can_carry(c):
+			return "%s cannot be carried" % (c.display_name if c != null else "a ship")
+	return _start(wing, door, ships, "", hash([main.scenario_seed, wing.to_lower(), "relaunch", SimClock.now()]))
+
+
 ## Launches every wing the station has (`launch wing all`). Returns `{lines, launched}`: one line per wing (how many launched,
 ## or why it did not) and how many wings went.
 func launch_all_wings() -> Dictionary:

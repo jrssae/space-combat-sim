@@ -36,7 +36,8 @@ func test_dpad_right_opens_the_menu_with_the_wing_orders_and_pauses_the_game() -
 	assert_true(get_tree().paused, "the game is paused while it is open")
 	assert_eq(main.comms.menu.page_title(), "WING ORDERS")
 	assert_true(_read("comms_menu.open"))
-	assert_eq(_read("comms_menu.entries"), PackedStringArray(["attack", "form on me", "engage", "cover me"]))
+	assert_eq(_read("comms_menu.entries"), PackedStringArray(["attack", "-", "form on me", "-", "engage", "dock", "cover me", "-"]),
+			"the four orders on the compass points, DOCK down-left (M8-T06)")
 	assert_true(main.comms.view.visible)
 
 
@@ -54,7 +55,7 @@ func test_the_stick_points_and_a_sends_each_of_the_four_orders_through_the_wing_
 		var record := func(line: String) -> void: lines.append(line)
 		main.wings.acknowledged.connect(record)
 		await _point(slices[i])
-		assert_eq(main.comms.menu.radial.highlight(), i, "the stick lit slice %d" % i)
+		assert_eq(main.comms.menu.radial.highlight(), 2 * i, "the stick lit compass point %d" % i)
 		assert_true(get_tree().paused, "nothing is sent while it is only pointed at")
 		await _press(InputAdapter.RADIAL_SELECT)
 		main.wings.acknowledged.disconnect(record)
@@ -161,7 +162,7 @@ func test_the_console_drives_it() -> void:
 	assert_true(_run("commsmenu highlight \"cover me\"").ok)
 	assert_eq(_read("comms_menu.highlight"), "COVER ME")
 	var wing: Wing = main.wings.player_wing()
-	assert_true(_run("commsmenu pick 1").ok)
+	assert_true(_run("commsmenu pick 2").ok)  # the slice to the right
 	await _ticks(2)
 	assert_eq(wing.order, AiContext.Order.FORM_ON_ME)
 	assert_eq(_read("comms_menu.last_pick"), "FORM ON ME")
@@ -184,15 +185,16 @@ func test_the_ring_is_the_target_menus_size_and_side_and_the_highlight_follows_t
 	var size: Vector2 = get_viewport().get_visible_rect().size
 	assert_gt(view.draws, 0)
 	assert_eq(view.layer, target_view.layer, "the same layer as the target menu")
-	assert_eq(view.drawn_labels, ["ATTACK", "FORM ON ME", "ENGAGE", "COVER ME"] as Array[String], "the entries sit on the ring")
+	assert_eq(view.drawn_labels, ["ATTACK", "", "FORM ON ME", "", "ENGAGE", "DOCK", "COVER ME", ""] as Array[String],
+			"the entries sit on the ring, the orders on the compass points")
 	assert_eq(view.drawn_heading, "WING ORDERS")
 	assert_almost_eq(view.drawn_radius, RadialLayout.outer_radius(size), 0.5, "as big as the target menu")
 	assert_almost_eq(view.drawn_centre.y, size.y * 0.5, 1.0, "vertically centred")
 	assert_eq(view.drawn_centre, RadialLayout.centre(size, false), "at the target menu's side")
-	assert_eq(main.comms.menu.radial.highlight(), 1, "the stick lit FORM ON ME")
+	assert_eq(main.comms.menu.radial.highlight(), 2, "the stick lit FORM ON ME")
 	assert_gt(view.focus_amount(), 0.0, "the focus pull is on")
 	await _point(LEFT)
-	assert_eq(main.comms.menu.radial.highlight(), 3)
+	assert_eq(main.comms.menu.radial.highlight(), 6, "COVER ME, to the left")
 
 
 func _press(action: StringName) -> void:

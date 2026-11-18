@@ -6403,5 +6403,66 @@ data/station/bot_points.json     the crew's tunables, roads, patrol areas and wo
   walls beside the cargo bay flicker (M7-3), sawtooth Cobra-bay doors (M7-4), the audio rework (M7-5); all M8.
 - A wing following a leader that glances along the drum's flank at 250 m/s or more sits at the edge of a Starfury's stop: one in five
   starts still lost a wingman at 200 m/s (M7-T76).
-- The bays' `dock` and `cargo` interactions are placeholders that answer "not available" (Q4: docking is after M7).
+- The cargo bay's `cargo` interaction is a placeholder that answers "not available" (the docking bay's `dock` runs since M8-T06, §21.1).
 - A lone fleeing Saturn rarely beats two raiders and never three; it survives by reaching shelter (accepted, M7-T55).
+
+## 21. The tutorial vertical slice (M8)
+
+### 21.1 Docking for repair and relaunch (D82, T06)
+
+```
+src/world/docking_director.gd    DockingDirector (Main's child, priority -44): the visits, the bay's `dock` interaction, the
+                                 player's autopilot, the wingmen's docking pilot, repair, relaunch; command and provider `dock`
+src/world/dock_visit.gd          DockVisit (pure): one ship's visit as a state (approach, lane, inside, repair, relaunch, launching)
+src/world/dock_autopilot.gd      DockAutopilot (pure): the approach to the lane and the flight along it, one FlightCommand a tick
+src/world/dock_keep_out.gd       DockKeepOut (pure): the station's solids near the bay as boxes, the next clear point toward the lane
+src/world/dock_repair.gd         DockRepair (pure): the time in the bay from the hull, charge and reaction mass missing
+src/ship/stopping_distance.gd    StoppingDistance (pure): stopping distance and the speed that still stops in a distance (shared with D84)
+assets/ai/docking.tres           the docking pilot's profile: a route and nothing else (no attack, evade or retreat)
+data/station/docking.json        speeds, the corridor, the keep-out boxes, the repair's times, the wingmen's hull threshold, the
+                                 offer's threshold and line, the relaunch bay, the shots
+data/scenarios/station_dock.json the player 1.2 km off the bay with two wingmen
+```
+
+- **The interaction.** `DockingDirector` fills the docking bay's `TargetInteraction` (§20.5): its action is `start_player`, offered
+  while the player has no visit. The reach stays `Station.BAY_REACH_M` (2 km). The cargo bay's `cargo` is still a placeholder.
+- **The player's way in.** `Main.controls_locked()` holds while a visit runs, and `step_player` gives the tick's command (after the
+  gate's, before the launch's). **Approach:** `DockKeepOut.next_target` in the station's frame: the goal is the lane's line
+  `join_out_m` (400 m) off the mouth; the boxes (the drum, the spine, the bow ring and its pylon) grown by `clear_m` block lines,
+  their corners grown by `via_m` are turning points with their shortest clear way to the goal worked out once (Dijkstra), and a ship
+  inside a grown box is sent straight out of it. `DockAutopilot.approach` closes on the target no faster than `approach_mps` and
+  than `StoppingDistance.speed_for_mps` on the mains allows, so a ship handed over at any speed is first braked (the nose turns
+  onto the velocity error above 30 m/s). **Lane:** once within `corridor_m` of the line, slower than `join_max_mps` and with the
+  tunnel free, `DockAutopilot.lane` holds the nose on the axis and flies every thruster: `lane_mps` to the mouth, `inner_mps`
+  inside, and never faster than the retros can stop it short of the inner doors until they stand open (then short of the lane's
+  end in the void). The doors are asked and let go as the traffic's ships do it (§20.4), and the ship is `inside_station` in the void.
+- **Inside.** When the doors have shut the ship leaves play: hidden, no collision layers, `custom_integrator`, `clamped`,
+  `inside_station` (M7-T62), held at the lane's end against the station each tick, so a rebase moves it with the station. The
+  repair clock is `DockRepair.time_s` of what it came in with (`base_s` + `hull_s` x hull missing + `rearm_s` x charge missing +
+  `refuel_s` x reaction mass missing, at most `max_s`); when it ends the hull and its damage zones are restored, the cannon's
+  gate and capacitor reset and the tank filled. There are no missiles in the game yet: their reload joins here when they exist.
+- **Relaunch.** The ship is given back its layers and handed to `LaunchDirector`: `launch_player(wing, door, false)` for the
+  player (the launch's own camera, skip, hand-off and burn), `launch_ships` for a wingman; the arm in `relaunch`, else the next
+  arm that is not launching, tried every `retry_s`; after `give_up_s` the ship is put off the bow at rest instead.
+- **Camera and skip.** Three `CinematicShot`s from the data (`dock_approach` behind the ship, `dock_entry` beside the mouth,
+  `dock_wait` drawing back from the bay), actors `player` and `bay`. `Main`'s shot skip (A or Start) calls `skip`: to the bay,
+  then to the end of the repair, then the launch's own skip. A visit that has not reached the bay in `timeout_s` jumps there too.
+- **Cancel.** `dock cancel` (and a respawn, whatever the state) ends a visit; from the console only while the ship is outside
+  the inner doors.
+- **Wingmen.** `order_wing` (`UiCommand.wing_dock`, key 6; the comms menu's DOCK, down-left on the ring of eight whose compass
+  points keep the four orders) sends every damaged wingman of the player's wing; one below `wingman.hull_below` (0.4) goes by
+  itself. The wingman's own `AiPilot` is set aside and a docking pilot flies it natively (§17.13): faster than
+  `peel_above_mps` it first swings `peel_out_m` out of its formation, on along its course at the speed it has (braking where it
+  flew put it in the way of the ships behind it: M8-T13's seeded fight lost a wingman to that), then a plain route with avoidance on
+  to its waiting point off the bow (`entry_out_m` beyond the lane's first point, one `queue_spacing_m` farther per fighter
+  waiting), a lane route that stops there, then `DockingPlan`'s lane as the civilians fly it. Inside, `Wing.set_away` marks it:
+  `WingDirector.refresh` neither drops nor briefs an away member, so its slot is kept and it is not lost; `Wing.close_gaps` (M8-T13)
+  never moves an away member or puts a ship in its place (the ones behind it move up past it), so it comes back to the slot it left. After its launch its own pilot is put back and the wing briefs it at the next refresh.
+- **One at a time.** A fighter takes the lane only when `StationTraffic.bay_busy()` is false and no other visit is on the lane or
+  through the doors; the traffic's own check counts fighters (`holds_bay`).
+- **Control's offer (D79 beat 13).** A player whose hull falls below `offer.hull_below` gets `dock_offered` once per damage
+  (re-armed above the threshold) and, unless a mission turns `offer_line` off to speak its own, the data's line on the HUD's
+  acknowledgement line (`notice_text`, which also carries the wing's docking answers).
+- **Tests.** `test_stopping_distance`, `test_dock_keep_out` (a grid of starts through the 2 km sphere arrives without entering a
+  solid), `test_dock_autopilot`, `test_dock_repair`, `test_dock_visit`, `test_wing_away`, `test_docking` (the hold, the flight in,
+  the state inside, repair, relaunch, a 450 m/s start, skip, cancel, respawn, rebase, the reach, wingmen by order and threshold).

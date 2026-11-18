@@ -112,6 +112,12 @@ res://tests/integration/test_shiftable_registry.gd
 res://tests/integration/test_rock_bodies.gd
 res://tests/unit/test_station_hardpoints.gd
 res://tests/unit/test_station_parts.gd
+res://tests/unit/test_stopping_distance.gd
+res://tests/unit/test_dock_keep_out.gd
+res://tests/unit/test_dock_autopilot.gd
+res://tests/unit/test_dock_repair.gd
+res://tests/unit/test_dock_visit.gd
+res://tests/unit/test_wing_away.gd
 # Jumpgate and jump vortex (M6-T14, T19)
 res://tests/unit/test_vortex_timing.gd
 res://tests/unit/test_gate_jump.gd

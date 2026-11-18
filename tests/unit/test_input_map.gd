@@ -34,6 +34,7 @@ const PAD_BINDINGS: Dictionary = {
 const KEYBOARD_ONLY: Array[StringName] = [
 	&"debug_toggle_overlay", &"target_ahead", &"target_prev", &"screenshot",
 	&"wing_attack", &"wing_form", &"wing_engage", &"wing_cover", &"roll_left", &"roll_right", &"target_next",
+	&"wing_dock",
 ]
 
 # Keyboard layout B (architecture §6.1, M3-T01): every flight key under the left hand, because the right hand flies the
@@ -67,6 +68,7 @@ const KEYS_B: Dictionary = {
 	&"wing_engage": [KEY_3],
 	&"wing_cover": [KEY_4],
 	&"toggle_running_lights": [KEY_5],
+	&"wing_dock": [KEY_6],
 	&"comms_menu": [KEY_CTRL],
 }
 
@@ -94,6 +96,7 @@ const OUTSIDE_THE_BLOCK: Dictionary = {
 	KEY_N: [&"screenshot"],
 	KEY_PRINT: [&"screenshot"],
 	KEY_F3: [&"debug_toggle_overlay"],
+	KEY_6: [&"wing_dock"],  # the next key of the number row: the wing's order to dock (M8-T06)
 }
 
 

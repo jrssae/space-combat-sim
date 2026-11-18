@@ -1,0 +1,33 @@
+{"_doc": "Docking for repair in the main docking bay (M8-T06, D82). Lengths in metres, speeds in m/s, times in seconds; boxes and shot offsets in the station's frame (the bay's axis runs along +z into the drum).",
+ "join_out_m": 400.0,
+ "corridor_m": 35.0,
+ "approach_mps": 140.0,
+ "via_mps": 45.0,
+ "lane_mps": 40.0,
+ "inner_mps": 20.0,
+ "join_max_mps": 70.0,
+ "clear_m": 35.0,
+ "via_m": 60.0,
+ "timeout_s": 240.0,
+ "repair": {"base_s": 6.0, "hull_s": 30.0, "rearm_s": 4.0, "refuel_s": 4.0, "max_s": 45.0},
+ "wingman": {"auto": true, "hull_below": 0.4, "max_range_m": 60000.0, "cruise_mps": 120.0, "entry_out_m": 500.0,
+             "queue_spacing_m": 250.0, "peel_above_mps": 50.0, "peel_out_m": 250.0, "peel_ahead_s": 3.0},
+ "offer": {"hull_below": 0.5, "line": "BABYLON CONTROL: YOU ARE CLEARED TO DOCK FOR REPAIRS, MAIN DOCKING BAY"},
+ "relaunch": {"wing": "alpha", "door": 1, "retry_s": 0.5, "give_up_s": 90.0},
+ "keep_out": [
+   {"name": "drum", "min": [-430, -430, -2580], "max": [430, 430, 2600]},
+   {"name": "spine", "min": [-190, 285, -4005], "max": [190, 575, 2600]},
+   {"name": "bow_ring", "min": [-145, -145, -3530], "max": [145, 145, -3482]},
+   {"name": "ring_pylon", "min": [-8, 130, -3500], "max": [8, 300, -3480]}],
+ "shots": {
+   "dock_approach": {"keys": [
+     {"t": 0.0, "position": {"actor": "player", "offset": [26, 10, 58]}, "look_at": {"actor": "player", "offset": [0, 0, -120]}, "fov": 58},
+     {"t": 4.0, "position": {"actor": "player", "offset": [16, 7, 44]}, "look_at": {"actor": "player", "offset": [0, 0, -60]}, "fov": 55},
+     {"t": 600.0, "position": {"actor": "player", "offset": [16, 7, 44]}, "look_at": {"actor": "player", "offset": [0, 0, -60]}, "fov": 55}]},
+   "dock_entry": {"keys": [
+     {"t": 0.0, "position": {"actor": "bay", "offset": [70, 34, -210]}, "look_at": {"actor": "player"}, "fov": 50},
+     {"t": 600.0, "position": {"actor": "bay", "offset": [70, 34, -210]}, "look_at": {"actor": "player"}, "fov": 50}]},
+   "dock_wait": {"keys": [
+     {"t": 0.0, "position": {"actor": "bay", "offset": [70, 34, -210]}, "look_at": {"actor": "bay", "offset": [0, 0, 40]}, "fov": 50},
+     {"t": 20.0, "position": {"actor": "bay", "offset": [240, 120, -560]}, "look_at": {"actor": "bay", "offset": [0, 0, 300]}, "fov": 55},
+     {"t": 600.0, "position": {"actor": "bay", "offset": [240, 120, -560]}, "look_at": {"actor": "bay", "offset": [0, 0, 300]}, "fov": 55}]}}}

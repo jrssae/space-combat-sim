@@ -347,7 +347,8 @@ free look. D-pad Right opens the comms menu (see Wing orders).
 ## Wing orders
 
 Keys 1 to 4, or `wing order <attack|form|engage|cover>` in the console. The HUD names the order for 3.5 s, for example
-`ALPHA 2: COPY, FORMING UP`.
+`ALPHA 2: COPY, FORMING UP`. Key 6 (M8-T06) sends the damaged wingmen to the main docking bay for repair (`dock wing`); on the
+comms menu it is DOCK, down-left, between the four orders, which stay up, right, down and left.
 
 The comms menu (D-pad Right, or Ctrl) is a radial menu like the target menu: the same ring at the left, the game paused and the view
 blurred behind it. Point the left stick (M7-T37; or the arrow keys, or the mouse) at WING ORDERS' slices, up to down going clockwise: ATTACK
@@ -1162,6 +1163,27 @@ do it: `spawn raider ai 1500`).
 - [ ] **(H) The roster:** the wingmen keep their callsigns when they move up; the roster follows the formation's places, so
       their rows move up too and the DOWN row, under the downed wingman's callsign, is the place at the back; `wing replenish`
       brings a replacement under that callsign, at the back of the formation.
+
+# Play-testing docking for repair (M8-T06)
+
+`play station_dock` puts you 1.2 km off the main docking bay with two wingmen (or fly there in free flight). Hurt yourself first
+with `damage 50` (hull points; `state ship` shows the hull) so the repair has something to do.
+
+- [ ] **(H) Docking:** target `BABYLON 5 DOCKING BAY` (target menu, NAVIGATION), hold X (Shift, Mouse 4) for 2 s inside 2 km. The
+      controls lock, the ship turns for the bay and flies in down the middle of the mouth; the inner doors open ahead of it and shut
+      behind it. Say if the approach looks sensible from beside the drum and from above the spine (it should go round, never
+      through), and if the speeds feel right (140 m/s out, 40 m/s to the mouth, 20 m/s inside).
+- [ ] **(H) From speed:** start the hold at several hundred m/s across the bow: the ship brakes first, then comes back and docks.
+- [ ] **(H) The cinematic:** the three shots (behind the ship, beside the mouth, drawing back from the bay while the repair runs)
+      and the launch's own shots after them. A or Start skips a stage each press: into the bay, to the end of the repair, to the
+      hand-off. Say if the wait (6 s plus up to 30 s for a wrecked hull) is too long or too short to watch.
+- [ ] **(H) Relaunch:** you come out of Cobra bay Alpha 1 with a whole hull and the controls back.
+- [ ] **(H) Wingmen:** select ALPHA 2 and `damage 30 target`, then key 6 (or the comms menu's DOCK, down-left): `ALPHA 2: COPY, DOCKING FOR
+      REPAIRS`, it flies off to the bay, is gone a while (its roster row stays), comes out of a Cobra bay and forms up again. Hurt
+      one below 40 % and it goes by itself (`HULL CRITICAL, DOCKING FOR REPAIRS`). Two at once go in one after the other.
+- [ ] **(H) The comms ring:** eight slices now, the four orders still up, right, down and left; say if the blank diagonals and
+      DOCK between ENGAGE and COVER ME read well.
+- [ ] **(H) Control's offer:** below half hull the HUD's line offers the bay once (`BABYLON CONTROL: YOU ARE CLEARED TO DOCK ...`).
 
 # Play-testing the raider strike carrier (M12-T19, now M10-T19: the early delivery, merged into M8 by M8-T07)
 
