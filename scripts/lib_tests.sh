@@ -5,6 +5,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GODOT="${GODOT_BIN:-${ROOT}/.tools/godot/godot}"
 REPORTS="${ROOT}/reports"
 SCRIPT_ERRORS="SCRIPT ERROR|Parse Error|Failed to load script"
+# Godot runs share the machine with other agents' runs (scripts/godot_lock.sh): the import writes .godot/, so it takes the lock
+# alone; everything else only reads and shares it. The wait is outside `timeout`, so it does not eat the limit. Uncontended, the lock costs nothing.
+GODOT_READ=("${ROOT}/scripts/godot_lock.sh" read --)
+GODOT_WRITE=("${ROOT}/scripts/godot_lock.sh" write --)
 
 fail() {
     echo "run_tests.sh: $*" >&2
@@ -46,7 +50,7 @@ build_native_or_fail() {
 # until it has run). A current cache takes about 3 s. <log> names where the output goes.
 godot_import() {
     echo "== Godot import"
-    run_logged "$1" timeout 600 "${GODOT}" --headless --path . --import \
+    run_logged "$1" "${GODOT_WRITE[@]}" timeout 600 "${GODOT}" --headless --path . --import \
         || fail "Godot import failed (see $1)."
     if grep -E "${SCRIPT_ERRORS}" "$1"; then
         fail "Import reported script errors (see $1)."
@@ -56,7 +60,7 @@ godot_import() {
 # GUT silently skips a test file that does not parse, so compile everything explicitly. <log> names where the output goes.
 compile_check() {
     echo "== Compile check"
-    run_logged "$1" timeout 300 "${GODOT}" --headless --path . -s res://scripts/check_scripts.gd \
+    run_logged "$1" "${GODOT_READ[@]}" timeout 300 "${GODOT}" --headless --path . -s res://scripts/check_scripts.gd \
         || fail "Scripts failed to compile (see $1)."
     if grep -E "${SCRIPT_ERRORS}" "$1"; then
         fail "Scripts failed to compile (see $1)."
@@ -98,7 +102,7 @@ console_run() {
     local log="$1" expected="$2"
     shift 2
     local status=0
-    timeout 120 "${GODOT}" --headless --path . "${CONSOLE_HOST}" -- "$@" > "${log}" 2>&1 || status=$?
+    "${GODOT_READ[@]}" timeout 120 "${GODOT}" --headless --path . "${CONSOLE_HOST}" -- "$@" > "${log}" 2>&1 || status=$?
     cat "${log}"
     if (( status != expected )); then
         echo "run_tests.sh: console smoke run exited ${status}, expected ${expected} (see ${log})." >&2
@@ -150,7 +154,7 @@ main_run() {
     local log="$1" limit="$2" expected="$3" label="$4"
     shift 4
     local status=0
-    timeout "${limit}" "${GODOT}" --headless --path . "$@" > "${log}" 2>&1 || status=$?
+    "${GODOT_READ[@]}" timeout "${limit}" "${GODOT}" --headless --path . "$@" > "${log}" 2>&1 || status=$?
     cat "${log}"
     if (( status != expected )); then
         echo "run_tests.sh: ${label} smoke run exited ${status}, expected ${expected} (see ${log})." >&2
@@ -188,7 +192,7 @@ smoke_main_scene() {
 # M1-T15 / AC10: the game itself (project main scene) must boot headless, register every subsystem's provider and
 # answer through the console without engine errors.
 main_status=0
-timeout 180 "${GODOT}" --headless --path . -- --console-strict \
+"${GODOT_READ[@]}" timeout 180 "${GODOT}" --headless --path . -- --console-strict \
     --console-exec="wait 30; state; state ship; get render.renderer; quit" > "${log}" 2>&1 || main_status=$?
 cat "${log}"
 if (( main_status != 0 )); then

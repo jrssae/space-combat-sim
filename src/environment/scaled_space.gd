@@ -33,6 +33,8 @@ const SPHERE_SEGMENTS: int = 128
 ## The planet surface's full sun (`scaled_planet.gdshader`'s `sun_strength`), which its far dot matches.
 const SUN_STRENGTH: float = 1.5
 const ACTIONS: PackedStringArray = ["status", "epoch", "show", "hide"]
+## The layer's group: `frame orbit` reads its epoch offset to place the player against the star as drawn (M7-T68).
+const GROUP: StringName = &"scaled_space"
 
 ## Added to the World's system time (its scenario's epoch and the sim clock, M6-T09) before the ephemeris is asked, s: zero
 ## but for captures (`scaled epoch`).
@@ -57,6 +59,7 @@ var _shader: Shader = null
 
 func _init() -> void:
 	top_level = true
+	add_to_group(GROUP)
 	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	process_priority = LATE_PRIORITY
 
@@ -95,7 +98,7 @@ func refresh(camera: Camera3D) -> void:
 	if system != _system:
 		_build(system)
 	var time_s: float = world.system_time() + epoch_offset_s
-	var view: Transform3D = camera.get_global_transform_interpolated()
+	var view: Transform3D = FarProp.drawn_pose(camera)
 	var eye: PackedFloat64Array = ScaledPlacement.camera_from_anchor(world.origin, view.origin)
 	var places: Dictionary = {}
 	for id: StringName in system.body_ids:
@@ -159,13 +162,14 @@ func refresh(camera: Camera3D) -> void:
 
 
 ## Where body `id` is from the World's anchor at `time_s`: three numbers, m, game axes; empty when it cannot be told.
-## A place on a rail sees the body straight from the ephemeris; a free-falling anchor is held against its home body.
+## A rail (a place's, or a body's own under `frame drop`, M7-T71) sees the body straight from the ephemeris; a free-falling
+## anchor is held against its home body.
 static func body_from_anchor(world: WorldFrame, id: StringName, time_s: float) -> PackedFloat64Array:
 	var system: StarSystem = world.star_system
 	if system == null or not system.has_id(id) or not system.has_id(world.anchor_name):
 		return PackedFloat64Array()
 	var off: PackedFloat64Array = world.anchor_offset
-	if system.place_ids.has(world.anchor_name):
+	if world.on_rail():
 		var seen: PackedFloat64Array = system.relative_state(id, world.anchor_name, time_s)
 		if seen.size() < 3:
 			return PackedFloat64Array()

@@ -155,4 +155,5 @@ static func _without_task_ids(text: String) -> String:
 	var alone := RegEx.create_from_string(" ?\\(M\\d+-T\\d+[a-z]?\\)")
 	var leading := RegEx.create_from_string("M\\d+-T\\d+[a-z]?[,;:] ")
 	var trailing := RegEx.create_from_string("[,;] M\\d+-T\\d+[a-z]?")
-	return trailing.sub(leading.sub(alone.sub(text, "", true), "", true), "", true)
+	# A list of ids alone in brackets ("(M5-T40, M7-T24)") thins to one id, which the last pass then drops with its brackets.
+	return alone.sub(trailing.sub(leading.sub(alone.sub(text, "", true), "", true), "", true), "", true)

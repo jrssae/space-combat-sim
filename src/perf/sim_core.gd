@@ -68,6 +68,8 @@ const KIND_STATIC: int = 5
 const KIND_PROP: int = 6
 const KIND_BOLT: int = 7
 const KIND_BEAM: int = 8
+## An interceptor battery's pulse (M7-T41): it meets hostile missiles and bolts, never a hull.
+const KIND_INTERCEPT: int = 9
 ## Row flags (`ScsSimCore`) GDScript reads: a rigid body, a hull, an active hull, a low-attention tier row (M4-T21).
 const FLAG_RIGID: int = 1
 const FLAG_HULL: int = 2
@@ -78,6 +80,10 @@ const FLAG_TIER: int = 16
 static var _current: SimCore = null
 # The civilian ships by body id (M5-T21): every core is told, so the turrets defend them.
 static var _civilians: Dictionary[int, bool] = {}
+# The navigation markers' bodies (M7-T27, `set_navigation`), given again to each core that attaches.
+static var _nav_bodies: Dictionary[int, bool] = {}
+# The ships sheltered inside a station (M7-T62, `set_sheltered`), given again to each core that attaches.
+static var _sheltered: Dictionary[int, bool] = {}
 ## Warnings that bodies were asked about in a tree with no world (said once a run).
 static var no_world_warnings: int = 0
 
@@ -206,6 +212,16 @@ func _ready() -> void:
 			core.set_civilian(body_id, true)
 		else:
 			_civilians.erase(body_id)  # a ship freed with an earlier scene (code review 2026-11-12: the set only grew)
+	for body_id: int in _nav_bodies.keys():
+		if is_instance_id_valid(body_id):
+			core.set_navigation(body_id, true)
+		else:
+			_nav_bodies.erase(body_id)
+	for body_id: int in _sheltered.keys():
+		if is_instance_id_valid(body_id):
+			core.set_sheltered(body_id, true)
+		else:
+			_sheltered.erase(body_id)
 	TurretMount.rebind_all()
 
 
@@ -290,6 +306,29 @@ static func set_civilian(body_id: int, on: bool) -> void:
 	var sim: SimCore = current()
 	if sim != null and sim.core != null:
 		sim.core.set_civilian(body_id, on)
+
+
+## Marks body `body_id` as a navigation marker (M7-T27, `NavPoint`): a place the player targets, which avoidance flies through.
+static func set_navigation(body_id: int, on: bool) -> void:
+	if on:
+		_nav_bodies[body_id] = true
+	else:
+		_nav_bodies.erase(body_id)
+	var sim: SimCore = current()
+	if sim != null and sim.core != null:
+		sim.core.set_navigation(body_id, on)
+
+
+## Marks ship `body_id` as sheltered inside a station (M7-T62, `Ship.inside_station`): out of every other ship's sight, aim and
+## fire while its row flies on.
+static func set_sheltered(body_id: int, on: bool) -> void:
+	if on:
+		_sheltered[body_id] = true
+	else:
+		_sheltered.erase(body_id)
+	var sim: SimCore = current()
+	if sim != null and sim.core != null:
+		sim.core.set_sheltered(body_id, on)
 
 
 ## A bolt of `shooter_id` hit `victim_id` (the hit resolver, in the sweep's order): the turrets' attacker memory (M5-T21).

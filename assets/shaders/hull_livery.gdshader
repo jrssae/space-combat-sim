@@ -137,7 +137,10 @@ void fragment() {
 	ROUGHNESS = orm.g;
 	METALLIC = orm.b;
 	SPECULAR = 0.35;  // matte paint (Q34: less gloss)
-	CLEARCOAT = sheen;
-	CLEARCOAT_ROUGHNESS = sheen_roughness;
+	// The clear coat is on the paint only, and as worn as the paint under it (M7-T17): none on bare metal, duller on grime and
+	// wear, its sharpness following each plate's roughness, so it never lies over the hull as one even plastic shell.
+	float on_paint = (1.0 - smoothstep(0.62, 0.78, orm.b)) * clamp((0.85 - orm.g) / 0.35, 0.0, 1.0);
+	CLEARCOAT = sheen * on_paint;
+	CLEARCOAT_ROUGHNESS = clamp(sheen_roughness + (orm.g - 0.5), 0.1, 1.0);
 	EMISSION = texture(emissive_map, UV).rgb * emission_energy;
 }

@@ -7,12 +7,16 @@ extends Node3D
 ## Do not add it to `world_shiftable`: it moves with its parent, which is the shiftable node.
 
 const GROUP: StringName = &"targetable"
+## Metadata on a body with no marker of its own, naming the `Targetable` that speaks for it (the station's turning drum, whose
+## guns fire for the station): a pilot hit by that body's shots knows whom to answer.
+const SPEAKS_FOR: StringName = &"speaks_for"
 
 ## What sort of thing it marks (M4-T07): later scans, broad phases and the tier read it so a rock or a mine never fills a
 ## fighter's contacts. Ships are the default; the battle's stand-ins set their own.
 enum Kind { SHIP, CAPITAL, TURRET, MISSILE, MINE, STATIC, PROP }
 
-## What it is to a pilot picking from the target menu (M5-T25): civilians and nav beacons get their own categories.
+## What it is to a pilot picking from the target menu (M5-T25): civilians and navigation targets get their own categories.
+## BEACON is every navigation target: nav buoys, jumpgates and the station's bays (M7-T27), drawn in the HUD's navigation look.
 enum Role { SHIP, CIVILIAN, BEACON }
 
 ## What the pilot reads ("NAV ALPHA"); the console selects targets by it.
@@ -23,6 +27,8 @@ enum Role { SHIP, CIVILIAN, BEACON }
 @export var kind: Kind = Kind.SHIP
 ## Its `Role` (M5-T25).
 var role: Role = Role.SHIP
+## What a long hold of the auto-track button does to it while selected (M7-T27): a gate's jump, a bay's placeholder; null = nothing.
+var interaction: TargetInteraction = null
 ## How far this target is heard beyond the sensors (M3-T17, Q21), m: 0 = not at all, `INF` = everywhere. Nav buoys use
 ## 1 000 km, allied ships 100 km. Broadcasters are kept in one list (`broadcasters`) so the AI's
 ## `ContactScan.shared_broadcasts` need not sweep every body.
@@ -82,12 +88,13 @@ func _sync_broadcaster() -> void:
 		_broadcasters.erase(self)
 
 
-## True while the target can be selected: visible and its parent processing (parked and destroyed ships are neither).
+## True while the target can be selected: visible and its parent processing (parked and destroyed ships are neither), and not a
+## ship inside a station (M7-T62).
 func is_active() -> bool:
 	if not is_inside_tree() or not is_visible_in_tree():
 		return false
 	var parent: Node = get_parent()
-	return parent != null and parent.can_process()
+	return parent != null and parent.can_process() and not (parent is Ship and (parent as Ship).inside_station)
 
 
 ## Hull 0..1 of the owner (its `Damageable` sibling), or -1 when it has none (a buoy).
@@ -111,7 +118,7 @@ func get_target_velocity() -> Vector3:
 	if owner_node != null and owner_node.is_in_group(WorldFrame.ANCHORED_GROUP):
 		var world: WorldFrame = WorldFrame.of(owner_node)
 		if world != null:
-			return velocity + world.rest_velocity()
+			return velocity + world.anchored_velocity()
 	return velocity
 
 
@@ -123,6 +130,7 @@ func to_target_info() -> TargetInfo:
 			damageable.bounding_radius if damageable != null else 0.0)
 	info.broadcast_range_m = broadcast_range_m
 	info.role = role
+	info.interaction_kind = interaction.kind if interaction != null else &""
 	if damageable != null:
 		info.damage_layout = damageable.zones.layout
 		info.damage_zones = damageable.zone_severities()

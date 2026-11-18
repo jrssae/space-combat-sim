@@ -140,17 +140,18 @@ func _relation_run() -> Array:
 	return out
 
 
-# Fails at the first tick whose entry differs from the GDScript stand-ins' recorded log.
+# Fails at the first tick whose entry differs from the recorded log (the GDScript stand-ins'; re-recorded from the native
+# rows at M7-T64, when mine blasts began to chain).
 func _assert_recorded(case: String, log: Array) -> void:
-	var recorded: Variant = ParityFixture.stored(FIXTURE, case)
-	assert_not_null(recorded, "%s: the GDScript stand-ins' log was recorded" % case)
+	var got: Array = WeaponRowsScene.digests(log)
+	var recorded: Variant = ParityFixture.rerecorded(FIXTURE, case, got)
+	assert_not_null(recorded, "%s: the log was recorded" % case)
 	if recorded == null:
 		return
-	var got: Array = WeaponRowsScene.digests(log)
 	assert_eq(got.size(), (recorded as Array).size(), "%s: as many ticks as the recording" % case)
 	for t: int in mini(got.size(), (recorded as Array).size()):
 		if got[t] != recorded[t]:
-			fail_test("%s: tick %d differs from the GDScript stand-ins' recording: %s" % [case, t, var_to_str(log[t]).left(400)])
+			fail_test("%s: tick %d differs from the recording: %s" % [case, t, var_to_str(log[t]).left(400)])
 			return
 	pass_test("%s: %d ticks equal the recording byte for byte" % [case, got.size()])
 

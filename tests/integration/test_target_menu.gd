@@ -160,9 +160,9 @@ func test_the_stick_points_a_selects_and_the_game_resumes_with_nothing_fired() -
 	assert_eq(_read("target_menu.highlight"), "RAIDER 2")
 	await _point(120.0)
 	assert_eq(_read("target_menu.highlight"), "RAIDER 2", "a blank slice keeps the last highlight")
-	# A is also fire, and the stick that points also steers: both stay held through the pick.
+	# A is also fire, and the left stick that points also strafes: both stay held through the pick (M7-T37).
 	var bolts: int = main.projectiles.get_child_count()
-	source.hold(InputAdapter.YAW_RIGHT, 1.0)
+	source.hold(InputAdapter.STRAFE_RIGHT, 1.0)
 	source.hold(InputAdapter.FIRE)
 	source.hold(InputAdapter.RADIAL_SELECT)
 	await _ticks(4)
@@ -172,14 +172,14 @@ func test_the_stick_points_a_selects_and_the_game_resumes_with_nothing_fired() -
 	assert_eq(_read("target_menu.closed_by"), "pick")
 	assert_eq(main.projectiles.get_child_count(), bolts, "the A that selected does not fire")
 	assert_false(main.adapter.last.combat.fire)
-	assert_eq(main.adapter.last.flight.rot, Vector3.ZERO, "the stick that pointed does not steer until it centres")
+	assert_eq(main.adapter.last.flight.strafe, Vector2.ZERO, "the left stick that pointed does not strafe until it centres")
 	source.release_all()
 	await _ticks(2)
-	source.hold(InputAdapter.YAW_RIGHT, 1.0)
+	source.hold(InputAdapter.STRAFE_RIGHT, 1.0)
 	source.hold(InputAdapter.FIRE)
 	await _ticks(3)
 	assert_true(main.adapter.last.combat.fire, "let go and pressed again, A fires")
-	assert_gt(main.adapter.last.flight.rot.y, 0.5, "and the stick steers")
+	assert_gt(main.adapter.last.flight.strafe.x, 0.5, "and the stick strafes")
 
 
 func test_b_goes_back_a_ring_then_closes_and_resumes() -> void:
@@ -273,8 +273,13 @@ func test_a_picked_beacon_is_the_hud_waypoint_and_never_the_target() -> void:
 	assert_eq(_read("target_menu.highlight"), "NAVIGATION")
 	await _press(InputAdapter.RADIAL_SELECT)
 	var entries: PackedStringArray = _read("target_menu.entries")
-	assert_eq(entries[0], "nav alpha", "the nearest beacon first")
+	# The places to act on lead the ring (M7-T27: the station's bays and the gate), then the nearest beacon.
+	var station_placed: bool = main.far_props.station != null
+	var places: Array[String] = ["babylon 5 docking bay", "babylon 5 cargo bay", "jumpgate"]
+	assert_true(places.has(entries[0]) if station_placed else entries[0] == "nav alpha", "a place first: %s" % [entries])
+	assert_true(entries.has("nav alpha"), "the nearest beacon is listed: %s" % [entries])
 	assert_eq(entries[3], "none")
+	assert_true(_run("targetmenu highlight \"nav alpha\"").ok)
 	await _press(InputAdapter.RADIAL_SELECT)
 	assert_false(main.target_menu.is_open())
 	assert_eq(main.ship.targeting.selected_name(), "RAIDER 1", "the ship keeps its target: a beacon is never the facing target")
@@ -303,7 +308,7 @@ func test_a_picked_beacon_is_the_hud_waypoint_and_never_the_target() -> void:
 func test_a_picked_waypoint_is_dropped_when_its_beacon_is_destroyed() -> void:
 	_run("targetmenu open")
 	_run("targetmenu pick navigation")
-	_run("targetmenu pick 0")
+	_run("targetmenu pick \"nav alpha\"")
 	assert_true(_frame().waypoint_present)
 	main.buoys[0].set_destroyed(true)
 	assert_false(_frame().waypoint_present)
@@ -413,8 +418,9 @@ func test_closed_it_costs_nothing_per_tick() -> void:
 	assert_eq(main.target_menu.view.draws, draws, "nothing is drawn")
 	_run("targetmenu open")
 	assert_eq(TargetInfo.built_count - built, int(_read("target_menu.last_candidates")), "opening reads the list once")
-	# The buoys and the jumpgate (M6-T14) are the scene's broadcasters.
-	assert_eq(int(_read("target_menu.last_candidates")), main.buoys.size() + main.gates.gates.size())
+	# The buoys, the jumpgate (M6-T14), the station (M7-T06) and its two bays (M7-T27) are the scene's broadcasters.
+	assert_eq(int(_read("target_menu.last_candidates")), main.buoys.size() + main.gates.gates.size()
+			+ (3 if main.far_props.station != null else 0))
 	built = TargetInfo.built_count
 	await _ticks(10)
 	_run("targetmenu pick navigation")
@@ -422,6 +428,21 @@ func test_closed_it_costs_nothing_per_tick() -> void:
 	assert_eq(TargetInfo.built_count, built, "and never again while it is open: the rings come from that one read")
 	_run("targetmenu close")
 	assert_false(main.target_menu.view.is_processing())
+
+
+func test_the_station_is_an_ally_to_pick_as_a_target() -> void:
+	# M7-T06: Babylon 5 broadcasts, so it is identified from anywhere, and it is the player's own side: an ally, a target (not
+	# a beacon, which would only be the waypoint).
+	await _ticks(2)
+	assert_not_null(main.far_props.station, "the scenario places the station")
+	_run("targetmenu open")
+	_run("targetmenu pick allies")
+	assert_eq(_read("target_menu.page"), "allies")
+	assert_has(Array(_read("target_menu.entries") as PackedStringArray), "babylon 5")
+	_run("targetmenu pick \"babylon 5\"")
+	await _ticks(2)
+	assert_eq(main.ship.targeting.selected_id(), main.far_props.station.targetable.get_instance_id(), "selected as the target")
+	assert_false(main.target_menu.view.visible, "the pick closed the menu")
 
 
 func test_the_console_opens_picks_and_closes_it() -> void:
@@ -480,6 +501,15 @@ func _pull_view() -> FocusPullView:
 	return main.target_menu.get_node("FocusPull") as FocusPullView
 
 
+# Waits on frames until the pull reaches the target (or 2 s of real time), so a hitching frame cannot fail the test.
+func _wait_pull(blur: FocusPullView, target: float) -> void:
+	var deadline: int = Time.get_ticks_msec() + 2000
+	while blur.amount() != target and Time.get_ticks_msec() < deadline:
+		await get_tree().process_frame
+	if target == 0.0:
+		await get_tree().process_frame
+
+
 func test_focus_pull_eases_in_and_out_on_real_time() -> void:
 	var blur: FocusPullView = _pull_view()
 	assert_not_null(blur)
@@ -489,11 +519,11 @@ func test_focus_pull_eases_in_and_out_on_real_time() -> void:
 	assert_true(blur.visible)
 	assert_true(blur.layer > main.hud.layer and blur.layer < main.target_menu.view.layer, "above the HUD, below the menu")
 	assert_true(blur.layer < main.target_menu.preview.layer + 1)
-	await get_tree().create_timer(0.4, true, false, true).timeout
-	assert_eq(blur.amount(), 1.0, "full after 0.2 s even though the tree is paused")
+	await _wait_pull(blur, 1.0)
+	assert_eq(blur.amount(), 1.0, "reaches full even though the tree is paused")
 	assert_eq(_read("target_menu.focus"), 1.0)
 	main.target_menu.close()
-	await get_tree().create_timer(0.4, true, false, true).timeout
+	await _wait_pull(blur, 0.0)
 	assert_eq(blur.amount(), 0.0)
 	assert_false(blur.visible, "hidden again once back in focus")
 	assert_false(blur.is_processing())

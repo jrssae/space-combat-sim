@@ -115,6 +115,13 @@ impl ScsSimCore {
         self.frame.set_origin(to_kernel(x, y, z));
     }
 
+    /// The local frame's velocity against a new anchor, m/s (game axes), once every mover has taken the change (M7-T66):
+    /// zero rides it.
+    #[func]
+    fn frame_set_origin_velocity(&mut self, x: f64, y: f64, z: f64) {
+        self.frame.set_origin_velocity(to_kernel(x, y, z));
+    }
+
     /// The tick's gravity sample at sim time `time_s`; true when anything near the local space pulls.
     #[func]
     fn frame_sample(&mut self, time_s: f64) -> bool {

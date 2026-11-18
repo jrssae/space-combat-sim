@@ -73,6 +73,15 @@ GDGS behaviours that shape our pipeline (read from the v3.3.0 source):
 - Headless runs (`--headless`) still have no GDGS backend and a 64 x 64 px viewport; tests that need screen sizes set the
   root window size themselves.
 
+## Sharing one machine between agents (2026-11-13, M7)
+
+Parallel agents used one exclusive lock for every Godot command, so a 15-minute import-plus-GUT wrapper made two others wait 10
+minutes each on a 20-core machine. Only two things really conflict: writes to the import cache (`godot --import` into `.godot/`)
+and builds into `assets/generated/`; tests, the compile check, smokes and renders only read them. `scripts/godot_lock.sh` is a
+read/write lock (shared for readers, exclusive for writers, a gate so a waiting writer is not starved) with one fixed order
+(Godot, then GPU, then bench), and `scripts/scratch_project.sh` gives an agent a private `.godot/` and `assets/generated/`
+(btrfs reflink copies) when it must swap or rebuild assets for a comparison.
+
 ## Container findings (implementation sessions)
 
 - `github.com/<org>/<repo>/releases/download/...` **works** through the proxy (Godot 4.7.2 zip and export templates both 200).

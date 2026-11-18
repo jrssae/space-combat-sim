@@ -106,6 +106,23 @@ func test_the_drivers_mean_muzzle_is_the_same_from_the_transforms() -> void:
 	assert_eq(from_data, from_markers, "the mean muzzle the brains aim from is the same bits either way")
 
 
+func test_a_flash_ends_after_flash_s_whatever_the_pools_clock_reads() -> void:
+	# The pool's clock is nonzero once any idle frame has run (the passes advance it by real frame times, and ship assembly
+	# attaches the pool), so `(clock + FLASH_S) - birth` may round to a hair under FLASH_S. CI hit it as a flash that
+	# outlived its time: the expiry must hold at every clock, not only at zero.
+	var lean: Combatant = _ship("LEAN", true)
+	await get_tree().physics_frame
+	var pool: MuzzleFlashPool = MuzzleFlashPool.attach(world)
+	for step: int in 400:
+		pool.advance(0.00731 + 0.00013 * step)
+		lean.cannon.on_kernel_fired(0, Vector3.ZERO)
+		assert_eq(pool.active_for(lean.ship), 1, "step %d: the shot flashes" % step)
+		pool.advance(EmitterCurves.FLASH_S)
+		if pool.active_count() != 0:
+			assert_eq(pool.active_count(), 0, "step %d: a flash is gone after exactly FLASH_S" % step)
+			return
+
+
 func test_the_pool_and_the_bolt_mesh_run_in_the_frames_passes_not_in_a_process_of_their_own() -> void:
 	var lean: Combatant = _ship("LEAN", true)
 	await get_tree().physics_frame

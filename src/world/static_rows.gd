@@ -8,8 +8,9 @@ extends RefCounted
 ## natively, the solid rows with them, and `moves` counts it, so nothing kept by `version` is built again. Ids must be unique
 ## and not instance ids: a rock uses its body's RID id, a mine one from `new_id`.
 ##
-## Mines are obstacles, not hulls: bolts and rams pass them (the mine's own trigger is what sets it off), and only their own
-## side knows where they are (Q27, `ContactScan.statics_for`).
+## Mines are obstacles, not solid rows: rams pass them and their row is as big as their trigger, and only their own side knows
+## where they are (Q27, `ContactScan.statics_for`). What sets one off is its own step (a hostile in the trigger, a touch) or a
+## shot at its 3 m body, which the hit resolver keeps beside the rocks (M7-T64).
 
 ## Rocks do not move, so a ram is decided by the ship's own change of velocity.
 const SOLID_MASS_KG: float = 1.0e15
@@ -114,6 +115,27 @@ static func shift(offset: Vector3, world: Node) -> void:
 		_solid.positions = native.shift(_solid.positions, _solid.worlds, owner, offset)
 		if int(native.moved()) > 0:
 			_solid.moves += 1
+
+
+## Puts rows of `world` at `places` (row id to position, in `world`'s frame), in place as a shift is: `moves` counts it.
+## For rows put back where they stood exactly, after a stay far from the local origin (M7-T66).
+static func place_rows(world: Node, places: Dictionary) -> void:
+	if places.is_empty() or world == null:
+		return
+	var owner: int = world.get_instance_id()
+	var moved: bool = false
+	for i: int in ids.size():
+		if worlds[i] == owner and places.has(ids[i]):
+			positions[i] = places[ids[i]]
+			moved = true
+	if not moved:
+		return
+	moves += 1
+	if _solid != null and _solid.version == solid_version:
+		for i: int in _solid.ids.size():
+			if _solid.worlds[i] == owner and places.has(_solid.ids[i]):
+				_solid.positions[i] = places[_solid.ids[i]]
+		_solid.moves += 1
 
 
 ## Removes every row.

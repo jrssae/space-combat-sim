@@ -1,0 +1,336 @@
+extends GutTest
+## The defense grid's balance (M7-T07, D75, AC6): the grid alone beats 12 raiders, or one capital ship (M4's capital stand-in in
+## M7), as long as the enemy stays in its fire. "Beats" means the whole enemy force destroyed within the fight's limit; the
+## station is never destroyed (Q5). Seeded and headless through the native core, three seeds each, as Q31 pinned the Saturns.
+## A balance file, so behind `GUT_BALANCE`.
+##
+## - **The raid**: 12 raiders on the raider profile dive from a loose box 0.9 to 1.7 km up and forward of a point 450 m over the
+##   spine's first light turret, ordered to attack the station itself (M7-T10: they aim at the grid's mounts, go round the hull
+##   and none may ram it or hang beside it). Their hits set the grid weapons free; the grid answers. Tuned (maintainer, after
+##   T07) so the grid takes 90 to 120 s on the three seeds' mean, each seed 75 to 140 s, and the hull shows damage.
+## - **The capital**: a cruiser stand-in holding station 2.2 to 2.7 km off the bow tower (placed by the seed). The stand-in's own director picks fighters
+##   only, so this file fires its weapons at the bow (its eight guns' bolts once a second each, its two beams every 2 s, a
+##   missile every 3 s): the interceptors' pulses take its bolts and missiles, its beams get through (D75).
+## - **The interceptors' proof** (M7-T41): the same raid with the batteries parked does clearly more damage to the station, over
+##   the three seeds together (one seed alone may not: the raid is chaotic).
+
+const RAID_SIZE: int = 12
+const RAID_LIMIT_S: float = 180.0
+## The maintainer's bands for the raid (after T07), s: the three seeds' mean, and each seed. The fight is chaotic, so one seed
+## may stray further than the mean.
+const RAID_MEAN_BAND_S: Vector2 = Vector2(90.0, 120.0)
+const RAID_SEED_BAND_S: Vector2 = Vector2(75.0, 140.0)
+const CAPITAL_LIMIT_S: float = 300.0
+const SEEDS: Array[int] = [1, 2, 3]
+const RAIDER: StringName = &"raider_fighter"
+## Where the raid forms up: over this mount, this high. Its objective is the station (M7-T10; T07 needed a decoy here, because
+## raiders near the hull stalled beside it).
+const RAID_OVER: String = "L9"
+const RAID_UP_M: float = 450.0
+const RAIDER_AI: Dictionary = {"type": "ai", "profile": "raider", "orders": "attack", "objective": Station.DISPLAY_NAME}
+## A raider slower than this against the station counts as hanging (the stall T07 found), m/s; and the most of the raid's
+## flying time that may be spent so, and the fewest metres any raider may come to the hull without it being a scrape.
+const HANG_MPS: float = 8.0
+const HANG_SHARE_MAX: float = 0.05
+const CAPITAL_CLASS: StringName = &"cruiser"
+## The capital's weapons as this file fires them (the stand-ins' own cadences, M4-T07 and T12).
+const GUN_INTERVAL_S: float = TurretStandin.SHOT_INTERVAL_S
+const MISSILE_INTERVAL_S: float = 3.0
+## Ticks per real tick: the physics rate and the time scale raised together, so each step is still 1/60 s of sim time.
+const SPEED_UP: float = 8.0
+## The parked raid's station damage over the three seeds, at least this many times the raid's with the batteries (M7-T41).
+const PROOF_MARGIN: float = 1.5
+
+# The raid's fights by seed, and with the batteries parked: the balance and the proof tests share them.
+static var _raids: Dictionary = {}
+static var _parked_raids: Dictionary = {}
+
+var _rate_backup: int = 60
+var _scale_backup: float = 1.0
+var _steps_backup: int = 8
+
+
+@warning_ignore("untyped_declaration")  # GutTest declares it untyped
+func should_skip_script():
+	return BalanceTests.skip_reason()
+
+
+func before_each() -> void:
+	_rate_backup = Engine.physics_ticks_per_second
+	_scale_backup = Engine.time_scale
+	_steps_backup = Engine.max_physics_steps_per_frame
+
+
+func after_each() -> void:
+	_restore_speed()
+
+
+func test_the_grid_alone_beats_twelve_raiders() -> void:
+	var lines := PackedStringArray()
+	var total_s: float = 0.0
+	for seed_value: int in SEEDS:
+		var f: Dictionary = await _raid(seed_value, false)
+		if f.is_empty():
+			pending("the babylon5_station asset is not generated")
+			return
+		lines.append("seed %d %s" % [seed_value, _line(f)])
+		assert_true(bool(f["won"]), "seed %d: every raider destroyed inside %.0f s (%s)" % [seed_value, RAID_LIMIT_S, _line(f)])
+		assert_gt(int(f["intercepts"]), 0, "seed %d: the batteries' pulses met the raiders' bolts" % seed_value)
+		assert_between(float(f["time_s"]), RAID_SEED_BAND_S.x, RAID_SEED_BAND_S.y, "seed %d: the raid lasts %.0f to %.0f s" % [
+				seed_value, RAID_SEED_BAND_S.x, RAID_SEED_BAND_S.y])
+		total_s += float(f["time_s"])
+		assert_gt(float(f["worst_section"]), 0.03, "seed %d: the station shows section damage" % seed_value)
+		assert_eq(int(f["rammed"]), 0, "seed %d: no raider rams the station" % seed_value)
+		assert_lt(float(f["hanging"]), HANG_SHARE_MAX, "seed %d: the raiders do not hang beside the hull" % seed_value)
+	var mean_s: float = total_s / float(SEEDS.size())
+	assert_between(mean_s, RAID_MEAN_BAND_S.x, RAID_MEAN_BAND_S.y, "the seeds' mean lasts %.0f to %.0f s" % [RAID_MEAN_BAND_S.x,
+			RAID_MEAN_BAND_S.y])
+	gut.p("BALANCE grid vs %d raiders (mean %.1f s):\n    %s" % [RAID_SIZE, mean_s, "\n    ".join(lines)])
+
+
+func test_the_grid_alone_beats_one_capital() -> void:
+	var lines := PackedStringArray()
+	for seed_value: int in SEEDS:
+		var f: Dictionary = await _fight(seed_value, true)
+		if f.is_empty():
+			pending("the babylon5_station asset is not generated")
+			return
+		lines.append("seed %d %s" % [seed_value, _line(f)])
+		assert_true(bool(f["won"]), "seed %d: the capital destroyed inside %.0f s (%s)" % [seed_value, CAPITAL_LIMIT_S, _line(f)])
+		assert_gt(int(f["intercepts"]), 0, "seed %d: its bolts and missiles were shot down" % seed_value)
+		assert_gt(int(f["beam_hits"]), 0, "seed %d: its beams got through" % seed_value)
+		assert_lt(float(f["worst_section"]), 1.0, "seed %d: no section lost" % seed_value)
+	gut.p("BALANCE grid vs one %s stand-in:\n    %s" % [CAPITAL_CLASS, "\n    ".join(lines)])
+
+
+func test_the_interceptors_save_the_station_damage() -> void:
+	var lines := PackedStringArray()
+	var with_total: float = 0.0
+	var parked_total: float = 0.0
+	var intercepts: int = 0
+	for seed_value: int in SEEDS:
+		var on: Dictionary = await _raid(seed_value, false)
+		var off: Dictionary = await _raid(seed_value, true)
+		if on.is_empty() or off.is_empty():
+			pending("the babylon5_station asset is not generated")
+			return
+		with_total += float(on["station_lost"])
+		parked_total += float(off["station_lost"])
+		intercepts += int(on["intercepts"])
+		assert_eq(int(off["pulses"]), 0, "seed %d: parked batteries fire nothing" % seed_value)
+		lines.append("seed %d: station lost %.0f with the batteries (%d pulses, %d met), %.0f parked" % [seed_value,
+				float(on["station_lost"]), int(on["pulses"]), int(on["intercepts"]), float(off["station_lost"])])
+	assert_gt(intercepts, 0, "the batteries' pulses met the raiders' bolts")
+	assert_gte(parked_total, PROOF_MARGIN * with_total, "parked, the batteries let the station take at least %.1f times the damage (%.0f against %.0f)" % [
+			PROOF_MARGIN, parked_total, with_total])
+	gut.p("PROOF interceptors: station lost %.0f with the batteries, %.0f parked (%.2f times):\n    %s" % [with_total, parked_total,
+			parked_total / maxf(with_total, 1.0), "\n    ".join(lines)])
+
+
+# The raid on `seed_value`, with the batteries parked or not, flown once per run of the file.
+func _raid(seed_value: int, parked: bool) -> Dictionary:
+	var cache: Dictionary = _parked_raids if parked else _raids
+	if not cache.has(seed_value):
+		var f: Dictionary = await _fight(seed_value, false, parked)
+		if f.is_empty():
+			return f
+		cache[seed_value] = f
+	return cache[seed_value]
+
+
+# One fight: the station at the origin and the raid or the capital off its bow, flown until the enemy is destroyed or the limit.
+# `parked`: the interceptor batteries hold still (out of play), for the proof.
+func _fight(seed_value: int, capital: bool, parked: bool = false) -> Dictionary:
+	await get_tree().process_frame
+	await get_tree().physics_frame
+	var scene: TurretScene = TurretScene.build(self, &"threaded", 1)
+	var station := Station.new()
+	station.name = "Station"
+	if not station.build():
+		station.free()
+		await scene.free_scene(get_tree())
+		return {}
+	scene.world.spawn(station, scene.world.to_universe(Vector3.ZERO))
+	var bow: Vector3 = station.to_world(station.hardpoints.mount("H1")["position"], StationHardpoints.FRAME)
+	var enemies: Array[Node3D] = []
+	var hulls: Array[Damageable] = []
+	var rammed: Array[int] = [0]
+	var cap: CapitalStandin = null
+	if capital:
+		cap = CapitalStandin.create(CAPITAL_CLASS, Factions.RAIDERS, "CRUISER", Vector3.ZERO)
+		cap.world = scene.world
+		var rng := RandomNumberGenerator.new()
+		rng.seed = seed_value
+		var at: Vector3 = bow + Vector3(rng.randf_range(-400.0, 400.0), rng.randf_range(300.0, 700.0),
+				-rng.randf_range(2200.0, 2700.0))
+		scene.world.spawn(cap, scene.world.to_universe(at), Basis.looking_at((bow - at).normalized(), Vector3.UP))
+		enemies.append(cap)
+		hulls.append(cap.damageable)
+	else:
+		var over: Dictionary = station.hardpoints.mount(RAID_OVER)
+		var decoy: Vector3 = station.to_world(over["position"], String(over["body"])) + Vector3.UP * RAID_UP_M
+		var rng := RandomNumberGenerator.new()
+		rng.seed = seed_value
+		for i: int in RAID_SIZE:
+			var at: Vector3 = decoy + Vector3(rng.randf_range(-500.0, 500.0), rng.randf_range(700.0, 1300.0),
+					rng.randf_range(-1100.0, -500.0))
+			var c: Combatant = scene.ship(RAIDER, Factions.RAIDERS, "RAIDER %d" % (i + 1), at, RAIDER_AI, seed_value * 100 + i,
+					false, Basis.looking_at(Vector3.BACK, Vector3.UP))
+			scene.park_on_death(c)
+			enemies.append(c.ship)
+			hulls.append(c.damageable)
+			c.damageable.hit_taken.connect(func(info: HitInfo) -> void:
+				rammed[0] += 1 if info != null and info.cause == HitInfo.CAUSE_RAM else 0)
+	var health_before: float = _health(station)
+	var hang_ticks: int = 0
+	var flown_ticks: int = 0
+	var nearest_m: float = INF
+	var beam_hits: Array[int] = [0]
+	# The grid's hits on the enemy by gun kind, told apart by their damage.
+	var grid_hits: Array[int] = [0, 0]
+	var light_damage: float = station.grid.of_kind(StationGrid.Kind.LIGHT)[0].weapon.damage
+	var heavy_damage: float = station.grid.of_kind(StationGrid.Kind.HEAVY)[0].weapon.damage
+	var station_id: int = station.get_instance_id()
+	scene.resolver.hit_resolved.connect(func(info: HitInfo) -> void:
+		if cap != null and info.shooter_id == cap.get_instance_id() and info.damage == BeamStandin.DAMAGE:
+			beam_hits[0] += 1
+		elif info.faction == Factions.EARTH_ALLIANCE and info.target_id != station_id:
+			grid_hits[0] += 1 if info.damage == light_damage else 0
+			grid_hits[1] += 1 if info.damage == heavy_damage else 0)
+	scene.attach()
+	TurretMount.rebind_all()
+	if parked:
+		for m: TurretMount in station.grid.of_kind(StationGrid.Kind.INTERCEPTOR):
+			m.process_mode = Node.PROCESS_MODE_DISABLED
+	await get_tree().physics_frame
+	var t0: float = SimClock.now()
+	var limit: float = CAPITAL_LIMIT_S if capital else RAID_LIMIT_S
+	var next_gun: Array[float] = []
+	if cap != null:
+		for k: int in cap.guns().size():
+			next_gun.append(t0 + GUN_INTERVAL_S * float(k) / float(cap.guns().size()))
+	var next_beam: float = t0
+	var next_missile: float = t0 + 0.5
+	Engine.physics_ticks_per_second = roundi(60.0 * SPEED_UP)
+	Engine.time_scale = SPEED_UP
+	Engine.max_physics_steps_per_frame = maxi(_steps_backup, roundi(SPEED_UP))
+	var won: bool = false
+	var in_fire_ticks: int = 0
+	var ticks: int = 0
+	var kills_at := PackedInt32Array()
+	while SimClock.now() - t0 < limit:
+		await get_tree().physics_frame
+		ticks += 1
+		var dead: int = hulls.filter(func(h: Damageable) -> bool: return h.hull.destroyed).size()
+		while kills_at.size() < dead:
+			kills_at.append(roundi(SimClock.now() - t0))
+		if dead == hulls.size():
+			won = true
+			break
+		if cap != null and not cap.damageable.hull.destroyed:
+			var now: float = SimClock.now()
+			cap.step_engines(1.0 / 60.0)
+			_capital_fire(cap, station, now, next_gun)
+			if now >= next_beam:
+				next_beam += BeamStandin.INTERVAL_S
+				for k: int in cap.beams().size():
+					cap.beams()[k].fire(_aim(station, k), now, scene.bolts)
+			if now >= next_missile:
+				next_missile += MISSILE_INTERVAL_S
+				_missile(cap, station, scene, now)
+		in_fire_ticks += 1 if _any_in_fire(station, enemies, hulls) else 0
+		if cap == null and ticks % 6 == 0:
+			for i: int in enemies.size():
+				if hulls[i].hull.destroyed:
+					continue
+				var body := enemies[i] as RigidBody3D
+				flown_ticks += 1
+				hang_ticks += 1 if body.linear_velocity.length() < HANG_MPS else 0
+				for hull_body: Node in [station, station.drum_body]:
+					var d: float = scene.sim.core.surface_distance(hull_body.get_instance_id(), body.global_position)
+					nearest_m = minf(nearest_m, d)
+	_restore_speed()
+	var r: PackedInt64Array = station.grid.readouts()
+	var left: int = hulls.filter(func(h: Damageable) -> bool: return not h.hull.destroyed).size()
+	var f: Dictionary = {"won": won, "time_s": SimClock.now() - t0, "left": left, "light": r[0], "heavy": r[1],
+			"intercepts": r[2], "missiles": r[3], "blocked": r[4], "pulses": r[5], "station_lost": health_before - _health(station),
+			"beam_hits": beam_hits[0], "in_fire": float(in_fire_ticks) / float(maxi(ticks, 1)),
+			"capital_hull": cap.damageable.hull.fraction() if cap != null else -1.0,
+			"knocked_out": station.grid.knocked_out().size(), "worst_section": _worst_section(station),
+			"light_hits": grid_hits[0], "heavy_hits": grid_hits[1], "kills_at": kills_at, "rammed": rammed[0],
+			"hanging": float(hang_ticks) / float(maxi(flown_ticks, 1)), "nearest_m": nearest_m}
+	await scene.free_scene(get_tree())
+	return f
+
+
+# The capital's guns, each on its cadence, at the bow from where it sits.
+func _capital_fire(cap: CapitalStandin, station: Station, now: float, next_gun: Array[float]) -> void:
+	var guns: Array[TurretStandin] = cap.guns()
+	for k: int in guns.size():
+		if now < next_gun[k]:
+			continue
+		next_gun[k] += GUN_INTERVAL_S
+		var from: Vector3 = guns[k].global_position
+		var direction: Vector3 = (_aim(station, k) - from).normalized()
+		TurretStandin.launch_bolt(cap, from, cap.linear_velocity + direction * TurretStandin.MUZZLE_SPEED_MPS, now)
+
+
+# A missile from the capital's bow straight at the bow's hull (the stand-in's missile, unguided: its target does not move).
+func _missile(cap: CapitalStandin, station: Station, scene: TurretScene, now: float) -> void:
+	var from: Vector3 = cap.global_position - cap.global_basis.z * (cap.length_m() * 0.5 + 10.0)
+	var missile := MissileStandin.PROJECTILE_SCENE.instantiate() as Projectile
+	scene.bolts.add_child(missile)
+	missile.configure(MissileStandin.weapon())
+	missile.set_kind(Projectile.KIND_MISSILE)
+	missile.shooter_id = cap.get_instance_id()
+	missile.faction = cap.faction
+	missile.launch(from, (_aim(station, 0) - from).normalized() * MissileStandin.SPEED_MPS, now)
+
+
+# Where the capital aims: just under the bow's grid mounts, on the hull (H1, H2, the bow battery, the first spine station).
+func _aim(station: Station, k: int) -> Vector3:
+	var names: Array[String] = ["H1", "H2", "I5", "L9"]
+	var entry: Dictionary = station.hardpoints.mount(names[k % names.size()])
+	var under: Vector3 = (entry["position"] as Vector3) - (entry["up"] as Vector3).normalized() * 4.0
+	return station.to_world(under, String(entry["body"]))
+
+
+# Whether some live enemy is inside a light gun's range of its mount (a capital: a heavy cannon's).
+static func _any_in_fire(station: Station, enemies: Array[Node3D], hulls: Array[Damageable]) -> bool:
+	for i: int in enemies.size():
+		if hulls[i].hull.destroyed:
+			continue
+		for m: TurretMount in station.grid.mounts:
+			if m.grid_kind == StationGrid.Kind.INTERCEPTOR:
+				continue
+			if m.global_position.distance_to(enemies[i].global_position) <= m.weapon.turret_range_m:
+				return true
+	return false
+
+
+# The most a single damage section lost, as a share of its health: what the target box shows.
+static func _worst_section(station: Station) -> float:
+	var worst: float = 0.0
+	for i: int in station.sections.count():
+		worst = maxf(worst, 1.0 - station.sections.health[i] / station.sections.max_health[i])
+	return worst
+
+
+static func _health(station: Station) -> float:
+	var sum: float = 0.0
+	for h: float in station.sections.health:
+		sum += h
+	return sum
+
+
+func _restore_speed() -> void:
+	Engine.physics_ticks_per_second = _rate_backup
+	Engine.time_scale = _scale_backup
+	Engine.max_physics_steps_per_frame = _steps_backup
+
+
+static func _line(f: Dictionary) -> String:
+	return "%s at %.1f s, %d left, in fire %.0f %%, light %d (%d hits), heavy %d (%d hits) shots, kills at %s s, pulses %d, shot down %d (missiles %d), blocked %d, beams through %d, station lost %.0f (worst section %.0f %%), mounts knocked out %d, capital hull %.0f %%, rammed %d, hanging %.1f %%, nearest %.0f m" % [
+		"WIN" if bool(f["won"]) else "LOSS", float(f["time_s"]), int(f["left"]), 100.0 * float(f["in_fire"]), int(f["light"]),
+		int(f["light_hits"]), int(f["heavy"]), int(f["heavy_hits"]), f["kills_at"], int(f["pulses"]), int(f["intercepts"]), int(f["missiles"]), int(f["blocked"]), int(f["beam_hits"]),
+		float(f["station_lost"]), 100.0 * float(f["worst_section"]), int(f["knocked_out"]), 100.0 * float(f["capital_hull"]), int(f["rammed"]), 100.0 * float(f["hanging"]), float(f["nearest_m"])]

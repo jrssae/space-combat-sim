@@ -42,9 +42,9 @@ extends RigidBody3D
 ## GDScript (`set_flight_command`) takes the ship back; a ship on its own model reads the row's command into `_flight`.
 ##
 ## AI ships are built lean (M4-T11, architecture §17.10, `lean`): no cockpit interior and no cockpit anchor, their collision shapes as
-## shape owners of the body instead of a node each, and their plumes and markers as one multimesh each. Past
-## `settings.far_ship_dot_m` from the camera an AI ship is a far dot (`set_far_dot`): its hull, plumes, markers and guns are hidden and
-## the world's `FarDots` draws it. The player's ship is built as before.
+## shape owners of the body instead of a node each, and their plumes and markers as one multimesh each. Once its bounding radius is
+## under `settings.far_ship_dot_px` on screen an AI ship is a far dot (`set_far_dot`, M7-T26): its hull, plumes, markers and guns are
+## hidden and the world's `FarDots` draws it. The player's ship is built as before.
 ##
 ## Rebase-safe: nothing here caches a World position between ticks. Console (§6.4, §15.1 D27): only the player's ship
 ## registers (`console_owner`, set before the ship enters the tree, `ShipAssembly` does it): provider `ship` and commands
@@ -156,9 +156,27 @@ var _row_command: bool = false
 ## A disabled hulk (M4-T21, M12 groundwork): its assist is off for good; `set_hulk` clears its command and the tier director
 ## takes its pilot, so it coasts on its last motion until something commands it again. The pool clears it on reuse.
 var hulk: bool = false
+## Held in a Cobra bay's launch clamp (M7-T08): the clamp, not the ship, moves it, so its plumes, RCS puffs and engine sounds stay
+## cold whatever its flight model asks for (`get_flight_output` reports idle). The launch clears it at the ejection.
+var clamped: bool = false:
+	set(value):
+		clamped = value
+		if value:
+			_clamped_output = _idle_output()  # sized for the nozzles, every level zero
+var _clamped_output: FlightOutput = FlightOutput.new()
 ## A mission watches this ship (M5-T30): it stays out of the low-attention tier, so the mission sees where it is and that it
 ## lives. The pool clears it on parking.
 var tier_exempt: bool = false
+## Inside a station (M7-T62: in the docking bay's black void): it flies on, but is unavailable to everyone else, off the radar and
+## every target list, out of reach of shots and rams, and never a far dot. The station's traffic sets it; the pool clears it on parking.
+var inside_station: bool = false:
+	set(value):
+		if value == inside_station:
+			return
+		inside_station = value
+		SimCore.set_sheltered(get_instance_id(), value)
+		if value:
+			set_far_dot(false)  # its hull stays drawn, hidden by the station's walls
 # The flight batch flies this ship and owns its tick (M4-T35): this node's `_physics_process` is off until the batch gives it back.
 var _batch_owned: bool = false
 # What the ship's speed is read against when not the World's rest (M6-T08, D67): the player's reference, set each tick by its
@@ -628,8 +646,10 @@ func get_fuel_tank() -> FuelTank:
 
 
 ## What the flight model produced on the last physics tick (all zero before the first one). Never null. On the batched
-## path it is filled from the batch's row when first asked after a tick.
+## path it is filled from the batch's row when first asked after a tick. Idle while `clamped`.
 func get_flight_output() -> FlightOutput:
+	if clamped:
+		return _clamped_output
 	if _in_batch_row() and _output_tick != _batch.tick:
 		_fill_output_from_batch()
 		_output_tick = _batch.tick

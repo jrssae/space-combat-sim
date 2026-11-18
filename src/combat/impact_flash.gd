@@ -15,10 +15,17 @@ const FLASH_S: float = 0.08
 const FLASH_SIZE_M: float = 1.6
 const GLOW_MATERIAL: StandardMaterial3D = preload("res://assets/materials/thruster_glow.tres")
 
+## A hit's damage past which its flash grows with it (M7-T51): every small bolt keeps the usual flash, a heavy cannon's 300
+## shows one about as wide as a fighter, up to `MAX_SIZE_SCALE` times the usual.
+const GROW_FROM_DAMAGE: float = 40.0
+const MAX_SIZE_SCALE: float = 9.0
+
 ## Colours whose resources are kept; past this a flash makes its own (bolt colours come from a few weapon specs).
 const MAX_SHARED_COLOURS: int = 64
 ## Spare flashes the pool keeps; past this a finished one is freed.
 const POOL_MAX: int = 256
+## Finished flashes `warm` leaves in the pool: a volley of hits at once finds them built.
+const SPARE_AT_LOAD: int = 16
 
 # Colour -> the flash quad with its glow material.
 static var _shared: Dictionary = {}
@@ -26,11 +33,13 @@ static var _shared: Dictionary = {}
 static var built_count: int = 0
 
 var _age_s: float = 0.0
+var _size_scale: float = 1.0
 
 
-## A flash for a hit tinted `color`, from the pool when it has one. `seed_value` is kept for the callers' signature (the sparks it
-## seeded are the particle burst's now).
-static func create(color: Color, _seed_value: int = 0) -> ImpactFlash:
+## A flash for a hit tinted `color`, from the pool when it has one, `size_scale` times a hit's size for its whole life (M7-T41:
+## the batteries' smaller meeting flash). `seed_value` is kept for the callers' signature (the sparks it seeded are the particle
+## burst's now).
+static func create(color: Color, _seed_value: int = 0, size_scale: float = 1.0) -> ImpactFlash:
 	var flash: ImpactFlash = _from_pool()
 	if flash == null:
 		flash = ImpactFlash.new()
@@ -39,10 +48,48 @@ static func create(color: Color, _seed_value: int = 0) -> ImpactFlash:
 		built_count += 1
 	flash.mesh = _quad_for(color)
 	flash._age_s = 0.0
+	flash._size_scale = size_scale
 	flash.visible = true
-	flash.scale = Vector3.ONE * (FLASH_SIZE_M * 0.6)
+	flash.scale = Vector3.ONE * (FLASH_SIZE_M * size_scale * 0.6)
 	flash.transparency = 0.0
 	return flash
+
+
+## The flash's size for a hit of `damage`, as `create` takes it: a heavier shot strikes visibly harder.
+static func size_for(damage: float) -> float:
+	return clampf(damage / GROW_FROM_DAMAGE, 1.0, MAX_SIZE_SCALE)
+
+
+## Makes the quad of every colour in `colors` and keeps `SPARE_AT_LOAD` finished flashes in the pool, so the first hit of a
+## session builds nothing (its first flash cost 17.5 ms, 9.4 of them building the quad). Returns the colours now kept.
+static func warm(colors: Array[Color]) -> int:
+	for color: Color in colors:
+		_quad_for(color)
+	var passes: FramePasses = FramePasses.current()
+	if passes != null:
+		var wanted: int = SPARE_AT_LOAD - passes.impact_pool_size()
+		for i: int in maxi(wanted, 0):
+			var flash := ImpactFlash.new()
+			if not colors.is_empty():
+				flash.mesh = _quad_for(colors[i % colors.size()])  # the renderer's first use of the glow shader is paid here
+			flash.name = "ImpactFlash"
+			flash.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			flash.visible = false
+			flash._age_s = FLASH_S  # over: waiting in the pool
+			built_count += 1
+			passes.keep_impact(flash)
+	return _shared.size()
+
+
+## Forgets every made quad and the flashes' count (tests that look at what a first flash builds).
+static func reset_shared() -> void:
+	_shared.clear()
+	built_count = 0
+
+
+## Whether `color`'s quad is already made (tests).
+static func is_warm(color: Color) -> bool:
+	return _shared.has(color)
 
 
 func _notification(what: int) -> void:
@@ -59,7 +106,7 @@ func advance(delta: float) -> void:
 		_finish()
 		return
 	var life: float = _age_s / FLASH_S
-	scale = Vector3.ONE * (FLASH_SIZE_M * lerpf(0.6, 1.0, life))
+	scale = Vector3.ONE * (FLASH_SIZE_M * _size_scale * lerpf(0.6, 1.0, life))
 	transparency = life
 
 

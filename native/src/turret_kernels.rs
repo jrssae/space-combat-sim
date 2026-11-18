@@ -13,6 +13,8 @@ use std::f64::consts::{FRAC_PI_2, PI, TAU};
 use godot::builtin::{Basis, Vector3};
 
 use crate::brain_maths::solve;
+use crate::grid_kernels::{self, Latch, MOUNT_INTERCEPTOR, MOUNT_TURRET};
+use crate::kernels::contact::{Grid, Query};
 use crate::rows::{FLAG_HULL_ACTIVE, FLAG_RIGID, FLAG_TIER, Rows};
 use crate::v3::{add, col_a, col_b, col_c, cross, dist_sq, dot, normalized, scale, sub, xform};
 
@@ -70,6 +72,19 @@ pub struct Mounts {
     pub target: Vec<i64>,
     pub ready_at: Vec<f64>,
     pub shots: Vec<i64>,
+    /// `grid_kernels::MOUNT_*`: a ship's turret, or one of the station grid's kinds (M7-T07).
+    pub kind: Vec<u8>,
+    /// Knocked out (M7-T07: a grid mount whose health is gone): it neither picks nor fires until repaired.
+    pub out: Vec<bool>,
+    /// How far up its base's axis the trunnion stands (M7-T43): the line of fire and the shot start there; 0 for a turret
+    /// whose barrels sit on its base (the line then starts `LINE_LIFT_M` up).
+    pub lift_m: Vec<f64>,
+    /// Bursts (M7-T43): shots a burst, the time between them, and the burst in progress (shots fired, when it began). A gun of
+    /// one shot a burst fires every `interval_s`; a longer burst starts a new one `interval_s` after the last began.
+    pub burst_shots: Vec<u32>,
+    pub burst_spacing_s: Vec<f64>,
+    pub burst_fired: Vec<u32>,
+    pub burst_started_s: Vec<f64>,
 }
 
 impl Mounts {
@@ -113,6 +128,13 @@ impl Mounts {
             self.target.push(0);
             self.ready_at.push(f64::NEG_INFINITY);
             self.shots.push(0);
+            self.kind.push(MOUNT_TURRET);
+            self.out.push(false);
+            self.lift_m.push(0.0);
+            self.burst_shots.push(1);
+            self.burst_spacing_s.push(0.0);
+            self.burst_fired.push(0);
+            self.burst_started_s.push(0.0);
         }
         self.taken[slot] = true;
         self.id[slot] = id;
@@ -131,7 +153,31 @@ impl Mounts {
         self.target[slot] = 0;
         self.ready_at[slot] = f64::NEG_INFINITY;
         self.shots[slot] = 0;
+        self.kind[slot] = MOUNT_TURRET;
+        self.out[slot] = false;
+        self.lift_m[slot] = 0.0;
+        self.burst_shots[slot] = 1;
+        self.burst_spacing_s[slot] = 0.0;
+        self.burst_fired[slot] = 0;
+        self.burst_started_s[slot] = 0.0;
         slot
+    }
+
+    /// Where `slot`'s line of fire starts, up its base's axis from the pivot.
+    pub fn line_lift(&self, slot: usize) -> f64 {
+        self.lift_m[slot].max(LINE_LIFT_M)
+    }
+
+    /// `slot` fired at `now_s`: when it may fire again, its burst counted on.
+    pub fn fired(&mut self, slot: usize, now_s: f64) -> f64 {
+        next_ready(
+            self.gun[slot].interval_s,
+            self.burst_shots[slot],
+            self.burst_spacing_s[slot],
+            &mut self.burst_fired[slot],
+            &mut self.burst_started_s[slot],
+            now_s,
+        )
     }
 
     /// Whether `slot` holds a mount.
@@ -163,6 +209,9 @@ pub struct Memory {
     pub attacker: Vec<i64>,
     pub until_s: Vec<f64>,
     pub civilian: Vec<bool>,
+    /// The attacker fired close to the victim with the victim selected (M7-T29), though it may be a friend or a neutral
+    /// whose bolts cannot land: the victim's own turrets may answer it, and their bolts may hit it.
+    pub provoked: Vec<bool>,
 }
 
 impl Memory {
@@ -183,6 +232,27 @@ impl Memory {
         self.attacker.push(attacker);
         self.until_s.push(until);
         self.civilian.push(civilian);
+        self.provoked.push(false);
+    }
+
+    /// `attacker` fired close to civilian `victim` while it had it selected, at `now_s` (M7-T29).
+    pub fn note_provoked(&mut self, victim: i64, attacker: i64, now_s: f64) {
+        self.note(victim, attacker, now_s, true);
+        if let Some(k) = (0..self.victim.len()).find(|&k| self.victim[k] == victim && self.attacker[k] == attacker) {
+            self.provoked[k] = true;
+        }
+    }
+
+    /// Whether `victim` still remembers being provoked by `attacker` at `now_s`.
+    pub fn is_provoked(&self, victim: i64, attacker: i64, now_s: f64) -> bool {
+        (0..self.victim.len()).any(|k| {
+            self.provoked[k] && self.victim[k] == victim && self.attacker[k] == attacker && self.until_s[k] >= now_s
+        })
+    }
+
+    /// How many provoked pairs are remembered (the hit resolver asks about a pair only when there is one).
+    pub fn provoked_count(&self) -> usize {
+        self.provoked.iter().filter(|p| **p).count()
     }
 
     /// Drops what is older than the memory lasts, keeping the order of the rest.
@@ -208,6 +278,7 @@ impl Memory {
         self.attacker.clear();
         self.until_s.clear();
         self.civilian.clear();
+        self.provoked.clear();
     }
 
     fn retain(&mut self, keep: impl Fn(&Memory, usize) -> bool) {
@@ -218,6 +289,7 @@ impl Memory {
                 self.attacker[w] = self.attacker[k];
                 self.until_s[w] = self.until_s[k];
                 self.civilian[w] = self.civilian[k];
+                self.provoked[w] = self.provoked[k];
                 w += 1;
             }
         }
@@ -225,7 +297,25 @@ impl Memory {
         self.attacker.truncate(w);
         self.until_s.truncate(w);
         self.civilian.truncate(w);
+        self.provoked.truncate(w);
     }
+}
+
+/// When a gun that fired at `now_s` may fire again: `interval_s` on for a gun of one shot a burst; within a burst of `shots`,
+/// `spacing_s` on, and after its last shot `interval_s` after the burst began. `fired` and `started_s` carry the burst.
+pub fn next_ready(interval_s: f64, shots: u32, spacing_s: f64, fired: &mut u32, started_s: &mut f64, now_s: f64) -> f64 {
+    if shots <= 1 {
+        return now_s + interval_s;
+    }
+    if *fired == 0 {
+        *started_s = now_s;
+    }
+    *fired += 1;
+    if *fired < shots {
+        return now_s + spacing_s;
+    }
+    *fired = 0;
+    (*started_s + interval_s).max(now_s + spacing_s)
 }
 
 /// One mount as the pick sees it.
@@ -239,6 +329,10 @@ pub struct PickMount {
     pub up: Vector3,
     pub min_elevation: f64,
     pub reach_m: f64,
+    /// `grid_kernels::MOUNT_*` (M7-T07).
+    pub kind: u8,
+    /// How far up its axis its line of fire starts (`Mounts::line_lift`).
+    pub line_lift_m: f64,
 }
 
 /// A pick's answer: the target for a mount's binding (0 for none).
@@ -260,17 +354,56 @@ pub struct PickJob {
     pub picks: Vec<Pick>,
     /// The turreted ships' own hit volumes (Q33), copied again only when they changed (`hulls_version`).
     pub hulls: Hulls,
+    /// The grid's weapons-free latch and the big hulls that block its guns (M7-T07), and the grid pick's scratch.
+    pub latch: Latch,
+    pub surface_bodies: Vec<i64>,
+    pub query: Query,
+    pub found: Vec<i32>,
+    pub surface_rows: Vec<usize>,
+    /// Every working grid mount, interceptors too (M7-T10): what a raid on the station aims at.
+    pub points: Vec<AimPoint>,
+    /// The job's answer beside the picks (M7-T29): civilians fired on by a ship that had them selected, as (victim body,
+    /// shooter body), in the batch's order; noted in the memory on the main thread at the join.
+    pub provoked: Vec<(i64, i64)>,
+}
+
+/// A working grid mount as the launch found it: its slot, its hull's body and its pivot in that hull's frame.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AimPoint {
+    pub slot: u32,
+    pub body: i64,
+    pub local: Vector3,
 }
 
 impl PickJob {
     /// Fills the job from the mounts and memory as they stand (the launch's copy).
-    pub fn take_from(&mut self, mounts: &Mounts, memory: &Memory, relations: &[u8], stride: usize, hulls: &Hulls) {
+    pub fn take_from(
+        &mut self,
+        mounts: &Mounts,
+        memory: &Memory,
+        relations: &[u8],
+        stride: usize,
+        hulls: &Hulls,
+        latch: &Latch,
+        surface_bodies: &[i64],
+    ) {
         if self.hulls.version != hulls.version {
             self.hulls.clone_from(hulls);
         }
+        self.points.clear();
+        for s in 0..mounts.taken.len() {
+            if mounts.taken[s] && mounts.live[s] && !mounts.out[s] && mounts.kind[s] != MOUNT_TURRET {
+                self.points.push(AimPoint {
+                    slot: s as u32,
+                    body: mounts.body[s],
+                    local: mounts.local[s],
+                });
+            }
+        }
         self.mounts.clear();
         for s in 0..mounts.taken.len() {
-            if !mounts.taken[s] || !mounts.live[s] {
+            // An interceptor's choice is made on the main thread, where it shoots the same tick.
+            if !mounts.taken[s] || !mounts.live[s] || mounts.out[s] || mounts.kind[s] == MOUNT_INTERCEPTOR {
                 continue;
             }
             self.mounts.push(PickMount {
@@ -282,16 +415,23 @@ impl PickJob {
                 up: mounts.up[s],
                 min_elevation: mounts.min_elevation[s],
                 reach_m: mounts.gun[s].range_m * PICK_REACH,
+                kind: mounts.kind[s],
+                line_lift_m: mounts.line_lift(s),
             });
         }
         self.memory.clone_from(memory);
         self.relations.clear();
         self.relations.extend_from_slice(relations);
         self.stride = stride;
+        self.latch.clone_from(latch);
+        self.surface_bodies.clear();
+        self.surface_bodies.extend_from_slice(surface_bodies);
         self.picks.clear();
+        self.provoked.clear();
     }
 
     pub fn clear(&mut self) {
+        self.points.clear();
         self.mounts.clear();
         self.memory.clear();
         self.picks.clear();
@@ -307,8 +447,9 @@ pub fn relation(relations: &[u8], stride: usize, a: u32, b: u32) -> u8 {
     relations.get(a * stride + b).copied().unwrap_or(REL_NEUTRAL)
 }
 
-/// Every live mount's target, from the frozen rows (`row_of` gives a body's row, or -1) and the frozen memory at `now_s`.
-pub fn pick_all<F: Fn(i64) -> i64>(rows: &Rows, row_of: F, now_s: f64, job: &mut PickJob) {
+/// Every live mount's target, from the frozen rows (`row_of` gives a body's row, or -1) and the frozen memory at `now_s`; the
+/// grid's guns look through the brains' broad phase `grid` (M7-T07).
+pub fn pick_all<F: Fn(i64) -> i64>(rows: &Rows, row_of: F, now_s: f64, job: &mut PickJob, grid: &Grid) {
     let PickJob {
         mounts,
         memory,
@@ -316,11 +457,30 @@ pub fn pick_all<F: Fn(i64) -> i64>(rows: &Rows, row_of: F, now_s: f64, job: &mut
         stride,
         picks,
         hulls,
+        latch,
+        surface_bodies,
+        query,
+        found,
+        surface_rows,
+        ..
     } = job;
     picks.clear();
+    grid_kernels::surface_rows_of(rows, &row_of, surface_bodies, surface_rows);
     for m in mounts.iter() {
-        let own = hulls.of(m.body);
-        let target = pick(rows, &row_of, m, memory, relations, *stride, now_s, own);
+        let target = if m.kind == MOUNT_TURRET {
+            pick(rows, &row_of, m, memory, relations, *stride, now_s, hulls.of(m.body))
+        } else {
+            let mut ctx = grid_kernels::PickCtx {
+                relations,
+                stride: *stride,
+                latch,
+                surface_rows,
+                grid,
+                query,
+                found,
+            };
+            grid_kernels::pick(rows, &row_of, m, &mut ctx)
+        };
         picks.push(Pick {
             slot: m.slot,
             stamp: m.stamp,
@@ -390,7 +550,10 @@ pub fn pick<F: Fn(i64) -> i64>(
         let Some(a) = usable_row(rows, row_of(attacker)) else {
             continue;
         };
-        if relation(relations, stride, m.faction_ix, rows.faction_ix[a]) == REL_FRIENDLY {
+        // A friend is never a target, but for the one that fired on this very ship with it selected (M7-T29).
+        if relation(relations, stride, m.faction_ix, rows.faction_ix[a]) == REL_FRIENDLY
+            && !(memory.provoked[k] && victim == m.body)
+        {
             continue;
         }
         let d_sq = f64::from(dist_sq(rows.positions[a], pivot));
@@ -407,7 +570,7 @@ pub fn pick<F: Fn(i64) -> i64>(
         };
         // The line is tested only for a candidate that would win: the volume test stays off the common path.
         if score < best_score {
-            let from = add(pivot, scale(up, LINE_LIFT_M as f32));  // `line_start` of the mount's frame
+            let from = add(pivot, scale(up, m.line_lift_m as f32));  // where the mount's line of fire starts
             if line_blocked(basis, ship_at, from, rows.positions[a], own_hull) {
                 continue;
             }
@@ -440,6 +603,18 @@ pub fn frame(basis: &Basis, origin: Vector3, local: Vector3, up: Vector3, forwar
         up: u,
         forward: f,
         side: cross(u, f),
+    }
+}
+
+/// The frame a gun aims and fires from: its trunnion `lift_m` up its axis (M7-T43's heavy cannon), so the lead, the gate and
+/// the shot share one point. An unlifted mount keeps its own frame as it is.
+pub fn raised(f: &Frame, lift_m: f64) -> Frame {
+    let pivot = if lift_m > 0.0 { add(f.pivot, scale(f.up, lift_m as f32)) } else { f.pivot };
+    Frame {
+        pivot,
+        up: f.up,
+        forward: f.forward,
+        side: f.side,
     }
 }
 

@@ -8,10 +8,13 @@ extends Node3D
 ##
 ## The model hangs from two holders: `yaw` turns round the base's up by the azimuth, `pitch` (its child, at the trunnion) lifts
 ## by the elevation. A model's base goes under `yaw`, its barrels under `pitch`, both with the barrel along -Z at rest. The
-## hull's own model is its manifest's `turret` entry (`model_for`, T27's textured mesh), pooled with the ship (D22).
+## hull's own model is its manifest's `turret` entry (`model_for`, T27's textured mesh), pooled with the ship (D22). A model
+## built in three parts (M7-T42's interceptor battery) also has a fixed pedestal, which stays on the mount itself.
 
 ## A shot left the barrel at `at` (World frame): the sound and anything else that follows a shot.
 signal shot_fired(at: Vector3)
+## An interceptor battery's pulse met a projectile at `point` (World frame), M7-T07 and M7-T41; `color` is the projectile's.
+signal intercepted(point: Vector3, color: Color)
 
 ## The entry's name in `hardpoints.json`.
 var mount_name: String = ""
@@ -19,7 +22,7 @@ var mount_name: String = ""
 ## degrees below the base).
 var up: Vector3 = Vector3.UP
 var arc_deg: float = 200.0
-## m from the pivot to the barrel's tip, where a shot leaves.
+## m from the pivot to the barrel's tip, where a shot leaves; from the trunnion for a gun raised on one (M7-T43, `trunnion_m`).
 var barrel_m: float = 3.0
 var weapon: WeaponSpec = null
 var faction: StringName = Factions.NEUTRAL:
@@ -28,8 +31,32 @@ var faction: StringName = Factions.NEUTRAL:
 		if _slot >= 0 and _sim != null and is_instance_valid(_sim) and _sim.core != null:
 			_sim.core.set_turret_faction(_slot, value)
 
+## The body the core binds the mount to (its row gives the pose each tick); null means the parent ship. The station's mounts
+## hang from its visuals but bind to its frame or drum body (M7-T07).
+var host: Node3D = null
+## 0 a ship's turret (M5-T21); 1, 2 or 3 one of the station grid's light pulse turrets, heavy cannons or interceptor batteries
+## (`StationGrid.Kind`, the core's `grid_kernels::MOUNT_*`).
+var grid_kind: int = 0
+## An interceptor battery's barrels (M7-T41): the trunnion in the yaw frame and each muzzle in the pitch frame, metres, fired in
+## turn, each recharging `barrel_recharge_s`. Empty: one barrel `barrel_m` down the axis, from the trunnion when it stands up the
+## axis (M7-T43: the heavy cannon's line of fire and shots start there).
+var trunnion_m: Vector3 = Vector3.ZERO
+var muzzles_m: Array[Vector3] = []
+var barrel_recharge_s: float = 0.0
+## The barrel of `muzzles_m` the latest shot left (-1 for a gun's), set before `shot_fired`.
+var last_barrel: int = -1
+## Knocked out (a grid mount whose health is gone, M7-T07): the core neither picks nor fires for it, and its model goes dark.
+var knocked_out: bool = false:
+	set(value):
+		knocked_out = value
+		if _slot >= 0 and _sim != null and is_instance_valid(_sim) and _sim.core != null:
+			_sim.core.set_turret_out(_slot, value)
+		_show_knocked_out()
+
 var yaw: Node3D = null
 var pitch: Node3D = null
+## A three-part model's pedestal, fixed to the mount (M7-T42); null for a two-part model.
+var pedestal: MeshInstance3D = null
 ## Shots this mount fired (a readout).
 var shots: int = 0
 
@@ -37,8 +64,10 @@ var shots: int = 0
 static var _live: Array[TurretMount] = []
 # The turret models split for their mounts, by asset id (empty when the asset has none).
 static var _models: Dictionary[String, Dictionary] = {}
+# The dark look every knocked-out mount shares.
+static var _burnt_material: StandardMaterial3D = null
 
-var _body: RigidBody3D = null
+var _body: Node3D = null
 var _sim: SimCore = null
 var _slot: int = -1
 
@@ -80,7 +109,7 @@ func _init() -> void:
 
 func _enter_tree() -> void:
 	_live.append(self)
-	_body = get_parent() as RigidBody3D
+	_body = host if host != null else (get_parent() as RigidBody3D)
 	_bind()
 	var passes: FramePasses = FramePasses.of(self)
 	if passes != null:
@@ -116,6 +145,12 @@ func use_model(model: Dictionary) -> void:
 		return
 	var trunnion: Vector3 = model["trunnion"]
 	pitch.position = trunnion
+	if model.has("pitch"):
+		# Three parts, each from its own file; the pitch part's origin is already the trunnion.
+		pedestal = _part(model["pedestal"], "Pedestal")
+		add_child(pedestal)
+		set_model(_part(model["yaw"], "Yoke"), _part(model["pitch"], "Barrels"))
+		return
 	var base := MeshInstance3D.new()
 	base.name = "Base"
 	base.mesh = model["base"]
@@ -126,13 +161,56 @@ func use_model(model: Dictionary) -> void:
 	set_model(base, barrel)
 
 
-## The turret model a hull's manifest names (`turret`: its mesh in the turret's frame, the trunnion and the muzzles), split
-## once per asset into `base` (what turns round the base) and `barrel` (the barrels, which lift too), with `trunnion`;
-## empty when the asset has no turret model.
+# One part of a model as its own node.
+static func _part(mesh: Mesh, part_name: String) -> MeshInstance3D:
+	var part := MeshInstance3D.new()
+	part.name = part_name
+	part.mesh = mesh
+	return part
+
+
+## The turret model an asset's manifest names (`turret`), once per asset: a model in three parts (`parts`: its pedestal, yaw and
+## pitch files, M7-T42) as `pedestal`, `yaw` and `pitch`; else one mesh in the turret's frame split into `base` (what turns round
+## the base) and `barrel` (the barrels, which lift too). Both with `trunnion`; empty when the asset has no turret model or a part
+## is missing.
 static func model_for(asset_id: String) -> Dictionary:
 	if _models.has(asset_id):
 		return _models[asset_id]
 	var entry: Dictionary = MeshAssets.read_manifest(asset_id).get("turret", {})
+	var model: Dictionary = _parts_model(asset_id, entry) if entry.has("parts") else _split_model(asset_id, entry)
+	_models[asset_id] = model
+	return model
+
+
+## The muzzles of an asset's turret model in its pitch frame (origin at the trunnion, -Z down the barrels), metres, in firing
+## order: the manifest's `pitch_muzzles` (M7-T42); empty when it names none.
+static func pitch_muzzles(asset_id: String) -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	for m: Variant in (MeshAssets.read_manifest(asset_id).get("turret", {}) as Dictionary).get("pitch_muzzles", []):
+		out.append(_vec3(m))
+	return out
+
+
+## How far an asset's turret model reaches from its pivot to the muzzles, metres (the manifest's `barrel_m`), else `fallback`.
+static func barrel_reach(asset_id: String, fallback: float) -> float:
+	return float((MeshAssets.read_manifest(asset_id).get("turret", {}) as Dictionary).get("barrel_m", fallback))
+
+
+# A three-part model: each part's own file, drawn with the whole model's maps.
+static func _parts_model(asset_id: String, entry: Dictionary) -> Dictionary:
+	var dir: String = ShipSpec.ASSET_ROOT.path_join(asset_id)
+	var files: Dictionary = entry["parts"]
+	var model: Dictionary = {"trunnion": _vec3(entry.get("trunnion", [0.0, 0.0, 0.0]))}
+	for pair: Array in [["pedestal", "base"], ["yaw", "yaw"], ["pitch", "pitch"]]:
+		var mesh: Mesh = MeshAssets.section_mesh(dir, entry.get("mesh", {}), String(files.get(pair[1], "")))
+		if mesh == null:
+			return {}
+		model[pair[0]] = mesh
+	return model
+
+
+# A one-mesh model split at its barrels.
+static func _split_model(asset_id: String, entry: Dictionary) -> Dictionary:
 	var model: Dictionary = {}
 	var mesh: Mesh = null
 	if not (entry.get("mesh", {}) as Dictionary).is_empty():
@@ -144,7 +222,6 @@ static func model_for(asset_id: String) -> Dictionary:
 			muzzles.append(_vec3(m))
 		var parts: Array[ArrayMesh] = split_barrels(mesh, muzzles, trunnion)
 		model = {"base": parts[0], "barrel": parts[1], "trunnion": trunnion}
-	_models[asset_id] = model
 	return model
 
 
@@ -210,6 +287,26 @@ static func _vec3(v: Variant) -> Vector3:
 	return Vector3(float(a[0]), float(a[1]), float(a[2])) if a.size() >= 3 else Vector3.ZERO
 
 
+# A knocked-out mount's model is dark (burnt), its own look when repaired.
+func _show_knocked_out() -> void:
+	if pedestal != null:
+		pedestal.material_override = _burnt() if knocked_out else null
+	for holder: Node3D in [yaw, pitch]:
+		for child: Node in holder.get_children():
+			var mesh := child as MeshInstance3D
+			if mesh != null:
+				mesh.material_override = _burnt() if knocked_out else null
+
+
+
+static func _burnt() -> StandardMaterial3D:
+	if _burnt_material == null:
+		_burnt_material = StandardMaterial3D.new()
+		_burnt_material.albedo_color = Color(0.04, 0.035, 0.03)
+		_burnt_material.roughness = 1.0
+	return _burnt_material
+
+
 ## Turns the model to an azimuth and elevation (rad), as the core's row holds them (the frame pass calls it).
 func turn_to(azimuth: float, elevation: float) -> void:
 	yaw.rotation = Vector3(0.0, azimuth, 0.0)
@@ -226,10 +323,16 @@ func bound_sim() -> SimCore:
 	return _sim if _slot >= 0 and is_instance_valid(_sim) else null
 
 
-## The core fired a shot from this mount (`TurretRows.step`).
-func on_fired(at: Vector3) -> void:
+## The core fired a shot from this mount (`TurretRows.step`): from `barrel` of a battery's `muzzles_m`, -1 for a gun.
+func on_fired(at: Vector3, barrel: int = -1) -> void:
 	shots += 1
+	last_barrel = barrel
 	shot_fired.emit(at)
+
+
+## A pulse of this mount's battery met a projectile of colour `color` at `point` (`TurretRows.step`).
+func on_intercepted(point: Vector3, color: Color) -> void:
+	intercepted.emit(point, color)
 
 
 ## Binds every mount to the core, as the core stands now (it came or went).
@@ -248,11 +351,14 @@ func _bind() -> void:
 	if _slot >= 0 and _sim == sim:
 		return
 	_unbind()
-	var slot_now: int = sim.turrets.register(self, _body.get_instance_id(), weapon, faction)
+	var slot_now: int = sim.turrets.register(self, _body.get_instance_id(), weapon, faction) if grid_kind == 0 \
+			else sim.turrets.register_grid(self, _body.get_instance_id(), weapon, faction, grid_kind)
 	if slot_now < 0:
 		return
 	_sim = sim
 	_slot = slot_now
+	if knocked_out:
+		_sim.core.set_turret_out(_slot, true)
 	if not can_process():
 		_sim.core.set_turret_live(_slot, false)
 

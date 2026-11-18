@@ -103,8 +103,9 @@ func test_the_input_carries_the_players_state() -> void:
 	assert_eq(input.weapon_speed_mps, main.cannon.weapon.muzzle_speed_mps)
 	assert_true(input.fuel_unlimited)
 	assert_eq(input.faction, Factions.EARTH_ALLIANCE)
-	assert_eq(input.radar_contacts.size(), main.buoys.size() + main.gates.gates.size() + main.ships.alive().size(),
-			"the five buoys, the jumpgate (M6-T14) and the wingmen")
+	assert_eq(input.radar_contacts.size(), main.buoys.size() + main.gates.gates.size() + main.ships.alive().size()
+			+ (3 if main.far_props.station != null else 0),
+			"the five buoys, the jumpgate (M6-T14), the station (M7-T06) with its two bays (M7-T27) and the wingmen")
 	assert_almost_eq(input.muzzle_position, main.ship.global_position + (main.ship.get_muzzles()[0].global_position - main.ship.global_position + main.ship.get_muzzles()[1].global_position - main.ship.global_position) * 0.5, Vector3.ONE * 1e-3)
 
 
@@ -153,12 +154,13 @@ func test_a_selected_raider_gets_a_box_a_lead_and_a_hull_bar() -> void:
 	assert_gt(f.radar_dots.size(), 0)
 
 
-func test_a_selected_buoy_has_a_full_hull_bar_and_neutral_colour() -> void:
+func test_a_selected_buoy_has_a_full_hull_bar_and_the_navigation_look() -> void:
 	main.ship.targeting.refresh()
 	main.ship.targeting.select_by_name("NAV ALPHA")
 	var f: HudFrame = HudLayout.compute(main._build_hud_input())
 	assert_eq(f.target_hull, 1.0)
-	assert_eq(f.target_color, Factions.NEUTRAL_COLOR)
+	assert_true(f.target_nav, "a nav buoy is a navigation target (M7-T27)")
+	assert_eq(f.target_color, TargetCategories.COLORS[TargetCategories.Category.NAVIGATION])
 
 
 func test_a_target_behind_shows_the_edge_arrow() -> void:

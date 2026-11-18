@@ -1,11 +1,13 @@
 class_name LodSwitcher
 extends Node
-## Draws an AI ship as a far dot past `settings.far_ship_dot_m` from the camera (M4-T11, §17.10): `Ship.set_far_dot` hides its hull,
-## plumes and markers and the world's `FarDots` draws it; a tenth back inside it shows its detail again. The player's ship is never a
-## dot. Nearer than that the textured mesh's own levels of detail (the importer's) do the rest (M4-T31).
+## Draws an AI ship as a far dot once it is only a few pixels across (M4-T11, §17.10; by size on screen since M7-T26): its bounding
+## radius under `settings.far_ship_dot_px`. `Ship.set_far_dot` hides its hull, plumes and markers and the world's `FarDots` draws it; a
+## tenth back inside it shows its mesh again. Until then the textured mesh's own levels of detail (the importer's, picked by size on
+## screen) keep its shape with fewer triangles (M4-T31), so a freighter holds its shape ten times farther out than a fighter. The
+## player's ship is never a dot.
 ##
 ## The far dot count is read by `RenderStatus`'s `render.far_dots`. Every switcher is decided in one loop a frame, the `FramePasses`
-## LOD pass, with the camera and the dot distance read once (M4-T36); this node only holds its ship's state.
+## LOD pass, with the camera and the view's scale read once (M4-T36); this node only holds its ship's state.
 
 ## Whether the ship is far enough from the camera to be drawn as a dot (M4-T11).
 var far: bool = false
@@ -40,20 +42,28 @@ func _exit_tree() -> void:
 		passes.remove_switcher(self)
 
 
-## Decides this frame's dot from the camera's distance and applies it, reading the camera itself (tests; the pass reads it once
-## for every ship and calls `decide`).
+## Decides this frame's dot from the camera and applies it, reading the camera itself (tests; the pass reads it once for every
+## ship and calls `decide`).
 func update() -> void:
 	var camera: Camera3D = get_viewport().get_camera_3d() if get_viewport() != null else null
 	if camera != null:
-		decide(camera.global_position, float(Settings.get_value(&"far_ship_dot_m")))
+		decide(camera.global_position, dot_scale(camera))
 
 
-## Decides this frame's dot for a camera at `eye` and a dot distance of `far_m`, and applies it.
-func decide(eye: Vector3, far_m: float) -> void:
+## The dot distance per metre of bounding radius for `camera`'s view (M7-T26): its pixels per radian (at least 1 080 lines' worth)
+## over the dot size.
+static func dot_scale(camera: Camera3D) -> float:
+	return LodSwitcherMath.dot_distance_m(1.0, LodSwitcherMath.view_k(FarProp.k_of(camera), camera.fov),
+			float(Settings.get_value(&"far_ship_dot_px")))
+
+
+## Decides this frame's dot for a camera at `eye` and a dot distance of `m_per_m` per metre of the hull's radius, and applies it.
+func decide(eye: Vector3, m_per_m: float) -> void:
 	if not _shown():
 		return
 	var distance: float = eye.distance_to(_ship.global_position)
-	far = not _ship.console_owner and LodSwitcherMath.far_dot(distance, far, far_m)
+	far = not _ship.console_owner and not _ship.inside_station \
+			and LodSwitcherMath.far_dot(distance, far, _ship.bounding_radius() * m_per_m)
 	_ship.set_far_dot(far)
 
 

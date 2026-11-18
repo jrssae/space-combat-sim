@@ -40,13 +40,13 @@ func _init(p_name: String = DEFAULT_NAME, p_leader: Combatant = null, p_size: in
 	_lost.fill(false)
 
 
-## Puts `member` in `slot` (1..size), or in the first empty slot for -1. Returns the slot, or -1 when the slot is taken or
+## Puts `member` in `slot` (1..size), or for -1 in the empty slot that keeps the arms even (`fill_order`). Returns the slot, or -1 when the slot is taken or
 ## out of range, the wing is full, or `member` is null, the leader or already a member.
 func add_member(member: Combatant, slot: int = -1) -> int:
 	if member == null or member == leader or slot_of(member) > 0:
 		return -1
 	if slot == -1:
-		var free: PackedInt32Array = empty_slots()
+		var free: PackedInt32Array = fill_order()
 		if free.is_empty():
 			return -1
 		slot = free[0]
@@ -55,6 +55,22 @@ func add_member(member: Combatant, slot: int = -1) -> int:
 	_by_slot[slot - 1] = member
 	_lost[slot - 1] = false
 	return slot
+
+
+## Changes the number of member slots to `new_size`, keeping every member in its slot (a station wing launched for the
+## player's wing makes room for the rest of the wing, M7-T58). Returns false, changing nothing, when a slot it would cut is flown.
+func resize(new_size: int) -> bool:
+	new_size = maxi(new_size, 0)
+	for i: int in range(new_size, size):
+		if _by_slot[i] != null:
+			return false
+	_by_slot.resize(new_size)
+	var old: int = _lost.size()
+	_lost.resize(new_size)
+	for i: int in range(old, new_size):
+		_lost[i] = false
+	size = new_size
+	return true
 
 
 ## Takes `member` out of its slot. Returns whether it was a member.
@@ -109,6 +125,46 @@ func empty_slots() -> PackedInt32Array:
 	return out
 
 
+## The empty slots in the order newcomers should take them (M7-T74): each on the arm with fewer ships, nearest the leader
+## first, the centre slot last, so the V stays balanced and nobody already flying has to move.
+func fill_order() -> PackedInt32Array:
+	var balance: int = 0  # ships on the right arm less those on the left
+	for i: int in size:
+		if _by_slot[i] != null:
+			balance += formation.side(i + 1, size)
+	var free: Array[int] = []
+	free.assign(empty_slots())
+	var out := PackedInt32Array()
+	while not free.is_empty():
+		var best: int = 0
+		for j: int in range(1, free.size()):
+			if _fills_before(free[j], free[best], balance):
+				best = j
+		var slot: int = free[best]
+		free.remove_at(best)
+		balance += formation.side(slot, size)
+		out.append(slot)
+	return out
+
+
+# Whether empty slot `a` should be filled before `b` with the arms at `balance`: the centre last, then the one leaving the arms
+# more even, then the one nearer the leader, then the lower slot.
+func _fills_before(a: int, b: int, balance: int) -> bool:
+	var a_side: int = formation.side(a, size)
+	var b_side: int = formation.side(b, size)
+	if (a_side == 0) != (b_side == 0):
+		return b_side == 0
+	var a_skew: int = absi(balance + a_side)
+	var b_skew: int = absi(balance + b_side)
+	if a_skew != b_skew:
+		return a_skew < b_skew
+	var a_depth: float = formation.offset(a, size).length_squared()
+	var b_depth: float = formation.offset(b, size).length_squared()
+	if a_depth != b_depth:
+		return a_depth < b_depth
+	return a < b
+
+
 func is_full() -> bool:
 	return empty_slots().is_empty()
 
@@ -118,9 +174,9 @@ func callsign(slot: int) -> String:
 	return "%s %d" % [name, slot + 1]
 
 
-## A slot's offset from the leader in the leader's body frame (`formation`).
+## A slot's offset from the leader in the leader's body frame (`formation`, for this wing's size).
 func slot_offset(slot: int) -> Vector3:
-	return formation.offset(slot)
+	return formation.offset(slot, size)
 
 
 ## The order the members fly: `order` while the leader lives, ENGAGE AT WILL while it is dead.

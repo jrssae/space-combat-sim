@@ -583,8 +583,8 @@ static func _parse_key(text: String) -> Dictionary:
 		return _bad_descriptor("unknown key name '%s' (Godot's names: E, Space, Left, F3, Kp 0 ...)" % key_name)
 	if (code & KEY_MODIFIER_MASK) != 0:
 		return _bad_descriptor("'%s' uses a modifier; bind one plain key" % key_name)
-	if code == KEY_QUOTELEFT:
-		return _bad_descriptor("key:QuoteLeft is the console key and cannot be bound to an action")
+	if code == KEY_QUOTELEFT or code == KEY_SECTION:  # the console key, on ANSI and ISO boards (M7-T39)
+		return _bad_descriptor("key:%s is the console key and cannot be bound to an action" % OS.get_keycode_string(code as Key))
 	var event := InputEventKey.new()
 	event.device = -1
 	event.physical_keycode = code as Key

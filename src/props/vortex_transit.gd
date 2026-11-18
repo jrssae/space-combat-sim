@@ -27,7 +27,7 @@ const MAX_TRANSIT_S: float = 6.0
 ## An arriving ship comes out of the ring this far into its vortex's opening (after its opener's lead-in): the opening flash has
 ## faded and the funnel has unfolded about as far as the ring, so the ship's own flash shows and it stays inside the drawn funnel.
 ## Until then it waits on the base at this scale, as good as gone.
-const EMERGE_AFTER_S: float = VortexTiming.FLASH_S + VortexTiming.GROW_S / 3.0
+static var EMERGE_AFTER_S: float = VortexTiming.FLASH_S + VortexTiming.GROW_S / 3.0
 const HELD_SCALE: float = 0.01
 ## An arriving ship smaller than this on screen (its bounding radius, px) is not flown through the funnel: nobody could see it
 ## shrink, so it comes out at its place as before (its flash still shows at the ring). Keeps a far wave of hundreds cheap.

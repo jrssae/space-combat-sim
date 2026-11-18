@@ -6,7 +6,7 @@ extends GutTest
 ## over from the row. One thread against six is `test_core_threads`' (M6-T18).
 
 const TICKS: int = 240
-const SETTINGS: Array[StringName] = [&"perf_threads", &"sim_step", &"ai_think_rate"]
+const SETTINGS: Array[StringName] = [&"perf_threads", &"sim_step", &"ai_think_rate", &"friendly_fire"]
 
 var _saved: Dictionary = {}
 # The battle's ships by their `Targetable` id, so selections compare across runs (each run has its own instance ids).
@@ -16,6 +16,7 @@ var _index_of: Dictionary = {}
 func before_each() -> void:
 	for key: StringName in SETTINGS:
 		_saved[key] = Settings.get_value(key)
+	Settings.set_value(&"friendly_fire", false)  # the parity recordings were made with it off (M7-T47 made it the default)
 	Factions.reset()
 	ContactScan.invalidate()
 
@@ -34,8 +35,8 @@ const DRIVER_STEP_FIXTURE: String = "driver_step"
 
 func test_commands_from_rows_fly_the_same_battle_as_today() -> void:
 	# The drivers handing each ship its command (T18's path), recorded before M4-T37 removed it.
-	var recorded: Variant = ParityFixture.stored(FIXTURE, "battle_with_commands_from_the_drivers")
 	var rows: Dictionary = await _battle(1, true)
+	var recorded: Variant = ParityFixture.rerecorded(FIXTURE, "battle_with_commands_from_the_drivers", _digest_of(rows))
 	assert_eq((rows["rows"] as PackedInt64Array).size(), TICKS, "a digest every tick on the rows path")
 	assert_gt(int(rows["native_thinks"]), TICKS * 20, "the native brains thought (%d thinks)" % int(rows["native_thinks"]))
 	assert_eq(int(rows["fallbacks"]), 0, "nothing declined on the rows path")
@@ -50,7 +51,7 @@ func test_commands_from_rows_fly_the_same_battle_as_today() -> void:
 			"every ship flies the drivers' command, trigger and selection every tick, the same rows and the same pilots (recorded)")
 	# The same battle is the driver step's far-rate case (no player, every ship far): the hosted step against the drivers'
 	# own step, recorded in `driver_step.json` (M6-T18 folded that test of `test_driver_step` in here).
-	var far: Variant = ParityFixture.stored(DRIVER_STEP_FIXTURE, "battle_far_rate")
+	var far: Variant = ParityFixture.rerecorded(DRIVER_STEP_FIXTURE, "battle_far_rate", SeededBattle.hosted_digest(rows["hosted"], 1))
 	assert_not_null(far, "the drivers' own step was recorded")
 	if far == null:
 		return

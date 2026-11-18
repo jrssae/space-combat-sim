@@ -12,10 +12,15 @@ var world: WorldFrame
 var camera: Camera3D
 var layer: ScaledSpace
 var _clock_backup: float
+# GUT's own panel, hidden while a test reads the picture: it sits over the middle of the window.
+var _gut_panels: Array[Node] = []
 
 
 func before_each() -> void:
 	_clock_backup = SimClock.now()
+	_gut_panels = get_tree().root.find_children("GutLayer", "CanvasLayer", true, false)
+	for panel: Node in _gut_panels:
+		(panel as CanvasLayer).visible = false
 	# A third of the station's orbit on: the planet is 120 degrees from the sun, three quarters of its disc lit.
 	SimClock.reset(23_300.0)
 	var environment := Environment.new()
@@ -42,6 +47,9 @@ func before_each() -> void:
 
 func after_each() -> void:
 	SimClock.reset(_clock_backup)
+	for panel: Node in _gut_panels:
+		if is_instance_valid(panel):
+			(panel as CanvasLayer).visible = true
 
 
 func _gpu() -> bool:
@@ -95,9 +103,14 @@ func test_the_planets_disc_is_as_wide_as_its_angular_size() -> void:
 	var placed: ScaledPlacement = layer.placement_of(PLANET)
 	# A sphere on the view's axis draws as a circle of tan(angular radius) over tan(half the field of view).
 	var expected_px: float = tan(placed.angular_radius_rad) / tan(deg_to_rad(FOV_DEG) / 2.0) * size.y
-	var tall: int = 0
+	# From the top lit pixel to the bottom one: dark ground inside the disc does not shorten it.
+	var top: int = -1
+	var bottom: int = -1
 	for y: int in size.y:
-		tall += 1 if _lit(image.get_pixel(size.x / 2, y)) else 0
+		if _lit(image.get_pixel(size.x / 2, y)):
+			top = y if top < 0 else top
+			bottom = y
+	var tall: int = bottom - top + 1 if top >= 0 else 0
 	assert_almost_eq(float(tall), expected_px, 3.0, "the disc's height in pixels (the lit side reaches both poles)")
 	assert_true(_lit(image.get_pixel(size.x / 2, size.y / 2)), "the planet is at the centre of the picture")
 	assert_false(_lit(image.get_pixel(size.x / 2, 2)), "and the sky above it is dark")

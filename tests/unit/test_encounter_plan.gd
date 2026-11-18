@@ -1,7 +1,8 @@
 extends GutTest
 ## `EncounterPlan` (architecture §18 D58, M5-T17, AC14): the free-flight encounter schedule and its draws. Deterministic per
 ## seed; every draw is a hash of the seed and the event index, so asking for event 7 gives the same event whatever was
-## asked before; event times every `interval_s` within half an interval either way; kinds by weight; raids 2-6 raiders
+## asked before; each event due half to one and a half intervals after the last one started (M7-T56), another kind standing
+## in when it cannot start; kinds by weight; a share of raids for the station; raids 2-6 raiders
 ## 6-12 km from their target, patrols 2/4/6 Starfuries and traffic 1-3 civilian hulls on straight routes from 26-30 km out
 ## (traffic passing 2-10 km from the player); a Bokmai's pods from the seed; the cap.
 
@@ -16,7 +17,7 @@ func test_the_same_seed_plans_the_same_events() -> void:
 	var a: EncounterPlan = _plan(42)
 	var b: EncounterPlan = _plan(42)
 	for i: int in 30:
-		assert_eq(a.time_of(i), b.time_of(i), "event %d's time" % i)
+		assert_eq(a.gap_of(i), b.gap_of(i), "event %d's gap" % i)
 		assert_eq(a.event(i).describe(), b.event(i).describe(), "event %d" % i)
 
 
@@ -40,31 +41,45 @@ func test_a_draw_does_not_depend_on_what_was_asked_before() -> void:
 	assert_eq(_plan(9).event(7).describe(), fresh, "asked twice")
 
 
-func test_events_come_every_interval_within_half_an_interval() -> void:
+func test_each_gap_is_half_to_one_and_a_half_intervals() -> void:
+	# M7-T56 (m5-056): an event every 1 to 3 minutes at the default 120 s, counted from the last start.
 	var plan: EncounterPlan = _plan(3, 120.0)
-	var last: float = 0.0
-	for i: int in 200:
-		var t: float = plan.time_of(i)
-		assert_between(t - last, 60.0, 180.0, "the gap before event %d" % i)
-		assert_between(t, 120.0 * (i + 1) - 30.0, 120.0 * (i + 1) + 30.0, "event %d near its slot" % i)
-		last = t
-	assert_eq(plan.event(5).time_s, plan.time_of(5), "the event carries its time")
+	var lo: float = INF
+	var hi: float = 0.0
+	for i: int in 500:
+		var gap: float = plan.gap_of(i)
+		assert_between(gap, 60.0, 180.0, "the gap before event %d" % i)
+		lo = minf(lo, gap)
+		hi = maxf(hi, gap)
+	assert_lt(lo, 70.0, "the short end of the band is used")
+	assert_gt(hi, 170.0, "and the long end")
 
 
-func test_the_interval_scales_the_schedule() -> void:
+func test_the_interval_scales_the_gaps() -> void:
 	var slow: EncounterPlan = _plan(3, 120.0)
 	var fast: EncounterPlan = _plan(3, 60.0)
 	for i: int in 20:
-		assert_almost_eq(fast.time_of(i), slow.time_of(i) * 0.5, 1e-6, "event %d" % i)
+		assert_almost_eq(fast.gap_of(i), slow.gap_of(i) * 0.5, 1e-6, "event %d" % i)
 
 
-func test_count_due_counts_the_events_whose_time_has_come() -> void:
-	var plan: EncounterPlan = _plan(5)
-	assert_eq(plan.count_due(0.0), 0)
-	assert_eq(plan.count_due(plan.time_of(0) - 0.01), 0)
-	assert_eq(plan.count_due(plan.time_of(0)), 1)
-	assert_eq(plan.count_due(plan.time_of(9) + 0.01), 10)
-	assert_eq(plan.count_due(plan.time_of(10) - 0.01), 10)
+func test_other_kinds_stand_in_gentlest_first() -> void:
+	assert_eq(EncounterPlan.substitutes(&"raid"), [&"traffic", &"patrol"] as Array[StringName])
+	assert_eq(EncounterPlan.substitutes(&"patrol"), [&"traffic", &"raid"] as Array[StringName])
+	assert_eq(EncounterPlan.substitutes(&"traffic"), [&"patrol", &"raid"] as Array[StringName])
+
+
+func test_a_share_of_raids_is_drawn_for_the_station() -> void:
+	var plan: EncounterPlan = _plan(13)
+	plan.station_raid_share = 0.3
+	var raids: int = 0
+	var at_station: int = 0
+	for i: int in SAMPLE:
+		var e: EncounterEvent = plan.event(i, &"raid")
+		raids += 1
+		at_station += 1 if e.at_station else 0
+		assert_false(plan.event(i, &"patrol").at_station, "only raids go for the station")
+	assert_almost_eq(float(at_station) / raids, 0.3, 0.04, "the pools file's share")
+	assert_false(_plan(13).event(4, &"raid").at_station, "none without a share")
 
 
 func test_kinds_are_drawn_by_weight() -> void:

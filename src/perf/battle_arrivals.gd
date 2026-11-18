@@ -49,7 +49,7 @@ var life_s: float = 0.0
 static func plan(entries: Array[Dictionary], max_points: int = JumpPointPool.MAX_POINTS,
 		hold_s: float = VortexTiming.DEFAULT_HOLD_S) -> BattleArrivals:
 	var out := BattleArrivals.new()
-	out.life_s = VortexTiming.new(hold_s).done_at_s()
+	out.life_s = VortexTiming.for_point(hold_s).done_at_s()
 	out.period_s = out.life_s + SPREAD_S + MARGIN_S
 	out.entry_point.resize(entries.size())
 	var made: Array[Dictionary] = []

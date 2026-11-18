@@ -43,8 +43,9 @@ func test_the_feature_settings_keep_their_types_defaults_and_ranges() -> void:
 	assert_eq(voices["default"], 24)
 	assert_gte(int(voices["min"]), 8, "the player's own voices always fit")
 	assert_eq(schema.get_type(&"friendly_fire"), TYPE_BOOL)
-	assert_eq(schema.get_default(&"friendly_fire"), false, "forgiving by default (maintainer Q2)")
-	assert_eq(DebugConsole.registry.format_path("settings.friendly_fire"), "settings.friendly_fire = false")
+	assert_eq(schema.get_default(&"friendly_fire"), true, "friendly fire on by default (maintainer, M7-T47)")
+	assert_eq(DebugConsole.registry.format_path("settings.friendly_fire"), "settings.friendly_fire = true")
+	assert_eq(schema.get_default(&"motion_blur"), true, "motion blur on by default (maintainer, M7-T47)")
 	var density: Dictionary = SettingsSchema.ENTRIES[&"particle_density"]
 	assert_eq(density["type"], TYPE_FLOAT)
 	assert_eq(density["default"], 1.0)

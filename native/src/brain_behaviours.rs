@@ -12,6 +12,7 @@ use crate::brain_maths::{
     self, Capability, FlightCmd, Manoeuvre, Pcg, Pose, Temperament, hash_seed,
 };
 use crate::civilian;
+use crate::surface;
 use crate::kernels::{contact, pilot};
 use crate::rows::{Bolts, Rows};
 use crate::v3::{
@@ -54,6 +55,11 @@ const KEEP_ATTACKER_S: f64 = brain_maths::PROVOKED_S;
 const URGENT_SEEK_HORIZON_S: f64 = 0.25;
 const COVER_LEASH_M: f64 = 3000.0;
 const TARGET_NONE: i64 = -1;
+/// A big hull whose skin is within this of a ship is one of its contacts whatever the nearest-k cut kept (M7-T10): far
+/// enough to see it coming at any speed a fighter flies near it.
+pub const SURFACE_SIGHT_M: f64 = 2000.0;
+/// Fire passing within this of a civilian's hull (its radius added) frightens it (M7-T29).
+pub const CLOSE_FIRE_M: f64 = 15.0;
 
 /// A ship's constants as its brain needs them: the capability, where the bolts leave (ship frame), the weapon's muzzle
 /// speed and lifetime, the hull's bounding radius, and the avoidance tie-break (`hash(display_name)`).
@@ -158,6 +164,8 @@ pub struct Scratch {
     pub lists: pilot::Lists,
     pub bolt_candidates: Vec<u32>,
     named: Vec<u32>,
+    lane_contacts: Vec<i32>,
+    friend_rows: Vec<i32>,
     hostile_row: Vec<bool>,
     friendly_row: Vec<bool>,
 }
@@ -180,6 +188,20 @@ pub struct Field {
     /// the ones that see a threat themselves (their alarm spreads, Q25). Marked by the job before its pass, every tick.
     pub fleeing: Vec<bool>,
     pub alarmed: Vec<bool>,
+    /// The big hulls' rows (M7-T10), in row order: a think adds the ones whose skin is near to its contacts, however many
+    /// ships crowd the nearest-k cut.
+    pub surface_rows: Vec<u32>,
+    /// The working weapon mounts on big hulls (the station's grid), in slot order: what an attack on the hull aims at.
+    /// Filled by the job from the launch's copy of the mounts, before any think.
+    pub sub_points: Vec<SubPoint>,
+}
+
+/// A weapon mount on a big hull as an attacker sees it (M7-T10): its hull's row, its slot and its place in the hull's frame.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SubPoint {
+    pub row: u32,
+    pub slot: u32,
+    pub local: Vector3,
 }
 
 impl Field {
@@ -187,8 +209,11 @@ impl Field {
     pub fn build(&mut self, rows: &Rows, bolts: &Bolts, cell_m: f64) {
         contact::sorted_cells_into(&bolts.positions, cell_m, &mut self.bolt_cells);
         self.ship_rows.clear();
-        self.ship_rows
-            .extend((0..rows.positions.len() as u32).filter(|&i| !rows.is_static[i as usize]));
+        // A ship sheltered inside a station (M7-T62) is no one's contact.
+        self.ship_rows.extend(
+            (0..rows.positions.len() as u32)
+                .filter(|&i| !rows.is_static[i as usize] && !rows.is_sheltered(i as usize)),
+        );
         self.max_bolt_speed = bolts
             .velocities
             .iter()
@@ -197,9 +222,12 @@ impl Field {
         self.broadcasters.clear();
         self.broadcasters.extend(
             (0..rows.reach.len())
-                .filter(|&i| rows.reach[i] > 0.0)
+                .filter(|&i| rows.reach[i] > 0.0 && !rows.is_sheltered(i))
                 .map(|i| i as u32),
         );
+        self.surface_rows.clear();
+        self.surface_rows
+            .extend((0..rows.positions.len() as u32).filter(|&i| rows.surface(i as usize).is_some()));
     }
 
     /// Marks the fleeing civilians among `brains` on the rows (`row_of` gives a body's row, -1 for none): one pass over the
@@ -268,6 +296,13 @@ pub struct Route {
     pub pace_id: i64,
     pub loops: bool,
     pub yield_to_attack: bool,
+    /// A docking lane (M7-T10): flown along its legs with every thruster, slowing into a waypoint that holds, arriving
+    /// within `arrival_m`; `faces` and `spins` say how the hull is held on the way to each waypoint (zero: nose along the
+    /// leg, no roll): the nose's direction, and a turn rate to match (a tunnel that turns), both in the World's axes.
+    pub precise: bool,
+    pub arrival_m: f64,
+    pub faces: Vec<Vector3>,
+    pub spins: Vec<Vector3>,
 }
 
 impl Route {
@@ -402,6 +437,9 @@ struct Tick<'a> {
     own_row: usize,
     fleeing: &'a [bool],
     alarmed: &'a [bool],
+    // The big hulls' rows, for a civilian's shelter at a station of its people or a neutral port (M7-T55).
+    hulls: &'a [u32],
+    points: &'a [SubPoint],
     relations: &'a [u8],
     contacts: &'a [i32],
     broadcasts: &'a [i32],
@@ -442,8 +480,8 @@ impl Tick<'_> {
         self.rows.is_civilian(self.own_row)
     }
 
-    // The civilian flight's view of this think (M5-T16).
-    fn civilian_view(&self, radius: f64, speed_mps: f64) -> civilian::View<'_> {
+    // The civilian flight's view of this think (M5-T16); `brake_mps2` 0 where nothing is flown from it.
+    fn civilian_view(&self, radius: f64, speed_mps: f64, brake_mps2: f64) -> civilian::View<'_> {
         civilian::View {
             rows: self.rows,
             contacts: self.contacts,
@@ -451,16 +489,49 @@ impl Tick<'_> {
             radius,
             speed_mps,
             fleeing: self.fleeing,
+            shun: -1,
+            hulls: self.hulls,
+            brake_mps2,
         }
     }
 
     // How far from its centre a target's surface lies (M5-T16): a civilian hull's radius, so an attack's ranges are
     // measured to a 260 m freighter's skin; 0 for any other target, whose ranges stay centre to centre.
+    // A big hull with a surface (M7-T06, the station) lies as far off as its nearest volume: what is left of the centre
+    // range once that is taken off.
     fn surface_of(&self, target_id: i64) -> f64 {
         let r = self.rows.row_of_id(target_id);
         match usize::try_from(r) {
             Ok(j) if self.rows.is_civilian(j) => self.rows.radii[j],
+            Ok(j) => self.big_hull_depth(j, self.p.position),
             _ => 0.0,
+        }
+    }
+
+    // How much nearer than its centre row `j`'s surface lies from `at` (M7-T06); 0 for a row without one.
+    fn big_hull_depth(&self, j: usize, at: Vector3) -> f64 {
+        match surface::nearest_of_row(self.rows, j, at) {
+            Some((_, d)) => maxf(f64::from(length(sub(self.rows.positions[j], at))) - d, 0.0),
+            None => 0.0,
+        }
+    }
+
+    // Whether a hostile big hull is among the contacts (M7-T10): the ship is fighting at a station.
+    fn at_hostile_hull(&self) -> bool {
+        self.contacts.iter().any(|&r| {
+            let j = r as usize;
+            self.rows.surface(j).is_some() && self.relation(j) == pilot::HOSTILE
+        })
+    }
+
+    // Row `j`'s velocity at World point `at`: a turning hull's skin moves under it (M7-T10).
+    fn velocity_at(&self, j: usize, at: Vector3) -> Vector3 {
+        match self.rows.surface(j) {
+            Some(s) if s.spin_rad_s != 0.0 => add(
+                self.rows.velocities[j],
+                surface::surface_velocity(&self.rows.bases[j], self.rows.positions[j], s.spin_rad_s, at),
+            ),
+            _ => self.rows.velocities[j],
         }
     }
 
@@ -499,6 +570,8 @@ impl<'a> Tick<'a> {
             own_row,
             fleeing: &field.fleeing,
             alarmed: &field.alarmed,
+            hulls: &field.surface_rows,
+            points: &field.sub_points,
             relations,
             contacts,
             broadcasts,
@@ -538,6 +611,8 @@ pub struct Brain {
     pub avoiding: bool,
     pub avoiding_urgent: bool,
     pub contacts_seen: i64,
+    /// The body whose close fire, with this civilian selected, the last think saw (0 none): the job tells the turrets.
+    pub provoked_by: i64,
     ram: RamState,
     retreat: RetreatState,
     evade: EvadeState,
@@ -556,6 +631,11 @@ pub struct Output {
 }
 
 impl Brain {
+    /// The route from its first waypoint again.
+    pub fn restart_route(&mut self) {
+        self.path.reset();
+    }
+
     /// `AiPilot._init`: the profile scaled by the temperament, the behaviours given (in tie order), each retuned.
     pub fn new(base: Profile, temperament: Temperament, seed: i64, kinds: &[u8]) -> Self {
         let profile = base.scaled(&temperament);
@@ -581,6 +661,7 @@ impl Brain {
             avoiding: false,
             avoiding_urgent: false,
             contacts_seen: 0,
+            provoked_by: 0,
             ram: RamState::new(hash_seed(seed, "ram")),
             retreat: RetreatState::new(&profile),
             evade: EvadeState::new(hash_seed(seed, "evade")),
@@ -857,6 +938,21 @@ impl Brain {
             }
             scratch.contacts.sort_unstable();
         }
+        // A big hull near enough to matter is a contact however crowded the cut was (M7-T10): its skin always reaches
+        // avoidance, the fire lane and the attack.
+        for &r in &field.surface_rows {
+            let (j, i) = (r as usize, r as i32);
+            if rows.body_ids[j] == inputs.own_body_id || scratch.contacts.contains(&i) {
+                continue;
+            }
+            if f64::from(distance(rows.positions[j], p.position)) - rows.radii[j] > SURFACE_SIGHT_M {
+                continue;
+            }
+            if surface::nearest_of_row(rows, j, p.position).is_some_and(|(_, d)| d <= SURFACE_SIGHT_M) {
+                let at = scratch.contacts.partition_point(|&x| x < i);
+                scratch.contacts.insert(at, i);
+            }
+        }
         if inputs.lean {
             scratch.statics.clear();
         } else {
@@ -899,6 +995,34 @@ impl Brain {
             &mut scratch.broadcasts,
         );
         self.contacts_seen = scratch.contacts.len() as i64;
+        // A civilian is frightened by any ship's fire that comes close to its hull (M7-T29), and when that ship had it
+        // selected the fire was meant: its turrets may answer (the job hands the pair to the turrets' memory).
+        self.provoked_by = 0;
+        if !inputs.lean && rows.is_civilian(own_row) {
+            let shooter = contact::close_fire_from(
+                &view,
+                inputs.own_body_id,
+                p.position,
+                p.velocity,
+                self.ship.radius + CLOSE_FIRE_M,
+                &field.bolt_cells,
+                work.grid.cell_m,
+                reach_max + self.ship.radius,
+                &mut scratch.bolt_candidates,
+            );
+            if let Some(&r) = scratch.contacts.iter().find(|&&r| rows.body_ids[r as usize] == shooter && shooter != 0) {
+                let j = r as usize;
+                let relation = inputs.relations.get(rows.faction_ix[j] as usize).copied().unwrap_or(pilot::NEUTRAL);
+                // A hostile's fire is M5's business (the threat list); this is for everyone else's. A big hull's (the
+                // station's grid) is aimed past its traffic, not at it (M7-T40).
+                if relation != pilot::HOSTILE && rows.surface(j).is_none() {
+                    self.retreat.scare(shooter, p.now_s);
+                    if rows.target_ids[j] == rows.ids[own_row] {
+                        self.provoked_by = shooter;
+                    }
+                }
+            }
+        }
         // `AiContext.refresh`.
         pilot::context_lists(
             rows,
@@ -979,6 +1103,7 @@ impl Brain {
         // `AiPilot.think`.
         self.select(&tick, inputs.dt);
         let mut out = Output::default();
+        let mut detouring = false;
         self.has_desired_velocity = false;
         self.desired_all_axes = false;
         if self.current < 0 {
@@ -1014,6 +1139,19 @@ impl Brain {
                 ),
                 _ => cmd.brake = self.profile.idle_hold,
             }
+            // A run whose straight way lies through a big hull flies round the hull instead (M7-T10).
+            if kind == KIND_ATTACK
+                && let Some(goal) = self.attack.goal
+                && let Some(round) = detour(&tick, &self.ship, goal, self.profile.tactics.closing_far_mps)
+            {
+                let dv = sub(round, tick.p.velocity);
+                let nose = if f64::from(length(dv)) > 1.0 { dv } else { round };
+                cmd = FlightCmd::default();
+                cmd.rot = brain_maths::face(&tick.p.basis, nose, self.ship.capability.rate_max, brain_maths::K_FACE);
+                seek_velocity(&mut cmd, &tick.p, &self.ship.capability, round, false, &mut wish);
+                fire = false;
+                detouring = true;
+            }
             self.desired_velocity = wish.velocity;
             self.has_desired_velocity = wish.has;
             self.desired_all_axes = wish.all_axes;
@@ -1040,7 +1178,8 @@ impl Brain {
         }
         self.ram.remember_pick(&tick, &self.ctx);
         // `AiPilotDriver._avoid`: the brain's wish through the avoidance filter, re-sought when it changed.
-        self.avoiding = false;
+        // Flying round a hull is avoiding it, whether or not the filter below changes anything more.
+        self.avoiding = detouring;
         self.avoiding_urgent = false;
         if !inputs.lean
             && !out.flight.brake
@@ -1052,7 +1191,29 @@ impl Brain {
                 p.velocity
             };
             let cap = &self.ship.capability;
-            let avoided = pilot::avoid(
+            // A docking lane leads through a big hull's openings (a tunnel, a bay's mouth): the lane is trusted against
+            // the hulls, and only ships and rocks are dodged on it (M7-T10).
+            let on_lane = self.current_kind() == i32::from(KIND_FOLLOW_PATH)
+                && self.ctx.route.as_ref().is_some_and(|r| r.precise);
+            if on_lane {
+                scratch.lane_contacts.clear();
+                scratch.lane_contacts.extend(
+                    scratch.contacts.iter().copied().filter(|&r| rows.surface(r as usize).is_none()),
+                );
+            }
+            // A wingman forming up keeps off its friends whatever the dodges ask (M7-T76).
+            scratch.friend_rows.clear();
+            if self.current_kind() == i32::from(KIND_FORMATION) {
+                let relation = |j: usize| inputs.relations.get(rows.faction_ix[j] as usize).copied();
+                scratch.friend_rows.extend(scratch.contacts.iter().copied().filter(|&r| {
+                    let j = r as usize;
+                    j != own_row
+                        && rows.rigid[j]
+                        && rows.surface(j).is_none()
+                        && relation(j) == Some(pilot::FRIENDLY)
+                }));
+            }
+            let avoided = pilot::avoid_keeping_off(
                 rows,
                 &pilot::Ship {
                     position: p.position,
@@ -1065,12 +1226,13 @@ impl Brain {
                     a_rcs_y: cap.a_rcs_y,
                     tie_hash: self.ship.tie_hash,
                 },
-                &scratch.contacts,
+                if on_lane { &scratch.lane_contacts } else { &scratch.contacts },
                 &scratch.statics,
                 self.avoid_exempt_id,
+                &scratch.friend_rows,
                 wish,
             );
-            if avoided.v_des != wish {
+            if avoided.v_des != wish || avoided.pull_out {
                 self.avoiding = true;
                 self.avoiding_urgent = avoided.urgent;
                 let horizon = if avoided.urgent {
@@ -1086,9 +1248,17 @@ impl Brain {
                         &p.basis,
                         cap,
                         horizon,
-                        self.has_desired_velocity && self.desired_all_axes,
+                        (self.has_desired_velocity && self.desired_all_axes) || avoided.pull_out,
                     ),
                 );
+                // Falling at a big hull (M7-T10): the nose goes where the burn must, and the guns wait.
+                if avoided.pull_out {
+                    let dv = sub(avoided.v_des, p.velocity);
+                    if f64::from(length(dv)) > brain_maths::COAST_BELOW_MPS {
+                        out.flight.rot = brain_maths::face(&p.basis, dv, cap.rate_max, brain_maths::K_FACE);
+                    }
+                    out.fire = false;
+                }
             }
         }
         out
@@ -1355,6 +1525,51 @@ fn seek_velocity(
 }
 
 
+// The velocity that takes a ship round a big hull standing between it and `goal` (M7-T10), or none when the way is clear:
+// out to beyond the girth of every hull in sight (so never into the slot between the spine and the drum), then round the
+// hull's long axis the shorter way toward the goal's side, drifting along the axis to the goal's station. The straight way
+// is tested to a keep-off distance short of the goal, so a goal on the hull itself (a mount) is reached from its own side.
+fn detour(tick: &Tick, ship: &Ship, goal: Vector3, speed: f64) -> Option<Vector3> {
+    let from = tick.p.position;
+    let to = sub(goal, from);
+    let dist = f64::from(length(to));
+    let keep = ship.radius + pilot::MARGIN_M;
+    let short = keep + pilot::SLIDE_BAND_M;
+    if dist <= short {
+        return None;
+    }
+    let end = add(from, scale(to, (1.0 - short / dist) as f32));
+    let (mut blocked, mut girth) = (None, 0.0_f64);
+    for &r in tick.contacts {
+        let j = r as usize;
+        let Some(s) = tick.rows.surface(j) else {
+            continue;
+        };
+        girth = girth.max(s.girth);
+        if blocked.is_none() && surface::segment_enters(tick.rows, j, from, end, keep) {
+            blocked = Some(j);
+        }
+    }
+    let j = blocked?;
+    let (basis, origin) = (&tick.rows.bases[j], tick.rows.positions[j]);
+    let q = surface::into_body(basis, origin, from);
+    let g = surface::into_body(basis, origin, goal);
+    let r = q[0].hypot(q[1]);
+    let out = if r > 1e-3 { [q[0] / r, q[1] / r] } else { [1.0, 0.0] };
+    let mut round = [-out[1], out[0]];
+    let side = round[0] * g[0] + round[1] * g[1];
+    if side < 0.0 || (side == 0.0 && ship.tie_hash & 1 == 1) {
+        round = [-round[0], -round[1]];
+    }
+    let v = if r < girth + short {
+        let k = std::f64::consts::FRAC_1_SQRT_2 * speed;
+        [(out[0] + round[0]) * k, (out[1] + round[1]) * k, 0.0]
+    } else {
+        [round[0] * speed, round[1] * speed, clampf((g[2] - q[2]) * 0.2, -0.5 * speed, 0.5 * speed)]
+    };
+    Some(add(surface::from_body(basis, Vector3::ZERO, v), tick.rows.velocities[j]))
+}
+
 // The first row of `list` named `wanted`, as `AiContext._named` finds it among the contacts every tick (M4-T18: a parked
 // or far row with the same name earlier in the rows never hides the listed one); -1 for none.
 fn first_named(rows: &Rows, list: &[i32], wanted: &str) -> i32 {
@@ -1379,6 +1594,7 @@ fn keep(rows: &Rows, chosen: &mut Vec<i32>, i: i32, own_body_id: i64, at: Vector
         && !chosen.contains(&i)
         && f64::from(dist_sq(rows.positions[j], at)) <= range_sq
         && !rows.is_static[j]
+        && !rows.is_sheltered(j)
     {
         chosen.push(i);
     }
@@ -1651,11 +1867,23 @@ struct RetreatState {
     alarm_row: i32,
     goal_id: i64,
     shelter: bool,
+    // Whether a run to a station's far side is under way, and whether it began outside the station's cover (council
+    // round 2, N1): only such a run goes on under the guns.
+    station_run: bool,
+    ran_from_outside: bool,
+    // Fire that came close (M7-T29): the body that fired it, of any side, and until when it keeps a civilian running.
+    scare_body: i64,
+    scare_until_s: f64,
+    // Until when a civilian keeps running from hostiles in sight after one last came near or hit it (M7-T55), so an
+    // attacker swinging out for its next pass never turns it back onto its route.
+    threat_until_s: f64,
 }
 
 impl RetreatState {
     const EXTRA_MPS: f64 = 50.0;
     const SCORE_MIN: f64 = 0.85;
+    /// Below this much velocity left to change, a civilian's nose goes where it is heading rather than where it burns.
+    const BURN_FACE_MPS: f64 = 5.0;
 
     fn new(profile: &Profile) -> Self {
         RetreatState {
@@ -1669,6 +1897,11 @@ impl RetreatState {
             alarm_row: -1,
             goal_id: 0,
             shelter: false,
+            station_run: false,
+            ran_from_outside: false,
+            scare_body: 0,
+            scare_until_s: f64::NEG_INFINITY,
+            threat_until_s: f64::NEG_INFINITY,
         }
     }
 
@@ -1684,14 +1917,40 @@ impl RetreatState {
         self.alarm_row = -1;
         self.goal_id = 0;
         self.shelter = false;
+        self.station_run = false;
+        self.ran_from_outside = false;
+        self.scare_body = 0;
+        self.scare_until_s = f64::NEG_INFINITY;
+        self.threat_until_s = f64::NEG_INFINITY;
     }
 
     fn score(&mut self, tick: &Tick, ctx: &Context) -> f64 {
+        let score = self.score_now(tick, ctx);
+        // A retreat that scores nothing ends, and its shelter with it.
+        if score <= 0.0 {
+            self.shelter = false;
+            self.station_run = false;
+            self.ran_from_outside = false;
+        }
+        score
+    }
+
+    fn score_now(&mut self, tick: &Tick, ctx: &Context) -> f64 {
         if !may_retreat(ctx) {
             return 0.0;
         }
-        // A civilian runs on its people's alarm too (Q25), with no threat of its own in sight.
-        let panicked = tick.own_civilian() && self.panicked(tick);
+        let civilian = tick.own_civilian();
+        // A civilian runs on its people's alarm too (Q25), with no threat of its own in sight, and from whoever's fire
+        // came close, hostile or not (M7-T29); and keeps running while its attackers are in sight (M7-T55).
+        let panicked = civilian && (self.panicked(tick) | self.attacked(tick));
+        let scared = civilian && self.scared_by(tick) >= 0;
+        // Under the guns of a station that shelters it a civilian keeps its course against raiders (M7-T55): a docking lane
+        // is no place to turn. A friend's fire close by still frightens it: the guns do not answer that. One that began its
+        // run to the station's far side outside the cover keeps running: its way round the hull passes under the guns.
+        if civilian && !self.ran_from_outside && civilian::under_cover(&tick.civilian_view(0.0, self.speed_mps, 0.0)) {
+            return if scared { Self::SCORE_MIN } else { 0.0 };
+        }
+        let panicked = panicked || scared;
         if tick.lists.hostiles.is_empty() {
             return if panicked { Self::SCORE_MIN } else { 0.0 };
         }
@@ -1713,9 +1972,54 @@ impl RetreatState {
         low
     }
 
+    // Whether a civilian is still running from an attack (M7-T55): a hostile within its flee range, or a hit, holds it
+    // `PANIC_HOLD_S` on, as long as a hostile stays in sight.
+    fn attacked(&mut self, tick: &Tick) -> bool {
+        let p = &tick.p;
+        let mut until = p.last_bolt_hit_s + civilian::PANIC_HOLD_S;
+        if self.retreat_within_m > 0.0 && tick.lists.ranges.iter().any(|&d| d <= self.retreat_within_m) {
+            until = maxf(until, p.now_s + civilian::PANIC_HOLD_S);
+        }
+        self.threat_until_s = maxf(self.threat_until_s, until);
+        !tick.lists.hostiles.is_empty() && p.now_s < self.threat_until_s
+    }
+
+    // A civilian's burn toward `v_des` (M7-T55): its nose on the change of velocity, so the main engine does what a
+    // freighter's weak thrusters cannot, every thruster helping while it turns.
+    fn burn(cmd: &mut FlightCmd, p: &Percept, ship: &Ship, v_des: Vector3, fallback: Vector3, wish: &mut Wish) {
+        let dv = sub(v_des, p.velocity);
+        let nose = if f64::from(length(dv)) > Self::BURN_FACE_MPS {
+            dv
+        } else if f64::from(length(v_des)) > 1.0 {
+            v_des
+        } else {
+            fallback
+        };
+        cmd.rot = brain_maths::face(&p.basis, nose, ship.capability.rate_max, brain_maths::K_FACE);
+        seek_velocity(cmd, p, &ship.capability, v_des, true, wish);
+    }
+
+    // Notes fire that came close from `body` at `now_s`: the civilian runs from it for `PANIC_HOLD_S`.
+    fn scare(&mut self, body: i64, now_s: f64) {
+        self.scare_body = body;
+        self.scare_until_s = now_s + civilian::PANIC_HOLD_S;
+    }
+
+    // The row of the ship whose close fire still frightens this civilian, when it is among the contacts; else -1.
+    fn scared_by(&self, tick: &Tick) -> i32 {
+        if self.scare_body == 0 || tick.p.now_s >= self.scare_until_s {
+            return -1;
+        }
+        tick.contacts
+            .iter()
+            .copied()
+            .find(|&r| tick.rows.body_ids[r as usize] == self.scare_body)
+            .unwrap_or(-1)
+    }
+
     // Whether an alarm keeps this civilian running: one heard now (it holds `PANIC_HOLD_S` on), or one heard lately.
     fn panicked(&mut self, tick: &Tick) -> bool {
-        self.alarm_row = civilian::nearest_alarm(&tick.civilian_view(0.0, self.speed_mps), tick.alarmed);
+        self.alarm_row = civilian::nearest_alarm(&tick.civilian_view(0.0, self.speed_mps, 0.0), tick.alarmed);
         if self.alarm_row >= 0 {
             self.panic_until_s = tick.p.now_s + civilian::PANIC_HOLD_S;
         }
@@ -1741,27 +2045,49 @@ impl RetreatState {
                 threat = row as i32;
             }
         }
+        // No hostile in sight, but someone's fire came close: that ship is the threat (M7-T29).
+        if threat < 0 && tick.own_civilian() {
+            threat = self.scared_by(tick);
+            if let Ok(t) = usize::try_from(threat) {
+                let off = sub(p.position, tick.rows.positions[t]);
+                self.from_range_m = maxf(f64::from(length(off)), 1.0);
+                self.from_id = tick.rows.ids[t];
+                away = off;
+            }
+        }
         self.threatened = threat >= 0;
         if f64::from(length_squared(away)) < 1e-18 {
             away = p.forward;
         }
         let dir = normalized(away);
         // A civilian runs to its people (Q24, Q25); every other ship, and a civilian with nobody to run to, straight away.
+        let brake = ship.capability.a_retro;
         let flight = if !tick.own_civilian() {
             None
         } else if let Ok(t) = usize::try_from(threat) {
-            civilian::flee_from(
-                &tick.civilian_view(ship.radius, self.speed_mps),
-                dir,
-                tick.rows.positions[t],
-            )
+            let mut view = tick.civilian_view(ship.radius, self.speed_mps, brake);
+            view.shun = threat; // never to the ship it runs from, were it of its own people
+            civilian::flee_from(&view, dir, tick.rows.positions[t])
         } else {
             Some(civilian::flee_alarm(
-                &tick.civilian_view(ship.radius, self.speed_mps),
+                &tick.civilian_view(ship.radius, self.speed_mps, brake),
                 self.alarm_row,
             ))
         };
+        let station_run = flight
+            .as_ref()
+            .is_some_and(|f| f.shelter && usize::try_from(f.goal).is_ok_and(|g| tick.rows.surface(g).is_some()));
+        if station_run && !self.station_run {
+            self.ran_from_outside = !civilian::under_cover(&tick.civilian_view(0.0, self.speed_mps, 0.0));
+        } else if !station_run {
+            self.ran_from_outside = false;
+        }
+        self.station_run = station_run;
         let Some(flight) = flight else {
+            if tick.own_civilian() {
+                Self::burn(cmd, p, ship, scale(dir, self.speed_mps as f32), dir, wish);
+                return;
+            }
             cmd.rot =
                 brain_maths::face(&p.basis, dir, ship.capability.rate_max, brain_maths::K_FACE);
             seek_velocity(
@@ -1774,17 +2100,18 @@ impl RetreatState {
             );
             return;
         };
+        let mut velocity = flight.velocity;
         if let Ok(g) = usize::try_from(flight.goal) {
             self.goal_id = tick.rows.ids[g];
             self.shelter = flight.shelter;
+            // A station's far side is reached round its hull, never through it.
+            if tick.rows.surface(g).is_some()
+                && let Some(round) = detour(tick, ship, flight.point, self.speed_mps)
+            {
+                velocity = round;
+            }
         }
-        let face_dir = if f64::from(length(flight.velocity)) > 1.0 {
-            normalized(flight.velocity)
-        } else {
-            dir
-        };
-        cmd.rot = brain_maths::face(&p.basis, face_dir, ship.capability.rate_max, brain_maths::K_FACE);
-        seek_velocity(cmd, p, &ship.capability, flight.velocity, false, wish);
+        Self::burn(cmd, p, ship, velocity, dir, wish);
     }
 
     fn describe(&self, d: &mut Describe) {
@@ -2076,6 +2403,8 @@ const ATTACK_W_CLOSING: f64 = 0.2;
 const ATTACK_W_ATTACKING_FRIEND: f64 = 0.3;
 const ATTACK_W_DAMAGED: f64 = 0.1;
 const ATTACK_KEEP_BONUS: f64 = 0.1;
+/// At a hostile big hull, whoever fired at the ship last outranks every other target (M7-T10, the maintainer's raid rule).
+const ATTACK_W_ANSWER: f64 = 1.0;
 const ATTACK_CLOSING_FULL_MPS: f64 = 200.0;
 const ATTACK_SCORE_BASE: f64 = 0.3;
 const ATTACK_SCORE_SPAN: f64 = 0.5;
@@ -2091,6 +2420,10 @@ struct AttackState {
     target_id: i64,
     target_is_objective: bool,
     engaged_id: i64,
+    // The weapon mount a run on a big hull aims at (its slot), kept while it works; -1 for none (M7-T10).
+    aim_slot: i64,
+    // Where this think's run is headed (the target, or the point of a big hull it aims at); none without a target.
+    goal: Option<Vector3>,
     time_s: f64,
     transit: bool,
     passive: bool,
@@ -2114,6 +2447,8 @@ impl AttackState {
             target_id: 0,
             target_is_objective: false,
             engaged_id: 0,
+            aim_slot: -1,
+            goal: None,
             time_s: 0.0,
             transit: false,
             passive: false,
@@ -2154,6 +2489,7 @@ impl AttackState {
         self.target_id = 0;
         self.target_is_objective = false;
         self.engaged_id = 0;
+        self.aim_slot = -1;
         self.time_s = 0.0;
         self.transit = false;
         let mut rng = Pcg::seeded(hash_seed(self.seed, "aim"));
@@ -2195,6 +2531,15 @@ impl AttackState {
                 provoker = p.last_attacker_id;
             }
         }
+        // A raid at a station answers whoever is firing at it first, the station's fighters or the station itself.
+        let answer: i64 = if p.last_attacker_id != 0
+            && p.now_s - p.last_hit_s <= KEEP_ATTACKER_S
+            && tick.at_hostile_hull()
+        {
+            p.last_attacker_id
+        } else {
+            0
+        };
         for h in 0..tick.lists.hostiles.len() {
             let row = tick.hostile_row(h);
             let id = tick.rows.ids[row];
@@ -2208,6 +2553,8 @@ impl AttackState {
             // A big civilian hull is as near as its skin (M5-T16): a raider picks a freighter by how close it really is.
             let d = if tick.rows.is_civilian(row) {
                 maxf(tick.lists.ranges[h] - tick.rows.radii[row], 1e-3)
+            } else if tick.rows.surface(row).is_some() {
+                maxf(tick.lists.ranges[h] - tick.big_hull_depth(row, p.position), 1e-3)
             } else {
                 tick.lists.ranges[h]
             };
@@ -2227,10 +2574,32 @@ impl AttackState {
             if id == keep_id {
                 value += ATTACK_KEEP_BONUS;
             }
+            if id == answer {
+                value += ATTACK_W_ANSWER;
+            }
             if value > best {
                 best = value;
                 self.target = row as i32;
                 self.target_id = id;
+            }
+        }
+        // The station's guns hit it last: the station is the answer (its mounts are aimed at in `think`).
+        if answer != 0
+            && at_will
+            && let Ok(j) = usize::try_from(tick.rows.row_of_id(answer))
+            && tick.rows.surface(j).is_some()
+            && tick.relation(j) == pilot::HOSTILE
+            && tick.contacts.contains(&(j as i32))
+        {
+            let range = f64::from(distance(tick.rows.positions[j], p.position));
+            let d = maxf(range - tick.big_hull_depth(j, p.position), 1e-3);
+            let value = ATTACK_W_ANSWER
+                + ATTACK_W_NEAR * clampf(1.0 - d * ATTACK_INV_SENSOR_RANGE, 0.0, 1.0)
+                + if answer == keep_id { ATTACK_KEEP_BONUS } else { 0.0 };
+            if value > best {
+                best = value;
+                self.target = j as i32;
+                self.target_id = answer;
             }
         }
         if self.target < 0 {
@@ -2265,16 +2634,25 @@ impl AttackState {
         wish: &mut Wish,
     ) -> bool {
         self.transit = false;
+        self.goal = None;
         if self.target < 0 {
             self.brain.firing = false;
             return false;
         }
-        if self.target_is_objective && tick.d.objective_range_m > SENSOR_RANGE_M {
+        // A big hull is flown at until its skin, not its centre 4 km inside it, is in sensor range (M7-T10).
+        let on_hull = tick.rows.surface(self.target as usize).is_some();
+        let far_m = if on_hull {
+            tick.d.objective_range_m - tick.big_hull_depth(self.target as usize, tick.p.position)
+        } else {
+            tick.d.objective_range_m
+        };
+        if self.target_is_objective && far_m > SENSOR_RANGE_M {
             self.transit_to(tick, ship, tick.d.objective_range_m, cmd, wish);
             return false;
         }
         if self.target_id != self.engaged_id {
             self.engaged_id = self.target_id;
+            self.aim_slot = -1;
             self.roll_run();
             self.slash.restart();
             self.brain.restart();
@@ -2302,9 +2680,20 @@ impl AttackState {
         self.brain.aim_offset_rad = aim;
         self.slash.aim_offset_rad = aim;
         let t = self.target as usize;
-        let target_position = tick.rows.positions[t];
-        let target_velocity = tick.rows.velocities[t];
-        let surface_m = tick.surface_of(self.target_id);
+        // A run on a big hull goes for one of its weapon mounts, else its nearest skin: a point, flown as a gun run
+        // (a slashing pass would carry on through the hull).
+        let (target_position, target_velocity, surface_m) = if on_hull {
+            let at = self.hull_aim(tick, t);
+            self.uses_slash = false;
+            (at.0, tick.velocity_at(at.1, at.0), 0.0)
+        } else {
+            (
+                tick.rows.positions[t],
+                tick.rows.velocities[t],
+                tick.surface_of(self.target_id),
+            )
+        };
+        self.goal = Some(target_position);
         if self.uses_slash {
             self.slash.engage(
                 tick,
@@ -2337,6 +2726,37 @@ impl AttackState {
             self.target_id
         } else {
             TARGET_NONE
+        }
+    }
+
+    // Where a run on big hull `t` aims (M7-T10) and the row that point rides on: the mount it aimed at last while that
+    // still works, else the nearest working mount on a hostile hull (the weapon systems first), else the hull's nearest
+    // skin. Equal distances go to the lower slot.
+    fn hull_aim(&mut self, tick: &Tick, t: usize) -> (Vector3, usize) {
+        let from = tick.p.position;
+        let mut best: Option<(f32, Vector3, usize, u32)> = None;
+        for sp in tick.points {
+            let j = sp.row as usize;
+            if j >= tick.rows.ids.len() || tick.relation(j) != pilot::HOSTILE {
+                continue;
+            }
+            let at = add(xform(&tick.rows.bases[j], sp.local), tick.rows.positions[j]);
+            if i64::from(sp.slot) == self.aim_slot {
+                return (at, j);
+            }
+            let d = dist_sq(at, from);
+            if best.is_none_or(|(b, _, _, _)| d < b) {
+                best = Some((d, at, j, sp.slot));
+            }
+        }
+        if let Some((_, at, j, slot)) = best {
+            self.aim_slot = i64::from(slot);
+            return (at, j);
+        }
+        self.aim_slot = -1;
+        match surface::nearest_of_row(tick.rows, t, from) {
+            Some((at, _)) => (at, t),
+            None => (tick.rows.positions[t], t),
         }
     }
 
@@ -2404,6 +2824,9 @@ impl AttackState {
             return;
         }
         d.names.push(("target", self.target_id));
+        if self.aim_slot >= 0 {
+            d.numbers.push(("aim_mount", self.aim_slot as f64));
+        }
         if self.transit {
             d.state = "transit".to_string();
             d.flags.push(("firing", false));
@@ -2977,6 +3400,16 @@ struct FormationState {
     far_closure_mps: f64,
     slot_error_m: f64,
     on_link: bool,
+    // The leader's way near a big hull (M7-T38), newest last: points relative to that hull's place, so a rebase leaves them.
+    crumbs: [Vector3; FormationState::CRUMBS],
+    crumb_count: usize,
+    crumb_head: usize,
+    crumb_hull: i64,
+    last_crumb_s: f64,
+    trailing: bool,
+    // The axis a wingman comes round its leader about while its slot lies across the leader (M7-T76), kept until it is
+    // round, so every wingman goes the way the slots went.
+    swing_axis: Option<Vector3>,
     last_leader_id: i64,
     last_leader_velocity: Vector3,
     last_s: f64,
@@ -2998,12 +3431,41 @@ impl FormationState {
     const MAX_LEAN_DEG: f64 = 40.0;
     const MAX_PATH_RATE_RAD_S: f32 = 0.35;
     const FEED_FORWARD_FULL_MPS: f64 = 30.0;
+    // The trail (M7-T38): how many of the leader's points are kept, how often one is laid, the least a wingman trails it by,
+    // and how many points are tried for a clear way.
+    const CRUMBS: usize = 64;
+    const CRUMB_S: f64 = 0.25;
+    const TRAIL_S: f64 = 0.5;
+    const TRAIL_TRIES: usize = 16;
+    // A friendly ship nearer than this is pushed off, m, at up to this speed, m/s (twice a Starfury's keep-off: slots 56 m
+    // apart are left alone).
+    const SEPARATION_M: f64 = pilot::KEEP_OFF_FRIEND_M;
+    const SEPARATION_MPS: f64 = 40.0;
+    // The moment a wingman takes to start a stop short of a friend, s.
+    const SETTLE_S: f64 = 1.0;
+    // Coming round the leader (M7-T76): how far round the aim leads the ship, and where it is round, rad; how far out,
+    // against its slot's distance, a ship still comes round rather than flying in; how far off the leader's way a wingman
+    // aims while the leader burns toward it harder than `SWING_BURN_MPS2`, m.
+    const SWING_STEP_RAD: f64 = 0.785;
+    const SWING_DONE_RAD: f64 = 0.35;
+    const SWING_REACH: f64 = 3.0;
+    const SWING_CLEAR_M: f64 = 50.0;
+    const SWING_BURN_MPS2: f64 = 8.0;
+    // A wish closing on a big hull slower than this is no fall, m/s.
+    const HOLD_MATCHED_MPS: f64 = 3.0;
 
     fn new(profile: &Profile) -> Self {
         FormationState {
             far_closure_mps: profile.cruise_mps + Self::FAR_EXTRA_MPS,
             slot_error_m: -1.0,
             on_link: false,
+            crumbs: [Vector3::ZERO; Self::CRUMBS],
+            crumb_count: 0,
+            crumb_head: 0,
+            crumb_hull: 0,
+            last_crumb_s: f64::NEG_INFINITY,
+            trailing: false,
+            swing_axis: None,
             last_leader_id: 0,
             last_leader_velocity: Vector3::ZERO,
             last_s: f64::NEG_INFINITY,
@@ -3017,6 +3479,11 @@ impl FormationState {
         self.on_link = false;
         self.last_leader_id = 0;
         self.last_s = f64::NEG_INFINITY;
+        self.crumb_count = 0;
+        self.crumb_hull = 0;
+        self.last_crumb_s = f64::NEG_INFINITY;
+        self.trailing = false;
+        self.swing_axis = None;
     }
 
     fn enter(&mut self) {
@@ -3040,6 +3507,7 @@ impl FormationState {
         let slot;
         let mut slot_velocity;
         let mut slot_accel = Vector3::ZERO;
+        let mut leader_accel = Vector3::ZERO;
         self.on_link = false;
         if leader >= 0 {
             let l = leader as usize;
@@ -3057,7 +3525,7 @@ impl FormationState {
                 && (since - dt).abs() < 0.5 * dt
                 && speed_sq > 1.0
             {
-                let leader_accel = div_s(
+                leader_accel = div_s(
                     sub(leader_velocity, self.last_leader_velocity),
                     since as f32,
                 );
@@ -3085,19 +3553,50 @@ impl FormationState {
         }
         let to_slot = sub(slot, p.position);
         self.slot_error_m = f64::from(length(to_slot));
-        let error = add(to_slot, scale(sub(slot_velocity, p.velocity), Self::LEAD_S));
+        // Near a big hull a slot inside or beside the skin, or across the hull, is left for the leader's own way (M7-T38).
+        self.trailing = false;
+        if leader >= 0 {
+            let l = leader as usize;
+            self.lay_crumb(tick, tick.rows.positions[l], p.now_s);
+            if let Some(v_des) = self.trail(tick, ship, slot, l) {
+                let v_des = Self::held_off(tick, ship, v_des);
+                self.trailing = true;
+                cmd.rot = brain_maths::face(
+                    &p.basis,
+                    self.heading(p.velocity, v_des, None),
+                    ship.capability.rate_max,
+                    brain_maths::K_FACE,
+                );
+                seek_velocity(cmd, p, &ship.capability, v_des, false, wish);
+                return;
+            }
+        }
+        let aim = if leader >= 0 {
+            let l = leader as usize;
+            let (forward, up) = (tick.forward_of(l), tick.up_of(l));
+            let leader_at = tick.rows.positions[l];
+            let aim = self.swing(leader_at, forward, up, p.position, slot).unwrap_or(slot);
+            Self::clear_of_burn(leader_at, leader_accel, up, aim)
+        } else {
+            slot
+        };
+        let error = add(sub(aim, p.position), scale(sub(slot_velocity, p.velocity), Self::LEAD_S));
         let cap = if self.slot_error_m <= Self::FAR_RANGE_M {
             Self::NEAR_CLOSURE_MPS
         } else {
             self.far_closure_mps
         };
-        let v_des = add(
+        let mut v_des = add(
             add(
                 slot_velocity,
                 limit_length(scale(error, Self::K_PER_S), cap as f32),
             ),
             scale(slot_accel, brain_maths::HORIZON_S as f32),
         );
+        // Every friendly ship is kept off, not only near a big hull (M7-T76): a wing re-forming after its leader turns
+        // about must not come back through itself.
+        v_des = Self::kept_apart(tick, ship, v_des);
+        v_des = Self::held_off(tick, ship, v_des);
         let rate = ship.capability.rate_max;
         if leader >= 0 && self.slot_error_m <= Self::ALIGN_RANGE_M {
             let l = leader as usize;
@@ -3127,6 +3626,249 @@ impl FormationState {
             );
             seek_velocity(cmd, p, &ship.capability, v_des, false, wish);
         }
+    }
+
+    // The point a wingman at `own` flies for instead of `slot` while the slot lies across its leader at `leader_at` (M7-T76:
+    // the leader turned about, so a straight way back to the slot runs through the leader and the rest of the wing). The
+    // ship comes round a step at a time at its own distance from the leader, over the leader's top from its left and under
+    // it from its right (`forward`, `up`), so the two arms pass on different levels and each arm's ships on their own
+    // circles. None when the slot is not across.
+    fn swing(
+        &mut self,
+        leader_at: Vector3,
+        forward: Vector3,
+        up: Vector3,
+        own: Vector3,
+        slot: Vector3,
+    ) -> Option<Vector3> {
+        let rel_own = sub(own, leader_at);
+        let rel_slot = sub(slot, leader_at);
+        let (r_own, r_slot) = (f64::from(length(rel_own)), f64::from(length(rel_slot)));
+        if r_own < 1.0 || r_slot < 1.0 || r_own > Self::SWING_REACH * r_slot + Self::SWING_CLEAR_M {
+            self.swing_axis = None;
+            return None;
+        }
+        if self.swing_axis.is_none() {
+            if f64::from(dot(rel_own, rel_slot)) >= 0.0 {
+                return None;
+            }
+            let over = if f64::from(dot(rel_own, cross(forward, up))) > 0.0 { neg(up) } else { up };
+            let turn = cross(rel_own, over);
+            self.swing_axis = Some(if f64::from(length(turn)) > 0.1 * r_own {
+                normalized(turn)
+            } else {
+                normalized(cross(rel_own, rel_slot))
+            });
+        }
+        let axis = self.swing_axis?;
+        let (a_own, a_slot) = (f64::from(dot(rel_own, axis)), f64::from(dot(rel_slot, axis)));
+        let flat_own = sub(rel_own, scale(axis, a_own as f32));
+        let flat_slot = sub(rel_slot, scale(axis, a_slot as f32));
+        let (f_own, f_slot) = (f64::from(length(flat_own)), f64::from(length(flat_slot)));
+        let mut angle = f64::from(dot(cross(flat_own, flat_slot), axis)).atan2(f64::from(dot(flat_own, flat_slot)));
+        if angle < 0.0 {
+            angle += TAU;
+        }
+        if f_own < 1.0 || angle < Self::SWING_DONE_RAD || angle > TAU - Self::SWING_DONE_RAD {
+            self.swing_axis = None;
+            return None;
+        }
+        let step = minf(angle, Self::SWING_STEP_RAD);
+        let k = step / angle;
+        let out = rotated(div_s(flat_own, f_own as f32), axis, step as f32);
+        let aim = add(
+            scale(out, (f_own + (f_slot - f_own) * k) as f32),
+            scale(axis, (a_own + (a_slot - a_own) * k) as f32),
+        );
+        Some(add(leader_at, aim))
+    }
+
+    // `aim` moved off the line its leader at `leader_at` comes along while it burns toward the ship harder than
+    // `SWING_BURN_MPS2` (M7-T76: turned about, it brakes back into the wing behind it faster than a wingman still turning
+    // can), to `SWING_CLEAR_M` from it, on the side the aim is (`up` when it is on the line).
+    fn clear_of_burn(leader_at: Vector3, leader_accel: Vector3, up: Vector3, aim: Vector3) -> Vector3 {
+        let burn = f64::from(length(leader_accel));
+        if burn <= Self::SWING_BURN_MPS2 {
+            return aim;
+        }
+        let a_dir = div_s(leader_accel, burn as f32);
+        let rel = sub(aim, leader_at);
+        let along = f64::from(dot(rel, a_dir));
+        let lateral = sub(rel, scale(a_dir, along as f32));
+        let wide = f64::from(length(lateral));
+        if along <= 0.0 || wide >= Self::SWING_CLEAR_M {
+            return aim;
+        }
+        let flat_up = sub(up, scale(a_dir, dot(up, a_dir)));
+        let side = if wide > 1.0 { div_s(lateral, wide as f32) } else { normalized(flat_up) };
+        add(leader_at, add(scale(a_dir, along as f32), scale(side, Self::SWING_CLEAR_M as f32)))
+    }
+
+    // Lays the leader's point at `at` every `CRUMB_S` while a big hull is in sight, relative to the first resting one (the
+    // turning drum's place is its axis, which does not turn). The trail is dropped when no hull is in sight or it changes.
+    fn lay_crumb(&mut self, tick: &Tick, at: Vector3, now_s: f64) {
+        let hull = tick
+            .contacts
+            .iter()
+            .map(|&r| r as usize)
+            .find(|&j| tick.rows.surface(j).is_some_and(|s| s.spin_rad_s == 0.0))
+            .or_else(|| tick.contacts.iter().map(|&r| r as usize).find(|&j| tick.rows.surface(j).is_some()));
+        let Some(h) = hull else {
+            self.crumb_count = 0;
+            self.crumb_hull = 0;
+            return;
+        };
+        if tick.rows.body_ids[h] != self.crumb_hull {
+            self.crumb_count = 0;
+            self.crumb_hull = tick.rows.body_ids[h];
+            self.last_crumb_s = f64::NEG_INFINITY;
+        }
+        if now_s - self.last_crumb_s < Self::CRUMB_S {
+            return;
+        }
+        self.last_crumb_s = now_s;
+        self.crumbs[self.crumb_head] = sub(at, tick.rows.positions[h]);
+        self.crumb_head = (self.crumb_head + 1) % Self::CRUMBS;
+        self.crumb_count = (self.crumb_count + 1).min(Self::CRUMBS);
+    }
+
+    // The velocity that takes the ship along the leader's way instead of to `slot` (M7-T38), or none while the slot is
+    // clear of every big hull in sight and so is the straight way to it. On the trail the ship flies to the newest point of
+    // the leader's way it reaches in a straight line that is old enough to keep it behind (its place in the formation sets
+    // how far, so the wing goes through in file); with none, round the hull.
+    fn trail(&self, tick: &Tick, ship: &Ship, slot: Vector3, l: usize) -> Option<Vector3> {
+        let p = &tick.p;
+        let keep = ship.radius + pilot::MARGIN_M;
+        let clear_of = |a: Vector3, b: Vector3| {
+            tick.contacts.iter().all(|&r| {
+                let j = r as usize;
+                tick.rows.surface(j).is_none() || !surface::segment_enters(tick.rows, j, a, b, keep)
+            })
+        };
+        let near_skin = tick.contacts.iter().any(|&r| {
+            let j = r as usize;
+            tick.rows.surface(j).is_some()
+                && surface::nearest_of_row(tick.rows, j, slot)
+                    .is_some_and(|(_, d)| d < keep + 0.5 * pilot::SLIDE_BAND_M)
+        });
+        if !near_skin && clear_of(p.position, slot) {
+            return None;
+        }
+        let leader_v = tick.rows.velocities[l];
+        let speed = maxf(f64::from(length(leader_v)), 30.0);
+        if self.crumb_count > 0 {
+            let hull_at = tick
+                .contacts
+                .iter()
+                .map(|&r| r as usize)
+                .find(|&j| tick.rows.body_ids[j] == self.crumb_hull)
+                .map(|j| tick.rows.positions[j]);
+            if let Some(origin) = hull_at {
+                let offset = tick.ctx_slot_offset;
+                let behind_m = 1.5 * (f64::from(length(offset)) + maxf(f64::from(offset.x), 0.0));
+                let skip = ((Self::TRAIL_S + behind_m / speed) / Self::CRUMB_S).ceil() as usize;
+                for k in (skip..self.crumb_count).take(Self::TRAIL_TRIES) {
+                    let at = (self.crumb_head + Self::CRUMBS - 1 - k) % Self::CRUMBS;
+                    let point = add(origin, self.crumbs[at]);
+                    if clear_of(p.position, point) {
+                        let error = sub(point, p.position);
+                        let closure = limit_length(scale(error, Self::K_PER_S), Self::NEAR_CLOSURE_MPS as f32);
+                        return Some(Self::kept_apart(tick, ship, add(scale(normalized(error), speed as f32), closure)));
+                    }
+                }
+            }
+        }
+        detour(tick, ship, slot, self.far_closure_mps)
+    }
+
+    // `v_des` kept off every friendly ship (M7-T38, everywhere since M7-T76): one the ship is closing on within the room it
+    // needs to stop is a wall the wish may not close on, and one nearer than `SEPARATION_M` is pushed off. A wing pushed off its slots (by a big
+    // hull, or its leader turning about) comes back fast, and must not come back through its leader or a wingmate.
+    fn kept_apart(tick: &Tick, ship: &Ship, v_des: Vector3) -> Vector3 {
+        let p = &tick.p;
+        // The worst stop: across the nose on the side thrusters, after a moment to settle; near a big hull, after
+        // avoidance's urgent turn as well (M7-T38), since a ship pulling out of the hull's way may be turned away.
+        let a_stop = maxf(minf(ship.capability.a_rcs_x, ship.capability.a_rcs_y), 0.01);
+        let settle_s = if tick.contacts.iter().any(|&r| tick.rows.surface(r as usize).is_some()) {
+            let rate = f64::from(ship.capability.rate_max.x.min(ship.capability.rate_max.y));
+            0.5 * std::f64::consts::PI / maxf(rate, 0.01) + Self::SETTLE_S
+        } else {
+            Self::SETTLE_S
+        };
+        let mut out = v_des;
+        for &r in tick.contacts {
+            let j = r as usize;
+            if j == tick.own_row
+                || !tick.rows.rigid[j]
+                || tick.rows.surface(j).is_some()
+                || tick.relation(j) != pilot::FRIENDLY
+            {
+                continue;
+            }
+            let c_velocity = tick.rows.velocities[j];
+            let Some((away, d)) = pilot::closing_wall(
+                p.position,
+                p.velocity,
+                tick.rows.positions[j],
+                c_velocity,
+                Self::SEPARATION_M,
+                settle_s,
+                a_stop,
+            ) else {
+                continue;
+            };
+            let into = -f64::from(dot(sub(out, c_velocity), away));
+            if into > 0.0 {
+                out = add(out, scale(away, into as f32));
+            }
+            if d < Self::SEPARATION_M {
+                let push = (Self::SEPARATION_M - d) / Self::SEPARATION_M * Self::SEPARATION_MPS;
+                out = add(out, scale(away, push as f32));
+            }
+        }
+        out
+    }
+
+    // `v_des` held off every big hull in sight (M7-T76): a wish that would carry the ship at a hull's face faster than it
+    // could still stop short of it (a turn, then the retros, as avoidance reckons a stop) closes no faster than that, and
+    // along the face it is left alone. The face is taken outside avoidance's slide band, so a wing whose leader flies into
+    // the station holds off short of it instead of following it in and leaving avoidance to pull it out.
+    fn held_off(tick: &Tick, ship: &Ship, v_des: Vector3) -> Vector3 {
+        let p = &tick.p;
+        let keep = ship.radius + pilot::MARGIN_M;
+        let a_stop = maxf(ship.capability.a_retro, 0.01);
+        let rate = f64::from(ship.capability.rate_max.x.min(ship.capability.rate_max.y));
+        let turn_s = 0.5 * std::f64::consts::PI / maxf(rate, 0.01) + 1.0;
+        let mut out = v_des;
+        for &r in tick.contacts {
+            let j = r as usize;
+            if tick.rows.surface(j).is_none() {
+                continue;
+            }
+            let c_velocity = tick.rows.velocities[j];
+            let w = sub(out, c_velocity);
+            let speed = f64::from(length(w));
+            if speed <= Self::HOLD_MATCHED_MPS {
+                continue;
+            }
+            let stop_s = turn_s + speed / a_stop;
+            // Outside the band first; a ship already inside it holds off the keep-off distance itself.
+            let entry = surface::path_entry(tick.rows, j, p.position, w, stop_s, keep + pilot::SLIDE_BAND_M)
+                .or_else(|| surface::path_entry(tick.rows, j, p.position, w, stop_s, keep));
+            let Some((t, n)) = entry else {
+                continue;
+            };
+            let falling = -f64::from(dot(w, n));
+            if falling <= Self::HOLD_MATCHED_MPS {
+                continue;
+            }
+            let gap = falling * t;
+            let most = a_stop * ((turn_s * turn_s + 2.0 * gap / a_stop).sqrt() - turn_s);
+            if falling > most {
+                out = add(out, scale(n, (falling - most) as f32));
+            }
+        }
+        out
     }
 
     // `BehaviourFormation._heading`.
@@ -3160,6 +3902,9 @@ impl FormationState {
         }
         if self.on_link {
             state = "joining (link)";
+        }
+        if self.trailing {
+            state = "trailing";
         }
         d.state = state.to_string();
         d.numbers
@@ -3353,6 +4098,7 @@ impl PathState {
         self.lag_m = Self::lag_to(tick, route);
         self.settle(p, route);
         match self.phase {
+            Self::LEAD if route.precise => self.fly_lane(tick, cmd, ship, route, wish),
             Self::LEAD => {
                 let to = sub(p.local_of(route.points[self.index]), p.position);
                 self.fly(cmd, p, ship, to, route.pace_speed(self.lag_m), wish);
@@ -3374,8 +4120,21 @@ impl PathState {
                 }
             }
             Self::HOLD => {
-                cmd.brake = true;
                 self.hold_left_s -= dt;
+                // A hold in the turning drum keeps turning with it: the brake would stop the roll, and a wide hull
+                // left behind by the drum meets the doorway's edge on its way out (M7-T61).
+                if route.precise && Self::lane_spin(route, self.index).is_some() {
+                    self.hold_lane(tick, cmd, ship, route, wish);
+                    return;
+                }
+                cmd.brake = true;
+                // A docking lane's hold keeps the hull as the lane asked (a freighter stern to the bay).
+                if route.precise
+                    && let Some(face) = route.faces.get(self.index)
+                    && f64::from(length_squared(*face)) > 1e-12
+                {
+                    cmd.rot = brain_maths::face(&p.basis, *face, ship.capability.rate_max, brain_maths::K_FACE);
+                }
             }
             _ => cmd.brake = true,
         }
@@ -3402,7 +4161,8 @@ impl PathState {
                     } else if f64::from(length(sub(
                         p.local_of(route.points[self.index]),
                         p.position,
-                    ))) < Self::ARRIVAL_M
+                    ))) < Self::arrival_m(route)
+                        || Self::passed(p, route, self.index)
                     {
                         self.arrive(route);
                     }
@@ -3493,6 +4253,127 @@ impl PathState {
         }
     }
 
+    // How near a waypoint counts as reached: a docking lane's own distance, else `ARRIVAL_M`.
+    fn arrival_m(route: &Route) -> f64 {
+        if route.precise && route.arrival_m > 0.0 {
+            route.arrival_m
+        } else {
+            Self::ARRIVAL_M
+        }
+    }
+
+    // Whether a docking lane's waypoint that does not hold lies behind the ship along its leg: flown past, a little wide.
+    fn passed(p: &Percept, route: &Route, index: usize) -> bool {
+        if !route.precise || index == 0 || route.holds[index] > 0.0 {
+            return false;
+        }
+        let goal = p.local_of(route.points[index]);
+        let leg = sub(goal, p.local_of(route.points[index - 1]));
+        f64::from(length(leg)) > 1.0 && f64::from(dot(sub(goal, p.position), leg)) <= 0.0
+    }
+
+    // One tick along a docking lane (M7-T10): along the leg to the waypoint with the sideways error steered out, slowing
+    // into a waypoint that holds; the nose where the lane asks (a freighter backs in), any thruster doing the work; and
+    // the hull turning with the lane's spin (a ship matches the drum's roll before its tunnel).
+    fn fly_lane(&mut self, tick: &Tick, cmd: &mut FlightCmd, ship: &Ship, route: &Route, wish: &mut Wish) {
+        let p = &tick.p;
+        const LANE_GAIN: f64 = 0.5;
+        const BRAKE_SHARE: f64 = 0.4;
+        const CREEP_MPS: f64 = 3.0;
+        let cap = &ship.capability;
+        let goal = p.local_of(route.points[self.index]);
+        let to = sub(goal, p.position);
+        let d = f64::from(length(to));
+        let toward = if d > 1e-6 { div_s(to, d as f32) } else { p.forward };
+        let mut speed = route.cruise_mps;
+        if route.holds[self.index] > 0.0 {
+            let a_slow = BRAKE_SHARE * maxf(minf(cap.a_retro, minf(cap.a_rcs_x, cap.a_rcs_y)), 0.01);
+            let stop = (2.0 * a_slow * maxf(d - 0.5 * Self::arrival_m(route), 0.0)).sqrt();
+            speed = minf(speed, maxf(stop, CREEP_MPS));
+        }
+        let mut along = toward;
+        let mut v_des = scale(toward, speed as f32);
+        if self.index > 0 {
+            let from = p.local_of(route.points[self.index - 1]);
+            let leg = sub(goal, from);
+            if f64::from(length(leg)) > 1.0 {
+                along = normalized(leg);
+                let off = sub(p.position, from);
+                let side = sub(off, scale(along, dot(off, along)));
+                let mut pull = scale(side, -LANE_GAIN as f32);
+                let most = 0.5 * speed;
+                if f64::from(length(pull)) > most {
+                    pull = scale(normalized(pull), most as f32);
+                }
+                // Past the waypoint (an overshoot) the way along the leg is back to it.
+                let left = f64::from(dot(to, along));
+                let ahead = clampf(left / maxf(Self::arrival_m(route), 1.0), -1.0, 1.0);
+                v_des = add(scale(along, (speed * ahead) as f32), pull);
+            }
+        }
+        let face = route.faces.get(self.index).copied().unwrap_or(Vector3::ZERO);
+        let nose = if f64::from(length_squared(face)) > 1e-12 { face } else { along };
+        // A nose the lane fixes is brought round before the leg is flown (a freighter turns, then backs in): no way
+        // made beyond a quarter turn off, all of it within `ALIGNED_COS`.
+        if f64::from(length_squared(face)) > 1e-12 {
+            const ALIGNED_COS: f64 = 0.9;
+            let cos = f64::from(dot(p.forward, normalized(face)));
+            v_des = scale(v_des, clampf(cos / ALIGNED_COS, 0.0, 1.0) as f32);
+        }
+        cmd.rot = brain_maths::face(&p.basis, nose, cap.rate_max, brain_maths::K_FACE);
+        if let Some(spin) = Self::lane_spin(route, self.index) {
+            cmd.rot.z = Self::lane_roll(tick, cap, spin) as f32;
+        }
+        seek_velocity(cmd, p, cap, v_des, true, wish);
+    }
+
+    // The turn rate a docking lane's waypoint asks to match about the nose, if any.
+    fn lane_spin(route: &Route, index: usize) -> Option<Vector3> {
+        route
+            .spins
+            .get(index)
+            .copied()
+            .filter(|s| f64::from(length_squared(*s)) > 1e-12)
+    }
+
+    // The roll that turns the hull with the lane's spin and lies it square in the turning hull nearby.
+    fn lane_roll(tick: &Tick, cap: &Capability, spin: Vector3) -> f64 {
+        let p = &tick.p;
+        let mut roll = brain_maths::match_roll(&p.basis, spin, cap.rate_max);
+        // Turning as fast as the tunnel is not yet lying square in it: the hull's top is also brought to the
+        // turning hull's own (a 40 m span does not pass a 34 m tunnel on its side).
+        if let Some(j) = tick
+            .contacts
+            .iter()
+            .map(|&r| r as usize)
+            .find(|&j| tick.rows.surface(j).is_some_and(|s| s.spin_rad_s != 0.0))
+        {
+            roll += brain_maths::align_roll(&p.basis, tick.up_of(j), cap.rate_max, brain_maths::K_FACE);
+        }
+        clampf(roll, -1.0, 1.0)
+    }
+
+    // Holding at a docking lane's waypoint that turns (the void behind the drum's doors): kept on the point by the
+    // thrusters, the nose where it was or where the lane asks, the hull turning square with the drum.
+    fn hold_lane(&mut self, tick: &Tick, cmd: &mut FlightCmd, ship: &Ship, route: &Route, wish: &mut Wish) {
+        const HOLD_GAIN: f64 = 0.3;
+        const HOLD_MPS: f64 = 2.0;
+        let p = &tick.p;
+        let cap = &ship.capability;
+        let to = sub(p.local_of(route.points[self.index]), p.position);
+        let mut v_des = scale(to, HOLD_GAIN as f32);
+        if f64::from(length(v_des)) > HOLD_MPS {
+            v_des = scale(normalized(v_des), HOLD_MPS as f32);
+        }
+        let face = route.faces.get(self.index).copied().unwrap_or(Vector3::ZERO);
+        let nose = if f64::from(length_squared(face)) > 1e-12 { face } else { p.forward };
+        cmd.rot = brain_maths::face(&p.basis, nose, cap.rate_max, brain_maths::K_FACE);
+        if let Some(spin) = Self::lane_spin(route, self.index) {
+            cmd.rot.z = Self::lane_roll(tick, cap, spin) as f32;
+        }
+        seek_velocity(cmd, p, cap, v_des, true, wish);
+    }
+
     // `BehaviourFollowPath._fly`: nose along `to`, velocity toward it at `speed`.
     fn fly(
         &mut self,
@@ -3554,3 +4435,6 @@ impl PathState {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

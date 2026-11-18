@@ -54,6 +54,29 @@ func test_a_full_wing_a_taken_slot_a_bad_slot_and_a_second_add_are_refused() -> 
 	assert_eq(wing.slot_of(_member("nobody")), -1)
 
 
+func test_resize_grows_the_slots_and_never_cuts_a_flown_one() -> void:
+	var wing := Wing.new()
+	var a := _member("ALPHA 2")
+	var d := _member("ALPHA 4")
+	wing.add_member(a, 1)
+	wing.add_member(d, 3)
+	wing.mark_lost(2)
+	assert_true(wing.resize(11), "a station launch makes room for the rest of Alpha (M7-T58)")
+	assert_eq(wing.size, 11)
+	assert_eq(wing.slot_of(a), 1, "members keep their slots")
+	assert_eq(wing.slot_of(d), 3)
+	assert_true(wing.is_lost(2), "a lost slot stays lost")
+	assert_false(wing.is_lost(4), "a new slot is not")
+	assert_eq(wing.empty_slots(), PackedInt32Array([2, 4, 5, 6, 7, 8, 9, 10, 11]))
+	var e := _member("ALPHA 12")
+	assert_eq(wing.add_member(e, 11), 11)
+	assert_false(wing.resize(3), "slot 11 is flown")
+	assert_eq(wing.size, 11, "a refused resize changes nothing")
+	wing.remove_member(e)
+	assert_true(wing.resize(3), "back to the finger-four once the slots past it are empty")
+	assert_eq(wing.empty_slots(), PackedInt32Array([2]))
+
+
 func test_removing_a_member_frees_its_slot() -> void:
 	var wing := Wing.new()
 	var a := _member("ALPHA 2")
@@ -109,6 +132,45 @@ func test_slot_offsets_follow_the_wings_formation() -> void:
 
 
 # --- orders gate the behaviours -------------------------------------------------------------------------------------
+
+
+# A wing of `size` slots with a member in each of `slots`.
+func _wing_with(size: int, slots: Array[int]) -> Wing:
+	var wing := Wing.new(Wing.DEFAULT_NAME, _member("PLAYER"), size)
+	for slot: int in slots:
+		wing.add_member(_member("ALPHA %d" % (slot + 1)), slot)
+	return wing
+
+
+func test_a_big_wing_fills_in_slot_order_and_its_centre_last() -> void:
+	# M7-T74: Alpha grown to eleven around the player's three wingmen takes its launched ships in slot order, the arms even.
+	var alpha: Wing = _wing_with(11, [1, 2, 3])
+	assert_eq(alpha.fill_order(), PackedInt32Array([4, 5, 6, 7, 8, 9, 10, 11]))
+	assert_eq(_wing_with(11, []).fill_order(), PackedInt32Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]))
+	assert_eq(_wing_with(3, []).fill_order(), PackedInt32Array([1, 2, 3]), "a finger-four as before")
+	var joining := Wing.new()
+	for n: int in 3:
+		assert_eq(joining.add_member(_member("ALPHA %d" % (n + 2))), n + 1, "the scenario's wingmen keep their slots")
+
+
+func test_a_newcomer_takes_the_slot_that_evens_the_arms() -> void:
+	# Full but for ALPHA 3 (slot 2, right) and ALPHA 5 (slot 4, left) shot down, and one more gone on the right (slot 7).
+	var wing: Wing = _wing_with(11, [1, 3, 5, 6, 8, 9, 10, 11])
+	assert_eq(wing.fill_order(), PackedInt32Array([2, 4, 7]), "the short right arm first, then the nearest")
+	var c := _member("NEW")
+	assert_eq(wing.add_member(c), 2)
+	for slot: int in range(1, 12):
+		if wing.member_at(slot) != null:
+			assert_eq(wing.slot_offset(slot), wing.formation.offset(slot, 11), "slot %d stays put" % slot)
+
+
+func test_a_wing_growing_for_a_launch_moves_none_of_its_wingmen() -> void:
+	var wing: Wing = _wing_with(3, [1, 2, 3])
+	var before: Array[Vector3] = [wing.slot_offset(1), wing.slot_offset(2), wing.slot_offset(3)]
+	assert_true(wing.resize(11))
+	for slot: int in range(1, 4):
+		assert_eq(wing.slot_offset(slot), before[slot - 1], "slot %d" % slot)
+	assert_eq(wing.slot_offset(11).x, 0.0, "the twelfth on the centreline")
 
 
 func _ctx(order: AiContext.Order, hull: float, contacts: Array[Contact]) -> AiContext:

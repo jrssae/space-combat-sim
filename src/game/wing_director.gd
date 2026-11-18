@@ -197,7 +197,7 @@ func player_wing() -> Wing:
 	return wings[0] if not wings.is_empty() else null
 
 
-## Puts a ship in play into `slot` of `wing` (-1: the first empty one) and briefs its pilot. Returns the slot, or -1 when the
+## Puts a ship in play into `slot` of `wing` (-1: the one `Wing.fill_order` picks) and briefs its pilot. Returns the slot, or -1 when the
 ## wing refuses it, it does not fly an `AiPilot`, or it is not in play (`refresh` would drop it).
 func add_member(wing: Wing, member: Combatant, slot: int = -1) -> int:
 	var pilot: AiPilot = _pilot_of(member)
@@ -223,7 +223,7 @@ func replenish(wing: Wing = null) -> Array[Combatant]:
 	if wing == null or pool == null or world == null or not is_inside_tree() or get_tree().paused:
 		return launched
 	refresh(wing)  # a wingman shot down this very tick is an empty slot already
-	var empty: PackedInt32Array = wing.empty_slots()
+	var empty: PackedInt32Array = wing.fill_order()  # the arms stay even if the pool runs dry
 	if empty.is_empty() or not leader_alive(wing) or pool.pool_size(ShipPool.ALLY_TYPE) == 0:
 		return launched
 	var leader: Ship = wing.leader.ship
@@ -236,7 +236,7 @@ func replenish(wing: Wing = null) -> Array[Combatant]:
 			break
 		var lane: Vector3 = wing.slot_offset(slot)
 		var at: UniversePos = anchor.plus_local(basis * Vector3(lane.x, lane.y, REPLENISH_DISTANCE_M))
-		var callsign: String = _callsign_for(wing, slot)
+		var callsign: String = callsign_for(wing, slot)
 		var made: Dictionary = BrainFactory.from_behaviour({"type": "ai", "profile": REPLENISH_PROFILE,
 				"orders": String(AiContext.order_word(wing.order))}, at, hash([callsign, _launched]))
 		if not bool(made["ok"]):
@@ -269,6 +269,19 @@ func remove_member(wing: Wing, member: Combatant) -> void:
 	var pilot: AiPilot = _pilot_of(member)
 	if pilot != null:
 		pilot.context.clear_wing()
+
+
+## Takes `member` out of `wing` whether it flies a slot or leads it, so a launch that falls through leaves no ghosts behind.
+## A leaderless wing takes the next ship `join`s as its leader.
+func leave(wing: Wing, member: Combatant) -> void:
+	if wing == null:
+		return
+	if wing.leader == member:
+		wing.leader = null
+		var pilot: AiPilot = _pilot_of(member)
+		if pilot != null:
+			pilot.context.clear_wing()
+	remove_member(wing, member)
 
 
 ## Gives `wing` (default: the player's) a new order and posts one acknowledgement line. Returns `{"ok", "line"}`. ATTACK MY
@@ -323,6 +336,11 @@ func leader_hostile_target(wing: Wing) -> Targetable:
 func leader_alive(wing: Wing) -> bool:
 	var leader: Combatant = wing.leader
 	return leader != null and is_instance_valid(leader.ship) and _in_play(leader)
+
+
+## Whether a ship still counts for its wing (see `_in_play`).
+static func is_in_play(c: Combatant) -> bool:
+	return _in_play(c)
 
 
 # Whether a ship still counts for its wing: active, or flying as a low-attention tier row (M4-T21) and not destroyed.
@@ -444,9 +462,9 @@ func _post(line: String) -> void:
 	acknowledged.emit(line)
 
 
-# The slot's callsign, unless a ship in play carries it (a console `spawn ally`): then the first free number after the
-# wing's own, so no two ships share a name.
-func _callsign_for(wing: Wing, slot: int) -> String:
+## The slot's callsign, unless a ship in play carries it (a console `spawn ally`): then the first free number after the
+## wing's own, so no two ships share a name.
+func callsign_for(wing: Wing, slot: int) -> String:
 	var callsign: String = wing.callsign(slot)
 	var taken: bool = wing.leader != null and wing.leader.display_name == callsign
 	for other: Combatant in pool.alive():

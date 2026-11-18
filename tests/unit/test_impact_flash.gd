@@ -39,3 +39,39 @@ func test_a_hit_is_one_node() -> void:
 	add_child_autofree(a)
 	assert_eq(a.get_child_count(true), 0, "the flash quad alone; no mesh sparks (M4-T36)")
 	assert_false(a.is_processing(), "animated by the hit flashes pass")
+
+
+func test_warming_makes_every_weapon_colour_and_a_first_flash_builds_nothing() -> void:
+	var colours: Array[Color] = WeaponSpec.known_bolt_colors()
+	var from_files: Array[Color] = []
+	for file: String in DirAccess.get_files_at(WeaponSpec.WEAPON_DIR):
+		if file.ends_with(".tres"):
+			var spec := load("%s/%s" % [WeaponSpec.WEAPON_DIR, file]) as WeaponSpec
+			if spec != null and not from_files.has(spec.bolt_color):
+				from_files.append(spec.bolt_color)
+	assert_gt(from_files.size(), 5, "the station grid's and the ships' weapons have their own colours")
+	assert_eq(colours.size(), from_files.size(), "every spec's colour is known")
+	ImpactFlash.reset_shared()
+	ImpactFlash.warm(colours)
+	for color: Color in from_files:
+		assert_true(ImpactFlash.is_warm(color), "the quad of %s is made" % color)
+	var built: int = ImpactFlash.built_count
+	for color: Color in from_files:
+		add_child_autofree(ImpactFlash.create(color))
+	assert_eq(ImpactFlash.built_count, built, "a first flash of any colour builds no node")
+
+
+func test_a_meeting_flash_keeps_its_smaller_size_as_it_grows() -> void:
+	var hit: ImpactFlash = ImpactFlash.create(Color(0.9, 1.5, 3.0), 1)
+	var meet: ImpactFlash = ImpactFlash.create(Color(0.9, 1.5, 3.0), 1, StationGrid.MEET_FLASH_SCALE)
+	add_child_autofree(hit)
+	add_child_autofree(meet)
+	for step: int in 3:
+		hit.advance(ImpactFlash.FLASH_S * 0.2)
+		meet.advance(ImpactFlash.FLASH_S * 0.2)
+		assert_almost_eq(meet.scale.x, hit.scale.x * StationGrid.MEET_FLASH_SCALE, 1e-5,
+				"step %d: the battery's meeting flash stays %.1f of a hit's size (M7-T41)" % [step, StationGrid.MEET_FLASH_SCALE])
+	var reused: ImpactFlash = ImpactFlash.create(Color(0.9, 1.5, 3.0), 1)
+	add_child_autofree(reused)
+	reused.advance(ImpactFlash.FLASH_S * 0.6)
+	assert_almost_eq(reused.scale.x, hit.scale.x, 1e-5, "a hull hit's flash is full size")

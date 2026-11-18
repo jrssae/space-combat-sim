@@ -57,12 +57,19 @@ func test_the_flare_is_the_vendored_effect_through_our_thin_subclass() -> void:
 # --- settings, live -----------------------------------------------------------------------------------------------
 
 
-func test_defaults_flare_on_blur_off() -> void:
+func test_defaults_flare_on_blur_on() -> void:
+	# Both on by default (motion blur since M7-T47, the maintainer's wish).
 	assert_true(bool(Settings.get_value(&"lens_flare")))
-	assert_false(bool(Settings.get_value(&"motion_blur")))
+	assert_true(bool(Settings.get_value(&"motion_blur")))
 	assert_almost_eq(float(Settings.get_value(&"motion_blur_strength")), 0.5, 0.0001)
 	post.apply_settings()
 	assert_true(post.flare_effect().enabled)
+	assert_true(post.blur_effect().enabled)
+
+
+func test_an_off_blur_asks_the_renderer_for_nothing() -> void:
+	Settings.set_value(&"motion_blur", false)
+	post.apply_settings()
 	assert_false(post.blur_effect().enabled, "an off blur asks the renderer for no motion vectors")
 
 
@@ -144,6 +151,22 @@ func test_the_flare_is_told_where_the_star_is() -> void:
 	assert_almost_eq(post.flare_effect().sun_position.x, 0.5, 0.01)
 	assert_almost_eq(post.flare_effect().sun_position.y, 0.5, 0.01)
 	assert_almost_eq(post.flare_effect().sun_dir_sign, 1.0, 0.001)
+
+
+func test_the_flare_reads_the_camera_and_the_key_star_of_the_frame_drawn() -> void:
+	# M7-T72: the camera rig turns the camera and the environment turns the key star in the same frame; a flare aimed before
+	# them lags a frame, a second sun beside the disc while the view turns.
+	camera.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	var turner := _CameraTurner.new()
+	turner.camera = camera
+	turner.key_star = env.key_star
+	add_child_autofree(turner)
+	assert_gt(post.process_priority, env.process_priority, "after the key star follows the sun")
+	camera.global_transform = Transform3D(Basis.looking_at(env.key_star.global_basis.z), Vector3.ZERO)
+	for i: int in 4:
+		await get_tree().process_frame
+		var wanted: Vector2 = LensFlareAim.sun_uv(camera, env.key_star.global_basis.z)
+		assert_almost_eq(post.flare_effect().sun_position, wanted, Vector2.ONE * 1.0e-5, "frame %d" % i)
 
 
 func test_looking_away_from_the_star_flips_the_facing_sign() -> void:
@@ -238,3 +261,33 @@ func test_the_star_field_leaves_the_flare_open_on_the_sky_and_a_hull_still_hides
 	var lens_shader: String = FileAccess.get_file_as_string("res://addons/lens_effects/lens_flares.glsl")
 	assert_string_contains(lens_shader, "get_raw_depth(ivec2(sun_position)) <= 0.0", "the flare's open-sky rule is the clear depth")
 
+
+func test_the_jump_flash_pass_leaves_the_shared_compositor_with_its_environment() -> void:
+	# The Compositor belongs to the packed scene, so every later environment would inherit a pass left on it.
+	var compositor: Compositor = env.world_environment.compositor
+	var before: int = compositor.compositor_effects.size()
+	FlashFlare.clear()
+	FlashFlare.offer(Vector3(0.0, 0.0, -100.0), Color.WHITE, 1.0)
+	await _frame()
+	FlashFlare.offer(Vector3(0.0, 0.0, -100.0), Color.WHITE, 1.0)
+	await _frame()
+	assert_not_null(post.flash_flare_effect(), "a flash in view gets its flare pass")
+	assert_eq(compositor.compositor_effects.size(), before + 1)
+	remove_child(env)
+	env.free()
+	FlashFlare.clear()
+	assert_eq(compositor.compositor_effects.size(), before, "gone with the environment")
+	var next: SpaceEnvironment = (load(SCENE_PATH) as PackedScene).instantiate() as SpaceEnvironment
+	add_child_autofree(next)
+	assert_eq(next.world_environment.compositor.compositor_effects.size(), before, "the next environment starts clean")
+
+
+# Turns the camera and the key star a little every frame at the default priority, as the camera rig moves the view.
+class _CameraTurner:
+	extends Node
+	var camera: Camera3D
+	var key_star: DirectionalLight3D
+
+	func _process(_delta: float) -> void:
+		camera.rotate_y(0.02)
+		key_star.rotate_x(0.01)

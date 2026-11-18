@@ -36,7 +36,8 @@ second.
 
 ```
 RT / LT       right / left main pods (analog)        RB / LB     right / left retros
-Right stick   up/down: pitch (stick back = nose up)   Left stick  strafe left/right, up/down
+Right stick   up/down: pitch (stick back = nose up)   Left stick  strafe left/right, up/down;
+              with a radial menu open (target menu, comms menu) it points at the entries instead (M7-T37)
               left/right: yaw;  the four diagonals: roll toward the side you lean (up-right or down-right = roll right)
 D-pad Up      flight assist on/off                   D-pad Down  fire mode
 D-pad Left    running lights on/off (key 5; the HUD says LIGHTS ON or OFF, and your wingmen follow)     D-pad Right  comms menu (M5)
@@ -44,6 +45,9 @@ B             tap: nearest enemy (again: the 2nd nearest)   hold (about 0.35 s):
 X (toggle)    auto-track on/off: the nose swings onto the lead reticle of the selected target and follows it as it moves
               (with none selected it takes the nearest hostile; it switches itself off when none is left); your speed and
               direction are untouched, so you can keep thrusting and strafing while you aim. AUTO-TRACK shows on the HUD
+X (hold 2 s)  within 2 km of a target that offers an action (the jumpgate, a Babylon 5 bay; the HUD reads HOLD X / SHIFT /
+              MOUSE 4: ...): a bar fills across the top and the action runs (M7-T27); a tap is still auto-track. Farther out
+              the HUD only says how close to come (JUMPGATE: 3.4 km — CLOSE TO 2.0 km TO JUMP) and the hold does nothing
 R3            brake (hold): all stop; with a target selected the nose also swings onto it
 L3 (hold)     free look: the right stick turns the view instead of flying (cockpit: your head turns; chase: the camera
               pans around the ship), faster the further you push it; centre the stick and the view stays where it is.
@@ -66,6 +70,8 @@ Alt (hold)    frees the mouse: the cursor appears, the ship ignores it and click
 Mouse 1       fire                                    Mouse 2     tap: nearest enemy, hold: the target menu
 Wheel         previous / next target                  Middle button (hold)  free look, as L3
 Mouse 4       auto-track (toggle)                     Mouse 5     fire mode (the side buttons, if your mouse has them)
+Shift or Mouse 4 held 2 s   the pad's X hold (M7-T27): acts on the targeted gate or bay, the bar across the top; a tap toggles auto-track
+Arrows / Enter / Backspace  point, pick and back in the target and comms menus (the mouse points and clicks too)
 N or Print    screenshot (saved to user://screenshots/, path printed)
 Backspace     respawn                                 Esc         pause (also frees the mouse)       F3  debug overlay
 ```
@@ -339,10 +345,11 @@ Keys 1 to 4, or `wing order <attack|form|engage|cover>` in the console. The HUD 
 `ALPHA 2: COPY, FORMING UP`.
 
 The comms menu (D-pad Right, or Ctrl) is a radial menu like the target menu: the same ring at the left, the game paused and the view
-blurred behind it. Point the right stick (or the arrow keys, or the mouse) at WING ORDERS' slices, up to down going clockwise: ATTACK
+blurred behind it. Point the left stick (M7-T37; or the arrow keys, or the mouse) at WING ORDERS' slices, up to down going clockwise: ATTACK
 (my target), FORM ON ME, ENGAGE (at will), COVER ME. A sends the order and the game resumes; B closes the menu (from a sub-page it
 goes back a page); D-pad Right again also closes it; Start hands over to the pause menu. There is no timeout. Nothing held (fire, the
-aim stick, a D-pad press) acts when it closes. Console: `commsmenu open`, `commsmenu pick "form on me"`, `state comms_menu`.
+left stick, a D-pad press) acts when it closes; the left stick strafes again only once it has been back near centre. The right
+stick is not read by the menu and flies as soon as it closes. Console: `commsmenu open`, `commsmenu pick "form on me"`, `state comms_menu`.
 
 - **1, attack my target:** every wingman goes for your selected hostile, and only that one. With no hostile selected it is refused
   (`ALPHA 2: UNABLE, NO HOSTILE SELECTED`) and the old order stands. In a console script under `--console-strict`, a refusal stops the
@@ -395,13 +402,13 @@ state wing|ai|factions|ram|route|lights|post|screens|world     the new providers
 Set one with `set settings.<name> <value>`; add `save` to keep it. Every one is listed by `state settings`.
 
 ```
-friendly_fire false            bolts hit anything but their shooter when on
+friendly_fire true             bolts hit anything but their shooter when on (on by default since M7-T47)
 ram_damage true                collisions hurt
 ambient_level 0.3              how much light the dark side of a hull gets (M4-T30a)
 texture_detail high            the ships' texture set: high (seams, hatches, ribs, toned plating) or low (major seams only); only the civilian hulls have both sets for now; live (M5-T40)
 particle_density 1.0           how much of each spark and debris burst is thrown; 0 costs nothing per frame
 lens_flare true                the star's flare (flare on|off)
-motion_blur false              blur on fast turns (blur on|off)
+motion_blur true               blur on fast turns (blur on|off; on by default since M7-T47)
 motion_blur_strength 0.5       how strong the blur is
 cabin_glow_level 0.3           how much red the cockpit glow adds in the canopy, seen from outside
 cabin_glow_view_m 150          how far off the glow can be seen
@@ -474,41 +481,43 @@ Record your GPU, driver, FPS and VRAM in the acceptance record at the end of the
 
 ## M4 return checklist
 
+**Accepted by the maintainer 2026-11-17** (every item below passed; the last fixes were in M7-T54 to M7-T56 and M7-T59).
+
 Look and feel items from M4 not yet seen by the maintainer (Q54), for one session on return. Each names the task that changed it.
 
-- [ ] **M4-T36 The radar's dots.** The radar's contacts are drawn in batches now: every stalk first, then every dot over them (before,
+- [x] **M4-T36 The radar's dots.** The radar's contacts are drawn in batches now: every stalk first, then every dot over them (before,
       each contact's stalk and dot were drawn in turn, so a nearer contact's stalk could cross a farther dot), and the dots are 16-sided
       polygons. Check the chase radar and the cockpit octagon at `battle 300` and in the sandbox: dots read as round, colours as before,
       the selected contact ringed and on top, broadcast contacts hollow on the rim.
-- [ ] **M4-T36 Hit sparks.** A bolt hit shows the flash and the particle sparks only; the 6 to 10 mesh spark streaks that flew off each
+- [x] **M4-T36 Hit sparks.** A bolt hit shows the flash and the particle sparks only; the 6 to 10 mesh spark streaks that flew off each
       hit are gone. Shoot a raider at 100 to 300 m: say if hits read too thin.
-- [ ] **M4-T36 Plumes.** A ship holding one command stops updating its plumes once they reach their levels (within a ten-thousandth).
+- [x] **M4-T36 Plumes.** A ship holding one command stops updating its plumes once they reach their levels (within a ten-thousandth).
       Watch AI plumes at combat range: nothing should freeze or step.
-- [ ] **M4-T36 The 3D at full resolution.** `RenderScale` no longer lowers a large window's 3D. Since M4-T41 the game opens through
+- [x] **M4-T36 The 3D at full resolution.** `RenderScale` no longer lowers a large window's 3D. Since M4-T41 the game opens through
       Wayland at the panel's own 3840x2160 (before, X11 under GNOME's 1.25 scale made it 6144x3456). Maximize the game: the 3D is
       at the window's size (`settings.upscaler native`); check the frame rate holds in the sandbox and at `typical` (GPU time was
       0.8 ms a frame at 1 080 lines in M4-T25's fullscreen check; full 4K is four times the pixels).
-- [ ] **M4-T36 Motion blur on turns.** `settings.motion_blur on`, then a hard turn: the stars and the nebula smear by the turn, hulls by
+- [x] **M4-T36 Motion blur on turns.** `settings.motion_blur on`, then a hard turn: the stars and the nebula smear by the turn, hulls by
       their own motion, and no hull paint is dragged across the stars. The pair `reports/perf/M4-T36_motion_blur/turn_blur_{false,true}.png`
       (a one-frame 40 degree look swing) shows what the agent saw.
-- [ ] **M4-T36 The debug overlay** refreshes ten times a second instead of every frame: it should still read as live.
-- [ ] **M4-T24 The AI one tick behind.** The AI step (every native brain's think, the hosted drivers' think rate, the commands into
+- [x] **M4-T36 The debug overlay** refreshes ten times a second instead of every frame: it should still read as live.
+- [x] **M4-T24 The AI one tick behind.** The AI step (every native brain's think, the hosted drivers' think rate, the commands into
       the rows) runs on a worker thread and its commands reach the ships one tick (16.7 ms) after the rows they were decided on
       (Q53). Fly the sandbox and `battle 300`: AI ships should turn, fire and dodge as before, with no visible hesitation or
       overshoot; a raider on your tail should still track you. M4-T37 removed the same-tick `inline` step, so there is no
       switch back to compare with; `set settings.sim_step delayed` runs the same one-tick handover on the main thread (the
       threaded step's bit-for-bit reference) if a difference between the two is suspected.
-- [ ] **M4-T24 Input feel.** Your own stick is never behind (the player's command is sampled and applied in the same tick on
+- [x] **M4-T24 Input feel.** Your own stick is never behind (the player's command is sampled and applied in the same tick on
       every schedule), but the frame no longer carries the AI step: at `battle 300` and `500` the stick should feel more
       immediate than before. Check pitch, yaw and the trigger with vsync on and off; `state core` shows `step_misses` (should
       stay 0) and `step_wait_us`.
-- [ ] **M4-T24 The catch-up cap.** `physics_max_steps_per_frame` is 3 (Godot's default was 8): when the tick cannot keep up
+- [x] **M4-T24 The catch-up cap.** `physics_max_steps_per_frame` is 3 (Godot's default was 8): when the tick cannot keep up
       (battle 500) the simulation slows instead of the frame stuttering through catch-up ticks. Judge whether the slow-motion
       at 500 reads better than the stutter did; `2` is the other candidate (`set settings.physics_max_steps_per_frame 2`).
-- [ ] **M4-T35 Bolts as rows.** the AI ships' bolts are drawn by one multimesh per look (`core.bolt_draws`), interpolated between ticks as the nodes were. Check in a `battle` run: bolts leave the muzzles, fly straight and smoothly (no stutter against the hulls), hit flashes still appear where bolts land, the chase camera's larger bolts (`Projectile.visual_scale`) still apply, and nothing is drawn where a bolt was spent. (M4-T37 removed `perf_native_bolt_rows`, so there is no bolt-node run to compare with: the recorded battle in `test_bolt_rows` holds the rows to the nodes' hits.)
-- [ ] **M4-T35 The AI ships' muzzle flashes.** the lean ships' flashes come from one pool (a multimesh of billboard quads and pooled lights), not a node per muzzle. Check in a `battle` run: a flash pops at the muzzle of every AI shot for about 50 ms, grows and fades as the player's own flashes do, rides with the ship, and lights the nose; no flash lingers on a parked or dead ship.
-- [ ] **M4-T35 The AI ships' shot sounds.** `AudioDirector.watch_ship` listens to `shot_fired`, which both bolt paths emit (fix round 1). Confirm every AI shot in a `battle` run makes its pulse or raider sound at the muzzle (the AI ships' bolts are always rows since M4-T37 removed `perf_native_bolt_rows`).
-- [ ] **M4-T21 The low-attention tier.** On by default since T23 (`settings.tier_radius_m` 10 000). AI fighters and capitals more than 10 km from you (`settings.tier_radius_m`) leave
+- [x] **M4-T35 Bolts as rows.** the AI ships' bolts are drawn by one multimesh per look (`core.bolt_draws`), interpolated between ticks as the nodes were. Check in a `battle` run: bolts leave the muzzles, fly straight and smoothly (no stutter against the hulls), hit flashes still appear where bolts land, the chase camera's larger bolts (`Projectile.visual_scale`) still apply, and nothing is drawn where a bolt was spent. (M4-T37 removed `perf_native_bolt_rows`, so there is no bolt-node run to compare with: the recorded battle in `test_bolt_rows` holds the rows to the nodes' hits.)
+- [x] **M4-T35 The AI ships' muzzle flashes.** the lean ships' flashes come from one pool (a multimesh of billboard quads and pooled lights), not a node per muzzle. Check in a `battle` run: a flash pops at the muzzle of every AI shot for about 50 ms, grows and fades as the player's own flashes do, rides with the ship, and lights the nose; no flash lingers on a parked or dead ship.
+- [x] **M4-T35 The AI ships' shot sounds.** `AudioDirector.watch_ship` listens to `shot_fired`, which both bolt paths emit (fix round 1). Confirm every AI shot in a `battle` run makes its pulse or raider sound at the muzzle (the AI ships' bolts are always rows since M4-T37 removed `perf_native_bolt_rows`).
+- [x] **M4-T21 The low-attention tier.** On by default since T23 (`settings.tier_radius_m` 10 000). AI fighters and capitals more than 10 km from you (`settings.tier_radius_m`) leave
       Jolt and fly as native core rows integrated at 20 Hz from their held command; within 10 km they are promoted back onto
       their bodies with their motion carried over exactly. In a `battle 300` or `500` run (`state tier` shows the rows and the
       handovers): fly toward a far fight: its ships are drawn from their rows beyond 10 km (T23: dots for fighters, the class's
@@ -516,7 +525,7 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
       flew; fly away from a fight: the same at 11 km the other way. Ships past 11 km stay on the radar and keep your lock (T23).
       A ship that crosses the line while
       shooting should fire again at once when it is back. Compare with the tier off (`set settings.tier_radius_m 0`).
-- [ ] **M4-T22 The battle beyond the radius fights.** With the tier on (the default since T23, `settings.tier_radius_m` 10 000), tier fighters think
+- [x] **M4-T22 The battle beyond the radius fights.** With the tier on (the default since T23, `settings.tier_radius_m` 10 000), tier fighters think
       three times a second (`settings.tier_brain_hz`) and their shots and the far capitals' guns, beams and missiles are rolled,
       not flown as bolts. In a `battle 500` run, fly into a far fight: the ships you meet at 10 km should be in the middle of a
       fight that went on without you (hurt hulls, ships missing that died out there, wingmen still in their slots), with no
@@ -530,62 +539,71 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
       the same chase up close (a Starfury sitting behind a raider at 450 m lands about 73 % of its shots up close, about 30 %
       in the tier); say whether you notice far chases ending slower than near ones. Far missiles can now be shot down by the
       target side's interceptors, and committed rammers ram out of view too.
-- [ ] **M4-T23 Far ships as dots.** In a `battle 500` or `1000` run (the tier on by default), the fighters beyond 11 km are
+- [x] **M4-T23 Far ships as dots.** In a `battle 500` or `1000` run (the tier on by default), the fighters beyond 11 km are
       dots from their rows (`state tier`: `proxy_dots`), in their hull's paint, a pixel at least, dimming with distance as the
       near far dots do. Say whether a far fight reads as a fight (moving specks) and whether the dots are too bright, too dim or
       too many next to the stars. Screenshot: `reports/perf/M4-T23_battle_1000_view.png`, `reports/perf/M4-T23_far_fight.png`.
-- [ ] **M4-T23 Far capitals.** A capital beyond 11 km is drawn as its class's mesh from its row (`proxy_hulls`): at 11 to 20 km
+- [x] **M4-T23 Far capitals.** A capital beyond 11 km is drawn as its class's mesh from its row (`proxy_hulls`): at 11 to 20 km
       a carrier is still a hundred pixels or more. Fly toward and away from one through 10 and 11 km: no pop, no flicker and no
       jump at the handover; it should look exactly the same just before and just after (the bench's capitals use the plain box
       look; the station scene's the textured hull). Screenshot: `reports/perf/M4-T23_far_fight.png` (the grey hull ahead).
-- [ ] **M4-T23 Far deaths.** The level follows the fireball's size on the 3D picture (fix round 1): the full explosion while its
+- [x] **M4-T23 Far deaths.** The level follows the fireball's size on the 3D picture (fix round 1): the full explosion while its
       radius is 8 px or more, a reduced one (no light, a gas puff, no debris) down to 2 px, then a point flash with no node
       (`state tier`: `flashes`) that starts as big and as bright as the fireball it replaces and then fades out with distance. At
       1 080 lines (the default 3D at 0.5 on the 4K panel): a fighter's death is full to about 1.1 km, reduced to 4.3 km, and its
       flash reads to about 17 km; a destroyer's 36 km, 142 km and 570 km; a carrier's 71 km, 284 km and 1 140 km (twice as far at
-      2 160 lines). In a battle run watch fighters die beyond 4 km (a bright point that flares and fades in about half a second)
-      and kill a capital (`set targeting.selected "CRUISER 1"` then `kill`): within tens of km it is still the full explosion.
+      2 160 lines). After a battle run's `[bench]` line fly toward a fight and watch fighters die beyond 4 km (a bright point that flares and fades in about half a second)
+      and kill a capital (`set targeting.selected "CRUISER 1"` then `kill`, typed after the run's `[bench]` line, M7-T59): within
+      tens of km it is still the full explosion.
       Say whether the switches pop (a full or reduced blast handing over to the point) and how bright and how long the point
       should be. Screenshots: `reports/perf/M4-T23_far_fighter_death.png` and `M4-T23_far_capital_flash.png` (a raider at 7.5 km
       and a cruiser at 116 km, each past its switch, with an 8x crop around the flash, `*_crop8x.png`; distances in
       `M4-T23_far_flash_shots.txt`), and `M4-T23_far_capital_death.png` (a carrier at 16 km: the full explosion).
-- [ ] **M4-T23 Capitals can die.** In `battle` runs capitals can now be destroyed (before T23 a capital at zero hull stayed in
-      play): it explodes by the rule above and vanishes, its turrets with it. The bench's own capitals are invulnerable, so this
-      shows with `kill` or outside the bench; say whether a capital simply vanishing after its blast is acceptable until M12's
+- [x] **M4-T23 Capitals can die.** In `battle` runs capitals can now be destroyed (before T23 a capital at zero hull stayed in
+      play): it explodes by the rule above and vanishes, its turrets with it. The bench's capitals are invulnerable during the
+      measured window only; once the run has ended (the `[bench]` line) they are mortal (M7-T59), so shoot one down (or
+      `set targeting.selected "CRUISER 1"; kill`); say whether a capital simply vanishing after its blast is acceptable until M12's
       break-up.
-- [ ] **M4-T23 A capital promoted near a rock.** A ship coming back from the tier inside a rock or a mine is moved out by the
+- [x] **M7-T64 Mines go off.** After a `battle` run's `[bench]` line (`bench battle 300 30`), `state mines` names the nearest
+      mine in play (`nearest_m`, its side, whether it is hostile to you; the belt nearest the start is usually your own side's).
+      Fly to it (a small dark red sphere, 3 m; it is not in the target list) and shoot it: it goes off whoever's it is
+      (`by_shot`). Fly into another (your hull touching it): it goes off, yours or the enemy's (`by_touch`; `god on` first, a
+      blast takes 200 of your 300 hull). Hover 30 m from one of your own side's without touching it: it stays; an enemy one goes
+      off on you within 50 m as before (`by_trigger`). A blast sets off the mines it reaches (`by_blast`). Say whether the mines
+      are easy enough to see and hit.
+- [x] **M4-T23 A capital promoted near a rock.** A ship coming back from the tier inside a rock or a mine is moved out by the
       shortest way (a capital by its hull box): watch a carrier promoted at 10 km next to a rock field for a visible jump.
-- [ ] **M4-T23 The radar with the tier.** At `battle 1000` the radar holds about a thousand contacts again (the tier's ships
+- [x] **M4-T23 The radar with the tier.** At `battle 1000` the radar holds about a thousand contacts again (the tier's ships
       within 25 km and its broadcasting allies); check it stays readable and that selecting a far ship by `target_next` works
       and holds while it is promoted and demoted.
-- [ ] **M4-T38 Anti-aliasing, the default.** `settings.anti_aliasing` is `smaa` now (it was no anti-aliasing). Compare the sheets in
+- [x] **M4-T38 Anti-aliasing, the default.** `settings.anti_aliasing` is `smaa` now (it was no anti-aliasing). Compare the sheets in
       `reports/perf/m4-t38_compare/pairs/` (each the same frozen `battle` 300 frame in all six modes): `edges_2160.png` and
       `edges_1080.png` (a wing and a rock edge), `hull_detail_2160.png` and `hull_detail_1080.png` (struts, panel lines, the small
       parts), `stars_2160.png` and `far_dots_2160.png` (stars and small far objects must stay crisp single points), and
       `edges_native.png`, `hull_detail_native.png`, `stars_native.png` with the 3D at the 6K window's own size (taken through X11 before M4-T41; the game's window is now the 4K panel). Then fly the
       sandbox with `aa smaa`, `aa fxaa`, `aa msaa_4x` and `aa off`: say which you want as the default.
-- [ ] **M4-T38 TAA in motion.** `aa taa`, then fly a `battle 300` run with hard turns: the stars and the nebula must stay steady and
+- [x] **M4-T38 TAA in motion.** `aa taa`, then fly a `battle 300` run with hard turns: the stars and the nebula must stay steady and
       bright through a turn (no dimming, no trails; a measured softening: a star's brightest pixel fell from 0.59 to 0.45 of white
       on a turn under TAA, the light kept but spread, so say if the stars read soft), hull edges smooth, and a fast fighter crossing the view must leave no ghost.
       Bolts: under TAA they draw opaque (so they carry their own motion) and soften a little; check they read as bolts at 100 to 1 000
       m, and that no bolt flashes from somewhere else when it appears. Running lights of far ships may soften; far dots carry only the
       camera's turn, not their own motion, so a fast far dot may dim. Beams, missiles and hit flashes stay transparent (not measured). The sheet
       `reports/perf/m4-t38_compare/pairs/moving_2160.png` (no AA, SMAA, TAA, the live fight) shows what the agent saw.
-- [ ] **M4-T38 TAA with motion blur.** `aa taa` and `blur on`: a hard turn smears the stars once (the blur), not twice; a still
+- [x] **M4-T38 TAA with motion blur.** `aa taa` and `blur on`: a hard turn smears the stars once (the blur), not twice; a still
       camera leaves the sky sharp.
-- [ ] **M4-T41 The Wayland window.** The game now opens through Godot's Wayland display driver (it falls back to X11 when there
+- [x] **M4-T41 The Wayland window.** The game now opens through Godot's Wayland display driver (it falls back to X11 when there
       is no Wayland session). Fullscreen should fill the panel at its own 3840x2160 (`get render.window`, `get render.display`)
       and look as sharp as before. Windowed, GNOME gives Godot no server-side title bar, so check that the window still has a
       usable title bar and can be moved and resized (libdecor draws it if installed). Say if anything about the window, the
       mouse, the pad or alt-tab behaves differently from before.
-- [ ] **M4-T40 Upscaling, the default.** `settings.upscaler` is `native` (the 3D at the window's own size, as since T36), because
+- [x] **M4-T40 Upscaling, the default.** `settings.upscaler` is `native` (the 3D at the window's own size, as since T36), because
       FSR 2.2 measured dearer than native on this card. Compare the sheets in `reports/perf/m4-t40_compare/pairs/` (each the same
       frozen `battle` 300 frame in the 6K X11 window before M4-T41, twelve upscaler and preset turns): `edges.png`, `hull_detail.png`, `stars.png`,
       `far_dots.png` and `hud_text.png` (the HUD must be equally sharp in every turn). Then fly the sandbox with `upscale fsr1 quality`
       and `upscale native`: FSR 1.0 Quality costs about 1.4 ms less GPU at 6K, but the FPS gain is a few percent (+3 to +5 % in
       the agent's live round; the frame is CPU-bound); say if it looks as good as native, in which case it could be the default for
       a large window.
-- [ ] **M4-T40 FSR 2.2 in motion.** `upscale fsr2 quality`, then a `battle 300` run with hard turns and fighters crossing close: no
+- [x] **M4-T40 FSR 2.2 in motion.** `upscale fsr2 quality`, then a `battle 300` run with hard turns and fighters crossing close: no
       ghost behind a fast fighter, the stars steady through a turn, bolts still crisp at a distance (a sub-pixel point moving fast
       at half scale kept its light in a GPU measure but spread it, its brightest pixel 0.25 to 0.39 of white, so far bolts may read
       soft at `performance` and below). `aa` must say
@@ -593,15 +611,15 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
       upscaler in the native library is the fallback (Q60). The live sheets `moving_hull.png`, `moving_rocks.png` and
       `moving_left.png` (native, bilinear and FSR 1.0 Quality, FSR 2.2 Quality, Performance and Ultra Performance, each a different
       moment of the live fight) show what the agent saw: no ghosting, stars soft at Ultra Performance.
-- [ ] **M4-T40 Low presets.** `upscale fsr1 ultra_performance` and `upscale fsr2 ultra_performance` (a third of the lines, for weaker
+- [x] **M4-T40 Low presets.** `upscale fsr1 ultra_performance` and `upscale fsr2 ultra_performance` (a third of the lines, for weaker
       GPUs): the stars and far dots enlarge into soft blobs; say whether that is acceptable for a low setting.
-- [ ] **M4-T25 The 60 FPS bar at the screen (Q52).** The bar is yours to judge: 60 FPS at the screen with vsync on, fullscreen at the
+- [x] **M4-T25 The 60 FPS bar at the screen (Q52).** The bar is yours to judge: 60 FPS at the screen with vsync on, fullscreen at the
       panel's 3840x2160. Fly `bench typical 58`, `bench battle 300`, `bench battle 500` and `bench battle 1000` (each with a long
       window, e.g. `bench battle 500 300`) and say where the picture stops being smooth. The agent measured with vsync off: the
       average over 60 FPS at every count (66 to 71 at 1 000), the 1 % low about 60 to 600 ships and 40 to 51 from 800. Through
       Wayland Godot keeps vsync on whatever the setting says and paces frames to at most about 145 FPS; say if anything feels
       different from X11 (`--display-driver x11` runs the old path).
-- [ ] **M4-T30d Every other hull textured (AC7, Q44).** T30d merged on the agent's judgement; the sheets wait for your eye. Open
+- [x] **M4-T30d Every other hull textured (AC7, Q44).** T30d merged on the agent's judgement; the sheets wait for your eye. Open
       `reports/perf/m4-t30d_sheets/`: the raider fighter (8 to 600 m), the nav buoy, the raider and Starfury break-up chunks, the
       cruiser, destroyer and carrier (300 m to 8 km), the B5 station (3, 8 and 20 km), and the Starfury's fine against coarse LOD
       sheets (Q45: the agent picked one; you may reverse it). Say which need a fix round.
@@ -628,7 +646,7 @@ How to start and what is new come first; everything for you to judge is in one l
 - **Debrief:** after a mission, the result with why, the objectives, time, kills and assists, wing losses, shots and hits.
   Retry flies the same mission and seed again; Front end goes back to the start screen.
 
-## Civilian escort (M5-T30; replaced Buoy defence)
+## Civilian escort (M5-T30; replaced Buoy defense)
 
 Start the game windowed (`.tools/godot/godot --path .`), choose **New game**, then **Civilian escort**. The briefing shows under
 the list while it is focused. Each start from the menu draws a new seed, and with it a different civilian ship (any of the nine hulls;
@@ -636,13 +654,20 @@ the list while it is focused. Each start from the menu draws a new seed, and wit
 
 - **The intro.** The mission opens on the civilian beside NAV ALPHA with the belt somewhere ahead, then cuts to you and ALPHA 2
   coasting past the camera. The civilian's master hails over the fly-past; Control briefs once the camera is back, with your
-  controls held until "the flight is yours". **A** or **Start** skips one shot.
+  controls held until "the flight is yours". **A** or **Start** skips one shot; holding **X** (keyboard Shift or Mouse 4) for 2 s
+  skips the whole opening, intro and briefing, to the hand-over (M7-T54; `HOLD X / SHIFT / MOUSE 4: SKIP` and its bar show while
+  it can).
 - **The crossing.** The civilian flies to NAV BETA, 30 km out, at up to 120 m/s, threading the asteroid belt (24 km across, 8 km
   deep) in the middle of the route. The waypoint marks the civilian. Three raider waves jump in 6 to 12 km off it as it passes
-  25 % (3 raiders, before the belt), 50 % (4, inside it) and 75 % (6, past it). Attacked, it runs (an Earth Alliance ship towards
+  25 % (3 raiders, before the belt), 50 % (4, inside it) and 75 % (6, past it); a later wave also waits until the one before is
+  down and 30 s have passed (M7-T54), so a fought run takes 6 to 8 minutes. The first wave comes out of a raider carrier: its
+  arrival jump point opens, the fighters come through, then the carrier opens a departure point and leaves (M6-T23; the carrier
+  is still a box stand-in, kept by the maintainer). Attacked, it runs (an Earth Alliance ship towards
   you or ALPHA 2, others straight away) and turns back onto its route a few seconds after the raiders are gone or dead.
 - **Objectives.** Escort the civilian to NAV BETA (done when it is within 1.5 km of the buoy and every raider is down; failed if
-  it is destroyed) and, optional, bring ALPHA 2 home. Losing yourself also ends it. A last line, then the debrief.
+  it is destroyed) and, optional, bring ALPHA 2 home. Losing yourself also ends it. A last line, then the debrief. From the
+  hand-over the civilian's name and hull show top right under the objectives, as a bar that turns amber then red as it drops and
+  reads `LOST` when it is destroyed (M7-T54; `get mission.hull_bars`).
 - **Console shortcuts.** `mission goto wave_one` (or `wave_two`, `wave_three`) skips ahead: the civilian is placed at the step's
   point and skipped waves leave no raider; `kill all` destroys every raider in play; `kill player` loses you; `mission skip`
   fast-forwards the step; `mission journal` lists what happened. `ai "<civilian name>"` shows whether it flies its route
@@ -655,7 +680,7 @@ Fly the dogfight (`play dogfight`, or **New game**, **Dogfight**) and a big batt
 ```
 B / Mouse 2 (tap)    the nearest enemy; tap again for the 2nd nearest; again for the nearest
 B / Mouse 2 (hold)   the game pauses and the target menu opens at the left; it stays open when you let go
-Right stick          points at a slice (centred, the highlight stays); arrow keys and moving the mouse do the same
+Left stick           points at a slice (centred, the highlight stays; M7-T37); arrow keys and moving the mouse do the same
 A / Enter / Mouse 1  open the category, or pick the entry
 B / Backspace / Mouse 2   back to the categories; from the categories, close and resume
 Start / Esc          close it and open the pause menu
@@ -683,7 +708,7 @@ From the console: `targetmenu open`, `targetmenu pick enemies`, `targetmenu pick
 ## Comms menu (M5-T46)
 
 D-pad Right (or Ctrl) opens a ring like the target menu's: the game pauses and the view blurs behind it. WING ORDERS has ATTACK
-(my target) up, FORM ON ME right, ENGAGE (at will) down and COVER ME left. The right stick (arrow keys, mouse) points, A sends
+(my target) up, FORM ON ME right, ENGAGE (at will) down and COVER ME left. The left stick (arrow keys, mouse) points, A sends
 the order and the game resumes, B or D-pad Right closes it, Start hands over to the pause menu. There is no timeout. Keys 1 to
 4 still give the orders directly. Console: `commsmenu open`, `commsmenu pick "form on me"`, `state comms_menu`.
 
@@ -701,10 +726,13 @@ one; `state encounters` shows the schedule; `encounters clear` sends every encou
   one with none. `set settings.texture_detail low` and `high` switch every ship's surface detail live (Settings, Video, "Ship
   texture detail"); `set settings.hull_sheen 0` shows the old flat paint.
 - Civilians carry no guns of their own but have light turrets, which fire only at ships that attacked them or a civilian or
-  ally within 2 km. The showcase has no raiders (and its hulls sit 1.8 km ahead: fly up to them); to watch civilians run
-  and shoot back, start free flight and type `encounters force traffic`, then `encounters force raid` once they are near, or
-  fly the escort. An Earth Alliance civilian runs towards the nearest Earth Alliance ship (behind it when that is a
-  fighter); others run together.
+  ally within 2 km. The showcase starts with no raiders (its hulls sit 1.8 km ahead: fly up to them); `spawn raider ai
+  1500` sends one in and every hull runs (M7-T55), to Babylon 5 or, for the Earth Alliance ones, behind you. In free flight a
+  raid drawn for a civilian goes for one on the station's run (`encounters force raid` until one does, or fly the escort).
+  Babylon 5 is a neutral port: any civilian (Earth Alliance, Narn, Centauri, Brakiri) within 20 km of it runs round to its
+  far side; an Earth Alliance civilian also runs towards the nearest Earth Alliance ship (behind it when that is a fighter)
+  when that is nearer. Under the station's guns (within 1 km of it) a civilian keeps to its lane; others run together, and a
+  fleeing civilian sets its people within 5 km running. Its turrets keep firing while it runs.
 - `play belt_showcase`: the asteroid belt by itself. The rocks stop bolts and ships; a scrape costs little, a head-on hit a lot.
 
 ## Sounds (M5-T18, T19, T37)
@@ -733,23 +761,25 @@ Commands: `menu`, `play <scenario> [seed]`, `retry`, `mission [status|skip|goto 
 
 ## M5 acceptance checklist (AC18, the (H) criteria)
 
+**Accepted by the maintainer 2026-11-17** (every item below passed; the last fixes were in M7-T54 to M7-T56 and M7-T59).
+
 Everything automated is recorded in the acceptance table of `docs/milestones/m5-mission-framework-and-front-end.md`. These need
 you, a pad and your ears. The agent's screenshots are under `references/screenshots/` (the folder is named with each item);
 T20's own, taken at the end on the RX 6950 XT, are in `references/screenshots/T20 acceptance/`.
 
 **Start screen, menus and settings**
 
-- [ ] **T45 Start screen** (`T45 start screen/`): only New game, Load game (greyed out, the D-pad skips it; is the greyed look
+- [x] **T45 Start screen** (`T45 start screen/`): only New game, Load game (greyed out, the D-pad skips it; is the greyed look
       clear?), Free flight, Settings and Quit, with no pad diagram and no side panel. New game lists Civilian escort, then
       Combat sandbox, Dogfight, Instructor route and Civilian ships; the highlighted one's text under the list reads well.
-- [ ] **T45 Settings groups:** Gameplay, Controls, Camera & HUD, Video, Audio, the same from the start screen and from the
+- [x] **T45 Settings groups:** Gameplay, Controls, Camera & HUD, Video, Audio, the same from the start screen and from the
       pause menu. Controls holds the profiles and rebinding (with the pad diagram) and ends with "Sensitivity and
       deadzones..." for invert pitch, deadzones and mouse speeds: is that row where you would look for them?
-- [ ] **T02 to T04 On the pad alone:** every screen can be reached and left with the D-pad, A and B; a rebind takes the next
+- [x] **T02 to T04 On the pad alone:** every screen can be reached and left with the D-pad, A and B; a rebind takes the next
       press and nothing else happens; the pad diagram's legend follows the rebind; the four volumes each change what they say.
-- [ ] **T01 Loading and T09 debrief:** the loading screen shows and goes; the debrief comes about 3 s after the mission ends
+- [x] **T01 Loading and T09 debrief:** the loading screen shows and goes; the debrief comes about 3 s after the mission ends
       (not too soon, not too late); A held from the fight does not pick Retry by accident.
-- [ ] **T42 Pause backdrop** (`T42 pause backdrop/`; `pausemenu on`): behind the pause menu the camera drifts in a slow
+- [x] **T42 Pause backdrop** (`T42 pause backdrop/`; `pausemenu on`): behind the pause menu the camera drifts in a slow
       figure 8 around your ship (about 30 s a loop, `settings.pause_backdrop_loop_s`) and the flight HUD steps aside;
       Settings keeps it going; Resume puts the view back as you left it, in chase and in cockpit;
       `settings.pause_backdrop off` gives the frozen frame. Does the ship read on the right, or do the panels hide too much?
@@ -757,76 +787,79 @@ T20's own, taken at the end on the RX 6950 XT, are in `references/screenshots/T2
 
 **Civilian escort** (`T30 civilian escort/`)
 
-- [ ] **The intro** reads well: the civilian at the buoy, the wing passing close, the lines readable in their time on screen;
-      A or Start skips a shot.
-- [ ] **The pacing:** the whole mission takes about 6 to 8 minutes when you fight each wave (Q40; not yet timed by a person);
-      the waves come neither too soon nor too late.
-- [ ] **The civilian** runs when attacked and comes back to its route; a Saturn 8 gets through the belt without hitting rocks;
+- [x] **The intro** reads well: the civilian at the buoy, the wing passing close, the lines readable in their time on screen;
+      A or Start skips a shot; holding X (Shift, Mouse 4) skips the whole opening to the hand-over, with the prompt and its bar
+      readable over the letterbox (M7-T54).
+- [x] **The pacing:** the whole mission takes about 6 to 8 minutes when you fight each wave (Q40, M7-T54: about 7 min with seed
+      3 in the test); the last wave no longer comes too soon, and no wave comes too late.
+- [x] **The civilian's hull bar** (M7-T54) reads top right under the objectives in the chase view and the cockpit, its name and
+      hull %, amber and red as it drops, `LOST` when destroyed.
+- [x] **The civilian** runs when attacked and comes back to its route; a Saturn 8 gets through the belt without hitting rocks;
       a fragile hull (the Skylark, `play civilian_escort 5`) can survive three waves with a fair escort.
-- [ ] **The lines** read as people, with the civilian's name filled in; the last line before the debrief is heard out.
-- [ ] **The endings:** losing the civilian, losing yourself and winning each end where you expect, with the right debrief.
+- [x] **The lines** read as people, with the civilian's name filled in; the last line before the debrief is heard out.
+- [x] **The endings:** losing the civilian, losing yourself and winning each end where you expect, with the right debrief.
 
 **Target menu, preview and focus pull**
 
-- [ ] **T25 The ring** (`T25 target menu/`) reads at 1080 lines and at 4K: the category names, the ship names and ranges,
+- [x] **T25 The ring** (`T25 target menu/`) reads at 1080 lines and at 4K: the category names, the ship names and ranges,
       the highlight.
-- [ ] **T25 Pause and resume** mid-fight feel right, and nothing fires, turns or retargets as the game comes back.
-- [ ] **T25 The hold:** 0.35 s is right (`set settings.target_hold_s 0.5` to try another).
-- [ ] **T25 The tap:** nearest, 2nd nearest, nearest. With no identified enemy it takes the nearest unknown contact: wanted?
-- [ ] **T25 Unknown contacts:** the grey reads against the radar; a contact turning unknown again when it opens past 5 km is
+- [x] **T25 Pause and resume** mid-fight feel right, and nothing fires, turns or retargets as the game comes back.
+- [x] **T25 The hold:** 0.35 s is right (`set settings.target_hold_s 0.5` to try another).
+- [x] **T25 The tap:** nearest, 2nd nearest, nearest. With no identified enemy it takes the nearest unknown contact: wanted?
+- [x] **T25 Unknown contacts:** the grey reads against the radar; a contact turning unknown again when it opens past 5 km is
       acceptable (the selected target keeps its name).
-- [ ] **T25 Navigation and Objectives:** the waypoint diamond and its radar mark are easy to find; the ship keeps facing its target.
-- [ ] **T25 Keyboard and mouse:** arrows (left or right alone take the upper slice), the mouse's direction, Enter, Backspace.
-- [ ] **T43 The preview panel** (`T43 target preview/`): the wireframes read as the ships (a raider, a Starfury, a Saturn 8,
+- [x] **T25 Navigation and Objectives:** the waypoint diamond and its radar mark are easy to find; the ship keeps facing its target.
+- [x] **T25 Keyboard and mouse:** arrows (left or right alone take the upper slice), the mouse's direction, Enter, Backspace.
+- [x] **T43 The preview panel** (`T43 target preview/`): the wireframes read as the ships (a raider, a Starfury, a Saturn 8,
       a Bokmai with its pods), with no far-side lines and no flat-panel diagonals; the dense spots are acceptable or want
       fewer lines; the turn's speed and angle; a long hull end-on is not too small; it reads at 1080 lines and at 4K; the
       class names; `NO ID` for an unknown contact; `ATTACKING YOU` on the raider that is on you. The first time a hull is
       highlighted its outline shows at once and its inner lines a moment later (up to 0.2 s for a Saturn 8).
-- [ ] **T44 The focus pull** (`T44 focus pull/`): the view and HUD ease out of focus in 0.2 s and back in 0.2 s; the ring and
+- [x] **T44 The focus pull** (`T44 focus pull/`): the view and HUD ease out of focus in 0.2 s and back in 0.2 s; the ring and
       the preview are the only sharp things; the strength at 0.35 (`set settings.target_menu_blur 0.6` for more, 0 is off).
 
 **Comms menu** (`T46 radial comms/`)
 
-- [ ] **T46 The ring with a real stick:** pointing and A feel right; the pause while it is open suits giving orders in a
+- [x] **T46 The ring with a real stick:** pointing and A feel right; the pause while it is open suits giving orders in a
       dogfight; the labels' wording (ATTACK / my target, FORM ON ME, ENGAGE / at will, COVER ME).
-- [ ] **T06 Subtitles:** the callsign and line at the bottom read in cockpit and chase views and during the cinematic; the
+- [x] **T06 Subtitles:** the callsign and line at the bottom read in cockpit and chase views and during the cinematic; the
       radio squelch before and after a line is at the right level.
 
 **Civilian ships and turrets** (`civilian_showcase`; `T40 seams/`, `Civilian colours and hull sheen/`, `M5 civilian ships review/`)
 
-- [ ] **T12 to T15, T22, T27 The nine hulls** look like their ships: the Saturn 3 (its added engine section and raised pod
+- [x] **T12 to T15, T22, T27 The nine hulls** look like their ships: the Saturn 3 (its added engine section and raised pod
       stack, Q20, Q23), the Saturn 4 and 8 transports and tankers, the Skylark (sand), the Narn transport (dark green; which
       way is up), the Centauri Brezebel (dark violet), the Brakiri Bokmai (pale pods on the olive frame, 0 to 3 pods).
-- [ ] **T39 Colours and sheen:** approved 2026-11-08; look once more in play. A saved `ambient_level` overrides the new 0.1.
-- [ ] **T40 Surfaces at `high` and `low`:** each hull's seams, hatches and plating match its references at `high`; `low`
+- [x] **T39 Colours and sheen:** approved 2026-11-08; look once more in play. A saved `ambient_level` overrides the new 0.1.
+- [x] **T40 Surfaces at `high` and `low`:** each hull's seams, hatches and plating match its references at `high`; `low`
       keeps the major lines and is acceptable for a low setting.
-- [ ] **T21 Turrets:** the turret model on every hull, its turn and lift, the Saturns' flank turrets on their posts at the
+- [x] **T21 Turrets:** the turret model on every hull, its turn and lift, the Saturns' flank turrets on their posts at the
       disc rim; at high elevation the barrels' roots may show through the dome; `turret_fire`'s level and feel.
-- [ ] **T16 Civilians in a fight:** how the fleeing reads (to shelter, in groups, the panic spreading); the Saturn 8s' slow
-      turns (about 1 degree a second in pitch); the balance (a Saturn alone sometimes beats two raiders, never three; hulls
-      of 330 to 1150); the engine glows.
-- [ ] **Q33 The blind spot:** only a narrow cone straight behind each Saturn is hidden from its turrets. Keep it, or widen it?
+- [x] **T16 Civilians in a fight:** how the fleeing reads (to shelter, in groups, the panic spreading); the Saturn 8s' slow
+      turns (about 1 degree a second in pitch); the balance (a lone fleeing Saturn rarely beats two raiders and never three;
+      it survives by reaching shelter, accepted 2026-11-16 in M7-T55; hulls of 380 to 715, since M7-T16); the engine glows.
+- [x] **Q33 The blind spot:** only a narrow cone straight behind each Saturn is hidden from its turrets. Keep it, or widen it?
 
 **Encounters** (free flight, encounters on)
 
-- [ ] **T17 Pacing and mix:** an event every 1 to 3 minutes; raids, patrols and traffic in a mix that feels alive, not busy.
-- [ ] **T17 Arrivals:** raids read when they jump in at 6 to 12 km; patrols and traffic come over the radar's edge naturally;
+- [x] **T17 Pacing and mix:** an event every 1 to 3 minutes; raids, patrols and traffic in a mix that feels alive, not busy.
+- [x] **T17 Arrivals:** raids read when they jump in at 6 to 12 km; patrols and traffic come over the radar's edge naturally;
       the civilians' 15 km transponder shows nothing odd on the radar rim.
 
 **The belt** (`T29 asteroid belt/`, `T29 asteroid shapes/`; `play belt_showcase`)
 
-- [ ] **T29 The rocks** from 2 km and 10 km and close up: shapes (the peanut changed after your approval), sizes, how sparse.
-- [ ] **T41 Scrapes:** grazing a rock costs a little hull, a head-on hit a lot; neither feels unfair.
+- [x] **T29 The rocks** from 2 km and 10 km and close up: shapes (the peanut changed after your approval), sizes, how sparse.
+- [x] **T41 Scrapes:** grazing a rock costs a little hull, a head-on hit a lot; neither feels unfair.
 
 **Sounds, by ear**
 
-- [ ] **T18 Guns and impacts:** the Starfury's and the raider's guns (character, level, the slight pitch change shot to shot)
+- [x] **T18 Guns and impacts:** the Starfury's and the raider's guns (character, level, the slight pitch change shot to shot)
       and the hull hit, against the written reference in `docs/design-references.md` ("Combat sounds").
-- [ ] **T19 Engines:** each pod and RCS cluster heard from its place on the ship; levels (four pods about as loud as a held
+- [x] **T19 Engines:** each pod and RCS cluster heard from its place on the ship; levels (four pods about as loud as a held
       shot); other ships' engines within 1.5 km.
-- [ ] **T37 At scale** (`bench battle 300 120`): near you shots, flashes and engines are as before; distant fights no longer
+- [x] **T37 At scale** (`bench battle 300 120`): near you shots, flashes and engines are as before; distant fights no longer
       thin out the near sounds.
-- [ ] **T02 Menu sounds:** move, accept and back are audible and not tiring.
+- [x] **T02 Menu sounds:** move, accept and back are audible and not tiring.
 
 
 # Play-testing M6 (Epsilon Space at True Scale)
@@ -857,13 +890,14 @@ a look-only stand-in with no collision until M7. The jumpgate stands 50 km from 
   Hit the planet or drop below the top of its atmosphere (100 km) and the ship is destroyed, `god` or not.
 - **Speed.** The velocity rebase is on: past 2 000 m/s against the frame the world is re-based under you with no visible change;
   `state world` shows `boosts`, `origin_velocity` and `riding`.
-- **The gate.** Fly within 10 km of it, target it (`gate target`), and the HUD offers `X: REQUEST JUMP`; X flies the jump (a short
+- **The gate.** Fly within 10 km of it, target it (`gate target`), and within 2 km the HUD offers `HOLD X / SHIFT / MOUSE 4: JUMP`; holding it for 2 s flies the jump (M7-T27; a short
   cinematic out through the orange vortex and back through the blue one).
 
 ## Console for M6 (all in `info.md`)
 
 ```
 frame orbit 400            anchor the world on a free-falling 400 km circular orbit of Epsilon III (frame orbit 400 epsilon_iii)
+frame orbit 400 dusk       the same, on the terminator heading into night (day, the default; night; dawn; or degrees from noon)
 frame rail babylon5        back onto the station's rail (no pull); frame status shows the anchor
 state reference            what you are reading speed against; reference auto | babylon5 | jumpgate | epsilon_iii sets it
 boost 2500 0 0 / ride      a velocity rebase by hand / back onto the anchor (nothing should move on screen)
@@ -879,97 +913,223 @@ state system               the bodies, the places, the epoch and where the scena
 
 ## M6 acceptance checklist (AC12, the (H) criteria)
 
+**Accepted by the maintainer 2026-11-17** (every item below passed; the last fixes were in M7-T59, T66-T68, T71-T73 and T75).
+
 Everything automated is recorded in the acceptance table of `docs/milestones/m6-epsilon-space-at-true-scale.md`. These need you.
 GPU numbers are the agents' (RX 6950 XT); a hidden window stops being drawn on this desktop, so the frame rates marked (visible)
 want a window you can see.
 
 **The start**
 
-- [ ] **Free flight, T09 Start view** (`M6-T09 start/`): the planet is ahead over the ship and the station's stand-in is front
+- [x] **Free flight, T09 Start view** (`M6-T09 start/`): the planet is ahead over the ship and the station's stand-in is front
       right, REF reads BABYLON 5 at about 8 km. For a few seeds (`play free_flight 1`, `2`, `3`) the planet is at least half lit and
       in view; for the fixed epochs (sandbox, dogfight, instructor's route, escort) the start suits each scene.
-- [ ] **Station and gate in place:** the stand-in sits where the scenario's `at` puts it and is not odd to see without collision;
+- [x] **Station and gate in place:** the stand-in sits where the scenario's `at` puts it and is not odd to see without collision;
       the gate is 50 km off, facing the station, and seen as a faint point from the start.
 
 **The planet and the sun** (`M6-T11 planet/`, `M6-T12 sun/`, `M6-T10 scaled space/`)
 
-- [ ] **Epsilon III's look:** rust and tan, strong relief, no oceans, faint wisps, a hard terminator, a faint warm limb (not
+- [x] **Epsilon III's look:** rust and tan, strong relief, no oceans, faint wisps, a hard terminator, a faint warm limb (not
       blue). The agent's note: a little pink and pale beside the description; the surface's brightness in full sun (1.5) and the
       haze strength (0.012) are look choices.
-- [ ] **Against the still:** `references/Epsilon III planet.png` is **not on the agent's machine**, so the side-by-side panel
+- [x] **Against the still:** `references/Epsilon III planet.png` is **not on the agent's machine**, so the side-by-side panel
       (`compare_with_still.png`) is a placeholder. Put the still back and check the planet against it (the generator's `look_sheet`
       does the panel).
-- [ ] **The limb and terminator from orbit** (`frame orbit 400`, then `scaled epoch 0|6|12`): the limb is round, the lit limb glows,
+- [x] **The limb and terminator from orbit** (`frame orbit 400`, then `scaled epoch 0|6|12`): the limb is round, the lit limb glows,
       the night limb does not, the night side is near black with no lights.
-- [ ] **From 1 000 km up** (`frame orbit 1000`) the planet fills the view and the map reads; from 400 km straight down it is soft
+- [x] **From 1 000 km up** (`frame orbit 1000`) the planet fills the view and the map reads; from 400 km straight down it is soft
       (4 096 texels round). Acceptable?
-- [ ] **The sun:** a white core with the orange in the limb and corona (brightness 2.4, corona 0.25 of the disc, limb darkening
+- [x] **The sun:** a white core with the orange in the limb and corona (brightness 2.4, corona 0.25 of the disc, limb darkening
       0.7), the lens flare on it. The add-on's large flat halo (about 185 px) round the star: keep or remove?
-- [ ] **Going behind the planet** (`scaled epoch` until the star meets the limb): the key light and the flare fade smoothly, the
+- [x] **Going behind the planet** (`scaled epoch` until the star meets the limb): the key light and the flare fade smoothly, the
       eclipse is dark, nothing pops.
-- [ ] **After a rebase** (`rebase 4000 0 0`, `boost 2500 0 0`): the planet and sun do not move or flicker.
+- [x] **After a rebase** (`rebase 4000 0 0`, `boost 2500 0 0`): the planet and sun do not move or flicker.
 
 **Flying under gravity**
 
-- [ ] **Hold an orbit:** `frame orbit 400`, assist on, hold the brake: the speed reads about 0, REF is EPSILON III with `ALT` near
+- [x] **Hold an orbit:** `frame orbit 400`, assist on, hold the brake: the speed reads about 0, REF is EPSILON III with `ALT` near
       400 km, and the ship stays in a circular orbit.
-- [ ] **Assist and brake feel:** prograde and retrograde burns, climbing, falling and the brake settling you into the circle feel
+- [x] **Assist and brake feel:** prograde and retrograde burns, climbing, falling and the brake settling you into the circle feel
       right; the speed jump when REF changes (station to planet) is understood from the name.
-- [ ] **HUD layout:** the long `REF` line and the `ALT` line in the chase view's corner and the cockpit view are readable and do not
-      cover anything.
-- [ ] **The station's reference range:** 1 000 km (`settings.reference_place_range_km`) is right for REF to stay on the station.
-- [ ] **Falling bolts:** a bolt fired near the planet visibly curves (fire horizontally from 100 km up); debris falls too.
-- [ ] **Planet impact:** diving into the atmosphere destroys the ship even with `god on`; the death reads as intended.
-- [ ] **A dogfight across several velocity rebases** (`play dogfight`, then `boost 2500 0 0` or fly past 2 000 m/s): nothing is seen to
+- [x] **HUD layout:** the long `REF` line and the `ALT` line in the chase view's corner and the cockpit view are readable and do not
+      cover anything (the REF line wraps onto a second line, name above distance and speed, clear of the DRIFT sphere).
+- [x] **The station's reference range:** 1 000 km (`settings.reference_place_range_km`) is right for REF to stay on the station.
+- [x] **Falling bolts:** a bolt fired near the planet visibly curves (fire horizontally from 400 km up); debris falls too.
+- [x] **Planet impact:** diving into the atmosphere destroys the ship even with `god on`; the death reads as intended.
+- [x] **A dogfight across several velocity rebases** (`play dogfight`, then `boost 2500 0 0` or fly past 2 000 m/s): nothing is seen to
       jump, bolts stay beside the ship, the HUD marks stay on their targets.
 
 **Far things**
 
-- [ ] **Far dots** (`far view gate 100|250|500|1000`, `far view station 500|1000`): the gate and the station keep their look to the
+- [x] **Far dots** (`far view gate 100|250|500|1000`, `far view station 500|1000`): the gate and the station keep their look to the
       hand-off (about 248 km and 709 km), the cross-fade into a dot shows no pop, and the dot's brightness is acceptable
       (the gate at 1 000 km is a faint point by M4's rule; keep it, or add a floor?). The station's far frames were not captured by
       the agent. Check from the planet's far side too (the planet is a dot past about 841 000 km).
-- [ ] **Station range:** the stand-in broadcasting to 1 000 km is right, or wants more.
+- [x] **Station range:** the stand-in broadcasting to 1 000 km is right, or wants more.
 
 **The jumpgate and its vortex** (`M6-T19 vortex/`, `gate view reference`)
 
-- [ ] **The side-by-side with the reference still** (`acceptance_jumpgate_png.png`): you accepted round 6 on 2026-11-12; look once
+- [x] **The side-by-side with the reference still** (`acceptance_jumpgate_png.png`): you accepted round 6 on 2026-11-12; look once
       more in play from the reference pose, arrival and departure.
-- [ ] **The sequence:** lamps flash along the arms, the centre flash, the funnel unfolds, open, folds back, the white closing flash
+- [x] **The sequence:** lamps flash along the arms, the centre flash, the funnel unfolds, open, folds back, the white closing flash
       (`gate open departure 1`, then `gate open arrival 1`); the swirl turns clockwise and inward for a departure, counter-clockwise
       and outward for an arrival.
-- [ ] **From the side and the tip:** the base glows white from behind and the side; from the tip the near wall covers the dark base.
-- [ ] **The player's jump:** `X: REQUEST JUMP` within 10 km of the gate; the autopilot, the shots, the flash and fade, back out
+- [x] **From the side and the tip:** the base glows white from behind and the side; from the tip the near wall covers the dark base.
+- [x] **The player's jump:** `HOLD X / SHIFT / MOUSE 4: JUMP` within 2 km of the gate (M7-T28; it was 10 km in M6); the autopilot, the shots, the flash and fade, back out
       through the blue vortex with control returned after 3 s or 500 m.
-- [ ] **Raiders and open points:** an encounter raid (`encounters force raid`) comes out of a vortex sized to the ship, not a flash.
-- [ ] **Frame rates** (visible window): the vortex open from close up and from the reference pose at the display's rate; free flight
+- [x] **Raiders and open points:** an encounter raid (`encounters force raid`) comes out of a vortex sized to the ship, not a flash.
+- [x] **Frame rates** (visible window): the vortex open from close up and from the reference pose at the display's rate; free flight
       with the planet, sun and gate in view; `state render` shows `forward_plus`, fps, draw calls and VRAM.
-- [ ] **T20, detail by distance:** `vortex open arrival 300`, then `vortex lod 0` to `vortex lod 6` (and `auto`): each level looks right
+- [x] **T20, detail by distance:** `vortex open arrival 300`, then `vortex lod 0` to `vortex lod 6` (and `auto`): each level looks right
       and the blends between them show no pop as you back away (hairs first, then patches and wisps, then cloud, down to a soft
       disc under 4 px); the centre flash keeps its timing at every level.
-- [ ] **T20, mass arrivals (AC13):** `bench battle 1000` (a window, `vortex view` to follow): every ship comes out of a jump point,
+- [x] **T20, mass arrivals (AC13):** `bench battle 1000` (a window, `vortex view` to follow): every ship comes out of a jump point,
       groups within 600 m share one, 100 points to a wave, waves about 10 s apart (a point's life plus 1.5 s), the player's fight
       first. Capitals open their own point sized by cross-section (a carrier's mouth is not 2.5 km). `arrive=placed` is the
       comparison. Frame rate with 100 points forming on your GPU in a visible window (the agents' numbers are in the milestone file).
-- [ ] **T20, far points:** a stand-alone point beyond the 50 km far plane is not drawn at all (no far stand-in yet); say if that matters.
+- [x] **T20, far points:** a stand-alone point beyond the 50 km far plane is not drawn at all (no far stand-in yet); say if that matters.
 
 **Ships in the vortex (T22) and who may open a point (T23)** (`M6-T22 ship transit/`, `M6-T23 jump capability/`)
 
-- [ ] **T22, shrink and grow:** `transit depart gate fighter follow`, then `transit arrive gate capital follow` (and `point` for
+- [x] **T22, shrink and grow:** `transit depart gate fighter follow`, then `transit arrive gate capital follow` (and `point` for
       ship-made points): the ship flies down the funnel shrinking into the black ring and vanishes in a white flash; an arrival comes
       out of the ring in a flash, small, and grows to full size by the mouth. A capital shrinks more than a fighter. It stays
       targetable and can be hit while scaled.
-- [ ] **T22, the player's jump:** `X: REQUEST JUMP` from any view (chase, cockpit): the camera cuts to an outside shot that follows
+- [x] **T22, the player's jump:** `HOLD X / SHIFT / MOUSE 4: JUMP` from any view (chase, cockpit): the camera cuts to an outside shot that follows
       the ship down the funnel to the ring's flash, fades, and on the way back shows it come out and grow before handing control
       back. Say if the flash is too bright close up.
-- [ ] **T23, a fighter cannot open a point:** `transit arrive point fighter` is a debug point held by nothing; in play no fighter
+- [x] **T23, a fighter cannot open a point:** `transit arrive point fighter` is a debug point held by nothing; in play no fighter
       opens one. A raid (`encounters force raid`) arrives through a capital's point or the gate, as its data says.
-- [ ] **T23, a capital's point collapses:** `transit carrier point follow`, then `vortex collapse` (destroys the opener), or fly a
-      carrier away beyond twice its length from its mouth: the point collapses at once with a flash. Check `state vortex`
-      (`last_collapse`: `opener_destroyed` or `out_of_range`).
-- [ ] **T23, ships caught inside die:** collapse a point while a ship is still in its funnel (`vortex collapse` right after
-      `transit arrive point capital`): the ship is destroyed with no kill credit (`collapse_kills` in `state vortex`).
-- [ ] **T23, the battle:** `bench battle 1000`: fighters ride their side's capital points or come through the battle's own gate;
-      only capitals open points.
+- [x] **T23, a capital's point collapses:** paste `transit carrier point fighter follow; wait 120; vortex collapse; wait 30; state
+      vortex` (the destroyed opener; or fly a carrier away beyond twice its length from its mouth): the point collapses at once
+      with a flash and `state vortex` shows `collapses = 1`, `collapse_kills = 1` (the carrier, still in its own funnel), `last_collapse =
+      opener_destroyed` (`out_of_range` when flown away).
+      The fighters of the carrier are too small on screen at 2.5 km to fly the funnel, so they are placed at once.
+- [x] **T23, ships caught inside die:** paste `transit arrive point capital; wait 5; vortex collapse; wait 30; state vortex`: the
+      capital is still in its own funnel when the point collapses, so it dies by the collapse (no kill credit): `collapse_kills
+      = 1`, `last_collapse = opener_destroyed` (M7-T59: the collapse now runs before the opener's death, so it counts).
+- [x] **T23, the battle:** checked in code and a test (M7-T59, see its Done note): in `bench battle 1000` only capitals open
+      points and fighters ride their side's capital points or come through the battle's own gate. Nothing to do by hand.
 
 **Not for you yet:** Babylon 5 itself (M7), time warp (M9), other planets to fly to (M9).
+
+# Play-testing M7 (Babylon 5 Station)
+
+How to get to each new thing comes first; everything for you to judge is in the list at the end, "M7 acceptance checklist". The
+design is `docs/architecture.md` §20. Screenshots the agents took are under `references/screenshots/` in folders named for each
+task (`M7-T04 station/`, `M7-T08 launch/`, `M7-T09 interior/`, `T24 station surfaces/`, `M7-T25 docking bay/`, `M7-T76 avoidance/`, ...).
+
+## Start
+
+```
+.tools/godot/godot --path .                                   # the start screen over the Cobra-bay hangar
+.tools/godot/godot --path . -- --scenario=station_launch       # launch from Alpha 3 with three wingmen
+.tools/godot/godot --path . -- --scenario=station_showcase     # the same launch, then free flight with bots and a freighter
+```
+
+Free flight starts about 8 km from Babylon 5, the gate 50 km off; with encounters on (the menu's choice, or `encounters on`)
+the station's traffic runs too.
+
+## What is new to fly
+
+- **The station.** An 8 km generated station: a fixed frame, a turning drum (touching it is fatal), four Cobra arms. It is a
+  target, broadcasts to 1 000 km and takes damage by section; it is never destroyed.
+- **The launch.** The clamp turns your fighter nose out, the doors ripple open along the arm, you drop out nose first; the camera
+  cuts between shots. A or Start skips to the hand-off.
+- **The grid.** Light turrets, heavy cannons in the bow and interceptor batteries. It fires only once someone hostile has fired
+  on the station or its friends.
+- **Traffic.** Civilians run between the gate and the docking bay, Saturns hold at the cargo bay while cargo pods carry their
+  cargo, maintenance bots patrol and repair.
+- **Navigation targets.** The bays and the gate sit in the target menu's NAVIGATION ring; within 2 km hold X (Shift, Mouse 4).
+
+## Console for M7 (all in `info.md`)
+
+```
+goto                       list the nav points; goto babylon 5 / goto babylon 5 docking bay / goto jumpgate / goto epsilon iii
+station goto <tour point>  stand at a tour point; station info; station spin off|on; station section <name> damage 2000; station heal
+launch alpha 3             launch the player from a bay; launch wing <wing|all>; launch skip; launch cut
+grid info                  the grid's mounts, shots and pulses; grid free raiders; grid hold; grid repair all
+traffic status             the station's traffic; traffic dock [near]; traffic undock; traffic freighter <type> show; traffic raid 12
+tour                       the exterior tour (eight stops); tour heavy_cannons plays one
+bots info / pods info      the maintenance crew and the cargo pods
+frame orbit 400 dusk       a 400 km orbit on the terminator; frame drop 500; frame rail babylon5
+far view station 1000      the station from 1 000 km; far off
+station_lights off|on      the station's exterior lights, for A/B looks
+```
+
+## M7 acceptance checklist (AC12, the (H) criteria)
+
+**Accepted by the maintainer 2026-11-18** (every item below passed in the play-tests of 2026-11-16 to 11-18).
+
+Everything automated is recorded in the acceptance table of `docs/milestones/m7-babylon-5-station.md`. GPU numbers are the agents'
+(RX 6950 XT).
+
+**The station's look, from the bays to 1 000 km**
+
+- [x] **From a bay** (`play station_launch`, then look round after the hand-off): the Cobra arm, its six doors and the drum read
+      from close up; plating, seams and colours as the show has them; no visible tiling or blotches (T04, T05, T21, T24).
+- [x] **Both texture sets** (`set settings.texture_detail low`, then `high`): low keeps the major seams, high the plating; both sharp.
+- [x] **The main docking bay** (`goto babylon 5 docking bay`): the stepped cross mouth, the red-lit tunnel, the inner doors (T25).
+- [x] **The cargo bay** (`station goto cargo_bay`): grey metal lit red, roofed (T21, T32).
+- [x] **The spine, command section and bow** (`tour`, or `goto babylon 5`): shaped as the STL (T22); the heavy cannons in their
+      recesses beside the rook tower (T43).
+- [x] **Lights** (night side and close up): beacons blink, navigation lights, bay lamps, flood pools on the hull (T18); they fade
+      with distance and none shows from 100 km on (`far view station 100`, `1000`, `10000`; T69).
+- [x] **From 10 km and 1 000 km** (`far view station 10`, `far view station 1000`): it reads as the station, then as a point; one
+      sun at every distance (T72).
+- [x] **Ships at range** keep a low-polygon model, not a grey sphere, until a few pixels across (T26).
+
+**The drum's turn**
+
+- [x] The drum turns smoothly against the still frame (about 62 m/s at its skin); `station spin off` holds it, `on` restarts it.
+- [x] Scraping the turning drum kills a Starfury (Q9); the frame is a plain ram.
+
+**The launch and its camera**
+
+- [x] **Launch** (`play station_launch`): the clamp turns the fighter nose out while the doors open, the ripple along the arm, the
+      drop nose first, no fighter let go under the spine; the thrusters cold until the drop (T08).
+- [x] **The camera**: each shot holds at least 1 s, a wave's row shot shows three fighters leave; cuts differ from launch to launch.
+- [x] **Skip** (A or Start): lands in the same state as a played launch.
+- [x] **Wing launches** (`launch wing all`): every arm launches its twelve; a launched Alpha joins your wing and takes FORM ON ME
+      (key 1), the comms menu and `wing order` (T58); its V balanced, an odd ship centred behind (T74).
+
+**The grid's fire and the interceptors**
+
+- [x] **A raid** (`traffic raid 12`): the grid opens up only after the raiders fire; the light turrets hit fighters with orange
+      bolts, the heavy cannons fire three-shot green bursts that leave the barrel and strike (T43, T51).
+- [x] **Interceptors**: four barrels in turn, blue-white pulses that fly out and can miss, a small flash and sparks where one meets
+      a missile or bolt (T41, T42).
+- [x] **Knocked-out mounts** go dark and stop firing; the repair bots bring them back (`grid info`, `bots info`; T35).
+- [x] **Wingmen and allies near the station** never fly into it when they could avoid it (T38).
+
+**The interior behind the menu**
+
+- [x] The start screen over Alpha's Cobra-bay hall: six fighters racked over the doors, the second row behind, the slow camera; the
+      menus work with the pad alone (T09, T20).
+
+**The traffic and the bots**
+
+- [x] **Docking** (`traffic dock`, `traffic dock near`): a civilian flies the lane, matches the drum's roll, the inner doors open,
+      it goes into the void and they shut; `traffic dock` says it waits for the gate, then counts the ship (T25, T70).
+- [x] **Undocking** (`traffic undock`, several times): every tunnel hull, the Narn transport too, comes out lying square, no ram (T61).
+- [x] **Inside the station**: a ship in the void is off the radar and not targetable, and comes back once out (T62).
+- [x] **Freighters** (`traffic freighter saturn_3_freighter show`): the Saturn backs in, the cargo pods carry its cargo into the
+      cargo bay one by one, and away (T30, T34).
+- [x] **The run** (free flight, encounters on): civilians between the gate and the station, arrivals and departures on their own
+      sides; an event every 1 to 3 minutes (T56); attacked civilians flee to Babylon 5 (T55).
+- [x] **Maintenance bots** (`bots info`): three to six patrol the spine, vanes, drum and gate; in a raid they go home, then one per
+      damaged area comes out to repair (T35, T36).
+
+**The tour and the console moves**
+
+- [x] **The tour** (`tour`): eight stops with captions; "Defense"; the grid stops show the turrets, batteries and cannons from the
+      front, lit (T57).
+- [x] **Moves** (`goto`, `station goto main_docking_bay` during a launch, `frame orbit 400 dusk`, `frame drop 500` then `station
+      goto main_docking_bay`): placed clear and at rest, no ram; the orbit on the asked side, never inside the atmosphere; after a
+      drop the station's rail and REF BABYLON 5 come back and the planet is drawn (T63, T66 to T68, T71).
+
+**Wingmen forming up (M7-T76)**
+
+- [x] **The turnaround:** `play station_launch`, `launch wing alpha`, FORM ON ME (key 1), fly past 200 m/s, turn sharply and burn
+      back: the wing comes round over and under you and re-forms without ramming you or each other.
+- [x] **The station:** `god on`, fly into Babylon 5's drum with the wing following: no wingman rams the station or another wingman.

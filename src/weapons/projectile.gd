@@ -1,6 +1,6 @@
 class_name Projectile
 extends Node3D
-## A pulse-cannon bolt (architecture §6.3, §7.1): a kinematic Node3D carrying an emissive capsule, no physics body
+## A pulse-cannon bolt (architecture §6.3, §7.1): a kinematic Node3D carrying an emissive teardrop, no physics body
 ## and no hit detection in M1. It flies on at the velocity it was launched with, bent only by gravity (M6-T07, `HeldPull`),
 ## and frees itself `lifetime_s` of sim time after launch (`SimClock`, never the wall clock, so time warp and pausing work).
 ##
@@ -12,13 +12,14 @@ extends Node3D
 ## (`damage`, `hit_radius_m`) and the displacement of its latest tick (`last_step`, zero before its first tick), so the
 ## resolver can sweep the segment it just flew. It is in group `projectiles`. `spend()` retires it after a hit.
 ##
-## The capsule is built along the node's -Z axis, and `launch` points -Z along the velocity.
+## The bolt is a teardrop (`BoltShape`, M7-T52) with its head along the node's -Z axis, and `launch` points -Z along the velocity.
+## Its tail is drawn no longer than the bolt has flown, so it never reaches back behind the muzzle.
 ##
 ## Guided and one-tick kinds (M4-T12): a projectile with `steering` asks it for its velocity every tick (a missile), and
 ## `fire_beam` makes a beam whose segment is its one tick of flight; the hit resolver retires a beam after sweeping it.
 ##
 ## `configure(weapon)` (the cannon calls it before `launch`) takes the lifetime and the bolt's look from a
-## `WeaponSpec`. Capsule meshes are shared between all bolts of one look.
+## `WeaponSpec`. Bolt meshes are shared between all bolts of one look.
 
 const GROUP: StringName = &"projectiles"
 const SCENE_PATH: String = "res://src/weapons/projectile.tscn"
@@ -32,6 +33,12 @@ const KIND_MINE: StringName = &"mine"
 const KINDS: Array[StringName] = [KIND_BOLT, KIND_BEAM, KIND_MISSILE, KIND_MINE]
 ## Each kind's hit radius (m): stand-in values until the real weapons (roadmap M12) bring their own. A mine's is its fuse.
 const HIT_RADIUS_BY_KIND: Dictionary = {KIND_BOLT: 0.25, KIND_BEAM: 0.5, KIND_MISSILE: 2.0, KIND_MINE: 25.0}
+
+## The look a bolt has before `configure` (the Starfury's pulse cannon, `pulse_cannon_ef.tres`).
+const DEFAULT_LENGTH_M: float = 1.5
+const DEFAULT_RADIUS_M: float = 0.05
+## The shortest a bolt's tail is drawn, as a share of its full length (the core's `MIN_TAIL_SHARE`): a thin disc at the muzzle.
+const MIN_TAIL_SHARE: float = 1e-3
 
 # Bolt meshes by look (length, radius, material), so a volley does not build a mesh per bolt.
 static var _meshes: Dictionary = {}
@@ -68,6 +75,10 @@ var color: Color = Color(0.9, 1.5, 3.0, 1.0)
 var last_step: Vector3 = Vector3.ZERO
 
 var _spent: bool = false
+# How far the look's teardrop reaches behind the bolt at true size, the drawn enlargement, and the distance flown since launch.
+var _tail_m: float = BoltShape.tail_length(DEFAULT_LENGTH_M, DEFAULT_RADIUS_M)
+var _size: float = 1.0
+var _flown: float = 0.0
 var _laid_beam: bool = false
 var _pull := HeldPull.new()  # gravity (M6-T07), read once a second
 
@@ -80,6 +91,8 @@ func _init() -> void:
 
 
 func _ready() -> void:
+	if _bolt.mesh == null:
+		_bolt.mesh = bolt_mesh(DEFAULT_LENGTH_M, DEFAULT_RADIUS_M)
 	set_visual_scale(visual_scale)
 
 
@@ -95,6 +108,11 @@ func _physics_process(delta: float) -> void:
 	velocity = _pull.kick(self, velocity, delta)
 	last_step = velocity * delta
 	global_position += last_step
+	if _flown < _tail_m * _size:
+		_flown += last_step.length()
+		_apply_size()
+	else:
+		_flown += last_step.length()
 
 
 ## A velocity rebase (`WorldFrame.boost`): the bolt keeps its universe velocity. It keeps its heading too: nothing turns.
@@ -106,8 +124,19 @@ func frame_boost(dv: Vector3) -> void:
 
 ## Draws the bolt `factor` times its size (all axes); the hit radius stays as it is.
 func set_visual_scale(factor: float) -> void:
+	_size = maxf(factor, 0.01)
+	_apply_size()
+
+
+## How much of its drawn tail the bolt shows now: all of it once it has flown that far.
+func tail_share() -> float:
+	var full: float = _tail_m * _size
+	return 1.0 if full <= 0.0 else clampf(_flown / full, MIN_TAIL_SHARE, 1.0)
+
+
+func _apply_size() -> void:
 	if _bolt != null:
-		_bolt.scale = Vector3.ONE * maxf(factor, 0.01)
+		_bolt.scale = Vector3(_size, _size * tail_share(), _size)  # the mesh's +Y is its tail
 
 
 ## Takes the lifetime and the bolt's look (length, radius, material) from `weapon`. Call it after the node entered the
@@ -118,30 +147,30 @@ func configure(weapon: WeaponSpec) -> void:
 	hit_radius_m = weapon.hit_radius_m
 	color = weapon.bolt_color
 	_bolt.mesh = bolt_mesh(weapon.bolt_length_m, weapon.bolt_radius_m, weapon.bolt_material)
+	_tail_m = BoltShape.tail_length(weapon.bolt_length_m, weapon.bolt_radius_m)
+	_apply_size()
 
 
 ## Every bolt material in use: the default and those of the meshes built so far (M4-T38 switches them for TAA).
 static func bolt_materials() -> Array[Material]:
 	var out: Array[Material] = [DEFAULT_MATERIAL]
-	for mesh: CapsuleMesh in _meshes.values():
-		if mesh.material != null and not out.has(mesh.material):
-			out.append(mesh.material)
+	for mesh: ArrayMesh in _meshes.values():
+		var material: Material = mesh.surface_get_material(0)
+		if material != null and not out.has(material):
+			out.append(material)
 	return out
 
 
-## The shared capsule mesh for a bolt of this look; a null `material` is the pulse bolt material.
-static func bolt_mesh(length_m: float, radius_m: float, material: Material = null) -> CapsuleMesh:
+## The shared teardrop mesh for a bolt of this look; a null `material` is the pulse bolt material. The bolt materials carry
+## the vertex colour, depth and draw order the teardrop needs (`assets/materials/*.tres`).
+static func bolt_mesh(length_m: float, radius_m: float, material: Material = null) -> ArrayMesh:
 	var mat: Material = material if material != null else DEFAULT_MATERIAL
 	var key := "%s|%s|%d" % [length_m, radius_m, mat.get_instance_id()]
-	var cached: CapsuleMesh = _meshes.get(key) as CapsuleMesh
+	var cached: ArrayMesh = _meshes.get(key) as ArrayMesh
 	if cached != null:
 		return cached
-	var mesh := CapsuleMesh.new()
-	mesh.radius = radius_m
-	mesh.height = maxf(length_m, 2.0 * radius_m)
-	mesh.radial_segments = 8
-	mesh.rings = 2
-	mesh.material = mat
+	var mesh: ArrayMesh = BoltShape.mesh(length_m, radius_m)
+	mesh.surface_set_material(0, mat)
 	_meshes[key] = mesh
 	if BoltMesh.motion_vectors():
 		BoltMesh.set_motion_vectors(true)  # a new material joins the opaque ones under TAA
@@ -155,6 +184,8 @@ func launch(at: Vector3, launch_velocity: Vector3, now_s: float) -> void:
 	expires_at_s = now_s + lifetime_s
 	global_position = at
 	_face(launch_velocity)
+	_flown = 0.0
+	_apply_size()
 	# Appear here, not smeared from wherever the node was a tick ago (project-wide physics interpolation is on).
 	reset_physics_interpolation()
 
@@ -174,12 +205,12 @@ func fire_beam(from: Vector3, to: Vector3, now_s: float) -> void:
 	reset_physics_interpolation()
 
 
-# Points the capsule along `direction`; left alone for a near-zero one.
+# Points the bolt along `direction`; left alone for a near-zero one.
 func _face(direction: Vector3) -> void:
 	if direction.length_squared() <= 1e-6:
 		return
 	var unit: Vector3 = direction.normalized()
-	# looking_at needs an up vector that is not parallel to the direction; the capsule is round, so any will do.
+	# looking_at needs an up vector that is not parallel to the direction; the bolt is round, so any will do.
 	var up: Vector3 = Vector3.UP if absf(unit.dot(Vector3.UP)) < 0.99 else Vector3.RIGHT
 	global_basis = Basis.looking_at(unit, up)
 

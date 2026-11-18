@@ -365,3 +365,29 @@ func test_in_a_sandbox_fight_at_most_eight_lights_shine_and_the_players_nozzles_
 	assert_gt(flash_ticks, 0, "shots were lit")
 	gut.p("sandbox fight: %d ticks, most candidates %d, own nozzles lit %d ticks, flash picked %d slot-ticks, picker cost mean %d us" % [
 			FIGHT_TICKS, most_candidates, own_lit_ticks, flash_ticks, cost_total_us / FIGHT_TICKS])
+
+
+func test_the_key_star_leaves_the_interior_layer_to_the_lamps() -> void:
+	# M7: what stands inside a hall is on the interior layer; the star lights the hulls, not it, and the slots light both.
+	var star: DirectionalLight3D = rig.key_star
+	assert_eq(star.light_cull_mask & LightRig.INTERIOR_LAYER, 0, "the star's light leaves the interior layer out")
+	assert_eq(star.light_cull_mask & 1, 1, "and lights the hulls")
+	assert_eq(star.light_cull_mask & LightRig.SHADOW_CASTER_LAYER, 0, "a caster's own layer says whether the star lights it")
+	for k: int in range(1, rig.slots().size()):
+		assert_ne(rig.slots()[k].light_cull_mask & LightRig.INTERIOR_LAYER, 0, "slot %d lights the interior" % k)
+		assert_false((rig.slots()[k] as OmniLight3D).shadow_enabled, "the slots cast no shadow")
+	var camera: Camera3D = get_viewport().get_camera_3d()
+	assert_ne(camera.cull_mask & LightRig.INTERIOR_LAYER, 0, "the camera sees the interior")
+
+
+func test_only_the_station_casts_the_key_stars_shadow() -> void:
+	# M7: the sun glinted off a station's night side and into its bays. The star's shadow is on, cast by the shadow casters'
+	# layer alone: 500 ships casting would cost four more passes each.
+	var star: DirectionalLight3D = rig.key_star
+	assert_true(star.shadow_enabled)
+	assert_eq(star.shadow_caster_mask, LightRig.SHADOW_CASTER_LAYER)
+	assert_eq(star.directional_shadow_max_distance, LightRig.STAR_SHADOW_M)
+	var hulls: Array = main.ship.find_children("*", "GeometryInstance3D", true, false)
+	assert_gt(hulls.size(), 0)
+	for node: GeometryInstance3D in hulls:
+		assert_eq(node.layers & LightRig.SHADOW_CASTER_LAYER, 0, "%s casts no shadow" % node.name)

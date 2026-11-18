@@ -4,7 +4,7 @@ use godot::builtin::Basis;
 
 use super::*;
 use crate::kernels::pilot;
-use crate::rows::{FLAG_HULL_ACTIVE, FLAG_RIGID, ROLE_CIVILIAN, ROLE_COMBAT};
+use crate::rows::{FLAG_HULL_ACTIVE, FLAG_RIGID, ROLE_CIVILIAN, ROLE_COMBAT, ROLE_NAV};
 use crate::tier::{self, TierRows};
 use crate::turret_kernels::{self, Memory, PICK_REACH, PickMount, REL_FRIENDLY, REL_HOSTILE, REL_NEUTRAL};
 
@@ -54,6 +54,9 @@ fn view<'a>(rows: &'a Rows, contacts: &'a [i32], fleeing: &'a [bool]) -> View<'a
         radius: 80.0,
         speed_mps: 130.0,
         fleeing,
+        shun: -1,
+        hulls: &[],
+        brake_mps2: 0.0,
     }
 }
 
@@ -85,6 +88,28 @@ fn the_nearest_kin_is_of_the_own_people_of_any_kind() {
 }
 
 #[test]
+fn no_kin_beyond_the_threat_is_run_to() {
+    // M7-T55: the Starfury 3 km ahead, past the raider 1.5 km ahead: running there would pass the raider.
+    let threat = v(0.0, 0.0, -1500.0);
+    let rows = rows_of(&[
+        (1, EA, ROLE_CIVILIAN, 80.0, STILL, STILL),
+        (3, EA, ROLE_COMBAT, 12.0, v(300.0, 0.0, -3000.0), STILL),
+        (4, EA, ROLE_CIVILIAN, 80.0, v(2500.0, 0.0, 2500.0), STILL),
+        (5, RAIDERS, ROLE_COMBAT, 10.0, threat, STILL),
+    ]);
+    let seen = view(&rows, &[1, 2], &[]);
+    assert_eq!(nearest_kin(&seen), 1, "the Starfury is the nearest kin");
+    assert_eq!(nearest_kin_from(&seen, Some(threat)), 2, "but the freighter behind is the one it runs to");
+    let flight = flee_from(&seen, v(0.0, 0.0, 1.0), threat).unwrap();
+    assert_eq!(flight.goal, 2);
+    assert!(flight.velocity.z > 0.0, "away from the raider: {:?}", flight.velocity);
+    // A raider already close beside it: a shelter on its side is still run to when the way only draws off from it.
+    let near = v(400.0, 0.0, -100.0);
+    let rows = rows_of(&[(1, EA, ROLE_CIVILIAN, 80.0, STILL, STILL), (3, EA, ROLE_COMBAT, 12.0, v(3000.0, 0.0, 6000.0), STILL)]);
+    assert_eq!(nearest_kin_from(&view(&rows, &[1], &[]), Some(near)), 1, "the way leaves the raider behind");
+}
+
+#[test]
 fn a_freighter_shelters_on_the_far_side_of_a_warship_of_its_people() {
     let threat = v(0.0, 0.0, -1500.0);
     let rows = rows_of(&[
@@ -106,6 +131,20 @@ fn a_freighter_shelters_on_the_far_side_of_a_warship_of_its_people() {
     assert!(dot(dir, normalized(point)) > 0.99, "it heads for that point: {dir:?}");
     let pace = minf(130.0, f64::from(length(point)) / ARRIVE_S);
     assert!((f64::from(length(flight.velocity)) - pace).abs() < 0.01, "slowing into it over ARRIVE_S, at most the run's speed");
+}
+
+#[test]
+fn a_freighter_slows_into_its_shelter_no_faster_than_it_can_brake() {
+    // M7-T55: 1.4 km out at the run's speed a Saturn could never stop there; it comes in at what its retro can stop.
+    let threat = v(0.0, 0.0, -1500.0);
+    let rows = rows_of(&[(1, EA, ROLE_CIVILIAN, 80.0, STILL, STILL), (3, EA, ROLE_COMBAT, 12.0, v(1200.0, 0.0, 0.0), STILL)]);
+    let mut seen = view(&rows, &[1], &[]);
+    seen.brake_mps2 = 0.5;
+    let flight = flee_from(&seen, v(0.0, 0.0, 1.0), threat).unwrap();
+    let point = shelter_point(rows.positions[1], threat, standoff_m(80.0, 12.0));
+    let stop = (2.0 * 0.5 * f64::from(length(point))).sqrt();
+    assert!((f64::from(length(flight.velocity)) - stop).abs() < 0.01, "{} m/s, its stopping speed {stop}", length(flight.velocity));
+    assert!(dot(normalized(flight.velocity), normalized(point)) > 0.99, "toward the point");
 }
 
 #[test]
@@ -242,6 +281,29 @@ fn avoidance_sees_a_big_civilian_hull_early() {
 }
 
 #[test]
+fn avoidance_flies_through_a_navigation_marker() {
+    // M7-T27: a station bay's marker sits on the docking lane at the tunnel's mouth. A ship on the lane flies through it; the
+    // same point as a body is dodged.
+    let ship = pilot::Ship {
+        position: STILL,
+        velocity: v(0.0, 0.0, -45.0),
+        radius: 20.0,
+        a_retro: 20.0,
+        rate_max_x: 1.0,
+        rate_max_y: 1.0,
+        a_rcs_x: 2.0,
+        a_rcs_y: 2.0,
+        tie_hash: 3,
+    };
+    let wish = v(0.0, 0.0, -45.0);
+    for (role, dodges) in [(ROLE_COMBAT, true), (ROLE_NAV, false)] {
+        let rows = rows_of(&[(5, EA, role, 0.0, v(0.0, 0.0, -150.0), STILL)]);
+        let avoided = pilot::avoid(&rows, &ship, &[0], &[], 0, wish);
+        assert_eq!(avoided.v_des != wish, dodges, "role {role}: {:?}", avoided.v_des);
+    }
+}
+
+#[test]
 fn the_tier_measures_a_civilian_hull_from_its_skin() {
     let rows = rows_of(&[
         (1, EA, ROLE_COMBAT, 130.0, v(10_050.0, 0.0, 0.0), STILL),
@@ -288,6 +350,8 @@ fn turrets_cover_a_civilian_hull_within_two_km_of_skin() {
         up: v(0.0, 1.0, 0.0),
         min_elevation: (-10_f64).to_radians(),
         reach_m: 1500.0 * PICK_REACH,
+        kind: 0,
+        line_lift_m: crate::turret_kernels::LINE_LIFT_M,
     };
     let mut memory = Memory::default();
     memory.note(2, 3, 0.0, false);

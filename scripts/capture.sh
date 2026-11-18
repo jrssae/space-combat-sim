@@ -11,5 +11,5 @@ GODOT="${GODOT_BIN:-${ROOT}/.tools/godot/godot}"
 COMMANDS="${1:?console commands required}"
 SIZE="${2:-1280x720}"
 cd "${ROOT}"
-exec timeout 600 xvfb-run -a -s "-screen 0 1920x1080x24" "${GODOT}" --path . --rendering-driver vulkan \
+exec "${ROOT}/scripts/godot_lock.sh" read -- timeout 600 xvfb-run -a -s "-screen 0 1920x1080x24" "${GODOT}" --path . --rendering-driver vulkan \
     --resolution "${SIZE}" -- --console-strict --console-exec="${COMMANDS}; quit"

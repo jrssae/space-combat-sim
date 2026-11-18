@@ -1,0 +1,4 @@
+{"lane_ships": 5,
+ "lane_spacing_s": 40.0,
+ "weights": {"dock": 0.4, "undock": 0.4, "freighter": 0.2},
+ "scramble": ["alpha"]}

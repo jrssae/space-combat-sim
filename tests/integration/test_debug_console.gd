@@ -17,8 +17,11 @@ const SCRATCH_FILES: PackedStringArray = [CONFIG_PATH, HISTORY_PATH, AUTOEXEC_PA
 class OnePadSource:
 	extends GodotInputSource
 
+	## Past any id a real pad gets (Godot numbers them from 0), so a pad on the desk cannot feed the test.
+	const DEVICE: int = 15
+
 	func _pad_ids() -> Array[int]:
-		var pads: Array[int] = [0]
+		var pads: Array[int] = [DEVICE]
 		return pads
 
 	func _pad_guid(_pad: int) -> String:
@@ -288,6 +291,18 @@ func test_fps_follows_show_fps() -> void:
 	assert_true(console.fps_counter.visible, "the counter follows the setting, however it is changed")
 
 
+func test_overlay_sets_and_toggles_show_overlay() -> void:
+	var console: DebugConsoleScript = _make_console()
+	console.submit("overlay off")
+	assert_eq(settings.get_value(&"show_overlay"), false)
+	console.submit("overlay on")
+	assert_eq(settings.get_value(&"show_overlay"), true)
+	console.submit("overlay")
+	assert_eq(settings.get_value(&"show_overlay"), false, "no argument toggles")
+	console.submit("overlay")
+	assert_eq(settings.get_value(&"show_overlay"), true)
+
+
 func test_watch_and_unwatch() -> void:
 	var console: DebugConsoleScript = _make_console()
 	console.submit("watch settings.invert_y")
@@ -322,7 +337,7 @@ func test_input_provider_and_owner_pruning() -> void:
 	assert_string_contains(text, "input.fire = true")
 	assert_string_contains(text, "input.keyboard_masked = false")
 	assert_string_contains(text, "input.main_right = 0.00")
-	assert_string_contains(text, "input.pads = [{id: 0, name: Fake Pad, guid: fakepad0")
+	assert_string_contains(text, "input.pads = [{id: %d, name: Fake Pad, guid: fakepad0" % OnePadSource.DEVICE)
 	source = null
 	adapter = null
 	assert_false(console.registry.has_provider(&"input"), "the provider goes when the source is freed")
@@ -442,7 +457,7 @@ func test_pad_events_are_swallowed_only_while_open() -> void:
 	DebugConsole.open()
 	_pad_button(JOY_BUTTON_X, true)
 	assert_eq(probe.seen, seen_closed, "the console UI swallows pad events")
-	assert_true(Input.is_joy_button_pressed(0, JOY_BUTTON_X), "device polling is unaffected")
+	assert_true(Input.is_joy_button_pressed(OnePadSource.DEVICE, JOY_BUTTON_X), "device polling is unaffected")
 	_pad_button(JOY_BUTTON_X, false)
 
 
@@ -526,7 +541,7 @@ func _key(keycode: Key, pressed: bool, unicode: int = 0) -> void:
 
 func _pad_button(button: JoyButton, pressed: bool) -> void:
 	var e := InputEventJoypadButton.new()
-	e.device = 0
+	e.device = OnePadSource.DEVICE
 	e.button_index = button
 	e.pressed = pressed
 	Input.parse_input_event(e)
@@ -535,7 +550,7 @@ func _pad_button(button: JoyButton, pressed: bool) -> void:
 
 func _pad_axis(axis: JoyAxis, value: float) -> void:
 	var e := InputEventJoypadMotion.new()
-	e.device = 0
+	e.device = OnePadSource.DEVICE
 	e.axis = axis
 	e.axis_value = value
 	Input.parse_input_event(e)

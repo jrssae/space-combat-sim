@@ -12,7 +12,7 @@ const SCENARIO_DIR := "res://data/scenarios/"
 ## The debug overlay's text is rebuilt this often while it shows (M4-T36): a readout, not an animation.
 const OVERLAY_INTERVAL_S: float = 0.1
 const SCENARIO_CHOICES: Array[StringName] = [&"combat_sandbox", &"free_flight", &"instructor_route", &"dogfight",
-		&"civilian_showcase", &"belt_showcase"]
+		&"civilian_showcase", &"belt_showcase", &"station_launch", &"station_showcase"]
 
 ## The player's hull reached zero (the ship is hidden and disabled; input is ignored until the respawn).
 signal player_died
@@ -80,10 +80,18 @@ var target_menu: TargetMenuDirector = null
 var encounter_director: EncounterDirector = null
 ## The scenario's jumpgates and the player's jump through one (M6-T14); always present, with no gate in most scenarios.
 var gates: JumpgateHost = null
+## The long hold of X on a target that offers an interaction (M7-T27): a gate's jump, the station bays' placeholders.
+var interactions: InteractionHost = null
 ## The far props' console and the station's stand-in for captures (M6-T15).
 var far_props: FarPropHost = null
 ## The star system the scene flies in (M6-T03).
 var star_system: StarSystemHost = null
+## Cobra-bay launches from the station (M7-T08): the scenario's `launch_bay` start, `MissionApi.launch_from`, console `launch`.
+var launches: LaunchDirector = null
+## Traffic at the station (M7-T10): docking, freighters, raids at it; console `traffic`.
+var traffic: StationTraffic = null
+## The station's exterior tour (M7-T12): console `tour`; the tour's shots play on the cinematic camera.
+var tours: TourDirector = null
 ## Where and when the scenario is in its star system (M6-T09): `ScenarioFrame.resolve`'s result, empty without a system.
 var frame: Dictionary = {}
 
@@ -203,6 +211,10 @@ func _ready() -> void:
 	gates.name = JumpgateHost.NODE_NAME
 	gates.main = self
 	add_child(gates)
+	interactions = InteractionHost.new()
+	interactions.name = InteractionHost.NODE_NAME
+	interactions.main = self
+	add_child(interactions)
 	far_props = FarPropHost.new()
 	far_props.name = FarPropHost.NODE_NAME
 	far_props.main = self
@@ -213,9 +225,28 @@ func _ready() -> void:
 	if bool(scenario.get("ok", false)):
 		_spawn_props(scenario["props"])
 		for entry: Dictionary in scenario["jumpgates"]:
-			gates.place(entry, star_system.system, frame)
+			_offer_jump(gates.place(entry, star_system.system, frame))
 		_spawn_belts(scenario["belts"])
 	_spawn_scenario_ships()
+	launches = LaunchDirector.new()
+	launches.main = self
+	add_child(launches)
+	traffic = StationTraffic.new()
+	traffic.main = self
+	add_child(traffic)
+	if bool((scenario.get("station", {}) as Dictionary).get("reserve_traffic", false)):
+		traffic.reserve_pools()  # the raids' and wings' ships are built now, not in the middle of a fight
+	_warm_flashes()
+	var launch_bay: String = String((scenario.get("player", {}) as Dictionary).get("launch_bay", ""))
+	if not launch_bay.is_empty():
+		launches.start_bay = launch_bay
+		var why: String = launches.launch_from_bay(launch_bay)
+		if not why.is_empty():
+			push_warning("Main: the scenario starts in %s: %s" % [launch_bay, why])
+	tours = TourDirector.new()
+	tours.main = self
+	add_child(tours)
+	_start_station_traffic(scenario.get("station", {}) as Dictionary)
 	if not (scenario.get("mission", {}) as Dictionary).is_empty():
 		mission = MissionRunner.create(self, scenario)
 	camera_rig.setup(ship, ship.cockpit_anchor, ship.get_chase_offset(), ship.set_cockpit_interior_visible)
@@ -228,6 +259,8 @@ func _ready() -> void:
 	add_child(flight_reference)
 	# The cockpit camera follows a RemoteTransform3D, so reset its interpolation on a rebase or the jump smears.
 	world.rebased.connect(func(_offset: Vector3) -> void: camera_rig.cockpit_pivot.reset_physics_interpolation())
+	# The console carried the player to a new frame and the world shifted round it: the chase camera follows at once (M7-T66).
+	world.focus_carried.connect(camera_rig.snap_chase)
 	letterbox = Letterbox.new()
 	add_child(letterbox)
 	camera_rig.mode_changed.connect(_on_camera_mode_changed)
@@ -253,6 +286,10 @@ func _ready() -> void:
 	target_menu.main = self
 	add_child(target_menu)
 	hud.final_input = target_menu.fill_hud_input
+	var nav_goto := NavGoto.new()
+	nav_goto.name = "NavGoto"
+	nav_goto.main = self
+	add_child(nav_goto)
 	_register_console()
 
 
@@ -272,14 +309,21 @@ func _physics_process(delta: float) -> void:
 	if comms.is_open():
 		comms.step(adapter.sample_radial(input_source, delta))
 		return
-	# Beside a targeted gate X asks for a jump instead of switching auto-track (M6-T14).
-	adapter.jump_offered = gates.jump_offered()
+	# On a target that offers an interaction (a gate within reach, a station bay) a long hold of X runs it (M7-T27).
+	# A mission's opening is skipped the same way, with a hold of X (M7-T54).
+	var opening: bool = mission != null and mission.opening_skip_offered()
+	adapter.interaction_offered = opening or interactions.offer() != null
 	var pc: PilotCommand = adapter.sample(input_source, delta)
+	if opening:
+		mission.take_opening_hold(pc.ui)
 	if control_lock.apply(pc, controls_locked(), camera_rig.is_playing_shot()):
 		camera_rig.stop_shot()
-	if pc.ui.request_jump:
-		gates.start_jump()
+		launches.skip()  # a launch's shot skipped jumps the player to the hand-off (M7-T08)
+	if pc.ui.interact and not opening:  # the hold that skips the opening is spent on it
+		interactions.run_offered()
 	var autopilot: FlightCommand = gates.step_player(delta) if not get_tree().paused else null
+	if autopilot == null and not get_tree().paused:
+		autopilot = launches.step_player(delta)  # a launched fighter's engines light as it clears the arm (M7-T08)
 	if autopilot != null:
 		pc.flight = autopilot
 	if debug_throttle > 0.0:
@@ -297,6 +341,16 @@ func _physics_process(delta: float) -> void:
 		comms.open()  # says nothing when it cannot (the player is down, a cinematic): the press is simply lost
 	if pc.ui.target_menu_open:
 		target_menu.open()  # it says nothing when it cannot (the player is down, a cinematic): the hold is simply lost
+
+
+# A gate's interaction is the player's jump through it (M6-T14): offered while it is targeted and no jump runs, within the gate's
+# request range (2 km, M7-T28); farther out the HUD says how close to come and the hold does nothing.
+func _offer_jump(gate: Jumpgate) -> void:
+	if gate == null:
+		return
+	gate.targetable.interaction = TargetInteraction.new(&"jump", GateJumpPrompt.LABEL,
+			func() -> String: return gates.start_jump(gate),
+			func() -> bool: return gates.targeted_gate() == gate and not gates.jump.is_active(), GateJumpRequest.range_m())
 
 
 # Auto-track needs a target: with none selected the nearest hostile is taken; with none in range it switches itself off.
@@ -381,6 +435,14 @@ func _pool_count(scenario: Dictionary, type: StringName, override_count: int) ->
 	return int((scenario.get("pools", {}) as Dictionary).get(type, 0))
 
 
+# The first hit and the first volley of a session cost nothing to build: every weapon colour's impact flash is made now.
+func _warm_flashes() -> void:
+	ImpactFlash.warm(WeaponSpec.known_bolt_colors())
+	var flashes: MuzzleFlashPool = MuzzleFlashPool.attach(world)
+	if flashes != null:
+		flashes.warm()
+
+
 # The scenario's pools of every other type (the civilians, M5-T16) and their break-up chunks.
 func _prepare_other_pools(scenario: Dictionary) -> void:
 	var pools: Dictionary = scenario.get("pools", {})
@@ -391,17 +453,28 @@ func _prepare_other_pools(scenario: Dictionary) -> void:
 		debris.prepare(type)
 
 
-## Grows the pool of `type` to at least `count` ships, heard like the scenario's own (the benchmark's load, M4-T01). Returns
-## how many were built.
+## Grows the pool of `type` to at least `count` ships, heard, broken up and watched like the scenario's own (the benchmark's
+## load, M4-T01): a ship built here dies and leaves play like any other (M7-T59 fix). Returns how many were built.
 func ensure_pool(type: StringName, count: int) -> int:
 	var missing: int = count - ships.pool_size(type)
 	if missing <= 0:
 		return 0
 	var known: int = ships.pool_size()
 	var built: int = ships.prepare(type, missing)
+	debris.prepare(type)
 	for pooled: Combatant in ships.all_ships().slice(known):
 		audio.watch_ship(pooled)
+		director.watch(pooled)
 	return built
+
+
+## Grows the pool of `type` until `count` of it are free. Returns how many were built (0 when enough are free: a station
+## scenario sizes its pools at load, so a raid never builds).
+func ensure_free(type: StringName, count: int) -> int:
+	var short: int = count - ships.free_count(type)
+	if short <= 0:
+		return 0
+	return ensure_pool(type, ships.pool_size(type) + short)
 
 
 # The World anchors where the scenario says (M6-T09): on a place's rail with the scenario's origin beside it, or on an orbit,
@@ -487,6 +560,7 @@ func resolved_scenario_path() -> String:
 
 ## Back to the scenario start, at rest, with a full hull (Back / Backspace / `respawn`, and the respawn after a death).
 func respawn() -> void:
+	world.return_home()  # the start is measured on the home rail (M7-T71)
 	ship.process_mode = Node.PROCESS_MODE_INHERIT
 	ship.visible = true
 	ship.reset_to(Transform3D(_spawn_basis, world.universe_to_local(_spawn_position)))
@@ -531,10 +605,11 @@ func objectives() -> Array[Dictionary]:
 	return mission.objectives() if mission != null else ([] as Array[Dictionary])
 
 
-## The running mission holds the player's controls (`MissionApi.lock_controls`), or a gate jump does (M6-T14): the ship flies on
-## without them.
+## The running mission holds the player's controls (`MissionApi.lock_controls`), or a gate jump does (M6-T14), or the player is
+## on a Cobra bay's rack (M7-T08): the ship flies on without them.
 func controls_locked() -> bool:
-	return (mission != null and mission.api != null and mission.api.controls_locked) or (gates != null and gates.locks_controls())
+	return (mission != null and mission.api != null and mission.api.controls_locked) or (gates != null and gates.locks_controls()) \
+			or (launches != null and launches.locks_controls())
 
 
 # A cinematic hides the HUD and brings the letterbox in; the comms panel keeps its subtitles (D55).
@@ -615,7 +690,8 @@ func _build_hud_input() -> HudInput:
 	input.roster = wings.hud_roster()
 	input.roster_color = Factions.FRIENDLY_COLOR
 	input.ack_line = wings.ack_text()
-	input.prompt_line = gates.prompt_line()
+	input.prompt_line = interactions.prompt_line()
+	input.interact_progress = adapter.last.ui.interact_progress
 	if route_active():
 		input.status_line = instructor_path.status_line(instructor.display_name)
 		var waypoint: UniversePos = instructor_path.waypoint_position()
@@ -728,6 +804,10 @@ func set_paused(paused: bool) -> void:
 
 
 func _setup_input() -> void:
+	if input_source == null and DisplayServer.get_name() == "headless":
+		# No window, no pilot: a pad or key touched during a headless run must never steer a recorded or console-driven
+		# fight (M7-T10). The base source reads idle; tests and tools still give their own.
+		input_source = InputSource.new()
 	if input_source == null:
 		var source := GodotInputSource.new()
 		source.load_calibration(Settings.get_pad_calibration())
@@ -742,6 +822,7 @@ func _apply_input_settings() -> void:
 	adapter.stick_deadzone = float(Settings.get_value(&"stick_deadzone"))
 	adapter.invert_y = bool(Settings.get_value(&"invert_y"))
 	adapter.target_hold_s = float(Settings.get_value(&"target_hold_s"))
+	adapter.interact_hold_s = float(Settings.get_value(&"interact_hold_s"))
 	adapter.mouse_full_rate_px_s = float(Settings.get_value(&"mouse_full_rate_px_s"))
 	Engine.physics_jitter_fix = float(Settings.get_value(&"physics_jitter_fix"))
 	Engine.max_physics_steps_per_frame = int(Settings.get_value(&"physics_max_steps_per_frame"))  # M4-T24
@@ -775,6 +856,18 @@ func _spawn_props(props: Array) -> void:
 		world.spawn(buoy, entry["position"], Basis.IDENTITY, targets)
 		buoys.append(buoy)
 		director.watch_buoy(buoy)
+
+
+# The station's traffic the scenario asks for at the start (M7-T12): the maintenance bots are always there; the cargo scene, a Saturn
+# backed in at the cargo bay with its cargo pods (M7-T34), is what `station.cargo_ferry` adds.
+func _start_station_traffic(wanted: Dictionary) -> void:
+	var ferry: int = int(wanted.get("cargo_ferry", 0))
+	var station: Station = far_props.station if far_props != null else null
+	if ferry <= 0 or station == null or station.cargo_pods == null or station.cargo_pods.cargo == null:
+		return
+	var made: ConsoleResult = station.cargo_pods.cargo.load_scene(ferry)
+	if not made.ok:
+		push_warning("Main: the cargo ferry did not start: %s" % made.error)
 
 
 # The scenario's asteroid belts (M5-T29, D63), each laid out from its seed and built as static rows.
@@ -841,7 +934,8 @@ func _update_mouse_capture() -> void:
 
 
 func _update_bracket() -> void:
-	if hud.visible or ship == null:  # the HUD has its own box
+	# The HUD has its own box, and a cinematic shows neither (M7-T28: the square sat on the gate as its jump point formed).
+	if hud.visible or hud.cinematic or ship == null:
 		overlay.hide_bracket()
 		return
 	var readout: TargetReadout = ship.targeting.selected_readout()
@@ -965,6 +1059,6 @@ func _cmd_pausemenu(args: Dictionary) -> ConsoleResult:
 
 
 func _on_setting_changed(key: StringName, _value: Variant) -> void:
-	if key in [&"stick_deadzone", &"invert_y", &"target_hold_s", &"trigger_deadzone", &"mouse_full_rate_px_s", &"physics_jitter_fix",
+	if key in [&"stick_deadzone", &"invert_y", &"target_hold_s", &"interact_hold_s", &"trigger_deadzone", &"mouse_full_rate_px_s", &"physics_jitter_fix",
 			&"physics_max_steps_per_frame"]:
 		_apply_input_settings()

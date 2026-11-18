@@ -366,6 +366,60 @@ pub mod contact {
         closest_approach(rel_pos, rel_vel, INCOMING_HORIZON_S) < INCOMING_MISS_M
     }
 
+    /// The shooter (a body id) of a bolt of any side, not `own_body_id`'s, that passes within `miss_m` of a ship at `at`
+    /// in the incoming-fire horizon (M7-T29: a civilian is frightened by fire that comes close, whoever fires it); the
+    /// earliest bolt row among them, 0 for none. Walks the bolts near enough through the grid of their cells, as
+    /// `incoming_near` does.
+    #[allow(clippy::too_many_arguments)]
+    pub fn close_fire_from(
+        view: &View,
+        own_body_id: i64,
+        at: Vector3,
+        velocity: Vector3,
+        miss_m: f64,
+        bolt_cells: &[((i32, i32, i32), u32)],
+        cell_m: f64,
+        reach_max: f64,
+        candidates: &mut Vec<u32>,
+    ) -> i64 {
+        candidates.clear();
+        let pad = reach_max * (1.0 + PAD_REL) + PAD_M;
+        let lo = |v: f32| cell_of(f64::from(v) - pad, cell_m);
+        let hi = |v: f32| cell_of(f64::from(v) + pad, cell_m);
+        let (lx, ly, lz) = (lo(at.x), lo(at.y), lo(at.z));
+        let (hx, hy, hz) = (hi(at.x), hi(at.y), hi(at.z));
+        let span = |l: i32, h: i32| i64::from(h) - i64::from(l) + 1;
+        let columns = span(lx, hx).checked_mul(span(ly, hy));
+        if cell_m > 0.0 && reach_max.is_finite() && columns.is_some_and(|c| c <= bolt_cells.len() as i64) {
+            for cx in lx..=hx {
+                for cy in ly..=hy {
+                    let start = bolt_cells.partition_point(|e| e.0 < (cx, cy, lz));
+                    let end = bolt_cells.partition_point(|e| e.0 <= (cx, cy, hz));
+                    candidates.extend(bolt_cells[start..end].iter().map(|e| e.1));
+                }
+            }
+        } else {
+            candidates.extend(0..view.bolt_positions.len() as u32);
+        }
+        let mut first: Option<u32> = None;
+        for &i in candidates.iter() {
+            let b = i as usize;
+            let shooter = view.bolt_shooters[b];
+            if shooter == own_body_id || shooter == 0 || first.is_some_and(|f| f <= i) {
+                continue;
+            }
+            let rel_pos = sub(view.bolt_positions[b], at);
+            let rel_vel = sub(view.bolt_velocities[b], velocity);
+            let reach = f64::from(length(rel_vel)) * INCOMING_HORIZON_S + miss_m + 1.0;
+            if f64::from(length_squared(rel_pos)) <= reach * reach
+                && closest_approach(rel_pos, rel_vel, INCOMING_HORIZON_S) < miss_m
+            {
+                first = Some(i);
+            }
+        }
+        first.map_or(0, |i| view.bolt_shooters[i as usize])
+    }
+
     /// `incoming` over the bolts a grid of their cells (`sorted_cells_into`) puts within `reach_max` of `at`: the same count
     /// when no bolt can be incoming from farther than `reach_max` (the caller bounds it by the fastest bolt plus the
     /// ship's own speed, times the horizon, plus the miss distance). `candidates` is the caller's scratch.
@@ -1351,9 +1405,10 @@ pub mod pilot {
     use godot::builtin::Vector3;
 
     use crate::rows::Rows;
+    use crate::surface;
     use crate::v3::{
-        FORWARD, RIGHT, UP, add, clampf, cross, div_s, dot, length, length_squared, maxf, minf,
-        normalized, rotated, scale, sub,
+        FORWARD, RIGHT, UP, add, clampf, cross, div_s, dot, length, length_squared, limit_length, maxf,
+        minf, normalized, rotated, scale, sub,
     };
 
     // `AvoidanceMath`'s constants.
@@ -1392,6 +1447,9 @@ pub mod pilot {
     pub struct Avoided {
         pub v_des: Vector3,
         pub urgent: bool,
+        /// The ship is closing on a big hull faster than its side thrusters can stop it in the room left (M7-T10): it
+        /// must turn its nose and burn for `v_des` with everything.
+        pub pull_out: bool,
     }
 
     /// `AiContext.refresh`'s lists for one ship: the hostile ships (their places in the contact list), their offsets and
@@ -1415,8 +1473,33 @@ pub mod pilot {
         exempt_id: i64,
         v_des: Vector3,
     ) -> Avoided {
+        avoid_keeping_off(rows, ship, contacts, statics, exempt_id, &[], v_des)
+    }
+
+    /// How near a friendly ship a wingman keeps when nothing closes, m (M7-T38's separation: twice a Starfury's keep-off).
+    pub const KEEP_OFF_FRIEND_M: f64 = 50.0;
+
+    /// `avoid`, with the rows `friends` kept off as well (M7-T76, a wing forming up): the answer never closes on one the
+    /// ship could not stop short of `KEEP_OFF_FRIEND_M` (`closing_wall`), whatever the dodges round the others and a big
+    /// hull's slide asked for; a big hull's own walls still have the last word.
+    #[allow(clippy::too_many_arguments)]
+    pub fn avoid_keeping_off(
+        rows: &Rows,
+        ship: &Ship,
+        contacts: &[i32],
+        statics: &[i32],
+        exempt_id: i64,
+        friends: &[i32],
+        v_des: Vector3,
+    ) -> Avoided {
         let mut dodge = Vector3::new(0.0, 0.0, 0.0);
         let mut urgent = false;
+        let mut pull_out = false;
+        // The big hulls near enough to shape the wish: each one's outward normal here, how much of a way in it forbids
+        // (0..1), its velocity and how far it is. A handful at most (the station's frame and drum).
+        let mut walls: [(Vector3, f32, Vector3, f32); 6] = [(Vector3::ZERO, 0.0, Vector3::ZERO, 0.0); 6];
+        let mut wall_count = 0;
+        let mut hull_seen = false;
         let a_stop = maxf(ship.a_retro, 0.01);
         let turn_rate = maxf(minf(ship.rate_max_x, ship.rate_max_y), 0.01);
         let urgent_s = 0.5 * PI / turn_rate + URGENT_SETTLE_S;
@@ -1424,64 +1507,367 @@ pub mod pilot {
         let listed = contacts
             .iter()
             .filter_map(|&r| row(rows, r))
-            .filter(|&j| exempt_id == 0 || rows.ids[j] != exempt_id)
+            .filter(|&j| (exempt_id == 0 || rows.ids[j] != exempt_id) && !rows.is_nav(j))
             .chain(statics.iter().filter_map(|&r| row(rows, r)));
         for j in listed {
-            let c_position = rows.positions[j];
             let c_velocity = rows.velocities[j];
-            let reach = ship.radius + rows.radii[j] + MARGIN_M;
-            let s = sub(ship.position, c_position);
-            let w = sub(v_des, c_velocity);
-            let d = f64::from(length(s));
-            if d < reach {
-                let out_dir = if d > TIE_M {
-                    div_s(s, d as f32)
-                } else {
-                    tie_direction(w, ship.tie_hash)
+            if let Some(surface) = rows.surface(j) {
+                hull_seen = true;
+                // A big hull (M7-T06): each of its volumes near enough to matter is a threat at its nearest point, so a
+                // ship goes round the station's skin, not its 4 km bounding sphere, and keeps off a tunnel's walls.
+                let reach = ship.radius + MARGIN_M;
+                // Near the skin a wish that heads into it is turned along it (M7-T10), so a ship whose way is through
+                // the hull goes round instead of hanging beside it. The part used is the one the ship has least room to
+                // stop short of (M7-T38), not always the nearest: sliding along the drum, it may be falling at an arm.
+                let (urgent_skin, nearest_skin) = skin_points(rows, j, ship, c_velocity, reach, a_stop, urgent_s);
+                let (slid, pull, wall) = match urgent_skin {
+                    Some((near, d, falling)) => {
+                        slide_along(ship, c_velocity, near, d, falling, v_des, reach, a_stop, urgent_s)
+                    }
+                    None => (v_des, false, (Vector3::ZERO, 0.0, 0.0)),
                 };
-                let closing = -f64::from(dot(w, out_dir));
-                let push = (reach - d) / PUSH_S + maxf(closing, 0.0);
-                dodge = add(dodge, scale(out_dir, push as f32));
-                urgent = urgent || closing > MATCHED_MPS;
+                let near_wall = nearest_skin.map_or((Vector3::ZERO, 0.0, 0.0), |(near, d)| wall_of(ship, near, d, reach));
+                let ahead = wish_wall(rows, j, ship, c_velocity, v_des, reach, a_stop, urgent_s);
+                for (n, share, d) in [wall, near_wall, ahead] {
+                    if share > 0.0 && wall_count < walls.len() && (wall_count == 0 || walls[wall_count - 1].0 != n) {
+                        walls[wall_count] = (n, 1.0, c_velocity, d);
+                        wall_count += 1;
+                    }
+                }
+                pull_out = pull_out || pull;
+                urgent = urgent || pull;
+                dodge = add(dodge, sub(slid, v_des));
+                let w = sub(slid, c_velocity);
+                let speed = f64::from(length(w));
+                let relative = f64::from(length(sub(ship.velocity, c_velocity)));
+                let horizon = maxf(
+                    maxf(HORIZON_MIN_S, maxf(speed, relative) / a_stop),
+                    (2.0 * reach / a_side).sqrt() + URGENT_SETTLE_S,
+                );
+                // A turning hull is kept off where its parts sweep (the drum's arms come round at 40 m/s), not where
+                // they are this tick.
+                let within = reach + speed * horizon;
+                let mut meet = |near: Vector3, _: f64| {
+                    if let Some((push, hurry)) =
+                        threat(ship, near, c_velocity, 0.0, true, slid, a_stop, a_side, urgent_s)
+                    {
+                        dodge = add(dodge, push);
+                        urgent = urgent || hurry;
+                    }
+                };
+                if surface.spin_rad_s != 0.0 {
+                    surface::near_swept(rows, j, ship.position, within, 2.0 * reach, &mut meet);
+                } else {
+                    surface::near_volumes(rows, j, ship.position, within, &mut meet);
+                }
                 continue;
             }
-            let speed_sq = f64::from(length_squared(w));
-            if speed_sq < MATCHED_MPS * MATCHED_MPS {
+            let Some((push, hurry)) = threat(
+                ship,
+                rows.positions[j],
+                c_velocity,
+                rows.radii[j],
+                rows.is_static[j] || rows.is_civilian(j),
+                v_des,
+                a_stop,
+                a_side,
+                urgent_s,
+            ) else {
                 continue;
+            };
+            dodge = add(dodge, push);
+            urgent = urgent || hurry;
+        }
+        // Between two hulls (the drum under the spine) one's dodge must not lead into the other: what is left of a way
+        // in to each is taken out of the sum, twice round so the second does not undo the first.
+        // The nearest hull has the last word.
+        walls[..wall_count].sort_by(|a, b| b.3.total_cmp(&a.3));
+        let mut v_out = add(v_des, dodge);
+        // Near a big hull a stop short of a friend may have to wait for the urgent turn (M7-T38).
+        let friend_settle_s = if hull_seen { urgent_s } else { URGENT_SETTLE_S };
+        for _ in 0..2 {
+            for j in friends.iter().filter_map(|&r| row(rows, r)) {
+                let c_velocity = rows.velocities[j];
+                if let Some((away, _)) = closing_wall(
+                    ship.position,
+                    ship.velocity,
+                    rows.positions[j],
+                    c_velocity,
+                    KEEP_OFF_FRIEND_M,
+                    friend_settle_s,
+                    a_side,
+                ) {
+                    let into = -dot(sub(v_out, c_velocity), away);
+                    if into > 0.0 {
+                        v_out = add(v_out, scale(away, into));
+                    }
+                }
             }
-            let t_star = -f64::from(dot(s, w)) / speed_sq;
-            if t_star <= 0.0 {
-                continue; // opening
+            for &(n, share, c_velocity, _) in &walls[..wall_count] {
+                let into = -dot(sub(v_out, c_velocity), n);
+                if into > 0.0 {
+                    v_out = add(v_out, scale(n, into * share));
+                }
             }
-            let speed = speed_sq.sqrt();
-            let relative = f64::from(length(sub(ship.velocity, c_velocity)));
-            let mut horizon = maxf(HORIZON_MIN_S, maxf(speed, relative) / a_stop);
-            // A rock, a mine or a big civilian hull (M5-T16) is seen early enough to go round: at least the time a
-            // sideways burn takes to clear its reach.
-            if rows.is_static[j] || rows.is_civilian(j) {
-                horizon = maxf(horizon, (2.0 * reach / a_side).sqrt() + URGENT_SETTLE_S);
+        }
+        Avoided {
+            v_des: v_out,
+            urgent,
+            pull_out,
+        }
+    }
+
+    /// Whether a ship at `position` moving at `velocity` must not let its wish close on a body at `c_position` moving at
+    /// `c_velocity` (M7-T38, M7-T76): it is nearer than `keep_m` plus the room it needs to stop closing (a settle of
+    /// `settle_s`, then `a_stop`). When it must, the unit vector from the body to the ship and the distance.
+    pub fn closing_wall(
+        position: Vector3,
+        velocity: Vector3,
+        c_position: Vector3,
+        c_velocity: Vector3,
+        keep_m: f64,
+        settle_s: f64,
+        a_stop: f64,
+    ) -> Option<(Vector3, f64)> {
+        let off = sub(position, c_position);
+        let d = f64::from(length(off));
+        if d < 1e-3 {
+            return None;
+        }
+        let away = div_s(off, d as f32);
+        let closing_now = maxf(-f64::from(dot(sub(velocity, c_velocity), away)), 0.0);
+        let look = keep_m + closing_now * settle_s + closing_now * closing_now / (2.0 * a_stop);
+        if d >= look {
+            return None;
+        }
+        Some((away, d))
+    }
+
+    /// How far outside a big hull's keep-off distance a wish into it starts to turn along the skin, m.
+    pub const SLIDE_BAND_M: f64 = 60.0;
+    // A wish this much along the skin already is kept; under it (head on) the ship's seeded side picks the way round.
+    const SLIDE_HEAD_ON: f64 = 0.25;
+
+    // Big hull `j`'s skin seen from `ship` (M7-T38): the point it has least room to stop short of at its speed (a turn of
+    // `turn_s` and a burn at `a_stop` included; a face its way meets counts as well as nearest points), and the nearest
+    // point, each with its distance. Only points within the room its speed needs are looked at; ties go to the earlier.
+    fn skin_points(
+        rows: &Rows,
+        j: usize,
+        ship: &Ship,
+        c_velocity: Vector3,
+        reach: f64,
+        a_stop: f64,
+        turn_s: f64,
+    ) -> (Option<(Vector3, f64, f64)>, Option<(Vector3, f64)>) {
+        let relative = f64::from(length(sub(ship.velocity, c_velocity)));
+        let look = reach + SLIDE_BAND_M + relative * turn_s + relative * relative / (2.0 * a_stop);
+        let mut urgent: Option<(Vector3, f64, f64, f64)> = None;
+        let mut nearest: Option<(Vector3, f64)> = None;
+        let v = sub(ship.velocity, c_velocity);
+        let v_sq = f64::from(length_squared(v));
+        let mut consider = |near: Vector3, d: f64| {
+            let off = sub(ship.position, near);
+            // A part the ship's way passes wide of is no fall.
+            let t = if v_sq > 1e-9 { maxf(0.0, -f64::from(dot(off, v)) / v_sq) } else { 0.0 };
+            let passes_wide = f64::from(length(add(off, scale(v, t as f32)))) >= reach;
+            let falling = if f64::from(length(off)) < 1e-3 || (passes_wide && d > reach) {
+                0.0
+            } else {
+                -f64::from(dot(v, normalized(off)))
+            };
+            let mut room = d - reach;
+            if falling > MATCHED_MPS {
+                room -= falling * turn_s + falling * falling / (2.0 * a_stop);
             }
-            if t_star > horizon {
-                continue;
+            if urgent.is_none_or(|(_, _, _, r)| room < r) {
+                urgent = Some((near, d, falling, room));
             }
-            let offset = add(s, scale(w, t_star as f32));
-            let miss = f64::from(length(offset));
-            if miss >= reach {
-                continue;
+            if nearest.is_none_or(|(_, b)| d < b) {
+                nearest = Some((near, d));
             }
-            let side = if miss > TIE_M {
-                div_s(offset, miss as f32)
+        };
+        if rows.surface(j).is_some_and(|s| s.spin_rad_s != 0.0) {
+            surface::near_swept(rows, j, ship.position, look, 2.0 * reach, &mut consider);
+        } else {
+            surface::near_volumes(rows, j, ship.position, look, &mut consider);
+        }
+        // The face the ship's way meets inside the time it needs to turn and stop: a thin plate met face on, whose nearest
+        // point is an edge the way passes wide of.
+        let stop_s = turn_s + v_sq.sqrt() / a_stop;
+        if let Some((t, n)) = surface::path_entry(rows, j, ship.position, v, stop_s, reach) {
+            let falling = -f64::from(dot(v, n));
+            if falling > MATCHED_MPS {
+                let to_face = falling * t + reach;
+                let room = falling * t - (falling * turn_s + falling * falling / (2.0 * a_stop));
+                if urgent.is_none_or(|(_, _, _, r)| room < r) {
+                    urgent = Some((sub(ship.position, scale(n, to_face as f32)), to_face, falling, room));
+                }
+            }
+        }
+        (urgent.map(|(near, d, falling, _)| (near, d, falling)), nearest)
+    }
+
+    // The face of big hull `j` the wish `v_des` leads to with too little room to stop short of it at the wish's speed
+    // (M7-T38), as a wall: so a wish is turned off the skin before the ship is falling at it, not after. No wall (share 0)
+    // for a wish with room, or one that meets no face in the time a stop takes.
+    #[allow(clippy::too_many_arguments)]
+    fn wish_wall(
+        rows: &Rows,
+        j: usize,
+        ship: &Ship,
+        c_velocity: Vector3,
+        v_des: Vector3,
+        reach: f64,
+        a_stop: f64,
+        turn_s: f64,
+    ) -> (Vector3, f32, f32) {
+        let w = sub(v_des, c_velocity);
+        let speed = f64::from(length(w));
+        if speed <= MATCHED_MPS {
+            return (Vector3::ZERO, 0.0, 0.0);
+        }
+        let stop_s = turn_s + speed / a_stop;
+        let Some((t, n)) = surface::path_entry(rows, j, ship.position, w, stop_s, reach) else {
+            return (Vector3::ZERO, 0.0, 0.0);
+        };
+        let falling = -f64::from(dot(w, n));
+        let room = falling * t - (falling * turn_s + falling * falling / (2.0 * a_stop));
+        if falling <= MATCHED_MPS || room > 0.0 {
+            return (Vector3::ZERO, 0.0, 0.0);
+        }
+        (n, 1.0, (falling * t + reach) as f32)
+    }
+
+    // The wall skin point `near` at `d` makes for `ship`: its outward normal, how much of a way in it forbids (0..1) and
+    // its distance.
+    fn wall_of(ship: &Ship, near: Vector3, d: f64, reach: f64) -> (Vector3, f32, f32) {
+        let off = sub(ship.position, near);
+        if f64::from(length(off)) < 1e-3 {
+            return (Vector3::ZERO, 0.0, 0.0);
+        }
+        let share = clampf((reach + SLIDE_BAND_M - d) / SLIDE_BAND_M, 0.0, 1.0) as f32;
+        (normalized(off), share, d as f32)
+    }
+
+    // The wish `v_des` as skin point `near` at `d`, closing at `falling` (`skin_points`: none when the ship's way passes
+    // wide of it), lets it stand (M7-T10), and whether the ship must pull out. Within
+    // `SLIDE_BAND_M` of the keep-off distance `reach`, the part of the wish heading into the skin is turned along it. A ship
+    // falling at the skin faster than it can stop in the room left (a turn of `turn_s`, then `a_stop`) pulls out.
+    #[allow(clippy::too_many_arguments)]
+    fn slide_along(
+        ship: &Ship,
+        c_velocity: Vector3,
+        near: Vector3,
+        d: f64,
+        falling: f64,
+        v_des: Vector3,
+        reach: f64,
+        a_stop: f64,
+        turn_s: f64,
+    ) -> (Vector3, bool, (Vector3, f32, f32)) {
+        // Inside a turning hull's swept ring the point given marks the way out; inside a volume at rest there is none.
+        let off = sub(ship.position, near);
+        if f64::from(length(off)) < 1e-3 {
+            return (v_des, false, (Vector3::ZERO, 0.0, 0.0));
+        }
+        let n = normalized(off);
+        let pull = falling > MATCHED_MPS
+            && d - reach <= falling * turn_s + falling * falling / (2.0 * a_stop);
+        let soft = reach + SLIDE_BAND_M;
+        let share = if pull {
+            1.0
+        } else {
+            clampf((soft - d) / SLIDE_BAND_M, 0.0, 1.0) as f32
+        };
+        let wall = (n, share, d as f32);
+        // Pulling out, the stop comes first (M7-T38): the wish may change the ship's way along the skin by no more than
+        // the fall, so most of the thrust goes into stopping.
+        if pull {
+            let v = sub(ship.velocity, c_velocity);
+            let v_along = add(v, scale(n, falling as f32));
+            let w = sub(v_des, c_velocity);
+            let w_along = sub(w, scale(n, dot(w, n)));
+            let change = limit_length(sub(w_along, v_along), falling as f32);
+            return (add(c_velocity, add(v_along, change)), true, wall);
+        }
+        let w = sub(v_des, c_velocity);
+        let into = -f64::from(dot(w, n));
+        if into <= MATCHED_MPS || d >= soft {
+            return (v_des, pull, wall);
+        }
+        let speed = f64::from(length(w));
+        let mut along = add(w, scale(n, into as f32));
+        if f64::from(length(along)) < SLIDE_HEAD_ON * speed {
+            along = tie_direction(scale(n, -1.0), ship.tie_hash);
+        }
+        let along = scale(normalized(along), speed as f32);
+        (
+            add(c_velocity, add(scale(w, 1.0 - share), scale(along, share))),
+            pull,
+            wall,
+        )
+    }
+
+    // One threat's dodge for `AvoidanceMath.filter` and whether it is urgent: a body at `c_position` moving at `c_velocity`
+    // with `c_radius`; `early` sees it soon enough to go round (a rock, a mine, a big hull).
+    #[allow(clippy::too_many_arguments)]
+    fn threat(
+        ship: &Ship,
+        c_position: Vector3,
+        c_velocity: Vector3,
+        c_radius: f64,
+        early: bool,
+        v_des: Vector3,
+        a_stop: f64,
+        a_side: f64,
+        urgent_s: f64,
+    ) -> Option<(Vector3, bool)> {
+        let reach = ship.radius + c_radius + MARGIN_M;
+        let s = sub(ship.position, c_position);
+        let w = sub(v_des, c_velocity);
+        let d = f64::from(length(s));
+        if d < reach {
+            let out_dir = if d > TIE_M {
+                div_s(s, d as f32)
             } else {
                 tie_direction(w, ship.tie_hash)
             };
-            let x = sideways_speed(miss, speed * t_star, reach + AIM_PAST_M, speed, t_star);
-            dodge = add(dodge, scale(side, x as f32));
-            urgent = urgent || t_star < urgent_s;
+            let closing = -f64::from(dot(w, out_dir));
+            let push = (reach - d) / PUSH_S + maxf(closing, 0.0);
+            return Some((scale(out_dir, push as f32), closing > MATCHED_MPS));
         }
-        Avoided {
-            v_des: add(v_des, dodge),
-            urgent,
+        let speed_sq = f64::from(length_squared(w));
+        if speed_sq < MATCHED_MPS * MATCHED_MPS {
+            return None;
         }
+        let t_star = -f64::from(dot(s, w)) / speed_sq;
+        if t_star <= 0.0 {
+            return None; // opening
+        }
+        let speed = speed_sq.sqrt();
+        let relative = f64::from(length(sub(ship.velocity, c_velocity)));
+        let mut horizon = maxf(HORIZON_MIN_S, maxf(speed, relative) / a_stop);
+        // A rock, a mine or a big hull (M5-T16, M7-T06) is seen early enough to go round: at least the time a sideways
+        // burn takes to clear its reach.
+        if early {
+            horizon = maxf(horizon, (2.0 * reach / a_side).sqrt() + URGENT_SETTLE_S);
+        }
+        if t_star > horizon {
+            return None;
+        }
+        let offset = add(s, scale(w, t_star as f32));
+        let miss = f64::from(length(offset));
+        if miss >= reach {
+            return None;
+        }
+        let side = if miss > TIE_M {
+            div_s(offset, miss as f32)
+        } else {
+            tie_direction(w, ship.tie_hash)
+        };
+        let x = sideways_speed(miss, speed * t_star, reach + AIM_PAST_M, speed, t_star);
+        Some((scale(side, x as f32), t_star < urgent_s))
     }
 
     /// `FireLane.clear` over the rows `contacts`: true when nothing that must not be hit sits in the lane from `position`
@@ -1504,6 +1890,14 @@ pub mod pilot {
             if rows.ids[j] == target_id
                 || !protected(relation(rows, relations, j), rows.rigid[j], friendly_fire)
             {
+                continue;
+            }
+            if rows.surface(j).is_some() {
+                // A big hull (M7-T06) is in the lane where its volumes are, not across its bounding sphere.
+                let end = add(position, scale(dir, range_m as f32));
+                if surface::segment_enters(rows, j, position, end, CLEARANCE_M) {
+                    return false;
+                }
                 continue;
             }
             let rel = sub(rows.positions[j], position);

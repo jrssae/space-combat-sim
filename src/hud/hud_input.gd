@@ -77,6 +77,8 @@ var ack_line: String = ""
 ## A prompt for the player (M6-T14: `X: REQUEST JUMP` beside a targeted gate), "" for none. It shows on the acknowledgement's line
 ## while no acknowledgement does.
 var prompt_line: String = ""
+## How far the auto-track button's hold has run toward the targeted object's interaction (M7-T27), 0..1; 0 = no hold, no bar.
+var interact_progress: float = 0.0
 ## The route waypoint to mark (M3-T09: the instructor's next waypoint), World frame, and its label (`NAV 2`).
 var has_waypoint: bool = false
 var waypoint_position: Vector3 = Vector3.ZERO
@@ -90,3 +92,6 @@ var waypoint_key: String = ""
 ## The running mission's active objectives (M5-T05), `ObjectiveBook.active()`: `{id, text, primary, state}`; empty outside a
 ## mission.
 var objectives: Array[Dictionary] = []
+## The ships the mission has the player protect (M7-T54: the escorted civilian), each `{name, hull}` (hull 0..1, 0 once lost):
+## a named hull bar under the objectives.
+var escorts: Array[Dictionary] = []

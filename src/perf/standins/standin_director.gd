@@ -1,7 +1,8 @@
 class_name StandinDirector
 extends Node3D
 ## The battle's stand-ins in play (M4-T07, architecture §17.6): `World/Standins`, an identity container `Main` makes for the
-## bench runner. It holds the capitals, the asteroid field and the mine belts (the pull is the World frame's, M6-T07), steps
+## bench runner. It holds the capitals, the asteroids (the game's generated rocks, M7-T48) and the mine belts (the pull is
+## the World frame's, M6-T07), steps
 ## every capital's engines, guns, interceptors and beam lasers once per tick (priority -5: after the core's first sync and the AI drivers, before anything
 ## moves), keeps `missile_target` missiles in flight (M4-T12), steps the mines, runs the carriers' launch cycle through the
 ## runner's `launcher`, and counts the battle per entity type for the `perf` probe. Bench-only: no scenario spawns stand-ins.
@@ -67,7 +68,7 @@ var part_us: PackedInt64Array = PackedInt64Array()
 var ticks: int = 0
 
 var _capitals: Array[CapitalStandin] = []
-var _field: AsteroidField = null
+var _field: AsteroidBelt = null
 var _mines: MineStandin = null
 var _strike: Dictionary = {}  # capital -> [target body id, tick it was looked up]
 var _capital_turn: int = 0
@@ -196,7 +197,7 @@ func _step_native(native: NativeWeapons, delta: float, now_s: float, started_us:
 		tier_group_rolls = int(out[15])
 	mark_us = _mark(Part.MISSILES, mark_us)
 	if native.mines != null and is_instance_valid(native.mines):
-		detonations += native.mines.step_native(_tick, now_s)
+		detonations += native.mines.step_native(_tick, now_s, delta)
 	mark_us = _mark(Part.MINES, mark_us)
 	_finish(now_s, mark_us, started_us)
 
@@ -280,6 +281,9 @@ func add_mines(rows: Array[Dictionary], anchor: UniversePos) -> MineStandin:
 	world.spawn(_mines, anchor, Basis.IDENTITY, self)
 	_mines.add_to_group(WorldFrame.ANCHORED_GROUP)
 	_mines.build(rows)
+	var destruction: DestructionDirector = DestructionDirector.current()
+	if destruction != null:
+		destruction.watch_mines(_mines)  # a mine that goes off is drawn exploding (M7-T64)
 	return _mines
 
 
@@ -301,14 +305,15 @@ func missile_target_of(missile: Projectile) -> int:
 	return guide.target_id if guide != null else 0
 
 
-## The asteroid field: `rocks` (`offset` m from `anchor`, `radius` m), built into this world's physics space.
-func add_asteroids(rocks: Array[Dictionary], anchor: UniversePos) -> AsteroidField:
+## The asteroids: `rocks` (`offset` m from `anchor`, `radius` m bounding, `shape`, `basis`), the generated rocks built as a belt
+## is, into this world's physics space.
+func add_asteroids(rocks: Array[Dictionary], anchor: UniversePos) -> AsteroidBelt:
 	remove_asteroids()
-	_field = AsteroidField.new()
+	_field = AsteroidBelt.new()
 	_field.name = "Asteroids"
 	world.spawn(_field, anchor, Basis.IDENTITY, self)
 	_field.add_to_group(WorldFrame.ANCHORED_GROUP)
-	_field.build(rocks, world.get_world_3d().space, world)
+	_field.build_rocks(rocks, world.get_world_3d().space, world)
 	world.rebased.connect(_field.on_rebased)
 	world.drifted.connect(_field.on_rebased)
 	return _field
@@ -348,6 +353,24 @@ func clear() -> void:
 	counts.fill(0)
 
 
+## The run is over and its battle flies on (M7-T50): every capital and mine of a side in `game_factions` (bench faction ->
+## game faction) joins its game faction, as the run's fighters do, and the carriers stop launching (the run's churn).
+## Every capital turns mortal and a mine that goes off stays gone: the bench's invulnerability and re-laying only held the
+## count steady for the measured window (M7-T59).
+func keep_after_run(game_factions: Dictionary) -> void:
+	launcher = Callable()
+	for cap: CapitalStandin in _capitals:
+		if not is_instance_valid(cap):
+			continue
+		cap.damageable.invulnerable = false
+		if game_factions.has(cap.faction):
+			cap.set_faction(game_factions[cap.faction])
+	if _mines != null and is_instance_valid(_mines):
+		_mines.relays = false
+		_mines.change_factions(game_factions)
+	_native_dirty = true  # the native rows bound the old sides
+
+
 func capitals() -> Array[CapitalStandin]:
 	return _capitals
 
@@ -370,8 +393,9 @@ static func _flying(cap: CapitalStandin) -> bool:
 	return is_instance_valid(cap) and cap.is_inside_tree() and cap.can_process()
 
 
+## Rocks in the field (each one to three collision spheres).
 func asteroid_count() -> int:
-	return _field.count() if _field != null and is_instance_valid(_field) else 0
+	return _field.rock_count if _field != null and is_instance_valid(_field) else 0
 
 
 func turret_count() -> int:

@@ -41,6 +41,8 @@ pub const STRIKE_RETARGET_TICKS: i64 = 30;
 // `MineStandin`'s constants.
 pub const TRIGGER_RADIUS_M: f64 = 50.0;
 pub const BLAST_RADIUS_M: f64 = 100.0;
+/// `MineStandin.DRAWN_RADIUS_M`: the mine's body, what a touch or a blast must reach (M7-T64).
+pub const BODY_RADIUS_M: f64 = 3.0;
 /// `MineStandin.TRIGGER_TICKS`.
 pub const TRIGGER_TICKS: i64 = 3;
 // The mines' grid cell, m, and the room added round a hull's look so a mine the exact test takes is never missed.
@@ -50,6 +52,8 @@ const PAD_M: f64 = 1.0;
 // The core's `KIND_*` values the kernels tell apart.
 const KIND_MISSILE: u8 = 3;
 const KIND_BEAM: u8 = 8;
+// A station battery's pulse (M7-T41, `grid_kernels::KIND_INTERCEPT`): no interceptor shoots at one.
+pub(crate) const KIND_INTERCEPT: u8 = 9;
 
 /// A turret's role: a gun, an interceptor, or a beam emitter.
 pub const ROLE_GUN: u8 = 0;
@@ -211,9 +215,9 @@ pub fn muzzle(at: Vector3, capital_velocity: Vector3, axis: Vector3) -> (Vector3
     )
 }
 
-/// How many projectiles fly that an interceptor could take (every kind but beams).
+/// How many projectiles fly that an interceptor could take (every kind but beams and the station's pulses).
 pub fn shots_in_flight(bolts: &Bolts) -> usize {
-    bolts.kinds.iter().filter(|&&k| k != KIND_BEAM).count()
+    bolts.kinds.iter().filter(|&&k| k != KIND_BEAM && k != KIND_INTERCEPT).count()
 }
 
 /// How many guided missiles fly.
@@ -232,7 +236,7 @@ pub fn intercept_candidates(
     out.clear();
     let reach_sq = INTERCEPT_RANGE_M * INTERCEPT_RANGE_M;
     for p in 0..bolts.ids.len() {
-        if bolts.kinds[p] == KIND_BEAM || !flagged(hostile, bolts.faction_ix[p]) {
+        if bolts.kinds[p] == KIND_BEAM || bolts.kinds[p] == KIND_INTERCEPT || !flagged(hostile, bolts.faction_ix[p]) {
             continue;
         }
         let d_sq = f64::from(dist_sq(bolts.positions[p], at));
@@ -369,12 +373,84 @@ pub fn mine_hits(
     out: &mut Vec<u32>,
 ) {
     let reach = TRIGGER_RADIUS_M + hull_reach;
+    each_mine_near(mines, origin, hull_at, reach, |i| {
+        if i % TRIGGER_TICKS as usize != phase || !mines.alive[i] || !flagged(hostile, mines.faction_ix[i]) {
+            return;
+        }
+        let at = add(origin, mines.local[i]);
+        if f64::from(dist_sq(hull_at, at)) <= reach * reach {
+            out.push(i as u32);
+        }
+    });
+}
+
+/// The mines in play, of any side, whose body a hull's sphere (`hull_reach`) touched on its last move, from `hull_at - step`
+/// to `hull_at` (M7-T64: flying into a mine sets it off, whoever's it is). Every tick, not on the trigger's cadence, so a
+/// fast ship cannot pass through one between checks. Appends them to `out`.
+pub fn mine_touches(
+    mines: &Mines,
+    origin: Vector3,
+    hull_at: Vector3,
+    step: Vector3,
+    hull_reach: f64,
+    out: &mut Vec<u32>,
+) {
+    let reach = BODY_RADIUS_M + hull_reach;
+    let (sx, sy, sz) = (f64::from(step.x), f64::from(step.y), f64::from(step.z));
+    let half = 0.5 * (sx * sx + sy * sy + sz * sz).sqrt();
+    if !half.is_finite() {
+        return;
+    }
+    // The move's midpoint, looked round far enough to hold both ends.
+    let mid = Vector3::new(
+        (f64::from(hull_at.x) - 0.5 * sx) as f32,
+        (f64::from(hull_at.y) - 0.5 * sy) as f32,
+        (f64::from(hull_at.z) - 0.5 * sz) as f32,
+    );
+    each_mine_near(mines, origin, mid, reach + half, |i| {
+        if !mines.alive[i] {
+            return;
+        }
+        let at = add(origin, mines.local[i]);
+        if segment_point_dist_sq(hull_at, (sx, sy, sz), at) <= reach * reach {
+            out.push(i as u32);
+        }
+    });
+}
+
+/// A hull's move since the last tick as the mines see it: its World velocity `velocity` plus the frame's velocity off its
+/// anchor `frame_velocity`, since the mines drift with the anchor (M6-T08), over `delta` seconds.
+pub fn touch_step(velocity: Vector3, frame_velocity: Vector3, delta: f64) -> Vector3 {
+    let v = if frame_velocity == Vector3::ZERO { velocity } else { add(velocity, frame_velocity) };
+    Vector3::new(
+        (f64::from(v.x) * delta) as f32,
+        (f64::from(v.y) * delta) as f32,
+        (f64::from(v.z) * delta) as f32,
+    )
+}
+
+/// The mines in play whose body lies within the blast of a mine at `at` (M7-T64: a blast sets off the mines it reaches).
+/// Appends them to `out` in ascending order.
+pub fn mines_in_blast(mines: &Mines, origin: Vector3, at: Vector3, out: &mut Vec<u32>) {
+    let reach = BLAST_RADIUS_M + BODY_RADIUS_M;
+    let first = out.len();
+    each_mine_near(mines, origin, at, reach, |i| {
+        if mines.alive[i] && f64::from(dist_sq(at, add(origin, mines.local[i]))) <= reach * reach {
+            out.push(i as u32);
+        }
+    });
+    out[first..].sort_unstable();
+}
+
+// Calls `f` with every mine whose grid cell lies in the box `reach` round `centre` (padded so the exact test never misses
+// one), with the belt's node at `origin`.
+fn each_mine_near(mines: &Mines, origin: Vector3, centre: Vector3, reach: f64, mut f: impl FnMut(usize)) {
     let pad = reach.abs() * (1.0 + PAD_REL) + PAD_M;
     let rel = |h: f32, o: f32| f64::from(h) - f64::from(o);
     let (rx, ry, rz) = (
-        rel(hull_at.x, origin.x),
-        rel(hull_at.y, origin.y),
-        rel(hull_at.z, origin.z),
+        rel(centre.x, origin.x),
+        rel(centre.y, origin.y),
+        rel(centre.z, origin.z),
     );
     if !(rx.is_finite() && ry.is_finite() && rz.is_finite() && pad.is_finite()) {
         return;
@@ -388,21 +464,26 @@ pub fn mine_hits(
         let start = cells.partition_point(|e| e.0 < (cx, ly, i32::MIN));
         let end = cells.partition_point(|e| e.0 <= (cx, hy, i32::MAX));
         for e in &cells[start..end] {
-            let i = e.1 as usize;
-            if e.0.2 < lz
-                || e.0.2 > hz
-                || i % TRIGGER_TICKS as usize != phase
-                || !mines.alive[i]
-                || !flagged(hostile, mines.faction_ix[i])
-            {
-                continue;
-            }
-            let at = add(origin, mines.local[i]);
-            if f64::from(dist_sq(hull_at, at)) <= reach * reach {
-                out.push(e.1);
+            if e.0.2 >= lz && e.0.2 <= hz {
+                f(e.1 as usize);
             }
         }
     }
+}
+
+// The squared distance from `p` to the move from `end - step` to `end`, in 64 bits.
+fn segment_point_dist_sq(end: Vector3, step: (f64, f64, f64), p: Vector3) -> f64 {
+    let (ex, ey, ez) = (f64::from(end.x), f64::from(end.y), f64::from(end.z));
+    let (ax, ay, az) = (ex - step.0, ey - step.1, ez - step.2);
+    let (px, py, pz) = (f64::from(p.x) - ax, f64::from(p.y) - ay, f64::from(p.z) - az);
+    let len_sq = step.0 * step.0 + step.1 * step.1 + step.2 * step.2;
+    let t = if len_sq > 0.0 {
+        ((px * step.0 + py * step.1 + pz * step.2) / len_sq).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let (dx, dy, dz) = (px - t * step.0, py - t * step.1, pz - t * step.2);
+    dx * dx + dy * dy + dz * dz
 }
 
 /// Whether a row's hull can be set off and hurt by a mine: a rigid active hull, or a low-attention tier row (M4-T23: the
@@ -563,3 +644,5 @@ fn rotated(v: Vector3, axis: Vector3, angle: f32) -> Vector3 {
     )
 }
 
+#[cfg(test)]
+mod tests;

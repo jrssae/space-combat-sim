@@ -368,6 +368,27 @@ func test_the_rock_slab_clears_every_ship() -> void:
 	assert_eq(BenchLayout.rocks(BenchLayout.FURBALL, 50, 1).size(), 0, "the other layouts have no rocks")
 
 
+func test_each_rock_is_a_generated_shape_turned_its_own_way_from_its_own_hash() -> void:
+	var a: Array[Dictionary] = BenchLayout.rocks(BenchLayout.BATTLE, 100, 4)
+	var b: Array[Dictionary] = BenchLayout.rocks(BenchLayout.BATTLE, 100, 4)
+	var c: Array[Dictionary] = BenchLayout.rocks(BenchLayout.BATTLE, 100, 5)
+	var shapes: Dictionary = {}
+	var turned: int = 0
+	for i: int in a.size():
+		var basis: Basis = a[i]["basis"]
+		assert_true(basis.is_equal_approx(basis.orthonormalized()), "rock %d: a turn, no stretch" % i)
+		assert_eq(int(a[i]["shape"]), int(b[i]["shape"]), "rock %d: the same shape for the same seed" % i)
+		assert_eq(basis, b[i]["basis"] as Basis, "rock %d: and the same turn" % i)
+		shapes[int(a[i]["shape"]) % 16] = true
+		turned += 1 if not basis.is_equal_approx(Basis.IDENTITY) else 0
+	assert_gt(shapes.size(), 8, "the rocks spread over the shapes")
+	assert_eq(turned, a.size(), "every rock turned")
+	var other: int = 0
+	for i: int in mini(a.size(), c.size()):
+		other += 1 if int(a[i]["shape"]) != int(c[i]["shape"]) else 0
+	assert_gt(other, a.size() / 2.0, "another seed, other shapes")
+
+
 func test_the_battle_is_flown_in_a_low_orbit_of_a_body_of_the_data() -> void:
 	var g: Dictionary = BenchLayout.gravity_orbit(BenchLayout.BATTLE)
 	assert_eq(g["body"], &"epsilon_iii")
@@ -377,42 +398,133 @@ func test_the_battle_is_flown_in_a_low_orbit_of_a_body_of_the_data() -> void:
 	assert_true(BenchLayout.gravity_orbit(BenchLayout.SPREAD).is_empty())
 
 
-# --- mine belts (M4-T12) -----------------------------------------------------------------------------------------
+# --- mines (M4-T12, M7-T65) ------------------------------------------------------------------------------------
 
 
-func test_the_mine_belts_hold_the_mix_split_between_the_sides() -> void:
-	for layout: StringName in [BenchLayout.TYPICAL, BenchLayout.BATTLE]:
-		for n: int in [58, 100, 300]:
-			var mix: Dictionary = BenchLayout.mix(layout, n)
-			var mines: Array[Dictionary] = BenchLayout.mines(layout, n, 1)
-			assert_eq(mines.size(), int(mix["mines"]), "%s %d lays the mix's mines" % [layout, n])
-			var per_side: Dictionary = {}
-			for m: Dictionary in mines:
-				per_side[m["faction"]] = int(per_side.get(m["faction"], 0)) + 1
-			var sides: Array[StringName] = BenchLayout.sides(layout)
-			assert_eq(per_side.size(), sides.size(), "every side lays a belt")
-			for f: StringName in per_side:
-				assert_true(sides.has(f))
-				assert_almost_eq(float(per_side[f]), float(mines.size()) / float(sides.size()), float(mines.size()) * 0.05 + 2.0)
+const MINE_CASES: Array = [[&"typical", 58], [&"typical", 300], [&"battle", 50], [&"battle", 100], [&"battle", 300], [&"battle", 1000]]
+
+
+# The layout's mines by group index.
+func _mine_groups(mines: Array[Dictionary]) -> Dictionary:
+	var out: Dictionary = {}
+	for m: Dictionary in mines:
+		var g: int = int(m["group"])
+		if not out.has(g):
+			out[g] = []
+		(out[g] as Array).append(m)
+	return out
+
+
+func test_the_mines_hold_the_mix_split_between_the_sides() -> void:
+	for case: Array in MINE_CASES:
+		var layout: StringName = case[0]
+		var n: int = case[1]
+		var mix: Dictionary = BenchLayout.mix(layout, n)
+		var mines: Array[Dictionary] = BenchLayout.mines(layout, n, 1)
+		assert_eq(mines.size(), int(mix["mines"]), "%s %d lays the mix's mines" % [layout, n])
+		var per_side: Dictionary = {}
+		for m: Dictionary in mines:
+			per_side[m["faction"]] = int(per_side.get(m["faction"], 0)) + 1
+		var sides: Array[StringName] = BenchLayout.sides(layout)
+		assert_eq(per_side.size(), sides.size(), "%s %d: every side lays mines" % [layout, n])
+		for f: StringName in per_side:
+			assert_true(sides.has(f))
+			assert_lte(absi(int(per_side[f]) - mines.size() / sides.size()), 1, "%s %d: %s lays its share" % [layout, n, f])
 	assert_eq(BenchLayout.mines(BenchLayout.FURBALL, 50, 1).size(), 0, "a fighter layout lays none")
 
 
-func test_a_belt_lies_between_its_sides_fighters_and_capitals_clear_of_every_ship() -> void:
-	var layout: StringName = BenchLayout.BATTLE
-	var plan: Array[Dictionary] = BenchLayout.plan(layout, 100, 1)
-	var sides: Array[StringName] = BenchLayout.sides(layout)
-	for m: Dictionary in BenchLayout.mines(layout, 100, 1):
-		var side: int = sides.find(m["faction"])
-		var from_centre: Vector3 = (m["offset"] as Vector3) - (m["fight_centre"] as Vector3)
-		var flat := Vector3(from_centre.x, 0.0, from_centre.z)
-		assert_between(flat.length(), BenchLayout.MINE_BELT_RADIUS_M - BenchLayout.MINE_BELT_DEPTH_M,
-				BenchLayout.MINE_BELT_RADIUS_M + BenchLayout.MINE_BELT_DEPTH_M, "on the belt's ring")
-		assert_gt(flat.normalized().dot(BenchLayout.side_direction(side)), cos(deg_to_rad(46.0)), "on its own side's arc")
-		for e: Dictionary in plan:
-			var clear: float = float(e["radius"]) + MineStandin.TRIGGER_RADIUS_M
-			assert_gt((m["offset"] as Vector3).distance_to(e["offset"]), clear, "no ship starts inside a trigger")
+func test_mines_lie_in_groups_of_4_to_8_of_one_side_each_a_chain() -> void:
+	for case: Array in MINE_CASES:
+		var groups: Dictionary = _mine_groups(BenchLayout.mines(case[0], case[1], 1))
+		for g: int in groups:
+			var members: Array = groups[g]
+			assert_between(members.size(), BenchLayout.MINE_GROUP_MIN, BenchLayout.MINE_GROUP_MAX, "%s group %d's size" % [case, g])
+			# Every mine reached from the first through blasts: a chain goes off whole.
+			var reached: Array[int] = [0]
+			var k: int = 0
+			while k < reached.size():
+				var at: Vector3 = members[reached[k]]["offset"]
+				for j: int in members.size():
+					if not reached.has(j) and at.distance_to(members[j]["offset"]) <= MineStandin.BLAST_RADIUS_M:
+						reached.append(j)
+				k += 1
+			assert_eq(reached.size(), members.size(), "%s group %d goes off as one chain" % [case, g])
+			for m: Dictionary in members:
+				assert_eq(m["faction"], members[0]["faction"], "%s group %d is one side's" % [case, g])
 
 
-func test_mine_belts_are_seeded() -> void:
+func test_no_blast_reaches_from_one_group_to_another() -> void:
+	assert_gt(BenchLayout.MINE_GROUP_GAP_M, 2.0 * MineStandin.BLAST_RADIUS_M, "more than a blast and a margin")
+	for case: Array in MINE_CASES:
+		var mines: Array[Dictionary] = BenchLayout.mines(case[0], case[1], 1)
+		var nearest: float = INF
+		for i: int in mines.size():
+			var at: Vector3 = mines[i]["offset"]
+			var g: int = int(mines[i]["group"])
+			for j: int in range(i + 1, mines.size()):
+				if int(mines[j]["group"]) != g:
+					nearest = minf(nearest, at.distance_to(mines[j]["offset"]))
+		assert_gte(nearest, BenchLayout.MINE_GROUP_GAP_M, "%s: the nearest mines of two groups %.0f m apart" % [case, nearest])
+
+
+func test_the_mines_lie_in_the_rock_slab_on_the_fights_approaches_clear_of_ships_and_rocks() -> void:
+	for case: Array in MINE_CASES:
+		var layout: StringName = case[0]
+		var n: int = case[1]
+		var slab: AABB = BenchLayout.rock_slab(layout, n)
+		var plan: Array[Dictionary] = BenchLayout.plan(layout, n, 1)
+		var rocks: Array[Dictionary] = BenchLayout.rocks(layout, n, 1)
+		var groups: Dictionary = _mine_groups(BenchLayout.mines(layout, n, 1))
+		var fights: Dictionary = {}
+		var bad: Array[String] = []
+		for g: int in groups:
+			var first: Dictionary = (groups[g] as Array)[0]
+			var centre: Vector3 = first["fight_centre"]
+			fights[centre] = true
+			assert_true(slab.has_point(centre), "%s group %d serves a fight in the slab" % [case, g])
+			# The first mine on another side's approach, where the fighters were measured to fight.
+			var from_centre: Vector3 = (first["offset"] as Vector3) - centre
+			var best: float = 0.0
+			for side: int in BenchLayout.sides(layout).size():
+				if side != int(first["side"]):
+					best = maxf(best, from_centre.dot(BenchLayout.side_direction(side)))
+			assert_between(best, BenchLayout.MINE_ALONG_MIN_M, BenchLayout.MINE_ALONG_MAX_M, "%s group %d on an approach" % [case, g])
+			for m: Dictionary in groups[g]:
+				var at: Vector3 = m["offset"]
+				if not slab.has_point(at):
+					bad.append("group %d outside the rock slab" % g)
+				if at.length() <= MineStandin.TRIGGER_RADIUS_M:
+					bad.append("group %d inside the player's trigger" % g)
+				for e: Dictionary in plan:
+					if at.distance_to(e["offset"]) <= float(e["radius"]) + MineStandin.TRIGGER_RADIUS_M:
+						bad.append("group %d: a ship starts inside a trigger" % g)
+				for r: Dictionary in rocks:
+					if at.distance_to(r["offset"]) <= float(r["radius"]) + MineStandin.DRAWN_RADIUS_M:
+						bad.append("group %d: a mine inside a rock" % g)
+		assert_eq(bad, [] as Array[String], "%s: every mine in the slab, clear of ships and rocks" % [case])
+		assert_eq(fights.size(), BenchLayout.fights_in_slab(layout, n), "%s: every fight in the slab has mines" % [case])
+
+
+func test_the_group_sizes_add_up_to_each_sides_share() -> void:
+	var rng := RandomNumberGenerator.new()
+	for count: int in [100, 101, 300, 1000, 1999]:
+		for side_count: int in [2, 4]:
+			var specs: Array[Vector2i] = BenchLayout.mine_groups(count, side_count, rng)
+			var per_side := PackedInt32Array()
+			per_side.resize(side_count)
+			var sizes: Dictionary = {}
+			for spec: Vector2i in specs:
+				per_side[spec.x] += spec.y
+				sizes[spec.y] = true
+				assert_between(spec.y, BenchLayout.MINE_GROUP_MIN, BenchLayout.MINE_GROUP_MAX)
+			for side: int in side_count:
+				assert_eq(per_side[side], count / side_count + (1 if side < count % side_count else 0), "%d over %d" % [count, side_count])
+			assert_gt(sizes.size(), 2, "the sizes vary")
+
+
+func test_mines_are_seeded() -> void:
 	assert_eq(BenchLayout.mines(BenchLayout.TYPICAL, 58, 3), BenchLayout.mines(BenchLayout.TYPICAL, 58, 3))
 	assert_ne(BenchLayout.mines(BenchLayout.TYPICAL, 58, 3), BenchLayout.mines(BenchLayout.TYPICAL, 58, 4))
+	var rocks: Array[Dictionary] = BenchLayout.rocks(BenchLayout.BATTLE, 100, 2)
+	assert_eq(BenchLayout.mines(BenchLayout.BATTLE, 100, 2, rocks), BenchLayout.mines(BenchLayout.BATTLE, 100, 2),
+			"the run's rocks are the layout's")

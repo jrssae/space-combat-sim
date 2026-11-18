@@ -21,6 +21,8 @@ var factions: Array[StringName]:
 		return out
 ## Each contact's broadcast range (`Targetable.broadcast_range_m`), m: 0 for none, `INF` for everywhere.
 var reach := PackedFloat64Array()
+## 1 for a civilian hull (its role, not its faction, M7-T56), else 0.
+var civilian := PackedByteArray()
 
 
 func size() -> int:
@@ -43,6 +45,7 @@ static func gather(tree: SceneTree, own_body: Node3D, sensor_range_m: float) -> 
 	out.positions = rows[1]
 	out.faction_ix = rows[2]
 	out.reach = rows[3]
+	out.civilian = rows[4]
 	out.faction_names.assign(sim.core.factions())
 	return out
 
@@ -59,4 +62,5 @@ static func from_infos(infos: Array[TargetInfo]) -> RadarContacts:
 			out.faction_names.append(info.faction)
 		out.faction_ix.append(k)
 		out.reach.append(info.broadcast_range_m)
+		out.civilian.append(1 if info.role == Targetable.Role.CIVILIAN else 0)
 	return out

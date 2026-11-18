@@ -147,3 +147,17 @@ func test_a_tap_with_one_enemy_none_or_only_unknowns() -> void:
 	assert_eq(TargetCategories.tap_pick(far, Vector3.ZERO, OWN, 8), 7)
 	far.append(_info(9, Vector3(0.0, 0.0, -4000.0)))
 	assert_eq(TargetCategories.tap_pick(far, Vector3.ZERO, OWN, 8), 9, "an identified enemy comes before any unknown")
+
+
+func test_places_to_act_on_lead_the_navigation_ring() -> void:
+	# M7-T27: five buoys within 3 km must not push a gate 50 km out off the ring of five.
+	var candidates: Array[TargetInfo] = []
+	for i: int in 5:
+		candidates.append(_info(20 + i, Vector3(0.0, 0.0, -500.0 * float(i + 1)), Factions.NEUTRAL, Targetable.Role.BEACON, 1.0e6))
+	var gate: TargetInfo = _info(30, Vector3(0.0, 0.0, -50000.0), Factions.NEUTRAL, Targetable.Role.BEACON, 1.0e6)
+	gate.interaction_kind = &"jump"
+	candidates.append(gate)
+	var ring: Array[int] = _ids(TargetCategories.nearest(candidates, C.NAVIGATION, Vector3.ZERO, OWN, 5))
+	assert_eq(ring, [30, 20, 21, 22, 23] as Array[int], "the gate first, then the nearest buoys")
+	var sorted: Array[int] = _ids(TargetCategories.sort_all(candidates, Vector3.ZERO, OWN)[C.NAVIGATION])
+	assert_eq(sorted[0], 30, "the full sort agrees")

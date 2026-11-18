@@ -1,6 +1,6 @@
 class_name TurretStandin
 extends Node3D
-## A capital's turret stand-in (M4-T07, Q19): bench-only, replaced by M12's turrets, AI gunners and defence grid. A `GUN`
+## A capital's turret stand-in (M4-T07, Q19): bench-only, replaced by M12's turrets, AI gunners and defense grid. A `GUN`
 ## takes the nearest hostile fighter within `RANGE_M` from the contact scan, turns its gun axis toward the lead point at a
 ## limited rate and fires pulse-cannon bolts through a `PulseCannonGate` only while the aim is inside `GATE_RAD`. An
 ## `INTERCEPTOR` shoots down a hostile projectile within `INTERCEPT_RANGE_M` at its own rate (no bolt of its own): the nearest

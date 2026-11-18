@@ -5,7 +5,9 @@ extends RefCounted
 ## A key is `{t, position, look_at, fov?}`: `t` is seconds from the start of the shot (increasing), `fov` degrees (default
 ## `DEFAULT_FOV_DEG`), `roll` degrees about the view axis (default 0, positive turns the picture clockwise). `position` and `look_at` are points: `{actor: <name>, offset?: [x, y, z]}` is an offset in that actor's own
 ## frame (Godot axes: -z is its nose, +y its top), `{origin: [x, y, z]}` is a universe offset from the scenario's origin, kept in
-## 64-bit. The shot lasts until its last key.
+## 64-bit. `up` (optional) is the picture's up as `{actor: <name>, direction: [x, y, z]}` in that actor's frame, so a shot of something
+## turning or tilted stays upright against it (M7-T08: a Cobra arm on the turning drum); without it the world's up. The shot lasts
+## until its last key.
 ##
 ## Pure: `pose_at` is handed the actors' poses and the origin's local position by the caller, every frame, and keeps nothing
 ## between calls, so a shot is rebase-proof by construction: shift every pose and the pose moves by the same shift. The camera
@@ -35,6 +37,9 @@ class Frame:
 	var look_at: Point = null
 	var fov: float = DEFAULT_FOV_DEG
 	var roll: float = 0.0
+	## The picture's up: a direction in `up_actor`'s frame; empty actor for the world's up.
+	var up_actor: String = ""
+	var up_direction: Vector3 = Vector3.UP
 
 
 ## The camera for one instant: a World-local transform (-z looks at the aim point) and the field of view in degrees.
@@ -88,6 +93,15 @@ static func from_dict(shot_id: StringName, data: Variant) -> Dictionary:
 		if not _is_number(roll) or absf(float(roll)) > 180.0:
 			return _failure("%s.roll must be degrees between -180 and 180" % key_where)
 		key.roll = float(roll)
+		if entry.has("up"):
+			var up: Variant = entry["up"]
+			var direction: Variant = _triple((up as Dictionary).get("direction")) if up is Dictionary else null
+			if not (up is Dictionary) or not ((up as Dictionary).get("actor") is String) \
+					or ((up as Dictionary)["actor"] as String).strip_edges().is_empty() or direction == null \
+					or Vector3(direction[0], direction[1], direction[2]).is_zero_approx():
+				return _failure("%s.up must be {actor: <name>, direction: [x, y, z]} (not zero)" % key_where)
+			key.up_actor = ((up as Dictionary)["actor"] as String).strip_edges()
+			key.up_direction = Vector3(direction[0], direction[1], direction[2]).normalized()
 		shot.keys.append(key)
 	shot.duration_s = shot.keys[-1].t
 	return {"ok": true, "shot": shot}
@@ -100,6 +114,8 @@ func actors() -> PackedStringArray:
 		for point: Point in [key.position, key.look_at]:
 			if not point.actor.is_empty() and not out.has(point.actor):
 				out.append(point.actor)
+		if not key.up_actor.is_empty() and not out.has(key.up_actor):
+			out.append(key.up_actor)
 	return out
 
 
@@ -121,7 +137,8 @@ func pose_at(t: float, actor_pose: Callable, origin_to_local: Callable) -> Pose:
 	var position: Vector3 = _curve(i, u, p1 as Vector3, p2 as Vector3, actor_pose, origin_to_local)
 	var eased: float = smoothstep(0.0, 1.0, u)
 	var pose := Pose.new()
-	pose.transform = _looking(position, (l1 as Vector3).lerp(l2 as Vector3, eased))
+	var up: Vector3 = _up_of(a, actor_pose).lerp(_up_of(b, actor_pose), eased)
+	pose.transform = _looking(position, (l1 as Vector3).lerp(l2 as Vector3, eased), up if not up.is_zero_approx() else _up_of(a, actor_pose))
 	var roll: float = lerpf(a.roll, b.roll, eased)
 	if roll != 0.0:
 		# The camera turns the other way about its view axis, so the picture turns clockwise.
@@ -156,13 +173,25 @@ func _curve(i: int, u: float, p1: Vector3, p2: Vector3, actor_pose: Callable, or
 	return p1.cubic_interpolate_in_time(p2, p0 as Vector3, p3 as Vector3, u, t2 - t1, t0 - t1, t3 - t1)
 
 
-# A camera at `from` aiming at `at`, kept level with the world's up unless it looks straight up or down.
-static func _looking(from: Vector3, at: Vector3) -> Transform3D:
+# A key's up in the World: its actor's direction, or the world's up (also when the actor is gone).
+static func _up_of(key: Frame, actor_pose: Callable) -> Vector3:
+	if key.up_actor.is_empty():
+		return Vector3.UP
+	var pose: Variant = actor_pose.call(key.up_actor)
+	if pose == null:
+		return Vector3.UP
+	return ((pose as Transform3D).basis * key.up_direction).normalized()
+
+
+# A camera at `from` aiming at `at`, kept level with `up` unless it looks straight along it.
+static func _looking(from: Vector3, at: Vector3, up: Vector3 = Vector3.UP) -> Transform3D:
 	var direction: Vector3 = at - from
 	if direction.length_squared() < 1e-8:
 		return Transform3D(Basis.IDENTITY, from)
-	var up: Vector3 = Vector3.UP if absf(direction.normalized().dot(Vector3.UP)) < 0.999 else Vector3.BACK
-	return Transform3D(Basis.looking_at(direction, up), from)
+	var level: Vector3 = up.normalized()
+	if absf(direction.normalized().dot(level)) >= 0.999:
+		level = Vector3.BACK if absf(direction.normalized().dot(Vector3.BACK)) < 0.999 else Vector3.RIGHT
+	return Transform3D(Basis.looking_at(direction, level), from)
 
 
 static func _place(point: Point, actor_pose: Callable, origin_to_local: Callable) -> Variant:

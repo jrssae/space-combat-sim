@@ -13,6 +13,10 @@ extends Node
 ## lines the script says (D53); a dialog file that does not validate stops the mission from starting, and so does a camera shot in
 ## the scenario's `cinematics` that does not (D55).
 ##
+## While the script's opening runs with the controls held (`MissionApi.opening_skippable`), X (or its keys) splits into a tap and
+## a hold, as on a target that offers an interaction, and a completed hold skips the opening (M7-T54); a `SkipPrompt` says so.
+## The ships the script names with `show_hull` get a hull bar on the HUD.
+##
 ## Console (`MissionConsole`): provider `mission`, `mission [status|skip|goto <step>|objectives|journal]`.
 
 ## The mission ended (success or not); `result` as `MissionApi.result` plus the player's counters.
@@ -34,6 +38,8 @@ var stage: MissionStage = null
 var jumps: JumpPointPool = null
 ## The subtitles and squelches of the lines the script says (D53).
 var comms: CommsPanel = null
+## The opening's `HOLD X: SKIP` and its bar (M7-T54).
+var skip_prompt: SkipPrompt = null
 ## Counts the player's shots, hits, kills and wing losses for the debrief.
 var recorder: DebriefRecorder = null
 ## `DEBRIEF_DELAY_S`; tests shorten it.
@@ -90,6 +96,8 @@ func _ready() -> void:
 	comms = CommsPanel.new()
 	add_child(comms)
 	comms.bind(api.dialog, api.dialog_book, main.audio)
+	skip_prompt = SkipPrompt.new()
+	add_child(skip_prompt)
 	api.ended.connect(_on_ended)
 	main.director.player_destroyed.connect(_on_player_destroyed)
 	recorder = DebriefRecorder.new()
@@ -114,11 +122,25 @@ func _exit_tree() -> void:
 func _physics_process(delta: float) -> void:
 	if api != null:
 		api.tick(delta, PlayerActions.from_command(main.adapter.last))
+	_show_skip_prompt()
 	if _debrief_in_s < INF:
 		_debrief_in_s -= delta
 		if _debrief_in_s <= 0.0:
 			_debrief_in_s = INF
 			_open_debrief()
+
+
+## Whether a hold of X would skip the opening now (`Main` asks before it samples the pad, so X splits into tap and hold).
+func opening_skip_offered() -> bool:
+	return api != null and api.opening_skippable()
+
+
+## This tick's X (`ui`, sampled while the skip was offered): a completed hold skips the opening; the prompt shows the hold.
+func take_opening_hold(ui: UiCommand) -> void:
+	if skip_prompt != null:
+		skip_prompt.progress = ui.interact_progress
+	if ui.interact:
+		api.skip_opening()
 
 
 ## Every objective of the running mission (`ObjectiveBook.snapshot`): the pause menu's right panel and the debrief.
@@ -132,6 +154,8 @@ func fill_hud_input(input: HudInput) -> void:
 	if api == null:
 		return
 	input.objectives = api.book.active()
+	for ship_name: String in api.hull_bars:
+		input.escorts.append({"name": ship_name, "hull": stage.hull_fraction(ship_name)})
 	if not input.has_waypoint:
 		input.waypoint_key = "mission:%d" % api.waypoint_serial if api.waypoint_serial > 0 else ""
 		var at: Variant = stage.local_position(api.waypoint_name) if not api.waypoint_name.is_empty() else null
@@ -142,6 +166,16 @@ func fill_hud_input(input: HudInput) -> void:
 			input.waypoint_id = stage.target_id(api.waypoint_name)
 	if api.has_ended():
 		input.status_line = result_line(api.result)
+
+
+# The skip prompt while the opening can be skipped, naming the live bindings; hidden otherwise.
+func _show_skip_prompt() -> void:
+	if skip_prompt == null:
+		return
+	var offered: bool = opening_skip_offered()
+	skip_prompt.text = SkipPrompt.prompt_text(BindingNames.of_action(InputAdapter.AUTOTRACK)) if offered else ""
+	if not offered:
+		skip_prompt.progress = 0.0
 
 
 ## The HUD's line for a result: `MISSION COMPLETE`, or `MISSION FAILED - PLAYER DESTROYED`.

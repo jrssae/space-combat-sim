@@ -26,6 +26,9 @@ var broadcast_range_m: float = 0.0
 
 ## What the target is to a pilot picking from a menu (`Targetable.Role`, M5-T25): a ship, a civilian ship or a nav beacon.
 var role: int = 0
+## What a long hold of X does to it (`TargetInteraction.kind`, M7-T27), or empty: a navigation target that offers one (a bay, the
+## gate) is picked from the target menu as the target, a plain nav buoy as the waypoint.
+var interaction_kind: StringName = &""
 
 ## How many have been built in this process (M4-T02): a work count for tests and profiling, never gameplay.
 static var built_count: int = 0

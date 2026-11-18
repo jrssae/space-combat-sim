@@ -1,7 +1,7 @@
 class_name FarDots
 extends MultiMeshInstance3D
-## Every far AI ship as a point (M4-T11, architecture §17.10 and §14.4's last level). A ship past `settings.far_ship_dot_m` from
-## the camera hides its hull, plumes and markers (its `LodSwitcher` decides, `Ship.set_far_dot`) and is drawn here instead: one
+## Every far AI ship as a point (M4-T11, architecture §17.10 and §14.4's last level). A ship whose bounding radius is under
+## `settings.far_ship_dot_px` on screen (M7-T26) hides its hull, plumes and markers (its `LodSwitcher` decides, `Ship.set_far_dot`) and is drawn here instead: one
 ## instance of the world's one multimesh, so every far ship together is one draw call. A dot is the hull's mean paint at the hull's
 ## angular size, never under a pixel, and dims below that like a running light (`far_ship_dot.gdshader`). The paint is the textured
 ## mesh's mean albedo from the manifest (M4-T30d).
@@ -12,10 +12,11 @@ extends MultiMeshInstance3D
 ## It is shiftable, so a rebase moves the written dots with everything else at once (no frame draws one at its old place); it then
 ## goes back to the origin and moves the dots instead, so its own offset never grows. A parked or freed ship draws none. Visual only.
 ##
-## Tier rows (M4-T23, §17.14): the fighters in the low-attention tier have no node to draw; their rows in the native core are a
+## Tier rows (M4-T23, §17.14): the ships in the low-attention tier have no node to draw; their rows in the native core are a
 ## second source, written by the core into the same buffer after the ships' dots each frame (paint and radius set when the
 ## ship was demoted, `TierDirector`), so every far ship, near or tier, is still this one draw call. A promotion parks no node and
-## takes the row in the same tick, so a ship is drawn by its body or its row, never both and never neither.
+## takes the row in the same tick, so a ship is drawn by its body or its row, never both and never neither. A row with a far hull
+## (`FarHulls`) is a dot only while it is a few pixels across, by the same rule as a ship (M7-T26, `view_rows`).
 
 const NODE_NAME: String = "FarDots"
 const SHADER: Shader = preload("res://assets/shaders/far_ship_dot.gdshader")
@@ -161,6 +162,8 @@ func refresh() -> void:
 			_forget(i)
 	var sim: SimCore = SimCore.for_tree(get_tree()) if is_inside_tree() else null
 	var core: Object = sim.core if sim != null else null
+	if core != null:
+		view_rows(self, core)
 	var tier_dots: int = int(core.tier_dot_count()) if core != null else 0
 	_ensure_slots(_ships.size() + tier_dots)
 	var to_local: Transform3D = global_transform.affine_inverse()
@@ -222,7 +225,7 @@ func _forget(at: int) -> void:
 
 func _upload() -> void:
 	if multimesh.instance_count > 0:
-		RenderingServer.multimesh_set_buffer(multimesh.get_rid(), _buffer)
+		MultiMeshUpload.set_buffer(multimesh, _buffer)
 	multimesh.visible_instance_count = _shown + tier_shown
 
 
@@ -235,6 +238,16 @@ func _on_rebased(offset: Vector3) -> void:
 		_buffer[base + 7] -= offset.y
 		_buffer[base + 11] -= offset.z
 	_upload()
+
+
+## Tells the core which tier rows with a far hull are dots for this frame's camera (M7-T26), in the rows' World-local frame.
+## `FarDots` and `FarHulls` both ask before they draw, so neither depends on which refreshes first (asking twice decides the same).
+static func view_rows(from: Node3D, core: Object) -> void:
+	var camera: Camera3D = from.get_viewport().get_camera_3d() if from.get_viewport() != null else null
+	var world := from.get_parent() as Node3D
+	if camera == null or world == null:
+		return
+	core.tier_set_view(world.global_transform.affine_inverse() * camera.global_position, LodSwitcher.dot_scale(camera))
 
 
 # The ship's hull paint (its asset's manifest), lit as a hull's lit side, in linear light.

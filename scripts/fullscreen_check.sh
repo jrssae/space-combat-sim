@@ -47,7 +47,7 @@ BENCH_S=$(( WARMUP + WINDOW + 30 ))
 EXEC="bench ${LAYOUT} ${N} ${BENCH_S} warmup=0 seed=${SEED} label=${LABEL}/bench ${FULLSCREEN_BENCH_OPTS:-}"
 [[ -n "${EXTRA}" ]] && EXEC="${EXEC}; ${EXTRA}"
 status=0
-flock "${GPU_LOCK}" timeout $(( WARMUP + WINDOW + 240 )) "${GODOT}" --path . --resolution "${RES}" --fullscreen --disable-vsync \
+"${GODOT_LOCK_SH}" read --gpu --bench -- timeout $(( WARMUP + WINDOW + 240 )) "${GODOT}" --path . --resolution "${RES}" --fullscreen --disable-vsync \
     -s res://scripts/measure_fight.gd -- scene=quiet camera=chase warmup="${WARMUP}" window="${WINDOW}" label="${LAYOUT}_${N}" \
     exec="${EXEC}" scale3d="${SCALE}" pause_at="${PAUSE_AT}" shot="${OUT}/fullscreen.png" > "${LOG}" 2>&1 || status=$?
 grep -E '^\[measure\]|^\[bench\]|SCRIPT ERROR' "${LOG}" || true

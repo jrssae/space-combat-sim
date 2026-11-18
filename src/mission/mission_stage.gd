@@ -32,6 +32,8 @@ var jumps: JumpPointPool = null
 var gates: JumpgateHost = null
 ## Plays the mission's cinematics (D55).
 var camera_rig: CameraRig = null
+## Cobra-bay launches (M7-T08); null in a stage without a `Main`.
+var launches: LaunchDirector = null
 var system_id: StringName = &"local"
 ## Mixed into spawned pilots' brain seeds (the scenario's seed: the same seed flies the same mission).
 var seed_value: int = 0
@@ -48,6 +50,7 @@ func setup(main: Main, p_jumps: JumpPointPool) -> void:
 	jumps = p_jumps
 	gates = main.gates
 	camera_rig = main.camera_rig
+	launches = main.launches
 	system_id = main.world.origin.system_id
 	seed_value = main.scenario_seed
 	if player != null:
@@ -105,6 +108,8 @@ func place(actor: String, at: UniversePos) -> void:
 	var node: Node3D = _node_of(MissionWorld.key(actor))
 	if node == null:
 		return
+	if node == world.focus:
+		world.return_home()  # the player's mission places are measured on the home rail (M7-T71)
 	var local: Vector3 = world.universe_to_local(at)
 	var ship := node as Ship
 	if ship != null:
@@ -305,6 +310,32 @@ func send(ship_name: String, target_name: String) -> bool:
 	return true
 
 
+## Starts the player's launch from wing `wing`'s door `door`, wingmen on the arm's other racks (M7-T08); "" or why not.
+func launch_from(wing: String, door: int) -> String:
+	if launches == null or not is_instance_valid(launches):
+		return "no launch director in this scene"
+	return launches.launch_player(wing, door)
+
+
+## Sends `count` raiders at the station, its wings scrambled when `scramble` (M7-T10); "" or why not.
+func raid_station(count: int, scramble: bool) -> String:
+	var traffic: StationTraffic = launches.main.traffic if launches != null and is_instance_valid(launches) and launches.main != null else null
+	if traffic == null:
+		return "no station traffic in this scene"
+	return traffic.raid(count, scramble)
+
+
+## The player is still on its rack or rail.
+func launching() -> bool:
+	return launches != null and is_instance_valid(launches) and launches.locks_controls()
+
+
+## Jumps the player's launch to the hand-off (a skipped step).
+func skip_launch() -> void:
+	if launches != null and is_instance_valid(launches):
+		launches.skip()
+
+
 ## Plays `shot` on the camera rig (D55): its actors are found by name every frame, its origin points from the scenario's origin.
 func play_cinematic(shot: CinematicShot) -> void:
 	if camera_rig != null and is_instance_valid(camera_rig):
@@ -337,6 +368,15 @@ func origin_to_local(offset: PackedFloat64Array) -> Vector3:
 func local_position(actor: String) -> Variant:
 	var node: Node3D = _node_of(MissionWorld.key(actor))
 	return node.global_position if node != null else null
+
+
+## The ship `actor`'s hull, 0..1, for the HUD's bar (M7-T54); 0 once it is lost or out of play.
+func hull_fraction(actor: String) -> float:
+	var k: String = MissionWorld.key(actor)
+	var c := _actors.get(k) as Combatant
+	if c == null or _node_of(k) == null:
+		return 0.0
+	return c.damageable.hull.fraction()
 
 
 ## The `Targetable` id of the actor `actor` (its radar contact), or 0 when it is not in play or has no marker (M5-T25).

@@ -55,11 +55,11 @@ func _wait_for(what: String, reached: Callable, max_ticks: int = 1500) -> void:
 	assert_true(bool(reached.call()), "waited %d ticks for: %s" % [waited, what])
 
 
-# Civilian escort in the real Main, started as the flow starts a mission (a request, then space).
-func _fly(seed_value: int = 3) -> void:
+# Civilian escort in the real Main, started as the flow starts a mission (a request, then space); `input` stands in for the pad.
+func _fly(seed_value: int = 3, input: InputSource = null) -> void:
 	Game.flow.enter_directly(GameFlow.make_request(&"mission", SCENARIO_ID, false, seed_value))
 	main = (load("res://src/game/main.tscn") as PackedScene).instantiate() as Main
-	main.input_source = source
+	main.input_source = input if input != null else source
 	main.scenario_path = MISSION_PATH
 	main.scenario_seed = seed_value
 	holder.add_child(main)
@@ -128,7 +128,7 @@ func test_the_front_end_lists_the_escort_with_its_briefing_and_starts_it_on_a_fr
 	var page: NewGameSelect = front.frame().current_page() as NewGameSelect
 	assert_not_null(page)
 	assert_has(page.option_ids(), SCENARIO_ID)
-	assert_does_not_have(page.option_ids(), &"buoy_defence", "Buoy defence is gone (Q36)")
+	assert_does_not_have(page.option_ids(), &"buoy_defense", "Buoy defense is gone (Q36)")
 	page.button_of(SCENARIO_ID).grab_focus()
 	await wait_process_frames(2)
 	var shown: String = front.frame().detail_text()
@@ -173,6 +173,139 @@ func test_the_intro_hands_over_with_the_objectives_and_the_civilian_marked() -> 
 	assert_eq(_api().objective_state(&"home"), ObjectiveBook.ACTIVE)
 	assert_eq(_api().waypoint_name, _civilian_name())
 	assert_true(main.hud.visible)
+
+
+# --- skipping the opening and the civilian's hull bar (M7-T54) ----------------------------------------------------------
+
+
+func test_holding_x_on_the_pad_skips_the_opening_and_a_tap_does_not() -> void:
+	await _fly()
+	await _wait_for("the first shot", func() -> bool: return _shot_id() == &"departure", 120)
+	await _ticks(2)
+	assert_true(main.mission.opening_skip_offered(), "offered while the intro plays")
+	assert_eq(main.mission.skip_prompt.text, SkipPrompt.prompt_text(BindingNames.of_action(InputAdapter.AUTOTRACK)))
+	assert_string_contains(main.mission.skip_prompt.text, "SKIP")
+	assert_string_contains(DebugConsole.registry.execute("get mission.opening_skip")[0].lines[0], "true")
+	source.hold(InputAdapter.AUTOTRACK)
+	await _ticks(6)
+	source.release(InputAdapter.AUTOTRACK)
+	await _ticks(2)
+	assert_eq(_api().step_name(), &"intro", "a tap skips nothing")
+	source.hold(InputAdapter.AUTOTRACK)
+	await _wait_for("the hold's bar", func() -> bool: return main.mission.skip_prompt.progress > 0.0, 60)
+	assert_true(_api().controls_locked, "still the opening while the bar fills")
+	await _wait_for("the hand-over", func() -> bool: return not _api().controls_locked, 150)
+	source.release(InputAdapter.AUTOTRACK)
+	assert_eq(_api().step_name(), &"depart", "the intro and the briefing are skipped")
+	assert_true(_journal_has("skip opening to depart"))
+	assert_eq(_api().objective_state(&"escort"), ObjectiveBook.ACTIVE)
+	assert_eq(_api().waypoint_name, _civilian_name())
+	await _ticks(2)
+	assert_false(main.camera_rig.is_playing_shot(), "the shot is cut")
+	assert_true(main.hud.visible, "the HUD is back")
+	assert_eq(main.mission.skip_prompt.text, "", "the prompt goes")
+	assert_false(main.mission.opening_skip_offered())
+	assert_string_contains(DebugConsole.registry.execute("get mission.opening_skip")[0].lines[0], "false")
+
+
+# Council round 1 (O5): the hold that skips the opening runs no interaction of a target that offers one.
+func test_the_hold_that_skips_the_opening_runs_no_interaction() -> void:
+	await _fly()
+	await _wait_for("the first shot", func() -> bool: return _shot_id() == &"departure", 120)
+	var civilian: Combatant = _civilian()
+	var ran: Array[int] = [0]
+	civilian.targetable.interaction = TargetInteraction.new(&"dock", "DOCK", func() -> String:
+		ran[0] += 1
+		return "")
+	assert_true(main.ship.targeting.select_id(civilian.targetable.get_instance_id()), "(a target that offers an interaction)")
+	source.hold(InputAdapter.AUTOTRACK)
+	await _wait_for("the hand-over", func() -> bool: return not _api().controls_locked, 150)
+	await _ticks(2)
+	source.release(InputAdapter.AUTOTRACK)
+	await _ticks(2)
+	assert_eq(_api().step_name(), &"depart", "(the opening is skipped)")
+	assert_eq(ran[0], 0, "the same hold runs nothing")
+	assert_eq(main.interactions.runs, 0)
+
+
+func test_holding_the_keyboards_auto_track_key_skips_the_opening_too() -> void:
+	var keys := GodotInputSource.new()
+	keys.keyboard_mouse_enabled = true
+	await _fly(3, keys)
+	await _wait_for("the first shot", func() -> bool: return _shot_id() == &"departure", 120)
+	_shift(true)
+	await _wait_for("the hand-over", func() -> bool: return not _api().controls_locked, 200)
+	_shift(false)
+	assert_eq(_api().step_name(), &"depart", "Shift held skips it as X does (keyboard parity)")
+
+
+func test_the_hud_shows_the_civilians_name_and_hull_as_a_bar() -> void:
+	await _fly()
+	assert_true(_run("mission goto depart").ok)
+	await _ticks(3)
+	var civilian: Combatant = _civilian()
+	civilian.damageable.hull.hp = civilian.damageable.hull.max_hp * 0.6
+	await _wait_for("the hull bar", func() -> bool: return main.hud.frame.escort_rows.size() == 1, 30)
+	await _ticks(2)
+	var row: HudLayout.RosterRow = main.hud.frame.escort_rows[0]
+	assert_eq(row.text, "%s  60%%" % _civilian_name().to_upper())
+	assert_almost_eq(row.hull, 0.6, 0.01)
+	assert_has(main.hud.painted_items(), HudSurface.ESCORT)
+	assert_string_contains(DebugConsole.registry.execute("get mission.hull_bars")[0].lines[0], "60%")
+	assert_true(civilian.damageable.kill())
+	await _ticks(3)
+	assert_string_ends_with(main.hud.frame.escort_rows[0].text, "LOST")
+
+
+func _shift(pressed: bool) -> void:
+	var event := InputEventKey.new()
+	event.physical_keycode = KEY_SHIFT
+	event.keycode = KEY_SHIFT
+	event.pressed = pressed
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+
+
+# --- the waves' spacing (M7-T54) -----------------------------------------------------------------------------------------
+
+
+func test_a_wave_waits_for_the_last_to_be_down_and_then_a_breather() -> void:
+	DebugConsole.flags.invulnerable = true
+	await _fly()
+	_civilian().damageable.invulnerable = true
+	assert_true(_run("mission goto wave_one").ok)
+	await _ticks(2)
+	var past := UniversePos.new(MissionScriptClass.POINT_75.x, 0.0, MissionScriptClass.POINT_75.z, _api().world.system_id)
+	main.mission.stage.place(_civilian_name(), past)  # past the next wave's mark while wave one still flies
+	var scale_backup: float = Engine.time_scale
+	Engine.time_scale = 4.0
+	await _ticks(60 * 5 / 4)
+	assert_eq(_api().step_name(), &"wave_one", "wave two waits while wave one is up")
+	assert_true(_run("kill all").ok)
+	var down_s: float = _api().time_s()
+	await _wait_for("wave two", func() -> bool: return _journal_has("spawn RAIDER 4 raider_fighter"),
+			roundi(60.0 * (MissionScriptClass.BREATHER_S + 15.0) / 4.0))
+	Engine.time_scale = scale_backup
+	# The breather counts from when the step sees the wave down, after its lines.
+	assert_between(_api().time_s() - down_s, MissionScriptClass.BREATHER_S, MissionScriptClass.BREATHER_S + 10.0,
+			"a breather after wave one is down")
+	assert_eq(_api().step_name(), &"wave_two")
+
+
+func test_a_civilian_back_from_a_detour_still_brings_the_next_wave() -> void:
+	DebugConsole.flags.invulnerable = true
+	await _fly()
+	assert_true(_run("mission goto wave_one").ok)
+	await _ticks(2)
+	assert_true(_run("kill all").ok)
+	# Two kilometres off the line, level with the 50 % point: a point trigger of 1 km would never see it.
+	var aside := UniversePos.new(2000.0, 0.0, MissionScriptClass.POINT_50.z - 200.0, _api().world.system_id)
+	main.mission.stage.place(_civilian_name(), aside)
+	var scale_backup: float = Engine.time_scale
+	Engine.time_scale = 4.0
+	await _wait_for("wave two", func() -> bool: return _api().step_name() == &"wave_two",
+			roundi(60.0 * (MissionScriptClass.BREATHER_S + 15.0) / 4.0))
+	Engine.time_scale = scale_backup
 
 
 func test_every_actor_a_shot_names_is_in_play_from_the_start() -> void:
@@ -320,6 +453,69 @@ func test_a_saturn_8_crosses_the_belt_without_hitting_a_rock() -> void:
 			_run("kill all")
 		return _at(civilian).distance_to(_buoy_at("NAV BETA")) < MissionScriptClass.ARRIVAL_M, 60 * 600)
 	assert_eq(civilian.damageable.hull.hp, hull, "no rock hit on the way")
+
+
+# A fair escort's run (Q40, M7-T54): each wave is fought down `FIGHT_S_PER_RAIDER` a raider after it first closes on the
+# civilian, the rest is the mission's own flight and triggers. It prints the timeline the pacing was set from.
+const FIGHT_S_PER_RAIDER: float = 10.0
+const CONTACT_M: float = 2000.0
+const SPEED_UP: float = 2.0
+
+
+func test_a_fought_run_takes_6_to_8_minutes_with_each_wave_cleared_before_the_next() -> void:
+	if OS.get_environment("GUT_SLOW") != "1":
+		pending("GUT_SLOW=1 flies a whole fought run")
+		return
+	DebugConsole.flags.invulnerable = true
+	await _fly(3)
+	_civilian().damageable.invulnerable = true
+	var scale_backup: float = Engine.time_scale
+	Engine.time_scale = SPEED_UP
+	var waves: Array = [WAVE_ONE, WAVE_TWO, WAVE_THREE]
+	var spawned: Array[float] = [-1.0, -1.0, -1.0]
+	var contact: Array[float] = [-1.0, -1.0, -1.0]
+	var cleared: Array[float] = [-1.0, -1.0, -1.0]
+	var ticks: int = 0
+	while not _api().has_ended() and ticks < roundi(60.0 * 900.0 / SPEED_UP):
+		await _ticks(1)
+		ticks += 1
+		var now: float = _api().time_s()
+		if ticks % roundi(60.0 * 15.0 / SPEED_UP) == 0:
+			var civ: Combatant = _civilian()
+			gut.p("  t %4.0f s  %-10s  civilian at %5.1f km, %3.0f m/s, %s" % [now, _api().step_name(),
+					_at(civ).distance_to(_buoy_at("NAV ALPHA")) / 1000.0,
+					civ.ship.linear_velocity.length(), _behaviour(civ)])
+		for w: int in 3:
+			var names: Array[String] = waves[w]
+			if spawned[w] < 0.0 and _journal_has("spawn %s raider_fighter" % names[0]):
+				spawned[w] = now
+			if spawned[w] < 0.0 or cleared[w] >= 0.0:
+				continue
+			if contact[w] < 0.0 and _closest_raider_m(names) < CONTACT_M:
+				contact[w] = now
+			if contact[w] >= 0.0 and now - contact[w] >= FIGHT_S_PER_RAIDER * names.size():
+				for c: Combatant in main.ships.alive(ShipPool.DEFAULT_TYPE):
+					if names.has(c.display_name):
+						c.damageable.kill()
+				cleared[w] = now
+	Engine.time_scale = scale_backup
+	var end_s: float = _api().time_s()
+	gut.p("fought run (seed 3, %s): waves at %s, contact %s, cleared %s, end %.0f s" % [_civilian_name(), spawned, contact,
+			cleared, end_s])
+	assert_true(_api().has_ended() and bool(_api().result.get("success", false)), str(_api().result))
+	for w: int in [1, 2]:
+		assert_gt(spawned[w] - cleared[w - 1], MissionScriptClass.BREATHER_S - 0.1,
+				"wave %d comes a breather after wave %d is down" % [w + 1, w])
+	assert_between(end_s, 360.0, 480.0, "6 to 8 minutes (Q40)")
+
+
+func _closest_raider_m(names: Array[String]) -> float:
+	var best: float = INF
+	var at: Vector3 = _civilian().ship.global_position
+	for c: Combatant in main.ships.alive(ShipPool.DEFAULT_TYPE):
+		if names.has(c.display_name):
+			best = minf(best, c.ship.global_position.distance_to(at))
+	return best
 
 
 func _seed_for(type: StringName) -> int:

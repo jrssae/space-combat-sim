@@ -1,6 +1,7 @@
 extends TestSteps
-## Far proxies for the low-attention tier (M4-T23, architecture §17.14): every tier row is drawn (a fighter as a far dot, a
-## capital as an instance of its class's mesh, one multimesh per mesh) and shows on the radar; a promoted ship's proxy goes in
+## Far proxies for the low-attention tier (M4-T23, architecture §17.14): every tier row is drawn (a far hull, an instance of its
+## class's mesh, one multimesh per mesh, until only a few pixels across, then a far dot, M7-T26: a fighter at 15 km is a dot, a
+## capital or a freighter keeps its shape) and shows on the radar; a promoted ship's proxy goes in
 ## the tick its body shows (no double, no gap); the player can select a tier ship, read it from its row, and keep the
 ## selection through promotion and demotion; candidates and broadcasts include tier ships; a row promoted inside a rock comes
 ## back clear of it. Real pooled ships and capitals, the threaded step, real physics frames.
@@ -17,12 +18,16 @@ var standins: StandinDirector
 var sim: SimCore
 var tier: TierDirector
 var _saved: Dictionary = {}
+var _size_backup: Vector2i = Vector2i.ZERO
 
 
 func before_each() -> void:
 	for key: StringName in SETTINGS:
 		_saved[key] = Settings.get_value(key)
 	Settings.set_value(&"tier_radius_m", RADIUS_M)
+	# Headless windows are 64 x 64 px; which rows are dots is about a real screen.
+	_size_backup = get_tree().root.size
+	get_tree().root.size = Vector2i(1920, 1080)
 	Factions.reset()
 	ContactScan.invalidate()
 	ContactScan.clear_statics()
@@ -32,6 +37,7 @@ func before_each() -> void:
 func after_each() -> void:
 	for key: StringName in SETTINGS:
 		Settings.set_value(key, _saved[key])
+	get_tree().root.size = _size_backup
 	ContactScan.clear_statics()
 	Factions.reset()
 	ContactScan.invalidate()
@@ -57,6 +63,11 @@ func _build() -> void:
 	world.spawn(player.ship, world.to_universe(Vector3.ZERO))
 	player.damageable.invulnerable = true
 	pool.player = player.ship
+	var camera := Camera3D.new()
+	camera.fov = 75.0
+	camera.far = 50000.0
+	player.ship.add_child(camera)
+	camera.make_current()
 	pool.prepare(ShipPool.DEFAULT_TYPE, POOL)
 	pool.prepare(ShipPool.ALLY_TYPE, 2)
 	standins = StandinDirector.new()
@@ -106,16 +117,17 @@ func test_every_tier_row_has_a_dot_or_a_hull_instance_and_a_radar_blip() -> void
 	var dots: FarDots = FarDots.of(world)
 	assert_not_null(dots, "the far dots were made when the first fighter went into the tier")
 	dots.refresh()
-	assert_eq(dots.tier_shown, raiders.size(), "one dot a tier fighter, none for the capital")
+	assert_eq(dots.tier_shown, raiders.size(), "one dot a tier fighter (a few pixels at 15 km), none for the capital")
 	for c: Combatant in raiders:
 		assert_true(_dot_near(dots, _row_at(c.ship)), "%s is drawn where its row flies" % c.display_name)
 	var hulls: FarHulls = FarHulls.of(world)
 	assert_not_null(hulls, "the far hulls were made when the capital went into the tier")
 	hulls.refresh()
-	assert_eq(hulls.class_count(), 1)
-	assert_eq(hulls.class_mesh(0), cap.drawn_mesh(), "the cruiser's proxy is the mesh its body draws")
-	assert_eq(hulls.instance_count(0), 1)
-	var drawn: Transform3D = hulls.instance_transform(0, 0)
+	var cruiser: int = hulls.class_of(cap.drawn_mesh())
+	assert_eq(hulls.class_count(), 2, "the raiders' hull and the cruiser's")
+	assert_eq(hulls.instance_count(cruiser), 1, "the cruiser's proxy is the mesh its body draws")
+	assert_eq(hulls.instance_count(hulls.class_of(raiders[0].ship.hull_mesh())), 0, "the dots' fighters draw no hull")
+	var drawn: Transform3D = hulls.instance_transform(cruiser, 0)
 	assert_lt(drawn.origin.distance_to(_row_at(cap)), 0.01, "at its row's pose")
 	var contacts: RadarContacts = RadarContacts.gather(get_tree(), player.ship, RadarModel.MAX_RANGE_M)
 	for c: Combatant in raiders:
@@ -138,6 +150,8 @@ func test_capitals_of_a_class_share_one_multimesh_and_another_class_has_its_own(
 	hulls.refresh()
 	assert_eq(hulls.class_count(), 2, "one class per mesh")
 	var counts: Array[int] = [hulls.instance_count(0), hulls.instance_count(1)]
+	var box: AABB = hulls.get_child(0).custom_aabb
+	assert_lt(box.size.length(), 20000.0, "each class's bounds follow its instances, so its levels of detail work")
 	counts.sort()
 	assert_eq(counts, [1, 2] as Array[int], "two cruisers in one multimesh, the destroyer in the other")
 	assert_eq(hulls.shown, 3)
@@ -325,3 +339,49 @@ func test_the_bench_counts_leave_a_dead_capital_and_its_weapons_out() -> void:
 	a.damageable.kill()
 	assert_eq(standins.capitals_in_play(), 1, "the dead one is not counted")
 	assert_eq(standins.turret_count(), guns - a.guns().size(), "nor its guns")
+
+
+func test_a_tier_freighter_keeps_its_hull_until_a_few_pixels_across_then_is_a_dot() -> void:
+	# M7-T26: a 70 m Saturn 3 at 15 km is about 3 px of radius on 1 080 lines: its hull; at 45 km, about 1 px: a dot.
+	assert_eq(pool.prepare(&"saturn_3_freighter", 1), 1)
+	var c: Combatant = pool.acquire("SATURN", world.to_universe(Vector3(0.0, 0.0, -15000.0)), Basis.IDENTITY, Vector3.ZERO,
+			IdleBrain.new(), &"saturn_3_freighter")
+	c.damageable.invulnerable = true
+	await _ticks(4)
+	assert_true(c.ship.is_tier_parked(), "the freighter is a tier row")
+	var hulls: FarHulls = FarHulls.of(world)
+	var dots: FarDots = FarDots.of(world)
+	assert_not_null(hulls)
+	assert_not_null(dots)
+	hulls.refresh()
+	dots.refresh()
+	var saturn: int = hulls.class_of(c.ship.hull_mesh())
+	assert_eq(hulls.instance_count(saturn), 1, "drawn as its own mesh at 15 km")
+	assert_eq(dots.tier_shown, 0, "not a dot")
+	player.ship.global_position = Vector3(0.0, 0.0, 30000.0)
+	dots.refresh()
+	hulls.refresh()
+	assert_eq(hulls.instance_count(saturn), 0, "45 km out: no hull")
+	assert_eq(dots.tier_shown, 1, "a dot instead, never both and never neither")
+
+
+func test_a_rebase_moves_the_far_hulls_with_the_world_at_once() -> void:
+	# M7-T26 fix: every class is world_shiftable (a rebase leaves nothing behind) and goes back to the origin with its instances
+	# moved instead, as the far dots do.
+	var cap: CapitalStandin = standins.add_capital(&"cruiser", Factions.RAIDERS, "CRUISER", world.to_universe(Vector3(2000.0, 0.0, -16000.0)),
+			Basis.IDENTITY, Vector3.ZERO)
+	cap.damageable.invulnerable = true
+	standins.active = true
+	await _ticks(4)
+	var hulls: FarHulls = FarHulls.of(world)
+	hulls.refresh()
+	var cruiser: int = hulls.class_of(cap.drawn_mesh())
+	var instance := hulls.get_child(cruiser) as MultiMeshInstance3D
+	assert_true(instance.is_in_group(WorldFrame.SHIFTABLE_GROUP), "the class moves with a rebase")
+	var before: Vector3 = instance.global_transform * hulls.instance_transform(cruiser, 0).origin
+	var box: AABB = instance.custom_aabb
+	world.rebase(Vector3(1000.0, 0.0, 0.0))
+	assert_almost_eq(instance.position, Vector3.ZERO, Vector3.ONE * 1e-3, "back at the origin")
+	var after: Vector3 = instance.global_transform * hulls.instance_transform(cruiser, 0).origin
+	assert_almost_eq(after, before - Vector3(1000.0, 0.0, 0.0), Vector3.ONE * 1e-2, "drawn where the world moved it, no frame behind")
+	assert_almost_eq(instance.custom_aabb.position, box.position - Vector3(1000.0, 0.0, 0.0), Vector3.ONE * 1e-2, "its bounds too")

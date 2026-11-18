@@ -101,6 +101,7 @@ func _cmd(args: Dictionary) -> ConsoleResult:
 # A cruiser stand-in opens a point 2.5 km ahead of the player, across its view, and two pilotless raiders come out with it.
 func _carrier(follow: bool) -> ConsoleResult:
 	var main: Main = host.main
+	main.ensure_free(ShipPool.DEFAULT_TYPE, 2)  # free flight with encounters off builds no raiders
 	if main.ships.free_count(ShipPool.DEFAULT_TYPE) < 2:
 		return ConsoleResult.failure("no two free raiders to bring in")
 	var nose: Vector3 = -main.ship.global_basis.z
@@ -134,6 +135,7 @@ func _make(capital: bool, xform: Transform3D, velocity: Vector3) -> RigidBody3D:
 			return null
 		return main.bench.standins.add_capital(CAPITAL_CLASS, Factions.EARTH_ALLIANCE, "TRANSIT %d" % _made, at, xform.basis,
 				velocity)
+	main.ensure_free(ShipPool.DEFAULT_TYPE, 1)
 	if main.ships.free_count(ShipPool.DEFAULT_TYPE) == 0:
 		return null
 	var placed: Combatant = main.ships.acquire(main.ships.next_name(), at, xform.basis, velocity, null)

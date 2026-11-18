@@ -1,6 +1,6 @@
 extends GutTest
-## The player's gate jump (M6-T14): the prompt's rule (range and target), X as a jump request only while it is offered, the jump's
-## state machine and its flash and fade, and the autopilot's line-up and run-in.
+## The player's gate jump (M6-T14): the prompt's rule (range and target), a hold of X as a jump request only while it is offered
+## (M7-T27), the jump's state machine and its flash and fade, and the autopilot's line-up and run-in.
 
 const DT: float = 1.0 / 60.0
 const DEPARTURE: Vector3 = Vector3(0.0, 0.0, -1440.0)
@@ -17,33 +17,36 @@ func test_prompt_needs_the_gate_targeted_within_ten_km() -> void:
 	assert_false(GateJumpPrompt.offered(500.0, true, false, true, true), "the ship is lost")
 	assert_false(GateJumpPrompt.offered(500.0, true, true, false, true), "a mission or a shot holds the controls")
 	assert_false(GateJumpPrompt.offered(500.0, true, true, true, false), "a jump is already under way")
-	assert_eq(GateJumpPrompt.line(500.0, true, true, true, true), "X: REQUEST JUMP")
+	assert_eq(GateJumpPrompt.line(500.0, true, true, true, true), "HOLD X: JUMP")
 	assert_eq(GateJumpPrompt.line(50000.0, true, true, true, true), "")
 
 
-func test_x_requests_a_jump_only_while_offered() -> void:
+func test_a_hold_of_x_requests_a_jump_only_while_offered() -> void:
 	var adapter := InputAdapter.new()
 	var source := FakeInputSource.new()
-	adapter.jump_offered = true
+	adapter.interaction_offered = true
 	source.hold(InputAdapter.AUTOTRACK)
-	var cmd: PilotCommand = adapter.sample(source, DT)
-	assert_true(cmd.ui.request_jump, "X beside the targeted gate asks for the jump")
+	var asked: int = 0
+	for i: int in 120:
+		asked += int(adapter.sample(source, DT).ui.interact)
+	assert_eq(asked, 1, "a 2 s hold of X beside the targeted gate asks for the jump, once")
 	assert_false(adapter.autotrack_on, "and leaves auto-track off")
-	assert_false(cmd.flight.autotrack)
 	source.release(InputAdapter.AUTOTRACK)
 	adapter.sample(source, DT)
-	adapter.jump_offered = false
+	adapter.interaction_offered = false
 	source.hold(InputAdapter.AUTOTRACK)
-	cmd = adapter.sample(source, DT)
-	assert_false(cmd.ui.request_jump, "anywhere else X is auto-track")
+	var cmd: PilotCommand = adapter.sample(source, DT)
+	assert_false(cmd.ui.interact, "anywhere else X is auto-track")
 	assert_true(adapter.autotrack_on)
 
 
 func test_a_control_lock_drops_the_request() -> void:
 	var pc := PilotCommand.new()
-	pc.ui.request_jump = true
+	pc.ui.interact = true
+	pc.ui.interact_progress = 0.5
 	ControlLock.new().apply(pc, true, false)
-	assert_false(pc.ui.request_jump)
+	assert_false(pc.ui.interact)
+	assert_eq(pc.ui.interact_progress, 0.0, "no bar while the controls are held")
 
 
 func test_hud_shows_the_prompt_on_the_acknowledgement_line() -> void:
@@ -57,11 +60,12 @@ func test_hud_shows_the_prompt_on_the_acknowledgement_line() -> void:
 # --- the state machine ---------------------------------------------------------------------------------------------
 
 
-func _run(jump: GateJump, seconds: float, local: Vector3, through: bool = false, placed: bool = false) -> PackedStringArray:
+func _run(jump: GateJump, seconds: float, local: Vector3, through: bool = false, placed: bool = false,
+		closing_mps: float = 0.0) -> PackedStringArray:
 	var all := PackedStringArray()
 	var ticks: int = roundi(seconds / DT)
 	for i: int in ticks:
-		all.append_array(jump.step(DT, local, DEPARTURE, true, through and i == 0, placed and i == 0))
+		all.append_array(jump.step(DT, local, DEPARTURE, true, through and i == 0, placed and i == 0, closing_mps))
 	return all
 
 
@@ -89,6 +93,20 @@ func test_the_jump_goes_out_and_comes_back() -> void:
 	assert_eq(jump.start(), PackedStringArray([GateJump.EV_START]), "another jump may follow")
 
 
+# A ship just out of the gate crosses the departure point flying away: the run-in (and with it the vortex and the shot) waits
+# until it has turned round (M7-T28).
+func test_the_run_in_waits_for_a_ship_flying_away_from_the_gate() -> void:
+	var jump := GateJump.new()
+	jump.start()
+	assert_eq(_run(jump, 1.0, DEPARTURE, false, false, -175.0), PackedStringArray(), "at the departure point, outbound: not yet")
+	assert_eq(jump.state, GateJump.State.LINE_UP)
+	assert_eq(_run(jump, DT, DEPARTURE, false, false, -GateJump.LINE_UP_RECEDE_MAX_MPS - 1.0), PackedStringArray())
+	assert_eq(_run(jump, DT, DEPARTURE, false, false, 80.0), PackedStringArray([GateJump.EV_RUN_IN]), "inbound: the run-in starts")
+	jump = GateJump.new()
+	jump.start()
+	assert_eq(_run(jump, DT, DEPARTURE), PackedStringArray([GateJump.EV_RUN_IN]), "at rest there: it starts at once")
+
+
 func test_clearing_also_ends_on_time_once_out_of_the_mouth() -> void:
 	var jump := GateJump.new()
 	jump.start()
@@ -104,7 +122,7 @@ func test_clearing_also_ends_on_time_once_out_of_the_mouth() -> void:
 func test_the_jump_ends_early_when_it_must() -> void:
 	var jump := GateJump.new()
 	jump.start()
-	assert_eq(jump.step(DT, Vector3.ZERO, DEPARTURE, false, false, false), PackedStringArray([GateJump.EV_ABORT]))
+	assert_eq(jump.step(DT, Vector3.ZERO, DEPARTURE, false, false, false, 0.0), PackedStringArray([GateJump.EV_ABORT]))
 	assert_eq(jump.ended_why, "the ship was lost")
 	jump.start()
 	assert_eq(_run(jump, GateJump.LINE_UP_TIMEOUT_S + 1.0, Vector3(0.0, 0.0, -9000.0)), PackedStringArray([GateJump.EV_ABORT]))

@@ -7,6 +7,8 @@ extends RefCounted
 
 const LIVERY_SHADER: Shader = preload("res://assets/shaders/hull_livery.gdshader")
 const HULL_GLASS_SHADER: Shader = preload("res://assets/shaders/hull_glass.gdshader")
+## The station hull's material (M7-T24), by path so an import cache without its class still loads.
+const STATION_HULL := preload("res://src/rendering/station_hull_material.gd")
 ## The shader's table sizes (`hull_livery.gdshader`).
 const MAX_STRIPES: int = 48
 const MAX_PATTERNS: int = 12
@@ -69,6 +71,63 @@ static func chunk_mesh(dir: String, file: String) -> Mesh:
 		var current: Material = mesh.surface_get_material(i)
 		var name: String = String(current.resource_name) if current != null else ""
 		mesh.surface_set_material(i, by_name.get(name, parent.surface_get_material(mini(i, parent.get_surface_count() - 1))))
+	_cache[path] = mesh
+	return mesh
+
+
+## One section of a big piece (M7-T19): its glb (`file`, under `dir`) drawn with the piece's materials (one set per piece, made
+## from the piece's `mesh` entry as `load_textured` makes them), so every section shares the piece's maps. Null when missing.
+static func section_mesh(dir: String, entry: Dictionary, file: String) -> Mesh:
+	var path: String = dir.path_join(file)
+	if _cache.has(path):
+		return _cache[path]
+	var mesh: Mesh = _imported_mesh(path)
+	if mesh == null:
+		push_warning("MeshAssets: %s is missing or not imported (run scripts/gen_assets.sh, then import)" % path)
+		return null
+	var by_name: Dictionary = piece_materials(dir, entry)
+	for i: int in mesh.get_surface_count():
+		var current: Material = mesh.surface_get_material(i)
+		var name: String = String(current.resource_name) if current != null else ""
+		if by_name.has(name):
+			mesh.surface_set_material(i, by_name[name])
+	_cache[path] = mesh
+	return mesh
+
+
+## A big piece's materials by surface name, made once from its `mesh` entry (paint with the hull sheen, glass without).
+static func piece_materials(dir: String, entry: Dictionary) -> Dictionary:
+	var key: String = dir.path_join(String(entry.get("file", ""))) + "#materials"
+	if _cache.has(key):
+		return _cache[key]
+	var out: Dictionary = {}
+	for surface: Dictionary in entry.get("surfaces", []):
+		# The station's tiers draw with its own hull material (M7-T24); other pieces with the standard one.
+		var material: Material = STATION_HULL.make(dir, surface) if STATION_HULL.wants(surface) \
+				else textured_material(dir, surface)
+		out[String(surface.get("name", ""))] = _with_sheen(material, not bool(surface.get("blend", false)))
+	_cache[key] = out
+	return out
+
+
+## A near-only prop's mesh (M7-T19): its glb (`file`, under `dir`) drawn with the prop atlas's material (`surface`, a textured
+## mesh surface entry, made once per atlas), with the hull sheen as the hull's paint has it; with `world_detail` (the piece's detail
+## tile) laid over it as over the hull, for a prop among the piece's plating. Null when missing.
+static func prop_mesh(dir: String, surface: Dictionary, file: String, world_detail: Dictionary = {}) -> Mesh:
+	var path: String = dir.path_join(file)
+	if _cache.has(path):
+		return _cache[path]
+	var mesh: Mesh = _imported_mesh(path)
+	if mesh == null:
+		push_warning("MeshAssets: %s is missing or not imported (run scripts/gen_assets.sh, then import)" % path)
+		return null
+	# A prop among the piece's plating takes the piece's detail tile too (M7-T25): its own material, the same maps.
+	var key: String = dir.path_join(String(surface.get("albedo", ""))) + ("#prop_detail" if not world_detail.is_empty() else "#prop")
+	if not _cache.has(key):
+		var with_detail: Dictionary = surface.merged({"world_detail": world_detail}, true) if not world_detail.is_empty() else surface
+		_cache[key] = _with_sheen(textured_material(dir, with_detail), true)
+	for i: int in mesh.get_surface_count():
+		mesh.surface_set_material(i, _cache[key])
 	_cache[path] = mesh
 	return mesh
 
@@ -137,7 +196,33 @@ static func textured_material(dir: String, surface: Dictionary) -> StandardMater
 		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		material.albedo_color = Color(1.0, 1.0, 1.0, 1.0 - float(surface.get("transmittance", 0.0)))
 		material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	apply_world_detail(material, dir, surface)
 	return material
+
+
+## Lays a big hull's shared detail tile over its atlas (M7-T04, D72): the surface's `world_detail` names the tile's two maps and its
+## size in metres. The tile repeats in the mesh's own space on all three axes (so it turns with a turning piece) and multiplies the
+## paint, so plating a few metres across shows from 50 m without a bigger atlas. A surface without one, or with its maps missing,
+## is left as it is.
+static func apply_world_detail(material: StandardMaterial3D, dir: String, surface: Dictionary) -> void:
+	var detail: Dictionary = surface.get("world_detail", {})
+	var tile_m: float = float(detail.get("tile_m", 0.0))
+	if detail.is_empty() or tile_m <= 0.0:
+		return
+	var albedo: Texture2D = _texture(dir.path_join(String(detail.get("albedo", ""))))
+	var normal: Texture2D = _texture(dir.path_join(String(detail.get("normal", ""))))
+	if albedo == null or normal == null:
+		push_warning("MeshAssets: the detail tile of %s is missing or not imported" % dir)
+		return
+	material.detail_enabled = true
+	material.detail_blend_mode = BaseMaterial3D.BLEND_MODE_MUL
+	material.detail_uv_layer = BaseMaterial3D.DETAIL_UV_2
+	material.detail_albedo = albedo
+	material.detail_normal = normal
+	material.uv2_triplanar = true
+	material.uv2_world_triplanar = false
+	material.uv2_triplanar_sharpness = 4.0
+	material.uv2_scale = Vector3.ONE / tile_m
 
 
 ## The file of one of a surface's maps in the texture set `settings.texture_detail` picks: a set the surface's `detail` names

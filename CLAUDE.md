@@ -59,6 +59,7 @@ been planned were taken for done.
 ## Rules of the road
 
 - Do not create your own branches unless explicitely instructed. branches are expected to tie directly to a milestone, with all tasks kept in that milestone branch.
+- Never use an agent on Max effort level. 
 - Do not commit `assets/generated/`, `.tools/`, `.godot/`, `references/` or `reports/` (already in `.gitignore`).
 - Do not edit `README.md`, `LICENSE`, `DISCLAIMER.md` (owned by the maintainer) or files under `addons/gut/` and `addons/lens_effects/`
   (vendored upstream code; see `docs/third-party.md`).
@@ -94,6 +95,29 @@ been planned were taken for done.
   `/sys/class/drm/card1/device/mem_info_vram_used`. Judging how something looks (visual appearance, feel) stays with the
   human tester as `(H)`. In a container without a GPU, mark GPU checks `(H)` instead of faking them; llvmpipe
   (`scripts/capture.sh`) shows geometry and layout, not the GPU's speed (`docs/research-notes.md`).
+- Locks (parallel agents share one machine): wrap every Godot or asset-building command in `scripts/godot_lock.sh`, with
+  `SCS_LOCK_LABEL=<task id>` set (once per shell command is enough). `write` for `--import`, the native build and builds into
+  `assets/generated/` (`gen_assets.sh`, `python3 -m tools.procgen build`); `read` for tests, the compile check, smokes and
+  `--console-exec` runs (readers overlap); add `--gpu` for anything that opens a window. The Godot lock comes before the GPU lock,
+  never the reverse. Hold a lock per command, never around a long script or a whole test-suite wrapper (`run_tests.sh` and the
+  render scripts take their own). Never swap or rebuild a shared asset to get a baseline: make an isolated copy with
+  `scripts/scratch_project.sh <name>` (own `.godot/` and `assets/generated/`, under `reports/scratch/`) and run Godot with
+  `--path` there, then `--clean` it. `scripts/godot_lock.sh status` shows who holds and waits; every run is logged in `reports/locks.log`.
+- STL fidelity (maintainer, M5 Q18, extended 2026-11-13): a generator built from a reference STL in `references/` passes the
+  **90% rule**: top, side and front silhouette IoU >= 0.90 against the STL at the same length and L/W/H within 10%
+  (`tools/refview` compare), **and, for large assets (stations, capital ships), per-part cross-sections**: cuts at fixed planes
+  through every part seen up close (for Babylon 5: the Cobra arms, both bays, the spine, the command section) each overlap the
+  STL's section by IoU >= 0.90. Whole-asset silhouettes cannot see a part's shape (M7-T21: a pentagonal arm built as a slab,
+  a roofed bay built open, both at 0.965 overall). Measurement tasks record section profiles, not just extents, and look sheets
+  for close-up places show the STL's sections beside the build.
+- Verify against the committed code, not the shared working copy (maintainer, 2026-11-13): several agents share one checkout, so
+  the working copy holds other agents' uncommitted files, and tests run there can pass while CI, which builds from the
+  committed code, fails (M7-T06 went red this way). Before every commit, run your touched Python and GUT files (and any
+  assets they need, built from the generators) against **HEAD plus your staged changes only**: `scripts/scratch_project.sh
+  <name> --staged` makes that copy (real files from the index, its own `.godot/` and `assets/generated/`, the native library;
+  `--build-native` rebuilds the library from the staged sources when they touch `native/`), then rebuild the assets whose generators
+  you touched there (`cd reports/scratch/<name> && python3 -m tools.procgen build <id> --out assets/generated`), `--import` and test
+  with `--path reports/scratch/<name>` (Python tests from inside it). Report the counts from that copy, and `--clean` it after.
 - Screenshots: every screenshot or captured frame an agent takes, for any request, goes under `references/screenshots/`
   (gitignored) in a subfolder named for the request, e.g. `references/screenshots/T13 Saturn 4 current replacement/`.
   Never `/tmp` or `reports/`, and never commit them. In a worktree, use the main checkout's `references/` so the

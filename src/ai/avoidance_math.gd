@@ -49,11 +49,14 @@ static func filter(own_pos: Vector3, own_vel: Vector3, own_radius: float, contac
 
 
 ## `filter` for a perception: its contacts but `exempt_id` (a committed rammer's target, M3-T13; 0 for none), then its
-## statics (rocks and mines, M4-T09), from its own position and velocity, with `hash(seed_value)` as the tie-break.
-static func filter_seen(p: Perception, own_radius: float, v_des: Vector3, exempt_id: int, seed_value: int) -> Dictionary:
+## statics (rocks and mines, M4-T09), from its own position and velocity, with `hash(seed_value)` as the tie-break. A
+## wingman forming up keeps its friends off the answer as well (`keep_friends`, M7-T76: `friend_rows`).
+static func filter_seen(p: Perception, own_radius: float, v_des: Vector3, exempt_id: int, seed_value: int,
+		keep_friends: bool = false) -> Dictionary:
+	var friends: PackedInt32Array = friend_rows(p) if keep_friends else PackedInt32Array()
 	if p.on_rows():
 		return _avoid(p.kernels, p.contact_rows, p.static_rows, exempt_id, p.position, p.velocity, own_radius, v_des,
-				p.capability, hash(seed_value))
+				p.capability, hash(seed_value), friends)
 	var listed: Array[Contact] = []
 	listed.append_array(p.contacts)
 	listed.append_array(p.statics)
@@ -61,15 +64,32 @@ static func filter_seen(p: Perception, own_radius: float, v_des: Vector3, exempt
 	if kernels == null:
 		return {"v_des": v_des, "urgent": false}
 	return _avoid(kernels, PilotRows.span(0, p.contacts.size()), PilotRows.span(p.contacts.size(), p.statics.size()),
-			exempt_id, p.position, p.velocity, own_radius, v_des, p.capability, hash(seed_value))
+			exempt_id, p.position, p.velocity, own_radius, v_des, p.capability, hash(seed_value), friends)
 
 
-# One ship's avoidance through `kernels` over the given rows: `{"v_des": Vector3, "urgent": bool}`.
+## The rows of a perception's friendly ships, in contact order (its contact rows on the core's rows, else the places in
+## its own list), for a wingman keeping them off (M7-T76).
+static func friend_rows(p: Perception) -> PackedInt32Array:
+	var out := PackedInt32Array()
+	for i: int in p.contacts.size():
+		var c: Contact = p.contacts[i]
+		if c.is_ship and c.relation == Factions.Relation.FRIENDLY:
+			out.append(p.contact_rows[i] if p.on_rows() else i)
+	return out
+
+
+# One ship's avoidance through `kernels` over the given rows, keeping the rows `friends` off: `{"v_des": Vector3,
+# "urgent": bool}`.
 static func _avoid(kernels: Object, contact_rows: PackedInt32Array, static_rows: PackedInt32Array, exempt_id: int,
 		own_pos: Vector3, own_vel: Vector3, own_radius: float, v_des: Vector3, capability: ShipCapability,
-		tie_hash: int) -> Dictionary:
-	var out: Vector4 = kernels.avoid(contact_rows, static_rows, exempt_id, own_pos, own_vel, own_radius, v_des,
-			capability.a_retro, capability.rate_max_rad, capability.a_rcs, tie_hash)
+		tie_hash: int, friends: PackedInt32Array = PackedInt32Array()) -> Dictionary:
+	var out: Vector4
+	if friends.is_empty():
+		out = kernels.avoid(contact_rows, static_rows, exempt_id, own_pos, own_vel, own_radius, v_des,
+				capability.a_retro, capability.rate_max_rad, capability.a_rcs, tie_hash)
+	else:
+		out = kernels.avoid_keeping_off(contact_rows, static_rows, exempt_id, friends, own_pos, own_vel, own_radius, v_des,
+				capability.a_retro, capability.rate_max_rad, capability.a_rcs, tie_hash)
 	return {"v_des": Vector3(out.x, out.y, out.z), "urgent": out.w > 0.5}
 
 

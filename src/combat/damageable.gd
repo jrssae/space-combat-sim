@@ -53,6 +53,9 @@ var ram_mass_kg: float = 0.0
 ## True for something that any bolt hurts whatever its faction (a nav buoy: neutral to everyone, yet shootable). Bolts of its
 ## own faction still pass through.
 var hit_by_anyone: bool = false
+## True for a big hull that a bolt it does not take damage from still stops on (M7-T07, maintainer: the station, whose grid fires
+## many bolts close to its hull); the bolt is spent with no damage.
+var stops_friendly_bolts: bool = false
 ## True for the player's hull: `debug.invulnerable` stops its damage.
 var respects_god_mode: bool = false
 ## True for a hull nothing damages, god-mode style but for any ship (M3-T09: the instructor, from its scenario spawn's

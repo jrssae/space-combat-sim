@@ -4,7 +4,7 @@ extends Node
 ## flashes and the far-dot decision used to be a `_process` on every ship (or every flash, idle or not); at 500 ships those
 ## callbacks had no owner and cost the frame several milliseconds. Each subsystem now registers its nodes here and this one node
 ## walks each list once a frame: the plumes of the ships in play and shown, only the muzzle and hit flashes that are showing,
-## every LOD switcher with the camera and the dot distance read once. It also keeps the finished hit flashes for the next hits
+## every LOD switcher with the camera and the view's scale read once. It also keeps the finished hit flashes for the next hits
 ## (hidden children of this node), so a hit no longer builds and frees nodes.
 ##
 ## The lean ships' pooled muzzle flashes and the core's bolt multimeshes (M4-T35) run here too, one pass each, and the
@@ -121,8 +121,8 @@ func _process(delta: float) -> void:
 	_cost_us[&"turrets"] = Time.get_ticks_usec() - bolts_done
 
 
-## The far-dot decision for every registered ship: the camera and the dot distance read once (M4-T11's rule per ship). Public
-## for the tests.
+## The far-dot decision for every registered ship: the camera and the view's scale read once (M4-T11's rule per ship, by size on
+## screen since M7-T26). Public for the tests.
 func update_lod() -> void:
 	if _switchers.is_empty():
 		return
@@ -130,10 +130,10 @@ func update_lod() -> void:
 	if camera == null:
 		return
 	var eye: Vector3 = camera.global_position
-	var far_m: float = float(Settings.get_value(&"far_ship_dot_m"))
+	var m_per_m: float = LodSwitcher.dot_scale(camera)
 	for switcher: LodSwitcher in _switchers:
 		if switcher.can_process():
-			switcher.decide(eye, far_m)
+			switcher.decide(eye, m_per_m)
 
 
 ## Ages every showing flash by `delta`; one that is over leaves the list. Public for the tests.

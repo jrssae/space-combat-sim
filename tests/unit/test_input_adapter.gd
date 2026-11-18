@@ -662,22 +662,60 @@ func test_nothing_else_is_read_behind_a_radial_menu() -> void:
 	assert_true(adapter.sample(source, DT).combat.fire, "pressed again, fire fires")
 
 
-func test_the_stick_that_pointed_does_not_steer_until_it_centres() -> void:
+func test_the_left_stick_that_pointed_does_not_strafe_until_it_centres() -> void:
 	adapter.begin_radial(source)
-	source.hold(InputAdapter.YAW_RIGHT, 1.0)
+	source.hold(InputAdapter.STRAFE_RIGHT, 1.0)
 	adapter.sample_radial(source, DT)
 	source.push_mouse(Vector2(900.0, 0.0))
 	adapter.end_radial(source)
 	for _i: int in 5:
-		assert_eq(adapter.sample(source, DT).flight.rot, Vector3.ZERO, "held over from the menu: no turn, from the stick or the mouse")
-	source.release(InputAdapter.YAW_RIGHT)
-	assert_eq(adapter.sample(source, DT).flight.rot, Vector3.ZERO)
-	source.hold(InputAdapter.YAW_RIGHT, 1.0)
-	assert_almost_eq(adapter.sample(source, DT).flight.rot.y, 1.0, 1e-6, "centred once, the stick flies again")
+		var held: PilotCommand = adapter.sample(source, DT)
+		assert_eq(held.flight.strafe, Vector2.ZERO, "held over from the menu: no strafe from the stick")
+		assert_eq(held.flight.rot, Vector3.ZERO, "and the mouse moved over the menu does not turn the ship")
+	source.release(InputAdapter.STRAFE_RIGHT)
+	assert_eq(adapter.sample(source, DT).flight.strafe, Vector2.ZERO)
+	source.hold(InputAdapter.STRAFE_RIGHT, 1.0)
+	assert_almost_eq(adapter.sample(source, DT).flight.strafe.x, 1.0, 1e-6, "centred once, the stick strafes again")
 	# A stick at rest when the menu closes is not held over at all.
-	adapter.end_radial(source)
 	adapter.reset()
 	source.release_all()
 	adapter.end_radial(source)
-	source.hold(InputAdapter.PITCH_UP, 1.0)
-	assert_almost_eq(adapter.sample(source, DT).flight.rot.x, 1.0, 1e-6)
+	source.hold(InputAdapter.STRAFE_UP, 1.0)
+	assert_almost_eq(adapter.sample(source, DT).flight.strafe.y, 1.0, 1e-6)
+
+
+func test_a_stick_barely_off_centre_when_the_menu_closes_is_not_held_over() -> void:
+	adapter.begin_radial(source)
+	source.hold(InputAdapter.STRAFE_LEFT, adapter.stick_deadzone * 0.5)
+	adapter.end_radial(source)
+	source.hold(InputAdapter.STRAFE_LEFT, 1.0)
+	assert_almost_eq(adapter.sample(source, DT).flight.strafe.x, -1.0, 1e-6, "inside the deadzone is centred")
+
+
+func test_the_right_stick_flies_the_moment_a_radial_menu_closes() -> void:
+	# The right stick is not the menu's (M7-T37): the menu does not read it, and nothing waits for it to centre.
+	adapter.begin_radial(source)
+	source.hold(InputAdapter.YAW_RIGHT, 1.0)
+	var ui: UiCommand = adapter.sample_radial(source, DT)
+	assert_eq(ui.radial_point, Vector2.ZERO, "the right stick points at nothing")
+	assert_eq(adapter.last.flight.rot, Vector3.ZERO, "the ship gets no stick input behind the menu")
+	adapter.end_radial(source)
+	var after: PilotCommand = adapter.sample(source, DT)
+	assert_almost_eq(after.flight.rot.y, 1.0, 1e-6, "back to its flight role at once")
+
+
+func test_no_left_stick_flight_input_while_a_radial_menu_shows() -> void:
+	adapter.begin_radial(source)
+	source.hold(InputAdapter.STRAFE_RIGHT, 1.0)
+	source.hold(InputAdapter.STRAFE_UP, 1.0)
+	adapter.sample_radial(source, DT)
+	assert_eq(adapter.last.flight.strafe, Vector2.ZERO, "the stick that points the menu does not also strafe")
+
+
+func test_a_held_strafe_key_is_not_held_over_by_a_menu() -> void:
+	# Keyboard and mouse paths are unchanged (M7-T37): only the pad's stick waits for centre.
+	adapter.begin_radial(source)
+	source.hold(InputAdapter.STRAFE_RIGHT, 1.0, true)
+	adapter.sample_radial(source, DT)
+	adapter.end_radial(source)
+	assert_almost_eq(adapter.sample(source, DT).flight.strafe.x, 1.0, 1e-6, "the Z/C key still strafes when the menu closes")

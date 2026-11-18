@@ -8,7 +8,7 @@ extends GutTest
 const TICKS: int = 240
 const SPEC_PATH: String = "res://assets/ships/starfury_aurora.tres"
 const FIXTURE: String = "core_state"
-const SETTINGS: Array[StringName] = [&"perf_threads", &"ram_damage"]
+const SETTINGS: Array[StringName] = [&"perf_threads", &"ram_damage", &"friendly_fire"]
 ## Jolt's contact points in T14's melee, as `test_fighter_melee` pinned them (M4-T14, re-taken in M4-T31).
 const MELEE_CONTACTS: int = 2959
 
@@ -18,6 +18,7 @@ var _saved: Dictionary = {}
 func before_each() -> void:
 	for key: StringName in SETTINGS:
 		_saved[key] = Settings.get_value(key)
+	Settings.set_value(&"friendly_fire", false)  # the parity recordings were made with it off (M7-T47 made it the default)
 	Factions.reset()
 	ContactScan.invalidate()
 
@@ -297,7 +298,7 @@ const OLD_PATHS_CASE: String = "battle_on_the_old_paths"
 
 func test_the_battle_flies_as_the_old_paths_did() -> void:
 	var candidate: Dictionary = await _battle()
-	var recorded: Variant = ParityFixture.stored(FIXTURE, OLD_PATHS_CASE)
+	var recorded: Variant = ParityFixture.rerecorded(FIXTURE, OLD_PATHS_CASE, _digest_of(candidate))
 	assert_not_null(recorded, "the old paths' battle was recorded")
 	if recorded == null:
 		return

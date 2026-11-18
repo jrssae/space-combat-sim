@@ -2,7 +2,8 @@
 
 Godot imports a ``.glb`` as a scene and builds the mesh's levels of detail at import, so a mesh written here gets the engine's
 own LOD chain. Only what the textured meshes need: one mesh of indexed triangle primitives, each with positions, normals and
-one UV set, and a named material per primitive. Output is deterministic: no timestamps, fixed key order, 4-byte alignment.
+one UV set, and a named material per primitive; optionally a skin (M7-T33: parts that move, each vertex bound whole to one joint).
+Output is deterministic: no timestamps, fixed key order, 4-byte alignment.
 """
 
 from __future__ import annotations
@@ -21,10 +22,20 @@ CHUNK_JSON = 0x4E4F534A
 CHUNK_BIN = 0x004E4942
 FLOAT = 5126
 UINT32 = 5125
+UINT16 = 5123
 ARRAY_BUFFER = 34962
 ELEMENT_ARRAY_BUFFER = 34963
 TRIANGLES = 4
 GENERATOR = "space-combat-sim procgen"
+
+
+@dataclass(frozen=True)
+class GlbJoint:
+    """A skin's joint: its name, its parent's index (-1 for a root) and where it sits in the mesh's frame (joints never turn at rest)."""
+
+    name: str
+    parent: int
+    position: tuple[float, float, float]
 
 
 @dataclass
@@ -40,6 +51,7 @@ class GlbPrimitive:
     blend: bool = False
     extras: dict = field(default_factory=dict)
     colors: np.ndarray | None = None  # optional COLOR_0, one RGBA per vertex (M4-T30b: the livery zone in red)
+    joints: np.ndarray | None = None  # optional JOINTS_0, the one joint each vertex follows (M7-T33)
 
     def __post_init__(self) -> None:
         self.positions = np.asarray(self.positions, dtype=np.float32).reshape(-1, 3)
@@ -49,7 +61,10 @@ class GlbPrimitive:
         n = len(self.positions)
         if self.colors is not None:
             self.colors = np.asarray(self.colors, dtype=np.float32).reshape(-1, 4)
-        if len(self.normals) != n or len(self.uv) != n or (self.colors is not None and len(self.colors) != n):
+        if self.joints is not None:
+            self.joints = np.asarray(self.joints, dtype=np.uint16).reshape(-1)
+        if len(self.normals) != n or len(self.uv) != n or (self.colors is not None and len(self.colors) != n) or (
+                self.joints is not None and len(self.joints) != n):
             raise ValueError("primitive arrays disagree in length")
         if len(self.indices) % 3 != 0:
             raise ValueError("indices must be whole triangles")
@@ -61,20 +76,28 @@ def _pad(data: bytes, fill: bytes) -> bytes:
     return data + fill * ((4 - len(data) % 4) % 4)
 
 
-def glb_bytes(primitives: Sequence[GlbPrimitive], mesh_name: str) -> bytes:
-    """The whole ``.glb`` file for one mesh of ``primitives`` (empty primitives are left out)."""
+def glb_bytes(primitives: Sequence[GlbPrimitive], mesh_name: str, joints: Sequence[GlbJoint] = ()) -> bytes:
+    """The whole ``.glb`` file for one mesh of ``primitives`` (empty primitives are left out); with ``joints`` the mesh is skinned
+    and every primitive must say which joint each vertex follows."""
     used = [p for p in primitives if len(p.indices) > 0]
     if not used:
         raise ValueError("a glb mesh needs at least one non-empty primitive")
+    if joints and any(p.joints is None for p in used):
+        raise ValueError("a skinned glb needs every primitive's joints")
+    if joints and any(not -1 <= j.parent < k for k, j in enumerate(joints)):
+        raise ValueError("a joint's parent must come before it")
     blob = bytearray()
     views: list[dict] = []
     accessors: list[dict] = []
 
-    def add(array: np.ndarray, component: int, kind: str, target: int, bounds: bool = False) -> int:
+    def add(array: np.ndarray, component: int, kind: str, target: int | None, bounds: bool = False) -> int:
         offset = len(blob)
         raw = np.ascontiguousarray(array).tobytes()
         blob.extend(_pad(raw, b"\x00"))
-        views.append({"buffer": 0, "byteOffset": offset, "byteLength": len(raw), "target": target})
+        view = {"buffer": 0, "byteOffset": offset, "byteLength": len(raw)}
+        if target is not None:
+            view["target"] = target
+        views.append(view)
         accessor: dict = {"bufferView": len(views) - 1, "componentType": component, "count": int(len(array)), "type": kind}
         if bounds:
             accessor["min"] = [float(v) for v in array.min(axis=0)]
@@ -92,6 +115,13 @@ def glb_bytes(primitives: Sequence[GlbPrimitive], mesh_name: str) -> bytes:
         }
         if p.colors is not None:
             attributes["COLOR_0"] = add(p.colors, FLOAT, "VEC4", ARRAY_BUFFER)
+        if joints:
+            bound = np.zeros((len(p.joints), 4), dtype=np.uint16)
+            bound[:, 0] = p.joints
+            weight = np.zeros((len(p.joints), 4), dtype=np.float32)
+            weight[:, 0] = 1.0
+            attributes["JOINTS_0"] = add(bound, UINT16, "VEC4", ARRAY_BUFFER)
+            attributes["WEIGHTS_0"] = add(weight, FLOAT, "VEC4", ARRAY_BUFFER)
         indices = add(p.indices, UINT32, "SCALAR", ELEMENT_ARRAY_BUFFER)
         material: dict = {
             "name": p.material,
@@ -104,17 +134,38 @@ def glb_bytes(primitives: Sequence[GlbPrimitive], mesh_name: str) -> bytes:
         materials.append(material)
         gltf_primitives.append({"attributes": attributes, "indices": indices, "material": len(materials) - 1, "mode": TRIANGLES})
 
+    nodes: list[dict] = [{"name": mesh_name, "mesh": 0}]
+    roots = [0]
+    skins: list[dict] = []
+    if joints:
+        nodes[0]["skin"] = 0
+        where = np.array([j.position for j in joints], dtype=np.float64)
+        for k, j in enumerate(joints):
+            local = where[k] - (where[j.parent] if j.parent >= 0 else 0.0)
+            node: dict = {"name": j.name, "translation": [float(v) for v in local]}
+            children = [1 + c for c, other in enumerate(joints) if other.parent == k]
+            if children:
+                node["children"] = children
+            nodes.append(node)
+            if j.parent < 0:
+                roots.append(1 + k)
+        inverse = np.tile(np.eye(4, dtype=np.float32), (len(joints), 1, 1))
+        inverse[:, 3, :3] = -where  # column-major: the translation sits in the last column
+        skins.append({"joints": [1 + k for k in range(len(joints))], "skeleton": roots[1],
+                      "inverseBindMatrices": add(inverse.reshape(-1, 16), FLOAT, "MAT4", None)})
     doc = {
         "asset": {"version": "2.0", "generator": GENERATOR},
         "scene": 0,
-        "scenes": [{"nodes": [0]}],
-        "nodes": [{"name": mesh_name, "mesh": 0}],
+        "scenes": [{"nodes": roots}],
+        "nodes": nodes,
         "meshes": [{"name": mesh_name, "primitives": gltf_primitives}],
         "materials": materials,
         "accessors": accessors,
         "bufferViews": views,
         "buffers": [{"byteLength": len(blob)}],
     }
+    if skins:
+        doc["skins"] = skins
     json_chunk = _pad(json.dumps(doc, separators=(",", ":"), sort_keys=False).encode("ascii"), b" ")
     bin_chunk = bytes(blob)
     total = 12 + 8 + len(json_chunk) + 8 + len(bin_chunk)
@@ -124,9 +175,9 @@ def glb_bytes(primitives: Sequence[GlbPrimitive], mesh_name: str) -> bytes:
     return bytes(out)
 
 
-def write_glb(path: Path, primitives: Sequence[GlbPrimitive], mesh_name: str) -> Path:
+def write_glb(path: Path, primitives: Sequence[GlbPrimitive], mesh_name: str, joints: Sequence[GlbJoint] = ()) -> Path:
     path = Path(path)
-    path.write_bytes(glb_bytes(primitives, mesh_name))
+    path.write_bytes(glb_bytes(primitives, mesh_name, joints))
     return path
 
 
@@ -157,8 +208,8 @@ def read_glb(path: Path) -> GlbMesh:
     def read(index: int) -> np.ndarray:
         accessor = doc["accessors"][index]
         view = doc["bufferViews"][accessor["bufferView"]]
-        width = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4}[accessor["type"]]
-        dtype = np.float32 if accessor["componentType"] == FLOAT else np.uint32
+        width = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4, "MAT4": 16}[accessor["type"]]
+        dtype = {FLOAT: np.float32, UINT16: np.uint16}.get(accessor["componentType"], np.uint32)
         raw = np.frombuffer(blob, dtype=dtype, count=accessor["count"] * width, offset=view["byteOffset"])
         return raw.reshape(-1, width) if width > 1 else raw
 
@@ -176,6 +227,7 @@ def read_glb(path: Path) -> GlbMesh:
                 material.get("alphaMode") == "BLEND",
                 material.get("extras", {}),
                 read(p["attributes"]["COLOR_0"]) if "COLOR_0" in p["attributes"] else None,
+                read(p["attributes"]["JOINTS_0"])[:, 0] if "JOINTS_0" in p["attributes"] else None,
             )
         )
     return GlbMesh(doc, primitives)

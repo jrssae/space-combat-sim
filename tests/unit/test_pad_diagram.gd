@@ -33,6 +33,11 @@ func test_a_stick_row_names_everything_on_the_stick() -> void:
 	assert_eq(diagram.rows_text(), PackedStringArray(["R stick  Pitch / Yaw"]))
 
 
+func test_the_left_stick_row_also_says_it_points_the_radial_menus() -> void:
+	var diagram: PadDiagram = _diagram({&"strafe_left": ["pad:axis:0-"], &"strafe_right": ["pad:axis:0+"]})
+	assert_eq(diagram.rows_text(), PackedStringArray(["L stick  Strafe / Menu pointer"]), "T37: the menus' stick is the left one")
+
+
 func test_an_empty_legend_lists_nothing() -> void:
 	assert_eq(_diagram({}).rows_text().size(), 0)
 

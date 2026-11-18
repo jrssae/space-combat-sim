@@ -7,7 +7,7 @@ extends RefCounted
 const SETTINGS: Array[StringName] = [&"perf_threads", &"perf_step_threads", &"sim_step", &"ai_think_rate"]
 const WEAPON_PATH: String = ShipAssembly.DEFAULT_TURRET_WEAPON
 ## The hand-mounted turrets fire the light turret at this interval, so a few seconds of a mechanics test carry several shots
-## whatever the balance fight tunes the real gun to (`test_turret_defence` fires the real one from the hardpoints).
+## whatever the balance fight tunes the real gun to (`test_turret_defense` fires the real one from the hardpoints).
 const MECHANICS_INTERVAL_S: float = 1.2
 
 var space: SubViewport = null

@@ -1,0 +1,39 @@
+{
+"_comment": "M7-T35 maintenance crew (docs/assets-station.md). Points are in the station's frame (metres); the drum's pivot is (0, 0, -1000). crew: the pool of bots in the cargo bay, peace_min..peace_max out on patrol at once, battle_max repairing at once, repair_hp_s health a bot adds to its area each second, speeds (m/s) and acceleration (m/s^2), spin_s to get on or off the drum, the seeded wait between an area's trips and a patrol's stop (s), and the duck (a repair bot backs off duck_m while a hit landed within duck_radius_m in the last duck_s). roads: the trunk out of the cargo bay past the bow, the climb from its end to the high road at top_y, and the low road at lower_y under the drum. peace: the patrol areas, one bot each at a time: spine (its points), fins (the vanes at x, one of vanes_z, up or down to tip_y, reached at entry_z in front of the first vane), drum (landing and stopping between z[0] and z[1] along the green zone, riding at drum_profile's radius, [station z, radius]), gate (an arm's outer face arm_out_m out, from front_out_m in front of it; depart is the point past the bow the run starts from, detour_m out to the side when the gate is behind). sections: each damage section's work spot (frame) or drum z and radius (boarded from under the drum). mount_offset_m: how far along a grid mount's up a bot works, by kind. The clearance (clearance_m from the drawn hull, the drum's over a whole turn) is tested by tests/unit/test_bot_routes_clear_of_hull.gd.",
+"clearance_m": 8.0,
+"crew": {
+ "pool": 12, "peace_min": 3, "peace_max": 6, "battle_max": 12, "repair_hp_s": 10.0,
+ "cruise_mps": 25.0, "patrol_mps": 8.0, "transit_mps": 250.0, "accel_mps2": 4.0, "transit_accel_mps2": 10.0, "spin_s": 20.0,
+ "peace_wait_s": [60.0, 400.0], "peace_hold_s": [4.0, 15.0],
+ "duck_m": 40.0, "duck_radius_m": 100.0, "duck_s": 4.0
+},
+"roads": {
+ "trunk": [[0, 339, -3534], [0, 339, -3620], [0, 339, -4060], [0, 339, -4250]],
+ "climb": [[0, 650, -4150], [0, 640, -3600]],
+ "top_y": 640, "lower_y": -500, "corner_m": 30
+},
+"peace": [
+ {"name": "spine", "kind": "spine", "points": [[0, 515, -3300], [0, 515, -2700], [0, 615, -2550], [0, 615, -400]]},
+ {"name": "fins_port", "kind": "fins", "x": -580, "vanes_z": [365, 805, 1245], "entry_z": 150, "tip_y": 1440},
+ {"name": "fins_starboard", "kind": "fins", "x": 580, "vanes_z": [365, 805, 1245], "entry_z": 150, "tip_y": 1440},
+ {"name": "drum_fore", "kind": "drum", "z": [-1400, -750]},
+ {"name": "drum_aft", "kind": "drum", "z": [-100, 550]},
+ {"name": "gate", "kind": "gate", "arm_out_m": 75, "front_out_m": 150, "depart": [0, 339, -4800], "detour_m": 1800}
+],
+"drum_profile": [[-1400, 360], [-1300, 360], [-1200, 356], [-1100, 355], [-150, 355], [350, 356], [450, 360], [550, 360], [600, 356]],
+"sections": {
+ "command": {"work": [0, 455, -3150]},
+ "spine": {"work": [0, 575, -2000]},
+ "cargo": {"work": [0, 588, -800]},
+ "vanes": {"work": [580, 1000, 365], "via": [[580, 640, 150], [580, 640, 365]]},
+ "hub": {"work": [0, 410, 1900]},
+ "reactor": {"work": [0, 285, 3200]},
+ "docking_sphere": {"z": -2500, "r": 387},
+ "cobra_bays": {"z": -2900, "r": 276},
+ "forward_drum": {"z": -2600, "r": 350},
+ "green_zone": {"z": -1000, "r": 355},
+ "aft_drum": {"z": 750, "r": 364}
+},
+"mount_offset_m": {"light_pulse": 22, "heavy_cannon": 22, "interceptor": 19},
+"mount_work": {"I6": {"work": [60, 488, -2502]}}
+}

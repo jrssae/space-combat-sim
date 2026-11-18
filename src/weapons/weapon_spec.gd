@@ -41,8 +41,28 @@ extends Resource
 @export var turret_spread_deg: float = 0.8
 @export var turret_traverse_deg_s: float = 50.0
 @export var turret_elevation_deg_s: float = 40.0
+## Bursts (M7-T43, the heavy cannon): shots a burst, `burst_spacing_s` apart; `shot_interval_s` is then the whole cycle, from one
+## burst's first shot to the next's. One shot a burst is a plain gun.
+@export var burst_shots: int = 1
+@export var burst_spacing_s: float = 0.0
 
 
 ## A capacitor sized for this weapon, full.
 func make_capacitor() -> WeaponCapacitor:
 	return WeaponCapacitor.new(capacitor_capacity, capacitor_cost_per_shot, capacitor_recharge_per_s)
+
+
+const WEAPON_DIR: String = "res://assets/weapons"
+
+
+## The bolt colour of every weapon spec under `assets/weapons`, each once: what the impact flashes are warmed for at load.
+static func known_bolt_colors() -> Array[Color]:
+	var out: Array[Color] = []
+	for file: String in DirAccess.get_files_at(WEAPON_DIR):
+		var path: String = "%s/%s" % [WEAPON_DIR, file.trim_suffix(".remap")]
+		if not path.ends_with(".tres"):
+			continue
+		var spec := load(path) as WeaponSpec
+		if spec != null and not out.has(spec.bolt_color):
+			out.append(spec.bolt_color)
+	return out

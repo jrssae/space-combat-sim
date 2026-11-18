@@ -42,6 +42,39 @@ class Relief:
         return Relief(np.zeros(n), np.zeros(n), np.ones(n), np.zeros(n))
 
 
+def _keyed_hash(keys: np.ndarray, *salts: int) -> np.ndarray:
+    """``_hash01(keys, salt, ...)`` for an array of keys and constant salts, each distinct key hashed once (M7-T24: a part's
+    millions of texels lie on a few thousand plates; the same numbers)."""
+    keys = np.asarray(keys, dtype=np.int64)
+    if len(keys) < 4096:
+        return _hash01(keys, *(np.full(len(keys), s_, dtype=np.int64) for s_ in salts))
+    unique, inverse = np.unique(keys, return_inverse=True)
+    return _hash01(unique, *(np.full(len(unique), s_, dtype=np.int64) for s_ in salts))[inverse.reshape(-1)]
+
+
+def _cell_hash(iu: np.ndarray, iv: np.ndarray, chart: np.ndarray, salt: int) -> np.ndarray:
+    """``_hash01(iu, iv, chart, salt)``, each distinct field hashed once."""
+    if len(iu) >= 4096:
+        lo = np.array([iu.min(), iv.min(), chart.min()])
+        span = np.array([iu.max(), iv.max(), chart.max()]) - lo + 1
+        if float(span[0]) * float(span[1]) * float(span[2]) < 2.0 ** 62:
+            key = ((iu - lo[0]) * span[1] + (iv - lo[1])) * span[2] + (chart - lo[2])
+            unique, inverse = np.unique(key, return_inverse=True)
+            c = unique % span[2]
+            b = (unique // span[2]) % span[1]
+            a = unique // (span[2] * span[1])
+            return _hash01(a + lo[0], b + lo[1], c + lo[2], np.full(len(unique), salt, dtype=np.int64))[inverse.reshape(-1)]
+    return _hash01(iu, iv, chart, np.full(len(iu), salt, dtype=np.int64))
+
+
+def _pair_hash(key: np.ndarray, first: np.ndarray, add: int, salt: int) -> np.ndarray:
+    """``_hash01(key, first + add, salt)`` for non-negative keys and a flag per point, each distinct pair hashed once."""
+    if len(key) < 4096:
+        return _hash01(key, first.astype(np.int64) + add, np.full(len(key), salt, dtype=np.int64))
+    unique, inverse = np.unique(key * 2 + first.astype(np.int64), return_inverse=True)
+    return _hash01(unique // 2, unique % 2 + add, np.full(len(unique), salt, dtype=np.int64))[inverse.reshape(-1)]
+
+
 def _smooth(t: np.ndarray) -> np.ndarray:
     t = np.clip(t, 0.0, 1.0)
     return t * t * (3.0 - 2.0 * t)
@@ -74,7 +107,10 @@ class Feature:
 
     def paint(self, p: np.ndarray, n: np.ndarray, line_m: float, depth_m: float, out: Relief) -> None:
         """Adds this feature's groove or rib to ``out``."""
-        d = np.where(self._allowed(p, n), self.distance(p, n), _INF)
+        _on_allowed(self, p, n, line_m, depth_m, out)
+
+    def _paint_all(self, p: np.ndarray, n: np.ndarray, line_m: float, depth_m: float, out: Relief, ok: np.ndarray) -> None:
+        d = np.where(ok, self.distance(p, n), _INF)
         half = 0.5 * line_m * self.width
         s = _smooth(1.0 - (d - self.flat_m) / half)
         out.height -= depth_m * self.depth * s
@@ -83,6 +119,21 @@ class Feature:
         else:  # a rib: a thin shadow line at its foot only
             foot = _smooth(1.0 - np.abs(d - self.flat_m - half) / (0.5 * half))
             out.line[:] = np.maximum(out.line, 0.5 * self.dark * foot)
+
+
+def _on_allowed(feature: Feature, p: np.ndarray, n: np.ndarray, line_m: float, depth_m: float, out: Relief) -> None:
+    """Paints ``feature`` where it may paint: when its box and side leave most points out, only on those it keeps (M7-T24: the same
+    relief, since it adds nothing elsewhere, for far less work on a big part)."""
+    ok = feature._allowed(p, n)
+    if not ok.any():
+        return
+    if ok.all():
+        feature._paint_all(p, n, line_m, depth_m, out, ok)
+        return
+    sub = np.flatnonzero(ok)
+    part = Relief(out.height[sub], out.line[sub], out.tint[sub], out.rough[sub])
+    feature._paint_all(p[sub], n[sub], line_m, depth_m, part, np.ones(len(sub), dtype=bool))
+    out.height[sub], out.line[sub], out.tint[sub], out.rough[sub] = part.height, part.line, part.tint, part.rough
 
 
 @dataclass(frozen=True)
@@ -259,18 +310,17 @@ class Plates(Feature):
             p = np.column_stack([self.centre[0] + np.abs(p[:, 0] - self.centre[0]), p[:, 1], p[:, 2]])
         u, v, chart, (cu, cv) = self._uv(p, n)
         u, v = u - self.offset[0], v - self.offset[1]
-        seed = np.full(len(p), self.seed, dtype=np.int64)
         iu, iv = np.floor(u / cu).astype(np.int64), np.floor(v / cv).astype(np.int64)
         if self.wrap in ("barrel", "polar"):
             iv = np.mod(iv, self.around)
         u0, v0 = np.floor(u / cu) * cu, np.floor(v / cv) * cv
         u1, v1 = u0 + cu, v0 + cv
-        key = (_hash01(iu, iv, chart, seed) * 0xFFFFFF).astype(np.int64)
+        key = (_cell_hash(iu, iv, chart, self.seed) * 0xFFFFFF).astype(np.int64)
         for round_ in range(self.splits):
             w, h = u1 - u0, v1 - v0
-            r_keep = _hash01(key, seed + 101 + round_)
-            r_side = _hash01(key, seed + 211 + round_)
-            r_at = 0.3 + 0.4 * _hash01(key, seed + 307 + round_)
+            r_keep = _keyed_hash(key, self.seed + 101 + round_)
+            r_side = _keyed_hash(key, self.seed + 211 + round_)
+            r_at = 0.3 + 0.4 * _keyed_hash(key, self.seed + 307 + round_)
             along_u = np.where(w > 1.6 * h, True, np.where(h > 1.6 * w, False, r_side < 0.5))
             size = np.where(along_u, w, h)
             split = (r_keep >= self.keep) & (size * np.minimum(r_at, 1.0 - r_at) >= self.min_m)
@@ -282,32 +332,31 @@ class Plates(Feature):
             u0 = np.where(su & ~first, cut_u, u0)
             v1 = np.where(sv & first, cut_v, v1)
             v0 = np.where(sv & ~first, cut_v, v0)
-            key = np.where(split, (_hash01(key, first.astype(np.int64) + 7, seed + round_) * 0xFFFFFF).astype(np.int64), key)
+            key = np.where(split, (_pair_hash(key, first, 7, self.seed + round_) * 0xFFFFFF).astype(np.int64), key)
         return key, u0, u1, v0, v1, u, v
 
     def paint(self, p: np.ndarray, n: np.ndarray, line_m: float, depth_m: float, out: Relief) -> None:
-        ok = self._allowed(p, n)
-        if not ok.any():
-            return
+        _on_allowed(self, p, n, line_m, depth_m, out)
+
+    def _paint_all(self, p: np.ndarray, n: np.ndarray, line_m: float, depth_m: float, out: Relief, ok: np.ndarray) -> None:
         key, u0, u1, v0, v1, u, v = self.cells(p, n)
-        seed = np.full(len(p), self.seed, dtype=np.int64)
         edge = np.minimum(np.minimum(u - u0, u1 - u), np.minimum(v - v0, v1 - v))
         half = 0.5 * line_m * self.width
         if self.scatter > 0.0:
-            chosen = ok & (_hash01(key, seed + 503) < self.scatter) & (np.minimum(u1 - u0, v1 - v0) > 2.5 * self.inset_m)
+            chosen = ok & (_keyed_hash(key, self.seed + 503) < self.scatter) & (np.minimum(u1 - u0, v1 - v0) > 2.5 * self.inset_m)
             inner = edge - self.inset_m
             out.height += depth_m * abs(self.depth) * _smooth(inner / half) * chosen
             out.line[:] = np.maximum(out.line, self.dark * _smooth(1.0 - np.abs(inner + 0.5 * half) / half) * chosen)
-            out.tint *= 1.0 + self.tone * (2.0 * _hash01(key, seed + 401) - 1.0) * chosen * (inner > 0.0)
+            out.tint *= 1.0 + self.tone * (2.0 * _keyed_hash(key, self.seed + 401) - 1.0) * chosen * (inner > 0.0)
             return
         s = _smooth(1.0 - edge / half) * ok
         out.height -= depth_m * self.depth * s
         out.line[:] = np.maximum(out.line, self.dark * s)
         inside = _smooth(edge / half - 1.0) * ok
-        out.tint *= 1.0 + self.tone * (2.0 * _hash01(key, seed + 401) - 1.0) * ok
-        out.rough += self.sheen * (2.0 * _hash01(key, seed + 607) - 1.0) * ok
+        out.tint *= 1.0 + self.tone * (2.0 * _keyed_hash(key, self.seed + 401) - 1.0) * ok
+        out.rough += self.sheen * (2.0 * _keyed_hash(key, self.seed + 607) - 1.0) * ok
         if self.proud > 0.0:
-            out.height += depth_m * 0.6 * inside * (_hash01(key, seed + 503) < self.proud)
+            out.height += depth_m * 0.6 * inside * (_keyed_hash(key, self.seed + 503) < self.proud)
         if self.grime > 0.0:
             out.tint *= 1.0 - self.grime * np.exp(-edge / self.grime_m) * ok
 

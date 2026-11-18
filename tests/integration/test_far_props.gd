@@ -172,7 +172,7 @@ func test_the_dots_light_follows_the_sun_as_the_mesh_does() -> void:
 func test_the_station_shrinks_both_pieces_and_its_drum_keeps_turning() -> void:
 	var station := StationStandin.new()
 	if not station.build():
-		fail_test("the b5_station asset is not generated")
+		fail_test("the babylon5_station asset is not generated")
 		station.free()
 		return
 	var far: FarProp = FarPropHost.dress_station(station)
@@ -188,8 +188,14 @@ func test_the_station_shrinks_both_pieces_and_its_drum_keeps_turning() -> void:
 	var turned: Basis = station.drum_pivot.basis
 	await wait_process_frames(3)
 	assert_ne(station.drum_pivot.basis, turned, "the drum turns inside the shrunk look")
+	# M7-T06: the station stands still; its picture between ticks is where it is (a tick's history must not move the eye's
+	# measure). The hand-off at this picture lies inside the broadcast range (M6), so it is a dot beyond it.
+	station.reset_physics_interpolation()
 	_view(far, station, FarPropHost.STATION_RANGE_M * 1.5, Vector3(1.0, 0.4, 0.3), 30)
-	assert_eq(far.path(), &"dot", "a dot beyond its range")
+	var why: String = "distance %.0f km, hand-off %.0f km at %.1f px/rad, fade %.2f, window %s" % [far.distance_m / 1000.0,
+			far.math.dot_distance_m(far.k_px_per_rad) / 1000.0, far.k_px_per_rad, far.fade, get_tree().root.size]
+	assert_lt(far.math.dot_distance_m(far.k_px_per_rad), FarPropHost.STATION_RANGE_M, "the hand-off inside its range: " + why)
+	assert_eq(far.path(), &"dot", "a dot beyond its range: " + why)
 
 
 func test_the_console_lists_the_far_props() -> void:
@@ -203,3 +209,16 @@ func test_the_console_lists_the_far_props() -> void:
 	var result: ConsoleResult = DebugConsole.registry.execute("far")[0]
 	assert_true(result.ok, "alone, it reports")
 	assert_false(DebugConsole.registry.execute("far view gate")[0].ok, "a view needs its distance")
+
+
+func test_a_camera_cut_this_frame_is_read_where_it_is_now() -> void:
+	# M7-T26 fix: a camera with interpolation off is read at its pose now; Godot's interpolated pose of it could still be the last
+	# frame's place, so a cut read as the old distance (the station's dot test failed that way after other tests' frames).
+	await wait_process_frames(2)
+	camera.global_position = Vector3(0.0, 0.0, 1.0e6)
+	assert_eq(FarProp.drawn_pose(camera), camera.global_transform, "where it is now, this frame")
+	var mover := Node3D.new()
+	mover.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_ON
+	world.add_child(mover)
+	assert_eq(FarProp.drawn_pose(mover), mover.get_global_transform_interpolated(), "an interpolated node is drawn between ticks")
+	mover.queue_free()

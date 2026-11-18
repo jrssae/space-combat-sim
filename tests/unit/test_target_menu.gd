@@ -114,6 +114,22 @@ func test_picking_a_ship_returns_it_as_the_target_and_closes() -> void:
 	assert_eq(int(menu.select()["id"]), 50)
 
 
+func test_a_navigation_target_that_offers_an_interaction_is_the_target() -> void:
+	# M7-T27: a station bay (or the gate) is picked from NAVIGATION as the target, so a hold of X can act on it.
+	var candidates: Array[TargetInfo] = _battle()
+	var bay: TargetInfo = _info(62, 1500.0, Factions.NEUTRAL, Targetable.Role.BEACON, 1.0e6, "Babylon 5 cargo bay")
+	bay.interaction_kind = &"cargo"
+	candidates.append(bay)
+	menu.open(candidates, Vector3.ZERO, OWN, _objectives())
+	menu.radial.set_highlight(TargetCategories.ORDER.find(C.NAVIGATION))
+	menu.select()
+	assert_eq(_labels().slice(0, 2), ["BABYLON 5 CARGO BAY", "NAV BETA"] as Array[String], "places to act on come first")
+	menu.radial.set_highlight(0)
+	var picked: Dictionary = menu.select()
+	assert_eq(picked["action"], TargetMenu.ACTION_TARGET)
+	assert_eq(int(picked["id"]), 62)
+
+
 func test_unknown_contacts_have_no_name() -> void:
 	_open_category(C.UNKNOWN)
 	assert_eq(_labels(), ["UNKNOWN", "UNKNOWN", "UNKNOWN", "NONE", "", ""] as Array[String])

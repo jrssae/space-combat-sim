@@ -86,22 +86,60 @@ closer to a Thunderbolt than a Starfury. The rework must hit the silhouette abov
 
 ## Babylon 5 station (M7)
 
-About 8 km long, arranged along one axis. From aft to fore:
+Refined in M7-T01 from the maintainer's references (Q1): the STL `references/EA Babylon 5 Station.stl` for the proportions,
+two blueprints (Andy Crook's schematic, Lawrence Miller's lettered sheets), a show still (`babylon 5 station colors.jpg`) and
+fan close-ups for colour, surfaces and lights. The numbers, the source list and the colour table are in
+`docs/assets-station.md`; this is the description in words.
 
-1. **Reactor/engine end.** A cylindrical drum with a flared cap.
-2. **Spine.** A long, thin lattice of truss segments, about 25-30 % of the total length.
-3. **Hub and vanes.** A funnel or cone transition into the main body, with **three pairs of huge paddle-shaped
-   vanes** (dark blue). They stand out above and below in profile like a comb, each pair spanning about 2.5x the
-   drum diameter.
-4. **Rotating habitat drum.** The largest part, about 40-45 % of the length, with a diameter of roughly
-   1/9 of the total length. Segmented bands with blue/purple and grey panelling. A row of small reddish cargo
-   modules runs along the top.
-5. **Command section.** A blue-grey sphere and a ring structure ("Blue section"): the docking aperture at the
-   bow, the Cobra-bay launch arms on the sides, and thin antenna masts extending far above and below.
-6. **Bow.** A long forked spike or antenna array.
+8 km long along one axis, about 830 m across the drum's widest bands. Two long booms beside the aft drum carry twelve
+vane blades that reach 1.5 km above and below the axis, so the station is 3 km tall and 1.1 km wide overall. Two
+structures share the axis. A **turning drum** runs from the docking sphere at the bow to the aft band, a little under
+5 km. A **stationary frame** holds it from behind (hub, booms, reactor) and from above, where one long dorsal spine runs
+from the stern over the whole drum to the bow spike.
 
-Front on: a circular cross-section with a central docking aperture; two short arms carry the Cobra bays; long,
-thin vertical masts. Defence-grid emplacements (tutorial tour points) sit on the hull.
+From the bow to the stern:
+
+1. **Bow spike.** A flat fork on the dorsal spine's front end, two prongs with a slot between them, about 560 m long. A
+   pylon drops from it to the docking aperture's outer ring.
+2. **Docking aperture.** A toothed ring about 300 m across on the axis, a cross-shaped four-leaf door inside it.
+3. **Docking sphere** (the Blue section's command sphere). A sphere about 550 m across, blue and grey checkerboard.
+4. **Cobra-bay arms.** Four long arms at 90 degree spacing (top, both sides, bottom) on the sphere and the waist behind it,
+   each with a broad head on the sphere, two forward prongs, and a narrower 94 m wide section aft. A row of seven numbered,
+   hazard-striped hatches on the outward face; red stripes along the edges.
+5. **Forward body, ring and forward band.** A barrel about 660 m across, a toothed ring, then the first wide band (about
+   830 m across, 550 m long).
+6. **Green zone.** The long middle of the drum, about 660 m across and 2.5 km long, with a slightly wider belt at mid
+   length and raised stringers along it.
+7. **Aft band.** A second wide band like the forward one, rounded at both shoulders.
+8. **Hub.** Behind a narrow neck (the drum's aft bearing): a short drum, then a cone tapering to the truss, with two flat
+   delta fins out to the sides.
+9. **Vane booms and vanes.** Two thin rails at the hub's sides running forward beside the aft drum, about 120 m clear of
+   it. Each carries three tall vanes ("ionization vanes"), each a pair of blades, one up and one down: thin deep-blue
+   plates in a grey frame, widest near the root and tapering to a notched tip. In profile they stand above and below like
+   a comb; front on they are long thin vertical lines at the sides (there are no separate antenna masts).
+10. **Truss spine.** An open box truss about 210 m across and 760 m long.
+11. **Torus disc.** A disc about 510 m across with radial ribs and toothed rim.
+12. **Shaft and reactor.** A slim shaft with machinery bays, then the reactor drum (about 340 m across), its aft face a
+    ring of bulging pipe sections round a flat disc.
+
+**The dorsal spine** (the Brown section) is the frame's backbone: warm grey-brown, faceted, 9 m above the drum's wide
+bands and about 90 m above the green zone. It carries the observation dome near the bow, two ribbed radiator blocks over
+the wide bands and a row of six red cargo modules over the green zone.
+
+**What turns.** The references (Miller's Blue section sheet: rotation compensators, scanners matching the station's
+rotation, elevators from the Blue section to the Green zone; the support spine the rotation section can be jettisoned
+from) put the docking sphere, the Cobra arms and the whole drum on the turning part. That moves the Cobra bays from the
+stationary command section, as this page read before T01, onto the drum. The maintainer confirms it (Q3).
+
+**Defense grid.** Its emplacements are settled with the maintainer in T02; `docs/assets-station.md` lists where the
+references show turret-like features.
+
+**Colours.** The drum light grey with large blue-violet panels in stepped blocks; the vanes deep blue; the spine, the bow
+spike and the hub warm grey-brown; the reactor end darker bronze grey; the cargo modules dull red; red trim stripes on the
+arms and the bow spine, hazard yellow on the bay hatches.
+
+**Lights.** A red lamp at the observation dome, red lit panels on the bow spine, yellow strip lights on the arms; windows
+are not readable in the captures and come from Q10.
 
 ## Epsilon III (M6)
 
@@ -209,6 +247,37 @@ a capital ship's own (M12) and the open points raiders arrive through.
   the video frames (the whole sequence, and the orange-gold departure). `jumpgate.png` is dimmer and deeper blue than the
   others; the game follows the brighter video colours, a little dimmed.
 
+**The GIF's sequence (M7-T23).** `references/jumpgate/Jump gate opening (arrival), jump point forming (with small pause), and jump
+gate jump to hyperspace.gif` (28.7 s, 430 frames at about 15 a second; inspiration only, never traced or committed). Times are
+seconds into the GIF; the game's values are in `data/jump/vortex_look.json`.
+
+| GIF time | Stage | Lasts | In the game |
+|---|---|---|---|
+| 0 to 1.7 | title card | | |
+| **A gate arrival** | | | |
+| 1.8 to 3.0 | lights run along all four arms together, toward the centre | 1.2 s | `gate.chase_s` 1.2 |
+| 3.2 to 3.8 | the four ends glow pink-red round white cores and throb twice, each throb larger | 0.6 s | `gate.lead_s` 2.0 in all, `gate.tip_pulses` 2, `gate.flash_colour` |
+| 3.8 to 4.0 | the glows merge into a white flash that whites out the whole picture | 0.2 s | `gate.flash_peak` 0.15 of `timing.flash_s` 1.4; **not a white-out** (the maintainer: "keep the flash but it doesn't need to white out the whole screen"): a round flash 3.2 mouth radii across (`gate.flash_size`; `gate.flash_bloom` 0) |
+| 4.0 to 5.2 | the flash shrinks to a round pink-red glow with a halo ring and lens ghosts | 1.2 s | the rest of `timing.flash_s`; round glows with `flash_halo` and `flash_ring`, and the lens flare (`flare_level`, `FlashFlare`), no star rays (the maintainer) |
+| 5.2 to 6.2 | a blue disc grows from the spark to the full mouth, a tiny dark eye in it from the start | 1.0 s | `timing.grow_s` 1.2, `gate.eye_share` |
+| 6.4 to 7.0 | a flash at the eye as a ship comes through | 0.6 s | the ring flash (M6-T22), unchanged |
+| 7.0 to 12.4 | open: a bright mid-blue body covered in short pale feathers, lying along a slight spiral and drifting slowly outward; a soft darker rim; the ship grows out of the eye | | the funnel shader's feathers |
+| **A ship's own jump point** | | | |
+| 12.8 to 14.0 | a small dim blue-purple star with a few rays, steady: the pause | 1.2 s | **not built** (`point.lead_s` 0, the maintainer): the star swells at once |
+| 14.2 to 15.4 | the star swells and flickers to a blue-purple flare with long rays and a white core | 1.2 s | `point.flash_peak` 0.7 of `timing.flash_s`, `point.flash_colour` |
+| 15.4 to 16.0 | the flare falls back to a spark | 0.6 s | the rest of the flash |
+| 16.0 to 17.4 | a thin blue ring opens beside the spark, wide and shallow, its dark centre most of it; it grows, thickens inward and deepens into a funnel with a dark eye a quarter of its radius | 1.4 s | `timing.grow_s`; `point.ring_start` 0.32 (the ring springs out a third of the mouth across, blue at once), `point.eye_share` 0.6, `point.shallow` 0.35 |
+| 17.6 to 18.0 | a flash at the eye as the ship comes through | 0.4 s | the ring flash |
+| 18.0 to 20.6 | open, the camera closing in | | |
+| **A jump into hyperspace through the gate (for M11, not built)** | | | |
+| 21.2 to 25.3 | an amber-orange vortex between the arms, the same feathers in orange and brown round a dark eye; the ship flies in and the view follows it down an amber tunnel | 4.1 s | recorded for M11 (Hyperspace); today's departure keeps M6's orange funnel |
+| 25.3 to 25.7 | a white flash, then the title card | | |
+
+The GIF shows no closing; the fold back and the closing flash stay as M6 built them. The point's pause is **not built**: M6-T19
+round 2 took it for a fault in the gif, and the maintainer confirmed that under M7-T23 (`point.lead_s` is 0; a value there would
+hold the small star that long). The dark eye stays M6's 0.24 of the mouth (ships come out of that ring), and the lamps chase
+front to back along the rails (the GIF's gate has spoke arms).
+
 **What the generator gives the game (T14, T19).** The gate's origin is the centre of the arms' front ends, where the vortex's mouth
 lies; the gate faces -Z (arrivals leave along -Z, departures fly in along +Z) and the arms run back to z = 1 200 m. `hardpoints.json`
 and the manifest carry the vortex (mouth centre, normal, up, rim radius measured a few metres inside the arms, depth = the arm's
@@ -245,6 +314,12 @@ spikes hanging from the nacelle sides and wing roots. `docs/assets-raider.md` li
 56°) and where they differ from the earlier written defaults (9 m × 17 m, 60°). Open: scale (is 17 m across right?)
 and colour (worn grey-brown is used, per the mood shot); the maintainer can overrule both in `RaiderSpec`.
 
+**M7-T16: the model.** `Raider_Fighter_16m.stl` (binary, 8 381 triangles) now sets the shape, at 16 m across (0.12446 m per file
+unit; 7.37 m long, 1.53 m high), mapped `--right=-x --up=+z --aft=+y`, the apex forward: a 47.8° leading edge in one line from the
+nose to a pointed tip, notched at 2.7 to 3.4 m out for two short guns, a straight trailing edge, a body across the wing (a narrow
+ridge and keel between two flat engine housings). The sections, the scores and what changed are in `docs/assets-raider.md`
+("What it is", "Fidelity"); this supersedes the sheet's proportions above and answers the open scale question (16 m).
+
 ## Raider carrier (M12)
 
 A blocky "battlewagon": a long rectangular box hull, dark green-grey with plating. **Two large concentric
@@ -280,6 +355,67 @@ plating and visible panel detail. Useful for raider colours, engine-glow colour 
 A small craft a few metres across. Two large curved shell halves (blue-purple, with yellow-orange bands and a
 painted number) sit side by side like a split egg or clam, joined by a grey central truss body. Two jointed
 manipulator arms hang below with claw grippers. A sensor head with a green lens sits under the front centre.
+
+The reference is the maintainer's four-view sheet `references/maintenance bot.webp` (gitignored; top, side, front and a
+three-quarter view), measured in M7-T36 at the bot's 4.65 m length (one sheet pixel is 0.0216 m). Below, z runs aft from the
+shells' tips and y up from the shells' flat undersides:
+
+| Part | Size and place |
+|---|---|
+| Overall | 4.65 m long, 3.48 m across the arms, 2.92 m from the shells' crest to the claws |
+| Shells | each a quarter of a long egg, flat inside and underneath: the inner walls at x ±0.585 m (a 1.17 m gap down the middle), the outer edge out to x ±1.37 m at z 2.8; the pointed tip (z 0) and the rounded tail (z 4.58) both on the inner wall; the crest along the inner wall rising from the tip to 0.45 m at z 1.75 and 0.62 to 0.65 m from z 2.5 to 4.1; the section a little flatter than a quarter ellipse; gold bands at z 1.6 to 1.9 and 3.04 to 3.47 with a gold "9" 0.48 m tall between them, upright read from outboard (a "9" and a "6" seen from above) |
+| Truss | a deck between the shells (top at y 0.09) from z 0.88, 0.68 m wide ahead of z 1.66; under the shells a beam 0.84 m wide at y -0.13 to -0.43 from z 1.05, with a dark slot between it and the shells; the tail block's underside rising from y -0.63 at z 3.44 to -0.06 at z 4.22; a T-shaped mast on the deck aft, up to the crest |
+| Arms | outboard of the shells at x ±1.62 m, folding fore and aft: the shoulder at y -0.31, z 1.83 (a post up to the shell's underside, a beam across toward the truss at z 1.1 to 1.65); the elbow at y -0.89, z 3.73; the wrist at y -1.8, z 2.49; a two-prong claw down to y -2.23 |
+| Sensor | a stalk 0.4 m wide at z 2.33 to 2.59 down to y -1.23; a lens box 0.8 m wide down to y -1.78, its green lens looking forward |
+| Colours (lit, sRGB) | shells #5F5AA8, bands and numbers #B79F62, truss #969391 |
+
+Fidelity (maintainer, 2026-11-14, M7-T36): there is no STL, so the sheet's views stand in for it. Masks are cut from the sheet by a
+threshold on its dark background (dark paint on solid parts, the lens box's face and the bow frame's ring, is filled in), the bot's
+silhouettes are drawn at the same scale (its length is the sheet's length), and each view must overlap by IoU >= 0.90 with L/W/H
+within 10%. The sheet is not left-right symmetric (the front is a perspective render, some truss details are one-sided), so a
+symmetric bot can reach at most 0.896 in the top view and 0.888 in the front against the raw masks. Top and front are therefore
+scored against the **symmetrised mask**: the mask joined with its mirror image, the best target for a symmetric shape. As built:
+top 0.905 (raw 0.844), side 0.908, front 0.857 (raw 0.801); the maintainer accepted the front below 0.90, against its 0.888 ceiling.
+
+## Cargo pod (M7)
+
+The Earth Alliance cargo pod (M7-T33, asset `cargo_pod_craft`): the small work craft that moves the freighters' cargo
+between their holds and the station's cargo bay (M7-T34). `references/EA_cargo_pod.stl`, 0.0471 m per file unit at the
+maintainer's **6 m** length. File +x is aft (the jaws at -x), file y is starboard and file z up:
+`--right=+y --up=+z --aft=+x`. Length 6.0 m from the jaws' tips to the stern ridge, span 3.28 m across the arms' root blocks,
+height 2.07 m from the keel to the roof humps; x and y are centred on the box.
+
+In words: a faceted cab, hexagonal in section (a flat roof and keel, sloped flanks meeting at a chine a little below the
+middle), a wedge in front of a taller cabin; two arms alongside it, each a block on the cabin's flank, two barrels stacked one
+above the other telescoping forward, a wrist and a tapered forearm ending in a hand of two jaws that close top to bottom. Two
+hands 2.64 m apart reach 1 m ahead of the nose, so the craft carries its load in front of it, held at two points.
+
+| Part | Size and place |
+|---|---|
+| Nose | a bezel 0.84 m wide and 0.46 m tall at z 0.93 to 1.1, its face leaning back about 15 degrees, a window across it and a small sensor slot under it |
+| Wedge | z 1.02 to 3.6: the chine 0.86 m across at the nose widening to 2.12 m, the roof rising from y 0.12 to 0.80 (0.66 m wide at its front, 1.6 m at its back), the keel falling from y -0.50 to -0.97; the chine at y -0.21 to -0.15 |
+| Cabin | z 3.6 to 5.62: the chine 2.26 m across at y -0.20, the roof at y 0.95 (1.66 m wide), the keel at y -1.04 (1.70 m wide); two humps on the roof, 0.42 by 0.38 m and 0.1 m tall, at x ±0.4, z 4.06 |
+| Stern | outboard of x ±0.6 the roof and keel slope into a ridge on the chine at z 6.0 (y -0.22); between them they stop at a flat engine face 1.2 m wide at z 5.75 (y -0.77 to 0.55), which leaves a notch in the plan |
+| Root blocks | x 1.03 to 1.64, y -0.94 to 0.12, z 4.62 to 5.47, the outboard corners chamfered and the back raked inward |
+| Barrels | on axes at x ±1.32, y -0.19 and -0.61: the outer pair 0.38 by 0.43 m (a little oval), z 2.92 to 4.62; the inner pair 0.28 by 0.36 m, z 1.86 to 2.94 |
+| Wrist | a plate 0.3 by 0.98 m at z 1.85, a tapered block behind the pivot (z 1.57 to 1.82) and a pivot drum across it (0.24 m across, 0.46 m long, along x) |
+| Hand | a forearm tapering from 0.27 by 0.42 m at z 1.57 to 0.15 by 0.22 m at z 0.77; a crossbar 0.9 m tall at z 0.6 to 0.77; two jaws (z 0 to 0.6, 0.27 m square at the bar, 0.13 by 0.14 m at the tip) at y -0.17 and -0.63, five teeth on each inner face |
+
+The show's zero-g cargo bay (`references/zero g cargo bay references/1 SHOW zero g cargo bay with pod and arms.webp`) shows a
+pod holding a banded tank: a blue cab with a pale panel on its roof, a black window across the hexagonal nose, small white
+thruster cones at the nose corners, and beside it twin-barrelled arms in dark grey with yellow, orange and yellow bands and a
+black and white chequer. The bay's light is blue, so the colours are white-balanced on the cab's pale panel:
+
+| Where | sRGB | Read from |
+|---|---|---|
+| Cab | blue #1F4C9E, metallic paint | the cab's flanks (#083FAB under the bay's light) |
+| Roof panel | pale grey #C4C8CC | the cab's top (#A4AED8 under the bay's light) |
+| Barrels | worn grey metal #7A8189; bands yellow #D8BE38, orange #D2601E, a chequer of #1E1E1E and #E4E4E2 | the arms beside the pod |
+| Wrist, forearm, jaws | grey metal #6A717C | the arms' clamps |
+| Window | near black #0C1014 | the nose |
+| Thrusters | white #D8DADC, throats glowing blue-white | the nose corners |
+
+The arms in the capture may be the bay's own; the pod is given their paint until the maintainer says otherwise.
 
 ## Civilian ships (M5)
 

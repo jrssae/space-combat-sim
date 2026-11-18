@@ -63,6 +63,8 @@ fn mount(body: i64) -> PickMount {
         up: Vector3::new(0.0, 1.0, 0.0),
         min_elevation: (-10_f64).to_radians(),
         reach_m: 1500.0 * PICK_REACH,
+        kind: MOUNT_TURRET,
+        line_lift_m: LINE_LIFT_M,
     }
 }
 
@@ -286,7 +288,7 @@ fn the_mounts_reuse_a_freed_slot_and_change_its_stamp() {
     assert_eq!(m.add(3, 9, 12, 0, Vector3::ZERO, Vector3::new(0.0, 1.0, 0.0), 200.0, 3.0, gun()), 0);
     let mut job = PickJob::default();
     m.live[1] = false;
-    job.take_from(&m, &Memory::default(), &table(), 3, &Hulls::default());
+    job.take_from(&m, &Memory::default(), &table(), 3, &Hulls::default(), &Latch::default(), &[]);
     assert_eq!(job.mounts.len(), 1, "only live mounts are picked for");
     assert_eq!((job.mounts[0].slot, job.mounts[0].stamp), (0, 9));
 }
@@ -300,8 +302,8 @@ fn the_pick_over_a_job_answers_every_live_mount_with_its_stamp() {
     let mut memory = Memory::default();
     memory.note(1, 2, 0.0, true);
     let mut job = PickJob::default();
-    job.take_from(&m, &memory, &table(), 3, &Hulls::default());
-    pick_all(&rows, row_finder(&rows), 0.0, &mut job);
+    job.take_from(&m, &memory, &table(), 3, &Hulls::default(), &Latch::default(), &[]);
+    pick_all(&rows, row_finder(&rows), 0.0, &mut job, &Grid::default());
     assert_eq!(
         job.picks,
         vec![
@@ -395,4 +397,143 @@ fn the_hull_table_unpacks_and_versions() {
     assert_eq!(v[0].half, [1.0, 2.0, 3.0]);
     assert!((v[1].reach - 7.0).abs() < 1e-9);
     assert!(h.of(8).is_empty());
+}
+
+#[test]
+fn a_friend_that_fired_on_a_civilian_it_had_selected_is_answered_by_that_civilians_turrets_only() {
+    // Ship 1 the civilian with the turret, 7 a friend 400 m above it, 8 another civilian of the same people nearby.
+    let rows = rows_of(&[
+        (1, 0, Vector3::ZERO),
+        (7, 0, Vector3::new(0.0, 400.0, 0.0)),
+        (8, 0, Vector3::new(600.0, 0.0, 0.0)),
+    ]);
+    let find = row_finder(&rows);
+    let t = table();
+    let mut memory = Memory::default();
+    // A friend's hit, as with friendly fire on: never answered.
+    memory.note(1, 7, 0.0, true);
+    assert_eq!(pick(&rows, &find, &mount(1), &memory, &t, 3, 0.0, &[]), 0, "a friend is not a target");
+    assert!(!memory.is_provoked(1, 7, 0.0));
+    assert_eq!(memory.provoked_count(), 0);
+    // It fired close with the civilian selected: the civilian's own turret answers.
+    memory.note_provoked(1, 7, 1.0);
+    assert_eq!(pick(&rows, &find, &mount(1), &memory, &t, 3, 1.0, &[]), 7, "the provoked civilian's turret picks it");
+    assert!(memory.is_provoked(1, 7, 1.0), "and its bolts may land on it");
+    assert!(!memory.is_provoked(7, 1, 1.0), "not the other way round");
+    assert!(!memory.is_provoked(8, 7, 1.0), "nor from anyone else");
+    assert_eq!(memory.provoked_count(), 1);
+    // A neighbour's turret does not join in against a friend.
+    assert_eq!(pick(&rows, &find, &mount(8), &memory, &t, 3, 1.0, &[]), 0, "the civilian beside it stays silent");
+    // A later ordinary hit keeps the provocation; the memory's time ends it.
+    memory.note(1, 7, 2.0, true);
+    assert!(memory.is_provoked(1, 7, 2.0));
+    memory.prune(2.0 + MEMORY_S + 1.0);
+    assert_eq!(memory.provoked_count(), 0, "forgotten with the memory");
+    assert_eq!(pick(&rows, &find, &mount(1), &memory, &t, 3, 40.0, &[]), 0);
+}
+
+#[test]
+fn a_one_shot_gun_fires_every_interval() {
+    let (mut fired, mut started) = (0, 0.0);
+    assert_eq!(next_ready(12.0, 1, 0.0, &mut fired, &mut started, 5.0), 17.0);
+    assert_eq!((fired, started), (0, 0.0), "no burst kept");
+}
+
+#[test]
+fn a_burst_fires_its_shots_apart_then_waits_out_the_cycle() {
+    // M7-T43's heavy cannon: three shots 0.35 s apart, a new burst 12 s after the last began.
+    let (mut fired, mut started) = (0, 0.0);
+    let mut now = 100.0;
+    let mut times = vec![];
+    for _ in 0..6 {
+        times.push(now);
+        now = next_ready(12.0, 3, 0.35, &mut fired, &mut started, now);
+    }
+    let expected = [100.0, 100.35, 100.7, 112.0, 112.35, 112.7];
+    for (t, e) in times.iter().zip(expected) {
+        assert!((t - e).abs() < 1e-9, "{times:?}");
+    }
+    assert!((now - 124.0).abs() < 1e-9, "the third burst {now}");
+    // A burst held up (no target in the gate) resumes its count; the cycle runs from when the burst began.
+    let (mut fired, mut started) = (0, 0.0);
+    next_ready(12.0, 3, 0.35, &mut fired, &mut started, 0.0);
+    let late = next_ready(12.0, 3, 0.35, &mut fired, &mut started, 5.0);
+    assert!((late - 5.35).abs() < 1e-9);
+    assert!((next_ready(12.0, 3, 0.35, &mut fired, &mut started, 5.35) - 12.0).abs() < 1e-9);
+    // Held past its cycle, the next burst still waits its spacing.
+    let (mut fired, mut started) = (0, 0.0);
+    next_ready(1.0, 2, 0.35, &mut fired, &mut started, 0.0);
+    assert!((next_ready(1.0, 2, 0.35, &mut fired, &mut started, 3.0) - 3.35).abs() < 1e-9);
+}
+
+#[test]
+fn a_gun_on_a_raised_trunnion_fires_from_it() {
+    let mut m = Mounts::default();
+    let s = m.add(1, 1, 10, 0, Vector3::ZERO, Vector3::new(0.0, 1.0, 0.0), 200.0, 22.5, gun());
+    assert_eq!(m.line_lift(s), LINE_LIFT_M, "a turret's line starts just over its base");
+    m.lift_m[s] = 9.5;
+    assert_eq!(m.line_lift(s), 9.5, "a raised trunnion's line starts at it");
+    m.burst_shots[s] = 3;
+    m.burst_spacing_s[s] = 0.35;
+    let first = m.fired(s, 0.0);
+    assert!((first - 0.35).abs() < 1e-9);
+    let t = m.add(2, 1, 11, 0, Vector3::ZERO, Vector3::new(0.0, 1.0, 0.0), 200.0, 3.0, gun());
+    m.remove(t);
+    let again = m.add(3, 1, 12, 0, Vector3::ZERO, Vector3::new(0.0, 1.0, 0.0), 200.0, 3.0, gun());
+    assert_eq!(again, t);
+    assert_eq!((m.lift_m[again], m.burst_shots[again]), (0.0, 1), "a reused slot starts plain");
+}
+
+// The heavy cannon (M7-T43): a 2 km/s bolt, 1 m hit radius, from a trunnion 9.5 m over its base.
+fn heavy_gun() -> Gun {
+    Gun {
+        muzzle_speed: 2000.0,
+        interval_s: 12.0,
+        lifetime_s: 3.5,
+        damage: 300.0,
+        hit_radius: 1.0,
+        range_m: 6000.0,
+        spread_rad: 0.0,
+        traverse_rad_s: 15_f64.to_radians(),
+        elevation_rad_s: 12_f64.to_radians(),
+        color: [1.0; 4],
+        look: 0,
+    }
+}
+
+// How close a shot from `aim_from`'s settled aim, leaving `fire_from`, passes a fighter crossing at 2 km and `elevation_deg`.
+fn heavy_miss(aim_from: &Frame, fire_from: Vector3, elevation_deg: f64) -> f64 {
+    let g = heavy_gun();
+    let (se, ce) = elevation_deg.to_radians().sin_cos();
+    let target = Vector3::new(0.0, (2000.0 * se) as f32, (-2000.0 * ce) as f32);
+    let velocity = Vector3::new(90.0, 0.0, 0.0);
+    let (mut az, mut el) = (0.0, elevation_deg.to_radians());
+    let mut a = aim(aim_from, Vector3::ZERO, az, el, 0.0, &g, target, velocity, DT);
+    for _ in 0..600 {
+        a = aim(aim_from, Vector3::ZERO, az, el, 0.0, &g, target, velocity, DT);
+        (az, el) = (a.azimuth, a.elevation);
+    }
+    let (start, shot_velocity) = shot(fire_from, a.axis, a.axis, 0.0, Vector3::ZERO, g.muzzle_speed);
+    // The closest the bolt comes to the fighter over its flight (relative motion in a straight line).
+    let d = sub(start, target);
+    let v = sub(shot_velocity, velocity);
+    let t = (-f64::from(dot(d, v)) / f64::from(dot(v, v))).clamp(0.0, g.lifetime_s);
+    f64::from(crate::v3::length(add(d, scale(v, t as f32))))
+}
+
+#[test]
+fn a_raised_gun_aims_from_the_trunnion_it_fires_from() {
+    let base = level_frame();
+    let lifted = raised(&base, 9.5);
+    assert!((f64::from(lifted.pivot.y) - 9.5).abs() < 1e-6, "the trunnion 9.5 m up the base's axis");
+    let same = raised(&base, 0.0);
+    assert_eq!((same.pivot, same.up, same.forward, same.side), (base.pivot, base.up, base.forward, base.side), "unlifted: as is");
+    let r = heavy_gun().hit_radius;
+    for elevation in [10.0, 20.0, 30.0] {
+        let miss = heavy_miss(&lifted, lifted.pivot, elevation);
+        assert!(miss <= r, "{elevation} degrees up: the shot passes {miss:.2} m from the fighter");
+        // The old shot: aimed from the base, fired from the trunnion, parallel to the aimed line and about 9.5 m off it.
+        let old = heavy_miss(&base, lifted.pivot, elevation);
+        assert!(old > 5.0 * r, "{elevation} degrees up: aimed from the base it passes {old:.2} m off");
+    }
 }

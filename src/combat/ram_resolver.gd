@@ -276,7 +276,7 @@ func _hull_from(body_id: int, hull_id: int, rigid: bool, position: Vector3, velo
 	var damageable := instance_from_id(hull_id) as Damageable
 	var node := instance_from_id(body_id) as Node3D
 	if not rigid and world != null and node != null and node.is_in_group(WorldFrame.ANCHORED_GROUP):
-		velocity += world.rest_velocity()
+		velocity += world.anchored_velocity()
 	return {
 		"damageable": damageable,
 		"body": node,
@@ -611,7 +611,7 @@ static func _prop_velocity(body: Node3D) -> Vector3:
 	var buoy := body as NavBuoy
 	var own: Vector3 = buoy.velocity if buoy != null else Vector3.ZERO
 	var world: WorldFrame = WorldFrame.of(body) if body != null and body.is_in_group(WorldFrame.ANCHORED_GROUP) else null
-	return own + world.rest_velocity() if world != null else own
+	return own + world.anchored_velocity() if world != null else own
 
 
 static func _body_velocity(body: Node3D) -> Vector3:

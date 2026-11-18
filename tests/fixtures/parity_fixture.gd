@@ -56,6 +56,21 @@ static func record(file: String, case: String, value: Variant) -> void:
 	_cache[file] = ordered
 
 
+## The stored case `case` of `file` after re-recording it from the path the test just ran, when this run records
+## (M7-T16: the raider's new hull moved every seeded battle; the GDScript paths are gone, so the native path is the
+## reference now). `key` re-records one entry of a dictionary case and keeps the others. Without recording it is `stored`.
+static func rerecorded(file: String, case: String, value: Variant, key: String = "") -> Variant:
+	if recording():
+		if key.is_empty():
+			record(file, case, value)
+		else:
+			var old: Variant = stored(file, case)
+			var merged: Dictionary = (old as Dictionary).duplicate() if old is Dictionary else {}
+			merged[key] = encode(value)
+			record(file, case, merged)
+	return stored(file, case)
+
+
 ## Case `case` of `file` as stored, or null when it was never recorded.
 static func stored(file: String, case: String) -> Variant:
 	return _read(file).get(case)

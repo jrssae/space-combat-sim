@@ -7,7 +7,7 @@ extends Node
 ## play.
 ##
 ## `battle` and `typical` (M4-T07, §17.6) also bring the battle's stand-ins through `standins` (`World/Standins`): the
-## capitals with their turrets and beam lasers, the asteroid field (`rocks=` overrides the mix's count; 0 for none), the mine
+## capitals with their turrets and beam lasers, the generated asteroids (`rocks=` overrides the mix's count; 0 for none), the mine
 ## belts and the missiles the mix holds in flight (M4-T12), a low orbit of a body of the star system's data for its gravity
 ## (M6-T07; the frame's anchor is put back after), the carriers' launch cycle, and for four sides a session
 ## faction table and the bench factions on the fighters of sides three and four.
@@ -43,7 +43,7 @@ const ARRIVE_JUMP: StringName = &"jump"
 const ARRIVE_PLACED: StringName = &"placed"
 ## With arrivals, the measured window starts at least this long after the last point opened: its ships fly out of the funnel
 ## first (M6-T22, at most `VortexTransit.MAX_TRANSIT_S`), and the gate's groups wait for its vortex to open (M6-T23).
-const ARRIVAL_SETTLE_S: float = 1.0 + VortexTransit.MAX_TRANSIT_S + GateActivation.DURATION_S + VortexTiming.FLASH_S \
+static var ARRIVAL_SETTLE_S: float = 1.0 + VortexTransit.MAX_TRANSIT_S + GateActivation.DURATION_S + VortexTiming.FLASH_S \
 		+ VortexTiming.GROW_S
 ## The battle's jumpgate (M6-T23), for the fighter groups with no capital to bring them: this far below the first fight, facing
 ## up into the battle. Past the low-attention tier's reach from the player (10 km and its 10 % hysteresis, with 3 km to spare)
@@ -241,6 +241,7 @@ func start(layout: StringName, n: int, options: Dictionary) -> ConsoleResult:
 
 
 func _set_up_scene() -> void:
+	main.world.return_home()  # the layout is laid out round the player on the home rail (M7-T71)
 	_restore = {
 		"table": Factions.table(),
 		"threshold": main.world.auto_rebase_distance_m,
@@ -254,6 +255,8 @@ func _set_up_scene() -> void:
 	DebugConsole.flags.invulnerable = true
 	for c: Combatant in main.ships.alive():
 		main.ships.release(c)
+	if standins != null and is_instance_valid(standins):
+		standins.clear()  # a past run's capitals, rocks and mines go with its ships (M7-T50)
 	BenchLayout.capital_share = float(_options.get("capitals", -1.0))
 	var plan: Array[Dictionary] = BenchLayout.plan(_layout, _n, int(_options["seed"]))
 	if TierDirector.current() != null:
@@ -330,7 +333,7 @@ func _set_up_standins(plan: Array[Dictionary], anchor: UniversePos) -> void:
 	if not rocks.is_empty():
 		standins.add_asteroids(rocks, anchor)
 	_rocks_placed = rocks.size()
-	var belts: Array[Dictionary] = BenchLayout.mines(_layout, _n, int(_options["seed"]))
+	var belts: Array[Dictionary] = BenchLayout.mines(_layout, _n, int(_options["seed"]), rocks)
 	if not belts.is_empty():
 		standins.add_mines(belts, anchor)
 	standins.missile_target = int(_mix.get("missiles", 0))
@@ -720,7 +723,18 @@ func _finish(now: int, aborted: String) -> void:
 	finished.emit(summary)
 
 
-# Everything the run changed, back as it was (the ships stay in play).
+## The game faction each of `layout`'s bench-only sides joins when the run ends (the side's pool type's own), by bench faction.
+static func game_factions(layout: StringName) -> Dictionary:
+	var out: Dictionary = {}
+	var list: Array[StringName] = BenchLayout.sides(layout)
+	for i: int in list.size():
+		var own: StringName = ShipCatalog.faction_for(BenchLayout.SIDE_TYPES[i])
+		if list[i] != own:
+			out[list[i]] = own
+	return out
+
+
+# Everything the run changed, back as it was; its ships, capitals, rocks and mines stay in play until the next run.
 func _put_back() -> void:
 	if _restore.is_empty():
 		return
@@ -739,11 +753,12 @@ func _put_back() -> void:
 	if jumps != null and is_instance_valid(jumps):
 		jumps.stop_all()  # before their capitals go: a point losing its opener would collapse on whatever is in it
 	if standins != null and is_instance_valid(standins):
-		standins.clear()
+		standins.keep_after_run(game_factions(_layout))  # the battle flies on, as its ships do (M7-T50)
 	_free_gate()
 	_restore_frame()
 	if main != null and is_instance_valid(main.ships):
 		for c: Combatant in main.ships.all_ships():
+			c.damageable.invulnerable = false  # the bench's invulnerability only held the count steady for the window (M7-T59)
 			var own: StringName = ShipCatalog.faction_for(main.ships.type_of(c))
 			if c.faction != own:
 				set_faction(c, own)
@@ -787,8 +802,8 @@ func _engine_ticks() -> Dictionary:
 static func render_phases(frames: Array[PackedFloat64Array], window_s: float) -> Dictionary:
 	if frames.is_empty():
 		return {}
-	var forming_s: float = VortexTiming.FLASH_S + VortexTiming.GROW_S
-	var open_s: float = VortexTiming.new().close_from_s
+	var forming_s: float = VortexTiming.point_forming_s()
+	var open_s: float = VortexTiming.for_point().close_from_s
 	var bounds: Dictionary = {"forming": Vector2(0.0, forming_s), "open": Vector2(forming_s, open_s), "window": Vector2(window_s, INF)}
 	var out: Dictionary = {}
 	for part: String in bounds:

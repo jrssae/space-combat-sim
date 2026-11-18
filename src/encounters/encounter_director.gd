@@ -3,7 +3,13 @@ extends Node
 ## Free-flight encounters in play (architecture §18 D58, Q3, Q9, Q12, AC14): starts each `EncounterPlan` event when it is
 ## due, from pools built when encounters turn on (behind the loading screen when the menu asked for them), and returns its
 ## ships to their pools once they are 40 km from the player or their route has ended. Raiders come out of a jump point;
-## patrols and traffic cruise in from past the radar's reach. An event that would pass `encounter_max_ships` waits.
+## patrols and traffic cruise in from past the radar's reach.
+##
+## Pacing (M7-T56): each event is due its plan's gap after the last one started, so they come 1 to 3 minutes apart at the
+## default interval. One that cannot start (the cap, or its pool spent) gives way to another kind that can, and waits only
+## when none fits. A pools file with `station_run` (free flight) puts the traffic on the station's run from the jumpgate
+## (`StationTraffic.lane_event`; the run keeps its own civilians going too) and builds its ships on top of what the station's
+## raids and wings reserve; `station_raid_share` sends that share of the raids at the station, its wings scrambled against them.
 ##
 ## Cost (AC16): a tick only compares the encounter clock with the next event's time; the release check runs once a second
 ## over the director's own ships (at most the cap), never over every ship in play (`check_work`).
@@ -48,6 +54,10 @@ const GATE_REACH_M: float = 25000.0
 const GATE_SPREAD_M: float = 150.0
 ## Patrols and traffic out of the gate fly this far along its axis before their route ends.
 const GATE_OUT_M: float = 15000.0
+## A raid goes for the station only while the player is this close to it, so the fight is seen.
+const STATION_RAID_REACH_M: float = 25000.0
+## A station raid comes out this much farther from the station's centre than a raid from its target, clear of its hull.
+const STATION_STANDOFF_M: float = 5000.0
 const PATROL_CALLSIGNS: Array[String] = ["BRAVO", "CHARLIE", "DELTA", "ECHO", "FOXTROT"]
 const CIVILIAN_CALLSIGNS: Dictionary[StringName, String] = {
 	&"saturn_3_freighter": "SATURN", &"saturn_4_transport": "SATURN", &"saturn_4_tanker": "SATURN",
@@ -55,6 +65,7 @@ const CIVILIAN_CALLSIGNS: Dictionary[StringName, String] = {
 	&"narn_transport": "NARN", &"centauri_brezebel": "BREZEBEL", &"brakiri_bokmai": "BOKMAI",
 }
 const RAIDER_AI: Dictionary = {"type": "ai", "profile": "raider"}
+const STATION_RAIDER_AI: Dictionary = {"type": "ai", "profile": "raider", "orders": "attack", "objective": Station.DISPLAY_NAME}
 const ALLY_AI: Dictionary = {"type": "ai", "profile": "ally_starfury", "orders": "engage"}
 const CIVILIAN_AI: Dictionary = {"type": "ai", "profile": "civilian"}
 
@@ -75,6 +86,8 @@ var plan: EncounterPlan = null
 var elapsed_s: float = 0.0
 ## The next event the plan has not handed out yet.
 var next_index: int = 0
+## Encounter time the next event is due at (its gap after the last scheduled one started).
+var next_due_s: float = 0.0
 ## Events forced from the console so far: they draw from their own indices, so the schedule stays as it was.
 var forced: int = 0
 ## An event that is due but held by the cap or the pools.
@@ -93,6 +106,9 @@ var gate_shares: Dictionary = {}
 ## Events that used the gate so far, and ships waiting for the arrival vortex (counted against the cap).
 var gate_events: int = 0
 var in_transit: int = 0
+## The pools file's share of raids sent at the station, and whether traffic flies the station's run (M7-T56).
+var station_raid_share: float = 0.0
+var station_run: bool = false
 ## The pools file's `via.raid` and its carrier options (M6-T23).
 var raid_via: StringName = VIA_CARRIER
 var carrier_options: Dictionary = {}
@@ -133,6 +149,8 @@ static func create(p_main: Main, path: String) -> EncounterDirector:
 			w[kind] = float((raw_weights as Dictionary).get(String(kind), 0.0))
 		director.weights = w
 	director.gate_shares = EncounterPlan.parse_gate_shares((parsed as Dictionary).get("gate"))
+	director.station_raid_share = clampf(float((parsed as Dictionary).get("station_raid_share", 0.0)), 0.0, 1.0)
+	director.station_run = bool((parsed as Dictionary).get("station_run", false))
 	var raw_via: Variant = (parsed as Dictionary).get("via", {})
 	if raw_via is Dictionary:
 		var raid: StringName = StringName(str((raw_via as Dictionary).get("raid", VIA_CARRIER)))
@@ -168,7 +186,9 @@ func enable() -> String:
 	if not pools_built:
 		var t0: int = Time.get_ticks_msec()
 		for type: StringName in pools:
-			built += main.ensure_pool(type, pools[type])
+			# The station's raids and wings draw on the same pools: the file's ships come on top of what they reserve.
+			var reserved: int = main.traffic.reserved_count(type) if main.traffic != null and station_run else 0
+			built += main.ensure_pool(type, pools[type] + reserved)
 			main.debris.prepare(type)
 		# Ships built after load still break up and go back to their pools when destroyed (watching twice is harmless).
 		for pooled: Combatant in main.ships.all_ships():
@@ -179,6 +199,8 @@ func enable() -> String:
 	if plan == null:
 		plan = EncounterPlan.new(seed_value, float(Settings.get_value(&"encounter_interval_s")), weights)
 		plan.gate_shares = gate_shares
+		plan.station_raid_share = station_raid_share
+		next_due_s = elapsed_s + plan.gap_of(next_index)
 	on = true
 	return "encounters on (seed %d, every %.0f s, at most %d ships)%s" % [seed_value, plan.interval_s, cap(),
 			" - built %d pooled ships in %d ms" % [built, build_ms] if built > 0 else ""]
@@ -218,7 +240,7 @@ func alive_of(kind: StringName) -> int:
 func next_in_s() -> float:
 	if plan == null:
 		return -1.0
-	return 0.0 if waiting != null else maxf(plan.time_of(next_index) - elapsed_s, 0.0)
+	return 0.0 if waiting != null else maxf(next_due_s - elapsed_s, 0.0)
 
 
 func _physics_process(delta: float) -> void:
@@ -233,10 +255,23 @@ func _physics_process(delta: float) -> void:
 
 # At most one event a tick: the one waiting, else the next once its time has come.
 func _start_due() -> void:
-	if waiting == null and plan.time_of(next_index) <= elapsed_s:
+	if waiting == null and elapsed_s >= next_due_s:
 		waiting = take_next()
-	if waiting != null and start(waiting):
+	if waiting != null and start_scheduled(waiting):
 		waiting = null
+
+
+## Starts scheduled event `e`, or another kind in its place when it cannot start now, and times the next one from now.
+## False (nothing placed, the clock untouched) when no kind fits.
+func start_scheduled(e: EncounterEvent) -> bool:
+	var started: bool = start(e)
+	for kind: StringName in EncounterPlan.substitutes(e.kind):
+		if started:
+			break
+		started = start(plan.event(e.index, kind))
+	if started:
+		next_due_s = elapsed_s + plan.gap_of(next_index)
+	return started
 
 
 ## The plan's next event, and moves past it.
@@ -255,20 +290,33 @@ func take_forced(kind: StringName) -> EncounterEvent:
 
 ## Starts `e` now when the cap and the pools allow it; false (nothing placed) when it must wait.
 func start(e: EncounterEvent) -> bool:
-	var admitted: int = EncounterPlan.admit(_own.size() + in_transit, e.count(), cap())
+	var admitted: int = EncounterPlan.admit(_in_play(), e.count(), cap())
 	if admitted == 0:
 		return false
 	if admitted < e.count():
 		e.trim(admitted)
+	if e.kind == &"traffic" and _lane() != null:
+		if not _lane().lane_event(e, seed_value):
+			return false
+		_started(e)
+		return true
 	var types: Array[StringName] = _available_types(e)
 	if types.is_empty():
 		return false
-	var target: Combatant = _raid_target(e) if e.kind == &"raid" else null
+	var station: Station = _raid_station(e)
+	var target: Combatant = _raid_target(e) if e.kind == &"raid" and station == null else null
 	var anchor: UniversePos = _anchor_of(e, target)
 	var anchor_velocity: Vector3 = _reference_rest()  # planned velocities are against the player's reference (M6-T08, T09)
 	if e.anchor == EncounterEvent.ANCHOR_TARGET:
 		anchor_velocity = target.ship.linear_velocity if target != null else main.ship.linear_velocity
 	var target_name: String = target.display_name if target != null else main.combatant.display_name
+	if station != null:
+		anchor = main.world.to_universe(station.global_position)
+		anchor_velocity = main.world.rest_velocity()
+		target_name = Station.DISPLAY_NAME
+		var push: Vector3 = e.positions[0].normalized() * STATION_STANDOFF_M
+		for k: int in e.count():
+			e.positions[k] += push
 	var gate: Jumpgate = _gate_for(e)
 	var via: StringName = plan.gate_use(e.index, e.kind) if gate != null else &""
 	if e.jumps and raid_via == VIA_GATE and gate == null and main.gates != null:
@@ -282,10 +330,17 @@ func start(e: EncounterEvent) -> bool:
 			_arrive_at_gate(e, k, types[k], target_name, gate)
 		else:
 			_place(e, k, types[k], anchor, anchor_velocity, target_name, gate if via == EncounterPlan.GATE_DEPART else null)
+	if station != null:
+		main.traffic.scramble_for_raid()
+	_started(e)
+	return true
+
+
+func _started(e: EncounterEvent) -> void:
+	e.time_s = elapsed_s
 	last_event = e
 	events_started += 1
 	event_started.emit(e)
-	return true
 
 
 ## Looks at the director's own ships (never every ship in play): one gone from play is forgotten, one 40 km from the
@@ -365,8 +420,31 @@ func _free_civilian(wanted: StringName, taken: Dictionary) -> StringName:
 	return &""
 
 
+# The station's traffic, when the scene has the station and its lanes: traffic events fly its run (M7-T56).
+# The encounters' ships against the cap: their own, those asked of a gate, and the convoys they sent onto the station's run.
+func _in_play() -> int:
+	var traffic: StationTraffic = main.traffic if main != null else null
+	return _own.size() + in_transit + (traffic.encounter_count() if traffic != null else 0)
+
+
+func _lane() -> StationTraffic:
+	var traffic: StationTraffic = main.traffic
+	return traffic if station_run and traffic != null and traffic.lanes_ready() else null
+
+
+# The station a raid drawn for it goes for: only with the station's traffic there (its wings answer) and the player near.
+func _raid_station(e: EncounterEvent) -> Station:
+	if e.kind != &"raid" or not e.at_station or main.traffic == null:
+		return null
+	var s: Station = main.traffic.station()
+	if s == null or s.global_position.distance_to(main.ship.global_position) > STATION_RAID_REACH_M:
+		return null
+	return s
+
+
 # A raid for a civilian takes one of the encounters' civilians within reach of the player, by the event's pick; else (or
-# with none near) it goes for the player.
+# with none near) it goes for the player. On the station's run its traffic is the encounters' (M7-T55): their events join
+# it, so a raid finds the run's civilians between the gate and the station (never one on a docking lane).
 func _raid_target(e: EncounterEvent) -> Combatant:
 	if not e.at_civilian:
 		return null
@@ -377,6 +455,13 @@ func _raid_target(e: EncounterEvent) -> Combatant:
 		if entry["kind"] == &"traffic" and _still_ours(entry) and c.damageable.is_active() \
 				and _local_position(c).distance_to(player_at) <= CIVILIAN_REACH_M:
 			near.append(c)
+	var lane: StationTraffic = _lane()
+	if lane != null:
+		for c: Combatant in lane.ships():
+			var state: StringName = lane.state_of(c)
+			if (state == &"transit" or state == &"leave") and c.damageable.is_active() \
+					and _local_position(c).distance_to(player_at) <= CIVILIAN_REACH_M:
+				near.append(c)
 	if near.is_empty():
 		return null
 	return near[mini(floori(e.target_pick * float(near.size())), near.size() - 1)]
@@ -489,6 +574,8 @@ func _name_for(e: EncounterEvent, type: StringName) -> String:
 func _behaviour_for(e: EncounterEvent, target_name: String) -> Dictionary:
 	match e.kind:
 		&"raid":
+			if target_name == Station.DISPLAY_NAME:
+				return STATION_RAIDER_AI.duplicate()
 			var behaviour: Dictionary = RAIDER_AI.duplicate()
 			behaviour["objective"] = target_name
 			return behaviour

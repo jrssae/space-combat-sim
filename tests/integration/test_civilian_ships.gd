@@ -246,6 +246,48 @@ func test_raiders_attack_civilians_through_the_faction_data() -> void:
 	assert_has(names, target, "it attacked a civilian (%s), not the player" % target)
 
 
+func test_the_showcase_civilians_flee_a_raider() -> void:
+	# M7-T55 (m5-054): the showcase's hulls had no pilot, so they sat and fought; they now fly the civilian pilot, parked
+	# until a raider comes, then run.
+	if _skipped():
+		return
+	var main: Main = await _showcase()
+	for c: Combatant in main.scenario_ships:
+		var pilot := c.driver.brain as AiPilot if c.driver != null else null
+		assert_not_null(pilot, "%s has a pilot" % c.display_name)
+		if pilot != null:
+			assert_eq(pilot.base_profile.resource_path, AiProfile.PATHS[&"civilian"],
+					"%s flies the civilian profile" % c.display_name)
+	main.ensure_pool(ShipPool.DEFAULT_TYPE, 1)
+	main.combatant.damageable.invulnerable = true
+	assert_true(DebugConsole.registry.execute("spawn raider idle 1500")[0].ok)
+	var raider: Combatant = main.ships.alive(ShipPool.DEFAULT_TYPE)[0]
+	var before: Dictionary = {}
+	for c: Combatant in main.scenario_ships:
+		before[c] = c.ship.global_position.distance_to(raider.ship.global_position)
+	Engine.physics_ticks_per_second = roundi(60.0 * SPEED_UP)
+	Engine.time_scale = SPEED_UP
+	var t0: float = SimClock.now()
+	while SimClock.now() - t0 < 40.0:
+		await get_tree().physics_frame
+	Engine.physics_ticks_per_second = _rate_backup
+	Engine.time_scale = _scale_backup
+	var fled: Array[String] = []
+	var opened: float = 0.0
+	for c: Combatant in main.scenario_ships:
+		var seen: Dictionary = (c.driver.brain as AiPilot).describe()
+		var now: float = c.ship.global_position.distance_to(raider.ship.global_position)
+		opened += now - float(before[c])
+		if String(seen.get("behaviour", "")) == "retreat":
+			fled.append(c.display_name)
+		# A Saturn 8 turns at about a degree a second: in 40 s it may only have swung onto its way, never toward the raider.
+		assert_gt(now, float(before[c]) - 150.0, "%s does not close on the raider (%.0f -> %.0f m)" % [c.display_name,
+				float(before[c]), now])
+	gut.p("fleeing after 40 s: %s; %.0f m opened from the raider in all" % [fled, opened])
+	assert_eq(fled.size(), main.scenario_ships.size(), "every hull within 3 km of the raider runs")
+	assert_gt(opened, 1000.0 * main.scenario_ships.size() / 2.0, "away from it, together")
+
+
 func _named(main: Main, ship_name: String) -> Combatant:
 	for c: Combatant in main.scenario_ships:
 		if c.display_name == ship_name:

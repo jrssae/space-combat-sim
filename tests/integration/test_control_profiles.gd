@@ -14,12 +14,15 @@ const HISTORY_PATH := "user://test_control_profiles_history.txt"
 const DT := 1.0 / 60.0
 
 
-## GodotInputSource with one fake pad (id 0), driven with parse_input_event.
+## GodotInputSource with one fake pad, driven with parse_input_event.
 class OnePadSource:
 	extends GodotInputSource
 
+	## Past any id a real pad gets (Godot numbers them from 0), so a pad on the desk cannot feed the test.
+	const DEVICE: int = 15
+
 	func _pad_ids() -> Array[int]:
-		var pads: Array[int] = [0]
+		var pads: Array[int] = [DEVICE]
 		return pads
 
 	func _pad_guid(_pad: int) -> String:
@@ -290,6 +293,7 @@ func test_bind_and_unbind_errors_leave_the_map_alone() -> void:
 		"bind fier key:K": "unknown action 'fier' (did you mean fire?)",
 		"bind fire key:NoSuchKey": "unknown key name",
 		"bind fire key:QuoteLeft": "console key",
+		"bind fire key:Section": "console key",  # the same key on an ISO board (M7-T39)
 		"bind fire pad:button:15": "outside the standard layout",
 		"bind fire pad:axis:5-": "trigger",
 		"bind fire joystick:1": "unknown binding",
@@ -613,7 +617,7 @@ func _clean() -> void:
 
 func _axis(axis: JoyAxis, value: float) -> void:
 	var e := InputEventJoypadMotion.new()
-	e.device = 0
+	e.device = OnePadSource.DEVICE
 	e.axis = axis
 	e.axis_value = value
 	Input.parse_input_event(e)
@@ -622,7 +626,7 @@ func _axis(axis: JoyAxis, value: float) -> void:
 
 func _button(button: JoyButton, pressed: bool) -> void:
 	var e := InputEventJoypadButton.new()
-	e.device = 0
+	e.device = OnePadSource.DEVICE
 	e.button_index = button
 	e.pressed = pressed
 	Input.parse_input_event(e)

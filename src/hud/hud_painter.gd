@@ -14,6 +14,8 @@ const LINE_COLOR: Color = HudLayout.LINE_COLOR
 const TEXT_SHADOW: Color = Color(0.0, 0.0, 0.0, 0.8)
 ## Sides of the radar's batched dots (M4-T36): round at their few pixels.
 const DOT_SEGMENTS: int = 16
+## The step between the REF and ALT lines under the speed, layout px.
+const READOUT_LINE_PX: float = 16.0
 
 ## What the last radar paint cost, us (a readout): the dot buffers and the draws.
 static var radar_paint_us: int = 0
@@ -28,15 +30,20 @@ var painted: Array[StringName] = []
 var _canvas: CanvasItem = null
 var _font: Font = null
 # The radar's contacts as one draw each (M4-T36): the dots and, on a labelled radar, their dark backings.
-var _dots: MultiMesh = null
-var _backings: MultiMesh = null
+var _dots := RadarDotBatch.new()
+var _backings := RadarDotBatch.new()
 # The hollow rim dots (broadcasts beyond the sensors) as one draw too (M4-T23: the tier's far allies are hundreds of them).
-var _rims: MultiMesh = null
+var _rims := RadarDotBatch.new()
 
 
 func _init(canvas: CanvasItem) -> void:
 	_canvas = canvas
 	_font = _hud_font()
+
+
+## How many times the radar's dot multimeshes rebuilt after Godot moved their buffers (M7-T45; tests read it).
+func radar_dot_rebuilds() -> int:
+	return _dots.rebuilds + _rims.rebuilds + _backings.rebuilds
 
 
 ## The HUD's font, for what is drawn beside the instruments (the comms panel's subtitles).
@@ -99,11 +106,15 @@ func paint(f: HudFrame, surface: HudSurface) -> void:
 	if items.has(HudSurface.STATUS) and not f.status_line.is_empty():
 		_line(surface, f.status_line, surface.status_pos, 18.0 * s)
 	if items.has(HudSurface.ACK) and not f.ack_line.is_empty():
-		_line(surface, f.ack_line, surface.ack_pos, 16.0 * s)
+		_line(surface, f.ack_line, surface.ack_pos, surface.ack_text_size * s)
 	if items.has(HudSurface.ROSTER):
 		_draw_roster(surface, s, w)
 	if items.has(HudSurface.OBJECTIVES):
 		_draw_objectives(f, s)
+	if items.has(HudSurface.ESCORT):
+		_draw_escorts(f, s, w)
+	if items.has(HudSurface.INTERACT):
+		_bar(f.interact_rect, f.interact_progress, LINE_COLOR, w)
 
 
 # The wing roster (M3-T11): per wingman a hull bar in the wing's colour, the callsign and what it is doing.
@@ -122,6 +133,14 @@ func _draw_objectives(f: HudFrame, s: float) -> void:
 	for line: Dictionary in f.objective_lines:
 		_text(String(line["text"]), line["pos"] as Vector2, 15.0 * s, LINE_COLOR if bool(line["primary"]) else faint,
 				HORIZONTAL_ALIGNMENT_RIGHT)
+
+
+# The protected ships (M7-T54) under the objectives: each name and hull over its bar, right-aligned.
+func _draw_escorts(f: HudFrame, s: float, w: float) -> void:
+	_text("ESCORT", f.escort_caption_pos, 12.0 * s, Color(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, 0.7), HORIZONTAL_ALIGNMENT_RIGHT)
+	for row: HudLayout.RosterRow in f.escort_rows:
+		_text(row.text, row.text_pos, 15.0 * s, row.color, HORIZONTAL_ALIGNMENT_RIGHT)
+		_bar(row.bar_rect, row.hull, row.color, w)
 
 
 # --- helpers --------------------------------------------------------------------------------------------------
@@ -185,6 +204,16 @@ func _brackets(rect: Rect2, color: Color, w: float, arm: float) -> void:
 		_canvas.draw_line(corner[0], corner[0] + corner[2], color, w)
 
 
+# A navigation target's mark (M7-T27): a diamond round its box, so a gate or a bay never reads as a ship. Returns its lowest point.
+func _nav_diamond(rect: Rect2, color: Color, w: float) -> float:
+	var c: Vector2 = rect.get_center()
+	var r: float = rect.size.x * 0.5 * 1.3
+	_canvas.draw_polyline(PackedVector2Array([c + Vector2(0.0, -r), c + Vector2(r, 0.0), c + Vector2(0.0, r), c + Vector2(-r, 0.0),
+			c + Vector2(0.0, -r)]), color, w)
+	_canvas.draw_line(c + Vector2(-r * 0.2, 0.0), c + Vector2(r * 0.2, 0.0), color, w * 0.75)
+	return c.y + r
+
+
 # --- boresight, velocity marker -----------------------------------------------------------------------------
 
 
@@ -225,11 +254,15 @@ func _draw_target_marks(f: HudFrame, s: float, w: float, labelled: bool) -> void
 	var label: String = _target_line(f)
 	if f.target_on_screen:
 		var box: Rect2 = f.target_box
-		_brackets(box, color, w, maxf(8.0 * s, box.size.x * 0.28))
+		var bottom: float = box.end.y
+		if f.target_nav:
+			bottom = _nav_diamond(box, color, w)
+		else:
+			_brackets(box, color, w, maxf(8.0 * s, box.size.x * 0.28))
 		if labelled:
-			_text(label, Vector2(box.position.x, box.end.y + 18.0 * s), 15.0 * s, color)
+			_text(label, Vector2(box.position.x, bottom + 18.0 * s), 15.0 * s, color)
 			if f.target_hull >= 0.0:
-				_bar(Rect2(Vector2(box.position.x, box.end.y + 24.0 * s), Vector2(maxf(box.size.x, 60.0 * s), 6.0 * s)), f.target_hull, color, w)
+				_bar(Rect2(Vector2(box.position.x, bottom + 24.0 * s), Vector2(maxf(box.size.x, 60.0 * s), 6.0 * s)), f.target_hull, color, w)
 	elif f.edge_arrow_visible:
 		var p: Vector2 = f.edge_arrow_pos
 		var a: float = f.edge_arrow_angle
@@ -305,6 +338,38 @@ static func altitude_text(f: HudFrame) -> String:
 	return "ALT %s" % _range_text(f.altitude_m)
 
 
+## The REF and ALT readout as lines no wider than `max_width` (0: unlimited): the REF text on one line when it fits, else
+## split into its name and its distance and speed, with a long name wrapped by words; then the ALT line.
+static func readout_lines(f: HudFrame, font: Font, size: float, max_width: float) -> PackedStringArray:
+	var lines := PackedStringArray()
+	if f.reference_valid:
+		var whole: String = reference_text(f)
+		if max_width <= 0.0 or font.get_string_size(whole, HORIZONTAL_ALIGNMENT_LEFT, -1.0, int(size)).x <= max_width:
+			lines.append(whole)
+		else:
+			if not f.reference_name.is_empty():
+				lines.append_array(_wrap("REF %s" % f.reference_name, font, size, max_width))
+			lines.append("%s%s  %+.0f m/s" % ["" if not f.reference_name.is_empty() else "REF ", _range_text(f.reference_range_m), f.reference_closing_mps])
+	if f.altitude_valid:
+		lines.append(altitude_text(f))
+	return lines
+
+
+static func _wrap(text: String, font: Font, size: float, max_width: float) -> PackedStringArray:
+	var lines := PackedStringArray()
+	var current: String = ""
+	for word: String in text.split(" ", false):
+		var tried: String = word if current.is_empty() else current + " " + word
+		if not current.is_empty() and font.get_string_size(tried, HORIZONTAL_ALIGNMENT_LEFT, -1.0, int(size)).x > max_width:
+			lines.append(current)
+			current = word
+		else:
+			current = tried
+	if not current.is_empty():
+		lines.append(current)
+	return lines
+
+
 static func _range_text(range_m: float) -> String:
 	return "%.2f km" % (range_m / 1000.0) if range_m >= 1000.0 else "%.0f m" % range_m
 
@@ -351,10 +416,11 @@ func _draw_speed(f: HudFrame, surface: HudSurface, s: float) -> void:
 	var at: Vector2 = surface.speed_pos
 	_text("%.0f m/s" % f.speed_mps, at + Vector2(0.0, -22.0 * s), surface.speed_size * s, LINE_COLOR, align)
 	_text(angles_text(f), at, 16.0 * s, LINE_COLOR, align)
-	if f.reference_valid:
-		_text(reference_text(f), at + Vector2(0.0, 20.0 * s), 14.0 * s, Color(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, 0.75), align)
-	if f.altitude_valid:
-		_text(altitude_text(f), at + Vector2(0.0, 36.0 * s), 14.0 * s, Color(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, 0.75), align)
+	var dim := Color(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, 0.75)
+	var y: float = 20.0
+	for line: String in readout_lines(f, _font, 14.0 * s, surface.speed_text_width):
+		_text(line, at + Vector2(0.0, y * s), 14.0 * s, dim, align)
+		y += READOUT_LINE_PX
 
 
 # --- drift sphere -------------------------------------------------------------------------------------------------
@@ -459,17 +525,17 @@ func _draw_radar(f: HudFrame, surface: HudSurface, s: float, w: float) -> void:
 	var plot: RadarPlot = f.radar_plot
 	var to_screen: Transform2D = RadarPlot.screen_transform(c, r)
 	var dots: RadarDotBuffers = RadarModel.dot_buffers(plot, c, r, 5.5 * k, 3.0 * k, TEXT_SHADOW, surface.radar_labels,
-			PackedInt32Array([_instances(_dots), _instances(_rims), _instances(_backings)]))
+			PackedInt32Array([_dots.instances(), _rims.instances(), _backings.instances()]))
 	if surface.radar_labels:  # dark backings under everything, so contacts read over the octagon's grid and never hide each other
-		_backings = _submit_dots(_backings, dots.backing, dots.backing_count, _dot_unit_mesh())
+		_backings.submit(_canvas, dots.backing, dots.backing_count, _dot_unit_mesh())
 	# Own ship at the centre, nose up.
 	_canvas.draw_polyline(PackedVector2Array([c + Vector2(0.0, -6.0 * k), c + Vector2(4.0 * k, 5.0 * k), c + Vector2(-4.0 * k, 5.0 * k), c + Vector2(0.0, -6.0 * k)]), LINE_COLOR, w * 0.75)
 	if plot.size() == 0:
 		return
 	_canvas.draw_multiline_colors(to_screen * plot.stalk_units, plot.stalk_colors, w * 0.5)
-	_dots = _submit_dots(_dots, dots.plain, dots.plain_count, _dot_unit_mesh())
+	_dots.submit(_canvas, dots.plain, dots.plain_count, _dot_unit_mesh())
 	# A broadcast beyond the sensors is hollow, on the rim (M3-T17): every one but the selection in one ring multimesh.
-	_rims = _submit_dots(_rims, dots.rim, dots.rim_count, _ring_unit_mesh((w * 0.6) / (3.0 * k)))
+	_rims.submit(_canvas, dots.rim, dots.rim_count, _ring_unit_mesh((w * 0.6) / (3.0 * k)))
 	var i: int = plot.selected_index
 	if i >= 0:
 		var at_selected: Vector2 = to_screen * plot.point_units[i]
@@ -485,33 +551,6 @@ func _draw_radar(f: HudFrame, surface: HudSurface, s: float, w: float) -> void:
 		var d: float = 9.0 * k
 		_canvas.draw_polyline(PackedVector2Array([at_waypoint + Vector2(0.0, -d), at_waypoint + Vector2(d, 0.0), at_waypoint + Vector2(0.0, d),
 				at_waypoint + Vector2(-d, 0.0), at_waypoint + Vector2(0.0, -d)]), LINE_COLOR, w * 0.75)
-
-
-# A multimesh's instance count, 0 before it is made.
-static func _instances(dots: MultiMesh) -> int:
-	return dots.instance_count if dots != null else 0
-
-
-# Draws the first `count` dots of `buffer` with `mesh` in one multimesh. The buffer comes sized for the multimesh
-# (`RadarModel.dot_buffers`), so it goes to the server whole. Returns the multimesh, made on first use (one per kind, as one
-# draw keeps its buffer).
-func _submit_dots(dots: MultiMesh, buffer: PackedFloat32Array, count: int, mesh: Mesh) -> MultiMesh:
-	if dots == null:
-		dots = MultiMesh.new()
-		dots.transform_format = MultiMesh.TRANSFORM_2D
-		dots.use_colors = true
-	if dots.mesh != mesh:
-		dots.mesh = mesh
-	if count == 0:
-		dots.visible_instance_count = 0
-		return dots
-	var capacity: int = RadarDotBuffers.instances(buffer)
-	if dots.instance_count != capacity:
-		dots.instance_count = capacity  # grows rarely, never shrinks
-	RenderingServer.multimesh_set_buffer(dots.get_rid(), buffer)
-	dots.visible_instance_count = count
-	_canvas.draw_multimesh(dots, null)
-	return dots
 
 
 # A filled unit circle, the radar's dot.

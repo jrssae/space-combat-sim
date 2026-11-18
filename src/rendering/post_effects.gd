@@ -8,6 +8,9 @@ extends Node
 ## (and the blur then asks the renderer for no motion vectors). A rebase blanks the blur for the frames around it
 ## (`MotionBlurGate`).
 ##
+## A jump flash gets a flare too (M7-T23): the brightest one showing (`FlashFlare`) drives a second pass of the same effect, added
+## the first time a flash needs it and off whenever none does.
+##
 ## Console (§6.4): provider `post` and commands `flare [on|off]`, `blur [on|off]`.
 
 ## The environment whose Compositor holds the effects.
@@ -19,6 +22,8 @@ extends Node
 const FLARE_LEVEL: float = 0.39
 
 var _flare: LensFlareEffect
+var _flash_flare: LensFlareEffect
+var _flash_weight: float = 0.0
 var _blur: MotionBlurEffect
 var _gate: MotionBlurGate = MotionBlurGate.new()
 var _world: WorldFrame
@@ -26,6 +31,12 @@ var _sun_uv: Vector2 = Vector2(0.5, 0.5)
 var _sun_facing: float = 1.0
 var _star_color: Color = Color.WHITE
 var _flare_strength: float = 1.0
+
+
+func _init() -> void:
+	# After the cameras have moved and the key star has turned to the sun this frame, so the flare's core sits on the drawn
+	# disc even while the view turns (M7-T72).
+	process_priority = ScaledSpace.LATE_PRIORITY + 2
 
 
 func _ready() -> void:
@@ -42,6 +53,8 @@ func _ready() -> void:
 		&"blur_skipping": {"get": _gate.skipping, "doc": "Frames the blur is still blanked after a rebase"},
 		&"sun_uv": {"get": func() -> Vector2: return _sun_uv, "doc": "Where the star is in the picture, 0-1 (y down)"},
 		&"sun_facing": {"get": func() -> float: return _sun_facing, "doc": "1 looking at the star, -1 looking away"},
+		&"flash_flare": {"get": func() -> float: return _flash_weight,
+				"doc": "Strength of the jump flash's lens flare now (the brightest flash in view; 0 with none)"},
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"flare",
 			"Toggle or set the star's lens flare", [ConsoleArg.bool_optional(&"state")]), _cmd_flare, self)
@@ -55,11 +68,13 @@ func _exit_tree() -> void:
 		Settings.changed.disconnect(_on_setting_changed)
 	if _world != null and _world.rebased.is_connected(_on_rebased):
 		_world.rebased.disconnect(_on_rebased)
+	_remove_flash_flare()
 
 
 func _process(_delta: float) -> void:
 	_update_blur()
 	_update_flare()
+	_update_flash_flare()
 
 
 ## Blanks the blur around the rebases of `world`.
@@ -95,6 +110,11 @@ func _apply_flare_color() -> void:
 
 func flare_effect() -> LensFlareEffect:
 	return _flare
+
+
+## The jump flashes' flare pass; null until a flash first needed it.
+func flash_flare_effect() -> LensFlareEffect:
+	return _flash_flare
 
 
 func blur_effect() -> MotionBlurEffect:
@@ -138,6 +158,49 @@ func _update_flare() -> void:
 	_sun_facing = LensFlareAim.facing(-camera.global_basis.z, to_sun)
 	_flare.sun_position = _sun_uv
 	_flare.sun_dir_sign = _sun_facing
+
+
+## Gives the brightest jump flash in view its lens flare, and switches the pass off when there is none.
+func _update_flash_flare() -> void:
+	var flash: Array = FlashFlare.brightest()
+	var camera: Camera3D = get_viewport().get_camera_3d()
+	var weight: float = float(flash[0])
+	var at: Vector3 = flash[1]
+	var shown: bool = _flare != null and _flare.enabled and camera != null and weight >= FlashFlare.MIN_WEIGHT \
+			and not camera.is_position_behind(at)
+	_flash_weight = weight if shown else 0.0
+	if not shown:
+		if _flash_flare != null:
+			_flash_flare.enabled = false
+		return
+	if _flash_flare == null:
+		_flash_flare = _add_flash_flare()
+	var colour: Color = flash[2]
+	_flash_flare.sun_position = camera.unproject_position(at) / camera.get_viewport().get_visible_rect().size
+	_flash_flare.sun_dir_sign = 1.0
+	_flash_flare.sun_color = Color(colour.r * weight, colour.g * weight, colour.b * weight)
+	_flash_flare.enabled = true
+
+
+# A second pass of the star's flare with its settings, last on the Compositor.
+func _add_flash_flare() -> LensFlareEffect:
+	var effect := _flare.duplicate() as LensFlareEffect
+	var effects: Array[CompositorEffect] = world_environment.compositor.compositor_effects
+	effects.append(effect)
+	world_environment.compositor.compositor_effects = effects
+	return effect
+
+
+# The Compositor is the scene's shared resource, so the next environment would inherit this pass (and draw it stuck on).
+func _remove_flash_flare() -> void:
+	if _flash_flare == null:
+		return
+	var compositor: Compositor = world_environment.compositor if is_instance_valid(world_environment) else null
+	if compositor != null:
+		var effects: Array[CompositorEffect] = compositor.compositor_effects
+		effects.erase(_flash_flare)
+		compositor.compositor_effects = effects
+	_flash_flare = null
 
 
 ## The gate ages every frame, blur on or off, so a rebase's blank frames never outlast it.

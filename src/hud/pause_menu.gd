@@ -1,7 +1,8 @@
 class_name PauseMenu
 extends CanvasLayer
 ## The pause menu (architecture §18, D57, Q15): Start (the `pause` action) in flight opens a `MenuFrame` over the game with
-## Resume, Restart, Settings (with Controls inside) and Quit to menu. The world pauses while it is open; the menu itself keeps running.
+## Resume, Restart, Settings (with Controls inside), Quit to menu and Quit to desktop (after a yes/no). The world pauses while
+## it is open; the menu itself keeps running.
 ##
 ## `Main` hands it the pause action's edge (`on_pause_action`): it opens the menu, goes back one page, or at the root resumes.
 ## Esc is that same action, so the pages ignore the key themselves and one press never counts twice.
@@ -16,6 +17,7 @@ const ENTRIES: Array[Dictionary] = [
 	{"id": &"restart", "text": "Restart"},
 	{"id": &"settings", "text": "Settings"},
 	{"id": &"quit", "text": "Quit to menu"},
+	{"id": &"quit_game", "text": "Quit to desktop"},
 ]
 
 var game: GameScript = null  ## null: /root/Game
@@ -23,6 +25,8 @@ var game: GameScript = null  ## null: /root/Game
 var audio: AudioDirector = null
 ## A Callable returning the running mission's objectives (`ObjectivesModel`); the mission core plugs its book in here.
 var objectives_source: Callable = Callable()
+## Called when Quit to desktop is confirmed. Unset: quits the game.
+var quit_game: Callable = Callable()
 
 var _open: bool = false
 
@@ -95,6 +99,7 @@ func _list_page() -> MenuScreen:
 	var page := ChoiceListScreen.new()
 	page.setup("PAUSED", ENTRIES)
 	page.cancel_ignores_keys = true
+	page.compact = true
 	page.chosen.connect(_on_chosen)
 	return page
 
@@ -117,6 +122,19 @@ func _on_chosen(id: StringName) -> void:
 		&"quit":
 			if game != null:
 				game.show_front_end()
+		&"quit_game":
+			var confirm := ConfirmScreen.new()
+			confirm.setup_confirm("Quit to desktop?")
+			confirm.confirmed.connect(_quit_to_desktop)
+			_push(confirm)
+
+
+# The yes on the confirm page: leave the game for good.
+func _quit_to_desktop() -> void:
+	if quit_game.is_valid():
+		quit_game.call()
+	else:
+		get_tree().quit()
 
 
 func _push(page: MenuScreen) -> void:

@@ -21,7 +21,9 @@ extends Node
 ## the full effects while it is 8 px or more in radius, a reduced explosion (no light, the gas shell only, no debris) down to
 ## 2 px, and below that a point flash in the world's `FarFlashes`, with no node and no particle. A death in the low-attention tier is drawn where its row
 ## flew. A **capital** stand-in's death (`watch_capital`) is drawn the same way; the capital then leaves play (and the tier)
-## and `capital_destroyed` is emitted. Every death's killing hit carries its blast's energy, radius and point (`set_blast`),
+## and `capital_destroyed` is emitted. A **mine** that goes off (`watch_mines`, M7-T64) is drawn the same way, its fireball as big
+## as its blast; at most `MINE_BLASTS_MAX` of its explosions are alive at once and the rest are far flashes, so a battle's
+## chains stay cheap. Every death's killing hit carries its blast's energy, radius and point (`set_blast`),
 ## the data M12's blast damage and hulks start from.
 ##
 ## Console: `kill [target|all|allies|player]` destroys now, bypassing god mode: the selected pooled ship or capital, every
@@ -39,6 +41,8 @@ signal player_destroyed(info: HitInfo)
 signal respawn_due
 ## A capital stand-in was destroyed (it has left play) (M4-T23).
 signal capital_destroyed(capital: CapitalStandin, info: HitInfo)
+## A mine's explosion was drawn as an explosion at `at` (M7-T64): once a tick, so a chain sounds as one blast.
+signal mine_exploded(at: Vector3)
 
 const RESPAWN_DELAY_S: float = 3.0
 ## A death's blast (M4-T22): energy per kilogram of the dead hull, J/kg, and its reach in bounding radii (the explosion's
@@ -51,6 +55,8 @@ const ZONE_CHUNKS: Dictionary[int, StringName] = {
 	DamageZones.LOWER_LEFT: &"arm_ll", DamageZones.LOWER_RIGHT: &"arm_lr",
 }
 const KILL_CHOICES: Array[StringName] = [&"target", &"all", &"allies", &"player"]
+## Mine explosions alive at once (M7-T64); past it a mine's blast is a far flash.
+const MINE_BLASTS_MAX: int = 12
 
 var world: WorldFrame = null
 var pool: ShipPool = null
@@ -63,10 +69,14 @@ var player: Combatant = null
 
 ## Where the last ship's explosion started (World-local); sounds follow it.
 var last_blast_position: Vector3 = Vector3.ZERO
+## Mine blasts drawn so far, by level (`ExplosionLod.Level`: full, reduced, far flash), for tests and readouts.
+var mine_blasts := PackedInt32Array([0, 0, 0])
 
 var _watched: Array[Combatant] = []
 var _watched_capitals: Array[CapitalStandin] = []
 var _respawn_at_s: float = INF
+var _mine_explosions: Array[Explosion] = []
+var _mine_sound_frame: int = -1
 
 static var _current: DestructionDirector = null
 
@@ -131,6 +141,13 @@ func watch_capital(cap: CapitalStandin) -> void:
 		return
 	_watched_capitals.append(cap)
 	cap.damageable.destroyed.connect(_on_capital_destroyed.bind(cap))
+
+
+## Draws every mine of `belt` that goes off from now on (M7-T64). Watching a belt twice is harmless.
+func watch_mines(belt: MineStandin) -> void:
+	if belt == null or belt.detonated.is_connected(_on_mine_detonated):
+		return
+	belt.detonated.connect(_on_mine_detonated.bind(belt))
 
 
 ## True while a respawn of the player is pending.
@@ -205,6 +222,42 @@ func _on_capital_destroyed(info: HitInfo, cap: CapitalStandin) -> void:
 	capital_destroyed.emit(cap, info)
 
 
+func _on_mine_detonated(index: int, belt: MineStandin) -> void:
+	draw_mine_blast(belt.position_of(index))
+
+
+## A mine's blast at `at` (World frame): drawn at its level of detail like a death, capped so a battle's chains stay cheap.
+## Returns the level it was drawn at.
+func draw_mine_blast(at: Vector3) -> ExplosionLod.Level:
+	var radius: float = MineStandin.BLAST_RADIUS_M / Explosion.FIREBALL_FINAL_SCALE
+	var velocity: Vector3 = world.rest_velocity() if world != null and is_instance_valid(world) else Vector3.ZERO
+	var level: ExplosionLod.Level = _level_at(radius, at)
+	if level != ExplosionLod.Level.FAR and _mine_explosions_alive() >= MINE_BLASTS_MAX:
+		level = ExplosionLod.Level.FAR
+	if level == ExplosionLod.Level.FAR:
+		_spawn_far(level, at, velocity, radius, MineStandin.BLAST_ENERGY_J)
+	else:
+		var explosion: Explosion = _add_explosion(radius, velocity, at, level == ExplosionLod.Level.REDUCED)
+		if explosion != null:
+			_mine_explosions.append(explosion)
+		var frame: int = Engine.get_physics_frames()
+		if level == ExplosionLod.Level.FULL and frame != _mine_sound_frame:
+			_mine_sound_frame = frame
+			mine_exploded.emit(at)
+	mine_blasts[level] += 1
+	return level
+
+
+# Mine explosions still showing; drops the finished ones.
+func _mine_explosions_alive() -> int:
+	var still: Array[Explosion] = []
+	for explosion: Explosion in _mine_explosions:
+		if is_instance_valid(explosion) and not explosion.is_queued_for_deletion():
+			still.append(explosion)
+	_mine_explosions = still
+	return still.size()
+
+
 # How a death of a hull of `radius` at `at` is drawn: from its fireball's size on the current picture (the full effect with no
 # camera).
 func _level_at(radius: float, at: Vector3) -> ExplosionLod.Level:
@@ -224,14 +277,15 @@ func _spawn_far(level: ExplosionLod.Level, at: Vector3, velocity: Vector3, radiu
 		flashes.add(at, velocity, radius, energy_j)
 
 
-func _add_explosion(radius: float, velocity: Vector3, at: Vector3, reduced: bool) -> void:
+func _add_explosion(radius: float, velocity: Vector3, at: Vector3, reduced: bool) -> Explosion:
 	if effects == null or not is_instance_valid(effects):
-		return
+		return null
 	var explosion: Explosion = Explosion.create(radius, velocity, reduced)
 	explosion.fx = fx
 	explosion.position = at
 	effects.add_child(explosion)
 	explosion.reset_physics_interpolation()
+	return explosion
 
 
 func _on_buoy_destroyed(info: HitInfo, buoy: NavBuoy) -> void:

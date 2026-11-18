@@ -853,6 +853,13 @@ func _sync_context(host: Object) -> void:
 	if route != _pushed_route or count != _pushed_route_count or (route != null and (route.pace_id != _pushed_route_pace \
 			or route.cruise_mps != _pushed_route_cruise or route.loop != _pushed_route_loop \
 			or route.yield_to_attack != _pushed_route_yield)):
+		# A new route starts at its first waypoint (M7-T10's lanes; M7-T56: any route given in place of another, so a ship sent
+		# on to the gate after its lane flies there instead of counting the old route's end as the new one's).
+		if route != null and route != _pushed_route and (route.lane or _pushed_route != null):
+			host.restart_route(_slot)
+			var follow := behaviour(&"follow_path") as BehaviourFollowPath
+			if follow != null:
+				follow.reset()
 		_pushed_route = route
 		_pushed_route_count = count
 		if route != null:
@@ -948,3 +955,9 @@ static func _push_route(host: Object, slot: int, route: Route) -> void:
 		points.append_array([w.position.x, w.position.y, w.position.z, w.hold_s])
 		demos.append(Manoeuvres.NAMES.find(w.demo) + 1 if w.demo != &"" else 0)
 	host.set_route(slot, points, demos, route.cruise_mps, route.pace_id, route.loop, route.yield_to_attack)
+	if route.lane:
+		var attitudes := PackedFloat64Array()
+		for i: int in route.count():
+			var w: Route.Waypoint = route.waypoint(i)
+			attitudes.append_array([w.face.x, w.face.y, w.face.z, w.spin.x, w.spin.y, w.spin.z])
+		host.set_route_lane(slot, attitudes, route.lane_arrival_m)

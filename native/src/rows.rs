@@ -8,18 +8,60 @@ use godot::builtin::{Basis, Vector3};
 /// Row flags: a rigid body in Jolt (the flight step's and the ram phase's), an active hull (`Damageable.is_active()`: the
 /// sweep and the rams see it), a hull at all, a row added after the tick's first sync (a ship back from the pool), a
 /// low-attention tier row with no body and no node (M4-T21: integrated by the tier, skipped by the kernels that write to
-/// a body or fire from one), and a hulk (a tier row that drifts with no brain and no force).
+/// a body or fire from one), a hulk (a tier row that drifts with no brain and no force), and a ship sheltered inside a
+/// station (M7-T62: in the docking bay's black void; it flies its own row, but nothing outside sees, targets or hits it).
 pub const FLAG_RIGID: u32 = 1;
 pub const FLAG_HULL: u32 = 2;
 pub const FLAG_HULL_ACTIVE: u32 = 4;
 pub const FLAG_LATE: u32 = 8;
 pub const FLAG_TIER: u32 = 16;
 pub const FLAG_HULK: u32 = 32;
+pub const FLAG_SHELTERED: u32 = 64;
 
 /// A row's role (M5-T16, Q24): what the ship is for, beside its faction and kind. A civilian is a big non-combat hull (a
 /// freighter up to 260 m) that the brains, the raiders' picks, the turrets, avoidance and the tier treat by its size.
 pub const ROLE_COMBAT: u8 = 0;
 pub const ROLE_CIVILIAN: u8 = 1;
+/// A big hull with a surface of its own (M7-T06: the station's frame and drum): the hit sweep, the rams, avoidance, the
+/// fire lane and the brains' ranges read its volumes (`Rows::surface`) instead of its bounding sphere.
+pub const ROLE_SURFACE: u8 = 2;
+/// A navigation marker with no body of its own (M7-T27: a station bay's mouth): the player targets it, but it is a place,
+/// not a thing, so avoidance flies through it.
+pub const ROLE_NAV: u8 = 3;
+
+/// One box or capsule of a big hull in its body's frame, in 64 bits: the volume's own x, y and z axes (unit, as columns),
+/// its centre, and its size (a box's half extents; a capsule along its own y: half segment, radius, 0). `reach` bounds it
+/// from its centre.
+#[derive(Clone, Copy, Debug)]
+pub struct SurfaceVolume {
+    pub capsule: bool,
+    pub axes: [[f64; 3]; 3],
+    pub centre: [f64; 3],
+    pub half: [f64; 3],
+    pub reach: f64,
+    /// What the volume sweeps as its hull turns about its own +z (M7-T10): the ring from `[0]` to `[1]` m off the axis,
+    /// between `[2]` and `[3]` along it. Avoidance keeps off this, so a ship never waits where an arm comes round.
+    pub swept: [f64; 4],
+}
+
+/// A big hull's volumes and its spin (rad/s about its body's own +z; the turning drum, 0 for the frame). A volume fitted to a
+/// convex hull also has that hull's face planes (`hulls`, by volume: each `[nx, ny, nz, d]` in the body frame, a point inside
+/// where `n . p <= d`; empty for a plain box or capsule), so a bolt stops on the shape Jolt collides with, not its box.
+#[derive(Clone, Debug, Default)]
+pub struct Surface {
+    pub volumes: Vec<SurfaceVolume>,
+    pub hulls: Vec<Vec<[f64; 4]>>,
+    pub spin_rad_s: f64,
+    /// How far from its own +z axis the hull reaches (M7-T10): a ship flying round it keeps outside this.
+    pub girth: f64,
+    /// A neutral port (M7-T55): it shelters a fleeing civilian of any people, not only its own (Babylon 5).
+    pub port: bool,
+    /// The body whose row names this hull (M7-T55: the drum is Babylon 5's), 0 for its own row's name.
+    pub named_by: i64,
+}
+
+/// The big hulls by body id.
+pub type Surfaces = HashMap<i64, Arc<Surface>>;
 
 /// The scan's rows, column by column: the bodies in registry order (active markers, then active hulls with no active
 /// marker), the static rows, then any row added after the tick's first sync. Read by the kernels through `bind()`, from
@@ -56,6 +98,9 @@ pub struct Rows {
     // The row's role (M5-T16): fed when a body turns active or is touched, never gathered per tick; rows built without the
     // column (hand-made ones in tests) are combat rows (`role`).
     pub roles: Vec<u8>,
+    // The big hulls' surfaces by body id (M7-T06), shared with the core that set them; `clear` keeps it. A row reads its
+    // own only when its role is `ROLE_SURFACE`.
+    pub surfaces: Option<Arc<Surfaces>>,
     // The rows by marker id, sorted by id, rebuilt with the rows (M4-T17): a kernel finds a contact by its id in a binary
     // search instead of a scan.
     pub id_rows: Vec<(i64, u32)>,
@@ -85,6 +130,9 @@ pub struct Bolts {
     pub expires_at: Vec<f64>,
     pub launched: Vec<i64>,
     pub spent: Vec<bool>,
+    // How far each bolt has flown since it was fired (M7-T52): its drawn tail is never longer, so it never reaches back
+    // behind its muzzle.
+    pub flown: Vec<f32>,
     /// How many rows at the front the core owns.
     pub owned: usize,
     // The multimesh instance each owned bolt is drawn in (-1 for none): a bolt keeps its slot for life, so instance k
@@ -168,6 +216,7 @@ impl Clone for Rows {
             name_ids,
             names,
             roles,
+            surfaces,
             id_rows,
             node_count,
             tier_rows,
@@ -193,6 +242,7 @@ impl Clone for Rows {
         self.name_ids.clone_from(name_ids);
         self.names.clone_from(names);
         self.roles.clone_from(roles);
+        self.surfaces.clone_from(surfaces);
         self.id_rows.clone_from(id_rows);
         self.node_count = *node_count;
         self.tier_rows = *tier_rows;
@@ -222,6 +272,7 @@ impl Clone for Bolts {
             expires_at,
             launched,
             spent,
+            flown,
             owned,
             draw_slots,
             slots_used,
@@ -241,6 +292,7 @@ impl Clone for Bolts {
         self.expires_at.clone_from(expires_at);
         self.launched.clone_from(launched);
         self.spent.clone_from(spent);
+        self.flown.clone_from(flown);
         self.owned = *owned;
         self.draw_slots.clone_from(draw_slots);
         self.slots_used.clone_from(slots_used);
@@ -360,6 +412,25 @@ impl Rows {
         self.role(r) == ROLE_CIVILIAN
     }
 
+    /// Whether row `r` is a ship sheltered inside a station (M7-T62): out of every other ship's sight, aim and fire.
+    pub fn is_sheltered(&self, r: usize) -> bool {
+        self.flags.get(r).is_some_and(|f| f & FLAG_SHELTERED != 0)
+    }
+
+    /// Whether row `r` is a navigation marker (M7-T27).
+    pub fn is_nav(&self, r: usize) -> bool {
+        self.role(r) == ROLE_NAV
+    }
+
+    /// Row `r`'s surface when it is a big hull with one (M7-T06), else none.
+    pub fn surface(&self, r: usize) -> Option<&Surface> {
+        if self.role(r) != ROLE_SURFACE {
+            return None;
+        }
+        let surfaces = self.surfaces.as_ref()?;
+        surfaces.get(self.body_ids.get(r)?).map(|s| s.as_ref())
+    }
+
     /// The row whose marker id is `id`, or -1.
     pub fn row_of_id(&self, id: i64) -> i32 {
         match self.id_rows.binary_search_by_key(&id, |e| e.0) {
@@ -385,6 +456,7 @@ impl Bolts {
         self.expires_at.clear();
         self.launched.clear();
         self.spent.clear();
+        self.flown.clear();
         self.draw_slots.clear();
         self.slots_used.clear();
         self.keep_scratch.clear();
@@ -449,6 +521,7 @@ impl Bolts {
         self.expires_at.truncate(n);
         self.launched.truncate(n);
         self.spent.truncate(n);
+        self.flown.truncate(n);
         self.draw_slots.truncate(n);
     }
 
@@ -486,6 +559,7 @@ impl Bolts {
         self.expires_at.insert(at, expires_at);
         self.launched.insert(at, launched);
         self.spent.insert(at, false);
+        self.flown.insert(at, 0.0);
         self.owned += 1;
         at
     }
@@ -518,6 +592,7 @@ impl Bolts {
         compact(&mut self.expires_at, owned, keep);
         compact(&mut self.launched, owned, keep);
         compact(&mut self.spent, owned, keep);
+        compact(&mut self.flown, owned, keep);
         self.owned = kept;
     }
 }

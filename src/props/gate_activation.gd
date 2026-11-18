@@ -6,17 +6,20 @@ extends RefCounted
 ## lead-in of the vortex's `VortexTiming` (`lead_s = DURATION_S`). Pure: levels are functions of the age (sim seconds since the
 ## opening began); a lamp's station is its place along the arm, 0 at the front.
 
-## The whole lead-in; the gate still opens in the 3.5 s of T14's timing (this replaces its 1 s tip glow).
-const DURATION_S: float = 1.0
+## Seconds and levels from `data/jump/vortex_look.json` (M7-T23, the maintainer's GIF). The whole lead-in.
+static var DURATION_S: float = VortexLook.number("gate", "lead_s", 2.0)
 ## The chase takes this long from the front station to the back one.
-const CHASE_S: float = 0.6
+static var CHASE_S: float = VortexLook.number("gate", "chase_s", 1.2)
 ## A lamp's flash: up in a blink, then down to a steady glow over this long.
-const RISE_S: float = 0.05
-const PULSE_S: float = 0.3
+static var RISE_S: float = VortexLook.number("gate", "lamp_rise_s", 0.05)
+static var PULSE_S: float = VortexLook.number("gate", "lamp_pulse_s", 0.3)
 ## Lit lamps keep this share of their flash until the vortex's flash is over.
-const HOLD_LEVEL: float = 0.3
+static var HOLD_LEVEL: float = VortexLook.number("gate", "lamp_hold_level", 0.3)
 ## Between openings the lamps burn steadily at this level: the amber points that show a gate in shadow (the stills).
-const STEADY_LEVEL: float = 0.12
+static var STEADY_LEVEL: float = VortexLook.number("gate", "lamp_steady_level", 0.12)
+## The back ends throb this many times as they build to the flash, dipping by this share between throbs.
+static var TIP_PULSES: float = VortexLook.number("gate", "tip_pulses", 2.0)
+static var TIP_PULSE_DEPTH: float = VortexLook.number("gate", "tip_pulse_depth", 0.35)
 ## Two lamps this close along the arm (metres) belong to the same station.
 const SAME_STATION_M: float = 2.0
 
@@ -66,12 +69,14 @@ static func lamp_level(rank: int, stations: int, age_s: float) -> float:
 	return maxf(level, STEADY_LEVEL)
 
 
-## The back ends' glow, 0..1: rising once the chase reaches them, peaking as the vortex flashes, gone half way through the flash.
+## The back ends' glow, 0..1: rising in throbs once the chase reaches them, peaking as the vortex flashes, gone half way through the flash.
 static func tip_level(age_s: float) -> float:
 	if age_s < CHASE_S or age_s >= DURATION_S + VortexTiming.FLASH_S * 0.5:
 		return 0.0
 	if age_s < DURATION_S:
-		return smoothstep(0.0, 1.0, (age_s - CHASE_S) / (DURATION_S - CHASE_S))
+		var build: float = (age_s - CHASE_S) / (DURATION_S - CHASE_S)
+		var throb: float = 1.0 - TIP_PULSE_DEPTH * 0.5 * (1.0 - cos(TAU * TIP_PULSES * build))
+		return smoothstep(0.0, 1.0, build) * throb
 	return 1.0 - smoothstep(0.0, 1.0, (age_s - DURATION_S) / (VortexTiming.FLASH_S * 0.5))
 
 

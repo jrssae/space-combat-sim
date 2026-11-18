@@ -14,6 +14,8 @@ const VOLUME_LEN: int = 16
 
 var sim: SimCore = null
 var shots_last_tick: int = 0
+## Projectiles the station's interceptor pulses met in the latest tick (M7-T07, M7-T41).
+var intercepts_last_tick: int = 0
 var step_us: int = 0
 
 var _mounts: Dictionary[int, TurretMount] = {}
@@ -39,6 +41,25 @@ func register(mount: TurretMount, body_id: int, weapon: WeaponSpec, faction: Str
 		return -1
 	_mounts[slot] = mount
 	_feed_hull(body_id, Damageable.of(mount.get_parent()))
+	return slot
+
+
+## Mounts one of the station grid's guns or interceptor batteries (M7-T07, `kind` 1 to 3) on body `body_id` and returns its slot
+## (-1 when refused). The station's surfaces, already in the core, block its line of fire.
+func register_grid(mount: TurretMount, body_id: int, weapon: WeaponSpec, faction: StringName, kind: int) -> int:
+	if sim == null or sim.core == null or weapon == null:
+		return -1
+	var slot: int = int(sim.core.add_grid_mount(body_id, mount.position, mount.up, mount.arc_deg, mount.barrel_m, faction,
+			gun_of(weapon), weapon.bolt_color, BoltMesh.look_for(weapon), kind))
+	if slot < 0:
+		return -1
+	if not mount.muzzles_m.is_empty():
+		sim.core.set_battery_barrels(slot, mount.trunnion_m, PackedVector3Array(mount.muzzles_m), mount.barrel_recharge_s)
+	elif mount.trunnion_m.y > 0.0:
+		sim.core.set_turret_lift(slot, mount.trunnion_m.y)  # a gun on a raised trunnion fires from it (M7-T43)
+	if weapon.burst_shots > 1:
+		sim.core.set_turret_burst(slot, weapon.burst_shots, weapon.burst_spacing_s)
+	_mounts[slot] = mount
 	return slot
 
 
@@ -92,9 +113,11 @@ static func pack_volumes(shapes: Array[HitShape]) -> PackedFloat64Array:
 
 
 ## One tick of every turret (from `SimCore.step_now`, after the cannons and before the bolts move): the relations brought
-## up to date, the core's step, and each shot handed to its mount.
+## up to date, the core's step, each shot handed to its mount (a battery's pulse too, M7-T41), and each projectile a pulse met
+## spent at once.
 func step(now_s: float, delta: float) -> void:
 	shots_last_tick = 0
+	intercepts_last_tick = 0
 	if _mounts.is_empty():
 		return
 	var started: int = Time.get_ticks_usec()  # readout only
@@ -102,12 +125,33 @@ func step(now_s: float, delta: float) -> void:
 	var out: Array = sim.core.step_turrets(now_s, delta)
 	var slots: PackedInt32Array = out[0]
 	var starts: PackedVector3Array = out[1]
+	var barrels: PackedInt32Array = out[7]
 	shots_last_tick = slots.size()
 	for k: int in slots.size():
 		var mount: TurretMount = _mounts.get(slots[k])
 		if mount != null and is_instance_valid(mount):
-			mount.on_fired(starts[k])
+			mount.on_fired(starts[k], barrels[k])
+	var kill_slots: PackedInt32Array = out[3]
+	var kill_ids: PackedInt64Array = out[4]
+	var kill_points: PackedVector3Array = out[5]
+	var kill_colors: PackedColorArray = out[6]
+	intercepts_last_tick = kill_slots.size()
+	for k: int in kill_slots.size():
+		_spend(kill_ids[k])
+		var mount: TurretMount = _mounts.get(kill_slots[k])
+		if mount != null and is_instance_valid(mount):
+			mount.on_intercepted(kill_points[k], kill_colors[k])
 	step_us = Time.get_ticks_usec() - started
+
+
+# A projectile shot down: an owned bolt row in the core, or a projectile node (a missile, the player's bolt).
+func _spend(id: int) -> void:
+	if id < 0:
+		sim.spend_bolt(id)
+		return
+	var shot := instance_from_id(id) as Projectile
+	if shot != null:
+		shot.spend()
 
 
 ## Builds the relation table again when the core knows a new faction, another faction table is active or the active one

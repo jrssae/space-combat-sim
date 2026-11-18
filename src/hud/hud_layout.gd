@@ -8,6 +8,9 @@ extends RefCounted
 ## yellow; the HUD's own line work is green).
 
 const BORESIGHT_RANGE_M: float = 1000.0
+## The room the REF and ALT lines have beside the drift sphere, layout px (the cockpit's is centred, so it is the full width).
+const CHASE_SPEED_TEXT_PX: float = 207.0
+const COCKPIT_SPEED_TEXT_PX: float = 224.0
 const MIN_SPEED_FOR_MARKER_MPS: float = 1.0
 const MIN_BOX_PX: float = 24.0
 const EDGE_MARGIN_PX: float = 48.0
@@ -32,12 +35,24 @@ const CHARGE_BAR_WIDTH_SHARE: float = 40.0 / 640.0
 const ROSTER_ORIGIN: Vector2 = Vector2(48.0, 48.0)
 const ROSTER_ROW_PX: float = 24.0
 const ROSTER_BAR: Vector2 = Vector2(64.0, 8.0)
+## The interaction hold's bar across the top (M7-T27): its share of the window's width, and its top and height (at 1080 px; scaled),
+## above the status line.
+const INTERACT_BAR_WIDTH_SHARE: float = 0.6
+const INTERACT_BAR_TOP_PX: float = 6.0
+const INTERACT_BAR_HEIGHT_PX: float = 10.0
 ## The acknowledgement line's baseline below the status line's (under AUTO-TRACK's, 26 px below it).
 const ACK_BELOW_STATUS_PX: float = 50.0
+## The skip prompt's text size (M7-T54): alone over a cinematic, it reads larger than an acknowledgement.
+const PROMPT_TEXT_PX: float = 24.0
 const STATUS_Y_PX: float = 36.0
 ## The objectives list (M5-T05), top right (at 1080 px; scaled): the caption's baseline below the FPS counter, and the line pitch.
 const OBJECTIVES_TOP_PX: float = 110.0
 const OBJECTIVE_ROW_PX: float = 22.0
+## The protected ships' block under the objectives (M7-T54, at 1080 px; scaled): the gap above its caption, a row's pitch, and
+## the hull bar under each name.
+const ESCORT_GAP_PX: float = 14.0
+const ESCORT_ROW_PX: float = 40.0
+const ESCORT_BAR: Vector2 = Vector2(240.0, 10.0)
 ## A roster row's short form of what a wingman is doing, by behaviour id.
 const ROSTER_TAGS: Dictionary = {"formation": "FORM", "attack": "ATK", "evade": "EVADE", "retreat": "RETREAT",
 		"follow_path": "NAV", "idle": "IDLE", "none": "-"}
@@ -68,6 +83,7 @@ static func compute(input: HudInput) -> HudFrame:
 	_waypoint(input, f)
 	_wing(input, f)
 	_objectives(input, f)
+	_escorts(input, f)
 	f.status_line = input.status_line
 	f.items = HudSurface.ALL_ITEMS.duplicate()
 	if not f.grid_visible:
@@ -77,6 +93,9 @@ static func compute(input: HudInput) -> HudFrame:
 		_split_onto_screens(input, f)
 	if not f.objective_lines.is_empty():
 		f.items.append(HudSurface.OBJECTIVES)  # on the window in both views
+	if not f.escort_rows.is_empty():
+		f.items.append(HudSurface.ESCORT)
+	_interact(input, f)
 	return f
 
 
@@ -197,13 +216,17 @@ static func _target(input: HudInput, f: HudFrame) -> void:
 	f.target_closing_mps = t.closing_mps
 	f.target_hull = t.hull_fraction
 	f.target_relation = Factions.relation(input.faction, t.faction)
-	f.target_color = Factions.hud_color(f.target_relation)
+	f.target_color = Factions.contact_color(f.target_relation, t.role == Targetable.Role.CIVILIAN)  # a civilian is not an ally (M7-T56)
+	if t.role == Targetable.Role.BEACON:
+		f.target_nav = true
+		f.target_color = TargetCategories.COLORS[TargetCategories.Category.NAVIGATION]
 	if input.target_unknown:
 		# Too far to tell what it is (M5-T25): no name, no hull, no faction colour.
 		f.target_name = TargetMenu.UNKNOWN_LABEL
 		f.target_hull = -1.0
 		f.target_relation = Factions.Relation.NEUTRAL
 		f.target_color = Factions.UNIDENTIFIED_COLOR
+		f.target_nav = false
 	var shown: Dictionary = project(input, t.position)
 	if bool(shown["in_front"]) and on_screen(input, shown["pos"]):
 		f.target_on_screen = true
@@ -213,6 +236,8 @@ static func _target(input: HudInput, f: HudFrame) -> void:
 		f.edge_arrow_pos = edge["pos"]
 		f.edge_arrow_angle = edge["angle"]
 		f.edge_arrow_visible = true
+	if f.target_nav:
+		return  # a place to fly to, not to shoot at: no lead (M7-T27)
 	# The lead: where the bolt meets the target, from the mean muzzle position, hidden when there is no solution in range.
 	var lead: Dictionary = InterceptMath.solve(input.muzzle_position, input.own_velocity, t.position, t.velocity,
 			input.weapon_speed_mps, input.weapon_lifetime_s)
@@ -288,11 +313,14 @@ static func _gauges(input: HudInput, f: HudFrame) -> void:
 	var s: float = f.scale
 	var bar := Vector2(260.0, 14.0) * s
 	var margin: float = 48.0 * s
-	f.speed_pos = Vector2(w * 0.5, h - 40.0 * s)
+	f.speed_pos = Vector2(w * 0.5, h - 64.0 * s)  # room for three lines under it
 	f.speed_align_right = not input.cockpit
+	f.speed_text_width = COCKPIT_SPEED_TEXT_PX * s
 	if not input.cockpit:
-		# Chase view: the ship fills the middle, so the readout sits above the radar in the bottom-right corner.
-		f.speed_pos = Vector2(w - margin, h - 56.0 * s - 30.0 * s - 2.0 * 78.0 * s - 28.0 * s)
+		# Chase view: the ship fills the middle, so the readout sits above the radar in the bottom-right corner,
+		# with room under it for the REF and ALT lines even when the name wraps.
+		f.speed_pos = Vector2(w - margin, h - 56.0 * s - 30.0 * s - 2.0 * 78.0 * s - 80.0 * s)
+		f.speed_text_width = CHASE_SPEED_TEXT_PX * s
 	f.hull_rect = Rect2(Vector2(margin, h - 90.0 * s), bar)
 	f.fuel_rect = Rect2(Vector2(margin, h - 56.0 * s), bar)
 	f.charge_rect = Rect2(Vector2(w - margin - bar.x, h - 56.0 * s), bar)
@@ -342,7 +370,7 @@ static func _fill_grid(input: HudInput, surface: HudSurface, rect: Rect2) -> voi
 
 static func _radar(input: HudInput, f: HudFrame) -> void:
 	f.radar_radius_px = RADAR_RADIUS_UNITS * f.scale
-	f.radar_centre = Vector2(input.viewport_size.x * 0.5, input.viewport_size.y - 176.0 * f.scale)
+	f.radar_centre = Vector2(input.viewport_size.x * 0.5, input.viewport_size.y - 200.0 * f.scale)
 	if not input.cockpit:
 		# Chase view: bottom-right corner, over the charge bar.
 		f.radar_centre = Vector2(input.viewport_size.x - 48.0 * f.scale - 130.0 * f.scale, input.viewport_size.y - 56.0 * f.scale - 30.0 * f.scale - f.radar_radius_px)
@@ -357,9 +385,9 @@ static func _radar(input: HudInput, f: HudFrame) -> void:
 	f.drift_radius_px = 58.0 * f.scale
 	# Beside the speed readout: to its left, on the same lines (the readout is right-aligned in the chase view, centred in the cockpit).
 	if input.cockpit:
-		f.drift_centre = f.speed_pos + Vector2(-120.0 * f.scale - f.drift_radius_px, -30.0 * f.scale)
+		f.drift_centre = f.speed_pos + Vector2(-COCKPIT_SPEED_TEXT_PX * 0.5 * f.scale - f.drift_radius_px - 8.0 * f.scale, -30.0 * f.scale)
 	else:
-		f.drift_centre = f.speed_pos + Vector2(-215.0 * f.scale - f.drift_radius_px, 0.0)
+		f.drift_centre = f.speed_pos + Vector2(-(CHASE_SPEED_TEXT_PX + 8.0) * f.scale - f.drift_radius_px, 0.0)
 	var contacts: RadarContacts = input.radar_contacts if input.radar_contacts != null else RadarContacts.from_infos(input.contacts)
 	var before_us: int = Time.get_ticks_usec()
 	f.radar_plot = RadarModel.plot(contacts, input.selected_id, input.own_position, input.own_basis, input.faction,
@@ -411,6 +439,41 @@ static func _roster_rows(input: HudInput, origin: Vector2, s: float, pitch: floa
 	return rows
 
 
+# --- the interaction hold (M7-T27) ----------------------------------------------------------------------------------------
+
+
+# The hold's bar, centred across the top of the window in both views, while a hold runs.
+static func _interact(input: HudInput, f: HudFrame) -> void:
+	f.interact_progress = clampf(input.interact_progress, 0.0, 1.0)
+	if f.interact_progress <= 0.0:
+		return
+	var s: float = f.scale
+	var width: float = input.viewport_size.x * INTERACT_BAR_WIDTH_SHARE
+	f.interact_rect = Rect2(Vector2((input.viewport_size.x - width) * 0.5, INTERACT_BAR_TOP_PX * s),
+			Vector2(width, INTERACT_BAR_HEIGHT_PX * s))
+	f.items.append(HudSurface.INTERACT)
+
+
+## A prompt and its hold's bar alone (M7-T54: the opening's skip, on its own layer over a cinematic's letterbox): placed as the HUD
+## places an interaction's, so both read the same.
+static func prompt_frame(viewport: Vector2, prompt: String, progress: float) -> HudFrame:
+	var input := HudInput.new()
+	input.viewport_size = viewport
+	input.prompt_line = prompt
+	input.interact_progress = progress
+	var f := HudFrame.new()
+	f.viewport_size = viewport
+	f.size = viewport
+	f.scale = maxf(viewport.y / 1080.0, 0.25)
+	_wing(input, f)
+	f.ack_text_size = PROMPT_TEXT_PX
+	f.items = []
+	if not prompt.is_empty():
+		f.items.append(HudSurface.ACK)
+	_interact(input, f)
+	return f
+
+
 # --- mission objectives (M5-T05) ------------------------------------------------------------------------------------------
 
 
@@ -434,6 +497,35 @@ static func _objectives(input: HudInput, f: HudFrame) -> void:
 		f.objective_lines.append({"text": objective_text(objective),
 				"pos": Vector2(x, (OBJECTIVES_TOP_PX + OBJECTIVE_ROW_PX * float(i + 1)) * s),
 				"primary": bool(objective.get("primary", true))})
+
+
+## A protected ship's line over its bar: its name in capitals and its hull in percent (`LOST` at none).
+static func escort_text(escort: Dictionary) -> String:
+	var hull: float = clampf(float(escort.get("hull", 0.0)), 0.0, 1.0)
+	var state: String = "%d%%" % roundi(hull * 100.0) if hull > 0.0 else "LOST"
+	return "%s  %s" % [str(escort.get("name", "")).to_upper(), state]
+
+
+# The protected ships under the objectives, right-aligned: the name over a hull bar coloured by how hurt it is.
+static func _escorts(input: HudInput, f: HudFrame) -> void:
+	f.escort_rows = []
+	if input.escorts.is_empty():
+		return
+	var s: float = f.scale
+	var right: float = input.viewport_size.x - 48.0 * s
+	var top: float = OBJECTIVES_TOP_PX + OBJECTIVE_ROW_PX * float(input.objectives.size()) + ESCORT_GAP_PX
+	f.escort_caption_pos = Vector2(right, (top + 12.0) * s)
+	for i: int in input.escorts.size():
+		var escort: Dictionary = input.escorts[i]
+		var row := RosterRow.new()
+		var y: float = top + 12.0 + ESCORT_ROW_PX * float(i)
+		row.hull = clampf(float(escort.get("hull", 0.0)), 0.0, 1.0)
+		row.down = row.hull <= 0.0
+		row.color = hull_color(row.hull)
+		row.text = escort_text(escort)
+		row.text_pos = Vector2(right, (y + 20.0) * s)
+		row.bar_rect = Rect2(Vector2(right - ESCORT_BAR.x * s, (y + 27.0) * s), ESCORT_BAR * s)
+		f.escort_rows.append(row)
 
 
 # --- the console's screens (M3-T29) ---------------------------------------------------------------------------------------
@@ -489,6 +581,7 @@ static func _left_screen(size: Vector2) -> HudSurface:
 	surface.drift_centre = Vector2(width - 8.0 - 42.0, 20.0 + 42.0) * s
 	surface.speed_pos = Vector2(width * 0.5, 158.0) * s
 	surface.speed_size = 30.0
+	surface.speed_text_width = (width - 16.0) * s
 	surface.running_lights_pos = Vector2(8.0, 126.0) * s  # above the speed block: the REF line can run wide
 	surface.fuel_rect = Rect2(Vector2(width - 8.0 - 74.0, 122.0) * s, Vector2(74.0, 5.0) * s)
 	surface.hull_rect = Rect2(Vector2(8.0, 212.0) * s, Vector2(width - 16.0, 30.0) * s)

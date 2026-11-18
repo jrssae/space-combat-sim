@@ -25,7 +25,7 @@ its Cycle log holds the full numbers. This file is the short version plus the de
   rule still says a GDExtension is "a question for the report, not a cycle's pick". This answer settles the maintenance
   cost. The language and the scope of a native port are still to agree (section 7, option 6).
 - **Ship counts in the setting** (in the milestone's goal): a full Starfury squadron is 12, patrols are 6 or 4, scouts fly
-  alone or in twos and threes, Babylon 5 has three full squadrons plus the station's defences.
+  alone or in twos and threes, Babylon 5 has three full squadrons plus the station's defenses.
 - **2026-11-02, run the recommendations:** "begin executing the top 3 recommendations. follow the test cycle approach using
   the shorter performance test." So: finish T02, then cycles 2 to 4 (option 1; options 3 and 4; option 2), with option 11
   measured once in cycle 2. Cycles measure with `scripts/bench_quick.sh`, not the full sweep.

@@ -9,12 +9,14 @@ var projectiles: Node3D
 var pool: ShipPool
 var player: Combatant
 var camera: Camera3D
-var _far_backup: Variant
+var _size_backup: Vector2i = Vector2i.ZERO
 var _output: FlightOutput = null
 
 
 func before_each() -> void:
-	_far_backup = Settings.get_value(&"far_ship_dot_m")
+	# Headless windows are 64 x 64 px; the dot distances are about a real screen.
+	_size_backup = get_tree().root.size
+	get_tree().root.size = Vector2i(1920, 1080)
 	world = WorldFrame.new()
 	world.name = "World"
 	add_child_autofree(world)
@@ -40,7 +42,12 @@ func before_each() -> void:
 
 
 func after_each() -> void:
-	Settings.set_value(&"far_ship_dot_m", _far_backup)
+	get_tree().root.size = _size_backup
+
+
+# Where `ship` turns into a dot for this camera (its radius on screen at `settings.far_ship_dot_px`, M7-T26).
+func _dot_m(ship: Ship) -> float:
+	return ship.bounding_radius() * LodSwitcher.dot_scale(camera)
 
 
 func _passes() -> FramePasses:
@@ -62,8 +69,8 @@ func _ships(count: int, type: StringName = ShipPool.DEFAULT_TYPE) -> Array[Comba
 
 
 func test_the_lod_pass_decides_every_ship_as_its_own_switcher_did() -> void:
-	Settings.set_value(&"far_ship_dot_m", 2000.0)
 	var ships: Array[Combatant] = _ships(12)
+	var far_m: float = _dot_m(ships[0].ship)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 36
 	var expected: Dictionary = {}
@@ -72,21 +79,21 @@ func test_the_lod_pass_decides_every_ship_as_its_own_switcher_did() -> void:
 	var mismatches: int = 0
 	for step: int in 8:
 		for c: Combatant in ships:
-			# Around the dot distance and its return line (1 800 to 2 000 m), where the rule's memory matters.
-			var distance: float = rng.randf_range(1500.0, 2400.0)
+			# Around the dot distance and its return line, where the rule's memory matters.
+			var distance: float = rng.randf_range(0.75, 1.2) * far_m
 			c.ship.global_position = camera.global_position + Vector3(rng.randfn(), rng.randfn(), rng.randfn()).normalized() * distance
-			expected[c] = LodSwitcherMath.far_dot(camera.global_position.distance_to(c.ship.global_position), expected[c], 2000.0)
+			expected[c] = LodSwitcherMath.far_dot(camera.global_position.distance_to(c.ship.global_position), expected[c], far_m)
 		_passes().update_lod()
 		for c: Combatant in ships:
 			mismatches += 0 if c.ship.is_far_dot() == expected[c] else 1
-	assert_eq(mismatches, 0, "every ship, every step, as LodSwitcherMath decides from the camera's distance")
+	assert_eq(mismatches, 0, "every ship, every step, as LodSwitcherMath decides from its size on screen")
 
 
 func test_the_lod_pass_never_makes_the_players_ship_a_dot_and_skips_parked_ships() -> void:
-	Settings.set_value(&"far_ship_dot_m", 100.0)
 	var ships: Array[Combatant] = _ships(2)
-	player.ship.global_position = camera.global_position + Vector3(0.0, 0.0, -5000.0)
-	ships[0].ship.global_position = camera.global_position + Vector3(0.0, 0.0, -5000.0)
+	var far_m: float = 2.0 * _dot_m(player.ship)
+	player.ship.global_position = camera.global_position + Vector3(0.0, 0.0, -far_m)
+	ships[0].ship.global_position = camera.global_position + Vector3(0.0, 0.0, -far_m)
 	pool.release(ships[1])
 	_passes().update_lod()
 	assert_false(player.ship.is_far_dot(), "the player's ship is never a dot")
@@ -95,9 +102,8 @@ func test_the_lod_pass_never_makes_the_players_ship_a_dot_and_skips_parked_ships
 
 
 func test_the_lod_pass_runs_each_frame_and_the_switchers_have_no_process_of_their_own() -> void:
-	Settings.set_value(&"far_ship_dot_m", 1000.0)
 	var ships: Array[Combatant] = _ships(3)
-	ships[2].ship.global_position = camera.global_position + Vector3(0.0, 0.0, -3000.0)
+	ships[2].ship.global_position = camera.global_position + Vector3(0.0, 0.0, -1.5 * _dot_m(ships[2].ship))
 	await get_tree().process_frame
 	await get_tree().process_frame
 	assert_true(ships[2].ship.is_far_dot(), "the frame's pass made it a dot")
@@ -112,14 +118,14 @@ func test_the_lod_pass_runs_each_frame_and_the_switchers_have_no_process_of_thei
 
 
 func test_the_far_dots_write_each_ships_drawn_place_paint_and_size_each_frame() -> void:
-	Settings.set_value(&"far_ship_dot_m", 500.0)
 	var ships: Array[Combatant] = _ships(6)
+	var far_m: float = _dot_m(ships[0].ship)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 7
 	for step: int in 4:
 		for c: Combatant in ships:
 			c.ship.global_position = camera.global_position + Vector3(rng.randfn(), rng.randfn(), rng.randfn()).normalized() \
-					* rng.randf_range(800.0, 3000.0)
+					* rng.randf_range(1.2, 4.0) * far_m
 			c.ship.reset_physics_interpolation()
 		await get_tree().process_frame
 		await get_tree().process_frame
@@ -141,12 +147,11 @@ func test_the_far_dots_write_each_ships_drawn_place_paint_and_size_each_frame() 
 
 
 func test_ships_turning_into_dots_together_cost_one_refresh_a_frame() -> void:
-	Settings.set_value(&"far_ship_dot_m", 500.0)
 	var ships: Array[Combatant] = _ships(10)
 	var dots: FarDots = FarDots.attach(world)
 	await get_tree().process_frame
 	for c: Combatant in ships:
-		c.ship.global_position = camera.global_position + Vector3(0.0, 0.0, -2000.0)
+		c.ship.global_position = camera.global_position + Vector3(0.0, 0.0, -2.0 * _dot_m(c.ship))
 	var before: int = dots.refresh_count
 	for i: int in 3:
 		await get_tree().process_frame

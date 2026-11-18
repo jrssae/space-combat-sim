@@ -363,3 +363,105 @@ func test_a_planet_a_few_pixels_across_hands_over_to_its_far_dot() -> void:
 	var night: Vector3 = (layer.dot_of(PLANET).material_override as ShaderMaterial).get_shader_parameter(&"paint")
 	assert_lt(night.x, day.x * 0.05, "seen from its night side it is all but dark")
 	get_tree().root.size = window
+
+
+# M7-T44: a free-falling anchor `altitude_m` above body `id` on a circular orbit, as `frame orbit` makes it.
+func _in_orbit(id: StringName, altitude_m: float) -> void:
+	var radius: float = float(system.info(id)["radius_m"]) + altitude_m
+	var speed: float = sqrt(float(system.info(id)["gm"]) / radius)
+	assert_true(world.anchor_in_orbit(system, id, PackedFloat64Array([radius, 0.0, 0.0, 0.0, 0.0, -speed])))
+	layer.refresh(camera)
+	env.follow_sun()
+
+
+# The star's drawn sphere, its placement, the key light and the flare's aim agree on one direction, and only one cap of the
+# sky reads as the star's disc: the one round that direction (M7-T44).
+func _assert_one_sun(where: String) -> void:
+	assert_true(layer.has_sun(), where)
+	var to_star: Vector3 = layer.placement_of(STAR).direction
+	var drawn: MeshInstance3D = layer.sphere_of(STAR)
+	assert_true(drawn.visible, where)
+	assert_almost_eq(layer.sun_direction().angle_to(to_star), 0.0, 1.0e-5, "%s: the layer's sun is the star's place" % where)
+	assert_almost_eq(_drawn_direction(STAR).angle_to(to_star), 0.0, 1.0e-4, "%s: the star is drawn there" % where)
+	assert_almost_eq(env.key_star.global_basis.z.angle_to(to_star), 0.0, 1.0e-4, "%s: the key light comes from it" % where)
+	camera.global_basis = Basis.looking_at(env.key_star.global_basis.z, SpaceEnvironment.key_basis(to_star).y)
+	assert_almost_eq(LensFlareAim.facing(-camera.global_basis.z, env.key_star.global_basis.z), 1.0, 1.0e-4, where)
+	assert_almost_eq(LensFlareAim.sun_uv(camera, env.key_star.global_basis.z), Vector2(0.5, 0.5), Vector2.ONE * 1.0e-3,
+			"%s: the flare is anchored on the disc" % where)
+	# The disc as the shader sees it: the drawn sphere holds the glow, the disc is a GLOW_SCALE-th of it.
+	var reach: float = drawn.global_transform.basis.x.length()
+	var disc: float = asin(minf(reach / SunLook.GLOW_SCALE / drawn.global_position.distance_to(camera.global_position), 1.0))
+	assert_almost_eq(disc, layer.placement_of(STAR).angular_radius_rad, 1.0e-4, "%s: as large as the true disc" % where)
+	var count: int = 4000
+	for i: int in count:
+		# A Fibonacci sphere: directions spread evenly over the whole sky.
+		var y: float = 1.0 - 2.0 * (float(i) + 0.5) / float(count)
+		var ring: float = sqrt(1.0 - y * y)
+		var turn: float = PI * (3.0 - sqrt(5.0)) * float(i)
+		var ray := Vector3(cos(turn) * ring, y, sin(turn) * ring)
+		var angle: float = ray.angle_to(_drawn_direction(STAR))
+		if SunLook.disc_radii(angle, disc) < 1.0:
+			assert_lt(angle, disc + 1.0e-4, "%s: sky at %.1f deg off the star reads as its disc" % [where, rad_to_deg(angle)])
+	assert_lt(SunLook.disc_radii(0.5 * disc, disc), 1.0, "%s: the disc shows round the star's place" % where)
+	assert_gt(SunLook.disc_radii(1.5 * disc, disc), 1.0, "%s: and ends at its limb" % where)
+	assert_gt(SunLook.disc_radii(PI, disc), 1.0, "%s: nothing opposite the star" % where)
+	var stars: int = 0
+	for child: Node in layer.get_children():
+		var sphere := child as MeshInstance3D
+		if sphere != null and sphere.visible and sphere.material_override is ShaderMaterial \
+				and (sphere.material_override as ShaderMaterial).shader.resource_path == ScaledSpace.STAR_SHADER_PATH:
+			stars += 1
+	assert_eq(stars, 1, "%s: one star drawn" % where)
+
+
+func test_one_sun_from_near_the_star_to_the_planet() -> void:
+	# The maintainer's distances (2026-11-15): 10 000 km to 10 000 000 km above Epsilon, then Epsilon III's orbits and the
+	# station's rail (free flight's place).
+	for altitude_km: float in [10_000.0, 100_000.0, 1_000_000.0, 10_000_000.0]:
+		_in_orbit(STAR, altitude_km * 1000.0)
+		assert_almost_eq(layer.placement_of(STAR).distance_m, float(system.info(STAR)["radius_m"]) + altitude_km * 1000.0,
+				1.0, "%s km above the star" % altitude_km)
+		_assert_one_sun("%s km above the star" % altitude_km)
+	for altitude_km: float in [400.0, 1000.0]:
+		_in_orbit(PLANET, altitude_km * 1000.0)
+		_assert_one_sun("%s km above Epsilon III" % altitude_km)
+	layer.epoch_offset_s = system.period_s(&"babylon5") / 3.0
+	_on_the_rail()
+	env.follow_sun()
+	_assert_one_sun("on the station's rail")
+
+
+# M7-T72: the star's place, its drawn sphere, the key light and the flare's core agree, the camera at `at` and the star
+# off to one side of the view (where two suns showed: the flare's core 2.6 degrees off the disc at 10 000 km out).
+func _assert_one_sun_seen_from(at: Vector3, where: String) -> void:
+	camera.global_position = at
+	layer.refresh(camera)
+	env.follow_sun()
+	var to_star: Vector3 = layer.placement_of(STAR).direction
+	camera.global_basis = Basis.looking_at(to_star.rotated(Vector3.UP, deg_to_rad(15.0)), Vector3.UP)
+	layer.refresh(camera)
+	env.follow_sun()
+	var tolerance_deg: float = 0.05
+	assert_lt(rad_to_deg(layer.sun_direction().angle_to(to_star)), tolerance_deg, "%s: the layer's sun" % where)
+	assert_lt(rad_to_deg(_drawn_direction(STAR).angle_to(to_star)), tolerance_deg, "%s: the drawn star" % where)
+	assert_lt(rad_to_deg(env.key_star.global_basis.z.angle_to(to_star)), tolerance_deg, "%s: the key light" % where)
+	var uv: Vector2 = LensFlareAim.sun_uv(camera, env.key_star.global_basis.z)
+	assert_true(uv.x > 0.0 and uv.x < 1.0 and uv.y > 0.0 and uv.y < 1.0, "%s: the star is in view (%s)" % [where, uv])
+	var flare: Vector3 = camera.project_ray_normal(uv * camera.get_viewport().get_visible_rect().size)
+	assert_lt(rad_to_deg(flare.angle_to(to_star)), tolerance_deg, "%s: the flare's core is on the disc" % where)
+
+
+func test_one_sun_at_every_camera_distance_and_frame() -> void:
+	# A season with the sun off every axis, as in the maintainer's view (rounding hides on an axis).
+	layer.epoch_offset_s = system.period_s(PLANET) * 0.11
+	_on_the_rail()
+	_assert_one_sun_seen_from(Vector3.ZERO, "at the station")
+	for km: float in [1000.0, 10_000.0, 27_000.0]:
+		# Where `far view station <km>` holds the camera.
+		_assert_one_sun_seen_from(FarPropHost.VIEW_BEARING.normalized() * km * 1000.0, "far view %s km" % km)
+	_in_orbit(PLANET, 400_000.0)
+	_assert_one_sun_seen_from(Vector3.ZERO, "frame orbit 400")
+	_assert_one_sun_seen_from(FarPropHost.VIEW_BEARING.normalized() * 1.0e7, "10 000 km out from frame orbit 400")
+	_in_orbit(STAR, 1.0e8)
+	_assert_one_sun_seen_from(Vector3.ZERO, "frame orbit 100000 epsilon")
+	_assert_one_sun_seen_from(FarPropHost.VIEW_BEARING.normalized() * 1.0e7, "10 000 km out from frame orbit 100000 epsilon")

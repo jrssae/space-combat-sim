@@ -8,7 +8,7 @@ extends GutTest
 
 const TICKS: int = 240
 const SETTINGS: Array[StringName] = [&"perf_threads", &"ai_think_rate",
-		&"ai_think_far_hz", &"ai_think_near_m"]
+		&"ai_think_far_hz", &"ai_think_near_m", &"friendly_fire"]
 
 var _saved: Dictionary = {}
 
@@ -17,6 +17,7 @@ func before_each() -> void:
 	for key: StringName in SETTINGS:
 		_saved[key] = Settings.get_value(key)
 	Settings.set_value(&"ai_think_rate", true)
+	Settings.set_value(&"friendly_fire", false)  # the parity recordings were made with it off (M7-T47 made it the default)
 	Factions.reset()
 	ContactScan.invalidate()
 
@@ -80,8 +81,8 @@ func _battle(threads: int, with_player: bool, ticks: int = TICKS) -> Dictionary:
 # `test_row_commands`, which flies the same battle (M6-T18).
 func test_the_hosted_step_flies_the_same_battle_with_near_and_far_ships() -> void:
 	var label: String = "a player among them"
-	var recorded: Variant = ParityFixture.stored(FIXTURE, "battle_near_and_far")
 	var hosted: Dictionary = await _battle(1, true)
+	var recorded: Variant = ParityFixture.rerecorded(FIXTURE, "battle_near_and_far", SeededBattle.hosted_digest(hosted, 1))
 	assert_not_null(recorded, "%s: the drivers' own step was recorded" % label)
 	if recorded == null:
 		return

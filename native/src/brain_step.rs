@@ -288,7 +288,7 @@ fn run_body(
     };
     run_batch(work, snapshot, runner, total, &rel, params);
     work.rel_scratch = rel;
-    pick_turrets(snapshot, params.now_s);
+    pick_turrets(snapshot, &work.grid, params.now_s);
     if params.from_rows {
         write_commands(work, snapshot, total);
         settle_hosted(work, params.n, total);
@@ -299,8 +299,9 @@ fn run_body(
     std::mem::take(&mut work.batch_out)
 }
 
-// The turrets' targets on the frozen rows and memory (M5-T21): a decision, so it rides in the job beside the thinks.
-fn pick_turrets(snapshot: &mut Snapshot, now_s: f64) {
+// The turrets' targets on the frozen rows and memory (M5-T21): a decision, so it rides in the job beside the thinks. The
+// station grid's guns look up hostiles through the brains' broad phase (M7-T07).
+fn pick_turrets(snapshot: &mut Snapshot, grid: &Grid, now_s: f64) {
     let Snapshot {
         rows,
         body_rows,
@@ -318,13 +319,24 @@ fn pick_turrets(snapshot: &mut Snapshot, now_s: f64) {
         }
         HashMap::get(body_rows, &body).map_or(-1, |&r| i64::from(r))
     };
-    turret_kernels::pick_all(rows, row_of, now_s, turrets);
+    turret_kernels::pick_all(rows, row_of, now_s, turrets, grid);
 }
 
 // Thinks the batch's first `n` items (inputs filled, brains taken from their slots) across the runner's threads and
 // packs their outputs in order; with `from_rows` each ship's hull and selection are read from its own row first.
 fn run_batch(work: &mut Work, snap: &Snapshot, runner: &Runner, n: usize, rel: &[u8], p: &Params) {
     refresh_grid(work, snap);
+    // The grid's working mounts on their hulls' rows (M7-T10), for the thinks that attack a big hull.
+    work.field.sub_points.clear();
+    for point in &snap.turrets.points {
+        if let Some(row) = turret_kernels::usable_row(&snap.rows, snap.row_for_kernel(point.body)) {
+            work.field.sub_points.push(brain_behaviours::SubPoint {
+                row: row as u32,
+                slot: point.slot,
+                local: point.local,
+            });
+        }
+    }
     // The civilians' flight marks (M5-T16) from every brain's last think, before any think of this pass reads them.
     {
         let Work {
@@ -513,6 +525,9 @@ fn write_commands(work: &mut Work, snap: &mut Snapshot, n: usize) {
             continue;
         };
         let body = brain.ship.own_body_id;
+        if brain.provoked_by != 0 {
+            snap.turrets.provoked.push((body, brain.provoked_by));
+        }
         let mut events = write_command(&mut snap.commands, body, &item.out[..=CMD_LEN]);
         let wanted = brain.wanted_target_id;
         note_aim(&mut snap.commands, body, brain);

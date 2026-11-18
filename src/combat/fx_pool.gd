@@ -129,6 +129,14 @@ func burst(effect: int, position: Vector3, direction: Vector3, velocity: Vector3
 	return ((_generation[slot] & HANDLE_SLOT_MASK) << 16) | (slot + 1)
 
 
+## Gives the burst `handle` (of a tinted effect, `FxSpecs.INTERCEPT`) the colour `color`; any other burst is left as it is.
+func tint(handle: int, color: Color) -> void:
+	var slot: int = _slot_of(handle)
+	if slot < 0 or not bool(FxSpecs.spec(_effect_of[slot]).get("tinted", false)):
+		return
+	(_nodes[slot].process_material as ParticleProcessMaterial).color = color
+
+
 ## Ends a vent early: no new particles, and the emitter is free once the ones in flight die. A handle from a burst that has since
 ## finished, or whose emitter another burst took, does nothing.
 func stop(handle: int) -> void:
@@ -300,7 +308,8 @@ func _make_emitter(node_name: String, spec: Dictionary) -> GPUParticles3D:
 	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	p.visibility_aabb = AABB(Vector3.ONE * -VISIBILITY_HALF_M, Vector3.ONE * (2.0 * VISIBILITY_HALF_M))
 	p.draw_pass_1 = load(String(spec["mesh"])) as Mesh
-	p.process_material = load(String(spec["material"])) as ParticleProcessMaterial
+	var material := load(String(spec["material"])) as ParticleProcessMaterial
+	p.process_material = material.duplicate() as ParticleProcessMaterial if bool(spec.get("tinted", false)) else material
 	return p
 
 

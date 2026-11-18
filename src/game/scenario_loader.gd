@@ -10,7 +10,12 @@ extends RefCounted
 ##     {"ok": bool, "error": String,               # error is "" when ok, else "<source>: <what is wrong>"
 ##      "scenario_id": StringName, "system_id": StringName,
 ##      "player": {"position": UniversePos, "forward": Vector3, "basis": Basis,
-##                 "velocity": Vector3},            # the start velocity (M5-T10), zero unless given
+##                 "velocity": Vector3,             # the start velocity (M5-T10), zero unless given
+##                 "launch_bay": String},           # (M7-T08) `player.launch_bay` or `player.launch` {wing, door}: the start on
+##                                                  #       that Cobra bay's rack ("cobra_bay_alpha_3"); "" in flight
+##      "station": Dictionary,                      # (M7-T12) the station's traffic at the start: {"cargo_ferry": int} (the Saturn 3 backed
+##                                                  #       in at the cargo bay and that many cargo pods, 0 for none), and (M7-T13)
+##                                                  #       "reserve_traffic": bool (build the raids' and wings' ships at load); {} for none
 ##      "props": Array[Dictionary],                 # each {"type": StringName, "name": String,
 ##                                                  #       "position": UniversePos, "velocity": Vector3}
 ##      "jumpgates": Array[Dictionary],             # (M6-T14) `jumpgates[]`, each {"type": &"jumpgate", "name", "position"
@@ -53,6 +58,8 @@ extends RefCounted
 ## Errors are returned, not pushed: the caller decides how loud a broken scenario is.
 
 const FREE_FLIGHT_PATH: String = "res://data/scenarios/free_flight.json"
+## A launch bay's name begins so (M7-T08): `cobra_bay_<wing>_<door>`.
+const LAUNCH_BAY_PREFIX: String = "cobra_bay_"
 ## Prop types a scenario may spawn (the caller maps each to a scene). Unknown types are an error, not a silent skip.
 const PROP_TYPES: Array[StringName] = [&"nav_buoy"]
 ## A `jumpgates[]` entry's type (M6-T14): placed from `data/star_systems.json` beside the station's stand-in unless it gives a
@@ -99,7 +106,12 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	if not (player is Dictionary):
 		return _failure("%s: player must be an object" % source)
 	var player_dict: Dictionary = player
-	var player_pos: Variant = _universe_pos(player_dict.get("position"), system)
+	var launch_bay: Variant = _launch_bay(player_dict, source)
+	if launch_bay is Dictionary:
+		return launch_bay
+	# A start in a launch bay puts the player on the station's rack; its position is only where a respawn without one would go.
+	var player_pos: Variant = _universe_pos(player_dict.get("position", [0.0, 0.0, 0.0] if not (launch_bay as String).is_empty()
+			else null), system)
 	if player_pos == null:
 		return _failure("%s: player.position must be [x, y, z] (numbers)" % source)
 	var forward: Variant = _vector3(player_dict.get("forward", [0.0, 0.0, -1.0]))
@@ -204,12 +216,16 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	if frame is String:
 		return _failure(frame as String)
 
+	var station: Variant = _station(root.get("station", {}), source)
+	if station is String:
+		return _failure(station as String)
+
 	var result: Dictionary = _empty()
 	result["ok"] = true
 	result["scenario_id"] = StringName(scenario_id as String)
 	result["system_id"] = system
 	result["player"] = {"position": player_pos as UniversePos, "forward": forward_unit,
-			"basis": basis_facing(forward_unit), "velocity": start_velocity as Vector3}
+			"basis": basis_facing(forward_unit), "velocity": start_velocity as Vector3, "launch_bay": launch_bay as String}
 	result["props"] = props
 	result["jumpgates"] = jumpgates
 	result["pools"] = pools
@@ -221,6 +237,7 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	result["mission"] = mission
 	result["cinematics"] = cinematics
 	result["belts"] = belts
+	result["station"] = station
 	result["civilian_names"] = civilian_names
 	result["frame"] = frame
 	return result
@@ -297,6 +314,28 @@ static func _civilian_names(raw: Variant, source: String) -> Variant:
 		if names.is_empty() or not (list is Array) or names.size() != (list as Array).size():
 			return "%s: civilian_names.%s must be a non-empty list of names" % [source, key]
 		out[hull] = names
+	return out
+
+
+## `station` (M7-T12): the station's traffic at the start, `{"cargo_ferry": n}` with n from 0 to 12 (the cargo scene's cargo pods)
+## and `{"reserve_traffic": true}` (M7-T13: the raids' and wings' ships are built at load); or an error string.
+static func _station(raw: Variant, source: String) -> Variant:
+	if not raw is Dictionary:
+		return "%s: station must be an object" % source
+	var out: Dictionary = {}
+	for key: String in (raw as Dictionary).keys():
+		var value: Variant = (raw as Dictionary)[key]
+		if key == "reserve_traffic":
+			if typeof(value) != TYPE_BOOL:
+				return "%s: station.reserve_traffic must be true or false" % source
+			out[key] = value
+			continue
+		if key != "cargo_ferry":
+			return "%s: station.%s is not a known key (cargo_ferry, reserve_traffic)" % [source, key]
+		if typeof(value) != TYPE_INT and typeof(value) != TYPE_FLOAT or float(value) != floorf(float(value)) or int(value) < 0 \
+				or int(value) > CargoPodScene.MAX_PODS:
+			return "%s: station.cargo_ferry must be a whole number from 0 to %d" % [source, CargoPodScene.MAX_PODS]
+		out["cargo_ferry"] = int(value)
 	return out
 
 
@@ -752,14 +791,37 @@ static func _numbers3(value: Variant) -> Variant:
 	return out
 
 
+## The player's launch bay (M7-T08, D76): `player.launch_bay` ("cobra_bay_<wing>_<door>"), or `player.launch` ({"wing", "door"})
+## written as that name; "" when the scenario starts in flight, or a failure dictionary.
+static func _launch_bay(player: Dictionary, source: String) -> Variant:
+	var named: Variant = player.get("launch_bay")
+	var parts: Variant = player.get("launch")
+	if named != null and parts != null:
+		return _failure("%s: player takes launch_bay or launch, not both" % source)
+	if named != null:
+		if not (named is String) or not (named as String).begins_with(LAUNCH_BAY_PREFIX):
+			return _failure("%s: player.launch_bay must name a bay, \"%s<wing>_<door>\"" % [source, LAUNCH_BAY_PREFIX])
+		return named
+	if parts == null:
+		return ""
+	if not (parts is Dictionary) or not ((parts as Dictionary).get("wing") is String) or not _is_door((parts as Dictionary).get("door")):
+		return _failure("%s: player.launch must be {\"wing\": \"alpha\", \"door\": 1 to 6}" % source)
+	return "%s%s_%d" % [LAUNCH_BAY_PREFIX, ((parts as Dictionary)["wing"] as String).to_lower(), int((parts as Dictionary)["door"])]
+
+
+# A launch door is a whole number from 1 to the arm's six (JSON numbers arrive as floats, so 3.0 is a 3).
+static func _is_door(value: Variant) -> bool:
+	return _is_number(value) and is_equal_approx(float(value), roundf(float(value))) and float(value) >= 1.0 and float(value) <= 6.0
+
+
 static func _empty() -> Dictionary:
 	return {"ok": false, "error": "", "scenario_id": &"", "system_id": &"local",
 			"player": {"position": UniversePos.new(), "forward": Vector3.FORWARD, "basis": Basis.IDENTITY,
-					"velocity": Vector3.ZERO},
+					"velocity": Vector3.ZERO, "launch_bay": ""},
 			"props": [] as Array[Dictionary], "jumpgates": [] as Array[Dictionary], "pools": {}, "waves": [] as Array[Dictionary],
 			"loop": {"from_wave": 0, "add_per_loop": 1}, "routes": [] as Array[Route], "spawns": [] as Array[Dictionary],
 			"wings": [] as Array[Dictionary], "mission": {}, "cinematics": {}, "belts": [] as Array[Dictionary],
-			"civilian_names": {}, "placeholders": {}}
+			"civilian_names": {}, "placeholders": {}, "station": {}}
 
 
 static func _failure(message: String) -> Dictionary:

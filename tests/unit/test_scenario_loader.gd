@@ -514,14 +514,14 @@ func test_a_scenario_without_a_mission_block_has_an_empty_one() -> void:
 
 func test_the_mission_block_and_cinematics_are_passed_through() -> void:
 	var data: Dictionary = _minimal()
-	data["mission"] = {"title": " Buoy defence ", "briefing": "Hold the relay.\n", "script": "res://data/missions/x.gd",
+	data["mission"] = {"title": " Buoy defense ", "briefing": "Hold the relay.\n", "script": "res://data/missions/x.gd",
 			"dialog": "res://data/dialog/x.json",
 			"objectives": [{"id": "protect", "text": "Protect NAV ALPHA", "fail": {"kind": "destroyed", "name": "NAV ALPHA"}}]}
 	data["cinematics"] = {"intro": {"keys": []}}
 	var result: Dictionary = ScenarioLoader.from_data(data, "case")
 	assert_true(result["ok"], str(result["error"]))
 	var mission: Dictionary = result["mission"]
-	assert_eq(mission["title"], "Buoy defence", "trimmed")
+	assert_eq(mission["title"], "Buoy defense", "trimmed")
 	assert_eq(mission["briefing"], "Hold the relay.\n", "kept as written")
 	assert_eq(mission["script"], "res://data/missions/x.gd")
 	assert_eq(mission["dialog"], "res://data/dialog/x.json")
@@ -674,3 +674,51 @@ func test_civilian_names_are_checked() -> void:
 	_assert_fails(data, "case: civilian_names.raider_fighter is not a civilian hull")
 	data["civilian_names"] = {"skylark_transport": []}
 	_assert_fails(data, "case: civilian_names.skylark_transport must be a non-empty list of names")
+
+
+func test_a_launch_bay_start_is_read_either_way() -> void:
+	# M7-T08: `player.launch_bay` names the bay; `player.launch` {wing, door} is written as the same name.
+	var data: Dictionary = _minimal()
+	assert_eq(ScenarioLoader.from_data(data)["player"]["launch_bay"], "", "in flight by default")
+	data["player"] = {"launch_bay": "cobra_bay_alpha_3"}
+	var named: Dictionary = ScenarioLoader.from_data(data, "case")
+	assert_true(bool(named["ok"]), str(named.get("error", "")))
+	assert_eq(named["player"]["launch_bay"], "cobra_bay_alpha_3", "no position needed")
+	data["player"] = {"launch": {"wing": "Zeta", "door": 6}, "position": [10, 0, 0]}
+	assert_eq(ScenarioLoader.from_data(data)["player"]["launch_bay"], "cobra_bay_zeta_6")
+	data["player"] = {"launch_bay": "bay_3"}
+	_assert_fails(data, "player.launch_bay must name a bay")
+	data["player"] = {"launch_bay": "cobra_bay_alpha_3", "launch": {"wing": "alpha", "door": 3}}
+	_assert_fails(data, "player takes launch_bay or launch, not both")
+	data["player"] = {"launch": {"wing": "alpha"}}
+	_assert_fails(data, "player.launch must be")
+	for door: Variant in [0, 7, 2.5, -1, "3"]:
+		data["player"] = {"launch": {"wing": "alpha", "door": door}}
+		_assert_fails(data, "player.launch must be")
+	for door: Variant in [1, 6, 3.0]:
+		data["player"] = {"launch": {"wing": "alpha", "door": door}}
+		assert_true(bool(ScenarioLoader.from_data(data, "case")["ok"]), "door %s is accepted" % str(door))
+	var file: Dictionary = ScenarioLoader.load("res://data/scenarios/station_launch.json")
+	assert_true(bool(file["ok"]), str(file.get("error", "")))
+	assert_eq(file["player"]["launch_bay"], "cobra_bay_alpha_3", "the station launch scenario starts in Alpha 3")
+	assert_eq(file["station"], {"reserve_traffic": true}, "no cargo ferry unless it is asked for; the raids' ships are built at load")
+
+
+# M7-T12: the station showcase starts in a bay with the cargo ferry's bots; the traffic key is checked.
+func test_station_traffic_at_the_start() -> void:
+	var file: Dictionary = ScenarioLoader.load("res://data/scenarios/station_showcase.json")
+	assert_true(bool(file["ok"]), str(file.get("error", "")))
+	assert_eq(file["player"]["launch_bay"], "cobra_bay_alpha_3", "the showcase starts in a bay, so the launch plays")
+	assert_eq(file["station"], {"cargo_ferry": 5, "reserve_traffic": true})
+	var data: Dictionary = {"scenario_id": "t", "player": {"position": [0, 0, 0]}, "station": {"cargo_ferry": 20}}
+	_assert_fails(data, "station.cargo_ferry must be a whole number from 0 to 12")
+	data["station"] = {"patrols": 2}
+	_assert_fails(data, "station.patrols is not a known key")
+	data["station"] = []
+	_assert_fails(data, "station must be an object")
+	data["station"] = {"cargo_ferry": 0}
+	assert_eq(ScenarioLoader.from_data(data)["station"], {"cargo_ferry": 0})
+	data["station"] = {"reserve_traffic": 1}
+	_assert_fails(data, "station.reserve_traffic must be true or false")
+	data["station"] = {"reserve_traffic": true}
+	assert_eq(ScenarioLoader.from_data(data)["station"], {"reserve_traffic": true})

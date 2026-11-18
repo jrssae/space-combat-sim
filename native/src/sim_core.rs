@@ -13,7 +13,9 @@ use crate::rows::NameTable;
 use crate::threads::{self, Pass, Threads};
 use crate::v3::{add, col_b, col_c, neg, normalized, sub};
 
-pub use crate::rows::{Bolts, FLAG_HULL, FLAG_HULL_ACTIVE, FLAG_LATE, FLAG_RIGID, FLAG_TIER, Rows};
+pub use crate::rows::{
+    Bolts, FLAG_HULL, FLAG_HULL_ACTIVE, FLAG_LATE, FLAG_RIGID, FLAG_SHELTERED, FLAG_TIER, Rows,
+};
 
 // The snapshot the scan takes of the rows, built here (it crosses the boundary).
 trait RowsSnapshot {
@@ -27,14 +29,16 @@ trait RowsSnapshot {
 }
 
 // `BodyKind` (src/ai/body_kind.gd) in value order, then the projectile kinds the core adds (`SimCore.KIND_*`).
-const KIND_NAMES: [&str; 9] = [
-    "ship", "capital", "turret", "missile", "mine", "static", "prop", "bolt", "beam",
+const KIND_NAMES: [&str; 10] = [
+    "ship", "capital", "turret", "missile", "mine", "static", "prop", "bolt", "beam", "intercept",
 ];
 pub const KIND_SHIP: u8 = 0;
 pub const KIND_MINE: u8 = 4;
 pub const KIND_STATIC: u8 = 5;
 pub const KIND_BOLT: u8 = 7;
 pub const KIND_BEAM: u8 = 8;
+/// An interceptor battery's pulse (M7-T41, `grid_kernels::KIND_INTERCEPT`): it never lands on a hull.
+pub const KIND_INTERCEPT: u8 = crate::grid_kernels::KIND_INTERCEPT;
 
 // The script properties the core reads, as StringNames made once: a name built per read costs as much as the read.
 struct Names {
@@ -94,6 +98,8 @@ struct Attrs {
     target_id: i64,
     // The role (M5-T16): civilian when `set_civilian` named the body, read with the other attributes.
     role: u8,
+    // Inside a station (M7-T62, `set_sheltered`): its row flies, but takes `FLAG_SHELTERED` in place of an active hull.
+    sheltered: bool,
 }
 
 // One `Targetable` (or, for a body without one, one `Damageable`) of the tree, with the body it marks.
@@ -274,6 +280,12 @@ pub struct ScsSimCore {
     pub(crate) bolts_pulled: i64,
     pub(crate) tier_pull_us: i64,
     pub(crate) bolt_pull_us: i64,
+    // The big hulls' surfaces by body id (M7-T06, `surface_rows.rs`), shared with the rows and the AI job's copy.
+    pub(crate) surfaces: Arc<crate::rows::Surfaces>,
+    // The navigation markers' bodies by id (M7-T27, `set_navigation`): their rows take `ROLE_NAV`.
+    pub(crate) nav_bodies: std::collections::HashSet<i64>,
+    // The ships sheltered inside a station by id (M7-T62, `set_sheltered`): their rows take `FLAG_SHELTERED`.
+    pub(crate) sheltered: std::collections::HashSet<i64>,
 }
 
 #[godot_api]
@@ -437,6 +449,24 @@ impl ScsSimCore {
     #[func]
     pub fn touch(&mut self, body_id: i64) {
         self.touched.insert(body_id);
+    }
+
+    /// Marks a ship as sheltered inside a station (or out again, M7-T62): it keeps flying, but no other ship, turret,
+    /// radar or shot sees it from the next sync on.
+    #[func]
+    pub fn set_sheltered(&mut self, body_id: i64, on: bool) {
+        if on {
+            self.sheltered.insert(body_id);
+        } else {
+            self.sheltered.remove(&body_id);
+        }
+        self.touch(body_id);
+    }
+
+    /// Ships sheltered inside a station now.
+    #[func]
+    fn sheltered_count(&self) -> i64 {
+        self.sheltered.len() as i64
     }
 
     /// Forgets every body's faction, name, kind and radius, so the next sync reads them all again.
@@ -1139,9 +1169,18 @@ impl ScsSimCore {
     /// beam_ids, owned, bolt_count, hull_body_ids, hull_ids, hull_positions, hull_velocities, hull_bases, hull_total]`: one
     /// entry per bolt kept in the first thirteen (ranges into `hull_slots` and `rock_keys`); per kept hull pair the paired
     /// hull's slot in the hull columns that follow (only hulls some kept pair names, bases three columns each); the beams'
-    /// indices and ids; the rows the core owns, the bolt count and the hull count.
+    /// indices and ids; the rows the core owns, the bolt count and the hull count. Then, per kept hull pair, where along
+    /// the bolt's tick it enters a big hull's surface (M7-T06: the station; -1 for any other hull, which GDScript sweeps
+    /// itself): a pair whose bolt misses the surface is not kept, so 4 km of bounding sphere costs GDScript nothing.
+    /// `delta` is the tick, the hull's own move across it taken off the bolt's end as the resolver does.
     #[func]
-    fn hit_bolts(&self, hull_keys: PackedInt64Array, rock_keys: PackedInt64Array, rock_count: i64) -> VarArray {
+    fn hit_bolts(
+        &self,
+        hull_keys: PackedInt64Array,
+        rock_keys: PackedInt64Array,
+        rock_count: i64,
+        delta: f64,
+    ) -> VarArray {
         let b = &self.bolts;
         let n = b.ids.len();
         let hull_total = self.sweep_rows.len();
@@ -1149,13 +1188,14 @@ impl ScsSimCore {
         let rocks = rock_count.max(1);
         // Each bolt's run of kept keys in the filtered lists.
         let mut kept_hulls: Vec<i32> = Vec::with_capacity(hull_keys.len());
+        let mut kept_t: Vec<f64> = Vec::with_capacity(hull_keys.len());
         let mut hull_range = vec![(0i32, 0i32); n];
         let mut slot_of_hull: HashMap<usize, i32> = HashMap::new();
         let mut hull_list: Vec<u32> = Vec::new();
         for &key in hull_keys.as_slice() {
             let i = (key / hulls) as usize;
             let j = (key - i as i64 * hulls) as usize;
-            if i >= n || b.spent[i] {
+            if i >= n || b.spent[i] || b.kinds[i] == KIND_INTERCEPT {
                 continue;
             }
             let body = self
@@ -1165,6 +1205,14 @@ impl ScsSimCore {
             if body == b.shooters[i] {
                 continue;
             }
+            let row = self.sweep_rows[j] as usize;
+            let surface_t = match self.rows.surface(row) {
+                Some(surface) => match self.surface_entry(surface, row, i, delta) {
+                    Some(t) => t,
+                    None => continue, // the bolt passes the big hull's volumes
+                },
+                None => -1.0,
+            };
             if hull_range[i].1 == hull_range[i].0 {
                 hull_range[i] = (kept_hulls.len() as i32, kept_hulls.len() as i32);
             }
@@ -1173,13 +1221,14 @@ impl ScsSimCore {
                 (hull_list.len() - 1) as i32
             });
             kept_hulls.push(slot);
+            kept_t.push(surface_t);
             hull_range[i].1 = kept_hulls.len() as i32;
         }
         let mut kept_rocks: Vec<i64> = Vec::with_capacity(rock_keys.len());
         let mut rock_range = vec![(0i32, 0i32); n];
         for &key in rock_keys.as_slice() {
             let i = (key / rocks) as usize;
-            if i >= n || b.spent[i] {
+            if i >= n || b.spent[i] || b.kinds[i] == KIND_INTERCEPT {
                 continue;
             }
             if rock_range[i].1 == rock_range[i].0 {
@@ -1250,6 +1299,7 @@ impl ScsSimCore {
             out.push(&columns.at(k));
         }
         out.push(&(hull_total as i64).to_variant());
+        out.push(&PackedFloat64Array::from(kept_t.as_slice()).to_variant());
         out
     }
 
@@ -1272,6 +1322,19 @@ impl ScsSimCore {
 }
 
 impl ScsSimCore {
+    // Where bolt `i`'s path this tick enters `surface`, row `row`'s big hull, as a fraction of it (M7-T06), or none: the
+    // path taken into the hull's frame at its pose this tick, the hull's own move off its end, as `HitResolver` does.
+    fn surface_entry(&self, surface: &crate::rows::Surface, row: usize, i: usize, delta: f64) -> Option<f64> {
+        let b = &self.bolts;
+        let start = sub(b.positions[i], b.last_steps[i]);
+        let at = self.rows.positions[row];
+        let moved = add(at, crate::v3::scale(self.rows.velocities[row], delta as f32));
+        let basis = &self.rows.bases[row];
+        let a = crate::surface::into_body(basis, at, start);
+        let end = crate::surface::into_body(basis, moved, b.positions[i]);
+        crate::surface::sweep(surface, a, end, b.radii[i]).map(|(t, _)| t)
+    }
+
     // The index of `faction` in the core's table, added on first sight.
     pub fn faction_index(&mut self, faction: StringName) -> u32 {
         if let Some(at) = self.factions.iter().position(|f| *f == faction) {
@@ -1362,7 +1425,10 @@ impl ScsSimCore {
         if has_hull {
             flags |= FLAG_HULL;
         }
-        if has_hull && !attrs.destroyed {
+        // A sheltered ship's hull is out of play: no sweep, ram, mine or turret sees it.
+        if attrs.sheltered {
+            flags |= FLAG_SHELTERED;
+        } else if has_hull && !attrs.destroyed {
             flags |= FLAG_HULL_ACTIVE;
         }
         // The brains' two live reads of a contact (M4-T17), `Damageable.hull.fraction()` and the ship's selection: the
@@ -1532,6 +1598,15 @@ impl ScsSimCore {
         {
             self.rows.names = Some(Arc::clone(&self.names_shared));
         }
+        // The big hulls' surfaces as they stand (M7-T06).
+        if !self
+            .rows
+            .surfaces
+            .as_ref()
+            .is_some_and(|held| Arc::ptr_eq(held, &self.surfaces))
+        {
+            self.rows.surfaces = Some(Arc::clone(&self.surfaces));
+        }
     }
 
     // The rocks and mines as rows, made once for every sync to copy.
@@ -1615,16 +1690,23 @@ impl ScsSimCore {
             .unwrap_or_default()
     }
 
-    /// The display name of the row whose marker id is `id` ("" for none), for the debug readouts.
+    /// The display name of the row whose marker id is `id` ("" for none), for the debug readouts. A big hull with no name
+    /// of its own goes by its owner's (M7-T55: the drum is BABYLON 5).
     pub fn name_of_marker(&self, id: i64) -> String {
         if id == 0 {
             return String::new();
         }
-        self.rows
-            .ids
-            .iter()
-            .position(|&r| r == id)
-            .and_then(|r| self.row_name_ids.get(r))
+        let Some(mut r) = self.rows.ids.iter().position(|&i| i == id) else {
+            return String::new();
+        };
+        if self.row_name_ids.get(r).is_none_or(|&n| n == 0)
+            && let Some(owner) = self.rows.surface(r).map(|s| s.named_by).filter(|&b| b != 0)
+            && let Some(o) = self.rows.body_ids.iter().position(|&b| b == owner)
+        {
+            r = o;
+        }
+        self.row_name_ids
+            .get(r)
             .map_or_else(String::new, |&name| self.display_name(name).to_string())
     }
 
@@ -1808,14 +1890,19 @@ impl ScsSimCore {
             None => -1,
         };
         self.latest_target.insert(m.body_id, target_id);
-        let role = if self.turrets.civilians.contains(&m.body_id) {
+        let role = if self.surfaces.contains_key(&m.body_id) {
+            crate::rows::ROLE_SURFACE
+        } else if self.turrets.civilians.contains(&m.body_id) {
             crate::rows::ROLE_CIVILIAN
+        } else if self.nav_bodies.contains(&m.body_id) {
+            crate::rows::ROLE_NAV
         } else {
             crate::rows::ROLE_COMBAT
         };
         let (name_id, key_id) = self.intern_name(&name);
         Attrs {
             role,
+            sheltered: self.sheltered.contains(&m.body_id),
             faction_ix: self.faction_index(faction),
             name_id,
             key_id,
@@ -2120,8 +2207,8 @@ impl ScsSimCore {
 
     /// What the player's radar shows (M4-T23): every row with a marker (a targetable in play, not parked since the sync) or
     /// in the low-attention tier, not body `own_body`, within `sensor_range` of `own_position` or its own broadcast reach, as `[marker ids,
-    /// positions, faction indices (into `factions`), reach]` in row order. One pass over the rows, near and tier alike, instead of a walk of the
-    /// targetable nodes each frame; the positions are the tick's rows.
+    /// positions, faction indices (into `factions`), reach, civilian (1 for a civilian hull, M7-T56)]` in row order. One pass over the rows,
+    /// near and tier alike, instead of a walk of the targetable nodes each frame; the positions are the tick's rows.
     #[func]
     fn radar_contacts(&self, own_position: Vector3, own_body: i64, sensor_range: f64) -> VarArray {
         let r = &self.rows;
@@ -2129,11 +2216,13 @@ impl ScsSimCore {
         let mut positions: Vec<Vector3> = Vec::new();
         let mut faction_ix: Vec<i32> = Vec::new();
         let mut reach: Vec<f64> = Vec::new();
+        let mut civilian: Vec<u8> = Vec::new();
         for i in 0..r.body_ids.len() {
             let marked =
                 r.flags[i] & FLAG_TIER != 0 || (r.ids[i] != r.body_ids[i] && !r.is_static[i]);
             if !marked
                 || r.body_ids[i] == own_body
+                || r.is_sheltered(i)
                 || self.parked_since_sync.contains(&r.body_ids[i])
             {
                 continue;
@@ -2149,12 +2238,14 @@ impl ScsSimCore {
             positions.push(p);
             faction_ix.push(r.faction_ix[i] as i32);
             reach.push(r.reach[i]);
+            civilian.push(u8::from(r.is_civilian(i)));
         }
         let mut out = VarArray::new();
         out.push(&PackedInt64Array::from(ids.as_slice()).to_variant());
         out.push(&PackedVector3Array::from(positions.as_slice()).to_variant());
         out.push(&PackedInt32Array::from(faction_ix.as_slice()).to_variant());
         out.push(&PackedFloat64Array::from(reach.as_slice()).to_variant());
+        out.push(&PackedByteArray::from(civilian.as_slice()).to_variant());
         out
     }
 
@@ -2180,7 +2271,7 @@ impl ScsSimCore {
                 out.push(body_id);
                 continue;
             };
-            if self.rows.body_ids[t] == body_id {
+            if self.rows.body_ids[t] == body_id || self.rows.is_sheltered(t) {
                 out.push(body_id);
                 continue;
             }

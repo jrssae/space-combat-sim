@@ -27,6 +27,11 @@ extends AiBehaviour
 ##
 ## Out of sight (beyond sensor range) it flies to the leader's position on the wing's link (`AiContext.leader_link_position`)
 ## at the far closure, the slot offset ignored until the contact is back.
+##
+## Forming up (M7-T76, as the native brain flies it; this reference sees no big hull): a slot that lies across the leader (the
+## leader turned about) is come round to over the leader's top from its left and under it from its right (`_swing`), the aim
+## keeps off the line a leader burning back toward the ship comes along (`_clear_of_burn`), and every friendly ship is kept
+## off the wish (`_kept_apart`).
 
 const SCORE: float = 0.25
 const STAND_BY_SCORE: float = 0.1
@@ -48,6 +53,17 @@ const MAX_LEAN_DEG: float = 40.0
 ## the leader's speed: at low speed v x a / |v|^2 is the leader's thrust, not a turn, and would fling the far slots.
 const MAX_PATH_RATE_RAD_S: float = 0.35
 const FEED_FORWARD_FULL_MPS: float = 30.0
+## A friendly ship nearer than this is pushed off, m, at up to this speed, m/s; the moment a stop short of one takes to start, s.
+const SEPARATION_M: float = 50.0
+const SEPARATION_MPS: float = 40.0
+const SETTLE_S: float = 1.0
+## Coming round the leader: how far round the aim leads, where it is round, rad; how far out against the slot's distance it
+## still comes round; how far off a burning leader's way it aims, m, and the burn that counts, m/s^2.
+const SWING_STEP_RAD: float = 0.785
+const SWING_DONE_RAD: float = 0.35
+const SWING_REACH: float = 3.0
+const SWING_CLEAR_M: float = 50.0
+const SWING_BURN_MPS2: float = 8.0
 
 ## The closure cap beyond `FAR_RANGE_M`: the profile's cruise + `FAR_EXTRA_MPS`.
 var far_closure_mps: float = 200.0
@@ -55,6 +71,9 @@ var far_closure_mps: float = 200.0
 var slot_error_m: float = -1.0
 
 var _on_link: bool = false
+# The axis the ship comes round its leader about, kept until it is round (`_swinging`).
+var _swing_axis: Vector3 = Vector3.ZERO
+var _swinging: bool = false
 # The leader's velocity at the last `think` (and when, and whose), to estimate its acceleration on the next one.
 var _last_leader_id: int = 0
 var _last_leader_velocity: Vector3 = Vector3.ZERO
@@ -74,6 +93,7 @@ func reset() -> void:
 	_on_link = false
 	_last_leader_id = 0
 	_last_s = -INF
+	_swinging = false
 
 
 func enter() -> void:
@@ -93,6 +113,7 @@ func think(ctx: AiContext, dt: float) -> PilotCommand:
 	var slot: Vector3
 	var slot_velocity: Vector3
 	var slot_accel := Vector3.ZERO
+	var leader_accel := Vector3.ZERO
 	_on_link = false
 	if leader != null:
 		slot = Formation.slot_point(leader.position, leader.forward, leader.up, ctx.slot_offset)
@@ -104,7 +125,7 @@ func think(ctx: AiContext, dt: float) -> PilotCommand:
 		var since: float = p.now_s - _last_s
 		var speed_sq: float = leader.velocity.length_squared()
 		if leader.id == _last_leader_id and dt > 0.0 and absf(since - dt) < 0.5 * dt and speed_sq > 1.0:
-			var leader_accel: Vector3 = (leader.velocity - _last_leader_velocity) / since
+			leader_accel = (leader.velocity - _last_leader_velocity) / since
 			var path_rate: Vector3 = (leader.velocity.cross(leader_accel) / speed_sq).limit_length(MAX_PATH_RATE_RAD_S)
 			path_rate *= minf(1.0, sqrt(speed_sq) / FEED_FORWARD_FULL_MPS)
 			var arm: Vector3 = slot - leader.position
@@ -121,9 +142,14 @@ func think(ctx: AiContext, dt: float) -> PilotCommand:
 		return cmd  # nobody to fly with (it scored 0, so this is not reached in play)
 	var to_slot: Vector3 = slot - p.position
 	slot_error_m = to_slot.length()
-	var error: Vector3 = to_slot + (slot_velocity - p.velocity) * LEAD_S
+	var aim: Vector3 = slot
+	if leader != null:
+		var swung: Variant = _swing(leader.position, leader.forward, leader.up, p.position, slot)
+		aim = _clear_of_burn(leader.position, leader_accel, leader.up, swung if swung != null else slot)
+	var error: Vector3 = (aim - p.position) + (slot_velocity - p.velocity) * LEAD_S
 	var cap: float = NEAR_CLOSURE_MPS if slot_error_m <= FAR_RANGE_M else far_closure_mps
 	var v_des: Vector3 = slot_velocity + (error * K_PER_S).limit_length(cap) + slot_accel * PilotSteering.HORIZON_S
+	v_des = _kept_apart(p, v_des)
 	var rate: Vector3 = p.capability.rate_max_rad
 	if leader != null and slot_error_m <= ALIGN_RANGE_M:
 		# The leader's nose, leant toward the acceleration the wish asks for when the RCS alone cannot give its sideways part.
@@ -149,6 +175,82 @@ func describe() -> Dictionary:
 	if _on_link:
 		state = "joining (link)"
 	return {"state": state, "slot_error_m": snappedf(slot_error_m, 0.1)}
+
+
+# The point to fly for instead of `slot` while it lies across the leader at `leader_at` (`forward`, `up` its nose and top),
+# a step at a time round the leader at the ship's own distance; null when it is not across.
+func _swing(leader_at: Vector3, forward: Vector3, up: Vector3, own: Vector3, slot: Vector3) -> Variant:
+	var rel_own: Vector3 = own - leader_at
+	var rel_slot: Vector3 = slot - leader_at
+	var r_own: float = rel_own.length()
+	var r_slot: float = rel_slot.length()
+	if r_own < 1.0 or r_slot < 1.0 or r_own > SWING_REACH * r_slot + SWING_CLEAR_M:
+		_swinging = false
+		return null
+	if not _swinging:
+		if rel_own.dot(rel_slot) >= 0.0:
+			return null
+		var over: Vector3 = -up if rel_own.dot(forward.cross(up)) > 0.0 else up
+		var turn: Vector3 = rel_own.cross(over)
+		_swing_axis = turn.normalized() if turn.length() > 0.1 * r_own else rel_own.cross(rel_slot).normalized()
+		_swinging = true
+	var axis: Vector3 = _swing_axis
+	var a_own: float = rel_own.dot(axis)
+	var a_slot: float = rel_slot.dot(axis)
+	var flat_own: Vector3 = rel_own - axis * a_own
+	var flat_slot: Vector3 = rel_slot - axis * a_slot
+	var f_own: float = flat_own.length()
+	var f_slot: float = flat_slot.length()
+	var angle: float = atan2(flat_own.cross(flat_slot).dot(axis), flat_own.dot(flat_slot))
+	if angle < 0.0:
+		angle += TAU
+	if f_own < 1.0 or angle < SWING_DONE_RAD or angle > TAU - SWING_DONE_RAD:
+		_swinging = false
+		return null
+	var step: float = minf(angle, SWING_STEP_RAD)
+	var k: float = step / angle
+	var out: Vector3 = (flat_own / f_own).rotated(axis, step)
+	return leader_at + (out * (f_own + (f_slot - f_own) * k) + axis * (a_own + (a_slot - a_own) * k))
+
+
+# `aim` moved off the line the leader at `leader_at` comes along while it burns toward the ship, to `SWING_CLEAR_M`.
+static func _clear_of_burn(leader_at: Vector3, leader_accel: Vector3, up: Vector3, aim: Vector3) -> Vector3:
+	var burn: float = leader_accel.length()
+	if burn <= SWING_BURN_MPS2:
+		return aim
+	var a_dir: Vector3 = leader_accel / burn
+	var rel: Vector3 = aim - leader_at
+	var along: float = rel.dot(a_dir)
+	var lateral: Vector3 = rel - a_dir * along
+	var wide: float = lateral.length()
+	if along <= 0.0 or wide >= SWING_CLEAR_M:
+		return aim
+	var side: Vector3 = lateral / wide if wide > 1.0 else (up - a_dir * up.dot(a_dir)).normalized()
+	return leader_at + (a_dir * along + side * SWING_CLEAR_M)
+
+
+# `v_des` kept off every friendly ship: one the ship is closing on within the room it needs to stop (a settle, then the
+# side thrusters) is a wall the wish may not close on, and one nearer than `SEPARATION_M` is pushed off.
+static func _kept_apart(p: Perception, v_des: Vector3) -> Vector3:
+	var a_stop: float = maxf(minf(p.capability.a_rcs.x, p.capability.a_rcs.y), 0.01)
+	var out: Vector3 = v_des
+	for c: Contact in p.contacts:
+		if not c.is_ship or c.relation != Factions.Relation.FRIENDLY:
+			continue
+		var off: Vector3 = p.position - c.position
+		var d: float = off.length()
+		if d < 1e-3:
+			continue
+		var away: Vector3 = off / d
+		var closing_now: float = maxf(-(p.velocity - c.velocity).dot(away), 0.0)
+		if d >= SEPARATION_M + closing_now * SETTLE_S + closing_now * closing_now / (2.0 * a_stop):
+			continue
+		var into: float = -(out - c.velocity).dot(away)
+		if into > 0.0:
+			out += away * into
+		if d < SEPARATION_M:
+			out += away * ((SEPARATION_M - d) / SEPARATION_M * SEPARATION_MPS)
+	return out
 
 
 # Where the nose goes away from the slot: toward the velocity change when it is big and not a slow-down along the way,

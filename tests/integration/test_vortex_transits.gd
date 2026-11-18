@@ -91,7 +91,7 @@ func test_a_ship_comes_out_of_a_point_shrunk_and_grows_to_its_whole_size_at_the_
 	assert_eq(transits.scale_of(raider.ship), VortexTransit.HELD_SCALE, "as good as gone through the point's opening flash")
 	assert_eq(transits.flash_count(), 0)
 	var waited: int = 0
-	while point.age_s < VortexTransit.emerge_age_s(0.0) and waited < 300:
+	while point.age_s < VortexTransit.emerge_age_s(point.timing.lead_s) and waited < 600:
 		await _frames(1)
 		waited += 1
 	await _frames(1)

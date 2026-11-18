@@ -37,3 +37,45 @@ SCS_RECORD_FIXTURES=1 GUT_SLOW=1 .tools/godot/godot --headless --path . -s addon
 The Q16 fights (`brain_tolerance.json`, `flight_parity_fight.json`) hold two references each: the GDScript fight on the
 single-thread step (Q16's reference, which the native code matched bit for bit on that step when recorded) and the native
 fight on the delayed step (the threaded step's bit-for-bit reference). See each test's header for what is gated.
+
+**M7-T16 re-recorded the native entries** (the raider rebuilt to its reference model: a new hull, hit volumes and muzzles move
+every seeded battle with raiders in it). `ParityFixture.rerecorded(file, case, value[, key])` writes what the test just flew
+when the run sets `SCS_RECORD_FIXTURES=1`; the Q16 fights record their `native` references from the delayed step, which the
+threaded fight then matched bit for bit. Run, at the M7-T16 commit:
+
+```
+SCS_RECORD_FIXTURES=1 GUT_SLOW=1 .tools/godot/godot --headless --path . -s addons/gut/gut_cmdln.gd -gexit \
+    -gtest=res://tests/integration/test_brain_tolerance.gd,res://tests/integration/test_flight_parity_fight.gd,res://tests/integration/test_weapon_rows_battle.gd,res://tests/unit/test_bolt_rows.gd,res://tests/unit/test_core_state.gd,res://tests/unit/test_driver_step.gd,res://tests/unit/test_row_commands.gd
+```
+
+The GDScript entries (`gdscript`, `gdscript_*`) stay as recorded at `0586e3e` on the old raider: `brain_tolerance` still holds
+Q16's hits and mix against them; `flight_parity_fight` prints its mix against them (12 points on the new hull) and gates the hits.
+What moved (old → new): `weapon_rows_battle` 933, 420, 174, 151, 25, 1 → 779, 380, 144, 145, 25, 1; the 100-ship battle of
+`bolt_rows`, `core_state`, `driver_step` and `row_commands` 62 → 67 hits (thinks 12 033 → 12 034 near and far, 8 238 → 8 239 far
+rate; the row, command, hit and pilot digests new); `brain_tolerance` native hits furball 264, 315, 256 → 268, 248, 285, spread
+355, 301, 298 → 330, 324, 293; `flight_parity_fight` 127 → 144 hits over 30 s, mix attack 18 evade 7 → attack 20 evade 5.
+
+
+**M7-T48 re-recorded `weapon_rows_battle` alone**: the bench's 1 000 rocks became the generated asteroids (a shape and turn per
+rock, one to three collision spheres each, in place of one sphere of the rock's radius), so the seeded battle flies among other
+obstacles. HEAD before the change still gave 780, 380, 144, 145, 25, 1 against the stored 779, 380, 144, 145, 25, 1; with the
+generated rocks the battle gives 704, 321, 132, 146, 25, 1 (capitals' hits 15 % down, outside the 10 % gate), the same on a
+second run. No other recording holds rocks: the other battles are fighters only (`SeededBattle`) or furballs.
+
+
+**M7-T64 re-recorded `mine_kernel` (`edge_of_a_trigger`, `belt_seed_23`)**: a blast sets off neighbouring mines and a touch sets one
+off whoever's it is; trigger arithmetic unchanged. (`edge_of_a_trigger`: two mines go off from another's blast at tick 1;
+`belt_seed_23`: blasts carry on from tick 0 and a fighter touches a mine at tick 801.)
+
+
+**M7-T65 re-recorded `weapon_rows_battle` (`battle_100_seed_1`)**: the bench's mines are laid as groups in the fights, so the
+100-ship battle sets off 36 mines instead of 1; hits, beams and missiles unchanged (704, 321, 132, 146, 25, 1 → 704, 321, 132,
+146, 25, 36).
+
+
+**M7-T64 also re-recorded `turret_kernel` (`seed_7`, `rebase_at_90`, `relation_changed_at_120`)**, found by the full check after
+the commit: the miniature battle flies through a mine belt, and a blast now sets off its neighbours, so a few mines go off a few
+ticks early. Only the mine fields of those ticks moved (mines set off, the mines' hits, the mines left to check: `seed_7` ticks
+26-38, `rebase_at_90` 3-18, `relation_changed_at_120` 18-24); every turret's pick, aim and shot, every projectile made, every
+kill and the end counts are byte for byte the old recording's (compared against the log of the commit before M7-T64, which still
+gave the stored digests).

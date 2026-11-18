@@ -24,8 +24,11 @@ var target_menu_open: bool = false
 var radial_point: Vector2 = Vector2.ZERO
 var radial_select: bool = false
 var radial_back: bool = false
-## X (the auto-track action) while `InputAdapter.jump_offered` is set (M6-T14): ask the targeted gate for a jump. An edge.
-var request_jump: bool = false
+## X (the auto-track action) held `InputAdapter.interact_hold_s` while the selected target offers an interaction (M7-T27): run it
+## (a gate's jump; a bay's placeholder answers "not available"). An edge. `interact_progress` is how far the hold has run, 0..1
+## (0 = no hold): the HUD's bar across the top.
+var interact: bool = false
+var interact_progress: float = 0.0
 ## Free look (L3 held on a pad, the middle mouse button held): the camera turns, the ship does not. `look_stick` is the right
 ## stick as an absolute look direction (x right, y up, -1..1); `look_mouse_px` is the mouse travel this tick in pixels
 ## (x right, y up).
@@ -42,6 +45,6 @@ func to_dict() -> Dictionary:
 		"toggle_running_lights": toggle_running_lights,
 		"comms_open": comms_open,
 		"target_menu_open": target_menu_open, "radial_point": radial_point, "radial_select": radial_select,
-		"radial_back": radial_back, "request_jump": request_jump,
+		"radial_back": radial_back, "interact": interact, "interact_progress": interact_progress,
 		"look_active": look_active, "look_stick": look_stick, "look_mouse_px": look_mouse_px,
 	}

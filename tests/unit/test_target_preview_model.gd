@@ -83,7 +83,7 @@ func test_a_civilian_with_pod_mounts_adds_its_cargo_pods() -> void:
 			{"asset_id": "brakiri_bokmai", "cargo_pods": 2, "cargo_mounts": 3})
 	assert_eq(model.kind, TargetPreviewModel.Kind.SHIP, "its transponder identifies it beyond 5 km")
 	assert_eq(model.subtitle, "Bokmai hauler · Brakiri Syndicracy")
-	assert_eq(model.title_color, Factions.NEUTRAL_COLOR)
+	assert_eq(model.title_color, Factions.CIVILIAN_COLOR, "a civilian in the civilian colour (M7-T56)")
 	assert_eq(_fields(model), [&"hull", &"range", &"closing", &"cargo"])
 	assert_eq(model.row(&"cargo")["value"], "2 of 3")
 	var tanker: TargetInfo = _info("Tanker 1", EA, Vector3(0, 0, -3000), Vector3.ZERO, 1.0, Targetable.Role.CIVILIAN, 15000.0)
@@ -102,6 +102,21 @@ func test_a_buoy_shows_its_kind_and_no_hull_bar() -> void:
 	assert_eq(_fields(model), [&"range", &"closing"])
 	assert_eq(model.row(&"range")["value"], "42.0 km")
 	assert_eq(model.row(&"closing")["value"], "+50 m/s")
+
+
+func test_a_bay_and_the_gate_name_what_they_are() -> void:
+	# M7-T27: a bay has no hull, so its class comes from the facts; the gate is its own asset.
+	var bay: TargetInfo = _info("BABYLON 5 DOCKING BAY", Factions.NEUTRAL, Vector3(0, 0, -1500), Vector3.ZERO, -1.0,
+			Targetable.Role.BEACON, 1.0e6)
+	var model: TargetPreviewModel = TargetPreviewModel.contact(bay, OWN, OWN_VELOCITY, EA, {"class": "Docking bay"})
+	assert_eq(model.kind, TargetPreviewModel.Kind.BEACON)
+	assert_eq(model.subtitle, "Docking bay · Neutral")
+	assert_eq(model.hull_id, "", "nothing to draw")
+	var gate: TargetInfo = _info("JUMPGATE", Factions.NEUTRAL, Vector3(0, 0, -50000), Vector3.ZERO, -1.0, Targetable.Role.BEACON, 1.0e6)
+	model = TargetPreviewModel.contact(gate, OWN, OWN_VELOCITY, EA, {"asset_id": "jumpgate"})
+	assert_eq(model.subtitle, "Jumpgate · Neutral")
+	assert_eq(model.hull_id, "jumpgate")
+	assert_eq(_fields(model), [&"range", &"closing"])
 
 
 func test_an_unknown_contact_gives_away_neither_its_name_nor_its_hull() -> void:

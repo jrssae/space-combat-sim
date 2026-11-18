@@ -11,6 +11,7 @@ use crate::kernels::ram;
 use crate::ram_tracker::{Feed, Ram, Tracker};
 use crate::rows::Rows;
 use crate::sim_core::ScsSimCore;
+use crate::surface;
 use crate::v3::{col_a, col_b, col_c, sub};
 
 /// What `RamResolver` keeps between ticks: contacts, windows and one ram per pair per collision. A tick is `contacts`
@@ -33,6 +34,9 @@ pub struct ScsRamTracker {
     others: Vec<i64>,
     points: Vec<Vector3>,
     normals: Vec<Vector3>,
+    // Per contact: the other body is a moving surface (M7-T06, the turning drum) and its skin's velocity there.
+    on_surface: Vec<bool>,
+    surface_velocities: Vec<Vector3>,
     // The hulls whose acceleration the flight step did not write, as indices into `ids`.
     unknown: Vec<u32>,
     // The pairs of hulls Jolt holds in contact, in the broad phase's form.
@@ -139,11 +143,21 @@ impl ScsRamTracker {
             self.touched_hulls.push(k as u32);
             self.starts.push(self.others.len() as u32);
             for c in 0..count {
-                self.others.push(state.get_contact_collider_id(c) as i64);
-                self.points
-                    .push(sub(state.get_contact_local_position(c), shift));
+                let other = state.get_contact_collider_id(c) as i64;
+                let point = sub(state.get_contact_local_position(c), shift);
+                self.others.push(other);
+                self.points.push(point);
                 let n = state.get_contact_local_normal(c);
                 self.normals.push(Vector3::new(-n.x, -n.y, -n.z));
+                // The turning drum's skin (M7-T06): its row's pose, its spin, and the World's rest under it.
+                let skin = Self::moving_surface(&core, other).map(|j| {
+                    let r = &core.rows;
+                    let spin = r.surface(j).map_or(0.0, |s| s.spin_rad_s);
+                    let at = surface::surface_velocity(&r.bases[j], r.positions[j], spin, point);
+                    crate::v3::add(at, core.frame_rest().velocity)
+                });
+                self.on_surface.push(skin.is_some());
+                self.surface_velocities.push(skin.unwrap_or(Vector3::ZERO));
             }
         }
         self.starts.push(self.others.len() as u32);
@@ -284,6 +298,10 @@ impl ScsRamTracker {
             if !(r.rigid[row_i] || r.rigid[row_j]) {
                 continue;
             }
+            // A big hull (M7-T06, the station) is never a prop to the swept test: Jolt's contacts with its own bodies ram.
+            if r.surface(row_i).is_some() || r.surface(row_j).is_some() {
+                continue;
+            }
             // Jolt's pairs are always looked at; any other pair must come near enough to matter.
             let held = self
                 .tracker
@@ -386,6 +404,8 @@ impl ScsRamTracker {
         self.others.clear();
         self.points.clear();
         self.normals.clear();
+        self.on_surface.clear();
+        self.surface_velocities.clear();
         self.unknown.clear();
         self.in_contact.clear();
     }
@@ -401,9 +421,18 @@ impl ScsRamTracker {
                 others: &self.others,
                 points: &self.points,
                 normals: &self.normals,
+                on_surface: &self.on_surface,
+                surface_velocities: &self.surface_velocities,
             },
             delta,
         )
+    }
+
+    // The row of body `other` when it is a big hull that turns (M7-T06), else none.
+    fn moving_surface(core: &ScsSimCore, other: i64) -> Option<usize> {
+        let row = usize::try_from(core.row_of_id(other)).ok()?;
+        let spin = core.rows.surface(row)?.spin_rad_s;
+        (spin != 0.0).then_some(row)
     }
 
     // Fills `in_contact`: each touched hull with each hull it touches (once a hull, in report order), as

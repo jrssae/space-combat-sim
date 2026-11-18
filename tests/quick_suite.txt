@@ -48,6 +48,7 @@ res://tests/unit/test_pulse_cannon_capacitor.gd
 res://tests/unit/test_weapon_capacitor.gd
 res://tests/unit/test_hull_health.gd
 res://tests/unit/test_hit_shape.gd
+res://tests/unit/test_collision_pieces.gd
 res://tests/unit/test_intercept_math.gd
 res://tests/unit/test_ram_math.gd
 res://tests/unit/test_ram_tracker.gd
@@ -109,6 +110,8 @@ res://tests/unit/test_static_rows.gd
 res://tests/integration/test_static_shift.gd
 res://tests/integration/test_shiftable_registry.gd
 res://tests/integration/test_rock_bodies.gd
+res://tests/unit/test_station_hardpoints.gd
+res://tests/unit/test_station_parts.gd
 # Jumpgate and jump vortex (M6-T14, T19)
 res://tests/unit/test_vortex_timing.gd
 res://tests/unit/test_gate_jump.gd
@@ -145,6 +148,8 @@ res://tests/unit/test_encounter_plan.gd
 res://tests/unit/test_game_flow.gd
 res://tests/integration/test_boot_routing.gd
 res://tests/integration/test_front_end.gd
+res://tests/unit/test_hangar_camera.gd
+res://tests/integration/test_hangar_backdrop.gd
 res://tests/integration/test_pause_menu.gd
 res://tests/integration/test_main_scene.gd
 # Audio

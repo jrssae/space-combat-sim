@@ -40,24 +40,28 @@ func after_each() -> void:
 
 
 func test_a_rebase_and_a_drift_leave_the_statics_answering_as_a_fresh_build() -> void:
+	if GeneratedRocks.missing(self):
+		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 61
 	var rocks: Array[Dictionary] = []
 	for s: int in ROCKS:
-		rocks.append({"offset": Vector3(rng.randf_range(-6000.0, 6000.0), rng.randf_range(-1500.0, 1500.0),
-				rng.randf_range(-6000.0, 6000.0)), "radius": exp(rng.randf_range(log(20.0), log(200.0)))})
-	standins.add_asteroids(rocks, world.to_universe(Vector3.ZERO))
+		rocks.append(GeneratedRocks.mixed_rock(Vector3(rng.randf_range(-6000.0, 6000.0), rng.randf_range(-1500.0, 1500.0),
+				rng.randf_range(-6000.0, 6000.0)), exp(rng.randf_range(log(20.0), log(200.0))), s))
+	var spheres: Array[Dictionary] = GeneratedRocks.spheres(standins.add_asteroids(rocks, world.to_universe(Vector3.ZERO)))
 	var mine_rows: Array[Dictionary] = []
 	for i: int in 3:
 		mine_rows.append({"offset": (rocks[i]["offset"] as Vector3) + Vector3(0.0, -400.0, 0.0), "faction": Factions.RAIDERS})
 	standins.add_mines(mine_rows, world.to_universe(Vector3.ZERO))
-	# Drones skimming past rocks 7 m off their faces (the ram broad phase pairs them, nothing rams), and bolts closing on rocks.
+	# Drones skimming past rocks' spheres 7 m off their faces (the ram broad phase pairs them, nothing rams: they are
+	# invulnerable), and bolts closing on rocks.
+	var step: int = floori(spheres.size() / 20.0)
 	for i: int in 6:
-		var rock: Dictionary = rocks[i * 30]
-		_drone((rock["offset"] as Vector3) + Vector3(0.0, float(rock["radius"]) + 7.0, 0.0), Vector3(600.0, 0.0, 0.0))
+		var sphere: Dictionary = spheres[i * step * 3]
+		_drone((sphere["at"] as Vector3) + Vector3(0.0, float(sphere["radius"]) + 7.0, 0.0), Vector3(600.0, 0.0, 0.0))
 	for i: int in 20:
-		var rock: Dictionary = rocks[i * 10]
-		_bolt((rock["offset"] as Vector3) + Vector3(0.0, 0.0, float(rock["radius"]) + 12.0), Vector3(0.0, 0.0, -1000.0))
+		var sphere: Dictionary = spheres[i * step]
+		_bolt((sphere["at"] as Vector3) + Vector3(0.0, 0.0, float(sphere["radius"]) + 12.0), Vector3(0.0, 0.0, -1000.0))
 	var resolvers: Array = _resolvers()
 	var before: Dictionary = _answers(resolvers[0], resolvers[1])
 	assert_gt((before["hit"] as PackedInt64Array).size(), 0, "the bolts are paired with rocks")

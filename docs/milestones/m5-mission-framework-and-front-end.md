@@ -2,10 +2,7 @@
 
 > "Scripted play." (`docs/roadmap.md`)
 
-**Status:** **built, awaiting the maintainer's confirmation (2026-11-12).** Every task is done except T20, whose automated part is
-finished: AC1 to AC17 and AC19 to AC28 are met (the acceptance table's Done column), the full suite is green, the GPU check and
-the benchmark are in T20's notes. What is left is AC18, the maintainer's play-test (`docs/playtest.md`, "M5 acceptance
-checklist"), and the confirmation; then `m5` merges into `main`. History: planned 2026-11-02 on branch `m5`, cut from `main` at `b2f8ce1` (M3 merged) while M4 goes on separately on `m4`.
+**Status:** **Accepted 2026-11-17** by the maintainer (every (H) check passed in the M7 play-test; the last fixes were M7-T54 escort, M7-T55 civilians flee, M7-T56 encounters and traffic). Merged into `main` as work in progress on 2026-11-12 (tag `m5-wip`); the accepted docs reach `main` with M7's merge. Before that: built, awaiting the maintainer's confirmation (2026-11-12); AC18 was the maintainer's play-test (`docs/playtest.md`, "M5 acceptance checklist"). History: planned 2026-11-02 on branch `m5`, cut from `main` at `b2f8ce1` (M3 merged) while M4 goes on separately on `m4`.
 The maintainer asked for M5 to run beside M4 because most of it does not touch the performance work, and expects `m5` to
 be rebased onto `main` once M4 merges (see "Living beside M4"). The planning questions were answered the same day (below),
 including the civilian ships' lengths and a seventh civilian hull, the Centauri Brezebel (Q8, Q11). A ninth hull, the
@@ -36,7 +33,7 @@ performance block.
 
 | Q | Question | Answer |
 |---|---|---|
-| Q1 | Which demo missions prove the framework? | (Superseded by Q36.) **Buoy defence**, with a **scripted cinematic intro**: raiders are sent at a nav buoy from beyond sensor range; the player and their wing defend it. Objectives, comms lines, win and fail, debrief |
+| Q1 | Which demo missions prove the framework? | (Superseded by Q36.) **Buoy defense**, with a **scripted cinematic intro**: raiders are sent at a nav buoy from beyond sensor range; the player and their wing defend it. Objectives, comms lines, win and fail, debrief |
 | Q2 | What sits behind the front-end menu (the B5 interior needs M7's station)? | **Sky only** |
 | Q3 | What does "random encounters on" mean in free flight? | **Mixed traffic**: raiders, allied patrols and neutral traffic |
 | Q4 | A pad comms menu for wing orders? | **D-pad Right opens a comms menu**; keys 1-4 stay |
@@ -56,7 +53,7 @@ performance block.
 | Q18 | (maintainer, during the build) How close to the references? | **Every civilian model within 90 % of its STL**, measured as **silhouettes and size**: the top, side and front silhouettes each overlap the STL's by at least 90 % (intersection over union) at the same length, and length, width and height each lie within 10 %. **Civilian ships only**: the Starfury stays as built, and the raider has no STL. Planner's calls: the score is taken on the LOD0 splats by `tools/refview`'s compare mode (T23); where Q16 departs from a model on purpose (the Saturn 8s' 200 m of cargo, the Saturn 3's engine section, the Saturn 4 tanker, which has no model of its own), each part is scored against the part of the model it came from |
 | Q19 | (after the review sheet of turret spots and colours) Turrets and colours | **Turrets on top only:** keep every dorsal spot proposed, drop every ventral one. That leaves the Saturn 4 transport, Saturn 4 tanker, Saturn 8 transport and Saturn 8 tanker with two each (`dorsal_fwd` on the disc hub and `dorsal_aft` or `dorsal_mid`), the Saturn 3 with one (`dorsal_fwd`), the Skylark and the Brezebel with one (`dorsal`), the Narn transport with its two tower turrets. **Colours confirmed** as written for the Saturn family, the Skylark, the Narn transport and the Brezebel. **The Narn transport's towers point up** (T11's reading). The maintainer places turrets and confirms colours for any further ship (the Bokmai) before its generator commits them |
 | Q20 | (same day) Where is the Saturn 3's engine? | **Between the two lower pods, on the centre line, directly under the top pod**, and **just long enough that its exhaust clears the pods**. It is a **slimmer engine** than the shared section so it fits the gap between the lower pods; the pods keep their places. The Saturn 3's aft turret is dropped. For the 90 % check (Q18) the Saturn 3's pod group is scored against the model's pod group **scaled up to the shared pod size** (Q8), so shape and layout are checked rather than the size the maintainer chose |
-| Q21 | (maintainer, 2026-11-03) The mission's buoys | (Superseded by Q41.) **Buoy defence is set on a string of nav buoys in a huge circle, as if round a planet: 16 buoys on a ring of 20 000 km radius, about 7 850 km apart.** **Every buoy broadcasts to 10 000 km** (was 1 000 km, M3 Q21), and the spacing is set so that a ship always has **at least two buoys in broadcast range**, on the radar and targetable: anywhere on the ring, and within about 6 000 km of it. There is no planet in the middle yet (M6 brings Epsilon III) |
+| Q21 | (maintainer, 2026-11-03) The mission's buoys | (Superseded by Q41.) **Buoy defense is set on a string of nav buoys in a huge circle, as if round a planet: 16 buoys on a ring of 20 000 km radius, about 7 850 km apart.** **Every buoy broadcasts to 10 000 km** (was 1 000 km, M3 Q21), and the spacing is set so that a ship always has **at least two buoys in broadcast range**, on the radar and targetable: anywhere on the ring, and within about 6 000 km of it. There is no planet in the middle yet (M6 brings Epsilon III) |
 | Q22 | (after T22's survey) The Bokmai's frame, colours and turrets | **The tall fins are at the stern**, so the blade is the bow (T22's reading; the STL stands on its tail, its length along file y). **The pods are pale green** (#ABAE9A, as proposed). **Two turrets, in the stepped Z-shaped insets on either side of the bow** (4.9 x 2.4 m, high on each flank; the survey had read them as windows), each facing outboard: an exception to Q19's top-only rule, for the Bokmai. **Brakiri turrets fire a bright green pulse.** (The maintainer first said one on top and one underneath the bow, then corrected it the same day) |
 | Q23 | (same day) The Saturn 3's pod group misses 0.90 because T11 spread its pods wider than the model to let the truss and engine pass. Keep it? | **Keep the wider spread.** The Saturn 3's pod group is an **expected exemption** from Q18's bar: its scores are recorded with that note and do not fail T12. Every other Saturn part must still pass |
 | Q24 | (maintainer, 2026-11-04) How civilians flee | **Every civilian has a faction** (the Saturns and the Skylark are Earth Alliance, the Narn transport Narn, the Brezebel Centauri, the Bokmai Brakiri); "civilian" is its role, not its faction. **Attacked, a civilian runs away from the enemy towards the nearest vessel of its own faction, of any kind** (an Earth Alliance freighter makes for any Earth Alliance ship, military or civilian). **Civilians under attack run together and cover each other** (they close up while fleeing, and their turrets fire for one another, D61). In T16 (the `civilian` profile and the faction data) and T21; T16 and T21 wait for M4's merge, so this lands after the rebase |
@@ -71,7 +68,7 @@ performance block.
 | Q33 | (maintainer, 2026-11-07, T16 fix round 2) Q32's rear-belly blind spot is not in the model: a turret fires through its own ship | **A ship's own hull blocks its turrets' fire.** Make the blind spot real with a native line-of-fire check, not by narrowing arcs: a turret fires only when the line from it to the lead point misses its own ship's hit volumes, and the pick skips an attacker the hull hides; for every turreted ship (M12's capitals too). Q31's sweep is re-run and re-tuned in its order |
 | Q34 | (maintainer, 2026-11-08) "Pull m5, then rebase from main." A rebase rewrites 132 commits and needs a force-push; Q27 chose merges | **Merge `main` into `m5`** (Q27 stands): one merge commit, normal push |
 | Q35 | (same day) "Add the updated requirements": there is no `requirements.md`; is it the roadmap's "Carried from M4's full review" table? | **Yes.** L1, L2, L3, L5, L8, L9, L12, L13 (performance), L6, L7 (sound pass) and L14 (tests and CI) become M5 tasks T31 to T39 (`docs/research/m4-full-review.md` has the details) |
-| Q36 | (maintainer, same day) The demo mission | **Replace Buoy defence with a civilian escort.** The civilian travels from a starting nav beacon to one on the far side of a **less dense asteroid belt**. The player escorts it and fights off raider waves that trigger at **three points** on the way. **One wingman** for the player. **Three raiders in the first wave.** **The civilian ship is random** (any of the nine hulls) |
+| Q36 | (maintainer, same day) The demo mission | **Replace Buoy defense with a civilian escort.** The civilian travels from a starting nav beacon to one on the far side of a **less dense asteroid belt**. The player escorts it and fights off raider waves that trigger at **three points** on the way. **One wingman** for the player. **Three raiders in the first wave.** **The civilian ship is random** (any of the nine hulls) |
 | Q37 | (same day) The waves' sizes | **3, 4 and 6 raiders** |
 | Q38 | (same day) What the belt's rocks are | **New procedural rocks**: a small `tools/procgen` asteroid generator (lumpy textured rocks, a few shapes and sizes), placed sparsely. It pulls part of M14 forward; M4's grey-sphere bench stand-in stays for the bench |
 | Q39 | (same day) What the civilian does under attack | **Flee, then resume**: it flees by the Q24 and Q25 rules and returns to its route to the far beacon once the raiders are gone |
@@ -94,7 +91,7 @@ In:
   triggers, objectives with success and failure, dialog lines as data, subtitles and a comms panel, a `CINEMATIC` camera
   mode with locked controls, and a debrief.
 - **Comms menu on D-pad Right** with the four wing orders.
-- **One mission**: Civilian escort with a cinematic intro (Q36; it replaced Buoy defence, T10, which is removed with the
+- **One mission**: Civilian escort with a cinematic intro (Q36; it replaced Buoy defense, T10, which is removed with the
   buoy ring, Q41), through a sparse belt of generated asteroids (Q38).
 - **Performance block** (Q35): M4's later findings L1, L2, L3, L5, L8, L9, L12 and L13 (T31 to T36), and L14's test and CI
   clean-up (T38). The sound pass takes L6 and L7 (T37).
@@ -150,7 +147,7 @@ threaded and `delayed`. M5's tasks, read against that rule:
 | Task | Per tick, per entity? | Where it goes |
 |---|---|---|
 | T01-T04, T06-T09 (flow, menus, settings, controls, dialog, comms menu, cinematic camera, debrief) | No: UI and per-event | GDScript, as planned |
-| T05, T10 (mission core and Buoy defence) | No: the runner's work grows with live triggers, not ships (49 units for 20 triggers with 4 or 502 actors, T05) | GDScript, as built |
+| T05, T10 (mission core and Buoy defense) | No: the runner's work grows with live triggers, not ships (49 units for 20 triggers with 4 or 502 actors, T05) | GDScript, as built |
 | T11-T15, T22, T23 (references, generators, fidelity) | No: tools | Python; T27 moves the generators to textured meshes |
 | T18, T19 (sounds, engine voices) | The per-frame step is bounded by `engine_voice_cap`; the 4 Hz re-rank walks every ship | GDScript; the re-rank's ship query moves to the core (T28) |
 | T21 (turrets) | Yes: a weapon, every tick, per turret | The native core: rows and kernels beside M4-T20's, below |
@@ -343,7 +340,7 @@ removed or converted when M5 rebases onto `main` after M4.
   the splats, `cockpit_camera` and `chase_anchor` (the parser needs them), running lights, and `chunks[]` from
   `core/chunks.py`. **Defensive turrets (Q13, Q14, D61):** `hardpoints.json` gains `turrets[]` (dorsal mounts only, one or
   two per hull, where the maintainer placed them, Q19), and each style has one generated turret model; civilians still run
-  from raiders (the `civilian` profile) while their turrets fire in their own defence.
+  from raiders (the `civilian` profile) while their turrets fire in their own defense.
   - `saturn_family` with variants `saturn_3_freighter`, `saturn_4_transport`, `saturn_4_tanker`, `saturn_8_transport` and
     `saturn_8_tanker` (Q16). The family is modular: one **lead ship** (the control section with the command sphere, its
     truss and the engine section, the same size on every variant) plus cargo. A **Saturn 4 cargo section** (four
@@ -441,7 +438,7 @@ removed or converted when M5 rebases onto `main` after M4.
 ### D62 Civilian escort (Q36 to Q42)
 
 - **The mission** `civilian_escort` (`data/scenarios/civilian_escort.json`, `data/missions/civilian_escort.gd`,
-  `data/dialog/civilian_escort.json`) replaces `buoy_defence`. Two nav buoys about 30 km apart (Q40): **NAV ALPHA**, the
+  `data/dialog/civilian_escort.json`) replaces `buoy_defense`. Two nav buoys about 30 km apart (Q40): **NAV ALPHA**, the
   start, at the scenario origin, and **NAV BETA** beyond the belt. They are the existing `nav_buoy` asset and broadcast to
   1 000 km (Q41). The belt (D63) lies across the route in the middle: the straight line between the buoys crosses it.
 - **The civilian is random (Q36).** A spawn's `type` may be `random_civilian`. The scenario loader resolves it from the
@@ -473,7 +470,7 @@ removed or converted when M5 rebases onto `main` after M4.
   controls held, then hands over. A or Start skips a shot.
 - **Skipping.** `mission goto wave_two` and the rest work as D51 says: a skipped wave's raiders are released, and an
   `arrived` or `proximity` trigger on the civilian places it at the point, so a skip leaves the world as the step would.
-- **The ring goes (Q41).** `BuoyRing`, `test_buoy_ring.gd`, the scenario field `buoy_rings`, the Buoy defence files and
+- **The ring goes (Q41).** `BuoyRing`, `test_buoy_ring.gd`, the scenario field `buoy_rings`, the Buoy defense files and
   their tests are removed. `NavBuoy.BROADCAST_RANGE_M` returns to 1 000 km (M3 Q21), with `test_broadcast.gd` to match.
   §18 records both changes.
 
@@ -515,7 +512,7 @@ removed or converted when M5 rebases onto `main` after M4.
 | AC7 | Comms menu: D-pad Right opens it; the four wing orders go through `WingDirector`; while open, the D-pad's flight actions and the target button do not fire; a profile saved before M5 loads with `comms_menu` filled in. **Updated by T46 (2026-11-11):** the orders are picked with the right stick and A on the radial ring (not the four D-pad directions), B or D-pad Right closes it, and there is no 4 s timeout (the game is paused while it is open); AC28 is the full behaviour | A | **Met as updated by T46** (AC28 has the behaviour). `test_comms_menu` (9), `test_comms_menu_input` (13: the four orders through `WingDirector`, nothing else fires while open), `test_control_profile_store` (a profile saved before M5 loads with `comms_menu` filled in) |
 | AC8 | `CINEMATIC`: shots from data relative to actors or the origin, unit-tested interpolation; a rebase during a shot moves nothing on screen (test); HUD hidden, letterbox, the player's commands zeroed while the ship keeps its physics; A or Start skips | A | **Met.** `test_cinematic_shot` (15: the interpolation), `test_cinematic_camera` (12: a rebase during a shot moves nothing on screen, HUD hidden, letterbox, A or Start skips), `test_control_lock` (10), `test_mission_cinematic` |
 | AC9 | Debrief: result and reason, objectives, time, kills and assists, wing losses, shots and hits; retry restarts the same scenario and seed; menu returns to the front end | A | **Met.** `test_debrief_model` (21), `test_mission_tally`, `test_debrief` (26: result and reason, objectives, time, kills and assists, wing losses, shots and hits; retry plays the same scenario and seed through loading; the front end) |
-| AC10 | Civilian escort (D62): starts from the menu with its cinematic intro and runs to success and to failure (civilian destroyed; player destroyed) in headless tests driven by console commands, ending in the debrief; the civilian is drawn from all nine hulls by the seed (test over seeds) and only its hull is pooled; it flies from NAV ALPHA through the belt to NAV BETA about 30 km away, flees when attacked and resumes its route (test); three waves of 3, 4 and 6 raiders jump in at the 25, 50 and 75 % points; one wingman; the buoy ring is gone and buoys broadcast to 1 000 km (Q41). Buoy defence's AC10 is superseded | A | **Met.** `test_civilian_escort` (12: from the menu on a fresh seed, console-driven to success and the debrief, failure by losing the civilian and by losing the player, flee and resume, a skipped wave leaves no raider, a Saturn 8 through the belt, buoys at 1 000 km and no ring), `test_scenario_loader` (the seed draws every one of the nine hulls and only that hull is pooled; a retry flies the same ship). The buoy ring and Buoy defence are removed. On the GPU: the intro and waves one and two at 145 fps, 82 to 85 draw calls |
+| AC10 | Civilian escort (D62): starts from the menu with its cinematic intro and runs to success and to failure (civilian destroyed; player destroyed) in headless tests driven by console commands, ending in the debrief; the civilian is drawn from all nine hulls by the seed (test over seeds) and only its hull is pooled; it flies from NAV ALPHA through the belt to NAV BETA about 30 km away, flees when attacked and resumes its route (test); three waves of 3, 4 and 6 raiders jump in at the 25, 50 and 75 % points; one wingman; the buoy ring is gone and buoys broadcast to 1 000 km (Q41). Buoy defense's AC10 is superseded | A | **Met.** `test_civilian_escort` (12: from the menu on a fresh seed, console-driven to success and the debrief, failure by losing the civilian and by losing the player, flee and resume, a skipped wave leaves no raider, a Saturn 8 through the belt, buoys at 1 000 km and no ring), `test_scenario_loader` (the seed draws every one of the nine hulls and only that hull is pooled; a retry flies the same ship). The buoy ring and Buoy defense are removed. On the GPU: the intro and waves one and two at 145 fps, 82 to 85 draw calls |
 | AC11 | Civilian references: each of the nine ships described (the Saturn 4 tanker from the Saturn parts, Q16; the Bokmai, Q17) in `docs/design-references.md` with the lengths from Q8, Q11, Q16 and Q17, from orthographic views and cross-sections of its STL; every ship's colour scheme written from online images (Q11) with the sources listed; nothing from the STL files or the images is in git | A | **Met** (T11, T22). `docs/design-references.md` describes the nine ships with their lengths and colour schemes and lists the sources; `references/` is gitignored and no STL or image is in git |
 | AC12 | Civilian generators: nine hulls from five generators meet the output contract (LOD0-3 PLYs and lighting records, fallback mesh, hardpoints with pods, RCS, collision, cockpit camera, chase anchor, running lights, chunks; the Bokmai's pod model and `cargo_pods[]`); Python tests for budgets, frames, symmetry where the design has it, chunk partition, collision coverage and determinism; every PLY imports in Godot with the manifest's count | A | **Met in the form T27 gave it** (Q29: splats dropped, so the output is a textured mesh with Godot's own mesh levels, not LOD0-3 PLYs). `test_saturn_family`, `test_skylark_transport`, `test_narn_transport`, `test_centauri_brezebel`, `test_brakiri_bokmai` (budgets, frames, symmetry, chunk partition, collision coverage, determinism, the Bokmai's pod model and `cargo_pods[]`), `test_seams`, `test_textured_hulls`; `test_civilian_meshes` (7: every hull imports in Godot as the manifest says). Python: 860 tests, OK |
 | AC13 | Civilian ships in the game: each flies through `FlightModel` with zero damping (the damping guard covers it), turns by torque only, flees raiders on the `civilian` profile, towards the nearest ship of its own faction (behind it from the threat when it is military) and in a group with other fleeing civilians, and sets same-faction civilians within its sensor range fleeing too (Q24, Q25), takes hull damage, breaks into its chunks, shows running lights and switches LOD; a Bokmai flies with 0-3 cargo pods and sheds them when destroyed; raiders attack them through faction data; on the maintainer's GPU all nine in view at once run with `renderer = forward_plus`, FPS, draw calls and VRAM recorded by the agent | A | **Met.** `test_civilian_ships` (6: every hull Newtonian with zero damping and torque-only turning, hull damage, chunks, lights, LOD, the Bokmai's pods mounted and shed), `test_civilian_flight` (5: flees to its own faction, groups, the alarm; 1 and 6 threads, threaded and delayed), `test_ship_catalog`, `test_factions`. **GPU (T20, RX 6950 XT, RADV, Wayland, 1200x675 window):** all nine in view in `civilian_showcase`: `forward_plus`, 145 fps (the Wayland cap), 129 draw calls from the cockpit (96 in chase), `render.vram_mb` 481 MB (the card as a whole 3 262 MB with the desktop, 2 832 MB before the run) |
@@ -523,7 +520,7 @@ removed or converted when M5 rebases onto `main` after M4.
 | AC15 | Sounds: generator tests pin the new guns' shape (length, flat hold, constant pitch, energy band after the 0.25 register, inharmonic partials), the impact's length and band, and the engine bursts' band (no energy to speak of below 300 Hz); voices sit at the nozzles; the voice cap holds and the per-frame update is linear in voices (work count); the old loops are gone | A | **Met.** `test_sfx_combat` (the guns' length, flat hold, constant pitch, band and inharmonic partials; the impact; the bursts' band), `test_audio`, `test_engine_voices` (23), `test_engine_audio` (14: voices at the nozzles, the cap, work linear in voices), `test_voice_query` (5); the old loops are gone from the generator |
 | AC16 | Cost: M5 adds nothing measurable to AC13 of M3 (the paired 13-ship AI budget still passes, `test_ai_think_time`); the mission runner with 20 triggers and the encounter director stay inside their work counts | A | **Met.** `test_ai_think_time` passes in the full run (13 ships: AiPilot median 195 us against the M2 brain's 2 177 us); `test_twenty_live_triggers_stay_inside_a_counted_bound`; the encounter director's `check_work` tests in `test_encounters`. `bench battle 1000` (T20, headless, idle): tick median 5.44 ms, p99 7.51 ms, real time kept, against 9.22 ms at M4's close |
 | AC17 | Docs and the suite: `docs/architecture.md` §18 as built, a `docs/playtest.md` M5 section (how to start, menus, mission, comms menu, encounters, new settings and commands), the roadmap row; `scripts/run_tests.sh` green **once, at the end** (Q10), read from the suite's own totals | A | **Met.** Architecture §18 as built (a map of its 33 subsections, the file list, the superseded parts marked); `docs/playtest.md` "Play-testing M5" with one (H) checklist; the roadmap row. `scripts/run_tests.sh --full` passed on 2026-11-12 in 4 459 s, exit 0: GUT 303 scripts, 3 433 tests, 3 421 passing, 0 failing, 12 pending (10 need the real renderer, 2 are M3's AC12 balance tests still under the maintainer's review), 134 659 asserts; Python 860 tests OK (2 skipped); Rust 66 passed; every console smoke run passed |
-| AC19 | Defensive turrets (D61): the native turret kernels (aim, fire gate, target pick) and the attacker memory unit-tested in Rust and through GUT, identical with 1 and 6 threads and between `sim_step` threaded and `delayed`; civilians fire only at attackers of themselves or of a civilian or ally within 2 km, and never through their own hull (Q33: a blind spot astern of a Saturn is pinned); they keep running while firing; turret bolts go through the projectile pool and `HitResolver`; the seeded balance holds (Q31: every Saturn variant alone beats two raiders in 1 to 3 of 10 seeds and three raiders in none, a fight running until the Saturn dies or no raider fights on, at most 600 s; its turrets finish a 15 % raider that keeps attacking); `turret_fire` sound | A | **Met.** Rust `turret_kernels/tests.rs` (in the 66 `cargo test --lib`), `test_turret_kernel` (12), `test_turret_threads` (3: threaded against delayed, 1 against 6 threads, byte for byte), `test_turret_line_of_fire` (3: the own hull blocks, the Saturn's blind spot astern), `test_turret_defence` (2), `test_turret_balance` (2, balance tier: every Saturn variant beats two raiders in 1 to 3 of 10 seeds and three in none), `turret_fire` in `test_sfx_combat` |
+| AC19 | Defensive turrets (D61): the native turret kernels (aim, fire gate, target pick) and the attacker memory unit-tested in Rust and through GUT, identical with 1 and 6 threads and between `sim_step` threaded and `delayed`; civilians fire only at attackers of themselves or of a civilian or ally within 2 km, and never through their own hull (Q33: a blind spot astern of a Saturn is pinned); they keep running while firing; turret bolts go through the projectile pool and `HitResolver`; the seeded balance holds (Q31: every Saturn variant alone beats two raiders in 1 to 3 of 10 seeds and three raiders in none, a fight running until the Saturn dies or no raider fights on, at most 600 s; its turrets finish a 15 % raider that keeps attacking); `turret_fire` sound | A | **Met.** Rust `turret_kernels/tests.rs` (in the 66 `cargo test --lib`), `test_turret_kernel` (12), `test_turret_threads` (3: threaded against delayed, 1 against 6 threads, byte for byte), `test_turret_line_of_fire` (3: the own hull blocks, the Saturn's blind spot astern), `test_turret_defense` (2), `test_turret_balance` (2, balance tier: every Saturn variant beats two raiders in 1 to 3 of 10 seeds and three in none), `turret_fire` in `test_sfx_combat` |
 | AC20 | Fidelity (Q18): every civilian model's top, side and front silhouettes overlap its STL's by at least 90 % (intersection over union) and its length, width and height are within 10 %, Q16's deliberate departures scored part by part against the model each part was built from; measured on the model's geometry (its fallback mesh) by `tools/refview` compare, with the LOD0 splats covering at least 95 % of their own mesh's silhouette and lying at least 95 % within a one-spacing band of it, and unit tests that pin the tool's calibration; each model's scores recorded in `docs/assets-civilian.md` | A | **Met on the textured mesh** (T27 re-scored it; the splat coverage clause went with the splats, Q29). `test_refview_compare`, `test_refview` (the tool's calibration); every hull's silhouette and size scores are in `docs/assets-civilian.md`, with the Saturn 3 pod stack's deliberate departure (Q23) |
 | AC21 | Asteroids (D63): the generator's Python tests (determinism, closed meshes, budgets, radii); `BeltLayout` unit-tested (seeded, inside the box, gaps held, size spread); the belt's rocks are static rows that the scan, hits, rams and avoidance see; a Saturn 8 crosses the escort's belt in a headless run without hitting a rock; FPS, draw calls and VRAM with the belt in view recorded on the maintainer's GPU | A | **Met.** `test_asteroids` (determinism, closed meshes, budgets, radii), `test_belt_layout` (7), `test_asteroid_belt` (4: static rows seen by the scan, hits, rams and avoidance; a rebase), `test_a_saturn_8_crosses_the_belt_without_hitting_a_rock`. **GPU (T20):** `belt_showcase` (400 rocks, 16 draw groups): 145 fps and 62 draw calls in chase, 131 fps and 94 from the cockpit, `render.vram_mb` 355 to 360 MB; the escort's belt with a wave in view 145 fps, 85 draw calls, 403 MB |
 | AC22 | Performance block (Q35): each of L1, L2, L3, L5, L8, L9, L12 and L13 fixed as its task says; results unchanged (the recorded parity fixtures, and the same answers with 1 and 6 threads and with `sim_step` threaded and delayed); each task measures `bench battle 1000` before and after with `scripts/bench_quick.sh` on an idle machine, and the per-stage numbers go into its Done notes against Report P3's (flight 3.97 ms, hits 1.41 ms, rams 1.20 ms at 1 000) | A | **Met.** L1 T31, L2 T32, L3 T33, L5 T34, L8 and L9 T35, L12 and L13 T36, each with its before and after in its Done notes; the parity fixtures and the thread tests (`test_core_threads`, `test_core_snapshot`, `test_flight_parity_fight`, `test_weapon_rows_battle`) pass in the full run. **T20's run** (`bench_quick.sh t20 battle`, 1 000, seed 1, idle): tick median 5.44 ms, p99 7.51 ms; flight 2.30 ms (P3 3.97), hits 0.78 ms (P3 1.41), rams 0.23 ms (P3 1.20) |
@@ -587,7 +584,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T07 | B | Comms menu on D-pad Right | T06 | Sonnet | Input routing with clear rules | done |
 | T08 | B | `CINEMATIC` camera and locked controls | T05 | Opus | Rebase-safe camera paths | done |
 | T09 | B | Debrief | T05, T02 | Sonnet | Model and screen | done |
-| T10 | B | Mission: Buoy defence with a cinematic intro | T06, T07, T08, T09 | Opus | Pacing, writing and the first real use of the API | done |
+| T10 | B | Mission: Buoy defense with a cinematic intro | T06, T07, T08, T09 | Opus | Pacing, writing and the first real use of the API | done |
 | T11 | C | Civilian references: measurements and descriptions | - | Opus | Reading shapes off renders; sizes from Q8 | done |
 | T23 | C | Fidelity check: silhouettes and size against the STL, `refview` compare (Q18; numbered last because it was added during the build) | T11 | Sonnet | A small measuring tool that every civilian generator must pass | done |
 | T12 | C | `saturn_family` generator (five variants, Q16) | T11, T23 | Opus | Large shared part library | done |
@@ -605,7 +602,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T19 | D | Per-thruster engine bursts | T18 | Opus | Voice placement and a voice budget | done |
 | T25 | A | Targeting at scale: a target menu and other targeting UX for large battles (Q26; placed before T20; numbered last because it was added after the others had numbers) | T02, T07, the M4 rebase | Opus | UX judgement with a concept stop (H); reads M4's on-read candidate list | done |
 | T29 | C | Generated asteroids and a sparse belt (D63, Q38): the `asteroids` generator, `BeltLayout`, `AsteroidBelt` as static rows | T27 | Opus | A new procgen asset and a placement seam M14 builds on | done |
-| T30 | B | Mission: Civilian escort with a cinematic intro (D62, Q36 to Q42), replacing Buoy defence and the ring | T29, T16, T17 | Opus | The random civilian, flee-and-resume in the native brains, three waves, writing and pacing | done |
+| T30 | B | Mission: Civilian escort with a cinematic intro (D62, Q36 to Q42), replacing Buoy defense and the ring | T29, T16, T17 | Opus | The random civilian, flee-and-resume in the native brains, three waves, writing and pacing | done |
 | T31 | - | L1: the flight batch's per-ship gather in native for row-commanded ships | T30 | Opus | The biggest measured lever (about 37 % of the tick at 1 000) | done |
 | T32 | - | L2: the hit resolver gets only bolts with live hostile pairs from native; per-hit hash and readout costs | T31 | Opus | 1.41 ms at 1 000; native pair filtering | done |
 | T33 | - | L3: the ram resolver's quick wins, then `RamTracker` in native | T32 | Fable (maintainer, 2026-11-11) | 1.20 ms at 1 000; string keys and full passes per tick | done |
@@ -624,7 +621,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T46 | A | Radial comms menu: the comms menu moves onto T25's radial framework, with the focus pull, the right stick to point, A to confirm, B to go back (maintainer, 2026-11-09) | T25, T44, T07 | Sonnet | One framework for both menus; the comms routing changes from the D-pad to the stick; it pauses the game | done |
 | T47 | - | Radar plot input checks and scratch reuse: the code review's two open radar items (maintainer, 2026-11-12; numbered last because it was added after the others had numbers) | T34 | controller | Two small native fixes found by the code review | done |
 | T48 | - | The full code review's three P3 findings (maintainer, 2026-11-12; numbered last because it was added after the others had numbers) | T47 | controller | Small fixes found by the review | done |
-| T20 | - | Integration, full suite, docs and acceptance | all | Fable (maintainer, 2026-11-11) | One full run, the GPU check, the (H) list | in progress — awaiting the maintainer's confirmation |
+| T20 | - | Integration, full suite, docs and acceptance | all | Fable (maintainer, 2026-11-11) | One full run, the GPU check, the (H) list | done (accepted by the maintainer 2026-11-17) |
 
 **Progress (2026-11-12).** Every task in the table is `done` except T20, which is `in progress` until the maintainer confirms
 the milestone (its notes are at the end of this file). The paragraphs below are the build's history, kept as written.
@@ -928,14 +925,14 @@ T38 below.
     accuracy is computed in both `DebriefModel` and `MissionTally`; the recorder keys the player by `main.ship` for shots
     and `main.combatant` for losses.
 
-### M5-T10 Mission: Buoy defence with a cinematic intro
+### M5-T10 Mission: Buoy defense with a cinematic intro
 
-*(Superseded 2026-11-08: T30 replaces Buoy defence with Civilian escort and removes the ring, Q36 and Q41. Kept for the
+*(Superseded 2026-11-08: T30 replaces Buoy defense with Civilian escort and removes the ring, Q36 and Q41. Kept for the
 framework pieces it added: `player.velocity`, `mission.closing_lines` and the cinematic fly-past.)*
 
 - **Goal:** AC10 and the mission half of AC18.
-- **Files:** `data/scenarios/buoy_defence.json`, `data/missions/buoy_defence.gd`, `data/dialog/buoy_defence.json`,
-  `tests/integration/test_buoy_defence.gd`, `docs/playtest.md` (how to play it).
+- **Files:** `data/scenarios/buoy_defense.json`, `data/missions/buoy_defense.gd`, `data/dialog/buoy_defense.json`,
+  `tests/integration/test_buoy_defense.gd`, `docs/playtest.md` (how to play it).
 - **Sketch** (the agent writes the lines; all text original): open in `CINEMATIC` on the relay buoy `NAV ALPHA` with the
   sun behind it, then Alpha wing in finger-four passing the camera with the player as lead. Babylon 5 Control briefs
   over comms: raiders have been seen heading for the relay. Controls hand over. Wave one (three raiders) is sent at the
@@ -955,8 +952,8 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   nothing measurable to M4's scan.
 - **Done when:** AC10; the cinematic and dialog read well in a windowed run (captured frames for the maintainer); the
   ring and the two-buoy rule hold (test), and the radar shows the two nearest ring buoys on its rim from `NAV ALPHA`.
-- **Done (as built, 2026-11-04):** `data/scenarios/buoy_defence.json`, `data/missions/buoy_defence.gd` and
-  `data/dialog/buoy_defence.json`: five steps (intro, brief, wave_one, wave_two, wrap), 13 original lines, objectives
+- **Done (as built, 2026-11-04):** `data/scenarios/buoy_defense.json`, `data/missions/buoy_defense.gd` and
+  `data/dialog/buoy_defense.json`: five steps (intro, brief, wave_one, wave_two, wrap), 13 original lines, objectives
   protect `NAV ALPHA` and destroy the raiders (primary) and bring Alpha wing home (optional), pools of 7 raiders and 3
   allies. The intro is two shots, `relay` (NAV ALPHA against the star) and `wing` (Alpha wing coasting past a camera
   that holds still in space); Control briefs with the controls held, then hands over. Wave one (three raiders) and wave
@@ -967,7 +964,7 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   inward), tested at the real edges; the radar from NAV ALPHA shows NAV BRAVO and NAV PAPA on its rim (test). New in the
   framework: a scenario's `player.velocity` (first spawn only) and `mission.closing_lines` (a last line for a loss that
   ends the mission before a step can speak; the debrief waits for it). Missions start from the menu or `play`;
-  `--scenario=buoy_defence` is refused. By ruling, no far-buoy splat hiding (splats leave with M4); the far buoys' draw
+  `--scenario=buoy_defense` is refused. By ruling, no far-buoy splat hiding (splats leave with M4); the far buoys' draw
   and scan cost is checked after the rebase (T20). `docs/playtest.md` says how to play it. Frames of the intro are in
   `reports/m5-t10/` for the maintainer (H).
   - **Review.** Approved (opus), no fixes needed. Open (minor): a closing line ignores the skip flag; the optional `home`
@@ -1364,7 +1361,7 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
     (`turret_fire`).
   - Tests: `tests/unit/test_turret_kernel.gd` (aim, gate, pick and memory through the core on seeded scenes),
     `tests/integration/test_turret_threads.gd` (1 against 6 threads and `threaded` against `delayed`, byte for byte),
-    `tests/integration/test_turret_defence.gd` (the balance fight: two raiders and a Saturn 4, headless, three seeds).
+    `tests/integration/test_turret_defense.gd` (the balance fight: two raiders and a Saturn 4, headless, three seeds).
 - **Threads:** as "M5 on the native core" says: the pick in the AI job one tick behind, applied at the join against the
   turret's stamp; aim, gate and shot on the main thread in the weapon rows' step; the memory written on the main thread in
   the sweep's order; spread from a hash of turret id and tick. No GDScript per tick per turret.
@@ -1391,7 +1388,7 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   - **Saturn 4 for the fight.** A minimal `assets/ships/saturn_4_transport.tres` and the catalog type
     `saturn_4_transport` (Earth Alliance): 14,000 t, 1000 hull, slow rates, no cannon. The sheet can park it. T16 owns the
     full civilian catalog and may replace every number.
-  - **Balance (`test_turret_defence`).** Seeds 1, 2, 3; the transport flies the `civilian` profile; dead ships are parked as
+  - **Balance (`test_turret_defense`).** Seeds 1, 2, 3; the transport flies the `civilian` profile; dead ships are parked as
     the pool parks them. The first numbers (2.5 damage every 1.2 s) killed both raiders in every seed, and a 1500 hull never
     fell, so the light turret became 4.5 damage every 3.0 s (900 m/s, 2 s life, 1.5 km range and 0.8 degree spread kept)
     and the Saturn's hull 1000.
@@ -1405,7 +1402,7 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   - **Tests.**
     - Rust: 13 of 13 (`turret_kernels/tests.rs`, the crate's only Rust tests).
     - New GUT: `test_turret_kernel` 14 of 14 (7 new), `test_turret_threads` 2 of 2 (byte for byte, threaded against
-      delayed and 1 thread against 6, 300 ticks), `test_turret_defence` 2 of 2 (about 100 s).
+      delayed and 1 thread against 6, 300 ticks), `test_turret_defense` 2 of 2 (about 100 s).
     - Regression, all passing: `test_sim_core` 17, `test_brain_parity` 7, `test_brain_think_parity` 5, `test_weapons` 48,
       `test_weapon_charge` 10, `test_hit_resolver` 16, `test_console_command_list` 7, `test_engine_audio` 9,
       `test_audio_director` 13, `test_main_scene` 13, `test_mission_runner` 18, `test_frame_passes` 12, `test_core_threads`
@@ -1529,20 +1526,20 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
     | 8 tanker | 3 | 330 | 1 (seed 7, 36 %) | 0 |
 
     Three variants sit at one win, the band's floor: a change to the raiders or the brains can move a count by one. The
-    15 % finish check (`test_turret_defence`) holds without a change: the turrets finish the raider in all three seeds at
-    37 to 41 s with two hits, the transport at 37 to 49 %. `test_turret_defence` also checks the three mounts, the shots
+    15 % finish check (`test_turret_defense`) holds without a change: the turrets finish the raider in all three seeds at
+    37 to 41 s with two hits, the transport at 37 to 49 %. `test_turret_defense` also checks the three mounts, the shots
     and the run; D61's "two of three seeds within 180 s" is superseded.
   - **Tests.** Rust 29 of 29 (`civilian/tests.rs` 11 new, `turret_kernels/tests.rs` 18 with fix round 2's five: box and
     capsule segments, the turned frame, the pick skipping a hidden attacker, the volume table). Fix round 2's GUT:
     `test_turret_line_of_fire` 3 (the blind spot pinned, the same raider fired at with the hull's volumes taken out, a
     raider beside the ship fired at), `test_turret_threads` 3 (a Saturn with its own turrets against four AI raiders,
     threaded against delayed and one thread against six, byte for byte), `test_turret_kernel` 14 (its below-the-arc raider
-    moved into clear line), `test_turret_defence` 2, `test_sim_core` 17, `test_brain_parity` 7, `test_brain_think_parity`
+    moved into clear line), `test_turret_defense` 2, `test_sim_core` 17, `test_brain_parity` 7, `test_brain_think_parity`
     5, `test_weapons` 48, `test_civilian_ships` 5, `test_ship_catalog` 6; `check_scripts` clean. Not run on `oscar`:
     `test_weapon_rows_battle` (the `battle` layout). GUT: `test_civilian_flight` 5
     (shelter, panic in and out, grouping, threaded against delayed and one thread against six byte for byte),
     `test_civilian_ships` 5, `test_ship_catalog` 6 (Q30 pinned), `test_faction_table` 33 and `test_factions` 21 (the
-    shipped file's new peoples), `test_turret_balance` 2 (slow), `test_turret_defence` 2. Python: `test_saturn_family` 151
+    shipped file's new peoples), `test_turret_balance` 2 (slow), `test_turret_defense` 2. Python: `test_saturn_family` 151
     (2 skipped by design). Regression, all passing: `test_sim_core` 17 (the guard holds `civilian.rs`), `test_brain_parity` 7, `test_brain_think_parity` 5, `test_pilot_kernels` 7, `test_turret_kernel` 14, `test_turret_threads` 2, `test_destruction` 11, `test_debris_pool` 12, `test_main_scene` 13, `test_console_command_list` 7, `test_tier` 10, `test_tier_handover` 13, `test_ai_retreat` 1, `test_civilian_meshes` 4, `test_damage` 17, `test_frame_passes` 12, `test_brain_in_play` 2, `test_last_hit_breakup` 14, `test_hit_resolver` 16, `test_hardpoints` 20, `test_scenario_loader` 36; `check_scripts` clean.
     `test_ai_think_time`: before AiPilot median 335 us (paired difference -2522 us), after 337 us (-2487 us): no change beyond noise.
   - **GPU (oscar, R9 280X, labelled as oscar's, Q29).** `civilian_showcase` at 960x540: `renderer = forward_plus`, 57 fps,
@@ -1890,10 +1887,10 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   **Depends on:** T29 (the belt), T16 (civilians in play), T17 (jump arrivals as used by encounters).
 - **Files:** `data/scenarios/civilian_escort.json`, `data/missions/civilian_escort.gd`, `data/dialog/civilian_escort.json`,
   `tests/integration/test_civilian_escort.gd`; the loader's `random_civilian` spawn type; the native brains' resume of the
-  pilot objective after a flee; `docs/playtest.md` (how to play it); removed: `data/*/buoy_defence.*`,
-  `tests/integration/test_buoy_defence.gd`, `BuoyRing` and `test_buoy_ring.gd`, the `buoy_rings` field;
+  pilot objective after a flee; `docs/playtest.md` (how to play it); removed: `data/*/buoy_defense.*`,
+  `tests/integration/test_buoy_defense.gd`, `BuoyRing` and `test_buoy_ring.gd`, the `buoy_rings` field;
   `NavBuoy.BROADCAST_RANGE_M` back to 1 000 km with `test_broadcast.gd`; the menu's Missions list, `test_front_end`,
-  `test_mission_catalog` and any other test that names Buoy defence.
+  `test_mission_catalog` and any other test that names Buoy defense.
 - **Steps:**
   1. `random_civilian`: drawn from `ShipCatalog.CIVILIAN_TYPES` by the run's seed before pools are built; only that hull
      pooled; a test over many seeds sees all nine and the same ship on a retry.
@@ -1924,7 +1921,7 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
     depart, wave_one, wave_two, wave_three, arrive; waves of 3, 4 and 6 jump in 6-12 km off the civilian on three bearings and are
     sent at it), `data/dialog/civilian_escort.json` (16 original lines with `{civilian}`). `ScenarioLoader.resolve_random_civilian`
     (Main, before the pools), `DialogBook.fill`, `MissionApi.filled` and `MissionApi.transient` (a skipped wave's raiders
-    released). The menu starts each mission on a fresh seed. Removed: Buoy defence's files and test, `BuoyRing`, its test and
+    released). The menu starts each mission on a fresh seed. Removed: Buoy defense's files and test, `BuoyRing`, its test and
     `buoy_rings`; `NavBuoy.BROADCAST_RANGE_M` back to 1 000 km.
   - **Changed from the plan:** step 2 needed no native change. A passive civilian never takes a pilot objective (the attack
     behaviour carries it), so the civilian flies a scenario route instead, and the native arbiter already ranks retreat (0.85
@@ -2712,7 +2709,7 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   think (the seeded-battle parity files pass unchanged); a new `SimCore` drops civilian ids of ships freed since instead of
   handing them to its core (`test_sim_core`: `test_a_new_core_forgets_civilians_freed_with_an_earlier_scene`). Rust 68 pass;
   GUT: `test_damage`, `test_sim_core`, `test_row_commands`, `test_core_threads`, `test_core_state`, `test_driver_step`,
-  `test_turret_defence`, `test_civilian_ships`, `test_ai_driver`: 89 passing with `GUT_SLOW=1`; the quick tier passes.
+  `test_turret_defense`, `test_civilian_ships`, `test_ai_driver`: 89 passing with `GUT_SLOW=1`; the quick tier passes.
 
 ### M5-T20 Integration, full suite, docs and acceptance
 
@@ -2721,14 +2718,14 @@ framework pieces it added: `player.velocity`, `mission.closing_lines` and the ci
   checklist; update the roadmap row; run `scripts/run_tests.sh` once and read GUT's and Python's own totals; run the GPU
   check on the maintainer's machine; then ask the maintainer to confirm the milestone. `m5` already holds all of M4 (Q34);
   once confirmed it merges into `main` (no rebase).
-- **Done when:** the maintainer confirms M5.
-- **Status:** in progress — awaiting the maintainer's confirmation. Not merged into `main`.
+- **Done when:** the maintainer confirms M5 (met 2026-11-17).
+- **Status:** done: the maintainer accepted M5 on 2026-11-17 after the M7 play-test (AC18 passed). Merged into `main` as work in progress on 2026-11-12 (tag `m5-wip`).
 - **Notes (2026-11-12, the automated part):**
   - **Docs.** Architecture §18: a map of which subsection describes each part of M5 and what a later task replaced; the
     file list brought up to date (the buoy ring and T02's two select pages gone; the settings and controls menus, dialog,
     the radial framework, focus pull, comms menu, pause path and engine voices added); the providers and settings M5 added;
     new as-built subsections §18.31 (settings and controls menus, audio buses), §18.32 (the sound pass) and §18.33 (tests and
-    CI); stale lines corrected (the menus' root lists, the comms menu's layer, Buoy defence in §18.5). Numbers 18.1 to 18.33
+    CI); stale lines corrected (the menus' root lists, the comms menu's layer, Buoy defense in §18.5). Numbers 18.1 to 18.33
     are unique and in order, and every `§18.n` reference in the docs resolves. `docs/playtest.md`: "Play-testing M5" now
     covers the start screen and menus, the escort, the target and comms menus, encounters, the civilians, sounds, the new
     settings and commands, and one "M5 acceptance checklist" with every task's (H) item. The roadmap's M5 row and the

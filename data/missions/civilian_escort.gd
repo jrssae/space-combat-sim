@@ -1,19 +1,25 @@
 extends MissionScript
 ## Civilian escort (M5-T30, D62): Alpha 1 and ALPHA 2 see a civilian ship, drawn from the nine hulls by the seed, from NAV
 ## ALPHA through the asteroid belt to NAV BETA, 30 km out. Three raider waves jump in as it passes 25, 50 and 75 % of the
-## route. `data/scenarios/civilian_escort.json` holds the buoys, the belt, the route, the wing, the objectives and the shots;
+## route; a later wave also waits until the one before it is down and a breather has passed (M7-T54), so a fought run takes
+## 6 to 8 minutes (Q40). `data/scenarios/civilian_escort.json` holds the buoys, the belt, the route, the wing, the objectives and the shots;
 ## `data/dialog/civilian_escort.json` holds every line.
 
 const NAV_BETA: String = "NAV BETA"
 const RAIDER: Dictionary = {"type": "raider_fighter", "anchor": "origin", "behaviour": {"type": "ai", "profile": "raider"},
 		"arrival": "jump", "via": "carrier"}
-## The route's progress points (25, 50 and 75 %), metres from the scenario origin; the civilian's route flies through each.
+## The route's progress points (25, 50 and 75 %), metres from the scenario origin. The route flies through the first; the later
+## two are marks on the way to NAV BETA (`_passed`), so a civilian back from fleeing never turns back for them (M7-T54).
 const POINT_25: Vector3 = Vector3(0.0, 0.0, -7500.0)
 const POINT_50: Vector3 = Vector3(0.0, 0.0, -15000.0)
 const POINT_75: Vector3 = Vector3(0.0, 0.0, -22500.0)
 const POINT_RADIUS_M: float = 1000.0
 ## Done when the civilian is this close to NAV BETA (D62).
 const ARRIVAL_M: float = 1500.0
+## NAV BETA, metres from the scenario origin.
+const BETA_AT: Vector3 = Vector3(0.0, 0.0, -30000.0)
+## The quiet after a wave is down before the next may jump in, s (M7-T54: the last wave came too soon).
+const BREATHER_S: float = 30.0
 ## Where each wave jumps in from the civilian: beyond the AI's 5 km sensors, each from its own bearing.
 const WAVE_ONE_FROM: Vector3 = Vector3(-8200.0, 900.0, -2500.0)
 const WAVE_TWO_FROM: Vector3 = Vector3(7000.0, -1200.0, 5200.0)
@@ -25,6 +31,11 @@ const SPREAD_M: float = 150.0
 
 func steps() -> Array[StringName]:
 	return [&"intro", &"brief", &"depart", &"wave_one", &"wave_two", &"wave_three", &"arrive"]
+
+
+# Holding X through the intro and the briefing hands the flight over at once (M7-T54).
+func opening_until() -> StringName:
+	return &"depart"
 
 
 # The civilian beside NAV ALPHA with the belt beyond, then the wing flying past; the civilian hails over the fly-past.
@@ -44,6 +55,7 @@ func step_brief(m: MissionApi) -> void:
 	m.objective_add(&"escort")
 	m.objective_add(&"home")
 	m.waypoint(_civilian(m))
+	m.show_hull(_civilian(m))
 	m.lock_controls(false)
 	await m.say(&"control_handover")
 
@@ -56,7 +68,7 @@ func step_wave_one(m: MissionApi) -> void:
 	var names: PackedStringArray = _send_wave(m, 0, WAVE_ONE_FROM)
 	await m.say(&"control_wave_one")
 	await m.say(&"civilian_under_fire")
-	await m.until(_reached(m, POINT_50))
+	await _next_wave_due(m, names, POINT_50)
 	m.transient(names)
 
 
@@ -65,7 +77,7 @@ func step_wave_two(m: MissionApi) -> void:
 	await m.say(&"control_wave_two")
 	await m.say(&"raider_lead_taunt")
 	await m.say(&"alpha_2_tally")
-	await m.until(_reached(m, POINT_75))
+	await _next_wave_due(m, names, POINT_75)
 	m.transient(names)
 
 
@@ -92,6 +104,23 @@ func _civilian(m: MissionApi) -> String:
 
 func _reached(m: MissionApi, point: Vector3) -> TriggerProximity:
 	return TriggerSpec.near_point(_civilian(m), UniversePos.new(point.x, point.y, point.z, m.world.system_id), POINT_RADIUS_M)
+
+
+# The civilian is as near NAV BETA as `point` is: on the way there, a detour cannot miss it. Forced, it is put at the point.
+func _passed(m: MissionApi, point: Vector3) -> TriggerProximity:
+	var trigger: TriggerProximity = TriggerSpec.proximity(_civilian(m), NAV_BETA, BETA_AT.distance_to(point))
+	trigger.place_at = UniversePos.new(point.x, point.y, point.z, m.world.system_id)
+	return trigger
+
+
+# Until the next wave is due: the wave `names` down, the breather after it, and the civilian past `point`, whichever is last.
+func _next_wave_due(m: MissionApi, names: PackedStringArray, point: Vector3) -> void:
+	await m.until(TriggerSpec.destroyed(names))
+	var down_s: float = m.time_s()
+	await m.until(_passed(m, point))
+	var left_s: float = BREATHER_S - (m.time_s() - down_s)
+	if left_s > 0.0:
+		await m.wait(left_s)
 
 
 # Jumps wave `wave` in at `from` metres off the civilian and sends every raider at it. Returns their names.

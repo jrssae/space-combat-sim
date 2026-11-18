@@ -65,6 +65,9 @@ signal rebased(offset: Vector3)
 signal boosted(dv: Vector3)
 ## The frame is off its anchor and moved this tick: everything tied to the anchor moved by `shift` in local coordinates.
 signal drifted(shift: Vector3)
+## The console carried the focus to a new anchor and the rest of the world shifted round it (M7-T66): whatever follows the
+## focus and was shifted with the world (a chase camera) goes back to it.
+signal focus_carried
 
 const SHIFTABLE_GROUP := &"world_shiftable"
 ## Shiftable nodes that stand still against the anchor (a buoy, a gate, a rock field): they move with it while the frame is
@@ -75,11 +78,16 @@ const ANCHORED_GROUP := &"world_anchored"
 ## it is, since the pool places it when it comes back (M6-T06, L4).
 const PARKED_META := &"_scs_pool_parked"
 const BOOST_METHOD := &"frame_boost"
+## Meta on an anchor-tied node: what its drift still owes it below its own 32-bit step (M7-T66).
+const DRIFT_OWED_META := &"_scs_drift_owed"
 ## The frame boosts back onto its anchor when the focus is under this part of the threshold against the anchor (Q8).
 const RETURN_PART: float = 0.5
-const FRAME_ACTIONS: PackedStringArray = ["status", "orbit", "rail", "off"]
-## The body `frame orbit` circles when none is named.
+const FRAME_ACTIONS: PackedStringArray = ["status", "orbit", "drop", "rail", "off"]
+## The body `frame orbit` circles and `frame drop` falls toward when none is named.
 const DEFAULT_ORBIT_BODY: StringName = &"epsilon_iii"
+## Where round the body `frame orbit` and `frame drop` put the player (M7-T68): degrees from the sub-solar point in the
+## orbit's direction of travel. Dawn is where the orbit carries the player into daylight, dusk where it carries it into night.
+const POSITION_DEG: Dictionary = {&"day": 0.0, &"dusk": 90.0, &"night": 180.0, &"dawn": 270.0}
 ## Physics priority of the end-of-tick interpolation reset after a rebase: after every other node of the tick.
 const SETTLE_PRIORITY: int = 1_000_000
 ## The tick's gravity sample: before every mover, the low-attention tier's step (-12) included (M6-T04).
@@ -101,6 +109,9 @@ var anchor_name: StringName = &""
 ## Where the scenario's origin (a `UniversePos` of zero) stands from the place the World rides (M6-T09): game axes, m, 64-bit;
 ## zero on an orbit. The anchor is that point, carried along the place's rail.
 var anchor_offset: PackedFloat64Array = PackedFloat64Array([0.0, 0.0, 0.0])
+## The rail the world was laid out on (M7-T66): the place (or body) `anchor_on_rail` was given, so what is tied to the anchor
+## keeps riding it when the console puts the frame on another anchor; empty for a world laid out on an orbit or none.
+var home_id: StringName = &""
 ## The system time at sim time 0 (M6-T09, Q9): the scenario's epoch. Everything that asks the ephemeris uses `system_time()`.
 var epoch_s: float = 0.0
 ## Automatic position rebase: when `focus` is farther than this many metres from the local origin, rebase onto it.
@@ -140,6 +151,18 @@ var _registry: ShiftableRegistry = null
 var _drift_owed: PackedFloat64Array = PackedFloat64Array([0.0, 0.0, 0.0])
 # The core stepped the local origin at the end of the last tick and `origin` has not taken it yet.
 var _origin_stepped: bool = false
+# Where the scenario's origin stands from the home rail (`anchor_on_rail`'s offset), whether the anchor is a rail, whether
+# the anchor-tied things ride the home rail rather than the anchor, and that rail's point against the anchor and velocity in
+# the local frame at the last sample (M7-T66).
+var _home_offset: PackedFloat64Array = PackedFloat64Array([0.0, 0.0, 0.0])
+var _anchor_on_rail: bool = false
+var _tracks_home: bool = false
+var _home_point: PackedFloat64Array = PackedFloat64Array()
+var _home_velocity: Vector3 = Vector3.ZERO
+# Where each anchor-tied node and static row stood against the home rail when the console took the frame off it, 64-bit:
+# far from the local origin 32 bits round them by metres, so they go back exactly when the frame returns (M7-T66).
+var _pins: Dictionary = {}
+var _row_pins: Dictionary[int, PackedFloat64Array] = {}
 # The velocity rebases asked for and not yet taken: a boost (summed), or the way back onto the anchor.
 var _boost_asked := Vector3.ZERO
 var _return_asked: bool = false
@@ -225,10 +248,11 @@ func _ready() -> void:
 				"doc": "Rocks that live as Jolt bodies now, near a ship; the rest are static rows only (M6-T21)"},
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"frame",
-			"The free-falling frame's anchor: status, orbit <altitude km> [body] (a free-falling anchor on a circular orbit, prograde along -Z; default body epsilon_iii), rail <place> (ride a place's orbit, such as babylon5), off (no pull)",
+			"The free-falling frame's anchor; orbit, drop and rail carry the player (and the frame) there while the station, the gate and every other world object stay where they are: status, orbit <altitude km> [body] [position] (the player on a circular orbit, the frame on a free-falling anchor there; default body epsilon_iii), drop <altitude km> [body] [position] (the player at rest that high over the body, epsilon_iii or the star epsilon, riding its rail, so it falls straight in; refused outside the body's zone), rail <place> (the player at rest beside a place, riding its rail: for babylon5, back at the start), off (no pull). Orbit and drop refuse an altitude at or inside the body's atmosphere; position: day (the default), night, dawn (where the orbit carries you into daylight), dusk (where it carries you into night) or degrees round the orbit from the sub-solar point in its direction of travel, the star where the sky draws it (scaled epoch); round the star only degrees, from +X",
 			[ConsoleArg.enum_optional(&"action", FRAME_ACTIONS, &"status"),
 			ConsoleArg.string_optional(&"value", null),
-			ConsoleArg.string_optional(&"body", null)] as Array[ConsoleArg]), _cmd_frame, self)
+			ConsoleArg.string_optional(&"body", null),
+			ConsoleArg.string_optional(&"where", null)] as Array[ConsoleArg]), _cmd_frame, self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"rebase",
 			"Shift the local origin by an offset in metres (World.rebase); nothing moves in universe terms. With the automatic rebase on, the next one brings the player back",
 			[ConsoleArg.vec3_required(&"offset", PackedStringArray(["dx", "dy", "dz"]))]), _cmd_rebase, self)
@@ -503,12 +527,25 @@ func _drift_anchored(moved: PackedFloat64Array) -> void:
 		_drift_owed[axis] -= shift[axis]
 	if shift == Vector3.ZERO:
 		return
+	var step := PackedFloat64Array([-moved[0], -moved[1], -moved[2]])
 	for member: Node in get_tree().get_nodes_in_group(ANCHORED_GROUP):
 		var node := member as Node3D
 		if node != null and is_ancestor_of(node):
-			node.global_translate(shift)
+			_drift_node(node, step)
 	ContactScan.shift_statics(shift, self)
 	drifted.emit(shift)
+
+
+# Moves an anchor-tied node by `step` (m, 64-bit), carrying over what its own 32-bit position could not take: far from the
+# origin (Babylon 5 is 27 500 km off with the player in a low orbit, M7-T66) one rounding per tick would add up to kilometres.
+func _drift_node(node: Node3D, step: PackedFloat64Array) -> void:
+	var owed: PackedFloat64Array = node.get_meta(DRIFT_OWED_META, PackedFloat64Array([0.0, 0.0, 0.0]))
+	var want := PackedFloat64Array([owed[0] + step[0], owed[1] + step[1], owed[2] + step[2]])
+	var before: Vector3 = node.global_position
+	node.global_position = before + Vector3(want[0], want[1], want[2])
+	var after: Vector3 = node.global_position
+	node.set_meta(DRIFT_OWED_META, PackedFloat64Array([want[0] - (after.x - before.x), want[1] - (after.y - before.y),
+			want[2] - (after.z - before.z)]))
 
 
 # This world's shiftable nodes in play (`ShiftableRegistry`): walk the keys, never change them.
@@ -559,16 +596,15 @@ func gravity_active() -> bool:
 
 
 ## Falls with place `place`'s rail (the station's orbit): nothing integrates, the ephemeris gives its state at each tick's
-## time. `offset` is where the scenario's origin stands from the place (`anchor_offset`). False, with a warning, when the
-## system or the place cannot be used.
+## time. `offset` is where the scenario's origin stands from the place (`anchor_offset`). The world is laid out on it: the
+## anchor-tied things ride this rail from now on, wherever the console moves the frame (M7-T66). False, with a warning,
+## when the system or the place cannot be used.
 func anchor_on_rail(system: StarSystem, place: StringName, offset: PackedFloat64Array = PackedFloat64Array()) -> bool:
-	if not _take_system(system, place):
-		return false
-	if not _sim.core.frame_anchor_on_rail(system.index_of(place)):
-		push_warning("WorldFrame: %s cannot anchor on %s" % [name, place])
-		return false
-	anchor_offset = offset.duplicate() if offset.size() == 3 else PackedFloat64Array([0.0, 0.0, 0.0])
-	return _anchored(system, place)
+	home_id = place
+	_pins.clear()
+	_row_pins.clear()
+	_home_offset = offset.duplicate() if offset.size() == 3 else PackedFloat64Array([0.0, 0.0, 0.0])
+	return _rail(system, place, _home_offset)
 
 
 ## The system time now (M6-T09): the scenario's epoch plus the sim clock.
@@ -577,8 +613,246 @@ func system_time() -> float:
 
 
 ## Falls with a free-falling test particle: `state` is its position then velocity (six numbers, m and m/s, game axes)
-## against `body`'s centre now. False, with a warning, when the system, the body or the state cannot be used.
+## against `body`'s centre now. The world is laid out on it: the anchor-tied things stand still against it. False, with a
+## warning, when the system, the body or the state cannot be used.
 func anchor_in_orbit(system: StarSystem, body: StringName, state: PackedFloat64Array) -> bool:
+	home_id = &""
+	_pins.clear()
+	_row_pins.clear()
+	return _orbit(system, body, state)
+
+
+## Puts the focus (with none, the local origin) on a circular orbit `altitude_m` over `body`, in the game's XZ plane and
+## turning about +Y, `around_deg` round it from the sub-solar point (M7-T68), the frame riding a free-falling anchor there
+## (M6-T04); every other object keeps its universe position and velocity (M7-T66). Returns "" or why it was refused: no such
+## body, or an altitude at or inside its atmosphere, where the impact rule would destroy the ship.
+func orbit_focus(system: StarSystem, body: StringName, altitude_m: float, around_deg: float = 0.0) -> String:
+	var refused: String = _altitude_refusal(system, body, altitude_m)
+	if not refused.is_empty():
+		return refused
+	var radius_m: float = float(system.info(body)["radius_m"]) + altitude_m
+	var turn: float = deg_to_rad(sunward_deg(system, body) + around_deg)
+	var speed: float = sqrt(float(system.info(body)["gm"]) / radius_m)
+	# Out at `turn` round +Y from +X, prograde a quarter turn on (the 64-bit form of Basis(UP, turn) * X, then UP x out).
+	var state := PackedFloat64Array([cos(turn) * radius_m, 0.0, -sin(turn) * radius_m,
+			-sin(turn) * speed, 0.0, -cos(turn) * speed])
+	return _carry_focus(system, body, state, _orbit.bind(system, body, state))
+
+
+## Where the sub-solar point of `body` stands round its orbit plane (XZ, turning about +Y, the way `frame orbit` travels),
+## degrees from +X, with the star where the scaled-space layer draws it (its epoch offset included). 0 for the star itself
+## or when it cannot be told.
+func sunward_deg(system: StarSystem, body: StringName) -> float:
+	if body == system.star_id():
+		return 0.0
+	var seen: PackedFloat64Array = system.relative_state(system.star_id(), body, system_time() + sky_offset_s())
+	if seen.size() < 3:
+		return 0.0
+	var game: PackedFloat64Array = ScaledPlacement.to_game(seen)
+	return rad_to_deg(atan2(-game[2], game[0]))
+
+
+## How far ahead of the system time the scaled-space layer draws the sky (`scaled epoch`), s; 0 with no layer.
+func sky_offset_s() -> float:
+	if not is_inside_tree():
+		return 0.0
+	var layer: ScaledSpace = get_tree().get_first_node_in_group(ScaledSpace.GROUP) as ScaledSpace
+	return layer.epoch_offset_s if layer != null else 0.0
+
+
+## Degrees round the orbit for a position word (`day`, `night`, `dawn`, `dusk` or a number of degrees), or NAN when it is
+## not one.
+static func position_deg(word: String) -> float:
+	var key := StringName(word.to_lower())
+	if POSITION_DEG.has(key):
+		return float(POSITION_DEG[key])
+	return float(word) if word.is_valid_float() else NAN
+
+
+# Why an altitude over `body` is refused, or "": no such body, no number, or at or inside the atmosphere's top (the surface
+# for a body without one), where the impact rule destroys the ship (M7-T68).
+func _altitude_refusal(system: StarSystem, body: StringName, altitude_m: float) -> String:
+	if system == null or not system.is_valid() or system.info(body).is_empty():
+		return "no body %s in the star system" % body
+	if is_nan(altitude_m):
+		return "give an altitude in km"
+	var top_m: float = float(system.info(body).get("atmosphere_top_m", 0.0))
+	if altitude_m <= top_m:
+		var km: float = top_m / 1000.0
+		var floor_km: String = "%d" % roundi(km) if is_equal_approx(km, roundf(km)) else "%.1f" % km
+		var what: String = "atmosphere (%s km)" % floor_km if top_m > 0.0 else "surface"
+		return "at or below %s's %s: pick more than %s km" % [system.display_name(body), what, floor_km]
+	return ""
+
+
+## Puts the focus (with none, the local origin) at rest `altitude_m` over `body`, `around_deg` round it from the sub-solar
+## point as `orbit_focus` counts it, the frame riding the body's own rail, so it falls straight in under the body's whole pull
+## (M7-T14); every other object keeps its universe position and velocity (M7-T66). Returns "" or why it was refused: no such
+## body, a start at or inside its atmosphere (the fall may go on into it), or a place outside the body's zone, where under
+## D66 its pull does not reach or another body's wins.
+func drop_toward(system: StarSystem, body: StringName, altitude_m: float, around_deg: float = 0.0) -> String:
+	var refused: String = _altitude_refusal(system, body, altitude_m)
+	if not refused.is_empty():
+		return refused
+	var radius_m: float = float(system.info(body)["radius_m"])
+	var from_centre_m: float = radius_m + altitude_m
+	var zone_m: float = system.zone_radius_m(body)
+	if from_centre_m >= zone_m:
+		return "%s km over %s is outside its zone, where its pull ends (%s km over it)" % [
+				ConsoleFormat.value(altitude_m / 1000.0), body, ConsoleFormat.value(roundf((zone_m - radius_m) / 1000.0))]
+	var turn: float = deg_to_rad(sunward_deg(system, body) + around_deg)
+	var x: float = cos(turn) * from_centre_m
+	var z: float = -sin(turn) * from_centre_m
+	# The ephemeris's axes: game (x, y, z) is kernel (x, -z, y).
+	var winner: StringName = system.dominant_body(PackedFloat64Array([x, -z, 0.0]), body, system_time())
+	if winner != body:
+		return "%s km over %s is inside %s's zone, which pulls there instead" % [
+				ConsoleFormat.value(altitude_m / 1000.0), body, winner]
+	return _carry_focus(system, body, PackedFloat64Array([x, 0.0, z, 0.0, 0.0, 0.0]),
+			_rail.bind(system, body, PackedFloat64Array([x, 0.0, z])))
+
+
+## Puts the focus (with none, the local origin) at rest beside `place`, riding its rail, as far from it as the scenario's
+## origin stands from the place the world was laid out on: for that place, back at the start (M7-T66). Returns "" or why it
+## was refused.
+func rail_focus(system: StarSystem, place: StringName) -> String:
+	if system == null or not system.is_valid() or not system.place_ids.has(place):
+		return "name a place of the star system, such as %s" % StarSystemHost.DEFAULT_ANCHOR
+	var off: PackedFloat64Array = _home_offset if star_system == system else PackedFloat64Array([0.0, 0.0, 0.0])
+	return _carry_focus(system, place, PackedFloat64Array([off[0], off[1], off[2], 0.0, 0.0, 0.0]),
+			_rail.bind(system, place, off.duplicate()))
+
+
+## Whether the frame is on the rail the world was laid out on, so the anchor-tied things stand where the scenario put them
+## (M7-T67): false after the console moved it to a body's orbit or another rail.
+func on_home_rail() -> bool:
+	return home_id != &"" and not _tracks_home and anchor_name == home_id
+
+
+## Whether the frame rides a rail, a place's or a body's own (`frame drop`), rather than a free-falling particle.
+func on_rail() -> bool:
+	return star_system != null and _anchor_on_rail
+
+
+## Puts the frame back on the rail the world was laid out on when the console moved it elsewhere (M7-T71). Every command
+## that moves the player into the scenario's home region calls it first, so the pull, the reference and the velocities
+## follow the new place. "" (also with nothing to do) or why it could not.
+func return_home() -> String:
+	if star_system == null or home_id == &"" or on_home_rail():
+		return ""
+	return rail_focus(star_system, home_id)
+
+
+## The velocity in the local frame of what is tied to the anchor (a buoy, the gate, the station): the anchor's, or, while
+## the frame falls with something else, that of the rail they ride (M7-T66).
+func anchored_velocity() -> Vector3:
+	return _home_velocity if _tracks_home else rest_velocity()
+
+
+# Carries the focus to `state` (position then velocity, six numbers, game axes) against `id`'s centre and puts the frame on
+# a new anchor there with `anchor`, riding it (M7-T66). The rest of the world keeps its universe positions and velocities:
+# a position rebase the focus sits out, then a velocity rebase by the new anchor's velocity, taken now so the focus never
+# holds it (Jolt caps a body at 10 km/s). Typed at the console this runs between ticks, so every mover changes frames at
+# once. With no anchor yet, the local space is first taken to stand at the system's default place.
+func _carry_focus(system: StarSystem, id: StringName, state: PackedFloat64Array, anchor: Callable) -> String:
+	if star_system != system and not anchor_on_rail(system, StarSystemHost.DEFAULT_ANCHOR):
+		return "refused (see the log)"
+	_adopt_origin()
+	sample_gravity(system_time())  # bodies and the anchor at one time, now
+	var at: PackedFloat64Array = body_state(id)
+	if at.size() < 6:
+		return "cannot place %s (see the log)" % id
+	if not _tracks_home and home_id != &"":
+		_pin_home_tied()  # leaving the home rail
+	var ship: Node3D = focus if focus != null and is_instance_valid(focus) else null
+	var here: Vector3 = ship.global_position if ship != null else Vector3.ZERO
+	var exact := PackedFloat64Array([at[0] + state[0] - here.x, at[1] + state[1] - here.y, at[2] + state[2] - here.z])
+	var shift := Vector3(exact[0], exact[1], exact[2])
+	rebase(shift)
+	# What 32 bits dropped from the shift goes onto the focus, near the origin, so it lands on the point to the millimetre.
+	var kept := Vector3(exact[0] - shift.x, exact[1] - shift.y, exact[2] - shift.z)
+	var started_us: int = Time.get_ticks_usec()  # profiling readout only, never gameplay time
+	var velocity := Vector3(at[3] + state[3], at[4] + state[4], at[5] + state[5])
+	_sim.core.boost(velocity)
+	_boost_nodes(velocity, started_us)
+	if not anchor.call():
+		return "refused (see the log)"
+	origin = UniversePos.new(-(here.x + kept.x), -(here.y + kept.y), -(here.z + kept.z), origin.system_id)
+	_sim.core.frame_set_origin_velocity(0.0, 0.0, 0.0)
+	origin_velocity = PackedFloat64Array([0.0, 0.0, 0.0])
+	_boost_asked = Vector3.ZERO
+	_return_asked = false
+	_push_origin()
+	if ship != null:
+		var pose := Transform3D(ship.global_transform.basis, here + kept)
+		if ship.has_method(&"reset_to"):
+			ship.call(&"reset_to", pose)
+		else:
+			ship.global_transform = pose
+			ship.reset_physics_interpolation()
+		if ship is RigidBody3D:
+			(ship as RigidBody3D).linear_velocity = Vector3.ZERO
+	sample_gravity(system_time())
+	if not _tracks_home:
+		_unpin_home_tied()
+	focus_carried.emit()
+	return ""
+
+
+# Leaving the home rail: notes where the anchor-tied nodes and this world's static rows stand against it.
+func _pin_home_tied() -> void:
+	_pins.clear()
+	_row_pins.clear()
+	var home: PackedFloat64Array = body_state(home_id)
+	if home.size() < 3:
+		return
+	for member: Node in get_tree().get_nodes_in_group(ANCHORED_GROUP):
+		var node := member as Node3D
+		if node != null and is_ancestor_of(node):
+			var at: Vector3 = node.global_position
+			_pins[node] = PackedFloat64Array([at.x - home[0], at.y - home[1], at.z - home[2]])
+	var owner: int = get_instance_id()
+	for i: int in StaticRows.ids.size():
+		if StaticRows.worlds[i] == owner:
+			var at: Vector3 = StaticRows.positions[i]
+			_row_pins[StaticRows.ids[i]] = PackedFloat64Array([at.x - home[0], at.y - home[1], at.z - home[2]])
+
+
+# Back on the home rail: the pinned nodes and rows go back exactly where they stood against it, then a rebase of nothing
+# lets every holder of their places (bodies, rock bodies, the core's statics) take them again.
+func _unpin_home_tied() -> void:
+	if _pins.is_empty() and _row_pins.is_empty():
+		return
+	var home: PackedFloat64Array = body_state(home_id)
+	if home.size() >= 3:
+		for key: Variant in _pins:
+			var node: Node3D = key as Node3D if is_instance_valid(key) else null
+			if node != null and node.is_inside_tree():
+				var pin: PackedFloat64Array = _pins[key]
+				node.global_position = Vector3(home[0] + pin[0], home[1] + pin[1], home[2] + pin[2])
+				node.remove_meta(DRIFT_OWED_META)
+		var places: Dictionary = {}
+		for id: int in _row_pins:
+			var pin: PackedFloat64Array = _row_pins[id]
+			places[id] = Vector3(home[0] + pin[0], home[1] + pin[1], home[2] + pin[2])
+		StaticRows.place_rows(self, places)
+	_pins.clear()
+	_row_pins.clear()
+	rebase(Vector3.ZERO)
+
+
+func _rail(system: StarSystem, place: StringName, offset: PackedFloat64Array) -> bool:
+	if not _take_system(system, place):
+		return false
+	if not _sim.core.frame_anchor_on_rail(system.index_of(place)):
+		push_warning("WorldFrame: %s cannot anchor on %s" % [name, place])
+		return false
+	anchor_offset = offset.duplicate() if offset.size() == 3 else PackedFloat64Array([0.0, 0.0, 0.0])
+	_anchor_on_rail = true
+	return _anchored(system, place)
+
+
+func _orbit(system: StarSystem, body: StringName, state: PackedFloat64Array) -> bool:
 	if not _take_system(system, body):
 		return false
 	var dt: float = 1.0 / float(Engine.physics_ticks_per_second)
@@ -586,6 +860,7 @@ func anchor_in_orbit(system: StarSystem, body: StringName, state: PackedFloat64A
 		push_warning("WorldFrame: %s cannot fall round %s from %s" % [name, body, state])
 		return false
 	anchor_offset = PackedFloat64Array([0.0, 0.0, 0.0])
+	_anchor_on_rail = false
 	return _anchored(system, body)
 
 
@@ -594,6 +869,10 @@ func clear_anchor() -> void:
 	star_system = null
 	anchor_name = &""
 	anchor_offset = PackedFloat64Array([0.0, 0.0, 0.0])
+	home_id = &""
+	_tracks_home = false
+	_pins.clear()
+	_row_pins.clear()
 	_gravity_active = false
 	if _has_core():
 		_sim.core.frame_clear()
@@ -602,6 +881,24 @@ func clear_anchor() -> void:
 ## The tick's gravity sample at sim time `time_s`; the first slot of the tick calls it.
 func sample_gravity(time_s: float) -> void:
 	_gravity_active = _sim.core.frame_sample(time_s) if star_system != null and _has_core() else false
+	_follow_home()
+
+
+# While the frame falls with something other than the rail the world was laid out on, what is tied to the anchor rides that
+# rail instead (M7-T66): it moves as the rail moves against the anchor since the last sample.
+func _follow_home() -> void:
+	if not _tracks_home or not _has_core():
+		return
+	var home: PackedFloat64Array = body_state(home_id)
+	if home.size() < 6:
+		return
+	# The rail against the anchor itself, which no rebase changes.
+	var point := PackedFloat64Array([home[0] + origin.x + anchor_offset[0], home[1] + origin.y + anchor_offset[1],
+			home[2] + origin.z + anchor_offset[2]])
+	if _home_point.size() == 3:
+		_drift_anchored(PackedFloat64Array([_home_point[0] - point[0], _home_point[1] - point[1], _home_point[2] - point[2]]))
+	_home_point = point
+	_home_velocity = Vector3(home[3], home[4], home[5])
 
 
 ## The frame's step; the last slot of the tick calls it. The anchor moves on its orbit, and off the anchor the local origin
@@ -673,6 +970,8 @@ func _take_system(system: StarSystem, id: StringName) -> bool:
 func _anchored(system: StarSystem, id: StringName) -> bool:
 	star_system = system
 	anchor_name = id
+	_tracks_home = home_id != &"" and not (_anchor_on_rail and id == home_id)
+	_home_point = PackedFloat64Array()
 	_push_origin()
 	sample_gravity(system_time())
 	return true
@@ -696,26 +995,65 @@ func _anchor_state_km() -> PackedFloat64Array:
 	return s
 
 
+# Reads `frame orbit`/`drop`'s optional body and position (M7-T68): the third word is the position when it is a position
+# word or a number (no body is named either), else the body, with the position after it. Gives body, deg and word, or error.
+func _where_args(system: StarSystem, third: Variant, fourth: Variant) -> Dictionary:
+	var body: StringName = DEFAULT_ORBIT_BODY
+	var given: Variant = null
+	if third != null and not is_nan(position_deg(String(third))):
+		if fourth != null:
+			return {"error": "name the body before the position: <km> [body] [day|night|dawn|dusk|<deg>]"}
+		given = third
+	else:
+		if third != null:
+			body = StringName(String(third).to_lower())
+		given = fourth
+	var word: String = String(given).to_lower() if given != null else "day"
+	var deg: float = position_deg(word)
+	if is_nan(deg):
+		return {"error": "%s is not a position: day, night, dawn, dusk or an angle in degrees" % word}
+	var keyword: bool = POSITION_DEG.has(StringName(word))
+	if system != null and body == system.star_id():
+		if keyword and given != null:
+			return {"error": "the star has no day side: give an angle round it from +X"}
+		if keyword:
+			deg = 0.0
+	return {"body": body, "deg": deg, "word": word + ": " if keyword else ""}
+
+
 func _cmd_frame(args: Dictionary) -> ConsoleResult:
 	var action: StringName = args[&"action"]
 	var value: Variant = args[&"value"]
 	match action:
-		&"orbit":
+		&"orbit", &"drop":
 			var altitude_km: float = float(value) if value != null and String(value).is_valid_float() else NAN
-			var body: StringName = StringName(args[&"body"]) if args[&"body"] != null else DEFAULT_ORBIT_BODY
 			var system: StarSystem = star_system if star_system != null else StarSystem.load_system(StarSystemHost.DEFAULT_SYSTEM)
-			if is_nan(altitude_km) or altitude_km < 0.0:
-				return ConsoleResult.failure("frame orbit: give an altitude in km of at least 0")
-			if not system.is_valid() or system.info(body).is_empty():
-				return ConsoleResult.failure("frame orbit: no body %s in the star system" % body)
-			var radius_m: float = float(system.info(body)["radius_m"]) + altitude_km * 1000.0
-			var speed: float = sqrt(float(system.info(body)["gm"]) / radius_m)
-			if not anchor_in_orbit(system, body, PackedFloat64Array([radius_m, 0.0, 0.0, 0.0, 0.0, -speed])):
-				return ConsoleResult.failure("frame orbit: refused (see the log)")
+			var place: Dictionary = _where_args(system, args[&"body"], args[&"where"])
+			if place.has("error"):
+				return ConsoleResult.failure("frame %s: %s" % [action, place["error"]])
+			var body: StringName = place["body"]
+			var around: float = place["deg"]
+			var refused: String
+			if action == &"orbit":
+				refused = orbit_focus(system, body, altitude_km * 1000.0, around)
+			else:
+				refused = drop_toward(system, body, altitude_km * 1000.0, around)
+			if not refused.is_empty():
+				return ConsoleResult.failure("frame %s: %s" % [action, refused])
+			var side: String = "%s%s deg round from the sub-solar point" % [place["word"], ConsoleFormat.value(around)] \
+					if body != system.star_id() else "%s deg round from +X" % ConsoleFormat.value(around)
+			if action == &"orbit":
+				return ConsoleResult.line("world.anchor = %s; circling %s km over %s (%s)" % [anchor_text(),
+						ConsoleFormat.value(altitude_km), body, side])
+			var here: Vector3 = focus.global_position if focus != null and is_instance_valid(focus) else Vector3.ZERO
+			var pull: Vector3 = reference_body(here).get("pull", Vector3.ZERO)
+			return ConsoleResult.line("world.anchor = %s; at rest %s km over %s (%s), falling in at %s m/s^2" % [anchor_text(),
+					ConsoleFormat.value(altitude_km), body, side, ConsoleFormat.value(pull.length())])
 		&"rail":
 			var system: StarSystem = star_system if star_system != null else StarSystem.load_system(StarSystemHost.DEFAULT_SYSTEM)
-			if value == null or not anchor_on_rail(system, StringName(value)):
-				return ConsoleResult.failure("frame rail: name a place of the star system, such as babylon5")
+			var refused: String = rail_focus(system, StringName(value) if value != null else &"")
+			if not refused.is_empty():
+				return ConsoleResult.failure("frame rail: " + refused)
 		&"off":
 			clear_anchor()
 	return ConsoleResult.line("world.anchor = %s; world.gravity = %s; world.anchor_pull = %s m/s^2" % [anchor_text(),

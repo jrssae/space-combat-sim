@@ -39,6 +39,8 @@ fn contacts(tracker: &mut Tracker, bodies: &[Body]) -> Vec<Ram> {
             others: &others,
             points: &points,
             normals: &normals,
+            on_surface: &[],
+            surface_velocities: &[],
         },
         DT,
     );
@@ -264,4 +266,61 @@ fn a_boost_moves_the_velocity_a_new_window_starts_from() {
         rams.extend(tick(&mut tracker, &[Body(A, -boost, vec![B]), Body(B, -boost, vec![A])]));
     }
     assert!(rams.is_empty(), "{rams:?}");
+}
+
+// M7-T06 (Q9): a hull that touches the turning drum's skin rams at once by the speed between it and the skin.
+fn touch_skin(tracker: &mut Tracker, hull_v: Vector3, skin_v: Vector3, touching: bool) -> Vec<Ram> {
+    let ids = [A];
+    let velocities = [hull_v];
+    let accels = [Vector3::ZERO];
+    let (touched, starts, others): (Vec<u32>, Vec<u32>, Vec<i64>) = if touching {
+        (vec![0], vec![0, 1], vec![C])
+    } else {
+        (vec![], vec![0], vec![])
+    };
+    let n = others.len();
+    let points = vec![Vector3::new(417.0, 0.0, 0.0); n];
+    let normals = vec![Vector3::new(1.0, 0.0, 0.0); n];
+    let on_surface = vec![true; n];
+    let skin = vec![skin_v; n];
+    let asked = tracker.feed(
+        &Feed {
+            ids: &ids,
+            velocities: &velocities,
+            accels: &accels,
+            touched: &touched,
+            starts: &starts,
+            others: &others,
+            points: &points,
+            normals: &normals,
+            on_surface: &on_surface,
+            surface_velocities: &skin,
+        },
+        DT,
+    );
+    let limits: Vec<f64> = asked.iter().flat_map(|_| LIMITS).collect();
+    let rams = tracker.land(&limits);
+    tracker.end_tick();
+    rams
+}
+
+#[test]
+fn a_scrape_on_the_turning_drum_rams_at_the_skins_speed_at_once() {
+    let skin = Vector3::new(0.0, 61.7, 0.0);
+    let mut tracker = Tracker::default();
+    // At rest beside the drum, then touching it: Jolt's friction barely moves the hull, the skin runs past at 61.7 m/s.
+    assert!(touch_skin(&mut tracker, Vector3::ZERO, skin, false).is_empty());
+    let rams = touch_skin(&mut tracker, Vector3::new(-0.5, 0.0, 0.0), skin, true);
+    assert_eq!(rams.len(), 1, "lands in the tick it touches, no window to wait for");
+    let ram = rams[0];
+    assert_eq!((ram.hull_id, ram.other_id), (A, C));
+    assert!((ram.dv - 61.7).abs() < 1e-3, "the skin's speed: {}", ram.dv);
+    assert!((ram.relative_speed - 61.7).abs() < 1e-3);
+    assert_eq!(ram.severity, 1.0, "past the Starfury's 18 m/s");
+    // Still touching: the same collision, no second ram.
+    assert!(touch_skin(&mut tracker, Vector3::new(0.0, 3.0, 0.0), skin, true).is_empty());
+    // A hull that matches the skin's motion takes nothing.
+    let mut matched = Tracker::default();
+    touch_skin(&mut matched, skin, skin, false);
+    assert!(touch_skin(&mut matched, skin, skin, true).is_empty(), "no speed between them, no ram");
 }

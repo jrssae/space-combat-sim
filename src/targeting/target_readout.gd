@@ -23,6 +23,8 @@ var bounding_radius: float = 0.0
 ## Damage by main component, as in `TargetInfo`.
 var damage_layout: DamageZones.Layout = DamageZones.Layout.NONE
 var damage_zones: PackedFloat32Array = PackedFloat32Array()
+## Its `Targetable.Role`: a navigation target (BEACON) gets the HUD's navigation look (M7-T27).
+var role: int = 0
 
 
 func _to_string() -> String:

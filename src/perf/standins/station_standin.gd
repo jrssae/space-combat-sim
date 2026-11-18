@@ -1,13 +1,13 @@
 class_name StationStandin
 extends Node3D
-## The Babylon 5 station stand-in for the render comparison (M4-T27, Q24): bench-only, the generated `b5_station` asset's shape (no
-## franchise asset), about 8 km long. The habitat drum turns about the station's long axis; the frame around it (reactor, spine,
-## vanes, top bar, command section, bow) stands still. Each is a `RenderPiece` drawn as its textured mesh (M4-T30d).
+## The Babylon 5 station stand-in for the render comparison (M4-T27, Q24): bench-only, the generated `babylon5_station` asset (M7-T04; no
+## franchise asset), about 8 km long. The habitat drum (with the Cobra arms) turns about the station's long axis; the frame around it
+## (bow, dorsal spine, hub, vanes, reactor) stands still. Each is a `RenderPiece` drawn as its textured mesh (M4-T30d).
 ##
 ## The drum's turn is a visual: it has no body, so it turns each frame by the frame's own time.
 
-const ASSET_ID: String = "b5_station"
-## The drum's spin, rad/s: one standard gravity at its 445 m radius, about 1.4 turns a minute.
+const ASSET_ID: String = "babylon5_station"
+## The drum's spin, rad/s (Q9): about 62 m/s at the bands' 417 m radius, 1.4 turns a minute.
 const DRUM_RAD_S: float = 0.148
 
 var frame_piece: RenderPiece = null

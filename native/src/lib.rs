@@ -44,6 +44,7 @@ mod tier_rows;
 mod tier_fire;
 
 // M5-T21: the defensive turrets, engine-free kernels and the core's shell around them.
+mod grid_kernels;
 mod turret_kernels;
 mod turret_rows;
 
@@ -74,3 +75,7 @@ mod static_rows;
 
 // M6-T21: which rocks live as Jolt bodies, an engine-free kernel and its shell over the core's rows.
 mod rock_stream;
+
+// M7-T06: big hulls with a surface of their own (the station), an engine-free kernel the core, the rams and the brains read.
+mod surface;
+mod surface_rows;

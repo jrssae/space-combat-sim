@@ -59,12 +59,23 @@ func get_vector(neg_x: StringName, pos_x: StringName, neg_y: StringName, pos_y: 
 	return InputSource.radial_deadzone(v, deadzone)
 
 
+## Only what a test set as the pad's (not `from_keyboard`): the fake's stand-in for the stick axes.
+func get_stick_vector(neg_x: StringName, pos_x: StringName, neg_y: StringName, pos_y: StringName,
+		deadzone: float) -> Vector2:
+	var v := Vector2(_stick_value(pos_x) - _stick_value(neg_x), _stick_value(pos_y) - _stick_value(neg_y))
+	return InputSource.radial_deadzone(v, deadzone)
+
+
 func get_trigger(action: StringName) -> float:
 	return _value(action)
 
 
 func is_pressed(action: StringName) -> bool:
 	return _value(action) > 0.5
+
+
+func _stick_value(action: StringName) -> float:
+	return 0.0 if _from_keyboard.has(action) else float(_strengths.get(action, 0.0))
 
 
 func _value(action: StringName) -> float:

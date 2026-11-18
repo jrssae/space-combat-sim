@@ -10,7 +10,7 @@ same triangles and bounds as the OBJ.
 from __future__ import annotations
 
 import dataclasses
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -19,9 +19,11 @@ import numpy as np
 
 from ..styles import Style
 from .geometry import Material, Mesh
-from .glb import GlbPrimitive, write_glb
+from .glb import GlbJoint, GlbPrimitive, write_glb
+from .color import linear_to_srgb, srgb_to_linear
 from .image import write_png
 from .chunks import ChunkCut, chunk_mesh_name
+from .sections import SectionCut, write_sections
 from .livery import digit_atlas, digit_import_sidecar, livery_section
 from .raster import dilate, rasterize, sharp_edges
 from .seams import EMPTY, SeamLayout
@@ -62,6 +64,7 @@ class TexturedPart:
     name: str = ""
     zone: int = 0  # the livery zone its vertices carry (``core/livery.py``; 0: never painted)
     seams: SeamLayout = EMPTY  # its drawn surface layout, in the mesh's frame (M5-T40)
+    joint: int = 0  # the skin joint the whole part follows, when the mesh is skinned (M7-T33)
 
 
 @dataclass
@@ -110,11 +113,16 @@ def atlas_of(parts: Sequence[TexturedPart], atlas_px: int = DEFAULT_ATLAS_PX, te
 
 
 def _primitives(parts: Sequence[TexturedPart], packed: PackedParts, zones: bool = False, face_mask: np.ndarray | None = None,
-                offset: Sequence[float] = (0.0, 0.0, 0.0)) -> tuple[GlbPrimitive, GlbPrimitive]:
+                offset: Sequence[float] = (0.0, 0.0, 0.0), suffix: str = "", skinned: bool = False) -> tuple[GlbPrimitive, GlbPrimitive]:
     """The opaque and glass primitives: a glb vertex per (mesh vertex, UV), normals the parts' smooth vertex normals; with ``zones``
     each vertex's livery zone in COLOR_0's red (zone / 255). ``face_mask`` keeps only some faces (a chunk's) and ``offset`` is
-    subtracted from the positions."""
+    subtracted from the positions; ``suffix`` follows the surfaces' names (a tier of a big piece, M7-T24); ``skinned`` gives each
+    vertex its part's joint."""
     mesh = packed.mesh
+    vertex_joint = np.zeros(mesh.vertex_count, dtype=np.int64)
+    if skinned:
+        part_joint = np.array([p.joint for p in parts], dtype=np.int64)
+        vertex_joint[mesh.faces.reshape(-1)] = np.repeat(part_joint[packed.face_part], 3)
     normals = mesh.vertex_normals()
     transmittance = np.array([m.transmittance for m in mesh.materials], dtype=float)[mesh.face_material]
     glass_face = transmittance > 0.0
@@ -123,8 +131,8 @@ def _primitives(parts: Sequence[TexturedPart], packed: PackedParts, zones: bool 
     for glass in (False, True):
         faces = np.flatnonzero((glass_face == glass) & keep)
         if len(faces) == 0:
-            out.append(GlbPrimitive(np.zeros((0, 3)), np.zeros((0, 3)), np.zeros((0, 2)), [], GLASS_SURFACE if glass else OPAQUE_SURFACE,
-                                    (0.0, 0.0, 0.0, 0.3) if glass else (1.0, 1.0, 1.0, 1.0), glass))
+            out.append(GlbPrimitive(np.zeros((0, 3)), np.zeros((0, 3)), np.zeros((0, 2)), [], (GLASS_SURFACE if glass else OPAQUE_SURFACE) + suffix,
+                                    (0.0, 0.0, 0.0, 0.3) if glass else (1.0, 1.0, 1.0, 1.0), glass, joints=np.zeros(0) if skinned else None))
             continue
         corner_vertex = mesh.faces[faces].reshape(-1)
         corner_uv = np.round(packed.face_uv01[faces].reshape(-1, 2).astype(np.float32), 7)
@@ -138,17 +146,39 @@ def _primitives(parts: Sequence[TexturedPart], packed: PackedParts, zones: bool 
             colors[:, 0] = packed.vertex_zone[source] / 255.0
             colors[:, 3] = 1.0
         out.append(GlbPrimitive(mesh.vertices[source] - np.asarray(offset, dtype=float), normals[source], unique[:, 1:3], inverse.reshape(-1),
-                                GLASS_SURFACE if glass else OPAQUE_SURFACE, base, glass, colors=colors))
+                                (GLASS_SURFACE if glass else OPAQUE_SURFACE) + suffix, base, glass, colors=colors,
+                                joints=vertex_joint[source] if skinned else None))
     return out[0], out[1]
 
 
-def import_sidecar(kind: str) -> str:
-    """Godot's ``.import`` for one map: VRAM compressed with mipmaps; the normal map flagged, the linear maps packed as data."""
+def shrink_map(image: np.ndarray, factor: int, key: str) -> np.ndarray:
+    """An 8-bit map ``factor`` times smaller, each texel the mean of the block it covers (the colour in linear light, a normal
+    renormalised): what the full map's mipmap would show at that size."""
+    if factor <= 1:
+        return image
+    h, w = image.shape[0] // factor, image.shape[1] // factor
+    values = image[: h * factor, : w * factor].astype(np.float64) / 255.0
+    if key == "albedo":
+        values[..., :3] = srgb_to_linear(values[..., :3])
+    blocks = values.reshape(h, factor, w, factor, -1).mean(axis=(1, 3))
+    if key == "albedo":
+        blocks[..., :3] = linear_to_srgb(blocks[..., :3])
+    elif key == "normal":
+        n = blocks[..., :3] * 2.0 - 1.0
+        n /= np.maximum(np.linalg.norm(n, axis=-1, keepdims=True), 1e-9)
+        blocks[..., :3] = n * 0.5 + 0.5
+    return np.clip(np.rint(blocks * 255.0), 0, 255).astype(np.uint8).reshape(h, w, *image.shape[2:])
+
+
+def import_sidecar(kind: str, high_quality: bool = False) -> str:
+    """Godot's ``.import`` for one map: VRAM compressed with mipmaps; the normal map flagged, the linear maps packed as data.
+    ``high_quality`` asks for the better (twice the size) compression, without the colour noise of the usual one."""
     normal_map = {"albedo": 2, "emissive": 2, "normal": 1, "orm": 2}[kind]
     channel_pack = {"albedo": 0, "emissive": 0, "normal": 1, "orm": 1}[kind]
     return (
         "[remap]\n\nimporter=\"texture\"\ntype=\"CompressedTexture2D\"\n\n[params]\n\n"
-        "compress/mode=2\ncompress/high_quality=false\ncompress/lossy_quality=0.7\ncompress/uastc_level=0\ncompress/rdo_quality_loss=0.0\n"
+        f"compress/mode=2\ncompress/high_quality={'true' if high_quality else 'false'}\n"
+        "compress/lossy_quality=0.7\ncompress/uastc_level=0\ncompress/rdo_quality_loss=0.0\n"
         f"compress/hdr_compression=1\ncompress/normal_map={normal_map}\ncompress/channel_pack={channel_pack}\n"
         "mipmaps/generate=true\nmipmaps/limit=-1\nroughness/mode=0\nroughness/src_normal=\"\"\n"
         "process/channel_remap/red=0\nprocess/channel_remap/green=1\nprocess/channel_remap/blue=2\nprocess/channel_remap/alpha=3\n"
@@ -194,7 +224,11 @@ def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPa
                         texel_m: float = DEFAULT_TEXEL_M, seed: int = 0, occlusion: bool = True,
                         paintable: Sequence[str] = (), fine_mesh: Mesh | None = None, normal_scale: int = NORMAL_SCALE,
                         chunks: Sequence[ChunkCut] = (), grid: bool = True,
-                        detail_levels: Mapping[str, int] | None = None) -> tuple[list[Path], dict[str, Any]]:
+                        detail_levels: Mapping[str, int] | None = None,
+                        sections: Sequence[SectionCut] = (),
+                        interior: Callable[[np.ndarray, np.ndarray], np.ndarray] | None = None,
+                        surface_suffix: str = "", detail_shrink: Mapping[str, int] | None = None,
+                        high_quality_keys: Sequence[str] = (), joints: Sequence[GlbJoint] = ()) -> tuple[list[Path], dict[str, Any]]:
     """Write the textured mesh of ``parts`` into ``out_dir`` and return its files and the manifest's ``mesh`` section. With
     ``paintable`` material names the hull takes wing liveries (M4-T30b): the vertices carry their parts' zones, the albedo's alpha
     says where paint may go, and the digit atlas and the ``livery`` section are written too. With ``fine_mesh`` the parts are a
@@ -203,7 +237,14 @@ def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPa
     faces on the same atlas, so it draws with these maps. ``grid`` off leaves the generic staggered plating out (a hull whose parts
     carry drawn layouts, M5-T40). Each of ``detail_levels`` (a name and a layout level) is one more set of the albedo, normal and
     ORM maps with the layouts drawn up to that level only, ``<asset_id>_<map>_<name>.png``, named in every surface's ``detail``:
-    the game picks a set by ``settings.texture_detail``; the maps without a suffix are the full layouts."""
+    the game picks a set by ``settings.texture_detail``; the maps without a suffix are the full layouts. ``sections`` (M7-T19) cut
+    the mesh across z into ``<asset_id>_sec_<name>.glb`` on the same maps, listed in the section's ``sections``; ``interior``
+    (face centroids, face normals -> a flag per face) says which faces lie inside a hall or a bay, written apart in each section
+    so the game keeps the sun off them (no light casts shadows). ``surface_suffix`` follows the surfaces' names, so the tiers of one
+    big piece (M7-T24, each its own atlas) draw with their own materials; ``detail_shrink`` writes a detail set's maps that many
+    times smaller (a lighter set); ``high_quality_keys`` are the maps imported with the better compression. With ``joints`` (M7-T33)
+    the hull's glb is skinned, each part following its ``joint``, so the game can move parts without another draw call; chunks and
+    sections stay unskinned."""
     out_dir = Path(out_dir)
     packed = pack_parts(parts, atlas_px, texel_m)
     mesh = packed.mesh
@@ -215,8 +256,10 @@ def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPa
                   packed.packed.texel_m, mesh, tuple(plating_for(p.name, p.mesh, style) for p in parts) if grid else (), fine_mesh,
                   tuple(p.seams for p in parts), grid)
     maps = bake_maps(atlas, style, seed, occlusion, paintable, normal_scale)
-    opaque, glass = _primitives(parts, packed, zones=bool(paintable))
-    paths = [write_glb(out_dir / f"{asset_id}.glb", [opaque, glass], asset_id)]
+    if any(not 0 <= p.joint < max(len(joints), 1) for p in parts):
+        raise ValueError(f"{asset_id}: a part names a joint the skin does not have")
+    opaque, glass = _primitives(parts, packed, zones=bool(paintable), suffix=surface_suffix, skinned=bool(joints))
+    paths = [write_glb(out_dir / f"{asset_id}.glb", [opaque, glass], asset_id, joints)]
     names = [p.name for p in parts if p.mesh.face_count > 0]
     for cut in chunks:
         unknown = [name for name in cut.parts if name not in names]
@@ -226,23 +269,31 @@ def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPa
         mask = np.isin(packed.face_part, members)
         if not mask.any():
             raise ValueError(f"chunk {cut.name!r} has no faces")
-        piece = _primitives(parts, packed, zones=bool(paintable), face_mask=mask, offset=cut.offset)
+        piece = _primitives(parts, packed, zones=bool(paintable), face_mask=mask, offset=cut.offset, suffix=surface_suffix)
         paths.append(write_glb(out_dir / chunk_mesh_name(asset_id, cut.name), list(piece), f"{asset_id}_chunk_{cut.name}"))
     for key in MAP_KEYS:
         png = out_dir / f"{asset_id}_{key}.png"
         paths.append(write_png(png, maps[key]))
         sidecar = Path(str(png) + ".import")
-        sidecar.write_text(import_sidecar(key), encoding="utf-8", newline="\n")
+        sidecar.write_text(import_sidecar(key, key in high_quality_keys), encoding="utf-8", newline="\n")
         paths.append(sidecar)
     section = manifest_section(asset_id, parts, packed, [opaque, glass], maps, atlas)
+    if sections:
+        glass_face = np.array([m.transmittance for m in mesh.materials], dtype=float)[mesh.face_material] > 0.0
+        cut_files, section["sections"] = write_sections(
+            out_dir, asset_id, mesh.vertices[mesh.faces], mesh.vertex_normals()[mesh.faces], packed.face_uv01, glass_face, sections,
+            (OPAQUE_SURFACE + surface_suffix, GLASS_SURFACE + surface_suffix), ((1.0, 1.0, 1.0, 1.0), (0.0, 0.0, 0.0, 0.3)),
+            None if interior is None else np.asarray(interior(mesh.face_centroids(), mesh.face_normals()), dtype=bool))
+        paths += cut_files
     for name, level in (detail_levels or {}).items() if any(p.seams for p in parts) else ():
         lesser = bake_maps(dataclasses.replace(atlas, part_seams=tuple(p.seams.up_to(level) for p in parts)), style, seed, occlusion,
                            paintable, normal_scale)
         files = {key: f"{asset_id}_{key}_{name}.png" for key in DETAIL_KEYS}
+        shrink = int((detail_shrink or {}).get(name, 1))
         for key, file in files.items():
-            paths.append(write_png(out_dir / file, lesser[key]))
+            paths.append(write_png(out_dir / file, shrink_map(lesser[key], shrink, key)))
             sidecar = out_dir / (file + ".import")
-            sidecar.write_text(import_sidecar(key), encoding="utf-8", newline="\n")
+            sidecar.write_text(import_sidecar(key, key in high_quality_keys), encoding="utf-8", newline="\n")
             paths.append(sidecar)
         for surface in section["surfaces"]:
             surface.setdefault("detail", {})[name] = dict(files)
@@ -257,5 +308,5 @@ def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPa
     return paths, section
 
 
-__all__ = ["DEFAULT_ATLAS_PX", "DEFAULT_TEXEL_M", "ChunkCut", "PackedParts", "TexturedPart", "atlas_of", "import_sidecar", "pack_parts",
+__all__ = ["DEFAULT_ATLAS_PX", "DEFAULT_TEXEL_M", "ChunkCut", "PackedParts", "SectionCut", "TexturedPart", "atlas_of", "import_sidecar", "pack_parts",
            "write_textured_mesh"]

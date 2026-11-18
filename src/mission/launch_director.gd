@@ -1,0 +1,679 @@
+class_name LaunchDirector
+extends Node
+## Cobra-bay launches in the game (M7-T08, D76, AC7): the node side of `LaunchSequence`. Each tick it moves the launches on with
+## the drum's angle, carries every fighter still on its rack or rail with the drum, swings the doors' leaves, hands each fighter
+## over at its release point and, for the player, plays the launch camera's shots and holds the controls.
+##
+## - **Carried with the drum.** A fighter on the rack or the rail is put each tick where the drum carries it, with the drum's
+##   velocity there (and its spin), never as a free body beside a turning door: its body keeps integrating but feels no force
+##   (`custom_integrator`), touches nothing (no collision layers) and stays out of the low-attention tier. It is placed in the
+##   drum's pose from before Jolt's step, so after the step it stands where the drum's body does, and a rebase moves the two
+##   together. At the release it gets its layers back and flies on with the hand-off state.
+## - **The player** is first in the wave: the controls stay held until the hand-off. Each launch gets its own camera cut, one variant
+##   per phase from the profile's pools (`LaunchCut`, seeded by the scenario's seed, the bay and the run's launch count, or
+##   `cut_seed` when pinned), each played as the fighter has been long enough in its step. A or Start (`Main`'s skip) jumps to the hand-off state; under the spine it waits for clear space.
+##   After a played hand-off its engines light for `burn_s` (`step_player`, as the gate jump's autopilot), so it clears the arm
+##   under thrust; a skip leaves the controls to the player at once.
+##   Wingmen (the player's wing) take the other racks of the arm, in the wave order, and the second row behind them.
+## - **Wing launches** (`launch wing <wing>`, `launch wing all`): twelve AI Starfuries from the ally pool (topped up when short),
+##   named after the wing, launched in two waves. A wing the player leads (Alpha, with the player as Alpha 1) takes the launched
+##   ships as its own wingmen, as many as its eleven slots have room for, so they answer the player's orders (M7-T58).
+##
+## Console: provider and command `launch`.
+
+## The player's fighter was handed over (its release, or a skip's).
+signal player_released
+## Every fighter of a launch is away and its doors are shut.
+signal launch_finished(wing: String)
+
+const NODE_NAME: StringName = &"LaunchDirector"
+## After the drum is turned (`Station.SPIN_PRIORITY`, -50) and before the tier (-12) and the core's sync (-11).
+const PRIORITY: int = -45
+const PROVIDER: StringName = &"launch"
+const WINGS: PackedStringArray = ["alpha", "beta", "delta", "zeta"]
+## Starfuries in a full wing launch.
+const WING_SIZE: int = 12
+## What a wing launch's Starfuries fly once away.
+const WING_PROFILE: String = "ally_starfury"
+
+var main: Main = null
+var profile: LaunchProfile = null
+## The launches running: each `{seq: LaunchSequence, ships: Dictionary (id -> Combatant), player: String, wing: String}`.
+var launches: Array[Dictionary] = []
+## The player's last hand-off in the World: `id`, `bay`, `transform`, `velocity`, `angular`, `drum_angle` (the drum's angle it
+## was given at), `skipped`.
+var last_handoff: Dictionary = {}
+## The scenario's start bay (`player.launch_bay`), relaunched on a respawn; empty for none.
+var start_bay: String = ""
+
+## Each wing launched (its name, lower case) -> the Starfuries it sent as `{combatant, name}`, so the station knows which wing is
+## still out and how strong it is (`wing_strength`).
+var _wing_ships: Dictionary = {}
+
+var _leaves: StationDoorLeaves = null
+var _carried: Dictionary = {}  # Ship instance id -> {layer, mask, exempt}
+var _prev_angle: float = NAN  # the drum's angle last tick: its body's pose before this tick's step
+var _step_starts: Dictionary = {}  # each step the player's fighter has been in -> when it began (launch time)
+## When the player's launch cuts: the least hold, and a row shot held over several ejections (`LaunchShotSequencer`).
+var sequencer: LaunchShotSequencer = null
+var _skip_asked: bool = false
+var _shots_cut: bool = false  # the player skipped: no more shots this launch
+var _launch_shot: Dictionary = {}  # the player's latest launch: its shots, its skip
+var _burn_left_s: float = 0.0  # the player's engines after the hand-off
+## The shuffle bags of this scenario run's cuts, and how many player launches it has had.
+var cut: LaunchCut = null
+var launch_count: int = 0
+## Pins every cut's seed (tests, `launch seed <n>`); -1 seeds each launch from the scenario, the bay and the launch count.
+var cut_seed: int = -1
+## The fill light of the shot playing (a profile's `fill`), lit through the scene's `LightRig` only while its shot is on screen.
+var fill: LightEmitter = null
+var _fill_shot: CinematicShot = null
+var _fill_spec: Dictionary = {}
+
+
+func _init() -> void:
+	name = NODE_NAME
+	process_physics_priority = PRIORITY
+	process_mode = Node.PROCESS_MODE_PAUSABLE
+
+
+func _ready() -> void:
+	if main != null:
+		main.player_respawned.connect(_on_player_respawned)
+	var made: Dictionary = LaunchProfile.load_file()
+	if bool(made["ok"]):
+		profile = made["profile"]
+		cut = LaunchCut.new(profile)
+	else:
+		push_error("LaunchDirector: %s" % made["error"])
+	_register_console()
+
+
+func _exit_tree() -> void:
+	DebugConsole.registry.unregister_owner(self)
+	_drop_fill()
+
+
+# The fill follows its actor as drawn, and goes out with its shot.
+func _process(_delta: float) -> void:
+	if fill == null:
+		return
+	if main == null or main.camera_rig == null or main.camera_rig.playing_shot() != _fill_shot:
+		_drop_fill()
+		return
+	var pose: Variant = _actor_pose(String(_fill_spec["actor"]))
+	if pose != null:
+		fill.position = (pose as Transform3D) * (_fill_spec["offset"] as Vector3)
+
+
+## The station launches come from, or null.
+func station() -> Station:
+	if main == null or main.far_props == null:
+		return null
+	var s: Station = main.far_props.station
+	return s if s != null and is_instance_valid(s) and s.hardpoints != null else null
+
+
+## Puts the player on wing `wing`'s rack over door `door` with its wingmen on the arm's other racks, and starts the launch.
+## Returns "" or why it cannot.
+func launch_player(wing: String, door: int, with_wingmen: bool = true) -> String:
+	if main == null or not main.player_alive:
+		return "no player to launch"
+	if player_launch().size() > 0:
+		return "the player is already launching"
+	var ships: Array[Combatant] = [main.combatant]
+	if with_wingmen:
+		var own: Wing = main.wings.player_wing() if main.wings != null else null
+		if own != null and own.leader == main.combatant:
+			for member: Combatant in own.members():
+				if _can_carry(member) and ships.size() < 12:
+					ships.append(member)
+	var seed_value: int = cut_seed if cut_seed >= 0 else hash([main.scenario_seed, wing.to_lower(), door, launch_count])
+	var why: String = _start(wing, door, ships, main.combatant.display_name, seed_value)
+	if why.is_empty():
+		launch_count += 1
+		_launch_shot["cut"] = cut.pick(seed_value, mini(ships.size(), (_launch_shot["seq"] as LaunchSequence).bays.size()))
+		_launch_shot["cut_seed"] = seed_value
+		_step_starts.clear()
+		sequencer = LaunchShotSequencer.new(profile)
+		_shots_cut = false
+		_skip_asked = false
+	return why
+
+
+## A scenario's `launch_bay` start (`cobra_bay_<wing>_<door>`); "" or why not.
+func launch_from_bay(bay_name: String, with_wingmen: bool = true) -> String:
+	var s: Station = station()
+	if s == null:
+		return "no station in this scenario (anchor it on babylon5)"
+	var bay: Dictionary = s.hardpoints.bay(bay_name)
+	if bay.is_empty():
+		return "no launch bay '%s'" % bay_name
+	return launch_player(str(bay["wing"]), int(bay["door_number"]), with_wingmen)
+
+
+## Whether wing `wing` was launched in this run (it may be gone since).
+func has_flown(wing: String) -> bool:
+	return _wing_ships.has(wing.to_lower())
+
+
+## Whether a launch of wing `wing` is running now.
+func is_launching(wing: String) -> bool:
+	for launch: Dictionary in launches:
+		if launch["wing"] == wing.to_lower():
+			return true
+	return false
+
+
+## How many of wing `wing`'s launched Starfuries still fly for it: in play, not shot down and not handed to someone else.
+func wing_strength(wing: String) -> int:
+	var n: int = 0
+	var in_play: Array[Combatant] = main.ships.alive(ShipPool.ALLY_TYPE)
+	for entry: Dictionary in _wing_ships.get(wing.to_lower(), []):
+		var c: Combatant = entry["combatant"]
+		if is_instance_valid(c) and is_instance_valid(c.ship) and c.display_name == entry["name"] and in_play.has(c) \
+				and WingDirector.is_in_play(c):
+			n += 1
+	return n
+
+
+## `count` AI Starfuries (a full wing of twelve by default) launch from wing `wing`'s arm in two waves; "" or why not.
+func launch_wing(wing: String, count: int = WING_SIZE) -> String:
+	var s: Station = station()
+	if s == null:
+		return "no station in this scenario"
+	if not WINGS.has(wing.to_lower()):
+		return "no wing '%s' (%s)" % [wing, ", ".join(WINGS)]
+	for launch: Dictionary in launches:
+		if launch["wing"] == wing.to_lower():
+			return "wing %s is launching already" % wing
+	var pool: ShipPool = main.ships
+	count = clampi(count, 1, WING_SIZE)
+	var led: Wing = _player_led_wing(wing.to_upper())
+	var size_before: int = led.size if led != null else 0
+	var slots := PackedInt32Array()
+	if led != null:
+		main.wings.refresh(led)  # a wingman down a moment ago frees its slot
+		led.resize(maxi(led.size, WING_SIZE - 1))  # the player flies number 1, the rest of the wing the other eleven
+		slots = led.fill_order()  # the arms stay even if fewer launch
+		count = mini(count, slots.size())
+		if count == 0:
+			return "wing %s is full: every slot of the player's wing is flown" % wing.to_upper()
+	# A station scenario built these at load (`StationTraffic.reserve_pools`); a console launch elsewhere may hitch.
+	main.ensure_free(ShipPool.ALLY_TYPE, count)
+	var ships: Array[Combatant] = []
+	var prefix: String = wing.to_upper()
+	var at: UniversePos = main.world.to_universe(s.global_position)
+	var made_wing: bool = main.wings != null and main.wings.wing_named(prefix) == null
+	var squadron: Wing = _station_wing(prefix)
+	for i: int in count:
+		var callsign: String = main.wings.callsign_for(led, slots[i]) if led != null else pool.next_name(prefix, 1)
+		var behaviour: Dictionary = {"type": "ai", "profile": WING_PROFILE}
+		if led != null:
+			behaviour["orders"] = String(AiContext.order_word(led.order))
+		var made: Dictionary = BrainFactory.from_behaviour(behaviour, at, hash([callsign, main.scenario_seed]))
+		var ally: Combatant = pool.acquire(callsign, at, Basis.IDENTITY, main.world.anchored_velocity(),
+				made["brain"] as PilotBrain if bool(made["ok"]) else null, ShipPool.ALLY_TYPE)
+		if ally == null:
+			break
+		if led != null and main.wings.add_member(led, ally, slots[i]) != slots[i]:
+			pool.release(ally)  # a ship the player's wing refuses would fly on deaf to its orders
+			break
+		ships.append(ally)
+		if squadron != null:
+			main.wings.join(squadron.name, ally)  # the first leads, the rest take its slots (M7-T10)
+	var why: String = "no allied Starfury free" if ships.is_empty() else \
+			_start(wing, 1, ships, "", hash([main.scenario_seed, wing.to_lower(), "wing", SimClock.now()]))
+	if not why.is_empty():
+		for ally: Combatant in ships:
+			if squadron != null:
+				main.wings.leave(squadron, ally)
+			if led != null:
+				main.wings.remove_member(led, ally)
+			pool.release(ally)
+		if led != null:
+			led.resize(size_before)  # the player's wing as it was, so a replenish does not fill slots it never had
+		if made_wing and squadron != null and squadron.leader == null and squadron.members().is_empty():
+			main.wings.wings.erase(squadron)  # a retry starts from nothing, not from a wing of parked hulls
+		return why
+	var in_play: Array[Combatant] = main.ships.alive(ShipPool.ALLY_TYPE)
+	var sent: Array = _wing_ships.get(wing.to_lower(), []).filter(func(e: Dictionary) -> bool:
+		return is_instance_valid(e["combatant"]) and in_play.has(e["combatant"]) and not ships.has(e["combatant"]))  # a hull sent again is one entry
+	for ally: Combatant in ships:
+		sent.append({"combatant": ally, "name": ally.display_name})
+	_wing_ships[wing.to_lower()] = sent
+	return ""
+
+
+# The station's wing called `wing_name`, twelve strong and engaging at will, made on its first launch (M7-T10): its members
+# form on their leader when nothing is in reach and fight when something is. None when the player leads a wing of that name
+# (its own wingmen keep it), or without a wing director.
+func _station_wing(wing_name: String) -> Wing:
+	if main.wings == null:
+		return null
+	var wing: Wing = main.wings.wing_named(wing_name)
+	if wing != null:
+		return null if wing.leader != null and wing.leader.is_player else wing
+	wing = Wing.new(wing_name, null, 11)
+	wing.order = AiContext.Order.ENGAGE_AT_WILL
+	main.wings.wings.append(wing)
+	return wing
+
+
+# The wing called `wing_name` when the player leads it, or null: its launched ships fly as the player's wingmen.
+func _player_led_wing(wing_name: String) -> Wing:
+	var wing: Wing = main.wings.wing_named(wing_name) if main.wings != null else null
+	return wing if wing != null and wing.leader != null and wing.leader.is_player else null
+
+
+## Launches every wing the station has (`launch wing all`). Returns `{lines, launched}`: one line per wing (how many launched,
+## or why it did not) and how many wings went.
+func launch_all_wings() -> Dictionary:
+	var lines := PackedStringArray()
+	var launched: int = 0
+	for wing: String in WINGS:
+		var why: String = launch_wing(wing)
+		if why.is_empty():
+			launched += 1
+		lines.append("wing %s: %s" % [wing, why if not why.is_empty() else "%d launching" % _last_launch_size(wing)])
+	return {"lines": lines, "launched": launched}
+
+
+# How many fighters the running launch of `wing` carries.
+func _last_launch_size(wing: String) -> int:
+	for launch: Dictionary in launches:
+		if launch["wing"] == wing.to_lower():
+			return (launch["ships"] as Dictionary).size()
+	return 0
+
+
+# A scenario that starts in a bay starts there again after a respawn, without the wingmen (they flew on).
+func _on_player_respawned() -> void:
+	if not start_bay.is_empty():
+		var why: String = launch_from_bay(start_bay, false)
+		if not why.is_empty():
+			push_warning("LaunchDirector: respawn in %s: %s" % [start_bay, why])
+
+
+## The launch the player is in (not yet handed over), or empty.
+func player_launch() -> Dictionary:
+	for launch: Dictionary in launches:
+		var id: String = launch["player"]
+		if not id.is_empty() and (launch["seq"] as LaunchSequence).fighter(id)["phase"] != LaunchSequence.Phase.RELEASED:
+			return launch
+	return {}
+
+
+## The player is on a rack or a rail: the controls are held (`Main.controls_locked`).
+func locks_controls() -> bool:
+	return not player_launch().is_empty()
+
+
+## The player asked to skip the launch (A or Start during its shots, `launch skip`, a skipped mission step).
+func skip() -> void:
+	_burn_left_s = 0.0
+	if player_launch().is_empty():
+		return
+	_skip_asked = true
+	_shots_cut = true
+
+
+## The player's flight command for this tick while its engines burn after the hand-off (`Main` flies it as the gate jump's
+## autopilot), else null.
+func step_player(delta: float) -> FlightCommand:
+	if _burn_left_s <= 0.0 or profile == null or main == null or not main.player_alive:
+		_burn_left_s = 0.0
+		return null
+	_burn_left_s -= delta
+	var burn := FlightCommand.new()
+	burn.main_left = profile.burn_throttle
+	burn.main_right = profile.burn_throttle
+	return burn
+
+
+## Every launch's state, one line each.
+func describe() -> String:
+	var lines := PackedStringArray()
+	for launch: Dictionary in launches:
+		var seq: LaunchSequence = launch["seq"]
+		lines.append("wing %s, %.1f s, arm %.1f deg%s: %s" % [launch["wing"], seq.time_s, seq.arm_angle_now(),
+				" (under the spine)" if seq.blocked_now() else "", seq.describe()])
+	return " | ".join(lines) if not lines.is_empty() else "no launch"
+
+
+func _physics_process(delta: float) -> void:
+	var s: Station = station()
+	if s == null:
+		_prev_angle = NAN
+		return
+	var rate: float = s.spin.rate_rad_s if s.spinning else 0.0
+	# The drum's body is still at last tick's angle until Jolt steps: carry the fighters from there.
+	var angle: float = s.drum_angle - rate * delta if is_nan(_prev_angle) else _prev_angle
+	_prev_angle = s.drum_angle
+	if launches.is_empty():
+		return
+	if _leaves == null:
+		_leaves = StationDoorLeaves.find(s.drum_piece, s.hardpoints)
+	for launch: Dictionary in launches.duplicate():
+		_step(launch, s, delta, angle, rate)
+
+
+func _step(launch: Dictionary, s: Station, delta: float, angle: float, rate: float) -> void:
+	var seq: LaunchSequence = launch["seq"]
+	var player_id: String = launch["player"]
+	if is_same(launch, _launch_shot) and _skip_asked:
+		_skip_asked = false
+		seq.drum_angle = angle
+		seq.spin_rate_rad_s = rate
+		seq.skip(player_id)
+		if seq.fighter(player_id)["phase"] == LaunchSequence.Phase.RELEASED:
+			_hand_over(launch, player_id, s, true)
+	for e: Dictionary in seq.advance(delta, angle, rate):
+		if e["kind"] == "release":
+			_hand_over(launch, String(e["id"]), s, false)
+	for f: Dictionary in seq.fighters:
+		if f["phase"] != LaunchSequence.Phase.RELEASED:
+			_carry(launch, String(f["id"]), s)
+	if _leaves != null:
+		for i: int in seq.bays.size():
+			_leaves.set_open(String(seq.bays[i]["name"]), seq.door_angle_deg(i))
+	if is_same(launch, _launch_shot):
+		_direct_camera(launch)
+	if seq.finished():
+		launches.erase(launch)
+		launch_finished.emit(String(launch["wing"]))
+
+
+# Puts a fighter where the drum carries it this tick.
+func _carry(launch: Dictionary, id: String, s: Station) -> void:
+	var c: Combatant = (launch["ships"] as Dictionary).get(id)
+	if not _alive(c):
+		if c != null and is_instance_valid(c) and c.ship != null and is_instance_valid(c.ship):
+			_free(c.ship)  # lost on the rack: it falls as any wreck does
+		return
+	var ship: Ship = c.ship
+	var key: int = ship.get_instance_id()
+	var first: bool = not _carried.has(key)
+	if first:
+		_carried[key] = {"layer": ship.collision_layer, "mask": ship.collision_mask, "exempt": ship.tier_exempt}
+		ship.collision_layer = 0
+		ship.collision_mask = 0
+		ship.custom_integrator = true  # no thrust or assist moves it while it rides the drum
+		ship.tier_exempt = true
+		ship.clamped = true  # the clamp moves it: no plume, puff or engine sound until the ejection
+		InteriorLight.set_inside(ship, true)  # in the hall the sun does not reach it; back in the open at its hand-off
+	_place(ship, _world_state((launch["seq"] as LaunchSequence).state_of(id, s.drum_origin), s))
+	if first:
+		ship.reset_physics_interpolation()
+
+
+# Lets a fighter go at its release point with the hand-off state.
+func _hand_over(launch: Dictionary, id: String, s: Station, skipped: bool) -> void:
+	var c: Combatant = (launch["ships"] as Dictionary).get(id)
+	if not _alive(c):
+		return
+	var seq: LaunchSequence = launch["seq"]
+	var state: Dictionary = _world_state(seq.handoff_of(id, s.drum_origin), s)
+	var ship: Ship = c.ship
+	_place(ship, state)
+	_free(ship)
+	if id == launch["player"]:
+		last_handoff = state.merged({"id": id, "bay": seq.bays[seq.fighter(id)["bay"]]["name"], "drum_angle": seq.drum_angle,
+				"skipped": skipped})
+		_burn_left_s = 0.0 if skipped else profile.burn_s
+		player_released.emit()
+
+
+func _place(ship: Ship, state: Dictionary) -> void:
+	ship.global_transform = state["transform"]
+	ship.linear_velocity = state["velocity"]
+	ship.angular_velocity = state["angular"]
+
+
+func _free(ship: Ship) -> void:
+	var key: int = ship.get_instance_id()
+	var kept: Dictionary = _carried.get(key, {})
+	if kept.is_empty():
+		return
+	ship.collision_layer = int(kept["layer"])
+	ship.collision_mask = int(kept["mask"])
+	ship.tier_exempt = bool(kept["exempt"])
+	ship.custom_integrator = false
+	ship.clamped = false
+	InteriorLight.set_inside(ship, false)
+	_carried.erase(key)
+
+
+# The station frame's state in the World: the station's place and its velocity against the World added.
+func _world_state(state: Dictionary, s: Station) -> Dictionary:
+	var xform: Transform3D = s.global_transform
+	var rest: Vector3 = main.world.anchored_velocity() if main != null else Vector3.ZERO  # the station's, wherever the frame is
+	return {"transform": xform * (state["transform"] as Transform3D), "velocity": xform.basis * (state["velocity"] as Vector3) + rest,
+			"angular": xform.basis * (state["angular"] as Vector3)}
+
+
+func _start(wing: String, door: int, ships: Array[Combatant], player_id: String, seed_value: int) -> String:
+	var s: Station = station()
+	if s == null:
+		return "no station in this scenario (anchor it on babylon5)"
+	if profile == null:
+		return "no launch profile (%s)" % LaunchProfile.DEFAULT_PATH
+	for launch: Dictionary in launches:
+		if launch["wing"] == wing.to_lower():
+			return "wing %s is launching already" % wing
+	if not player_id.is_empty():
+		main.world.return_home()  # the player's launch: the station's rail first (M7-T71)
+	var ids := PackedStringArray()
+	var by_id: Dictionary = {}
+	for c: Combatant in ships:
+		ids.append(c.display_name)
+		by_id[c.display_name] = c
+	var rate: float = s.spin.rate_rad_s if s.spinning else 0.0
+	var angle: float = s.drum_angle if is_nan(_prev_angle) else _prev_angle
+	var seq := LaunchSequence.create(s.hardpoints, wing, ids, profile, door, angle, rate, seed_value)
+	if not seq.valid:
+		return seq.error
+	var offset: float = seq.stored_pose_offset_deg(seq.bays[0])
+	if offset > 1.0:
+		push_warning("LaunchDirector: the station's rack pose is %.1f deg from the profile's stored pose; the profile's is used" % offset)
+	var launch: Dictionary = {"seq": seq, "ships": by_id, "player": player_id, "wing": wing.to_lower()}
+	launches.append(launch)
+	if not player_id.is_empty():
+		_launch_shot = launch
+	for id: String in ids:
+		_carry(launch, id, s)
+	return ""
+
+
+func _can_carry(c: Combatant) -> bool:
+	return _alive(c) and not c.ship.is_tier_parked() and not _carried.has(c.ship.get_instance_id())
+
+
+func _alive(c: Combatant) -> bool:
+	return c != null and is_instance_valid(c) and c.ship != null and is_instance_valid(c.ship) and c.damageable != null \
+			and c.damageable.is_active() and (not c.is_player or main.player_alive)
+
+
+# --- the launch camera -------------------------------------------------------------------------------------------------
+
+
+# Plays each shot of the player's step once its time in the step has come.
+func _direct_camera(launch: Dictionary) -> void:
+	var seq: LaunchSequence = launch["seq"]
+	var id: String = launch["player"]
+	var step: StringName = seq.step_of(id)
+	if not step.is_empty() and not _step_starts.has(step):
+		_step_starts[step] = seq.time_s - seq.step_time(id)
+	if _shots_cut or main == null or main.camera_rig == null or sequencer == null:
+		return
+	var shots: Array[Dictionary] = launch.get("cut", [] as Array[Dictionary])
+	var due := PackedInt32Array()
+	for i: int in shots.size():
+		var entry: Dictionary = shots[i]
+		if _step_starts.has(entry["step"]) and seq.time_s - float(_step_starts[entry["step"]]) >= float(entry["at_s"]) - LaunchSequence.EPS_S:
+			due.append(i)
+	var play: int = sequencer.next(seq.time_s, due, shots, released_count(seq), wave_left(seq))
+	if play >= 0:
+		main.camera_rig.play_shot(shots[play]["shot"], _actor_pose, _origin_to_local)
+		_light_fill(shots[play])
+
+
+## How many fighters of a launch were let go so far.
+static func released_count(seq: LaunchSequence) -> int:
+	return seq.fighters.filter(func(f: Dictionary) -> bool: return f["phase"] == LaunchSequence.Phase.RELEASED).size()
+
+
+## How many of a launch's first wave are still to go.
+static func wave_left(seq: LaunchSequence) -> int:
+	return seq.fighters.filter(func(f: Dictionary) -> bool:
+		return int(f["wave"]) == 1 and f["phase"] != LaunchSequence.Phase.RELEASED).size()
+
+
+# Lights the shot's fill (replacing the last one), or puts the last one out when this shot has none.
+func _light_fill(entry: Dictionary) -> void:
+	_drop_fill()
+	var spec: Dictionary = entry.get("fill", {})
+	var rig: LightRig = LightRig.of(self)
+	if spec.is_empty() or rig == null:
+		return
+	fill = LightEmitter.new("launch fill", LightEmitter.PRIORITY_MUZZLE_FLASH, spec["color"], float(spec["energy"]),
+			float(spec["range_m"]))
+	_fill_shot = entry["shot"]
+	_fill_spec = spec
+	var pose: Variant = _actor_pose(String(spec["actor"]))
+	if pose != null:
+		fill.position = (pose as Transform3D) * (spec["offset"] as Vector3)
+	rig.add_emitter(fill)
+
+
+func _drop_fill() -> void:
+	if fill == null:
+		return
+	var rig: LightRig = LightRig.of(self)
+	if rig != null:
+		rig.remove_emitter(fill)
+	fill = null
+	_fill_shot = null
+	_fill_spec = {}
+
+
+
+# The shots' actors: `fighter` (the player's ship as drawn) and `bay` (the player's door as the drum is drawn).
+func _actor_pose(actor: String) -> Variant:
+	if actor == "fighter" or actor == "player":
+		return main.ship.get_global_transform_interpolated() if main != null and main.player_alive else null
+	if actor == "bay" and not _launch_shot.is_empty():
+		var s: Station = station()
+		var seq: LaunchSequence = _launch_shot["seq"]
+		var f: Dictionary = seq.fighter(String(_launch_shot["player"]))
+		if s == null or f.is_empty():
+			return null
+		var drum := Transform3D(Basis(Vector3.BACK, s.visual_angle(Engine.get_physics_interpolation_fraction())), s.drum_origin)
+		return s.get_global_transform_interpolated() * drum * LaunchSequence.door_frame(seq.bays[f["bay"]])
+	return null
+
+
+func _origin_to_local(offset: PackedFloat64Array) -> Vector3:
+	return main.world.universe_to_local(UniversePos.new(offset[0], offset[1], offset[2], main.world.origin.system_id))
+
+
+# --- console -------------------------------------------------------------------------------------------------------------
+
+
+func _register_console() -> void:
+	DebugConsole.registry.register_provider(PROVIDER, ConsoleVars.new({
+		&"active": {"get": func() -> int: return launches.size(), "type": TYPE_INT, "doc": "Launches running (M7-T08)"},
+		&"player": {"get": func() -> bool: return locks_controls(), "type": TYPE_BOOL,
+				"doc": "The player is on a rack or a rail, controls held until the hand-off"},
+		&"fighters": {"get": describe, "doc": "Each launch's fighters: bay, wave, phase (staged, moving, racked, held, dropping, released)"},
+		&"held": {"get": _held_text, "doc": "Fighters holding under the spine (their arm in a blocked sector)"},
+		&"handoff": {"get": _handoff_text, "doc": "The player's last hand-off: bay, speed against the station, skipped or played"},
+		&"start_bay": {"get": func() -> String: return start_bay, "doc": "The scenario's launch bay (player.launch_bay), or empty"},
+		&"cut": {"get": _cut_text, "doc": "The player's last launch's camera cut: its seed and each phase's shot variant (a phase left out is missing)"},
+		&"launches": {"get": func() -> int: return launch_count, "type": TYPE_INT, "doc": "Player launches this scenario run (seeds the cuts)"},
+	}), self)
+	DebugConsole.registry.register_command(ConsoleCommand.new(PROVIDER,
+			"Cobra-bay launches (M7-T08): launch <wing> <door> (the player and its wingmen), launch wing <wing> (twelve AI Starfuries in two waves; a wing the player leads takes them as its wingmen), launch wing all (every wing), launch skip, launch status, launch cut (the last camera cut), launch seed <n|off> (pin the cuts' seed), launch preview <variant> (play one shot variant now, for look sheets)",
+			[ConsoleArg.string_optional(&"a", "status"), ConsoleArg.string_optional(&"b")]), _cmd_launch, self)
+
+
+func _held_text() -> String:
+	var names := PackedStringArray()
+	for launch: Dictionary in launches:
+		for f: Dictionary in (launch["seq"] as LaunchSequence).fighters:
+			if f["phase"] == LaunchSequence.Phase.HELD:
+				names.append(String(f["id"]))
+	return ", ".join(names) if not names.is_empty() else "none"
+
+
+func _handoff_text() -> String:
+	if last_handoff.is_empty():
+		return "none"
+	var rest: Vector3 = main.world.rest_velocity() if main != null else Vector3.ZERO
+	return "%s from %s at %.1f m/s against the station%s" % [last_handoff["id"], last_handoff["bay"],
+			((last_handoff["velocity"] as Vector3) - rest).length(), " (skipped)" if bool(last_handoff["skipped"]) else ""]
+
+
+func _cmd_launch(args: Dictionary) -> ConsoleResult:
+	var a: String = str(args[&"a"]).to_lower()
+	var b: String = str(args[&"b"]).to_lower() if args[&"b"] != null else ""
+	if a == "status":
+		return ConsoleResult.line(describe())
+	if a == "cut":
+		return ConsoleResult.line(_cut_text())
+	if a == "preview":
+		return _preview(str(args[&"b"]) if args[&"b"] != null else "")
+	if a == "seed":
+		if b == "off":
+			cut_seed = -1
+			return ConsoleResult.line("launch cuts seeded per launch")
+		if not b.is_valid_int() or int(b) < 0:
+			return ConsoleResult.failure("launch seed <n|off>")
+		cut_seed = int(b)
+		return ConsoleResult.line("launch cuts seeded with %d" % cut_seed)
+	if a == "skip":
+		if player_launch().is_empty():
+			return ConsoleResult.failure("launch skip: the player is not launching")
+		skip()
+		return ConsoleResult.line("launch skipped")
+	if a == "wing" and b == "all":
+		var outcome: Dictionary = launch_all_wings()
+		var lines: PackedStringArray = outcome["lines"]
+		return ConsoleResult.success(lines) if int(outcome["launched"]) > 0 \
+				else ConsoleResult.failure("launch wing all: %s" % "; ".join(lines))
+	if a == "wing":
+		var why_wing: String = launch_wing(b)
+		if not why_wing.is_empty():
+			return ConsoleResult.failure("launch wing: %s" % why_wing)
+		var joined: String = " as the player's wingmen" if _player_led_wing(b.to_upper()) != null else ""
+		return ConsoleResult.line("wing %s launching: %d Starfuries in two waves%s" % [b, _last_launch_size(b), joined])
+	if WINGS.has(a) and b.is_valid_int():
+		var why: String = launch_player(a, int(b))
+		return ConsoleResult.failure("launch: %s" % why) if not why.is_empty() \
+				else ConsoleResult.line("launching from cobra_bay_%s_%s" % [a, b])
+	return ConsoleResult.failure("launch <alpha|beta|delta|zeta> <1-6>, launch wing <wing|all>, launch skip, launch status, launch cut, launch seed <n|off>")
+
+
+# Plays one variant of the profile's pools on the player's launch now, as its phase would (for look sheets).
+func _preview(id: String) -> ConsoleResult:
+	if _launch_shot.is_empty():
+		return ConsoleResult.failure("launch preview: no player launch to film")
+	var ids := PackedStringArray()
+	for phase: Dictionary in profile.phases:
+		for variant: Dictionary in phase["variants"]:
+			ids.append(String(variant["id"]))
+			if String(variant["id"]) == id:
+				_shots_cut = true  # the cut's own shots stand aside
+				main.camera_rig.play_shot(variant["shot"], _actor_pose, _origin_to_local)
+				_light_fill(variant)
+				return ConsoleResult.line("previewing %s (%s phase)" % [id, phase["phase"]])
+	return ConsoleResult.failure("launch preview <%s>" % "|".join(ids))
+
+
+func _cut_text() -> String:
+	if _launch_shot.is_empty() or not _launch_shot.has("cut"):
+		return "none"
+	var parts := PackedStringArray()
+	for entry: Dictionary in _launch_shot["cut"] as Array[Dictionary]:
+		parts.append("%s %s" % [entry["phase"], entry["variant"]])
+	return "seed %d: %s" % [int(_launch_shot["cut_seed"]), ", ".join(parts)]

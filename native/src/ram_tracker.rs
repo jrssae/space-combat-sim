@@ -69,6 +69,11 @@ pub struct Feed<'a> {
     pub others: &'a [i64],
     pub points: &'a [Vector3],
     pub normals: &'a [Vector3],
+    /// Per contact (or empty for none): whether the other body is a moving surface (M7-T06, Q9: the station's turning
+    /// drum) and its skin's velocity at the contact point. Such a contact rams at once by the whole speed between the hull
+    /// and the skin under it, whatever Jolt's friction made of it.
+    pub on_surface: &'a [bool],
+    pub surface_velocities: &'a [Vector3],
 }
 
 type Pair = (i64, i64);
@@ -142,24 +147,31 @@ impl Tracker {
                     continue;
                 }
                 let v_before = self.prev_velocities[p];
-                let other_v = match self.prev_at(other) {
-                    Some(o) => self.prev_velocities[o],
-                    None => self.rest,
+                let moving = feed.on_surface.get(c).copied().unwrap_or(false);
+                let other_v = if moving {
+                    feed.surface_velocities[c]
+                } else {
+                    match self.prev_at(other) {
+                        Some(o) => self.prev_velocities[o],
+                        None => self.rest,
+                    }
                 };
+                let relative_speed = f64::from(length(sub(v_before, other_v)));
                 self.window_keys.insert((id, other));
                 self.windows.push(Window {
                     ram: Ram {
                         hull_id: id,
                         other_id: other,
-                        dv: 0.0,
+                        // A moving skin takes the hull to its own speed at once (Q9): the whole speed between them.
+                        dv: if moving { relative_speed } else { 0.0 },
                         severity: 0.0,
                         point: feed.points[c],
                         normal: feed.normals[c],
-                        relative_speed: f64::from(length(sub(v_before, other_v))),
+                        relative_speed,
                     },
                     v_before,
                     own_dv: Vector3::ZERO,
-                    ticks_left: CONTACT_WINDOW_TICKS,
+                    ticks_left: if moving { 1 } else { CONTACT_WINDOW_TICKS },
                 });
             }
         }

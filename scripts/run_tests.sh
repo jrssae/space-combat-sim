@@ -35,13 +35,15 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib_tests.sh"
 cd "${ROOT}"
 mkdir -p "${REPORTS}"
 require_godot
+# Every Godot process this script starts (GUT, the smokes) uses the settings' defaults, never the player's saved file (M7-T47).
+export SCS_TEST_SETTINGS=1
 
 # run_gut <log> <junit xml> <timeout s> <godot args...>: one GUT process; returns its exit code.
 run_gut() {
     local log="$1" xml="$2" limit="$3"
     shift 3
     local status=0
-    run_logged "${log}" timeout "${limit}" "${GODOT}" --headless --path . -s addons/gut/gut_cmdln.gd "$@" -gexit \
+    run_logged "${log}" "${GODOT_READ[@]}" timeout "${limit}" "${GODOT}" --headless --path . -s addons/gut/gut_cmdln.gd "$@" -gexit \
         -gjunit_xml_file="${xml}" || status=$?
     return "${status}"
 }
@@ -124,18 +126,13 @@ if [[ -n "${GUT_SHARD:-}" ]]; then
     shard="${BASH_REMATCH[1]}"
     shards="${BASH_REMATCH[2]}"
     (( shard >= 1 && shard <= shards )) || fail "GUT_SHARD ${GUT_SHARD}: k must be 1..n."
-    # The scripts GUT finds with -gdir=res://tests -ginclude_subdirs, in a stable order.
-    mapfile -t all_scripts < <(find tests -name 'test_*.gd' | LC_ALL=C sort)
-    picked=()
-    for i in "${!all_scripts[@]}"; do
-        if (( i % shards == shard - 1 )); then
-            picked+=("res://${all_scripts[$i]}")
-        fi
-    done
-    (( ${#picked[@]} > 0 )) || fail "GUT_SHARD ${GUT_SHARD} picks no script."
-    gut_select=("-gtest=$(IFS=,; echo "${picked[*]}")")
+    # Weighted by measured time, every test file in exactly one shard (scripts/gut_shards.py); `n` is the shard count.
+    picked_list="$("$(python_bin)" scripts/gut_shards.py files "${shard}" "${shards}")" || fail "scripts/gut_shards.py failed for GUT_SHARD ${GUT_SHARD}."
+    [[ -n "${picked_list}" ]] || fail "GUT_SHARD ${GUT_SHARD} picks no script."
+    IFS=, read -r -a picked <<< "${picked_list}"
+    gut_select=("-gtest=${picked_list}")
     (( shard == 1 )) || run_extras=0
-    echo "run_tests.sh: GUT shard ${shard} of ${shards}: ${#picked[@]} of ${#all_scripts[@]} scripts."
+    echo "run_tests.sh: GUT shard ${shard} of ${shards}: ${#picked[@]} scripts."
 fi
 
 if (( run_extras )); then
@@ -166,7 +163,7 @@ elif [[ "${mode}" == "full" ]]; then
     gut_timeout=7200
 fi
 gut_status=0
-run_logged "${REPORTS}/gut.log" timeout "${gut_timeout}" "${GODOT}" --headless --path . -s addons/gut/gut_cmdln.gd \
+run_logged "${REPORTS}/gut.log" "${GODOT_READ[@]}" timeout "${gut_timeout}" "${GODOT}" --headless --path . -s addons/gut/gut_cmdln.gd \
     "${gut_select[@]}" -gexit -gjunit_xml_file=reports/gut.xml \
     || gut_status=$?
 if (( gut_status != 0 )); then
@@ -332,11 +329,12 @@ reject_text "${log}" "[console] > quit 0" || smoke_status=1
 
 echo "== Console smoke run: faction relations and friendly fire on the real main scene"
 # M3-T02 / AC2, AC3: `relation` prints and sets a pair for the session (it never writes data/factions.json), `reset`
-# reloads the file, an unknown faction is an error under --console-strict, and settings.friendly_fire is the switch.
+# reloads the file, an unknown faction is an error under --console-strict, and settings.friendly_fire is the switch (on by
+# default since M7-T47, so the smoke turns it off and on again).
 log="${REPORTS}/console_factions.log"
 factions_file_before="$(sha256sum data/factions.json | cut -d' ' -f1)"
 main_run "${log}" 180 0 "factions" -- --console-strict \
-    --console-exec="wait 30; relation earth_alliance raiders; relation earth_alliance raiders neutral; get factions.relations; relation reset; get factions.relations; get factions.friendly_fire; set settings.friendly_fire on; get factions.friendly_fire; quit" \
+    --console-exec="wait 30; relation earth_alliance raiders; relation earth_alliance raiders neutral; get factions.relations; relation reset; get factions.relations; get factions.friendly_fire; set settings.friendly_fire off; get factions.friendly_fire; set settings.friendly_fire on; get factions.friendly_fire; quit" \
     || smoke_status=1
 expect_line "${log}" "[console] earth_alliance vs raiders: hostile" || smoke_status=1
 expect_line "${log}" "[console] earth_alliance vs raiders: hostile -> neutral (this session)" || smoke_status=1

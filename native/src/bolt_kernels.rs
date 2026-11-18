@@ -5,7 +5,7 @@
 use godot::builtin::{Basis, Vector3};
 
 use crate::rows::Bolts;
-use crate::v3::{add, col_a, col_b, col_c, cross, dot, maxf, minf, neg, normalized, scale, sub};
+use crate::v3::{add, col_a, col_b, col_c, cross, dot, length, maxf, minf, neg, normalized, scale, sub};
 
 /// `PulseCannonGate.TIME_EPSILON_S`: a clock summed from ticks reaches an interval a few ulps short.
 pub const TIME_EPSILON_S: f64 = 1e-6;
@@ -20,25 +20,33 @@ pub const QUARANTINE_MAX_STEP_M: f64 = 250.0;
 pub const QUARANTINE_SIDE_SLACK_M: f64 = 0.05;
 /// `BoltSlotQuarantine.SIDE_SLACK_SHARE`: the share of its move added to that slack.
 pub const QUARANTINE_SIDE_SLACK_SHARE: f64 = 0.01;
+/// `Projectile.MIN_TAIL_SHARE`: the shortest a bolt's tail is drawn, as a share of its full length (M7-T52): a bolt at
+/// its muzzle is a thin disc, never a degenerate transform.
+pub const MIN_TAIL_SHARE: f64 = 1e-3;
 
 /// `BoltSlotQuarantine.filter`: `buffer` (12 floats a slot) with every slot whose occupant is new since `last` collapsed
 /// to a point at its place, so the renderer never pairs a new bolt with another's last frame. `forward` is the bolts' flight
-/// direction in an instance's own frame. Written into `out`; returns how many slots were collapsed. Arithmetic in 64 bits
-/// over the 32-bit floats, in the GDScript's order, so both give the same bits.
+/// direction in an instance's own frame, one of its axes (the bolt meshes are built along one). Written into `out`;
+/// returns how many slots were collapsed. Arithmetic in 64 bits over the 32-bit floats.
+///
+/// The same bolt keeps its basis's two side axes: only its length along the flight changes while its tail grows (M7-T52).
 pub fn quarantine(buffer: &[f32], last: &[f32], forward: [f32; 3], out: &mut Vec<f32>) -> usize {
     out.clear();
     out.extend_from_slice(buffer);
     let [fx, fy, fz] = forward.map(f64::from);
+    let sides = side_axes(forward);
     let g = |v: &[f32], i: usize| f64::from(v[i]);
+    let same_column = |b: usize, c: usize| {
+        buffer[b + c] == last[b + c] && buffer[b + 4 + c] == last[b + 4 + c] && buffer[b + 8 + c] == last[b + 8 + c]
+    };
     let mut count = 0;
     let mut b = 0;
     while b + INSTANCE_FLOATS <= buffer.len() {
         let (r0x, r0y, r0z) = (g(buffer, b), g(buffer, b + 1), g(buffer, b + 2));
         if r0x != 0.0 || r0y != 0.0 || r0z != 0.0 {
             let mut kept = b + INSTANCE_FLOATS <= last.len()
-                && buffer[b] == last[b]
-                && buffer[b + 1] == last[b + 1]
-                && buffer[b + 2] == last[b + 2];
+                && same_column(b, sides[0])
+                && same_column(b, sides[1]);
             if kept {
                 let wx = r0x * fx + r0y * fy + r0z * fz;
                 let wy = g(buffer, b + 4) * fx + g(buffer, b + 5) * fy + g(buffer, b + 6) * fz;
@@ -65,6 +73,18 @@ pub fn quarantine(buffer: &[f32], last: &[f32], forward: [f32; 3], out: &mut Vec
         b += INSTANCE_FLOATS;
     }
     count
+}
+
+// The two instance axes across the flight: those other than `forward`'s largest component.
+fn side_axes(forward: [f32; 3]) -> [usize; 2] {
+    let a = forward.map(f32::abs);
+    if a[0] >= a[1] && a[0] >= a[2] {
+        [1, 2]
+    } else if a[1] >= a[2] {
+        [0, 2]
+    } else {
+        [0, 1]
+    }
 }
 
 /// Expires the owned bolts whose time is up, as `Projectile._physics_process` does for a node: the expiry test comes
@@ -104,6 +124,7 @@ pub fn advance(bolts: &mut Bolts, delta: f64, tick: i64, pull: &[Vector3]) {
         let step = scale(bolts.velocities[i], dt);
         bolts.last_steps[i] = step;
         bolts.positions[i] = add(bolts.positions[i], step);
+        bolts.flown[i] += length(step);
     }
 }
 
@@ -329,11 +350,17 @@ pub fn shot_velocity(
 /// chase camera's enlargement. Spent bolts are left out. Returns the instances written. `frame_velocity` is the local
 /// frame's own velocity against its anchor (M6-T05): a bolt points along its velocity against the anchor, so a velocity
 /// rebase turns no bolt in flight.
+///
+/// `tail_m` is how far the look's mesh reaches behind the bolt's place at true size (M7-T52): a bolt is drawn shortened
+/// along its flight until it has flown that far (enlarged), so its tail never reaches back behind its muzzle; 0 never
+/// shortens it.
+#[allow(clippy::too_many_arguments)]
 pub fn instance_transforms(
     bolts: &Bolts,
     look: u8,
     fraction: f32,
     visual_scale: f32,
+    tail_m: f32,
     child: &Basis,
     frame_velocity: Vector3,
     out: &mut Vec<f32>,
@@ -350,11 +377,17 @@ pub fn instance_transforms(
             continue;
         };
         let origin = sub(bolts.positions[i], scale(bolts.last_steps[i], behind));
-        let facing = if frame_velocity == Vector3::ZERO {
+        let mut facing = if frame_velocity == Vector3::ZERO {
             looking_along(bolts.velocities[i])
         } else {
             looking_along(add(bolts.velocities[i], frame_velocity))
         };
+        let share = tail_share(bolts.flown[i] - length(bolts.last_steps[i]) * behind, tail_m * visual_scale);
+        if share < 1.0 {
+            for row in &mut facing.rows {
+                row.z *= share; // the node's +Z runs back along the flight
+            }
+        }
         let basis = mul(&facing, child);
         let base = slot * INSTANCE_FLOATS;
         for row in 0..3 {
@@ -370,6 +403,14 @@ pub fn instance_transforms(
         }
     }
     count
+}
+
+/// How much of a drawn tail `full_m` long a bolt that has flown `flown_m` shows: all of it once it has flown that far.
+pub fn tail_share(flown_m: f32, full_m: f32) -> f32 {
+    if full_m <= 0.0 {
+        return 1.0;
+    }
+    (flown_m / full_m).clamp(MIN_TAIL_SHARE as f32, 1.0)
 }
 
 /// The bolts in launch order for the hit resolver's sweep: the owned rows and the node rows are each in launch order
@@ -540,5 +581,100 @@ mod pull_tests {
         assert_eq!(expire(&mut bolts, 1.0), 1);
         assert_eq!(bolts.owned, 2);
         assert_eq!(bolts.ids, vec![-1, -3]);
+    }
+}
+
+#[cfg(test)]
+mod tail_tests {
+    use super::*;
+
+    const DT: f64 = 1.0 / 60.0;
+    const TAIL_M: f32 = 20.0;
+
+    // One bolt of look 0 fired from the origin down -Z at 600 m/s, on tick 0.
+    fn one_bolt() -> Bolts {
+        let mut bolts = Bolts::default();
+        let v = Vector3::new(0.0, 0.0, -600.0);
+        bolts.insert_owned(-1, Vector3::ZERO, v, 0, 5, 7, 0.1, 2.0, [1.0; 4], 0, 9.0, 0);
+        bolts
+    }
+
+    // The drawn bolt's place and how far its tail reaches behind it, at `fraction` and `visual_scale`.
+    fn drawn(bolts: &Bolts, fraction: f32, visual_scale: f32) -> (Vector3, Vector3, f32) {
+        let mut out = Vec::new();
+        instance_transforms(bolts, 0, fraction, visual_scale, TAIL_M, &Basis::IDENTITY, Vector3::ZERO, &mut out);
+        let origin = Vector3::new(out[3], out[7], out[11]);
+        let back = Vector3::new(out[2], out[6], out[10]); // the node's +Z, back along the flight
+        let side = Vector3::new(out[0], out[4], out[8]);
+        (origin, scale(back, TAIL_M), length(side))
+    }
+
+    #[test]
+    fn a_bolts_tail_grows_from_its_muzzle_to_its_full_length() {
+        let mut bolts = one_bolt();
+        let mut last_reach = 0.0;
+        for tick in 0..6 {
+            if tick > 0 {
+                advance(&mut bolts, DT, tick, &[]);
+            }
+            for fraction in [0.0, 0.5, 1.0] {
+                let (origin, tail, side) = drawn(&bolts, fraction, 1.0);
+                let tip = add(origin, tail);
+                let slack = MIN_TAIL_SHARE as f32 * TAIL_M + 1e-4; // the thin disc a bolt at its muzzle is drawn as
+                assert!(tip.z <= slack, "tick {tick} at {fraction}: the tail reaches {} m behind the muzzle", tip.z);
+                assert!((side - 1.0).abs() < 1e-6, "the head keeps its true size");
+                let reach = length(tail);
+                assert!(reach + 1e-4 >= last_reach, "the tail never shrinks");
+                last_reach = reach;
+            }
+        }
+        assert!((last_reach - TAIL_M).abs() < 1e-3, "full length once it has flown that far: {last_reach} m");
+    }
+
+    #[test]
+    fn an_enlarged_bolts_tail_waits_for_its_enlarged_length() {
+        let mut bolts = one_bolt();
+        advance(&mut bolts, DT, 1, &[]); // 10 m flown
+        let (origin, tail, side) = drawn(&bolts, 1.0, 4.5);
+        assert!((side - 4.5).abs() < 1e-5, "enlarged across the flight");
+        assert!((add(origin, tail).z).abs() < 1e-3, "the tail ends at the muzzle");
+        assert!((length(tail) - 10.0).abs() < 1e-3, "10 of its 90 m");
+    }
+
+    #[test]
+    fn a_look_without_a_tail_is_never_shortened() {
+        let bolts = one_bolt();
+        let mut out = Vec::new();
+        instance_transforms(&bolts, 0, 1.0, 2.0, 0.0, &Basis::IDENTITY, Vector3::ZERO, &mut out);
+        assert_eq!(out[10], 2.0);
+        assert_eq!(tail_share(0.0, 0.0), 1.0);
+        assert_eq!(tail_share(0.0, 5.0), MIN_TAIL_SHARE as f32);
+        assert_eq!(tail_share(7.0, 5.0), 1.0);
+    }
+
+    #[test]
+    fn a_growing_tail_keeps_its_slot_under_the_quarantine() {
+        let mut bolts = one_bolt();
+        let mut last = Vec::new();
+        instance_transforms(&bolts, 0, 1.0, 1.0, 200.0, &Basis::IDENTITY, Vector3::ZERO, &mut last);
+        for tick in 1..5 {
+            advance(&mut bolts, DT, tick, &[]);
+            let mut now = Vec::new();
+            instance_transforms(&bolts, 0, 1.0, 1.0, 200.0, &Basis::IDENTITY, Vector3::ZERO, &mut now);
+            assert_ne!(now[10], last[10], "the tail grew");
+            let mut out = Vec::new();
+            assert_eq!(quarantine(&now, &last, [0.0, 0.0, -1.0], &mut out), 0, "tick {tick}: still the same bolt");
+            last = now;
+        }
+    }
+
+    #[test]
+    fn a_turned_bolt_is_still_a_new_one() {
+        let mut out = Vec::new();
+        let straight = vec![1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0];
+        let turned = vec![0.0, 1.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, -5.0];
+        assert_eq!(quarantine(&turned, &straight, [0.0, 0.0, -1.0], &mut out), 1);
+        assert_eq!(side_axes([0.0, -1.0, 0.0]), [0, 2]);
+        assert_eq!(side_axes([0.0, 0.0, -1.0]), [0, 1]);
     }
 }

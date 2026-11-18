@@ -159,7 +159,8 @@ func test_the_station_rail_lies_outside_every_zone_so_nothing_pulls() -> void:
 	assert_false(world.gravity_active(), "27 500 km is outside Epsilon III's 18 300 km zone (D66)")
 	assert_eq(world.gravity_residual(Vector3(20000.0, 0.0, 0.0)), Vector3.ZERO)
 	var state: PackedFloat64Array = world.anchor_state()
-	assert_almost_eq(Vector3(state[0], state[1], state[2]).length(), 2.75e7, 1.0, "the anchor rides the station's rail")
+	# 4 m: the rail's position rounds as a float32 does at 27 500 km (2 m steps), whichever orbit phase the run reaches.
+	assert_almost_eq(Vector3(state[0], state[1], state[2]).length(), 2.75e7, 4.0, "the anchor rides the station's rail")
 
 
 func test_a_rebase_keeps_the_residual_at_a_universe_point() -> void:

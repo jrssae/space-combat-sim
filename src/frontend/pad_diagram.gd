@@ -11,6 +11,9 @@ const LEGEND_EDGE_RIGHT: float = 676.0
 const FONT_DESIGN: float = 17.0
 const LINE: Color = Color(0.55, 1.0, 0.6)
 const LIT: Color = Color(1.0, 0.85, 0.3)
+## The radial menus (target menu, comms menu) are pointed with the left stick (M7-T37), whatever the profile binds to it.
+const MENU_POINTER_WIDGET: StringName = &"ls"
+const MENU_POINTER_LABEL: String = "Menu pointer"
 
 # The left half of the outline, top centre round to bottom centre (pad units); the right half mirrors it.
 const _BODY_LEFT: PackedVector2Array = [
@@ -47,6 +50,12 @@ var _lit: Array[StringName] = []
 func _ready() -> void:
 	custom_minimum_size = Vector2(240.0, 100.0)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+
+## Asks for the diagram to be at least `width` wide at the layout's own proportions (a compact page); 0 returns to the
+## default minimum, and the box stretches.
+func set_min_width(width: float) -> void:
+	custom_minimum_size = Vector2(width, width * DESIGN.y / DESIGN.x) if width > 0.0 else Vector2(240.0, 100.0)
 
 
 func set_legend(new_legend: PadLegend) -> void:
@@ -191,7 +200,10 @@ func _sorted_side(left: bool) -> Array[StringName]:
 
 
 func _row_text(widget: StringName) -> String:
-	return "%s  %s" % [PadLegend.tag_of(widget), legend.label_for(widget)]
+	var label: String = legend.label_for(widget)
+	if widget == MENU_POINTER_WIDGET:
+		label += " / " + MENU_POINTER_LABEL
+	return "%s  %s" % [PadLegend.tag_of(widget), label]
 
 
 static func _body_points() -> PackedVector2Array:

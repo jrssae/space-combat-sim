@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Compares the anti-aliasing modes in one process (M4-T38): a bench layout fullscreen, vsync off, frozen after a warm-up (or live
 # with pause=off), the modes taking turns for several rounds so the GPU's clock changes cancel. Prints the GPU ms and FPS per mode
-# and saves a screenshot per mode. Runs under the M5, bench and GPU locks.
+# and saves a screenshot per mode. Runs under the Godot (read), GPU and bench locks.
 #
 # Usage: scripts/aa_compare.sh <label> [option=value ...]   e.g. scripts/aa_compare.sh battle300_1080 layout=battle n=300 scale3d=1080p
 # Options (scripts/aa_compare_node.gd): layout n seed warmup pause modes rounds frames settle scale3d camera exec.
@@ -16,6 +16,6 @@ shift
 OUT="reports/perf/aa_compare"
 mkdir -p "${OUT}"
 touch reports/.gdignore
-flock "${GODOT_LOCK}" flock "${BENCH_LOCK}" flock "${GPU_LOCK}" timeout 900 "${GODOT}" --path . --fullscreen --disable-vsync \
+"${GODOT_LOCK_SH}" read --gpu --bench -- timeout 900 "${GODOT}" --path . --fullscreen --disable-vsync \
     -s res://scripts/aa_compare.gd -- "$@" shots="${OUT}/${LABEL}" > "${OUT}/${LABEL}.log" 2>&1
 grep -E '^\[aa_compare\]|SCRIPT ERROR' "${OUT}/${LABEL}.log"

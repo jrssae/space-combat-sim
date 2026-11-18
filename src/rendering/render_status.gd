@@ -40,7 +40,7 @@ func _ready() -> void:
 				"doc": "Triangles drawn in the last frame"},
 		&"vram_mb": {"get": func() -> float: return Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1e6,
 				"unit": "MB", "doc": "Video memory the renderer holds, MB"},
-		&"far_dots": {"get": LodSwitcher.far_dot_count, "doc": "Ships in play drawn as far dots, past settings.far_ship_dot_m (M4-T11)"},
+		&"far_dots": {"get": LodSwitcher.far_dot_count, "doc": "Ships in play drawn as far dots, under settings.far_ship_dot_px on screen (M4-T11, M7-T26)"},
 		&"gpu": {"get": _gpu_name, "doc": "Video adapter name"},
 		&"gpu_ms": {"get": _gpu_ms, "doc": "Last frame's GPU time, ms (0 on the first read: measuring starts then)"},
 		&"display": {"get": display_server, "doc": "Display server: wayland, x11 or headless (M4-T41)"},

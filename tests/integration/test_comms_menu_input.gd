@@ -1,6 +1,6 @@
 extends TestSteps
 ## AC28 on the real main scene (architecture §18.22, M5-T46): D-pad Right opens the comms menu on the radial framework and
-## pauses the game; the right stick points, A sends the order through `WingDirector` once the game runs again, B backs out,
+## pauses the game; the left stick points (M7-T37), A sends the order through `WingDirector` once the game runs again, B backs out,
 ## D-pad Right closes it; while it is open the D-pad's flight actions and the target button do nothing, and nothing that was
 ## held fires on the tick it closes.
 

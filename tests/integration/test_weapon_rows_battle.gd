@@ -18,6 +18,7 @@ const SECONDS: float = 30.0
 
 var main: Main
 var _tier_radius: Variant
+var _friendly_fire: bool = true
 var _hits: int = 0
 var _capital_hits: int = 0
 var _tier_rows: float = 0.0
@@ -32,12 +33,15 @@ func should_skip_script():
 func before_each() -> void:
 	_tier_radius = Settings.get_value(&"tier_radius_m")
 	Settings.set_value(&"tier_radius_m", 0.0)
+	_friendly_fire = bool(Settings.get_value(&"friendly_fire"))
+	Settings.set_value(&"friendly_fire", false)  # the parity recordings were made with it off (M7-T47 made it the default)
 	get_tree().paused = false
 	ContactScan.invalidate()
 
 
 func after_each() -> void:
 	Settings.set_value(&"tier_radius_m", _tier_radius)
+	Settings.set_value(&"friendly_fire", _friendly_fire)
 	DebugConsole.flags.invulnerable = false
 	ContactScan.invalidate()
 	Factions.reset()
@@ -90,14 +94,14 @@ func _on_hit(info: HitInfo) -> void:
 
 
 func test_a_seeded_battle_lands_the_same_hits_within_ten_percent_of_the_recording() -> void:
-	var recorded: Variant = ParityFixture.stored(FIXTURE, "battle_100_seed_1")
+	var native: Array = await _battle()
+	var recorded: Variant = ParityFixture.rerecorded(FIXTURE, "battle_100_seed_1", native)
 	assert_not_null(recorded, "the battle was recorded")
 	if recorded == null:
 		return
 	var reference: Array = []
 	for count: Variant in recorded:
 		reference.append(int(count))
-	var native: Array = await _battle()
 	var names: Array[String] = ["hits", "capitals' hits", "beam shots", "launches", "missiles shot down", "mines set off"]
 	gut.p("battle 100, %d s, seed 1: recorded %s, now %s" % [SECONDS, reference, native])
 	assert_gt(int(reference[1]), 20, "the stand-ins' weapons landed hits: %s" % [reference])

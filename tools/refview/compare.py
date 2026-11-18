@@ -25,7 +25,8 @@ How the two sides are put on one grid
   search, not from the boxes).
 * The asset's mesh is stored as the generators write it, in the Godot frame centred on its visible surface's centroid:
   ``manifest.centroid_offset`` is the authored position of that origin, which the tool adds back. A ``.glb`` or an
-  ``.obj`` reads the same way (the fallback OBJ holds the same triangles).
+  ``.obj`` reads the same way (the fallback OBJ holds the same triangles). An asset built in pieces (the station's frame
+  and turning drum, M7-T04) is scored as all its pieces together, each moved to its ``pivot``.
 * The pixel is ``PIXEL_FRACTION`` of the length (never above 0.5 %). The asset may then move by a whole number of pixels
   in x, y and z, up to 2 % of the length each, to the place where the three views overlap best; the shift is reported and
   the scores are those at that place (``iou_unshifted`` in the JSON is the score without it).
@@ -191,10 +192,32 @@ def asset_mesh_name(manifest: dict) -> str:
     return files.get("obj") or files.get("fallback_mesh") or f"{manifest['asset_id']}.obj"
 
 
+def asset_pieces(manifest: dict) -> list[tuple[str, np.ndarray]]:
+    """A multi-piece asset's meshes (M7-T04: the station's frame and drum): each entry of the manifest's ``pieces`` that names a
+    textured mesh, with where its frame sits in the asset's (its ``pivot``, else the origin), in name order. Empty for a one-mesh
+    asset."""
+    pieces = manifest.get("pieces")
+    if not isinstance(pieces, dict):
+        return []
+    out = []
+    for name in sorted(pieces):
+        entry = pieces[name]
+        section = entry.get("mesh") if isinstance(entry, dict) else None
+        if isinstance(section, dict) and isinstance(section.get("file"), str):
+            out.append((section["file"], np.asarray(entry.get("pivot", (0.0, 0.0, 0.0)), dtype=np.float64).reshape(3)))
+    return out
+
+
 def load_asset_mesh(folder: Path) -> np.ndarray:
-    """The mesh of the asset in ``folder`` (:func:`asset_mesh_name`), in the authored frame."""
-    manifest = read_asset_manifest(Path(folder))
-    return mesh_from_file(Path(folder) / asset_mesh_name(manifest), _centroid_offset(manifest))
+    """The mesh of the asset in ``folder``, in the authored frame: every piece at its pivot for a multi-piece asset (at rest, so a
+    turning piece is scored as built), else :func:`asset_mesh_name`."""
+    folder = Path(folder)
+    manifest = read_asset_manifest(folder)
+    offset = _centroid_offset(manifest)
+    pieces = asset_pieces(manifest)
+    if pieces:
+        return np.concatenate([mesh_from_file(folder / file, offset + pivot) for file, pivot in pieces])
+    return mesh_from_file(folder / asset_mesh_name(manifest), offset)
 
 
 def rotation_to_up(up: np.ndarray) -> np.ndarray:
@@ -596,8 +619,9 @@ def main(argv: list[str] | None = None) -> int:
         tris = tris + model_offset
         folder = resolve_asset(args.asset)
         manifest = read_asset_manifest(folder)
-        mesh_name = asset_mesh_name(manifest)
-        mesh = mesh_from_file(folder / mesh_name, _centroid_offset(manifest))
+        pieces = asset_pieces(manifest)
+        mesh_name = " + ".join(file for file, _ in pieces) if pieces else asset_mesh_name(manifest)
+        mesh = load_asset_mesh(folder)
 
         mounts = pod_mounts(args, folder)
         if mounts:

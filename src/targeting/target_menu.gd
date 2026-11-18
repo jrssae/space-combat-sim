@@ -124,7 +124,9 @@ func _open_category(c: TargetCategories.Category) -> void:
 
 func _contact_entry(info: TargetInfo, c: TargetCategories.Category, color: Color) -> Dictionary:
 	var label: String = UNKNOWN_LABEL if c == TargetCategories.Category.UNKNOWN else info.display_name.to_upper()
-	var action: StringName = ACTION_WAYPOINT if c == TargetCategories.Category.NAVIGATION else ACTION_TARGET
+	# A nav buoy is a waypoint; a navigation target that offers an interaction (a bay, the gate) is targeted, so X can act on it.
+	var waypoint: bool = c == TargetCategories.Category.NAVIGATION and info.interaction_kind == &""
+	var action: StringName = ACTION_WAYPOINT if waypoint else ACTION_TARGET
 	return {"label": label, "sub": range_text(TargetingSystem.range_between(_own_position, info.position)), "color": color,
 			"source": info, "payload": {"action": action, "id": info.id, "label": label, "point": null}}
 

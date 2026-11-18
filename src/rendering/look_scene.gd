@@ -9,7 +9,7 @@ extends Node
 ##
 ## M4-T30d: the sheet also parks the hulls that are not pooled ships (`PROP_ASSETS`): a nav buoy, a ship's break-up chunks spread
 ## apart (`raider_fighter_chunks`, `starfury_aurora_chunks`), a capital stand-in of each class (`capital_cruiser`, `capital_destroyer`,
-## `capital_carrier`) and the station stand-in (`b5_station`).
+## `capital_carrier`) and the Babylon 5 station (`babylon5_station`, M7-T04).
 
 const LIGHTS: Array[StringName] = [&"lit", &"dark", &"off"]
 ## How the parked ship faces the camera: three-quarters on (the sheets' rows), its back (the dorsal number), or its left side.
@@ -21,7 +21,7 @@ const POOL_TYPES: Dictionary = {"starfury_aurora": ShipPool.ALLY_TYPE, "raider_f
 		"centauri_brezebel": &"centauri_brezebel", "brakiri_bokmai": &"brakiri_bokmai"}  # the civilians (M5-T16)
 ## The hulls that are not pooled ships, for the sheets (M4-T30d).
 const PROP_ASSETS: Array[String] = ["nav_buoy", "raider_fighter_chunks", "starfury_aurora_chunks", "capital_cruiser", "capital_destroyer",
-		"capital_carrier", "b5_station"]
+		"capital_carrier", "babylon5_station"]
 ## How far apart a ship's chunks are spread for their sheet, as a share of their distance from the ship's centre.
 const CHUNK_SPREAD: float = 0.8
 ## How the parked ship faces the camera: turned this much off nose-on, seen a little from above.
@@ -50,7 +50,7 @@ var _player_was_visible: bool = true
 func _ready() -> void:
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"sheet",
 			"Park one idle ship of an asset ahead of the camera for a look sheet, lit from behind the camera or from behind the ship; `sheet off` clears it",
-			[ConsoleArg.string_required(&"asset_id"), ConsoleArg.float_optional(&"distance_m", 30.0, 0.0, 20000.0),
+			[ConsoleArg.string_required(&"asset_id"), ConsoleArg.float_optional(&"distance_m", 30.0, 0.0, 50000.0),
 			ConsoleArg.enum_optional(&"light", LIGHTS, &"lit"), ConsoleArg.string_optional(&"livery", "-"), ConsoleArg.enum_optional(&"view", VIEWS, &"three_quarter")]), _cmd_sheet, self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"livery",
 			"Paint a ship in a wing's livery with a number (plain for none), for looking at it: the player's ship, `sheet` for the parked one, or a ship by name",
@@ -197,7 +197,7 @@ func _show_prop(asset_id: String, camera: Camera3D, distance_m: float, light: St
 		var station := StationStandin.new()
 		if not station.build():
 			station.free()
-			return "the b5_station asset is not generated (run scripts/gen_assets.sh, then import)"
+			return "the babylon5_station asset is not generated (run scripts/gen_assets.sh, then import)"
 		_prop = station
 	_prop.name = "Sheet" + asset_id.to_pascal_case()
 	world.add_child(_prop)

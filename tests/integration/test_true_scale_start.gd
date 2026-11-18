@@ -45,8 +45,8 @@ func test_free_flight_starts_beside_the_station_lit_with_the_planet_ahead() -> v
 	assert_lt(SimClock.now(), 1.0, "the sim clock still starts at 0")
 	assert_almost_eq(main.world.system_time(), expected + SimClock.now(), 1.0e-6)
 	assert_eq(main.world.anchor_text(), "rail babylon5")
-	var station: StationStandin = main.far_props.station
-	assert_not_null(station, "the station's stand-in is placed for good")
+	var station: Station = main.far_props.station
+	assert_not_null(station, "the station is placed for good")
 	assert_not_null(FarProp.of(station), "dressed for the far field")
 	var u: UniversePos = main.world.to_universe(station.global_position)
 	var at := Vector3(u.x, u.y, u.z)

@@ -110,6 +110,24 @@ func test_acquire_takes_a_ship_of_the_asked_type_and_names_it_per_acquire() -> v
 	assert_eq(again.display_name, "ALPHA 3", "named afresh each time")
 
 
+func test_acquire_gives_each_type_its_own_transponder_back() -> void:
+	var saturn: StringName = &"saturn_4_transport"
+	assert_eq(pool.prepare(saturn, 1), 1)
+	var civilian: Combatant = pool.acquire("SATURN", UniversePos.new(0.0, 0.0, 300.0), Basis.IDENTITY, Vector3.ZERO, null, saturn)
+	assert_eq(civilian.targetable.broadcast_range_m, ShipPool.CIVILIAN_BROADCAST_RANGE_M)
+	civilian.targetable.broadcast_range_m = 0.0  # what a station traffic cycle does as it lets a ship go
+	pool.release(civilian)
+	var again: Combatant = pool.acquire("SATURN", UniversePos.new(0.0, 0.0, 300.0), Basis.IDENTITY, Vector3.ZERO, null, saturn)
+	assert_eq(again, civilian, "the one hull comes back")
+	assert_eq(again.targetable.broadcast_range_m, ShipPool.CIVILIAN_BROADCAST_RANGE_M, "a silenced civilian is heard again")
+	var ally: Combatant = _ally_at(300.0)
+	ally.targetable.broadcast_range_m = 0.0
+	pool.release(ally)
+	assert_eq(_ally_at(300.0).targetable.broadcast_range_m, ShipPool.ALLY_BROADCAST_RANGE_M)
+	var raider: Combatant = pool.acquire("RAIDER 1", UniversePos.new(0.0, 0.0, 300.0), Basis.IDENTITY, Vector3.ZERO, null, RAIDER)
+	assert_eq(raider.targetable.broadcast_range_m, 0.0, "raiders stay silent")
+
+
 func test_alive_is_per_type() -> void:
 	var a: Combatant = _ally_at(-200.0)
 	var b: Combatant = _ally_at(-300.0, "ALPHA 3")

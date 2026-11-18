@@ -1,10 +1,14 @@
 extends TestSteps
 ## AC20 in Jolt (M3-T13, Q12): on the same seeded runs an `ace` raider lands more hits on a straight-flying drone than a
 ## `rookie`; a `cautious` Starfury retreats at a higher hull than an `aggressive` one; a `rookie` reacts to a hit within 0.6 s
-## (AC9), later than a regular; a `civilian` never fires, flees a hostile within 3 km and evades when hit; spawns take `skill=`
-## and `aggression=` and `ai <name> skill|aggression` changes them live. The real main scene, Jolt and the real drivers.
+## (AC9), later than a regular; a `civilian` never fires, flees a hostile within 3 km and never jinks when hit (M7-T55);
+## spawns take `skill=` and `aggression=` and `ai <name> skill|aggression` changes them live. The real main scene, Jolt and
+## the real drivers.
 
 const SPEED_UP: float = 4.0
+## The hit-count lanes: this far to port of the player and this far above and below it, m.
+const LANE_X_M: float = -2000.0
+const LANE_UP_M: float = 4500.0
 
 var main: Main
 var _scale_backup: float = 1.0
@@ -51,13 +55,15 @@ func _ticks_for(seconds: float) -> void:
 
 
 func test_an_ace_lands_more_hits_on_a_drone_than_a_rookie() -> void:
-	# Two runs at once, 10 km apart, mirrored: a raider 1.5 km behind a Starfury drone flying straight at 60 m/s.
+	# Two runs at once, 9 km apart, mirrored: a raider 1.5 km behind a Starfury drone flying straight at 60 m/s. The lanes are
+	# above and below the player and off to port, clear of Babylon 5 in the default scene (M7-T06): a raider firing on a friend
+	# within its guns' range sets the defense grid on the raider (D75), and the ace's run is then no longer the pilot's alone.
 	var hits: Dictionary = {}
 	var resolver := main.get_node(^"Combat/HitResolver") as HitResolver
 	var drones: Dictionary = {}
 	for skill: String in ["ace", "rookie"]:
-		var side: float = 5000.0 if skill == "ace" else -5000.0
-		var drone: Combatant = main.ships.acquire("DRONE %s" % skill.to_upper(), _at(Vector3(side, 0.0, -3000.0)), Basis.IDENTITY,
+		var side: float = LANE_UP_M if skill == "ace" else -LANE_UP_M
+		var drone: Combatant = main.ships.acquire("DRONE %s" % skill.to_upper(), _at(Vector3(LANE_X_M, side, -3000.0)), Basis.IDENTITY,
 				Vector3(0.0, 0.0, -60.0), IdleBrain.new(false), ShipPool.ALLY_TYPE)
 		drone.damageable.hull = HullHealth.new(1.0e6)
 		drones[drone.ship.get_instance_id()] = skill
@@ -65,7 +71,7 @@ func test_an_ace_lands_more_hits_on_a_drone_than_a_rookie() -> void:
 		# The same seed for both: only the skill differs.
 		var made: Dictionary = BrainFactory.from_behaviour({"type": "ai", "profile": "raider", "skill": skill, "aggression": "balanced"},
 				_at(Vector3.ZERO), 4242)
-		main.ships.acquire("RAIDER %s" % skill.to_upper(), _at(Vector3(side, 0.0, -1500.0)), Basis.IDENTITY, Vector3(0.0, 0.0, -60.0),
+		main.ships.acquire("RAIDER %s" % skill.to_upper(), _at(Vector3(LANE_X_M, side, -1500.0)), Basis.IDENTITY, Vector3(0.0, 0.0, -60.0),
 				made["brain"] as PilotBrain, ShipPool.DEFAULT_TYPE)
 	resolver.hit_resolved.connect(func(info: HitInfo) -> void:
 		if drones.has(info.target_id):
@@ -76,6 +82,10 @@ func test_an_ace_lands_more_hits_on_a_drone_than_a_rookie() -> void:
 	gut.p("skill: ace %d hits, rookie %d hits on a drone in 90 s" % [hits["ace"], hits["rookie"]])
 	assert_gt(int(hits["ace"]), int(hits["rookie"]), "the ace lands more")
 	assert_gt(int(hits["ace"]), 0)
+	# The comparison holds only while nobody else shoots: the station's grid must have stayed out of both runs.
+	var grid: Dictionary = DebugConsole.registry.read("grid.free")
+	if bool(grid.get("ok", false)):
+		assert_eq(String(grid["value"]), "holding", "the runs are out of the defense grid's reach")
 
 
 func test_a_cautious_ship_retreats_at_a_higher_hull_than_an_aggressive_one() -> void:
@@ -130,7 +140,7 @@ func test_a_rookie_reacts_to_a_hit_within_0_6_s() -> void:
 	assert_gt(reaction, 0.5, "slower than a regular's 0.25 s")
 
 
-func test_a_civilian_never_fires_flees_and_evades_when_hit() -> void:
+func test_a_civilian_never_fires_flees_and_never_jinks_when_hit() -> void:
 	var civ: Combatant = _ai("TRADER 1", ShipPool.ALLY_TYPE, _at(Vector3(0.0, 0.0, -1000.0)), {"profile": "civilian"})
 	var raider: Combatant = main.ships.acquire("RAIDER 8", _at(Vector3(0.0, 0.0, -3500.0)), Basis.IDENTITY, Vector3.ZERO,
 			IdleBrain.new(true), ShipPool.DEFAULT_TYPE)
@@ -146,10 +156,13 @@ func test_a_civilian_never_fires_flees_and_evades_when_hit() -> void:
 	civ.damageable.apply_hit(HitInfo.new(civ.ship.get_instance_id(), raider.ship.get_instance_id(), Factions.RAIDERS, 1.0,
 			civ.ship.global_position, Vector3.UP, 300.0, HitInfo.CAUSE_BOLT))
 	var hit_s: float = SimClock.now()
-	while pilot.current.id != &"evade" and SimClock.now() - hit_s < 2.0:
+	var jinked: bool = false
+	while SimClock.now() - hit_s < 2.0:
+		jinked = jinked or pilot.current.id == &"evade"
 		await get_tree().physics_frame
 	Engine.time_scale = 1.0
-	assert_eq(pilot.current.id, &"evade", "it evades when hit")
+	# A fighter's jink held a slow freighter where it was shot (M7-T55); a civilian hull runs instead (test_civilian_flight).
+	assert_false(jinked, "a hit never throws it into a jink")
 	assert_eq(shots[0], 0, "it never fires")
 
 

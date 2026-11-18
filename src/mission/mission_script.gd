@@ -35,7 +35,13 @@ func steps() -> Array[StringName]:
 	return []
 
 
-## "" when every step has its method, else which one is missing.
+## The first step after the opening sequence (the intro shots and the briefing, with the controls held), or &"" for none. While
+## the opening runs with the controls held, holding X skips to it (M7-T54).
+func opening_until() -> StringName:
+	return &""
+
+
+## "" when every step has its method (and the opening ends on a listed step), else what is wrong.
 func check_steps() -> String:
 	var seen: Dictionary = {}
 	for step: StringName in steps():
@@ -44,4 +50,6 @@ func check_steps() -> String:
 		seen[step] = true
 		if not has_method(STEP_PREFIX + String(step)):
 			return "no method %s%s for step %s" % [STEP_PREFIX, step, step]
+	if opening_until() != &"" and not seen.has(opening_until()):
+		return "the opening ends at %s, which is not a step" % opening_until()
 	return ""

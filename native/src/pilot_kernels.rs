@@ -150,6 +150,49 @@ impl ScsPilotKernels {
         )
     }
 
+    /// `avoid` with the rows `friends` kept off as well (M7-T76, a wingman forming up: `pilot::avoid_keeping_off`).
+    #[func]
+    #[allow(clippy::too_many_arguments)]
+    fn avoid_keeping_off(
+        &self,
+        contacts: PackedInt32Array,
+        statics: PackedInt32Array,
+        exempt_id: i64,
+        friends: PackedInt32Array,
+        position: Vector3,
+        velocity: Vector3,
+        radius: f64,
+        v_des: Vector3,
+        a_retro: f64,
+        rate_max: Vector3,
+        a_rcs: Vector2,
+        tie_hash: i64,
+    ) -> Vector4 {
+        let ship = Ship {
+            position,
+            velocity,
+            radius,
+            a_retro,
+            rate_max_x: f64::from(rate_max.x),
+            rate_max_y: f64::from(rate_max.y),
+            a_rcs_x: f64::from(a_rcs.x),
+            a_rcs_y: f64::from(a_rcs.y),
+            tie_hash,
+        };
+        let guard = self.core.as_ref().map(|c| c.bind());
+        let rows = rows_of(&guard, &self.own);
+        let out = pilot::avoid_keeping_off(
+            rows,
+            &ship,
+            contacts.as_slice(),
+            statics.as_slice(),
+            exempt_id,
+            friends.as_slice(),
+            v_des,
+        );
+        Vector4::new(out.v_des.x, out.v_des.y, out.v_des.z, if out.urgent { 1.0 } else { 0.0 })
+    }
+
     /// `FireLane.clear` for one shot over the rows `contacts`; `relations` holds the shooter's `Factions.Relation` to each
     /// faction of the table, in its order.
     #[func]

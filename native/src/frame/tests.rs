@@ -257,6 +257,22 @@ fn a_boosted_frame_with_no_pull_drifts_in_a_straight_line_and_keeps_its_motion_t
     assert_eq!(frame.origin(), origin, "riding again: the origin stays");
 }
 
+#[test]
+fn a_new_anchor_takes_the_frame_with_the_velocity_it_is_given() {
+    let mut frame = low_orbit_frame();
+    frame.sample(0.0);
+    frame.boost([0.0, -5_694.9, 0.0]);
+    frame.set_origin_velocity([0.0; 3]);
+    assert!(frame.riding(), "zero rides the new anchor");
+    let origin = frame.origin();
+    frame.sample(DT);
+    frame.step(DT);
+    assert_eq!(frame.origin(), origin, "and the origin stays on it");
+    frame.set_origin_velocity([3.0, 0.0, 0.0]);
+    assert!(!frame.riding(), "any other velocity is off it");
+    assert_eq!(frame.origin_velocity(), [3.0, 0.0, 0.0]);
+}
+
 // --- many movers at once (M6-T07): the tier's rows and the bolts --------------------------------------------------------
 
 #[test]
