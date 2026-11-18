@@ -59,6 +59,7 @@ been planned were taken for done.
 ## Rules of the road
 
 - Do not create your own branches unless explicitely instructed. branches are expected to tie directly to a milestone, with all tasks kept in that milestone branch.
+- Never use an agent on Max effort level. 
 - Do not commit `assets/generated/`, `.tools/`, `.godot/`, `references/` or `reports/` (already in `.gitignore`).
 - Do not edit `README.md`, `LICENSE`, `DISCLAIMER.md` (owned by the maintainer) or files under `addons/gut/` and `addons/lens_effects/`
   (vendored upstream code; see `docs/third-party.md`).
