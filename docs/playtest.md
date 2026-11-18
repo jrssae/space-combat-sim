@@ -1012,3 +1012,125 @@ want a window you can see.
       points and fighters ride their side's capital points or come through the battle's own gate. Nothing to do by hand.
 
 **Not for you yet:** Babylon 5 itself (M7), time warp (M9), other planets to fly to (M9).
+
+# Play-testing M7 (Babylon 5 Station)
+
+How to get to each new thing comes first; everything for you to judge is in the list at the end, "M7 acceptance checklist". The
+design is `docs/architecture.md` §20. Screenshots the agents took are under `references/screenshots/` in folders named for each
+task (`M7-T04 station/`, `M7-T08 launch/`, `M7-T09 interior/`, `T24 station surfaces/`, `M7-T25 docking bay/`, `M7-T76 avoidance/`, ...).
+
+## Start
+
+```
+.tools/godot/godot --path .                                   # the start screen over the Cobra-bay hangar
+.tools/godot/godot --path . -- --scenario=station_launch       # launch from Alpha 3 with three wingmen
+.tools/godot/godot --path . -- --scenario=station_showcase     # the same launch, then free flight with bots and a freighter
+```
+
+Free flight starts about 8 km from Babylon 5, the gate 50 km off; with encounters on (the menu's choice, or `encounters on`)
+the station's traffic runs too.
+
+## What is new to fly
+
+- **The station.** An 8 km generated station: a fixed frame, a turning drum (touching it is fatal), four Cobra arms. It is a
+  target, broadcasts to 1 000 km and takes damage by section; it is never destroyed.
+- **The launch.** The clamp turns your fighter nose out, the doors ripple open along the arm, you drop out nose first; the camera
+  cuts between shots. A or Start skips to the hand-off.
+- **The grid.** Light turrets, heavy cannons in the bow and interceptor batteries. It fires only once someone hostile has fired
+  on the station or its friends.
+- **Traffic.** Civilians run between the gate and the docking bay, Saturns hold at the cargo bay while cargo pods carry their
+  cargo, maintenance bots patrol and repair.
+- **Navigation targets.** The bays and the gate sit in the target menu's NAVIGATION ring; within 2 km hold X (Shift, Mouse 4).
+
+## Console for M7 (all in `info.md`)
+
+```
+goto                       list the nav points; goto babylon 5 / goto babylon 5 docking bay / goto jumpgate / goto epsilon iii
+station goto <tour point>  stand at a tour point; station info; station spin off|on; station section <name> damage 2000; station heal
+launch alpha 3             launch the player from a bay; launch wing <wing|all>; launch skip; launch cut
+grid info                  the grid's mounts, shots and pulses; grid free raiders; grid hold; grid repair all
+traffic status             the station's traffic; traffic dock [near]; traffic undock; traffic freighter <type> show; traffic raid 12
+tour                       the exterior tour (eight stops); tour heavy_cannons plays one
+bots info / pods info      the maintenance crew and the cargo pods
+frame orbit 400 dusk       a 400 km orbit on the terminator; frame drop 500; frame rail babylon5
+far view station 1000      the station from 1 000 km; far off
+station_lights off|on      the station's exterior lights, for A/B looks
+```
+
+## M7 acceptance checklist (AC12, the (H) criteria)
+
+**Play-tested by the maintainer 2026-11-16 and 2026-11-17: every item passed except the two M7-T76 checks at the end.** Not yet
+accepted: the T76 checks, the full `scripts/run_tests.sh` and the maintainer's confirmation of M7 remain.
+
+Everything automated is recorded in the acceptance table of `docs/milestones/m7-babylon-5-station.md`. GPU numbers are the agents'
+(RX 6950 XT).
+
+**The station's look, from the bays to 1 000 km**
+
+- [x] **From a bay** (`play station_launch`, then look round after the hand-off): the Cobra arm, its six doors and the drum read
+      from close up; plating, seams and colours as the show has them; no visible tiling or blotches (T04, T05, T21, T24).
+- [x] **Both texture sets** (`set settings.texture_detail low`, then `high`): low keeps the major seams, high the plating; both sharp.
+- [x] **The main docking bay** (`goto babylon 5 docking bay`): the stepped cross mouth, the red-lit tunnel, the inner doors (T25).
+- [x] **The cargo bay** (`station goto cargo_bay`): grey metal lit red, roofed (T21, T32).
+- [x] **The spine, command section and bow** (`tour`, or `goto babylon 5`): shaped as the STL (T22); the heavy cannons in their
+      recesses beside the rook tower (T43).
+- [x] **Lights** (night side and close up): beacons blink, navigation lights, bay lamps, flood pools on the hull (T18); they fade
+      with distance and none shows from 100 km on (`far view station 100`, `1000`, `10000`; T69).
+- [x] **From 10 km and 1 000 km** (`far view station 10`, `far view station 1000`): it reads as the station, then as a point; one
+      sun at every distance (T72).
+- [x] **Ships at range** keep a low-polygon model, not a grey sphere, until a few pixels across (T26).
+
+**The drum's turn**
+
+- [x] The drum turns smoothly against the still frame (about 62 m/s at its skin); `station spin off` holds it, `on` restarts it.
+- [x] Scraping the turning drum kills a Starfury (Q9); the frame is a plain ram.
+
+**The launch and its camera**
+
+- [x] **Launch** (`play station_launch`): the clamp turns the fighter nose out while the doors open, the ripple along the arm, the
+      drop nose first, no fighter let go under the spine; the thrusters cold until the drop (T08).
+- [x] **The camera**: each shot holds at least 1 s, a wave's row shot shows three fighters leave; cuts differ from launch to launch.
+- [x] **Skip** (A or Start): lands in the same state as a played launch.
+- [x] **Wing launches** (`launch wing all`): every arm launches its twelve; a launched Alpha joins your wing and takes FORM ON ME
+      (key 1), the comms menu and `wing order` (T58); its V balanced, an odd ship centred behind (T74).
+
+**The grid's fire and the interceptors**
+
+- [x] **A raid** (`traffic raid 12`): the grid opens up only after the raiders fire; the light turrets hit fighters with orange
+      bolts, the heavy cannons fire three-shot green bursts that leave the barrel and strike (T43, T51).
+- [x] **Interceptors**: four barrels in turn, blue-white pulses that fly out and can miss, a small flash and sparks where one meets
+      a missile or bolt (T41, T42).
+- [x] **Knocked-out mounts** go dark and stop firing; the repair bots bring them back (`grid info`, `bots info`; T35).
+- [x] **Wingmen and allies near the station** never fly into it when they could avoid it (T38).
+
+**The interior behind the menu**
+
+- [x] The start screen over Alpha's Cobra-bay hall: six fighters racked over the doors, the second row behind, the slow camera; the
+      menus work with the pad alone (T09, T20).
+
+**The traffic and the bots**
+
+- [x] **Docking** (`traffic dock`, `traffic dock near`): a civilian flies the lane, matches the drum's roll, the inner doors open,
+      it goes into the void and they shut; `traffic dock` says it waits for the gate, then counts the ship (T25, T70).
+- [x] **Undocking** (`traffic undock`, several times): every tunnel hull, the Narn transport too, comes out lying square, no ram (T61).
+- [x] **Inside the station**: a ship in the void is off the radar and not targetable, and comes back once out (T62).
+- [x] **Freighters** (`traffic freighter saturn_3_freighter show`): the Saturn backs in, the cargo pods carry its cargo into the
+      cargo bay one by one, and away (T30, T34).
+- [x] **The run** (free flight, encounters on): civilians between the gate and the station, arrivals and departures on their own
+      sides; an event every 1 to 3 minutes (T56); attacked civilians flee to Babylon 5 (T55).
+- [x] **Maintenance bots** (`bots info`): three to six patrol the spine, vanes, drum and gate; in a raid they go home, then one per
+      damaged area comes out to repair (T35, T36).
+
+**The tour and the console moves**
+
+- [x] **The tour** (`tour`): eight stops with captions; "Defense"; the grid stops show the turrets, batteries and cannons from the
+      front, lit (T57).
+- [x] **Moves** (`goto`, `station goto main_docking_bay` during a launch, `frame orbit 400 dusk`, `frame drop 500` then `station
+      goto main_docking_bay`): placed clear and at rest, no ram; the orbit on the asked side, never inside the atmosphere; after a
+      drop the station's rail and REF BABYLON 5 come back and the planet is drawn (T63, T66 to T68, T71).
+
+**Wingmen forming up (M7-T76, open)**
+
+- [ ] **The turnaround:** `play station_launch`, `launch wing alpha`, FORM ON ME (key 1), fly past 200 m/s, turn sharply and burn
+      back: the wing comes round over and under you and re-forms without ramming you or each other.
+- [ ] **The station:** `god on`, fly into Babylon 5's drum with the wing following: no wingman rams the station or another wingman.

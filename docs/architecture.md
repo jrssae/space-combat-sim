@@ -2088,7 +2088,8 @@ scripts/bench_quick.sh      the quick check: ramps furball and spread until 30 F
   Windows are counted in ticks; real time kept is the recorded ticks' sim time against the wall time they took. The command
   holds the console queue until it ends (`DebugConsole.release_wait`); a run under a tenth of real time is cut short. Afterwards
   everything it changed is put back, and its ships stay in play. So do its capitals, rocks and mines (M7-T50: the battle
-  flies on, the bench-only sides joining the game's factions as the fighters do); the next run takes them away. A run that
+  flies on, the bench-only sides joining the game's factions as the fighters do), all of them mortal from then on (M7-T59:
+  `StandinDirector.keep_after_run` and `_put_back` clear `invulnerable`); the next run takes them away. A run that
   dies without a report leaves a failing placeholder, so the sweep counts it as a failed run (one surviving pass cannot pass
   a count) and still sees the count.
 - **Tests** never assert milliseconds: `test_perf_stats`, `test_bench_layout` and `test_bench_report` are pure; `test_bench`
@@ -5160,6 +5161,18 @@ drift (`_scs_drift_owed`), and leaving the home rail notes every anchor-tied nod
 they go back exactly. Babylon 5 is then 27 000 km from a player 400 km over Epsilon III, as in real space; D66 still holds there:
 the station's region feels no pull while the station follows its Kepler rail, a 0.22 m/s^2 mismatch nobody is near to see.
 
+**Where round the body, and the atmosphere floor (M7-T68).** `orbit_focus` and `drop_toward` take `around_deg`, counted round the
+orbit plane (XZ, the way the orbit travels, about +Y) from the sub-solar point, with the star where the scaled layer draws it
+(`sunward_deg`, `scaled epoch` included): `day` 0 (the default), `dusk` 90, `night` 180, `dawn` 270, or any angle; round the star
+an angle from +X. An altitude at or below the body's atmosphere top (Epsilon III's 100 km, the impact rule's line) is refused with
+the floor named (`test_frame_position`).
+
+**Every move goes home first (M7-T71).** `WorldFrame.return_home()` puts the frame back on the home rail when the console moved it
+(`rail_focus`); every command that moves the player into the scenario's region calls it first (§20.11), so the pull, REF, the
+readings and the assist follow the new place. The scaled layer reads the bodies straight from the ephemeris whenever the frame
+rides a rail, a place's or a body's (`on_rail()`), so the planet is drawn at its true distance after `frame drop`
+(`test_frame_return`).
+
 **One sample, the step last.** The tick's slots, around the order of §15.3:
 
 | Priority | Who | What |
@@ -5261,7 +5274,8 @@ anchor is the reference, it is zero and every result is bit-identical to before 
   with a warning); `FarPropHost.place_station` builds and dresses the stand-in; the gate stands on its rail 50 km ahead on the
   station's orbit, facing the station (`JumpgateHost.place`). Encounters take planned velocities against the player's reference.
 - Console: `system` gains `epoch_h`, `time_h` and `anchor`; `scaled epoch <hours>` offsets the World's system time for captures;
-  `frame [status|orbit <km> [body]|drop <km> [body]|rail <place>|off]` (orbit, drop and rail carry the player; M7-T14, T66).
+  `frame [status|orbit <km> [body] [position]|drop <km> [body] [position]|rail <place>|off]` (orbit, drop and rail carry the
+  player; M7-T14, T66; the position and the atmosphere floor M7-T68).
 
 ### 19.7 The rebase's cost (L4, AC2; T06, T21)
 
@@ -5565,8 +5579,12 @@ velocity rebase is `World.auto_boost_speed_mps`, an export of `main.tscn`, not a
 
 ## 20. The Babylon 5 station (M7)
 
-What M7 adds (tasks in `docs/milestones/m7-babylon-5-station.md`, decisions D72 to D78 there). M7-T14 writes the section in full;
-the parts below are contracts other tasks build on.
+M7 as built (tasks T01 to T76 in `docs/milestones/m7-babylon-5-station.md`, decisions D72 to D78 there). Babylon 5 is an 8 km
+generated station (§20.7) standing on its rail in the free-falling frame: a fixed frame and a turning drum, both big hulls in Jolt
+and the native core (§20.1), with Cobra-bay launches (§20.2), the defense grid on the native turret rows (§20.3), AI, traffic and
+wings that fly round it (§20.4), navigation targets (§20.5), the hull's surfaces and lights (§20.6), the hangar behind the menu
+(§20.8), maintenance bots and cargo pods (§20.9), the exterior tour (§20.10) and console moves that bring the player to it
+(§20.11). §20.12 lists what M7 changed in earlier systems, §20.13 the measurements and §20.14 what is carried on.
 
 ### 20.1 The station in the game (D74, T06)
 
@@ -5608,9 +5626,10 @@ native/src/surface_rows.rs       ScsSimCore.set_surface / set_surface_owner / cl
     fire lane tests the segment against the volumes; the brains' skin range to a surface is the distance to its nearest volume.
     Every other row's arithmetic is unchanged (parity recordings green); the surfaces travel with the rows into the AI job.
 - **Damage (Q5).** A hit's point in its piece's frame picks the damage section whose box holds it (`StationSections.section_at`);
-  the section's health falls (5 000 each since T07's fix round, first 20 000; T10 tunes it again), the `DamageZones` layout `STATION` shows each section's
+  the section's health falls (`StationSections.SECTION_HEALTH`, 5 000 each since T07's fix round, first 20 000), the `DamageZones` layout `STATION` shows each section's
   own share and `Silhouette.set_station_sections` draws them side on; `Station.section_lost` fires once per section. The hulls are
-  invulnerable: the station is never destroyed or disabled.
+  invulnerable: the station is never destroyed or disabled. Only the repair crew (`Station.repair_section`, §20.9) and
+  `station heal` give health back.
 - **Marker.** `BABYLON 5`, `earth_alliance`, kind `PROP`, broadcasting to 1 000 km (the AI hears it, M3-T17).
 - **Cost.** Jolt's physics stage with a fighter in the tunnel, along the spine and along the drum: +11 to +31 us a tick on a quiet
   machine (one and six core threads), +43 to +91 us under load (`test_station_jolt_cost`, slow); T05's 192 shapes a piece stand.
@@ -5690,9 +5709,10 @@ data/scenarios/station_launch.json  the player on Alpha 3 with three wingmen
   row shot (the row variants' own bag) and leaves the exit out. A unit test runs seeded launches (one fighter and a wave of four)
   through the sequencer and requires every shot on screen for at least 1 s, every row shot over three ejections, and each shot's
   subject (the fighter, or the wave's first three doors) in the picture for its whole hold.
-- **Wing launches.** `launch wing <wing>` takes twelve Starfuries from the ally pool (topping it up with `ShipPool.prepare`), named
-  `<WING> 1` to `12` with the `ally_starfury` profile and no wing yet (T10 gives them their part); its ripple is seeded from the wing and
-  the sim time.
+- **Wing launches.** `launch wing <wing>` takes up to twelve Starfuries from the ally pool (`Main.ensure_free` tops it up), with the
+  `ally_starfury` profile, the station's velocity (`WorldFrame.anchored_velocity`, so a wing launched while the console moved the
+  frame still leaves the drum right, M7-T71) and a wing (§20.4, "Station wings"); its ripple is seeded from the wing and the sim
+  time. `launch wing all` launches the four (`LaunchDirector.launch_all_wings`, one line a wing; M7-T58).
 - **For M8.** A squadron launch is one `LaunchSequence` per wing (or several in turn) with the same profile, its cuts drawn from the
   same pools.
 
@@ -5703,9 +5723,11 @@ native/src/grid_kernels.rs       the grid's kinds on the turret rows: the latch,
                                  the interceptors' incoming fire and choice, the batteries' barrels and muzzles, the pulses'
                                  sweep (M7-T41), the big hulls' line of fire; engine-free (guard test)
 native/src/turret_rows.rs        + add_grid_mount, set_grid_free, grid_free_sides, grid_readouts, turret_kind, set_turret_out,
-                                 the batteries; note_attackers sets the latch
+                                 turret_out, grid_points, set_battery_barrels, set_turret_lift, set_turret_burst; step_turrets
+                                 runs the batteries; note_attackers sets the latch
 native/src/surface.rs            + enters_from_outside: a line entering a volume its start is not inside
 src/world/station_grid.gd        StationGrid: D75's 23 mounts from the hardpoints, their models, flashes, provider and command `grid`
+src/world/station_grid_lights.gd StationGridLights (M7-T57): a flood emitter ahead of and above H1, H2 and I5; provider `grid_lights`
 src/combat/turret_mount.gd       + host (the body a mount binds to), grid_kind, the intercepted signal, knocked_out
 src/world/grid_mount_health.gd   GridMountHealth: each mount's own health, worn down by hits near it (pure)
 assets/weapons/grid_*.tres       the light pulse turret, the heavy cannon and the interceptor battery
@@ -5777,7 +5799,11 @@ assets/weapons/grid_*.tres       the light pulse turret, the heavy cannon and th
   at the muzzle of the barrel that fired (`TurretMount.last_barrel`, the flash pool's per-flash tint), and where a pulse meets a
   projectile a small `ImpactFlash` and a scatter of sparks (`FxSpecs.INTERCEPT`, whose emitters own their process material,
   coloured by `FxPool.tint`) both take the projectile's own colour (M7-T41). `AudioDirector.watch_grid` plays `turret_fire`
-  pitched and levelled per kind, for every shot and every meeting.
+  pitched and levelled per kind, for every shot and every meeting. The light pulse turrets fire orange teardrops (`light_battery_bolt.tres`, M7-T52). The
+  chase view's bolt enlargement never draws a bolt longer than 40 m (`BoltMesh.drawn_scale`), so the heavy pulse leaves its barrel
+  and ends at its target, and a hit's flash grows with its damage past 40 (`ImpactFlash.size_for`, at most 9 times; M7-T51,
+  `test_heavy_cannon`). The bow faces away from the sun, so `StationGridLights` (always on) hangs a warm `LightEmitter` 24 m ahead
+  of and 16 m above H1, H2 and I5 in the `LightRig`'s competition, as the bays' lamps are (M7-T57, `test_station_grid_lights`).
 - **Knocked-out mounts** (maintainer, after T07). Each of the 23 mounts has its own health (`GridMountHealth`: light 300,
   heavy 4 000, interceptor 200). `Station._on_hit` passes every hit to `StationGrid.take_hit` beside the section's share: a
   mount on the hit body within its radius of the hit (30, 45, 25 m) loses the hit's damage. At zero `TurretMount.knocked_out`
@@ -5811,12 +5837,17 @@ src/targeting/targetable.gd      + SPEAKS_FOR: a body whose shots are answered a
 src/world/docking_plan.gd        DockingPlan (pure): the main docking bay's lane in and out, the freighter's lane
 src/world/station_traffic.gd     StationTraffic (Main's child): dock, undock, freighter, raid, scramble, the run (M7-T56);
                                  command and provider `traffic`
+src/world/station_airlock.gd     StationAirlock (M7-T25): the docking bay's inner doors in play, the void's bounds (holds, M7-T62)
+src/world/airlock_doors.gd       AirlockDoors (pure): how far open, opening while any ship asks; AirlockLeaves slides the props
+src/ship/ship.gd                 + inside_station (M7-T62): SimCore.set_sheltered, native FLAG_SHELTERED
+src/mission/launch_director.gd   + launch_wing's station wings and the player-led wing (M7-T58), launch_all_wings
+src/ai/wing.gd                   + resize, fill_order (M7-T58, T74)
 src/props/freighter_cargo.gd     FreighterCargo (T30): a Saturn's cargo off its hull for the bots, its hull shown as its other chunks
 src/props/cargo_ferry_plan.gd    + CargoFerryPlan.for_freighter (T30, pure): one CargoTrip a pod, from the chunks' boxes
 src/props/cargo_trip.gd          CargoTrip (pure): a pod's path, its bots' holds and routes, the tank's turn, the way home
 src/props/ferry_pod.gd           FerryPod (pure): a carried pod's place along its trip; waits, moves, dropped, done
 src/props/cargo_ferry_job.gd     CargoFerryJob (pure): pod by pod with a crew of two bots
-src/props/bot_ferry_motion.gd    + carrying: a crew bot flies out, holds the pod, lets go in a fight and comes back for it
+src/props/cargo_pod_motion.gd    CargoPodMotion (T30's BotFerryMotion, T34): a pod flies out, holds the cargo, lets go in a fight, comes back
 data/station/traffic.json        the run's ships and spacing, its kinds' weights, the wings scrambled
 ```
 
@@ -5926,7 +5957,7 @@ data/station/traffic.json        the run's ships and spacing, its kinds' weights
   it, in the tunnel or in the void, docking or undocking. A ship sent on after a lane gets a new route
   that starts at its first waypoint (`BehaviourFollowPath.attach` resets on a different route, `AiPilot` restarts the native
   slot): before M7-T56 a departing ship took its lane's end for its departure route's and was let go 5 km out.
-- **Cargo carried by the maintenance bots (T30, maintainer 2026-11-14).** Any of the five Saturns (`DockingPlan.FREIGHTER_TYPES`;
+- **Cargo carried to the cargo bay (T30, maintainer 2026-11-14; the carriers are cargo pods since T34, below).** Any of the five Saturns (`DockingPlan.FREIGHTER_TYPES`;
   the traffic draws hull and unloading or loading from the session seed) holds at the cargo bay while the station's bots carry its
   cargo between it and the bay's back wall; nothing flies by itself.
   - **Cargo** is the break-up chunks named `pod*` and `tank*` (`FreighterCargo.is_cargo`): a Saturn 3's three pods, a Saturn 4's
@@ -5967,9 +5998,23 @@ data/station/traffic.json        the run's ships and spacing, its kinds' weights
   (pure, in the motion): reach and open over the last 20 m, shut over 1.25 s once holding (within `FerryPod.GRAB_S`), held while
   carrying, opened standing still 1.25 s on letting go, then folded flying off (at once in a fight). Clearance is measured over the
   craft's body and hands (5 m from the hull, 2.5 m from the Saturn; least 10.6 m and 3.0 m).
+- **Station wings.** `LaunchDirector.launch_wing` makes (once) a `Wing` of the arm's name with eleven slots, engage at
+  will, and joins each of the twelve as it is taken from the pool: the first leads. `WingDirector.refresh` briefs them as
   any wing.
-  A wing the player leads (Alpha, the player its Alpha 1; M7-T58) is not made again: it grows to eleven slots (`Wing.resize`) and
-  the launch fills its empty slots, so the launched ships take the player's orders. `launch wing all` launches every arm's wing.
+  A wing the player leads (Alpha, the player its Alpha 1; M7-T58) is not made again: it grows to eleven slots (`Wing.resize`, which
+  never cuts a flown slot) and the launch fills its empty slots in `Wing.fill_order` (M7-T74: the shorter arm of the V first,
+  nearest the leader, the centre slot last), each named for its slot (`WingDirector.callsign_for`) and briefed with the wing's
+  order, so the launched ships take the player's orders (keys 1-4, the comms menu, `wing order`); a launch that fails gives the
+  slots back. `traffic scramble` and a raid's scramble take the same path. `launch wing all` launches every arm's wing.
+- **Inside the station (M7-T62).** A ship whose origin lies in the docking bay's black void behind the inner doors
+  (`StationAirlock.holds`, the one test of that boundary; `StationTraffic` checks it each tick for its docking and undocking
+  ships) is `Ship.inside_station`: it flies on, but `SimCore.set_sheltered` gives its row `FLAG_SHELTERED` in place of an active
+  hull, so no brain, turret, cannon, radar contact or hit sweep sees it, `Targetable` reports it unavailable and it is never a far
+  dot. It comes back once out past the plane; the pool clears the flag on parking. `traffic status` counts those inside.
+  Test: `test_station_sheltered`.
+- **A start through the gate waits for the vortex (M7-T70).** `traffic dock` without `near` asks the gate for an arrival; the ship
+  is taken from its pool only once the vortex has opened (a few seconds), so the reply and `traffic status` say "waiting for the
+  gate" (`StationTraffic.waiting_for_gate`) until then (`test_station_traffic`).
 - **Threads.** All of the above per tick is in the AI job on the frozen rows; `Field.sub_points` is filled in the job
   before the pass. Threaded equals delayed and one thread equals six (`test_station_threads`, `test_station_grid_threads`,
   and T38's dive among the arms in `test_station_wing_follow`). No recording in `tests/fixtures/` moved.
@@ -6055,6 +6100,188 @@ manifest pieces.<p>.mesh.tiers[]      name, sections, texel_m, atlas_px, area_m2
   emission so the night side shows it. `StationLights` gives each section that some flood reaches its own copy of its material
   (`StationHullMaterial.copy_of`, kept on the texture set in use) holding only those floods; a flood on the other piece follows the
   drum's turn each frame. The shared materials carry none, so the halls' and bays' inner faces (separate meshes on them) stay unlit.
-  The small lights (beacons, navigation lights, bay lamps) are `station_light_marker.gdshader` points, instanced per piece.
+  The small lights (beacons, navigation lights, bay lamps) are `station_light_marker.gdshader` points, instanced per piece. They
+  follow the running lights' rule (M7-T69): their real size up close, then a 2 px floor whose brightness falls with the inverse
+  square of distance (`RunningLightDimming`), and nothing drawn once the peak is under `cull_peak` (0.01; a 4.5 m beacon is gone
+  past about 32 km). `StationLights` sets only their brightness (gain 0 when dark or `station_lights off`); the far prop alone owns
+  their visibility, so none shows once the station is a dot (`test_running_light_dimming`, `test_station_lights`).
+- **Bay lamps and the interior layer (M7-T25, T32).** `BayLights` puts a red `LightEmitter` at each `main_docking_bay_red_*` and
+  `cargo_bay_red_*` hardpoint (the docking bay's on the drum's axis, so the turn does not move them) in the `LightRig`'s
+  competition; `InteriorZones` (trigger volumes in the docking bay's tunnel and void and the cargo bay) moves a ship onto the
+  interior layer the key star leaves out (`InteriorLight`, §7.3) and back as it leaves (`test_bay_lights`).
 - **Tests.** `test_babylon5_station` (tiers, both sets, the budget, the light rows), `test_station_tiles`, `test_station_sections`
   (joints across tiers meet on points), GUT `test_station_hull_material`.
+
+### 20.7 The generator and its collision (D72, D73; T03 to T05, T19, T21, T22, T25, T32, T43)
+
+```
+tools/procgen/assets/babylon5_station.py   the station (generator 5): frame and drum pieces, sections, collision, hardpoints
+tools/procgen/parts/station.py             the shapes: drum, Cobra arms, vanes, reactor, cargo modules
+tools/procgen/parts/station_spine.py       the dorsal spine, command section and bow lofted through the STL's sections (T22)
+tools/procgen/parts/station_tower.py       the bow's rook tower for I5; station_recess.py the heavy cannons' recesses (T43)
+tools/procgen/parts/station_detail.py      the main docking bay (T25), the cargo bay (T05, T21, T32), the grid plinths
+tools/procgen/parts/station_layouts.py     seams, paint patterns and windows; styles/earth_alliance_station.py the paint and metal
+tools/procgen/parts/station_hardpoints.py  data only: Cobra bays, docking and cargo bays, 23 grid mounts, lights, tour points, sections
+tools/procgen/parts/station_props.py       door leaves and near-only props (core/near_props.py); station_collision.py shapes per section
+tools/procgen/parts/station_fidelity.py    the per-part section planes against the STL (tools/refview/sections.py)
+tools/procgen/core/collision.py            compound collision from parts (T03): Shape, Budget, merge_to_budget, coverage
+tools/procgen/core/sections.py             a piece clipped into sections that tile it (T19); core/detail_layer.py the shared fine tile
+src/world/collision_pieces.gd              CollisionPieces (pure): the manifest's collision section; CollisionBodies.build: a piece's body
+src/world/station_hardpoints.gd            StationHardpoints: the hardpoints for the game
+src/rendering/piece_sections.gd            PieceSections (pure): sections and props, the props' ranges; RenderPiece draws them
+```
+
+- **Shape.** 8 km along z, the bow at -z, in two pieces: `frame` (still) and `drum` (turning, its frame on the axis, at least 8 m
+  from the frame). Built from the measurements in `docs/assets-station.md`, never from the references. The 90% rule holds: top,
+  side and front silhouettes 0.954 to 0.970 against the STL, L/W/H within 0.1%, and every part seen up close (the Cobra arms,
+  both bays, the spine, the command section, the bow recesses) passes its section planes at IoU >= 0.90
+  (`test_station_fidelity`; scores in `docs/assets-station.md`).
+- **Sections (T19).** The drum in 12 and the frame in 16 (`DRUM_PLANES`, `FRAME_PLANES`), cut on the hull's own joints; each is its
+  own glb with its origin on the axis, a 6 m skirt in its cut planes hiding cracks between neighbours at different levels of
+  detail, and its own atlas tier (§20.6). Props (door leaves, gantries, window frames, the airlock leaves) are instanced per section
+  with small atlases of their own and drawn within their kind's range (`PropKind.near_m`).
+- **Collision (T03, D73).** Each part names a box, a capsule or the hull of its points; a piece's shapes are merged down to the
+  budget (192 a piece for the station, 32 points a hull), written into `collision.pieces` with a hit volume per shape, and checked
+  against the render mesh (`coverage`: the largest gap and excess). The station's shapes are cut at the section planes, the bays'
+  never merged, so the docking tunnel, the halls under the launch doors and the cargo bay stay open (tested with a Starfury's and a
+  pod's boxes). The game builds one body per piece (`CollisionBodies`) and the core's surfaces from the same hulls (§20.1).
+- **Hardpoints.** 24 `cobra_bay_<wing>_<door>` (door, hinges, rail, release, pose, the second row's staging path), `cobra_arm`,
+  `launch_clearance`, `main_docking_bay_*` (drum frame), `cargo_bay_*`, D75's 23 mounts, the lights, 8 tour points and 11 damage
+  sections; `StationHardpoints` reads them and every M7 system places from it.
+- **The bays.** The main docking bay is the STL's, its mouth scaled to 80 m: a stepped cross-shaped mouth, a red-lit tunnel of
+  receding frames and the inner airlock's sliding leaves (T25); the cargo bay a roofed box between the bow's forks in grey metal lit
+  red (T21, T32).
+- **Tests.** Python `test_collision`, `test_babylon5_station`, `test_station_hardpoints`, `test_station_sections`,
+  `test_station_fidelity`, `test_station_sealed`, `test_coplanar_overlaps`, `test_station_tower`, `test_grid_heavy_cannon`,
+  `test_grid_interceptor_battery`; GUT `test_collision_pieces`, `test_station_hardpoints`, `test_piece_sections`,
+  `test_station_sections`.
+
+### 20.8 The hangar behind the menu (D77, Q7; T09, T20)
+
+- `b5_interior` (`parts/cobra_bay.py`, `styles/cobra_bay.py`) is Alpha's Cobra-bay hall read from the station's `hardpoints.cobra_arm`
+  (six launch positions at the doors' pitch, the upper hall over the doors and the lower hall of the second row). Each racked
+  fighter's `id`, `wing`, `door`, `wave`, release point and staging path match the `cobra_bay_alpha_*` hardpoints, for M8's
+  squadron launch.
+- `HangarBackdrop` (the front end's backdrop) racks twelve real `starfury_aurora` in Alpha's livery (six over the doors on clamp
+  arms, six in the second row on crane trolleys) under six work lamps in the light rig; `HangarCamera` (pure) dollies slowly along
+  the upper hall, with fixed views for look sheets (`backdrop <move|wide|close|rack|second>`, provider `backdrop`). Without the
+  generated interior the front end keeps M5's sky drift. Tests: `test_b5_interior`, `test_hangar_camera`, `test_hangar_backdrop`,
+  M5's `test_front_end` unchanged.
+
+### 20.9 Maintenance bots and cargo pods (Q11, D78; T11, T33 to T36)
+
+```
+src/props/bot_fleet.gd           BotFleet: the crew's pool of 12 in the cargo bay, the alarms, command and provider `bots`
+src/props/bot_crew.gd            BotCrew (pure): who goes out, where and when; repairs from a working bot's time
+src/props/bot_trip_planner.gd    BotTripPlanner, BotTrip, BotCrewMotion, BotFrames, BotRepairAreas, BotAlert (pure)
+src/props/maintenance_bot.gd     MaintenanceBot: the generated mesh on a node that follows its mover
+src/props/cargo_pod_fleet.gd     CargoPodFleet: the cargo pods (CargoPodCraft, CargoPodRig, CargoPodPose, CargoPodMotion), `pods`
+data/station/bot_points.json     the crew's tunables, roads, patrol areas and work spots
+```
+
+- **Ambient only.** Bots and pods have no body, `Targetable` or row: nothing targets, shoots or rams them. They hang from the
+  station's node in its frame, so rebases and the drift change nothing; crew bots are not drawn past 20 km.
+- **Peace.** Three to six bots out, one an area at a time (the spine, the vanes port and starboard, the drum riding its turn, the
+  jumpgate out 50 km at 250 m/s), each area's next trip after a wait hashed from the area and its trip number (no shared RNG).
+  Every trip leaves the cargo bay down the trunk and takes the high road over the spine or the low road under the drum; its
+  return mirrors its way out, so a bot called home turns where it is. The drum is boarded from under it, the bot's turn rate
+  ramped to the drum's.
+- **Battle (T35).** Fighting near the station (the `BotAlert` log) sends one bot per damaged area, most urgent first (a knocked-out
+  mount or a lost section before a worn one); each adds 10 HP/s (`Station.repair_section`, `StationGrid.repair_some`), backing off
+  while hits land within 100 m.
+- **Cargo pods (T33, T34).** The 6 m craft (`cargo_pod_craft`, built to its STL at the 90% rule) with arms posed from three numbers;
+  they launch from the cargo bay's back wall and carry every freighter's cargo (§20.4) and heed the crew's alarm.
+- **The bot (T36)** is rebuilt to its reference sheet's top, side and front silhouettes (90% overlap).
+- Tests: `test_bot_crew`, `test_bot_routes_clear_of_hull` (clearance from the drawn hull, the drum's over a whole turn),
+  `test_cargo_pod_grip`, `test_cargo_carry_clearance`; Python `test_maintenance_bot`, `test_cargo_pod_craft`.
+
+### 20.10 The exterior tour and the station scenarios (T12, T57)
+
+- `data/tour/station_tour.json` (`TourBook`, pure; `TourDirector`, Main's child, command and provider `tour`): eight stops in order,
+  `bow`, `main_docking_bay`, `cobra_arm`, `defense_grid`, `heavy_cannons`, `drum`, `vanes`, `cargo_bay`, one shot each on the
+  cinematic camera, captioned in the lower letterbox bar, never under 1 s. A stop is a tour hardpoint or a view of its own; its
+  move is one of five templates in fractions of the camera-to-subject distance, drawn per stop from a seeded shuffle bag. Shots
+  are placed from the station's pose every frame, so they are rebase-proof, and the Cobra arm's stop rides the drum.
+- **Defense stops (M7-T57).** `defense_grid` stands 85 m ahead of an arm head and shows L1, L2 and I1 from the front;
+  `heavy_cannons` films H1, H2 and I5 from 130 m ahead and above the bow tower, lit by `StationGridLights` (§20.3). Captions say
+  "Defense". Tests: `test_tour_book`, `test_tour_defense`, `test_station_tour`.
+- **Scenarios.** `station_launch` (the player on Alpha 3 with three wingmen, launched from the bay) and `station_showcase` (the
+  same launch, then free flight with the bots, a Saturn at the cargo bay and `tour`; in the New game list).
+
+### 20.11 Moving the player near the station (T63, T67; the frame's part is §19.3)
+
+- **`goto <nav point>` (M7-T67).** `NavGoto` (Main's child, console only) lists the target menu's places (Babylon 5, its two bays,
+  the jumpgate, the scenario's NAV buoys, the system's bodies) and takes any case or a unique prefix. Stand-offs: Babylon 5 4 km
+  off its bow, a bay 2 km in front of its mouth, the gate 6 km in front, a buoy 1 km off, a body on a circular orbit over its
+  atmosphere on its day side. The player rests against the place and faces it, the wing placed in formation beside it; the frame
+  goes back on the station's rail first (`WorldFrame.return_home`). Refused in a mission; during a launch the launch is skipped
+  and the move waits for the release. Test: `test_nav_goto`.
+- **`station goto` during a launch (M7-T63).** It waits for the release (`Station._place_at_tour_point`; the last goto asked wins,
+  dropped if the player dies first), and a point on the turning drum takes the drum's velocity there, so no goto point leaves the
+  player in the drum's sweep. Test: `test_station_goto` (each of the eight points 30 s after the real launch: no ram, no damage).
+- Every move into the station's region (`station goto`, `gate approach`, `respawn`, `launch`, `tour`, `goto`, `mines view`, `far
+  view`, `bots goto`, the bench) calls `WorldFrame.return_home` first (M7-T71, §19.3).
+
+### 20.12 What M7 changed in earlier systems
+
+- **Hero hulls (T15 to T17).** The Starfury and the raider have low and high texture sets for `settings.texture_detail` (§18.30); the
+  raider is rebuilt to its STL (its hit disc refit, §17.14, and its turrets' spread, §18.10); the Starfury's metal, roughness and normal maps make
+  it read metallic.
+- **Far models (T26).** An AI ship keeps its mesh until a few pixels across (§14.4, §17.10).
+- **The jumpgate (T23, T28).** The GIF's opening sequence, the blue vortex and one shared flash flare (`FlashFlare`, §19.10); the
+  player's jump only within 2 km (`GateJumpRequest`), and a second entry opens one vortex.
+- **Civilians (T29, T55).** Fleeing that reads and Babylon 5 as a port for every civilian (§18.11, `Surface.port`).
+- **Menus and input (T31, T37, T39).** Compact menus and Quit with a `ConfirmScreen` (§18.34); the radial menus on the left stick
+  (§6.1); the console key in play (§6.4).
+- **One sun (T44, T72).** Close to the star `scaled_star.gdshader`'s disc coordinate keeps growing past 90 degrees off the centre
+  (`SunLook.disc_radii`), so the far side of its glow sphere draws no second disc (`test_sun_look`); the flare's core is aimed from
+  the camera's turn alone (§19.8).
+- **Radar dots under motion vectors (T45, T49).** Godot 4.7.2 swaps a multimesh's GPU buffer the first time it is written with
+  motion vectors on and keeps the 2D binding on the freed one (the dots vanished; `uniform_set` is null printed each frame).
+  `RadarDotBatch` notes the buffer each draw used and resizes the multimesh once when Godot moved it (`test_radar_dot_batch`).
+- **FSR 2.2 and the blur (T46).** Under FSR 2.2 Godot writes motion only for what moved and marks still pixels (-1, -1);
+  `motion_blur.glsl` works their vector out from depth as Godot's FSR 2.2 does, so still hulls are no longer smeared
+  (`test_motion_blur_upscaled_gpu`).
+- **Defaults (T47).** Friendly fire and motion blur on; tests never read the player's settings (§7.5, §12, D31).
+- **The bench (T48, T50, T59, T64, T65).** Generated asteroids; the battle flies on after a run with its capitals, rocks and mines,
+  every capital and pooled ship then mortal; `Main.ensure_pool` prepares debris and watches every ship it builds, so a bench fighter
+  that dies leaves play; mines can be shot and set off by touch, laid in small chained groups (§17.11).
+- **Bolts (T51 to T53).** Teardrops whose tail grows out of the muzzle (§7.1, §7.6); the heavy pulse's 40 m cap (§20.3).
+  `MultiMeshUpload` clears Godot's multimesh interpolation before every upload of the batched draws that interpolate their own
+  instances (bolts, plumes, muzzle flashes, far dots, flashes and hulls, door and airlock leaves, the mine stand-in), so no
+  interpolation warning prints (`test_multimesh_upload`).
+- **The civilian escort (T54).** A later wave waits for the one before it to be down, a 30 s breather and the civilian's progress
+  mark; holding X (Shift, Mouse 4) for 2 s skips the opening to `MissionScript.opening_until()` with a `SkipPrompt` layer above the
+  letterbox and the HUD, and runs no target interaction; `MissionApi.show_hull(name)` puts a ship's hull bar under the objectives
+  (`test_civilian_escort`, `test_mission_sequencer`, `test_hud_layout`).
+- **Encounters (T56).** Events one to three minutes apart, substitutes when one cannot start, station raids and the gate-station
+  run (§18.11, §20.4); non-hostile civilians drawn in the civilian colour.
+- **The spelling and the overlay (T60).** "Defense" in every identifier, file, data id and doc; `overlay [on|off]` beside `fps`.
+- **The REF line (T73).** `HudPainter.readout_lines` splits a REF text wider than `speed_text_width` into its name (wrapped by
+  words) and its distance and speed, then ALT, 16 layout px apart, the readouts moved up to make room, so it never covers the
+  drift sphere (`test_hud_readout_layout`).
+- **Formations (T74).** `Formation.offset` carries the finger-four on as a V: pairs one step further back and out, starting on
+  alternate arms (#5 #6 left, #7 #8 right, ...), and a wing of more than three slots with an odd count puts its last slot on the
+  centreline 80 m behind the leader. Only that slot depends on the wing's size, so growing a wing moves nobody; wings of up to
+  three slots keep their slots. Newcomers take `Wing.fill_order`'s first slot (`test_formation`, `test_wing`, `test_launch_bay`).
+- **Transit (T75).** `transit carrier` and `transit arrive` grow the raider pool when too few are free (`Main.ensure_free`), so they
+  work in free flight with encounters off (`test_bench`).
+
+### 20.13 Measurements and tests (AC10; T13)
+
+- On the RX 6950 XT, the station in view from a bay, from 10 km and from 1 000 km: `forward_plus` in every view; 1920x1080 with vsync
+  off 453 to 830 fps, GPU 0.5 to 1.4 ms, 66 to 237 draw calls, 927 MB in the renderer; 3840x2160 279 to 767 fps, GPU 1.0 to 3.4 ms,
+  1 314 MB. With 39 allied Starfuries, the grid firing and 12 raiders the tick ran p50 2.9 ms and p99 6.8 ms at 60 fps; the
+  one-off ticks of pools grown by a raid or a wing launch were moved to the scenario's load.
+- Threaded equals `delayed` and one thread equals six for the station, its grid and the wing at the station
+  (`test_station_threads`, `test_station_grid_threads`, `test_station_wing_follow`); no parity recording moved for the station
+  (`weapon_rows_battle` was re-recorded once, for T48's generated rocks).
+
+### 20.14 Known gaps (carried to later milestones)
+
+- The roadmap's "Carried from M7": an interceptor pulse leaves about 1.3 m beside its drawn barrel within about 30 m (M7-2), the
+  walls beside the cargo bay flicker (M7-3), sawtooth Cobra-bay doors (M7-4), the audio rework (M7-5); all M8.
+- A wing following a leader that glances along the drum's flank at 250 m/s or more sits at the edge of a Starfury's stop: one in five
+  starts still lost a wingman at 200 m/s (M7-T76).
+- The bays' `dock` and `cargo` interactions are placeholders that answer "not available" (Q4: docking is after M7).
+- A lone fleeing Saturn rarely beats two raiders and never three; it survives by reaching shelter (accepted, M7-T55).
