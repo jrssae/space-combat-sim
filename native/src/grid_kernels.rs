@@ -46,6 +46,10 @@ pub const MAX_BARRELS: usize = 4;
 /// and the target may be shot at again.
 pub const COVER_SLACK_S: f64 = 0.1;
 const TIME_EPSILON_S: f64 = 1e-6;
+/// How often at most a battery's barrel is laid again on the lead from its muzzle, and the muzzle's move that ends it
+/// (1 mm, squared).
+const LAY_PASSES: usize = 6;
+const LAY_SETTLED_M2: f64 = 1e-6;
 /// How far ahead an interceptor follows a projectile's straight path to the hull, s (its own life when shorter).
 pub const INTERCEPT_HORIZON_S: f64 = 6.0;
 // Score offsets that rank the pick's classes ahead of distance: out of the arc, then the heavy cannon's fighters.
@@ -475,28 +479,81 @@ pub struct BatteryShot {
     pub elevation: f64,
 }
 
-/// A battery's shot at a projectile: the barrels laid on the trunnion's lead, the pulse led again from the barrel that fires,
-/// and the mount shown along the pulse's line so up close the pulse never leaves sideways. A lead is its line and flight time;
-/// `lead_from` leads from a point (none without a solution).
+/// The barrel a battery fires: the arc's floor, the azimuth the mount holds now, the trunnion in the yaw frame and the muzzle in
+/// the pitch frame.
+pub struct Barrel {
+    pub min_elevation: f64,
+    pub azimuth: f64,
+    pub trunnion: Vector3,
+    pub muzzle: Vector3,
+}
+
+/// The azimuth and elevation that bring a barrel's line through `point` (M8-T10): a barrel beside or over the trunnion needs a
+/// little more or less turn and lift than the trunnion's own line. Turning cannot bring a barrel onto a point nearer the
+/// mount's axis than the barrel stands beside it (a target right overhead), so the mount keeps its azimuth there. The
+/// elevation stays inside the arc.
+pub fn lay_on(f: &tk::Frame, b: &Barrel, point: Vector3) -> (f64, f64) {
+    let rel = sub(point, f.pivot);
+    let (along, across) = (f64::from(dot(rel, f.forward)), f64::from(dot(rel, f.side)));
+    let beside = f64::from(b.trunnion.x) + f64::from(b.muzzle.x);
+    let flat = along.hypot(across);
+    let azimuth = if flat > beside.abs() {
+        let turned = across.atan2(along) + (beside / flat).asin();
+        turned - std::f64::consts::TAU * (turned / std::f64::consts::TAU).round()
+    } else {
+        b.azimuth
+    };
+    let (sa, ca) = azimuth.sin_cos();
+    // The point as the trunnion sees it in the plane the barrels lift in.
+    let ahead = along * ca + across * sa + f64::from(b.trunnion.z);
+    let above = f64::from(dot(rel, f.up)) - f64::from(b.trunnion.y);
+    let over = f64::from(b.muzzle.y);
+    let reach = ahead.hypot(above);
+    let less = if reach > over.abs() { (over / reach).asin() } else { 0.0 };
+    (azimuth, (above.atan2(ahead) - less).clamp(b.min_elevation, std::f64::consts::FRAC_PI_2))
+}
+
+/// A battery's shot at a projectile: the pulse leaves the tip of the barrel as it is drawn and, wherever the mount can turn
+/// that far, along that barrel, however close the target (M8-T10). The barrel is laid through the meeting the trunnion's lead
+/// gives, the pulse led from the muzzle that puts, and the barrel laid again until the muzzle settles; the pulse's line is
+/// always the lead from where it starts. A lead is its line and flight time at `pulse_speed`; `lead_from` leads from a point
+/// (none without a solution).
 pub fn battery_shot(
     f: &tk::Frame,
-    min_elevation: f64,
-    trunnion: Vector3,
-    muzzle: Vector3,
+    b: &Barrel,
+    pulse_speed: f64,
     trunnion_lead: (Vector3, f64),
     lead_from: impl Fn(Vector3) -> Option<(Vector3, f64)>,
 ) -> BatteryShot {
-    let in_arc = |el: f64| el.clamp(min_elevation, std::f64::consts::FRAC_PI_2);
-    let (az, el) = tk::angles_of(f, trunnion_lead.0);
-    let at = muzzle_point(f, az, in_arc(el), trunnion, muzzle);
-    let (aim, flight_s) = lead_from(at).unwrap_or(trunnion_lead);
-    let (shown_az, shown_el) = tk::angles_of(f, aim);
+    let lay = |from: Vector3, (aim, flight_s): (Vector3, f64)| {
+        let (az, el) = lay_on(f, b, add(from, scale(aim, (pulse_speed * flight_s) as f32)));
+        (az, el, muzzle_point(f, az, el, b.trunnion, b.muzzle))
+    };
+    let mut lead = trunnion_lead;
+    let (mut azimuth, mut elevation, mut at) = lay(muzzle_point(f, b.azimuth, 0.0, b.trunnion, Vector3::ZERO), lead);
+    let mut settled = false;
+    for _ in 0..LAY_PASSES {
+        let Some(from_muzzle) = lead_from(at) else {
+            settled = true;
+            break;
+        };
+        lead = from_muzzle;
+        let was = at;
+        (azimuth, elevation, at) = lay(was, lead);
+        if f64::from(dist_sq(at, was)) < LAY_SETTLED_M2 {
+            settled = true;
+            break;
+        }
+    }
+    if !settled && let Some(from_muzzle) = lead_from(at) {
+        lead = from_muzzle;
+    }
     BatteryShot {
         muzzle: at,
-        aim,
-        flight_s,
-        azimuth: shown_az,
-        elevation: in_arc(shown_el),
+        aim: lead.0,
+        flight_s: lead.1,
+        azimuth,
+        elevation,
     }
 }
 

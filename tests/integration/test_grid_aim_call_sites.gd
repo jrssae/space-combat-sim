@@ -1,13 +1,16 @@
 extends GutTest
 ## The grid's aim where the turret rows call it (M7-T14, council round 3): a heavy cannon on its raised trunnion hits a crossing
-## fighter at 2 km, and an interceptor battery shows the line of the pulse it fires. The kernels have their own tests; these
-## fail when `step_turrets` or `step_interceptors` hands them the wrong frame or stores the wrong angles.
+## fighter at 2 km, an interceptor battery shows the line of the pulse it fires, and that pulse starts at the tip of the barrel
+## as drawn, at 30 m as at long range (M8-T10). The kernels have their own tests; these fail when `step_turrets` or
+## `step_interceptors` hands them the wrong frame or stores the wrong angles.
 
 const RAIDER: StringName = &"raider_fighter"
 ## The heavy cannon's trunnion over its recess floor, m (the model's; `StationGrid.HEAVY_TRUNNION_M`).
 const TRUNNION_M: float = 9.5
 ## A pulse leaves within its spread (0.22 degrees) of the line the battery shows.
 const SHOWN_TOLERANCE_DEG: float = 0.3
+## A pulse starts this close to the drawn barrel's tip, m (M8-T10: "a few centimetres"; it was about 1.3 m at 30 m).
+const TIP_TOLERANCE_M: float = 0.03
 
 var scene: TurretScene
 var station: Station
@@ -119,6 +122,64 @@ func test_a_battery_shows_the_line_of_the_pulse_it_fires() -> void:
 	for k: int in checked.size():
 		assert_lt(checked[k], SHOWN_TOLERANCE_DEG, "the barrels lie along the pulse that met")
 		assert_gt(parallax[k], 2.0 * SHOWN_TOLERANCE_DEG, "close enough that the trunnion's line would not")
+
+
+func test_a_batterys_pulse_starts_at_the_drawn_barrel_tip_at_30_m_and_at_long_range() -> void:
+	# M8-T10 (roadmap M7-2): the muzzle was placed from the trunnion lead's angles while the barrels are drawn along the pulse,
+	# so within about 30 m a pulse started about 1.3 m beside the barrel it left.
+	if not await _start():
+		return
+	scene.attach()
+	TurretMount.rebind_all()
+	await _ticks(2)
+	var i5: TurretMount = station.grid.mount("I5")
+	_alone(i5)
+	var entry: Dictionary = station.hardpoints.mount("I5")
+	var body: String = entry["body"]
+	var base: Vector3 = entry["position"]
+	var up: Vector3 = (entry["up"] as Vector3).normalized()
+	var across: Vector3 = up.cross(Vector3.RIGHT if absf(up.x) < 0.9 else Vector3.FORWARD).normalized()
+	var trunnion: Vector3 = station.to_world(base + up * i5.trunnion_m.y, body)
+	var model_scale: float = StationGrid.MODEL_SCALE[StationGrid.Kind.INTERCEPTOR]
+	var target: Array[Projectile] = [null]
+	# Each shot: how far its target was from the trunnion, and how far the pulse started from the drawn tip of its barrel.
+	var ranges: Array[float] = []
+	var gaps: Array[float] = []
+	var barrels: Dictionary[int, bool] = {}
+	i5.shot_fired.connect(func(from: Vector3) -> void:
+		var s: Dictionary = scene.state(i5)
+		i5.turn_to(float(s["azimuth"]), float(s["elevation"]))  # the model as the next frame shows it
+		var tip: Vector3 = i5.pitch.global_transform * (i5.muzzles_m[i5.last_barrel] / model_scale)
+		ranges.append(target[0].global_position.distance_to(trunnion) if is_instance_valid(target[0]) else -1.0)
+		gaps.append(from.distance_to(tip))
+		barrels[i5.last_barrel] = true)
+	# A slow bolt from 30 m and a fast one from 1.2 km, falling on the battery's base from 45 degrees up on four sides and from
+	# right overhead (where no turn brings a barrel beside the axis onto the target, and the mount holds its azimuth).
+	for far: bool in [false, true]:
+		for k: int in 5:
+			var toward: Vector3 = (up + across.rotated(up, k * PI / 2.0)).normalized() if k < 4 else up
+			var from_m: float = 1200.0 if far else 30.0
+			var start: Vector3 = station.to_world(base + up * i5.trunnion_m.y + toward * from_m, body)
+			var velocity: Vector3 = (station.to_world(base, body) - start).normalized() * (350.0 if far else 40.0)
+			target[0] = _bolt(start, velocity)
+			await _ticks(45)
+	var near_shots: int = 0
+	var far_shots: int = 0
+	var worst_near: float = 0.0
+	var worst_far: float = 0.0
+	for i: int in gaps.size():
+		if ranges[i] >= 0.0 and ranges[i] <= 31.0:
+			near_shots += 1
+			worst_near = maxf(worst_near, gaps[i])
+		elif ranges[i] >= 900.0:
+			far_shots += 1
+			worst_far = maxf(worst_far, gaps[i])
+		assert_lt(gaps[i], TIP_TOLERANCE_M, "a pulse at a target %.0f m off starts at its barrel's drawn tip" % ranges[i])
+	gut.p("I5: %d pulses within 31 m start at most %.4f m from the drawn tip, %d past 900 m at most %.4f m" % [
+			near_shots, worst_near, far_shots, worst_far])
+	assert_gte(near_shots, 5, "a pulse at each of the five close bolts")
+	assert_gte(far_shots, 5, "and at each of the five far ones")
+	assert_eq(barrels.size(), 4, "every barrel fired")
 
 
 func _bolt(at: Vector3, velocity: Vector3) -> Projectile:

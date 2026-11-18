@@ -5814,6 +5814,14 @@ assets/weapons/grid_*.tres       the light pulse turret, the heavy cannon and th
   interval. The pulse leaves the firing barrel's muzzle (`muzzle_point`: the mount turned as `TurretMount`'s Yaw and Pitch
   nodes) on the brains' lead (`solve`), led to where the target will be when the pulse starts to move (a row does not move on
   its launch tick), thrown off by `tk::spread` hashed from the battery's id, its shot count and the tick (no shared RNG).
+  The muzzle is placed from the angles the mount shows (M8-T10), so the pulse and its flash start at the drawn barrel's tip at
+  any range (placed from the trunnion lead's angles it started about 2 m beside the tip at 30 m): `lay_on` gives the azimuth
+  and elevation that put the firing barrel's line through a point (a barrel 3.9 m beside the trunnion and 1.4 m over it needs
+  a little more or less turn and lift than the trunnion's line), and `battery_shot` lays it through the meeting the lead gives,
+  leads again from that muzzle and lays again until the muzzle settles (under 1 mm, at most 6 passes). The pulse's line is
+  always the lead from its own start. No turn brings a barrel onto a point nearer the mount's axis than the barrel stands
+  beside it (a projectile right overhead): there the mount keeps its azimuth and the pulse leaves the tip a little off the
+  barrel's line (under half a degree at 900 m).
   Pick filter beside the arc and the hull line: a target already covered by a pulse that meets it before it reaches the hull is
   skipped until that pulse's lead time plus `COVER_SLACK_S` (0.1 s) passes (then it missed); a target the pulse cannot catch
   within its life is skipped. Numbers (`grid_interceptor.tres`): 2 000 m/s, 1 s life (2 km: the 1.5 km reach plus the target's

@@ -922,9 +922,13 @@ impl ScsSimCore {
             let barrel = battery.fire(now_s);
             let shot = gk::battery_shot(
                 &f,
-                m.min_elevation[s],
-                battery.trunnion,
-                battery.muzzles[barrel],
+                &gk::Barrel {
+                    min_elevation: m.min_elevation[s],
+                    azimuth: m.azimuth[s],
+                    trunnion: battery.trunnion,
+                    muzzle: battery.muzzles[barrel],
+                },
+                gun.muzzle_speed,
                 {
                     let lead = lead_from(trunnion, p);
                     (lead.aim_dir, lead.t)

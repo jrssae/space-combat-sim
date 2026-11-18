@@ -265,7 +265,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T07 | C | Bring M10-T19's raider strike carrier into `m8`: merge `origin/m10`, one collision builder, its tests green (Q5) | - | Opus | Two branches built a collision builder; docs, `native/src/lib.rs` and `info.md` conflict | done |
 | T08 | C | The civilian escort's raids come with the strike carrier (D83, Q6) | T07 | Fable | Mission data and pacing on `CarrierJumps`; the escort's tests kept green | not started |
 | T09 | C | Raider Battle Wagon (moved from M10-T20): from images, with weapons (M10 Q31) and four launch tubes; the escort's last wave comes with it (Q8) | T08, the maintainer on its weapons | Fable | No STL; a new hull with weapons and tube launches | not started |
-| T10 | D | Interceptor muzzle at the drawn barrel tip, and the grid balance measured again (roadmap M7-2) | - | Fable | A placement fix in the turret rows with a balance check | in progress |
+| T10 | D | Interceptor muzzle at the drawn barrel tip, and the grid balance measured again (roadmap M7-2) | - | Fable | A placement fix in the turret rows with a balance check | done |
 | T11 | D | The walls beside the cargo bay stop flickering (roadmap M7-3) | - | Fable | Find the coplanar faces or shading cause in the station generator; a test | not started |
 | T12 | D | Audio rework of every sound effect and the Starfury engines' steady level (roadmap M7-5) | - | Fable | One loudness reference, the mix, and a smoothed engine gain; a listening checklist | not started |
 | T13 | D | Wingmen close the gaps losses leave in a formation (roadmap M7-6) | - | Fable | Native re-slotting with M7-T76's avoidance, 1 and 6 threads identical | not started |
@@ -386,6 +386,37 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 - **Goal:** roadmap M7-2: a battery's pulse and its muzzle flash start at the drawn barrel tip (placed from the shown angles), and
   the grid balance is measured again.
 - **Done when:** a test puts the pulse's start at the barrel tip within a few centimetres at 30 m; the balance fights pass.
+- **Done (2026-11-18):** `grid_kernels::lay_on` gives the azimuth and elevation that put the firing barrel's line through a point
+  (a barrel 3.9 m beside the trunnion and 1.4 m over it needs a little more or less turn and lift than the trunnion's line), and
+  `battery_shot` lays the barrel through the meeting the lead gives, leads again from that muzzle and lays again until the muzzle
+  settles (under 1 mm, at most 6 passes). The muzzle is placed from the shown angles, so the pulse starts at the drawn barrel's
+  tip, and its line is always the lead from its own start. The flash needed no change: it rides the pitch holder, so it was at
+  the drawn tip already and the pulse now starts there too. Architecture §20.3.
+  - **Measured** (the new GUT test on I5, bolts from 45 degrees up on four sides and from overhead): on HEAD the pulse started
+    2.0 to 2.1 m from the drawn tip at 29 m and 4 to 5 cm at 1 to 1.2 km; now 0.0000 m at both.
+  - **Right overhead.** No turn brings a barrel onto a point nearer the mount's axis than the barrel stands beside it (3.9 m): the
+    mount keeps its azimuth there, and the pulse leaves the tip a little off the barrel's line (under half a degree at 900 m). A
+    first version that only repeated "lead from the muzzle, show along the lead" never settled there and fired on a stale
+    lead (the raid moved to a mean of 105.1 s); it was replaced before the commit.
+  - **Balance** (`test_station_grid_balance`, GUT_BALANCE=1, seeds 1, 2, 3; before on HEAD 2e7e9c62, after with the fix, same
+    assets): identical to the last figure. Raid mean 101.9 s (97.5, 106.2, 102.0; bands 90 to 120 and 75 to 140), pulses 298,
+    215, 245 with 172, 127, 144 met; capital destroyed at 123.0, 123.5, 123.9 s (pulses 1 028, 1 268, 1 257); proof 1 149 lost
+    with the batteries, 2 028 parked, 1.76 times (bar 1.5). 3/3 pass both times. The pulse still passes through the same
+    meeting point with the same spread, only its start moved, so no pulse's hit or miss changed. No recording moved.
+  - **Tests.** Rust: `lay_on` (the line through the point for every barrel at 12 m to 1.5 km, the held azimuth, the arc's floor)
+    and `battery_shot` (the tip at 30 m and 1.4 km, overhead, below the arc, no lead from the muzzle). GUT:
+    `test_a_batterys_pulse_starts_at_the_drawn_barrel_tip_at_30_m_and_at_long_range` (`test_grid_aim_call_sites`; fails on
+    HEAD). `test_station_grid`'s barrel test checked that each start lay 2 m from the one before; its bolts fall within metres of
+    I5's axis, where a left and a right barrel's tips now come close, so it checks each start against the drawn tip of the barrel
+    that fired instead.
+  - Counts from the staged scratch copy: Rust 248 pass; 908 scripts compile; GUT_SLOW=1 test_grid_aim_call_sites 3,
+    test_station_grid 9, test_station_grid_threads 1, test_parity_fixture 3, test_flight_parity_fight 1, test_weapon_rows_battle
+    1, test_brain_parity 7, test_brain_think_parity 5, test_heavy_cannon 10, test_interceptor_battery_model 4,
+    test_turret_threads 3, test_turret_defense 2, test_turret_line_of_fire 3, test_turret_kernel 12, test_sim_core 21,
+    test_native_constants 2, test_frame_passes 12, test_station_grid_lights 1, all pass; GUT_BALANCE=1
+    test_station_grid_balance 3/3.
+  - **(H):** up close, pulses leave the barrel tips; a battery firing at shots from nearly overhead turns far between its left
+    and right barrels (it showed that before as well).
 
 ### M8-T11 The walls beside the cargo bay stop flickering
 
