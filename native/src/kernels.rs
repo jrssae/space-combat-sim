@@ -1473,6 +1473,25 @@ pub mod pilot {
         exempt_id: i64,
         v_des: Vector3,
     ) -> Avoided {
+        avoid_keeping_off(rows, ship, contacts, statics, exempt_id, &[], v_des)
+    }
+
+    /// How near a friendly ship a wingman keeps when nothing closes, m (M7-T38's separation: twice a Starfury's keep-off).
+    pub const KEEP_OFF_FRIEND_M: f64 = 50.0;
+
+    /// `avoid`, with the rows `friends` kept off as well (M7-T76, a wing forming up): the answer never closes on one the
+    /// ship could not stop short of `KEEP_OFF_FRIEND_M` (`closing_wall`), whatever the dodges round the others and a big
+    /// hull's slide asked for; a big hull's own walls still have the last word.
+    #[allow(clippy::too_many_arguments)]
+    pub fn avoid_keeping_off(
+        rows: &Rows,
+        ship: &Ship,
+        contacts: &[i32],
+        statics: &[i32],
+        exempt_id: i64,
+        friends: &[i32],
+        v_des: Vector3,
+    ) -> Avoided {
         let mut dodge = Vector3::new(0.0, 0.0, 0.0);
         let mut urgent = false;
         let mut pull_out = false;
@@ -1480,6 +1499,7 @@ pub mod pilot {
         // (0..1), its velocity and how far it is. A handful at most (the station's frame and drum).
         let mut walls: [(Vector3, f32, Vector3, f32); 6] = [(Vector3::ZERO, 0.0, Vector3::ZERO, 0.0); 6];
         let mut wall_count = 0;
+        let mut hull_seen = false;
         let a_stop = maxf(ship.a_retro, 0.01);
         let turn_rate = maxf(minf(ship.rate_max_x, ship.rate_max_y), 0.01);
         let urgent_s = 0.5 * PI / turn_rate + URGENT_SETTLE_S;
@@ -1492,6 +1512,7 @@ pub mod pilot {
         for j in listed {
             let c_velocity = rows.velocities[j];
             if let Some(surface) = rows.surface(j) {
+                hull_seen = true;
                 // A big hull (M7-T06): each of its volumes near enough to matter is a threat at its nearest point, so a
                 // ship goes round the station's skin, not its 4 km bounding sphere, and keeps off a tunnel's walls.
                 let reach = ship.radius + MARGIN_M;
@@ -1562,7 +1583,26 @@ pub mod pilot {
         // The nearest hull has the last word.
         walls[..wall_count].sort_by(|a, b| b.3.total_cmp(&a.3));
         let mut v_out = add(v_des, dodge);
+        // Near a big hull a stop short of a friend may have to wait for the urgent turn (M7-T38).
+        let friend_settle_s = if hull_seen { urgent_s } else { URGENT_SETTLE_S };
         for _ in 0..2 {
+            for j in friends.iter().filter_map(|&r| row(rows, r)) {
+                let c_velocity = rows.velocities[j];
+                if let Some((away, _)) = closing_wall(
+                    ship.position,
+                    ship.velocity,
+                    rows.positions[j],
+                    c_velocity,
+                    KEEP_OFF_FRIEND_M,
+                    friend_settle_s,
+                    a_side,
+                ) {
+                    let into = -dot(sub(v_out, c_velocity), away);
+                    if into > 0.0 {
+                        v_out = add(v_out, scale(away, into));
+                    }
+                }
+            }
             for &(n, share, c_velocity, _) in &walls[..wall_count] {
                 let into = -dot(sub(v_out, c_velocity), n);
                 if into > 0.0 {
@@ -1575,6 +1615,32 @@ pub mod pilot {
             urgent,
             pull_out,
         }
+    }
+
+    /// Whether a ship at `position` moving at `velocity` must not let its wish close on a body at `c_position` moving at
+    /// `c_velocity` (M7-T38, M7-T76): it is nearer than `keep_m` plus the room it needs to stop closing (a settle of
+    /// `settle_s`, then `a_stop`). When it must, the unit vector from the body to the ship and the distance.
+    pub fn closing_wall(
+        position: Vector3,
+        velocity: Vector3,
+        c_position: Vector3,
+        c_velocity: Vector3,
+        keep_m: f64,
+        settle_s: f64,
+        a_stop: f64,
+    ) -> Option<(Vector3, f64)> {
+        let off = sub(position, c_position);
+        let d = f64::from(length(off));
+        if d < 1e-3 {
+            return None;
+        }
+        let away = div_s(off, d as f32);
+        let closing_now = maxf(-f64::from(dot(sub(velocity, c_velocity), away)), 0.0);
+        let look = keep_m + closing_now * settle_s + closing_now * closing_now / (2.0 * a_stop);
+        if d >= look {
+            return None;
+        }
+        Some((away, d))
     }
 
     /// How far outside a big hull's keep-off distance a wish into it starts to turn along the skin, m.

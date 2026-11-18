@@ -738,7 +738,10 @@ func _avoid(p: Perception, flight: FlightCommand) -> void:
 	var wish: Vector3 = brain.desired_velocity if brain.has_desired_velocity else p.velocity
 	var radius: float = combatant.damageable.bounding_radius if combatant.damageable != null else 0.0
 	# A committed rammer flies into its target (M3-T13), everything else is still avoided; rocks and mines too (M4-T09).
-	var result: Dictionary = AvoidanceMath.filter_seen(p, radius, wish, brain.avoid_exempt_id, hash(combatant.display_name))
+	# A wingman forming up keeps off its friends whatever the dodges ask (M7-T76).
+	var forming: bool = brain is AiPilot and (brain as AiPilot).current is BehaviourFormation
+	var result: Dictionary = AvoidanceMath.filter_seen(p, radius, wish, brain.avoid_exempt_id, hash(combatant.display_name),
+			forming)
 	var filtered: Vector3 = result["v_des"]
 	if filtered == wish:
 		return

@@ -258,7 +258,8 @@ static func _think_gdscript(t: Twin, p: Perception) -> PackedStringArray:
 	var urgent: bool = false
 	if not pc.flight.brake and not (p.contacts.is_empty() and p.statics.is_empty()):
 		var wish: Vector3 = t.pilot.desired_velocity if t.pilot.has_desired_velocity else p.velocity
-		var result: Dictionary = AvoidanceMath.filter_seen(p, t.radius, wish, t.pilot.avoid_exempt_id, t.tie_hash)
+		var result: Dictionary = AvoidanceMath.filter_seen(p, t.radius, wish, t.pilot.avoid_exempt_id, t.tie_hash,
+				t.pilot.current is BehaviourFormation)
 		var filtered: Vector3 = result["v_des"]
 		if filtered != wish:
 			avoiding = true

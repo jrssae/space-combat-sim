@@ -165,6 +165,7 @@ pub struct Scratch {
     pub bolt_candidates: Vec<u32>,
     named: Vec<u32>,
     lane_contacts: Vec<i32>,
+    friend_rows: Vec<i32>,
     hostile_row: Vec<bool>,
     friendly_row: Vec<bool>,
 }
@@ -1200,7 +1201,19 @@ impl Brain {
                     scratch.contacts.iter().copied().filter(|&r| rows.surface(r as usize).is_none()),
                 );
             }
-            let avoided = pilot::avoid(
+            // A wingman forming up keeps off its friends whatever the dodges ask (M7-T76).
+            scratch.friend_rows.clear();
+            if self.current_kind() == i32::from(KIND_FORMATION) {
+                let relation = |j: usize| inputs.relations.get(rows.faction_ix[j] as usize).copied();
+                scratch.friend_rows.extend(scratch.contacts.iter().copied().filter(|&r| {
+                    let j = r as usize;
+                    j != own_row
+                        && rows.rigid[j]
+                        && rows.surface(j).is_none()
+                        && relation(j) == Some(pilot::FRIENDLY)
+                }));
+            }
+            let avoided = pilot::avoid_keeping_off(
                 rows,
                 &pilot::Ship {
                     position: p.position,
@@ -1216,6 +1229,7 @@ impl Brain {
                 if on_lane { &scratch.lane_contacts } else { &scratch.contacts },
                 &scratch.statics,
                 self.avoid_exempt_id,
+                &scratch.friend_rows,
                 wish,
             );
             if avoided.v_des != wish || avoided.pull_out {
@@ -3393,6 +3407,9 @@ struct FormationState {
     crumb_hull: i64,
     last_crumb_s: f64,
     trailing: bool,
+    // The axis a wingman comes round its leader about while its slot lies across the leader (M7-T76), kept until it is
+    // round, so every wingman goes the way the slots went.
+    swing_axis: Option<Vector3>,
     last_leader_id: i64,
     last_leader_velocity: Vector3,
     last_s: f64,
@@ -3420,10 +3437,22 @@ impl FormationState {
     const CRUMB_S: f64 = 0.25;
     const TRAIL_S: f64 = 0.5;
     const TRAIL_TRIES: usize = 16;
-    // Near a big hull a friendly ship nearer than this is pushed off, m, at up to this speed, m/s (twice a Starfury's
-    // keep-off: slots 56 m apart are left alone).
-    const SEPARATION_M: f64 = 50.0;
+    // A friendly ship nearer than this is pushed off, m, at up to this speed, m/s (twice a Starfury's keep-off: slots 56 m
+    // apart are left alone).
+    const SEPARATION_M: f64 = pilot::KEEP_OFF_FRIEND_M;
     const SEPARATION_MPS: f64 = 40.0;
+    // The moment a wingman takes to start a stop short of a friend, s.
+    const SETTLE_S: f64 = 1.0;
+    // Coming round the leader (M7-T76): how far round the aim leads the ship, and where it is round, rad; how far out,
+    // against its slot's distance, a ship still comes round rather than flying in; how far off the leader's way a wingman
+    // aims while the leader burns toward it harder than `SWING_BURN_MPS2`, m.
+    const SWING_STEP_RAD: f64 = 0.785;
+    const SWING_DONE_RAD: f64 = 0.35;
+    const SWING_REACH: f64 = 3.0;
+    const SWING_CLEAR_M: f64 = 50.0;
+    const SWING_BURN_MPS2: f64 = 8.0;
+    // A wish closing on a big hull slower than this is no fall, m/s.
+    const HOLD_MATCHED_MPS: f64 = 3.0;
 
     fn new(profile: &Profile) -> Self {
         FormationState {
@@ -3436,6 +3465,7 @@ impl FormationState {
             crumb_hull: 0,
             last_crumb_s: f64::NEG_INFINITY,
             trailing: false,
+            swing_axis: None,
             last_leader_id: 0,
             last_leader_velocity: Vector3::ZERO,
             last_s: f64::NEG_INFINITY,
@@ -3453,6 +3483,7 @@ impl FormationState {
         self.crumb_hull = 0;
         self.last_crumb_s = f64::NEG_INFINITY;
         self.trailing = false;
+        self.swing_axis = None;
     }
 
     fn enter(&mut self) {
@@ -3476,6 +3507,7 @@ impl FormationState {
         let slot;
         let mut slot_velocity;
         let mut slot_accel = Vector3::ZERO;
+        let mut leader_accel = Vector3::ZERO;
         self.on_link = false;
         if leader >= 0 {
             let l = leader as usize;
@@ -3493,7 +3525,7 @@ impl FormationState {
                 && (since - dt).abs() < 0.5 * dt
                 && speed_sq > 1.0
             {
-                let leader_accel = div_s(
+                leader_accel = div_s(
                     sub(leader_velocity, self.last_leader_velocity),
                     since as f32,
                 );
@@ -3527,6 +3559,7 @@ impl FormationState {
             let l = leader as usize;
             self.lay_crumb(tick, tick.rows.positions[l], p.now_s);
             if let Some(v_des) = self.trail(tick, ship, slot, l) {
+                let v_des = Self::held_off(tick, ship, v_des);
                 self.trailing = true;
                 cmd.rot = brain_maths::face(
                     &p.basis,
@@ -3538,7 +3571,16 @@ impl FormationState {
                 return;
             }
         }
-        let error = add(to_slot, scale(sub(slot_velocity, p.velocity), Self::LEAD_S));
+        let aim = if leader >= 0 {
+            let l = leader as usize;
+            let (forward, up) = (tick.forward_of(l), tick.up_of(l));
+            let leader_at = tick.rows.positions[l];
+            let aim = self.swing(leader_at, forward, up, p.position, slot).unwrap_or(slot);
+            Self::clear_of_burn(leader_at, leader_accel, up, aim)
+        } else {
+            slot
+        };
+        let error = add(sub(aim, p.position), scale(sub(slot_velocity, p.velocity), Self::LEAD_S));
         let cap = if self.slot_error_m <= Self::FAR_RANGE_M {
             Self::NEAR_CLOSURE_MPS
         } else {
@@ -3551,9 +3593,10 @@ impl FormationState {
             ),
             scale(slot_accel, brain_maths::HORIZON_S as f32),
         );
-        if Self::hull_in_sight(tick) {
-            v_des = Self::kept_apart(tick, ship, v_des);
-        }
+        // Every friendly ship is kept off, not only near a big hull (M7-T76): a wing re-forming after its leader turns
+        // about must not come back through itself.
+        v_des = Self::kept_apart(tick, ship, v_des);
+        v_des = Self::held_off(tick, ship, v_des);
         let rate = ship.capability.rate_max;
         if leader >= 0 && self.slot_error_m <= Self::ALIGN_RANGE_M {
             let l = leader as usize;
@@ -3583,6 +3626,82 @@ impl FormationState {
             );
             seek_velocity(cmd, p, &ship.capability, v_des, false, wish);
         }
+    }
+
+    // The point a wingman at `own` flies for instead of `slot` while the slot lies across its leader at `leader_at` (M7-T76:
+    // the leader turned about, so a straight way back to the slot runs through the leader and the rest of the wing). The
+    // ship comes round a step at a time at its own distance from the leader, over the leader's top from its left and under
+    // it from its right (`forward`, `up`), so the two arms pass on different levels and each arm's ships on their own
+    // circles. None when the slot is not across.
+    fn swing(
+        &mut self,
+        leader_at: Vector3,
+        forward: Vector3,
+        up: Vector3,
+        own: Vector3,
+        slot: Vector3,
+    ) -> Option<Vector3> {
+        let rel_own = sub(own, leader_at);
+        let rel_slot = sub(slot, leader_at);
+        let (r_own, r_slot) = (f64::from(length(rel_own)), f64::from(length(rel_slot)));
+        if r_own < 1.0 || r_slot < 1.0 || r_own > Self::SWING_REACH * r_slot + Self::SWING_CLEAR_M {
+            self.swing_axis = None;
+            return None;
+        }
+        if self.swing_axis.is_none() {
+            if f64::from(dot(rel_own, rel_slot)) >= 0.0 {
+                return None;
+            }
+            let over = if f64::from(dot(rel_own, cross(forward, up))) > 0.0 { neg(up) } else { up };
+            let turn = cross(rel_own, over);
+            self.swing_axis = Some(if f64::from(length(turn)) > 0.1 * r_own {
+                normalized(turn)
+            } else {
+                normalized(cross(rel_own, rel_slot))
+            });
+        }
+        let axis = self.swing_axis?;
+        let (a_own, a_slot) = (f64::from(dot(rel_own, axis)), f64::from(dot(rel_slot, axis)));
+        let flat_own = sub(rel_own, scale(axis, a_own as f32));
+        let flat_slot = sub(rel_slot, scale(axis, a_slot as f32));
+        let (f_own, f_slot) = (f64::from(length(flat_own)), f64::from(length(flat_slot)));
+        let mut angle = f64::from(dot(cross(flat_own, flat_slot), axis)).atan2(f64::from(dot(flat_own, flat_slot)));
+        if angle < 0.0 {
+            angle += TAU;
+        }
+        if f_own < 1.0 || angle < Self::SWING_DONE_RAD || angle > TAU - Self::SWING_DONE_RAD {
+            self.swing_axis = None;
+            return None;
+        }
+        let step = minf(angle, Self::SWING_STEP_RAD);
+        let k = step / angle;
+        let out = rotated(div_s(flat_own, f_own as f32), axis, step as f32);
+        let aim = add(
+            scale(out, (f_own + (f_slot - f_own) * k) as f32),
+            scale(axis, (a_own + (a_slot - a_own) * k) as f32),
+        );
+        Some(add(leader_at, aim))
+    }
+
+    // `aim` moved off the line its leader at `leader_at` comes along while it burns toward the ship harder than
+    // `SWING_BURN_MPS2` (M7-T76: turned about, it brakes back into the wing behind it faster than a wingman still turning
+    // can), to `SWING_CLEAR_M` from it, on the side the aim is (`up` when it is on the line).
+    fn clear_of_burn(leader_at: Vector3, leader_accel: Vector3, up: Vector3, aim: Vector3) -> Vector3 {
+        let burn = f64::from(length(leader_accel));
+        if burn <= Self::SWING_BURN_MPS2 {
+            return aim;
+        }
+        let a_dir = div_s(leader_accel, burn as f32);
+        let rel = sub(aim, leader_at);
+        let along = f64::from(dot(rel, a_dir));
+        let lateral = sub(rel, scale(a_dir, along as f32));
+        let wide = f64::from(length(lateral));
+        if along <= 0.0 || wide >= Self::SWING_CLEAR_M {
+            return aim;
+        }
+        let flat_up = sub(up, scale(a_dir, dot(up, a_dir)));
+        let side = if wide > 1.0 { div_s(lateral, wide as f32) } else { normalized(flat_up) };
+        add(leader_at, add(scale(a_dir, along as f32), scale(side, Self::SWING_CLEAR_M as f32)))
     }
 
     // Lays the leader's point at `at` every `CRUMB_S` while a big hull is in sight, relative to the first resting one (the
@@ -3662,33 +3781,42 @@ impl FormationState {
         detour(tick, ship, slot, self.far_closure_mps)
     }
 
-    // `v_des` kept off every friendly ship (M7-T38): one the ship is closing on within the room it needs to stop is a wall
-    // the wish may not close on, and one nearer than `SEPARATION_M` is pushed off. Near a big hull a wing pushed off its
-    // slots comes back fast, and must not come back through its leader or a wingmate.
+    // `v_des` kept off every friendly ship (M7-T38, everywhere since M7-T76): one the ship is closing on within the room it
+    // needs to stop is a wall the wish may not close on, and one nearer than `SEPARATION_M` is pushed off. A wing pushed off its slots (by a big
+    // hull, or its leader turning about) comes back fast, and must not come back through its leader or a wingmate.
     fn kept_apart(tick: &Tick, ship: &Ship, v_des: Vector3) -> Vector3 {
         let p = &tick.p;
-        // The worst stop: across the nose on the side thrusters, after avoidance's urgent turn.
+        // The worst stop: across the nose on the side thrusters, after a moment to settle; near a big hull, after
+        // avoidance's urgent turn as well (M7-T38), since a ship pulling out of the hull's way may be turned away.
         let a_stop = maxf(minf(ship.capability.a_rcs_x, ship.capability.a_rcs_y), 0.01);
-        let rate = f64::from(ship.capability.rate_max.x.min(ship.capability.rate_max.y));
-        let turn_s = 0.5 * std::f64::consts::PI / maxf(rate, 0.01) + 1.0;
+        let settle_s = if tick.contacts.iter().any(|&r| tick.rows.surface(r as usize).is_some()) {
+            let rate = f64::from(ship.capability.rate_max.x.min(ship.capability.rate_max.y));
+            0.5 * std::f64::consts::PI / maxf(rate, 0.01) + Self::SETTLE_S
+        } else {
+            Self::SETTLE_S
+        };
         let mut out = v_des;
         for &r in tick.contacts {
             let j = r as usize;
-            if j == tick.own_row || !tick.rows.rigid[j] || tick.relation(j) != pilot::FRIENDLY {
+            if j == tick.own_row
+                || !tick.rows.rigid[j]
+                || tick.rows.surface(j).is_some()
+                || tick.relation(j) != pilot::FRIENDLY
+            {
                 continue;
             }
-            let off = sub(p.position, tick.rows.positions[j]);
-            let d = f64::from(length(off));
-            if d < 1e-3 {
-                continue;
-            }
-            let away = div_s(off, d as f32);
             let c_velocity = tick.rows.velocities[j];
-            let closing_now = maxf(-f64::from(dot(sub(p.velocity, c_velocity), away)), 0.0);
-            let look = Self::SEPARATION_M + closing_now * turn_s + closing_now * closing_now / (2.0 * a_stop);
-            if d >= look {
+            let Some((away, d)) = pilot::closing_wall(
+                p.position,
+                p.velocity,
+                tick.rows.positions[j],
+                c_velocity,
+                Self::SEPARATION_M,
+                settle_s,
+                a_stop,
+            ) else {
                 continue;
-            }
+            };
             let into = -f64::from(dot(sub(out, c_velocity), away));
             if into > 0.0 {
                 out = add(out, scale(away, into as f32));
@@ -3701,9 +3829,46 @@ impl FormationState {
         out
     }
 
-    // Whether a big hull is among the contacts.
-    fn hull_in_sight(tick: &Tick) -> bool {
-        tick.contacts.iter().any(|&r| tick.rows.surface(r as usize).is_some())
+    // `v_des` held off every big hull in sight (M7-T76): a wish that would carry the ship at a hull's face faster than it
+    // could still stop short of it (a turn, then the retros, as avoidance reckons a stop) closes no faster than that, and
+    // along the face it is left alone. The face is taken outside avoidance's slide band, so a wing whose leader flies into
+    // the station holds off short of it instead of following it in and leaving avoidance to pull it out.
+    fn held_off(tick: &Tick, ship: &Ship, v_des: Vector3) -> Vector3 {
+        let p = &tick.p;
+        let keep = ship.radius + pilot::MARGIN_M;
+        let a_stop = maxf(ship.capability.a_retro, 0.01);
+        let rate = f64::from(ship.capability.rate_max.x.min(ship.capability.rate_max.y));
+        let turn_s = 0.5 * std::f64::consts::PI / maxf(rate, 0.01) + 1.0;
+        let mut out = v_des;
+        for &r in tick.contacts {
+            let j = r as usize;
+            if tick.rows.surface(j).is_none() {
+                continue;
+            }
+            let c_velocity = tick.rows.velocities[j];
+            let w = sub(out, c_velocity);
+            let speed = f64::from(length(w));
+            if speed <= Self::HOLD_MATCHED_MPS {
+                continue;
+            }
+            let stop_s = turn_s + speed / a_stop;
+            // Outside the band first; a ship already inside it holds off the keep-off distance itself.
+            let entry = surface::path_entry(tick.rows, j, p.position, w, stop_s, keep + pilot::SLIDE_BAND_M)
+                .or_else(|| surface::path_entry(tick.rows, j, p.position, w, stop_s, keep));
+            let Some((t, n)) = entry else {
+                continue;
+            };
+            let falling = -f64::from(dot(w, n));
+            if falling <= Self::HOLD_MATCHED_MPS {
+                continue;
+            }
+            let gap = falling * t;
+            let most = a_stop * ((turn_s * turn_s + 2.0 * gap / a_stop).sqrt() - turn_s);
+            if falling > most {
+                out = add(out, scale(n, (falling - most) as f32));
+            }
+        }
+        out
     }
 
     // `BehaviourFormation._heading`.

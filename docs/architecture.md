@@ -5796,12 +5796,14 @@ assets/weapons/grid_*.tres       the light pulse turret, the heavy cannon and th
 
 ```
 native/src/kernels.rs            pilot::avoid at a big hull: slide_along (the wish turned along the skin), the pull-out, swept rings
-                                 for a turning hull, two hulls' limits together; T38: skin_points, wall_of, wish_wall
+                                 for a turning hull, two hulls' limits together; T38: skin_points, wall_of, wish_wall;
+                                 T76: avoid_keeping_off (a wingman's friends kept off its answer), closing_wall
 native/src/surface.rs            + SurfaceVolume.swept and Surface.girth, near_swept, nearest_to_avoid; T38: way_out (the rings
                                  as one solid), path_entry (a stopping path's face: volume_entry, ring_entry)
 native/src/brain_behaviours.rs   + big hulls always contacts (SURFACE_SIGHT_M), the attacker first at a hostile hull, the station
                                  as a target, its mounts as aim points (Field.sub_points), detour, docking lanes (Route.precise);
-                                 T38: FormationState's trail (lay_crumb, trail) and kept_apart
+                                 T38: FormationState's trail (lay_crumb, trail) and kept_apart; T76: kept_apart everywhere,
+                                 swing (a slot across the leader), clear_of_burn, held_off (a hull's face ahead)
 native/src/turret_kernels.rs     + PickJob.points: every working grid mount, for the brains
 native/src/brain.rs              + ScsBrains.set_route_lane, restart_route
 src/ai/route.gd                  + lane, lane_arrival_m, a waypoint's face and spin (add_lane)
@@ -5855,7 +5857,27 @@ data/station/traffic.json        the run's ships and spacing, its kinds' weights
   wing goes in file; with none, the detour toward the slot; back on the slot once it and the way to it are clear (`describe`:
   `trailing`). Near a big hull, trailing or in formation, a friendly ship it is closing on within the room a stop across the
   nose takes (the urgent turn, then the side thrusters) is a wall its wish may not close on, and one within 50 m is pushed off
-  at up to 40 m/s (`kept_apart`). Away from big hulls the formation is as it was, bit for bit.
+  at up to 40 m/s (`kept_apart`). (T76 keeps friends off everywhere, below.)
+- **The wing forming up (T76).** Formation flight, anywhere:
+  - **friends kept off** (`kept_apart`): T38's wall away from big hulls too (`pilot::closing_wall`: a friendly ship it is
+    closing on within 50 m plus the room a stop on the side thrusters takes, after a 1 s settle, or near a big hull after the
+    urgent turn as well, is a wall its wish may not close on), and one within 50 m is pushed off at up to 40 m/s; a big hull's
+    row is no friend. The avoidance filter keeps the same friends off its answer (`pilot::avoid_keeping_off`, before the
+    hulls' walls, which keep the last word; `pilot::avoid` is it with none, bit for bit);
+  - **coming round** (`FormationState::swing`): a wingman within three times its slot's distance (plus 50 m) of its leader
+    whose slot lies more than a quarter turn round the leader from it (the leader turned about) flies for a point 45
+    degrees on round the leader at its own distance, easing toward the slot's, over the leader's top from its left and
+    under it from its right (the axis kept until it is within 20 degrees of the slot), so the arms pass on different levels
+    and an arm's ships on their own circles;
+  - **out of a burning leader's way** (`clear_of_burn`): while the leader burns toward the wingman harder than 8 m/s^2 (turned
+    about, it brakes back into the wing faster than a wingman still turning can), the wingman's aim keeps 50 m off the line
+    the leader comes along;
+  - **a big hull held off** (`held_off`, trailing too): a wish whose stopping path meets a hull's face (`path_entry` grown by
+    the keep-off and `SLIDE_BAND_M`, or by the keep-off inside that band) closes on it no faster than the ship could still
+    stop short of it (the urgent turn, then the retros); along the face it is left alone. A wing whose leader flies into the
+    station holds off instead of following it in and leaving avoidance to pull it out.
+  The GDScript reference (`BehaviourFormation`, `AvoidanceMath.filter_seen(keep_friends)`, `ScsPilotKernels.avoid_keeping_off`)
+  flies the same away from big hulls (`test_brain_think_parity`); no parity recording holds a formation, so none moved.
 - **Raid targeting (maintainer).** `AttackState.score`: with a hostile big hull among the contacts, the last attacker
   inside `KEEP_ATTACKER_S` gets `ATTACK_W_ANSWER` (1.0, above every other term); when that attacker is the hull itself (the
   grid's guns; the drum's shots name the station through `Targetable.SPEAKS_FOR`) the hull is the target though no rigid

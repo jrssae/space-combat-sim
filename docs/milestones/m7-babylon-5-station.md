@@ -3646,3 +3646,57 @@ Settled with the maintainer in T02 (2026-11-13). The grid guards the bow; the af
   only with the reason stated).
 - **Done when:** tests (an eleven-ship Alpha re-forming after a high-speed reversal: no ally-ally contact; the leader flying into the
   station: no wingman reaches the hull; formation flying otherwise unchanged); the maintainer checks it (H); committed.
+- **Done (code part, 2026-11-17):**
+  - **Reproduced** headless (a leader flown on a schedule with Alpha's eleven on the V under FORM ON ME, `test_wing_reform`; the
+    station harness of T38, `test_station_wing_follow`). Turning about (yaw 180 degrees, then a 30 m/s^2 burn back) on HEAD: in
+    2.5 s at 100, 200 or 300 m/s, 1 ram each (a wingman into the leader at 75 to 91 m/s); in 1.5 or 2.5 s burning from the
+    start, 3 and 4 rams, two and three of them between wingmen (up to 148 m/s); at a Starfury's 60 degrees/s and 300 m/s
+    burning from the start, 6 (ALPHA 2 and 6 at 67 m/s, ALPHA 9 into the leader at 224 m/s); pitching over, none. Into the
+    station: a leader flown straight into the drum, the spine or the bow, or bouncing off them tumbling, lost no wingman on HEAD
+    at 120 to 300 m/s, nor did a live run (`play station_launch`, Alpha formed, `goto "BABYLON 5"`, god on, the player shoved
+    into the frame at 150 m/s: `ram.events` 1, the player's own); a leader glancing into the drum's flank at 11 degrees and on
+    inside did: 2 lost at 200 m/s (ALPHA 6 and 9 rammed each other pulling out), 4 at 250, 3 at 300 (into the drum's rim and
+    the frame), 3 and 2 rolled on its side at 250 and 300.
+  - **Causes:** (1) a turnabout mirrors the V through its leader, so every wingman's straight way to its new slot runs through
+    the leader, and an arm's slots lie on one line, so through its armmates too; away from big hulls nothing kept friends off
+    the formation's wish (T38's wall acted only near a hull), and the avoidance filter dodges friends on the wish, not on the
+    ship's real closing. (2) The leader burning back after the turn brakes harder than a wingman still turning can, so it backs
+    into whoever is on its line behind it. (3) Near the station the wish kept the leader's speed at the hull until avoidance
+    pulled out, then asked for it again (braking, re-accelerating, braking), and wingmen pulling out together closed on
+    each other.
+  - **Fix (native, `brain_behaviours.rs`, `kernels.rs`; contract in `docs/architecture.md` §20.4):** `kept_apart` everywhere
+    (T38's wall, after a 1 s settle away from hulls, the urgent turn near them; the station's own row is no longer counted); the
+    avoidance filter keeps a wingman's friends off its answer the same way (`pilot::avoid_keeping_off`, before the hulls' walls;
+    `pilot::avoid` is it with none, so every other ship's avoidance is bit for bit as before); a slot across the leader is
+    **come round to** at the ship's own distance, 45 degrees at a time, over the leader's top from its left and under it from
+    its right (`FormationState::swing`), so the arms pass on different levels; while the leader burns toward a wingman harder
+    than 8 m/s^2 its aim keeps 50 m off the leader's line (`clear_of_burn`); a wish whose stopping path meets a big hull's face
+    outside avoidance's band closes on it no faster than the ship could still stop short of it (`held_off`, trailing too).
+    Slots and their assignment are T74's. The GDScript reference twin (`BehaviourFormation`, `AvoidanceMath.filter_seen` with
+    `keep_friends`, `ScsPilotKernels.avoid_keeping_off`) flies the same, so `test_brain_think_parity`'s wings stay bit for bit
+    (it sees no big hull; `held_off` is native only). No parity recording holds a formation: none moved.
+  - **After:** turning about at 60 degrees/s: 200 m/s 0 rams, nearest centres 39.7 m (HEAD 0, 19.9 m), re-formed 46.8 s after
+    the turn began (HEAD 45.9); 300 m/s burning from the start 0 rams (HEAD 6), nearest 25.9 m, 63.2 s (HEAD 60.2); pitched
+    over 0 (HEAD 0), 31.8 m, 47.9 s (HEAD 38.2). The glancing station runs: 0 lost at 150, 200, 250 and 300 m/s, but rolled on
+    its side 1 at 250 and 3 at 300 (HEAD 3 and 2: a rolled V's arms 200 m above and below the leader following it into the
+    drum's rim); the 200 m/s glance from five starts 20 to 50 m apart: 1 lost on one (a wingman sliding on past the stopped
+    leader into the frame aft of the drum at 111 m/s), HEAD 2 lost and 2 rammed on three. These glances at 250 m/s and more
+    sit at the edge of a Starfury's stop (a kilometre and more) and swing on a few metres of start; left open. A live GPU run (Alpha formed at 200 m/s, the player turned about and burned back):
+    `ram.events` 0. Plain formation: `test_ai_formation`'s finger-four joins in 6.2, 6.17 and 6.0 s (HEAD 6.2, 6.17, 5.87),
+    straight and turn errors as before; T74's eleven settle as before (`test_launch_bay`).
+  - **Tests:** GUT `test_wing_reform` (new, slow: 3, turning about at 200 m/s, at 300 m/s burning from the start, pitching
+    over: no ram, no two centres within 25 m, re-formed); `test_station_wing_follow` (+2: the leader into the drum, Alpha
+    behind a leader glancing into the drum at 200 m/s and bouncing out tumbling; HEAD fails the second, 2 lost); Rust 234
+    (+4: the wish walled off a wingmate away from a hull, coming round over and under, the aim off a burning leader's line, a
+    hull held off, friends kept off the filter's answer).
+  - **Balance** (GUT_BALANCE=1, the staged copy against HEAD's library): `test_dogfight` and `test_m3_sandbox` the same fights to
+    the number (every dogfight seed at 360 s with 4 allies left, the sandbox one wave in 900 s; both pending under AC12 on
+    HEAD already).
+  - **Staged copy** (HEAD plus this change): Rust 234; the compile check 895 scripts; GUT, GUT_SLOW=1, 235 of 235 across the
+    wing, formation, launch, station, traffic, avoidance and parity files (`test_brain_think_parity`, `test_brain_tolerance`,
+    `test_flight_parity_fight`, `test_weapon_rows_battle`, `test_pilot_kernels`, `test_core_state`, `test_driver_step`,
+    `test_row_commands`, `test_bolt_rows`).
+  - **GPU capture:** `references/screenshots/M7-T76 avoidance/reform_00_-0.5s.png` to `reform_10_55.0s.png` (chase camera
+    looking back, Alpha re-forming after the player turned about at 200 m/s).
+  - **For the maintainer (H):** the wing coming round over and under the leader after a turnabout (a look check); re-forming
+    after pitching over is some 10 s slower than before.

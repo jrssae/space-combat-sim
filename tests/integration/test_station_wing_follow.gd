@@ -18,6 +18,12 @@ const REJOIN_S: float = 40.0
 ## How long the threads test flies the dive: into the arms and out (100 m/s from 900 m out).
 const DIGEST_TICKS: int = 780
 
+## The wing's slots this test flies: the finger-four, or Alpha's eleven (`_alpha`).
+var _slots: Array[Vector3] = SLOTS
+## Whether the leader stops at its track's end instead of flying on (M7-T76: a leader that runs into the hull), and then
+## bounces back off it, tumbling.
+var _hold: bool = false
+var _bounce: bool = false
 var _rate_backup: int = 60
 var _scale_backup: float = 1.0
 var _steps_backup: int = 8
@@ -29,6 +35,9 @@ func should_skip_script():
 
 
 func before_each() -> void:
+	_slots = SLOTS
+	_hold = false
+	_bounce = false
 	_rate_backup = Engine.physics_ticks_per_second
 	_scale_backup = Engine.time_scale
 	_steps_backup = Engine.max_physics_steps_per_frame
@@ -123,6 +132,49 @@ func test_the_wing_follows_the_leader_through_both_fin_sets_twice() -> void:
 	await _fly(path, 100.0, Vector3.UP, true)
 
 
+func test_the_wing_holds_off_when_the_leader_runs_into_the_drum() -> void:
+	# M7-T76: the leader (a ghost) flies at the drum's side at 120 m/s and stops 20 m inside its skin; the wing, trailing
+	# it, must hold off or break away rather than follow it in.
+	_hold = true
+	await _fly(func(station: Station, _speed: float) -> Array[Vector3]:
+		return _into(station, Vector3(-2000.0, 0.0, -2000.0), Vector3.RIGHT), 120.0, Vector3.UP, true)
+
+
+func test_alpha_holds_off_when_the_leader_glances_into_the_drum() -> void:
+	# Alpha's eleven on the V (M7-T74) behind a leader (a ghost) at 200 m/s closing on the drum at 11 degrees, into its
+	# flank and on inside the hull to a stop, then backing out tumbling. On HEAD before M7-T76 ALPHA 6 and 9 rammed each
+	# other at 48 m/s pulling out of the hull's way, and both were lost.
+	_slots = _alpha()
+	_hold = true
+	_bounce = true
+	await _fly(_glance(), 200.0, Vector3.UP, true)
+
+
+# The glancing track: from 1.1 km off the drum's port flank ahead of the bow end, 5 km on at 11 degrees to the axis, in
+# through the drum's flank to a stop deep inside the station.
+static func _glance() -> Array[Vector3]:
+	var from := Vector3(-1000.0, 0.0, -5200.0)
+	var to: Vector3 = from + Vector3(600.0, 0.0, 3200.0).normalized() * 4998.0
+	return [from, from.lerp(to, 0.5), to]
+
+
+# Alpha's eleven slots (the balanced V, M7-T74).
+static func _alpha() -> Array[Vector3]:
+	var formation := Formation.new()
+	var out: Array[Vector3] = []
+	for k: int in range(1, 12):
+		out.append(formation.offset(k, 11))
+	return out
+
+
+# A straight track from `from` along `direction` to 20 m inside the station's collision hulls.
+static func _into(station: Station, from: Vector3, direction: Vector3) -> Array[Vector3]:
+	var at: Vector3 = from
+	while not _touches(station, at, 1.0) and at.distance_to(from) < 5000.0:
+		at += direction * 5.0
+	return [from, from.lerp(at, 0.5), at + direction * 20.0]
+
+
 ## The middle of the groove between the Cobra arms along the axis, station frame (the drum's waist, 280 m long).
 const ARMS_Z: float = -2840.0
 ## How far from the axis the leader threads the arms, and its racetrack's turn radius, m.
@@ -196,8 +248,11 @@ func _fly(path: Variant, speed: float, up: Vector3 = Vector3.UP, ghost: bool = f
 	var wing: Array[Combatant] = f["wing"]
 	var rams: Array[int] = f["rams"]
 	var total_s: float = f["total_s"]
-	var nearest: Array[float] = [INF, INF, INF]
-	var nearest_at: Array[String] = ["", "", ""]
+	var nearest: Array[float] = []
+	var nearest_at: Array[String] = []
+	nearest.resize(wing.size())
+	nearest.fill(INF)
+	nearest_at.resize(wing.size())
 	var leader_nearest: float = INF
 	_speed_up()
 	var t0: float = SimClock.now()
@@ -213,7 +268,7 @@ func _fly(path: Variant, speed: float, up: Vector3 = Vector3.UP, ghost: bool = f
 			var d: float = _hull_skin(scene, station, p)
 			if d < nearest[i]:
 				nearest[i] = d
-				var slot: Vector3 = Formation.slot_point(at, -leader.ship.global_basis.z, leader.ship.global_basis.y, SLOTS[i])
+				var slot: Vector3 = Formation.slot_point(at, -leader.ship.global_basis.z, leader.ship.global_basis.y, _slots[i])
 				nearest_at[i] = "%.1f s at (%.0f, %.0f, %.0f), %.0f m/s, %.0f m from its slot" % [t, p.x, p.y, p.z,
 						wing[i].ship.linear_velocity.length(), p.distance_to(slot)]
 	after_each()
@@ -222,7 +277,7 @@ func _fly(path: Variant, speed: float, up: Vector3 = Vector3.UP, ghost: bool = f
 	for i: int in wing.size():
 		lost += 1 if wing[i].damageable.hull.destroyed else 0
 		off_slot.append("%.0f" % wing[i].ship.global_position.distance_to(Formation.slot_point(leader.ship.global_position,
-				-leader.ship.global_basis.z, leader.ship.global_basis.y, SLOTS[i])))
+				-leader.ship.global_basis.z, leader.ship.global_basis.y, _slots[i])))
 	gut.p("  at the end the wing is %s m from its slots" % " / ".join(off_slot))
 	gut.p("wing past the station at %.0f m/s: rams %d, lost %d, leader at least %.0f m off, %.0f s" % [speed, rams[0], lost,
 			leader_nearest, total_s])
@@ -285,9 +340,9 @@ func _launch(path_of: Variant, speed: float, up: Vector3, ghost: bool, mode: Str
 		leader.ship.collision_mask = 0
 	var wing: Array[Combatant] = []
 	var rams: Array[int] = [0]
-	for i: int in SLOTS.size():
+	for i: int in _slots.size():
 		var c: Combatant = scene.ship(ALLY, Factions.EARTH_ALLIANCE, "ALPHA %d" % (i + 2),
-				Formation.slot_point(start, heading, basis.y, SLOTS[i]), {"type": "ai", "profile": "ally_starfury"}, 80 + i,
+				Formation.slot_point(start, heading, basis.y, _slots[i]), {"type": "ai", "profile": "ally_starfury"}, 80 + i,
 				false, basis)
 		var pilot: AiPilot = c.driver.brain as AiPilot
 		pilot.add_behaviour(BehaviourFormation.new(pilot.profile))  # as `WingDirector.add_member` briefs a wingman
@@ -305,9 +360,10 @@ func _launch(path_of: Variant, speed: float, up: Vector3, ghost: bool, mode: Str
 	leader.ship.linear_velocity = heading * speed
 	_add_rams(scene)
 	scene.attach()
-	_brief(wing, leader)
+	_brief(wing, leader, _slots)
 	return {"scene": scene, "station": scene.get_meta(&"station"), "leader": leader, "wing": wing, "rams": rams,
-			"track": track, "lengths": lengths, "speed": speed, "up": up, "total_s": lengths[lengths.size() - 1] / speed}
+			"track": track, "lengths": lengths, "speed": speed, "up": up, "total_s": lengths[lengths.size() - 1] / speed,
+			"hold": _hold, "bounce": _bounce}
 
 
 # Puts flight `f`'s leader where its track is `t` seconds in, moving along it, and tells the wing where it is, as
@@ -320,8 +376,13 @@ static func _lead(f: Dictionary, t: float) -> Vector3:
 	var up: Vector3 = f["up"]
 	var scene: TurretScene = f["scene"]
 	var at: Vector3 = leader.ship.global_position
-	var want: Vector3 = _along(track, lengths, t * speed)
-	var velocity: Vector3 = (_along(track, lengths, (t + 0.1) * speed) - want) / 0.1
+	var end: float = lengths[lengths.size() - 1] if f["hold"] else INF
+	var since_end: float = t - end / speed
+	if f["bounce"] and since_end > 0.0:
+		_bounce_off(f, since_end, at)
+		return at
+	var want: Vector3 = _along(track, lengths, minf(t * speed, end))
+	var velocity: Vector3 = (_along(track, lengths, minf((t + 0.1) * speed, end)) - want) / 0.1
 	leader.ship.linear_velocity = velocity + (want - at) * 2.0
 	leader.ship.angular_velocity = Vector3.ZERO
 	if velocity.length_squared() > 1.0:
@@ -334,6 +395,26 @@ static func _lead(f: Dictionary, t: float) -> Vector3:
 	return at
 
 
+# Flight `f`'s leader `since_end` seconds after its track's end, inside the hull: backing off at 0.3 of its speed for
+# 3 s, tumbling for 4 s, then at rest; and tells the wing.
+static func _bounce_off(f: Dictionary, since_end: float, at: Vector3) -> void:
+	var leader: Combatant = f["leader"]
+	var track: PackedVector3Array = f["track"]
+	var scene: TurretScene = f["scene"]
+	if not f.has("struck_basis"):
+		f["struck_basis"] = leader.ship.global_basis
+	var last: Vector3 = (track[track.size() - 1] - track[track.size() - 2]).normalized()
+	var velocity: Vector3 = -last * 0.3 * float(f["speed"]) if since_end < 3.0 else Vector3.ZERO
+	leader.ship.linear_velocity = velocity
+	leader.ship.angular_velocity = Vector3.ZERO
+	var struck: Basis = f["struck_basis"]
+	leader.ship.global_basis = struck.rotated(Vector3(1.0, 1.0, 0.3).normalized(), 1.5 * minf(since_end, 4.0)).orthonormalized()
+	for c: Combatant in f["wing"]:
+		var ctx: AiContext = (c.driver.brain as AiPilot).context
+		ctx.leader_link_position = scene.world.to_universe(at)
+		ctx.leader_link_velocity = velocity
+
+
 # The leader's top at `at` flying along `forward`: `up`, or away from the station's axis when `up` is zero; never along
 # `forward`.
 static func _up_at(up: Vector3, at: Vector3, forward: Vector3) -> Vector3:
@@ -342,7 +423,7 @@ static func _up_at(up: Vector3, at: Vector3, forward: Vector3) -> Vector3:
 
 
 # Puts the wing on the leader's slots under COVER ME, as `WingDirector.refresh` briefs a player's wing.
-static func _brief(wing: Array[Combatant], leader: Combatant) -> void:
+static func _brief(wing: Array[Combatant], leader: Combatant, slots: Array[Vector3]) -> void:
 	var ids := PackedInt64Array([leader.targetable.get_instance_id()])
 	for c: Combatant in wing:
 		ids.append(c.targetable.get_instance_id())
@@ -357,7 +438,7 @@ static func _brief(wing: Array[Combatant], leader: Combatant) -> void:
 		ctx.order = AiContext.Order.COVER_ME
 		ctx.leader_id = leader.targetable.get_instance_id()
 		ctx.has_slot = true
-		ctx.slot_offset = SLOTS[i]
+		ctx.slot_offset = slots[i]
 
 
 # The Catmull-Rom spline through `path`, densely sampled into `track` with the length flown to each sample in `lengths`.

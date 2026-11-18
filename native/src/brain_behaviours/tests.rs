@@ -906,20 +906,118 @@ fn fly_on_from(bench: &mut Bench, brain: &mut Brain, k: usize) {
 }
 
 #[test]
-fn near_a_hull_a_wingman_does_not_close_on_a_wingmate_it_could_not_stop_short_of() {
-    // A wingmate 60 m to the side flying with it, the wingman already drifting at it at 40 m/s, both near the hull: its
-    // slot lies beyond the wingmate, but the wish has no way toward it.
-    let mut bench = wing_bench(Vector3::new(0.0, 300.0, 600.0), 0.0, Some(Vector3::new(60.0, 300.0, 600.0)));
+fn a_wingman_does_not_close_on_a_wingmate_it_could_not_stop_short_of_near_a_hull_or_away_from_one() {
+    // A wingmate 60 m to the side flying with it, the wingman already drifting at it at 40 m/s; its slot lies beyond the
+    // wingmate, but the wish has no way toward it: near the hull (M7-T38), and away from any hull too (M7-T76).
+    for leader_at in [Vector3::new(0.0, 300.0, 600.0), Vector3::new(0.0, 300.0, 9000.0)] {
+        let mut bench = wing_bench(leader_at, 0.0, Some(leader_at + Vector3::new(60.0, 0.0, 0.0)));
+        bench.rows.velocities[2] = Vector3::new(40.0, 0.0, -100.0);
+        bench.rows.velocities[3] = Vector3::new(0.0, 0.0, -100.0);
+        let mut brain = wingman(Vector3::new(150.0, 0.0, 0.0));
+        bench.think(&mut brain, 0.0, 0, NEVER, 12);
+        assert!(brain.desired_velocity.x <= 1e-3, "at {leader_at:?}, no closing: {:?}", brain.desired_velocity);
+    }
+    // Away from a hull, with room to stop (the wingmate 300 m off), the wish goes for the slot.
+    let leader_at = Vector3::new(0.0, 300.0, 9000.0);
+    let mut bench = wing_bench(leader_at, 0.0, Some(leader_at + Vector3::new(300.0, 0.0, 0.0)));
     bench.rows.velocities[2] = Vector3::new(40.0, 0.0, -100.0);
     bench.rows.velocities[3] = Vector3::new(0.0, 0.0, -100.0);
     let mut brain = wingman(Vector3::new(150.0, 0.0, 0.0));
     bench.think(&mut brain, 0.0, 0, NEVER, 12);
-    assert!(brain.desired_velocity.x <= 1e-3, "no closing on the wingmate: {:?}", brain.desired_velocity);
-    // Far from any hull the formation is as it was: the wish goes for the slot.
-    let mut far = wing_bench(Vector3::new(0.0, 300.0, 9000.0), 0.0, Some(Vector3::new(60.0, 300.0, 9000.0)));
-    far.rows.velocities[2] = Vector3::new(40.0, 0.0, -100.0);
-    far.rows.velocities[3] = Vector3::new(0.0, 0.0, -100.0);
-    let mut brain = wingman(Vector3::new(150.0, 0.0, 0.0));
-    far.think(&mut brain, 0.0, 0, NEVER, 12);
     assert!(brain.desired_velocity.x > 1.0, "for the slot: {:?}", brain.desired_velocity);
+}
+
+#[test]
+fn a_wingman_whose_slot_swings_across_its_leader_comes_round_over_it_from_the_left_and_under_it_from_the_right() {
+    // M7-T76: the leader turned about, so a slot behind it now lies ahead on the other side, straight across the leader
+    // from the wingman. The wingman comes round at its own distance instead of through the leader: over its top from its
+    // left, under it from its right, so the two arms never meet. Away from any hull.
+    let leader_at = Vector3::new(0.0, 300.0, 9000.0);
+    for (side, up) in [(-1.0_f32, 1.0_f32), (1.0, -1.0)] {
+        let mut bench = wing_bench(leader_at, 0.0, None);
+        bench.rows.positions[2] = leader_at + Vector3::new(40.0 * side, 0.0, 40.0);
+        let mut brain = wingman(Vector3::new(-40.0 * side, 0.0, -40.0));
+        bench.think(&mut brain, 0.0, 0, NEVER, 12);
+        assert!(brain.formation.swing_axis.is_some(), "side {side}: coming round");
+        let rise = brain.desired_velocity.y * up;
+        assert!(rise > 5.0, "side {side}: {:?}", brain.desired_velocity);
+    }
+    // A slot it is already beside is flown to straight.
+    let mut bench = wing_bench(leader_at, 0.0, None);
+    bench.rows.positions[2] = leader_at + Vector3::new(-60.0, 0.0, 40.0);
+    let mut brain = wingman(Vector3::new(-40.0, 0.0, 40.0));
+    bench.think(&mut brain, 0.0, 0, NEVER, 12);
+    assert!(brain.formation.swing_axis.is_none(), "straight to the slot");
+}
+
+#[test]
+fn a_wingman_coming_round_keeps_off_the_line_its_leader_burns_back_along() {
+    // The leader turned about and burns back at 30 m/s^2 toward the wing behind it: a wingman coming round from straight
+    // behind it aims 50 m off that line, not down it; an aim already wide of it, or ahead, is kept.
+    let leader_at = Vector3::new(0.0, 300.0, 9000.0);
+    let mut bench = wing_bench(leader_at, 0.0, None);
+    bench.rows.positions[2] = leader_at + Vector3::new(0.0, 0.0, 80.0);
+    let mut brain = wingman(Vector3::new(0.0, 0.0, -80.0));
+    for k in 0..2 {
+        bench.rows.velocities[1] = Vector3::new(0.0, 0.0, -100.0 + 30.0 * 0.25 * k as f32);
+        bench.think(&mut brain, 0.25 * k as f64, 0, NEVER, 12);
+    }
+    let aim = FormationState::clear_of_burn(
+        bench.rows.positions[1],
+        Vector3::new(0.0, 0.0, 30.0),
+        Vector3::new(0.0, 1.0, 0.0),
+        leader_at + Vector3::new(0.0, 0.0, 60.0),
+    );
+    let off = aim - bench.rows.positions[1];
+    assert!(brain.formation.swing_axis.is_some(), "coming round");
+    assert!(off.x.hypot(off.y) >= 49.9, "off the line: {off:?}");
+    for kept in [Vector3::new(70.0, 0.0, 60.0), Vector3::new(0.0, 0.0, -60.0)] {
+        let burn = Vector3::new(0.0, 0.0, 30.0);
+        let aim = FormationState::clear_of_burn(leader_at, burn, Vector3::new(0.0, 1.0, 0.0), leader_at + kept);
+        assert_eq!(aim, leader_at + kept);
+    }
+}
+
+#[test]
+fn a_wingman_holds_off_a_hull_its_leader_flies_into() {
+    // M7-T76: the leader flies into the hull's end face at 100 m/s and on inside; the wingman 600 m out behind it, its slot
+    // just outside the face, asks to close on the face no faster than it could still stop short of it (a turn, then the
+    // retros), outside avoidance's band. Far from any hull the same wish follows the leader.
+    let mut bench = wing_bench(Vector3::new(0.0, 0.0, 980.0), 600.0, None);
+    let mut brain = wingman(Vector3::new(0.0, 0.0, 40.0));
+    bench.think(&mut brain, 0.0, 0, NEVER, 12);
+    let turn = 0.5 * std::f64::consts::PI / 1.5 + 1.0;
+    let gap = 1580.0 - 1000.0 - (8.0 + pilot::MARGIN_M + pilot::SLIDE_BAND_M);
+    let most = 30.0 * ((turn * turn + 2.0 * gap / 30.0).sqrt() - turn);
+    let closing = -f64::from(brain.desired_velocity.z);
+    assert!(closing <= most + 0.5, "closing {closing} against at most {most}");
+    let mut far = wing_bench(Vector3::new(0.0, 0.0, 9980.0), 600.0, None);
+    let mut brain = wingman(Vector3::new(0.0, 0.0, 40.0));
+    far.think(&mut brain, 0.0, 0, NEVER, 12);
+    assert!(-f64::from(brain.desired_velocity.z) > most + 5.0, "{:?}", brain.desired_velocity);
+}
+
+#[test]
+fn keeping_off_friends_walls_off_the_closing_and_with_none_the_answer_is_avoids() {
+    // M7-T76: a wingmate 200 m ahead at rest, the ship closing on it at 100 m/s (a stop across the nose needs 400 m): with
+    // the wingmate kept off the answer does not close on it; with no friends kept off it is `avoid`'s, bit for bit.
+    let rows = rows_with(&[(RAIDER, 1, Vector3::new(0.0, 0.0, 9000.0)), (MATE, 1, Vector3::new(0.0, 0.0, 8800.0))], 1000.0, 0.0);
+    let ship = pilot::Ship {
+        position: rows.positions[1],
+        velocity: Vector3::new(0.0, 0.0, -100.0),
+        radius: 8.0,
+        a_retro: 30.0,
+        rate_max_x: 1.5,
+        rate_max_y: 1.5,
+        a_rcs_x: 20.0,
+        a_rcs_y: 20.0,
+        tie_hash: 5,
+    };
+    let wish = Vector3::new(30.0, 0.0, -100.0);
+    let plain = pilot::avoid(&rows, &ship, &[2], &[], 0, wish);
+    let none = pilot::avoid_keeping_off(&rows, &ship, &[2], &[], 0, &[], wish);
+    assert_eq!(plain.v_des, none.v_des);
+    let kept = pilot::avoid_keeping_off(&rows, &ship, &[2], &[], 0, &[2], wish);
+    assert!(kept.v_des.z >= -1e-3, "no closing: {:?}", kept.v_des);
+    assert!((kept.v_des.x - plain.v_des.x).abs() < 1e-3, "across it is left alone: {:?} {:?}", kept.v_des, plain.v_des);
 }
