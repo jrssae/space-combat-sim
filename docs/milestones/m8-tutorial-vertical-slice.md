@@ -91,7 +91,9 @@ A `MissionScript` (`data/missions/tutorial.gd`) with `data/scenarios/tutorial.js
      ("keep this up and one day you might be flying a White Star"); par, a plain word of encouragement; below par, a teasing remark;
      a nav buoy destroyed, the worst (something about being lucky to end up piloting a rusty cargo ship). Par and exemplary times are
      data.
-  8. Combat: cycle targets (next, previous, ahead), shoot unarmed training drones with the lead reticle, switch fire modes.
+  8. Combat: target the nearest enemy and the next one (the pad's B tap, the keyboard's target-next) and pick from the radial
+     target menu (B held); target-previous and target-ahead are not taught (maintainer, 2026-11-18: keyboard and mouse only, and
+     target-ahead has no default binding); shoot unarmed training drones with the lead reticle, switch fire modes.
   9. Wing orders: form, attack and cover from the comms menu.
   10. The exterior tour: the Cobra bays, the main docking bay, the command section, the defense grid (heavy cannons, interceptors),
       the jumpgate.
@@ -218,7 +220,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 |---|---|---|---|
 | AC1 | Tutorial script: T01's beats and checks written into D79 (the lines go into the dialog file in T05), approved by the maintainer | A | **Met** (T01, 2026-11-18) |
 | AC2 | Squadron launch: the cinematic plays from the hangar, the squadron launches and forms up, skipping lands in the same state (test on the end state), the player's launch hands over as M7-T08 does | A | |
-| AC3 | Control checks: each check passes on its actions and state in headless tests driven by injected commands, for pad and keyboard bindings; a rebind changes the hint; a missed check repeats and demonstrates, never fails | A | **Met** (T04, 2026-11-18): the demo is asked for on `MissionApi.demo_requested`; the instructor flying it is T05's |
+| AC3 | Control checks: each check passes on its actions and state in headless tests driven by injected commands, for pad and keyboard bindings; a rebind changes the hint; a missed check repeats and demonstrates, never fails | A | **Met except the flown demo** (T04, 2026-11-18; the instructor flying it is checked in T05's AC4): the demo is asked for on `MissionApi.demo_requested`; the instructor flying it is T05's |
 | AC4 | Tutorial mission: starts from the menu and runs to the debrief in a headless test driven by console commands; the tour visits its points; the raid comes through the jumpgate vortex and the station's allies and grid fight it; losing the player ends in the debrief | A | |
 | AC5 | Docking: the player docks through the main docking bay, is repaired (hull, guns, missiles) and relaunched from a Cobra bay (headless test on the state before and after); a wingman docks on order and by threshold and rejoins its wing | A | |
 | AC6 | Strike carrier: M10-T19 merged into `m8` with its tests green next to M7's; one collision builder serves the station and the carrier | A | |
@@ -343,6 +345,10 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 - **Goal:** AC4 (D79), from T01's script.
 - **Files:** `data/missions/tutorial.gd`, `data/scenarios/tutorial.json`, the dialog file from T01, the front end's New game entry,
   `tests/integration/test_tutorial.gd` (menu to debrief, the player lost), `info.md`.
+- **Notes (from T04):** the instructor flies the demo T04's runner asks for (`MissionApi.demo_requested`); the `check_<id>`
+  dialog lines; the pause menu's skip of the training block; drop the `target_prev` and `target_ahead` checks from
+  `data/checks/controls.json` (D79 beat 8); T04's thresholds (main pods 40 m/s, retros 20, strafe 10, pitch and yaw 45°, roll 180°,
+  free look 25°, a 20 s repeat) are data, tuned in play.
 - **Done when:** AC4.
 
 ### M8-T06 Dock in the main docking bay to be repaired and relaunched
