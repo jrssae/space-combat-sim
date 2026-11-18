@@ -9,7 +9,7 @@ describe what M1 builds and §15 what M2 adds; §14 is the long-term design that
 
 | Layer | Choice | Version | Licence |
 |---|---|---|---|
-| Target platform | **Linux x86_64 + Vulkan, only.** Windows, macOS and consoles are not planned (deferred indefinitely) | - | - |
+| Target platform | **Linux x86_64 + Vulkan**; **Windows x86_64 from M9** (the maintainer, 2026-11-18). macOS and consoles are not planned (deferred indefinitely). Milestone numbers in this file before 2026-11-18 are the old ones (`docs/roadmap.md` has the mapping) | - | - |
 | Engine | Godot (official single-precision build, no .NET) | **4.7.2-stable** | MIT |
 | Renderer | Forward+ (Vulkan) | - | - |
 | Controller | Generic XInput-class gamepad through Godot/SDL3's standard `JOY_*` layout; no Xbox-only features | - | - |

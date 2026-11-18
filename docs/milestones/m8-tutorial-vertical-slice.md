@@ -7,6 +7,10 @@ questions below were asked on 2026-11-18; the maintainer answered Q5 to Q8 the s
 stand until the maintainer answers. The tutorial's script is
 not planned here: its beats, lines and pacing are settled with the maintainer in T01, and T03 to T05 are filled in from it.
 
+The roadmap was renumbered on 2026-11-18 (`docs/roadmap.md`, "After the tutorial"): the capital-ship milestone planned on
+branch `m12` is now **M10**. This file calls its tasks by their planned ids (M12-T19, M12-T20, M12-T49) until T07 renames its
+plan file.
+
 Read `docs/architecture.md` first, especially §14.6 (launch bays and the mission framework), §16 (the instructor as an
 `AiPilot`, D37), §18 (M5: missions, `MissionApi`, dialog, the front end, the `CINEMATIC` camera) and M7's §20 (the station,
 Cobra-bay launches §20.2, the defense grid §20.3, traffic and the main docking bay's `DockingPlan` §20.4, the hold-X
@@ -20,8 +24,8 @@ Wagon"). Tasks are ordered inside each track; each is one PR-sized unit and name
 Make the first mission. The player starts in the hangar behind the menu, watches their squadron launch from the Cobra bays,
 launches, and is taught every control by a subtitled instructor. The instructor tours the station and its defense grid, then
 raiders come through the jumpgate and the player defends Babylon 5 with the station's allies, ending in a debrief. A damaged
-ship can dock in the main docking bay to be repaired and launched again. The raiders get their capital ships: M12's strike
-carrier (T19) comes into M8 and carries the civilian escort's raids, and the Raider Battle Wagon moves here from M12. M7's
+ship can dock in the main docking bay to be repaired and launched again. The raiders get their capital ships: M10's strike
+carrier (T19) comes into M8 and carries the civilian escort's raids, and the Raider Battle Wagon moves here from M10. M7's
 carried clean-ups land, and the game ships as a Linux x86_64 release build.
 
 ## Planning questions (asked 2026-11-18)
@@ -32,7 +36,7 @@ carried clean-ups land, and the game ships as a Linux x86_64 release build.
 | Q2 | Which controls the instructor checks | The roadmap's list: main pods, retros, strafe (each axis), roll, pitch and yaw, flight assist on and off, the brake, targeting (next, nearest, the radial menu), fire modes (guns linked and alternate, missiles); each check passes on the same `InputMap` actions M1 reads, shown with the pad and keyboard bindings (keyboard parity: every pad action has a keyboard equivalent) | |
 | Q3 | Can the player fail or skip a check? | A check never fails: the instructor repeats the hint after a pause and demonstrates the move (D37's manoeuvres); the whole training part can be skipped from the pause menu straight to the tour | |
 | Q4 | The squadron-launch cinematic | As the roadmap says (maintainer, 2026-11-13): the Cobra bay's sawtooth doors open (T02), Starfuries drop out one after another, flip, light their engines and form up, with exterior shots; skippable; it ends with the player's own launch from M7-T08's sequence | |
-| Q5 | How does the M12 strike carrier come into M8? | Merge `origin/m12` into `m8` in T07, reconciling M12's collision builder with the one M7 built, then mark M12-T19 done once the maintainer flies it in M8's play-test | Maintainer, 2026-11-18: the proposed answer |
+| Q5 | How does the M10 strike carrier come into M8? | Merge `origin/m12` into `m8` in T07, reconciling M10's collision builder with the one M7 built, then mark M12-T19 done once the maintainer flies it in M8's play-test | Maintainer, 2026-11-18: the proposed answer |
 | Q6 | The strike carrier in the civilian escort | Each wave's raiders arrive docked on the carrier and launch once it is clear of its point (Q29's data option); the carrier hangs back at stand-off, recalls survivors and jumps out when hurt or when its wave is down; destroying it is an optional objective | Maintainer, 2026-11-18: the proposed answer, for the first two waves; the last wave comes with the Battle Wagon (Q8) |
 | Q7 | Docking for repair and relaunch | The player holds X at the main docking bay's mouth (the `dock` interaction that answers "not available" today); `DockingPlan` flies the ship in through the inner doors; a timed repair restores the hull and reloads guns and missiles; the ship then launches from a Cobra bay through M7-T08's launch sequence. A wingman docks on a wing order, or by itself below a hull threshold, and rejoins after its relaunch | Maintainer, 2026-11-18: the proposed answer |
 | Q8 | The Battle Wagon in M8 | Moved from M12-T20 with its rules (Q31 there: from images, with weapons settled with the maintainer before work starts, four launch tubes). It appears in free-flight raids and a sandbox scenario; the tutorial's raiders come through the jumpgate vortex as the roadmap says | Maintainer, 2026-11-18: **also in the civilian escort: its last wave comes with the Battle Wagon**, launched from its tubes, instead of the strike carrier |
@@ -49,13 +53,13 @@ In:
 - **Carried from M7:** M7-2 the interceptor muzzle, M7-3 the cargo bay's flicker, M7-4 sawtooth Cobra doors, M7-5 the audio rework,
   M7-6 wingmen close formation gaps after losses.
 - **Carried from M4:** L15, the bench's `res://reports` in an exported build.
-- **The release build** for Linux x86_64 (Q9).
+- **The release build** for Linux x86_64 (Q9); the Windows build is M9, right after this milestone.
 
 Out:
-- Voiced dialog (M15; subtitles and the comms panel stay).
-- Every other capital ship and the M12 framework (sections, beams, the staged break-up): M12 as planned.
+- Voiced dialog (M29; subtitles and the comms panel stay).
+- Every other capital ship and the M10 framework (sections, beams, the staged break-up): M10 as planned.
 - Landing in a Cobra bay (the bays stay launch-only; docking goes through the main docking bay).
-- Story missions beyond the tutorial and the escort (M14).
+- Story missions beyond the tutorial and the escort (M12 onward, one milestone per mission).
 
 ## Design (to go into `docs/architecture.md` §21)
 
@@ -87,8 +91,8 @@ threshold, and the wing keeps their slots open (M7-6's re-slotting decides who m
 ### D83 The raider capitals in M8
 
 The strike carrier as M12-T19 built it (`docs/architecture.md` §19.18 on `m12`): `CarrierJumps` brings it for raider raids, with
-fighters docked or beside by data. The escort's first two waves set `docked` (Q6); its last wave comes with the Battle Wagon (Q8). The Battle Wagon follows M12's Q31 rules and its four
-tubes launch Delta-Vs; when M12's framework lands (sections, turrets, beams), both hulls move onto it like every other.
+fighters docked or beside by data. The escort's first two waves set `docked` (Q6); its last wave comes with the Battle Wagon (Q8). The Battle Wagon follows M10's Q31 rules and its four
+tubes launch Delta-Vs; when M10's framework lands (sections, turrets, beams), both hulls move onto it like every other.
 
 ## Acceptance criteria
 
@@ -115,7 +119,7 @@ tubes launch Delta-Vs; when M12's framework lands (sections, turrets, beams), bo
   table's.
 - **The tutorial's script is the maintainer's call.** T01 is held with the maintainer by the controller; no agent writes beats
   or lines before it. A question about the script that comes up later goes back to the maintainer.
-- **The Battle Wagon's weapons are the maintainer's call** (M12's Q31): settled with the controller before T09 starts.
+- **The Battle Wagon's weapons are the maintainer's call** (M10's Q31): settled with the controller before T09 starts.
 - **One working copy** on branch `m8` in the main checkout, no task branches.
 - **Locks**: every Godot or asset-building command goes through `scripts/godot_lock.sh` with `SCS_LOCK_LABEL=<task id>` set (`write`
   for `--import`, the native build and asset builds; `read` for tests and console runs; `--gpu` for windows). Commits stay under
@@ -138,7 +142,7 @@ tubes launch Delta-Vs; when M12's framework lands (sections, turrets, beams), bo
 | T06 | B | Dock in the main docking bay to be repaired and relaunched, for the player and the AI wingmen (D82, Q7) | - | Opus | The `dock` interaction, the lane for fighters, repair and a Cobra-bay relaunch; wing orders | not started |
 | T07 | C | Bring M12-T19's raider strike carrier into `m8`: merge `origin/m12`, one collision builder, its tests green (Q5) | - | Opus | Two branches built a collision builder; docs, `native/src/lib.rs` and `info.md` conflict | not started |
 | T08 | C | The civilian escort's raids come with the strike carrier (D83, Q6) | T07 | Opus | Mission data and pacing on `CarrierJumps`; the escort's tests kept green | not started |
-| T09 | C | Raider Battle Wagon (moved from M12-T20): from images, with weapons (M12 Q31) and four launch tubes; the escort's last wave comes with it (Q8) | T08, the maintainer on its weapons | Fable | No STL; a new hull with weapons and tube launches | not started |
+| T09 | C | Raider Battle Wagon (moved from M12-T20): from images, with weapons (M10 Q31) and four launch tubes; the escort's last wave comes with it (Q8) | T08, the maintainer on its weapons | Fable | No STL; a new hull with weapons and tube launches | not started |
 | T10 | D | Interceptor muzzle at the drawn barrel tip, and the grid balance measured again (roadmap M7-2) | - | Sonnet | A placement fix in the turret rows with a balance check | not started |
 | T11 | D | The walls beside the cargo bay stop flickering (roadmap M7-3) | - | Sonnet | Find the coplanar faces or shading cause in the station generator; a test | not started |
 | T12 | D | Audio rework of every sound effect and the Starfury engines' steady level (roadmap M7-5) | - | Opus | One loudness reference, the mix, and a smoothed engine gain; a listening checklist | not started |
@@ -153,7 +157,7 @@ tubes launch Delta-Vs; when M12's framework lands (sections, turrets, beams), bo
 - **Goal:** AC1 (D79). Held by the controller with the maintainer; not dispatched to an agent.
 - **Inputs the controller brings:** the roadmap's beats, Q2's list of checks with each one's action and a proposed pass
   condition, the instructor's manoeuvres (D37), the tour points (M7-T12, T57), the station raid's knobs (M7-T10).
-- **Files:** D79 in this file, `data/dialog/tutorial.json` (lines as data with voice ids for M15).
+- **Files:** D79 in this file, `data/dialog/tutorial.json` (lines as data with voice ids for M29).
 - **Done when:** AC1.
 
 ### M8-T02 Sawtooth Cobra-bay doors
@@ -200,7 +204,9 @@ tubes launch Delta-Vs; when M12's framework lands (sections, turrets, beams), bo
   native docking kernel, the raid in `CarrierJumps`) is on `origin/m12`, not yet flown by the maintainer.
 - **Steps:** merge `origin/m12` into `m8`; reconcile `tools/procgen/core/collision.py` and its tests with M7's builder into one
   (the station and the carrier both built from it, their compares unchanged); resolve `native/src/lib.rs`, the docs and `info.md`;
-  in the M12 file, mark T20 `not needed (moved to M8-T09)`; the M12 plan stays M12's.
+  rename the plan to `docs/milestones/m10-factions-and-capital-ships.md` and renumber its milestone references by the roadmap's
+  mapping (its tasks become M10-T..); mark T20 `not needed (moved to M8-T09)` and T49 `not needed (moved to M11)`; the rest of the
+  plan stays M10's, and its later work runs on branch `m10`.
 - **Done when:** AC6; the station's and the carrier's Python, Rust and GUT tests pass in a `--staged --build-native` scratch copy.
 
 ### M8-T08 The civilian escort's raids come with the strike carrier
