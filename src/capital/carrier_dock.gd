@@ -354,7 +354,8 @@ func _show(index: int, shown: bool) -> void:
 	if _multimesh == null:
 		return
 	var xform: Transform3D = cradles.docked_transform(index, _rest)
-	_multimesh.set_instance_transform(index, xform if shown else Transform3D(Basis.from_scale(Vector3.ZERO), xform.origin))
+	MultiMeshUpload.set_instance_transform(_multimesh, index,
+			xform if shown else Transform3D(Basis.from_scale(Vector3.ZERO), xform.origin))
 
 
 # The carrier died: its docked fighters die with it, each where it sat (Q28); the others are let go.
