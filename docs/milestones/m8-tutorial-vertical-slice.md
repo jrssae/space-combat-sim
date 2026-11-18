@@ -214,6 +214,34 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   fake files); the read stays off the per-frame path.
 - `state render` gains `vram_used_gb`, `vram_total_gb`, `vram_pct`; `info.md`, and `docs/playtest.md`'s overlay notes.
 
+### D87 The game's fonts (T21; maintainer, 2026-11-18)
+
+- Two freeware fonts the maintainer supplied (in `references/`, to be committed under `assets/fonts/` as third-party data and recorded
+  in `docs/third-party.md` with their source and the maintainer's word that they are freeware; the files carry no licence text and
+  the source page, fonts2u.com, refuses automated fetches): **Babylon5** (`B5______.ttf`, "Fantazia Fonts and Sounds") for every
+  title and headline, and **Babylon5Credits** (`Bac_____.ttf`, 1994) for larger blocks of text (mission briefings, debriefs, dialog,
+  menus' body text) **and the whole HUD**.
+- **All UI text uses one of the two**: the project's default theme font becomes Babylon5Credits, a `Title`/`Headline` theme type
+  variation uses Babylon5, and every label, button, `draw_string` and `RichTextLabel` (front end, pause, settings, controls,
+  briefing, debrief, comms, subtitles, HUD, overlay, console excepted if it needs a fixed width; say so) reads them from the theme or
+  one small `GameFonts` helper. A test walks `src/` and the scenes for any other font in use.
+- Both files use a symbol-encoded cmap (glyphs at U+F020-F0FF); the task checks Godot draws ASCII with them (HarfBuzz's symbol
+  mapping) and fixes the files' cmap at import time if not, and checks every character the UI prints is covered (digits, `%`, `/`,
+  `°`, the key and button names). A look sheet of the front end, a briefing, a debrief and the HUD in both views goes to the
+  maintainer before the commit (readability at HUD sizes is (H)).
+
+### D88 Gamepad detection (T22; maintainer, 2026-11-18)
+
+- The maintainer's pad sometimes is not seen by Godot while Steam sees it. Found 2026-11-18 with it plugged in and unseen: USB
+  `3537:2106` "HID zk" (a Zikway controller chip), bound only as a raw `hidraw` node (root-only) with **no evdev/joystick device**,
+  so nothing that reads input events (Godot's joypad layer) can see it; Steam reads it through its own HID access and, through
+  Steam Input, gives games it launches a virtual Xbox pad. Likely the pad comes up in a vendor or console mode some of the time.
+- The task diagnoses it on this machine (which mode, what changes when it is seen: the USB id, the driver, Steam running or not),
+  and then: logs every joypad at start and on hotplug (name, GUID, known mapping), shows a short toast when a pad connects or
+  disconnects and a front-end notice when none is found, adds a `joypads` console command (list, mapping, last events), and writes
+  a troubleshooting section in `docs/playtest.md` (the pad's mode switch, launching through Steam as a non-Steam game, a udev rule
+  if hidraw access helps SDL). Any game-side fix must keep gameplay reading `InputAdapter`, never `Input`.
+
 ## Acceptance criteria
 
 | # | Criterion | Kind | Done |
@@ -234,6 +262,8 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | AC14 | Approach cues and the gate's reach (D84): `ApproachCue`'s states are unit-tested over approach speeds, offsets and brake strengths; the cue shows on the gate and both bays in both views; the gate offers the jump farther out at speed, and headless jumps requested at 200 m/s to several km/s all run the line-up, the run-in and the cinematic and arrive through the mouth (tests on the end state and the shot's timing) | A | |
 | AC15 | Flights and orders (D85): the player commands only a flight of two wingmen where the mission says so; AI flights of three cover each other and stay within their cohesion distance through a seeded headless fight; ships in formation fire at targets in reach; the two hold-fire orders hold formation or position without firing and are lifted by any other order (tests for each, pad menu and keyboard), native kept 1 and 6 threads identical | A | |
 | AC16 | GPU memory (D86): the overlay shows VRAM used in GB and as a percentage of the card on the maintainer's GPU, matching `mem_info_vram_used` within a refresh; `state render` reports the three values; with no driver total it shows the game's share and `total unknown` (unit tests on fake sysfs files) | A | **Met** (T20, 2026-11-18) |
+| AC17 | Fonts (D87): both fonts in the repo with their `docs/third-party.md` entry; every UI text uses one of them (a test finds no other font); ASCII and the UI's symbols draw on the GPU; the maintainer approved the look sheet | A | |
+| AC18 | Gamepad detection (D88): the cause written down; joypads logged at start and hotplug, the connect, disconnect and none-found notices, `joypads` in `info.md`; the troubleshooting section; the maintainer's pad seen by the game in its working mode (H) | A | |
 
 ## Working rules for M8
 
@@ -277,6 +307,8 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T18 | B | Approach cues for navigation targets with an interaction (brake, overshoot, adjust course), and the jumpgate's reach, autopilot and cinematic scaled to the player's speed (D84; maintainer, 2026-11-18; numbered last because it was added after the others had numbers) | - (shared with T06) | Fable | Relative-motion maths on the HUD, and a gate run-in that starts from any speed with its shot timed to match | not started |
 | T19 | D | Flights of three: the player commands two wingmen, AI flights of three cover each other and stay together, every ship in formation may fire, and two new orders (form up and hold fire; hold position and hold fire) (D85; maintainer, 2026-11-18; numbered last because it was added after the others had numbers) | T13 | Fable | Native flight cohesion and mutual cover, two orders through the comms menu and keys, parity | not started |
 | T20 | D | GPU memory in use on the debug overlay, in GB and as a percentage of the card (D86; maintainer 2026-11-18; numbered last because it was added after the others had numbers) | - | Fable | Driver sysfs reads off the frame path, a fallback, the overlay and `state render` | done |
+| T21 | D | The game's fonts: Babylon5 for titles and headlines, Babylon5Credits for body text and the HUD, on all UI text (D87; maintainer, 2026-11-18; numbered last) | - | Fable | A theme over every screen and the HUD's own drawing, a symbol-encoded cmap, a look sheet first | not started |
+| T22 | D | Gamepad detection: why Godot sometimes misses the maintainer's pad, joypad logging and notices, `joypads`, troubleshooting (D88; maintainer, 2026-11-18; numbered last) | - | Fable | Linux input stack diagnosis on the real device, small notices | in progress |
 | T17 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M8-T01 Tutorial script (discussion with the maintainer)
@@ -541,6 +573,21 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   - **Limits:** two cards of one vendor (an AMD APU beside an AMD card) cannot be told apart by the adapter name, so the lowest
     numbered one is shown; NVIDIA's and Intel's drivers do not write these files, so they get `total unknown` until a source
     is added for them (Windows gets its own in M9).
+
+### M8-T21 The game's fonts
+
+- **Goal:** AC17 (D87).
+- **Files:** `assets/fonts/` (the two files), the default theme and its title variation, a `GameFonts` helper if code draws text,
+  every screen and HUD element that sets its own font, `docs/third-party.md`, a guard test, a look sheet under
+  `references/screenshots/M8-T21 fonts/` for the maintainer before the commit.
+- **Done when:** AC17.
+
+### M8-T22 Gamepad detection
+
+- **Goal:** AC18 (D88).
+- **Files:** a pure joypad report class, the connect/disconnect toast and the front end's notice, the `joypads` console command
+  and provider, `info.md`, `docs/playtest.md` (troubleshooting), tests with injected joypad events.
+- **Done when:** AC18.
 
 ### M8-T17 Integration, full suite, docs and acceptance
 
