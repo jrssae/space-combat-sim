@@ -22,7 +22,6 @@ SimClock="*res://src/autoload/sim_clock.gd"
 DebugConsole="*res://src/autoload/debug_console.gd"
 ControlProfiles="*res://src/autoload/control_profiles.gd"
 Game="*res://src/autoload/game.gd"
-Joypads="*res://src/autoload/joypads.gd"
 FramePassesNode="*res://src/rendering/frame_passes.gd"
 
 [debug]
