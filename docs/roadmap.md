@@ -87,6 +87,12 @@ here (the maintainer, 2026-11-08). Details, evidence and suggested fixes: `docs/
 | M7-5 | Audio rework of every sound effect (maintainer, 2026-11-17): review each effect's level, mix and attenuation against the others (engines, guns, hits, explosions, mines, station, jump vortex, UI), set one loudness reference, and fix the Starfury engines' inconsistent volume while thrusting (the level jumps as thrusters start, stop and overlap: smooth each engine's gain, sum the thrusters to a steady level per throttle, keep the mix from clipping); a listening checklist for the maintainer | M8 |
 | M7-6 | Wingmen close the gaps losses leave: when a Starfury in a formation is destroyed, the wingmen behind it move up into the empty slots (in `Wing.fill_order`'s order, the same rule newcomers follow, M7-T74) so the formation keeps its shape with no holes; the re-slotting flown with M7-T76's avoidance, no ally rams while moving up, native kept 1 and 6 threads identical, parity kept (maintainer, 2026-11-18) | M8 |
 
+## Carried from M8 (2026-11-18)
+
+| item | what | milestone |
+|---|---|---|
+| M8-1 | Promotion to squadron leader: a pilot who misses the tutorial's qualification (an exemplary buoy course, no more than one Starfury and no civilian lost) joins the squadron, and a later mission promotes them to leader; the rank is saved with the profile from M8 (D79) | placed when planned |
+
 ## Required: gravity
 
 Maintainer requirement (M2 play test): gravitational pull must be in the plan. It is, in three places: **M6** added gravity
