@@ -595,7 +595,7 @@ func test_the_civilian_escort_file_validates() -> void:
 	assert_eq(props.size(), 2)
 	assert_eq(props[0]["name"], "NAV ALPHA")
 	assert_almost_eq((props[0]["position"] as UniversePos).distance_to(props[1]["position"]), 30000.0, 1.0, "30 km apart (Q40)")
-	assert_eq_deep(result["pools"], {&"raider_fighter": 13, &"starfury_ally": 1, &"random_civilian": 1})
+	assert_eq_deep(result["pools"], {&"raider_fighter": 24, &"starfury_ally": 2, &"random_civilian": 1})
 	assert_eq((result["belts"] as Array).size(), 1, "the belt across the route")
 	assert_eq((result["civilian_names"] as Dictionary).size(), ShipCatalog.CIVILIAN_TYPES.size(), "names for all nine hulls")
 	var mission: Dictionary = result["mission"]

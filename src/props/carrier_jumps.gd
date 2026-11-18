@@ -20,7 +20,8 @@ extends Node3D
 ## one with no cradles holds its course until then. The strike carrier's fighters go home when few of the raid are left, or
 ## one by one when badly hurt; it flees when it has taken its share of damage, when its raid is over or when every surviving
 ## fighter has docked: through its own point once the drive has recharged, else it runs for the jumpgate (which needs no
-## drive), or with no gate away from the enemy. Fighters not docked within their time are left behind (Q27, Q30). The
+## drive), or with no gate away from the enemy. Once it flees, fighters not docked within their time are left behind (Q27,
+## Q30). The
 ## numbers are data (`data/capitals/capitals.json`, a raid's `carrier` options over them).
 
 const NODE_NAME: StringName = &"CarrierJumps"
@@ -395,9 +396,7 @@ func _stand_off(run: CarrierRun, cap: CapitalStandin, now: float) -> void:
 		if hull != null and CarrierTactics.fighter_goes_home(hull.hull.fraction(), float(run.options["fighter_return_hull"])):
 			cap.dock.recall(ship)  # with no free cradle it fights on
 	if run.recalled_at_s < 0.0 and CarrierTactics.recall_all(run.brought, _fighting(run).size(), int(run.options["recall_left"])):
-		_recall_all(run, cap, now)
-	elif run.recalled_at_s >= 0.0 and now - run.recalled_at_s >= float(run.options["wait_s"]):
-		_abandon(run, cap)
+		_recall_all(run, cap, now)  # it stands off until they are aboard: their time limit starts when it flees
 	var over: bool = CarrierTactics.raid_over(run.raid_ended, now - run.started_s, float(run.options["raid_s"]))
 	var why: StringName = CarrierTactics.flee_reason(cap.damageable.hull.fraction(), float(run.options["retreat_hull"]), over,
 			run.brought, _fighting(run).size(), cap.dock.returning_count())
@@ -412,13 +411,14 @@ func _stand_off(run: CarrierRun, cap: CapitalStandin, now: float) -> void:
 	_flee_step(run, cap, now)
 
 
-# One decision of a fleeing carrier (D83), every `DECIDE_S`: fighters past their time are left behind; with its drive
-# recharged it waits for the others, then jumps; until then it runs for the nearest gate, or with none from the enemy.
+# One decision of a fleeing carrier (D83), every `DECIDE_S`: fighters not aboard `wait_s` after it began to flee are left
+# behind; with its drive recharged it waits for the others, then jumps; until then it runs for the nearest gate, or with
+# none from the enemy.
 func _flee_step(run: CarrierRun, cap: CapitalStandin, now: float) -> void:
 	if now - run.decided_s < DECIDE_S:
 		return
 	run.decided_s = now
-	var waited_s: float = now - run.recalled_at_s
+	var waited_s: float = now - run.state_at_s
 	var wait_s: float = float(run.options["wait_s"])
 	if waited_s >= wait_s:
 		_abandon(run, cap)

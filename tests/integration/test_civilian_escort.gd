@@ -13,9 +13,12 @@ const FrontEndScene: PackedScene = preload("res://src/frontend/front_end.tscn")
 const MissionScriptClass: GDScript = preload("res://data/missions/civilian_escort.gd")
 ## The beat before the debrief, shortened so the tests do not wait three seconds each (a closing line still holds it).
 const BEAT_S: float = 0.25
-const WAVE_ONE: Array[String] = ["RAIDER 1", "RAIDER 2", "RAIDER 3"]
-const WAVE_TWO: Array[String] = ["RAIDER 4", "RAIDER 5", "RAIDER 6", "RAIDER 7"]
-const WAVE_THREE: Array[String] = ["RAIDER 8", "RAIDER 9", "RAIDER 10", "RAIDER 11", "RAIDER 12", "RAIDER 13"]
+## Six, eight and ten raiders (the maintainer, 2026-11-18).
+const WAVE_ONE: Array[String] = ["RAIDER 1", "RAIDER 2", "RAIDER 3", "RAIDER 4", "RAIDER 5", "RAIDER 6"]
+const WAVE_TWO: Array[String] = ["RAIDER 7", "RAIDER 8", "RAIDER 9", "RAIDER 10", "RAIDER 11", "RAIDER 12", "RAIDER 13",
+		"RAIDER 14"]
+const WAVE_THREE: Array[String] = ["RAIDER 15", "RAIDER 16", "RAIDER 17", "RAIDER 18", "RAIDER 19", "RAIDER 20", "RAIDER 21",
+		"RAIDER 22", "RAIDER 23", "RAIDER 24"]
 
 var main: Main
 var holder: Node
@@ -285,7 +288,7 @@ func test_a_wave_waits_for_the_last_to_be_down_and_then_a_breather() -> void:
 	assert_eq(_api().step_name(), &"wave_one", "wave two waits while wave one is up")
 	assert_true(_run("kill all").ok)
 	var down_s: float = _api().time_s()
-	await _wait_for("wave two", func() -> bool: return _journal_has("spawn RAIDER 4 raider_fighter"),
+	await _wait_for("wave two", func() -> bool: return _journal_has("spawn %s raider_fighter" % WAVE_TWO[0]),
 			roundi(60.0 * (MissionScriptClass.BREATHER_S + 15.0) / 4.0))
 	Engine.time_scale = scale_backup
 	# The breather counts from when the step sees the wave down, after its lines.
@@ -308,6 +311,35 @@ func test_a_civilian_back_from_a_detour_still_brings_the_next_wave() -> void:
 	await _wait_for("wave two", func() -> bool: return _api().step_name() == &"wave_two",
 			roundi(60.0 * (MissionScriptClass.BREATHER_S + 15.0) / 4.0))
 	Engine.time_scale = scale_backup
+
+
+func test_the_waves_and_the_arrival_do_not_need_nav_beta_in_one_piece() -> void:
+	# M8-T08: a stray bolt took the buoy in a long fight beside it, and the mission waited on the buoy for ever.
+	DebugConsole.flags.invulnerable = true
+	await _fly()
+	_civilian().damageable.invulnerable = true
+	for buoy: NavBuoy in main.buoys:
+		if buoy.display_name == "NAV BETA":
+			buoy.set_destroyed(true)
+	assert_true(_run("mission goto wave_one").ok)
+	await _ticks(2)
+	assert_false(_api().alive("NAV BETA"), "the buoy is gone")
+	assert_true(_run("kill all").ok)
+	var beta: Vector3 = MissionScriptClass.BETA_AT
+	main.mission.stage.place(_civilian_name(), UniversePos.new(beta.x + 600.0, beta.y, beta.z + 600.0, _api().world.system_id))
+	var limit_s: float = MissionScriptClass.BREATHER_S + 20.0
+	await _run_on(limit_s, func() -> bool: return _api().step_name() == &"wave_two")
+	assert_eq(_api().step_name(), &"wave_two", "the next wave comes by the civilian's place")
+	await _ticks(2)
+	assert_true(_run("kill all").ok)
+	await _run_on(limit_s, func() -> bool: return _api().step_name() == &"wave_three")
+	assert_eq(_api().step_name(), &"wave_three", "and the last")
+	await _ticks(2)
+	assert_true(_run("kill all").ok)
+	await _run_on(60.0, func() -> bool: return _api().world.line_finished(&"civilian_nearly_there"))
+	await _ticks(2)
+	assert_true(_api().world.line_finished(&"civilian_nearly_there"), "past the wave's lines, it waits for the arrival")
+	assert_false(_api().watched().has("nav beta"), "the arrival waits on the civilian's route, not on the buoy: %s" % str(_api().watched()))
 
 
 func test_every_actor_a_shot_names_is_in_play_from_the_start() -> void:
@@ -352,17 +384,17 @@ func test_a_wave_rides_in_docked_on_a_strike_carrier_and_is_launched() -> void:
 	var cap: CapitalStandin = run.carrier
 	assert_eq(cap.ship_class, CapitalStandin.STRIKE_CARRIER)
 	assert_eq(cap.targetable.display_name, "RAIDER CARRIER 1", "named by the wave's data")
-	assert_eq(cap.dock.docked_count(), 3, "its three raiders ride in on its cradles (Q6)")
-	assert_eq(_alive(WAVE_ONE), 3, "and count as in play while they do")
+	assert_eq(cap.dock.docked_count(), 6, "its six raiders ride in on its cradles (Q6)")
+	assert_eq(_alive(WAVE_ONE), 6, "and count as in play while they do")
 	assert_true(_api().alive("RAIDER CARRIER 1"), "the carrier is an actor of the mission")
 	assert_eq(_api().objective_state(&"carrier"), ObjectiveBook.ACTIVE, "destroying a carrier is offered")
 	await _run_on(60.0, func() -> bool: return run.state == CarrierRun.State.STANDOFF)
 	assert_eq(run.state, CarrierRun.State.STANDOFF, "clear of its point it launches them and hangs back")
-	assert_eq(cap.dock.launches, 3)
+	assert_eq(cap.dock.launches, 6)
 	for c: Combatant in main.ships.alive(ShipPool.DEFAULT_TYPE):
 		assert_true(c.ship.is_visible_in_tree(), "%s is launched" % c.display_name)
 		assert_false(c.ship.has_meta(CarrierJumps.RIDING_META))
-	assert_eq(_alive(WAVE_ONE), 3)
+	assert_eq(_alive(WAVE_ONE), 6)
 	assert_gt(_at(_civilian()).distance_to(main.world.to_universe(cap.global_position)), 5000.0, "the carrier stays well back")
 	await _run_on(60.0, func() -> bool: return _journal_has("say control_carrier"))
 	assert_true(_journal_has("say control_carrier"), "Control's line for the carrier")
@@ -395,7 +427,7 @@ func test_destroying_a_carrier_is_the_optional_objective() -> void:
 	await _ticks(4)
 	assert_eq(_api().objective_state(&"carrier"), ObjectiveBook.DONE, "a carrier destroyed")
 	assert_false(_api().has_ended(), "an optional objective ends nothing")
-	assert_eq(_alive(WAVE_ONE), 3, "its launched raiders fight on")
+	assert_eq(_alive(WAVE_ONE), 6, "its launched raiders fight on")
 
 
 func test_a_carrier_that_gets_away_is_not_a_kill_and_raiders_gone_home_are_down() -> void:
@@ -410,8 +442,8 @@ func test_a_carrier_that_gets_away_is_not_a_kill_and_raiders_gone_home_are_down(
 	assert_eq(_carriers().runs().size(), 1, "the skipped first wave's carrier is gone with it")
 	await _run_on(60.0, func() -> bool: return run.state == CarrierRun.State.STANDOFF)
 	for c: Combatant in main.ships.alive(ShipPool.DEFAULT_TYPE):
-		if c.display_name == "RAIDER 4":
-			c.damageable.kill()  # just launched, the others are still beside their carrier
+		if WAVE_TWO.find(c.display_name) in [0, 1, 2, 3, 4]:
+			c.damageable.kill()  # five of the eight, just launched: the others are still beside their carrier
 	await _run_on(float(run.options["wait_s"]) + 5.0, func() -> bool: return run.state == CarrierRun.State.FLEEING)
 	assert_eq(run.flee_reason, CarrierTactics.FLEE_ALL_DOCKED, "three left: they went home, and their carrier flees (D83)")
 	assert_eq(cap.dock.docked_count(), 3)
@@ -436,7 +468,7 @@ func test_console_commands_drive_it_to_success_and_the_debrief() -> void:
 	_civilian().damageable.invulnerable = true
 	assert_true(_run("mission goto wave_one").ok)
 	await _ticks(2)
-	assert_eq(_alive(WAVE_ONE), 3, "wave one jumped in")
+	assert_eq(_alive(WAVE_ONE), 6, "wave one jumped in")
 	var first: Combatant = main.ships.alive(ShipPool.DEFAULT_TYPE)[0]
 	var range_m: float = _at(first).distance_to(_at(_civilian()))
 	assert_between(range_m, 6000.0, 12000.0, "6 to 12 km from the civilian")
@@ -444,11 +476,11 @@ func test_console_commands_drive_it_to_success_and_the_debrief() -> void:
 	assert_true(_run("kill all").ok)
 	assert_true(_run("mission goto wave_two").ok)
 	await _ticks(2)
-	assert_eq(_alive(WAVE_TWO), 4, "wave two")
+	assert_eq(_alive(WAVE_TWO), 8, "wave two")
 	assert_true(_run("kill all").ok)
 	assert_true(_run("mission goto wave_three").ok)
 	await _ticks(2)
-	assert_eq(_alive(WAVE_THREE), 6, "wave three")
+	assert_eq(_alive(WAVE_THREE), 10, "wave three")
 	assert_true(_run("kill all").ok)
 	assert_true(_run("mission skip").ok)
 	await _wait_for("the end", func() -> bool: return _api().has_ended(), 2400)
@@ -516,7 +548,7 @@ func test_a_skipped_wave_leaves_no_raider_and_the_civilian_at_its_point() -> voi
 	for ship_name: String in WAVE_ONE:
 		assert_true(_journal_has("spawn %s raider_fighter" % ship_name), ship_name)
 		assert_false(_api().alive(ship_name), "%s released by the skip" % ship_name)
-	assert_eq(_alive(WAVE_TWO), 4, "the step played now has its wave")
+	assert_eq(_alive(WAVE_TWO), 8, "the step played now has its wave")
 	var point: Vector3 = MissionScriptClass.POINT_50
 	assert_lt(_at(_civilian()).distance_to(UniversePos.new(point.x, point.y, point.z)), 1.0, "at the 50 % point")
 
@@ -527,8 +559,8 @@ func test_a_skipped_run_spawns_every_ship_from_the_pools() -> void:
 	assert_true(_run("mission goto arrive").ok)
 	for ship_name: String in WAVE_ONE + WAVE_TWO + WAVE_THREE:
 		assert_true(_journal_has("spawn %s raider_fighter" % ship_name), ship_name)
-	assert_eq(main.ships.pool_size(ShipPool.DEFAULT_TYPE), 13, "thirteen raiders, all the script spawns")
-	assert_eq(main.ships.pool_size(ShipPool.ALLY_TYPE), 1, "ALPHA 2")
+	assert_eq(main.ships.pool_size(ShipPool.DEFAULT_TYPE), 24, "twenty-four raiders, all the script spawns")
+	assert_eq(main.ships.pool_size(ShipPool.ALLY_TYPE), 2, "ALPHA 2 and ALPHA 3")
 	assert_true(_run("mission skip").ok)
 	assert_true(_api().has_ended())
 	assert_true(bool(_api().result["success"]))
@@ -564,32 +596,40 @@ func test_a_saturn_8_crosses_the_belt_without_hitting_a_rock() -> void:
 	assert_eq(civilian.damageable.hull.hp, hull, "no rock hit on the way")
 
 
-# A fair escort's run (Q40, M7-T54): each wave is fought down `FIGHT_S_PER_RAIDER` a raider after it first closes on the
-# civilian, the rest is the mission's own flight and triggers. It prints the timeline the pacing was set from.
+# A fair escort's run (Q40, M7-T54; M8-T08's waves of six, eight and ten): each wave is fought down to the three its
+# carrier calls home (D83), `FIGHT_S_PER_RAIDER` a raider after it first closes on the civilian; those three fly home and
+# dock, which ends the wave. The rest is the mission's own flight and triggers. It prints the timeline.
 const FIGHT_S_PER_RAIDER: float = 10.0
 const CONTACT_M: float = 2000.0
-const SPEED_UP: float = 2.0
+## Ticks per real tick: the physics rate and the time scale rise together, so each step is still 1/60 s of sim time.
+const SPEED_UP: float = 4.0
+const GO_HOME_AT: int = 3
 
 
-func test_a_fought_run_takes_6_to_8_minutes_with_each_wave_cleared_before_the_next() -> void:
+func test_a_fought_run_ends_each_wave_at_three_left_before_the_next_comes() -> void:
 	if OS.get_environment("GUT_SLOW") != "1":
 		pending("GUT_SLOW=1 flies a whole fought run")
 		return
 	DebugConsole.flags.invulnerable = true
 	await _fly(3)
 	_civilian().damageable.invulnerable = true
+	_take_the_player_out_of_the_way()
 	var scale_backup: float = Engine.time_scale
+	var rate_backup: int = Engine.physics_ticks_per_second
 	Engine.time_scale = SPEED_UP
+	Engine.physics_ticks_per_second = roundi(rate_backup * SPEED_UP)
 	var waves: Array = [WAVE_ONE, WAVE_TWO, WAVE_THREE]
 	var spawned: Array[float] = [-1.0, -1.0, -1.0]
 	var contact: Array[float] = [-1.0, -1.0, -1.0]
+	var fought: Array[float] = [-1.0, -1.0, -1.0]
 	var cleared: Array[float] = [-1.0, -1.0, -1.0]
 	var ticks: int = 0
-	while not _api().has_ended() and ticks < roundi(60.0 * 900.0 / SPEED_UP):
+	while not _api().has_ended() and _api().time_s() < 1200.0:
 		await _ticks(1)
 		ticks += 1
+		_ride_over(_civilian())
 		var now: float = _api().time_s()
-		if ticks % roundi(60.0 * 15.0 / SPEED_UP) == 0:
+		if ticks % (60 * 15) == 0:
 			var civ: Combatant = _civilian()
 			gut.p("  t %4.0f s  %-10s  civilian at %5.1f km, %3.0f m/s, %s" % [now, _api().step_name(),
 					_at(civ).distance_to(_buoy_at("NAV ALPHA")) / 1000.0,
@@ -602,20 +642,162 @@ func test_a_fought_run_takes_6_to_8_minutes_with_each_wave_cleared_before_the_ne
 				continue
 			if contact[w] < 0.0 and _closest_raider_m(names) < CONTACT_M:
 				contact[w] = now
-			if contact[w] >= 0.0 and now - contact[w] >= FIGHT_S_PER_RAIDER * names.size():
+			var kills: int = names.size() - GO_HOME_AT
+			if fought[w] < 0.0 and contact[w] >= 0.0 and now - contact[w] >= FIGHT_S_PER_RAIDER * kills:
 				for c: Combatant in main.ships.alive(ShipPool.DEFAULT_TYPE):
-					if names.has(c.display_name):
+					if names.find(c.display_name) >= 0 and names.find(c.display_name) < kills:
 						c.damageable.kill()
+				fought[w] = now
+			if fought[w] >= 0.0 and _alive(names) == 0:
 				cleared[w] = now
 	Engine.time_scale = scale_backup
+	Engine.physics_ticks_per_second = rate_backup
 	var end_s: float = _api().time_s()
-	gut.p("fought run (seed 3, %s): waves at %s, contact %s, cleared %s, end %.0f s" % [_civilian_name(), spawned, contact,
-			cleared, end_s])
+	gut.p("fought run (seed 3, %s): waves at %s, contact %s, down to three at %s, home or dead at %s, end %.0f s" % [
+			_civilian_name(), spawned, contact, fought, cleared, end_s])
 	assert_true(_api().has_ended() and bool(_api().result.get("success", false)), str(_api().result))
 	for w: int in [1, 2]:
 		assert_gt(spawned[w] - cleared[w - 1], MissionScriptClass.BREATHER_S - 0.1,
 				"wave %d comes a breather after wave %d is down" % [w + 1, w])
-	assert_between(end_s, 360.0, 480.0, "6 to 8 minutes (Q40)")
+	assert_between(end_s, 600.0, 900.0, "about twelve minutes with waves of six, eight and ten (it was 6 to 8 with 3, 4 and 6, Q40)")
+
+
+# --- the wing flies it with an AI in the player's place (M8-T08): a balance judgement --------------------------------------
+
+## Sim seconds a tick at this speed (the physics rate rises with the time scale), and when a run is given up.
+const AI_SPEED_UP: float = 4.0
+const AI_LIMIT_S: float = 1200.0
+## The pilotless player's ship is held this far over the civilian, so the wing fights where a player would.
+const AI_STAY_M: float = 500.0
+
+
+func test_the_wing_and_an_ai_leader_see_the_civilian_through_on_cover_seed_1() -> void:
+	await _ai_fought_run(1, AiContext.Order.COVER_ME)
+
+
+func test_the_wing_and_an_ai_leader_see_the_civilian_through_on_cover_seed_2() -> void:
+	await _ai_fought_run(2, AiContext.Order.COVER_ME)
+
+
+func test_the_wing_and_an_ai_leader_see_the_civilian_through_on_cover_seed_3() -> void:
+	await _ai_fought_run(3, AiContext.Order.COVER_ME)
+
+
+func test_the_wing_and_an_ai_leader_see_the_civilian_through_engaging_seed_1() -> void:
+	await _ai_fought_run(1, AiContext.Order.ENGAGE_AT_WILL)
+
+
+func test_the_wing_and_an_ai_leader_see_the_civilian_through_engaging_seed_2() -> void:
+	await _ai_fought_run(2, AiContext.Order.ENGAGE_AT_WILL)
+
+
+func test_the_wing_and_an_ai_leader_see_the_civilian_through_engaging_seed_3() -> void:
+	await _ai_fought_run(3, AiContext.Order.ENGAGE_AT_WILL)
+
+
+# The whole escort with waves of six, eight and ten, fought by ALPHA 2, ALPHA 3 and a third AI Starfury for the player's
+# guns, on `order`; the civilian and every wingman can be lost. The player's own ship flies no guns: it is held over the
+# civilian, where the wing covers it. It prints the raiders destroyed and gone home, the losses and the run's time.
+func _ai_fought_run(seed_value: int, order: AiContext.Order) -> void:
+	if BalanceTests.skip(self):
+		return
+	await _fly(seed_value)
+	DebugConsole.flags.invulnerable = true  # the player's own ship flies no guns here: it is only where the wing stays
+	main.ensure_free(ShipPool.ALLY_TYPE, 1)
+	var stand_in: Combatant = _api().spawn({"type": "starfury_ally",
+			"name": "ALPHA %d" % (main.ships.alive(ShipPool.ALLY_TYPE).size() + 2), "anchor": "player", "offset": [0, 0, 80],
+			"velocity": [0, 0, -60], "behaviour": {"type": "ai", "profile": "ally_starfury"}, "wing": "ALPHA"})
+	assert_not_null(stand_in, "the AI in the player's place")
+	main.wings.give_order(order)
+	_take_the_player_out_of_the_way()
+	var tally: Dictionary = {"destroyed": 0, "with_carrier": 0, "carriers": 0, "fleeing": 0}
+	for c: Combatant in main.ships.all_ships():
+		c.damageable.destroyed.connect(func(info: HitInfo) -> void:
+			var fleeing: bool = false
+			for run: CarrierRun in _carriers().runs():
+				fleeing = fleeing or (run.carrier.dock != null and run.carrier.dock.is_handling(c.ship))
+			gut.p("  t %4.0f s  %s destroyed by %s (%s)%s" % [_api().time_s(), c.display_name, _name_of(info.shooter_id), info.cause,
+					" on its way home" if fleeing else ""])
+			if c.display_name.begins_with("RAIDER"):
+				tally["with_carrier" if info.cause == HitInfo.CAUSE_CARRIER_LOST else "destroyed"] += 1
+				tally["fleeing"] += 1 if fleeing else 0)
+	var wingmen: Array[Combatant] = []
+	for c: Combatant in main.ships.alive(ShipPool.ALLY_TYPE):
+		wingmen.append(c)
+	var civilian: Combatant = _civilian()
+	var scale_backup: float = Engine.time_scale
+	var rate_backup: int = Engine.physics_ticks_per_second
+	Engine.time_scale = AI_SPEED_UP
+	Engine.physics_ticks_per_second = roundi(rate_backup * AI_SPEED_UP)
+	var ticks: int = 0
+	var seen_carriers: Dictionary = {}
+	while not _api().has_ended() and _api().time_s() < AI_LIMIT_S:
+		await _ticks(1)
+		ticks += 1
+		for run: CarrierRun in _carriers().runs():
+			if not seen_carriers.has(run):
+				seen_carriers[run] = true
+				run.carrier.damageable.destroyed.connect(func(_info: HitInfo) -> void: tally["carriers"] += 1, CONNECT_ONE_SHOT)
+		_ride_over(civilian)
+		if ticks % roundi(60.0 * 60.0) == 0:
+			gut.p("  t %4.0f s  %-10s  civilian hull %3.0f %%, %4.1f km to go, %s; raiders destroyed %d, in play %d" % [_api().time_s(),
+					_api().step_name(), 100.0 * civilian.damageable.hull.fraction(),
+					_at(civilian).distance_to(_buoy_at("NAV BETA")) / 1000.0, _behaviour(civilian), tally["destroyed"],
+					main.ships.alive(ShipPool.DEFAULT_TYPE).size()])
+	Engine.time_scale = scale_backup
+	Engine.physics_ticks_per_second = rate_backup
+	var lost: PackedStringArray = PackedStringArray()
+	for c: Combatant in wingmen:
+		if c.damageable.hull.destroyed:
+			lost.append(c.display_name)
+	var came: int = 0
+	var out: int = 0
+	var raiders: int = 0
+	for wave: Dictionary in MissionScriptClass.WAVES:
+		raiders += int(wave["size"])
+	for i: int in raiders:
+		var ship_name: String = "RAIDER %d" % (i + 1)
+		came += 1 if _journal_has("spawn %s raider_fighter" % ship_name) else 0
+		out += 1 if _api().alive(ship_name) else 0
+	var home: int = came - int(tally["destroyed"]) - int(tally["with_carrier"]) - out
+	gut.p("AI fought run, seed %d, %s (%s, %.0f hull): %s after %.0f s; raiders come %d, destroyed %d, gone home %d, lost with a carrier %d, still out %d; carriers destroyed %d; wingmen lost %s; civilian hull %.0f %%" % [
+			seed_value, AiContext.ORDER_WORDS[order], _civilian_name(), civilian.damageable.hull.max_hp,
+			GameFlow.describe_result(_api().result) if _api().has_ended() else "not over", _api().time_s(), came, tally["destroyed"],
+			home, tally["with_carrier"], out, tally["carriers"], ", ".join(lost) if not lost.is_empty() else "none",
+			100.0 * civilian.damageable.hull.fraction()])
+	gut.p("  of the raiders destroyed, %d were on their way home" % tally["fleeing"])
+	if not _api().has_ended():
+		gut.p("  not over: step %s, waiting on %s; NAV BETA %s" % [_api().step_name(), str(_api().watched()),
+				"in play" if _api().alive("NAV BETA") else "gone"])
+	assert_gte(came, WAVE_ONE.size(), "the run got as far as its first wave (a measurement, not a gate: read the lines above)")
+
+
+# Nothing rams the pilotless player's ship: in these runs it only marks where the leader is.
+func _take_the_player_out_of_the_way() -> void:
+	main.ship.collision_layer = 0
+	main.ship.collision_mask = 0
+
+
+# Holds the pilotless player's ship over `civilian`, so the raiders it draws and the wing that covers it stay where a
+# player would fight (left alone it coasts away for good and takes the fight with it).
+func _ride_over(civilian: Combatant) -> void:
+	if _api().controls_locked or civilian.damageable.hull.destroyed:
+		return
+	var to_place: Vector3 = civilian.ship.global_position + Vector3(0.0, AI_STAY_M, 0.0) - main.ship.global_position
+	main.ship.linear_velocity = civilian.ship.linear_velocity + (0.5 * to_place).limit_length(400.0)
+
+
+# Who an instance id is: a ship's name, else the node's.
+func _name_of(id: int) -> String:
+	var node := instance_from_id(id) as Node if id != 0 else null
+	if node == null:
+		return "nobody"
+	if node == main.ship or main.ship.is_ancestor_of(node):
+		return "the player"
+	for c: Combatant in main.ships.all_ships():
+		if c.ship == node or c.ship.is_ancestor_of(node):
+			return c.display_name
+	return String(node.name)
 
 
 func _closest_raider_m(names: Array[String]) -> float:

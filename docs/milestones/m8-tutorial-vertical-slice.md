@@ -297,7 +297,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T05 | A | The tutorial mission: launch, checks, tour, raid, defense, debrief (D79) | T03, T04 | Fable | The mission script, dialog and pacing on M5's and M7's seams | not started |
 | T06 | B | Dock in the main docking bay to be repaired and relaunched, for the player and the AI wingmen (D82, Q7) | - | Fable | The `dock` interaction, the lane for fighters, repair and a Cobra-bay relaunch; wing orders | in progress |
 | T07 | C | Bring M10-T19's raider strike carrier into `m8`: merge `origin/m10`, one collision builder, its tests green (Q5) | - | Opus | Two branches built a collision builder; docs, `native/src/lib.rs` and `info.md` conflict | done |
-| T08 | C | The civilian escort's raids come with the strike carrier (D83, Q6) | T07 | Fable | Mission data and pacing on `CarrierJumps`; the escort's tests kept green | in progress |
+| T08 | C | The civilian escort's raids come with the strike carrier (D83, Q6) | T07 | Fable | Mission data and pacing on `CarrierJumps`; the escort's tests kept green | done |
 | T09 | C | Raider Battle Wagon (moved from M10-T20): from images, with weapons (M10 Q31) and four launch tubes; the escort's last wave comes with it (Q8) | T08, the maintainer on its weapons | Fable | No STL; a new hull with weapons and tube launches | not started |
 | T10 | D | Interceptor muzzle at the drawn barrel tip, and the grid balance measured again (roadmap M7-2) | - | Fable | A placement fix in the turret rows with a balance check | done |
 | T11 | D | The walls beside the cargo bay stop flickering (roadmap M7-3) | - | Sonnet | Find the coplanar faces or shading cause in the station generator; a test | not started |
@@ -539,12 +539,45 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
     `test_civilian_escort` 23 of 23 (4 new; the fought run ends at 435 s, inside 6 to 8 minutes) and `test_strike_carrier`
     16 of 16 (7 new or rewritten). No native or Python change. `bench_quick.sh` was not run (no per-tick work added: the
     carrier decides at 2 Hz).
-  - **Open, for the maintainer:** (1) waves one and two come with 3 and 4 raiders, so under "home at 3 left" they break off at
-    their first loss (a raid of 3 or fewer is not called home on arrival; it goes home at its first loss): keep, give those
-    waves their own `recall_left`, or make them larger? (2) "It may run early if the player breaks off" is read as: it runs for
-    the gate at once while its drive recharges; nothing watches whether the player gave up. (3) The escort has no jumpgate, so
-    a fleeing carrier there runs from the enemy until 240 s after its jump in. (4) The numbers above are proposals. (H): fly
-    the escort and the carrier checks in `docs/playtest.md`.
+  - **Fix round (2026-11-18, the maintainer's answers):** "home at 3 left" stays the doctrine and the escort's waves are
+    **6, 8 and 10** raiders (`WAVES`; 24 pooled; each wave rides on one strike carrier, which has 18 cradles, so no second
+    carrier and no fighters beside it are needed); the escort flies with **two wingmen**, ALPHA 2 and ALPHA 3, on `cover`
+    (the scenario's wing, pool, briefing, the `home` objective "Bring ALPHA 2 and ALPHA 3 home", Alpha 2's line, Control's
+    wave lines). The carrier running for the gate at once while its drive recharges, and the numbers in `capitals.json`: kept.
+    - **Three ways the longer waves stalled the mission, fixed.** (1) A carrier standing off no longer leaves the fighters
+      it called home at 3 left behind after `wait_s`: it waits for them (the fight is often 15 km from it, a 100 s flight),
+      and `wait_s` counts only from when it flees. Before, raiders left behind this way could drift off and the wave never
+      ended. (2) The escort's progress marks use NAV BETA's place, not the buoy: a stray bolt took the buoy and the next
+      wave never came (seen at HEAD too). (3) It has arrived once the civilian has flown its route to the end, not when
+      it is within 1.5 km of the buoy while the last wave's step looks: with longer waves it is there early, flees, and
+      ends up idle elsewhere.
+    - **CI:** `test_jump_holds` failed in shard 4 on a float edge of the test's own making (`fire(now - recharge)` is not
+      yet "ready" for about 1 clock value in 600); the test now fires a second earlier. `JumpDrive` is unchanged.
+    - **A scripted fought run** (`test_a_fought_run_ends_each_wave_at_three_left_before_the_next_comes`, seed 3: each wave shot
+      down to three 10 s a raider after contact, the three fly home): waves at 69, 262 and 531 s, home or dead at 177, 501
+      and 732 s, **the end at 744 s** (12.4 minutes; it was 435 s with 3, 4 and 6). The 6 to 8 minutes of Q40 no longer hold.
+    - **Winnable with the wing? Flown by AI, no** (`_ai_fought_run`, behind `GUT_BALANCE`; a measurement, not a gate):
+      ALPHA 2, ALPHA 3 and a third AI Starfury for the player's guns, the civilian and all three mortal, the pilotless
+      player's ship held over the civilian. Six runs, none saved the civilian:
+      - seed 1, cover (G'TARN): lost at 645 s; 14 raiders come, 7 destroyed (4 on their way home), 2 gone home, 5 still
+        out; ALPHA 2 and 4 lost.
+      - seed 2, cover (VELORA): lost at 730 s; 24 come, 7 destroyed (5), 7 gone home, 10 still out; ALPHA 3 and 4 lost.
+      - seed 3, cover (TOLVAR): lost at 853 s; 24 come, 12 destroyed (7), 2 gone home, 10 still out; all three lost.
+      - seed 1, engage (G'TARN): lost at 335 s; 14 come, 6 destroyed (4), none gone home, 8 still out; ALPHA 2 lost.
+      - seed 2, engage (VELORA): lost at 281 s; 14 come, 5 destroyed (5), 1 gone home, 8 still out; no wingman lost.
+      - seed 3, engage (TOLVAR): lost at 272 s; 14 come, 6 destroyed (6), none gone home, 8 still out; no wingman lost.
+
+      Wave one (6) is always beaten; the wing is lost, or the civilian shot down behind it, in wave two (8). No carrier was
+      destroyed. The runs do not repeat exactly (an earlier cover run on seed 2 won at 898 s with all three wingmen lost).
+      For scale, the same check on the old escort (waves of 3, 4 and 6, one wingman plus the AI for the player) won 1 of 6,
+      lost 2, and 3 did not end in 20 minutes (two stand-offs, one the buoy stall above). So the AI is a poor stand-in for a
+      player, and by this measure the escort is harder than it was. Nothing was tuned. **(H)** the maintainer flies it;
+      the levers are data: the waves' sizes, `recall_left`, a third wingman, the civilian's hull.
+    - **Tests** (scratch copy of HEAD plus the staged change, `GUT_SLOW=1`): compile check 940 scripts; GUT 19 files,
+      335 tests, 329 passed, 0 failed, 6 pending (the AI runs, behind `GUT_BALANCE`): `test_civilian_escort` 24 of 30
+      (2 new: the buoy, the retreat-aware fought run in place of the old one), `test_strike_carrier` 16, `test_carrier_logic`
+      17, `test_scenario_loader` 40, `test_jump_holds` 5 (and 21 of 21 run in one process after `test_strike_carrier`, the
+      late clock the CI failure needed), the mission, encounter, dialog, objective, front-end and console-list files.
 
 ### M8-T09 Raider Battle Wagon
 

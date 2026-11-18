@@ -14,7 +14,7 @@ const DEFAULTS: Dictionary = {
 	"recall_left": 3,  # its fighters all go home once this few of the raid are left in the fight (D83)
 	"fighter_return_hull": 0.2,  # a fighter under this share of its hull goes home alone (D83)
 	"retreat_hull": 0.5,  # it flees once its hull is down to this share (D83)
-	"wait_s": 90.0,  # called home, fighters not docked within this long are left behind (Q27, Q30)
+	"wait_s": 90.0,  # once it flees, fighters not docked within this long are left behind (Q27, Q30)
 	"raid_s": 0.0,  # the raid is over after this long; 0: no time limit
 	"flee_mps": 60.0,  # its speed while it runs with its drive still recharging
 }

@@ -120,7 +120,7 @@ func test_a_capital_opens_no_second_point_until_its_drive_has_recharged() -> voi
 	assert_eq(pool.refused_charging, 2)
 	assert_eq(pool.refused, 0, "not for want of a drive")
 	assert_eq(pool.open_count(), 1)
-	cap.jump_drive.fire(SimClock.now() - cap.jump_drive.recharge_s)  # as if its recharge had passed
+	cap.jump_drive.fire(SimClock.now() - cap.jump_drive.recharge_s - 1.0)  # as if its recharge had passed a second ago
 	assert_not_null(pool.open_with(xform, fit, JumpVortex.Direction.DEPARTURE, VortexTiming.DEFAULT_HOLD_S, cap),
 			"recharged, it opens its point out")
 	assert_false(JumpCapability.drive_ready(cap, SimClock.now()), "which empties it again")

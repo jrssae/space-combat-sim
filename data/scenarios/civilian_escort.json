@@ -23,7 +23,7 @@
 		"centauri_brezebel": ["VELORA", "CASSARINE"],
 		"brakiri_bokmai": ["TOLVAR", "IRRISET"]
 	},
-	"pools": {"raider_fighter": 13, "starfury_ally": 1, "random_civilian": 1},
+	"pools": {"raider_fighter": 24, "starfury_ally": 2, "random_civilian": 1},
 	"routes": [
 		{"name": "ESCORT", "cruise_mps": 120, "pace": "none", "waypoints": [
 			{"position": [0, 0, -7500]}, {"position": [0, 0, -29000]}
@@ -37,6 +37,8 @@
 		{"name": "ALPHA", "faction": "earth_alliance", "leader": "player", "order": "cover", "formation": "finger_four",
 			"members": [
 				{"type": "starfury_ally", "name": "ALPHA 2", "anchor": "player", "offset": [-40, 0, 40], "velocity": [0, 0, -60],
+					"behaviour": {"type": "ai", "profile": "ally_starfury"}},
+				{"type": "starfury_ally", "name": "ALPHA 3", "anchor": "player", "offset": [40, 0, 40], "velocity": [0, 0, -60],
 					"behaviour": {"type": "ai", "profile": "ally_starfury"}}
 			]}
 	],
@@ -56,7 +58,7 @@
 	},
 	"mission": {
 		"title": "Civilian escort",
-		"briefing": "A civilian ship is crossing from NAV ALPHA to NAV BETA, 30 km out, through a field of rock. Raiders work this stretch.\n\nLead Alpha wing with your wingman, ALPHA 2, and see the ship through the belt to NAV BETA. Bring ALPHA 2 home.",
+		"briefing": "A civilian ship is crossing from NAV ALPHA to NAV BETA, 30 km out, through a field of rock. Raiders work this stretch.\n\nLead Alpha wing with your wingmen, ALPHA 2 and ALPHA 3, and see the ship through the belt to NAV BETA. Bring them both home.",
 		"script": "res://data/missions/civilian_escort.gd",
 		"dialog": "res://data/dialog/civilian_escort.json",
 		"closing_lines": {
@@ -66,8 +68,8 @@
 		"objectives": [
 			{"id": "escort", "text": "Escort the {civilian} to NAV BETA", "primary": true,
 				"fail": {"kind": "destroyed", "name": "{civilian}"}},
-			{"id": "home", "text": "Bring ALPHA 2 home", "primary": false,
-				"fail": {"kind": "destroyed", "names": ["ALPHA 2"], "all": false}},
+			{"id": "home", "text": "Bring ALPHA 2 and ALPHA 3 home", "primary": false,
+				"fail": {"kind": "destroyed", "names": ["ALPHA 2", "ALPHA 3"], "all": false}},
 			{"id": "carrier", "text": "Destroy a raider carrier", "primary": false,
 				"success": {"kind": "destroyed", "names": ["RAIDER CARRIER 1", "RAIDER CARRIER 2", "RAIDER CARRIER 3"],
 					"all": false}}

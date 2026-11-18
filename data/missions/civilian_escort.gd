@@ -1,13 +1,13 @@
 extends MissionScript
-## Civilian escort (M5-T30, D62): Alpha 1 and ALPHA 2 see a civilian ship, drawn from the nine hulls by the seed, from NAV
-## ALPHA through the asteroid belt to NAV BETA, 30 km out. Three raider waves jump in as it passes 25, 50 and 75 % of the
-## route; a later wave also waits until the one before it is down and a breather has passed (M7-T54), so a fought run takes
+## Civilian escort (M5-T30, D62): Alpha 1 with ALPHA 2 and ALPHA 3 (two wingmen since M8-T08) sees a civilian ship, drawn
+## from the nine hulls by the seed, from NAV ALPHA through the asteroid belt to NAV BETA, 30 km out. Three raider waves jump
+## in as it passes 25, 50 and 75 % of the route; a later wave also waits until the one before it is down and a breather has
+## passed (M7-T54). The waves are six, eight and ten raiders (M8-T08), so a fought run now takes longer than Q40's
 ## 6 to 8 minutes (Q40). Each wave rides in docked on a raider strike carrier and is launched once it is clear of its point
 ## (M8-T08, Q6); the carrier hangs back, takes its survivors home and flees, and destroying one is an optional objective.
 ## `data/scenarios/civilian_escort.json` holds the buoys, the belt, the route, the wing, the objectives and the shots;
 ## `data/dialog/civilian_escort.json` holds every line.
 
-const NAV_BETA: String = "NAV BETA"
 const RAIDER: Dictionary = {"type": "raider_fighter", "anchor": "origin", "behaviour": {"type": "ai", "profile": "raider"},
 		"arrival": "jump", "via": "carrier"}
 ## The optional objective: any wave's carrier destroyed (the scenario's objective lists the carriers' names).
@@ -18,7 +18,7 @@ const POINT_25: Vector3 = Vector3(0.0, 0.0, -7500.0)
 const POINT_50: Vector3 = Vector3(0.0, 0.0, -15000.0)
 const POINT_75: Vector3 = Vector3(0.0, 0.0, -22500.0)
 const POINT_RADIUS_M: float = 1000.0
-## Done when the civilian is this close to NAV BETA (D62).
+## The civilian's route ends within this of NAV BETA (D62): there it has arrived.
 const ARRIVAL_M: float = 1500.0
 ## NAV BETA, metres from the scenario origin.
 const BETA_AT: Vector3 = Vector3(0.0, 0.0, -30000.0)
@@ -26,10 +26,12 @@ const BETA_AT: Vector3 = Vector3(0.0, 0.0, -30000.0)
 const BREATHER_S: float = 30.0
 ## The waves: how many raiders, where they jump in from the civilian (beyond the AI's 5 km sensors, each from its own
 ## bearing), and the capital that brings them (the spawn's `carrier` options: its fighters docked, its name as an actor).
+## Six, eight and ten (the maintainer, 2026-11-18), so each wave fights on until three are left and those go home (D83); a
+## strike carrier has eighteen cradles.
 const WAVES: Array[Dictionary] = [
-	{"size": 3, "from": Vector3(-8200.0, 900.0, -2500.0), "carrier": {"arrival": "docked", "name": "RAIDER CARRIER 1"}},
-	{"size": 4, "from": Vector3(7000.0, -1200.0, 5200.0), "carrier": {"arrival": "docked", "name": "RAIDER CARRIER 2"}},
-	{"size": 6, "from": Vector3(1500.0, 2000.0, -9000.0), "carrier": {"arrival": "docked", "name": "RAIDER CARRIER 3"}},
+	{"size": 6, "from": Vector3(-8200.0, 900.0, -2500.0), "carrier": {"arrival": "docked", "name": "RAIDER CARRIER 1"}},
+	{"size": 8, "from": Vector3(7000.0, -1200.0, 5200.0), "carrier": {"arrival": "docked", "name": "RAIDER CARRIER 2"}},
+	{"size": 10, "from": Vector3(1500.0, 2000.0, -9000.0), "carrier": {"arrival": "docked", "name": "RAIDER CARRIER 3"}},
 ]
 ## Spacing between raiders of one wave, metres.
 const SPREAD_M: float = 150.0
@@ -93,10 +95,12 @@ func step_wave_three(m: MissionApi) -> void:
 	_send_wave(m, 2)
 	await m.say(&"control_wave_three")
 	await m.say(&"civilian_nearly_there")
-	await m.until(TriggerSpec.proximity(_civilian(m), NAV_BETA, ARRIVAL_M))
+	# Arrived once it has flown its route to the end, wherever a later raid has chased it since (M8-T08: with the longer
+	# waves it is often there before this one comes, and "near the buoy now" never held again).
+	await m.until(TriggerSpec.arrived(_civilian(m)))
 
 
-# At NAV BETA with no raider left fighting: ALPHA 2 is home if still flying, and the escort, the last primary, ends it.
+# At NAV BETA with no raider left fighting: the wingmen are home if both still fly, and the escort, the last primary, ends it.
 func step_arrive(m: MissionApi) -> void:
 	await m.until(TriggerSpec.destroyed(_raider_names(0, _total())))
 	if m.objective_state(&"home") == ObjectiveBook.ACTIVE:
@@ -113,14 +117,24 @@ func _civilian(m: MissionApi) -> String:
 
 
 func _reached(m: MissionApi, point: Vector3) -> TriggerProximity:
-	return TriggerSpec.near_point(_civilian(m), UniversePos.new(point.x, point.y, point.z, m.world.system_id), POINT_RADIUS_M)
+	return TriggerSpec.near_point(_civilian(m), _at(m, point), POINT_RADIUS_M)
 
 
 # The civilian is as near NAV BETA as `point` is: on the way there, a detour cannot miss it. Forced, it is put at the point.
 func _passed(m: MissionApi, point: Vector3) -> TriggerProximity:
-	var trigger: TriggerProximity = TriggerSpec.proximity(_civilian(m), NAV_BETA, BETA_AT.distance_to(point))
-	trigger.place_at = UniversePos.new(point.x, point.y, point.z, m.world.system_id)
+	var trigger: TriggerProximity = _near_beta(m, BETA_AT.distance_to(point))
+	trigger.place_at = _at(m, point)
 	return trigger
+
+
+# The civilian within `radius_m` of NAV BETA's place. The place, not the buoy: a buoy shot away in the fight must not stop
+# the next wave or the arrival (M8-T08: it stalled the mission).
+func _near_beta(m: MissionApi, radius_m: float) -> TriggerProximity:
+	return TriggerSpec.near_point(_civilian(m), _at(m, BETA_AT), radius_m)
+
+
+func _at(m: MissionApi, point: Vector3) -> UniversePos:
+	return UniversePos.new(point.x, point.y, point.z, m.world.system_id)
 
 
 # Until the next wave is due: the wave `names` down, the breather after it, and the civilian past `point`, whichever is last.

@@ -4242,7 +4242,7 @@ as the menu does; seed 0 by default, encounters off). Setting: `skip_front_end` 
 - **Wingmen's names.** A replacement from `WingDirector.replenish` flies under the lost wingman's callsign, so a `destroyed` on
   wing names is only safe as an objective's `fail` with `all` false (Civilian escort's `home`): it fails at the loss, before any
   replacement, and failure is final. A success trigger or an `until` on wing names could be satisfied, or undone, by a
-  replacement. Civilian escort pools exactly its one wingman and runs no `WaveDirector` waves (which replenish), so no
+  replacement. Civilian escort pools exactly its two wingmen and runs no `WaveDirector` waves (which replenish), so no
   replacement comes.
 - **Left for later.** `cinematic` and the control lock are T08's (§18.8); the debrief screen is T09's (§18.7).
 
@@ -5624,15 +5624,15 @@ The first real capital hull, built ahead of M10's framework (M10-T05, T07) and m
   `fighter_return_hull` 0.2, `retreat_hull` 0.5, `wait_s` 90, `flee_mps` 60, `standoff_m` 2500), a raid's `carrier` options
   lie over it and `CarrierTactics.DEFAULTS` under it. Standing off, every 0.5 s: a fighter under 20 % hull is called home
   alone; when only 3 of the raid are left in the fight (flying on their own; a raid that came with 3 or fewer goes home at
-  its first loss) all are called home, and one not docked `wait_s` after that call is let go and is the carrier's no longer.
+  its first loss) all are called home, and it stands off until they are aboard, however far the fight has moved from it.
   The carrier flees (`CarrierTactics.flee_reason`) when its hull is down to 50 % (`hurt`), its raid is over (`raid_over`: its
   script, the console, `raid_s`) or every surviving fighter has docked (`all_docked`, also with none left alive); on `hurt`
   and `raid_over` it calls everyone home first. Fleeing (`flee_move`, state `fleeing`): with its drive recharged (§19.16) it
   holds still for the fighters on their way (`wait`), then slows onto its bow and jumps through its own point (`jump`); with
   the drive still recharging it runs at `flee_mps` for the nearest jumpgate (`gate`: round the gate's side, onto its axis and
   through the mouth, `CarrierTactics.gate_run_target`; the gate's departure vortex opens for it and it is gone at the ring,
-  `gate_departures`), or with no gate away from the nearest enemy (`run`) until the drive is ready. Fighters not aboard when
-  it enters the gate's funnel are left behind. So a carrier whose raid fails early cannot jump at once: it can be run down,
+  `gate_departures`), or with no gate away from the nearest enemy (`run`) until the drive is ready. A fighter not aboard `wait_s`
+  after it began to flee, or when it enters the gate's funnel, is let go and is the carrier's no longer. So a carrier whose raid fails early cannot jump at once: it can be run down,
   and gets away if the pursuit breaks off. Tests: `test_carrier_logic.gd` (the rules, the doctrine and the drives as data),
   `test_jump_capability.gd` and `test_jump_holds.gd` (the drive, the pool's refusal), `test_strike_carrier.gd` (home at 3
   left and under 20 %, flight at 50 % and with every survivor docked, the jump, the gate, the run, a cradle-less carrier).
@@ -5640,9 +5640,10 @@ The first real capital hull, built ahead of M10's framework (M10-T05, T07) and m
   actor (`MissionStage`): a `destroyed` trigger on it holds only when it was destroyed, not when it got away
   (`MissionWorld.set_left`). A fighter riding in docked counts as in play (`CarrierJumps.RIDING_META`), one back on a cradle
   after a recall as out of it, so a wave is down once every raider is dead or home. A mission's docked fighter keeps its
-  tier exemption through its launch (`CarrierDock` remembers it). The civilian escort's three waves ride in docked on
+  tier exemption through its launch (`CarrierDock` remembers it). The civilian escort's three waves (six, eight and ten raiders) ride in docked on
   `RAIDER CARRIER 1` to `3` (`data/missions/civilian_escort.gd`, `WAVES`), and destroying any of them is its optional
-  objective `carrier`.
+  objective `carrier`. Its progress marks use NAV BETA's place, not the buoy (which a stray bolt can take), and it has
+  arrived once the civilian has flown its route to the end, wherever a raid has chased it since.
 - **Per tick and per event.** Native: the docking paths. GDScript per tick: the carrier's engine and helm forces (as every
   capital stand-in's), and applying the dock's poses. GDScript per event or at 2 Hz: the stand-off decision, recalls, the run's
   state changes.

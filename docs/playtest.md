@@ -658,22 +658,24 @@ Start the game windowed (`.tools/godot/godot --path .`), choose **New game**, th
 the list while it is focused. Each start from the menu draws a new seed, and with it a different civilian ship (any of the nine hulls;
 **Retry** on the debrief keeps the ship). From the console, `play civilian_escort <seed>` picks the seed (seed 5 is the Skylark).
 
-- **The intro.** The mission opens on the civilian beside NAV ALPHA with the belt somewhere ahead, then cuts to you and ALPHA 2
+- **The intro.** The mission opens on the civilian beside NAV ALPHA with the belt somewhere ahead, then cuts to you, ALPHA 2 and ALPHA 3
   coasting past the camera. The civilian's master hails over the fly-past; Control briefs once the camera is back, with your
   controls held until "the flight is yours". **A** or **Start** skips one shot; holding **X** (keyboard Shift or Mouse 4) for 2 s
   skips the whole opening, intro and briefing, to the hand-over (M7-T54; `HOLD X / SHIFT / MOUSE 4: SKIP` and its bar show while
   it can).
 - **The crossing.** The civilian flies to NAV BETA, 30 km out, at up to 120 m/s, threading the asteroid belt (24 km across, 8 km
   deep) in the middle of the route. The waypoint marks the civilian. Three raider waves jump in 6 to 12 km off it as it passes
-  25 % (3 raiders, before the belt), 50 % (4, inside it) and 75 % (6, past it); a later wave also waits until the one before is
-  down and 30 s have passed (M7-T54), so a fought run takes 6 to 8 minutes. Each wave rides in docked on a raider strike
+  25 % (6 raiders, before the belt), 50 % (8, inside it) and 75 % (10, past it; M8-T08); a later wave also waits until the one
+  before is down and 30 s have passed (M7-T54). A fought run now takes about 12 minutes (it was 6 to 8 with waves of 3, 4
+  and 6), and the civilian is often at NAV BETA before the last wave comes. Each wave rides in docked on a raider strike
   carrier (`RAIDER CARRIER 1` to `3`, M8-T08): its jump point opens, it comes out with its raiders on its cradles, launches
   them once clear and hangs back; raiders that go home to it (3 left of a wave, or one under 20 % hull) count as down, and
   it then flees (its drive needs 240 s after the jump in, and there is no gate here, so it runs until then: it can be
   caught). Attacked, the civilian runs (an Earth Alliance ship towards
-  you or ALPHA 2, others straight away) and turns back onto its route a few seconds after the raiders are gone or dead.
-- **Objectives.** Escort the civilian to NAV BETA (done when it is within 1.5 km of the buoy and every raider is down; failed if
-  it is destroyed) and, optional, bring ALPHA 2 home. Losing yourself also ends it. A last line, then the debrief. From the
+  you or a wingman, others straight away) and turns back onto its route a few seconds after the raiders are gone or dead.
+- **Objectives.** Escort the civilian to NAV BETA (done when it has flown its route to the end, 1 km short of the buoy, and
+  every raider is down or gone home; failed if it is destroyed) and, optional, bring ALPHA 2 and ALPHA 3 home (two wingmen
+  since M8-T08) and destroy a raider carrier. Losing yourself also ends it. A last line, then the debrief. From the
   hand-over the civilian's name and hull show top right under the objectives, as a bar that turns amber then red as it drops and
   reads `LOST` when it is destroyed (M7-T54; `get mission.hull_bars`).
 - **Console shortcuts.** `mission goto wave_one` (or `wave_two`, `wave_three`) skips ahead: the civilian is placed at the step's
@@ -1213,14 +1215,15 @@ M10 (`docs/architecture.md` §19.18, `docs/assets-capital.md`). Its look sheet i
       shows its drive (`recharging N s` for 240 s after its jump in) and what it does: with the drive ready it waits for its
       fighters and jumps; while it recharges it runs for the jumpgate at 60 m/s (in free flight the gate is 50 km off, so
       the drive is ready first), or with no gate away from you. `carrier charge` readies the drive at once. A fighter not
-      home within 90 s of the call is left behind and fights on.
+      aboard 90 s after it began to flee is left behind and fights on.
 - [ ] **Its fighters go home (H, M8-T08):** shoot a raid down to three: the rest fly back and dock, and the carrier flees
       once they are aboard. Shoot one raider to under a fifth of its hull: it goes home alone. Say if 3 left, 20 % hull, 50 %
       carrier damage, the 90 s limit, the 240 s recharge and the 60 m/s run feel right (`data/capitals/capitals.json`).
 - [ ] **The escort with the carriers (H, M8-T08, AC7):** fly the civilian escort: each wave's carrier arrives, launches and
       hangs back; Control offers the optional objective; destroy one carrier (`Destroy a raider carrier` goes done, Control
-      says so at the end) and let another get away. Waves one and two come with 3 and 4 raiders, so they break off at their
-      first loss (see the open question in the M8 plan, T08).
+      says so at the end) and let another get away. The waves are 6, 8 and 10 raiders: each fights until 3 are left, and
+      those fly home, which can take a minute and a half when the fight has moved 15 km from their carrier. Say if it can
+      be won with ALPHA 2 and ALPHA 3 and how long it should take (the AI-flown check is in the M8 plan, T08).
 - [ ] **It hangs back:** fly at a carrier that is standing off: inside 2.5 km it turns its stern to you and backs away at up to
       30 m/s. Say if the stand-off, the speed and the turn rate (4 degrees a second) feel right.
 - [ ] **Its death (H):** `carrier kill` with fighters docked: the capital explosion, and each docked fighter blows up on its
