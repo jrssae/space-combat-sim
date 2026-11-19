@@ -335,7 +335,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T23 | C | The civilian escort in its own star system: no Babylon 5, no nebula, a different planet (D89; maintainer, 2026-11-18; numbered last) | T08 | Opus | A second system in the data, its sky and planet, the escort moved onto it; a sheet first | done |
 | T24 | D | Radial menus fit their entries: equal slices for however many entries, no empty spots (D90; maintainer, 2026-11-18; numbered last) | - | Opus | The radial framework's layout and picking for every input | done |
 | T25 | E | Frame-rate regression: free flight at ~15 fps (66.7 ms frames, GPU ~1 ms) found 2026-11-19 by M8-T23; find the commit and fix it (numbered last) | - | Opus | Bisect from M7's merge with `state render` on the GPU; CPU-side cost per frame | done |
-| T26 | C | Civilian escort update: a longer route and a bigger belt, a longer gap before wave two, Control's opening brief (maintainer, 2026-11-19; numbered last) | T23 | Fable | Scenario and mission data, pacing and dialog on the escort the T08 agent knows | not started |
+| T26 | C | Civilian escort update: a longer route and a bigger belt, a longer gap before wave two, Control's opening brief (maintainer, 2026-11-19; numbered last) | T23 | Fable | Scenario and mission data, pacing and dialog on the escort the T08 agent knows | in progress |
 | T17 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M8-T01 Tutorial script (discussion with the maintainer)
