@@ -57,3 +57,13 @@ func test_a_star_square_to_the_view_projects_off_screen_without_an_error() -> vo
 	var uv: Vector2 = LensFlareAim.sun_uv(camera, Vector3(-1.0, 0.0, 0.0))
 	assert_true(is_finite(uv.x) and is_finite(uv.y))
 	assert_lt(uv.x, -1.0, "far off the left edge")
+
+
+# M8-T29: a star off the picture draws no flare ghosts (they showed as soft grey blobs with no star in the gate's shots): the flare
+# is whole on screen and fades out within `EDGE_FADE` of the edge.
+func test_the_flare_fades_out_past_the_pictures_edge() -> void:
+	assert_eq(LensFlareAim.screen_weight(Vector2(0.5, 0.5)), 1.0, "on screen: all of it")
+	assert_eq(LensFlareAim.screen_weight(Vector2(0.0, 1.0)), 1.0, "on the edge")
+	assert_almost_eq(LensFlareAim.screen_weight(Vector2(1.0 + LensFlareAim.EDGE_FADE * 0.5, 0.5)), 0.5, 1e-6, "halfway out")
+	assert_eq(LensFlareAim.screen_weight(Vector2(1.6, 0.5)), 0.0, "well off the picture: none")
+	assert_eq(LensFlareAim.screen_weight(Vector2(-0.3, -0.3)), 0.0, "off a corner: none")

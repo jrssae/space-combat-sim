@@ -16,6 +16,8 @@ const NODE_NAME: StringName = &"JumpgateHost"
 const FALLBACK_DISTANCE_M: float = 50000.0
 ## Where the hidden ship waits while away: behind the gate on its axis, out of every path.
 const PARK_BEHIND_M: float = 3000.0
+## The way out's takes start this long before the ship comes out of the ring (the reviewer: catch the core's white burst).
+const SHOT_LEAD_S: float = 0.2
 ## `gate approach` puts the player this far in front of the gate, facing it (inside the prompt's 10 km), unless it names a
 ## distance (`gate approach 1.8`, km: inside the 2 km a jump may be asked from, M7-T28).
 const APPROACH_M: float = 6000.0
@@ -275,8 +277,8 @@ func step_player(delta: float) -> FlightCommand:
 		shots.tick(delta, _play)
 		if (jump.state == GateJump.State.ARRIVING or jump.state == GateJump.State.CLEARING) and ship.visible:
 			var transits: VortexTransits = VortexTransits.of(main.world)
-			if transits == null or transits.has_emerged(ship) or not transits.is_passing(ship):
-				shots.on_placed(_play)  # the way out's takes start as the ship comes out of the ring
+			if transits == null or transits.emerges_in_s(ship) <= SHOT_LEAD_S or not transits.is_passing(ship):
+				shots.on_placed(_play)  # the way out's takes start just before the ship comes out, to catch the white core
 	if not jump.is_active():
 		return null
 	var transits_now: VortexTransits = VortexTransits.of(main.world)

@@ -26,7 +26,7 @@ func test_the_pools_hold_the_reviewed_takes_each_under_three_seconds() -> void:
 	var expected: Dictionary = {
 		GateShotPool.APPROACH: ["beside_behind", "trail_wide", "gate_side"],
 		GateShotPool.MOUTH: ["close_behind", "trail_mid", "pull_out", "over_shoulder"],
-		GateShotPool.ARRIVAL_OPEN: ["collapse_wide", "centre_close", "wide_burst", "reverse_exit"],
+		GateShotPool.ARRIVAL_OPEN: ["pylons_wide", "centre_close", "wide_burst", "reverse_exit"],
 		GateShotPool.ARRIVAL_OUT: ["centre_close", "wide_burst", "arm_side", "head_on"],
 	}
 	for slot: StringName in expected:

@@ -16,6 +16,8 @@ const DEFAULT_CUT_LEAD_S: float = 3.5
 const TAKE_MAX_S: float = 2.6
 ## ... or this for a take marked `"feature": true` (maintainer, 2026-11-19: an interesting angle may run up to 5 s) ...
 const FEATURE_MAX_S: float = 4.6
+## A feature take is held at least this, so its moment plays out (the reviewer, 2026-11-19: the burst out needs it).
+const FEATURE_MIN_S: float = 2.5
 ## ... and held at least this (M7-T08), unless the stage itself is shorter.
 const MIN_HOLD_S: float = 1.0
 ## What the data's gate actor is called; `keys` swaps it for the caller's name.

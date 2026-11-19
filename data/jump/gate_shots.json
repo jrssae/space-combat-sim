@@ -101,7 +101,7 @@
       "actor": "gate",
       "offset": [
        650,
-       150,
+       450,
        -1300
       ]
      },
@@ -116,7 +116,7 @@
       "actor": "gate",
       "offset": [
        650,
-       150,
+       450,
        -1300
       ]
      },
@@ -338,7 +338,7 @@
  ],
  "arrival_open": [
   {
-   "id": "collapse_wide",
+   "id": "pylons_wide",
    "keys": [
     {
      "t": 0,
@@ -560,37 +560,38 @@
    "id": "wide_burst",
    "keys": [
     {
-     "t": 0.0,
+     "t": 0,
      "position": {
       "actor": "gate",
       "offset": [
-       400,
        300,
-       -3500
+       150,
+       -1200
       ]
      },
      "look_at": {
       "actor": "player"
      },
-     "fov": 45
+     "fov": 15
     },
     {
      "t": 4.9,
      "position": {
       "actor": "gate",
       "offset": [
-       400,
        300,
-       -3500
+       150,
+       -1200
       ]
      },
      "look_at": {
       "actor": "player"
      },
-     "fov": 20
+     "fov": 15
     }
    ],
-   "feature": true
+   "feature": true,
+   "when": "before"
   },
   {
    "id": "arm_side",

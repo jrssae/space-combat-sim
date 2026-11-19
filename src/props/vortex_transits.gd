@@ -191,6 +191,17 @@ func is_passing(body: Node) -> bool:
 	return _by_body.has(body)
 
 
+## Seconds until `body`, waiting in an arrival's ring, comes out (0 once it has; INF in no arrival).
+func emerges_in_s(body: Node) -> float:
+	var p: VortexPassage = _by_body.get(body)
+	if p == null or p.kind != VortexPassage.Kind.ARRIVAL:
+		return INF
+	if p.emerged:
+		return 0.0
+	var vortex: JumpVortex = p.vortex
+	return maxf(VortexTransit.emerge_age_s(vortex.timing.lead_s) - vortex.age_s, 0.0) if is_instance_valid(vortex) else INF
+
+
 ## Whether `body` has come out of an arrival's ring (false while it waits "in hyperspace" for its vortex, or is in no funnel).
 func has_emerged(body: Node) -> bool:
 	var p: VortexPassage = _by_body.get(body)

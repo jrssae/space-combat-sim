@@ -93,8 +93,8 @@ func begin_arrival(ctx: Dictionary, play: Callable) -> String:
 
 ## The gate has placed the ship in the funnel: takes of it coming out.
 func on_placed(play: Callable) -> void:
-	if _stage != GateShotPool.ARRIVAL_OPEN or clock_s - _take_at < GateShotPool.MIN_HOLD_S:
-		return  # the host asks every tick: the cut comes once the take on screen has had its second (no take under 1 s)
+	if _stage != GateShotPool.ARRIVAL_OPEN or clock_s - _take_at < _least_hold_s():
+		return  # the host asks every tick: the cut comes once the take on screen has had its second (a feature its 2.5 s)
 	_stage_start(GateShotPool.ARRIVAL_OUT, OUT_S)
 	_cut(play)
 
@@ -237,6 +237,8 @@ func _cut(play: Callable) -> void:
 			kind = GateShotPool.BEFORE
 	elif slot == GateShotPool.ARRIVAL_OPEN:
 		kind = GateShotPool.AFTER if clock_s >= OPEN_LATE_S else GateShotPool.BEFORE  # a take tagged `after` waits for the blue
+	elif slot == GateShotPool.ARRIVAL_OUT:
+		kind = GateShotPool.BEFORE if clock_s < 0.5 else GateShotPool.AFTER  # a take tagged `before` opens the burst, its core white
 	var used := PackedStringArray()
 	var previous: String = ""
 	for take: Dictionary in played:
@@ -285,6 +287,14 @@ func _usable(slot: StringName, id: String) -> bool:
 		var arriving: bool = slot == GateShotPool.ARRIVAL_OPEN or slot == GateShotPool.ARRIVAL_OUT
 		_clear[key] = arrival_clear(slot, id, _ctx) if arriving else is_clear(slot, id, _ctx)
 	return _clear[key]
+
+
+# The least the take on screen is held before a stage moves on: a second, or a feature take's `FEATURE_MIN_S`.
+func _least_hold_s() -> float:
+	if played.is_empty():
+		return GateShotPool.MIN_HOLD_S
+	var last: Dictionary = played[played.size() - 1]
+	return GateShotPool.FEATURE_MIN_S if pool.is_feature(last["slot"], String(last["id"])) else GateShotPool.MIN_HOLD_S
 
 
 func _stage_start(slot: StringName, length_s: float) -> void:
