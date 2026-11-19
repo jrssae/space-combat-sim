@@ -4,7 +4,7 @@ extends RefCounted
 ## `ScenarioLoader`, so a new mission is a new file and never an edit here. A file that does not load, or has no block, is not
 ## a mission.
 
-## Missions in `dir`, by id: `{id: StringName, title: String, briefing: String}`. `read` turns a path into a loaded scenario
+## Missions in `dir`, by their block's `order` (lowest first: the tutorial leads the list, M8 D79) and then by id: `{id: StringName, title: String, briefing: String}`. `read` turns a path into a loaded scenario
 ## (`ScenarioLoader.load` by default); the block is the loader's `mission` entry.
 static func entries(dir: String = GameFlow.SCENARIO_DIR, read: Callable = ScenarioLoader.load) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
@@ -29,5 +29,8 @@ static func entries(dir: String = GameFlow.SCENARIO_DIR, read: Callable = Scenar
 			"id": StringName(id),
 			"title": title if not title.is_empty() else id.replace("_", " ").capitalize(),
 			"briefing": String((block as Dictionary).get("briefing", "")),
+			"order": int((block as Dictionary).get("order", ScenarioLoader.MISSION_ORDER)),
 		})
+	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return a["order"] < b["order"] if a["order"] != b["order"] else String(a["id"]) < String(b["id"]))
 	return out

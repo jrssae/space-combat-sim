@@ -46,7 +46,8 @@ extends RefCounted
 ##                                                  #       MissionScript path, loaded by the runner), dialog (a dialog file
 ##                                                  #       path), objectives: the raw `objectives[]`, already checked by
 ##                                                  #       `ObjectiveBook.declare`, closing_lines: {reason, "success" or
-##                                                  #       "failure" -> line id (StringName)} (M5-T10)}; strings may be ""
+##                                                  #       "failure" -> line id (StringName)} (M5-T10), order: its place in
+##                                                  #       the New game list, lowest first (M8 D79)}; strings may be ""
 ##      "cinematics": Dictionary,                   # (M5-T05, D55) shot id -> shot, passed through for T08; may be empty
 ##      "belts": Array[Dictionary],                 # `asteroid_belts[]` (M5-T29, D63): each {centre: UniversePos, size: Vector3,
 ##                                                  #       count, radius_m: Vector2 (min, max bounding radius), seed, min_gap_m},
@@ -70,6 +71,8 @@ const PROP_TYPES: Array[StringName] = [&"nav_buoy"]
 ## A `jumpgates[]` entry's type (M6-T14): placed from `data/star_systems.json` beside the station's stand-in unless it gives a
 ## position.
 const JUMPGATE: StringName = &"jumpgate"
+## A mission's place in the New game list when its block gives no `order`.
+const MISSION_ORDER: int = 100
 const SANDBOX_PATH: String = "res://data/scenarios/combat_sandbox.json"
 const ANCHORS: Array[StringName] = [&"player", &"origin"]
 ## A spawn and pool type that stands for one civilian hull drawn from the run's seed (M5-T30, D62).
@@ -407,6 +410,10 @@ static func _mission(raw: Variant, system: StringName, source: String) -> Varian
 	if closing is String:
 		return closing
 	out["closing_lines"] = closing
+	var order: Variant = block.get("order", MISSION_ORDER)
+	if not (order is float or order is int):
+		return "%s: mission.order must be a number" % source
+	out["order"] = int(order)  # its place in the New game list, lowest first (M8 D79: the tutorial leads)
 	return out
 
 

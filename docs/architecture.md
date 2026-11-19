@@ -6637,3 +6637,50 @@ native/src/brain.rs              + ScsBrains.set_flight
   `test_flight_rules`, `test_wing`, `test_comms_menu`, `test_input_map`; `test_flights` (the split in a scenario and from a Cobra
   arm, orders reaching two wingmen); `test_wing_orders` (keys 7 and 8, the console, shots from the slot, both holds lifted);
   `test_comms_menu_input` (the pad ring); `test_flight_fight` (cohesion, cover, a short leash, threads).
+
+### 21.3 The tutorial mission and the seams it added (D79, T05)
+
+```
+data/missions/tutorial.gd             the script: 13 steps, launch to debrief; the places and the raid's shape as constants
+data/scenarios/tutorial.json          Babylon 5 at the origin, the jumpgate, five nav buoys, the instructor, the flight, objectives
+data/dialog/tutorial.json             every line (voice ids `tu_*`); `{instructor}` is the instructor's callsign from speakers.json
+data/missions/tutorial_rules.json     TutorialRules (pure): the course's times, the squadron-leader rule, the raid's numbers
+assets/ai/training_drone.tres         an AiProfile that never fires: the gunnery drones are raider hulls flown by it
+src/game/career.gd, career_store.gd   Career (pure: the rank, only ever raised; the best course rating) and its file, user://career.json
+src/mission/mission_facts.gd          MissionFacts: numbers counted from the scene's signals, written into the MissionWorld each tick
+src/mission/trigger_fact.gd           TriggerFact (`TriggerSpec.fact`, JSON kind "fact"): a fact reached a number, or fell below it
+```
+
+- **Steps.** `launch` (the squadron cinematic with two flights, then the player), `form_up` (the instructor leads, paced on
+  the player, to a box 8 km off the station), `flight_checks`, `camera_lights`, `x_button`, `course`, `combat`, `wing_orders`,
+  `tour`, `jumpgate`, `raid` (six raiders out of the gate; the checkpoint), `defense` (the strike carrier with eight more),
+  `debrief`. The opening ends at `form_up`; the pause menu's **Skip training** goes from any step of `flight_checks` to
+  `wing_orders` straight to `tour` (`MissionScript.skip_block`, `MissionApi.skip_offered` / `take_skip`, `PauseMenu.entries`).
+- **What a mission script gained** (all on `MissionApi`, world changes journaled, a skipped step still makes them):
+  `launch_squadron(wing, door, flights)`; `tour(stop)` (one stop of `TourDirector`, awaited); `traffic(on)` (the station's run);
+  `scramble(wing, count)` (false while the arm is busy: ask again); `fly(ship, points, cruise_mps, paced)` and `demo(ship, name)`
+  (a fresh `Route` for an AI ship; a demo is a one-point route where the ship is, so the native follow-path flies it at once);
+  `gate_point(ahead_m)`; `gather(names, at)` (in a skipped step only: where flying the step would have left those ships);
+  `fact(name)` with `TriggerSpec.fact`; `when(trigger, action)` (an action run once when its trigger first holds, while the
+  steps go on: the scramble at the raiders' first hit, Control's docking offer); `note` / `noted`; `checkpoint(step, label)`;
+  `debrief_line(text)`; `award_rank(rank)`; `own_dock_offer()`.
+- **Facts** (`MissionFacts.NAMES`): gate jumps flown, bolts raiders landed (`hostile_hits`), Starfuries, civilians and buoys
+  lost, raider capitals destroyed and in play, docking offers, repairs, tour stops shown, the player's hull. A step waits on
+  one with `m.until(TriggerSpec.fact(...))`; a forced fact trigger only latches, so the script places what the step would
+  have moved (`gather`, a proximity trigger's `place_at`).
+- **The checkpoint.** `m.checkpoint(step, label)` puts `{step, label, notes}` in the mission's result. A lost mission with
+  one makes the debrief offer **Restart from <label>** before **Restart whole mission** (`DebriefModel.options`,
+  `GameFlow.has_checkpoint`); `Game.retry(true)` / `retry checkpoint` copies it into the request, `Main.mission_checkpoint`
+  hands it to the runner, and the runner starts the script on the same seed with the notes restored and every step before
+  the checkpoint skipped (`goto`). So the world is rebuilt by the skip rules, not saved: a skipped squadron launch now ends
+  before its step goes on (`MissionApi._skip_launch`), or it would take the player back from where a later step put it.
+  The course step leaves a note that is already there alone, which is how the flown rating survives.
+- **The career.** The script's rank (`award_rank`) rides in a successful result; `Game.end_mission` gives it to `Career`
+  (`Game.earn`, with the course rating from the notes) and saves it. Only a mission the flow started saves, so a test's Main
+  never writes the pilot's file. Console: `career`, provider `career`.
+- **The list.** A mission block's `order` (default 100) sorts the New game list (`MissionCatalog`); the tutorial's is 0.
+- **Tests.** `test_tutorial` (menu to debrief by console commands, the launch's two flights, the drones left alone, the
+  skip, the four course remarks, the tour's stops in order, the raid out of the gate and off the carrier with the scramble,
+  both ways of losing the pilot and the restart from the raid, the squadron leader; a fought raid as a balance test),
+  `test_career`, `test_tutorial_rules`, `test_mission_seams`, and additions to `test_game_flow`, `test_debrief_model`,
+  `test_mission_catalog`.

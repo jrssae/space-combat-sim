@@ -29,6 +29,7 @@ var _route_done: Dictionary = {}  # key -> bool
 var _lines: Dictionary = {}  # StringName -> true
 var _seen: Dictionary = {}  # key -> true once it was in play
 var _actions: Dictionary = {}  # StringName -> true, this tick only
+var _facts: Dictionary = {}  # StringName -> float (`fact`)
 
 
 ## How a name is matched: trimmed, lower case.
@@ -119,6 +120,16 @@ func route_end(actor: String) -> UniversePos:
 func line_finished(line_id: StringName) -> bool:
 	work += 1
 	return _lines.has(line_id)
+
+
+## Sets a number the game keeps about the run (`MissionFacts`, M8 D79).
+func set_fact(fact_name: StringName, value: float) -> void:
+	_facts[fact_name] = value
+
+
+## A fact's number, 0 for one nobody set.
+func fact(fact_name: StringName) -> float:
+	return float(_facts.get(fact_name, 0.0))
 
 
 func performed(action: StringName) -> bool:

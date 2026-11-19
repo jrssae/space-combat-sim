@@ -25,6 +25,10 @@ var game: GameScript = null  ## null: /root/Game
 var audio: AudioDirector = null
 ## A Callable returning the running mission's objectives (`ObjectivesModel`); the mission core plugs its book in here.
 var objectives_source: Callable = Callable()
+## A Callable returning the label of the mission's skip ("Skip training") while it is offered, else ""; `skip_taken` takes it
+## and returns "" or why not (M8 D79: the tutorial's training block). Unset: no such entry.
+var skip_source: Callable = Callable()
+var skip_taken: Callable = Callable()
 ## Called when Quit to desktop is confirmed. Unset: quits the game.
 var quit_game: Callable = Callable()
 
@@ -95,9 +99,18 @@ func on_pause_action() -> void:
 		open()
 
 
+## The list's entries: the fixed ones, with the mission's skip after Resume while it is offered.
+func entries() -> Array[Dictionary]:
+	var out: Array[Dictionary] = ENTRIES.duplicate()
+	var label: String = String(skip_source.call()) if skip_source.is_valid() else ""
+	if not label.is_empty():
+		out.insert(1, {"id": &"skip", "text": label})
+	return out
+
+
 func _list_page() -> MenuScreen:
 	var page := ChoiceListScreen.new()
-	page.setup("PAUSED", ENTRIES)
+	page.setup("PAUSED", entries())
 	page.cancel_ignores_keys = true
 	page.compact = true
 	page.chosen.connect(_on_chosen)
@@ -115,6 +128,12 @@ func _on_chosen(id: StringName) -> void:
 	match id:
 		&"resume":
 			close()
+		&"skip":
+			var problem: String = String(skip_taken.call()) if skip_taken.is_valid() else "nothing to skip"
+			if problem.is_empty():
+				close()
+			else:
+				_frame.show_message(problem)
 		&"restart":
 			_ask_game(func() -> String: return game.restart())
 		&"settings":

@@ -31,6 +31,8 @@ var waves_auto_start: bool = true
 ## Mixed into the brain seed of every ship the scenario places (M3-T10): the same seed flies the same fight (the dogfight's
 ## AC12 runs). Set before the node enters the tree.
 var scenario_seed: int = 0
+## A lost mission's checkpoint to restart from (`{step, label, notes}`, M8 D79); empty for a run from the start.
+var mission_checkpoint: Dictionary = {}
 ## Free-flight encounters from the start (M5-T17, D58): the menu's request sets it; every other run starts them off.
 var encounters: bool = false
 ## Overrides the scenario's encounter pools file (tests). Empty = `data/encounters/<scenario_id>.json`, if there is one.
@@ -282,6 +284,8 @@ func _ready() -> void:
 	pause_menu = (preload("res://src/hud/pause_menu.tscn") as PackedScene).instantiate() as PauseMenu
 	pause_menu.audio = audio
 	pause_menu.objectives_source = objectives
+	pause_menu.skip_source = func() -> String: return mission.skip_label() if mission != null else ""
+	pause_menu.skip_taken = func() -> String: return mission.take_skip() if mission != null else "no mission"
 	# The button that closed the menu may still be down: it must not also tap a target or toggle something.
 	pause_menu.resumed.connect(func() -> void: adapter.resync_edges(input_source))
 	pause_menu.opened.connect(_start_pause_backdrop)

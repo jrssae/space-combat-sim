@@ -1,6 +1,7 @@
 {
   "speakers": [
     {"id": "control", "name": "Babylon 5 Control", "callsign": "CONTROL", "faction": "earth_alliance"},
+    {"id": "instructor", "name": "Lt. Cmdr. Maren Okafor", "callsign": "SEXTANT", "faction": "earth_alliance"},
     {"id": "alpha_2", "name": "Alpha 2", "callsign": "ALPHA 2", "faction": "earth_alliance"},
     {"id": "alpha_3", "name": "Alpha 3", "callsign": "ALPHA 3", "faction": "earth_alliance"},
     {"id": "alpha_4", "name": "Alpha 4", "callsign": "ALPHA 4", "faction": "earth_alliance"},

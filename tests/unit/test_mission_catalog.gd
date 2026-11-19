@@ -68,3 +68,16 @@ func test_every_json_in_the_folder_is_offered_to_the_reader() -> void:
 	# The shipped scenarios load through the real loader whatever they hold.
 	for entry: Dictionary in MissionCatalog.entries():
 		assert_true(entry.has("id") and entry.has("title") and entry.has("briefing"))
+
+
+## M8 D79: a block's `order` puts a mission ahead of the others (the tutorial leads the New game list); the rest go by id.
+func test_missions_list_by_their_order_then_by_id() -> void:
+	var read: Callable = func(path: String) -> Dictionary:
+		var block: Dictionary = {"title": path.get_file().get_basename()}
+		if path.get_file() == "mission_second.json":
+			block["order"] = 0
+		return {"ok": true, "mission": block}
+	var ids: Array = MissionCatalog.entries(FIXTURES, read).map(func(e: Dictionary) -> StringName: return e["id"])
+	assert_eq(ids[0], &"mission_second")
+	var real: Array[Dictionary] = MissionCatalog.entries()
+	assert_eq(real[0]["id"], &"tutorial", "the tutorial is offered first")

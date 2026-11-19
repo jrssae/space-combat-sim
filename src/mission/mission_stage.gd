@@ -45,6 +45,9 @@ var system_id: StringName = &"local"
 ## Mixed into spawned pilots' brain seeds (the scenario's seed: the same seed flies the same mission).
 var seed_value: int = 0
 
+## The run's counted numbers (`MissionApi.fact`, M8 D79).
+var facts: MissionFacts = null
+var _main: Main = null
 var _actors: Dictionary = {}  # MissionWorld.key -> Combatant, NavBuoy or a raid's named carrier (CapitalStandin)
 var _carrier_fates: Dictionary = {}  # a carrier's key -> true once it left play whole, false once destroyed
 var _holds_end: Dictionary = {}  # an actor's key -> {cruise_mps: its own route's, back: its route back or null} (`hold_route_end`)
@@ -62,10 +65,16 @@ func setup(main: Main, p_jumps: JumpPointPool) -> void:
 	launches = main.launches
 	system_id = main.world.origin.system_id
 	seed_value = main.scenario_seed
+	_main = main
+	facts = MissionFacts.new()
+	facts.setup(main)
 	if player != null:
 		_actors["player"] = player
 	for buoy: NavBuoy in main.buoys:
 		_actors[MissionWorld.key(buoy.display_name)] = buoy
+	if gates != null:
+		for gate: Jumpgate in gates.gates:
+			_actors[MissionWorld.key(gate.display_name)] = gate  # a waypoint and a place to fly to (M8 D79)
 	for combatant: Combatant in ships.alive():
 		register(combatant)
 	if not ships.acquired.is_connected(register):
@@ -80,6 +89,7 @@ func teardown() -> void:
 	_carrier_fates.clear()
 	_holds_end.clear()
 	camera_rig = null
+	_main = null
 
 
 ## Knows `combatant` by the name it flies under now, and keeps it out of the low-attention tier: a parked tier body would read
@@ -93,6 +103,12 @@ func register(combatant: Combatant) -> void:
 
 ## Updates the snapshot for `names` (lower case): position, alive and route. One unit of work each.
 func refresh(snapshot: MissionWorld, names: PackedStringArray) -> void:
+	if facts != null:
+		facts.refresh(snapshot)
+		var capitals: int = 0
+		for k: String in _actors:
+			capitals += 1 if _actors[k] is CapitalStandin and _node_of(k) != null else 0
+		snapshot.set_fact(&"capitals_in_play", float(capitals))
 	for actor: String in names:
 		snapshot.work += 1
 		var k: String = MissionWorld.key(actor)
@@ -387,10 +403,80 @@ func launching() -> bool:
 
 ## Starts the squadron-launch cinematic from wing `wing`'s arm, the player last from door `door` (M8-T03; empty and 0 for the
 ## data's); "" or why not.
-func launch_squadron(wing: String = "", door: int = 0) -> String:
+func launch_squadron(wing: String = "", door: int = 0, flights: int = 0) -> String:
 	if launches == null or not is_instance_valid(launches):
 		return "no launch director in this scene"
-	return launches.launch_squadron(wing, door)
+	return launches.launch_squadron(wing, door, flights)
+
+
+## Plays the station tour's stop `stop` ("" for the whole tour, M7-T12); "" or why not.
+func tour(stop: String) -> String:
+	if _main == null or _main.tours == null:
+		return "no tour in this scene"
+	return _main.tours.start(stop)
+
+
+func touring() -> bool:
+	return _main != null and _main.tours != null and _main.tours.playing
+
+
+func stop_tour() -> void:
+	if touring():
+		_main.tours.stop()
+
+
+## Keeps the station's run of civilians going between the gate and the bays, or lets it run out (M7-T56); "" or why not.
+func traffic(on: bool) -> String:
+	if _main == null or _main.traffic == null or not _main.traffic.lanes_ready():
+		return "no station traffic in this scene"
+	_main.traffic.auto_forced = true
+	_main.traffic.auto = on
+	return ""
+
+
+## Launches `count` more Starfuries of the station's wing `wing` from its Cobra arm (the places not flown, at most); "" or why not.
+func scramble(wing: String, count: int) -> String:
+	if _main == null or _main.traffic == null:
+		return "no station traffic in this scene"
+	return _main.traffic.scramble(wing, count)
+
+
+## Sends the AI ship `ship_name` along `points` (metres from the scenario's origin) at `cruise_mps`, waiting for the player when
+## `paced`; a point may name a demo to show there (`Manoeuvres.NAMES`). "" or why not.
+func fly(ship_name: String, points: Array, cruise_mps: float, paced: bool, demo: StringName = &"") -> String:
+	var k: String = MissionWorld.key(ship_name)
+	var combatant := _actors.get(k) as Combatant
+	var pilot := combatant.driver.brain as AiPilot if combatant != null and combatant.driver != null and _node_of(k) != null else null
+	if pilot == null:
+		return "no AI ship %s in play" % ship_name
+	var route := Route.new()
+	route.name = ship_name
+	route.cruise_mps = cruise_mps
+	route.loop = false
+	route.pace = Route.PACE_PLAYER if paced else Route.PACE_NONE
+	if paced and player != null and player.targetable != null:
+		route.pace_id = player.targetable.get_instance_id()
+	for i: int in points.size():
+		var p: Vector3 = points[i]
+		route.add(UniversePos.new(p.x, p.y, p.z, system_id), demo if i == points.size() - 1 else &"")
+	if route.count() == 0:
+		route.add(world.to_universe(combatant.ship.global_position), demo)  # where it is: the demo starts at once
+	BehaviourFollowPath.attach(pilot, route)
+	return ""
+
+
+## The place `ahead_m` out of the scene's jumpgate along the way its arrivals fly, or null with no gate.
+func gate_point(ahead_m: float) -> UniversePos:
+	var gate: Jumpgate = gates.gate() if gates != null else null
+	if gate == null:
+		return null
+	return world.to_universe(gate.global_position + (gate.global_basis * gate.arrival_forward).normalized() * ahead_m)
+
+
+## Control's docking offer is the mission's to say: the HUD line stays off (M8-T06).
+func own_dock_offer() -> void:
+	if _main != null and _main.docking != null:
+		_main.docking.offer_line = false
 
 
 ## Jumps the player's launch to the hand-off (a skipped step).
@@ -490,6 +576,8 @@ func _node_of(k: String) -> Node3D:
 		if c != player and MissionWorld.key(c.targetable.display_name) != k:
 			return null  # the pool gave this ship to someone else
 		return c.ship
+	if thing is Jumpgate:
+		return thing as Jumpgate
 	if thing is NavBuoy:
 		var buoy := thing as NavBuoy
 		return buoy if buoy.is_inside_tree() and buoy.visible and not buoy.is_destroyed() else null

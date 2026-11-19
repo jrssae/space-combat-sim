@@ -1235,6 +1235,36 @@ with `damage 50` (hull points; `state ship` shows the hull) so the repair has so
       ring has a blank slice where DOCK was and key 6 does nothing; a wingman below 25 % keeps fighting.
 - [ ] **(H) Control's offer:** below half hull the HUD's line offers the bay once (`BABYLON CONTROL: YOU ARE CLEARED TO DOCK ...`).
 
+## The tutorial mission (M8-T05)
+
+New game, then **Tutorial: qualification flight** (first in the list). Console: `play tutorial`, `mission goto <step>` (steps:
+launch, form_up, flight_checks, camera_lights, x_button, course, combat, wing_orders, tour, jumpgate, raid, defense, debrief),
+`checks pass`, `career`, `retry checkpoint` from a lost debrief. Nothing below can be judged headless.
+
+- [ ] **(H) The launch:** two flights launch (yours and ALPHA 4 to 6), then you; holding X skips it. Say if two flights
+      look thin: the rest of the wing (ALPHA 7 to 12) is kept for the raid's scramble.
+- [ ] **(H) Form up and the box:** the instructor (callsign SEXTANT, ship `INSTRUCTOR`) waits off the Cobra arm, leads at
+      your pace to the box 8 km out. Say if the route, its speed (150 m/s) or the distance feel wrong.
+- [ ] **(H) The checks:** each hint reads right and passes on the move; a missed check repeats after 20 s, then the
+      instructor flies the roll, the strafe box or the stop where it is. The lines read as plain radio.
+- [ ] **(H) The buoy course:** five buoys (8.8 km of legs), a pass inside 200 m each, the clock from NAV 1. Fly it and
+      report your time: `instructor_time_s` in `data/missions/tutorial_rules.json` is a guess (75 s) until you have.
+      The four remarks: fast, on par, slow, and one with a buoy shot or rammed.
+- [ ] **(H) The drones:** three unarmed raider hulls on a slow track, then two more for ATTACK MY TARGET. Nobody but you
+      and your ordered flight shoots them.
+- [ ] **(H) Skip training:** the pause menu's second entry during the training steps goes straight to the tour.
+- [ ] **(H) The tour:** all stop first (the brake check), then five stops with a line each: Cobra bays, docking bay, command
+      section, grid, heavy cannons. A or Start cuts a stop.
+- [ ] **(H) The gate:** 50 km out behind the instructor; the approach cue calls the brake; hold X inside the reach.
+- [ ] **(H) The raid:** the alarm as you come out; six raiders out of the vortex; the wing scrambles at their first hit; the
+      carrier jumps in 12 km off the station 45 s later and launches eight. Say if the 50 km back to the station is too far,
+      and whether the traffic's lines for the two bays show.
+- [ ] **(H) Docking:** below half hull Control offers the bay as a comms line; after the repair Control says so.
+- [ ] **(H) The debrief:** the instructor talks the raid through, then the screen shows the course, the losses, the carrier
+      and the assignment. `career` reads the rank after a restart of the game.
+- [ ] **(H) Lost after the alarm:** the debrief offers **Restart from the raid's start** and **Restart whole mission**;
+      the first puts you and your flight back at the gate with the alarm sounding and the course result kept.
+
 ## Flights of three and the hold-fire orders (M8-T19)
 
 The tutorial (M8-T05) will give you a flight of three; until it lands, any scenario shows the rest. `play station_showcase`, or

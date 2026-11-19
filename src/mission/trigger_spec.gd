@@ -11,9 +11,10 @@ extends RefCounted
 ##     {"kind": "dialog_finished", "line": "intro_1"}
 ##     {"kind": "input_performed", "action": "roll_right"}                         (a `PlayerActions.NAMES` word)
 ##     {"kind": "arrived", "actor": "ALPHA 2", "at": [x, y, z], "radius_m": 150}   (no "at": the end of its route)
+##     {"kind": "fact", "fact": "gate_jumps", "at_least": 1}                       (a `MissionFacts.NAMES` number; "below": true)
 
 const KINDS: Array[StringName] = [&"proximity", &"area", &"timer", &"destroyed", &"dialog_finished", &"input_performed",
-		&"arrived"]
+		&"arrived", &"fact"]
 
 
 ## `{"ok": bool, "trigger": Trigger or null, "error": String}` for one JSON trigger.
@@ -93,6 +94,14 @@ static func from_dict(data: Variant, system: StringName = &"local") -> Dictionar
 			if point == null:
 				return _fail("arrived: at must be [x, y, z], got %s" % JSON.stringify(d.get("at")))
 			return _ok(arrived(actor as String, point, radius as float))
+		&"fact":
+			var fact_name: Variant = _name(d, "fact")
+			if fact_name == null or not MissionFacts.NAMES.has(StringName(fact_name as String)):
+				return _fail("fact needs a fact (one of %s)" % ", ".join(PackedStringArray(MissionFacts.NAMES)))
+			var least: Variant = d.get("at_least", 1.0)
+			if not _is_number(least):
+				return _fail("fact: at_least must be a number")
+			return _ok(fact(StringName(fact_name as String), float(least), bool(d.get("below", false))))
 	return _fail("unknown kind %s (expected one of %s)" % [JSON.stringify(d.get("kind")), ", ".join(PackedStringArray(KINDS))])
 
 
@@ -141,6 +150,11 @@ static func arrived(actor: String, point: UniversePos = null, radius_m: float = 
 
 
 # --- parsing -----------------------------------------------------------------------------------------------------------
+
+
+## A number the game keeps about the run has reached `at_least` (with `below`: has fallen under it).
+static func fact(fact_name: StringName, at_least: float = 1.0, below: bool = false) -> TriggerFact:
+	return TriggerFact.new(fact_name, at_least, below)
 
 
 static func _name(d: Dictionary, key: String) -> Variant:

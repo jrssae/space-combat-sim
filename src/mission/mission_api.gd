@@ -31,6 +31,18 @@ extends RefCounted
 ##     m.end(success [, reason])
 ##     m.time_s(), m.alive(name), m.objective_state(id)
 ##     m.filled(text)                  `text` with the scenario's placeholders filled in ("{civilian}" -> the drawn ship's name)
+## Station missions (M8 D79):
+##     await m.launch_squadron(wing, door, flights)   the squadron-launch cinematic, then the player's own launch (M8-T03)
+##     await m.tour(stop)              one stop of the station tour on the cinematic camera (M7-T12)
+##     m.traffic(on)                   the station's run of civilians between the gate and the bays
+##     m.scramble(wing, count)         more Starfuries of the station's wing launch from its Cobra arm
+##     m.fly(ship, points, cruise_mps [, paced]) / m.demo(ship, name)   an AI ship's route; a `Manoeuvres` move flown where it is
+##     m.gather(names, at)             in a skipped step, puts those ships at `at` (where flying the step would have left them)
+##     m.fact(name)                    a number the game counts (`MissionFacts.NAMES`); wait on one with `TriggerSpec.fact`
+##     m.when(trigger, action)         runs `action` once, whenever `trigger` first holds, while the steps go on
+##     m.note(key, value) / m.noted(key [, default])   the script's own facts; kept by a checkpoint restart
+##     m.checkpoint(step, label)       from now on a lost mission's debrief offers a restart from `step`
+##     m.debrief_line(text) / m.award_rank(rank)       a line on the debrief; the rank the mission earns (`Career`)
 ##
 ## Lines (D53): `dialog_book` holds the mission's dialog file and `dialog` is the queue the comms panel shows; a line is recorded
 ## in the `MissionWorld` as finished when it ends, shown out or cut (an interrupt, a skip, the mission's end). Without a book
@@ -68,6 +80,8 @@ signal demo_requested(check_id: StringName, demo: StringName)
 const TIME_EPS_S: float = 1e-6
 ## Waits that may return at once in one skip before the step counts as polling (a script that waits in a loop).
 const SKIP_SPIN_LIMIT: int = 1000
+## Ticks a skipped squadron launch may take to hand the player over.
+const SKIP_LAUNCH_TICKS: int = 240
 
 var world: MissionWorld = null
 var book: ObjectiveBook = null
@@ -109,7 +123,19 @@ var checks: ControlCheckRunner = ControlCheckRunner.new()
 ## This tick's measured state for the open check: the runner fills it before `tick` while `checks.is_active()`.
 var check_sample: ControlCheckSample = null
 
+## The script's own facts (`note`); a checkpoint restart starts with the ones the checkpoint held.
+var notes: Dictionary = {}
+## `{step, label, notes}` once the script set one (`checkpoint`); empty before.
+var checkpoint_data: Dictionary = {}
+## Lines the script adds to the debrief, and the rank the mission earns (&"" for none).
+var debrief_lines: PackedStringArray = PackedStringArray()
+var rank: StringName = &""
+## `{from, to, label}` when the script offers a skip of some of its steps from the pause menu (`MissionScript.skip_block`).
+var skip_block: Dictionary = {}
+
 var _seq: MissionSequencer = MissionSequencer.new()
+# `when`: {trigger, action}, each dropped once it has run.
+var _reactions: Array[Dictionary] = []
 # The shot `cinematic` is waiting on, or null.
 var _shot: CinematicShot = null
 var _live: Array[Trigger] = []
@@ -431,25 +457,159 @@ func launch_from(wing: String, door: int) -> void:
 ## Plays the squadron-launch cinematic (M8-T03, D81) and waits for the player's hand-off: the squadron's flights launch from
 ## wing `wing`'s arm (empty: the player's wing, else alpha), flip and form up filmed from outside, then the player launches alone
 ## from door `door` (0: the data's). In a skipped step it lands in the end state at once and returns.
-func launch_squadron(wing: String = "", door: int = 0) -> void:
+func launch_squadron(wing: String = "", door: int = 0, flights: int = 0) -> void:
 	if has_ended():
 		return
 	journal.append("launch_squadron %s %d" % [wing, door])
 	if stage == null:
 		return
-	var why: String = stage.launch_squadron(wing, door)
+	var why: String = stage.launch_squadron(wing, door, flights)
 	if not why.is_empty():
 		push_error("Mission: launch_squadron: %s" % why)
 		return
-	if _seq.skipping:
-		stage.skip_launch()
-		return
 	while not _seq.stopped and not _seq.skipping and stage.launching():
 		await _seq.wake
-	if _seq.skipping:
-		stage.skip_launch()
+	await _skip_launch()
 	while _seq.stopped:
 		await _seq.wake
+
+
+# A skipped squadron launch is over before its step goes on: a later step may place the player, and a launch still holding the
+# ship would take it back to the station (M8-T05: a restart from the raid's checkpoint). It takes the launch's few ticks.
+func _skip_launch() -> void:
+	var ticks: int = 0
+	while _seq.skipping and not _seq.stopped and stage != null and stage.launching() and ticks < SKIP_LAUNCH_TICKS:
+		stage.skip_launch()
+		ticks += 1
+		await _seq.wake
+
+
+## Plays the station tour's stop `stop` on the cinematic camera (M7-T12; "" for the whole tour) and waits until it ends or the
+## player skips it. In a skipped step it is logged, not shown.
+func tour(stop: String = "") -> void:
+	if has_ended():
+		return
+	journal.append("tour %s" % stop)
+	if stage == null or _seq.skipping:
+		return
+	var why: String = stage.tour(stop)
+	if not why.is_empty():
+		push_error("Mission: tour: %s" % why)
+		return
+	while not _seq.stopped and not _seq.skipping and stage.touring():
+		await _seq.wake
+	stage.stop_tour()
+	while _seq.stopped:
+		await _seq.wake
+
+
+## Starts or stops the station's run of civilians between the jumpgate and the bays (M7-T56).
+func traffic(on: bool) -> void:
+	journal.append("traffic %s" % ("on" if on else "off"))
+	_report("traffic", stage.traffic(on) if stage != null else "")
+
+
+## Launches `count` more Starfuries of the station's wing `wing` (the places not flown, at most). False when the arm cannot
+## launch now (another launch of the wing is still running): the caller may ask again later.
+func scramble(wing: String, count: int = 12) -> bool:
+	var why: String = stage.scramble(wing, count) if stage != null else ""
+	journal.append("scramble %s %d%s" % [wing, count, "" if why.is_empty() else " refused: %s" % why])
+	return why.is_empty()
+
+
+## Sends the AI ship `ship_name` along `points` (Vector3, metres from the scenario's origin) at `cruise_mps`; `paced`, it waits
+## for the player as an instructor does.
+func fly(ship_name: String, points: Array, cruise_mps: float, paced: bool = false) -> void:
+	journal.append("fly %s %d points" % [ship_name, points.size()])
+	_report("fly", stage.fly(ship_name, points, cruise_mps, paced) if stage != null else "")
+
+
+## The AI ship `ship_name` flies the demo `demo_name` (`Manoeuvres.NAMES`) where it is.
+func demo(ship_name: String, demo_name: StringName) -> void:
+	journal.append("demo %s %s" % [ship_name, demo_name])
+	_report("demo", stage.fly(ship_name, [], Route.DEFAULT_CRUISE_MPS, false, demo_name) if stage != null else "")
+
+
+## Control's docking offer (M8-T06) is this mission's to say (`TriggerSpec.fact(&"dock_offers")`): the HUD's own line stays off.
+func own_dock_offer() -> void:
+	if stage != null:
+		stage.own_dock_offer()
+
+
+## The place `ahead_m` in front of the scene's jumpgate, where its arrivals come out; null with no gate (or no stage).
+func gate_point(ahead_m: float) -> UniversePos:
+	return stage.gate_point(ahead_m) if stage != null else null
+
+
+## Where a step that was flown leaves these ships together (the player and its flight at the jumpgate): in a skipped step
+## they are put at `at`, `spacing_m` apart, their velocity kept. Played, it does nothing: they flew there.
+func gather(names: Array, at: UniversePos, spacing_m: float = 150.0) -> void:
+	if at == null or not _seq.skipping or has_ended():
+		return
+	journal.append("gather %d at %s" % [names.size(), at])
+	if stage != null:
+		stage.refresh(world, PackedStringArray(names))  # only a ship the snapshot knows alive is moved
+	for i: int in names.size():
+		world.place(String(names[i]), at.plus_local(Vector3(spacing_m * i, 0.0, 0.0)))
+
+
+## A number the game counts about the run (`MissionFacts.NAMES`), as of the last tick.
+func fact(fact_name: StringName) -> float:
+	return world.fact(fact_name)
+
+
+## Runs `action` once, at the first tick `condition` holds (a `Trigger` or its dictionary), while the steps go on: for what may
+## happen at any time (a docking offer, the first shot of a raid). It does not hold a step up and a skip does not force it.
+func when(condition: Variant, action: Callable) -> void:
+	var trigger: Trigger = _trigger_of(condition)
+	if trigger == null or has_ended():
+		return
+	trigger.arm(world)
+	_reactions.append({"trigger": trigger, "action": action})
+
+
+## Keeps one of the script's own facts (a course time, a rating): `noted` reads it back, and a checkpoint restart keeps it.
+func note(key: StringName, value: Variant) -> void:
+	notes[key] = value
+	journal.append("note %s %s" % [key, value])
+
+
+func noted(key: StringName, fallback: Variant = null) -> Variant:
+	return notes.get(key, fallback)
+
+
+## From now on, a lost mission's debrief offers a restart from step `step` (`label` names it: "the raid's start"): the same
+## seed, every step before it skipped, the notes as they are now.
+func checkpoint(step: StringName, label: String) -> void:
+	checkpoint_data = {"step": step, "label": label, "notes": notes.duplicate(true)}
+	journal.append("checkpoint %s" % step)
+
+
+## Adds a line to the debrief's panel.
+func debrief_line(text: String) -> void:
+	debrief_lines.append(text)
+
+
+## The rank this mission earns (`Career.RANKS`); the game saves it when the mission ends in success.
+func award_rank(p_rank: StringName) -> void:
+	rank = p_rank
+	journal.append("rank %s" % p_rank)
+
+
+## Whether the pause menu may offer the script's skip now: one of the block's steps is running.
+func skip_offered() -> bool:
+	if skip_block.is_empty() or not is_running() or _seq.skipping:
+		return false
+	var from: int = _seq.steps.find(skip_block["from"])
+	return _seq.index >= from and _seq.index < _seq.steps.find(skip_block["to"])
+
+
+## Takes the pause menu's skip: straight to the step after the block. Returns "" or why not.
+func take_skip() -> String:
+	if not skip_offered():
+		return "nothing to skip now"
+	journal.append("skip block to %s" % skip_block["to"])
+	return goto(skip_block["to"])
 
 
 ## Sends `count` raiders at the station (M7-T10): they come out of the scene's jumpgate when it has one and go for the grid's
@@ -486,7 +646,9 @@ func end(success: bool, reason: String = "") -> void:
 	if has_ended():
 		return
 	result = {"success": success, "reason": reason, "scenario_id": scenario_id, "title": title,
-			"objectives": book.snapshot(), "time_s": world.time_s}
+			"objectives": book.snapshot(), "time_s": world.time_s, "debrief_lines": debrief_lines.duplicate(),
+			"checkpoint": checkpoint_data.duplicate(true), "rank": rank if success else &"", "notes": notes.duplicate(true)}
+	_reactions.clear()
 	_seq.stop()
 	_live.clear()
 	checks.stop()
@@ -558,6 +720,7 @@ func begin(script: MissionScript) -> String:
 		return "the mission script has no steps"
 	_started = true
 	opening_until = script.opening_until()
+	skip_block = script.skip_block()
 	_seq.start(script, self)
 	return ""
 
@@ -582,6 +745,7 @@ func tick(delta: float, actions: Dictionary) -> void:
 		_serve_checks()
 	if not has_ended():
 		_seq.tick()
+	_react()
 	tick_work = world.work
 
 
@@ -675,6 +839,8 @@ func watched() -> PackedStringArray:
 	var out := PackedStringArray()
 	var triggers: Array[Trigger] = book.live_triggers()
 	triggers.append_array(_live)
+	for reaction: Dictionary in _reactions:
+		triggers.append(reaction["trigger"])
 	for trigger: Trigger in triggers:
 		for actor: String in trigger.actors():
 			var k: String = MissionWorld.key(actor)
@@ -773,6 +939,23 @@ func _anchor(entry: Dictionary) -> UniversePos:
 		return origin
 	var player: UniversePos = world.position_of("player")
 	return player if player != null else origin
+
+
+# Runs the `when` actions whose trigger holds now, each once.
+func _react() -> void:
+	var i: int = 0
+	while i < _reactions.size() and not has_ended():
+		var reaction: Dictionary = _reactions[i]
+		if (reaction["trigger"] as Trigger).check(world):
+			_reactions.remove_at(i)
+			(reaction["action"] as Callable).call()
+		else:
+			i += 1
+
+
+func _report(what: String, why: String) -> void:
+	if not why.is_empty():
+		push_error("Mission: %s: %s" % [what, why])
 
 
 func _check_result() -> void:

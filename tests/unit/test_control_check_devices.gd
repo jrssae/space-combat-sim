@@ -6,9 +6,10 @@ extends GutTest
 
 const DT: float = 1.0 / 60.0
 const MAX_TICKS: int = 420
-## What the default layout gives no way to do on a device: `target_ahead` is bound to nothing, `target_prev` only to the wheel.
-const NO_PAD_WAY: Array[StringName] = [&"target_prev", &"target_ahead"]
-const NO_KEYS_WAY: Array[StringName] = [&"target_ahead"]
+## What the default layout gives no way to do on a device: nothing since M8-T05 dropped `target_prev` (the wheel only) and
+## `target_ahead` (bound to nothing) from the checks (D79 beat 8: not taught).
+const NO_PAD_WAY: Array[StringName] = []
+const NO_KEYS_WAY: Array[StringName] = []
 const MOUSE_BUTTONS: Array[MouseButton] = [MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_XBUTTON1,
 		MOUSE_BUTTON_XBUTTON2]
 

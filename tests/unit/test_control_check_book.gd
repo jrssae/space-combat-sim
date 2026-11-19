@@ -10,7 +10,7 @@ const D79_CHECKS: Array[StringName] = [
 	&"camera_switch", &"camera_back", &"free_look", &"running_lights",
 	&"autotrack", &"interact",
 	&"target_menu",
-	&"target_next", &"target_prev", &"target_ahead", &"fire_linked", &"fire_alternating",
+	&"target_next", &"fire_linked", &"fire_alternating",
 	&"wing_form", &"wing_attack", &"wing_cover",
 ]
 

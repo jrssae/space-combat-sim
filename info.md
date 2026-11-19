@@ -67,7 +67,8 @@ Arguments in `<angle brackets>` are required, `[square brackets]` optional, `a|b
 |---|---|---|---|
 | `menu` | | Go back to the front end | always |
 | `play` | `<scenario_id> [seed]` | Play a scenario through the loading screen, as the menu does; the same seed plays the same run | always |
-| `retry` | | From the debrief, play the same mission again (same scenario and seed) through the loading screen; refused anywhere else | always |
+| `retry` | `[start\|checkpoint]` | From the debrief, play the same mission again (same scenario and seed) through the loading screen; `retry checkpoint` restarts a lost mission from the checkpoint it left (the tutorial: the raid's start, the course result kept; M8-T05); refused anywhere else | always |
+| `career` | `[status\|set\|reset] [rank]` | The pilot's rank, saved in `user://career.json` beside the settings (M8-T05): shows it, `career set <unassigned\|squadron_pilot\|squadron_leader>` sets it, `career reset` starts afresh | always |
 | `controls` | `[list\|use\|save\|show\|delete] [name\|action]` | Control profiles: list them, use or save one, show bindings, delete a saved one | always |
 | `bind` | `<action> <binding>` | Add a binding to an action (session only until `controls save`) | always |
 | `unbind` | `<action> <binding>` | Remove a binding from an action | always |
@@ -181,7 +182,8 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `debug` | `invulnerable` (writable): the player takes no damage | always |
 | `time` | Sim time, time warp and the engine time scale | always |
 | `game` | The game flow: `state`, the `request` being played and the `last_result` | always |
-| `debrief` | The last mission's debrief: result, reason, time, kills, assists, wing losses, shots fired and hit, accuracy, objectives (`none` until a mission ends) | always |
+| `debrief` | The last mission's debrief: result, reason, time, kills, assists, wing losses, shots fired and hit, accuracy, objectives, `options` (the debrief's choices: `retry`, `front_end`, and `checkpoint` for a lost mission that left one) and `notes` (the lines the mission added) (`none` until a mission ends) | always |
+| `career` | The pilot's standing (M8-T05): `rank` (unassigned, squadron_pilot, squadron_leader) and `course` (the best buoy-course rating: exemplary, par, below_par, buoy_destroyed, none) | always |
 | `controls` | The active control profile, the profile list and unsaved binding changes | always |
 | `joypads` | The gamepads the game sees (M8-T22): `count`, their `names` and `guids`, how many have no known button mapping (`unmapped`), connect and disconnect `events` since launch, the `last_event` and the front end's `notice` while none is connected | always |
 | `input` | Connected pads, whether the keyboard is masked, and the last flight, combat and UI commands | in flight |

@@ -1,0 +1,6 @@
+{
+ "about": "The tutorial's grading (M8 D79, TutorialRules). course: the instructor's own time round the buoy course in seconds; a time within exemplary_within of it (0.10: 10 %) rates exemplary, within par_within par, slower below par, and a destroyed buoy the worst. squadron_leader: the most Starfuries and civilians lost in the raid that still make the pilot squadron leader at once (with an exemplary course). raid: raiders through the jumpgate, then the number the strike carrier launches. Tuned after the play-test.",
+ "course": {"instructor_time_s": 75.0, "exemplary_within": 0.10, "par_within": 0.40},
+ "squadron_leader": {"max_starfuries_lost": 1, "max_civilians_lost": 0},
+ "raid": {"gate_raiders": 6, "carrier_raiders": 8}
+}

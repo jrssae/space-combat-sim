@@ -231,8 +231,31 @@ func _begin(script_path: String) -> void:
 	if script != null:
 		print("[mission] %s: %s, %d steps" % [api.scenario_id, api.title, script.steps().size()])
 		error = api.begin(script)
+		_resume_checkpoint()
 	if not error.is_empty():
 		push_error("Mission %s: %s" % [api.scenario_id, error])
+
+
+# A restart from a lost run's checkpoint (M8 D79): the notes it held, then every step before it skipped on this fresh world.
+func _resume_checkpoint() -> void:
+	var checkpoint: Dictionary = main.mission_checkpoint
+	var step := StringName(str(checkpoint.get("step", "")))
+	if step == &"" or not error.is_empty():
+		return
+	api.notes = (checkpoint.get("notes", {}) as Dictionary).duplicate(true)
+	var problem: String = api.goto(step)
+	if not problem.is_empty():
+		push_error("Mission %s: checkpoint %s: %s" % [api.scenario_id, step, problem])
+	print("[mission] restarted from checkpoint %s" % step)
+
+
+## The pause menu's skip of the script's block (`MissionScript.skip_block`): its label while it is offered, else "".
+func skip_label() -> String:
+	return String(api.skip_block.get("label", "")) if api != null and api.skip_offered() else ""
+
+
+func take_skip() -> String:
+	return api.take_skip() if api != null else "no mission"
 
 
 # The mission's dialog file, if it names one: a file that does not validate is the mission's start error.
@@ -243,8 +266,17 @@ func _load_dialog(path: String) -> void:
 	if bool(made["ok"]):
 		api.dialog_book = made["book"]
 		api.dialog_book.fill(api.placeholders)
+		api.dialog_book.fill(_callsigns(api.dialog_book))
 	else:
 		error = "dialog: %s" % made["error"]
+
+
+# `{<speaker id>}` -> that speaker's callsign as spoken ("{instructor}" -> "Sextant"), so a renamed voice needs one data entry.
+static func _callsigns(book: DialogBook) -> Dictionary:
+	var out: Dictionary = {}
+	for id: StringName in book.speaker_ids():
+		out["{%s}" % id] = book.speaker(id).callsign.capitalize()
+	return out
 
 
 # The control checks every mission may run. A file that does not validate leaves the mission without checks, and says so.

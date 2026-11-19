@@ -280,7 +280,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | AC1 | Tutorial script: T01's beats and checks written into D79 (the lines go into the dialog file in T05), approved by the maintainer | A | **Met** (T01, 2026-11-18) |
 | AC2 | Squadron launch: the cinematic plays from the hangar, the squadron launches and forms up, skipping lands in the same state (test on the end state), the player's launch hands over as M7-T08 does | A || **Met** (T03, 2026-11-19; the look is (H)) |
 | AC3 | Control checks: each check passes on its actions and state in headless tests driven by injected commands, for pad and keyboard bindings; a rebind changes the hint; a missed check repeats and demonstrates, never fails | A | **Met except the flown demo** (T04, 2026-11-18; the instructor flying it is checked in T05's AC4): the demo is asked for on `MissionApi.demo_requested`; the instructor flying it is T05's |
-| AC4 | Tutorial mission: starts from the menu and runs to the debrief in a headless test driven by console commands; the tour visits its points; the raid comes through the jumpgate vortex and the station's allies and grid fight it; losing the player ends in the debrief | A | |
+| AC4 | Tutorial mission: starts from the menu and runs to the debrief in a headless test driven by console commands; the tour visits its points; the raid comes through the jumpgate vortex and the station's allies and grid fight it; losing the player ends in the debrief | A | **Met** (T05, 2026-11-19) |
 | AC5 | Docking: the player docks through the main docking bay, is repaired (hull, guns, missiles) and relaunched from a Cobra bay (headless test on the state before and after); a wingman docks on order and by threshold and rejoins its wing | A | **Met** (T06, 2026-11-18; no missiles exist yet, so hull, gun charge and reaction mass are what is restored) |
 | AC6 | Strike carrier: M10-T19 merged into `m8` with its tests green next to M7's; one collision builder serves the station and the carrier | A | |
 | AC7 | Civilian escort: the first two waves arrive docked on the strike carrier and launch; the carrier hangs back, recalls and jumps out; the escort's tests (success, both failures, flee and resume) pass with it | A | |
@@ -327,7 +327,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T02 | A | Sawtooth Cobra-bay doors (roadmap M7-4): toothed leaves that slide apart, the launch's door ripple and timing kept | - | Fable | Generator parts and an animated door the cinematic opens on | done |
 | T03 | A | The squadron-launch cinematic (D81) | T02, T01 | Opus | Scripted launches, camera shots and a skip that lands in the same state | done |
 | T04 | A | Control checks: `ControlCheck`, the runner and the binding hints (D80) | T01 | Fable | Pass conditions on measured state for every control, pad and keyboard | done |
-| T05 | A | The tutorial mission: launch, checks, tour, raid, defense, debrief (D79) | T03, T04 | Fable | The mission script, dialog and pacing on M5's and M7's seams | in progress |
+| T05 | A | The tutorial mission: launch, checks, tour, raid, defense, debrief (D79) | T03, T04 | Fable | The mission script, dialog and pacing on M5's and M7's seams | done |
 | T06 | B | Dock in the main docking bay to be repaired and relaunched, for the player and the AI wingmen (D82, Q7) | - | Fable | The `dock` interaction, the lane for fighters, repair and a Cobra-bay relaunch; wing orders | done |
 | T07 | C | Bring M10-T19's raider strike carrier into `m8`: merge `origin/m10`, one collision builder, its tests green (Q5) | - | Opus | Two branches built a collision builder; docs, `native/src/lib.rs` and `info.md` conflict | done |
 | T08 | C | The civilian escort's raids come with the strike carrier (D83, Q6) | T07 | Fable | Mission data and pacing on `CarrierJumps`; the escort's tests kept green | done |
@@ -458,6 +458,53 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   `data/checks/controls.json` (D79 beat 8); T04's thresholds (main pods 40 m/s, retros 20, strafe 10, pitch and yaw 45°, roll 180°,
   free look 25°, a 20 s repeat) are data, tuned in play.
 - **Done when:** AC4.
+- **Done (2026-11-19):** `data/missions/tutorial.gd` (13 steps: launch, form_up, flight_checks, camera_lights, x_button, course,
+  combat, wing_orders, tour, jumpgate, raid, defense, debrief), `data/scenarios/tutorial.json` (Babylon 5 at the origin, the gate
+  50 km off, five buoys, the instructor, the player's flight of three), `data/dialog/tutorial.json` (82 lines, voice ids `tu_*`),
+  `data/missions/tutorial_rules.json` (`TutorialRules`, pure: 10 % and 40 % of the instructor's time, the squadron-leader rule,
+  6 and 8 raiders). **Tutorial: qualification flight** leads the New game list (a mission block's `order`). Architecture §21.3.
+  - **The instructor** is one entry in `data/dialog/speakers.json`: **Lt. Cmdr. Maren Okafor, callsign SEXTANT** (proposed; a
+    rename is that one entry, lines say `{instructor}`). The ship flies as `INSTRUCTOR`, invulnerable, on routes the script
+    gives it (`m.fly`, paced on the player) and flies a missed check's demo where it is (`m.demo` on `demo_requested`).
+  - **Training.** The 25 checks of T04 (`target_prev` and `target_ahead` dropped from `controls.json`), each with its
+    `check_<id>` line; the hold of X is taught at the gate. The buoy course is five buoys, 8.8 km of legs, a pass inside
+    200 m each, the clock from NAV 1; its rating is said in flight and kept as a note. The drones are raider hulls flown by a
+    new profile that never fires (`assets/ai/training_drone.tres`). **Skip training** in the pause menu goes to the tour.
+  - **Tour and gate.** All stop (the brake check), then five stops of M7's tour, a line over each; the gate is flown: the
+    approach cue, the `interact` check, the jump and back out.
+  - **The raid.** Six raiders through the gate with the station as their objective, 45 s later the strike carrier 12 km off
+    the station with eight docked; the rest of the wing (ALPHA 7 to 12; the opening launches two flights) scrambles at the
+    raiders' first hit; M7's traffic run is on from the launch; Control's docking offer and the repair are comms lines. The
+    step ends when every raider is down or home and the carrier has gone or died (T08's rules decide which).
+  - **Debrief and career.** The instructor talks the raid through (perfect with no Starfury lost, the carrier credited or
+    not), the screen adds the course, the losses, the carrier and the assignment. `Career` (pure) with `CareerStore`
+    (`user://career.json`), saved when a mission the flow started ends in success; `career` command and provider.
+  - **Dying.** `m.checkpoint(&"raid", ...)` at the alarm; a lost mission's debrief then offers **Restart from the raid's
+    start** and **Restart whole mission** (before the alarm: Retry alone). The restart replays the seed with every earlier
+    step skipped and the notes (the course rating) restored. `retry checkpoint` in the console.
+  - **Seams added for mission scripts** (`MissionApi`): `tour`, `traffic`, `scramble`, `fly`, `demo`, `gate_point`,
+    `gather`, `fact` with `TriggerSpec.fact` (`MissionFacts`), `when`, `note`/`noted`, `checkpoint`, `debrief_line`,
+    `award_rank`, `own_dock_offer`, `launch_squadron`'s `flights`; `MissionScript.skip_block`.
+  - **Found on the way:** a skipped squadron launch ended a few ticks after its step, so a later skipped step that placed
+    the player (the restart from the raid) lost it back to the station; the skip now finishes first.
+  - **Decided here, for the maintainer to confirm:** (1) the opening launches **two flights** (the player's and ALPHA 4 to
+    6), so that "the rest of the wing launches" in the raid means something; (2) the tour's stops are cinematic and the
+    jumpgate is the flown last stop; (3) the first shot counts as the raiders' first **hit** on anything; (4) a skipped
+    course has no rating, so it cannot make a squadron leader; (5) the checkpoint restart is offered only after a loss;
+    (6) the carrier jumps in near the station, 50 km from the gate where the player meets the first six.
+  - **Tests** (staged scratch copy; first on HEAD `49b8ac36`, then again on `8619872d` after M8-T27 and M8-T28 landed, the
+    counts below from the second run): compile check 984 scripts clean; 25 files (the unit files, `test_tutorial`,
+    `test_console_command_list`, `test_console_execute_all`), 302 passed, 1 pending (the balance gate), 0 failed. New:
+    `test_career` 4, `test_tutorial_rules` 7, `test_mission_seams` 7, and tests added to `test_game_flow`,
+    `test_debrief_model`, `test_mission_catalog`. `test_tutorial`, 11 in the gate: the menu entry, no raid hinted before
+    the alarm, menu to debrief by console on seed 4711, the instructor, demo and drones, the skip, the four remarks, the
+    tour's five stops in order, the raid through the gate and off the carrier with the scramble, both deaths and the
+    restart, the squadron leader saved. Its twelfth, the fought raid, is a balance test (`GUT_BALANCE=1`): it ends by
+    itself at 377 s with no Starfury lost and the carrier escaped. The integration neighbours (squadron launch, debrief,
+    front end, pause menu, mission runner, flights, live checks, docking, traffic, launch bay, station tour, the escort,
+    boot routing, loading screen, instructor route), 15 files with `GUT_SLOW=1`: 201 passed, 6 pending (balance), 0 failed.
+  - **(H), `docs/playtest.md` "The tutorial mission":** every line's wording, the pacing, the course's
+    `instructor_time_s` (75 s is a guess until the maintainer has flown it), the 50 km flight back from the gate.
 
 ### M8-T06 Dock in the main docking bay to be repaired and relaunched
 
