@@ -159,6 +159,27 @@ func test_the_left_stick_points_a_radial_menu_and_the_right_stick_does_not() -> 
 	assert_almost_eq(adapter.sample_radial(source, 1.0 / 60.0).radial_point, Vector2(0.0, 1.0), Vector2(1e-5, 1e-5), "left stick up")
 
 
+func test_the_dpad_and_the_numbered_keys_pick_a_radial_menus_entries_by_order() -> void:
+	# M8-T24 (D90), through the real InputMap: D-pad up, right, down, left are entries 1-4, keys 1-8 entries 1-8.
+	var adapter := InputAdapter.new()
+	adapter.begin_radial(source)
+	var pads: Array[JoyButton] = [JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_RIGHT, JOY_BUTTON_DPAD_DOWN, JOY_BUTTON_DPAD_LEFT]
+	for i: int in pads.size():
+		_button(pads[i], true)
+		var ui: UiCommand = adapter.sample_radial(source, 1.0 / 60.0)
+		assert_eq(ui.radial_entry, i, "D-pad direction %d" % i)
+		assert_false(ui.comms_open, "D-pad Right picks the second entry; it does not close the comms menu")
+		assert_eq(adapter.sample_radial(source, 1.0 / 60.0).radial_entry, -1, "held: an edge, not a level")
+		_button(pads[i], false)
+	var keys: Array[Key] = [KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8]
+	for i: int in keys.size():
+		_key(keys[i], true)
+		assert_eq(adapter.sample_radial(source, 1.0 / 60.0).radial_entry, i, "key %d" % (i + 1))
+		_key(keys[i], false)
+	adapter.sample_radial(source, 1.0 / 60.0)
+	assert_eq(adapter.sample_radial(source, 1.0 / 60.0).radial_entry, -1, "nothing pressed")
+
+
 func test_the_stick_vector_ignores_keys() -> void:
 	_key(KEY_Z, true)  # strafe left, by key
 	var by_key: Vector2 = source.get_vector(&"strafe_left", &"strafe_right", &"strafe_down", &"strafe_up", 0.15)
@@ -210,7 +231,8 @@ func _release_everything() -> void:
 		_axis(axis as JoyAxis, 0.0)
 	for button: int in 15:
 		_button(button as JoyButton, false)
-	for key: Key in [KEY_E, KEY_W, KEY_Q, KEY_S, KEY_A, KEY_D, KEY_B, KEY_G, KEY_CAPSLOCK, KEY_Z]:
+	for key: Key in [KEY_E, KEY_W, KEY_Q, KEY_S, KEY_A, KEY_D, KEY_B, KEY_G, KEY_CAPSLOCK, KEY_Z, KEY_1, KEY_2, KEY_3, KEY_4, KEY_5,
+			KEY_6, KEY_7, KEY_8]:
 		_key(key, false)
 	Input.flush_buffered_events()
 

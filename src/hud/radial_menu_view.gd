@@ -113,16 +113,13 @@ func paint(canvas: Control) -> void:
 		canvas.draw_polyline(polygon, lit_color, maxf(3.0 * s, 1.5), true)
 	canvas.draw_arc(at, outer, 0.0, TAU, 96, rim, maxf(2.0 * s, 1.0), true)
 	canvas.draw_arc(at, inner, 0.0, TAU, 64, rim, maxf(2.0 * s, 1.0), true)
-	for i: int in count:
+	for i: int in (count if count > 1 else 0):
 		var line: PackedVector2Array = RadialLayout.spoke(at, inner, outer, i, count)
 		canvas.draw_line(line[0], line[1], rim, maxf(2.0 * s, 1.0), true)
 	# Each label may be as wide as its slice is at the labels' radius.
 	var room: float = 2.0 * RadialLayout.label_radius(size) * sin(PI / float(maxi(count, 2))) * 0.92
 	for i: int in count:
 		var slot: Dictionary = slots[i]
-		if slot.is_empty():
-			drawn_labels.append("")
-			continue
 		var color: Color = slot.get("color", tint)
 		if i == lit:
 			color = color.lerp(Color.WHITE, 0.35)

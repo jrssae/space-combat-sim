@@ -2,8 +2,8 @@ class_name CommsMenuDirector
 extends Node
 ## Runs the comms menu in flight (architecture §18.22, M5-T46): a thin node around the pure `CommsMenu` and a `RadialMenuView`,
 ## the same ring, side and focus pull as the target menu. D-pad Right opens it and pauses the game; the pad then belongs to
-## the menu (`InputAdapter.sample_radial`) until an order is sent, B backs out of the first ring, D-pad Right again closes it,
-## or Start hands over to the pause menu. The order is given once the game runs again, through the call keys 1-4 make. Closed,
+## the menu (`InputAdapter.sample_radial`) until an order is sent (the stick and A, or the D-pad or a numbered key by the entry's
+## place, M8-T24), B backs out of the first ring, the comms key (Ctrl) again closes it, or Start hands over to the pause menu. The order is given once the game runs again, through the call keys 1-4 make. Closed,
 ## it does nothing per tick: `Main` only calls `step` while it is open.
 ##
 ## Console: provider `comms_menu`, command `commsmenu open|pick <entry>|highlight <entry>|back|close`.
@@ -97,6 +97,10 @@ func step(ui: UiCommand) -> void:
 		back()
 	elif ui.radial_select:
 		select()
+	elif menu.radial.has_entry(ui.radial_entry):
+		# The D-pad or a numbered key: that entry, as if pointed at and selected.
+		menu.radial.set_highlight(ui.radial_entry)
+		select()
 	if menu.is_open():
 		view.refresh()
 
@@ -160,15 +164,16 @@ func _register_console() -> void:
 		&"page": {"get": func() -> String: return menu.page_title(), "doc": "The title of the ring showing"},
 		&"highlight": {"get": func() -> String: return str(menu.radial.highlighted().get("label", "none")),
 				"doc": "The entry the stick points at"},
-		&"entries": {"get": _console_entries, "doc": "The ring's slices clockwise from the top (- for a blank one)"},
+		&"entries": {"get": _console_entries, "doc": "The ring's entries clockwise from the top, in page order"},
 		&"picks": {"get": func() -> int: return menu.picks(), "doc": "Entries selected so far"},
 		&"last_pick": {"get": func() -> String: return last_pick if not last_pick.is_empty() else "none", "doc": "The last order sent"},
 		&"closed_by": {"get": func() -> String: return String(menu.closed_by()), "doc": "Why it last closed: pick, back, pause or close"},
 		&"focus": {"get": func() -> float: return view.focus_amount(), "doc": "The focus pull on the view behind the menu, 0 sharp to 1 full"},
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"commsmenu",
-			"The comms menu: open (pauses the game), pick <entry> (a slice 0-7 clockwise from the top, or its label: attack, form up, "
-			+ "form on me, hold position, engage, dock, cover me), highlight <entry> (points at it without sending), back, close",
+			"The comms menu: open (pauses the game), pick <entry> (its index in page order, 0 at the top and clockwise, or its label: "
+			+ "attack, form on me, engage, cover me, dock, form up, hold position), highlight <entry> (points at it without sending), "
+			+ "back, close",
 			[ConsoleArg.enum_required(&"action", ACTIONS), ConsoleArg.string_optional(&"entry", "").with_suggestions(_console_entries)]),
 			_cmd_commsmenu, self)
 
@@ -207,7 +212,7 @@ func _cmd_commsmenu(args: Dictionary) -> ConsoleResult:
 	return _describe()
 
 
-# A slice by its number or its label (the first match, case-insensitive); -1 for none or a blank slice.
+# An entry by its index in page order or its label (the first match, case-insensitive); -1 for none.
 func _entry_index(entry: String) -> int:
 	var slots: Array[Dictionary] = menu.radial.slots()
 	var index: int = entry.to_int() if entry.is_valid_int() else -1
@@ -216,7 +221,7 @@ func _entry_index(entry: String) -> int:
 			if str(slots[i].get("label", "")).to_lower() == entry.to_lower():
 				index = i
 				break
-	return index if index >= 0 and index < slots.size() and not slots[index].is_empty() else -1
+	return index if menu.radial.has_entry(index) else -1
 
 
 func _describe() -> ConsoleResult:

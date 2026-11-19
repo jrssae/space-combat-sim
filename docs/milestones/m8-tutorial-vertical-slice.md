@@ -284,7 +284,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | AC17 | Fonts (D87): both fonts in the repo with their `docs/third-party.md` entry; every UI text uses one of them (a test finds no other font); ASCII and the UI's symbols draw on the GPU; the maintainer approved the look sheet | A | **Met** (T21, 2026-11-19) |
 | AC18 | Gamepad detection (D88): the cause written down; joypads logged at start and hotplug, the connect, disconnect and none-found notices, `joypads` in `info.md`; the troubleshooting section; the maintainer's pad seen by the game in its working mode (H) | A | |
 | AC19 | Escort's own system (D89): the escort runs in the new star system with no station and no nebula, the new planet and sky approved on a sheet, wingmen with no home dock; its tests pass; Epsilon's scenarios unchanged | A | |
-| AC20 | Radial fit (D90): menus with 1 to 8 entries lay out equal slices with no empty ones (unit tests on the layout), the stick, the D-pad, the keys and the console pick the right entry for each count, unavailable entries leave the ring | A | |
+| AC20 | Radial fit (D90): menus with 1 to 8 entries lay out equal slices with no empty ones (unit tests on the layout), the stick, the D-pad, the keys and the console pick the right entry for each count, unavailable entries leave the ring | A | **Met** (T24, 2026-11-19) |
 
 ## Working rules for M8
 
@@ -333,7 +333,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T21 | D | The game's fonts: Babylon5 for titles and headlines, Babylon5Credits for body text and the HUD, on all UI text (D87; maintainer, 2026-11-18; numbered last) | - | Fable | A theme over every screen and the HUD's own drawing, a symbol-encoded cmap, a look sheet first | done |
 | T22 | D | Gamepad detection: why Godot sometimes misses the maintainer's pad, joypad logging and notices, `joypads`, troubleshooting (D88; maintainer, 2026-11-18; numbered last) | - | Fable | Linux input stack diagnosis on the real device, small notices | in progress |
 | T23 | C | The civilian escort in its own star system: no Babylon 5, no nebula, a different planet (D89; maintainer, 2026-11-18; numbered last) | T08 | Opus | A second system in the data, its sky and planet, the escort moved onto it; a sheet first | not started |
-| T24 | D | Radial menus fit their entries: equal slices for however many entries, no empty spots (D90; maintainer, 2026-11-18; numbered last) | - | Opus | The radial framework's layout and picking for every input | in progress |
+| T24 | D | Radial menus fit their entries: equal slices for however many entries, no empty spots (D90; maintainer, 2026-11-18; numbered last) | - | Opus | The radial framework's layout and picking for every input | done |
 | T17 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M8-T01 Tutorial script (discussion with the maintainer)
@@ -925,6 +925,21 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 - **Files:** the radial framework (§18.19) and its view, `CommsMenu` pages, the target menu, the input adapter's picks, the console's
   `commsmenu pick`, tests. After M8-T19 lands (it adds two comms entries).
 - **Done when:** AC20.
+- **Done (2026-11-19):** one equal slice per entry on every ring (§18.19 "One slice per entry"). `RadialMenu.push` drops blank
+  slots, `arrange` no longer pads, "none" sits straight down on an even ring and on the first slice past down on an odd one
+  (`none_slice`; the stick pulled down lands there); `RadialLayout` draws a ring of one as a whole annulus with no spoke.
+  `CommsMenu.wing_orders` lists the orders by key (ATTACK, FORM ON ME, ENGAGE, COVER ME, DOCK, FORM UP, HOLD POSITION) and leaves
+  DOCK out while no home dock is in range. New fixed actions `radial_entry_1`..`_8` (D-pad up, right, down, left and keys 1-8)
+  give `UiCommand.radial_entry`; both menus highlight and select that entry at once; D-pad Right picks the second entry rather
+  than closing the comms menu (Ctrl or B close it). Console `pick`/`highlight <n>` take the index in page order (`info.md`,
+  `docs/playtest.md`). GPU frames (Forward+, RX 6950 XT) of the six-entry comms ring and a three-entry enemies ring under
+  `references/screenshots/M8-T24 radial fit/`; how they look is (H). Tests (staged copy, GUT_SLOW=1): 957 scripts compile; 18 GUT files, 267
+  tests, 0 failing: new layout tests for 1 to 8 entries (`test_radial_menu` 15: angles, nearest slice at the edges, none's place,
+  unavailable entries leave the ring, picks by place), `test_comms_menu` 10, `test_comms_menu_input` 17 (D-pad and keys by place,
+  a place past the last entry, D-pad Right picks rather than closes), `test_target_menu` 33 (unit and scene), `test_input_adapter`
+  54, `test_input_map` 14, `test_godot_input_source` 12 (the real D-pad and keys 1-8); picks by entry in `test_docking` 11,
+  `test_launch_bay` 16, `test_target_preview` 11; kept green: `test_keyboard_parity`, `test_nav_targets`, `test_civilian_ships`,
+  `test_flights`, `test_wing_orders`, `test_main_scene`, `test_control_lock`, `test_hud`.
 
 ### M8-T17 Integration, full suite, docs and acceptance
 

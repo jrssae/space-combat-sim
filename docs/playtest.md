@@ -350,14 +350,15 @@ free look. D-pad Right opens the comms menu (see Wing orders).
 
 Keys 1 to 4, or `wing order <attack|form|engage|cover>` in the console. The HUD names the order for 3.5 s, for example
 `ALPHA 2: COPY, FORMING UP`. Key 6 (M8-T06) sends the damaged wingmen to the main docking bay for repair (`dock wing`); on the
-comms menu it is DOCK, down-left, between the four orders, which stay up, right, down and left. Keys 7 and 8 (M8-T19) are form
-up and hold fire (`wing order form_hold`) and hold position and hold fire (`wing order hold`), on the ring as FORM UP and HOLD
-POSITION between the four orders.
+comms menu it is DOCK, the fifth entry, after the four orders (left out while no home dock is in range). Keys 7 and 8 (M8-T19) are
+form up and hold fire (`wing order form_hold`) and hold position and hold fire (`wing order hold`), on the ring as FORM UP and HOLD
+POSITION after DOCK. The ring has one slice per entry (M8-T24).
 
 The comms menu (D-pad Right, or Ctrl) is a radial menu like the target menu: the same ring at the left, the game paused and the view
-blurred behind it. Point the left stick (M7-T37; or the arrow keys, or the mouse) at WING ORDERS' slices, up to down going clockwise: ATTACK
-(my target), FORM ON ME, ENGAGE (at will), COVER ME. A sends the order and the game resumes; B closes the menu (from a sub-page it
-goes back a page); D-pad Right again also closes it; Start hands over to the pause menu. There is no timeout. Nothing held (fire, the
+blurred behind it. Point the left stick (M7-T37; or the arrow keys, or the mouse) at WING ORDERS' slices, from the top going clockwise: ATTACK
+(my target), FORM ON ME, ENGAGE (at will), COVER ME, then DOCK, FORM UP, HOLD POSITION. A sends the order and the game resumes. The
+D-pad's up, right, down and left, or keys 1-8, send the entry in that place at once (M8-T24). B closes the menu (from a sub-page it
+goes back a page); Ctrl again also closes it (on the pad D-pad Right picks the second entry instead); Start hands over to the pause menu. There is no timeout. Nothing held (fire, the
 left stick, a D-pad press) acts when it closes; the left stick strafes again only once it has been back near centre. The right
 stick is not read by the menu and flies as soon as it closes. Console: `commsmenu open`, `commsmenu pick "form on me"`, `state comms_menu`.
 
@@ -719,16 +720,16 @@ speed (`+` closing). A Bokmai adds its cargo pods, a buoy and an objective have 
 and nothing about what it is, and a ship attacking you is flagged `ATTACKING YOU`. `play civilian_showcase` has every civilian
 hull; `targetmenu highlight "saturn 8 tanker"` points at an entry without picking it and `state target_preview` shows the panel.
 
-From the console: `targetmenu open`, `targetmenu pick enemies`, `targetmenu pick 1` (a slice, 0 at the top, clockwise) or
+From the console: `targetmenu open`, `targetmenu pick enemies`, `targetmenu pick 1` (an entry in page order, 0 at the top, clockwise) or
 `targetmenu pick "raider 2"`, `targetmenu back`, `targetmenu close`; `state target_menu` shows it.
 
 ## Comms menu (M5-T46)
 
-D-pad Right (or Ctrl) opens a ring like the target menu's: the game pauses and the view blurs behind it. WING ORDERS has ATTACK
-(my target) up, FORM ON ME right, ENGAGE (at will) down and COVER ME left. The left stick (arrow keys, mouse) points, A sends
-the order and the game resumes, B or D-pad Right closes it, Start hands over to the pause menu. There is no timeout. Keys 1 to
-4 still give the orders directly. Since M8 the ring has eight places: FORM UP (hold fire) and HOLD POSITION (hold fire) between
-the first orders (M8-T19, keys 7 and 8) and DOCK (M8-T06, key 6). Console: `commsmenu open`, `commsmenu pick "form on me"`,
+D-pad Right (or Ctrl) opens a ring like the target menu's: the game pauses and the view blurs behind it. WING ORDERS lists ATTACK
+(my target), FORM ON ME, ENGAGE (at will), COVER ME, DOCK (M8-T06, only while a home dock is in range), FORM UP and HOLD POSITION
+(M8-T19), one equal slice each, clockwise from the top (M8-T24). The left stick (arrow keys, mouse) points and A sends; the D-pad's
+four directions and keys 1-8 send the entry in that place at once; B or Ctrl closes it, Start hands over to the pause menu. There
+is no timeout. Closed, keys 1 to 4 still give the orders directly. Console: `commsmenu open`, `commsmenu pick "form on me"`,
 `state comms_menu`.
 
 ## Free-flight encounters (M5-T17)
@@ -1191,7 +1192,7 @@ with `damage 50` (hull points; `state ship` shows the hull) so the repair has so
       and the launch's own shots after them. A or Start skips a stage each press: into the bay, to the end of the repair, to the
       hand-off. Say if the wait (6 s plus up to 30 s for a wrecked hull) is too long or too short to watch.
 - [ ] **(H) Relaunch:** you come out of Cobra bay Alpha 1 with a whole hull and the controls back.
-- [ ] **(H) Wingmen:** select ALPHA 2 and `damage 30 target`, then key 6 (or the comms menu's DOCK, down-left): `ALPHA 2: COPY, DOCKING FOR
+- [ ] **(H) Wingmen:** select ALPHA 2 and `damage 30 target`, then key 6 (or the comms menu's DOCK): `ALPHA 2: COPY, DOCKING FOR
       REPAIRS`, it flies off to the bay (its roster row reads DOCKING), is gone a while (DOCKED), comes out of a Cobra bay and forms up
       again (its usual readout). Hurt one below 25 % and it goes by itself (`HULL CRITICAL, DOCKING FOR REPAIRS`). Two at once go in one after the other.
 - [ ] **(H) The comms ring:** eight slices now, the four orders still up, right, down and left; say if the blank diagonals and

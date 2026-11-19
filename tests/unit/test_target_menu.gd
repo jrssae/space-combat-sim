@@ -1,6 +1,6 @@
 extends GutTest
 ## TargetMenu, pure (M5-T25): the categories ring with counts, a category's ring of the nearest five with "none" straight
-## down, what a pick returns, and B walking back out. Also HudWaypoint: the later of the pilot's pick and a script's wins.
+## down (one slice per entry, M8-T24), what a pick returns, and B walking back out. Also HudWaypoint: the later of the pilot's pick and a script's wins.
 
 const C := TargetCategories.Category
 const OWN: StringName = Factions.EARTH_ALLIANCE
@@ -90,12 +90,20 @@ func test_a_category_ring_holds_the_nearest_five_and_none_in_the_down_slice() ->
 	assert_eq(str(menu.radial.highlighted()["label"]), "NONE")
 
 
-func test_every_ring_with_a_none_has_it_straight_down() -> void:
+func test_every_category_ring_has_one_slice_per_entry_and_none_down() -> void:
+	# M8-T24 (D90): no blank slices; "none" straight down on an even ring, the first slice past down on an odd one.
 	for category: C in TargetCategories.ORDER:
+		var name: String = TargetCategories.NAMES[category]
 		_open_category(category)
-		assert_eq(menu.radial.slice_count(), 6, TargetCategories.NAMES[category])
-		assert_eq(_labels()[3], "NONE", "%s: none is the down slice" % TargetCategories.NAMES[category])
+		var count: int = mini(menu.count(category), TargetCategories.RING_SIZE) + 1
+		assert_eq(menu.radial.slice_count(), count, "%s: its entries and none" % name)
+		assert_does_not_have(_labels(), "", "%s: no blank slice" % name)
+		assert_eq(_labels()[RadialMenu.none_slice(count)], "NONE", name)
+		menu.point(DOWN)
+		assert_eq(menu.radial.highlighted()["label"], "NONE", "%s: the stick pulled down finds none" % name)
 		menu.close()
+	_open_category(C.ALLIES)
+	assert_eq(_labels(), ["ALPHA 2", "ALPHA 3", "NONE"] as Array[String], "two allies and none: three slices of 120 degrees")
 
 
 func test_picking_a_ship_returns_it_as_the_target_and_closes() -> void:
@@ -132,7 +140,7 @@ func test_a_navigation_target_that_offers_an_interaction_is_the_target() -> void
 
 func test_unknown_contacts_have_no_name() -> void:
 	_open_category(C.UNKNOWN)
-	assert_eq(_labels(), ["UNKNOWN", "UNKNOWN", "UNKNOWN", "NONE", "", ""] as Array[String])
+	assert_eq(_labels(), ["UNKNOWN", "UNKNOWN", "NONE", "UNKNOWN"] as Array[String], "four slices, none straight down")
 	assert_eq(str(menu.radial.slots()[0]["sub"]), "8.0 km")
 	var picked: Dictionary = menu.select()
 	assert_eq(picked["action"], TargetMenu.ACTION_TARGET)
@@ -189,8 +197,8 @@ func test_an_empty_category_still_offers_none_and_at_most_five_objectives_show()
 	assert_eq(str(menu.radial.slots()[0]["sub"]), "0 in range")
 	assert_eq(menu.count(C.OBJECTIVES), 5, "up to five objectives")
 	assert_true(menu.select().is_empty())
-	assert_eq(_labels(), ["", "", "", "NONE", "", ""] as Array[String])
-	assert_eq(menu.radial.highlight(), 3, "the highlight starts on the only entry")
+	assert_eq(_labels(), ["NONE"] as Array[String], "a ring of one")
+	assert_eq(menu.radial.highlight(), 0, "the highlight starts on the only entry")
 	assert_eq(menu.select()["action"], TargetMenu.ACTION_CLEAR_TARGET)
 
 
@@ -269,7 +277,7 @@ func test_opening_on_five_hundred_candidates_is_one_cheap_pass() -> void:
 	for category: C in TargetCategories.ORDER:
 		menu.radial.set_highlight(TargetCategories.ORDER.find(category))
 		menu.select()
-		assert_lte(menu.radial.slots().filter(func(slot: Dictionary) -> bool: return not slot.is_empty()).size(), 6)
+		assert_lte(menu.radial.slice_count(), 6)
 		menu.back()
 	assert_eq(TargetInfo.built_count, built, "the rings are cut from the one sorted read: nothing is built again")
 	# Opening is per event, during a pause: half a frame at 60 fps is plenty, and far above what it takes.

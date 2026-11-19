@@ -564,6 +564,41 @@ func test_the_dpad_does_not_point_the_radial_menu() -> void:
 	var ui: UiCommand = adapter.sample_radial(source, DT)
 	assert_eq(ui.radial_point, Vector2.ZERO, "only the stick, the arrows and the mouse point")
 	assert_false(ui.radial_select or ui.radial_back)
+	assert_eq(ui.radial_entry, -1, "the flight actions pick nothing: the radial entry actions do (M8-T24)")
+
+
+func test_the_dpad_and_the_numbered_keys_pick_entries_by_order_as_edges() -> void:
+	# M8-T24 (D90): the radial entry actions give the place in page order, 0 for D-pad Up or key 1.
+	adapter.begin_radial(source)
+	assert_eq(adapter.sample_radial(source, DT).radial_entry, -1, "nothing pressed")
+	for i: int in InputAdapter.RADIAL_ENTRIES.size():
+		source.hold(InputAdapter.RADIAL_ENTRIES[i])
+		var ui: UiCommand = adapter.sample_radial(source, DT)
+		assert_eq(ui.radial_entry, i)
+		assert_eq(ui.to_dict()["radial_entry"], i)
+		assert_eq(adapter.sample_radial(source, DT).radial_entry, -1, "an edge, not a level")
+		source.release(InputAdapter.RADIAL_ENTRIES[i])
+	source.hold(InputAdapter.RADIAL_ENTRIES[6])
+	source.hold(InputAdapter.RADIAL_ENTRIES[2])
+	assert_eq(adapter.sample_radial(source, DT).radial_entry, 2, "two at once: the earlier place")
+
+
+func test_the_press_that_opened_a_radial_menu_picks_no_entry() -> void:
+	# D-pad Right opens the comms menu and is also the second entry: held through the opening, it picks nothing.
+	source.hold(InputAdapter.COMMS_MENU)
+	source.hold(InputAdapter.RADIAL_ENTRIES[1])
+	adapter.begin_radial(source)
+	var ui: UiCommand = adapter.sample_radial(source, DT)
+	assert_eq(ui.radial_entry, -1)
+	assert_false(ui.comms_open)
+	source.release_all()
+	adapter.sample_radial(source, DT)
+	# Pressed again, the pick wins over the comms key's close.
+	source.hold(InputAdapter.COMMS_MENU)
+	source.hold(InputAdapter.RADIAL_ENTRIES[1])
+	ui = adapter.sample_radial(source, DT)
+	assert_eq(ui.radial_entry, 1)
+	assert_false(ui.comms_open, "a pick, not a close")
 
 
 func test_a_dpad_press_held_through_the_comms_menu_fires_nothing_when_it_closes() -> void:

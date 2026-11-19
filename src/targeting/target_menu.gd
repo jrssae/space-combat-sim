@@ -2,8 +2,8 @@ class_name TargetMenu
 extends RefCounted
 ## The target menu's pages on a `RadialMenu` (architecture §18.19, M5-T25), pure. Opened with the candidate list as it is at
 ## that moment (the game is paused while it shows, so nothing in it goes stale): the first ring is the six categories with
-## their counts, the second the nearest five of one category and "none" in the down slice. `select` opens a category or
-## returns what the pilot picked, for the owner to carry out:
+## their counts, the second the nearest five of one category and "none" in the down slice; each ring has one slice per entry
+## (D90, M8-T24). `select` opens a category or returns what the pilot picked, for the owner to carry out:
 ##     {action: target, id, label}           a ship becomes the target
 ##     {action: waypoint, id, label, point}  a beacon or an objective becomes the HUD waypoint (`id` 0 for a bare place)
 ##     {action: clear_target} / {action: clear_waypoint}   "none"
@@ -17,8 +17,6 @@ const ACTION_TARGET: StringName = &"target"
 const ACTION_WAYPOINT: StringName = &"waypoint"
 const ACTION_CLEAR_TARGET: StringName = &"clear_target"
 const ACTION_CLEAR_WAYPOINT: StringName = &"clear_waypoint"
-## Every category's ring has this many slices: five entries and "none", so a slot is always in the same direction.
-const RING_SLICES: int = TargetCategories.RING_SIZE + 1
 ## An objective's text is cut to this on its slice; the whole text shows under the ring while it is highlighted.
 const OBJECTIVE_LABEL_CHARS: int = 16
 ## The categories whose picks set the waypoint rather than the target.
@@ -119,7 +117,7 @@ func _open_category(c: TargetCategories.Category) -> void:
 			entries.append(_contact_entry(info, c, color))
 	var clears: StringName = ACTION_CLEAR_WAYPOINT if WAYPOINT_CATEGORIES.has(c) else ACTION_CLEAR_TARGET
 	var none: Dictionary = {"label": NONE_LABEL, "sub": "", "color": Factions.UNIDENTIFIED_COLOR, "payload": {"action": clears}}
-	radial.push("%s · %s" % [HEADING, TargetCategories.NAMES[c]], RadialMenu.arrange(entries, none, RING_SLICES), color)
+	radial.push("%s · %s" % [HEADING, TargetCategories.NAMES[c]], RadialMenu.arrange(entries, none), color)
 
 
 func _contact_entry(info: TargetInfo, c: TargetCategories.Category, color: Color) -> Dictionary:

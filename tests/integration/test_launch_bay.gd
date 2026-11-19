@@ -470,7 +470,7 @@ func test_a_launched_alpha_wing_flies_as_the_players_wingmen() -> void:
 	var leader_id: int = main.combatant.targetable.get_instance_id()
 	# The comms menu, as the radial menu sends it.
 	assert_true(DebugConsole.registry.execute("commsmenu open")[0].ok, "the menu opens")
-	assert_true(DebugConsole.registry.execute("commsmenu pick 2")[0].ok, "FORM ON ME, to the right")
+	assert_true(DebugConsole.registry.execute("commsmenu pick \"form on me\"")[0].ok, "FORM ON ME")
 	await _ticks(1)
 	assert_eq(own.order, AiContext.Order.FORM_ON_ME)
 	assert_string_contains(main.wings.last_ack, "FORMING UP")

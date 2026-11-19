@@ -436,8 +436,8 @@ RB  right retros (hold)           LB  left retros (hold)
 R-stick  up/down pitch, left/right yaw, diagonals roll       L-stick  strafe L/R + up/down; points the radial menus while one is open (M7-T37)
 D-pad Up  flight assist           D-pad Down  next weapon           D-pad Left  running lights        D-pad Right  comms menu (radial)
 A  fire       B  tap: next target, hold (0.35 s): previous target
-Comms menu open (D-pad Right, 4 s): D-pad Up/Right/Down/Left pick entries 1-4 (attack my target, form on me, engage at will,
-  cover me); B closes it; assist, next weapon, lights and the target button do nothing meanwhile
+Radial menu open (comms, target): D-pad Up/Right/Down/Left and keys 1-8 pick the ring's entries 1-4 / 1-8 in page order
+  (M8-T24); B backs out; assist, next weapon, lights and the target button do nothing meanwhile
 X  auto-track (toggle): the nose follows the lead point of the selected target; hold 2 s on a target that offers an
    interaction (a gate's jump, a station bay; M7-T27, §20.5) to run it instead
 Y  camera 1st/3rd
@@ -4698,12 +4698,24 @@ still cycles every target.
 
 | Class | Kind | Holds |
 |---|---|---|
-| `RadialMenu` | pure | the page stack, the highlight, `slice_at` (slice 0 straight up, clockwise; a boundary takes the slice nearer the top; under `POINT_THRESHOLD` nothing is pointed at) and `arrange`, which puts a "none" entry in the down slice of an even ring |
+| `RadialMenu` | pure | the page stack, the highlight, `slice_at` (slice 0 straight up, clockwise; the nearest slice's centre wins, a boundary takes the slice nearer the top, the later one on a tie; under `POINT_THRESHOLD` nothing is pointed at), `has_entry` (the D-pad's and keys' reach) and `arrange`, which puts a "none" entry at `none_slice` |
 | `RadialLayout` | pure | the ring vertically centred at one side, slice polygons, spokes, label points, scaled by window height |
 | `RadialMenuView` | `CanvasLayer` 45 | draws a `RadialMenu`; hidden and not processing while closed |
 
-A slot is `{label, sub, detail, color, payload}`; an empty one is a blank slice the highlight skips. The owner feeds
-`point`, `select` and `back` and decides what a selected entry does.
+A slot is `{label, sub, detail, color, payload}`. The owner feeds `point`, `select` and `back` and decides what a selected
+entry does.
+
+**One slice per entry (D90, M8-T24).** A ring has exactly as many equal slices as its page has entries (1 to 8; three are 120
+degrees each, five 72): `push` drops empty slots, so an unavailable entry (DOCK with no home dock in range) leaves the ring
+rather than leaving a blank, and nothing blank is drawn or pickable. The first entry is at the top and the rest follow
+clockwise in page order. "None" (the target menu's second ring) sits straight down on an even ring and on the first slice past
+down on an odd one, where the stick pulled straight down also lands, so the other entries stay together in order. A ring of
+one is the whole annulus with no spoke. Picks follow the layout: the stick (arrows, mouse) highlights the nearest slice; the
+D-pad's up, right, down and left and keys 1-8 (`radial_entry_1`..`_8`, fixed in `project.godot` like the other `radial_*`
+actions, read by `sample_radial` as `UiCommand.radial_entry`, seeded as held when a menu opens) pick the entry in that place of
+the page order at once, as a highlight and select; a place past the last entry does nothing. D-pad Right is also the comms
+key: while a menu is open the pick wins, so Ctrl or B closes the comms menu. The consoles' `pick`/`highlight <n>` take the
+index in page order.
 
 **The target menu.** `TargetMenu` (pure) builds the pages from one candidate list: the six categories with counts, then
 the nearest five of one and NONE. `select` returns `{action: target | waypoint | clear_target | clear_waypoint, id, label,
@@ -4810,14 +4822,16 @@ and the game paused while it is open.
 | `CommsMenu` | pure | a page stack over a `RadialMenu`: `set_root_page`, `open`, `push_page`, `select` (opens an entry's `page`, or returns the entry and closes), `back`, `close`; the wing orders as the first page |
 | `CommsMenuDirector` | node under `Main` | pauses on open, owns a `RadialMenuView`, sends the order through `WingDirector.give_order` after resuming, the `comms_menu` provider and the `commsmenu` command |
 
-An entry is `{label, sub?, color?, payload?, page?: {title, entries}}`; a page pads to four slices (the wing orders sit up, right,
-down, left in the order of keys 1-4) and holds at most eight. `Main` calls `adapter.sample_radial` while the comms menu is open,
+An entry is `{label, sub?, color?, payload?, page?: {title, entries}}`; a page has one slice per entry and holds at most eight
+(M8-T24). The wing orders are listed in the order of their keys: the four of keys 1-4 first (so the D-pad's four directions give
+them), then DOCK (key 6, left out while no home dock is in range), FORM UP and HOLD POSITION (keys 7 and 8). `Main` calls `adapter.sample_radial` while the comms menu is open,
 so the right stick, arrows or mouse point, A selects, B backs (out of the first page it closes), Start hands over to the pause
-menu, and the comms key's edge (`UiCommand.comms_open`, read by `sample_radial`; the opening press is seeded as held) closes it. The
+menu, and the comms key's edge (`UiCommand.comms_open`, read by `sample_radial`; the opening press is seeded as held) closes it
+unless the same press picked an entry (D-pad Right, M8-T24). The
 4 s timer, `comms_pick`/`comms_close` and the adapter's open-menu swallowing are gone: the pad is not read for flight while a radial
 menu is open. The target menu and the comms menu refuse to open over each other; a cinematic, a mission's `lock_controls`
 or the pilot's death closes the comms menu. A later page of replies is `push_page` (or an entry's `page`); a page with a "none"
-entry goes through `RadialMenu.arrange` so "none" takes the down slice (Q44).
+entry goes through `RadialMenu.arrange` so "none" takes the down slice (Q44; on an odd ring the first slice past down).
 
 ### 18.23 The ram tracker in native (T33, L3)
 

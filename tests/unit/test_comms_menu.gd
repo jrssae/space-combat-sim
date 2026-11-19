@@ -1,6 +1,6 @@
 extends GutTest
-## The comms menu's pages on the radial framework (architecture §18.22, M5-T46): the wing orders as the first ring on the four
-## compass slices, sub-pages on the page stack, B back and out, a select that returns the entry and closes.
+## The comms menu's pages on the radial framework (architecture §18.22, M5-T46): the wing orders as the first ring, one slice per
+## entry (M8-T24), sub-pages on the page stack, B back and out, a select that returns the entry and closes.
 
 
 func _page(prefix: String, n: int = 4) -> Array[Dictionary]:
@@ -33,53 +33,50 @@ func test_without_a_root_page_it_does_not_open() -> void:
 	assert_false(menu.is_open())
 
 
-func test_the_wing_orders_sit_up_right_down_left_in_the_order_of_keys_1_to_4() -> void:
+func test_the_wing_orders_follow_their_keys_one_slice_each() -> void:
+	# M8-T24 (D90): the orders of keys 1-4 first, so the D-pad's four directions give them; then DOCK (key 6) and the hold-fire
+	# orders (keys 7 and 8). Seven entries, seven slices, no blank.
 	var menu := CommsMenu.new()
 	menu.set_root_page("WING ORDERS", CommsMenu.wing_orders())
 	menu.open()
-	var expected: Array[int] = [AiContext.Order.ATTACK_MY_TARGET, AiContext.Order.FORM_ON_ME, AiContext.Order.ENGAGE_AT_WILL,
-			AiContext.Order.COVER_ME]
-	var up_right_down_left: Array[Vector2] = [Vector2(0, 1), Vector2.RIGHT, Vector2(0, -1), Vector2.LEFT]
-	for i: int in 4:
-		menu.radial.point(up_right_down_left[i])
-		assert_eq(menu.radial.highlighted()["payload"], expected[i], "slice %d" % i)
-	# Later orders take the diagonals, so the four above stay where the stick has always found them (M8-T06: DOCK, down-left).
-	assert_eq(menu.radial.slice_count(), 8)
-	menu.radial.point(Vector2(-1, -1).normalized())
-	assert_eq(menu.radial.highlighted()["payload"], CommsMenu.PAYLOAD_DOCK)
-	assert_eq(menu.radial.highlighted()["label"], "DOCK")
-	# With no home dock in range the order cannot be given: its slice is blank and the ring is otherwise the same.
+	var expected: Array = [AiContext.Order.ATTACK_MY_TARGET, AiContext.Order.FORM_ON_ME, AiContext.Order.ENGAGE_AT_WILL,
+			AiContext.Order.COVER_ME, CommsMenu.PAYLOAD_DOCK, AiContext.Order.FORM_HOLD_FIRE, AiContext.Order.HOLD_POSITION]
+	assert_eq(menu.radial.slice_count(), 7)
+	for i: int in expected.size():
+		assert_eq(menu.radial.slots()[i]["payload"], expected[i], "entry %d" % i)
+	assert_eq(menu.radial.slots()[4]["label"], "DOCK")
+	# With no home dock in range the order cannot be given: DOCK leaves the ring and the rest close up.
 	var without: Array[Dictionary] = CommsMenu.wing_orders(false)
-	assert_eq(without.size(), 8)
-	assert_true(without[5].is_empty(), "DOCK is left out")
-	assert_eq(without[4]["label"], "ENGAGE")
-	assert_eq(without[6]["label"], "COVER ME")
-
-
-func test_the_hold_fire_orders_are_on_the_wing_orders_page_wherever_the_ring_puts_them() -> void:
-	# M8-T19 (D85). The page lists them; the ring lays them out, so the stick is pointed at the slice the ring gave each.
-	var menu := CommsMenu.new()
-	menu.set_root_page("WING ORDERS", CommsMenu.wing_orders())
-	var expected: Dictionary = {"FORM UP": AiContext.Order.FORM_HOLD_FIRE, "HOLD POSITION": AiContext.Order.HOLD_POSITION}
-	for label: String in expected:
-		menu.open()
-		var slots: Array[Dictionary] = menu.radial.slots()
-		var at: int = -1
-		for i: int in slots.size():
-			if str(slots[i].get("label", "")) == label:
-				at = i
-		assert_gt(at, -1, "%s is on the ring" % label)
-		assert_eq(slots[at]["sub"], "hold fire")
-		var angle: float = RadialMenu.slice_angle(at, menu.radial.slice_count())
-		menu.radial.point(Vector2(sin(angle), cos(angle)))
-		assert_eq(menu.radial.highlight(), at, "the stick finds %s" % label)
-		var picked: Dictionary = menu.select()
-		assert_eq(picked["payload"], expected[label], label)
-		assert_false(menu.is_open())
-	# The four orders of keys 1-4 are still found on the compass points.
+	assert_eq(without.size(), 6)
+	for entry: Dictionary in without:
+		assert_ne(entry["label"], "DOCK", "DOCK is left out")
+	menu.set_root_page("WING ORDERS", without)
 	menu.open()
-	menu.radial.point(Vector2.RIGHT)
-	assert_eq(menu.radial.highlighted()["payload"], AiContext.Order.FORM_ON_ME)
+	assert_eq(menu.radial.slice_count(), 6, "six entries, six slices of 60 degrees")
+	assert_eq(menu.radial.slots()[4]["label"], "FORM UP")
+
+
+func test_the_stick_finds_every_wing_order_wherever_the_ring_puts_it() -> void:
+	# The page lists the orders; the ring lays them out, so the stick is pointed at the slice the ring gave each.
+	var menu := CommsMenu.new()
+	for dock: bool in [true, false]:
+		menu.set_root_page("WING ORDERS", CommsMenu.wing_orders(dock))
+		for entry: Dictionary in CommsMenu.wing_orders(dock):
+			menu.open()
+			var count: int = menu.radial.slice_count()
+			var at: int = -1
+			for i: int in count:
+				if menu.radial.slots()[i]["label"] == entry["label"]:
+					at = i
+			assert_gt(at, -1, "%s is on the ring" % entry["label"])
+			var angle: float = RadialMenu.slice_angle(at, count)
+			menu.radial.point(Vector2(sin(angle), cos(angle)))
+			assert_eq(menu.radial.highlight(), at, "the stick finds %s" % entry["label"])
+			var picked: Dictionary = menu.select()
+			assert_eq(picked["payload"], entry["payload"], entry["label"])
+			assert_false(menu.is_open())
+	var hold_fire: Array[Dictionary] = CommsMenu.wing_orders().filter(func(e: Dictionary) -> bool: return e["sub"] == "hold fire")
+	assert_eq(hold_fire.size(), 2, "FORM UP and HOLD POSITION (M8-T19)")
 
 
 func test_select_returns_the_lit_entry_and_closes() -> void:
@@ -93,13 +90,20 @@ func test_select_returns_the_lit_entry_and_closes() -> void:
 	assert_eq(menu.picks(), 1)
 
 
-func test_a_short_page_pads_to_four_slices_and_the_highlight_skips_blanks() -> void:
+func test_a_short_page_has_one_slice_per_entry() -> void:
+	# M8-T24 (D90): two replies are two halves, three are thirds; a page is never padded.
 	var menu := CommsMenu.new()
+	for n: int in range(1, 9):
+		menu.set_root_page("REPLIES", _page("r", n))
+		menu.open()
+		assert_eq(menu.radial.slice_count(), n, "%d entries" % n)
 	menu.set_root_page("REPLIES", _page("r", 2))
 	menu.open()
-	assert_eq(menu.radial.slice_count(), 4)
 	menu.radial.point(Vector2(0, -1))
-	assert_eq(menu.radial.highlight(), 0, "a blank slice is never lit")
+	assert_eq(menu.radial.highlight(), 1, "two entries: the bottom half is the second")
+	menu.set_root_page("REPLIES", _page("r", 10))
+	menu.open()
+	assert_eq(menu.radial.slice_count(), CommsMenu.MAX_SLOTS, "at most eight")
 
 
 func test_an_entry_with_a_page_pushes_it_and_b_comes_back() -> void:

@@ -18,6 +18,8 @@ const HINT_BELOW_PX: float = 60.0
 const DETAIL_BELOW_PX: float = 96.0
 # Arc steps per slice outline: smooth at 4K, a few dozen points per ring.
 const _ARC_STEPS: int = 12
+# The gap left at the bottom of a ring of one, radians.
+const _SEAM_RAD: float = 1e-3
 
 
 static func scale_for(viewport: Vector2) -> float:
@@ -50,19 +52,22 @@ static func direction(angle: float) -> Vector2:
 	return Vector2(sin(angle), -cos(angle))
 
 
-## The outline of slice `index` of `count` between the hub and the rim, closed, clockwise from its hub corner.
+## The outline of slice `index` of `count` between the hub and the rim, closed, clockwise from its hub corner. A ring of one is
+## the whole annulus but for a hairline seam at the bottom, so it stays one simple polygon.
 static func slice_polygon(at: Vector2, inner: float, outer: float, index: int, count: int) -> PackedVector2Array:
-	var half: float = PI / float(maxi(count, 1))
+	var half: float = minf(PI / float(maxi(count, 1)), PI - _SEAM_RAD)
 	var mid: float = RadialMenu.slice_angle(index, count)
+	# Wide slices (a ring of one to three) get more steps, so their arcs stay as smooth as narrow ones.
+	var steps: int = maxi(_ARC_STEPS, ceili(float(_ARC_STEPS) * half / (PI / 4.0)))
 	var points := PackedVector2Array()
-	for k: int in _ARC_STEPS + 1:
-		points.append(at + direction(mid - half + 2.0 * half * float(k) / float(_ARC_STEPS)) * inner)
-	for k: int in _ARC_STEPS + 1:
-		points.append(at + direction(mid + half - 2.0 * half * float(k) / float(_ARC_STEPS)) * outer)
+	for k: int in steps + 1:
+		points.append(at + direction(mid - half + 2.0 * half * float(k) / float(steps)) * inner)
+	for k: int in steps + 1:
+		points.append(at + direction(mid + half - 2.0 * half * float(k) / float(steps)) * outer)
 	return points
 
 
-## The spoke between slice `index` and the one before it: from the hub to the rim.
+## The spoke between slice `index` and the one before it: from the hub to the rim. A ring of one has none to draw.
 static func spoke(at: Vector2, inner: float, outer: float, index: int, count: int) -> PackedVector2Array:
 	var dir: Vector2 = direction(RadialMenu.slice_angle(index, count) - PI / float(maxi(count, 1)))
 	return PackedVector2Array([at + dir * inner, at + dir * outer])
