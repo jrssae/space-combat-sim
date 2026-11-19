@@ -84,8 +84,8 @@ func test_the_line_up_brakes_from_any_speed_and_lets_a_lined_up_ship_arrive_at_t
 	assert_gt(slowed.retro_left + slowed.main_left, 0.0, "the line-up's own arrival would brake it to 80 m/s")
 
 
-# M8-T18: the departure shot is timed from the predicted arrival at the mouth.
-func test_the_departure_shot_closes_in_shortly_before_the_predicted_arrival() -> void:
+# M8-T18: the run-in's predicted arrival at the mouth (the departure shots are timed from it, M8-T29).
+func test_the_run_in_predicts_its_arrival_at_the_mouth() -> void:
 	assert_almost_eq(GateAutopilot.predicted_arrival_s(1500.0, 2.0), 6.0, 1e-6, "1.5 km at 250 m/s")
 	assert_almost_eq(GateAutopilot.predicted_arrival_s(1500.0, 9.0), 9.0, 1e-6, "no sooner than the vortex opens")
 	assert_almost_eq(GateAutopilot.predicted_arrival_s(1500.0, INF), 6.0, 1e-6)
@@ -97,13 +97,11 @@ func test_the_departure_shot_closes_in_shortly_before_the_predicted_arrival() ->
 	assert_almost_eq(carried, 6.0, 0.3, "at the run-in's speed already: about 1.5 km / 250 m/s")
 	assert_gt(slow, carried + 1.5, "from 80 m/s it first gathers speed")
 	assert_almost_eq(GateAutopilot.predicted_arrival_s(1500.0, 9.0, 250.0, cap), 9.0, 0.5, "it paces itself to the vortex")
-	for arrival: float in [3.0, 6.0, 12.0]:
-		var keys: Array = GateAutopilot.departure_shot_keys(arrival)
-		assert_eq(keys.size(), 3)
-		assert_almost_eq(float(keys[1]["t"]), maxf(arrival - GateAutopilot.SHOT_CLOSE_LEAD_S, GateAutopilot.SHOT_MIN_CLOSE_S), 1e-6,
-				"%.0f s out: close in before the mouth" % arrival)
-		assert_gt(float(keys[2]["t"]), arrival + 20.0, "and hold down the funnel")
-		assert_true(bool(CinematicShot.from_dict(&"t", {"keys": keys})["ok"]), "a valid shot")
+	var travel: PackedFloat32Array = GateAutopilot.run_in_travel_m(PackedFloat32Array([0.0, carried, carried + 2.0]), 1500.0, 4.6,
+			250.0, cap)
+	assert_eq(travel[0], 0.0)
+	assert_almost_eq(travel[1], 1500.0, 30.0, "at the predicted arrival it is at the mouth")
+	assert_gt(travel[2], 1800.0, "and flies on down the funnel")
 
 
 # M8-T18: a ship passing the departure point too fast for the run-in carries on in the line-up (it turns and comes back), and a

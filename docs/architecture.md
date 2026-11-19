@@ -5472,6 +5472,24 @@ At 1 000 km (GPU): the gate 23 draw calls, 145 fps (the display's cap), 379 MB; 
   and the line-up's limit grows with the speed at the request (`GateJump.line_up_timeout_for`). The departure shot's keys come from
   the predicted arrival at the mouth (`GateAutopilot.predicted_arrival_s` flies the run-in's pacing from the ship's speed, no sooner
   than the vortex opens; `departure_shot_keys` closes in 2 s before it); `gate.run_in_eta_s` shows it.
+- **Camera takes and the jump's beats (M8-T29, maintainer and a show-likeness review, 2026-11-19).** The jump is cut into short
+  takes from pools in `data/jump/gate_shots.json` (`GateShotPool`, pure; `GateShotDirector`, the glue `JumpgateHost` drives):
+  approach takes until 3.5 s before the predicted arrival at the mouth (T18), mouth takes to the ring (a take tagged `entry` holds
+  the entry, one tagged `before` never runs past it), then on the way back `arrival_open` takes (one tagged `after` waits 1.5 s for
+  the blue vortex) and `arrival_out` takes from the moment the ship comes out of the ring until control returns. Each take is
+  picked at random per jump (seeded, the session's sim time in the seed), never the same twice in a row, never the last jump's
+  opening, and only if its camera stays clear of the gate, the station and the planet along the predicted path and can see the ship
+  (physics queries once per stage). Every take lasts 1 s or more and under 3 s, or under 5 s when marked `"feature": true` (the
+  guard test over all shot data checks the data; the director shares a stage out in even takes and lets the last one run on to its
+  limit when the stage ends late). The beats are data (`data/jump/player_jump.json`, `GateJump`): the ship is swallowed from the mouth
+  to the ring in 1.2 s (`VortexTransits` carries it at the speed that takes), the ring's flash shows 0.3 s, a hard cut to 0.75 s of
+  black (M28's hyperspace goes there), a hard cut to the arrival side, where the departure vortex is ended so the arrival opens at
+  once on the pylons' glow, and the ship bursts out of the ring in 1.0 s with the core glowing white-blue behind it, its running
+  lights on and its mains glowing (`ThrusterVisuals.main_glow_floor`). No fades. During the shots the player's ship carries the
+  shared `CinematicKeyLight` (`src/camera/cinematic_key_light.gd`, `data/camera/key_light.json`: a key from the sun's side and a rim
+  from behind; `attach(ship, to_sun)`, `update(to_sun)`, `detach()`), which other shot sequencers reuse. `stop_shots()` ends every
+  take in one call. Console `gate shots <approach>,<mouth>|arrive:<id>|auto` pins the opening takes for captures; provider `gate.shots`
+  lists the last jump's takes.
 - Console `gate [status|open|close|jump|cancel|target|approach|view]` (`gate open <dir> <hold_s>`; `gate view reference` is the
   acceptance pose of the still), `vortex [status|open|close|view]`; providers `gate`, `vortex`.
 - GPU (RX 6950 XT, headless gamescope): the vortex costs about 0.23 ms and one draw call, even filling the screen from inside; the

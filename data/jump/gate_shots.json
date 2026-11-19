@@ -1,0 +1,676 @@
+{
+ "_comment": "The gate jump's camera takes (M8-T29, maintainer 2026-11-19, after show-likeness reviews; every take under 3 s). The jump is cut into short takes from these pools, picked at random per jump, never the same take twice in a row and never the last jump's opening take, and only takes whose camera stays clear of the gate, the station and the planets and can see the ship: the run-in's 'approach' takes until cut_lead_s before the ship is predicted at the mouth (M8-T18), then 'mouth' takes to the ring (a take tagged 'when': 'entry' goes on the take that holds the moment of entry, one tagged 'before' only before it; on the way back a take tagged 'after' waits 1.5 s, until the blue vortex opens); at the ring's 0.3 s flash a hard cut to the arrival side: 'arrival_open' takes from the pylons' glow, which starts at the cut, as the blue vortex opens, then 'arrival_out' takes from the moment the ship bursts out of the ring (about 1 s through the funnel) until control returns (3 s or 500 m in front of the mouth). Each take's keys run 0 to 2.9 s and it is cut at most 2.6 s in (under 3 s with the ring's 0.3 s flash); a take marked 'feature': true (an interesting angle, maintainer 2026-11-19) runs 0 to 4.9 s and is cut at most 4.6 s in. Actors: 'player' (offsets in its frame: +z behind it, +y above it) and 'gate' (its frame: -z in front of the mouth, the ship flies in along +z, the funnel runs on to about +1200). 'roll' turns the picture, degrees.",
+ "cut_lead_s": 3.5,
+ "approach": [
+  {
+   "id": "beside_behind",
+   "keys": [
+    {
+     "t": 0,
+     "position": {
+      "actor": "player",
+      "offset": [
+       45,
+       18,
+       95
+      ]
+     },
+     "look_at": {
+      "actor": "player",
+      "offset": [
+       0,
+       0,
+       -300
+      ]
+     },
+     "fov": 62
+    },
+    {
+     "t": 2.9,
+     "position": {
+      "actor": "player",
+      "offset": [
+       28,
+       10,
+       60
+      ]
+     },
+     "look_at": {
+      "actor": "player",
+      "offset": [
+       0,
+       0,
+       -150
+      ]
+     },
+     "fov": 50
+    }
+   ]
+  },
+  {
+   "id": "trail_wide",
+   "keys": [
+    {
+     "t": 0,
+     "position": {
+      "actor": "player",
+      "offset": [
+       25,
+       18,
+       120
+      ]
+     },
+     "look_at": {
+      "actor": "player",
+      "offset": [
+       0,
+       40,
+       -600
+      ]
+     },
+     "fov": 55
+    },
+    {
+     "t": 2.9,
+     "position": {
+      "actor": "player",
+      "offset": [
+       28,
+       20,
+       130
+      ]
+     },
+     "look_at": {
+      "actor": "player",
+      "offset": [
+       0,
+       40,
+       -600
+      ]
+     },
+     "fov": 55
+    }
+   ]
+  },
+  {
+   "id": "gate_side",
+   "keys": [
+    {
+     "t": 0,
+     "position": {
+      "actor": "gate",
+      "offset": [
+       650,
+       150,
+       -1300
+      ]
+     },
+     "look_at": {
+      "actor": "player"
+     },
+     "fov": 12
+    },
+    {
+     "t": 2.9,
+     "position": {
+      "actor": "gate",
+      "offset": [
+       650,
+       150,
+       -1300
+      ]
+     },
+     "look_at": {
+      "actor": "player"
+     },
+     "fov": 14
+    }
+   ]
+  }
+ ],
+ "mouth": [
+  {
+   "id": "close_behind",
+   "when": "before",
+   "keys": [
+    {
+     "t": 0,
+     "position": {
+      "actor": "player",
+      "offset": [
+       8,
+       4,
+       26
+      ]
+     },
+     "look_at": {
+      "actor": "player",
+      "offset": [
+       0,
+       0,
+       -40
+      ]
+     },
+     "fov": 55
+    },
+    {
+     "t": 2.9,
+     "position": {
+      "actor": "player",
+      "offset": [
+       8,
+       4,
+       26
+      ]
+     },
+     "look_at": {
+      "actor": "player",
+      "offset": [
+       0,
+       0,
+       -40
+      ]
+     },
+     "fov": 55
+    }
+   ]
+  },
+  {
+   "id": "trail_mid",
+   "keys": [
+    {
+     "t": 0,
+     "position": {
+      "actor": "player",
+      "offset": [
+       20,
+       -8,
+       45
+      ]
+     },
+     "look_at": {
+      "actor": "player",
+      "offset": [
+       0,
+       0,
+       -80
+      ]
+     },
+     "fov": 50,
+     "roll": 15
+    },
+    {
+     "t": 2.9,
+     "position": {
+      "actor": "player",
+      "offset": [
+       20,
+       -8,
+       45
+      ]
+     },
+     "look_at": {
+      "actor": "player",
+      "offset": [
+       0,
+       0,
+       -80
+      ]
+     },
+     "fov": 50,
+     "roll": 15
+    }
+   ],
+   "when": "entry"
+  },
+  {
+   "id": "pull_out",
+   "when": "entry",
+   "keys": [
+    {
+     "t": 0,
+     "position": {
+      "actor": "player",
+      "offset": [
+       22,
+       9,
+       62
+      ]
+     },
+     "look_at": {
+      "actor": "player",
+      "offset": [
+       0,
+       0,
+       -40
+      ]
+     },
+     "fov": 55
+    },
+    {
+     "t": 1.2,
+     "position": {
+      "actor": "player",
+      "offset": [
+       70,
+       30,
+       300
+      ]
+     },
+     "look_at": {
+      "actor": "player",
+      "offset": [
+       0,
+       0,
+       -120
+      ]
+     },
+     "fov": 50
+    },
+    {
+     "t": 2.9,
+     "position": {
+      "actor": "player",
+      "offset": [
+       70,
+       30,
+       300
+      ]
+     },
+     "look_at": {
+      "actor": "player",
+      "offset": [
+       0,
+       0,
+       -120
+      ]
+     },
+     "fov": 50
+    }
+   ]
+  },
+  {
+   "id": "over_shoulder",
+   "when": "before",
+   "keys": [
+    {
+     "t": 0,
+     "position": {
+      "actor": "player",
+      "offset": [
+       6,
+       3,
+       18
+      ]
+     },
+     "look_at": {
+      "actor": "player",
+      "offset": [
+       -8,
+       6,
+       -200
+      ]
+     },
+     "fov": 62
+    },
+    {
+     "t": 2.9,
+     "position": {
+      "actor": "player",
+      "offset": [
+       6,
+       3,
+       18
+      ]
+     },
+     "look_at": {
+      "actor": "player",
+      "offset": [
+       -8,
+       6,
+       -200
+      ]
+     },
+     "fov": 62
+    }
+   ]
+  }
+ ],
+ "arrival_open": [
+  {
+   "id": "collapse_wide",
+   "keys": [
+    {
+     "t": 0,
+     "position": {
+      "actor": "gate",
+      "offset": [
+       1700,
+       600,
+       -2400
+      ]
+     },
+     "look_at": {
+      "actor": "gate",
+      "offset": [
+       0,
+       0,
+       300
+      ]
+     },
+     "fov": 45
+    },
+    {
+     "t": 2.9,
+     "position": {
+      "actor": "gate",
+      "offset": [
+       1690,
+       600,
+       -2390
+      ]
+     },
+     "look_at": {
+      "actor": "gate",
+      "offset": [
+       0,
+       0,
+       300
+      ]
+     },
+     "fov": 45
+    }
+   ]
+  },
+  {
+   "id": "centre_close",
+   "keys": [
+    {
+     "t": 0,
+     "position": {
+      "actor": "gate",
+      "offset": [
+       520,
+       210,
+       -2700
+      ]
+     },
+     "look_at": {
+      "actor": "gate",
+      "offset": [
+       0,
+       0,
+       0
+      ]
+     },
+     "fov": 55
+    },
+    {
+     "t": 2.9,
+     "position": {
+      "actor": "gate",
+      "offset": [
+       300,
+       130,
+       -1600
+      ]
+     },
+     "look_at": {
+      "actor": "gate",
+      "offset": [
+       0,
+       0,
+       1200
+      ]
+     },
+     "fov": 30
+    }
+   ]
+  },
+  {
+   "id": "wide_burst",
+   "keys": [
+    {
+     "t": 0.0,
+     "position": {
+      "actor": "gate",
+      "offset": [
+       400,
+       300,
+       -3600
+      ]
+     },
+     "look_at": {
+      "actor": "gate",
+      "offset": [
+       0,
+       0,
+       100
+      ]
+     },
+     "fov": 45
+    },
+    {
+     "t": 4.9,
+     "position": {
+      "actor": "gate",
+      "offset": [
+       400,
+       300,
+       -3500
+      ]
+     },
+     "look_at": {
+      "actor": "gate",
+      "offset": [
+       0,
+       0,
+       100
+      ]
+     },
+     "fov": 42
+    }
+   ],
+   "feature": true,
+   "when": "after"
+  },
+  {
+   "id": "reverse_exit",
+   "keys": [
+    {
+     "t": 0,
+     "position": {
+      "actor": "gate",
+      "offset": [
+       -260,
+       -90,
+       -1300
+      ]
+     },
+     "look_at": {
+      "actor": "gate",
+      "offset": [
+       0,
+       0,
+       300
+      ]
+     },
+     "fov": 50
+    },
+    {
+     "t": 2.9,
+     "position": {
+      "actor": "gate",
+      "offset": [
+       -260,
+       -90,
+       -1300
+      ]
+     },
+     "look_at": {
+      "actor": "gate",
+      "offset": [
+       0,
+       0,
+       300
+      ]
+     },
+     "fov": 48
+    }
+   ]
+  }
+ ],
+ "arrival_out": [
+  {
+   "id": "centre_close",
+   "keys": [
+    {
+     "t": 0,
+     "position": {
+      "actor": "player",
+      "offset": [
+       60,
+       25,
+       -120
+      ]
+     },
+     "look_at": {
+      "actor": "player"
+     },
+     "fov": 40
+    },
+    {
+     "t": 2.9,
+     "position": {
+      "actor": "player",
+      "offset": [
+       64,
+       27,
+       -128
+      ]
+     },
+     "look_at": {
+      "actor": "player"
+     },
+     "fov": 40
+    }
+   ]
+  },
+  {
+   "id": "wide_burst",
+   "keys": [
+    {
+     "t": 0.0,
+     "position": {
+      "actor": "gate",
+      "offset": [
+       400,
+       300,
+       -3500
+      ]
+     },
+     "look_at": {
+      "actor": "player"
+     },
+     "fov": 45
+    },
+    {
+     "t": 4.9,
+     "position": {
+      "actor": "gate",
+      "offset": [
+       400,
+       300,
+       -3500
+      ]
+     },
+     "look_at": {
+      "actor": "player"
+     },
+     "fov": 20
+    }
+   ],
+   "feature": true
+  },
+  {
+   "id": "arm_side",
+   "keys": [
+    {
+     "t": 0,
+     "position": {
+      "actor": "gate",
+      "offset": [
+       1600,
+       350,
+       -1800
+      ]
+     },
+     "look_at": {
+      "actor": "gate",
+      "offset": [
+       0,
+       0,
+       -250
+      ]
+     },
+     "fov": 50
+    },
+    {
+     "t": 2.9,
+     "position": {
+      "actor": "gate",
+      "offset": [
+       1600,
+       350,
+       -1800
+      ]
+     },
+     "look_at": {
+      "actor": "gate",
+      "offset": [
+       0,
+       0,
+       -350
+      ]
+     },
+     "fov": 48
+    }
+   ]
+  },
+  {
+   "id": "head_on",
+   "keys": [
+    {
+     "t": 0,
+     "position": {
+      "actor": "gate",
+      "offset": [
+       0,
+       -30,
+       -700
+      ]
+     },
+     "look_at": {
+      "actor": "player"
+     },
+     "fov": 18
+    },
+    {
+     "t": 2.9,
+     "position": {
+      "actor": "gate",
+      "offset": [
+       0,
+       -30,
+       -700
+      ]
+     },
+     "look_at": {
+      "actor": "player"
+     },
+     "fov": 18
+    }
+   ]
+  }
+ ]
+}

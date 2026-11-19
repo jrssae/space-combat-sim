@@ -90,7 +90,16 @@ func _jump_at(speed: float) -> void:
 	var saw_run_in: bool = false
 	var eta: float = -1.0
 	var crossed_s: float = -1.0
-	var shot_at_crossing: float = -1.0
+	var first_shot: String = ""
+	var shot_at_crossing: String = ""
+	var cut_seen_s: float = -1.0
+	var take: CinematicShot = null
+	var take_s: float = 0.0
+	var longest_take_s: float = 0.0
+	var longest_take: String = ""
+	var takes: int = 0
+	var shortest_take_s: float = INF
+	var shortest_take: String = ""
 	var was_z: float = gate.local_of(main.ship.global_position).z
 	var mouth_z: float = gate.fit.mouth_z_m
 	var farthest: float = 0.0
@@ -100,15 +109,34 @@ func _jump_at(speed: float) -> void:
 		Engine.time_scale = SPEED_UP if distance > FAST_BEYOND_M and main.gates.jump.state == GateJump.State.LINE_UP else 1.0
 		await _ticks(1)
 		var state: GateJump.State = main.gates.jump.state
+		# Every camera take under 3 s, a feature take under 5 s (maintainer, 2026-11-19).
+		var now_take: CinematicShot = main.camera_rig.playing_shot() if main.camera_rig.is_playing_shot() else null
+		if now_take != take:
+			if take != null and now_take != null and take_s < shortest_take_s:
+				shortest_take_s = take_s
+				shortest_take = String(take.id)
+			take = now_take
+			take_s = 0.0
+			takes += 1
+		elif take != null and Engine.time_scale == 1.0:
+			take_s += 1.0 / 60.0
+			var limit: float = 5.0 if _is_feature(String(take.id)) else 3.0
+			if take_s - limit > longest_take_s - 3.0 or longest_take.is_empty():
+				longest_take_s = take_s - limit + 3.0  # how far the worst take came to its own limit, on the 3 s scale
+				longest_take = "%s (%.2f s of %.0f)" % [take.id, take_s, limit]
 		var z: float = gate.local_of(main.ship.global_position).z
 		if state == GateJump.State.RUN_IN:
 			if not saw_run_in:
 				saw_run_in = true
 				eta = main.gates.run_in_eta_s
 				assert_true(main.camera_rig.is_playing_shot(), "the departure shot starts with the run-in")
+				first_shot = String(main.camera_rig.playing_shot().id) if main.camera_rig.is_playing_shot() else ""
+			var playing: String = String(main.camera_rig.playing_shot().id) if main.camera_rig.is_playing_shot() else ""
+			if cut_seen_s < 0.0 and playing.begins_with("gate_mouth_"):
+				cut_seen_s = main.gates.jump.state_s
 			if crossed_s < 0.0 and was_z < mouth_z and z >= mouth_z:
 				crossed_s = main.gates.jump.state_s
-				shot_at_crossing = main.camera_rig._shot_time_s if main.camera_rig.is_playing_shot() else -1.0
+				shot_at_crossing = playing
 		was_z = z
 		if not main.gates.jump.is_active():
 			break
@@ -120,10 +148,28 @@ func _jump_at(speed: float) -> void:
 	assert_gt(crossed_s, 0.0, "it crossed the mouth during the run-in")
 	assert_gt(eta, 0.0, "the run-in predicted its arrival")
 	assert_almost_eq(crossed_s, eta, 2.0, "%.0f m/s: at the mouth %.1f s into the run-in, predicted %.1f s" % [speed, crossed_s, eta])
-	var keys: Array = GateAutopilot.departure_shot_keys(eta)
-	assert_lt(float(keys[1]["t"]), crossed_s, "the shot closes in before the ship reaches the mouth")
-	assert_gt(shot_at_crossing, float(keys[1]["t"]) - 0.1, "at the mouth the shot is already close behind the ship")
+	var sequence: PackedStringArray = main.gates.shots.sequence()
+	assert_eq(first_shot, "gate_approach_" + sequence[0].get_slice("/", 1), "an approach take opens the run-in (M8-T29)")
+	assert_true(shot_at_crossing.begins_with("gate_mouth_"), "a mouth take is on at the mouth (%s)" % shot_at_crossing)
+	assert_eq(main.gates.shots.pool.when(GateShotPool.MOUTH, shot_at_crossing.trim_prefix("gate_mouth_")), GateShotPool.ENTRY,
+			"one made for the entry")
+	assert_almost_eq(cut_seen_s, main.gates.shots.pool.cut_s(eta), 0.1, "the mouth takes start on the predicted arrival's clock")
+	assert_lt(cut_seen_s, crossed_s, "before the ship reaches the mouth")
+	assert_lt(longest_take_s, 3.0, "no take held to its limit, 3 s or a feature's 5 s (the closest: %s)" % longest_take)
+	assert_gt(takes, 6, "the jump is cut into many takes")
+	assert_gte(shortest_take_s, GateShotPool.MIN_HOLD_S - 2.0 / 60.0, "no take under 1 s (the shortest: %s, %.2f s)" % [
+			shortest_take, shortest_take_s])
 	assert_true(main.ship.visible)
 	assert_false(main.controls_locked(), "the controls are back")
-	gut.p("%.0f m/s: reach %.1f km, farthest %.1f km out, at the mouth %.1f s into the run-in (predicted %.1f s)" % [speed,
-			reach / 1000.0, farthest / 1000.0, crossed_s, eta])
+	gut.p("%.0f m/s: reach %.1f km, farthest %.1f km out, at the mouth %.1f s into the run-in (predicted %.1f s), shots %s, cut at %.1f s" % [speed,
+			reach / 1000.0, farthest / 1000.0, crossed_s, eta, " ".join(main.gates.shots.sequence()), cut_seen_s])
+
+
+# A take marked `feature` in the gate's pools may run up to 5 s (maintainer, 2026-11-19).
+func _is_feature(shot_id: String) -> bool:
+	var pool: GateShotPool = main.gates.shots.pool
+	for slot: StringName in GateShotPool.SLOTS:
+		for id: String in pool.ids(slot):
+			if shot_id == "gate_%s_%s" % [slot, id]:
+				return pool.is_feature(slot, id)
+	return false

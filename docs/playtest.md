@@ -1393,3 +1393,19 @@ too quiet or right, against the engines (the bed the rest sits on).
 - [ ] **(H) Busy fight, no clipping:** `traffic raid 6` near the station with your wing out, fight for a minute, then
       `state audio`: `master_peak_db` never above -0.5. Listen for crackle or the whole mix ducking when several explosions hit at
       once.
+
+# Play-testing the gate jump's camera (M8-T29)
+
+The jump is now cut into short shots from pools, so no two jumps look alike. It is quicker, too: the ship is swallowed about a
+second after it crosses the mouth, a white flash, a moment of black, then straight back to the gate as its pylons glow, and the ship
+bursts out of the blue vortex in about a second. `state gate.shots` lists the last jump's shots. `gate shots <approach>,<mouth>`
+or `gate shots arrive:<id>` repeats one opening (`auto` picks again). The review strips are in
+`references/screenshots/M8-T29 gate shots/review/`.
+
+- [ ] **(H) Variety:** jump five times (`gate approach 1.9`, target the gate, hold X). Say if the sequences feel different
+      enough, and if any shot looks wrong (clipping, the ship out of frame, too dark).
+- [ ] **(H) Pace:** say if the swallow, the black (0.75 s) and the burst out read clearly and are not too quick or too slow
+      (`data/jump/player_jump.json`).
+- [ ] **(H) Readable ship:** coming back out, the ship should read against the vortex: the core glows behind it, its lights are
+      on and a soft key light follows it during the shots. Say if it is too bright or still lost.
+

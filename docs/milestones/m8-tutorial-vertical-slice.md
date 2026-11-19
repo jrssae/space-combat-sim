@@ -362,7 +362,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T28 | D | Free flight's encounters split into three switches: civilian traffic, allied patrols, enemy encounters (maintainer, 2026-11-19; numbered last) | - | Sonnet | Settings, the Free flight page and the encounter director's weights | done |
 | T33 | A | Tutorial update: only the instructor and the player until the raid; the wing-orders drill on the instructor; a two-ship opening launch; every other Starfury launches at the alarm (maintainer, 2026-11-19) | T05 | Fable | Mission script, scenario and dialog on the T05 agent's own work | done |
 | T30 | C | Cobra-bay launch: more camera angles (a pool, picked at random without repeats) and control back as soon as the launch thrusters cut (maintainer, 2026-11-19) | T03 | Opus | Launch shots and the hand-off timing | in progress |
-| T29 | C | Jumpgate autopilot: more camera angles (wider trailing shots, the gate's base and side), picked at random without repeats (maintainer, 2026-11-19) | T18 | Opus | Gate shots on the autopilot's predicted path | in progress |
+| T29 | C | Jumpgate autopilot: more camera angles (wider trailing shots, the gate's base and side), picked at random without repeats (maintainer, 2026-11-19) | T18 | Opus | Gate shots on the autopilot's predicted path | done |
 | T31 | C | Docking into the main docking bay: more camera angles, and the Starfury visibly matching the drum's rotation before it enters (maintainer, 2026-11-19) | T06 | Opus | Docking shots and a roll-match stage in the docking autopilot | not started |
 | T32 | C | Hold X for 1 s to abort any autopilot (gate jump, docking), until its point of no return (maintainer, 2026-11-19) | T29, T31 | Opus | One abort rule over every autopilot, the hold bar and keyboard parity | not started |
 | T34 | D | Babylon 5 commands: with the station targeted, the comms menu sends orders to Babylon 5 (launch wing, recall fighters, defense grid on/off, fire support, shelter civilians, sitrep) (maintainer, 2026-11-19) | T24 | Opus | A second comms page on the radial framework and station-side handlers | not started |
@@ -1340,6 +1340,17 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 - **Goal (maintainer, 2026-11-19):** more shots for the gate jump: trailing the Starfury from further out, from the gate's base and
   from its side, in a pool picked at random (seeded) without repeating the last set, timed from the predicted arrival (T18).
 - **Done when:** tests on the pool and timing at several approach speeds; frames for the record; (H) the look.
+- **Done (2026-11-19):** the jump is cut into short takes from pools in `data/jump/gate_shots.json` (`GateShotPool`, `GateShotDirector`;
+  approach, mouth, and the way back's `arrival_open` and `arrival_out`), seeded per jump, never repeated back to back, never the last
+  jump's opening, clearance-checked against the gate, the station and the planet, every take 1 s to under 3 s (or under 5 s as a
+  `feature`), timed from T18's predicted arrival; reviewed against the show over seven rounds (strips in
+  `references/screenshots/M8-T29 gate shots/review/`). The beats are data (`data/jump/player_jump.json`): a 1.2 s swallow, a 0.3 s
+  flash, 0.75 s of black, the arrival opening at once on the pylons' glow, a 1.0 s burst out with the core glowing, the ship's lights
+  and mains on. The shared `CinematicKeyLight` (`attach`/`update`/`detach`, `data/camera/key_light.json`) lights the subject ship
+  during the shots, for T30 to reuse. `stop_shots()` aborts every take (T32). Tests (staged scratch copy, `GUT_SLOW=1`): 155/155 over
+  15 files (the pool, the takes against the real gate, the jump's beats, the key light, jumps asked at 200 m/s, 1 km/s and 3 km/s,
+  the gate in play, T18's cue, nav and docking); compile check clean. Left for the reviewer's fix round: `approach_under_arm` (dropped:
+  unlit arm, ship unreadable) and the dark `approach_gate_side`.
 
 - **Shot length (maintainer, 2026-11-19, for T29 to T31 and every cinematic):** no single camera shot lasts **3 s or more**;
   sequences keep their length but cut more often from the pools; the gate's **arrival** gets its own pool too. A guard test over all

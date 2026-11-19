@@ -29,11 +29,6 @@ const FACE_DV_MPS: float = 30.0
 ## Lined up with the mouth (M8-T18): out in front of the departure point, within this of the axis, heading in within this angle.
 const LINED_UP_RADIUS_M: float = 150.0
 const LINED_UP_DEG: float = 15.0
-## The departure shot closes in on the ship this long before it is predicted at the mouth, and is never shorter than this.
-const SHOT_CLOSE_LEAD_S: float = 2.0
-const SHOT_MIN_CLOSE_S: float = 1.0
-## The departure shot holds its last frame this long past the predicted arrival: the funnel, the ring and the fade fit inside.
-const SHOT_HOLD_AFTER_S: float = 54.0
 ## The arrival's prediction steps the run-in this finely, s, and gives up past this (the run-in's own timeout).
 const PREDICT_STEP_S: float = 1.0 / 30.0
 const PREDICT_LIMIT_S: float = 45.0
@@ -78,38 +73,53 @@ static func predicted_arrival_s(to_plane_m: float, open_in_s: float, speed_mps: 
 	if capability == null:
 		var flying: float = maxf(to_plane_m, 0.0) / RUN_IN_MPS
 		return maxf(flying, open_in_s) if is_finite(open_in_s) else flying
-	# The run-in's command along the axis, flown in one dimension as `PilotSteering.seek` paces it.
+	var travel: Dictionary = _fly_run_in(to_plane_m, open_in_s, speed_mps, capability, PackedFloat32Array(), true)
+	return float(travel["arrival_s"])
+
+
+## How far along the axis the run-in has carried the ship at each of `times` (s after its start, increasing), from the same start
+## as `predicted_arrival_s`; past the mouth it flies on at the speed it reached (M8-T29: where a shot's camera will find the ship).
+static func run_in_travel_m(times: PackedFloat32Array, to_plane_m: float, open_in_s: float, speed_mps: float,
+		capability: ShipCapability) -> PackedFloat32Array:
+	return _fly_run_in(to_plane_m, open_in_s, speed_mps, capability, times, false)["travel"]
+
+
+# The run-in's command along the axis, flown in one dimension as `PilotSteering.seek` paces it: the arrival at the plane, and the
+# distance flown at each of `times`.
+static func _fly_run_in(to_plane_m: float, open_in_s: float, speed_mps: float, capability: ShipCapability,
+		times: PackedFloat32Array, stop_at_plane: bool) -> Dictionary:
 	var left: float = to_plane_m
 	var speed: float = speed_mps
 	var t: float = 0.0
-	while left > 0.0 and t < PREDICT_LIMIT_S:
-		var wanted: float = RUN_IN_MPS
-		var opens: float = open_in_s - t if is_finite(open_in_s) else INF
-		if opens == INF:
-			wanted = minf(wanted, maxf(left - WAIT_SHORT_M, 0.0) * 0.25)
-		elif opens > 0.0:
-			wanted = minf(wanted, left / opens)
-		var dv: float = wanted - speed
+	var arrival: float = -1.0
+	var travel := PackedFloat32Array()
+	var next: int = 0
+	var limit: float = PREDICT_LIMIT_S if times.is_empty() else maxf(times[times.size() - 1], 0.0) + PREDICT_STEP_S
+	while t < limit and (next < times.size() or (stop_at_plane and arrival < 0.0)):
+		while next < times.size() and times[next] <= t:
+			travel.append(to_plane_m - left)
+			next += 1
+		if left <= 0.0 and arrival < 0.0:
+			arrival = t
+			if stop_at_plane:
+				break
 		var accel: float = 0.0
-		if absf(dv) >= PilotSteering.COAST_BELOW_MPS:
-			accel = clampf(dv / PilotSteering.HORIZON_S, -capability.a_retro, capability.a_main)
+		if left > 0.0:
+			var wanted: float = RUN_IN_MPS
+			var opens: float = open_in_s - t if is_finite(open_in_s) else INF
+			if opens == INF:
+				wanted = minf(wanted, maxf(left - WAIT_SHORT_M, 0.0) * 0.25)
+			elif opens > 0.0:
+				wanted = minf(wanted, left / opens)
+			var dv: float = wanted - speed
+			if absf(dv) >= PilotSteering.COAST_BELOW_MPS:
+				accel = clampf(dv / PilotSteering.HORIZON_S, -capability.a_retro, capability.a_main)
 		speed += accel * PREDICT_STEP_S
 		left -= speed * PREDICT_STEP_S
 		t += PREDICT_STEP_S
-	return t
-
-
-## The departure shot's keys for a ship predicted at the mouth in `arrival_s` (M8-T18): beside and behind it as it lines up,
-## then in close behind it shortly before the mouth and all the way down the funnel to the ring (M6-T22).
-static func departure_shot_keys(arrival_s: float) -> Array:
-	var close_s: float = maxf(arrival_s - SHOT_CLOSE_LEAD_S, SHOT_MIN_CLOSE_S)
-	var near: Dictionary = {"position": {"actor": "player", "offset": [22, 9, 62]}, "look_at": {"actor": "player", "offset": [0, 0, -40]},
-			"fov": 55}
-	return [
-		{"t": 0.0, "position": {"actor": "player", "offset": [45, 18, 95]}, "look_at": {"actor": "player", "offset": [0, 0, -300]}, "fov": 62},
-		near.merged({"t": close_s}),
-		near.merged({"t": maxf(arrival_s, close_s) + SHOT_HOLD_AFTER_S}),
-	]
+	while travel.size() < times.size():
+		travel.append(to_plane_m - left)
+	return {"arrival_s": arrival if arrival >= 0.0 else t, "travel": travel}
 
 
 ## The way up a ship of `ship_radius_m` must be turned to pass a mouth whose smaller half axis is `mouth_radius_m`: `up` for one

@@ -1,0 +1,8 @@
+{
+  "_comment": "The player's gate jump's beats (M8-T29, maintainer 2026-11-19), seconds: the ship is swallowed from the mouth's plane to the ring in swallow_s; the ring's white flash shows ring_flash_s, then a hard cut to black_s of black (no fades; M28's hyperspace will go there); the arrival side opens on the gate's pylon glow, and the ship bursts out of the ring to the mouth in burst_out_s. During the gate's shots the player's ship carries the cinematic key light (CinematicKeyLight, data/camera/key_light.json). Coming back out, the ship's main engines glow at least engine_glow_floor and its running lights are on from the moment it is placed.",
+  "swallow_s": 1.2,
+  "ring_flash_s": 0.3,
+  "black_s": 0.75,
+  "burst_out_s": 1.0,
+  "engine_glow_floor": 0.35
+}

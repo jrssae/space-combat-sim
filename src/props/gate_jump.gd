@@ -6,9 +6,10 @@ extends RefCounted
 ##
 ## The flow: `LINE_UP` (controls locked, the autopilot flies to the departure point), `RUN_IN` (it accelerates along the gate's
 ## axis, the orange vortex opens, the cinematic follows it in and down the funnel as it shrinks, M6-T22), `FLASH` (through the
-## black ring: the shot holds on the ring's white flash, then fades to black, the shot's last frame), `AWAY` (black, "in
-## hyperspace"; M11 puts hyperspace here), `ARRIVING` (the fade lifts on the blue vortex opening; the gate brings the ship out of
-## its ring), `CLEARING` (the ship flies out of the funnel, growing, and on clear of the mouth), then `IDLE` with the controls
+## black ring, swallowed within about a second of the mouth: the ring's white flash, then a hard cut, M8-T29), `AWAY` (a moment
+## of black; M28's hyperspace goes here),
+## `ARRIVING` (the arrival side opens on the gate's pylon glow; the gate brings the ship out of its ring, bursting out within about
+## a second), `CLEARING` (the ship flies on clear of the mouth), then `IDLE` with the controls
 ## back. Losing the ship, or a stage that takes too long, ends it early (`ended_why`). The screen shows no flash of its own: the
 ## flash is the ring's, in the world.
 
@@ -40,13 +41,20 @@ const LINE_UP_PER_SPEED: float = 4.0
 ## The run-in is 1 440 m to the mouth and 1 200 m on down the funnel; at the slowest it waits for the vortex and then flies it in
 ## about 20 s.
 const RUN_IN_TIMEOUT_S: float = 45.0
-## Through the ring the shot holds on its flash this long, then the picture fades to black.
-const RING_HOLD_S: float = 0.8
-const FADE_OUT_S: float = 0.9
-## Black while "in hyperspace": long enough to read as a passage, short enough not to bore (M11 replaces it).
-const AWAY_S: float = 2.0
-## The fade lifts while the blue vortex's tips glow, so the opening is seen from its start.
-const FADE_IN_S: float = 1.2
+## The jump's beats, from `data/jump/player_jump.json` (maintainer, 2026-11-19): the ring's flash shows this long, then a hard cut
+## to black for `AWAY_S` (no fades; M28's hyperspace goes there), then the arrival side opens on the pylons' glow.
+const TIMING_PATH: String = "res://data/jump/player_jump.json"
+static var RING_HOLD_S: float = _timing("ring_flash_s", 0.3)
+static var AWAY_S: float = _timing("black_s", 0.75)
+## No fades: the cuts are hard.
+const FADE_OUT_S: float = 0.0
+const FADE_IN_S: float = 0.0
+## The ship goes from the mouth's plane to the ring in this long, and comes back out of the ring to the mouth in this long.
+static var SWALLOW_S: float = _timing("swallow_s", 1.2)
+static var BURST_OUT_S: float = _timing("burst_out_s", 1.0)
+## Coming back out the main engines glow at least this much (0..1), so the ship reads against the vortex.
+static var ENGINE_GLOW_FLOOR: float = _timing("engine_glow_floor", 0.35)
+
 ## The vortex takes 3.5 s to open; past this the arrival is stuck.
 const ARRIVING_TIMEOUT_S: float = 20.0
 ## Out of the arrival: clear once this far in front of the mouth, or this long after leaving it (M6-T22: the ship first flies out
@@ -173,11 +181,13 @@ func autopilot_on() -> bool:
 static func screen_at(p_state: State, t: float) -> Vector2:
 	match p_state:
 		State.FLASH:
+			if FADE_OUT_S <= 0.0:
+				return Vector2(0.0, 0.0)  # the flash, then the hard cut to black is the next state's
 			return Vector2(0.0, clampf((t - RING_HOLD_S) / FADE_OUT_S, 0.0, 1.0))
 		State.AWAY:
-			return Vector2(0.0, 1.0)
+			return Vector2(0.0, 1.0 if AWAY_S > 0.0 else 0.0)
 		State.ARRIVING:
-			return Vector2(0.0, 1.0 - clampf(t / FADE_IN_S, 0.0, 1.0))
+			return Vector2(0.0, 1.0 - clampf(t / FADE_IN_S, 0.0, 1.0) if FADE_IN_S > 0.0 else 0.0)
 	return Vector2.ZERO
 
 
@@ -199,3 +209,9 @@ func _abort(why: String) -> PackedStringArray:
 	aborted += 1
 	_enter(State.IDLE)
 	return PackedStringArray([EV_ABORT])
+
+
+static func _timing(key: String, fallback: float) -> float:
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(TIMING_PATH))
+	var value: Variant = (parsed as Dictionary).get(key) if parsed is Dictionary else null
+	return float(value) if (value is float or value is int) and float(value) >= 0.0 else fallback

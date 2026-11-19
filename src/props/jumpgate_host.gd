@@ -21,7 +21,7 @@ const PARK_BEHIND_M: float = 3000.0
 const APPROACH_M: float = 6000.0
 ## Lit layer of the flash and the fade: over the HUD and the letterbox (39), under the console.
 const FADE_LAYER: int = 60
-const ACTIONS: Array[StringName] = [&"status", &"open", &"close", &"jump", &"cancel", &"target", &"approach", &"view"]
+const ACTIONS: Array[StringName] = [&"status", &"open", &"close", &"jump", &"cancel", &"target", &"approach", &"view", &"shots"]
 const DIRECTIONS: Array[StringName] = [&"arrival", &"departure"]
 ## `gate view <name>`: held camera poses on the gate for captures, in the gate's frame (-Z its front, +Y its top): the camera's
 ## offset, the aim's offset, the field of view and the roll (degrees, the picture turned clockwise). `reference` matches `references/jumpgate/jumpgate.png` (the maintainer's
@@ -63,6 +63,8 @@ var _placed: bool = false
 var _assist_before: bool = true
 var _capability: ShipCapability = null
 var _capability_ship: Ship = null
+var _lights_before: Variant = null  # the running lights before the ship came back out lit, or null
+var _key_light: CinematicKeyLight = CinematicKeyLight.new()
 var _fade: ColorRect = null
 var _flash_colour: Color = JumpVortex.DEFAULT_FLASH
 ## The stand-alone points `vortex open` shows.
@@ -72,8 +74,10 @@ var _transit_console: TransitConsole = null
 var _player_pose: Variant = null  # the player's pose while last in sight, for the shots
 var _view_gate: Jumpgate = null
 var _view_point: JumpVortex = null
-## When the departure shot expects the ship at the mouth, s after the run-in's start (M8-T18); -1 before the first run-in.
+## When the run-in expects the ship at the mouth, s after its start (M8-T18; the camera takes are cut from it); -1 before the first.
 var run_in_eta_s: float = -1.0
+## The jump's camera takes: short, picked from the pools per jump, cut on the predicted arrival (M8-T29).
+var shots: GateShotDirector = GateShotDirector.new()
 
 
 func _ready() -> void:
@@ -266,10 +270,18 @@ func step_player(delta: float) -> FlightCommand:
 	_went_through = false
 	_placed = false
 	_handle(events)
+	_set_key_light(jump.is_active() and main.camera_rig.is_playing_shot())
+	if jump.is_active():
+		shots.tick(delta, _play)
+		if (jump.state == GateJump.State.ARRIVING or jump.state == GateJump.State.CLEARING) and ship.visible:
+			var transits: VortexTransits = VortexTransits.of(main.world)
+			if transits == null or transits.has_emerged(ship) or not transits.is_passing(ship):
+				shots.on_placed(_play)  # the way out's takes start as the ship comes out of the ring
 	if not jump.is_active():
 		return null
-	if not jump.autopilot_on():
-		return FlightCommand.new()
+	var transits_now: VortexTransits = VortexTransits.of(main.world)
+	if not jump.autopilot_on() or transits_now != null and transits_now.is_passing(ship):
+		return FlightCommand.new()  # in the funnel the gate carries it
 	var capability: ShipCapability = ship_capability()
 	var velocity: Vector3 = ship.linear_velocity - main.world.anchored_velocity()  # against the gate's rest
 	if jump.state == GateJump.State.LINE_UP:
@@ -292,14 +304,17 @@ func _handle(events: PackedStringArray) -> void:
 				_assist_before = main.ship.assist_on
 				main.ship.assist_on = true
 			GateJump.EV_RUN_IN:
-				jump_gate.send_departure(main.ship, _on_player_through)
+				jump_gate.send_departure(main.ship, _on_player_through, GateJump.SWALLOW_S)
 				run_in_eta_s = _predicted_arrival_s()
-				_play(_departure_shot(run_in_eta_s))
+				shots.begin(_shot_context(run_in_eta_s), _play)
 			GateJump.EV_THROUGH:
+				shots.on_through(_play)  # a close shot cuts away to the gate before the ring's flash
 				_park_away()
 			GateJump.EV_ASK_ARRIVAL:
+				if jump_gate.vortex.is_active() and jump_gate.vortex.direction == JumpVortex.Direction.DEPARTURE:
+					jump_gate.vortex.stop()  # gone in the black: the arrival opens on the pylons' glow at the cut, no dead time
 				jump_gate.request_arrival(_place_player)
-				_play(_arrival_shot())
+				shots.begin_arrival(_arrival_context(), _play)
 			GateJump.EV_ARRIVED:
 				pass  # the arrival shot is already framing the way out
 			GateJump.EV_DONE, GateJump.EV_ABORT:
@@ -326,13 +341,25 @@ func _place_player() -> void:
 	ship.linear_velocity = jump_gate.arrival_velocity() + main.world.rest_velocity()
 	ship.visible = true
 	ship.reset_physics_interpolation()
-	jump_gate.bring_through(ship, true)
-	_play(_arrival_follow_shot())
+	jump_gate.bring_through(ship, true, GateJump.BURST_OUT_S)
+	# Lit as it comes out, so it reads against the vortex (M8-T29): running lights on, the mains glowing while it coasts.
+	_lights_before = ship.running_lights
+	ship.running_lights = true
+	var plumes: ThrusterVisuals = ship.get_node_or_null(^"ThrusterVisuals") as ThrusterVisuals
+	if plumes != null:
+		plumes.main_glow_floor = GateJump.ENGINE_GLOW_FLOOR
 	_placed = true
 
 
 func _finish() -> void:
 	var ship: Ship = main.ship
+	var plumes: ThrusterVisuals = ship.get_node_or_null(^"ThrusterVisuals") as ThrusterVisuals
+	if plumes != null:
+		plumes.main_glow_floor = 0.0
+	if _lights_before != null:
+		ship.running_lights = bool(_lights_before)
+		_lights_before = null
+	_set_key_light(false)
 	var transits: VortexTransits = VortexTransits.of(main.world)
 	if transits != null:
 		transits.cancel(ship)  # an aborted jump leaves no shrunk ship behind
@@ -344,12 +371,27 @@ func _finish() -> void:
 			ship.visible = true
 	if main.player_alive:
 		ship.assist_on = _assist_before
-	if main.camera_rig.is_playing_shot():
-		main.camera_rig.stop_shot()
+	stop_shots()
 	main.camera_rig.snap_chase()
 	main.adapter.resync_edges(main.input_source)
 	_placed = false
 	jump_gate = null
+
+
+## Ends the jump's camera takes now, the ones still to come included: the one call a skip or an abort makes (M8-T29).
+func stop_shots() -> void:
+	shots.stop(func() -> void:
+		if main.camera_rig.is_playing_shot():
+			main.camera_rig.stop_shot())
+
+
+# The cinematic key light on the player's ship (M8-T29: the show always key-lit its ships): on during the gate's shots only.
+func _set_key_light(on: bool) -> void:
+	if not on:
+		_key_light.detach()
+		return
+	var to_sun: Vector3 = main.space_environment.key_star.global_basis.z if main.space_environment != null else Vector3.ZERO
+	_key_light.attach(main.ship, to_sun)
 
 
 func _play(shot: CinematicShot) -> void:
@@ -357,11 +399,33 @@ func _play(shot: CinematicShot) -> void:
 		main.camera_rig.play_shot(shot, _actor_pose, _origin_to_local)
 
 
-# Beside and behind the ship as it lines up on the axis, then close behind it all the way in, at a fixed distance, so it is seen
-# shrinking as the funnel narrows round it, down to the black ring and its flash (M6-T22); timed from when the ship is expected
-# at the mouth, so it frames the run-in at any approach speed (M8-T18).
-func _departure_shot(arrival_s: float) -> CinematicShot:
-	return _shot(&"gate_departure", GateAutopilot.departure_shot_keys(arrival_s))
+# What the run-in's takes read (M8-T29): the gate, the ship's run-in as predicted, and what a camera must keep clear of.
+func _shot_context(arrival_s: float) -> Dictionary:
+	var axis: Vector3 = (jump_gate.global_basis * jump_gate.departure_forward).normalized()
+	var mouth: Vector3 = jump_gate.global_transform * Vector3(0.0, 0.0, jump_gate.fit.mouth_z_m)
+	var open_in: float = jump_gate.vortex.open_in_s(JumpVortex.Direction.DEPARTURE)
+	if not jump_gate.vortex.is_active():
+		open_in = GateActivation.DURATION_S + VortexTiming.FLASH_S + VortexTiming.GROW_S
+	return {
+		"gate": jump_gate, "ship": main.ship, "axis": axis, "arrival_s": arrival_s, "gate_actor": _gate_key(),
+		"to_plane_m": (mouth - main.ship.global_position).dot(axis), "open_in_s": open_in, "capability": ship_capability(),
+		"speed_mps": (main.ship.linear_velocity - main.world.anchored_velocity()).dot(axis),
+		"space": main.world.get_world_3d().direct_space_state,
+		"planet": main.flight_reference.body_near(jump_gate.global_position) if main.flight_reference != null else null,
+		"seed_extra": roundi(SimClock.now() * 10.0),
+	}
+
+
+# What the way back's takes read (M8-T29): where the gate places the ship and how fast it comes out, and what a camera must
+# keep clear of.
+func _arrival_context() -> Dictionary:
+	return {
+		"gate": jump_gate, "ship": main.ship, "gate_actor": _gate_key(),
+		"arrival_pose": jump_gate.arrival_transform(), "arrival_velocity": jump_gate.arrival_velocity(),
+		"space": main.world.get_world_3d().direct_space_state,
+		"planet": main.flight_reference.body_near(jump_gate.global_position) if main.flight_reference != null else null,
+		"seed_extra": roundi(SimClock.now() * 10.0),
+	}
 
 
 # When the run-in starting now brings the ship to the mouth: from its distance to the mouth's plane and its speed along the axis,
@@ -375,35 +439,6 @@ func _predicted_arrival_s() -> float:
 		open_in = GateActivation.DURATION_S + VortexTiming.FLASH_S + VortexTiming.GROW_S
 	var speed: float = (main.ship.linear_velocity - main.world.anchored_velocity()).dot(axis)
 	return GateAutopilot.predicted_arrival_s(to_plane, open_in, speed, ship_capability())
-
-
-# From in front of the gate on the vortex opening, then in on the funnel's base, where the ship will come out of its ring.
-func _arrival_shot() -> CinematicShot:
-	var g: String = _gate_key()
-	return _shot(&"gate_arrival", [
-		{"t": 0.0, "position": {"actor": g, "offset": [520, 210, -2700]}, "look_at": {"actor": g, "offset": [0, 0, 0]}, "fov": 55},
-		{"t": 3.0, "position": {"actor": g, "offset": [300, 130, -1600]}, "look_at": {"actor": g, "offset": [0, 0, 1200]}, "fov": 30},
-		{"t": 60.0, "position": {"actor": g, "offset": [300, 130, -1600]}, "look_at": {"actor": g, "offset": [0, 0, 1200]}, "fov": 30},
-	])
-
-
-# Once the ship is out of the ring's flash: ahead of it, looking back as it grows on its way out of the funnel, then drawing
-# back over the mouth (M6-T22).
-func _arrival_follow_shot() -> CinematicShot:
-	return _shot(&"gate_arrival_follow", [
-		{"t": 0.0, "position": {"actor": "player", "offset": [14, 6, -60]}, "look_at": {"actor": "player"}, "fov": 55},
-		{"t": 5.0, "position": {"actor": "player", "offset": [16, 7, -66]}, "look_at": {"actor": "player"}, "fov": 55},
-		{"t": 9.0, "position": {"actor": "player", "offset": [45, 18, -150]}, "look_at": {"actor": "player"}, "fov": 55},
-		{"t": 60.0, "position": {"actor": "player", "offset": [45, 18, -150]}, "look_at": {"actor": "player"}, "fov": 55},
-	])
-
-
-func _shot(id: StringName, keys: Array) -> CinematicShot:
-	var made: Dictionary = CinematicShot.from_dict(id, {"keys": keys})
-	if not bool(made["ok"]):
-		push_warning("JumpgateHost: %s" % made["error"])
-		return null
-	return made["shot"]
 
 
 func _gate_key() -> String:
@@ -440,7 +475,7 @@ func _register_console() -> void:
 	_transit_console = TransitConsole.new(self)
 	_transit_console.register(registry)
 	registry.register_command(ConsoleCommand.new(&"gate",
-			"The jumpgate: status, open <arrival|departure> [hold seconds] (the vortex, after the arms' activation), close, jump (start the player's jump through it, from within 2 km, farther closing fast: state gate.reach_m), cancel (end the jump), target (select it), approach [km] (put the player 6 km in front of it, facing it, or that many km), view <front|three_quarter|close|tip|run_in|side|behind|reference|off> (hold the camera on it for captures)",
+			"The jumpgate: status, open <arrival|departure> [hold seconds] (the vortex, after the arms' activation), close, jump (start the player's jump through it, from within 2 km, farther closing fast: state gate.reach_m), cancel (end the jump), target (select it), approach [km] (put the player 6 km in front of it, facing it, or that many km), view <front|three_quarter|close|tip|run_in|side|behind|reference|off> (hold the camera on it for captures), shots <approach>,<mouth>|auto|arrive:<id>|arrive:auto (open every run-in and mouth stage, or the way back out, with those takes; auto picks again)",
 			[ConsoleArg.enum_optional(&"action", ACTIONS, &"status"),
 			ConsoleArg.string_optional(&"option", null),
 			ConsoleArg.float_optional(&"hold_s", CONSOLE_HOLD_S, 0.0, 600.0)] as Array[ConsoleArg]), _cmd_gate, self)
@@ -508,8 +543,12 @@ func _register_console() -> void:
 				"doc": "How far out the gate takes the jump request now: 2 km at rest, farther closing fast (M8-T18)"},
 		&"cue": {"get": func() -> String: return approach_cue(gate()).state_name() if gate() != null else "none",
 				"doc": "The approach cue on the gate: ON COURSE, BRAKE, OVERSHOOT or ADJUST COURSE (M8-T18)"},
+		&"shots": {"get": func() -> String: return " ".join(shots.sequence()) if not shots.played.is_empty() else "none",
+				"doc": "The last jump's camera takes in order, slot/id, each under 3 s (M8-T29, data/jump/gate_shots.json)"},
+		&"shot_cut_s": {"get": func() -> float: return shots.pool.cut_s(run_in_eta_s) if run_in_eta_s > 0.0 else -1.0, "unit": "s",
+				"doc": "When the last run-in's approach takes gave way to its mouth takes, after the run-in's start (-1: none yet)"},
 		&"run_in_eta_s": {"get": func() -> float: return run_in_eta_s, "unit": "s",
-				"doc": "When the last run-in expected the ship at the mouth, after its start; the departure shot is timed from it (-1: none yet)"},
+				"doc": "When the last run-in expected the ship at the mouth, after its start; the camera takes are cut from it (-1: none yet)"},
 		&"vortex": {"get": func() -> String: return gate().vortex.phase_name() if gate() != null else "none",
 				"doc": "The vortex: closed, activate (the arms' lamps), flash, grow, open, closing or end_flash (its closing flash)"},
 		&"vortex_direction": {"get": func() -> String: return String(gate().vortex.direction_name()) if gate() != null else "none",
@@ -731,6 +770,23 @@ func _cmd_gate(args: Dictionary) -> ConsoleResult:
 			return ConsoleResult.line("%s vortex opening" % option)
 		&"view":
 			return _view(g, StringName(str(args.get(&"option", ""))))
+		&"shots":
+			var option: String = str(args.get(&"option", "")) if args.get(&"option") != null else ""
+			if option.begins_with("arrive:"):
+				var arrive: String = option.trim_prefix("arrive:")
+				if arrive != "auto" and not shots.pool.ids(GateShotPool.ARRIVAL_OPEN).has(arrive) \
+						and not shots.pool.ids(GateShotPool.ARRIVAL_OUT).has(arrive):
+					return ConsoleResult.failure("arrival takes: %s; %s; auto" % [", ".join(shots.pool.ids(GateShotPool.ARRIVAL_OPEN)),
+							", ".join(shots.pool.ids(GateShotPool.ARRIVAL_OUT))])
+				shots.pinned_arrival = "" if arrive == "auto" else arrive
+				return ConsoleResult.line("arrival shot: %s" % (arrive if arrive != "auto" else "picked per jump"))
+			var names: PackedStringArray = option.split(",", false) if option != "auto" else PackedStringArray()
+			if option != "auto" and names.size() != 2:
+				return ConsoleResult.failure("gate shots <approach>,<mouth>|auto; %s" % shots.pin("?", "?"))
+			var why: String = shots.pin(names[0], names[1]) if names.size() == 2 else shots.pin("", "")
+			if not why.is_empty():
+				return ConsoleResult.failure(why)
+			return ConsoleResult.line("run-in opens with: %s" % (" then ".join(names) if names.size() == 2 else "picked per jump"))
 		&"close":
 			g.vortex.close()
 			return ConsoleResult.line("vortex closing (%s)" % g.vortex.phase_name())

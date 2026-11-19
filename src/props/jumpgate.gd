@@ -186,9 +186,10 @@ func request_arrival(place: Callable) -> void:
 
 
 ## Watches `ship` flying in: the departure vortex opens as it nears and `on_through(ship)` runs once it crosses the vortex.
-func send_departure(ship: Node3D, on_through: Callable) -> void:
+## `swallow_s` > 0: from the mouth to the ring in that many seconds, whatever its speed (the player's jump, M8-T29).
+func send_departure(ship: Node3D, on_through: Callable, swallow_s: float = 0.0) -> void:
 	cancel_departure(ship)
-	_departures.append({"body": ship, "on_through": on_through, "z": to_local(ship.global_position).z})
+	_departures.append({"body": ship, "on_through": on_through, "z": to_local(ship.global_position).z, "swallow_s": swallow_s})
 
 
 ## Stops watching `ship` (it was destroyed, or its mission changed its mind); one already in the funnel is let go there, whole.
@@ -211,11 +212,11 @@ func departing() -> int:
 
 ## Brings `body`, just placed at `arrival_transform(offset)` with its exit velocity, out of the open arrival vortex (M6-T22): it
 ## starts at the funnel's black ring, shrunk, and flies out to that place, growing to its whole size by the mouth (`always`: even
-## when too small on screen to see, as the player's own ship).
-func bring_through(body: RigidBody3D, always: bool = false) -> void:
+## when too small on screen to see, as the player's own ship; `burst_s` > 0: out in that many seconds, as the player bursts out).
+func bring_through(body: RigidBody3D, always: bool = false, burst_s: float = 0.0) -> void:
 	var transits: VortexTransits = VortexTransits.for_node(self)
 	if transits != null:
-		transits.begin_arrival(body, vortex, body.global_position, body.linear_velocity, always)
+		transits.begin_arrival(body, vortex, body.global_position, body.linear_velocity, always, burst_s)
 
 
 ## Where the `k`-th ship of an arrival comes out, World-local: the arrival point plus `offset` in the gate's frame (x right, y up,
@@ -285,7 +286,7 @@ func _step_departures() -> void:
 		var inside: bool = fit.contains(Vector2(local.x, local.y), THROUGH_RADIUS)
 		if was_z < 0.0 and local.z >= 0.0 and inside and vortex.is_passable_for(JumpVortex.Direction.DEPARTURE):
 			_departures.remove_at(i)
-			_through_mouth(ship, entry["on_through"] as Callable)
+			_through_mouth(ship, entry["on_through"] as Callable, float(entry.get("swallow_s", 0.0)))
 			continue
 		if local.z < 0.0 and local.length() <= DEPARTURE_OPEN_M:
 			if not open_vortex(JumpVortex.Direction.DEPARTURE):
@@ -296,14 +297,14 @@ func _step_departures() -> void:
 
 
 # A departing ship crossed the mouth: it flies on down the funnel to the ring (M6-T22) and is handed back from there.
-func _through_mouth(ship: Node3D, on_through: Callable) -> void:
+func _through_mouth(ship: Node3D, on_through: Callable, swallow_s: float = 0.0) -> void:
 	var through: Callable = func(body: Node3D) -> void:
 		departed += 1
 		on_through.call(body)
 		if _departures.is_empty() and vortex.passing == 0 and vortex.direction == JumpVortex.Direction.DEPARTURE:
 			vortex.close()  # its last ship is through
 	var transits: VortexTransits = VortexTransits.for_node(self)
-	if ship is RigidBody3D and transits != null and transits.begin_departure(ship as RigidBody3D, vortex, through):
+	if ship is RigidBody3D and transits != null and transits.begin_departure(ship as RigidBody3D, vortex, through, swallow_s):
 		return
 	through.call(ship)
 
