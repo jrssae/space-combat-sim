@@ -1311,23 +1311,23 @@ M10 (`docs/architecture.md` §19.18, `docs/assets-capital.md`). Its look sheet i
 `references/screenshots/M12-T19 raider strike carrier/look_sheet.png`. Console: `carrier`, `transit docked`, `state carriers`
 (all in `info.md`). Free flight's raids now come behind it with their fighters docked (`data/encounters/free_flight.json`).
 
-- [ ] **The hull (H):** `sheet raider_strike_carrier 50 lit - three_quarter` (also `top`, `side`, `front`; 500 and 5000 m): the
+- [x] **The hull (H):** `sheet raider_strike_carrier 50 lit - three_quarter` (also `top`, `side`, `front`; 500 and 5000 m): the
       show green surface, the lit slats pale but not blown out, the decks readable under a square-on sun, a Delta-V docked on
       the top outer cradle reaching out to the clamp pins. Try `set settings.texture_detail low`.
-- [ ] **Docked arrival and launch (H):** `transit docked follow`: the carrier comes out of its own point with six Delta-Vs on
+- [x] **Docked arrival and launch (H):** `transit docked follow`: the carrier comes out of its own point with six Delta-Vs on
       its cradles, and once clear of the mouth pushes them off one after another. Say if the launch reads well (2 s, 30 m).
-- [ ] **Beside arrival:** `transit carrier point follow`: two fighters come out of its point beside it, as before.
-- [ ] **Fly up to it (H):** fly round and through the rings and up to a cradle: the rings' openings are open, the arms and pads
+- [x] **Beside arrival:** `transit carrier point follow`: two fighters come out of its point beside it, as before.
+- [x] **Fly up to it (H):** fly round and through the rings and up to a cradle: the rings' openings are open, the arms and pads
       stop you, nothing invisible does. Shoot it: bolts land on the hull (a ring is hit as its sectors' boxes).
-- [ ] **Recall and jump out (H):** with a carrier standing off (`state carriers.state` says `standoff`), `carrier recall`: its
+- [x] **Recall and jump out (H):** with a carrier standing off (`state carriers.state` says `standoff`), `carrier recall`: its
       fighters fly back, are drawn in onto free cradles, and it opens a point ahead of its bow and leaves with them. Say if the
       last 60 m (the cradle drawing the fighter in over 4 s) looks right or too much like a tractor beam.
-- [ ] **Hurt, it runs (M8-T08):** `carrier hurt`: at half its hull it calls its fighters home and flees. `carrier status`
+- [x] **Hurt, it runs (M8-T08):** `carrier hurt`: at half its hull it calls its fighters home and flees. `carrier status`
       shows its drive (`recharging N s` for 240 s after its jump in) and what it does: with the drive ready it waits for its
       fighters and jumps; while it recharges it runs for the jumpgate at 60 m/s (in free flight the gate is 50 km off, so
       the drive is ready first), or with no gate away from you. `carrier charge` readies the drive at once. A fighter not
       aboard 90 s after it began to flee is left behind and fights on.
-- [ ] **Its fighters go home (H, M8-T08):** shoot a raid down to three: the rest fly back and dock, and the carrier flees
+- [x] **Its fighters go home (H, M8-T08):** shoot a raid down to three: the rest fly back and dock, and the carrier flees
       once they are aboard. Shoot one raider to under a fifth of its hull: it goes home alone. Say if 3 left, 20 % hull, 50 %
       carrier damage, the 90 s limit, the 240 s recharge and the 60 m/s run feel right (`data/capitals/capitals.json`).
 - [ ] **The escort with the carriers (H, M8-T08, AC7):** fly the civilian escort: each wave's carrier arrives, launches and
@@ -1335,11 +1335,11 @@ M10 (`docs/architecture.md` §19.18, `docs/assets-capital.md`). Its look sheet i
       says so at the end) and let another get away. The waves are 6, 8 and 10 raiders: each fights until 3 are left, and
       those fly home, which can take a minute and a half when the fight has moved 15 km from their carrier. Say if it can
       be won with ALPHA 2 and ALPHA 3 and how long it should take (the AI-flown check is in the M8 plan, T08).
-- [ ] **It hangs back:** fly at a carrier that is standing off: inside 2.5 km it turns its stern to you and backs away at up to
+- [x] **It hangs back:** fly at a carrier that is standing off: inside 2.5 km it turns its stern to you and backs away at up to
       30 m/s. Say if the stand-off, the speed and the turn rate (4 degrees a second) feel right.
-- [ ] **Its death (H):** `carrier kill` with fighters docked: the capital explosion, and each docked fighter blows up on its
+- [x] **Its death (H):** `carrier kill` with fighters docked: the capital explosion, and each docked fighter blows up on its
       cradle. Its hull points (10 000) are a first figure: say how long it should take a Starfury to kill it.
-- [ ] **A raid in free flight (H):** `encounters force raid`: the carrier arrives 6 to 12 km out, launches, stands off while its
+- [x] **A raid in free flight (H):** `encounters force raid`: the carrier arrives 6 to 12 km out, launches, stands off while its
       fighters attack, and leaves when they are all gone or after five minutes.
 
 # Play-testing approach cues and fast gate jumps (M8-T18)
@@ -1369,28 +1369,28 @@ Every sound is now written at one loudness (-20 LUFS, `tools/procgen/core/loudne
 Use headphones and the default volumes; `sfx <name>` plays any combat sound at your ship. Say for each line what is too loud,
 too quiet or right, against the engines (the bed the rest sits on).
 
-- [ ] **(H) Engines, steady thrust:** free flight, hold full mains for 5 s, then turn hard left and right and pitch while
+- [x] **(H) Engines, steady thrust:** free flight, hold full mains for 5 s, then turn hard left and right and pitch while
       holding them. The roar should stay at one level while you manoeuvre (it moves about the ship as pods trade load); before
       this change it jumped. Half throttle sits clearly lower; letting go dies away in about a quarter second.
-- [ ] **(H) Engines, RCS:** strafe (sway) and yaw at once, on and off: the jets' hiss stays at one level when more jets join in,
+- [x] **(H) Engines, RCS:** strafe (sway) and yaw at once, on and off: the jets' hiss stays at one level when more jets join in,
       and sits under the mains. Short taps fade fast, a long burn fades slower.
-- [ ] **(H) Engines, other ships:** `launch wing zeta`, fly beside them: their pods are heard, nobody's engine level pumps.
-- [ ] **(H) Your guns:** hold fire for 3 s: `pulse_fire` clearly over the engines, not harsh.
-- [ ] **(H) Enemy guns and hits:** `spawn raider attack 600` with `god on`: their `raider_fire` a touch under yours; `hit_hull`
+- [x] **(H) Engines, other ships:** `launch wing zeta`, fly beside them: their pods are heard, nobody's engine level pumps.
+- [x] **(H) Your guns:** hold fire for 3 s: `pulse_fire` clearly over the engines, not harsh.
+- [x] **(H) Enemy guns and hits:** `spawn raider attack 600` with `god on`: their `raider_fire` a touch under yours; `hit_hull`
       when they hit you, as loud as their guns.
-- [ ] **(H) Explosions:** `kill target` on a raider 200 to 500 m away, `kill all` with several around: the loudest thing in a
+- [x] **(H) Explosions:** `kill target` on a raider 200 to 500 m away, `kill all` with several around: the loudest thing in a
       fight, without the rest dropping out (the limiter) or crackling.
-- [ ] **(H) Mines:** `bench battle 50`, then `mines view 400` and `mines set_off`: a chain of blasts, a little deeper (pitched
+- [x] **(H) Mines:** `bench battle 50`, then `mines view 400` and `mines set_off`: a chain of blasts, a little deeper (pitched
       down), as loud as a ship's.
-- [ ] **(H) Station and grid:** `play station_showcase`, `grid free all`, `traffic raid 6`: light guns like a turret, the
+- [x] **(H) Station and grid:** `play station_showcase`, `grid free all`, `traffic raid 6`: light guns like a turret, the
       heavy guns deeper and louder, the interceptors quieter. `turret_fire` from the Saturns the same family.
-- [ ] **(H) Jump vortex:** `gate open arrival` and `transit arrive point fighter follow`: the opening swell is heard from far off,
+- [x] **(H) Jump vortex:** `gate open arrival` and `transit arrive point fighter follow`: the opening swell is heard from far off,
       louder than a shot, under an explosion.
-- [ ] **(H) Cockpit sounds:** select a target (`target_blip`); `damage 80` with `god off` until the hull warning beeps: the beep
+- [x] **(H) Cockpit sounds:** select a target (`target_blip`); `damage 80` with `god off` until the hull warning beeps: the beep
       cuts through a fight without startling.
-- [ ] **(H) Menus and radio:** move, accept and back in the menus: the move tick quieter than accept and back; the radio squelches
+- [x] **(H) Menus and radio:** move, accept and back in the menus: the move tick quieter than accept and back; the radio squelches
       around a wingman's line (key 2, form on me, with a wing out) under the menu sounds. Comms and UI have their own volume sliders.
-- [ ] **(H) Busy fight, no clipping:** `traffic raid 6` near the station with your wing out, fight for a minute, then
+- [x] **(H) Busy fight, no clipping:** `traffic raid 6` near the station with your wing out, fight for a minute, then
       `state audio`: `master_peak_db` never above -0.5. Listen for crackle or the whole mix ducking when several explosions hit at
       once.
 

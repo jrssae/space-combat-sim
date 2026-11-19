@@ -304,6 +304,13 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | AC19 | Escort's own system (D89): the escort runs in the new star system with no station and no nebula, the new planet and sky approved on a sheet, wingmen with no home dock; its tests pass; Epsilon's scenarios unchanged | A | **Met** (T23, 2026-11-19; Gamma Leporis, the ice world chosen from two on the sheet. How it looks is (H)) |
 | AC20 | Radial fit (D90): menus with 1 to 8 entries lay out equal slices with no empty ones (unit tests on the layout), the stick, the D-pad, the keys and the console pick the right entry for each count, unavailable entries leave the ring | A | **Met** (T24, 2026-11-19) |
 
+## Play-test results
+
+- **2026-11-19, approved by the maintainer after play-testing:** the fonts and the HUD (T21, AC17's (H) part), the audio rework
+  (T12's listening checklist), the cargo-bay flicker fix (T11), and the raider strike carrier (M10-T19, merged by T07; its M10 row
+  is now `done`). Still to play-test: the rest of AC13 (the tutorial, the escort in Gamma Leporis, docking, the gate and launch
+  shots, the radial menus, the Babylon 5 commands, the release build).
+
 ## Working rules for M8
 
 - **Tracks.** A (the tutorial: T01 to T05), B (docking and approach: T06, T18), C (the raider capitals: T07 to T09), D (carried clean-ups and smaller features: T10 to
