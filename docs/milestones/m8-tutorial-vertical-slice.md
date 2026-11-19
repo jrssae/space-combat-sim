@@ -348,6 +348,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T24 | D | Radial menus fit their entries: equal slices for however many entries, no empty spots (D90; maintainer, 2026-11-18; numbered last) | - | Opus | The radial framework's layout and picking for every input | done |
 | T25 | E | Frame-rate regression: free flight at ~15 fps (66.7 ms frames, GPU ~1 ms) found 2026-11-19 by M8-T23; find the commit and fix it (numbered last) | - | Opus | Bisect from M7's merge with `state render` on the GPU; CPU-side cost per frame | done |
 | T26 | C | Civilian escort update: a longer route and a bigger belt, a longer gap before wave two, Control's opening brief (maintainer, 2026-11-19; numbered last) | T23 | Fable | Scenario and mission data, pacing and dialog on the escort the T08 agent knows | done |
+| T27 | C | Remove the Raider Battle Wagon everywhere: not from the show, and its source image's creator would not want it shared this way (maintainer, 2026-11-19; numbered last) | - | Fable | Undo M8-T09 across code, data, assets, tests and docs; the escort's last wave back on the strike carrier | not started |
 | T17 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M8-T01 Tutorial script (discussion with the maintainer)
@@ -1126,6 +1127,19 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
     138 passed, 0 failed, 6 pending (the AI runs, behind `GUT_BALANCE`): `test_civilian_escort` 28 of 34, `test_scenario_loader`
     40, `test_belt_layout` 7, `test_asteroid_belt` 4, `test_dialog_ids` 5, `test_dialog_book` 15, the mission catalog, front
     end and mission skip files.
+
+### M8-T27 Remove the Raider Battle Wagon
+
+- **Goal (maintainer, 2026-11-19):** the Battle Wagon is not from the show, and the creator of the image it was built from would not
+  want it shared this way. Remove it everywhere: the generator, its parts and style hooks, the asset id, `ShipSpec`, weapons and
+  missile-rack code used only by it, `capitals.json` entry, the escort's last wave (back onto the strike carrier, 10 raiders),
+  free-flight raids (`wagon_share`), the `battle_wagon_raid` scenario and encounter, the New game entry, `transit wagon`, tests,
+  `info.md`, and every doc reference (design references, assets-capital, playtest, architecture, roadmap mentions such as the
+  mining-colony mission, which then uses strike carriers). Generic engine features that only it used (tube lanes in the dock
+  rows, turret `hunts`) are removed too unless something else uses them. The reference images were deleted from `references/`
+  by the controller. M8-T09's row stays `done` with a note that T27 removed it; its Done notes stay as history.
+- **Done when:** `git grep -i "battle.wagon\|battlewagon\|battle_wagon"` finds nothing outside history notes, the escort and
+  carrier tests pass, and the shared generated asset is deleted.
 
 ### M8-T17 Integration, full suite, docs and acceptance
 
