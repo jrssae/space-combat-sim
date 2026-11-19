@@ -1032,6 +1032,13 @@ static func _load_mesh(path: String) -> Mesh:
 
 
 # Zero demand at rest with no time step: right-sized level arrays for visuals before the first tick, no state change.
+## What the engines show while `clamped`: a scripted cinematic flight lights them as it moves (M8-T03's squadron forming up);
+## null for idle.
+func set_clamped_command(command: FlightCommand) -> void:
+	_clamped_output = _idle_output() if command == null or _model == null \
+			else _model.compute(command, Vector3.ZERO, Vector3.ZERO, Vector3.ZERO, _assist_on, 0.0)
+
+
 func _idle_output() -> FlightOutput:
 	if _model == null:
 		return FlightOutput.new()

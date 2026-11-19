@@ -1,0 +1,478 @@
+{
+ "about": "The player's launch filmed from outside the station (M8-T03, D81): the squadron-launch cinematic's last launch and the relaunch after a repair in the main docking bay (M8-T06) use these phases instead of cobra_launch.json's (the launch's own steps and timings stay cobra_launch.json's). Same format: a phase plays 'at_s' into the player's step; actors 'bay' (the player's door, x across the arm, y out of the drum, z aft) and 'fighter' (the player's ship).",
+ "min_shot_s": 1.0,
+ "row_ejections": 3,
+ "row_max_s": 4.0,
+ "row_wave_min": 3,
+ "phases": [
+  {
+   "phase": "door",
+   "step": "door",
+   "at_s": 0.0,
+   "variants": [
+    {
+     "id": "ext_door_watch",
+     "weight": 2.0,
+     "keys": [
+      {
+       "t": 0,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -20,
+         26,
+         -34
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         1,
+         0
+        ]
+       },
+       "fov": 50,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 3.5,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -19,
+         24,
+         -30
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         1,
+         0
+        ]
+       },
+       "fov": 48,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "ext_door_arm",
+     "weight": 1.0,
+     "keys": [
+      {
+       "t": 0,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         12,
+         14,
+         60
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         2,
+         0
+        ]
+       },
+       "fov": 45,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 3.5,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         12,
+         15,
+         54
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         2,
+         0
+        ]
+       },
+       "fov": 44,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "phase": "hold",
+   "step": "hold",
+   "at_s": 0.0,
+   "variants": [
+    {
+     "id": "ext_hold_arm",
+     "weight": 1.0,
+     "keys": [
+      {
+       "t": 0,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -30,
+         48,
+         -45
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         0,
+         25
+        ]
+       },
+       "fov": 55,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 60,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -36,
+         56,
+         -52
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         0,
+         25
+        ]
+       },
+       "fov": 55,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "phase": "drop",
+   "step": "drop",
+   "at_s": 0.0,
+   "variants": [
+    {
+     "id": "ext_drop_out",
+     "weight": 2.0,
+     "keys": [
+      {
+       "t": 0,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -14,
+         34,
+         10
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         6,
+         0
+        ]
+       },
+       "fov": 60,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 1.5,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -14,
+         34,
+         10
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         14,
+         0
+        ]
+       },
+       "fov": 62,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "ext_drop_side",
+     "weight": 1.0,
+     "keys": [
+      {
+       "t": 0,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -40,
+         14,
+         0
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         14,
+         0
+        ]
+       },
+       "fov": 55,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 1.5,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -40,
+         15,
+         0
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         20,
+         0
+        ]
+       },
+       "fov": 55,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "phase": "exit",
+   "step": "release",
+   "at_s": 0.1,
+   "variants": [
+    {
+     "id": "ext_exit_watch",
+     "weight": 1.0,
+     "keys": [
+      {
+       "t": 0,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -30,
+         40,
+         -30
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         0
+        ]
+       },
+       "fov": 45,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 1.5,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -30,
+         40,
+         -30
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         0
+        ]
+       },
+       "fov": 38,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "phase": "chase",
+   "step": "release",
+   "at_s": 1.5,
+   "variants": [
+    {
+     "id": "ext_chase_behind",
+     "weight": 1.0,
+     "keys": [
+      {
+       "t": 0,
+       "position": {
+        "actor": "fighter",
+        "offset": [
+         3,
+         -10,
+         14
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         -10
+        ]
+       },
+       "fov": 64,
+       "up": {
+        "actor": "fighter",
+        "direction": [
+         0.0,
+         0.0,
+         -1.0
+        ]
+       }
+      },
+      {
+       "t": 4,
+       "position": {
+        "actor": "fighter",
+        "offset": [
+         5,
+         -16,
+         22
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         -12
+        ]
+       },
+       "fov": 68,
+       "up": {
+        "actor": "fighter",
+        "direction": [
+         0.0,
+         0.0,
+         -1.0
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

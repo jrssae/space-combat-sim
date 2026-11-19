@@ -266,7 +266,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | # | Criterion | Kind | Done |
 |---|---|---|---|
 | AC1 | Tutorial script: T01's beats and checks written into D79 (the lines go into the dialog file in T05), approved by the maintainer | A | **Met** (T01, 2026-11-18) |
-| AC2 | Squadron launch: the cinematic plays from the hangar, the squadron launches and forms up, skipping lands in the same state (test on the end state), the player's launch hands over as M7-T08 does | A | |
+| AC2 | Squadron launch: the cinematic plays from the hangar, the squadron launches and forms up, skipping lands in the same state (test on the end state), the player's launch hands over as M7-T08 does | A || **Met** (T03, 2026-11-19; the look is (H)) |
 | AC3 | Control checks: each check passes on its actions and state in headless tests driven by injected commands, for pad and keyboard bindings; a rebind changes the hint; a missed check repeats and demonstrates, never fails | A | **Met except the flown demo** (T04, 2026-11-18; the instructor flying it is checked in T05's AC4): the demo is asked for on `MissionApi.demo_requested`; the instructor flying it is T05's |
 | AC4 | Tutorial mission: starts from the menu and runs to the debrief in a headless test driven by console commands; the tour visits its points; the raid comes through the jumpgate vortex and the station's allies and grid fight it; losing the player ends in the debrief | A | |
 | AC5 | Docking: the player docks through the main docking bay, is repaired (hull, guns, missiles) and relaunched from a Cobra bay (headless test on the state before and after); a wingman docks on order and by threshold and rejoins its wing | A | **Met** (T06, 2026-11-18; no missiles exist yet, so hull, gun charge and reaction mass are what is restored) |
@@ -313,7 +313,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 |---|---|---|---|---|---|---|
 | T01 | A | Tutorial script: beats, lines, checks and pacing (discussion with the maintainer) | Q1 to Q4 | controller | The maintainer's design call, held as a discussion, not delegated | done |
 | T02 | A | Sawtooth Cobra-bay doors (roadmap M7-4): toothed leaves that slide apart, the launch's door ripple and timing kept | - | Fable | Generator parts and an animated door the cinematic opens on | done |
-| T03 | A | The squadron-launch cinematic (D81) | T02, T01 | Opus | Scripted launches, camera shots and a skip that lands in the same state | in progress |
+| T03 | A | The squadron-launch cinematic (D81) | T02, T01 | Opus | Scripted launches, camera shots and a skip that lands in the same state | done |
 | T04 | A | Control checks: `ControlCheck`, the runner and the binding hints (D80) | T01 | Fable | Pass conditions on measured state for every control, pad and keyboard | done |
 | T05 | A | The tutorial mission: launch, checks, tour, raid, defense, debrief (D79) | T03, T04 | Fable | The mission script, dialog and pacing on M5's and M7's seams | not started |
 | T06 | B | Dock in the main docking bay to be repaired and relaunched, for the player and the AI wingmen (D82, Q7) | - | Fable | The `dock` interaction, the lane for fighters, repair and a Cobra-bay relaunch; wing orders | done |
@@ -382,6 +382,22 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 - **Files:** the cinematic's sequence on M7-T08's `LaunchSequence` and launch camera, the shots, the skip, tests (end state of
   the full run equals the skipped one, every ship formed up).
 - **Done when:** AC2.
+- **Done (2026-11-19):** `launch squadron [wing]`, `MissionApi.launch_squadron(wing, door)` (`MissionStage.launch_squadron`):
+  `SquadronLaunch` runs one launch of the squadron's ships (the player's two wingmen, then three AI flights of three) while the
+  player waits stowed in the drum; each fighter let go flies a scripted `FormUpPath` (round the drum's axis away from the spine:
+  the flip, mains, then retros, its plumes lit through `Ship.set_clamped_command`) to its slot in a formation fixed in the
+  station's frame (`data/launch/squadron_launch.json`); then the player launches alone from Alpha 3 with the exterior shots
+  (`data/launch/exterior_launch.json`) and its hand-off lets the squadron go on its slots and gives the controls back. Shots are
+  exterior only (`follows` lets a phase follow the wave's first, the second wave's first or the last fighter; actors
+  `formation` and `station`; a fallback covers the wave gap). A skip puts everyone on their slots, shuts the doors and skips the
+  player's launch: the same end state. The docking relaunch (M8-T06) now plays the exterior shots (`launch_player(..., exterior)`);
+  a skip held under the spine counts as a skip at its release. Tests (scratch copy from the index): `test_squadron_launch` 3
+  (full run on slots, doors open and shut, controls held then back, exterior shots; skip equals the full run; console and
+  MissionApi), `test_form_up_path` 4, `test_launch_shot_clearance` 3 (the new shots kept 2 m off the walls), `test_launch_bay` 16,
+  `test_docking` 12 (relaunch filmed outside), `test_flights` 4, `test_station_traffic` 7, `test_station_pools` 6,
+  `test_launch_cut` 7, `test_launch_sequence` 25, `test_cinematic_shot` 17, `test_console_execute_all` 4. GPU frames in
+  `references/screenshots/M8-T03 squadron launch/` (forward_plus, 145 fps, 226 draw calls); the window stopped presenting new
+  frames in that session (a control run without the change froze too), so only two distinct frames: the look stays (H).
 
 ### M8-T04 Control checks
 

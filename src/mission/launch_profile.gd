@@ -15,6 +15,9 @@ extends RefCounted
 const DEFAULT_PATH: String = "res://data/launch/cobra_launch.json"
 const STEPS: Array[StringName] = [&"door", &"rotate", &"hold", &"drop", &"release"]
 const MIN_SHOT_FLOOR_S: float = 1.0
+## Whose steps a phase waits for (M8-T03): `lead` the launch's lead (the player in its own launch, else the first fighter),
+## `wave2` the second wave's first, `last` the launch's last fighter.
+const FOLLOWS: PackedStringArray = ["lead", "wave2", "last"]
 
 ## Seconds for a door's leaves to slide apart (how far is the station's: each bay's `leaves` hardpoints).
 var door_open_s: float = 2.0
@@ -54,7 +57,7 @@ var row_max_s: float = 4.0
 ## A launch with at least this many fighters in its first wave films the drop with a row shot and leaves the exit out.
 var row_wave_min: int = 3
 ## The camera's phases, in order: each `{phase: String, step: StringName, at_s, optional (0 to 1: the chance it is left out),
-## variants}`; each variant `{id: StringName, shot: CinematicShot, weight, fill, row: bool, subject: "fighter" or "row"}`: a row
+## follows (`FOLLOWS`), variants}`; each variant `{id: StringName, shot: CinematicShot, weight, fill, row: bool, subject: "fighter" or "row"}`: a row
 ## variant films the door row (subject `row`: the wave's doors in frame) and is held for several ejections. `fill` (empty for none) is a light lit for the
 ## shot's length: `actor`, `offset` (Vector3 in its frame), `energy`, `range_m`, `color`.
 var phases: Array[Dictionary] = []
@@ -232,4 +235,8 @@ static func _phase(raw: Variant, where: String) -> Variant:
 			return "%s.subject must be fighter or row" % vw
 		variants.append({"id": StringName((v as Dictionary)["id"]), "shot": shot["shot"], "weight": float(weight), "fill": fill,
 				"row": row, "subject": subject})
-	return {"phase": str(e.get("phase", step)), "step": step, "at_s": float(at), "optional": float(optional), "variants": variants}
+	var follows: String = str(e.get("follows", "lead"))
+	if not FOLLOWS.has(follows):
+		return "%s.follows must be one of %s" % [where, FOLLOWS]
+	return {"phase": str(e.get("phase", step)), "step": step, "at_s": float(at), "optional": float(optional), "variants": variants,
+			"follows": follows}

@@ -226,6 +226,7 @@ func test_the_player_docks_is_repaired_and_launches_again_from_a_cobra_bay() -> 
 	assert_true(ship.visible, "back in sight, on the rack")
 	assert_false(ship.inside_station)
 	assert_true(main.launches.locks_controls(), "the launch has it now")
+	assert_true(main.launches.filmed_exterior(), "the relaunch is filmed from outside the station (M8-T03)")
 	ok = await _until(func() -> bool: return not relaunched.is_empty(), 30.0)
 	assert_true(ok, "launched and handed over")
 	await _ticks(2)
@@ -245,6 +246,8 @@ func test_the_player_docks_is_repaired_and_launches_again_from_a_cobra_bay() -> 
 		assert_has(shots_seen, id, "the docking's %s shot played" % id)
 	assert_does_not_have(shots_seen, "dock_wait", "no repair shot: the docking runs straight into the launch")
 	assert_gt(shots_seen.size(), 2, "then the launch's own shots")
+	var outside: Array = Array(shots_seen).filter(func(id: String) -> bool: return id.begins_with("ext_"))
+	assert_false(outside.is_empty(), "the exterior launch shots played after the dock (%s)" % ", ".join(shots_seen))
 
 
 func test_a_ship_coming_in_fast_is_slowed_and_still_docks() -> void:

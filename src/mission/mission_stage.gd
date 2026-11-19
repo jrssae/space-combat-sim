@@ -385,6 +385,14 @@ func launching() -> bool:
 	return launches != null and is_instance_valid(launches) and launches.locks_controls()
 
 
+## Starts the squadron-launch cinematic from wing `wing`'s arm, the player last from door `door` (M8-T03; empty and 0 for the
+## data's); "" or why not.
+func launch_squadron(wing: String = "", door: int = 0) -> String:
+	if launches == null or not is_instance_valid(launches):
+		return "no launch director in this scene"
+	return launches.launch_squadron(wing, door)
+
+
 ## Jumps the player's launch to the hand-off (a skipped step).
 func skip_launch() -> void:
 	if launches != null and is_instance_valid(launches):

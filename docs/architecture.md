@@ -5784,6 +5784,10 @@ src/mission/launch_cut.gd        LaunchCut (pure): one shot variant a phase per 
 src/mission/launch_shot_sequencer.gd LaunchShotSequencer (pure): when the cut cuts: 1 s least hold, row shots over three ejections
 src/mission/launch_director.gd   LaunchDirector (Main's child, priority -45): carries the fighters, hands them over, the camera, console `launch`
 src/world/station_door_leaves.gd StationDoorLeaves: the doors' toothed leaf props slid apart across the arm (M8-T02)
+src/mission/squadron_launch.gd   SquadronLaunch: the squadron-launch cinematic's stages, slots, skip and hand-off (M8-T03)
+src/mission/form_up_path.gd      FormUpPath (pure): a launched Starfury's scripted way to its slot: out, flip, mains, retros
+data/launch/squadron_launch.json the squadron cinematic: flights, the player's door, the formation's place, its exterior shots
+data/launch/exterior_launch.json the player's launch filmed from outside (the cinematic's last launch, the relaunch after a repair)
 data/launch/cobra_launch.json    door 2 s, clamp turn 0.8 s into it for 1.4 s, ejection 0.3 s after the door is open and 0.75 s long,
                                  ripple 0.25 to 0.5 s, wave gap 10 s, second row 6 s
 data/scenarios/station_launch.json  the player on Alpha 3 with three wingmen
@@ -5862,8 +5866,17 @@ data/scenarios/station_launch.json  the player on Alpha 3 with three wingmen
   `ally_starfury` profile, the station's velocity (`WorldFrame.anchored_velocity`, so a wing launched while the console moved the
   frame still leaves the drum right, M7-T71) and a wing (§20.4, "Station wings"); its ripple is seeded from the wing and the sim
   time. `launch wing all` launches the four (`LaunchDirector.launch_all_wings`, one line a wing; M7-T58).
-- **For M8.** A squadron launch is one `LaunchSequence` per wing (or several in turn) with the same profile, its cuts drawn from the
-  same pools.
+- **The squadron launch (M8-T03, D81).** `LaunchDirector.launch_squadron` (console `launch squadron [wing]`, `await
+  m.launch_squadron(wing, door)`) runs one `LaunchSequence` of the squadron's ships (the player's own wingmen first, then three AI
+  flights of three from `launch_wing(..., as_flights)`) while the player waits stowed inside the drum; each fighter let go is held
+  out of the flight model on a `FormUpPath` (cylindrical about the drum's axis, so it never dips inside it, and round the side away
+  from the spine) to its slot in a formation fixed in the station's frame (`form_up`: 650 m out at 270 degrees, level with the arm;
+  the AI flights where their pilots keep them, M8-T19, the player's flight on the next flight's place). Its engines show the burn
+  (`Ship.set_clamped_command`). When that launch is over (doors shut) the player launches alone, filmed by `exterior_launch.json`;
+  its hand-off lets everyone go at rest on their slots. Camera phases may follow another fighter than the lead (`follows`: lead,
+  wave2, last) and use the actors `formation` and `station`; a fallback shot covers the gaps. The skip puts every squadron ship on
+  its slot, ends the launch with its doors shut and skips the player's launch, so it lands in the full run's end state. A skip
+  held under the spine still counts as a skip at its release (no burn).
 
 ### 20.3 The defense grid (D75, T07)
 

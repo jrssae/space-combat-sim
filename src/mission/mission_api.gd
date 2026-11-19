@@ -428,6 +428,30 @@ func launch_from(wing: String, door: int) -> void:
 		await _seq.wake
 
 
+## Plays the squadron-launch cinematic (M8-T03, D81) and waits for the player's hand-off: the squadron's flights launch from
+## wing `wing`'s arm (empty: the player's wing, else alpha), flip and form up filmed from outside, then the player launches alone
+## from door `door` (0: the data's). In a skipped step it lands in the end state at once and returns.
+func launch_squadron(wing: String = "", door: int = 0) -> void:
+	if has_ended():
+		return
+	journal.append("launch_squadron %s %d" % [wing, door])
+	if stage == null:
+		return
+	var why: String = stage.launch_squadron(wing, door)
+	if not why.is_empty():
+		push_error("Mission: launch_squadron: %s" % why)
+		return
+	if _seq.skipping:
+		stage.skip_launch()
+		return
+	while not _seq.stopped and not _seq.skipping and stage.launching():
+		await _seq.wake
+	if _seq.skipping:
+		stage.skip_launch()
+	while _seq.stopped:
+		await _seq.wake
+
+
 ## Sends `count` raiders at the station (M7-T10): they come out of the scene's jumpgate when it has one and go for the grid's
 ## mounts and whoever fires at them; `scramble` launches the station's wings named in `data/station/traffic.json` against them.
 func raid_station(count: int, scramble: bool = true) -> void:

@@ -6,7 +6,7 @@ extends Node
 ##   ship round the station (`DockKeepOut`) to the lane and along it through the mouth and the inner doors, slowing it from
 ##   whatever speed it had. Behind the doors the ship leaves play (hidden, sheltered, touching nothing), `DockRepair`'s clock runs
 ##   (an AI wingman's, a fixed time; the player does not wait), the hull, the guns' charge and the tank are restored, and it
-##   launches from a Cobra bay through `LaunchDirector` (its camera, its skip, its hand-off). The cinematic's skip jumps a
+##   launches from a Cobra bay through `LaunchDirector` (its exterior shots, M8-T03; its skip, its hand-off). The cinematic's skip jumps a
 ##   stage ahead: to the bay and its launch, then to the hand-off.
 ## - **Wingmen** of the player's wing dock on the wing order (key 6, the comms menu's DOCK) and by themselves below the hull
 ##   threshold. A docking wingman flies a docking pilot (`assets/ai/docking.tres`) on routes the native brains fly: to a
@@ -591,7 +591,7 @@ func _relaunch(entry: Dictionary) -> bool:
 		_bring_back(entry)
 		if not visit.is_player:
 			c.driver.in_passage = false
-		var why: String = launches.launch_player(wing, relaunch_door, false) if visit.is_player \
+		var why: String = launches.launch_player(wing, relaunch_door, false, true) if visit.is_player \
 				else launches.launch_ships(wing, relaunch_door, [c] as Array[Combatant])
 		if why.is_empty():
 			return true

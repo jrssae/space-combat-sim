@@ -8,7 +8,7 @@ extends RefCounted
 ##
 ## Seeded, never a shared generator: every draw is a hash of the launch's seed, the phase and the draw, so a pinned seed gives the
 ## same cut. The bags are this object's own: keep one per scenario run (`LaunchDirector` does), so the variety runs across launches.
-## M8's squadron launch draws from the same pools.
+## M8's squadron launch and the exterior launch draw from their own profiles' pools the same way.
 
 var profile: LaunchProfile = null
 ## Per phase name: the variant indices still in the bag, and the one played last (-1 none).
@@ -23,7 +23,7 @@ func _init(p_profile: LaunchProfile) -> void:
 
 
 ## One launch's cut with `seed_value` for a first wave of `wave_size` fighters: the chosen shots in phase order, each
-## `{phase, variant, shot, step, at_s, fill, row, subject}`; a phase left out is missing.
+## `{phase, variant, shot, step, at_s, fill, row, subject, follows}`; a phase left out is missing.
 func pick(seed_value: int, wave_size: int = 1) -> Array[Dictionary]:
 	var wave: bool = wave_size >= profile.row_wave_min
 	var out: Array[Dictionary] = []
@@ -40,7 +40,7 @@ func pick(seed_value: int, wave_size: int = 1) -> Array[Dictionary]:
 		var i: int = _draw(seed_value, name, variants, rows_only)
 		var v: Dictionary = variants[i]
 		out.append({"phase": name, "variant": v["id"], "shot": v["shot"], "step": phase["step"], "at_s": float(phase["at_s"]),
-				"fill": v["fill"], "row": bool(v["row"]), "subject": v["subject"]})
+				"fill": v["fill"], "row": bool(v["row"]), "subject": v["subject"], "follows": phase.get("follows", "lead")})
 		record.append({"phase": name, "variant": String(v["id"])})
 	history.append(record)
 	return out
