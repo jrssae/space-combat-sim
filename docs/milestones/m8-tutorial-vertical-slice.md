@@ -349,6 +349,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T25 | E | Frame-rate regression: free flight at ~15 fps (66.7 ms frames, GPU ~1 ms) found 2026-11-19 by M8-T23; find the commit and fix it (numbered last) | - | Opus | Bisect from M7's merge with `state render` on the GPU; CPU-side cost per frame | done |
 | T26 | C | Civilian escort update: a longer route and a bigger belt, a longer gap before wave two, Control's opening brief (maintainer, 2026-11-19; numbered last) | T23 | Fable | Scenario and mission data, pacing and dialog on the escort the T08 agent knows | done |
 | T27 | C | Remove the Raider Battle Wagon everywhere: not from the show, and its source image's creator would not want it shared this way (maintainer, 2026-11-19; numbered last) | - | Fable | Undo M8-T09 across code, data, assets, tests and docs; the escort's last wave back on the strike carrier | not started |
+| T28 | D | Free flight's encounters split into three switches: civilian traffic, allied patrols, enemy encounters (maintainer, 2026-11-19; numbered last) | - | Sonnet | Settings, the Free flight page and the encounter director's weights | not started |
 | T17 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M8-T01 Tutorial script (discussion with the maintainer)
@@ -1140,6 +1141,17 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   by the controller. M8-T09's row stays `done` with a note that T27 removed it; its Done notes stay as history.
 - **Done when:** `git grep -i "battle.wagon\|battlewagon\|battle_wagon"` finds nothing outside history notes, the escort and
   carrier tests pass, and the shared generated asset is deleted.
+
+### M8-T28 Free flight: three encounter switches
+
+- **Goal (maintainer, 2026-11-19):** free flight's single "Encounters on/off" (`Settings.encounters`, `FreeFlightSelect`, the
+  `EncounterDirector`'s `raid`/`patrol`/`traffic` weights in `data/encounters/free_flight.json`) becomes **three switches**:
+  **civilian traffic** (neutral ships, including Babylon 5's docking queues and gate runs), **allied patrols**, and **enemy
+  encounters** (raids, with their carriers). Each is a `SettingsSchema` entry, on the Free flight page, saved with the settings;
+  any combination works (all off = an empty sky); an old saved `encounters` value maps onto all three. Console: the existing
+  encounter commands take the three; `info.md`.
+- **Done when:** tests for each switch alone and in combination (the director never spawns a switched-off kind; station traffic
+  follows civilian traffic), the page with pad-only navigation, the old setting migrated.
 
 ### M8-T17 Integration, full suite, docs and acceptance
 
