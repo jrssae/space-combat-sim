@@ -1241,8 +1241,8 @@ New game, then **Tutorial: qualification flight** (first in the list). Console: 
 launch, form_up, flight_checks, camera_lights, x_button, course, combat, wing_orders, tour, jumpgate, raid, defense, debrief),
 `checks pass`, `career`, `retry checkpoint` from a lost debrief. Nothing below can be judged headless.
 
-- [ ] **(H) The launch:** two flights launch (yours and ALPHA 4 to 6), then you; holding X skips it. Say if two flights
-      look thin: the rest of the wing (ALPHA 7 to 12) is kept for the raid's scramble.
+- [ ] **(H) The launch:** two ships (M8-T33): the instructor launches, then you, filmed from outside; holding X skips it.
+      Nobody else flies until the alarm.
 - [ ] **(H) Form up and the box:** the instructor (callsign SEXTANT, ship `INSTRUCTOR`) waits off the Cobra arm, leads at
       your pace to the box 8 km out. Say if the route, its speed (150 m/s) or the distance feel wrong.
 - [ ] **(H) The checks:** each hint reads right and passes on the move; a missed check repeats after 20 s, then the
@@ -1250,15 +1250,20 @@ launch, form_up, flight_checks, camera_lights, x_button, course, combat, wing_or
 - [ ] **(H) The buoy course:** five buoys (8.8 km of legs), a pass inside 200 m each, the clock from NAV 1. Fly it and
       report your time: `instructor_time_s` in `data/missions/tutorial_rules.json` is a guess (75 s) until you have.
       The four remarks: fast, on par, slow, and one with a buoy shot or rammed.
-- [ ] **(H) The drones:** three unarmed raider hulls on a slow track, then two more for ATTACK MY TARGET. Nobody but you
-      and your ordered flight shoots them.
+- [ ] **(H) The drones:** three unarmed raider hulls on a slow track 1.7 km beyond the last buoy. Nobody but you shoots them.
+- [ ] **(H) Wing orders on the instructor:** the instructor says it is your wingman for the drill; FORM ON ME brings it to
+      your wing, ATTACK MY TARGET sends it at the drone you selected (two more drones come for this), COVER ME ends the
+      drill and it says it instructs again.
 - [ ] **(H) Skip training:** the pause menu's second entry during the training steps goes straight to the tour. A skipped
       course counts as a par time: the instructor gives the par remark as the tour step begins, and the debrief assigns
       you to the squadron (never squadron leader at once).
 - [ ] **(H) The tour:** all stop first (the brake check), then five stops with a line each: Cobra bays, docking bay, command
       section, grid, heavy cannons. A or Start cuts a stop.
 - [ ] **(H) The gate:** 50 km out behind the instructor; the approach cue calls the brake; hold X inside the reach.
-- [ ] **(H) The raid:** the alarm as you come out; six raiders out of the vortex; the wing scrambles at their first hit; the
+- [ ] **(H) The squadron at the alarm:** ALPHA 2 and ALPHA 3 call their launch and four more follow (five Starfuries), with
+      no camera cut: you keep flying. They launch at the station, 50 km away; say how long you fight with only the
+      instructor (who shoots now) before they reach you, and whether that is too long.
+- [ ] **(H) The raid:** the alarm as you come out; six raiders out of the vortex; the rest of the wing scrambles at their first hit; the
       carrier jumps in 12 km off the station 45 s later and launches eight. Say if the 50 km back to the station is too far,
       and whether the traffic's lines for the two bays show.
 - [ ] **(H) Docking:** below half hull Control offers the bay as a comms line; after the repair Control says so.

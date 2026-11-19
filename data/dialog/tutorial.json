@@ -4,13 +4,13 @@
    "id": "control_launch_clear",
    "speaker": "control",
    "voice": "tu_control_launch_clear",
-   "text": "Alpha squadron, Babylon Control. Bay doors are open. You are clear to launch in sequence."
+   "text": "Alpha One, Babylon Control. Bay doors are open. Your check pilot launches first, then you."
   },
   {
    "id": "instructor_welcome",
    "speaker": "instructor",
    "voice": "tu_instructor_welcome",
-   "text": "Alpha One, {instructor}. I am your check pilot today. Launch, then form up on me off the Cobra bays."
+   "text": "Alpha One, {instructor}. I am your check pilot today. Two ships, you and me. Form up on me off the Cobra bays."
   },
   {
    "id": "instructor_form_up",
@@ -268,31 +268,31 @@
    "id": "instructor_wing_intro",
    "speaker": "instructor",
    "voice": "tu_instructor_wing_intro",
-   "text": "Wing orders. You command your flight: Alpha Two and Alpha Three. Orders are on the comms menu."
+   "text": "Wing orders. A squadron leader commands a flight of two wingmen. For this drill I am your wingman. Orders are on the comms menu."
   },
   {
    "id": "check_wing_form",
    "speaker": "instructor",
    "voice": "tu_check_wing_form",
-   "text": "Order your flight to form on you."
+   "text": "Order me to form on you."
   },
   {
    "id": "check_wing_attack",
    "speaker": "instructor",
    "voice": "tu_check_wing_attack",
-   "text": "Two more drones. Target one and order your flight to attack your target."
+   "text": "Two more drones. Target one and order me to attack your target."
   },
   {
    "id": "check_wing_cover",
    "speaker": "instructor",
    "voice": "tu_check_wing_cover",
-   "text": "Order your flight to cover you. They will take whoever attacks you."
+   "text": "Order me to cover you. I take whoever attacks you."
   },
   {
    "id": "instructor_wing_done",
    "speaker": "instructor",
    "voice": "tu_instructor_wing_done",
-   "text": "That is the training block. Now the station. You should know what you defend."
+   "text": "Drill complete. I am your instructor again. Now the station. You should know what you defend."
   },
   {
    "id": "instructor_tour_intro",
@@ -364,19 +364,31 @@
    "id": "instructor_raid",
    "speaker": "instructor",
    "voice": "tu_instructor_raid",
-   "text": "Check is suspended, Alpha One. This is real. Your flight is with you. Weapons free."
+   "text": "Check is suspended, Alpha One. This is real. I am on your wing. Weapons free."
   },
   {
    "id": "control_raid_orders",
    "speaker": "control",
    "voice": "tu_control_raid_orders",
-   "text": "Alpha One, Control. Engage the raiders. Protect the transports on the gate run."
+   "text": "Alpha One, Control. Alpha squadron is launching. Alpha Two and Alpha Three are your wingmen. Hold the raiders off the gate run until they reach you."
+  },
+  {
+   "id": "alpha_2_launch",
+   "speaker": "alpha_2",
+   "voice": "tu_alpha_2_launch",
+   "text": "Alpha Two, launching. On our way to you, Lead."
+  },
+  {
+   "id": "alpha_3_launch",
+   "speaker": "alpha_3",
+   "voice": "tu_alpha_3_launch",
+   "text": "Alpha Three, clear of the bay. Forming on Alpha Two."
   },
   {
    "id": "control_wing_launch",
    "speaker": "control",
    "voice": "tu_control_wing_launch",
-   "text": "Raiders are firing. Alpha wing, scramble. All remaining flights launch."
+   "text": "Raiders are firing. Alpha wing, all remaining flights launch."
   },
   {
    "id": "control_carrier",

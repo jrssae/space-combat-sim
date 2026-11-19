@@ -1,6 +1,6 @@
 {
  "scenario_id": "tutorial",
- "description": "Qualification flight at Babylon 5: launch with the squadron, fly the control checks and the buoy course with your instructor, tour the station and use the jumpgate.",
+ "description": "Qualification flight at Babylon 5: launch behind your instructor, fly the control checks and the buoy course, tour the station and use the jumpgate.",
  "system_id": "local",
  "anchor": {
   "place": "babylon5",
@@ -92,7 +92,7 @@
   }
  ],
  "pools": {
-  "starfury_ally": 3,
+  "starfury_ally": 1,
   "raider_fighter": 20,
   "skylark_transport": 3,
   "narn_transport": 2,
@@ -132,46 +132,18 @@
    "order": "form_hold",
    "formation": "finger_four",
    "flight": true,
-   "members": [
-    {
-     "type": "starfury_ally",
-     "name": "ALPHA 2",
-     "anchor": "player",
-     "offset": [
-      -60,
-      0,
-      40
-     ],
-     "behaviour": {
-      "type": "ai",
-      "profile": "ally_starfury"
-     }
-    },
-    {
-     "type": "starfury_ally",
-     "name": "ALPHA 3",
-     "anchor": "player",
-     "offset": [
-      60,
-      0,
-      40
-     ],
-     "behaviour": {
-      "type": "ai",
-      "profile": "ally_starfury"
-     }
-    }
-   ]
+   "members": []
   }
  ],
  "mission": {
   "title": "Tutorial: qualification flight",
   "order": 0,
-  "briefing": "You have transferred to Babylon 5 from your last ship. Today you fly the check that qualifies you to lead a Starfury squadron.\n\nLaunch with the squadron from the Cobra bays and form up on your instructor. You will fly the control checks, a timed buoy course, gunnery on unarmed drones and wing orders, then tour the station and take the jumpgate.\n\nNo check can be failed. Fly the course well: your time goes on your record.",
+  "briefing": "You have transferred to Babylon 5 from your last ship. Today you fly the check that qualifies you to lead a Starfury squadron.\n\nYou and your instructor launch from the Cobra bays, two ships. You will fly the control checks, a timed buoy course, gunnery on unarmed drones and wing orders, then tour the station and take the jumpgate.\n\nNo check can be failed. Fly the course well: your time goes on your record.",
   "script": "res://data/missions/tutorial.gd",
   "dialog": "res://data/dialog/tutorial.json",
   "closing_lines": {
-   "player destroyed": "control_leader_down", "success": "control_welcome"
+   "player destroyed": "control_leader_down",
+   "success": "control_welcome"
   },
   "objectives": [
    {

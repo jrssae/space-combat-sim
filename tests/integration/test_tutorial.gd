@@ -1,6 +1,7 @@
 extends TestSteps
 ## The tutorial mission (M8 D79, AC4): the front end offers it first and starts it; console commands drive it from the menu
-## to the debrief on a fresh seed; the tour visits its stops; the raid comes out of the jumpgate's vortex and then off the
+## to the debrief on a fresh seed; only the instructor and the player fly until the alarm (M8-T33): the two launch one after
+## the other, and the instructor takes the wing orders as the player's wingman; the tour visits its stops; the raid comes out of the jumpgate's vortex and then off the
 ## strike carrier, and the rest of the wing scrambles when the raiders first hit something; a pilot lost before the alarm
 ## gets the full restart only, one lost after it also the restart from the raid's start, which keeps the course result; the
 ## buoy course gives its four remarks; the qualification makes a squadron leader or a squadron pilot, saved in the career.
@@ -86,6 +87,23 @@ func _ship(ship_name: String) -> Combatant:
 
 func _grading() -> TutorialRules:
 	return TutorialRules.load_file()["rules"]
+
+
+# The names of the AI Starfuries in play, sorted.
+func _starfuries() -> Array:
+	var names: Array = main.ships.alive(ShipPool.ALLY_TYPE).map(func(c: Combatant) -> String: return c.display_name)
+	names.sort()
+	return names
+
+
+func _check_open(id: StringName) -> bool:
+	return _api().checks.is_active() and _api().checks.current != null and _api().checks.current.id == id
+
+
+# Waits until check `id` is open and has taken its first look: an order given in its first tick would be its baseline.
+func _await_check(id: StringName, max_ticks: int) -> void:
+	await _wait_for("the %s check" % id, func() -> bool: return _check_open(id), max_ticks)
+	await _ticks(5)
 
 
 func _debrief() -> DebriefScreen:
@@ -183,8 +201,9 @@ func test_console_commands_take_it_from_the_menu_to_the_debrief_on_a_fresh_seed(
 	assert_true(main.launches.locks_controls(), "the squadron launch runs")
 	assert_true(_run("mission goto form_up").ok)
 	await _wait_for("the hand-over", func() -> bool: return _api().step_name() == &"form_up" and not main.controls_locked(), 600)
-	assert_eq(main.wings.flights_of("ALPHA").size(), 2, "the player's flight and one more; the rest scramble in the raid")
-	assert_eq(main.wings.player_wing().members().size(), 2, "the player commands a flight of three")
+	assert_eq(_starfuries(), ["INSTRUCTOR"], "two ships until the alarm: the instructor and the player")
+	assert_eq(main.wings.player_wing().members().size(), 0, "the instructor left the flight it launched in")
+	assert_true(_journal_has("launch_squadron alpha 0"), "the two-ship launch: the instructor, then the player")
 	assert_true(main.traffic.auto, "the station's run of traffic is on")
 	assert_eq(_api().objective_state(&"qualify"), ObjectiveBook.ACTIVE)
 	assert_eq(_api().objective_state(&"defend"), ObjectiveBook.HIDDEN, "nothing shows the raid coming")
@@ -231,6 +250,39 @@ func test_the_instructor_leads_to_the_box_flies_a_demo_on_request_and_the_drones
 	for drone: String in Script_.GUNNERY_DRONES:
 		assert_true(_api().alive(drone), "%s is left for the pilot: the grid and the flight hold their fire out here" % drone)
 		assert_almost_eq(_ship(drone).damageable.hull.fraction(), 1.0, 0.001)
+
+
+func test_the_wing_orders_drill_runs_on_the_instructor_who_obeys_and_then_instructs_again() -> void:
+	await _fly()
+	await _goto(&"wing_orders")
+	var instructor: Combatant = _ship("INSTRUCTOR")
+	var flight: Wing = main.wings.player_wing()
+	await _await_check(&"wing_form", 1200)
+	assert_eq(_starfuries(), ["INSTRUCTOR"], "still two ships")
+	assert_eq(flight.members(), [instructor] as Array[Combatant], "the instructor is the player's wingman for the drill")
+	var wingman := instructor.driver.brain as AiPilot
+	assert_true(wingman.profile.fires, "under a pilot that fights")
+	assert_true(bool(main.wings.give_order(AiContext.Order.FORM_ON_ME)["ok"]))
+	await _await_check(&"wing_attack", 300)
+	assert_eq(wingman.context.order, AiContext.Order.FORM_ON_ME, "the instructor took the order")
+	assert_true(_api().alive("DRONE 5"), "two drones for the attack order")
+	assert_true(main.ship.targeting.select_by_name("DRONE 4"))
+	var drone_id: int = main.ship.targeting.selected_id()
+	assert_true(bool(main.wings.give_order(AiContext.Order.ATTACK_MY_TARGET)["ok"]))
+	await _ticks(90)
+	assert_eq(wingman.context.leader_target_id, drone_id, "the instructor attacks the player's target")
+	await _wait_for("the instructor's kill", func() -> bool: return not _api().alive("DRONE 4"), 9000)
+	_ship("DRONE 5").damageable.kill()
+	await _await_check(&"wing_cover", 600)
+	assert_true(bool(main.wings.give_order(AiContext.Order.COVER_ME)["ok"]))
+	assert_eq(wingman.context.order, AiContext.Order.COVER_ME, "the instructor took the order")
+	await _wait_for("the drill's end", func() -> bool: return _journal_has("pilot INSTRUCTOR own"), 300)
+	assert_eq(flight.members().size(), 0, "out of the flight: its two slots wait for the wingmen")
+	assert_false((instructor.driver.brain as AiPilot).profile.fires, "the instructor's own pilot again")
+	await _wait_for("the instructor's word that the drill is over", func() -> bool: return _api().dialog.current != null \
+			and _api().dialog.current.id == &"instructor_wing_done", 900)
+	for id: StringName in [&"check_wing_form", &"check_wing_attack", &"check_wing_cover"]:
+		assert_string_contains(_api().dialog_book.line(id).text, " me ", "%s is addressed to the instructor" % id)
 
 
 func test_the_pause_menu_skips_the_training_block_to_the_tour() -> void:
@@ -302,21 +354,34 @@ func test_the_raid_comes_out_of_the_gate_then_off_the_carrier_and_the_wing_scram
 	await _goto(&"raid")
 	var gate: Jumpgate = main.gates.gate()
 	assert_lt(main.ship.global_position.distance_to(gate.global_position), 9000.0, "the player came out of the gate")
-	for wingman: String in ["ALPHA 2", "ALPHA 3", "INSTRUCTOR"]:
-		assert_lt(_ship(wingman).ship.global_position.distance_to(main.ship.global_position), 2000.0, wingman)
+	assert_lt(_ship("INSTRUCTOR").ship.global_position.distance_to(main.ship.global_position), 2000.0, "the instructor came too")
+	assert_true((_ship("INSTRUCTOR").driver.brain as AiPilot).profile.fires, "and fights now")
+	assert_eq(_starfuries(), ["INSTRUCTOR"], "two ships until the alarm")
+	assert_true(_journal_has("scramble alpha 5"), "the squadron launch is asked for as the alarm sounds")
+	assert_false(main.controls_locked(), "in play: the player keeps the controls")
 	assert_eq(_api().checkpoint_data["step"], &"raid", "the checkpoint is taken as the alarm sounds")
 	assert_eq(_api().dialog.current.id, &"control_alarm")
 	assert_eq(_api().objective_state(&"defend"), ObjectiveBook.ACTIVE)
 	await _wait_for("six raiders through the vortex", func() -> bool: return _api().alive("RAIDER 6"), 3000)
+	await _wait_for("the squadron's launch", func() -> bool: return _starfuries().size() == 6, 3600)
+	assert_eq(_starfuries(), ["ALPHA 2", "ALPHA 3", "ALPHA 4", "ALPHA 5", "ALPHA 6", "INSTRUCTOR"])
+	var own: Array = main.wings.player_wing().members().map(func(c: Combatant) -> String: return c.display_name)
+	assert_eq(own, ["ALPHA 2", "ALPHA 3"], "the player's two wingmen take its flight's slots")
+	assert_eq(main.wings.flights_of("ALPHA").size(), 2, "and a second flight")
+	assert_false(main.controls_locked(), "the launch ran in play: the player kept the controls")
+	assert_ne(main.camera_rig.mode, CameraRig.Mode.CINEMATIC, "and the view")
+	assert_eq(_api().step_name(), &"raid")
+	assert_eq(_api().dialog_book.line(&"alpha_2_launch").speaker, &"alpha_2", "the wingmen's first lines come at the alarm")
 	for i: int in 6:
 		var raider: Combatant = _ship("RAIDER %d" % (i + 1))
 		assert_lt(raider.ship.global_position.distance_to(gate.global_position), 6000.0, "RAIDER %d came out of the gate" % (i + 1))
 	assert_false(_api().alive("RAIDER 7"), "the carrier's group is not here yet")
-	assert_false(_journal_has("scramble"), "nobody has fired yet")
+	assert_false(_journal_has("scramble alpha 12"), "nobody has fired yet")
 	main.mission.stage.facts._on_hit(_raider_bolt())
 	await _ticks(3)
-	assert_true(_journal_has("scramble alpha"), "the rest of the wing launches when the raiders first hit something")
-	await _wait_for("the rest of the wing", func() -> bool: return main.wings.flights_of("ALPHA").size() == 4, 1800)
+	assert_true(_journal_has("scramble alpha 12"), "the rest of the wing launches when the raiders first hit something")
+	await _wait_for("the rest of the wing", func() -> bool: return main.wings.flights_of("ALPHA").size() == 4, 3600)
+	await _wait_for("the whole wing", func() -> bool: return _starfuries().size() == 12, 3600)
 	assert_eq(_api().dialog_book.line(&"control_wing_launch").speaker, &"control")
 	assert_true(_run("mission skip").ok)
 	await _wait_for("the carrier's step", func() -> bool: return _api().step_name() == &"defense" and not _api().is_skipping(), 600)
@@ -375,7 +440,8 @@ func test_a_pilot_lost_after_the_alarm_may_restart_from_the_raid_with_the_course
 	await _wait_for("the controls", func() -> bool: return not main.controls_locked(), 900)
 	assert_lt(main.ship.global_position.distance_to(main.gates.gate().global_position), 9000.0)
 	assert_true(main.traffic.auto)
-	assert_eq(main.wings.player_wing().members().size(), 2, "the flight is whole again")
+	assert_true(_journal_has("scramble alpha 5"), "the squadron launches again at the alarm")
+	await _wait_for("the wingmen", func() -> bool: return main.wings.player_wing().members().size() == 2, 3600)
 	main.combatant.damageable.kill()
 	await _wait_for("the debrief again", func() -> bool: return _debrief() != null, 2400)
 	assert_true(_run("retry").ok, "and the whole mission from the debrief")

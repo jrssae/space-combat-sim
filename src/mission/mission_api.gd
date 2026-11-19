@@ -37,6 +37,8 @@ extends RefCounted
 ##     m.traffic(on)                   the station's run of civilians between the gate and the bays
 ##     m.scramble(wing, count)         more Starfuries of the station's wing launch from its Cobra arm
 ##     m.fly(ship, points, cruise_mps [, paced]) / m.demo(ship, name)   an AI ship's route; a `Manoeuvres` move flown where it is
+##     m.pilot(ship, profile)          another pilot for an AI ship (`AiProfile.PATHS`); "" gives its own back
+##     m.join_flight(ship) / m.leave_flight(ship)     an AI ship into, and out of, the player's flight
 ##     m.gather(names, at)             in a skipped step, puts those ships at `at` (where flying the step would have left them)
 ##     m.fact(name)                    a number the game counts (`MissionFacts.NAMES`); wait on one with `TriggerSpec.fact`
 ##     m.when(trigger, action)         runs `action` once, whenever `trigger` first holds, while the steps go on
@@ -528,6 +530,24 @@ func fly(ship_name: String, points: Array, cruise_mps: float, paced: bool = fals
 func demo(ship_name: String, demo_name: StringName) -> void:
 	journal.append("demo %s %s" % [ship_name, demo_name])
 	_report("demo", stage.fly(ship_name, [], Route.DEFAULT_CRUISE_MPS, false, demo_name) if stage != null else "")
+
+
+## Gives the AI ship `ship_name` a pilot of `profile` (`AiProfile.PATHS`); "" gives it back the pilot it had (M8-T33).
+func pilot(ship_name: String, profile: String = "") -> void:
+	journal.append("pilot %s %s" % [ship_name, profile if not profile.is_empty() else "own"])
+	_report("pilot", stage.pilot(ship_name, profile) if stage != null else "")
+
+
+## Puts the AI ship `ship_name` in the player's flight, where it takes the player's wing orders (M8-T33).
+func join_flight(ship_name: String) -> void:
+	journal.append("join_flight %s" % ship_name)
+	_report("join_flight", stage.join_flight(ship_name, true) if stage != null else "")
+
+
+## Takes the AI ship `ship_name` out of the player's flight: its slot is free and it flies for itself again.
+func leave_flight(ship_name: String) -> void:
+	journal.append("leave_flight %s" % ship_name)
+	_report("leave_flight", stage.join_flight(ship_name, false) if stage != null else "")
 
 
 ## Control's docking offer (M8-T06) is this mission's to say (`TriggerSpec.fact(&"dock_offers")`): the HUD's own line stays off.

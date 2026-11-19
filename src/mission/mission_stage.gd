@@ -50,6 +50,7 @@ var facts: MissionFacts = null
 var _main: Main = null
 var _actors: Dictionary = {}  # MissionWorld.key -> Combatant, NavBuoy or a raid's named carrier (CapitalStandin)
 var _carrier_fates: Dictionary = {}  # a carrier's key -> true once it left play whole, false once destroyed
+var _own_pilots: Dictionary = {}  # an actor's key -> the pilot it flew before `pilot` gave it another
 var _holds_end: Dictionary = {}  # an actor's key -> {cruise_mps: its own route's, back: its route back or null} (`hold_route_end`)
 
 
@@ -88,6 +89,7 @@ func teardown() -> void:
 	_actors.clear()
 	_carrier_fates.clear()
 	_holds_end.clear()
+	_own_pilots.clear()
 	camera_rig = null
 	_main = null
 
@@ -471,6 +473,46 @@ func gate_point(ahead_m: float) -> UniversePos:
 	if gate == null:
 		return null
 	return world.to_universe(gate.global_position + (gate.global_basis * gate.arrival_forward).normalized() * ahead_m)
+
+
+## Gives the AI ship `ship_name` a pilot of `profile` (`AiProfile.PATHS`), or with "" its own pilot back (M8-T33: the
+## tutorial's instructor flies as a fighting wingman for a drill, then instructs again). "" or why not.
+func pilot(ship_name: String, profile: String) -> String:
+	var k: String = MissionWorld.key(ship_name)
+	var combatant := _actors.get(k) as Combatant
+	if combatant == null or combatant.driver == null or _node_of(k) == null:
+		return "no AI ship %s in play" % ship_name
+	if profile.is_empty():
+		if _own_pilots.has(k):
+			combatant.driver.brain = _own_pilots[k]
+			_own_pilots.erase(k)
+		return ""
+	var made: Dictionary = BrainFactory.from_behaviour({"type": "ai", "profile": profile},
+			world.to_universe(combatant.ship.global_position), hash([ship_name, seed_value, profile, _own_pilots.size()]))
+	if not bool(made["ok"]):
+		return String(made["error"])
+	if not _own_pilots.has(k):
+		_own_pilots[k] = combatant.driver.brain
+	combatant.driver.brain = made["brain"]
+	return ""
+
+
+## Puts the AI ship `ship_name` in the player's flight (a free slot of it), or takes it out again; "" or why not.
+func join_flight(ship_name: String, join: bool) -> String:
+	var k: String = MissionWorld.key(ship_name)
+	var combatant := _actors.get(k) as Combatant
+	var flight: Wing = wings.player_wing() if wings != null else null
+	if combatant == null or _node_of(k) == null:
+		return "no ship %s in play" % ship_name
+	if flight == null:
+		return "the player leads no flight"
+	if not join:
+		wings.remove_member(flight, combatant)
+		wings.refresh(flight)
+		return ""
+	if flight.slot_of(combatant) > 0:
+		return ""
+	return "" if wings.join(flight.name, combatant) == flight else "%s could not join %s" % [ship_name, flight.name]
 
 
 ## Control's docking offer is the mission's to say: the HUD line stays off (M8-T06).

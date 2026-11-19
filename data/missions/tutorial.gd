@@ -1,9 +1,11 @@
 extends MissionScript
-## The tutorial (M8 D79): a pilot new to Babylon 5 flies the check that qualifies a squadron leader. The squadron launches,
-## the instructor leads to a training box for the control checks, a timed buoy course (its rating is the career remark),
-## gunnery on unarmed drones and wing orders; then the station tour and a jump through the gate. As the player comes back out
-## the raid begins, a surprise to everyone: six raiders through the gate, then a strike carrier with eight more. The debrief
-## is the first time the raid is discussed, and it gives the rank.
+## The tutorial (M8 D79): a pilot new to Babylon 5 flies the check that qualifies a squadron leader. Until the alarm there
+## are two ships, the instructor and the player (M8-T33): they launch one after the other, the instructor leads to a training
+## box for the control checks, a timed buoy course (its rating is the career remark), gunnery on unarmed drones and wing
+## orders, which the instructor takes as the player's wingman; then the station tour and a jump through the gate. As the
+## player comes back out the raid begins, a surprise to everyone: six raiders through the gate, then a strike carrier with
+## eight more. The squadron launches at the alarm, in play: the player's two wingmen and a second flight, and the rest of
+## the wing at the raiders' first hit. The debrief is the first time the raid is discussed, and it gives the rank.
 ##
 ## `data/scenarios/tutorial.json` holds the buoys, the instructor, the flight and the objectives, `data/dialog/tutorial.json`
 ## every line, `data/missions/tutorial_rules.json` the grading. No check can be failed; the pause menu skips the training
@@ -13,10 +15,11 @@ const INSTRUCTOR: String = "INSTRUCTOR"
 const GATE: String = "JUMPGATE"
 const STATION: String = "BABYLON 5"
 const CARRIER: String = "RAIDER CARRIER"
-const FLIGHT: Array[String] = ["ALPHA 2", "ALPHA 3"]
-## Flights of three in the opening launch (the player's and one more); the rest of the wing scrambles in the raid.
-const OPENING_FLIGHTS: int = 2
 const WING: String = "alpha"
+## The pilot the instructor flies with while it is the player's wingman or fights; its own never fires.
+const FIGHTING_PILOT: String = "ally_starfury"
+## Starfuries launched at the alarm: the player's two wingmen and a second flight of three. The rest follow at the first hit.
+const ALARM_LAUNCH: int = 5
 ## The training box, metres from the station, and how near counts as there.
 const BOX_AT: Vector3 = Vector3(-8000.0, 1500.0, 0.0)
 const BOX_RADIUS_M: float = 1500.0
@@ -30,11 +33,14 @@ const BUOY_PASS_M: float = 200.0
 ## A course "flown" faster than this was skipped, not flown: it counts as a par time (the maintainer, 2026-11-19), so it
 ## cannot make a squadron leader at once, and its remark is owed until the skip lands (`_owed_remark`).
 const COURSE_MIN_S: float = 5.0
-## The drones: unarmed raider hulls on a slow track through the box.
+## The drones: unarmed raider hulls on a slow track, released 1.7 km beyond the course's last buoy, where the pilot is.
 const DRONE: Dictionary = {"type": "raider_fighter", "anchor": "origin", "behaviour": {"type": "ai", "profile": "training_drone"}}
 const GUNNERY_DRONES: Array[String] = ["DRONE 1", "DRONE 2", "DRONE 3"]
 const ORDER_DRONES: Array[String] = ["DRONE 4", "DRONE 5"]
-const DRONE_AT: Vector3 = Vector3(-9200.0, 1600.0, 1800.0)
+const DRONE_AT: Vector3 = Vector3(-9200.0, 1600.0, -9000.0)
+const DRONE_TRACK: Array[Vector3] = [Vector3(0.0, 0.0, -2000.0), Vector3(900.0, 300.0, -1000.0)]
+## Where the instructor waits for the pilot at the course's end: this far above its last buoy.
+const COURSE_WAIT: Vector3 = Vector3(0.0, 300.0, 0.0)
 const DRONE_MPS: float = 45.0
 ## The tour's stops (`data/tour/station_tour.json`) and the line said over each.
 const TOUR: Array[Dictionary] = [
@@ -80,13 +86,16 @@ func skip_block() -> Dictionary:
 	return {"from": &"flight_checks", "to": &"tour", "label": "Skip training"}
 
 
-# The squadron launches from the Cobra bays, then the player; Control and the instructor talk over it.
+# Two ships launch from the Cobra bays: the instructor, as the player's flight for the launch, then the player.
 func step_launch(m: MissionApi) -> void:
 	m.lock_controls(true)
 	m.own_dock_offer()
-	m.say(&"control_launch_clear")  # not awaited: it plays over the launch
+	m.say(&"control_launch_clear")  # not awaited: the lines play over the launch
+	m.say(&"instructor_welcome")
 	m.demo_requested.connect(func(_check: StringName, demo: StringName) -> void: _show(m, demo))
-	await m.launch_squadron(WING, 0, OPENING_FLIGHTS)
+	m.join_flight(INSTRUCTOR)
+	await m.launch_squadron(WING, 0, 1)
+	m.leave_flight(INSTRUCTOR)
 	m.traffic(true)
 	m.lock_controls(false)
 	m.objective_add(&"qualify")
@@ -129,7 +138,7 @@ func step_x_button(m: MissionApi) -> void:
 func step_course(m: MissionApi) -> void:
 	await m.say(&"instructor_course_intro")
 	await m.say(&"instructor_course_cue")
-	m.fly(INSTRUCTOR, [COURSE_AT[-1] + Vector3(0.0, 300.0, 0.0)], LEAD_MPS)
+	m.fly(INSTRUCTOR, [COURSE_AT[-1] + COURSE_WAIT], LEAD_MPS)
 	m.say(&"instructor_course_go")
 	var buoys_before: float = m.fact(&"buoys_lost")
 	await m.until(_buoy(m, 0))
@@ -139,6 +148,7 @@ func step_course(m: MissionApi) -> void:
 		m.waypoint(COURSE[i])
 		await m.until(_buoy(m, i))
 	m.waypoint(null)
+	m.gather([INSTRUCTOR], _at(m, COURSE_AT[-1] + COURSE_WAIT))
 	var time_s: float = m.time_s() - started_s
 	if m.noted(&"course") != null:
 		return  # a restart from the checkpoint keeps the flown result
@@ -164,14 +174,18 @@ func step_combat(m: MissionApi) -> void:
 	await m.say(&"instructor_drones_down")
 
 
-# The player's flight of three takes its orders: form, attack and cover.
+# The instructor flies as the player's wingman and takes the orders: form, attack and cover. Then it instructs again.
 func step_wing_orders(m: MissionApi) -> void:
 	await m.say(&"instructor_wing_intro")
+	m.pilot(INSTRUCTOR, FIGHTING_PILOT)
+	m.join_flight(INSTRUCTOR)
 	await m.run_checks([&"wing_form"])
 	_release_drones(m, ORDER_DRONES, GUNNERY_DRONES.size())
 	await m.run_checks([&"wing_attack"])
 	await m.until(TriggerSpec.destroyed(ORDER_DRONES))
 	await m.run_checks([&"wing_cover"])
+	m.leave_flight(INSTRUCTOR)
+	m.pilot(INSTRUCTOR)
 	await m.say(&"instructor_wing_done")
 
 
@@ -202,16 +216,18 @@ func step_jumpgate(m: MissionApi) -> void:
 	await m.check(&"interact")
 	await m.until(TriggerSpec.fact(&"gate_jumps", 1.0))
 	var out: UniversePos = m.gate_point(GATE_OUT_M)
-	m.gather(["player"] + FLIGHT + [INSTRUCTOR], out)
+	m.gather(["player", INSTRUCTOR], out)
 	if out != null:
 		await m.until(TriggerSpec.near_point("player", out, GATE_OUT_RADIUS_M))
 	m.waypoint(null)
 	await m.say(&"instructor_gate_back")
 
 
-# The alarm: raiders out of the gate behind the player. The checkpoint is taken here.
+# The alarm: raiders out of the gate behind the player, and the squadron launches. The checkpoint is taken here.
 func step_raid(m: MissionApi) -> void:
 	m.checkpoint(&"raid", "the raid's start")
+	m.pilot(INSTRUCTOR, FIGHTING_PILOT)
+	_scramble(m, ALARM_LAUNCH, &"alpha_2_launch")
 	var names: PackedStringArray = _raider_names(0, _grading().gate_raiders)
 	for i: int in names.size():
 		var spawn: Dictionary = RAIDER_GATE.duplicate(true)
@@ -220,12 +236,13 @@ func step_raid(m: MissionApi) -> void:
 		m.spawn(spawn)
 	m.objective_add(&"defend")
 	m.objective_add(&"flight")
-	m.when(TriggerSpec.fact(&"hostile_hits", 1.0), func() -> void: _scramble(m))
+	m.when(TriggerSpec.fact(&"hostile_hits", 1.0), func() -> void: _scramble(m, LaunchDirector.WING_SIZE, &"control_wing_launch"))
 	m.when(TriggerSpec.fact(&"dock_offers", m.fact(&"dock_offers") + 1.0), func() -> void: m.say(&"control_dock_offer"))
 	m.when(TriggerSpec.fact(&"repairs", m.fact(&"repairs") + 1.0), func() -> void: m.say(&"control_repaired"))
 	await m.say(&"control_alarm", true)
 	await m.say(&"instructor_raid")
 	await m.say(&"control_raid_orders")
+	await m.say(&"alpha_3_launch")
 	await m.wait(CARRIER_AFTER_S)
 
 
@@ -292,12 +309,13 @@ func _owed_remark(m: MissionApi) -> void:
 	await m.say(&"course_par")
 
 
-# The rest of the wing launches as the raiders first hit something; an arm still busy with a launch is asked again.
-func _scramble(m: MissionApi, tries_left: int = SCRAMBLE_TRIES) -> void:
-	if m.scramble(WING):
-		m.say(&"control_wing_launch")
+# Launches up to `count` more of the wing from its Cobra arm, in play, and says `line` as they go; an arm still busy with a
+# launch is asked again. The first ships out take the player's two free slots, the rest fly in flights of their own.
+func _scramble(m: MissionApi, count: int, line: StringName, tries_left: int = SCRAMBLE_TRIES) -> void:
+	if m.scramble(WING, count):
+		m.say(line)
 	elif tries_left > 0:
-		m.when(TriggerSpec.timer(SCRAMBLE_RETRY_S), func() -> void: _scramble(m, tries_left - 1))
+		m.when(TriggerSpec.timer(SCRAMBLE_RETRY_S), func() -> void: _scramble(m, count, line, tries_left - 1))
 
 
 # The instructor flies the move a check asked for.
@@ -313,7 +331,7 @@ func _release_drones(m: MissionApi, names: Array[String], first: int) -> void:
 		spawn["name"] = names[i]
 		spawn["offset"] = [at.x, at.y, at.z]
 		m.spawn(spawn)
-		m.fly(names[i], [at + Vector3(0.0, 0.0, -2600.0), at + Vector3(900.0, 300.0, -1300.0)], DRONE_MPS)
+		m.fly(names[i], [at + DRONE_TRACK[0], at + DRONE_TRACK[1]], DRONE_MPS)
 	m.transient(PackedStringArray(names))
 
 

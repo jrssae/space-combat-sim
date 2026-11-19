@@ -78,7 +78,8 @@ A `MissionScript` (`data/missions/tutorial.gd`) with `data/scenarios/tutorial.js
   nothing before the alarm hints at it, and the debrief is the first time it is discussed as a whole.
 - **Beats, in order.**
   1. Hangar: New game, Tutorial; the briefing over the hangar backdrop.
-  2. The squadron-launch cinematic (D81), then the player's own launch; skippable.
+  2. A **two-ship launch** with D81's exterior shots: the instructor, then the player; skippable. **Only the instructor and
+     the player fly until the alarm** (M8-T33, maintainer 2026-11-19; the squadron launch moved to beat 12).
   3. Form up on the instructor and fly to a training box about 8 km off the station, away from traffic.
   4. Flight checks: main pods, retros, pitch and yaw, roll, strafe on all four axes, flight assist off (a drift demo) and on, the
      brake.
@@ -94,14 +95,17 @@ A `MissionScript` (`data/missions/tutorial.gd`) with `data/scenarios/tutorial.js
   8. Combat: target the nearest enemy and the next one (the pad's B tap, the keyboard's target-next) and pick from the radial
      target menu (B held); target-previous and target-ahead are not taught (maintainer, 2026-11-18: keyboard and mouse only, and
      target-ahead has no default binding); shoot unarmed training drones with the lead reticle, switch fire modes.
-  9. Wing orders: form, attack and cover from the comms menu.
+  9. Wing orders: form, attack and cover from the comms menu, **given to the instructor**, who flies as the player's wingman
+     for the drill (a pilot that fights, in the player's flight) and then instructs again (M8-T33).
   10. The exterior tour: the Cobra bays, the main docking bay, the command section, the defense grid (heavy cannons, interceptors),
       the jumpgate.
   11. **Jumpgate use**: at the gate the player targets it, closes on the approach cue and holds X; the jump and its cinematic run
       (the round trip of M6 until hyperspace exists) and the player comes back out through the blue vortex.
   12. The raid: a first group of raiders through the jumpgate vortex, then **the raider strike carrier** jumps in on its own point
       and launches more (M12-T19, via T07); alarms, more wings launch, the grid engages, the player defends with the wing (orders
-      in use). **The rest of the wing launches when the raiders begin firing** on Babylon 5 or on any ship in the area. **The
+      in use). **The squadron launches at the alarm, in play** (M8-T33: the player keeps the controls and the view): the
+      player's two wingmen, ALPHA 2 and ALPHA 3, whose first lines come here, and a second flight; the instructor fights
+      beside the player from the alarm. **The rest of the wing launches when the raiders begin firing** on Babylon 5 or on any ship in the area. **The
       player commands only a flight of three** (the player and two Starfuries); the other Starfuries fly in flights of three that
       cover each other and stay together, under their own AI (T19).
       **Traffic is in the way:** cargo and passenger ships wait in a line for the cargo bay and in a separate line for the main
@@ -350,7 +354,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T26 | C | Civilian escort update: a longer route and a bigger belt, a longer gap before wave two, Control's opening brief (maintainer, 2026-11-19; numbered last) | T23 | Fable | Scenario and mission data, pacing and dialog on the escort the T08 agent knows | done |
 | T27 | C | Remove the Raider Battle Wagon everywhere: not from the show, and its source image's creator would not want it shared this way (maintainer, 2026-11-19; numbered last) | - | Fable | Undo M8-T09 across code, data, assets, tests and docs; the escort's last wave back on the strike carrier | done |
 | T28 | D | Free flight's encounters split into three switches: civilian traffic, allied patrols, enemy encounters (maintainer, 2026-11-19; numbered last) | - | Sonnet | Settings, the Free flight page and the encounter director's weights | done |
-| T33 | A | Tutorial update: only the instructor and the player until the raid; the wing-orders drill on the instructor; a two-ship opening launch; every other Starfury launches at the alarm (maintainer, 2026-11-19) | T05 | Fable | Mission script, scenario and dialog on the T05 agent's own work | in progress |
+| T33 | A | Tutorial update: only the instructor and the player until the raid; the wing-orders drill on the instructor; a two-ship opening launch; every other Starfury launches at the alarm (maintainer, 2026-11-19) | T05 | Fable | Mission script, scenario and dialog on the T05 agent's own work | done |
 | T30 | C | Cobra-bay launch: more camera angles (a pool, picked at random without repeats) and control back as soon as the launch thrusters cut (maintainer, 2026-11-19) | T03 | Opus | Launch shots and the hand-off timing | not started |
 | T29 | C | Jumpgate autopilot: more camera angles (wider trailing shots, the gate's base and side), picked at random without repeats (maintainer, 2026-11-19) | T18 | Opus | Gate shots on the autopilot's predicted path | in progress |
 | T31 | C | Docking into the main docking bay: more camera angles, and the Starfury visibly matching the drum's rotation before it enters (maintainer, 2026-11-19) | T06 | Opus | Docking shots and a roll-match stage in the docking autopilot | not started |
@@ -1278,6 +1282,36 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   acts as the player's wingman for form/attack/cover and then resumes instructing. **Every other Starfury, the player's two
   wingmen included, launches at the alarm**: the full squadron launch runs then, in play (the player keeps control).
 - **Done when:** the tutorial's tests pass with two ships until the alarm and the whole wing after it; D79 updated.
+- **Done (2026-11-19):** D79's beats 2, 9 and 12 rewritten; `data/missions/tutorial.gd`, its scenario and dialog follow them.
+  - **Opening.** The scenario has no wingmen (the player's flight is empty, one pooled Starfury: the instructor). The
+    instructor joins the player's flight for the launch (`m.join_flight`), `m.launch_squadron(wing, 0, 1)` launches it and
+    then the player with T03's exterior shots, and it leaves the flight again to lead to the box.
+  - **The drill.** For `wing_orders` the instructor gets a pilot that fights (`m.pilot(INSTRUCTOR, "ally_starfury")`; its
+    own never fires) and joins the flight; the three checks pass on the orders it takes, it kills the drone it is sent at,
+    then leaves the flight and has its own pilot back (`m.pilot(INSTRUCTOR)`). The lines of the three checks address it.
+  - **The alarm.** The instructor fights from here (the same pilot, engaging at will, still invulnerable).
+    `m.scramble("alpha", 5)` launches in play: the first two take the player's free slots as ALPHA 2 and ALPHA 3, the next
+    three fly as a second flight; their lines `alpha_2_launch` and `alpha_3_launch` are the wingmen's first. The other six
+    launch at the raiders' first hit, as before. A launch refused while the arm is busy is asked again every 5 s.
+  - **New seams** (`MissionApi`, `MissionStage`): `pilot(ship, profile)` (another pilot for an AI ship, "" gives its own
+    back), `join_flight(ship)`, `leave_flight(ship)`.
+  - **Found on the way (T05's geometry):** the drones were released at the training box, 9 km from the course's last buoy
+    where the pilot is; they now come out 1.7 km beyond that buoy. A skipped course now also puts the instructor at the
+    course's end, where flying it leaves him (`m.gather`).
+  - **Decided here:** "every other Starfury launches at the alarm" is built as two launches seconds apart: five at the
+    alarm, six at the first hit, so D79's "the rest of the wing launches when the raiders begin firing" still holds. The
+    wingmen launch 50 km from the gate where the player is, so the first minutes there are the player and the instructor.
+  - **Tests** (staged scratch copy, HEAD `40c810cd` plus this task): compile check 984 scripts clean; 12 files (`test_tutorial`,
+    `test_mission_seams`, `test_tutorial_rules`, the dialog, scenario-loader, catalog and mission-check unit files,
+    `test_mission_runner`, `test_squadron_launch`, `test_flights`, `test_wing_orders`), 139 passed, 1 pending (the balance
+    gate), 0 failed. `test_tutorial`, 12 in the gate: one new (the drill on the instructor: it joins the flight under a
+    pilot that fights, takes form, attack and cover, kills the drone it is sent at, then leaves the flight with its own
+    pilot back); menu to debrief with only the instructor in play after the launch; the raid with two ships until the
+    alarm, then ALPHA 2 to 6 launched in play (controls and view kept) and the whole wing of twelve after the first hit;
+    the restart from the raid launches the squadron again. The fought raid (`GUT_BALANCE=1`) ends by itself at 341 s with
+    no Starfury lost and the carrier destroyed.
+  - **(H), `docs/playtest.md` "The tutorial mission":** the two-ship launch's look, the drill on the instructor, and how
+    long the player fights at the gate before the wingmen arrive from the station.
 
 ### M8-T30 Cobra-bay launch: camera variety and a quicker hand-off
 
