@@ -6685,3 +6685,12 @@ src/mission/trigger_fact.gd           TriggerFact (`TriggerSpec.fact`, JSON kind
   both ways of losing the pilot and the restart from the raid, the squadron leader; a fought raid as a balance test),
   `test_career`, `test_tutorial_rules`, `test_mission_seams`, and additions to `test_game_flow`, `test_debrief_model`,
   `test_mission_catalog`.
+
+### 21.4 Measurements (AC11; T16)
+
+- On the RX 6950 XT through the tutorial: `forward_plus` throughout. Windowed (the monitor at 60 Hz) the launch, the tour and
+  the raid hold 56 to 60 fps at 1920x1080 and 3840x2160, GPU 0.7 to 2.8 ms, 17 to 201 draw calls, 1 189 to 1 482 MB in the
+  renderer (the game about 1.0 to 1.9 GB of 16). Uncapped (X11 fullscreen 6144x3456) 106 to 242 fps, GPU 3.1 to 6.7 ms, 2 249 MB,
+  except about 60 fps for the launch's first 4 s inside the bay (tick and GPU both well under the frame there).
+- The raid at its busiest (14 raiders, 22 to 32 ships, up to 71 bolts, the grid and station traffic): tick p50 2.1 to 2.4 ms,
+  p99 5.0 to 6.0 ms, max 10.9 ms; inside the 60 Hz budget, close to M7's p50 2.9, p99 6.8 ms (§20.13).

@@ -287,7 +287,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | AC8 | Battle Wagon: meets the output contract with Python tests (budgets, frames, hardpoints, tubes, determinism), its look sheet seen by the maintainer (no STL: M10's Q10), in the game with its weapons and four launch tubes, in a sandbox scenario and free-flight raids; the civilian escort's last wave launches from its tubes and the escort's tests pass with it | A | **Met** (T09, 2026-11-19; two tubes with four lanes, as the sheet has it: the maintainer, 2026-11-18. How it looks and plays is (H), `docs/playtest.md`). **Withdrawn:** the ship was removed by T27 (2026-11-19) |
 | AC9 | Carried items: M7-2 to M7-6 and L15 each done with a test where one can be written | A | |
 | AC10 | Release build: a script builds the Linux x86_64 export from the pinned templates; the exported game opens, runs the tutorial's opening and quits cleanly in a smoke test | A | done |
-| AC11 | Cost: on the maintainer's GPU, the squadron launch, the tour and the raid: `renderer = forward_plus`, FPS, draw calls and VRAM recorded; the tick inside the 60 Hz budget during the raid | A | |
+| AC11 | Cost: on the maintainer's GPU, the squadron launch, the tour and the raid: `renderer = forward_plus`, FPS, draw calls and VRAM recorded; the tick inside the 60 Hz budget during the raid | A | Numbers recorded (T16, HEAD `76618200`): `forward_plus` throughout; windowed at the monitor's 60 Hz (1920x1080 and 3840x2160) 56 to 60 fps everywhere, GPU 0.7 to 1.8 ms (1080p) and 1.1 to 2.8 ms (2160p), 17 to 201 draw calls, renderer 1 189 MB (1080p) and 1 378 to 1 482 MB (2160p), the game about 1.0 to 1.9 GB of the card's 16 GB; uncapped (X11 fullscreen 6144x3456) the launch 106 to 179 fps after its first 4 s in the bay (about 60, GPU 6.6 ms), the tour 107 to 242, the raid 131 to 176, GPU 3.1 to 6.7 ms, 2 249 MB; the raid (14 raiders, 22 to 32 ships, up to 71 bolts) ticked p50 2.1 to 2.4 ms, p99 5.0 to 6.0 ms, max 10.9 ms |
 | AC12 | Docs and the suite: `docs/architecture.md` §21 as built, a `docs/playtest.md` M8 section, the roadmap row, `info.md`; `scripts/run_tests.sh` green once, at the end | A | |
 | AC13 | (H) The maintainer plays it: the tutorial start to finish, the squadron launch, the approach cues and a fast gate jump, docking and relaunch, the escort with the strike carrier, the audio, the release build | H | |
 | AC14 | Approach cues and the gate's reach (D84): `ApproachCue`'s states are unit-tested over approach speeds, offsets and brake strengths; the cue shows on the gate and both bays in both views; the gate offers the jump farther out at speed, and headless jumps requested at 200 m/s to several km/s all run the line-up, the run-in and the cinematic and arrive through the mouth (tests on the end state and the shot's timing) | A |  **Met** (T18, 2026-11-19; whether the cue reads in time and a fast jump looks right is (H), `docs/playtest.md`) |
@@ -338,7 +338,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T13 | D | Wingmen close the gaps losses leave in a formation (roadmap M7-6) | - | Fable | Native re-slotting with M7-T76's avoidance, 1 and 6 threads identical | done |
 | T14 | D | The bench writes to `user://` in an exported build (roadmap L15) | - | Fable | A path fix with a test | done |
 | T15 | E | Linux x86_64 release build from the pinned export templates (Q9) | T14 | Sonnet | Templates by SHA-256, the native library and assets packed, an export smoke test | done |
-| T16 | E | Performance and the GPU check: the squadron launch, the tour and the raid | T05, T09 | Opus | Measurement on the maintainer's machine; the budget call | in progress |
+| T16 | E | Performance and the GPU check: the squadron launch, the tour and the raid | T05, T09 | Opus | Measurement on the maintainer's machine; the budget call | done |
 | T18 | B | Approach cues for navigation targets with an interaction (brake, overshoot, adjust course), and the jumpgate's reach, autopilot and cinematic scaled to the player's speed (D84; maintainer, 2026-11-18; numbered last because it was added after the others had numbers) | - (shared with T06) | Opus | Relative-motion maths on the HUD, and a gate run-in that starts from any speed with its shot timed to match | done |
 | T19 | D | Flights of three: the player commands two wingmen, AI flights of three cover each other and stay together, every ship in formation may fire, and two new orders (form up and hold fire; hold position and hold fire) (D85; maintainer, 2026-11-18; numbered last because it was added after the others had numbers) | T13 | Fable | Native flight cohesion and mutual cover, two orders through the comms menu and keys, parity | done |
 | T20 | D | GPU memory in use on the debug overlay, in GB and as a percentage of the card (D86; maintainer 2026-11-18; numbered last because it was added after the others had numbers) | - | Fable | Driver sysfs reads off the frame path, a fallback, the overlay and `state render` | done |
@@ -957,6 +957,22 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 
 - **Goal:** AC11.
 - **Done when:** AC11's numbers recorded in this file and `docs/architecture.md` §21.
+- **Done (2026-11-19):** measured on the RX 6950 XT at HEAD `76618200` through the tutorial (`play tutorial`, `mission goto tour`
+  with `checks pass`, `mission goto raid` then `mission skip` and 3 000 ticks for the strike carrier's group to close), every
+  sample at least 300 ticks after a scene start; the monitor now runs at 59.97 Hz, so windowed Wayland caps at 60 (not T25's 145).
+  `forward_plus` in every sample. Windowed 1920x1080 / 3840x2160: the launch 47 to 60 / 56 to 59 fps, GPU up to 1.8 / 2.8 ms,
+  18 to 189 draw calls; the tour 57 to 60 / 58 to 60, GPU 0.7 to 1.7 / 1.4 to 2.8 ms, 123 to 201 draw calls; the raid 58 to 60 /
+  46 to 60, GPU 0.7 to 1.2 / 1.1 to 1.7 ms, about 52 draw calls. Renderer VRAM 1 189 MB / 1 378 to 1 482 MB; the card 5.6 / 6.4 GB
+  used of 16 against 4.6 GB for the desktop alone, so the game's share is about 1.0 / 1.9 GB. Uncapped (`--fullscreen
+  --display-driver x11 --disable-vsync`, 6144x3456): the launch about 60 fps for its first 4 s inside the bay (`sq_doors_low`,
+  `sq_drop_above`; tick at most 7 ms, GPU 6.6 ms, so neither the tick nor the GPU sets it), then 106 to 179; the tour 107 to 242
+  (one 62 right after `mission goto`); the raid 131 to 176; GPU 3.1 to 6.7 ms, 2 249 MB in the renderer. The raid at its busiest
+  (6 gate raiders and the carrier's 8, 22 to 32 ships in the tick, up to 71 bolts, the grid firing, station traffic of 5): tick
+  p50 2.4 / 2.2 / 2.1 ms, p99 5.5 / 5.0 / 6.0 ms, max 10.9 ms over 1 200 samples every 3 ticks; inside the 16.7 ms budget with
+  room, close to M7 AC10's p50 2.9, p99 6.8 ms. One-off dips: one 1 s window at 47 fps in the 1080p launch (`ext_drop_side`) and one
+  at 46 in the 2160p raid; no stall over the budget was seen, so nothing was fixed. The in-bay launch's 60 fps uncapped is worth a
+  look if the bay shots ever feel heavy (H). The runs used the shared working copy, which then held M8-T33's uncommitted tutorial change (two ships until
+  the raid), so the launch and tour had fewer wingmen than at `76618200`; the raid is the same. Screenshots in `references/screenshots/M8-T16 GPU check/`. No code change.
 
 ### M8-T18 Approach cues and a speed-scaled gate reach
 
