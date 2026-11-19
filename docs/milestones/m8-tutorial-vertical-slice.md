@@ -128,6 +128,10 @@ A `MissionScript` (`data/missions/tutorial.gd`) with `data/scenarios/tutorial.js
   The training block (beats 4 to 9) can be skipped from the pause menu straight to the tour.
 - Each check shows the action's live pad and keyboard bindings and follows a rebind (D80).
 
+- **Settled before T05 (maintainer, 2026-11-19):** the raid is **6 raiders through the jumpgate, then the strike carrier jumps in
+  and launches 8**; the instructor's name and callsign are proposed by T05 (one data entry); the buoy course's **exemplary** time is
+  within 10 % of the instructor's own time on the course and **par** within 40 % (data, tuned after the play-test).
+
 ### D80 Control checks
 
 A pure `ControlCheck` (one per check: the actions it watches, a pass condition on measured ship state, a hint line, a demo
@@ -323,7 +327,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T02 | A | Sawtooth Cobra-bay doors (roadmap M7-4): toothed leaves that slide apart, the launch's door ripple and timing kept | - | Fable | Generator parts and an animated door the cinematic opens on | done |
 | T03 | A | The squadron-launch cinematic (D81) | T02, T01 | Opus | Scripted launches, camera shots and a skip that lands in the same state | done |
 | T04 | A | Control checks: `ControlCheck`, the runner and the binding hints (D80) | T01 | Fable | Pass conditions on measured state for every control, pad and keyboard | done |
-| T05 | A | The tutorial mission: launch, checks, tour, raid, defense, debrief (D79) | T03, T04 | Fable | The mission script, dialog and pacing on M5's and M7's seams | not started |
+| T05 | A | The tutorial mission: launch, checks, tour, raid, defense, debrief (D79) | T03, T04 | Fable | The mission script, dialog and pacing on M5's and M7's seams | in progress |
 | T06 | B | Dock in the main docking bay to be repaired and relaunched, for the player and the AI wingmen (D82, Q7) | - | Fable | The `dock` interaction, the lane for fighters, repair and a Cobra-bay relaunch; wing orders | done |
 | T07 | C | Bring M10-T19's raider strike carrier into `m8`: merge `origin/m10`, one collision builder, its tests green (Q5) | - | Opus | Two branches built a collision builder; docs, `native/src/lib.rs` and `info.md` conflict | done |
 | T08 | C | The civilian escort's raids come with the strike carrier (D83, Q6) | T07 | Fable | Mission data and pacing on `CarrierJumps`; the escort's tests kept green | done |
