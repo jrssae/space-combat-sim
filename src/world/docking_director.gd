@@ -1058,6 +1058,11 @@ func _take_clear(stage: StringName, id: String) -> bool:
 		return false
 	var shot: CinematicShot = made["shot"]
 	var ship: Ship = main.ship
+	# A take framed on the bay waits until the Fury is near enough to be in it (`near_m`).
+	var bay: Variant = _actor_pose("bay")
+	var near: float = shots.pool.number(stage, id, "near_m", INF)
+	if bay != null and ship.global_position.distance_to((bay as Transform3D).origin) > near:
+		return false
 	var space: PhysicsDirectSpaceState3D = main.world.get_world_3d().direct_space_state
 	var velocity: Vector3 = ship.linear_velocity - main.world.anchored_velocity()
 	var blocked: int = 0

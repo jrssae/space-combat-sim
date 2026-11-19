@@ -89,6 +89,12 @@ func next(rng: RandomNumberGenerator, stage: StringName, used: PackedStringArray
 	return clear[0] if not clear.is_empty() else ""
 
 
+## A number from the take's entry (`near_m` and the like), or `fallback`.
+func number(stage: StringName, id: String, key: String, fallback: float) -> float:
+	var value: Variant = _entry(stage, id).get(key)
+	return float(value) if value is float or value is int else fallback
+
+
 ## A take's keys as written.
 func keys(stage: StringName, id: String) -> Array:
 	return (_entry(stage, id).get("keys", []) as Array).duplicate(true)

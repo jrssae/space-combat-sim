@@ -6,7 +6,7 @@ extends RefCounted
 ## How close to square-on to the view the star may sit before it is nudged in front (M6-T09), as a unit direction's depth.
 const EDGE_ON: float = 1.0e-4
 ## Toward the picture's edge the flare fades out over this share of the screen, gone at the edge.
-const EDGE_FADE: float = 0.05
+const EDGE_FADE: float = 0.15
 
 
 ## 1 looking straight at the star, -1 looking away.

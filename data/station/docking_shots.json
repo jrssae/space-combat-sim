@@ -1,5 +1,5 @@
 {
- "_comment": "The player's docking shots (M8-T31, maintainer 2026-11-19), a pool per stage, cut by `ShotSequencer`: 'approach' while the autopilot brings the ship to the lane, 'lane' down the lane, 'roll' while it holds short of the mouth and matches the drum's turn, 'entry' from then through the mouth and the inner doors, 'wait' on the bay while it is inside until the launch. Picked at random per visit, never the same take twice in a row, never the last visit's opening, only takes clear of the station. Each take 1 s or more and under 3 s (keys 0 to 2.9 s), a take marked 'feature': true under 5 s (keys 0 to 4.9 s). Actors: 'player' (its frame: +z behind, +y above), 'bay' (the main docking bay's mouth in the station's frame: +z into the bay, -z out in front of it) and 'drum' (the same mouth turning with the drum). The ship holds 300 m out on the axis for the roll match (bay or drum offset z -300).",
+ "_comment": "The player's docking shots (M8-T31, maintainer 2026-11-19), a pool per stage, cut by `ShotSequencer`: 'approach' while the autopilot brings the ship to the lane, 'lane' down the lane, 'roll' while it holds short of the mouth and matches the drum's turn, 'entry' from then through the mouth and the inner doors, 'wait' on the bay while it is inside until the launch. Picked at random per visit, never the same take twice in a row, never the last visit's opening, only takes clear of the station. Each take 1 s or more and under 3 s (keys 0 to 2.9 s), a take marked 'feature': true under 5 s (keys 0 to 4.9 s). A take with 'near_m' plays only once the Fury is that close to the bay's mouth. Actors: 'player' (its frame: +z behind, +y above), 'bay' (the main docking bay's mouth in the station's frame: +z into the bay, -z out in front of it) and 'drum' (the same mouth turning with the drum). The ship holds 300 m out on the axis for the roll match (bay or drum offset z -300).",
  "approach": [
   {
    "id": "trail_close",
@@ -56,18 +56,13 @@
       "offset": [
        150,
        40,
-       -500
+       -650
       ]
      },
      "look_at": {
-      "actor": "bay",
-      "offset": [
-       0,
-       0,
-       -150
-      ]
+      "actor": "player"
      },
-     "fov": 35
+     "fov": 45
     },
     {
      "t": 2.9,
@@ -76,20 +71,16 @@
       "offset": [
        150,
        40,
-       -500
+       -650
       ]
      },
      "look_at": {
-      "actor": "bay",
-      "offset": [
-       0,
-       0,
-       -150
-      ]
+      "actor": "player"
      },
-     "fov": 35
+     "fov": 42
     }
-   ]
+   ],
+   "near_m": 700
   },
   {
    "id": "wide_station",
@@ -283,7 +274,7 @@
       "actor": "drum",
       "offset": [
        30,
-       0,
+       -8,
        0
       ]
      },
@@ -311,7 +302,7 @@
       "actor": "drum",
       "offset": [
        30,
-       0,
+       -8,
        0
       ]
      },
@@ -342,12 +333,7 @@
       ]
      },
      "look_at": {
-      "actor": "bay",
-      "offset": [
-       0,
-       0,
-       -150
-      ]
+      "actor": "player"
      },
      "fov": 40
     },
@@ -362,12 +348,7 @@
       ]
      },
      "look_at": {
-      "actor": "bay",
-      "offset": [
-       0,
-       0,
-       -150
-      ]
+      "actor": "player"
      },
      "fov": 40
     }
