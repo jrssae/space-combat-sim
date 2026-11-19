@@ -1260,10 +1260,10 @@ launch, form_up, flight_checks, camera_lights, x_button, course, combat, wing_or
 - [ ] **(H) The tour:** all stop first (the brake check), then five stops with a line each: Cobra bays, docking bay, command
       section, grid, heavy cannons. A or Start cuts a stop.
 - [ ] **(H) The gate:** 50 km out behind the instructor; the approach cue calls the brake; hold X inside the reach.
-- [ ] **(H) The squadron at the alarm:** ALPHA 2 and ALPHA 3 call their launch and four more follow (five Starfuries), with
-      no camera cut: you keep flying. They launch at the station, 50 km away; say how long you fight with only the
+- [ ] **(H) The wing at the alarm:** ALPHA 2 and ALPHA 3 call their launch and nine more follow (all eleven together), with
+      no camera cut: you keep flying. Nothing more launches when the raiders start shooting. They launch at the station, 50 km away; say how long you fight with only the
       instructor (who shoots now) before they reach you, and whether that is too long.
-- [ ] **(H) The raid:** the alarm as you come out; six raiders out of the vortex; the rest of the wing scrambles at their first hit; the
+- [ ] **(H) The raid:** the alarm as you come out; six raiders out of the vortex; the
       carrier jumps in 12 km off the station 45 s later and launches eight. Say if the 50 km back to the station is too far,
       and whether the traffic's lines for the two bays show.
 - [ ] **(H) Docking:** below half hull Control offers the bay as a comms line; after the repair Control says so.

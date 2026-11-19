@@ -6653,7 +6653,7 @@ src/mission/trigger_fact.gd           TriggerFact (`TriggerSpec.fact`, JSON kind
 
 - **Steps.** `launch` (two ships with the exterior shots: the instructor, then the player; M8-T33), `form_up` (the instructor leads, paced on
   the player, to a box 8 km off the station), `flight_checks`, `camera_lights`, `x_button`, `course`, `combat`, `wing_orders`,
-  `tour`, `jumpgate`, `raid` (six raiders out of the gate; the checkpoint; the squadron launches in play), `defense` (the strike carrier with eight more),
+  `tour`, `jumpgate`, `raid` (six raiders out of the gate; the checkpoint; the whole wing launches in play), `defense` (the strike carrier with eight more),
   `debrief`. The opening ends at `form_up`; the pause menu's **Skip training** goes from any step of `flight_checks` to
   `wing_orders` straight to `tour` (`MissionScript.skip_block`, `MissionApi.skip_offered` / `take_skip`, `PauseMenu.entries`).
 - **What a mission script gained** (all on `MissionApi`, world changes journaled, a skipped step still makes them):
@@ -6662,13 +6662,13 @@ src/mission/trigger_fact.gd           TriggerFact (`TriggerSpec.fact`, JSON kind
   (a fresh `Route` for an AI ship; a demo is a one-point route where the ship is, so the native follow-path flies it at once);
   `gate_point(ahead_m)`; `gather(names, at)` (in a skipped step only: where flying the step would have left those ships);
   `fact(name)` with `TriggerSpec.fact`; `when(trigger, action)` (an action run once when its trigger first holds, while the
-  steps go on: the scramble at the raiders' first hit, Control's docking offer); `note` / `noted`; `checkpoint(step, label)`;
+  steps go on: Control's docking offer, a launch asked again while the arm is busy); `note` / `noted`; `checkpoint(step, label)`;
   `debrief_line(text)`; `award_rank(rank)`; `own_dock_offer()`.
 - **Two ships until the alarm (M8-T33).** `m.pilot(ship, profile)` gives an AI ship another pilot (`MissionStage` keeps
   the one it had and `m.pilot(ship)` gives it back); `m.join_flight(ship)` and `m.leave_flight(ship)` put it in the player's
   flight and take it out. The instructor joins the flight for the launch (the squadron launch with one flight carries the
   player's flight, then the player) and for the wing-orders drill, there under a pilot that fights. At the alarm
-  `m.scramble` fills the player's two slots first (ALPHA 2 and 3), then flights of their own.
+  `m.scramble("alpha", 11)` launches the whole wing at once: the player's two slots first (ALPHA 2 and 3), then three flights of their own.
 - **Facts** (`MissionFacts.NAMES`): gate jumps flown, bolts raiders landed (`hostile_hits`), Starfuries, civilians and buoys
   lost, raider capitals destroyed and in play, docking offers, repairs, tour stops shown, the player's hull. A step waits on
   one with `m.until(TriggerSpec.fact(...))`; a forced fact trigger only latches, so the script places what the step would

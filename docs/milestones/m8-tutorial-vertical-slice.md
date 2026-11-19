@@ -103,9 +103,11 @@ A `MissionScript` (`data/missions/tutorial.gd`) with `data/scenarios/tutorial.js
       (the round trip of M6 until hyperspace exists) and the player comes back out through the blue vortex.
   12. The raid: a first group of raiders through the jumpgate vortex, then **the raider strike carrier** jumps in on its own point
       and launches more (M12-T19, via T07); alarms, more wings launch, the grid engages, the player defends with the wing (orders
-      in use). **The squadron launches at the alarm, in play** (M8-T33: the player keeps the controls and the view): the
-      player's two wingmen, ALPHA 2 and ALPHA 3, whose first lines come here, and a second flight; the instructor fights
-      beside the player from the alarm. **The rest of the wing launches when the raiders begin firing** on Babylon 5 or on any ship in the area. **The
+      in use). **The whole wing launches at the alarm, together and in play** (M8-T33 and its fix round, maintainer
+      2026-11-19: the player keeps the controls and the view): all eleven other Starfuries, the player's two wingmen,
+      ALPHA 2 and ALPHA 3, whose first lines come here, into the player's flight, the other nine as flights under their
+      own AI; the instructor fights beside the player from the alarm. Nothing more launches when the raiders begin firing
+      (that second wave, T05's and T33's first build, is gone). **The
       player commands only a flight of three** (the player and two Starfuries); the other Starfuries fly in flights of three that
       cover each other and stay together, under their own AI (T19).
       **Traffic is in the way:** cargo and passenger ships wait in a line for the cargo bay and in a separate line for the main
@@ -354,7 +356,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T26 | C | Civilian escort update: a longer route and a bigger belt, a longer gap before wave two, Control's opening brief (maintainer, 2026-11-19; numbered last) | T23 | Fable | Scenario and mission data, pacing and dialog on the escort the T08 agent knows | done |
 | T27 | C | Remove the Raider Battle Wagon everywhere: not from the show, and its source image's creator would not want it shared this way (maintainer, 2026-11-19; numbered last) | - | Fable | Undo M8-T09 across code, data, assets, tests and docs; the escort's last wave back on the strike carrier | done |
 | T28 | D | Free flight's encounters split into three switches: civilian traffic, allied patrols, enemy encounters (maintainer, 2026-11-19; numbered last) | - | Sonnet | Settings, the Free flight page and the encounter director's weights | done |
-| T33 | A | Tutorial update: only the instructor and the player until the raid; the wing-orders drill on the instructor; a two-ship opening launch; every other Starfury launches at the alarm (maintainer, 2026-11-19) | T05 | Fable | Mission script, scenario and dialog on the T05 agent's own work | in progress |
+| T33 | A | Tutorial update: only the instructor and the player until the raid; the wing-orders drill on the instructor; a two-ship opening launch; every other Starfury launches at the alarm (maintainer, 2026-11-19) | T05 | Fable | Mission script, scenario and dialog on the T05 agent's own work | done |
 | T30 | C | Cobra-bay launch: more camera angles (a pool, picked at random without repeats) and control back as soon as the launch thrusters cut (maintainer, 2026-11-19) | T03 | Opus | Launch shots and the hand-off timing | not started |
 | T29 | C | Jumpgate autopilot: more camera angles (wider trailing shots, the gate's base and side), picked at random without repeats (maintainer, 2026-11-19) | T18 | Opus | Gate shots on the autopilot's predicted path | in progress |
 | T31 | C | Docking into the main docking bay: more camera angles, and the Starfury visibly matching the drum's rotation before it enters (maintainer, 2026-11-19) | T06 | Opus | Docking shots and a roll-match stage in the docking autopilot | not started |
@@ -1312,6 +1314,15 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
     no Starfury lost and the carrier destroyed.
   - **(H), `docs/playtest.md` "The tutorial mission":** the two-ship launch's look, the drill on the instructor, and how
     long the player fights at the gate before the wingmen arrive from the station.
+  - **Fix round (2026-11-19, the maintainer):** the fighting instructor and the wingmen launching from the station are
+    accepted. **All eleven Starfuries launch at the alarm together** (`ALARM_LAUNCH` 11, one `m.scramble`): ALPHA 2 and 3
+    into the player's flight, ALPHA 4 to 12 as three AI flights, in play. The launch at the raiders' first hit is gone
+    with its line `control_wing_launch`; Control's orders now say "Alpha wing is launching, all flights". D79's beat 12
+    rewritten. Tests (staged scratch copy, HEAD `a2510bb2` plus this fix): compile check 984 scripts clean;
+    `test_tutorial`, `test_dialog_ids` and `test_mission_seams`, 24 passed, 1 pending (the balance gate), 0 failed: after
+    the alarm all twelve Starfuries (ALPHA 2 to 12 and the instructor) are in play in four flights, launched in play, and
+    a raider's hit after the launch asks for no further one. The fought raid (`GUT_BALANCE=1`) ends by itself at 392 s,
+    on that seed with two Starfuries lost and the carrier escaped (341 s, none lost, carrier destroyed with two launches).
 
 ### M8-T30 Cobra-bay launch: camera variety and a quicker hand-off
 

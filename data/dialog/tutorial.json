@@ -370,7 +370,7 @@
    "id": "control_raid_orders",
    "speaker": "control",
    "voice": "tu_control_raid_orders",
-   "text": "Alpha One, Control. Alpha squadron is launching. Alpha Two and Alpha Three are your wingmen. Hold the raiders off the gate run until they reach you."
+   "text": "Alpha One, Control. Alpha wing is launching, all flights. Alpha Two and Alpha Three are your wingmen. Hold the raiders off the gate run until they reach you."
   },
   {
    "id": "alpha_2_launch",
@@ -383,12 +383,6 @@
    "speaker": "alpha_3",
    "voice": "tu_alpha_3_launch",
    "text": "Alpha Three, clear of the bay. Forming on Alpha Two."
-  },
-  {
-   "id": "control_wing_launch",
-   "speaker": "control",
-   "voice": "tu_control_wing_launch",
-   "text": "Raiders are firing. Alpha wing, all remaining flights launch."
   },
   {
    "id": "control_carrier",

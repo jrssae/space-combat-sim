@@ -4,8 +4,8 @@ extends MissionScript
 ## box for the control checks, a timed buoy course (its rating is the career remark), gunnery on unarmed drones and wing
 ## orders, which the instructor takes as the player's wingman; then the station tour and a jump through the gate. As the
 ## player comes back out the raid begins, a surprise to everyone: six raiders through the gate, then a strike carrier with
-## eight more. The squadron launches at the alarm, in play: the player's two wingmen and a second flight, and the rest of
-## the wing at the raiders' first hit. The debrief is the first time the raid is discussed, and it gives the rank.
+## eight more. The whole wing launches at the alarm, in play: the player's two wingmen and nine more in flights of their
+## own. The debrief is the first time the raid is discussed, and it gives the rank.
 ##
 ## `data/scenarios/tutorial.json` holds the buoys, the instructor, the flight and the objectives, `data/dialog/tutorial.json`
 ## every line, `data/missions/tutorial_rules.json` the grading. No check can be failed; the pause menu skips the training
@@ -18,8 +18,9 @@ const CARRIER: String = "RAIDER CARRIER"
 const WING: String = "alpha"
 ## The pilot the instructor flies with while it is the player's wingman or fights; its own never fires.
 const FIGHTING_PILOT: String = "ally_starfury"
-## Starfuries launched at the alarm: the player's two wingmen and a second flight of three. The rest follow at the first hit.
-const ALARM_LAUNCH: int = 5
+## Starfuries launched at the alarm, all together: the player's two wingmen and nine more in three flights (the wing of
+## twelve less the player; the maintainer, 2026-11-19).
+const ALARM_LAUNCH: int = 11
 ## The training box, metres from the station, and how near counts as there.
 const BOX_AT: Vector3 = Vector3(-8000.0, 1500.0, 0.0)
 const BOX_RADIUS_M: float = 1500.0
@@ -236,7 +237,6 @@ func step_raid(m: MissionApi) -> void:
 		m.spawn(spawn)
 	m.objective_add(&"defend")
 	m.objective_add(&"flight")
-	m.when(TriggerSpec.fact(&"hostile_hits", 1.0), func() -> void: _scramble(m, LaunchDirector.WING_SIZE, &"control_wing_launch"))
 	m.when(TriggerSpec.fact(&"dock_offers", m.fact(&"dock_offers") + 1.0), func() -> void: m.say(&"control_dock_offer"))
 	m.when(TriggerSpec.fact(&"repairs", m.fact(&"repairs") + 1.0), func() -> void: m.say(&"control_repaired"))
 	await m.say(&"control_alarm", true)
