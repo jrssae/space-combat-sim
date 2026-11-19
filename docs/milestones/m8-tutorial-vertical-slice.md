@@ -365,7 +365,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T29 | C | Jumpgate autopilot: more camera angles (wider trailing shots, the gate's base and side), picked at random without repeats (maintainer, 2026-11-19) | T18 | Opus | Gate shots on the autopilot's predicted path | in progress |
 | T31 | C | Docking into the main docking bay: more camera angles, and the Starfury visibly matching the drum's rotation before it enters (maintainer, 2026-11-19) | T06 | Opus | Docking shots and a roll-match stage in the docking autopilot | in progress |
 | T32 | C | Hold X for 1 s to abort any autopilot (gate jump, docking), until its point of no return (maintainer, 2026-11-19) | T29, T31 | Opus | One abort rule over every autopilot, the hold bar and keyboard parity | not started |
-| T34 | D | Babylon 5 commands: with the station targeted, the comms menu sends orders to Babylon 5 (launch wing, recall fighters, defense grid on/off, fire support, shelter civilians, sitrep) (maintainer, 2026-11-19) | T24 | Opus | A second comms page on the radial framework and station-side handlers | not started |
+| T34 | D | Babylon 5 commands: with the station targeted, the comms menu sends orders to Babylon 5 (launch wing, recall fighters, defense grid on/off, fire support, shelter civilians, sitrep) (maintainer, 2026-11-19) | T24 | Opus | A second comms page on the radial framework and station-side handlers | in progress |
 | T17 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M8-T01 Tutorial script (discussion with the maintainer)
