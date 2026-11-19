@@ -678,7 +678,9 @@ the list while it is focused. Each start from the menu draws a new seed, and wit
   it then flees (its drive needs 240 s after the jump in, and there is no gate here, so it runs until then: it can be
   caught). Attacked, the civilian runs (an Earth Alliance ship towards
   you or a wingman, others straight away) and turns back onto its route a few seconds after the raiders are gone or dead.
-- **Objectives.** Escort the civilian to NAV BETA (done when it has flown its route to the end, 1 km short of the buoy, and
+- **Objectives.** The objectives list of the target menu shows NAV BETA for the escort (pick it for a waypoint), and a
+  civilian chased off after it has arrived flies back to its route's end (M8-T08, from the play-test of 2026-11-19).
+  Escort the civilian to NAV BETA (done when it has flown its route to the end, 1 km short of the buoy, and
   every raider is down or gone home; failed if it is destroyed) and, optional, bring ALPHA 2 and ALPHA 3 home (two wingmen
   since M8-T08) and destroy a raider carrier. Losing yourself also ends it. A last line, then the debrief. From the
   hand-over the civilian's name and hull show top right under the objectives, as a bar that turns amber then red as it drops and

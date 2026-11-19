@@ -318,7 +318,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T05 | A | The tutorial mission: launch, checks, tour, raid, defense, debrief (D79) | T03, T04 | Fable | The mission script, dialog and pacing on M5's and M7's seams | not started |
 | T06 | B | Dock in the main docking bay to be repaired and relaunched, for the player and the AI wingmen (D82, Q7) | - | Fable | The `dock` interaction, the lane for fighters, repair and a Cobra-bay relaunch; wing orders | in progress |
 | T07 | C | Bring M10-T19's raider strike carrier into `m8`: merge `origin/m10`, one collision builder, its tests green (Q5) | - | Opus | Two branches built a collision builder; docs, `native/src/lib.rs` and `info.md` conflict | done |
-| T08 | C | The civilian escort's raids come with the strike carrier (D83, Q6) | T07 | Fable | Mission data and pacing on `CarrierJumps`; the escort's tests kept green | in progress |
+| T08 | C | The civilian escort's raids come with the strike carrier (D83, Q6) | T07 | Fable | Mission data and pacing on `CarrierJumps`; the escort's tests kept green | done |
 | T09 | C | Raider Battle Wagon (moved from M10-T20): from images, with weapons (M10 Q31) and four launch tubes; the escort's last wave comes with it (Q8) | T08, the maintainer on its weapons | Fable | No STL; a new hull with weapons and tube launches | in progress |
 | T10 | D | Interceptor muzzle at the drawn barrel tip, and the grid balance measured again (roadmap M7-2) | - | Fable | A placement fix in the turret rows with a balance check | done |
 | T11 | D | The walls beside the cargo bay stop flickering (roadmap M7-3) | - | Sonnet | Find the coplanar faces or shading cause in the station generator; a test | not started |
@@ -565,6 +565,20 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
     `test_civilian_escort` 23 of 23 (4 new; the fought run ends at 435 s, inside 6 to 8 minutes) and `test_strike_carrier`
     16 of 16 (7 new or rewritten). No native or Python change. `bench_quick.sh` was not run (no per-tick work added: the
     carrier decides at 2 Hz).
+  - **Play-test fix (2026-11-19, the maintainer's flight):** the civilian stopped after the second wave and never went on to
+    NAV BETA, and NAV BETA was not in the target menu's objectives list. (1) It had arrived early, a raid chased it off, and
+    with its route flown it idled where the chase ended, kilometres short (it also coasts about 3 km past its route's end
+    on first arriving). `MissionStage.hold_route_end` (`m.hold_route_end`, asked for at the hand-over) now sends it back
+    to its route's end whenever it has flown the route and is more than 500 m from it, slower the nearer it is so that it
+    stops there, and again, faster, when a raid takes it further off on the way. The route behaviour itself (native) is
+    untouched. (2) The escort objective named only the civilian. An objective may now give a `subject`; the escort's is
+    NAV BETA, so the list shows the buoy from the hand-over (the civilian again if the buoy is shot away). The scripted
+    fought run now ends with the civilian back at NAV BETA, at 782 s (with T09's Battle Wagon as the last wave; 744 s before).
+    Tests (scratch copy of HEAD plus the staged change, `GUT_SLOW=1`): compile check 948 scripts; GUT 9 files, 170 tests, 164 passed, 0 failed,
+    6 pending (the AI runs, behind `GUT_BALANCE`):
+    `test_civilian_escort` (2 new: NAV BETA listed; taken 4 km short and 2.5 km past with a wave still up, the civilian
+    flies back, stops within 500 m and stays), `test_objective_book` (1 new), the target menu, mission runner, mission skip,
+    instructor route, strike carrier and scenario loader files.
   - **Fix round (2026-11-18, the maintainer's answers):** "home at 3 left" stays the doctrine and the escort's waves are
     **6, 8 and 10** raiders (`WAVES`; 24 pooled; each wave rides on one strike carrier, which has 18 cradles, so no second
     carrier and no fighters beside it are needed); the escort flies with **two wingmen**, ALPHA 2 and ALPHA 3, on `cover`

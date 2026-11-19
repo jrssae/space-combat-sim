@@ -21,6 +21,13 @@ const VIA_OWN: StringName = &""
 const VIA_GATE: StringName = &"gate"
 const VIA_CARRIER: StringName = &"carrier"
 const VIAS: Array[StringName] = [VIA_OWN, VIA_GATE, VIA_CARRIER]
+## A ship that holds its route's end (`hold_route_end`) is sent back once it is further than this from it, m; its way back
+## is planned to take about `RETURN_S`, at no less than `RETURN_MIN_MPS`.
+const HOLD_END_M: float = 500.0
+const RETURN_S: float = 40.0
+const RETURN_MIN_MPS: float = 15.0
+## Taken so much further off that its way back asks for this many times its planned speed, it is sent again.
+const REPLAN_FACTOR: float = 1.5
 ## A ship sent out through the gate flies its run-in at this speed (the player's autopilot's run-in is 250 m/s).
 const DEPART_CRUISE_MPS: float = 200.0
 var world: WorldFrame = null
@@ -40,6 +47,7 @@ var seed_value: int = 0
 
 var _actors: Dictionary = {}  # MissionWorld.key -> Combatant, NavBuoy or a raid's named carrier (CapitalStandin)
 var _carrier_fates: Dictionary = {}  # a carrier's key -> true once it left play whole, false once destroyed
+var _holds_end: Dictionary = {}  # an actor's key -> {cruise_mps: its own route's, back: its route back or null} (`hold_route_end`)
 
 
 ## Wires the stage to `main`'s nodes and learns the actors already in play.
@@ -70,6 +78,7 @@ func teardown() -> void:
 		ships.acquired.disconnect(register)
 	_actors.clear()
 	_carrier_fates.clear()
+	_holds_end.clear()
 	camera_rig = null
 
 
@@ -104,6 +113,8 @@ func refresh(snapshot: MissionWorld, names: PackedStringArray) -> void:
 			var route: Route = _route_of(combatant)
 			if route != null and route.count() > 0:
 				snapshot.set_route(k, route.waypoint(route.count() - 1).position, path.phase == BehaviourFollowPath.Phase.DONE)
+				if _holds_end.has(k):
+					_hold_route_end(k, combatant, route, node, path.phase == BehaviourFollowPath.Phase.DONE)
 
 
 ## A forced trigger moved `actor` to `at`: placed there, velocity and spin kept. A ship goes through `Ship.reset_to`, as D51
@@ -146,6 +157,42 @@ func release(actor: String) -> void:
 	elif thing is CapitalStandin:
 		_carrier_fates[k] = true  # taken out whole: a skip earns no kill
 		CarrierJumps.attach(world).dismiss(thing as CapitalStandin)
+
+
+## From now on the AI ship `ship_name` goes back to the end of the route it leads whenever it has flown it and is no longer
+## there (M8-T08: a civilian chased off after arriving idled where the chase ended, kilometres from its goal). False, with
+## an error, when there is no such AI ship in play.
+func hold_route_end(ship_name: String) -> bool:
+	var k: String = MissionWorld.key(ship_name)
+	var combatant := _actors.get(k) as Combatant
+	if combatant == null or _node_of(k) == null or _path_of(combatant) == null:
+		push_error("Mission: hold_route_end: no AI ship '%s' leading a route" % ship_name)
+		return false
+	var route: Route = _route_of(combatant)
+	_holds_end[k] = {"cruise_mps": route.cruise_mps if route != null else Route.DEFAULT_CRUISE_MPS, "back": null}
+	return true
+
+
+# One look at a ship that holds its route's end: once it has flown `route` and is off its end it is sent back, slower the
+# nearer it is, so it stops inside `HOLD_END_M` instead of coasting past again; taken much further off on its way back (a
+# raid chased it), it is sent again at the speed that distance asks for.
+func _hold_route_end(k: String, combatant: Combatant, route: Route, node: Node3D, flown: bool) -> void:
+	var hold: Dictionary = _holds_end[k]
+	if not flown and route != hold["back"]:
+		return  # still on its own route
+	var end: UniversePos = route.waypoint(route.count() - 1).position
+	var away_m: float = world.to_universe(node.global_position).distance_to(end)
+	var cruise_mps: float = clampf(away_m / RETURN_S, RETURN_MIN_MPS, maxf(float(hold["cruise_mps"]), RETURN_MIN_MPS))
+	if (flown and away_m <= HOLD_END_M) or (not flown and cruise_mps <= REPLAN_FACTOR * route.cruise_mps):
+		return
+	var back := Route.new()
+	back.name = route.name
+	back.pace = Route.PACE_NONE
+	back.loop = false
+	back.cruise_mps = cruise_mps
+	back.add(end)
+	hold["back"] = back
+	BehaviourFollowPath.attach(combatant.driver.brain as AiPilot, back)
 
 
 ## A forced `arrived` finished `actor`'s route: its follow-path behaviour is told it is at the end.

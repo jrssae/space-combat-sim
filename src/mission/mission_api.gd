@@ -20,6 +20,7 @@ extends RefCounted
 ##                                     play by its name once through)
 ##     m.depart(ship)                  an AI ship flies out through the jumpgate's orange vortex and leaves play (M6-T14)
 ##     m.send(ship, target)            the ship's pilot objective (D39)
+##     m.hold_route_end(ship)          it goes back to its route's end whenever it is taken away after flying it (M8-T08)
 ##     m.transient(names)              ships that only matter while the step plays: a skipped step releases them (M5-T30)
 ##     m.objective_add(id [, text, primary]) / m.objective_complete(id) / m.objective_fail(id)
 ##     m.waypoint(name or null)        the HUD's waypoint marker on an actor
@@ -381,6 +382,17 @@ func objective_complete(id: StringName) -> bool:
 
 func objective_fail(id: StringName) -> bool:
 	return _finish_objective(id, false)
+
+
+## From now on the AI ship `ship_name` goes back to the end of its route whenever it has flown it and something has taken
+## it away since (M8-T08, `MissionStage.hold_route_end`).
+func hold_route_end(ship_name: String) -> bool:
+	if has_ended():
+		return false
+	if stage != null and not stage.hold_route_end(ship_name):
+		return false
+	journal.append("hold_route_end %s" % ship_name)
+	return true
 
 
 ## Marks an actor with the HUD's waypoint (its name), or clears it (null or "").

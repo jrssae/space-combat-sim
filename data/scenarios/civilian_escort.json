@@ -67,7 +67,7 @@
 			"player destroyed": "alpha_2_leader_down"
 		},
 		"objectives": [
-			{"id": "escort", "text": "Escort the {civilian} to NAV BETA", "primary": true,
+			{"id": "escort", "text": "Escort the {civilian} to NAV BETA", "primary": true, "subject": "NAV BETA",
 				"fail": {"kind": "destroyed", "name": "{civilian}"}},
 			{"id": "home", "text": "Bring ALPHA 2 and ALPHA 3 home", "primary": false,
 				"fail": {"kind": "destroyed", "names": ["ALPHA 2", "ALPHA 3"], "all": false}},

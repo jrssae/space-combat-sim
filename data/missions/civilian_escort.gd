@@ -64,6 +64,7 @@ func step_brief(m: MissionApi) -> void:
 	m.objective_add(&"home")
 	m.waypoint(_civilian(m))
 	m.show_hull(_civilian(m))
+	m.hold_route_end(_civilian(m))  # chased off after it has arrived, it comes back to NAV BETA
 	m.lock_controls(false)
 	await m.say(&"control_handover")
 

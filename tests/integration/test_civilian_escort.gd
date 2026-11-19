@@ -343,6 +343,67 @@ func test_the_waves_and_the_arrival_do_not_need_nav_beta_in_one_piece() -> void:
 	assert_false(_api().watched().has("nav beta"), "the arrival waits on the civilian's route, not on the buoy: %s" % str(_api().watched()))
 
 
+# --- the maintainer's play-test of 2026-11-19 (M8-T08) ------------------------------------------------------------------
+
+
+func test_nav_beta_is_listed_with_the_escort_objective() -> void:
+	DebugConsole.flags.invulnerable = true
+	await _fly()
+	assert_true(_run("mission goto depart").ok)
+	await _ticks(2)
+	assert_eq(_api().objective_state(&"escort"), ObjectiveBook.ACTIVE)
+	assert_eq((_api().book.subject(&"escort")["actors"] as PackedStringArray)[0], "NAV BETA", "the escort is about NAV BETA first")
+	var listed: Dictionary = {}
+	for entry: Dictionary in main.target_menu._objectives():
+		listed[String(entry["label"])] = entry
+	assert_true(listed.has("NAV BETA"), "the target menu's objectives list NAV BETA from the hand-over: %s" % str(listed.keys()))
+	assert_ne(int((listed.get("NAV BETA", {}) as Dictionary).get("target_id", 0)), 0, "as the buoy itself, to pick for a waypoint")
+
+
+func test_a_civilian_taken_from_nav_beta_after_arriving_flies_back_and_stops_there() -> void:
+	# It arrived early, a raid chased it off, and it idled where the chase ended, kilometres short, for the rest of the run.
+	DebugConsole.flags.invulnerable = true
+	await _fly()
+	var civilian: Combatant = _civilian()
+	civilian.damageable.invulnerable = true
+	assert_true(_run("mission goto wave_one").ok)
+	await _ticks(2)
+	assert_true(_journal_has("hold_route_end %s" % _civilian_name()), "the script asks it to hold NAV BETA")
+	# The wave stays up, out of the way, so no later one comes while this watches the civilian: one raider is left, far off
+	# and pilotless, and its carrier does not call it home.
+	var run: CarrierRun = _carriers().runs()[0]
+	run.options["recall_left"] = 0
+	await _run_on(60.0, func() -> bool: return run.state == CarrierRun.State.STANDOFF)
+	for c: Combatant in main.ships.alive(ShipPool.DEFAULT_TYPE):
+		if c.display_name != WAVE_ONE[0]:
+			c.damageable.kill()
+			continue
+		c.driver.brain = null
+		c.damageable.invulnerable = true
+		c.ship.global_position += Vector3(0.0, 90000.0, 0.0)
+	var path := (civilian.driver.brain as AiPilot).behaviour(&"follow_path") as BehaviourFollowPath
+	assert_eq(path.index, 1, "past the 25 % point, bound for the end of its route")
+	var system: StringName = _api().world.system_id
+	var end := UniversePos.new(0.0, 0.0, -29000.0, system)
+	main.mission.stage.place(_civilian_name(), UniversePos.new(0.0, 0.0, -28700.0, system))
+	await _run_on(120.0, func() -> bool: return _api().world.route_done(_civilian_name()))
+	assert_true(_api().world.route_done(_civilian_name()), "it flies its route to the end")
+	for away: Vector3 in [Vector3(300.0, 0.0, -25000.0), Vector3(-200.0, 100.0, -31500.0)]:
+		main.mission.stage.place(_civilian_name(), UniversePos.new(away.x, away.y, away.z, system))
+		civilian.ship.linear_velocity = main.world.rest_velocity()
+		var from_m: float = _at(civilian).distance_to(end)
+		await _run_on(25.0, func() -> bool: return false)
+		assert_lt(_at(civilian).distance_to(end), from_m - 150.0, "taken %.0f m away, it is on its way back" % from_m)
+		assert_eq(_behaviour(civilian), "follow_path")
+		await _run_on(400.0, func() -> bool: return _at(civilian).distance_to(end) < MissionStage.HOLD_END_M \
+				and (civilian.ship.linear_velocity - main.world.rest_velocity()).length() < 2.0)
+		assert_lt(_at(civilian).distance_to(end), MissionStage.HOLD_END_M, "and it stops at its route's end")
+		assert_lt(_at(civilian).distance_to(_buoy_at("NAV BETA")), MissionScriptClass.ARRIVAL_M, "by NAV BETA")
+		await _run_on(30.0, func() -> bool: return false)
+		assert_lt(_at(civilian).distance_to(end), MissionStage.HOLD_END_M, "where it stays")
+	assert_eq(_api().step_name(), &"wave_one", "the wave was up all the while")
+
+
 func test_every_actor_a_shot_names_is_in_play_from_the_start() -> void:
 	await _fly()
 	for shot_id: StringName in _api().cinematics:
@@ -683,7 +744,7 @@ func test_a_fought_run_ends_each_wave_at_three_left_before_the_next_comes() -> v
 	for w: int in [1, 2]:
 		assert_gt(spawned[w] - cleared[w - 1], MissionScriptClass.BREATHER_S - 0.1,
 				"wave %d comes a breather after wave %d is down" % [w + 1, w])
-	assert_between(end_s, 600.0, 900.0, "about twelve minutes with waves of six, eight and ten (it was 6 to 8 with 3, 4 and 6, Q40)")
+	assert_between(end_s, 600.0, 1100.0, "twelve to fifteen minutes with waves of six, eight and ten, the civilian back at NAV BETA at the end (it was 6 to 8 with 3, 4 and 6, Q40)")
 
 
 # --- the wing flies it with an AI in the player's place (M8-T08): a balance judgement --------------------------------------
