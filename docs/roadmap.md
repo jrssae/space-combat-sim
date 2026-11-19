@@ -92,6 +92,7 @@ here (the maintainer, 2026-11-08). Details, evidence and suggested fixes: `docs/
 | item | what | milestone |
 |---|---|---|
 | M8-1 | Promotion to squadron leader: a pilot who misses the tutorial's qualification (an exemplary buoy course, no more than one Starfury and no civilian lost) joins the squadron, and a later mission promotes them to leader; the rank is saved with the profile from M8 (D79) | placed when planned |
+| M8-2 | Babylon 5's main docking bay tunnel lit and coloured **deep red** as in the show (the station generator's lamps and materials; it renders white/grey today), with a look sheet for the maintainer first (maintainer, 2026-11-19; found by M8-T31's shot review) | placed when planned |
 
 ## Required: gravity
 
