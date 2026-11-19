@@ -61,6 +61,8 @@ var repair: DockRepair = DockRepair.new()
 var offer_line: bool = true
 var docked_count: int = 0
 var relaunched_count: int = 0
+## Recalled fighters that docked and stayed inside (M8-T34).
+var stowed_count: int = 0
 var last_notice: String = ""
 ## The latest visit that ended, for the console and the tests.
 var last_visit: DockVisit = null
@@ -316,6 +318,26 @@ func order_wing() -> Dictionary:
 	return _answer(true, "%s: COPY, DOCKING FOR REPAIRS" % sent[0])
 
 
+## Control's recall (M8-T34): every fighter whose home is this station, AI wings and the player's wingmen alike, flies home and
+## docks, and stays inside (back to its pool) so the wings launch whole again. Returns how many were sent or turned for home.
+func recall_all() -> int:
+	if main == null or main.wings == null or not _ready_plan().is_empty():
+		return 0
+	var n: int = 0
+	for wing: Wing in main.wings.wings.duplicate():
+		var ships: Array[Combatant] = wing.members()
+		if wing.leader != null and not wing.leader.is_player:
+			ships.append(wing.leader)
+		for member: Combatant in ships:
+			var visit: DockVisit = visit_of(member.display_name)
+			if visit != null:
+				visit.why = DockVisit.WHY_RECALL  # already on its way in: it stays inside too
+				n += 1
+			elif start_wingman(member, DockVisit.WHY_RECALL).is_empty():
+				n += 1
+	return n
+
+
 ## Calls off the visit of `ship_name` (default: the player's) while the ship is still outside the inner doors. "" or why not.
 func cancel(ship_name: String = "", reason: String = "cancelled") -> String:
 	var entry: Dictionary = _player_entry() if ship_name.is_empty() else _entry_named(ship_name)
@@ -544,6 +566,10 @@ func _dock_now(entry: Dictionary) -> void:
 	if visit.is_player and visit.repair_s > 0.0:
 		shots.to_stage(&"wait", _play_shot)  # inside: the bay until the launch (none when the repair is at once)
 	docked_count += 1
+	if not visit.is_player and visit.why == DockVisit.WHY_RECALL:
+		wingman_docked.emit(visit.ship_name)
+		_stow(entry)
+		return
 	if visit.is_player:
 		player_docked.emit()
 	else:
@@ -555,6 +581,17 @@ func _dock_now(entry: Dictionary) -> void:
 	_hold(c.ship, s)
 	if visit.repair_s <= 0.0 and s != null:
 		_keep_away(entry, s, 0.0)  # no wait (the player): repaired on the way through, straight to a Cobra bay
+
+
+# A recalled fighter is home for good: it leaves its wing and goes back to its pool, whole.
+func _stow(entry: Dictionary) -> void:
+	var c: Combatant = entry["combatant"]
+	(entry["visit"] as DockVisit).enter(DockVisit.State.DONE)
+	_bring_back(entry)
+	_drop(entry)
+	stowed_count += 1
+	if is_instance_valid(c):
+		main.ships.release(c)
 
 
 # Hidden, touching nothing, unavailable to everyone outside: the state of a ship inside the station.
