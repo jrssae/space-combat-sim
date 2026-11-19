@@ -9,6 +9,8 @@ extends Node
 ## Console: provider `comms_menu`, command `commsmenu open|pick <entry>|highlight <entry>|back|close`.
 
 const HINT_ROOT: String = "A  SEND      B  CLOSE"
+## The first ring's title while Babylon 5 is the target (M8-T34).
+const STATION_TITLE: String = "BABYLON 5"
 const HINT_SUB: String = "A  SEND      B  BACK"
 const ACTIONS: Array[StringName] = [&"open", &"pick", &"highlight", &"back", &"close"]
 
@@ -62,8 +64,12 @@ func open() -> String:
 	var why: String = why_not()
 	if not why.is_empty():
 		return why
-	# DOCK is on the ring only while a wingman has its home dock in range (M8-T06).
-	menu.set_root_page("WING ORDERS", CommsMenu.wing_orders(main.docking != null and main.docking.order_available()))
+	# With Babylon 5 targeted the ring is the station's commands (M8-T34); otherwise the wing orders, DOCK only while a wingman
+	# has its home dock in range (M8-T06).
+	if main.station_commands != null and main.station_commands.targeted():
+		menu.set_root_page(STATION_TITLE, main.station_commands.current_page())
+	else:
+		menu.set_root_page("WING ORDERS", CommsMenu.wing_orders(main.docking != null and main.docking.order_available()))
 	menu.open()
 	if not menu.is_open():
 		return "the comms menu has no entries"
@@ -149,7 +155,9 @@ func _carry_out(picked: Dictionary) -> void:
 	if picked.is_empty():
 		return
 	last_pick = str(picked.get("label", ""))
-	if picked.get("payload") is int and main.player_alive:
+	if StationCommands.is_payload(picked.get("payload")) and main.station_commands != null:
+		main.station_commands.run_payload(picked["payload"] as String)  # Control answers; any pilot may ask
+	elif picked.get("payload") is int and main.player_alive:
 		main.wings.give_order(picked["payload"] as AiContext.Order)
 	elif picked.get("payload") is StringName and picked["payload"] == CommsMenu.PAYLOAD_DOCK and main.player_alive:
 		main.docking.order_wing()
@@ -172,7 +180,8 @@ func _register_console() -> void:
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"commsmenu",
 			"The comms menu: open (pauses the game), pick <entry> (its index in page order, 0 at the top and clockwise, or its label: "
-			+ "attack, form on me, engage, cover me, dock, form up, hold position), highlight <entry> (points at it without sending), "
+			+ "attack, form on me, engage, cover me, dock, form up, hold position; with Babylon 5 targeted its commands, M8-T34: "
+			+ "launch wing, recall, defense grid, fire support, shelter, sitrep), highlight <entry> (points at it without sending), "
 			+ "back, close",
 			[ConsoleArg.enum_required(&"action", ACTIONS), ConsoleArg.string_optional(&"entry", "").with_suggestions(_console_entries)]),
 			_cmd_commsmenu, self)

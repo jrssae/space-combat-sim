@@ -94,6 +94,8 @@ var launches: LaunchDirector = null
 var traffic: StationTraffic = null
 ## Docking for repair in the main docking bay (M8-T06): the player's hold of X there, the wing's order; console `dock`.
 var docking: DockingDirector = null
+## Babylon 5's commands from the comms menu with the station targeted (M8-T34).
+var station_commands: StationCommands = null
 ## The station's exterior tour (M7-T12): console `tour`; the tour's shots play on the cinematic camera.
 var tours: TourDirector = null
 ## Where and when the scenario is in its star system (M6-T09): `ScenarioFrame.resolve`'s result, empty without a system.
@@ -246,6 +248,9 @@ func _ready() -> void:
 	docking = DockingDirector.new()
 	docking.main = self
 	add_child(docking)
+	station_commands = StationCommands.new()
+	station_commands.main = self
+	add_child(station_commands)
 	if bool((scenario.get("station", {}) as Dictionary).get("reserve_traffic", false)):
 		traffic.reserve_pools()  # the raids' and wings' ships are built now, not in the middle of a fight
 	_warm_flashes()

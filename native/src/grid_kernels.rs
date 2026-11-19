@@ -55,11 +55,27 @@ pub const INTERCEPT_HORIZON_S: f64 = 6.0;
 // Score offsets that rank the pick's classes ahead of distance: out of the arc, then the heavy cannon's fighters.
 const ARC_PENALTY: f64 = 4.0;
 const CLASS_PENALTY: f64 = 16.0;
+// Under covering fire, every hostile outside the covered ship's radius ranks behind every one inside it.
+const COVER_PENALTY: f64 = 64.0;
 
 /// Which grid people are weapons free against which side: `(grid faction, enemy faction)` pairs in the order they were set.
+/// Beside it the station's own orders (M8-T34): grids switched off, and covering fire asked for round a ship.
 #[derive(Default, Clone, Debug, PartialEq)]
 pub struct Latch {
     pub pairs: Vec<(u32, u32)>,
+    /// Grid people whose grid is off: no gun or interceptor of theirs fires.
+    pub off: Vec<u32>,
+    /// Covering fire: each grid's guns take hostiles near the ship that asked first, latched or not.
+    pub cover: Vec<Cover>,
+}
+
+/// A covering-fire order (M8-T34): the guns of grid people `grid` engage hostiles within `radius_m` of body `body`, the one
+/// nearest that body first, whether or not the grid is weapons free against their side.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Cover {
+    pub grid: u32,
+    pub body: i64,
+    pub radius_m: f64,
 }
 
 impl Latch {
@@ -83,6 +99,32 @@ impl Latch {
     /// Holds fire against `enemy` again (all sides for `None`).
     pub fn hold(&mut self, grid: u32, enemy: Option<u32>) {
         self.pairs.retain(|&(g, e)| g != grid || enemy.is_some_and(|x| x != e));
+    }
+
+    /// Switches grid `grid` off (no fire at all) or on again; true when that changed it.
+    pub fn set_off(&mut self, grid: u32, off: bool) -> bool {
+        let was = self.is_off(grid);
+        self.off.retain(|&g| g != grid);
+        if off {
+            self.off.push(grid);
+        }
+        was != off
+    }
+
+    pub fn is_off(&self, grid: u32) -> bool {
+        self.off.contains(&grid)
+    }
+
+    /// Covering fire for grid `grid` round body `body` within `radius_m`, or none (`body` 0).
+    pub fn set_cover(&mut self, grid: u32, body: i64, radius_m: f64) {
+        self.cover.retain(|c| c.grid != grid);
+        if body != 0 && radius_m > 0.0 {
+            self.cover.push(Cover { grid, body, radius_m });
+        }
+    }
+
+    pub fn cover_of(&self, grid: u32) -> Option<Cover> {
+        self.cover.iter().copied().find(|c| c.grid == grid)
     }
 }
 
@@ -147,9 +189,17 @@ pub struct PickCtx<'a> {
 /// A grid gun's target (a body id, 0 for none): the nearest hostile of a side the grid is weapons free against within its
 /// reach, looked up through the broad phase. A light pulse turret takes fighters first and a capital only when no fighter is
 /// in reach; a heavy cannon the other way round.
-/// Inside the arc before outside it; a target the station's hull hides is never picked.
+/// Inside the arc before outside it; a target the station's hull hides is never picked. A grid that is off picks nothing.
+/// Under covering fire (M8-T34) any hostile within the covered ship's radius comes first, nearest that ship first, whatever
+/// its class and whether or not the grid is weapons free against its side.
 pub fn pick<F: Fn(i64) -> i64>(rows: &Rows, row_of: &F, m: &PickMount, ctx: &mut PickCtx<'_>) -> i64 {
-    if (m.kind != MOUNT_LIGHT && m.kind != MOUNT_HEAVY) || !ctx.latch.free_any(m.faction_ix) {
+    if (m.kind != MOUNT_LIGHT && m.kind != MOUNT_HEAVY) || ctx.latch.is_off(m.faction_ix) {
+        return 0;
+    }
+    let cover = ctx.latch.cover_of(m.faction_ix).and_then(|c| {
+        tk::usable_row(rows, row_of(c.body)).map(|r| (rows.positions[r], c.radius_m * c.radius_m))
+    });
+    if cover.is_none() && !ctx.latch.free_any(m.faction_ix) {
         return 0;
     }
     let Some(own) = firing_row(rows, row_of(m.body)) else {
@@ -189,7 +239,12 @@ pub fn pick<F: Fn(i64) -> i64>(rows: &Rows, row_of: &F, m: &PickMount, ctx: &mut
             continue;
         }
         let side = rows.faction_ix[j];
-        if relation(ctx.relations, ctx.stride, m.faction_ix, side) != REL_HOSTILE || !ctx.latch.is_free(m.faction_ix, side) {
+        if relation(ctx.relations, ctx.stride, m.faction_ix, side) != REL_HOSTILE {
+            continue;
+        }
+        let covered = cover.map(|(at, _)| f64::from(dist_sq(rows.positions[j], at)));
+        let near = cover.is_some_and(|(_, r_sq)| covered.is_some_and(|d| d <= r_sq));
+        if !near && !ctx.latch.is_free(m.faction_ix, side) {
             continue;
         }
         let capital = is_capital(rows, j);
@@ -199,13 +254,18 @@ pub fn pick<F: Fn(i64) -> i64>(rows: &Rows, row_of: &F, m: &PickMount, ctx: &mut
         }
         let toward = normalized(sub(rows.positions[j], pivot));
         let elevation = f64::from(dot(toward, up)).clamp(-1.0, 1.0).asin();
-        let mut score = d_sq;
+        let mut score = if near { covered.unwrap_or(d_sq) } else { d_sq };
         if elevation < m.min_elevation {
             score += ARC_PENALTY * reach_sq;
         }
-        // Each gun's own class first: a light turret's fighters, a heavy cannon's capitals (maintainer, after T07).
-        if (m.kind == MOUNT_HEAVY) != capital {
-            score += CLASS_PENALTY * reach_sq;
+        if !near {
+            // Each gun's own class first: a light turret's fighters, a heavy cannon's capitals (maintainer, after T07).
+            if (m.kind == MOUNT_HEAVY) != capital {
+                score += CLASS_PENALTY * reach_sq;
+            }
+            if cover.is_some() {
+                score += COVER_PENALTY * reach_sq;
+            }
         }
         // The hull is tested only for a candidate that would win, off the common path.
         if score < best_score && !line_blocked(rows, ctx.surface_rows, from, rows.positions[j]) {

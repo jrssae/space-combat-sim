@@ -372,7 +372,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T29 | C | Jumpgate autopilot: more camera angles (wider trailing shots, the gate's base and side), picked at random without repeats (maintainer, 2026-11-19) | T18 | Opus | Gate shots on the autopilot's predicted path | done |
 | T31 | C | Docking into the main docking bay: more camera angles, and the Starfury visibly matching the drum's rotation before it enters (maintainer, 2026-11-19) | T06 | Opus | Docking shots and a roll-match stage in the docking autopilot | in progress |
 | T32 | C | Hold X for 1 s to abort any autopilot (gate jump, docking), until its point of no return (maintainer, 2026-11-19) | T29, T31 | Opus | One abort rule over every autopilot, the hold bar and keyboard parity | not started |
-| T34 | D | Babylon 5 commands: with the station targeted, the comms menu sends orders to Babylon 5 (launch wing, recall fighters, defense grid on/off, fire support, shelter civilians, sitrep) (maintainer, 2026-11-19) | T24 | Opus | A second comms page on the radial framework and station-side handlers | in progress |
+| T34 | D | Babylon 5 commands: with the station targeted, the comms menu sends orders to Babylon 5 (launch wing, recall fighters, defense grid on/off, fire support, shelter civilians, sitrep) (maintainer, 2026-11-19) | T24 | Opus | A second comms page on the radial framework and station-side handlers | done |
 | T17 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M8-T01 Tutorial script (discussion with the maintainer)
@@ -1400,13 +1400,33 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   - **Recall fighters**: always recalls **all** the station's fighters (they fly home and dock, M8-T06's docking; the player's own
     wingmen included).
   - **Defense grid on/off**: toggles the grid's current state (M7 §20.3); off = no turret, cannon or interceptor fire.
-  - **Fire support**: the grid's heavy cannons engage the player's current target if it is within their reach.
+  - **Fire support** (maintainer, 2026-11-19: covering fire round the player, not the player's target): a toggle with Control's
+    acknowledgement; while on, every grid gun that can reach engages any hostile within a data-set radius of the player's ship
+    (2 km), the one nearest the player first, whether or not the grid is weapons free against its side; the player's selected
+    target gets no priority. A native turret-row input (a covered body and a radius), not a GDScript loop.
   - **Shelter civilians**: toggle; station traffic holds, and ships in the queues and lanes go inside or stand off behind the
     station; again releases them.
   - **Sitrep**: Control reports section damage, wings out, raiders in the area and the grid's state.
   - The rings lay out by entry count (M8-T24); keys 1..N pick; the D-pad does nothing in the ring.
 - **Done when:** tests for each command's effect and acknowledgement, the follow-up ring, the menu switching with the target, and
   console equivalents in `info.md`.
+- **Done (2026-11-19):** `StationCommands` (Main's child, `src/world/station_commands.gd`, lines and radii in
+  `data/station/commands.json`): with Babylon 5 selected as an allied target the comms menu's first ring is `BABYLON 5` with
+  LAUNCH WING (a ring of Alpha, Beta, Delta, Zeta, All), RECALL, DEFENSE GRID, FIRE SUPPORT, SHELTER and SITREP, one slice each,
+  keys 1-N; Control answers each on the comms panel (the mission's when one runs, else its own). Launch: `LaunchDirector.launch_wing`,
+  a wing out or in the bay answers so. Recall: `DockingDirector.recall_all`, a `recall` visit docks and stays (back to its pool, so
+  wings launch whole again), the player's wingmen too. Grid off and covering fire are new fields of the core's grid latch
+  (`grid_kernels::Latch.off`, `Cover`): off, the pick returns nothing and the main-thread gun and interceptor steps skip the grid;
+  covering fire ranks hostiles within the radius of the covered body first, nearest it first, latched or not (`set_grid_off`,
+  `set_grid_cover`). Shelter: `StationTraffic.set_shelter` (no new starts, docking ships go in, the void holds, freighters and
+  leaving ships stand off 3 km behind the station away from the gate; released, they leave). Sitrep: sections, wings out, raiders
+  within 30 km, the grid. Console `stationcmd`, provider `station_cmd`; `grid.on`, `grid.cover`, `traffic.sheltering`. Tests
+  (staged copy with the native library built from it, GUT_SLOW=1): Rust 257 passed (two new: grid off, covering fire); compile 996
+  scripts; new `test_station_commands` 8 and `test_station_command_page` 4; kept green `test_comms_menu` 10, `test_comms_menu_input`
+  16, `test_docking` 12, `test_launch_bay` 19, `test_station_grid` 9, `test_station_grid_threads` 1, `test_grid_aim_call_sites` 3,
+  `test_turret_defense` 2, `test_turret_threads` 3, `test_station_traffic` 7, `test_station_sheltered` 2, `test_station_run` 9,
+  `test_comms_panel` 14, `test_main_scene` 14, `test_dock_visit` 5. How the rings, Control's lines and the shelter's stand-off look
+  in play is (H).
 
 ### M8-T17 Integration, full suite, docs and acceptance
 

@@ -680,3 +680,48 @@ fn a_battery_with_no_lead_from_its_muzzle_keeps_the_trunnions_lead() {
     let drawn = muzzle_point(&f, s.azimuth, s.elevation, b.trunnion, b.muzzle);
     assert!(f64::from(dist_sq(s.muzzle, drawn)) < 1e-12, "from the drawn barrel's tip all the same");
 }
+
+#[test]
+fn a_grid_switched_off_picks_nothing_and_on_again_picks_as_before() {
+    // M8-T34: the station's "defense grid off".
+    let rows = rows_with(&[(1, 1, Vector3::new(0.0, 900.0, 0.0), false)], 0.0);
+    let mut latch = free_against(&[1]);
+    assert!(latch.set_off(0, true));
+    assert!(!latch.set_off(0, true), "already off");
+    assert_eq!(pick_with(&rows, &gun(MOUNT_LIGHT, 3000.0), &latch), 0, "off: the light gun holds");
+    assert_eq!(pick_with(&rows, &gun(MOUNT_HEAVY, 3000.0), &latch), 0, "and the heavy cannon");
+    latch.set_cover(0, 1, 2000.0);
+    assert_eq!(pick_with(&rows, &gun(MOUNT_LIGHT, 3000.0), &latch), 0, "covering fire does not override off");
+    assert!(latch.set_off(0, false));
+    assert_eq!(pick_with(&rows, &gun(MOUNT_LIGHT, 3000.0), &latch), 1, "on again");
+}
+
+#[test]
+fn covering_fire_takes_hostiles_near_the_covered_ship_first_latched_or_not() {
+    // M8-T34 (maintainer): body 10 is the player's ship, an ally of the grid; covering fire round it within 2 km.
+    let rows = rows_with(
+        &[
+            (10, 0, Vector3::new(0.0, 2500.0, 0.0), false),
+            (1, 1, Vector3::new(0.0, 600.0, 0.0), false),   // nearest the gun, far from the player
+            (2, 1, Vector3::new(500.0, 2500.0, 0.0), false), // 500 m from the player
+            (3, 1, Vector3::new(0.0, 3500.0, 0.0), false),   // 1 km from the player, farther still from the gun
+        ],
+        0.0,
+    );
+    let mut latch = Latch::default();
+    assert_eq!(pick_with(&rows, &gun(MOUNT_LIGHT, 3000.0), &latch), 0, "never first, without covering fire");
+    latch.set_cover(0, 10, 2000.0);
+    assert_eq!(latch.cover_of(0).map(|c| c.body), Some(10));
+    assert_eq!(pick_with(&rows, &gun(MOUNT_LIGHT, 3000.0), &latch), 2, "the hostile nearest the player, not the gun");
+    assert_eq!(pick_with(&rows, &gun(MOUNT_HEAVY, 3000.0), &latch), 2, "every gun that reaches, whatever its class");
+    latch.set(0, 1);
+    assert_eq!(pick_with(&rows, &gun(MOUNT_LIGHT, 3000.0), &latch), 2, "latched too: the player's neighbourhood still first");
+    latch.set_cover(0, 10, 300.0);
+    assert_eq!(pick_with(&rows, &gun(MOUNT_LIGHT, 3000.0), &latch), 1, "none inside the radius: the usual pick");
+    latch.set_cover(0, 0, 2000.0);
+    assert_eq!(latch.cover_of(0), None, "body 0 ends it");
+    let unlatched = Latch { cover: vec![Cover { grid: 0, body: 10, radius_m: 300.0 }], ..Latch::default() };
+    assert_eq!(pick_with(&rows, &gun(MOUNT_LIGHT, 3000.0), &unlatched), 0, "outside the radius an unlatched side is held");
+    let gone = Latch { cover: vec![Cover { grid: 0, body: 99, radius_m: 2000.0 }], ..Latch::default() };
+    assert_eq!(pick_with(&rows, &gun(MOUNT_LIGHT, 3000.0), &gone), 0, "a covered ship no longer in play covers nothing");
+}

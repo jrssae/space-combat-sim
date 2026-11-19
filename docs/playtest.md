@@ -761,6 +761,17 @@ send the entry in that place at once; the D-pad does nothing; B or Ctrl closes i
 is no timeout. Closed, keys 1 to 4 still give the orders directly. Console: `commsmenu open`, `commsmenu pick "form on me"`,
 `state comms_menu`.
 
+**Babylon 5's commands (M8-T34).** `play station_dock`, select BABYLON 5 (the wheel, or the target menu's ALLIES ring) and open the comms
+menu: its first ring is BABYLON 5 with LAUNCH WING (a second ring: Alpha, Beta, Delta, Zeta, All), RECALL, DEFENSE GRID, FIRE
+SUPPORT, SHELTER and SITREP; keys 1-6 pick. Control answers each on the comms panel.
+- [ ] **(H) Launch and recall:** key 1 then 2 launches Beta from its arm; RECALL sends every fighter home, your wingmen too, and
+      they stay inside.
+- [ ] **(H) Grid and covering fire:** with raiders about (`traffic raid 4`), DEFENSE GRID off silences every gun and
+      interceptor; on again, FIRE SUPPORT has the guns that reach take the raiders within 2 km of you first.
+- [ ] **(H) Shelter:** with traffic running (`traffic auto on`), SHELTER holds it: docking ships go in, freighters and leaving
+      ships wait 3 km behind the station; again, they leave. SITREP reads the sections, wings, raiders and grid.
+Console: `stationcmd <launch|recall|grid|support|shelter|sitrep>`, `state station_cmd`.
+
 ## Free-flight encounters (M5-T17)
 
 **Free flight** with **Encounters: on**. About every one to three minutes one of three things happens: a raid (2 to 6 raiders

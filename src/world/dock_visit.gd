@@ -7,11 +7,13 @@ extends RefCounted
 enum State { APPROACH, LANE, INSIDE, REPAIR, RELAUNCH, LAUNCHING, DONE, CANCELLED }
 const STATE_NAMES: Array[String] = ["approach", "lane", "inside", "repair", "relaunch", "launching", "done", "cancelled"]
 
-## Why the visit began: the player's hold, the wing order, a wingman's own call below the hull threshold, the console.
+## Why the visit began: the player's hold, the wing order, a wingman's own call below the hull threshold, the console, or
+## Control's recall (M8-T34: the ship stays inside).
 const WHY_HOLD: StringName = &"hold"
 const WHY_ORDER: StringName = &"order"
 const WHY_HULL: StringName = &"hull"
 const WHY_CONSOLE: StringName = &"console"
+const WHY_RECALL: StringName = &"recall"
 
 var ship_name: String = ""
 var is_player: bool = false

@@ -20,6 +20,10 @@ extends Node
 ##   filled when traffic starts and one more started whenever one has docked or left (arriving through the gate, or undocking), each a hash of the session seed and its index. The encounters'
 ##   traffic events join the run as arriving convoys (`lane_event`), and their raids on the station scramble the wings.
 ##
+## - **Shelter** (M8-T34, Control's "shelter civilians"): no new ship starts; ships docking go on in, ships waiting in the void
+##   stay there, and every other civilian (leaving, undocking once clear, freighters) stands off behind the station, away from
+##   the gate, until the shelter is lifted and they leave. The run's own spawn rule (T28's switch) is untouched.
+##
 ## Console: command and provider `traffic`.
 
 const NODE_NAME: StringName = &"StationTraffic"
@@ -31,6 +35,9 @@ const KINDS: Array[StringName] = [&"dock", &"undock", &"freighter"]
 const CIVILIAN_AI: Dictionary = {"type": "ai", "profile": "civilian"}
 const RAIDER_AI: Dictionary = {"type": "ai", "profile": "raider", "orders": "attack"}
 const TRANSIT_CRUISE_MPS: float = 120.0
+## Sheltering civilians wait this far behind the station, this far apart, metres (M8-T34).
+const STANDOFF_M: float = 3000.0
+const STANDOFF_SPACING_M: float = 250.0
 ## Without a gate: how far beyond a lane's first point a ship starts, and how far out a leaving ship is let go, metres.
 const START_OUT_M: float = 2500.0
 const LEAVE_OUT_M: float = 12000.0
@@ -102,6 +109,8 @@ var raids: int = 0
 ## Milliseconds the load spent building the ships the raids and wings need (`reserve_pools`).
 var reserved_ms: float = 0.0
 var last_event: String = "none"
+## Control's shelter is on (M8-T34): see the class comment.
+var sheltering: bool = false
 # One entry a ship: {combatant, brain, kind, state, cargo, loading, cargo_state} (the last three for freighters).
 var _own: Array[Dictionary] = []
 var _spawned: int = 0
@@ -443,7 +452,8 @@ func _physics_process(delta: float) -> void:
 		auto = director != null and director.on and director.station_run and director.kind_on(&"traffic") and station() != null
 	if auto:
 		elapsed_s += delta
-		_keep_flow()
+		if not sheltering:
+			_keep_flow()
 	for i: int in range(_own.size() - 1, -1, -1):
 		_step(i)
 
@@ -771,7 +781,11 @@ func _step(i: int) -> void:
 			if done and not (kind == &"dock" and _bay_busy()):  # a docking ship waits its turn at its entry point
 				BehaviourFollowPath.attach(entry["brain"] as AiPilot, _lane_route(kind, plan.freighter if kind == &"freighter" else plan.dock_in))
 				entry["state"] = &"lane"
+		&"shelter":  # standing off behind the station until the shelter is lifted
+			return
 		&"airlock":  # an undocking ship waits in the void until the inner doors stand open
+			if sheltering:
+				return
 			var lock: StationAirlock = _airlock()
 			if lock == null or lock.doors.is_open():
 				BehaviourFollowPath.attach(entry["brain"] as AiPilot, DockingPlan.route_of(plan.dock_out, station().global_transform,
@@ -793,7 +807,10 @@ func _step(i: int) -> void:
 			if kind == &"freighter" and entry["cargo_state"] == &"done":
 				_depart(entry)
 			if done:
-				_leave(entry)
+				if sheltering:
+					_stand_off(entry)
+				else:
+					_leave(entry)
 		&"leave":
 			if done:
 				_finish(i)
@@ -832,6 +849,58 @@ func _depart(entry: Dictionary) -> void:
 	entry["cargo_state"] = &"gone"
 	var lane: Array[Dictionary] = [plan.freighter[plan.freighter.size() - 1]]
 	BehaviourFollowPath.attach(entry["brain"] as AiPilot, _lane_route(&"freighter", lane))
+
+
+## Control's shelter on or off (M8-T34). On: freighters and leaving ships go to the stand-off at once (an undocking ship once it
+## is clear of the doors); off: those standing off leave. Returns how many ships it moved.
+func set_shelter(on: bool) -> int:
+	sheltering = on
+	var n: int = 0
+	for entry: Dictionary in _own:
+		if not _still_ours(entry):
+			continue
+		var kind: StringName = entry["kind"]
+		var state: StringName = entry["state"]
+		if on and (kind == &"freighter" or state == &"leave"):
+			_stand_off(entry)
+			n += 1
+		elif not on and state == &"shelter":
+			_leave(entry)
+			n += 1
+	return n
+
+
+## Ships standing off behind the station now.
+func sheltered_count() -> int:
+	var n: int = 0
+	for entry: Dictionary in _own:
+		n += 1 if entry["state"] == &"shelter" else 0
+	return n
+
+
+# A sheltering ship waits behind the station, on the side away from the gate (where raids come from), each at its own point.
+func _stand_off(entry: Dictionary) -> void:
+	var s: Station = station()
+	if s == null:
+		return
+	if entry["kind"] == &"freighter":
+		_drop_pods(entry)
+		entry["cargo_state"] = &"gone"
+	var gate: Jumpgate = _gate()
+	var away: Vector3 = s.global_basis.z
+	if gate != null and not gate.global_position.is_equal_approx(s.global_position):
+		away = (s.global_position - gate.global_position).normalized()
+	var side: Vector3 = away.cross(Vector3.UP if absf(away.dot(Vector3.UP)) < 0.9 else Vector3.RIGHT).normalized()
+	var slot: int = sheltered_count()
+	var at: Vector3 = s.global_position + away * STANDOFF_M + side * STANDOFF_SPACING_M * float((slot + 1) / 2) \
+			* (1.0 if slot % 2 == 0 else -1.0)
+	var route := Route.new()
+	route.name = "SHELTER"
+	route.pace = Route.PACE_NONE
+	route.cruise_mps = TRANSIT_CRUISE_MPS
+	route.add(main.world.to_universe(at), &"", 1.0e9)
+	BehaviourFollowPath.attach(entry["brain"] as AiPilot, route)
+	entry["state"] = &"shelter"
 
 
 # The way out after a lane: through the gate when there is one, else straight on to where it is let go.
@@ -1008,6 +1077,8 @@ func _register_console() -> void:
 	registry.register_provider(PROVIDER, ConsoleVars.new({
 		&"auto": {"get": func() -> bool: return auto, "doc": "Whether the run between the gate and the station keeps itself going (free-flight encounters on, or traffic auto on)"},
 		&"lane_ships": {"get": func() -> int: return lane_ships, "doc": "Civilians the run keeps on their way between the gate and the station at once"},
+		&"sheltering": {"get": func() -> String: return "on, %d standing off" % sheltered_count() if sheltering else "off",
+				"doc": "Control's shelter (M8-T34): no new traffic, civilians inside stay, the rest stand off behind the station"},
 		&"lane_spacing_s": {"get": func() -> float: return lane_spacing_s, "unit": "s", "doc": "Least time between two of the run's own starts"},
 		&"flow": {"get": flow_count, "doc": "The run's own civilians on their way now (with those still to come out of the gate)"},
 		&"alive": {"get": alive_count, "doc": "Traffic ships in play"},

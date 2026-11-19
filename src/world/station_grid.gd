@@ -227,6 +227,32 @@ func set_free(side: StringName, on: bool) -> void:
 		sim.core.set_grid_free(faction, side, on)
 
 
+## Whether the grid fires at all (M8-T34, Control's "defense grid on/off"): off, no gun or interceptor fires; the weapons-free
+## latch is kept for when it comes back on.
+func is_on() -> bool:
+	var sim: SimCore = _sim()
+	return sim == null or not sim.core.grid_is_off(faction)
+
+
+func set_on(on: bool) -> void:
+	var sim: SimCore = _sim()
+	if sim != null:
+		sim.core.set_grid_off(faction, not on)
+
+
+## Covering fire (M8-T34): every gun that reaches takes hostiles within `radius_m` of `ship` first, nearest it first; null ends it.
+func set_cover(ship: Node3D, radius_m: float) -> void:
+	var sim: SimCore = _sim()
+	if sim != null:
+		sim.core.set_grid_cover(faction, ship.get_instance_id() if ship != null else 0, radius_m)
+
+
+## The body the grid covers now (its instance id), or 0.
+func cover_body() -> int:
+	var sim: SimCore = _sim()
+	return int(sim.core.grid_cover_body(faction)) if sim != null else 0
+
+
 ## `[light pulse shots, heavy cannon shots, projectiles shot down, of them missiles, shots the hull blocked, interceptor pulses
 ## fired]`.
 func readouts() -> PackedInt64Array:
@@ -287,6 +313,8 @@ func _register_console() -> void:
 	DebugConsole.registry.register_provider(PROVIDER, ConsoleVars.new({
 		&"mounts": {"get": func() -> String: return _mounts_text(),
 				"doc": "The grid's mounts by kind (D75: 12 light pulse, 2 heavy cannons, 9 interceptors) and how many the core holds"},
+		&"on": {"get": func() -> bool: return is_on(), "doc": "The grid fires at all (M8-T34: Control's defense grid on/off)"},
+		&"cover": {"get": func() -> int: return cover_body(), "doc": "The body covering fire protects (M8-T34), 0 for none"},
 		&"free": {"get": func() -> String: return ", ".join(free_sides()) if not free_sides().is_empty() else "holding",
 				"doc": "The sides the grid is weapons free against (it never fires first; a hostile shot at the station frees it)"},
 		&"knocked_out": {"get": func() -> String: return _knocked_out_text(),

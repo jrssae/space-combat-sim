@@ -6016,6 +6016,13 @@ assets/weapons/grid_*.tres       the light pulse turret, the heavy cannon and th
   aims at them yet.
 - **Threads.** Threaded equals `delayed`, one thread equals six, rows, commands and the turret digest byte for byte
   (`test_station_grid_threads`). Every per-tick grid decision is native; GDScript only spends what the core named.
+- **Control's orders (M8-T34).** The latch also holds the station's commands from the comms menu (`StationCommands`): `off`
+  (grid people whose grid is off: the pick returns nothing and the main-thread gun and interceptor steps skip their mounts; the
+  weapons-free pairs are kept) and `cover` (covering fire: a body and a radius; the pick ranks hostiles within the radius of that
+  body first, nearest it first, latched or not, ahead of every other candidate; a body no longer in play covers nothing).
+  `ScsSimCore.set_grid_off`, `grid_is_off`, `set_grid_cover`, `grid_cover_body`; `StationGrid.set_on`, `set_cover`. With the
+  station targeted the comms menu's first ring is its commands (launch wing, recall, defense grid, fire support, shelter
+  civilians, sitrep; `StationCommands.page`), and Control answers each on the comms panel.
 
 ### 20.4 AI and traffic at the station (D74, D78, T10)
 
