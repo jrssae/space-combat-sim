@@ -323,7 +323,8 @@ sets), `weapons_sheet.png` (the turrets, the racks, the lanes and their berths).
 100 000 t, 2 m/s2 of thrust, a 3 degree a second turn, 24 000 hull points, jump capable (its drive needs 240 s after a
 jump, as the strike carrier's). Jolt collides with the 142 shapes; bolts and rams meet them with each hull as its box.
 The berths drive `CarrierDock` (launch ahead through the bow mouths, home through the stern mouths), the turret mounts
-fire `assets/weapons/turret_raider_plasma.tres` (450 m/s, 8 damage, 0.8 s, to 1.6 km) at whoever attacked it, and the racks
+fire `assets/weapons/turret_raider_plasma.tres` (450 m/s, 8 damage, 0.8 s) at any hostile within 1.6 km (its spec's `turrets_hunt`; every
+other hull's turrets only answer an attack), and the racks
 launch M4's guided missile at a hostile fighter within 3 km: six cells a rack, a rack again after 20 s, the ship's racks
 2 s apart (`data/capitals/capitals.json`, `missile_racks.battle_wagon`).
 

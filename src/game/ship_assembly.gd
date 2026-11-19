@@ -145,6 +145,7 @@ static func _mount_turrets(combatant: Combatant) -> void:
 	var model: Dictionary = TurretMount.model_for(ship.spec.asset_id)
 	for entry: Dictionary in entries:
 		var mount := TurretMount.create(entry, weapon, combatant.faction)
+		mount.hunts = ship.spec.turrets_hunt
 		mount.use_model(model)
 		ship.add_child(mount)
 		combatant.turrets.append(mount)

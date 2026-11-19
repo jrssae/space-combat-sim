@@ -19,5 +19,6 @@ has_cockpit_interior = false
 engine_glow_color = Color(1.75, 1.5, 1.0, 1)
 damage_layout = &""
 turret_weapon = ExtResource("2_turret")
+turrets_hunt = true
 can_open_jump_point = true
 jump_hold_range_m = 0.0

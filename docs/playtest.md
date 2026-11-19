@@ -1275,8 +1275,8 @@ wagon/` (`look_sheet_final.png` beside the reference, `option_sheet.png`, `weapo
       berths in its tubes, and launches them ahead through the bow mouths, two lanes a tube.
 - [ ] **Coming home (H):** `carrier recall`: its fighters fly round to behind the stern mouths and are drawn in along the
       tubes to their berths; it then flees (a jump once its drive has recharged, 240 s, else a run for the gate).
-- [ ] **Its guns (H):** shoot it: its turrets answer (they hold fire on a ship that has not attacked it or its fighters).
-      Fly within 3 km: its racks launch guided missiles, one every two seconds at most, each rack again after 20 s,
+- [ ] **Its guns (H):** fly within 1.6 km without firing: its turrets open fire on you (they hunt any hostile in reach, the
+      maintainer's rule of 2026-11-19; a civilian's turrets still only answer an attack). Fly within 3 km: its racks launch guided missiles, one every two seconds at most, each rack again after 20 s,
       24 missiles in all. Say if the turrets (8 damage, 0.8 s, 1.6 km), the missiles (40 damage) and the 3 km feel right
       (`assets/weapons/turret_raider_plasma.tres`, `data/capitals/capitals.json`).
 - [ ] **Its hull (H):** 24 000 points, 3 degrees a second: say how long a wing should need to drive it off (it flees at half).

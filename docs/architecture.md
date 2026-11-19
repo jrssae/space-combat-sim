@@ -5679,9 +5679,12 @@ The first real capital hull, built ahead of M10's framework (M10-T05, T07) and m
     behind the stern mouth and is drawn in along the tube. The push is the cradles' (15 m/s2), kept up for as long as the way
     needs, and a capture from further than 60 m takes longer in proportion; a cradle's row is bit for bit what it was.
   - **Plasma turrets.** A `TurretMount` on each of the hull's eight `turrets[]` (§18.10, M5's D61), firing the spec's
-    `turret_weapon` (`assets/weapons/turret_raider_plasma.tres`) with the hull's own turret model. They are gunners, not
-    hunters: they fire on a ship that hit the wagon, or hit a friend within 2 km of it, and its own hull blocks their line
-    of fire (its hit volumes go to the core with its first mount).
+    `turret_weapon` (`assets/weapons/turret_raider_plasma.tres`) with the hull's own turret model. They hunt (the
+    maintainer, 2026-11-19): they fire on any hostile ship or capital in their reach (1.6 km), not only on one that attacked.
+    That is data: `ShipSpec.turrets_hunt` (off for every other hull, whose turrets stay D61's gunners) sets `TurretMount.hunts`,
+    and the core's pick for such a mount is `turret_kernels::pick_hostile` (the nearest hostile through the brains' broad
+    phase, in the AI job like every pick: one inside the arc first, none its own hull hides) in place of the remembered
+    attackers. Its own hull blocks their line of fire (its hit volumes go to the core with its first mount).
   - **Missile racks.** `MissileRacks` (a child of the ship) on the hull's four `missile_racks[]`. The target and the launch
     decision are the native rows' that the bench's capitals use (`NativeWeapons` over `ScsWeaponRows`: the nearest hostile
     fighter in a missile's reach), asked only when a rack is ready (`RackSchedule`, pure: six cells a rack, a reload, a gap

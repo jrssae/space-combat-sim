@@ -53,6 +53,14 @@ var knocked_out: bool = false:
 			_sim.core.set_turret_out(_slot, value)
 		_show_knocked_out()
 
+## Hunts (M8-T09): the core picks any hostile in reach for it, not only a ship that attacked. A ship's turret only
+## (`grid_kind` 0); its ship's spec says so (`ShipSpec.turrets_hunt`).
+var hunts: bool = false:
+	set(value):
+		hunts = value
+		if _slot >= 0 and _sim != null and is_instance_valid(_sim) and _sim.core != null:
+			_sim.core.set_turret_hunts(_slot, value)
+
 var yaw: Node3D = null
 var pitch: Node3D = null
 ## A three-part model's pedestal, fixed to the mount (M7-T42); null for a two-part model.
@@ -359,6 +367,8 @@ func _bind() -> void:
 	_slot = slot_now
 	if knocked_out:
 		_sim.core.set_turret_out(_slot, true)
+	if hunts:
+		_sim.core.set_turret_hunts(_slot, true)
 	if not can_process():
 		_sim.core.set_turret_live(_slot, false)
 

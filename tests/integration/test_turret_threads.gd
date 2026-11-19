@@ -36,6 +36,20 @@ func test_one_thread_and_six_give_the_same_fight() -> void:
 		assert_eq(first, -1, "%s: the same bits with one thread and six (first difference at tick %d)" % [key, first])
 
 
+func test_hunting_turrets_give_the_same_fight_on_every_schedule_and_thread_count() -> void:
+	# M8-T09 (the Battle Wagon's): mounts that take any hostile in reach, with no attack remembered. Their pick runs in the AI
+	# job through the brains' broad phase, so it must land the same bits every way the step can run.
+	var delayed: Dictionary = await _fight(&"delayed", 6, true)
+	var threaded: Dictionary = await _fight(&"threaded", 6, true)
+	var one: Dictionary = await _fight(&"threaded", 1, true)
+	assert_gt(int(delayed["shots"]), 4, "the turrets fired on raiders that never hit anyone (%d shots)" % int(delayed["shots"]))
+	for key: String in ["turrets", "rows", "commands", "hits"]:
+		var first: int = _first_difference(delayed[key], threaded[key])
+		assert_eq(first, -1, "%s: threaded against delayed, the same bits (first difference at tick %d)" % [key, first])
+		first = _first_difference(one[key], threaded[key])
+		assert_eq(first, -1, "%s: one thread against six, the same bits (first difference at tick %d)" % [key, first])
+
+
 func test_the_own_hull_blocking_fire_is_the_same_on_every_schedule_and_thread_count() -> void:
 	# Q33 (M5-T16): a Saturn 4 transport's own hull hides some of four raiders from its turrets; the blocked picks (in the
 	# AI job) and the blocked shots (in the main thread's step) must land the same bits every way the step can run.
@@ -93,8 +107,9 @@ func _saturn_fight(mode: StringName, threads: int) -> Dictionary:
 
 
 # The seeded fight flown `TICKS` ticks with the step `mode` and `threads` threads: per tick the turrets' digest (aims,
-# targets, gates, shots, memory), the rows', the commands' and the hits'; the totals and the step's readouts.
-func _fight(mode: StringName, threads: int) -> Dictionary:
+# targets, gates, shots, memory), the rows', the commands' and the hits'; the totals and the step's readouts. With `hunts` the
+# mounts take any hostile in reach and no attack is noted (M8-T09).
+func _fight(mode: StringName, threads: int, hunts: bool = false) -> Dictionary:
 	await get_tree().process_frame
 	await get_tree().physics_frame
 	var scene: TurretScene = TurretScene.build(self, mode, threads)
@@ -102,8 +117,8 @@ func _fight(mode: StringName, threads: int) -> Dictionary:
 	for i: int in 2:
 		var t: Combatant = scene.ship(TRANSPORT, Factions.EARTH_ALLIANCE, "TRANSPORT %d" % (i + 1),
 				Vector3(800.0 * i, 0.0, 0.0), {}, 1, true)
-		scene.mount(t, Vector3(0.0, 3.0, -3.0), Vector3.UP, 200.0, "dorsal_fwd")
-		scene.mount(t, Vector3(0.0, -2.0, 3.0), Vector3.DOWN, 200.0, "ventral_aft")
+		scene.mount(t, Vector3(0.0, 3.0, -3.0), Vector3.UP, 200.0, "dorsal_fwd").hunts = hunts
+		scene.mount(t, Vector3(0.0, -2.0, 3.0), Vector3.DOWN, 200.0, "ventral_aft").hunts = hunts
 		transports.append(t)
 	var raiders: Array[Combatant] = []
 	for i: int in 4:
@@ -119,7 +134,7 @@ func _fight(mode: StringName, threads: int) -> Dictionary:
 	var off_main: bool = false
 	var seen: int = 0
 	for t: int in TICKS:
-		if t == 2:
+		if t == 2 and not hunts:
 			# Each raider starts as an attacker of a transport, so the turrets engage whatever the raiders do first.
 			for i: int in raiders.size():
 				scene.sim.note_hit(transports[i % 2].ship.get_instance_id(), raiders[i].ship.get_instance_id())

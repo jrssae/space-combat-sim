@@ -70,6 +70,9 @@ const ASSET_ROOT: String = "res://assets/generated"
 ## The defensive turrets' gun (M5-T21, D61), for a hull whose hardpoints list `turrets[]`; null takes the light turret
 ## (`assets/weapons/turret_light.tres`).
 @export var turret_weapon: WeaponSpec = null
+## Whether its turrets hunt (M8-T09, the Battle Wagon): they fire on any hostile in their reach. Off, they are gunners that
+## answer an attack on their ship or a friend near it (D61), as every civilian's are.
+@export var turrets_hunt: bool = false
 
 
 ## Whether this ship can open a jump point of its own (M6-T23, `JumpCapability`). No designed hull can (the Starfury, the raiders,

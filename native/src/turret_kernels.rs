@@ -14,7 +14,7 @@ use godot::builtin::{Basis, Vector3};
 
 use crate::brain_maths::solve;
 use crate::grid_kernels::{self, Latch, MOUNT_INTERCEPTOR, MOUNT_TURRET};
-use crate::kernels::contact::{Grid, Query};
+use crate::kernels::contact::{self, Grid, Query, View};
 use crate::rows::{FLAG_HULL_ACTIVE, FLAG_RIGID, FLAG_TIER, Rows};
 use crate::v3::{add, col_a, col_b, col_c, cross, dist_sq, dot, normalized, scale, sub, xform};
 
@@ -85,6 +85,9 @@ pub struct Mounts {
     pub burst_spacing_s: Vec<f64>,
     pub burst_fired: Vec<u32>,
     pub burst_started_s: Vec<f64>,
+    /// A ship's turret that hunts (M8-T09, the Battle Wagon's): it takes any hostile in its reach, not only a ship that
+    /// attacked. Off for every mount until its ship's data asks for it.
+    pub hunts: Vec<bool>,
 }
 
 impl Mounts {
@@ -135,6 +138,7 @@ impl Mounts {
             self.burst_spacing_s.push(0.0);
             self.burst_fired.push(0);
             self.burst_started_s.push(0.0);
+            self.hunts.push(false);
         }
         self.taken[slot] = true;
         self.id[slot] = id;
@@ -160,6 +164,7 @@ impl Mounts {
         self.burst_spacing_s[slot] = 0.0;
         self.burst_fired[slot] = 0;
         self.burst_started_s[slot] = 0.0;
+        self.hunts[slot] = false;
         slot
     }
 
@@ -333,6 +338,8 @@ pub struct PickMount {
     pub kind: u8,
     /// How far up its axis its line of fire starts (`Mounts::line_lift`).
     pub line_lift_m: f64,
+    /// A ship's turret that takes any hostile in reach (`Mounts::hunts`).
+    pub hunts: bool,
 }
 
 /// A pick's answer: the target for a mount's binding (0 for none).
@@ -417,6 +424,7 @@ impl PickJob {
                 reach_m: mounts.gun[s].range_m * PICK_REACH,
                 kind: mounts.kind[s],
                 line_lift_m: mounts.line_lift(s),
+                hunts: mounts.hunts[s],
             });
         }
         self.memory.clone_from(memory);
@@ -467,7 +475,9 @@ pub fn pick_all<F: Fn(i64) -> i64>(rows: &Rows, row_of: F, now_s: f64, job: &mut
     picks.clear();
     grid_kernels::surface_rows_of(rows, &row_of, surface_bodies, surface_rows);
     for m in mounts.iter() {
-        let target = if m.kind == MOUNT_TURRET {
+        let target = if m.kind == MOUNT_TURRET && m.hunts {
+            pick_hostile(rows, &row_of, m, relations, *stride, hulls.of(m.body), grid, query, found)
+        } else if m.kind == MOUNT_TURRET {
             pick(rows, &row_of, m, memory, relations, *stride, now_s, hulls.of(m.body))
         } else {
             let mut ctx = grid_kernels::PickCtx {
@@ -576,6 +586,74 @@ pub fn pick<F: Fn(i64) -> i64>(
             }
             best_score = score;
             best = attacker;
+        }
+    }
+    best
+}
+
+/// A hunting mount's pick (M8-T09): the nearest hostile ship or capital within its reach, found through the brains' broad
+/// phase (never a sweep over every ship); one inside the arc before one outside it, and none its own hull hides. It needs
+/// no attack to start: a warship's guns, not a freighter's. 0 for none.
+#[allow(clippy::too_many_arguments)]
+pub fn pick_hostile<F: Fn(i64) -> i64>(
+    rows: &Rows,
+    row_of: &F,
+    m: &PickMount,
+    relations: &[u8],
+    stride: usize,
+    own_hull: &[Volume],
+    grid: &Grid,
+    query: &mut Query,
+    found: &mut Vec<i32>,
+) -> i64 {
+    let Some(own) = usable_row(rows, row_of(m.body)) else {
+        return 0;
+    };
+    let ship_at = rows.positions[own];
+    let basis = &rows.bases[own];
+    let pivot = add(xform(basis, m.local), ship_at);
+    let up = normalized(xform(basis, m.up));
+    let from = add(pivot, scale(up, m.line_lift_m as f32));
+    let view = View {
+        body_ids: &rows.body_ids,
+        positions: &rows.positions,
+        body_faction: &rows.faction_ix,
+        is_ship: &rows.rigid,
+        reach: &rows.reach,
+        is_static: &rows.is_static,
+        is_mine: &rows.is_mine,
+        radii: &rows.radii,
+        bolt_positions: &[],
+        bolt_velocities: &[],
+        bolt_faction: &[],
+        bolt_shooters: &[],
+    };
+    let mut work = contact::Work { grid, query };
+    contact::contacts_into(&view, &mut work, m.body, pivot, m.reach_m, found);
+    let reach_sq = m.reach_m * m.reach_m;
+    let mut best = 0;
+    let mut best_score = f64::INFINITY;
+    for &c in found.iter() {
+        let Some(j) = usable_row(rows, i64::from(c)) else {
+            continue;
+        };
+        if j == own || !rows.rigid[j] || rows.surface(j).is_some() {
+            continue;
+        }
+        if relation(relations, stride, m.faction_ix, rows.faction_ix[j]) != REL_HOSTILE {
+            continue;
+        }
+        let d_sq = f64::from(dist_sq(rows.positions[j], pivot));
+        if d_sq > reach_sq {
+            continue;
+        }
+        let toward = normalized(sub(rows.positions[j], pivot));
+        let elevation = f64::from(dot(toward, up)).clamp(-1.0, 1.0).asin();
+        let score = if elevation >= m.min_elevation { d_sq } else { d_sq + reach_sq * 4.0 };
+        // The line is tested only for a candidate that would win, as the defensive pick does.
+        if score < best_score && !line_blocked(basis, ship_at, from, rows.positions[j], own_hull) {
+            best_score = score;
+            best = rows.body_ids[j];
         }
     }
     best

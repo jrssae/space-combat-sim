@@ -319,7 +319,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T06 | B | Dock in the main docking bay to be repaired and relaunched, for the player and the AI wingmen (D82, Q7) | - | Fable | The `dock` interaction, the lane for fighters, repair and a Cobra-bay relaunch; wing orders | in progress |
 | T07 | C | Bring M10-T19's raider strike carrier into `m8`: merge `origin/m10`, one collision builder, its tests green (Q5) | - | Opus | Two branches built a collision builder; docs, `native/src/lib.rs` and `info.md` conflict | done |
 | T08 | C | The civilian escort's raids come with the strike carrier (D83, Q6) | T07 | Fable | Mission data and pacing on `CarrierJumps`; the escort's tests kept green | done |
-| T09 | C | Raider Battle Wagon (moved from M10-T20): from images, with weapons (M10 Q31) and four launch tubes; the escort's last wave comes with it (Q8) | T08, the maintainer on its weapons | Fable | No STL; a new hull with weapons and tube launches | in progress |
+| T09 | C | Raider Battle Wagon (moved from M10-T20): from images, with weapons (M10 Q31) and four launch tubes; the escort's last wave comes with it (Q8) | T08, the maintainer on its weapons | Fable | No STL; a new hull with weapons and tube launches | done |
 | T10 | D | Interceptor muzzle at the drawn barrel tip, and the grid balance measured again (roadmap M7-2) | - | Fable | A placement fix in the turret rows with a balance check | done |
 | T11 | D | The walls beside the cargo bay stop flickering (roadmap M7-3) | - | Sonnet | Find the coplanar faces or shading cause in the station generator; a test | not started |
 | T12 | D | Audio rework of every sound effect and the Starfury engines' steady level (roadmap M7-5) | - | Opus | One loudness reference, the mix, and a smoothed engine gain; a listening checklist | not started |
@@ -654,7 +654,8 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
     740 s, as before), a quarter of free flight's raids (`wagon_share`), every raid of the new sandbox scenario
     `battle_wagon_raid` (New game, "Raider Battle Wagon"), and `transit wagon` on the console (`info.md`).
   - **Two things decided here, for the maintainer to confirm (H).** Its turrets are M5's gunners (D61): they fire on a ship
-    that hit the wagon or a friend near it, not on every hostile in reach. Its racks fire only at a fighter within 3 km of
+    that hit the wagon or a friend near it, not on every hostile in reach (changed in the fix round below: they hunt). Its
+    racks fire only at a fighter within 3 km of
     it (data), though a missile reaches 6 km: it stands off at 2.5 km, so they defend it and do not shell the escort's
     fight from afar. Both are first figures, as are its hull (24 000) and the turret's numbers (`docs/playtest.md`).
   - **Tests** (scratch copy of HEAD plus the staged change, native rebuilt, the wagon rebuilt there, `GUT_SLOW=1`): compile
@@ -667,6 +668,20 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 
 - **Follow-up (maintainer, 2026-11-19, queued):** the Battle Wagon's turrets engage **any hostile within their reach** (1.6 km),
   not only ships that hit the wagon or a friend; the missile racks stay as built (fire within 3 km, the civilian a valid target).
+- **Fix round (2026-11-19): its turrets hunt.** A per-class option in data: `ShipSpec.turrets_hunt` (on in
+  `raider_battle_wagon.tres` only) sets `TurretMount.hunts`, and the core picks for such a mount with
+  `turret_kernels::pick_hostile` (`ScsSimCore.set_turret_hunts`): the nearest hostile ship or capital in its reach through
+  the brains' broad phase, in the AI job like every pick, one inside the arc first and none its own hull hides. Every other
+  hull's turrets keep D61's defensive pick, untouched. The racks are as built.
+  - **Tests** (scratch copy of HEAD plus the staged change, native rebuilt, `GUT_SLOW=1`): compile check 957 scripts; Rust 259
+    passed (3 new: the hunting pick, its arc and own hull, a reused slot defends again); GUT 15 files, 128 tests, 122
+    passed, 0 failed, 6 pending (the escort's balance runs): `test_battle_wagon` 8 (the player inside 1.6 km that never fired
+    is fired on, one at 4.5 km is not, and a Skylark's turrets hold fire on a hostile 450 m away that never fired),
+    `test_turret_threads` 4 (1 new: hunting mounts give the same bits threaded, delayed and with 1 and 6 threads),
+    `test_turret_defense`, `test_turret_line_of_fire`, `test_turret_kernel`, `test_parity_fixture`,
+    `test_brain_think_parity`, `test_weapon_rows_battle`, `test_station_grid` and its threads file, `test_sim_core`,
+    `test_strike_carrier`, and `test_civilian_escort` 25 of 31 (its scripted fought run now ends at 782 s; it was 740 s).
+    `bench_quick.sh` was not run (the pick is one broad-phase query a hunting mount in the AI job, eight mounts a wagon).
 
 ### M8-T10 Interceptor muzzle at the drawn barrel tip
 

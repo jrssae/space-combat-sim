@@ -65,6 +65,7 @@ fn mount(body: i64) -> PickMount {
         reach_m: 1500.0 * PICK_REACH,
         kind: MOUNT_TURRET,
         line_lift_m: LINE_LIFT_M,
+        hunts: false,
     }
 }
 
@@ -536,4 +537,72 @@ fn a_raised_gun_aims_from_the_trunnion_it_fires_from() {
         let old = heavy_miss(&base, lifted.pivot, elevation);
         assert!(old > 5.0 * r, "{elevation} degrees up: aimed from the base it passes {old:.2} m off");
     }
+}
+
+// Rows the broad phase can read: `rows_of`, every row a ship.
+fn hunt_rows(bodies: &[(i64, u32, Vector3)]) -> Rows {
+    let mut rows = rows_of(bodies);
+    let n = rows.body_ids.len();
+    rows.rigid = vec![true; n];
+    rows.is_static = vec![false; n];
+    rows.is_mine = vec![false; n];
+    rows.reach = vec![0.0; n];
+    rows.kinds = vec![0; n];
+    rows.roles = vec![0; n];
+    rows
+}
+
+// A hunting mount's pick over `rows`, its ship's own volumes `hull`.
+fn hunt(rows: &Rows, m: &PickMount, hull: &[Volume]) -> i64 {
+    let mut grid = Grid { cell_m: 5000.0, ..Grid::default() };
+    contact::sorted_cells_into(&rows.positions, grid.cell_m, &mut grid.cells);
+    let (mut query, mut found) = (Query::default(), Vec::new());
+    pick_hostile(rows, &row_finder(rows), m, &table(), 3, hull, &grid, &mut query, &mut found)
+}
+
+#[test]
+fn a_hunting_turret_takes_the_nearest_hostile_in_reach_that_never_fired() {
+    // M8-T09: the Battle Wagon's turrets. The defensive pick leaves the same ships alone.
+    let rows = hunt_rows(&[
+        (1, 0, Vector3::ZERO),
+        (2, 1, Vector3::new(0.0, 900.0, 0.0)),
+        (3, 1, Vector3::new(0.0, 400.0, 300.0)),
+        (4, 2, Vector3::new(0.0, 200.0, 0.0)),
+        (5, 0, Vector3::new(0.0, 100.0, 0.0)),
+    ]);
+    let m = PickMount { hunts: true, ..mount(1) };
+    assert_eq!(hunt(&rows, &m, &[]), 3, "the nearest raider, not the nearer neutral or friend");
+    assert_eq!(pick(&rows, &row_finder(&rows), &mount(1), &Memory::default(), &table(), 3, 0.0, &[]), 0, "a defensive turret holds fire");
+    let far = hunt_rows(&[(1, 0, Vector3::ZERO), (2, 1, Vector3::new(0.0, 1500.0 * PICK_REACH as f32 + 50.0, 0.0))]);
+    assert_eq!(hunt(&far, &m, &[]), 0, "a raider beyond its reach is left alone");
+    let alone = hunt_rows(&[(1, 0, Vector3::ZERO)]);
+    assert_eq!(hunt(&alone, &m, &[]), 0, "never its own ship");
+}
+
+#[test]
+fn a_hunting_turret_prefers_its_arc_and_never_picks_through_its_own_hull() {
+    let rows = hunt_rows(&[
+        (1, 0, Vector3::ZERO),
+        (2, 1, Vector3::new(0.0, -300.0, 0.0)),
+        (3, 1, Vector3::new(0.0, 800.0, 0.0)),
+    ]);
+    let m = PickMount { hunts: true, ..mount(1) };
+    assert_eq!(hunt(&rows, &m, &[]), 3, "the one inside the arc before the nearer one below it");
+    // The ship's own hull: a slab under the mount hides whatever is below.
+    let slab = Volume::new(false, Basis::IDENTITY, Vector3::ZERO, [50.0, 2.0, 50.0]);
+    let below = hunt_rows(&[(1, 0, Vector3::ZERO), (2, 1, Vector3::new(0.0, -300.0, 0.0))]);
+    assert_eq!(hunt(&below, &m, &[]), 2, "below the arc, but the only one");
+    assert_eq!(hunt(&below, &m, &[slab]), 0, "hidden by its own hull: no target it cannot shoot");
+}
+
+#[test]
+fn a_mount_hunts_only_when_asked_and_a_reused_slot_defends_again() {
+    let mut mounts = Mounts::default();
+    let s = mounts.add(7, 1, 1, 0, Vector3::ZERO, Vector3::new(0.0, 1.0, 0.0), 200.0, 3.0, gun());
+    assert!(!mounts.hunts[s], "a turret defends unless its ship's data says it hunts");
+    mounts.hunts[s] = true;
+    mounts.taken[s] = false;
+    let again = mounts.add(8, 2, 1, 0, Vector3::ZERO, Vector3::new(0.0, 1.0, 0.0), 200.0, 3.0, gun());
+    assert_eq!(again, s);
+    assert!(!mounts.hunts[again]);
 }

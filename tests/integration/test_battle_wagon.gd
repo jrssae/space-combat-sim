@@ -2,8 +2,8 @@ extends GutTest
 ## The raiders' Battle Wagon in the real main scene (M8-T09, D83, AC8), headless: it is built from its generated hull with its
 ## compound collision, twenty berths in its two launch tubes, eight plasma turrets and four missile racks; it comes out of its
 ## own jump point with ten fighters on its berths and launches them ahead through the tubes' bow mouths; called home, they
-## come in through the stern mouths; its racks fire on a hostile fighter in reach, its turrets on one that attacked it (D61),
-## and both hold fire on one out of reach.
+## come in through the stern mouths; its turrets and its racks fire on a hostile fighter in reach that never fired (its
+## turrets hunt, by its spec; every other hull's stay M5's gunners), and both hold fire on one out of reach.
 ## Its numbers are data (`data/capitals/capitals.json`), and free flight's raids and the sandbox scenario bring it by data.
 
 const SEED: int = 5
@@ -132,11 +132,13 @@ func test_its_numbers_are_data() -> void:
 	cap.free()
 
 
-func test_its_racks_fire_on_a_hostile_fighter_in_reach_and_its_turrets_on_one_that_attacked_it() -> void:
+func test_its_turrets_and_racks_fire_on_a_hostile_fighter_in_reach_that_never_fired() -> void:
 	var cap: CapitalStandin = await _wagon(Vector3(700.0, 120.0, -300.0))
 	for mount: TurretMount in cap.mounts:
 		assert_gt(mount.slot(), -1, "%s is on the core's turret rows" % mount.mount_name)
 		assert_eq(mount.faction, Factions.RAIDERS)
+		assert_true(mount.hunts, "its spec says its turrets hunt")
+		assert_true(bool(mount.bound_sim().core.turret_hunts(mount.slot())), "and the core knows")
 	# What its racks have in flight: guided missiles of the wagon's, at the player.
 	var seen: Dictionary = {}
 	var watch: Callable = func() -> void:
@@ -144,24 +146,47 @@ func test_its_racks_fire_on_a_hostile_fighter_in_reach_and_its_turrets_on_one_th
 			var shot := node as Projectile
 			if shot != null and MissileStandin.of(shot) != null and shot.shooter_id == cap.get_instance_id():
 				seen[shot.get_instance_id()] = MissileStandin.of(shot).target_id
-	await _fly(8.0, func() -> bool:
+	await _fly(12.0, func() -> bool:
 		watch.call()
-		return cap.racks.launches > 1)
+		return cap.racks.launches > 1 and _turret_shots(cap) > 3)
 	assert_gt(cap.racks.launches, 1, "its racks launch missiles at the player in reach")
 	assert_eq(cap.racks.schedule.missiles_left(), 24 - cap.racks.launches, "each from a rack's cells")
 	assert_gt(seen.size(), 0, "the missiles fly")
 	for id: int in seen:
 		assert_eq(seen[id], main.ship.get_instance_id(), "guided at the player")
-	assert_eq(_turret_shots(cap), 0, "its turrets are gunners' (D61): they hold fire on a ship that has not attacked")
-	# The player's bolt hits the wagon (what the hit sweep tells the core): now its turrets answer.
-	SimCore.for_tree(get_tree()).note_hit(cap.get_instance_id(), main.ship.get_instance_id())
-	await _fly(12.0, func() -> bool: return _turret_shots(cap) > 3)
-	assert_gt(_turret_shots(cap), 3, "its plasma turrets fire on its attacker")
-	assert_eq(int(DebugConsole.registry.read("carriers.turret_shots")["value"]), 0, "(the readout is the newest raid carrier's: none here)")
+	assert_gt(_turret_shots(cap), 3, "its plasma turrets fire on a hostile in reach that never fired (the maintainer, 2026-11-19)")
 	assert_eq(cap.damageable.hull.fraction(), 1.0, "its own fire does not hit it")
 	cap.set_faction(Factions.EARTH_ALLIANCE)
 	for mount: TurretMount in cap.mounts:
 		assert_eq(mount.faction, Factions.EARTH_ALLIANCE, "its turrets change sides with it")
+	var shots: int = _turret_shots(cap)
+	await _fly(3.0)
+	assert_eq(_turret_shots(cap), shots, "and hold fire on the player, now a friend")
+
+
+func test_only_the_battle_wagons_turrets_hunt() -> void:
+	# Every other hull's turrets stay M5's gunners (D61): they answer an attack, they do not open fire.
+	for file: String in DirAccess.get_files_at("res://assets/ships"):
+		if not file.ends_with(".tres"):
+			continue
+		var spec := load("res://assets/ships".path_join(file)) as ShipSpec
+		assert_eq(spec.turrets_hunt, file == "raider_battle_wagon.tres", file)
+	main.ensure_pool(&"skylark_transport", 1)
+	var liner: Combatant = main.ships.acquire("LINER", main.world.to_universe(main.ship.global_position + Vector3(400.0, 60.0, -200.0)),
+			Basis.IDENTITY, main.world.rest_velocity(), null, &"skylark_transport")
+	assert_not_null(liner)
+	await wait_physics_frames(2)
+	assert_gt(liner.turrets.size(), 0)
+	for mount: TurretMount in liner.turrets:
+		mount.faction = Factions.RAIDERS  # its gunners now see the player as hostile
+		assert_false(mount.hunts)
+		assert_gt(mount.slot(), -1)
+		assert_false(bool(mount.bound_sim().core.turret_hunts(mount.slot())))
+	await _fly(6.0)
+	var fired: int = 0
+	for mount: TurretMount in liner.turrets:
+		fired += mount.shots
+	assert_eq(fired, 0, "a defensive turret holds fire on a hostile 450 m away that never fired")
 
 
 func test_it_holds_fire_on_a_fighter_out_of_reach() -> void:

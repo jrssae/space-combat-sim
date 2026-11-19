@@ -357,6 +357,7 @@ func _arm(hardpoints: Dictionary) -> void:
 				continue
 			var mount := TurretMount.create({"name": String(entry.get("name", "turret")), "position": at, "up": up,
 					"arc_deg": float(entry.get("arc_deg", 200.0)), "barrel_m": float(entry.get("barrel_m", 3.0))}, spec.turret_weapon, faction)
+			mount.hunts = spec.turrets_hunt
 			mount.use_model(model)
 			add_child(mount)
 			mounts.append(mount)
