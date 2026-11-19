@@ -350,6 +350,11 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T26 | C | Civilian escort update: a longer route and a bigger belt, a longer gap before wave two, Control's opening brief (maintainer, 2026-11-19; numbered last) | T23 | Fable | Scenario and mission data, pacing and dialog on the escort the T08 agent knows | done |
 | T27 | C | Remove the Raider Battle Wagon everywhere: not from the show, and its source image's creator would not want it shared this way (maintainer, 2026-11-19; numbered last) | - | Fable | Undo M8-T09 across code, data, assets, tests and docs; the escort's last wave back on the strike carrier | done |
 | T28 | D | Free flight's encounters split into three switches: civilian traffic, allied patrols, enemy encounters (maintainer, 2026-11-19; numbered last) | - | Sonnet | Settings, the Free flight page and the encounter director's weights | done |
+| T33 | A | Tutorial update: only the instructor and the player until the raid; the wing-orders drill on the instructor; a two-ship opening launch; every other Starfury launches at the alarm (maintainer, 2026-11-19) | T05 | Fable | Mission script, scenario and dialog on the T05 agent's own work | not started |
+| T30 | C | Cobra-bay launch: more camera angles (a pool, picked at random without repeats) and control back as soon as the launch thrusters cut (maintainer, 2026-11-19) | T03 | Opus | Launch shots and the hand-off timing | not started |
+| T29 | C | Jumpgate autopilot: more camera angles (wider trailing shots, the gate's base and side), picked at random without repeats (maintainer, 2026-11-19) | T18 | Opus | Gate shots on the autopilot's predicted path | not started |
+| T31 | C | Docking into the main docking bay: more camera angles, and the Starfury visibly matching the drum's rotation before it enters (maintainer, 2026-11-19) | T06 | Opus | Docking shots and a roll-match stage in the docking autopilot | not started |
+| T32 | C | Hold X for 1 s to abort any autopilot (gate jump, docking), until its point of no return (maintainer, 2026-11-19) | T29, T31 | Opus | One abort rule over every autopilot, the hold bar and keyboard parity | not started |
 | T17 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M8-T01 Tutorial script (discussion with the maintainer)
@@ -1248,6 +1253,42 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   (a mid-flight flip applies to the next event) and starts nothing with all three off. `StationTraffic.auto` needs the civilian
   switch. The Free flight page has the three toggles then Start; the request's `encounters` is "any on". Console: `encounters
   on|off <raid|patrol|traffic>` flips a switch, `force` refuses an off kind, `status` shows them; `info.md`.
+
+### M8-T33 Tutorial update: two ships until the raid
+
+- **Goal (maintainer, 2026-11-19):** the walkthrough (beats 1-11) has **only the instructor and the player**. The opening is a
+  **two-ship launch** (T03's exterior shots, the instructor then the player). The **wing-orders drill runs on the instructor**, who
+  acts as the player's wingman for form/attack/cover and then resumes instructing. **Every other Starfury, the player's two
+  wingmen included, launches at the alarm**: the full squadron launch runs then, in play (the player keeps control).
+- **Done when:** the tutorial's tests pass with two ships until the alarm and the whole wing after it; D79 updated.
+
+### M8-T30 Cobra-bay launch: camera variety and a quicker hand-off
+
+- **Goal (maintainer, 2026-11-19):** a pool of launch camera angles (data), each launch picking its shots at random (seeded) and
+  never the same set as last time, skipping any that would clip the station; **control returns as soon as the launch thrusters
+  cut** instead of after the cinematic's tail. Applies to every Cobra-bay launch (player, docking relaunch, squadron launch).
+- **Done when:** tests on the pool (no repeat, clearance) and on the hand-off moment; frames for the record; (H) the look.
+
+### M8-T29 Jumpgate autopilot: camera variety
+
+- **Goal (maintainer, 2026-11-19):** more shots for the gate jump: trailing the Starfury from further out, from the gate's base and
+  from its side, in a pool picked at random (seeded) without repeating the last set, timed from the predicted arrival (T18).
+- **Done when:** tests on the pool and timing at several approach speeds; frames for the record; (H) the look.
+
+### M8-T31 Docking: camera variety and matching the drum's rotation
+
+- **Goal (maintainer, 2026-11-19):** a pool of docking shots picked the same way, and **the player's Starfury visibly matches the
+  drum's rotation** (rolls to the bay's turn) before it enters the main docking bay, with a shot that shows it.
+- **Done when:** tests on the pool and the roll match (the ship's roll rate equals the drum's within a tolerance before the mouth);
+  frames for the record; (H) the look.
+
+### M8-T32 Hold X to abort an autopilot
+
+- **Goal (maintainer, 2026-11-19):** during any autopilot (the gate jump's line-up and run-in, docking's approach), **holding X for
+  1 s** (with the hold bar; Shift / Mouse 4 on the keyboard) aborts it: the cinematic cuts and control returns. Not possible past
+  the point of no return (inside the gate's vortex; past the docking bay's inner doors) — the prompt goes away there. One rule
+  shared by every autopilot.
+- **Done when:** tests for each autopilot (abort before the point, refused after), keyboard parity, the prompt.
 
 ### M8-T17 Integration, full suite, docs and acceptance
 
