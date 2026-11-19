@@ -1337,6 +1337,10 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   from its side, in a pool picked at random (seeded) without repeating the last set, timed from the predicted arrival (T18).
 - **Done when:** tests on the pool and timing at several approach speeds; frames for the record; (H) the look.
 
+- **Shot length (maintainer, 2026-11-19, for T29 to T31 and every cinematic):** no single camera shot lasts **3 s or more**;
+  sequences keep their length but cut more often from the pools; the gate's **arrival** gets its own pool too. A guard test over all
+  shot data (T30) enforces it.
+
 ### M8-T31 Docking: camera variety and matching the drum's rotation
 
 - **Goal (maintainer, 2026-11-19):** a pool of docking shots picked the same way, and **the player's Starfury visibly matches the
