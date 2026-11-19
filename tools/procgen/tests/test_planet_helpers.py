@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import math
 import unittest
+from dataclasses import replace
 from unittest import mock
 
 import numpy as np
@@ -142,6 +143,21 @@ class ColourTests(unittest.TestCase):
         self.assertFalse(spec.ocean)
         self.assertFalse(spec.night_lights)
         self.assertEqual(spec.map_size[0], 2 * spec.map_size[1])
+
+    def test_gamma_leporis_ii_is_cold_and_unlike_epsilon_iii(self) -> None:
+        # D89: the escort's planet differs from Epsilon III in colour: blue-white ice, not rust.
+        spec = planet.GAMMA_LEPORIS_II
+        for r, g, b in [c for _, c in spec.ramp] + [spec.rust, spec.ochre, spec.limb_srgb]:
+            self.assertGreaterEqual(b, g, (r, g, b))
+            self.assertGreater(b, r, (r, g, b))
+        self.assertGreater(spec.groove_dark, planet.EPSILON_III.groove_dark)  # the cracks read darker than Epsilon's canyons
+        self.assertIn("gamma_leporis_ii", planet.BUILDERS)
+
+    def test_a_small_ice_build_is_blue(self) -> None:
+        maps = planet.make_maps(replace(planet.GAMMA_LEPORIS_II, map_size=(128, 64), cloud_size=(64, 32)), 42)
+        mean = maps.albedo.reshape(-1, 3).mean(axis=0)
+        self.assertGreater(mean[2], mean[0])
+        self.assertEqual(maps.albedo.shape, (64, 128, 3))
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 {
 	"scenario_id": "civilian_escort",
-	"system_id": "local",
-	"anchor": {"place": "babylon5", "at": [5500, -1200, -6000]},
+	"system_id": "gamma_leporis",
+	"anchor": {"place": "leporis_relay", "at": [5500, -1200, -6000]},
 	"epoch": 540148,
 	"player": {"position": [420, 40, 1600], "forward": [0, 0, -1], "velocity": [0, 0, -60]},
 	"props": [
@@ -44,8 +44,8 @@
 	],
 	"cinematics": {
 		"departure": {"keys": [
-			{"t": 0, "position": {"origin": [-420, 90, 380]}, "look_at": {"actor": "{civilian}"}, "fov": 50},
-			{"t": 6, "position": {"origin": [-520, 140, 160]}, "look_at": {"actor": "{civilian}", "offset": [0, 0, -400]},
+			{"t": 0, "position": {"origin": [130, 70, 420]}, "look_at": {"actor": "{civilian}"}, "fov": 50},
+			{"t": 6, "position": {"origin": [80, 110, 180]}, "look_at": {"actor": "{civilian}", "offset": [0, 0, -400]},
 				"fov": 44}
 		]},
 		"wing": {"keys": [

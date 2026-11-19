@@ -166,6 +166,27 @@ func test_play_loads_it_into_the_cinematic_intro_with_the_drawn_civilian() -> vo
 			assert_eq(main.ships.pool_size(type), 0, "no %s pooled" % type)
 
 
+## D89 (M8-T23): the escort flies in its own system, Gamma Leporis: its ships are spawned there, with no station, no nebula
+## and no home dock for anyone, round the ice world rather than Epsilon III.
+func test_it_runs_in_gamma_leporis_with_no_station_no_nebula_and_no_home_dock() -> void:
+	await _fly()
+	assert_eq(main.star_system.system.id, &"gamma_leporis")
+	assert_true(main.star_system.system.is_valid(), "; ".join(main.star_system.system.errors))
+	assert_false(main.star_system.system.has_id(&"babylon5"))
+	assert_true(main.star_system.system.has_id(&"gamma_leporis_ii"))
+	assert_eq(main.world.origin.system_id, &"gamma_leporis")
+	assert_eq(main.world.to_universe(main.ship.global_position).system_id, &"gamma_leporis")
+	assert_not_null(_civilian(), "the civilian is spawned in the new system")
+	assert_eq(_at(_civilian()).system_id, &"gamma_leporis")
+	assert_true(main.far_props.station == null or not is_instance_valid(main.far_props.station), "no Babylon 5 here")
+	assert_false(main.space_environment._nebula_shown, "the sky has no nebula")
+	var wing: Wing = main.wings.player_wing()
+	assert_eq(wing.members().size(), 2, "ALPHA 2 and ALPHA 3 fly with the player")
+	for c: Combatant in [main.combatant] + wing.members():
+		assert_eq(c.home, &"", "%s has no home dock" % c.display_name)
+		assert_null(main.docking.home_dock(c))
+
+
 # --- the intro and the hand-over -----------------------------------------------------------------------------------------
 
 
@@ -635,7 +656,8 @@ func test_a_skipped_wave_leaves_no_raider_and_the_civilian_at_its_point() -> voi
 		assert_false(_api().alive(ship_name), "%s released by the skip" % ship_name)
 	assert_eq(_alive(WAVE_TWO), 8, "the step played now has its wave")
 	var point: Vector3 = MissionScriptClass.POINT_50
-	assert_lt(_at(_civilian()).distance_to(UniversePos.new(point.x, point.y, point.z)), 1.0, "at the 50 % point")
+	var fifty := UniversePos.new(point.x, point.y, point.z, _api().world.system_id)
+	assert_lt(_at(_civilian()).distance_to(fifty), 1.0, "at the 50 % point")
 
 
 func test_a_skipped_run_spawns_every_ship_from_the_pools() -> void:

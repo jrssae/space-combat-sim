@@ -33,6 +33,22 @@ func test_the_catalog_names_the_current_systems_star() -> void:
 	assert_almost_eq(StarCatalog.temperature_k(&"local"), 5084.0, 1e-6, "Epsilon Eridani")
 
 
+## D89 (M8-T23): the escort's system has a whiter F star than Epsilon's and a plain star field; Epsilon keeps its nebula.
+func test_gamma_leporis_has_a_whiter_star_and_no_nebula() -> void:
+	assert_almost_eq(StarCatalog.temperature_k(&"gamma_leporis"), 6350.0, 1e-6)
+	assert_false(StarCatalog.shows_nebula(&"gamma_leporis"))
+	assert_true(StarCatalog.shows_nebula(&"local"))
+
+
+func test_a_system_shows_the_nebula_unless_its_sky_says_not() -> void:
+	var table: Dictionary = StarCatalog.parse('{"default": "a", "systems": {"a": {"temperature_k": 3000.0}, '
+			+ '"b": {"temperature_k": 6000.0, "sky": {"nebula": false}}}}')
+	assert_true(StarCatalog.nebula_in(table, &"a"))
+	assert_false(StarCatalog.nebula_in(table, &"b"))
+	assert_true(StarCatalog.nebula_in(table, &"nowhere"), "an unknown system takes the default's sky")
+	assert_true(StarCatalog.nebula_in(StarCatalog.parse("not json"), &"a"), "a broken table keeps the nebula")
+
+
 func test_an_unknown_system_falls_back_to_the_default_star() -> void:
 	var table: Dictionary = StarCatalog.parse('{"default": "a", "systems": {"a": {"temperature_k": 3000.0}}}')
 	assert_almost_eq(StarCatalog.temperature_in(table, &"nowhere"), 3000.0, 1e-6)

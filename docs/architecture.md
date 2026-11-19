@@ -911,6 +911,7 @@ and feeds them each frame. Console: `flare [on|off]`, `blur [on|off]`, provider 
 
 - **No haze (Q31).** The flare is a lens effect only: no veil, no broad lobes, no god rays, since space has nothing to scatter light (`SceneLensFlareEffect.SHADER_PATCHES`).
 - **Star colour (Q30).** `data/star_systems.json` gives each `system_id` a star temperature; `StarColor` turns it into one colour for the flare and the key star's light (`SpaceEnvironment.set_star`).
+- **A system's sky (M8-T23, D89).** A system entry's `sky.nebula: false` drops the nebula panorama (the star points stay); missing, the nebula shows. `SpaceEnvironment.use_star_of` applies it with the star. The civilian escort flies in `gamma_leporis` (an F6V star, the ice world `gamma_leporis_ii`, the place `leporis_relay`; no station, no gate), the rest in `local` (Epsilon Eridani).
 - **Lens flare.** ARez's add-on (`addons/lens_effects/`, vendored unedited, `docs/third-party.md`) draws the sun disc, ghosts, an
   anamorphic streak (its god rays are patched out, Q31). It wants the sun's screen position from its own `world_environment.gd`; `PostEffects` sets
   `sun_position` and `sun_dir_sign` instead (`LensFlareAim`), from the key star's direction (`KeyStar`'s +Z, the way to the star).

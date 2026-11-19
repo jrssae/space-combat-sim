@@ -167,6 +167,8 @@ func _ready() -> void:
 		_start_velocity = player["velocity"]
 		_player_home = player.get("home", &"")
 		_system_id = scenario["system_id"]
+		# Every position the scenario places is in its own system, the World's origin too (M8-T23).
+		world.origin = UniversePos.new(world.origin.x, world.origin.y, world.origin.z, _system_id)
 		_scenario_spawns = scenario["spawns"]
 		_scenario_routes = scenario["routes"]
 		_scenario_wings = scenario["wings"]

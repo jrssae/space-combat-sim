@@ -263,7 +263,7 @@ func next_name(prefix: String = NAME_PREFIX, first: int = 1) -> String:
 
 
 func _park_position() -> UniversePos:
-	return UniversePos.new(0.0, PARK_Y_M, 0.0)
+	return UniversePos.new(0.0, PARK_Y_M, 0.0, world.origin.system_id)
 
 
 func _park(combatant: Combatant) -> void:

@@ -149,6 +149,18 @@ func test_the_star_catalog_still_reads_the_file() -> void:
 	assert_false(StarCatalog.parse(FileAccess.get_file_as_string(StarCatalog.PATH)).has("error"), "parses")
 
 
+## D89 (M8-T23): the escort's own system loads: its star, the ice world and the relay the escort anchors on, and no station.
+func test_gamma_leporis_loads_with_its_planet_and_relay_and_no_station() -> void:
+	var system := StarSystem.load_system(&"gamma_leporis")
+	assert_true(system.is_valid(), "; ".join(system.errors))
+	assert_eq(system.star_id(), &"gamma_leporis")
+	assert_eq(system.display_name(&"gamma_leporis_ii"), "Gamma Leporis II")
+	assert_eq(system.display_name(&"leporis_relay"), "Leporis Relay")
+	assert_false(system.has_id(&"babylon5"))
+	assert_false(system.has_id(&"jumpgate"))
+	assert_true(StarSystem.load_system(&"local").has_id(&"babylon5"), "Epsilon keeps its station")
+
+
 func test_names_indices_and_impact_radii() -> void:
 	var system := StarSystem.load_system(&"local")
 	assert_eq(system.display_name(&"babylon5"), "Babylon 5", "the file's name (M6-T08)")

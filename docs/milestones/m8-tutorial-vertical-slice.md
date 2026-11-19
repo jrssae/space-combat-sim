@@ -283,7 +283,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | AC16 | GPU memory (D86): the overlay shows VRAM used in GB and as a percentage of the card on the maintainer's GPU, matching `mem_info_vram_used` within a refresh; `state render` reports the three values; with no driver total it shows the game's share and `total unknown` (unit tests on fake sysfs files) | A | **Met** (T20, 2026-11-18) |
 | AC17 | Fonts (D87): both fonts in the repo with their `docs/third-party.md` entry; every UI text uses one of them (a test finds no other font); ASCII and the UI's symbols draw on the GPU; the maintainer approved the look sheet | A | **Met** (T21, 2026-11-19) |
 | AC18 | Gamepad detection (D88): the cause written down; joypads logged at start and hotplug, the connect, disconnect and none-found notices, `joypads` in `info.md`; the troubleshooting section; the maintainer's pad seen by the game in its working mode (H) | A | |
-| AC19 | Escort's own system (D89): the escort runs in the new star system with no station and no nebula, the new planet and sky approved on a sheet, wingmen with no home dock; its tests pass; Epsilon's scenarios unchanged | A | |
+| AC19 | Escort's own system (D89): the escort runs in the new star system with no station and no nebula, the new planet and sky approved on a sheet, wingmen with no home dock; its tests pass; Epsilon's scenarios unchanged | A | **Met** (T23, 2026-11-19; Gamma Leporis, the ice world chosen from two on the sheet. How it looks is (H)) |
 | AC20 | Radial fit (D90): menus with 1 to 8 entries lay out equal slices with no empty ones (unit tests on the layout), the stick, the D-pad, the keys and the console pick the right entry for each count, unavailable entries leave the ring | A | **Met** (T24, 2026-11-19) |
 
 ## Working rules for M8
@@ -332,7 +332,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T20 | D | GPU memory in use on the debug overlay, in GB and as a percentage of the card (D86; maintainer 2026-11-18; numbered last because it was added after the others had numbers) | - | Fable | Driver sysfs reads off the frame path, a fallback, the overlay and `state render` | done |
 | T21 | D | The game's fonts: Babylon5 for titles and headlines, Babylon5Credits for body text and the HUD, on all UI text (D87; maintainer, 2026-11-18; numbered last) | - | Fable | A theme over every screen and the HUD's own drawing, a symbol-encoded cmap, a look sheet first | done |
 | T22 | D | Gamepad detection: why Godot sometimes misses the maintainer's pad, joypad logging and notices, `joypads`, troubleshooting (D88; maintainer, 2026-11-18; numbered last) | - | Fable | Linux input stack diagnosis on the real device, small notices | in progress |
-| T23 | C | The civilian escort in its own star system: no Babylon 5, no nebula, a different planet (D89; maintainer, 2026-11-18; numbered last) | T08 | Opus | A second system in the data, its sky and planet, the escort moved onto it; a sheet first | not started |
+| T23 | C | The civilian escort in its own star system: no Babylon 5, no nebula, a different planet (D89; maintainer, 2026-11-18; numbered last) | T08 | Opus | A second system in the data, its sky and planet, the escort moved onto it; a sheet first | done |
 | T24 | D | Radial menus fit their entries: equal slices for however many entries, no empty spots (D90; maintainer, 2026-11-18; numbered last) | - | Opus | The radial framework's layout and picking for every input | done |
 | T17 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
@@ -952,6 +952,15 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 - **Files:** `data/star_systems.json` (the new system), the sky and planet generators' data for it, `data/scenarios/civilian_escort.json`
   and its mission script, the escort's tests, a sheet under `references/screenshots/M8-T23 escort system/` for the maintainer first.
 - **Done when:** AC19.
+- **Done (2026-11-19):** the escort flies in `gamma_leporis` (`data/star_systems.json`): Gamma Leporis, an F6V yellow-white star
+  (6 350 K, whiter than Epsilon's K2V), the ice world `gamma_leporis_ii` (blue-grey ice, white highlands, dark cracks; a new
+  `PlanetSpec` in `tools/procgen/assets/planet.py` with `groove_dark`) and the place `leporis_relay` the scenario anchors on; no
+  station, no gate, no home dock. A system's `sky.nebula: false` drops the nebula (`StarCatalog.shows_nebula`, applied by
+  `SpaceEnvironment.use_star_of`). Fixed for any system but Epsilon: the World's origin and the pool's parking spot took `local`.
+  The departure shot now frames the planet behind the civilian. The maintainer picked the ice world over a banded gas giant from
+  the sheet. Tests, from the staged copy: escort and ship pool 49 passed (6 balance pending), star colour, star system, scenario
+  frame, scenario loader, environment, scaled space, planet look, anchor, true-scale start and free fall 132/132, procgen planet
+  and CLI 46 OK, compile check clean.
 
 ### M8-T24 Radial menus fit their entries
 
