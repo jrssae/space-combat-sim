@@ -59,11 +59,12 @@ func test_a_star_square_to_the_view_projects_off_screen_without_an_error() -> vo
 	assert_lt(uv.x, -1.0, "far off the left edge")
 
 
-# M8-T29: a star off the picture draws no flare ghosts (they showed as soft grey blobs with no star in the gate's shots): the flare
-# is whole on screen and fades out within `EDGE_FADE` of the edge.
-func test_the_flare_fades_out_past_the_pictures_edge() -> void:
+# M8-T29, M8-T31: a star off the picture draws no flare ghosts (they showed as soft grey blobs with no star in the gate's and the
+# docking's shots): the flare is whole well inside the picture, fades out over `EDGE_FADE` toward the edge and is gone past it.
+func test_the_flare_fades_out_at_the_pictures_edge() -> void:
 	assert_eq(LensFlareAim.screen_weight(Vector2(0.5, 0.5)), 1.0, "on screen: all of it")
-	assert_eq(LensFlareAim.screen_weight(Vector2(0.0, 1.0)), 1.0, "on the edge")
-	assert_almost_eq(LensFlareAim.screen_weight(Vector2(1.0 + LensFlareAim.EDGE_FADE * 0.5, 0.5)), 0.5, 1e-6, "halfway out")
-	assert_eq(LensFlareAim.screen_weight(Vector2(1.6, 0.5)), 0.0, "well off the picture: none")
-	assert_eq(LensFlareAim.screen_weight(Vector2(-0.3, -0.3)), 0.0, "off a corner: none")
+	assert_eq(LensFlareAim.screen_weight(Vector2(LensFlareAim.EDGE_FADE, 0.5)), 1.0, "a margin in: all of it")
+	assert_almost_eq(LensFlareAim.screen_weight(Vector2(1.0 - LensFlareAim.EDGE_FADE * 0.5, 0.5)), 0.5, 1e-6, "halfway to the edge")
+	assert_eq(LensFlareAim.screen_weight(Vector2(0.0, 0.5)), 0.0, "at the edge: none")
+	assert_eq(LensFlareAim.screen_weight(Vector2(-0.026, 0.103)), 0.0, "just off the left (the docking frame that showed a blob): none")
+	assert_eq(LensFlareAim.screen_weight(Vector2(1.6, 0.5)), 0.0, "well off: none")

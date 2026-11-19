@@ -39,8 +39,19 @@ const PRIORITY: int = -44
 const NOTICE_S: float = 4.0
 ## A fighter through the inner doors waits at most this long for them to shut behind it, seconds.
 const DOORS_WAIT_S: float = 20.0
-## The entry shot takes over this far out from the mouth, metres.
-const ENTRY_SHOT_M: float = 220.0
+## The docking shots, a pool per stage (M8-T31).
+const SHOTS_PATH: String = "res://data/station/docking_shots.json"
+## The player's ship holds this far short of the mouth until it turns with the drum (M8-T31), metres.
+const ROLL_GATE_M: float = 300.0
+## And it must turn with the drum this long before it goes on, seconds, and wait at the hold point at least `ROLL_SHOW_S`, so the
+## match is always seen, however early it came (the maintainer asked to see it).
+const ROLL_HOLD_S: float = 0.5
+const ROLL_SHOW_S: float = 3.5
+## Within this of the hold point the ship counts as holding there, metres.
+const ROLL_AT_GATE_M: float = 15.0
+## A docking camera keeps this clear of the station's hull, metres; a take may lose sight of the ship for at most this share.
+const SHOT_CLEAR_M: float = 12.0
+const SHOT_MAX_BLOCKED: float = 0.2
 
 var main: Main = null
 var plan: DockingPlan = null
@@ -50,8 +61,6 @@ var repair: DockRepair = DockRepair.new()
 var offer_line: bool = true
 var docked_count: int = 0
 var relaunched_count: int = 0
-## Recalled fighters that docked and stayed inside (M8-T34).
-var stowed_count: int = 0
 var last_notice: String = ""
 ## The latest visit that ended, for the console and the tests.
 var last_visit: DockVisit = null
@@ -84,12 +93,16 @@ var relaunch_wing: String = "alpha"
 var relaunch_door: int = 1
 var retry_s: float = 0.5
 var give_up_s: float = 90.0
+## How far short of the mouth the player's last visit turned with the drum, metres (-1: not yet).
+var roll_matched_at_m: float = -1.0
 
 # One entry a ship: {visit, combatant, kept, reach, key, brain, docker, stage, queue, retry_in_s}.
 var _entries: Array[Dictionary] = []
 var _boxes: Array[AABB] = []
-var _shots: Dictionary = {}
+## The player's docking shots (M8-T31): short takes from `SHOTS_PATH`, a stage each part of the visit.
+var shots: ShotSequencer = ShotSequencer.new(ShotPool.load_file(SHOTS_PATH), "docking")
 var _my_shot: CinematicShot = null
+var _key_light: CinematicKeyLight = CinematicKeyLight.new()
 var _wired: Station = null
 var _capability: ShipCapability = null
 var _notice_left_s: float = 0.0
@@ -232,7 +245,8 @@ func start_player(why: StringName = DockVisit.WHY_HOLD) -> String:
 	_entries.append(entry)
 	_started += 1
 	_player_pose = null
-	_play(&"dock_approach")
+	shots.usable = _take_clear
+	shots.begin(&"approach", _play_shot, roundi(SimClock.now() * 10.0))
 	_say("%s: DOCKING, AUTOPILOT ENGAGED" % Station.DOCKING_BAY_NAME)
 	return ""
 
@@ -302,26 +316,6 @@ func order_wing() -> Dictionary:
 	return _answer(true, "%s: COPY, DOCKING FOR REPAIRS" % sent[0])
 
 
-## Control's recall (M8-T34): every fighter whose home is this station, AI wings and the player's wingmen alike, flies home and
-## docks, and stays inside (back to its pool) so the wings launch whole again. Returns how many were sent or turned for home.
-func recall_all() -> int:
-	if main == null or main.wings == null or not _ready_plan().is_empty():
-		return 0
-	var n: int = 0
-	for wing: Wing in main.wings.wings.duplicate():
-		var ships: Array[Combatant] = wing.members()
-		if wing.leader != null and not wing.leader.is_player:
-			ships.append(wing.leader)
-		for member: Combatant in ships:
-			var visit: DockVisit = visit_of(member.display_name)
-			if visit != null:
-				visit.why = DockVisit.WHY_RECALL  # already on its way in: it stays inside too
-				n += 1
-			elif start_wingman(member, DockVisit.WHY_RECALL).is_empty():
-				n += 1
-	return n
-
-
 ## Calls off the visit of `ship_name` (default: the player's) while the ship is still outside the inner doors. "" or why not.
 func cancel(ship_name: String = "", reason: String = "cancelled") -> String:
 	var entry: Dictionary = _player_entry() if ship_name.is_empty() else _entry_named(ship_name)
@@ -385,10 +379,16 @@ func step_player(_delta: float) -> FlightCommand:
 	var stop_at: float = (plan.airlock - plan.mouth).dot(axis)
 	if lock != null and not lock.doors.is_open():
 		stop_at = (lock.doors_at - plan.mouth).dot(axis) - reach.x - 15.0  # short of the doors until they stand open
+	if not bool(entry.get("rolled", false)):
+		stop_at = minf(stop_at, -ROLL_GATE_M)  # short of the mouth until it turns with the drum (M8-T31)
 	var cap: float = lane_mps if along < -reach.x else inner_mps
 	var speed: float = DockAutopilot.lane_speed(stop_at - along, cap, _capability)
+	# The match starts at the hold point, so it is seen: the ship comes down the lane at its own roll and turns with the drum there.
+	var roll: float = 0.0
+	if bool(entry.get("rolled", false)) or along >= -ROLL_GATE_M - ROLL_AT_GATE_M:
+		roll = DockAutopilot.roll_with(ship.global_basis, _spin_world(s), _square_ups(s), _capability.rate_max_rad)
 	return DockAutopilot.lane(ship.global_position, velocity, ship.global_basis, xform * plan.mouth, xform.basis * axis, speed,
-			_capability)
+			_capability, roll)
 
 
 ## Every visit's state, one line.
@@ -450,12 +450,11 @@ func _step_player_visit(entry: Dictionary, s: Station, delta: float) -> void:
 				_dock_now(entry)
 			elif _in_corridor(ship, s, local) and not _bay_taken(entry):
 				visit.enter(DockVisit.State.LANE)
+				shots.to_stage(&"lane", _play_shot)
 		DockVisit.State.LANE:
 			_fly_in(entry, s, local)
 			var along: float = (local - plan.mouth).dot(_axis())
-			if not bool(entry.get("entry_shot", false)) and along > -ENTRY_SHOT_M:
-				entry["entry_shot"] = true
-				_play(&"dock_entry")
+			_watch_roll(entry, s, along, delta)
 			if visit.state == DockVisit.State.LANE and along < 0.0 \
 					and DockAutopilot.off_axis_m(local, plan.mouth, _axis()) > 2.0 * corridor_m:
 				_let_doors_go(entry, s)
@@ -467,12 +466,47 @@ func _step_player_visit(entry: Dictionary, s: Station, delta: float) -> void:
 			_fly_in(entry, s, local)
 		DockVisit.State.REPAIR, DockVisit.State.RELAUNCH:
 			_keep_away(entry, s, delta)
-			if not entry.is_empty() and visit.is_away() and visit.state != DockVisit.State.LAUNCHING \
-					and not main.camera_rig.is_playing_shot():
-				_play(&"dock_wait")  # a skip stopped the shot: the bay stays on screen until the launch's own
+			if not entry.is_empty() and visit.is_away() and visit.state != DockVisit.State.LAUNCHING:
+				if not shots.is_running():
+					shots.begin(&"wait", _play_shot)  # a skip stopped the shots: the bay stays on screen until the launch's own
+				else:
+					shots.to_stage(&"wait", _play_shot)
 		DockVisit.State.LAUNCHING:
+			if shots.is_running():
+				shots.stop()  # the launch's own shots take the camera
 			if main.launches == null or main.launches.player_launch().is_empty():
 				_finish(entry)
+	if not entry.is_empty():
+		shots.tick(delta, _play_shot)
+		_light_player()
+
+
+# The player's ship near the mouth: it holds and turns with the drum (a stage of its own, with its shots), then goes on in once it
+# has turned with it for `ROLL_HOLD_S` and held at the hold point `ROLL_SHOW_S` (M8-T31, maintainer 2026-11-19).
+func _watch_roll(entry: Dictionary, s: Station, along: float, delta: float) -> void:
+	if bool(entry.get("rolled", false)) or along < -ROLL_GATE_M - 80.0:
+		return
+	shots.to_stage(&"roll", _play_shot)
+	var ship: Ship = main.ship
+	var turning: bool = DockAutopilot.rolls_with(ship.angular_velocity, ship.global_basis, _spin_world(s), _square_ups(s))
+	entry["roll_s"] = float(entry.get("roll_s", 0.0)) + delta if turning else 0.0
+	if along >= -ROLL_GATE_M - ROLL_AT_GATE_M:
+		entry["at_gate_s"] = float(entry.get("at_gate_s", 0.0)) + delta
+	if float(entry["roll_s"]) >= ROLL_HOLD_S and float(entry.get("at_gate_s", 0.0)) >= ROLL_SHOW_S:
+		entry["rolled"] = true
+		roll_matched_at_m = -along
+		shots.to_stage(&"entry", _play_shot)
+
+
+# The drum's turn, World, rad/s (zero while it is held still).
+func _spin_world(s: Station) -> Vector3:
+	return s.global_basis * plan.spin if s.spinning else Vector3.ZERO
+
+
+# The bay's four square ups, World: the drum's sides about its axis, turning with it.
+func _square_ups(s: Station) -> Array[Vector3]:
+	var b: Basis = s.drum_body.global_basis.orthonormalized() if s.drum_body != null else s.global_basis
+	return [b.y, b.x, -b.y, -b.x] as Array[Vector3]
 
 
 # A fighter on the lane: sheltered once in the void, the inner doors asked ahead of it and let go behind it, docked when they
@@ -507,11 +541,9 @@ func _dock_now(entry: Dictionary) -> void:
 	var hull: float = c.damageable.hull.fraction() if c.damageable != null else 1.0
 	_take_out(entry)
 	visit.begin_repair(repair.time_s(visit.is_player), hull)
+	if visit.is_player and visit.repair_s > 0.0:
+		shots.to_stage(&"wait", _play_shot)  # inside: the bay until the launch (none when the repair is at once)
 	docked_count += 1
-	if not visit.is_player and visit.why == DockVisit.WHY_RECALL:
-		wingman_docked.emit(visit.ship_name)
-		_stow(entry)
-		return
 	if visit.is_player:
 		player_docked.emit()
 	else:
@@ -523,17 +555,6 @@ func _dock_now(entry: Dictionary) -> void:
 	_hold(c.ship, s)
 	if visit.repair_s <= 0.0 and s != null:
 		_keep_away(entry, s, 0.0)  # no wait (the player): repaired on the way through, straight to a Cobra bay
-
-
-# A recalled fighter is home for good: it leaves its wing and goes back to its pool, whole.
-func _stow(entry: Dictionary) -> void:
-	var c: Combatant = entry["combatant"]
-	(entry["visit"] as DockVisit).enter(DockVisit.State.DONE)
-	_bring_back(entry)
-	_drop(entry)
-	stowed_count += 1
-	if is_instance_valid(c):
-		main.ships.release(c)
 
 
 # Hidden, touching nothing, unavailable to everyone outside: the state of a ship inside the station.
@@ -687,10 +708,8 @@ func _drop(entry: Dictionary) -> void:
 	if visit.is_player:
 		if main.player_alive and is_instance_valid(main.ship):
 			main.ship.assist_on = bool(entry.get("assist", true))
-		if _my_shot != null and main.camera_rig.playing_shot() == _my_shot:
-			main.camera_rig.stop_shot()
-			main.camera_rig.snap_chase()
-		_my_shot = null
+		stop_shots()
+		_key_light.detach()
 		main.adapter.resync_edges(main.input_source)
 		return
 	if not is_instance_valid(c) or not is_instance_valid(c.ship):
@@ -953,15 +972,74 @@ func _answer(ok: bool, line: String) -> Dictionary:
 # --- the camera --------------------------------------------------------------------------------------------------------
 
 
-func _play(id: StringName) -> void:
-	var shot: CinematicShot = _shots.get(id)
-	if shot == null or main == null or main.camera_rig == null:
+## Ends the player's docking shots now, the ones still to come included: the one call an abort makes (M8-T32).
+func stop_shots() -> void:
+	shots.stop(func() -> void:
+		if _my_shot != null and main.camera_rig.playing_shot() == _my_shot:
+			main.camera_rig.stop_shot()
+			main.camera_rig.snap_chase()
+		_my_shot = null)
+
+
+func _play_shot(shot: CinematicShot) -> void:
+	if main == null or main.camera_rig == null:
 		return
 	_my_shot = shot
 	main.camera_rig.play_shot(shot, _actor_pose, _origin_to_local)
 
 
-# The shots' actors: `player` (where it was last seen once it is inside) and `bay` (the mouth, in the station's frame).
+# The shared key light on the player's ship while its docking shots play and it is in sight (M8-T29's `CinematicKeyLight`).
+func _light_player() -> void:
+	var lit: bool = shots.is_running() and main.ship != null and main.ship.visible and main.camera_rig.is_playing_shot()
+	if not lit:
+		_key_light.detach()
+		return
+	var to_sun: Vector3 = main.space_environment.key_star.global_basis.z if main.space_environment != null else Vector3.ZERO
+	_key_light.attach(main.ship, to_sun)
+
+
+# Whether a docking take keeps its camera off the station's hull and in sight of the ship over its length, the ship flying on
+# as it flies now.
+func _take_clear(stage: StringName, id: String) -> bool:
+	var made: Dictionary = CinematicShot.from_dict(&"check", {"keys": shots.pool.keys(stage, id)})
+	if not bool(made["ok"]) or main == null or main.ship == null:
+		return false
+	var shot: CinematicShot = made["shot"]
+	var ship: Ship = main.ship
+	var space: PhysicsDirectSpaceState3D = main.world.get_world_3d().direct_space_state
+	var velocity: Vector3 = ship.linear_velocity - main.world.anchored_velocity()
+	var blocked: int = 0
+	var looked: int = 0
+	var t: float = 0.0
+	while t <= shots.pool.max_s(stage, id):
+		var at: Transform3D = Transform3D(ship.global_basis, ship.global_position + velocity * t)
+		var poses: Callable = func(actor: String) -> Variant: return at if actor == "player" else _actor_pose(actor)
+		var camera: Vector3 = shot.pose_at(t, poses, _origin_to_local).transform.origin
+		if _solid_near(space, camera, ship):
+			return false
+		if ship.visible:
+			looked += 1
+			var ray := PhysicsRayQueryParameters3D.create(camera, at.origin, CollisionLayers.ROCK | CollisionLayers.CAPITAL,
+					[ship.get_rid()])
+			if not space.intersect_ray(ray).is_empty():
+				blocked += 1
+		t += 0.5
+	return looked == 0 or float(blocked) / float(looked) <= SHOT_MAX_BLOCKED
+
+
+static func _solid_near(space: PhysicsDirectSpaceState3D, at: Vector3, ship: Ship) -> bool:
+	var query := PhysicsShapeQueryParameters3D.new()
+	var sphere := SphereShape3D.new()
+	sphere.radius = SHOT_CLEAR_M
+	query.shape = sphere
+	query.transform = Transform3D(Basis.IDENTITY, at)
+	query.collision_mask = CollisionLayers.ROCK | CollisionLayers.CAPITAL
+	query.exclude = [ship.get_rid()]
+	return not space.intersect_shape(query, 1).is_empty()
+
+
+# The shots' actors: `player` (where it was last seen once it is inside), `bay` (the mouth, in the station's frame) and `drum`
+# (the mouth turning with the drum, M8-T31).
 func _actor_pose(actor: String) -> Variant:
 	if actor == "player":
 		if main.ship == null:
@@ -972,6 +1050,9 @@ func _actor_pose(actor: String) -> Variant:
 	var s: Station = station()
 	if actor == "bay" and s != null and plan != null:
 		return s.get_global_transform_interpolated() * Transform3D(Basis.IDENTITY, plan.mouth)
+	if actor == "drum" and s != null and plan != null and s.drum_body != null:
+		var mouth: Vector3 = s.get_global_transform_interpolated() * plan.mouth
+		return Transform3D(s.drum_body.global_basis.orthonormalized(), mouth)
 	return null
 
 
@@ -1018,13 +1099,8 @@ func _load_data() -> void:
 	retry_s = maxf(float(relaunch.get("retry_s", retry_s)), 0.1)
 	give_up_s = maxf(float(relaunch.get("give_up_s", give_up_s)), 1.0)
 	_boxes = DockKeepOut.boxes_from(d.get("keep_out"))
-	var shots: Dictionary = d.get("shots", {})
-	for id: String in shots:
-		var made: Dictionary = CinematicShot.from_dict(StringName(id), shots[id])
-		if bool(made["ok"]):
-			_shots[StringName(id)] = made["shot"]
-		else:
-			push_warning("DockingDirector: shot %s: %s" % [id, made["error"]])
+	if not shots.pool.error.is_empty():
+		push_warning("DockingDirector: %s" % shots.pool.error)
 
 
 # --- console -----------------------------------------------------------------------------------------------------------
@@ -1036,6 +1112,10 @@ func _register_console() -> void:
 		&"player": {"get": func() -> String: return player_visit().state_name() if player_visit() != null else "none",
 				"doc": "The player's visit: approach, lane, inside, repair, relaunch, launching, or none"},
 		&"visits": {"get": describe, "doc": "Every visit: the ship and its state"},
+		&"roll_matched_at_m": {"get": func() -> float: return roll_matched_at_m, "unit": "m",
+				"doc": "How far short of the mouth the player's last visit turned with the drum before going in (M8-T31; -1: not yet)"},
+		&"shots": {"get": func() -> String: return " ".join(shots.sequence()) if not shots.played.is_empty() else "none",
+				"doc": "The player's docking shots in order, stage/id, each under 3 s (a feature under 5 s; M8-T31)"},
 		&"repair_left_s": {"get": func() -> float: return player_visit().repair_left_s if player_visit() != null else 0.0,
 				"unit": "s", "doc": "Seconds of the player's repair left"},
 		&"docked": {"get": func() -> int: return docked_count, "type": TYPE_INT, "doc": "Ships taken into the bay so far"},

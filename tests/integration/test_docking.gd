@@ -187,7 +187,9 @@ func test_the_player_docks_is_repaired_and_launches_again_from_a_cobra_bay() -> 
 	assert_true(ship.assist_on, "the autopilot flies with the assist on")
 	_fast()
 	var lock: StationAirlock = station.airlock
-	var seen: Dictionary = {"off_axis": 0.0, "open_at_nose": -1.0, "fastest": 0.0}
+	var seen: Dictionary = {"off_axis": 0.0, "open_at_nose": -1.0, "fastest": 0.0, "roll_rate": INF}
+	var spin_axis: Vector3 = (station.global_basis * main.docking.plan.spin).normalized()
+	var spin_rate: float = main.docking.plan.spin.length()
 	var reach: Vector2 = StationAirlock.hull_reach(ship)
 	var ok: bool = await _until(func() -> bool:
 		if docked.is_empty():
@@ -196,6 +198,8 @@ func test_the_player_docks_is_repaired_and_launches_again_from_a_cobra_bay() -> 
 			seen["fastest"] = maxf(float(seen["fastest"]), _speed(ship))
 			if local.z > main.docking.plan.mouth.z - 60.0:
 				seen["off_axis"] = maxf(float(seen["off_axis"]), Vector2(local.x, local.y).length())
+			if is_inf(float(seen["roll_rate"])) and local.z >= main.docking.plan.mouth.z:
+				seen["roll_rate"] = ship.angular_velocity.dot(spin_axis)  # at the mouth (M8-T31)
 			if float(seen["open_at_nose"]) < 0.0 and depth + reach.x >= 0.0:
 				seen["open_at_nose"] = lock.doors.fraction
 		return not docked.is_empty(), 150.0)
@@ -203,6 +207,20 @@ func test_the_player_docks_is_repaired_and_launches_again_from_a_cobra_bay() -> 
 	if not ok:
 		return
 	assert_eq(rams, 0, "without touching the station")
+	# M8-T31 (maintainer, 2026-11-19): it turns with the drum before it goes in, and is still turning with it at the mouth.
+	assert_almost_eq(main.docking.roll_matched_at_m, DockingDirector.ROLL_GATE_M, 40.0,
+			"it matched the drum's turn at the hold point, short of the mouth")
+	var roll_take: Dictionary = {}
+	var after_roll: float = -1.0
+	for take: Dictionary in main.docking.shots.played:
+		if roll_take.is_empty() and take["stage"] == &"roll":
+			roll_take = take
+		elif not roll_take.is_empty() and after_roll < 0.0:
+			after_roll = float(take["at_s"])
+	assert_false(roll_take.is_empty(), "a roll take showed the match")
+	assert_gte(after_roll - float(roll_take.get("at_s", 0.0)), ShotPool.FEATURE_MIN_S - 0.05, "held long enough to see it (%s)" % [
+			main.docking.shots.sequence()])
+	assert_almost_eq(float(seen["roll_rate"]), spin_rate, 0.03, "at the mouth it rolls at the drum's rate (%.3f rad/s)" % spin_rate)
 	assert_lt(float(seen["off_axis"]), 10.0, "down the middle of the mouth and the tunnel")
 	assert_eq(float(seen["open_at_nose"]), 1.0, "the inner doors stood open before its nose reached them")
 	assert_lte(float(seen["fastest"]), main.docking.approach_mps + 5.0, "never faster than the approach speed")
@@ -242,9 +260,11 @@ func test_the_player_docks_is_repaired_and_launches_again_from_a_cobra_bay() -> 
 	assert_gt(_speed(ship), 20.0, "flying, with the rail's speed")
 	assert_eq(main.docking.docked_count, 1)
 	assert_eq(main.docking.relaunched_count, 1)
-	for id: String in ["dock_approach", "dock_entry"]:
-		assert_has(shots_seen, id, "the docking's %s shot played" % id)
-	assert_does_not_have(shots_seen, "dock_wait", "no repair shot: the docking runs straight into the launch")
+	for stage: String in ["approach_", "roll_", "entry_"]:
+		assert_true(Array(shots_seen).any(func(id: String) -> bool: return id.begins_with(stage)),
+				"the docking's %s shots played (M8-T31: %s)" % [stage, ", ".join(shots_seen)])
+	assert_false(Array(shots_seen).any(func(id: String) -> bool: return id.begins_with("wait_")),
+			"no repair shot: the docking runs straight into the launch")
 	assert_gt(shots_seen.size(), 2, "then the launch's own shots")
 	var outside: Array = Array(shots_seen).filter(func(id: String) -> bool: return id.begins_with("ext_"))
 	assert_false(outside.is_empty(), "the exterior launch shots played after the dock (%s)" % ", ".join(shots_seen))

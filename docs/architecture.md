@@ -6611,6 +6611,16 @@ data/scenarios/station_dock.json the player 1.2 km off the bay with two wingmen,
 - **Tests.** `test_stopping_distance`, `test_dock_keep_out` (a grid of starts through the 2 km sphere arrives without entering a
   solid), `test_dock_autopilot`, `test_dock_repair`, `test_dock_visit`, `test_wing_away`, `test_docking` (the hold, the flight in,
   the state inside, repair, relaunch, a 450 m/s start, skip, cancel, respawn, rebase, the reach, wingmen by order and threshold).
+- **Camera variety and the roll match (M8-T31, maintainer and a show-likeness review, 2026-11-19).** The player's docking is cut
+  into short takes from `data/station/docking_shots.json` by the shared `ShotPool` and `ShotSequencer` (`src/camera/`: stages that
+  last as long as the action, each take held to its longest, a new stage once the take on screen has had its second, a feature
+  take its 2.5 s; seeded per visit, never the same take twice in a row, never the last visit's opening): `approach`, `lane`, `roll`,
+  `entry`, `wait`. A take must keep its camera 12 m off the station's hull with the ship in sight (`_take_clear`, physics
+  queries per pick); the actors are `player`, `bay` (the mouth, station frame) and `drum` (the mouth turning with the drum). The
+  Fury carries the shared `CinematicKeyLight`; `stop_shots()` aborts the takes in one call. The autopilot holds the Fury 300 m
+  short of the mouth (`ROLL_GATE_M`) and only there turns it with the drum: `DockAutopilot.roll_with` feeds the drum's turn forward
+  about the nose and rolls it onto the nearest of the bay's four square sides at no more than 0.4 rad/s, so the match is seen; it
+  goes on in once `rolls_with` has held for 0.5 s and it has waited at least 3.5 s, and keeps turning with the drum down the tunnel.
 
 ### 21.2 Flights of three and the hold-fire orders (D85, T19)
 

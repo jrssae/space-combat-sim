@@ -370,7 +370,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T33 | A | Tutorial update: only the instructor and the player until the raid; the wing-orders drill on the instructor; a two-ship opening launch; every other Starfury launches at the alarm (maintainer, 2026-11-19) | T05 | Fable | Mission script, scenario and dialog on the T05 agent's own work | done |
 | T30 | C | Cobra-bay launch: more camera angles (a pool, picked at random without repeats) and control back as soon as the launch thrusters cut (maintainer, 2026-11-19) | T03 | Opus | Launch shots and the hand-off timing | done |
 | T29 | C | Jumpgate autopilot: more camera angles (wider trailing shots, the gate's base and side), picked at random without repeats (maintainer, 2026-11-19) | T18 | Opus | Gate shots on the autopilot's predicted path | done |
-| T31 | C | Docking into the main docking bay: more camera angles, and the Starfury visibly matching the drum's rotation before it enters (maintainer, 2026-11-19) | T06 | Opus | Docking shots and a roll-match stage in the docking autopilot | in progress |
+| T31 | C | Docking into the main docking bay: more camera angles, and the Starfury visibly matching the drum's rotation before it enters (maintainer, 2026-11-19) | T06 | Opus | Docking shots and a roll-match stage in the docking autopilot | done |
 | T32 | C | Hold X for 1 s to abort any autopilot (gate jump, docking), until its point of no return (maintainer, 2026-11-19) | T29, T31 | Opus | One abort rule over every autopilot, the hold bar and keyboard parity | not started |
 | T34 | D | Babylon 5 commands: with the station targeted, the comms menu sends orders to Babylon 5 (launch wing, recall fighters, defense grid on/off, fire support, shelter civilians, sitrep) (maintainer, 2026-11-19) | T24 | Opus | A second comms page on the radial framework and station-side handlers | done |
 | T17 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
@@ -1382,6 +1382,16 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   drum's rotation** (rolls to the bay's turn) before it enters the main docking bay, with a shot that shows it.
 - **Done when:** tests on the pool and the roll match (the ship's roll rate equals the drum's within a tolerance before the mouth);
   frames for the record; (H) the look.
+- **Done (2026-11-19):** the player's docking is cut into short takes from `data/station/docking_shots.json` by the new shared
+  `ShotPool`/`ShotSequencer` (approach, lane, roll, entry, wait; seeded, no back-to-back repeats, clearance-checked, 1 s to under
+  3 s or a 2.5 to 5 s feature, `CinematicKeyLight` on the Fury, `stop_shots()` for T32); the Fury holds 300 m out and visibly rolls
+  into step with the drum (capped at 0.4 rad/s, at least 3.5 s at the hold, two roll takes framing the bay's face) and goes in
+  rolling with it. The lens flare now fades out inside the picture's edge in every scene (the grey blob seen again in a docking
+  shot). T30's unused docking shots are gone from `docking.json`. Reviewed against the show over three rounds (strips in
+  `references/screenshots/M8-T31 docking shots/review/`). Tests (staged scratch copy): 48/48 over 10 files (the
+  sequencer, the roll maths, the docking autopilot, visit and repair, the flare's edge fade, the shot-length guard, the key light,
+  and the docking flight with the roll match at the hold point and the drum's rate at the mouth). Follow-up: an entry take from inside the red tunnel
+  looking out, placed from the inner doors' depth; the deep-red interior is roadmap M8-2.
 
 ### M8-T32 Hold X to abort an autopilot
 

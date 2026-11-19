@@ -1420,3 +1420,12 @@ or `gate shots arrive:<id>` repeats one opening (`auto` picks again). The review
 - [ ] **(H) Readable ship:** coming back out, the ship should read against the vortex: the core glows behind it, its lights are
       on and a soft key light follows it during the shots. Say if it is too bright or still lost.
 
+# Play-testing the docking camera and the roll match (M8-T31)
+
+`play station_dock`, target `BABYLON 5 DOCKING BAY`, hold X. The docking is now cut into short shots, and 300 m short of the mouth
+the Fury stops, rolls to the bay's turn and goes in rolling with it. `state dock.shots` lists the shots; the review strips are in
+`references/screenshots/M8-T31 docking shots/review/`.
+
+- [ ] **(H) The roll match reads:** you see the Fury roll into step with the drum before the mouth, in a shot with the bay's face
+      behind it. Say if it is too slow, too quick, or hard to see.
+- [ ] **(H) Variety:** dock three times. Say if the shots feel varied enough, and if any is too dark, too far or clipping.
