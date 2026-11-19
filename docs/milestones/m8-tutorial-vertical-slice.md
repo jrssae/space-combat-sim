@@ -1001,6 +1001,12 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   and provider, `info.md`, `docs/playtest.md` (troubleshooting), tests with injected joypad events.
 - **Done when:** AC18.
 
+- **Maintainer, 2026-11-19:** the pad problem was hardware; the connect/disconnect toasts look good (seen in play) — finish and commit
+  the task (correct D88's wrong guesses: the idle receiver `3537:2106` is the pad switched off, auto-off after 10 min idle, slow
+  link-up; not a console mode). **Added:** while the **pause menu** or the **controls settings menu** is open, the pad diagram
+  **highlights each button as it is pressed** (and each stick/trigger as it moves), so it is obvious which button is which; from the
+  menus' input, never gameplay's `Input` reads.
+
 ### M8-T23 The civilian escort in its own star system
 
 - **Goal:** AC19 (D89).
