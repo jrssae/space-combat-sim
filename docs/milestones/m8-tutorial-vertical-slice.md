@@ -333,7 +333,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T21 | D | The game's fonts: Babylon5 for titles and headlines, Babylon5Credits for body text and the HUD, on all UI text (D87; maintainer, 2026-11-18; numbered last) | - | Fable | A theme over every screen and the HUD's own drawing, a symbol-encoded cmap, a look sheet first | in progress |
 | T22 | D | Gamepad detection: why Godot sometimes misses the maintainer's pad, joypad logging and notices, `joypads`, troubleshooting (D88; maintainer, 2026-11-18; numbered last) | - | Fable | Linux input stack diagnosis on the real device, small notices | in progress |
 | T23 | C | The civilian escort in its own star system: no Babylon 5, no nebula, a different planet (D89; maintainer, 2026-11-18; numbered last) | T08 | Opus | A second system in the data, its sky and planet, the escort moved onto it; a sheet first | not started |
-| T24 | D | Radial menus fit their entries: equal slices for however many entries, no empty spots (D90; maintainer, 2026-11-18; numbered last) | - | Opus | The radial framework's layout and picking for every input | not started |
+| T24 | D | Radial menus fit their entries: equal slices for however many entries, no empty spots (D90; maintainer, 2026-11-18; numbered last) | - | Opus | The radial framework's layout and picking for every input | in progress |
 | T17 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M8-T01 Tutorial script (discussion with the maintainer)
@@ -491,6 +491,9 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   before it relaunches from a Cobra bay. **The player does not wait**: the dock cinematic is followed straight by the external
   launch cinematic (no repair stage or shot), repaired on the way through. Replaces the damage-scaled timer (6 s plus up to
   30 s) in `data/station/docking.json`.
+- **Follow-up (maintainer, 2026-11-18, same queue): leash evasion.** Under FORM ON ME (and in AI flights), a wingman evading past
+  the flight's cohesion distance (2.5 km, `data/wings/flights.json`) breaks toward its leader or flight instead of away, dragging
+  the chaser into the wing's guns (M8-T19 saw one dragged 10.4 km off). Native, with parity and 1/6-thread identity kept.
 
 ### M8-T07 Bring M10-T19's raider strike carrier into `m8`
 
