@@ -44,7 +44,6 @@ static var BRIGHTNESS: Dictionary = {&"arrival": VortexLook.brightness("arrival"
 		&"departure": VortexLook.brightness("departure", 1.2)}
 ## An arrival's sound (the generated `jump_in`); silent without it.
 const SOUND_PATH: String = "res://assets/generated/sfx_world/jump_in.wav"
-const SOUND_DB: float = 2.0
 
 ## The mouth's semi-axes and the depth.
 var fit: VortexFit = VortexFit.new()
@@ -197,9 +196,9 @@ func setup(vortex_data: Dictionary = {}, with_sound: bool = true) -> void:
 		sound = AudioStreamPlayer3D.new()
 		sound.name = "Sound"
 		sound.bus = AudioDirector.BUS
-		sound.unit_size = 120.0
+		sound.unit_size = SoundMix.UNIT_SIZE_M[&"jump_in"]
 		sound.max_distance = 15000.0
-		sound.volume_db = SOUND_DB
+		sound.volume_db = SoundMix.level_db(&"jump_in")
 		sound.stream = _jump_sound()
 		add_child(sound)
 	_hide_all()

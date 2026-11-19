@@ -13,8 +13,8 @@ const LAYER: int = 41
 const PLATE_COLOR: Color = Color(0.0, 0.0, 0.0, 0.62)
 const TEXT_COLOR: Color = Color(0.94, 0.98, 0.96)
 const SHADOW_COLOR: Color = Color(0.0, 0.0, 0.0, 0.85)
-## The squelches' level: quieter than the menu sounds, they sit under a voice.
-const SQUELCH_DB: float = -6.0
+## The squelches' variation on their `SoundMix` level (which already sits them under the menu sounds and a voice).
+const SQUELCH_DB: float = 0.0
 
 var queue: DialogQueue = null
 var book: DialogBook = null

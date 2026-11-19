@@ -322,7 +322,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T09 | C | Raider Battle Wagon (moved from M10-T20): from images, with weapons (M10 Q31) and four launch tubes; the escort's last wave comes with it (Q8) | T08, the maintainer on its weapons | Fable | No STL; a new hull with weapons and tube launches | done |
 | T10 | D | Interceptor muzzle at the drawn barrel tip, and the grid balance measured again (roadmap M7-2) | - | Fable | A placement fix in the turret rows with a balance check | done |
 | T11 | D | The walls beside the cargo bay stop flickering (roadmap M7-3) | - | Sonnet | Find the coplanar faces or shading cause in the station generator; a test | in progress |
-| T12 | D | Audio rework of every sound effect and the Starfury engines' steady level (roadmap M7-5) | - | Opus | One loudness reference, the mix, and a smoothed engine gain; a listening checklist | in progress |
+| T12 | D | Audio rework of every sound effect and the Starfury engines' steady level (roadmap M7-5) | - | Opus | One loudness reference, the mix, and a smoothed engine gain; a listening checklist | done |
 | T13 | D | Wingmen close the gaps losses leave in a formation (roadmap M7-6) | - | Fable | Native re-slotting with M7-T76's avoidance, 1 and 6 threads identical | done |
 | T14 | D | The bench writes to `user://` in an exported build (roadmap L15) | - | Fable | A path fix with a test | done |
 | T15 | E | Linux x86_64 release build from the pinned export templates (Q9) | T14 | Sonnet | Templates by SHA-256, the native library and assets packed, an export smoke test | not started |
@@ -769,6 +769,31 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 - **Files:** the sound generators and buses, the engine audio, tests on the engine gain's steadiness, a listening checklist in
   `docs/playtest.md`.
 - **Done when:** the tests pass; the maintainer's listening checklist (H).
+- **Done (2026-11-19):** one loudness reference and one mix table, a steady engine level, a limiter (`docs/architecture.md`
+  §18.32).
+  - **The reference:** every generated sound is written at **-20 LUFS** (BS.1770 K-weighting, 50 ms blocks every 12.5 ms,
+    gated -70 LUFS and 10 LU under; loops read circularly), peak at most -1 dBFS (`tools/procgen/core/loudness.py`; run it as
+    `python3 -m tools.procgen.core.loudness` for a report). Before, every file was peak-normalised to -1.5 dBFS and their
+    loudness spread over 11 LU (turret_fire -5.0, pulse_fire -6.3, warning_beep -6.0, ui_accept -10.2, main_burst -12.6,
+    explosion -15.3, jump_in -16.3); now all 15 read -20.00, peaks -5.2 (jump_in) to -16.5 dBFS (turret_fire). Generators bumped:
+    `sfx_combat` 7, `sfx_ui` 3, `sfx_world` 2 (manifest: `loudness_lufs` per sound, `loudness_target_lufs`).
+  - **The mix:** `SoundMix.LEVEL_DB` (dB over the reference at the unit size): explosion +8, jump_in +6, warning_beep +6,
+    main_burst +4 (a whole ship at full thrust), ui_accept/ui_back +3, pulse_fire +2, raider_fire/turret_fire/hit_hull/
+    target_blip +1, ui_move 0, rcs_burst and the squelches -1. The world sounds keep their old loudness within 1-2 dB; the
+    outliers came down: the hull warning 5 dB, the menu sounds about 6 dB. Callers' `volume_db` are now only variations (grid
+    light +1, heavy +6, interceptor -2; buoy blast -3). Unit sizes in the same file (shots 60 m, pods 25, jets 15, vortex 120).
+  - **Engines:** a ship's pods and jets each have a group level following the strongest pod / jet (30/80 ms and 40 ms/jets'
+    own release); each voice plays it times its share of the group's power (`EngineVoices.gain`). Same cost (one unit per voice).
+  - **No clipping:** `AudioEffectHardLimiter` at -0.5 dBFS ends Master; `state audio.master_peak_db` / `sfx_peak_db` read the
+    meters. Scripted busy fight (full thrust, yaw, guns, an explosion + hit + raider + turret shot every 0.1 s, the warning):
+    SFX bus peak +2.1 to +2.5 dBFS across runs, Master -0.50.
+  - **Tests** (staged copy): Python 100 (`test_loudness` 8 new, every set at the reference within 0.5 LU, the loudness option
+    and the ceiling). GUT: `test_engine_gain` 8 new (pods toggling and trading load at one throttle: swing < 0.1 dB; main and
+    retro overlapping; 15 Hz chatter < 10 dB; throttle steps rise without a dip or overshoot; silence 1 s after closing; jets
+    overlapping flat; cost), `test_sound_mix` 4, `test_mix_headroom` 1 (5 asserts), the limiter in
+    `test_audio_buses`; with the engine, audio, comms, grid, jump-point and vortex files: 12 files, 134 tests, 2245 asserts,
+    all passing (GUT_SLOW=1). 970 scripts compile.
+  - **For the maintainer (H):** the listening checklist in `docs/playtest.md` ("Listening checklist", M8-T12).
 
 ### M8-T13 Wingmen close the gaps losses leave
 

@@ -1828,7 +1828,7 @@ with bad entries, still makes the profile invalid. The built-in data profiles ar
 | `waves` | WaveDirector (T09, M3-T16) | `scenario`, `index`, `name`, `state`, `next_in_s`, `alive`, `kills`, `player_kills`, `player_assists`, `losses` |
 | `hud` | Hud (T08) | `visible`, `lead_tof_s`, `lead_on_screen`, `prograde_on_screen`, `target_box` |
 | `controls` | ControlProfiles (T11) | `profile`, `profiles`, `unsaved` |
-| `audio` | AudioDirector (T12) | `sounds`, `voices_active`, `volume` |
+| `audio` | AudioDirector (T12) | `sounds`, `voices_active`, `volume`, `master_peak_db`, `sfx_peak_db` (M8-T12) |
 
 | Command | Owner | Does |
 |---|---|---|
@@ -5069,6 +5069,17 @@ native/src/voice_kernels.rs, voice_rows.rs   ScsSimCore.ships_near(centre, radiu
   until the cap is spent, so its work follows the ships in earshot, not the ships in play. The rows are the tick's, so a
   candidate's node is checked before it is offered. Without a core only the player's voices sound.
 - **Culling (T37)** is §18.26.
+- **One loudness reference and the mix (M8-T12).** Every generated sound is written at -20 LUFS (BS.1770 K-weighting, 50 ms
+  blocks every 12.5 ms, gated at -70 LUFS and 10 LU under; a loop read circularly), never above -1 dBFS:
+  `tools/procgen/core/loudness.py`, `write_sound_set` for all three sets. `SoundMix` (`src/audio/sound_mix.gd`) is the one table
+  of levels against it and of the unit sizes; `AudioDirector.play`, `play_ui`/`play_comms`, the engines and the jump vortex add
+  its level, and a caller's `volume_db` is only a variation (the grid's kinds, a buoy's smaller blast). Master ends in an
+  `AudioEffectHardLimiter` at -0.5 dBFS; `state audio` reads `master_peak_db` and `sfx_peak_db`.
+- **The engines' steady level (M8-T12).** A voice's envelope only places the sound; a ship's loudness is its group level, one for
+  its pods (following its strongest pod's demand, 30 ms attack, 80 ms release) and one for its jets (strongest cluster, 40 ms
+  attack, the jets' own release), and each voice plays the group level times its share of the group's power
+  (`EngineVoices.gain`). Pods starting, stopping, overlapping or trading load at one throttle move the sound about the ship, not
+  its level. Same cost as before: one unit per granted voice, plus one per voiced ship.
 
 ### 18.34 Compact menus and the pause menu's Quit as built (M7-T31)
 

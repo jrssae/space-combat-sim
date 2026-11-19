@@ -1,7 +1,7 @@
 """``sfx_ui``: the menu sounds (docs/architecture.md section 18, D57, M5-T02) and the comms squelches (D53, M5-T06),
 synthesised with NumPy.
 
-Five mono 16-bit 48 kHz WAVs, each peaking at -1.5 dBFS, from seeded generators (the same seed gives byte-identical files).
+Five mono 16-bit 48 kHz WAVs, each at the reference loudness (-20 LUFS, 50 ms blocks, M8-T12) and peaking at most -1 dBFS, from seeded generators (the same seed gives byte-identical files).
 The menu sounds are plain sine tones with a soft attack and a quick decay, in the family of the HUD's ``target_blip``, so a
 menu sounds like part of the cockpit:
 
@@ -20,17 +20,14 @@ The manifest has ``kind`` ``audio`` and a ``sounds`` object (file, samples, samp
 from __future__ import annotations
 
 from collections.abc import Callable
-from pathlib import Path
 
 import numpy as np
 
-from ..core import audio
+from ..core import audio, loudness
 from ..core.context import AssetOutputs, BuildContext
-from ..core.manifest import build_audio_manifest, sound_entry, write_manifest
 
 ASSET_ID = "sfx_ui"
-GENERATOR_VERSION = 2
-PEAK_DBFS = -1.5
+GENERATOR_VERSION = 3
 
 
 def _note(duration_s: float, freq_hz: float, tau_s: float) -> np.ndarray:
@@ -113,20 +110,5 @@ SOUNDS: dict[str, Callable[[np.random.Generator], np.ndarray]] = {
 
 
 def build(ctx: BuildContext) -> AssetOutputs:
-    """Generate every sound into ``ctx.out_dir``. Option ``peak_dbfs`` (default -1.5) sets the level each is normalised to."""
-    peak = float(ctx.option("peak_dbfs", PEAK_DBFS))
-    if peak > -1.0:
-        raise ValueError("peak_dbfs must not exceed -1 dBFS")
-    out_dir = Path(ctx.out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    files: list[Path] = []
-    sounds: dict[str, dict] = {}
-    for name, synth in SOUNDS.items():
-        samples = audio.normalize_peak(synth(ctx.rng("sfx", name)), peak)
-        path = audio.write_wav(out_dir / f"{name}.wav", samples)
-        files.append(path)
-        written, _ = audio.read_wav(path)  # the level on disk, after 16-bit rounding
-        sounds[name] = sound_entry(path.name, len(samples), audio.SAMPLE_RATE, audio.peak_dbfs(written))
-    manifest = build_audio_manifest(ASSET_ID, GENERATOR_VERSION, ctx.seed, sounds, extra={"peak_dbfs_target": peak})
-    files.append(write_manifest(out_dir, manifest))
-    return AssetOutputs(ASSET_ID, out_dir, manifest, tuple(files))
+    """Generate every sound into ``ctx.out_dir`` at the reference loudness (``loudness.TARGET_LUFS``, M8-T12)."""
+    return loudness.write_sound_set(ctx, ASSET_ID, GENERATOR_VERSION, SOUNDS)

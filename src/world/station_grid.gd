@@ -56,9 +56,9 @@ const HEAVY_FLASH_SCALE: float = 9.0
 const MEET_FLASH_SCALE: float = 0.6
 ## Each mount's cone round its base's up, degrees (a hemisphere and a little below it).
 const ARC_DEG: float = 200.0
-## How the turret shot sounds per kind: pitch and level (dB).
+## How the turret shot sounds per kind: pitch, and level (dB) on top of `turret_fire`'s `SoundMix` level.
 const SOUND_PITCH: Dictionary[Kind, float] = {Kind.LIGHT: 1.0, Kind.HEAVY: 0.55, Kind.INTERCEPTOR: 1.6}
-const SOUND_DB: Dictionary[Kind, float] = {Kind.LIGHT: -13.0, Kind.HEAVY: -8.0, Kind.INTERCEPTOR: -16.0}
+const SOUND_DB: Dictionary[Kind, float] = {Kind.LIGHT: 1.0, Kind.HEAVY: 6.0, Kind.INTERCEPTOR: -2.0}
 const PROVIDER: StringName = &"grid"
 const ACTIONS: Array[StringName] = [&"info", &"free", &"hold", &"repair"]
 

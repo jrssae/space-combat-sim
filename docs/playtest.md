@@ -1308,3 +1308,36 @@ farther out the faster you close (`state gate.reach_m`: 2 km at rest, about 9 km
       the gate). Slow: the ship carries its speed straight down the axis into the run-in. Fast: it flies past the gate, turns, comes
       back round the arms and lines up. Every time the departure shot closes in behind the ship just before the mouth; say if any
       run-in looks odd or the shot misses the moment.
+
+# Listening checklist: the sound mix and the engines' steady level (M8-T12)
+
+Every sound is now written at one loudness (-20 LUFS, `tools/procgen/core/loudness.py`) and the mix lives in one table,
+`src/audio/sound_mix.gd`: change a row there to make an effect louder or quieter. Master ends in a limiter (-0.5 dBFS);
+`state audio` shows the bus peaks now (`master_peak_db`, `sfx_peak_db`: above 0 on SFX means the limiter is catching a pile-up).
+Use headphones and the default volumes; `sfx <name>` plays any combat sound at your ship. Say for each line what is too loud,
+too quiet or right, against the engines (the bed the rest sits on).
+
+- [ ] **(H) Engines, steady thrust:** free flight, hold full mains for 5 s, then turn hard left and right and pitch while
+      holding them. The roar should stay at one level while you manoeuvre (it moves about the ship as pods trade load); before
+      this change it jumped. Half throttle sits clearly lower; letting go dies away in about a quarter second.
+- [ ] **(H) Engines, RCS:** strafe (sway) and yaw at once, on and off: the jets' hiss stays at one level when more jets join in,
+      and sits under the mains. Short taps fade fast, a long burn fades slower.
+- [ ] **(H) Engines, other ships:** `launch wing zeta`, fly beside them: their pods are heard, nobody's engine level pumps.
+- [ ] **(H) Your guns:** hold fire for 3 s: `pulse_fire` clearly over the engines, not harsh.
+- [ ] **(H) Enemy guns and hits:** `spawn raider attack 600` with `god on`: their `raider_fire` a touch under yours; `hit_hull`
+      when they hit you, as loud as their guns.
+- [ ] **(H) Explosions:** `kill target` on a raider 200 to 500 m away, `kill all` with several around: the loudest thing in a
+      fight, without the rest dropping out (the limiter) or crackling.
+- [ ] **(H) Mines:** `bench battle 50`, then `mines view 400` and `mines set_off`: a chain of blasts, a little deeper (pitched
+      down), as loud as a ship's.
+- [ ] **(H) Station and grid:** `play station_showcase`, `grid free all`, `traffic raid 6`: light guns like a turret, the
+      heavy guns deeper and louder, the interceptors quieter. `turret_fire` from the Saturns and the Battle Wagon the same family.
+- [ ] **(H) Jump vortex:** `gate open arrival` and `transit arrive point fighter follow`: the opening swell is heard from far off,
+      louder than a shot, under an explosion.
+- [ ] **(H) Cockpit sounds:** select a target (`target_blip`); `damage 80` with `god off` until the hull warning beeps: the beep
+      cuts through a fight without startling.
+- [ ] **(H) Menus and radio:** move, accept and back in the menus: the move tick quieter than accept and back; the radio squelches
+      around a wingman's line (key 2, form on me, with a wing out) under the menu sounds. Comms and UI have their own volume sliders.
+- [ ] **(H) Busy fight, no clipping:** `traffic raid 6` near the station with your wing out, fight for a minute, then
+      `state audio`: `master_peak_db` never above -0.5. Listen for crackle or the whole mix ducking when several explosions hit at
+      once.

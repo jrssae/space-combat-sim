@@ -166,6 +166,8 @@ res://tests/integration/test_main_scene.gd
 # Audio
 res://tests/unit/test_audio_buses.gd
 res://tests/unit/test_engine_voices.gd
+res://tests/unit/test_engine_gain.gd
+res://tests/unit/test_sound_mix.gd
 res://tests/integration/test_audio_director.gd
 # Rendering settings
 res://tests/unit/test_upscaling.gd

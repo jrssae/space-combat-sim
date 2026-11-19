@@ -1,28 +1,25 @@
 """``sfx_world``: sounds of the world itself rather than of a ship or the menus (docs/architecture.md section 18, D51, M5-T05),
-synthesised with NumPy. Mono 16-bit 48 kHz WAVs, each peaking at -1.5 dBFS, from seeded generators (the same seed gives
+synthesised with NumPy. Mono 16-bit 48 kHz WAVs, each at the reference loudness (-20 LUFS, 50 ms blocks, M8-T12) and peaking at most -1 dBFS, from seeded generators (the same seed gives
 byte-identical files):
 
 * ``jump_in`` (1.6 s): a jump point opening (Q12; a placeholder until M6's jumpgate vortex). Noise rises through four bands
   and a sine glides up three octaves for ``OPEN_S``, so the sound swells and brightens toward the moment the point opens;
   there it bursts (a bright two-modulator FM chord that dulls as it fades, over a short falling thump) and dies away.
 
-The manifest has ``kind`` ``audio`` and a ``sounds`` object (file, samples, sample rate, duration, peak level).
+The manifest has ``kind`` ``audio`` and a ``sounds`` object (file, samples, sample rate, duration, peak level, loudness).
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from pathlib import Path
 
 import numpy as np
 
-from ..core import audio
+from ..core import audio, loudness
 from ..core.context import AssetOutputs, BuildContext
-from ..core.manifest import build_audio_manifest, sound_entry, write_manifest
 
 ASSET_ID = "sfx_world"
-GENERATOR_VERSION = 1
-PEAK_DBFS = -1.5
+GENERATOR_VERSION = 2
 JUMP_S = 1.6
 OPEN_S = 0.8  # when the point opens: the rise peaks and the burst starts
 RISER_BANDS_HZ = ((200.0, 800.0), (600.0, 2400.0), (1800.0, 7000.0), (4000.0, 14000.0))
@@ -56,20 +53,5 @@ SOUNDS: dict[str, Callable[[np.random.Generator], np.ndarray]] = {
 
 
 def build(ctx: BuildContext) -> AssetOutputs:
-    """Generate every sound into ``ctx.out_dir``. Option ``peak_dbfs`` (default -1.5) sets the level each is normalised to."""
-    peak = float(ctx.option("peak_dbfs", PEAK_DBFS))
-    if peak > -1.0:
-        raise ValueError("peak_dbfs must not exceed -1 dBFS")
-    out_dir = Path(ctx.out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    files: list[Path] = []
-    sounds: dict[str, dict] = {}
-    for name, synth in SOUNDS.items():
-        samples = audio.normalize_peak(synth(ctx.rng("sfx", name)), peak)
-        path = audio.write_wav(out_dir / f"{name}.wav", samples)
-        files.append(path)
-        written, _ = audio.read_wav(path)  # the level on disk, after 16-bit rounding
-        sounds[name] = sound_entry(path.name, len(samples), audio.SAMPLE_RATE, audio.peak_dbfs(written))
-    manifest = build_audio_manifest(ASSET_ID, GENERATOR_VERSION, ctx.seed, sounds, extra={"peak_dbfs_target": peak})
-    files.append(write_manifest(out_dir, manifest))
-    return AssetOutputs(ASSET_ID, out_dir, manifest, tuple(files))
+    """Generate every sound into ``ctx.out_dir`` at the reference loudness (``loudness.TARGET_LUFS``, M8-T12)."""
+    return loudness.write_sound_set(ctx, ASSET_ID, GENERATOR_VERSION, SOUNDS)
