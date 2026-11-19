@@ -128,9 +128,19 @@ been planned were taken for done.
 - Commit subjects start with the task id, e.g. `M1-T08: flight model and assist`. Do not push or open PRs unless
   asked; the maintainer handles git remotes.
 - Confirm each milestone is complete by asking the user, but once confirmed, merge to main.
-- Comments in the code must explain the goal of the method, not the functionality of the code. complex logic must explain what it's purpose is, not what it is actually doing. Comments must be human readable and short; do not over explain. Summarize. 
-- Each task mentioned to the user must use a short, one sentance explanation in parenthesis such as this example: "After that I'll start T19 (Splat LOD chain and LodSwitcher) properly." This is so the user can more easily understand what the task is.
+- Comments in the code must explain the goal of the method, not the functionality of the code. complex logic must explain what it's purpose is, not what it is actually doing. Comments must be human readable and short; do not over explain. 
+- Each task mentioned to the user must use a short, one sentence explanation in parenthesis such as this example: "After that I'll start T19 (Splat LOD chain and LodSwitcher) properly." This is so the user can more easily understand what the task is.
 - Keep a list of all console commands in an info.md document
+- The main thread is primarily an overseer and organizer. Agents are spun up for task work, with the model and effort appropriate
+  for the work being done.
+- Briefs: name the exact sections and files an agent should read, tell it to grep rather than read whole docs, and ask for short
+  reports.
+- Thread reuse: resume an existing agent's thread for fixes in its own area, since its context is already loaded, instead of starting a fresh agent.
+- Questions first: ask the maintainer design questions before dispatching where possible, so agents don't have to rework.
+- Two at a time: cap parallel agents at two. Exceptions are allowed when the maintainer says so.
+- Long-term maintenance will be done by an Opus model at high effort, so keep files sized and organised for that model.
+- Long-term goal: an Opus model can generate new missions by reusing the existing models (adding new ones occasionally), the
+  mission framework and the rest, without needing to understand the whole codebase.
 
 ## Commands
 
