@@ -76,7 +76,7 @@ func _render(job: Dictionary) -> void:
 	job["files"] = files
 	_rows.append("| `%s` | %s / %s | %s | %s%s |" % [id, (job["pool"] as Dictionary)["name"], job["phase"], job["move"],
 			", ".join(files) if not files.is_empty() else "not rendered",
-			" (ended after frame %d)" % int(job["left"]) if job.has("left") else ""])
+			" (ended after frame %d, %.2f s on screen)" % [int(job["left"]), float(job.get("seen_s", 0.0))] if job.has("left") else ""])
 	main.queue_free()
 	await get_tree().physics_frame
 	await get_tree().physics_frame
@@ -104,11 +104,12 @@ func _capture(main: Main, job: Dictionary) -> PackedStringArray:
 	for n: int in FRAMES:
 		var at: float = span * float(n) / float(FRAMES - 1)
 		while rig.playing_shot() == shot and rig.shot_time_s() < at:
+			job["seen_s"] = rig.shot_time_s()
 			await get_tree().physics_frame
 		await RenderingServer.frame_post_draw
 		if rig.playing_shot() != shot:
 			job["left"] = n  # the shot ended (its `until`, or something cut it): no frame of whatever follows
-			push_warning("launch_shot_review: %s ended before frame %d" % [id, n + 1])
+			push_warning("launch_shot_review: %s ended before frame %d, after %.2f s on screen" % [id, n + 1, float(job.get("seen_s", 0.0))])
 			break
 		var image: Image = get_viewport().get_texture().get_image()
 		var file: String = "%s_%d.png" % [id, n + 1]

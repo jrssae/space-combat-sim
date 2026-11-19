@@ -838,69 +838,6 @@
      "delay_s": 0.5
     },
     {
-     "id": "sq_flyout_flip",
-     "weight": 1.0,
-     "move": "a camera fixed in space 15 m forward of the door, fov 40 on the lead as it drops out and flips, under the key light",
-     "keys": [
-      {
-       "t": 0,
-       "position": {
-        "actor": "bay_fixed",
-        "offset": [
-         0,
-         8,
-         -15
-        ]
-       },
-       "look_at": {
-        "actor": "fighter",
-        "offset": [
-         0,
-         0,
-         0
-        ]
-       },
-       "fov": 40,
-       "up": {
-        "actor": "bay_fixed",
-        "direction": [
-         0.0,
-         1.0,
-         0.0
-        ]
-       }
-      },
-      {
-       "t": 2.5,
-       "position": {
-        "actor": "bay_fixed",
-        "offset": [
-         0,
-         8,
-         -15
-        ]
-       },
-       "look_at": {
-        "actor": "fighter",
-        "offset": [
-         0,
-         0,
-         0
-        ]
-       },
-       "fov": 40,
-       "up": {
-        "actor": "bay_fixed",
-        "direction": [
-         0.0,
-         1.0,
-         0.0
-        ]
-       }
-      }
-     ]
-    },
-    {
      "id": "sq_flyout_face",
      "weight": 1.0,
      "feature": true,
@@ -1302,32 +1239,32 @@
     {
      "id": "sq_formup_station",
      "weight": 1.0,
-     "move": "about 130 m off one flight: the flight in the foreground, the station's drum stretching away behind it",
+     "move": "below and beyond one flight, about 60 m from it, looking up past it: the flight fills the lower foreground, the drum above at an angle",
      "keys": [
       {
        "t": 0,
        "position": {
         "actor": "formation",
         "offset": [
-         -260,
-         50,
-         100
+         -186,
+         8,
+         128
         ]
        },
        "look_at": {
         "actor": "formation",
         "offset": [
-         -60,
-         -260,
+         -90,
+         -420,
          900
         ]
        },
-       "fov": 70,
+       "fov": 60,
        "up": {
         "actor": "formation",
         "direction": [
          0.0,
-         1.0,
+         -1.0,
          0.0
         ]
        }
@@ -1337,25 +1274,25 @@
        "position": {
         "actor": "formation",
         "offset": [
-         -250,
-         46,
-         110
+         -184,
+         6,
+         134
         ]
        },
        "look_at": {
         "actor": "formation",
         "offset": [
-         -60,
-         -260,
+         -90,
+         -420,
          900
         ]
        },
-       "fov": 70,
+       "fov": 60,
        "up": {
         "actor": "formation",
         "direction": [
          0.0,
-         1.0,
+         -1.0,
          0.0
         ]
        }
