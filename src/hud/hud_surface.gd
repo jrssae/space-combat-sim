@@ -48,6 +48,8 @@ var speed_pos: Vector2 = Vector2.ZERO
 var speed_align_right: bool = false
 ## The widest the REF and ALT lines may run, px (0: unlimited): they wrap to the room beside the drift sphere.
 var speed_text_width: float = 0.0
+## The most REF and ALT lines there is room for (0: any): with more, REF is not wrapped but drawn smaller on one line.
+var speed_max_lines: int = 0
 ## The speed's size in pixels at this surface's scale.
 var speed_size: float = 22.0
 ## The drift sphere: a ship-frame sphere with an arrow along the direction of travel.
@@ -89,6 +91,8 @@ var radar_labels: bool = false
 ## The target panel's first line (left end of its baseline) and its hull bar, and the line that closes the panel off (0 for none).
 var target_panel_pos: Vector2 = Vector2.ZERO
 var target_bar_rect: Rect2 = Rect2()
+## The room the panel's name and range lines have, px (0: unlimited): longer ones are drawn smaller.
+var target_text_width: float = 0.0
 var divider_y: float = 0.0
 
 ## Where the text lines go; `lines_centred` when they are centred on these points rather than starting at them. With a `lines_width` a
@@ -103,4 +107,6 @@ var lines_width: float = 0.0
 ## The wing roster: one row per slot, its text size, and where its `WING` caption goes (zero for none).
 var roster_rows: Array[HudLayout.RosterRow] = []
 var roster_text_size: float = 15.0
+## The room a roster row's text has, px (0: unlimited): a longer one is drawn smaller.
+var roster_text_width: float = 0.0
 var roster_caption_pos: Vector2 = Vector2.ZERO

@@ -785,7 +785,7 @@ the overlay is hidden; watched values are drawn under it.
 
 **Command list.** `info.md` (repository root) lists every console command and state provider with its arguments and where it exists; `tests/integration/test_console_command_list.gd` fails when a registered one is missing from it, so a task that adds a command updates `info.md` in the same commit.
 
-**UI.** Top 40 % of the screen, translucent panel, monospace, prompt `>`, Up/Down history, Tab completion (command
+**UI.** Top 40 % of the screen, translucent panel, monospace (the one place that is not in the game's fonts, M8-T21), prompt `>`, Up/Down history, Tab completion (command
 names, then provider paths, setting keys and enum values; repeated Tab cycles), PageUp/PageDown scroll, 1000-line
 ring buffer; engine errors in red and warnings in yellow from `ConsoleLogger`.
 
@@ -4102,6 +4102,13 @@ src/frontend/boot.tscn|.gd               the project's main scene: hands the com
 src/frontend/loading_screen.tscn|.gd     shown while main.tscn loads on a thread (T01)
 src/frontend/front_end.tscn|.gd          the sky with a slow drift and the main menu in a MenuFrame (T01 placeholder, T02)
 src/frontend/menu_frame.tscn|.gd, menu_screen.gd, theme.tres   the three-panel frame, the base page, the one Theme (T02)
+src/ui/game_theme.tres, game_fonts.gd     the project theme and `GameFonts` (M8-T21, D87): Babylon5Credits for every control and the
+                                 HUD, Babylon5 for the `Title`, `Headline` and `Heading` label variations; `GameFonts.draw_line`
+                                 gives each digit a slot as wide as "0" (the fonts' digits differ in width)
+src/autoload/fonts.gd             autoload `Fonts`, the first: `GameFonts.install` puts the fonts into the project theme at start
+                                 (the theme's file names none: the engine loads it before a fresh checkout's first import)
+src/ui/readout_text.gd, readout_columns.gd   the debug overlay's and the FPS counter's text: digit slots, and columns placed
+                                 by cell instead of padding spaces (M8-T21)
 src/frontend/choice_list_screen.gd, free_flight_select.gd, placeholder_screen.gd, menu_screens.gd   the pages (T02)
 src/frontend/new_game_select.gd, settings_groups_screen.gd   missions then sandbox scenes; the five settings groups (T45; they
                                  replaced T02's mission_select.gd and sandbox_select.gd)

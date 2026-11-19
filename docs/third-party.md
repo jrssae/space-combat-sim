@@ -19,6 +19,17 @@ resolve the shader's `#include "godot/scene_data_inc.glsl"` and caches an empty 
 Vendored addons are upstream code: do not edit them in place. If a patch is unavoidable, put it in
 `addons/<name>/PATCHES.md`, keep it minimal, and upstream it.
 
+## Fonts (`assets/fonts/`, M8-T21)
+
+Third-party data, not generated and not GPL: two freeware fonts the maintainer supplied (2026-11-18, D87). The files carry no
+licence text and their source page refuses automated fetches, so the terms rest on the maintainer's word; they are committed
+unchanged (no table edited: both already map Unicode) and are the only font files in the game (`tests/unit/test_font_guard.gd`).
+
+| Font | File | Made by | Source | Licence | Role |
+|---|---|---|---|---|---|
+| Babylon5 | `assets/fonts/babylon5.ttf` (the maintainer's `B5______.ttf`; SHA-256 `ef2fc09b554ca7b9e3610601314b90aeb9ae2d130a13ca92367e2e2dbb7a61ef`) | "Fantazia Fonts and Sounds" (its name table) | https://fonts2u.com/babylon5.font | Freeware (the maintainer, 2026-11-18); no licence text in the file | Titles and headlines |
+| Babylon5Credits | `assets/fonts/babylon5_credits.ttf` (the maintainer's `Bac_____.ttf`; SHA-256 `004332f046417bb2db9f445a32882198e5b7711fe2c1202a8b9354896b74c2bf`) | Unnamed; made with Fontographer 3.5, 1994 (its name table) | fonts2u.com (the maintainer) | Freeware (the maintainer, 2026-11-18); no licence text in the file | Body text and the whole HUD |
+
 ## Removed (history)
 
 | Component | Removed | Why |

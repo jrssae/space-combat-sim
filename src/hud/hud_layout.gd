@@ -9,8 +9,8 @@ extends RefCounted
 
 const BORESIGHT_RANGE_M: float = 1000.0
 ## The room the REF and ALT lines have beside the drift sphere, layout px (the cockpit's is centred, so it is the full width).
-const CHASE_SPEED_TEXT_PX: float = 207.0
-const COCKPIT_SPEED_TEXT_PX: float = 224.0
+const CHASE_SPEED_TEXT_PX: float = 248.0
+const COCKPIT_SPEED_TEXT_PX: float = 268.0
 const MIN_SPEED_FOR_MARKER_MPS: float = 1.0
 const MIN_BOX_PX: float = 24.0
 const EDGE_MARGIN_PX: float = 48.0
@@ -41,17 +41,17 @@ const INTERACT_BAR_WIDTH_SHARE: float = 0.6
 const INTERACT_BAR_TOP_PX: float = 6.0
 const INTERACT_BAR_HEIGHT_PX: float = 10.0
 ## The acknowledgement line's baseline below the status line's (under AUTO-TRACK's, 26 px below it).
-const ACK_BELOW_STATUS_PX: float = 50.0
+const ACK_BELOW_STATUS_PX: float = 56.0
 ## The skip prompt's text size (M7-T54): alone over a cinematic, it reads larger than an acknowledgement.
 const PROMPT_TEXT_PX: float = 24.0
 const STATUS_Y_PX: float = 36.0
 ## The objectives list (M5-T05), top right (at 1080 px; scaled): the caption's baseline below the FPS counter, and the line pitch.
 const OBJECTIVES_TOP_PX: float = 110.0
-const OBJECTIVE_ROW_PX: float = 22.0
+const OBJECTIVE_ROW_PX: float = 24.0
 ## The protected ships' block under the objectives (M7-T54, at 1080 px; scaled): the gap above its caption, a row's pitch, and
 ## the hull bar under each name.
 const ESCORT_GAP_PX: float = 14.0
-const ESCORT_ROW_PX: float = 40.0
+const ESCORT_ROW_PX: float = 44.0
 const ESCORT_BAR: Vector2 = Vector2(240.0, 10.0)
 ## A roster row's short form of what a wingman is doing, by behaviour id.
 const ROSTER_TAGS: Dictionary = {"formation": "FORM", "attack": "ATK", "evade": "EVADE", "retreat": "RETREAT",
@@ -313,22 +313,22 @@ static func _gauges(input: HudInput, f: HudFrame) -> void:
 	var s: float = f.scale
 	var bar := Vector2(260.0, 14.0) * s
 	var margin: float = 48.0 * s
-	f.speed_pos = Vector2(w * 0.5, h - 64.0 * s)  # room for three lines under it
+	f.speed_pos = Vector2(w * 0.5, h - 76.0 * s)  # room for three lines under it
 	f.speed_align_right = not input.cockpit
 	f.speed_text_width = COCKPIT_SPEED_TEXT_PX * s
 	if not input.cockpit:
 		# Chase view: the ship fills the middle, so the readout sits above the radar in the bottom-right corner,
 		# with room under it for the REF and ALT lines even when the name wraps.
-		f.speed_pos = Vector2(w - margin, h - 56.0 * s - 30.0 * s - 2.0 * 78.0 * s - 80.0 * s)
+		f.speed_pos = Vector2(w - margin, h - 56.0 * s - 38.0 * s - 2.0 * 78.0 * s - 84.0 * s)
 		f.speed_text_width = CHASE_SPEED_TEXT_PX * s
-	f.hull_rect = Rect2(Vector2(margin, h - 90.0 * s), bar)
+	f.hull_rect = Rect2(Vector2(margin, h - 96.0 * s), bar)
 	f.fuel_rect = Rect2(Vector2(margin, h - 56.0 * s), bar)
 	f.charge_rect = Rect2(Vector2(w - margin - bar.x, h - 56.0 * s), bar)
 	f.running_lights_dark = not input.running_lights
 	f.running_lights_text = "LIGHTS OFF" if f.running_lights_dark else "LIGHTS ON"
-	f.running_lights_pos = f.charge_rect.position + Vector2(0.0, -24.0 * s)
+	f.running_lights_pos = f.charge_rect.position + Vector2(0.0, -28.0 * s)
 	var outline := Vector2(150.0, 112.0) * s
-	f.own_silhouette_rect = Rect2(Vector2(margin, h - 98.0 * s - outline.y - 22.0 * s), outline)
+	f.own_silhouette_rect = Rect2(Vector2(margin, h - 104.0 * s - outline.y - 24.0 * s), outline)
 
 
 # --- targeting grid --------------------------------------------------------------------------------------------------
@@ -341,7 +341,7 @@ static func _grid(input: HudInput, f: HudFrame) -> void:
 	if not f.grid_visible:
 		return
 	var side: float = 260.0 * f.scale
-	_fill_grid(input, f, Rect2(Vector2(input.viewport_size.x * 0.5 - side * 0.5, input.viewport_size.y * 0.62 - side * 0.5), Vector2(side, side)))
+	_fill_grid(input, f, Rect2(Vector2(input.viewport_size.x * 0.5 - side * 0.5, input.viewport_size.y * 0.6 - side * 0.5), Vector2(side, side)))
 
 
 # The grid on `surface`, in `rect`, with the marker for the selected target.
@@ -370,10 +370,10 @@ static func _fill_grid(input: HudInput, surface: HudSurface, rect: Rect2) -> voi
 
 static func _radar(input: HudInput, f: HudFrame) -> void:
 	f.radar_radius_px = RADAR_RADIUS_UNITS * f.scale
-	f.radar_centre = Vector2(input.viewport_size.x * 0.5, input.viewport_size.y - 200.0 * f.scale)
+	f.radar_centre = Vector2(input.viewport_size.x * 0.5, input.viewport_size.y - 216.0 * f.scale)
 	if not input.cockpit:
 		# Chase view: bottom-right corner, over the charge bar.
-		f.radar_centre = Vector2(input.viewport_size.x - 48.0 * f.scale - 130.0 * f.scale, input.viewport_size.y - 56.0 * f.scale - 30.0 * f.scale - f.radar_radius_px)
+		f.radar_centre = Vector2(input.viewport_size.x - 48.0 * f.scale - 138.0 * f.scale, input.viewport_size.y - 56.0 * f.scale - 38.0 * f.scale - f.radar_radius_px)
 	if input.target != null and input.target.damage_layout != DamageZones.Layout.NONE and not input.target_unknown:
 		f.target_layout = input.target.damage_layout
 		f.target_zones = input.target.damage_zones
@@ -419,7 +419,7 @@ static func _wing(input: HudInput, f: HudFrame) -> void:
 	f.ack_line = input.ack_line if not input.ack_line.is_empty() else input.prompt_line
 	f.ack_pos = Vector2(input.viewport_size.x * 0.5, (STATUS_Y_PX + ACK_BELOW_STATUS_PX) * s)
 	f.status_pos = Vector2(input.viewport_size.x * 0.5, STATUS_Y_PX * s)
-	f.tracking_pos = Vector2(input.viewport_size.x * 0.5, 62.0 * s)
+	f.tracking_pos = Vector2(input.viewport_size.x * 0.5, 64.0 * s)
 
 
 static func _roster_rows(input: HudInput, origin: Vector2, s: float, pitch: float = ROSTER_ROW_PX) -> Array[RosterRow]:
@@ -523,8 +523,8 @@ static func _escorts(input: HudInput, f: HudFrame) -> void:
 		row.down = row.hull <= 0.0
 		row.color = hull_color(row.hull)
 		row.text = escort_text(escort)
-		row.text_pos = Vector2(right, (y + 20.0) * s)
-		row.bar_rect = Rect2(Vector2(right - ESCORT_BAR.x * s, (y + 27.0) * s), ESCORT_BAR * s)
+		row.text_pos = Vector2(right, (y + 22.0) * s)
+		row.bar_rect = Rect2(Vector2(right - ESCORT_BAR.x * s, (y + 30.0) * s), ESCORT_BAR * s)
 		f.escort_rows.append(row)
 
 
@@ -576,15 +576,16 @@ static func _left_screen(size: Vector2) -> HudSurface:
 	var s: float = surface.scale
 	var width: float = size.x / s  # in layout units
 	surface.items = [HudSurface.SPEED, HudSurface.HULL_BAR, HudSurface.FUEL_BAR, HudSurface.RUNNING_LIGHTS, HudSurface.DRIFT, HudSurface.OWN_SILHOUETTE]
-	surface.own_silhouette_rect = Rect2(Vector2(8.0, 18.0) * s, Vector2(minf(130.0, width * 0.38), 90.0) * s)
-	surface.drift_radius_px = 42.0 * s
-	surface.drift_centre = Vector2(width - 8.0 - 42.0, 20.0 + 42.0) * s
-	surface.speed_pos = Vector2(width * 0.5, 158.0) * s
+	surface.own_silhouette_rect = Rect2(Vector2(8.0, 22.0) * s, Vector2(minf(130.0, width * 0.38), 78.0) * s)
+	surface.drift_radius_px = 38.0 * s
+	surface.drift_centre = Vector2(width - 8.0 - 38.0, 22.0 + 38.0) * s
+	surface.speed_pos = Vector2(width * 0.5, 164.0) * s
 	surface.speed_size = 30.0
 	surface.speed_text_width = (width - 16.0) * s
-	surface.running_lights_pos = Vector2(8.0, 126.0) * s  # above the speed block: the REF line can run wide
-	surface.fuel_rect = Rect2(Vector2(width - 8.0 - 74.0, 122.0) * s, Vector2(74.0, 5.0) * s)
-	surface.hull_rect = Rect2(Vector2(8.0, 212.0) * s, Vector2(width - 16.0, 30.0) * s)
+	surface.speed_max_lines = 2  # REF and ALT: a third would run into the hull bar
+	surface.running_lights_pos = Vector2(46.0, 18.0) * s  # the top row, beside YOU: the speed block below runs wide
+	surface.fuel_rect = Rect2(Vector2(8.0, 122.0) * s, Vector2(60.0, 5.0) * s)  # under the silhouette, left of the speed
+	surface.hull_rect = Rect2(Vector2(8.0, 219.0) * s, Vector2(width - 16.0, 26.0) * s)
 	surface.bar_caption_size = 17.0
 	surface.bar_percent = true
 	return surface
@@ -596,20 +597,22 @@ static func _right_screen(input: HudInput, size: Vector2) -> HudSurface:
 	var s: float = surface.scale
 	var width: float = size.x / s
 	surface.items = [HudSurface.TARGET_PANEL, HudSurface.TARGET_SILHOUETTE, HudSurface.CHARGE_BAR, HudSurface.STATUS, HudSurface.ACK, HudSurface.ROSTER]
-	surface.target_panel_pos = Vector2(8.0, 24.0) * s
-	surface.target_bar_rect = Rect2(Vector2(8.0, 58.0) * s, Vector2(width * 0.52, 12.0) * s)
+	surface.target_panel_pos = Vector2(8.0, 26.0) * s
+	surface.target_bar_rect = Rect2(Vector2(8.0, 60.0) * s, Vector2(width * 0.52, 12.0) * s)
 	surface.target_silhouette_rect = Rect2(Vector2(width - 8.0 - 108.0, 6.0) * s, Vector2(108.0, 78.0) * s)
+	surface.target_text_width = (width - 8.0 - 108.0 - 8.0 - 8.0) * s  # clear of the silhouette
 	surface.divider_y = 90.0 * s
 	var bar_width: float = width * CHARGE_BAR_WIDTH_SHARE
 	surface.charge_vertical = true
 	surface.charge_caption_pos = Vector2(width - 6.0, 106.0) * s
-	surface.charge_rect = Rect2(Vector2(width - 6.0 - bar_width, 126.0) * s, Vector2(bar_width, 250.0 - 126.0 - 6.0) * s)
+	surface.charge_rect = Rect2(Vector2(width - 6.0 - bar_width, 114.0) * s, Vector2(bar_width, 250.0 - 114.0 - 6.0) * s)
 	var text_width: float = width - 8.0 - 6.0 - bar_width - 8.0
 	surface.roster_caption_pos = Vector2(8.0, 106.0) * s
 	surface.roster_text_size = 14.0
-	surface.roster_rows = _roster_rows(input, Vector2(8.0, 110.0) * s, s, 20.0)
+	surface.roster_rows = _roster_rows(input, Vector2(8.0, 112.0) * s, s, 20.0)
+	surface.roster_text_width = (text_width - ROSTER_BAR.x - 10.0) * s  # a long tag stops short of the charge bar
 	surface.lines_centred = false
 	surface.lines_width = text_width * s
-	surface.ack_pos = Vector2(8.0, 204.0) * s
-	surface.status_pos = Vector2(8.0, 222.0) * s
+	surface.ack_pos = Vector2(8.0, 206.0) * s
+	surface.status_pos = Vector2(8.0, 224.0) * s
 	return surface

@@ -11,16 +11,20 @@ var formatter: Callable = Callable()
 
 var _watches: PackedStringArray = PackedStringArray()
 
-@onready var _label: Label = %Readout
+const TEXT_PX: int = 14
+
+@onready var _readout: ReadoutText = %Readout
 
 
 func _ready() -> void:
+	_readout.font_size = TEXT_PX
+	_readout.align_right = true
 	_refresh_visibility()
 
 
 func _process(_delta: float) -> void:
 	if visible:
-		_label.text = compose_text()
+		_readout.text = compose_text()
 
 
 func set_show_fps(value: bool) -> void:
@@ -37,7 +41,7 @@ func watches() -> PackedStringArray:
 	return _watches.duplicate()
 
 
-## The text the label shows this frame.
+## The text the readout shows this frame.
 func compose_text() -> String:
 	var out := PackedStringArray()
 	if show_fps:
@@ -50,5 +54,5 @@ func compose_text() -> String:
 
 func _refresh_visibility() -> void:
 	visible = show_fps or not _watches.is_empty()
-	if visible and _label != null:
-		_label.text = compose_text()
+	if visible and _readout != null:
+		_readout.text = compose_text()

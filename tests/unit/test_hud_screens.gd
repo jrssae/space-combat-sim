@@ -81,7 +81,7 @@ func test_the_charge_bar_stands_at_the_right_edge_under_the_target_section() -> 
 	assert_gt(bar.position.x, right.size.x * 0.85, "at the right edge")
 	assert_lt(right.size.x - bar.end.x, 12.0 * right.scale, "up against it")
 	assert_gt(right.charge_caption_pos.y, right.divider_y, "its label is under the target section's divider")
-	assert_gt(bar.position.y, right.charge_caption_pos.y + 12.0 * right.scale, "the bar runs from under its two lines of label")
+	assert_gt(bar.position.y, right.charge_caption_pos.y, "the bar runs from under its one line of label and fire mode")
 	assert_gt(bar.end.y, right.size.y * 0.96, "to the bottom of the screen")
 	assert_gt(bar.size.y, bar.size.x * 3.0, "standing up")
 
@@ -148,7 +148,7 @@ func test_the_chase_view_keeps_both_bars_on_the_2d_layer_as_before() -> void:
 	var f: HudFrame = HudLayout.compute(_hud(false))
 	assert_has(f.items, HudSurface.HULL_BAR)
 	assert_has(f.items, HudSurface.CHARGE_BAR)
-	assert_eq(f.hull_rect, Rect2(Vector2(48.0, VIEW.y - 90.0), Vector2(260.0, 14.0)))
+	assert_eq(f.hull_rect, Rect2(Vector2(48.0, VIEW.y - 96.0), Vector2(260.0, 14.0)))
 	assert_eq(f.charge_rect, Rect2(Vector2(VIEW.x - 48.0 - 260.0, VIEW.y - 56.0), Vector2(260.0, 14.0)))
 	assert_eq(f.bar_caption_size, 14.0)
 	assert_false(f.bar_percent)

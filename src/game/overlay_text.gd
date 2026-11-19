@@ -1,27 +1,28 @@
 class_name OverlayText
 extends RefCounted
 ## Pure formatter for the debug overlay (architecture §3, M1-T15). Main gathers a snapshot Dictionary each
-## frame; this turns it into monospace lines, so every readout rule is unit-tested without a scene.
+## frame; this turns it into lines whose columns are two or more spaces apart (`ReadoutColumns` places them: the game's font
+## is not fixed-width), so every readout rule is unit-tested without a scene.
 ## Missing keys are simply skipped, so the overlay degrades gracefully while parts of the game are absent.
 
 
 static func format(s: Dictionary) -> String:
 	var lines: PackedStringArray = []
 	if s.has("speed_mps"):
-		lines.append("SPD   %8.1f m/s" % float(s["speed_mps"]))
+		lines.append("SPD   %.1f  m/s" % float(s["speed_mps"]))
 	if s.has("body_velocity"):
 		var v: Vector3 = s["body_velocity"]
-		lines.append("VEL   %+8.1f %+8.1f %+8.1f  (body x/y/z)" % [v.x, v.y, v.z])
+		lines.append("VEL   %+.1f  %+.1f  %+.1f  (body x/y/z)" % [v.x, v.y, v.z])
 	if s.has("angular_rate_dps"):
 		var w: Vector3 = s["angular_rate_dps"]
-		lines.append("ROT   %+7.1f %+7.1f %+7.1f °/s (pitch/yaw/roll)" % [w.x, w.y, w.z])
+		lines.append("ROT   %+.1f  %+.1f  %+.1f  °/s (pitch/yaw/roll)" % [w.x, w.y, w.z])
 	if s.has("assist_on"):
 		var assist_on: bool = s["assist_on"]
 		var parts: PackedStringArray = ["ASSIST ON" if assist_on else "ASSIST OFF"]
 		if assist_on and s.has("pod_yaw_dps"):
-			parts.append("POD YAW %+5.1f °/s" % float(s["pod_yaw_dps"]))
+			parts.append("POD YAW %+.1f °/s" % float(s["pod_yaw_dps"]))
 		if s.has("pod_trim"):
-			parts.append("POD TRIM %3d %%" % roundi(float(s["pod_trim"]) * 100.0))
+			parts.append("POD TRIM %d %%" % roundi(float(s["pod_trim"]) * 100.0))
 		lines.append("   ".join(parts))
 	var modes: PackedStringArray = []
 	if s.has("camera_mode"):
@@ -37,7 +38,7 @@ static func format(s: Dictionary) -> String:
 				float(s.get("target_closing_mps", 0.0)), bool(s.get("target_behind", false))))
 	if s.has("universe_position"):
 		var u: PackedFloat64Array = s["universe_position"]
-		lines.append("POS   %.3f %.3f %.3f m  [%s]" % [u[0], u[1], u[2], String(s.get("system_id", "local"))])
+		lines.append("POS   %.3f  %.3f  %.3f  m [%s]" % [u[0], u[1], u[2], String(s.get("system_id", "local"))])
 	var render: PackedStringArray = []
 	if s.has("renderer"):
 		render.append("RENDER " + String(s["renderer"]).to_upper())

@@ -17,6 +17,7 @@ config/features=PackedStringArray("4.7", "Forward Plus")
 
 [autoload]
 
+Fonts="*res://src/autoload/fonts.gd"
 Settings="*res://src/autoload/settings.gd"
 SimClock="*res://src/autoload/sim_clock.gd"
 DebugConsole="*res://src/autoload/debug_console.gd"
@@ -37,6 +38,10 @@ window/size/viewport_height=1080
 [editor_plugins]
 
 enabled=PackedStringArray("res://addons/gut/plugin.cfg", "res://addons/scs_export/plugin.cfg")
+
+[gui]
+
+theme/custom="res://src/ui/game_theme.tres"
 
 [input]
 

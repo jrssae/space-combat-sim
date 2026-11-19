@@ -1,0 +1,10 @@
+[gd_resource type="Theme" format=3]
+
+; The project's theme (M8-T21, D87): what every control falls back to. Its fonts are set when the game starts, by
+; `GameFonts.install` (the `Fonts` autoload): Babylon5Credits as the default font, Babylon5 for the Title, Headline and
+; Heading label variations below. No font is named here, because this file is loaded before a fresh checkout's first import.
+
+[resource]
+Heading/base_type = &"Label"
+Headline/base_type = &"Label"
+Title/base_type = &"Label"

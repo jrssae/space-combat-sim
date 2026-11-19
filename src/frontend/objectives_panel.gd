@@ -85,7 +85,9 @@ func show_content(new_content: Dictionary) -> void:
 		label.text = "%s %s" % [mark, line["text"]] if not mark.is_empty() else String(line["text"])
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		if compact:
+		if bool(line.get("headline", false)):
+			label.theme_type_variation = &"Headline"
+		elif compact:
 			label.add_theme_font_size_override(&"font_size", COMPACT_FONT_SIZE)
 		match StringName(line.get("state", &"")):
 			&"done":

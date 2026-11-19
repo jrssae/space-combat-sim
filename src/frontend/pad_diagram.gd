@@ -104,7 +104,7 @@ func _draw() -> void:
 		return
 	var origin: Vector2 = (size - DESIGN * fit) * 0.5
 	var font: Font = get_theme_default_font()
-	var font_size: int = clampi(roundi(FONT_DESIGN * fit), 9, 30)
+	var font_size: int = _fit_rows(font, clampi(roundi(FONT_DESIGN * fit), 9, 30), fit, origin)
 	var rows: Array[Dictionary] = _layout_rows(fit, origin, font, font_size)
 	for row: Dictionary in rows:  # leaders first, so the parts of the pad cover them
 		if not _LETTERED.has(row["widget"]):
@@ -122,6 +122,22 @@ func _draw() -> void:
 			draw_string(font, Vector2(origin.x, baseline), row["text"], HORIZONTAL_ALIGNMENT_RIGHT, edge - origin.x, font_size, color)
 		else:
 			draw_string(font, Vector2(edge, baseline), row["text"], HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size, color)
+
+
+# The largest size up to `wanted` at which every legend line fits beside the pad (the game's fonts are wide).
+func _fit_rows(font: Font, wanted: int, fit: float, origin: Vector2) -> int:
+	var fitted: int = wanted
+	while fitted > 9 and not _rows_fit(font, fitted, fit, origin):
+		fitted -= 1
+	return fitted
+
+
+func _rows_fit(font: Font, font_size: int, fit: float, origin: Vector2) -> bool:
+	for widget: StringName in legend.widgets():
+		var room: float = LEGEND_EDGE_LEFT * fit if _LEFT_SIDE.has(widget) else size.x - origin.x - LEGEND_EDGE_RIGHT * fit
+		if font.get_string_size(_row_text(widget), HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size).x > room:
+			return false
+	return true
 
 
 func _draw_body(fit: float, origin: Vector2) -> void:

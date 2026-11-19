@@ -281,7 +281,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | AC14 | Approach cues and the gate's reach (D84): `ApproachCue`'s states are unit-tested over approach speeds, offsets and brake strengths; the cue shows on the gate and both bays in both views; the gate offers the jump farther out at speed, and headless jumps requested at 200 m/s to several km/s all run the line-up, the run-in and the cinematic and arrive through the mouth (tests on the end state and the shot's timing) | A | |
 | AC15 | Flights and orders (D85): the player commands only a flight of two wingmen where the mission says so; AI flights of three cover each other and stay within their cohesion distance through a seeded headless fight; ships in formation fire at targets in reach; the two hold-fire orders hold formation or position without firing and are lifted by any other order (tests for each, pad menu and keyboard), native kept 1 and 6 threads identical | A | **Met** (T19, 2026-11-18) |
 | AC16 | GPU memory (D86): the overlay shows VRAM used in GB and as a percentage of the card on the maintainer's GPU, matching `mem_info_vram_used` within a refresh; `state render` reports the three values; with no driver total it shows the game's share and `total unknown` (unit tests on fake sysfs files) | A | **Met** (T20, 2026-11-18) |
-| AC17 | Fonts (D87): both fonts in the repo with their `docs/third-party.md` entry; every UI text uses one of them (a test finds no other font); ASCII and the UI's symbols draw on the GPU; the maintainer approved the look sheet | A | |
+| AC17 | Fonts (D87): both fonts in the repo with their `docs/third-party.md` entry; every UI text uses one of them (a test finds no other font); ASCII and the UI's symbols draw on the GPU; the maintainer approved the look sheet | A | **Met** (T21, 2026-11-19) |
 | AC18 | Gamepad detection (D88): the cause written down; joypads logged at start and hotplug, the connect, disconnect and none-found notices, `joypads` in `info.md`; the troubleshooting section; the maintainer's pad seen by the game in its working mode (H) | A | |
 | AC19 | Escort's own system (D89): the escort runs in the new star system with no station and no nebula, the new planet and sky approved on a sheet, wingmen with no home dock; its tests pass; Epsilon's scenarios unchanged | A | |
 | AC20 | Radial fit (D90): menus with 1 to 8 entries lay out equal slices with no empty ones (unit tests on the layout), the stick, the D-pad, the keys and the console pick the right entry for each count, unavailable entries leave the ring | A | |
@@ -330,7 +330,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T18 | B | Approach cues for navigation targets with an interaction (brake, overshoot, adjust course), and the jumpgate's reach, autopilot and cinematic scaled to the player's speed (D84; maintainer, 2026-11-18; numbered last because it was added after the others had numbers) | - (shared with T06) | Opus | Relative-motion maths on the HUD, and a gate run-in that starts from any speed with its shot timed to match | not started |
 | T19 | D | Flights of three: the player commands two wingmen, AI flights of three cover each other and stay together, every ship in formation may fire, and two new orders (form up and hold fire; hold position and hold fire) (D85; maintainer, 2026-11-18; numbered last because it was added after the others had numbers) | T13 | Fable | Native flight cohesion and mutual cover, two orders through the comms menu and keys, parity | done |
 | T20 | D | GPU memory in use on the debug overlay, in GB and as a percentage of the card (D86; maintainer 2026-11-18; numbered last because it was added after the others had numbers) | - | Fable | Driver sysfs reads off the frame path, a fallback, the overlay and `state render` | done |
-| T21 | D | The game's fonts: Babylon5 for titles and headlines, Babylon5Credits for body text and the HUD, on all UI text (D87; maintainer, 2026-11-18; numbered last) | - | Fable | A theme over every screen and the HUD's own drawing, a symbol-encoded cmap, a look sheet first | in progress |
+| T21 | D | The game's fonts: Babylon5 for titles and headlines, Babylon5Credits for body text and the HUD, on all UI text (D87; maintainer, 2026-11-18; numbered last) | - | Fable | A theme over every screen and the HUD's own drawing, a symbol-encoded cmap, a look sheet first | done |
 | T22 | D | Gamepad detection: why Godot sometimes misses the maintainer's pad, joypad logging and notices, `joypads`, troubleshooting (D88; maintainer, 2026-11-18; numbered last) | - | Fable | Linux input stack diagnosis on the real device, small notices | in progress |
 | T23 | C | The civilian escort in its own star system: no Babylon 5, no nebula, a different planet (D89; maintainer, 2026-11-18; numbered last) | T08 | Opus | A second system in the data, its sky and planet, the escort moved onto it; a sheet first | not started |
 | T24 | D | Radial menus fit their entries: equal slices for however many entries, no empty spots (D90; maintainer, 2026-11-18; numbered last) | - | Opus | The radial framework's layout and picking for every input | in progress |
@@ -863,6 +863,33 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   every screen and HUD element that sets its own font, `docs/third-party.md`, a guard test, a look sheet under
   `references/screenshots/M8-T21 fonts/` for the maintainer before the commit.
 - **Done when:** AC17.
+- **Done (2026-11-19):**
+  - **Fonts and theme:** `assets/fonts/babylon5.ttf` and `babylon5_credits.ttf` (the maintainer's files, unchanged: both already
+    carry a Unicode cmap, so D87's symbol-cmap fix was not needed; both have their own lowercase; Babylon5 draws `°`, `·` and `×`
+    blank, and no title uses them). `src/ui/game_theme.tres` is the project theme (`gui/theme/custom`): Babylon5Credits for every
+    control, Babylon5 for the `Title`, `Headline` and `Heading` label variations, so labels other tasks add inherit them. The
+    `Fonts` autoload (the first) puts the fonts into it at start (`GameFonts.install`): named in the theme's file they broke a
+    fresh checkout's first import, which loads the project theme before any font is imported.
+    `GameFonts` hands both to code that draws its own text. The debug console keeps its fixed-width system font, the one exception.
+  - **The maintainer's answers (2026-11-18):** the HUD's instrument text one size up (`HudPainter.TEXT_SCALE` 1.2) with the layout
+    moved so nothing is drawn over anything (the cockpit's left screen: lights on the top row, fuel under the wireframe, REF kept
+    to one line when ALT shows; the right screen: `CHARGE` and the fire mode on one line, roster rows and the target's name
+    drawn smaller when too long; the chase view: readout, radar, hull and objectives rows spaced for the larger text); fixed
+    digit slots for every HUD number and the target preview (`GameFonts.draw_line`: each digit centred in the width of "0");
+    the debug overlay and the FPS counter in Babylon5Credits through `ReadoutText`, the overlay's columns placed by
+    `ReadoutColumns` (cells two spaces apart, numbers ending at their column's edge) instead of `%8.1f` padding; the mission's
+    name in Babylon5 on the briefing and the debrief only (`Headline`), radial headings left in Babylon5Credits.
+  - **Also:** the pad diagram's legend shrinks until every line fits (the font is wider than the old one). Not scaled: the
+    radial menus, the target preview, the subtitles and the control hint, already 16 px and more.
+  - **Tests:** `test_font_guard.gd` (no source, scene, theme or project setting brings in another font; the console's is the one
+    allowed), `test_game_fonts.gd` (coverage of ASCII and `°·…—`, the theme, digit slots), `test_readout_columns.gd`,
+    `test_readout_text.gd`, `test_hud_text_overlap.gd` (every text the painter draws against every other text and gauge, chase
+    window and the three screens, at 1920 by 1080 and 960 by 540). Verified in a staged copy (HEAD plus this commit) imported from an empty `.godot/` as CI does (no script
+    error): compile check 957 scripts clean; the 38 UI and HUD GUT files 531 of 531 (5300 asserts, `GUT_SLOW=1`); every
+    unit file 2749 of 2749; the main-scene smoke clean.
+  - **Look sheets:** `references/screenshots/M8-T21 fonts/` (stage 1: before and after, the size and digit variants) and
+    `final/` (the HUD in both views with and without the overlay and a target, at 1080p and the 960 by 540 size; menus,
+    briefing, debrief). Readability in play stays (H).
 
 ### M8-T22 Gamepad detection
 

@@ -1,13 +1,7 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://src/console/fps_counter.gd" id="1_script"]
-
-[sub_resource type="SystemFont" id="SystemFont_mono"]
-font_names = PackedStringArray("monospace", "DejaVu Sans Mono", "Liberation Mono")
-
-[sub_resource type="Theme" id="Theme_fps"]
-default_font = SubResource("SystemFont_mono")
-default_font_size = 14
+[ext_resource type="Script" path="res://src/ui/readout_text.gd" id="2_readout"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
 content_margin_left = 8.0
@@ -30,10 +24,9 @@ offset_top = 8.0
 offset_right = -8.0
 grow_horizontal = 0
 mouse_filter = 2
-theme = SubResource("Theme_fps")
 theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
 
-[node name="Readout" type="Label" parent="Panel"]
+[node name="Readout" type="Control" parent="Panel"]
 unique_name_in_owner = true
 layout_mode = 2
-horizontal_alignment = 2
+script = ExtResource("2_readout")

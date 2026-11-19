@@ -90,7 +90,7 @@ static func format_time(seconds: float) -> String:
 func panel() -> Dictionary:
 	var lines: Array[Dictionary] = []
 	if not title.is_empty():
-		lines.append(_line(title, "", &"", true))
+		lines.append(ObjectivesModel.headline(title))
 	lines.append(_line(result_text(), "", &"done" if success else &"failed", true))
 	for row: Dictionary in objectives:
 		lines.append(_objective_line(row))

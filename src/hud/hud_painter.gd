@@ -14,18 +14,28 @@ const LINE_COLOR: Color = HudLayout.LINE_COLOR
 const TEXT_SHADOW: Color = Color(0.0, 0.0, 0.0, 0.8)
 ## Sides of the radar's batched dots (M4-T36): round at their few pixels.
 const DOT_SEGMENTS: int = 16
-## The step between the REF and ALT lines under the speed, layout px.
-const READOUT_LINE_PX: float = 16.0
+## Every text size is drawn this much larger than the layout names it (M8-T21: the game's font is thin at the old sizes).
+const TEXT_SCALE: float = 1.2
+## The speed's baseline above the angles, the first REF or ALT line below them and the step between those lines, layout px.
+const SPEED_ABOVE_PX: float = 24.0
+const READOUT_FIRST_PX: float = 22.0
+const READOUT_LINE_PX: float = 19.0
+## A screen's status and acknowledgement lines, layout px.
+const SCREEN_LINE_PX: float = 13.0
+## The font's capitals' height over its size.
+const CAP_HEIGHT: float = 0.72
 
 ## What the last radar paint cost, us (a readout): the dot buffers and the draws.
 static var radar_paint_us: int = 0
-static var _shared_font: Font = null
 static var _dot_mesh: ArrayMesh = null
 # Hollow rim dots' rings, by their thickness over their radius (M4-T23).
 static var _ring_meshes: Dictionary = {}
 
 ## What the last `paint` was asked to draw (tests and the console read it).
 var painted: Array[StringName] = []
+## With `record_text` on, every text of the last paint as it was drawn: `{text, rect}`, the rect its capitals' box (tests).
+var record_text: bool = false
+var text_boxes: Array[Dictionary] = []
 
 var _canvas: CanvasItem = null
 var _font: Font = null
@@ -38,7 +48,7 @@ var _rims := RadarDotBatch.new()
 
 func _init(canvas: CanvasItem) -> void:
 	_canvas = canvas
-	_font = _hud_font()
+	_font = GameFonts.body()
 
 
 ## How many times the radar's dot multimeshes rebuilt after Godot moved their buffers (M7-T45; tests read it).
@@ -48,20 +58,13 @@ func radar_dot_rebuilds() -> int:
 
 ## The HUD's font, for what is drawn beside the instruments (the comms panel's subtitles).
 static func font() -> Font:
-	return _hud_font()
-
-
-static func _hud_font() -> Font:
-	if _shared_font == null:
-		var system := SystemFont.new()
-		system.font_names = PackedStringArray(["DejaVu Sans Mono", "Liberation Mono", "Noto Sans Mono", "Monospace"])
-		_shared_font = system
-	return _shared_font
+	return GameFonts.body()
 
 
 ## Draws what `surface` lists, from `f`.
 func paint(f: HudFrame, surface: HudSurface) -> void:
 	painted = surface.items
+	text_boxes = []
 	var s: float = surface.scale
 	var w: float = maxf(1.0, 2.0 * s)  # 2 px lines at 1080p
 	var items: Array[StringName] = surface.items
@@ -123,7 +126,7 @@ func _draw_roster(surface: HudSurface, s: float, w: float) -> void:
 		_text("WING", surface.roster_caption_pos, 12.0 * s, Color(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, 0.7))
 	for row: HudLayout.RosterRow in surface.roster_rows:
 		_bar(row.bar_rect, row.hull, row.color, w)
-		_text(row.text, row.text_pos, surface.roster_text_size * s, row.color if row.down else LINE_COLOR)
+		_fitted(row.text, row.text_pos, surface.roster_text_size * s, row.color if row.down else LINE_COLOR, surface.roster_text_width)
 
 
 # The mission's active objectives (M5-T05), right-aligned at the top right: optional ones fainter.
@@ -147,14 +150,28 @@ func _draw_escorts(f: HudFrame, s: float, w: float) -> void:
 
 
 func _text(text: String, pos: Vector2, size: float, color: Color, align: HorizontalAlignment = HORIZONTAL_ALIGNMENT_LEFT) -> void:
-	var width: float = _font.get_string_size(text, align, -1.0, int(size)).x
+	var px: int = text_px(size)
+	var width: float = GameFonts.line_width(_font, text, px)
 	var origin: Vector2 = pos
 	if align == HORIZONTAL_ALIGNMENT_CENTER:
 		origin.x -= width * 0.5
 	elif align == HORIZONTAL_ALIGNMENT_RIGHT:
 		origin.x -= width
-	_canvas.draw_string(_font, origin + Vector2(1.5, 1.5), text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, int(size), TEXT_SHADOW)
-	_canvas.draw_string(_font, origin, text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, int(size), color)
+	GameFonts.draw_line(_canvas, _font, origin + Vector2(1.5, 1.5), text, px, TEXT_SHADOW)
+	GameFonts.draw_line(_canvas, _font, origin, text, px, color)
+	if record_text:
+		text_boxes.append({"text": text, "rect": Rect2(origin.x, origin.y - CAP_HEIGHT * float(px), width, CAP_HEIGHT * float(px))})
+
+
+## The size in pixels a text of layout size `size` is drawn at.
+static func text_px(size: float) -> int:
+	return int(size * TEXT_SCALE)
+
+
+# `text` at `size`, or as much smaller as it takes to fit `room` px (0: no limit).
+func _fitted(text: String, pos: Vector2, size: float, color: Color, room: float, align: HorizontalAlignment = HORIZONTAL_ALIGNMENT_LEFT) -> void:
+	var width: float = GameFonts.line_width(_font, text, text_px(size))
+	_text(text, pos, size * room / width if room > 0.0 and width > room else size, color, align)
 
 
 # A status or acknowledgement line: centred on the 2D layer, on a screen starting at `at`, smaller, and wrapped to the room it has.
@@ -162,16 +179,17 @@ func _line(surface: HudSurface, text: String, at: Vector2, size: float) -> void:
 	if surface.lines_centred:
 		_text(text, at, size, LINE_COLOR, HORIZONTAL_ALIGNMENT_CENTER)
 		return
-	var fitted: int = int(13.0 * surface.scale)
-	_canvas.draw_multiline_string(_font, at + Vector2(1.5, 1.5), text, HORIZONTAL_ALIGNMENT_LEFT, surface.lines_width, fitted, -1, TEXT_SHADOW)
-	_canvas.draw_multiline_string(_font, at, text, HORIZONTAL_ALIGNMENT_LEFT, surface.lines_width, fitted, -1, LINE_COLOR)
+	var fitted: float = SCREEN_LINE_PX * surface.scale
+	var y: float = at.y
+	for line: String in _wrap(text, _font, float(text_px(fitted)), surface.lines_width):
+		_text(line, Vector2(at.x, y), fitted, LINE_COLOR)
+		y += _font.get_height(text_px(fitted))
 
 
 # The bar that stands up at a screen's edge: its label and fire mode right-aligned above it, filling from the bottom.
 func _draw_vertical_charge(f: HudFrame, surface: HudSurface, s: float, w: float) -> void:
 	var rect: Rect2 = surface.charge_rect
-	_text("CHARGE", surface.charge_caption_pos, 12.0 * s, LINE_COLOR, HORIZONTAL_ALIGNMENT_RIGHT)
-	_text(f.fire_mode.to_upper(), surface.charge_caption_pos + Vector2(0.0, 14.0 * s), 11.0 * s, LINE_COLOR, HORIZONTAL_ALIGNMENT_RIGHT)
+	_text("CHARGE  %s" % f.fire_mode.to_upper(), surface.charge_caption_pos, 12.0 * s, LINE_COLOR, HORIZONTAL_ALIGNMENT_RIGHT)
 	_canvas.draw_rect(rect, Color(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, 0.15), true)
 	var filled: float = rect.size.y * clampf(f.charge_fraction, 0.0, 1.0)
 	_canvas.draw_rect(Rect2(Vector2(rect.position.x, rect.end.y - filled), Vector2(rect.size.x, filled)), Color(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, 0.8), true)
@@ -260,9 +278,9 @@ func _draw_target_marks(f: HudFrame, s: float, w: float, labelled: bool) -> void
 		else:
 			_brackets(box, color, w, maxf(8.0 * s, box.size.x * 0.28))
 		if labelled:
-			_text(label, Vector2(box.position.x, bottom + 18.0 * s), 15.0 * s, color)
+			_text(label, Vector2(box.position.x, bottom + 20.0 * s), 15.0 * s, color)
 			if f.target_hull >= 0.0:
-				_bar(Rect2(Vector2(box.position.x, bottom + 24.0 * s), Vector2(maxf(box.size.x, 60.0 * s), 6.0 * s)), f.target_hull, color, w)
+				_bar(Rect2(Vector2(box.position.x, bottom + 27.0 * s), Vector2(maxf(box.size.x, 60.0 * s), 6.0 * s)), f.target_hull, color, w)
 	elif f.edge_arrow_visible:
 		var p: Vector2 = f.edge_arrow_pos
 		var a: float = f.edge_arrow_angle
@@ -287,8 +305,9 @@ func _draw_target_panel(f: HudFrame, surface: HudSurface, s: float, w: float) ->
 	if not f.target_present:
 		_text("NO TARGET", at, 18.0 * s, Color(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, 0.5))
 		return
-	_text(f.target_name, at, 20.0 * s, f.target_color)
-	_text("%s  %+.0f m/s" % [_range_text(f.target_range_m), f.target_closing_mps], at + Vector2(0.0, 24.0 * s), 16.0 * s, LINE_COLOR)
+	_fitted(f.target_name, at, 20.0 * s, f.target_color, surface.target_text_width)
+	_fitted("%s  %+.0f m/s" % [_range_text(f.target_range_m), f.target_closing_mps], at + Vector2(0.0, 26.0 * s), 16.0 * s, LINE_COLOR,
+			surface.target_text_width)
 	if f.target_hull >= 0.0:
 		_bar(surface.target_bar_rect, f.target_hull, f.target_color, w)
 
@@ -307,7 +326,7 @@ func _draw_waypoint(f: HudFrame, s: float, w: float) -> void:
 		var r: float = 12.0 * s
 		_canvas.draw_polyline(PackedVector2Array([c + Vector2(0.0, -r), c + Vector2(r, 0.0), c + Vector2(0.0, r), c + Vector2(-r, 0.0),
 				c + Vector2(0.0, -r)]), LINE_COLOR, w)
-		_text(label, c + Vector2(0.0, r + 16.0 * s), 14.0 * s, LINE_COLOR, HORIZONTAL_ALIGNMENT_CENTER)
+		_text(label, c + Vector2(0.0, r + 19.0 * s), 14.0 * s, LINE_COLOR, HORIZONTAL_ALIGNMENT_CENTER)
 	elif f.waypoint_edge_visible:
 		var p: Vector2 = f.waypoint_edge_pos
 		var a: float = f.waypoint_edge_angle
@@ -344,7 +363,7 @@ static func readout_lines(f: HudFrame, font: Font, size: float, max_width: float
 	var lines := PackedStringArray()
 	if f.reference_valid:
 		var whole: String = reference_text(f)
-		if max_width <= 0.0 or font.get_string_size(whole, HORIZONTAL_ALIGNMENT_LEFT, -1.0, int(size)).x <= max_width:
+		if max_width <= 0.0 or GameFonts.line_width(font, whole, int(size)) <= max_width:
 			lines.append(whole)
 		else:
 			if not f.reference_name.is_empty():
@@ -360,7 +379,7 @@ static func _wrap(text: String, font: Font, size: float, max_width: float) -> Pa
 	var current: String = ""
 	for word: String in text.split(" ", false):
 		var tried: String = word if current.is_empty() else current + " " + word
-		if not current.is_empty() and font.get_string_size(tried, HORIZONTAL_ALIGNMENT_LEFT, -1.0, int(size)).x > max_width:
+		if not current.is_empty() and GameFonts.line_width(font, tried, int(size)) > max_width:
 			lines.append(current)
 			current = word
 		else:
@@ -414,12 +433,16 @@ func _draw_grid(surface: HudSurface, f: HudFrame, s: float, w: float) -> void:
 func _draw_speed(f: HudFrame, surface: HudSurface, s: float) -> void:
 	var align: HorizontalAlignment = HORIZONTAL_ALIGNMENT_RIGHT if surface.speed_align_right else HORIZONTAL_ALIGNMENT_CENTER
 	var at: Vector2 = surface.speed_pos
-	_text("%.0f m/s" % f.speed_mps, at + Vector2(0.0, -22.0 * s), surface.speed_size * s, LINE_COLOR, align)
+	_text("%.0f m/s" % f.speed_mps, at + Vector2(0.0, -SPEED_ABOVE_PX * s), surface.speed_size * s, LINE_COLOR, align)
 	_text(angles_text(f), at, 16.0 * s, LINE_COLOR, align)
 	var dim := Color(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, 0.75)
-	var y: float = 20.0
-	for line: String in readout_lines(f, _font, 14.0 * s, surface.speed_text_width):
-		_text(line, at + Vector2(0.0, y * s), 14.0 * s, dim, align)
+	var y: float = READOUT_FIRST_PX
+	var lines: PackedStringArray = readout_lines(f, _font, float(text_px(14.0 * s)), surface.speed_text_width)
+	if surface.speed_max_lines > 0 and lines.size() > surface.speed_max_lines:
+		# No room for a wrapped name: REF stays on one line, drawn as small as it takes.
+		lines = readout_lines(f, _font, float(text_px(14.0 * s)), 0.0)
+	for line: String in lines:
+		_fitted(line, at + Vector2(0.0, y * s), 14.0 * s, dim, surface.speed_text_width, align)
 		y += READOUT_LINE_PX
 
 
@@ -463,7 +486,7 @@ func _draw_drift_sphere(f: HudFrame, surface: HudSurface, s: float, w: float) ->
 	var ahead: float = f.drift_dir.y
 	var caption: String = "FWD" if ahead > 0.35 else ("AFT" if ahead < -0.35 else "SIDE")
 	var caption_color: Color = tip_color if ahead > 0.35 else (Color(1.0, 0.5, 0.35) if ahead < -0.35 else LINE_COLOR)
-	_text(caption, c + Vector2(0.0, r + 14.0 * s), 12.0 * s, caption_color, HORIZONTAL_ALIGNMENT_CENTER)
+	_text(caption, c + Vector2(0.0, r + 16.0 * s), 12.0 * s, caption_color, HORIZONTAL_ALIGNMENT_CENTER)
 	# Where you have come from: a small open circle on the far side.
 	var back: Vector2 = RadarModel.to_screen(-tip_point * 0.8, c, r)
 	_canvas.draw_arc(back, 3.0 * s, 0.0, TAU, 12, dim, w * 0.75)

@@ -38,11 +38,12 @@ func _line_rects(f: HudFrame) -> Array[Rect2]:
 	var font: Font = HudPainter.font()
 	var s: float = f.scale
 	var rects: Array[Rect2] = []
-	var y: float = 20.0
-	for line: String in HudPainter.readout_lines(f, font, 14.0 * s, f.speed_text_width):
-		var w: float = font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1.0, int(14.0 * s)).x
+	var px: int = HudPainter.text_px(14.0 * s)  # as the painter draws them (M8-T21: one size up, digit slots)
+	var y: float = HudPainter.READOUT_FIRST_PX
+	for line: String in HudPainter.readout_lines(f, font, float(px), f.speed_text_width):
+		var w: float = GameFonts.line_width(font, line, px)
 		var x: float = f.speed_pos.x - (w if f.speed_align_right else w * 0.5)
-		rects.append(Rect2(Vector2(x, f.speed_pos.y + y * s - 12.0 * s), Vector2(w, 15.0 * s)))
+		rects.append(Rect2(Vector2(x, f.speed_pos.y + y * s - float(px) * 0.86), Vector2(w, float(px) * 1.07)))
 		y += HudPainter.READOUT_LINE_PX
 	return rects
 
