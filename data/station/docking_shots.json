@@ -274,11 +274,11 @@
       "actor": "drum",
       "offset": [
        30,
-       -8,
+       -15,
        0
       ]
      },
-     "fov": 48,
+     "fov": 53,
      "up": {
       "actor": "drum",
       "direction": [
@@ -302,11 +302,11 @@
       "actor": "drum",
       "offset": [
        30,
-       -8,
+       -15,
        0
       ]
      },
-     "fov": 48,
+     "fov": 53,
      "up": {
       "actor": "drum",
       "direction": [
