@@ -355,6 +355,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T29 | C | Jumpgate autopilot: more camera angles (wider trailing shots, the gate's base and side), picked at random without repeats (maintainer, 2026-11-19) | T18 | Opus | Gate shots on the autopilot's predicted path | in progress |
 | T31 | C | Docking into the main docking bay: more camera angles, and the Starfury visibly matching the drum's rotation before it enters (maintainer, 2026-11-19) | T06 | Opus | Docking shots and a roll-match stage in the docking autopilot | not started |
 | T32 | C | Hold X for 1 s to abort any autopilot (gate jump, docking), until its point of no return (maintainer, 2026-11-19) | T29, T31 | Opus | One abort rule over every autopilot, the hold bar and keyboard parity | not started |
+| T34 | D | Babylon 5 commands: with the station targeted, the comms menu sends orders to Babylon 5 (launch wing, recall fighters, defense grid on/off, fire support, shelter civilians, sitrep) (maintainer, 2026-11-19) | T24 | Opus | A second comms page on the radial framework and station-side handlers | not started |
 | T17 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M8-T01 Tutorial script (discussion with the maintainer)
@@ -1305,6 +1306,23 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   the point of no return (inside the gate's vortex; past the docking bay's inner doors) — the prompt goes away there. One rule
   shared by every autopilot.
 - **Done when:** tests for each autopilot (abort before the point, refused after), keyboard parity, the prompt.
+
+### M8-T34 Babylon 5 commands
+
+- **Goal (maintainer, 2026-11-19):** when Babylon 5 is the selected target (an ally), the comms menu shows **station commands**
+  instead of wing orders; they go to the station, not the wingmen, and Control acknowledges each. Any pilot may give them.
+  - **Launch wing** → a follow-up ring: **Alpha, Beta, Delta, Zeta, All** (M7-T08's `launch_from` / wing launches; a wing already
+    flying or in the bay answers that).
+  - **Recall fighters**: always recalls **all** the station's fighters (they fly home and dock, M8-T06's docking; the player's own
+    wingmen included).
+  - **Defense grid on/off**: toggles the grid's current state (M7 §20.3); off = no turret, cannon or interceptor fire.
+  - **Fire support**: the grid's heavy cannons engage the player's current target if it is within their reach.
+  - **Shelter civilians**: toggle; station traffic holds, and ships in the queues and lanes go inside or stand off behind the
+    station; again releases them.
+  - **Sitrep**: Control reports section damage, wings out, raiders in the area and the grid's state.
+  - The rings lay out by entry count (M8-T24); keys 1..N pick; the D-pad does nothing in the ring.
+- **Done when:** tests for each command's effect and acknowledgement, the follow-up ring, the menu switching with the target, and
+  console equivalents in `info.md`.
 
 ### M8-T17 Integration, full suite, docs and acceptance
 
