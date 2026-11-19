@@ -350,6 +350,21 @@ func cancel(ship_name: String = "", reason: String = "cancelled") -> String:
 	return ""
 
 
+## Whether the pilot may abort the docking now (M8-T32): while the autopilot approaches and flies the lane, until the ship is
+## through the inner doors.
+func abort_offered() -> bool:
+	var visit: DockVisit = player_visit()
+	return visit != null and (visit.state == DockVisit.State.APPROACH or visit.state == DockVisit.State.LANE)
+
+
+## The pilot's abort (`AutopilotAbort`): the ship flies on with its velocity, the shots stop and the controls come back. "" or
+## why not.
+func abort() -> String:
+	if not abort_offered():
+		return "no docking to abort, or the ship is through the inner doors"
+	return cancel("", "aborted by the pilot")
+
+
 ## Ends the player's visit whatever its state (a respawn, the scene's own reset): the ship is in the pilot's hands again.
 func cancel_player(reason: String) -> void:
 	var entry: Dictionary = _player_entry()

@@ -1,0 +1,4 @@
+{
+  "_comment": "Holding X (the auto-track action: pad X, Shift, Mouse 4) this long aborts the autopilot flying the ship (the gate jump's line-up and run-in, docking's approach and lane), until its point of no return (M8-T32, maintainer 2026-11-19). Seconds.",
+  "hold_s": 1.0
+}

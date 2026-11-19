@@ -1429,3 +1429,14 @@ the Fury stops, rolls to the bay's turn and goes in rolling with it. `state dock
 - [ ] **(H) The roll match reads:** you see the Fury roll into step with the drum before the mouth, in a shot with the bay's face
       behind it. Say if it is too slow, too quick, or hard to see.
 - [ ] **(H) Variety:** dock three times. Say if the shots feel varied enough, and if any is too dark, too far or clipping.
+
+# Play-testing the autopilot abort (M8-T32)
+
+During the gate jump's line-up and run-in, and docking's approach and lane, hold X (Shift, Mouse 4) for 1 s: the bar fills under
+`HOLD X / SHIFT / MOUSE 4: ABORT`, the cinematic cuts, and you fly on from where you were. Once the ship is in the gate's funnel, or
+through the docking bay's inner doors, the prompt goes away and X does nothing.
+
+- [ ] **(H) Abort:** abort a jump while it lines up and a docking on its approach. Say if 1 s feels right
+      (`data/controls/autopilot_abort.json`) and if the cut back to flying is clean.
+- [ ] **(H) Point of no return:** the prompt should vanish as the ship enters the vortex and as it passes the inner doors.
+

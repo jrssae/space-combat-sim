@@ -371,7 +371,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T30 | C | Cobra-bay launch: more camera angles (a pool, picked at random without repeats) and control back as soon as the launch thrusters cut (maintainer, 2026-11-19) | T03 | Opus | Launch shots and the hand-off timing | done |
 | T29 | C | Jumpgate autopilot: more camera angles (wider trailing shots, the gate's base and side), picked at random without repeats (maintainer, 2026-11-19) | T18 | Opus | Gate shots on the autopilot's predicted path | done |
 | T31 | C | Docking into the main docking bay: more camera angles, and the Starfury visibly matching the drum's rotation before it enters (maintainer, 2026-11-19) | T06 | Opus | Docking shots and a roll-match stage in the docking autopilot | in progress |
-| T32 | C | Hold X for 1 s to abort any autopilot (gate jump, docking), until its point of no return (maintainer, 2026-11-19) | T29, T31 | Opus | One abort rule over every autopilot, the hold bar and keyboard parity | in progress |
+| T32 | C | Hold X for 1 s to abort any autopilot (gate jump, docking), until its point of no return (maintainer, 2026-11-19) | T29, T31 | Opus | One abort rule over every autopilot, the hold bar and keyboard parity | done |
 | T34 | D | Babylon 5 commands: with the station targeted, the comms menu sends orders to Babylon 5 (launch wing, recall fighters, defense grid on/off, fire support, shelter civilians, sitrep) (maintainer, 2026-11-19) | T24 | Opus | A second comms page on the radial framework and station-side handlers | done |
 | T17 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
@@ -1400,6 +1400,13 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   the point of no return (inside the gate's vortex; past the docking bay's inner doors) — the prompt goes away there. One rule
   shared by every autopilot.
 - **Done when:** tests for each autopilot (abort before the point, refused after), keyboard parity, the prompt.
+- **Done (2026-11-19):** `AutopilotAbort`, one rule for both autopilots: a 1 s hold of X (data, `data/controls/autopilot_abort.json`;
+  pad X, Shift, Mouse 4) aborts the gate jump's line-up and run-in or docking's approach and lane with the hold's bar and
+  `HOLD X / SHIFT / MOUSE 4: ABORT` over the cinematic; the ship flies on at its velocity, the shots stop, the controls return.
+  Refused, prompt gone, in the gate's funnel and past the inner doors; a tap of X toggles nothing while the controls are held.
+  Console `autopilot [status|abort]`, provider `autopilot`. Tests (staged scratch copy): 98/98 over 8 files (the abort's
+  keys and mouse, keyboard parity, the input adapter and the hold, both autopilots aborted and refused in play, the gate in play,
+  nav targets, docking).
 
 ### M8-T34 Babylon 5 commands
 

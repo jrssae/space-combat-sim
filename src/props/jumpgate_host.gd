@@ -251,6 +251,25 @@ func start_jump(through: Jumpgate = null) -> String:
 	return ""
 
 
+## Whether the pilot may abort the jump now (M8-T32): while it lines up and runs in, until the ship is in the vortex's funnel.
+func abort_offered() -> bool:
+	if not jump.is_active() or main == null or not main.player_alive:
+		return false
+	if jump.state != GateJump.State.LINE_UP and jump.state != GateJump.State.RUN_IN:
+		return false
+	var transits: VortexTransits = VortexTransits.of(main.world)
+	return transits == null or not transits.is_passing(main.ship)
+
+
+## The pilot's abort (`AutopilotAbort`): the jump ends where the ship is, with its velocity; its shots stop and the controls come
+## back. "" or why not.
+func abort() -> String:
+	if not abort_offered():
+		return "no jump to abort, or the ship is in the vortex"
+	cancel_jump("aborted by the pilot")
+	return ""
+
+
 ## Ends a jump under way (the console, a respawn); the ship is put back in sight at the arrival if it was away.
 func cancel_jump(why: String = "cancelled") -> void:
 	_handle(jump.cancel(why))

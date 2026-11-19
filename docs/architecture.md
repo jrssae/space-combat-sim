@@ -5490,6 +5490,13 @@ At 1 000 km (GPU): the gate 23 draw calls, 145 fps (the display's cap), 379 MB; 
   from behind; `attach(ship, to_sun)`, `update(to_sun)`, `detach()`), which other shot sequencers reuse. `stop_shots()` ends every
   take in one call. Console `gate shots <approach>,<mouth>|arrive:<id>|auto` pins the opening takes for captures; provider `gate.shots`
   lists the last jump's takes.
+- **Aborting an autopilot (M8-T32, maintainer 2026-11-19).** One rule for every autopilot, `AutopilotAbort` (Main's child): while
+  the gate jump lines up and runs in (`JumpgateHost.abort_offered`, until the ship is in the vortex's funnel) or docking approaches
+  and flies the lane (`DockingDirector.abort_offered`, until the inner doors), X's hold runs the abort at
+  `data/controls/autopilot_abort.json`'s 1 s instead of the interaction's 2 s; its prompt (`HOLD X / SHIFT / MOUSE 4: ABORT`, the
+  live bindings) and bar sit on their own layer over the cinematic (`SkipPrompt`). The abort cancels the jump or the visit where
+  the ship is, at its velocity; the shots stop through the director's own `stop_shots()`. While the controls are held a tap of X
+  toggles nothing (`InputAdapter.taps_blocked`). Console `autopilot [status|abort]`, provider `autopilot`.
 - Console `gate [status|open|close|jump|cancel|target|approach|view]` (`gate open <dir> <hold_s>`; `gate view reference` is the
   acceptance pose of the still), `vortex [status|open|close|view]`; providers `gate`, `vortex`.
 - GPU (RX 6950 XT, headless gamescope): the vortex costs about 0.23 ms and one draw call, even filling the screen from inside; the

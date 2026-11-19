@@ -152,6 +152,8 @@ var autotrack_on: bool = false
 var interaction_offered: bool = false
 ## X's tap and hold (M7-T27).
 var hold: HoldInteract = HoldInteract.new()
+## Taps of X do nothing (M8-T32: while an autopilot holds the controls, X is only its abort's hold, never auto-track).
+var taps_blocked: bool = false
 ## The console holds X this much longer, s (`interact hold`, for scripts and captures): as if the button were down.
 var console_hold_s: float = 0.0
 
@@ -227,7 +229,7 @@ func sample(source: InputSource, dt: float) -> PilotCommand:
 	var x_down: bool = source.is_pressed(AUTOTRACK) or console_hold_s > 0.0
 	console_hold_s = maxf(console_hold_s - dt, 0.0)
 	hold.step(x_down, interaction_offered, dt)
-	if hold.tapped:
+	if hold.tapped and not taps_blocked:
 		autotrack_on = not autotrack_on
 	flight.autotrack = autotrack_on
 	cmd.ui.interact = hold.fired

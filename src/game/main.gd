@@ -94,6 +94,8 @@ var launches: LaunchDirector = null
 var traffic: StationTraffic = null
 ## Docking for repair in the main docking bay (M8-T06): the player's hold of X there, the wing's order; console `dock`.
 var docking: DockingDirector = null
+## Holding X aborts the gate jump's or docking's autopilot until its point of no return (M8-T32).
+var autopilot_abort: AutopilotAbort = null
 ## Babylon 5's commands from the comms menu with the station targeted (M8-T34).
 var station_commands: StationCommands = null
 ## The station's exterior tour (M7-T12): console `tour`; the tour's shots play on the cinematic camera.
@@ -245,6 +247,10 @@ func _ready() -> void:
 	traffic = StationTraffic.new()
 	traffic.main = self
 	add_child(traffic)
+	autopilot_abort = AutopilotAbort.new()
+	autopilot_abort.name = AutopilotAbort.NODE_NAME
+	autopilot_abort.main = self
+	add_child(autopilot_abort)
 	docking = DockingDirector.new()
 	docking.main = self
 	add_child(docking)
@@ -331,15 +337,20 @@ func _physics_process(delta: float) -> void:
 	# On a target that offers an interaction (a gate within reach, a station bay) a long hold of X runs it (M7-T27).
 	# A mission's opening is skipped the same way, with a hold of X (M7-T54).
 	var opening: bool = mission != null and mission.opening_skip_offered()
-	adapter.interaction_offered = opening or interactions.offer() != null
+	# An autopilot flying the ship is left with its own hold of X (M8-T32); a tap of X does nothing while the controls are held.
+	var abortable: StringName = autopilot_abort.offered()
+	adapter.interaction_offered = opening or abortable != &"" or interactions.offer() != null
+	adapter.hold.hold_s = AutopilotAbort.hold_s() if abortable != &"" else adapter.interact_hold_s
+	adapter.taps_blocked = controls_locked()
 	var pc: PilotCommand = adapter.sample(input_source, delta)
+	var aborted: bool = autopilot_abort.take(pc.ui, abortable)
 	if opening:
 		mission.take_opening_hold(pc.ui)
 	if control_lock.apply(pc, controls_locked(), camera_rig.is_playing_shot()):
 		camera_rig.stop_shot()
 		launches.skip()  # a launch's shot skipped jumps the player to the hand-off (M7-T08)
 		docking.skip()  # a docking's shot skipped jumps to the bay, then to the end of the repair (M8-T06)
-	if pc.ui.interact and not opening:  # the hold that skips the opening is spent on it
+	if pc.ui.interact and not opening and abortable == &"" and not aborted:  # a hold spent on the opening or an abort runs nothing else
 		interactions.run_offered()
 	var autopilot: FlightCommand = gates.step_player(delta) if not get_tree().paused else null
 	if autopilot == null and not get_tree().paused:
