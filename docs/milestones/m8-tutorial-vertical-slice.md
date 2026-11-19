@@ -335,6 +335,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T23 | C | The civilian escort in its own star system: no Babylon 5, no nebula, a different planet (D89; maintainer, 2026-11-18; numbered last) | T08 | Opus | A second system in the data, its sky and planet, the escort moved onto it; a sheet first | done |
 | T24 | D | Radial menus fit their entries: equal slices for however many entries, no empty spots (D90; maintainer, 2026-11-18; numbered last) | - | Opus | The radial framework's layout and picking for every input | done |
 | T25 | E | Frame-rate regression: free flight at ~15 fps (66.7 ms frames, GPU ~1 ms) found 2026-11-19 by M8-T23; find the commit and fix it (numbered last) | - | Opus | Bisect from M7's merge with `state render` on the GPU; CPU-side cost per frame | done |
+| T26 | C | Civilian escort update: a longer route and a bigger belt, a longer gap before wave two, Control's opening brief (maintainer, 2026-11-19; numbered last) | T23 | Fable | Scenario and mission data, pacing and dialog on the escort the T08 agent knows | not started |
 | T17 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M8-T01 Tutorial script (discussion with the maintainer)
@@ -1036,6 +1037,16 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   fps uncapped, GPU 2.6 ms, 145 on Wayland, and the same 1, 16, 16 at ticks 5, 20 and 30. A windowed X11 run without vsync
   swings from 9 to 384 fps on either build (XWayland pacing, not the game). To measure frame rate, wait at least 300 ticks
   (5 s) first. No code change.
+
+### M8-T26 Civilian escort update
+
+- **Goal (maintainer, 2026-11-19):** in Gamma Leporis (M8-T23), NAV ALPHA to NAV BETA about **45 km** (was about 30), the
+  asteroid belt about **12 km** deep at the same density, still across the middle; **30 s more** between the first and second
+  waves; at the start, **Control briefs** that the cargo is sensitive and must get through, and that the escort is a show of force
+  to deter raiders in this sector — in **plain military radio language**, not wordy, in flight before the hand-over **and** as a
+  matching short paragraph in the mission briefing text.
+- **Done when:** the escort's tests pass with the new route, belt and pacing (the scripted fought run's time recorded), the lines
+  are in the dialog file and the briefing, and the maintainer has re-flown it (H).
 
 ### M8-T17 Integration, full suite, docs and acceptance
 
