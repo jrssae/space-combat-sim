@@ -27,7 +27,7 @@ func test_the_pools_hold_the_reviewed_takes_each_under_three_seconds() -> void:
 		GateShotPool.APPROACH: ["beside_behind", "trail_wide", "gate_side"],
 		GateShotPool.MOUTH: ["close_behind", "trail_mid", "pull_out", "over_shoulder"],
 		GateShotPool.ARRIVAL_OPEN: ["pylons_wide", "centre_close", "wide_burst", "reverse_exit"],
-		GateShotPool.ARRIVAL_OUT: ["centre_close", "wide_burst", "arm_side", "head_on"],
+		GateShotPool.ARRIVAL_OUT: ["centre_close", "arm_side", "head_on"],
 	}
 	for slot: StringName in expected:
 		for id: String in expected[slot]:
@@ -64,7 +64,7 @@ func test_a_take_is_held_no_longer_than_it_may_be_and_leaves_the_next_a_second()
 		for id: String in pool.ids(slot):
 			if pool.is_feature(slot, id):
 				features.append("%s/%s" % [slot, id])
-	assert_eq(Array(features), ["arrival_open/wide_burst", "arrival_out/wide_burst"], "the takes that earn the longer hold")
+	assert_eq(Array(features), ["arrival_open/wide_burst"], "the take that earns the longer hold")
 	assert_eq(pool.when(GateShotPool.ARRIVAL_OPEN, "wide_burst"), GateShotPool.AFTER, "it waits for the blue vortex to open")
 
 

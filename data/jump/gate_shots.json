@@ -557,43 +557,6 @@
    ]
   },
   {
-   "id": "wide_burst",
-   "keys": [
-    {
-     "t": 0,
-     "position": {
-      "actor": "gate",
-      "offset": [
-       300,
-       150,
-       -1200
-      ]
-     },
-     "look_at": {
-      "actor": "player"
-     },
-     "fov": 15
-    },
-    {
-     "t": 4.9,
-     "position": {
-      "actor": "gate",
-      "offset": [
-       300,
-       150,
-       -1200
-      ]
-     },
-     "look_at": {
-      "actor": "player"
-     },
-     "fov": 15
-    }
-   ],
-   "feature": true,
-   "when": "before"
-  },
-  {
    "id": "arm_side",
    "keys": [
     {
