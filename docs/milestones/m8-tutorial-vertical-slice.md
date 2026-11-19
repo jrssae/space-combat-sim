@@ -242,6 +242,25 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   a troubleshooting section in `docs/playtest.md` (the pad's mode switch, launching through Steam as a non-Steam game, a udev rule
   if hidraw access helps SDL). Any game-side fix must keep gameplay reading `InputAdapter`, never `Input`.
 
+### D89 The civilian escort in its own star system (T23; maintainer, 2026-11-18)
+
+- The escort leaves Epsilon Eridani: **no Babylon 5** (so no station, no home dock: the wingmen stay and fight, D82), **no nebula**,
+  and a **different nearby planet in colour and look**, in **a different star system** — a new entry in `data/star_systems.json`
+  (its own star, the planet on its rail, no gate needed yet; M27's system generator and jumpgate travel come later and will take this
+  system over). Its sky, sun colour and planet are data and generated assets; the escort's scenario names the new `system_id` and
+  anchors on that system's places. A look sheet of the new sky and planet goes to the maintainer before the commit.
+- Everything the escort reads from Epsilon (the anchor, the sun, broadcasts, encounters, the HUD's reference) works from the new
+  system; free flight and the station scenarios keep Epsilon.
+
+### D90 Radial menus fit their entries (T24; maintainer, 2026-11-18)
+
+- Every radial menu (the comms menu, the target menu and any page pushed onto them, §18.19, §18.22) lays out **one slice per entry
+  present**: 3 entries are 120° each, 5 are 72° each; **no empty slices** are drawn or pickable. The first entry stays at the top and
+  the rest follow clockwise in page order.
+- Picking follows the layout: the stick's angle picks the nearest slice of the current layout; the D-pad's four directions and the
+  keyboard's numbered keys pick by entry order (an entry beyond the fourth is reached by the stick or the keys); entries that are
+  unavailable (M8-T06's DOCK with no home dock in range) are left out rather than blanked. Console picks by index follow page order.
+
 ## Acceptance criteria
 
 | # | Criterion | Kind | Done |
@@ -264,6 +283,8 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | AC16 | GPU memory (D86): the overlay shows VRAM used in GB and as a percentage of the card on the maintainer's GPU, matching `mem_info_vram_used` within a refresh; `state render` reports the three values; with no driver total it shows the game's share and `total unknown` (unit tests on fake sysfs files) | A | **Met** (T20, 2026-11-18) |
 | AC17 | Fonts (D87): both fonts in the repo with their `docs/third-party.md` entry; every UI text uses one of them (a test finds no other font); ASCII and the UI's symbols draw on the GPU; the maintainer approved the look sheet | A | |
 | AC18 | Gamepad detection (D88): the cause written down; joypads logged at start and hotplug, the connect, disconnect and none-found notices, `joypads` in `info.md`; the troubleshooting section; the maintainer's pad seen by the game in its working mode (H) | A | |
+| AC19 | Escort's own system (D89): the escort runs in the new star system with no station and no nebula, the new planet and sky approved on a sheet, wingmen with no home dock; its tests pass; Epsilon's scenarios unchanged | A | |
+| AC20 | Radial fit (D90): menus with 1 to 8 entries lay out equal slices with no empty ones (unit tests on the layout), the stick, the D-pad, the keys and the console pick the right entry for each count, unavailable entries leave the ring | A | |
 
 ## Working rules for M8
 
@@ -311,6 +332,8 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T20 | D | GPU memory in use on the debug overlay, in GB and as a percentage of the card (D86; maintainer 2026-11-18; numbered last because it was added after the others had numbers) | - | Fable | Driver sysfs reads off the frame path, a fallback, the overlay and `state render` | done |
 | T21 | D | The game's fonts: Babylon5 for titles and headlines, Babylon5Credits for body text and the HUD, on all UI text (D87; maintainer, 2026-11-18; numbered last) | - | Fable | A theme over every screen and the HUD's own drawing, a symbol-encoded cmap, a look sheet first | in progress |
 | T22 | D | Gamepad detection: why Godot sometimes misses the maintainer's pad, joypad logging and notices, `joypads`, troubleshooting (D88; maintainer, 2026-11-18; numbered last) | - | Fable | Linux input stack diagnosis on the real device, small notices | in progress |
+| T23 | C | The civilian escort in its own star system: no Babylon 5, no nebula, a different planet (D89; maintainer, 2026-11-18; numbered last) | T08 | Opus | A second system in the data, its sky and planet, the escort moved onto it; a sheet first | not started |
+| T24 | D | Radial menus fit their entries: equal slices for however many entries, no empty spots (D90; maintainer, 2026-11-18; numbered last) | - | Opus | The radial framework's layout and picking for every input | not started |
 | T17 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M8-T01 Tutorial script (discussion with the maintainer)
@@ -766,6 +789,20 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 - **Files:** a pure joypad report class, the connect/disconnect toast and the front end's notice, the `joypads` console command
   and provider, `info.md`, `docs/playtest.md` (troubleshooting), tests with injected joypad events.
 - **Done when:** AC18.
+
+### M8-T23 The civilian escort in its own star system
+
+- **Goal:** AC19 (D89).
+- **Files:** `data/star_systems.json` (the new system), the sky and planet generators' data for it, `data/scenarios/civilian_escort.json`
+  and its mission script, the escort's tests, a sheet under `references/screenshots/M8-T23 escort system/` for the maintainer first.
+- **Done when:** AC19.
+
+### M8-T24 Radial menus fit their entries
+
+- **Goal:** AC20 (D90).
+- **Files:** the radial framework (§18.19) and its view, `CommsMenu` pages, the target menu, the input adapter's picks, the console's
+  `commsmenu pick`, tests. After M8-T19 lands (it adds two comms entries).
+- **Done when:** AC20.
 
 ### M8-T17 Integration, full suite, docs and acceptance
 
