@@ -319,7 +319,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T06 | B | Dock in the main docking bay to be repaired and relaunched, for the player and the AI wingmen (D82, Q7) | - | Fable | The `dock` interaction, the lane for fighters, repair and a Cobra-bay relaunch; wing orders | in progress |
 | T07 | C | Bring M10-T19's raider strike carrier into `m8`: merge `origin/m10`, one collision builder, its tests green (Q5) | - | Opus | Two branches built a collision builder; docs, `native/src/lib.rs` and `info.md` conflict | done |
 | T08 | C | The civilian escort's raids come with the strike carrier (D83, Q6) | T07 | Fable | Mission data and pacing on `CarrierJumps`; the escort's tests kept green | in progress |
-| T09 | C | Raider Battle Wagon (moved from M10-T20): from images, with weapons (M10 Q31) and four launch tubes; the escort's last wave comes with it (Q8) | T08, the maintainer on its weapons | Fable | No STL; a new hull with weapons and tube launches | done |
+| T09 | C | Raider Battle Wagon (moved from M10-T20): from images, with weapons (M10 Q31) and four launch tubes; the escort's last wave comes with it (Q8) | T08, the maintainer on its weapons | Fable | No STL; a new hull with weapons and tube launches | in progress |
 | T10 | D | Interceptor muzzle at the drawn barrel tip, and the grid balance measured again (roadmap M7-2) | - | Fable | A placement fix in the turret rows with a balance check | done |
 | T11 | D | The walls beside the cargo bay stop flickering (roadmap M7-3) | - | Sonnet | Find the coplanar faces or shading cause in the station generator; a test | not started |
 | T12 | D | Audio rework of every sound effect and the Starfury engines' steady level (roadmap M7-5) | - | Opus | One loudness reference, the mix, and a smoothed engine gain; a listening checklist | not started |
@@ -650,6 +650,9 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
     (1 new), `test_strike_carrier` 16, and the front end, loader, encounter, mission, jump, turret, missile, stand-in,
     console-list and settings files. `bench_quick.sh` was not run (a wagon in play adds a time check a tick; its turrets
     and docking paths are native rows). The full standard suite was not run.
+
+- **Follow-up (maintainer, 2026-11-19, queued):** the Battle Wagon's turrets engage **any hostile within their reach** (1.6 km),
+  not only ships that hit the wagon or a friend; the missile racks stay as built (fire within 3 km, the civilian a valid target).
 
 ### M8-T10 Interceptor muzzle at the drawn barrel tip
 
