@@ -10,7 +10,7 @@
  "clear_m": 35.0,
  "via_m": 60.0,
  "timeout_s": 240.0,
- "repair": {"base_s": 6.0, "hull_s": 30.0, "rearm_s": 4.0, "refuel_s": 4.0, "max_s": 45.0},
+ "repair": {"wingman_s": 30.0, "player_s": 0.0},
  "wingman": {"auto": true, "hull_below": 0.25, "cruise_mps": 120.0, "entry_out_m": 500.0,
              "queue_spacing_m": 250.0, "peel_above_mps": 50.0, "peel_out_m": 250.0, "peel_ahead_s": 3.0},
  "offer": {"hull_below": 0.5, "line": "BABYLON CONTROL: YOU ARE CLEARED TO DOCK FOR REPAIRS, MAIN DOCKING BAY"},

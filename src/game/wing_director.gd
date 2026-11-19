@@ -201,6 +201,16 @@ func _add_joining(wing: Wing, ship: Combatant) -> Wing:
 	return null
 
 
+## Hands `wing`'s lead to its lowest slot; the old lead, still flying, takes a slot of its own flight (M8-T06: a lead that
+## goes to dock leaves the flight in the air under its wingman). False when nobody can take over.
+func hand_lead(wing: Wing) -> bool:
+	if wing == null or wing.members().is_empty() or (wing.leader != null and wing.leader.is_player):
+		return false
+	_lead(wing, wing.members()[0])
+	refresh(wing)
+	return true
+
+
 # Makes `ship` lead `wing`. A living old leader takes a slot.
 func _lead(wing: Wing, ship: Combatant) -> void:
 	var old: Combatant = wing.leader
@@ -612,6 +622,9 @@ func refresh(wing: Wing) -> void:
 		ctx.cover = ai_flight
 		ctx.cohesion_m = flight_rules.cohesion_m if ai_flight else 0.0
 		ctx.rejoined_m = flight_rules.rejoined_m if ai_flight else 0.0
+		# An evading wingman of a flight, or of a wing told to form up, turns back at the cohesion distance (M8-T06).
+		var forming: bool = order == AiContext.Order.FORM_ON_ME or order == AiContext.Order.FORM_HOLD_FIRE
+		ctx.leash_m = flight_rules.cohesion_m if ai_flight or (alive and forming) else 0.0
 		if alive and wing.leader.is_player:
 			member.ship.running_lights = wing.leader.ship.running_lights
 	if leader_pilot != null and wing.flight > 0:

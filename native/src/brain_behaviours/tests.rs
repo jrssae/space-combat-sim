@@ -1209,3 +1209,81 @@ fn a_wingman_that_strays_past_the_cohesion_distance_rejoins_before_it_fights_aga
     think_at(&mut bench, &mut free, 4000.0, 0.0);
     assert!(!free.ctx.strayed);
 }
+
+// `LEADER` flying -z at 100 m/s and the brain's ship `off` m to its right with a hostile 600 m astern of it, nose on it.
+fn leashed_bench(off: f32) -> Bench {
+    let own = Vector3::new(off, 0.0, OUT);
+    let ships = vec![(LEADER, 1, Vector3::new(0.0, 0.0, OUT)), (RAIDER, 1, own), (BANDIT, 0, own + Vector3::new(0.0, 0.0, 600.0))];
+    let mut rows = rows_with(&ships, 1000.0, 0.0);
+    for v in rows.velocities.iter_mut().skip(1) {
+        *v = Vector3::new(0.0, 0.0, -100.0);
+    }
+    Bench::new(rows)
+}
+
+fn evading_wingman(leash_m: f64) -> Brain {
+    let mut brain = raider_brain(&[KIND_EVADE, KIND_FORMATION, KIND_IDLE]);
+    brain.ctx.order = ORDER_FORM_ON_ME;
+    brain.ctx.leader_id = LEADER;
+    brain.ctx.has_slot = true;
+    brain.ctx.slot_offset = Vector3::new(40.0, 0.0, 40.0);
+    brain.ctx.wing_ids = vec![LEADER];
+    brain.ctx.leash_m = leash_m;
+    brain
+}
+
+// Thinks for a second with the bandit on the tail, so the evasion has outlasted the pilot's reaction time.
+fn chased(bench: &mut Bench, brain: &mut Brain, from_s: f64) {
+    for k in 0..60 {
+        bench.think(brain, from_s + f64::from(k) / 60.0, 0, NEVER, 12);
+    }
+}
+
+#[test]
+fn an_evading_wingman_past_its_leash_breaks_toward_its_lead() {
+    // M8-T06 (maintainer, 2026-11-18): chased 3 km out from its lead with a 2.5 km leash, the evasion turns for the lead.
+    let mut bench = leashed_bench(3000.0);
+    let mut brain = evading_wingman(2500.0);
+    chased(&mut bench, &mut brain, 0.0);
+    assert_eq!(brain.current_kind(), i32::from(KIND_EVADE), "a hostile on its tail: it evades");
+    assert!(brain.evade.leashed, "3 km from its lead on a 2.5 km leash");
+    // The lead's own motion (-z 100), 150 m/s toward it (-x), and a 100 m/s jink across the line of fire.
+    assert!(brain.desired_velocity.x < -45.0, "toward its lead: {:?}", brain.desired_velocity);
+    assert!((brain.desired_velocity.z + 100.0).abs() < 1.0, "riding on the lead's motion: {:?}", brain.desired_velocity);
+    // Without a leash the same evasion keeps the course it had: only the jink across it.
+    let mut free = evading_wingman(0.0);
+    chased(&mut bench, &mut free, 0.0);
+    assert_eq!(free.current_kind(), i32::from(KIND_EVADE));
+    assert!(!free.evade.leashed);
+    assert!(free.desired_velocity.x.abs() <= 100.5, "no pull toward the lead: {:?}", free.desired_velocity);
+    // Inside the leash nothing changes either.
+    let mut near_bench = leashed_bench(2000.0);
+    let mut near = evading_wingman(2500.0);
+    chased(&mut near_bench, &mut near, 0.0);
+    assert!(!near.evade.leashed, "2 km out on a 2.5 km leash");
+}
+
+#[test]
+fn the_leash_lets_go_only_well_inside_and_follows_the_wings_link_out_of_sight() {
+    let mut bench = leashed_bench(3000.0);
+    let mut brain = evading_wingman(2500.0);
+    chased(&mut bench, &mut brain, 0.0);
+    assert!(brain.evade.leashed);
+    // Back to 2 km it is still on its way in; at 1 km (under half the leash) it is let off and stays with the lead.
+    let mut closer = leashed_bench(2000.0);
+    chased(&mut closer, &mut brain, 1.0);
+    assert!(brain.evade.leashed, "not let off at the leash's edge");
+    let mut back = leashed_bench(1000.0);
+    chased(&mut back, &mut brain, 2.0);
+    assert!(!brain.evade.leashed, "well inside: let off");
+    assert!(brain.desired_velocity.x.abs() <= 100.5, "only the jink again: {:?}", brain.desired_velocity);
+    // The lead out of sight: the leash runs to where the wing's link puts it.
+    let mut far = evading_wingman(2500.0);
+    far.ctx.leader_id = 999;
+    far.ctx.link = Some([-6000.0, 0.0, f64::from(OUT)]);
+    far.ctx.link_velocity = Vector3::new(0.0, 0.0, -100.0);
+    let mut near_bench = leashed_bench(1000.0);
+    chased(&mut near_bench, &mut far, 0.0);
+    assert!(far.evade.leashed, "7 km from the link's lead");
+    assert!(far.desired_velocity.x < -45.0, "toward the link: {:?}", far.desired_velocity);
+}

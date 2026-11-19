@@ -6495,6 +6495,18 @@ data/scenarios/station_dock.json the player 1.2 km off the bay with two wingmen,
   tunnel free, `DockAutopilot.lane` holds the nose on the axis and flies every thruster: `lane_mps` to the mouth, `inner_mps`
   inside, and never faster than the retros can stop it short of the inner doors until they stand open (then short of the lane's
   end in the void). The doors are asked and let go as the traffic's ships do it (§20.4), and the ship is `inside_station` in the void.
+- **Follow-ups (maintainer, 2026-11-18).** *Repair times:* an AI wingman waits a fixed `repair.wingman_s` (30 s) inside; the
+  player waits `repair.player_s` (0): docked, it is restored and handed to a Cobra bay in the same tick, so the docking's
+  shots run straight into the launch's (`dock_wait` plays only while no arm can take the ship). This replaces the
+  damage-scaled clock below. *AI flights:* `_watch_wing` goes through every wing, so Babylon 5's own flights (M8-T19) dock
+  by themselves below the threshold with their home in range; a flight's lead first hands the flight to its first wingman
+  (`WingDirector.hand_lead`) and docks as one of its wingmen, so the flight flies on and its place is kept. *The evasion's
+  leash:* `AiContext.leash_m` (the flights' cohesion distance, 2.5 km, for an AI flight's wingmen and a wing told to form
+  up; `ScsBrains.set_leash`) makes `BehaviourEvade` and the native `EvadeState` ride their jinks on a course back toward the
+  lead (its row, else the wing's link; the lead's velocity plus 150 m/s toward it) once the ship is past the leash, until it
+  is within half of it, so a chaser is drawn into the wing's guns instead of dragging the wingman off. An evasion with a leash
+  also keeps off its wingmates (`FormationState::kept_apart`, `BehaviourFormation.keep_apart`): it jinks among its wing now,
+  where before it drifted off. With no leash the arithmetic is untouched (parity recordings unchanged; `test_brain_think_parity` flies the leashed twins).
 - **Inside.** When the doors have shut the ship leaves play: hidden, no collision layers, `custom_integrator`, `clamped`,
   `inside_station` (M7-T62), held at the lane's end against the station each tick, so a rebase moves it with the station. The
   repair clock is `DockRepair.time_s` of what it came in with (`base_s` + `hull_s` x hull missing + `rearm_s` x charge missing +

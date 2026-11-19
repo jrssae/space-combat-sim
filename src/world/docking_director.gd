@@ -5,9 +5,9 @@ extends Node
 ## - **The player** holds X on the bay's navigation target within its reach: the controls are held, `DockAutopilot` flies the
 ##   ship round the station (`DockKeepOut`) to the lane and along it through the mouth and the inner doors, slowing it from
 ##   whatever speed it had. Behind the doors the ship leaves play (hidden, sheltered, touching nothing), `DockRepair`'s clock runs
-##   from the damage it came in with, the hull, the guns' charge and the tank are restored, and it launches from a Cobra bay
-##   through `LaunchDirector` (its camera, its skip, its hand-off). The cinematic's skip jumps a stage ahead: to the bay, to
-##   the end of the repair, to the hand-off.
+##   (an AI wingman's, a fixed time; the player does not wait), the hull, the guns' charge and the tank are restored, and it
+##   launches from a Cobra bay through `LaunchDirector` (its camera, its skip, its hand-off). The cinematic's skip jumps a
+##   stage ahead: to the bay and its launch, then to the hand-off.
 ## - **Wingmen** of the player's wing dock on the wing order (key 6, the comms menu's DOCK) and by themselves below the hull
 ##   threshold. A docking wingman flies a docking pilot (`assets/ai/docking.tres`) on routes the native brains fly: to a
 ##   waiting point off the bow with avoidance on, then `DockingPlan`'s lane (the roster reads DOCKING). Inside it is away (`Wing.set_away`: its slot is
@@ -254,6 +254,10 @@ func start_wingman(member: Combatant, why: StringName = DockVisit.WHY_ORDER) -> 
 	var profile: AiProfile = load(PROFILE_PATH) as AiProfile
 	if profile == null:
 		return "the docking pilot's profile is missing (%s)" % PROFILE_PATH
+	# A flight's lead hands the flight to its first wingman and docks as one of its wingmen, so the flight flies on.
+	var led: Wing = _wing_led_by(member)
+	if led != null and not led.members().is_empty():
+		main.wings.hand_lead(led)
 	var visit := DockVisit.new(member.display_name, false, why)
 	var entry: Dictionary = _new_entry(visit, member)
 	entry["brain"] = member.driver.brain
@@ -315,7 +319,7 @@ func cancel_player(reason: String) -> void:
 		_end(entry, reason)
 
 
-## The cinematic's skip (`Main`): the player's visit jumps a stage ahead, to the bay or to the end of the repair.
+## The cinematic's skip (`Main`): the player's visit jumps ahead to the bay, and so straight to its launch.
 func skip() -> void:
 	var entry: Dictionary = _player_entry()
 	if entry.is_empty():
@@ -479,13 +483,10 @@ func _dock_now(entry: Dictionary) -> void:
 	var s: Station = station()
 	_let_doors_go(entry, s)
 	var hull: float = c.damageable.hull.fraction() if c.damageable != null else 1.0
-	var charge: float = c.cannon.charge_fraction() if c.cannon != null else 1.0
-	var seconds: float = repair.time_s(hull, charge, c.ship.get_fuel_tank().fraction())
 	_take_out(entry)
-	visit.begin_repair(seconds, hull)
+	visit.begin_repair(repair.time_s(visit.is_player), hull)
 	docked_count += 1
 	if visit.is_player:
-		_play(&"dock_wait")
 		player_docked.emit()
 	else:
 		var wing: Wing = _wing_of(c)
@@ -494,6 +495,8 @@ func _dock_now(entry: Dictionary) -> void:
 		c.driver.in_passage = true  # nobody flies it while it is inside
 		wingman_docked.emit(visit.ship_name)
 	_hold(c.ship, s)
+	if visit.repair_s <= 0.0 and s != null:
+		_keep_away(entry, s, 0.0)  # no wait (the player): repaired on the way through, straight to a Cobra bay
 
 
 # Hidden, touching nothing, unavailable to everyone outside: the state of a ship inside the station.
@@ -722,16 +725,20 @@ func _step_wingman(entry: Dictionary, s: Station, delta: float) -> void:
 func _watch_wing() -> void:
 	if not wingman_auto or main.wings == null or plan == null and not _ready_plan().is_empty():
 		return
-	var wing: Wing = main.wings.player_wing()
-	if wing == null or wing.leader == null or not wing.leader.is_player:
-		return
-	for member: Combatant in wing.members():
-		if member.damageable == null or not member.damageable.is_active() or member.damageable.hull.fraction() >= wingman_hull_below:
-			continue
-		if visit_of(member.display_name) != null or not dock_refusal(member).is_empty():
-			continue  # no home dock in range: it stays and fights
-		if start_wingman(member, DockVisit.WHY_HULL).is_empty():
-			_say("%s: HULL CRITICAL, DOCKING FOR REPAIRS" % member.display_name)
+	# The player's wingmen and every AI flight alike (maintainer, 2026-11-18): whoever has its home dock in range.
+	var own: Wing = main.wings.player_wing()
+	for wing: Wing in main.wings.wings.duplicate():
+		var ships: Array[Combatant] = wing.members()
+		if wing.leader != null and not wing.leader.is_player:
+			ships.append(wing.leader)
+		for member: Combatant in ships:
+			if not is_instance_valid(member.ship) or member.damageable == null or not member.damageable.is_active() \
+					or member.damageable.hull.fraction() >= wingman_hull_below:
+				continue
+			if visit_of(member.display_name) != null or not dock_refusal(member).is_empty():
+				continue  # no home dock in range: it stays and fights
+			if start_wingman(member, DockVisit.WHY_HULL).is_empty() and wing == own and own.leader != null and own.leader.is_player:
+				_say("%s: HULL CRITICAL, DOCKING FOR REPAIRS" % member.display_name)
 
 
 # Control offers the bay once to a player whose hull has fallen below the offer's threshold (D79 beat 13).
@@ -826,6 +833,16 @@ func _wing_of(c: Combatant) -> Wing:
 		return null
 	for wing: Wing in main.wings.wings:
 		if wing.slot_of(c) > 0:
+			return wing
+	return null
+
+
+# The wing `c` leads, or null.
+func _wing_led_by(c: Combatant) -> Wing:
+	if main.wings == null:
+		return null
+	for wing: Wing in main.wings.wings:
+		if wing.leader == c:
 			return wing
 	return null
 

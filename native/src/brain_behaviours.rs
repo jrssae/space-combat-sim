@@ -367,6 +367,9 @@ pub struct Context {
     pub cohesion_m: f64,
     pub rejoined_m: f64,
     pub strayed: bool,
+    /// The evasion's leash (M8-T06, `AiContext.leash_m`): a wingman evading farther than this from its lead breaks toward
+    /// the lead instead of on away (0: none).
+    pub leash_m: f64,
 }
 
 impl Context {
@@ -393,6 +396,7 @@ impl Context {
         self.cohesion_m = 0.0;
         self.rejoined_m = 0.0;
         self.strayed = false;
+        self.leash_m = 0.0;
     }
 }
 
@@ -475,6 +479,7 @@ struct Tick<'a> {
     ctx_slot_offset: Vector3,
     ctx_link: Option<[f64; 3]>,
     ctx_link_velocity: Vector3,
+    ctx_leash_m: f64,
 }
 
 impl Tick<'_> {
@@ -606,6 +611,7 @@ impl<'a> Tick<'a> {
             ctx_slot_offset: ctx.slot_offset,
             ctx_link: ctx.link,
             ctx_link_velocity: ctx.link_velocity,
+            ctx_leash_m: ctx.leash_m,
         }
     }
 }
@@ -2219,6 +2225,8 @@ struct EvadeState {
     reason: u8,
     base_velocity: Vector3,
     fresh: bool,
+    // Past the leash (`Context.leash_m`): the evasion is carrying the ship back toward its lead.
+    leashed: bool,
     lock_until_jinks: i64,
     jink_scale: f64,
     spread_deg: f64,
@@ -2239,6 +2247,8 @@ impl EvadeState {
     const JINK_MAX_S: f32 = 4.0;
     const JINK_SPEED_MPS: f32 = 100.0;
     const REVERSAL_SPREAD_DEG: f64 = 45.0;
+    const LEASH_CLOSE_MPS: f32 = 150.0;
+    const LEASH_BACK: f64 = 0.5;
     const REASON_NAMES: [&'static str; 4] = ["", "tail", "fire", "hit"];
 
     fn new(seed: i64) -> Self {
@@ -2253,6 +2263,7 @@ impl EvadeState {
             reason: 0,
             base_velocity: Vector3::ZERO,
             fresh: true,
+            leashed: false,
             lock_until_jinks: 0,
             jink_scale: 1.0,
             spread_deg: Self::REVERSAL_SPREAD_DEG,
@@ -2274,6 +2285,7 @@ impl EvadeState {
         self.threat_id = 0;
         self.reason = 0;
         self.fresh = true;
+        self.leashed = false;
         self.lock_until_jinks = 0;
         self.threat_since_s = f64::NEG_INFINITY;
     }
@@ -2349,6 +2361,7 @@ impl EvadeState {
 
     fn enter(&mut self) {
         self.fresh = true;
+        self.leashed = false;
         self.lock_until_jinks = 0;
     }
 
@@ -2380,8 +2393,14 @@ impl EvadeState {
                 self.new_jink(line_of_fire);
             }
         }
+        self.keep_to_leash(tick);
         let across = self.across(line_of_fire);
-        let v_des = add(self.base_velocity, scale(across, Self::JINK_SPEED_MPS));
+        let mut v_des = add(self.base_velocity, scale(across, Self::JINK_SPEED_MPS));
+        if tick.ctx_leash_m > 0.0 {
+            // On a leash it jinks among its wing, or comes back into it: it keeps off its wingmates as a ship rejoining
+            // its slot does (M7-T76). M8-T13's seeded fight lost two to a jink across the formation without this.
+            v_des = FormationState::kept_apart(tick, ship, v_des);
+        }
         let dv = sub(v_des, p.velocity);
         cmd.rot = brain_maths::face(
             &p.basis,
@@ -2394,6 +2413,34 @@ impl EvadeState {
             brain_maths::K_FACE,
         );
         seek_velocity(cmd, p, &ship.capability, v_des, false, wish);
+    }
+
+    // `BehaviourEvade._keep_to_leash`: a wingman on a leash does not let a chaser drag it off. Past the leash the jinks
+    // ride on a course back toward its lead (its row, else where the wing's link puts it); back, it stays with the lead.
+    fn keep_to_leash(&mut self, tick: &Tick) {
+        if tick.ctx_leash_m <= 0.0 {
+            return;
+        }
+        let p = &tick.p;
+        let (lead_at, lead_velocity) = if tick.d.leader >= 0 {
+            let l = tick.d.leader as usize;
+            (tick.rows.positions[l], tick.rows.velocities[l])
+        } else if let Some(link) = tick.ctx_link {
+            (p.local_of(link), tick.ctx_link_velocity)
+        } else {
+            self.leashed = false;
+            return;
+        };
+        let to_lead = sub(lead_at, p.position);
+        let away_m = length(to_lead);
+        let was = self.leashed;
+        let limit = if was { Self::LEASH_BACK * tick.ctx_leash_m } else { tick.ctx_leash_m };
+        self.leashed = f64::from(away_m) > limit;
+        if self.leashed {
+            self.base_velocity = add(lead_velocity, scale(div_s(to_lead, away_m), Self::LEASH_CLOSE_MPS));
+        } else if was {
+            self.base_velocity = lead_velocity;
+        }
     }
 
     // `BehaviourEvade._likely_shooter`: the nearest hostile aiming at us, else the one pointing closest.

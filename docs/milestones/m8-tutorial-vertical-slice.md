@@ -316,7 +316,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T03 | A | The squadron-launch cinematic (D81) | T02, T01 | Opus | Scripted launches, camera shots and a skip that lands in the same state | not started |
 | T04 | A | Control checks: `ControlCheck`, the runner and the binding hints (D80) | T01 | Fable | Pass conditions on measured state for every control, pad and keyboard | done |
 | T05 | A | The tutorial mission: launch, checks, tour, raid, defense, debrief (D79) | T03, T04 | Fable | The mission script, dialog and pacing on M5's and M7's seams | not started |
-| T06 | B | Dock in the main docking bay to be repaired and relaunched, for the player and the AI wingmen (D82, Q7) | - | Fable | The `dock` interaction, the lane for fighters, repair and a Cobra-bay relaunch; wing orders | in progress |
+| T06 | B | Dock in the main docking bay to be repaired and relaunched, for the player and the AI wingmen (D82, Q7) | - | Fable | The `dock` interaction, the lane for fighters, repair and a Cobra-bay relaunch; wing orders | done |
 | T07 | C | Bring M10-T19's raider strike carrier into `m8`: merge `origin/m10`, one collision builder, its tests green (Q5) | - | Opus | Two branches built a collision builder; docs, `native/src/lib.rs` and `info.md` conflict | done |
 | T08 | C | The civilian escort's raids come with the strike carrier (D83, Q6) | T07 | Fable | Mission data and pacing on `CarrierJumps`; the escort's tests kept green | done |
 | T09 | C | Raider Battle Wagon (moved from M10-T20): from images, with weapons (M10 Q31) and four launch tubes; the escort's last wave comes with it (Q8) | T08, the maintainer on its weapons | Fable | No STL; a new hull with weapons and tube launches | done |
@@ -332,7 +332,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T20 | D | GPU memory in use on the debug overlay, in GB and as a percentage of the card (D86; maintainer 2026-11-18; numbered last because it was added after the others had numbers) | - | Fable | Driver sysfs reads off the frame path, a fallback, the overlay and `state render` | done |
 | T21 | D | The game's fonts: Babylon5 for titles and headlines, Babylon5Credits for body text and the HUD, on all UI text (D87; maintainer, 2026-11-18; numbered last) | - | Fable | A theme over every screen and the HUD's own drawing, a symbol-encoded cmap, a look sheet first | done |
 | T22 | D | Gamepad detection: why Godot sometimes misses the maintainer's pad, joypad logging and notices, `joypads`, troubleshooting (D88; maintainer, 2026-11-18; numbered last) | - | Fable | Linux input stack diagnosis on the real device, small notices | in progress |
-| T23 | C | The civilian escort in its own star system: no Babylon 5, no nebula, a different planet (D89; maintainer, 2026-11-18; numbered last) | T08 | Opus | A second system in the data, its sky and planet, the escort moved onto it; a sheet first | in progress |
+| T23 | C | The civilian escort in its own star system: no Babylon 5, no nebula, a different planet (D89; maintainer, 2026-11-18; numbered last) | T08 | Opus | A second system in the data, its sky and planet, the escort moved onto it; a sheet first | not started |
 | T24 | D | Radial menus fit their entries: equal slices for however many entries, no empty spots (D90; maintainer, 2026-11-18; numbered last) | - | Opus | The radial framework's layout and picking for every input | done |
 | T17 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
@@ -494,6 +494,25 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 - **Follow-up (maintainer, 2026-11-18, same queue): leash evasion.** Under FORM ON ME (and in AI flights), a wingman evading past
   the flight's cohesion distance (2.5 km, `data/wings/flights.json`) breaks toward its leader or flight instead of away, dragging
   the chaser into the wing's guns (M8-T19 saw one dragged 10.4 km off). Native, with parity and 1/6-thread identity kept.
+- **Done, the three follow-ups (2026-11-19):** **AI flights:** `DockingDirector._watch_wing` goes through every wing, so
+  Babylon 5's flights of three dock by themselves below 25 % with their home in range; a flight's lead first hands the flight
+  to its first wingman (`WingDirector.hand_lead`) and docks as one of its wingmen, so the flight flies on and the docked ship's
+  place is kept (`Wing.set_away`); only the player's own wingmen say so on the HUD. **Repair times:** `DockRepair` is two
+  numbers now (`repair.wingman_s` 30, `repair.player_s` 0): an AI wingman waits 30 s inside; the player is restored and handed
+  to a Cobra bay in the tick it docks, the docking's shots running straight into the launch's (`dock_wait` only while no arm
+  can take the ship), and the skip goes through the bay onto the launch. **Leash:** `AiContext.leash_m` (the flights' cohesion
+  distance for an AI flight's wingmen and for a wing under FORM ON ME or form up, hold fire; `ScsBrains.set_leash`): past it
+  the evasion's jinks ride on the lead's velocity plus 150 m/s toward the lead (its row, else the wing's link) until within
+  half the leash, and any evasion with a leash keeps off its wingmates as a ship rejoining its slot does (M8-T13's seed 3,
+  where a wingman was dragged 10.4 km off, first lost two wingmen to a jink across the formation: now none, the farthest
+  wingman 189 m off); `BehaviourEvade` and the native `EvadeState` alike,
+  untouched arithmetic with no leash (no recording moved). **Tests** (staged scratch copy with the native library built from
+  it, HEAD `fca8174f` plus this round): 261 Rust tests (2 new, the leash), the compile check clean (959 scripts), 28 GUT files,
+  176 tests, 0 failures: `test_docking` (12: an AI flight's wingman and a lead dock, the place kept; the player's no wait; the
+  AI's 30 s), `test_dock_repair`, the new `test_evade_leash` (unit 5, in play 1: 3.2 km out and chased, it ends nearer its
+  leader and is never dragged as far as without a leash), `test_brain_think_parity` (8, the leashed twins added),
+  `test_parity_fixture`, `test_flight_parity_fight`, `test_flights`, `test_flight_fight`, `test_wing_gaps`, `test_wing_away`,
+  `test_wing`, `test_ai_evade`, `test_station_threads`, `test_launch_bay`, `test_station_wing_follow`.
 
 ### M8-T07 Bring M10-T19's raider strike carrier into `m8`
 

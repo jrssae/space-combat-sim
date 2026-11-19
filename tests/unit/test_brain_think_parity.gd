@@ -399,6 +399,11 @@ static func _note(seen: Dictionary, t: Twin, i: int) -> void:
 		seen["strayed %d" % i] = true
 	if t.pilot.current != null and t.pilot.current.id == &"attack":
 		seen["attacked %d" % i] = true
+	var evade := t.pilot.current as BehaviourEvade
+	if evade != null:
+		seen["evaded %d" % i] = true
+		if evade.leashed:
+			seen["leashed %d" % i] = true
 
 
 ## The fields of `a` that differ from `b`, for the message.
@@ -563,6 +568,76 @@ func test_the_hold_fire_orders_shots_from_the_slot_and_the_flights_rules_think_t
 	assert_true(seen.has("strayed 4"), "the wingman far from its lead strayed")
 	assert_false(seen.has("attacked 4"), "and did not attack")
 	assert_false(seen.has("aimed 11"), "a pilot that never starts a fight does not shoot from its slot")
+
+
+func test_an_evasion_on_a_leash_thinks_the_same() -> void:
+	# M8-T06 (maintainer, 2026-11-18): wingmen hit 3 km from their leads with a hostile on the tail, with a leash and
+	# without, the lead in sight and on the wing's link, each flown by the native brain and its GDScript twin.
+	var brains: Object = NativeLib.instantiate(BRAINS_CLASS)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1806
+	var rows := Rows.new(rng, 40, 6, 10, 1800.0)
+	var formation := Formation.new()
+	var form: AiContext.Order = AiContext.Order.FORM_ON_ME
+	# Per twin: its order, its leash, whether its lead is out of sight (flown on the link).
+	var plan: Array[Array] = [
+		[form, 2500.0, false],
+		[form, 0.0, false],
+		[AiContext.Order.ENGAGE_AT_WILL, 2500.0, false],
+		[form, 2500.0, true],
+		[AiContext.Order.FORM_HOLD_FIRE, 600.0, false],
+		[AiContext.Order.ENGAGE_AT_WILL, 0.0, false],
+	]
+	var twins: Array[Twin] = []
+	for i: int in plan.size():
+		var leader_row: int = 12 + i
+		var hostile_row: int = 24 + i
+		for r: int in [i, leader_row, hostile_row]:
+			rows.kinds[r] = BodyKind.SHIP
+			rows.is_ship[r] = 1
+			rows.radii[r] = 8.0
+		rows.factions[leader_row] = rows.factions[i]
+		rows.factions[hostile_row] = (rows.factions[i] + 1) % 4
+		# 3 km out from its lead, flying with it, the hostile 400 m astern with its nose on it.
+		rows.positions[i] = rows.positions[leader_row] + rows.bases[leader_row].x * 3000.0
+		rows.velocities[i] = rows.velocities[leader_row]
+		rows.bases[i] = rows.bases[leader_row]
+		rows.positions[hostile_row] = rows.positions[i] + rows.bases[i].z * 400.0
+		rows.velocities[hostile_row] = rows.velocities[i]
+		rows.bases[hostile_row] = rows.bases[i]
+		for r: int in [i, leader_row, hostile_row]:
+			rows._spin[r] = Vector3.ZERO
+		var t: Twin = _twin(rows, i, &"ally_starfury", 500 + i, rng)
+		_make_slot(brains, t, rows)
+		var ctx: AiContext = t.pilot.context
+		ctx.order = plan[i][0]
+		ctx.leader_id = rows.ids[leader_row]
+		ctx.has_slot = true
+		ctx.slot_offset = formation.offset(1 + i % 3)
+		ctx.wing_ids = PackedInt64Array([rows.ids[leader_row]])
+		ctx.leash_m = plan[i][1]
+		if bool(plan[i][2]):
+			ctx.leader_id = 999  # out of sight: the leash runs to the link
+			ctx.leader_link_position = t.origin.plus_local(rows.positions[leader_row] + Vector3(4000.0, 0.0, 0.0))
+			ctx.leader_link_velocity = Vector3(30.0, 0.0, -20.0)
+		t.pilot.add_behaviour(BehaviourFormation.new(t.pilot.profile))
+		t.pilot.add_behaviour(BehaviourRally.new(t.pilot.profile))
+		brains.add_behaviour(t.slot, AiPilot.TIE_ORDER.find(&"formation"))
+		brains.add_behaviour(t.slot, AiPilot.TIE_ORDER.find(&"rally"))
+		t.pilot.reset()
+		brains.reset(t.slot)
+		_push_context(brains, t)
+		twins.append(t)
+	var seen: Dictionary = {}
+	var differences: PackedStringArray = _run(brains, rows, twins, rng, TICKS, {5: 0, 6: 1, 7: 2, 8: 3, 9: 4, 10: 5}, "leash", {}, seen)
+	assert_eq(differences.size(), 0, "an evasion on a leash thinks the same bits natively: %s" % differences.slice(0, 4))
+	for i: int in plan.size():
+		assert_true(seen.has("evaded %d" % i), "twin %d evaded (%s)" % [i, str(seen.keys())])
+	assert_true(seen.has("leashed 0"), "3 km out on a 2.5 km leash under FORM ON ME")
+	assert_true(seen.has("leashed 2"), "and in a flight engaging at will")
+	assert_true(seen.has("leashed 3"), "the lead out of sight: on the link")
+	assert_true(seen.has("leashed 4"), "a short leash")
+	assert_false(seen.has("leashed 1") or seen.has("leashed 5"), "without a leash the evasion is as it was")
 
 
 func test_objectives_guards_temperaments_and_live_retunes_think_the_same() -> void:

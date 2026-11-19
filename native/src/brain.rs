@@ -486,6 +486,15 @@ impl ScsBrains {
         }
     }
 
+    /// The evasion's leash for the pilot (M8-T06; `AiContext.leash_m`): evading farther than this from its lead it breaks
+    /// toward the lead (0: none).
+    #[func]
+    fn set_leash(&mut self, slot: i64, leash_m: f64) {
+        if let Some(b) = self.brain_mut(slot) {
+            b.ctx.leash_m = leash_m;
+        }
+    }
+
     /// `AiContext.clear_wing`.
     #[func]
     fn clear_wing(&mut self, slot: i64) {

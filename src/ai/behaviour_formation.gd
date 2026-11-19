@@ -301,6 +301,11 @@ static func _clear_of_burn(leader_at: Vector3, leader_accel: Vector3, up: Vector
 	return leader_at + (a_dir * along + side * SWING_CLEAR_M)
 
 
+## `_kept_apart` for another behaviour that brings a ship back into its wing (M8-T06: an evasion on its leash).
+static func keep_apart(p: Perception, v_des: Vector3) -> Vector3:
+	return _kept_apart(p, v_des)
+
+
 # `v_des` kept off every friendly ship: one the ship is closing on within the room it needs to stop (a settle, then the
 # side thrusters) is a wall the wish may not close on, and one nearer than `SEPARATION_M` is pushed off.
 static func _kept_apart(p: Perception, v_des: Vector3) -> Vector3:

@@ -166,7 +166,13 @@ func test_the_player_docks_is_repaired_and_launches_again_from_a_cobra_bay() -> 
 	await _select_bay()
 	var docked: Array[float] = []
 	var relaunched: Array[bool] = []
-	main.docking.player_docked.connect(func() -> void: docked.append(hull.fraction()))
+	# What the ship is as it leaves play behind the doors: the hull it came in with, hidden, sheltered, touching nothing.
+	var inside: Dictionary = {}
+	main.docking.player_docked.connect(func() -> void:
+		docked.append(hull.fraction())
+		inside.merge({"at_s": SimClock.now(), "visible": ship.visible, "sheltered": ship.inside_station, "layer": ship.collision_layer,
+				"active": main.combatant.damageable.is_active(), "doors_shut": station.airlock.doors.is_shut(),
+				"repair_s": main.docking.player_visit().repair_s}))
 	main.docking.player_relaunched.connect(func() -> void: relaunched.append(true))
 	# The real path: X held for the hold time on the selected bay.
 	source.hold(InputAdapter.AUTOTRACK)
@@ -200,23 +206,20 @@ func test_the_player_docks_is_repaired_and_launches_again_from_a_cobra_bay() -> 
 	assert_lt(float(seen["off_axis"]), 10.0, "down the middle of the mouth and the tunnel")
 	assert_eq(float(seen["open_at_nose"]), 1.0, "the inner doors stood open before its nose reached them")
 	assert_lte(float(seen["fastest"]), main.docking.approach_mps + 5.0, "never faster than the approach speed")
-	# Inside: out of play, the damage still on it, the repair clock set from it.
+	# Inside: out of play behind the shut doors, the damage still on it.
 	var visit: DockVisit = main.docking.player_visit()
-	assert_eq(visit.state, DockVisit.State.REPAIR)
 	assert_false(visit.skipped, "it flew the whole way in")
-	assert_true(lock.doors.is_shut(), "behind shut doors")
-	assert_false(ship.visible, "the ship is out of sight")
-	assert_true(ship.inside_station, "and unavailable to everyone outside (M7-T62)")
-	assert_false(main.combatant.damageable.is_active(), "nothing can hit it")
-	assert_eq(ship.collision_layer, 0)
+	assert_true(bool(inside["doors_shut"]), "behind shut doors")
+	assert_false(bool(inside["visible"]), "the ship left sight")
+	assert_true(bool(inside["sheltered"]), "and was unavailable to everyone outside (M7-T62)")
+	assert_false(bool(inside["active"]), "nothing could hit it")
+	assert_eq(int(inside["layer"]), 0)
 	assert_almost_eq(docked[0], 0.4, 0.01, "it came in with the damage it had")
-	# The guns recharged by themselves on the way in, so only the hull counts here (`test_dock_repair` has the rest).
-	assert_almost_eq(visit.repair_s, main.docking.repair.time_s(0.4), 0.01, "the repair time follows the damage")
-	assert_gt(visit.repair_s, main.docking.repair.base_s + 10.0)
-	assert_true(main.controls_locked(), "the controls stay held inside")
-	# Repaired, then out through a Cobra bay.
-	ok = await _until(func() -> bool: return visit.state == DockVisit.State.LAUNCHING, visit.repair_s + 10.0)
-	assert_true(ok, "the repair ended and a Cobra bay took the ship (%s)" % main.docking.describe())
+	# The player does not wait (maintainer, 2026-11-18): repaired on the way through, straight onto a Cobra bay's rack.
+	assert_eq(float(inside["repair_s"]), 0.0, "no repair time for the player")
+	assert_eq(visit.state, DockVisit.State.LAUNCHING, "the launch has begun (%s)" % main.docking.describe())
+	assert_lt(SimClock.now() - float(inside["at_s"]), 0.5, "as it docked: no wait")
+	assert_true(main.controls_locked(), "the controls stay held")
 	assert_eq(hull.fraction(), 1.0, "a whole hull")
 	assert_gt(main.cannon.charge_fraction(), 0.99, "charged guns")
 	assert_eq(ship.get_fuel_tank().fraction(), 1.0, "a full tank")
@@ -238,9 +241,10 @@ func test_the_player_docks_is_repaired_and_launches_again_from_a_cobra_bay() -> 
 	assert_gt(_speed(ship), 20.0, "flying, with the rail's speed")
 	assert_eq(main.docking.docked_count, 1)
 	assert_eq(main.docking.relaunched_count, 1)
-	for id: String in ["dock_approach", "dock_entry", "dock_wait"]:
+	for id: String in ["dock_approach", "dock_entry"]:
 		assert_has(shots_seen, id, "the docking's %s shot played" % id)
-	assert_gt(shots_seen.size(), 3, "then the launch's own shots")
+	assert_does_not_have(shots_seen, "dock_wait", "no repair shot: the docking runs straight into the launch")
+	assert_gt(shots_seen.size(), 2, "then the launch's own shots")
 
 
 func test_a_ship_coming_in_fast_is_slowed_and_still_docks() -> void:
@@ -256,7 +260,7 @@ func test_a_ship_coming_in_fast_is_slowed_and_still_docks() -> void:
 	var slowed: bool = await _until(func() -> bool: return _speed(ship) <= main.docking.approach_mps, 60.0)
 	assert_true(slowed, "the autopilot sheds the speed it was handed (%.0f m/s left)" % _speed(ship))
 	assert_eq(_state(), "approach", "before it takes the lane")
-	var ok: bool = await _until(func() -> bool: return _state() == "repair", 200.0)
+	var ok: bool = await _until(func() -> bool: return main.docking.docked_count == 1, 200.0)
 	assert_true(ok, "and it docks all the same (%s)" % main.docking.describe())
 	assert_eq(rams, 0, "without touching the station")
 	assert_false(main.docking.player_visit().skipped, "flown, not jumped")
@@ -282,7 +286,7 @@ func test_the_skip_jumps_a_stage_and_a_cancel_gives_the_ship_back() -> void:
 	assert_true(ship.visible)
 	assert_almost_eq(main.combatant.damageable.hull.fraction(), 0.5, 0.01, "nothing was repaired")
 	assert_false(_run("dock cancel").ok, "nothing left to cancel")
-	# The cinematic's skip (Start): straight into the bay, then to the end of the repair, then the launch's own skip.
+	# The cinematic's skip (Start): straight through the bay onto the launch, then the launch's own skip.
 	assert_true(_run("dock player").ok)
 	await _ticks(5)
 	source.hold(InputAdapter.PAUSE)
@@ -290,24 +294,19 @@ func test_the_skip_jumps_a_stage_and_a_cancel_gives_the_ship_back() -> void:
 	source.release(InputAdapter.PAUSE)
 	await _ticks(2)
 	var visit: DockVisit = main.docking.player_visit()
-	assert_eq(visit.state, DockVisit.State.REPAIR, "the first skip lands in the bay")
+	assert_eq(visit.state, DockVisit.State.LAUNCHING, "the first skip lands on a Cobra bay's rack: no repair to wait for")
 	assert_true(visit.skipped)
-	assert_false(ship.visible)
-	assert_lt(_local(ship).distance_to(main.docking.plan.airlock), 1.0, "held in the void behind the doors")
-	assert_true(main.camera_rig.is_playing_shot(), "the bay stays on screen")
+	assert_eq(main.combatant.damageable.hull.fraction(), 1.0, "repaired on the way through")
+	assert_true(ship.visible, "on the rack")
 	assert_false(get_tree().paused, "Start skipped the shot, it did not pause")
 	var refused: ConsoleResult = _run("dock cancel")
 	assert_false(refused.ok, "inside, it cannot be called off")
 	assert_string_contains(refused.error, "inside the station")
+	await _ticks(30)  # the launch's first shot comes up
 	source.hold(InputAdapter.PAUSE)
 	await _ticks(2)
 	source.release(InputAdapter.PAUSE)
-	assert_true(await _until(func() -> bool: return visit.state == DockVisit.State.LAUNCHING, 3.0), "the second skip ends the repair")
-	assert_eq(main.combatant.damageable.hull.fraction(), 1.0, "repaired all the same")
-	source.hold(InputAdapter.PAUSE)
-	await _ticks(2)
-	source.release(InputAdapter.PAUSE)
-	assert_true(await _until(func() -> bool: return main.docking.player_visit() == null, 15.0), "the third skips the launch")
+	assert_true(await _until(func() -> bool: return main.docking.player_visit() == null, 15.0), "the second skips the launch")
 	await _ticks(2)
 	assert_false(main.controls_locked(), "skipped through: the controls are back")
 	assert_false(main.launches.last_handoff.is_empty(), "at the launch's hand-off")
@@ -319,19 +318,31 @@ func test_a_respawn_ends_a_docking_wherever_it_is() -> void:
 	if not await _start():
 		pending("the babylon5_station asset is not generated")
 		return
+	# On the way in: the pilot has the ship again at once.
 	assert_true(_run("dock player").ok)
-	await _ticks(3)
-	assert_true(_run("dock skip").ok)
-	await _ticks(2)
-	assert_false(main.ship.visible, "inside the station")
+	await _ticks(30)
 	main.respawn()
 	await _ticks(3)
 	assert_null(main.docking.player_visit(), "the respawn ends the visit")
+	assert_eq(main.docking.last_visit.cancel_reason, "respawn")
 	assert_true(main.ship.visible)
 	assert_false(main.ship.inside_station)
 	assert_ne(main.ship.collision_layer, 0)
 	assert_false(main.ship.clamped)
 	assert_false(main.controls_locked())
+	# Skipped onto the rack: the visit ends too, and the launch under way lets the ship go as any launch does.
+	assert_true(_run("dock player").ok)
+	await _ticks(3)
+	assert_true(_run("dock skip").ok)
+	await _ticks(2)
+	assert_eq(_state(), "launching")
+	main.respawn()
+	await _ticks(3)
+	assert_null(main.docking.player_visit())
+	assert_true(await _until(func() -> bool: return not main.controls_locked(), 20.0), "handed over by the launch")
+	assert_true(main.ship.visible)
+	assert_false(main.ship.inside_station)
+	assert_ne(main.ship.collision_layer, 0)
 
 
 func test_a_rebase_during_docking_moves_nothing() -> void:
@@ -347,13 +358,10 @@ func test_a_rebase_during_docking_moves_nothing() -> void:
 	main.world.rebase(Vector3(4000.0, -1500.0, 2500.0))
 	assert_almost_eq(_local(ship), before, Vector3.ONE * 1e-2, "the ship stays where it was on the lane")
 	assert_almost_eq(main.docking.plan.airlock, target, Vector3.ONE * 1e-3, "the lane is the station's, not the World's")
-	var ok: bool = await _until(func() -> bool: return _state() == "repair", 120.0)
+	var ok: bool = await _until(func() -> bool: return main.docking.docked_count == 1, 120.0)
 	assert_true(ok, "and it docks all the same (%s)" % main.docking.describe())
 	assert_false(main.docking.player_visit().skipped)
 	assert_eq(rams, 0)
-	main.world.rebase(Vector3(-900.0, 300.0, 1200.0))
-	await _ticks(2)
-	assert_lt(_local(ship).distance_to(main.docking.plan.airlock), 1.0, "a docked ship stays in the void through a rebase")
 
 
 func test_wingmen_dock_on_the_order_and_below_the_hull_threshold_and_rejoin() -> void:
@@ -408,8 +416,14 @@ func test_wingmen_dock_on_the_order_and_below_the_hull_threshold_and_rejoin() ->
 	_fast()
 	var docked := PackedStringArray()
 	var rejoined := PackedStringArray()
-	main.docking.wingman_docked.connect(func(ship_name: String) -> void: docked.append(ship_name))
-	main.docking.wingman_rejoined.connect(func(ship_name: String) -> void: rejoined.append(ship_name))
+	var docked_at: Dictionary = {}
+	var inside_s: Dictionary = {}
+	main.docking.wingman_docked.connect(func(ship_name: String) -> void:
+		docked.append(ship_name)
+		docked_at[ship_name] = SimClock.now())
+	main.docking.wingman_rejoined.connect(func(ship_name: String) -> void:
+		rejoined.append(ship_name)
+		inside_s[ship_name] = SimClock.now() - float(docked_at[ship_name]))
 	var both_on_lane: Array[bool] = [false]
 	var away_checked: Array[bool] = [false]
 	var ok: bool = await _until(func() -> bool:
@@ -430,6 +444,10 @@ func test_wingmen_dock_on_the_order_and_below_the_hull_threshold_and_rejoin() ->
 			assert_false(first.ship.visible, "out of play")
 			assert_true(first.ship.inside_station)
 			assert_lt(first.damageable.hull.fraction(), 1.0, "its repair has only begun")
+			assert_eq(main.docking.visit_of(first.display_name).repair_s, 30.0, "an AI wingman waits a fixed 30 s (maintainer)")
+			assert_lt(_local(first.ship).distance_to(main.docking.plan.airlock), 1.0, "held in the void behind the doors")
+			main.world.rebase(Vector3(-900.0, 300.0, 1200.0))
+			assert_lt(_local(first.ship).distance_to(main.docking.plan.airlock), 1.0, "and stays there through a rebase")
 		return rejoined.size() == 2, 420.0)
 	assert_true(ok, "both docked, were repaired and launched again (%s)" % main.docking.describe())
 	if not ok:
@@ -437,6 +455,8 @@ func test_wingmen_dock_on_the_order_and_below_the_hull_threshold_and_rejoin() ->
 	assert_false(both_on_lane[0], "one at a time through the tunnel")
 	assert_eq(wing_rams[0], 0, "without touching the station or each other")
 	assert_eq(docked.size(), 2)
+	for ship_name: String in docked:
+		assert_gte(float(inside_s[ship_name]), 30.0, "%s was inside 30 s before its launch (the player waits none)" % ship_name)
 	for pair: Array in [[two, pilot_two, slot_two], [three, pilot_three, slot_three]]:
 		var c: Combatant = pair[0]
 		assert_eq(c.damageable.hull.fraction(), 1.0, "%s is whole again" % c.display_name)
@@ -577,3 +597,49 @@ func test_ships_launched_from_the_cobra_bays_belong_to_the_station() -> void:
 	var beta: Wing = main.wings.wing_named("BETA")
 	assert_eq(beta.home, Station.HOME_ID, "a station wing")
 	assert_eq(beta.leader.home, Station.HOME_ID)
+
+
+func test_an_ai_flight_docks_by_itself_and_keeps_the_docked_ships_place() -> void:
+	# Maintainer, 2026-11-18: Babylon 5's own flights of three dock below 25 % like the player's wingmen.
+	assert_true(await _start("res://data/scenarios/station_launch.json"))
+	if station == null:
+		pending("the babylon5_station asset is not generated")
+		return
+	assert_true(_run("launch wing beta").ok)
+	_fast()
+	assert_true(await _until(func() -> bool: return not main.launches.is_launching("beta"), 90.0), "Beta is away")
+	var flights: Array[Wing] = main.wings.flights_of("BETA")
+	assert_gt(flights.size(), 1, "Beta flies in flights of three")
+	var flight: Wing = flights[0]
+	var lead: Combatant = flight.leader
+	var wingman: Combatant = flight.member_at(1)
+	var mate: Combatant = flight.member_at(2)
+	assert_eq(wingman.home, Station.HOME_ID, "launched from Babylon 5: it is its home")
+	var notice: String = main.docking.last_notice
+	# A wingman of an AI flight: it goes by itself, and its flight keeps its place.
+	_damage(wingman, 0.15)
+	await _ticks(3)
+	assert_not_null(main.docking.visit_of(wingman.display_name), "below 25 % with its home in range it goes to dock")
+	assert_eq(main.docking.visit_of(wingman.display_name).why, DockVisit.WHY_HULL)
+	assert_true(flight.is_docking(wingman))
+	assert_eq(main.docking.last_notice, notice, "an AI flight says nothing on the player's HUD")
+	# A flight's lead: the flight goes on under its first wingman, and the old lead docks as one of its wingmen.
+	var other: Wing = flights[1]
+	var old_lead: Combatant = other.leader
+	var heir: Combatant = other.member_at(1)
+	_damage(old_lead, 0.15)
+	await _ticks(3)
+	assert_eq(other.leader, heir, "its first wingman leads on")
+	assert_gt(other.slot_of(old_lead), 0, "the old lead has a place in its flight")
+	assert_not_null(main.docking.visit_of(old_lead.display_name), "and is on its way to the bay")
+	# A whole fighter of the same flight stays.
+	assert_null(main.docking.visit_of(mate.display_name))
+	var ok: bool = await _until(func() -> bool: return flight.is_away(wingman), 400.0)
+	assert_true(ok, "it docked (%s)" % main.docking.describe())
+	if not ok:
+		return
+	assert_eq(flight.slot_of(wingman), 1, "its place in the flight is kept while it is inside")
+	assert_false(flight.is_lost(1), "it is not lost")
+	assert_eq(flight.slot_of(mate), 2, "nobody closed up over it")
+	assert_eq(flight.leader, lead)
+	assert_eq(main.docking.visit_of(wingman.display_name).repair_s, 30.0, "an AI wingman's fixed 30 s")

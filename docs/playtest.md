@@ -1188,15 +1188,20 @@ with `damage 50` (hull points; `state ship` shows the hull) so the repair has so
       behind it. Say if the approach looks sensible from beside the drum and from above the spine (it should go round, never
       through), and if the speeds feel right (140 m/s out, 40 m/s to the mouth, 20 m/s inside).
 - [ ] **(H) From speed:** start the hold at several hundred m/s across the bow: the ship brakes first, then comes back and docks.
-- [ ] **(H) The cinematic:** the three shots (behind the ship, beside the mouth, drawing back from the bay while the repair runs)
-      and the launch's own shots after them. A or Start skips a stage each press: into the bay, to the end of the repair, to the
-      hand-off. Say if the wait (6 s plus up to 30 s for a wrecked hull) is too long or too short to watch.
+- [ ] **(H) The cinematic:** the two docking shots (behind the ship, beside the mouth) run straight into the launch's own shots:
+      you do not wait for the repair. A or Start skips a stage each press: through the bay onto the launch, then to the hand-off.
+      Say if the cut from the doors shutting to the Cobra bay reads well.
 - [ ] **(H) Relaunch:** you come out of Cobra bay Alpha 1 with a whole hull and the controls back.
 - [ ] **(H) Wingmen:** select ALPHA 2 and `damage 30 target`, then key 6 (or the comms menu's DOCK): `ALPHA 2: COPY, DOCKING FOR
       REPAIRS`, it flies off to the bay (its roster row reads DOCKING), is gone a while (DOCKED), comes out of a Cobra bay and forms up
       again (its usual readout). Hurt one below 25 % and it goes by itself (`HULL CRITICAL, DOCKING FOR REPAIRS`). Two at once go in one after the other.
 - [ ] **(H) The comms ring:** eight slices now, the four orders still up, right, down and left; say if the blank diagonals and
       DOCK between ENGAGE and COVER ME read well.
+- [ ] **(H) AI wingmen wait 30 s:** a docked wingman's roster row reads DOCKED for about 30 s before it comes out of a Cobra bay.
+      Babylon 5's own flights (`launch wing beta`) dock the same way when one of them falls below 25 %; a flight's lead hands
+      the flight to its wingman first.
+- [ ] **(H) The leash:** under FORM ON ME, a wingman chased more than 2.5 km from you jinks back toward you instead of running
+      on away, bringing its chaser with it.
 - [ ] **(H) No dock, no order:** in a scenario far from the station, or with wingmen that have no home (`combat_sandbox`), the comms
       ring has a blank slice where DOCK was and key 6 does nothing; a wingman below 25 % keeps fighting.
 - [ ] **(H) Control's offer:** below half hull the HUD's line offers the bay once (`BABYLON CONTROL: YOU ARE CLEARED TO DOCK ...`).

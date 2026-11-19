@@ -123,6 +123,15 @@ var rejoined_m: float = 0.0:
 			return
 		rejoined_m = value
 		_changed()
+## The evasion's leash (M8-T06; maintainer, 2026-11-18): a wingman evading farther than this from its lead breaks toward the
+## lead, not on away, so whoever chases it is drawn into the wing's guns (0: none). `WingDirector` sets it to the flights'
+## cohesion distance for an AI flight's wingmen and for a wing told to form up.
+var leash_m: float = 0.0:
+	set(value):
+		if value == leash_m:
+			return
+		leash_m = value
+		_changed()
 ## Whether this wingman is too far from its lead to fight (`refresh` works it out every think).
 var strayed: bool = false
 ## The route this pilot leads (M3-T09, the instructor; `BehaviourFollowPath.attach` sets it), or null.
@@ -318,6 +327,7 @@ func clear_wing() -> void:
 	wing_ids = PackedInt64Array()
 	cover = false
 	cohesion_m = 0.0
+	leash_m = 0.0
 	rejoined_m = 0.0
 	strayed = false
 
