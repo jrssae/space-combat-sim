@@ -10,7 +10,6 @@ const SCENES: Array[Dictionary] = [
 	{"id": &"instructor_route", "text": "Instructor route"},
 	{"id": &"civilian_showcase", "text": "Civilian ships"},
 	{"id": &"station_showcase", "text": "Babylon 5 station"},
-	{"id": &"battle_wagon_raid", "text": "Raider Battle Wagon"},
 ]
 
 var _missions: Dictionary = {}  # id -> true, for `is_mission`

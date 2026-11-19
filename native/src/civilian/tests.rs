@@ -352,7 +352,6 @@ fn turrets_cover_a_civilian_hull_within_two_km_of_skin() {
         reach_m: 1500.0 * PICK_REACH,
         kind: 0,
         line_lift_m: crate::turret_kernels::LINE_LIFT_M,
-        hunts: false,
     };
     let mut memory = Memory::default();
     memory.note(2, 3, 0.0, false);

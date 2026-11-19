@@ -3,8 +3,7 @@
   "cruiser": 60.0,
   "destroyer": 90.0,
   "carrier": 120.0,
-  "strike_carrier": 240.0,
-  "battle_wagon": 240.0
+  "strike_carrier": 240.0
  },
  "carrier_doctrine": {
   "raiders": {
@@ -14,15 +13,6 @@
    "retreat_hull": 0.5,
    "wait_s": 90.0,
    "flee_mps": 60.0
-  }
- },
- "missile_racks": {
-  "battle_wagon": {
-   "cells": 6,
-   "reload_s": 20.0,
-   "gap_s": 2.0,
-   "retry_s": 0.5,
-   "range_m": 3000.0
   }
  }
 }

@@ -702,9 +702,8 @@ the list while it is focused. Each start from the menu draws a new seed, and wit
   a scripted fought run takes about 15 minutes. The waypoint marks the civilian. Three raider waves jump in 6 to 12 km off it as it passes
   25 % (6 raiders, before the belt), 50 % (8, inside it) and 75 % (10, past it; M8-T08); a later wave also waits until the one
   before is down and 30 s have passed (M7-T54). A fought run now takes about 12 minutes (it was 6 to 8 with waves of 3, 4
-  and 6), and the civilian is often at NAV BETA before the last wave comes. The first two waves ride in docked on a raider
-  strike carrier (`RAIDER CARRIER 1` and `2`, M8-T08), the last on the berths of the Battle Wagon's launch tubes (`RAIDER
-  BATTLE WAGON`, M8-T09): its jump point opens, it comes out with its raiders on its cradles, launches
+  and 6), and the civilian is often at NAV BETA before the last wave comes. Each wave rides in docked on a raider strike
+  carrier (`RAIDER CARRIER 1` to `3`, M8-T08): its jump point opens, it comes out with its raiders on its cradles, launches
   them once clear and hangs back; raiders that go home to it (3 left of a wave, or one under 20 % hull) count as down, and
   it then flees (its drive needs 240 s after the jump in, and there is no gate here, so it runs until then: it can be
   caught). Attacked, the civilian runs (an Earth Alliance ship towards
@@ -1306,31 +1305,6 @@ M10 (`docs/architecture.md` §19.18, `docs/assets-capital.md`). Its look sheet i
 - [ ] **A raid in free flight (H):** `encounters force raid`: the carrier arrives 6 to 12 km out, launches, stands off while its
       fighters attack, and leaves when they are all gone or after five minutes.
 
-# Play-testing the raider Battle Wagon (M8-T09)
-
-The raiders' heavy carrier: 275 m over its antenna spikes, one ring 161 m across, a launch tube above the core and one
-below it, eight plasma turrets on its deck arms and four missile racks in the ring's bow face. The asset is in
-`docs/assets-capital.md`, the game side in `docs/architecture.md` (19.18). Sheets: `references/screenshots/M8-T09 battle
-wagon/` (`look_sheet_final.png` beside the reference, `option_sheet.png`, `weapons_sheet.png`). Console: `transit wagon`,
-`carrier`, `state carriers`. Scenario: New game, "Raider Battle Wagon" (`scenario battle_wagon_raid`).
-
-- [ ] **The hull (H):** `sheet raider_battle_wagon 60 lit - three_quarter` (also `top`, `side`, `front`; 500 and 5000 m): the
-      shape against `raider battle wagon.png` (there is no STL: this look is its check), and the "salvaged" surface (grey
-      plates, oxide-red decks). Its texel is 14 to 25 cm: say if it is too soft from 50 m.
-- [ ] **Arrival and launch (H):** `transit wagon follow`: it comes out of its own point 4 km ahead with ten Delta-Vs on the
-      berths in its tubes, and launches them ahead through the bow mouths, two lanes a tube.
-- [ ] **Coming home (H):** `carrier recall`: its fighters fly round to behind the stern mouths and are drawn in along the
-      tubes to their berths; it then flees (a jump once its drive has recharged, 240 s, else a run for the gate).
-- [ ] **Its guns (H):** fly within 1.6 km without firing: its turrets open fire on you (they hunt any hostile in reach, the
-      maintainer's rule of 2026-11-19; a civilian's turrets still only answer an attack). Fly within 3 km: its racks launch guided missiles, one every two seconds at most, each rack again after 20 s,
-      24 missiles in all. Say if the turrets (8 damage, 0.8 s, 1.6 km), the missiles (40 damage) and the 3 km feel right
-      (`assets/weapons/turret_raider_plasma.tres`, `data/capitals/capitals.json`).
-- [ ] **Its hull (H):** 24 000 points, 3 degrees a second: say how long a wing should need to drive it off (it flees at half).
-- [ ] **The sandbox (H):** New game, "Raider Battle Wagon": every raid comes with it; you lead a wing of four.
-- [ ] **Free flight (H):** about a quarter of the raids come with it (`data/encounters/free_flight.json`, `wagon_share`).
-- [ ] **The escort (H, AC8):** the last wave (10 raiders) comes with it instead of a third strike carrier; destroying it
-      counts for "Destroy a raider carrier". Say if its missiles make the end of the escort too hard.
-
 # Play-testing approach cues and fast gate jumps (M8-T18)
 
 A navigation target that offers an action (the jumpgate, the docking and cargo bays) now carries an approach cue: under its
@@ -1372,7 +1346,7 @@ too quiet or right, against the engines (the bed the rest sits on).
 - [ ] **(H) Mines:** `bench battle 50`, then `mines view 400` and `mines set_off`: a chain of blasts, a little deeper (pitched
       down), as loud as a ship's.
 - [ ] **(H) Station and grid:** `play station_showcase`, `grid free all`, `traffic raid 6`: light guns like a turret, the
-      heavy guns deeper and louder, the interceptors quieter. `turret_fire` from the Saturns and the Battle Wagon the same family.
+      heavy guns deeper and louder, the interceptors quieter. `turret_fire` from the Saturns the same family.
 - [ ] **(H) Jump vortex:** `gate open arrival` and `transit arrive point fighter follow`: the opening swell is heard from far off,
       louder than a shot, under an explosion.
 - [ ] **(H) Cockpit sounds:** select a target (`target_blip`); `damage 80` with `god off` until the hull warning beeps: the beep

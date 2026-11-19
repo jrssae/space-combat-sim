@@ -11,13 +11,10 @@ extends RefCounted
 ## after its fighters are out (`carrier recall` sends it home); `docked` brings it in with six fighters on its cradles, which it
 ## launches once clear of its point.
 
-const ACTIONS: Array[StringName] = [&"arrive", &"depart", &"carrier", &"docked", &"wagon", &"status"]
+const ACTIONS: Array[StringName] = [&"arrive", &"depart", &"carrier", &"docked", &"status"]
 ## Fighters `carrier` brings out beside the carrier, and `docked` brings in on its cradles.
 const BESIDE_FIGHTERS: int = 2
 const DOCKED_FIGHTERS: int = 6
-## Fighters `wagon` brings in on the berths of the Battle Wagon's tubes, and how far ahead its bigger point opens, m (M8-T09).
-const WAGON_FIGHTERS: int = 10
-const WAGON_AHEAD_M: float = 4000.0
 const WHERES: Array[StringName] = [&"gate", &"point"]
 const KINDS: Array[StringName] = [&"fighter", &"capital"]
 const CAMERAS: Array[StringName] = [&"none", &"follow"]
@@ -39,7 +36,7 @@ func _init(p_host: JumpgateHost) -> void:
 
 func register(registry: ConsoleRegistry) -> void:
 	registry.register_command(ConsoleCommand.new(&"transit",
-			"Ships through a jump vortex's funnel (M6-T22), a debug tool: arrive <gate|point> [fighter|capital] [none|follow] (out of the gate's black ring once it opens, or out of a point opened 2.5 km ahead of the player: a capital opens and holds its own, a fighter's is held by nothing, which no fighter could do in play, M6-T23), depart gate [fighter|capital] [none|follow] (one flies in from 1.7 km in front of the gate and down its funnel), carrier [-] [-] [none|follow] (a cruiser stand-in opens a point 2.5 km ahead, two fighters come out with it, then it jumps back; follow watches the second fighter), wagon [-] [-] [none|follow] (the raiders' Battle Wagon opens a point 4 km ahead with ten fighters on the berths of its launch tubes, M8-T09), status; follow holds a cinematic camera on it",
+			"Ships through a jump vortex's funnel (M6-T22), a debug tool: arrive <gate|point> [fighter|capital] [none|follow] (out of the gate's black ring once it opens, or out of a point opened 2.5 km ahead of the player: a capital opens and holds its own, a fighter's is held by nothing, which no fighter could do in play, M6-T23), depart gate [fighter|capital] [none|follow] (one flies in from 1.7 km in front of the gate and down its funnel), carrier [-] [-] [none|follow] (a cruiser stand-in opens a point 2.5 km ahead, two fighters come out with it, then it jumps back; follow watches the second fighter), status; follow holds a cinematic camera on it",
 			[ConsoleArg.enum_optional(&"action", ACTIONS, &"status"),
 			ConsoleArg.enum_optional(&"where", WHERES, &"gate"),
 			ConsoleArg.enum_optional(&"kind", KINDS, &"fighter"),
@@ -59,8 +56,6 @@ func _cmd(args: Dictionary) -> ConsoleResult:
 	var gate: Jumpgate = host.gate()
 	if where == &"gate" and gate == null:
 		return ConsoleResult.failure("no jumpgate in this scenario")
-	if action == &"wagon":
-		return _carrier(follow, true, CapitalStandin.BATTLE_WAGON)
 	if action == &"carrier" or action == &"docked":
 		return _carrier(follow, action == &"docked")
 	if action == &"depart" and where != &"gate":
@@ -110,22 +105,19 @@ func _cmd(args: Dictionary) -> ConsoleResult:
 
 # The raiders' carrier opens a point 2.5 km ahead of the player, across its view, and pilotless raiders come with it: two out of
 # its point beside it, or six docked on its cradles.
-func _carrier(follow: bool, docked: bool, cls: StringName = &"") -> ConsoleResult:
+func _carrier(follow: bool, docked: bool) -> ConsoleResult:
 	var main: Main = host.main
-	var wagon: bool = cls == CapitalStandin.BATTLE_WAGON
-	var count: int = WAGON_FIGHTERS if wagon else (DOCKED_FIGHTERS if docked else BESIDE_FIGHTERS)
-	if cls == &"":
-		cls = CarrierJumps.class_for(Factions.RAIDERS)
+	var count: int = DOCKED_FIGHTERS if docked else BESIDE_FIGHTERS
 	main.ensure_free(ShipPool.DEFAULT_TYPE, count)  # free flight with encounters off builds no raiders
 	if main.ships.free_count(ShipPool.DEFAULT_TYPE) < count:
 		return ConsoleResult.failure("no %d free raiders to bring in" % count)
 	var nose: Vector3 = -main.ship.global_basis.z
-	var at: Vector3 = main.ship.global_position + nose * (WAGON_AHEAD_M if wagon else POINT_AHEAD_M)
+	var at: Vector3 = main.ship.global_position + nose * POINT_AHEAD_M
 	var out_dir: Vector3 = (main.ship.global_basis.x - nose).normalized()
 	var carriers: CarrierJumps = CarrierJumps.attach(main.world)
-	carriers.ensure_free(cls)  # a console hitch, not play
+	carriers.ensure_free(CarrierJumps.class_for(Factions.RAIDERS))  # a console hitch, not play
 	var run: CarrierRun = carriers.run_for(host.console_points, main.world.to_universe(at), out_dir, Factions.RAIDERS,
-			{"arrival": String(CarrierTactics.ARRIVAL_DOCKED if docked else CarrierTactics.ARRIVAL_BESIDE), "class": String(cls)})
+			{"arrival": String(CarrierTactics.ARRIVAL_DOCKED if docked else CarrierTactics.ARRIVAL_BESIDE)})
 	if run == null:
 		return ConsoleResult.failure("no carrier could open a point")
 	for k: int in count:
@@ -136,8 +128,8 @@ func _carrier(follow: bool, docked: bool, cls: StringName = &"") -> ConsoleResul
 			_followed = body
 	if follow:
 		_play(_arrival_shot(false))
-	return ConsoleResult.line("%s opens a %.0f m point %.1f km ahead; %d fighters come %s" % [
-			run.carrier.targetable.display_name, run.arrival.fit.mouth_radius_m, (WAGON_AHEAD_M if wagon else POINT_AHEAD_M) / 1000.0, count,
+	return ConsoleResult.line("%s opens a %.0f m point 2.5 km ahead; %d fighters come %s" % [
+			run.carrier.targetable.display_name, run.arrival.fit.mouth_radius_m, count,
 			"in docked on its cradles" if docked else "out with it"])
 
 

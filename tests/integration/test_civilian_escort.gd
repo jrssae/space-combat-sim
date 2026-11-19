@@ -6,7 +6,6 @@ extends TestSteps
 ## A whole run without skips (the civilian crosses the belt without hitting a rock) is under `GUT_SLOW`.
 ## M8-T08 (Q6, AC7): each wave rides in docked on a raider strike carrier and is launched; the carrier hangs back, takes its
 ## survivors home and flees; raiders gone home count as down; destroying a carrier is the optional objective.
-## M8-T09 (Q8, AC8): the last wave comes with the Battle Wagon and is launched from its tubes.
 
 const SCENARIO_ID: StringName = &"civilian_escort"
 const MISSION_PATH: String = "res://data/scenarios/civilian_escort.json"
@@ -495,29 +494,6 @@ func test_the_objectives_carriers_are_the_waves_carriers() -> void:
 		named.append(wave["carrier"]["name"])
 		assert_eq(wave["carrier"]["arrival"], "docked", "every wave rides in docked (Q6)")
 	assert_eq(listed, named)
-
-
-func test_the_last_wave_comes_with_the_battle_wagon_and_launches_from_its_tubes() -> void:
-	# M8-T09 (Q8, AC8): ten raiders on the berths of the Battle Wagon's two launch tubes.
-	DebugConsole.flags.invulnerable = true
-	await _fly()
-	_civilian().damageable.invulnerable = true
-	assert_true(_run("mission goto wave_three").ok)
-	await _ticks(2)
-	var run: CarrierRun = _carriers().runs()[-1]
-	var cap: CapitalStandin = run.carrier
-	assert_eq(cap.ship_class, CapitalStandin.BATTLE_WAGON, "built at load from the mission's data")
-	assert_eq(cap.targetable.display_name, "RAIDER BATTLE WAGON", "named by the wave's data")
-	assert_eq(cap.dock.docked_count(), 10, "the whole wave rides in on its berths")
-	assert_true(_api().alive("RAIDER BATTLE WAGON"), "it is an actor of the mission")
-	assert_eq(cap.mounts.size(), 8, "with its turrets")
-	assert_not_null(cap.racks, "and its missile racks")
-	await _run_on(90.0, func() -> bool: return cap.dock.launches == 10)
-	assert_eq(cap.dock.launches, 10, "launched from its tubes")
-	assert_eq(_alive(WAVE_THREE), 10, "every raider of the wave is out and whole")
-	assert_true(_run("carrier kill").ok)
-	await _ticks(2)
-	assert_eq(_api().objective_state(&"carrier"), ObjectiveBook.DONE, "destroying it counts as a carrier destroyed")
 
 
 func test_destroying_a_carrier_is_the_optional_objective() -> void:

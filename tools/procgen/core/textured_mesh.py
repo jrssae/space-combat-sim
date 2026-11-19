@@ -187,13 +187,6 @@ def import_sidecar(kind: str, high_quality: bool = False) -> str:
     )
 
 
-def primitives_of(parts: Sequence[TexturedPart], atlas_px: int, texel_m: float, surface_suffix: str = "",
-                  offset: Sequence[float] = (0.0, 0.0, 0.0)) -> tuple[GlbPrimitive, GlbPrimitive]:
-    """The opaque and glass primitives ``write_textured_mesh`` writes for these parts on this atlas, for a hull that joins the
-    parts of several atlases into one file (``civilian.write_hull_atlases``). ``offset`` is subtracted from the positions."""
-    return _primitives(parts, pack_parts(parts, atlas_px, texel_m), offset=offset, suffix=surface_suffix)
-
-
 def manifest_section(asset_id: str, parts: Sequence[TexturedPart], packed: PackedParts, primitives: Sequence[GlbPrimitive],
                      maps: dict[str, np.ndarray], atlas: Atlas) -> dict[str, Any]:
     mesh = packed.mesh
@@ -316,4 +309,4 @@ def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPa
 
 
 __all__ = ["DEFAULT_ATLAS_PX", "DEFAULT_TEXEL_M", "ChunkCut", "PackedParts", "SectionCut", "TexturedPart", "atlas_of", "import_sidecar", "pack_parts",
-           "primitives_of", "write_textured_mesh"]
+           "write_textured_mesh"]

@@ -88,7 +88,6 @@ fn gun(kind: u8, range_m: f64) -> PickMount {
         reach_m: range_m * PICK_REACH,
         kind,
         line_lift_m: tk::LINE_LIFT_M,
-        hunts: false,
     }
 }
 

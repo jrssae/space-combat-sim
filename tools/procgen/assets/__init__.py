@@ -12,8 +12,7 @@ from ..core.context import AssetOutputs, BuildContext
 from . import asteroids, b5_interior, babylon5_station, brakiri_bokmai, capital_hulls, cargo_pod_craft, centauri_brezebel
 from . import grid_heavy_cannon
 from . import grid_interceptor_battery, jumpgate, planet, saturn_family, skylark_transport
-from . import maintenance_bot, narn_transport, nav_buoy, raider_battle_wagon, raider_fighter, raider_strike_carrier, sfx_combat, sfx_ui, sfx_world
-from . import sky_default
+from . import maintenance_bot, narn_transport, nav_buoy, raider_fighter, raider_strike_carrier, sfx_combat, sfx_ui, sfx_world, sky_default
 from . import starfury_aurora
 
 ASSETS: dict[str, Callable[[BuildContext], AssetOutputs]] = {
@@ -30,7 +29,6 @@ ASSETS: dict[str, Callable[[BuildContext], AssetOutputs]] = {
     "maintenance_bot": maintenance_bot.build,
     "narn_transport": narn_transport.build,
     "nav_buoy": nav_buoy.build,
-    "raider_battle_wagon": raider_battle_wagon.build,
     "raider_fighter": raider_fighter.build,
     "raider_strike_carrier": raider_strike_carrier.build,
     "sfx_combat": sfx_combat.build,

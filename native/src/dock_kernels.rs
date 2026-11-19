@@ -11,10 +11,6 @@
 // * RETURN: it flies itself. The kernel gives the velocity to hold: round the carrier at a safe radius until the cradle's
 //   side is in view, then to the approach point, slowing so it arrives nearly at rest against the carrier.
 // * CAPTURE: from the approach point the cradle draws it in to the pad for `CAPTURE_S`; then it is docked.
-//
-// A cradle pushes its fighter straight out and takes it back from straight out. A berth in a launch tube (M8-T09, the
-// Battle Wagon; `Row::lane`) names both ways itself: out ahead through the tube's bow mouth, home from behind its stern
-// mouth. A longer way takes longer at the same push.
 use godot::builtin::{Basis, Vector3};
 
 use crate::v3::{add, col_b, col_c, cross, dot, length, normalized, scale, sub, xform, xform_inv};
@@ -34,10 +30,8 @@ pub const EVENT_DOCKED: i32 = 3;
 /// A launch: how long the cradle pushes, s, and how far out the fighter is when it lets go, m.
 pub const LAUNCH_S: f64 = 2.0;
 pub const RELEASE_M: f64 = 30.0;
-/// A capture: how long the cradle takes to draw the fighter in, s, from an approach point up to `CAPTURE_REACH_M` away;
-/// from further it takes longer in proportion.
+/// A capture: how long the cradle takes to draw the fighter in, s.
 pub const CAPTURE_S: f64 = 4.0;
-pub const CAPTURE_REACH_M: f64 = 60.0;
 /// A returning fighter is taken once this near its approach point, m, and this slow against the carrier, m/s.
 pub const CAPTURE_RADIUS_M: f64 = 10.0;
 pub const CAPTURE_MPS: f64 = 20.0;
@@ -60,8 +54,7 @@ pub struct Carrier {
 }
 
 /// One fighter under the dock's control. `rest` is the point of the fighter (its own frame) that meets the pad; `start`
-/// is where a capture began, in the carrier's frame. `approach_dir` and `release_dir` (unit, the carrier's frame) are the
-/// ways from the pad to its approach point and to where a launch lets go, `approach_m` and `release_m` how far.
+/// is where a capture began, in the carrier's frame.
 #[derive(Clone, Copy)]
 pub struct Row {
     pub phase: i32,
@@ -69,9 +62,6 @@ pub struct Row {
     pub cradle_position: Vector3,
     pub cradle_basis: Basis,
     pub approach_m: f32,
-    pub approach_dir: Vector3,
-    pub release_m: f32,
-    pub release_dir: Vector3,
     pub rest: Vector3,
     pub start_position: Vector3,
     pub start_basis: Basis,
@@ -88,33 +78,13 @@ pub struct Out {
 }
 
 impl Row {
-    /// A cradle: out and back along its own +Y.
     pub fn new(phase: i32, cradle_position: Vector3, cradle_basis: Basis, approach_m: f32, rest: Vector3) -> Self {
-        let out = col_b(&cradle_basis);
-        Row::lane(phase, cradle_position, cradle_basis, out, approach_m, out, RELEASE_M as f32, rest)
-    }
-
-    /// A berth with its own ways: home from `approach_m` along `approach_dir`, out `release_m` along `release_dir`.
-    #[allow(clippy::too_many_arguments)]
-    pub fn lane(
-        phase: i32,
-        cradle_position: Vector3,
-        cradle_basis: Basis,
-        approach_dir: Vector3,
-        approach_m: f32,
-        release_dir: Vector3,
-        release_m: f32,
-        rest: Vector3,
-    ) -> Self {
         Row {
             phase,
             age_s: 0.0,
             cradle_position,
             cradle_basis,
             approach_m,
-            approach_dir,
-            release_m: release_m.max(1.0),
-            release_dir,
             rest,
             start_position: Vector3::ZERO,
             start_basis: cradle_basis,
@@ -132,39 +102,24 @@ impl Row {
 
 /// The fighter's origin in the carrier's frame when it sits `height_m` out from its pad.
 pub fn docked_origin(row: &Row, height_m: f32) -> Vector3 {
-    origin_along(row, col_b(&row.cradle_basis), height_m)
-}
-
-/// The fighter's origin in the carrier's frame `reach_m` from its pad along `dir`.
-pub fn origin_along(row: &Row, dir: Vector3, reach_m: f32) -> Vector3 {
-    sub(add(row.cradle_position, scale(dir, reach_m)), xform(&row.cradle_basis, row.rest))
+    let out = col_b(&row.cradle_basis);
+    sub(add(row.cradle_position, scale(out, height_m)), xform(&row.cradle_basis, row.rest))
 }
 
 /// The approach point in the carrier's frame: where a returning fighter is handed to the cradle.
 pub fn approach_point(row: &Row) -> Vector3 {
-    origin_along(row, row.approach_dir, row.approach_m)
+    docked_origin(row, row.approach_m)
 }
 
-/// How long a launch over `release_m` takes, s: the push that covers `RELEASE_M` in `LAUNCH_S`, kept up for longer.
-pub fn launch_s(release_m: f64) -> f64 {
-    LAUNCH_S * (release_m / RELEASE_M).sqrt()
+/// How far out a launching fighter is `age_s` into its launch, and how fast it moves out, m and m/s.
+pub fn launch_profile(age_s: f64) -> (f64, f64) {
+    let t = (age_s / LAUNCH_S).clamp(0.0, 1.0);
+    (RELEASE_M * t * t, 2.0 * RELEASE_M * t / LAUNCH_S)
 }
 
-/// How long a capture from `approach_m` away takes, s.
-pub fn capture_s(approach_m: f64) -> f64 {
-    CAPTURE_S * (approach_m / CAPTURE_REACH_M).max(1.0)
-}
-
-/// How far out a fighter launching over `release_m` is `age_s` into its launch, and how fast it moves out, m and m/s.
-pub fn launch_profile(age_s: f64, release_m: f64) -> (f64, f64) {
-    let whole = launch_s(release_m);
-    let t = (age_s / whole).clamp(0.0, 1.0);
-    (release_m * t * t, 2.0 * release_m * t / whole)
-}
-
-/// The share of a capture of `whole_s` done `age_s` into it: quick at first, settling onto the pad.
-pub fn capture_share(age_s: f64, whole_s: f64) -> f64 {
-    let t = (age_s / whole_s).clamp(0.0, 1.0);
+/// The share of a capture done `age_s` into it: quick at first, settling onto the pad.
+pub fn capture_share(age_s: f64) -> f64 {
+    let t = (age_s / CAPTURE_S).clamp(0.0, 1.0);
     1.0 - (1.0 - t) * (1.0 - t)
 }
 
@@ -204,17 +159,16 @@ fn blend(a: &Basis, b: &Basis, t: f32) -> Basis {
 /// One tick of one row. `position` and `velocity` are the fighter's (World); `brake_mps2` is what it can brake with;
 /// `shell_m` is the radius a returning fighter keeps from the carrier's centre while it flies round.
 pub fn step_row(row: &mut Row, carrier: &Carrier, position: Vector3, velocity: Vector3, brake_mps2: f32, shell_m: f32, delta: f64) -> Out {
-    let out_axis = xform(&carrier.basis, row.release_dir);
+    let out_axis = xform(&carrier.basis, col_b(&row.cradle_basis));
     let attitude = carrier.basis * row.cradle_basis;
     match row.phase {
         PHASE_LAUNCH => {
             row.age_s += delta;
-            let release_m = f64::from(row.release_m);
-            let (height, speed) = launch_profile(row.age_s, release_m);
-            let local = origin_along(row, row.release_dir, height as f32);
+            let (height, speed) = launch_profile(row.age_s);
+            let local = docked_origin(row, height as f32);
             let offset = xform(&carrier.basis, local);
             Out {
-                event: if row.age_s >= launch_s(release_m) { EVENT_RELEASED } else { EVENT_NONE },
+                event: if row.age_s >= LAUNCH_S { EVENT_RELEASED } else { EVENT_NONE },
                 position: add(carrier.position, offset),
                 basis: attitude,
                 velocity: add(add(carrier.velocity, cross(carrier.spin, offset)), scale(out_axis, speed as f32)),
@@ -222,13 +176,12 @@ pub fn step_row(row: &mut Row, carrier: &Carrier, position: Vector3, velocity: V
         }
         PHASE_CAPTURE => {
             row.age_s += delta;
-            let whole_s = capture_s(f64::from(row.approach_m));
-            let share = capture_share(row.age_s, whole_s) as f32;
+            let share = capture_share(row.age_s) as f32;
             let goal = docked_origin(row, 0.0);
             let local = add(scale(row.start_position, 1.0 - share), scale(goal, share));
             let offset = xform(&carrier.basis, local);
             Out {
-                event: if row.age_s >= whole_s { EVENT_DOCKED } else { EVENT_NONE },
+                event: if row.age_s >= CAPTURE_S { EVENT_DOCKED } else { EVENT_NONE },
                 position: add(carrier.position, offset),
                 basis: carrier.basis * blend(&row.start_basis, &row.cradle_basis, share),
                 velocity: add(carrier.velocity, cross(carrier.spin, offset)),

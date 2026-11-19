@@ -60,7 +60,6 @@
 		"title": "Civilian escort",
 		"briefing": "A civilian ship is crossing from NAV ALPHA to NAV BETA, 45 km out, through a field of rock. Raiders work this stretch.\n\nHer cargo is sensitive. It must get through. The escort is also a show of force, to deter raiders in this sector.\n\nLead Alpha wing with your wingmen, ALPHA 2 and ALPHA 3, and see the ship through the belt to NAV BETA. Bring them both home.",
 		"script": "res://data/missions/civilian_escort.gd",
-		"battle_wagons": 1,
 		"dialog": "res://data/dialog/civilian_escort.json",
 		"closing_lines": {
 			"objective failed: escort": "control_civilian_lost",
@@ -72,7 +71,7 @@
 			{"id": "home", "text": "Bring ALPHA 2 and ALPHA 3 home", "primary": false,
 				"fail": {"kind": "destroyed", "names": ["ALPHA 2", "ALPHA 3"], "all": false}},
 			{"id": "carrier", "text": "Destroy a raider carrier", "primary": false,
-				"success": {"kind": "destroyed", "names": ["RAIDER CARRIER 1", "RAIDER CARRIER 2", "RAIDER BATTLE WAGON"],
+				"success": {"kind": "destroyed", "names": ["RAIDER CARRIER 1", "RAIDER CARRIER 2", "RAIDER CARRIER 3"],
 					"all": false}}
 		]
 	}

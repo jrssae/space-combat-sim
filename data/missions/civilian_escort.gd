@@ -29,11 +29,11 @@ const WAVE_TWO_BREATHER_S: float = 60.0
 ## The waves: how many raiders, where they jump in from the civilian (beyond the AI's 5 km sensors, each from its own
 ## bearing), and the capital that brings them (the spawn's `carrier` options: its fighters docked, its name as an actor).
 ## Six, eight and ten (the maintainer, 2026-11-18), so each wave fights on until three are left and those go home (D83); a
-## strike carrier has eighteen cradles. The last wave comes with the Battle Wagon, launched from its tubes (M8-T09, Q8).
+## strike carrier has eighteen cradles.
 const WAVES: Array[Dictionary] = [
 	{"size": 6, "from": Vector3(-8200.0, 900.0, -2500.0), "carrier": {"arrival": "docked", "name": "RAIDER CARRIER 1"}},
 	{"size": 8, "from": Vector3(7000.0, -1200.0, 5200.0), "carrier": {"arrival": "docked", "name": "RAIDER CARRIER 2"}},
-	{"size": 10, "from": Vector3(1500.0, 2000.0, -9000.0), "carrier": {"arrival": "docked", "name": "RAIDER BATTLE WAGON", "class": "battle_wagon"}},
+	{"size": 10, "from": Vector3(1500.0, 2000.0, -9000.0), "carrier": {"arrival": "docked", "name": "RAIDER CARRIER 3"}},
 ]
 ## Spacing between raiders of one wave, metres.
 const SPREAD_M: float = 150.0

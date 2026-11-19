@@ -4,34 +4,23 @@ extends RefCounted
 ## carrier's frame. Pure bookkeeping: `CarrierDock` moves the ships.
 ##
 ## A cradle is FREE, DOCKED (a fighter sits on it) or BUSY (kept for a fighter launching from it or coming back to it).
-##
-## M8-T09: a berth in a launch tube is a cradle with its own ways (`lanes`): its fighter leaves ahead through the tube's bow
-## mouth (`release_to`) and comes home from behind its stern mouth (`approach_from`), not straight out from its pad.
 
 enum State { FREE, DOCKED, BUSY }
 
 ## How far out a returning fighter is handed to its cradle when the hardpoint gives no `approach_from`, m.
 const DEFAULT_APPROACH_M: float = 60.0
-## How far out a cradle pushes a launching fighter, m (the kernel's `RELEASE_M`).
-const DEFAULT_RELEASE_M: float = 30.0
 
 var names: PackedStringArray = PackedStringArray()
 ## Where a docked fighter rests (on the pad) and how it sits: its nose along -Z, its back along +Y.
 var positions: PackedVector3Array = PackedVector3Array()
 var bases: Array[Basis] = []
-## How far out a returning fighter is taken, m, and which way that is from the pad (the carrier's frame; a cradle's own +Y).
+## How far out along the cradle's +Y a returning fighter is taken, m.
 var approach_m: PackedFloat32Array = PackedFloat32Array()
-var approach_dirs: PackedVector3Array = PackedVector3Array()
-## How far a launch pushes the fighter, m, and which way.
-var release_m: PackedFloat32Array = PackedFloat32Array()
-var release_dirs: PackedVector3Array = PackedVector3Array()
-## 1 for a tube's berth (its ways are its own), 0 for a cradle.
-var lanes: PackedByteArray = PackedByteArray()
 var states: PackedInt32Array = PackedInt32Array()
 
 
-## The cradles of a hull's hardpoints (`cradles[]`: `name`, `position`, `forward`, `up`, `approach_from`, and for a tube's
-## berth `release_to`); entries without a position are skipped.
+## The cradles of a hull's hardpoints (`cradles[]`: `name`, `position`, `forward`, `up`, `approach_from`); entries without a
+## position are skipped.
 static func from_hardpoints(entries: Array) -> CarrierCradles:
 	var out := CarrierCradles.new()
 	for raw: Variant in entries:
@@ -49,12 +38,6 @@ static func from_hardpoints(entries: Array) -> CarrierCradles:
 		out.positions.append(at)
 		out.bases.append(basis)
 		out.approach_m.append((from as Vector3).distance_to(at) if from != null else DEFAULT_APPROACH_M)
-		var to: Variant = _vec3(entry.get("release_to"))
-		var lane: bool = to != null and from != null and not (to as Vector3).is_equal_approx(at) and not (from as Vector3).is_equal_approx(at)
-		out.lanes.append(1 if lane else 0)
-		out.approach_dirs.append(((from as Vector3) - (at as Vector3)).normalized() if lane else basis.y)
-		out.release_dirs.append(((to as Vector3) - (at as Vector3)).normalized() if lane else basis.y)
-		out.release_m.append((to as Vector3).distance_to(at) if lane else DEFAULT_RELEASE_M)
 		out.states.append(State.FREE)
 	return out
 
@@ -96,7 +79,7 @@ func set_state(index: int, state: State) -> void:
 
 ## Where a returning fighter is handed to cradle `index`, the carrier's frame.
 func approach_point(index: int) -> Vector3:
-	return positions[index] + approach_dirs[index] * approach_m[index]
+	return positions[index] + bases[index].y * approach_m[index]
 
 
 ## Where a fighter whose resting point is `rest` (its own frame) sits on cradle `index`, the carrier's frame.

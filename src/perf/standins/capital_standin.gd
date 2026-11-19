@@ -10,10 +10,6 @@ extends RigidBody3D
 ## asset (`CompoundCollision`), with its numbers in a `ShipSpec`, no weapons, a `CarrierDock` for its fighters and a helm that
 ## turns it (`heading`). It rides this class until M12-T07 gives capitals their own.
 ##
-## M8-T09: the class `battle_wagon` is the raiders' Battle Wagon, a real hull too: its fighters wait on berths in its two
-## launch tubes (the dock's cradles, with their own ways out and home), and it is armed: a `TurretMount` on each of its hull's
-## `turrets[]` firing its spec's `turret_weapon`, and `MissileRacks` on its `missile_racks[]`.
-##
 ## Newtonian like every body (§15.16): no damping; gravity pulls it like any mover (D66, M6-T07), and the engines hold the
 ## cruise velocity with a force each tick that also holds off that pull.
 
@@ -37,12 +33,8 @@ const CLASSES: Dictionary = {
 	# The raiders' strike carrier (M12-T19): its box is the generated hull's, its other numbers its `ShipSpec`'s.
 	&"strike_carrier": {"length": 112.0, "width": 85.5, "height": 84.3, "mass": 1.35e7, "hull": 1.0e4, "turrets": 0,
 			"can_open_jump_point": true, "jump_hold_range_m": 0.0, "spec": "res://assets/ships/raider_strike_carrier.tres"},
-	# The raiders' Battle Wagon (M8-T09): as the strike carrier, with its turrets and racks from its hull's hardpoints.
-	&"battle_wagon": {"length": 275.0, "width": 160.6, "height": 160.6, "mass": 1.0e8, "hull": 2.4e4, "turrets": 0,
-			"can_open_jump_point": true, "jump_hold_range_m": 0.0, "spec": "res://assets/ships/raider_battle_wagon.tres"},
 }
 const STRIKE_CARRIER: StringName = &"strike_carrier"
-const BATTLE_WAGON: StringName = &"battle_wagon"
 ## The helm brings the turn rate to what is asked within this long, s.
 const HELM_RESPONSE_S: float = 2.0
 const HULL_COLOR: Color = Color(0.42, 0.44, 0.47)
@@ -65,9 +57,6 @@ var damageable: Damageable = null
 var spec: ShipSpec = null
 var dock: CarrierDock = null
 var jump_anchor: Dictionary = {}
-## A real hull's own weapons (M8-T09): its turret mounts, and its missile racks (null for a hull with none).
-var mounts: Array[TurretMount] = []
-var racks: MissileRacks = null
 ## The way the helm turns the bow, World frame; zero: it holds no heading (the bench's capitals never turn).
 var heading: Vector3 = Vector3.ZERO
 ## Its jump drive (M8-T08): it needs its class's recharge after a jump before it opens another point.
@@ -134,8 +123,6 @@ func set_faction(p_faction: StringName) -> void:
 	faction = p_faction
 	targetable.faction = p_faction
 	damageable.faction = p_faction
-	for mount: TurretMount in mounts:
-		mount.faction = p_faction
 
 
 ## Whether this class can open a jump point (M6-T23, `JumpCapability`).
@@ -339,46 +326,7 @@ func _build_hull(display_name: String, spec_path: String) -> bool:
 			dock.name = "Dock"
 			dock.setup(cradles)
 			add_child(dock)
-		_arm(hardpoints as Dictionary)
 	return true
-
-
-# The hull's own weapons (M8-T09): a mount on each `turrets[]` entry when its spec names a turret weapon, and its missile
-# racks. A hull with neither stays unarmed.
-func _arm(hardpoints: Dictionary) -> void:
-	var turret_entries: Variant = hardpoints.get("turrets", [])
-	if spec.turret_weapon != null and turret_entries is Array:
-		var model: Dictionary = TurretMount.model_for(spec.asset_id)
-		for raw: Variant in turret_entries:
-			var entry: Dictionary = raw if raw is Dictionary else {}
-			var at: Variant = _vec3(entry.get("position"))
-			var up: Variant = _vec3(entry.get("up"))
-			if at == null or up == null:
-				continue
-			var mount := TurretMount.create({"name": String(entry.get("name", "turret")), "position": at, "up": up,
-					"arc_deg": float(entry.get("arc_deg", 200.0)), "barrel_m": float(entry.get("barrel_m", 3.0))}, spec.turret_weapon, faction)
-			mount.hunts = spec.turrets_hunt
-			mount.use_model(model)
-			add_child(mount)
-			mounts.append(mount)
-	var rack_entries: Variant = hardpoints.get("missile_racks", [])
-	if rack_entries is Array and not (rack_entries as Array).is_empty():
-		racks = MissileRacks.new()
-		racks.name = "MissileRacks"
-		racks.setup(rack_entries, CapitalData.missile_racks(ship_class))
-		add_child(racks)
-
-
-static func _vec3(value: Variant) -> Variant:
-	if value is Array and (value as Array).size() == 3:
-		return Vector3(float(value[0]), float(value[1]), float(value[2]))
-	return null
-
-
-## Every rack full again (it comes back into play from its base).
-func rearm() -> void:
-	if racks != null:
-		racks.schedule.restock()
 
 
 # Guns along the spine, alternately on top and underneath so the two halves cover the whole sphere; interceptors at the

@@ -301,24 +301,6 @@ impl ScsSimCore {
         m.target[s] = 0;
     }
 
-    /// Makes a ship's turret hunt (`hunts`: it takes any hostile in its reach, M8-T09) or defend again (the default: only
-    /// a ship that attacked). It drops its target, so the next pick decides afresh.
-    #[func]
-    fn set_turret_hunts(&mut self, slot: i64, hunts: bool) {
-        let Some(s) = self.mount_slot(slot) else {
-            return;
-        };
-        let m = &mut self.turrets.mounts;
-        m.hunts[s] = hunts;
-        m.target[s] = 0;
-    }
-
-    /// Whether a mount hunts.
-    #[func]
-    fn turret_hunts(&self, slot: i64) -> bool {
-        self.mount_slot(slot).is_some_and(|s| self.turrets.mounts.hunts[s])
-    }
-
     /// Whether a mount is knocked out.
     #[func]
     fn turret_out(&self, slot: i64) -> bool {

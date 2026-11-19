@@ -112,8 +112,6 @@ var station_run: bool = false
 ## The pools file's `via.raid` and its carrier options (M6-T23).
 var raid_via: StringName = VIA_CARRIER
 var carrier_options: Dictionary = {}
-## The share of raids that come with the Battle Wagon instead of the data's carrier (M8-T09; `carrier.wagon_share`).
-var wagon_share: float = 0.0
 
 var _check_in_s: float = 0.0
 # One entry a ship in play: {combatant, brain, path (BehaviourFollowPath or null), index, kind}.
@@ -163,7 +161,6 @@ static func create(p_main: Main, path: String) -> EncounterDirector:
 	var raw_carrier: Variant = (parsed as Dictionary).get("carrier", {})
 	if raw_carrier is Dictionary:
 		director.carrier_options = raw_carrier
-		director.wagon_share = clampf(float((raw_carrier as Dictionary).get("wagon_share", 0.0)), 0.0, 1.0)
 	director.process_mode = Node.PROCESS_MODE_PAUSABLE
 	p_main.add_child(director)
 	return director
@@ -198,8 +195,6 @@ func enable() -> String:
 			main.director.watch(pooled)
 		CarrierJumps.attach(main.world).prepare(CARRIERS)  # raids behind a carrier (M6-T23; a gate raid with the gate out of reach too)
 		CarrierJumps.attach(main.world).prepare(CARRIERS, CapitalStandin.STRIKE_CARRIER)  # the raiders' own (M12-T19)
-		if wagon_share > 0.0 or String(carrier_options.get("class", "")) == String(CapitalStandin.BATTLE_WAGON):
-			CarrierJumps.attach(main.world).prepare(1, CapitalStandin.BATTLE_WAGON)  # one Battle Wagon at a time (M8-T09)
 		build_ms = Time.get_ticks_msec() - t0
 		pools_built = true
 	if plan == null:
@@ -487,16 +482,6 @@ func _anchor_of(e: EncounterEvent, target: Combatant) -> UniversePos:
 	return main.world.to_universe(at)
 
 
-## The carrier options raid `index` comes with: the Battle Wagon for its share of the raids (the same answer for every fighter
-## of one raid, from the run's seed), else the pools file's.
-func carrier_for(index: int) -> Dictionary:
-	if wagon_share <= 0.0 or float(hash([seed_value, index, "wagon"]) & 0xFFFF) / 65536.0 >= wagon_share:
-		return carrier_options
-	var out: Dictionary = carrier_options.duplicate()
-	out["class"] = String(CapitalStandin.BATTLE_WAGON)
-	return out
-
-
 func _place(e: EncounterEvent, k: int, type: StringName, anchor: UniversePos, anchor_velocity: Vector3,
 		target_name: String, depart_by: Jumpgate = null) -> void:
 	var ships: ShipPool = main.ships
@@ -520,7 +505,7 @@ func _place(e: EncounterEvent, k: int, type: StringName, anchor: UniversePos, an
 	if e.jumps and jumps != null:
 		# Raiders cannot open a point: they come in behind their raid's carrier (M6-T23).
 		var carriers: CarrierJumps = CarrierJumps.attach(main.world)
-		var run: CarrierRun = carriers.run_for(jumps, at, -basis.z, placed.faction, carrier_for(e.index)) if carriers != null else null
+		var run: CarrierRun = carriers.run_for(jumps, at, -basis.z, placed.faction, carrier_options) if carriers != null else null
 		if run != null:
 			carriers.bring_through(run, placed.ship, placed.ship.linear_velocity)
 	if placed.cargo_pods != null and e.cargo_pods[k] >= 0:

@@ -1,4 +1,0 @@
-{"pools": {"raider_fighter": 12},
- "weights": {"raid": 1.0, "patrol": 0.0, "traffic": 0.0},
- "via": {"raid": "carrier"},
- "carrier": {"class": "battle_wagon", "then": "depart", "arrival": "docked", "raid_s": 300.0}}

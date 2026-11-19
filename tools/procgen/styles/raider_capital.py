@@ -1,6 +1,5 @@
 """The raider capitals' paint (M12-T19; docs/assets-capital.md, "Surface"): the strike carrier's surface, a style and the numbers
-its plating is drawn with. The maintainer chose it from three candidates on 2026-11-15 ("show green"). The Battle Wagon's
-(M8-T09, "salvaged") follows it.
+its plating is drawn with. The maintainer chose it from three candidates on 2026-11-15 ("show green").
 
 Read off the show's still of the strike carrier, the raiders' Delta-V and the fan render of the raider base (all in the
 untracked ``references/``; nothing of them is copied): the still's dark green flanks under grey plated decks, lit pale slats,
@@ -86,15 +85,4 @@ SURFACE = Surface(
     plate_m=(9.0, 6.0), splits=2, tone=0.07, grime=0.05, sheen=0.06, hatches=0.06, frames_m=7.5,
 )
 
-# The Battle Wagon's surface (M8-T09; docs/assets-capital.md): "salvaged", grey plates over oxide-red decks, the plates differing
-# in tone as if taken from several ships. The maintainer chose it from three candidates on 2026-11-18 (the strike carrier's
-# green and the reference render's worn grey-brown were dropped). Its lit parts are the ring's windows, a pale blue-white.
-WAGON_SURFACE = Surface(
-    "c", "salvaged",
-    _style("wc", hull=0x5E5F5A, deck=0x6B4A3A, dark=0x34322F, pad=0x9A7636, clamp=0x524D48, slat=0xB4D6DC, slat_glow=1.0,
-           wear={"bare_metal": 0.55, "smudge": 0.25, "smudge_scale_m": 0.6, "speckle": 0.06, "paint_roughness": 0.78, "streak_length_m": 0.4},
-           panel_line_darkness=0.55, panel_tint_jitter=0.1, edge_wear=0.45, streaks=0.22, grime=0.1),
-    plate_m=(8.0, 5.0), splits=2, tone=0.17, grime=0.08, sheen=0.08, hatches=0.09, frames_m=6.5,
-)
-
-__all__ = ["SURFACE", "WAGON_SURFACE", "Surface"]
+__all__ = ["SURFACE", "Surface"]

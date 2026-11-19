@@ -7,4 +7,4 @@
  "station_raid_share": 0.3,
  "gate": {"arrive": {"raid": 0.5, "patrol": 0.5, "traffic": 0.4}, "depart": {"patrol": 0.2, "traffic": 0.3}},
  "via": {"raid": "carrier"},
- "carrier": {"then": "depart", "arrival": "docked", "raid_s": 300.0, "wagon_share": 0.25}}
+ "carrier": {"then": "depart", "arrival": "docked", "raid_s": 300.0}}

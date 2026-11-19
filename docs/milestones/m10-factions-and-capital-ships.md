@@ -82,7 +82,7 @@ launches are proposed here and confirmed in T01 from the show.
 | Task | Hull | Faction | Role | Reference | Launches |
 |---|---|---|---|---|---|
 | T19 | Raider strike carrier | raiders | carrier | `Rader_strike_carrier.stl`, `radier strike carrier.jpg`, `raider ships docked to strike carrier.jpg` | Delta-V |
-| T20 | Raider Battle Wagon | raiders | heavy carrier | images only: `raider battle wagon.png` (three views and two perspectives), `raider ships and battle wagon.png` | Delta-V, from four launch tubes |
+| T20 | Raider Battle Wagon (dropped, M8-T27) | raiders | heavy carrier | images only: `raider battle wagon.png` (three views and two perspectives), `raider ships and battle wagon.png` | Delta-V, from four launch tubes |
 | T21 | Omega-class destroyer | Earth Alliance, renegades | destroyer and carrier, rotating section | `EA Omega Destroyer.stl` | Starfury |
 | T22 | Hyperion-class heavy cruiser | Earth Alliance, renegades | heavy cruiser | `EA Hyperion Class Heavy Cruiser.stl` | Starfury (to confirm) |
 | T23 | Nova-class dreadnought | Earth Alliance, renegades | dreadnought | `EA Nova class destroyer.STL` | Starfury |
@@ -152,7 +152,8 @@ two hulls move onto them like every other.
   fly it (`docs/playtest.md`); T19 stays `in progress` until then.
 - **Merged into `m8` (M8-T07, 2026-11-18):** T19 came into the tutorial milestone with `origin/m10` (M8's Q5), its tests green
   beside M7's; T19 stays `in progress` until the maintainer flies it in M8's play-test, and reaches `main` with M8.
-- **T20, the Battle Wagon:** moved to M8 as M8-T09 (M8's Q8): with weapons (Q31; which ones, settled with the maintainer
+- **T20, the Battle Wagon:** dropped (M8-T27, 2026-11-19: it is not from the show; it was built in M8 as M8-T09 and removed
+  again). History: moved to M8 as M8-T09 (M8's Q8): with weapons (Q31; which ones, settled with the maintainer
   first) and its four launch tubes.
 - **Merge:** superseded by M8-T07: the carrier reaches `main` when M8 merges, not on its own (Q25's early merge).
 
@@ -316,7 +317,7 @@ Out (explicitly):
 | AC3 | Special mechanics concept (T04): D12.11 written and approved by the maintainer | A | |
 | AC4 | Factions: the relation table and styles as data (D12.3), renegades with their marking on EA hulls, tests on the relations | A | |
 | AC5 | Framework: the capital parts library, the section model, collision per section and the organic parts and sheen have Python tests (budgets, coverage, determinism, sections cover the hull) | A | |
-| AC6 | Every hull and fighter meets the output contract, has Python tests (budgets, frames, hardpoints, sections, determinism), passes the 90 % compare (Q10; the Battle Wagon and the Vorlon petals as Q10 says), has low and high texture sets and its VRAM recorded; the maintainer has seen its look sheet | A | |
+| AC6 | Every hull and fighter meets the output contract, has Python tests (budgets, frames, hardpoints, sections, determinism), passes the 90 % compare (Q10; the Vorlon petals as Q10 says), has low and high texture sets and its VRAM recorded; the maintainer has seen its look sheet | A | |
 | AC7 | Capitals in the game: they fly under the native flight step with zero damping, collide by their compound shapes, are hit by section, are targetable and broadcast, ride the tier and open jump points (tests) | A | |
 | AC8 | Damage: a section lost takes its subsystems; every explosion is a falloff blast (tests on the curve, the push, the reach, threads identical); disabled hulks drift and stay in the tier; a capital's death plays its staged break-up with secondary blasts that hurt what is near (headless tests) | A | |
 | AC9 | Weapons: beams, interceptors, capital turrets, missiles and mines in the native core, identical with 1 and 6 threads and between `sim_step` threaded and `delayed`; parity recordings green; the stand-ins and their counters are gone | A | |
@@ -410,7 +411,7 @@ Out (explicitly):
   commonly quoted length from published sources and list them, with the disagreements; choose the STL's axis mapping
   (`tools/refview/refview.py`, first look without a mapping) and render its views to `reports/refs/<id>/`; describe its
   shape section by section, its colours from show images, its weapons and bays as the show shows them, and its sections
-  (where the reactor, the bridge, the hangars and the engines are). The Battle Wagon from its three-view sheet; the Vorlon
+  (where the reactor, the bridge, the hangars and the engines are). The Vorlon
   petals from show images. Check every length against the gate's mouth (2 400 by 1 510 m) and note which hulls need their
   own jump points.
 - **Files:** `docs/design-references.md` (a section per hull and fighter, the raider carriers' sections expanded),

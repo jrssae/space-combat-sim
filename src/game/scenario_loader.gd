@@ -46,8 +46,7 @@ extends RefCounted
 ##                                                  #       MissionScript path, loaded by the runner), dialog (a dialog file
 ##                                                  #       path), objectives: the raw `objectives[]`, already checked by
 ##                                                  #       `ObjectiveBook.declare`, closing_lines: {reason, "success" or
-##                                                  #       "failure" -> line id (StringName)} (M5-T10), battle_wagons: how
-##                                                  #       many Battle Wagons to build at load (M8-T09)}; strings may be ""
+##                                                  #       "failure" -> line id (StringName)} (M5-T10)}; strings may be ""
 ##      "cinematics": Dictionary,                   # (M5-T05, D55) shot id -> shot, passed through for T08; may be empty
 ##      "belts": Array[Dictionary],                 # `asteroid_belts[]` (M5-T29, D63): each {centre: UniversePos, size: Vector3,
 ##                                                  #       count, radius_m: Vector2 (min, max bounding radius), seed, min_gap_m},
@@ -408,10 +407,6 @@ static func _mission(raw: Variant, system: StringName, source: String) -> Varian
 	if closing is String:
 		return closing
 	out["closing_lines"] = closing
-	var wagons: Variant = block.get("battle_wagons", 0)
-	if not (wagons is float or wagons is int) or int(wagons) < 0:
-		return "%s: mission.battle_wagons must be a count" % source
-	out["battle_wagons"] = int(wagons)  # Battle Wagons built at load for its raids (M8-T09)
 	return out
 
 
