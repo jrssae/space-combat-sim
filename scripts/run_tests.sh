@@ -406,7 +406,7 @@ log="${REPORTS}/console_wing_strict.log"
 main_run "${log}" 180 1 "bad wing order" -- --console-strict \
     --console-exec='wait 30; wing order dance; quit 0' \
     || smoke_status=1
-expect_text "${log}" "[console] error: wing order expects one of attack|form|engage|cover, got 'dance'" || smoke_status=1
+expect_text "${log}" "[console] error: wing order expects one of attack|form|engage|cover|form_hold|hold, got 'dance'" || smoke_status=1
 reject_text "${log}" "[console] > quit 0" || smoke_status=1
 
 echo "== Console smoke run: wing replenish launches the wingmen on the real main scene"
