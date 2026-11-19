@@ -57,6 +57,8 @@ var weights: Dictionary = DEFAULT_WEIGHTS
 var gate_shares: Dictionary = {}
 ## Share of raids sent at the station instead (the pools file's `station_raid_share`); the director honours it only near one.
 var station_raid_share: float = 0.0
+## The kinds switched on (free flight's three switches, M8-T28): a switched-off kind is never drawn, never a substitute.
+var enabled: Dictionary = {&"raid": true, &"patrol": true, &"traffic": true}
 
 
 func _init(p_seed: int = 0, p_interval_s: float = DEFAULT_INTERVAL_S, p_weights: Dictionary = DEFAULT_WEIGHTS) -> void:
@@ -72,12 +74,24 @@ func gap_of(index: int) -> float:
 
 ## The kinds tried in place of `kind` when its event cannot start now (its pool spent, or the cap): the gentlest first, so
 ## the schedule keeps its pace without piling up fights.
-static func substitutes(kind: StringName) -> Array[StringName]:
+func substitutes(kind: StringName) -> Array[StringName]:
 	var out: Array[StringName] = []
 	for k: StringName in [&"traffic", &"patrol", &"raid"]:
-		if k != kind:
+		if k != kind and kind_on(k):
 			out.append(k)
 	return out
+
+
+func kind_on(kind: StringName) -> bool:
+	return bool(enabled.get(kind, false))
+
+
+## Whether any kind is switched on (none: an empty sky, no event is ever drawn).
+func any_on() -> bool:
+	for kind: StringName in KINDS:
+		if kind_on(kind):
+			return true
+	return false
 
 
 ## Event `index`, of the kind its weights draw or of `kind` when given (the console's `force`).
@@ -109,21 +123,26 @@ static func admit(alive: int, wanted: int, cap: int) -> int:
 
 
 func _draw_kind(index: int) -> StringName:
+	var on: Array[StringName] = []
 	var total: float = 0.0
 	for kind: StringName in KINDS:
-		total += maxf(float(weights.get(kind, 0.0)), 0.0)
-	if total <= 0.0:
+		if kind_on(kind):
+			on.append(kind)
+			total += maxf(float(weights.get(kind, 0.0)), 0.0)
+	if on.is_empty():
 		return KINDS[0]
+	if total <= 0.0:
+		return on[0]
 	var pick: float = _unit(index, Salt.KIND) * total
-	for kind: StringName in KINDS:
+	for kind: StringName in on:
 		var w: float = maxf(float(weights.get(kind, 0.0)), 0.0)
 		if pick < w:
 			return kind
 		pick -= w
-	for i: int in range(KINDS.size() - 1, -1, -1):  # the rounding's last sliver goes to the last weighted kind
-		if float(weights.get(KINDS[i], 0.0)) > 0.0:
-			return KINDS[i]
-	return KINDS[0]
+	for i: int in range(on.size() - 1, -1, -1):  # the rounding's last sliver goes to the last weighted kind
+		if float(weights.get(on[i], 0.0)) > 0.0:
+			return on[i]
+	return on[0]
 
 
 # The raiders around one jump point, each flying at the target.

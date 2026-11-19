@@ -314,3 +314,21 @@ func test_an_encounter_convoy_counts_against_the_cap() -> void:
 	var raid: EncounterEvent = director.plan.event(EncounterDirector.FORCED_INDEX + 700, &"raid")
 	assert_false(director.start(raid), "a raid waits while the convoys fill the cap")
 	Settings.set_value(&"encounter_max_ships", cap_backup)
+
+
+# M8-T28: the station's run follows the civilian-traffic switch.
+func test_the_station_run_follows_the_civilian_traffic_switch() -> void:
+	var backup: Variant = Settings.get_value(&"encounters_civilian")
+	Settings.set_value(&"encounters_civilian", false)
+	if not await _start(true):
+		Settings.set_value(&"encounters_civilian", backup)
+		pending("the babylon5_station asset is not generated")
+		return
+	await get_tree().physics_frame
+	assert_false(main.traffic.auto, "civilian traffic off: no run")
+	assert_eq(main.traffic.flow_count(), 0)
+	Settings.set_value(&"encounters_civilian", true)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	assert_true(main.traffic.auto, "civilian traffic on: the run starts")
+	Settings.set_value(&"encounters_civilian", backup)

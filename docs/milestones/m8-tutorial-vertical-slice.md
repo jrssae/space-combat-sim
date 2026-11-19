@@ -349,7 +349,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T25 | E | Frame-rate regression: free flight at ~15 fps (66.7 ms frames, GPU ~1 ms) found 2026-11-19 by M8-T23; find the commit and fix it (numbered last) | - | Opus | Bisect from M7's merge with `state render` on the GPU; CPU-side cost per frame | done |
 | T26 | C | Civilian escort update: a longer route and a bigger belt, a longer gap before wave two, Control's opening brief (maintainer, 2026-11-19; numbered last) | T23 | Fable | Scenario and mission data, pacing and dialog on the escort the T08 agent knows | done |
 | T27 | C | Remove the Raider Battle Wagon everywhere: not from the show, and its source image's creator would not want it shared this way (maintainer, 2026-11-19; numbered last) | - | Fable | Undo M8-T09 across code, data, assets, tests and docs; the escort's last wave back on the strike carrier | done |
-| T28 | D | Free flight's encounters split into three switches: civilian traffic, allied patrols, enemy encounters (maintainer, 2026-11-19; numbered last) | - | Sonnet | Settings, the Free flight page and the encounter director's weights | in progress |
+| T28 | D | Free flight's encounters split into three switches: civilian traffic, allied patrols, enemy encounters (maintainer, 2026-11-19; numbered last) | - | Sonnet | Settings, the Free flight page and the encounter director's weights | done |
 | T17 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M8-T01 Tutorial script (discussion with the maintainer)
@@ -1188,6 +1188,12 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   encounter commands take the three; `info.md`.
 - **Done when:** tests for each switch alone and in combination (the director never spawns a switched-off kind; station traffic
   follows civilian traffic), the page with pad-only navigation, the old setting migrated.
+- **Done (2026-11-19):** `encounters` replaced by `encounters_civilian` / `encounters_allied` / `encounters_enemy` (`SettingsSchema`;
+  `SPLIT` loads an old `encounters` into all three). `EncounterPlan.enabled` keeps a switched-off kind out of the draw and out of the
+  substitutes (a lone kind is drawn whatever the file weights it); the director syncs the plan from the settings before each draw
+  (a mid-flight flip applies to the next event) and starts nothing with all three off. `StationTraffic.auto` needs the civilian
+  switch. The Free flight page has the three toggles then Start; the request's `encounters` is "any on". Console: `encounters
+  on|off <raid|patrol|traffic>` flips a switch, `force` refuses an off kind, `status` shows them; `info.md`.
 
 ### M8-T17 Integration, full suite, docs and acceptance
 

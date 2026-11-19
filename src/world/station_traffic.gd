@@ -440,7 +440,7 @@ func clear() -> int:
 func _physics_process(delta: float) -> void:
 	var director: EncounterDirector = main.encounter_director if main != null else null
 	if not auto_forced:
-		auto = director != null and director.on and director.station_run and station() != null
+		auto = director != null and director.on and director.station_run and director.kind_on(&"traffic") and station() != null
 	if auto:
 		elapsed_s += delta
 		_keep_flow()

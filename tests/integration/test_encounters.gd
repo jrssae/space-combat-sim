@@ -525,3 +525,50 @@ func _load_ms(encounters_on: bool) -> int:
 	main = m
 	await wait_physics_frames(2)
 	return ms
+
+
+# --- M8-T28: the three switches ------------------------------------------------------------------------------------
+
+
+func _switch(civilian: bool, allied: bool, enemy: bool) -> void:
+	Settings.set_value(&"encounters_civilian", civilian)
+	Settings.set_value(&"encounters_allied", allied)
+	Settings.set_value(&"encounters_enemy", enemy)
+
+
+func test_the_director_never_starts_a_switched_off_kind() -> void:
+	var backup: Array = [Settings.get_value(&"encounters_civilian"), Settings.get_value(&"encounters_allied"),
+			Settings.get_value(&"encounters_enemy")]
+	main = await _make_main(true)
+	var started: Dictionary = {}
+	for combo: Array in [[true, false, false], [false, true, false], [false, false, true], [true, true, false],
+			[false, true, true], [true, false, true]]:
+		_switch(combo[0], combo[1], combo[2])
+		_director().sync_switches()
+		_run("encounters clear")
+		for i: int in 12:
+			var e: EncounterEvent = _director().take_next()
+			assert_true(_director().kind_on(e.kind), "%s is drawn with switches %s" % [e.kind, combo])
+			if _director().start_scheduled(e):
+				assert_true(_director().kind_on(_director().last_event.kind),
+						"%s started with switches %s" % [_director().last_event.kind, combo])
+			_run("encounters clear")
+	_switch(false, false, false)
+	assert_false(_run("encounters force raid").ok, "a switched-off kind cannot be forced")
+	assert_false(_run("encounters next").ok, "all off: nothing comes")
+	var before: int = _director().events_started
+	await _fly(30.0)
+	assert_eq(_director().events_started, before, "an empty sky stays empty")
+	_switch(backup[0], backup[1], backup[2])
+
+
+func test_the_console_flips_one_switch_at_a_time() -> void:
+	var backup: bool = bool(Settings.get_value(&"encounters_enemy"))
+	main = await _make_main(true)
+	assert_true(_run("encounters off raid").ok)
+	assert_false(bool(Settings.get_value(&"encounters_enemy")))
+	assert_true(bool(Settings.get_value(&"encounters_allied")))
+	assert_true(_director().on, "the director itself stays on")
+	assert_true(_run("encounters on raid").ok)
+	assert_true(bool(Settings.get_value(&"encounters_enemy")))
+	Settings.set_value(&"encounters_enemy", backup)

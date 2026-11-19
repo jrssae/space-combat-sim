@@ -4277,7 +4277,7 @@ as the menu does; seed 0 by default, encounters off). Setting: `skip_front_end` 
 - **Resume.** `Main` re-seeds the adapter's edges when the menu closes (`InputAdapter.resync_edges`), so the button that closed it (B is also the target button) does not also tap a target when it is released.
 - **Missions.** `MissionCatalog.entries(dir, read)` lists the scenario files whose loader result has a non-empty `mission` block (its
   `title`, else the id made readable, and `briefing`). Civilian escort is the one shipped mission; with none the page says "No missions yet".
-- **Free flight.** `encounters` lives in `Game`'s request (the menu starts it from `Settings.encounters`; `play` and boot keep it
+- **Free flight.** `encounters` lives in `Game`'s request (true when any of free flight's three switches is on, M8-T28; `play` and boot keep it
   off); T17 (§18.12) added the setting and a fresh session seed for each menu start. Restart is `Game.restart()`: the request that started the run, else the scenario setting.
 - **Loading.** Leaving the loading screen mid-load collects the threaded request; a failed load is collected too. `Game` refuses a scene
   it cannot build instead of failing on a null.
@@ -4597,8 +4597,9 @@ tests/unit/test_encounter_plan.gd, tests/integration/test_encounters.gd, tests/f
 - **Console.** `encounters [status|on|off|next|force|clear] [raid|patrol|traffic]`: `force` draws from indices from 1 000 000 up,
   so the schedule is untouched; `next` takes the next scheduled event now (another kind standing in, or waiting when none
   fits) and times the one after from it.
-- **Settings.** `encounters` (bool, true: the Free flight page starts from it and keeps the player's toggle there for the
-  session), `encounter_interval_s` (120, read when encounters first turn on), `encounter_max_ships` (24). The front end gives each
+- **Settings.** `encounters_civilian`, `encounters_allied`, `encounters_enemy` (bools, true; M8-T28: neutral ships and the station's
+  run, allied patrols, raids; the Free flight page keeps the player's toggles there, any combination works, all off is an empty sky;
+  an old saved `encounters` loads into all three via `SettingsSchema.SPLIT`), `encounter_interval_s` (120, read when encounters first turn on), `encounter_max_ships` (24). The front end gives each
   free flight it starts a fresh seed (`FrontEnd.session_seed`); Restart keeps it.
 
 

@@ -77,6 +77,8 @@ var main: Main = null
 var pools: Dictionary[StringName, int] = {}
 var weights: Dictionary = EncounterPlan.DEFAULT_WEIGHTS
 var pools_path: String = ""
+const SWITCHES: Dictionary = {&"traffic": &"encounters_civilian", &"patrol": &"encounters_allied", &"raid": &"encounters_enemy"}
+
 var on: bool = false
 var pools_built: bool = false
 ## The session seed (the request's), so the same seed brings the same encounters.
@@ -202,6 +204,7 @@ func enable() -> String:
 		plan.gate_shares = gate_shares
 		plan.station_raid_share = station_raid_share
 		next_due_s = elapsed_s + plan.gap_of(next_index)
+	sync_switches()
 	on = true
 	return "encounters on (seed %d, every %.0f s, at most %d ships)%s" % [seed_value, plan.interval_s, cap(),
 			" - built %d pooled ships in %d ms" % [built, build_ms] if built > 0 else ""]
@@ -256,6 +259,9 @@ func _physics_process(delta: float) -> void:
 
 # At most one event a tick: the one waiting, else the next once its time has come.
 func _start_due() -> void:
+	sync_switches()
+	if not plan.any_on():
+		return
 	if waiting == null and elapsed_s >= next_due_s:
 		waiting = take_next()
 	if waiting != null and start_scheduled(waiting):
@@ -265,8 +271,9 @@ func _start_due() -> void:
 ## Starts scheduled event `e`, or another kind in its place when it cannot start now, and times the next one from now.
 ## False (nothing placed, the clock untouched) when no kind fits.
 func start_scheduled(e: EncounterEvent) -> bool:
+	sync_switches()
 	var started: bool = start(e)
-	for kind: StringName in EncounterPlan.substitutes(e.kind):
+	for kind: StringName in plan.substitutes(e.kind):
 		if started:
 			break
 		started = start(plan.event(e.index, kind))
@@ -275,8 +282,23 @@ func start_scheduled(e: EncounterEvent) -> bool:
 	return started
 
 
+## Whether free flight's switch for `kind` is on (civilian traffic = traffic, allied patrols = patrol, enemy encounters = raid).
+func kind_on(kind: StringName) -> bool:
+	var key: StringName = SWITCHES.get(kind, &"")
+	return key != &"" and bool(Settings.get_value(key))
+
+
+## Brings the plan's kinds up to the settings, so a switch flipped mid-flight applies to the next event.
+func sync_switches() -> void:
+	if plan == null:
+		return
+	for kind: StringName in EncounterPlan.KINDS:
+		plan.enabled[kind] = kind_on(kind)
+
+
 ## The plan's next event, and moves past it.
 func take_next() -> EncounterEvent:
+	sync_switches()
 	var e: EncounterEvent = plan.event(next_index)
 	next_index += 1
 	return e
