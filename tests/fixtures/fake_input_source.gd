@@ -74,6 +74,11 @@ func is_pressed(action: StringName) -> bool:
 	return _value(action) > 0.5
 
 
+## Only what a test held `from_keyboard`.
+func is_key_pressed(action: StringName) -> bool:
+	return _from_keyboard.has(action) and _value(action) > 0.5
+
+
 func _stick_value(action: StringName) -> float:
 	return 0.0 if _from_keyboard.has(action) else float(_strengths.get(action, 0.0))
 

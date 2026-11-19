@@ -35,6 +35,11 @@ func is_pressed(_action: StringName) -> bool:
 	return false
 
 
+## Like `is_pressed`, but only the action's keys and mouse buttons count: what a radial menu reads of an action the D-pad shares.
+func is_key_pressed(_action: StringName) -> bool:
+	return false
+
+
 ## Mouse travel in pixels since the last call (x right, y down), then cleared. Zero while the keyboard and mouse are masked.
 func take_mouse_delta() -> Vector2:
 	return Vector2.ZERO

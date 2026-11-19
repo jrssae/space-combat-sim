@@ -357,8 +357,8 @@ POSITION after DOCK. The ring has one slice per entry (M8-T24).
 The comms menu (D-pad Right, or Ctrl) is a radial menu like the target menu: the same ring at the left, the game paused and the view
 blurred behind it. Point the left stick (M7-T37; or the arrow keys, or the mouse) at WING ORDERS' slices, from the top going clockwise: ATTACK
 (my target), FORM ON ME, ENGAGE (at will), COVER ME, then DOCK, FORM UP, HOLD POSITION. A sends the order and the game resumes. The
-D-pad's up, right, down and left, or keys 1-8, send the entry in that place at once (M8-T24). B closes the menu (from a sub-page it
-goes back a page); Ctrl again also closes it (on the pad D-pad Right picks the second entry instead); Start hands over to the pause menu. There is no timeout. Nothing held (fire, the
+number keys send the entry in that place at once: 1 to however many the ring has, a key past the last does nothing (M8-T24). The
+D-pad does nothing while the menu is open. B closes the menu (from a sub-page it goes back a page); Ctrl again also closes it; Start hands over to the pause menu. There is no timeout. Nothing held (fire, the
 left stick, a D-pad press) acts when it closes; the left stick strafes again only once it has been back near centre. The right
 stick is not read by the menu and flies as soon as it closes. Console: `commsmenu open`, `commsmenu pick "form on me"`, `state comms_menu`.
 
@@ -727,8 +727,8 @@ From the console: `targetmenu open`, `targetmenu pick enemies`, `targetmenu pick
 
 D-pad Right (or Ctrl) opens a ring like the target menu's: the game pauses and the view blurs behind it. WING ORDERS lists ATTACK
 (my target), FORM ON ME, ENGAGE (at will), COVER ME, DOCK (M8-T06, only while a home dock is in range), FORM UP and HOLD POSITION
-(M8-T19), one equal slice each, clockwise from the top (M8-T24). The left stick (arrow keys, mouse) points and A sends; the D-pad's
-four directions and keys 1-8 send the entry in that place at once; B or Ctrl closes it, Start hands over to the pause menu. There
+(M8-T19), one equal slice each, clockwise from the top (M8-T24). The left stick (arrow keys, mouse) points and A sends; keys 1 to N
+send the entry in that place at once; the D-pad does nothing; B or Ctrl closes it, Start hands over to the pause menu. There
 is no timeout. Closed, keys 1 to 4 still give the orders directly. Console: `commsmenu open`, `commsmenu pick "form on me"`,
 `state comms_menu`.
 

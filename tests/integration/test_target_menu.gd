@@ -183,18 +183,18 @@ func test_the_stick_points_a_selects_and_the_game_resumes_with_nothing_fired() -
 	assert_gt(main.adapter.last.flight.strafe.x, 0.5, "and the stick strafes")
 
 
-func test_the_dpad_and_the_numbered_keys_pick_by_the_entrys_place() -> void:
-	# M8-T24 (D90): D-pad up, right, down, left and keys 1-8 pick the ring's entries in page order.
+func test_the_numbered_keys_pick_by_the_entrys_place() -> void:
+	# M8-T24 (D90): keys 1-N pick the ring's N entries in page order, for rings of six, three and one.
 	_raider("RAIDER 1", 900.0)
 	_raider("RAIDER 2", 1400.0)
 	await _ticks(3)
 	await _hold_open()
 	await _press(InputAdapter.RADIAL_ENTRIES[0])
-	assert_eq(_read("target_menu.page"), "enemies", "D-pad Up: the first category")
+	assert_eq(_read("target_menu.page"), "enemies", "key 1: the first category")
 	await _press(InputAdapter.RADIAL_ENTRIES[5])
 	assert_true(main.target_menu.is_open(), "key 6: nothing in that place on a ring of three")
 	await _press(InputAdapter.RADIAL_ENTRIES[1])
-	assert_false(main.target_menu.is_open(), "D-pad Right: the second entry, picked")
+	assert_false(main.target_menu.is_open(), "key 2: the second entry, picked")
 	assert_eq(main.ship.targeting.selected_name(), "RAIDER 2")
 	await _hold_open()
 	await _press(InputAdapter.RADIAL_ENTRIES[5])

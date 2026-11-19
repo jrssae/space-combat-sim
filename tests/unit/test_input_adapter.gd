@@ -545,15 +545,19 @@ func test_dpad_right_opens_the_comms_menu_for_one_tick() -> void:
 	assert_false(adapter.sample(source, DT).ui.comms_open, "held is not a second press")
 
 
-func test_dpad_right_closes_the_comms_menu_again_but_not_the_press_that_opened_it() -> void:
-	source.hold(InputAdapter.COMMS_MENU)
+func test_ctrl_closes_the_comms_menu_again_but_not_the_press_that_opened_it_and_the_dpad_never() -> void:
+	source.hold(InputAdapter.COMMS_MENU, 1.0, true)
 	adapter.begin_radial(source)
 	assert_false(adapter.sample_radial(source, DT).comms_open, "the press that opened it is not a close")
 	source.release(InputAdapter.COMMS_MENU)
 	assert_false(adapter.sample_radial(source, DT).comms_open)
-	source.hold(InputAdapter.COMMS_MENU)
+	source.hold(InputAdapter.COMMS_MENU, 1.0, true)
 	assert_true(adapter.sample_radial(source, DT).comms_open, "a fresh press is")
 	assert_false(adapter.sample_radial(source, DT).comms_open, "an edge, not a level")
+	source.release(InputAdapter.COMMS_MENU)
+	adapter.sample_radial(source, DT)
+	source.hold(InputAdapter.COMMS_MENU)  # D-pad Right: the pad's comms button (M8-T24, maintainer 2026-11-19)
+	assert_false(adapter.sample_radial(source, DT).comms_open, "the D-pad does nothing in a radial menu")
 
 
 func test_the_dpad_does_not_point_the_radial_menu() -> void:
@@ -567,8 +571,8 @@ func test_the_dpad_does_not_point_the_radial_menu() -> void:
 	assert_eq(ui.radial_entry, -1, "the flight actions pick nothing: the radial entry actions do (M8-T24)")
 
 
-func test_the_dpad_and_the_numbered_keys_pick_entries_by_order_as_edges() -> void:
-	# M8-T24 (D90): the radial entry actions give the place in page order, 0 for D-pad Up or key 1.
+func test_the_numbered_keys_pick_entries_by_order_as_edges() -> void:
+	# M8-T24 (D90): the radial entry actions (keys 1-8) give the place in page order, 0 for key 1.
 	adapter.begin_radial(source)
 	assert_eq(adapter.sample_radial(source, DT).radial_entry, -1, "nothing pressed")
 	for i: int in InputAdapter.RADIAL_ENTRIES.size():
@@ -583,22 +587,14 @@ func test_the_dpad_and_the_numbered_keys_pick_entries_by_order_as_edges() -> voi
 	assert_eq(adapter.sample_radial(source, DT).radial_entry, 2, "two at once: the earlier place")
 
 
-func test_the_press_that_opened_a_radial_menu_picks_no_entry() -> void:
-	# D-pad Right opens the comms menu and is also the second entry: held through the opening, it picks nothing.
-	source.hold(InputAdapter.COMMS_MENU)
+func test_a_numbered_key_held_as_a_radial_menu_opens_picks_nothing() -> void:
 	source.hold(InputAdapter.RADIAL_ENTRIES[1])
 	adapter.begin_radial(source)
-	var ui: UiCommand = adapter.sample_radial(source, DT)
-	assert_eq(ui.radial_entry, -1)
-	assert_false(ui.comms_open)
+	assert_eq(adapter.sample_radial(source, DT).radial_entry, -1, "held through the opening")
 	source.release_all()
 	adapter.sample_radial(source, DT)
-	# Pressed again, the pick wins over the comms key's close.
-	source.hold(InputAdapter.COMMS_MENU)
 	source.hold(InputAdapter.RADIAL_ENTRIES[1])
-	ui = adapter.sample_radial(source, DT)
-	assert_eq(ui.radial_entry, 1)
-	assert_false(ui.comms_open, "a pick, not a close")
+	assert_eq(adapter.sample_radial(source, DT).radial_entry, 1, "pressed again, it picks")
 
 
 func test_a_dpad_press_held_through_the_comms_menu_fires_nothing_when_it_closes() -> void:

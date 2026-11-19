@@ -93,6 +93,13 @@ func is_pressed(action: StringName) -> bool:
 	return false
 
 
+func is_key_pressed(action: StringName) -> bool:
+	for event: InputEvent in _events(action):
+		if (event is InputEventKey or event is InputEventMouseButton) and _event_active(event, action):
+			return true
+	return false
+
+
 func pad_info() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for pad: int in _pad_ids():

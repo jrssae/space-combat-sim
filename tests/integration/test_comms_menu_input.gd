@@ -1,9 +1,8 @@
 extends TestSteps
 ## AC28 on the real main scene (architecture §18.22, M5-T46): D-pad Right opens the comms menu on the radial framework and
 ## pauses the game; the left stick points (M7-T37), A sends the order through `WingDirector` once the game runs again, B backs out,
-## the comms key closes it; while it is open the D-pad's flight actions and the target button do nothing, and nothing that was
-## held fires on the tick it closes. M8-T24 (D90): one slice per order, and the D-pad's four directions and keys 1-8 pick by
-## the entry's place in the page.
+## Ctrl closes it; while it is open the D-pad and the target button do nothing, and nothing that was held fires on the tick it
+## closes. M8-T24 (D90): one slice per order, and keys 1-N pick by the entry's place in the page.
 
 ## The wing orders page in free flight (no home dock in range, so no DOCK), in page order.
 const ORDERS: Array[String] = ["ATTACK", "FORM ON ME", "ENGAGE", "COVER ME", "FORM UP", "HOLD POSITION"]
@@ -92,8 +91,8 @@ func test_the_stick_and_a_send_the_two_hold_fire_orders_and_another_order_lifts_
 	assert_eq(wing.order, AiContext.Order.FORM_ON_ME)
 
 
-func test_the_dpad_and_the_numbered_keys_pick_by_the_entrys_place() -> void:
-	# M8-T24 (D90): D-pad up, right, down, left are entries 1-4, keys 1-8 entries 1-8; either sends at once.
+func test_the_numbered_keys_pick_by_the_entrys_place() -> void:
+	# M8-T24 (D90): keys 1-N are the ring's N entries in page order and send at once.
 	var wing: Wing = main.wings.player_wing()
 	for i: int in range(1, ORDERS.size()):  # ATTACK MY TARGET needs a hostile selected: the console test and key 1 cover it
 		await _press(InputAdapter.COMMS_MENU)
@@ -114,29 +113,6 @@ func test_a_place_past_the_last_entry_picks_nothing() -> void:
 	assert_true(main.comms.is_open(), "nothing there: still open")
 	assert_eq(main.comms.menu.picks(), picks)
 	await _press(InputAdapter.RADIAL_BACK)
-
-
-func test_dpad_right_picks_the_second_entry_rather_than_closing() -> void:
-	# On a pad D-pad Right is both the comms key and the second entry; while the menu is open the pick wins.
-	var wing: Wing = main.wings.player_wing()
-	main.wings.give_order(AiContext.Order.COVER_ME)
-	source.hold(InputAdapter.COMMS_MENU)
-	source.hold(InputAdapter.RADIAL_ENTRIES[1])
-	await _ticks(3)
-	assert_true(main.comms.is_open(), "the press that opened it picks nothing")
-	source.release(InputAdapter.COMMS_MENU)
-	source.release(InputAdapter.RADIAL_ENTRIES[1])
-	await _ticks(2)
-	assert_true(main.comms.is_open())
-	source.hold(InputAdapter.COMMS_MENU)
-	source.hold(InputAdapter.RADIAL_ENTRIES[1])
-	await _ticks(2)
-	source.release(InputAdapter.COMMS_MENU)
-	source.release(InputAdapter.RADIAL_ENTRIES[1])
-	await _ticks(2)
-	assert_false(main.comms.is_open())
-	assert_eq(main.comms.menu.closed_by(), &"pick", "a pick, not a close")
-	assert_eq(wing.order, AiContext.Order.FORM_ON_ME)
 
 
 func test_b_closes_it_without_giving_an_order_or_targeting() -> void:
@@ -162,15 +138,20 @@ func test_the_pad_b_that_closes_it_taps_no_target() -> void:
 	assert_false(main.ship.targeting.system.has_selection(), "the closing press did not select a target")
 
 
-func test_dpad_right_again_closes_it_and_the_opening_press_does_not() -> void:
-	source.hold(InputAdapter.COMMS_MENU)
+func test_ctrl_again_closes_it_and_the_opening_press_does_not() -> void:
+	source.hold(InputAdapter.COMMS_MENU, 1.0, true)
 	await _ticks(10)
 	assert_true(main.comms.is_open(), "held through the open: still open")
 	source.release(InputAdapter.COMMS_MENU)
 	await _ticks(2)
 	assert_true(main.comms.is_open())
 	await _press(InputAdapter.COMMS_MENU)
-	assert_false(main.comms.is_open(), "a second press closes it")
+	assert_true(main.comms.is_open(), "D-pad Right does nothing in the ring (M8-T24, maintainer 2026-11-19)")
+	source.hold(InputAdapter.COMMS_MENU, 1.0, true)
+	await _ticks(2)
+	source.release(InputAdapter.COMMS_MENU)
+	await _ticks(2)
+	assert_false(main.comms.is_open(), "a second Ctrl press closes it")
 	assert_eq(main.comms.menu.closed_by(), &"close")
 	assert_false(get_tree().paused)
 
@@ -185,8 +166,9 @@ func test_the_dpad_and_flight_buttons_do_nothing_while_it_is_open() -> void:
 	var assist: bool = main.ship.assist_on
 	var lit: bool = main.ship.running_lights
 	await _press(InputAdapter.COMMS_MENU)
+	# The whole D-pad (assist, next weapon, lights, and D-pad Right, the pad's comms button) and the target buttons.
 	for action: StringName in [InputAdapter.TOGGLE_ASSIST, InputAdapter.WEAPON_NEXT, InputAdapter.TOGGLE_RUNNING_LIGHTS,
-			InputAdapter.TARGET_CYCLE, InputAdapter.TARGET_NEXT]:
+			InputAdapter.COMMS_MENU, InputAdapter.TARGET_CYCLE, InputAdapter.TARGET_NEXT]:
 		await _press(action)
 	assert_true(main.comms.is_open(), "none of them picks or closes")
 	assert_eq(main.comms.menu.picks(), 0)

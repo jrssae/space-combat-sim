@@ -282,19 +282,16 @@ func test_the_radial_menus_actions_are_fixed_and_outside_the_profiles() -> void:
 
 
 func test_the_radial_entry_picks_are_the_dpad_and_the_numbered_keys() -> void:
-	# M8-T24 (D90): the D-pad's up, right, down and left and keys 1-4 are entries 1-4; keys 5-8 entries 5-8. Fixed, outside the
-	# profiles, read only while a radial menu is open.
-	var pads: Array[JoyButton] = [JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_RIGHT, JOY_BUTTON_DPAD_DOWN, JOY_BUTTON_DPAD_LEFT]
+	# M8-T24 (D90): keys 1-8 are entries 1-8, the keyboard only (the D-pad does nothing in a radial menu, maintainer
+	# 2026-11-19). Fixed, outside the profiles, read only while a radial menu is open.
 	assert_eq(InputAdapter.RADIAL_ENTRIES.size(), 8)
 	for i: int in 8:
 		var action: StringName = InputAdapter.RADIAL_ENTRIES[i]
 		assert_true(InputAdapter.RADIAL_ACTIONS.has(action), String(action))
 		assert_false(InputAdapter.ACTIONS.has(action), "%s is not a profile action" % action)
 		var events: Array[InputEvent] = InputMap.action_get_events(action)
-		assert_eq(events.size(), 2 if i < 4 else 1, String(action))
-		if i < 4:
-			assert_eq((events[0] as InputEventJoypadButton).button_index, pads[i], "%s: its D-pad direction" % action)
-		assert_eq((events.back() as InputEventKey).physical_keycode, KEY_1 + i, "%s: key %d" % [action, i + 1])
+		assert_eq(events.size(), 1, "%s: one key, no pad button" % action)
+		assert_eq((events[0] as InputEventKey).physical_keycode, KEY_1 + i, "%s: key %d" % [action, i + 1])
 
 
 func _actions_on_button(button: JoyButton) -> Array[StringName]:

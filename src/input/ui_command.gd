@@ -19,8 +19,8 @@ var wing_form_hold: bool = false
 var wing_hold: bool = false
 ## D-pad Left, key 5 (M3-T27): the player's running lights on or off.
 var toggle_running_lights: bool = false
-## The comms menu (D54, M5-T46): D-pad Right (an edge) opens it; while it is open the comms key closes it again (on the pad D-pad
-## Right then picks the second entry instead, M8-T24); its stick, A and B are the radial ones below.
+## The comms menu (D54, M5-T46): D-pad Right or Ctrl (an edge) opens it; while it is open Ctrl closes it again (the D-pad does
+## nothing in a radial menu, M8-T24; B closes it on the pad); its stick, A and B are the radial ones below.
 var comms_open: bool = false
 ## The target menu (M5-T25): a hold of the target button asks for it (`target_menu_open`, an edge). While a radial menu is open
 ## `InputAdapter.sample_radial` gives the direction pointed (`radial_point`: x right, y up, 0..1; zero when nothing points)
@@ -29,8 +29,8 @@ var target_menu_open: bool = false
 var radial_point: Vector2 = Vector2.ZERO
 var radial_select: bool = false
 var radial_back: bool = false
-## A D-pad direction (up, right, down, left: 0-3) or a numbered key (1-8: 0-7) pressed while a radial menu is open: the entry
-## in that place of the ring's page order to pick (M8-T24); -1 when none was pressed.
+## A numbered key (1-8: 0-7) pressed while a radial menu is open: the entry in that place of the ring's page order to pick
+## (M8-T24); -1 when none was pressed.
 var radial_entry: int = -1
 ## X (the auto-track action) held `InputAdapter.interact_hold_s` while the selected target offers an interaction (M7-T27): run it
 ## (a gate's jump; a bay's placeholder answers "not available"). An edge. `interact_progress` is how far the hold has run, 0..1

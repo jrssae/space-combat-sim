@@ -28,8 +28,8 @@ extends RefCounted
 ## menu's stick, select and back (and Start), `begin_radial` and `end_radial` bracket it so that nothing fires, steers or
 ## targets on the tick the game resumes. The menu's own actions (`RADIAL_ACTIONS`) are fixed like the menu kit's `ui_*`
 ## ones, not part of a control profile: the LEFT stick or the arrow keys point (M7-T37; the right stick is not read, and the game is
-## paused, so it flies again as the menu closes), A or Enter selects, B or Backspace backs, and the D-pad's up, right, down and
-## left or keys 1-8 pick the ring's entries by their order (M8-T24, `RADIAL_ENTRIES`).
+## paused, so it flies again as the menu closes), A or Enter selects, B or Backspace backs, and keys 1-8 pick the ring's entries
+## by their order (M8-T24, `RADIAL_ENTRIES`). The D-pad does nothing while a radial menu is open (maintainer, 2026-11-19).
 
 const MAIN_RIGHT := &"main_right"
 const MAIN_LEFT := &"main_left"
@@ -78,8 +78,7 @@ const RADIAL_LEFT := &"radial_left"
 const RADIAL_RIGHT := &"radial_right"
 const RADIAL_SELECT := &"radial_select"
 const RADIAL_BACK := &"radial_back"
-## Pick the ring's entries by order while a radial menu is open (M8-T24): the first four are the D-pad's up, right, down and left
-## and keys 1-4, the rest keys 5-8.
+## Pick the ring's entries by order while a radial menu is open (M8-T24): keys 1-8, the keyboard only.
 const RADIAL_ENTRIES: Array[StringName] = [&"radial_entry_1", &"radial_entry_2", &"radial_entry_3", &"radial_entry_4",
 		&"radial_entry_5", &"radial_entry_6", &"radial_entry_7", &"radial_entry_8"]
 
@@ -116,6 +115,8 @@ const MOUSE_SMOOTHING := 0.4
 const STICK_SECTOR_HALF_DEG := 22.5
 ## The tap-or-hold target buttons: a tap picks the nearest enemy, a hold opens the target menu.
 const TAP_HOLD: Array[StringName] = [TARGET_NEXT, TARGET_CYCLE]
+# Where the comms key's own (keyboard) edge is remembered while a radial menu is open.
+const _COMMS_KEY := &"comms_menu:key"
 ## Mouse travel, pixels, that points a radial menu as far as a stick held over.
 const RADIAL_MOUSE_REACH_PX := 120.0
 ## Default for `target_hold_s` (`Settings.target_hold_s`).
@@ -298,24 +299,27 @@ func sample_menu(source: InputSource, dt: float) -> UiCommand:
 
 
 ## A radial menu opens: its select, back and entry picks, and the comms key, are seeded from what is held (the button that opened
-## it is also its back, and D-pad Right a pick), and the mouse points from the centre again.
+## it is also its back), and the mouse points from the centre again.
 func begin_radial(source: InputSource) -> void:
-	for action: StringName in [RADIAL_SELECT, RADIAL_BACK, PAUSE, COMMS_MENU] + RADIAL_ENTRIES:
+	for action: StringName in [RADIAL_SELECT, RADIAL_BACK, PAUSE] + RADIAL_ENTRIES:
 		_prev_pressed[action] = source.is_pressed(action)
+	_prev_pressed[_COMMS_KEY] = source.is_key_pressed(COMMS_MENU)
 	_radial_pointer = Vector2.ZERO
 	source.take_mouse_delta()
 
 
 ## One tick while a radial menu has the pad: the direction pointed (`UiCommand.radial_point`: the menu's stick or arrow keys,
-## else the mouse while it moves), the select and back edges, an entry picked by the D-pad or a numbered key, the comms key's edge
-## and Start. Everything else is re-seeded from what is held, as behind the pause menu.
+## else the mouse while it moves), the select and back edges, an entry picked by a numbered key, the comms key's edge (its key
+## only: the D-pad is quiet in a radial menu) and Start. Everything else is re-seeded from what is held, as behind the pause menu.
 func sample_radial(source: InputSource, dt: float) -> UiCommand:
 	source.poll(dt)
 	var cmd := PilotCommand.new()
 	var ui: UiCommand = cmd.ui
 	ui.pause = source.is_pressed(PAUSE) and not bool(_prev_pressed.get(PAUSE, false))
-	# The comms key closes the comms menu again; the target menu ignores it.
-	ui.comms_open = source.is_pressed(COMMS_MENU) and not bool(_prev_pressed.get(COMMS_MENU, false))
+	# Ctrl closes the comms menu again (the target menu ignores it); D-pad Right, the pad's comms button, does not.
+	var comms_key: bool = source.is_key_pressed(COMMS_MENU)
+	ui.comms_open = comms_key and not bool(_prev_pressed.get(_COMMS_KEY, false))
+	_prev_pressed[_COMMS_KEY] = comms_key
 	for action: StringName in [RADIAL_SELECT, RADIAL_BACK]:
 		var pressed: bool = source.is_pressed(action)
 		var edge: bool = pressed and not bool(_prev_pressed.get(action, false))
@@ -329,9 +333,6 @@ func sample_radial(source: InputSource, dt: float) -> UiCommand:
 		if pressed and not bool(_prev_pressed.get(RADIAL_ENTRIES[i], false)) and ui.radial_entry < 0:
 			ui.radial_entry = i
 		_prev_pressed[RADIAL_ENTRIES[i]] = pressed
-	# D-pad Right is both the comms key and the second entry: while a menu is open the pick wins, and Ctrl or B closes it.
-	if ui.radial_entry >= 0:
-		ui.comms_open = false
 	ui.radial_point = source.get_vector(RADIAL_LEFT, RADIAL_RIGHT, RADIAL_DOWN, RADIAL_UP, stick_deadzone)
 	var px: Vector2 = source.take_mouse_delta()
 	if not px.is_zero_approx():

@@ -333,7 +333,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T21 | D | The game's fonts: Babylon5 for titles and headlines, Babylon5Credits for body text and the HUD, on all UI text (D87; maintainer, 2026-11-18; numbered last) | - | Fable | A theme over every screen and the HUD's own drawing, a symbol-encoded cmap, a look sheet first | done |
 | T22 | D | Gamepad detection: why Godot sometimes misses the maintainer's pad, joypad logging and notices, `joypads`, troubleshooting (D88; maintainer, 2026-11-18; numbered last) | - | Fable | Linux input stack diagnosis on the real device, small notices | in progress |
 | T23 | C | The civilian escort in its own star system: no Babylon 5, no nebula, a different planet (D89; maintainer, 2026-11-18; numbered last) | T08 | Opus | A second system in the data, its sky and planet, the escort moved onto it; a sheet first | not started |
-| T24 | D | Radial menus fit their entries: equal slices for however many entries, no empty spots (D90; maintainer, 2026-11-18; numbered last) | - | Opus | The radial framework's layout and picking for every input | in progress |
+| T24 | D | Radial menus fit their entries: equal slices for however many entries, no empty spots (D90; maintainer, 2026-11-18; numbered last) | - | Opus | The radial framework's layout and picking for every input | done |
 | T17 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M8-T01 Tutorial script (discussion with the maintainer)
@@ -940,6 +940,14 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   54, `test_input_map` 14, `test_godot_input_source` 12 (the real D-pad and keys 1-8); picks by entry in `test_docking` 11,
   `test_launch_bay` 16, `test_target_preview` 11; kept green: `test_keyboard_parity`, `test_nav_targets`, `test_civilian_ships`,
   `test_flights`, `test_wing_orders`, `test_main_scene`, `test_control_lock`, `test_hud`.
+- **Fix (2026-11-19, maintainer):** the D-pad has no effect while a radial menu is open: it neither picks nor closes (the
+  `radial_entry_*` actions are keys 1-8 only, and `sample_radial` reads the comms action's keys alone through the new
+  `InputSource.is_key_pressed`, so D-pad Right no longer closes the comms menu). Keys 1 to N pick a ring's N entries; the pad
+  picks with the stick and A and closes with B; Ctrl or Escape as before on the keyboard. Tests (staged copy, GUT_SLOW=1): 957 scripts
+  compile; 11 GUT files, 197 tests, 0 failing (`test_input_adapter` 54, `test_input_map` 14, `test_godot_input_source` 12 with the
+  real D-pad doing nothing in a ring, `test_comms_menu_input` 16, `test_target_menu` 33 with keys on rings of six, three and one,
+  `test_radial_menu` 15, `test_comms_menu` 10, `test_keyboard_parity` 4, `test_cinematic_camera` 12, `test_control_lock` 10,
+  `test_control_profile_store` 17).
 
 ### M8-T17 Integration, full suite, docs and acceptance
 
