@@ -150,3 +150,15 @@ read/write lock (shared for readers, exclusive for writers, a gate so a waiting 
   samples it and writes to its own scratch image.
 - `RenderSceneBuffersRD.create_texture` takes 10 arguments in 4.7 (a trailing `discardable`).
 - A `CompositorEffect` script cannot call its own methods from `NOTIFICATION_PREDELETE` ("null instance"); free RIDs inline.
+
+## Linux export templates and the release build (M8-T15, Q9; verified 2026-11-19)
+
+- Templates: `Godot_v4.7.2-stable_export_templates.tpz` (1.28 GB, from the 4.7.2-stable GitHub release), SHA-512
+  `ca4d71c4d7b81dfc15d1a98baa07534aa95b03fdda78a0075b06672e1648d2e5f40980c9adc28d23e1b92e732ee7bf3461997aa804af74ec2fcd7a93ccb84079`
+  (checked by `scripts/setup_export_templates.sh`, which keeps only `linux_release.x86_64` and `linux_debug.x86_64`).
+- `scripts/build_release.sh` runs Godot with `XDG_DATA_HOME=.tools/xdg`, where the templates are linked as
+  `godot/export_templates/4.7.2.stable/`, so nothing under `~/.local` is touched. It builds the native library, the assets, imports,
+  exports the committed `export_presets.cfg` preset "Linux release" (excludes `reports/*`, `tests/*`, `docs/*`, `tools/*`,
+  `scripts/*`, `addons/gut/*`, `references/*`, `native/*`; `embed_pck`) to `build/release/` and runs `scripts/release_smoke.sh`.
+- Godot copies `libscs_native.so` beside the binary (the `.gdextension` is packed); ship both files together.
+- A release binary rejects `--path`; `--headless -- --console-exec=...` works. A headless export's `state render` shows `gpu = none`.

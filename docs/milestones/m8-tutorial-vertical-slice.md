@@ -286,7 +286,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | AC7 | Civilian escort: the first two waves arrive docked on the strike carrier and launch; the carrier hangs back, recalls and jumps out; the escort's tests (success, both failures, flee and resume) pass with it | A | |
 | AC8 | Battle Wagon: meets the output contract with Python tests (budgets, frames, hardpoints, tubes, determinism), its look sheet seen by the maintainer (no STL: M10's Q10), in the game with its weapons and four launch tubes, in a sandbox scenario and free-flight raids; the civilian escort's last wave launches from its tubes and the escort's tests pass with it | A | **Met** (T09, 2026-11-19; two tubes with four lanes, as the sheet has it: the maintainer, 2026-11-18. How it looks and plays is (H), `docs/playtest.md`) |
 | AC9 | Carried items: M7-2 to M7-6 and L15 each done with a test where one can be written | A | |
-| AC10 | Release build: a script builds the Linux x86_64 export from the pinned templates; the exported game opens, runs the tutorial's opening and quits cleanly in a smoke test | A | |
+| AC10 | Release build: a script builds the Linux x86_64 export from the pinned templates; the exported game opens, runs the tutorial's opening and quits cleanly in a smoke test | A | done |
 | AC11 | Cost: on the maintainer's GPU, the squadron launch, the tour and the raid: `renderer = forward_plus`, FPS, draw calls and VRAM recorded; the tick inside the 60 Hz budget during the raid | A | |
 | AC12 | Docs and the suite: `docs/architecture.md` §21 as built, a `docs/playtest.md` M8 section, the roadmap row, `info.md`; `scripts/run_tests.sh` green once, at the end | A | |
 | AC13 | (H) The maintainer plays it: the tutorial start to finish, the squadron launch, the approach cues and a fast gate jump, docking and relaunch, the escort with the strike carrier, the Battle Wagon, the audio, the release build | H | |
@@ -337,7 +337,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T12 | D | Audio rework of every sound effect and the Starfury engines' steady level (roadmap M7-5) | - | Opus | One loudness reference, the mix, and a smoothed engine gain; a listening checklist | done |
 | T13 | D | Wingmen close the gaps losses leave in a formation (roadmap M7-6) | - | Fable | Native re-slotting with M7-T76's avoidance, 1 and 6 threads identical | done |
 | T14 | D | The bench writes to `user://` in an exported build (roadmap L15) | - | Fable | A path fix with a test | done |
-| T15 | E | Linux x86_64 release build from the pinned export templates (Q9) | T14 | Sonnet | Templates by SHA-256, the native library and assets packed, an export smoke test | in progress |
+| T15 | E | Linux x86_64 release build from the pinned export templates (Q9) | T14 | Sonnet | Templates by SHA-256, the native library and assets packed, an export smoke test | done |
 | T16 | E | Performance and the GPU check: the squadron launch, the tour and the raid | T05, T09 | Opus | Measurement on the maintainer's machine; the budget call | not started |
 | T18 | B | Approach cues for navigation targets with an interaction (brake, overshoot, adjust course), and the jumpgate's reach, autopilot and cinematic scaled to the player's speed (D84; maintainer, 2026-11-18; numbered last because it was added after the others had numbers) | - (shared with T06) | Opus | Relative-motion maths on the HUD, and a gate run-in that starts from any speed with its shot timed to match | done |
 | T19 | D | Flights of three: the player commands two wingmen, AI flights of three cover each other and stay together, every ship in formation may fire, and two new orders (form up and hold fire; hold position and hold fire) (D85; maintainer, 2026-11-18; numbered last because it was added after the others had numbers) | T13 | Fable | Native flight cohesion and mutual cover, two orders through the comms menu and keys, parity | done |
@@ -883,6 +883,15 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 - **Files:** a `scripts/` build script, `export_presets.cfg`, the templates' version and SHA-256 in `docs/research-notes.md`,
   `docs/third-party.md` if anything is added, an export smoke test.
 - **Done when:** AC10.
+- **Done (2026-11-19):** `scripts/build_release.sh` (templates by SHA-512 via `setup_export_templates.sh`, linked under
+  `.tools/xdg` so `~/.local` stays clean; `build_native.sh`; `gen_assets.sh`; `--import`; `--export-release "Linux release"`
+  from the committed `export_presets.cfg`, which keeps `reports/*`, `tests/*`, `docs/*`, `tools/*`, `scripts/*`, `addons/gut/*`,
+  `references/*` and `native/*` out; `--no-smoke` skips the smoke). Output `build/release/` (gitignored): the 1.7 GB binary with
+  the embedded pack plus `libscs_native.so` (7 MB). Full run 15 min on this machine, nearly all of it `gen_assets.sh`; the export
+  step 7 s. `scripts/release_smoke.sh` runs the binary `--headless --console-strict`, plays `free_flight` (swap `SMOKE_SCENARIO`
+  for the tutorial's opening once T05 lands), waits 600 ticks and quits: exit 0, no `ERROR:` lines. It is a separate script, not
+  in `run_tests.sh` (needs the 15 min build). Pack checked: no `reports/`, `tests/` or `tools/` paths; the lens flare `.glsl` is
+  in. Bench against a release snap: `setup_export_templates.sh` steps 4-5 (`user://reports` link, wrapper dropping `--path`).
 
 ### M8-T16 Performance and the GPU check
 

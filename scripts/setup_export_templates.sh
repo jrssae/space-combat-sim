@@ -6,6 +6,8 @@
 # Repeat a release run (M4-T03r). A template cannot open a project folder (it rejects --path), so measure an export:
 #   1. Snapshot the commit so working-tree edits never reach the numbers: git archive <commit> | tar -x -C <snap>, copy
 #      assets/generated/ into it, then .tools/godot/godot --headless --path <snap> --import.
+#   (scripts/build_release.sh, M8-T15, does the export itself from the committed export_presets.cfg; steps 2-3 below are the
+#   hand recipe for a snapshot.)
 #   2. In <snap>, an export_presets.cfg with one preset, name="Linux release", platform="Linux", export_filter="all_resources",
 #      include_filter="*.json,*.f32,*.txt,*.cfg,*.obj,*.mtl",
 #      exclude_filter="tests/*, docs/*, tools/*, scripts/*, addons/gut/*, reports/*", binary_format/embed_pck=true, and
