@@ -315,6 +315,10 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 - **Fable where the task warrants it** (maintainer, 2026-11-18): Fable for the hardest work (new hulls from references, native AI,
   the tutorial's integration), Opus and Sonnet for the rest as the Agent column says; Fable-suited tasks are started first while
   its tokens last. High effort, never max.
+- **Standing shot reviewer (maintainer, 2026-11-19):** a third agent stays available to review every new cinematic shot (launches,
+  jump points, jumpgates, docking, ...) for consistency with the show and cinematic impressiveness, against the local references
+  and a library of show stills and GIFs it gathered under `references/show/` (gitignored). Shot tasks render review strips and
+  stop before committing; the reviewer's verdict goes back to them.
 - **One working copy** on branch `m8` in the main checkout, no task branches.
 - **Locks**: every Godot or asset-building command goes through `scripts/godot_lock.sh` with `SCS_LOCK_LABEL=<task id>` set (`write`
   for `--import`, the native build and asset builds; `read` for tests and console runs; `--gpu` for windows). Commits stay under
