@@ -594,7 +594,7 @@ func test_the_civilian_escort_file_validates() -> void:
 	var props: Array = result["props"]
 	assert_eq(props.size(), 2)
 	assert_eq(props[0]["name"], "NAV ALPHA")
-	assert_almost_eq((props[0]["position"] as UniversePos).distance_to(props[1]["position"]), 30000.0, 1.0, "30 km apart (Q40)")
+	assert_almost_eq((props[0]["position"] as UniversePos).distance_to(props[1]["position"]), 45000.0, 1.0, "45 km apart (M8-T26; 30 before)")
 	assert_eq_deep(result["pools"], {&"raider_fighter": 24, &"starfury_ally": 2, &"random_civilian": 1})
 	assert_eq((result["belts"] as Array).size(), 1, "the belt across the route")
 	assert_eq((result["civilian_names"] as Dictionary).size(), ShipCatalog.CIVILIAN_TYPES.size(), "names for all nine hulls")
@@ -610,7 +610,7 @@ func test_the_escort_belt_leaves_the_route_and_its_middle_point_clear() -> void:
 	var result: Dictionary = ScenarioLoader.load("res://data/scenarios/civilian_escort.json")
 	var belt: Dictionary = result["belts"][0]
 	var layout: BeltLayout = BeltLayout.place(belt, 16)
-	assert_eq(layout.rocks.size(), 400, "all 400 rocks fit")
+	assert_eq(layout.rocks.size(), 600, "all 600 rocks fit (12 km deep at the density of the old 8 km, M8-T26)")
 	var middle: float = INF
 	var line: float = INF
 	for rock: Dictionary in layout.rocks:

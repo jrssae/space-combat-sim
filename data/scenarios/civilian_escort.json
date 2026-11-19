@@ -6,10 +6,10 @@
 	"player": {"position": [420, 40, 1600], "forward": [0, 0, -1], "velocity": [0, 0, -60]},
 	"props": [
 		{"type": "nav_buoy", "name": "NAV ALPHA", "position": [0, 0, 0]},
-		{"type": "nav_buoy", "name": "NAV BETA", "position": [0, 0, -30000]}
+		{"type": "nav_buoy", "name": "NAV BETA", "position": [0, 0, -45000]}
 	],
 	"asteroid_belts": [
-		{"centre": [0, 0, -15000], "size": [24000, 3000, 8000], "count": 400, "radius_m": [10, 150], "seed": 38,
+		{"centre": [0, 0, -22500], "size": [24000, 3000, 12000], "count": 600, "radius_m": [10, 150], "seed": 4,
 			"min_gap_m": 200}
 	],
 	"civilian_names": {
@@ -26,7 +26,7 @@
 	"pools": {"raider_fighter": 24, "starfury_ally": 2, "random_civilian": 1},
 	"routes": [
 		{"name": "ESCORT", "cruise_mps": 120, "pace": "none", "waypoints": [
-			{"position": [0, 0, -7500]}, {"position": [0, 0, -29000]}
+			{"position": [0, 0, -11250]}, {"position": [0, 0, -44000]}
 		]}
 	],
 	"spawns": [
@@ -58,7 +58,7 @@
 	},
 	"mission": {
 		"title": "Civilian escort",
-		"briefing": "A civilian ship is crossing from NAV ALPHA to NAV BETA, 30 km out, through a field of rock. Raiders work this stretch.\n\nLead Alpha wing with your wingmen, ALPHA 2 and ALPHA 3, and see the ship through the belt to NAV BETA. Bring them both home.",
+		"briefing": "A civilian ship is crossing from NAV ALPHA to NAV BETA, 45 km out, through a field of rock. Raiders work this stretch.\n\nHer cargo is sensitive. It must get through. The escort is also a show of force, to deter raiders in this sector.\n\nLead Alpha wing with your wingmen, ALPHA 2 and ALPHA 3, and see the ship through the belt to NAV BETA. Bring them both home.",
 		"script": "res://data/missions/civilian_escort.gd",
 		"battle_wagons": 1,
 		"dialog": "res://data/dialog/civilian_escort.json",

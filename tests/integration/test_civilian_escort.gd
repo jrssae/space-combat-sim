@@ -311,10 +311,10 @@ func test_a_wave_waits_for_the_last_to_be_down_and_then_a_breather() -> void:
 	assert_true(_run("kill all").ok)
 	var down_s: float = _api().time_s()
 	await _wait_for("wave two", func() -> bool: return _journal_has("spawn %s raider_fighter" % WAVE_TWO[0]),
-			roundi(60.0 * (MissionScriptClass.BREATHER_S + 15.0) / 4.0))
+			roundi(60.0 * (MissionScriptClass.WAVE_TWO_BREATHER_S + 15.0) / 4.0))
 	Engine.time_scale = scale_backup
 	# The breather counts from when the step sees the wave down, after its lines.
-	assert_between(_api().time_s() - down_s, MissionScriptClass.BREATHER_S, MissionScriptClass.BREATHER_S + 10.0,
+	assert_between(_api().time_s() - down_s, MissionScriptClass.WAVE_TWO_BREATHER_S, MissionScriptClass.WAVE_TWO_BREATHER_S + 10.0,
 			"a breather after wave one is down")
 	assert_eq(_api().step_name(), &"wave_two")
 
@@ -331,7 +331,7 @@ func test_a_civilian_back_from_a_detour_still_brings_the_next_wave() -> void:
 	var scale_backup: float = Engine.time_scale
 	Engine.time_scale = 4.0
 	await _wait_for("wave two", func() -> bool: return _api().step_name() == &"wave_two",
-			roundi(60.0 * (MissionScriptClass.BREATHER_S + 15.0) / 4.0))
+			roundi(60.0 * (MissionScriptClass.WAVE_TWO_BREATHER_S + 15.0) / 4.0))
 	Engine.time_scale = scale_backup
 
 
@@ -349,7 +349,7 @@ func test_the_waves_and_the_arrival_do_not_need_nav_beta_in_one_piece() -> void:
 	assert_true(_run("kill all").ok)
 	var beta: Vector3 = MissionScriptClass.BETA_AT
 	main.mission.stage.place(_civilian_name(), UniversePos.new(beta.x + 600.0, beta.y, beta.z + 600.0, _api().world.system_id))
-	var limit_s: float = MissionScriptClass.BREATHER_S + 20.0
+	var limit_s: float = MissionScriptClass.WAVE_TWO_BREATHER_S + 20.0
 	await _run_on(limit_s, func() -> bool: return _api().step_name() == &"wave_two")
 	assert_eq(_api().step_name(), &"wave_two", "the next wave comes by the civilian's place")
 	await _ticks(2)
@@ -405,11 +405,11 @@ func test_a_civilian_taken_from_nav_beta_after_arriving_flies_back_and_stops_the
 	var path := (civilian.driver.brain as AiPilot).behaviour(&"follow_path") as BehaviourFollowPath
 	assert_eq(path.index, 1, "past the 25 % point, bound for the end of its route")
 	var system: StringName = _api().world.system_id
-	var end := UniversePos.new(0.0, 0.0, -29000.0, system)
-	main.mission.stage.place(_civilian_name(), UniversePos.new(0.0, 0.0, -28700.0, system))
+	var end := UniversePos.new(0.0, 0.0, -44000.0, system)
+	main.mission.stage.place(_civilian_name(), UniversePos.new(0.0, 0.0, -43700.0, system))
 	await _run_on(120.0, func() -> bool: return _api().world.route_done(_civilian_name()))
 	assert_true(_api().world.route_done(_civilian_name()), "it flies its route to the end")
-	for away: Vector3 in [Vector3(300.0, 0.0, -25000.0), Vector3(-200.0, 100.0, -31500.0)]:
+	for away: Vector3 in [Vector3(300.0, 0.0, -40000.0), Vector3(-200.0, 100.0, -46500.0)]:
 		main.mission.stage.place(_civilian_name(), UniversePos.new(away.x, away.y, away.z, system))
 		civilian.ship.linear_velocity = main.world.rest_velocity()
 		var from_m: float = _at(civilian).distance_to(end)
@@ -731,7 +731,7 @@ func test_a_fought_run_ends_each_wave_at_three_left_before_the_next_comes() -> v
 	var fought: Array[float] = [-1.0, -1.0, -1.0]
 	var cleared: Array[float] = [-1.0, -1.0, -1.0]
 	var ticks: int = 0
-	while not _api().has_ended() and _api().time_s() < 1200.0:
+	while not _api().has_ended() and _api().time_s() < 1500.0:
 		await _ticks(1)
 		ticks += 1
 		_ride_over(_civilian())
@@ -764,9 +764,9 @@ func test_a_fought_run_ends_each_wave_at_three_left_before_the_next_comes() -> v
 			_civilian_name(), spawned, contact, fought, cleared, end_s])
 	assert_true(_api().has_ended() and bool(_api().result.get("success", false)), str(_api().result))
 	for w: int in [1, 2]:
-		assert_gt(spawned[w] - cleared[w - 1], MissionScriptClass.BREATHER_S - 0.1,
+		assert_gt(spawned[w] - cleared[w - 1], [MissionScriptClass.WAVE_TWO_BREATHER_S, MissionScriptClass.BREATHER_S][w - 1] - 0.1,
 				"wave %d comes a breather after wave %d is down" % [w + 1, w])
-	assert_between(end_s, 600.0, 1100.0, "twelve to fifteen minutes with waves of six, eight and ten, the civilian back at NAV BETA at the end (it was 6 to 8 with 3, 4 and 6, Q40)")
+	assert_between(end_s, 600.0, 1100.0, "about fifteen minutes on the 45 km route with waves of six, eight and ten, the civilian back at NAV BETA at the end (M8-T26; 6 to 8 in Q40's day)")
 
 
 # --- the wing flies it with an AI in the player's place (M8-T08): a balance judgement --------------------------------------

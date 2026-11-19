@@ -664,12 +664,14 @@ the list while it is focused. Each start from the menu draws a new seed, and wit
 **Retry** on the debrief keeps the ship). From the console, `play civilian_escort <seed>` picks the seed (seed 5 is the Skylark).
 
 - **The intro.** The mission opens on the civilian beside NAV ALPHA with the belt somewhere ahead, then cuts to you, ALPHA 2 and ALPHA 3
-  coasting past the camera. The civilian's master hails over the fly-past; Control briefs once the camera is back, with your
+  coasting past the camera. The civilian's master hails over the fly-past; Control briefs once the camera is back (the cargo is sensitive and
+  must get through, the escort is a show of force, then the tasking; M8-T26), with your
   controls held until "the flight is yours". **A** or **Start** skips one shot; holding **X** (keyboard Shift or Mouse 4) for 2 s
   skips the whole opening, intro and briefing, to the hand-over (M7-T54; `HOLD X / SHIFT / MOUSE 4: SKIP` and its bar show while
   it can).
-- **The crossing.** The civilian flies to NAV BETA, 30 km out, at up to 120 m/s, threading the asteroid belt (24 km across, 8 km
-  deep) in the middle of the route. The waypoint marks the civilian. Three raider waves jump in 6 to 12 km off it as it passes
+- **The crossing.** The civilian flies to NAV BETA, 45 km out (M8-T26; 30 before), at up to 120 m/s, threading the asteroid
+  belt (24 km across, 12 km deep) in the middle of the route. The second wave waits 60 s after the first is down, the third 30 s;
+  a scripted fought run takes about 15 minutes. The waypoint marks the civilian. Three raider waves jump in 6 to 12 km off it as it passes
   25 % (6 raiders, before the belt), 50 % (8, inside it) and 75 % (10, past it; M8-T08); a later wave also waits until the one
   before is down and 30 s have passed (M7-T54). A fought run now takes about 12 minutes (it was 6 to 8 with waves of 3, 4
   and 6), and the civilian is often at NAV BETA before the last wave comes. The first two waves ride in docked on a raider

@@ -335,7 +335,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T23 | C | The civilian escort in its own star system: no Babylon 5, no nebula, a different planet (D89; maintainer, 2026-11-18; numbered last) | T08 | Opus | A second system in the data, its sky and planet, the escort moved onto it; a sheet first | done |
 | T24 | D | Radial menus fit their entries: equal slices for however many entries, no empty spots (D90; maintainer, 2026-11-18; numbered last) | - | Opus | The radial framework's layout and picking for every input | done |
 | T25 | E | Frame-rate regression: free flight at ~15 fps (66.7 ms frames, GPU ~1 ms) found 2026-11-19 by M8-T23; find the commit and fix it (numbered last) | - | Opus | Bisect from M7's merge with `state render` on the GPU; CPU-side cost per frame | done |
-| T26 | C | Civilian escort update: a longer route and a bigger belt, a longer gap before wave two, Control's opening brief (maintainer, 2026-11-19; numbered last) | T23 | Fable | Scenario and mission data, pacing and dialog on the escort the T08 agent knows | in progress |
+| T26 | C | Civilian escort update: a longer route and a bigger belt, a longer gap before wave two, Control's opening brief (maintainer, 2026-11-19; numbered last) | T23 | Fable | Scenario and mission data, pacing and dialog on the escort the T08 agent knows | done |
 | T17 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M8-T01 Tutorial script (discussion with the maintainer)
@@ -1078,6 +1078,22 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   matching short paragraph in the mission briefing text.
 - **Done when:** the escort's tests pass with the new route, belt and pacing (the scripted fought run's time recorded), the lines
   are in the dialog file and the briefing, and the maintainer has re-flown it (H).
+- **Done (2026-11-19):** the route is 45 km (NAV BETA at -45 000, the route's end 1 km short, the wave marks at 25, 50 and
+  75 %: 11.25, 22.5 and 33.75 km); the belt is 24 by 3 by 12 km round the 50 % point with 600 rocks (400 in 8 km before: the
+  same density), on seed 4, because seed 38 put a rock 28 m off the straight route at this size (seed 4: none within 316 m
+  of the line or 791 m of the middle). The quiet before the second wave is 60 s (`WAVE_TWO_BREATHER_S`), 30 s before the
+  third as before. Control's brief, in flight before the hand-over: "Alpha leader, Control. Cargo aboard the {civilian} is
+  sensitive. It must get through." / "Your escort is a show of force. Deter raiders in this sector." (new line
+  `control_show_of_force`, voice `ce_control_show_of_force`) / "Stay with her to NAV BETA. If she runs, let her run, then
+  bring her back on course."; the mission briefing has the matching paragraph and says 45 km.
+  - **Scripted fought run** (seed 3): waves at 101, 368 and 651 s, home or dead at 265, 621 and 874 s, **the end at 908 s**
+    (15.1 minutes; 782 s on the 30 km route). The Saturn 8 still crosses the belt without touching a rock.
+  - **The departure shot** was not rendered again: the anchor, the start, the civilian's spawn and the shot's keys are
+    unchanged, and the belt now starts 16.5 km out instead of 11 km. (H) with the re-flight.
+  - **Tests** (scratch copy of HEAD plus the staged change, `GUT_SLOW=1`): compile check 970 scripts; GUT 9 files, 144 tests,
+    138 passed, 0 failed, 6 pending (the AI runs, behind `GUT_BALANCE`): `test_civilian_escort` 28 of 34, `test_scenario_loader`
+    40, `test_belt_layout` 7, `test_asteroid_belt` 4, `test_dialog_ids` 5, `test_dialog_book` 15, the mission catalog, front
+    end and mission skip files.
 
 ### M8-T17 Integration, full suite, docs and acceptance
 
