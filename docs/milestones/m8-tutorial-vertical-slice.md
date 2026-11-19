@@ -1344,6 +1344,8 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 - **Shot length (maintainer, 2026-11-19, for T29 to T31 and every cinematic):** no single camera shot lasts **3 s or more**;
   sequences keep their length but cut more often from the pools; the gate's **arrival** gets its own pool too. A guard test over all
   shot data (T30) enforces it.
+  **Revised (maintainer, 2026-11-19):** shots may run **up to 5 s when they are interesting** (flagged `"feature": true` in the shot
+  data, e.g. the Starfury launching from inside the bay); ordinary shots stay under 3 s; the reviewer judges each flagged shot.
 
 ### M8-T31 Docking: camera variety and matching the drum's rotation
 
