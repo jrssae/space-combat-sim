@@ -334,7 +334,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T22 | D | Gamepad detection: why Godot sometimes misses the maintainer's pad, joypad logging and notices, `joypads`, troubleshooting (D88; maintainer, 2026-11-18; numbered last) | - | Fable | Linux input stack diagnosis on the real device, small notices | in progress |
 | T23 | C | The civilian escort in its own star system: no Babylon 5, no nebula, a different planet (D89; maintainer, 2026-11-18; numbered last) | T08 | Opus | A second system in the data, its sky and planet, the escort moved onto it; a sheet first | done |
 | T24 | D | Radial menus fit their entries: equal slices for however many entries, no empty spots (D90; maintainer, 2026-11-18; numbered last) | - | Opus | The radial framework's layout and picking for every input | done |
-| T25 | E | Frame-rate regression: free flight at ~15 fps (66.7 ms frames, GPU ~1 ms) found 2026-11-19 by M8-T23; find the commit and fix it (numbered last) | - | Opus | Bisect from M7's merge with `state render` on the GPU; CPU-side cost per frame | in progress |
+| T25 | E | Frame-rate regression: free flight at ~15 fps (66.7 ms frames, GPU ~1 ms) found 2026-11-19 by M8-T23; find the commit and fix it (numbered last) | - | Opus | Bisect from M7's merge with `state render` on the GPU; CPU-side cost per frame | done |
 | T17 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M8-T01 Tutorial script (discussion with the maintainer)
@@ -1015,6 +1015,15 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   calls; M7 ran well above 60 fps on the same machine. Find the cause (bisect `1e7064dc`..HEAD with the real renderer and
   `state render`), fix it, and add a guard where one fits.
 - **Done when:** free flight is back to M7's frame rate (numbers recorded here) and the cause and fix are written down.
+- **Done (2026-11-19):** no regression; the 15 fps was a measuring mistake. `wait` counts physics frames, not seconds, so M8-T23's
+  `wait 5` / `wait 15` / `wait 10` sampled `render.fps` 5, 20 and 30 ticks (about 0.5 s) after start, while `fps` (frames counted
+  over the last whole second) still covered loading: 1, 11, 11. Free flight at HEAD (`98012732`), sampled every 300 ticks over 60 s:
+  145 fps every sample at 1600x900 on Wayland (vsync and `--disable-vsync` alike: the compositor paces to the monitor's 145 Hz),
+  draw calls 201, GPU 0.6 to 1.0 ms; uncapped (`--fullscreen --display-driver x11 --disable-vsync`, 6144x3456) 336 to 342 fps, GPU
+  2.6 ms. M7's merge (`1e7064dc`, built in a detached worktree, own native library and assets) with the same commands: 343 to 349
+  fps uncapped, GPU 2.6 ms, 145 on Wayland, and the same 1, 16, 16 at ticks 5, 20 and 30. A windowed X11 run without vsync
+  swings from 9 to 384 fps on either build (XWayland pacing, not the game). To measure frame rate, wait at least 300 ticks
+  (5 s) first. No code change.
 
 ### M8-T17 Integration, full suite, docs and acceptance
 
