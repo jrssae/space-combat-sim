@@ -72,3 +72,24 @@ func test_rows_stay_inside_the_panel() -> void:
 	var high: PackedFloat32Array = PadDiagram.stack_rows(PackedFloat32Array([0.0, 1.0]), 20.0, 0.0, 300.0)
 	assert_almost_eq(high[0], 0.0, 0.001, "the first row starts at the top")
 	assert_almost_eq(high[1], 20.0, 0.001)
+
+
+func test_pressed_parts_are_kept_apart_from_the_lit_ones() -> void:
+	var diagram: PadDiagram = _diagram({&"fire": ["pad:button:0"]})
+	diagram.set_highlight([&"a"] as Array[StringName])
+	diagram.set_pressed([&"x", &"rs"] as Array[StringName])
+	assert_eq(diagram.pressed(), [&"x", &"rs"] as Array[StringName], "M8-T22: what the player holds, bound or not")
+	assert_eq(diagram.highlighted(), [&"a"] as Array[StringName], "the action in focus stays lit")
+	diagram.set_pressed([] as Array[StringName])
+	assert_eq(diagram.pressed(), [] as Array[StringName])
+
+
+func test_a_pressed_part_is_drawn_brighter_than_a_lit_one() -> void:
+	var diagram: PadDiagram = _diagram({&"fire": ["pad:button:0"]})
+	var bound: Array[StringName] = [&"a"]
+	diagram.set_highlight([&"a"] as Array[StringName])
+	assert_eq(diagram._edge_of(&"a", bound), PadDiagram.LIT)
+	diagram.set_pressed([&"a"] as Array[StringName])
+	assert_eq(diagram._edge_of(&"a", bound), PadDiagram.PRESSED, "the press shows over the focus highlight")
+	assert_gt(diagram._fill_of(&"a", bound).a, 0.8)
+	assert_eq(diagram._edge_of(&"y", bound), Color(PadDiagram.LINE.r, PadDiagram.LINE.g, PadDiagram.LINE.b, 0.4), "the rest is as before")

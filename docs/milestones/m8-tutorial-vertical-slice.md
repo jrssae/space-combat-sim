@@ -232,15 +232,23 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 
 ### D88 Gamepad detection (T22; maintainer, 2026-11-18)
 
-- The maintainer's pad sometimes is not seen by Godot while Steam sees it. Found 2026-11-18 with it plugged in and unseen: USB
-  `3537:2106` "HID zk" (a Zikway controller chip), bound only as a raw `hidraw` node (root-only) with **no evdev/joystick device**,
-  so nothing that reads input events (Godot's joypad layer) can see it; Steam reads it through its own HID access and, through
-  Steam Input, gives games it launches a virtual Xbox pad. Likely the pad comes up in a vendor or console mode some of the time.
-- The task diagnoses it on this machine (which mode, what changes when it is seen: the USB id, the driver, Steam running or not),
-  and then: logs every joypad at start and on hotplug (name, GUID, known mapping), shows a short toast when a pad connects or
-  disconnects and a front-end notice when none is found, adds a `joypads` console command (list, mapping, last events), and writes
-  a troubleshooting section in `docs/playtest.md` (the pad's mode switch, launching through Steam as a non-Steam game, a udev rule
-  if hidraw access helps SDL). Any game-side fix must keep gameplay reading `InputAdapter`, never `Input`.
+- The maintainer's pad sometimes is not seen by Godot. **Cause, found on the machine 2026-11-18 (T22):** hardware, not the game. The
+  pad is a GameSir Nova Lite on its 2.4 GHz USB receiver. While the pad is **switched off** the receiver is USB `3537:2106` "Zikway
+  HID zk": one vendor-defined HID interface (usage page `0xFF7A`), a root-only `hidraw` node and **no evdev or joystick device**, so
+  nothing can see a pad, Steam included (its `controller.txt` lists none then). It is not a console or vendor mode of the pad.
+  - The pad **switches itself off after 10 minutes without input** (the manual; the kernel log shows the receiver back at `2106`
+    9 min 53 s after the last use, twice), so it vanishes while flying on the keyboard or waiting.
+  - Switched on, the receiver drops off USB, first claims `045e:028e`, the kernel fails to read its configuration (`error -110`) one
+    to four times, and it then settles as `3537:1040` "2.4G XBOX 360 For Windows", which `xpad` binds as "Generic X-Box pad" with a
+    `js` node. That took **6 to 40 s**, and once failed outright and fell back to `2106` (replug the receiver).
+  - In that mode Godot 4.7.2 sees it at once, also when hot-plugged mid-run: GUID `03008665373500004010000000010000`, mapping known.
+  - No udev rule helps (the idle receiver carries no pad data) and Steam Input is not needed.
+- The game side (T22): logs every joypad at launch and on hotplug (name, GUID, known mapping), shows a short toast when a pad
+  connects or disconnects and a front-end notice while none is found, adds a `joypads` console command and provider (list, mapping,
+  last events), and a troubleshooting section in `docs/playtest.md` ("Gamepad not detected"). Gameplay keeps reading `InputAdapter`,
+  never `Input`; the report is diagnostics.
+- **Added 2026-11-19 (maintainer):** wherever a menu shows the pad diagram (the pause menu, the Controls page) it lights each button
+  while it is held and each stick or trigger while it is moved, from the joypad events the menus receive.
 
 ### D89 The civilian escort in its own star system (T23; maintainer, 2026-11-18)
 
@@ -282,7 +290,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | AC15 | Flights and orders (D85): the player commands only a flight of two wingmen where the mission says so; AI flights of three cover each other and stay within their cohesion distance through a seeded headless fight; ships in formation fire at targets in reach; the two hold-fire orders hold formation or position without firing and are lifted by any other order (tests for each, pad menu and keyboard), native kept 1 and 6 threads identical | A | **Met** (T19, 2026-11-18) |
 | AC16 | GPU memory (D86): the overlay shows VRAM used in GB and as a percentage of the card on the maintainer's GPU, matching `mem_info_vram_used` within a refresh; `state render` reports the three values; with no driver total it shows the game's share and `total unknown` (unit tests on fake sysfs files) | A | **Met** (T20, 2026-11-18) |
 | AC17 | Fonts (D87): both fonts in the repo with their `docs/third-party.md` entry; every UI text uses one of them (a test finds no other font); ASCII and the UI's symbols draw on the GPU; the maintainer approved the look sheet | A | **Met** (T21, 2026-11-19) |
-| AC18 | Gamepad detection (D88): the cause written down; joypads logged at start and hotplug, the connect, disconnect and none-found notices, `joypads` in `info.md`; the troubleshooting section; the maintainer's pad seen by the game in its working mode (H) | A | |
+| AC18 | Gamepad detection (D88): the cause written down; joypads logged at start and hotplug, the connect, disconnect and none-found notices, `joypads` in `info.md`; the troubleshooting section; the maintainer's pad seen by the game in its working mode (H) | A | **Met** (T22, 2026-11-19; the maintainer saw the toasts in play; the (H) list is in `docs/playtest.md`) |
 | AC19 | Escort's own system (D89): the escort runs in the new star system with no station and no nebula, the new planet and sky approved on a sheet, wingmen with no home dock; its tests pass; Epsilon's scenarios unchanged | A | **Met** (T23, 2026-11-19; Gamma Leporis, the ice world chosen from two on the sheet. How it looks is (H)) |
 | AC20 | Radial fit (D90): menus with 1 to 8 entries lay out equal slices with no empty ones (unit tests on the layout), the stick, the D-pad, the keys and the console pick the right entry for each count, unavailable entries leave the ring | A | **Met** (T24, 2026-11-19) |
 
@@ -331,7 +339,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T19 | D | Flights of three: the player commands two wingmen, AI flights of three cover each other and stay together, every ship in formation may fire, and two new orders (form up and hold fire; hold position and hold fire) (D85; maintainer, 2026-11-18; numbered last because it was added after the others had numbers) | T13 | Fable | Native flight cohesion and mutual cover, two orders through the comms menu and keys, parity | done |
 | T20 | D | GPU memory in use on the debug overlay, in GB and as a percentage of the card (D86; maintainer 2026-11-18; numbered last because it was added after the others had numbers) | - | Fable | Driver sysfs reads off the frame path, a fallback, the overlay and `state render` | done |
 | T21 | D | The game's fonts: Babylon5 for titles and headlines, Babylon5Credits for body text and the HUD, on all UI text (D87; maintainer, 2026-11-18; numbered last) | - | Fable | A theme over every screen and the HUD's own drawing, a symbol-encoded cmap, a look sheet first | done |
-| T22 | D | Gamepad detection: why Godot sometimes misses the maintainer's pad, joypad logging and notices, `joypads`, troubleshooting (D88; maintainer, 2026-11-18; numbered last) | - | Fable | Linux input stack diagnosis on the real device, small notices | in progress |
+| T22 | D | Gamepad detection: why Godot sometimes misses the maintainer's pad, joypad logging and notices, `joypads`, troubleshooting (D88; maintainer, 2026-11-18; numbered last) | - | Fable | Linux input stack diagnosis on the real device, small notices | done |
 | T23 | C | The civilian escort in its own star system: no Babylon 5, no nebula, a different planet (D89; maintainer, 2026-11-18; numbered last) | T08 | Opus | A second system in the data, its sky and planet, the escort moved onto it; a sheet first | done |
 | T24 | D | Radial menus fit their entries: equal slices for however many entries, no empty spots (D90; maintainer, 2026-11-18; numbered last) | - | Opus | The radial framework's layout and picking for every input | done |
 | T25 | E | Frame-rate regression: free flight at ~15 fps (66.7 ms frames, GPU ~1 ms) found 2026-11-19 by M8-T23; find the commit and fix it (numbered last) | - | Opus | Bisect from M7's merge with `state render` on the GPU; CPU-side cost per frame | done |
@@ -1006,6 +1014,17 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   link-up; not a console mode). **Added:** while the **pause menu** or the **controls settings menu** is open, the pad diagram
   **highlights each button as it is pressed** (and each stick/trigger as it moves), so it is obvious which button is which; from the
   menus' input, never gameplay's `Input` reads.
+- **Done (2026-11-19):** the cause is written into D88 (the receiver idles as `3537:2106` while the pad is off; 10 min auto-off; a 6
+  to 40 s link-up to `3537:1040`). Built: `JoypadReport` (pure: the pads, the last 16 events, the wording), `JoypadDevices` (the
+  seam over `Input`), the `Joypads` autoload (logs at launch and on hotplug, the `changed` signal, `joypads` and its provider; it
+  reads no hardware in a test run), `JoypadToast` (4 s at the top of the screen, also while paused) and the front end's notice.
+  `PadPresses` (pure) follows the joypad events `MenuFrame._input` gets, and `PadDiagram.set_pressed` draws those parts white over
+  the amber focus highlight; closing the menu or losing a pad forgets what was held. A press taken by a rebind's capture is not lit.
+  - **Tests** (from the staged copy): `test_joypad_report`, `test_pad_presses`, `test_pad_diagram`, `test_joypads`,
+    `test_pad_press_highlight` (the pause menu and the Controls page, injected button and axis events), with the console list,
+    front end, pause menu, controls page, menu frame and font guard files.
+  - **(H):** with the pad on, `joypads` lists it; switching it off and on shows both toasts; with it off the front end shows the
+    notice; in the pause menu and on the Controls page each button, stick and trigger lights as it is used.
 
 ### M8-T23 The civilian escort in its own star system
 

@@ -32,6 +32,9 @@ res://tests/unit/test_godot_input_source.gd
 res://tests/unit/test_trigger_calibration.gd
 res://tests/unit/test_binding_capture.gd
 res://tests/unit/test_controls_model.gd
+res://tests/unit/test_joypad_report.gd
+res://tests/unit/test_pad_presses.gd
+res://tests/integration/test_joypads.gd
 # Console, settings, info.md
 res://tests/unit/test_console_registry.gd
 res://tests/unit/test_console_tokenizer.gd

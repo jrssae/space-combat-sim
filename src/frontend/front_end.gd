@@ -7,12 +7,17 @@ extends Control
 ## the frame; Quit leaves. Everything is reachable and usable with the pad alone.
 
 const GameScript := preload("res://src/autoload/game.gd")
+const JoypadsScript := preload("res://src/autoload/joypads.gd")
 
 ## The sky's drift (without the hangar): the camera sways about the view that has the nebula in it, never turning to the empty side.
 const DRIFT_YAW_DEG: float = 30.0
 const DRIFT_YAW_RATE: float = 0.035  # rad/s: one sway in about three minutes
 const DRIFT_PITCH_DEG: float = 6.0
 const DRIFT_PITCH_RATE: float = 0.021
+
+## The "no gamepad" notice's distance from the window's bottom left corner, and its width.
+const NOTICE_MARGIN: float = 48.0
+const NOTICE_WIDTH: float = 640.0
 
 const MAIN_ENTRIES: Array[Dictionary] = [
 	{"id": &"new_game", "text": "New game"},
@@ -23,12 +28,14 @@ const MAIN_ENTRIES: Array[Dictionary] = [
 ]
 
 var game: GameScript = null  ## null: /root/Game
+var joypads: JoypadsScript = null  ## null: /root/Joypads
 ## A Callable returning the missions to list (`MissionCatalog.entries`). Unset: the scenarios in `data/scenarios/`.
 var mission_entries: Callable = Callable()
 ## Called by Quit. Unset: quits the game.
 var quit_game: Callable = Callable()
 
 var _elapsed_s: float = 0.0
+var _joypad_notice: Label = null
 
 @onready var _frame: MenuFrame = %Frame
 @onready var _camera: Camera3D = %Camera
@@ -44,6 +51,7 @@ func _ready() -> void:
 	if game == null:
 		push_error("FrontEnd: no Game autoload; nothing can be started")
 		_frame.show_message("The game cannot start a run: no Game autoload.")
+	_add_joypad_notice()
 	_backdrop.environment = $Sky/SpaceEnvironment as SpaceEnvironment
 	if _backdrop.load_interior():
 		_camera.transform = _backdrop.camera_pose()
@@ -73,6 +81,35 @@ static func drift_basis(elapsed_s: float) -> Basis:
 
 func frame() -> MenuFrame:
 	return _frame
+
+
+## The line that says no gamepad is connected (M8-T22), "" while one is.
+func joypad_notice() -> String:
+	return _joypad_notice.text if _joypad_notice != null and _joypad_notice.visible else ""
+
+
+# A player whose pad is off or asleep sees why the menu ignores it, and that the keyboard still works (D88).
+func _add_joypad_notice() -> void:
+	if joypads == null:
+		joypads = get_node_or_null(^"/root/Joypads") as JoypadsScript
+	if joypads == null:
+		return
+	_joypad_notice = Label.new()
+	_joypad_notice.name = "JoypadNotice"
+	_joypad_notice.theme = _frame.theme
+	_joypad_notice.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_joypad_notice.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_joypad_notice.custom_minimum_size.x = NOTICE_WIDTH
+	_joypad_notice.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE, int(NOTICE_MARGIN))
+	_joypad_notice.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	add_child(_joypad_notice)
+	joypads.changed.connect(_refresh_joypad_notice)
+	_refresh_joypad_notice()
+
+
+func _refresh_joypad_notice() -> void:
+	_joypad_notice.text = joypads.none_notice()
+	_joypad_notice.visible = not _joypad_notice.text.is_empty()
 
 
 ## A fresh seed for each free flight or mission the menu starts, so its encounters (M5-T17) or its civilian (T30) differ;

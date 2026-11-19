@@ -71,6 +71,7 @@ Arguments in `<angle brackets>` are required, `[square brackets]` optional, `a|b
 | `controls` | `[list\|use\|save\|show\|delete] [name\|action]` | Control profiles: list them, use or save one, show bindings, delete a saved one | always |
 | `bind` | `<action> <binding>` | Add a binding to an action (session only until `controls save`) | always |
 | `unbind` | `<action> <binding>` | Remove a binding from an action | always |
+| `joypads` | | The gamepads the game sees (M8-T22): each one's device id, name, SDL GUID and whether its button mapping is known, then the last connect and disconnect events with their time since launch; with none connected, what to try (`docs/playtest.md`, "Gamepad not detected") | always |
 
 ### Flight
 
@@ -182,6 +183,7 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `game` | The game flow: `state`, the `request` being played and the `last_result` | always |
 | `debrief` | The last mission's debrief: result, reason, time, kills, assists, wing losses, shots fired and hit, accuracy, objectives (`none` until a mission ends) | always |
 | `controls` | The active control profile, the profile list and unsaved binding changes | always |
+| `joypads` | The gamepads the game sees (M8-T22): `count`, their `names` and `guids`, how many have no known button mapping (`unmapped`), connect and disconnect `events` since launch, the `last_event` and the front end's `notice` while none is connected | always |
 | `input` | Connected pads, whether the keyboard is masked, and the last flight, combat and UI commands | in flight |
 | `ship` | The player's ship: position, velocity, speed (against its reference, M6-T08), the velocity that speed is read against (`rest_velocity`), angular rate, assist, pods, mass flow, fuel | in flight |
 | `reference` | The player's reference (M6-T08): its `name` (the HUD's `REF`), `kind` (none, place or body), `rest_velocity` (a body's: the circular orbit's at the ship), `rest_accel`, the ship's `speed` against it, `range`, `altitude` above the body near (nan when none) and the reference a mission or the console set (`mission`) | in flight |

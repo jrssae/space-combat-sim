@@ -574,6 +574,12 @@ main_right={
 }
 ```
 
+**Which pads the game sees (M8-T22).** The `Joypads` autoload reports the connected gamepads; it is diagnostics and never feeds
+flight. `JoypadReport` (pure) holds the pads and the last events and words the log, the toast (`JoypadToast`), the front end's
+"no gamepad" notice and the `joypads` command; `JoypadDevices` is the seam over `Input` that tests replace, and in a test run no
+hardware is read. In the menus `PadPresses` (pure) follows the joypad events `MenuFrame._input` receives and `PadDiagram` lights
+those parts, so a player sees which button is which.
+
 ### 6.2 Commands
 
 ```

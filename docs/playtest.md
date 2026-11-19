@@ -32,6 +32,34 @@ For the old free-flight scene with only the nav buoys use `scenario free_flight`
 Plug the pad in before launching if you can. Hot-plug also works; trigger calibration then takes about half a
 second.
 
+## Gamepad not detected
+
+The game says which pads it sees: a line at the top of the screen when one connects or disconnects, a notice at the bottom
+left of the front end while none is connected, `joypads` in the console (each pad's name, GUID and whether its button mapping
+is known, then the last connect and disconnect events) and `Joypads:` lines in the terminal at launch and on every hotplug.
+The keyboard and mouse always work.
+
+**A wireless pad with a USB receiver** (found on the maintainer's GameSir Nova Lite, M8-T22, D88): the receiver alone is not a
+pad. While the pad is switched off the receiver is a bare `3537:2106 Zikway HID zk` device with no joystick, so no program can
+see a pad, Steam included.
+
+1. Press Home on the pad and wait for its light to go solid. The receiver then drops off USB and comes back as a pad. On this
+   machine that took 6 to 40 s (it first tries an Xbox 360 identity the kernel cannot read, then settles as
+   `3537:1040 2.4G XBOX 360 For Windows`).
+2. Check: `lsusb | grep 3537` shows `3537:1040`, and `ls /dev/input/by-id/ | grep joystick` lists it. The game shows
+   `Gamepad connected: Generic X-Box pad`; no restart is needed.
+3. Still `3537:2106` after a minute, or `journalctl -k | tail` keeps repeating `can't read configurations, error -110`: pull
+   the receiver, plug it back in and press Home again.
+4. The pad switches itself off after 10 minutes without input (flying on the keyboard, reading, waiting for a run), and the
+   game says `Gamepad disconnected`. Press Home and wait again.
+
+**Any pad.** `joypads` shows `mapping unknown`: Godot has no button layout for it, so buttons may be swapped; put the pad in
+its XInput (Xbox) mode. Nothing listed at all: check `ls /dev/input/js*`; with no `js` node the kernel has no pad, and the
+fault is the pad, its mode, its cable or its receiver, not the game.
+
+**Not needed here:** a udev rule (the idle receiver carries no pad data, so access to it gives nothing), and launching through
+Steam (Steam sees the pad only when the kernel does).
+
 ## Controls
 
 ```
@@ -1226,6 +1254,17 @@ free flight near the station, then `launch wing zeta` and `state wing`.
       them back.
 - [ ] **(H) The comms ring:** FORM UP sits between ATTACK and FORM ON ME, HOLD POSITION between FORM ON ME and ENGAGE. Say if
       the two labels with `hold fire` under them are clear enough to tell apart at a glance.
+
+# Play-testing the gamepad notices and the pad diagram (M8-T22)
+
+"Gamepad not detected" near the top of this page has the cause and what to try.
+
+- [ ] **(H) Seen:** with the pad on, `joypads` lists it (`Generic X-Box pad`, `mapping known`).
+- [ ] **(H) Toasts:** switching the pad off, then on, shows `Gamepad disconnected` and `Gamepad connected` at the top of the
+      screen, in flight, in the pause menu and on the front end.
+- [ ] **(H) The notice:** with the pad off, the front end says no gamepad is detected (bottom left); it goes when the pad is back.
+- [ ] **(H) The diagram:** in the pause menu and on Settings > Controls, each button lights white while held, each stick while
+      off centre and each trigger while pulled; the action in focus on the Controls page stays amber.
 
 # Play-testing the raider strike carrier (M12-T19, now M10-T19: the early delivery, merged into M8 by M8-T07)
 

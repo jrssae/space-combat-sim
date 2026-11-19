@@ -67,6 +67,16 @@ static func widget_of(descriptor: String) -> StringName:
 	return &""
 
 
+## The pad part an SDL button index is, or `&""` for one the diagram does not draw (Guide, paddles).
+static func widget_of_button(index: int) -> StringName:
+	return _BUTTONS.get(index, &"")
+
+
+## The pad part an SDL axis moves (a stick or a trigger), or `&""`.
+static func widget_of_axis(axis: int) -> StringName:
+	return _AXES.get(axis, &"")
+
+
 ## The menu's name for an action; an action it has no wording for is shown readable rather than as its identifier.
 static func label_of_action(action: StringName) -> String:
 	if ACTION_LABELS.has(action):
