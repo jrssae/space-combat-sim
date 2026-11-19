@@ -550,5 +550,36 @@ def raider_carrier(u: float, surface: Any) -> dict[str, SeamLayout]:
             "bar_top_r": SeamLayout.of(plain), "bar_bottom_r": SeamLayout.of(plain), "box_plate_r": SeamLayout.of(plain)}
 
 
-__all__ = ["brakiri", "brakiri_pod", "centauri", "dress", "narn", "raider", "raider_carrier", "saturn", "saturn_engine", "skylark",
-           "starfury"]
+
+# --- Raiders: the Battle Wagon --------------------------------------------------------------------------------------------
+def raider_wagon(u: float, surface: Any) -> dict[str, SeamLayout]:
+    """The Battle Wagon's parts in the ship's authored frame (``u`` metres per percent of its length; ``parts/raider_wagon.py``).
+    ``surface`` is ``styles/raider_capital.WAGON_SURFACE``. Low: the ring's quarter joints and the long parts' frame
+    breaks. Full: frame lines and plating, then its tone."""
+    s = surface
+    skin = dict(wrap="sides", long_axis=2, splits=s.splits, min_m=1.2, keep=0.3, sheen=s.sheen, grime=s.grime, grime_m=0.5)
+    small = (0.6 * s.plate_m[0], 0.6 * s.plate_m[1])
+
+    def plated(seed: int, z0: float, z1: float, cell: tuple[float, float] = s.plate_m) -> SeamLayout:
+        return SeamLayout.of([
+            Cut(axis=2, at=0.5 * (z0 + z1) * u, level=1),
+            *rings(2, every(z0 * u, z1 * u, s.frames_m)[1:-1], level=2, width=0.8),
+            *_plating(2, s.tone, cell=cell, seed=seed, **skin),
+            _hatches((2.4, 1.5), s.hatches, seed + 2, wrap="sides", long_axis=2),
+        ])
+
+    hoop: list[Feature] = [
+        *spokes(2, (0.0, 0.0, 0.0), range(0, 360, 45), level=1, reach=(20.0 * u, INF)),
+        *spokes(2, (0.0, 0.0, 0.0), [a for a in range(0, 360, 9) if a % 45], level=2, reach=(20.0 * u, INF), width=0.8),
+        *_plating(3, s.tone, wrap="barrel", axis=2, radius=25.0 * u, around=48, cell=(2.6 * u, 4.0), splits=1, min_m=1.2, keep=0.5,
+                  sheen=s.sheen, grime=s.grime, grime_m=0.5, seed=211),
+    ]
+    tube = plated(213, 25.4, 89.8)
+    return {"cone": plated(201, 14.8, 23.9), "core_0": plated(203, 23.9, 33.5), "core_2": plated(205, 46.1, 68.3, small),
+            "ring": SeamLayout.of(hoop), "tube_upper": tube, "tube_lower": tube, "arm_fore_r": plated(215, 23.9, 46.5, small),
+            "arm_aft_r": plated(217, 68.0, 84.0, small), "slab_mid": plated(219, 81.3, 99.8, small),
+            "slab_top": plated(221, 81.3, 99.8, small), "slab_bottom": plated(223, 81.3, 99.8, small)}
+
+
+__all__ = ["brakiri", "brakiri_pod", "centauri", "dress", "narn", "raider", "raider_carrier", "raider_wagon", "saturn", "saturn_engine",
+           "skylark", "starfury"]

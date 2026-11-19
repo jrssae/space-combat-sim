@@ -14,6 +14,9 @@ extends Node
 ## M12-T19: the sheet parks a capital hull (`HULL_ASSETS`) as its bare textured mesh, its nearest corner `distance_m` away, with a
 ## Delta-V on one cradle for scale. `<asset>:<option>` shows a surface option built beside it
 ## (`<asset>_options/<option>/<asset>/`, for the A/B/C sheets).
+##
+## M8-T09: the Battle Wagon is one of those hulls; its scale Delta-V floats where a lane lets a launched fighter go, and its
+## turret model stands on every mount.
 
 const LIGHTS: Array[StringName] = [&"lit", &"dark", &"off"]
 ## How the parked ship faces the camera: three-quarters on (the sheets' rows), its back (the dorsal number), or its left side.
@@ -27,7 +30,7 @@ const POOL_TYPES: Dictionary = {"starfury_aurora": ShipPool.ALLY_TYPE, "raider_f
 const PROP_ASSETS: Array[String] = ["nav_buoy", "raider_fighter_chunks", "starfury_aurora_chunks", "capital_cruiser", "capital_destroyer",
 		"capital_carrier", "babylon5_station"]
 ## The capital hulls shown as their bare mesh (M12-T19), and the cradle that holds the scale fighter.
-const HULL_ASSETS: Array[String] = ["raider_strike_carrier"]
+const HULL_ASSETS: Array[String] = ["raider_strike_carrier", "raider_battle_wagon"]
 const SCALE_FIGHTER: String = "raider_fighter"
 const SCALE_CRADLE: String = "outer_000"
 const DOCK_GAP_M: float = 0.05
@@ -255,7 +258,38 @@ func _hull_prop(asset_id: String) -> Node3D:
 			docked.mesh = fighter
 			docked.transform = docked_transform(cradle, fighter.get_aabb())
 			node.add_child(docked)
+	_add_tube_fighter(node, data as Dictionary, fighter)
+	_add_turrets(node, data as Dictionary, root.path_join(hull_id), MeshAssets.read_manifest(hull_id, root).get("turret", {}))
 	return node
+
+
+# A hull with launch tubes shows the scale fighter where its first lane lets a launched one go, ahead of the tube's mouth.
+func _add_tube_fighter(node: Node3D, data: Dictionary, fighter: Mesh) -> void:
+	var tubes: Array = data.get("tubes", [])
+	if tubes.is_empty() or (tubes[0] as Dictionary).get("lanes", []).is_empty():
+		return
+	var tube: Dictionary = tubes[0]
+	var launched := MeshInstance3D.new()
+	launched.mesh = fighter
+	launched.transform = docked_transform({"position": (tube["lanes"][0] as Dictionary).get("exit"), "forward": tube.get("forward"),
+			"up": tube.get("up")}, fighter.get_aabb())
+	node.add_child(launched)
+
+
+# The hull's own turret model on every mount, at rest: its barrels along the hull, away from its middle.
+func _add_turrets(node: Node3D, data: Dictionary, dir: String, entry: Dictionary) -> void:
+	var section: Dictionary = entry.get("mesh", {})
+	if section.is_empty():
+		return
+	var model: Mesh = MeshAssets.load_textured(dir, section)
+	if model == null:
+		return
+	for mount: Dictionary in data.get("turrets", []):
+		var at: Vector3 = _vec3(mount.get("position"), Vector3.ZERO)
+		var turret := MeshInstance3D.new()
+		turret.mesh = model
+		turret.transform = Transform3D(Hardpoints.look_basis(Vector3.BACK if at.z > 0.0 else Vector3.FORWARD, _vec3(mount.get("up"), Vector3.UP)), at)
+		node.add_child(turret)
 
 
 ## Where a fighter with the box `fighter` rests on a cradle hardpoint (the carrier's frame): its belly on the pad, its box centred

@@ -12,7 +12,7 @@ const SCENARIO_DIR := "res://data/scenarios/"
 ## The debug overlay's text is rebuilt this often while it shows (M4-T36): a readout, not an animation.
 const OVERLAY_INTERVAL_S: float = 0.1
 const SCENARIO_CHOICES: Array[StringName] = [&"combat_sandbox", &"free_flight", &"instructor_route", &"dogfight",
-		&"civilian_showcase", &"belt_showcase", &"station_launch", &"station_showcase"]
+		&"civilian_showcase", &"belt_showcase", &"station_launch", &"station_showcase", &"battle_wagon_raid"]
 
 ## The player's hull reached zero (the ship is hidden and disabled; input is ignored until the respawn).
 signal player_died
@@ -559,7 +559,7 @@ func _setup_encounters(scenario: Dictionary) -> void:
 	if path.is_empty():
 		return
 	encounter_director = EncounterDirector.create(self, path)
-	if encounter_director != null and encounters:
+	if encounter_director != null and (encounters or bool(scenario.get("encounters", false))):  # a scenario may ask for them itself
 		print("[encounters] ", encounter_director.enable())
 
 

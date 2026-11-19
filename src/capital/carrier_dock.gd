@@ -144,7 +144,7 @@ func recall(ship: Ship) -> bool:
 	if index < 0:
 		return false
 	_hold(ship, index, true)
-	_rows.add(ship.get_instance_id(), PHASE_RETURN, cradles.positions[index], cradles.bases[index], cradles.approach_m[index], _rest)
+	_add_row(ship, PHASE_RETURN, index)
 	set_physics_process(true)
 	return true
 
@@ -285,7 +285,16 @@ func _launch(index: int) -> void:
 	cradles.set_state(index, CarrierCradles.State.BUSY)
 	_held[ship.get_instance_id()] = {"ship": ship, "cradle": index, "returning": false, "flying": false,
 			"capability": ShipCapability.from_spec(ship.spec, ship.get_layout()), "tier_exempt": tier_exempt}
-	_rows.add(ship.get_instance_id(), PHASE_LAUNCH, cradles.positions[index], cradles.bases[index], cradles.approach_m[index], _rest)
+	_add_row(ship, PHASE_LAUNCH, index)
+
+
+# Hands `ship` to the kernel on cradle `index`: a tube's berth with its own ways out and home (M8-T09), a cradle straight out.
+func _add_row(ship: Ship, phase: int, index: int) -> void:
+	if cradles.lanes[index] == 1:
+		_rows.add_lane(ship.get_instance_id(), phase, cradles.positions[index], cradles.bases[index], cradles.approach_dirs[index],
+				cradles.approach_m[index], cradles.release_dirs[index], cradles.release_m[index], _rest)
+	else:
+		_rows.add(ship.get_instance_id(), phase, cradles.positions[index], cradles.bases[index], cradles.approach_m[index], _rest)
 
 
 # Takes `ship`'s pilot out of the loop and keeps cradle `index` for it.

@@ -16,7 +16,7 @@ and a 4 m turret read the same paint.
 from __future__ import annotations
 
 import dataclasses
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -26,13 +26,14 @@ import numpy as np
 from ..parts import Part
 from ..parts.solids import Solid
 from ..styles import Style
-from .chunks import ChunkCut, ChunkSource, chunk_offsets, write_chunks
+from .chunks import ChunkCut, ChunkSource, chunk_mesh_name, chunk_offsets, write_chunks
 from .context import BuildContext
 from .geometry import Mesh
+from .glb import write_glb
 from .obj import write_obj
 from .sampling import SurfaceSamples, sample_mesh
 from .seams import EMPTY, MAJOR, SeamLayout
-from .textured_mesh import DEFAULT_TEXEL_M, TexturedPart, pack_parts, phase_steps, write_textured_mesh
+from .textured_mesh import DEFAULT_TEXEL_M, TexturedPart, pack_parts, phase_steps, primitives_of, write_textured_mesh
 from .textures import Marking
 
 CENTRE, RIGHT = "c", "r"
@@ -215,19 +216,10 @@ def texel_of(parts: Sequence[TexturedPart], atlas_px: int) -> float:
     return float(pack_parts(parts, atlas_px, start).packed.texel_m)
 
 
-def write_hull(
-    out_dir: Path,
-    asset_id: str,
-    parts: Sequence[HullPart],
-    chunk_order: Sequence[str],
-    style: Style,
-    ctx: BuildContext,
-    comments: Sequence[str] = (),
-) -> HullFiles:
-    """The hull as ``<id>.glb`` with its maps, the fallback ``<id>.obj`` and one chunk per group in ``chunk_order``
-    (``<id>_chunk_<name>.obj`` and its cut of the textured mesh, placed by its visible surface's centroid). Options:
-    ``atlas_px`` (default 2 048) and ``occlusion`` (default off: the hulls are far bigger than the occlusion radius)."""
-    out_dir = Path(out_dir)
+def _fallback_and_chunks(out_dir: Path, asset_id: str, parts: Sequence[HullPart], chunk_order: Sequence[str],
+                         comments: Sequence[str]) -> tuple[list[Path], Mesh, list[ChunkSource], list[dict[str, Any]]]:
+    """The hull's fallback ``<id>.obj`` and its chunks' OBJs: the files, the hull's mesh, each chunk's source and the
+    ``hardpoints.chunks[]`` entries."""
     unknown = {p.group for p in parts} - set(chunk_order)
     if unknown:
         raise ValueError(f"{asset_id}: parts in unlisted chunks {sorted(unknown)}")
@@ -241,7 +233,23 @@ def write_hull(
             raise ValueError(f"{asset_id}: chunk {group!r} has no visible surface")
         sources.append(ChunkSource(group, np.concatenate(points), Mesh.concatenate(p.mesh for p in members)))
     chunk_files, chunk_entries = write_chunks(out_dir, asset_id, sources, tuple(comments), with_meshes=True)
-    files += chunk_files
+    return files + chunk_files, hull_mesh, sources, chunk_entries
+
+
+def write_hull(
+    out_dir: Path,
+    asset_id: str,
+    parts: Sequence[HullPart],
+    chunk_order: Sequence[str],
+    style: Style,
+    ctx: BuildContext,
+    comments: Sequence[str] = (),
+) -> HullFiles:
+    """The hull as ``<id>.glb`` with its maps, the fallback ``<id>.obj`` and one chunk per group in ``chunk_order``
+    (``<id>_chunk_<name>.obj`` and its cut of the textured mesh, placed by its visible surface's centroid). Options:
+    ``atlas_px`` (default 2 048) and ``occlusion`` (default off: the hulls are far bigger than the occlusion radius)."""
+    out_dir = Path(out_dir)
+    files, hull_mesh, sources, chunk_entries = _fallback_and_chunks(out_dir, asset_id, parts, chunk_order, comments)
 
     textured = _textured(parts)
     atlas_px = int(ctx.option("atlas_px", HULL_ATLAS_PX))
@@ -256,6 +264,65 @@ def write_hull(
     )  # fmt: skip
     files += paths
     lo, hi = hull_mesh.bounds()
+    return HullFiles(files, section, chunk_entries, lo, hi, hull_mesh)
+
+
+def write_hull_atlases(
+    out_dir: Path,
+    asset_id: str,
+    parts: Sequence[HullPart],
+    chunk_order: Sequence[str],
+    style: Style,
+    ctx: BuildContext,
+    atlas_px: Mapping[str, int],
+    comments: Sequence[str] = (),
+) -> HullFiles:
+    """A hull too big for one atlas (M8-T09): what :func:`write_hull` writes, with an atlas per chunk (``atlas_px`` by chunk
+    name), baked one after another. A bake's memory goes with its atlas's texels (about 2.6 GB at 2 048 px, four times that at
+    4 096), so several smaller atlases keep a big hull's build small and give each chunk its own texel. ``<id>.glb`` holds every
+    chunk's faces as surfaces ``hull_<chunk>``, each drawn with that chunk's maps (``<id>_<chunk>_<map>.png``); the ``mesh``
+    section lists them all, and ``atlases`` each chunk's atlas. The option ``atlas_scale`` shrinks every atlas (the tests)."""
+    out_dir = Path(out_dir)
+    files, hull_mesh, sources, chunk_entries = _fallback_and_chunks(out_dir, asset_id, parts, chunk_order, comments)
+    offsets = chunk_offsets(sources)
+    scale = float(ctx.option("atlas_scale", 1.0))
+    primitives, surfaces, atlases = [], [], []
+    albedo, areas = [], []
+    for group in chunk_order:
+        textured = _textured([p for p in parts if p.group == group])
+        px = max(64, round(atlas_px[group] * scale))
+        texel = texel_of(textured, px)
+        stem = f"{asset_id}_{group}"
+        suffix = f"_{group}"
+        paths, section = write_textured_mesh(
+            out_dir, stem, textured, at_texel(style, texel), atlas_px=px, texel_m=texel, seed=ctx.seed,
+            occlusion=bool(ctx.option("occlusion", False)), normal_scale=1, grid=False, detail_levels=DETAIL_LEVELS, surface_suffix=suffix,
+        )  # fmt: skip
+        alone = out_dir / section["file"]  # the chunk's faces are in the hull's file and in its chunk file
+        alone.unlink()
+        files += [path for path in paths if path != alone]
+        primitives += list(primitives_of(textured, px, texel, suffix))
+        chunk = primitives_of(textured, px, texel, suffix, tuple(float(v) for v in offsets[group]))
+        files.append(write_glb(out_dir / chunk_mesh_name(asset_id, group), list(chunk), f"{asset_id}_chunk_{group}"))
+        surfaces += section["surfaces"]
+        atlases.append({"chunk": group, **{k: section[k] for k in ("triangles", "texel_m", "atlas_px", "atlas_fill", "map_px")}})
+        albedo.append(section["mean_albedo"])
+        areas.append(sum(t.mesh.area() for t in textured))
+    files.append(write_glb(out_dir / f"{asset_id}.glb", primitives, asset_id))
+    lo, hi = hull_mesh.bounds()
+    section = {
+        "file": f"{asset_id}.glb",
+        "triangles": int(hull_mesh.face_count),
+        "vertices": int(sum(len(p.positions) for p in primitives)),
+        "aabb_min": [round(float(x), 5) for x in lo],
+        "aabb_max": [round(float(x), 5) for x in hi],
+        "texel_m": max(a["texel_m"] for a in atlases),
+        "atlas_px": max(a["atlas_px"] for a in atlases),
+        "mean_albedo": [round(float(c), 6) for c in np.average(albedo, axis=0, weights=areas)],
+        "surfaces": surfaces,
+        "atlases": atlases,
+        "lods": [],
+    }
     return HullFiles(files, section, chunk_entries, lo, hi, hull_mesh)
 
 
@@ -340,5 +407,6 @@ __all__ = [
     "turret_entry",
     "with_twins",
     "write_hull",
+    "write_hull_atlases",
     "write_model",
 ]

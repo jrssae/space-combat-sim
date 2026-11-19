@@ -23,7 +23,7 @@
 		{"id": "alpha_2_tally", "speaker": "alpha_2", "voice": "ce_alpha_2_tally",
 			"text": "Tally eight, low in the rocks. Engaging."},
 		{"id": "control_wave_three", "speaker": "control", "voice": "ce_control_wave_three",
-			"text": "Alpha, big jump signature past the belt. A third carrier, ten raiders. That's their whole pack."},
+			"text": "Alpha, big jump signature past the belt. That's a raider Battle Wagon, ten fighters in its tubes. That's their whole pack. Mind its guns."},
 		{"id": "civilian_nearly_there", "speaker": "civilian", "voice": "ce_civilian_nearly_there",
 			"text": "NAV BETA in sight. Just keep them off us a little longer."},
 		{"id": "control_carrier_down", "speaker": "control", "voice": "ce_control_carrier_down",

@@ -272,7 +272,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | AC5 | Docking: the player docks through the main docking bay, is repaired (hull, guns, missiles) and relaunched from a Cobra bay (headless test on the state before and after); a wingman docks on order and by threshold and rejoins its wing | A | **Met** (T06, 2026-11-18; no missiles exist yet, so hull, gun charge and reaction mass are what is restored) |
 | AC6 | Strike carrier: M10-T19 merged into `m8` with its tests green next to M7's; one collision builder serves the station and the carrier | A | |
 | AC7 | Civilian escort: the first two waves arrive docked on the strike carrier and launch; the carrier hangs back, recalls and jumps out; the escort's tests (success, both failures, flee and resume) pass with it | A | |
-| AC8 | Battle Wagon: meets the output contract with Python tests (budgets, frames, hardpoints, tubes, determinism), its look sheet seen by the maintainer (no STL: M10's Q10), in the game with its weapons and four launch tubes, in a sandbox scenario and free-flight raids; the civilian escort's last wave launches from its tubes and the escort's tests pass with it | A | |
+| AC8 | Battle Wagon: meets the output contract with Python tests (budgets, frames, hardpoints, tubes, determinism), its look sheet seen by the maintainer (no STL: M10's Q10), in the game with its weapons and four launch tubes, in a sandbox scenario and free-flight raids; the civilian escort's last wave launches from its tubes and the escort's tests pass with it | A | **Met** (T09, 2026-11-19; two tubes with four lanes, as the sheet has it: the maintainer, 2026-11-18. How it looks and plays is (H), `docs/playtest.md`) |
 | AC9 | Carried items: M7-2 to M7-6 and L15 each done with a test where one can be written | A | |
 | AC10 | Release build: a script builds the Linux x86_64 export from the pinned templates; the exported game opens, runs the tutorial's opening and quits cleanly in a smoke test | A | |
 | AC11 | Cost: on the maintainer's GPU, the squadron launch, the tour and the raid: `renderer = forward_plus`, FPS, draw calls and VRAM recorded; the tick inside the 60 Hz budget during the raid | A | |
@@ -319,7 +319,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T06 | B | Dock in the main docking bay to be repaired and relaunched, for the player and the AI wingmen (D82, Q7) | - | Fable | The `dock` interaction, the lane for fighters, repair and a Cobra-bay relaunch; wing orders | in progress |
 | T07 | C | Bring M10-T19's raider strike carrier into `m8`: merge `origin/m10`, one collision builder, its tests green (Q5) | - | Opus | Two branches built a collision builder; docs, `native/src/lib.rs` and `info.md` conflict | done |
 | T08 | C | The civilian escort's raids come with the strike carrier (D83, Q6) | T07 | Fable | Mission data and pacing on `CarrierJumps`; the escort's tests kept green | in progress |
-| T09 | C | Raider Battle Wagon (moved from M10-T20): from images, with weapons (M10 Q31) and four launch tubes; the escort's last wave comes with it (Q8) | T08, the maintainer on its weapons | Fable | No STL; a new hull with weapons and tube launches | in progress |
+| T09 | C | Raider Battle Wagon (moved from M10-T20): from images, with weapons (M10 Q31) and four launch tubes; the escort's last wave comes with it (Q8) | T08, the maintainer on its weapons | Fable | No STL; a new hull with weapons and tube launches | done |
 | T10 | D | Interceptor muzzle at the drawn barrel tip, and the grid balance measured again (roadmap M7-2) | - | Fable | A placement fix in the turret rows with a balance check | done |
 | T11 | D | The walls beside the cargo bay stop flickering (roadmap M7-3) | - | Sonnet | Find the coplanar faces or shading cause in the station generator; a test | not started |
 | T12 | D | Audio rework of every sound effect and the Starfury engines' steady level (roadmap M7-5) | - | Opus | One loudness reference, the mix, and a smoothed engine gain; a listening checklist | not started |
@@ -614,6 +614,42 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   Delta-Vs, a sandbox scenario and free-flight raids, the civilian escort's last wave moved onto it (its mission data, dialog and
   `test_civilian_escort.gd`), `docs/assets-capital.md`, tests.
 - **Done when:** AC8.
+- **Done (2026-11-19):** the raiders' Battle Wagon, `raider_battle_wagon`: 275 m over its antenna spikes, one ring 161 m
+  across, in the "salvaged" surface. The maintainer's choices of 2026-11-18 from stage 1's sheets
+  (`references/screenshots/M8-T09 battle wagon/`): **two tubes with four lanes** (the sheet has two tubes, above and below,
+  not four; `docs/design-references.md` corrected, with the ring at 0.58 of the length, not 1.3), surface C, all eight
+  plasma turrets, four missile racks on the ring's bow face, 275 m.
+  - **The asset** (`docs/assets-capital.md`): `parts/raider_wagon.py` (every proportion a share of the length read off the
+    three-view sheet; no STL), 9 948 triangles, six break-up chunks, 142 collision shapes (covered 1.0 within 2 m, within
+    reach 1.0 at 5 m; the tubes and the ring's openings open), hardpoints for the two tubes and their four lanes, twenty
+    berths, eight turret mounts, four racks, eight nozzles and the jump point; low and high texture sets; 55 MB of video
+    memory a set (RX 6950 XT).
+  - **The build's memory.** The first build put the hull on one 4 096 px atlas, took about 10 GB and was killed for memory:
+    a bake costs about 600 bytes an atlas texel. `civilian.write_hull_atlases` writes an atlas per chunk, baked one after
+    another: **2.6 GB at its peak**, 110 s. `write_hull` is unchanged: the strike carrier and the Skylark rebuilt at HEAD and
+    with this change (both at `atlas_px` 1 024, to stay inside the 6 GB cap) are byte for byte the same, 79 files.
+  - **In the game** (architecture 19.18): the capital class `battle_wagon` on the strike carrier's body path. Its berths are
+    the dock's cradles with their own ways (the native kernel's `Row::lane`, `ScsDockRows.add_lane`): launched ahead through
+    the tubes' bow mouths, home through the stern mouths; a cradle's row is bit for bit what it was. Eight `TurretMount`s on
+    the native turret rows fire `turret_raider_plasma.tres`; `MissileRacks` asks the native missile rows the bench's
+    capitals use for a target and launches M4's guided missile (`RackSchedule`: six cells a rack, 20 s a rack, 2 s apart).
+    `capitals.json`: its drive recharges in 240 s as the strike carrier's (D83: the raiders' are the longest), it keeps the
+    raiders' doctrine, and `missile_racks.battle_wagon` holds the racks' numbers.
+  - **Where it comes:** the escort's last wave (`WAVES`: `RAIDER BATTLE WAGON`, ten raiders on its berths; the scenario's
+    `battle_wagons` builds one at load; Control's line and the optional objective's names follow; the fought run ends at
+    740 s, as before), a quarter of free flight's raids (`wagon_share`), every raid of the new sandbox scenario
+    `battle_wagon_raid` (New game, "Raider Battle Wagon"), and `transit wagon` on the console (`info.md`).
+  - **Two things decided here, for the maintainer to confirm (H).** Its turrets are M5's gunners (D61): they fire on a ship
+    that hit the wagon or a friend near it, not on every hostile in reach. Its racks fire only at a fighter within 3 km of
+    it (data), though a missile reaches 6 km: it stands off at 2.5 km, so they defend it and do not shell the escort's
+    fight from afar. Both are first figures, as are its hull (24 000) and the turret's numbers (`docs/playtest.md`).
+  - **Tests** (scratch copy of HEAD plus the staged change, native rebuilt, the wagon rebuilt there, `GUT_SLOW=1`): compile
+    check 948 scripts; Rust 256 passed (3 new: the lane cases); Python 176 OK in 8 files (`test_raider_battle_wagon` 26
+    new); GUT 34 files, 416 tests, 410 passed, 0 failed, 6 pending (the escort's AI runs, behind `GUT_BALANCE`):
+    `test_battle_wagon` 7 and `test_rack_schedule` 5 new, `test_carrier_logic` 19 (2 new), `test_civilian_escort` 25 of 31
+    (1 new), `test_strike_carrier` 16, and the front end, loader, encounter, mission, jump, turret, missile, stand-in,
+    console-list and settings files. `bench_quick.sh` was not run (a wagon in play adds a time check a tick; its turrets
+    and docking paths are native rows). The full standard suite was not run.
 
 ### M8-T10 Interceptor muzzle at the drawn barrel tip
 

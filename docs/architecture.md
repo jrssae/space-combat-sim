@@ -5647,6 +5647,38 @@ The first real capital hull, built ahead of M10's framework (M10-T05, T07) and m
 - **Per tick and per event.** Native: the docking paths. GDScript per tick: the carrier's engine and helm forces (as every
   capital stand-in's), and applying the dock's poses. GDScript per event or at 2 Hz: the stand-off decision, recalls, the run's
   state changes.
+- **The Battle Wagon** (M8-T09, D83; the asset in `docs/assets-capital.md`). `CapitalStandin` gains the class `battle_wagon`
+  (`assets/ships/raider_battle_wagon.tres`), built as the strike carrier is, and a raid whose `carrier.class` names it comes
+  with it (`CarrierJumps`, unchanged). What it adds:
+  - **Launch tubes.** Its twenty berths (two tubes, two lanes each, five deep) are the dock's cradles: `hardpoints.cradles[]`
+    entries with `release_to` and `approach_from`, which `CarrierCradles` reads as a lane (`lanes`, `release_dirs`,
+    `approach_dirs`). The native kernel takes a row with its own ways (`Row::lane`, `ScsDockRows.add_lane`): a launch pushes
+    the fighter ahead along its lane and lets it go 20 m past the bow mouth; a fighter called home flies to the point 40 m
+    behind the stern mouth and is drawn in along the tube. The push is the cradles' (15 m/s2), kept up for as long as the way
+    needs, and a capture from further than 60 m takes longer in proportion; a cradle's row is bit for bit what it was.
+  - **Plasma turrets.** A `TurretMount` on each of the hull's eight `turrets[]` (§18.10, M5's D61), firing the spec's
+    `turret_weapon` (`assets/weapons/turret_raider_plasma.tres`) with the hull's own turret model. They are gunners, not
+    hunters: they fire on a ship that hit the wagon, or hit a friend within 2 km of it, and its own hull blocks their line
+    of fire (its hit volumes go to the core with its first mount).
+  - **Missile racks.** `MissileRacks` (a child of the ship) on the hull's four `missile_racks[]`. The target and the launch
+    decision are the native rows' that the bench's capitals use (`NativeWeapons` over `ScsWeaponRows`: the nearest hostile
+    fighter in a missile's reach), asked only when a rack is ready (`RackSchedule`, pure: six cells a rack, a reload, a gap
+    between any two launches), so a ship with racks costs a time check a tick. The rack that faces the target fires M4's
+    guided missile (`MissileStandin`, steered by the same rows). It fires only at a fighter within `range_m` of the ship
+    (3 km by data, though a missile reaches 6 km): the wagon stands off at 2.5 km, so its racks defend it and do not shell
+    a fight far from it. The racks are full again each time the ship comes into play.
+  - **Data.** `data/capitals/capitals.json`: its drive's recharge (`jump_recharge_s.battle_wagon`, 240 s as the strike
+    carrier's) and `missile_racks.battle_wagon` (`cells`, `reload_s`, `gap_s`, `retry_s`, `range_m`; `CapitalData.missile_racks`).
+    It keeps the raiders' carrier doctrine.
+  - **Where it comes.** The civilian escort's last wave (`WAVES`, `carrier.class`; the mission's `battle_wagons` builds one at
+    load); a quarter of free flight's raids (`data/encounters/free_flight.json`, `carrier.wagon_share`;
+    `EncounterDirector.carrier_for` gives every fighter of one raid the same answer from the run's seed); every raid of the
+    sandbox scenario `battle_wagon_raid` (a scenario may switch its encounters on itself: `"encounters": true`); and
+    `transit wagon` on the console.
+  - **The hull's maps.** One atlas per break-up chunk (`civilian.write_hull_atlases`): the hull's file has a surface per
+    chunk, and `MeshAssets.load_textured` gives each its own maps by name, as it does a one-atlas hull's single surface.
+  - **Tests.** Rust `dock_kernels::tests` (the lane cases); GUT `test_battle_wagon.gd`, `test_rack_schedule.gd`,
+    `test_carrier_logic.gd` (lanes), `test_civilian_escort.gd` (the last wave); Python `test_raider_battle_wagon.py`.
 - **Console.** Command `carrier [status|launch|recall|hurt|kill|charge]`; `transit docked`; provider `carriers` gains `docked`,
   `returning`, `launched`, `recovered`, `left_behind`, `hull`, and with M8-T08 `flee`, `move`, `drive_left_s`,
   `gate_departures` (`carrier charge` readies its drive). No new setting.

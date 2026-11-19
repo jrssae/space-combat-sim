@@ -83,6 +83,24 @@ func test_cradles_are_read_from_the_hardpoints() -> void:
 	assert_almost_eq((docked * rest - Vector3(0.0, 40.0, 10.0)).length(), 0.0, 1e-5, "its resting point is on the pad")
 
 
+func test_a_tubes_berth_has_its_own_ways_out_and_home() -> void:
+	# M8-T09: the Battle Wagon's berths leave ahead through the bow mouth and come home from behind the stern mouth.
+	var entries: Array = CRADLES.duplicate()
+	entries.append({"name": "upper_r_1", "position": [9.7, 44.6, -80.0], "forward": [0.0, 0.0, -1.0], "up": [0.0, 1.0, 0.0],
+			"approach_from": [9.7, 44.6, 123.0], "release_to": [9.7, 44.6, -114.0]})
+	var cradles: CarrierCradles = CarrierCradles.from_hardpoints(entries)
+	assert_eq(cradles.lanes, PackedByteArray([0, 0, 1]), "a cradle without `release_to` is pushed straight out, as before")
+	assert_eq(cradles.release_dirs[0], Vector3.UP)
+	assert_eq(cradles.approach_dirs[1], Vector3.RIGHT)
+	assert_almost_eq(cradles.release_m[0], CarrierCradles.DEFAULT_RELEASE_M, 1e-6)
+	assert_almost_eq(cradles.release_dirs[2], Vector3.FORWARD, Vector3.ONE * 1e-5, "out ahead")
+	assert_almost_eq(cradles.release_m[2], 34.0, 1e-4)
+	assert_almost_eq(cradles.approach_dirs[2], Vector3.BACK, Vector3.ONE * 1e-5, "home from astern")
+	assert_almost_eq(cradles.approach_m[2], 203.0, 1e-4)
+	assert_almost_eq((cradles.approach_point(2) - Vector3(9.7, 44.6, 123.0)).length(), 0.0, 1e-4)
+	assert_eq(cradles.nearest_free(Vector3(0.0, 40.0, 400.0)), 2, "a fighter astern is given the berth it can reach from there")
+
+
 func test_cradles_track_who_is_where() -> void:
 	var cradles: CarrierCradles = CarrierCradles.from_hardpoints(CRADLES)
 	assert_eq(cradles.count_in(CarrierCradles.State.FREE), 2)
@@ -272,6 +290,36 @@ func test_a_return_ends_at_the_approach_point_and_a_capture_on_the_pad() -> void
 	assert_eq((out[0] as PackedInt32Array)[0], CarrierDock.EVENT_DOCKED)
 	assert_almost_eq(((out[1][0] as Vector3) - Vector3(0.0, 40.8, 10.0)).length(), 0.0, 1e-3, "on its pad")
 	assert_almost_eq(float(ticks) / 60.0, rows.constants()[1], 0.05, "after the capture time")
+
+
+func test_a_lane_row_launches_ahead_and_is_drawn_in_from_astern() -> void:
+	var rows := ScsDockRows.new()
+	var numbers: PackedFloat64Array = rows.constants()
+	var berth := Vector3(9.7, 44.6, -80.0)
+	var rest := Vector3(0.0, -1.0, 0.0)
+	rows.add_lane(5, CarrierDock.PHASE_LAUNCH, berth, Basis.IDENTITY, Vector3.BACK, 203.0, Vector3.FORWARD, 34.0, rest)
+	var out: Array = _step(rows, Vector3.ZERO, Vector3.ZERO)
+	var ticks: int = 1
+	while (out[0] as PackedInt32Array)[0] == 0 and ticks < 900:
+		out = _step(rows, Vector3.ZERO, Vector3.ZERO)
+		ticks += 1
+	assert_eq((out[0] as PackedInt32Array)[0], CarrierDock.EVENT_RELEASED)
+	assert_almost_eq(((out[1][0] as Vector3) - (berth - rest + Vector3(0.0, 0.0, -34.0))).length(), 0.0, 1e-2, "let go 34 m ahead, on its lane")
+	assert_almost_eq(float(ticks) / 60.0, numbers[0] * sqrt(34.0 / numbers[2]), 0.05, "the cradles' push, for as long as its way needs")
+	assert_lt((out[2][0] as Vector3).z, -25.0, "flying out ahead")
+	rows.add_lane(5, CarrierDock.PHASE_RETURN, berth, Basis.IDENTITY, Vector3.BACK, 203.0, Vector3.FORWARD, 34.0, rest)
+	var far: Array = _step(rows, Vector3(40.0, 60.0, 600.0), Vector3.ZERO)
+	assert_almost_eq(((far[1][0] as Vector3) - (berth - rest + Vector3(0.0, 0.0, 203.0))).length(), 0.0, 1e-2, "sent to the point astern")
+	var there: Array = _step(rows, berth - rest + Vector3(0.0, 0.0, 204.0), Vector3(0.0, 0.0, -5.0))
+	assert_eq((there[0] as PackedInt32Array)[0], CarrierDock.EVENT_AT_APPROACH)
+	rows.begin_capture(5, berth - rest + Vector3(0.0, 0.0, 204.0), Basis.IDENTITY)
+	ticks = 0
+	while rows.count() > 0 and ticks < 2000:
+		out = _step(rows, Vector3.ZERO, Vector3.ZERO)
+		ticks += 1
+	assert_eq((out[0] as PackedInt32Array)[0], CarrierDock.EVENT_DOCKED)
+	assert_almost_eq(((out[1][0] as Vector3) - (berth - rest)).length(), 0.0, 1e-2, "on its berth")
+	assert_almost_eq(float(ticks) / 60.0, numbers[1] * 203.0 / 60.0, 0.05, "a longer way in takes longer")
 
 
 func test_rows_are_kept_by_key_in_the_order_they_were_added() -> void:

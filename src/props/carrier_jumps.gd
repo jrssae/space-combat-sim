@@ -23,6 +23,9 @@ extends Node3D
 ## drive), or with no gate away from the enemy. Once it flees, fighters not docked within their time are left behind (Q27,
 ## Q30). The
 ## numbers are data (`data/capitals/capitals.json`, a raid's `carrier` options over them).
+##
+## M8-T09: a raid whose `carrier.class` is `battle_wagon` comes with the Battle Wagon: the same run, its fighters on the
+## berths of its launch tubes, and its turrets and missile racks firing for themselves.
 
 const NODE_NAME: StringName = &"CarrierJumps"
 ## What a carrier does once its fighters are out.
@@ -644,6 +647,7 @@ func _unpark(cap: CapitalStandin, faction: StringName, xform: Transform3D, veloc
 	cap.cruise_velocity = velocity
 	cap.heading = Vector3.ZERO
 	cap.jump_drive.charge()  # the jump in is the one that empties it
+	cap.rearm()
 	cap.reset_physics_interpolation()
 	var destruction: DestructionDirector = DestructionDirector.current()
 	if destruction != null:
@@ -745,10 +749,31 @@ func _register_console() -> void:
 				"doc": "Fighters their carrier left without (not docked within its wait), so far"},
 		&"hull": {"get": func() -> float: return _runs[-1].carrier.damageable.hull.fraction() if not _runs.is_empty() else 0.0,
 				"doc": "The newest carrier's hull, 0..1"},
+		&"class": {"get": func() -> String: return String(_runs[-1].carrier.ship_class) if not _runs.is_empty() else "",
+				"doc": "The newest carrier's class: cruiser, strike_carrier or battle_wagon (M8-T09)"},
+		&"turret_shots": {"get": func() -> int: return _turret_shots(),
+				"doc": "Bolts the newest carrier's own turrets have fired (the Battle Wagon's eight plasma turrets)"},
+		&"missiles": {"get": func() -> int: return _newest_racks().launches if _newest_racks() != null else 0,
+				"doc": "Missiles the newest carrier's racks have launched"},
+		&"missiles_left": {"get": func() -> int: return _newest_racks().schedule.missiles_left() if _newest_racks() != null else 0,
+				"doc": "Missiles left in the newest carrier's racks"},
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"carrier",
 			"The newest raid carrier (M12-T19, M8-T08): `status` (its state, hull, jump drive and why it flees), `launch` its docked fighters, `recall` them (ends its raid: it flees), `hurt` it to just under the hull it flees at, `kill` it, or `charge` its jump drive now",
 			[ConsoleArg.enum_optional(&"action", CARRIER_ACTIONS, &"status")]), _cmd_carrier, self)
+
+
+# The newest carrier's missile racks, or null (no carrier at work, or one with none).
+func _newest_racks() -> MissileRacks:
+	return _runs[-1].carrier.racks if not _runs.is_empty() and is_instance_valid(_runs[-1].carrier) else null
+
+
+func _turret_shots() -> int:
+	var n: int = 0
+	if not _runs.is_empty() and is_instance_valid(_runs[-1].carrier):
+		for mount: TurretMount in _runs[-1].carrier.mounts:
+			n += mount.shots
+	return n
 
 
 func _drive_left_s() -> float:

@@ -370,22 +370,28 @@ show's still `radier strike carrier.jpg`, and a painted print of the model with 
   raiders' ochre accents and yellow-white engine glow. The maintainer chose this "show green" surface (option A of
   three, 2026-11-15); its numbers are in `docs/assets-capital.md`.
 
-## Raider Battle Wagon (second raider carrier type, M12)
+## Raider Battle Wagon (second raider carrier type; built in M8-T09)
 
-A heavier raider carrier built around one huge ring, weathered grey-brown with heavy plating.
+A heavier raider carrier built around one huge ring, weathered grey-brown with heavy plating. Read off the three-view sheet
+(`raider battle wagon.png`; corrected on 2026-11-18, when the hull was built: the ring's size and the number of tubes were
+wrong here before). Its numbers as built are in `docs/assets-capital.md`.
 
 - **Core hull.** A long body of octagonal cross-section running fore-aft, tapering at the bow into a faceted
   cone. The cone ends in a small circular "eye" frame (an open ring) with two or three long, thin antenna spikes
   pointing forward.
 - **Main ring.** One very thick ring encircles the hull just aft of mid-length: deep, with buttresses and panel
-  bays around its rim, and its diameter about 1.3x the hull's length is wide. Seen end-on, the ring frames
-  everything. Inside it, a cross-braced lattice (X-braces) connects the ring to the hull.
-- **Launch tubes.** Four big tubes of hexagonal or octagonal section run fore-aft through the ring: one above,
-  one below and one on each side of the core. Ribbed, with open fronts. Fighters (Delta-Vs) launch from these.
+  bays around its rim; its diameter is about 0.58 of the ship's length (the sheet: 268 px across on 460 px). Seen
+  end-on, the ring frames everything. Inside it, a cross-braced lattice (X-braces) connects the ring to the hull.
+- **Launch tubes.** Two wide tubes of flattened eight-sided section run fore-aft through the ring, one above the core
+  and one below it, each as long as two thirds of the ship, ribbed, open at both ends and wide enough for two Delta-Vs
+  abreast. Fighters (Delta-Vs) launch from these. There is no tube at the sides.
+- **Deck arms and turrets.** On each side of the core a flat arm runs out to the ring, one before the ring and one
+  behind it, swept back from the bow; each carries a twin-barrelled gun turret above (and by the perspectives below).
 - **Stern.** A flat aft face with an engine block of **eight yellow-glowing nozzles** in two rows of four,
   between the upper and lower tubes.
-- **Scale.** Several Delta-V lengths across the ring. A Delta-V beside it in the reference is tiny (roughly
-  1/15 of the ring diameter).
+- **Scale.** The sheet draws a Delta-V beside the bow in the top and side views: 12 px long and 27 px across where
+  the ship is 460 px over its antenna spikes. At the Delta-V's 7.4 m by 16 m that is 0.60 m a pixel: a ship of about
+  275 m and a ring of 161 m, ten Delta-V spans across.
 
 ## Raider base scene (mood reference)
 

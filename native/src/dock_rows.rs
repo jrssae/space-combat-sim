@@ -26,6 +26,27 @@ impl ScsDockRows {
         self.rows.push(Row::new(phase, cradle_position, cradle_basis, approach_m, rest));
     }
 
+    /// As `add`, on a berth with its own ways (a launch tube's, M8-T09): home from `approach_m` along `approach_dir`, out
+    /// `release_m` along `release_dir`, both unit vectors in the carrier's frame.
+    #[func]
+    #[allow(clippy::too_many_arguments)]
+    fn add_lane(
+        &mut self,
+        key: i64,
+        phase: i32,
+        cradle_position: Vector3,
+        cradle_basis: Basis,
+        approach_dir: Vector3,
+        approach_m: f32,
+        release_dir: Vector3,
+        release_m: f32,
+        rest: Vector3,
+    ) {
+        self.remove(key);
+        self.keys.push(key);
+        self.rows.push(Row::lane(phase, cradle_position, cradle_basis, approach_dir, approach_m, release_dir, release_m, rest));
+    }
+
     /// Lets the fighter `key` go; false when it was not there.
     #[func]
     fn remove(&mut self, key: i64) -> bool {

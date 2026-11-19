@@ -1,8 +1,9 @@
 class_name CapitalData
 extends RefCounted
 ## The capital ships' tuning (M8-T08, D83), read once from `data/capitals/capitals.json`: how long each class's jump drive
-## needs after a jump before it can open another point, and each faction's carrier doctrine (when its fighters go home and
-## when the carrier flees; `CarrierTactics.DEFAULTS` lists the keys). Pure apart from the read.
+## needs after a jump before it can open another point, each faction's carrier doctrine (when its fighters go home and
+## when the carrier flees; `CarrierTactics.DEFAULTS` lists the keys) and each armed class's missile racks (M8-T09). Pure apart
+## from the read.
 
 const PATH: String = "res://data/capitals/capitals.json"
 ## A class the file does not name recharges this long, s.
@@ -23,6 +24,13 @@ static func jump_recharge_s(cls: StringName) -> float:
 static func doctrine(faction: StringName) -> Dictionary:
 	var table: Variant = _read().get("carrier_doctrine")
 	var found: Variant = (table as Dictionary).get(String(faction)) if table is Dictionary else null
+	return (found as Dictionary).duplicate() if found is Dictionary else {}
+
+
+## The missile racks of class `cls` (M8-T09; `RackSchedule.DEFAULTS` lists the keys): empty for a class with none.
+static func missile_racks(cls: StringName) -> Dictionary:
+	var table: Variant = _read().get("missile_racks")
+	var found: Variant = (table as Dictionary).get(String(cls)) if table is Dictionary else null
 	return (found as Dictionary).duplicate() if found is Dictionary else {}
 
 

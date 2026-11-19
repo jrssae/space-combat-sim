@@ -134,3 +134,65 @@ fn a_row_depends_on_nothing_but_itself() {
     };
     assert_eq!(run(&[0, 1, 2]), run(&[2, 0, 1]));
 }
+
+// A berth in a launch tube (M8-T09): 45 m up, the fighter's nose forward (-Z); out 80 m ahead, home from 200 m astern.
+fn tube_row(phase: i32) -> Row {
+    Row::lane(phase, v(10.0, 45.0, -60.0), Basis::IDENTITY, v(0.0, 0.0, 1.0), 200.0, v(0.0, 0.0, -1.0), 80.0, v(0.0, -1.0, 0.0))
+}
+
+#[test]
+fn a_cradle_keeps_its_times_and_a_longer_way_takes_longer() {
+    assert_eq!(launch_s(RELEASE_M), LAUNCH_S);
+    assert_eq!(capture_s(CAPTURE_REACH_M), CAPTURE_S);
+    assert_eq!(capture_s(30.0), CAPTURE_S);
+    assert!((launch_s(4.0 * RELEASE_M) - 2.0 * LAUNCH_S).abs() < 1e-12, "the same push: four times as far in twice the time");
+    assert!((capture_s(200.0) - CAPTURE_S * 200.0 / CAPTURE_REACH_M).abs() < 1e-12);
+    let cradle = top_row(PHASE_LAUNCH);
+    assert_eq!(cradle.release_dir, v(0.0, 1.0, 0.0));
+    assert_eq!(cradle.approach_dir, v(0.0, 1.0, 0.0));
+    assert_eq!(cradle.release_m, RELEASE_M as f32);
+}
+
+#[test]
+fn a_tube_launch_pushes_ahead_through_the_bow_mouth() {
+    let mut row = tube_row(PHASE_LAUNCH);
+    let carrier = still();
+    let mut last = step_row(&mut row, &carrier, Vector3::ZERO, Vector3::ZERO, 20.0, 200.0, 1.0 / 60.0);
+    assert!(close(last.position, v(10.0, 46.0, -60.0), 0.01), "it starts on its berth: {:?}", last.position);
+    assert_eq!(last.basis, Basis::IDENTITY, "its nose stays forward");
+    let mut ticks = 1;
+    while last.event == EVENT_NONE {
+        last = step_row(&mut row, &carrier, Vector3::ZERO, Vector3::ZERO, 20.0, 200.0, 1.0 / 60.0);
+        assert!((last.position.x - 10.0).abs() < 1e-4 && (last.position.y - 46.0).abs() < 1e-4, "it stays on its lane");
+        ticks += 1;
+        assert!(ticks < 2000);
+    }
+    assert_eq!(last.event, EVENT_RELEASED);
+    assert!((ticks as f64 / 60.0 - launch_s(80.0)).abs() < 0.05);
+    assert!(close(last.position, v(10.0, 46.0, -140.0), 1e-3));
+    assert!(close(last.velocity, v(0.0, 0.0, -(2.0 * 80.0 / launch_s(80.0)) as f32), 1e-3), "{:?}", last.velocity);
+}
+
+#[test]
+fn a_tube_takes_its_fighter_home_from_astern() {
+    let mut row = tube_row(PHASE_RETURN);
+    assert!(close(approach_point(&row), v(10.0, 46.0, 140.0), 1e-4));
+    let carrier = still();
+    // Astern and a little off the lane: it flies straight for the approach point.
+    let out = step_row(&mut row, &carrier, v(60.0, 80.0, 400.0), Vector3::ZERO, 20.0, 200.0, 1.0 / 60.0);
+    assert!(close(out.position, v(10.0, 46.0, 140.0), 1e-3), "its aim is the approach point: {:?}", out.position);
+    // At the approach point, slow: the berth draws it in along the tube, and it ends on the berth.
+    let at = step_row(&mut row, &carrier, v(10.0, 46.0, 143.0), Vector3::ZERO, 20.0, 200.0, 1.0 / 60.0);
+    assert_eq!(at.event, EVENT_AT_APPROACH);
+    row.begin_capture(v(10.0, 46.0, 143.0), Basis::IDENTITY);
+    let mut last = at;
+    let mut ticks = 0;
+    while last.event != EVENT_DOCKED {
+        last = step_row(&mut row, &carrier, Vector3::ZERO, Vector3::ZERO, 20.0, 200.0, 1.0 / 60.0);
+        assert!((last.position.x - 10.0).abs() < 1e-3 && (last.position.y - 46.0).abs() < 1e-3, "drawn in along the lane");
+        ticks += 1;
+        assert!(ticks < 2000);
+    }
+    assert!((ticks as f64 / 60.0 - capture_s(200.0)).abs() < 0.05);
+    assert!(close(last.position, v(10.0, 46.0, -60.0), 1e-3));
+}
