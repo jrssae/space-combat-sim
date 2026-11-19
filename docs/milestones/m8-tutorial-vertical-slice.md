@@ -327,7 +327,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T02 | A | Sawtooth Cobra-bay doors (roadmap M7-4): toothed leaves that slide apart, the launch's door ripple and timing kept | - | Fable | Generator parts and an animated door the cinematic opens on | done |
 | T03 | A | The squadron-launch cinematic (D81) | T02, T01 | Opus | Scripted launches, camera shots and a skip that lands in the same state | done |
 | T04 | A | Control checks: `ControlCheck`, the runner and the binding hints (D80) | T01 | Fable | Pass conditions on measured state for every control, pad and keyboard | done |
-| T05 | A | The tutorial mission: launch, checks, tour, raid, defense, debrief (D79) | T03, T04 | Fable | The mission script, dialog and pacing on M5's and M7's seams | in progress |
+| T05 | A | The tutorial mission: launch, checks, tour, raid, defense, debrief (D79) | T03, T04 | Fable | The mission script, dialog and pacing on M5's and M7's seams | done |
 | T06 | B | Dock in the main docking bay to be repaired and relaunched, for the player and the AI wingmen (D82, Q7) | - | Fable | The `dock` interaction, the lane for fighters, repair and a Cobra-bay relaunch; wing orders | done |
 | T07 | C | Bring M10-T19's raider strike carrier into `m8`: merge `origin/m10`, one collision builder, its tests green (Q5) | - | Opus | Two branches built a collision builder; docs, `native/src/lib.rs` and `info.md` conflict | done |
 | T08 | C | The civilian escort's raids come with the strike carrier (D83, Q6) | T07 | Fable | Mission data and pacing on `CarrierJumps`; the escort's tests kept green | done |
@@ -490,7 +490,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   - **Decided here, for the maintainer to confirm:** (1) the opening launches **two flights** (the player's and ALPHA 4 to
     6), so that "the rest of the wing launches" in the raid means something; (2) the tour's stops are cinematic and the
     jumpgate is the flown last stop; (3) the first shot counts as the raiders' first **hit** on anything; (4) a skipped
-    course has no rating, so it cannot make a squadron leader; (5) the checkpoint restart is offered only after a loss;
+    course has no rating, so it cannot make a squadron leader (changed in the fix round below: it counts as par); (5) the checkpoint restart is offered only after a loss;
     (6) the carrier jumps in near the station, 50 km from the gate where the player meets the first six.
   - **Tests** (staged scratch copy; first on HEAD `49b8ac36`, then again on `8619872d` after M8-T27 and M8-T28 landed, the
     counts below from the second run): compile check 984 scripts clean; 25 files (the unit files, `test_tutorial`,
@@ -505,6 +505,13 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
     boot routing, loading screen, instructor route), 15 files with `GUT_SLOW=1`: 201 passed, 6 pending (balance), 0 failed.
   - **(H), `docs/playtest.md` "The tutorial mission":** every line's wording, the pacing, the course's
     `instructor_time_s` (75 s is a guess until the maintainer has flown it), the 50 km flight back from the gate.
+  - **Fix round (2026-11-19, the maintainer):** the two flights, the raid's geography and the fought raid as a balance test
+    are accepted. **A skipped course counts as a par time**: the course step notes `par` and owes its remark, and the
+    instructor gives the plain par remark **as the skip lands**, first thing in the tour step (a skipped step's lines are
+    not heard, so it cannot be said at the course's end). Par is not exemplary, so a skip never makes a squadron leader
+    at once, however clean the raid; the debrief and the career read `Buoy course: par`. Tests (staged scratch copy,
+    HEAD `8ff08fd6` plus this fix): compile check 984 scripts clean; `test_tutorial`, `test_tutorial_rules`,
+    `test_mission_seams` and `test_career`, 28 passed, 1 pending (the balance gate), 0 failed.
 
 ### M8-T06 Dock in the main docking bay to be repaired and relaunched
 

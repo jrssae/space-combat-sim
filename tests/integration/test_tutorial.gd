@@ -84,6 +84,10 @@ func _ship(ship_name: String) -> Combatant:
 	return main.mission.stage._actors.get(MissionWorld.key(ship_name)) as Combatant
 
 
+func _grading() -> TutorialRules:
+	return TutorialRules.load_file()["rules"]
+
+
 func _debrief() -> DebriefScreen:
 	return holder.get_child(0) as DebriefScreen if holder.get_child_count() == 1 else null
 
@@ -193,7 +197,11 @@ func test_console_commands_take_it_from_the_menu_to_the_debrief_on_a_fresh_seed(
 	assert_true(bool(Game.flow.last_result["success"]))
 	var model: DebriefModel = _debrief().model
 	assert_eq(model.headline(), DebriefModel.HEADLINE_SUCCESS)
-	assert_true(" | ".join(model.extra_lines).contains("Assignment: Squadron pilot"), "a course never flown is not exemplary: %s" % model.extra_lines)
+	var notes: String = " | ".join(model.extra_lines)
+	assert_string_contains(notes, "Buoy course: par", "a skipped course counts as a par time")
+	assert_string_contains(notes, "Starfuries lost: 0   PERFECT SCORE")
+	assert_string_contains(notes, "Assignment: Squadron pilot", "par is not exemplary: no squadron leader at once, even with a perfect raid")
+	assert_eq(Game.career.course, TutorialRules.PAR)
 	assert_eq(model.options().size(), 2, "a mission won offers no checkpoint")
 	assert_eq(Game.career.rank, Career.SQUADRON_PILOT)
 	assert_eq(CareerStore.load_file(CAREER_PATH).rank, Career.SQUADRON_PILOT, "the rank is on disk: it survives a restart")
@@ -235,7 +243,11 @@ func test_the_pause_menu_skips_the_training_block_to_the_tour() -> void:
 	assert_eq(main.mission.take_skip(), "")
 	await _wait_for("the tour", func() -> bool: return _api().step_name() == &"tour" and not _api().is_skipping(), 600)
 	assert_eq(main.mission.skip_label(), "", "gone once the block is behind")
-	assert_eq(str(_api().noted(&"course")), "", "a skipped course has no rating")
+	assert_eq(_api().noted(&"course"), TutorialRules.PAR, "a skipped course counts as a par time")
+	await _wait_for("the par remark as the skip lands", func() -> bool: return _api().dialog.current != null \
+			and _api().dialog.current.id == &"course_par", 120)
+	assert_eq(_api().noted(&"course_remark"), &"said", "said once")
+	assert_eq(_grading().rank(TutorialRules.PAR, 0, 0), Career.SQUADRON_PILOT, "so no squadron leader at once")
 
 
 func test_the_course_gives_its_four_remarks() -> void:

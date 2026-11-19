@@ -39,7 +39,7 @@ func test_squadron_leader_needs_an_exemplary_course_one_starfury_lost_at_most_an
 	assert_eq(rules.rank(TutorialRules.EXEMPLARY, 1, 0), Career.SQUADRON_LEADER)
 	assert_eq(rules.rank(TutorialRules.EXEMPLARY, 2, 0), Career.SQUADRON_PILOT)
 	assert_eq(rules.rank(TutorialRules.EXEMPLARY, 0, 1), Career.SQUADRON_PILOT)
-	assert_eq(rules.rank(TutorialRules.PAR, 0, 0), Career.SQUADRON_PILOT)
+	assert_eq(rules.rank(TutorialRules.PAR, 0, 0), Career.SQUADRON_PILOT, "par, as a skipped course counts: never leader at once")
 	assert_eq(rules.rank(&"", 0, 0), Career.SQUADRON_PILOT, "a course never flown")
 
 

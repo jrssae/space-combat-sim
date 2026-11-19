@@ -1252,7 +1252,9 @@ launch, form_up, flight_checks, camera_lights, x_button, course, combat, wing_or
       The four remarks: fast, on par, slow, and one with a buoy shot or rammed.
 - [ ] **(H) The drones:** three unarmed raider hulls on a slow track, then two more for ATTACK MY TARGET. Nobody but you
       and your ordered flight shoots them.
-- [ ] **(H) Skip training:** the pause menu's second entry during the training steps goes straight to the tour.
+- [ ] **(H) Skip training:** the pause menu's second entry during the training steps goes straight to the tour. A skipped
+      course counts as a par time: the instructor gives the par remark as the tour step begins, and the debrief assigns
+      you to the squadron (never squadron leader at once).
 - [ ] **(H) The tour:** all stop first (the brake check), then five stops with a line each: Cobra bays, docking bay, command
       section, grid, heavy cannons. A or Start cuts a stop.
 - [ ] **(H) The gate:** 50 km out behind the instructor; the approach cue calls the brake; hold X inside the reach.

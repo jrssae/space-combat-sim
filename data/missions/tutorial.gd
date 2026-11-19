@@ -27,7 +27,8 @@ const COURSE: Array[String] = ["NAV 1", "NAV 2", "NAV 3", "NAV 4", "NAV 5"]
 const COURSE_AT: Array[Vector3] = [Vector3(-8000.0, 1500.0, -1500.0), Vector3(-9500.0, 1900.0, -3000.0),
 		Vector3(-8200.0, 1200.0, -4700.0), Vector3(-10200.0, 1700.0, -5500.0), Vector3(-9000.0, 1500.0, -7300.0)]
 const BUOY_PASS_M: float = 200.0
-## A course "flown" faster than this was skipped, not flown: it earns no rating.
+## A course "flown" faster than this was skipped, not flown: it counts as a par time (the maintainer, 2026-11-19), so it
+## cannot make a squadron leader at once, and its remark is owed until the skip lands (`_owed_remark`).
 const COURSE_MIN_S: float = 5.0
 ## The drones: unarmed raider hulls on a slow track through the box.
 const DRONE: Dictionary = {"type": "raider_fighter", "anchor": "origin", "behaviour": {"type": "ai", "profile": "training_drone"}}
@@ -142,7 +143,8 @@ func step_course(m: MissionApi) -> void:
 	if m.noted(&"course") != null:
 		return  # a restart from the checkpoint keeps the flown result
 	if time_s < COURSE_MIN_S:
-		m.note(&"course", &"")  # skipped, not flown: no rating and no remark
+		m.note(&"course", TutorialRules.PAR)
+		m.note(&"course_remark", &"owed")  # a skipped step's lines are not heard
 		return
 	var rating: StringName = _grading().rating(time_s, m.fact(&"buoys_lost") > buoys_before)
 	m.note(&"course", rating)
@@ -175,6 +177,7 @@ func step_wing_orders(m: MissionApi) -> void:
 
 # The station from outside, a stop at a time, the ship at rest meanwhile.
 func step_tour(m: MissionApi) -> void:
+	await _owed_remark(m)
 	await m.say(&"instructor_tour_intro")
 	await m.check(&"brake")
 	m.lock_controls(true)
@@ -269,7 +272,7 @@ func step_debrief(m: MissionApi) -> void:
 		await m.say(&"instructor_debrief_civilians")
 	await m.say(&"instructor_debrief_carrier_down" if carrier_down else &"instructor_debrief_carrier_away")
 	await m.say(&"instructor_verdict_leader" if rank == Career.SQUADRON_LEADER else &"instructor_verdict_squadron")
-	m.debrief_line("Buoy course: %s" % (String(course).replace("_", " ") if course != &"" else "not flown"))
+	m.debrief_line("Buoy course: %s" % String(course).replace("_", " "))
 	m.debrief_line("Starfuries lost: %d%s" % [starfuries, "   PERFECT SCORE" if TutorialRules.perfect(starfuries) else ""])
 	m.debrief_line("Civilian ships lost: %d" % civilians)
 	m.debrief_line("Raider carrier: %s" % ("destroyed" if carrier_down else "escaped"))
@@ -279,6 +282,14 @@ func step_debrief(m: MissionApi) -> void:
 		m.objective_complete(&"flight")
 	m.objective_complete(&"defend")
 	m.objective_complete(&"qualify")  # the last primary: the mission ends, and Control's welcome is its closing line
+
+
+# The par remark for a course that was skipped, said once where the skip lands: at the tour.
+func _owed_remark(m: MissionApi) -> void:
+	if m.noted(&"course_remark") != &"owed":
+		return
+	m.note(&"course_remark", &"said")
+	await m.say(&"course_par")
 
 
 # The rest of the wing launches as the raiders first hit something; an arm still busy with a launch is asked again.

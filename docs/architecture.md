@@ -6674,7 +6674,8 @@ src/mission/trigger_fact.gd           TriggerFact (`TriggerSpec.fact`, JSON kind
   hands it to the runner, and the runner starts the script on the same seed with the notes restored and every step before
   the checkpoint skipped (`goto`). So the world is rebuilt by the skip rules, not saved: a skipped squadron launch now ends
   before its step goes on (`MissionApi._skip_launch`), or it would take the player back from where a later step put it.
-  The course step leaves a note that is already there alone, which is how the flown rating survives.
+  The course step leaves a note that is already there alone, which is how the flown rating survives. A course that was
+  skipped (the pause menu, a `goto`) counts as par: the step notes it and owes the remark, which the tour step says.
 - **The career.** The script's rank (`award_rank`) rides in a successful result; `Game.end_mission` gives it to `Career`
   (`Game.earn`, with the course rating from the notes) and saves it. Only a mission the flow started saves, so a test's Main
   never writes the pilot's file. Console: `career`, provider `career`.
