@@ -153,7 +153,7 @@ godot_import "${REPORTS}/import.log"
 compile_check "${REPORTS}/check_scripts.log"
 
 echo "== GUT"
-# The whole run takes about 40 minutes on the maintainer's machine, a CI shard 15 to 25. A shard's timeout (40 minutes)
+# The whole run takes about 40 minutes on the maintainer's machine, a CI shard about 20 (six shards). A shard's timeout (40 minutes)
 # fires before CI's 60-minute job limit, so a hang ends with GUT's log and this script's message, not a cancelled job.
 gut_timeout=3600
 if [[ -n "${GUT_SHARD:-}" ]]; then
